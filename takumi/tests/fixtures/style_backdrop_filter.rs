@@ -134,3 +134,70 @@ fn test_style_backdrop_filter_frosted_glass() {
 
   run_fixture_test(container, "style_backdrop_filter_frosted_glass");
 }
+
+#[test]
+fn test_style_backdrop_filter_with_mask() {
+  let absolute_inset_zero = |style: Style| {
+    style
+      .with(StyleDeclaration::position(Position::Absolute))
+      .with(StyleDeclaration::top(Px(0.0)))
+      .with(StyleDeclaration::right(Px(0.0)))
+      .with(StyleDeclaration::bottom(Px(0.0)))
+      .with(StyleDeclaration::left(Px(0.0)))
+  };
+
+  let masked_background = Node::container([]).with_style(
+    absolute_inset_zero(Style::default())
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([239, 68, 68, 255]),
+      )))
+      .with(StyleDeclaration::mask_image(Some(
+        BackgroundImages::from_str("linear-gradient(transparent 10%, black 100%)").unwrap(),
+      ))),
+  );
+
+  let masked_backdrop_blur = Node::container([]).with_style(
+    absolute_inset_zero(Style::default())
+      .with(StyleDeclaration::backdrop_filter(
+        Filters::from_str("blur(24px)").unwrap(),
+      ))
+      .with(StyleDeclaration::mask_image(Some(
+        BackgroundImages::from_str("radial-gradient(transparent 30%, black 100%)").unwrap(),
+      ))),
+  );
+
+  let label = Node::text("Sharp center, blurred edges".to_string()).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::font_size(Px(48.0).into()))
+      .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
+      .with(StyleDeclaration::color(ColorInput::Value(Color::white()))),
+  );
+
+  let container = Node::container([masked_background, masked_backdrop_blur, label]).with_style(
+    Style::default()
+      .with(StyleDeclaration::position(Position::Relative))
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::align_items(AlignItems::Center))
+      .with(StyleDeclaration::justify_content(JustifyContent::Center))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::black(),
+      )))
+      .with(StyleDeclaration::background_image(Some(
+        BackgroundImages::from_str(
+          "linear-gradient(90deg, transparent 0%, transparent 48%, white 48%, white 52%, transparent 52%, transparent 100%)",
+        )
+        .unwrap(),
+      )))
+      .with(StyleDeclaration::background_size(
+        BackgroundSizes::from_str("40px 100%").unwrap(),
+      ))
+      .with(StyleDeclaration::background_repeat(
+        BackgroundRepeats::from_str("repeat-x").unwrap(),
+      )),
+  );
+
+  run_fixture_test(container, "style_backdrop_filter_with_mask");
+}

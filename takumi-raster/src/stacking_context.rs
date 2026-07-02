@@ -12,7 +12,7 @@ use crate::{
       InlineLayoutMode, InlineLayoutRequest, ProcessedInlineSpan, collect_inline_items,
       create_inline_layout, resolve_inline_max_height,
     },
-    style::{Affine, BackgroundImage, BlendMode, Color, Filter, SizingContext},
+    style::{Affine, BackgroundImage, BlendMode, Color, ComputedStyle, Filter, SizingContext},
     tree::{LayoutResults, RenderNode},
   },
   prepare_node_mask,
@@ -303,6 +303,25 @@ fn begin_node_render(
   current.context.transform = node_paint.transform;
 
   if !current.context.style.backdrop_filter.is_empty() {
+    // Filtered backdrop is clipped by the node's clip-path and mask, like Chromium's
+    // backdrop root: https://drafts.fxtf.org/filter-effects-2/#BackdropRoot
+    let node_mask = if node_shapes_backdrop(&current.context.style) {
+      match prepare_node_mask(
+        &current.context,
+        &current.context.style,
+        layout,
+        node_paint.transform,
+        canvas.viewport(),
+        &mut canvas.buffer_pool,
+      )? {
+        NodeMaskAction::Shell(mask) => Some(mask),
+        NodeMaskAction::SkipRendering => return Ok(Some(DeferredNodeRender::SkipRendering)),
+        _ => None,
+      }
+    } else {
+      None
+    };
+
     let border = BorderProperties::from_context(&current.context, layout.size, layout.border);
     apply_backdrop_filter(
       canvas,
@@ -310,6 +329,7 @@ fn begin_node_render(
       layout.size,
       node_paint.transform,
       &current.context,
+      node_mask.as_ref(),
     )?;
   }
 
@@ -508,6 +528,15 @@ pub(crate) fn paint_context(
   }
 
   Ok(())
+}
+
+fn node_shapes_backdrop(style: &ComputedStyle) -> bool {
+  style.clip_path.is_some()
+    || style.mask_image.as_ref().is_some_and(|images| {
+      images
+        .iter()
+        .any(|image| !matches!(image, BackgroundImage::None))
+    })
 }
 
 fn supports_bounds_hint(node: &RenderNode, require_child_clipping: bool) -> bool {

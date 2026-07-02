@@ -1,7 +1,7 @@
 use image::Rgba;
 use smallvec::SmallVec;
 use taffy::{Point, Size};
-use tiny_skia::PixmapMut;
+use tiny_skia::{Mask as TinyMask, PixmapMut};
 
 use crate::{
   BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, Placement, RenderContext, Result,
@@ -284,6 +284,34 @@ fn backdrop_region(
     .clamp_to(canvas_size)
 }
 
+fn intersect_mask_with_node_mask(mask_data: &mut [u8], placement: Placement, node_mask: &TinyMask) {
+  let node_width = node_mask.width() as i32;
+  let node_height = node_mask.height() as i32;
+  let node_data = node_mask.data();
+
+  for (y, row) in mask_data
+    .chunks_exact_mut(placement.width as usize)
+    .enumerate()
+  {
+    let node_y = placement.top + y as i32;
+    if node_y < 0 || node_y >= node_height {
+      row.fill(0);
+      continue;
+    }
+
+    let node_row_start = node_y as usize * node_width as usize;
+    for (x, alpha) in row.iter_mut().enumerate() {
+      let node_x = placement.left + x as i32;
+      if node_x < 0 || node_x >= node_width {
+        *alpha = 0;
+        continue;
+      }
+
+      *alpha = fast_div_255(*alpha as u32 * node_data[node_row_start + node_x as usize] as u32);
+    }
+  }
+}
+
 fn composite_backdrop_with_mask(
   canvas_row: &mut [u8],
   backdrop_row: &[u8],
@@ -392,6 +420,7 @@ pub(crate) fn apply_backdrop_filter(
   layout_size: Size<f32>,
   transform: Affine,
   context: &RenderContext,
+  node_mask: Option<&TinyMask>,
 ) -> Result<()> {
   let filters = &context.style.backdrop_filter;
 
@@ -413,11 +442,16 @@ pub(crate) fn apply_backdrop_filter(
   border.append_mask_commands(&mut paths, layout_size, Point::ZERO);
 
   // Render the mask for compositing.
-  let (mask_data, placement) = render_mask(&paths, Some(transform), None, &mut canvas.buffer_pool);
+  let (mut mask_data, placement) =
+    render_mask(&paths, Some(transform), None, &mut canvas.buffer_pool);
 
   if placement.width == 0 || placement.height == 0 {
     canvas.buffer_pool.release(mask_data);
     return Ok(());
+  }
+
+  if let Some(node_mask) = node_mask {
+    intersect_mask_with_node_mask(&mut mask_data, placement, node_mask);
   }
 
   let Some(mask_bounds) = mask_bounds(&mask_data, placement.width, placement.height) else {
