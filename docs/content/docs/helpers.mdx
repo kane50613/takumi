@@ -39,12 +39,11 @@ Length and color shorthands return CSS strings. `vw`/`vh` are viewport width/hei
 | `fromJsx(element, options?)` | `takumi-js/helpers/jsx`  | Convert JSX or a React element to `{ node, stylesheets }`. |
 | `fromHtml(html)`             | `takumi-js/helpers/html` | Convert an HTML string to `{ node, stylesheets }`.         |
 
-## Resources & emoji
+## Images & emoji
 
-| Helper                           | Import                    | Use                                                                         |
-| :------------------------------- | :------------------------ | :-------------------------------------------------------------------------- |
-| `extractResourceUrls(node)`      | `takumi-js/helpers`       | Collect every image URL in a node tree.                                     |
-| `fetchResources(urls, options?)` | `takumi-js/helpers`       | Fetch URLs into `images` entries. See [Images & emoji](/docs/load-images).  |
-| `extractEmojis(node, emojiType)` | `takumi-js/helpers/emoji` | Replace emoji with CDN `<img>` nodes. See [Emoji](/docs/load-images#emoji). |
+| Helper                           | Import                    | Use                                                                                               |
+| :------------------------------- | :------------------------ | :------------------------------------------------------------------------------------------------ |
+| `prepareImages(options)`         | `takumi-js`               | Fetch a node tree's remote images into `images` entries. See [Images & emoji](/docs/load-images). |
+| `extractEmojis(node, emojiType)` | `takumi-js/helpers/emoji` | Replace emoji with CDN `<img>` nodes. See [Emoji](/docs/load-images#emoji).                       |
 
 `emojiType` selects the CDN provider: `twemoji`, `blobmoji`, `noto`, `openmoji`, `fluent`, or `fluentFlat`.

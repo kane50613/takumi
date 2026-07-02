@@ -152,6 +152,20 @@ describe("render", () => {
     expect(result.subarray(0, 4)).toEqual(Buffer.from([0, 0, 1, 0]));
   });
 
+  test("images group form with cache default", async () => {
+    const result = await renderer.render(node, {
+      width: 1200,
+      height: 630,
+      format: "png",
+      images: {
+        cache: "none",
+        sources: [{ src: remoteUrl, data: imageBuffer }],
+      },
+    });
+
+    expect(result).toBeInstanceOf(Buffer);
+  });
+
   test("auto-calculated dimensions", async () => {
     const result = await renderer.render(node, {
       format: "png",

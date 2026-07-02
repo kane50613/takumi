@@ -48,8 +48,8 @@ extern "C" {
   pub type MeasuredNodeType;
 
   /// JavaScript object representing an animation scene source.
-  #[wasm_bindgen(typescript_type = "AnimationSceneSource")]
-  pub type AnimationSceneSourceType;
+  #[wasm_bindgen(typescript_type = "AnimationScene")]
+  pub type AnimationSceneType;
 }
 
 /// Options for rendering an image.
@@ -117,7 +117,7 @@ pub struct SvgRenderOptions {
 #[serde(rename_all = "camelCase")]
 pub struct RenderAnimationOptions {
   /// The scenes to render sequentially.
-  pub scenes: Vec<AnimationSceneSource>,
+  pub scenes: Vec<AnimationScene>,
   /// The width of each frame in pixels.
   pub width: u32,
   /// The height of each frame in pixels.
@@ -247,7 +247,7 @@ impl From<FontStyle> for ParleyFontStyle {
 /// A single scene in a sequential animation timeline.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AnimationSceneSource {
+pub struct AnimationScene {
   /// The node tree to render for this scene.
   pub node: Node,
   /// The duration of this scene in milliseconds.

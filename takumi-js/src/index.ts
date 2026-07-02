@@ -1,6 +1,6 @@
 export type {
   ContainerNode,
-  FetchResourcesOptions,
+  FetchOptions,
   ImageNode,
   Node,
   NodeAttributes,
@@ -10,7 +10,6 @@ export type {
 } from "@takumi-rs/helpers";
 export type {
   AnimationOutputFormat,
-  AnimationSceneSource,
   DitheringAlgorithm,
   Font,
   FontDetails,
@@ -23,11 +22,14 @@ export type {
   MeasuredTextRun,
   OutputFormat,
 } from "@takumi-rs/core";
-export { render, renderAnimation, renderSvg } from "./render";
+export { prepareImages, render, renderAnimation, renderSvg } from "./render";
 
 export type {
+  AnimationScene,
+  ImageFetchCache,
+  ImagesInput,
+  PrepareImagesOptions,
   RenderAnimationOptions,
-  RenderAnimationScene,
   RenderInput,
   RenderOptions,
   RenderSvgOptions,

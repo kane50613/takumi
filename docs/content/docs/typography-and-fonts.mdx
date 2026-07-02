@@ -98,7 +98,7 @@ Each subset registers under its own internal name; `font-family: Inter` expands 
 | Ranged subsets (from `googleFonts`) | Trimmed to the codepoints the content uses. |
 | Whole files (URL string, raw bytes) | No `unicode-range`, so they load in full.   |
 
-`subset: false` opts out. To trim before the render, call `subsetFonts({ fonts, source })`, where `source` is the string, node, or node array you render.
+To trim before the render, call `subsetFonts({ fonts, source })`, where `source` is the string, node, or node array you render.
 
 ### Preloading with `registerFont`
 

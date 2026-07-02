@@ -353,19 +353,6 @@ export function fontFromUrl(url: string) {
   };
 }
 
-/** Apply {@link subsetFonts} unless `subset` is `false`. Passes `undefined` fonts through. */
-export function pickFonts<T>({
-  fonts,
-  source,
-  subset,
-}: {
-  fonts: T[] | undefined;
-  source: string | Node | Node[];
-  subset?: boolean;
-}): T[] | undefined {
-  return fonts && subset !== false ? subsetFonts({ fonts, source }) : fonts;
-}
-
 /**
  * Load Google Font families in one css2 request, returning every coverage subset. Each keeps
  * its `unicode-range` and registers uniquely-named under its `subsetOf` family, which

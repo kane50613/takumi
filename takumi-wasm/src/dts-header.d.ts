@@ -80,7 +80,7 @@ export type SvgRenderOptions = Omit<
 >;
 
 export type RenderAnimationOptions = {
-  scenes: AnimationSceneSource[];
+  scenes: AnimationScene[];
   width: number;
   height: number;
   format?: "webp" | "apng" | "gif";
@@ -174,7 +174,7 @@ export type MeasuredNode = {
   runs: MeasuredTextRun[];
 };
 
-export type AnimationSceneSource = {
+export type AnimationScene = {
   node: Node;
   durationMs: number;
 };

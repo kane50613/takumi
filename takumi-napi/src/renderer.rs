@@ -214,7 +214,7 @@ impl From<DitheringAlgorithm> for CoreDitheringAlgorithm {
 
 /// Represents a single scene in a sequential animation timeline.
 #[napi(object)]
-pub struct AnimationSceneSource<'ctx> {
+pub struct AnimationScene<'ctx> {
   /// The node tree to render for this scene.
   #[napi(ts_type = "Node")]
   pub node: Object<'ctx>,
@@ -226,7 +226,7 @@ pub struct AnimationSceneSource<'ctx> {
 #[napi(object)]
 pub struct RenderAnimationOptions<'env> {
   /// The scenes to render sequentially.
-  pub scenes: Vec<AnimationSceneSource<'env>>,
+  pub scenes: Vec<AnimationScene<'env>>,
   /// Whether to draw debug borders around layout elements.
   pub draw_debug_border: Option<bool>,
   /// The width of each frame in pixels.

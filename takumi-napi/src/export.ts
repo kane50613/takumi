@@ -12,9 +12,7 @@ import type {
 export type * from "../index";
 import { Renderer as RendererInternal } from "../index";
 
-import { extractResourceUrls, fontFromUrl, pickFonts } from "@takumi-rs/helpers";
-
-export { extractResourceUrls };
+import { fontFromUrl, subsetFonts } from "@takumi-rs/helpers";
 
 /**
  * A font to register. Either a URL string (fetched on demand, with name/weight/style read from the
@@ -34,6 +32,16 @@ type ImageLoaderData = ImageSource["data"];
 export type ImageLoader = Omit<ImageSource, "data"> & {
   data: ImageLoaderData | (() => ImageLoaderData | Promise<ImageLoaderData>);
 };
+
+/** Images for a render: pre-fetched entries, or a group with a decode-cache default. */
+export type ImagesInput =
+  | ImageLoader[]
+  | {
+      /** Pre-fetched entries, same as the array form. */
+      sources?: ImageLoader[];
+      /** Decode-cache default for every image this render; a source's own `cache` wins. */
+      cache?: NonNullable<ImageLoader["cache"]>;
+    };
 
 /**
  * Output format. Format-specific options live on the variant that supports them,
@@ -55,9 +63,7 @@ export type RenderOptions = Omit<
   OutputFormatOptions & {
     fonts?: FontLoader[];
     signal?: AbortSignal;
-    images?: ImageLoader[];
-    /** Register only the `fonts` subsets the content renders. @default true */
-    subset?: boolean;
+    images?: ImagesInput;
   };
 
 /**
@@ -77,31 +83,28 @@ export type RenderAnimationOptions = Omit<
   AnimationOutputFormatOptions & {
     fonts?: FontLoader[];
     signal?: AbortSignal;
-    images?: ImageLoader[];
-    /** Register only the `fonts` subsets the content renders. @default true */
-    subset?: boolean;
+    images?: ImagesInput;
   };
 
 export type SvgRenderOptions = Omit<SvgRenderOptionsInternal, "images"> & {
   fonts?: FontLoader[];
   signal?: AbortSignal;
-  images?: ImageLoader[];
-  /** Register only the `fonts` subsets the content renders. @default true */
-  subset?: boolean;
+  images?: ImagesInput;
 };
 
-async function resolveImageLoaders(images: ImageLoader[]): Promise<ImageSource[]> {
+async function resolveImageLoaders(images: ImagesInput): Promise<ImageSource[]> {
+  const { sources = [], cache } = Array.isArray(images) ? { sources: images } : images;
   const bySrc = new Map<string, ImageLoader>();
 
-  for (const image of images) {
+  for (const image of sources) {
     bySrc.set(image.src, image);
   }
 
   return Promise.all(
-    [...bySrc.values()].map(async ({ src, data, cache }) => ({
+    [...bySrc.values()].map(async ({ src, data, cache: own }) => ({
       src,
       data: typeof data === "function" ? await data() : data,
-      cache,
+      cache: own ?? cache,
     })),
   );
 }
@@ -145,7 +148,7 @@ export class Renderer {
    * the napi binding expects. Explicit `fontFamilies` wins over the registered set. */
   private async resolveResources(
     fonts: FontLoader[] | undefined,
-    images: ImageLoader[] | undefined,
+    images: ImagesInput | undefined,
     fontFamilies: string[] | undefined,
   ) {
     const registeredFamilies = await this.prepareFonts(fonts);
@@ -157,9 +160,9 @@ export class Renderer {
   }
 
   async render(node: Node, options?: RenderOptions) {
-    const { fonts, fontFamilies, signal, images, subset, ...rest } = options ?? {};
+    const { fonts, fontFamilies, signal, images, ...rest } = options ?? {};
     const resolved = await this.resolveResources(
-      pickFonts({ fonts, source: node, subset }),
+      fonts && subsetFonts({ fonts, source: node }),
       images,
       fontFamilies,
     );
@@ -168,9 +171,9 @@ export class Renderer {
   }
 
   async renderSvg(node: Node, options?: SvgRenderOptions) {
-    const { fonts, fontFamilies, signal, images, subset, ...rest } = options ?? {};
+    const { fonts, fontFamilies, signal, images, ...rest } = options ?? {};
     const resolved = await this.resolveResources(
-      pickFonts({ fonts, source: node, subset }),
+      fonts && subsetFonts({ fonts, source: node }),
       images,
       fontFamilies,
     );
@@ -179,9 +182,9 @@ export class Renderer {
   }
 
   async measure(node: Node, options?: RenderOptions) {
-    const { fonts, fontFamilies, signal, images, subset, ...rest } = options ?? {};
+    const { fonts, fontFamilies, signal, images, ...rest } = options ?? {};
     const resolved = await this.resolveResources(
-      pickFonts({ fonts, source: node, subset }),
+      fonts && subsetFonts({ fonts, source: node }),
       images,
       fontFamilies,
     );
@@ -190,10 +193,10 @@ export class Renderer {
   }
 
   async renderAnimation(options: RenderAnimationOptions) {
-    const { fonts, fontFamilies, signal, images, subset, ...rest } = options;
+    const { fonts, fontFamilies, signal, images, ...rest } = options;
     const nodes = options.scenes.map((scene) => scene.node);
     const resolved = await this.resolveResources(
-      pickFonts({ fonts, source: nodes, subset }),
+      fonts && subsetFonts({ fonts, source: nodes }),
       images,
       fontFamilies,
     );

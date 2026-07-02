@@ -1,22 +1,169 @@
 import type * as napi from "@takumi-rs/core";
 import type * as wasm from "@takumi-rs/wasm";
 import { extractEmojis, type EmojiType } from "@takumi-rs/helpers/emoji";
-import { extractResourceUrls, fetchResources } from "@takumi-rs/helpers";
+import { fetchOk, type FetchOptions } from "@takumi-rs/helpers";
 import { fromJsx, type FromJsxOptions } from "@takumi-rs/helpers/jsx";
 import { getImports } from "./import";
-import type { ReactNode } from "react";
-import type { FetchResourcesOptions, Node, ReactElementLike } from "@takumi-rs/helpers";
+import type { CSSProperties, ReactNode } from "react";
+import type { Node, ReactElementLike } from "@takumi-rs/helpers";
 import { fromHtml } from "@takumi-rs/helpers/html";
 
 type Renderer = napi.Renderer | wasm.Renderer;
 type ImageLoader = napi.ImageLoader | wasm.ImageLoader;
+
+/**
+ * A cache of image fetches keyed by URL. Sharing one across renders deduplicates concurrent
+ * requests for the same URL (single-flight) and reuses their bytes. Any object with `Map`-like
+ * `get`/`set`/`delete` works, so LRU/TTL policies can be plugged in.
+ */
+export type ImageFetchCache = Pick<Map<string, Promise<ArrayBuffer>>, "get" | "set" | "delete">;
+
+const defaultFetchTimeout = 5000;
+const cssUrlPattern = /url\(\s*(['"]?)(.*?)\1\s*\)/g;
+
+function isRemoteUrl(value: string): boolean {
+  return value.startsWith("https://") || value.startsWith("http://");
+}
+
+function collectCssUrls(value: unknown, urls: Set<string>) {
+  if (typeof value === "string") {
+    for (const match of value.matchAll(cssUrlPattern)) {
+      const url = match[2]?.trim();
+      if (url && isRemoteUrl(url)) {
+        urls.add(url);
+      }
+    }
+  } else if (Array.isArray(value)) {
+    for (const item of value) {
+      collectCssUrls(item, urls);
+    }
+  }
+}
+
+/** Every remote image URL a node tree references: `<img src>`, `backgroundImage`, `maskImage`. */
+function extractResourceUrls(node: Node): string[] {
+  const urls = new Set<string>();
+
+  const visit = (current: Node) => {
+    const collectStyleUrls = (style: CSSProperties | undefined) => {
+      if (!style) {
+        return;
+      }
+
+      collectCssUrls(style.backgroundImage, urls);
+      collectCssUrls(style.maskImage, urls);
+    };
+
+    collectStyleUrls(current.style);
+    collectStyleUrls(current.preset);
+    collectCssUrls(current.tw, urls);
+
+    if (current.type === "image") {
+      if (typeof current.src === "string" && isRemoteUrl(current.src)) {
+        urls.add(current.src);
+      }
+      return;
+    }
+
+    if (current.type === "container") {
+      for (const child of current.children ?? []) {
+        visit(child);
+      }
+    }
+  };
+
+  visit(node);
+  return [...urls];
+}
+
+/** Fetches a URL's bytes, coalescing concurrent requests for the same URL through `cache`. A
+ * rejected fetch is evicted so a later call can retry instead of replaying the failure. */
+function fetchImageData(
+  url: string,
+  options: FetchOptions,
+  fetchCache?: ImageFetchCache,
+): Promise<ArrayBuffer> {
+  const cached = fetchCache?.get(url);
+  if (cached) {
+    return cached;
+  }
+
+  const promise = fetchOk(url, options)
+    .then((response) => response.arrayBuffer())
+    .catch((error) => {
+      fetchCache?.delete(url);
+      throw error;
+    });
+
+  fetchCache?.set(url, promise);
+  return promise;
+}
+
+export type PrepareImagesOptions = FetchOptions & {
+  /** The node tree(s) whose remote images to fetch. */
+  node: Node | Node[];
+  /** Pre-fetched entries; their URLs are not re-fetched. */
+  sources?: ImageLoader[];
+  /** Single-flight byte cache shared across renders. */
+  fetchCache?: ImageFetchCache;
+  /** Throw on any fetch failure; if `false`, failed URLs are dropped. @default true */
+  throwOnError?: boolean;
+};
+
+/**
+ * Collects every remote image a node tree references, fetches the ones not already in `sources`,
+ * and returns them as `images` entries ready to hand to a renderer.
+ */
+export async function prepareImages({
+  node,
+  sources = [],
+  fetchCache,
+  fetch,
+  timeout = defaultFetchTimeout,
+  throwOnError = true,
+}: PrepareImagesOptions): Promise<ImageLoader[]> {
+  const nodes = Array.isArray(node) ? node : [node];
+  const provided = new Map<string, ImageLoader>();
+
+  for (const image of sources) {
+    provided.set(image.src, image);
+  }
+
+  const urls = [...new Set(nodes.flatMap(extractResourceUrls))].filter((url) => !provided.has(url));
+  const fetchOptions: FetchOptions = { fetch, timeout };
+
+  const tasks = urls.map(async (src) => ({
+    src,
+    data: await fetchImageData(src, fetchOptions, fetchCache),
+  }));
+  const fetched = throwOnError
+    ? await Promise.all(tasks)
+    : (await Promise.allSettled(tasks))
+        .filter((result) => result.status === "fulfilled")
+        .map((result) => result.value);
+
+  return [...provided.values(), ...fetched];
+}
+
+/**
+ * Images for a render: pre-fetched entries, or a group that also controls how remote images
+ * (and emoji glyphs) are fetched and cached.
+ */
+export type ImagesInput =
+  | ImageLoader[]
+  | (FetchOptions & {
+      /** Pre-fetched entries, same as the array form. */
+      sources?: ImageLoader[];
+      /** Single-flight byte cache shared across renders. */
+      fetchCache?: ImageFetchCache;
+    });
 
 /** The managed-renderer plumbing shared by every entry point. */
 type SharedRenderExtras = {
   renderer: Renderer;
   signal?: AbortSignal;
   jsx?: FromJsxOptions;
-  resourcesOptions?: FetchResourcesOptions;
+  images?: ImagesInput;
   /**
    * @description The emoji provider to use when rendering emojis. If set to `"from-font"`, the renderer will attempt to source emoji glyphs from the loaded fonts.
    * @default "twemoji"
@@ -40,15 +187,18 @@ type Managed<TInner> =
   | (TInner & SharedRenderExtras)
   | (TInner & Omit<SharedRenderExtras, "renderer"> & ManagedRendererOptions);
 
-type InnerRenderOptions = napi.RenderOptions | wasm.RenderOptions;
-type InnerSvgRenderOptions = napi.SvgRenderOptions | wasm.SvgRenderOptions;
-type InnerRenderAnimationOptions = napi.RenderAnimationOptions | wasm.RenderAnimationOptions;
+type InnerRenderOptions = Omit<napi.RenderOptions | wasm.RenderOptions, "images">;
+type InnerSvgRenderOptions = Omit<napi.SvgRenderOptions | wasm.SvgRenderOptions, "images">;
+type InnerRenderAnimationOptions = Omit<
+  napi.RenderAnimationOptions | wasm.RenderAnimationOptions,
+  "images"
+>;
 
 export type RenderOptions = Managed<InnerRenderOptions>;
 export type RenderSvgOptions = Managed<InnerSvgRenderOptions>;
 
 /** A single animation scene whose content is any renderable input. */
-export type RenderAnimationScene = Omit<napi.AnimationSceneSource, "node"> & {
+export type AnimationScene = Omit<napi.AnimationScene, "node"> & {
   /** The content to render for this scene: JSX, an HTML string, or a node tree. */
   node: RenderInput;
 };
@@ -56,14 +206,13 @@ export type RenderAnimationScene = Omit<napi.AnimationSceneSource, "node"> & {
 export type RenderAnimationOptions = Managed<
   Omit<InnerRenderAnimationOptions, "scenes"> & {
     /** The scenes to render sequentially. */
-    scenes: RenderAnimationScene[];
+    scenes: AnimationScene[];
   }
 >;
 
 /** The subset of options the shared pipeline reads, across every entry point. */
 type PipelineOptions = Partial<SharedRenderExtras> &
   ManagedRendererOptions & {
-    images?: ImageLoader[];
     stylesheets?: string[];
   };
 
@@ -113,20 +262,14 @@ async function resolveContent(element: RenderInput, options?: PipelineOptions) {
   return { node, stylesheets };
 }
 
-/** Merges caller-supplied images with the resources fetched from the nodes. */
-async function collectImages(nodes: Node[], options?: PipelineOptions): Promise<ImageLoader[]> {
-  const providedImages = new Map<string, ImageLoader>();
+/** Resolves the render's `images` option into concrete entries via {@link prepareImages}. */
+function collectImages(node: Node | Node[], options?: PipelineOptions): Promise<ImageLoader[]> {
+  const images = options?.images;
+  const { sources, fetchCache, fetch, timeout } = Array.isArray(images)
+    ? { sources: images }
+    : (images ?? {});
 
-  for (const image of options?.images ?? []) {
-    providedImages.set(image.src, image);
-  }
-
-  const urls = [...new Set(nodes.flatMap((node) => extractResourceUrls(node)))].filter(
-    (url) => !providedImages.has(url),
-  );
-  const fetched = await fetchResources(urls, options?.resourcesOptions);
-
-  return [...providedImages.values(), ...fetched];
+  return prepareImages({ node, sources, fetchCache, fetch, timeout });
 }
 
 function mergeStylesheets(options: PipelineOptions | undefined, extra: string[]): string[] {
@@ -158,7 +301,7 @@ export async function render(element: RenderInput, options?: RenderOptions) {
 
   const renderer = await resolveRenderer(options);
   const { node, stylesheets } = await resolveContent(element, options);
-  const images = await collectImages([node], options);
+  const images = await collectImages(node, options);
 
   // The WASM renderer is synchronous and ignores the signal argument, so honor an
   // abort that happened during the async font/resource loading before the blocking call.
@@ -196,7 +339,7 @@ export async function renderSvg(element: RenderInput, options?: RenderSvgOptions
 
   const renderer = await resolveRenderer(options);
   const { node, stylesheets } = await resolveContent(element, options);
-  const images = await collectImages([node], options);
+  const images = await collectImages(node, options);
 
   options?.signal?.throwIfAborted();
 
