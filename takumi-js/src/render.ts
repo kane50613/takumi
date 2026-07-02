@@ -16,7 +16,11 @@ type ImageLoader = napi.ImageLoader | wasm.ImageLoader;
  * requests for the same URL (single-flight) and reuses their bytes. Any object with `Map`-like
  * `get`/`set`/`delete` works, so LRU/TTL policies can be plugged in.
  */
-export type ImageFetchCache = Pick<Map<string, Promise<ArrayBuffer>>, "get" | "set" | "delete">;
+export interface ImageFetchCache {
+  get(url: string): Promise<ArrayBuffer> | undefined;
+  set(url: string, data: Promise<ArrayBuffer>): unknown;
+  delete(url: string): unknown;
+}
 
 const defaultFetchTimeout = 5000;
 const cssUrlPattern = /url\(\s*(['"]?)(.*?)\1\s*\)/g;
@@ -120,6 +124,7 @@ export async function prepareImages({
   fetchCache,
   fetch,
   timeout = defaultFetchTimeout,
+  signal,
   throwOnError = true,
 }: PrepareImagesOptions): Promise<ImageLoader[]> {
   const nodes = Array.isArray(node) ? node : [node];
@@ -130,7 +135,7 @@ export async function prepareImages({
   }
 
   const urls = [...new Set(nodes.flatMap(extractImageUrls))].filter((url) => !provided.has(url));
-  const fetchOptions: FetchOptions = { fetch, timeout };
+  const fetchOptions: FetchOptions = { fetch, timeout, signal };
 
   const tasks = urls.map(async (src) => ({
     src,
@@ -274,7 +279,14 @@ async function collectImages(
     ? { sources: images }
     : (images ?? {});
 
-  const prepared = await prepareImages({ node, sources, fetchCache, fetch, timeout });
+  const prepared = await prepareImages({
+    node,
+    sources,
+    fetchCache,
+    fetch,
+    timeout,
+    signal: options?.signal,
+  });
 
   return cache ? prepared.map((image) => ({ ...image, cache: image.cache ?? cache })) : prepared;
 }

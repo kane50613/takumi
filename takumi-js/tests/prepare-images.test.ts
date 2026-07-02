@@ -57,6 +57,26 @@ describe("prepareImages", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  test("extracts urls from backgroundImage, maskImage, and tw", async () => {
+    const fetchMock = mock((url: string) => Promise.resolve(ok(url)));
+    const node: Node = {
+      type: "container",
+      style: {
+        backgroundImage: "url(https://example.com/bg.png)",
+        maskImage: "url('https://example.com/mask.png')",
+      },
+      children: [{ type: "container", tw: "bg-[url(https://example.com/tw.png)]" }],
+    };
+
+    const images = await prepareImages({ node, fetch: fetchMock });
+
+    expect(images.map((i) => i.src).sort()).toEqual([
+      "https://example.com/bg.png",
+      "https://example.com/mask.png",
+      "https://example.com/tw.png",
+    ]);
+  });
+
   test("throwOnError false drops failed urls", async () => {
     const fetchMock = mock((url: string) =>
       url.includes("bad") ? Promise.reject(new Error("nope")) : Promise.resolve(ok(url)),
