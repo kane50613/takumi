@@ -2,16 +2,30 @@
 
 import { compile } from "tailwindcss";
 import indexCss from "tailwindcss/index.css?raw";
-import preflightCss from "tailwindcss/preflight.css?raw";
 import themeCss from "tailwindcss/theme.css?raw";
 import utilitiesCss from "tailwindcss/utilities.css?raw";
 import { useLayoutEffect, useRef, useState } from "react";
 import manropeUrl from "../../../../assets/fonts/manrope/manrope-latin-wght-normal.woff2?url";
 
+// Takumi's `tw` has no Preflight: it keeps UA presets and defaults to border-box.
+// Drop Preflight's base layer, keep only box-sizing/border, so the pane matches the render.
+const BASE = `@layer base{*,::after,::before,::backdrop,::file-selector-button{box-sizing:border-box;border:0 solid}}`;
+
+function withoutPreflight(css: string) {
+  const start = css.indexOf("@layer base {");
+  if (start === -1) return css;
+  let depth = 0;
+  for (let i = css.indexOf("{", start); i < css.length; i++) {
+    if (css[i] === "{") depth++;
+    else if (css[i] === "}" && --depth === 0) return `${css.slice(0, start)}${css.slice(i + 1)}`;
+  }
+  return css;
+}
+
 const SOURCES: Record<string, string> = {
-  tailwindcss: indexCss,
+  tailwindcss: `${withoutPreflight(indexCss)}\n${BASE}`,
   "tailwindcss/theme.css": themeCss,
-  "tailwindcss/preflight.css": preflightCss,
+  "tailwindcss/preflight.css": BASE,
   "tailwindcss/utilities.css": utilitiesCss,
 };
 

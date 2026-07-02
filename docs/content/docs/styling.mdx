@@ -88,6 +88,11 @@ The `tw` prop runs a built-in parser with no build step. It won't cover every Ta
 - No theme config, but arbitrary values work.
 - See the [parser mapping](https://github.com/kane50613/takumi/blob/master/takumi-css/src/style/tw/map.rs) for every supported class.
 
+<Callout type="warn">
+  `tw` has no Tailwind Preflight, so elements keep their UA margins. A `<h1>` gets a `0.67em` top
+  margin until you add `mt-0`. `box-sizing` still defaults to `border-box`.
+</Callout>
+
 ```tsx
 <div tw="bg-blue-500 p-4 rounded-lg">
   <h1 tw="text-white text-2xl font-bold">Hello Tailwind!</h1>

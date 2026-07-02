@@ -26,12 +26,17 @@ type Page =
 | ({ path: '/showcase' } & GetConfigResponse<typeof File_Showcase_getConfig>);
 
 // prettier-ignore
+type Layout =
+| { path: '/docs' };
+
+// prettier-ignore
 declare module 'waku/router' {
   interface RouteConfig {
     paths: PathsForPages<Page>;
   }
   interface CreatePagesConfig {
     pages: Page;
+    layouts: Layout;
   }
   interface SearchCodecsConfig extends SearchCodecsForPages<Page> {}
 }
