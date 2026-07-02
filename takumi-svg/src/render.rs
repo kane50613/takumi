@@ -470,7 +470,12 @@ fn resolve_shape_radius(
 
 /// Absolute SVG path `d` for the border-box rounded rectangle, reusing core's
 /// `BorderProperties` geometry (cubic-bezier corners, overlap-scaled radii).
-fn border_box_path_data(border: &BorderProperties, size: Size<f32>, x: f32, y: f32) -> String {
+pub(crate) fn border_box_path_data(
+  border: &BorderProperties,
+  size: Size<f32>,
+  x: f32,
+  y: f32,
+) -> String {
   let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
   border.append_mask_commands(&mut commands, size, Point::ZERO);
   path_data(&commands, [1.0, 0.0, 0.0, 1.0, x, y])
