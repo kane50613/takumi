@@ -1,6 +1,8 @@
 ---
 packages:
-  npm:takumi-js: patch
+  npm:takumi-js:
+    replay:
+      - exit-prerelease(npm:takumi-js)
 ---
 
 ### Pin `@takumi-rs/*` dependencies to the matching release
