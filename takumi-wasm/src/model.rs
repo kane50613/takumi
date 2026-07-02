@@ -64,7 +64,7 @@ pub struct RenderOptions {
   pub format: Option<OutputFormat>,
   /// The JPEG quality (0-100), if applicable.
   pub quality: Option<u8>,
-  /// Pre-fetched image resources to use during rendering.
+  /// Pre-fetched images to use during rendering.
   pub images: Option<Vec<ImageSource>>,
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
@@ -96,7 +96,7 @@ pub struct SvgRenderOptions {
   pub width: Option<u32>,
   /// The height of the viewport in pixels.
   pub height: Option<u32>,
-  /// Pre-fetched image resources to use during rendering.
+  /// Pre-fetched images to use during rendering.
   pub images: Option<Vec<ImageSource>>,
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
@@ -124,7 +124,7 @@ pub struct RenderAnimationOptions {
   pub height: u32,
   /// The output animation format (WebP, APNG, or GIF).
   pub format: Option<AnimationOutputFormat>,
-  /// Pre-fetched image resources to use during rendering.
+  /// Pre-fetched images to use during rendering.
   pub images: Option<Vec<ImageSource>>,
   /// Whether to draw debug borders around layout elements.
   pub draw_debug_border: Option<bool>,

@@ -41,7 +41,7 @@ function collectCssUrls(value: unknown, urls: Set<string>) {
 }
 
 /** Every remote image URL a node tree references: `<img src>`, `backgroundImage`, `maskImage`. */
-function extractResourceUrls(node: Node): string[] {
+function extractImageUrls(node: Node): string[] {
   const urls = new Set<string>();
 
   const visit = (current: Node) => {
@@ -129,7 +129,7 @@ export async function prepareImages({
     provided.set(image.src, image);
   }
 
-  const urls = [...new Set(nodes.flatMap(extractResourceUrls))].filter((url) => !provided.has(url));
+  const urls = [...new Set(nodes.flatMap(extractImageUrls))].filter((url) => !provided.has(url));
   const fetchOptions: FetchOptions = { fetch, timeout };
 
   const tasks = urls.map(async (src) => ({
@@ -280,7 +280,7 @@ function mergeStylesheets(options: PipelineOptions | undefined, extra: string[])
  * Renders a React element, HTML string, or Takumi node tree into an image.
  *
  * This function automatically detects the best renderer for your environment (native Rust on Node.js,
- * WASM on Edge/Workers) and handles resource fetching (fonts, images) and emoji extraction.
+ * WASM on Edge/Workers) and handles fetching fonts and images, and emoji extraction.
  *
  * @example
  * ```tsx
@@ -304,7 +304,7 @@ export async function render(element: RenderInput, options?: RenderOptions) {
   const images = await collectImages(node, options);
 
   // The WASM renderer is synchronous and ignores the signal argument, so honor an
-  // abort that happened during the async font/resource loading before the blocking call.
+  // abort that happened during the async font and image loading before the blocking call.
   options?.signal?.throwIfAborted();
 
   return renderer.render(node, {
@@ -318,7 +318,7 @@ export async function render(element: RenderInput, options?: RenderOptions) {
  * Renders a React element, HTML string, or Takumi node tree into a vector SVG
  * document string.
  *
- * Same input handling and resource pipeline as {@link render}, but emits real SVG
+ * Same input handling and image pipeline as {@link render}, but emits real SVG
  * (`<rect>`, `<path>`, gradients, glyph outlines, embedded images) instead of a
  * raster bitmap.
  *
@@ -353,8 +353,8 @@ export async function renderSvg(element: RenderInput, options?: RenderSvgOptions
 /**
  * Renders a sequence of scenes into an animated image (WebP / APNG / GIF).
  *
- * Each scene's content goes through the same input handling and resource pipeline
- * as {@link render}; resources are fetched once across all scenes.
+ * Each scene's content goes through the same input handling and image pipeline
+ * as {@link render}; images are fetched once across all scenes.
  *
  * @example
  * ```tsx

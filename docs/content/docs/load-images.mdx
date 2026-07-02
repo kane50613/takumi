@@ -1,6 +1,6 @@
 ---
 title: Images & emoji
-description: Load images, cache resources, and render emoji.
+description: Load and cache images, and render emoji.
 icon: Image
 ---
 
@@ -8,34 +8,23 @@ icon: Image
 
 Takumi fetches external images in `src` attributes and CSS `background-image` / `mask-image`.
 
-To cache fetched bytes across renders, pass a caching `fetch` implementation through `images.fetch`:
+To reuse fetched bytes across renders, pass a `fetchCache` — a `Map<string, Promise<ArrayBuffer>>`, or anything with `Map`-like `get`/`set`/`delete`. It stores the in-flight promise, so concurrent renders needing the same URL share one fetch:
 
 ```tsx twoslash
 import { render } from "takumi-js";
 
 const element = <img src="https://example.com/image.png" />;
 
-const cache = new Map<string, Promise<ArrayBuffer>>();
-
-async function cachedFetch(url: string, init?: RequestInit) {
-  let bytes = cache.get(url);
-
-  if (!bytes) {
-    bytes = fetch(url, init).then((response) => response.arrayBuffer());
-    cache.set(url, bytes);
-  }
-
-  return new Response(await bytes);
-}
+const fetchCache = new Map<string, Promise<ArrayBuffer>>();
 
 const image = await render(element, {
   images: {
-    fetch: { fetch: cachedFetch },
+    fetchCache,
   },
 });
 ```
 
-A plain `Map` never evicts. If your URLs are high-cardinality (a different image per render), use a bounded cache such as an LRU, or skip caching.
+A plain `Map` never evicts. If your URLs are high-cardinality (a different image per render), pass a bounded cache such as an LRU, or omit `fetchCache`.
 
 ## Pre-fetched Images
 
@@ -77,10 +66,10 @@ function OgImage() {
 
 Takumi caches each decoded image so repeated content is decoded once. Two independent layers exist:
 
-| Layer        | Stores         | Keyed by            | Set with                             |
-| ------------ | -------------- | ------------------- | ------------------------------------ |
-| Byte cache   | Fetched bytes  | URL                 | a caching `fetch` via `images.fetch` |
-| Decode cache | Decoded pixels | Hash of image bytes | per-image `cache` / `images.cache`   |
+| Layer        | Stores         | Keyed by            | Set with                           |
+| ------------ | -------------- | ------------------- | ---------------------------------- |
+| Byte cache   | Fetched bytes  | URL                 | `images.fetchCache`                |
+| Decode cache | Decoded pixels | Hash of image bytes | per-image `cache` / `images.cache` |
 
 The decode cache lives in the renderer and is bounded: entries weigh in at their decoded size against a 64 MiB budget, and once it fills the cache evicts the least recently used. A high-cardinality workload (a different image every render) won't grow memory; it misses the cache and decodes each time. SVGs skip the cache and re-parse per render.
 
