@@ -49,7 +49,7 @@ describe("prepareImages", () => {
     const fetchCache = new Map<string, Promise<ArrayBuffer>>();
     const node = tree("https://example.com/y.png");
 
-    await expect(prepareImages({ node, fetchCache, fetch: fetchMock })).rejects.toThrow("boom");
+    expect(prepareImages({ node, fetchCache, fetch: fetchMock })).rejects.toThrow("boom");
     expect(fetchCache.size).toBe(0);
 
     const images = await prepareImages({ node, fetchCache, fetch: fetchMock });
