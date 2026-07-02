@@ -14,6 +14,7 @@ export default defineConfig({
     },
     resolve: {
       tsconfigPaths: true,
+      dedupe: ["fumadocs-core", "fumadocs-ui"],
     },
     plugins: [tailwindcss(), mdx(MdxConfig)],
   },
