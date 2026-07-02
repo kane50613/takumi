@@ -1,4 +1,5 @@
-import { fetchResources, extractResourceUrls, googleFonts } from "takumi-js/helpers";
+import { googleFonts } from "takumi-js/helpers";
+import { prepareImages } from "takumi-js";
 import { extractEmojis } from "takumi-js/helpers/emoji";
 import { fromJsx } from "takumi-js/helpers/jsx";
 import wasm, { init, Renderer } from "takumi-js/wasm";
@@ -7,7 +8,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { evaluateCodeExports, renderReact } from "./evaluate";
 import { messageSchema, type RenderMessageInput } from "./schema";
 
-const fetchCache = new Map<string, ArrayBuffer>();
+const fetchCache = new Map<string, Promise<ArrayBuffer>>();
 const fontCssCache = new Map<string, string>();
 
 function postMessage(message: RenderMessageInput, transfer?: Transferable[]) {
@@ -64,10 +65,8 @@ self.onmessage = async (event: MessageEvent) => {
 
         node = extractEmojis(node, options.emoji ?? "twemoji");
 
-        const resourceUrls = extractResourceUrls(node);
-
         const [images, fonts] = await Promise.all([
-          fetchResources(resourceUrls, { cache: fetchCache }),
+          prepareImages({ node, fetchCache }),
           googleFonts({ families: GOOGLE_FONTS, cache: fontCssCache }),
         ]);
 

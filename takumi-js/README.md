@@ -42,7 +42,7 @@ await writeFile("./output.png", image);
 | `takumi-js/response`      | `ImageResponse` class — drop-in compatible with `next/og`               |
 | `takumi-js/node`          | Re-exports `@takumi-rs/core` (native napi-rs bindings)                  |
 | `takumi-js/wasm`          | Re-exports `@takumi-rs/wasm` + `init()` for manual WASM initialization  |
-| `takumi-js/helpers`       | Node tree utilities (`fromJsx`, `fromHtml`, `fetchResources`, …)        |
+| `takumi-js/helpers`       | Node tree utilities (`fromJsx`, `fromHtml`, `extractEmojis`, …)         |
 | `takumi-js/helpers/jsx`   | `fromJsx` — convert a React element to a Takumi node tree + stylesheets |
 | `takumi-js/helpers/emoji` | `extractEmojis` — replace emoji characters with image nodes             |
 

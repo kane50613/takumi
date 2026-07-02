@@ -1,10 +1,37 @@
 import type { CSSProperties } from "react";
 import type { Node } from "./types";
 
-const defaultTimeout = 5000;
+const defaultFetchTimeout = 5000;
 const cssUrlPattern = /url\(\s*(['"]?)(.*?)\1\s*\)/g;
 
-function isFetchableResourceUrl(value: string): boolean {
+export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+
+export type FetchOptions = {
+  /** Custom fetch implementation. @default globalThis.fetch */
+  fetch?: FetchLike;
+  /** Abort the request after this many milliseconds. */
+  timeout?: number;
+  /** Caller abort signal, combined with the timeout. */
+  signal?: AbortSignal;
+};
+
+/** Fetches a URL, applying a timeout signal and throwing on a non-OK status. */
+export async function fetchOk(url: string, options: FetchOptions & { init?: RequestInit } = {}) {
+  const fetchImpl = options.fetch ?? globalThis.fetch;
+  const timeoutSignal =
+    options.timeout === undefined ? undefined : AbortSignal.timeout(options.timeout);
+  const signals = [options.signal, options.init?.signal, timeoutSignal].filter(
+    (s): s is AbortSignal => s !== undefined,
+  );
+  const signal = signals.length ? AbortSignal.any(signals) : undefined;
+  const response = await fetchImpl(url, { ...options.init, signal });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} ${response.statusText} fetching ${url}`);
+  }
+  return response;
+}
+
+function isRemoteUrl(value: string): boolean {
   return value.startsWith("https://") || value.startsWith("http://");
 }
 
@@ -12,7 +39,7 @@ function collectCssUrls(value: unknown, urls: Set<string>) {
   if (typeof value === "string") {
     for (const match of value.matchAll(cssUrlPattern)) {
       const url = match[2]?.trim();
-      if (url && isFetchableResourceUrl(url)) {
+      if (url && isRemoteUrl(url)) {
         urls.add(url);
       }
     }
@@ -23,7 +50,8 @@ function collectCssUrls(value: unknown, urls: Set<string>) {
   }
 }
 
-export function extractResourceUrls(node: Node): string[] {
+/** Every remote image URL a node tree references: `<img src>`, `backgroundImage`, `maskImage`. */
+function extractImageUrls(node: Node): string[] {
   const urls = new Set<string>();
 
   const visit = (current: Node) => {
@@ -41,7 +69,7 @@ export function extractResourceUrls(node: Node): string[] {
     collectCssUrls(current.tw, urls);
 
     if (current.type === "image") {
-      if (typeof current.src === "string" && isFetchableResourceUrl(current.src)) {
+      if (typeof current.src === "string" && isRemoteUrl(current.src)) {
         urls.add(current.src);
       }
       return;
@@ -58,76 +86,91 @@ export function extractResourceUrls(node: Node): string[] {
   return [...urls];
 }
 
-export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
-
-export type FetchOptions = {
-  /** Custom fetch implementation. @default globalThis.fetch */
-  fetch?: FetchLike;
-  /** Abort the request after this many milliseconds. */
-  timeout?: number;
-};
-
-/** Fetches a URL, applying a timeout signal and throwing on a non-OK status. */
-export async function fetchOk(url: string, options: FetchOptions & { init?: RequestInit } = {}) {
-  const fetchImpl = options.fetch ?? globalThis.fetch;
-  const signal =
-    options.timeout === undefined ? options.init?.signal : AbortSignal.timeout(options.timeout);
-  const response = await fetchImpl(url, { ...options.init, signal });
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status} ${response.statusText} fetching ${url}`);
-  }
-  return response;
+/**
+ * A cache of image fetches keyed by URL. Sharing one across renders deduplicates concurrent
+ * requests for the same URL (single-flight) and reuses their bytes. Any object with `Map`-like
+ * `get`/`set`/`delete` works, so LRU/TTL policies can be plugged in.
+ */
+export interface ImageFetchCache {
+  get(url: string): Promise<ArrayBuffer> | undefined;
+  set(url: string, data: Promise<ArrayBuffer>): unknown;
+  delete(url: string): unknown;
 }
 
-export type FetchResourcesOptions = FetchOptions & {
-  /**
-   * Whether to throw on any fetch failure. If false, returns only successful fetches.
-   * @default true
-   */
+/** Fetches a URL's bytes, coalescing concurrent requests for the same URL through `cache`. A
+ * rejected fetch is evicted so a later call can retry instead of replaying the failure. */
+function fetchImageData(
+  url: string,
+  options: FetchOptions,
+  fetchCache?: ImageFetchCache,
+): Promise<ArrayBuffer> {
+  const cached = fetchCache?.get(url);
+  if (cached) {
+    return cached;
+  }
+
+  const promise = fetchOk(url, options)
+    .then((response) => response.arrayBuffer())
+    .catch((error) => {
+      fetchCache?.delete(url);
+      throw error;
+    });
+
+  fetchCache?.set(url, promise);
+  return promise;
+}
+
+/** A fetched image entry: its source URL and raw bytes. */
+export interface FetchedImage {
+  src: string;
+  data: ArrayBuffer;
+}
+
+export type PrepareImagesOptions<T extends { src: string } = FetchedImage> = FetchOptions & {
+  /** The node tree(s) whose remote images to fetch. */
+  node: Node | Node[];
+  /** Pre-fetched entries; their URLs are not re-fetched. */
+  sources?: T[];
+  /** Single-flight byte cache shared across renders. */
+  fetchCache?: ImageFetchCache;
+  /** Throw on any fetch failure; if `false`, failed URLs are dropped. @default true */
   throwOnError?: boolean;
-  /**
-   * Cache for fetched resources.
-   * Custom features (like LRU, TTL, etc.) can be implemented by providing an extended `Map<string, ArrayBuffer>`.
-   */
-  cache?: Pick<Map<string, ArrayBuffer>, "has" | "get" | "set">;
 };
 
 /**
- * Fetches multiple resources concurrently, deduplicating URLs.
- *
- * @param urls - URLs to fetch
- * @param options - Fetch options; `timeout` defaults to 5000ms
- * @returns Array of { src: string, data: ArrayBuffer }
+ * Collects every remote image a node tree references, fetches the ones not already in `sources`,
+ * and returns them as entries ready to hand to a renderer.
  */
-export async function fetchResources(urls: string[], options?: FetchResourcesOptions) {
-  const throwOnError = options?.throwOnError ?? true;
-  // Per-request timeout so one slow URL can't consume the whole batch's budget.
-  const timeout = options?.timeout ?? defaultTimeout;
+export async function prepareImages<T extends { src: string } = FetchedImage>({
+  node,
+  sources = [],
+  fetchCache,
+  fetch,
+  timeout = defaultFetchTimeout,
+  signal,
+  throwOnError = true,
+}: PrepareImagesOptions<T>): Promise<(T | FetchedImage)[]> {
+  const nodes = Array.isArray(node) ? node : [node];
+  const provided = new Map<string, T>();
 
-  const promises = [...new Set(urls)].map(async (url) => {
-    if (options?.cache?.has(url)) {
-      const cached = options.cache.get(url);
-      if (cached) {
-        return { src: url, data: cached };
-      }
-    }
-
-    const buffer = await fetchOk(url, { fetch: options?.fetch, timeout }).then((r) =>
-      r.arrayBuffer(),
-    );
-    options?.cache?.set(url, buffer);
-    return { src: url, data: buffer };
-  });
-
-  if (throwOnError) {
-    return Promise.all(promises);
+  for (const image of sources) {
+    provided.set(image.src, image);
   }
 
-  const results = await Promise.allSettled(promises);
-  return results
-    .filter(
-      (r): r is PromiseFulfilledResult<{ src: string; data: ArrayBuffer }> =>
-        r.status === "fulfilled",
-    )
-    .map((r) => r.value);
+  const urls = [...new Set(nodes.flatMap(extractImageUrls))].filter((url) => !provided.has(url));
+  const fetchOptions: FetchOptions = { fetch, timeout, signal };
+
+  const tasks = urls.map(
+    async (src): Promise<FetchedImage> => ({
+      src,
+      data: await fetchImageData(src, fetchOptions, fetchCache),
+    }),
+  );
+  const fetched = throwOnError
+    ? await Promise.all(tasks)
+    : (await Promise.allSettled(tasks))
+        .filter((result) => result.status === "fulfilled")
+        .map((result) => result.value);
+
+  return [...provided.values(), ...fetched];
 }

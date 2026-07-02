@@ -1,6 +1,6 @@
 ---
 title: Images & emoji
-description: Load images, cache resources, and render emoji.
+description: Load and cache images, and render emoji.
 icon: Image
 ---
 
@@ -8,21 +8,23 @@ icon: Image
 
 Takumi fetches external images in `src` attributes and CSS `background-image` / `mask-image`.
 
-Add a caching layer by passing `resourcesOptions.cache` to `render`.
+To reuse fetched bytes across renders, pass a `fetchCache` — a `Map<string, Promise<ArrayBuffer>>`, or anything with `Map`-like `get`/`set`/`delete`. It stores the in-flight promise, so concurrent renders needing the same URL share one fetch:
 
 ```tsx twoslash
 import { render } from "takumi-js";
 
 const element = <img src="https://example.com/image.png" />;
 
-const cache = new Map<string, ArrayBuffer>();
+const fetchCache = new Map<string, Promise<ArrayBuffer>>();
 
 const image = await render(element, {
-  resourcesOptions: {
-    cache,
+  images: {
+    fetchCache,
   },
 });
 ```
+
+A plain `Map` never evicts. If your URLs are high-cardinality (a different image per render), pass a bounded cache such as an LRU, or omit `fetchCache`.
 
 ## Pre-fetched Images
 
@@ -62,17 +64,19 @@ function OgImage() {
 
 ## Decode caching
 
-Takumi caches each decoded image so a repeated `src` is decoded once. Two independent layers exist:
+Takumi caches each decoded image so repeated content is decoded once. Two independent layers exist:
 
-| Layer        | Stores         | Set with                 |
-| ------------ | -------------- | ------------------------ |
-| Byte cache   | Fetched bytes  | `resourcesOptions.cache` |
-| Decode cache | Decoded pixels | per-image `cache`        |
+| Layer        | Stores         | Keyed by            | Set with                           |
+| ------------ | -------------- | ------------------- | ---------------------------------- |
+| Byte cache   | Fetched bytes  | URL                 | `images.fetchCache`                |
+| Decode cache | Decoded pixels | Hash of image bytes | per-image `cache` / `images.cache` |
+
+The decode cache lives in the renderer and is bounded: entries weigh in at their decoded size against a 64 MiB budget, and once it fills the cache evicts the least recently used. A high-cardinality workload (a different image every render) won't grow memory; it misses the cache and decodes each time. SVGs skip the cache and re-parse per render.
 
 The per-image `cache` mode takes two values:
 
-- `auto` (default): cache the decoded image; the entry is evictable.
-- `none`: skip the cache. Use it for a one-off image you won't render again, to avoid holding its pixels in memory.
+- `auto` (default): cache the decoded image within the byte budget.
+- `none`: read the cache but never populate it. Use it for a one-off image you won't render again, so it can't displace images worth keeping.
 
 ```tsx twoslash
 import { ImageResponse } from "takumi-js/response";
@@ -87,6 +91,25 @@ export function GET() {
       },
     ],
   });
+}
+```
+
+To set the mode for every image in a render, including ones Takumi fetches itself, pass `images` as a group instead of an array. A per-source `cache` still wins. For a route where each request renders a different image, `cache: "none"` keeps one-off decodes out of the cache:
+
+```tsx twoslash
+import { ImageResponse } from "takumi-js/response";
+
+export function GET() {
+  return new ImageResponse(<OgImage />, {
+    images: {
+      cache: "none", // [!code ++]
+      sources: [{ src: "logo", data: () => fetch("/logo.png").then((res) => res.arrayBuffer()) }],
+    },
+  });
+}
+
+function OgImage() {
+  return <img src="logo" />;
 }
 ```
 
@@ -108,19 +131,18 @@ export function GET() {
 
 #### Manual extraction
 
-`ImageResponse` calls the `extractEmojis` helper for you. The helper splits emoji from text into image nodes pointing at a CDN. Run the steps yourself to fetch emoji bytes alongside other resources.
+`ImageResponse` calls the `extractEmojis` helper for you. The helper splits emoji from text into image nodes pointing at a CDN. Run the steps yourself to fetch emoji bytes alongside other images.
 
 ```tsx twoslash
 import { extractEmojis } from "takumi-js/helpers/emoji";
 import { fromJsx } from "takumi-js/helpers/jsx";
-import { extractResourceUrls, fetchResources } from "takumi-js/helpers";
+import { prepareImages } from "takumi-js/helpers";
 import { Renderer } from "takumi-js/node";
 
 let { node } = await fromJsx(<div tw="flex justify-center items-center text-3xl">Hello 👋😁</div>);
 node = extractEmojis(node, "twemoji");
 
-const resourceUrls = extractResourceUrls(node);
-const images = await fetchResources(resourceUrls);
+const images = await prepareImages({ node });
 
 const renderer = new Renderer();
 
@@ -128,6 +150,8 @@ const image = await renderer.render(node, {
   images,
 });
 ```
+
+`prepareImages` walks the node tree for remote `<img>`, `backgroundImage`, and `maskImage` URLs, fetches the ones missing from `sources`, and returns `images` entries. Pass a `fetchCache` (a `Map<string, Promise<ArrayBuffer>>`, or anything with `Map`-like `get`/`set`/`delete`) to deduplicate concurrent fetches and reuse bytes across renders.
 
 ### COLR / bitmap fonts
 

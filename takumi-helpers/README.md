@@ -2,7 +2,7 @@
 
 **Utility functions and types for working with Takumi node trees.**
 
-This package provides the core logic for converting JSX and HTML into the layout-ready node trees that Takumi's Rust engine expects. It also handles resource fetching (fonts, images) and emoji processing.
+This package provides the core logic for converting JSX and HTML into the layout-ready node trees that Takumi's Rust engine expects. It also loads fonts and processes emoji.
 
 [Documentation](https://takumi.kane.tw/docs/architecture#fromjsx-helper) · [GitHub](https://github.com/kane50613/takumi)
 
@@ -32,17 +32,6 @@ Parse HTML strings into Takumi nodes.
 import { fromHtml } from "@takumi-rs/helpers/html";
 
 const { node, stylesheets } = await fromHtml("<div style='color: red'>Hello</div>");
-```
-
-### Resource Fetching
-
-Extract and fetch external resources (images, fonts) mentioned in a node tree.
-
-```ts
-import { extractResourceUrls, fetchResources } from "@takumi-rs/helpers";
-
-const urls = extractResourceUrls(node);
-const resources = await fetchResources(urls);
 ```
 
 ### Emoji Processing

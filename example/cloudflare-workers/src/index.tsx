@@ -1,7 +1,8 @@
 import { ImageResponse } from "takumi-js/response";
 import DocsTemplate from "takumi-template/src/templates/docs-template";
 
-const fetchCache = new Map();
+// Shared across requests: dedupes concurrent fetches of the same URL and reuses the bytes.
+const imageCache = new Map<string, Promise<ArrayBuffer>>();
 
 export default {
   async fetch(request) {
@@ -24,8 +25,8 @@ export default {
         primaryTextColor="#fff"
       />,
       {
-        resourcesOptions: {
-          cache: fetchCache,
+        images: {
+          fetchCache: imageCache,
         },
         width: 1200,
         height: 630,

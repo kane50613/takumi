@@ -23,6 +23,8 @@ JS (takumi-js, @takumi-rs/*):
 - new Renderer({fonts}) -> new Renderer(); pass fonts per call: render(node, {fonts:[inter]})
 - loadFont/loadFonts/loadFontSync -> registerFont (only to reuse a font across renders)
 - render option fetchedResources -> images (keyed by src; no global image store)
+- render option resourcesOptions -> images.fetch/images.timeout; combine pre-fetched entries and a shared byte cache with the group form images: { sources: [...], fetch: myFetch, fetchCache: myMap }
+- extractResourceUrls + fetchResources helpers -> prepareImages({ node, fetchCache? }) from "takumi-js/helpers"
 - format is a string ("png"|"jpeg"|"webp"|...) with optional quality (jpeg/lossy webp) and lossless (webp)
 - createImageResponse(opts)(jsx) -> new ImageResponse(jsx, opts)
 
@@ -91,15 +93,32 @@ const image = await renderer.render(node, {
 
 ### Renamed and changed options
 
-| v1                 | v2                           | Note                                                                      |
-| ------------------ | ---------------------------- | ------------------------------------------------------------------------- |
-| `fetchedResources` | `images`                     | Pre-fetched images, keyed by `src`.                                       |
-| —                  | `fonts` on `renderAnimation` | Animation calls now accept `fonts` and `fontFamilies`, matching `render`. |
+| v1                 | v2                                | Note                                                                               |
+| ------------------ | --------------------------------- | ---------------------------------------------------------------------------------- |
+| `fetchedResources` | `images`                          | Pre-fetched images, keyed by `src`.                                                |
+| `resourcesOptions` | `images.fetch` / `images.timeout` | Fetch implementation and timeout for remote images.                                |
+| —                  | `images.fetchCache`               | Byte cache shared across renders (a `Map`-like store); dedupes concurrent fetches. |
+| —                  | `fonts` on `renderAnimation`      | Animation calls now accept `fonts` and `fontFamilies`, matching `render`.          |
 
 ```tsx
 const image = await renderer.render(node, {
   fetchedResources: resources, // [!code --]
   images: resources, // [!code ++]
+});
+```
+
+`images` also takes a group form that holds pre-fetched entries, fetch behavior, and a shared byte cache in one place:
+
+```tsx
+const imageCache = new Map<string, Promise<ArrayBuffer>>();
+
+const image = await render(node, {
+  resourcesOptions: { fetch: myFetch }, // [!code --]
+  images: {
+    sources, // pre-fetched entries, not re-fetched [!code ++]
+    fetch: myFetch, // [!code ++]
+    fetchCache: imageCache, // reused across renders, dedupes concurrent fetches [!code ++]
+  },
 });
 ```
 
