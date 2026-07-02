@@ -1,3 +1,16 @@
+## @takumi-rs/wasm@2.0.0-rc.4 (rc)
+
+### Replace `fetchResources`/`extractResourceUrls` with `prepareImages`
+
+`@takumi-rs/helpers` exports `prepareImages({ node, sources?, fetchCache?, fetch?, timeout? })`,
+which collects a node tree's remote images and fetches the ones not already supplied. Pass a
+`fetchCache` (a `Map<string, Promise<ArrayBuffer>>`, or any `Map`-like store) to coalesce
+concurrent fetches of the same URL and reuse the bytes across renders; a failed fetch is
+evicted so a later call retries.
+
+The `extractResourceUrls` and `fetchResources` helpers are removed. The `images` render option
+takes the same group form: `{ sources, fetchCache, fetch, timeout }`.
+
 ## @takumi-rs/wasm@2.0.0-rc.1 (rc)
 
 ### Make subset-group font selection deterministic

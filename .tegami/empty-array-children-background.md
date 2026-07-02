@@ -1,7 +1,8 @@
 ---
 packages:
   npm:@takumi-rs/helpers:
-    type: patch
+    replay:
+      - "exit prerelease: npm:@takumi-rs/helpers"
 ---
 
 ### Keep elements as containers when children carry no text
