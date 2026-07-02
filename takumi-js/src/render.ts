@@ -156,6 +156,8 @@ export type ImagesInput =
       sources?: ImageLoader[];
       /** Single-flight byte cache shared across renders. */
       fetchCache?: ImageFetchCache;
+      /** Decode-cache default for every image this render; a source's own `cache` wins. */
+      cache?: NonNullable<ImageLoader["cache"]>;
     });
 
 /** The managed-renderer plumbing shared by every entry point. */
@@ -263,13 +265,18 @@ async function resolveContent(element: RenderInput, options?: PipelineOptions) {
 }
 
 /** Resolves the render's `images` option into concrete entries via {@link prepareImages}. */
-function collectImages(node: Node | Node[], options?: PipelineOptions): Promise<ImageLoader[]> {
+async function collectImages(
+  node: Node | Node[],
+  options?: PipelineOptions,
+): Promise<ImageLoader[]> {
   const images = options?.images;
-  const { sources, fetchCache, fetch, timeout } = Array.isArray(images)
+  const { sources, fetchCache, fetch, timeout, cache } = Array.isArray(images)
     ? { sources: images }
     : (images ?? {});
 
-  return prepareImages({ node, sources, fetchCache, fetch, timeout });
+  const prepared = await prepareImages({ node, sources, fetchCache, fetch, timeout });
+
+  return cache ? prepared.map((image) => ({ ...image, cache: image.cache ?? cache })) : prepared;
 }
 
 function mergeStylesheets(options: PipelineOptions | undefined, extra: string[]): string[] {
