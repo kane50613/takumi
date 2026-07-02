@@ -390,23 +390,28 @@ function collectStyleText(node: ReactNode | ReactElementLike): string | undefine
 
 function collectTextFromIterable(children: Iterable<ReactNode>): string | undefined {
   const chunks: string[] = [];
+  let hasText = false;
 
   for (const child of children) {
     // If any child is a React element, this is not pure text
     if (isValidElement(child)) return;
 
     if (typeof child === "string") {
+      hasText = true;
       chunks.push(child);
       continue;
     }
 
     if (typeof child === "number") {
+      hasText = true;
       chunks.push(String(child));
       continue;
     }
 
     return;
   }
+
+  if (!hasText) return;
 
   return chunks.join("");
 }
