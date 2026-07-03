@@ -147,27 +147,10 @@ impl From<taffy::TaffyError> for Error {
   }
 }
 
-impl From<png::EncodingError> for Error {
-  fn from(err: png::EncodingError) -> Self {
-    Self::Encode(Box::new(err))
-  }
-}
-
-impl From<gif::EncodingError> for Error {
-  fn from(err: gif::EncodingError) -> Self {
-    Self::Encode(Box::new(err))
-  }
-}
-
-impl From<image::ImageError> for Error {
-  fn from(err: image::ImageError) -> Self {
-    Self::Encode(Box::new(err))
-  }
-}
-
-#[cfg(target_arch = "wasm32")]
-impl From<image_webp::EncodingError> for Error {
-  fn from(err: image_webp::EncodingError) -> Self {
+impl Error {
+  /// Wraps an encoder-crate error opaquely so takumi's public API stays
+  /// independent of the encoder crates' versions.
+  pub fn encode(err: impl std::error::Error + Send + Sync + 'static) -> Self {
     Self::Encode(Box::new(err))
   }
 }

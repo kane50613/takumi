@@ -259,9 +259,13 @@ impl<'a, N: MatchableNode> Element for ArenaElement<'a, N> {
   }
 
   fn is_same_type(&self, other: &Self) -> bool {
-    let my_tag = self.tree.nodes[self.index].node.tag_name();
-    let other_tag = other.tree.nodes[other.index].node.tag_name();
-    my_tag == other_tag
+    match (
+      self.tree.nodes[self.index].node.tag_name(),
+      other.tree.nodes[other.index].node.tag_name(),
+    ) {
+      (Some(a), Some(b)) => a.eq_ignore_ascii_case(b),
+      (a, b) => a == b,
+    }
   }
 
   fn has_id(&self, id: &Ident, _case_sensitivity: CaseSensitivity) -> bool {

@@ -29,6 +29,7 @@ use crate::{
   BackgroundTile, BorderProperties, ColorTile, Placement, Result,
   blend::*,
   build_path,
+  error::Error,
   layout::style::{
     Affine, BlendMode, GradientOverlayTile, ImageScalingAlgorithm, LinearGradientFastPathKind,
     LinearGradientTile, RadialGradientTile, overlay_gradient_tile_fast_normal_unconstrained,
@@ -212,10 +213,9 @@ impl Canvas {
     }
 
     Pixmap::new(size.width, size.height).ok_or_else(|| {
-      ImageError::Parameter(ParameterError::from_kind(
+      Error::encode(ImageError::Parameter(ParameterError::from_kind(
         ParameterErrorKind::DimensionMismatch,
-      ))
-      .into()
+      )))
     })
   }
 
@@ -332,10 +332,9 @@ impl Canvas {
       self.image.take_demultiplied(),
     )
     .ok_or_else(|| {
-      ImageError::Parameter(ParameterError::from_kind(
+      Error::encode(ImageError::Parameter(ParameterError::from_kind(
         ParameterErrorKind::DimensionMismatch,
-      ))
-      .into()
+      )))
     })
   }
 

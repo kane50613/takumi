@@ -245,7 +245,9 @@ pub fn write_image<T: Write>(
       let rgb = strip_alpha_channel(Cow::Borrowed(rgba));
 
       let encoder = JpegEncoder::new_with_quality(destination, quality.get());
-      encoder.write_image(&rgb, width, height, ExtendedColorType::Rgb8)?;
+      encoder
+        .write_image(&rgb, width, height, ExtendedColorType::Rgb8)
+        .map_err(Error::encode)?;
     }
     OutputFormat::Png => {
       let mut encoder = png::Encoder::new(destination, image.width(), image.height());
@@ -265,9 +267,11 @@ pub fn write_image<T: Write>(
         ColorType::Rgb
       });
 
-      let mut writer = encoder.write_header()?;
-      writer.write_image_data(&image_data)?;
-      writer.finish()?;
+      let mut writer = encoder.write_header().map_err(Error::encode)?;
+      writer
+        .write_image_data(&image_data)
+        .map_err(Error::encode)?;
+      writer.finish().map_err(Error::encode)?;
     }
     #[cfg(not(target_arch = "wasm32"))]
     OutputFormat::WebP { quality } => {
@@ -280,7 +284,9 @@ pub fn write_image<T: Write>(
       let width = image.width();
       let height = image.height();
       let encoder = IcoEncoder::new(destination);
-      encoder.write_image(image.as_raw(), width, height, ExtendedColorType::Rgba8)?;
+      encoder
+        .write_image(image.as_raw(), width, height, ExtendedColorType::Rgba8)
+        .map_err(Error::encode)?;
     }
   }
 
@@ -316,14 +322,16 @@ pub fn encode_animated_gif<W: Write>(
 
   let width = width as u16;
   let height = height as u16;
-  let mut encoder = GifEncoder::new(destination, width, height, &[])?;
-  encoder.set_repeat(options.loop_count.map_or(Repeat::Infinite, Repeat::Finite))?;
+  let mut encoder = GifEncoder::new(destination, width, height, &[]).map_err(Error::encode)?;
+  encoder
+    .set_repeat(options.loop_count.map_or(Repeat::Infinite, Repeat::Finite))
+    .map_err(Error::encode)?;
 
   for frame in frames.into_owned().into_iter() {
     let mut pixels = frame.image.into_raw();
     let mut gif_frame = GifFrame::from_rgba_speed(width, height, &mut pixels, 28);
     gif_frame.delay = duration_ms_to_gif_delay(frame.duration_ms);
-    encoder.write_frame(&gif_frame)?;
+    encoder.write_frame(&gif_frame).map_err(Error::encode)?;
   }
 
   Ok(())
@@ -350,7 +358,9 @@ pub fn encode_animated_png<W: Write>(
   let mut encoder = png::Encoder::new(destination, width, height);
   configure_png_encoder(&mut encoder);
   encoder.set_color(ColorType::Rgba);
-  encoder.set_animated(frames.len() as u32, options.loop_count.unwrap_or(0) as u32)?;
+  encoder
+    .set_animated(frames.len() as u32, options.loop_count.unwrap_or(0) as u32)
+    .map_err(Error::encode)?;
 
   // Since APNG doesn't support variable frame duration, we use the minimum duration of all frames.
   let min_duration_ms = frames
@@ -359,15 +369,19 @@ pub fn encode_animated_png<W: Write>(
     .min()
     .unwrap_or(0);
 
-  encoder.set_frame_delay(min_duration_ms.clamp(0, u16::MAX as u32) as u16, 1000)?;
+  encoder
+    .set_frame_delay(min_duration_ms.clamp(0, u16::MAX as u32) as u16, 1000)
+    .map_err(Error::encode)?;
 
-  let mut writer = encoder.write_header()?;
+  let mut writer = encoder.write_header().map_err(Error::encode)?;
 
   for frame in frames {
-    writer.write_image_data(frame.image.as_raw())?;
+    writer
+      .write_image_data(frame.image.as_raw())
+      .map_err(Error::encode)?;
   }
 
-  writer.finish()?;
+  writer.finish().map_err(Error::encode)?;
 
   Ok(())
 }

@@ -225,7 +225,7 @@ impl FromStr for SvgSource {
   type Err = ImageResourceError;
 
   fn from_str(src: &str) -> Result<Self, Self::Err> {
-    use resvg::usvg::{Error, Options, Tree};
+    use resvg::usvg::{Options, Tree};
     use roxmltree::{Document, ParsingOptions};
 
     // One parse, shared with usvg via `from_xmltree` (what `from_str` does
@@ -235,9 +235,11 @@ impl FromStr for SvgSource {
       allow_dtd: true,
       ..Default::default()
     };
-    let document = Document::parse_with_options(src, options).map_err(Error::ParsingFailed)?;
+    let document =
+      Document::parse_with_options(src, options).map_err(ImageResourceError::svg_parse)?;
 
-    let tree = Tree::from_xmltree(&document, &Options::default())?;
+    let tree =
+      Tree::from_xmltree(&document, &Options::default()).map_err(ImageResourceError::svg_parse)?;
     let intrinsic = svg_intrinsic_sizing(document.root_element(), tree.size());
 
     Ok(SvgSource {
@@ -295,7 +297,7 @@ impl ImageSource {
       }
     }
 
-    let image = decode_image(bytes)?;
+    let image = decode_image(bytes).map_err(ImageResourceError::decode)?;
     let source = match image {
       DecodedImage::Buffer(buffer) => ImageSource::Bitmap(Arc::new(buffer)),
       DecodedImage::Gif(gif) => ImageSource::Gif(GifSource::from_decoded(gif)?),
@@ -479,15 +481,17 @@ pub enum ImageResourceError {
   InvalidGif,
 }
 
-impl From<image::ImageError> for ImageResourceError {
-  fn from(err: image::ImageError) -> Self {
+impl ImageResourceError {
+  /// Wraps a decoder error opaquely so takumi's public API stays independent of
+  /// the `image` crate's version.
+  pub(crate) fn decode(err: impl std::error::Error + Send + Sync + 'static) -> Self {
     Self::DecodeError(Box::new(err))
   }
-}
 
-#[cfg(feature = "svg")]
-impl From<resvg::usvg::Error> for ImageResourceError {
-  fn from(err: resvg::usvg::Error) -> Self {
+  /// Wraps an SVG parse error opaquely so takumi's public API stays independent
+  /// of the `resvg`/`usvg` version.
+  #[cfg(feature = "svg")]
+  pub(crate) fn svg_parse(err: impl std::error::Error + Send + Sync + 'static) -> Self {
     Self::SvgParseError(Box::new(err))
   }
 }
