@@ -201,20 +201,9 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     }
 
     const extracted = extractFontBuffer(loader);
-    // Keep the descriptor's name/subsetOf/weight/style; only the data is resolved.
-    const register = (data: ByteBuf) =>
-      this.registerInner(isBuffer(loader) ? data : { ...loader, data });
-
-    if (isBuffer(extracted)) {
-      const registered = Promise.resolve(register(extracted));
-
-      this.setFont(key, registered);
-
-      return registered;
-    }
 
     const promise = Promise.resolve(extracted)
-      .then(register)
+      .then((data) => this.registerInner(isBuffer(loader) ? data : { ...loader, data }))
       .catch((error) => {
         this.deleteFont(key);
         throw error;
