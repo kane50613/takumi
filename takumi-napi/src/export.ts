@@ -103,7 +103,4 @@ export class Renderer {
   registerFont(font: FontLoader) {
     return this.fonts.register(font);
   }
-
-  /** No-op: native renderer instances are garbage-collected. Present for parity with the wasm backend. */
-  free() {}
 }
