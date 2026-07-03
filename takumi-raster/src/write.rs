@@ -294,7 +294,7 @@ pub fn encode_animated_gif<W: Write>(
   options: AnimatedGifOptions,
 ) -> Result<()> {
   if frames.is_empty() {
-    return Err(Error::EmptyAnimationFrames { format: "GIF" });
+    return Err(Error::EmptyAnimationFrames);
   }
 
   let width = frames[0].image.width();
@@ -310,7 +310,7 @@ pub fn encode_animated_gif<W: Write>(
 
   for frame in frames.iter() {
     if frame.image.width() != width || frame.image.height() != height {
-      return Err(Error::MixedAnimationFrameDimensions { format: "GIF" });
+      return Err(Error::MixedAnimationFrameDimensions);
     }
   }
 
@@ -336,14 +336,14 @@ pub fn encode_animated_png<W: Write>(
   options: AnimatedPngOptions,
 ) -> Result<()> {
   if frames.is_empty() {
-    return Err(Error::EmptyAnimationFrames { format: "APNG" });
+    return Err(Error::EmptyAnimationFrames);
   }
 
   let width = frames[0].image.width();
   let height = frames[0].image.height();
   for frame in frames.iter() {
     if frame.image.width() != width || frame.image.height() != height {
-      return Err(Error::MixedAnimationFrameDimensions { format: "APNG" });
+      return Err(Error::MixedAnimationFrameDimensions);
     }
   }
 
@@ -374,11 +374,12 @@ pub fn encode_animated_png<W: Write>(
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
-  use std::{borrow::Cow, io::Cursor, mem::MaybeUninit, slice::from_raw_parts};
+  use std::{assert_matches, borrow::Cow, io::Cursor, mem::MaybeUninit, slice::from_raw_parts};
 
   use gif::{ColorOutput, DecodeOptions};
   use image::RgbaImage;
   use libwebp_sys::{WEBP_CSP_MODE::MODE_RGBA, *};
+  use takumi_core::Error;
 
   use super::{
     AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, Bitmap,
@@ -512,32 +513,16 @@ mod tests {
       &mut bytes,
       AnimatedGifOptions::default(),
     );
-    let err = result.err();
-    assert!(err.is_some(), "empty frame list should be rejected");
-    let Some(err) = err else {
-      return;
-    };
-    assert_eq!(
-      err.to_string(),
-      "GIF animation must contain at least one frame",
-      "unexpected error message: {err}"
-    );
+
+    assert_matches!(result, Err(Error::EmptyAnimationFrames));
   }
 
   #[test]
   fn encode_animated_png_rejects_empty_frames() {
     let mut bytes = Vec::new();
     let result = encode_animated_png(&[], &mut bytes, AnimatedPngOptions::default());
-    let err = result.err();
-    assert!(err.is_some(), "empty frame list should be rejected");
-    let Some(err) = err else {
-      return;
-    };
-    assert_eq!(
-      err.to_string(),
-      "APNG animation must contain at least one frame",
-      "unexpected error message: {err}"
-    );
+
+    assert_matches!(result, Err(Error::EmptyAnimationFrames));
   }
 
   #[test]
@@ -555,16 +540,8 @@ mod tests {
 
     let mut bytes = Vec::new();
     let result = encode_animated_png(&frames, &mut bytes, AnimatedPngOptions::default());
-    let err = result.err();
-    assert!(err.is_some(), "mismatched frame sizes should be rejected");
-    let Some(err) = err else {
-      return;
-    };
-    assert_eq!(
-      err.to_string(),
-      "all APNG animation frames must share the same dimensions",
-      "unexpected error message: {err}"
-    );
+
+    assert_matches!(result, Err(Error::MixedAnimationFrameDimensions));
   }
 
   #[test]

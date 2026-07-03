@@ -114,18 +114,12 @@ pub enum Error {
   },
 
   /// Animated encode was requested without any frames.
-  #[error("{format} animation must contain at least one frame")]
-  EmptyAnimationFrames {
-    /// The animation format used in the error message.
-    format: &'static str,
-  },
+  #[error("Animation must contain at least one frame")]
+  EmptyAnimationFrames,
 
   /// Animated frames for a given format did not all share the same dimensions.
-  #[error("All {format} animation frames must share the same dimensions")]
-  MixedAnimationFrameDimensions {
-    /// The animation format used in the error message.
-    format: &'static str,
-  },
+  #[error("Animation frames must share the same dimensions")]
+  MixedAnimationFrameDimensions,
 
   /// GIF frame dimensions exceeded the format limits.
   #[error("GIF frame dimensions must be <= {max}x{max}, got {width}x{height}")]
