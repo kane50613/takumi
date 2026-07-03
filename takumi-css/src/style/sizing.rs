@@ -28,8 +28,8 @@ pub struct SizingContext {
   #[builder(default)]
   pub root_line_height: Option<f32>,
   /// The calc arena shared by the current layout tree.
-  #[builder(default)]
-  pub calc_arena: Rc<CalcArena>,
+  #[builder(default, setter(skip))]
+  pub(crate) calc_arena: Rc<CalcArena>,
 }
 
 impl SizingContext {
@@ -44,6 +44,29 @@ impl SizingContext {
   #[inline]
   pub fn to_css(&self, device_px: f32) -> f32 {
     self.viewport.to_css(device_px)
+  }
+
+  /// Returns a copy with the font and line-height metrics overridden, inheriting
+  /// the viewport, container size, and shared calc arena.
+  pub fn with_font_metrics(
+    &self,
+    font_size: f32,
+    root_font_size: Option<f32>,
+    line_height: f32,
+    root_line_height: Option<f32>,
+  ) -> Self {
+    Self {
+      font_size,
+      root_font_size,
+      line_height,
+      root_line_height,
+      ..self.clone()
+    }
+  }
+
+  /// Resolves an interned `calc(...)` handle against this context's arena.
+  pub fn resolve_calc(&self, value: *const (), basis: f32) -> f32 {
+    self.calc_arena.resolve_calc_value(value, basis)
   }
 
   /// Device-pixel basis for the `rem` unit.

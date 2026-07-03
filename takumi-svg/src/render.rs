@@ -4,7 +4,7 @@ use std::{collections::HashMap, io, rc::Rc, sync::Arc};
 
 use taffy::{AbsoluteAxis, AvailableSpace, Point, Rect, Size};
 use takumi_core::{
-  Fonts, Language,
+  Fonts,
   context::RenderContext,
   error::Result,
   layout::{
@@ -58,10 +58,10 @@ pub struct SvgOptions<'g> {
   /// registered families in registration order.
   #[builder(default)]
   pub(crate) font_families: Option<Vec<String>>,
-  /// Default BCP-47 language applied to the root, inherited by nodes without
+  /// Default BCP-47 language tag applied to the root, inherited by nodes without
   /// their own `lang`. Drives locale-aware shaping and line-breaking.
   #[builder(default)]
-  pub(crate) lang: Option<Language>,
+  pub(crate) lang: Option<Arc<str>>,
 }
 
 /// Renders a node tree to a vector SVG string.
@@ -78,10 +78,11 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
     .images(Rc::new(options.images))
     .stylesheet(options.stylesheet.into())
     .time_ms(options.time_ms)
-    .style(Box::new(ComputedStyle {
-      lang: options.lang,
-      ..Default::default()
-    }))
+    .style({
+      let mut style = ComputedStyle::default();
+      style.set_lang(options.lang.as_deref());
+      Box::new(style)
+    })
     .build();
 
   let root = RenderNode::from_node(&context, options.node);

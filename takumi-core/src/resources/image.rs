@@ -295,7 +295,7 @@ impl ImageSource {
       }
     }
 
-    let image = decode_image(bytes).map_err(ImageResourceError::DecodeError)?;
+    let image = decode_image(bytes)?;
     let source = match image {
       DecodedImage::Buffer(buffer) => ImageSource::Bitmap(Arc::new(buffer)),
       DecodedImage::Gif(gif) => ImageSource::Gif(GifSource::from_decoded(gif)?),
@@ -450,7 +450,7 @@ fn parse_viewbox_ratio(view_box: &str) -> Option<f32> {
 pub enum ImageResourceError {
   /// An error occurred while decoding the image data
   #[error("An error occurred while decoding the image data: {0}")]
-  DecodeError(#[from] image::ImageError),
+  DecodeError(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
   /// The image data URI is in an invalid format
   #[error("The image data URI is in an invalid format")]
   InvalidDataUriFormat,
@@ -460,7 +460,7 @@ pub enum ImageResourceError {
   #[cfg(feature = "svg")]
   /// An error occurred while parsing an SVG image
   #[error("An error occurred while parsing an SVG image: {0}")]
-  SvgParseError(#[from] resvg::usvg::Error),
+  SvgParseError(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
   /// SVG parsing is not supported in this build
   #[cfg(not(feature = "svg"))]
   #[error("SVG parsing is not supported in this build")]
@@ -477,6 +477,19 @@ pub enum ImageResourceError {
   /// GIF decoding produced no frames.
   #[error("The GIF image does not contain any decodable frames")]
   InvalidGif,
+}
+
+impl From<image::ImageError> for ImageResourceError {
+  fn from(err: image::ImageError) -> Self {
+    Self::DecodeError(Box::new(err))
+  }
+}
+
+#[cfg(feature = "svg")]
+impl From<resvg::usvg::Error> for ImageResourceError {
+  fn from(err: resvg::usvg::Error) -> Self {
+    Self::SvgParseError(Box::new(err))
+  }
 }
 
 /// Decoded-image budget before entries start getting evicted.

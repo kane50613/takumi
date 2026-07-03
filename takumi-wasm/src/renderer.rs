@@ -249,11 +249,7 @@ impl Renderer {
       .node(node)
       .fonts(fonts)
       .font_families(options.font_families)
-      .lang(
-        options
-          .lang
-          .and_then(|s| takumi_core::Language::parse(&s).ok()),
-      )
+      .lang(options.lang.map(Arc::from))
       .build();
 
     let image = render(render_options).map_err(map_error)?;
@@ -303,11 +299,7 @@ impl Renderer {
         .node(node)
         .fonts(&state)
         .font_families(options.font_families)
-        .lang(
-          options
-            .lang
-            .and_then(|s| takumi_core::Language::parse(&s).ok()),
-        )
+        .lang(options.lang.map(Arc::from))
         .build(),
     )
     .map_err(map_error)?;
@@ -348,11 +340,7 @@ impl Renderer {
       .node(node)
       .fonts(&state)
       .font_families(options.font_families)
-      .lang(
-        options
-          .lang
-          .and_then(|s| takumi_core::Language::parse(&s).ok()),
-      )
+      .lang(options.lang.map(Arc::from))
       .build();
 
     let layout = measure(render_options).map_err(map_error)?;
@@ -411,6 +399,7 @@ impl Renderer {
       lang,
     } = from_value(options.into()).map_err(map_error)?;
     let images = self.fetch_resources_map(images.as_deref())?;
+    let lang = lang.map(Arc::from);
 
     if scenes.is_empty() {
       return Err(JsValue::from_str("Expected at least one animation scene"));
@@ -438,11 +427,7 @@ impl Renderer {
               .node(scene.node)
               .fonts(&state)
               .font_families(font_families.clone())
-              .lang(
-                lang
-                  .clone()
-                  .and_then(|s| takumi_core::Language::parse(&s).ok()),
-              )
+              .lang(lang.clone())
               .draw_debug_border(draw_debug_border)
               .build(),
           )

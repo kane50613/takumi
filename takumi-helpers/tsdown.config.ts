@@ -77,6 +77,7 @@ export default defineConfig({
     emoji: "src/emoji.ts",
     jsx: "src/jsx/index.ts",
     html: "src/html/index.ts",
+    renderer: "src/renderer.ts",
   },
   format: ["esm", "cjs"],
   dts: true,

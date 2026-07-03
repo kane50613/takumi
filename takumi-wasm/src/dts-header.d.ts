@@ -15,6 +15,18 @@ export type KeyframesRuleList = {
 }[];
 export type Keyframes = KeyframesMap | KeyframesRuleList;
 
+/** Output format for static images. */
+export type OutputFormat = "png" | "jpeg" | "webp" | "ico" | "raw";
+
+/** Output format for animated images. */
+export type AnimationOutputFormat = "webp" | "apng" | "gif";
+
+/** The output dithering algorithm. */
+export type DitheringAlgorithm = "none" | "ordered-bayer" | "floyd-steinberg";
+
+/** Cache policy for a decoded image. Defaults to `"auto"`. */
+export type ImageCacheMode = "auto" | "none";
+
 export type RenderOptions = {
   /**
    * The width of the image. If not provided, the width will be automatically calculated based on the content.
@@ -28,11 +40,17 @@ export type RenderOptions = {
    * The format of the image.
    * @default "png"
    */
-  format?: "png" | "jpeg" | "webp" | "ico" | "raw";
+  format?: OutputFormat;
   /**
-   * The quality of JPEG format (0-100).
+   * The quality of lossy formats (0-100). For JPEG; on wasm, WebP is always
+   * lossless so this is ignored for WebP.
    */
   quality?: number;
+  /**
+   * Encode WebP losslessly. On wasm, WebP is always lossless, so this is
+   * accepted for parity with the native backend but has no effect.
+   */
+  lossless?: boolean;
   /**
    * Images keyed by `src`, each carrying raw bytes. Provided up front and used
    * in place of fetching external `src` URLs during rendering.
@@ -63,12 +81,14 @@ export type RenderOptions = {
    * The output dithering algorithm.
    * @default "none"
    */
-  dithering?: "none" | "ordered-bayer" | "floyd-steinberg";
+  dithering?: DitheringAlgorithm;
   /**
    * Per-render font stack: ordered family names used as the fallback chain.
    * Defaults to all registered families in registration order.
    */
   fontFamilies?: string[];
+  /** Default BCP-47 language applied to the root, inherited by nodes without their own lang. */
+  lang?: string;
 };
 
 /**
@@ -76,18 +96,24 @@ export type RenderOptions = {
  */
 export type SvgRenderOptions = Omit<
   RenderOptions,
-  "format" | "quality" | "drawDebugBorder" | "devicePixelRatio" | "dithering"
+  "format" | "quality" | "lossless" | "drawDebugBorder" | "devicePixelRatio" | "dithering"
 >;
 
 export type RenderAnimationOptions = {
   scenes: AnimationScene[];
   width: number;
   height: number;
-  format?: "webp" | "apng" | "gif";
+  format?: AnimationOutputFormat;
   /**
-   * The quality of WebP format (0-100). Ignored for APNG and GIF.
+   * The quality of lossy WebP (0-100). Ignored for APNG and GIF; on wasm, WebP
+   * is always lossless so this is ignored for WebP too.
    */
   quality?: number;
+  /**
+   * Encode WebP losslessly. On wasm, animated WebP is always lossless, so this
+   * is accepted for parity with the native backend but has no effect.
+   */
+  lossless?: boolean;
   /**
    * Images keyed by `src`, each carrying raw bytes. Provided up front and used
    * in place of fetching external `src` URLs during rendering.
@@ -112,6 +138,8 @@ export type RenderAnimationOptions = {
    * Defaults to all registered families in registration order.
    */
   fontFamilies?: string[];
+  /** Default BCP-47 language applied to the root, inherited by nodes without their own lang. */
+  lang?: string;
 };
 
 export type FontDetails = {
@@ -131,7 +159,7 @@ export type ImageSource = {
   src: string;
   data: ByteBuf;
   /** Cache policy for the decoded image. Defaults to `"auto"`. */
-  cache?: "auto" | "none";
+  cache?: ImageCacheMode;
 };
 
 export type KeyframeRule = {

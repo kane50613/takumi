@@ -6,6 +6,7 @@ use crate::resources::image_buffer::ImageBuffer;
 use serde::Deserialize;
 use std::{collections::BTreeMap, sync::Arc};
 use taffy::{AvailableSpace, Size};
+use takumi_css::matching::MatchableNode;
 
 use crate::{
   Xxh3HashSet,
@@ -654,6 +655,32 @@ pub(crate) struct NodeStyleLayers {
   pub(crate) lang: Option<Option<Language>>,
 }
 
+impl MatchableNode for Node {
+  fn tag_name(&self) -> Option<&str> {
+    self.metadata.tag_name.as_deref()
+  }
+
+  fn id(&self) -> Option<&str> {
+    self.metadata.id.as_deref()
+  }
+
+  fn class_name(&self) -> Option<&str> {
+    self.metadata.class_name.as_deref()
+  }
+
+  fn attr(&self, name: &str) -> Option<&str> {
+    self.attribute(name)
+  }
+
+  fn is_replaced(&self) -> bool {
+    self.is_replaced_element()
+  }
+
+  fn children(&self) -> Option<&[Self]> {
+    self.children_ref()
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use std::str::FromStr;
@@ -712,5 +739,324 @@ mod tests {
     node.style_resource_urls(&mut urls);
 
     assert_eq!(urls.into_iter().collect::<Vec<_>>(), vec![mask_url]);
+  }
+}
+
+#[cfg(test)]
+mod matching_tests {
+  use std::collections::BTreeMap;
+
+  use takumi_css::matching::{MatchedDeclarationsView, match_stylesheets_view};
+
+  use crate::layout::{
+    Viewport,
+    node::Node,
+    style::{ComputedStyle, Length, Style, StyleSheet},
+  };
+
+  fn container_with_class(class_name: &str) -> Node {
+    Node::container([]).with_class_name(class_name)
+  }
+
+  fn computed_width_from_matches(matches: &MatchedDeclarationsView<'_>) -> Length {
+    let mut style = Style::default();
+    for &declarations in matches.normal() {
+      for declaration in declarations.iter() {
+        declaration.merge_into_ref(&mut style);
+      }
+    }
+    for &declarations in matches.important() {
+      for declaration in declarations.iter() {
+        declaration.merge_into_ref(&mut style);
+      }
+    }
+    style.inherit(&ComputedStyle::default()).width
+  }
+
+  fn computed_height_from_matches(matches: &MatchedDeclarationsView<'_>) -> Length {
+    let mut style = Style::default();
+    for &declarations in matches.normal() {
+      for declaration in declarations.iter() {
+        declaration.merge_into_ref(&mut style);
+      }
+    }
+    for &declarations in matches.important() {
+      for declaration in declarations.iter() {
+        declaration.merge_into_ref(&mut style);
+      }
+    }
+    style.inherit(&ComputedStyle::default()).height
+  }
+
+  fn parse_stylesheet(css: &str) -> StyleSheet {
+    let result = StyleSheet::parse(css);
+    assert!(result.is_ok(), "expected stylesheet to parse: {result:?}");
+    result.unwrap_or_default()
+  }
+
+  fn parse_stylesheet_list<I, S>(stylesheets: I) -> StyleSheet
+  where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+  {
+    let result = StyleSheet::parse_list(stylesheets);
+    assert!(
+      result.is_ok(),
+      "expected stylesheet list to parse: {result:?}"
+    );
+    result.unwrap_or_default()
+  }
+
+  #[test]
+  fn layered_rules_outrank_source_order() {
+    let root = container_with_class("card");
+    let stylesheet = parse_stylesheet(
+      r#"
+        @layer theme, base;
+        @layer base {
+          .card { width: 10px; }
+        }
+        @layer theme {
+          .card { width: 20px; }
+        }
+      "#,
+    );
+
+    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    assert_eq!(matched.len(), 1);
+    assert_eq!(
+      computed_width_from_matches(matched[0].element()),
+      Length::Px(10.0)
+    );
+  }
+
+  #[test]
+  fn nested_selector_uses_parent_list_specificity() {
+    let root = Node::container([container_with_class("title")]).with_class_name("card notice");
+
+    let stylesheet = parse_stylesheet(
+      r#"
+        .card, #panel {
+          .title { width: 10px; }
+        }
+
+        .notice .title { width: 20px; }
+      "#,
+    );
+
+    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    assert_eq!(matched.len(), 2);
+    assert_eq!(
+      computed_width_from_matches(matched[1].element()),
+      Length::Px(10.0)
+    );
+  }
+
+  #[test]
+  fn important_layered_rules_outrank_unlayered_important() {
+    let root = container_with_class("card");
+    let stylesheet = parse_stylesheet(
+      r#"
+        @layer theme, base;
+        .card { width: 5px !important; }
+        @layer base {
+          .card { width: 10px !important; }
+        }
+        @layer theme {
+          .card { width: 20px !important; }
+        }
+      "#,
+    );
+
+    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    assert_eq!(matched.len(), 1);
+    assert_eq!(
+      computed_width_from_matches(matched[0].element()),
+      Length::Px(20.0)
+    );
+  }
+
+  #[test]
+  fn later_stylesheet_rules_outrank_earlier_stylesheets_on_ties() {
+    let root = container_with_class("card");
+    let stylesheet = parse_stylesheet(".card { width: 10px; } .card { width: 20px; }");
+
+    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    assert_eq!(matched.len(), 1);
+    assert_eq!(
+      computed_width_from_matches(matched[0].element()),
+      Length::Px(20.0)
+    );
+  }
+
+  #[test]
+  fn parse_list_preserves_cross_stylesheet_layer_order() {
+    let root = container_with_class("card");
+    let stylesheet = parse_stylesheet_list([
+      r#"
+        @layer theme, base;
+        @layer base {
+          .card { width: 10px; }
+        }
+      "#,
+      r#"
+        @layer theme {
+          .card { width: 20px; }
+        }
+      "#,
+    ]);
+
+    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    assert_eq!(matched.len(), 1);
+    assert_eq!(
+      computed_width_from_matches(matched[0].element()),
+      Length::Px(10.0)
+    );
+  }
+
+  #[test]
+  fn root_selector_list_with_host_keeps_matching_root() {
+    let root = Node::default();
+    let stylesheet = parse_stylesheet(
+      r#"
+        :root, :host {
+          width: 10px;
+        }
+      "#,
+    );
+
+    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    assert_eq!(matched.len(), 1);
+    assert_eq!(
+      computed_width_from_matches(matched[0].element()),
+      Length::Px(10.0)
+    );
+  }
+
+  #[test]
+  fn sibling_combinators_only_match_the_correct_siblings() {
+    let root = Node::container([
+      container_with_class("lead"),
+      container_with_class("title"),
+      container_with_class("spacer"),
+      container_with_class("title"),
+    ])
+    .with_class_name("container");
+    let stylesheet = parse_stylesheet(
+      r#"
+        .container .title { width: 20px; }
+        .lead + .title { width: 10px; }
+        .lead ~ .title { height: 30px; }
+      "#,
+    );
+
+    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    assert_eq!(matched.len(), 5);
+    assert_eq!(
+      computed_width_from_matches(matched[2].element()),
+      Length::Px(10.0)
+    );
+    assert_eq!(
+      computed_height_from_matches(matched[2].element()),
+      Length::Px(30.0)
+    );
+    assert_eq!(
+      computed_width_from_matches(matched[4].element()),
+      Length::Px(20.0)
+    );
+    assert_eq!(
+      computed_height_from_matches(matched[4].element()),
+      Length::Px(30.0)
+    );
+  }
+
+  #[test]
+  fn attribute_selectors_match_node_metadata_and_attributes() {
+    let root = Node::container([Node::container([])
+      .with_id("hero")
+      .with_class_name("card featured")
+      .with_attributes(BTreeMap::from([
+        (Box::<str>::from("data-kind"), Box::<str>::from("promo")),
+        (
+          Box::<str>::from("data-state"),
+          Box::<str>::from("ready now"),
+        ),
+      ]))]);
+    let stylesheet = parse_stylesheet(
+      r#"
+        [id="hero"] { width: 10px; }
+        [class~="featured"] { height: 20px; }
+        [data-kind="promo"] { width: 30px; }
+        [data-state~="ready"] { height: 40px; }
+      "#,
+    );
+
+    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    assert_eq!(matched.len(), 2);
+    assert_eq!(
+      computed_width_from_matches(matched[1].element()),
+      Length::Px(30.0)
+    );
+    assert_eq!(
+      computed_height_from_matches(matched[1].element()),
+      Length::Px(40.0)
+    );
+  }
+
+  #[test]
+  fn test_repro_mixed_importance_bug() {
+    let stylesheet = parse_stylesheet(".test { width: 10px; height: 20px !important; }");
+    let root = Node::container([]).with_class_name("test");
+    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+
+    // Matched normal: should have width: 10px.
+    // Matched important: should have height: 20px.
+
+    assert_eq!(matched[0].element().normal()[0].declarations.len(), 1);
+    assert!(matched[0].element().normal()[0].importance.is_empty());
+
+    assert_eq!(matched[0].element().important()[0].declarations.len(), 1);
+    assert!(!matched[0].element().important()[0].importance.is_empty());
+  }
+
+  #[test]
+  fn pseudo_element_rules_land_in_before_after_buckets() {
+    let root = Node::container([]).with_class_name("card");
+    let stylesheet = parse_stylesheet(
+      r#"
+        .card::before { content: "x"; }
+        .card::after  { content: "y"; }
+        .card         { width: 10px; }
+      "#,
+    );
+
+    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    assert_eq!(matched.len(), 1);
+
+    assert!(!matched[0].element().normal().is_empty());
+    assert!(matched[0].before().is_some());
+    assert!(matched[0].after().is_some());
+  }
+
+  #[test]
+  fn pseudo_element_rules_are_skipped_on_replaced_elements() {
+    let root = Node::image("data:image/png;base64,iVBOR").with_class_name("logo");
+    let stylesheet = parse_stylesheet(r#".logo::before { content: "x"; }"#);
+
+    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    assert_eq!(matched.len(), 1);
+    assert!(matched[0].before().is_none());
+    assert!(matched[0].after().is_none());
+  }
+
+  #[test]
+  fn unsupported_pseudo_element_does_not_create_bucket() {
+    let root = Node::container([]).with_class_name("card");
+    let stylesheet = parse_stylesheet(r#".card::placeholder { color: red; }"#);
+
+    let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
+    assert_eq!(matched.len(), 1);
+    assert!(matched[0].before().is_none());
+    assert!(matched[0].after().is_none());
   }
 }

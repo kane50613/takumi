@@ -159,7 +159,7 @@ fn resolve_style_size_axis(
     CompactLength::LENGTH_TAG => Some(size.value()),
     CompactLength::PERCENT_TAG => available.into_option(),
     _ => size.maybe_resolve(available.into_option(), |val, basis| {
-      context.sizing.calc_arena.resolve_calc_value(val, basis)
+      context.sizing.resolve_calc(val, basis)
     }),
   }
 }

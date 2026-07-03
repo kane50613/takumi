@@ -615,6 +615,7 @@ macro_rules! define_style {
         pub registered_custom_properties: HashMap<String, PropertyRule>,
         /// Resolved BCP-47 language, inherited from the `lang` attribute. Drives
         /// locale-aware shaping (Han unification, line-breaking). Has no CSS property.
+        /// Set from a tag string via [`ComputedStyle::set_lang`].
         pub lang: Option<Language>,
         $(
           #[doc = concat!("Computed `", stringify!($longhand), "` value.")]
@@ -678,6 +679,13 @@ macro_rules! define_style {
         /// Resolves relative units against the sizing context.
         pub fn make_computed_values(&mut self, sizing: &SizingContext) {
           $(self.$longhand.make_computed(sizing);)*
+        }
+
+        /// Sets the BCP-47 language from a tag string (e.g. `"en"`, `"zh-Hant"`),
+        /// parsed into the shaping engine's representation. Unrecognized tags are
+        /// ignored. Drives locale-aware shaping and line-breaking.
+        pub fn set_lang(&mut self, tag: Option<&str>) {
+          self.lang = tag.and_then(|tag| Language::parse(tag).ok());
         }
 
         pub(crate) fn apply_interpolated_properties(

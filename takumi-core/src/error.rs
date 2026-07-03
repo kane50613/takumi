@@ -89,33 +89,23 @@ pub enum Error {
   #[error("IO error: {0}")]
   IoError(#[from] std::io::Error),
 
-  /// Error encoding a PNG image.
-  #[error("PNG encoding error: {0}")]
-  PngError(#[from] png::EncodingError),
-
-  /// Error encoding a WebP image.
-  #[error("WebP encoding error: {0}")]
-  #[cfg(target_arch = "wasm32")]
-  WebPEncodingError(#[from] image_webp::EncodingError),
+  /// Encoding an image or animation failed.
+  ///
+  /// Wraps the underlying encoder error opaquely so takumi's public API stays
+  /// independent of the encoder crates' versions.
+  #[error("Encoding error: {0}")]
+  Encode(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
 
   /// Structured errors from WebP encoding and RIFF container assembly.
   #[error("WebP error: {0}")]
   WebPError(#[from] WebPError),
-
-  /// Error encoding a GIF image.
-  #[error("GIF encoding error: {0}")]
-  GifEncodingError(#[from] gif::EncodingError),
-
-  /// Generic image processing error.
-  #[error("Image error: {0}")]
-  ImageError(#[from] image::ImageError),
 
   /// Invalid viewport dimensions (e.g., width or height is 0).
   #[error("Invalid viewport: width or height cannot be 0")]
   InvalidViewport,
 
   /// RGBA buffer length does not match `width * height * 4`.
-  #[error("invalid RGBA buffer length: expected {expected} bytes, got {actual}")]
+  #[error("Invalid RGBA buffer length: expected {expected} bytes, got {actual}")]
   InvalidRgbaBufferLength {
     /// Actual RGBA byte length in the buffer.
     actual: usize,
@@ -131,7 +121,7 @@ pub enum Error {
   },
 
   /// Animated frames for a given format did not all share the same dimensions.
-  #[error("all {format} animation frames must share the same dimensions")]
+  #[error("All {format} animation frames must share the same dimensions")]
   MixedAnimationFrameDimensions {
     /// The animation format used in the error message.
     format: &'static str,
@@ -152,14 +142,39 @@ pub enum Error {
   #[error("Font error: {0}")]
   FontError(#[from] FontError),
 
-  /// Error during layout computation.
+  /// Computing layout failed.
   #[error("Layout error: {0}")]
-  LayoutError(taffy::TaffyError),
+  Layout(String),
 }
 
 impl From<taffy::TaffyError> for Error {
   fn from(err: taffy::TaffyError) -> Self {
-    Self::LayoutError(err)
+    Self::Layout(err.to_string())
+  }
+}
+
+impl From<png::EncodingError> for Error {
+  fn from(err: png::EncodingError) -> Self {
+    Self::Encode(Box::new(err))
+  }
+}
+
+impl From<gif::EncodingError> for Error {
+  fn from(err: gif::EncodingError) -> Self {
+    Self::Encode(Box::new(err))
+  }
+}
+
+impl From<image::ImageError> for Error {
+  fn from(err: image::ImageError) -> Self {
+    Self::Encode(Box::new(err))
+  }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl From<image_webp::EncodingError> for Error {
+  fn from(err: image_webp::EncodingError) -> Self {
+    Self::Encode(Box::new(err))
   }
 }
 

@@ -551,8 +551,8 @@ fn scale_bitmap_glyph(bitmap: BitmapGlyph<'_>, font_size: f32) -> Option<Resolve
 pub enum FontError {
   /// Error occurred during WOFF conversion
   #[cfg(any(feature = "woff", feature = "woff2"))]
-  #[error("Error occurred during WOFF conversion.")]
-  Woff(wuff::WuffErr),
+  #[error("WOFF conversion failed: {0}")]
+  Woff(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
   /// Unsupported Font Format
   #[error("Unsupported font format")]
   UnsupportedFormat,
@@ -590,12 +590,12 @@ fn load_font(source: Cow<'_, [u8]>, format_hint: Option<FontFormat>) -> Result<V
     FontFormat::Ttf | FontFormat::Otf | FontFormat::Ttc => Ok(source.into_owned()),
     #[cfg(feature = "woff2")]
     FontFormat::Woff2 => {
-      let ttf = wuff::decompress_woff2(&source).map_err(FontError::Woff)?;
+      let ttf = wuff::decompress_woff2(&source).map_err(|e| FontError::Woff(Box::new(e)))?;
       Ok(ttf)
     }
     #[cfg(feature = "woff")]
     FontFormat::Woff => {
-      let ttf = wuff::decompress_woff1(&source).map_err(FontError::Woff)?;
+      let ttf = wuff::decompress_woff1(&source).map_err(|e| FontError::Woff(Box::new(e)))?;
       Ok(ttf)
     }
   }

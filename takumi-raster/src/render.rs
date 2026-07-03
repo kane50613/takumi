@@ -1,6 +1,6 @@
 use std::{collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
-use parley::{GlyphRun, InlineBoxKind, Language, PositionedLayoutItem};
+use parley::{GlyphRun, InlineBoxKind, PositionedLayoutItem};
 use serde::Serialize;
 use taffy::{AvailableSpace, Layout, NodeId, TaffyError, geometry::Size};
 use takumi_core::layout::style::SizingContext;
@@ -29,14 +29,16 @@ use takumi_core::scene::build_stacking_contexts;
 
 /// Root computed style carrying the render-level `lang` and `fontFamilies` defaults,
 /// inherited by every node that does not set its own.
-fn root_style(lang: Option<Language>, font_families: Option<&[String]>) -> Box<ComputedStyle> {
-  Box::new(ComputedStyle {
-    lang,
+fn root_style(lang: Option<&str>, font_families: Option<&[String]>) -> Box<ComputedStyle> {
+  let mut style = ComputedStyle {
     font_family: font_families.map_or_else(FontFamily::default, |names| {
       FontFamily::from_names(names.iter().cloned())
     }),
     ..Default::default()
-  })
+  };
+  style.set_lang(lang);
+
+  Box::new(style)
 }
 
 #[derive(Clone, TypedBuilder)]
@@ -67,10 +69,10 @@ pub struct RenderOptions<'g> {
   /// registered families in registration order.
   #[builder(default)]
   pub(crate) font_families: Option<Vec<String>>,
-  /// Default BCP-47 language applied to the root, inherited by nodes without
+  /// Default BCP-47 language tag applied to the root, inherited by nodes without
   /// their own `lang`. Drives locale-aware shaping and line-breaking.
   #[builder(default)]
-  pub(crate) lang: Option<Language>,
+  pub(crate) lang: Option<Arc<str>>,
 }
 
 impl<'g> RenderOptions<'g> {
@@ -218,7 +220,7 @@ pub fn measure<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
     .stylesheet(stylesheet.into())
     .time_ms(time_ms)
     .draw_debug_border(draw_debug_border)
-    .style(root_style(lang, font_families.as_deref()))
+    .style(root_style(lang.as_deref(), font_families.as_deref()))
     .build();
 
   let mut root = RenderNode::from_node(&render_context, node);
@@ -268,7 +270,7 @@ fn collect_measure_result(
         container_size,
       }) => {
         let Some(current) = node.node_at_path_mut(&path) else {
-          return Err(Error::LayoutError(TaffyError::InvalidInputNode(node_id)));
+          return Err(TaffyError::InvalidInputNode(node_id).into());
         };
         let layout = *layout_results.layout(node_id)?;
         current.context.sizing.container_size = container_size;
@@ -486,7 +488,7 @@ fn collect_measure_result(
         let mut children = Vec::with_capacity(child_ids.len());
         for child_id in child_ids {
           let Some(child) = measured_by_node_id.remove(&usize::from(child_id)) else {
-            return Err(Error::LayoutError(TaffyError::InvalidInputNode(child_id)));
+            return Err(TaffyError::InvalidInputNode(child_id).into());
           };
           children.push(child);
         }
@@ -507,7 +509,7 @@ fn collect_measure_result(
 
   measured_by_node_id
     .remove(&usize::from(node_id))
-    .ok_or_else(|| Error::LayoutError(TaffyError::InvalidInputNode(node_id)))
+    .ok_or_else(|| TaffyError::InvalidInputNode(node_id).into())
 }
 
 fn create_measured_node(
@@ -547,7 +549,7 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<Bitmap> {
     .stylesheet(stylesheet.into())
     .time_ms(time_ms)
     .draw_debug_border(draw_debug_border)
-    .style(root_style(lang, font_families.as_deref()))
+    .style(root_style(lang.as_deref(), font_families.as_deref()))
     .build();
 
   let mut root = RenderNode::from_node(&render_context, node);

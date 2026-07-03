@@ -9,7 +9,7 @@ use crate::style::{
 
 /// Interns `calc(...)` linear values so `CompactLength` can reference them by id.
 #[derive(Default)]
-pub struct CalcArena {
+pub(crate) struct CalcArena {
   linear_values: RefCell<Vec<CalcLinear>>,
 }
 
@@ -22,7 +22,7 @@ impl CalcArena {
   }
 
   /// Resolves an interned `calc(...)` value against a percentage basis.
-  pub fn resolve_calc_value(&self, val: *const (), basis: f32) -> f32 {
+  pub(crate) fn resolve_calc_value(&self, val: *const (), basis: f32) -> f32 {
     let Some(id) = decode_linear_id(val) else {
       return 0.0;
     };

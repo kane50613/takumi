@@ -1620,7 +1620,6 @@ dependencies = [
  "quick_cache",
  "resvg",
  "roxmltree 0.21.1",
- "selectors",
  "serde",
  "serde_bytes",
  "serde_json",
@@ -1667,6 +1666,7 @@ dependencies = [
  "markup5ever_rcdom",
  "takumi-core",
  "thiserror",
+ "typed-builder",
 ]
 
 [[package]]
