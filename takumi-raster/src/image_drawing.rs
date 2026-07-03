@@ -328,25 +328,18 @@ pub(crate) fn draw_image(
 
 #[cfg(test)]
 mod tests {
-  use std::rc::Rc;
-
   use super::resolve_object_position_axis;
   use crate::layout::{
     Viewport,
-    style::{CalcArena, Length, PositionComponent, PositionKeywordX, SizingContext},
+    style::{Length, PositionComponent, PositionKeywordX, SizingContext},
   };
-  use taffy::Size;
 
   fn sizing() -> SizingContext {
-    SizingContext {
-      viewport: Viewport::new((1200, 630)),
-      container_size: Size::NONE,
-      font_size: 16.0,
-      root_font_size: None,
-      line_height: 0.0,
-      root_line_height: None,
-      calc_arena: Rc::new(CalcArena::default()),
-    }
+    SizingContext::builder()
+      .viewport(Viewport::new((1200, 630)))
+      .font_size(16.0)
+      .line_height(0.0)
+      .build()
   }
 
   #[test]

@@ -22,7 +22,6 @@ serde_bytes.workspace = true
 thiserror.workspace = true
 tiny-skia.workspace = true
 typed-builder.workspace = true
-selectors.workspace = true
 skrifa.workspace = true
 xxhash-rust.workspace = true
 quick_cache.workspace = true

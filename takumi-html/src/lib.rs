@@ -16,6 +16,7 @@ use html5ever::{
   tendril::TendrilSink,
 };
 use markup5ever_rcdom::{Handle, NodeData, RcDom, SerializableHandle};
+use typed_builder::TypedBuilder;
 
 use takumi_core::layout::{
   node::{ImageData, ImageSourceInput, Node, NodeKind},
@@ -197,45 +198,26 @@ impl From<HashMap<Box<str>, Style>> for StylePresets {
   }
 }
 
-/// Options for [`from_html`].
-#[derive(Debug, Clone)]
+/// Options for [`from_html`]. Construct via [`FromHtmlOptions::builder`], or
+/// [`default`](Self::default) for the defaults.
+#[derive(Debug, Clone, TypedBuilder)]
+#[non_exhaustive]
 pub struct FromHtmlOptions {
   /// Default element styles. Use [`StylePresets::empty`] to disable.
-  pub presets: StylePresets,
+  #[builder(default)]
+  pub(crate) presets: StylePresets,
   /// Attribute name carrying Tailwind classes. `None` means `tw`.
-  pub tailwind_property: Option<Box<str>>,
+  #[builder(default, setter(into, strip_option))]
+  pub(crate) tailwind_property: Option<Box<str>>,
   /// Maximum element nesting depth before [`HtmlError::MaxDepthExceeded`].
   /// Defaults to [`DEFAULT_MAX_DEPTH`].
-  pub max_depth: usize,
+  #[builder(default = DEFAULT_MAX_DEPTH)]
+  pub(crate) max_depth: usize,
 }
 
 impl Default for FromHtmlOptions {
   fn default() -> Self {
-    Self {
-      presets: StylePresets::default(),
-      tailwind_property: None,
-      max_depth: DEFAULT_MAX_DEPTH,
-    }
-  }
-}
-
-impl FromHtmlOptions {
-  /// Sets the element style presets.
-  pub fn with_presets(mut self, presets: StylePresets) -> Self {
-    self.presets = presets;
-    self
-  }
-
-  /// Sets the attribute name carrying Tailwind classes.
-  pub fn with_tailwind_property(mut self, name: impl Into<Box<str>>) -> Self {
-    self.tailwind_property = Some(name.into());
-    self
-  }
-
-  /// Sets the maximum element nesting depth.
-  pub fn with_max_depth(mut self, max_depth: usize) -> Self {
-    self.max_depth = max_depth;
-    self
+    Self::builder().build()
   }
 }
 
@@ -588,9 +570,10 @@ mod tests {
   fn tailwind_property_can_alias_reserved_name() {
     let node = from_html(
       r#"<div class="flex">x</div>"#,
-      FromHtmlOptions::default()
-        .with_presets(StylePresets::empty())
-        .with_tailwind_property("class"),
+      FromHtmlOptions::builder()
+        .presets(StylePresets::empty())
+        .tailwind_property("class")
+        .build(),
     )
     .unwrap();
     assert!(node.to_html().contains(r#"class="flex""#));
@@ -658,7 +641,9 @@ mod tests {
   fn presets_disabled() {
     let node = from_html(
       "<p>x</p>",
-      FromHtmlOptions::default().with_presets(StylePresets::empty()),
+      FromHtmlOptions::builder()
+        .presets(StylePresets::empty())
+        .build(),
     )
     .unwrap();
     assert!(!node.to_html().contains("style="));
@@ -667,7 +652,7 @@ mod tests {
   #[test]
   fn nesting_past_max_depth_is_rejected() {
     let src = format!("{}{}", "<div>".repeat(4), "</div>".repeat(4));
-    let opts = FromHtmlOptions::default().with_max_depth(2);
+    let opts = FromHtmlOptions::builder().max_depth(2).build();
     assert!(matches!(
       from_html(&src, opts),
       Err(HtmlError::MaxDepthExceeded(2)),

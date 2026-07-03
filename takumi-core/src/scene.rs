@@ -8,7 +8,7 @@ use parley::{InlineBoxKind, PositionedLayoutItem};
 use taffy::{AvailableSpace, Layout, NodeId, Point, TaffyError, geometry::Size};
 
 use crate::{
-  error::{Error, Result},
+  error::Result,
   font_style::SizedFontStyle,
   geometry::transformed_rect_extents,
   layout::{
@@ -234,9 +234,7 @@ pub fn build_stacking_contexts(
 
   while let Some(visit) = visits.pop() {
     let Some(current) = root.node_at_path(&visit.path) else {
-      return Err(Error::LayoutError(TaffyError::InvalidInputNode(
-        visit.node_id,
-      )));
+      return Err(TaffyError::InvalidInputNode(visit.node_id).into());
     };
     let layout = *layout_results.layout(visit.node_id)?;
     if current.context.style.is_invisible() {

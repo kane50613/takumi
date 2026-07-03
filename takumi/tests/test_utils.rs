@@ -154,7 +154,9 @@ pub fn run_fixture_test_with_options(options: RenderOptions<'_>, fixture_name: &
   // styles.
   #[cfg(feature = "from-html")]
   {
-    let options = FromHtmlOptions::default().with_presets(StylePresets::empty());
+    let options = FromHtmlOptions::builder()
+      .presets(StylePresets::empty())
+      .build();
     let round_tripped = Node::from_html(&node_html, options).expect("round-trip parse");
     assert_eq!(
       node_html,

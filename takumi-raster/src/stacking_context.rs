@@ -2,8 +2,8 @@ use taffy::{AvailableSpace, Layout, NodeId, Point, TaffyError, geometry::Size};
 use tiny_skia::{Pixmap, PixmapMut};
 
 use crate::{
-  BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, Error, NodeMaskAction,
-  Placement, Result, SizedFontStyle, apply_backdrop_filter, apply_filters_to_pixmap, blend_pixel,
+  BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, NodeMaskAction, Placement,
+  Result, SizedFontStyle, apply_backdrop_filter, apply_filters_to_pixmap, blend_pixel,
   draw_background, draw_border, draw_debug_border, draw_inset_box_shadow, draw_node_content,
   draw_outline, draw_outset_box_shadow,
   inline_drawing::{draw_inline_box, draw_inline_layout},
@@ -282,9 +282,7 @@ fn begin_node_render(
   isolation_bounds_hint: Option<SceneBounds>,
 ) -> Result<Option<DeferredNodeRender>> {
   let Some(current) = root.node_at_path_mut(&node_paint.path) else {
-    return Err(Error::LayoutError(TaffyError::InvalidInputNode(
-      node_paint.node_id,
-    )));
+    return Err(TaffyError::InvalidInputNode(node_paint.node_id).into());
   };
   let layout = *layout_results.layout(node_paint.node_id)?;
 
@@ -428,9 +426,7 @@ fn paint_single_node(
       filter_bounds,
     }) => {
       let Some(current) = root.node_at_path_mut(&path) else {
-        return Err(Error::LayoutError(TaffyError::InvalidInputNode(
-          node_paint.node_id,
-        )));
+        return Err(TaffyError::InvalidInputNode(node_paint.node_id).into());
       };
       finish_node_render(
         current,
@@ -472,9 +468,7 @@ pub(crate) fn paint_context(
   context_id: usize,
 ) -> Result<()> {
   let Some(context) = contexts.get(context_id) else {
-    return Err(Error::LayoutError(TaffyError::InvalidInputNode(
-      NodeId::new(context_id as u64),
-    )));
+    return Err(TaffyError::InvalidInputNode(NodeId::new(context_id as u64)).into());
   };
 
   if let Some(bounds) = context.paint_bounds()
@@ -516,7 +510,7 @@ pub(crate) fn paint_context(
       let node_id = context
         .root()
         .map_or(layout_results.root_node_id(), |node| node.node_id);
-      return Err(Error::LayoutError(TaffyError::InvalidInputNode(node_id)));
+      return Err(TaffyError::InvalidInputNode(node_id).into());
     };
     finish_node_render(
       current,

@@ -5,7 +5,6 @@ pub mod node;
 pub mod border;
 /// Inline-level layout: text shaping, line breaking, and text fitting.
 pub mod inline;
-pub(crate) mod matching;
 /// Layout tree: render nodes and their computed layout results.
 pub mod tree;
 

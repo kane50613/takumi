@@ -877,30 +877,22 @@ pub(crate) fn collect_background_layers(
 
 #[cfg(test)]
 mod tests {
-  use std::rc::Rc;
-
-  use taffy::Size;
-
   use super::{resolve_position_component_x, resolve_position_component_y};
   use crate::layout::{
     Viewport,
     style::{
-      CalcArena, Length, PositionComponent, PositionKeywordX, PositionKeywordY, PositionValue,
-      SizingContext, SpacePair,
+      Length, PositionComponent, PositionKeywordX, PositionKeywordY, PositionValue, SizingContext,
+      SpacePair,
     },
   };
 
   fn test_sizing() -> SizingContext {
     let viewport = Viewport::new((100, 100));
-    SizingContext {
-      viewport,
-      container_size: Size::NONE,
-      font_size: viewport.font_size,
-      root_font_size: None,
-      line_height: 0.0,
-      root_line_height: None,
-      calc_arena: Rc::new(CalcArena::default()),
-    }
+    SizingContext::builder()
+      .viewport(viewport)
+      .font_size(viewport.font_size)
+      .line_height(0.0)
+      .build()
   }
 
   #[test]

@@ -36,7 +36,7 @@ pub struct PropertyRule {
 
 /// A name in a cascade layer path.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum LayerName {
+pub(crate) enum LayerName {
   /// An explicitly named layer.
   Named(String),
   /// An anonymous layer.
@@ -47,7 +47,7 @@ type LayerPath = Vec<LayerName>;
 
 /// An ASCII-case-insensitive CSS identifier.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Ident(String);
+pub(crate) struct Ident(String);
 
 impl Deref for Ident {
   type Target = str;
@@ -102,13 +102,13 @@ impl PrecomputedHash for Ident {
 
 /// Selector type bindings for the `selectors` crate.
 #[derive(Debug, Clone)]
-pub struct SelectorImpl;
+pub(crate) struct SelectorImpl;
 
 // Parsed but never matched, so rules with `:hover`, `::before`, etc. survive
 // alongside their sibling selectors instead of getting dropped wholesale.
 /// A pseudo-class, parsed but never matched.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PseudoClass(Ident);
+pub(crate) struct PseudoClass(Ident);
 
 impl ToCss for PseudoClass {
   fn to_css<W>(&self, dest: &mut W) -> fmt::Result
@@ -132,7 +132,7 @@ impl NonTSPseudoClass for PseudoClass {
 
 /// A pseudo-element.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PseudoElement {
+pub(crate) enum PseudoElement {
   /// `::before`.
   Before,
   /// `::after`.
@@ -532,26 +532,27 @@ fn parse_fragment_with_mode<'i, 't>(
   Ok(fragment)
 }
 
-/// A style rule with its selectors and declaration blocks.
+/// A style rule with its selectors and declaration blocks. Opaque: its
+/// `selectors` crate innards stay out of takumi's public API.
 #[derive(Debug, Clone)]
-pub struct CssRule {
+pub(crate) struct CssRule {
   /// Selectors this rule applies to.
   pub(crate) selectors: SelectorList<SelectorImpl>,
   /// Declarations without `!important`.
-  pub normal_declarations: StyleDeclarationBlock,
+  pub(crate) normal_declarations: StyleDeclarationBlock,
   /// Declarations marked `!important`.
-  pub important_declarations: StyleDeclarationBlock,
+  pub(crate) important_declarations: StyleDeclarationBlock,
   /// Media queries gating this rule.
-  pub media_queries: Vec<MediaQueryList>,
+  pub(crate) media_queries: Vec<MediaQueryList>,
   /// Cascade layer this rule belongs to.
-  pub layer: Option<LayerPath>,
+  pub(crate) layer: Option<LayerPath>,
   /// Resolved ordinal of the rule's layer.
-  pub layer_order: Option<usize>,
+  pub(crate) layer_order: Option<usize>,
 }
 
 impl CssRule {
   /// The selectors this rule applies to.
-  pub fn selectors(&self) -> &SelectorList<SelectorImpl> {
+  pub(crate) fn selectors(&self) -> &SelectorList<SelectorImpl> {
     &self.selectors
   }
 }
@@ -990,13 +991,13 @@ impl<'i> AtRuleParser<'i> for RuleParser {
 #[derive(Debug, Clone, Default)]
 pub struct StyleSheet {
   /// Style rules in source order.
-  pub rules: Vec<CssRule>,
+  pub(crate) rules: Vec<CssRule>,
   /// `@keyframes` rules.
-  pub keyframes: Vec<KeyframesRule>,
+  pub(crate) keyframes: Vec<KeyframesRule>,
   /// `@property` rules.
-  pub property_rules: Vec<PropertyRule>,
+  pub(crate) property_rules: Vec<PropertyRule>,
   /// Number of distinct cascade layers.
-  pub layer_count: usize,
+  pub(crate) layer_count: usize,
 }
 
 impl From<Vec<KeyframesRule>> for StyleSheet {
@@ -1009,7 +1010,21 @@ impl From<Vec<KeyframesRule>> for StyleSheet {
   }
 }
 
+impl From<Vec<PropertyRule>> for StyleSheet {
+  fn from(property_rules: Vec<PropertyRule>) -> Self {
+    Self {
+      property_rules,
+      ..Default::default()
+    }
+  }
+}
+
 impl StyleSheet {
+  /// The `@property` registrations declared by this stylesheet.
+  pub fn property_rules(&self) -> &[PropertyRule] {
+    &self.property_rules
+  }
+
   /// Extends the stylesheet with keyframes.
   pub fn extend_keyframes(&mut self, keyframes: Vec<KeyframesRule>) {
     self.keyframes.extend(keyframes);

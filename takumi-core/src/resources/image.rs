@@ -225,7 +225,7 @@ impl FromStr for SvgSource {
   type Err = ImageResourceError;
 
   fn from_str(src: &str) -> Result<Self, Self::Err> {
-    use resvg::usvg::{Error, Options, Tree};
+    use resvg::usvg::{Options, Tree};
     use roxmltree::{Document, ParsingOptions};
 
     // One parse, shared with usvg via `from_xmltree` (what `from_str` does
@@ -235,9 +235,11 @@ impl FromStr for SvgSource {
       allow_dtd: true,
       ..Default::default()
     };
-    let document = Document::parse_with_options(src, options).map_err(Error::ParsingFailed)?;
+    let document =
+      Document::parse_with_options(src, options).map_err(ImageResourceError::svg_parse)?;
 
-    let tree = Tree::from_xmltree(&document, &Options::default())?;
+    let tree =
+      Tree::from_xmltree(&document, &Options::default()).map_err(ImageResourceError::svg_parse)?;
     let intrinsic = svg_intrinsic_sizing(document.root_element(), tree.size());
 
     Ok(SvgSource {
@@ -295,7 +297,7 @@ impl ImageSource {
       }
     }
 
-    let image = decode_image(bytes).map_err(ImageResourceError::DecodeError)?;
+    let image = decode_image(bytes).map_err(ImageResourceError::decode)?;
     let source = match image {
       DecodedImage::Buffer(buffer) => ImageSource::Bitmap(Arc::new(buffer)),
       DecodedImage::Gif(gif) => ImageSource::Gif(GifSource::from_decoded(gif)?),
@@ -450,7 +452,7 @@ fn parse_viewbox_ratio(view_box: &str) -> Option<f32> {
 pub enum ImageResourceError {
   /// An error occurred while decoding the image data
   #[error("An error occurred while decoding the image data: {0}")]
-  DecodeError(#[from] image::ImageError),
+  DecodeError(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
   /// The image data URI is in an invalid format
   #[error("The image data URI is in an invalid format")]
   InvalidDataUriFormat,
@@ -460,7 +462,7 @@ pub enum ImageResourceError {
   #[cfg(feature = "svg")]
   /// An error occurred while parsing an SVG image
   #[error("An error occurred while parsing an SVG image: {0}")]
-  SvgParseError(#[from] resvg::usvg::Error),
+  SvgParseError(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
   /// SVG parsing is not supported in this build
   #[cfg(not(feature = "svg"))]
   #[error("SVG parsing is not supported in this build")]
@@ -477,6 +479,21 @@ pub enum ImageResourceError {
   /// GIF decoding produced no frames.
   #[error("The GIF image does not contain any decodable frames")]
   InvalidGif,
+}
+
+impl ImageResourceError {
+  /// Wraps a decoder error opaquely so takumi's public API stays independent of
+  /// the `image` crate's version.
+  pub(crate) fn decode(err: impl std::error::Error + Send + Sync + 'static) -> Self {
+    Self::DecodeError(Box::new(err))
+  }
+
+  /// Wraps an SVG parse error opaquely so takumi's public API stays independent
+  /// of the `resvg`/`usvg` version.
+  #[cfg(feature = "svg")]
+  pub(crate) fn svg_parse(err: impl std::error::Error + Send + Sync + 'static) -> Self {
+    Self::SvgParseError(Box::new(err))
+  }
 }
 
 /// Decoded-image budget before entries start getting evicted.

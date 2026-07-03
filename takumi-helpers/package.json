@@ -74,6 +74,16 @@
         "types": "./dist/emoji.d.cts",
         "default": "./dist/emoji.cjs"
       }
+    },
+    "./renderer": {
+      "import": {
+        "types": "./dist/renderer.d.mts",
+        "default": "./dist/renderer.mjs"
+      },
+      "require": {
+        "types": "./dist/renderer.d.cts",
+        "default": "./dist/renderer.cjs"
+      }
     }
   },
   "publishConfig": {

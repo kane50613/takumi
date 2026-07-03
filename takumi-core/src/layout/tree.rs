@@ -18,7 +18,6 @@ use crate::{
       InlineContentKind, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
       collect_inline_items, create_inline_constraint, create_inline_layout, measure_inline_layout,
     },
-    matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
     node::{Node, NodeStyleLayers},
     style::{
       BackgroundImage, BlendMode, BoxSizing, Color, ComputedStyle, ContentItem, ContentValue,
@@ -29,6 +28,9 @@ use crate::{
   },
 };
 use parley::fontique::Attributes;
+use takumi_css::matching::{
+  MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view,
+};
 
 /// A render-tree child paired with its layout `NodeId`. `hoisted_cb` is set
 /// when the child is out-of-flow and was re-parented to a containing block in
@@ -190,7 +192,7 @@ fn build_style_layers(
     style.push(StyleDeclaration::direction(dir), false);
   }
 
-  for &declarations in &matched_declarations.normal {
+  for &declarations in matched_declarations.normal() {
     for declaration in declarations.iter() {
       declaration.merge_into_ref(&mut style);
     }
@@ -204,7 +206,7 @@ fn build_style_layers(
     style.merge_from(inline);
   }
 
-  for &declarations in &matched_declarations.important {
+  for &declarations in matched_declarations.important() {
     for declaration in declarations.iter() {
       declaration.merge_into_ref(&mut style);
     }
@@ -221,7 +223,7 @@ fn registered_custom_property_parent_style(
   let mut adjusted_parent = parent_style.clone();
 
   for sheet in stylesheets {
-    for property_rule in &sheet.property_rules {
+    for property_rule in sheet.property_rules() {
       if !property_rule
         .media_queries
         .iter()
@@ -287,18 +289,17 @@ fn pseudo_computed_style(
   let line_height = style
     .line_height
     .to_px(&parent_context.sizing, normal_basis);
-  let sizing = SizingContext {
+  let sizing = parent_context.sizing.with_font_metrics(
     font_size,
-    root_font_size: Some(parent_context.sizing.root_font_size.unwrap_or(font_size)),
+    Some(parent_context.sizing.root_font_size.unwrap_or(font_size)),
     line_height,
-    root_line_height: Some(
+    Some(
       parent_context
         .sizing
         .root_line_height
         .unwrap_or(line_height),
     ),
-    ..parent_context.sizing.clone()
-  };
+  );
   let current_color = style.color.resolve(parent_context.current_color);
   style.make_computed(&sizing);
   (style, sizing, current_color)
@@ -673,11 +674,7 @@ impl LayoutPartialTree for LayoutTree<'_> {
       return 0.0;
     };
 
-    root
-      .context
-      .sizing
-      .calc_arena
-      .resolve_calc_value(val, basis)
+    root.context.sizing.resolve_calc(val, basis)
   }
 
   fn compute_child_layout(&mut self, node: NodeId, inputs: LayoutInput) -> LayoutOutput {
@@ -1176,7 +1173,7 @@ impl RenderNode {
       let default_matched = MatchedDeclarationsView::default();
       let matched = matched_declarations
         .get(node_index)
-        .map(|m| &m.element)
+        .map(NodeMatchedDeclarations::element)
         .unwrap_or(&default_matched);
       let layers = node.take_style_layers();
       let node_lang = layers.lang;
@@ -1206,13 +1203,12 @@ impl RenderNode {
         let line_height = style
           .line_height
           .to_px(&parent_context.sizing, normal_basis);
-        let child_sizing = SizingContext {
+        let child_sizing = parent_context.sizing.with_font_metrics(
           font_size,
-          root_font_size: parent_root_font_size,
+          parent_root_font_size,
           line_height,
-          root_line_height: parent_root_line_height,
-          ..parent_context.sizing.clone()
-        };
+          parent_root_line_height,
+        );
         let child_current_color = style.color.resolve(parent_context.current_color);
         let child_context = RenderContext::from_parent(
           parent_context,
@@ -1230,7 +1226,7 @@ impl RenderNode {
         child_sizing_for_final = Some(child_sizing);
       }
 
-      for &declarations in &matched.important {
+      for &declarations in matched.important() {
         for declaration in declarations.iter() {
           declaration.apply_to_computed(&mut style);
         }
@@ -1242,13 +1238,12 @@ impl RenderNode {
       let line_height = style
         .line_height
         .to_px(&parent_context.sizing, normal_basis);
-      let sizing = SizingContext {
+      let sizing = parent_context.sizing.with_font_metrics(
         font_size,
-        root_font_size: Some(parent_root_font_size.unwrap_or(font_size)),
+        Some(parent_root_font_size.unwrap_or(font_size)),
         line_height,
-        root_line_height: Some(parent_root_line_height.unwrap_or(line_height)),
-        ..parent_context.sizing.clone()
-      };
+        Some(parent_root_line_height.unwrap_or(line_height)),
+      );
       let current_color = style.color.resolve(parent_context.current_color);
       style.make_computed(&sizing);
       (style, sizing, current_color)
@@ -1268,10 +1263,10 @@ impl RenderNode {
 
       let element_matched = matched_declarations.get(node_index);
       let pseudo_before = element_matched
-        .and_then(|m| m.before.as_ref())
+        .and_then(|m| m.before())
         .and_then(|m| RenderNode::from_pseudo_match(&context, &node, m));
       let pseudo_after = element_matched
-        .and_then(|m| m.after.as_ref())
+        .and_then(|m| m.after())
         .and_then(|m| RenderNode::from_pseudo_match(&context, &node, m));
 
       let has_pseudo = pseudo_before.is_some() || pseudo_after.is_some();
@@ -1941,8 +1936,8 @@ mod tests {
   use crate::layout::{
     Viewport,
     style::{
-      ComputedStyle, Length, Style, StyleDeclaration, StyleDeclarationBlock, StyleSheet,
-      selector::PropertyRule,
+      ComputedStyle, Length, PropertyRule, Style, StyleDeclaration, StyleDeclarationBlock,
+      StyleSheet,
     },
   };
 
@@ -1980,16 +1975,13 @@ mod tests {
       .custom_properties
       .insert("--box-size".to_owned(), "50px".to_owned());
 
-    let stylesheets = [StyleSheet {
-      property_rules: vec![PropertyRule {
-        name: "--box-size".to_owned(),
-        syntax: "*".to_owned(),
-        inherits: false,
-        initial_value: Some("10px".to_owned()),
-        media_queries: Vec::new(),
-      }],
-      ..StyleSheet::default()
-    }];
+    let stylesheets = [StyleSheet::from(vec![PropertyRule {
+      name: "--box-size".to_owned(),
+      syntax: "*".to_owned(),
+      inherits: false,
+      initial_value: Some("10px".to_owned()),
+      media_queries: Vec::new(),
+    }])];
 
     let adjusted_parent =
       registered_custom_property_parent_style(&parent, &stylesheets, Viewport::default());
@@ -2006,16 +1998,13 @@ mod tests {
       .custom_properties
       .insert("--box-size".to_owned(), "50px".to_owned());
 
-    let stylesheets = [StyleSheet {
-      property_rules: vec![PropertyRule {
-        name: "--box-size".to_owned(),
-        syntax: "*".to_owned(),
-        inherits: true,
-        initial_value: Some("10px".to_owned()),
-        media_queries: Vec::new(),
-      }],
-      ..StyleSheet::default()
-    }];
+    let stylesheets = [StyleSheet::from(vec![PropertyRule {
+      name: "--box-size".to_owned(),
+      syntax: "*".to_owned(),
+      inherits: true,
+      initial_value: Some("10px".to_owned()),
+      media_queries: Vec::new(),
+    }])];
 
     let adjusted_parent =
       registered_custom_property_parent_style(&parent, &stylesheets, Viewport::default());
@@ -2029,16 +2018,13 @@ mod tests {
   fn registered_custom_property_uses_initial_value_when_missing_and_inheriting() {
     let parent = ComputedStyle::default();
 
-    let stylesheets = [StyleSheet {
-      property_rules: vec![PropertyRule {
-        name: "--box-size".to_owned(),
-        syntax: "*".to_owned(),
-        inherits: true,
-        initial_value: Some("10px".to_owned()),
-        media_queries: Vec::new(),
-      }],
-      ..StyleSheet::default()
-    }];
+    let stylesheets = [StyleSheet::from(vec![PropertyRule {
+      name: "--box-size".to_owned(),
+      syntax: "*".to_owned(),
+      inherits: true,
+      initial_value: Some("10px".to_owned()),
+      media_queries: Vec::new(),
+    }])];
 
     let adjusted_parent =
       registered_custom_property_parent_style(&parent, &stylesheets, Viewport::default());
@@ -2052,25 +2038,22 @@ mod tests {
   fn registered_custom_property_uses_last_inherited_initial_value_when_parent_is_missing() {
     let parent = ComputedStyle::default();
 
-    let stylesheets = [StyleSheet {
-      property_rules: vec![
-        PropertyRule {
-          name: "--box-size".to_owned(),
-          syntax: "*".to_owned(),
-          inherits: true,
-          initial_value: Some("10px".to_owned()),
-          media_queries: Vec::new(),
-        },
-        PropertyRule {
-          name: "--box-size".to_owned(),
-          syntax: "*".to_owned(),
-          inherits: true,
-          initial_value: Some("20px".to_owned()),
-          media_queries: Vec::new(),
-        },
-      ],
-      ..StyleSheet::default()
-    }];
+    let stylesheets = [StyleSheet::from(vec![
+      PropertyRule {
+        name: "--box-size".to_owned(),
+        syntax: "*".to_owned(),
+        inherits: true,
+        initial_value: Some("10px".to_owned()),
+        media_queries: Vec::new(),
+      },
+      PropertyRule {
+        name: "--box-size".to_owned(),
+        syntax: "*".to_owned(),
+        inherits: true,
+        initial_value: Some("20px".to_owned()),
+        media_queries: Vec::new(),
+      },
+    ])];
 
     let adjusted_parent =
       registered_custom_property_parent_style(&parent, &stylesheets, Viewport::default());
@@ -2087,25 +2070,22 @@ mod tests {
       .custom_properties
       .insert("--box-size".to_owned(), "50px".to_owned());
 
-    let stylesheets = [StyleSheet {
-      property_rules: vec![
-        PropertyRule {
-          name: "--box-size".to_owned(),
-          syntax: "*".to_owned(),
-          inherits: false,
-          initial_value: Some("10px".to_owned()),
-          media_queries: Vec::new(),
-        },
-        PropertyRule {
-          name: "--box-size".to_owned(),
-          syntax: "*".to_owned(),
-          inherits: true,
-          initial_value: Some("20px".to_owned()),
-          media_queries: Vec::new(),
-        },
-      ],
-      ..StyleSheet::default()
-    }];
+    let stylesheets = [StyleSheet::from(vec![
+      PropertyRule {
+        name: "--box-size".to_owned(),
+        syntax: "*".to_owned(),
+        inherits: false,
+        initial_value: Some("10px".to_owned()),
+        media_queries: Vec::new(),
+      },
+      PropertyRule {
+        name: "--box-size".to_owned(),
+        syntax: "*".to_owned(),
+        inherits: true,
+        initial_value: Some("20px".to_owned()),
+        media_queries: Vec::new(),
+      },
+    ])];
 
     let adjusted_parent =
       registered_custom_property_parent_style(&parent, &stylesheets, Viewport::default());
@@ -2120,25 +2100,22 @@ mod tests {
    {
     let parent = ComputedStyle::default();
 
-    let stylesheets = [StyleSheet {
-      property_rules: vec![
-        PropertyRule {
-          name: "--box-size".to_owned(),
-          syntax: "*".to_owned(),
-          inherits: false,
-          initial_value: Some("10px".to_owned()),
-          media_queries: Vec::new(),
-        },
-        PropertyRule {
-          name: "--box-size".to_owned(),
-          syntax: "*".to_owned(),
-          inherits: true,
-          initial_value: None,
-          media_queries: Vec::new(),
-        },
-      ],
-      ..StyleSheet::default()
-    }];
+    let stylesheets = [StyleSheet::from(vec![
+      PropertyRule {
+        name: "--box-size".to_owned(),
+        syntax: "*".to_owned(),
+        inherits: false,
+        initial_value: Some("10px".to_owned()),
+        media_queries: Vec::new(),
+      },
+      PropertyRule {
+        name: "--box-size".to_owned(),
+        syntax: "*".to_owned(),
+        inherits: true,
+        initial_value: None,
+        media_queries: Vec::new(),
+      },
+    ])];
 
     let adjusted_parent =
       registered_custom_property_parent_style(&parent, &stylesheets, Viewport::default());
@@ -2393,8 +2370,9 @@ mod tests {
 
   #[test]
   fn lang_resolves_and_inherits_to_descendants() {
+    use parley::Language;
+
     use crate::{
-      Language,
       context::RenderContext,
       layout::{node::Node, style::SizingContext, tree::RenderNode},
       resources::font::Fonts,
