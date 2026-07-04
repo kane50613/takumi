@@ -101,7 +101,7 @@ version = "1.15"
 features = ["serde"]
 
 [workspace.dependencies.taffy]
-version = "0.12"
+version = "0.11"
 default-features = false
 features = [
   "flexbox",
