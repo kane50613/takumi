@@ -1,6 +1,8 @@
 ---
 packages:
-  cargo:takumi-html: minor
+  cargo:takumi-html:
+    replay:
+      - exit-prerelease(cargo:takumi-html)
 ---
 
 ### Build `FromHtmlOptions` with a builder

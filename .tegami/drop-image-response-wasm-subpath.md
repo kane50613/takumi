@@ -1,7 +1,8 @@
 ---
 packages:
   npm:@takumi-rs/image-response:
-    type: patch
+    replay:
+      - exit-prerelease(npm:@takumi-rs/image-response)
 ---
 
 ### Drop the `./wasm` export

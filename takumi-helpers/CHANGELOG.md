@@ -1,3 +1,10 @@
+## @takumi-rs/helpers@2.0.0-rc.6 (rc)
+
+### Add the `@takumi-rs/helpers/renderer` entrypoint
+
+The shared renderer wrapper backing the napi and wasm bindings is now exported
+as `@takumi-rs/helpers/renderer`.
+
 ## @takumi-rs/helpers@2.0.0-rc.4 (rc)
 
 ### Replace `fetchResources`/`extractResourceUrls` with `prepareImages`

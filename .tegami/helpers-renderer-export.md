@@ -1,6 +1,8 @@
 ---
 packages:
-  npm:@takumi-rs/helpers: minor
+  npm:@takumi-rs/helpers:
+    replay:
+      - exit-prerelease(npm:@takumi-rs/helpers)
 ---
 
 ### Add the `@takumi-rs/helpers/renderer` entrypoint

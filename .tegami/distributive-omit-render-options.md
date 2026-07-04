@@ -1,6 +1,8 @@
 ---
 packages:
-  npm:takumi-js: patch
+  npm:takumi-js:
+    replay:
+      - exit-prerelease(npm:takumi-js)
 ---
 
 ### Keep the format tagged union on `render` options

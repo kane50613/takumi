@@ -1,3 +1,73 @@
+## takumi-core@0.1.0-rc.4
+
+### Merge `takumi-css` into `takumi-core`
+
+Fold the CSS parsing, cascade, value types, selector matching, and `@keyframes`
+layer back into `takumi-core` and drop the separate `takumi-css` crate. The
+`style` module is reachable through `layout::style` as before; `matching` is now
+crate-private. Core builds at `opt-level = "z"`, shrinking the napi `.node` ~7%
+and the wasm binary ~8% with no render-path regression.
+
+### Remove taffy/parley/image types from the public API
+
+`Affine::transform_point`, `ComputedStyle::local_transform`/`has_non_identity_transform`,
+`OffsetAnchor::resolve`, `PositionValue::to_point`, and `BorderRadiusPair::to_px` now take
+separate `width`/`height` (or `x`/`y`) `f32` params and return tuples instead of `taffy::Point`/
+`taffy::Size`. `Affine::decompose_translation` is removed; read `.x`/`.y` directly.
+`SizingContext::container_size` is private; use the new `set_container_size` setter.
+`ComputedStyle::to_taffy_style`/`creates_stacking_context`, `LineHeight::into_parley`,
+`Float::resolve`/`Clear::resolve` are now crate-private. Dropped the `From<image::RgbaImage>`
+impls for `ImageSource`/`ImageData`; convert through `ImageBuffer::from_rgba` instead.
+`style::fast_div_255`/`fast_div_255_u32` moved under `style::math`.
+
+### Mark spec-tracking CSS value enums `#[non_exhaustive]`
+
+`BlendMode`, `Filter`, `BasicShape`, `ContentValue`, `TextTransform`,
+`WhiteSpaceCollapse`, `OffsetPath`, `ImageScalingAlgorithm`, and `Position` can
+gain variants as their specs grow without a breaking change.
+
+### Hide internal style/layout items from the public API
+
+Roughly 200 CSS value types, parsing helpers, and internal accessors across `style::properties`,
+`style::stylesheets`, `style::tw`, `style::selector`, and `layout` are now crate-private; they were
+never meant to be constructed or matched on directly. `StyleSheet::property_rules` and
+`apply_stylesheet_animations` are crate-private; use `StyleSheet`'s public parsing/query surface
+instead. Gradient direction/keyword helpers (`GradientKeywordDirection`, `HorizontalKeyword`,
+`VerticalKeyword`) stay public since they're reachable through `LinearGradientDirection`.
+
+### Seal `parley` out of the font resource API
+
+`FontResource::override_info` now takes a takumi-owned `FontOverride` (owned
+family name, weight, style, width, axes) instead of `parley`'s
+`FontInfoOverride`. `FontSource` is an opaque struct over raw bytes rather than
+an enum exposing a `parley` blob. Callers no longer depend on `parley`.
+
+### Rename `resource` naming to `image`
+
+`Node::resource_urls`/`Style::resource_urls`/`StyleDeclarationBlock::resource_urls` are now
+`image_urls`, and `ImageResourceError` is now `ImageError` — everything they cover is image
+loading, so the names say so.
+
+### Hide the encoder and layout crates behind opaque `Error` variants
+
+`Error::PngError`, `WebPEncodingError`, `GifEncodingError`, `ImageError`, and
+`LayoutError` exposed the `png`, `image_webp`, `gif`, `image`, and `taffy`
+crates. They collapse into `Error::Encode` (an opaque boxed source, built via
+`Error::encode`) and `Error::Layout(String)`, so the public API no longer
+tracks those crates' versions. `EmptyAnimationFrames` and
+`MixedAnimationFrameDimensions` also drop their `format` fields.
+
+### Seal `cssparser` and parse values via `FromCssStr`
+
+`FromCss`, `ParseResult`, `CssToken`, `CssSyntaxKind`, and `CssExpectedMessage`
+are now `pub(crate)`, keeping `cssparser` off the public API. Parse CSS value
+types from strings through the new `FromCssStr` trait
+(`Length::from_css_str("12px")`), which returns an owned `ParseError`
+(`PartialEq`/`Eq`). The value-list types are plain aliases rather than newtypes:
+`Filters` = `Vec<Filter>`, `GridTemplateComponents` = `Vec<GridTemplateComponent>`,
+and `BackgroundImages`/`BackgroundSizes`/`BackgroundRepeats`/`PositionValues` =
+`Box<[_]>`.
+
 ## takumi-core@0.1.0-rc.1
 
 ### Make subset-group font selection deterministic

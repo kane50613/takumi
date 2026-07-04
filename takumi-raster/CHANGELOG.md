@@ -1,3 +1,11 @@
+## takumi-raster@0.1.0-rc.4
+
+### Rename the animated encoders to `write_animated_*`
+
+`encode_animated_gif`, `encode_animated_png`, and `encode_animated_webp` are
+now `write_animated_gif`, `write_animated_png`, and `write_animated_webp`,
+matching `write_image`. Signatures are unchanged.
+
 ## takumi-raster@0.1.0-rc.3
 
 ### Clip backdrop-filter output by the node's mask and clip-path
