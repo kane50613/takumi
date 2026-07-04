@@ -16,16 +16,16 @@ use crate::{
       PositionedInlineRun, ProcessedInlineSpan, VisualInlineBox, outline_island_contour,
       outline_islands, resolve_inline_runs,
     },
-    style::{
-      Affine, BackgroundClip, BlendMode, BorderStyle, Color, SizedTextDecorationThickness,
-      TextDecorationLines, TextDecorationSkipInk,
-    },
     tree::LayoutTree,
   },
   mask_index_from_coord, rasterize_layers, release_rasterized_background_tile,
   render::render_node,
   render_mask,
   resources::font::{FontError, ResolvedGlyph},
+  style::{
+    Affine, BackgroundClip, BlendMode, BorderStyle, Color, SizedTextDecorationThickness,
+    TextDecorationLines, TextDecorationSkipInk,
+  },
 };
 use taffy::{AvailableSpace, geometry::Size};
 

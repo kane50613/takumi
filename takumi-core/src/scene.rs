@@ -17,9 +17,9 @@ use crate::{
       resolve_inline_max_height, resolve_visual_inline_box, scale_text_fit_x,
       text_fit_line_alignment_correction,
     },
-    style::{Affine, ComputedStyle, Display},
     tree::{LayoutResults, RenderNode},
   },
+  style::{Affine, ComputedStyle, Display},
 };
 
 /// A node's resolved paint inputs: where it sits in the tree, its accumulated
@@ -541,7 +541,7 @@ mod tests {
   use taffy::geometry::Size;
 
   use super::{SceneBounds, bounds_for_rect, merge_bounds};
-  use crate::layout::style::Affine;
+  use crate::style::Affine;
 
   #[test]
   fn zero_sized_rect_produces_empty_bounds() {

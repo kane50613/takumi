@@ -22,10 +22,41 @@ pub mod text_processing;
 /// Error types.
 pub mod error;
 pub mod geometry;
-pub use takumi_css::keyframes;
+/// `@keyframes` rules and animation timing.
+pub mod keyframes;
+/// Selector matching against an abstract node tree.
+pub(crate) mod matching;
 /// Font and image resource management.
 pub mod resources;
 pub mod scene;
+/// CSS value types, parsing, and the cascade.
+pub mod style;
+/// Viewport dimensions and device-pixel-ratio resolution.
+pub mod viewport;
+
+/// Backend painting helpers (gradient LUTs, tile positioning, transfer tables)
+/// shared with the raster and SVG renderers. Deliberately kept out of `style`
+/// (and thus `takumi`'s prelude) since they are rendering-backend internals, not
+/// part of the CSS value surface.
+pub mod paint {
+  pub use crate::style::properties::{
+    background_repeat::{
+      collect_repeat_tile_positions, collect_spaced_tile_positions,
+      collect_stretched_tile_positions,
+    },
+    conic_gradient::{ConicGradientRowState, ConicGradientTile},
+    filter::compose_transfer_table,
+    gradient_utils::{
+      GradientOverlayTile, build_color_lut_with_interpolation,
+      overlay_gradient_tile_fast_normal_unconstrained, resolve_stops_along_axis,
+    },
+    linear_gradient::{
+      LinearGradientFastPath, LinearGradientFastPathData, LinearGradientFastPathKind,
+      LinearGradientRowState, LinearGradientTile,
+    },
+    radial_gradient::{RadialGradientRowState, RadialGradientTile},
+  };
+}
 
 use std::collections::HashSet;
 

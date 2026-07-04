@@ -6,7 +6,7 @@ use tiny_skia::{
   Rect as TinyRect, Stroke as TinyStroke, StrokeDash as TinyStrokeDash,
 };
 
-use crate::layout::style::LineJoin;
+use crate::style::LineJoin;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub(crate) enum Fill {

@@ -3,9 +3,9 @@ use std::rc::Rc;
 use taffy::Size;
 
 use crate::{
-  Viewport,
   error::StyleSheetParseError,
   style::{CalcArena, FromCss, Length, SizingContext},
+  viewport::Viewport,
 };
 
 #[derive(Debug, Clone, PartialEq)]

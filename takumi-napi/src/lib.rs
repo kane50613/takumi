@@ -17,8 +17,8 @@ use napi::{De, Env, Error, bindgen_prelude::*};
 use napi_derive::napi;
 use serde::{Deserialize, Deserializer, de::DeserializeOwned, de::Error as DeError};
 use takumi_core::{
-  layout::style::{FontStyle, FromCssStr, KeyframesRule, StyleSheet},
   resources::font::{FontOverride, FontResource},
+  style::{FontStyle, FromCssStr, KeyframesRule, StyleSheet},
 };
 
 pub use renderer::Renderer;

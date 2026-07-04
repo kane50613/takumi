@@ -8,20 +8,20 @@ use takumi_core::{
   context::RenderContext,
   error::Result,
   layout::{
-    Viewport,
     border::{BorderProperties, BorderSide, border_dash_pattern},
     inline::{InlineBoxItem, VisualInlineBox},
     node::{ImageData, Node, NodeKind},
-    style::{
-      Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BasicShape, BlendMode,
-      BorderStyle, Color, ComputedStyle, FillRule, Isolation, Length, Overflow, ShapeRadius, Sides,
-      SizingContext, SpacePair, StyleSheet, ToCss,
-    },
     tree::{LayoutTree, RenderNode},
   },
   resources::image::ImageSource,
   scene::build_stacking_contexts,
   shadow::SizedShadow,
+  style::{
+    Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BasicShape, BlendMode, BorderStyle,
+    Color, ComputedStyle, FillRule, Isolation, Length, Overflow, ShapeRadius, Sides, SizingContext,
+    SpacePair, StyleSheet, ToCss,
+  },
+  viewport::Viewport,
 };
 use typed_builder::TypedBuilder;
 

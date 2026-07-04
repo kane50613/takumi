@@ -18,8 +18,8 @@ use html5ever::{
 use markup5ever_rcdom::{Handle, NodeData, RcDom, SerializableHandle};
 use typed_builder::TypedBuilder;
 
-use takumi_core::layout::{
-  node::{ImageData, ImageSourceInput, Node, NodeKind},
+use takumi_core::{
+  layout::node::{ImageData, ImageSourceInput, Node, NodeKind},
   style::{Direction, FromCssStr, Style, StyleDeclarationBlock, tw::TailwindValues},
 };
 

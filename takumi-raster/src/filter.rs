@@ -4,14 +4,13 @@ use tiny_skia::{Mask as TinyMask, PixmapMut};
 
 use crate::{
   BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, Placement, RenderContext, Result,
-  SizedShadow, apply_blur, apply_blur_rgba_bytes, intersect_alpha_masks,
-  layout::style::{
+  SizedShadow, apply_blur, apply_blur_rgba_bytes, intersect_alpha_masks, render_mask,
+  style::{
     Affine, Color, Filter, FilterCategory, LUMA_WEIGHTS, PercentageNumber, SEPIA_WEIGHTS,
     SizingContext, TransferChannel, TransferTable, fast_div_255,
   },
-  render_mask,
 };
-use takumi_css::paint::compose_transfer_table;
+use takumi_core::paint::compose_transfer_table;
 
 /// Calculates the luma of an RGB pixel.
 #[inline(always)]
@@ -629,7 +628,7 @@ mod tests {
   use tiny_skia::PixmapMut;
 
   use super::*;
-  use crate::layout::Viewport;
+  use crate::viewport::Viewport;
 
   #[test]
   fn test_apply_filters_lut_batching() -> Result<()> {

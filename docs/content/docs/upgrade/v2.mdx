@@ -322,7 +322,7 @@ let origin: PositionValue = PositionValue::center(); // [!code ++]
 
 ### Core enums are `#[non_exhaustive]`
 
-Several public enums gained `#[non_exhaustive]`: `NodeKind`, `ImageSource`, `ImageSourceInput`, `ImageCacheMode`, `Length`, and `ColorInput`, plus `PropertyId`, `StyleDeclaration`, and the spec-tracking CSS value enums (`BlendMode`, `Filter`, `BasicShape`, `ContentValue`, `TextTransform`, `WhiteSpaceCollapse`, `OffsetPath`, `ImageScalingAlgorithm`, `Position`) in `takumi-css`. You can no longer build these variants with a struct literal from outside the crate, and a `match` on them needs a wildcard arm.
+Several public enums gained `#[non_exhaustive]`: `NodeKind`, `ImageSource`, `ImageSourceInput`, `ImageCacheMode`, `Length`, and `ColorInput`, plus `PropertyId`, `StyleDeclaration`, and the spec-tracking CSS value enums (`BlendMode`, `Filter`, `BasicShape`, `ContentValue`, `TextTransform`, `WhiteSpaceCollapse`, `OffsetPath`, `ImageScalingAlgorithm`, `Position`) in `takumi-core`. You can no longer build these variants with a struct literal from outside the crate, and a `match` on them needs a wildcard arm.
 
 ```rust
 match node.kind {

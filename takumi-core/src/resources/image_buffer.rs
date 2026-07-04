@@ -8,7 +8,7 @@ use std::borrow::Cow;
 
 use image::{ExtendedColorType, ImageEncoder, RgbaImage, codecs::png::PngEncoder};
 
-use crate::layout::style::fast_div_255;
+use crate::style::fast_div_255;
 
 /// A decoded image as premultiplied, row-major RGBA bytes.
 #[derive(Debug, Clone)]

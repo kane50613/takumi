@@ -11,18 +11,13 @@ use tiny_skia::PathSegment;
 use crate::{
   context::RenderContext,
   font_style::SizedFontStyle,
-  layout::{
-    border::BorderPath,
-    node::Node,
-    style::{
-      Affine, BoxSizing, Color, Float, FontSynthesis, Length, ResolvedVerticalAlign,
-      SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk, TextFitMode,
-      TextFitTarget, TextOverflow, TextWrapMode, TextWrapStyle, VerticalAlign,
-      VerticalAlignKeyword,
-    },
-    tree::RenderNode,
-  },
+  layout::{border::BorderPath, node::Node, tree::RenderNode},
   resources::font::{FontError, ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},
+  style::{
+    Affine, BoxSizing, Color, Float, FontSynthesis, Length, ResolvedVerticalAlign,
+    SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk, TextFitMode,
+    TextFitTarget, TextOverflow, TextWrapMode, TextWrapStyle, VerticalAlign, VerticalAlignKeyword,
+  },
   text_processing::{
     MaxHeight, RebreakOptions, apply_text_transform, apply_white_space_collapse,
     make_balanced_text, make_pretty_text,
@@ -2352,15 +2347,11 @@ mod tests {
   use crate::{
     Fonts,
     context::RenderContext,
-    layout::{
-      Viewport,
-      node::Node,
-      style::{Color, ColorInput, Display, Style, StyleDeclaration, WhiteSpace},
-      tree::RenderNode,
-    },
+    layout::{node::Node, tree::RenderNode},
     resources::font::{FontOverride, FontResource, GenericFamily},
+    style::{Color, ColorInput, Display, SizingContext, Style, StyleDeclaration, WhiteSpace},
+    viewport::Viewport,
   };
-  use takumi_css::SizingContext;
 
   fn create_test_context() -> Fonts {
     let mut context = Fonts::default();

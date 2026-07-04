@@ -9,11 +9,9 @@ use std::io;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use takumi_core::{
   context::RenderContext,
-  layout::{
-    node::{ImageData, ImageSourceInput, resolve_image},
-    style::{Length, ObjectFit, PositionComponent},
-  },
+  layout::node::{ImageData, ImageSourceInput, resolve_image},
   resources::image::ImageSource,
+  style::{Length, ObjectFit, PositionComponent},
 };
 
 use crate::{Frame, SvgDocument, box_model::rect_path_data};

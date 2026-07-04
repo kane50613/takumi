@@ -2,7 +2,7 @@ use taffy::Layout;
 
 use crate::{
   BorderPainting, BorderProperties, Canvas,
-  layout::style::{Affine, BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair},
+  style::{Affine, BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair},
 };
 
 /// Draws debug borders around the node's layout areas.

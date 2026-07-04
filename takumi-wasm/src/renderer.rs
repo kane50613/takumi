@@ -10,15 +10,13 @@ use std::{
 };
 use takumi_core::{
   Fonts,
-  layout::{
-    DEFAULT_DEVICE_PIXEL_RATIO, Viewport,
-    node::Node,
-    style::{KeyframesRule, StyleSheet},
-  },
+  layout::node::Node,
   resources::{
     font::{FontOverride, FontResource, GenericFamily, RegisteredFamily},
     image::{ImageCache, ImageSource as LoadedImageSource},
   },
+  style::{KeyframesRule, StyleSheet},
+  viewport::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
 };
 use takumi_raster::{
   AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, SequentialScene,

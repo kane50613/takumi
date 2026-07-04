@@ -46,13 +46,7 @@ const groupedNpmPackages = [
   "@takumi-rs/image-response",
 ];
 
-const independentCrates = [
-  "takumi-core",
-  "takumi-css",
-  "takumi-raster",
-  "takumi-svg",
-  "takumi-html",
-];
+const independentCrates = ["takumi-core", "takumi-raster", "takumi-svg", "takumi-html"];
 
 const packages: Record<string, PackageOptions<"takumi">> = {
   "cargo:takumi": { group: "takumi" },

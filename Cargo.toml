@@ -4,7 +4,6 @@ members = [
   "takumi",
   "takumi-core",
   "takumi-raster",
-  "takumi-css",
   "takumi-svg",
   "takumi-html",
   "takumi-napi",
@@ -102,7 +101,7 @@ version = "1.15"
 features = ["serde"]
 
 [workspace.dependencies.taffy]
-version = "0.12"
+version = "0.11"
 default-features = false
 features = [
   "flexbox",
@@ -151,7 +150,7 @@ strip = "debuginfo"
 debug = true
 strip = "debuginfo"
 
-[profile.release.package.takumi-css]
+[profile.release.package.takumi-core]
 opt-level = "z"
 
 # Crates that run at most once per image (parse/decode/encode), never per pixel.

@@ -2,22 +2,18 @@ mod container;
 mod image;
 mod text;
 
-use crate::resources::image_buffer::ImageBuffer;
+use crate::{matching::MatchableNode, resources::image_buffer::ImageBuffer};
 use serde::Deserialize;
 use std::{collections::BTreeMap, sync::Arc};
 use taffy::{AvailableSpace, Size};
-use takumi_css::matching::MatchableNode;
 
 use crate::{
   Xxh3HashSet,
   context::RenderContext,
-  layout::{
-    Viewport,
-    inline::InlineContentKind,
-    node::image::image_resource_url,
-    style::{Direction, Style, StyleDeclaration, ToCss, tw::TailwindValues},
-  },
+  layout::{inline::InlineContentKind, node::image::image_resource_url},
   resources::image::{ImageResult, ImageSource},
+  style::{Direction, Style, StyleDeclaration, ToCss, tw::TailwindValues},
+  viewport::Viewport,
 };
 use ::image::RgbaImage;
 use parley::Language;
@@ -685,7 +681,7 @@ impl MatchableNode for Node {
 mod tests {
   use std::str::FromStr;
 
-  use crate::layout::style::{BackgroundImage, Style, StyleDeclaration, tw::TailwindValues};
+  use crate::style::{BackgroundImage, Style, StyleDeclaration, tw::TailwindValues};
 
   use super::*;
 
@@ -746,12 +742,12 @@ mod tests {
 mod matching_tests {
   use std::collections::BTreeMap;
 
-  use takumi_css::matching::{MatchedDeclarationsView, match_stylesheets_view};
+  use crate::matching::{MatchedDeclarationsView, match_stylesheets_view};
 
-  use crate::layout::{
-    Viewport,
-    node::Node,
+  use crate::{
+    layout::node::Node,
     style::{ComputedStyle, Length, Style, StyleSheet},
+    viewport::Viewport,
   };
 
   fn container_with_class(class_name: &str) -> Node {

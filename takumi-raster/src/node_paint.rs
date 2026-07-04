@@ -14,8 +14,8 @@ use crate::{
       resolve_inline_max_height,
     },
     node::{ImageData, Node, NodeKind, TextData},
-    style::{Affine, BackgroundClip, BlendMode, Length, Sides},
   },
+  style::{Affine, BackgroundClip, BlendMode, Length, Sides},
 };
 
 use super::{

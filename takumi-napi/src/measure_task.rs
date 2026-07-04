@@ -1,7 +1,11 @@
 use std::{collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
-use takumi_core::layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node, style::StyleSheet};
+use takumi_core::{
+  layout::node::Node,
+  style::StyleSheet,
+  viewport::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
+};
 use takumi_raster::measure;
 
 use crate::{

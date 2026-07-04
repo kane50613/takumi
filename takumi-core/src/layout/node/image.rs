@@ -4,11 +4,9 @@ use taffy::{AvailableSpace, CompactLength, MaybeResolve, Size};
 
 use crate::{
   context::RenderContext,
-  layout::{
-    node::{ImageData, ImageSourceInput, Node, NodeStyleLayers},
-    style::{Length, Style, StyleDeclaration},
-  },
+  layout::node::{ImageData, ImageSourceInput, Node, NodeStyleLayers},
   resources::image::{ImageResourceError, ImageResult, ImageSource, is_svg_like},
+  style::{Length, Style, StyleDeclaration},
 };
 
 pub(crate) fn image_resource_url(image: &ImageData) -> Option<&str> {
@@ -199,20 +197,18 @@ pub fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
 mod tests {
   use std::assert_matches;
 
+  use crate::style::SizingContext;
   use image::RgbaImage;
   use serde_json::from_value;
   use taffy::{AvailableSpace, Dimension, Size, Style};
-  use takumi_css::SizingContext;
 
   use super::{image_resource_url, measure_image_node};
   use crate::{
     Fonts,
     context::RenderContext,
-    layout::{
-      Viewport,
-      node::{ImageData, ImageSourceInput},
-    },
+    layout::node::{ImageData, ImageSourceInput},
     resources::image::ImageSource,
+    viewport::Viewport,
   };
 
   #[test]

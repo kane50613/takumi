@@ -4,7 +4,7 @@ const BLUR_DOWNSAMPLE_TARGET_SIGMA: f32 = 6.0;
 const BLUR_DOWNSAMPLE_MIN_DIMENSION: u32 = 128;
 const BLUR_DOWNSAMPLE_MAX_SCALE: u32 = 8;
 
-pub(crate) use takumi_core::layout::style::BlurType;
+pub(crate) use takumi_core::style::BlurType;
 
 #[derive(Clone, Copy)]
 struct BlurPassParams {

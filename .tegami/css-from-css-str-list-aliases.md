@@ -1,6 +1,6 @@
 ---
 packages:
-  cargo:takumi-css: minor
+  cargo:takumi-core: minor
 ---
 
 ### Seal `cssparser` and parse values via `FromCssStr`

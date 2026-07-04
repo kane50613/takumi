@@ -9,12 +9,10 @@ use crate::{
   BorderProperties, Canvas, ColorTile, Command, MaskSamplingOptions, MaskSourceToPixmapOptions,
   PaintSource, Placement, Result, SamplingOptions, SizedFontStyle, Stroke,
   composite_mask_source_to_pixmap, draw_outset_shadow,
-  layout::{
-    inline::InlineBrush,
-    style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
-  },
+  layout::inline::InlineBrush,
   render_mask,
   resources::font::{ResolvedColorLayer, ResolvedGlyph},
+  style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
 };
 
 pub(crate) type GlyphMaskCache = HashMap<u64, (Vec<u8>, Placement)>;

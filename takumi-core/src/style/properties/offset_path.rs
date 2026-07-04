@@ -1,16 +1,12 @@
-use std::f32::consts::FRAC_PI_2;
-use std::fmt;
+use std::{f32::consts::FRAC_PI_2, fmt};
 
 use cssparser::Parser;
 use kurbo::{BezPath, ParamCurve, ParamCurveArclen, PathEl, PathSeg, Shape};
 use taffy::{Point, Size};
 
-use crate::{
-  declare_enum_from_css_impl,
-  style::{
-    Angle, Animatable, BasicShape, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed,
-    ParseResult, ShapePosition, ShapeRadius, SizingContext, ToCss,
-  },
+use crate::style::{
+  Angle, Animatable, BasicShape, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed,
+  ParseResult, ShapePosition, ShapeRadius, SizingContext, ToCss, declare_enum_from_css_impl,
 };
 
 /// Flattening tolerance (CSS px) for arc-length integration and shape sampling.
@@ -766,11 +762,11 @@ pub(crate) fn sample_offset_path(
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::style::FromCssStr;
+  use crate::{style::FromCssStr, viewport::Viewport};
 
   fn test_sizing() -> SizingContext {
     SizingContext::builder()
-      .viewport(crate::Viewport::new((200, 200)))
+      .viewport(Viewport::new((200, 200)))
       .build()
   }
 
@@ -853,7 +849,7 @@ mod tests {
       height: 400.0,
     };
     let sizing = SizingContext::builder()
-      .viewport(crate::Viewport::new((400, 400)).with_device_pixel_ratio(2.0))
+      .viewport(Viewport::new((400, 400)).with_device_pixel_ratio(2.0))
       .build();
 
     let (point, _) = sample_offset_path(

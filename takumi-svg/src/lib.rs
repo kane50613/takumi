@@ -57,8 +57,8 @@ impl Rgba {
 
 use taffy::Size;
 use takumi_core::{
-  layout::style::{Affine, Color, Filter, LUMA_WEIGHTS, SEPIA_WEIGHTS, SizingContext},
   shadow::SizedShadow,
+  style::{Affine, Color, Filter, LUMA_WEIGHTS, SEPIA_WEIGHTS, SizingContext},
 };
 
 pub(crate) const IDENTITY: Affine = Affine::IDENTITY;

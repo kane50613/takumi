@@ -1,6 +1,6 @@
 ---
 packages:
-  cargo:takumi-css: minor
+  cargo:takumi-core: minor
 ---
 
 ### Mark spec-tracking CSS value enums `#[non_exhaustive]`

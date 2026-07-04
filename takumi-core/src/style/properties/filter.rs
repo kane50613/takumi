@@ -401,8 +401,7 @@ impl ToCss for Filter {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::style::FromCssStr;
-  use crate::style::{Color, ColorInput, Length::Px};
+  use crate::style::{Color, ColorInput, FromCssStr, Length::Px};
 
   #[test]
   fn test_parse_blur_filter() {

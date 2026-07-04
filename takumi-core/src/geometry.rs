@@ -2,7 +2,7 @@
 
 use taffy::{Point, geometry::Size};
 
-use crate::layout::style::Affine;
+use crate::style::Affine;
 
 /// Transforms a rect's four corners and returns the axis-aligned `(min_x, min_y,
 /// max_x, max_y)` extents, or `None` if any corner is non-finite.

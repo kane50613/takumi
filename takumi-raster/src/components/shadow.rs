@@ -3,9 +3,8 @@ use tiny_skia::PixmapRef;
 
 use crate::{
   BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, Command, Fill, Placement, Result,
-  SamplingOptions, Style, apply_blur, attenuate_alpha_by_mask, fast_div_255,
-  layout::style::{Affine, BlendMode, ImageScalingAlgorithm, Sides},
-  render_mask,
+  SamplingOptions, Style, apply_blur, attenuate_alpha_by_mask, fast_div_255, render_mask,
+  style::{Affine, BlendMode, ImageScalingAlgorithm, Sides},
 };
 
 pub(crate) use crate::shadow::SizedShadow;

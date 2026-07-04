@@ -30,10 +30,10 @@ use crate::{
   blend::*,
   build_path,
   error::Error,
-  layout::style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
   stacking_context::blend_pixmap_software,
+  style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
 };
-use takumi_css::paint::{
+use takumi_core::paint::{
   GradientOverlayTile, LinearGradientFastPathKind, LinearGradientTile, RadialGradientTile,
   overlay_gradient_tile_fast_normal_unconstrained,
 };
@@ -1668,19 +1668,15 @@ mod tests {
   use tiny_skia::PixmapMut;
 
   use crate::{
-    Fonts, RenderContext, blend_pixel,
-    layout::{
-      Viewport,
-      style::{
-        Angle, BlendMode, Color, ColorInterpolationMethod, ConicGradient, GradientStop, Length,
-        LinearGradient, PositionValue, RadialGradient, SizingContext, StopPosition,
-      },
-    },
-    pixmap_from_buffer,
+    Fonts, RenderContext, blend_pixel, pixmap_from_buffer,
     resources::image_buffer::ImageBuffer,
+    style::{
+      Angle, BlendMode, Color, ColorInterpolationMethod, ConicGradient, FromCssStr, GradientStop,
+      Length, LinearGradient, PositionValue, RadialGradient, SizingContext, StopPosition,
+    },
+    viewport::Viewport,
   };
-  use takumi_core::layout::style::FromCssStr;
-  use takumi_css::paint::{ConicGradientTile, LinearGradientTile, RadialGradientTile};
+  use takumi_core::paint::{ConicGradientTile, LinearGradientTile, RadialGradientTile};
 
   use super::*;
 

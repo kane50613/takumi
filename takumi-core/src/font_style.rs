@@ -12,14 +12,12 @@ use taffy::{Size, prelude::FromLength};
 
 use crate::{
   context::RenderContext,
-  layout::{
-    inline::InlineBrush,
-    style::{
-      BorderStyle, Color, ComputedStyle, Display, FontFamily, FontSynthesis, Length,
-      SizedTextDecorationThickness, SizingContext, WordBreak,
-    },
-  },
+  layout::inline::InlineBrush,
   shadow::SizedShadow,
+  style::{
+    BorderStyle, Color, ComputedStyle, Display, FontFamily, FontSynthesis, Length,
+    SizedTextDecorationThickness, SizingContext, WordBreak,
+  },
 };
 
 /// A `font-family` after subset-group expansion: each authored family name that names a

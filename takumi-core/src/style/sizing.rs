@@ -3,7 +3,7 @@ use std::rc::Rc;
 use taffy::Size;
 use typed_builder::TypedBuilder;
 
-use crate::{Viewport, style::CalcArena};
+use crate::{style::CalcArena, viewport::Viewport};
 
 /// The sizing context used for length value resolving.
 #[derive(Clone, TypedBuilder)]
@@ -34,7 +34,7 @@ pub struct SizingContext {
 
 impl SizingContext {
   /// Converts an author-space CSS-pixel value into device pixels via
-  /// [`crate::Viewport::to_device`], the single dpr boundary.
+  /// [`crate::viewport::Viewport::to_device`], the single dpr boundary.
   #[inline]
   pub fn to_device(&self, css_px: f32) -> f32 {
     self.viewport.to_device(css_px)

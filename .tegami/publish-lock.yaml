@@ -41,8 +41,6 @@ core:packages:
     updated: false
   - id: npm:example-tanstack-start
     updated: false
-  - id: cargo:takumi-css
-    updated: false
   - id: cargo:takumi-core
     updated: false
   - id: cargo:takumi-raster

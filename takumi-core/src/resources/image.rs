@@ -13,11 +13,11 @@ use tiny_skia::Pixmap;
 use xxhash_rust::xxh3::xxh3_64;
 
 use crate::{
-  layout::style::{ImageScalingAlgorithm, IntrinsicSizing, SizingContext},
   resources::{
     image_buffer::ImageBuffer,
     image_decoder::{DecodedGif, DecodedImage, decode_image},
   },
+  style::{ImageScalingAlgorithm, IntrinsicSizing, SizingContext},
 };
 use thiserror::Error;
 
