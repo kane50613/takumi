@@ -2359,8 +2359,8 @@ mod tests {
       tree::RenderNode,
     },
     resources::font::{FontOverride, FontResource, GenericFamily},
+    style::SizingContext,
   };
-  use takumi_css::SizingContext;
 
   fn create_test_context() -> Fonts {
     let mut context = Fonts::default();

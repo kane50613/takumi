@@ -1607,53 +1607,36 @@ dependencies = [
 name = "takumi-core"
 version = "0.1.0-rc.3"
 dependencies = [
+ "bitflags",
  "bytemuck",
  "color",
+ "cssparser",
  "data-url",
  "gif",
  "image",
  "image-webp",
+ "kurbo",
  "libwebp-sys",
  "parley",
+ "paste",
+ "phf 0.14.0",
  "png",
+ "precomputed-hash",
  "quick_cache",
  "resvg",
  "roxmltree 0.21.1",
+ "selectors",
  "serde",
  "serde_bytes",
  "serde_json",
  "skrifa",
  "smallvec",
  "taffy",
- "takumi-css",
  "thiserror",
  "tiny-skia",
  "typed-builder",
  "wuff",
  "xxhash-rust",
-]
-
-[[package]]
-name = "takumi-css"
-version = "0.2.0-rc.2"
-dependencies = [
- "bitflags",
- "bytemuck",
- "color",
- "cssparser",
- "kurbo",
- "parley",
- "paste",
- "phf 0.14.0",
- "precomputed-hash",
- "selectors",
- "serde",
- "serde_json",
- "smallvec",
- "taffy",
- "thiserror",
- "tiny-skia",
- "typed-builder",
 ]
 
 [[package]]
@@ -1702,7 +1685,6 @@ dependencies = [
  "svgtypes",
  "taffy",
  "takumi-core",
- "takumi-css",
  "tiny-skia",
  "typed-builder",
 ]
@@ -1715,7 +1697,6 @@ dependencies = [
  "quick-xml",
  "taffy",
  "takumi-core",
- "takumi-css",
  "tiny-skia",
  "typed-builder",
 ]

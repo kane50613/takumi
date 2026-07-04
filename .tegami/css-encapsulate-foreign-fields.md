@@ -1,8 +1,8 @@
 ---
 packages:
-  cargo:takumi-css:
+  cargo:takumi-core:
     replay:
-      - "exit prerelease: cargo:takumi-css"
+      - "exit prerelease: cargo:takumi-core"
 ---
 
 ### Keep the `color` and `selectors` crates out of the public API

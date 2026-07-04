@@ -1,6 +1,6 @@
 ---
 packages:
-  cargo:takumi-css: minor
+  cargo:takumi-core: minor
 ---
 
 ### Keep `image` and `tiny_skia` out of the `Color` API

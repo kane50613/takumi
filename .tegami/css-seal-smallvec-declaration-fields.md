@@ -1,6 +1,6 @@
 ---
 packages:
-  cargo:takumi-css: minor
+  cargo:takumi-core: minor
 ---
 
 ### Keep `smallvec` and `image` out of the declaration-block API

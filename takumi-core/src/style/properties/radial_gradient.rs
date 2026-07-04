@@ -525,12 +525,11 @@ mod tests {
   use tiny_skia::ColorU8;
 
   use super::*;
-  use crate::style::FromCssStr;
   use crate::{
     Viewport,
     style::{
-      Color, Length, PositionComponent, PositionKeywordX, PositionKeywordY, PositionValue,
-      SpacePair, StopPosition, properties::gradient_utils::red_blue_stops,
+      Color, FromCssStr, Length, PositionComponent, PositionKeywordX, PositionKeywordY,
+      PositionValue, SpacePair, StopPosition, properties::gradient_utils::red_blue_stops,
     },
   };
   #[test]

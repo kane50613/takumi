@@ -26,11 +26,9 @@ use crate::{
       apply_stylesheet_animations,
     },
   },
+  matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
 };
 use parley::fontique::Attributes;
-use takumi_css::matching::{
-  MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view,
-};
 
 /// A render-tree child paired with its layout `NodeId`. `hoisted_cb` is set
 /// when the child is out-of-flow and was re-parented to a containing block in

@@ -1162,8 +1162,10 @@ mod tests {
   use super::*;
   use cssparser::ToCss;
 
-  use crate::Viewport;
-  use crate::style::{Color, ColorInput, ComputedStyle, Length, Style, StyleDeclaration};
+  use crate::{
+    Viewport,
+    style::{Color, ColorInput, ComputedStyle, Length, Style, StyleDeclaration},
+  };
 
   fn computed_style_from_declarations(declarations: &StyleDeclarationBlock) -> ComputedStyle {
     let mut style = Style::default();

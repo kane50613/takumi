@@ -11,10 +11,8 @@ mod supports;
 /// Tailwind utility-class parsing.
 pub mod tw;
 
-pub use animation::apply_stylesheet_animations;
-pub use animation::{KeyframeRule, KeyframesRule};
-pub(crate) use calc::CalcArena;
-pub(crate) use calc::parse_calc_number_expression;
+pub use animation::{KeyframeRule, KeyframesRule, apply_stylesheet_animations};
+pub(crate) use calc::{CalcArena, parse_calc_number_expression};
 pub(crate) use css_input::{CssInput, CssNumber, CssUnexpected, CssValueSeed};
 pub(crate) use math::lerp;
 pub use math::{fast_div_255, fast_div_255_u32};

@@ -1,13 +1,11 @@
 ---
 packages:
-  cargo:takumi-css: minor
   cargo:takumi-core: minor
 ---
 
-### Match selectors in takumi-css and seal the `selectors` crate
+### Seal the `selectors` crate behind a private matching module
 
-Selector matching moved out of takumi-core's `layout::matching` into a new
-`matching` module in takumi-css, generic over a caller-implemented
-`MatchableNode`. `CssRule`, `LayerName`, `Ident`, `SelectorImpl`,
-`PseudoClass`, and `PseudoElement` are now `pub(crate)`, keeping the
-`selectors` crate out of the public API.
+Selector matching lives in takumi-core's crate-private `matching` module,
+generic over a caller-implemented `MatchableNode`. `CssRule`, `LayerName`,
+`Ident`, `SelectorImpl`, `PseudoClass`, and `PseudoElement` are `pub(crate)`,
+keeping the `selectors` crate out of the public API.

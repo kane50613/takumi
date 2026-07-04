@@ -27,6 +27,13 @@ quick_cache.workspace = true
 smallvec.workspace = true
 parley.workspace = true
 taffy.workspace = true
+bitflags.workspace = true
+cssparser.workspace = true
+kurbo.workspace = true
+paste.workspace = true
+phf.workspace = true
+precomputed-hash.workspace = true
+selectors.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 image-webp.workspace = true
@@ -41,10 +48,6 @@ features = ["wasm_simd"]
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies.bytemuck]
 workspace = true
 features = ["aarch64_simd", "avx512_simd"]
-
-[dependencies.takumi-css]
-path = "../takumi-css"
-version = "0.2.0-rc.2"
 
 [dependencies.serde]
 workspace = true

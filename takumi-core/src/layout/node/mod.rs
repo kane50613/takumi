@@ -2,11 +2,10 @@ mod container;
 mod image;
 mod text;
 
-use crate::resources::image_buffer::ImageBuffer;
+use crate::{matching::MatchableNode, resources::image_buffer::ImageBuffer};
 use serde::Deserialize;
 use std::{collections::BTreeMap, sync::Arc};
 use taffy::{AvailableSpace, Size};
-use takumi_css::matching::MatchableNode;
 
 use crate::{
   Xxh3HashSet,
@@ -746,7 +745,7 @@ mod tests {
 mod matching_tests {
   use std::collections::BTreeMap;
 
-  use takumi_css::matching::{MatchedDeclarationsView, match_stylesheets_view};
+  use crate::matching::{MatchedDeclarationsView, match_stylesheets_view};
 
   use crate::layout::{
     Viewport,

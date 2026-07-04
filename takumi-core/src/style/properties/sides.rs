@@ -130,8 +130,7 @@ impl<T: Copy + ToCss> ToCss for Sides<T> {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::style::FromCssStr;
-  use crate::style::Length;
+  use crate::style::{FromCssStr, Length};
 
   #[test]
   fn deserialize_single_number() {

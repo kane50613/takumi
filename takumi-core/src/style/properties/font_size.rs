@@ -194,9 +194,8 @@ mod tests {
   use taffy::Size;
 
   use super::*;
-  use crate::style::FromCssStr;
   use crate::{
-    style::{CalcArena, SizingContext},
+    style::{CalcArena, FromCssStr, SizingContext},
     viewport::Viewport,
   };
 

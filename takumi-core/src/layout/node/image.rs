@@ -199,10 +199,10 @@ pub fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
 mod tests {
   use std::assert_matches;
 
+  use crate::style::SizingContext;
   use image::RgbaImage;
   use serde_json::from_value;
   use taffy::{AvailableSpace, Dimension, Size, Style};
-  use takumi_css::SizingContext;
 
   use super::{image_resource_url, measure_image_node};
   use crate::{

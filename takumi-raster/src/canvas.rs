@@ -33,7 +33,7 @@ use crate::{
   layout::style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
   stacking_context::blend_pixmap_software,
 };
-use takumi_css::paint::{
+use takumi_core::paint::{
   GradientOverlayTile, LinearGradientFastPathKind, LinearGradientTile, RadialGradientTile,
   overlay_gradient_tile_fast_normal_unconstrained,
 };
@@ -1679,8 +1679,10 @@ mod tests {
     pixmap_from_buffer,
     resources::image_buffer::ImageBuffer,
   };
-  use takumi_core::layout::style::FromCssStr;
-  use takumi_css::paint::{ConicGradientTile, LinearGradientTile, RadialGradientTile};
+  use takumi_core::{
+    layout::style::FromCssStr,
+    paint::{ConicGradientTile, LinearGradientTile, RadialGradientTile},
+  };
 
   use super::*;
 

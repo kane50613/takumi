@@ -374,10 +374,12 @@ mod tests {
   use tiny_skia::ColorU8;
 
   use super::*;
-  use crate::style::FromCssStr;
   use crate::{
     Viewport,
-    style::{Color, Length, SpacePair, StopPosition, properties::gradient_utils::red_blue_stops},
+    style::{
+      Color, FromCssStr, Length, SpacePair, StopPosition,
+      properties::gradient_utils::red_blue_stops,
+    },
   };
   #[test]
   fn test_parse_conic_gradient_basic_variants() {

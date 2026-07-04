@@ -29,7 +29,7 @@ use skrifa::{
 use thiserror::Error;
 use tiny_skia::{IntSize, PathSegment as Command, Pixmap};
 
-use takumi_css::FontStyle as CssFontStyle;
+use crate::style::FontStyle as CssFontStyle;
 
 use crate::{
   context::RenderContext,

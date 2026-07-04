@@ -25,11 +25,11 @@ use takumi_core::{
       PositionComponent, PositionValue, RadialGradient, ResolvedGradientStop, SizingContext,
     },
   },
-};
-use takumi_css::paint::{
-  ConicGradientTile, LinearGradientTile, RadialGradientTile, build_color_lut_with_interpolation,
-  collect_repeat_tile_positions, collect_spaced_tile_positions, collect_stretched_tile_positions,
-  resolve_stops_along_axis,
+  paint::{
+    ConicGradientTile, LinearGradientTile, RadialGradientTile, build_color_lut_with_interpolation,
+    collect_repeat_tile_positions, collect_spaced_tile_positions, collect_stretched_tile_positions,
+    resolve_stops_along_axis,
+  },
 };
 
 use crate::{

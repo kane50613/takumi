@@ -1,8 +1,8 @@
 ---
 packages:
-  cargo:takumi-css:
+  cargo:takumi-core:
     replay:
-      - "exit prerelease: cargo:takumi-css"
+      - "exit prerelease: cargo:takumi-core"
 ---
 
 ### Mark the property-identifier enums `#[non_exhaustive]`

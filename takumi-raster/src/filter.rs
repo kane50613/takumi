@@ -11,7 +11,7 @@ use crate::{
   },
   render_mask,
 };
-use takumi_css::paint::compose_transfer_table;
+use takumi_core::paint::compose_transfer_table;
 
 /// Calculates the luma of an RGB pixel.
 #[inline(always)]

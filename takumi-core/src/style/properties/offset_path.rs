@@ -1,16 +1,12 @@
-use std::f32::consts::FRAC_PI_2;
-use std::fmt;
+use std::{f32::consts::FRAC_PI_2, fmt};
 
 use cssparser::Parser;
 use kurbo::{BezPath, ParamCurve, ParamCurveArclen, PathEl, PathSeg, Shape};
 use taffy::{Point, Size};
 
-use crate::{
-  declare_enum_from_css_impl,
-  style::{
-    Angle, Animatable, BasicShape, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed,
-    ParseResult, ShapePosition, ShapeRadius, SizingContext, ToCss,
-  },
+use crate::style::{
+  Angle, Animatable, BasicShape, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed,
+  ParseResult, ShapePosition, ShapeRadius, SizingContext, ToCss, declare_enum_from_css_impl,
 };
 
 /// Flattening tolerance (CSS px) for arc-length integration and shape sampling.

@@ -1,6 +1,6 @@
 ---
 packages:
-  cargo:takumi-css: minor
+  cargo:takumi-core: minor
 ---
 
 ### Move gradient tiles to the `paint` module and seal `tiny_skia`
