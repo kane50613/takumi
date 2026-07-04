@@ -9,7 +9,7 @@ use std::{
 
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use takumi::{
-  encode_animated_gif, encode_animated_png, encode_animated_webp, prelude::*, render, write_image,
+  prelude::*, render, write_animated_gif, write_animated_png, write_animated_webp, write_image,
 };
 use takumi_svg::{SvgOptions, render as svg_render};
 
@@ -254,7 +254,7 @@ pub(crate) fn run_animation_fixture_test<'g, Frames>(
 
     match format {
       AnimationFixtureFormat::Webp => {
-        encode_animated_webp(
+        write_animated_webp(
           Cow::Owned(frames.clone()),
           &mut file,
           AnimatedWebpOptions::default(),
@@ -262,10 +262,10 @@ pub(crate) fn run_animation_fixture_test<'g, Frames>(
         .unwrap();
       }
       AnimationFixtureFormat::Png => {
-        encode_animated_png(&frames, &mut file, AnimatedPngOptions::default()).unwrap();
+        write_animated_png(&frames, &mut file, AnimatedPngOptions::default()).unwrap();
       }
       AnimationFixtureFormat::Gif => {
-        encode_animated_gif(
+        write_animated_gif(
           Cow::Owned(frames.clone()),
           &mut file,
           AnimatedGifOptions::default(),

@@ -4,7 +4,7 @@ use napi::bindgen_prelude::*;
 use takumi_core::layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node};
 use takumi_raster::{
   AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, RenderOptions, SequentialScene,
-  encode_animated_gif, encode_animated_png, encode_animated_webp, render_animation,
+  render_animation, write_animated_gif, write_animated_png, write_animated_webp,
 };
 
 use crate::{
@@ -147,15 +147,15 @@ impl Task for RenderAnimationTask {
             options.quality = quality;
           }
 
-          encode_animated_webp(Cow::Owned(frames), &mut buffer, options)
+          write_animated_webp(Cow::Owned(frames), &mut buffer, options)
             .map_err(|e| Error::from_reason(e.to_string()))?;
         }
         AnimationOutputFormat::Apng => {
-          encode_animated_png(&frames, &mut buffer, AnimatedPngOptions::default())
+          write_animated_png(&frames, &mut buffer, AnimatedPngOptions::default())
             .map_err(|e| Error::from_reason(e.to_string()))?;
         }
         AnimationOutputFormat::Gif => {
-          encode_animated_gif(
+          write_animated_gif(
             Cow::Owned(frames),
             &mut buffer,
             AnimatedGifOptions::default(),

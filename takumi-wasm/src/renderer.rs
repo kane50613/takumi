@@ -22,8 +22,8 @@ use takumi_core::{
 };
 use takumi_raster::{
   AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, SequentialScene,
-  encode_animated_gif, encode_animated_png, encode_animated_webp, measure, render,
-  render_animation, write_image,
+  measure, render, render_animation, write_animated_gif, write_animated_png, write_animated_webp,
+  write_image,
 };
 use wasm_bindgen::prelude::*;
 
@@ -158,7 +158,7 @@ impl Renderer {
     match format.unwrap_or(AnimationOutputFormat::WebP) {
       AnimationOutputFormat::WebP => {
         // wasm `image-webp` is lossless-only.
-        encode_animated_webp(
+        write_animated_webp(
           Cow::Owned(frames),
           &mut buffer,
           AnimatedWebpOptions::default(),
@@ -166,11 +166,11 @@ impl Renderer {
         .map_err(map_error)?;
       }
       AnimationOutputFormat::APng => {
-        encode_animated_png(&frames, &mut buffer, AnimatedPngOptions::default())
+        write_animated_png(&frames, &mut buffer, AnimatedPngOptions::default())
           .map_err(map_error)?;
       }
       AnimationOutputFormat::Gif => {
-        encode_animated_gif(
+        write_animated_gif(
           Cow::Owned(frames),
           &mut buffer,
           AnimatedGifOptions::default(),

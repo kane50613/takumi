@@ -9,7 +9,7 @@ use png::{ColorType, DeflateCompression, Filter};
 use typed_builder::TypedBuilder;
 
 /// Encode a sequence of RGBA frames into an animated WebP and write to `destination`.
-pub use crate::webp::encode_animated_webp;
+pub use crate::webp::write_animated_webp;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::webp::write_webp_lossy;
 use crate::webp::{has_any_alpha_pixel, strip_alpha_channel, write_webp_lossless};
@@ -294,7 +294,7 @@ pub fn write_image<T: Write>(
 }
 
 /// Encode a sequence of RGBA frames into an animated GIF and write to `destination`.
-pub fn encode_animated_gif<W: Write>(
+pub fn write_animated_gif<W: Write>(
   frames: Cow<'_, [AnimationFrame]>,
   destination: &mut W,
   options: AnimatedGifOptions,
@@ -338,7 +338,7 @@ pub fn encode_animated_gif<W: Write>(
 }
 
 /// Encode a sequence of RGBA frames into an animated PNG and write to `destination`.
-pub fn encode_animated_png<W: Write>(
+pub fn write_animated_png<W: Write>(
   frames: &[AnimationFrame],
   destination: &mut W,
   options: AnimatedPngOptions,
@@ -397,7 +397,7 @@ mod tests {
 
   use super::{
     AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, Bitmap,
-    OutputFormat, encode_animated_gif, encode_animated_png, encode_animated_webp, write_image,
+    OutputFormat, write_animated_gif, write_animated_png, write_animated_webp, write_image,
   };
   use crate::{DitheringAlgorithm, apply_dithering};
 
@@ -409,7 +409,7 @@ mod tests {
   }
 
   #[test]
-  fn encode_animated_gif_writes_valid_animation_and_delays() {
+  fn write_animated_gif_writes_valid_animation_and_delays() {
     let frame_a = mk_frame(
       RgbaImage::from_fn(2, 2, |x, y| {
         if x == 0 && y == 0 {
@@ -432,7 +432,7 @@ mod tests {
     );
 
     let mut bytes = Vec::new();
-    let encode_result = encode_animated_gif(
+    let encode_result = write_animated_gif(
       Cow::Owned(vec![frame_a, frame_b]),
       &mut bytes,
       AnimatedGifOptions {
@@ -496,7 +496,7 @@ mod tests {
   }
 
   #[test]
-  fn encode_animated_gif_rejects_mismatched_frame_dimensions() {
+  fn write_animated_gif_rejects_mismatched_frame_dimensions() {
     let frame_a = mk_frame(
       RgbaImage::from_fn(2, 2, |_, _| image::Rgba([255, 0, 0, 255])),
       10,
@@ -507,7 +507,7 @@ mod tests {
     );
 
     let mut bytes = Vec::new();
-    let encode_result = encode_animated_gif(
+    let encode_result = write_animated_gif(
       Cow::Owned(vec![frame_a, frame_b]),
       &mut bytes,
       AnimatedGifOptions::default(),
@@ -520,9 +520,9 @@ mod tests {
   }
 
   #[test]
-  fn encode_animated_gif_rejects_empty_frames() {
+  fn write_animated_gif_rejects_empty_frames() {
     let mut bytes = Vec::new();
-    let result = encode_animated_gif(
+    let result = write_animated_gif(
       Cow::Owned(Vec::new()),
       &mut bytes,
       AnimatedGifOptions::default(),
@@ -532,15 +532,15 @@ mod tests {
   }
 
   #[test]
-  fn encode_animated_png_rejects_empty_frames() {
+  fn write_animated_png_rejects_empty_frames() {
     let mut bytes = Vec::new();
-    let result = encode_animated_png(&[], &mut bytes, AnimatedPngOptions::default());
+    let result = write_animated_png(&[], &mut bytes, AnimatedPngOptions::default());
 
     assert_matches!(result, Err(Error::EmptyAnimationFrames));
   }
 
   #[test]
-  fn encode_animated_png_rejects_mismatched_frame_dimensions() {
+  fn write_animated_png_rejects_mismatched_frame_dimensions() {
     let frames = vec![
       mk_frame(
         RgbaImage::from_pixel(2, 2, image::Rgba([255, 0, 0, 255])),
@@ -553,7 +553,7 @@ mod tests {
     ];
 
     let mut bytes = Vec::new();
-    let result = encode_animated_png(&frames, &mut bytes, AnimatedPngOptions::default());
+    let result = write_animated_png(&frames, &mut bytes, AnimatedPngOptions::default());
 
     assert_matches!(result, Err(Error::MixedAnimationFrameDimensions));
   }
@@ -621,7 +621,7 @@ mod tests {
   }
 
   #[test]
-  fn encode_animated_webp_respects_blend_dispose_and_loop_count() {
+  fn write_animated_webp_respects_blend_dispose_and_loop_count() {
     let frame_a = mk_frame(
       RgbaImage::from_fn(2, 2, |x, y| {
         if x == 0 && y == 0 {
@@ -644,7 +644,7 @@ mod tests {
     );
 
     let mut bytes = Vec::new();
-    let encode_result = encode_animated_webp(
+    let encode_result = write_animated_webp(
       Cow::Owned(vec![frame_a, frame_b]),
       &mut bytes,
       AnimatedWebpOptions {
@@ -688,7 +688,7 @@ mod tests {
   }
 
   #[test]
-  fn encode_animated_webp_lossy_produces_valid_animation() {
+  fn write_animated_webp_lossy_produces_valid_animation() {
     // With allow_mixed=1 libwebp may choose VP8L even at quality<100 when it
     // produces a smaller file (trivial 2×2 solid-colour images always compress
     // better losslessly). We verify the output is a parseable animated WebP.
@@ -698,7 +698,7 @@ mod tests {
     );
 
     let mut bytes = Vec::new();
-    let encode_result = encode_animated_webp(
+    let encode_result = write_animated_webp(
       Cow::Owned(vec![frame]),
       &mut bytes,
       AnimatedWebpOptions {
@@ -732,7 +732,7 @@ mod tests {
   }
 
   #[test]
-  fn encode_animated_webp_merges_consecutive_identical_frames() {
+  fn write_animated_webp_merges_consecutive_identical_frames() {
     let image_a = RgbaImage::from_fn(2, 2, |_, _| image::Rgba([120, 30, 10, 255]));
     let image_b = RgbaImage::from_fn(2, 2, |_, _| image::Rgba([5, 200, 20, 255]));
     let frame_a = mk_frame(image_a.clone(), 50);
@@ -740,7 +740,7 @@ mod tests {
     let frame_c = mk_frame(image_b, 30);
 
     let mut bytes = Vec::new();
-    let encode_result = encode_animated_webp(
+    let encode_result = write_animated_webp(
       Cow::Owned(vec![frame_a, frame_b, frame_c]),
       &mut bytes,
       AnimatedWebpOptions::default(),
@@ -781,11 +781,11 @@ mod tests {
   }
 
   #[test]
-  fn encode_animated_webp_rejects_zero_sized_frames() {
+  fn write_animated_webp_rejects_zero_sized_frames() {
     let invalid = mk_frame(RgbaImage::new(0, 1), 10);
 
     let mut bytes = Vec::new();
-    let result = encode_animated_webp(
+    let result = write_animated_webp(
       Cow::Owned(vec![invalid]),
       &mut bytes,
       AnimatedWebpOptions::default(),
@@ -804,7 +804,7 @@ mod tests {
   }
 
   #[test]
-  fn encode_animated_webp_preserves_parallel_frame_order() {
+  fn write_animated_webp_preserves_parallel_frame_order() {
     let frames = vec![
       mk_frame(
         RgbaImage::from_pixel(2, 2, image::Rgba([255, 0, 0, 255])),
@@ -825,7 +825,7 @@ mod tests {
     ];
 
     let mut bytes = Vec::new();
-    let encode_result = encode_animated_webp(
+    let encode_result = write_animated_webp(
       Cow::Owned(frames),
       &mut bytes,
       AnimatedWebpOptions::default(),

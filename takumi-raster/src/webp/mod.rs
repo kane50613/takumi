@@ -8,11 +8,11 @@ mod image_webp;
 mod libwebp;
 
 #[cfg(target_arch = "wasm32")]
-pub use image_webp::encode_animated_webp;
+pub use image_webp::write_animated_webp;
 #[cfg(target_arch = "wasm32")]
 pub(crate) use image_webp::write_webp_lossless;
 #[cfg(not(target_arch = "wasm32"))]
-pub use libwebp::encode_animated_webp;
+pub use libwebp::write_animated_webp;
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use libwebp::{write_webp_lossless, write_webp_lossy};
 

@@ -148,7 +148,7 @@ fn validate_u24_dimension(name: &'static str, value: u32) -> Result<()> {
 }
 
 /// Encode a sequence of RGBA frames into an animated WebP and write to `destination`.
-pub fn encode_animated_webp<W: Write>(
+pub fn write_animated_webp<W: Write>(
   frames: Cow<'_, [AnimationFrame]>,
   destination: &mut W,
   options: AnimatedWebpOptions,

@@ -367,7 +367,7 @@ fn encode_frames(
 }
 
 /// Encodes a sequence of RGBA frames into an animated WebP.
-pub fn encode_animated_webp<W: Write>(
+pub fn write_animated_webp<W: Write>(
   frames: Cow<'_, [AnimationFrame]>,
   destination: &mut W,
   options: AnimatedWebpOptions,
