@@ -12,10 +12,10 @@ use crate::{
       InlineLayoutMode, InlineLayoutRequest, ProcessedInlineSpan, collect_inline_items,
       create_inline_layout, resolve_inline_max_height,
     },
-    style::{Affine, BackgroundImage, BlendMode, Filter, SizingContext},
     tree::{LayoutResults, RenderNode},
   },
   prepare_node_mask,
+  style::{Affine, BackgroundImage, BlendMode, Filter, SizingContext},
 };
 use takumi_core::{
   geometry::transformed_rect_extents,

@@ -5,8 +5,8 @@ use std::borrow::Cow;
 
 use parley::layout::BreakReason;
 
-use crate::layout::{
-  inline::{InlineLayout, ProcessedInlineSpan, break_lines},
+use crate::{
+  layout::inline::{InlineLayout, ProcessedInlineSpan, break_lines},
   style::{TextTransform, TextWrapMode, WhiteSpaceCollapse},
 };
 

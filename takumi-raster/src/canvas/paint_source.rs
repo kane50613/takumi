@@ -4,7 +4,7 @@ use crate::{
   BackgroundTile, ColorTile,
   blend::premultiplied_from_pixel,
   canvas::{BufferPool, composite_premultiplied_over},
-  layout::style::ImageScalingAlgorithm,
+  style::ImageScalingAlgorithm,
 };
 
 #[derive(Clone, Copy)]
@@ -382,7 +382,7 @@ mod tests {
   use tiny_skia::{Pixmap, PremultipliedColorU8};
 
   use super::{PaintSource, SamplingFootprint, interpolate_with_footprint};
-  use crate::layout::style::ImageScalingAlgorithm;
+  use crate::style::ImageScalingAlgorithm;
 
   #[test]
   fn minified_sampling_averages_high_frequency_content() -> Result<(), &'static str> {

@@ -20,10 +20,10 @@ use takumi_core::{
       resolve_inline_runs, run_decorations,
     },
     node::TextData,
-    style::{BackgroundClip, BorderStyle, LineJoin},
     tree::RenderNode,
   },
   resources::font::ResolvedGlyph,
+  style::{BackgroundClip, BorderStyle, LineJoin},
 };
 
 use crate::{

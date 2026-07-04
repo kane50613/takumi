@@ -8,12 +8,11 @@ use crate::{
   BorderProperties, Command, Fill, PathBuilder, PathData, Placement, RenderContext, Result, Style,
   build_path,
   canvas::{BufferPool, mask_index_from_coord},
-  create_mask, fast_div_255,
-  layout::style::{
+  create_mask, fast_div_255, scale_commands,
+  style::{
     Affine, Axis, BasicShape, BorderStyle, Color, ComputedStyle, FillRule, ImageScalingAlgorithm,
     Overflow, ShapeRadius, Sides, SizingContext, SpacePair,
   },
-  scale_commands,
 };
 use takumi_core::geometry::transformed_rect_extents;
 

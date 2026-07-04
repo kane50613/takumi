@@ -29,9 +29,8 @@ pub(crate) mod matching;
 /// Font and image resource management.
 pub mod resources;
 pub mod scene;
-/// CSS value types, parsing, and the cascade. Reachable publicly through
-/// [`layout::style`]; the module itself stays crate-private.
-pub(crate) mod style;
+/// CSS value types, parsing, and the cascade.
+pub mod style;
 mod viewport;
 
 /// Backend painting helpers (gradient LUTs, tile positioning, transfer tables)

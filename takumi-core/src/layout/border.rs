@@ -5,7 +5,7 @@ use tiny_skia::{PathSegment as Command, Point as TinyPoint};
 
 use crate::{
   context::RenderContext,
-  layout::style::{BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair},
+  style::{BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair},
 };
 
 /// Border side identifier used by per-side geometry and rasterization.

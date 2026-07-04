@@ -1,7 +1,7 @@
 use image::Rgba;
 use tiny_skia::PremultipliedColorU8;
 
-use crate::{fast_div_255, fast_div_255_u32, layout::style::BlendMode};
+use crate::{fast_div_255, fast_div_255_u32, style::BlendMode};
 
 #[inline(always)]
 fn composited_alpha(bottom_alpha: u32, top_alpha: u32) -> u32 {
@@ -629,7 +629,7 @@ pub(crate) fn composite_repeated_premultiplied_pixel_normal(
 mod tests {
   use image::Rgba;
 
-  use crate::{blend::blend_pixel, layout::style::BlendMode};
+  use crate::{blend::blend_pixel, style::BlendMode};
 
   // https://github.com/kane50613/takumi/issues/447
   #[test]

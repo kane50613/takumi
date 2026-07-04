@@ -4,11 +4,9 @@ use taffy::{AvailableSpace, CompactLength, MaybeResolve, Size};
 
 use crate::{
   context::RenderContext,
-  layout::{
-    node::{ImageData, ImageSourceInput, Node, NodeStyleLayers},
-    style::{Length, Style, StyleDeclaration},
-  },
+  layout::node::{ImageData, ImageSourceInput, Node, NodeStyleLayers},
   resources::image::{ImageResourceError, ImageResult, ImageSource, is_svg_like},
+  style::{Length, Style, StyleDeclaration},
 };
 
 pub(crate) fn image_resource_url(image: &ImageData) -> Option<&str> {

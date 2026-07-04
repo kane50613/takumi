@@ -10,10 +10,11 @@ use crate::resources::image::RenderedImage;
 use crate::{
   BorderProperties, BufferPool, OverlayOptions, PaintSource, RenderContext, Result,
   SamplingFootprint, color_to_premultiplied, interpolate_with_footprint,
-  layout::{node::resolve_image, style::*},
+  layout::node::resolve_image,
   overlay_gradient_tile, overlay_image, overlay_linear_gradient_tile, overlay_radial_gradient_tile,
   pixmap_from_buffer, pixmap_ref_from_buffer,
   resources::{image::ImageSource, image_buffer::ImageBuffer},
+  style::*,
 };
 use takumi_core::paint::{
   ConicGradientTile, GradientOverlayTile, LinearGradientTile, RadialGradientTile,
@@ -874,8 +875,8 @@ pub(crate) fn collect_background_layers(
 #[cfg(test)]
 mod tests {
   use super::{resolve_position_component_x, resolve_position_component_y};
-  use crate::layout::{
-    Viewport,
+  use crate::{
+    layout::Viewport,
     style::{
       Length, PositionComponent, PositionKeywordX, PositionKeywordY, PositionValue, SizingContext,
       SpacePair,

@@ -3,7 +3,6 @@ use std::{collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 use parley::{GlyphRun, InlineBoxKind, PositionedLayoutItem};
 use serde::Serialize;
 use taffy::{AvailableSpace, Layout, NodeId, TaffyError, geometry::Size};
-use takumi_core::layout::style::SizingContext;
 use typed_builder::TypedBuilder;
 
 use crate::{
@@ -18,12 +17,12 @@ use crate::{
       resolve_visual_inline_box, text_fit_line_alignment_correction,
     },
     node::Node,
-    style::{Affine, ComputedStyle, FontFamily, StyleSheet},
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
   resources::image::ImageSource,
   scale_text_fit_x,
   stacking_context::paint_context,
+  style::{Affine, ComputedStyle, FontFamily, SizingContext, StyleSheet},
 };
 use takumi_core::scene::build_stacking_contexts;
 
@@ -701,15 +700,12 @@ mod tests {
   };
   use crate::{
     Fonts,
-    layout::{
-      Viewport,
-      node::Node,
-      style::{
-        AnimationFillMode, AnimationTime, AnimationTimingFunction, Color, ColorInput, Display,
-        KeyframeRule, KeyframesRule, Length, Length::Px, Position, Style, StyleDeclaration,
-      },
-    },
+    layout::{Viewport, node::Node},
     measure,
+    style::{
+      AnimationFillMode, AnimationTime, AnimationTimingFunction, Color, ColorInput, Display,
+      KeyframeRule, KeyframesRule, Length, Length::Px, Position, Style, StyleDeclaration,
+    },
   };
 
   fn make_scene<'g>(fonts: &'g Fonts, duration_ms: u32) -> SequentialScene<'g> {

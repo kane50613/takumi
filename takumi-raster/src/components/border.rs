@@ -7,9 +7,8 @@ use takumi_core::layout::border::{
 
 use crate::{
   Canvas, Cap, DashPattern, Fill, MaskSamplingOptions, PaintSource, PathBuilder, Placement, Stroke,
-  Style, intersect_alpha_masks,
-  layout::style::{Affine, BlendMode, BorderStyle, Color, ImageScalingAlgorithm},
-  render_mask,
+  Style, intersect_alpha_masks, render_mask,
+  style::{Affine, BlendMode, BorderStyle, Color, ImageScalingAlgorithm},
 };
 
 /// Canvas-backed rasterization of [`BorderProperties`].
@@ -649,8 +648,8 @@ fn paint_mask_with_inverse(
 mod tests {
   use taffy::{Rect, Size};
 
-  use takumi_core::layout::{
-    border::BorderProperties,
+  use takumi_core::{
+    layout::border::BorderProperties,
     style::{Affine, BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair},
   };
 

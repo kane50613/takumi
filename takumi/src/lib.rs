@@ -71,12 +71,12 @@ pub mod prelude {
     layout::{
       Viewport,
       node::{ImageData, ImageSourceInput, Node, NodeKind, TextData},
-      style::*,
     },
     resources::{
       font::{FontError, FontOverride, FontResource, GenericFamily, RegisteredFamily},
       image::{ImageCacheMode, ImageSource},
     },
+    style::*,
   };
 
   #[cfg(feature = "raster-backend")]

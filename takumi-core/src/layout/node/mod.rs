@@ -10,13 +10,9 @@ use taffy::{AvailableSpace, Size};
 use crate::{
   Xxh3HashSet,
   context::RenderContext,
-  layout::{
-    Viewport,
-    inline::InlineContentKind,
-    node::image::image_resource_url,
-    style::{Direction, Style, StyleDeclaration, ToCss, tw::TailwindValues},
-  },
+  layout::{Viewport, inline::InlineContentKind, node::image::image_resource_url},
   resources::image::{ImageResult, ImageSource},
+  style::{Direction, Style, StyleDeclaration, ToCss, tw::TailwindValues},
 };
 use ::image::RgbaImage;
 use parley::Language;
@@ -684,7 +680,7 @@ impl MatchableNode for Node {
 mod tests {
   use std::str::FromStr;
 
-  use crate::layout::style::{BackgroundImage, Style, StyleDeclaration, tw::TailwindValues};
+  use crate::style::{BackgroundImage, Style, StyleDeclaration, tw::TailwindValues};
 
   use super::*;
 
@@ -747,9 +743,8 @@ mod matching_tests {
 
   use crate::matching::{MatchedDeclarationsView, match_stylesheets_view};
 
-  use crate::layout::{
-    Viewport,
-    node::Node,
+  use crate::{
+    layout::{Viewport, node::Node},
     style::{ComputedStyle, Length, Style, StyleSheet},
   };
 

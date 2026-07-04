@@ -1,7 +1,10 @@
 use std::{collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
-use takumi_core::layout::{Viewport, node::Node, style::StyleSheet};
+use takumi_core::{
+  layout::{Viewport, node::Node},
+  style::StyleSheet,
+};
 
 use crate::{
   buffer_from_object, map_error, parse_stylesheet,

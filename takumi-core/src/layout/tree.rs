@@ -19,14 +19,14 @@ use crate::{
       collect_inline_items, create_inline_constraint, create_inline_layout, measure_inline_layout,
     },
     node::{Node, NodeStyleLayers},
-    style::{
-      BackgroundImage, BackgroundImages, BlendMode, BoxSizing, Color, ComputedStyle, ContentItem,
-      ContentValue, Display, Filters, Float, Isolation, Length, LineHeight, PercentageNumber,
-      Position, SizingContext, Style as NodeStyle, StyleDeclaration, StyleSheet, TextWrapMode,
-      apply_stylesheet_animations,
-    },
   },
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
+  style::{
+    BackgroundImage, BackgroundImages, BlendMode, BoxSizing, Color, ComputedStyle, ContentItem,
+    ContentValue, Display, Filters, Float, Isolation, Length, LineHeight, PercentageNumber,
+    Position, SizingContext, Style as NodeStyle, StyleDeclaration, StyleSheet, TextWrapMode,
+    apply_stylesheet_animations,
+  },
 };
 use parley::fontique::Attributes;
 
@@ -1932,8 +1932,8 @@ mod tests {
   use taffy::NodeId;
 
   use super::{registered_custom_property_parent_style, sort_children_by_order};
-  use crate::layout::{
-    Viewport,
+  use crate::{
+    layout::Viewport,
     style::{
       ComputedStyle, Length, PropertyRule, Style, StyleDeclaration, StyleDeclarationBlock,
       StyleSheet,
@@ -2371,8 +2371,9 @@ mod tests {
 
     use crate::{
       context::RenderContext,
-      layout::{node::Node, style::SizingContext, tree::RenderNode},
+      layout::{node::Node, tree::RenderNode},
       resources::font::Fonts,
+      style::SizingContext,
     };
 
     let fonts = Fonts::default();

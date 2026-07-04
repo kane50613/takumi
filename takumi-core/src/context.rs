@@ -3,8 +3,8 @@ use std::{collections::HashMap, rc::Rc, sync::Arc};
 use typed_builder::TypedBuilder;
 
 use crate::{
-  layout::style::{Affine, Color, ComputedStyle, SizingContext, StyleSheet},
   resources::{font::FontsSnapshot, image::ImageSource},
+  style::{Affine, Color, ComputedStyle, SizingContext, StyleSheet},
 };
 
 /// The context for the internal rendering. You should not construct this directly.

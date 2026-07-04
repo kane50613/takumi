@@ -17,18 +17,16 @@ use std::{f32::consts::TAU, io};
 use taffy::Size;
 use takumi_core::{
   context::RenderContext,
-  layout::{
-    node::resolve_image,
-    style::{
-      BackgroundImage, BackgroundRepeat, BackgroundRepeatStyle, BackgroundSize,
-      ColorInterpolationMethod, ConicGradient, IntrinsicSizing, Length, LinearGradient,
-      PositionComponent, PositionValue, RadialGradient, ResolvedGradientStop, SizingContext,
-    },
-  },
+  layout::node::resolve_image,
   paint::{
     ConicGradientTile, LinearGradientTile, RadialGradientTile, build_color_lut_with_interpolation,
     collect_repeat_tile_positions, collect_spaced_tile_positions, collect_stretched_tile_positions,
     resolve_stops_along_axis,
+  },
+  style::{
+    BackgroundImage, BackgroundRepeat, BackgroundRepeatStyle, BackgroundSize,
+    ColorInterpolationMethod, ConicGradient, IntrinsicSizing, Length, LinearGradient,
+    PositionComponent, PositionValue, RadialGradient, ResolvedGradientStop, SizingContext,
   },
 };
 

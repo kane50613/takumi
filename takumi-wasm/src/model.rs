@@ -5,11 +5,9 @@ use serde_bytes::ByteBuf;
 use std::sync::Arc;
 use takumi_core::{
   keyframes::deserialize_optional_keyframes,
-  layout::{
-    node::Node,
-    style::{FontStyle as CssFontStyle, FromCssStr, KeyframesRule},
-  },
+  layout::node::Node,
   resources::image::ImageCacheMode,
+  style::{FontStyle as CssFontStyle, FromCssStr, KeyframesRule},
 };
 use takumi_raster::DitheringAlgorithm;
 use wasm_bindgen::prelude::*;

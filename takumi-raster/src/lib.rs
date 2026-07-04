@@ -56,7 +56,7 @@ pub use render::*;
 pub(crate) use text_drawing::*;
 pub use write::*;
 
-pub(crate) use crate::layout::style::{fast_div_255, fast_div_255_u32};
+pub(crate) use crate::style::{fast_div_255, fast_div_255_u32};
 
 pub(crate) use crate::{context::RenderContext, layout::inline::scale_text_fit_x};
 

@@ -10,11 +10,12 @@ use napi_derive::napi;
 use rayon::prelude::*;
 use takumi_core::{
   Fonts,
-  layout::{node::Node, style::KeyframesRule as CoreKeyframesRule},
+  layout::node::Node,
   resources::{
     font::{FontOverride, FontResource, GenericFamily},
     image::{ImageCache, ImageCacheMode as CoreImageCacheMode, ImageSource as LoadedImageSource},
   },
+  style::KeyframesRule as CoreKeyframesRule,
 };
 use takumi_raster::{
   DitheringAlgorithm as CoreDitheringAlgorithm, OutputFormat as RasterOutputFormat, Quality,

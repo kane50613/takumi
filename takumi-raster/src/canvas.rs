@@ -30,8 +30,8 @@ use crate::{
   blend::*,
   build_path,
   error::Error,
-  layout::style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
   stacking_context::blend_pixmap_software,
+  style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
 };
 use takumi_core::paint::{
   GradientOverlayTile, LinearGradientFastPathKind, LinearGradientTile, RadialGradientTile,
@@ -1669,20 +1669,15 @@ mod tests {
 
   use crate::{
     Fonts, RenderContext, blend_pixel,
-    layout::{
-      Viewport,
-      style::{
-        Angle, BlendMode, Color, ColorInterpolationMethod, ConicGradient, GradientStop, Length,
-        LinearGradient, PositionValue, RadialGradient, SizingContext, StopPosition,
-      },
-    },
+    layout::Viewport,
     pixmap_from_buffer,
     resources::image_buffer::ImageBuffer,
+    style::{
+      Angle, BlendMode, Color, ColorInterpolationMethod, ConicGradient, FromCssStr, GradientStop,
+      Length, LinearGradient, PositionValue, RadialGradient, SizingContext, StopPosition,
+    },
   };
-  use takumi_core::{
-    layout::style::FromCssStr,
-    paint::{ConicGradientTile, LinearGradientTile, RadialGradientTile},
-  };
+  use takumi_core::paint::{ConicGradientTile, LinearGradientTile, RadialGradientTile};
 
   use super::*;
 

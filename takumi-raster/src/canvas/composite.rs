@@ -8,7 +8,7 @@ use super::{
 use crate::{
   Placement,
   blend::{blend_premultiplied_pixel, composite_premultiplied_over, scale_premultiplied_pixel},
-  layout::style::{Affine, BlendMode},
+  style::{Affine, BlendMode},
 };
 
 #[derive(Clone, Copy)]

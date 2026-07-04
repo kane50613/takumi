@@ -8,8 +8,4 @@ pub mod inline;
 /// Layout tree: render nodes and their computed layout results.
 pub mod tree;
 
-/// CSS-like styling system with colors, units, and properties.
-pub mod style {
-  pub use crate::style::*;
-}
 pub use crate::viewport::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport};

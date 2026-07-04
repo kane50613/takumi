@@ -1,13 +1,12 @@
 use taffy::{Layout, Point, Size};
 
 use crate::{
-  BorderProperties, Canvas, RenderContext, Result, SamplingOptions,
-  layout::style::{
+  BorderProperties, Canvas, RenderContext, Result, SamplingOptions, pixmap_ref_from_buffer,
+  resources::image::{ImageSource, RenderedImage},
+  style::{
     Affine, BlendMode, ObjectFit, PositionComponent, PositionKeywordX, PositionKeywordY,
     SizingContext,
   },
-  pixmap_ref_from_buffer,
-  resources::image::{ImageSource, RenderedImage},
 };
 
 pub(crate) struct PreparedImage<'a> {
@@ -329,8 +328,8 @@ pub(crate) fn draw_image(
 #[cfg(test)]
 mod tests {
   use super::resolve_object_position_axis;
-  use crate::layout::{
-    Viewport,
+  use crate::{
+    layout::Viewport,
     style::{Length, PositionComponent, PositionKeywordX, SizingContext},
   };
 

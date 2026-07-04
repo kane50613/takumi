@@ -15,10 +15,10 @@ use taffy::NodeId;
 use takumi_core::{
   layout::{
     border::BorderProperties,
-    style::{Affine, Filter},
     tree::{LayoutResults, RenderNode},
   },
   scene::{NodePaint, PaintItemKind, StackingContextNode},
+  style::{Affine, Filter},
 };
 
 use crate::{
