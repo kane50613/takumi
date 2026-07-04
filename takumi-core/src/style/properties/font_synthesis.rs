@@ -1,8 +1,9 @@
-use crate::style::unexpected_token;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use typed_builder::TypedBuilder;
 
-use crate::style::{CssToken, FromCss, MakeComputed, ParseResult, declare_enum_from_css_impl};
+use crate::style::{
+  CssToken, FromCss, MakeComputed, ParseResult, declare_enum_from_css_impl, unexpected_token,
+};
 
 /// Controls synthetic font behaviors.
 #[derive(Debug, Clone, Copy, PartialEq, Default, TypedBuilder)]
@@ -63,7 +64,7 @@ pub enum FontSynthesic {
 
 impl FontSynthesic {
   /// Whether synthesis is permitted.
-  pub fn is_allowed(self) -> bool {
+  pub(crate) fn is_allowed(self) -> bool {
     self == FontSynthesic::Auto
   }
 }

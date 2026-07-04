@@ -1,7 +1,6 @@
-use crate::style::unexpected_token;
 use cssparser::Parser;
 
-use crate::style::*;
+use crate::style::{unexpected_token, *};
 
 /// Parsed `background` shorthand value.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -136,7 +135,7 @@ impl<'i> FromCss<'i> for Background {
 }
 
 /// A list of background properties (one per layer).
-pub type Backgrounds = Box<[Background]>;
+pub(crate) type Backgrounds = Box<[Background]>;
 
 impl<'i> FromCss<'i> for Backgrounds {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {

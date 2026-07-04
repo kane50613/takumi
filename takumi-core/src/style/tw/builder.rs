@@ -299,7 +299,7 @@ impl TwTransformState {
 
 /// Accumulated Tailwind gradient utilities pending synthesis into a `background-image`.
 #[derive(Debug, Default)]
-pub struct TwGradientState {
+pub(crate) struct TwGradientState {
   /// Gradient kind (linear, radial, conic).
   pub gradient_type: TwGradientType,
   /// Linear/conic angle, if set.
@@ -322,7 +322,7 @@ pub struct TwGradientState {
 
 /// Gradient kind.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
-pub enum TwGradientType {
+pub(crate) enum TwGradientType {
   /// Linear gradient.
   #[default]
   Linear,

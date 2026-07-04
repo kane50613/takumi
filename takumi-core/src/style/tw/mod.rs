@@ -4,11 +4,10 @@ pub mod map;
 /// Parsers for Tailwind utility-class suffixes.
 pub mod parser;
 
-use builder::TailwindDeclarationBuilder;
-pub use builder::{TwGradientState, TwGradientType};
-
 use std::{borrow::Cow, cmp::Ordering, str::FromStr};
 
+use builder::TailwindDeclarationBuilder;
+pub(crate) use builder::TwGradientType;
 use cssparser::match_ignore_ascii_case;
 use serde::{Deserialize, Deserializer, de::Error as DeError};
 
@@ -24,7 +23,7 @@ use crate::{
 };
 
 /// Tailwind v4 `--spacing` (rem per unit). Prefer [`Length::from_spacing`].
-pub const TW_VAR_SPACING: f32 = 0.25;
+pub(crate) const TW_VAR_SPACING: f32 = 0.25;
 
 /// Represents a collection of tailwind properties.
 #[derive(Debug, Clone, PartialEq)]
@@ -67,7 +66,7 @@ impl FromStr for TailwindValues {
 
 impl TailwindValues {
   /// Collects resource URLs referenced by active Tailwind utilities for the given viewport.
-  pub fn resource_urls(&self, viewport: Viewport) -> impl Iterator<Item = &str> {
+  pub(crate) fn image_urls(&self, viewport: Viewport) -> impl Iterator<Item = &str> {
     self
       .inner
       .iter()
@@ -76,7 +75,7 @@ impl TailwindValues {
 
   /// Resolves all utilities for the viewport into a declaration block.
   #[inline(never)]
-  pub fn into_declaration_block(self, viewport: Viewport) -> StyleDeclarationBlock {
+  pub(crate) fn into_declaration_block(self, viewport: Viewport) -> StyleDeclarationBlock {
     let mut builder = TailwindDeclarationBuilder::default();
 
     for value in self.inner {
@@ -100,7 +99,7 @@ impl<'de> Deserialize<'de> for TailwindValues {
 
 /// Represents a tailwind value.
 #[derive(Debug, Clone, PartialEq)]
-pub struct TailwindValue {
+pub(crate) struct TailwindValue {
   /// The tailwind property.
   pub property: TailwindProperty,
   /// The breakpoint.
@@ -196,7 +195,7 @@ impl TailwindValue {
 
 /// Represents a breakpoint.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Breakpoint(pub Length);
+pub(crate) struct Breakpoint(pub Length);
 
 impl Breakpoint {
   /// Parse a breakpoint from a token.
@@ -230,7 +229,7 @@ impl Breakpoint {
 
 /// Represents a tailwind property.
 #[derive(Debug, Clone, PartialEq)]
-pub enum TailwindProperty {
+pub(crate) enum TailwindProperty {
   /// `background-clip` property.
   BackgroundClip(BackgroundClip),
   /// `box-sizing` property.

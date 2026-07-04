@@ -1,11 +1,11 @@
 use std::fmt;
 
-use crate::style::{ToCss, declare_enum_from_css_impl, unexpected_token};
 use cssparser::Parser;
 
 use crate::style::{
   Animatable, BorderStyle, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, MakeComputed,
-  ParseResult, SizingContext, properties::Length, tw::TailwindPropertyParser,
+  ParseResult, SizingContext, ToCss, declare_enum_from_css_impl, properties::Length,
+  tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// CSSWG `<line-width>` keyword (`thin | medium | thick`).
@@ -198,10 +198,8 @@ impl MakeComputed for Border {
 
 #[cfg(test)]
 mod tests {
-  use crate::style::Color;
-
   use super::*;
-  use crate::style::FromCssStr;
+  use crate::style::{Color, FromCssStr};
 
   #[test]
   fn test_parse_border_style_solid() {

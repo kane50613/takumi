@@ -29,12 +29,11 @@ use skrifa::{
 use thiserror::Error;
 use tiny_skia::{IntSize, PathSegment as Command, Pixmap};
 
-use crate::style::FontStyle as CssFontStyle;
-
 use crate::{
   context::RenderContext,
   layout::inline::{InlineBrush, InlineLayout},
   resources::{image_buffer::ImageBuffer, image_decoder::decode_png},
+  style::FontStyle as CssFontStyle,
 };
 
 fn pixmap_from_image_buffer(buffer: ImageBuffer) -> Option<Pixmap> {

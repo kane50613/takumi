@@ -1,10 +1,10 @@
-use cssparser::{Parser, Token, match_ignore_ascii_case};
 use std::{
   fmt,
   ops::{Deref, Neg},
 };
-use tiny_skia::PremultipliedColorU8;
 
+use cssparser::{Parser, Token, match_ignore_ascii_case};
+use tiny_skia::PremultipliedColorU8;
 use typed_builder::TypedBuilder;
 
 use super::gradient_utils::{
@@ -147,13 +147,13 @@ impl LinearGradientTile {
 
   /// Projects a pixel onto the gradient axis, in pixels.
   #[inline(always)]
-  pub fn projection_at(&self, x: f32, y: f32) -> f32 {
+  pub(crate) fn projection_at(&self, x: f32, y: f32) -> f32 {
     x * self.dir_x + y * self.dir_y + self.projection_bias
   }
 
   /// Maps an axis projection to a LUT index for a LUT of `lut_len`.
   #[inline(always)]
-  pub fn lut_index_for_projection_with_len(&self, projection: f32, lut_len: usize) -> usize {
+  pub(crate) fn lut_index_for_projection_with_len(&self, projection: f32, lut_len: usize) -> usize {
     if lut_len <= 1 {
       return 0;
     }
@@ -372,7 +372,7 @@ impl MakeComputed for GradientStop {
 }
 
 /// A list of gradient color stops, handling CSS double-stop syntax.
-pub type GradientStops = Vec<GradientStop>;
+pub(crate) type GradientStops = Vec<GradientStop>;
 
 impl<'i> FromCss<'i> for GradientStops {
   const VALID_TOKENS: &'static [CssToken] = GradientStop::VALID_TOKENS;
@@ -574,7 +574,7 @@ impl Default for LinearGradientDirection {
 
 impl HorizontalKeyword {
   /// Returns the angle in degrees.
-  pub fn degrees(&self) -> f32 {
+  pub(crate) fn degrees(&self) -> f32 {
     match self {
       HorizontalKeyword::Left => 270.0, // "to left" = 270deg
       HorizontalKeyword::Right => 90.0, // "to right" = 90deg
@@ -582,7 +582,7 @@ impl HorizontalKeyword {
   }
 
   /// Returns the mixed angle in degrees.
-  pub fn vertical_mixed_degrees(&self) -> f32 {
+  pub(crate) fn vertical_mixed_degrees(&self) -> f32 {
     match self {
       HorizontalKeyword::Left => -45.0, // For diagonals with left
       HorizontalKeyword::Right => 45.0, // For diagonals with right
@@ -592,7 +592,7 @@ impl HorizontalKeyword {
 
 impl VerticalKeyword {
   /// Returns the angle in degrees.
-  pub fn degrees(&self) -> f32 {
+  pub(crate) fn degrees(&self) -> f32 {
     match self {
       VerticalKeyword::Top => 0.0,
       VerticalKeyword::Bottom => 180.0,
@@ -602,7 +602,7 @@ impl VerticalKeyword {
 
 impl GradientKeywordDirection {
   /// Converts a side-or-corner direction into the matching CSS angle.
-  pub fn to_angle(self) -> Angle {
+  pub(crate) fn to_angle(self) -> Angle {
     Angle::degrees_from_keywords(self.horizontal, self.vertical)
   }
 }
@@ -707,7 +707,7 @@ impl<'i> FromCss<'i> for LinearGradient {
 
 impl Angle {
   /// Calculates the angle from horizontal and vertical keywords.
-  pub fn degrees_from_keywords(
+  pub(crate) fn degrees_from_keywords(
     horizontal: Option<HorizontalKeyword>,
     vertical: Option<VerticalKeyword>,
   ) -> Angle {
@@ -822,18 +822,17 @@ impl ToCss for LinearGradient {
 
 #[cfg(test)]
 mod tests {
-  use color::{ColorSpaceTag, HueDirection};
   use std::rc::Rc;
+
+  use color::{ColorSpaceTag, HueDirection};
   use taffy::Size;
   use tiny_skia::ColorU8;
 
+  use super::*;
   use crate::{
-    style::{CalcArena, properties::gradient_utils::red_blue_stops},
+    style::{CalcArena, FromCssStr, properties::gradient_utils::red_blue_stops},
     viewport::Viewport,
   };
-
-  use super::*;
-  use crate::style::FromCssStr;
   fn sizing() -> SizingContext {
     SizingContext {
       viewport: Viewport::new((200, 100)),

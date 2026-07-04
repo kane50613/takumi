@@ -1,6 +1,7 @@
 //! Node.js N-API bindings for Takumi.
 
-#![deny(clippy::unwrap_used, clippy::expect_used)]
+#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 #![deny(missing_docs)]
 
 mod load_font_task;
@@ -15,13 +16,15 @@ use std::{fmt::Display, ops::Deref};
 
 use napi::{De, Env, Error, bindgen_prelude::*};
 use napi_derive::napi;
-use serde::{Deserialize, Deserializer, de::DeserializeOwned, de::Error as DeError};
+pub use renderer::Renderer;
+use serde::{
+  Deserialize, Deserializer,
+  de::{DeserializeOwned, Error as DeError},
+};
 use takumi_core::{
   resources::font::{FontOverride, FontResource},
   style::{FontStyle, FromCssStr, KeyframesRule, StyleSheet},
 };
-
-pub use renderer::Renderer;
 
 /// A font family produced by `registerFont`, with the faces it contains.
 #[napi(object)]

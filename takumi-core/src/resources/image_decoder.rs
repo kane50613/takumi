@@ -9,11 +9,10 @@ use image::{
   codecs::{gif::GifDecoder, jpeg::JpegDecoder, png::PngDecoder},
   error::{DecodingError, ImageFormatHint, UnsupportedError, UnsupportedErrorKind},
 };
-#[cfg(not(target_arch = "wasm32"))]
-use libwebp_sys::{WebPDecodeRGBA, WebPFree};
-
 #[cfg(target_arch = "wasm32")]
 use image_webp::WebPDecoder;
+#[cfg(not(target_arch = "wasm32"))]
+use libwebp_sys::{WebPDecodeRGBA, WebPFree};
 
 use crate::resources::image_buffer::ImageBuffer;
 

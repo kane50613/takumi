@@ -1,14 +1,13 @@
 use std::fmt;
 
-use crate::style::{ToCss, unexpected_token};
 use bitflags::bitflags;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use typed_builder::TypedBuilder;
 
 use crate::style::{
   Animatable, Color, CssSyntaxKind, CssToken, FromCss, FromCssStr, Length, MakeComputed,
-  ParseResult, SizingContext, declare_enum_from_css_impl, properties::ColorInput,
-  tw::TailwindPropertyParser,
+  ParseResult, SizingContext, ToCss, declare_enum_from_css_impl, properties::ColorInput,
+  tw::TailwindPropertyParser, unexpected_token,
 };
 
 bitflags! {
@@ -207,7 +206,7 @@ pub enum TextUnderlineOffset {
 
 impl TextUnderlineOffset {
   /// Resolves the offset to pixels, with `auto` yielding `0`.
-  pub fn resolve_px(&self, sizing: &SizingContext) -> f32 {
+  pub(crate) fn resolve_px(&self, sizing: &SizingContext) -> f32 {
     match self {
       Self::Auto => 0.0,
       Self::Length(length) => length.to_px(sizing, sizing.font_size),

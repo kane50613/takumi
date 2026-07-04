@@ -59,6 +59,8 @@ mod white_space;
 mod word_break;
 mod z_index;
 
+use std::fmt;
+
 pub use animation::*;
 pub use aspect_ratio::*;
 pub use background::*;
@@ -75,6 +77,7 @@ pub use clip_path::*;
 pub use color::*;
 pub use conic_gradient::ConicGradient;
 pub use content::*;
+use cssparser::{Parser, match_ignore_ascii_case};
 pub use filter::{
   BlurType, Filter, FilterCategory, Filters, LUMA_WEIGHTS, SEPIA_WEIGHTS, TransferChannel,
   TransferTable,
@@ -82,26 +85,28 @@ pub use filter::{
 pub use flex::*;
 pub use flex_grow::*;
 pub use font_family::*;
-pub use font_feature_settings::*;
+pub(crate) use font_feature_settings::*;
 pub use font_size::*;
 pub use font_stretch::*;
 pub use font_style::*;
 pub use font_synthesis::*;
 pub use font_variant::*;
-pub use font_variation_settings::*;
+pub(crate) use font_variation_settings::*;
 pub use font_weight::*;
 pub use grid::*;
 pub use length::*;
 pub use line_clamp::*;
 pub use line_height::*;
+pub(crate) use linear_gradient::GradientStops;
 pub use linear_gradient::{
-  Angle, GradientKeywordDirection, GradientStop, GradientStops, HorizontalKeyword, LinearGradient,
+  Angle, GradientKeywordDirection, GradientStop, HorizontalKeyword, LinearGradient,
   LinearGradientDirection, ResolvedGradientStop, StopPosition, VerticalKeyword,
 };
 pub use offset_path::*;
 pub use order::*;
 pub use overflow::*;
 pub use overflow_wrap::*;
+use parley::Alignment;
 pub use percentage_number::*;
 pub use radial_gradient::{RadialGradient, RadialShape, RadialSize};
 use serde::Deserialize;
@@ -123,10 +128,6 @@ pub use vertical_align::*;
 pub use white_space::*;
 pub use word_break::*;
 pub use z_index::*;
-
-use cssparser::{Parser, match_ignore_ascii_case};
-use parley::Alignment;
-use std::fmt;
 
 use crate::style::{SizingContext, tw::TailwindPropertyParser};
 
@@ -568,12 +569,12 @@ impl From<Position> for taffy::Position {
 impl Position {
   /// A positioned element (anything but `static`): establishes a containing
   /// block for absolutely-positioned descendants and honors `z-index`.
-  pub const fn is_positioned(self) -> bool {
+  pub(crate) const fn is_positioned(self) -> bool {
     matches!(self, Self::Relative | Self::Absolute | Self::Fixed)
   }
 
   /// Removed from normal flow.
-  pub const fn is_out_of_flow(self) -> bool {
+  pub(crate) const fn is_out_of_flow(self) -> bool {
     matches!(self, Self::Absolute | Self::Fixed)
   }
 }
@@ -625,7 +626,7 @@ declare_enum_from_css_impl!(
 
 impl Float {
   /// Resolves the floating direction based on the layout direction.
-  pub fn resolve(self, direction: Direction) -> taffy::Float {
+  pub(crate) fn resolve(self, direction: Direction) -> taffy::Float {
     match self {
       Self::None => taffy::Float::None,
       Self::Left => taffy::Float::Left,
@@ -679,7 +680,7 @@ declare_enum_from_css_impl!(
 
 impl Clear {
   /// Resolves the clearing direction based on the layout direction.
-  pub fn resolve(self, direction: Direction) -> taffy::Clear {
+  pub(crate) fn resolve(self, direction: Direction) -> taffy::Clear {
     match self {
       Self::None => taffy::Clear::None,
       Self::Left => taffy::Clear::Left,
@@ -872,12 +873,12 @@ declare_enum_from_css_impl!(
 
 impl Display {
   /// Returns true if the display creates an inline formatting context.
-  pub fn is_inline(&self) -> bool {
+  pub(crate) fn is_inline(&self) -> bool {
     *self == Display::Inline
   }
 
   /// Returns true if the display participates in the inline flow as an atomic box.
-  pub fn is_inline_level(&self) -> bool {
+  pub(crate) fn is_inline_level(&self) -> bool {
     matches!(
       self,
       Display::Inline | Display::InlineBlock | Display::InlineFlex | Display::InlineGrid
@@ -885,7 +886,7 @@ impl Display {
   }
 
   /// Returns true if the display makes the children blockified (e.g., flex or grid).
-  pub fn should_blockify_children(&self) -> bool {
+  pub(crate) fn should_blockify_children(&self) -> bool {
     matches!(
       self,
       Display::Flex | Display::InlineFlex | Display::Grid | Display::InlineGrid
@@ -893,7 +894,7 @@ impl Display {
   }
 
   /// Cast the display to block level.
-  pub fn as_blockified(self) -> Self {
+  pub(crate) fn as_blockified(self) -> Self {
     match self {
       Display::Inline => Display::Block,
       Display::InlineBlock => Display::Block,
@@ -904,7 +905,7 @@ impl Display {
   }
 
   /// Mutate the display to be block level.
-  pub fn blockify(&mut self) {
+  pub(crate) fn blockify(&mut self) {
     *self = self.as_blockified();
   }
 }

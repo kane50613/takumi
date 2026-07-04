@@ -1,4 +1,3 @@
-use crate::style::{ToCss, unexpected_token};
 use std::{
   fmt,
   ops::{Deref, Neg},
@@ -7,12 +6,11 @@ use std::{
 use cssparser::{Parser, Token};
 
 use crate::style::{
-  Animatable, Color, MakeComputed, SizingContext, lerp,
+  Animatable, Color, CssSyntaxKind, CssToken, MakeComputed, SizingContext, ToCss, lerp,
   properties::{FromCss, ParseResult, flex_grow::parse_numeric_tw},
   tw::TailwindPropertyParser,
+  unexpected_token,
 };
-
-use crate::style::{CssSyntaxKind, CssToken};
 
 /// Represents a percentage value (0.0-1.0) in CSS parsing.
 #[derive(Debug, Clone, Copy, PartialEq)]

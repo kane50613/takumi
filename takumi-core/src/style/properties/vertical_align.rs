@@ -233,9 +233,8 @@ mod tests {
 
   use taffy::Size;
 
-  use crate::viewport::Viewport;
-
   use super::*;
+  use crate::viewport::Viewport;
 
   fn sizing() -> SizingContext {
     SizingContext {

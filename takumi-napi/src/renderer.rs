@@ -4,7 +4,6 @@ use std::{
 };
 
 use arc_swap::ArcSwap;
-
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use rayon::prelude::*;

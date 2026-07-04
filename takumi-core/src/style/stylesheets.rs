@@ -1,7 +1,6 @@
-use crate::style::unexpected_token;
 use std::{borrow::Cow, collections::HashMap, fmt, str::FromStr};
 
-use cssparser::{Parser, ParserInput, Token, match_ignore_ascii_case};
+use cssparser::{Parser, ParserInput, RuleBodyParser, Token, match_ignore_ascii_case};
 use parley::Language;
 use paste::paste;
 use serde::de::IgnoredAny;
@@ -13,9 +12,9 @@ use crate::{
     CssInput, CssValueSeed, SizingContext,
     properties::*,
     selector::{PropertyRule, StyleDeclarationParser},
+    unexpected_token,
   },
 };
-use cssparser::RuleBodyParser;
 #[path = "stylesheets_helpers.rs"]
 mod stylesheets_helpers;
 #[path = "stylesheets_mask.rs"]
@@ -166,7 +165,7 @@ macro_rules! define_style {
       #[repr(u8)]
       #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
       #[non_exhaustive]
-      pub enum LonghandId {
+      pub(crate) enum LonghandId {
         $(
           #[doc = concat!("The `", stringify!($longhand), "` longhand.")]
           [<$longhand:camel>],
@@ -193,7 +192,7 @@ macro_rules! define_style {
       #[repr(u8)]
       #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
       #[non_exhaustive]
-      pub enum ShorthandId {
+      pub(crate) enum ShorthandId {
         $(
           #[doc = concat!("The `", stringify!($shorthand), "` shorthand.")]
           [<$shorthand:camel>],
@@ -297,7 +296,7 @@ macro_rules! define_style {
       /// Identifies any property: longhand, shorthand, custom, or ignored.
       #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
       #[non_exhaustive]
-      pub enum PropertyId {
+      pub(crate) enum PropertyId {
         /// An unrecognized property that is dropped.
         Ignored,
         /// A custom property (`--name`).
@@ -324,7 +323,7 @@ macro_rules! define_style {
 
         /// Resolves a property from a camelCase name.
         #[allow(dead_code)]
-        pub fn from_camel_case(name: &str) -> Self {
+        pub(crate) fn from_camel_case(name: &str) -> Self {
           PropertyId::from_name(name, normalize_camel_property_name)
         }
 
@@ -530,7 +529,7 @@ macro_rules! define_style {
         }
 
         /// Appends another declaration block in source order.
-        pub fn append_block(&mut self, declarations: StyleDeclarationBlock) {
+        pub(crate) fn append_block(&mut self, declarations: StyleDeclarationBlock) {
           self.declarations.append(declarations);
         }
 
@@ -540,12 +539,12 @@ macro_rules! define_style {
         }
 
         /// Collects resource URLs referenced by this style's declarations.
-        pub fn resource_urls(&self) -> impl Iterator<Item = &str> {
-          self.declarations.resource_urls()
+        pub fn image_urls(&self) -> impl Iterator<Item = &str> {
+          self.declarations.image_urls()
         }
 
         /// Resolves this style against a parent into a computed style.
-        pub fn inherit(self, parent: &ComputedStyle) -> ComputedStyle {
+        pub(crate) fn inherit(self, parent: &ComputedStyle) -> ComputedStyle {
           let mut style = ComputedStyle::from_parent(parent);
           let mut declarations = ParsedDeclarations::new();
 
@@ -589,7 +588,7 @@ macro_rules! define_style {
         }
 
         /// Merges another style's declarations into this one.
-        pub fn merge_from(&mut self, other: Self) {
+        pub(crate) fn merge_from(&mut self, other: Self) {
           self.append_block(other.declarations);
         }
       }
@@ -659,7 +658,7 @@ macro_rules! define_style {
 
       impl ComputedStyle {
         /// Builds a child computed style inheriting from a parent.
-        pub fn from_parent(parent: &Self) -> Self {
+        pub(crate) fn from_parent(parent: &Self) -> Self {
           Self {
             custom_properties: if parent.custom_properties.is_empty() {
               HashMap::new()
@@ -677,7 +676,7 @@ macro_rules! define_style {
         }
 
         /// Resolves relative units against the sizing context.
-        pub fn make_computed_values(&mut self, sizing: &SizingContext) {
+        pub(crate) fn make_computed_values(&mut self, sizing: &SizingContext) {
           $(self.$longhand.make_computed(sizing);)*
         }
 
@@ -793,7 +792,7 @@ macro_rules! define_style {
         )*
 
         /// The longhand this declaration targets.
-        pub fn longhand_id(&self) -> LonghandId {
+        pub(crate) fn longhand_id(&self) -> LonghandId {
           match self {
             $(Self::[<$longhand:camel>](..) => LonghandId::[<$longhand:camel>],)*
             $(Self::[<$transient:camel>](..) => LonghandId::[<$transient:camel>],)*
@@ -814,7 +813,7 @@ macro_rules! define_style {
         }
 
         /// Applies this declaration to a computed style, resolving against the parent.
-        pub fn apply_with_parent(
+        pub(crate) fn apply_with_parent(
           self,
           style: &mut ComputedStyle,
           parent: &ComputedStyle,
@@ -865,7 +864,7 @@ macro_rules! define_style {
         }
 
         /// Applies this declaration to a computed style without a parent.
-        pub fn apply_to_computed(&self, style: &mut ComputedStyle) {
+        pub(crate) fn apply_to_computed(&self, style: &mut ComputedStyle) {
           let is_rtl = style.direction == Direction::Rtl;
           match self {
             Self::CssWideKeyword(property, keyword) => match keyword {
@@ -901,7 +900,7 @@ macro_rules! define_style {
         }
 
         /// Pushes a clone of this declaration onto a style.
-        pub fn merge_into_ref(&self, style: &mut Style) {
+        pub(crate) fn merge_into_ref(&self, style: &mut Style) {
           style.declarations.push(self.to_owned(), false);
         }
 
@@ -1489,7 +1488,7 @@ impl DeclarationImportance {
   }
 
   /// Records the longhands a declaration marks important.
-  pub fn insert_declaration(&mut self, declaration: &StyleDeclaration) {
+  pub(crate) fn insert_declaration(&mut self, declaration: &StyleDeclaration) {
     self
       .longhands
       .extend(declaration.affected_longhands().iter());
@@ -1500,7 +1499,7 @@ impl DeclarationImportance {
   }
 
   /// Merges another importance set, deduping custom properties.
-  pub fn append(&mut self, other: &mut Self) {
+  pub(crate) fn append(&mut self, other: &mut Self) {
     self.longhands.append(&mut other.longhands);
 
     for name in other.custom_properties.drain(..) {
@@ -1568,7 +1567,7 @@ impl StyleDeclarationBlock {
   }
 
   /// Appends another block's declarations and importance.
-  pub fn append(&mut self, mut other: Self) {
+  pub(crate) fn append(&mut self, mut other: Self) {
     self.importance.append(&mut other.importance);
     self.declarations.extend(other.declarations);
   }
@@ -1589,7 +1588,7 @@ impl StyleDeclarationBlock {
   }
 
   /// Collects resource URLs referenced by declarations in this block.
-  pub fn resource_urls(&self) -> impl Iterator<Item = &str> {
+  pub fn image_urls(&self) -> impl Iterator<Item = &str> {
     fn background_image_url(image: &BackgroundImage) -> Option<&str> {
       if let BackgroundImage::Url(url) = image {
         Some(url.as_ref())

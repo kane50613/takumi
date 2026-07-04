@@ -32,7 +32,7 @@ impl TailwindPropertyParser for WhiteSpace {
 
 impl WhiteSpace {
   /// Creates a `WhiteSpace` instance with `nowrap` behavior.
-  pub const fn no_wrap() -> Self {
+  pub(crate) const fn no_wrap() -> Self {
     Self {
       text_wrap_mode: TextWrapMode::NoWrap,
       white_space_collapse: WhiteSpaceCollapse::Collapse,

@@ -1,11 +1,9 @@
 use cssparser::Parser;
 
 use crate::style::{
-  CssSyntaxKind, CssToken, FromCss, GridPlacementSpan, MakeComputed, ParseResult, SizingContext,
-  tw::TailwindPropertyParser,
+  CssSyntaxKind, CssToken, FromCss, GridPlacement, GridPlacementSpan, MakeComputed, ParseResult,
+  SizingContext, tw::TailwindPropertyParser,
 };
-
-use crate::style::GridPlacement;
 
 /// Represents a grid line placement with serde support
 #[derive(Debug, Clone, Default, PartialEq)]

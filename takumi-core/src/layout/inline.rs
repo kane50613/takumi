@@ -212,7 +212,7 @@ pub(crate) enum InlineContentKind<'c> {
 }
 
 /// Parley layout specialized to [`InlineBrush`].
-pub type InlineLayout = parley::Layout<InlineBrush>;
+pub(crate) type InlineLayout = parley::Layout<InlineBrush>;
 
 #[derive(Clone, Copy, Debug)]
 /// x-height and ascent/descent of the parent font.
@@ -2341,9 +2341,9 @@ fn make_ellipsis_layout<'c>(
 #[cfg(test)]
 #[allow(clippy::panic, clippy::unwrap_used)]
 mod tests {
-  use super::*;
   use std::{fs::File, io::Read, path::Path};
 
+  use super::*;
   use crate::{
     Fonts,
     context::RenderContext,

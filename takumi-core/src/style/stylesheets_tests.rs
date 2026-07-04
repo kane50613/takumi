@@ -694,7 +694,7 @@ fn style_declaration_block_collect_style_fetch_tasks_collects_url_images() {
   ]));
 
   assert_eq!(
-    declarations.resource_urls().collect::<Vec<_>>(),
+    declarations.image_urls().collect::<Vec<_>>(),
     vec![background_url, mask_url]
   );
 }
@@ -810,10 +810,10 @@ fn test_creates_stacking_context_from_z_index_scope() {
 
   style.position = Position::Relative;
   style.z_index = ZIndex::Integer(1);
-  assert!(style.creates_stacking_context(border_box, &sizing, false));
+  assert!(style.creates_stacking_context(border_box.width, border_box.height, &sizing, false));
 
   style.position = Position::Absolute;
-  assert!(style.creates_stacking_context(border_box, &sizing, false));
+  assert!(style.creates_stacking_context(border_box.width, border_box.height, &sizing, false));
 }
 
 #[test]
@@ -868,15 +868,14 @@ fn test_offset_path_moves_element_onto_path_and_creates_stacking_context() {
   style.offset_path = OffsetPath::from_css_str("path('M 0 0 L 100 0')").ok();
   style.offset_distance = Length::Percentage(50.0);
 
-  assert!(style.creates_stacking_context(border_box, &sizing, false));
+  assert!(style.creates_stacking_context(border_box.width, border_box.height, &sizing, false));
 
   // The default offset-anchor is transform-origin (the box center). At 50% the
   // anchor lands on the path midpoint (50, 0).
-  let local = style.local_transform(border_box, &sizing);
-  let center = taffy::Point { x: 50.0, y: 20.0 };
-  let placed = local.transform_point(center);
-  assert!((placed.x - 50.0).abs() < 0.5, "x = {}", placed.x);
-  assert!(placed.y.abs() < 0.5, "y = {}", placed.y);
+  let local = style.local_transform(border_box.width, border_box.height, &sizing);
+  let (placed_x, placed_y) = local.transform_point(50.0, 20.0);
+  assert!((placed_x - 50.0).abs() < 0.5, "x = {}", placed_x);
+  assert!(placed_y.abs() < 0.5, "y = {}", placed_y);
 }
 
 #[test]
@@ -905,13 +904,13 @@ fn test_non_identity_transform_detection() {
     height: 100.0,
   };
 
-  assert!(!style.has_non_identity_transform(border_box, &sizing));
+  assert!(!style.has_non_identity_transform(border_box.width, border_box.height, &sizing));
 
   style.transform = Some([Transform::Rotate(Angle::new(0.0))].into());
-  assert!(!style.has_non_identity_transform(border_box, &sizing));
+  assert!(!style.has_non_identity_transform(border_box.width, border_box.height, &sizing));
 
   style.transform = Some([Transform::Rotate(Angle::new(10.0))].into());
-  assert!(style.has_non_identity_transform(border_box, &sizing));
+  assert!(style.has_non_identity_transform(border_box.width, border_box.height, &sizing));
 }
 
 #[test]
@@ -933,7 +932,7 @@ fn test_transform_creates_stacking_context_without_offscreen_compositing() {
 
   style.transform = Some([Transform::Rotate(Angle::new(10.0))].into());
 
-  assert!(style.creates_stacking_context(border_box, &sizing, false));
+  assert!(style.creates_stacking_context(border_box.width, border_box.height, &sizing, false));
   assert!(!style.needs_offscreen_compositing());
 }
 

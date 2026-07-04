@@ -26,7 +26,7 @@ pub struct IntrinsicSizing {
 
 impl IntrinsicSizing {
   /// Intrinsic sizing from concrete width and height in pixels.
-  pub fn from_dimensions(width: f32, height: f32) -> Self {
+  pub(crate) fn from_dimensions(width: f32, height: f32) -> Self {
     Self {
       width: Some(width),
       height: Some(height),

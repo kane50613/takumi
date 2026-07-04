@@ -1,15 +1,16 @@
-use crate::style::{CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss};
-use cssparser::Parser;
-use parley::FontVariation;
 use std::fmt;
 
+use cssparser::Parser;
+use parley::FontVariation;
+
 use super::font_feature_settings::parse_opentype_tag;
+use crate::style::{CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss};
 
 /// Controls variable font axis values via CSS font-variation-settings property.
 ///
 /// This allows fine-grained control over variable font characteristics like weight,
 /// width, slant, and other custom axes defined in the font.
-pub type FontVariationSettings = Box<[FontVariation]>;
+pub(crate) type FontVariationSettings = Box<[FontVariation]>;
 
 impl MakeComputed for FontVariationSettings {}
 

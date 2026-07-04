@@ -1,10 +1,11 @@
-use crate::style::unexpected_token;
 use std::collections::HashMap;
 
 use cssparser::{Parser, Token};
 
 use super::write_space_separated;
-use crate::style::{CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss};
+use crate::style::{
+  CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, unexpected_token,
+};
 
 /// Represents `grid-template-areas` value
 ///

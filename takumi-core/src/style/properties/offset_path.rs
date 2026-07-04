@@ -217,10 +217,13 @@ impl MakeComputed for OffsetAnchor {
 
 impl OffsetAnchor {
   /// The explicit anchor point, or `None` when it defaults to transform-origin.
-  pub fn resolve(self, sizing: &SizingContext, border_box: Size<f32>) -> Option<Point<f32>> {
+  pub fn resolve(self, sizing: &SizingContext, width: f32, height: f32) -> Option<(f32, f32)> {
     match self {
       OffsetAnchor::Auto => None,
-      OffsetAnchor::Position(position) => Some(position_point(&position, sizing, border_box)),
+      OffsetAnchor::Position(position) => {
+        let point = position_point(&position, sizing, Size { width, height });
+        Some((point.x, point.y))
+      }
     }
   }
 }

@@ -1,4 +1,5 @@
 use std::{env, hint::black_box};
+
 use takumi::{prelude::*, render};
 
 const LONG_TEXT: &str = "Typography is the art and technique of arranging type to make written language legible, \

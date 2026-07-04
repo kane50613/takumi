@@ -22,14 +22,13 @@ mod image;
 mod render;
 mod scene_emit;
 mod text;
-pub use render::{SvgOptions, render};
-
 use std::{borrow::Cow, fmt, fmt::Write as _, io};
 
 use quick_xml::{
   Writer,
   events::{BytesEnd, BytesStart, Event},
 };
+pub use render::{SvgOptions, render};
 
 /// Straight-alpha RGBA color.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

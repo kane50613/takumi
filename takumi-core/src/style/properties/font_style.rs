@@ -1,10 +1,9 @@
 use std::fmt;
 
-use crate::style::{ToCss, unexpected_token};
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use parley::style::FontStyle as ParleyFontStyle;
 
-use crate::style::{Angle, CssToken, FromCss, MakeComputed, ParseResult};
+use crate::style::{Angle, CssToken, FromCss, MakeComputed, ParseResult, ToCss, unexpected_token};
 
 /// Controls the slant (italic/oblique) of text rendering.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]

@@ -76,32 +76,27 @@ pub mod prelude {
     style::*,
     viewport::Viewport,
   };
-
+  #[cfg(feature = "from-html")]
+  pub use takumi_html::{DEFAULT_MAX_DEPTH, FromHtml, FromHtmlOptions, HtmlError, StylePresets};
   #[cfg(feature = "raster-backend")]
   pub use takumi_raster::{
     AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, Bitmap,
     DitheringAlgorithm, MeasuredNode, MeasuredTextRun, OutputFormat, Quality, RenderOptions,
     SequentialScene,
   };
-
   #[cfg(feature = "svg-backend")]
   pub use takumi_svg::SvgOptions;
-
-  #[cfg(feature = "from-html")]
-  pub use takumi_html::{DEFAULT_MAX_DEPTH, FromHtml, FromHtmlOptions, HtmlError, StylePresets};
 }
 
+#[cfg(feature = "from-html")]
+pub use takumi_html::from_html;
 #[cfg(feature = "raster-backend")]
 pub use takumi_raster::{
   measure, render, render_animation, write_animated_gif, write_animated_png, write_animated_webp,
   write_image,
 };
-
 #[cfg(feature = "svg-backend")]
 pub use takumi_svg::render as render_svg;
-
-#[cfg(feature = "from-html")]
-pub use takumi_html::from_html;
 
 /// Unstable, semver-exempt access to the backend crates in full.
 ///
@@ -110,13 +105,10 @@ pub use takumi_html::from_html;
 #[cfg(feature = "unstable")]
 pub mod unstable {
   pub use takumi_core as base;
-
-  #[cfg(feature = "raster-backend")]
-  pub use takumi_raster as raster;
-
-  #[cfg(feature = "svg-backend")]
-  pub use takumi_svg as svg;
-
   #[cfg(feature = "from-html")]
   pub use takumi_html as html;
+  #[cfg(feature = "raster-backend")]
+  pub use takumi_raster as raster;
+  #[cfg(feature = "svg-backend")]
+  pub use takumi_svg as svg;
 }

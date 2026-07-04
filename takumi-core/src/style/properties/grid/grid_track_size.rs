@@ -9,7 +9,7 @@ use crate::style::{
 };
 
 /// A list of `GridTrackSize`
-pub type GridTrackSizes = Vec<GridTrackSize>;
+pub(crate) type GridTrackSizes = Vec<GridTrackSize>;
 
 impl<'i> FromCss<'i> for GridTrackSizes {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
@@ -109,10 +109,8 @@ impl ToCss for GridTrackSize {
 
 #[cfg(test)]
 mod tests {
-  use crate::style::Length;
-
   use super::*;
-  use crate::style::FromCssStr;
+  use crate::style::{FromCssStr, Length};
 
   #[test]
   fn test_parse_minmax_and_track_size() {

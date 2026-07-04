@@ -1,12 +1,11 @@
-use crate::style::{ToCss, properties::write_css_string, unexpected_token};
 use std::{fmt, sync::Arc};
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
   Animatable, ConicGradient, CssDescriptorKind, CssToken, FromCss, LinearGradient,
-  ListInterpolationStrategy, MakeComputed, ParseResult, RadialGradient, SizingContext,
-  tw::TailwindPropertyParser,
+  ListInterpolationStrategy, MakeComputed, ParseResult, RadialGradient, SizingContext, ToCss,
+  properties::write_css_string, tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Background image variants supported by Takumi.
@@ -131,13 +130,12 @@ impl ToCss for BackgroundImage {
 }
 #[cfg(test)]
 mod tests {
-  use crate::style::{
-    Angle, Color, ConicGradient, GradientStop, Length, LinearGradient, LinearGradientDirection,
-    PositionValue, RadialGradient, RadialShape, RadialSize, SpacePair, StopPosition,
-  };
-
   use super::*;
-  use crate::style::FromCssStr;
+  use crate::style::{
+    Angle, Color, ConicGradient, FromCssStr, GradientStop, Length, LinearGradient,
+    LinearGradientDirection, PositionValue, RadialGradient, RadialShape, RadialSize, SpacePair,
+    StopPosition,
+  };
 
   #[test]
   fn test_parse_tailwind_none() {

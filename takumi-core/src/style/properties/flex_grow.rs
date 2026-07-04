@@ -1,5 +1,6 @@
-use cssparser::Parser;
 use std::fmt;
+
+use cssparser::Parser;
 
 use crate::style::{
   Animatable, Color, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, SizingContext,

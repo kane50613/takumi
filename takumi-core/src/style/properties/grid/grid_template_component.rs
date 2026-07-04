@@ -224,10 +224,8 @@ impl ToCss for GridTemplateComponent {
 
 #[cfg(test)]
 mod tests {
-  use crate::style::{GridLength, GridRepetitionKeyword};
-
   use super::*;
-  use crate::style::FromCssStr;
+  use crate::style::{FromCssStr, GridLength, GridRepetitionKeyword};
 
   #[test]
   fn components_serialize_space_separated() {

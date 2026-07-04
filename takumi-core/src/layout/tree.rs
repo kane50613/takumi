@@ -1,5 +1,6 @@
 use std::{collections::HashMap, mem::take, vec::IntoIter};
 
+use parley::fontique::Attributes;
 use taffy::{
   AvailableSpace, BlockContext, Cache, CacheTree, Display as TaffyDisplay, Layout,
   LayoutBlockContainer, LayoutFlexboxContainer, LayoutGridContainer, LayoutInput, LayoutOutput,
@@ -28,7 +29,6 @@ use crate::{
   },
   viewport::Viewport,
 };
-use parley::fontique::Attributes;
 
 /// A render-tree child paired with its layout `NodeId`. `hoisted_cb` is set
 /// when the child is out-of-flow and was re-parented to a containing block in

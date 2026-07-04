@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::{
   keyframes::KeyframePreludeParseError,
-  resources::{font::FontError, image::ImageResourceError},
+  resources::{font::FontError, image::ImageError},
 };
 
 /// Structured errors raised by the WebP encoding and container assembly paths.
@@ -90,7 +90,7 @@ pub enum WebPError {
 pub enum Error {
   /// Error resolving an image resource.
   #[error("Image resolution error: {0}")]
-  ImageResolveError(#[from] ImageResourceError),
+  ImageResolveError(#[from] ImageError),
 
   /// Standard IO error.
   #[error("IO error: {0}")]
@@ -265,47 +265,47 @@ impl<'i> From<KeyframePreludeParseError<'i>> for StyleSheetParseError {
 
 impl StyleSheetParseError {
   /// Builds an invalid-stylesheet error from a reason string.
-  pub fn invalid_reason(reason: impl Into<String>) -> Self {
+  pub(crate) fn invalid_reason(reason: impl Into<String>) -> Self {
     Self::new(StyleSheetParseErrorKind::InvalidStyleSheet(reason.into()))
   }
 
   /// Error for an unsupported media feature.
-  pub fn unsupported_media_feature() -> Self {
+  pub(crate) fn unsupported_media_feature() -> Self {
     Self::new(StyleSheetParseErrorKind::UnsupportedMediaFeature)
   }
 
   /// Error for a non-boolean `@property` `inherits` descriptor.
-  pub fn property_inherits_must_be_boolean() -> Self {
+  pub(crate) fn property_inherits_must_be_boolean() -> Self {
     Self::new(StyleSheetParseErrorKind::PropertyInheritsMustBeBoolean)
   }
 
   /// Error for a `@property` missing its `syntax` descriptor.
-  pub fn missing_property_syntax() -> Self {
+  pub(crate) fn missing_property_syntax() -> Self {
     Self::new(StyleSheetParseErrorKind::MissingPropertySyntax)
   }
 
   /// Error for a `@property` missing its `inherits` descriptor.
-  pub fn missing_property_inherits() -> Self {
+  pub(crate) fn missing_property_inherits() -> Self {
     Self::new(StyleSheetParseErrorKind::MissingPropertyInherits)
   }
 
   /// Error for `@supports` mixing `and`/`or` without parentheses.
-  pub fn supports_mixed_and_or_without_parentheses() -> Self {
+  pub(crate) fn supports_mixed_and_or_without_parentheses() -> Self {
     Self::new(StyleSheetParseErrorKind::SupportsMixedAndOrWithoutParentheses)
   }
 
   /// Error for a `@property` name that is not a custom property.
-  pub fn property_name_must_be_custom_property() -> Self {
+  pub(crate) fn property_name_must_be_custom_property() -> Self {
     Self::new(StyleSheetParseErrorKind::PropertyNameMustBeCustomProperty)
   }
 
   /// Error for an `@layer` block naming more than one layer.
-  pub fn layer_block_multiple_names() -> Self {
+  pub(crate) fn layer_block_multiple_names() -> Self {
     Self::new(StyleSheetParseErrorKind::LayerBlockMultipleNames)
   }
 
   /// Error for an unsupported nested at-rule.
-  pub fn unsupported_nested_at_rule() -> Self {
+  pub(crate) fn unsupported_nested_at_rule() -> Self {
     Self::new(StyleSheetParseErrorKind::UnsupportedNestedAtRule)
   }
 
@@ -324,7 +324,10 @@ impl StyleSheetParseError {
   }
 
   /// Converts a `cssparser` parse error into a stylesheet error with context.
-  pub fn from_parse_error(context: &str, error: ParseError<'_, StyleSheetParseError>) -> Self {
+  pub(crate) fn from_parse_error(
+    context: &str,
+    error: ParseError<'_, StyleSheetParseError>,
+  ) -> Self {
     match error.kind {
       ParseErrorKind::Basic(error) => Self::invalid_reason(format!("{error:?}")),
       ParseErrorKind::Custom(error) => error,

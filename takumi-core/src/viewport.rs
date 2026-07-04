@@ -1,7 +1,7 @@
 use taffy::{AvailableSpace, Size};
 
 /// The default font size in pixels.
-pub const DEFAULT_FONT_SIZE: f32 = 16.0;
+pub(crate) const DEFAULT_FONT_SIZE: f32 = 16.0;
 
 /// The default device pixel ratio.
 pub const DEFAULT_DEVICE_PIXEL_RATIO: f32 = 1.0;
@@ -85,7 +85,7 @@ impl Viewport {
   /// Converts a device-pixel value back into author-space CSS pixels. The
   /// inverse of [`Self::to_device`]; the only place the ratio is divided out.
   #[inline]
-  pub fn to_css(self, device_px: f32) -> f32 {
+  pub(crate) fn to_css(self, device_px: f32) -> f32 {
     device_px / self.effective_dpr()
   }
 }

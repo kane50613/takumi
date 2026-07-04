@@ -1,9 +1,8 @@
-use crate::style::unexpected_token;
 use cssparser::{Parser, match_ignore_ascii_case};
 
 use crate::style::{
   AspectRatio, CssSyntaxKind, CssToken, FlexDirection, FlexWrap, FromCss, FromCssStr, Length,
-  MakeComputed, ParseResult, SizingContext, tw::TailwindPropertyParser,
+  MakeComputed, ParseResult, SizingContext, tw::TailwindPropertyParser, unexpected_token,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -54,7 +53,7 @@ impl Flex {
   }
 
   /// The flex-grow value is 0 and the flex-shrink value is 1.
-  pub const fn initial() -> Self {
+  pub(crate) const fn initial() -> Self {
     Self {
       grow: 0.0,
       shrink: 1.0,
@@ -63,7 +62,7 @@ impl Flex {
   }
 
   /// Create a new Flex from a number.
-  pub const fn from_number(number: f32) -> Self {
+  pub(crate) const fn from_number(number: f32) -> Self {
     Self {
       grow: number,
       shrink: 1.0,

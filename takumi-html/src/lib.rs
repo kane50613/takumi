@@ -16,12 +16,11 @@ use html5ever::{
   tendril::TendrilSink,
 };
 use markup5ever_rcdom::{Handle, NodeData, RcDom, SerializableHandle};
-use typed_builder::TypedBuilder;
-
 use takumi_core::{
   layout::node::{ImageData, ImageSourceInput, Node, NodeKind},
   style::{Direction, FromCssStr, Style, StyleDeclarationBlock, tw::TailwindValues},
 };
+use typed_builder::TypedBuilder;
 
 /// Tags whose entire subtree is dropped, matching the JS `isHtmlVoidElement`
 /// set. Deliberately distinct from the `display:none` presets (`title`,

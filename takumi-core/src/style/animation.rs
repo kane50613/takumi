@@ -1,10 +1,8 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, cmp::Ordering};
 
 use parley::{FontFeature, FontVariation};
-use std::cmp::Ordering;
-use typed_builder::TypedBuilder;
-
 use serde::Deserialize;
+use typed_builder::TypedBuilder;
 
 use crate::{
   style::{
@@ -43,7 +41,7 @@ pub struct KeyframesRule {
 }
 
 /// Applies a stylesheet's matching animations to a style at the given time.
-pub fn apply_stylesheet_animations(
+pub(crate) fn apply_stylesheet_animations(
   mut base_style: ComputedStyle,
   stylesheet: &StyleSheet,
   time: u64,

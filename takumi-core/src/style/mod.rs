@@ -1,7 +1,7 @@
 mod animation;
 mod calc;
 mod css_input;
-mod math;
+pub mod math;
 mod media_query;
 pub(crate) mod properties;
 pub(crate) mod selector;
@@ -11,11 +11,11 @@ mod supports;
 /// Tailwind utility-class parsing.
 pub mod tw;
 
-pub use animation::{KeyframeRule, KeyframesRule, apply_stylesheet_animations};
+pub(crate) use animation::apply_stylesheet_animations;
+pub use animation::{KeyframeRule, KeyframesRule};
 pub(crate) use calc::{CalcArena, parse_calc_number_expression};
 pub(crate) use css_input::{CssInput, CssNumber, CssUnexpected, CssValueSeed};
 pub(crate) use math::lerp;
-pub use math::{fast_div_255, fast_div_255_u32};
 pub(crate) use properties::unexpected_token;
 pub use properties::*;
 // Selector matching internals (CssRule, SelectorImpl, Ident, …) stay crate-private

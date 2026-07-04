@@ -1,4 +1,3 @@
-use crate::style::{ToCss, properties::write_css_string, unexpected_token};
 use std::{borrow::Cow, fmt, vec::Vec};
 
 use cssparser::{BasicParseErrorKind, Parser, Token, match_ignore_ascii_case};
@@ -6,7 +5,8 @@ use typed_builder::TypedBuilder;
 
 use crate::style::{
   CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
-  declare_enum_from_css_impl, next_is_comma, tw::TailwindPropertyParser,
+  ToCss, declare_enum_from_css_impl, next_is_comma, properties::write_css_string,
+  tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Implements `FromCss` for a `Box<[T]>` animation list type as a comma-separated list of `$elem`.
@@ -63,10 +63,10 @@ impl<'i> FromCss<'i> for AnimationTime {
 }
 
 /// Parsed value for one `animation-name`.
-pub type AnimationName = Option<String>;
+pub(crate) type AnimationName = Option<String>;
 
 /// Parsed values for `animation-name`.
-pub type AnimationNames = Box<[AnimationName]>;
+pub(crate) type AnimationNames = Box<[AnimationName]>;
 
 impl MakeComputed for AnimationNames {}
 
@@ -81,7 +81,7 @@ impl_comma_list_from_css!(
 );
 
 /// Parsed values for `animation-duration` and `animation-delay`.
-pub type AnimationDurations = Box<[AnimationTime]>;
+pub(crate) type AnimationDurations = Box<[AnimationTime]>;
 
 impl_comma_list_from_css!(AnimationDurations, AnimationTime);
 
@@ -164,7 +164,7 @@ impl<'i> FromCss<'i> for AnimationTimingFunction {
 }
 
 /// Parsed values for `animation-timing-function`.
-pub type AnimationTimingFunctions = Box<[AnimationTimingFunction]>;
+pub(crate) type AnimationTimingFunctions = Box<[AnimationTimingFunction]>;
 
 impl_comma_list_from_css!(AnimationTimingFunctions, AnimationTimingFunction);
 
@@ -210,7 +210,7 @@ impl<'i> FromCss<'i> for AnimationIterationCount {
 }
 
 /// Parsed values for `animation-iteration-count`.
-pub type AnimationIterationCounts = Box<[AnimationIterationCount]>;
+pub(crate) type AnimationIterationCounts = Box<[AnimationIterationCount]>;
 
 impl_comma_list_from_css!(AnimationIterationCounts, AnimationIterationCount);
 
@@ -238,7 +238,7 @@ declare_enum_from_css_impl!(
 );
 
 /// Parsed values for `animation-direction`.
-pub type AnimationDirections = Box<[AnimationDirection]>;
+pub(crate) type AnimationDirections = Box<[AnimationDirection]>;
 
 impl_comma_list_from_css!(AnimationDirections, AnimationDirection);
 
@@ -266,7 +266,7 @@ declare_enum_from_css_impl!(
 );
 
 /// Parsed values for `animation-fill-mode`.
-pub type AnimationFillModes = Box<[AnimationFillMode]>;
+pub(crate) type AnimationFillModes = Box<[AnimationFillMode]>;
 
 impl_comma_list_from_css!(AnimationFillModes, AnimationFillMode);
 
@@ -288,7 +288,7 @@ declare_enum_from_css_impl!(
 );
 
 /// Parsed values for `animation-play-state`.
-pub type AnimationPlayStates = Box<[AnimationPlayState]>;
+pub(crate) type AnimationPlayStates = Box<[AnimationPlayState]>;
 
 impl_comma_list_from_css!(AnimationPlayStates, AnimationPlayState);
 
@@ -374,7 +374,7 @@ impl<'i> FromCss<'i> for Animation {
 }
 
 /// Parsed values for the `animation` shorthand.
-pub type Animations = Box<[Animation]>;
+pub(crate) type Animations = Box<[Animation]>;
 
 impl<'i> FromCss<'i> for Animations {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {

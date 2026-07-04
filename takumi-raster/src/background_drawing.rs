@@ -3,6 +3,10 @@ use std::sync::Arc;
 use image::Rgba;
 use smallvec::{SmallVec, smallvec};
 use taffy::{Layout, Point, Size};
+use takumi_core::paint::{
+  ConicGradientTile, GradientOverlayTile, LinearGradientTile, RadialGradientTile,
+  collect_repeat_tile_positions, collect_spaced_tile_positions, collect_stretched_tile_positions,
+};
 use tiny_skia::{IntSize, Pixmap, PixmapMut, PremultipliedColorU8};
 
 #[cfg(feature = "svg")]
@@ -15,10 +19,6 @@ use crate::{
   pixmap_from_buffer, pixmap_ref_from_buffer,
   resources::{image::ImageSource, image_buffer::ImageBuffer},
   style::*,
-};
-use takumi_core::paint::{
-  ConicGradientTile, GradientOverlayTile, LinearGradientTile, RadialGradientTile,
-  collect_repeat_tile_positions, collect_spaced_tile_positions, collect_stretched_tile_positions,
 };
 
 pub(crate) struct TileLayer {
@@ -140,7 +140,10 @@ pub(crate) fn rasterize_layers(
           && layer_transform.only_translation()
           && layer.blend_mode == BlendMode::Normal
         {
-          let translation = layer_transform.decompose_translation();
+          let translation = Point {
+            x: layer_transform.x,
+            y: layer_transform.y,
+          };
           match &layer.tile {
             BackgroundTile::Linear(linear_gradient) => {
               overlay_linear_gradient_tile(

@@ -1,9 +1,7 @@
 use std::{fmt, string::ToString};
 
 use cssparser::{Parser, match_ignore_ascii_case};
-use parley::{
-  FontFamily as ParleyFontFamily, FontFamilyName, GenericFamily, fontique::QueryFamily,
-};
+use parley::{FontFamily as ParleyFontFamily, FontFamilyName, GenericFamily};
 
 use crate::style::{
   CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, properties::write_css_string,
@@ -17,7 +15,7 @@ pub struct FontFamily(Box<[FontFamilyToken]>);
 
 /// One entry in a font-family fallback list.
 #[derive(Debug, Clone, PartialEq)]
-pub enum FontFamilyToken {
+pub(crate) enum FontFamilyToken {
   /// A named family.
   Owned(String),
   /// A generic family such as `serif`.
@@ -40,16 +38,8 @@ impl FontFamily {
     Self(tokens.into_boxed_slice())
   }
 
-  /// The families as fontique query families, in declaration order.
-  pub fn query_families(&self) -> impl Iterator<Item = QueryFamily<'_>> + Clone {
-    self.0.iter().map(|token| match token {
-      FontFamilyToken::Owned(name) => QueryFamily::Named(name.as_str()),
-      FontFamilyToken::Generic(generic) => QueryFamily::Generic(*generic),
-    })
-  }
-
   /// The families as parley `FontFamilyName`s, in declaration order.
-  pub fn names(&self) -> impl Iterator<Item = FontFamilyName<'_>> + Clone {
+  pub(crate) fn names(&self) -> impl Iterator<Item = FontFamilyName<'_>> + Clone {
     self.0.iter().map(|token| match token {
       FontFamilyToken::Owned(name) => FontFamilyName::Named(name.as_str().into()),
       FontFamilyToken::Generic(generic) => FontFamilyName::Generic(*generic),

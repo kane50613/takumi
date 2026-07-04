@@ -1,11 +1,10 @@
 use std::fmt;
 
-use crate::style::{ToCss, properties::write_css_string, unexpected_token};
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
   CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult, Sides,
-  SizingContext, SpacePair,
+  SizingContext, SpacePair, ToCss, properties::write_css_string, unexpected_token,
 };
 
 /// Represents the fill rule used for determining the interior of shapes.
@@ -98,7 +97,7 @@ impl MakeComputed for EllipseShape {
 }
 
 /// Represents a single coordinate pair in a polygon.
-pub type PolygonCoordinate = SpacePair<Length>;
+pub(crate) type PolygonCoordinate = SpacePair<Length>;
 
 /// Represents a polygon() shape.
 #[derive(Debug, Clone, PartialEq)]
@@ -385,9 +384,10 @@ impl ToCss for BasicShape {
 mod tests {
   use std::assert_matches;
 
+  use Length::*;
+
   use super::*;
   use crate::style::FromCssStr;
-  use Length::*;
 
   #[test]
   fn test_parse_inset_simple() {

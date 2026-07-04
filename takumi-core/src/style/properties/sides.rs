@@ -1,5 +1,6 @@
-use cssparser::Parser;
 use std::fmt;
+
+use cssparser::Parser;
 use taffy::Rect;
 
 use crate::style::{
