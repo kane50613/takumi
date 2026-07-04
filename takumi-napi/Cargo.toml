@@ -10,7 +10,6 @@ crate-type = ["cdylib"]
 [dependencies]
 serde.workspace = true
 rayon.workspace = true
-parley.workspace = true
 napi.workspace = true
 napi-derive.workspace = true
 arc-swap.workspace = true

@@ -183,7 +183,7 @@ impl BackgroundSize {
   }
 }
 
-/// A list of `background-size` values (one per layer).
+/// An ordered list of [`BackgroundSize`] values.
 pub type BackgroundSizes = Box<[BackgroundSize]>;
 
 impl<'i> FromCss<'i> for BackgroundSizes {
@@ -214,16 +214,20 @@ impl ToCss for BackgroundSize {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::style::FromCssStr;
 
   #[test]
   fn parses_cover_keyword() {
-    assert_eq!(BackgroundSize::from_str("cover"), Ok(BackgroundSize::Cover));
+    assert_eq!(
+      BackgroundSize::from_css_str("cover"),
+      Ok(BackgroundSize::Cover)
+    );
   }
 
   #[test]
   fn parses_contain_keyword() {
     assert_eq!(
-      BackgroundSize::from_str("contain"),
+      BackgroundSize::from_css_str("contain"),
       Ok(BackgroundSize::Contain)
     );
   }
@@ -231,7 +235,7 @@ mod tests {
   #[test]
   fn parses_single_percentage_value_as_both_dimensions() {
     assert_eq!(
-      BackgroundSize::from_str("50%\t"),
+      BackgroundSize::from_css_str("50%\t"),
       Ok(BackgroundSize::Explicit {
         width: Length::Percentage(50.0),
         height: Length::Auto,
@@ -242,7 +246,7 @@ mod tests {
   #[test]
   fn parses_single_auto_value_as_both_dimensions() {
     assert_eq!(
-      BackgroundSize::from_str("auto"),
+      BackgroundSize::from_css_str("auto"),
       Ok(BackgroundSize::Explicit {
         width: Length::Auto,
         height: Length::Auto,
@@ -253,7 +257,7 @@ mod tests {
   #[test]
   fn parses_two_values_mixed_units() {
     assert_eq!(
-      BackgroundSize::from_str("100px auto"),
+      BackgroundSize::from_css_str("100px auto"),
       Ok(BackgroundSize::Explicit {
         width: Length::Px(100.0),
         height: Length::Auto,
@@ -263,13 +267,13 @@ mod tests {
 
   #[test]
   fn errors_on_unknown_identifier() {
-    assert!(BackgroundSize::from_str("bogus").is_err());
+    assert!(BackgroundSize::from_css_str("bogus").is_err());
   }
 
   #[test]
   fn parses_multiple_layers_with_keywords_and_values() {
     assert_eq!(
-      BackgroundSizes::from_str("cover, 50% auto"),
+      BackgroundSizes::from_css_str("cover, 50% auto"),
       Ok(
         [
           BackgroundSize::Cover,
@@ -286,7 +290,7 @@ mod tests {
   #[test]
   fn parses_multiple_layers_with_single_value_duplication() {
     assert_eq!(
-      BackgroundSizes::from_str("25%, contain"),
+      BackgroundSizes::from_css_str("25%, contain"),
       Ok(
         [
           BackgroundSize::Explicit {
@@ -302,6 +306,6 @@ mod tests {
 
   #[test]
   fn errors_on_invalid_first_layer() {
-    assert!(BackgroundSizes::from_str("nope").is_err());
+    assert!(BackgroundSizes::from_css_str("nope").is_err());
   }
 }

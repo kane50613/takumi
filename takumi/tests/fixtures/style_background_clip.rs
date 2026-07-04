@@ -74,7 +74,7 @@ fn test_style_background_clip_content_box() {
 
 #[test]
 fn test_style_background_clip_text_gradient() {
-  let gradient_images = BackgroundImages::from_str(
+  let gradient_images = BackgroundImages::from_css_str(
     "linear-gradient(90deg, #ff3b30, #ffcc00, #34c759, #007aff, #5856d6)",
   )
   .unwrap();
@@ -84,13 +84,13 @@ fn test_style_background_clip_text_gradient() {
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::background_image(Some(gradient_images)))
       .with(StyleDeclaration::background_size(
-        BackgroundSizes::from_str("100% 100%").unwrap(),
+        BackgroundSizes::from_css_str("100% 100%").unwrap(),
       ))
       .with(StyleDeclaration::background_position(
-        PositionValues::from_str("0 0").unwrap(),
+        PositionValues::from_css_str("0 0").unwrap(),
       ))
       .with(StyleDeclaration::background_repeat(
-        BackgroundRepeats::from_str("no-repeat").unwrap(),
+        BackgroundRepeats::from_css_str("no-repeat").unwrap(),
       ))
       .with(StyleDeclaration::background_clip(BackgroundClip::Text))
       .with(StyleDeclaration::color(ColorInput::Value(
@@ -116,17 +116,17 @@ fn test_style_background_clip_text_gradient() {
 #[test]
 fn test_style_background_clip_text_radial_gradient() {
   let gradient_images =
-    BackgroundImages::from_str("radial-gradient(circle, #ff0080, #7928ca, #0070f3)").unwrap();
+    BackgroundImages::from_css_str("radial-gradient(circle, #ff0080, #7928ca, #0070f3)").unwrap();
 
   let container = Node::container([Node::text("Radial Gradient".to_string()).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::background_image(Some(gradient_images)))
       .with(StyleDeclaration::background_size(
-        BackgroundSizes::from_str("100% 100%").unwrap(),
+        BackgroundSizes::from_css_str("100% 100%").unwrap(),
       ))
       .with(StyleDeclaration::background_position(
-        PositionValues::from_str("center center").unwrap(),
+        PositionValues::from_css_str("center center").unwrap(),
       ))
       .with(StyleDeclaration::background_clip(BackgroundClip::Text))
       .with(StyleDeclaration::color(ColorInput::Value(
@@ -187,7 +187,7 @@ fn test_style_background_clip_border_area() {
 #[test]
 fn test_style_background_clip_with_gradient_background() {
   let gradient_images =
-    BackgroundImages::from_str("linear-gradient(135deg, #667eea 0%, #764ba2 100%)").unwrap();
+    BackgroundImages::from_css_str("linear-gradient(135deg, #667eea 0%, #764ba2 100%)").unwrap();
 
   let container = Node::container([Node::container([]).with_style(
     Style::default()
@@ -196,7 +196,7 @@ fn test_style_background_clip_with_gradient_background() {
       .with(StyleDeclaration::height(Rem(10.0)))
       .with(StyleDeclaration::background_image(Some(gradient_images)))
       .with(StyleDeclaration::background_position(
-        PositionValues::from_str("center center").unwrap(),
+        PositionValues::from_css_str("center center").unwrap(),
       ))
       .with(StyleDeclaration::background_clip(
         BackgroundClip::PaddingBox,
@@ -224,15 +224,15 @@ fn test_style_background_clip_with_gradient_background() {
 #[test]
 fn test_style_background_clip_text_multiline() {
   let gradient_images =
-    BackgroundImages::from_str("linear-gradient(45deg, #12c2e9, #c471ed, #f64f59)").unwrap();
+    BackgroundImages::from_css_str("linear-gradient(45deg, #12c2e9, #c471ed, #f64f59)").unwrap();
 
   let container = Node::container([
       Node::text("This is a multiline text with a beautiful gradient background clipped to the text shape. It demonstrates how background-clip: text works with longer content.".to_string())
   .with_style(Style::default().with(StyleDeclaration::display(Display::Flex))
             .with(StyleDeclaration::background_image(Some(gradient_images)))
-            .with(StyleDeclaration::background_size(BackgroundSizes::from_str("100% 100%").unwrap()))
+            .with(StyleDeclaration::background_size(BackgroundSizes::from_css_str("100% 100%").unwrap()))
             .with(StyleDeclaration::background_position(
-              PositionValues::from_str("center center").unwrap(),
+              PositionValues::from_css_str("center center").unwrap(),
             ))
             .with(StyleDeclaration::background_clip(BackgroundClip::Text))
             .with(StyleDeclaration::color(ColorInput::Value(Color::transparent())))

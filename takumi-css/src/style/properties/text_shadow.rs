@@ -5,7 +5,7 @@ use typed_builder::TypedBuilder;
 
 use super::box_shadow::parse_offsets_blur;
 use crate::style::{
-  Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, Length,
+  Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, FromCssStr, Length,
   ListInterpolationStrategy, MakeComputed, ParseResult, SizingContext, ToCss, next_is_comma,
 };
 
@@ -107,7 +107,7 @@ impl<'i> FromCss<'i> for TextShadow {
 
 impl crate::style::tw::TailwindPropertyParser for TextShadow {
   fn parse_tw(token: &str) -> Option<Self> {
-    Self::from_str(token).ok()
+    Self::from_css_str(token).ok()
   }
 }
 
@@ -194,7 +194,7 @@ mod tests {
   #[test]
   fn test_parse_text_shadow_no_blur_radius() {
     assert_eq!(
-      TextShadows::from_str("5px 5px #558abb"),
+      TextShadows::from_css_str("5px 5px #558abb"),
       Ok(
         [TextShadow {
           offset_x: Px(5.0),
@@ -210,7 +210,7 @@ mod tests {
   #[test]
   fn test_parse_text_shadow_multiple_values() {
     assert_eq!(
-      TextShadows::from_str("5px 5px #558abb, 10px 10px #558abb"),
+      TextShadows::from_css_str("5px 5px #558abb, 10px 10px #558abb"),
       Ok(
         [
           TextShadow {
@@ -234,7 +234,7 @@ mod tests {
   #[test]
   fn test_parse_text_shadow_multiple_rgba_values() {
     assert_eq!(
-      TextShadows::from_str("5px 5px rgba(0, 0, 0, 0.5), 10px 10px rgba(255, 0, 0, 0.25)"),
+      TextShadows::from_css_str("5px 5px rgba(0, 0, 0, 0.5), 10px 10px rgba(255, 0, 0, 0.25)"),
       Ok(
         [
           TextShadow {

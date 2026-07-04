@@ -1,15 +1,74 @@
-use cssparser::{ParseError, Parser, ParserInput};
+use cssparser::{Parser, ParserInput};
 use std::{borrow::Cow, fmt, sync::Arc};
 
 use crate::style::{Color, SizingContext, math::lcm};
 
 /// Parser result type alias for CSS property parsers.
-pub type ParseResult<'i, T> = Result<T, ParseError<'i, Cow<'i, str>>>;
+pub(crate) type ParseResult<'i, T> = Result<T, cssparser::ParseError<'i, Cow<'i, str>>>;
+
+/// Owned error returned by [`FromCssStr::from_css_str`]. Carries a
+/// human-readable message and borrows nothing from the parser, keeping
+/// `cssparser` out of the public API.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParseError {
+  message: String,
+}
+
+impl fmt::Display for ParseError {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    f.write_str(&self.message)
+  }
+}
+
+impl std::error::Error for ParseError {}
+
+impl ParseError {
+  /// Stringifies an internal `cssparser` error into an owned [`ParseError`].
+  pub(crate) fn from_css_error(error: &cssparser::ParseError<'_, Cow<'_, str>>) -> Self {
+    let message = match &error.kind {
+      cssparser::ParseErrorKind::Custom(message) => message.to_string(),
+      basic => format!("{basic:?}"),
+    };
+
+    Self { message }
+  }
+}
+
+/// Runs the internal `FromCss` parser over `source`, mapping the borrowed
+/// `cssparser` error into the owned public [`ParseError`].
+pub(crate) fn parse_css_str<T>(source: &str) -> Result<T, ParseError>
+where
+  T: for<'i> FromCss<'i>,
+{
+  let mut input = ParserInput::new(source);
+  let mut parser = Parser::new(&mut input);
+
+  T::from_css(&mut parser).map_err(|error| ParseError::from_css_error(&error))
+}
+
+/// Parses a CSS value type from a string, delegating to its internal [`FromCss`].
+///
+/// Blanket-implemented over every `FromCss` type, so it also covers the bare
+/// `Vec<_>`/`Box<[_]>` list aliases that orphan rules bar from carrying a
+/// [`std::str::FromStr`].
+pub trait FromCssStr: Sized {
+  /// Parses `source` into this value type.
+  fn from_css_str(source: &str) -> Result<Self, ParseError>;
+}
+
+impl<T> FromCssStr for T
+where
+  T: for<'i> FromCss<'i>,
+{
+  fn from_css_str(source: &str) -> Result<Self, ParseError> {
+    parse_css_str::<Self>(source)
+  }
+}
 
 /// Compact identifiers for frequently reused CSS syntax tokens.
 #[derive(Clone, Copy)]
 #[non_exhaustive]
-pub enum CssSyntaxKind {
+pub(crate) enum CssSyntaxKind {
   /// `<angle>`
   Angle,
   /// `<border-style>`
@@ -84,7 +143,7 @@ impl CssSyntaxKind {
 
 /// Compact identifiers for reusable CSS descriptor and function labels.
 #[derive(Clone, Copy)]
-pub enum CssDescriptorKind {
+pub(crate) enum CssDescriptorKind {
   /// `<blur()>`
   BlurFn,
   /// `<blend-mode>`
@@ -196,7 +255,7 @@ impl CssDescriptorKind {
 /// Enum representing CSS tokens.
 #[derive(Clone, Copy)]
 #[non_exhaustive]
-pub enum CssToken {
+pub(crate) enum CssToken {
   /// A CSS keyword.
   Keyword(&'static str),
   /// A common CSS syntax token backed by a compact enum table.
@@ -247,7 +306,7 @@ impl std::fmt::Display for CssToken {
 
 /// Defines reusable message templates for CSS parse errors.
 #[non_exhaustive]
-pub enum CssExpectedMessage {
+pub(crate) enum CssExpectedMessage {
   /// Expects a value or the `none` keyword.
   ValueOrNone,
   /// Expects exactly one value.
@@ -282,22 +341,11 @@ impl CssExpectedMessage {
 }
 
 /// Trait for types that can be parsed from CSS.
-pub trait FromCss<'i> {
+pub(crate) trait FromCss<'i> {
   /// Parses the type from a [`Parser`] instance.
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self>
   where
     Self: Sized;
-
-  /// Helper function to parse the type from a string.
-  fn from_str(source: &'i str) -> ParseResult<'i, Self>
-  where
-    Self: Sized,
-  {
-    let mut input = ParserInput::new(source);
-    let mut parser = Parser::new(&mut input);
-
-    Self::from_css(&mut parser)
-  }
 
   /// Returns the list of valid CSS tokens for this type.
   const VALID_TOKENS: &'static [CssToken];
@@ -761,6 +809,7 @@ macro_rules! declare_enum_from_css_impl {
         }
       }
     }
+
   };
 }
 
@@ -822,6 +871,7 @@ macro_rules! declare_box_alignment_enum_impl {
         }
       }
     }
+
   };
 }
 

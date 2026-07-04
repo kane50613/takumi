@@ -13,6 +13,29 @@ pub mod error;
 pub mod keyframes;
 /// Selector matching against an abstract node tree.
 pub mod matching;
+/// Backend painting helpers (gradient LUTs, tile positioning, transfer tables)
+/// shared with the raster and SVG renderers. Deliberately kept out of `style`
+/// (and thus `takumi`'s prelude) since they are rendering-backend internals, not
+/// part of the CSS value surface.
+pub mod paint {
+  pub use crate::style::properties::{
+    background_repeat::{
+      collect_repeat_tile_positions, collect_spaced_tile_positions,
+      collect_stretched_tile_positions,
+    },
+    conic_gradient::{ConicGradientRowState, ConicGradientTile},
+    filter::compose_transfer_table,
+    gradient_utils::{
+      GradientOverlayTile, build_color_lut_with_interpolation,
+      overlay_gradient_tile_fast_normal_unconstrained, resolve_stops_along_axis,
+    },
+    linear_gradient::{
+      LinearGradientFastPath, LinearGradientFastPathData, LinearGradientFastPathKind,
+      LinearGradientRowState, LinearGradientTile,
+    },
+    radial_gradient::{RadialGradientRowState, RadialGradientTile},
+  };
+}
 /// CSS value types, parsing, and the cascade.
 pub mod style;
 mod viewport;

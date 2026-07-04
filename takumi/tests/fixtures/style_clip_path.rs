@@ -19,7 +19,7 @@ fn clip_path_text_stroke_filled() {
         )))
         .with(StyleDeclaration::color(ColorInput::Value(Color::white())))
         .with(StyleDeclaration::clip_path(Some(
-          BasicShape::from_str("inset(0 0 50% 0)").unwrap(),
+          BasicShape::from_css_str("inset(0 0 50% 0)").unwrap(),
         ))),
     ),
     Node::text(text.to_string()).with_style(
@@ -40,7 +40,7 @@ fn clip_path_text_stroke_filled() {
           ColorInput::Value(Color([128, 128, 128, 255])),
         )))
         .with(StyleDeclaration::clip_path(Some(
-          BasicShape::from_str("inset(50% 0 0 0)").unwrap(),
+          BasicShape::from_css_str("inset(50% 0 0 0)").unwrap(),
         ))),
     ),
   ])
@@ -78,7 +78,7 @@ fn clip_path_triangle_vercel() {
           Color::black(),
         )))
         .with(StyleDeclaration::clip_path(Some(
-          BasicShape::from_str("polygon(0% 100%, 100% 100%, 50% 12.25%)").unwrap(),
+          BasicShape::from_css_str("polygon(0% 100%, 100% 100%, 50% 12.25%)").unwrap(),
         ))),
     ),
   ])
@@ -110,13 +110,13 @@ fn clip_path_triangle_gradient() {
         .with(StyleDeclaration::width(Px(300.0)))
         .with(StyleDeclaration::height(Px(300.0)))
         .with(StyleDeclaration::background_image(Some(
-          BackgroundImages::from_str(
+          BackgroundImages::from_css_str(
             "linear-gradient(45deg, #ff3b30, #ff9500, #ffcc00, #34c759, #007aff, #5856d6)",
           )
           .unwrap(),
         )))
         .with(StyleDeclaration::clip_path(Some(
-          BasicShape::from_str("polygon(0% 100%, 100% 100%, 50% 12.25%)").unwrap(),
+          BasicShape::from_css_str("polygon(0% 100%, 100% 100%, 50% 12.25%)").unwrap(),
         ))),
     ),
   ])
@@ -151,7 +151,7 @@ fn clip_path_circle() {
           Color([255, 0, 100, 255]),
         )))
         .with(StyleDeclaration::clip_path(Some(
-          BasicShape::from_str("circle(50%)").unwrap(),
+          BasicShape::from_css_str("circle(50%)").unwrap(),
         ))),
     ),
   ])
@@ -186,7 +186,7 @@ fn clip_path_inset_rounded() {
           Color([100, 200, 255, 255]),
         )))
         .with(StyleDeclaration::clip_path(Some(
-          BasicShape::from_str("inset(50px 0 round 20px)").unwrap(),
+          BasicShape::from_css_str("inset(50px 0 round 20px)").unwrap(),
         ))),
     ),
   ])
@@ -237,7 +237,7 @@ fn clip_path_inset_round_clips_children() {
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::clip_path(Some(
-          BasicShape::from_str("inset(0px round 50px)").unwrap(),
+          BasicShape::from_css_str("inset(0px round 50px)").unwrap(),
         )))
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([0, 0, 0, 255]),

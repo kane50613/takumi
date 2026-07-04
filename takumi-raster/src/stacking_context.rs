@@ -4,15 +4,15 @@ use tiny_skia::{Pixmap, PixmapMut};
 use crate::{
   BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, NodeMaskAction, Placement,
   Result, SizedFontStyle, apply_backdrop_filter, apply_filters_to_pixmap, blend_pixel,
-  draw_background, draw_border, draw_debug_border, draw_inset_box_shadow, draw_node_content,
-  draw_outline, draw_outset_box_shadow,
+  color_to_premultiplied, draw_background, draw_border, draw_debug_border, draw_inset_box_shadow,
+  draw_node_content, draw_outline, draw_outset_box_shadow,
   inline_drawing::{draw_inline_box, draw_inline_layout},
   layout::{
     inline::{
       InlineLayoutMode, InlineLayoutRequest, ProcessedInlineSpan, collect_inline_items,
       create_inline_layout, resolve_inline_max_height,
     },
-    style::{Affine, BackgroundImage, BlendMode, Color, Filter, SizingContext},
+    style::{Affine, BackgroundImage, BlendMode, Filter, SizingContext},
     tree::{LayoutResults, RenderNode},
   },
   prepare_node_mask,
@@ -81,7 +81,7 @@ pub(crate) fn blend_pixmap_software(
         ((s.alpha() as f32) * opacity).clamp(0.0, 255.0) as u8,
       ]);
       blend_pixel(&mut out, top, mode);
-      *dst_pixel = Color(out.0).into();
+      *dst_pixel = color_to_premultiplied(out);
     }
   }
 }

@@ -87,11 +87,12 @@ impl TailwindPropertyParser for GridLine {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::style::FromCssStr;
 
   #[test]
   fn test_parse_line() {
     assert_eq!(
-      GridLine::from_str("span 2 / 3"),
+      GridLine::from_css_str("span 2 / 3"),
       Ok(GridLine {
         start: GridPlacement::span(2),
         end: GridPlacement::Line(3),

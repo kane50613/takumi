@@ -45,6 +45,7 @@ pub(crate) fn apply_text_transform<'a>(input: &'a str, transform: TextTransform)
       }
       Cow::Owned(result)
     }
+    _ => Cow::Borrowed(input),
   }
 }
 
@@ -136,6 +137,11 @@ pub(crate) fn apply_white_space_collapse<'a>(
       *previous_collapsible_space = last_was_space;
       *previous_was_line_break = last_was_line_break;
       Cow::Owned(out)
+    }
+
+    _ => {
+      *previous_was_line_break = false;
+      Cow::Borrowed(input)
     }
   }
 }

@@ -131,14 +131,17 @@ impl TailwindDeclarationBuilder {
   }
 
   pub(super) fn push_filter(&mut self, filter: Filter, important: bool) {
-    self.filter.get_or_insert_with(Vec::new).push(filter);
+    self
+      .filter
+      .get_or_insert_with(Filters::default)
+      .push(filter);
     self.filter_important = important;
   }
 
   pub(super) fn push_backdrop_filter(&mut self, filter: Filter, important: bool) {
     self
       .backdrop_filter
-      .get_or_insert_with(Vec::new)
+      .get_or_insert_with(Filters::default)
       .push(filter);
     self.backdrop_filter_important = important;
   }

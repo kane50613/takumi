@@ -55,9 +55,18 @@ type Managed<TInner> =
   | (TInner & SharedRenderExtras)
   | (TInner & Omit<SharedRenderExtras, "renderer"> & ManagedRendererOptions);
 
-type InnerRenderOptions = Omit<napi.RenderOptions | wasm.RenderOptions, "images">;
-type InnerSvgRenderOptions = Omit<napi.SvgRenderOptions | wasm.SvgRenderOptions, "images">;
-type InnerRenderAnimationOptions = Omit<
+/**
+ * `Omit` that distributes over unions, so the backends' `format`/`quality`/`lossless`
+ * tagged union survives instead of collapsing into one flat member.
+ */
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+
+type InnerRenderOptions = DistributiveOmit<napi.RenderOptions | wasm.RenderOptions, "images">;
+type InnerSvgRenderOptions = DistributiveOmit<
+  napi.SvgRenderOptions | wasm.SvgRenderOptions,
+  "images"
+>;
+type InnerRenderAnimationOptions = DistributiveOmit<
   napi.RenderAnimationOptions | wasm.RenderAnimationOptions,
   "images"
 >;
@@ -72,7 +81,7 @@ export type AnimationScene = Omit<napi.AnimationScene, "node"> & {
 };
 
 export type RenderAnimationOptions = Managed<
-  Omit<InnerRenderAnimationOptions, "scenes"> & {
+  DistributiveOmit<InnerRenderAnimationOptions, "scenes"> & {
     /** The scenes to render sequentially. */
     scenes: AnimationScene[];
   }

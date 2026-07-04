@@ -105,23 +105,24 @@ impl ToCss for GridRepetitionCount {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::style::FromCssStr;
 
   #[test]
   fn test_parse_repetition_count() {
     assert_eq!(
-      GridRepetitionCount::from_str("auto-fill"),
+      GridRepetitionCount::from_css_str("auto-fill"),
       Ok(GridRepetitionCount::Keyword(
         GridRepetitionKeyword::AutoFill
       ))
     );
 
     assert_eq!(
-      GridRepetitionCount::from_str("auto-fit"),
+      GridRepetitionCount::from_css_str("auto-fit"),
       Ok(GridRepetitionCount::Keyword(GridRepetitionKeyword::AutoFit))
     );
 
     assert_eq!(
-      GridRepetitionCount::from_str("3"),
+      GridRepetitionCount::from_css_str("3"),
       Ok(GridRepetitionCount::Count(3))
     );
   }

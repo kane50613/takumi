@@ -55,15 +55,15 @@ impl ToCss for ZIndex {
 
 #[cfg(test)]
 mod tests {
-  use crate::style::{FromCss, ZIndex};
+  use crate::style::{FromCssStr, ZIndex};
 
   #[test]
   fn parses_auto() {
-    assert_eq!(ZIndex::from_str("auto"), Ok(ZIndex::Auto));
+    assert_eq!(ZIndex::from_css_str("auto"), Ok(ZIndex::Auto));
   }
 
   #[test]
   fn parses_integer() {
-    assert_eq!(ZIndex::from_str("-3"), Ok(ZIndex::Integer(-3)));
+    assert_eq!(ZIndex::from_css_str("-3"), Ok(ZIndex::Integer(-3)));
   }
 }

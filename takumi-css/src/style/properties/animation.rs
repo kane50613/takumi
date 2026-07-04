@@ -5,7 +5,7 @@ use cssparser::{BasicParseErrorKind, Parser, Token, match_ignore_ascii_case};
 use typed_builder::TypedBuilder;
 
 use crate::style::{
-  CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult,
+  CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
   declare_enum_from_css_impl, next_is_comma, tw::TailwindPropertyParser,
 };
 
@@ -451,7 +451,7 @@ impl TailwindPropertyParser for Animations {
         Cow::Borrowed(value)
       };
 
-      return Self::from_str(&value).ok();
+      return Self::from_css_str(&value).ok();
     }
 
     Self::parse_tw(token)
@@ -697,11 +697,11 @@ mod tests {
   #[test]
   fn parse_animation_time() {
     assert_eq!(
-      AnimationTime::from_str("150ms"),
+      AnimationTime::from_css_str("150ms"),
       Ok(AnimationTime::from_milliseconds(150.0))
     );
     assert_eq!(
-      AnimationTime::from_str("2s"),
+      AnimationTime::from_css_str("2s"),
       Ok(AnimationTime::from_milliseconds(2000.0))
     );
   }
@@ -709,7 +709,7 @@ mod tests {
   #[test]
   fn parse_animation_names() {
     assert_matches!(
-      AnimationNames::from_str("fade, slide"),
+      AnimationNames::from_css_str("fade, slide"),
       Ok(names) if names.as_ref() == [Some("fade".to_string()), Some("slide".to_string())]
     );
   }
@@ -717,7 +717,7 @@ mod tests {
   #[test]
   fn parse_quoted_animation_names() {
     assert_matches!(
-      AnimationNames::from_str("\"fade\", slide"),
+      AnimationNames::from_css_str("\"fade\", slide"),
       Ok(names) if names.as_ref() == [Some("fade".to_string()), Some("slide".to_string())]
     );
   }
@@ -725,7 +725,7 @@ mod tests {
   #[test]
   fn parse_animation_names_with_none_entry() {
     assert_matches!(
-      AnimationNames::from_str("none, slide"),
+      AnimationNames::from_css_str("none, slide"),
       Ok(names) if names.as_ref() == [None, Some("slide".to_string())]
     );
   }
@@ -733,33 +733,33 @@ mod tests {
   #[test]
   fn parse_steps_timing_functions() {
     assert_eq!(
-      AnimationTimingFunction::from_str("step-start"),
+      AnimationTimingFunction::from_css_str("step-start"),
       Ok(AnimationTimingFunction::StepStart)
     );
     assert_eq!(
-      AnimationTimingFunction::from_str("step-end"),
+      AnimationTimingFunction::from_css_str("step-end"),
       Ok(AnimationTimingFunction::StepEnd)
     );
     assert_eq!(
-      AnimationTimingFunction::from_str("steps(4, end)"),
+      AnimationTimingFunction::from_css_str("steps(4, end)"),
       Ok(AnimationTimingFunction::Steps(4, StepPosition::End))
     );
   }
 
   #[test]
   fn reject_invalid_cubic_bezier_x_coordinates() {
-    assert!(AnimationTimingFunction::from_str("cubic-bezier(-0.1, 0, 0.2, 1)").is_err());
-    assert!(AnimationTimingFunction::from_str("cubic-bezier(0.1, 0, 1.2, 1)").is_err());
+    assert!(AnimationTimingFunction::from_css_str("cubic-bezier(-0.1, 0, 0.2, 1)").is_err());
+    assert!(AnimationTimingFunction::from_css_str("cubic-bezier(0.1, 0, 1.2, 1)").is_err());
   }
 
   #[test]
   fn reject_negative_animation_iteration_count() {
-    assert!(AnimationIterationCount::from_str("-1").is_err());
+    assert!(AnimationIterationCount::from_css_str("-1").is_err());
   }
 
   #[test]
   fn cubic_bezier_preserves_overshoot() {
-    let Ok(function) = AnimationTimingFunction::from_str("cubic-bezier(0.68, -0.6, 0.32, 1.6)")
+    let Ok(function) = AnimationTimingFunction::from_css_str("cubic-bezier(0.68, -0.6, 0.32, 1.6)")
     else {
       return;
     };
@@ -780,7 +780,7 @@ mod tests {
   #[test]
   fn parse_animation_shorthand() {
     assert_eq!(
-      Animations::from_str("fade 1s ease-in 200ms 2 alternate both paused"),
+      Animations::from_css_str("fade 1s ease-in 200ms 2 alternate both paused"),
       Ok(Box::from([Animation {
         duration: AnimationTime::from_milliseconds(1000.0),
         delay: AnimationTime::from_milliseconds(200.0),
@@ -797,7 +797,7 @@ mod tests {
   #[test]
   fn parse_animation_shorthand_with_quoted_name() {
     assert_eq!(
-      Animations::from_str("\"fade\" 1s linear"),
+      Animations::from_css_str("\"fade\" 1s linear"),
       Ok(Box::from([Animation {
         duration: AnimationTime::from_milliseconds(1000.0),
         timing_function: AnimationTimingFunction::Linear,
@@ -810,7 +810,7 @@ mod tests {
   #[test]
   fn parse_multiple_animation_shorthand_values() {
     assert_eq!(
-      Animations::from_str("fade 1s linear, 2s slide"),
+      Animations::from_css_str("fade 1s linear, 2s slide"),
       Ok(Box::from([
         Animation {
           duration: AnimationTime::from_milliseconds(1000.0),

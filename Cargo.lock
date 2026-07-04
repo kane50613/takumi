@@ -1609,7 +1609,6 @@ version = "0.1.0-rc.3"
 dependencies = [
  "bytemuck",
  "color",
- "cssparser",
  "data-url",
  "gif",
  "image",
@@ -1642,7 +1641,6 @@ dependencies = [
  "bytemuck",
  "color",
  "cssparser",
- "image",
  "kurbo",
  "parley",
  "paste",
@@ -1677,7 +1675,6 @@ dependencies = [
  "napi",
  "napi-build",
  "napi-derive",
- "parley",
  "rayon",
  "serde",
  "takumi-core",
@@ -1705,6 +1702,7 @@ dependencies = [
  "svgtypes",
  "taffy",
  "takumi-core",
+ "takumi-css",
  "tiny-skia",
  "typed-builder",
 ]
@@ -1717,6 +1715,7 @@ dependencies = [
  "quick-xml",
  "taffy",
  "takumi-core",
+ "takumi-css",
  "tiny-skia",
  "typed-builder",
 ]
@@ -1727,7 +1726,6 @@ version = "0.0.0"
 dependencies = [
  "base64",
  "js-sys",
- "parley",
  "serde",
  "serde-wasm-bindgen",
  "serde_bytes",

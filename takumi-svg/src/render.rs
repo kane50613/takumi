@@ -449,6 +449,7 @@ pub(crate) fn emit_clip_path_group(
       let transform = format!("translate({} {}) scale({})", Num(x), Num(y), Num(scale));
       doc.clip_path_transformed(&path.path, even_odd, Some(&transform))?
     }
+    _ => return Ok(None),
   };
   Ok(Some(doc.begin_group(IDENTITY, 1.0, Some(&clip), None)?))
 }

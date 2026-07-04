@@ -2,8 +2,8 @@ use cssparser::Parser;
 use std::fmt;
 
 use crate::style::{
-  Animatable, Color, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, SizingContext,
-  ToCss, lerp, tw::TailwindPropertyParser,
+  Animatable, Color, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
+  SizingContext, ToCss, lerp, tw::TailwindPropertyParser,
 };
 
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
@@ -45,7 +45,7 @@ impl Animatable for AspectRatio {
 
 impl TailwindPropertyParser for AspectRatio {
   fn parse_tw(token: &str) -> Option<Self> {
-    Self::from_str(token).ok()
+    Self::from_css_str(token).ok()
   }
 }
 
@@ -98,18 +98,21 @@ mod tests {
 
   #[test]
   fn parses_auto_keyword() {
-    assert_eq!(AspectRatio::from_str("auto"), Ok(AspectRatio::Auto));
+    assert_eq!(AspectRatio::from_css_str("auto"), Ok(AspectRatio::Auto));
   }
 
   #[test]
   fn parses_single_number_as_ratio() {
-    assert_eq!(AspectRatio::from_str("1.5"), Ok(AspectRatio::Ratio(1.5)));
+    assert_eq!(
+      AspectRatio::from_css_str("1.5"),
+      Ok(AspectRatio::Ratio(1.5))
+    );
   }
 
   #[test]
   fn parses_ratio_with_slash() {
     assert_eq!(
-      AspectRatio::from_str("16/9"),
+      AspectRatio::from_css_str("16/9"),
       Ok(AspectRatio::Ratio(16.0 / 9.0))
     );
   }
@@ -117,18 +120,18 @@ mod tests {
   #[test]
   fn parses_ratio_with_decimal_values() {
     assert_eq!(
-      AspectRatio::from_str("1.777/1"),
+      AspectRatio::from_css_str("1.777/1"),
       Ok(AspectRatio::Ratio(1.777))
     );
   }
 
   #[test]
   fn errors_on_invalid_input() {
-    assert!(AspectRatio::from_str("invalid").is_err());
+    assert!(AspectRatio::from_css_str("invalid").is_err());
   }
 
   #[test]
   fn errors_on_empty_slash() {
-    assert!(AspectRatio::from_str("16/").is_err());
+    assert!(AspectRatio::from_css_str("16/").is_err());
   }
 }

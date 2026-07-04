@@ -20,9 +20,9 @@ use crate::{
     },
     node::{Node, NodeStyleLayers},
     style::{
-      BackgroundImage, BlendMode, BoxSizing, Color, ComputedStyle, ContentItem, ContentValue,
-      Display, Filters, Float, Isolation, Length, LineHeight, PercentageNumber, Position,
-      SizingContext, Style as NodeStyle, StyleDeclaration, StyleSheet, TextWrapMode,
+      BackgroundImage, BackgroundImages, BlendMode, BoxSizing, Color, ComputedStyle, ContentItem,
+      ContentValue, Display, Filters, Float, Isolation, Length, LineHeight, PercentageNumber,
+      Position, SizingContext, Style as NodeStyle, StyleDeclaration, StyleSheet, TextWrapMode,
       apply_stylesheet_animations,
     },
   },
@@ -411,9 +411,9 @@ fn push_layout_node<'r>(
     if let Some(parent) = stack.last_mut() {
       let render_index = parent.next_child_index - 1;
       let cb = match finished.position {
-        Position::Static | Position::Relative => None,
         Position::Absolute => Some(*cb_stack.last().unwrap_or(&root_id)),
         Position::Fixed => Some(root_id),
+        _ => None,
       };
       // Only re-parent when the containing block differs from the structural
       // parent; otherwise keep the node in place to preserve DOM order (and the
@@ -949,7 +949,7 @@ impl RenderNode {
       },
       gradient => {
         let mut context = Self::anonymous_box_context(parent_context);
-        context.style.background_image = Some(Box::from([gradient]));
+        context.style.background_image = Some(BackgroundImages::from([gradient]));
         Self {
           context,
           node: Some(Node::container([])),
@@ -1010,7 +1010,7 @@ impl RenderNode {
 
     let items = match std::mem::take(&mut style.content) {
       ContentValue::Items(items) => items,
-      ContentValue::None | ContentValue::Normal => return None,
+      _ => return None,
     };
 
     let pseudo_context = RenderContext::from_parent(parent_context, style, sizing, current_color);
@@ -1929,7 +1929,8 @@ fn drop_block_boundary_whitespace(input: Vec<RenderNode>) -> Vec<RenderNode> {
 
 #[cfg(test)]
 mod tests {
-  use cssparser::{Parser, ParserInput};
+  use std::str::FromStr;
+
   use taffy::NodeId;
 
   use super::{registered_custom_property_parent_style, sort_children_by_order};
@@ -2324,9 +2325,7 @@ mod tests {
     );
     let adjusted_parent =
       registered_custom_property_parent_style(&parent, &[stylesheet], Viewport::default());
-    let mut input = ParserInput::new("var(--box-size)");
-    let mut parser = Parser::new(&mut input);
-    let declarations = StyleDeclarationBlock::parse("width", &mut parser);
+    let declarations = StyleDeclarationBlock::from_str("width: var(--box-size)");
     assert!(
       declarations.is_ok(),
       "width declaration using registered custom property should parse: {declarations:?}"

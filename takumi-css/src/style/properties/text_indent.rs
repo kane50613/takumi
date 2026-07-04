@@ -134,12 +134,12 @@ impl ToCss for TextIndent {
 
 #[cfg(test)]
 mod tests {
-  use crate::style::{FromCss, Length, TextIndent};
+  use crate::style::{FromCssStr, Length, TextIndent};
 
   #[test]
   fn parses_indent_keywords_in_any_order() {
     assert_eq!(
-      TextIndent::from_str("hanging 2em each-line"),
+      TextIndent::from_css_str("hanging 2em each-line"),
       Ok(TextIndent {
         amount: Length::Em(2.0),
         each_line: true,
@@ -156,7 +156,7 @@ mod tests {
   #[test]
   fn keyword_only_keeps_zero_amount() {
     assert_eq!(
-      TextIndent::from_str("hanging"),
+      TextIndent::from_css_str("hanging"),
       Ok(TextIndent {
         amount: Length::Px(0.0),
         each_line: false,

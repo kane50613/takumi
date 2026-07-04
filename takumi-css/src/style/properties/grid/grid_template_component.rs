@@ -8,7 +8,7 @@ use crate::style::{
   GridTrackSize, MakeComputed, ParseResult, SizingContext, ToCss,
 };
 
-/// An ordered list of grid-template track components and line names.
+/// An ordered list of [`GridTemplateComponent`] values.
 pub type GridTemplateComponents = Vec<GridTemplateComponent>;
 
 /// Parses a `[name1 name2 ...]` line-name block's body; caller consumes the opening bracket.
@@ -227,10 +227,11 @@ mod tests {
   use crate::style::{GridLength, GridRepetitionKeyword};
 
   use super::*;
+  use crate::style::FromCssStr;
 
   #[test]
   fn components_serialize_space_separated() {
-    let components = GridTemplateComponents::from_str("50px 100px").unwrap();
+    let components = GridTemplateComponents::from_css_str("50px 100px").unwrap();
     assert_eq!(components.to_css_string(), "50px 100px");
   }
 
@@ -242,7 +243,7 @@ mod tests {
   #[test]
   fn test_parse_template_component_repeat() {
     assert_eq!(
-      GridTemplateComponent::from_str("repeat(auto-fill, [a] 1fr [b] 2fr)"),
+      GridTemplateComponent::from_css_str("repeat(auto-fill, [a] 1fr [b] 2fr)"),
       Ok(GridTemplateComponent::Repeat(
         GridRepetitionCount::Keyword(GridRepetitionKeyword::AutoFill),
         vec![
@@ -263,6 +264,6 @@ mod tests {
 
   #[test]
   fn test_parse_repeat_without_track_size_is_error() {
-    assert!(GridTemplateComponent::from_str("repeat(2, [a])").is_err());
+    assert!(GridTemplateComponent::from_css_str("repeat(2, [a])").is_err());
   }
 }

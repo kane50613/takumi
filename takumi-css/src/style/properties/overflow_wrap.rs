@@ -3,7 +3,8 @@ use std::fmt;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
-  CssToken, FromCss, MakeComputed, ParseResult, ToCss, tw::TailwindPropertyParser, unexpected_token,
+  CssToken, FromCss, FromCssStr, MakeComputed, ParseResult, ToCss, tw::TailwindPropertyParser,
+  unexpected_token,
 };
 
 /// Controls how text should be overflowed.
@@ -12,7 +13,7 @@ pub struct OverflowWrap(parley::OverflowWrap);
 
 impl TailwindPropertyParser for OverflowWrap {
   fn parse_tw(token: &str) -> Option<Self> {
-    Self::from_str(token).ok()
+    Self::from_css_str(token).ok()
   }
 }
 

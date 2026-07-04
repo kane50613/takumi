@@ -22,7 +22,7 @@ fn create_filter_test_container(
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::display(Display::Grid))
       .with(StyleDeclaration::grid_template_columns(
-        GridTemplateComponents::from_str("repeat(5, 1fr)").ok(),
+        GridTemplateComponents::from_css_str("repeat(5, 1fr)").ok(),
       ))
       .with_gap(SpacePair::from_single(Px(gap_px)))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
@@ -40,7 +40,9 @@ fn create_filter_card(filter: &str, image_size_px: f32, label_font_size_px: f32)
       Style::default()
         .with(StyleDeclaration::width(Px(image_size_px)))
         .with(StyleDeclaration::height(Px(image_size_px)))
-        .with(StyleDeclaration::filter(Filters::from_str(filter).unwrap())),
+        .with(StyleDeclaration::filter(
+          Filters::from_css_str(filter).unwrap(),
+        )),
     ),
     Node::text(filter.to_string())
       .with_style(Style::default().with(StyleDeclaration::display(Display::Block))),
@@ -68,7 +70,9 @@ fn create_filter_transform_card(
       Style::default()
         .with(StyleDeclaration::width(Px(image_size_px)))
         .with(StyleDeclaration::height(Px(image_size_px)))
-        .with(StyleDeclaration::filter(Filters::from_str(filter).unwrap()))
+        .with(StyleDeclaration::filter(
+          Filters::from_css_str(filter).unwrap(),
+        ))
         .with(StyleDeclaration::transform(Some(transforms))),
     ),
     Node::text(label.to_string())
@@ -185,7 +189,7 @@ fn test_style_filter_combined_with_transform() {
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::display(Display::Grid))
       .with(StyleDeclaration::grid_template_columns(
-        GridTemplateComponents::from_str("repeat(4, 1fr)").ok(),
+        GridTemplateComponents::from_css_str("repeat(4, 1fr)").ok(),
       ))
       .with_gap(SpacePair::from_single(Px(16.0)))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))

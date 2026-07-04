@@ -525,6 +525,7 @@ mod tests {
   use tiny_skia::ColorU8;
 
   use super::*;
+  use crate::style::FromCssStr;
   use crate::{
     Viewport,
     style::{
@@ -534,7 +535,7 @@ mod tests {
   };
   #[test]
   fn test_parse_radial_gradient_basic() {
-    let gradient = RadialGradient::from_str("radial-gradient(#ff0000, #0000ff)");
+    let gradient = RadialGradient::from_css_str("radial-gradient(#ff0000, #0000ff)");
 
     assert_eq!(
       gradient,
@@ -549,7 +550,7 @@ mod tests {
   #[test]
   fn test_parse_radial_gradient_with_interpolation_color_space() {
     assert_eq!(
-      RadialGradient::from_str("radial-gradient(in oklab, red, blue)"),
+      RadialGradient::from_css_str("radial-gradient(in oklab, red, blue)"),
       Ok(
         RadialGradient::builder()
           .interpolation(ColorInterpolationMethod {
@@ -574,7 +575,7 @@ mod tests {
   #[test]
   fn test_parse_radial_gradient_circle_farthest_side() {
     let gradient =
-      RadialGradient::from_str("radial-gradient(circle farthest-side, #ff0000, #0000ff)");
+      RadialGradient::from_css_str("radial-gradient(circle farthest-side, #ff0000, #0000ff)");
 
     assert_eq!(
       gradient,
@@ -591,7 +592,7 @@ mod tests {
   #[test]
   fn test_parse_radial_gradient_ellipse_at_left_top() {
     let gradient =
-      RadialGradient::from_str("radial-gradient(ellipse at left top, #ff0000, #0000ff)");
+      RadialGradient::from_css_str("radial-gradient(ellipse at left top, #ff0000, #0000ff)");
 
     assert_eq!(
       gradient,
@@ -610,7 +611,7 @@ mod tests {
   #[test]
   fn test_parse_radial_gradient_size_then_position() {
     let gradient =
-      RadialGradient::from_str("radial-gradient(farthest-corner at 25% 70%, #ffffff, #000000)");
+      RadialGradient::from_css_str("radial-gradient(farthest-corner at 25% 70%, #ffffff, #000000)");
 
     assert_eq!(
       gradient,
@@ -637,7 +638,7 @@ mod tests {
 
   #[test]
   fn test_parse_radial_gradient_circle_farthest_side_with_stops() {
-    let gradient = RadialGradient::from_str(
+    let gradient = RadialGradient::from_css_str(
       "radial-gradient(circle at 25px 25px, lightgray 2%, transparent 0%)",
     );
 
@@ -703,7 +704,7 @@ mod tests {
       ),
     ] {
       assert_eq!(
-        RadialGradient::from_str(input),
+        RadialGradient::from_css_str(input),
         Ok(
           RadialGradient::builder()
             .shape(RadialShape::Circle)
@@ -717,7 +718,7 @@ mod tests {
 
   #[test]
   fn test_parse_radial_gradient_with_explicit_ellipse_radii() {
-    let gradient = RadialGradient::from_str(
+    let gradient = RadialGradient::from_css_str(
       "radial-gradient(ellipse 60% 60% at 50% 50%, rgba(255, 53, 53, 0.10) 0%, transparent 70%)",
     );
 

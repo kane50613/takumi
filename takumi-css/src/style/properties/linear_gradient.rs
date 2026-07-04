@@ -833,6 +833,7 @@ mod tests {
   };
 
   use super::*;
+  use crate::style::FromCssStr;
   fn sizing() -> SizingContext {
     SizingContext {
       viewport: Viewport::new((200, 100)),
@@ -848,7 +849,7 @@ mod tests {
   #[test]
   fn test_parse_linear_gradient() {
     assert_eq!(
-      LinearGradient::from_str("linear-gradient(to top right, #ff0000, #0000ff)"),
+      LinearGradient::from_css_str("linear-gradient(to top right, #ff0000, #0000ff)"),
       Ok(LinearGradient {
         repeating: false,
         direction: LinearGradientDirection::Keyword(GradientKeywordDirection {
@@ -869,10 +870,10 @@ mod tests {
       ("0.5turn", Angle::new(180.0)),
       ("90", Angle::new(90.0)),
     ] {
-      assert_eq!(Angle::from_str(input), Ok(expected), "input: {input}");
+      assert_eq!(Angle::from_css_str(input), Ok(expected), "input: {input}");
     }
     // rad requires approximate comparison
-    assert!(Angle::from_str("3.14159rad").is_ok_and(|a| (a.0 - 180.0).abs() < 0.001));
+    assert!(Angle::from_css_str("3.14159rad").is_ok_and(|a| (a.0 - 180.0).abs() < 0.001));
   }
 
   #[test]
@@ -938,7 +939,7 @@ mod tests {
       ),
     ] {
       assert_eq!(
-        GradientKeywordDirection::from_str(input),
+        GradientKeywordDirection::from_css_str(input),
         Ok(expected),
         "input: {input}"
       );
@@ -970,7 +971,7 @@ mod tests {
   #[test]
   fn test_parse_linear_gradient_with_angle() {
     assert_eq!(
-      LinearGradient::from_str("linear-gradient(45deg, #ff0000, #0000ff)"),
+      LinearGradient::from_css_str("linear-gradient(45deg, #ff0000, #0000ff)"),
       Ok(LinearGradient {
         repeating: false,
         direction: LinearGradientDirection::Angle(Angle::new(45.0)),
@@ -983,7 +984,7 @@ mod tests {
   #[test]
   fn test_parse_linear_gradient_with_interpolation_color_space() {
     assert_eq!(
-      LinearGradient::from_str("linear-gradient(in oklab, #ff0000, #0000ff)"),
+      LinearGradient::from_css_str("linear-gradient(in oklab, #ff0000, #0000ff)"),
       Ok(LinearGradient {
         repeating: false,
         direction: LinearGradientDirection::default(),
@@ -1001,8 +1002,8 @@ mod tests {
     // The serialized form must stay valid CSS (direction and color space in one
     // clause), so re-parsing keeps the interpolation instead of dropping it.
     let gradient =
-      LinearGradient::from_str("linear-gradient(to right in oklab, #ff0000, #0000ff)").unwrap();
-    let reparsed = LinearGradient::from_str(&gradient.to_css_string()).unwrap();
+      LinearGradient::from_css_str("linear-gradient(to right in oklab, #ff0000, #0000ff)").unwrap();
+    let reparsed = LinearGradient::from_css_str(&gradient.to_css_string()).unwrap();
     assert_eq!(gradient, reparsed);
     assert_eq!(reparsed.interpolation.color_space, ColorSpaceTag::Oklab);
   }
@@ -1010,7 +1011,7 @@ mod tests {
   #[test]
   fn test_parse_linear_gradient_with_interpolation_hue_direction() {
     assert_eq!(
-      LinearGradient::from_str("linear-gradient(to right in oklch longer hue, red, blue)"),
+      LinearGradient::from_css_str("linear-gradient(to right in oklch longer hue, red, blue)"),
       Ok(LinearGradient {
         repeating: false,
         direction: LinearGradientDirection::Keyword(GradientKeywordDirection {
@@ -1038,14 +1039,14 @@ mod tests {
 
   #[test]
   fn test_parse_linear_gradient_rejects_multiple_directions() {
-    assert!(LinearGradient::from_str("linear-gradient(to right 45deg, red, blue)").is_err());
-    assert!(LinearGradient::from_str("linear-gradient(45deg to right, red, blue)").is_err());
+    assert!(LinearGradient::from_css_str("linear-gradient(to right 45deg, red, blue)").is_err());
+    assert!(LinearGradient::from_css_str("linear-gradient(45deg to right, red, blue)").is_err());
   }
 
   #[test]
   fn test_parse_linear_gradient_with_stops() {
     assert_eq!(
-      LinearGradient::from_str("linear-gradient(to right, #ff0000 0%, #0000ff 100%)"),
+      LinearGradient::from_css_str("linear-gradient(to right, #ff0000 0%, #0000ff 100%)"),
       Ok(LinearGradient {
         repeating: false,
         direction: LinearGradientDirection::Keyword(GradientKeywordDirection {
@@ -1065,7 +1066,7 @@ mod tests {
   #[test]
   fn test_parse_linear_gradient_with_double_position_color_stop() {
     assert_eq!(
-      LinearGradient::from_str("linear-gradient(to right, red 10% 20%, blue)"),
+      LinearGradient::from_css_str("linear-gradient(to right, red 10% 20%, blue)"),
       Ok(LinearGradient {
         repeating: false,
         direction: LinearGradientDirection::Keyword(GradientKeywordDirection {
@@ -1095,7 +1096,7 @@ mod tests {
   #[test]
   fn test_parse_linear_gradient_with_hint() {
     assert_eq!(
-      LinearGradient::from_str("linear-gradient(to right, #ff0000, 50%, #0000ff)"),
+      LinearGradient::from_css_str("linear-gradient(to right, #ff0000, 50%, #0000ff)"),
       Ok(LinearGradient {
         repeating: false,
         direction: LinearGradientDirection::Keyword(GradientKeywordDirection {
@@ -1122,7 +1123,7 @@ mod tests {
   #[test]
   fn test_parse_linear_gradient_single_color() {
     assert_eq!(
-      LinearGradient::from_str("linear-gradient(to bottom, #ff0000)"),
+      LinearGradient::from_css_str("linear-gradient(to bottom, #ff0000)"),
       Ok(LinearGradient {
         repeating: false,
         direction: LinearGradientDirection::Keyword(GradientKeywordDirection {
@@ -1143,7 +1144,7 @@ mod tests {
   fn test_parse_linear_gradient_default_angle() {
     // Default angle is 180 degrees (to bottom)
     assert_eq!(
-      LinearGradient::from_str("linear-gradient(#ff0000, #0000ff)"),
+      LinearGradient::from_css_str("linear-gradient(#ff0000, #0000ff)"),
       Ok(LinearGradient {
         repeating: false,
         direction: LinearGradientDirection::default(),
@@ -1166,7 +1167,7 @@ mod tests {
   #[test]
   fn test_parse_gradient_hint_color() {
     assert_eq!(
-      GradientStop::from_str("#ff0000"),
+      GradientStop::from_css_str("#ff0000"),
       Ok(GradientStop::ColorHint {
         color: ColorInput::Value(Color([255, 0, 0, 255])),
         hint: None,
@@ -1177,7 +1178,7 @@ mod tests {
   #[test]
   fn test_parse_gradient_hint_numeric() {
     assert_eq!(
-      GradientStop::from_str("50%"),
+      GradientStop::from_css_str("50%"),
       Ok(GradientStop::Hint(StopPosition(Length::Percentage(50.0))))
     );
   }
@@ -1232,7 +1233,7 @@ mod tests {
   #[test]
   fn test_parse_linear_gradient_mixed_hints_and_colors() {
     assert_eq!(
-      LinearGradient::from_str("linear-gradient(45deg, #ff0000, 25%, #00ff00, 75%, #0000ff)"),
+      LinearGradient::from_css_str("linear-gradient(45deg, #ff0000, 25%, #00ff00, 75%, #0000ff)"),
       Ok(LinearGradient {
         repeating: false,
         direction: LinearGradientDirection::Angle(Angle::new(45.0)),
@@ -1428,9 +1429,9 @@ mod tests {
   }
 
   #[test]
-  fn test_linear_gradient_px_stops_crisp_line() -> ParseResult<'static, ()> {
+  fn test_linear_gradient_px_stops_crisp_line() {
     let gradient =
-      LinearGradient::from_str("linear-gradient(to right, grey 1px, transparent 1px)")?;
+      LinearGradient::from_css_str("linear-gradient(to right, grey 1px, transparent 1px)").unwrap();
 
     let sizing = SizingContext::builder()
       .viewport(Viewport::new((40, 40)))
@@ -1448,14 +1449,13 @@ mod tests {
     // transparent till the end
     let c2 = tile.sample_pixel(40, 0).demultiply();
     assert_eq!(c2, ColorU8::from_rgba(0, 0, 0, 0));
-
-    Ok(())
   }
 
   #[test]
-  fn test_linear_gradient_vertical_px_stops_top_pixel() -> ParseResult<'static, ()> {
+  fn test_linear_gradient_vertical_px_stops_top_pixel() {
     let gradient =
-      LinearGradient::from_str("linear-gradient(to bottom, grey 1px, transparent 1px)")?;
+      LinearGradient::from_css_str("linear-gradient(to bottom, grey 1px, transparent 1px)")
+        .unwrap();
 
     let sizing = SizingContext::builder()
       .viewport(Viewport::new((40, 40)))
@@ -1467,8 +1467,6 @@ mod tests {
       tile.sample_pixel(0, 0).demultiply(),
       ColorU8::from_rgba(128, 128, 128, 255)
     );
-
-    Ok(())
   }
 
   #[test]
@@ -1481,7 +1479,7 @@ mod tests {
       ("8px", StopPosition(Length::Px(8.0))),
     ] {
       assert_eq!(
-        StopPosition::from_str(input),
+        StopPosition::from_css_str(input),
         Ok(expected),
         "input: {input}"
       );

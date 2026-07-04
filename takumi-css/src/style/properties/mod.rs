@@ -8,7 +8,7 @@ mod aspect_ratio;
 mod background;
 mod background_image;
 mod background_position;
-mod background_repeat;
+pub(crate) mod background_repeat;
 mod background_size;
 mod background_size_resolve;
 mod blend_mode;
@@ -17,9 +17,9 @@ mod box_alignment;
 mod box_shadow;
 mod clip_path;
 mod color;
-mod conic_gradient;
+pub(crate) mod conic_gradient;
 mod content;
-mod filter;
+pub(crate) mod filter;
 mod flex;
 mod flex_grow;
 mod font_family;
@@ -31,18 +31,18 @@ mod font_synthesis;
 mod font_variant;
 mod font_variation_settings;
 mod font_weight;
-mod gradient_utils;
+pub(crate) mod gradient_utils;
 mod grid;
 mod length;
 mod line_clamp;
 mod line_height;
-mod linear_gradient;
+pub(crate) mod linear_gradient;
 mod offset_path;
 mod order;
 mod overflow;
 mod overflow_wrap;
 mod percentage_number;
-mod radial_gradient;
+pub(crate) mod radial_gradient;
 mod sides;
 mod space_pair;
 mod text_decoration;
@@ -64,7 +64,7 @@ pub use aspect_ratio::*;
 pub use background::*;
 pub use background_image::*;
 pub use background_position::*;
-pub use background_repeat::*;
+pub use background_repeat::{BackgroundRepeat, BackgroundRepeatStyle, BackgroundRepeats};
 pub use background_size::*;
 pub use background_size_resolve::*;
 pub use blend_mode::*;
@@ -73,9 +73,12 @@ pub use box_alignment::*;
 pub use box_shadow::*;
 pub use clip_path::*;
 pub use color::*;
-pub use conic_gradient::*;
+pub use conic_gradient::ConicGradient;
 pub use content::*;
-pub use filter::*;
+pub use filter::{
+  BlurType, Filter, FilterCategory, Filters, LUMA_WEIGHTS, SEPIA_WEIGHTS, TransferChannel,
+  TransferTable,
+};
 pub use flex::*;
 pub use flex_grow::*;
 pub use font_family::*;
@@ -87,21 +90,20 @@ pub use font_synthesis::*;
 pub use font_variant::*;
 pub use font_variation_settings::*;
 pub use font_weight::*;
-pub use gradient_utils::{
-  GradientOverlayTile, build_color_lut_with_interpolation,
-  overlay_gradient_tile_fast_normal_unconstrained, resolve_stops_along_axis,
-};
 pub use grid::*;
 pub use length::*;
 pub use line_clamp::*;
 pub use line_height::*;
-pub use linear_gradient::*;
+pub use linear_gradient::{
+  Angle, GradientKeywordDirection, GradientStop, GradientStops, HorizontalKeyword, LinearGradient,
+  LinearGradientDirection, ResolvedGradientStop, StopPosition, VerticalKeyword,
+};
 pub use offset_path::*;
 pub use order::*;
 pub use overflow::*;
 pub use overflow_wrap::*;
 pub use percentage_number::*;
-pub use radial_gradient::*;
+pub use radial_gradient::{RadialGradient, RadialShape, RadialSize};
 use serde::Deserialize;
 pub use sides::*;
 pub use space_pair::*;
@@ -123,7 +125,6 @@ pub use word_break::*;
 pub use z_index::*;
 
 use cssparser::{Parser, match_ignore_ascii_case};
-use image::imageops::FilterType;
 use parley::Alignment;
 use std::fmt;
 
@@ -136,20 +137,12 @@ pub(crate) fn next_is_comma<'i>(input: &mut Parser<'i, '_>) -> bool {
   is_comma
 }
 
-/// Implements `TailwindPropertyParser` by delegating to each type's `FromStr`.
-macro_rules! impl_tw_from_str {
-  ($($ty:ty),+ $(,)?) => {
-    $(
-      impl TailwindPropertyParser for $ty {
-        fn parse_tw(token: &str) -> Option<Self> {
-          Self::from_str(token).ok()
-        }
-      }
-    )+
-  };
-}
-
-impl_tw_from_str!(ObjectFit, TextAlign, LineJoin, AlignItems, BorderStyle);
+// These parse Tailwind tokens straight through their `FromCss` value parser.
+impl TailwindPropertyParser for ObjectFit {}
+impl TailwindPropertyParser for TextAlign {}
+impl TailwindPropertyParser for LineJoin {}
+impl TailwindPropertyParser for AlignItems {}
+impl TailwindPropertyParser for BorderStyle {}
 
 impl<T: Animatable + Copy> Animatable for SpacePair<T> {
   fn interpolate(
@@ -539,6 +532,7 @@ declare_enum_from_css_impl!(
 ///
 /// This enum determines how an element is positioned within its containing element.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum Position {
   /// The element is laid out in the normal flow and is not a containing block.
   /// Offsets (top, right, bottom, left) have no effect.
@@ -814,7 +808,7 @@ impl TailwindPropertyParser for JustifyContent {
       "between" => Some(JustifyContent::SpaceBetween),
       "around" => Some(JustifyContent::SpaceAround),
       "evenly" => Some(JustifyContent::SpaceEvenly),
-      _ => Self::from_str(token).ok(),
+      _ => Self::from_css_str(token).ok(),
     }
   }
 }
@@ -1024,6 +1018,7 @@ impl_from_taffy_enum!(FlexWrap, taffy::FlexWrap, NoWrap, Wrap, WrapReverse);
 
 /// Controls text case transformation when rendering.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum TextTransform {
   /// Do not transform text
   #[default]
@@ -1063,6 +1058,7 @@ declare_enum_from_css_impl!(
 
 /// Controls how whitespace should be collapsed.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum WhiteSpaceCollapse {
   /// Preserve whitespace as is—spaces and tabs are not collapsed.
   Preserve,
@@ -1085,6 +1081,7 @@ declare_enum_from_css_impl!(
 
 /// Defines how images should be scaled when rendered.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum ImageScalingAlgorithm {
   /// The image is scaled using Catmull-Rom interpolation.
   /// This is balanced for speed and quality.
@@ -1151,13 +1148,3 @@ declare_enum_from_css_impl!(
   "inset" => BorderStyle::Inset,
   "outset" => BorderStyle::Outset,
 );
-
-impl From<ImageScalingAlgorithm> for FilterType {
-  fn from(algorithm: ImageScalingAlgorithm) -> Self {
-    match algorithm {
-      ImageScalingAlgorithm::Auto => FilterType::CatmullRom,
-      ImageScalingAlgorithm::Smooth => FilterType::Lanczos3,
-      ImageScalingAlgorithm::Pixelated => FilterType::Nearest,
-    }
-  }
-}

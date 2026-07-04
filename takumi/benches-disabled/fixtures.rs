@@ -42,7 +42,7 @@ fn simple_image_blit_fixture() -> Node {
 }
 
 fn gradient_clip_text_fixture() -> Node {
-  let gradient = BackgroundImages::from_str(
+  let gradient = BackgroundImages::from_css_str(
     "linear-gradient(90deg, #ff3b30, #ffcc00, #34c759, #007aff, #5856d6)",
   )
   .unwrap();
@@ -53,13 +53,13 @@ fn gradient_clip_text_fixture() -> Node {
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::background_image(Some(gradient)))
         .with(StyleDeclaration::background_size(
-          BackgroundSizes::from_str("100% 100%").unwrap(),
+          BackgroundSizes::from_css_str("100% 100%").unwrap(),
         ))
         .with(StyleDeclaration::background_position(
-          PositionValues::from_str("0 0").unwrap(),
+          PositionValues::from_css_str("0 0").unwrap(),
         ))
         .with(StyleDeclaration::background_repeat(
-          BackgroundRepeats::from_str("no-repeat").unwrap(),
+          BackgroundRepeats::from_css_str("no-repeat").unwrap(),
         ))
         .with(StyleDeclaration::background_clip(BackgroundClip::Text))
         .with(StyleDeclaration::color(ColorInput::Value(
@@ -126,7 +126,7 @@ fn emoji_social_fixture() -> Node {
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with_padding(Sides([Px(48.0), Px(56.0), Px(48.0), Px(56.0)]))
       .with(StyleDeclaration::background_image(Some(
-        BackgroundImages::from_str(
+        BackgroundImages::from_css_str(
           "linear-gradient(135deg, #f8fafc 0%, #e2e8f0 45%, #cbd5e1 100%)",
         )
         .unwrap(),

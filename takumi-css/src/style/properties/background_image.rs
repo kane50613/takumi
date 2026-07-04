@@ -103,7 +103,7 @@ pub(crate) fn parse_comma_list<'i, T>(
   Ok(items.into_boxed_slice())
 }
 
-/// A collection of background images.
+/// An ordered list of [`BackgroundImage`] values.
 pub type BackgroundImages = Box<[BackgroundImage]>;
 
 impl<'i> FromCss<'i> for BackgroundImages {
@@ -137,6 +137,7 @@ mod tests {
   };
 
   use super::*;
+  use crate::style::FromCssStr;
 
   #[test]
   fn test_parse_tailwind_none() {
@@ -156,7 +157,7 @@ mod tests {
 
   #[test]
   fn test_parse_background_images_radial_explicit_radii() {
-    let images = BackgroundImages::from_str(
+    let images = BackgroundImages::from_css_str(
       "radial-gradient(ellipse 60% 60% at 50% 50%, rgba(255, 53, 53, 0.10) 0%, transparent 70%), radial-gradient(ellipse 30% 30% at 50% 50%, rgba(255, 53, 53, 0.06) 0%, transparent 55%)",
     );
 
@@ -216,7 +217,7 @@ mod tests {
 
   #[test]
   fn test_parse_repeating_gradients_in_background_images() {
-    let images = BackgroundImages::from_str(
+    let images = BackgroundImages::from_css_str(
       "repeating-linear-gradient(90deg, red 0px 5px, blue 5px 10px), repeating-radial-gradient(circle 20px, red 0px 5px, blue 5px 10px), repeating-conic-gradient(from 0deg, red 0deg 90deg, blue 90deg 180deg)",
     );
 

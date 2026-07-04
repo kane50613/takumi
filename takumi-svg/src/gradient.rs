@@ -21,13 +21,15 @@ use takumi_core::{
     node::resolve_image,
     style::{
       BackgroundImage, BackgroundRepeat, BackgroundRepeatStyle, BackgroundSize,
-      ColorInterpolationMethod, ConicGradient, ConicGradientTile, IntrinsicSizing, Length,
-      LinearGradient, LinearGradientTile, PositionComponent, PositionValue, RadialGradient,
-      RadialGradientTile, ResolvedGradientStop, SizingContext, build_color_lut_with_interpolation,
-      collect_repeat_tile_positions, collect_spaced_tile_positions,
-      collect_stretched_tile_positions, resolve_stops_along_axis,
+      ColorInterpolationMethod, ConicGradient, IntrinsicSizing, Length, LinearGradient,
+      PositionComponent, PositionValue, RadialGradient, ResolvedGradientStop, SizingContext,
     },
   },
+};
+use takumi_css::paint::{
+  ConicGradientTile, LinearGradientTile, RadialGradientTile, build_color_lut_with_interpolation,
+  collect_repeat_tile_positions, collect_spaced_tile_positions, collect_stretched_tile_positions,
+  resolve_stops_along_axis,
 };
 
 use crate::{

@@ -654,6 +654,7 @@ impl SvgDocument {
         self.empty("feMergeNode", &[("in", input.into())])?;
         self.close("feMerge")
       }
+      _ => Ok(()),
     }
   }
 

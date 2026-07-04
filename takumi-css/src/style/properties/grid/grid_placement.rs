@@ -167,27 +167,34 @@ impl ToCss for GridPlacement {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::style::FromCssStr;
 
   #[test]
   fn test_parse_placement() {
-    assert_eq!(GridPlacement::from_str("auto"), Ok(GridPlacement::auto()));
+    assert_eq!(
+      GridPlacement::from_css_str("auto"),
+      Ok(GridPlacement::auto())
+    );
 
     assert_eq!(
-      GridPlacement::from_str("span 2"),
+      GridPlacement::from_css_str("span 2"),
       Ok(GridPlacement::span(2))
     );
 
     assert_eq!(
-      GridPlacement::from_str("span name"),
+      GridPlacement::from_css_str("span name"),
       Ok(GridPlacement::span(1))
     );
 
-    assert_eq!(GridPlacement::from_str("3"), Ok(GridPlacement::Line(3)));
-
-    assert_eq!(GridPlacement::from_str("-1"), Ok(GridPlacement::Line(-1)));
+    assert_eq!(GridPlacement::from_css_str("3"), Ok(GridPlacement::Line(3)));
 
     assert_eq!(
-      GridPlacement::from_str("header"),
+      GridPlacement::from_css_str("-1"),
+      Ok(GridPlacement::Line(-1))
+    );
+
+    assert_eq!(
+      GridPlacement::from_css_str("header"),
       Ok(GridPlacement::Named("header".to_string()))
     );
   }

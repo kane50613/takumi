@@ -282,7 +282,7 @@ impl BorderRasterization for BorderProperties {
       BorderStyle::Solid => {
         self.draw_side_band(paint, side, border_box, Rect::ZERO, self.width, color);
       }
-      BorderStyle::None | BorderStyle::Hidden => {}
+      _ => {}
     }
   }
 

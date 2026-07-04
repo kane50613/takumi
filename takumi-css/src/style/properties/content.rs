@@ -8,6 +8,7 @@ use crate::style::{
 
 /// CSS `content` property value for `::before` / `::after` pseudo-elements.
 #[derive(Debug, Clone, Default, PartialEq)]
+#[non_exhaustive]
 pub enum ContentValue {
   /// `content: normal`. For `::before` / `::after` this behaves as `None`.
   #[default]
@@ -189,9 +190,10 @@ mod tests {
   use std::assert_matches;
 
   use super::*;
+  use crate::style::FromCssStr;
 
   fn parse(input: &str) -> ContentValue {
-    ContentValue::from_str(input).expect("parse")
+    ContentValue::from_css_str(input).expect("parse")
   }
 
   #[test]
@@ -261,13 +263,13 @@ mod tests {
 
   #[test]
   fn unsupported_function_is_rejected() {
-    assert!(ContentValue::from_str("counter(foo)").is_err());
-    assert!(ContentValue::from_str("\"prefix\" counter(foo)").is_err());
+    assert!(ContentValue::from_css_str("counter(foo)").is_err());
+    assert!(ContentValue::from_css_str("\"prefix\" counter(foo)").is_err());
   }
 
   #[test]
   fn unsupported_keyword_is_rejected() {
-    assert!(ContentValue::from_str("open-quote").is_err());
-    assert!(ContentValue::from_str("\"x\" close-quote").is_err());
+    assert!(ContentValue::from_css_str("open-quote").is_err());
+    assert!(ContentValue::from_css_str("\"x\" close-quote").is_err());
   }
 }

@@ -15,7 +15,7 @@ fn test_color_artifacts() {
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::object_fit(ObjectFit::Contain))
-      .with_border_radius(BorderRadius::from_str("10px").unwrap()),
+      .with_border_radius(BorderRadius::from_css_str("10px").unwrap()),
   )])
   .with_style(
     Style::default()
@@ -25,7 +25,7 @@ fn test_color_artifacts() {
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color([255, 255, 255, 96]),
       )))
-      .with_border_radius(BorderRadius::from_str("24px").unwrap())
+      .with_border_radius(BorderRadius::from_css_str("24px").unwrap())
       .with_padding(Sides([Px(24.0); 4])),
   );
 
@@ -48,7 +48,7 @@ fn test_color_artifacts() {
       )))
       .with(StyleDeclaration::align_items(AlignItems::Center))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
-      .with_border_radius(BorderRadius::from_str("24px").unwrap()),
+      .with_border_radius(BorderRadius::from_css_str("24px").unwrap()),
   );
 
   let container = Node::container([main_preview, downscaled_preview]).with_style(

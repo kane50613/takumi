@@ -68,13 +68,14 @@ impl ToCss for GridLength {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::style::FromCssStr;
 
   #[test]
   fn test_parse_fr_and_unit() {
-    assert_eq!(GridLength::from_str("1fr"), Ok(GridLength::Fr(1.0)));
+    assert_eq!(GridLength::from_css_str("1fr"), Ok(GridLength::Fr(1.0)));
 
     assert_eq!(
-      GridLength::from_str("10px"),
+      GridLength::from_css_str("10px"),
       Ok(GridLength::Unit(Length::Px(10.0)))
     );
   }

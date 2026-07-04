@@ -2,7 +2,6 @@
 
 use crate::{helper::map_error, model::*};
 use base64::{Engine, prelude::BASE64_STANDARD};
-use parley::{FontWeight, fontique::FontInfoOverride};
 use serde_wasm_bindgen::{from_value, to_value};
 use std::{
   borrow::Cow,
@@ -17,7 +16,7 @@ use takumi_core::{
     style::{KeyframesRule, StyleSheet},
   },
   resources::{
-    font::{FontResource, GenericFamily, RegisteredFamily},
+    font::{FontOverride, FontResource, GenericFamily, RegisteredFamily},
     image::{ImageCache, ImageSource as LoadedImageSource},
   },
 };
@@ -57,8 +56,8 @@ fn default_fonts() -> Result<Fonts, js_sys::Error> {
   let mut fonts = Fonts::default();
   for (font, family_name, generic_family) in EMBEDDED_FONTS {
     let resource = FontResource::new(*font)
-      .override_info(FontInfoOverride {
-        family_name: Some(*family_name),
+      .override_info(FontOverride {
+        family_name: Some((*family_name).into()),
         ..Default::default()
       })
       .generic_family(*generic_family);
@@ -84,12 +83,11 @@ fn load_font_internal(
       .register(FontResource::new(buffer.into_vec()))
       .map_err(map_error),
     Font::Object(details) => {
-      let resource = FontResource::new(details.data.into_vec()).override_info(FontInfoOverride {
-        family_name: details.name.as_deref(),
+      let resource = FontResource::new(details.data.into_vec()).override_info(FontOverride {
+        family_name: details.name.map(Into::into),
         style: details.style.map(Into::into),
-        weight: details.weight.map(|weight| FontWeight::new(weight as f32)),
-        axes: None,
-        width: None,
+        weight: details.weight.map(|weight| weight as f32),
+        ..Default::default()
       });
 
       let resource = match &details.subset_of {

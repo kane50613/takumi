@@ -37,7 +37,8 @@ Rust (takumi crate):
 - render_for_layout drops the current_color argument
 - style value types (unstable): LengthDefaultsToZero -> Length, ColorDefaultsToTransparent -> ColorInput
 - BackgroundPosition -> PositionValue, BackgroundPositions -> PositionValues; ObjectPosition/TransformOrigin removed -> PositionValue (PositionValue::center() for the 50% 50% default)
-- core enums (NodeKind, ImageSource, ImageSourceInput, ImageCacheMode, Length, ColorInput) and css PropertyId/StyleDeclaration are now #[non_exhaustive]: add a wildcard match arm; build via constructors, not struct literals
+- core enums (NodeKind, ImageSource, ImageSourceInput, ImageCacheMode, Length, ColorInput), css PropertyId/StyleDeclaration, and css value enums (BlendMode, Filter, BasicShape, ContentValue, TextTransform, WhiteSpaceCollapse, OffsetPath, ImageScalingAlgorithm, Position) are now #[non_exhaustive]: add a wildcard match arm; build via constructors, not struct literals
+- css value lists are plain aliases now (Filters = Vec<Filter>, BackgroundImages/Sizes/Repeats and PositionValues = Box<[_]>); drop any newtype wrapper and parse from strings with FromCssStr::from_css_str instead of parse()/from_str
 
 CSS defaults changed, verify visually: position relative -> static; border/outline width
 0 -> medium (3px); negative scale reflects; line-clamp is a shorthand; currentColor in SVG
@@ -321,7 +322,7 @@ let origin: PositionValue = PositionValue::center(); // [!code ++]
 
 ### Core enums are `#[non_exhaustive]`
 
-Several public enums gained `#[non_exhaustive]`: `NodeKind`, `ImageSource`, `ImageSourceInput`, `ImageCacheMode`, `Length`, and `ColorInput` (plus `PropertyId` and `StyleDeclaration` in `takumi-css`). You can no longer build these variants with a struct literal from outside the crate, and a `match` on them needs a wildcard arm.
+Several public enums gained `#[non_exhaustive]`: `NodeKind`, `ImageSource`, `ImageSourceInput`, `ImageCacheMode`, `Length`, and `ColorInput`, plus `PropertyId`, `StyleDeclaration`, and the spec-tracking CSS value enums (`BlendMode`, `Filter`, `BasicShape`, `ContentValue`, `TextTransform`, `WhiteSpaceCollapse`, `OffsetPath`, `ImageScalingAlgorithm`, `Position`) in `takumi-css`. You can no longer build these variants with a struct literal from outside the crate, and a `match` on them needs a wildcard arm.
 
 ```rust
 match node.kind {
@@ -329,6 +330,16 @@ match node.kind {
   NodeKind::Text(_) => {}
   _ => {} // [!code ++]
 }
+```
+
+### CSS value lists are type aliases
+
+The multi-value CSS lists are plain aliases instead of newtypes. `Filters` and `GridTemplateComponents` are `Vec<_>`; `BackgroundImages`, `BackgroundSizes`, `BackgroundRepeats`, and `PositionValues` are `Box<[_]>`. Drop the newtype wrapper when you build one. To parse a value from a string, use the `FromCssStr` trait, which returns an owned `ParseError` and keeps `cssparser` out of the public API.
+
+```rust
+let filters = Filters(vec![Filter::Blur(Length::Px(4.0))]); // [!code --]
+let filters = vec![Filter::Blur(Length::Px(4.0))];          // [!code ++]
+let sizes = BackgroundSizes::from_css_str("cover")?;
 ```
 
 ## More in Changelog!

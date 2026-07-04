@@ -205,10 +205,10 @@ fn create_overflow_issue_630_grid_fixture() -> Node {
     Style::default()
       .with(StyleDeclaration::display(Display::Grid))
       .with(StyleDeclaration::grid_template_columns(
-        GridTemplateComponents::from_str("repeat(2, 1fr)").ok(),
+        GridTemplateComponents::from_css_str("repeat(2, 1fr)").ok(),
       ))
       .with(StyleDeclaration::grid_template_rows(
-        GridTemplateComponents::from_str("repeat(2, 1fr)").ok(),
+        GridTemplateComponents::from_css_str("repeat(2, 1fr)").ok(),
       ))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))

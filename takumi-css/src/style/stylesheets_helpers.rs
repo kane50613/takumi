@@ -113,7 +113,9 @@ where
   match css_input {
     CssInput::Str(value) => {
       let source = value.to_string();
-      let failure = match T::from_str(source.as_str()) {
+      let mut parser_input = ParserInput::new(source.as_str());
+      let mut parser = Parser::new(&mut parser_input);
+      let failure = match T::from_css(&mut parser) {
         Ok(parsed_value) => return Ok(parsed_value),
         Err(error) => css_input_parse_failure(source.as_str(), error),
       };
@@ -128,8 +130,10 @@ where
     }
     CssInput::Number(number) => {
       let source = number.to_string();
+      let mut parser_input = ParserInput::new(&source);
+      let mut parser = Parser::new(&mut parser_input);
 
-      T::from_str(&source).map_err(|_| CssInputParseError::NumberType {
+      T::from_css(&mut parser).map_err(|_| CssInputParseError::NumberType {
         number,
         expected: T::EXPECT_MESSAGE
           .build_message(&source, merge_enum_values(T::VALID_TOKENS))

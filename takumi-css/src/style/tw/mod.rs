@@ -668,14 +668,17 @@ fn decode_arbitrary_value(value: &str) -> Cow<'_, str> {
 }
 
 /// A trait for parsing tailwind properties.
-pub trait TailwindPropertyParser: Sized + for<'i> FromCss<'i> {
-  /// Parse a tailwind property from a token.
-  fn parse_tw(token: &str) -> Option<Self>;
+pub(crate) trait TailwindPropertyParser: Sized + for<'i> FromCss<'i> {
+  /// Parse a tailwind property from a token. Defaults to the type's `FromCss`
+  /// parser; override for keywords Tailwind spells differently from CSS.
+  fn parse_tw(token: &str) -> Option<Self> {
+    Self::from_css_str(token).ok()
+  }
 
   /// Parse a tailwind property from a token, with support for arbitrary values.
   fn parse_tw_with_arbitrary(token: &str) -> Option<Self> {
     if let Some(value) = extract_arbitrary_value(token) {
-      return Self::from_str(&value).ok();
+      return Self::from_css_str(&value).ok();
     }
 
     Self::parse_tw(token)

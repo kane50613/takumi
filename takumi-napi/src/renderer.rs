@@ -7,13 +7,12 @@ use arc_swap::ArcSwap;
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
-use parley::fontique::FontInfoOverride;
 use rayon::prelude::*;
 use takumi_core::{
   Fonts,
   layout::{node::Node, style::KeyframesRule as CoreKeyframesRule},
   resources::{
-    font::{FontResource, GenericFamily},
+    font::{FontOverride, FontResource, GenericFamily},
     image::{ImageCache, ImageCacheMode as CoreImageCacheMode, ImageSource as LoadedImageSource},
   },
 };
@@ -374,8 +373,8 @@ fn default_fonts() -> Result<Fonts> {
       .par_iter()
       .map(|(font, name, generic)| {
         FontResource::new(*font)
-          .override_info(FontInfoOverride {
-            family_name: Some(*name),
+          .override_info(FontOverride {
+            family_name: Some((*name).to_string().into()),
             ..Default::default()
           })
           .generic_family(*generic)

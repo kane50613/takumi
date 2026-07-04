@@ -39,6 +39,10 @@ path = "../takumi-core"
 version = "0.1.0-rc.3"
 default-features = false
 
+[dependencies.takumi-css]
+path = "../takumi-css"
+version = "0.2.0-rc.2"
+
 [dependencies.serde]
 workspace = true
 features = ["rc"]

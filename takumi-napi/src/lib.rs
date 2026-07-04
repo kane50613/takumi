@@ -15,11 +15,10 @@ use std::{fmt::Display, ops::Deref};
 
 use napi::{De, Env, Error, bindgen_prelude::*};
 use napi_derive::napi;
-use parley::{FontStyle, FontWeight, fontique::FontInfoOverride};
-use serde::{Deserialize, Deserializer, de::DeserializeOwned};
+use serde::{Deserialize, Deserializer, de::DeserializeOwned, de::Error as DeError};
 use takumi_core::{
-  layout::style::{KeyframesRule, StyleSheet},
-  resources::font::FontResource,
+  layout::style::{FontStyle, FromCssStr, KeyframesRule, StyleSheet},
+  resources::font::{FontOverride, FontResource},
 };
 
 pub use renderer::Renderer;
@@ -85,7 +84,9 @@ impl<'de> Deserialize<'de> for FontStyleInput {
     D: Deserializer<'de>,
   {
     let s = String::deserialize(deserializer)?;
-    Ok(FontStyleInput(FontStyle::parse_css(&s).unwrap_or_default()))
+    Ok(FontStyleInput(
+      FontStyle::from_css_str(&s).map_err(D::Error::custom)?,
+    ))
   }
 }
 
@@ -116,12 +117,11 @@ pub(crate) fn resolve_font_resource<'a>(
   font: &'a FontInput,
   buffer: &'a [u8],
 ) -> Result<FontResource<'a>> {
-  let resource = FontResource::new(buffer).override_info(FontInfoOverride {
-    family_name: font.name.as_deref(),
-    width: None,
+  let resource = FontResource::new(buffer).override_info(FontOverride {
+    family_name: font.name.clone().map(Into::into),
     style: font.style.map(|style| style.0),
-    weight: font.weight.map(|weight| FontWeight::new(weight as f32)),
-    axes: None,
+    weight: font.weight.map(|weight| weight as f32),
+    ..Default::default()
   });
 
   let resource = match &font.subset_of {

@@ -201,21 +201,22 @@ mod tests {
   use crate::style::Color;
 
   use super::*;
+  use crate::style::FromCssStr;
 
   #[test]
   fn test_parse_border_style_solid() {
-    assert_eq!(BorderStyle::from_str("solid"), Ok(BorderStyle::Solid));
+    assert_eq!(BorderStyle::from_css_str("solid"), Ok(BorderStyle::Solid));
   }
 
   #[test]
   fn test_parse_border_style_dashed() {
-    assert_eq!(BorderStyle::from_str("dashed"), Ok(BorderStyle::Dashed));
+    assert_eq!(BorderStyle::from_css_str("dashed"), Ok(BorderStyle::Dashed));
   }
 
   #[test]
   fn test_parse_border_width_only() {
     assert_eq!(
-      Border::from_str("10px"),
+      Border::from_css_str("10px"),
       Ok(Border {
         width: LineWidth::Length(Length::Px(10.0)),
         style: BorderStyle::None,
@@ -227,7 +228,7 @@ mod tests {
   #[test]
   fn test_parse_border_style_only() {
     assert_eq!(
-      Border::from_str("solid"),
+      Border::from_css_str("solid"),
       Ok(Border {
         width: LineWidth::default(),
         style: BorderStyle::Solid,
@@ -239,7 +240,7 @@ mod tests {
   #[test]
   fn test_parse_border_color_only() {
     assert_eq!(
-      Border::from_str("red"),
+      Border::from_css_str("red"),
       Ok(Border {
         width: LineWidth::default(),
         style: BorderStyle::None,
@@ -251,7 +252,7 @@ mod tests {
   #[test]
   fn test_parse_border_width_and_style() {
     assert_eq!(
-      Border::from_str("2px solid"),
+      Border::from_css_str("2px solid"),
       Ok(Border {
         width: LineWidth::Length(Length::Px(2.0)),
         style: BorderStyle::Solid,
@@ -263,7 +264,7 @@ mod tests {
   #[test]
   fn test_parse_border_width_style_color() {
     assert_eq!(
-      Border::from_str("2px solid red"),
+      Border::from_css_str("2px solid red"),
       Ok(Border {
         width: LineWidth::Length(Length::Px(2.0)),
         style: BorderStyle::Solid,
@@ -275,7 +276,7 @@ mod tests {
   #[test]
   fn test_parse_border_style_width_color() {
     assert_eq!(
-      Border::from_str("solid 2px red"),
+      Border::from_css_str("solid 2px red"),
       Ok(Border {
         width: LineWidth::Length(Length::Px(2.0)),
         style: BorderStyle::Solid,
@@ -287,7 +288,7 @@ mod tests {
   #[test]
   fn test_parse_border_color_style_width() {
     assert_eq!(
-      Border::from_str("red solid 2px"),
+      Border::from_css_str("red solid 2px"),
       Ok(Border {
         width: LineWidth::Length(Length::Px(2.0)),
         style: BorderStyle::Solid,
@@ -299,7 +300,7 @@ mod tests {
   #[test]
   fn test_parse_border_rem_units() {
     assert_eq!(
-      Border::from_str("1.5rem solid blue"),
+      Border::from_css_str("1.5rem solid blue"),
       Ok(Border {
         width: LineWidth::Length(Length::Rem(1.5)),
         style: BorderStyle::Solid,
@@ -311,7 +312,7 @@ mod tests {
   #[test]
   fn test_parse_border_hex_color() {
     assert_eq!(
-      Border::from_str("3px solid #ff0000"),
+      Border::from_css_str("3px solid #ff0000"),
       Ok(Border {
         width: LineWidth::Length(Length::Px(3.0)),
         style: BorderStyle::Solid,
@@ -323,7 +324,7 @@ mod tests {
   #[test]
   fn test_parse_border_rgb_color() {
     assert_eq!(
-      Border::from_str("4px solid rgb(0, 255, 0)"),
+      Border::from_css_str("4px solid rgb(0, 255, 0)"),
       Ok(Border {
         width: LineWidth::Length(Length::Px(4.0)),
         style: BorderStyle::Solid,
@@ -335,7 +336,7 @@ mod tests {
   #[test]
   fn test_parse_border_dashed() {
     assert_eq!(
-      Border::from_str("2px dashed red"),
+      Border::from_css_str("2px dashed red"),
       Ok(Border {
         width: LineWidth::Length(Length::Px(2.0)),
         style: BorderStyle::Dashed,
@@ -346,18 +347,18 @@ mod tests {
 
   #[test]
   fn test_parse_border_invalid_color() {
-    assert!(Border::from_str("2px solid invalid-color").is_err());
+    assert!(Border::from_css_str("2px solid invalid-color").is_err());
   }
 
   #[test]
   fn test_parse_border_empty() {
-    assert_eq!(Border::from_str(""), Ok(Border::default()));
+    assert_eq!(Border::from_css_str(""), Ok(Border::default()));
   }
 
   #[test]
   fn test_border_value_from_css() {
     assert_eq!(
-      Border::from_str("3px solid blue"),
+      Border::from_css_str("3px solid blue"),
       Ok(Border {
         width: LineWidth::Length(Length::Px(3.0)),
         style: BorderStyle::Solid,
@@ -368,7 +369,7 @@ mod tests {
 
   #[test]
   fn test_border_value_from_invalid_css() {
-    assert!(Border::from_str("invalid border").is_err());
+    assert!(Border::from_css_str("invalid border").is_err());
   }
 
   #[test]
@@ -385,19 +386,19 @@ mod tests {
   #[test]
   fn test_line_width_keywords() {
     assert_eq!(
-      LineWidth::from_str("thin"),
+      LineWidth::from_css_str("thin"),
       Ok(LineWidth::Keyword(LineWidthKeyword::Thin))
     );
     assert_eq!(
-      LineWidth::from_str("medium"),
+      LineWidth::from_css_str("medium"),
       Ok(LineWidth::Keyword(LineWidthKeyword::Medium))
     );
     assert_eq!(
-      LineWidth::from_str("thick"),
+      LineWidth::from_css_str("thick"),
       Ok(LineWidth::Keyword(LineWidthKeyword::Thick))
     );
     assert_eq!(
-      LineWidth::from_str("2px"),
+      LineWidth::from_css_str("2px"),
       Ok(LineWidth::Length(Length::Px(2.0)))
     );
   }
@@ -405,7 +406,7 @@ mod tests {
   #[test]
   fn test_border_keyword_width() {
     assert_eq!(
-      Border::from_str("thick solid"),
+      Border::from_css_str("thick solid"),
       Ok(Border {
         width: LineWidth::Keyword(LineWidthKeyword::Thick),
         style: BorderStyle::Solid,

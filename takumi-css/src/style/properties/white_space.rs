@@ -129,9 +129,13 @@ impl<'i> FromCss<'i> for WhiteSpace {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::style::FromCssStr;
 
   #[test]
   fn test_parse_white_space_no_wrap() {
-    assert_eq!(WhiteSpace::from_str("nowrap"), Ok(WhiteSpace::no_wrap()));
+    assert_eq!(
+      WhiteSpace::from_css_str("nowrap"),
+      Ok(WhiteSpace::no_wrap())
+    );
   }
 }

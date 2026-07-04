@@ -762,7 +762,7 @@ fn test_needs_offscreen_compositing_for_clip_path_and_mask_image() {
   let mut style = ComputedStyle::default();
   assert!(!style.needs_offscreen_compositing());
 
-  style.clip_path = BasicShape::from_str("inset(10px)").ok();
+  style.clip_path = BasicShape::from_css_str("inset(10px)").ok();
   assert!(style.needs_offscreen_compositing());
 
   style.clip_path = None;
@@ -865,7 +865,7 @@ fn test_offset_path_moves_element_onto_path_and_creates_stacking_context() {
     height: 40.0,
   };
 
-  style.offset_path = OffsetPath::from_str("path('M 0 0 L 100 0')").ok();
+  style.offset_path = OffsetPath::from_css_str("path('M 0 0 L 100 0')").ok();
   style.offset_distance = Length::Percentage(50.0);
 
   assert!(style.creates_stacking_context(border_box, &sizing, false));

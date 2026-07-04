@@ -566,7 +566,7 @@ impl From<FillRule> for Fill {
   fn from(value: FillRule) -> Self {
     match value {
       FillRule::EvenOdd => Fill::EvenOdd,
-      FillRule::NonZero => Fill::NonZero,
+      _ => Fill::NonZero,
     }
   }
 }
@@ -680,6 +680,7 @@ pub(crate) fn render_clip_shape_mask(
       let scale = context.sizing.to_device(1.0);
       paths.extend(scale_commands(shape.path.as_ref().commands(), scale));
     }
+    _ => {}
   }
 
   render_mask(

@@ -2,7 +2,7 @@ use cssparser::Parser;
 
 use super::background_image::parse_comma_list;
 use crate::style::{
-  Animatable, CssToken, FromCss, ListInterpolationStrategy, ParseResult,
+  Animatable, CssToken, FromCss, FromCssStr, ListInterpolationStrategy, ParseResult,
   declare_enum_from_css_impl, tw::TailwindPropertyParser,
 };
 
@@ -19,6 +19,7 @@ impl<'i> FromCss<'i> for BlendModes {
 
 /// Defines the blending mode for an element.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
 pub enum BlendMode {
   /// The final color is the top color, regardless of what the bottom color is.
   #[default]
@@ -83,7 +84,7 @@ declare_enum_from_css_impl!(
 
 impl TailwindPropertyParser for BlendMode {
   fn parse_tw(token: &str) -> Option<Self> {
-    Self::from_str(token).ok()
+    Self::from_css_str(token).ok()
   }
 }
 

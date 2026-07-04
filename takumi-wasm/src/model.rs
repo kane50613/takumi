@@ -1,12 +1,14 @@
 //! Data models and types for the WebAssembly bindings.
 
-use parley::FontStyle as ParleyFontStyle;
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, de::Error as DeError};
 use serde_bytes::ByteBuf;
 use std::sync::Arc;
 use takumi_core::{
   keyframes::deserialize_optional_keyframes,
-  layout::{node::Node, style::KeyframesRule},
+  layout::{
+    node::Node,
+    style::{FontStyle as CssFontStyle, FromCssStr, KeyframesRule},
+  },
   resources::image::ImageCacheMode,
 };
 use takumi_raster::DitheringAlgorithm;
@@ -226,7 +228,7 @@ pub enum AnimationOutputFormat {
 
 /// Font style input parsed from CSS-like font-style strings.
 #[derive(Clone, Copy)]
-pub struct FontStyle(pub ParleyFontStyle);
+pub struct FontStyle(pub CssFontStyle);
 
 impl<'de> Deserialize<'de> for FontStyle {
   fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -234,11 +236,13 @@ impl<'de> Deserialize<'de> for FontStyle {
     D: Deserializer<'de>,
   {
     let value = String::deserialize(deserializer)?;
-    Ok(Self(ParleyFontStyle::parse_css(&value).unwrap_or_default()))
+    Ok(Self(
+      CssFontStyle::from_css_str(&value).map_err(D::Error::custom)?,
+    ))
   }
 }
 
-impl From<FontStyle> for ParleyFontStyle {
+impl From<FontStyle> for CssFontStyle {
   fn from(style: FontStyle) -> Self {
     style.0
   }

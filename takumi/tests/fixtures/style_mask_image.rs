@@ -3,7 +3,7 @@ use takumi::prelude::{Length::*, *};
 use crate::test_utils::run_fixture_test;
 
 fn centered_layer_position() -> PositionValues {
-  PositionValues::from_str("center center").unwrap()
+  PositionValues::from_css_str("center center").unwrap()
 }
 
 fn create_container_with_mask(mask_image: BackgroundImages, background_color: Color) -> Node {
@@ -23,7 +23,7 @@ fn create_container_with_mask(mask_image: BackgroundImages, background_color: Co
 #[test]
 fn test_style_mask_image_linear_gradient() {
   let mask_image =
-    BackgroundImages::from_str("linear-gradient(to right, black, transparent)").unwrap();
+    BackgroundImages::from_css_str("linear-gradient(to right, black, transparent)").unwrap();
 
   let container = create_container_with_mask(mask_image, Color([255, 0, 0, 255]));
 
@@ -33,7 +33,7 @@ fn test_style_mask_image_linear_gradient() {
 #[test]
 fn test_style_mask_image_radial_gradient() {
   let mask_image =
-    BackgroundImages::from_str("radial-gradient(circle, black, transparent)").unwrap();
+    BackgroundImages::from_css_str("radial-gradient(circle, black, transparent)").unwrap();
 
   let container = create_container_with_mask(mask_image, Color([0, 128, 255, 255]));
 
@@ -42,7 +42,7 @@ fn test_style_mask_image_radial_gradient() {
 
 #[test]
 fn test_style_mask_image_radial_gradient_ellipse() {
-  let mask_image = BackgroundImages::from_str(
+  let mask_image = BackgroundImages::from_css_str(
     "radial-gradient(ellipse at center, black 0%, black 50%, transparent 100%)",
   )
   .unwrap();
@@ -54,7 +54,7 @@ fn test_style_mask_image_radial_gradient_ellipse() {
 
 #[test]
 fn test_style_mask_image_multiple_gradients() {
-  let mask_image = BackgroundImages::from_str(
+  let mask_image = BackgroundImages::from_css_str(
     "linear-gradient(to right, black, transparent), radial-gradient(circle at 25% 25%, black, transparent 50%)",
   )
   .unwrap();
@@ -67,7 +67,7 @@ fn test_style_mask_image_multiple_gradients() {
 #[test]
 fn test_style_mask_image_diagonal_gradient() {
   let mask_image =
-    BackgroundImages::from_str("linear-gradient(45deg, black 0%, black 50%, transparent 100%)")
+    BackgroundImages::from_css_str("linear-gradient(45deg, black 0%, black 50%, transparent 100%)")
       .unwrap();
 
   let container = create_container_with_mask(mask_image, Color([138, 43, 226, 255]));
@@ -78,10 +78,10 @@ fn test_style_mask_image_diagonal_gradient() {
 #[test]
 fn test_style_mask_image_with_background_image() {
   let mask_image =
-    BackgroundImages::from_str("radial-gradient(circle at center, black 40%, transparent 70%)")
+    BackgroundImages::from_css_str("radial-gradient(circle at center, black 40%, transparent 70%)")
       .unwrap();
   let background_image =
-    BackgroundImages::from_str("linear-gradient(135deg, #667eea 0%, #764ba2 100%)").unwrap();
+    BackgroundImages::from_css_str("linear-gradient(135deg, #667eea 0%, #764ba2 100%)").unwrap();
 
   let container = Node::container([]).with_style(
     Style::default()
@@ -101,7 +101,7 @@ fn test_style_mask_image_with_background_image() {
 
 #[test]
 fn test_style_mask_image_url() {
-  let mask_image = BackgroundImages::from_str("url(assets/images/luma.svg)").unwrap();
+  let mask_image = BackgroundImages::from_css_str("url(assets/images/luma.svg)").unwrap();
 
   let container = create_container_with_mask(mask_image, Color([255, 0, 0, 255]));
 
@@ -111,7 +111,7 @@ fn test_style_mask_image_url() {
 #[test]
 fn test_style_mask_image_on_image_node() {
   let mask_image =
-    BackgroundImages::from_str("radial-gradient(circle, black 60%, transparent 100%)").unwrap();
+    BackgroundImages::from_css_str("radial-gradient(circle, black 60%, transparent 100%)").unwrap();
 
   let container = Node::container([Node::container(vec![
     Node::image("assets/images/yeecord.png").with_style(
@@ -145,7 +145,7 @@ fn test_style_mask_image_on_image_node() {
 
 #[test]
 fn test_style_mask_image_stripes_pattern() {
-  let mask_image = BackgroundImages::from_str(
+  let mask_image = BackgroundImages::from_css_str(
     "linear-gradient(90deg, black 0%, black 25%, transparent 25%, transparent 50%, black 50%, black 75%, transparent 75%, transparent 100%)",
   )
   .unwrap();
@@ -157,7 +157,7 @@ fn test_style_mask_image_stripes_pattern() {
 
 #[test]
 fn test_style_mask_image_corner_fade() {
-  let mask_image = BackgroundImages::from_str(
+  let mask_image = BackgroundImages::from_css_str(
     "radial-gradient(ellipse at top left, transparent 0%, black 50%), radial-gradient(ellipse at bottom right, transparent 0%, black 50%)",
   )
   .unwrap();

@@ -80,12 +80,13 @@ impl ToCss for parley::FontFeature {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::style::FromCssStr;
 
   #[test]
   fn empty_settings_serialize_as_normal() {
     assert_eq!(FontFeatureSettings::default().to_css_string(), "normal");
     assert_eq!(
-      FontFeatureSettings::from_str("normal")
+      FontFeatureSettings::from_css_str("normal")
         .unwrap()
         .to_css_string(),
       "normal"
