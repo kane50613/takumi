@@ -13,7 +13,6 @@ use crate::{
   context::RenderContext,
   font_style::SizedFontStyle,
   layout::{
-    Viewport,
     inline::{
       InlineContentKind, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
       collect_inline_items, create_inline_constraint, create_inline_layout, measure_inline_layout,
@@ -27,6 +26,7 @@ use crate::{
     Position, SizingContext, Style as NodeStyle, StyleDeclaration, StyleSheet, TextWrapMode,
     apply_stylesheet_animations,
   },
+  viewport::Viewport,
 };
 use parley::fontique::Attributes;
 
@@ -1933,11 +1933,11 @@ mod tests {
 
   use super::{registered_custom_property_parent_style, sort_children_by_order};
   use crate::{
-    layout::Viewport,
     style::{
       ComputedStyle, Length, PropertyRule, Style, StyleDeclaration, StyleDeclarationBlock,
       StyleSheet,
     },
+    viewport::Viewport,
   };
 
   fn parse_stylesheet(css: &str) -> StyleSheet {

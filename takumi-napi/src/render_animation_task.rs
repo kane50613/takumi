@@ -1,7 +1,10 @@
 use std::{borrow::Cow, collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
-use takumi_core::layout::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport, node::Node};
+use takumi_core::{
+  layout::node::Node,
+  viewport::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
+};
 use takumi_raster::{
   AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, RenderOptions, SequentialScene,
   render_animation, write_animated_gif, write_animated_png, write_animated_webp,

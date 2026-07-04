@@ -876,11 +876,11 @@ pub(crate) fn collect_background_layers(
 mod tests {
   use super::{resolve_position_component_x, resolve_position_component_y};
   use crate::{
-    layout::Viewport,
     style::{
       Length, PositionComponent, PositionKeywordX, PositionKeywordY, PositionValue, SizingContext,
       SpacePair,
     },
+    viewport::Viewport,
   };
 
   fn test_sizing() -> SizingContext {

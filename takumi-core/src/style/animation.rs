@@ -7,12 +7,12 @@ use typed_builder::TypedBuilder;
 use serde::Deserialize;
 
 use crate::{
-  Viewport,
   style::{
     StyleDeclarationBlock,
     selector::{MediaQueryList, StyleSheet},
     *,
   },
+  viewport::Viewport,
 };
 
 #[derive(Debug, Clone, Deserialize, PartialEq, TypedBuilder)]
@@ -640,12 +640,12 @@ mod tests {
   use taffy::Size;
 
   use crate::{
-    Viewport,
     style::{
       SizingContext,
       animation::{sample_animation_progress, tailwind_animation_keyframes},
       *,
     },
+    viewport::Viewport,
   };
 
   fn sizing() -> SizingContext {

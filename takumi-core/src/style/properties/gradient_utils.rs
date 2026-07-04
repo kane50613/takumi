@@ -761,8 +761,8 @@ pub fn resolve_stops_along_axis(
 #[cfg(test)]
 mod tests {
   use crate::{
-    Viewport,
     style::{Color, Length, StopPosition},
+    viewport::Viewport,
   };
 
   use super::*;

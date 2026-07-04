@@ -585,11 +585,7 @@ fn offset(transform: [f32; 6], origin_x: f32, origin_y: f32) -> Affine {
 mod tests {
   use std::path::Path;
 
-  use takumi_core::{
-    Fonts,
-    layout::{Viewport, node::Node},
-    resources::font::FontResource,
-  };
+  use takumi_core::{Fonts, layout::node::Node, resources::font::FontResource, viewport::Viewport};
 
   use crate::render::{SvgOptions, render};
 

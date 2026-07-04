@@ -16,11 +16,11 @@ use selectors::{
 use smallvec::SmallVec;
 
 use crate::{
-  Viewport,
   style::{
     StyleDeclarationBlock,
     selector::{CssRule, Ident, PseudoElement, SelectorImpl, StyleSheet},
   },
+  viewport::Viewport,
 };
 
 /// A node the cascade can match selectors against.

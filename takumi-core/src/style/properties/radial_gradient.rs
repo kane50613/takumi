@@ -526,11 +526,11 @@ mod tests {
 
   use super::*;
   use crate::{
-    Viewport,
     style::{
       Color, FromCssStr, Length, PositionComponent, PositionKeywordX, PositionKeywordY,
       PositionValue, SpacePair, StopPosition, properties::gradient_utils::red_blue_stops,
     },
+    viewport::Viewport,
   };
   #[test]
   fn test_parse_radial_gradient_basic() {

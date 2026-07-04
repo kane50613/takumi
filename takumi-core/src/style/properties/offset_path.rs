@@ -762,11 +762,11 @@ pub(crate) fn sample_offset_path(
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::style::FromCssStr;
+  use crate::{style::FromCssStr, viewport::Viewport};
 
   fn test_sizing() -> SizingContext {
     SizingContext::builder()
-      .viewport(crate::Viewport::new((200, 200)))
+      .viewport(Viewport::new((200, 200)))
       .build()
   }
 
@@ -849,7 +849,7 @@ mod tests {
       height: 400.0,
     };
     let sizing = SizingContext::builder()
-      .viewport(crate::Viewport::new((400, 400)).with_device_pixel_ratio(2.0))
+      .viewport(Viewport::new((400, 400)).with_device_pixel_ratio(2.0))
       .build();
 
     let (point, _) = sample_offset_path(

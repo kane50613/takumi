@@ -10,8 +10,8 @@ use super::{
   stylesheets_vars::resolve_var_references,
 };
 use crate::{
-  Viewport,
   style::{CalcArena, ComputedStyle, SizingContext, Style, StyleDeclaration, properties::*},
+  viewport::Viewport,
 };
 
 fn style_with(declarations: impl IntoIterator<Item = StyleDeclaration>) -> Style {

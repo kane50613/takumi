@@ -10,9 +10,10 @@ use taffy::{AvailableSpace, Size};
 use crate::{
   Xxh3HashSet,
   context::RenderContext,
-  layout::{Viewport, inline::InlineContentKind, node::image::image_resource_url},
+  layout::{inline::InlineContentKind, node::image::image_resource_url},
   resources::image::{ImageResult, ImageSource},
   style::{Direction, Style, StyleDeclaration, ToCss, tw::TailwindValues},
+  viewport::Viewport,
 };
 use ::image::RgbaImage;
 use parley::Language;
@@ -744,8 +745,9 @@ mod matching_tests {
   use crate::matching::{MatchedDeclarationsView, match_stylesheets_view};
 
   use crate::{
-    layout::{Viewport, node::Node},
+    layout::node::Node,
     style::{ComputedStyle, Length, Style, StyleSheet},
+    viewport::Viewport,
   };
 
   fn container_with_class(class_name: &str) -> Node {

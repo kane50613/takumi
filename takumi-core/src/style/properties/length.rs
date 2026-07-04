@@ -518,7 +518,7 @@ mod tests {
   use taffy::Size;
 
   use super::*;
-  use crate::{Viewport, style::calc::CalcArena};
+  use crate::{style::calc::CalcArena, viewport::Viewport};
 
   fn sizing() -> SizingContext {
     SizingContext {

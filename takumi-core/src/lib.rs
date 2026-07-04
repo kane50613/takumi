@@ -31,7 +31,8 @@ pub mod resources;
 pub mod scene;
 /// CSS value types, parsing, and the cascade.
 pub mod style;
-mod viewport;
+/// Viewport dimensions and device-pixel-ratio resolution.
+pub mod viewport;
 
 /// Backend painting helpers (gradient LUTs, tile positioning, transfer tables)
 /// shared with the raster and SVG renderers. Deliberately kept out of `style`
@@ -60,7 +61,6 @@ pub mod paint {
 use std::collections::HashSet;
 
 pub use error::{Error, Result};
-pub(crate) use viewport::*;
 
 use xxhash_rust::xxh3::Xxh3DefaultBuilder;
 

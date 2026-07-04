@@ -2347,9 +2347,10 @@ mod tests {
   use crate::{
     Fonts,
     context::RenderContext,
-    layout::{Viewport, node::Node, tree::RenderNode},
+    layout::{node::Node, tree::RenderNode},
     resources::font::{FontOverride, FontResource, GenericFamily},
     style::{Color, ColorInput, Display, SizingContext, Style, StyleDeclaration, WhiteSpace},
+    viewport::Viewport,
   };
 
   fn create_test_context() -> Fonts {

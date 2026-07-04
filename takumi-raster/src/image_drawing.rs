@@ -329,8 +329,8 @@ pub(crate) fn draw_image(
 mod tests {
   use super::resolve_object_position_axis;
   use crate::{
-    layout::Viewport,
     style::{Length, PositionComponent, PositionKeywordX, SizingContext},
+    viewport::Viewport,
   };
 
   fn sizing() -> SizingContext {

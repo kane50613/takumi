@@ -628,7 +628,7 @@ mod tests {
   use tiny_skia::PixmapMut;
 
   use super::*;
-  use crate::layout::Viewport;
+  use crate::viewport::Viewport;
 
   #[test]
   fn test_apply_filters_lut_batching() -> Result<()> {

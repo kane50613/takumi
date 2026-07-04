@@ -1668,14 +1668,13 @@ mod tests {
   use tiny_skia::PixmapMut;
 
   use crate::{
-    Fonts, RenderContext, blend_pixel,
-    layout::Viewport,
-    pixmap_from_buffer,
+    Fonts, RenderContext, blend_pixel, pixmap_from_buffer,
     resources::image_buffer::ImageBuffer,
     style::{
       Angle, BlendMode, Color, ColorInterpolationMethod, ConicGradient, FromCssStr, GradientStop,
       Length, LinearGradient, PositionValue, RadialGradient, SizingContext, StopPosition,
     },
+    viewport::Viewport,
   };
   use takumi_core::paint::{ConicGradientTile, LinearGradientTile, RadialGradientTile};
 

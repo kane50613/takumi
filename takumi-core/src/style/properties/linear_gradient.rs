@@ -828,8 +828,8 @@ mod tests {
   use tiny_skia::ColorU8;
 
   use crate::{
-    Viewport,
     style::{CalcArena, properties::gradient_utils::red_blue_stops},
+    viewport::Viewport,
   };
 
   use super::*;

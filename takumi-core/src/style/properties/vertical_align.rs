@@ -233,7 +233,7 @@ mod tests {
 
   use taffy::Size;
 
-  use crate::Viewport;
+  use crate::viewport::Viewport;
 
   use super::*;
 

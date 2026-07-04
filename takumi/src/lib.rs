@@ -68,15 +68,13 @@
 pub mod prelude {
   pub use takumi_core::{
     Error, Fonts, Result,
-    layout::{
-      Viewport,
-      node::{ImageData, ImageSourceInput, Node, NodeKind, TextData},
-    },
+    layout::node::{ImageData, ImageSourceInput, Node, NodeKind, TextData},
     resources::{
       font::{FontError, FontOverride, FontResource, GenericFamily, RegisteredFamily},
       image::{ImageCacheMode, ImageSource},
     },
     style::*,
+    viewport::Viewport,
   };
 
   #[cfg(feature = "raster-backend")]

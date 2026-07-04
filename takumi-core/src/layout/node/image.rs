@@ -206,11 +206,9 @@ mod tests {
   use crate::{
     Fonts,
     context::RenderContext,
-    layout::{
-      Viewport,
-      node::{ImageData, ImageSourceInput},
-    },
+    layout::node::{ImageData, ImageSourceInput},
     resources::image::ImageSource,
+    viewport::Viewport,
   };
 
   #[test]

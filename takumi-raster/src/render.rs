@@ -9,7 +9,6 @@ use crate::{
   AnimationFrame, Bitmap, Canvas, DitheringAlgorithm, Error, Fonts, RenderContext, Result,
   SizedFontStyle, apply_dithering,
   layout::{
-    Viewport,
     inline::{
       InlineBrush, InlineLayoutMode, InlineLayoutRequest, ProcessedInlineSpan,
       collect_inline_items, create_inline_constraint, create_inline_layout,
@@ -23,6 +22,7 @@ use crate::{
   scale_text_fit_x,
   stacking_context::paint_context,
   style::{Affine, ComputedStyle, FontFamily, SizingContext, StyleSheet},
+  viewport::Viewport,
 };
 use takumi_core::scene::build_stacking_contexts;
 
@@ -700,12 +700,13 @@ mod tests {
   };
   use crate::{
     Fonts,
-    layout::{Viewport, node::Node},
+    layout::node::Node,
     measure,
     style::{
       AnimationFillMode, AnimationTime, AnimationTimingFunction, Color, ColorInput, Display,
       KeyframeRule, KeyframesRule, Length, Length::Px, Position, Style, StyleDeclaration,
     },
+    viewport::Viewport,
   };
 
   fn make_scene<'g>(fonts: &'g Fonts, duration_ms: u32) -> SequentialScene<'g> {

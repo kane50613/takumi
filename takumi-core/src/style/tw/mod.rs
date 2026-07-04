@@ -13,7 +13,6 @@ use cssparser::match_ignore_ascii_case;
 use serde::{Deserialize, Deserializer, de::Error as DeError};
 
 use crate::{
-  Viewport,
   style::{
     tw::{
       map::{FIXED_PROPERTIES, PREFIX_PARSERS},
@@ -21,6 +20,7 @@ use crate::{
     },
     *,
   },
+  viewport::Viewport,
 };
 
 /// Tailwind v4 `--spacing` (rem per unit). Prefer [`Length::from_spacing`].

@@ -691,7 +691,7 @@ fn draw_render_node_inline(
 mod tests {
   use std::error::Error;
 
-  use crate::{Fonts, RenderOptions, layout::Viewport, layout::node::Node, render};
+  use crate::{Fonts, RenderOptions, layout::node::Node, render, viewport::Viewport};
 
   type TestResult = Result<(), Box<dyn Error>>;
 

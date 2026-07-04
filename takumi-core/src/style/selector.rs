@@ -1163,8 +1163,8 @@ mod tests {
   use cssparser::ToCss;
 
   use crate::{
-    Viewport,
     style::{Color, ColorInput, ComputedStyle, Length, Style, StyleDeclaration},
+    viewport::Viewport,
   };
 
   fn computed_style_from_declarations(declarations: &StyleDeclarationBlock) -> ComputedStyle {
