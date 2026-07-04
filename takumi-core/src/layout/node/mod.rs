@@ -429,7 +429,7 @@ impl Node {
     if let Some(dir) = &self.metadata.dir {
       let dir_str = match dir {
         Direction::Rtl => "rtl",
-        _ => "ltr",
+        Direction::Ltr => "ltr",
       };
       attrs.push(format!("dir=\"{}\"", dir_str));
     }

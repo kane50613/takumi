@@ -401,45 +401,55 @@ impl ToCss for Filter {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::style::FromCssStr;
   use crate::style::{Color, ColorInput, Length::Px};
 
   #[test]
   fn test_parse_blur_filter() {
-    assert_eq!(Filter::from_str("blur(5px)"), Ok(Filter::Blur(Px(5.0))));
+    assert_eq!(Filter::from_css_str("blur(5px)"), Ok(Filter::Blur(Px(5.0))));
   }
 
   #[test]
   fn test_parse_none_clears_filters() {
-    assert_eq!(Filters::from_str("none").unwrap(), Filters::default());
+    assert_eq!(Filters::from_css_str("none").unwrap(), Filters::default());
   }
 
   #[test]
   fn filters_serialize_space_separated() {
-    let filters = Filters::from_str("blur(3px) grayscale(0.5)").unwrap();
+    let filters = Filters::from_css_str("blur(3px) grayscale(0.5)").unwrap();
     assert_eq!(filters.to_css_string(), "blur(3px) grayscale(0.5)");
   }
 
   #[test]
   fn empty_filters_serialize_as_none() {
     assert_eq!(Filters::default().to_css_string(), "none");
-    assert_eq!(Filters::from_str("none").unwrap().to_css_string(), "none");
+    assert_eq!(
+      Filters::from_css_str("none").unwrap().to_css_string(),
+      "none"
+    );
   }
 
   #[test]
   fn test_parse_blur_rejects_invalid_argument() {
-    assert_eq!(Filter::from_str("blur()"), Ok(Filter::Blur(Length::zero())));
-    assert!(Filter::from_str("blur(red)").is_err());
+    assert_eq!(
+      Filter::from_css_str("blur()"),
+      Ok(Filter::Blur(Length::zero()))
+    );
+    assert!(Filter::from_css_str("blur(red)").is_err());
   }
 
   #[test]
   fn test_parse_blur_filter_zero() {
-    assert_eq!(Filter::from_str("blur()"), Ok(Filter::Blur(Length::zero())));
+    assert_eq!(
+      Filter::from_css_str("blur()"),
+      Ok(Filter::Blur(Length::zero()))
+    );
   }
 
   #[test]
   fn test_parse_drop_shadow_filter() {
     assert_eq!(
-      Filter::from_str("drop-shadow(2px 4px 6px red)"),
+      Filter::from_css_str("drop-shadow(2px 4px 6px red)"),
       Ok(Filter::DropShadow(TextShadow {
         offset_x: Px(2.0),
         offset_y: Px(4.0),
@@ -452,7 +462,7 @@ mod tests {
   #[test]
   fn test_parse_drop_shadow_color_first() {
     assert_eq!(
-      Filter::from_str("drop-shadow(red 2px 4px)"),
+      Filter::from_css_str("drop-shadow(red 2px 4px)"),
       Ok(Filter::DropShadow(TextShadow {
         offset_x: Px(2.0),
         offset_y: Px(4.0),
@@ -465,7 +475,7 @@ mod tests {
   #[test]
   fn test_parse_drop_shadow_no_blur() {
     assert_eq!(
-      Filter::from_str("drop-shadow(2px 4px)"),
+      Filter::from_css_str("drop-shadow(2px 4px)"),
       Ok(Filter::DropShadow(TextShadow {
         offset_x: Px(2.0),
         offset_y: Px(4.0),

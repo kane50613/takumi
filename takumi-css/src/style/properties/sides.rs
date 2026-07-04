@@ -130,12 +130,13 @@ impl<T: Copy + ToCss> ToCss for Sides<T> {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::style::FromCssStr;
   use crate::style::Length;
 
   #[test]
   fn deserialize_single_number() {
     assert_eq!(
-      Sides::<Length>::from_str("5"),
+      Sides::<Length>::from_css_str("5"),
       Ok(Sides([Length::Px(5.0); 4]))
     );
   }
@@ -143,7 +144,7 @@ mod tests {
   #[test]
   fn deserialize_axis_pair_numbers() {
     assert_eq!(
-      Sides::<Length>::from_str("10 20"),
+      Sides::<Length>::from_css_str("10 20"),
       Ok(Sides([
         Length::Px(10.0),
         Length::Px(20.0),
@@ -156,7 +157,7 @@ mod tests {
   #[test]
   fn deserialize_css_single_value() {
     assert_eq!(
-      Sides::<Length>::from_str("10px"),
+      Sides::<Length>::from_css_str("10px"),
       Ok(Sides([Length::Px(10.0); 4]))
     );
   }
@@ -164,7 +165,7 @@ mod tests {
   #[test]
   fn deserialize_css_multi_values() {
     assert_eq!(
-      Sides::<Length>::from_str("1px 2px 3px 4px"),
+      Sides::<Length>::from_css_str("1px 2px 3px 4px"),
       Ok(Sides([
         Length::Px(1.0),
         Length::Px(2.0),

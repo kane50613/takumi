@@ -5,8 +5,8 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 use parley::FontWidth;
 
 use crate::style::{
-  Animatable, Color, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, SizingContext,
-  lerp, tw::TailwindPropertyParser,
+  Animatable, Color, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
+  SizingContext, lerp, tw::TailwindPropertyParser,
 };
 
 /// Controls the width/stretch of text rendering.
@@ -67,7 +67,7 @@ impl<'i> FromCss<'i> for FontStretch {
 
 impl TailwindPropertyParser for FontStretch {
   fn parse_tw(token: &str) -> Option<Self> {
-    Self::from_str(token).ok()
+    Self::from_css_str(token).ok()
   }
 }
 
@@ -109,20 +109,19 @@ impl ToCss for FontStretch {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::style::FromCss;
 
   #[test]
   fn test_parse_font_stretch_keywords() {
     assert_eq!(
-      FontStretch::from_str("condensed"),
+      FontStretch::from_css_str("condensed"),
       Ok(FontStretch(FontWidth::CONDENSED))
     );
     assert_eq!(
-      FontStretch::from_str("expanded"),
+      FontStretch::from_css_str("expanded"),
       Ok(FontStretch(FontWidth::EXPANDED))
     );
     assert_eq!(
-      FontStretch::from_str("normal"),
+      FontStretch::from_css_str("normal"),
       Ok(FontStretch(FontWidth::NORMAL))
     );
   }
@@ -130,7 +129,7 @@ mod tests {
   #[test]
   fn test_parse_font_stretch_percentage() {
     assert_eq!(
-      FontStretch::from_str("75%"),
+      FontStretch::from_css_str("75%"),
       Ok(FontStretch(FontWidth::CONDENSED))
     );
   }

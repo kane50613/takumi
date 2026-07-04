@@ -1,6 +1,6 @@
 //! Data models and types for the WebAssembly bindings.
 
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, de::Error as DeError};
 use serde_bytes::ByteBuf;
 use std::sync::Arc;
 use takumi_core::{
@@ -236,7 +236,9 @@ impl<'de> Deserialize<'de> for FontStyle {
     D: Deserializer<'de>,
   {
     let value = String::deserialize(deserializer)?;
-    Ok(Self(CssFontStyle::from_css_str(&value).unwrap_or_default()))
+    Ok(Self(
+      CssFontStyle::from_css_str(&value).map_err(D::Error::custom)?,
+    ))
   }
 }
 

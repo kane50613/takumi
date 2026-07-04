@@ -128,12 +128,12 @@ impl ToCss for LineHeight {
 
 #[cfg(test)]
 mod tests {
-  use crate::style::{FromCss, Length, LineHeight, tw::TailwindPropertyParser};
+  use crate::style::{FromCssStr, Length, LineHeight, tw::TailwindPropertyParser};
 
   #[test]
   fn parses_unitless_calc_expression() {
     assert_eq!(
-      LineHeight::from_str("calc(1.75 / 1.125)"),
+      LineHeight::from_css_str("calc(1.75 / 1.125)"),
       Ok(LineHeight::Unitless(1.75 / 1.125))
     );
   }
@@ -141,7 +141,7 @@ mod tests {
   #[test]
   fn parses_percentage_as_font_size_relative() {
     assert_eq!(
-      LineHeight::from_str("90%"),
+      LineHeight::from_css_str("90%"),
       Ok(LineHeight::Length(Length::Percentage(90.0)))
     );
   }

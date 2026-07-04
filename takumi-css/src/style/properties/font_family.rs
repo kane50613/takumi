@@ -184,12 +184,12 @@ mod tests {
   use parley::GenericFamily;
 
   use super::{FontFamily, FontFamilyToken};
-  use crate::style::{FromCss, tw::TailwindPropertyParser};
+  use crate::style::{FromCssStr, tw::TailwindPropertyParser};
 
   #[test]
   fn parses_single_generic_family() {
     assert_eq!(
-      FontFamily::from_str("serif"),
+      FontFamily::from_css_str("serif"),
       Ok(FontFamily(Box::new([FontFamilyToken::Generic(
         GenericFamily::Serif,
       )])))
@@ -199,7 +199,7 @@ mod tests {
   #[test]
   fn parses_fallback_family_list() {
     assert_eq!(
-      FontFamily::from_str("\"Inter\", Arial, serif"),
+      FontFamily::from_css_str("\"Inter\", Arial, serif"),
       Ok(FontFamily(Box::new([
         FontFamilyToken::Owned(String::from("Inter")),
         FontFamilyToken::Owned(String::from("Arial")),
@@ -211,7 +211,7 @@ mod tests {
   #[test]
   fn parses_unquoted_multi_word_family_name() {
     assert_eq!(
-      FontFamily::from_str("Noto Sans TC"),
+      FontFamily::from_css_str("Noto Sans TC"),
       Ok(FontFamily(Box::new([FontFamilyToken::Owned(
         "Noto Sans TC".to_string()
       )])))

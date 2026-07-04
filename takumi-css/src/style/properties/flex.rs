@@ -2,8 +2,8 @@ use crate::style::unexpected_token;
 use cssparser::{Parser, match_ignore_ascii_case};
 
 use crate::style::{
-  AspectRatio, CssSyntaxKind, CssToken, FlexDirection, FlexWrap, FromCss, Length, MakeComputed,
-  ParseResult, SizingContext, tw::TailwindPropertyParser,
+  AspectRatio, CssSyntaxKind, CssToken, FlexDirection, FlexWrap, FromCss, FromCssStr, Length,
+  MakeComputed, ParseResult, SizingContext, tw::TailwindPropertyParser,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -26,7 +26,7 @@ impl TailwindPropertyParser for Flex {
       _ => {}
     }
 
-    let Ok(AspectRatio::Ratio(ratio)) = AspectRatio::from_str(token) else {
+    let Ok(AspectRatio::Ratio(ratio)) = AspectRatio::from_css_str(token) else {
       return None;
     };
 
@@ -193,7 +193,7 @@ mod tests {
   #[test]
   fn test_flex_three_values() {
     assert_eq!(
-      Flex::from_str("1 1 auto"),
+      Flex::from_css_str("1 1 auto"),
       Ok(Flex {
         grow: 1.0,
         shrink: 1.0,
@@ -205,7 +205,7 @@ mod tests {
   #[test]
   fn test_flex_single_number() {
     assert_eq!(
-      Flex::from_str("2"),
+      Flex::from_css_str("2"),
       Ok(Flex {
         grow: 2.0,
         shrink: 1.0,
@@ -217,7 +217,7 @@ mod tests {
   #[test]
   fn test_flex_number_and_length() {
     assert_eq!(
-      Flex::from_str("1 30px"),
+      Flex::from_css_str("1 30px"),
       Ok(Flex {
         grow: 1.0,
         shrink: 1.0,
@@ -229,7 +229,7 @@ mod tests {
   #[test]
   fn test_flex_two_numbers() {
     assert_eq!(
-      Flex::from_str("2 2"),
+      Flex::from_css_str("2 2"),
       Ok(Flex {
         grow: 2.0,
         shrink: 2.0,

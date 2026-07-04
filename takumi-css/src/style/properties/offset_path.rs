@@ -766,6 +766,7 @@ pub(crate) fn sample_offset_path(
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::style::FromCssStr;
 
   fn test_sizing() -> SizingContext {
     SizingContext::builder()
@@ -776,23 +777,23 @@ mod tests {
   #[test]
   fn parses_keywords_and_angles() {
     assert_eq!(
-      OffsetRotate::from_str("auto"),
+      OffsetRotate::from_css_str("auto"),
       Ok(OffsetRotate::Auto(Angle::zero()))
     );
     assert_eq!(
-      OffsetRotate::from_str("reverse"),
+      OffsetRotate::from_css_str("reverse"),
       Ok(OffsetRotate::Reverse(Angle::zero()))
     );
     assert_eq!(
-      OffsetRotate::from_str("45deg"),
+      OffsetRotate::from_css_str("45deg"),
       Ok(OffsetRotate::Fixed(Angle::new(45.0)))
     );
     assert_eq!(
-      OffsetRotate::from_str("auto 90deg"),
+      OffsetRotate::from_css_str("auto 90deg"),
       Ok(OffsetRotate::Auto(Angle::new(90.0)))
     );
     assert_eq!(
-      OffsetRotate::from_str("90deg auto"),
+      OffsetRotate::from_css_str("90deg auto"),
       Ok(OffsetRotate::Auto(Angle::new(90.0)))
     );
   }
@@ -805,7 +806,7 @@ mod tests {
 
   #[test]
   fn samples_horizontal_line_midpoint() {
-    let path = OffsetPath::from_str("path('M 0 0 L 100 0')").unwrap();
+    let path = OffsetPath::from_css_str("path('M 0 0 L 100 0')").unwrap();
     let size = Size {
       width: 200.0,
       height: 200.0,
@@ -827,7 +828,7 @@ mod tests {
 
   #[test]
   fn open_path_clamps_distance() {
-    let path = OffsetPath::from_str("path('M 0 0 L 100 0')").unwrap();
+    let path = OffsetPath::from_css_str("path('M 0 0 L 100 0')").unwrap();
     let size = Size {
       width: 200.0,
       height: 200.0,
@@ -846,7 +847,7 @@ mod tests {
 
   #[test]
   fn path_coordinates_scale_with_device_pixel_ratio() {
-    let path = OffsetPath::from_str("path('M 0 0 L 100 0')").unwrap();
+    let path = OffsetPath::from_css_str("path('M 0 0 L 100 0')").unwrap();
     let size = Size {
       width: 400.0,
       height: 400.0,
@@ -870,7 +871,7 @@ mod tests {
 
   #[test]
   fn ray_points_up_at_zero_degrees() {
-    let path = OffsetPath::from_str("ray(0deg)").unwrap();
+    let path = OffsetPath::from_css_str("ray(0deg)").unwrap();
     let size = Size {
       width: 200.0,
       height: 200.0,
@@ -892,7 +893,7 @@ mod tests {
 
   #[test]
   fn ray_at_position_overrides_start() {
-    let path = OffsetPath::from_str("ray(90deg at 0% 0%)").unwrap();
+    let path = OffsetPath::from_css_str("ray(90deg at 0% 0%)").unwrap();
     let size = Size {
       width: 200.0,
       height: 200.0,

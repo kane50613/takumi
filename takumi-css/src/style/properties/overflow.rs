@@ -50,11 +50,11 @@ impl From<Overflow> for TaffyOverflow {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::style::FromCss;
+  use crate::style::FromCssStr;
 
   #[test]
   fn parses_css_clip() {
-    assert_eq!(Overflow::from_str("clip"), Ok(Overflow::Clip));
+    assert_eq!(Overflow::from_css_str("clip"), Ok(Overflow::Clip));
   }
 
   #[test]

@@ -112,11 +112,12 @@ mod tests {
   use crate::style::Length;
 
   use super::*;
+  use crate::style::FromCssStr;
 
   #[test]
   fn test_parse_minmax_and_track_size() {
     assert_eq!(
-      GridTrackSize::from_str("minmax(10px, 1fr)"),
+      GridTrackSize::from_css_str("minmax(10px, 1fr)"),
       Ok(GridTrackSize::MinMax(GridMinMaxSize {
         min: GridLength::Unit(Length::Px(10.0)),
         max: GridLength::Fr(1.0)
@@ -124,7 +125,7 @@ mod tests {
     );
 
     assert_eq!(
-      GridTrackSize::from_str("2fr"),
+      GridTrackSize::from_css_str("2fr"),
       Ok(GridTrackSize::Fixed(GridLength::Fr(2.0)))
     );
   }

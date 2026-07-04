@@ -157,7 +157,7 @@ mod tests {
   #[test]
   fn test_parse_background_color_only() {
     assert_eq!(
-      Background::from_str("red"),
+      Background::from_css_str("red"),
       Ok(Background {
         color: Some(ColorInput::Value(Color([255, 0, 0, 255]))),
         ..Default::default()
@@ -169,7 +169,7 @@ mod tests {
   fn test_parse_background_color_and_clip() {
     // A single `<box>` sets both origin and clip.
     assert_eq!(
-      Background::from_str("red border-box"),
+      Background::from_css_str("red border-box"),
       Ok(Background {
         color: Some(ColorInput::Value(Color([255, 0, 0, 255]))),
         clip: BackgroundClip::BorderBox,
@@ -182,7 +182,7 @@ mod tests {
   #[test]
   fn test_parse_background_two_boxes_origin_then_clip() {
     assert_eq!(
-      Background::from_str("content-box border-box"),
+      Background::from_css_str("content-box border-box"),
       Ok(Background {
         origin: BackgroundOrigin::ContentBox,
         clip: BackgroundClip::BorderBox,
@@ -195,7 +195,7 @@ mod tests {
   fn test_parse_background_default_origin_is_padding_box() {
     assert_eq!(Background::default().origin, BackgroundOrigin::PaddingBox);
     assert_eq!(
-      Background::from_str("red").unwrap().origin,
+      Background::from_css_str("red").unwrap().origin,
       BackgroundOrigin::PaddingBox
     );
   }
@@ -203,7 +203,7 @@ mod tests {
   #[test]
   fn test_parse_background_with_position_and_size() {
     assert_eq!(
-      Background::from_str("center/cover"),
+      Background::from_css_str("center/cover"),
       Ok(Background {
         position: PositionValue(SpacePair::from_pair(
           PositionComponent::KeywordX(PositionKeywordX::Center),
@@ -218,7 +218,7 @@ mod tests {
   #[test]
   fn test_parse_background_full() {
     assert_eq!(
-      Background::from_str("no-repeat center/80% url(../img/image.png)"),
+      Background::from_css_str("no-repeat center/80% url(../img/image.png)"),
       Ok(Background {
         image: BackgroundImage::Url("../img/image.png".into()),
         position: PositionValue(SpacePair::from_pair(
@@ -237,18 +237,18 @@ mod tests {
 
   #[test]
   fn test_parse_background_empty() {
-    assert_eq!(Background::from_str(""), Ok(Background::default()));
+    assert_eq!(Background::from_css_str(""), Ok(Background::default()));
   }
 
   #[test]
   fn test_parse_background_invalid() {
-    assert!(Background::from_str("invalid-value").is_err());
+    assert!(Background::from_css_str("invalid-value").is_err());
   }
 
   #[test]
   fn test_parse_backgrounds_multiple_gradients() {
     assert_eq!(
-      Backgrounds::from_str(
+      Backgrounds::from_css_str(
         "radial-gradient(circle at 80% 20%, #FF3D00 0%, transparent 40%), radial-gradient(circle at 20% 80%, #00E5FF 0%, transparent 40%)",
       ),
       Ok(

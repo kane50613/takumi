@@ -374,6 +374,7 @@ mod tests {
   use tiny_skia::ColorU8;
 
   use super::*;
+  use crate::style::FromCssStr;
   use crate::{
     Viewport,
     style::{Color, Length, SpacePair, StopPosition, properties::gradient_utils::red_blue_stops},
@@ -429,7 +430,7 @@ mod tests {
       ),
     ] {
       assert_eq!(
-        ConicGradient::from_str(input),
+        ConicGradient::from_css_str(input),
         Ok(ConicGradient {
           repeating: false,
           from_angle: Angle::zero(),
@@ -445,7 +446,7 @@ mod tests {
   #[test]
   fn test_parse_conic_gradient_with_interpolation_color_space() {
     assert_eq!(
-      ConicGradient::from_str("conic-gradient(in oklab, red, blue)"),
+      ConicGradient::from_css_str("conic-gradient(in oklab, red, blue)"),
       Ok(ConicGradient {
         repeating: false,
         from_angle: Angle::zero(),
@@ -471,7 +472,7 @@ mod tests {
 
   #[test]
   fn test_parse_conic_gradient_complex() {
-    let gradient = ConicGradient::from_str("conic-gradient(from 90deg at 25% 75%, red, blue)");
+    let gradient = ConicGradient::from_css_str("conic-gradient(from 90deg at 25% 75%, red, blue)");
 
     assert_eq!(
       gradient,

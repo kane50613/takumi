@@ -386,12 +386,13 @@ mod tests {
   use std::assert_matches;
 
   use super::*;
+  use crate::style::FromCssStr;
   use Length::*;
 
   #[test]
   fn test_parse_inset_simple() {
     assert_eq!(
-      BasicShape::from_str("inset(10px)"),
+      BasicShape::from_css_str("inset(10px)"),
       Ok(BasicShape::Inset(Box::new(InsetShape {
         inset: Sides([Px(10.0); 4]),
         border_radius: None,
@@ -402,7 +403,7 @@ mod tests {
   #[test]
   fn test_parse_inset_four_values() {
     assert_eq!(
-      BasicShape::from_str("inset(10px 20px 30px 40px)"),
+      BasicShape::from_css_str("inset(10px 20px 30px 40px)"),
       Ok(BasicShape::Inset(Box::new(InsetShape {
         inset: Sides([Px(10.0), Px(20.0), Px(30.0), Px(40.0)]),
         border_radius: None,
@@ -413,7 +414,7 @@ mod tests {
   #[test]
   fn test_parse_inset_with_border_radius() {
     assert_eq!(
-      BasicShape::from_str("inset(10px round 5px)"),
+      BasicShape::from_css_str("inset(10px round 5px)"),
       Ok(BasicShape::Inset(Box::new(InsetShape {
         inset: Sides::from(Px(10.0)),
         border_radius: Some(Sides::from(Px(5.0))),
@@ -424,7 +425,7 @@ mod tests {
   #[test]
   fn test_parse_inset_with_complex_border_radius() {
     assert_eq!(
-      BasicShape::from_str("inset(10px 20px 30px 40px round 5px 10px 15px 20px)"),
+      BasicShape::from_css_str("inset(10px 20px 30px 40px round 5px 10px 15px 20px)"),
       Ok(BasicShape::Inset(Box::new(InsetShape {
         inset: Sides([Px(10.0), Px(20.0), Px(30.0), Px(40.0)]),
         border_radius: Some(Sides([Px(5.0), Px(10.0), Px(15.0), Px(20.0)])),
@@ -435,7 +436,7 @@ mod tests {
   #[test]
   fn test_parse_circle_simple() {
     assert_eq!(
-      BasicShape::from_str("circle(50px)"),
+      BasicShape::from_css_str("circle(50px)"),
       Ok(BasicShape::Ellipse(Box::new(EllipseShape {
         radius_x: ShapeRadius::Length(Px(50.0)),
         radius_y: ShapeRadius::Length(Px(50.0)),
@@ -447,7 +448,7 @@ mod tests {
   #[test]
   fn test_parse_circle_with_position() {
     assert_eq!(
-      BasicShape::from_str("circle(50px at 25% 75%)"),
+      BasicShape::from_css_str("circle(50px at 25% 75%)"),
       Ok(BasicShape::Ellipse(Box::new(EllipseShape {
         radius_x: ShapeRadius::Length(Px(50.0)),
         radius_y: ShapeRadius::Length(Px(50.0)),
@@ -462,7 +463,7 @@ mod tests {
   #[test]
   fn test_parse_circle_default_radius() {
     assert_eq!(
-      BasicShape::from_str("circle(at 25% 75%)"),
+      BasicShape::from_css_str("circle(at 25% 75%)"),
       Ok(BasicShape::Ellipse(Box::new(EllipseShape {
         radius_x: ShapeRadius::ClosestSide,
         radius_y: ShapeRadius::ClosestSide,
@@ -477,7 +478,7 @@ mod tests {
   #[test]
   fn test_parse_ellipse_simple() {
     assert_eq!(
-      BasicShape::from_str("ellipse(50px 30px)"),
+      BasicShape::from_css_str("ellipse(50px 30px)"),
       Ok(BasicShape::Ellipse(Box::new(EllipseShape {
         radius_x: ShapeRadius::Length(Px(50.0)),
         radius_y: ShapeRadius::Length(Px(30.0)),
@@ -489,7 +490,7 @@ mod tests {
   #[test]
   fn test_parse_ellipse_with_position() {
     assert_eq!(
-      BasicShape::from_str("ellipse(50px 30px at 25% 75%)"),
+      BasicShape::from_css_str("ellipse(50px 30px at 25% 75%)"),
       Ok(BasicShape::Ellipse(Box::new(EllipseShape {
         radius_x: ShapeRadius::Length(Px(50.0)),
         radius_y: ShapeRadius::Length(Px(30.0)),
@@ -504,7 +505,7 @@ mod tests {
   #[test]
   fn test_parse_polygon_triangle() {
     assert_matches!(
-      BasicShape::from_str("polygon(50% 0%, 0% 100%, 100% 100%)"),
+      BasicShape::from_css_str("polygon(50% 0%, 0% 100%, 100% 100%)"),
       Ok(BasicShape::Polygon(PolygonShape {
         fill_rule: None,
         coordinates: coords,
@@ -518,7 +519,7 @@ mod tests {
   #[test]
   fn test_parse_polygon_with_fill_rule() {
     assert_matches!(
-      BasicShape::from_str("polygon(evenodd, 50% 0%, 0% 100%, 100% 100%)"),
+      BasicShape::from_css_str("polygon(evenodd, 50% 0%, 0% 100%, 100% 100%)"),
       Ok(BasicShape::Polygon(PolygonShape {
         fill_rule: Some(FillRule::EvenOdd),
         coordinates: coords,
@@ -529,7 +530,7 @@ mod tests {
   #[test]
   fn test_parse_path() {
     assert_eq!(
-      BasicShape::from_str("path('M 10 10 L 90 90')"),
+      BasicShape::from_css_str("path('M 10 10 L 90 90')"),
       Ok(BasicShape::Path(PathShape {
         fill_rule: None,
         path: "M 10 10 L 90 90".into(),
@@ -540,7 +541,7 @@ mod tests {
   #[test]
   fn test_parse_path_with_fill_rule() {
     assert_eq!(
-      BasicShape::from_str("path(evenodd, 'M 10 10 L 90 90')"),
+      BasicShape::from_css_str("path(evenodd, 'M 10 10 L 90 90')"),
       Ok(BasicShape::Path(PathShape {
         fill_rule: Some(FillRule::EvenOdd),
         path: "M 10 10 L 90 90".into(),
@@ -551,7 +552,7 @@ mod tests {
   #[test]
   fn test_parse_circle_percentage_radius() {
     assert_eq!(
-      BasicShape::from_str("circle(50%)"),
+      BasicShape::from_css_str("circle(50%)"),
       Ok(BasicShape::Ellipse(Box::new(EllipseShape {
         radius_x: ShapeRadius::Length(Length::Percentage(50.0)),
         radius_y: ShapeRadius::Length(Length::Percentage(50.0)),
@@ -563,7 +564,7 @@ mod tests {
   #[test]
   fn test_parse_circle_closest_side() {
     assert_eq!(
-      BasicShape::from_str("circle(closest-side)"),
+      BasicShape::from_css_str("circle(closest-side)"),
       Ok(BasicShape::Ellipse(Box::new(EllipseShape {
         radius_x: ShapeRadius::ClosestSide,
         radius_y: ShapeRadius::ClosestSide,
@@ -575,7 +576,7 @@ mod tests {
   #[test]
   fn test_parse_circle_farthest_side() {
     assert_eq!(
-      BasicShape::from_str("circle(farthest-side)"),
+      BasicShape::from_css_str("circle(farthest-side)"),
       Ok(BasicShape::Ellipse(Box::new(EllipseShape {
         radius_x: ShapeRadius::FarthestSide,
         radius_y: ShapeRadius::FarthestSide,

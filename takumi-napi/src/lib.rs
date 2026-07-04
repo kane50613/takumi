@@ -15,7 +15,7 @@ use std::{fmt::Display, ops::Deref};
 
 use napi::{De, Env, Error, bindgen_prelude::*};
 use napi_derive::napi;
-use serde::{Deserialize, Deserializer, de::DeserializeOwned};
+use serde::{Deserialize, Deserializer, de::DeserializeOwned, de::Error as DeError};
 use takumi_core::{
   layout::style::{FontStyle, FromCssStr, KeyframesRule, StyleSheet},
   resources::font::{FontOverride, FontResource},
@@ -85,7 +85,7 @@ impl<'de> Deserialize<'de> for FontStyleInput {
   {
     let s = String::deserialize(deserializer)?;
     Ok(FontStyleInput(
-      FontStyle::from_css_str(&s).unwrap_or_default(),
+      FontStyle::from_css_str(&s).map_err(D::Error::custom)?,
     ))
   }
 }

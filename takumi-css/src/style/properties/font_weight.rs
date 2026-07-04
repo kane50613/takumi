@@ -162,16 +162,17 @@ impl ToCss for FontWeight {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::style::FromCssStr;
 
   #[test]
   fn parses_numeric_font_weight() {
-    assert_eq!(FontWeight::from_str("700"), Ok(700.0.into()));
+    assert_eq!(FontWeight::from_css_str("700"), Ok(700.0.into()));
   }
 
   #[test]
   fn resolves_relative_keywords_against_parent() {
-    assert_eq!(FontWeight::from_str("bolder"), Ok(FontWeight::Bolder));
-    assert_eq!(FontWeight::from_str("lighter"), Ok(FontWeight::Lighter));
+    assert_eq!(FontWeight::from_css_str("bolder"), Ok(FontWeight::Bolder));
+    assert_eq!(FontWeight::from_css_str("lighter"), Ok(FontWeight::Lighter));
 
     assert_eq!(FontWeight::Bolder.resolve_against(400.0).value(), 700.0);
     assert_eq!(FontWeight::Bolder.resolve_against(700.0).value(), 900.0);

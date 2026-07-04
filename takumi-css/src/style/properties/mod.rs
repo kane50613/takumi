@@ -808,7 +808,7 @@ impl TailwindPropertyParser for JustifyContent {
       "between" => Some(JustifyContent::SpaceBetween),
       "around" => Some(JustifyContent::SpaceAround),
       "evenly" => Some(JustifyContent::SpaceEvenly),
-      _ => Self::from_str(token).ok(),
+      _ => Self::from_css_str(token).ok(),
     }
   }
 }

@@ -4,7 +4,7 @@ use cssparser::{BasicParseErrorKind, ParseError, Parser};
 use typed_builder::TypedBuilder;
 
 use crate::style::{
-  Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, Length,
+  Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, FromCssStr, Length,
   ListInterpolationStrategy, MakeComputed, ParseResult, SizingContext, ToCss, next_is_comma,
 };
 
@@ -157,7 +157,7 @@ impl<'i> FromCss<'i> for BoxShadow {
 
 impl crate::style::tw::TailwindPropertyParser for BoxShadow {
   fn parse_tw(token: &str) -> Option<Self> {
-    Self::from_str(token).ok()
+    Self::from_css_str(token).ok()
   }
 }
 
@@ -367,14 +367,14 @@ mod tests {
     ];
 
     for (css, expected) in cases {
-      assert_eq!(BoxShadow::from_str(css), Ok(*expected), "css: {css}");
+      assert_eq!(BoxShadow::from_css_str(css), Ok(*expected), "css: {css}");
     }
   }
 
   #[test]
   fn test_parse_box_shadow_invalid() {
-    assert!(BoxShadow::from_str("2px").is_err());
-    assert!(BoxShadow::from_str("").is_err());
+    assert!(BoxShadow::from_css_str("2px").is_err());
+    assert!(BoxShadow::from_css_str("").is_err());
   }
 
   #[test]
@@ -382,7 +382,7 @@ mod tests {
     // Percentages are not valid <length> for blur/spread; loose parsing ignores
     // the trailing token rather than capturing it as a Percentage length.
     assert_eq!(
-      BoxShadow::from_str("2px 4px 50%"),
+      BoxShadow::from_css_str("2px 4px 50%"),
       Ok(BoxShadow {
         offset_x: Px(2.0),
         offset_y: Px(4.0),
@@ -391,7 +391,7 @@ mod tests {
       })
     );
     assert_eq!(
-      BoxShadow::from_str("2px 4px 6px 50%"),
+      BoxShadow::from_css_str("2px 4px 6px 50%"),
       Ok(BoxShadow {
         offset_x: Px(2.0),
         offset_y: Px(4.0),
@@ -405,7 +405,7 @@ mod tests {
   #[test]
   fn test_parse_multiple_box_shadows_with_rgba() {
     assert_eq!(
-      BoxShadows::from_str("2px 4px rgba(0, 0, 0, 0.5), 1px 2px 3px rgba(255, 0, 0, 0.25)"),
+      BoxShadows::from_css_str("2px 4px rgba(0, 0, 0, 0.5), 1px 2px 3px rgba(255, 0, 0, 0.25)"),
       Ok(
         [
           BoxShadow {

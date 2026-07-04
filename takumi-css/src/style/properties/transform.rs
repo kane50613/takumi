@@ -587,11 +587,12 @@ impl<'i> FromCss<'i> for Transform {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::style::FromCssStr;
 
   #[test]
   fn test_transform_from_str() {
     assert_eq!(
-      Transform::from_str("translate(10, 20px)"),
+      Transform::from_css_str("translate(10, 20px)"),
       Ok(Transform::Translate(Length::Px(10.0), Length::Px(20.0)))
     );
   }
@@ -599,7 +600,7 @@ mod tests {
   #[test]
   fn test_transform_scale_from_str() {
     assert_eq!(
-      Transform::from_str("scale(10)"),
+      Transform::from_css_str("scale(10)"),
       Ok(Transform::Scale(10.0, 10.0))
     );
   }
@@ -607,15 +608,15 @@ mod tests {
   #[test]
   fn test_transform_negative_scale_reflects() {
     assert_eq!(
-      Transform::from_str("scale(-1)"),
+      Transform::from_css_str("scale(-1)"),
       Ok(Transform::Scale(-1.0, -1.0))
     );
     assert_eq!(
-      Transform::from_str("scaleX(-1)"),
+      Transform::from_css_str("scaleX(-1)"),
       Ok(Transform::Scale(-1.0, DEFAULT_SCALE))
     );
     assert_eq!(
-      Transform::from_str("scaleY(-2)"),
+      Transform::from_css_str("scaleY(-2)"),
       Ok(Transform::Scale(DEFAULT_SCALE, -2.0))
     );
   }

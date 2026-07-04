@@ -9,7 +9,8 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 use taffy::{CompactLength, Dimension, LengthPercentage, LengthPercentageAuto};
 
 use crate::style::{
-  AspectRatio, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, SizingContext,
+  AspectRatio, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
+  SizingContext,
   tw::{TW_VAR_SPACING, TailwindPropertyParser},
 };
 
@@ -144,7 +145,7 @@ impl TailwindPropertyParser for Length {
       return Some(Length::from_spacing(value));
     }
 
-    match AspectRatio::from_str(token) {
+    match AspectRatio::from_css_str(token) {
       Ok(AspectRatio::Ratio(ratio)) => return Some(Length::Percentage(ratio * 100.0)),
       Ok(AspectRatio::Auto) => return Some(Length::Auto),
       _ => {}
@@ -543,7 +544,7 @@ mod tests {
   #[test]
   fn parse_calc_mixed_returns_formula() {
     assert_eq!(
-      Length::from_str("calc(100% - 12px)"),
+      Length::from_css_str("calc(100% - 12px)"),
       Ok(Length::Calc(CalcFormula {
         percent: 1.0,
         px: -12.0,
@@ -554,19 +555,19 @@ mod tests {
 
   #[test]
   fn parse_calc_number_expression_becomes_px() {
-    let parsed = Length::from_str("calc(1 + 2)");
+    let parsed = Length::from_css_str("calc(1 + 2)");
     assert_eq!(parsed, Ok(Length::Px(3.0)));
   }
 
   #[test]
   fn parse_calc_rejects_number_plus_length() {
-    let parsed = Length::from_str("calc(1 + 2px)");
+    let parsed = Length::from_css_str("calc(1 + 2px)");
     assert!(parsed.is_err());
   }
 
   #[test]
   fn parse_calc_rejects_division_by_zero() {
-    let parsed = Length::from_str("calc(10px / 0)");
+    let parsed = Length::from_css_str("calc(10px / 0)");
     assert!(parsed.is_err());
   }
 
@@ -747,28 +748,28 @@ mod tests {
 
   #[test]
   fn parse_supports_modern_viewport_and_container_units() {
-    assert_eq!(Length::from_str("12dvw"), Ok(Length::Vw(12.0)));
-    assert_eq!(Length::from_str("12svw"), Ok(Length::Vw(12.0)));
-    assert_eq!(Length::from_str("12lvw"), Ok(Length::Vw(12.0)));
-    assert_eq!(Length::from_str("12cqw"), Ok(Length::CqW(12.0)));
-    assert_eq!(Length::from_str("12cqi"), Ok(Length::CqW(12.0)));
-    assert_eq!(Length::from_str("12vi"), Ok(Length::Vw(12.0)));
-    assert_eq!(Length::from_str("12dvh"), Ok(Length::Vh(12.0)));
-    assert_eq!(Length::from_str("12svh"), Ok(Length::Vh(12.0)));
-    assert_eq!(Length::from_str("12lvh"), Ok(Length::Vh(12.0)));
-    assert_eq!(Length::from_str("12cqh"), Ok(Length::CqH(12.0)));
-    assert_eq!(Length::from_str("12cqb"), Ok(Length::CqH(12.0)));
-    assert_eq!(Length::from_str("12vb"), Ok(Length::Vh(12.0)));
-    assert_eq!(Length::from_str("12vmin"), Ok(Length::VMin(12.0)));
-    assert_eq!(Length::from_str("12cqmin"), Ok(Length::CqMin(12.0)));
-    assert_eq!(Length::from_str("12vmax"), Ok(Length::VMax(12.0)));
-    assert_eq!(Length::from_str("12cqmax"), Ok(Length::CqMax(12.0)));
+    assert_eq!(Length::from_css_str("12dvw"), Ok(Length::Vw(12.0)));
+    assert_eq!(Length::from_css_str("12svw"), Ok(Length::Vw(12.0)));
+    assert_eq!(Length::from_css_str("12lvw"), Ok(Length::Vw(12.0)));
+    assert_eq!(Length::from_css_str("12cqw"), Ok(Length::CqW(12.0)));
+    assert_eq!(Length::from_css_str("12cqi"), Ok(Length::CqW(12.0)));
+    assert_eq!(Length::from_css_str("12vi"), Ok(Length::Vw(12.0)));
+    assert_eq!(Length::from_css_str("12dvh"), Ok(Length::Vh(12.0)));
+    assert_eq!(Length::from_css_str("12svh"), Ok(Length::Vh(12.0)));
+    assert_eq!(Length::from_css_str("12lvh"), Ok(Length::Vh(12.0)));
+    assert_eq!(Length::from_css_str("12cqh"), Ok(Length::CqH(12.0)));
+    assert_eq!(Length::from_css_str("12cqb"), Ok(Length::CqH(12.0)));
+    assert_eq!(Length::from_css_str("12vb"), Ok(Length::Vh(12.0)));
+    assert_eq!(Length::from_css_str("12vmin"), Ok(Length::VMin(12.0)));
+    assert_eq!(Length::from_css_str("12cqmin"), Ok(Length::CqMin(12.0)));
+    assert_eq!(Length::from_css_str("12vmax"), Ok(Length::VMax(12.0)));
+    assert_eq!(Length::from_css_str("12cqmax"), Ok(Length::CqMax(12.0)));
   }
 
   #[test]
   fn parse_supports_lh_and_rlh_units() {
-    assert_eq!(Length::from_str("1.5lh"), Ok(Length::Lh(1.5)));
-    assert_eq!(Length::from_str("2rlh"), Ok(Length::Rlh(2.0)));
+    assert_eq!(Length::from_css_str("1.5lh"), Ok(Length::Lh(1.5)));
+    assert_eq!(Length::from_css_str("2rlh"), Ok(Length::Rlh(2.0)));
   }
 
   #[test]
@@ -789,7 +790,7 @@ mod tests {
 
   #[test]
   fn parse_calc_supports_lh_and_rlh() {
-    let parsed = Length::from_str("calc(1lh + 2rlh - 3px)");
+    let parsed = Length::from_css_str("calc(1lh + 2rlh - 3px)");
     assert_eq!(
       parsed,
       Ok(Length::Calc(CalcFormula {
@@ -804,7 +805,7 @@ mod tests {
   #[test]
   fn calc_lh_resolves_through_line_height_basis() {
     let sizing = sizing();
-    let parsed = Length::from_str("calc(1lh + 2px)");
+    let parsed = Length::from_css_str("calc(1lh + 2px)");
     assert_eq!(
       parsed,
       Ok(Length::Calc(CalcFormula {
@@ -829,7 +830,7 @@ mod tests {
 
   #[test]
   fn parse_calc_supports_modern_viewport_and_container_units() {
-    let parsed = Length::from_str("calc(20cqmax + 5px - 2cqb)");
+    let parsed = Length::from_css_str("calc(20cqmax + 5px - 2cqb)");
     assert_eq!(
       parsed,
       Ok(Length::Calc(CalcFormula {
@@ -864,27 +865,27 @@ mod tests {
   #[test]
   fn parse_calc_supports_constants() {
     assert_eq!(
-      Length::from_str("calc(pi)").as_ref(),
+      Length::from_css_str("calc(pi)").as_ref(),
       Ok(&Length::Px(std::f32::consts::PI))
     );
     assert_eq!(
-      Length::from_str("calc(e)").as_ref(),
+      Length::from_css_str("calc(e)").as_ref(),
       Ok(&Length::Px(std::f32::consts::E))
     );
 
-    let inf = Length::from_str("calc(infinity)");
+    let inf = Length::from_css_str("calc(infinity)");
     assert_matches!(inf, Ok(Length::Px(v)) if v.is_infinite() && v.is_sign_positive());
 
-    let neg_inf = Length::from_str("calc(-infinity)");
+    let neg_inf = Length::from_css_str("calc(-infinity)");
     assert_matches!(neg_inf, Ok(Length::Px(v)) if v.is_infinite() && v.is_sign_negative());
 
-    let nan = Length::from_str("calc(nan)");
+    let nan = Length::from_css_str("calc(nan)");
     assert_matches!(nan, Ok(Length::Px(v)) if v.is_nan());
   }
 
   #[test]
   fn parse_calc_infinity_times_length_clamps_in_to_px() {
-    let parsed = Length::from_str("calc(infinity * 1px)");
+    let parsed = Length::from_css_str("calc(infinity * 1px)");
     let sizing = sizing();
     assert!(parsed.is_ok(), "expected successful parse, got {parsed:?}");
     let Ok(length) = parsed else {

@@ -194,6 +194,7 @@ mod tests {
   use taffy::Size;
 
   use super::*;
+  use crate::style::FromCssStr;
   use crate::{
     style::{CalcArena, SizingContext},
     viewport::Viewport,
@@ -211,8 +212,8 @@ mod tests {
       calc_arena: Rc::new(CalcArena::default()),
     };
 
-    assert_eq!(FontSize::from_str("larger"), Ok(FontSize::Larger));
-    assert_eq!(FontSize::from_str("smaller"), Ok(FontSize::Smaller));
+    assert_eq!(FontSize::from_css_str("larger"), Ok(FontSize::Larger));
+    assert_eq!(FontSize::from_css_str("smaller"), Ok(FontSize::Smaller));
     assert_eq!(FontSize::Larger.to_px(&sizing, 20.0), 24.0);
     assert_eq!(FontSize::Smaller.to_px(&sizing, 20.0), 20.0 / 1.2);
   }

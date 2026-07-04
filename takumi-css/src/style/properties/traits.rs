@@ -347,18 +347,6 @@ pub(crate) trait FromCss<'i> {
   where
     Self: Sized;
 
-  /// Parses the type from a string. Internal, borrowed-error convenience over
-  /// [`FromCss::from_css`]; the public owned-error entry point is `FromCssStr`.
-  fn from_str(source: &'i str) -> ParseResult<'i, Self>
-  where
-    Self: Sized,
-  {
-    let mut input = ParserInput::new(source);
-    let mut parser = Parser::new(&mut input);
-
-    Self::from_css(&mut parser)
-  }
-
   /// Returns the list of valid CSS tokens for this type.
   const VALID_TOKENS: &'static [CssToken];
 

@@ -221,7 +221,7 @@ impl ResolvedVerticalAlign {
 
 impl TailwindPropertyParser for VerticalAlign {
   fn parse_tw(token: &str) -> Option<Self> {
-    VerticalAlignKeyword::from_str(token)
+    VerticalAlignKeyword::from_css_str(token)
       .ok()
       .map(Self::Keyword)
   }
@@ -273,19 +273,19 @@ mod tests {
   #[test]
   fn parse_keywords_and_length_percentage() {
     assert_eq!(
-      VerticalAlign::from_str("baseline"),
+      VerticalAlign::from_css_str("baseline"),
       Ok(VerticalAlign::Keyword(VerticalAlignKeyword::Baseline))
     );
     assert_eq!(
-      VerticalAlign::from_str("10px"),
+      VerticalAlign::from_css_str("10px"),
       Ok(VerticalAlign::Length(Length::Px(10.0)))
     );
     assert_eq!(
-      VerticalAlign::from_str("25%"),
+      VerticalAlign::from_css_str("25%"),
       Ok(VerticalAlign::Length(Length::Percentage(25.0)))
     );
     assert_eq!(
-      VerticalAlign::from_str("-0.5em"),
+      VerticalAlign::from_css_str("-0.5em"),
       Ok(VerticalAlign::Length(Length::Em(-0.5)))
     );
   }
@@ -405,7 +405,7 @@ mod tests {
 
   #[test]
   fn resolve_normal_calc_percentage_uses_metrics_relative_px() {
-    let Ok(length) = Length::from_str("calc(50% + 4px)") else {
+    let Ok(length) = Length::from_css_str("calc(50% + 4px)") else {
       return;
     };
     let resolved = VerticalAlign::Length(length).resolve(&sizing(), 12.0, LineHeight::Normal);

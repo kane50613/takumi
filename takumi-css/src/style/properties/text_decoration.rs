@@ -6,8 +6,9 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 use typed_builder::TypedBuilder;
 
 use crate::style::{
-  Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult,
-  SizingContext, declare_enum_from_css_impl, properties::ColorInput, tw::TailwindPropertyParser,
+  Animatable, Color, CssSyntaxKind, CssToken, FromCss, FromCssStr, Length, MakeComputed,
+  ParseResult, SizingContext, declare_enum_from_css_impl, properties::ColorInput,
+  tw::TailwindPropertyParser,
 };
 
 bitflags! {
@@ -152,7 +153,7 @@ impl TailwindPropertyParser for TextDecorationThickness {
       return Some(Self::Length(Length::Px(number)));
     }
 
-    Self::from_str(token).ok()
+    Self::from_css_str(token).ok()
   }
 }
 
@@ -373,7 +374,7 @@ mod tests {
   #[test]
   fn test_parse_text_decoration_underline() {
     assert_eq!(
-      TextDecoration::from_str("underline"),
+      TextDecoration::from_css_str("underline"),
       Ok(
         TextDecoration::builder()
           .line(TextDecorationLines::UNDERLINE)
@@ -385,7 +386,7 @@ mod tests {
   #[test]
   fn test_parse_text_decoration_line_through() {
     assert_eq!(
-      TextDecoration::from_str("line-through"),
+      TextDecoration::from_css_str("line-through"),
       Ok(
         TextDecoration::builder()
           .line(TextDecorationLines::LINE_THROUGH)
@@ -397,7 +398,7 @@ mod tests {
   #[test]
   fn test_parse_text_decoration_underline_solid() {
     assert_eq!(
-      TextDecoration::from_str("underline solid"),
+      TextDecoration::from_css_str("underline solid"),
       Ok(
         TextDecoration::builder()
           .line(TextDecorationLines::UNDERLINE)
@@ -410,7 +411,7 @@ mod tests {
   #[test]
   fn test_parse_text_decoration_line_through_solid_red() {
     assert_eq!(
-      TextDecoration::from_str("line-through solid red"),
+      TextDecoration::from_css_str("line-through solid red"),
       Ok(
         TextDecoration::builder()
           .line(TextDecorationLines::LINE_THROUGH)
@@ -424,7 +425,7 @@ mod tests {
   #[test]
   fn test_parse_text_decoration_multiple_lines() {
     assert_eq!(
-      TextDecoration::from_str("underline line-through solid red"),
+      TextDecoration::from_css_str("underline line-through solid red"),
       Ok(
         TextDecoration::builder()
           .line(TextDecorationLines::UNDERLINE | TextDecorationLines::LINE_THROUGH)
@@ -437,14 +438,14 @@ mod tests {
 
   #[test]
   fn test_parse_text_decoration_invalid() {
-    let result = TextDecoration::from_str("invalid");
+    let result = TextDecoration::from_css_str("invalid");
     assert!(result.is_err());
   }
 
   #[test]
   fn test_parse_text_underline_offset_auto() {
     assert_eq!(
-      TextUnderlineOffset::from_str("auto"),
+      TextUnderlineOffset::from_css_str("auto"),
       Ok(TextUnderlineOffset::Auto)
     );
   }
@@ -452,13 +453,13 @@ mod tests {
   #[test]
   fn test_parse_text_underline_offset_length() {
     assert_eq!(
-      TextUnderlineOffset::from_str("3px"),
+      TextUnderlineOffset::from_css_str("3px"),
       Ok(TextUnderlineOffset::Length(Length::Px(3.0)))
     );
   }
 
   #[test]
   fn test_parse_text_underline_offset_invalid() {
-    assert!(TextUnderlineOffset::from_str("solid").is_err());
+    assert!(TextUnderlineOffset::from_css_str("solid").is_err());
   }
 }
