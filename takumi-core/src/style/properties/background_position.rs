@@ -1,11 +1,12 @@
-use crate::style::{ToCss, unexpected_token};
-use cssparser::{Parser, Token, match_ignore_ascii_case};
 use std::fmt;
+
+use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use super::background_image::parse_comma_list;
 use crate::style::{
   Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, ListInterpolationStrategy,
-  MakeComputed, ParseResult, SizingContext, SpacePair, tw::TailwindPropertyParser,
+  MakeComputed, ParseResult, SizingContext, SpacePair, ToCss, tw::TailwindPropertyParser,
+  unexpected_token,
 };
 
 /// Horizontal keywords for `background-position`.

@@ -1,10 +1,10 @@
-use cssparser::{Parser, Token, match_ignore_ascii_case};
 use std::{
   fmt,
   ops::{Deref, Neg},
 };
-use tiny_skia::PremultipliedColorU8;
 
+use cssparser::{Parser, Token, match_ignore_ascii_case};
+use tiny_skia::PremultipliedColorU8;
 use typed_builder::TypedBuilder;
 
 use super::gradient_utils::{
@@ -822,18 +822,17 @@ impl ToCss for LinearGradient {
 
 #[cfg(test)]
 mod tests {
-  use color::{ColorSpaceTag, HueDirection};
   use std::rc::Rc;
+
+  use color::{ColorSpaceTag, HueDirection};
   use taffy::Size;
   use tiny_skia::ColorU8;
 
+  use super::*;
   use crate::{
-    style::{CalcArena, properties::gradient_utils::red_blue_stops},
+    style::{CalcArena, FromCssStr, properties::gradient_utils::red_blue_stops},
     viewport::Viewport,
   };
-
-  use super::*;
-  use crate::style::FromCssStr;
   fn sizing() -> SizingContext {
     SizingContext {
       viewport: Viewport::new((200, 100)),

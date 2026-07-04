@@ -1,5 +1,6 @@
-use cssparser::{Parser, Token, match_ignore_ascii_case};
 use std::{fmt, sync::Arc};
+
+use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
   Animatable, BackgroundImage, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss,

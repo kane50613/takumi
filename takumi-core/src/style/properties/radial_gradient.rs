@@ -1,5 +1,6 @@
-use cssparser::{Parser, Token, match_ignore_ascii_case};
 use std::fmt;
+
+use cssparser::{Parser, Token, match_ignore_ascii_case};
 use tiny_skia::PremultipliedColorU8;
 use typed_builder::TypedBuilder;
 

@@ -1,7 +1,6 @@
-use crate::style::unexpected_token;
 use cssparser::Parser;
 
-use crate::style::*;
+use crate::style::{unexpected_token, *};
 
 /// Parsed `background` shorthand value.
 #[derive(Debug, Clone, Default, PartialEq)]

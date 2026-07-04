@@ -1,12 +1,11 @@
 use std::fmt;
 
-use crate::style::{ToCss, unexpected_token};
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
   Angle, Animatable, Color, CssDescriptorKind, CssExpectedMessage, CssToken, FromCss, Length,
   ListInterpolationStrategy, MakeComputed, ParseResult, PercentageNumber, SizingContext,
-  TextShadow, tw::TailwindPropertyParser,
+  TextShadow, ToCss, tw::TailwindPropertyParser, unexpected_token,
 };
 
 macro_rules! interpolate_field {

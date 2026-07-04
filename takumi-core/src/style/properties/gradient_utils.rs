@@ -6,10 +6,9 @@ use smallvec::SmallVec;
 use taffy::Point;
 use tiny_skia::{ColorU8, PremultipliedColorU8};
 
-use crate::style::math::fast_div_255;
 use crate::style::{
   Color, ColorInput, ColorInterpolationMethod, FromCss, GradientStop, ParseResult,
-  ResolvedGradientStop, SizingContext, StopPosition, ToCss,
+  ResolvedGradientStop, SizingContext, StopPosition, ToCss, math::fast_div_255,
 };
 
 const MIN_GRADIENT_LUT_SIZE: usize = 2;
@@ -761,12 +760,11 @@ pub fn resolve_stops_along_axis(
 
 #[cfg(test)]
 mod tests {
+  use super::*;
   use crate::{
     style::{Color, Length, StopPosition},
     viewport::Viewport,
   };
-
-  use super::*;
 
   #[test]
   fn test_resolve_stops_along_axis() {

@@ -1,13 +1,13 @@
 //! The main renderer for Takumi image rendering engine.
 
-use crate::{helper::map_error, model::*};
-use base64::{Engine, prelude::BASE64_STANDARD};
-use serde_wasm_bindgen::{from_value, to_value};
 use std::{
   borrow::Cow,
   collections::HashMap,
   sync::{Arc, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
+
+use base64::{Engine, prelude::BASE64_STANDARD};
+use serde_wasm_bindgen::{from_value, to_value};
 use takumi_core::{
   Fonts,
   layout::node::Node,
@@ -24,6 +24,8 @@ use takumi_raster::{
   write_image,
 };
 use wasm_bindgen::prelude::*;
+
+use crate::{helper::map_error, model::*};
 
 const EMBEDDED_FONTS: &[(&[u8], &str, GenericFamily)] = &[(
   include_bytes!("../../assets/fonts/manrope/manrope-latin-wght-normal.woff2"),
@@ -127,7 +129,7 @@ impl Renderer {
     Ok(stylesheet)
   }
 
-  fn fetch_images_map(
+  fn images_map(
     &self,
     images: Option<&[ImageSource]>,
   ) -> Result<HashMap<Arc<str>, LoadedImageSource>, js_sys::Error> {
@@ -213,7 +215,7 @@ impl Renderer {
       .transpose()?
       .unwrap_or_default();
 
-    let images = self.fetch_images_map(options.images.as_deref())?;
+    let images = self.images_map(options.images.as_deref())?;
     let state = self.read_state()?;
     self.render_internal(&state, node, options, images)
   }
@@ -281,7 +283,7 @@ impl Renderer {
       .transpose()?
       .unwrap_or_default();
 
-    let images = self.fetch_images_map(options.images.as_deref())?;
+    let images = self.images_map(options.images.as_deref())?;
     let stylesheet =
       self.parse_stylesheet(options.stylesheets, options.keyframes.unwrap_or_default())?;
     let state = self.read_state()?;
@@ -316,7 +318,7 @@ impl Renderer {
       .transpose()?
       .unwrap_or_default();
 
-    let images = self.fetch_images_map(options.images.as_deref())?;
+    let images = self.images_map(options.images.as_deref())?;
     let stylesheet =
       self.parse_stylesheet(options.stylesheets, options.keyframes.unwrap_or_default())?;
 
@@ -364,7 +366,7 @@ impl Renderer {
       ));
     }
 
-    let images = self.fetch_images_map(options.images.as_deref())?;
+    let images = self.images_map(options.images.as_deref())?;
     let state = self.read_state()?;
     let buffer = self.render_internal(&state, node, options, images)?;
 
@@ -394,7 +396,7 @@ impl Renderer {
       font_families,
       lang,
     } = from_value(options.into()).map_err(map_error)?;
-    let images = self.fetch_images_map(images.as_deref())?;
+    let images = self.images_map(images.as_deref())?;
     let lang = lang.map(Arc::from);
 
     if scenes.is_empty() {

@@ -1,8 +1,7 @@
 use std::assert_matches;
 
-use crate::style::{ComputedStyle, LonghandId, Style, properties::BackgroundImage};
-
 use super::*;
+use crate::style::{ComputedStyle, LonghandId, Style, properties::BackgroundImage};
 
 #[test]
 fn test_box_sizing() {

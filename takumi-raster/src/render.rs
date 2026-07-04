@@ -3,6 +3,7 @@ use std::{collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 use parley::{GlyphRun, InlineBoxKind, PositionedLayoutItem};
 use serde::Serialize;
 use taffy::{AvailableSpace, Layout, NodeId, TaffyError, geometry::Size};
+use takumi_core::scene::build_stacking_contexts;
 use typed_builder::TypedBuilder;
 
 use crate::{
@@ -24,7 +25,6 @@ use crate::{
   style::{Affine, ComputedStyle, FontFamily, SizingContext, StyleSheet},
   viewport::Viewport,
 };
-use takumi_core::scene::build_stacking_contexts;
 
 /// Root computed style carrying the render-level `lang` and `fontFamilies` defaults,
 /// inherited by every node that does not set its own.

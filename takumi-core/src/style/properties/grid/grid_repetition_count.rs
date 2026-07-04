@@ -1,7 +1,6 @@
-use crate::style::unexpected_token;
 use cssparser::{Parser, Token};
 
-use crate::style::{CssSyntaxKind, CssToken, FromCss, ParseResult, ToCss};
+use crate::style::{CssSyntaxKind, CssToken, FromCss, ParseResult, ToCss, unexpected_token};
 
 /// Represents grid track repetition keywords
 #[derive(Debug, Clone, Copy, PartialEq)]

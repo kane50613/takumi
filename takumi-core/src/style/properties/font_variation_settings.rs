@@ -1,9 +1,10 @@
-use crate::style::{CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss};
-use cssparser::Parser;
-use parley::FontVariation;
 use std::fmt;
 
+use cssparser::Parser;
+use parley::FontVariation;
+
 use super::font_feature_settings::parse_opentype_tag;
+use crate::style::{CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss};
 
 /// Controls variable font axis values via CSS font-variation-settings property.
 ///

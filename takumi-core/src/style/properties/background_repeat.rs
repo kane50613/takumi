@@ -1,6 +1,7 @@
+use std::{fmt, iter::successors};
+
 use cssparser::{Parser, match_ignore_ascii_case};
 use smallvec::{SmallVec, smallvec};
-use std::{fmt, iter::successors};
 
 use super::background_image::parse_comma_list;
 use crate::style::{

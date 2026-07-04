@@ -109,10 +109,8 @@ impl ToCss for GridTrackSize {
 
 #[cfg(test)]
 mod tests {
-  use crate::style::Length;
-
   use super::*;
-  use crate::style::FromCssStr;
+  use crate::style::{FromCssStr, Length};
 
   #[test]
   fn test_parse_minmax_and_track_size() {

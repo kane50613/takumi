@@ -37,11 +37,6 @@ mod text_drawing;
 mod webp;
 mod write;
 
-use tiny_skia::{IntSize, Pixmap, PixmapRef};
-
-use crate::resources::image_buffer::ImageBuffer;
-
-pub(crate) use crate::font_style::*;
 pub(crate) use background_drawing::*;
 pub(crate) use blend::*;
 pub(crate) use canvas::*;
@@ -54,11 +49,16 @@ pub(crate) use node_paint::*;
 pub(crate) use path::*;
 pub use render::*;
 pub(crate) use text_drawing::*;
+use tiny_skia::{IntSize, Pixmap, PixmapRef};
 pub use write::*;
 
-pub(crate) use crate::style::math::{fast_div_255, fast_div_255_u32};
-
-pub(crate) use crate::{context::RenderContext, layout::inline::scale_text_fit_x};
+use crate::resources::image_buffer::ImageBuffer;
+pub(crate) use crate::{
+  context::RenderContext,
+  font_style::*,
+  layout::inline::scale_text_fit_x,
+  style::math::{fast_div_255, fast_div_255_u32},
+};
 
 /// Borrows an [`ImageBuffer`] as a zero-copy `tiny_skia` pixmap view.
 pub(crate) fn pixmap_ref_from_buffer(buffer: &ImageBuffer) -> Option<PixmapRef<'_>> {

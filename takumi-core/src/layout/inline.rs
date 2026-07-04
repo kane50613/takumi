@@ -2341,9 +2341,9 @@ fn make_ellipsis_layout<'c>(
 #[cfg(test)]
 #[allow(clippy::panic, clippy::unwrap_used)]
 mod tests {
-  use super::*;
   use std::{fs::File, io::Read, path::Path};
 
+  use super::*;
   use crate::{
     Fonts,
     context::RenderContext,

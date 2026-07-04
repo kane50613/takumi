@@ -1,17 +1,17 @@
-use crate::style::{ToCss, unexpected_token};
 use std::fmt::{self, Display};
 
-use crate::style::math::fast_div_255;
-use crate::style::{
-  Animatable, Color as CurrentColor, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss,
-  FromCssStr, MakeComputed, ParseResult, PercentageNumber, SizingContext,
-  properties::gradient_utils::interpolate_with_color_space, tw::TailwindPropertyParser,
-};
 use color::{AlphaColor, ColorSpaceTag, DynamicColor, HueDirection, Srgb, parse_color};
 use cssparser::{
   Parser, Token,
   color::{parse_hash_color, parse_named_color},
   match_ignore_ascii_case,
+};
+
+use crate::style::{
+  Animatable, Color as CurrentColor, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss,
+  FromCssStr, MakeComputed, ParseResult, PercentageNumber, SizingContext, ToCss,
+  math::fast_div_255, properties::gradient_utils::interpolate_with_color_space,
+  tw::TailwindPropertyParser, unexpected_token,
 };
 
 fn is_cylindrical_color_space(color_space: ColorSpaceTag) -> bool {

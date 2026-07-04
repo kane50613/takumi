@@ -1,7 +1,6 @@
-use crate::style::unexpected_token;
 use cssparser::Parser;
 
-use crate::style::{AlignItems, CssToken, FromCss, JustifyContent, ParseResult};
+use crate::style::{AlignItems, CssToken, FromCss, JustifyContent, ParseResult, unexpected_token};
 
 /// Represents the `place-items` shorthand.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]

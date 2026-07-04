@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use parley::GlyphRun;
 use skrifa::{FontRef, MetadataProvider};
-use taffy::{Layout, Point};
+use taffy::{AvailableSpace, Layout, Point, geometry::Size};
 
 use crate::{
   BorderProperties, Canvas, Cap, DashPattern, DecorationSegmentParams, PaintSource, Placement,
@@ -27,7 +27,6 @@ use crate::{
     TextDecorationLines, TextDecorationSkipInk,
   },
 };
-use taffy::{AvailableSpace, geometry::Size};
 
 fn draw_with_inline_opacity(
   canvas: &mut Canvas,

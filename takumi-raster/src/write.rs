@@ -12,9 +12,11 @@ use typed_builder::TypedBuilder;
 pub use crate::webp::write_animated_webp;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::webp::write_webp_lossy;
-use crate::webp::{has_any_alpha_pixel, strip_alpha_channel, write_webp_lossless};
-
-use crate::{Result, error::Error};
+use crate::{
+  Result,
+  error::Error,
+  webp::{has_any_alpha_pixel, strip_alpha_channel, write_webp_lossless},
+};
 
 /// Lossy-encoding quality, clamped to the `0..=100` range (higher means better
 /// quality and larger output).

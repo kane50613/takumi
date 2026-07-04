@@ -59,6 +59,8 @@ mod white_space;
 mod word_break;
 mod z_index;
 
+use std::fmt;
+
 pub use animation::*;
 pub use aspect_ratio::*;
 pub use background::*;
@@ -75,6 +77,7 @@ pub use clip_path::*;
 pub use color::*;
 pub use conic_gradient::ConicGradient;
 pub use content::*;
+use cssparser::{Parser, match_ignore_ascii_case};
 pub use filter::{
   BlurType, Filter, FilterCategory, Filters, LUMA_WEIGHTS, SEPIA_WEIGHTS, TransferChannel,
   TransferTable,
@@ -103,9 +106,9 @@ pub use offset_path::*;
 pub use order::*;
 pub use overflow::*;
 pub use overflow_wrap::*;
+use parley::Alignment;
 pub use percentage_number::*;
-pub use radial_gradient::RadialGradient;
-pub use radial_gradient::{RadialShape, RadialSize};
+pub use radial_gradient::{RadialGradient, RadialShape, RadialSize};
 use serde::Deserialize;
 pub use sides::*;
 pub use space_pair::*;
@@ -125,10 +128,6 @@ pub use vertical_align::*;
 pub use white_space::*;
 pub use word_break::*;
 pub use z_index::*;
-
-use cssparser::{Parser, match_ignore_ascii_case};
-use parley::Alignment;
-use std::fmt;
 
 use crate::style::{SizingContext, tw::TailwindPropertyParser};
 

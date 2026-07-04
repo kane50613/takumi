@@ -1,7 +1,8 @@
-use crate::style::unexpected_token;
 use cssparser::Parser;
 
-use crate::style::{CssSyntaxKind, CssToken, FromCss, GridPlacement, ParseResult};
+use crate::style::{
+  CssSyntaxKind, CssToken, FromCss, GridPlacement, ParseResult, unexpected_token,
+};
 
 /// Represents the `grid-area` shorthand.
 #[derive(Debug, Clone, PartialEq, Default)]

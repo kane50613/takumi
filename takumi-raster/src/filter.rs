@@ -1,5 +1,6 @@
 use smallvec::SmallVec;
 use taffy::{Point, Size};
+use takumi_core::paint::compose_transfer_table;
 use tiny_skia::{Mask as TinyMask, PixmapMut};
 
 use crate::{
@@ -10,7 +11,6 @@ use crate::{
     SizingContext, TransferChannel, TransferTable,
   },
 };
-use takumi_core::paint::compose_transfer_table;
 
 /// Calculates the luma of an RGB pixel.
 #[inline(always)]

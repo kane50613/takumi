@@ -1,4 +1,3 @@
-use crate::style::{ToCss, properties::write_css_string, unexpected_token};
 use std::{borrow::Cow, fmt, vec::Vec};
 
 use cssparser::{BasicParseErrorKind, Parser, Token, match_ignore_ascii_case};
@@ -6,7 +5,8 @@ use typed_builder::TypedBuilder;
 
 use crate::style::{
   CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
-  declare_enum_from_css_impl, next_is_comma, tw::TailwindPropertyParser,
+  ToCss, declare_enum_from_css_impl, next_is_comma, properties::write_css_string,
+  tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Implements `FromCss` for a `Box<[T]>` animation list type as a comma-separated list of `$elem`.

@@ -1,9 +1,11 @@
-use crate::style::{ToCss, unexpected_token};
-use cssparser::{Parser, Token};
-use parley::{FontFeature, setting::Tag};
 use std::fmt;
 
-use crate::style::{CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult};
+use cssparser::{Parser, Token};
+use parley::{FontFeature, setting::Tag};
+
+use crate::style::{
+  CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, unexpected_token,
+};
 
 pub(crate) fn parse_opentype_tag<'i, T: FromCss<'i>>(
   input: &mut Parser<'i, '_>,

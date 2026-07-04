@@ -6,6 +6,12 @@
 
 use taffy::{AvailableSpace, Layout, Point, Size};
 
+use super::{
+  BackgroundTile, BorderPainting, BorderProperties, Canvas, Fill, PaintSource, RenderContext,
+  SizedFontStyle, SizedShadow, TileLayer, collect_background_layers, draw_image,
+  draw_inset_shadow_to_canvas, draw_outset_shadow, inline_drawing::draw_inline_layout,
+  rasterize_layers, release_rasterized_background_tile,
+};
 use crate::{
   Result,
   layout::{
@@ -16,13 +22,6 @@ use crate::{
     node::{ImageData, Node, NodeKind, TextData},
   },
   style::{Affine, BackgroundClip, BlendMode, Length, Sides},
-};
-
-use super::{
-  BackgroundTile, BorderPainting, BorderProperties, Canvas, Fill, PaintSource, RenderContext,
-  SizedFontStyle, SizedShadow, TileLayer, collect_background_layers, draw_image,
-  draw_inset_shadow_to_canvas, draw_outset_shadow, inline_drawing::draw_inline_layout,
-  rasterize_layers, release_rasterized_background_tile,
 };
 
 pub(crate) fn draw_outset_box_shadow(

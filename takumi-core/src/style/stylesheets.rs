@@ -1,7 +1,6 @@
-use crate::style::unexpected_token;
 use std::{borrow::Cow, collections::HashMap, fmt, str::FromStr};
 
-use cssparser::{Parser, ParserInput, Token, match_ignore_ascii_case};
+use cssparser::{Parser, ParserInput, RuleBodyParser, Token, match_ignore_ascii_case};
 use parley::Language;
 use paste::paste;
 use serde::de::IgnoredAny;
@@ -13,9 +12,9 @@ use crate::{
     CssInput, CssValueSeed, SizingContext,
     properties::*,
     selector::{PropertyRule, StyleDeclarationParser},
+    unexpected_token,
   },
 };
-use cssparser::RuleBodyParser;
 #[path = "stylesheets_helpers.rs"]
 mod stylesheets_helpers;
 #[path = "stylesheets_mask.rs"]

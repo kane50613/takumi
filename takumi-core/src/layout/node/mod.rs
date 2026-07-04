@@ -2,21 +2,13 @@ mod container;
 mod image;
 mod text;
 
-use crate::{matching::MatchableNode, resources::image_buffer::ImageBuffer};
-use serde::Deserialize;
 use std::{collections::BTreeMap, sync::Arc};
+
+use parley::Language;
+use serde::Deserialize;
 use taffy::{AvailableSpace, Size};
 
-use crate::{
-  Xxh3HashSet,
-  context::RenderContext,
-  layout::{inline::InlineContentKind, node::image::image_url},
-  resources::image::{ImageResult, ImageSource},
-  style::{Direction, Style, StyleDeclaration, ToCss, tw::TailwindValues},
-  viewport::Viewport,
-};
-use parley::Language;
-
+pub use self::image::resolve_image;
 use self::{
   container::{
     container_children_ref, deserialize_children, drop_container_children, take_container_children,
@@ -24,8 +16,18 @@ use self::{
   image::{measure_image_node, take_image_style_layers},
   text::measure_text_node,
 };
-
-pub use self::image::resolve_image;
+use crate::{
+  Xxh3HashSet,
+  context::RenderContext,
+  layout::{inline::InlineContentKind, node::image::image_url},
+  matching::MatchableNode,
+  resources::{
+    image::{ImageResult, ImageSource},
+    image_buffer::ImageBuffer,
+  },
+  style::{Direction, Style, StyleDeclaration, ToCss, tw::TailwindValues},
+  viewport::Viewport,
+};
 
 /// Shared metadata stored by every renderable node.
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -674,9 +676,8 @@ impl MatchableNode for Node {
 mod tests {
   use std::str::FromStr;
 
-  use crate::style::{BackgroundImage, Style, StyleDeclaration, tw::TailwindValues};
-
   use super::*;
+  use crate::style::{BackgroundImage, Style, StyleDeclaration, tw::TailwindValues};
 
   #[test]
   fn collect_style_fetch_tasks_collects_nested_background_image_urls() {
@@ -735,10 +736,9 @@ mod tests {
 mod matching_tests {
   use std::collections::BTreeMap;
 
-  use crate::matching::{MatchedDeclarationsView, match_stylesheets_view};
-
   use crate::{
     layout::node::Node,
+    matching::{MatchedDeclarationsView, match_stylesheets_view},
     style::{ComputedStyle, Length, Style, StyleSheet},
     viewport::Viewport,
   };

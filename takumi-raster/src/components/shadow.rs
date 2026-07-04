@@ -1,13 +1,12 @@
 use taffy::{Layout, Point, Size};
 use tiny_skia::PixmapRef;
 
+pub(crate) use crate::shadow::SizedShadow;
 use crate::{
   BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, Command, Fill, Placement, Result,
   SamplingOptions, Style, apply_blur, attenuate_alpha_by_mask, fast_div_255, render_mask,
   style::{Affine, BlendMode, ImageScalingAlgorithm, Sides},
 };
-
-pub(crate) use crate::shadow::SizedShadow;
 
 /// Draws the outset mask of the shadow.
 pub(crate) fn draw_outset_shadow(

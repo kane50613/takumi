@@ -1,5 +1,6 @@
-use cssparser::{Parser, ParserInput};
 use std::{borrow::Cow, fmt, sync::Arc};
+
+use cssparser::{Parser, ParserInput};
 
 use crate::style::{Color, SizingContext, math::lcm};
 

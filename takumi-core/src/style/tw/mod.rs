@@ -4,11 +4,10 @@ pub mod map;
 /// Parsers for Tailwind utility-class suffixes.
 pub mod parser;
 
-use builder::TailwindDeclarationBuilder;
-pub(crate) use builder::TwGradientType;
-
 use std::{borrow::Cow, cmp::Ordering, str::FromStr};
 
+use builder::TailwindDeclarationBuilder;
+pub(crate) use builder::TwGradientType;
 use cssparser::match_ignore_ascii_case;
 use serde::{Deserialize, Deserializer, de::Error as DeError};
 

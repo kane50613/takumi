@@ -7,6 +7,7 @@ use std::{str::FromStr, sync::Arc};
 
 use quick_cache::{Weighter, sync::Cache};
 use serde::Deserialize;
+use thiserror::Error;
 #[cfg(feature = "svg")]
 use tiny_skia::Pixmap;
 use xxhash_rust::xxh3::xxh3_64;
@@ -18,7 +19,6 @@ use crate::{
   },
   style::{ImageScalingAlgorithm, IntrinsicSizing, SizingContext},
 };
-use thiserror::Error;
 
 /// Represents the state of an image resource.
 pub(crate) type ImageResult = Result<ImageSource, ImageError>;

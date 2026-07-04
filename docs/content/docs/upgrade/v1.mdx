@@ -134,13 +134,13 @@ let viewport = Viewport::new((800, 600)); // [!code ++]
 
 ### Removed Rust APIs
 
-| Removed                         | Replacement                                                                   |
-| ------------------------------- | ----------------------------------------------------------------------------- |
-| `parse_svg_str(data)`           | `SvgSource::from_str(data)`                                                   |
-| `FetchTaskCollection`           | `Node::image_urls` / `Style::image_urls`, then feed URLs back to the renderer |
-| `SpacePair::from_reversed_pair` | Construct `SpacePair` with values in order                                    |
-| `TakumiError` re-export         | `takumi::prelude::Error` (or `takumi_core::error::Error`)                     |
-| `detailed_css_error` feature    | Detailed CSS errors always on; no feature flag                                |
+| Removed                         | Replacement                                                                         |
+| ------------------------------- | ----------------------------------------------------------------------------------- |
+| `parse_svg_str(data)`           | `SvgSource::from_str(data)`                                                         |
+| `FetchTaskCollection`           | `Node::resource_urls` / `Style::resource_urls`, then feed URLs back to the renderer |
+| `SpacePair::from_reversed_pair` | Construct `SpacePair` with values in order                                          |
+| `TakumiError` re-export         | `takumi::prelude::Error` (or `takumi_core::error::Error`)                           |
+| `detailed_css_error` feature    | Detailed CSS errors always on; no feature flag                                      |
 
 ```rust
 use takumi::TakumiError; // [!code --]

@@ -10,11 +10,21 @@ mod paint_source;
 
 use std::{mem::replace, sync::Arc};
 
+pub(crate) use buffer_pool::BufferPool;
 use image::{
   ImageError, Rgba, RgbaImage,
   error::{ParameterError, ParameterErrorKind},
 };
+pub(crate) use mask::{
+  CanvasViewport, NodeMaskAction, attenuate_alpha_by_mask, intersect_alpha_masks,
+  prepare_node_mask, render_mask,
+};
+pub(crate) use paint_source::{PaintSource, SamplingFootprint, interpolate_with_footprint};
 use taffy::{Point, Size};
+use takumi_core::paint::{
+  GradientOverlayTile, LinearGradientFastPathKind, LinearGradientTile, RadialGradientTile,
+  overlay_gradient_tile_fast_normal_unconstrained,
+};
 use tiny_skia::{
   FillRule as TinyFillRule, FilterQuality as TinyFilterQuality, IntSize, Mask as TinyMask,
   Paint as TinyPaint, Path as TinyPath, Pattern as TinyPattern, Pixmap, PixmapMut, PixmapPaint,
@@ -33,17 +43,6 @@ use crate::{
   stacking_context::blend_pixmap_software,
   style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
 };
-use takumi_core::paint::{
-  GradientOverlayTile, LinearGradientFastPathKind, LinearGradientTile, RadialGradientTile,
-  overlay_gradient_tile_fast_normal_unconstrained,
-};
-
-pub(crate) use buffer_pool::BufferPool;
-pub(crate) use mask::{
-  CanvasViewport, NodeMaskAction, attenuate_alpha_by_mask, intersect_alpha_masks,
-  prepare_node_mask, render_mask,
-};
-pub(crate) use paint_source::{PaintSource, SamplingFootprint, interpolate_with_footprint};
 
 #[derive(Clone, Copy)]
 pub(crate) struct SamplingOptions {
@@ -1664,8 +1663,10 @@ pub(crate) fn overlay_radial_gradient_tile(
 #[cfg(test)]
 mod tests {
   use image::RgbaImage;
+  use takumi_core::paint::{ConicGradientTile, LinearGradientTile, RadialGradientTile};
   use tiny_skia::PixmapMut;
 
+  use super::*;
   use crate::{
     Fonts, RenderContext, blend_pixel, pixmap_from_buffer,
     resources::image_buffer::ImageBuffer,
@@ -1675,9 +1676,6 @@ mod tests {
     },
     viewport::Viewport,
   };
-  use takumi_core::paint::{ConicGradientTile, LinearGradientTile, RadialGradientTile};
-
-  use super::*;
 
   fn overlay_area_reference(
     bottom: &mut RgbaImage,

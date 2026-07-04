@@ -1,9 +1,3 @@
-use cssparser::*;
-use precomputed_hash::PrecomputedHash;
-use selectors::parser::{
-  NonTSPseudoClass, ParseRelative, PseudoElement as PseudoElementTrait,
-  SelectorImpl as SelectorImplTrait, SelectorList,
-};
 use std::{
   collections::HashMap,
   fmt::{self, Write},
@@ -11,13 +5,19 @@ use std::{
   ops::Deref,
 };
 
+use cssparser::*;
+use precomputed_hash::PrecomputedHash;
+use selectors::parser::{
+  NonTSPseudoClass, ParseRelative, PseudoElement as PseudoElementTrait,
+  SelectorImpl as SelectorImplTrait, SelectorList,
+};
+
+pub use crate::style::media_query::MediaQueryList;
 use crate::{
   error::StyleSheetParseError,
   keyframes::parse_keyframe_prelude,
   style::{KeyframeRule, KeyframesRule, StyleDeclarationBlock, supports::parse_supports_condition},
 };
-
-pub use crate::style::media_query::MediaQueryList;
 
 /// A registered custom property from an `@property` rule.
 #[derive(Debug, Clone, PartialEq)]
@@ -1159,9 +1159,9 @@ impl StyleSheet {
 
 #[cfg(test)]
 mod tests {
-  use super::*;
   use cssparser::ToCss;
 
+  use super::*;
   use crate::{
     style::{Color, ColorInput, ComputedStyle, Length, Style, StyleDeclaration},
     viewport::Viewport,

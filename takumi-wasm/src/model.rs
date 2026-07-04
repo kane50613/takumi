@@ -1,8 +1,9 @@
 //! Data models and types for the WebAssembly bindings.
 
+use std::sync::Arc;
+
 use serde::{Deserialize, Deserializer, de::Error as DeError};
 use serde_bytes::ByteBuf;
-use std::sync::Arc;
 use takumi_core::{
   keyframes::deserialize_optional_keyframes,
   layout::node::Node,

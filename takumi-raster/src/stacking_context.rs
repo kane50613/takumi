@@ -1,4 +1,8 @@
 use taffy::{AvailableSpace, Layout, NodeId, Point, TaffyError, geometry::Size};
+use takumi_core::{
+  geometry::transformed_rect_extents,
+  scene::{NodePaint, PaintItem, PaintItemKind, SceneBounds, StackingContextNode},
+};
 use tiny_skia::{Pixmap, PixmapMut};
 
 use crate::{
@@ -16,10 +20,6 @@ use crate::{
   },
   prepare_node_mask,
   style::{Affine, BackgroundImage, BlendMode, Filter, SizingContext},
-};
-use takumi_core::{
-  geometry::transformed_rect_extents,
-  scene::{NodePaint, PaintItem, PaintItemKind, SceneBounds, StackingContextNode},
 };
 
 fn bounds_intersects_viewport(bounds: SceneBounds, viewport: CanvasViewport) -> bool {

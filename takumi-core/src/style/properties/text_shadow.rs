@@ -187,9 +187,8 @@ impl ToCss for TextShadow {
 
 #[cfg(test)]
 mod tests {
-  use crate::style::{Color, Length::Px};
-
   use super::*;
+  use crate::style::{Color, Length::Px};
 
   #[test]
   fn test_parse_text_shadow_no_blur_radius() {

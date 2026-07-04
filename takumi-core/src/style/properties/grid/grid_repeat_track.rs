@@ -75,10 +75,10 @@ impl ToCss for GridRepeatTrack {
 
 #[cfg(test)]
 mod tests {
-  use crate::style::GridLength;
+  use cssparser::{Parser, ParserInput};
 
   use super::*;
-  use cssparser::{Parser, ParserInput};
+  use crate::style::GridLength;
 
   #[test]
   fn test_parse_repeat_track_with_names() {

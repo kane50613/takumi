@@ -1,10 +1,8 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, cmp::Ordering};
 
 use parley::{FontFeature, FontVariation};
-use std::cmp::Ordering;
-use typed_builder::TypedBuilder;
-
 use serde::Deserialize;
+use typed_builder::TypedBuilder;
 
 use crate::{
   style::{

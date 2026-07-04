@@ -246,7 +246,7 @@ With the image store gone, the render context holds only fonts. Build a `Fonts`,
 let mut global = GlobalContext::default(); // [!code --]
 global.font_context.load_and_store(FontResource::new(font_bytes)); // [!code --]
 let mut fonts = Fonts::default(); // [!code ++]
-fonts.register(FontResource::new(font_bytes)).unwrap(); // [!code ++]
+fonts.register(FontResource::new(font_bytes))?; // [!code ++]
 
 let options = RenderOptions::builder()
   .viewport(viewport)
@@ -283,12 +283,14 @@ renderer.render(node, { format: "webp", lossless: true }); // napi only
 
 ### Renamed entry points
 
-| v1                                      | v2                       | Note                                                                             |
-| --------------------------------------- | ------------------------ | -------------------------------------------------------------------------------- |
-| `measure_layout`                        | `measure`                | Returns a `MeasuredNode`.                                                        |
-| `render_sequence_animation`             | `render_animation`       | Matches the JS binding.                                                          |
-| `render` -> `image::RgbaImage`          | `render` -> `Bitmap`     | Reach pixels with `bitmap.as_raw()` / `into_raw()`, or pass it to `write_image`. |
-| `render_for_layout(..., current_color)` | `render_for_layout(...)` | The `current_color` argument is dropped.                                         |
+| v1                                             | v2                       | Note                                                                             |
+| ---------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------- |
+| `measure_layout`                               | `measure`                | Returns a `MeasuredNode`.                                                        |
+| `render_sequence_animation`                    | `render_animation`       | Matches the JS binding.                                                          |
+| `render` -> `image::RgbaImage`                 | `render` -> `Bitmap`     | Reach pixels with `bitmap.as_raw()` / `into_raw()`, or pass it to `write_image`. |
+| `render_for_layout(..., current_color)`        | `render_for_layout(...)` | The `current_color` argument is dropped.                                         |
+| `Node::resource_urls` / `Style::resource_urls` | `image_urls`             | The URLs they collect are all images.                                            |
+| `ImageResourceError`                           | `ImageError`             | Matches `FontError`.                                                             |
 
 ```rust
 let measured = measure_layout(options)?; // [!code --]

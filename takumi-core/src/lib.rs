@@ -61,7 +61,6 @@ pub mod paint {
 use std::collections::HashSet;
 
 pub use error::{Error, Result};
-
 use xxhash_rust::xxh3::Xxh3DefaultBuilder;
 
 pub use crate::resources::font::Fonts;

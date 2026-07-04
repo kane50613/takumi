@@ -1,9 +1,8 @@
-use crate::style::unexpected_token;
 use cssparser::{Parser, match_ignore_ascii_case};
 
 use crate::style::{
   AspectRatio, CssSyntaxKind, CssToken, FlexDirection, FlexWrap, FromCss, FromCssStr, Length,
-  MakeComputed, ParseResult, SizingContext, tw::TailwindPropertyParser,
+  MakeComputed, ParseResult, SizingContext, tw::TailwindPropertyParser, unexpected_token,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]

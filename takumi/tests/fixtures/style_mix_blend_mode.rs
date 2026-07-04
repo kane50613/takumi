@@ -1,7 +1,8 @@
+use std::sync::Arc;
+
 use takumi::prelude::{Length::*, *};
 
 use crate::test_utils::run_fixture_test;
-use std::sync::Arc;
 
 /// Creates a single card with solid blocks and mix-blend-mode for testing.
 fn create_blend_card(mode: BlendMode) -> Node {

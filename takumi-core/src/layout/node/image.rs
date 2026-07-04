@@ -195,12 +195,10 @@ pub fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
 
 #[cfg(test)]
 mod tests {
-  use std::assert_matches;
+  use std::{assert_matches, borrow::Cow};
 
-  use crate::style::SizingContext;
   use image::RgbaImage;
   use serde_json::from_value;
-  use std::borrow::Cow;
   use taffy::{AvailableSpace, Dimension, Size, Style};
 
   use super::{image_url, measure_image_node};
@@ -209,6 +207,7 @@ mod tests {
     context::RenderContext,
     layout::node::{ImageData, ImageSourceInput},
     resources::{image::ImageSource, image_buffer::ImageBuffer},
+    style::SizingContext,
     viewport::Viewport,
   };
 

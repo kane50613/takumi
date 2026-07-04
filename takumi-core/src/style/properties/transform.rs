@@ -1,4 +1,3 @@
-use crate::style::{ToCss, properties::filter::interpolate_field, unexpected_token};
 use std::{
   fmt,
   ops::{Mul, MulAssign},
@@ -9,7 +8,8 @@ use tiny_skia::Transform as TinyTransform;
 
 use crate::style::{
   Angle, Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, ListInterpolationStrategy,
-  MakeComputed, ParseResult, PercentageNumber, SizingContext, lerp,
+  MakeComputed, ParseResult, PercentageNumber, SizingContext, ToCss, lerp,
+  properties::filter::interpolate_field, unexpected_token,
 };
 
 const DEFAULT_SCALE: f32 = 1.0;
