@@ -128,6 +128,7 @@ pub struct PathShape {
 
 /// Represents a basic shape function for clip-path.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum BasicShape {
   /// inset() function
   Inset(Box<InsetShape>),

@@ -428,8 +428,8 @@ impl Node {
     }
     if let Some(dir) = &self.metadata.dir {
       let dir_str = match dir {
-        Direction::Ltr => "ltr",
         Direction::Rtl => "rtl",
+        _ => "ltr",
       };
       attrs.push(format!("dir=\"{}\"", dir_str));
     }
@@ -1012,10 +1012,10 @@ mod matching_tests {
     // Matched normal: should have width: 10px.
     // Matched important: should have height: 20px.
 
-    assert_eq!(matched[0].element().normal()[0].declarations.len(), 1);
+    assert_eq!(matched[0].element().normal()[0].len(), 1);
     assert!(matched[0].element().normal()[0].importance.is_empty());
 
-    assert_eq!(matched[0].element().important()[0].declarations.len(), 1);
+    assert_eq!(matched[0].element().important()[0].len(), 1);
     assert!(!matched[0].element().important()[0].importance.is_empty());
   }
 

@@ -20,7 +20,7 @@ use typed_builder::TypedBuilder;
 
 use takumi_core::layout::{
   node::{ImageData, ImageSourceInput, Node, NodeKind},
-  style::{Direction, FromCss, Style, StyleDeclarationBlock, tw::TailwindValues},
+  style::{Direction, FromCssStr, Style, StyleDeclarationBlock, tw::TailwindValues},
 };
 
 /// Tags whose entire subtree is dropped, matching the JS `isHtmlVoidElement`
@@ -513,7 +513,7 @@ fn dimension(handle: &Handle, name: &str) -> Option<f32> {
 }
 
 fn parse_direction(value: &str) -> Option<Direction> {
-  Direction::from_str(value).ok()
+  Direction::from_css_str(value).ok()
 }
 
 /// Serialize an element including its own tag (outer HTML), used to round-trip
@@ -553,7 +553,7 @@ mod tests {
     for (tag, _) in DEFAULT_PRESETS {
       let style = presets.get(tag).expect("preset present");
       assert!(
-        !style.declarations.declarations.is_empty(),
+        !style.declarations.is_empty(),
         "preset `{tag}` produced no declarations",
       );
     }

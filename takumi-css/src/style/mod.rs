@@ -3,7 +3,7 @@ mod calc;
 mod css_input;
 mod math;
 mod media_query;
-mod properties;
+pub(crate) mod properties;
 pub(crate) mod selector;
 mod sizing;
 mod stylesheets;

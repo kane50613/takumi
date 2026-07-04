@@ -36,7 +36,7 @@ fn render_gradient_node(fonts: &Fonts, node: Node) {
 }
 
 fn run_gradient_render(fonts: &Fonts, background_image_str: &str) {
-  let background_images = BackgroundImages::from_str(background_image_str).ok();
+  let background_images = BackgroundImages::from_css_str(background_image_str).ok();
   let node = build_gradient_node(background_images);
   render_gradient_node(fonts, node);
 }

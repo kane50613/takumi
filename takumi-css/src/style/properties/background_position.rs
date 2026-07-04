@@ -252,7 +252,7 @@ impl<'i> FromCss<'i> for PositionComponent {
   ];
 }
 
-/// A list of `background-position` values (one per layer).
+/// An ordered list of [`PositionValue`] values.
 pub type PositionValues = Box<[PositionValue]>;
 
 impl<'i> FromCss<'i> for PositionValues {

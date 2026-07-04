@@ -159,7 +159,7 @@ impl<'i> FromCss<'i> for BackgroundRepeat {
   ];
 }
 
-/// A list of background-repeat values (one per layer).
+/// An ordered list of [`BackgroundRepeat`] values.
 pub type BackgroundRepeats = Box<[BackgroundRepeat]>;
 
 impl<'i> FromCss<'i> for BackgroundRepeats {

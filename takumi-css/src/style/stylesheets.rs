@@ -1479,7 +1479,7 @@ impl<'i> FromCss<'i> for CssWideKeyword {
 pub struct DeclarationImportance {
   pub(crate) longhands: PropertyMask,
   /// Custom property names marked important.
-  pub custom_properties: SmallVec<[Box<str>; 1]>,
+  pub(crate) custom_properties: SmallVec<[Box<str>; 1]>,
 }
 
 impl DeclarationImportance {
@@ -1541,7 +1541,7 @@ where
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct StyleDeclarationBlock {
   /// Ordered declarations in source order.
-  pub declarations: SmallVec<[StyleDeclaration; 8]>,
+  pub(crate) declarations: SmallVec<[StyleDeclaration; 8]>,
   /// Properties that were marked with `!important`.
   pub importance: DeclarationImportance,
 }
@@ -1578,6 +1578,16 @@ impl StyleDeclarationBlock {
     self.declarations.iter()
   }
 
+  /// The number of declarations in this block.
+  pub fn len(&self) -> usize {
+    self.declarations.len()
+  }
+
+  /// Whether this block has no declarations.
+  pub fn is_empty(&self) -> bool {
+    self.declarations.is_empty()
+  }
+
   /// Collects resource URLs referenced by declarations in this block.
   pub fn resource_urls(&self) -> impl Iterator<Item = &str> {
     fn background_image_url(image: &BackgroundImage) -> Option<&str> {
@@ -1608,7 +1618,7 @@ impl StyleDeclarationBlock {
   }
 
   /// Parses one declaration block for the given property name.
-  pub fn parse<'i>(name: &str, input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+  pub(crate) fn parse<'i>(name: &str, input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     parse_style_declaration(name, input)
   }
 }
@@ -1636,6 +1646,14 @@ impl FromStr for StyleDeclarationBlock {
     }
 
     Ok(block)
+  }
+}
+
+impl FromStr for Style {
+  type Err = StyleDeclarationBlockParseError;
+
+  fn from_str(input: &str) -> Result<Self, Self::Err> {
+    StyleDeclarationBlock::from_str(input).map(Into::into)
   }
 }
 

@@ -30,11 +30,12 @@ use crate::{
   blend::*,
   build_path,
   error::Error,
-  layout::style::{
-    Affine, BlendMode, GradientOverlayTile, ImageScalingAlgorithm, LinearGradientFastPathKind,
-    LinearGradientTile, RadialGradientTile, overlay_gradient_tile_fast_normal_unconstrained,
-  },
+  layout::style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
   stacking_context::blend_pixmap_software,
+};
+use takumi_css::paint::{
+  GradientOverlayTile, LinearGradientFastPathKind, LinearGradientTile, RadialGradientTile,
+  overlay_gradient_tile_fast_normal_unconstrained,
 };
 
 pub(crate) use buffer_pool::BufferPool;
@@ -360,16 +361,16 @@ impl Canvas {
     f(&self.image, &mut self.buffer_pool)
   }
 
-  pub(crate) fn draw_mask<C: Into<Rgba<u8>>>(
+  pub(crate) fn draw_mask(
     &mut self,
     mask: &[u8],
     placement: Placement,
-    color: C,
+    color: Color,
     mode: BlendMode,
   ) {
     let placement = self.localize_placement(placement);
     self.with_overlay_state(|pixmap, combined_mask, _| {
-      draw_mask(pixmap, mask, placement, color.into(), mode, combined_mask);
+      draw_mask(pixmap, mask, placement, Rgba(color.0), mode, combined_mask);
     });
   }
   pub(crate) fn composite_mask_source(
@@ -397,12 +398,12 @@ impl Canvas {
       );
     });
   }
-  pub(crate) fn composite_mask_source_over_color<C: Into<Rgba<u8>>>(
+  pub(crate) fn composite_mask_source_over_color(
     &mut self,
     mask: &[u8],
     placement: Placement,
     source: PaintSource<'_>,
-    color: C,
+    color: Color,
     sampling: MaskSamplingOptions,
     mode: BlendMode,
   ) {
@@ -416,19 +417,19 @@ impl Canvas {
         composite::Options {
           placement,
           sampling,
-          color_mode: MaskCompositeColor::SourceOverColor(premultiply_rgba(color.into())),
+          color_mode: MaskCompositeColor::SourceOverColor(premultiply_rgba(Rgba(color.0))),
           mode,
           combined_mask,
         },
       );
     });
   }
-  pub(crate) fn composite_mask_color_over_source<C: Into<Rgba<u8>>>(
+  pub(crate) fn composite_mask_color_over_source(
     &mut self,
     mask: &[u8],
     placement: Placement,
     source: PaintSource<'_>,
-    color: C,
+    color: Color,
     sampling: MaskSamplingOptions,
     mode: BlendMode,
   ) {
@@ -442,7 +443,7 @@ impl Canvas {
         composite::Options {
           placement,
           sampling,
-          color_mode: MaskCompositeColor::ColorOverSource(premultiply_rgba(color.into())),
+          color_mode: MaskCompositeColor::ColorOverSource(premultiply_rgba(Rgba(color.0))),
           mode,
           combined_mask,
         },
@@ -724,13 +725,14 @@ fn to_tiny_blend_mode(mode: BlendMode) -> Option<tiny_skia::BlendMode> {
     BlendMode::Luminosity => T::Luminosity,
     BlendMode::PlusLighter => T::Plus,
     BlendMode::PlusDarker => return None,
+    _ => return None,
   })
 }
 
 fn to_tiny_filter_quality(algorithm: ImageScalingAlgorithm) -> TinyFilterQuality {
   match algorithm {
     ImageScalingAlgorithm::Pixelated => TinyFilterQuality::Nearest,
-    ImageScalingAlgorithm::Auto | ImageScalingAlgorithm::Smooth => TinyFilterQuality::Bilinear,
+    _ => TinyFilterQuality::Bilinear,
   }
 }
 
@@ -1670,14 +1672,15 @@ mod tests {
     layout::{
       Viewport,
       style::{
-        Angle, BlendMode, Color, ColorInterpolationMethod, ConicGradient, ConicGradientTile,
-        FromCss, GradientStop, Length, LinearGradient, LinearGradientTile, PositionValue,
-        RadialGradient, RadialGradientTile, SizingContext, StopPosition,
+        Angle, BlendMode, Color, ColorInterpolationMethod, ConicGradient, GradientStop, Length,
+        LinearGradient, PositionValue, RadialGradient, SizingContext, StopPosition,
       },
     },
     pixmap_from_buffer,
     resources::image_buffer::ImageBuffer,
   };
+  use takumi_core::layout::style::FromCssStr;
+  use takumi_css::paint::{ConicGradientTile, LinearGradientTile, RadialGradientTile};
 
   use super::*;
 
@@ -1763,7 +1766,7 @@ mod tests {
 
   #[test]
   fn test_overlay_linear_gradient_matches_reference() {
-    let Ok(gradient) = LinearGradient::from_str("linear-gradient(to right, red, blue)") else {
+    let Ok(gradient) = LinearGradient::from_css_str("linear-gradient(to right, red, blue)") else {
       return;
     };
     let global_context = Fonts::default();
@@ -1826,7 +1829,7 @@ mod tests {
 
     let global_context = Fonts::default();
     for (gradient_css, tile_size, canvas_size, offset) in cases {
-      let Ok(gradient) = RadialGradient::from_str(gradient_css) else {
+      let Ok(gradient) = RadialGradient::from_css_str(gradient_css) else {
         continue;
       };
       let render_context = RenderContext::builder()
@@ -1857,7 +1860,7 @@ mod tests {
 
   #[test]
   fn test_overlay_conic_gradient_matches_reference() {
-    let Ok(gradient) = ConicGradient::from_str("conic-gradient(red, blue)") else {
+    let Ok(gradient) = ConicGradient::from_css_str("conic-gradient(red, blue)") else {
       return;
     };
 
@@ -1957,7 +1960,7 @@ mod tests {
 
     let global_context = Fonts::default();
     for (gradient_css, tile_size, canvas_size, offset) in cases {
-      let Ok(gradient) = LinearGradient::from_str(gradient_css) else {
+      let Ok(gradient) = LinearGradient::from_css_str(gradient_css) else {
         continue;
       };
       let render_context = RenderContext::builder()
@@ -2110,7 +2113,7 @@ mod tests {
   #[test]
   fn test_overlay_radial_gradient_clustered_stops_matches_reference() {
     let Ok(gradient) =
-      RadialGradient::from_str("radial-gradient(circle, red 0%, lime 1%, blue 100%)")
+      RadialGradient::from_css_str("radial-gradient(circle, red 0%, lime 1%, blue 100%)")
     else {
       return;
     };

@@ -76,7 +76,7 @@ fn inline_image() {
         .with_border_style(Sides([BorderStyle::Solid; 4]))
         .with_border_color(Sides([ColorInput::Value(Color::transparent()); 4]))
         .with(StyleDeclaration::background_image(
-          BackgroundImages::from_str("linear-gradient(to right, red, blue)").ok(),
+          BackgroundImages::from_css_str("linear-gradient(to right, red, blue)").ok(),
         ))
         .with(StyleDeclaration::background_clip(
           BackgroundClip::BorderArea,

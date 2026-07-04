@@ -65,8 +65,8 @@ pub(crate) fn emit_image(
     ObjectFit::Fill => 1.0,
     ObjectFit::Contain => (w / iw).min(h / ih),
     ObjectFit::Cover => (w / iw).max(h / ih),
-    ObjectFit::None => 1.0,
     ObjectFit::ScaleDown => (w / iw).min(h / ih).min(1.0),
+    _ => 1.0,
   };
   let (dw, dh) = (iw * scale, ih * scale);
 

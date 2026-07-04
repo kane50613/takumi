@@ -86,7 +86,7 @@ fn test_style_mix_blend_mode() {
         .with(StyleDeclaration::align_items(AlignItems::Center))
         .with(StyleDeclaration::justify_content(JustifyContent::Center))
         .with(StyleDeclaration::background_color(
-          Color::from_str("sandybrown")
+          Color::from_css_str("sandybrown")
             .map(ColorInput::Value)
             .unwrap(),
         )),
@@ -136,7 +136,7 @@ fn test_style_mlx_blend_mode_isolation() {
       .with(StyleDeclaration::align_items(AlignItems::Center))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
       .with(StyleDeclaration::background_color(
-        Color::from_str("deepskyblue")
+        Color::from_css_str("deepskyblue")
           .map(ColorInput::Value)
           .unwrap(),
       )),
@@ -149,7 +149,7 @@ fn test_style_mlx_blend_mode_isolation() {
 // https://github.com/kane50613/takumi/issues/644
 #[test]
 fn test_style_mix_blend_mode_text_regression() {
-  let family = FontFamily::from_str("Geist").unwrap();
+  let family = FontFamily::from_css_str("Geist").unwrap();
   let label_style = Style::default()
     .with(StyleDeclaration::display(Display::Block))
     .with(StyleDeclaration::max_width(Px(500.0)))

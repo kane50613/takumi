@@ -7,7 +7,6 @@ use std::{
   sync::{Arc, LazyLock},
 };
 
-use parley::fontique::FontInfoOverride;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use takumi::{
   encode_animated_gif, encode_animated_png, encode_animated_webp, prelude::*, render, write_image,
@@ -93,8 +92,8 @@ fn create_test_context() -> Fonts {
     context
       .register(
         FontResource::new(font_data)
-          .override_info(FontInfoOverride {
-            family_name: Some(name),
+          .override_info(FontOverride {
+            family_name: Some((*name).into()),
             ..Default::default()
           })
           .generic_family(*generic),

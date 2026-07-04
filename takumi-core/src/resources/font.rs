@@ -12,7 +12,7 @@ use parley::{
   GenericFamily as ParleyGenericFamily, GlyphRun, LayoutContext, TextStyle, TreeBuilder,
   fontique::{
     Attributes, Blob, Collection, CollectionOptions, FallbackKey, FontInfoOverride, FontStyle,
-    QueryFamily, QueryStatus, Script, ScriptExt,
+    FontWeight, FontWidth, QueryFamily, QueryStatus, Script, ScriptExt,
   },
 };
 use skrifa::{
@@ -24,10 +24,12 @@ use skrifa::{
   },
   instance::{LocationRef, Size},
   outline::{DrawSettings, OutlineGlyphCollection, OutlinePen},
-  raw::types::{BoundingBox, F2Dot14},
+  raw::types::{BoundingBox, F2Dot14, Tag},
 };
 use thiserror::Error;
 use tiny_skia::{IntSize, PathSegment as Command, Pixmap};
+
+use takumi_css::FontStyle as CssFontStyle;
 
 use crate::{
   context::RenderContext,
@@ -907,6 +909,11 @@ impl Fonts {
     } = font;
 
     let blob = source.into_blob()?;
+    let axes = info_override.as_ref().map(FontOverride::resolved_axes);
+    let info_override = info_override
+      .as_ref()
+      .zip(axes.as_deref())
+      .map(|(info, axes)| info.to_parley(axes));
     let registered_fonts = self.inner.collection.register_fonts(blob, info_override);
 
     let mut families = Vec::with_capacity(registered_fonts.len());
@@ -996,14 +1003,13 @@ impl RenderContext {
   }
 }
 
-/// Represents a font source buffer.
+/// A font source buffer. Construct from raw bytes via `From`; woff/woff2 are
+/// decompressed internally when the font is registered.
 #[derive(Debug)]
-pub enum FontSource<'a> {
-  /// Raw font buffer.
-  Raw(Cow<'a, [u8]>),
-  /// Recognized font blob.
-  /// Woff2 and Woff should be decompressed into raw buffer before passing to this.
-  Blob(Blob<u8>),
+pub struct FontSource<'a> {
+  bytes: Cow<'a, [u8]>,
+  /// Whether `bytes` is already decompressed (woff/woff2 expanded to raw sfnt).
+  is_decoded: bool,
 }
 
 impl<'a, T> From<T> for FontSource<'a>
@@ -1011,37 +1017,39 @@ where
   T: Into<Cow<'a, [u8]>>,
 {
   fn from(value: T) -> Self {
-    Self::Raw(value.into())
+    Self {
+      bytes: value.into(),
+      is_decoded: false,
+    }
   }
 }
 
 impl<'a> FontSource<'a> {
-  fn into_blob_variant(self) -> Result<Self, FontError> {
-    match self {
-      Self::Raw(raw) => Ok(Self::Blob(decode_font(raw)?)),
-      Self::Blob(_) => Ok(self),
+  fn into_decoded(self) -> Result<Self, FontError> {
+    if self.is_decoded {
+      return Ok(self);
     }
+
+    Ok(Self {
+      bytes: Cow::Owned(load_font(self.bytes, None)?),
+      is_decoded: true,
+    })
   }
 
   fn into_blob(self) -> Result<Blob<u8>, FontError> {
-    match self {
-      Self::Raw(raw) => decode_font(raw),
-      Self::Blob(blob) => Ok(blob),
-    }
-  }
-}
+    let decoded = if self.is_decoded {
+      self.bytes.into_owned()
+    } else {
+      load_font(self.bytes, None)?
+    };
 
-/// Decodes raw font bytes (decompressing woff2/woff) into a blob.
-fn decode_font(raw: Cow<'_, [u8]>) -> Result<Blob<u8>, FontError> {
-  Ok(Blob::new(Arc::new(load_font(raw, None)?)))
+    Ok(Blob::new(Arc::new(decoded)))
+  }
 }
 
 impl<'a> AsRef<[u8]> for FontSource<'a> {
   fn as_ref(&self) -> &[u8] {
-    match self {
-      Self::Raw(raw) => raw,
-      Self::Blob(blob) => blob.as_ref(),
-    }
+    &self.bytes
   }
 }
 
@@ -1086,14 +1094,54 @@ impl From<GenericFamily> for ParleyGenericFamily {
   }
 }
 
+/// Overrides for a registered font's metadata, letting callers rename its
+/// family or pin weight/style/width/axes regardless of what the font file
+/// itself declares.
+#[derive(Debug, Default, Clone)]
+pub struct FontOverride {
+  /// Family name to register the font under, instead of its embedded name.
+  pub family_name: Option<Arc<str>>,
+  /// Font weight (CSS numeric, e.g. `400.0`) to use instead of the embedded one.
+  pub weight: Option<f32>,
+  /// Font style (slant) to use instead of the embedded one.
+  pub style: Option<CssFontStyle>,
+  /// Font width as a percentage (e.g. `100.0` for normal) to use instead of the
+  /// embedded one.
+  pub width: Option<f32>,
+  /// Default values for named variation axes (four-byte OpenType tags). Axes not
+  /// present in the font are ignored, as are tags that are not valid.
+  pub axes: Vec<(String, f32)>,
+}
+
+impl FontOverride {
+  fn resolved_axes(&self) -> Vec<(Tag, f32)> {
+    self
+      .axes
+      .iter()
+      .filter_map(|(tag, value)| {
+        Tag::new_checked(tag.as_bytes())
+          .ok()
+          .map(|tag| (tag, *value))
+      })
+      .collect()
+  }
+
+  fn to_parley<'a>(&'a self, axes: &'a [(Tag, f32)]) -> FontInfoOverride<'a> {
+    FontInfoOverride {
+      family_name: self.family_name.as_deref(),
+      width: self.width.map(FontWidth::from_percentage),
+      style: self.style.map(Into::into),
+      weight: self.weight.map(FontWeight::new),
+      axes: (!axes.is_empty()).then_some(axes),
+    }
+  }
+}
+
 #[derive(Debug)]
 /// Information of a font resource
 pub struct FontResource<'a> {
-  /// Font source
   source: FontSource<'a>,
-  /// Font information for override
-  info_override: Option<FontInfoOverride<'a>>,
-  /// Generic font family
+  info_override: Option<FontOverride>,
   generic_family: Option<GenericFamily>,
   /// Logical family this font is a coverage subset of (see [`FontResource::subset_of`]).
   subset_of: Option<String>,
@@ -1110,8 +1158,8 @@ impl<'a> FontResource<'a> {
     }
   }
 
-  /// Set font information for override
-  pub fn override_info(self, info_override: FontInfoOverride<'a>) -> Self {
+  /// Set font metadata overrides
+  pub fn override_info(self, info_override: FontOverride) -> Self {
     Self {
       info_override: Some(info_override),
       ..self
@@ -1142,7 +1190,7 @@ impl<'a> FontResource<'a> {
 
   /// Convert to resolved font resource, decompressing woff2/woff into a raw buffer.
   pub fn into_resolved(self) -> Result<Self, FontError> {
-    let source = self.source.into_blob_variant()?;
+    let source = self.source.into_decoded()?;
     Ok(Self {
       source,
       info_override: self.info_override,

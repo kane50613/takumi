@@ -13,7 +13,7 @@ fn create_test_nodes() -> Vec<Node> {
           .with(StyleDeclaration::flex_grow(Some(FlexGrow(1.0))))
           .with(StyleDeclaration::font_size(FontSize::Length(Px(24.0))))
           .with(StyleDeclaration::font_family(
-            FontFamily::from_str("monospace").unwrap(),
+            FontFamily::from_css_str("monospace").unwrap(),
           )),
       )
     })
@@ -66,7 +66,7 @@ fn test_direction_grid() {
       Style::default()
         .with(StyleDeclaration::display(Display::Grid))
         .with(StyleDeclaration::grid_template_columns(Some(
-          GridTemplateComponents::from_str("repeat(4, 1fr)").unwrap(),
+          GridTemplateComponents::from_css_str("repeat(4, 1fr)").unwrap(),
         )))
         .with(StyleDeclaration::direction(Direction::Ltr))
         .with_gap(SpacePair::from_pair(Px(16.0), Px(16.0)))
@@ -76,7 +76,7 @@ fn test_direction_grid() {
       Style::default()
         .with(StyleDeclaration::display(Display::Grid))
         .with(StyleDeclaration::grid_template_columns(Some(
-          GridTemplateComponents::from_str("repeat(4, 1fr)").unwrap(),
+          GridTemplateComponents::from_css_str("repeat(4, 1fr)").unwrap(),
         )))
         .with(StyleDeclaration::direction(Direction::Rtl))
         .with_gap(SpacePair::from_pair(Px(16.0), Px(16.0)))

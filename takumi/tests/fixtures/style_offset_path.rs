@@ -46,7 +46,7 @@ fn test_offset_path_along_curve() {
       marker(
         Color([40, 90, 220u8.saturating_sub(shade), 255]),
         [
-          StyleDeclaration::offset_path(Some(OffsetPath::from_str(CURVE).unwrap())),
+          StyleDeclaration::offset_path(Some(OffsetPath::from_css_str(CURVE).unwrap())),
           StyleDeclaration::offset_distance(Percentage(*distance)),
           StyleDeclaration::offset_rotate(OffsetRotate::default()),
         ],
@@ -67,7 +67,7 @@ fn test_offset_path_ray_burst() {
         Color([220, 60, 120, 255]),
         [
           StyleDeclaration::offset_path(Some(
-            OffsetPath::from_str(&format!("ray({angle}deg closest-side at 50% 50%)")).unwrap(),
+            OffsetPath::from_css_str(&format!("ray({angle}deg closest-side at 50% 50%)")).unwrap(),
           )),
           StyleDeclaration::offset_distance(Percentage(80.0)),
           StyleDeclaration::offset_rotate(OffsetRotate::default()),
@@ -108,7 +108,7 @@ fn glyph(character: char, index: usize, distance: f32, path: &str, font_size: f3
       .with(StyleDeclaration::left(Px(0.0)))
       .with(StyleDeclaration::top(Px(0.0)))
       .with(StyleDeclaration::offset_path(Some(
-        OffsetPath::from_str(path).unwrap(),
+        OffsetPath::from_css_str(path).unwrap(),
       )))
       .with(StyleDeclaration::offset_distance(Percentage(distance)))
       .with(StyleDeclaration::offset_rotate(OffsetRotate::default())),

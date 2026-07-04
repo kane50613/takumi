@@ -80,7 +80,7 @@ fn solid_background_renders_as_fill() {
 
 #[test]
 fn linear_gradient_endpoints_match_stops() {
-  let images = BackgroundImages::from_str("linear-gradient(to right, #ff0000, #0000ff)")
+  let images = BackgroundImages::from_css_str("linear-gradient(to right, #ff0000, #0000ff)")
     .expect("parse gradient");
   let node = full_container([StyleDeclaration::background_image(Some(images))]);
   let pixmap = rasterize(node, &context());

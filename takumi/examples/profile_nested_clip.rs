@@ -13,7 +13,7 @@ fn nested_clip_masks_fixture() -> Node {
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with_border_radius(BorderRadius::from_str(radius).unwrap())
+        .with_border_radius(BorderRadius::from_css_str(radius).unwrap())
         .with_overflow(SpacePair::from_single(Overflow::Clip))
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([200, 30, 30, 255]),
@@ -28,7 +28,7 @@ fn nested_clip_masks_fixture() -> Node {
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Percentage(95.0)))
         .with(StyleDeclaration::height(Percentage(95.0)))
-        .with_border_radius(BorderRadius::from_str(radius).unwrap())
+        .with_border_radius(BorderRadius::from_css_str(radius).unwrap())
         .with_overflow(SpacePair::from_single(Overflow::Clip))
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([30, 30, 200, 255]),

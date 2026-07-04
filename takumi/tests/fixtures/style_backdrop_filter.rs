@@ -12,7 +12,7 @@ fn create_backdrop_card(filter: &str, label_font_size_px: f32) -> Node {
       .with(StyleDeclaration::align_items(AlignItems::Center))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
       .with(StyleDeclaration::backdrop_filter(
-        Filters::from_str(filter).unwrap(),
+        Filters::from_css_str(filter).unwrap(),
       ))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color([255, 255, 255, 60]),
@@ -59,16 +59,16 @@ fn test_style_backdrop_filter() {
         .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::display(Display::Grid))
         .with(StyleDeclaration::grid_template_columns(
-          GridTemplateComponents::from_str("repeat(4, 1fr)").ok(),
+          GridTemplateComponents::from_css_str("repeat(4, 1fr)").ok(),
         ))
         .with(StyleDeclaration::background_image(Some(
-          BackgroundImages::from_str(
+          BackgroundImages::from_css_str(
             "linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f857a6 50%, #ff5858 75%, #ffb199 100%)",
           )
           .unwrap(),
         )))
         .with(StyleDeclaration::background_position(
-          PositionValues::from_str("center center").unwrap(),
+          PositionValues::from_css_str("center center").unwrap(),
         )),)
   ;
 
@@ -104,12 +104,12 @@ fn test_style_backdrop_filter_frosted_glass() {
       .with(StyleDeclaration::align_items(AlignItems::Center))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
       .with(StyleDeclaration::backdrop_filter(
-        Filters::from_str("blur(16px)").unwrap(),
+        Filters::from_css_str("blur(16px)").unwrap(),
       ))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color([255, 255, 255, 80]),
       )))
-      .with_border_radius(BorderRadius::from_str("24px").unwrap())
+      .with_border_radius(BorderRadius::from_css_str("24px").unwrap())
       .with_padding(Sides([Px(48.0); 4]))
       .with_gap(SpacePair::from_single(Px(16.0))),
   )])
@@ -122,13 +122,13 @@ fn test_style_backdrop_filter_frosted_glass() {
       .with(StyleDeclaration::align_items(AlignItems::Center))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
       .with(StyleDeclaration::background_image(Some(
-        BackgroundImages::from_str("url(assets/images/yeecord.png)").unwrap(),
+        BackgroundImages::from_css_str("url(assets/images/yeecord.png)").unwrap(),
       )))
       .with(StyleDeclaration::background_position(
-        PositionValues::from_str("center center").unwrap(),
+        PositionValues::from_css_str("center center").unwrap(),
       ))
       .with(StyleDeclaration::background_size(
-        BackgroundSizes::from_str("cover").unwrap(),
+        BackgroundSizes::from_css_str("cover").unwrap(),
       )),
   );
 
@@ -152,17 +152,17 @@ fn test_style_backdrop_filter_with_mask() {
         Color([239, 68, 68, 255]),
       )))
       .with(StyleDeclaration::mask_image(Some(
-        BackgroundImages::from_str("linear-gradient(transparent 10%, black 100%)").unwrap(),
+        BackgroundImages::from_css_str("linear-gradient(transparent 10%, black 100%)").unwrap(),
       ))),
   );
 
   let masked_backdrop_blur = Node::container([]).with_style(
     absolute_inset_zero()
       .with(StyleDeclaration::backdrop_filter(
-        Filters::from_str("blur(24px)").unwrap(),
+        Filters::from_css_str("blur(24px)").unwrap(),
       ))
       .with(StyleDeclaration::mask_image(Some(
-        BackgroundImages::from_str("radial-gradient(transparent 30%, black 100%)").unwrap(),
+        BackgroundImages::from_css_str("radial-gradient(transparent 30%, black 100%)").unwrap(),
       ))),
   );
 
@@ -186,16 +186,16 @@ fn test_style_backdrop_filter_with_mask() {
         Color::black(),
       )))
       .with(StyleDeclaration::background_image(Some(
-        BackgroundImages::from_str(
+        BackgroundImages::from_css_str(
           "linear-gradient(to right, white 8px, transparent 8px), linear-gradient(to bottom, white 8px, transparent 8px)",
         )
         .unwrap(),
       )))
       .with(StyleDeclaration::background_size(
-        BackgroundSizes::from_str("48px 48px").unwrap(),
+        BackgroundSizes::from_css_str("48px 48px").unwrap(),
       ))
       .with(StyleDeclaration::background_repeat(
-        BackgroundRepeats::from_str("repeat, repeat").unwrap(),
+        BackgroundRepeats::from_css_str("repeat, repeat").unwrap(),
       )),
   );
 

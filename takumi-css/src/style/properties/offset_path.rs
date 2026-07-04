@@ -140,6 +140,7 @@ declare_enum_from_css_impl!(
 
 /// The non-`none` value of the CSS `offset-path` property.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum OffsetPath {
   /// `ray()`
   Ray(RayShape),
@@ -729,7 +730,7 @@ fn sample_ray(
 
 /// Samples an `offset-path` at `distance`, returning the point (box-local px)
 /// and tangent direction (radians).
-pub fn sample_offset_path(
+pub(crate) fn sample_offset_path(
   path: &OffsetPath,
   distance: Length,
   offset_position: &OffsetPosition,

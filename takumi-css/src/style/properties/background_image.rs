@@ -103,7 +103,7 @@ pub(crate) fn parse_comma_list<'i, T>(
   Ok(items.into_boxed_slice())
 }
 
-/// A collection of background images.
+/// An ordered list of [`BackgroundImage`] values.
 pub type BackgroundImages = Box<[BackgroundImage]>;
 
 impl<'i> FromCss<'i> for BackgroundImages {

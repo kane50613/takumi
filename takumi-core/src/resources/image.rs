@@ -202,9 +202,9 @@ impl SvgRasterCacheKey {
       width,
       height,
       image_rendering: match image_rendering {
-        ImageScalingAlgorithm::Auto => 0,
         ImageScalingAlgorithm::Smooth => 1,
         ImageScalingAlgorithm::Pixelated => 2,
+        _ => 0,
       },
     }
   }

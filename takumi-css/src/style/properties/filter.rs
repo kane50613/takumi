@@ -38,6 +38,7 @@ pub(crate) fn build_transfer_table<F: Fn(usize) -> f32>(f: F) -> TransferTable {
 
 /// Represents a single CSS filter operation
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum Filter {
   /// Brightness multiplier (1 = unchanged). Accepts number or percentage
   Brightness(PercentageNumber),
@@ -110,7 +111,7 @@ impl Filter {
   }
 }
 
-/// A list of filter operations
+/// An ordered list of [`Filter`] values.
 pub type Filters = Vec<Filter>;
 
 impl MakeComputed for Filter {
@@ -409,7 +410,7 @@ mod tests {
 
   #[test]
   fn test_parse_none_clears_filters() {
-    assert_eq!(Filters::from_str("none"), Ok(Filters::default()));
+    assert_eq!(Filters::from_str("none").unwrap(), Filters::default());
   }
 
   #[test]

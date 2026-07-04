@@ -57,7 +57,7 @@ fn text_typography_variable_width() {
     })
     .collect::<Vec<_>>();
 
-  let Ok(family) = FontFamily::from_str("Archivo") else {
+  let Ok(family) = FontFamily::from_css_str("Archivo") else {
     unreachable!()
   };
 
@@ -686,7 +686,7 @@ fn text_transform_all() {
 
 #[test]
 fn text_mask_image_gradient_and_emoji() {
-  let gradient_images = BackgroundImages::from_str(
+  let gradient_images = BackgroundImages::from_css_str(
     "linear-gradient(90deg, #ff3b30, #ffcc00, #34c759, #007aff, #5856d6)",
   )
   .unwrap();
@@ -697,13 +697,13 @@ fn text_mask_image_gradient_and_emoji() {
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::background_image(Some(gradient_images)))
         .with(StyleDeclaration::background_size(
-          BackgroundSizes::from_str("100% 100%").unwrap(),
+          BackgroundSizes::from_css_str("100% 100%").unwrap(),
         ))
         .with(StyleDeclaration::background_position(
-          PositionValues::from_str("0 0").unwrap(),
+          PositionValues::from_css_str("0 0").unwrap(),
         ))
         .with(StyleDeclaration::background_repeat(
-          BackgroundRepeats::from_str("no-repeat").unwrap(),
+          BackgroundRepeats::from_css_str("no-repeat").unwrap(),
         ))
         .with(StyleDeclaration::background_clip(BackgroundClip::Text))
         .with(StyleDeclaration::color(ColorInput::Value(
@@ -753,7 +753,7 @@ fn text_stroke_black_red() {
 
 #[test]
 fn text_stroke_background_clip() {
-  let gradient_images = BackgroundImages::from_str(
+  let gradient_images = BackgroundImages::from_css_str(
     "linear-gradient(90deg, #ff3b30, #ffcc00, #34c759, #007aff, #5856d6)",
   )
   .unwrap();
@@ -763,7 +763,7 @@ fn text_stroke_background_clip() {
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::background_image(Some(gradient_images)))
       .with(StyleDeclaration::background_position(
-        PositionValues::from_str("center center").unwrap(),
+        PositionValues::from_css_str("center center").unwrap(),
       ))
       .with(StyleDeclaration::background_clip(BackgroundClip::Text))
       .with(StyleDeclaration::color(ColorInput::Value(Color::white())))
@@ -980,7 +980,7 @@ fn text_wrap_style_all() {
 
 #[test]
 fn text_super_bold_stroke_background_clip() {
-  let gradient_images = BackgroundImages::from_str(
+  let gradient_images = BackgroundImages::from_css_str(
     "linear-gradient(90deg, #ff3b30, #ffcc00, #34c759, #007aff, #5856d6)",
   )
   .unwrap();
@@ -990,7 +990,7 @@ fn text_super_bold_stroke_background_clip() {
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::background_image(Some(gradient_images)))
       .with(StyleDeclaration::background_position(
-        PositionValues::from_str("center center").unwrap(),
+        PositionValues::from_css_str("center center").unwrap(),
       ))
       .with(StyleDeclaration::background_clip(BackgroundClip::Text))
       .with(StyleDeclaration::display(Display::Block))
@@ -1071,22 +1071,22 @@ fn text_font_stretch() {
   let stretches = [
     (
       "ultra-condensed",
-      FontStretch::from_str("ultra-condensed").unwrap(),
+      FontStretch::from_css_str("ultra-condensed").unwrap(),
     ),
-    ("condensed", FontStretch::from_str("condensed").unwrap()),
+    ("condensed", FontStretch::from_css_str("condensed").unwrap()),
     (
       "semi-condensed",
-      FontStretch::from_str("semi-condensed").unwrap(),
+      FontStretch::from_css_str("semi-condensed").unwrap(),
     ),
-    ("normal", FontStretch::from_str("normal").unwrap()),
+    ("normal", FontStretch::from_css_str("normal").unwrap()),
     (
       "semi-expanded",
-      FontStretch::from_str("semi-expanded").unwrap(),
+      FontStretch::from_css_str("semi-expanded").unwrap(),
     ),
-    ("expanded", FontStretch::from_str("expanded").unwrap()),
+    ("expanded", FontStretch::from_css_str("expanded").unwrap()),
     (
       "ultra-expanded",
-      FontStretch::from_str("ultra-expanded").unwrap(),
+      FontStretch::from_css_str("ultra-expanded").unwrap(),
     ),
   ];
 
@@ -1102,7 +1102,7 @@ fn text_font_stretch() {
     })
     .collect::<Vec<_>>();
 
-  let Ok(family) = FontFamily::from_str("Archivo") else {
+  let Ok(family) = FontFamily::from_css_str("Archivo") else {
     unreachable!()
   };
 
@@ -1131,7 +1131,7 @@ fn text_flex_centered_text_node_vs_nested_container() {
       .with(StyleDeclaration::height(Px(200.0)))
       .with_margin(Sides([Px(0.0), Px(0.0), Px(30.0), Px(0.0)]))
       .with(StyleDeclaration::background_color(ColorInput::Value(
-        Color::from_str("#3b82f6").unwrap(),
+        Color::from_css_str("#3b82f6").unwrap(),
       )))
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::align_items(AlignItems::Center))
@@ -1146,7 +1146,7 @@ fn text_flex_centered_text_node_vs_nested_container() {
         .with(StyleDeclaration::width(Px(300.0)))
         .with(StyleDeclaration::height(Px(200.0)))
         .with(StyleDeclaration::background_color(ColorInput::Value(
-          Color::from_str("#ab82f6").unwrap(),
+          Color::from_css_str("#ab82f6").unwrap(),
         )))
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::align_items(AlignItems::Center))
@@ -1181,7 +1181,7 @@ fn text_flex_centered_text_node_vs_nested_container() {
 
 #[test]
 fn text_font_synthesis_weight_auto_none() {
-  let Ok(family) = FontFamily::from_str("Scheherazade New Test") else {
+  let Ok(family) = FontFamily::from_css_str("Scheherazade New Test") else {
     unreachable!()
   };
 
@@ -1216,7 +1216,7 @@ fn text_font_synthesis_weight_auto_none() {
 
 #[test]
 fn text_font_synthesis_style_auto_none() {
-  let Ok(family) = FontFamily::from_str("Scheherazade New Test") else {
+  let Ok(family) = FontFamily::from_css_str("Scheherazade New Test") else {
     unreachable!()
   };
 
@@ -1251,7 +1251,7 @@ fn text_font_synthesis_style_auto_none() {
 
 #[test]
 fn text_font_synthesis_weight_emoji() {
-  let Ok(family) = FontFamily::from_str("Scheherazade New Test") else {
+  let Ok(family) = FontFamily::from_css_str("Scheherazade New Test") else {
     unreachable!()
   };
 
@@ -1298,7 +1298,7 @@ fn text_font_synthesis_weight_emoji() {
 fn text_chinese_ellipsis() {
   let text = "日本利用壓電磁磚將腳步轉化為電能。這些瓷磚捕捉來自你腳步的動能。當你行走時，你的重量和動作會對瓷磚產生壓力。磁磚會輕微彎曲，從而產生機械應力。磁磚內部的壓電材料將這種應力轉化為電能。每一步都會產生少量電荷，而數百萬步結合在一起就能產生足夠的電力來驅動 LED燈、數位顯示器和感測器。在像澀谷車站這樣繁忙的地方，每天大約有240萬個腳步為此系統作出貢獻。這些電能可以被儲存或立即使用，從而減少對傳統電賴，並支持永續的城市基礎設施。這種方法將日常運動轉化為實用的再生能源。";
 
-  let Ok(family) = FontFamily::from_str("Noto Sans TC") else {
+  let Ok(family) = FontFamily::from_css_str("Noto Sans TC") else {
     unreachable!()
   };
 
@@ -1324,7 +1324,7 @@ fn text_devanagari_noto_sans() {
   fn create_node(weight: f32, font_family: &str) -> Node {
     let text = "नमस्ते दुनिया, यह देवनागरी लिपि का एक परीक्षण है।";
 
-    let Ok(family) = FontFamily::from_str(font_family) else {
+    let Ok(family) = FontFamily::from_css_str(font_family) else {
       unreachable!()
     };
 

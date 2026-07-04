@@ -555,9 +555,9 @@ fn emit_decoration(
 
 fn line_join_str(join: LineJoin) -> &'static str {
   match join {
-    LineJoin::Miter => "miter",
     LineJoin::Round => "round",
     LineJoin::Bevel => "bevel",
+    _ => "miter",
   }
 }
 

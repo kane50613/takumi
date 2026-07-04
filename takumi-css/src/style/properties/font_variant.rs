@@ -571,7 +571,7 @@ impl ToCss for FontVariantPosition {
 
 /// Appends every resolved `font-variant-*` feature to `out`, in property order. The caller
 /// appends `font-feature-settings` afterwards so explicit settings win on tag conflicts.
-pub fn append_variant_features(
+pub(crate) fn append_variant_features(
   ligatures: &FontVariantLigatures,
   numeric: &FontVariantNumeric,
   east_asian: &FontVariantEastAsian,

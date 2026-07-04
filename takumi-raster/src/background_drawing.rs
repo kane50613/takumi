@@ -9,11 +9,15 @@ use tiny_skia::{IntSize, Pixmap, PixmapMut, PremultipliedColorU8};
 use crate::resources::image::RenderedImage;
 use crate::{
   BorderProperties, BufferPool, OverlayOptions, PaintSource, RenderContext, Result,
-  SamplingFootprint, fast_div_255, interpolate_with_footprint,
+  SamplingFootprint, color_to_premultiplied, interpolate_with_footprint,
   layout::{node::resolve_image, style::*},
   overlay_gradient_tile, overlay_image, overlay_linear_gradient_tile, overlay_radial_gradient_tile,
   pixmap_from_buffer, pixmap_ref_from_buffer,
   resources::{image::ImageSource, image_buffer::ImageBuffer},
+};
+use takumi_css::paint::{
+  ConicGradientTile, GradientOverlayTile, LinearGradientTile, RadialGradientTile,
+  collect_repeat_tile_positions, collect_spaced_tile_positions, collect_stretched_tile_positions,
 };
 
 pub(crate) struct TileLayer {
@@ -212,18 +216,10 @@ pub(crate) struct ColorTile {
 }
 
 impl ColorTile {
-  pub(crate) fn new(color: Rgba<u8>, width: u32, height: u32) -> Self {
-    let alpha = color.0[3] as u32;
-    let premultiplied = PremultipliedColorU8::from_rgba(
-      fast_div_255(color.0[0] as u32 * alpha),
-      fast_div_255(color.0[1] as u32 * alpha),
-      fast_div_255(color.0[2] as u32 * alpha),
-      color.0[3],
-    )
-    .unwrap_or(PremultipliedColorU8::TRANSPARENT);
+  pub(crate) fn new(color: Color, width: u32, height: u32) -> Self {
     Self {
-      color: color.0.into(),
-      premultiplied,
+      color,
+      premultiplied: color_to_premultiplied(Rgba(color.0)),
       width,
       height,
     }
@@ -861,7 +857,7 @@ pub(crate) fn collect_background_layers(
       0,
       TileLayer {
         tile: BackgroundTile::Color(ColorTile::new(
-          background_color.into(),
+          background_color,
           border_box.width as u32,
           border_box.height as u32,
         )),

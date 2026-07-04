@@ -94,7 +94,7 @@ fn scaled_image_fixture() -> Node {
 }
 
 fn gradient_clip_mask_fixture() -> Node {
-  let gradient = BackgroundImages::from_str(
+  let gradient = BackgroundImages::from_css_str(
     "linear-gradient(135deg, #ff3b30, #ffcc00, #34c759, #007aff, #5856d6)",
   )
   .unwrap();
@@ -107,13 +107,13 @@ fn gradient_clip_mask_fixture() -> Node {
       .with_overflow(SpacePair::from_single(Overflow::Clip))
       .with(StyleDeclaration::background_image(Some(gradient)))
       .with(StyleDeclaration::background_size(
-        BackgroundSizes::from_str("100% 100%").unwrap(),
+        BackgroundSizes::from_css_str("100% 100%").unwrap(),
       ))
       .with(StyleDeclaration::background_position(
-        PositionValues::from_str("0 0").unwrap(),
+        PositionValues::from_css_str("0 0").unwrap(),
       ))
       .with(StyleDeclaration::background_repeat(
-        BackgroundRepeats::from_str("no-repeat").unwrap(),
+        BackgroundRepeats::from_css_str("no-repeat").unwrap(),
       ))
       .with(StyleDeclaration::background_clip(BackgroundClip::BorderBox)),
   )])

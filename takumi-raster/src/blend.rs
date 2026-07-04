@@ -444,6 +444,14 @@ pub(crate) fn premultiply_rgba(color: Rgba<u8>) -> [u8; 4] {
   premultiply_rgba_pixel(red, green, blue, alpha)
 }
 
+/// Premultiplies a straight-alpha pixel into a `tiny_skia`
+/// [`PremultipliedColorU8`].
+pub(crate) fn color_to_premultiplied(color: Rgba<u8>) -> PremultipliedColorU8 {
+  let [red, green, blue, alpha] = premultiply_rgba(color);
+  PremultipliedColorU8::from_rgba(red, green, blue, alpha)
+    .unwrap_or(PremultipliedColorU8::TRANSPARENT)
+}
+
 #[inline(always)]
 pub(crate) fn premultiplied_from_pixel(pixel: PremultipliedColorU8) -> [u8; 4] {
   [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()]

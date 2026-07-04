@@ -8,6 +8,7 @@ use crate::style::{
 
 /// CSS `content` property value for `::before` / `::after` pseudo-elements.
 #[derive(Debug, Clone, Default, PartialEq)]
+#[non_exhaustive]
 pub enum ContentValue {
   /// `content: normal`. For `::before` / `::after` this behaves as `None`.
   #[default]

@@ -18,16 +18,16 @@ fn test_style_background_origin() {
           Color([230, 230, 230, 255]),
         )))
         .with(StyleDeclaration::background_image(Some(
-          BackgroundImages::from_str("linear-gradient(#d00, #d00)").unwrap(),
+          BackgroundImages::from_css_str("linear-gradient(#d00, #d00)").unwrap(),
         )))
         .with(StyleDeclaration::background_size(
-          BackgroundSizes::from_str("70px 70px").unwrap(),
+          BackgroundSizes::from_css_str("70px 70px").unwrap(),
         ))
         .with(StyleDeclaration::background_repeat(
-          BackgroundRepeats::from_str("no-repeat").unwrap(),
+          BackgroundRepeats::from_css_str("no-repeat").unwrap(),
         ))
         .with(StyleDeclaration::background_position(
-          PositionValues::from_str("left top").unwrap(),
+          PositionValues::from_css_str("left top").unwrap(),
         ))
         .with(StyleDeclaration::background_origin(origin)),
     )

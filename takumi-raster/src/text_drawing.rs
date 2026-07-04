@@ -123,7 +123,7 @@ pub(crate) fn draw_decoration_segment(
   let snapped_start_x = params.start_x.floor();
   let width = (params.end_x.ceil() - snapped_start_x) as u32;
 
-  let tile = ColorTile::new(color.into(), width, params.size as u32);
+  let tile = ColorTile::new(color, width, params.size as u32);
 
   canvas.overlay_image(
     &tile,

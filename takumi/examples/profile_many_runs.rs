@@ -1,4 +1,3 @@
-use parley::fontique::FontInfoOverride;
 use std::hint::black_box;
 use takumi::{prelude::*, render};
 
@@ -17,8 +16,8 @@ fn load_global() -> Fonts {
   let regular: &[u8] = include_bytes!("../../assets/fonts/geist/Geist[wght].woff2");
   g.register(
     FontResource::new(regular.to_vec())
-      .override_info(FontInfoOverride {
-        family_name: Some("Geist"),
+      .override_info(FontOverride {
+        family_name: Some("Geist".into()),
         ..Default::default()
       })
       .generic_family(GenericFamily::SANS_SERIF),

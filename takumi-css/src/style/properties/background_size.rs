@@ -183,7 +183,7 @@ impl BackgroundSize {
   }
 }
 
-/// A list of `background-size` values (one per layer).
+/// An ordered list of [`BackgroundSize`] values.
 pub type BackgroundSizes = Box<[BackgroundSize]>;
 
 impl<'i> FromCss<'i> for BackgroundSizes {

@@ -16,7 +16,8 @@ fn create_luma_logo_container() -> Node {
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_image(Some(
-        BackgroundImages::from_str("linear-gradient(135deg, #2d3748 0%, #1a202c 100%)").unwrap(),
+        BackgroundImages::from_css_str("linear-gradient(135deg, #2d3748 0%, #1a202c 100%)")
+          .unwrap(),
       )))
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))

@@ -1,19 +1,16 @@
 use crate::style::{ToCss, unexpected_token};
 use std::fmt::{self, Display};
 
+use crate::style::{
+  Animatable, Color as CurrentColor, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss,
+  MakeComputed, ParseResult, PercentageNumber, SizingContext, fast_div_255,
+  properties::gradient_utils::interpolate_with_color_space, tw::TailwindPropertyParser,
+};
 use color::{AlphaColor, ColorSpaceTag, DynamicColor, HueDirection, Srgb, parse_color};
 use cssparser::{
   Parser, Token,
   color::{parse_hash_color, parse_named_color},
   match_ignore_ascii_case,
-};
-use image::Rgba;
-use tiny_skia::{ColorU8, PremultipliedColorU8};
-
-use crate::style::{
-  Animatable, Color as CurrentColor, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss,
-  MakeComputed, ParseResult, PercentageNumber, SizingContext, fast_div_255,
-  properties::gradient_utils::interpolate_with_color_space, tw::TailwindPropertyParser,
 };
 
 fn is_cylindrical_color_space(color_space: ColorSpaceTag) -> bool {
@@ -430,30 +427,6 @@ impl TailwindPropertyParser for Color {
 impl From<Color> for ColorInput {
   fn from(color: Color) -> Self {
     ColorInput::Value(color)
-  }
-}
-
-impl From<Color> for Rgba<u8> {
-  fn from(color: Color) -> Self {
-    Rgba(color.0)
-  }
-}
-
-impl From<Color> for PremultipliedColorU8 {
-  fn from(color: Color) -> Self {
-    let [r, g, b, a] = color.0;
-    let premul_r = fast_div_255(r as u32 * a as u32);
-    let premul_g = fast_div_255(g as u32 * a as u32);
-    let premul_b = fast_div_255(b as u32 * a as u32);
-
-    PremultipliedColorU8::from_rgba(premul_r, premul_g, premul_b, a)
-      .unwrap_or(PremultipliedColorU8::TRANSPARENT)
-  }
-}
-
-impl From<ColorU8> for Color {
-  fn from(color: ColorU8) -> Self {
-    Self([color.red(), color.green(), color.blue(), color.alpha()])
   }
 }
 

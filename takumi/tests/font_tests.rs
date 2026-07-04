@@ -5,7 +5,6 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use parley::fontique::FontInfoOverride;
 use takumi::{prelude::*, render};
 
 fn font_path(path: &str) -> PathBuf {
@@ -29,8 +28,8 @@ fn register_subset(fonts: &mut Fonts, path: &str, unique_name: &str, logical: &s
   fonts
     .register(
       FontResource::new(read_font(path))
-        .override_info(FontInfoOverride {
-          family_name: Some(unique_name),
+        .override_info(FontOverride {
+          family_name: Some(unique_name.into()),
           ..Default::default()
         })
         .generic_family(GenericFamily::SANS_SERIF)
@@ -46,7 +45,7 @@ fn render_devanagari(fonts: &Fonts, family: &str) -> Bitmap {
         72.0,
       ))))
       .with(StyleDeclaration::font_family(
-        FontFamily::from_str(family).unwrap(),
+        FontFamily::from_css_str(family).unwrap(),
       )),
   );
 

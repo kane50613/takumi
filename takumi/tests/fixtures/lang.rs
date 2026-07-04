@@ -14,14 +14,14 @@ fn lang_row(lang: &'static str) -> Node {
     Node::text(format!("{lang}: ")).with_style(
       Style::default()
         .with(StyleDeclaration::font_family(
-          FontFamily::from_str("Geist").unwrap(),
+          FontFamily::from_css_str("Geist").unwrap(),
         ))
         .with(StyleDeclaration::font_size(FontSize::Length(Px(40.0)))),
     ),
     Node::text(SAMPLE).with_lang(lang).with_style(
       Style::default()
         .with(StyleDeclaration::font_family(
-          FontFamily::from_str(FONT).unwrap(),
+          FontFamily::from_css_str(FONT).unwrap(),
         ))
         .with(StyleDeclaration::font_size(FontSize::Length(Px(40.0)))),
     ),

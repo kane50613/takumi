@@ -172,8 +172,19 @@ pub(crate) fn write_gradient_css<W: fmt::Write>(
   dest.write_char(')')
 }
 
-/// Interpolates between two colors in RGBA space, if t is 0.0 or 1.0, returns the first or second color.
-pub fn interpolate_rgba(c1: Color, c2: Color, t: f32) -> Color {
+/// Premultiplies a straight-alpha [`Color`] into a `tiny_skia`
+/// [`PremultipliedColorU8`].
+pub(crate) fn color_to_premultiplied(color: Color) -> PremultipliedColorU8 {
+  let [r, g, b, a] = color.0;
+  let premul_r = fast_div_255(r as u32 * a as u32);
+  let premul_g = fast_div_255(g as u32 * a as u32);
+  let premul_b = fast_div_255(b as u32 * a as u32);
+
+  PremultipliedColorU8::from_rgba(premul_r, premul_g, premul_b, a)
+    .unwrap_or(PremultipliedColorU8::TRANSPARENT)
+}
+
+pub(crate) fn interpolate_rgba(c1: Color, c2: Color, t: f32) -> Color {
   if t <= f32::EPSILON {
     return c1;
   }
@@ -253,7 +264,7 @@ pub(crate) fn interpolate_with_color_space(
 }
 
 /// Interpolates two premultiplied colors directly in premultiplied RGBA space.
-pub fn interpolate_rgba_premultiplied(
+pub(crate) fn interpolate_rgba_premultiplied(
   c1: PremultipliedColorU8,
   c2: PremultipliedColorU8,
   t: f32,
@@ -485,7 +496,7 @@ fn snap_stop_samples(
 
   let stop_indices = assign_stop_sample_indices(resolved_stops, axis_length, typed_lut.len());
   for (stop, &sample_index) in resolved_stops.iter().zip(&stop_indices) {
-    typed_lut[sample_index] = stop.color.into();
+    typed_lut[sample_index] = color_to_premultiplied(stop.color);
   }
 }
 
@@ -520,7 +531,7 @@ pub fn build_color_lut_with_interpolation(
       .map(|s| s.color)
       .unwrap_or(crate::style::Color::transparent());
 
-    return vec![color.into()];
+    return vec![color_to_premultiplied(color)];
   }
 
   let mut left_index = 0usize;
@@ -546,12 +557,16 @@ pub fn build_color_lut_with_interpolation(
       let left_stop = &resolved_stops[left_index];
       let right_stop = &resolved_stops[right_index];
       if left_stop.color == right_stop.color {
-        return left_stop.color.into();
+        return color_to_premultiplied(left_stop.color);
       }
 
       let t = interpolation_position(left_stop.position, right_stop.position, position_px);
       if color_space == ColorSpaceTag::Srgb && hue_direction == HueDirection::Shorter {
-        return interpolate_rgba_premultiplied(left_stop.color.into(), right_stop.color.into(), t);
+        return interpolate_rgba_premultiplied(
+          color_to_premultiplied(left_stop.color),
+          color_to_premultiplied(right_stop.color),
+          t,
+        );
       }
 
       interpolate_with_color_space(
@@ -563,7 +578,7 @@ pub fn build_color_lut_with_interpolation(
       )
     };
 
-    color.into()
+    color_to_premultiplied(color)
   };
 
   let mut typed_lut = vec![PremultipliedColorU8::TRANSPARENT; lut_size];
@@ -575,7 +590,10 @@ pub fn build_color_lut_with_interpolation(
 }
 
 /// Calculates an adaptive LUT size based on the gradient axis length.
-pub fn adaptive_lut_size(axis_length: f32, resolved_stops: &[ResolvedGradientStop]) -> usize {
+pub(crate) fn adaptive_lut_size(
+  axis_length: f32,
+  resolved_stops: &[ResolvedGradientStop],
+) -> usize {
   adaptive_lut_size_with_visible_samples(
     (axis_length.ceil() as usize)
       .saturating_add(1)
@@ -586,7 +604,7 @@ pub fn adaptive_lut_size(axis_length: f32, resolved_stops: &[ResolvedGradientSto
 }
 
 /// LUT size that covers `visible_samples` and the tightest stop interval.
-pub fn adaptive_lut_size_with_visible_samples(
+pub(crate) fn adaptive_lut_size_with_visible_samples(
   visible_samples: usize,
   axis_length: f32,
   resolved_stops: &[ResolvedGradientStop],
@@ -958,8 +976,8 @@ mod tests {
       },
     );
 
-    assert_eq!(lut[7], Color([255, 0, 0, 255]).into());
-    assert_eq!(lut[8], Color([0, 0, 255, 255]).into());
+    assert_eq!(lut[7], color_to_premultiplied(Color([255, 0, 0, 255])));
+    assert_eq!(lut[8], color_to_premultiplied(Color([0, 0, 255, 255])));
   }
 
   #[test]
@@ -992,8 +1010,14 @@ mod tests {
     let stop_indices = assign_stop_sample_indices(&resolved, 32.0, lut.len());
 
     assert!(stop_indices[0] < stop_indices[1]);
-    assert_eq!(lut[stop_indices[0]], resolved[0].color.into());
-    assert_eq!(lut[stop_indices[1]], resolved[1].color.into());
+    assert_eq!(
+      lut[stop_indices[0]],
+      color_to_premultiplied(resolved[0].color)
+    );
+    assert_eq!(
+      lut[stop_indices[1]],
+      color_to_premultiplied(resolved[1].color)
+    );
   }
 
   #[test]

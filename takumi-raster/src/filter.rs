@@ -1,4 +1,3 @@
-use image::Rgba;
 use smallvec::SmallVec;
 use taffy::{Point, Size};
 use tiny_skia::{Mask as TinyMask, PixmapMut};
@@ -8,10 +7,11 @@ use crate::{
   SizedShadow, apply_blur, apply_blur_rgba_bytes, intersect_alpha_masks,
   layout::style::{
     Affine, Color, Filter, FilterCategory, LUMA_WEIGHTS, PercentageNumber, SEPIA_WEIGHTS,
-    SizingContext, TransferChannel, TransferTable, compose_transfer_table, fast_div_255,
+    SizingContext, TransferChannel, TransferTable, fast_div_255,
   },
   render_mask,
 };
+use takumi_css::paint::compose_transfer_table;
 
 /// Calculates the luma of an RGB pixel.
 #[inline(always)]
@@ -76,6 +76,7 @@ fn apply_single_pixel_filter(pixel: &mut [u8], filter: &Filter) {
     }
     // Complex filters are not handled here
     Filter::Blur(_) | Filter::DropShadow(_) | Filter::HueRotate(_) => {}
+    _ => {}
   }
 }
 
@@ -545,8 +546,7 @@ fn apply_drop_shadow_filter(
   let offset_x = shadow.offset_x.round() as i32;
   let offset_y = shadow.offset_y.round() as i32;
 
-  let shadow_color: Rgba<u8> = shadow.color.into();
-  let [sr, sg, sb, sa] = shadow_color.0;
+  let [sr, sg, sb, sa] = shadow.color.0;
   let shadow_rgb = [sr, sg, sb];
   let source_pixels = pixmap.as_ref().pixels();
   let Some(source_bounds) =

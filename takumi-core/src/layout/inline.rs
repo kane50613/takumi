@@ -2358,9 +2358,8 @@ mod tests {
       style::{Color, ColorInput, Display, Style, StyleDeclaration, WhiteSpace},
       tree::RenderNode,
     },
-    resources::font::{FontResource, GenericFamily},
+    resources::font::{FontOverride, FontResource, GenericFamily},
   };
-  use parley::fontique::FontInfoOverride;
   use takumi_css::SizingContext;
 
   fn create_test_context() -> Fonts {
@@ -2376,8 +2375,8 @@ mod tests {
     context
       .register(
         FontResource::new(font_data)
-          .override_info(FontInfoOverride {
-            family_name: Some("Geist"),
+          .override_info(FontOverride {
+            family_name: Some("Geist".into()),
             ..Default::default()
           })
           .generic_family(GenericFamily::SANS_SERIF),

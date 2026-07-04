@@ -934,7 +934,7 @@ fn test_grid_cols_none() {
   assert_eq!(
     TailwindProperty::parse("grid-cols-none"),
     Some(TailwindProperty::GridTemplateColumns(TwGridTemplate(
-      Vec::new()
+      GridTemplateComponents::default()
     )))
   );
 }
