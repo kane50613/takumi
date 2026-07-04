@@ -127,13 +127,13 @@ impl Renderer {
     Ok(stylesheet)
   }
 
-  fn fetch_resources_map(
+  fn fetch_images_map(
     &self,
-    resources: Option<&[ImageSource]>,
+    images: Option<&[ImageSource]>,
   ) -> Result<HashMap<Arc<str>, LoadedImageSource>, js_sys::Error> {
     let mut map = HashMap::new();
 
-    for source in resources.unwrap_or_default() {
+    for source in images.unwrap_or_default() {
       let mode = source.cache.unwrap_or_default();
       let image = self
         .image_cache
@@ -213,7 +213,7 @@ impl Renderer {
       .transpose()?
       .unwrap_or_default();
 
-    let images = self.fetch_resources_map(options.images.as_deref())?;
+    let images = self.fetch_images_map(options.images.as_deref())?;
     let state = self.read_state()?;
     self.render_internal(&state, node, options, images)
   }
@@ -281,7 +281,7 @@ impl Renderer {
       .transpose()?
       .unwrap_or_default();
 
-    let images = self.fetch_resources_map(options.images.as_deref())?;
+    let images = self.fetch_images_map(options.images.as_deref())?;
     let stylesheet =
       self.parse_stylesheet(options.stylesheets, options.keyframes.unwrap_or_default())?;
     let state = self.read_state()?;
@@ -316,7 +316,7 @@ impl Renderer {
       .transpose()?
       .unwrap_or_default();
 
-    let images = self.fetch_resources_map(options.images.as_deref())?;
+    let images = self.fetch_images_map(options.images.as_deref())?;
     let stylesheet =
       self.parse_stylesheet(options.stylesheets, options.keyframes.unwrap_or_default())?;
 
@@ -364,7 +364,7 @@ impl Renderer {
       ));
     }
 
-    let images = self.fetch_resources_map(options.images.as_deref())?;
+    let images = self.fetch_images_map(options.images.as_deref())?;
     let state = self.read_state()?;
     let buffer = self.render_internal(&state, node, options, images)?;
 
@@ -394,7 +394,7 @@ impl Renderer {
       font_families,
       lang,
     } = from_value(options.into()).map_err(map_error)?;
-    let images = self.fetch_resources_map(images.as_deref())?;
+    let images = self.fetch_images_map(images.as_deref())?;
     let lang = lang.map(Arc::from);
 
     if scenes.is_empty() {

@@ -134,7 +134,7 @@ pub enum Length {
 impl Length {
   /// Construct a length from a Tailwind spacing-scale multiplier.
   #[inline]
-  pub fn from_spacing(units: f32) -> Self {
+  pub(crate) fn from_spacing(units: f32) -> Self {
     Length::Rem(units * TW_VAR_SPACING)
   }
 }
@@ -279,7 +279,7 @@ impl Length {
   }
 
   /// Negated value, or `None` for non-negatable forms like `auto`.
-  pub fn try_negative(self) -> Option<Self> {
+  pub(crate) fn try_negative(self) -> Option<Self> {
     if matches!(self, Length::Auto) {
       return None;
     }

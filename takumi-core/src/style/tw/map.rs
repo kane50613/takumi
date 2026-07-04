@@ -10,7 +10,7 @@ macro_rules! property_parsers {
   ($($variant:ident($arg:ty) => $parse:ty),+ $(,)?) => {
     /// Maps a parsed argument type to a [`TailwindProperty`] constructor.
     #[derive(Clone, Copy)]
-    pub enum PropertyParser {
+    pub(crate) enum PropertyParser {
       $(
         #[doc = concat!("Parser producing `", stringify!($variant), "` properties.")]
         $variant(fn($arg) -> TailwindProperty),
@@ -84,7 +84,7 @@ property_parsers! {
 }
 
 /// Maps a utility prefix to the parsers tried against its suffix.
-pub static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
+pub(crate) static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
   "object" => &[
     PropertyParser::ObjectFit(TailwindProperty::ObjectFit),
     PropertyParser::ObjectPosition(TailwindProperty::ObjectPosition),
@@ -317,7 +317,7 @@ const TEXT_SHADOW_MD: [TextShadow; 3] = [ts(1.0, 1.0, 26), ts(1.0, 2.0, 26), ts(
 const TEXT_SHADOW_LG: [TextShadow; 3] = [ts(1.0, 2.0, 26), ts(3.0, 2.0, 26), ts(4.0, 8.0, 26)];
 
 /// Maps a complete utility token to its fixed property.
-pub static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
+pub(crate) static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
   "border" => TailwindProperty::BorderDefault,
   "outline" => TailwindProperty::OutlineDefault,
   "box-border" => TailwindProperty::BoxSizing(BoxSizing::BorderBox),

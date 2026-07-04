@@ -296,7 +296,9 @@ pub(crate) fn element_transform(
   x: f32,
   y: f32,
 ) -> Option<Affine> {
-  let local = context.style.local_transform(border_box, &context.sizing);
+  let local = context
+    .style
+    .local_transform(border_box.width, border_box.height, &context.sizing);
   if local.is_identity() {
     return None;
   }

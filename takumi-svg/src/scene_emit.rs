@@ -145,8 +145,7 @@ fn emit_box(
 
   let relative = parent.invert().unwrap_or(IDENTITY) * np.transform;
   let (x, y, group_transform) = if relative.only_translation() {
-    let origin = relative.decompose_translation();
-    (origin.x, origin.y, IDENTITY)
+    (relative.x, relative.y, IDENTITY)
   } else {
     (0.0, 0.0, relative)
   };

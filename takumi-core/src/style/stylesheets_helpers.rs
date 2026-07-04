@@ -8,12 +8,12 @@ use crate::style::{
 };
 
 #[derive(Debug, Clone)]
-pub struct CssInputParseFailure {
+pub(crate) struct CssInputParseFailure {
   location: SourceLocation,
   detail: Option<String>,
 }
 
-pub enum CssInputParseError<'de> {
+pub(crate) enum CssInputParseError<'de> {
   Value {
     value: Cow<'de, str>,
     expected: Cow<'static, str>,
@@ -30,7 +30,7 @@ pub enum CssInputParseError<'de> {
 }
 
 impl CssInputParseError<'_> {
-  pub fn into_serde_error<E>(self, property_name: &str, property: PropertyId) -> E
+  pub(crate) fn into_serde_error<E>(self, property_name: &str, property: PropertyId) -> E
   where
     E: serde::de::Error,
   {

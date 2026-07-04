@@ -1,3 +1,5 @@
+//! Small numeric helpers shared across style resolution and paint backends.
+
 /// Fast division by 255, returning a `u8`.
 #[inline(always)]
 pub fn fast_div_255(v: u32) -> u8 {

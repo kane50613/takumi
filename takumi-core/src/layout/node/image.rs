@@ -5,11 +5,11 @@ use taffy::{AvailableSpace, CompactLength, MaybeResolve, Size};
 use crate::{
   context::RenderContext,
   layout::node::{ImageData, ImageSourceInput, Node, NodeStyleLayers},
-  resources::image::{ImageResourceError, ImageResult, ImageSource, is_svg_like},
+  resources::image::{ImageError, ImageResult, ImageSource, is_svg_like},
   style::{Length, Style, StyleDeclaration},
 };
 
-pub(crate) fn image_resource_url(image: &ImageData) -> Option<&str> {
+pub(crate) fn image_url(image: &ImageData) -> Option<&str> {
   match &image.src {
     ImageSourceInput::Url(src) if src.starts_with("https://") || src.starts_with("http://") => {
       Some(src.as_ref())
@@ -165,10 +165,10 @@ fn resolve_style_size_axis(
 const DATA_URI_PREFIX: &str = "data:";
 
 fn parse_data_uri_image(src: &str) -> ImageResult {
-  let url = DataUrl::process(src).map_err(|_| ImageResourceError::InvalidDataUriFormat)?;
+  let url = DataUrl::process(src).map_err(|_| ImageError::InvalidDataUriFormat)?;
   let (data, _) = url
     .decode_to_vec()
-    .map_err(|_| ImageResourceError::InvalidDataUriFormat)?;
+    .map_err(|_| ImageError::InvalidDataUriFormat)?;
 
   ImageSource::from_bytes(&data)
 }
@@ -183,14 +183,14 @@ pub fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
     #[cfg(feature = "svg")]
     return ImageSource::from_bytes(src.as_bytes());
     #[cfg(not(feature = "svg"))]
-    return Err(ImageResourceError::SvgParseNotSupported);
+    return Err(ImageError::SvgParseNotSupported);
   }
 
   if let Some(img) = context.images.get(src) {
     return Ok(img.clone());
   }
 
-  Err(ImageResourceError::Unknown)
+  Err(ImageError::Unknown)
 }
 
 #[cfg(test)]
@@ -200,14 +200,15 @@ mod tests {
   use crate::style::SizingContext;
   use image::RgbaImage;
   use serde_json::from_value;
+  use std::borrow::Cow;
   use taffy::{AvailableSpace, Dimension, Size, Style};
 
-  use super::{image_resource_url, measure_image_node};
+  use super::{image_url, measure_image_node};
   use crate::{
     Fonts,
     context::RenderContext,
     layout::node::{ImageData, ImageSourceInput},
-    resources::image::ImageSource,
+    resources::{image::ImageSource, image_buffer::ImageBuffer},
     viewport::Viewport,
   };
 
@@ -225,7 +226,7 @@ mod tests {
 
     assert_eq!(src.as_ref(), "https://example.com/image.png");
     assert_eq!(
-      image_resource_url(&ImageData {
+      image_url(&ImageData {
         src: ImageSourceInput::Url(src),
         width: None,
         height: None
@@ -250,7 +251,7 @@ mod tests {
 
     assert_eq!(&data[..], [137, 80, 78, 71]);
     assert_eq!(
-      image_resource_url(&ImageData {
+      image_url(&ImageData {
         src: ImageSourceInput::Buffer(data),
         width: None,
         height: None
@@ -302,7 +303,8 @@ mod tests {
   #[test]
   fn from_pixmap_creates_loaded_image_source_input() {
     let bitmap = RgbaImage::new(2, 2);
-    let image = ImageData::from(bitmap);
+    let buffer = ImageBuffer::from_rgba(Cow::Owned(bitmap)).unwrap();
+    let image = ImageData::from(buffer);
 
     assert_matches!(image.src, ImageSourceInput::Loaded(ImageSource::Bitmap(_)));
   }
@@ -318,7 +320,8 @@ mod tests {
           .build(),
       )
       .build();
-    let image = ImageData::from(ImageSource::from(RgbaImage::new(10, 10)));
+    let buffer = ImageBuffer::from_rgba(Cow::Owned(RgbaImage::new(10, 10))).unwrap();
+    let image = ImageData::from(ImageSource::from(buffer));
     let style = Style {
       size: Size {
         width: Dimension::length(42.0),

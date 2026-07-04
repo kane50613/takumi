@@ -1,9 +1,10 @@
 use crate::style::{ToCss, unexpected_token};
 use std::fmt::{self, Display};
 
+use crate::style::math::fast_div_255;
 use crate::style::{
   Animatable, Color as CurrentColor, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss,
-  FromCssStr, MakeComputed, ParseResult, PercentageNumber, SizingContext, fast_div_255,
+  FromCssStr, MakeComputed, ParseResult, PercentageNumber, SizingContext,
   properties::gradient_utils::interpolate_with_color_space, tw::TailwindPropertyParser,
 };
 use color::{AlphaColor, ColorSpaceTag, DynamicColor, HueDirection, Srgb, parse_color};
@@ -479,7 +480,7 @@ impl Color {
   }
 
   /// Apply opacity to alpha channel
-  pub fn with_opacity(mut self, opacity: u8) -> Self {
+  pub(crate) fn with_opacity(mut self, opacity: u8) -> Self {
     self.0[3] = fast_div_255(self.0[3] as u32 * opacity as u32);
 
     self

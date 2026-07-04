@@ -39,7 +39,7 @@ impl Default for TextShadow {
 }
 
 /// Represents a collection of text shadows; has custom `FromCss` implementation for comma-separated values.
-pub type TextShadows = Box<[TextShadow]>;
+pub(crate) type TextShadows = Box<[TextShadow]>;
 
 impl<'i> FromCss<'i> for TextShadows {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {

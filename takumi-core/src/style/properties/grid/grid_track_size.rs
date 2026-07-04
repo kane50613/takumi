@@ -9,7 +9,7 @@ use crate::style::{
 };
 
 /// A list of `GridTrackSize`
-pub type GridTrackSizes = Vec<GridTrackSize>;
+pub(crate) type GridTrackSizes = Vec<GridTrackSize>;
 
 impl<'i> FromCss<'i> for GridTrackSizes {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {

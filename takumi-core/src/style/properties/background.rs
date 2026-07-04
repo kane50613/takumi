@@ -136,7 +136,7 @@ impl<'i> FromCss<'i> for Background {
 }
 
 /// A list of background properties (one per layer).
-pub type Backgrounds = Box<[Background]>;
+pub(crate) type Backgrounds = Box<[Background]>;
 
 impl<'i> FromCss<'i> for Backgrounds {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {

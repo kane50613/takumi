@@ -111,7 +111,7 @@ impl BackgroundRepeat {
   }
 
   /// Returns a repeat value that does not tile on either axis.
-  pub const fn no_repeat() -> Self {
+  pub(crate) const fn no_repeat() -> Self {
     Self(
       BackgroundRepeatStyle::NoRepeat,
       BackgroundRepeatStyle::NoRepeat,

@@ -8,7 +8,7 @@ use std::borrow::Cow;
 
 use image::{ExtendedColorType, ImageEncoder, RgbaImage, codecs::png::PngEncoder};
 
-use crate::style::fast_div_255;
+use crate::style::math::fast_div_255;
 
 /// A decoded image as premultiplied, row-major RGBA bytes.
 #[derive(Debug, Clone)]
@@ -32,6 +32,7 @@ impl ImageBuffer {
   }
 
   /// Allocates a transparent (all-zero) buffer of the given size.
+  #[cfg(test)]
   pub(crate) fn new(width: u32, height: u32) -> Option<Self> {
     let len = (width as usize)
       .checked_mul(height as usize)?

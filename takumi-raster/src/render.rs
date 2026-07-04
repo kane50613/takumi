@@ -272,14 +272,18 @@ fn collect_measure_result(
           return Err(TaffyError::InvalidInputNode(node_id).into());
         };
         let layout = *layout_results.layout(node_id)?;
-        current.context.sizing.container_size = container_size;
+        current
+          .context
+          .sizing
+          .set_container_size(container_size.width, container_size.height);
 
         transform *= Affine::translation(layout.location.x, layout.location.y);
         let mut local_transform = transform;
-        local_transform *= current
-          .context
-          .style
-          .local_transform(layout.size, &current.context.sizing);
+        local_transform *= current.context.style.local_transform(
+          layout.size.width,
+          layout.size.height,
+          &current.context.sizing,
+        );
         node_transforms.insert(node_id, local_transform);
 
         let mut children = Vec::new();

@@ -1,6 +1,6 @@
 use cssparser::Parser;
 use std::fmt;
-use taffy::{Point, Size};
+use taffy::Point;
 
 use crate::style::{
   CssExpectedMessage, CssToken, FromCss, Length, MakeComputed, Overflow, ParseResult,
@@ -75,14 +75,14 @@ impl SpacePair<Overflow> {
 }
 
 /// A pair of values for horizontal and vertical border radii.
-pub type BorderRadiusPair = SpacePair<Length>;
+pub(crate) type BorderRadiusPair = SpacePair<Length>;
 
 impl BorderRadiusPair {
   /// Resolves both radii to non-negative pixels against the border box.
-  pub fn to_px(self, sizing: &SizingContext, border_box: Size<f32>) -> SpacePair<f32> {
+  pub fn to_px(self, sizing: &SizingContext, width: f32, height: f32) -> SpacePair<f32> {
     SpacePair::from_pair(
-      self.x.to_px(sizing, border_box.width).max(0.0),
-      self.y.to_px(sizing, border_box.height).max(0.0),
+      self.x.to_px(sizing, width).max(0.0),
+      self.y.to_px(sizing, height).max(0.0),
     )
   }
 }

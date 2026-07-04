@@ -184,7 +184,11 @@ impl RadialGradientTile {
 
   /// Maps an axis-space distance to a LUT index for a LUT of `lut_len`.
   #[inline(always)]
-  pub fn lut_index_for_distance_px_with_len(&self, distance_px: f32, lut_len: usize) -> usize {
+  pub(crate) fn lut_index_for_distance_px_with_len(
+    &self,
+    distance_px: f32,
+    lut_len: usize,
+  ) -> usize {
     if lut_len <= 1 {
       return 0;
     }

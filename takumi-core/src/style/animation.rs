@@ -43,7 +43,7 @@ pub struct KeyframesRule {
 }
 
 /// Applies a stylesheet's matching animations to a style at the given time.
-pub fn apply_stylesheet_animations(
+pub(crate) fn apply_stylesheet_animations(
   mut base_style: ComputedStyle,
   stylesheet: &StyleSheet,
   time: u64,

@@ -25,7 +25,7 @@ pub(crate) fn parse_opentype_tag<'i, T: FromCss<'i>>(
 ///
 /// This allows enabling/disabling specific typographic features in OpenType fonts
 /// such as ligatures, kerning, small caps, and other advanced typography features.
-pub type FontFeatureSettings = Box<[FontFeature]>;
+pub(crate) type FontFeatureSettings = Box<[FontFeature]>;
 
 impl MakeComputed for FontFeatureSettings {}
 

@@ -1021,7 +1021,7 @@ impl From<Vec<PropertyRule>> for StyleSheet {
 
 impl StyleSheet {
   /// The `@property` registrations declared by this stylesheet.
-  pub fn property_rules(&self) -> &[PropertyRule] {
+  pub(crate) fn property_rules(&self) -> &[PropertyRule] {
     &self.property_rules
   }
 

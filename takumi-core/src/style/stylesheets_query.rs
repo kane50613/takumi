@@ -8,7 +8,7 @@ use crate::style::{SizingContext, properties::*};
 
 impl ComputedStyle {
   /// Normalize inheritable text-related values to computed values for this node.
-  pub fn make_computed(&mut self, sizing: &SizingContext) {
+  pub(crate) fn make_computed(&mut self, sizing: &SizingContext) {
     // `font-size` computed value is already resolved in `sizing.font_size`.
     // Keep it as css-px in style to avoid re-resolving descendant inheritance.
     self.font_size = FontSize::Length(Length::Px(sizing.to_css(sizing.font_size)));
@@ -46,26 +46,27 @@ impl ComputedStyle {
   }
 
   /// Whether `z-index` takes effect on this element.
-  pub fn is_z_index_applicable(&self, is_flex_or_grid_item: bool) -> bool {
+  pub(crate) fn is_z_index_applicable(&self, is_flex_or_grid_item: bool) -> bool {
     !matches!(self.z_index, ZIndex::Auto) && (self.position.is_positioned() || is_flex_or_grid_item)
   }
 
   /// Whether the element paints in the positioned/z-index bucket.
-  pub fn participates_in_positioned_paint_bucket(&self, is_flex_or_grid_item: bool) -> bool {
+  pub(crate) fn participates_in_positioned_paint_bucket(&self, is_flex_or_grid_item: bool) -> bool {
     self.position.is_positioned() || self.is_z_index_applicable(is_flex_or_grid_item)
   }
 
   /// Whether the element establishes a new stacking context.
-  pub fn creates_stacking_context(
+  pub(crate) fn creates_stacking_context(
     &self,
-    border_box: Size<f32>,
+    width: f32,
+    height: f32,
     sizing: &SizingContext,
     is_flex_or_grid_item: bool,
   ) -> bool {
     self.isolation == Isolation::Isolate
       || self.is_z_index_applicable(is_flex_or_grid_item)
       || self.offset_path.is_some()
-      || self.has_non_identity_transform(border_box, sizing)
+      || self.has_non_identity_transform(width, height, sizing)
       || self.needs_offscreen_compositing()
   }
 
@@ -93,14 +94,14 @@ impl ComputedStyle {
   /// Builds the element's local affine transform around its transform-origin
   /// (CSS Transforms Level 2 order: `T(origin) * translate * rotate * scale *
   /// transform * T(-origin)`).
-  pub fn local_transform(&self, border_box: Size<f32>, sizing: &SizingContext) -> Affine {
-    let origin = self.transform_origin.to_point(sizing, border_box);
-    let mut local = Affine::translation(origin.x, origin.y);
+  pub fn local_transform(&self, width: f32, height: f32, sizing: &SizingContext) -> Affine {
+    let (origin_x, origin_y) = self.transform_origin.to_point(sizing, width, height);
+    let mut local = Affine::translation(origin_x, origin_y);
 
     if self.translate != SpacePair::default() {
       local *= Affine::translation(
-        self.translate.x.to_px(sizing, border_box.width),
-        self.translate.y.to_px(sizing, border_box.height),
+        self.translate.x.to_px(sizing, width),
+        self.translate.y.to_px(sizing, height),
       );
     }
     if let Some(rotate) = self.rotate {
@@ -112,45 +113,51 @@ impl ComputedStyle {
     // offset-path sits after translate/rotate/scale and before `transform`, and
     // resolves against the containing block (Blink `GetReferenceBox`), proxied
     // here by the query-container size, then the viewport, then the border box.
-    let reference_box = Size {
-      width: sizing
-        .container_size
-        .width
-        .filter(|width| *width > 0.0)
-        .or_else(|| sizing.viewport.size.width.map(|width| width as f32))
-        .unwrap_or(border_box.width),
-      height: sizing
-        .container_size
-        .height
-        .filter(|height| *height > 0.0)
-        .or_else(|| sizing.viewport.size.height.map(|height| height as f32))
-        .unwrap_or(border_box.height),
-    };
+    let reference_width = sizing
+      .container_size
+      .width
+      .filter(|width| *width > 0.0)
+      .or_else(|| sizing.viewport.size.width.map(|width| width as f32))
+      .unwrap_or(width);
+    let reference_height = sizing
+      .container_size
+      .height
+      .filter(|height| *height > 0.0)
+      .or_else(|| sizing.viewport.size.height.map(|height| height as f32))
+      .unwrap_or(height);
     if let Some(path) = &self.offset_path
       && let Some((point, tangent)) = sample_offset_path(
         path,
         self.offset_distance,
         &self.offset_position,
         sizing,
-        reference_box,
+        Size {
+          width: reference_width,
+          height: reference_height,
+        },
       )
     {
-      local *= Affine::translation(point.x - origin.x, point.y - origin.y);
+      local *= Affine::translation(point.x - origin_x, point.y - origin_y);
       local *= Affine::rotation_radians(self.offset_rotate.resolve(tangent));
-      if let Some(anchor) = self.offset_anchor.resolve(sizing, border_box) {
-        local *= Affine::translation(origin.x - anchor.x, origin.y - anchor.y);
+      if let Some((anchor_x, anchor_y)) = self.offset_anchor.resolve(sizing, width, height) {
+        local *= Affine::translation(origin_x - anchor_x, origin_y - anchor_y);
       }
     }
     if let Some(node_transform) = &self.transform {
-      local *= Affine::from_transforms(node_transform.iter(), sizing, border_box);
+      local *= Affine::from_transforms(node_transform.iter(), sizing, width, height);
     }
-    local *= Affine::translation(-origin.x, -origin.y);
+    local *= Affine::translation(-origin_x, -origin_y);
     local
   }
 
   /// Whether the resolved local transform differs from identity.
-  pub fn has_non_identity_transform(&self, border_box: Size<f32>, sizing: &SizingContext) -> bool {
-    !self.local_transform(border_box, sizing).is_identity()
+  pub(crate) fn has_non_identity_transform(
+    &self,
+    width: f32,
+    height: f32,
+    sizing: &SizingContext,
+  ) -> bool {
+    !self.local_transform(width, height, sizing).is_identity()
   }
 
   /// The `(overflow-x, overflow-y)` pair.
@@ -164,7 +171,7 @@ impl ComputedStyle {
   }
 
   /// The string used to mark truncated text.
-  pub fn ellipsis_char(&self) -> &str {
+  pub(crate) fn ellipsis_char(&self) -> &str {
     const ELLIPSIS_CHAR: &str = "…";
 
     match &self.text_overflow {
@@ -187,7 +194,7 @@ impl ComputedStyle {
   }
 
   /// The wrap mode used for layout, forcing wrap for single-line ellipsis.
-  pub fn resolved_text_wrap_mode(&self) -> TextWrapMode {
+  pub(crate) fn resolved_text_wrap_mode(&self) -> TextWrapMode {
     if self.forces_single_line_ellipsis() {
       TextWrapMode::Wrap
     } else {
@@ -200,7 +207,7 @@ impl ComputedStyle {
   /// `nowrap` + `ellipsis` clamps to a single line; otherwise `max-lines` applies
   /// only inside a fragmentation context (`continue: collapse`), per CSS Overflow 4.
   /// The ellipsis itself comes from [`Self::ellipsis_char`].
-  pub fn clamp_lines(&self) -> Option<u32> {
+  pub(crate) fn clamp_lines(&self) -> Option<u32> {
     if self.forces_single_line_ellipsis() {
       return Some(1);
     }
@@ -225,7 +232,7 @@ impl ComputedStyle {
 
   #[inline]
   /// The decoration thickness resolved to pixels or `from-font`.
-  pub fn resolved_text_decoration_thickness(
+  pub(crate) fn resolved_text_decoration_thickness(
     &self,
     sizing: &SizingContext,
   ) -> SizedTextDecorationThickness {
@@ -242,7 +249,7 @@ impl ComputedStyle {
   /// Resolved OpenType features: the `font-variant-*` expansions followed by explicit
   /// `font-feature-settings`, which win on tag conflicts. Borrows the settings when no
   /// `font-variant-*` is active, avoiding an allocation.
-  pub fn resolved_font_features(&self) -> Cow<'_, [FontFeature]> {
+  pub(crate) fn resolved_font_features(&self) -> Cow<'_, [FontFeature]> {
     let mut features = Vec::new();
     append_variant_features(
       &self.font_variant_ligatures,
@@ -262,7 +269,7 @@ impl ComputedStyle {
   }
 
   /// Converts the computed style into a `taffy::Style` for layout.
-  pub fn to_taffy_style(&self, sizing: &SizingContext) -> taffy::Style {
+  pub(crate) fn to_taffy_style(&self, sizing: &SizingContext) -> taffy::Style {
     // Convert grid templates and associated line names
     let (grid_template_columns, grid_template_column_names) =
       Self::grid_template(&self.grid_template_columns, sizing);

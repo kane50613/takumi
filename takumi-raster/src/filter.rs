@@ -4,10 +4,10 @@ use tiny_skia::{Mask as TinyMask, PixmapMut};
 
 use crate::{
   BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, Placement, RenderContext, Result,
-  SizedShadow, apply_blur, apply_blur_rgba_bytes, intersect_alpha_masks, render_mask,
+  SizedShadow, apply_blur, apply_blur_rgba_bytes, fast_div_255, intersect_alpha_masks, render_mask,
   style::{
     Affine, Color, Filter, FilterCategory, LUMA_WEIGHTS, PercentageNumber, SEPIA_WEIGHTS,
-    SizingContext, TransferChannel, TransferTable, fast_div_255,
+    SizingContext, TransferChannel, TransferTable,
   },
 };
 use takumi_core::paint::compose_transfer_table;

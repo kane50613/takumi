@@ -5,7 +5,6 @@ use std::{
 };
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
-use taffy::{Point, Size};
 use tiny_skia::Transform as TinyTransform;
 
 use crate::style::{
@@ -207,14 +206,6 @@ impl Affine {
       && self.y.abs() < 1e-6
   }
 
-  /// Decomposes the translation part of the transform
-  pub fn decompose_translation(self) -> Point<f32> {
-    Point {
-      x: self.x,
-      y: self.y,
-    }
-  }
-
   /// Geometric mean of the X and Y axis scales.
   pub fn uniform_scale(self) -> f32 {
     let sx = (self.a * self.a + self.b * self.b).sqrt();
@@ -236,7 +227,7 @@ impl Affine {
   }
 
   /// Creates a new rotation transform from an angle in radians
-  pub fn rotation_radians(radians: f32) -> Self {
+  pub(crate) fn rotation_radians(radians: f32) -> Self {
     let (sin, cos) = radians.sin_cos();
 
     Self {
@@ -272,23 +263,20 @@ impl Affine {
 
   /// Transforms a point by the transform
   #[inline(always)]
-  pub fn transform_point(self, point: Point<f32>) -> Point<f32> {
+  pub fn transform_point(self, x: f32, y: f32) -> (f32, f32) {
     // Fast path: If the transform is only a translation, we can just add the translation to the point
     if self.only_translation() {
-      return Point {
-        x: point.x + self.x,
-        y: point.y + self.y,
-      };
+      return (x + self.x, y + self.y);
     }
 
-    Point {
-      x: self.a * point.x + self.c * point.y + self.x,
-      y: self.b * point.x + self.d * point.y + self.y,
-    }
+    (
+      self.a * x + self.c * y + self.x,
+      self.b * x + self.d * y + self.y,
+    )
   }
 
   /// Creates a new skew transform
-  pub fn skew(x: Angle, y: Angle) -> Self {
+  pub(crate) fn skew(x: Angle, y: Angle) -> Self {
     let tanx = x.to_radians().tan();
     let tany = y.to_radians().tan();
 
@@ -304,7 +292,7 @@ impl Affine {
 
   /// Calculates the determinant of the transform
   #[inline(always)]
-  pub fn determinant(self) -> f32 {
+  pub(crate) fn determinant(self) -> f32 {
     self.a * self.d - self.b * self.c
   }
 
@@ -338,18 +326,19 @@ impl Affine {
   /// CSS transform property applies transformations from left to right.
   /// For `transform: translate() rotate()`, the resulting matrix is translate * rotate.
   /// When applied to point p: translate * rotate * p, rotate is applied first.
-  pub fn from_transforms<'a, I: Iterator<Item = &'a Transform>>(
+  pub(crate) fn from_transforms<'a, I: Iterator<Item = &'a Transform>>(
     transforms: I,
     sizing: &SizingContext,
-    border_box: Size<f32>,
+    width: f32,
+    height: f32,
   ) -> Affine {
     let mut instance = Affine::IDENTITY;
 
     for transform in transforms {
       instance *= match *transform {
         Transform::Translate(x_length, y_length) => Affine::translation(
-          x_length.to_px(sizing, border_box.width),
-          y_length.to_px(sizing, border_box.height),
+          x_length.to_px(sizing, width),
+          y_length.to_px(sizing, height),
         ),
         Transform::Scale(x_scale, y_scale) => Affine::scale(x_scale, y_scale),
         Transform::Rotate(angle) => Affine::rotation(angle),
@@ -626,15 +615,12 @@ mod tests {
     let transform = Affine::rotation(Angle::new(45.0));
 
     assert!(transform.invert().is_some_and(|inverse| {
-      let random_point = Point {
-        x: 1234.0,
-        y: -5678.0,
-      };
+      let (x, y) = (1234.0, -5678.0);
 
-      let processed_point = inverse.transform_point(transform.transform_point(random_point));
+      let (transformed_x, transformed_y) = transform.transform_point(x, y);
+      let (processed_x, processed_y) = inverse.transform_point(transformed_x, transformed_y);
 
-      (random_point.x - processed_point.x).abs() < 1.0
-        && (random_point.y - processed_point.y).abs() < 1.0
+      (x - processed_x).abs() < 1.0 && (y - processed_y).abs() < 1.0
     }));
   }
 }

@@ -140,7 +140,10 @@ pub(crate) fn rasterize_layers(
           && layer_transform.only_translation()
           && layer.blend_mode == BlendMode::Normal
         {
-          let translation = layer_transform.decompose_translation();
+          let translation = Point {
+            x: layer_transform.x,
+            y: layer_transform.y,
+          };
           match &layer.tile {
             BackgroundTile::Linear(linear_gradient) => {
               overlay_linear_gradient_tile(

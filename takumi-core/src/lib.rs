@@ -51,8 +51,8 @@ pub mod paint {
       overlay_gradient_tile_fast_normal_unconstrained, resolve_stops_along_axis,
     },
     linear_gradient::{
-      LinearGradientFastPath, LinearGradientFastPathData, LinearGradientFastPathKind,
-      LinearGradientRowState, LinearGradientTile,
+      LinearGradientFastPath, LinearGradientFastPathKind, LinearGradientRowState,
+      LinearGradientTile,
     },
     radial_gradient::{RadialGradientRowState, RadialGradientTile},
   };

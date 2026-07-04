@@ -545,15 +545,15 @@ fn transformed_mask_point(
   x: u32,
   y: u32,
 ) -> Option<Point<u32>> {
-  let original_point = inverse_transform.transform_point(Point {
-    x: x as f32,
-    y: y as f32,
-  });
-  if original_point.x < 0.0 || original_point.y < 0.0 {
+  let (original_x, original_y) = inverse_transform.transform_point(x as f32, y as f32);
+  if original_x < 0.0 || original_y < 0.0 {
     return None;
   }
 
-  let original_point = original_point.map(|point| point as u32);
+  let original_point = Point {
+    x: original_x as u32,
+    y: original_y as u32,
+  };
   let is_contained = original_point.x >= from.x
     && original_point.x < to.x
     && original_point.y >= from.y

@@ -27,7 +27,7 @@ use crate::{
 ///
 /// Implemented by the caller's node type; the matcher only reads the queries
 /// below, so the caller does not depend on the `selectors` crate.
-pub trait MatchableNode {
+pub(crate) trait MatchableNode {
   /// The element's tag name, if any.
   fn tag_name(&self) -> Option<&str>;
   /// The element's `id`, if any.
@@ -350,7 +350,7 @@ impl<'a, N: MatchableNode> Element for ArenaElement<'a, N> {
 
 /// Declaration blocks that apply to one element, split by `!important`.
 #[derive(Debug, Default, Clone)]
-pub struct MatchedDeclarationsView<'a> {
+pub(crate) struct MatchedDeclarationsView<'a> {
   normal: SmallVec<[&'a StyleDeclarationBlock; 4]>,
   important: SmallVec<[&'a StyleDeclarationBlock; 4]>,
 }
@@ -362,7 +362,7 @@ impl<'a> MatchedDeclarationsView<'a> {
   }
 
   /// Matched declaration blocks marked `!important`, in cascade order.
-  pub fn important(&self) -> &[&'a StyleDeclarationBlock] {
+  pub(crate) fn important(&self) -> &[&'a StyleDeclarationBlock] {
     &self.important
   }
 }
@@ -370,7 +370,7 @@ impl<'a> MatchedDeclarationsView<'a> {
 /// Per-node matching result: the element's own declarations plus declarations
 /// for any matched `::before` / `::after` pseudo-elements.
 #[derive(Debug, Default, Clone)]
-pub struct NodeMatchedDeclarations<'a> {
+pub(crate) struct NodeMatchedDeclarations<'a> {
   element: MatchedDeclarationsView<'a>,
   before: Option<MatchedDeclarationsView<'a>>,
   after: Option<MatchedDeclarationsView<'a>>,
@@ -411,7 +411,7 @@ enum SelectorTarget {
 
 /// Matches every rule in `stylesheet` against the tree rooted at `root`,
 /// returning the declaration blocks that apply to each node in tree order.
-pub fn match_stylesheets_view<'a, N: MatchableNode>(
+pub(crate) fn match_stylesheets_view<'a, N: MatchableNode>(
   root: &N,
   stylesheet: &'a StyleSheet,
   viewport: Viewport,

@@ -11,8 +11,8 @@ pub struct SizingContext {
   /// The viewport for the image renderer.
   pub viewport: Viewport,
   /// The nearest query container size (content box) in device pixels.
-  #[builder(default)]
-  pub container_size: Size<Option<f32>>,
+  #[builder(default, setter(skip))]
+  pub(crate) container_size: Size<Option<f32>>,
   /// The font size in pixels.
   #[builder(default = viewport.to_device(viewport.font_size))]
   pub font_size: f32,
@@ -42,13 +42,13 @@ impl SizingContext {
 
   /// Converts a device-pixel value back into author-space CSS pixels.
   #[inline]
-  pub fn to_css(&self, device_px: f32) -> f32 {
+  pub(crate) fn to_css(&self, device_px: f32) -> f32 {
     self.viewport.to_css(device_px)
   }
 
   /// Returns a copy with the font and line-height metrics overridden, inheriting
   /// the viewport, container size, and shared calc arena.
-  pub fn with_font_metrics(
+  pub(crate) fn with_font_metrics(
     &self,
     font_size: f32,
     root_font_size: Option<f32>,
@@ -65,24 +65,29 @@ impl SizingContext {
   }
 
   /// Resolves an interned `calc(...)` handle against this context's arena.
-  pub fn resolve_calc(&self, value: *const (), basis: f32) -> f32 {
+  pub(crate) fn resolve_calc(&self, value: *const (), basis: f32) -> f32 {
     self.calc_arena.resolve_calc_value(value, basis)
   }
 
   /// Device-pixel basis for the `rem` unit.
-  pub fn rem_basis(&self) -> f32 {
+  pub(crate) fn rem_basis(&self) -> f32 {
     self
       .root_font_size
       .unwrap_or(self.to_device(self.viewport.font_size))
   }
 
   /// Device-pixel basis for the `rlh` unit.
-  pub fn root_line_height_basis(&self) -> f32 {
+  pub(crate) fn root_line_height_basis(&self) -> f32 {
     self.root_line_height.unwrap_or(self.line_height)
   }
 
+  /// Sets the nearest query container size (content box), in device pixels.
+  pub fn set_container_size(&mut self, width: Option<f32>, height: Option<f32>) {
+    self.container_size = Size { width, height };
+  }
+
   /// Query container width in device pixels, falling back to the viewport.
-  pub fn query_container_width(&self) -> f32 {
+  pub(crate) fn query_container_width(&self) -> f32 {
     self
       .container_size
       .width
@@ -90,7 +95,7 @@ impl SizingContext {
   }
 
   /// Query container height in device pixels, falling back to the viewport.
-  pub fn query_container_height(&self) -> f32 {
+  pub(crate) fn query_container_height(&self) -> f32 {
     self
       .container_size
       .height

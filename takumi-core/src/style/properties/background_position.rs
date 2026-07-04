@@ -1,7 +1,6 @@
 use crate::style::{ToCss, unexpected_token};
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use std::fmt;
-use taffy::{Point, Size};
 
 use super::background_image::parse_comma_list;
 use crate::style::{
@@ -126,11 +125,11 @@ impl Animatable for PositionValue {
 
 impl PositionValue {
   /// Resolves the position to a pixel point within the border box.
-  pub fn to_point(self, sizing: &SizingContext, border_box: Size<f32>) -> Point<f32> {
-    Point {
-      x: Length::from(self.0.x).to_px(sizing, border_box.width),
-      y: Length::from(self.0.y).to_px(sizing, border_box.height),
-    }
+  pub(crate) fn to_point(self, sizing: &SizingContext, width: f32, height: f32) -> (f32, f32) {
+    (
+      Length::from(self.0.x).to_px(sizing, width),
+      Length::from(self.0.y).to_px(sizing, height),
+    )
   }
 }
 

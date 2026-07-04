@@ -118,7 +118,10 @@ pub(crate) fn draw_background(
               if transform.only_translation()
                 && canvas.overlay_background_tile_direct(
                   &tile.tile,
-                  transform.decompose_translation(),
+                  Point {
+                    x: transform.x,
+                    y: transform.y,
+                  },
                   tile.blend_mode,
                 )
               {

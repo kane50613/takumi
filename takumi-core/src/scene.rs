@@ -243,10 +243,11 @@ pub fn build_stacking_contexts(
 
     let mut current_transform = visit.transform;
     current_transform *= Affine::translation(layout.location.x, layout.location.y);
-    current_transform *= current
-      .context
-      .style
-      .local_transform(layout.size, &current.context.sizing);
+    current_transform *= current.context.style.local_transform(
+      layout.size.width,
+      layout.size.height,
+      &current.context.sizing,
+    );
     if !current_transform.is_invertible() {
       continue;
     }
@@ -271,7 +272,8 @@ pub fn build_stacking_contexts(
       true
     } else {
       current.context.style.creates_stacking_context(
-        layout.size,
+        layout.size.width,
+        layout.size.height,
         &current.context.sizing,
         is_flex_or_grid_item,
       ) || current

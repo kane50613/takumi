@@ -47,7 +47,7 @@ impl Default for BoxShadow {
 }
 
 /// Represents a collection of box shadows, have custom `FromCss` implementation for comma-separated values.
-pub type BoxShadows = Box<[BoxShadow]>;
+pub(crate) type BoxShadows = Box<[BoxShadow]>;
 
 impl<'i> FromCss<'i> for BoxShadows {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {

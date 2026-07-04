@@ -322,10 +322,10 @@ fn source_general(
     let mask_y = (dest_y - offset_y) as usize;
     let dst_row = dest_y as usize * canvas_width;
     let mask_row = mask_y * mask_stride;
-    let mut sample = options.sampling.canvas_to_source.transform_point(Point {
-      x: dest_x_min as f32 + options.sampling.sample_bias.x,
-      y: dest_y as f32 + options.sampling.sample_bias.y,
-    });
+    let (mut sample_x, mut sample_y) = options.sampling.canvas_to_source.transform_point(
+      dest_x_min as f32 + options.sampling.sample_bias.x,
+      dest_y as f32 + options.sampling.sample_bias.y,
+    );
     for dest_x in dest_x_min..dest_x_max {
       let mask_alpha = mask[mask_row + (dest_x - offset_x) as usize];
       let sampled = if mask_alpha == 0 {
@@ -334,13 +334,13 @@ fn source_general(
         sample_paint_source(
           source,
           options.sampling.algorithm,
-          sample.x,
-          sample.y,
+          sample_x,
+          sample_y,
           footprint,
         )
       };
-      sample.x += options.sampling.canvas_to_source.a;
-      sample.y += options.sampling.canvas_to_source.b;
+      sample_x += options.sampling.canvas_to_source.a;
+      sample_y += options.sampling.canvas_to_source.b;
 
       let Some(mut src) = sampled else {
         continue;

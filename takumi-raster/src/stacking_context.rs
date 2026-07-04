@@ -297,7 +297,10 @@ fn begin_node_render(
     return Ok(Some(DeferredNodeRender::SkipRendering));
   }
 
-  current.context.sizing.container_size = node_paint.container_size;
+  current.context.sizing.set_container_size(
+    node_paint.container_size.width,
+    node_paint.container_size.height,
+  );
   current.context.transform = node_paint.transform;
 
   if !current.context.style.backdrop_filter.is_empty() {

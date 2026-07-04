@@ -17,7 +17,7 @@ pub enum ZIndex {
 
 impl ZIndex {
   /// Returns the integer used to sort painting order.
-  pub const fn painting_order_value(self) -> i32 {
+  pub(crate) const fn painting_order_value(self) -> i32 {
     match self {
       Self::Auto => 0,
       Self::Integer(value) => value,

@@ -75,22 +75,26 @@ impl BorderProperties {
     context: &RenderContext,
     border_box: Size<f32>,
   ) -> Sides<SpacePair<f32>> {
-    let top_left = context
-      .style
-      .border_top_left_radius
-      .to_px(&context.sizing, border_box);
-    let top_right = context
-      .style
-      .border_top_right_radius
-      .to_px(&context.sizing, border_box);
-    let bottom_right = context
-      .style
-      .border_bottom_right_radius
-      .to_px(&context.sizing, border_box);
-    let bottom_left = context
-      .style
-      .border_bottom_left_radius
-      .to_px(&context.sizing, border_box);
+    let top_left = context.style.border_top_left_radius.to_px(
+      &context.sizing,
+      border_box.width,
+      border_box.height,
+    );
+    let top_right = context.style.border_top_right_radius.to_px(
+      &context.sizing,
+      border_box.width,
+      border_box.height,
+    );
+    let bottom_right = context.style.border_bottom_right_radius.to_px(
+      &context.sizing,
+      border_box.width,
+      border_box.height,
+    );
+    let bottom_left = context.style.border_bottom_left_radius.to_px(
+      &context.sizing,
+      border_box.width,
+      border_box.height,
+    );
 
     Sides([top_left, top_right, bottom_right, bottom_left])
   }

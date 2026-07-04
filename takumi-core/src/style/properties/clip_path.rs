@@ -98,7 +98,7 @@ impl MakeComputed for EllipseShape {
 }
 
 /// Represents a single coordinate pair in a polygon.
-pub type PolygonCoordinate = SpacePair<Length>;
+pub(crate) type PolygonCoordinate = SpacePair<Length>;
 
 /// Represents a polygon() shape.
 #[derive(Debug, Clone, PartialEq)]

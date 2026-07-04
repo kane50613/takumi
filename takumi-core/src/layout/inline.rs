@@ -212,7 +212,7 @@ pub(crate) enum InlineContentKind<'c> {
 }
 
 /// Parley layout specialized to [`InlineBrush`].
-pub type InlineLayout = parley::Layout<InlineBrush>;
+pub(crate) type InlineLayout = parley::Layout<InlineBrush>;
 
 #[derive(Clone, Copy, Debug)]
 /// x-height and ascent/descent of the parent font.

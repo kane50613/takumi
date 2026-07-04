@@ -7,7 +7,7 @@ use crate::style::{
 };
 
 /// A list of blend modes.
-pub type BlendModes = Box<[BlendMode]>;
+pub(crate) type BlendModes = Box<[BlendMode]>;
 
 impl<'i> FromCss<'i> for BlendModes {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {

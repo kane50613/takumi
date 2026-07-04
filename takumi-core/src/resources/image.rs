@@ -3,9 +3,8 @@
 //! This module provides types and utilities for managing image resources,
 //! including loading states, error handling, and image processing operations.
 
-use std::{borrow::Cow, str::FromStr, sync::Arc};
+use std::{str::FromStr, sync::Arc};
 
-use image::RgbaImage;
 use quick_cache::{Weighter, sync::Cache};
 use serde::Deserialize;
 #[cfg(feature = "svg")]
@@ -22,7 +21,7 @@ use crate::{
 use thiserror::Error;
 
 /// Represents the state of an image resource.
-pub type ImageResult = Result<ImageSource, ImageResourceError>;
+pub(crate) type ImageResult = Result<ImageSource, ImageError>;
 
 #[derive(Debug, Clone)]
 /// Represents the source of an image.
@@ -90,9 +89,9 @@ struct GifFrame {
 }
 
 impl GifSource {
-  fn from_decoded(decoded: DecodedGif) -> Result<Self, ImageResourceError> {
+  fn from_decoded(decoded: DecodedGif) -> Result<Self, ImageError> {
     if decoded.frames.is_empty() {
-      return Err(ImageResourceError::InvalidGif);
+      return Err(ImageError::InvalidGif);
     }
 
     let mut frames = Vec::with_capacity(decoded.frames.len());
@@ -166,21 +165,6 @@ pub enum RenderedImage<'a> {
   },
 }
 
-impl From<RgbaImage> for ImageSource {
-  fn from(bitmap: RgbaImage) -> Self {
-    let buffer = ImageBuffer::from_rgba(Cow::Owned(bitmap)).unwrap_or_else(|| {
-      let mut edge = 1_u32;
-      loop {
-        if let Some(buffer) = ImageBuffer::new(edge, edge) {
-          break buffer;
-        }
-        edge = edge.saturating_add(1);
-      }
-    });
-    ImageSource::Bitmap(Arc::new(buffer))
-  }
-}
-
 impl From<ImageBuffer> for ImageSource {
   fn from(buffer: ImageBuffer) -> Self {
     ImageSource::Bitmap(Arc::new(buffer))
@@ -222,7 +206,7 @@ type SvgRasterCache = Cache<SvgRasterCacheKey, Arc<ImageBuffer>>;
 
 #[cfg(feature = "svg")]
 impl FromStr for SvgSource {
-  type Err = ImageResourceError;
+  type Err = ImageError;
 
   fn from_str(src: &str) -> Result<Self, Self::Err> {
     use resvg::usvg::{Options, Tree};
@@ -235,11 +219,9 @@ impl FromStr for SvgSource {
       allow_dtd: true,
       ..Default::default()
     };
-    let document =
-      Document::parse_with_options(src, options).map_err(ImageResourceError::svg_parse)?;
+    let document = Document::parse_with_options(src, options).map_err(ImageError::svg_parse)?;
 
-    let tree =
-      Tree::from_xmltree(&document, &Options::default()).map_err(ImageResourceError::svg_parse)?;
+    let tree = Tree::from_xmltree(&document, &Options::default()).map_err(ImageError::svg_parse)?;
     let intrinsic = svg_intrinsic_sizing(document.root_element(), tree.size());
 
     Ok(SvgSource {
@@ -297,7 +279,7 @@ impl ImageSource {
       }
     }
 
-    let image = decode_image(bytes).map_err(ImageResourceError::decode)?;
+    let image = decode_image(bytes).map_err(ImageError::decode)?;
     let source = match image {
       DecodedImage::Buffer(buffer) => ImageSource::Bitmap(Arc::new(buffer)),
       DecodedImage::Gif(gif) => ImageSource::Gif(GifSource::from_decoded(gif)?),
@@ -316,7 +298,7 @@ impl ImageSource {
     height: u32,
     image_rendering: ImageScalingAlgorithm,
     time_ms: u64,
-  ) -> Result<RenderedImage<'i>, ImageResourceError> {
+  ) -> Result<RenderedImage<'i>, ImageError> {
     match self {
       ImageSource::Bitmap(bitmap) => Ok(RenderedImage::Borrowed {
         source: bitmap.as_ref(),
@@ -340,7 +322,7 @@ impl ImageSource {
         }
 
         let tree = &svg.tree;
-        let mut pixmap = Pixmap::new(width, height).ok_or(ImageResourceError::InvalidPixmapSize)?;
+        let mut pixmap = Pixmap::new(width, height).ok_or(ImageError::InvalidPixmapSize)?;
 
         let original_size = tree.size();
         let sx = width as f32 / original_size.width();
@@ -349,7 +331,7 @@ impl ImageSource {
         resvg::render(tree, Transform::from_scale(sx, sy), &mut pixmap.as_mut());
 
         let buffer = ImageBuffer::from_premultiplied_rgba(pixmap.data().to_vec(), width, height)
-          .ok_or(ImageResourceError::InvalidPixmapSize)?;
+          .ok_or(ImageError::InvalidPixmapSize)?;
         let buffer = Arc::new(buffer);
         svg.raster_cache.insert(cache_key, buffer.clone());
 
@@ -449,7 +431,7 @@ fn parse_viewbox_ratio(view_box: &str) -> Option<f32> {
 /// or if there was an error during the process.
 #[derive(Debug, Error)]
 #[non_exhaustive]
-pub enum ImageResourceError {
+pub enum ImageError {
   /// An error occurred while decoding the image data
   #[error("An error occurred while decoding the image data: {0}")]
   DecodeError(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
@@ -481,7 +463,7 @@ pub enum ImageResourceError {
   InvalidGif,
 }
 
-impl ImageResourceError {
+impl ImageError {
   /// Wraps a decoder error opaquely so takumi's public API stays independent of
   /// the `image` crate's version.
   pub(crate) fn decode(err: impl std::error::Error + Send + Sync + 'static) -> Self {
@@ -660,7 +642,7 @@ mod image_cache_tests {
 mod tests {
   use std::{assert_matches, borrow::Cow};
 
-  use image::Rgba;
+  use image::{Rgba, RgbaImage};
 
   use super::*;
   use crate::resources::image_decoder::DecodedGifFrame;
@@ -767,7 +749,7 @@ mod tests {
   // color (matching browsers/satori); it renders as the SVG's own default, black.
   #[cfg(feature = "svg")]
   #[test]
-  fn svg_current_color_is_not_host_resolved() -> Result<(), ImageResourceError> {
+  fn svg_current_color_is_not_host_resolved() -> Result<(), ImageError> {
     let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="0" y="0" width="4" height="4" fill="currentColor"/></svg>"#;
     let image = ImageSource::from_bytes(svg.as_bytes())?;
 
@@ -779,7 +761,7 @@ mod tests {
 
   #[cfg(feature = "svg")]
   #[test]
-  fn svg_reuses_rasterized_pixmap() -> Result<(), ImageResourceError> {
+  fn svg_reuses_rasterized_pixmap() -> Result<(), ImageError> {
     let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="0" y="0" width="4" height="4" fill="#ff0000"/></svg>"##;
     let image: ImageSource = SvgSource::from_str(svg)?.into();
 
@@ -801,8 +783,8 @@ mod tests {
   /// them: the SVG renders identically with and without the text nodes.
   #[cfg(feature = "svg")]
   #[test]
-  fn svg_text_nodes_are_ignored_not_stripped() -> Result<(), ImageResourceError> {
-    fn rendered_data(svg: &str) -> Result<Vec<u8>, ImageResourceError> {
+  fn svg_text_nodes_are_ignored_not_stripped() -> Result<(), ImageError> {
+    fn rendered_data(svg: &str) -> Result<Vec<u8>, ImageError> {
       let image: ImageSource = SvgSource::from_str(svg)?.into();
       let rendered = image.render_for_layout(8, 8, ImageScalingAlgorithm::Auto, 0)?;
       let RenderedImage::Rasterized(pixmap) = rendered else {
@@ -821,7 +803,7 @@ mod tests {
   /// `<text>` inside `clipPath` and `foreignObject` must not break parsing.
   #[cfg(feature = "svg")]
   #[test]
-  fn svg_with_unsupported_nodes_still_parses() -> Result<(), ImageResourceError> {
+  fn svg_with_unsupported_nodes_still_parses() -> Result<(), ImageError> {
     let clip_path_text = r##"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><clipPath id="c"><text>x</text></clipPath><rect width="8" height="8" fill="#ff0000" clip-path="url(#c)"/></svg>"##;
     let foreign_object = r##"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><foreignObject width="8" height="8"><div xmlns="http://www.w3.org/1999/xhtml">x</div></foreignObject><rect width="8" height="8" fill="#ff0000"/></svg>"##;
 
@@ -831,11 +813,12 @@ mod tests {
   }
 
   #[test]
-  fn bitmap_renders_borrowed() -> Result<(), ImageResourceError> {
+  fn bitmap_renders_borrowed() -> Result<(), ImageError> {
     let mut bitmap = RgbaImage::new(2, 2);
     bitmap.put_pixel(0, 0, Rgba([12, 34, 56, 200]));
     bitmap.put_pixel(1, 0, Rgba([78, 90, 12, 255]));
-    let image = ImageSource::from(bitmap);
+    let buffer = ImageBuffer::from_rgba(Cow::Owned(bitmap)).unwrap();
+    let image = ImageSource::from(buffer);
 
     let rendered = image.render_for_layout(2, 2, ImageScalingAlgorithm::Auto, 0)?;
 
@@ -844,14 +827,14 @@ mod tests {
   }
 
   #[test]
-  fn bitmap_render_for_layout_keeps_borrowed_sampling_parameters() -> Result<(), ImageResourceError>
-  {
+  fn bitmap_render_for_layout_keeps_borrowed_sampling_parameters() -> Result<(), ImageError> {
     let mut bitmap = RgbaImage::new(2, 2);
     bitmap.put_pixel(0, 0, Rgba([255, 0, 0, 255]));
     bitmap.put_pixel(1, 0, Rgba([0, 255, 0, 255]));
     bitmap.put_pixel(0, 1, Rgba([0, 0, 255, 255]));
     bitmap.put_pixel(1, 1, Rgba([255, 255, 255, 255]));
-    let image = ImageSource::from(bitmap);
+    let buffer = ImageBuffer::from_rgba(Cow::Owned(bitmap)).unwrap();
+    let image = ImageSource::from(buffer);
 
     let rendered = image.render_for_layout(4, 4, ImageScalingAlgorithm::Pixelated, 0)?;
     let RenderedImage::Borrowed {
@@ -873,7 +856,7 @@ mod tests {
   #[test]
   fn gif_source_from_decoded_rejects_empty_frames() {
     let result = GifSource::from_decoded(DecodedGif { frames: Vec::new() });
-    assert_matches!(result, Err(ImageResourceError::InvalidGif));
+    assert_matches!(result, Err(ImageError::InvalidGif));
   }
 
   #[test]

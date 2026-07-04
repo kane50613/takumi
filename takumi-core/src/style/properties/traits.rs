@@ -321,7 +321,7 @@ pub(crate) enum CssExpectedMessage {
 
 impl CssExpectedMessage {
   /// Builds the parse-error message for an unexpected token.
-  pub fn build_message(&self, token: &str, valid_tokens: String) -> String {
+  pub(crate) fn build_message(&self, token: &str, valid_tokens: String) -> String {
     match self {
       Self::ValueOrNone => {
         format!("Unexpected token: {token}, expected a value of {valid_tokens} or 'none'")

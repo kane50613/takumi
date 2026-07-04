@@ -819,21 +819,14 @@ fn blit_sampled_paint_source_translation(
   let footprint = sampling_footprint(sampling.logical_to_source);
   for dest_y in dest_y_min..dest_y_max {
     let src_y = (dest_y - offset_y) as f32;
-    let mut sample_point = sampling.logical_to_source.transform_point(Point {
-      x: (dest_x_min - offset_x) as f32 + 0.5,
-      y: src_y + 0.5,
-    });
+    let (mut sample_x, mut sample_y) = sampling
+      .logical_to_source
+      .transform_point((dest_x_min - offset_x) as f32 + 0.5, src_y + 0.5);
     for dest_x in dest_x_min..dest_x_max {
-      let src = sample_paint_source(
-        source,
-        sampling.algorithm,
-        sample_point.x,
-        sample_point.y,
-        footprint,
-      )
-      .unwrap_or([0, 0, 0, 0]);
-      sample_point.x += sampling.logical_to_source.a;
-      sample_point.y += sampling.logical_to_source.b;
+      let src = sample_paint_source(source, sampling.algorithm, sample_x, sample_y, footprint)
+        .unwrap_or([0, 0, 0, 0]);
+      sample_x += sampling.logical_to_source.a;
+      sample_y += sampling.logical_to_source.b;
       if src[3] == 0 {
         continue;
       }
@@ -1211,7 +1204,10 @@ pub(crate) fn overlay_image<'a, I: Into<PaintSource<'a>>>(
   }
 
   if options.border.is_zero() && options.transform.only_translation() {
-    let offset = options.transform.decompose_translation();
+    let offset = Point {
+      x: options.transform.x,
+      y: options.transform.y,
+    };
     blit_paint_source_translation(pixmap, image, offset, options.mode, options.combined_mask);
     return;
   }
@@ -1331,7 +1327,10 @@ fn overlay_sampled_paint_source(
       pixmap,
       source,
       size,
-      options.transform.decompose_translation(),
+      Point {
+        x: options.transform.x,
+        y: options.transform.y,
+      },
       sampling,
       options.mode,
       options.combined_mask,

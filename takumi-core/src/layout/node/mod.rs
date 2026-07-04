@@ -10,12 +10,11 @@ use taffy::{AvailableSpace, Size};
 use crate::{
   Xxh3HashSet,
   context::RenderContext,
-  layout::{inline::InlineContentKind, node::image::image_resource_url},
+  layout::{inline::InlineContentKind, node::image::image_url},
   resources::image::{ImageResult, ImageSource},
   style::{Direction, Style, StyleDeclaration, ToCss, tw::TailwindValues},
   viewport::Viewport,
 };
-use ::image::RgbaImage;
 use parley::Language;
 
 use self::{
@@ -162,12 +161,6 @@ impl From<ImageSource> for ImageData {
 impl From<ImageBuffer> for ImageData {
   fn from(buffer: ImageBuffer) -> Self {
     Self::from(ImageSource::from(buffer))
-  }
-}
-
-impl From<RgbaImage> for ImageData {
-  fn from(bitmap: RgbaImage) -> Self {
-    Self::from(ImageSource::from(bitmap))
   }
 }
 
@@ -560,7 +553,7 @@ impl Node {
   }
 
   /// Collects resource URLs referenced by this node tree.
-  pub(crate) fn metadata_resource_urls<'a>(&'a self, urls: &mut Xxh3HashSet<&'a str>) {
+  pub(crate) fn metadata_image_urls<'a>(&'a self, urls: &mut Xxh3HashSet<&'a str>) {
     match &self.kind {
       NodeKind::Container { .. } => {
         let Some(children) = self.children_ref() else {
@@ -568,11 +561,11 @@ impl Node {
         };
 
         for child in children {
-          child.metadata_resource_urls(urls);
+          child.metadata_image_urls(urls);
         }
       }
       NodeKind::Image(image) => {
-        if let Some(url) = image_resource_url(image) {
+        if let Some(url) = image_url(image) {
           urls.insert(url);
         }
       }
@@ -581,17 +574,17 @@ impl Node {
   }
 
   /// Collects resource URLs referenced by this node tree's styles.
-  pub(crate) fn style_resource_urls<'a>(&'a self, urls: &mut Xxh3HashSet<&'a str>) {
+  pub(crate) fn style_image_urls<'a>(&'a self, urls: &mut Xxh3HashSet<&'a str>) {
     if let Some(preset) = self.metadata.preset.as_ref() {
-      urls.extend(preset.resource_urls());
+      urls.extend(preset.image_urls());
     }
 
     if let Some(author_tw) = self.metadata.tw.as_ref() {
-      urls.extend(author_tw.resource_urls(Viewport::default()));
+      urls.extend(author_tw.image_urls(Viewport::default()));
     }
 
     if let Some(inline) = self.metadata.style.as_ref() {
-      urls.extend(inline.resource_urls());
+      urls.extend(inline.image_urls());
     }
 
     let Some(children) = self.children_ref() else {
@@ -599,15 +592,15 @@ impl Node {
     };
 
     for child in children {
-      child.style_resource_urls(urls);
+      child.style_image_urls(urls);
     }
   }
 
   /// Collects unique resource URLs referenced by this node tree and styles.
-  pub fn resource_urls(&self) -> impl Iterator<Item = &str> {
+  pub fn image_urls(&self) -> impl Iterator<Item = &str> {
     let mut urls = Xxh3HashSet::default();
-    self.metadata_resource_urls(&mut urls);
-    self.style_resource_urls(&mut urls);
+    self.metadata_image_urls(&mut urls);
+    self.style_image_urls(&mut urls);
 
     urls.into_iter()
   }
@@ -695,7 +688,7 @@ mod tests {
     ))]);
 
     let mut urls = Xxh3HashSet::default();
-    node.style_resource_urls(&mut urls);
+    node.style_image_urls(&mut urls);
 
     assert_eq!(urls.into_iter().collect::<Vec<_>>(), vec![background_url]);
   }
@@ -716,7 +709,7 @@ mod tests {
       .with_tw(tw);
 
     let mut urls = Xxh3HashSet::default();
-    node.style_resource_urls(&mut urls);
+    node.style_image_urls(&mut urls);
 
     let tasks = urls.into_iter().collect::<Vec<_>>();
 
@@ -732,7 +725,7 @@ mod tests {
     let node = Node::container([]).with_tw(tw);
 
     let mut urls = Xxh3HashSet::default();
-    node.style_resource_urls(&mut urls);
+    node.style_image_urls(&mut urls);
 
     assert_eq!(urls.into_iter().collect::<Vec<_>>(), vec![mask_url]);
   }

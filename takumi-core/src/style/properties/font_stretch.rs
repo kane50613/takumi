@@ -78,7 +78,7 @@ impl FontStretch {
   }
 
   /// Builds from a fraction where `1.0` is normal.
-  pub fn from_percentage(value: f32) -> Self {
+  pub(crate) fn from_percentage(value: f32) -> Self {
     Self(FontWidth::from_percentage(value.max(0.0) * 100.0))
   }
 }

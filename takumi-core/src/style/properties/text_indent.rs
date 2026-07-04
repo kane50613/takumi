@@ -48,7 +48,7 @@ impl TextIndent {
   }
 
   /// Resolves the indent amount to pixels against the line width.
-  pub fn resolve_px(self, sizing: &SizingContext, line_width: f32) -> f32 {
+  pub(crate) fn resolve_px(self, sizing: &SizingContext, line_width: f32) -> f32 {
     self.amount.to_px(sizing, line_width)
   }
 }

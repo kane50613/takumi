@@ -248,7 +248,7 @@ pub(crate) fn parse_calc_sum<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, 
 }
 
 /// Parses a `calc(...)` that must reduce to a unitless number.
-pub fn parse_calc_number_expression<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, f32> {
+pub(crate) fn parse_calc_number_expression<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, f32> {
   let location = input.current_source_location();
   let token = input.next()?.clone();
 

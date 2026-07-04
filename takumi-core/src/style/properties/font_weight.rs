@@ -128,7 +128,7 @@ impl FontWeight {
 
   /// Resolves `bolder`/`lighter` against the inherited parent weight; absolute
   /// weights pass through unchanged.
-  pub fn resolve_against(self, parent: f32) -> Self {
+  pub(crate) fn resolve_against(self, parent: f32) -> Self {
     match self {
       Self::Bolder => FontWeight::from(bolder(parent)),
       Self::Lighter => FontWeight::from(lighter(parent)),

@@ -32,7 +32,7 @@ pub enum FontSizeKeyword {
 
 impl FontSizeKeyword {
   /// Resolves the keyword to its root-relative CSS length.
-  pub const fn to_length(self) -> Length {
+  pub(crate) const fn to_length(self) -> Length {
     match self {
       Self::XXSmall => Length::Rem(0.6),
       Self::XSmall => Length::Rem(0.75),
