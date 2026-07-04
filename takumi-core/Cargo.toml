@@ -13,7 +13,6 @@ rust-version = "1.91"
 ignored = ["serde_bytes"]
 
 [dependencies]
-cssparser.workspace = true
 png.workspace = true
 gif.workspace = true
 data-url.workspace = true

@@ -24,7 +24,6 @@ smallvec.workspace = true
 phf.workspace = true
 parley.workspace = true
 taffy.workspace = true
-image.workspace = true
 
 [dependencies.serde]
 workspace = true
