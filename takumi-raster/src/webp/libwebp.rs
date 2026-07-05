@@ -366,6 +366,76 @@ fn encode_frames(
     .collect()
 }
 
+/// Streams frames into an animated WebP, encoding each as it arrives so only one
+/// raw frame is held at a time. Bytes match [`write_animated_webp`] for the same
+/// frames; frames encode sequentially rather than in parallel.
+pub(crate) fn encode_animated_webp<W, I>(
+  mut frames: I,
+  destination: &mut W,
+  options: AnimatedWebpOptions,
+) -> Result<()>
+where
+  W: Write,
+  I: Iterator<Item = Result<AnimationFrame>>,
+{
+  let Some(first) = frames.next().transpose()? else {
+    return Err(WebPError::EmptyAnimation.into());
+  };
+
+  let frame_width = first.image.width();
+  let frame_height = first.image.height();
+  if !(1..=U24_MAX + 1).contains(&frame_width) || !(1..=U24_MAX + 1).contains(&frame_height) {
+    return Err(
+      WebPError::InvalidFrameDimensions {
+        width: frame_width,
+        height: frame_height,
+        max: U24_MAX + 1,
+      }
+      .into(),
+    );
+  }
+
+  let speed = options.speed.unwrap_or(1).clamp(0, 6);
+  let config = webp_config(options.lossless, options.quality, speed)?;
+
+  let mut encoded = Vec::new();
+  let mut pending_image = first.image;
+  let mut pending_duration_ms = first.duration_ms.clamp(0, U24_MAX);
+
+  for frame in frames {
+    let frame = frame?;
+    if frame.image.width() != frame_width || frame.image.height() != frame_height {
+      return Err(WebPError::MixedFrameDimensions.into());
+    }
+    if frame.image.as_raw() == pending_image.as_raw() {
+      pending_duration_ms = pending_duration_ms.saturating_add(frame.duration_ms.clamp(0, U24_MAX));
+      continue;
+    }
+    encoded.push(encode_single_frame(
+      pending_image.as_rgba(),
+      pending_duration_ms,
+      &config,
+    )?);
+    pending_image = frame.image;
+    pending_duration_ms = frame.duration_ms.clamp(0, U24_MAX);
+  }
+  encoded.push(encode_single_frame(
+    pending_image.as_rgba(),
+    pending_duration_ms,
+    &config,
+  )?);
+
+  write_riff_container(
+    destination,
+    frame_width,
+    frame_height,
+    options.loop_count.unwrap_or(0),
+    options.blend,
+    options.dispose,
+    &encoded,
+  )
+}
+
 /// Encodes a sequence of RGBA frames into an animated WebP.
 pub fn write_animated_webp<W: Write>(
   frames: Cow<'_, [AnimationFrame]>,

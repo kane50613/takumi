@@ -617,38 +617,64 @@ pub(crate) fn render_sequence_at_time<'g>(
   render_at_time(scene.options.clone(), local_time_ms)
 }
 
-/// Renders all frames for a sequential animation timeline at a fixed frame rate.
-pub fn render_animation<'g>(
-  scenes: &[SequentialScene<'g>],
-  fps: u32,
-) -> Result<Vec<AnimationFrame>> {
+/// A frame's start offset and displayed duration, both in milliseconds. Computed
+/// from the timeline and frame rate without rendering any pixels.
+#[derive(Clone, Copy)]
+pub(crate) struct FrameSpan {
+  pub(crate) start_ms: u64,
+  pub(crate) duration_ms: u32,
+}
+
+/// The frame schedule for a timeline at a fixed frame rate: one [`FrameSpan`] per
+/// visible frame, dropping any that round to a zero-millisecond duration.
+pub(crate) fn frame_spans<'g>(scenes: &[SequentialScene<'g>], fps: u32) -> Vec<FrameSpan> {
   if scenes.is_empty() || fps == 0 {
-    return Ok(Vec::new());
+    return Vec::new();
   }
 
   let total_duration_ms = total_sequence_duration(scenes);
   if total_duration_ms == 0 {
-    return Ok(Vec::new());
+    return Vec::new();
   }
 
   let frame_count = total_duration_ms
     .saturating_mul(u64::from(fps))
     .div_ceil(1000);
-  let mut frames = Vec::with_capacity(frame_count as usize);
 
-  for frame_index in 0..frame_count {
-    let start_ms = frame_index * 1000 / u64::from(fps);
-    let end_ms = ((frame_index + 1) * 1000 / u64::from(fps)).min(total_duration_ms);
-    let frame_duration_ms = end_ms.saturating_sub(start_ms);
-    if frame_duration_ms == 0 {
-      continue;
-    }
+  (0..frame_count)
+    .filter_map(|frame_index| {
+      let start_ms = frame_index * 1000 / u64::from(fps);
+      let end_ms = ((frame_index + 1) * 1000 / u64::from(fps)).min(total_duration_ms);
+      let duration_ms = end_ms.saturating_sub(start_ms);
+      (duration_ms != 0).then_some(FrameSpan {
+        start_ms,
+        duration_ms: duration_ms as u32,
+      })
+    })
+    .collect()
+}
 
-    let image = render_sequence_at_time(scenes, start_ms)?;
-    frames.push(AnimationFrame::new(image, frame_duration_ms as u32));
-  }
+/// Renders one frame of the timeline for the given [`FrameSpan`].
+pub(crate) fn render_frame<'g>(
+  scenes: &[SequentialScene<'g>],
+  span: FrameSpan,
+) -> Result<AnimationFrame> {
+  let image = render_sequence_at_time(scenes, span.start_ms)?;
+  Ok(AnimationFrame::new(image, span.duration_ms))
+}
 
-  Ok(frames)
+/// Renders all frames for a sequential animation timeline at a fixed frame rate.
+///
+/// Holds every frame in memory. To bound memory, stream straight into an encoder
+/// with [`write_animation`](crate::write_animation) instead.
+pub fn render_animation<'g>(
+  scenes: &[SequentialScene<'g>],
+  fps: u32,
+) -> Result<Vec<AnimationFrame>> {
+  frame_spans(scenes, fps)
+    .into_iter()
+    .map(|span| render_frame(scenes, span))
+    .collect()
 }
 
 fn total_sequence_duration<'g>(scenes: &[SequentialScene<'g>]) -> u64 {
@@ -769,6 +795,65 @@ mod tests {
     let frames = frames_result.unwrap_or_default();
 
     assert!(frames.is_empty());
+  }
+
+  #[test]
+  fn write_animation_streams_the_same_bytes_as_render_then_encode() -> crate::Result<()> {
+    use std::borrow::Cow;
+
+    use crate::{
+      AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFormat,
+      write_animated_gif, write_animated_png, write_animated_webp, write_animation,
+    };
+
+    let fonts = Fonts::default();
+    let scenes = vec![make_scene(&fonts, 100), make_scene(&fonts, 100)];
+    let fps = 30;
+    let frames = render_animation(&scenes, fps)?;
+    assert!(!frames.is_empty());
+
+    let mut eager = Vec::new();
+    write_animated_gif(
+      Cow::Owned(frames.clone()),
+      &mut eager,
+      AnimatedGifOptions::default(),
+    )?;
+    let mut streamed = Vec::new();
+    write_animation(
+      &scenes,
+      fps,
+      AnimationFormat::Gif(AnimatedGifOptions::default()),
+      &mut streamed,
+    )?;
+    assert_eq!(eager, streamed, "gif");
+
+    let mut eager = Vec::new();
+    write_animated_png(&frames, &mut eager, AnimatedPngOptions::default())?;
+    let mut streamed = Vec::new();
+    write_animation(
+      &scenes,
+      fps,
+      AnimationFormat::Apng(AnimatedPngOptions::default()),
+      &mut streamed,
+    )?;
+    assert_eq!(eager, streamed, "apng");
+
+    let mut eager = Vec::new();
+    write_animated_webp(
+      Cow::Owned(frames.clone()),
+      &mut eager,
+      AnimatedWebpOptions::default(),
+    )?;
+    let mut streamed = Vec::new();
+    write_animation(
+      &scenes,
+      fps,
+      AnimationFormat::WebP(AnimatedWebpOptions::default()),
+      &mut streamed,
+    )?;
+    assert_eq!(eager, streamed, "webp");
+
+    Ok(())
   }
 
   #[test]

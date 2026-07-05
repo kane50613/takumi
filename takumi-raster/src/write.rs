@@ -1,4 +1,7 @@
-use std::{borrow::Cow, io::Write};
+use std::{
+  borrow::{Borrow, Cow},
+  io::Write,
+};
 
 use gif::{Encoder as GifEncoder, Frame as GifFrame, Repeat};
 use image::{
@@ -15,7 +18,8 @@ use crate::webp::write_webp_lossy;
 use crate::{
   Result,
   error::Error,
-  webp::{has_any_alpha_pixel, strip_alpha_channel, write_webp_lossless},
+  render::{SequentialScene, frame_spans, render_frame},
+  webp::{encode_animated_webp, has_any_alpha_pixel, strip_alpha_channel, write_webp_lossless},
 };
 
 /// Lossy-encoding quality, clamped to the `0..=100` range (higher means better
@@ -301,25 +305,52 @@ pub fn write_animated_gif<W: Write>(
   destination: &mut W,
   options: AnimatedGifOptions,
 ) -> Result<()> {
-  if frames.is_empty() {
-    return Err(Error::EmptyAnimationFrames);
+  ensure_uniform_frame_dimensions(&frames)?;
+  encode_animated_gif(
+    frames.into_owned().into_iter().map(Ok),
+    destination,
+    options,
+  )
+}
+
+/// Rejects mismatched frame dimensions up front, so a slice-based encoder writes
+/// nothing before failing. The streaming encoders check each frame as it arrives.
+fn ensure_uniform_frame_dimensions(frames: &[AnimationFrame]) -> Result<()> {
+  let Some(first) = frames.first() else {
+    return Ok(());
+  };
+  let (width, height) = (first.image.width(), first.image.height());
+  for frame in &frames[1..] {
+    if frame.image.width() != width || frame.image.height() != height {
+      return Err(Error::MixedAnimationFrameDimensions);
+    }
   }
+  Ok(())
+}
 
-  let width = frames[0].image.width();
-  let height = frames[0].image.height();
+/// Streams frames into an animated GIF, encoding each as it arrives so only one
+/// raw frame is held at a time.
+pub(crate) fn encode_animated_gif<W, I>(
+  mut frames: I,
+  destination: &mut W,
+  options: AnimatedGifOptions,
+) -> Result<()>
+where
+  W: Write,
+  I: Iterator<Item = Result<AnimationFrame>>,
+{
+  let Some(first) = frames.next().transpose()? else {
+    return Err(Error::EmptyAnimationFrames);
+  };
 
+  let width = first.image.width();
+  let height = first.image.height();
   if width > u16::MAX as u32 || height > u16::MAX as u32 {
     return Err(Error::GifFrameDimensionsTooLarge {
       width,
       height,
       max: u16::MAX,
     });
-  }
-
-  for frame in frames.iter() {
-    if frame.image.width() != width || frame.image.height() != height {
-      return Err(Error::MixedAnimationFrameDimensions);
-    }
   }
 
   let width = width as u16;
@@ -329,11 +360,19 @@ pub fn write_animated_gif<W: Write>(
     .set_repeat(options.loop_count.map_or(Repeat::Infinite, Repeat::Finite))
     .map_err(Error::encode)?;
 
-  for frame in frames.into_owned().into_iter() {
+  let mut write_gif_frame = |frame: AnimationFrame| -> Result<()> {
+    if frame.image.width() != u32::from(width) || frame.image.height() != u32::from(height) {
+      return Err(Error::MixedAnimationFrameDimensions);
+    }
     let mut pixels = frame.image.into_raw();
     let mut gif_frame = GifFrame::from_rgba_speed(width, height, &mut pixels, 28);
     gif_frame.delay = duration_ms_to_gif_delay(frame.duration_ms);
-    encoder.write_frame(&gif_frame).map_err(Error::encode)?;
+    encoder.write_frame(&gif_frame).map_err(Error::encode)
+  };
+
+  write_gif_frame(first)?;
+  for frame in frames {
+    write_gif_frame(frame?)?;
   }
 
   Ok(())
@@ -348,36 +387,67 @@ pub fn write_animated_png<W: Write>(
   if frames.is_empty() {
     return Err(Error::EmptyAnimationFrames);
   }
+  ensure_uniform_frame_dimensions(frames)?;
 
-  let width = frames[0].image.width();
-  let height = frames[0].image.height();
-  for frame in frames.iter() {
-    if frame.image.width() != width || frame.image.height() != height {
-      return Err(Error::MixedAnimationFrameDimensions);
-    }
-  }
-
-  let mut encoder = png::Encoder::new(destination, width, height);
-  configure_png_encoder(&mut encoder);
-  encoder.set_color(ColorType::Rgba);
-  encoder
-    .set_animated(frames.len() as u32, options.loop_count.unwrap_or(0) as u32)
-    .map_err(Error::encode)?;
-
-  // Since APNG doesn't support variable frame duration, we use the minimum duration of all frames.
+  let frame_count = frames.len() as u32;
+  // APNG doesn't support variable frame duration, so use the minimum across frames.
   let min_duration_ms = frames
     .iter()
     .map(|frame| frame.duration_ms)
     .min()
     .unwrap_or(0);
 
+  encode_animated_png(
+    frames.iter().map(Ok),
+    frame_count,
+    min_duration_ms,
+    destination,
+    options,
+  )
+}
+
+/// Streams frames into an animated PNG. `frame_count` and `min_duration_ms` are
+/// passed in because APNG writes both into the header before the first frame.
+pub(crate) fn encode_animated_png<W, F, I>(
+  mut frames: I,
+  frame_count: u32,
+  min_duration_ms: u32,
+  destination: &mut W,
+  options: AnimatedPngOptions,
+) -> Result<()>
+where
+  W: Write,
+  F: Borrow<AnimationFrame>,
+  I: Iterator<Item = Result<F>>,
+{
+  let Some(first) = frames.next().transpose()? else {
+    return Err(Error::EmptyAnimationFrames);
+  };
+  let first = first.borrow();
+  let width = first.image.width();
+  let height = first.image.height();
+
+  let mut encoder = png::Encoder::new(destination, width, height);
+  configure_png_encoder(&mut encoder);
+  encoder.set_color(ColorType::Rgba);
+  encoder
+    .set_animated(frame_count, options.loop_count.unwrap_or(0) as u32)
+    .map_err(Error::encode)?;
   encoder
     .set_frame_delay(min_duration_ms.clamp(0, u16::MAX as u32) as u16, 1000)
     .map_err(Error::encode)?;
 
   let mut writer = encoder.write_header().map_err(Error::encode)?;
+  writer
+    .write_image_data(first.image.as_raw())
+    .map_err(Error::encode)?;
 
   for frame in frames {
+    let frame = frame?;
+    let frame = frame.borrow();
+    if frame.image.width() != width || frame.image.height() != height {
+      return Err(Error::MixedAnimationFrameDimensions);
+    }
     writer
       .write_image_data(frame.image.as_raw())
       .map_err(Error::encode)?;
@@ -386,6 +456,45 @@ pub fn write_animated_png<W: Write>(
   writer.finish().map_err(Error::encode)?;
 
   Ok(())
+}
+
+/// Output format and per-format options for [`write_animation`].
+#[non_exhaustive]
+pub enum AnimationFormat {
+  /// Animated WebP.
+  WebP(AnimatedWebpOptions),
+  /// Animated PNG.
+  Apng(AnimatedPngOptions),
+  /// Animated GIF.
+  Gif(AnimatedGifOptions),
+}
+
+/// Renders a timeline at `fps` and streams each frame straight into `format`,
+/// holding one raw frame at a time instead of the whole animation.
+///
+/// The eager alternative — [`render_animation`](crate::render_animation) followed
+/// by a `write_animated_*` call — keeps every frame in memory at once.
+pub fn write_animation<W: Write>(
+  scenes: &[SequentialScene<'_>],
+  fps: u32,
+  format: AnimationFormat,
+  destination: &mut W,
+) -> Result<()> {
+  let spans = frame_spans(scenes, fps);
+  if spans.is_empty() {
+    return Err(Error::EmptyAnimationFrames);
+  }
+
+  let frames = spans.iter().map(|&span| render_frame(scenes, span));
+  match format {
+    AnimationFormat::WebP(options) => encode_animated_webp(frames, destination, options),
+    AnimationFormat::Gif(options) => encode_animated_gif(frames, destination, options),
+    AnimationFormat::Apng(options) => {
+      let frame_count = spans.len() as u32;
+      let min_duration_ms = spans.iter().map(|span| span.duration_ms).min().unwrap_or(0);
+      encode_animated_png(frames, frame_count, min_duration_ms, destination, options)
+    }
+  }
 }
 
 #[cfg(all(test, not(target_arch = "wasm32")))]

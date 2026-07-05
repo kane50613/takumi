@@ -74,9 +74,9 @@ pub mod prelude {
   pub use takumi_html::{DEFAULT_MAX_DEPTH, FromHtml, FromHtmlOptions, HtmlError, StylePresets};
   #[cfg(feature = "raster-backend")]
   pub use takumi_raster::{
-    AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, Bitmap,
-    DitheringAlgorithm, MeasuredNode, MeasuredTextRun, OutputFormat, Quality, RenderOptions,
-    SequentialScene,
+    AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFormat, AnimationFrame,
+    Bitmap, DitheringAlgorithm, MeasuredNode, MeasuredTextRun, OutputFormat, Quality,
+    RenderOptions, SequentialScene,
   };
   #[cfg(feature = "svg-backend")]
   pub use takumi_svg::SvgOptions;
@@ -87,7 +87,7 @@ pub use takumi_html::from_html;
 #[cfg(feature = "raster-backend")]
 pub use takumi_raster::{
   measure, render, render_animation, write_animated_gif, write_animated_png, write_animated_webp,
-  write_image,
+  write_animation, write_image,
 };
 #[cfg(feature = "svg-backend")]
 pub use takumi_svg::render as render_svg;

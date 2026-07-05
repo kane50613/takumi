@@ -153,57 +153,84 @@ pub fn write_animated_webp<W: Write>(
   destination: &mut W,
   options: AnimatedWebpOptions,
 ) -> Result<()> {
-  if frames.is_empty() {
-    return Err(WebPError::EmptyAnimation.into());
-  }
+  encode_animated_webp(
+    frames.into_owned().into_iter().map(Ok),
+    destination,
+    options,
+  )
+}
 
-  let canvas_width = frames[0].image.width();
-  let canvas_height = frames[0].image.height();
+/// A frame's dimensions, duration, and its already-encoded VP8 payload. Small
+/// enough to keep for every frame; the raw pixels are dropped after encoding.
+struct EncodedAnmf {
+  width: u32,
+  height: u32,
+  duration_ms: u32,
+  vp8: Vec<u8>,
+}
+
+/// Streams frames into an animated WebP, encoding each as it arrives so only one
+/// raw frame is held at a time. Only the compact VP8 payloads are retained, since
+/// the RIFF container needs every frame's size before the first byte is written.
+pub(crate) fn encode_animated_webp<W, I>(
+  mut frames: I,
+  destination: &mut W,
+  options: AnimatedWebpOptions,
+) -> Result<()>
+where
+  W: Write,
+  I: Iterator<Item = Result<AnimationFrame>>,
+{
+  let Some(first) = frames.next().transpose()? else {
+    return Err(WebPError::EmptyAnimation.into());
+  };
+
+  let canvas_width = first.image.width();
+  let canvas_height = first.image.height();
   validate_u24_dimension("WebP canvas width", canvas_width)?;
   validate_u24_dimension("WebP canvas height", canvas_height)?;
 
-  for (index, frame) in frames.iter().enumerate() {
-    let frame_width = frame.image.width();
-    let frame_height = frame.image.height();
-    validate_u24_dimension("WebP frame width", frame_width)?;
-    validate_u24_dimension("WebP frame height", frame_height)?;
-
-    if frame_width > canvas_width || frame_height > canvas_height {
+  let encode_frame = |frame: AnimationFrame, index: usize| -> Result<EncodedAnmf> {
+    let width = frame.image.width();
+    let height = frame.image.height();
+    validate_u24_dimension("WebP frame width", width)?;
+    validate_u24_dimension("WebP frame height", height)?;
+    if width > canvas_width || height > canvas_height {
       return Err(
         WebPError::FrameExceedsCanvas {
           index,
-          frame_width,
-          frame_height,
+          frame_width: width,
+          frame_height: height,
           canvas_width,
           canvas_height,
         }
         .into(),
       );
     }
+
+    let mut buf = Vec::new();
+    let mut encoder = WebPEncoder::new(&mut buf);
+    let mut params = EncoderParams::default();
+    params.use_predictor_transform = true;
+    encoder.set_params(params);
+    encoder
+      .encode(frame.image.as_raw(), width, height, ColorType::Rgba8)
+      .map_err(|_| WebPError::EncodeFailed)?;
+
+    Ok(EncodedAnmf {
+      width,
+      height,
+      duration_ms: frame.duration_ms,
+      vp8: buf,
+    })
+  };
+
+  let mut anmfs = vec![encode_frame(first, 0)?];
+  for (index, frame) in frames.enumerate() {
+    anmfs.push(encode_frame(frame?, index + 1)?);
   }
 
-  let frames_payloads: Vec<(&AnimationFrame, Vec<u8>)> = frames
-    .iter()
-    .map(|frame| {
-      let mut buf = Vec::new();
-      let mut encoder = WebPEncoder::new(&mut buf);
-      let mut params = EncoderParams::default();
-      params.use_predictor_transform = true;
-      encoder.set_params(params);
-      encoder
-        .encode(
-          frame.image.as_raw(),
-          frame.image.width(),
-          frame.image.height(),
-          ColorType::Rgba8,
-        )
-        .map_err(|_| WebPError::EncodeFailed)?;
-
-      Ok((frame, buf))
-    })
-    .collect::<Result<Vec<(&AnimationFrame, Vec<u8>)>>>()?;
-
-  let riff_size = estimate_riff_size(frames_payloads.iter().map(|(_, buf)| buf.as_slice()))?;
+  let riff_size = estimate_riff_size(anmfs.iter().map(|anmf| anmf.vp8.as_slice()))?;
 
   destination.write_all(b"RIFF")?;
   destination.write_all(&riff_size.to_le_bytes())?;
@@ -229,13 +256,12 @@ pub fn write_animated_webp<W: Write>(
   let dispose_flag = options.dispose as u8;
   let frame_flags = (blend_flag << 1) | dispose_flag;
 
-  for (frame, vp8_data) in frames_payloads.into_iter() {
-    let w_bytes = (frame.image.width() - 1).to_le_bytes();
-    let h_bytes = (frame.image.height() - 1).to_le_bytes();
+  for anmf in anmfs {
+    let w_bytes = (anmf.width - 1).to_le_bytes();
+    let h_bytes = (anmf.height - 1).to_le_bytes();
 
-    let (start, len) = vp8_payload_coords(&vp8_data).ok_or(WebPError::InvalidEncodedData)?;
-
-    let vp8_payload = &vp8_data[start..start + len];
+    let (start, len) = vp8_payload_coords(&anmf.vp8).ok_or(WebPError::InvalidEncodedData)?;
+    let vp8_payload = &anmf.vp8[start..start + len];
 
     let padding = vp8_payload.len() & 1;
     let vp8_payload_len_u32 =
@@ -253,10 +279,10 @@ pub fn write_animated_webp<W: Write>(
     destination.write_all(&[0u8; 6])?;
     destination.write_all(&w_bytes[..3])?;
     destination.write_all(&h_bytes[..3])?;
-    destination.write_all(&frame.duration_ms.clamp(0, U24_MAX).to_le_bytes()[..3])?;
+    destination.write_all(&anmf.duration_ms.clamp(0, U24_MAX).to_le_bytes()[..3])?;
     destination.write_all(&[frame_flags])?;
 
-    let chunk_tag = vp8_chunk_tag(&vp8_data, start)
+    let chunk_tag = vp8_chunk_tag(&anmf.vp8, start)
       .ok_or(WebPError::InvalidEncodedData)
       .and_then(|tag| {
         if &tag == b"VP8 " || &tag == b"VP8L" {
