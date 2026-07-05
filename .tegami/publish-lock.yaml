@@ -1,77 +1,95 @@
 core:changelogs:
-  - content: "---\npackages:\n  npm:@takumi-rs/helpers:\n    type: minor\n---\n\n### Shrink and sharpen the Google Fonts family type\n\nGroup the ~1940 families by their distinct weight/style/axis shape (152 of them) so\n`GoogleFontFamily` builds a discriminated union over shapes, not families. The shipped\n`.d.ts` drops from ~192 KB to ~58 KB and the checker does ~75% fewer instantiations. The\nobject form now autocompletes each known family's weight, style, and axes, and still accepts\na name built at runtime. The generator refuses to write a catalog with under 1000 families.\n"
-    filename: font-catalog-shape-union.md
+  - content: "---\npackages:\n  cargo:takumi-raster:\n    type: minor\n  cargo:takumi:\n    type: minor\n  npm:@takumi-rs/core:\n    type: patch\n  npm:@takumi-rs/wasm:\n    type: patch\n---\n\n### Cap animation frame rate per format\n\nBrowsers clamp any animation frame of 10ms or less to 100ms, so a high frame\nrate stalls instead of playing fast. `write_animation` now rejects a frame rate\nabove `AnimationFormat::max_fps` with the new `AnimationFrameRateTooHigh` error:\n90 fps for WebP and APNG, 50 fps for GIF (centisecond delays). The napi and WASM\n`renderAnimation` bindings surface the error.\n"
+    filename: animation-frame-rate-cap.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-raster:\n    type: minor\n  cargo:takumi:\n    type: minor\n  npm:@takumi-rs/core:\n    type: patch\n  npm:@takumi-rs/wasm:\n    type: patch\n---\n\n### Stream animation frames straight into the encoder\n\nAdd `write_animation`, which renders a timeline and feeds each frame to the\nencoder as it arrives, holding one raw frame at a time instead of the whole\nsequence. Both the napi and WASM `renderAnimation` bindings use it, so a high\nframe rate or a long duration no longer exhausts memory. On native the WebP\nencoder still runs frames in parallel, now over bounded chunks. The WASM WebP\nencoder now merges runs of identical frames like the native one, so a static or\nslow animation encodes and stores far less. The eager `render_animation` +\n`write_animated_*` path stays for callers that want every frame at once.\n"
+    filename: streaming-animation-encode.md
+    v: 0.0.0
+  - content: "---\npackages:\n  npm:@takumi-rs/core:\n    type: patch\n  npm:@takumi-rs/wasm:\n    type: patch\n---\n\n### Apply structured keyframes in `renderAnimation`\n\n`renderAnimation` accepted a `keyframes` option but never registered it, so\nstructured keyframes animated with `render` yet stayed static in animations. It\nnow extends the stylesheet with them like the other entry points.\n"
+    filename: render-animation-keyframes.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - id: npm:@takumi-rs/wasm
-    updated: true
-  - changelogIds:
-      - font-catalog-shape-union.md
-    id: npm:@takumi-rs/helpers
-    updated: true
-  - id: npm:@takumi-rs/image-response
+  - id: npm:@takumi-rs/helpers
     updated: true
   - id: npm:takumi-js
     updated: true
-  - id: npm:takumi-template
-    updated: false
   - id: npm:docs
     updated: false
-  - id: npm:@takumi-rs/core
+  - changelogIds:
+      - animation-frame-rate-cap.md
+      - streaming-animation-encode.md
+      - render-animation-keyframes.md
+    id: npm:@takumi-rs/wasm
     updated: true
-  - id: npm:example-twitter-images
-    updated: false
-  - id: npm:example-tanstack-start
-    updated: false
-  - id: npm:example-satori-html
-    updated: false
-  - id: npm:example-nextjs
+  - id: npm:@takumi-rs/image-response
+    updated: true
+  - changelogIds:
+      - animation-frame-rate-cap.md
+      - streaming-animation-encode.md
+      - render-animation-keyframes.md
+    id: npm:@takumi-rs/core
+    updated: true
+  - id: npm:takumi-template
     updated: false
   - id: npm:svelte
-    updated: false
-  - id: npm:example-css-library-integration
-    updated: false
-  - id: npm:ffplay
-    updated: false
-  - id: npm:waku-ssr
     updated: false
   - id: npm:ffmpeg-keyframe-animation
     updated: false
   - id: npm:example-cloudflare-workers
     updated: false
+  - id: npm:example-twitter-images
+    updated: false
+  - id: npm:example-css-library-integration
+    updated: false
+  - id: npm:waku-ssr
+    updated: false
+  - id: npm:ffplay
+    updated: false
+  - id: npm:example-nextjs
+    updated: false
+  - id: npm:example-satori-html
+    updated: false
+  - id: npm:example-tanstack-start
+    updated: false
   - id: cargo:takumi-html
     updated: false
-  - id: cargo:takumi-raster
-    updated: false
+  - changelogIds:
+      - animation-frame-rate-cap.md
+      - streaming-animation-encode.md
+    id: cargo:takumi
+    updated: true
   - id: cargo:takumi-svg
     updated: false
-  - id: cargo:takumi
+  - changelogIds:
+      - animation-frame-rate-cap.md
+      - streaming-animation-encode.md
+    id: cargo:takumi-raster
     updated: true
   - id: cargo:takumi-core
     updated: false
 npm:packages:
   - id: npm:takumi
   - distTag: rc
-    id: npm:@takumi-rs/wasm
-  - distTag: rc
     id: npm:@takumi-rs/helpers
+  - distTag: rc
+    id: npm:takumi-js
+  - id: npm:docs
+  - distTag: rc
+    id: npm:@takumi-rs/wasm
   - distTag: rc
     id: npm:@takumi-rs/image-response
   - distTag: rc
-    id: npm:takumi-js
-  - id: npm:takumi-template
-  - id: npm:docs
-  - distTag: rc
     id: npm:@takumi-rs/core
-  - id: npm:example-twitter-images
-  - id: npm:example-tanstack-start
-  - id: npm:example-satori-html
-  - id: npm:example-nextjs
+  - id: npm:takumi-template
   - id: npm:svelte
-  - id: npm:example-css-library-integration
-  - id: npm:ffplay
-  - id: npm:waku-ssr
   - id: npm:ffmpeg-keyframe-animation
   - id: npm:example-cloudflare-workers
+  - id: npm:example-twitter-images
+  - id: npm:example-css-library-integration
+  - id: npm:waku-ssr
+  - id: npm:ffplay
+  - id: npm:example-nextjs
+  - id: npm:example-satori-html
+  - id: npm:example-tanstack-start

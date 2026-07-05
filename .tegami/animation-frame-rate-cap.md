@@ -1,9 +1,17 @@
 ---
 packages:
-  "cargo:takumi-raster": minor
-  "cargo:takumi": minor
-  "npm:@takumi-rs/core": patch
-  "npm:@takumi-rs/wasm": patch
+  cargo:takumi-raster:
+    replay:
+      - exit-prerelease(cargo:takumi-raster)
+  cargo:takumi:
+    replay:
+      - exit-prerelease(cargo:takumi)
+  npm:@takumi-rs/core:
+    replay:
+      - exit-prerelease(npm:@takumi-rs/core)
+  npm:@takumi-rs/wasm:
+    replay:
+      - exit-prerelease(npm:@takumi-rs/wasm)
 ---
 
 ### Cap animation frame rate per format

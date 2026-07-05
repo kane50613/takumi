@@ -1,3 +1,30 @@
+## @takumi-rs/wasm@2.0.0-rc.8 (rc)
+
+### Cap animation frame rate per format
+
+Browsers clamp any animation frame of 10ms or less to 100ms, so a high frame
+rate stalls instead of playing fast. `write_animation` now rejects a frame rate
+above `AnimationFormat::max_fps` with the new `AnimationFrameRateTooHigh` error:
+90 fps for WebP and APNG, 50 fps for GIF (centisecond delays). The napi and WASM
+`renderAnimation` bindings surface the error.
+
+### Stream animation frames straight into the encoder
+
+Add `write_animation`, which renders a timeline and feeds each frame to the
+encoder as it arrives, holding one raw frame at a time instead of the whole
+sequence. Both the napi and WASM `renderAnimation` bindings use it, so a high
+frame rate or a long duration no longer exhausts memory. On native the WebP
+encoder still runs frames in parallel, now over bounded chunks. The WASM WebP
+encoder now merges runs of identical frames like the native one, so a static or
+slow animation encodes and stores far less. The eager `render_animation` +
+`write_animated_*` path stays for callers that want every frame at once.
+
+### Apply structured keyframes in `renderAnimation`
+
+`renderAnimation` accepted a `keyframes` option but never registered it, so
+structured keyframes animated with `render` yet stayed static in animations. It
+now extends the stylesheet with them like the other entry points.
+
 ## @takumi-rs/wasm@2.0.0-rc.4 (rc)
 
 ### Replace `fetchResources`/`extractResourceUrls` with `prepareImages`
