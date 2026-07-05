@@ -1,6 +1,8 @@
 ---
 packages:
-  cargo:takumi-core: minor
+  cargo:takumi-core:
+    replay:
+      - exit-prerelease(cargo:takumi-core)
 ---
 
 ### Remove taffy/parley/image types from the public API

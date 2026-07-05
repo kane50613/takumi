@@ -1,77 +1,135 @@
 core:changelogs:
-  - content: "---\npackages:\n  npm:takumi-js:\n    type: patch\n---\n\n### Pin `@takumi-rs/*` dependencies to the matching release\n\n`takumi-js` resolved its `@takumi-rs/core`, `@takumi-rs/helpers`, and `@takumi-rs/wasm`\ndependencies to an older release than itself, so `takumi-js/response` imported a helper\nthe pinned `@takumi-rs/helpers` did not yet export and failed to load. The internal\ndependencies now track the same release as `takumi-js`.\n"
-    filename: sync-internal-dep-versions.md
+  - content: "---\npackages:\n  npm:@takumi-rs/helpers:\n    type: minor\n---\n\n### Add the `@takumi-rs/helpers/renderer` entrypoint\n\nThe shared renderer wrapper backing the napi and wasm bindings is now exported\nas `@takumi-rs/helpers/renderer`.\n"
+    filename: helpers-renderer-export.md
+    v: 0.0.0
+  - content: "---\npackages:\n  npm:@takumi-rs/image-response:\n    type: patch\n---\n\n### Drop the `./wasm` export\n\n`@takumi-rs/image-response/wasm` aliased the same file as the root entry. Import from\n`@takumi-rs/image-response`.\n"
+    filename: drop-image-response-wasm-subpath.md
+    v: 0.0.0
+  - content: "---\npackages:\n  npm:takumi-js:\n    type: patch\n---\n\n### Keep the format tagged union on `render` options\n\n`render`, `renderSvg`, and `renderAnimation` used a non-distributive `Omit` that\ncollapsed the `format`/`quality`/`lossless` union, so `{ format: \"webp\", quality: 80 }`\nstopped type-checking. A distributive `Omit` restores it.\n"
+    filename: distributive-omit-render-options.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-raster:\n    type: minor\n---\n\n### Rename the animated encoders to `write_animated_*`\n\n`encode_animated_gif`, `encode_animated_png`, and `encode_animated_webp` are\nnow `write_animated_gif`, `write_animated_png`, and `write_animated_webp`,\nmatching `write_image`. Signatures are unchanged.\n"
+    filename: write-animated-rename.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi:\n    type: major\n---\n\n### Rename the `svg` feature to `svg-source`\n\n`svg` and `svg-backend` read as the same thing at a glance despite gating\nopposite directions (image-source input vs. render output). The umbrella's\ninput-side feature is now `svg-source`; `svg-backend` is unchanged.\n"
+    filename: svg-source-feature-rename.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n---\n\n### Merge `takumi-css` into `takumi-core`\n\nFold the CSS parsing, cascade, value types, selector matching, and `@keyframes`\nlayer back into `takumi-core` and drop the separate `takumi-css` crate. The\n`style` module is reachable through `layout::style` as before; `matching` is now\ncrate-private. Core builds at `opt-level = \"z\"`, shrinking the napi `.node` ~7%\nand the wasm binary ~8% with no render-path regression.\n"
+    filename: merge-css-into-core.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n---\n\n### Remove taffy/parley/image types from the public API\n\n`Affine::transform_point`, `ComputedStyle::local_transform`/`has_non_identity_transform`,\n`OffsetAnchor::resolve`, `PositionValue::to_point`, and `BorderRadiusPair::to_px` now take\nseparate `width`/`height` (or `x`/`y`) `f32` params and return tuples instead of `taffy::Point`/\n`taffy::Size`. `Affine::decompose_translation` is removed; read `.x`/`.y` directly.\n`SizingContext::container_size` is private; use the new `set_container_size` setter.\n`ComputedStyle::to_taffy_style`/`creates_stacking_context`, `LineHeight::into_parley`,\n`Float::resolve`/`Clear::resolve` are now crate-private. Dropped the `From<image::RgbaImage>`\nimpls for `ImageSource`/`ImageData`; convert through `ImageBuffer::from_rgba` instead.\n`style::fast_div_255`/`fast_div_255_u32` moved under `style::math`.\n"
+    filename: seal-taffy-in-public-api.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n---\n\n### Mark spec-tracking CSS value enums `#[non_exhaustive]`\n\n`BlendMode`, `Filter`, `BasicShape`, `ContentValue`, `TextTransform`,\n`WhiteSpaceCollapse`, `OffsetPath`, `ImageScalingAlgorithm`, and `Position` can\ngain variants as their specs grow without a breaking change.\n"
+    filename: css-value-enums-non-exhaustive.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n---\n\n### Hide internal style/layout items from the public API\n\nRoughly 200 CSS value types, parsing helpers, and internal accessors across `style::properties`,\n`style::stylesheets`, `style::tw`, `style::selector`, and `layout` are now crate-private; they were\nnever meant to be constructed or matched on directly. `StyleSheet::property_rules` and\n`apply_stylesheet_animations` are crate-private; use `StyleSheet`'s public parsing/query surface\ninstead. Gradient direction/keyword helpers (`GradientKeywordDirection`, `HorizontalKeyword`,\n`VerticalKeyword`) stay public since they're reachable through `LinearGradientDirection`.\n"
+    filename: hide-internal-style-items.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n---\n\n### Seal `parley` out of the font resource API\n\n`FontResource::override_info` now takes a takumi-owned `FontOverride` (owned\nfamily name, weight, style, width, axes) instead of `parley`'s\n`FontInfoOverride`. `FontSource` is an opaque struct over raw bytes rather than\nan enum exposing a `parley` blob. Callers no longer depend on `parley`.\n"
+    filename: own-font-override.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n---\n\n### Rename `resource` naming to `image`\n\n`Node::resource_urls`/`Style::resource_urls`/`StyleDeclarationBlock::resource_urls` are now\n`image_urls`, and `ImageResourceError` is now `ImageError` — everything they cover is image\nloading, so the names say so.\n"
+    filename: rename-resource-to-image.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n---\n\n### Hide the encoder and layout crates behind opaque `Error` variants\n\n`Error::PngError`, `WebPEncodingError`, `GifEncodingError`, `ImageError`, and\n`LayoutError` exposed the `png`, `image_webp`, `gif`, `image`, and `taffy`\ncrates. They collapse into `Error::Encode` (an opaque boxed source, built via\n`Error::encode`) and `Error::Layout(String)`, so the public API no longer\ntracks those crates' versions. `EmptyAnimationFrames` and\n`MixedAnimationFrameDimensions` also drop their `format` fields.\n"
+    filename: opaque-encode-layout-errors.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n---\n\n### Seal `cssparser` and parse values via `FromCssStr`\n\n`FromCss`, `ParseResult`, `CssToken`, `CssSyntaxKind`, and `CssExpectedMessage`\nare now `pub(crate)`, keeping `cssparser` off the public API. Parse CSS value\ntypes from strings through the new `FromCssStr` trait\n(`Length::from_css_str(\"12px\")`), which returns an owned `ParseError`\n(`PartialEq`/`Eq`). The value-list types are plain aliases rather than newtypes:\n`Filters` = `Vec<Filter>`, `GridTemplateComponents` = `Vec<GridTemplateComponent>`,\nand `BackgroundImages`/`BackgroundSizes`/`BackgroundRepeats`/`PositionValues` =\n`Box<[_]>`.\n"
+    filename: css-from-css-str-list-aliases.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-html:\n    type: minor\n---\n\n### Build `FromHtmlOptions` with a builder\n\n`FromHtmlOptions` fields are now `pub(crate)` and the struct is\n`#[non_exhaustive]`; construct it via `FromHtmlOptions::builder()` (or\n`default()`). The `with_presets`, `with_tailwind_property`, and `with_max_depth`\nmethods are gone.\n"
+    filename: html-fromhtmloptions-builder.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - id: npm:docs
-    updated: false
-  - changelogIds:
-      - sync-internal-dep-versions.md
-    id: npm:takumi-js
-    updated: true
-  - id: npm:takumi-template
-    updated: false
-  - id: npm:@takumi-rs/image-response
-    updated: true
   - id: npm:@takumi-rs/wasm
     updated: true
+  - changelogIds:
+      - helpers-renderer-export.md
+    id: npm:@takumi-rs/helpers
+    updated: true
+  - changelogIds:
+      - drop-image-response-wasm-subpath.md
+    id: npm:@takumi-rs/image-response
+    updated: true
+  - id: npm:docs
+    updated: false
+  - id: npm:takumi-template
+    updated: false
   - id: npm:@takumi-rs/core
     updated: true
-  - id: npm:@takumi-rs/helpers
+  - changelogIds:
+      - distributive-omit-render-options.md
+    id: npm:takumi-js
     updated: true
-  - id: npm:svelte
-    updated: false
-  - id: npm:example-satori-html
-    updated: false
-  - id: npm:example-css-library-integration
-    updated: false
-  - id: npm:ffmpeg-keyframe-animation
-    updated: false
-  - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:ffplay
-    updated: false
   - id: npm:example-nextjs
     updated: false
-  - id: npm:example-twitter-images
+  - id: npm:svelte
     updated: false
   - id: npm:waku-ssr
     updated: false
+  - id: npm:example-cloudflare-workers
+    updated: false
   - id: npm:example-tanstack-start
     updated: false
-  - id: cargo:takumi-core
+  - id: npm:ffmpeg-keyframe-animation
     updated: false
-  - id: cargo:takumi-raster
+  - id: npm:example-css-library-integration
+    updated: false
+  - id: npm:ffplay
+    updated: false
+  - id: npm:example-satori-html
+    updated: false
+  - id: npm:example-twitter-images
     updated: false
   - id: cargo:takumi-svg
-    updated: false
-  - id: cargo:takumi-html
-    updated: false
-  - id: cargo:takumi
+    updated: true
+  - changelogIds:
+      - write-animated-rename.md
+    id: cargo:takumi-raster
+    updated: true
+  - changelogIds:
+      - svg-source-feature-rename.md
+    id: cargo:takumi
+    updated: true
+  - changelogIds:
+      - merge-css-into-core.md
+      - seal-taffy-in-public-api.md
+      - css-value-enums-non-exhaustive.md
+      - hide-internal-style-items.md
+      - own-font-override.md
+      - rename-resource-to-image.md
+      - opaque-encode-layout-errors.md
+      - css-from-css-str-list-aliases.md
+    id: cargo:takumi-core
+    updated: true
+  - changelogIds:
+      - html-fromhtmloptions-builder.md
+    id: cargo:takumi-html
     updated: true
 npm:packages:
   - id: npm:takumi
-  - id: npm:docs
-  - distTag: rc
-    id: npm:takumi-js
-  - id: npm:takumi-template
-  - distTag: rc
-    id: npm:@takumi-rs/image-response
   - distTag: rc
     id: npm:@takumi-rs/wasm
   - distTag: rc
+    id: npm:@takumi-rs/helpers
+  - distTag: rc
+    id: npm:@takumi-rs/image-response
+  - id: npm:docs
+  - id: npm:takumi-template
+  - distTag: rc
     id: npm:@takumi-rs/core
   - distTag: rc
-    id: npm:@takumi-rs/helpers
-  - id: npm:svelte
-  - id: npm:example-satori-html
-  - id: npm:example-css-library-integration
-  - id: npm:ffmpeg-keyframe-animation
-  - id: npm:example-cloudflare-workers
-  - id: npm:ffplay
+    id: npm:takumi-js
   - id: npm:example-nextjs
-  - id: npm:example-twitter-images
+  - id: npm:svelte
   - id: npm:waku-ssr
+  - id: npm:example-cloudflare-workers
   - id: npm:example-tanstack-start
+  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-css-library-integration
+  - id: npm:ffplay
+  - id: npm:example-satori-html
+  - id: npm:example-twitter-images

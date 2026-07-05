@@ -1,6 +1,8 @@
 ---
 packages:
-  cargo:takumi: major
+  cargo:takumi:
+    replay:
+      - exit-prerelease(cargo:takumi)
 ---
 
 ### Rename the `svg` feature to `svg-source`

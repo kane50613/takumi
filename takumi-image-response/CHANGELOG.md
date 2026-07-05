@@ -1,3 +1,10 @@
+## @takumi-rs/image-response@2.0.0-rc.6 (rc)
+
+### Drop the `./wasm` export
+
+`@takumi-rs/image-response/wasm` aliased the same file as the root entry. Import from
+`@takumi-rs/image-response`.
+
 ## @takumi-rs/image-response@2.0.0-beta.5 (beta)
 
 ### Fix `workspace:*` leaking into the published `package.json`

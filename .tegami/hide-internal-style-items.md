@@ -1,6 +1,8 @@
 ---
 packages:
-  cargo:takumi-core: minor
+  cargo:takumi-core:
+    replay:
+      - exit-prerelease(cargo:takumi-core)
 ---
 
 ### Hide internal style/layout items from the public API

@@ -1,6 +1,8 @@
 ---
 packages:
-  cargo:takumi-raster: minor
+  cargo:takumi-raster:
+    replay:
+      - exit-prerelease(cargo:takumi-raster)
 ---
 
 ### Rename the animated encoders to `write_animated_*`

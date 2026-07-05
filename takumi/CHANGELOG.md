@@ -1,3 +1,11 @@
+## takumi@2.0.0-rc.6
+
+### Rename the `svg` feature to `svg-source`
+
+`svg` and `svg-backend` read as the same thing at a glance despite gating
+opposite directions (image-source input vs. render output). The umbrella's
+input-side feature is now `svg-source`; `svg-backend` is unchanged.
+
 ## takumi@2.0.0-rc.2
 
 ### Add `takumi-html` for parsing HTML into a node tree
