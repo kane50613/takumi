@@ -567,7 +567,7 @@ pub(crate) fn resolve_layer_tiles(
   input: ResolveLayerTilesInput<'_>,
 ) -> Result<Option<TileLayer>> {
   let resolved_size = style.size.resolve(
-    input.area,
+    (input.area.width, input.area.height),
     &input.context.sizing,
     resolve_intrinsic_size(image, input.context),
   );

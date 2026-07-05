@@ -29,12 +29,10 @@ use crate::{
 /// Root computed style carrying the render-level `lang` and `fontFamilies` defaults,
 /// inherited by every node that does not set its own.
 fn root_style(lang: Option<&str>, font_families: Option<&[String]>) -> Box<ComputedStyle> {
-  let mut style = ComputedStyle {
-    font_family: font_families.map_or_else(FontFamily::default, |names| {
-      FontFamily::from_names(names.iter().cloned())
-    }),
-    ..Default::default()
-  };
+  let mut style = ComputedStyle::default();
+  style.font_family = font_families.map_or_else(FontFamily::default, |names| {
+    FontFamily::from_names(names.iter().cloned())
+  });
   style.set_lang(lang);
 
   Box::new(style)

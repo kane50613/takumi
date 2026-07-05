@@ -129,10 +129,14 @@ impl BackgroundSize {
   /// Resolves this value against the positioning area and intrinsic sizing.
   pub fn resolve(
     self,
-    area: Size<u32>,
+    (area_width, area_height): (u32, u32),
     sizing: &SizingContext,
     intrinsic: IntrinsicSizing,
   ) -> ResolvedBackgroundSize {
+    let area = Size {
+      width: area_width,
+      height: area_height,
+    };
     match self {
       BackgroundSize::Explicit { width, height } => {
         if width != Length::Auto && height != Length::Auto {

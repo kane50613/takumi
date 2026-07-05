@@ -163,7 +163,7 @@ fn resolve_normal_line_height(
   }
   let attributes = Attributes {
     width: style.font_stretch.into(),
-    style: style.font_style.into(),
+    style: style.font_style.to_parley(),
     weight: style.font_weight.into(),
   };
   let font_family = context.expand_font_family(&style.font_family);

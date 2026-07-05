@@ -120,11 +120,16 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
       font_size: style.sizing.font_size,
       line_height: style.line_height,
       font_weight: style.parent.font_weight.into(),
-      font_style: style.parent.font_style.into(),
-      font_variations: FontVariations::List(Cow::Borrowed(
-        style.parent.font_variation_settings.as_ref(),
+      font_style: style.parent.font_style.to_parley(),
+      font_variations: FontVariations::List(Cow::Owned(
+        style
+          .parent
+          .font_variation_settings
+          .iter()
+          .map(|setting| setting.0)
+          .collect(),
       )),
-      font_features: FontFeatures::List(style.parent.resolved_font_features()),
+      font_features: FontFeatures::List(Cow::Owned(style.parent.resolved_font_features())),
       font_family: style.font_family.to_parley(),
       letter_spacing: style.letter_spacing,
       word_spacing: style.word_spacing,
@@ -160,8 +165,8 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
       },
       text_wrap_mode: style.parent.resolved_text_wrap_mode().into(),
       font_width: style.parent.font_stretch.into(),
-
       locale: style.parent.lang,
+
       has_underline: false,
       underline_offset: None,
       underline_size: None,

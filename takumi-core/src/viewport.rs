@@ -1,3 +1,4 @@
+#[cfg(feature = "unstable")]
 use taffy::{AvailableSpace, Size};
 
 /// The default font size in pixels.
@@ -18,6 +19,7 @@ pub struct Viewport {
   pub device_pixel_ratio: f32,
 }
 
+#[cfg(feature = "unstable")]
 impl From<Viewport> for Size<AvailableSpace> {
   fn from(value: Viewport) -> Self {
     Self {

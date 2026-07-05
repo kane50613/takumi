@@ -1,7 +1,10 @@
-use std::{borrow::Cow, marker::PhantomData};
+#[cfg(feature = "unstable")]
+use std::marker::PhantomData;
 
 use parley::FontFeature;
-use taffy::{Line, Point, Rect, Size};
+use taffy::Size;
+#[cfg(feature = "unstable")]
+use taffy::{Line, Point, Rect};
 
 use super::ComputedStyle;
 use crate::style::{SizingContext, properties::*};
@@ -219,6 +222,7 @@ impl ComputedStyle {
     self.max_lines.filter(|&count| count >= 1)
   }
 
+  #[cfg(feature = "unstable")]
   #[inline]
   fn grid_template(
     components: &Option<GridTemplateComponents>,
@@ -247,9 +251,8 @@ impl ComputedStyle {
   }
 
   /// Resolved OpenType features: the `font-variant-*` expansions followed by explicit
-  /// `font-feature-settings`, which win on tag conflicts. Borrows the settings when no
-  /// `font-variant-*` is active, avoiding an allocation.
-  pub(crate) fn resolved_font_features(&self) -> Cow<'_, [FontFeature]> {
+  /// `font-feature-settings`, which win on tag conflicts.
+  pub(crate) fn resolved_font_features(&self) -> Vec<FontFeature> {
     let mut features = Vec::new();
     append_variant_features(
       &self.font_variant_ligatures,
@@ -260,15 +263,12 @@ impl ComputedStyle {
       &mut features,
     );
 
-    if features.is_empty() {
-      return Cow::Borrowed(self.font_feature_settings.as_ref());
-    }
-
-    features.extend_from_slice(&self.font_feature_settings);
-    Cow::Owned(features)
+    features.extend(self.font_feature_settings.iter().map(|setting| setting.0));
+    features
   }
 
   /// Converts the computed style into a `taffy::Style` for layout.
+  #[cfg(feature = "unstable")]
   pub(crate) fn to_taffy_style(&self, sizing: &SizingContext) -> taffy::Style {
     // Convert grid templates and associated line names
     let (grid_template_columns, grid_template_column_names) =
@@ -346,7 +346,7 @@ impl ComputedStyle {
         width: self.max_width,
         height: self.max_height,
       }
-      .map(|length| length.resolve_to_dimension(sizing)),
+      .map(|max_size| max_size.resolve_to_dimension(sizing)),
       grid_auto_columns: self
         .grid_auto_columns
         .as_ref()

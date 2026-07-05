@@ -80,6 +80,7 @@ impl TailwindPropertyParser for GridPlacementSpan {
   }
 }
 
+#[cfg(feature = "unstable")]
 impl From<GridPlacement> for taffy::GridPlacement {
   fn from(placement: GridPlacement) -> Self {
     match placement {

@@ -1,6 +1,7 @@
 use std::fmt;
 
 use cssparser::Parser;
+#[cfg(feature = "unstable")]
 use taffy::Rect;
 
 use crate::style::{
@@ -73,6 +74,7 @@ impl<'i, T: Copy + for<'j> FromCss<'j>> FromCss<'i> for Sides<T> {
   const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::OneToFourValues;
 }
 
+#[cfg(feature = "unstable")]
 impl<T: Copy> From<Sides<T>> for Rect<T> {
   fn from(value: Sides<T>) -> Self {
     Rect {

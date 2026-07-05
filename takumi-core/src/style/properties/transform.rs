@@ -4,6 +4,7 @@ use std::{
 };
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
+#[cfg(feature = "unstable")]
 use tiny_skia::Transform as TinyTransform;
 
 use crate::style::{
@@ -138,6 +139,7 @@ pub struct Affine {
   pub y: f32,
 }
 
+#[cfg(feature = "unstable")]
 impl From<Affine> for TinyTransform {
   fn from(transform: Affine) -> Self {
     TinyTransform::from_row(

@@ -1,7 +1,7 @@
 use std::{fmt, string::ToString};
 
 use cssparser::{Parser, match_ignore_ascii_case};
-use parley::{FontFamily as ParleyFontFamily, FontFamilyName, GenericFamily};
+use parley::{FontFamilyName, GenericFamily};
 
 use crate::style::{
   CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, properties::write_css_string,
@@ -97,27 +97,6 @@ impl TailwindPropertyParser for FontFamily {
 impl Default for FontFamily {
   fn default() -> Self {
     GenericFamily::SansSerif.into()
-  }
-}
-
-impl<'a> From<FontFamily> for ParleyFontFamily<'a> {
-  fn from(family: FontFamily) -> Self {
-    ParleyFontFamily::List(
-      family
-        .0
-        .into_iter()
-        .map(|token| match token {
-          FontFamilyToken::Owned(name) => FontFamilyName::Named(name.into()),
-          FontFamilyToken::Generic(generic) => FontFamilyName::Generic(generic),
-        })
-        .collect(),
-    )
-  }
-}
-
-impl<'a> From<&'a FontFamily> for ParleyFontFamily<'a> {
-  fn from(family: &'a FontFamily) -> Self {
-    ParleyFontFamily::List(family.names().collect())
   }
 }
 

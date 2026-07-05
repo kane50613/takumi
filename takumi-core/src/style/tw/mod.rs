@@ -819,10 +819,17 @@ impl TailwindProperty {
         push_decl!(builder, important, background_clip(background_clip));
       }
       TailwindProperty::Gap(gap) => {
-        push_decl!(builder, important, row_gap(gap), column_gap(gap));
+        push_decl!(
+          builder,
+          important,
+          row_gap(gap.into()),
+          column_gap(gap.into())
+        );
       }
-      TailwindProperty::GapX(gap_x) => push_decl!(builder, important, column_gap(gap_x)),
-      TailwindProperty::GapY(gap_y) => push_decl!(builder, important, row_gap(gap_y)),
+      TailwindProperty::GapX(gap_x) => {
+        push_decl!(builder, important, column_gap(gap_x.into()))
+      }
+      TailwindProperty::GapY(gap_y) => push_decl!(builder, important, row_gap(gap_y.into())),
       TailwindProperty::BoxSizing(box_sizing) => {
         push_decl!(builder, important, box_sizing(box_sizing))
       }
@@ -917,9 +924,11 @@ impl TailwindProperty {
       TailwindProperty::MinHeight(min_height) => {
         push_decl!(builder, important, min_height(min_height))
       }
-      TailwindProperty::MaxWidth(max_width) => push_decl!(builder, important, max_width(max_width)),
+      TailwindProperty::MaxWidth(max_width) => {
+        push_decl!(builder, important, max_width(max_width.into()))
+      }
       TailwindProperty::MaxHeight(max_height) => {
-        push_decl!(builder, important, max_height(max_height))
+        push_decl!(builder, important, max_height(max_height.into()))
       }
       TailwindProperty::Shadow(box_shadow) => builder.set_shadow_layers([box_shadow], important),
       TailwindProperty::ShadowList(&[]) => builder.reset_shadow(important),

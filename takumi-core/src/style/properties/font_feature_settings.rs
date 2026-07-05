@@ -4,7 +4,7 @@ use cssparser::{Parser, Token};
 use parley::{FontFeature, setting::Tag};
 
 use crate::style::{
-  CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, unexpected_token,
+  Animatable, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, unexpected_token,
 };
 
 pub(crate) fn parse_opentype_tag<'i, T: FromCss<'i>>(
@@ -23,11 +23,29 @@ pub(crate) fn parse_opentype_tag<'i, T: FromCss<'i>>(
     .ok_or_else(|| unexpected_token!(T, location, &Token::QuotedString(tag_name.clone())))
 }
 
+/// A single `font-feature-settings` entry: an OpenType feature tag and its value.
+/// Wraps `parley::FontFeature` so callers need not depend on `parley` (and so the
+/// engine-only type doesn't appear directly in `ComputedStyle`'s field).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FontFeatureSetting(pub(crate) FontFeature);
+
+impl FontFeatureSetting {
+  /// Creates a feature setting from its 4-byte OpenType tag (e.g. `*b"liga"`) and
+  /// value (`0`/`1` to disable/enable, or a higher value for features like
+  /// stylistic sets that take one).
+  pub fn new(tag: [u8; 4], value: u16) -> Self {
+    Self(FontFeature {
+      tag: Tag::from_bytes(tag),
+      value,
+    })
+  }
+}
+
 /// Controls OpenType font features via CSS font-feature-settings property.
 ///
 /// This allows enabling/disabling specific typographic features in OpenType fonts
 /// such as ligatures, kerning, small caps, and other advanced typography features.
-pub(crate) type FontFeatureSettings = Box<[FontFeature]>;
+pub(crate) type FontFeatureSettings = Box<[FontFeatureSetting]>;
 
 impl MakeComputed for FontFeatureSettings {}
 
@@ -58,7 +76,7 @@ impl<'i> FromCss<'i> for FontFeatureSettings {
         }
       };
 
-      Ok(FontFeature { tag, value })
+      Ok(FontFeatureSetting(FontFeature { tag, value }))
     })?;
 
     Ok(list.into_boxed_slice())
@@ -70,12 +88,14 @@ impl<'i> FromCss<'i> for FontFeatureSettings {
   ];
 }
 
-impl ToCss for parley::FontFeature {
+impl Animatable for FontFeatureSetting {}
+
+impl ToCss for FontFeatureSetting {
   // An empty `font-feature-settings` list is the keyword `normal`.
   const EMPTY_LIST_KEYWORD: Option<&'static str> = Some("normal");
 
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    write!(dest, "\"{}\" {}", self.tag, self.value)
+    write!(dest, "\"{}\" {}", self.0.tag, self.0.value)
   }
 }
 

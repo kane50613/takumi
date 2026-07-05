@@ -754,9 +754,12 @@ impl ToCss for Arc<str> {
   }
 }
 
-/// Macro to implement From trait for Taffy enum conversions.
+/// Macro to implement From trait for Taffy/parley enum conversions. Gated
+/// behind `unstable` since the target types are foreign and would otherwise
+/// leak through the default public API.
 macro_rules! impl_from_taffy_enum {
   ($from_ty:ty, $to_ty:ty, $($variant:ident),*) => {
+    #[cfg(feature = "unstable")]
     impl From<$from_ty> for $to_ty {
       fn from(value: $from_ty) -> Self {
         match value {

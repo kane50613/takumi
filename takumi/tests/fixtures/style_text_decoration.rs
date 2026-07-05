@@ -59,7 +59,7 @@ fn text_decoration_skip_ink_parapsychologists() {
       )))
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
-      .with(StyleDeclaration::row_gap(Px(28.0)))
+      .with(StyleDeclaration::row_gap(Px(28.0).into()))
       .with(StyleDeclaration::padding_top(Px(40.0))),
   );
 

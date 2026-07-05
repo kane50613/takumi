@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 
 use cssparser::{BasicParseErrorKind, ParseError, ParseErrorKind};
-use selectors::parser::SelectorParseErrorKind;
 use thiserror::Error;
 
 use crate::{
@@ -176,6 +175,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Errors raised while parsing a CSS declaration block string.
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum StyleDeclarationBlockParseError {
   /// The declaration block could not be parsed as CSS declarations.
   #[error("failed to parse CSS declaration block `{input}` near `{context}`: {reason}")]
@@ -191,6 +191,7 @@ pub enum StyleDeclarationBlockParseError {
 
 /// Errors raised while parsing a CSS stylesheet string.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct StyleSheetParseError {
   /// The stylesheet slice being parsed when the error was raised.
   pub context: Option<String>,
@@ -200,6 +201,7 @@ pub struct StyleSheetParseError {
 
 /// The specific stylesheet parse failure.
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum StyleSheetParseErrorKind {
   /// The stylesheet could not be parsed as valid CSS.
   #[error("{0}")]
@@ -253,12 +255,6 @@ impl std::fmt::Display for StyleSheetParseError {
 }
 
 impl std::error::Error for StyleSheetParseError {}
-
-impl<'i> From<SelectorParseErrorKind<'i>> for StyleSheetParseError {
-  fn from(err: SelectorParseErrorKind<'i>) -> Self {
-    Self::invalid_reason(format!("{err:?}"))
-  }
-}
 
 impl<'i> From<Cow<'i, str>> for StyleSheetParseError {
   fn from(err: Cow<'i, str>) -> Self {

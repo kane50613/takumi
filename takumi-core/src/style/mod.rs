@@ -11,6 +11,7 @@ mod supports;
 /// Tailwind utility-class parsing.
 pub mod tw;
 
+#[cfg(feature = "unstable")]
 pub(crate) use animation::apply_stylesheet_animations;
 pub use animation::{KeyframeRule, KeyframesRule};
 pub(crate) use calc::{CalcArena, parse_calc_number_expression};

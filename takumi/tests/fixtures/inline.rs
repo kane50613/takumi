@@ -523,7 +523,7 @@ fn inline_complex_nested_fixture() {
       Style::default()
         .with(StyleDeclaration::display(Display::InlineFlex))
         .with(StyleDeclaration::align_items(AlignItems::Center))
-        .with_gap(SpacePair::from_single(Px(6.0)))
+        .with_gap(SpacePair::from_single(Px(6.0).into()))
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([80, 138, 184, 255]),
         )))
@@ -788,7 +788,7 @@ fn inline_social_post_regression() {
           .with(StyleDeclaration::color(ColorInput::Value(Color([
             136, 153, 166, 255,
           ]))))
-          .with_gap(SpacePair::from_single(Px(24.0))),
+          .with_gap(SpacePair::from_single(Px(24.0).into())),
       ),
     ])
     .with_style(
@@ -842,7 +842,7 @@ fn inline_social_post_regression() {
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
-      .with_gap(SpacePair::from_single(Px(24.0)))
+      .with_gap(SpacePair::from_single(Px(24.0).into()))
       .with(StyleDeclaration::flex_grow(Some(FlexGrow(1.0)))),
   )])
   .with_style(

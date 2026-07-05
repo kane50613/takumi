@@ -74,6 +74,11 @@ default = ["woff2", "woff", "svg"]
 svg = ["dep:resvg", "dep:roxmltree"]
 woff2 = ["dep:wuff", "wuff/brotli"]
 woff = ["dep:wuff", "wuff/z"]
+# Exposes the taffy/parley/tiny-skia-backed layout and paint engine (layout::tree,
+# layout::inline, layout::border, paint, scene, geometry, shadow, font_style, and the
+# glyph-rasterization surface of resources::font) for rendering-backend crates. Not
+# part of the stable, backend-agnostic API.
+unstable = []
 
 [dev-dependencies]
 serde_json.workspace = true

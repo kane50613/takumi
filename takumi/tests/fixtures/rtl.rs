@@ -29,14 +29,14 @@ fn test_direction_flex_row() {
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::direction(Direction::Ltr))
-        .with_gap(SpacePair::from_pair(Px(16.0), Px(16.0)))
+        .with_gap(SpacePair::from_pair(Px(16.0).into(), Px(16.0).into()))
         .with(StyleDeclaration::width(Percentage(100.0))),
     ),
     Node::container(children).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::direction(Direction::Rtl))
-        .with_gap(SpacePair::from_pair(Px(16.0), Px(16.0)))
+        .with_gap(SpacePair::from_pair(Px(16.0).into(), Px(16.0).into()))
         .with(StyleDeclaration::width(Percentage(100.0))),
     ),
   ])
@@ -51,7 +51,7 @@ fn test_direction_flex_row() {
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with_padding(Sides([Px(16.0); 4]))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
-      .with_gap(SpacePair::from_pair(Px(16.0), Px(16.0))),
+      .with_gap(SpacePair::from_pair(Px(16.0).into(), Px(16.0).into())),
   );
 
   run_fixture_test(container, "direction_flex_row");
@@ -69,7 +69,7 @@ fn test_direction_grid() {
           GridTemplateComponents::from_css_str("repeat(4, 1fr)").unwrap(),
         )))
         .with(StyleDeclaration::direction(Direction::Ltr))
-        .with_gap(SpacePair::from_pair(Px(16.0), Px(16.0)))
+        .with_gap(SpacePair::from_pair(Px(16.0).into(), Px(16.0).into()))
         .with(StyleDeclaration::width(Percentage(100.0))),
     ),
     Node::container(children).with_style(
@@ -79,7 +79,7 @@ fn test_direction_grid() {
           GridTemplateComponents::from_css_str("repeat(4, 1fr)").unwrap(),
         )))
         .with(StyleDeclaration::direction(Direction::Rtl))
-        .with_gap(SpacePair::from_pair(Px(16.0), Px(16.0)))
+        .with_gap(SpacePair::from_pair(Px(16.0).into(), Px(16.0).into()))
         .with(StyleDeclaration::width(Percentage(100.0))),
     ),
   ])
@@ -94,7 +94,7 @@ fn test_direction_grid() {
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with_padding(Sides([Px(16.0); 4]))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
-      .with_gap(SpacePair::from_pair(Px(16.0), Px(16.0))),
+      .with_gap(SpacePair::from_pair(Px(16.0).into(), Px(16.0).into())),
   );
 
   run_fixture_test(container, "direction_grid");

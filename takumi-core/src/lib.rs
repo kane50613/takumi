@@ -1,6 +1,9 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 #![deny(missing_docs)]
+// Much of this crate exists only to feed the layout/paint engine behind the
+// `unstable` feature; with it off, those items are unreachable but still compiled.
+#![cfg_attr(not(feature = "unstable"), allow(dead_code))]
 //! Backend-agnostic core for takumi: the node tree, CSS-driven style and layout,
 //! and font/image resource management.
 //!
@@ -14,13 +17,17 @@ pub mod layout;
 /// Render context threading style, sizing, and resources through layout.
 pub mod context;
 /// Font style resolved against a sizing context.
+#[cfg(feature = "unstable")]
 pub mod font_style;
 /// Box, text, and inset shadow resolution.
+#[cfg(feature = "unstable")]
 pub mod shadow;
+#[cfg(feature = "unstable")]
 pub mod text_processing;
 
 /// Error types.
 pub mod error;
+#[cfg(feature = "unstable")]
 pub mod geometry;
 /// `@keyframes` rules and animation timing.
 pub mod keyframes;
@@ -28,6 +35,7 @@ pub mod keyframes;
 pub(crate) mod matching;
 /// Font and image resource management.
 pub mod resources;
+#[cfg(feature = "unstable")]
 pub mod scene;
 /// CSS value types, parsing, and the cascade.
 pub mod style;
@@ -38,6 +46,7 @@ pub mod viewport;
 /// shared with the raster and SVG renderers. Deliberately kept out of `style`
 /// (and thus `takumi`'s prelude) since they are rendering-backend internals, not
 /// part of the CSS value surface.
+#[cfg(feature = "unstable")]
 pub mod paint {
   pub use crate::style::properties::{
     background_repeat::{

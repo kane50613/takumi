@@ -413,7 +413,11 @@ fn resolve_placement(
     height: area.h.round().max(0.0) as u32,
   };
   let intrinsic = intrinsic_sizing(image, context);
-  let resolved = size.resolve(area_size, &context.sizing, intrinsic);
+  let resolved = size.resolve(
+    (area_size.width, area_size.height),
+    &context.sizing,
+    intrinsic,
+  );
   let tile_w = resolved.width as f32;
   let tile_h = resolved.height as f32;
   if tile_w <= 0.0 || tile_h <= 0.0 {

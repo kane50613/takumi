@@ -1,6 +1,7 @@
 use std::fmt;
 
 use cssparser::Parser;
+#[cfg(feature = "unstable")]
 use parley::LineMetrics;
 
 use crate::style::{SizingContext, ToCss, tw::TailwindPropertyParser, *};
@@ -169,6 +170,7 @@ impl MakeComputed for VerticalAlign {
   }
 }
 
+#[cfg(feature = "unstable")]
 impl ResolvedVerticalAlign {
   /// Writes the aligned `y` for a box on a line given its metrics.
   pub fn apply(
@@ -252,6 +254,7 @@ mod tests {
     }
   }
 
+  #[cfg(feature = "unstable")]
   fn line_metrics() -> LineMetrics {
     LineMetrics {
       ascent: 9.0,
@@ -341,6 +344,7 @@ mod tests {
     );
   }
 
+  #[cfg(feature = "unstable")]
   #[test]
   fn apply_baseline_shift_raises_and_lowers() {
     let metrics = line_metrics();
@@ -362,6 +366,7 @@ mod tests {
     assert_eq!(y, baseline + 5.0);
   }
 
+  #[cfg(feature = "unstable")]
   #[test]
   fn apply_keyword_top_uses_block_min_coord() {
     let mut y = 0.0;
@@ -373,6 +378,7 @@ mod tests {
     assert_eq!(y, metrics.block_min_coord);
   }
 
+  #[cfg(feature = "unstable")]
   #[test]
   fn apply_keyword_bottom_uses_block_max_coord() {
     let mut y = 0.0;
@@ -385,6 +391,7 @@ mod tests {
     assert_eq!(y, metrics.block_max_coord - box_height);
   }
 
+  #[cfg(feature = "unstable")]
   #[test]
   fn apply_metrics_relative_shift_uses_line_metrics_formula() {
     let metrics = line_metrics();
@@ -417,6 +424,7 @@ mod tests {
     );
   }
 
+  #[cfg(feature = "unstable")]
   #[test]
   fn apply_metrics_relative_px_shift_uses_line_metrics_formula_plus_px() {
     let metrics = line_metrics();
@@ -434,6 +442,7 @@ mod tests {
     );
   }
 
+  #[cfg(feature = "unstable")]
   #[test]
   fn keyword_apply_matches_previous_baseline_behavior() {
     let metrics = line_metrics();
@@ -443,6 +452,7 @@ mod tests {
     assert_eq!(y, metrics.baseline - 4.0);
   }
 
+  #[cfg(feature = "unstable")]
   #[test]
   fn keyword_apply_uses_inline_box_baseline_when_available() {
     let metrics = line_metrics();
@@ -458,6 +468,7 @@ mod tests {
     assert_eq!(y, metrics.baseline - 12.0);
   }
 
+  #[cfg(feature = "unstable")]
   #[test]
   fn sub_and_super_shift_by_font_size_fraction() {
     let metrics = line_metrics();

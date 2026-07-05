@@ -631,8 +631,10 @@ macro_rules! define_style {
         pub registered_custom_properties: HashMap<String, PropertyRule>,
         /// Resolved BCP-47 language, inherited from the `lang` attribute. Drives
         /// locale-aware shaping (Han unification, line-breaking). Has no CSS property.
-        /// Set from a tag string via [`ComputedStyle::set_lang`].
-        pub lang: Option<Language>,
+        /// Set from a tag string via [`ComputedStyle::set_lang`]. Kept crate-private
+        /// since `parley::Language` is an engine (`unstable`) type; not part of the
+        /// stable API.
+        pub(crate) lang: Option<Language>,
         $(
           #[doc = concat!("Computed `", stringify!($longhand), "` value.")]
           pub $longhand: $longhand_ty,
@@ -990,8 +992,8 @@ define_style! {
     display: Display,
     width: Length,
     height: Length,
-    max_width: Length,
-    max_height: Length,
+    max_width: MaxSize,
+    max_height: MaxSize,
     min_width: Length,
     min_height: Length,
     aspect_ratio: AspectRatio,
@@ -1033,8 +1035,8 @@ define_style! {
     mask_size: BackgroundSizes,
     mask_position: PositionValues,
     mask_repeat: BackgroundRepeats,
-    column_gap: Length = Length::zero(),
-    row_gap: Length = Length::zero(),
+    column_gap: Gap,
+    row_gap: Gap,
     flex_grow: Option<FlexGrow>,
     flex_shrink: Option<FlexGrow>,
     border_top_left_radius: SpacePair<Length> = SpacePair::from_single(Length::zero()),
@@ -1099,8 +1101,8 @@ define_style! {
     font_variant_east_asian: FontVariantEastAsian where inherit = true,
     font_variant_caps: FontVariantCaps where inherit = true,
     font_variant_position: FontVariantPosition where inherit = true,
-    font_synthesis_weight: FontSynthesic where inherit = true,
-    font_synthesis_style: FontSynthesic where inherit = true,
+    font_synthesis_weight: FontSynthesisMode where inherit = true,
+    font_synthesis_style: FontSynthesisMode where inherit = true,
     max_lines: Option<u32>,
     block_ellipsis: BlockEllipsis where inherit = true,
     r#continue: Continue,
@@ -1234,7 +1236,7 @@ define_style! {
           .collect(),
       )));
     },
-    gap: SpacePair<Length> => [RowGap, ColumnGap] |value, target| {
+    gap: SpacePair<Gap> => [RowGap, ColumnGap] |value, target| {
       push_axis_declarations!(target, value, row_gap, column_gap);
     },
     flex_flow: FlexFlow => [FlexDirection, FlexWrap] |value, target| {

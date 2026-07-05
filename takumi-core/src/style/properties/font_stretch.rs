@@ -82,6 +82,7 @@ impl FontStretch {
   }
 }
 
+#[cfg(feature = "unstable")]
 impl From<FontStretch> for FontWidth {
   fn from(value: FontStretch) -> Self {
     value.0

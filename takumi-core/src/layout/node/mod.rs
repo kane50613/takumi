@@ -1,25 +1,32 @@
 mod container;
 mod image;
+#[cfg(feature = "unstable")]
 mod text;
 
 use std::{collections::BTreeMap, sync::Arc};
 
 use parley::Language;
 use serde::Deserialize;
+#[cfg(feature = "unstable")]
 use taffy::{AvailableSpace, Size};
 
+#[cfg(feature = "unstable")]
+use self::image::measure_image_node;
 pub use self::image::resolve_image;
+#[cfg(feature = "unstable")]
+use self::text::measure_text_node;
 use self::{
   container::{
     container_children_ref, deserialize_children, drop_container_children, take_container_children,
   },
-  image::{measure_image_node, take_image_style_layers},
-  text::measure_text_node,
+  image::take_image_style_layers,
 };
+#[cfg(feature = "unstable")]
+use crate::layout::inline::InlineContentKind;
 use crate::{
   Xxh3HashSet,
   context::RenderContext,
-  layout::{inline::InlineContentKind, node::image::image_url},
+  layout::node::image::image_url,
   matching::MatchableNode,
   resources::{
     image::{ImageResult, ImageSource},
@@ -530,6 +537,7 @@ impl Node {
     }
   }
 
+  #[cfg(feature = "unstable")]
   pub(crate) fn inline_content(&self) -> Option<InlineContentKind<'_>> {
     match &self.kind {
       NodeKind::Container { .. } => None,
@@ -538,6 +546,7 @@ impl Node {
     }
   }
 
+  #[cfg(feature = "unstable")]
   pub(crate) fn measure(
     &self,
     context: &RenderContext,

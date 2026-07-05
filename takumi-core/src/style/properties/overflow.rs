@@ -1,4 +1,5 @@
 use cssparser::match_ignore_ascii_case;
+#[cfg(feature = "unstable")]
 use taffy::Overflow as TaffyOverflow;
 
 use crate::style::{declare_enum_from_css_impl, tw::TailwindPropertyParser};
@@ -37,6 +38,7 @@ impl TailwindPropertyParser for Overflow {
   }
 }
 
+#[cfg(feature = "unstable")]
 impl From<Overflow> for TaffyOverflow {
   fn from(val: Overflow) -> Self {
     match val {

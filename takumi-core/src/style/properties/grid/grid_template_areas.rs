@@ -1,3 +1,4 @@
+#[cfg(feature = "unstable")]
 use std::collections::HashMap;
 
 use cssparser::{Parser, Token};
@@ -17,6 +18,7 @@ pub struct GridTemplateAreas(pub Vec<Vec<String>>);
 
 impl MakeComputed for GridTemplateAreas {}
 
+#[cfg(feature = "unstable")]
 impl From<GridTemplateAreas> for Vec<taffy::GridTemplateArea<String>> {
   fn from(value: GridTemplateAreas) -> Self {
     if value.0.is_empty() {

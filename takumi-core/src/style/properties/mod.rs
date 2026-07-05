@@ -31,12 +31,14 @@ mod font_synthesis;
 mod font_variant;
 mod font_variation_settings;
 mod font_weight;
+mod gap;
 pub(crate) mod gradient_utils;
 mod grid;
 mod length;
 mod line_clamp;
 mod line_height;
 pub(crate) mod linear_gradient;
+mod max_size;
 mod offset_path;
 mod order;
 mod overflow;
@@ -85,14 +87,17 @@ pub use filter::{
 pub use flex::*;
 pub use flex_grow::*;
 pub use font_family::*;
-pub(crate) use font_feature_settings::*;
+pub use font_feature_settings::FontFeatureSetting;
+pub(crate) use font_feature_settings::FontFeatureSettings;
 pub use font_size::*;
 pub use font_stretch::*;
 pub use font_style::*;
 pub use font_synthesis::*;
 pub use font_variant::*;
-pub(crate) use font_variation_settings::*;
+pub use font_variation_settings::FontVariationSetting;
+pub(crate) use font_variation_settings::FontVariationSettings;
 pub use font_weight::*;
+pub use gap::*;
 pub use grid::*;
 pub use length::*;
 pub use line_clamp::*;
@@ -102,10 +107,12 @@ pub use linear_gradient::{
   Angle, GradientKeywordDirection, GradientStop, HorizontalKeyword, LinearGradient,
   LinearGradientDirection, ResolvedGradientStop, StopPosition, VerticalKeyword,
 };
+pub use max_size::*;
 pub use offset_path::*;
 pub use order::*;
 pub use overflow::*;
 pub use overflow_wrap::*;
+#[cfg(feature = "unstable")]
 use parley::Alignment;
 pub use percentage_number::*;
 pub use radial_gradient::{RadialGradient, RadialShape, RadialSize};
@@ -557,6 +564,7 @@ declare_enum_from_css_impl!(
   "fixed" => Position::Fixed
 );
 
+#[cfg(feature = "unstable")]
 impl From<Position> for taffy::Position {
   fn from(value: Position) -> Self {
     match value {
@@ -814,6 +822,7 @@ impl TailwindPropertyParser for JustifyContent {
   }
 }
 
+#[cfg(feature = "unstable")]
 impl From<JustifyContent> for Option<taffy::JustifyContent> {
   fn from(value: JustifyContent) -> Self {
     match value {
@@ -910,6 +919,7 @@ impl Display {
   }
 }
 
+#[cfg(feature = "unstable")]
 impl From<Display> for taffy::Display {
   fn from(value: Display) -> Self {
     match value {
@@ -973,6 +983,7 @@ declare_box_alignment_enum_impl!(
   }
 );
 
+#[cfg(feature = "unstable")]
 impl From<AlignItems> for Option<taffy::AlignItems> {
   fn from(value: AlignItems) -> Self {
     match value {

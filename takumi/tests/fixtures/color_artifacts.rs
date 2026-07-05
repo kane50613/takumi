@@ -62,7 +62,7 @@ fn test_color_artifacts() {
       .with(StyleDeclaration::align_items(AlignItems::Center))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
       .with(StyleDeclaration::flex_direction(FlexDirection::Row))
-      .with_gap(SpacePair::from_single(Px(40.0)))
+      .with_gap(SpacePair::from_single(Px(40.0).into()))
       .with_padding(Sides([Rem(4.0); 4])),
   );
 

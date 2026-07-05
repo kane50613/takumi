@@ -1,4 +1,3 @@
-use parley::{FontVariation, setting::Tag};
 use serde_json::{from_value, json};
 use takumi::prelude::{Length::*, *};
 
@@ -48,10 +47,7 @@ fn text_typography_variable_width() {
         Style::default()
           .with(StyleDeclaration::display(Display::Flex))
           .with(StyleDeclaration::font_variation_settings(Box::new([
-            FontVariation {
-              tag: Tag::from_bytes(*b"wdth"),
-              value: *width,
-            },
+            FontVariationSetting::new(*b"wdth", *width),
           ]))),
       )
     })
@@ -70,7 +66,7 @@ fn text_typography_variable_width() {
       .with(StyleDeclaration::font_family(family))
       .with(StyleDeclaration::font_size(Px(48.0).into()))
       .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap))
-      .with(StyleDeclaration::row_gap(Px(48.0)))
+      .with(StyleDeclaration::row_gap(Px(48.0).into()))
       .with(StyleDeclaration::width(Percentage(100.0))),
   );
 
@@ -100,7 +96,7 @@ fn text_typography_variable_weight() {
         Color([240, 240, 240, 255]),
       )))
       .with(StyleDeclaration::font_size(Px(24.0).into()))
-      .with_gap(SpacePair::from_pair(Px(0.0), Px(24.0)))
+      .with_gap(SpacePair::from_pair(Px(0.0).into(), Px(24.0).into()))
       .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap)),
   );
 
@@ -188,7 +184,7 @@ fn text_typography_line_height_variants() {
     .with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
-        .with_gap(SpacePair::from_single(Px(16.0)))
+        .with_gap(SpacePair::from_single(Px(16.0).into()))
         .with(StyleDeclaration::align_items(AlignItems::Stretch)),
     ),
   ])
@@ -292,7 +288,7 @@ fn text_fit_overview_container(cards: impl Into<Box<[Node]>>) -> Node {
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap))
-      .with_gap(SpacePair::from_single(Px(14.0)))
+      .with_gap(SpacePair::from_single(Px(14.0).into()))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color([246, 248, 251, 255]),
       )))
@@ -600,7 +596,7 @@ fn text_indent_variants() {
           .with(StyleDeclaration::display(Display::Flex))
           .with(StyleDeclaration::flex_direction(FlexDirection::Column))
           .with(StyleDeclaration::width(Px(380.0)))
-          .with_gap(SpacePair::from_single(Px(8.0))),
+          .with_gap(SpacePair::from_single(Px(8.0).into())),
       )
     })
     .collect::<Vec<_>>();
@@ -614,7 +610,7 @@ fn text_indent_variants() {
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap))
       .with_padding(Sides([Px(20.0); 4]))
-      .with_gap(SpacePair::from_single(Px(24.0))),
+      .with_gap(SpacePair::from_single(Px(24.0).into())),
   );
 
   run_fixture_test(container, "text_indent_variants");
@@ -863,7 +859,7 @@ fn text_wrap_nowrap() {
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
-      .with_gap(SpacePair::from_single(Px(20.0)))
+      .with_gap(SpacePair::from_single(Px(20.0).into()))
       .with_padding(Sides([Px(20.0); 4])),
   );
 
@@ -917,7 +913,7 @@ fn text_whitespace_collapse() {
       .with(StyleDeclaration::font_size(Px(32.0).into()))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
-      .with_gap(SpacePair::from_single(Px(20.0)))
+      .with_gap(SpacePair::from_single(Px(20.0).into()))
       .with_padding(Sides([Px(20.0); 4])),
   );
 
@@ -971,7 +967,7 @@ fn text_wrap_style_all() {
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
-      .with_gap(SpacePair::from_single(Px(40.0)))
+      .with_gap(SpacePair::from_single(Px(40.0).into()))
       .with_padding(Sides([Px(20.0); 4])),
   );
 
@@ -1116,7 +1112,7 @@ fn text_font_stretch() {
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
       .with_padding(Sides([Px(20.0); 4]))
-      .with_gap(SpacePair::from_single(Px(12.0))),
+      .with_gap(SpacePair::from_single(Px(12.0).into())),
   );
 
   run_fixture_test(container, "text_font_stretch");
@@ -1185,19 +1181,22 @@ fn text_font_synthesis_weight_auto_none() {
     unreachable!()
   };
 
-  let nodes: Vec<Node> = [("auto", FontSynthesic::Auto), ("none", FontSynthesic::None)]
-    .iter()
-    .map(|(label, synthesis_weight)| {
-      Node::text(format!("font-synthesis-weight: {} - السلام عليكم", label)).with_style(
-        Style::default()
-          .with(StyleDeclaration::display(Display::Flex))
-          .with(StyleDeclaration::font_size(Px(72.0).into()))
-          .with(StyleDeclaration::font_family(family.clone()))
-          .with(StyleDeclaration::font_weight(FontWeight::from(900.0)))
-          .with(StyleDeclaration::font_synthesis_weight(*synthesis_weight)),
-      )
-    })
-    .collect::<Vec<_>>();
+  let nodes: Vec<Node> = [
+    ("auto", FontSynthesisMode::Auto),
+    ("none", FontSynthesisMode::None),
+  ]
+  .iter()
+  .map(|(label, synthesis_weight)| {
+    Node::text(format!("font-synthesis-weight: {} - السلام عليكم", label)).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::font_size(Px(72.0).into()))
+        .with(StyleDeclaration::font_family(family.clone()))
+        .with(StyleDeclaration::font_weight(FontWeight::from(900.0)))
+        .with(StyleDeclaration::font_synthesis_weight(*synthesis_weight)),
+    )
+  })
+  .collect::<Vec<_>>();
 
   let container = Node::container(nodes.into_boxed_slice()).with_style(
     Style::default()
@@ -1208,7 +1207,7 @@ fn text_font_synthesis_weight_auto_none() {
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
       .with_padding(Sides([Px(20.0); 4]))
-      .with_gap(SpacePair::from_single(Px(12.0))),
+      .with_gap(SpacePair::from_single(Px(12.0).into())),
   );
 
   run_fixture_test(container, "text_font_synthesis_weight_auto_none");
@@ -1220,19 +1219,22 @@ fn text_font_synthesis_style_auto_none() {
     unreachable!()
   };
 
-  let nodes: Vec<Node> = [("auto", FontSynthesic::Auto), ("none", FontSynthesic::None)]
-    .iter()
-    .map(|(label, synthesis_style)| {
-      Node::text(format!("font-synthesis-style: {} - السلام عليكم", label)).with_style(
-        Style::default()
-          .with(StyleDeclaration::display(Display::Flex))
-          .with(StyleDeclaration::font_size(Px(72.0).into()))
-          .with(StyleDeclaration::font_family(family.clone()))
-          .with(StyleDeclaration::font_style(FontStyle::italic()))
-          .with(StyleDeclaration::font_synthesis_style(*synthesis_style)),
-      )
-    })
-    .collect::<Vec<_>>();
+  let nodes: Vec<Node> = [
+    ("auto", FontSynthesisMode::Auto),
+    ("none", FontSynthesisMode::None),
+  ]
+  .iter()
+  .map(|(label, synthesis_style)| {
+    Node::text(format!("font-synthesis-style: {} - السلام عليكم", label)).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::font_size(Px(72.0).into()))
+        .with(StyleDeclaration::font_family(family.clone()))
+        .with(StyleDeclaration::font_style(FontStyle::italic()))
+        .with(StyleDeclaration::font_synthesis_style(*synthesis_style)),
+    )
+  })
+  .collect::<Vec<_>>();
 
   let container = Node::container(nodes.into_boxed_slice()).with_style(
     Style::default()
@@ -1243,7 +1245,7 @@ fn text_font_synthesis_style_auto_none() {
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
       .with_padding(Sides([Px(20.0); 4]))
-      .with_gap(SpacePair::from_single(Px(12.0))),
+      .with_gap(SpacePair::from_single(Px(12.0).into())),
   );
 
   run_fixture_test(container, "text_font_synthesis_style_auto_none");
@@ -1260,8 +1262,8 @@ fn text_font_synthesis_weight_emoji() {
     (
       "none",
       FontSynthesis::builder()
-        .weight(FontSynthesic::None)
-        .style(FontSynthesic::None)
+        .weight(FontSynthesisMode::None)
+        .style(FontSynthesisMode::None)
         .build(),
     ),
   ]
@@ -1288,7 +1290,7 @@ fn text_font_synthesis_weight_emoji() {
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
       .with_padding(Sides([Px(20.0); 4]))
-      .with_gap(SpacePair::from_single(Px(12.0))),
+      .with_gap(SpacePair::from_single(Px(12.0).into())),
   );
 
   run_fixture_test(container, "text_font_synthesis_weight_emoji");
@@ -1362,7 +1364,7 @@ fn text_devanagari_noto_sans() {
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
       .with_padding(Sides([Px(20.0); 4]))
-      .with_gap(SpacePair::from_single(Px(12.0))),
+      .with_gap(SpacePair::from_single(Px(12.0).into())),
   );
 
   run_fixture_test(container, "text_devanagari_noto_sans");

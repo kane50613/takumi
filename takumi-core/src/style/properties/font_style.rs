@@ -49,11 +49,9 @@ impl FontStyle {
   pub const fn oblique(angle: f32) -> Self {
     Self(ParleyFontStyle::Oblique(Some(angle)))
   }
-}
 
-impl From<FontStyle> for ParleyFontStyle {
-  fn from(value: FontStyle) -> Self {
-    value.0
+  pub(crate) fn to_parley(self) -> ParleyFontStyle {
+    self.0
   }
 }
 

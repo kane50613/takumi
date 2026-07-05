@@ -86,6 +86,7 @@ pub enum TextWrapMode {
   NoWrap,
 }
 
+#[cfg(feature = "unstable")]
 impl From<TextWrapMode> for parley::TextWrapMode {
   fn from(value: TextWrapMode) -> Self {
     match value {

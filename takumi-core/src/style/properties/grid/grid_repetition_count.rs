@@ -22,6 +22,7 @@ pub enum GridRepetitionCount {
   Count(u16),
 }
 
+#[cfg(feature = "unstable")]
 impl From<GridRepetitionCount> for taffy::RepetitionCount {
   fn from(repetition: GridRepetitionCount) -> Self {
     match repetition {

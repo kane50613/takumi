@@ -25,6 +25,7 @@ declare_enum_from_css_impl!(
   "break-word" => WordBreak::BreakWord,
 );
 
+#[cfg(feature = "unstable")]
 impl From<WordBreak> for parley::WordBreak {
   fn from(value: WordBreak) -> Self {
     match value {

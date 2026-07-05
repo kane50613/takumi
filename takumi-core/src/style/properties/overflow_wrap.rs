@@ -53,6 +53,7 @@ impl ToCss for OverflowWrap {
   }
 }
 
+#[cfg(feature = "unstable")]
 impl From<OverflowWrap> for parley::OverflowWrap {
   fn from(value: OverflowWrap) -> Self {
     value.0

@@ -9,7 +9,7 @@ use cssparser::*;
 use precomputed_hash::PrecomputedHash;
 use selectors::parser::{
   NonTSPseudoClass, ParseRelative, PseudoElement as PseudoElementTrait,
-  SelectorImpl as SelectorImplTrait, SelectorList,
+  SelectorImpl as SelectorImplTrait, SelectorList, SelectorParseErrorKind,
 };
 
 pub use crate::style::media_query::MediaQueryList;
@@ -190,9 +190,34 @@ impl SelectorImplTrait for SelectorImpl {
 
 struct TakumiSelectorParser;
 
+/// Adapts `selectors`' generic parse error into [`StyleSheetParseError`] without
+/// naming `selectors::parser::SelectorParseErrorKind` in a public `From` impl:
+/// `selectors::Parser::Error` requires `From<SelectorParseErrorKind>`, and that impl
+/// would otherwise have to live directly on the public `StyleSheetParseError`.
+struct SelectorParseErrorAdapter(StyleSheetParseError);
+
+impl<'i> From<SelectorParseErrorKind<'i>> for SelectorParseErrorAdapter {
+  fn from(err: SelectorParseErrorKind<'i>) -> Self {
+    Self(StyleSheetParseError::invalid_reason(format!("{err:?}")))
+  }
+}
+
+/// Converts a selector-list parse error back into the stylesheet's error type.
+fn convert_selector_parse_error(
+  err: ParseError<'_, SelectorParseErrorAdapter>,
+) -> ParseError<'_, StyleSheetParseError> {
+  ParseError {
+    kind: match err.kind {
+      ParseErrorKind::Basic(basic) => ParseErrorKind::Basic(basic),
+      ParseErrorKind::Custom(adapter) => ParseErrorKind::Custom(adapter.0),
+    },
+    location: err.location,
+  }
+}
+
 impl<'i> selectors::Parser<'i> for TakumiSelectorParser {
   type Impl = SelectorImpl;
-  type Error = StyleSheetParseError;
+  type Error = SelectorParseErrorAdapter;
 
   fn parse_parent_selector(&self) -> bool {
     true
@@ -370,6 +395,7 @@ impl<'i> QualifiedRuleParser<'i> for NestedStyleRuleParser<'_> {
     input: &mut Parser<'i, 't>,
   ) -> Result<Self::Prelude, ParseError<'i, Self::Error>> {
     SelectorList::parse(&TakumiSelectorParser, input, ParseRelative::ForNesting)
+      .map_err(convert_selector_parse_error)
   }
 
   fn parse_block<'t>(
@@ -837,6 +863,7 @@ impl<'i> QualifiedRuleParser<'i> for RuleParser {
     input: &mut Parser<'i, 't>,
   ) -> Result<Self::Prelude, ParseError<'i, Self::Error>> {
     SelectorList::parse(&TakumiSelectorParser, input, ParseRelative::No)
+      .map_err(convert_selector_parse_error)
   }
 
   fn parse_block<'t>(

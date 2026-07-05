@@ -1,6 +1,7 @@
 use std::fmt;
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
+#[cfg(feature = "unstable")]
 use parley::style::FontWeight as ParleyFontWeight;
 
 use crate::style::{
@@ -12,7 +13,7 @@ use crate::style::{
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum FontWeight {
   /// An absolute numeric weight.
-  Absolute(ParleyFontWeight),
+  Absolute(f32),
   /// One step bolder than the inherited weight, resolved against the parent.
   Bolder,
   /// One step lighter than the inherited weight, resolved against the parent.
@@ -119,7 +120,7 @@ impl FontWeight {
   /// inheritance to step from the parent weight.
   pub fn value(self) -> f32 {
     match self {
-      Self::Absolute(weight) => weight.value(),
+      Self::Absolute(weight) => weight,
       Self::Bolder => bolder(400.0),
       Self::Lighter => lighter(400.0),
     }
@@ -136,6 +137,7 @@ impl FontWeight {
   }
 }
 
+#[cfg(feature = "unstable")]
 impl From<FontWeight> for ParleyFontWeight {
   fn from(value: FontWeight) -> Self {
     ParleyFontWeight::new(value.value())
@@ -144,7 +146,7 @@ impl From<FontWeight> for ParleyFontWeight {
 
 impl From<f32> for FontWeight {
   fn from(value: f32) -> Self {
-    FontWeight::Absolute(ParleyFontWeight::new(value))
+    FontWeight::Absolute(value)
   }
 }
 
@@ -153,7 +155,7 @@ impl ToCss for FontWeight {
     match self {
       Self::Bolder => dest.write_str("bolder"),
       Self::Lighter => dest.write_str("lighter"),
-      Self::Absolute(weight) => write!(dest, "{}", weight.value()),
+      Self::Absolute(weight) => write!(dest, "{}", weight),
     }
   }
 }

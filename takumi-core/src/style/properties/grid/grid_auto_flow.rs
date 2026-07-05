@@ -25,6 +25,7 @@ pub struct GridAutoFlow {
 
 impl MakeComputed for GridAutoFlow {}
 
+#[cfg(feature = "unstable")]
 impl From<GridAutoFlow> for taffy::GridAutoFlow {
   fn from(value: GridAutoFlow) -> Self {
     match (value.direction, value.dense) {

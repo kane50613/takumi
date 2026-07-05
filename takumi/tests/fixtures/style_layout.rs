@@ -134,7 +134,7 @@ fn test_style_gap() {
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::display(Display::Flex))
-      .with_gap(SpacePair::from_pair(Px(0.0), Px(20.0)))
+      .with_gap(SpacePair::from_pair(Px(0.0).into(), Px(20.0).into()))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color([0, 0, 255, 255]),
       ))),

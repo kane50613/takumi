@@ -1,20 +1,27 @@
+#[cfg(feature = "unstable")]
+use std::collections::hash_map::Entry;
 use std::{
   borrow::Cow,
   cell::RefCell,
-  collections::{BTreeSet, HashMap, hash_map::Entry},
+  collections::{BTreeSet, HashMap},
   iter::once,
   rc::Rc,
   sync::Arc,
 };
 
+#[cfg(feature = "unstable")]
 use image::{Rgba, RgbaImage};
-use parley::{
-  GenericFamily as ParleyGenericFamily, GlyphRun, LayoutContext, TextStyle, TreeBuilder,
-  fontique::{
-    Attributes, Blob, Collection, CollectionOptions, FallbackKey, FontInfoOverride, FontStyle,
-    FontWeight, FontWidth, QueryFamily, QueryStatus, Script, ScriptExt,
-  },
+use parley::GenericFamily as ParleyGenericFamily;
+#[cfg(feature = "unstable")]
+use parley::fontique::{Attributes, QueryFamily, QueryStatus};
+use parley::fontique::{
+  Blob, Collection, CollectionOptions, FallbackKey, FontInfoOverride, FontStyle, FontWeight,
+  FontWidth, Script, ScriptExt,
 };
+#[cfg(feature = "unstable")]
+use parley::{GlyphRun, LayoutContext, TextStyle, TreeBuilder};
+use skrifa::raw::types::Tag;
+#[cfg(feature = "unstable")]
 use skrifa::{
   FontRef, GlyphId, MetadataProvider,
   bitmap::{BitmapData, BitmapGlyph, BitmapStrikes, Origin},
@@ -24,24 +31,28 @@ use skrifa::{
   },
   instance::{LocationRef, Size},
   outline::{DrawSettings, OutlineGlyphCollection, OutlinePen},
-  raw::types::{BoundingBox, F2Dot14, Tag},
+  raw::types::{BoundingBox, F2Dot14},
 };
 use thiserror::Error;
+#[cfg(feature = "unstable")]
 use tiny_skia::{IntSize, PathSegment as Command, Pixmap};
 
+use crate::style::FontStyle as CssFontStyle;
+#[cfg(feature = "unstable")]
 use crate::{
   context::RenderContext,
   layout::inline::{InlineBrush, InlineLayout},
   resources::{image_buffer::ImageBuffer, image_decoder::decode_png},
-  style::FontStyle as CssFontStyle,
 };
 
+#[cfg(feature = "unstable")]
 fn pixmap_from_image_buffer(buffer: ImageBuffer) -> Option<Pixmap> {
   let size = IntSize::from_wh(buffer.width(), buffer.height())?;
   Pixmap::from_vec(buffer.into_data(), size)
 }
 
 /// A resolved glyph, either an embedded bitmap or a vector outline.
+#[cfg(feature = "unstable")]
 #[derive(Clone)]
 pub enum ResolvedGlyph {
   /// Embedded bitmap glyph.
@@ -51,6 +62,7 @@ pub enum ResolvedGlyph {
 }
 
 /// A glyph backed by an embedded bitmap.
+#[cfg(feature = "unstable")]
 #[derive(Clone)]
 pub struct ResolvedBitmapGlyph {
   /// Source bitmap.
@@ -63,6 +75,7 @@ pub struct ResolvedBitmapGlyph {
   pub placement: ResolvedGlyphPlacement,
 }
 
+#[cfg(feature = "unstable")]
 impl ResolvedBitmapGlyph {
   /// Write the glyph's alpha channel into `mask`, scaling to the placement size.
   pub fn write_alpha_mask(&self, mask: &mut [u8]) {
@@ -113,6 +126,7 @@ impl ResolvedBitmapGlyph {
 }
 
 /// An outline glyph, either single-color or multi-layer color.
+#[cfg(feature = "unstable")]
 #[derive(Clone)]
 pub enum ResolvedOutlineGlyph {
   /// Single-color outline.
@@ -136,6 +150,7 @@ pub enum ResolvedOutlineGlyph {
 }
 
 /// One palette-colored layer of a color glyph.
+#[cfg(feature = "unstable")]
 #[derive(Clone)]
 pub struct ResolvedColorLayer {
   /// Outline path commands for this layer.
@@ -147,6 +162,7 @@ pub struct ResolvedColorLayer {
 }
 
 /// Pixel placement of a rendered glyph.
+#[cfg(feature = "unstable")]
 #[derive(Clone, Copy)]
 pub struct ResolvedGlyphPlacement {
   /// Left offset in pixels.
@@ -159,6 +175,7 @@ pub struct ResolvedGlyphPlacement {
   pub height: u32,
 }
 
+#[cfg(feature = "unstable")]
 impl ResolvedOutlineGlyph {
   /// Outline path commands for the glyph.
   pub fn paths(&self) -> &[Command] {
@@ -203,6 +220,7 @@ const BOLD_THRESHOLD: f32 = 600.0;
 /// Skia's fake-bold stroke width as a fraction of text size: `1/24` at 9px and below,
 /// easing to `1/32` at 36px and above, linearly interpolated in between. A constant factor
 /// over-emboldens large text. See Skia's `SkTextFormatParams.h`.
+#[cfg(feature = "unstable")]
 fn skia_fake_bold_factor(font_size: f32) -> f32 {
   const SMALL_SIZE: f32 = 9.0;
   const LARGE_SIZE: f32 = 36.0;
@@ -215,10 +233,12 @@ fn skia_fake_bold_factor(font_size: f32) -> f32 {
 
 /// Stroke width for synthesized (faux) bold — the emboldened glyph is the filled outline
 /// plus a centered stroke of this width, matching Skia's fake bold.
+#[cfg(feature = "unstable")]
 pub(crate) fn synthesis_embolden_strength(font_size: f32) -> f32 {
   font_size * skia_fake_bold_factor(font_size)
 }
 
+#[cfg(feature = "unstable")]
 fn hash_path_commands(paths: &[Command]) -> u64 {
   use xxhash_rust::xxh3::Xxh3;
   let mut h = Xxh3::new();
@@ -258,17 +278,20 @@ fn hash_path_commands(paths: &[Command]) -> u64 {
   h.digest()
 }
 
+#[cfg(feature = "unstable")]
 #[derive(Default)]
 struct GlyphOutlinePen {
   paths: Vec<Command>,
 }
 
+#[cfg(feature = "unstable")]
 impl GlyphOutlinePen {
   fn finish(self) -> Vec<Command> {
     self.paths
   }
 }
 
+#[cfg(feature = "unstable")]
 impl OutlinePen for GlyphOutlinePen {
   fn move_to(&mut self, x: f32, y: f32) {
     self
@@ -302,6 +325,7 @@ impl OutlinePen for GlyphOutlinePen {
   }
 }
 
+#[cfg(feature = "unstable")]
 struct ColorLayerCollector<'a, 'g> {
   outline_glyphs: &'g OutlineGlyphCollection<'a>,
   size: Size,
@@ -309,6 +333,7 @@ struct ColorLayerCollector<'a, 'g> {
   layers: Vec<ResolvedColorLayer>,
 }
 
+#[cfg(feature = "unstable")]
 impl<'a, 'g> ColorLayerCollector<'a, 'g> {
   fn new(
     outline_glyphs: &'g OutlineGlyphCollection<'a>,
@@ -328,6 +353,7 @@ impl<'a, 'g> ColorLayerCollector<'a, 'g> {
   }
 }
 
+#[cfg(feature = "unstable")]
 struct GlyphResolveContext<'a> {
   outline_glyphs: OutlineGlyphCollection<'a>,
   color_glyphs: ColorGlyphCollection<'a>,
@@ -339,6 +365,7 @@ struct GlyphResolveContext<'a> {
   embolden: Option<f32>,
 }
 
+#[cfg(feature = "unstable")]
 impl<'a> GlyphResolveContext<'a> {
   fn resolve_glyph(&self, glyph_id: u32) -> Option<ResolvedGlyph> {
     let glyph_id = GlyphId::new(glyph_id);
@@ -408,6 +435,7 @@ impl<'a> GlyphResolveContext<'a> {
 /// `push_clip_box`, `pop_clip`, and `push_layer` are intentional no-ops, and
 /// `fill_glyph` only records `Brush::Solid` layers, so gradients and other
 /// non-solid brushes are silently skipped.
+#[cfg(feature = "unstable")]
 impl ColorPainter for ColorLayerCollector<'_, '_> {
   fn push_transform(&mut self, _transform: Transform) {}
 
@@ -458,6 +486,7 @@ impl ColorPainter for ColorLayerCollector<'_, '_> {
   fn push_layer(&mut self, _composite_mode: CompositeMode) {}
 }
 
+#[cfg(feature = "unstable")]
 fn resolve_outline_commands(
   outline_glyphs: &OutlineGlyphCollection<'_>,
   glyph_id: GlyphId,
@@ -472,6 +501,7 @@ fn resolve_outline_commands(
   Some(pen.finish())
 }
 
+#[cfg(feature = "unstable")]
 fn transform_commands(paths: &mut [Command], skew_degrees: f32) {
   let skew_tangent = skew_degrees.to_radians().tan();
   for command in paths {
@@ -493,6 +523,7 @@ fn transform_commands(paths: &mut [Command], skew_degrees: f32) {
   }
 }
 
+#[cfg(feature = "unstable")]
 fn decode_bitmap_image(bitmap: &BitmapGlyph<'_>) -> Option<(Pixmap, Origin)> {
   let pixmap = match &bitmap.data {
     BitmapData::Png(bytes) => pixmap_from_image_buffer(decode_png(bytes).ok()?)?,
@@ -514,6 +545,7 @@ fn decode_bitmap_image(bitmap: &BitmapGlyph<'_>) -> Option<(Pixmap, Origin)> {
   Some((pixmap, bitmap.placement_origin))
 }
 
+#[cfg(feature = "unstable")]
 fn scale_bitmap_glyph(bitmap: BitmapGlyph<'_>, font_size: f32) -> Option<ResolvedBitmapGlyph> {
   let (pixmap, origin) = decode_bitmap_image(&bitmap)?;
   let scale_x = if bitmap.ppem_x > 0.0 {
@@ -619,14 +651,17 @@ fn guess_font_format(source: &[u8]) -> Result<FontFormat, FontError> {
   }
 }
 
+#[cfg(feature = "unstable")]
 thread_local! {
   static LAYOUT_CONTEXT: RefCell<LayoutContext<InlineBrush>> = RefCell::new(LayoutContext::new());
   static SHARED_RESOLVED_GLYPH_CACHE: RefCell<HashMap<u64, ResolvedGlyph>> =
     RefCell::new(HashMap::new());
 }
 
+#[cfg(feature = "unstable")]
 const RESOLVED_GLYPH_CACHE_MAX_ENTRIES: usize = 4096;
 
+#[cfg(feature = "unstable")]
 fn resolved_glyph_cache_key(
   font_id: u64,
   font_index: u32,
@@ -662,6 +697,7 @@ fn resolved_glyph_cache_key(
   h.digest()
 }
 
+#[cfg(feature = "unstable")]
 fn with_layout_context<R>(f: impl FnOnce(&mut LayoutContext<InlineBrush>) -> R) -> R {
   LAYOUT_CONTEXT.with(|cell| match cell.try_borrow_mut() {
     Ok(mut ctx) => f(&mut ctx),
@@ -671,6 +707,7 @@ fn with_layout_context<R>(f: impl FnOnce(&mut LayoutContext<InlineBrush>) -> R) 
 
 /// A font family produced by [`Fonts::register`], with the faces it contains.
 #[derive(Clone, Debug, serde::Serialize)]
+#[non_exhaustive]
 pub struct RegisteredFamily {
   /// Family name as stored by the font system (normalized; reflects any override).
   pub name: String,
@@ -680,6 +717,7 @@ pub struct RegisteredFamily {
 
 /// A single face within a [`RegisteredFamily`].
 #[derive(Clone, Debug, serde::Serialize)]
+#[non_exhaustive]
 pub struct RegisteredFace {
   /// Weight class, typically `1.0..=1000.0`.
   pub weight: f32,
@@ -702,10 +740,10 @@ fn font_style_css(style: FontStyle) -> String {
 
 /// The registry of fonts available to a renderer.
 ///
-/// Registration is the only mutation; afterwards the assembled parley context is immutable
+/// Registration is the only mutation; afterwards the assembled font collection is immutable
 /// and shared as `&self` across concurrent renders. Each render takes a cheap working clone
-/// (see [`RenderContext`]) for parley's `&mut` query API, so no per-thread or global state
-/// is needed.
+/// (see [`RenderContext`]) for the shaping engine's `&mut` query API, so no per-thread or
+/// global state is needed.
 #[derive(Clone)]
 pub struct Fonts {
   inner: parley::FontContext,
@@ -814,6 +852,7 @@ impl Fonts {
     }
   }
 
+  #[cfg(feature = "unstable")]
   pub(crate) fn resolve_glyphs(
     &self,
     run: &GlyphRun<'_, InlineBrush>,
@@ -950,7 +989,7 @@ impl Fonts {
         self
           .inner
           .collection
-          .append_generic_families(generic_family.into(), once(family));
+          .append_generic_families(generic_family.to_parley(), once(family));
       }
     }
 
@@ -958,6 +997,7 @@ impl Fonts {
   }
 }
 
+#[cfg(feature = "unstable")]
 impl RenderContext {
   /// First available font's line spacing for `families`/`attributes`, scaled to `font_size`.
   pub(crate) fn first_font_line_spacing<'a>(
@@ -1085,11 +1125,9 @@ impl GenericFamily {
   pub const MATH: Self = Self(ParleyGenericFamily::Math);
   /// `fangsong`
   pub const FANG_SONG: Self = Self(ParleyGenericFamily::FangSong);
-}
 
-impl From<GenericFamily> for ParleyGenericFamily {
-  fn from(value: GenericFamily) -> Self {
-    value.0
+  pub(crate) fn to_parley(self) -> ParleyGenericFamily {
+    self.0
   }
 }
 
@@ -1129,7 +1167,7 @@ impl FontOverride {
     FontInfoOverride {
       family_name: self.family_name.as_deref(),
       width: self.width.map(FontWidth::from_percentage),
-      style: self.style.map(Into::into),
+      style: self.style.map(CssFontStyle::to_parley),
       weight: self.weight.map(FontWeight::new),
       axes: (!axes.is_empty()).then_some(axes),
     }

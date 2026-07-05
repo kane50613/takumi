@@ -135,6 +135,7 @@ impl<'i> FromCss<'i> for GridTemplateComponents {
   const VALID_TOKENS: &'static [CssToken] = GridTemplateComponent::VALID_TOKENS;
 }
 
+#[cfg(feature = "unstable")]
 pub(crate) fn collect_components_and_names(
   components: &[GridTemplateComponent],
   sizing: &SizingContext,

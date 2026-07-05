@@ -1,6 +1,7 @@
 use std::fmt;
 
 use cssparser::Parser;
+#[cfg(feature = "unstable")]
 use taffy::Point;
 
 use crate::style::{
@@ -59,6 +60,7 @@ impl<T: Copy + MakeComputed> MakeComputed for SpacePair<T> {
   }
 }
 
+#[cfg(feature = "unstable")]
 impl<T: Copy> From<SpacePair<T>> for Point<T> {
   fn from(value: SpacePair<T>) -> Self {
     Point {
