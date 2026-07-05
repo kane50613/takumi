@@ -44,15 +44,13 @@
 //!
 //! # Feature flags
 //!
-//! | Feature | Default | Effect |
-//! | --- | --- | --- |
-//! | `raster-backend` | yes | Raster rendering backend. |
-//! | `svg-source` | yes | SVG image sources in the core and raster backend. |
-//! | `svg-backend` | no | Vector SVG output backend ([`render_svg`]). |
-//! | `woff2` | no | WOFF2 font support. |
-//! | `woff` | no | WOFF font support. |
-//! | `rayon` | no | Parallelism in the raster backend; needs `raster-backend`. |
-//! | `unstable` | no | Re-export the backend crates under [`unstable`]. No semver. |
+//! - `raster-backend` (default): raster rendering backend.
+//! - `svg-source` (default): SVG image sources in the core and raster backend.
+//! - `svg-backend`: vector SVG output backend ([`render_svg`]).
+//! - `woff2`: WOFF2 font support.
+//! - `woff`: WOFF font support.
+//! - `rayon`: parallelism in the raster backend; needs `raster-backend`.
+//! - `unstable`: re-export the backend crates under [`unstable`]; no semver.
 
 /// The curated, stable data structures for building a node tree and configuring a
 /// render.
