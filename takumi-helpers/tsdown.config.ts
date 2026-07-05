@@ -35,11 +35,7 @@ async function generateCatalog() {
     );
   }
 
-  // Most families share the same { weight; style; axis } shape (e.g. weight 400, style normal, no
-  // axis) — grouping them cuts a consumer's discriminated union (and thus the checker's
-  // per-member instantiation work) from one branch per family to one branch per distinct shape.
-  // Families in the same group are, by construction, indistinguishable in allowed weight/style/
-  // axis, so this loses no per-family precision.
+  // Group families by shape so the consumer union is one branch per distinct shape, not per family.
   const shapeNames = new Map<string, string>();
   const shapeFamilies = new Map<string, string[]>();
 
@@ -97,9 +93,7 @@ export interface GoogleFontShapes {
 ${shapeLines.join("\n")}
 }
 
-// Every family sharing a shape, keyed the same as GoogleFontShapes. Lets a consumer build a
-// discriminated union over shapes (${shapeNames.size}) instead of families (${families.length}),
-// and derive the flat name union from its values.
+// Families sharing each shape in GoogleFontShapes; its values form the flat name union.
 export interface GoogleFontShapeFamilies {
 ${shapeFamilyLines.join("\n")}
 }

@@ -1,8 +1,6 @@
 ---
 packages:
-  npm:@takumi-rs/helpers:
-    replay:
-      - exit-prerelease(npm:@takumi-rs/helpers)
+  npm:@takumi-rs/helpers: minor
 ---
 
 ### Shrink the generated Google Fonts type catalog

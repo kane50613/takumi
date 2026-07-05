@@ -9,10 +9,8 @@ type FontStyle = "normal" | "italic";
 type WeightRange = `${number}..${number}`;
 type AxisValue = number | WeightRange;
 
-// Built from GoogleFontShapes/GoogleFontShapeFamilies (one branch per distinct weight/style/axis
-// shape) rather than one branch per family: families sharing a shape are indistinguishable in
-// their allowed weight/style/axis, so grouping them shrinks this union ~13x (152 shapes vs. 1940
-// families) with no loss of per-family precision, which keeps the checker fast on this type.
+// One branch per distinct weight/style/axis shape, not per family: same-shape families are
+// indistinguishable here, so grouping keeps this union ~13x smaller for the checker.
 type KnownGoogleFontFamily = {
   [S in keyof GoogleFontShapes]: {
     name: GoogleFontShapeFamilies[S];
@@ -36,8 +34,6 @@ type GoogleFontFamilyObject =
       axes?: Record<string, AxisValue>;
     };
 
-// Flat union of every family name, from the values of GoogleFontShapeFamilies (its 152 keys each
-// map to a name union), for bare-string autocomplete without re-instantiating the object union.
 type GoogleFontName = GoogleFontShapeFamilies[keyof GoogleFontShapeFamilies];
 
 /**
