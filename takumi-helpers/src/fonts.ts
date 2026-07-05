@@ -1,4 +1,4 @@
-import type { GoogleFontCatalog } from "./google-fonts-catalog";
+import type { GoogleFontShapeFamilies, GoogleFontShapes } from "./google-fonts-catalog";
 import type { Node } from "./types";
 import { fetchOk, type FetchOptions } from "./utils";
 
@@ -9,36 +9,39 @@ type FontStyle = "normal" | "italic";
 type WeightRange = `${number}..${number}`;
 type AxisValue = number | WeightRange;
 
+// One branch per distinct weight/style/axis shape, not per family: same-shape families are
+// indistinguishable here, so grouping keeps this union ~13x smaller for the checker.
 type KnownGoogleFontFamily = {
-  [K in keyof GoogleFontCatalog]: {
-    name: K;
+  [S in keyof GoogleFontShapes]: {
+    name: GoogleFontShapeFamilies[S];
     /** `400`, `[400, 700]`, or a range like `"100..900"` for the variable font. @default 400 */
-    weight?: GoogleFontCatalog[K]["weight"] | GoogleFontCatalog[K]["weight"][] | WeightRange;
+    weight?: GoogleFontShapes[S]["weight"] | GoogleFontShapes[S]["weight"][] | WeightRange;
     /** `"normal"`, `"italic"`, or both. @default "normal" */
-    style?: GoogleFontCatalog[K]["style"] | GoogleFontCatalog[K]["style"][];
+    style?: GoogleFontShapes[S]["style"] | GoogleFontShapes[S]["style"][];
     /** Variable axes to vary, each at a value or `"min..max"` range, e.g. `{ opsz: "14..32" }`. */
-    axes?: [GoogleFontCatalog[K]["axis"]] extends [never]
+    axes?: [GoogleFontShapes[S]["axis"]] extends [never]
       ? never
-      : Partial<Record<GoogleFontCatalog[K]["axis"], AxisValue>>;
+      : Partial<Record<GoogleFontShapes[S]["axis"], AxisValue>>;
   };
-}[keyof GoogleFontCatalog];
+}[keyof GoogleFontShapes];
 
-type GoogleFontFamilyObject =
+type GoogleFontName = GoogleFontShapeFamilies[keyof GoogleFontShapeFamilies];
+
+/**
+ * One family to load. A bare string loads weight 400, normal style. The object form autocompletes
+ * each known family's weight, style, and variable axes; the last branch keeps any string name
+ * (e.g. one built at runtime) usable with a weight and style.
+ */
+export type GoogleFontFamily =
+  | GoogleFontName
+  | (string & {})
   | KnownGoogleFontFamily
   | {
-      name: string;
+      name: GoogleFontName | (string & {});
       weight?: number | number[] | WeightRange;
       style?: FontStyle | FontStyle[];
       axes?: Record<string, AxisValue>;
     };
-
-/**
- * One family to load. A bare string loads weight 400, normal style.
- *
- * Known {@link GoogleFontCatalog} families autocomplete their weight, style, and variable axes.
- * Any other string still works through a loose fallback that does not check the weight.
- */
-export type GoogleFontFamily = (keyof GoogleFontCatalog | (string & {})) | GoogleFontFamilyObject;
 
 export type GoogleFontsOptions = FetchOptions & {
   /** The families to load, each as a name or a name plus its weight/style axis. */
