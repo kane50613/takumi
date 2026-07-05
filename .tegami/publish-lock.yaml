@@ -68,7 +68,7 @@ core:packages:
     id: cargo:takumi-raster
     updated: true
   - id: cargo:takumi-core
-    updated: false
+    updated: true
 npm:packages:
   - id: npm:takumi
   - distTag: rc
