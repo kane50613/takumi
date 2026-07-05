@@ -125,6 +125,10 @@ export type RenderAnimationOptions = {
    */
   stylesheets?: string[];
   /**
+   * Structured keyframes to register alongside stylesheets.
+   */
+  keyframes?: Keyframes;
+  /**
    * Defines the ratio resolution of the image to the physical pixels.
    * @default 1.0
    */

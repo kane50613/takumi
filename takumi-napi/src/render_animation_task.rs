@@ -3,6 +3,7 @@ use std::{collections::HashMap, mem::take, sync::Arc};
 use napi::bindgen_prelude::*;
 use takumi_core::{
   layout::node::Node,
+  style::KeyframesRule,
   viewport::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
 };
 use takumi_raster::{
@@ -14,7 +15,7 @@ use crate::{
   buffer_from_object, deserialize_with_tracing, parse_stylesheet,
   renderer::{
     AnimationOutputFormat, ImageCacheMode, ImageSource, RenderAnimationOptions, RendererState,
-    decode_images, webp_lossless,
+    decode_images, deserialize_keyframes, webp_lossless,
   },
 };
 
@@ -27,6 +28,7 @@ pub struct RenderAnimationTask {
   pub(crate) lossless: Option<bool>,
   pub(crate) draw_debug_border: bool,
   pub(crate) stylesheets: Option<Vec<String>>,
+  pub(crate) keyframes: Vec<KeyframesRule>,
   pub(crate) images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
   pub(crate) font_families: Option<Vec<String>>,
   pub(crate) lang: Option<Arc<str>>,
@@ -50,6 +52,7 @@ impl RenderAnimationTask {
       fps,
       images,
       stylesheets,
+      keyframes,
       device_pixel_ratio,
       font_families,
       lang,
@@ -86,6 +89,7 @@ impl RenderAnimationTask {
       lossless,
       draw_debug_border: draw_debug_border.unwrap_or_default(),
       stylesheets,
+      keyframes: deserialize_keyframes(keyframes)?,
       images: images
         .unwrap_or_default()
         .into_iter()
@@ -117,7 +121,7 @@ impl Task for RenderAnimationTask {
       };
       let fonts = self.state.fonts.load();
       let initialized_images = decode_images(&self.state.image_cache, take(&mut self.images))?;
-      let stylesheet = parse_stylesheet(take(&mut self.stylesheets), Vec::new())?;
+      let stylesheet = parse_stylesheet(take(&mut self.stylesheets), take(&mut self.keyframes))?;
       let scene_options = scenes
         .into_iter()
         .map(|(node, duration_ms)| {

@@ -355,6 +355,7 @@ impl Renderer {
       images,
       draw_debug_border,
       stylesheets,
+      keyframes,
       device_pixel_ratio,
       fps,
       font_families,
@@ -374,7 +375,7 @@ impl Renderer {
     let viewport = Viewport::new((width, height))
       .with_device_pixel_ratio(device_pixel_ratio.unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO));
     let draw_debug_border = draw_debug_border.unwrap_or_default();
-    let stylesheet = StyleSheet::parse_owned_list_loosy(stylesheets.unwrap_or_default());
+    let stylesheet = self.parse_stylesheet(stylesheets, keyframes.unwrap_or_default())?;
     let state = self.read_state()?;
     let scene_options = scenes
       .into_iter()

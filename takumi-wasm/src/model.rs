@@ -131,6 +131,9 @@ pub struct RenderAnimationOptions {
   pub draw_debug_border: Option<bool>,
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
+  /// Structured keyframes to register alongside stylesheets.
+  #[serde(default, deserialize_with = "deserialize_optional_keyframes")]
+  pub(crate) keyframes: Option<Vec<KeyframesRule>>,
   /// The device pixel ratio for scaling.
   pub device_pixel_ratio: Option<f32>,
   /// Frames per second for timeline sampling.

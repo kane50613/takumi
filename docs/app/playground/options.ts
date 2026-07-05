@@ -1,54 +1,62 @@
-// oxlint-disable-next-line no-unused-vars
-declare type PlaygroundOptions = {
-  /**
-   * @description width of the render viewport.
-   */
-  width?: number;
-  /**
-   * @description height of the render viewport.
-   */
-  height?: number;
-  /**
-   * @description format to render.
-   * @default png
-   */
-  format?: "png" | "jpeg" | "webp" | "ico";
-  /**
-   * @description quality of jpeg format (0-100).
-   * @default 75
-   */
-  quality?: number;
-  /**
-   * @description device pixel ratio.
-   * @default 1.0
-   */
-  devicePixelRatio?: number;
-  /**
-   * @description CSS stylesheets applied before rendering.
-   */
-  stylesheets?: string[];
-  /**
-   * @description timeline animation output. When present, the playground renders an animated image instead of a single frame.
-   */
-  animation?: {
+import type { Keyframes } from "takumi-js";
+
+declare global {
+  // oxlint-disable-next-line no-unused-vars
+  type PlaygroundOptions = {
     /**
-     * @description total timeline duration in milliseconds.
+     * @description width of the render viewport.
      */
-    durationMs: number;
+    width?: number;
     /**
-     * @description frames per second used to sample keyframes.
-     * @default 30
+     * @description height of the render viewport.
      */
-    fps?: number;
+    height?: number;
     /**
-     * @description animation output format.
-     * @default webp
+     * @description format to render.
+     * @default png
      */
-    format?: "webp" | "apng" | "gif";
+    format?: "png" | "jpeg" | "webp" | "ico";
+    /**
+     * @description quality of jpeg format (0-100).
+     * @default 75
+     */
+    quality?: number;
+    /**
+     * @description device pixel ratio.
+     * @default 1.0
+     */
+    devicePixelRatio?: number;
+    /**
+     * @description CSS stylesheets applied before rendering.
+     */
+    stylesheets?: string[];
+    /**
+     * @description structured keyframes registered alongside the stylesheets.
+     */
+    keyframes?: Keyframes;
+    /**
+     * @description timeline animation output. When present, the playground renders an animated image instead of a single frame.
+     */
+    animation?: {
+      /**
+       * @description total timeline duration in milliseconds.
+       */
+      durationMs: number;
+      /**
+       * @description frames per second used to sample keyframes.
+       * @default 30
+       */
+      fps?: number;
+      /**
+       * @description animation output format.
+       * @default webp
+       */
+      format?: "webp" | "apng" | "gif";
+    };
+    /**
+     * @description emoji style to use.
+     * @default twemoji
+     */
+    emoji?: "twemoji" | "blobmoji" | "noto" | "openmoji";
   };
-  /**
-   * @description emoji style to use.
-   * @default twemoji
-   */
-  emoji?: "twemoji" | "blobmoji" | "noto" | "openmoji";
-};
+}

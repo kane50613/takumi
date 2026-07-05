@@ -364,6 +364,42 @@ describe("renderAsDataUrl", () => {
       expect(result).toBeInstanceOf(Uint8Array);
       expect(Buffer.from(result.subarray(0, 6)).toString("ascii")).toMatch(/^GIF8[79]a$/);
     });
+
+    test("applies structured keyframes over the timeline", async () => {
+      const base = { width: "128px", height: "128px", backgroundColor: "#ef4444" } as const;
+      const staticNode = container({ style: base });
+      const animatedNode = container({
+        style: {
+          ...base,
+          animationName: "grow",
+          animationDuration: "1000ms",
+          animationIterationCount: "infinite",
+        },
+      });
+      const keyframes = {
+        grow: { "0%": { borderRadius: "0px" }, "100%": { borderRadius: "64px" } },
+      };
+
+      const staticOut = await renderer.renderAnimation({
+        scenes: [{ node: staticNode, durationMs: 1000 }],
+        width: 128,
+        height: 128,
+        format: "webp",
+        fps: 12,
+      });
+      const animatedOut = await renderer.renderAnimation({
+        scenes: [{ node: animatedNode, durationMs: 1000 }],
+        width: 128,
+        height: 128,
+        format: "webp",
+        fps: 12,
+        keyframes,
+      });
+
+      // The static timeline dedups to one frame; the animated one keeps distinct
+      // frames, so its output is much larger.
+      expect(animatedOut.length).toBeGreaterThan(staticOut.length * 2);
+    });
   });
 
   test("with structured keyframes in render options", async () => {

@@ -89,6 +89,7 @@ self.onmessage = async (event: MessageEvent) => {
                 devicePixelRatio: options.devicePixelRatio,
                 images,
                 stylesheets: effectiveStylesheets,
+                keyframes: options.keyframes,
                 fonts,
                 fps,
               });
