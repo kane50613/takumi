@@ -1,8 +1,5 @@
 ---
 packages:
-  cargo:takumi-core:
-    replay:
-      - exit-prerelease(cargo:takumi-core)
   npm:@takumi-rs/helpers:
     replay:
       - exit-prerelease(npm:@takumi-rs/helpers)

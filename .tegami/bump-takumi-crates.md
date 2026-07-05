@@ -1,6 +1,8 @@
 ---
 packages:
-  cargo:takumi: patch
+  cargo:takumi:
+    replay:
+      - exit-prerelease(cargo:takumi)
 ---
 
 ### Bump internal crates

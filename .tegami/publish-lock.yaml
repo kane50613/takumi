@@ -1,95 +1,166 @@
 core:changelogs:
-  - content: "---\npackages:\n  cargo:takumi-raster:\n    type: minor\n  cargo:takumi:\n    type: minor\n  npm:@takumi-rs/core:\n    type: patch\n  npm:@takumi-rs/wasm:\n    type: patch\n---\n\n### Cap animation frame rate per format\n\nBrowsers clamp any animation frame of 10ms or less to 100ms, so a high frame\nrate stalls instead of playing fast. `write_animation` now rejects a frame rate\nabove `AnimationFormat::max_fps` with the new `AnimationFrameRateTooHigh` error:\n90 fps for WebP and APNG, 50 fps for GIF (centisecond delays). The napi and WASM\n`renderAnimation` bindings surface the error.\n"
-    filename: animation-frame-rate-cap.md
+  - content: "---\npackages:\n  cargo:takumi-html:\n    replay:\n      - exit-prerelease(cargo:takumi-html)\n---\n\n### Build `FromHtmlOptions` with a builder\n\n`FromHtmlOptions` fields are now `pub(crate)` and the struct is\n`#[non_exhaustive]`; construct it via `FromHtmlOptions::builder()` (or\n`default()`). The `with_presets`, `with_tailwind_property`, and `with_max_depth`\nmethods are gone.\n"
+    filename: html-fromhtmloptions-builder.md
     v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-raster:\n    type: minor\n  cargo:takumi:\n    type: minor\n  npm:@takumi-rs/core:\n    type: patch\n  npm:@takumi-rs/wasm:\n    type: patch\n---\n\n### Stream animation frames straight into the encoder\n\nAdd `write_animation`, which renders a timeline and feeds each frame to the\nencoder as it arrives, holding one raw frame at a time instead of the whole\nsequence. Both the napi and WASM `renderAnimation` bindings use it, so a high\nframe rate or a long duration no longer exhausts memory. On native the WebP\nencoder still runs frames in parallel, now over bounded chunks. The WASM WebP\nencoder now merges runs of identical frames like the native one, so a static or\nslow animation encodes and stores far less. The eager `render_animation` +\n`write_animated_*` path stays for callers that want every frame at once.\n"
+  - content: "---\npackages:\n  cargo:takumi-html:\n    replay:\n      - exit-prerelease(cargo:takumi-html)\n  cargo:takumi:\n    replay:\n      - exit-prerelease(cargo:takumi)\n---\n\n### Add `takumi-html` for parsing HTML into a node tree\n\nNew `takumi-html` crate parses HTML + Tailwind markup into a node tree with\n`from_html(source, FromHtmlOptions)`, mirroring the JS `fromHtml`. The `tw`,\n`style`, `class`, `id`, `dir`, and `lang` attributes map to node styling and\nmetadata; `FromHtmlOptions` sets the `StylePresets` table and a `max_depth`\nnesting cap. The `takumi` umbrella re-exports it under the `from-html` feature\nas `takumi::from_html`, plus `Node::from_html` via the `FromHtml` prelude\ntrait.\n"
+    filename: node-from-html.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi:\n    type: patch\n---\n\n### Bump internal crates\n\nReleasing v0 internal crates\n"
+    filename: bump-takumi-crates.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-raster:\n    replay:\n      - exit-prerelease(cargo:takumi-raster)\n---\n\n### Clip backdrop-filter output by the node's mask and clip-path\n\nThe filtered backdrop painted across the whole border box even when the node\nhad a `mask` or `clip-path`, unlike browsers where the mask applies to the\nfiltered backdrop too. The backdrop composite is now attenuated by the node\nmask, and a fully masked-out node skips the backdrop filter entirely.\n"
+    filename: backdrop-filter-mask.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-raster:\n    replay:\n      - exit-prerelease(cargo:takumi-raster)\n  cargo:takumi:\n    replay:\n      - exit-prerelease(cargo:takumi)\n  npm:@takumi-rs/core:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/core)\n  npm:@takumi-rs/wasm:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/wasm)\n---\n\n### Stream animation frames straight into the encoder\n\nAdd `write_animation`, which renders a timeline and feeds each frame to the\nencoder as it arrives, holding one raw frame at a time instead of the whole\nsequence. Both the napi and WASM `renderAnimation` bindings use it, so a high\nframe rate or a long duration no longer exhausts memory. On native the WebP\nencoder still runs frames in parallel, now over bounded chunks. The WASM WebP\nencoder now merges runs of identical frames like the native one, so a static or\nslow animation encodes and stores far less. The eager `render_animation` +\n`write_animated_*` path stays for callers that want every frame at once.\n"
     filename: streaming-animation-encode.md
     v: 0.0.0
-  - content: "---\npackages:\n  npm:@takumi-rs/core:\n    type: patch\n  npm:@takumi-rs/wasm:\n    type: patch\n---\n\n### Apply structured keyframes in `renderAnimation`\n\n`renderAnimation` accepted a `keyframes` option but never registered it, so\nstructured keyframes animated with `render` yet stayed static in animations. It\nnow extends the stylesheet with them like the other entry points.\n"
-    filename: render-animation-keyframes.md
+  - content: "---\npackages:\n  cargo:takumi-raster:\n    replay:\n      - exit-prerelease(cargo:takumi-raster)\n  cargo:takumi:\n    replay:\n      - exit-prerelease(cargo:takumi)\n  npm:@takumi-rs/core:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/core)\n  npm:@takumi-rs/wasm:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/wasm)\n---\n\n### Cap animation frame rate per format\n\nBrowsers clamp any animation frame of 10ms or less to 100ms, so a high frame\nrate stalls instead of playing fast. `write_animation` now rejects a frame rate\nabove `AnimationFormat::max_fps` with the new `AnimationFrameRateTooHigh` error:\n90 fps for WebP and APNG, 50 fps for GIF (centisecond delays). The napi and WASM\n`renderAnimation` bindings surface the error.\n"
+    filename: animation-frame-rate-cap.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-raster:\n    replay:\n      - exit-prerelease(cargo:takumi-raster)\n---\n\n### Rename the animated encoders to `write_animated_*`\n\n`encode_animated_gif`, `encode_animated_png`, and `encode_animated_webp` are\nnow `write_animated_gif`, `write_animated_png`, and `write_animated_webp`,\nmatching `write_image`. Signatures are unchanged.\n"
+    filename: write-animated-rename.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-svg:\n    replay:\n      - exit-prerelease(cargo:takumi-svg)\n  cargo:takumi-core:\n    replay:\n      - exit-prerelease(cargo:takumi-core)\n---\n\n### Render backdrop-filter in the SVG backend\n\nSVG has no native backdrop source, so the backdrop is the scene replayed up to\nthe element, run through an SVG `<filter>` chain, then clipped to the border\nbox and attenuated by the element's mask and clip-path. Adds\n`ComputedStyle::has_shape_mask` and `Filter::is_drop_shadow`.\n"
+    filename: svg-backdrop-filter.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    replay:\n      - exit-prerelease(cargo:takumi-core)\n---\n\n### Merge `takumi-css` into `takumi-core`\n\nFold the CSS parsing, cascade, value types, selector matching, and `@keyframes`\nlayer back into `takumi-core` and drop the separate `takumi-css` crate. The\n`style` module is reachable through `layout::style` as before; `matching` is now\ncrate-private. Core builds at `opt-level = \"z\"`, shrinking the napi `.node` ~7%\nand the wasm binary ~8% with no render-path regression.\n"
+    filename: merge-css-into-core.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    replay:\n      - exit-prerelease(cargo:takumi-core)\n---\n\n### Hide internal style/layout items from the public API\n\nRoughly 200 CSS value types, parsing helpers, and internal accessors across `style::properties`,\n`style::stylesheets`, `style::tw`, `style::selector`, and `layout` are now crate-private; they were\nnever meant to be constructed or matched on directly. `StyleSheet::property_rules` and\n`apply_stylesheet_animations` are crate-private; use `StyleSheet`'s public parsing/query surface\ninstead. Gradient direction/keyword helpers (`GradientKeywordDirection`, `HorizontalKeyword`,\n`VerticalKeyword`) stay public since they're reachable through `LinearGradientDirection`.\n"
+    filename: hide-internal-style-items.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    replay:\n      - exit-prerelease(cargo:takumi-core)\n---\n\n### Drop `serde_bytes::ByteBuf` from `ImageSourceInput::Buffer`\n\nThe `Buffer` variant exposed `serde_bytes::ByteBuf` in the public API. It now\nholds a `Vec<u8>` with `#[serde(with = \"serde_bytes\")]`, keeping the FFI\nbytes wire format while keeping `serde_bytes` out of the surface.\n"
+    filename: own-imagesourceinput-buffer.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    replay:\n      - exit-prerelease(cargo:takumi-core)\n  npm:@takumi-rs/helpers:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/helpers)\n---\n\n### Match the Chromium UA stylesheet for default element styles\n\nParse the relative font keywords `bolder`/`lighter` (`font-weight`) and\n`larger`/`smaller` (`font-size`), resolving to the values Chromium uses. Expand\nthe default element presets to cover lists, `sub`/`sup`, `ins`/`del`, forms,\n`details`/`summary`, and `search`.\n"
+    filename: ua-presets-chromium-parity.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    replay:\n      - exit-prerelease(cargo:takumi-core)\n---\n\n### Seal `parley` out of the font API\n\n`FontResource::override_info` takes a takumi-owned `FontOverride` (family name,\nweight, style, width, axes) instead of `parley`'s `FontInfoOverride`, and\n`FontResource::generic_family` takes a takumi-owned `GenericFamily` newtype with\nnamed constants (`GenericFamily::SANS_SERIF`, …) re-exported from the prelude.\n`FontSource` is an opaque struct over raw bytes. Callers no longer depend on\n`parley`.\n"
+    filename: seal-parley-font-api.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    replay:\n      - exit-prerelease(cargo:takumi-core)\n  npm:@takumi-rs/core:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/core)\n  npm:@takumi-rs/wasm:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/wasm)\n---\n\n### Make subset-group font selection deterministic\n\nSubsets registered under one logical family (via `FontResource::subset_of`) were kept\nin registration order. Callers commonly register fonts concurrently, so that order — and\ntherefore which subset won for a codepoint covered by more than one (e.g. overlapping\nweight subsets, where the loser is faux-bolded) — varied per process. Identical input\ncould render to different bytes run to run.\n\nSubsets are now held in a `BTreeSet`, ordered by their family name, so expansion and\nselection no longer depend on registration timing. Same input renders identically.\n"
+    filename: deterministic-subset-font-order.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    replay:\n      - exit-prerelease(cargo:takumi-core)\n---\n\n### Rename `resource` naming to `image`\n\n`Node::resource_urls`/`Style::resource_urls`/`StyleDeclarationBlock::resource_urls` are now\n`image_urls`, and `ImageResourceError` is now `ImageError` — everything they cover is image\nloading, so the names say so.\n"
+    filename: rename-resource-to-image.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    replay:\n      - exit-prerelease(cargo:takumi-core)\n---\n\n### Mark public enums `#[non_exhaustive]`\n\nThe node and image enums (`NodeKind`, `ImageSource`, `ImageSourceInput`,\n`ImageCacheMode`), the property identifiers (`LonghandId`, `ShorthandId`,\n`PropertyId`, `StyleDeclaration`), and the spec-tracking value enums (`BlendMode`,\n`Filter`, `BasicShape`, `ContentValue`, `TextTransform`, `WhiteSpaceCollapse`,\n`OffsetPath`, `ImageScalingAlgorithm`, `Position`) can gain variants without a\nbreaking change. Match them with a wildcard arm.\n"
+    filename: enums-non-exhaustive.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    replay:\n      - exit-prerelease(cargo:takumi-core)\n---\n\n### Serialize filter, grid track, and gradient values as valid CSS\n\n`filter`/`backdrop-filter` and grid track lists were comma-joined\n(`blur(3px), grayscale(0.5)`, `50px, 100px`) where CSS wants spaces, via the\nshared `Vec` serializer. `ToCss` now carries a per-type `LIST_SEPARATOR`\n(default `, `), overridden to a space for `Filter` and `GridTemplateComponent`.\nLinear, radial, and conic gradients also placed the color-interpolation method\nafter a comma (`to right, in srgb`); it now sits in the leading clause\n(`to right in srgb`). The output re-parses instead of dropping these\nproperties.\n"
+    filename: gradient-filter-grid-serialization.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    replay:\n      - exit-prerelease(cargo:takumi-core)\n---\n\n### Seal `selectors`, `tiny_skia`, `image`, and `smallvec` out of the public API\n\nSelector matching moved into a `matching` module generic over a caller-supplied\n`MatchableNode`; `CssRule`, `LayerName`, `Ident`, `SelectorImpl`, `PseudoClass`,\nand `PseudoElement` are crate-private, keeping `selectors` off the public API.\nThe `From<Color>` conversions to `image::Rgba` and\n`tiny_skia::PremultipliedColorU8` are gone; the raster backend converts\ninternally. `StyleDeclarationBlock::declarations` and\n`DeclarationImportance::custom_properties` are crate-private with `len`/`is_empty`\naccessors, dropping `smallvec` from the API. Gradient LUT, tile-position, and\ntransfer-table helpers plus the gradient tile types moved into a `paint` module\nthe backends use directly, keeping `tiny_skia` off the prelude.\n"
+    filename: seal-css-foreign-types.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    replay:\n      - exit-prerelease(cargo:takumi-core)\n---\n\n### Seal `cssparser` and parse values via `FromCssStr`\n\n`FromCss`, `ParseResult`, `CssToken`, `CssSyntaxKind`, and `CssExpectedMessage`\nare now `pub(crate)`, keeping `cssparser` off the public API. Parse CSS value\ntypes from strings through the new `FromCssStr` trait\n(`Length::from_css_str(\"12px\")`), which returns an owned `ParseError`\n(`PartialEq`/`Eq`). The value-list types are plain aliases rather than newtypes:\n`Filters` = `Vec<Filter>`, `GridTemplateComponents` = `Vec<GridTemplateComponent>`,\nand `BackgroundImages`/`BackgroundSizes`/`BackgroundRepeats`/`PositionValues` =\n`Box<[_]>`.\n"
+    filename: css-from-css-str-list-aliases.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    replay:\n      - exit-prerelease(cargo:takumi-core)\n---\n\n### Remove taffy/parley/image types from the public API\n\n`Affine::transform_point`, `ComputedStyle::local_transform`/`has_non_identity_transform`,\n`OffsetAnchor::resolve`, `PositionValue::to_point`, and `BorderRadiusPair::to_px` now take\nseparate `width`/`height` (or `x`/`y`) `f32` params and return tuples instead of `taffy::Point`/\n`taffy::Size`. `Affine::decompose_translation` is removed; read `.x`/`.y` directly.\n`SizingContext::container_size` is private; use the new `set_container_size` setter.\n`ComputedStyle::to_taffy_style`/`creates_stacking_context`, `LineHeight::into_parley`,\n`Float::resolve`/`Clear::resolve` are now crate-private. Dropped the `From<image::RgbaImage>`\nimpls for `ImageSource`/`ImageData`; convert through `ImageBuffer::from_rgba` instead.\n`style::fast_div_255`/`fast_div_255_u32` moved under `style::math`. `NodePaint::container_size`\nand `build_stacking_contexts` take `(Option<f32>, Option<f32>)` tuples instead of `taffy::Size`,\nand the new `Error::InvalidLayoutNode` variant replaces the `From<taffy::TaffyError>` conversion.\n"
+    filename: seal-taffy-in-public-api.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    replay:\n      - exit-prerelease(cargo:takumi-core)\n---\n\n### Hide the encoder and layout crates behind opaque `Error` variants\n\n`Error::PngError`, `WebPEncodingError`, `GifEncodingError`, `ImageError`, and\n`LayoutError` exposed the `png`, `image_webp`, `gif`, `image`, and `taffy`\ncrates. They collapse into `Error::Encode` (an opaque boxed source, built via\n`Error::encode`) and `Error::Layout(String)`, so the public API no longer\ntracks those crates' versions. `EmptyAnimationFrames` and\n`MixedAnimationFrameDimensions` also drop their `format` fields.\n"
+    filename: opaque-encode-layout-errors.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    replay:\n      - exit-prerelease(cargo:takumi-core)\n---\n\n### Stop exposing the parsed SVG tree as a public field\n\n`SvgSource::tree` was a public `resvg::usvg::Tree` field, leaking `usvg` into\nthe API. It is now `pub(crate)`, with a `dimensions()` accessor for the canvas\nsize that callers actually need.\n"
+    filename: svgsource-tree-private.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - id: npm:@takumi-rs/helpers
+  - id: npm:takumi-template
+    updated: false
+  - id: npm:@takumi-rs/core
     updated: true
   - id: npm:takumi-js
     updated: true
-  - id: npm:docs
-    updated: false
-  - changelogIds:
-      - animation-frame-rate-cap.md
-      - streaming-animation-encode.md
-      - render-animation-keyframes.md
-    id: npm:@takumi-rs/wasm
-    updated: true
   - id: npm:@takumi-rs/image-response
     updated: true
-  - changelogIds:
-      - animation-frame-rate-cap.md
-      - streaming-animation-encode.md
-      - render-animation-keyframes.md
-    id: npm:@takumi-rs/core
+  - id: npm:docs
+    updated: false
+  - id: npm:@takumi-rs/wasm
     updated: true
-  - id: npm:takumi-template
+  - id: npm:@takumi-rs/helpers
+    updated: true
+  - id: npm:example-cloudflare-workers
+    updated: false
+  - id: npm:example-tanstack-start
+    updated: false
+  - id: npm:example-css-library-integration
+    updated: false
+  - id: npm:example-twitter-images
+    updated: false
+  - id: npm:ffplay
+    updated: false
+  - id: npm:example-satori-html
+    updated: false
+  - id: npm:example-nextjs
     updated: false
   - id: npm:svelte
     updated: false
   - id: npm:ffmpeg-keyframe-animation
     updated: false
-  - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:example-twitter-images
-    updated: false
-  - id: npm:example-css-library-integration
-    updated: false
   - id: npm:waku-ssr
     updated: false
-  - id: npm:ffplay
-    updated: false
-  - id: npm:example-nextjs
-    updated: false
-  - id: npm:example-satori-html
-    updated: false
-  - id: npm:example-tanstack-start
-    updated: false
-  - id: cargo:takumi-html
-    updated: false
   - changelogIds:
-      - animation-frame-rate-cap.md
-      - streaming-animation-encode.md
+      - html-fromhtmloptions-builder.md
+      - node-from-html.md
+    id: cargo:takumi-html
+    updated: true
+  - changelogIds:
+      - bump-takumi-crates.md
     id: cargo:takumi
     updated: true
-  - id: cargo:takumi-svg
-    updated: false
   - changelogIds:
-      - animation-frame-rate-cap.md
+      - backdrop-filter-mask.md
       - streaming-animation-encode.md
+      - animation-frame-rate-cap.md
+      - write-animated-rename.md
     id: cargo:takumi-raster
     updated: true
-  - id: cargo:takumi-core
+  - changelogIds:
+      - svg-backdrop-filter.md
+    id: cargo:takumi-svg
+    updated: true
+  - changelogIds:
+      - merge-css-into-core.md
+      - hide-internal-style-items.md
+      - svg-backdrop-filter.md
+      - own-imagesourceinput-buffer.md
+      - ua-presets-chromium-parity.md
+      - seal-parley-font-api.md
+      - deterministic-subset-font-order.md
+      - rename-resource-to-image.md
+      - enums-non-exhaustive.md
+      - gradient-filter-grid-serialization.md
+      - seal-css-foreign-types.md
+      - css-from-css-str-list-aliases.md
+      - seal-taffy-in-public-api.md
+      - opaque-encode-layout-errors.md
+      - svgsource-tree-private.md
+    id: cargo:takumi-core
     updated: true
 npm:packages:
   - id: npm:takumi
+  - id: npm:takumi-template
   - distTag: rc
-    id: npm:@takumi-rs/helpers
+    id: npm:@takumi-rs/core
   - distTag: rc
     id: npm:takumi-js
+  - distTag: rc
+    id: npm:@takumi-rs/image-response
   - id: npm:docs
   - distTag: rc
     id: npm:@takumi-rs/wasm
   - distTag: rc
-    id: npm:@takumi-rs/image-response
-  - distTag: rc
-    id: npm:@takumi-rs/core
-  - id: npm:takumi-template
+    id: npm:@takumi-rs/helpers
+  - id: npm:example-cloudflare-workers
+  - id: npm:example-tanstack-start
+  - id: npm:example-css-library-integration
+  - id: npm:example-twitter-images
+  - id: npm:ffplay
+  - id: npm:example-satori-html
+  - id: npm:example-nextjs
   - id: npm:svelte
   - id: npm:ffmpeg-keyframe-animation
-  - id: npm:example-cloudflare-workers
-  - id: npm:example-twitter-images
-  - id: npm:example-css-library-integration
   - id: npm:waku-ssr
-  - id: npm:ffplay
-  - id: npm:example-nextjs
-  - id: npm:example-satori-html
-  - id: npm:example-tanstack-start

@@ -1,3 +1,9 @@
+## takumi@2.0.0-rc.9
+
+### Bump internal crates
+
+Releasing v0 internal crates
+
 ## takumi@2.0.0-rc.8
 
 ### Cap animation frame rate per format
