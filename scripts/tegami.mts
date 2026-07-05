@@ -38,20 +38,19 @@ const prerelease = "rc";
 
 if (prerelease) process.env.npm_config_tag = prerelease;
 
-const groupedNpmPackages = [
-  "takumi-js",
-  "@takumi-rs/core",
-  "@takumi-rs/helpers",
-  "@takumi-rs/wasm",
-  "@takumi-rs/image-response",
+const groupedPackages = [
+  "npm:takumi-js",
+  "npm:@takumi-rs/core",
+  "npm:@takumi-rs/helpers",
+  "npm:@takumi-rs/wasm",
+  "npm:@takumi-rs/image-response",
+  "cargo:takumi",
 ];
 
-const packages: Record<string, PackageOptions<"takumi">> = {
-  "cargo:takumi": { group: "takumi" },
-};
+const packages: Record<string, PackageOptions<"takumi">> = {};
 
-for (const name of groupedNpmPackages) {
-  packages[`npm:${name}`] = { group: "takumi" };
+for (const name of groupedPackages) {
+  packages[name] = { group: "takumi" };
 }
 
 // Skip versionless dependents (private examples, docs, templates); only real
