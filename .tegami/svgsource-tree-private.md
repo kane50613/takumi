@@ -2,7 +2,7 @@
 packages:
   cargo:takumi-core:
     replay:
-      - "exit prerelease: cargo:takumi-core"
+      - exit-prerelease(cargo:takumi-core)
 ---
 
 ### Stop exposing the parsed SVG tree as a public field

@@ -2,10 +2,10 @@
 packages:
   cargo:takumi-html:
     replay:
-      - "exit prerelease: cargo:takumi-html"
+      - exit-prerelease(cargo:takumi-html)
   cargo:takumi:
     replay:
-      - "exit prerelease: cargo:takumi"
+      - exit-prerelease(cargo:takumi)
 ---
 
 ### Add `takumi-html` for parsing HTML into a node tree
