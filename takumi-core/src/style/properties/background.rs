@@ -19,8 +19,6 @@ pub struct Background {
   pub clip: BackgroundClip,
   /// Background origin.
   pub origin: BackgroundOrigin,
-  /// Background blend mode.
-  pub blend_mode: BlendMode,
 }
 
 impl MakeComputed for Background {
@@ -41,7 +39,6 @@ impl<'i> FromCss<'i> for Background {
     let mut origin = None;
     let mut clip = None;
     let mut box_count = 0u8;
-    let mut blend_mode = None;
 
     while !input.is_exhausted() && !next_is_comma(input) {
       // Try to parse background-color
@@ -97,14 +94,6 @@ impl<'i> FromCss<'i> for Background {
         continue;
       }
 
-      // Try to parse background-blend-mode
-      if blend_mode.is_none()
-        && let Ok(value) = input.try_parse(BlendMode::from_css)
-      {
-        blend_mode = Some(value);
-        continue;
-      }
-
       // If we can't parse anything, it's an error
       return Err(unexpected_token!(
         input.current_source_location(),
@@ -120,7 +109,6 @@ impl<'i> FromCss<'i> for Background {
       repeat: repeat.unwrap_or_default(),
       clip: clip.unwrap_or_default(),
       origin: origin.unwrap_or_default(),
-      blend_mode: blend_mode.unwrap_or_default(),
     })
   }
 
@@ -130,7 +118,6 @@ impl<'i> FromCss<'i> for Background {
     CssToken::Syntax(CssSyntaxKind::Position),
     CssToken::Syntax(CssSyntaxKind::Repeat),
     CssToken::Syntax(CssSyntaxKind::Clip),
-    CssToken::Descriptor(CssDescriptorKind::BlendMode),
   ];
 }
 

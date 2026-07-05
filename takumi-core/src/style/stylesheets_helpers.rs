@@ -3,9 +3,7 @@ use std::{borrow::Cow, fmt::Write};
 use cssparser::{ParseError, Parser, ParserInput, SourceLocation, Token};
 
 use super::{LonghandId, ParsedDeclarations, PropertyId, ShorthandId};
-use crate::style::{
-  CssInput, CssNumber, CssUnexpected, CssWideKeyword, FromCss, merge_enum_values,
-};
+use crate::style::{CssInput, CssNumber, CssUnexpected, CssWideKeyword, FromCss};
 
 #[derive(Debug, Clone)]
 pub(crate) struct CssInputParseFailure {
@@ -104,48 +102,26 @@ pub(crate) fn parse_css_wide_keyword(css_input: &CssInput<'_>) -> Option<CssWide
   }
 }
 
-pub(crate) fn parse_css_input_value<'de, T>(
+pub(crate) fn css_input_parse_error<'de>(
   css_input: CssInput<'de>,
-) -> Result<T, CssInputParseError<'de>>
-where
-  T: for<'i> FromCss<'i>,
-{
+  source: &str,
+  expected: String,
+  error: ParseError<'_, Cow<'_, str>>,
+) -> CssInputParseError<'de> {
   match css_input {
-    CssInput::Str(value) => {
-      let source = value.to_string();
-      let mut parser_input = ParserInput::new(source.as_str());
-      let mut parser = Parser::new(&mut parser_input);
-      let failure = match T::from_css(&mut parser) {
-        Ok(parsed_value) => return Ok(parsed_value),
-        Err(error) => css_input_parse_failure(source.as_str(), error),
-      };
-
-      Err(CssInputParseError::Value {
-        value,
-        expected: T::EXPECT_MESSAGE
-          .build_message(source.as_str(), merge_enum_values(T::VALID_TOKENS))
-          .into(),
-        failure: Some(failure),
-      })
-    }
-    CssInput::Number(number) => {
-      let source = number.to_string();
-      let mut parser_input = ParserInput::new(&source);
-      let mut parser = Parser::new(&mut parser_input);
-
-      T::from_css(&mut parser).map_err(|_| CssInputParseError::NumberType {
-        number,
-        expected: T::EXPECT_MESSAGE
-          .build_message(&source, merge_enum_values(T::VALID_TOKENS))
-          .into(),
-      })
-    }
-    CssInput::Unexpected(unexpected) => Err(CssInputParseError::UnexpectedType {
+    CssInput::Str(value) => CssInputParseError::Value {
+      value,
+      expected: expected.into(),
+      failure: Some(css_input_parse_failure(source, error)),
+    },
+    CssInput::Number(number) => CssInputParseError::NumberType {
+      number,
+      expected: expected.into(),
+    },
+    CssInput::Unexpected(unexpected) => CssInputParseError::UnexpectedType {
       unexpected,
-      expected: T::EXPECT_MESSAGE
-        .build_message("input", merge_enum_values(T::VALID_TOKENS))
-        .into(),
-    }),
+      expected: expected.into(),
+    },
   }
 }
 

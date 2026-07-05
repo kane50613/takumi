@@ -147,8 +147,6 @@ impl CssSyntaxKind {
 pub(crate) enum CssDescriptorKind {
   /// `<blur()>`
   BlurFn,
-  /// `<blend-mode>`
-  BlendMode,
   /// `<brightness()>`
   BrightnessFn,
   /// `<circle()>`
@@ -217,7 +215,6 @@ impl CssDescriptorKind {
   const fn as_str(self) -> &'static str {
     match self {
       Self::BlurFn => "blur()",
-      Self::BlendMode => "blend-mode",
       Self::BrightnessFn => "brightness()",
       Self::CircleFn => "circle()",
       Self::ColorAndPercentage => "color and percentage",

@@ -226,24 +226,19 @@ macro_rules! define_style {
           }
         }
 
-        fn parse_css_input_declarations<'de>(
-          self,
-          css_input: CssInput<'de>,
-        ) -> Result<ParsedDeclarations, CssInputParseError<'de>> {
-          if let Some(keyword) = parse_css_wide_keyword(&css_input) {
-            return Ok(smallvec![StyleDeclaration::CssWideKeyword(self, keyword)]);
-          }
-
+        fn expect_info(self) -> (CssExpectedMessage, &'static [CssToken]) {
           match self {
             $(
-              Self::[<$longhand:camel>] => Ok(smallvec![StyleDeclaration::[<$longhand:camel>](
-                parse_css_input_value(css_input)?,
-              )]),
+              Self::[<$longhand:camel>] => (
+                <$longhand_ty as FromCss>::EXPECT_MESSAGE,
+                <$longhand_ty as FromCss>::VALID_TOKENS,
+              ),
             )*
             $(
-              Self::[<$transient:camel>] => Ok(smallvec![StyleDeclaration::[<$transient:camel>](
-                parse_css_input_value(css_input)?,
-              )]),
+              Self::[<$transient:camel>] => (
+                <$transient_ty as FromCss>::EXPECT_MESSAGE,
+                <$transient_ty as FromCss>::VALID_TOKENS,
+              ),
             )*
           }
         }
@@ -266,28 +261,13 @@ macro_rules! define_style {
           }
         }
 
-        fn parse_css_input_declarations<'de>(
-          self,
-          css_input: CssInput<'de>,
-        ) -> Result<ParsedDeclarations, CssInputParseError<'de>> {
+        fn expect_info(self) -> (CssExpectedMessage, &'static [CssToken]) {
           match self {
             $(
-              Self::[<$shorthand:camel>] => {
-                if let Some(keyword) = parse_css_wide_keyword(&css_input) {
-                  let mut declarations = ParsedDeclarations::new();
-                  $(
-                    declarations.push(StyleDeclaration::CssWideKeyword(LonghandId::$target, keyword));
-                  )+
-                  return Ok(declarations);
-                }
-
-                Ok(expand_shorthand(
-                  parse_css_input_value::<$shorthand_ty>(css_input)?,
-                  |$value, $target_var| {
-                    $expand
-                  },
-                ))
-              }
+              Self::[<$shorthand:camel>] => (
+                <$shorthand_ty as FromCss>::EXPECT_MESSAGE,
+                <$shorthand_ty as FromCss>::VALID_TOKENS,
+              ),
             )*
           }
         }
@@ -372,12 +352,49 @@ macro_rules! define_style {
               })]);
             }
 
-          match self {
-            Self::Ignored => Ok(ParsedDeclarations::new()),
-            Self::Custom => Ok(ParsedDeclarations::new()),
-            Self::Shorthand(property) => property.parse_css_input_declarations(css_input),
-            Self::Longhand(property) => property.parse_css_input_declarations(css_input),
+          if matches!(self, Self::Ignored | Self::Custom) {
+            return Ok(ParsedDeclarations::new());
           }
+
+          if let Some(keyword) = parse_css_wide_keyword(&css_input) {
+            return Ok(
+              self
+                .target_longhands()
+                .iter()
+                .map(|longhand| StyleDeclaration::CssWideKeyword(longhand, keyword))
+                .collect(),
+            );
+          }
+
+          if let CssInput::Unexpected(unexpected) = css_input {
+            return Err(CssInputParseError::UnexpectedType {
+              unexpected,
+              expected: self.expected_message("input").into(),
+            });
+          }
+
+          let source = css_input.to_string();
+          let mut parser_input = ParserInput::new(&source);
+          let mut parser = Parser::new(&mut parser_input);
+          let result = match self {
+            Self::Shorthand(property) => property.parse_declarations(&mut parser),
+            Self::Longhand(property) => property.parse_declarations(&mut parser),
+            Self::Ignored | Self::Custom => unreachable!(),
+          };
+
+          result
+            .map_err(|error| css_input_parse_error(css_input, &source, self.expected_message(&source), error))
+        }
+
+        /// Parse-error "expected ..." text for this property's value type.
+        fn expected_message(self, token: &str) -> String {
+          let (message, valid_tokens) = match self {
+            Self::Longhand(property) => property.expect_info(),
+            Self::Shorthand(property) => property.expect_info(),
+            Self::Ignored | Self::Custom => return String::new(),
+          };
+
+          message.build_message(token, merge_enum_values(valid_tokens))
         }
 
         /// Longhands this property expands into (shorthand-expansion targets; unrelated to `!important`).
@@ -1357,7 +1374,7 @@ define_style! {
     overflow: SpacePair<Overflow> => [OverflowX, OverflowY] |value, target| {
       push_axis_declarations!(target, value, overflow_x, overflow_y);
     },
-    background: Backgrounds => [BackgroundImage, BackgroundPosition, BackgroundSize, BackgroundRepeat, BackgroundBlendMode, BackgroundColor, BackgroundClip, BackgroundOrigin] |value, target| {
+    background: Backgrounds => [BackgroundImage, BackgroundPosition, BackgroundSize, BackgroundRepeat, BackgroundColor, BackgroundClip, BackgroundOrigin] |value, target| {
       target.push(StyleDeclaration::background_position(
         value.iter().map(|background| background.position).collect(),
       ));
@@ -1366,12 +1383,6 @@ define_style! {
       ));
       target.push(StyleDeclaration::background_repeat(
         value.iter().map(|background| background.repeat).collect(),
-      ));
-      target.push(StyleDeclaration::background_blend_mode(
-        value
-          .iter()
-          .map(|background| background.blend_mode)
-          .collect(),
       ));
       target.push(StyleDeclaration::background_color(
         value
