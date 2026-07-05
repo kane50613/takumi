@@ -1,4 +1,4 @@
-import type { GoogleFontCatalog } from "./google-fonts-catalog";
+import type { GoogleFontShapeFamilies, GoogleFontShapes } from "./google-fonts-catalog";
 import type { Node } from "./types";
 import { fetchOk, type FetchOptions } from "./utils";
 
@@ -9,19 +9,23 @@ type FontStyle = "normal" | "italic";
 type WeightRange = `${number}..${number}`;
 type AxisValue = number | WeightRange;
 
+// Built from GoogleFontShapes/GoogleFontShapeFamilies (one branch per distinct weight/style/axis
+// shape) rather than one branch per family: families sharing a shape are indistinguishable in
+// their allowed weight/style/axis, so grouping them shrinks this union ~13x (152 shapes vs. 1940
+// families) with no loss of per-family precision, which keeps the checker fast on this type.
 type KnownGoogleFontFamily = {
-  [K in keyof GoogleFontCatalog]: {
-    name: K;
+  [S in keyof GoogleFontShapes]: {
+    name: GoogleFontShapeFamilies[S];
     /** `400`, `[400, 700]`, or a range like `"100..900"` for the variable font. @default 400 */
-    weight?: GoogleFontCatalog[K]["weight"] | GoogleFontCatalog[K]["weight"][] | WeightRange;
+    weight?: GoogleFontShapes[S]["weight"] | GoogleFontShapes[S]["weight"][] | WeightRange;
     /** `"normal"`, `"italic"`, or both. @default "normal" */
-    style?: GoogleFontCatalog[K]["style"] | GoogleFontCatalog[K]["style"][];
+    style?: GoogleFontShapes[S]["style"] | GoogleFontShapes[S]["style"][];
     /** Variable axes to vary, each at a value or `"min..max"` range, e.g. `{ opsz: "14..32" }`. */
-    axes?: [GoogleFontCatalog[K]["axis"]] extends [never]
+    axes?: [GoogleFontShapes[S]["axis"]] extends [never]
       ? never
-      : Partial<Record<GoogleFontCatalog[K]["axis"], AxisValue>>;
+      : Partial<Record<GoogleFontShapes[S]["axis"], AxisValue>>;
   };
-}[keyof GoogleFontCatalog];
+}[keyof GoogleFontShapes];
 
 type GoogleFontFamilyObject =
   | KnownGoogleFontFamily
@@ -32,13 +36,17 @@ type GoogleFontFamilyObject =
       axes?: Record<string, AxisValue>;
     };
 
+// Flat union of every family name, from the values of GoogleFontShapeFamilies (its 152 keys each
+// map to a name union), for bare-string autocomplete without re-instantiating the object union.
+type GoogleFontName = GoogleFontShapeFamilies[keyof GoogleFontShapeFamilies];
+
 /**
  * One family to load. A bare string loads weight 400, normal style.
  *
- * Known {@link GoogleFontCatalog} families autocomplete their weight, style, and variable axes.
- * Any other string still works through a loose fallback that does not check the weight.
+ * Known families autocomplete their weight, style, and variable axes. Any other string still
+ * works through a loose fallback that does not check the weight.
  */
-export type GoogleFontFamily = (keyof GoogleFontCatalog | (string & {})) | GoogleFontFamilyObject;
+export type GoogleFontFamily = (GoogleFontName | (string & {})) | GoogleFontFamilyObject;
 
 export type GoogleFontsOptions = FetchOptions & {
   /** The families to load, each as a name or a name plus its weight/style axis. */
