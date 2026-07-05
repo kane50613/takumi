@@ -1,17 +1,9 @@
 ---
 packages:
-  cargo:takumi-raster:
-    replay:
-      - exit-prerelease(cargo:takumi-raster)
-  cargo:takumi:
-    replay:
-      - exit-prerelease(cargo:takumi)
-  npm:@takumi-rs/wasm:
-    replay:
-      - exit-prerelease(npm:@takumi-rs/wasm)
-  npm:@takumi-rs/core:
-    replay:
-      - exit-prerelease(npm:@takumi-rs/core)
+  "cargo:takumi-raster": minor
+  "cargo:takumi": minor
+  "npm:@takumi-rs/core": patch
+  "npm:@takumi-rs/wasm": patch
 ---
 
 ### Stream animation frames straight into the encoder

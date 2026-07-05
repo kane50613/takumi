@@ -27,8 +27,6 @@ export default function AnimatedShowcase() {
 export const options: PlaygroundOptions = {
   width: 640,
   height: 360,
-  // `DURATION_MS` drives the animation and the timeline, so they always match and
-  // the loop is seamless. Change it once to retime both.
   keyframes: {
     "stretch-cube": {
       "0%": { transform: "rotate(0deg) scale(1, 1)", borderRadius: "16px" },

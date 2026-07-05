@@ -1,11 +1,7 @@
 ---
 packages:
-  npm:@takumi-rs/core:
-    replay:
-      - exit-prerelease(npm:@takumi-rs/core)
-  npm:@takumi-rs/wasm:
-    replay:
-      - exit-prerelease(npm:@takumi-rs/wasm)
+  "npm:@takumi-rs/core": patch
+  "npm:@takumi-rs/wasm": patch
 ---
 
 ### Apply structured keyframes in `renderAnimation`
