@@ -1,7 +1,6 @@
 //! The main renderer for Takumi image rendering engine.
 
 use std::{
-  borrow::Cow,
   collections::HashMap,
   sync::{Arc, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
@@ -19,9 +18,8 @@ use takumi_core::{
   viewport::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
 };
 use takumi_raster::{
-  AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, SequentialScene,
-  measure, render, render_animation, write_animated_gif, write_animated_png, write_animated_webp,
-  write_image,
+  AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFormat, SequentialScene,
+  measure, render, write_animation, write_image,
 };
 use wasm_bindgen::prelude::*;
 
@@ -146,40 +144,6 @@ impl Renderer {
     }
 
     Ok(map)
-  }
-
-  fn encode_animation(
-    &self,
-    frames: Vec<AnimationFrame>,
-    format: Option<AnimationOutputFormat>,
-  ) -> Result<Vec<u8>, JsValue> {
-    let mut buffer = Vec::new();
-
-    match format.unwrap_or(AnimationOutputFormat::WebP) {
-      AnimationOutputFormat::WebP => {
-        // wasm `image-webp` is lossless-only.
-        write_animated_webp(
-          Cow::Owned(frames),
-          &mut buffer,
-          AnimatedWebpOptions::default(),
-        )
-        .map_err(map_error)?;
-      }
-      AnimationOutputFormat::APng => {
-        write_animated_png(&frames, &mut buffer, AnimatedPngOptions::default())
-          .map_err(map_error)?;
-      }
-      AnimationOutputFormat::Gif => {
-        write_animated_gif(
-          Cow::Owned(frames),
-          &mut buffer,
-          AnimatedGifOptions::default(),
-        )
-        .map_err(map_error)?;
-      }
-    }
-
-    Ok(buffer)
   }
 
   /// Creates a new Renderer instance.
@@ -391,6 +355,7 @@ impl Renderer {
       images,
       draw_debug_border,
       stylesheets,
+      keyframes,
       device_pixel_ratio,
       fps,
       font_families,
@@ -410,7 +375,7 @@ impl Renderer {
     let viewport = Viewport::new((width, height))
       .with_device_pixel_ratio(device_pixel_ratio.unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO));
     let draw_debug_border = draw_debug_border.unwrap_or_default();
-    let stylesheet = StyleSheet::parse_owned_list_loosy(stylesheets.unwrap_or_default());
+    let stylesheet = self.parse_stylesheet(stylesheets, keyframes.unwrap_or_default())?;
     let state = self.read_state()?;
     let scene_options = scenes
       .into_iter()
@@ -432,8 +397,17 @@ impl Renderer {
           .build()
       })
       .collect::<Vec<_>>();
-    let rendered_frames = render_animation(&scene_options, fps).map_err(map_error)?;
 
-    self.encode_animation(rendered_frames, format)
+    // wasm `image-webp` is lossless-only, which the WebP option defaults to.
+    let format = match format.unwrap_or(AnimationOutputFormat::WebP) {
+      AnimationOutputFormat::WebP => AnimationFormat::WebP(AnimatedWebpOptions::default()),
+      AnimationOutputFormat::APng => AnimationFormat::Apng(AnimatedPngOptions::default()),
+      AnimationOutputFormat::Gif => AnimationFormat::Gif(AnimatedGifOptions::default()),
+    };
+
+    let mut buffer = Vec::new();
+    write_animation(&scene_options, fps, format, &mut buffer).map_err(map_error)?;
+
+    Ok(buffer)
   }
 }

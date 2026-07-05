@@ -246,6 +246,9 @@ pub struct RenderAnimationOptions<'env> {
   pub images: Option<Vec<ImageSource<'env>>>,
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
+  /// Structured keyframes to register alongside stylesheets.
+  #[napi(ts_type = "Keyframes")]
+  pub keyframes: Option<Object<'env>>,
   /// The device pixel ratio.
   /// @default 1.0
   pub device_pixel_ratio: Option<f64>,

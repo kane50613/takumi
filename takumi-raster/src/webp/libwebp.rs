@@ -9,7 +9,7 @@ use crate::{
   Result,
   error::{Error, WebPError},
   webp::U24_MAX,
-  write::{AnimatedWebpOptions, AnimationFrame, Quality},
+  write::{AnimatedWebpOptions, AnimationFrame, Bitmap, Quality},
 };
 
 fn webp_config(lossless: bool, quality: u8, speed: u8) -> Result<WebPConfig> {
@@ -364,6 +364,111 @@ fn encode_frames(
     .iter()
     .map(|(image, duration_ms)| encode_single_frame(image, *duration_ms, config))
     .collect()
+}
+
+/// Streams frames into an animated WebP a bounded chunk at a time, so peak
+/// raw-pixel memory stays fixed while each chunk still encodes in parallel.
+/// Produces the same bytes as [`write_animated_webp`] for the same frames.
+pub(crate) fn encode_animated_webp<W, I>(
+  mut frames: I,
+  destination: &mut W,
+  options: AnimatedWebpOptions,
+) -> Result<()>
+where
+  W: Write,
+  I: Iterator<Item = Result<AnimationFrame>>,
+{
+  let Some(first) = frames.next().transpose()? else {
+    return Err(WebPError::EmptyAnimation.into());
+  };
+
+  let frame_width = first.image.width();
+  let frame_height = first.image.height();
+  if !(1..=U24_MAX + 1).contains(&frame_width) || !(1..=U24_MAX + 1).contains(&frame_height) {
+    return Err(
+      WebPError::InvalidFrameDimensions {
+        width: frame_width,
+        height: frame_height,
+        max: U24_MAX + 1,
+      }
+      .into(),
+    );
+  }
+
+  let speed = options.speed.unwrap_or(1).clamp(0, 6);
+  let config = webp_config(options.lossless, options.quality, speed)?;
+
+  // Buffer unique frames a chunk at a time and encode each chunk in parallel, so
+  // peak raw-pixel memory stays bounded while frames still encode concurrently.
+  let chunk_capacity = frames_per_chunk(frame_width, frame_height);
+  let mut encoded = Vec::new();
+  let mut chunk: Vec<(Bitmap, u32)> = Vec::new();
+  let mut pending_image = first.image;
+  let mut pending_duration_ms = first.duration_ms.clamp(0, U24_MAX);
+
+  for frame in frames {
+    let frame = frame?;
+    if frame.image.width() != frame_width || frame.image.height() != frame_height {
+      return Err(WebPError::MixedFrameDimensions.into());
+    }
+    if frame.image.as_raw() == pending_image.as_raw() {
+      pending_duration_ms = pending_duration_ms.saturating_add(frame.duration_ms.clamp(0, U24_MAX));
+      continue;
+    }
+    chunk.push((pending_image, pending_duration_ms));
+    if chunk.len() >= chunk_capacity {
+      encode_frame_chunk(&mut chunk, &config, &mut encoded)?;
+    }
+    pending_image = frame.image;
+    pending_duration_ms = frame.duration_ms.clamp(0, U24_MAX);
+  }
+  chunk.push((pending_image, pending_duration_ms));
+  encode_frame_chunk(&mut chunk, &config, &mut encoded)?;
+
+  write_riff_container(
+    destination,
+    frame_width,
+    frame_height,
+    options.loop_count.unwrap_or(0),
+    options.blend,
+    options.dispose,
+    &encoded,
+  )
+}
+
+/// Frames to buffer per parallel encode pass. Sized so the buffered raw pixels
+/// stay near a fixed budget whatever the frame dimensions, with at least one
+/// frame per pass.
+fn frames_per_chunk(width: u32, height: u32) -> usize {
+  const CHUNK_MEMORY_BUDGET: usize = 64 * 1024 * 1024;
+  let frame_bytes = (width as usize)
+    .saturating_mul(height as usize)
+    .saturating_mul(4)
+    .max(1);
+  (CHUNK_MEMORY_BUDGET / frame_bytes).max(1)
+}
+
+/// Encodes a chunk of unique frames (in parallel when `rayon` is enabled), appends
+/// the results in order, and frees the raw frames.
+fn encode_frame_chunk(
+  chunk: &mut Vec<(Bitmap, u32)>,
+  config: &WebPConfig,
+  encoded: &mut Vec<EncodedFrame>,
+) -> Result<()> {
+  #[cfg(feature = "rayon")]
+  let batch = chunk
+    .par_iter()
+    .map(|(image, duration_ms)| encode_single_frame(image.as_rgba(), *duration_ms, config))
+    .collect::<Result<Vec<_>>>()?;
+  #[cfg(not(feature = "rayon"))]
+  let batch = chunk
+    .iter()
+    .map(|(image, duration_ms)| encode_single_frame(image.as_rgba(), *duration_ms, config))
+    .collect::<Result<Vec<_>>>()?;
+
+  encoded.extend(batch);
+  chunk.clear();
+  Ok(())
 }
 
 /// Encodes a sequence of RGBA frames into an animated WebP.
