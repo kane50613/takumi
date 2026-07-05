@@ -5,6 +5,7 @@ import { fetchOk, type FetchOptions } from "./utils";
 const chromeUserAgent =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
+type FontStyle = "normal" | "italic";
 type WeightRange = `${number}..${number}`;
 type AxisValue = number | WeightRange;
 
@@ -27,10 +28,20 @@ type KnownGoogleFontFamily = {
 type GoogleFontName = GoogleFontShapeFamilies[keyof GoogleFontShapeFamilies];
 
 /**
- * One family to load. A bare string loads weight 400, normal style; any string is accepted. The
- * object form autocompletes and type-checks each known family's weight, style, and variable axes.
+ * One family to load. A bare string loads weight 400, normal style. The object form autocompletes
+ * each known family's weight, style, and variable axes; the last branch keeps any string name
+ * (e.g. one built at runtime) usable with a weight and style.
  */
-export type GoogleFontFamily = GoogleFontName | (string & {}) | KnownGoogleFontFamily;
+export type GoogleFontFamily =
+  | GoogleFontName
+  | (string & {})
+  | KnownGoogleFontFamily
+  | {
+      name: GoogleFontName | (string & {});
+      weight?: number | number[] | WeightRange;
+      style?: FontStyle | FontStyle[];
+      axes?: Record<string, AxisValue>;
+    };
 
 export type GoogleFontsOptions = FetchOptions & {
   /** The families to load, each as a name or a name plus its weight/style axis. */
