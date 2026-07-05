@@ -2,7 +2,7 @@ use std::{collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
 use parley::{GlyphRun, InlineBoxKind, PositionedLayoutItem};
 use serde::Serialize;
-use taffy::{AvailableSpace, Layout, NodeId, TaffyError, geometry::Size};
+use taffy::{AvailableSpace, Layout, NodeId, geometry::Size};
 use takumi_core::scene::build_stacking_contexts;
 use typed_builder::TypedBuilder;
 
@@ -269,7 +269,7 @@ fn collect_measure_result(
         container_size,
       }) => {
         let Some(current) = node.node_at_path_mut(&path) else {
-          return Err(TaffyError::InvalidInputNode(node_id).into());
+          return Err(Error::InvalidLayoutNode(node_id.into()));
         };
         let layout = *layout_results.layout(node_id)?;
         current
@@ -491,7 +491,7 @@ fn collect_measure_result(
         let mut children = Vec::with_capacity(child_ids.len());
         for child_id in child_ids {
           let Some(child) = measured_by_node_id.remove(&usize::from(child_id)) else {
-            return Err(TaffyError::InvalidInputNode(child_id).into());
+            return Err(Error::InvalidLayoutNode(child_id.into()));
           };
           children.push(child);
         }
@@ -512,7 +512,7 @@ fn collect_measure_result(
 
   measured_by_node_id
     .remove(&usize::from(node_id))
-    .ok_or_else(|| TaffyError::InvalidInputNode(node_id).into())
+    .ok_or(Error::InvalidLayoutNode(node_id.into()))
 }
 
 fn create_measured_node(
@@ -690,7 +690,13 @@ pub(crate) fn render_node(
   transform: Affine,
   container_size: Size<Option<f32>>,
 ) -> Result<()> {
-  let contexts = build_stacking_contexts(node, layout_results, node_id, transform, container_size)?;
+  let contexts = build_stacking_contexts(
+    node,
+    layout_results,
+    node_id,
+    transform,
+    (container_size.width, container_size.height),
+  )?;
   paint_context(node, &contexts, layout_results, canvas, 0)
 }
 

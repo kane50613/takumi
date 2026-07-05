@@ -146,12 +146,10 @@ pub enum Error {
   /// Computing layout failed.
   #[error("Layout error: {0}")]
   Layout(String),
-}
 
-impl From<taffy::TaffyError> for Error {
-  fn from(err: taffy::TaffyError) -> Self {
-    Self::Layout(err.to_string())
-  }
+  /// The layout engine was asked for a node id it does not know.
+  #[error("invalid layout node id: {0}")]
+  InvalidLayoutNode(u64),
 }
 
 impl Error {

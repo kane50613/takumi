@@ -2,13 +2,12 @@
 
 <!-- cargo-rdme start -->
 
-Raster (tiny-skia) painting backend for takumi: canvas, drawing, filters, and
-the [`render`] entry point. Used via the `takumi` umbrella (`takumi::raster`) or
-directly.
+Raster painting backend for takumi, built on tiny-skia: canvas, drawing,
+filters, and the [`render`] entry point.
 
-Imports the `takumi-core` root privately so painting code resolves
-`crate::layout`, `crate::resources`, `crate::Result`, etc. against the shared
-core. Base types are _not_ re-exported from here; reach them through
-`takumi::unstable::base` (with the `unstable` feature) or `takumi_core` directly.
+Use it through the `takumi` umbrella. The render functions are re-exported at
+the umbrella's crate root, and the crate itself is `takumi::unstable::raster`.
+Core types are not re-exported here; reach them through `takumi_core` or
+`takumi::unstable::base`.
 
 <!-- cargo-rdme end -->

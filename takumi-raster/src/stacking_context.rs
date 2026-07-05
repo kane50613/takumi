@@ -1,4 +1,4 @@
-use taffy::{AvailableSpace, Layout, NodeId, Point, TaffyError, geometry::Size};
+use taffy::{AvailableSpace, Layout, Point, geometry::Size};
 use takumi_core::{
   geometry::transformed_rect_extents,
   scene::{NodePaint, PaintItem, PaintItemKind, SceneBounds, StackingContextNode},
@@ -6,8 +6,8 @@ use takumi_core::{
 use tiny_skia::{Pixmap, PixmapMut};
 
 use crate::{
-  BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, NodeMaskAction, Placement,
-  Result, SizedFontStyle, apply_backdrop_filter, apply_filters_to_pixmap, blend_pixel,
+  BlurType, BorderProperties, Canvas, CanvasSubcanvas, CanvasViewport, Error, NodeMaskAction,
+  Placement, Result, SizedFontStyle, apply_backdrop_filter, apply_filters_to_pixmap, blend_pixel,
   color_to_premultiplied, draw_background, draw_border, draw_debug_border, draw_inset_box_shadow,
   draw_node_content, draw_outline, draw_outset_box_shadow,
   inline_drawing::{draw_inline_box, draw_inline_layout},
@@ -282,7 +282,7 @@ fn begin_node_render(
   isolation_bounds_hint: Option<SceneBounds>,
 ) -> Result<Option<DeferredNodeRender>> {
   let Some(current) = root.node_at_path_mut(&node_paint.path) else {
-    return Err(TaffyError::InvalidInputNode(node_paint.node_id).into());
+    return Err(Error::InvalidLayoutNode(node_paint.node_id.into()));
   };
   let layout = *layout_results.layout(node_paint.node_id)?;
 
@@ -297,10 +297,10 @@ fn begin_node_render(
     return Ok(Some(DeferredNodeRender::SkipRendering));
   }
 
-  current.context.sizing.set_container_size(
-    node_paint.container_size.width,
-    node_paint.container_size.height,
-  );
+  current
+    .context
+    .sizing
+    .set_container_size(node_paint.container_size.0, node_paint.container_size.1);
   current.context.transform = node_paint.transform;
 
   if !current.context.style.backdrop_filter.is_empty() {
@@ -429,7 +429,7 @@ fn paint_single_node(
       filter_bounds,
     }) => {
       let Some(current) = root.node_at_path_mut(&path) else {
-        return Err(TaffyError::InvalidInputNode(node_paint.node_id).into());
+        return Err(Error::InvalidLayoutNode(node_paint.node_id.into()));
       };
       finish_node_render(
         current,
@@ -471,7 +471,7 @@ pub(crate) fn paint_context(
   context_id: usize,
 ) -> Result<()> {
   let Some(context) = contexts.get(context_id) else {
-    return Err(TaffyError::InvalidInputNode(NodeId::new(context_id as u64)).into());
+    return Err(Error::InvalidLayoutNode(context_id as u64));
   };
 
   if let Some(bounds) = context.paint_bounds()
@@ -513,7 +513,7 @@ pub(crate) fn paint_context(
       let node_id = context
         .root()
         .map_or(layout_results.root_node_id(), |node| node.node_id);
-      return Err(TaffyError::InvalidInputNode(node_id).into());
+      return Err(Error::InvalidLayoutNode(node_id.into()));
     };
     finish_node_render(
       current,

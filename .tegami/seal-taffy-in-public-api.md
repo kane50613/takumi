@@ -15,4 +15,6 @@ separate `width`/`height` (or `x`/`y`) `f32` params and return tuples instead of
 `ComputedStyle::to_taffy_style`/`creates_stacking_context`, `LineHeight::into_parley`,
 `Float::resolve`/`Clear::resolve` are now crate-private. Dropped the `From<image::RgbaImage>`
 impls for `ImageSource`/`ImageData`; convert through `ImageBuffer::from_rgba` instead.
-`style::fast_div_255`/`fast_div_255_u32` moved under `style::math`.
+`style::fast_div_255`/`fast_div_255_u32` moved under `style::math`. `NodePaint::container_size`
+and `build_stacking_contexts` take `(Option<f32>, Option<f32>)` tuples instead of `taffy::Size`,
+and the new `Error::InvalidLayoutNode` variant replaces the `From<taffy::TaffyError>` conversion.

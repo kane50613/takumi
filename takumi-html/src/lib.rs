@@ -2,6 +2,16 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 #![deny(missing_docs)]
 //! Parse HTML markup into a takumi [`Node`] tree.
+//!
+//! ```rust
+//! use takumi_core::layout::node::Node;
+//! use takumi_html::{FromHtml, FromHtmlOptions};
+//!
+//! # fn main() -> Result<(), takumi_html::HtmlError> {
+//! let node = Node::from_html("<div style=\"color:red\">Hi</div>", FromHtmlOptions::default())?;
+//! # Ok(())
+//! # }
+//! ```
 
 use std::{
   borrow::Cow,

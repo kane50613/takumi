@@ -5,12 +5,13 @@ use taffy::{
   AvailableSpace, BlockContext, Cache, CacheTree, Display as TaffyDisplay, Layout,
   LayoutBlockContainer, LayoutFlexboxContainer, LayoutGridContainer, LayoutInput, LayoutOutput,
   LayoutPartialTree, NodeId, RequestedAxis, RoundTree, RunMode, Size, SizingMode, Style,
-  TaffyError, TraversePartialTree, TraverseTree, compute_block_layout, compute_cached_layout,
+  TraversePartialTree, TraverseTree, compute_block_layout, compute_cached_layout,
   compute_flexbox_layout, compute_grid_layout, compute_hidden_layout, compute_leaf_layout,
   compute_root_layout, round_layout,
 };
 
 use crate::{
+  Error,
   context::RenderContext,
   font_style::SizedFontStyle,
   layout::{
@@ -61,35 +62,32 @@ impl LayoutResults {
   }
 
   /// Computed layout of a node.
-  pub fn layout(&self, node_id: NodeId) -> std::result::Result<&Layout, TaffyError> {
+  pub fn layout(&self, node_id: NodeId) -> crate::Result<&Layout> {
     let idx: usize = node_id.into();
     self
       .nodes
       .get(idx)
       .map(|node| &node.layout)
-      .ok_or(TaffyError::InvalidInputNode(node_id))
+      .ok_or(Error::InvalidLayoutNode(node_id.into()))
   }
 
   /// Paint-ordered children of a node.
-  pub fn box_children(&self, node_id: NodeId) -> std::result::Result<&[OrderedChild], TaffyError> {
+  pub fn box_children(&self, node_id: NodeId) -> crate::Result<&[OrderedChild]> {
     let idx: usize = node_id.into();
     self
       .nodes
       .get(idx)
       .map(|node| node.box_children.as_ref())
-      .ok_or(TaffyError::InvalidInputNode(node_id))
+      .ok_or(Error::InvalidLayoutNode(node_id.into()))
   }
 
-  pub(crate) fn first_baseline_y(
-    &self,
-    node_id: NodeId,
-  ) -> std::result::Result<Option<f32>, TaffyError> {
+  pub(crate) fn first_baseline_y(&self, node_id: NodeId) -> crate::Result<Option<f32>> {
     let idx: usize = node_id.into();
     self
       .nodes
       .get(idx)
       .map(|node| node.first_baseline_y)
-      .ok_or(TaffyError::InvalidInputNode(node_id))
+      .ok_or(Error::InvalidLayoutNode(node_id.into()))
   }
 }
 

@@ -1,7 +1,7 @@
 # @takumi-rs/wasm
 
-Takumi is a **image rendering engine** written in Rust and this package provides WebAssembly bindings.
+WebAssembly bindings for [Takumi](https://github.com/kane50613/takumi), a Rust image rendering engine.
 
-Please refer to the [Integration](https://takumi.kane.tw/docs/integration) page in our official documentation for more details.
+See the [Integration guide](https://takumi.kane.tw/docs/integration) for setup.
 
-If you are looking for Node.js bindings, take a look at the [@takumi-rs/core](https://npmjs.com/package/@takumi-rs/core) package.
+For Node.js, use [@takumi-rs/core](https://npmjs.com/package/@takumi-rs/core).

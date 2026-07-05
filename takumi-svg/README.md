@@ -4,17 +4,22 @@
 
 Vector SVG output for takumi.
 
-[`render`] turns a takumi node tree into real SVG (`<rect>`, `<path>`,
-`<linearGradient>`/`<radialGradient>`, `<filter>`, `<clipPath>`, glyph outline
-`<path>`s, embedded `<image>`) rather than wrapping a rasterized bitmap in a
-`data:` URL. The document is built with [`quick_xml`] so every attribute and
-value is correctly escaped.
+[`render`] turns a node tree into real SVG (`<rect>`, `<path>`,
+`<linearGradient>`/`<radialGradient>`, `<filter>`, `<clipPath>`, glyph-outline
+`<path>`s, embedded `<image>`) instead of wrapping a rasterized bitmap in a
+`data:` URL. [`quick_xml`] builds the document, so every attribute and value
+is escaped.
 
-Coverage: backgrounds, borders, border-radius (backgrounds/clip), linear and
-radial gradients (conic via a wedge-path approximation), box-shadow, text
-(glyph outlines, decorations, text-shadow, `-webkit-text-stroke`), bitmap/
-emoji glyphs and images, clip-path/overflow, opacity, filter and
-backdrop-filter (`<filter>` chains; the backdrop is the scene replayed up to
-the element), and affine transforms.
+Coverage:
+
+- Backgrounds, borders, border-radius (backgrounds and clip).
+- Linear and radial gradients; conic via a wedge-path approximation.
+- Box-shadow.
+- Text: glyph outlines, decorations, text-shadow, `-webkit-text-stroke`.
+- Bitmap and emoji glyphs, images.
+- Clip-path, overflow, opacity.
+- Filter and backdrop-filter (`<filter>` chains; the backdrop is the scene
+  replayed up to the element).
+- Affine transforms.
 
 <!-- cargo-rdme end -->

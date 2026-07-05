@@ -5,10 +5,10 @@
 use std::collections::HashMap;
 
 use parley::{InlineBoxKind, PositionedLayoutItem};
-use taffy::{AvailableSpace, Layout, NodeId, Point, TaffyError, geometry::Size};
+use taffy::{AvailableSpace, Layout, NodeId, Point, geometry::Size};
 
 use crate::{
-  error::Result,
+  error::{Error, Result},
   font_style::SizedFontStyle,
   geometry::transformed_rect_extents,
   layout::{
@@ -32,8 +32,8 @@ pub struct NodePaint {
   pub node_id: NodeId,
   /// Accumulated transform applied when painting.
   pub transform: Affine,
-  /// Size of the containing block, per axis.
-  pub container_size: Size<Option<f32>>,
+  /// Containing-block size as `(width, height)`; `None` on an axis is indefinite.
+  pub container_size: (Option<f32>, Option<f32>),
   /// Device-space bounds of the paint output, if any.
   pub paint_bounds: Option<SceneBounds>,
 }
@@ -177,7 +177,7 @@ struct StackingContextBuildVisit {
   path: Vec<usize>,
   node_id: NodeId,
   transform: Affine,
-  container_size: Size<Option<f32>>,
+  container_size: (Option<f32>, Option<f32>),
   context_id: usize,
   parent_display: Option<Display>,
   is_root: bool,
@@ -213,7 +213,7 @@ pub fn build_stacking_contexts(
   layout_results: &LayoutResults,
   node_id: NodeId,
   transform: Affine,
-  container_size: Size<Option<f32>>,
+  container_size: (Option<f32>, Option<f32>),
 ) -> Result<Vec<StackingContextNode>> {
   let mut contexts = vec![StackingContextNode::with_root(None)];
   let mut source_order = 0usize;
@@ -221,7 +221,7 @@ pub fn build_stacking_contexts(
   // not their box-tree parent. Memoize each node's transform and content box so
   // a hoisted child can use its CB's values as its base.
   let mut node_transforms: HashMap<NodeId, Affine> = HashMap::new();
-  let mut node_content_box: HashMap<NodeId, Size<Option<f32>>> = HashMap::new();
+  let mut node_content_box: HashMap<NodeId, (Option<f32>, Option<f32>)> = HashMap::new();
   let mut visits = vec![StackingContextBuildVisit {
     path: Vec::new(),
     node_id,
@@ -234,7 +234,7 @@ pub fn build_stacking_contexts(
 
   while let Some(visit) = visits.pop() {
     let Some(current) = root.node_at_path(&visit.path) else {
-      return Err(TaffyError::InvalidInputNode(visit.node_id).into());
+      return Err(Error::InvalidLayoutNode(visit.node_id.into()));
     };
     let layout = *layout_results.layout(visit.node_id)?;
     if current.context.style.is_invisible() {
@@ -318,10 +318,10 @@ pub fn build_stacking_contexts(
     }
 
     let layout_children = layout_results.box_children(visit.node_id)?;
-    let child_container_size = Size {
-      width: Some(layout.content_box_width()),
-      height: Some(layout.content_box_height()),
-    };
+    let child_container_size = (
+      Some(layout.content_box_width()),
+      Some(layout.content_box_height()),
+    );
     node_content_box.insert(visit.node_id, child_container_size);
 
     for child in layout_children.iter().rev() {

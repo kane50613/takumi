@@ -2,7 +2,7 @@
 packages:
   npm:@takumi-rs/helpers:
     replay:
-      - "exit prerelease: npm:@takumi-rs/helpers"
+      - exit-prerelease(npm:@takumi-rs/helpers)
 ---
 
 ### Add `baseUrl` to `googleFonts`

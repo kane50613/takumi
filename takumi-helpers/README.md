@@ -2,7 +2,7 @@
 
 **Utility functions and types for working with Takumi node trees.**
 
-This package provides the core logic for converting JSX and HTML into the layout-ready node trees that Takumi's Rust engine expects. It also loads fonts and processes emoji.
+Convert JSX and HTML into the node trees Takumi's Rust engine renders. Load fonts and process emoji.
 
 [Documentation](https://takumi.kane.tw/docs/architecture#fromjsx-helper) · [GitHub](https://github.com/kane50613/takumi)
 
