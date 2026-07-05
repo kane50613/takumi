@@ -36,7 +36,7 @@ features = ["aarch64_simd", "avx512_simd"]
 
 [dependencies.takumi-core]
 path = "../takumi-core"
-version = "0.1.0-rc.4"
+version = "0.1.0-rc.5"
 default-features = false
 
 [dependencies.serde]
