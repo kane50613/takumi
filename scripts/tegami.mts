@@ -46,12 +46,18 @@ const groupedNpmPackages = [
   "@takumi-rs/image-response",
 ];
 
+const independentCrates = ["takumi-core", "takumi-raster", "takumi-svg", "takumi-html"];
+
 const packages: Record<string, PackageOptions<"takumi">> = {
   "cargo:takumi": { group: "takumi" },
 };
 
 for (const name of groupedNpmPackages) {
   packages[`npm:${name}`] = { group: "takumi" };
+}
+
+for (const name of independentCrates) {
+  packages[`cargo:${name}`] = { prerelease };
 }
 
 // Skip versionless dependents (private examples, docs, templates); only real
