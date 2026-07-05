@@ -460,6 +460,7 @@ where
 
 /// Output format and per-format options for [`write_animation`].
 #[non_exhaustive]
+#[derive(Debug, Clone, Copy)]
 pub enum AnimationFormat {
   /// Animated WebP.
   WebP(AnimatedWebpOptions),
@@ -472,8 +473,15 @@ pub enum AnimationFormat {
 /// Renders a timeline at `fps` and streams each frame straight into `format`,
 /// holding one raw frame at a time instead of the whole animation.
 ///
-/// The eager alternative — [`render_animation`](crate::render_animation) followed
-/// by a `write_animated_*` call — keeps every frame in memory at once.
+/// Every scene must render to the same frame size. `write_animation` encodes each
+/// frame as it renders it, so it cannot reject mismatched sizes up front: a
+/// timeline whose scenes use different viewports may write partial GIF or APNG
+/// output before failing with
+/// [`MixedAnimationFrameDimensions`](Error::MixedAnimationFrameDimensions).
+///
+/// [`render_animation`](crate::render_animation) plus a `write_animated_*` call is
+/// the eager alternative. It holds every frame at once but rejects mismatched
+/// dimensions before writing.
 pub fn write_animation<W: Write>(
   scenes: &[SequentialScene<'_>],
   fps: u32,

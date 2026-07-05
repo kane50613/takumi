@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap, mem::take, sync::Arc};
+use std::{collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
 use takumi_core::{
@@ -6,12 +6,12 @@ use takumi_core::{
   viewport::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
 };
 use takumi_raster::{
-  AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, RenderOptions, SequentialScene,
-  render_animation, write_animated_gif, write_animated_png, write_animated_webp,
+  AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFormat, RenderOptions,
+  SequentialScene, write_animation,
 };
 
 use crate::{
-  buffer_from_object, deserialize_with_tracing, map_error, parse_stylesheet,
+  buffer_from_object, deserialize_with_tracing, parse_stylesheet,
   renderer::{
     AnimationOutputFormat, ImageCacheMode, ImageSource, RenderAnimationOptions, RendererState,
     decode_images, webp_lossless,
@@ -138,34 +138,22 @@ impl Task for RenderAnimationTask {
             .build()
         })
         .collect::<Vec<_>>();
-      let frames = render_animation(&scene_options, self.fps).map_err(map_error)?;
-
-      let mut buffer = Vec::new();
-
-      match self.format {
+      let format = match self.format {
         AnimationOutputFormat::WebP => {
           let mut options = AnimatedWebpOptions::default();
           options.lossless = webp_lossless(self.quality, self.lossless);
           if let Some(quality) = self.quality {
             options.quality = quality;
           }
+          AnimationFormat::WebP(options)
+        }
+        AnimationOutputFormat::Apng => AnimationFormat::Apng(AnimatedPngOptions::default()),
+        AnimationOutputFormat::Gif => AnimationFormat::Gif(AnimatedGifOptions::default()),
+      };
 
-          write_animated_webp(Cow::Owned(frames), &mut buffer, options)
-            .map_err(|e| Error::from_reason(e.to_string()))?;
-        }
-        AnimationOutputFormat::Apng => {
-          write_animated_png(&frames, &mut buffer, AnimatedPngOptions::default())
-            .map_err(|e| Error::from_reason(e.to_string()))?;
-        }
-        AnimationOutputFormat::Gif => {
-          write_animated_gif(
-            Cow::Owned(frames),
-            &mut buffer,
-            AnimatedGifOptions::default(),
-          )
-          .map_err(|e| Error::from_reason(e.to_string()))?;
-        }
-      }
+      let mut buffer = Vec::new();
+      write_animation(&scene_options, self.fps, format, &mut buffer)
+        .map_err(|e| Error::from_reason(e.to_string()))?;
 
       Ok(buffer)
     })

@@ -9,7 +9,7 @@ use crate::{
   Result,
   error::{Error, WebPError},
   webp::U24_MAX,
-  write::{AnimatedWebpOptions, AnimationFrame, Quality},
+  write::{AnimatedWebpOptions, AnimationFrame, Bitmap, Quality},
 };
 
 fn webp_config(lossless: bool, quality: u8, speed: u8) -> Result<WebPConfig> {
@@ -366,9 +366,9 @@ fn encode_frames(
     .collect()
 }
 
-/// Streams frames into an animated WebP, encoding each as it arrives so only one
-/// raw frame is held at a time. Bytes match [`write_animated_webp`] for the same
-/// frames; frames encode sequentially rather than in parallel.
+/// Streams frames into an animated WebP a bounded chunk at a time, so peak
+/// raw-pixel memory stays fixed while each chunk still encodes in parallel.
+/// Produces the same bytes as [`write_animated_webp`] for the same frames.
 pub(crate) fn encode_animated_webp<W, I>(
   mut frames: I,
   destination: &mut W,
@@ -398,7 +398,11 @@ where
   let speed = options.speed.unwrap_or(1).clamp(0, 6);
   let config = webp_config(options.lossless, options.quality, speed)?;
 
+  // Buffer unique frames a chunk at a time and encode each chunk in parallel, so
+  // peak raw-pixel memory stays bounded while frames still encode concurrently.
+  let chunk_capacity = frames_per_chunk(frame_width, frame_height);
   let mut encoded = Vec::new();
+  let mut chunk: Vec<(Bitmap, u32)> = Vec::new();
   let mut pending_image = first.image;
   let mut pending_duration_ms = first.duration_ms.clamp(0, U24_MAX);
 
@@ -411,19 +415,15 @@ where
       pending_duration_ms = pending_duration_ms.saturating_add(frame.duration_ms.clamp(0, U24_MAX));
       continue;
     }
-    encoded.push(encode_single_frame(
-      pending_image.as_rgba(),
-      pending_duration_ms,
-      &config,
-    )?);
+    chunk.push((pending_image, pending_duration_ms));
+    if chunk.len() >= chunk_capacity {
+      encode_frame_chunk(&mut chunk, &config, &mut encoded)?;
+    }
     pending_image = frame.image;
     pending_duration_ms = frame.duration_ms.clamp(0, U24_MAX);
   }
-  encoded.push(encode_single_frame(
-    pending_image.as_rgba(),
-    pending_duration_ms,
-    &config,
-  )?);
+  chunk.push((pending_image, pending_duration_ms));
+  encode_frame_chunk(&mut chunk, &config, &mut encoded)?;
 
   write_riff_container(
     destination,
@@ -434,6 +434,41 @@ where
     options.dispose,
     &encoded,
   )
+}
+
+/// Frames to buffer per parallel encode pass. Sized so the buffered raw pixels
+/// stay near a fixed budget whatever the frame dimensions, with at least one
+/// frame per pass.
+fn frames_per_chunk(width: u32, height: u32) -> usize {
+  const CHUNK_MEMORY_BUDGET: usize = 64 * 1024 * 1024;
+  let frame_bytes = (width as usize)
+    .saturating_mul(height as usize)
+    .saturating_mul(4)
+    .max(1);
+  (CHUNK_MEMORY_BUDGET / frame_bytes).max(1)
+}
+
+/// Encodes a chunk of unique frames (in parallel when `rayon` is enabled), appends
+/// the results in order, and frees the raw frames.
+fn encode_frame_chunk(
+  chunk: &mut Vec<(Bitmap, u32)>,
+  config: &WebPConfig,
+  encoded: &mut Vec<EncodedFrame>,
+) -> Result<()> {
+  #[cfg(feature = "rayon")]
+  let batch = chunk
+    .par_iter()
+    .map(|(image, duration_ms)| encode_single_frame(image.as_rgba(), *duration_ms, config))
+    .collect::<Result<Vec<_>>>()?;
+  #[cfg(not(feature = "rayon"))]
+  let batch = chunk
+    .iter()
+    .map(|(image, duration_ms)| encode_single_frame(image.as_rgba(), *duration_ms, config))
+    .collect::<Result<Vec<_>>>()?;
+
+  encoded.extend(batch);
+  chunk.clear();
+  Ok(())
 }
 
 /// Encodes a sequence of RGBA frames into an animated WebP.
