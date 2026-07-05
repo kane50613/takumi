@@ -184,6 +184,7 @@ pub struct AnimatedWebpOptions {
   /// Encode losslessly. When `true`, `quality` is ignored.
   pub lossless: bool,
   /// Quality in range `0..=100` for lossy encoding; ignored when `lossless`.
+  #[builder(default = 75)]
   pub quality: u8,
   /// Encoding speed in range `0..=6`; `0` is fastest (lowest compression), `6` is
   /// slowest (best compression). `None` uses the default speed of `1`.

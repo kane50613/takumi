@@ -140,11 +140,10 @@ impl Task for RenderAnimationTask {
         .collect::<Vec<_>>();
       let format = match self.format {
         AnimationOutputFormat::WebP => {
-          let mut options = AnimatedWebpOptions::default();
-          options.lossless = webp_lossless(self.quality, self.lossless);
-          if let Some(quality) = self.quality {
-            options.quality = quality;
-          }
+          let options = AnimatedWebpOptions::builder()
+            .lossless(webp_lossless(self.quality, self.lossless))
+            .quality(self.quality.unwrap_or(75))
+            .build();
           AnimationFormat::WebP(options)
         }
         AnimationOutputFormat::Apng => AnimationFormat::Apng(AnimatedPngOptions::default()),
