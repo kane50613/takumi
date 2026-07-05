@@ -68,7 +68,7 @@ impl LayoutResults {
       .nodes
       .get(idx)
       .map(|node| &node.layout)
-      .ok_or_else(|| Error::InvalidLayoutNode(node_id.into()))
+      .ok_or(Error::InvalidLayoutNode(node_id.into()))
   }
 
   /// Paint-ordered children of a node.
@@ -78,7 +78,7 @@ impl LayoutResults {
       .nodes
       .get(idx)
       .map(|node| node.box_children.as_ref())
-      .ok_or_else(|| Error::InvalidLayoutNode(node_id.into()))
+      .ok_or(Error::InvalidLayoutNode(node_id.into()))
   }
 
   pub(crate) fn first_baseline_y(&self, node_id: NodeId) -> crate::Result<Option<f32>> {
@@ -87,7 +87,7 @@ impl LayoutResults {
       .nodes
       .get(idx)
       .map(|node| node.first_baseline_y)
-      .ok_or_else(|| Error::InvalidLayoutNode(node_id.into()))
+      .ok_or(Error::InvalidLayoutNode(node_id.into()))
   }
 }
 

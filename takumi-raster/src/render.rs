@@ -512,7 +512,7 @@ fn collect_measure_result(
 
   measured_by_node_id
     .remove(&usize::from(node_id))
-    .ok_or_else(|| Error::InvalidLayoutNode(node_id.into()))
+    .ok_or(Error::InvalidLayoutNode(node_id.into()))
 }
 
 fn create_measured_node(
