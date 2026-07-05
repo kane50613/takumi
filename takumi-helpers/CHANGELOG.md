@@ -1,3 +1,13 @@
+## @takumi-rs/helpers@2.0.0-rc.7 (rc)
+
+### Shrink and sharpen the Google Fonts family type
+
+Group the ~1940 families by their distinct weight/style/axis shape (152 of them) so
+`GoogleFontFamily` builds a discriminated union over shapes, not families. The shipped
+`.d.ts` drops from ~192 KB to ~58 KB and the checker does ~75% fewer instantiations. The
+object form now autocompletes each known family's weight, style, and axes, and still accepts
+a name built at runtime. The generator refuses to write a catalog with under 1000 families.
+
 ## @takumi-rs/helpers@2.0.0-rc.6 (rc)
 
 ### Add the `@takumi-rs/helpers/renderer` entrypoint

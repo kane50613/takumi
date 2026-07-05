@@ -1,6 +1,8 @@
 ---
 packages:
-  npm:@takumi-rs/helpers: minor
+  npm:@takumi-rs/helpers:
+    replay:
+      - exit-prerelease(npm:@takumi-rs/helpers)
 ---
 
 ### Shrink and sharpen the Google Fonts family type
