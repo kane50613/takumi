@@ -26,12 +26,13 @@ export { render, renderAnimation, renderSvg } from "./render";
 
 export type {
   AnimationScene,
-  ImagesInput,
+  ManagedImagesInput,
   RenderAnimationOptions,
   RenderInput,
   RenderOptions,
   RenderSvgOptions,
 } from "./render";
+export type { ImagesInput } from "@takumi-rs/helpers/renderer";
 
 declare module "react" {
   interface DOMAttributes<T> {

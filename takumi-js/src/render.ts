@@ -13,9 +13,10 @@ type ImageLoader = napi.ImageLoader | wasm.ImageLoader;
 
 /**
  * Images for a render: pre-fetched entries, or a group that also controls how remote images
- * (and emoji glyphs) are fetched and cached.
+ * (and emoji glyphs) are fetched and cached. The fetch-aware superset of
+ * {@link ImagesInput} from `@takumi-rs/helpers`.
  */
-export type ImagesInput =
+export type ManagedImagesInput =
   | ImageLoader[]
   | (FetchOptions & {
       /** Pre-fetched entries, same as the array form. */
@@ -31,7 +32,7 @@ type SharedRenderExtras = {
   renderer: Renderer;
   signal?: AbortSignal;
   jsx?: FromJsxOptions;
-  images?: ImagesInput;
+  images?: ManagedImagesInput;
   /**
    * @description The emoji provider to use when rendering emojis. If set to `"from-font"`, the renderer will attempt to source emoji glyphs from the loaded fonts.
    * @default "twemoji"
