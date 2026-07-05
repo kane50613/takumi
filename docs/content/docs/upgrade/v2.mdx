@@ -10,7 +10,7 @@ v2 makes fonts and images explicit per-render resources and tightens rendering t
 Most v2 breakages surface as type or compile errors, so a coding agent can do the bulk of the work. Bump the packages you use:
 
 ```npm
-npm install takumi-js@rc @takumi-rs/core@beta @takumi-rs/wasm@beta
+npm install takumi-js @takumi-rs/core @takumi-rs/wasm
 ```
 
 Then paste the prompt below. Apply only the lines for packages you import, then run the type checker (`cargo check` for Rust) and fix the rest.

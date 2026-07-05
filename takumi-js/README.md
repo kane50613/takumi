@@ -48,12 +48,12 @@ await writeFile("./output.png", image);
 
 ## Runtime detection
 
-`takumi-js` automatically selects the best backend:
+`takumi-js` selects the backend for the runtime:
 
 - **Node.js** → native `@takumi-rs/core` (napi-rs)
 - **Next.js Edge / Cloudflare Workers / browsers** → `@takumi-rs/wasm`
 
-You can override this by passing a `module` option to `render()` or using `takumi-js/wasm` directly.
+Override it with a `module` option on `render()`, or import `takumi-js/wasm` directly.
 
 ## Examples
 
