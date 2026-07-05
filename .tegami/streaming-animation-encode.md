@@ -1,8 +1,5 @@
 ---
 packages:
-  cargo:takumi-raster:
-    replay:
-      - exit-prerelease(cargo:takumi-raster)
   cargo:takumi:
     replay:
       - exit-prerelease(cargo:takumi)

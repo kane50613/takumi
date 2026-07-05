@@ -1,8 +1,5 @@
 ---
 packages:
-  cargo:takumi-html:
-    replay:
-      - exit-prerelease(cargo:takumi-html)
   cargo:takumi:
     replay:
       - exit-prerelease(cargo:takumi)
