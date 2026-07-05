@@ -471,6 +471,25 @@ pub enum AnimationFormat {
   Gif(AnimatedGifOptions),
 }
 
+impl AnimationFormat {
+  /// Shortest per-frame duration, in milliseconds, the format encodes without
+  /// decoders clamping it. Browsers bump any frame of 10ms or less to 100ms; GIF
+  /// stores delays in centiseconds, so its shortest honored step is 20ms.
+  const fn min_frame_duration_ms(self) -> u32 {
+    match self {
+      AnimationFormat::Gif(_) => 20,
+      AnimationFormat::WebP(_) | AnimationFormat::Apng(_) => 11,
+    }
+  }
+
+  /// Highest frame rate this format encodes faithfully. Above it, per-frame
+  /// durations fall to or below [`min_frame_duration_ms`](Self::min_frame_duration_ms)
+  /// and decoders clamp them to 100ms, stalling playback.
+  pub const fn max_fps(self) -> u32 {
+    1000 / self.min_frame_duration_ms()
+  }
+}
+
 /// Renders a timeline at `fps` and streams each frame straight into `format`,
 /// holding one raw frame at a time instead of the whole animation.
 ///
@@ -479,6 +498,11 @@ pub enum AnimationFormat {
 /// timeline whose scenes use different viewports may write partial GIF or APNG
 /// output before failing with
 /// [`MixedAnimationFrameDimensions`](Error::MixedAnimationFrameDimensions).
+///
+/// `fps` must not exceed [`AnimationFormat::max_fps`]. Above that ceiling frames
+/// fall to a duration decoders clamp to 100ms, so `write_animation` rejects it
+/// with [`AnimationFrameRateTooHigh`](Error::AnimationFrameRateTooHigh) before
+/// rendering anything.
 ///
 /// [`render_animation`](crate::render_animation) plus a `write_animated_*` call is
 /// the eager alternative. It holds every frame at once but rejects mismatched
@@ -489,6 +513,11 @@ pub fn write_animation<W: Write>(
   format: AnimationFormat,
   destination: &mut W,
 ) -> Result<()> {
+  let max_fps = format.max_fps();
+  if fps > max_fps {
+    return Err(Error::AnimationFrameRateTooHigh { fps, max_fps });
+  }
+
   let spans = frame_spans(scenes, fps);
   if spans.is_empty() {
     return Err(Error::EmptyAnimationFrames);

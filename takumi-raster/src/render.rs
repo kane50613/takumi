@@ -857,6 +857,55 @@ mod tests {
   }
 
   #[test]
+  fn write_animation_rejects_frame_rate_above_format_cap() {
+    use crate::{AnimatedGifOptions, AnimatedWebpOptions, AnimationFormat, Error, write_animation};
+
+    let fonts = Fonts::default();
+    let scenes = vec![make_scene(&fonts, 100)];
+
+    let mut sink = Vec::new();
+    let over_webp = write_animation(
+      &scenes,
+      91,
+      AnimationFormat::WebP(AnimatedWebpOptions::default()),
+      &mut sink,
+    );
+    assert!(matches!(
+      over_webp,
+      Err(Error::AnimationFrameRateTooHigh {
+        fps: 91,
+        max_fps: 90
+      })
+    ));
+    assert!(sink.is_empty(), "cap must reject before writing bytes");
+
+    let mut sink = Vec::new();
+    let over_gif = write_animation(
+      &scenes,
+      51,
+      AnimationFormat::Gif(AnimatedGifOptions::default()),
+      &mut sink,
+    );
+    assert!(matches!(
+      over_gif,
+      Err(Error::AnimationFrameRateTooHigh {
+        fps: 51,
+        max_fps: 50
+      })
+    ));
+
+    let mut sink = Vec::new();
+    let at_cap = write_animation(
+      &scenes,
+      90,
+      AnimationFormat::WebP(AnimatedWebpOptions::default()),
+      &mut sink,
+    );
+    assert!(at_cap.is_ok());
+    assert!(!sink.is_empty());
+  }
+
+  #[test]
   fn render_sequence_animation_uses_per_frame_integer_durations() {
     let fonts = Fonts::default();
     let scenes = vec![make_scene(&fonts, 150)];

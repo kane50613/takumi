@@ -124,6 +124,17 @@ pub enum Error {
   #[error("Animation must contain at least one frame")]
   EmptyAnimationFrames,
 
+  /// The requested frame rate is too high for the target format. Above this
+  /// ceiling some frames fall to or below the shortest duration decoders honor,
+  /// so browsers clamp them to 100ms and playback stalls.
+  #[error("Frame rate {fps} fps exceeds the maximum {max_fps} fps for this animation format")]
+  AnimationFrameRateTooHigh {
+    /// The requested frame rate.
+    fps: u32,
+    /// The highest frame rate the format encodes without decoder clamping.
+    max_fps: u32,
+  },
+
   /// Animated frames for a given format did not all share the same dimensions.
   #[error("Animation frames must share the same dimensions")]
   MixedAnimationFrameDimensions,
