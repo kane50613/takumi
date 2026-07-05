@@ -28,7 +28,7 @@ type KnownGoogleFontFamily = {
 type GoogleFontFamilyObject =
   | KnownGoogleFontFamily
   | {
-      name: string;
+      name: string & {};
       weight?: number | number[] | WeightRange;
       style?: FontStyle | FontStyle[];
       axes?: Record<string, AxisValue>;
