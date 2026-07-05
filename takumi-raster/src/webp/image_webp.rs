@@ -7,7 +7,7 @@ use crate::{
   Result,
   error::{Error, WebPError},
   webp::{U24_MAX, has_any_alpha_pixel, strip_alpha_channel},
-  write::{AnimatedWebpOptions, AnimationFrame},
+  write::{AnimatedWebpOptions, AnimationFrame, Bitmap},
 };
 
 const RIFF_HEADER_SIZE: usize = 12;
@@ -190,9 +190,9 @@ where
   validate_u24_dimension("WebP canvas width", canvas_width)?;
   validate_u24_dimension("WebP canvas height", canvas_height)?;
 
-  let encode_frame = |frame: AnimationFrame, index: usize| -> Result<EncodedAnmf> {
-    let width = frame.image.width();
-    let height = frame.image.height();
+  let validate_frame = |image: &Bitmap, index: usize| -> Result<()> {
+    let width = image.width();
+    let height = image.height();
     validate_u24_dimension("WebP frame width", width)?;
     validate_u24_dimension("WebP frame height", height)?;
     if width > canvas_width || height > canvas_height {
@@ -207,28 +207,51 @@ where
         .into(),
       );
     }
+    Ok(())
+  };
 
+  let encode_frame = |image: &Bitmap, duration_ms: u32| -> Result<EncodedAnmf> {
     let mut buf = Vec::new();
     let mut encoder = WebPEncoder::new(&mut buf);
     let mut params = EncoderParams::default();
     params.use_predictor_transform = true;
     encoder.set_params(params);
     encoder
-      .encode(frame.image.as_raw(), width, height, ColorType::Rgba8)
+      .encode(
+        image.as_raw(),
+        image.width(),
+        image.height(),
+        ColorType::Rgba8,
+      )
       .map_err(|_| WebPError::EncodeFailed)?;
 
     Ok(EncodedAnmf {
-      width,
-      height,
-      duration_ms: frame.duration_ms,
+      width: image.width(),
+      height: image.height(),
+      duration_ms,
       vp8: buf,
     })
   };
 
-  let mut anmfs = vec![encode_frame(first, 0)?];
-  for (index, frame) in frames.enumerate() {
-    anmfs.push(encode_frame(frame?, index + 1)?);
+  // Merge runs of identical frames, matching the native encoder, so a static
+  // stretch encodes and stores once.
+  validate_frame(&first.image, 0)?;
+  let mut anmfs = Vec::new();
+  let mut pending_image = first.image;
+  let mut pending_duration_ms = first.duration_ms.clamp(0, U24_MAX);
+
+  for (offset, frame) in frames.enumerate() {
+    let frame = frame?;
+    validate_frame(&frame.image, offset + 1)?;
+    if frame.image.as_raw() == pending_image.as_raw() {
+      pending_duration_ms = pending_duration_ms.saturating_add(frame.duration_ms.clamp(0, U24_MAX));
+      continue;
+    }
+    anmfs.push(encode_frame(&pending_image, pending_duration_ms)?);
+    pending_image = frame.image;
+    pending_duration_ms = frame.duration_ms.clamp(0, U24_MAX);
   }
+  anmfs.push(encode_frame(&pending_image, pending_duration_ms)?);
 
   let riff_size = estimate_riff_size(anmfs.iter().map(|anmf| anmf.vp8.as_slice()))?;
 
