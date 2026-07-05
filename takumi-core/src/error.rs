@@ -148,7 +148,7 @@ pub enum Error {
   Layout(String),
 
   /// The layout engine was asked for a node id it does not know.
-  #[error("invalid layout node id: {0}")]
+  #[error("Invalid layout node id: {0}")]
   InvalidLayoutNode(u64),
 }
 
