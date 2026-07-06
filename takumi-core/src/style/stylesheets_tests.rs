@@ -1,7 +1,6 @@
 use std::{collections::HashMap, rc::Rc, str::FromStr};
 
 use cssparser::{Parser, ParserInput};
-use parley::FontFeature;
 use serde_json::{from_value, json};
 
 use super::{

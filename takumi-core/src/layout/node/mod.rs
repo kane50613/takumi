@@ -4,7 +4,6 @@ mod text;
 
 use std::{collections::BTreeMap, sync::Arc};
 
-use parley::Language;
 use serde::Deserialize;
 
 pub use self::image::resolve_image;
@@ -25,7 +24,7 @@ use crate::{
     image::{ImageResult, ImageSource},
     image_buffer::ImageBuffer,
   },
-  style::{Direction, Style, StyleDeclaration, ToCss, tw::TailwindValues},
+  style::{Direction, Lang, Style, StyleDeclaration, ToCss, tw::TailwindValues},
   viewport::Viewport,
 };
 
@@ -522,11 +521,7 @@ impl Node {
       author_tw: self.metadata.tw.take(),
       inline: self.metadata.style.take(),
       dir: self.metadata.dir.take(),
-      lang: self
-        .metadata
-        .lang
-        .take()
-        .map(|tag| Language::parse(&tag).ok()),
+      lang: self.metadata.lang.take().map(|tag| Lang::parse(&tag)),
     }
   }
 
@@ -643,7 +638,7 @@ pub(crate) struct NodeStyleLayers {
   /// Resolved `lang` attribute, applied to the computed style after inheritance.
   /// `None` means absent (inherit the parent). `Some(None)` means present but empty
   /// or invalid, which per HTML clears the language to unknown.
-  pub(crate) lang: Option<Option<Language>>,
+  pub(crate) lang: Option<Option<Lang>>,
 }
 
 impl MatchableNode for Node {

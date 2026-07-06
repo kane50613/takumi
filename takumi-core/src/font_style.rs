@@ -15,7 +15,7 @@ use crate::{
   layout::inline::InlineBrush,
   shadow::SizedShadow,
   style::{
-    BorderStyle, Color, ComputedStyle, Display, FontFamily, FontSynthesis, Length,
+    BorderStyle, Color, ComputedStyle, Display, FontFamily, FontSynthesis, Lang, Length,
     SizedTextDecorationThickness, SizingContext, WordBreak,
   },
 };
@@ -119,12 +119,24 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
     TextStyle {
       font_size: style.sizing.font_size,
       line_height: style.line_height,
-      font_weight: style.parent.font_weight.into(),
-      font_style: style.parent.font_style.into(),
-      font_variations: FontVariations::List(Cow::Borrowed(
-        style.parent.font_variation_settings.as_ref(),
+      font_weight: style.parent.font_weight.into_parlance(),
+      font_style: style.parent.font_style.into_parlance(),
+      font_variations: FontVariations::List(Cow::Owned(
+        style
+          .parent
+          .font_variation_settings
+          .iter()
+          .map(|variation| variation.into_parlance())
+          .collect(),
       )),
-      font_features: FontFeatures::List(style.parent.resolved_font_features()),
+      font_features: FontFeatures::List(Cow::Owned(
+        style
+          .parent
+          .resolved_font_features()
+          .iter()
+          .map(|feature| feature.into_parlance())
+          .collect(),
+      )),
       font_family: style.font_family.to_parley(),
       letter_spacing: style.letter_spacing,
       word_spacing: style.word_spacing,
@@ -159,9 +171,9 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
         vertical_align: style.parent.vertical_align,
       },
       text_wrap_mode: style.parent.resolved_text_wrap_mode().into_parley(),
-      font_width: style.parent.font_stretch.into(),
+      font_width: style.parent.font_stretch.into_parlance(),
 
-      locale: style.parent.lang,
+      locale: style.parent.lang.as_ref().map(Lang::to_parlance),
       has_underline: false,
       underline_offset: None,
       underline_size: None,

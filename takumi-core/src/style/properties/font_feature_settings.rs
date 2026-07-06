@@ -1,11 +1,47 @@
 use std::fmt;
 
 use cssparser::{Parser, Token};
-use parley::{FontFeature, setting::Tag};
 
 use crate::style::{
   CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, unexpected_token,
 };
+
+/// A 4-byte OpenType tag (for example `wght`, `liga`).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct Tag([u8; 4]);
+
+impl Tag {
+  /// Creates a tag from a 4-byte array.
+  pub const fn new(bytes: &[u8; 4]) -> Self {
+    Self(*bytes)
+  }
+
+  /// Returns this tag as 4 bytes.
+  pub const fn to_bytes(self) -> [u8; 4] {
+    self.0
+  }
+
+  /// Parses a tag from a 4-character ASCII string, matching the OpenType tag grammar
+  /// (printable ASCII or space in every position).
+  fn parse(s: &str) -> Option<Self> {
+    let bytes = s.as_bytes();
+    if bytes.len() != 4 || !bytes.iter().all(|b| b.is_ascii_graphic() || *b == b' ') {
+      return None;
+    }
+    Some(Self([bytes[0], bytes[1], bytes[2], bytes[3]]))
+  }
+
+  pub(crate) fn into_parlance(self) -> parley::setting::Tag {
+    parley::setting::Tag::from_bytes(self.0)
+  }
+}
+
+impl fmt::Display for Tag {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let s = std::str::from_utf8(&self.0).unwrap_or("????");
+    f.write_str(s)
+  }
+}
 
 pub(crate) fn parse_opentype_tag<'i, T: FromCss<'i>>(
   input: &mut Parser<'i, '_>,
@@ -21,6 +57,29 @@ pub(crate) fn parse_opentype_tag<'i, T: FromCss<'i>>(
   }
   Tag::parse(tag_name)
     .ok_or_else(|| unexpected_token!(T, location, &Token::QuotedString(tag_name.clone())))
+}
+
+/// An OpenType font feature setting (tag + value) from CSS `font-feature-settings`.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct FontFeature {
+  /// The OpenType tag for this setting.
+  pub tag: Tag,
+  /// The feature value.
+  pub value: u16,
+}
+
+impl FontFeature {
+  /// Creates a new feature setting.
+  pub const fn new(tag: Tag, value: u16) -> Self {
+    Self { tag, value }
+  }
+
+  pub(crate) fn into_parlance(self) -> parley::FontFeature {
+    parley::FontFeature {
+      tag: self.tag.into_parlance(),
+      value: self.value,
+    }
+  }
 }
 
 /// Controls OpenType font features via CSS font-feature-settings property.
@@ -70,7 +129,7 @@ impl<'i> FromCss<'i> for FontFeatureSettings {
   ];
 }
 
-impl ToCss for parley::FontFeature {
+impl ToCss for FontFeature {
   // An empty `font-feature-settings` list is the keyword `normal`.
   const EMPTY_LIST_KEYWORD: Option<&'static str> = Some("normal");
 

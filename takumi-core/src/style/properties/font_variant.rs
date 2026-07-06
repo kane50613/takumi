@@ -1,10 +1,10 @@
 use std::fmt;
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
-use parley::{FontFeature, setting::Tag};
 
 use crate::style::{
-  Animatable, CssToken, FromCss, MakeComputed, ParseResult, ToCss, unexpected_token,
+  Animatable, CssToken, FontFeature, FromCss, MakeComputed, ParseResult, Tag, ToCss,
+  unexpected_token,
 };
 
 /// Tri-state for one `font-variant-ligatures` group.

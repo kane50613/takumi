@@ -941,7 +941,7 @@ impl Fonts {
         self
           .inner
           .collection
-          .append_generic_families(generic_family.into(), once(family));
+          .append_generic_families(generic_family.into_parlance(), once(family));
       }
     }
 
@@ -1076,11 +1076,9 @@ impl GenericFamily {
   pub const MATH: Self = Self(ParleyGenericFamily::Math);
   /// `fangsong`
   pub const FANG_SONG: Self = Self(ParleyGenericFamily::FangSong);
-}
 
-impl From<GenericFamily> for ParleyGenericFamily {
-  fn from(value: GenericFamily) -> Self {
-    value.0
+  pub(crate) fn into_parlance(self) -> ParleyGenericFamily {
+    self.0
   }
 }
 
@@ -1120,7 +1118,7 @@ impl FontOverride {
     FontInfoOverride {
       family_name: self.family_name.as_deref(),
       width: self.width.map(FontWidth::from_percentage),
-      style: self.style.map(Into::into),
+      style: self.style.map(CssFontStyle::into_parlance),
       weight: self.weight.map(FontWeight::new),
       axes: (!axes.is_empty()).then_some(axes),
     }

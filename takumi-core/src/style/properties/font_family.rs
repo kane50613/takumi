@@ -1,7 +1,7 @@
 use std::{fmt, string::ToString};
 
 use cssparser::{Parser, match_ignore_ascii_case};
-use parley::{FontFamily as ParleyFontFamily, FontFamilyName, GenericFamily};
+use parley::{FontFamilyName, GenericFamily};
 
 use crate::style::{
   CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, properties::write_css_string,
@@ -45,6 +45,10 @@ impl FontFamily {
       FontFamilyToken::Generic(generic) => FontFamilyName::Generic(*generic),
     })
   }
+
+  pub(crate) fn from_parlance_generic(generic: GenericFamily) -> Self {
+    Self(Box::new([FontFamilyToken::Generic(generic)]))
+  }
 }
 
 impl<'i> FromCss<'i> for FontFamilyToken {
@@ -86,9 +90,9 @@ impl<'i> FromCss<'i> for FontFamily {
 impl TailwindPropertyParser for FontFamily {
   fn parse_tw(token: &str) -> Option<Self> {
     match_ignore_ascii_case! {token,
-      "sans" => Some(GenericFamily::SansSerif.into()),
-      "serif" => Some(GenericFamily::Serif.into()),
-      "mono" => Some(GenericFamily::Monospace.into()),
+      "sans" => Some(FontFamily::from_parlance_generic(GenericFamily::SansSerif)),
+      "serif" => Some(FontFamily::from_parlance_generic(GenericFamily::Serif)),
+      "mono" => Some(FontFamily::from_parlance_generic(GenericFamily::Monospace)),
       _ => None,
     }
   }
@@ -96,34 +100,7 @@ impl TailwindPropertyParser for FontFamily {
 
 impl Default for FontFamily {
   fn default() -> Self {
-    GenericFamily::SansSerif.into()
-  }
-}
-
-impl<'a> From<FontFamily> for ParleyFontFamily<'a> {
-  fn from(family: FontFamily) -> Self {
-    ParleyFontFamily::List(
-      family
-        .0
-        .into_iter()
-        .map(|token| match token {
-          FontFamilyToken::Owned(name) => FontFamilyName::Named(name.into()),
-          FontFamilyToken::Generic(generic) => FontFamilyName::Generic(generic),
-        })
-        .collect(),
-    )
-  }
-}
-
-impl<'a> From<&'a FontFamily> for ParleyFontFamily<'a> {
-  fn from(family: &'a FontFamily) -> Self {
-    ParleyFontFamily::List(family.names().collect())
-  }
-}
-
-impl From<GenericFamily> for FontFamily {
-  fn from(generic: GenericFamily) -> Self {
-    Self(Box::new([FontFamilyToken::Generic(generic)]))
+    FontFamily::from_parlance_generic(GenericFamily::SansSerif)
   }
 }
 

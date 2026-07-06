@@ -80,11 +80,9 @@ impl FontStretch {
   pub(crate) fn from_percentage(value: f32) -> Self {
     Self(FontWidth::from_percentage(value.max(0.0) * 100.0))
   }
-}
 
-impl From<FontStretch> for FontWidth {
-  fn from(value: FontStretch) -> Self {
-    value.0
+  pub(crate) fn into_parlance(self) -> FontWidth {
+    self.0
   }
 }
 

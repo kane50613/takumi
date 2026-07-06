@@ -87,13 +87,15 @@ pub use filter::{
 pub use flex::*;
 pub use flex_grow::*;
 pub use font_family::*;
-pub(crate) use font_feature_settings::*;
+pub(crate) use font_feature_settings::FontFeatureSettings;
+pub use font_feature_settings::{FontFeature, Tag};
 pub use font_size::*;
 pub use font_stretch::*;
 pub use font_style::*;
 pub use font_synthesis::*;
 pub use font_variant::*;
-pub(crate) use font_variation_settings::*;
+pub use font_variation_settings::FontVariation;
+pub(crate) use font_variation_settings::FontVariationSettings;
 pub use font_weight::*;
 pub use gap::*;
 pub use grid::*;

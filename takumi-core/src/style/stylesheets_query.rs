@@ -1,6 +1,5 @@
 use std::{borrow::Cow, marker::PhantomData};
 
-use parley::FontFeature;
 use taffy::{Line, Rect, Size};
 
 use super::ComputedStyle;

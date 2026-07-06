@@ -1,6 +1,5 @@
 use std::{borrow::Cow, cmp::Ordering};
 
-use parley::{FontFeature, FontVariation};
 use serde::Deserialize;
 use typed_builder::TypedBuilder;
 
