@@ -22,21 +22,28 @@ JS (takumi-js, @takumi-rs/*):
 - await the top-level render/renderAnimation/renderSvg and the napi Renderer methods (they await resource loading)
 - new Renderer({fonts}) -> new Renderer(); pass fonts per call: render(node, {fonts:[inter]})
 - loadFont/loadFonts/loadFontSync -> registerFont (only to reuse a font across renders)
+- fonts array now accepts bare URL strings (e.g. fonts: ["https://example.com/Inter.woff2"])
 - render option fetchedResources -> images (keyed by src; no global image store)
 - render option resourcesOptions -> images.fetch/images.timeout; combine pre-fetched entries and a shared byte cache with the group form images: { sources: [...], fetch: myFetch, fetchCache: myMap }
 - extractResourceUrls + fetchResources helpers -> prepareImages({ node, fetchCache? }) from "takumi-js/helpers"
 - format is a string ("png"|"jpeg"|"webp"|...) with optional quality (jpeg/lossy webp) and lossless (webp)
-- createImageResponse(opts)(jsx) -> new ImageResponse(jsx, opts)
+- createImageResponse(opts)(jsx) -> new ImageResponse(jsx, opts); import from "@takumi-rs/image-response" directly (the /wasm subpath is removed)
+- remove encodeFrames (use renderAnimation or render per frame for raw output)
 
 Rust (takumi crate):
 - use takumi::prelude::*; use takumi::render;   (internals now behind the `unstable` feature)
 - GlobalContext -> Fonts, passed via RenderOptions::builder().fonts(&fonts)
-- Cargo feature "raster" -> "raster-backend" (+ rayon); enable "svg-backend" for render_svg
+- Cargo feature "raster" -> "raster-backend" (+ rayon); enable "svg-backend" for render_svg; rename feature "svg" to "svg-source" for SVG image input
 - OutputFormat::Jpeg/WebP carry Quality; lossless -> WebPLossless; write_image(img, &mut out, fmt)
 - measure_layout -> measure, render_sequence_animation -> render_animation; render -> Bitmap
 - render_for_layout drops the current_color argument
 - style value types (unstable): LengthDefaultsToZero -> Length, ColorDefaultsToTransparent -> ColorInput
 - BackgroundPosition -> PositionValue, BackgroundPositions -> PositionValues; ObjectPosition/TransformOrigin removed -> PositionValue (PositionValue::center() for the 50% 50% default)
+- max-width/max-height use MaxSize (initial None); column-gap/row-gap/gap use Gap (initial Normal)
+- background shorthand no longer sets background-blend-mode; blend_mode field is gone from Background struct
+- font_families and lang options in RenderOptions take resolved FontFamily and Lang instead of raw strings
+- write_animation streams animation frames straight to the encoder (e.g. write_animation(options, &mut output, format))
+- new takumi-html crate / "from-html" feature for parsing HTML into a Node tree (takumi::from_html)
 - core enums (NodeKind, ImageSource, ImageSourceInput, ImageCacheMode, Length, ColorInput), css PropertyId/StyleDeclaration, and css value enums (BlendMode, Filter, BasicShape, ContentValue, TextTransform, WhiteSpaceCollapse, OffsetPath, ImageScalingAlgorithm, Position) are now #[non_exhaustive]: add a wildcard match arm; build via constructors, not struct literals
 - css value lists are plain aliases now (Filters = Vec<Filter>, BackgroundImages/Sizes/Repeats and PositionValues = Box<[_]>); drop any newtype wrapper and parse from strings with FromCssStr::from_css_str instead of parse()/from_str
 
@@ -152,6 +159,29 @@ const svg = await renderSvg(<OgImage />, { width: 1200, height: 630 }); // [!cod
 
 `render`, `renderSvg`, and `renderAnimation` are all top-level exports, so you can produce a raster image, vector SVG, or animation without constructing a `Renderer`.
 
+### Bare URL strings in `fonts`
+
+`fonts` entries can now be bare URL strings instead of loaded font descriptors or raw bytes. The font is fetched on demand and cached automatically.
+
+```tsx
+const image = await render(<OgImage />, {
+  fonts: ["https://example.com/Inter.woff2"], // [!code ++]
+});
+```
+
+### `@takumi-rs/image-response/wasm` export is removed
+
+If you were importing `ImageResponse` from the `@takumi-rs/image-response/wasm` subpath, you must now import it from `@takumi-rs/image-response` directly:
+
+```tsx
+import { ImageResponse } from "@takumi-rs/image-response/wasm"; // [!code --]
+import { ImageResponse } from "@takumi-rs/image-response"; // [!code ++]
+```
+
+### Animation frame rate cap
+
+High frame rates in animations could stall or fail to play correctly. In v2, `renderAnimation` throws an error if the frame rate exceeds the format's limit: 90 fps for WebP and APNG, and 50 fps for GIF.
+
 ## CSS & rendering
 
 ### Property defaults
@@ -216,6 +246,10 @@ v2 ships a Chromium-parity user-agent stylesheet. Two changes affect existing ma
 Relative keywords now resolve. `font-weight: bolder` / `lighter` and `font-size: larger` / `smaller` were ignored in v1. They take effect in v2.
 
 More elements carry default styles: lists, `sub`, `sup`, `ins`, `del`, form controls, `details`, `summary`, and `search`. These elements render differently than v1. Override the defaults where you need the old look.
+
+### `background` shorthand drops `background-blend-mode`
+
+Unlike browsers, the v1 `background` shorthand parsed a blend-mode token and reset `background-blend-mode`. In v2, the shorthand no longer parses or resets the blend mode; configure it through the longhand property.
 
 ## Rust
 
@@ -342,6 +376,63 @@ The multi-value CSS lists are plain aliases instead of newtypes. `Filters` and `
 let filters = Filters(vec![Filter::Blur(Length::Px(4.0))]); // [!code --]
 let filters = vec![Filter::Blur(Length::Px(4.0))];          // [!code ++]
 let sizes = BackgroundSizes::from_css_str("cover")?;
+```
+
+### `max-width` / `max-height` and `gap` representation
+
+`max-width` and `max-height` are now represented as a `MaxSize` enum instead of using `Length`'s `auto` to mean unbounded. Its initial value is `MaxSize::None`.
+`column-gap`, `row-gap`, and the `gap` shorthand are represented as a `Gap` enum, whose initial value is `Gap::Normal` (which computes to `0`).
+
+```rust
+let max_width = Length::Auto; // [!code --]
+let max_width = MaxSize::None; // [!code ++]
+
+let gap = Length::Px(0.0); // [!code --]
+let gap = Gap::Normal; // [!code ++]
+```
+
+### `font_families` and `lang` option types are resolved
+
+Options on `RenderOptions` now take resolved types instead of raw strings. `font_families` accepts `FontFamily` (which can be parsed with `FontFamily::from_css_str`), and `lang` accepts `Lang` (which can be parsed with `Lang::parse`).
+
+```rust
+let options = RenderOptions::builder()
+  .font_families(Some(vec!["Inter".to_string()])) // [!code --]
+  .lang(Some("en-US".to_string())) // [!code --]
+  .font_families(Some(FontFamily::from_css_str("Inter")?)) // [!code ++]
+  .lang(Some(Lang::parse("en-US")?)) // [!code ++]
+```
+
+### `svg` Cargo feature renamed to `svg-source`
+
+To distinguish it from the `svg-backend` feature (used for SVG render output), the cargo feature gating SVG image input is renamed to `svg-source`.
+
+```toml
+takumi = { version = "*", features = ["svg"] } # [!code --]
+takumi = { version = "*", features = ["svg-source"] } # [!code ++]
+```
+
+### Stream animation frames with `write_animation`
+
+`write_animation` now streams animation frames straight to the encoder to keep memory bounded, rather than holding the entire frame sequence in memory. The napi and WASM bindings also use this behind the scenes.
+
+```rust
+// Legacy eager rendering of animation frames:
+let frames = render_animation(options)?; // [!code --]
+write_animated_webp(&frames, &mut output, fps)?; // [!code --]
+
+// Modern streaming:
+write_animation(options, &mut output, format)?; // [!code ++]
+```
+
+### Parsing HTML with `takumi-html`
+
+A new crate `takumi-html` is introduced to parse HTML and Tailwind markup into a node tree. Under the umbrella `takumi` crate, this is available via the `from-html` feature:
+
+```rust
+use takumi::from_html; // [!code ++]
+
+let node = from_html(html_source, options)?; // [!code ++]
 ```
 
 ## More in Changelog!
