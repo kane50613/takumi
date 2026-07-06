@@ -1174,13 +1174,16 @@ impl RenderNode {
         .map(NodeMatchedDeclarations::element)
         .unwrap_or(&default_matched);
       let layers = node.take_style_layers();
+      let lang = layers.lang;
+
       let style_layers = build_style_layers(layers, matched, parent_context.sizing.viewport);
       let inherited_parent = registered_custom_property_parent_style(
         &parent_context.style,
         std::slice::from_ref(parent_context.stylesheet.as_ref()),
         parent_context.sizing.viewport,
       );
-      let mut style = style_layers.inherit(&inherited_parent);
+
+      let mut style = style_layers.inherit_with_lang(&inherited_parent, lang);
 
       // On the root element, `parent_root_font_size` is `None` so `rem` inside
       // its own `font-size` falls back to `viewport.font_size`, per CSS Values 4

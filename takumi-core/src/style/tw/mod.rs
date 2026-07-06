@@ -1,8 +1,8 @@
 mod builder;
 /// Utility-prefix to property-parser mapping.
-pub mod map;
+mod map;
 /// Parsers for Tailwind utility-class suffixes.
-pub mod parser;
+mod parser;
 
 use std::{borrow::Cow, cmp::Ordering, str::FromStr};
 

@@ -60,17 +60,16 @@ impl<'de> Deserialize<'de> for Lang {
   {
     let tag = Cow::<str>::deserialize(deserializer)?;
     Lang::parse(&tag).map_err(|_| {
-      D::Error::invalid_type(
-        serde::de::Unexpected::Str(&tag),
-        &"a valid BCP-47 language tag",
-      )
+      D::Error::custom(format!(
+        "expected a valid BCP-47 language tag, but got {:?}",
+        tag
+      ))
     })
   }
 }
 
 impl Lang {
   /// Parses a BCP-47 tag string, canonicalizing language/script/region casing.
-  /// Returns `None` if the tag has no valid `language[-Script][-REGION]` prefix.
   pub fn parse(tag: &str) -> crate::Result<Self> {
     Language::parse(tag)
       .map(Self)
@@ -601,6 +600,14 @@ macro_rules! define_style {
           self.declarations.image_urls()
         }
 
+        pub(crate) fn inherit_with_lang(self, parent: &ComputedStyle, lang: Option<Lang>) -> ComputedStyle {
+          let mut style = self.inherit(parent);
+          if let Some(lang) = lang {
+            style.lang = Some(lang);
+          }
+          style
+        }
+
         /// Resolves this style against a parent into a computed style.
         pub(crate) fn inherit(self, parent: &ComputedStyle) -> ComputedStyle {
           let mut style = ComputedStyle::from_parent(parent);
@@ -672,7 +679,6 @@ macro_rules! define_style {
         pub registered_custom_properties: HashMap<String, PropertyRule>,
         /// Resolved BCP-47 language, inherited from the `lang` attribute. Drives
         /// locale-aware shaping (Han unification, line-breaking). Has no CSS property.
-        /// Set from a tag string via [`ComputedStyle::set_lang`].
         pub lang: Option<Lang>,
         $(
           #[doc = concat!("Computed `", stringify!($longhand), "` value.")]

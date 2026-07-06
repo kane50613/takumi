@@ -24,7 +24,7 @@ use crate::{
     image::{ImageResult, ImageSource},
     image_buffer::ImageBuffer,
   },
-  style::{Direction, Lang, Style, StyleDeclaration, ToCss, tw::TailwindValues},
+  style::{Direction, Lang, Style, StyleDeclaration, TailwindValues, ToCss},
   viewport::Viewport,
 };
 
@@ -521,6 +521,7 @@ impl Node {
       author_tw: self.metadata.tw.take(),
       inline: self.metadata.style.take(),
       dir: self.metadata.dir.take(),
+      lang: self.metadata.lang.take(),
     }
   }
 
@@ -634,6 +635,7 @@ pub(crate) struct NodeStyleLayers {
   /// Inline style attached directly to the element.
   pub(crate) inline: Option<Style>,
   pub(crate) dir: Option<Direction>,
+  pub(crate) lang: Option<Lang>,
 }
 
 impl MatchableNode for Node {
@@ -667,7 +669,7 @@ mod tests {
   use std::str::FromStr;
 
   use super::*;
-  use crate::style::{BackgroundImage, Style, StyleDeclaration, tw::TailwindValues};
+  use crate::style::{BackgroundImage, Style, StyleDeclaration, TailwindValues};
 
   #[test]
   fn collect_style_fetch_tasks_collects_nested_background_image_urls() {

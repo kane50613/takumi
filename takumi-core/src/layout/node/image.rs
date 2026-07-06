@@ -39,6 +39,7 @@ pub(crate) fn take_image_style_layers(
     author_tw: node.metadata.tw.take(),
     inline: node.metadata.style.take(),
     dir: node.metadata.dir.take(),
+    lang: node.metadata.lang.take(),
   }
 }
 

@@ -8,8 +8,7 @@ pub(crate) mod selector;
 mod sizing;
 mod stylesheets;
 mod supports;
-/// Tailwind utility-class parsing.
-pub mod tw;
+mod tw;
 
 pub(crate) use animation::apply_stylesheet_animations;
 pub use animation::{KeyframeRule, KeyframesRule};
@@ -24,3 +23,4 @@ pub use properties::*;
 pub use selector::{MediaQueryList, PropertyRule, StyleSheet};
 pub use sizing::SizingContext;
 pub use stylesheets::*;
+pub use tw::*;
