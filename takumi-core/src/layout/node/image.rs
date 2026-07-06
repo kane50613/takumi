@@ -1,10 +1,10 @@
 use data_url::DataUrl;
 use parley::Language;
-use taffy::{AvailableSpace, CompactLength, MaybeResolve};
+use taffy::{CompactLength, MaybeResolve};
 
 use crate::{
   context::RenderContext,
-  geometry::Size,
+  geometry::{AvailableSpace, Size},
   layout::node::{ImageData, ImageSourceInput, Node, NodeStyleLayers},
   resources::image::{ImageError, ImageResult, ImageSource, is_svg_like},
   style::{Length, Style, StyleDeclaration},
@@ -200,13 +200,13 @@ mod tests {
 
   use image::RgbaImage;
   use serde_json::from_value;
-  use taffy::{AvailableSpace, Dimension, Size as TaffySize, Style};
+  use taffy::{Dimension, Size as TaffySize, Style};
 
   use super::{image_url, measure_image_node};
   use crate::{
     Fonts,
     context::RenderContext,
-    geometry::Size,
+    geometry::{AvailableSpace, Size},
     layout::node::{ImageData, ImageSourceInput},
     resources::{image::ImageSource, image_buffer::ImageBuffer},
     style::SizingContext,

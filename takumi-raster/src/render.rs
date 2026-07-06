@@ -2,9 +2,8 @@ use std::{collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
 use parley::{GlyphRun, InlineBoxKind, PositionedLayoutItem};
 use serde::Serialize;
-use taffy::{AvailableSpace, NodeId};
 use takumi_core::{
-  geometry::{ComputedLayout as Layout, Point, Size},
+  geometry::{AvailableSpace, ComputedLayout as Layout, NodeId, Point, Size},
   scene::build_stacking_contexts,
 };
 use typed_builder::TypedBuilder;
@@ -235,7 +234,7 @@ pub fn measure<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
   collect_measure_result(
     &mut root,
     &layout_results,
-    layout_results.root_node_id(),
+    NodeId::ROOT,
     Affine::IDENTITY,
     Size {
       width: viewport.size.width.map(|value| value as f32),
@@ -564,7 +563,7 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<Bitmap> {
   tree.compute_layout(render_context.sizing.viewport.into());
 
   let layout_results = tree.into_results();
-  let root_node_id = layout_results.root_node_id();
+  let root_node_id = NodeId::ROOT;
   let root_size = layout_results
     .layout(root_node_id)?
     .size

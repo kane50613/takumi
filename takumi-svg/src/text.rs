@@ -8,11 +8,10 @@
 
 use std::io;
 
-use taffy::AvailableSpace;
 use takumi_core::{
   context::RenderContext,
   font_style::SizedFontStyle,
-  geometry::{ComputedLayout as Layout, Size},
+  geometry::{AvailableSpace, ComputedLayout as Layout, Size},
   layout::{
     inline::{
       DecorationRect, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineOutlineRect,

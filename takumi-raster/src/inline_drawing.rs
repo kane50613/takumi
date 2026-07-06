@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
 use skrifa::{FontRef, MetadataProvider};
-use taffy::AvailableSpace;
-use takumi_core::geometry::{ComputedLayout as Layout, Point, Size};
+use takumi_core::geometry::{AvailableSpace, ComputedLayout as Layout, NodeId, Point, Size};
 
 use crate::{
   BorderProperties, Canvas, Cap, DashPattern, DecorationSegmentParams, PaintSource, Placement,
@@ -588,7 +587,7 @@ pub(crate) fn draw_inline_box(
       height: AvailableSpace::Definite(inline_height),
     });
     let layout_results = layout_tree.into_results();
-    let root_node_id = layout_results.root_node_id();
+    let root_node_id = NodeId::ROOT;
 
     render_node(
       &mut subtree_root,

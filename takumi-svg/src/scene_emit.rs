@@ -11,9 +11,8 @@
 
 use std::io;
 
-use taffy::NodeId;
 use takumi_core::{
-  geometry::ComputedLayout as Layout,
+  geometry::{ComputedLayout as Layout, NodeId},
   layout::{
     border::BorderProperties,
     tree::{LayoutResults, RenderNode},

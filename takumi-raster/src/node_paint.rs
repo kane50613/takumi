@@ -4,8 +4,7 @@
 //! [`Layout`], not on the node tree. They are candidates for promotion to a
 //! backend-agnostic scene layer when an alternative (e.g. SVG) backend lands.
 
-use taffy::AvailableSpace;
-use takumi_core::geometry::{ComputedLayout as Layout, Point, Size};
+use takumi_core::geometry::{AvailableSpace, ComputedLayout as Layout, Point, Size};
 
 use super::{
   BackgroundTile, BorderPainting, BorderProperties, Canvas, Fill, PaintSource, RenderContext,

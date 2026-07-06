@@ -1,9 +1,7 @@
-use taffy::AvailableSpace;
-
 use crate::{
   context::RenderContext,
   font_style::SizedFontStyle,
-  geometry::Size,
+  geometry::{AvailableSpace, Size},
   layout::{
     inline::{
       InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,

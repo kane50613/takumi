@@ -2,12 +2,11 @@
 
 use std::{collections::HashMap, io, rc::Rc, sync::Arc};
 
-use taffy::AvailableSpace;
 use takumi_core::{
   Fonts,
   context::RenderContext,
   error::Result,
-  geometry::{ComputedLayout as Layout, Point, Rect, Size},
+  geometry::{AvailableSpace, ComputedLayout as Layout, NodeId, Point, Rect, Size},
   layout::{
     border::{BorderProperties, BorderSide, border_dash_pattern},
     inline::{InlineBoxItem, VisualInlineBox},
@@ -88,11 +87,11 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
 
   let root = RenderNode::from_node(&context, options.node);
   let mut tree = LayoutTree::from_render_node(&root);
-  let root_id = tree.root_node_id();
 
   tree.compute_layout(viewport.into());
 
   let results = tree.into_results();
+  let root_id = NodeId::ROOT;
 
   let root_layout = results.layout(root_id)?;
   let width = viewport
@@ -653,7 +652,7 @@ pub(crate) fn emit_inline_box(
       height: AvailableSpace::Definite(inline_height),
     });
     let results = tree.into_results();
-    let root_id = results.root_node_id();
+    let root_id = NodeId::ROOT;
     // Emit the recomputed subtree through the scene, offset to the box origin.
     let origin = Affine::translation(box_x + item.margin.left, box_y + item.margin.top);
     let contexts = build_stacking_contexts(

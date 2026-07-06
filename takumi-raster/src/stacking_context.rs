@@ -1,6 +1,7 @@
-use taffy::AvailableSpace;
 use takumi_core::{
-  geometry::{ComputedLayout as Layout, Point, Size, transformed_rect_extents},
+  geometry::{
+    AvailableSpace, ComputedLayout as Layout, NodeId, Point, Size, transformed_rect_extents,
+  },
   scene::{NodePaint, PaintItem, PaintItemKind, SceneBounds, StackingContextNode},
 };
 use tiny_skia::{Pixmap, PixmapMut};
@@ -510,9 +511,7 @@ pub(crate) fn paint_context(
   }) = deferred_root
   {
     let Some(current) = root.node_at_path_mut(&path) else {
-      let node_id = context
-        .root()
-        .map_or(layout_results.root_node_id(), |node| node.node_id);
+      let node_id = context.root().map_or(NodeId::ROOT, |node| node.node_id);
       return Err(Error::InvalidLayoutNode(node_id.into()));
     };
     finish_node_render(

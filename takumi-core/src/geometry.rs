@@ -264,6 +264,78 @@ impl ComputedLayout {
   }
 }
 
+/// Opaque identifier for a node within a computed layout tree. Obtained from
+/// [`crate::layout::tree::LayoutResults::box_children`] and passed back in to
+/// look up a node's layout, children, or paint scene.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct NodeId(usize);
+
+impl NodeId {
+  /// The root of any layout tree; construction always assigns it index 0.
+  pub const ROOT: Self = Self::new(0);
+
+  const fn new(index: usize) -> Self {
+    Self(index)
+  }
+
+  pub(crate) fn from_taffy(id: taffy::NodeId) -> Self {
+    Self(id.into())
+  }
+
+  pub(crate) fn into_taffy(self) -> taffy::NodeId {
+    taffy::NodeId::from(self.0)
+  }
+}
+
+impl From<NodeId> for usize {
+  fn from(id: NodeId) -> Self {
+    id.0
+  }
+}
+
+impl From<NodeId> for u64 {
+  fn from(id: NodeId) -> Self {
+    id.0 as u64
+  }
+}
+
+/// How much space is available along one axis during layout.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum AvailableSpace {
+  /// A definite amount of space, in pixels.
+  Definite(f32),
+  /// Indefinite space; the node should size to its minimum content.
+  MinContent,
+  /// Indefinite space; the node should size to its maximum content.
+  MaxContent,
+}
+
+impl AvailableSpace {
+  /// The definite amount of space, or `None` for indefinite space.
+  pub fn into_option(self) -> Option<f32> {
+    match self {
+      Self::Definite(space) => Some(space),
+      _ => None,
+    }
+  }
+
+  pub(crate) fn from_taffy(space: taffy::AvailableSpace) -> Self {
+    match space {
+      taffy::AvailableSpace::Definite(value) => Self::Definite(value),
+      taffy::AvailableSpace::MinContent => Self::MinContent,
+      taffy::AvailableSpace::MaxContent => Self::MaxContent,
+    }
+  }
+
+  pub(crate) fn into_taffy(self) -> taffy::AvailableSpace {
+    match self {
+      Self::Definite(value) => taffy::AvailableSpace::Definite(value),
+      Self::MinContent => taffy::AvailableSpace::MinContent,
+      Self::MaxContent => taffy::AvailableSpace::MaxContent,
+    }
+  }
+}
+
 /// One command of a resolved outline path, in device space. Mirrors the classic
 /// move/line/quad/cubic/close vocabulary; coordinates are y-down.
 #[derive(Debug, Clone, Copy, PartialEq)]

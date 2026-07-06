@@ -5,12 +5,11 @@ use parley::{
   PositionedInlineBox, PositionedLayoutItem, TextStyle, TreeBuilder, YieldData,
 };
 use skrifa::{FontRef, MetadataProvider};
-use taffy::AvailableSpace;
 
 use crate::{
   context::RenderContext,
   font_style::SizedFontStyle,
-  geometry::{ComputedLayout, PathCommand, Point, Rect, Size},
+  geometry::{AvailableSpace, ComputedLayout, PathCommand, Point, Rect, Size},
   layout::{border::BorderPath, node::Node, tree::RenderNode},
   resources::font::{FontError, ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},
   style::{

@@ -5,12 +5,11 @@
 use std::collections::HashMap;
 
 use parley::{InlineBoxKind, PositionedLayoutItem};
-use taffy::{AvailableSpace, NodeId};
 
 use crate::{
   error::{Error, Result},
   font_style::SizedFontStyle,
-  geometry::{ComputedLayout, Point, Size, transformed_rect_extents},
+  geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Size, transformed_rect_extents},
   layout::{
     inline::{
       InlineLayoutMode, InlineLayoutRequest, collect_inline_items, create_inline_layout,

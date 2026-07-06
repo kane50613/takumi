@@ -6,7 +6,6 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use parley::Language;
 use serde::Deserialize;
-use taffy::AvailableSpace;
 
 pub use self::image::resolve_image;
 use self::{
@@ -19,7 +18,7 @@ use self::{
 use crate::{
   Xxh3HashSet,
   context::RenderContext,
-  geometry::Size,
+  geometry::{AvailableSpace, Size},
   layout::{inline::InlineContentKind, node::image::image_url},
   matching::MatchableNode,
   resources::{
