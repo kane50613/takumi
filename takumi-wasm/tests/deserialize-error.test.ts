@@ -348,7 +348,7 @@ test("report deserialize error for gap (SpacePair) with invalid type", () => {
       ),
     "gap",
     "boolean `true`",
-    "1 ~ 2 values of <length>; also accepts 'initial', 'unset' or 'inherit'.",
+    "1 ~ 2 values of 'normal' or <length>; also accepts 'initial', 'unset' or 'inherit'.",
   );
 });
 
@@ -371,7 +371,7 @@ test("report deserialize error for gap (SpacePair) with invalid string value", (
     "gap",
     "invalid",
     "invalid",
-    "1 ~ 2 values of <length>; also accepts 'initial', 'unset' or 'inherit'.",
+    "1 ~ 2 values of 'normal' or <length>; also accepts 'initial', 'unset' or 'inherit'.",
   );
 });
 
