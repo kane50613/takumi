@@ -176,7 +176,7 @@ pub(crate) fn collect_components_and_names(
 
         track_components.push(taffy::GridTemplateComponent::Repeat(
           taffy::GridTemplateRepetition {
-            count: (*repetition).into(),
+            count: repetition.into_taffy(),
             tracks: track_sizes,
             line_names: inner_line_names,
           },

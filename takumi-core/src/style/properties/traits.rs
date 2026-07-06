@@ -754,12 +754,12 @@ impl ToCss for Arc<str> {
   }
 }
 
-/// Macro to implement From trait for Taffy enum conversions.
+/// Macro to implement a `pub(crate)` conversion method into a foreign (taffy/parley) enum.
 macro_rules! impl_from_taffy_enum {
-  ($from_ty:ty, $to_ty:ty, $($variant:ident),*) => {
-    impl From<$from_ty> for $to_ty {
-      fn from(value: $from_ty) -> Self {
-        match value {
+  ($from_ty:ty, $method:ident -> $to_ty:ty, $($variant:ident),*) => {
+    impl $from_ty {
+      pub(crate) fn $method(self) -> $to_ty {
+        match self {
           $(<$from_ty>::$variant => <$to_ty>::$variant,)*
         }
       }

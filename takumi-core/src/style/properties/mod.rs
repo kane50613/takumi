@@ -440,7 +440,7 @@ declare_enum_from_css_impl!(
   "border-box" => BoxSizing::BorderBox
 );
 
-impl_from_taffy_enum!(BoxSizing, taffy::BoxSizing, ContentBox, BorderBox);
+impl_from_taffy_enum!(BoxSizing, into_taffy -> taffy::BoxSizing, ContentBox, BorderBox);
 
 /// Text alignment options for text rendering.
 ///
@@ -474,7 +474,7 @@ declare_enum_from_css_impl!(
 );
 
 impl_from_taffy_enum!(
-  TextAlign, Alignment, Left, Right, Center, Justify, Start, End
+  TextAlign, into_parley -> Alignment, Left, Right, Center, Justify, Start, End
 );
 
 /// Defines whether an element creates a new stacking context.
@@ -561,11 +561,11 @@ declare_enum_from_css_impl!(
   "fixed" => Position::Fixed
 );
 
-impl From<Position> for taffy::Position {
-  fn from(value: Position) -> Self {
-    match value {
-      Position::Relative | Position::Static => Self::Relative,
-      Position::Absolute | Position::Fixed => Self::Absolute,
+impl Position {
+  pub(crate) fn into_taffy(self) -> taffy::Position {
+    match self {
+      Position::Relative | Position::Static => taffy::Position::Relative,
+      Position::Absolute | Position::Fixed => taffy::Position::Absolute,
     }
   }
 }
@@ -600,7 +600,7 @@ declare_enum_from_css_impl!(
   "rtl" => Direction::Rtl
 );
 
-impl_from_taffy_enum!(Direction, taffy::Direction, Ltr, Rtl);
+impl_from_taffy_enum!(Direction, into_taffy -> taffy::Direction, Ltr, Rtl);
 
 /// Defines whether an element should be placed along the left or right side of its container.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
@@ -735,7 +735,7 @@ declare_enum_from_css_impl!(
 
 impl_from_taffy_enum!(
   FlexDirection,
-  taffy::FlexDirection,
+  into_taffy -> taffy::FlexDirection,
   Row,
   Column,
   RowReverse,
@@ -818,9 +818,9 @@ impl TailwindPropertyParser for JustifyContent {
   }
 }
 
-impl From<JustifyContent> for Option<taffy::JustifyContent> {
-  fn from(value: JustifyContent) -> Self {
-    match value {
+impl JustifyContent {
+  pub(crate) fn into_taffy(self) -> Option<taffy::JustifyContent> {
+    match self {
       JustifyContent::Normal => None,
       JustifyContent::Start => Some(taffy::JustifyContent::START),
       JustifyContent::End => Some(taffy::JustifyContent::END),
@@ -914,9 +914,9 @@ impl Display {
   }
 }
 
-impl From<Display> for taffy::Display {
-  fn from(value: Display) -> Self {
-    match value {
+impl Display {
+  pub(crate) fn into_taffy(self) -> taffy::Display {
+    match self {
       Display::Flex | Display::InlineFlex => taffy::Display::Flex,
       Display::Grid | Display::InlineGrid => taffy::Display::Grid,
       Display::Block | Display::InlineBlock | Display::Inline => taffy::Display::Block,
@@ -977,9 +977,9 @@ declare_box_alignment_enum_impl!(
   }
 );
 
-impl From<AlignItems> for Option<taffy::AlignItems> {
-  fn from(value: AlignItems) -> Self {
-    match value {
+impl AlignItems {
+  pub(crate) fn into_taffy(self) -> Option<taffy::AlignItems> {
+    match self {
       AlignItems::Normal => None,
       AlignItems::Start => Some(taffy::AlignItems::START),
       AlignItems::End => Some(taffy::AlignItems::END),
@@ -1019,7 +1019,7 @@ declare_enum_from_css_impl!(
   "wrap-reverse" => FlexWrap::WrapReverse
 );
 
-impl_from_taffy_enum!(FlexWrap, taffy::FlexWrap, NoWrap, Wrap, WrapReverse);
+impl_from_taffy_enum!(FlexWrap, into_taffy -> taffy::FlexWrap, NoWrap, Wrap, WrapReverse);
 
 /// Controls text case transformation when rendering.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]

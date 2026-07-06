@@ -17,14 +17,14 @@ pub struct GridTemplateAreas(pub Vec<Vec<String>>);
 
 impl MakeComputed for GridTemplateAreas {}
 
-impl From<GridTemplateAreas> for Vec<taffy::GridTemplateArea<String>> {
-  fn from(value: GridTemplateAreas) -> Self {
-    if value.0.is_empty() {
+impl GridTemplateAreas {
+  pub(crate) fn into_taffy(self) -> Vec<taffy::GridTemplateArea<String>> {
+    if self.0.is_empty() {
       return Vec::new();
     }
 
     let mut bounds: HashMap<&str, (usize, usize, usize, usize)> = HashMap::new();
-    for (r, row) in value.0.iter().enumerate() {
+    for (r, row) in self.0.iter().enumerate() {
       for (c, cell) in row.iter().enumerate() {
         if cell == "." {
           continue;

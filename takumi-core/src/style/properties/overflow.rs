@@ -37,9 +37,9 @@ impl TailwindPropertyParser for Overflow {
   }
 }
 
-impl From<Overflow> for TaffyOverflow {
-  fn from(val: Overflow) -> Self {
-    match val {
+impl Overflow {
+  pub(crate) fn into_taffy(self) -> TaffyOverflow {
+    match self {
       Overflow::Visible => TaffyOverflow::Visible,
       Overflow::Clip => TaffyOverflow::Clip,
       Overflow::Hidden => TaffyOverflow::Hidden,
