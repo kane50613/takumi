@@ -57,5 +57,7 @@ fn test_lang_han_unification() -> Result<()> {
       .with_gap(SpacePair::from_pair(Px(32.0).into(), Px(32.0).into())),
   );
 
-  Ok(run_fixture_test(container, "lang_han_unification"))
+  run_fixture_test(container, "lang_han_unification");
+
+  Ok(())
 }

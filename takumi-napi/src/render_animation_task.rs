@@ -139,7 +139,7 @@ impl Task for RenderAnimationTask {
                 .node(node)
                 .fonts(&fonts)
                 .font_families(self.font_families.clone())
-                .lang(self.lang.clone())
+                .lang(self.lang)
                 .draw_debug_border(self.draw_debug_border)
                 .build(),
             )

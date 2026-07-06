@@ -774,7 +774,7 @@ impl Fonts {
                 .filter_map(|n| cloned.collection.family_id(n)),
             );
           }
-          None => family_ids.extend(cloned.collection.family_id(&*literal_name)),
+          None => family_ids.extend(cloned.collection.family_id(&literal_name)),
         }
       }
 

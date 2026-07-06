@@ -82,7 +82,7 @@ impl Lang {
     self.0.as_str()
   }
 
-  pub(crate) fn to_parlance(&self) -> Language {
+  pub(crate) fn into_parlance(self) -> Language {
     self.0
   }
 }
