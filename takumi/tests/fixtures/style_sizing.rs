@@ -69,7 +69,7 @@ fn test_style_max_width() {
   let container = Node::container([]).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::max_width(Px(100.0)))
+      .with(StyleDeclaration::max_width(Px(100.0).into()))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -85,7 +85,7 @@ fn test_style_max_height() {
   let container = Node::container([]).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::max_height(Px(100.0)))
+      .with(StyleDeclaration::max_height(Px(100.0).into()))
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(

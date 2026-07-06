@@ -98,7 +98,7 @@ fn test_style_opacity() {
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color([255, 255, 255, 255]),
       )))
-      .with_gap(SpacePair::from_single(Length::Rem(4.0))),
+      .with_gap(SpacePair::from_single(Length::Rem(4.0).into())),
   );
 
   run_fixture_test(container, "style_opacity");
@@ -140,7 +140,7 @@ fn test_style_opacity_image_with_text() {
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
       .with(StyleDeclaration::align_items(AlignItems::Center))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
-      .with_gap(SpacePair::from_single(Length::Rem(2.0)))
+      .with_gap(SpacePair::from_single(Length::Rem(2.0).into()))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color([240, 240, 240, 255]),
       ))),
@@ -198,7 +198,7 @@ fn test_style_opacity_flex_text_node_vs_nested_container() {
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::align_items(AlignItems::Center))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
-      .with_gap(SpacePair::from_single(Length::Px(48.0)))
+      .with_gap(SpacePair::from_single(Length::Px(48.0).into()))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color::white(),
       ))),

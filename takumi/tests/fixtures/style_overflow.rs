@@ -139,7 +139,7 @@ fn create_split_pill_case(
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
       .with_padding(Sides([Px(12.0); 4]))
-      .with_gap(SpacePair::from_single(Px(8.0)))
+      .with_gap(SpacePair::from_single(Px(8.0).into()))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color([248, 250, 252, 255]),
       ))),

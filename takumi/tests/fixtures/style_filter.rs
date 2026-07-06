@@ -24,7 +24,7 @@ fn create_filter_test_container(
       .with(StyleDeclaration::grid_template_columns(
         GridTemplateComponents::from_css_str("repeat(5, 1fr)").ok(),
       ))
-      .with_gap(SpacePair::from_single(Px(gap_px)))
+      .with_gap(SpacePair::from_single(Px(gap_px).into()))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
       .with(StyleDeclaration::align_items(AlignItems::Center))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -53,7 +53,7 @@ fn create_filter_card(filter: &str, image_size_px: f32, label_font_size_px: f32)
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
       .with(StyleDeclaration::align_items(AlignItems::Center))
-      .with_gap(SpacePair::from_single(Px(16.0)))
+      .with_gap(SpacePair::from_single(Px(16.0).into()))
       .with(StyleDeclaration::font_size(Px(label_font_size_px).into())),
   )
 }
@@ -84,7 +84,7 @@ fn create_filter_transform_card(
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
       .with(StyleDeclaration::align_items(AlignItems::Center))
-      .with_gap(SpacePair::from_single(Px(16.0)))
+      .with_gap(SpacePair::from_single(Px(16.0).into()))
       .with(StyleDeclaration::font_size(Px(label_font_size_px).into())),
   )
 }
@@ -191,7 +191,7 @@ fn test_style_filter_combined_with_transform() {
       .with(StyleDeclaration::grid_template_columns(
         GridTemplateComponents::from_css_str("repeat(4, 1fr)").ok(),
       ))
-      .with_gap(SpacePair::from_single(Px(16.0)))
+      .with_gap(SpacePair::from_single(Px(16.0).into()))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
       .with(StyleDeclaration::align_items(AlignItems::Center))
       .with(StyleDeclaration::background_color(ColorInput::Value(

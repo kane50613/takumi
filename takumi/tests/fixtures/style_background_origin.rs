@@ -43,7 +43,7 @@ fn test_style_background_origin() {
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
       .with(StyleDeclaration::width(Percentage(100.0)))
-      .with(StyleDeclaration::row_gap(Px(20.0)))
+      .with(StyleDeclaration::row_gap(Px(20.0).into()))
       .with_padding(Sides([Px(30.0); 4]))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color([255, 255, 255, 255]),

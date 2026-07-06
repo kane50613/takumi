@@ -485,7 +485,7 @@ fn demo_card(label: &str, preview: Node) -> Node {
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
       .with(StyleDeclaration::width(Px(208.0)))
-      .with_gap(SpacePair::from_single(Px(12.0)))
+      .with_gap(SpacePair::from_single(Px(12.0).into()))
       .with(StyleDeclaration::align_items(AlignItems::Center)),
   )
 }
@@ -515,7 +515,7 @@ fn non_uniform_border_demo(label: &str, style: Sides<BorderStyle>, width: Sides<
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
       .with(StyleDeclaration::width(Px(220.0)))
-      .with_gap(SpacePair::from_single(Px(12.0)))
+      .with_gap(SpacePair::from_single(Px(12.0).into()))
       .with(StyleDeclaration::align_items(AlignItems::Center)),
   )
 }
@@ -584,7 +584,7 @@ fn test_style_border_styles() {
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap))
-      .with_gap(SpacePair::from_single(Px(16.0)))
+      .with_gap(SpacePair::from_single(Px(16.0).into()))
       .with_padding(Sides([Px(32.0); 4]))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
@@ -641,7 +641,7 @@ fn test_style_border_non_uniform_patterns() {
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap))
-      .with_gap(SpacePair::from_single(Px(20.0)))
+      .with_gap(SpacePair::from_single(Px(20.0).into()))
       .with_padding(Sides([Px(32.0); 4]))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
@@ -676,7 +676,7 @@ fn test_style_outline_styles() {
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap))
-      .with_gap(SpacePair::from_single(Px(16.0)))
+      .with_gap(SpacePair::from_single(Px(16.0).into()))
       .with_padding(Sides([Px(32.0); 4]))
       .with(StyleDeclaration::width(Percentage(100.0)))
       .with(StyleDeclaration::height(Percentage(100.0)))
