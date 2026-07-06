@@ -1,3 +1,28 @@
+## takumi@2.0.0-rc.10
+
+### Drop `background-blend-mode` from the `background` shorthand
+
+The `background` shorthand parsed a blend-mode token and reset
+`background-blend-mode`, unlike browsers, where the shorthand touches neither. It
+now leaves `background-blend-mode` alone; set it through the longhand. The
+`blend_mode` field is gone from the `Background` shorthand value.
+
+### Represent the `none`/`normal` initial values of `max-*` and gaps
+
+`max-width` and `max-height` are now a `MaxSize` value whose initial is `None`
+(unbounded), instead of borrowing `Length`'s `auto`. `column-gap`, `row-gap`, and
+the `gap` shorthand are now a `Gap` value whose initial is `Normal`. Rendering is
+unchanged — `none` resolves like the old unbounded default and `normal` computes
+to `0` — but the values now round-trip through `to_css` as `none`/`normal`.
+
+### Seal `parley::Layout` out of the inline-layout boundary
+
+`BuiltInlineLayout::{layout, custom_inline_boxes}` are now private; the
+measure-only walk moves into `BuiltInlineLayout::measure_runs`, returning
+core-owned `MeasuredInlineRun`/`MeasuredInlineBox` (run text borrows the
+layout). `get_parent_font_metrics`, `resolve_inline_line_metrics`,
+`resolve_inline_line_states`, and `scale_text_fit_x` are no longer public.
+
 ## takumi@2.0.0-rc.9
 
 ### Bump internal crates

@@ -1,3 +1,90 @@
+## takumi-core@0.2.0
+
+### Drop `background-blend-mode` from the `background` shorthand
+
+The `background` shorthand parsed a blend-mode token and reset
+`background-blend-mode`, unlike browsers, where the shorthand touches neither. It
+now leaves `background-blend-mode` alone; set it through the longhand. The
+`blend_mode` field is gone from the `Background` shorthand value.
+
+### Seal the `parlance` font model out of the public `style` API
+
+`#916` grepped only `parley::`, so it missed `parlance` (the parley font
+model) leaking through `style`. This follow-up seals it:
+
+`FontFeature`, `FontVariation`, and `Tag` are now takumi-owned structs,
+replacing `parlance::tag::{FontFeature, FontVariation, Tag}` in
+`ComputedStyle::font_feature_settings`/`font_variation_settings`.
+`FontWeight::Absolute` holds a plain `f32` instead of
+`parlance::font::FontWeight`. `ComputedStyle::lang` is now `Option<Lang>`, a
+takumi-owned BCP-47 tag, instead of `Option<parlance::language::Language>`.
+`FontStretch`, `FontStyle`, `FontWeight`, `FontFamily`, and
+`resources::font::GenericFamily` lose their `From<_>`/`Into<_>` impls
+targeting `parlance` types; the conversions are now `pub(crate)` inherent
+methods (`into_parlance`/`to_parlance`/`from_parlance_generic`) called only
+at the shaping boundary.
+
+Also dropped two unused `From<FontFamily> for parlance::FontFamily` impls
+with no callers in the crate.
+
+### Seal remaining `taffy`/`parley` leaks out of the public `style` API
+
+`Position`, `Display`, `AlignItems`, `JustifyContent`, `BoxSizing`, `Direction`,
+`FlexDirection`, `FlexWrap`, `Overflow`, `TextAlign`, `GridPlacement`,
+`GridAutoFlow`, `GridRepetitionCount`, and `GridTemplateAreas` no longer
+implement `From<_>` for their `taffy`/`parley` counterparts; the conversions
+are now `pub(crate)` inherent methods (`into_taffy`/`into_parley`).
+`TextWrapMode`, `WordBreak`, and `OverflowWrap` lose their `parley` `From`
+impls the same way. `ResolvedVerticalAlign::apply` is now `pub(crate)`.
+
+`takumi-raster`: dropped the unused `From<OutputFormat> for image::ImageFormat`
+impl, which pinned the `image` crate into the public API without being called
+anywhere.
+
+### Represent the `none`/`normal` initial values of `max-*` and gaps
+
+`max-width` and `max-height` are now a `MaxSize` value whose initial is `None`
+(unbounded), instead of borrowing `Length`'s `auto`. `column-gap`, `row-gap`, and
+the `gap` shorthand are now a `Gap` value whose initial is `Normal`. Rendering is
+unchanged — `none` resolves like the old unbounded default and `normal` computes
+to `0` — but the values now round-trip through `to_css` as `none`/`normal`.
+
+### Seal `tiny_skia` and `image` types out of the public API
+
+Glyph outline paths now use core-owned `geometry::PathCommand`/`geometry::Point`
+instead of `tiny_skia::PathSegment`/`Point`. `ResolvedBitmapGlyph::pixmap`
+(`tiny_skia::Pixmap`) is now `image: ImageBuffer`. `ImageBuffer::from_rgba`
+(`Cow<RgbaImage>`) is now `from_rgba_bytes(Vec<u8>, width, height)`.
+`layout::border::BorderProperties`'s path-building methods take
+`Vec<geometry::PathCommand>` instead of `Vec<tiny_skia::PathSegment>`.
+
+### Seal `parley::Layout` out of the inline-layout boundary
+
+`BuiltInlineLayout::{layout, custom_inline_boxes}` are now private; the
+measure-only walk moves into `BuiltInlineLayout::measure_runs`, returning
+core-owned `MeasuredInlineRun`/`MeasuredInlineBox` (run text borrows the
+layout). `get_parent_font_metrics`, `resolve_inline_line_metrics`,
+`resolve_inline_line_states`, and `scale_text_fit_x` are no longer public.
+
+### Replace `parley::GlyphRun` with a core-owned `ShapedRun` at the paint boundary
+
+`PositionedInlineRun::glyph_run` is now `ShapedRun` (owned glyphs, brush, metrics,
+font data) instead of `parley::GlyphRun<'l, InlineBrush>`; `PositionedInlineRun`
+and `InlineRunLayout` drop their lifetime. `run_decorations` takes `&ShapedRun`.
+
+### Seal `taffy` geometry types out of the public API
+
+`layout::border::BorderProperties`, `shadow::SizedShadow`, `layout::inline::InlineBoxItem`,
+and the other geometry-touching public items now use core-owned
+`geometry::{Size, Rect, Point}` instead of `taffy::{Size, Rect, Point}`.
+`layout::tree::LayoutResults::layout` returns an owned `geometry::ComputedLayout`
+instead of `&taffy::Layout`. `LayoutTree::compute_layout` and the paint scene
+(`build_stacking_contexts`, `NodePaint`, `layout::tree::OrderedChild`) now use
+core-owned `geometry::{AvailableSpace, NodeId}` instead of `taffy::{AvailableSpace,
+NodeId}`; `NodeId::ROOT` replaces the removed `root_node_id()` accessors. `taffy`
+remains the layout engine at the `compute_layout` internals and `Style`
+construction.
+
 ## takumi-core@0.1.0
 
 ### Merge `takumi-css` into `takumi-core`
