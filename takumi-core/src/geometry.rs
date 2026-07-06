@@ -245,6 +245,15 @@ impl ComputedLayout {
       height: self.content_box_height(),
     }
   }
+
+  /// Offset of the content-box top-left from the border-box top-left, i.e. the
+  /// left/top border plus padding.
+  pub fn content_box_offset(&self) -> Point<f32> {
+    Point::new(
+      self.border.left + self.padding.left,
+      self.border.top + self.padding.top,
+    )
+  }
 }
 
 impl From<&taffy::Layout> for ComputedLayout {

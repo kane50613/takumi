@@ -1939,9 +1939,10 @@ impl PositionedInlineRun {
 
   /// Per-glyph inline-offset origin (border/padding box top-left + baseline shift).
   pub fn glyph_offset(&self, layout: ComputedLayout) -> Point<f32> {
+    let offset = layout.content_box_offset();
     Point {
-      x: layout.border.left + layout.padding.left,
-      y: layout.border.top + layout.padding.top + self.baseline_shift,
+      x: offset.x,
+      y: offset.y + self.baseline_shift,
     }
   }
 

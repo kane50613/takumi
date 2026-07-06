@@ -679,10 +679,9 @@ fn draw_render_node_inline(
     &font_style,
   )?;
 
-  let inline_transform = Affine::translation(
-    inline_layout_box.border.left + inline_layout_box.padding.left,
-    inline_layout_box.border.top + inline_layout_box.padding.top,
-  ) * node.context.transform;
+  let inline_offset = inline_layout_box.content_box_offset();
+  let inline_transform =
+    Affine::translation(inline_offset.x, inline_offset.y) * node.context.transform;
 
   for (item, positioned) in boxes.zip(positioned_inline_boxes.iter()) {
     draw_inline_box(positioned, item, canvas, inline_transform)?;

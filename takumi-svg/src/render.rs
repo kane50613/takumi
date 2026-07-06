@@ -589,10 +589,7 @@ fn content_box_path_data(border: &BorderProperties, layout: &Layout, x: f32, y: 
   inner.append_mask_commands(
     &mut commands,
     layout.content_box_size(),
-    Point {
-      x: layout.border.left + layout.padding.left,
-      y: layout.border.top + layout.padding.top,
-    },
+    layout.content_box_offset(),
   );
   path_data(&commands, [1.0, 0.0, 0.0, 1.0, x, y])
 }
@@ -640,10 +637,9 @@ pub(crate) fn emit_inline_box(
     return Ok(());
   }
 
-  let box_x =
-    container_x + container_layout.border.left + container_layout.padding.left + inline_box.x;
-  let box_y =
-    container_y + container_layout.border.top + container_layout.padding.top + inline_box.y;
+  let content_offset = container_layout.content_box_offset();
+  let box_x = container_x + content_offset.x + inline_box.x;
+  let box_y = container_y + content_offset.y + inline_box.y;
 
   if node.participates_as_inline_box() {
     // Atomic inline box (inline-block/float): recompute the subtree at the box
