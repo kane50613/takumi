@@ -4,8 +4,8 @@ use parley::fontique::Attributes;
 use taffy::{
   AvailableSpace, BlockContext, Cache, CacheTree, Display as TaffyDisplay, Layout,
   LayoutBlockContainer, LayoutFlexboxContainer, LayoutGridContainer, LayoutInput, LayoutOutput,
-  LayoutPartialTree, NodeId, RequestedAxis, RoundTree, RunMode, Size, SizingMode, Style,
-  TraversePartialTree, TraverseTree, compute_block_layout, compute_cached_layout,
+  LayoutPartialTree, NodeId, RequestedAxis, RoundTree, RunMode, Size as TaffySize, SizingMode,
+  Style, TraversePartialTree, TraverseTree, compute_block_layout, compute_cached_layout,
   compute_flexbox_layout, compute_grid_layout, compute_hidden_layout, compute_leaf_layout,
   compute_root_layout, round_layout,
 };
@@ -14,7 +14,7 @@ use crate::{
   Error,
   context::RenderContext,
   font_style::SizedFontStyle,
-  geometry::{ComputedLayout, Size as CoreSize},
+  geometry::{ComputedLayout, Size},
   layout::{
     inline::{
       InlineContentKind, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
@@ -126,7 +126,7 @@ pub struct RenderNode {
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct AtomicInlineMetrics {
-  pub(crate) size: CoreSize<f32>,
+  pub(crate) size: Size<f32>,
   pub(crate) baseline_offset: Option<f32>,
 }
 
@@ -457,7 +457,7 @@ impl<'r> LayoutTree<'r> {
   }
 
   /// Computes and rounds the layout for the whole tree.
-  pub fn compute_layout(&mut self, available_space: CoreSize<AvailableSpace>) {
+  pub fn compute_layout(&mut self, available_space: Size<AvailableSpace>) {
     let root_node_id = self.root_node_id();
     compute_root_layout(self, root_node_id, available_space.into());
     round_layout(self, root_node_id);
@@ -496,8 +496,8 @@ impl<'r> LayoutTree<'r> {
   fn update_node_style_for_available_space(
     &mut self,
     node_id: NodeId,
-    available_space: Size<AvailableSpace>,
-    known_dimensions: Size<Option<f32>>,
+    available_space: TaffySize<AvailableSpace>,
+    known_dimensions: TaffySize<Option<f32>>,
   ) {
     let Some(idx) = self.get_index(node_id) else {
       return;
@@ -511,7 +511,7 @@ impl<'r> LayoutTree<'r> {
       style_override.clone()
     } else {
       let mut sizing = render_node.context.sizing.clone();
-      sizing.container_size = Size {
+      sizing.container_size = TaffySize {
         width: known_dimensions.width.or(match available_space.width {
           AvailableSpace::Definite(value) => Some(value),
           _ => None,
@@ -538,7 +538,7 @@ impl<'r> LayoutTree<'r> {
 fn should_strip_flex_intrinsic_stretch_known_dimension(
   render_node: &RenderNode,
   inputs: LayoutInput,
-  known_dimensions: Size<Option<f32>>,
+  known_dimensions: TaffySize<Option<f32>>,
 ) -> bool {
   if inputs.run_mode != RunMode::ComputeSize
     || !matches!(
@@ -721,7 +721,7 @@ impl<'r> LayoutTree<'r> {
               inputs,
               known_dimensions,
             ) {
-              Size::NONE
+              TaffySize::NONE
             } else {
               known_dimensions
             }
@@ -734,12 +734,12 @@ impl<'r> LayoutTree<'r> {
             |known_dimensions, available_space| {
               let known_dimensions = stripped_known_dimensions(known_dimensions);
 
-              if let Size {
+              if let TaffySize {
                 width: Some(width),
                 height: Some(height),
               } = known_dimensions.maybe_apply_aspect_ratio(node_data.style.aspect_ratio)
               {
-                return Size { width, height };
+                return TaffySize { width, height };
               }
 
               render_node.measure(
@@ -927,7 +927,7 @@ impl RenderNode {
   fn anonymous_image_item(parent_context: &RenderContext, image: BackgroundImage) -> Self {
     // Cap image content to the parent pseudo's box so explicit `width` / `height`
     // on the pseudo wins over intrinsic / default sizing.
-    let max_size = Size {
+    let max_size = TaffySize {
       width: taffy::Dimension::percent(1.0),
       height: taffy::Dimension::percent(1.0),
     };
@@ -953,7 +953,7 @@ impl RenderNode {
           children: None,
           // css-images-3 §5.1 default object size when the parent is auto.
           layout_style_override: Some(Style {
-            size: Size {
+            size: TaffySize {
               width: taffy::Dimension::length(300.0),
               height: taffy::Dimension::length(150.0),
             },
@@ -1464,7 +1464,7 @@ impl RenderNode {
 
   fn inline_box_margin_box_height(
     &self,
-    content_size: Size<f32>,
+    content_size: TaffySize<f32>,
     include_padding_border: bool,
   ) -> f32 {
     let sizing = &self.context.sizing;
@@ -1484,9 +1484,9 @@ impl RenderNode {
 
   fn inline_replaced_content_size(
     &self,
-    measured_size: Size<f32>,
+    measured_size: TaffySize<f32>,
     layout_style: &Style,
-  ) -> Size<f32> {
+  ) -> TaffySize<f32> {
     if self.context.style.box_sizing != BoxSizing::BorderBox {
       return measured_size;
     }
@@ -1526,7 +1526,7 @@ impl RenderNode {
     };
 
     match (width_auto, height_auto) {
-      (false, false) => Size {
+      (false, false) => TaffySize {
         width: (measured_size.width - horizontal_insets).max(0.0),
         height: (measured_size.height - vertical_insets).max(0.0),
       },
@@ -1535,14 +1535,14 @@ impl RenderNode {
         let height = measured_ratio
           .filter(|ratio| *ratio > 0.0)
           .map_or(measured_size.height, |ratio| width / ratio);
-        Size { width, height }
+        TaffySize { width, height }
       }
       (true, false) => {
         let height = (measured_size.height - vertical_insets).max(0.0);
         let width = measured_ratio
           .filter(|ratio| *ratio > 0.0)
           .map_or(measured_size.width, |ratio| height * ratio);
-        Size { width, height }
+        TaffySize { width, height }
       }
       (true, true) => measured_size,
     }
@@ -1562,8 +1562,8 @@ impl RenderNode {
 
   fn inline_content_baseline_offset(
     &self,
-    available_space: Size<AvailableSpace>,
-    size: Size<f32>,
+    available_space: TaffySize<AvailableSpace>,
+    size: TaffySize<f32>,
     use_last_line: bool,
   ) -> Option<f32> {
     if matches!(
@@ -1585,7 +1585,7 @@ impl RenderNode {
     let max_width = size.width.max(0.0);
     let built = create_inline_layout(InlineLayoutRequest {
       items,
-      available_space: Size {
+      available_space: TaffySize {
         width: AvailableSpace::Definite(max_width),
         height: available_space.height,
       }
@@ -1671,8 +1671,8 @@ impl RenderNode {
 
   fn resolve_inline_baseline_source(
     &self,
-    available_space: Size<AvailableSpace>,
-    size: Size<f32>,
+    available_space: TaffySize<AvailableSpace>,
+    size: TaffySize<f32>,
     source: InlineBaselineSource,
     layout_results: Option<(&LayoutResults, NodeId)>,
   ) -> Option<f32> {
@@ -1693,8 +1693,8 @@ impl RenderNode {
 
   fn resolve_inline_baseline_offset(
     &self,
-    available_space: Size<AvailableSpace>,
-    size: Size<f32>,
+    available_space: TaffySize<AvailableSpace>,
+    size: TaffySize<f32>,
     layout_results: Option<(&LayoutResults, NodeId)>,
   ) -> Option<f32> {
     let strategy = self.inline_baseline_strategy()?;
@@ -1717,7 +1717,7 @@ impl RenderNode {
 
   pub(crate) fn measure_inline_box(
     &self,
-    available_space: Size<AvailableSpace>,
+    available_space: TaffySize<AvailableSpace>,
   ) -> AtomicInlineMetrics {
     if self.participates_as_inline_box() {
       return self.measure_atomic_subtree(available_space);
@@ -1725,7 +1725,7 @@ impl RenderNode {
 
     let Some(node) = &self.node else {
       return AtomicInlineMetrics {
-        size: CoreSize::ZERO,
+        size: Size::ZERO,
         baseline_offset: None,
       };
     };
@@ -1735,7 +1735,12 @@ impl RenderNode {
       .as_ref()
       .cloned()
       .unwrap_or_else(|| self.context.style.to_taffy_style(&self.context.sizing));
-    let measured_size = node.measure(&self.context, available_space, Size::NONE, &layout_style);
+    let measured_size = node.measure(
+      &self.context,
+      available_space,
+      TaffySize::NONE,
+      &layout_style,
+    );
     let size = self.inline_replaced_content_size(measured_size, &layout_style);
 
     AtomicInlineMetrics {
@@ -1746,11 +1751,11 @@ impl RenderNode {
 
   pub(crate) fn measure_atomic_subtree(
     &self,
-    available_space: Size<AvailableSpace>,
+    available_space: TaffySize<AvailableSpace>,
   ) -> AtomicInlineMetrics {
     let measure_with = |width: AvailableSpace| {
       let mut tree = LayoutTree::from_render_node(self);
-      tree.compute_layout(CoreSize {
+      tree.compute_layout(Size {
         width,
         height: available_space.height,
       });
@@ -1758,7 +1763,7 @@ impl RenderNode {
 
       results
         .layout(results.root_node_id())
-        .map_or(CoreSize::ZERO, |layout| layout.size)
+        .map_or(Size::ZERO, |layout| layout.size)
     };
 
     if self.participates_as_inline_box() {
@@ -1778,7 +1783,7 @@ impl RenderNode {
           node.style.justify_content = Some(taffy::JustifyContent::START);
         }
 
-        tree.compute_layout(CoreSize {
+        tree.compute_layout(Size {
           width: AvailableSpace::MaxContent,
           height: available_space.height,
         });
@@ -1786,7 +1791,7 @@ impl RenderNode {
         let results = tree.into_results();
         results
           .layout(results.root_node_id())
-          .map_or(CoreSize::ZERO, |layout| layout.size)
+          .map_or(Size::ZERO, |layout| layout.size)
       };
 
       let used_width = match available_space.width {
@@ -1797,7 +1802,7 @@ impl RenderNode {
         AvailableSpace::MaxContent => max_content.width,
       };
       let mut tree = LayoutTree::from_render_node(self);
-      tree.compute_layout(CoreSize {
+      tree.compute_layout(Size {
         width: AvailableSpace::Definite(used_width),
         height: available_space.height,
       });
@@ -1806,7 +1811,7 @@ impl RenderNode {
 
       return results.layout(root_node_id).map_or(
         AtomicInlineMetrics {
-          size: CoreSize::ZERO,
+          size: Size::ZERO,
           baseline_offset: None,
         },
         |layout| {
@@ -1833,11 +1838,11 @@ impl RenderNode {
 
   pub(crate) fn measure(
     &self,
-    available_space: Size<AvailableSpace>,
-    known_dimensions: Size<Option<f32>>,
+    available_space: TaffySize<AvailableSpace>,
+    known_dimensions: TaffySize<Option<f32>>,
     style: &Style,
     is_inline_children: bool,
-  ) -> Size<f32> {
+  ) -> TaffySize<f32> {
     if is_inline_children {
       let (max_width, max_height) = create_inline_constraint(
         &self.context,
@@ -1880,7 +1885,7 @@ impl RenderNode {
     );
 
     let Some(node) = &self.node else {
-      return Size::zero();
+      return TaffySize::zero();
     };
 
     node.measure(&self.context, available_space, known_dimensions, style)

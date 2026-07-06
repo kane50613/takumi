@@ -56,7 +56,7 @@ fn emit_backdrop(
   doc: &mut SvgDocument,
   node: &RenderNode,
   node_id: NodeId,
-  layout: &Layout,
+  layout: Layout,
   frame: Affine,
   x: f32,
   y: f32,
@@ -165,7 +165,7 @@ fn emit_box(
       doc,
       node,
       np.node_id,
-      &layout,
+      layout,
       frame,
       x,
       y,
@@ -173,8 +173,8 @@ fn emit_box(
     )?;
   }
 
-  let chrome = emit_box_chrome(node, &layout, x, y, group_transform, doc)?;
-  emit_own_content(node, &layout, x, y, doc)?;
+  let chrome = emit_box_chrome(node, layout, x, y, group_transform, doc)?;
+  emit_own_content(node, layout, x, y, doc)?;
   Ok(Some((chrome, frame)))
 }
 

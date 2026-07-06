@@ -154,7 +154,7 @@ impl BoxChrome {
 /// caller after emitting the box's content.
 pub(crate) fn emit_box_chrome(
   node: &RenderNode,
-  layout: &Layout,
+  layout: Layout,
   x: f32,
   y: f32,
   group_transform: Affine,
@@ -243,7 +243,7 @@ pub(crate) fn emit_box_chrome(
 }
 
 /// The `background-origin` positioning area as an absolute frame within the box.
-fn background_origin_frame(origin: BackgroundOrigin, layout: &Layout, x: f32, y: f32) -> Frame {
+fn background_origin_frame(origin: BackgroundOrigin, layout: Layout, x: f32, y: f32) -> Frame {
   let b = layout.border;
   let p = layout.padding;
   let frame = |left: f32, right: f32, top: f32, bottom: f32| {
@@ -274,7 +274,7 @@ fn background_origin_frame(origin: BackgroundOrigin, layout: &Layout, x: f32, y:
 pub(crate) fn emit_background(
   node: &RenderNode,
   border: &BorderProperties,
-  layout: &Layout,
+  layout: Layout,
   x: f32,
   y: f32,
   doc: &mut SvgDocument,
@@ -509,7 +509,7 @@ pub(crate) fn padding_box_path_data(
 /// content overflows there while being clipped on the other axis.
 pub(crate) fn overflow_clip_rect_data(
   style: &ComputedStyle,
-  layout: &Layout,
+  layout: Layout,
   x: f32,
   y: f32,
 ) -> String {
@@ -552,7 +552,7 @@ pub(crate) fn overflow_clip_rect_data(
 fn background_clip_path(
   clip: BackgroundClip,
   border: &BorderProperties,
-  layout: &Layout,
+  layout: Layout,
   x: f32,
   y: f32,
 ) -> Option<(String, bool)> {
@@ -581,7 +581,7 @@ fn background_clip_path(
 
 /// Absolute SVG path `d` for the content-box rounded rectangle (border-box inset
 /// by border widths and padding, with inner radii), reusing core geometry.
-fn content_box_path_data(border: &BorderProperties, layout: &Layout, x: f32, y: f32) -> String {
+fn content_box_path_data(border: &BorderProperties, layout: Layout, x: f32, y: f32) -> String {
   let mut inner = *border;
   inner.inset_by_border_width();
   inner.expand_by(layout.padding.map(|size| -size));
@@ -598,13 +598,13 @@ fn content_box_path_data(border: &BorderProperties, layout: &Layout, x: f32, y: 
 /// at the border-box top-left `(x, y)`. Block children are painted separately.
 pub(crate) fn emit_own_content(
   node: &RenderNode,
-  layout: &Layout,
+  layout: Layout,
   x: f32,
   y: f32,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
   if node.should_create_inline_layout() {
-    return emit_inline_content(node, *layout, x, y, doc);
+    return emit_inline_content(node, layout, x, y, doc);
   }
   // A node whose anonymous text became a child item paints that text through the
   // child, not as its own content (mirroring the raster backend's guard).
@@ -613,7 +613,7 @@ pub(crate) fn emit_own_content(
   }
   match node.node.as_ref().map(|n| &n.kind) {
     Some(NodeKind::Image(image)) => emit_image_node(image, node, layout, x, y, doc),
-    Some(NodeKind::Text(text)) => emit_text(text, &node.context, *layout, x, y, doc),
+    Some(NodeKind::Text(text)) => emit_text(text, &node.context, layout, x, y, doc),
     _ => Ok(()),
   }
 }
@@ -671,10 +671,10 @@ pub(crate) fn emit_inline_box(
   let box_layout: Layout = item.into();
   let group_transform =
     element_transform(&node.context, box_layout.size, box_x, box_y).unwrap_or(IDENTITY);
-  let chrome = emit_box_chrome(node, &box_layout, box_x, box_y, group_transform, doc)?;
+  let chrome = emit_box_chrome(node, box_layout, box_x, box_y, group_transform, doc)?;
 
   match node.node.as_ref().map(|n| &n.kind) {
-    Some(NodeKind::Image(image)) => emit_image_node(image, node, &box_layout, box_x, box_y, doc)?,
+    Some(NodeKind::Image(image)) => emit_image_node(image, node, box_layout, box_x, box_y, doc)?,
     Some(NodeKind::Text(text)) => emit_text(text, &node.context, box_layout, box_x, box_y, doc)?,
     _ => {}
   }
@@ -690,7 +690,7 @@ pub(crate) fn emit_inline_box(
 fn emit_image_node(
   image: &ImageData,
   node: &RenderNode,
-  layout: &Layout,
+  layout: Layout,
   x: f32,
   y: f32,
   doc: &mut SvgDocument,
@@ -1042,7 +1042,7 @@ fn emit_with_blur(
 /// Inset shadows are handled by [`emit_inset_box_shadows`].
 pub(crate) fn emit_box_shadows(
   node: &RenderNode,
-  layout: &Layout,
+  layout: Layout,
   x: f32,
   y: f32,
   w: f32,
@@ -1093,7 +1093,7 @@ pub(crate) fn emit_box_shadows(
 pub(crate) fn emit_inset_box_shadows(
   node: &RenderNode,
   border: &BorderProperties,
-  layout: &Layout,
+  layout: Layout,
   x: f32,
   y: f32,
   doc: &mut SvgDocument,
