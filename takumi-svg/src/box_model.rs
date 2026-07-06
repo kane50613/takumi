@@ -7,8 +7,11 @@
 use std::fmt::Write as _;
 
 use taffy::Size;
-use takumi_core::{context::RenderContext, style::Affine};
-use tiny_skia::{PathSegment, Point};
+use takumi_core::{
+  context::RenderContext,
+  geometry::{PathCommand, Point},
+  style::Affine,
+};
 
 use crate::{APPROX_CHARS_PER_NUMBER, Num};
 
@@ -92,43 +95,43 @@ fn quantize_path(value: f32) -> f32 {
   (value * PATH_COORD_FACTOR).round() / PATH_COORD_FACTOR
 }
 
-/// Serializes takumi-core path commands ([`tiny_skia::PathSegment`], the shared
-/// `Command` type) to compact SVG path `d` data, applying `transform`
-/// (`[a, b, c, d, e, f]`, SVG `matrix` order) to every point. Shared by glyph,
-/// border, background, and clip emission.
+/// Serializes takumi-core path commands ([`PathCommand`], the shared `Command`
+/// type) to compact SVG path `d` data, applying `transform` (`[a, b, c, d, e,
+/// f]`, SVG `matrix` order) to every point. Shared by glyph, border, background,
+/// and clip emission.
 ///
 /// Coordinates are emitted relative to the previous point (the first move stays
 /// absolute), axis-aligned lines collapse to `h`/`v`, and smooth cubics/quadratics
 /// use the `s`/`t` shorthands. Each delta is quantized with its rounding error
 /// folded into the next, so multi-contour fills stay closed — the core of SVGO's
 /// `convertPathData`.
-pub(crate) fn path_data(commands: &[PathSegment], [a, b, c, d, e, f]: [f32; 6]) -> String {
+pub(crate) fn path_data(commands: &[PathCommand], [a, b, c, d, e, f]: [f32; 6]) -> String {
   let path =
     PathData::with_capacity(commands.len() * NUMBERS_PER_COMMAND * APPROX_CHARS_PER_NUMBER);
-  let map = |p: Point| (a * p.x + c * p.y + e, b * p.x + d * p.y + f);
+  let map = |p: Point<f32>| (a * p.x + c * p.y + e, b * p.x + d * p.y + f);
   let mut emit = RelEmit::new(path);
   for command in commands {
     match command {
-      PathSegment::MoveTo(p) => {
+      PathCommand::MoveTo(p) => {
         let (x, y) = map(*p);
         emit.move_to(x, y);
       }
-      PathSegment::LineTo(p) => {
+      PathCommand::LineTo(p) => {
         let (x, y) = map(*p);
         emit.line_to(x, y);
       }
-      PathSegment::QuadTo(c0, p) => {
+      PathCommand::QuadTo(c0, p) => {
         let (cx, cy) = map(*c0);
         let (x, y) = map(*p);
         emit.quad_to(cx, cy, x, y);
       }
-      PathSegment::CubicTo(c0, c1, p) => {
+      PathCommand::CubicTo(c0, c1, p) => {
         let (c1x, c1y) = map(*c0);
         let (c2x, c2y) = map(*c1);
         let (x, y) = map(*p);
         emit.cubic_to(c1x, c1y, c2x, c2y, x, y);
       }
-      PathSegment::Close => emit.close(),
+      PathCommand::Close => emit.close(),
     }
   }
   emit.finish()
@@ -371,8 +374,8 @@ mod tests {
     assert_eq!(path, "M0 0 1 1 2 2");
   }
 
-  fn pt(x: f32, y: f32) -> Point {
-    Point::from_xy(x, y)
+  fn pt(x: f32, y: f32) -> Point<f32> {
+    Point::new(x, y)
   }
 
   const IDENTITY: [f32; 6] = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
@@ -380,10 +383,10 @@ mod tests {
   #[test]
   fn path_data_is_relative_with_hv_shorthands() {
     let commands = [
-      PathSegment::MoveTo(pt(10.0, 10.0)),
-      PathSegment::LineTo(pt(20.0, 10.0)),
-      PathSegment::LineTo(pt(20.0, 20.0)),
-      PathSegment::Close,
+      PathCommand::MoveTo(pt(10.0, 10.0)),
+      PathCommand::LineTo(pt(20.0, 10.0)),
+      PathCommand::LineTo(pt(20.0, 20.0)),
+      PathCommand::Close,
     ];
     assert_eq!(path_data(&commands, IDENTITY), "M10 10h10v10Z");
   }
@@ -393,9 +396,9 @@ mod tests {
     // The second cubic's first control is the reflection of the first cubic's
     // second control about the join, so it collapses to `s`.
     let commands = [
-      PathSegment::MoveTo(pt(0.0, 0.0)),
-      PathSegment::CubicTo(pt(0.0, 5.0), pt(5.0, 5.0), pt(5.0, 0.0)),
-      PathSegment::CubicTo(pt(5.0, -5.0), pt(10.0, -5.0), pt(10.0, 0.0)),
+      PathCommand::MoveTo(pt(0.0, 0.0)),
+      PathCommand::CubicTo(pt(0.0, 5.0), pt(5.0, 5.0), pt(5.0, 0.0)),
+      PathCommand::CubicTo(pt(5.0, -5.0), pt(10.0, -5.0), pt(10.0, 0.0)),
     ];
     assert_eq!(path_data(&commands, IDENTITY), "M0 0c0 5 5 5 5 0s5-5 5 0");
   }
@@ -403,8 +406,8 @@ mod tests {
   #[test]
   fn path_data_quantizes_to_two_decimals() {
     let commands = [
-      PathSegment::MoveTo(pt(0.0, 0.0)),
-      PathSegment::LineTo(pt(1.2345, 6.789)),
+      PathCommand::MoveTo(pt(0.0, 0.0)),
+      PathCommand::LineTo(pt(1.2345, 6.789)),
     ];
     assert_eq!(path_data(&commands, IDENTITY), "M0 0l1.23 6.79");
   }

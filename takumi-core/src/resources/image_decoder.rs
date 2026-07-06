@@ -1,5 +1,4 @@
 use std::{
-  borrow::Cow,
   io::{Cursor, Error as IoError, ErrorKind},
   sync::Arc,
 };
@@ -181,7 +180,8 @@ fn decode_webp(bytes: &[u8]) -> ImageResult<ImageBuffer> {
 }
 
 fn rgba_to_buffer(image: RgbaImage, format: ImageFormat) -> ImageResult<ImageBuffer> {
-  ImageBuffer::from_rgba(Cow::Owned(image)).ok_or_else(|| {
+  let (width, height) = (image.width(), image.height());
+  ImageBuffer::from_rgba_bytes(image.into_raw(), width, height).ok_or_else(|| {
     ImageError::Decoding(DecodingError::new(
       format.into(),
       IoError::new(

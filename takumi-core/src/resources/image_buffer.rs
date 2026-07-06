@@ -4,9 +4,7 @@
 //! layout as `tiny_skia::Pixmap`, so a paint backend can borrow it zero-copy via
 //! `PixmapRef::from_bytes(buffer.data(), w, h)` without a per-composite copy.
 
-use std::borrow::Cow;
-
-use image::{ExtendedColorType, ImageEncoder, RgbaImage, codecs::png::PngEncoder};
+use image::{ExtendedColorType, ImageEncoder, codecs::png::PngEncoder};
 
 use crate::style::math::fast_div_255;
 
@@ -44,33 +42,13 @@ impl ImageBuffer {
     })
   }
 
-  /// Builds a premultiplied buffer from a straight-alpha [`RgbaImage`].
-  pub fn from_rgba(source: Cow<'_, RgbaImage>) -> Option<Self> {
-    let (width, height, premultiplied) = match source {
-      Cow::Owned(image) => {
-        let width = image.width();
-        let height = image.height();
-        let mut raw = image.into_raw();
-        if !has_opaque_alpha(&raw) {
-          premultiply_rgba_in_place(&mut raw);
-        }
-        (width, height, raw)
-      }
-      Cow::Borrowed(image) => {
-        let width = image.width();
-        let height = image.height();
-        let raw = image.as_raw();
-        if has_opaque_alpha(raw) {
-          (width, height, raw.to_vec())
-        } else {
-          let mut premultiplied = vec![0u8; raw.len()];
-          write_premultiplied_rgba(&mut premultiplied, raw);
-          (width, height, premultiplied)
-        }
-      }
-    };
-
-    Self::from_premultiplied_rgba(premultiplied, width, height)
+  /// Builds a premultiplied buffer from straight-alpha RGBA bytes (row-major, 4 bytes/pixel).
+  /// Returns `None` if `raw.len() != width * height * 4`.
+  pub fn from_rgba_bytes(mut raw: Vec<u8>, width: u32, height: u32) -> Option<Self> {
+    if !has_opaque_alpha(&raw) {
+      premultiply_rgba_in_place(&mut raw);
+    }
+    Self::from_premultiplied_rgba(raw, width, height)
   }
 
   /// The image width in pixels.
@@ -91,11 +69,6 @@ impl ImageBuffer {
   /// Mutable access to the premultiplied RGBA bytes.
   pub fn data_mut(&mut self) -> &mut [u8] {
     &mut self.data
-  }
-
-  /// Consumes the buffer, returning the premultiplied RGBA bytes.
-  pub(crate) fn into_data(self) -> Vec<u8> {
-    self.data
   }
 
   /// Encodes the image as straight-alpha PNG bytes, for embedding in an SVG
@@ -168,27 +141,6 @@ fn premultiply_rgba_in_place(raw: &mut [u8]) {
     pixel[0] = fast_div_255(pixel[0] as u32 * alpha_u32);
     pixel[1] = fast_div_255(pixel[1] as u32 * alpha_u32);
     pixel[2] = fast_div_255(pixel[2] as u32 * alpha_u32);
-  }
-}
-
-#[inline(always)]
-fn write_premultiplied_rgba(dst: &mut [u8], src: &[u8]) {
-  for (dst_px, src_px) in dst.chunks_exact_mut(4).zip(src.chunks_exact(4)) {
-    let alpha = src_px[3];
-    if alpha == u8::MAX {
-      dst_px.copy_from_slice(src_px);
-      continue;
-    }
-    if alpha == 0 {
-      dst_px.copy_from_slice(&[0, 0, 0, 0]);
-      continue;
-    }
-
-    let alpha_u32 = alpha as u32;
-    dst_px[0] = fast_div_255(src_px[0] as u32 * alpha_u32);
-    dst_px[1] = fast_div_255(src_px[1] as u32 * alpha_u32);
-    dst_px[2] = fast_div_255(src_px[2] as u32 * alpha_u32);
-    dst_px[3] = alpha;
   }
 }
 

@@ -10,7 +10,7 @@ use crate::{
   PaintSource, Placement, Result, SamplingOptions, SizedFontStyle, Stroke,
   composite_mask_source_to_pixmap, draw_outset_shadow,
   layout::inline::InlineBrush,
-  render_mask,
+  pixmap_ref_from_buffer, render_mask,
   resources::font::{ResolvedColorLayer, ResolvedGlyph},
   style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
 };
@@ -288,13 +288,16 @@ pub(crate) fn draw_glyph(
 
   match glyph {
     ResolvedGlyph::Bitmap(bitmap) => {
+      let Some(source) = pixmap_ref_from_buffer(&bitmap.image) else {
+        return Ok(());
+      };
       transform *= Affine::translation(bitmap.placement.left as f32, -bitmap.placement.top as f32);
       transform *= Affine::scale(bitmap.scale_x, bitmap.scale_y);
       canvas.overlay_sampled_pixmap(
-        bitmap.pixmap.as_ref(),
+        source,
         Size {
-          width: bitmap.pixmap.width(),
-          height: bitmap.pixmap.height(),
+          width: source.width(),
+          height: source.height(),
         },
         Default::default(),
         transform,

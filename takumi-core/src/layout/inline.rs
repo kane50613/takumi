@@ -6,11 +6,11 @@ use parley::{
 };
 use skrifa::{FontRef, MetadataProvider};
 use taffy::{AvailableSpace, Layout, Point, Rect, Size};
-use tiny_skia::PathSegment;
 
 use crate::{
   context::RenderContext,
   font_style::SizedFontStyle,
+  geometry::PathCommand,
   layout::{border::BorderPath, node::Node, tree::RenderNode},
   resources::font::{FontError, ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},
   style::{
@@ -1796,7 +1796,7 @@ pub fn outline_islands(mut outline_rects: Vec<InlineOutlineRect>) -> Vec<Vec<Inl
 /// Builds the rectilinear contour around one island of outline rects, expanded
 /// by `expansion` (outline-offset plus half the outline width). Pure path
 /// geometry; callers stroke it with their own backend.
-pub fn outline_island_contour(island: &[InlineOutlineRect], expansion: f32) -> Vec<PathSegment> {
+pub fn outline_island_contour(island: &[InlineOutlineRect], expansion: f32) -> Vec<PathCommand> {
   let mut path = Vec::with_capacity(island.len() * 6);
   let mut expanded_rects = island
     .iter()
@@ -1895,7 +1895,7 @@ impl PositionedInlineRun<'_> {
     &self,
     outline: &'g ResolvedOutlineGlyph,
     foreground: Color,
-  ) -> Vec<(Color, &'g [PathSegment])> {
+  ) -> Vec<(Color, &'g [PathCommand])> {
     let Some(layers) = outline.color_layers() else {
       return Vec::new();
     };

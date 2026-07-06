@@ -1,10 +1,10 @@
 use std::f32::consts::{PI, SQRT_2};
 
 use taffy::{Point, Rect, Size};
-use tiny_skia::{PathSegment as Command, Point as TinyPoint};
 
 use crate::{
   context::RenderContext,
+  geometry::{PathCommand as Command, Point as PathPoint},
   style::{BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair},
 };
 
@@ -30,18 +30,18 @@ pub(crate) trait BorderPath {
 
 impl BorderPath for Vec<Command> {
   fn move_to(&mut self, point: (f32, f32)) {
-    self.push(Command::MoveTo(TinyPoint::from_xy(point.0, point.1)));
+    self.push(Command::MoveTo(PathPoint::new(point.0, point.1)));
   }
 
   fn line_to(&mut self, point: (f32, f32)) {
-    self.push(Command::LineTo(TinyPoint::from_xy(point.0, point.1)));
+    self.push(Command::LineTo(PathPoint::new(point.0, point.1)));
   }
 
   fn curve_to(&mut self, p1: (f32, f32), p2: (f32, f32), p3: (f32, f32)) {
     self.push(Command::CubicTo(
-      TinyPoint::from_xy(p1.0, p1.1),
-      TinyPoint::from_xy(p2.0, p2.1),
-      TinyPoint::from_xy(p3.0, p3.1),
+      PathPoint::new(p1.0, p1.1),
+      PathPoint::new(p2.0, p2.1),
+      PathPoint::new(p3.0, p3.1),
     ));
   }
 
