@@ -1675,7 +1675,6 @@ dependencies = [
  "image",
  "image-webp",
  "libwebp-sys",
- "parley",
  "png",
  "rayon",
  "serde",
