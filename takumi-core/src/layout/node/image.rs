@@ -135,22 +135,7 @@ pub(crate) fn measure_image_node(
   let aspect_ratio = style.aspect_ratio.or_else(|| {
     (preferred_size.height != 0.0).then_some(preferred_size.width / preferred_size.height)
   });
-  // Mirrors `taffy::geometry::Size::maybe_apply_aspect_ratio`: fills in the
-  // missing axis from the known one when only one dimension is set.
-  let known_dimensions = match aspect_ratio {
-    Some(ratio) => match (known_dimensions.width, known_dimensions.height) {
-      (Some(width), None) => Size {
-        width: Some(width),
-        height: Some(width / ratio),
-      },
-      (None, Some(height)) => Size {
-        width: Some(height * ratio),
-        height: Some(height),
-      },
-      _ => known_dimensions,
-    },
-    None => known_dimensions,
-  };
+  let known_dimensions = known_dimensions.fill_missing_axis_from_aspect_ratio(aspect_ratio);
 
   if let Size {
     width: Some(width),

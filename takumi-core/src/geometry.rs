@@ -112,6 +112,22 @@ impl Size<Option<f32>> {
     width: None,
     height: None,
   };
+
+  /// When exactly one axis is set, fills the other from `aspect_ratio` (width /
+  /// height). Mirrors `taffy::geometry::Size::maybe_apply_aspect_ratio`.
+  pub(crate) fn fill_missing_axis_from_aspect_ratio(self, aspect_ratio: Option<f32>) -> Self {
+    match (aspect_ratio, self.width, self.height) {
+      (Some(ratio), Some(width), None) => Self {
+        width: Some(width),
+        height: Some(width / ratio),
+      },
+      (Some(ratio), None, Some(height)) => Self {
+        width: Some(height * ratio),
+        height: Some(height),
+      },
+      _ => self,
+    }
+  }
 }
 
 /// A 2D rect defined by its four edges.
@@ -294,4 +310,55 @@ pub fn transformed_rect_extents(
   }
 
   Some((min_x, min_y, max_x, max_y))
+}
+
+#[cfg(test)]
+mod tests {
+  use super::Size;
+
+  #[test]
+  fn aspect_ratio_fills_height_from_width() {
+    let filled = Size {
+      width: Some(10.0),
+      height: None,
+    }
+    .fill_missing_axis_from_aspect_ratio(Some(2.0));
+    assert_eq!(filled.width, Some(10.0));
+    assert_eq!(filled.height, Some(5.0));
+  }
+
+  #[test]
+  fn aspect_ratio_fills_width_from_height() {
+    let filled = Size {
+      width: None,
+      height: Some(10.0),
+    }
+    .fill_missing_axis_from_aspect_ratio(Some(2.0));
+    assert_eq!(filled.width, Some(20.0));
+    assert_eq!(filled.height, Some(10.0));
+  }
+
+  #[test]
+  fn aspect_ratio_leaves_both_known_and_both_unknown_untouched() {
+    let both = Size {
+      width: Some(3.0),
+      height: Some(4.0),
+    };
+    assert_eq!(both.fill_missing_axis_from_aspect_ratio(Some(2.0)), both);
+
+    let neither = Size::<Option<f32>>::NONE;
+    assert_eq!(
+      neither.fill_missing_axis_from_aspect_ratio(Some(2.0)),
+      neither
+    );
+  }
+
+  #[test]
+  fn no_aspect_ratio_is_a_noop() {
+    let one_axis = Size {
+      width: Some(10.0),
+      height: None,
+    };
+    assert_eq!(one_axis.fill_missing_axis_from_aspect_ratio(None), one_axis);
+  }
 }
