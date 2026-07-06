@@ -119,9 +119,10 @@ impl Animatable for Transform {
   }
 }
 
-/// | a c x |
-/// | b d y |
-/// | 0 0 1 |
+// | a c x |
+// | b d y |
+// | 0 0 1 |
+/// An affine transform matrix, representing a combination of translation, rotation, scaling, and skewing.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Affine {
   /// Horizontal scaling / cosine of rotation

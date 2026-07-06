@@ -34,9 +34,7 @@ use crate::{
   text::{emit_inline_content, emit_text},
 };
 
-/// Inputs for [`render`]. Built with [`SvgOptions::builder`]; only `node`,
-/// `viewport`, and `fonts` are required. Carrying inputs in a builder struct
-/// keeps new options from being breaking changes.
+/// Inputs for [`render`], built with [`SvgOptions::builder`].
 #[derive(TypedBuilder)]
 pub struct SvgOptions<'g> {
   /// The viewport to render in.

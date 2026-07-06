@@ -26,7 +26,7 @@ use crate::{
 };
 
 #[derive(Clone, TypedBuilder)]
-/// Options for rendering a node. Construct using [`RenderOptions::builder`] to avoid breaking changes.
+/// Options for rendering a node, built with [`RenderOptions::builder`].
 pub struct RenderOptions<'g> {
   /// The viewport to render the node in.
   pub(crate) viewport: Viewport,
