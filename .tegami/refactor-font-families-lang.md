@@ -1,7 +1,8 @@
 ---
 packages:
-  cargo:takumi-core: minor
-  cargo:takumi: major
+  cargo:takumi:
+    replay:
+      - exit-prerelease(cargo:takumi)
 ---
 
 ### Refactor `font_families` and `lang` option type

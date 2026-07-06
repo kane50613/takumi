@@ -1,111 +1,79 @@
 core:changelogs:
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n  cargo:takumi:\n    type: major\n---\n\n### Drop `background-blend-mode` from the `background` shorthand\n\nThe `background` shorthand parsed a blend-mode token and reset\n`background-blend-mode`, unlike browsers, where the shorthand touches neither. It\nnow leaves `background-blend-mode` alone; set it through the longhand. The\n`blend_mode` field is gone from the `Background` shorthand value.\n"
-    filename: background-shorthand-blend-mode.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n  cargo:takumi:\n    type: major\n---\n\n### Represent the `none`/`normal` initial values of `max-*` and gaps\n\n`max-width` and `max-height` are now a `MaxSize` value whose initial is `None`\n(unbounded), instead of borrowing `Length`'s `auto`. `column-gap`, `row-gap`, and\nthe `gap` shorthand are now a `Gap` value whose initial is `Normal`. Rendering is\nunchanged — `none` resolves like the old unbounded default and `normal` computes\nto `0` — but the values now round-trip through `to_css` as `none`/`normal`.\n"
-    filename: max-size-gap-initial-values.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n  cargo:takumi:\n    type: major\n---\n\n### Seal `parley::Layout` out of the inline-layout boundary\n\n`BuiltInlineLayout::{layout, custom_inline_boxes}` are now private; the\nmeasure-only walk moves into `BuiltInlineLayout::measure_runs`, returning\ncore-owned `MeasuredInlineRun`/`MeasuredInlineBox` (run text borrows the\nlayout). `get_parent_font_metrics`, `resolve_inline_line_metrics`,\n`resolve_inline_line_states`, and `scale_text_fit_x` are no longer public.\n"
-    filename: seal-inline-layout-parley.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n  cargo:takumi-raster:\n    type: minor\n---\n\n### Seal remaining `taffy`/`parley` leaks out of the public `style` API\n\n`Position`, `Display`, `AlignItems`, `JustifyContent`, `BoxSizing`, `Direction`,\n`FlexDirection`, `FlexWrap`, `Overflow`, `TextAlign`, `GridPlacement`,\n`GridAutoFlow`, `GridRepetitionCount`, and `GridTemplateAreas` no longer\nimplement `From<_>` for their `taffy`/`parley` counterparts; the conversions\nare now `pub(crate)` inherent methods (`into_taffy`/`into_parley`).\n`TextWrapMode`, `WordBreak`, and `OverflowWrap` lose their `parley` `From`\nimpls the same way. `ResolvedVerticalAlign::apply` is now `pub(crate)`.\n\n`takumi-raster`: dropped the unused `From<OutputFormat> for image::ImageFormat`\nimpl, which pinned the `image` crate into the public API without being called\nanywhere.\n"
-    filename: seal-style-taffy-parley-leaks.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n---\n\n### Seal the `parlance` font model out of the public `style` API\n\n`#916` grepped only `parley::`, so it missed `parlance` (the parley font\nmodel) leaking through `style`. This follow-up seals it:\n\n`FontFeature`, `FontVariation`, and `Tag` are now takumi-owned structs,\nreplacing `parlance::tag::{FontFeature, FontVariation, Tag}` in\n`ComputedStyle::font_feature_settings`/`font_variation_settings`.\n`FontWeight::Absolute` holds a plain `f32` instead of\n`parlance::font::FontWeight`. `ComputedStyle::lang` is now `Option<Lang>`, a\ntakumi-owned BCP-47 tag, instead of `Option<parlance::language::Language>`.\n`FontStretch`, `FontStyle`, `FontWeight`, `FontFamily`, and\n`resources::font::GenericFamily` lose their `From<_>`/`Into<_>` impls\ntargeting `parlance` types; the conversions are now `pub(crate)` inherent\nmethods (`into_parlance`/`to_parlance`/`from_parlance_generic`) called only\nat the shaping boundary.\n\nAlso dropped two unused `From<FontFamily> for parlance::FontFamily` impls\nwith no callers in the crate.\n"
-    filename: seal-style-parlance-leaks.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n---\n\n### Seal `tiny_skia` and `image` types out of the public API\n\nGlyph outline paths now use core-owned `geometry::PathCommand`/`geometry::Point`\ninstead of `tiny_skia::PathSegment`/`Point`. `ResolvedBitmapGlyph::pixmap`\n(`tiny_skia::Pixmap`) is now `image: ImageBuffer`. `ImageBuffer::from_rgba`\n(`Cow<RgbaImage>`) is now `from_rgba_bytes(Vec<u8>, width, height)`.\n`layout::border::BorderProperties`'s path-building methods take\n`Vec<geometry::PathCommand>` instead of `Vec<tiny_skia::PathSegment>`.\n"
-    filename: seal-tiny-skia-image-types.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n---\n\n### Replace `parley::GlyphRun` with a core-owned `ShapedRun` at the paint boundary\n\n`PositionedInlineRun::glyph_run` is now `ShapedRun` (owned glyphs, brush, metrics,\nfont data) instead of `parley::GlyphRun<'l, InlineBrush>`; `PositionedInlineRun`\nand `InlineRunLayout` drop their lifetime. `run_decorations` takes `&ShapedRun`.\n"
-    filename: shaped-run-paint-boundary.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n---\n\n### Seal `taffy` geometry types out of the public API\n\n`layout::border::BorderProperties`, `shadow::SizedShadow`, `layout::inline::InlineBoxItem`,\nand the other geometry-touching public items now use core-owned\n`geometry::{Size, Rect, Point}` instead of `taffy::{Size, Rect, Point}`.\n`layout::tree::LayoutResults::layout` returns an owned `geometry::ComputedLayout`\ninstead of `&taffy::Layout`. `LayoutTree::compute_layout` and the paint scene\n(`build_stacking_contexts`, `NodePaint`, `layout::tree::OrderedChild`) now use\ncore-owned `geometry::{AvailableSpace, NodeId}` instead of `taffy::{AvailableSpace,\nNodeId}`; `NodeId::ROOT` replaces the removed `root_node_id()` accessors. `taffy`\nremains the layout engine at the `compute_layout` internals and `Style`\nconstruction.\n"
-    filename: seal-taffy-geometry-types.md
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n  cargo:takumi:\n    type: major\n---\n\n### Refactor `font_families` and `lang` option type\n\nNow both option takes resolved value instead of raw strings.\n"
+    filename: refactor-font-families-lang.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - id: npm:takumi-template
-    updated: false
-  - id: npm:@takumi-rs/image-response
+  - id: npm:takumi-js
     updated: true
   - id: npm:@takumi-rs/core
     updated: true
-  - id: npm:takumi-js
-    updated: true
+  - id: npm:takumi-template
+    updated: false
   - id: npm:docs
     updated: false
   - id: npm:@takumi-rs/helpers
     updated: true
   - id: npm:@takumi-rs/wasm
     updated: true
+  - id: npm:@takumi-rs/image-response
+    updated: true
   - id: npm:example-nextjs
-    updated: false
-  - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:example-satori-html
     updated: false
   - id: npm:example-css-library-integration
     updated: false
-  - id: npm:waku-ssr
-    updated: false
-  - id: npm:example-tanstack-start
-    updated: false
-  - id: npm:svelte
+  - id: npm:example-cloudflare-workers
     updated: false
   - id: npm:example-twitter-images
     updated: false
+  - id: npm:svelte
+    updated: false
+  - id: npm:waku-ssr
+    updated: false
   - id: npm:ffplay
+    updated: false
+  - id: npm:example-tanstack-start
     updated: false
   - id: npm:ffmpeg-keyframe-animation
     updated: false
+  - id: npm:example-satori-html
+    updated: false
+  - changelogIds:
+      - refactor-font-families-lang.md
+    id: cargo:takumi
+    updated: true
   - id: cargo:takumi-html
     updated: true
   - id: cargo:takumi-svg
     updated: true
   - changelogIds:
-      - background-shorthand-blend-mode.md
-      - max-size-gap-initial-values.md
-      - seal-inline-layout-parley.md
-    id: cargo:takumi
-    updated: true
-  - changelogIds:
-      - seal-style-taffy-parley-leaks.md
-    id: cargo:takumi-raster
-    updated: true
-  - changelogIds:
-      - background-shorthand-blend-mode.md
-      - seal-style-parlance-leaks.md
-      - seal-style-taffy-parley-leaks.md
-      - max-size-gap-initial-values.md
-      - seal-tiny-skia-image-types.md
-      - seal-inline-layout-parley.md
-      - shaped-run-paint-boundary.md
-      - seal-taffy-geometry-types.md
+      - refactor-font-families-lang.md
     id: cargo:takumi-core
+    updated: true
+  - id: cargo:takumi-raster
     updated: true
 npm:packages:
   - id: npm:takumi
-  - id: npm:takumi-template
-  - distTag: rc
-    id: npm:@takumi-rs/image-response
-  - distTag: rc
-    id: npm:@takumi-rs/core
   - distTag: rc
     id: npm:takumi-js
+  - distTag: rc
+    id: npm:@takumi-rs/core
+  - id: npm:takumi-template
   - id: npm:docs
   - distTag: rc
     id: npm:@takumi-rs/helpers
   - distTag: rc
     id: npm:@takumi-rs/wasm
+  - distTag: rc
+    id: npm:@takumi-rs/image-response
   - id: npm:example-nextjs
-  - id: npm:example-cloudflare-workers
-  - id: npm:example-satori-html
   - id: npm:example-css-library-integration
-  - id: npm:waku-ssr
-  - id: npm:example-tanstack-start
-  - id: npm:svelte
+  - id: npm:example-cloudflare-workers
   - id: npm:example-twitter-images
+  - id: npm:svelte
+  - id: npm:waku-ssr
   - id: npm:ffplay
+  - id: npm:example-tanstack-start
   - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-satori-html
