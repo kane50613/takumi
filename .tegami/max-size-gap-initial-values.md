@@ -1,9 +1,8 @@
 ---
 packages:
-  cargo:takumi-core:
-    type: minor
   cargo:takumi:
-    type: major
+    replay:
+      - exit-prerelease(cargo:takumi)
 ---
 
 ### Represent the `none`/`normal` initial values of `max-*` and gaps

@@ -1,9 +1,8 @@
 ---
 packages:
-  cargo:takumi-core:
-    type: minor
   cargo:takumi:
-    type: major
+    replay:
+      - exit-prerelease(cargo:takumi)
 ---
 
 ### Seal `parley::Layout` out of the inline-layout boundary
