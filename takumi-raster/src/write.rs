@@ -5,7 +5,7 @@ use std::{
 
 use gif::{Encoder as GifEncoder, Frame as GifFrame, Repeat};
 use image::{
-  ExtendedColorType, ImageEncoder, ImageFormat, RgbaImage,
+  ExtendedColorType, ImageEncoder, RgbaImage,
   codecs::{ico::IcoEncoder, jpeg::JpegEncoder},
 };
 use png::{ColorType, DeflateCompression, Filter};
@@ -86,19 +86,6 @@ impl OutputFormat {
       OutputFormat::Png => "image/png",
       OutputFormat::Jpeg { .. } => "image/jpeg",
       OutputFormat::Ico => "image/x-icon",
-    }
-  }
-}
-
-impl From<OutputFormat> for ImageFormat {
-  fn from(format: OutputFormat) -> Self {
-    match format {
-      #[cfg(not(target_arch = "wasm32"))]
-      OutputFormat::WebP { .. } => Self::WebP,
-      OutputFormat::WebPLossless => Self::WebP,
-      OutputFormat::Png => Self::Png,
-      OutputFormat::Jpeg { .. } => Self::Jpeg,
-      OutputFormat::Ico => Self::Ico,
     }
   }
 }
