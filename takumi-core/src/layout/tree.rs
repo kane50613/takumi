@@ -2,9 +2,9 @@ use std::{collections::HashMap, mem::take, vec::IntoIter};
 
 use parley::fontique::Attributes;
 use taffy::{
-  AvailableSpace, BlockContext, Cache, CacheTree, Display as TaffyDisplay, Layout,
-  LayoutBlockContainer, LayoutFlexboxContainer, LayoutGridContainer, LayoutInput, LayoutOutput,
-  LayoutPartialTree, NodeId, RequestedAxis, RoundTree, RunMode, Size, SizingMode, Style,
+  BlockContext, Cache, CacheTree, Display as TaffyDisplay, Layout, LayoutBlockContainer,
+  LayoutFlexboxContainer, LayoutGridContainer, LayoutInput, LayoutOutput, LayoutPartialTree,
+  NodeId as TaffyNodeId, RequestedAxis, RoundTree, RunMode, Size as TaffySize, SizingMode, Style,
   TraversePartialTree, TraverseTree, compute_block_layout, compute_cached_layout,
   compute_flexbox_layout, compute_grid_layout, compute_hidden_layout, compute_leaf_layout,
   compute_root_layout, round_layout,
@@ -14,6 +14,7 @@ use crate::{
   Error,
   context::RenderContext,
   font_style::SizedFontStyle,
+  geometry::{AvailableSpace, ComputedLayout, NodeId, Size},
   layout::{
     inline::{
       InlineContentKind, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
@@ -31,14 +32,14 @@ use crate::{
   viewport::Viewport,
 };
 
-/// A render-tree child paired with its layout `NodeId`. `hoisted_cb` is set
+/// A render-tree child paired with its layout node id. `hoisted_cb` is set
 /// when the child is out-of-flow and was re-parented to a containing block in
-/// the taffy tree; its geometry then resolves against that block.
+/// the layout tree; its geometry then resolves against that block.
 #[derive(Debug, Clone, Copy)]
 pub struct OrderedChild {
   /// Index of the child in its parent's render order.
   pub render_index: usize,
-  /// Layout node id in the taffy tree.
+  /// Layout node id.
   pub node_id: NodeId,
   /// Containing block the child was hoisted to, if out-of-flow.
   pub hoisted_cb: Option<NodeId>,
@@ -56,18 +57,13 @@ struct LayoutResultNode {
 }
 
 impl LayoutResults {
-  /// The root node id.
-  pub const fn root_node_id(&self) -> NodeId {
-    NodeId::new(0)
-  }
-
   /// Computed layout of a node.
-  pub fn layout(&self, node_id: NodeId) -> crate::Result<&Layout> {
+  pub fn layout(&self, node_id: NodeId) -> crate::Result<ComputedLayout> {
     let idx: usize = node_id.into();
     self
       .nodes
       .get(idx)
-      .map(|node| &node.layout)
+      .map(|node| ComputedLayout::from_taffy(&node.layout))
       .ok_or(Error::InvalidLayoutNode(node_id.into()))
   }
 
@@ -104,7 +100,7 @@ struct LayoutNodeState {
   final_layout: Layout,
   first_baseline_y: Option<f32>,
   is_inline_children: bool,
-  children: Box<[NodeId]>,
+  children: Box<[TaffyNodeId]>,
   box_children: Box<[OrderedChild]>,
 }
 
@@ -305,13 +301,13 @@ fn push_layout_node<'r>(
   nodes: &mut Vec<LayoutNodeState>,
   render_nodes: &mut Vec<&'r RenderNode>,
   render_root: &'r RenderNode,
-) -> NodeId {
+) -> TaffyNodeId {
   struct PendingNode<'r> {
-    node_id: NodeId,
+    node_id: TaffyNodeId,
     position: Position,
     next_child_index: usize,
     children: Option<&'r [RenderNode]>,
-    taffy_child_ids: Vec<NodeId>,
+    taffy_child_ids: Vec<TaffyNodeId>,
     box_children: Vec<OrderedChild>,
   }
 
@@ -321,7 +317,7 @@ fn push_layout_node<'r>(
     render_node: &'r RenderNode,
   ) -> PendingNode<'r> {
     let node_index = nodes.len();
-    let node_id = NodeId::from(node_index);
+    let node_id = TaffyNodeId::from(node_index);
     let is_inline_children = render_node.should_create_inline_layout();
     let children = if is_inline_children {
       None
@@ -366,8 +362,8 @@ fn push_layout_node<'r>(
   // direct-parent positioning resolves against the correct CSS containing
   // block: nearest CB ancestor for `absolute`, the root for `fixed`. The box
   // (render) tree is preserved separately for painting.
-  let mut cb_stack: Vec<NodeId> = Vec::new();
-  let mut hoisted: HashMap<NodeId, Vec<NodeId>> = HashMap::new();
+  let mut cb_stack: Vec<TaffyNodeId> = Vec::new();
+  let mut hoisted: HashMap<TaffyNodeId, Vec<TaffyNodeId>> = HashMap::new();
 
   let root = push_node_state(nodes, render_nodes, render_root);
   let root_id = root.node_id;
@@ -426,8 +422,8 @@ fn push_layout_node<'r>(
       };
       parent.box_children.push(OrderedChild {
         render_index,
-        node_id: fid,
-        hoisted_cb,
+        node_id: NodeId::from_taffy(fid),
+        hoisted_cb: hoisted_cb.map(NodeId::from_taffy),
       });
     }
   }
@@ -442,7 +438,7 @@ impl<'r> LayoutTree<'r> {
     let mut render_nodes = Vec::with_capacity(1);
     let root_id = push_layout_node(&mut nodes, &mut render_nodes, render_root);
 
-    debug_assert_eq!(root_id, NodeId::from(0usize));
+    debug_assert_eq!(root_id, TaffyNodeId::from(0usize));
 
     Self {
       nodes,
@@ -450,15 +446,14 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
-  /// The root node id.
-  pub fn root_node_id(&self) -> NodeId {
-    NodeId::from(0usize)
-  }
-
   /// Computes and rounds the layout for the whole tree.
   pub fn compute_layout(&mut self, available_space: Size<AvailableSpace>) {
-    let root_node_id = self.root_node_id();
-    compute_root_layout(self, root_node_id, available_space);
+    let root_node_id = NodeId::ROOT.into_taffy();
+    compute_root_layout(
+      self,
+      root_node_id,
+      available_space.map(AvailableSpace::into_taffy).into_taffy(),
+    );
     round_layout(self, root_node_id);
   }
 
@@ -477,16 +472,16 @@ impl<'r> LayoutTree<'r> {
     }
   }
 
-  fn get_index(&self, node_id: NodeId) -> Option<usize> {
+  fn get_index(&self, node_id: TaffyNodeId) -> Option<usize> {
     let idx = node_id.into();
     (idx < self.nodes.len()).then_some(idx)
   }
 
-  fn get_layout_node_ref(&self, node_id: NodeId) -> Option<&LayoutNodeState> {
+  fn get_layout_node_ref(&self, node_id: TaffyNodeId) -> Option<&LayoutNodeState> {
     self.get_index(node_id).and_then(|idx| self.nodes.get(idx))
   }
 
-  fn get_layout_node_mut_ref(&mut self, node_id: NodeId) -> Option<&mut LayoutNodeState> {
+  fn get_layout_node_mut_ref(&mut self, node_id: TaffyNodeId) -> Option<&mut LayoutNodeState> {
     self
       .get_index(node_id)
       .and_then(|idx| self.nodes.get_mut(idx))
@@ -494,7 +489,7 @@ impl<'r> LayoutTree<'r> {
 
   fn update_node_style_for_available_space(
     &mut self,
-    node_id: NodeId,
+    node_id: TaffyNodeId,
     available_space: Size<AvailableSpace>,
     known_dimensions: Size<Option<f32>>,
   ) {
@@ -575,9 +570,9 @@ fn should_strip_flex_intrinsic_stretch_known_dimension(
 }
 
 fn sort_children_by_order(
-  children: &[NodeId],
-  mut child_order: impl FnMut(NodeId) -> i32,
-) -> Vec<NodeId> {
+  children: &[TaffyNodeId],
+  mut child_order: impl FnMut(TaffyNodeId) -> i32,
+) -> Vec<TaffyNodeId> {
   let mut ordered = children
     .iter()
     .copied()
@@ -593,11 +588,11 @@ fn sort_children_by_order(
 
 impl TraversePartialTree for LayoutTree<'_> {
   type ChildIter<'a>
-    = IntoIter<NodeId>
+    = IntoIter<TaffyNodeId>
   where
     Self: 'a;
 
-  fn child_ids(&self, parent_node_id: NodeId) -> Self::ChildIter<'_> {
+  fn child_ids(&self, parent_node_id: TaffyNodeId) -> Self::ChildIter<'_> {
     let Some(node) = self.get_layout_node_ref(parent_node_id) else {
       return Vec::new().into_iter();
     };
@@ -617,7 +612,7 @@ impl TraversePartialTree for LayoutTree<'_> {
     children.into_iter()
   }
 
-  fn child_count(&self, parent_node_id: NodeId) -> usize {
+  fn child_count(&self, parent_node_id: TaffyNodeId) -> usize {
     let Some(node) = self.get_layout_node_ref(parent_node_id) else {
       return 0;
     };
@@ -625,16 +620,16 @@ impl TraversePartialTree for LayoutTree<'_> {
     node.children.len()
   }
 
-  fn get_child_id(&self, parent_node_id: NodeId, child_index: usize) -> NodeId {
+  fn get_child_id(&self, parent_node_id: TaffyNodeId, child_index: usize) -> TaffyNodeId {
     let Some(node) = self.get_layout_node_ref(parent_node_id) else {
-      return NodeId::from(0usize);
+      return TaffyNodeId::from(0usize);
     };
 
     if matches!(node.style.display, TaffyDisplay::Flex | TaffyDisplay::Grid) {
       let mut ordered_children = self.child_ids(parent_node_id);
       return ordered_children
         .nth(child_index)
-        .unwrap_or_else(|| NodeId::from(0usize));
+        .unwrap_or_else(|| TaffyNodeId::from(0usize));
     }
 
     node.children[child_index]
@@ -650,14 +645,14 @@ impl LayoutPartialTree for LayoutTree<'_> {
     Self: 'a;
   type CustomIdent = String;
 
-  fn get_core_container_style(&self, node_id: NodeId) -> Self::CoreContainerStyle<'_> {
+  fn get_core_container_style(&self, node_id: TaffyNodeId) -> Self::CoreContainerStyle<'_> {
     if let Some(node) = self.get_layout_node_ref(node_id) {
       return &node.style;
     }
     &self.nodes[0].style
   }
 
-  fn set_unrounded_layout(&mut self, node_id: NodeId, layout: &Layout) {
+  fn set_unrounded_layout(&mut self, node_id: TaffyNodeId, layout: &Layout) {
     let Some(node) = self.get_layout_node_mut_ref(node_id) else {
       return;
     };
@@ -673,7 +668,7 @@ impl LayoutPartialTree for LayoutTree<'_> {
     root.context.sizing.resolve_calc(val, basis)
   }
 
-  fn compute_child_layout(&mut self, node: NodeId, inputs: LayoutInput) -> LayoutOutput {
+  fn compute_child_layout(&mut self, node: TaffyNodeId, inputs: LayoutInput) -> LayoutOutput {
     self.compute_child_layout_inner(node, inputs, None)
   }
 }
@@ -681,14 +676,14 @@ impl LayoutPartialTree for LayoutTree<'_> {
 impl<'r> LayoutTree<'r> {
   fn compute_child_layout_inner(
     &mut self,
-    node: NodeId,
+    node: TaffyNodeId,
     inputs: LayoutInput,
     block_ctx: Option<&mut BlockContext<'_>>,
   ) -> LayoutOutput {
     self.update_node_style_for_available_space(
       node,
-      inputs.available_space,
-      inputs.known_dimensions,
+      Size::from_taffy(inputs.available_space).map(AvailableSpace::from_taffy),
+      Size::from_taffy(inputs.known_dimensions),
     );
 
     if inputs.run_mode == RunMode::PerformHiddenLayout {
@@ -714,13 +709,13 @@ impl<'r> LayoutTree<'r> {
             return compute_hidden_layout(tree, node);
           };
 
-          let stripped_known_dimensions = |known_dimensions| {
+          let stripped_known_dimensions = |known_dimensions: TaffySize<Option<f32>>| {
             if should_strip_flex_intrinsic_stretch_known_dimension(
               render_node,
               inputs,
-              known_dimensions,
+              Size::from_taffy(known_dimensions),
             ) {
-              Size::NONE
+              TaffySize::NONE
             } else {
               known_dimensions
             }
@@ -733,20 +728,22 @@ impl<'r> LayoutTree<'r> {
             |known_dimensions, available_space| {
               let known_dimensions = stripped_known_dimensions(known_dimensions);
 
-              if let Size {
+              if let TaffySize {
                 width: Some(width),
                 height: Some(height),
               } = known_dimensions.maybe_apply_aspect_ratio(node_data.style.aspect_ratio)
               {
-                return Size { width, height };
+                return TaffySize { width, height };
               }
 
-              render_node.measure(
-                available_space,
-                known_dimensions,
-                &node_data.style,
-                node_data.is_inline_children,
-              )
+              render_node
+                .measure(
+                  Size::from_taffy(available_space).map(AvailableSpace::from_taffy),
+                  Size::from_taffy(known_dimensions),
+                  &node_data.style,
+                  node_data.is_inline_children,
+                )
+                .into_taffy()
             },
           )
         }
@@ -762,12 +759,17 @@ impl<'r> LayoutTree<'r> {
 }
 
 impl CacheTree for LayoutTree<'_> {
-  fn cache_get(&self, node_id: NodeId, input: &LayoutInput) -> Option<LayoutOutput> {
+  fn cache_get(&self, node_id: TaffyNodeId, input: &LayoutInput) -> Option<LayoutOutput> {
     let node = self.get_layout_node_ref(node_id)?;
     node.cache.get(input)
   }
 
-  fn cache_store(&mut self, node_id: NodeId, input: &LayoutInput, layout_output: LayoutOutput) {
+  fn cache_store(
+    &mut self,
+    node_id: TaffyNodeId,
+    input: &LayoutInput,
+    layout_output: LayoutOutput,
+  ) {
     let Some(node) = self.get_layout_node_mut_ref(node_id) else {
       return;
     };
@@ -775,7 +777,7 @@ impl CacheTree for LayoutTree<'_> {
     node.cache.store(input, layout_output);
   }
 
-  fn cache_clear(&mut self, node_id: NodeId) {
+  fn cache_clear(&mut self, node_id: TaffyNodeId) {
     let Some(node) = self.get_layout_node_mut_ref(node_id) else {
       return;
     };
@@ -794,17 +796,17 @@ impl LayoutBlockContainer for LayoutTree<'_> {
   where
     Self: 'a;
 
-  fn get_block_container_style(&self, node_id: NodeId) -> Self::BlockContainerStyle<'_> {
+  fn get_block_container_style(&self, node_id: TaffyNodeId) -> Self::BlockContainerStyle<'_> {
     self.get_core_container_style(node_id)
   }
 
-  fn get_block_child_style(&self, child_node_id: NodeId) -> Self::BlockItemStyle<'_> {
+  fn get_block_child_style(&self, child_node_id: TaffyNodeId) -> Self::BlockItemStyle<'_> {
     self.get_core_container_style(child_node_id)
   }
 
   fn compute_block_child_layout(
     &mut self,
-    node: NodeId,
+    node: TaffyNodeId,
     inputs: LayoutInput,
     block_ctx: Option<&mut BlockContext<'_>>,
   ) -> LayoutOutput {
@@ -822,11 +824,11 @@ impl LayoutFlexboxContainer for LayoutTree<'_> {
   where
     Self: 'a;
 
-  fn get_flexbox_container_style(&self, node_id: NodeId) -> Self::FlexboxContainerStyle<'_> {
+  fn get_flexbox_container_style(&self, node_id: TaffyNodeId) -> Self::FlexboxContainerStyle<'_> {
     self.get_core_container_style(node_id)
   }
 
-  fn get_flexbox_child_style(&self, child_node_id: NodeId) -> Self::FlexboxItemStyle<'_> {
+  fn get_flexbox_child_style(&self, child_node_id: TaffyNodeId) -> Self::FlexboxItemStyle<'_> {
     self.get_core_container_style(child_node_id)
   }
 }
@@ -841,17 +843,17 @@ impl LayoutGridContainer for LayoutTree<'_> {
   where
     Self: 'a;
 
-  fn get_grid_container_style(&self, node_id: NodeId) -> Self::GridContainerStyle<'_> {
+  fn get_grid_container_style(&self, node_id: TaffyNodeId) -> Self::GridContainerStyle<'_> {
     self.get_core_container_style(node_id)
   }
 
-  fn get_grid_child_style(&self, child_node_id: NodeId) -> Self::GridItemStyle<'_> {
+  fn get_grid_child_style(&self, child_node_id: TaffyNodeId) -> Self::GridItemStyle<'_> {
     self.get_core_container_style(child_node_id)
   }
 }
 
 impl RoundTree for LayoutTree<'_> {
-  fn get_unrounded_layout(&self, node_id: NodeId) -> Layout {
+  fn get_unrounded_layout(&self, node_id: TaffyNodeId) -> Layout {
     let Some(node) = self.get_layout_node_ref(node_id) else {
       return Layout::new();
     };
@@ -859,7 +861,7 @@ impl RoundTree for LayoutTree<'_> {
     node.unrounded_layout
   }
 
-  fn set_final_layout(&mut self, node_id: NodeId, layout: &Layout) {
+  fn set_final_layout(&mut self, node_id: TaffyNodeId, layout: &Layout) {
     let Some(node) = self.get_layout_node_mut_ref(node_id) else {
       return;
     };
@@ -926,7 +928,7 @@ impl RenderNode {
   fn anonymous_image_item(parent_context: &RenderContext, image: BackgroundImage) -> Self {
     // Cap image content to the parent pseudo's box so explicit `width` / `height`
     // on the pseudo wins over intrinsic / default sizing.
-    let max_size = Size {
+    let max_size = TaffySize {
       width: taffy::Dimension::percent(1.0),
       height: taffy::Dimension::percent(1.0),
     };
@@ -952,7 +954,7 @@ impl RenderNode {
           children: None,
           // css-images-3 §5.1 default object size when the parent is auto.
           layout_style_override: Some(Style {
-            size: Size {
+            size: TaffySize {
               width: taffy::Dimension::length(300.0),
               height: taffy::Dimension::length(150.0),
             },
@@ -1723,7 +1725,7 @@ impl RenderNode {
 
     let Some(node) = &self.node else {
       return AtomicInlineMetrics {
-        size: Size::zero(),
+        size: Size::ZERO,
         baseline_offset: None,
       };
     };
@@ -1755,8 +1757,8 @@ impl RenderNode {
       let results = tree.into_results();
 
       results
-        .layout(results.root_node_id())
-        .map_or(Size::zero(), |layout| layout.size)
+        .layout(NodeId::ROOT)
+        .map_or(Size::ZERO, |layout| layout.size)
     };
 
     if self.participates_as_inline_box() {
@@ -1768,7 +1770,7 @@ impl RenderNode {
         let mut tree = LayoutTree::from_render_node(self);
         // Hack: Use Flexbox to avoid Block's "expand to fill" behavior when calculating max-content.
         // We want the content's preferred width, not the container's available width.
-        if let Some(node) = tree.get_layout_node_mut_ref(tree.root_node_id())
+        if let Some(node) = tree.get_layout_node_mut_ref(TaffyNodeId::from(0usize))
           && node.style.display == TaffyDisplay::Block
         {
           node.style.display = TaffyDisplay::Flex;
@@ -1783,8 +1785,8 @@ impl RenderNode {
 
         let results = tree.into_results();
         results
-          .layout(results.root_node_id())
-          .map_or(Size::zero(), |layout| layout.size)
+          .layout(NodeId::ROOT)
+          .map_or(Size::ZERO, |layout| layout.size)
       };
 
       let used_width = match available_space.width {
@@ -1800,11 +1802,11 @@ impl RenderNode {
         height: available_space.height,
       });
       let results = tree.into_results();
-      let root_node_id = results.root_node_id();
+      let root_node_id = NodeId::ROOT;
 
       return results.layout(root_node_id).map_or(
         AtomicInlineMetrics {
-          size: Size::zero(),
+          size: Size::ZERO,
           baseline_offset: None,
         },
         |layout| {
@@ -1874,7 +1876,7 @@ impl RenderNode {
     );
 
     let Some(node) = &self.node else {
-      return Size::zero();
+      return Size::ZERO;
     };
 
     node.measure(&self.context, available_space, known_dimensions, style)
@@ -1927,7 +1929,7 @@ fn drop_block_boundary_whitespace(input: Vec<RenderNode>) -> Vec<RenderNode> {
 mod tests {
   use std::str::FromStr;
 
-  use taffy::NodeId;
+  use taffy::NodeId as TaffyNodeId;
 
   use super::{registered_custom_property_parent_style, sort_children_by_order};
   use crate::{
@@ -1947,9 +1949,9 @@ mod tests {
   #[test]
   fn sort_children_by_order_keeps_source_order_for_equal_values() {
     let children = vec![
-      NodeId::from(3usize),
-      NodeId::from(1usize),
-      NodeId::from(2usize),
+      TaffyNodeId::from(3usize),
+      TaffyNodeId::from(1usize),
+      TaffyNodeId::from(2usize),
     ];
     let sorted = sort_children_by_order(&children, |child_id| match usize::from(child_id) {
       1 => -1,
@@ -1958,9 +1960,9 @@ mod tests {
     assert_eq!(
       sorted,
       vec![
-        NodeId::from(1usize),
-        NodeId::from(3usize),
-        NodeId::from(2usize)
+        TaffyNodeId::from(1usize),
+        TaffyNodeId::from(3usize),
+        TaffyNodeId::from(2usize)
       ]
     );
   }

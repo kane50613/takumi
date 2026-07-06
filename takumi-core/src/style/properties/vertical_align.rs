@@ -231,10 +231,8 @@ impl TailwindPropertyParser for VerticalAlign {
 mod tests {
   use std::rc::Rc;
 
-  use taffy::Size;
-
   use super::*;
-  use crate::viewport::Viewport;
+  use crate::{geometry::Size, viewport::Viewport};
 
   fn sizing() -> SizingContext {
     SizingContext {

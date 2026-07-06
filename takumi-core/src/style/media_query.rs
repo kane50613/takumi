@@ -1,10 +1,10 @@
 use std::rc::Rc;
 
 use cssparser::*;
-use taffy::Size;
 
 use crate::{
   error::StyleSheetParseError,
+  geometry::Size,
   style::{CalcArena, FromCss, Length, SizingContext},
   viewport::Viewport,
 };

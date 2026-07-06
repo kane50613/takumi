@@ -5,12 +5,11 @@ use parley::{
   PositionedInlineBox, PositionedLayoutItem, TextStyle, TreeBuilder, YieldData,
 };
 use skrifa::{FontRef, MetadataProvider};
-use taffy::{AvailableSpace, Layout, Point, Rect, Size};
 
 use crate::{
   context::RenderContext,
   font_style::SizedFontStyle,
-  geometry::PathCommand,
+  geometry::{AvailableSpace, ComputedLayout, PathCommand, Point, Rect, Size},
   layout::{border::BorderPath, node::Node, tree::RenderNode},
   resources::font::{FontError, ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},
   style::{
@@ -107,17 +106,13 @@ pub struct InlineBoxItem<'c> {
   pub(crate) vertical_align: ResolvedVerticalAlign,
 }
 
-impl From<&InlineBoxItem<'_>> for Layout {
+impl From<&InlineBoxItem<'_>> for ComputedLayout {
   fn from(value: &InlineBoxItem<'_>) -> Self {
-    Layout {
-      size: Size {
-        width: value.paint_width,
-        height: value.paint_height,
-      },
-      margin: value.margin,
-      padding: value.padding,
+    ComputedLayout {
+      location: Point::ZERO,
+      size: Size::new(value.paint_width, value.paint_height),
       border: value.border,
-      ..Default::default()
+      padding: value.padding,
     }
   }
 }
@@ -1217,24 +1212,18 @@ fn build_inline_layout_tree<'c>(
           .node
           .as_ref()
           .map(|_| render_node.measure_inline_box(available_space));
-        let content_size = atomic_metrics.map_or(Size::zero(), |metrics| metrics.size);
+        let content_size = atomic_metrics.map_or(Size::ZERO, |metrics| metrics.size);
         let raw_baseline_offset = atomic_metrics.and_then(|metrics| metrics.baseline_offset);
 
         let paint_width = if render_node.participates_as_inline_box() {
-          content_size.width + margin.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
+          content_size.width + margin.horizontal()
         } else {
-          content_size.width
-            + margin.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
-            + padding.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
-            + border.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)
+          content_size.width + margin.horizontal() + padding.horizontal() + border.horizontal()
         };
         let paint_height = if render_node.participates_as_inline_box() {
-          content_size.height + margin.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
+          content_size.height + margin.vertical()
         } else {
-          content_size.height
-            + margin.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
-            + padding.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
-            + border.grid_axis_sum(taffy::AbsoluteAxis::Vertical)
+          content_size.height + margin.vertical() + padding.vertical() + border.vertical()
         };
         let inline_box = InlineBox {
           index: index_pos,
@@ -1600,7 +1589,7 @@ impl LineSetup {
   /// Returns `None` when `line_index` is out of range for `line_vertical_metrics`.
   pub(crate) fn new(
     line: &Line<'_, InlineBrush>,
-    layout: Layout,
+    layout: ComputedLayout,
     line_vertical_metrics: &[ResolvedLineMetrics],
     line_scales: &[f32],
     line_index: usize,
@@ -1669,7 +1658,7 @@ fn scale_outline_rect(
 
 fn collect_glyph_run_outline_rect(
   glyph_run: &GlyphRun<'_, InlineBrush>,
-  layout: Layout,
+  layout: ComputedLayout,
   line_index: usize,
   line_top: f32,
   line_height: f32,
@@ -1938,10 +1927,11 @@ impl PositionedInlineRun {
   }
 
   /// Per-glyph inline-offset origin (border/padding box top-left + baseline shift).
-  pub fn glyph_offset(&self, layout: Layout) -> Point<f32> {
+  pub fn glyph_offset(&self, layout: ComputedLayout) -> Point<f32> {
+    let offset = layout.content_box_offset();
     Point {
-      x: layout.border.left + layout.padding.left,
-      y: layout.border.top + layout.padding.top + self.baseline_shift,
+      x: offset.x,
+      y: offset.y + self.baseline_shift,
     }
   }
 
@@ -2005,7 +1995,7 @@ pub struct InlineRunLayout {
 pub fn resolve_inline_runs(
   built: &BuiltInlineLayout<'_>,
   context: &RenderContext,
-  layout: Layout,
+  layout: ComputedLayout,
 ) -> Result<InlineRunLayout, FontError> {
   let BuiltInlineLayout {
     layout: inline_layout,
@@ -2164,7 +2154,7 @@ pub struct DecorationRect {
 /// ([`PositionedInlineRun::transform`] with an identity base).
 pub fn run_decorations(
   glyph_run: &ShapedRun,
-  layout: Layout,
+  layout: ComputedLayout,
   baseline_shift: f32,
   transform: Affine,
 ) -> Vec<DecorationRect> {

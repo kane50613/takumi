@@ -1,6 +1,7 @@
-use taffy::{AvailableSpace, Layout, Point, geometry::Size};
 use takumi_core::{
-  geometry::transformed_rect_extents,
+  geometry::{
+    AvailableSpace, ComputedLayout as Layout, NodeId, Point, Size, transformed_rect_extents,
+  },
   scene::{NodePaint, PaintItem, PaintItemKind, SceneBounds, StackingContextNode},
 };
 use tiny_skia::{Pixmap, PixmapMut};
@@ -284,7 +285,7 @@ fn begin_node_render(
   let Some(current) = root.node_at_path_mut(&node_paint.path) else {
     return Err(Error::InvalidLayoutNode(node_paint.node_id.into()));
   };
-  let layout = *layout_results.layout(node_paint.node_id)?;
+  let layout = layout_results.layout(node_paint.node_id)?;
 
   if current.context.style.is_invisible() || !node_paint.transform.is_invertible() {
     return Ok(None);
@@ -510,9 +511,7 @@ pub(crate) fn paint_context(
   }) = deferred_root
   {
     let Some(current) = root.node_at_path_mut(&path) else {
-      let node_id = context
-        .root()
-        .map_or(layout_results.root_node_id(), |node| node.node_id);
+      let node_id = context.root().map_or(NodeId::ROOT, |node| node.node_id);
       return Err(Error::InvalidLayoutNode(node_id.into()));
     };
     finish_node_render(
@@ -679,10 +678,9 @@ fn draw_render_node_inline(
     &font_style,
   )?;
 
-  let inline_transform = Affine::translation(
-    inline_layout_box.border.left + inline_layout_box.padding.left,
-    inline_layout_box.border.top + inline_layout_box.padding.top,
-  ) * node.context.transform;
+  let inline_offset = inline_layout_box.content_box_offset();
+  let inline_transform =
+    Affine::translation(inline_offset.x, inline_offset.y) * node.context.transform;
 
   for (item, positioned) in boxes.zip(positioned_inline_boxes.iter()) {
     draw_inline_box(positioned, item, canvas, inline_transform)?;

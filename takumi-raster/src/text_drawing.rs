@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, convert::Into};
 
 use skrifa::color::ColorPalette;
-use taffy::{Layout, Point, Size};
+use takumi_core::geometry::{ComputedLayout as Layout, Point, Size};
 use tiny_skia::Pixmap;
 
 use crate::{

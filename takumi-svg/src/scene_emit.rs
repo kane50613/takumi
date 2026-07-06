@@ -11,8 +11,8 @@
 
 use std::io;
 
-use taffy::NodeId;
 use takumi_core::{
+  geometry::{ComputedLayout as Layout, NodeId},
   layout::{
     border::BorderProperties,
     tree::{LayoutResults, RenderNode},
@@ -55,7 +55,7 @@ fn emit_backdrop(
   doc: &mut SvgDocument,
   node: &RenderNode,
   node_id: NodeId,
-  layout: &taffy::Layout,
+  layout: Layout,
   frame: Affine,
   x: f32,
   y: f32,

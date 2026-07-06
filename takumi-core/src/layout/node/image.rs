@@ -1,9 +1,10 @@
 use data_url::DataUrl;
 use parley::Language;
-use taffy::{AvailableSpace, CompactLength, MaybeResolve, Size};
+use taffy::{CompactLength, MaybeResolve};
 
 use crate::{
   context::RenderContext,
+  geometry::{AvailableSpace, Size},
   layout::node::{ImageData, ImageSourceInput, Node, NodeStyleLayers},
   resources::image::{ImageError, ImageResult, ImageSource, is_svg_like},
   style::{Length, Style, StyleDeclaration},
@@ -55,7 +56,7 @@ pub(crate) fn measure_image_node(
   style: &taffy::Style,
 ) -> Size<f32> {
   let Ok(image_source) = image.src.resolve(context) else {
-    return Size::zero();
+    return Size::ZERO;
   };
 
   let intrinsic_size = match &image_source {
@@ -134,7 +135,7 @@ pub(crate) fn measure_image_node(
   let aspect_ratio = style.aspect_ratio.or_else(|| {
     (preferred_size.height != 0.0).then_some(preferred_size.width / preferred_size.height)
   });
-  let known_dimensions = known_dimensions.maybe_apply_aspect_ratio(aspect_ratio);
+  let known_dimensions = known_dimensions.fill_missing_axis_from_aspect_ratio(aspect_ratio);
 
   if let Size {
     width: Some(width),
@@ -199,12 +200,13 @@ mod tests {
 
   use image::RgbaImage;
   use serde_json::from_value;
-  use taffy::{AvailableSpace, Dimension, Size, Style};
+  use taffy::{Dimension, Size as TaffySize, Style};
 
   use super::{image_url, measure_image_node};
   use crate::{
     Fonts,
     context::RenderContext,
+    geometry::{AvailableSpace, Size},
     layout::node::{ImageData, ImageSourceInput},
     resources::{image::ImageSource, image_buffer::ImageBuffer},
     style::SizingContext,
@@ -322,7 +324,7 @@ mod tests {
     let buffer = ImageBuffer::from_rgba_bytes(RgbaImage::new(10, 10).into_raw(), 10, 10).unwrap();
     let image = ImageData::from(ImageSource::from(buffer));
     let style = Style {
-      size: Size {
+      size: TaffySize {
         width: Dimension::length(42.0),
         height: Dimension::length(28.0),
       },

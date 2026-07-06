@@ -2,11 +2,11 @@
 
 use std::{collections::HashMap, io, rc::Rc, sync::Arc};
 
-use taffy::{AbsoluteAxis, AvailableSpace, Point, Rect, Size};
 use takumi_core::{
   Fonts,
   context::RenderContext,
   error::Result,
+  geometry::{AvailableSpace, ComputedLayout as Layout, NodeId, Point, Rect, Size},
   layout::{
     border::{BorderProperties, BorderSide, border_dash_pattern},
     inline::{InlineBoxItem, VisualInlineBox},
@@ -87,11 +87,11 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
 
   let root = RenderNode::from_node(&context, options.node);
   let mut tree = LayoutTree::from_render_node(&root);
-  let root_id = tree.root_node_id();
 
   tree.compute_layout(viewport.into());
 
   let results = tree.into_results();
+  let root_id = NodeId::ROOT;
 
   let root_layout = results.layout(root_id)?;
   let width = viewport
@@ -153,7 +153,7 @@ impl BoxChrome {
 /// caller after emitting the box's content.
 pub(crate) fn emit_box_chrome(
   node: &RenderNode,
-  layout: &taffy::Layout,
+  layout: Layout,
   x: f32,
   y: f32,
   group_transform: Affine,
@@ -242,12 +242,7 @@ pub(crate) fn emit_box_chrome(
 }
 
 /// The `background-origin` positioning area as an absolute frame within the box.
-fn background_origin_frame(
-  origin: BackgroundOrigin,
-  layout: &taffy::Layout,
-  x: f32,
-  y: f32,
-) -> Frame {
+fn background_origin_frame(origin: BackgroundOrigin, layout: Layout, x: f32, y: f32) -> Frame {
   let b = layout.border;
   let p = layout.padding;
   let frame = |left: f32, right: f32, top: f32, bottom: f32| {
@@ -278,7 +273,7 @@ fn background_origin_frame(
 pub(crate) fn emit_background(
   node: &RenderNode,
   border: &BorderProperties,
-  layout: &taffy::Layout,
+  layout: Layout,
   x: f32,
   y: f32,
   doc: &mut SvgDocument,
@@ -513,7 +508,7 @@ pub(crate) fn padding_box_path_data(
 /// content overflows there while being clipped on the other axis.
 pub(crate) fn overflow_clip_rect_data(
   style: &ComputedStyle,
-  layout: &taffy::Layout,
+  layout: Layout,
   x: f32,
   y: f32,
 ) -> String {
@@ -556,7 +551,7 @@ pub(crate) fn overflow_clip_rect_data(
 fn background_clip_path(
   clip: BackgroundClip,
   border: &BorderProperties,
-  layout: &taffy::Layout,
+  layout: Layout,
   x: f32,
   y: f32,
 ) -> Option<(String, bool)> {
@@ -585,12 +580,7 @@ fn background_clip_path(
 
 /// Absolute SVG path `d` for the content-box rounded rectangle (border-box inset
 /// by border widths and padding, with inner radii), reusing core geometry.
-fn content_box_path_data(
-  border: &BorderProperties,
-  layout: &taffy::Layout,
-  x: f32,
-  y: f32,
-) -> String {
+fn content_box_path_data(border: &BorderProperties, layout: Layout, x: f32, y: f32) -> String {
   let mut inner = *border;
   inner.inset_by_border_width();
   inner.expand_by(layout.padding.map(|size| -size));
@@ -598,10 +588,7 @@ fn content_box_path_data(
   inner.append_mask_commands(
     &mut commands,
     layout.content_box_size(),
-    Point {
-      x: layout.border.left + layout.padding.left,
-      y: layout.border.top + layout.padding.top,
-    },
+    layout.content_box_offset(),
   );
   path_data(&commands, [1.0, 0.0, 0.0, 1.0, x, y])
 }
@@ -610,13 +597,13 @@ fn content_box_path_data(
 /// at the border-box top-left `(x, y)`. Block children are painted separately.
 pub(crate) fn emit_own_content(
   node: &RenderNode,
-  layout: &taffy::Layout,
+  layout: Layout,
   x: f32,
   y: f32,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
   if node.should_create_inline_layout() {
-    return emit_inline_content(node, *layout, x, y, doc);
+    return emit_inline_content(node, layout, x, y, doc);
   }
   // A node whose anonymous text became a child item paints that text through the
   // child, not as its own content (mirroring the raster backend's guard).
@@ -625,7 +612,7 @@ pub(crate) fn emit_own_content(
   }
   match node.node.as_ref().map(|n| &n.kind) {
     Some(NodeKind::Image(image)) => emit_image_node(image, node, layout, x, y, doc),
-    Some(NodeKind::Text(text)) => emit_text(text, &node.context, *layout, x, y, doc),
+    Some(NodeKind::Text(text)) => emit_text(text, &node.context, layout, x, y, doc),
     _ => Ok(()),
   }
 }
@@ -639,7 +626,7 @@ pub(crate) fn emit_own_content(
 pub(crate) fn emit_inline_box(
   inline_box: &VisualInlineBox,
   item: &InlineBoxItem<'_>,
-  container_layout: taffy::Layout,
+  container_layout: Layout,
   container_x: f32,
   container_y: f32,
   doc: &mut SvgDocument,
@@ -649,26 +636,23 @@ pub(crate) fn emit_inline_box(
     return Ok(());
   }
 
-  let box_x =
-    container_x + container_layout.border.left + container_layout.padding.left + inline_box.x;
-  let box_y =
-    container_y + container_layout.border.top + container_layout.padding.top + inline_box.y;
+  let content_offset = container_layout.content_box_offset();
+  let box_x = container_x + content_offset.x + inline_box.x;
+  let box_y = container_y + content_offset.y + inline_box.y;
 
   if node.participates_as_inline_box() {
     // Atomic inline box (inline-block/float): recompute the subtree at the box
     // size, mirroring the raster backend.
     let subtree = node.clone();
     let mut tree = LayoutTree::from_render_node(&subtree);
-    let inline_width =
-      (inline_box.width - item.margin.grid_axis_sum(AbsoluteAxis::Horizontal)).max(0.0);
-    let inline_height =
-      (inline_box.height - item.margin.grid_axis_sum(AbsoluteAxis::Vertical)).max(0.0);
+    let inline_width = (inline_box.width - item.margin.horizontal()).max(0.0);
+    let inline_height = (inline_box.height - item.margin.vertical()).max(0.0);
     tree.compute_layout(Size {
       width: AvailableSpace::Definite(inline_width),
       height: AvailableSpace::Definite(inline_height),
     });
     let results = tree.into_results();
-    let root_id = results.root_node_id();
+    let root_id = NodeId::ROOT;
     // Emit the recomputed subtree through the scene, offset to the box origin.
     let origin = Affine::translation(box_x + item.margin.left, box_y + item.margin.top);
     let contexts = build_stacking_contexts(
@@ -683,13 +667,13 @@ pub(crate) fn emit_inline_box(
   }
 
   // Replaced inline box (e.g. an image): no in-flow layout to recompute.
-  let box_layout: taffy::Layout = item.into();
+  let box_layout: Layout = item.into();
   let group_transform =
     element_transform(&node.context, box_layout.size, box_x, box_y).unwrap_or(IDENTITY);
-  let chrome = emit_box_chrome(node, &box_layout, box_x, box_y, group_transform, doc)?;
+  let chrome = emit_box_chrome(node, box_layout, box_x, box_y, group_transform, doc)?;
 
   match node.node.as_ref().map(|n| &n.kind) {
-    Some(NodeKind::Image(image)) => emit_image_node(image, node, &box_layout, box_x, box_y, doc)?,
+    Some(NodeKind::Image(image)) => emit_image_node(image, node, box_layout, box_x, box_y, doc)?,
     Some(NodeKind::Text(text)) => emit_text(text, &node.context, box_layout, box_x, box_y, doc)?,
     _ => {}
   }
@@ -705,7 +689,7 @@ pub(crate) fn emit_inline_box(
 fn emit_image_node(
   image: &ImageData,
   node: &RenderNode,
-  layout: &taffy::Layout,
+  layout: Layout,
   x: f32,
   y: f32,
   doc: &mut SvgDocument,
@@ -1057,7 +1041,7 @@ fn emit_with_blur(
 /// Inset shadows are handled by [`emit_inset_box_shadows`].
 pub(crate) fn emit_box_shadows(
   node: &RenderNode,
-  layout: &taffy::Layout,
+  layout: Layout,
   x: f32,
   y: f32,
   w: f32,
@@ -1108,7 +1092,7 @@ pub(crate) fn emit_box_shadows(
 pub(crate) fn emit_inset_box_shadows(
   node: &RenderNode,
   border: &BorderProperties,
-  layout: &taffy::Layout,
+  layout: Layout,
   x: f32,
   y: f32,
   doc: &mut SvgDocument,

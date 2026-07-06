@@ -635,9 +635,8 @@ fn resolve_length_with_sizing(value: Length, sizing: &SizingContext) -> Option<f
 mod tests {
   use std::rc::Rc;
 
-  use taffy::Size;
-
   use crate::{
+    geometry::Size,
     style::{
       SizingContext,
       animation::{sample_animation_progress, tailwind_animation_keyframes},

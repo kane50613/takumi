@@ -1,10 +1,12 @@
 use std::fmt;
 
 use cssparser::Parser;
-use taffy::Rect;
 
-use crate::style::{
-  CssExpectedMessage, CssToken, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss,
+use crate::{
+  geometry::Rect,
+  style::{
+    CssExpectedMessage, CssToken, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss,
+  },
 };
 
 /// Represents the values for the four sides of a box (top, right, bottom, left).

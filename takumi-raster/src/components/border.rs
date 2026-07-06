@@ -1,7 +1,9 @@
-use taffy::{Point, Rect, Size};
-use takumi_core::layout::border::{
-  BorderProperties, BorderSide, border_dash_pattern, inset_size, rect_offset,
-  shade_3d_border_color, subtract_rect,
+use takumi_core::{
+  geometry::{Point, Rect, Size},
+  layout::border::{
+    BorderProperties, BorderSide, border_dash_pattern, inset_size, rect_offset,
+    shade_3d_border_color, subtract_rect,
+  },
 };
 
 use crate::{
@@ -645,8 +647,8 @@ fn paint_mask_with_inverse(
 
 #[cfg(test)]
 mod tests {
-  use taffy::{Rect, Size};
   use takumi_core::{
+    geometry::{Rect, Size},
     layout::border::BorderProperties,
     style::{Affine, BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair},
   };

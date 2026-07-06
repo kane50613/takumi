@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use skrifa::{FontRef, MetadataProvider};
-use taffy::{AvailableSpace, Layout, Point, geometry::Size};
+use takumi_core::geometry::{AvailableSpace, ComputedLayout as Layout, NodeId, Point, Size};
 
 use crate::{
   BorderProperties, Canvas, Cap, DashPattern, DecorationSegmentParams, PaintSource, Placement,
@@ -157,9 +157,10 @@ fn draw_underline_with_skip_ink(
   glyph_bounds_cache: &HashMap<u32, GlyphSkipInkData>,
   options: UnderlineDrawOptions,
 ) {
-  let run_start_x = options.layout.border.left + options.layout.padding.left + glyph_run.offset;
+  let content_offset = options.layout.content_box_offset();
+  let run_start_x = content_offset.x + glyph_run.offset;
   let run_end_x = run_start_x + glyph_run.advance;
-  let line_top = options.layout.border.top + options.layout.padding.top + options.offset;
+  let line_top = content_offset.y + options.offset;
   let line_bottom = line_top + options.size;
   let skip_padding = compute_skip_padding(options.size);
   let mut skip_ranges = Vec::new();
@@ -169,9 +170,8 @@ fn draw_underline_with_skip_ink(
       continue;
     };
     let local_bounds = glyph_data.bounds;
-    let inline_x = options.layout.border.left + options.layout.padding.left + glyph.x;
-    let inline_y =
-      options.layout.border.top + options.layout.padding.top + glyph.y + options.baseline_shift;
+    let inline_x = content_offset.x + glyph.x;
+    let inline_y = content_offset.y + glyph.y + options.baseline_shift;
     let glyph_top = inline_y + local_bounds.top;
     let glyph_bottom = inline_y + local_bounds.bottom;
 
@@ -547,14 +547,16 @@ fn draw_glyph_run_text_shadow(
   canvas: &mut Canvas,
   options: GlyphRunLineOptions,
 ) -> Result<()> {
+  let content_offset = options.layout.content_box_offset();
+
   for glyph in &glyph_run.glyphs {
     let Some(content) = resolved_glyphs.get(&glyph.id) else {
       continue;
     };
 
     let inline_offset = Point {
-      x: options.layout.border.left + options.layout.padding.left + glyph.x,
-      y: options.layout.border.top + options.layout.padding.top + glyph.y + options.baseline_shift,
+      x: content_offset.x + glyph.x,
+      y: content_offset.y + glyph.y + options.baseline_shift,
     };
 
     draw_glyph_text_shadow(content, canvas, style, options.transform, inline_offset)?;
@@ -577,17 +579,15 @@ pub(crate) fn draw_inline_box(
     let mut subtree_root = item.render_node.clone();
     let mut layout_tree = LayoutTree::from_render_node(&subtree_root);
 
-    let inline_width =
-      (inline_box.width - item.margin.grid_axis_sum(taffy::AbsoluteAxis::Horizontal)).max(0.0);
-    let inline_height =
-      (inline_box.height - item.margin.grid_axis_sum(taffy::AbsoluteAxis::Vertical)).max(0.0);
+    let inline_width = (inline_box.width - item.margin.horizontal()).max(0.0);
+    let inline_height = (inline_box.height - item.margin.vertical()).max(0.0);
 
     layout_tree.compute_layout(Size {
       width: AvailableSpace::Definite(inline_width),
       height: AvailableSpace::Definite(inline_height),
     });
     let layout_results = layout_tree.into_results();
-    let root_node_id = layout_results.root_node_id();
+    let root_node_id = NodeId::ROOT;
 
     render_node(
       &mut subtree_root,

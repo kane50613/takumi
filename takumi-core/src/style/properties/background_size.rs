@@ -1,12 +1,14 @@
 use std::fmt;
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
-use taffy::Size;
 
 use super::{background_image::parse_comma_list, background_size_resolve::*};
-use crate::style::{
-  Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, ListInterpolationStrategy,
-  MakeComputed, ParseResult, SizingContext, ToCss, tw::TailwindPropertyParser, unexpected_token,
+use crate::{
+  geometry::Size,
+  style::{
+    Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, ListInterpolationStrategy,
+    MakeComputed, ParseResult, SizingContext, ToCss, tw::TailwindPropertyParser, unexpected_token,
+  },
 };
 
 /// Parsed `background-size` for one layer.

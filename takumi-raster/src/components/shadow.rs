@@ -1,4 +1,4 @@
-use taffy::{Layout, Point, Size};
+use takumi_core::geometry::{ComputedLayout as Layout, Point, Size};
 use tiny_skia::PixmapRef;
 
 pub(crate) use crate::shadow::SizedShadow;

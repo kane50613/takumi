@@ -1,6 +1,7 @@
-use taffy::Size;
-
-use crate::style::{Length, SizingContext};
+use crate::{
+  geometry::Size,
+  style::{Length, SizingContext},
+};
 
 /// Which axis was left `auto` after resolving `background-size`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

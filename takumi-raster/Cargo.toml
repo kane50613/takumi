@@ -18,7 +18,6 @@ typed-builder.workspace = true
 smallvec.workspace = true
 parley.workspace = true
 skrifa.workspace = true
-taffy.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 image-webp.workspace = true

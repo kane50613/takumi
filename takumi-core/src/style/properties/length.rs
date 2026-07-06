@@ -512,10 +512,8 @@ impl MakeComputed for Length {
 mod tests {
   use std::{assert_matches, rc::Rc};
 
-  use taffy::Size;
-
   use super::*;
-  use crate::{style::calc::CalcArena, viewport::Viewport};
+  use crate::{geometry::Size, style::calc::CalcArena, viewport::Viewport};
 
   fn sizing() -> SizingContext {
     SizingContext {

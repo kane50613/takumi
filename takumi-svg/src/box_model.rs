@@ -6,10 +6,9 @@
 
 use std::fmt::Write as _;
 
-use taffy::Size;
 use takumi_core::{
   context::RenderContext,
-  geometry::{PathCommand, Point},
+  geometry::{PathCommand, Point, Size},
   style::Affine,
 };
 

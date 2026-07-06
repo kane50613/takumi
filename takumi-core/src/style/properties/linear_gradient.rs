@@ -825,11 +825,11 @@ mod tests {
   use std::rc::Rc;
 
   use color::{ColorSpaceTag, HueDirection};
-  use taffy::Size;
   use tiny_skia::ColorU8;
 
   use super::*;
   use crate::{
+    geometry::Size,
     style::{CalcArena, FromCssStr, properties::gradient_utils::red_blue_stops},
     viewport::Viewport,
   };

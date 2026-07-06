@@ -2,8 +2,10 @@ use std::{collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
 use parley::{GlyphRun, InlineBoxKind, PositionedLayoutItem};
 use serde::Serialize;
-use taffy::{AvailableSpace, Layout, NodeId, geometry::Size};
-use takumi_core::scene::build_stacking_contexts;
+use takumi_core::{
+  geometry::{AvailableSpace, ComputedLayout as Layout, NodeId, Point, Size},
+  scene::build_stacking_contexts,
+};
 use typed_builder::TypedBuilder;
 
 use crate::{
@@ -232,7 +234,7 @@ pub fn measure<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
   collect_measure_result(
     &mut root,
     &layout_results,
-    layout_results.root_node_id(),
+    NodeId::ROOT,
     Affine::IDENTITY,
     Size {
       width: viewport.size.width.map(|value| value as f32),
@@ -271,7 +273,7 @@ fn collect_measure_result(
         let Some(current) = node.node_at_path_mut(&path) else {
           return Err(Error::InvalidLayoutNode(node_id.into()));
         };
-        let layout = *layout_results.layout(node_id)?;
+        let layout = layout_results.layout(node_id)?;
         current
           .context
           .sizing
@@ -313,7 +315,7 @@ fn collect_measure_result(
             mode: InlineLayoutMode::Measure,
           });
           let parent_font_metrics = get_parent_font_metrics(&built.layout);
-          let inline_offset = taffy::Point::ZERO;
+          let inline_offset = Point::ZERO;
           let line_metrics = resolve_inline_line_metrics(
             &built.layout,
             &built.spans,
@@ -336,7 +338,7 @@ fn collect_measure_result(
                 line_scale,
                 layout.content_box_size().width,
               );
-            let line_scale_origin = taffy::Point {
+            let line_scale_origin = Point {
               x: line_scale_origin_x + inline_offset.x,
               y: resolved_metrics.resolved_baseline + inline_offset.y,
             };
@@ -561,7 +563,7 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<Bitmap> {
   tree.compute_layout(render_context.sizing.viewport.into());
 
   let layout_results = tree.into_results();
-  let root_node_id = layout_results.root_node_id();
+  let root_node_id = NodeId::ROOT;
   let root_size = layout_results
     .layout(root_node_id)?
     .size

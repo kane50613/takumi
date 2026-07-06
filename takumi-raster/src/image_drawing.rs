@@ -1,4 +1,4 @@
-use taffy::{Layout, Point, Size};
+use takumi_core::geometry::{ComputedLayout as Layout, Point, Size};
 
 use crate::{
   BorderProperties, Canvas, RenderContext, Result, SamplingOptions, pixmap_ref_from_buffer,
@@ -80,7 +80,7 @@ pub(crate) fn process_image_for_object_fit<'i>(
           )
         },
       },
-      Point::zero(),
+      Point::ZERO,
     )),
     ObjectFit::Contain => {
       let scale_x = content_box.width / image_width;
@@ -147,7 +147,7 @@ pub(crate) fn process_image_for_object_fit<'i>(
               * Affine::translation(crop_x, crop_y)
           },
         },
-        Point::zero(),
+        Point::ZERO,
       ))
     }
     ObjectFit::ScaleDown => {

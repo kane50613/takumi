@@ -5,12 +5,11 @@
 use std::collections::HashMap;
 
 use parley::{InlineBoxKind, PositionedLayoutItem};
-use taffy::{AvailableSpace, Layout, NodeId, Point, geometry::Size};
 
 use crate::{
   error::{Error, Result},
   font_style::SizedFontStyle,
-  geometry::transformed_rect_extents,
+  geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Size, transformed_rect_extents},
   layout::{
     inline::{
       InlineLayoutMode, InlineLayoutRequest, collect_inline_items, create_inline_layout,
@@ -236,7 +235,7 @@ pub fn build_stacking_contexts(
     let Some(current) = root.node_at_path(&visit.path) else {
       return Err(Error::InvalidLayoutNode(visit.node_id.into()));
     };
-    let layout = *layout_results.layout(visit.node_id)?;
+    let layout = layout_results.layout(visit.node_id)?;
     if current.context.style.is_invisible() {
       continue;
     }
@@ -372,7 +371,7 @@ pub fn build_stacking_contexts(
 
 fn compute_node_paint_bounds(
   node: &RenderNode,
-  layout: Layout,
+  layout: ComputedLayout,
   transform: Affine,
 ) -> Option<SceneBounds> {
   let mut bounds = bounds_for_rect(layout.size, transform);
@@ -540,9 +539,8 @@ fn merge_bounds(left: Option<SceneBounds>, right: Option<SceneBounds>) -> Option
 
 #[cfg(test)]
 mod tests {
-  use taffy::geometry::Size;
-
   use super::{SceneBounds, bounds_for_rect, merge_bounds};
+  use crate::geometry::Size;
   use crate::style::Affine;
 
   #[test]
