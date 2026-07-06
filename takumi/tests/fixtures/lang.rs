@@ -30,7 +30,7 @@ fn lang_row(lang: &'static str) -> Node {
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::align_items(AlignItems::Center))
-      .with_gap(SpacePair::from_pair(Px(12.0), Px(12.0))),
+      .with_gap(SpacePair::from_pair(Px(12.0).into(), Px(12.0).into())),
   )
 }
 
@@ -47,7 +47,7 @@ fn test_lang_han_unification() {
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with_padding(Sides([Px(40.0); 4]))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
-      .with_gap(SpacePair::from_pair(Px(32.0), Px(32.0))),
+      .with_gap(SpacePair::from_pair(Px(32.0).into(), Px(32.0).into())),
   );
 
   run_fixture_test(container, "lang_han_unification");

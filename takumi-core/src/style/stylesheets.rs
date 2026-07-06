@@ -990,8 +990,8 @@ define_style! {
     display: Display,
     width: Length,
     height: Length,
-    max_width: Length,
-    max_height: Length,
+    max_width: MaxSize,
+    max_height: MaxSize,
     min_width: Length,
     min_height: Length,
     aspect_ratio: AspectRatio,
@@ -1033,8 +1033,8 @@ define_style! {
     mask_size: BackgroundSizes,
     mask_position: PositionValues,
     mask_repeat: BackgroundRepeats,
-    column_gap: Length = Length::zero(),
-    row_gap: Length = Length::zero(),
+    column_gap: Gap,
+    row_gap: Gap,
     flex_grow: Option<FlexGrow>,
     flex_shrink: Option<FlexGrow>,
     border_top_left_radius: SpacePair<Length> = SpacePair::from_single(Length::zero()),
@@ -1234,7 +1234,7 @@ define_style! {
           .collect(),
       )));
     },
-    gap: SpacePair<Length> => [RowGap, ColumnGap] |value, target| {
+    gap: SpacePair<Gap> => [RowGap, ColumnGap] |value, target| {
       push_axis_declarations!(target, value, row_gap, column_gap);
     },
     flex_flow: FlexFlow => [FlexDirection, FlexWrap] |value, target| {

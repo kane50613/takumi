@@ -153,7 +153,7 @@ fn test_style_mix_blend_mode_text_regression() {
   let family = FontFamily::from_css_str("Geist").unwrap();
   let label_style = Style::default()
     .with(StyleDeclaration::display(Display::Block))
-    .with(StyleDeclaration::max_width(Px(500.0)))
+    .with(StyleDeclaration::max_width(Px(500.0).into()))
     .with(StyleDeclaration::font_family(family))
     .with(StyleDeclaration::font_size(Px(60.0).into()))
     .with(StyleDeclaration::font_weight(FontWeight::from(600.0)))
@@ -201,7 +201,7 @@ fn test_style_mix_blend_mode_text_regression() {
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
       .with(StyleDeclaration::align_items(AlignItems::Center))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
-      .with(StyleDeclaration::row_gap(Px(24.0))),
+      .with(StyleDeclaration::row_gap(Px(24.0).into())),
   )])
   .with_style(
     Style::default()

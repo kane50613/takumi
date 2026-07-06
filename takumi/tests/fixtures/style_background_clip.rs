@@ -331,7 +331,7 @@ fn test_style_background_clip_comparison() {
       )))
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
-      .with_gap(SpacePair::from_single(Px(20.0)))
+      .with_gap(SpacePair::from_single(Px(20.0).into()))
       .with_padding(Sides([Px(20.0); 4])),
   );
 

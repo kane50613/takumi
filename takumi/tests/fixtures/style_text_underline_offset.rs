@@ -36,7 +36,7 @@ fn test_style_text_underline_offset() {
         Color([240, 240, 240, 255]),
       )))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
-      .with(StyleDeclaration::row_gap(Px(20.0)))
+      .with(StyleDeclaration::row_gap(Px(20.0).into()))
       .with(StyleDeclaration::padding_top(Px(40.0)))
       .with(StyleDeclaration::padding_bottom(Px(40.0))),
   );
