@@ -1,3 +1,71 @@
+## takumi@2.0.0
+
+### Seal `parley::Layout` out of the inline-layout boundary
+
+`BuiltInlineLayout::{layout, custom_inline_boxes}` are now private; the
+measure-only walk moves into `BuiltInlineLayout::measure_runs`, returning
+core-owned `MeasuredInlineRun`/`MeasuredInlineBox` (run text borrows the
+layout). `get_parent_font_metrics`, `resolve_inline_line_metrics`,
+`resolve_inline_line_states`, and `scale_text_fit_x` are no longer public.
+
+### Rename the `svg` feature to `svg-source`
+
+`svg` and `svg-backend` read as the same thing at a glance despite gating
+opposite directions (image-source input vs. render output). The umbrella's
+input-side feature is now `svg-source`; `svg-backend` is unchanged.
+
+### Represent the `none`/`normal` initial values of `max-*` and gaps
+
+`max-width` and `max-height` are now a `MaxSize` value whose initial is `None`
+(unbounded), instead of borrowing `Length`'s `auto`. `column-gap`, `row-gap`, and
+the `gap` shorthand are now a `Gap` value whose initial is `Normal`. Rendering is
+unchanged — `none` resolves like the old unbounded default and `normal` computes
+to `0` — but the values now round-trip through `to_css` as `none`/`normal`.
+
+### Cap animation frame rate per format
+
+Browsers clamp any animation frame of 10ms or less to 100ms, so a high frame
+rate stalls instead of playing fast. `write_animation` now rejects a frame rate
+above `AnimationFormat::max_fps` with the new `AnimationFrameRateTooHigh` error:
+90 fps for WebP and APNG, 50 fps for GIF (centisecond delays). The napi and WASM
+`renderAnimation` bindings surface the error.
+
+### Bump internal crates
+
+Releasing v0 internal crates
+
+### Add `takumi-html` for parsing HTML into a node tree
+
+New `takumi-html` crate parses HTML + Tailwind markup into a node tree with
+`from_html(source, FromHtmlOptions)`, mirroring the JS `fromHtml`. The `tw`,
+`style`, `class`, `id`, `dir`, and `lang` attributes map to node styling and
+metadata; `FromHtmlOptions` sets the `StylePresets` table and a `max_depth`
+nesting cap. The `takumi` umbrella re-exports it under the `from-html` feature
+as `takumi::from_html`, plus `Node::from_html` via the `FromHtml` prelude
+trait.
+
+### Refactor `font_families` and `lang` option type
+
+Now both option takes resolved value instead of raw strings.
+
+### Drop `background-blend-mode` from the `background` shorthand
+
+The `background` shorthand parsed a blend-mode token and reset
+`background-blend-mode`, unlike browsers, where the shorthand touches neither. It
+now leaves `background-blend-mode` alone; set it through the longhand. The
+`blend_mode` field is gone from the `Background` shorthand value.
+
+### Stream animation frames straight into the encoder
+
+Add `write_animation`, which renders a timeline and feeds each frame to the
+encoder as it arrives, holding one raw frame at a time instead of the whole
+sequence. Both the napi and WASM `renderAnimation` bindings use it, so a high
+frame rate or a long duration no longer exhausts memory. On native the WebP
+encoder still runs frames in parallel, now over bounded chunks. The WASM WebP
+encoder now merges runs of identical frames like the native one, so a static or
+slow animation encodes and stores far less. The eager `render_animation` +
+`write_animated_*` path stays for callers that want every frame at once.
+
 ## takumi@2.0.0-rc.11
 
 ### Refactor `font_families` and `lang` option type
