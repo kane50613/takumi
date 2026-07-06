@@ -9,11 +9,6 @@
 //! the curated, stable types live in [`prelude`]. Glob the prelude, build a node
 //! tree, and call [`render`].
 //!
-//! The backend crates carry a much larger surface (layout glue, paint internals,
-//! cross-crate plumbing) that is `pub` only so sibling crates can share it. The
-//! facade does not re-export it. Enable the `unstable` feature to reach it under
-//! [`unstable`]; nothing there follows semver.
-//!
 //! # Example
 //!
 //! ```rust
@@ -46,11 +41,11 @@
 //!
 //! - `raster-backend` (default): raster rendering backend.
 //! - `svg-source` (default): SVG image sources in the core and raster backend.
-//! - `svg-backend`: vector SVG output backend ([`render_svg`]).
+//! - `svg-backend`: vector SVG output backend (`render_svg`).
 //! - `woff2`: WOFF2 font support.
 //! - `woff`: WOFF font support.
 //! - `rayon`: parallelism in the raster backend; needs `raster-backend`.
-//! - `unstable`: re-export the backend crates under [`unstable`]; no semver.
+//! - `unstable`: re-export the backend crates with no semver guarantee.
 
 /// The curated, stable data structures for building a node tree and configuring a
 /// render.

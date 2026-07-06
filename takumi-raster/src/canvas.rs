@@ -30,7 +30,7 @@ use takumi_core::{
 use tiny_skia::{
   FillRule as TinyFillRule, FilterQuality as TinyFilterQuality, IntSize, Mask as TinyMask,
   Paint as TinyPaint, Path as TinyPath, Pattern as TinyPattern, Pixmap, PixmapMut, PixmapPaint,
-  PixmapRef, SpreadMode as TinySpreadMode, Transform as TinyTransform,
+  PixmapRef, PremultipliedColorU8, SpreadMode as TinySpreadMode, Transform as TinyTransform,
 };
 
 use self::{
@@ -989,8 +989,8 @@ fn blit_solid_translation(
       } else {
         blend_repeated_premultiplied_pixel(
           row,
-          tiny_skia::PremultipliedColorU8::from_rgba(color[0], color[1], color[2], color[3])
-            .unwrap_or(tiny_skia::PremultipliedColorU8::TRANSPARENT),
+          PremultipliedColorU8::from_rgba(color[0], color[1], color[2], color[3])
+            .unwrap_or(PremultipliedColorU8::TRANSPARENT),
         );
       }
     }
