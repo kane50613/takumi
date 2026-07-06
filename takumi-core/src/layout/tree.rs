@@ -68,7 +68,7 @@ impl LayoutResults {
     self
       .nodes
       .get(idx)
-      .map(|node| ComputedLayout::from(&node.layout))
+      .map(|node| ComputedLayout::from_taffy(&node.layout))
       .ok_or(Error::InvalidLayoutNode(node_id.into()))
   }
 
@@ -459,7 +459,7 @@ impl<'r> LayoutTree<'r> {
   /// Computes and rounds the layout for the whole tree.
   pub fn compute_layout(&mut self, available_space: Size<AvailableSpace>) {
     let root_node_id = self.root_node_id();
-    compute_root_layout(self, root_node_id, available_space.into());
+    compute_root_layout(self, root_node_id, available_space.into_taffy());
     round_layout(self, root_node_id);
   }
 
@@ -688,8 +688,8 @@ impl<'r> LayoutTree<'r> {
   ) -> LayoutOutput {
     self.update_node_style_for_available_space(
       node,
-      inputs.available_space.into(),
-      inputs.known_dimensions.into(),
+      Size::from_taffy(inputs.available_space),
+      Size::from_taffy(inputs.known_dimensions),
     );
 
     if inputs.run_mode == RunMode::PerformHiddenLayout {
@@ -719,7 +719,7 @@ impl<'r> LayoutTree<'r> {
             if should_strip_flex_intrinsic_stretch_known_dimension(
               render_node,
               inputs,
-              known_dimensions.into(),
+              Size::from_taffy(known_dimensions),
             ) {
               TaffySize::NONE
             } else {
@@ -744,12 +744,12 @@ impl<'r> LayoutTree<'r> {
 
               render_node
                 .measure(
-                  available_space.into(),
-                  known_dimensions.into(),
+                  Size::from_taffy(available_space),
+                  Size::from_taffy(known_dimensions),
                   &node_data.style,
                   node_data.is_inline_children,
                 )
-                .into()
+                .into_taffy()
             },
           )
         }

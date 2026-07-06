@@ -161,26 +161,24 @@ impl Rect<f32> {
   };
 }
 
-impl<T> From<taffy::geometry::Size<T>> for Size<T> {
-  fn from(s: taffy::geometry::Size<T>) -> Self {
+impl<T> Size<T> {
+  pub(crate) fn from_taffy(s: taffy::geometry::Size<T>) -> Self {
     Self {
       width: s.width,
       height: s.height,
     }
   }
-}
 
-impl<T> From<Size<T>> for taffy::geometry::Size<T> {
-  fn from(s: Size<T>) -> Self {
-    Self {
-      width: s.width,
-      height: s.height,
+  pub(crate) fn into_taffy(self) -> taffy::geometry::Size<T> {
+    taffy::geometry::Size {
+      width: self.width,
+      height: self.height,
     }
   }
 }
 
-impl<T> From<taffy::geometry::Rect<T>> for Rect<T> {
-  fn from(r: taffy::geometry::Rect<T>) -> Self {
+impl<T> Rect<T> {
+  pub(crate) fn from_taffy(r: taffy::geometry::Rect<T>) -> Self {
     Self {
       left: r.left,
       right: r.right,
@@ -190,25 +188,8 @@ impl<T> From<taffy::geometry::Rect<T>> for Rect<T> {
   }
 }
 
-impl<T> From<Rect<T>> for taffy::geometry::Rect<T> {
-  fn from(r: Rect<T>) -> Self {
-    Self {
-      left: r.left,
-      right: r.right,
-      top: r.top,
-      bottom: r.bottom,
-    }
-  }
-}
-
-impl<T> From<taffy::geometry::Point<T>> for Point<T> {
-  fn from(p: taffy::geometry::Point<T>) -> Self {
-    Self { x: p.x, y: p.y }
-  }
-}
-
-impl<T> From<Point<T>> for taffy::geometry::Point<T> {
-  fn from(p: Point<T>) -> Self {
+impl<T> Point<T> {
+  pub(crate) fn from_taffy(p: taffy::geometry::Point<T>) -> Self {
     Self { x: p.x, y: p.y }
   }
 }
@@ -256,13 +237,13 @@ impl ComputedLayout {
   }
 }
 
-impl From<&taffy::Layout> for ComputedLayout {
-  fn from(l: &taffy::Layout) -> Self {
+impl ComputedLayout {
+  pub(crate) fn from_taffy(l: &taffy::Layout) -> Self {
     Self {
-      location: l.location.into(),
-      size: l.size.into(),
-      border: l.border.into(),
-      padding: l.padding.into(),
+      location: Point::from_taffy(l.location),
+      size: Size::from_taffy(l.size),
+      border: Rect::from_taffy(l.border),
+      padding: Rect::from_taffy(l.padding),
     }
   }
 }

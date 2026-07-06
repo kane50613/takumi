@@ -5,7 +5,7 @@ use parley::{
   PositionedInlineBox, PositionedLayoutItem, TextStyle, TreeBuilder, YieldData,
 };
 use skrifa::{FontRef, MetadataProvider};
-use taffy::{AvailableSpace, Layout};
+use taffy::AvailableSpace;
 
 use crate::{
   context::RenderContext,
@@ -107,24 +107,14 @@ pub struct InlineBoxItem<'c> {
   pub(crate) vertical_align: ResolvedVerticalAlign,
 }
 
-impl From<&InlineBoxItem<'_>> for Layout {
-  fn from(value: &InlineBoxItem<'_>) -> Self {
-    Layout {
-      size: taffy::Size {
-        width: value.paint_width,
-        height: value.paint_height,
-      },
-      margin: value.margin.into(),
-      padding: value.padding.into(),
-      border: value.border.into(),
-      ..Default::default()
-    }
-  }
-}
-
 impl From<&InlineBoxItem<'_>> for ComputedLayout {
   fn from(value: &InlineBoxItem<'_>) -> Self {
-    ComputedLayout::from(&Layout::from(value))
+    ComputedLayout {
+      location: Point::ZERO,
+      size: Size::new(value.paint_width, value.paint_height),
+      border: value.border,
+      padding: value.padding,
+    }
   }
 }
 

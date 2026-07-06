@@ -59,11 +59,11 @@ impl<T: Copy + MakeComputed> MakeComputed for SpacePair<T> {
   }
 }
 
-impl<T: Copy> From<SpacePair<T>> for Point<T> {
-  fn from(value: SpacePair<T>) -> Self {
+impl<T: Copy> SpacePair<T> {
+  pub(crate) fn into_taffy(self) -> Point<T> {
     Point {
-      x: value.x,
-      y: value.y,
+      x: self.x,
+      y: self.y,
     }
   }
 }

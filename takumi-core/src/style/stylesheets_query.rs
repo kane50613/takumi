@@ -1,7 +1,7 @@
 use std::{borrow::Cow, marker::PhantomData};
 
 use parley::FontFeature;
-use taffy::{Line, Point, Rect, Size};
+use taffy::{Line, Rect, Size};
 
 use super::ComputedStyle;
 use crate::{
@@ -390,7 +390,7 @@ impl ComputedStyle {
       aspect_ratio: self.aspect_ratio.into(),
       align_self: self.align_self.into(),
       justify_self: self.justify_self.into(),
-      overflow: Point::from(self.resolve_overflows()).map(Into::into),
+      overflow: self.resolve_overflows().into_taffy().map(Into::into),
       dummy: PhantomData,
       item_is_table: false,
       item_is_replaced: false,
