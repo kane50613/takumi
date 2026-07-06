@@ -1,3 +1,11 @@
+## @takumi-rs/core@2.0.0-rc.12 (rc)
+
+### Resolve the native binding under isolated installs
+
+The bundled loader now finds `@takumi-rs/core-<target>` when it lives in a pnpm
+or bun store rather than a hoisted `node_modules`, so strict installs no longer
+throw `Cannot find module '@takumi-rs/core-<target>'`.
+
 ## @takumi-rs/core@2.0.0-rc.8 (rc)
 
 ### Cap animation frame rate per format
