@@ -1,8 +1,14 @@
+<div align="center">
+  <img src="https://takumi.kane.tw/logo.svg" alt="Takumi" width="64" />
+
 # @takumi-rs/core
 
-Native Node.js bindings for [Takumi](https://github.com/kane50613/takumi), an image rendering engine written in Rust.
+**Native Node.js bindings for [Takumi](https://github.com/kane50613/takumi), a Rust image rendering engine.**  
+The high-performance N-API runtime that turns node trees into OG cards, banners, and animations, no headless browser required.
 
-This package ships the high-performance N-API runtime used by Takumi on Node.js environments.
+[Documentation](https://takumi.kane.tw/docs/) · [Playground](https://takumi.kane.tw/playground)
+
+</div>
 
 ## Install
 
@@ -10,26 +16,46 @@ This package ships the high-performance N-API runtime used by Takumi on Node.js 
 npm install @takumi-rs/core
 ```
 
-## Usage
+## Quick start
 
 ```ts
 import { Renderer } from "@takumi-rs/core";
 
 const renderer = new Renderer();
+
 const png = await renderer.render(
   {
-    type: "Element",
-    tag: "div",
-    children: [{ type: "Text", value: "Hello from Takumi" }],
+    type: "container",
+    children: [{ type: "text", text: "Hello from Takumi" }],
   },
-  {
-    width: 1200,
-    height: 630,
-  },
+  { width: 1200, height: 630 },
 );
 ```
 
-For JSX and HTML conversion helpers, use [`@takumi-rs/helpers`](https://npmjs.com/package/@takumi-rs/helpers).
+`render` takes a node tree and returns a PNG `Buffer`. Build the tree by hand, or generate it from JSX and HTML with [`@takumi-rs/helpers`](https://npmjs.com/package/@takumi-rs/helpers).
+
+## Fonts
+
+Pass fonts on the render options, no separate registration step:
+
+```ts
+import { readFile } from "node:fs/promises";
+
+const png = await renderer.render(node, {
+  width: 1200,
+  height: 630,
+  fonts: [await readFile("./Inter.ttf")],
+});
+```
+
+## Renderer
+
+| Method                   | Returns           | Description                       |
+| :----------------------- | :---------------- | :-------------------------------- |
+| `render(node, opts?)`    | `Promise<Buffer>` | Raster image (PNG, JPEG, WebP, …) |
+| `renderSvg(node, opts?)` | `Promise<string>` | Vector SVG document               |
+| `renderAnimation(opts)`  | `Promise<Buffer>` | Animated WebP, APNG, or GIF       |
+| `measure(node, opts?)`   | `Promise<...>`    | Layout without rasterizing        |
 
 ## Documentation
 
@@ -37,7 +63,7 @@ For JSX and HTML conversion helpers, use [`@takumi-rs/helpers`](https://npmjs.co
 - API reference: <https://takumi.kane.tw/docs/api-reference>
 - Repository: <https://github.com/kane50613/takumi>
 
-If you are looking for WebAssembly bindings, take a look at the [@takumi-rs/wasm](https://npmjs.com/package/@takumi-rs/wasm) package.
+For WebAssembly runtimes (Cloudflare Workers, browsers, edge), use [@takumi-rs/wasm](https://npmjs.com/package/@takumi-rs/wasm).
 
 ## License
 

@@ -3,8 +3,8 @@
 
 # takumi-js
 
-**All-in-one Takumi package for Node.js and WebAssembly runtimes.**  
-OG cards, banners, and lightweight animations from one Rust engine — no headless browser required.
+**Render JSX to SVG or images. Drop-in next/og replacement.**
+OG cards, banners, and lightweight animations from one Rust engine, no headless browser required.
 
 [Documentation](https://takumi.kane.tw/docs/) · [Playground](https://takumi.kane.tw/playground)
 
@@ -34,23 +34,11 @@ const image = await render(
 await writeFile("./output.png", image);
 ```
 
-## Entry points
-
-| Import                    | Description                                                             |
-| :------------------------ | :---------------------------------------------------------------------- |
-| `takumi-js`               | `render()` + all shared types                                           |
-| `takumi-js/response`      | `ImageResponse` class — drop-in compatible with `next/og`               |
-| `takumi-js/node`          | Re-exports `@takumi-rs/core` (native napi-rs bindings)                  |
-| `takumi-js/wasm`          | Re-exports `@takumi-rs/wasm` + `init()` for manual WASM initialization  |
-| `takumi-js/helpers`       | Node tree utilities (`fromJsx`, `fromHtml`, `extractEmojis`, …)         |
-| `takumi-js/helpers/jsx`   | `fromJsx` — convert a React element to a Takumi node tree + stylesheets |
-| `takumi-js/helpers/emoji` | `extractEmojis` — replace emoji characters with image nodes             |
-
 ## Runtime detection
 
 `takumi-js` selects the backend for the runtime:
 
-- **Node.js** → native `@takumi-rs/core` (napi-rs)
+- **Node.js / Bun** → native `@takumi-rs/core` (napi-rs)
 - **Next.js Edge / Cloudflare Workers / browsers** → `@takumi-rs/wasm`
 
 Override it with a `module` option on `render()`, or import `takumi-js/wasm` directly.
@@ -72,28 +60,43 @@ export function GET() {
 }
 ```
 
+### Render SVG
+
+```tsx
+import { renderSvg } from "takumi-js";
+import { writeFile } from "node:fs/promises";
+
+const svg = await renderSvg(
+  <div tw="w-full h-full flex items-center justify-center bg-gradient-to-b from-blue-100 to-red-50">
+    <h1 tw="text-6xl font-bold">Hello from Takumi</h1>
+  </div>,
+  { width: 1200, height: 630 },
+);
+
+await writeFile("./output.svg", svg);
+```
+
 ### Animated WebP
 
 ```tsx
-import { Renderer } from "takumi-js/node";
-import { fromJsx } from "takumi-js/helpers/jsx";
+import { renderAnimation } from "takumi-js";
 import { writeFile } from "node:fs/promises";
 
-const renderer = new Renderer();
-
-const { node, stylesheets } = await fromJsx(
-  <div tw="w-full h-full flex items-center justify-center">
-    <div tw="w-32 h-32 bg-blue-500 animate-spin rounded-lg" />
-  </div>,
-);
-
-const animation = await renderer.renderAnimation({
+const animation = await renderAnimation({
   width: 400,
   height: 400,
   fps: 30,
   format: "webp",
-  stylesheets,
-  scenes: [{ durationMs: 1000, node }],
+  scenes: [
+    {
+      durationMs: 1000,
+      node: (
+        <div tw="w-full h-full flex items-center justify-center">
+          <div tw="w-32 h-32 bg-blue-500 animate-spin rounded-lg" />
+        </div>
+      ),
+    },
+  ],
 });
 
 await writeFile("./output.webp", animation);
