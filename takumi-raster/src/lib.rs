@@ -55,7 +55,6 @@ use crate::resources::image_buffer::ImageBuffer;
 pub(crate) use crate::{
   context::RenderContext,
   font_style::*,
-  layout::inline::scale_text_fit_x,
   style::math::{fast_div_255, fast_div_255_u32},
 };
 

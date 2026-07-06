@@ -44,13 +44,13 @@ pub struct InlineLayoutRequest<'c> {
 /// A completed inline layout with its source text, spans, and per-line scales.
 pub struct BuiltInlineLayout<'c> {
   /// The parley layout.
-  pub layout: InlineLayout,
+  pub(crate) layout: InlineLayout,
   /// Concatenated laid-out text.
   pub text: String,
   /// Processed spans backing the layout.
   pub spans: Vec<ProcessedInlineSpan<'c>>,
   /// Out-of-flow inline boxes positioned separately.
-  pub custom_inline_boxes: Vec<PositionedInlineBox>,
+  pub(crate) custom_inline_boxes: Vec<PositionedInlineBox>,
   /// Per-line text-fit scale factors.
   pub line_scales: Vec<f32>,
 }
@@ -79,6 +79,109 @@ impl BuiltInlineLayout<'_> {
       self.parent_font_metrics(),
       &self.line_scales,
     )
+  }
+
+  /// Measures each glyph run's text/bounding box and each inline box's
+  /// position/size, with text-fit line scaling applied. Lighter than
+  /// [`resolve_inline_runs`]: no font-context access or glyph outline
+  /// resolution, for the measure-only path. Returned run text borrows `self`.
+  pub fn measure_runs(
+    &self,
+    layout: ComputedLayout,
+  ) -> (Vec<MeasuredInlineRun<'_>>, Vec<MeasuredInlineBox>) {
+    let line_vertical_metrics = self.line_metrics();
+    let line_states = self.line_states();
+
+    let mut runs = Vec::new();
+    let mut inline_boxes = Vec::new();
+
+    for (line_index, line) in self.layout.lines().enumerate() {
+      let Some(setup) = LineSetup::new(
+        &line,
+        layout,
+        &line_vertical_metrics,
+        &self.line_scales,
+        line_index,
+      ) else {
+        continue;
+      };
+      let line_scale_origin_y = setup.resolved_metrics.resolved_baseline;
+      let mut static_inline_prefix = 0.0_f32;
+
+      for item in line.items() {
+        match item {
+          PositionedLayoutItem::GlyphRun(glyph_run) => {
+            let text = measured_run_text(&self.text, &self.spans, &glyph_run);
+            if text.is_empty() {
+              continue;
+            }
+
+            let metrics = glyph_run.run().metrics();
+            let mut x = glyph_run.offset();
+            let mut y = glyph_run.baseline() + setup.baseline_shift - metrics.ascent;
+            let mut width = glyph_run.advance();
+            let mut height = metrics.ascent + metrics.descent;
+            if (setup.state.scale - 1.0).abs() > f32::EPSILON {
+              x = scale_text_fit_x(
+                x,
+                setup.line_scale_origin_x,
+                setup.state.scale,
+                static_inline_prefix,
+                setup.state.alignment_correction,
+              );
+              y = line_scale_origin_y + (y - line_scale_origin_y) * setup.state.scale;
+              width *= setup.state.scale;
+              height *= setup.state.scale;
+            }
+
+            runs.push(MeasuredInlineRun {
+              text,
+              x,
+              y,
+              width,
+              height,
+            });
+          }
+          PositionedLayoutItem::InlineBox(positioned_box) => {
+            if positioned_box.kind != InlineBoxKind::InFlow {
+              continue;
+            }
+            let Some(resolved) =
+              resolve_visual_inline_box(positioned_box, Some(line_states[line_index]), &self.spans)
+            else {
+              continue;
+            };
+
+            let x = scale_text_fit_x(
+              resolved.x,
+              setup.line_scale_origin_x,
+              setup.state.scale,
+              static_inline_prefix,
+              setup.state.alignment_correction,
+            );
+            static_inline_prefix += resolved.width;
+
+            inline_boxes.push(MeasuredInlineBox {
+              x,
+              y: resolved.y,
+              width: resolved.width,
+              height: resolved.height,
+            });
+          }
+        }
+      }
+    }
+
+    for positioned_box in &self.custom_inline_boxes {
+      inline_boxes.push(MeasuredInlineBox {
+        x: positioned_box.x,
+        y: positioned_box.y,
+        width: positioned_box.width,
+        height: positioned_box.height,
+      });
+    }
+
+    (runs, inline_boxes)
   }
 }
 
@@ -346,7 +449,7 @@ fn measure_ellipsis_width(
 }
 
 /// Font metrics of the first run, used as the parent reference.
-pub fn get_parent_font_metrics(layout: &InlineLayout) -> Option<ParentFontMetrics> {
+pub(crate) fn get_parent_font_metrics(layout: &InlineLayout) -> Option<ParentFontMetrics> {
   let run = layout.lines().find_map(|line| line.runs().next())?;
   let metrics = run.metrics();
   Some((metrics.x_height, metrics.ascent, metrics.descent)).map(|(x_height, ascent, descent)| {
@@ -653,7 +756,7 @@ pub(crate) fn effective_parent_text_metrics_for_line(
 }
 
 /// Resolve per-line metrics from the laid-out lines and spans.
-pub fn resolve_inline_line_metrics(
+pub(crate) fn resolve_inline_line_metrics(
   inline_layout: &InlineLayout,
   spans: &[ProcessedInlineSpan<'_>],
   parent_font_metrics: Option<ParentFontMetrics>,
@@ -837,7 +940,7 @@ pub struct ResolvedInlineLineState {
 }
 
 /// Resolve per-line state used when placing inline boxes and glyphs.
-pub fn resolve_inline_line_states(
+pub(crate) fn resolve_inline_line_states(
   inline_layout: &InlineLayout,
   spans: &[ProcessedInlineSpan<'_>],
   parent_font_metrics: Option<ParentFontMetrics>,
@@ -1831,7 +1934,7 @@ pub fn outline_island_contour(island: &[InlineOutlineRect], expansion: f32) -> V
 
 /// Scales an inline box's `x` for a text-fit-scaled line, mirroring the
 /// horizontal correction in [`LineScaleState::transform`].
-pub fn scale_text_fit_x(
+pub(crate) fn scale_text_fit_x(
   x: f32,
   origin_x: f32,
   scale: f32,
@@ -2131,6 +2234,73 @@ pub fn resolve_inline_runs(
     inline_boxes,
     outline_rects,
   })
+}
+
+/// A measured glyph run: its text (borrowed from the layout) and local bounding
+/// box, with text-fit line scaling applied. The lifetime ties the text back to
+/// the [`BuiltInlineLayout`] it was measured from.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MeasuredInlineRun<'a> {
+  /// The run's text content, borrowed from the layout.
+  pub text: &'a str,
+  /// Left edge, relative to the inline formatting context's origin.
+  pub x: f32,
+  /// Top edge, relative to the inline formatting context's origin.
+  pub y: f32,
+  /// Run width.
+  pub width: f32,
+  /// Run height.
+  pub height: f32,
+}
+
+/// A measured inline box's local bounding box, with text-fit line scaling
+/// applied to in-flow boxes' x position.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MeasuredInlineBox {
+  /// Left edge, relative to the inline formatting context's origin.
+  pub x: f32,
+  /// Top edge, relative to the inline formatting context's origin.
+  pub y: f32,
+  /// Box width.
+  pub width: f32,
+  /// Box height.
+  pub height: f32,
+}
+
+/// Extracts the text a glyph run renders, preferring the source span's byte
+/// range (so a run split across spans doesn't bleed into its neighbor).
+fn measured_run_text<'a>(
+  text: &'a str,
+  spans: &[ProcessedInlineSpan<'_>],
+  glyph_run: &GlyphRun<'_, InlineBrush>,
+) -> &'a str {
+  let text_range = glyph_run.run().text_range();
+  let Some(span_id) = glyph_run.style().brush.source_span_id else {
+    return slice_text_at_char_boundaries(text, text_range);
+  };
+
+  let Some(ProcessedInlineSpan::Text { byte_range, .. }) = spans.get(span_id as usize) else {
+    return slice_text_at_char_boundaries(text, text_range);
+  };
+
+  let start = text_range.start.max(byte_range.start);
+  let end = text_range.end.min(byte_range.end);
+  slice_text_at_char_boundaries(text, start..end)
+}
+
+fn slice_text_at_char_boundaries(text: &str, byte_range: Range<usize>) -> &str {
+  if byte_range.start >= byte_range.end || byte_range.start >= text.len() {
+    return "";
+  }
+
+  let end = byte_range.end.min(text.len());
+  let start = text.ceil_char_boundary(byte_range.start.min(end));
+  let end = text.floor_char_boundary(end);
+  if start >= end {
+    return "";
+  }
+
+  &text[start..end]
 }
 
 /// A text decoration line (underline/overline/line-through) as a fillable rect.
@@ -2446,6 +2616,16 @@ mod tests {
       )
       .unwrap_or_else(|error| panic!("failed to load test font {}: {error}", path.display()));
     context
+  }
+
+  #[test]
+  fn slice_text_at_char_boundaries_trims_invalid_utf8_edges() {
+    let text = "a🦀b";
+
+    assert_eq!(slice_text_at_char_boundaries(text, 0..3), "a");
+    assert_eq!(slice_text_at_char_boundaries(text, 1..5), "🦀");
+    assert_eq!(slice_text_at_char_boundaries(text, 2..5), "");
+    assert_eq!(slice_text_at_char_boundaries(text, 0..text.len()), text);
   }
 
   fn glyph_run_segments(node: Node, fonts: &Fonts) -> Vec<(Option<u64>, String, Color)> {

@@ -1,9 +1,8 @@
-use std::{collections::HashMap, ops::Range, rc::Rc, sync::Arc};
+use std::{collections::HashMap, rc::Rc, sync::Arc};
 
-use parley::{GlyphRun, InlineBoxKind, PositionedLayoutItem};
 use serde::Serialize;
 use takumi_core::{
-  geometry::{AvailableSpace, ComputedLayout as Layout, NodeId, Point, Size},
+  geometry::{AvailableSpace, ComputedLayout as Layout, NodeId, Size},
   scene::build_stacking_contexts,
 };
 use typed_builder::TypedBuilder;
@@ -13,16 +12,13 @@ use crate::{
   SizedFontStyle, apply_dithering,
   layout::{
     inline::{
-      InlineBrush, InlineLayoutMode, InlineLayoutRequest, ProcessedInlineSpan,
-      collect_inline_items, create_inline_constraint, create_inline_layout,
-      get_parent_font_metrics, resolve_inline_line_metrics, resolve_inline_line_states,
-      resolve_visual_inline_box, text_fit_line_alignment_correction,
+      InlineLayoutMode, InlineLayoutRequest, collect_inline_items, create_inline_constraint,
+      create_inline_layout,
     },
     node::Node,
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
   resources::image::ImageSource,
-  scale_text_fit_x,
   stacking_context::paint_context,
   style::{Affine, ComputedStyle, FontFamily, SizingContext, StyleSheet},
   viewport::Viewport,
@@ -142,40 +138,6 @@ pub struct MeasuredNode {
   pub children: Vec<MeasuredNode>,
   /// Text runs for inline layouts.
   pub runs: Vec<MeasuredTextRun>,
-}
-
-fn measured_run_text<'a>(
-  text: &'a str,
-  spans: &[ProcessedInlineSpan<'_>],
-  glyph_run: &GlyphRun<'_, InlineBrush>,
-) -> &'a str {
-  let text_range = glyph_run.run().text_range();
-  let Some(span_id) = glyph_run.style().brush.source_span_id else {
-    return slice_text_at_char_boundaries(text, text_range);
-  };
-
-  let Some(ProcessedInlineSpan::Text { byte_range, .. }) = spans.get(span_id as usize) else {
-    return slice_text_at_char_boundaries(text, text_range);
-  };
-
-  let start = text_range.start.max(byte_range.start);
-  let end = text_range.end.min(byte_range.end);
-  slice_text_at_char_boundaries(text, start..end)
-}
-
-fn slice_text_at_char_boundaries(text: &str, byte_range: Range<usize>) -> &str {
-  if byte_range.start >= byte_range.end || byte_range.start >= text.len() {
-    return "";
-  }
-
-  let end = byte_range.end.min(text.len());
-  let start = text.ceil_char_boundary(byte_range.start.min(end));
-  let end = text.floor_char_boundary(end);
-  if start >= end {
-    return "";
-  }
-
-  &text[start..end]
 }
 
 struct TraversalEnter {
@@ -314,116 +276,25 @@ fn collect_measure_result(
             context: &current.context,
             mode: InlineLayoutMode::Measure,
           });
-          let parent_font_metrics = get_parent_font_metrics(&built.layout);
-          let inline_offset = Point::ZERO;
-          let line_metrics = resolve_inline_line_metrics(
-            &built.layout,
-            &built.spans,
-            parent_font_metrics,
-            &built.line_scales,
-          );
-          let line_states = resolve_inline_line_states(
-            &built.layout,
-            &built.spans,
-            parent_font_metrics,
-            &built.line_scales,
-          );
-          for (line_index, line) in built.layout.lines().enumerate() {
-            let baseline_shift = line_states[line_index].baseline_shift;
-            let resolved_metrics = line_metrics[line_index];
-            let line_scale = built.line_scales.get(line_index).copied().unwrap_or(1.0);
-            let (line_scale_origin_x, line_alignment_correction) =
-              text_fit_line_alignment_correction(
-                &line,
-                line_scale,
-                layout.content_box_size().width,
-              );
-            let line_scale_origin = Point {
-              x: line_scale_origin_x + inline_offset.x,
-              y: resolved_metrics.resolved_baseline + inline_offset.y,
-            };
-            let mut static_inline_prefix = 0.0_f32;
-            for item in line.items() {
-              match item {
-                PositionedLayoutItem::GlyphRun(glyph_run) => {
-                  let text = measured_run_text(&built.text, &built.spans, &glyph_run);
-                  if text.is_empty() {
-                    continue;
-                  }
-                  let run = glyph_run.run();
-                  let metrics = run.metrics();
-                  let mut x = glyph_run.offset() + inline_offset.x;
-                  let mut y =
-                    glyph_run.baseline() + baseline_shift - metrics.ascent + inline_offset.y;
-                  let mut width = glyph_run.advance();
-                  let mut height = metrics.ascent + metrics.descent;
-                  if (line_scale - 1.0).abs() > f32::EPSILON {
-                    x = scale_text_fit_x(
-                      x,
-                      line_scale_origin.x,
-                      line_scale,
-                      static_inline_prefix,
-                      line_alignment_correction,
-                    );
-                    y = line_scale_origin.y + (y - line_scale_origin.y) * line_scale;
-                    width *= line_scale;
-                    height *= line_scale;
-                  }
-
-                  runs.push(MeasuredTextRun {
-                    text: text.to_string(),
-                    x,
-                    y,
-                    width,
-                    height,
-                  });
-                }
-                PositionedLayoutItem::InlineBox(positioned_box) => {
-                  if positioned_box.kind != InlineBoxKind::InFlow {
-                    continue;
-                  }
-                  let Some(positioned_box) = resolve_visual_inline_box(
-                    positioned_box,
-                    Some(line_states[line_index]),
-                    &built.spans,
-                  ) else {
-                    continue;
-                  };
-                  let positioned_box_x = scale_text_fit_x(
-                    positioned_box.x,
-                    line_scale_origin_x,
-                    line_scale,
-                    static_inline_prefix,
-                    line_alignment_correction,
-                  );
-                  static_inline_prefix += positioned_box.width;
-
-                  let inline_transform =
-                    Affine::translation(positioned_box_x, positioned_box.y) * local_transform;
-
-                  children.push(MeasuredNode {
-                    width: positioned_box.width,
-                    height: positioned_box.height,
-                    transform: inline_transform.to_cols_array(),
-                    children: Vec::new(),
-                    runs: Vec::new(),
-                  });
-                }
-              }
-            }
-          }
-
-          for positioned_box in built.custom_inline_boxes {
+          let (measured_runs, measured_boxes) = built.measure_runs(layout);
+          runs.extend(measured_runs.into_iter().map(|run| MeasuredTextRun {
+            text: run.text.to_string(),
+            x: run.x,
+            y: run.y,
+            width: run.width,
+            height: run.height,
+          }));
+          children.extend(measured_boxes.into_iter().map(|inline_box| {
             let inline_transform =
-              Affine::translation(positioned_box.x, positioned_box.y) * local_transform;
-            children.push(MeasuredNode {
-              width: positioned_box.width,
-              height: positioned_box.height,
+              Affine::translation(inline_box.x, inline_box.y) * local_transform;
+            MeasuredNode {
+              width: inline_box.width,
+              height: inline_box.height,
               transform: inline_transform.to_cols_array(),
               children: Vec::new(),
               runs: Vec::new(),
-            });
-          }
+            }
+          }));
 
           measured_by_node_id.insert(
             usize::from(node_id),
@@ -732,10 +603,7 @@ pub(crate) fn render_node(
 mod tests {
   use image::Rgba;
 
-  use super::{
-    RenderOptions, SequentialScene, render, render_animation, resolve_scene_at_time,
-    slice_text_at_char_boundaries,
-  };
+  use super::{RenderOptions, SequentialScene, render, render_animation, resolve_scene_at_time};
   use crate::{
     Fonts,
     layout::node::Node,
@@ -928,16 +796,6 @@ mod tests {
         .sum::<u64>(),
       150
     );
-  }
-
-  #[test]
-  fn slice_text_at_char_boundaries_trims_invalid_utf8_edges() {
-    let text = "a🦀b";
-
-    assert_eq!(slice_text_at_char_boundaries(text, 0..3), "a");
-    assert_eq!(slice_text_at_char_boundaries(text, 1..5), "🦀");
-    assert_eq!(slice_text_at_char_boundaries(text, 2..5), "");
-    assert_eq!(slice_text_at_char_boundaries(text, 0..text.len()), text);
   }
 
   #[test]
