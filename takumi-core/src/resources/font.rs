@@ -1045,7 +1045,7 @@ impl<'a> AsRef<[u8]> for FontSource<'a> {
 
 /// A CSS generic font family a registered font fulfills, exposed as named
 /// constants so callers need not depend on `parley`.
-/// https://drafts.csswg.org/css-fonts/#generic-font-families
+/// <https://drafts.csswg.org/css-fonts/#generic-font-families>
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GenericFamily(ParleyGenericFamily);
 

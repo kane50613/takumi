@@ -47,11 +47,7 @@ where
   T::from_css(&mut parser).map_err(|error| ParseError::from_css_error(&error))
 }
 
-/// Parses a CSS value type from a string, delegating to its internal [`FromCss`].
-///
-/// Blanket-implemented over every `FromCss` type, so it also covers the bare
-/// `Vec<_>`/`Box<[_]>` list aliases that orphan rules bar from carrying a
-/// [`std::str::FromStr`].
+/// Parses a CSS value type from a string.
 pub trait FromCssStr: Sized {
   /// Parses `source` into this value type.
   fn from_css_str(source: &str) -> Result<Self, ParseError>;

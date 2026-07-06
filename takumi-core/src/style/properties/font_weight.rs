@@ -114,9 +114,7 @@ impl TailwindPropertyParser for FontWeight {
 }
 
 impl FontWeight {
-  /// The numeric weight (1-1000). Relative keywords fall back to the `normal`
-  /// (400) base; call [`resolve_against`](Self::resolve_against) during
-  /// inheritance to step from the parent weight.
+  /// The numeric weight (1-1000). Relative keywords fall back to the `normal`.
   pub fn value(self) -> f32 {
     match self {
       Self::Absolute(weight) => weight,

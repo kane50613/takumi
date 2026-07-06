@@ -17,7 +17,7 @@ pub struct SizingContext {
   pub font_size: f32,
   /// Computed `font-size` of the root element in device pixels. `None` before
   /// the root has been resolved; readers should fall back to `viewport.font_size`.
-  /// https://www.w3.org/TR/css-values-4/#rem
+  /// <https://www.w3.org/TR/css-values-4/#rem>
   #[builder(default)]
   pub root_font_size: Option<f32>,
   /// Pixel basis for the `lh` unit.

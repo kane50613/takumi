@@ -502,13 +502,7 @@ impl Weighter<u64, ImageSource> for ImageWeighter {
   }
 }
 
-/// Content-addressed store of decoded images, keyed by `xxh3_64` of the input bytes.
-///
-/// Decoding is the expensive step; the decoded [`ImageSource`] is `Arc`-backed, so a hit clones
-/// for a refcount bump. A cold and a warm cache render identically, so sharing it process-wide
-/// (native) or module-wide (wasm) is safe. Eviction is byte-budgeted and coarse — a miss just
-/// re-decodes — and SVGs are excluded ([`ImageSource::is_cacheable`]) since their lazily-populated
-/// raster cache isn't counted by the byte budget.
+/// Content-addressed store of decoded images with a byte budget, used by the renderer to avoid re-decoding.
 pub struct ImageCache {
   cache: Cache<u64, ImageSource, ImageWeighter>,
 }

@@ -1,8 +1,4 @@
 //! Backend-agnostic decoded-image storage.
-//!
-//! [`ImageBuffer`] holds premultiplied, row-major RGBA bytes with the same memory
-//! layout as `tiny_skia::Pixmap`, so a paint backend can borrow it zero-copy via
-//! `PixmapRef::from_bytes(buffer.data(), w, h)` without a per-composite copy.
 
 use image::{ExtendedColorType, ImageEncoder, codecs::png::PngEncoder};
 
