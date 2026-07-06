@@ -191,10 +191,9 @@ impl ToCss for FontSize {
 mod tests {
   use std::rc::Rc;
 
-  use taffy::Size;
-
   use super::*;
   use crate::{
+    geometry::Size,
     style::{CalcArena, FromCssStr, SizingContext},
     viewport::Viewport,
   };

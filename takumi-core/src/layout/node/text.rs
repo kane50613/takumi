@@ -1,8 +1,9 @@
-use taffy::{AvailableSpace, Size};
+use taffy::AvailableSpace;
 
 use crate::{
   context::RenderContext,
   font_style::SizedFontStyle,
+  geometry::Size,
   layout::{
     inline::{
       InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
@@ -24,12 +25,12 @@ pub(crate) fn measure_text_node(
   };
 
   let (max_width, max_height) =
-    create_inline_constraint(context, available_space.into(), known_dimensions.into());
+    create_inline_constraint(context, available_space, known_dimensions);
   let font_style = SizedFontStyle::from_style(&context.style, context);
 
   let mut built = create_inline_layout(InlineLayoutRequest {
     items: vec![inline_content],
-    available_space: available_space.into(),
+    available_space,
     max_width,
     max_height,
     style: &font_style,
@@ -50,5 +51,4 @@ pub(crate) fn measure_text_node(
       parent_font_metrics,
     },
   )
-  .into()
 }

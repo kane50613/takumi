@@ -3,13 +3,13 @@ use std::{collections::HashMap, rc::Rc, str::FromStr};
 use cssparser::{Parser, ParserInput};
 use parley::FontFeature;
 use serde_json::{from_value, json};
-use taffy::Size;
 
 use super::{
   CssWideKeyword, LonghandId, PropertyId, PropertyMask, ShorthandId, StyleDeclarationBlock,
   stylesheets_vars::resolve_var_references,
 };
 use crate::{
+  geometry::Size,
   style::{CalcArena, ComputedStyle, SizingContext, Style, StyleDeclaration, properties::*},
   viewport::Viewport,
 };

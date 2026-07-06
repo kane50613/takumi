@@ -1,9 +1,8 @@
 use std::rc::Rc;
 
-use taffy::Size;
 use typed_builder::TypedBuilder;
 
-use crate::{style::CalcArena, viewport::Viewport};
+use crate::{geometry::Size, style::CalcArena, viewport::Viewport};
 
 /// The sizing context used for length value resolving.
 #[derive(Clone, TypedBuilder)]

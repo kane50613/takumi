@@ -496,8 +496,8 @@ impl<'r> LayoutTree<'r> {
   fn update_node_style_for_available_space(
     &mut self,
     node_id: NodeId,
-    available_space: TaffySize<AvailableSpace>,
-    known_dimensions: TaffySize<Option<f32>>,
+    available_space: Size<AvailableSpace>,
+    known_dimensions: Size<Option<f32>>,
   ) {
     let Some(idx) = self.get_index(node_id) else {
       return;
@@ -511,7 +511,7 @@ impl<'r> LayoutTree<'r> {
       style_override.clone()
     } else {
       let mut sizing = render_node.context.sizing.clone();
-      sizing.container_size = TaffySize {
+      sizing.container_size = Size {
         width: known_dimensions.width.or(match available_space.width {
           AvailableSpace::Definite(value) => Some(value),
           _ => None,
@@ -538,7 +538,7 @@ impl<'r> LayoutTree<'r> {
 fn should_strip_flex_intrinsic_stretch_known_dimension(
   render_node: &RenderNode,
   inputs: LayoutInput,
-  known_dimensions: TaffySize<Option<f32>>,
+  known_dimensions: Size<Option<f32>>,
 ) -> bool {
   if inputs.run_mode != RunMode::ComputeSize
     || !matches!(
@@ -688,8 +688,8 @@ impl<'r> LayoutTree<'r> {
   ) -> LayoutOutput {
     self.update_node_style_for_available_space(
       node,
-      inputs.available_space,
-      inputs.known_dimensions,
+      inputs.available_space.into(),
+      inputs.known_dimensions.into(),
     );
 
     if inputs.run_mode == RunMode::PerformHiddenLayout {
@@ -715,11 +715,11 @@ impl<'r> LayoutTree<'r> {
             return compute_hidden_layout(tree, node);
           };
 
-          let stripped_known_dimensions = |known_dimensions| {
+          let stripped_known_dimensions = |known_dimensions: TaffySize<Option<f32>>| {
             if should_strip_flex_intrinsic_stretch_known_dimension(
               render_node,
               inputs,
-              known_dimensions,
+              known_dimensions.into(),
             ) {
               TaffySize::NONE
             } else {
@@ -742,12 +742,14 @@ impl<'r> LayoutTree<'r> {
                 return TaffySize { width, height };
               }
 
-              render_node.measure(
-                available_space,
-                known_dimensions,
-                &node_data.style,
-                node_data.is_inline_children,
-              )
+              render_node
+                .measure(
+                  available_space.into(),
+                  known_dimensions.into(),
+                  &node_data.style,
+                  node_data.is_inline_children,
+                )
+                .into()
             },
           )
         }
@@ -1464,7 +1466,7 @@ impl RenderNode {
 
   fn inline_box_margin_box_height(
     &self,
-    content_size: TaffySize<f32>,
+    content_size: Size<f32>,
     include_padding_border: bool,
   ) -> f32 {
     let sizing = &self.context.sizing;
@@ -1484,9 +1486,9 @@ impl RenderNode {
 
   fn inline_replaced_content_size(
     &self,
-    measured_size: TaffySize<f32>,
+    measured_size: Size<f32>,
     layout_style: &Style,
-  ) -> TaffySize<f32> {
+  ) -> Size<f32> {
     if self.context.style.box_sizing != BoxSizing::BorderBox {
       return measured_size;
     }
@@ -1526,7 +1528,7 @@ impl RenderNode {
     };
 
     match (width_auto, height_auto) {
-      (false, false) => TaffySize {
+      (false, false) => Size {
         width: (measured_size.width - horizontal_insets).max(0.0),
         height: (measured_size.height - vertical_insets).max(0.0),
       },
@@ -1535,14 +1537,14 @@ impl RenderNode {
         let height = measured_ratio
           .filter(|ratio| *ratio > 0.0)
           .map_or(measured_size.height, |ratio| width / ratio);
-        TaffySize { width, height }
+        Size { width, height }
       }
       (true, false) => {
         let height = (measured_size.height - vertical_insets).max(0.0);
         let width = measured_ratio
           .filter(|ratio| *ratio > 0.0)
           .map_or(measured_size.width, |ratio| height * ratio);
-        TaffySize { width, height }
+        Size { width, height }
       }
       (true, true) => measured_size,
     }
@@ -1562,8 +1564,8 @@ impl RenderNode {
 
   fn inline_content_baseline_offset(
     &self,
-    available_space: TaffySize<AvailableSpace>,
-    size: TaffySize<f32>,
+    available_space: Size<AvailableSpace>,
+    size: Size<f32>,
     use_last_line: bool,
   ) -> Option<f32> {
     if matches!(
@@ -1585,11 +1587,10 @@ impl RenderNode {
     let max_width = size.width.max(0.0);
     let built = create_inline_layout(InlineLayoutRequest {
       items,
-      available_space: TaffySize {
+      available_space: Size {
         width: AvailableSpace::Definite(max_width),
         height: available_space.height,
-      }
-      .into(),
+      },
       max_width,
       max_height: None,
       style: &font_style,
@@ -1671,8 +1672,8 @@ impl RenderNode {
 
   fn resolve_inline_baseline_source(
     &self,
-    available_space: TaffySize<AvailableSpace>,
-    size: TaffySize<f32>,
+    available_space: Size<AvailableSpace>,
+    size: Size<f32>,
     source: InlineBaselineSource,
     layout_results: Option<(&LayoutResults, NodeId)>,
   ) -> Option<f32> {
@@ -1693,8 +1694,8 @@ impl RenderNode {
 
   fn resolve_inline_baseline_offset(
     &self,
-    available_space: TaffySize<AvailableSpace>,
-    size: TaffySize<f32>,
+    available_space: Size<AvailableSpace>,
+    size: Size<f32>,
     layout_results: Option<(&LayoutResults, NodeId)>,
   ) -> Option<f32> {
     let strategy = self.inline_baseline_strategy()?;
@@ -1717,7 +1718,7 @@ impl RenderNode {
 
   pub(crate) fn measure_inline_box(
     &self,
-    available_space: TaffySize<AvailableSpace>,
+    available_space: Size<AvailableSpace>,
   ) -> AtomicInlineMetrics {
     if self.participates_as_inline_box() {
       return self.measure_atomic_subtree(available_space);
@@ -1735,23 +1736,18 @@ impl RenderNode {
       .as_ref()
       .cloned()
       .unwrap_or_else(|| self.context.style.to_taffy_style(&self.context.sizing));
-    let measured_size = node.measure(
-      &self.context,
-      available_space,
-      TaffySize::NONE,
-      &layout_style,
-    );
+    let measured_size = node.measure(&self.context, available_space, Size::NONE, &layout_style);
     let size = self.inline_replaced_content_size(measured_size, &layout_style);
 
     AtomicInlineMetrics {
-      size: size.into(),
+      size,
       baseline_offset: self.resolve_inline_baseline_offset(available_space, size, None),
     }
   }
 
   pub(crate) fn measure_atomic_subtree(
     &self,
-    available_space: TaffySize<AvailableSpace>,
+    available_space: Size<AvailableSpace>,
   ) -> AtomicInlineMetrics {
     let measure_with = |width: AvailableSpace| {
       let mut tree = LayoutTree::from_render_node(self);
@@ -1818,7 +1814,7 @@ impl RenderNode {
           let size = layout.size;
           let baseline_offset = self.resolve_inline_baseline_offset(
             available_space,
-            size.into(),
+            size,
             Some((&results, root_node_id)),
           );
           AtomicInlineMetrics {
@@ -1838,23 +1834,20 @@ impl RenderNode {
 
   pub(crate) fn measure(
     &self,
-    available_space: TaffySize<AvailableSpace>,
-    known_dimensions: TaffySize<Option<f32>>,
+    available_space: Size<AvailableSpace>,
+    known_dimensions: Size<Option<f32>>,
     style: &Style,
     is_inline_children: bool,
-  ) -> TaffySize<f32> {
+  ) -> Size<f32> {
     if is_inline_children {
-      let (max_width, max_height) = create_inline_constraint(
-        &self.context,
-        available_space.into(),
-        known_dimensions.into(),
-      );
+      let (max_width, max_height) =
+        create_inline_constraint(&self.context, available_space, known_dimensions);
 
       let font_style = SizedFontStyle::from_style(&self.context.style, &self.context);
 
       let mut built = create_inline_layout(InlineLayoutRequest {
         items: collect_inline_items(self),
-        available_space: available_space.into(),
+        available_space,
         max_width,
         max_height,
         style: &font_style,
@@ -1874,8 +1867,7 @@ impl RenderNode {
           ceil_width,
           parent_font_metrics,
         },
-      )
-      .into();
+      );
     }
 
     assert_ne!(
@@ -1885,7 +1877,7 @@ impl RenderNode {
     );
 
     let Some(node) = &self.node else {
-      return TaffySize::zero();
+      return Size::ZERO;
     };
 
     node.measure(&self.context, available_space, known_dimensions, style)

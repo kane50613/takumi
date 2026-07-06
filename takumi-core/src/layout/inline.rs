@@ -1222,7 +1222,7 @@ fn build_inline_layout_tree<'c>(
         let atomic_metrics = render_node
           .node
           .as_ref()
-          .map(|_| render_node.measure_inline_box(available_space.into()));
+          .map(|_| render_node.measure_inline_box(available_space));
         let content_size = atomic_metrics.map_or(Size::ZERO, |metrics| metrics.size);
         let raw_baseline_offset = atomic_metrics.and_then(|metrics| metrics.baseline_offset);
 

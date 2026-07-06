@@ -1,9 +1,10 @@
 use data_url::DataUrl;
 use parley::Language;
-use taffy::{AvailableSpace, CompactLength, MaybeResolve, Size};
+use taffy::{AvailableSpace, CompactLength, MaybeResolve};
 
 use crate::{
   context::RenderContext,
+  geometry::Size,
   layout::node::{ImageData, ImageSourceInput, Node, NodeStyleLayers},
   resources::image::{ImageError, ImageResult, ImageSource, is_svg_like},
   style::{Length, Style, StyleDeclaration},
@@ -55,7 +56,7 @@ pub(crate) fn measure_image_node(
   style: &taffy::Style,
 ) -> Size<f32> {
   let Ok(image_source) = image.src.resolve(context) else {
-    return Size::zero();
+    return Size::ZERO;
   };
 
   let intrinsic_size = match &image_source {
@@ -134,7 +135,22 @@ pub(crate) fn measure_image_node(
   let aspect_ratio = style.aspect_ratio.or_else(|| {
     (preferred_size.height != 0.0).then_some(preferred_size.width / preferred_size.height)
   });
-  let known_dimensions = known_dimensions.maybe_apply_aspect_ratio(aspect_ratio);
+  // Mirrors `taffy::geometry::Size::maybe_apply_aspect_ratio`: fills in the
+  // missing axis from the known one when only one dimension is set.
+  let known_dimensions = match aspect_ratio {
+    Some(ratio) => match (known_dimensions.width, known_dimensions.height) {
+      (Some(width), None) => Size {
+        width: Some(width),
+        height: Some(width / ratio),
+      },
+      (None, Some(height)) => Size {
+        width: Some(height * ratio),
+        height: Some(height),
+      },
+      _ => known_dimensions,
+    },
+    None => known_dimensions,
+  };
 
   if let Size {
     width: Some(width),
@@ -199,12 +215,13 @@ mod tests {
 
   use image::RgbaImage;
   use serde_json::from_value;
-  use taffy::{AvailableSpace, Dimension, Size, Style};
+  use taffy::{AvailableSpace, Dimension, Size as TaffySize, Style};
 
   use super::{image_url, measure_image_node};
   use crate::{
     Fonts,
     context::RenderContext,
+    geometry::Size,
     layout::node::{ImageData, ImageSourceInput},
     resources::{image::ImageSource, image_buffer::ImageBuffer},
     style::SizingContext,
@@ -322,7 +339,7 @@ mod tests {
     let buffer = ImageBuffer::from_rgba_bytes(RgbaImage::new(10, 10).into_raw(), 10, 10).unwrap();
     let image = ImageData::from(ImageSource::from(buffer));
     let style = Style {
-      size: Size {
+      size: TaffySize {
         width: Dimension::length(42.0),
         height: Dimension::length(28.0),
       },
