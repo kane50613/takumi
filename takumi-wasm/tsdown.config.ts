@@ -15,9 +15,6 @@ export default defineConfig({
   },
   clean: true,
   outDir: "dist",
-  deps: {
-    neverBundle: ["csstype"],
-  },
   outputOptions: {
     exports: "named",
   },

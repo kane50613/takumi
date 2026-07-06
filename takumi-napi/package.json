@@ -70,8 +70,7 @@
     "publish-lint": "attw --pack . && publint --strict ."
   },
   "dependencies": {
-    "@takumi-rs/helpers": "workspace:*",
-    "csstype": "^3.2.3"
+    "@takumi-rs/helpers": "workspace:*"
   },
   "devDependencies": {
     "@napi-rs/cli": "3.7.2",

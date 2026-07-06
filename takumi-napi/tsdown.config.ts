@@ -12,9 +12,6 @@ export default defineConfig({
   clean: true,
   outDir: "dist",
   platform: "node",
-  deps: {
-    neverBundle: ["csstype"],
-  },
   hooks: {
     // Make NAPI-RS's generated loader bundler-safe. Only `dist/export.*` ships.
     "build:done": () => {

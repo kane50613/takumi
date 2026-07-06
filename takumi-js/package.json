@@ -1,7 +1,7 @@
 {
   "name": "takumi-js",
   "version": "2.0.0",
-  "description": "All-in-one Takumi package for Node.js and WebAssembly runtimes.",
+  "description": "Render JSX to SVG or images. Drop-in next/og replacement.",
   "keywords": [
     "css",
     "image",
