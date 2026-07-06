@@ -1,10 +1,32 @@
 use std::fmt;
 
 use cssparser::Parser;
-use parley::FontVariation;
 
-use super::font_feature_settings::parse_opentype_tag;
+use super::font_feature_settings::{Tag, parse_opentype_tag};
 use crate::style::{CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss};
+
+/// An OpenType font variation setting (tag + value) from CSS `font-variation-settings`.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct FontVariation {
+  /// The OpenType tag for this setting.
+  pub tag: Tag,
+  /// The variation value.
+  pub value: f32,
+}
+
+impl FontVariation {
+  /// Creates a new variation setting.
+  pub const fn new(tag: Tag, value: f32) -> Self {
+    Self { tag, value }
+  }
+
+  pub(crate) fn into_parlance(self) -> parley::FontVariation {
+    parley::FontVariation {
+      tag: self.tag.into_parlance(),
+      value: self.value,
+    }
+  }
+}
 
 /// Controls variable font axis values via CSS font-variation-settings property.
 ///
@@ -39,7 +61,7 @@ impl<'i> FromCss<'i> for FontVariationSettings {
   ];
 }
 
-impl ToCss for parley::FontVariation {
+impl ToCss for FontVariation {
   // An empty `font-variation-settings` list is the keyword `normal`.
   const EMPTY_LIST_KEYWORD: Option<&'static str> = Some("normal");
 

@@ -1,4 +1,3 @@
-use parley::{FontVariation, setting::Tag};
 use serde_json::{from_value, json};
 use takumi::prelude::{Length::*, *};
 
@@ -48,10 +47,7 @@ fn text_typography_variable_width() {
         Style::default()
           .with(StyleDeclaration::display(Display::Flex))
           .with(StyleDeclaration::font_variation_settings(Box::new([
-            FontVariation {
-              tag: Tag::from_bytes(*b"wdth"),
-              value: *width,
-            },
+            FontVariation::new(Tag::new(b"wdth"), *width),
           ]))),
       )
     })

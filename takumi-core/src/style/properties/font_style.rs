@@ -51,9 +51,9 @@ impl FontStyle {
   }
 }
 
-impl From<FontStyle> for ParleyFontStyle {
-  fn from(value: FontStyle) -> Self {
-    value.0
+impl FontStyle {
+  pub(crate) fn into_parlance(self) -> ParleyFontStyle {
+    self.0
   }
 }
 

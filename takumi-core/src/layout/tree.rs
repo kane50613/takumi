@@ -158,9 +158,9 @@ fn resolve_normal_line_height(
     return 0.0;
   }
   let attributes = Attributes {
-    width: style.font_stretch.into(),
-    style: style.font_style.into(),
-    weight: style.font_weight.into(),
+    width: style.font_stretch.into_parlance(),
+    style: style.font_style.into_parlance(),
+    weight: style.font_weight.into_parlance(),
   };
   let font_family = context.expand_font_family(&style.font_family);
 
@@ -1174,7 +1174,7 @@ impl RenderNode {
         .map(NodeMatchedDeclarations::element)
         .unwrap_or(&default_matched);
       let layers = node.take_style_layers();
-      let node_lang = layers.lang;
+      let node_lang = layers.lang.clone();
       let style_layers = build_style_layers(layers, matched, parent_context.sizing.viewport);
       let inherited_parent = registered_custom_property_parent_style(
         &parent_context.style,
@@ -2367,13 +2367,11 @@ mod tests {
 
   #[test]
   fn lang_resolves_and_inherits_to_descendants() {
-    use parley::Language;
-
     use crate::{
       context::RenderContext,
       layout::{node::Node, tree::RenderNode},
       resources::font::Fonts,
-      style::SizingContext,
+      style::{Lang, SizingContext},
     };
 
     let fonts = Fonts::default();
@@ -2398,8 +2396,8 @@ mod tests {
       .with_lang("zh-Hant"),
     );
 
-    let zh = Language::parse("zh-Hant").ok();
-    let ja = Language::parse("ja").ok();
+    let zh = Lang::parse("zh-Hant");
+    let ja = Lang::parse("ja");
     assert!(zh.is_some() && ja.is_some());
 
     assert_eq!(tree.context.style.lang, zh);

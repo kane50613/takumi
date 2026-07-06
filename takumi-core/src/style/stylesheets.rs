@@ -46,6 +46,34 @@ struct DeferredDeclaration {
   specified_value: String,
 }
 
+/// A resolved BCP-47 language tag (the canonicalized `language[-Script][-REGION]`
+/// prefix), inherited from the `lang` attribute. Drives locale-aware shaping
+/// (Han unification, line-breaking). Has no CSS property; set via
+/// [`ComputedStyle::set_lang`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Lang(Box<str>);
+
+impl Lang {
+  /// Parses a BCP-47 tag string, canonicalizing language/script/region casing.
+  /// Returns `None` if the tag has no valid `language[-Script][-REGION]` prefix.
+  pub fn parse(tag: &str) -> Option<Self> {
+    Language::parse(tag)
+      .ok()
+      .map(|language| Self(language.as_str().into()))
+  }
+
+  /// The canonical string form (`language[-Script][-REGION]`).
+  pub fn as_str(&self) -> &str {
+    &self.0
+  }
+
+  pub(crate) fn to_parlance(&self) -> Language {
+    // `self.0` is always the canonical string form of a successful `Language::parse`,
+    // so this never actually falls back to `UND`.
+    Language::parse(&self.0).unwrap_or(Language::UND)
+  }
+}
+
 #[derive(Clone, Copy)]
 struct InterpolationContext<'a> {
   progress: f32,
@@ -632,7 +660,7 @@ macro_rules! define_style {
         /// Resolved BCP-47 language, inherited from the `lang` attribute. Drives
         /// locale-aware shaping (Han unification, line-breaking). Has no CSS property.
         /// Set from a tag string via [`ComputedStyle::set_lang`].
-        pub lang: Option<Language>,
+        pub lang: Option<Lang>,
         $(
           #[doc = concat!("Computed `", stringify!($longhand), "` value.")]
           pub $longhand: $longhand_ty,
@@ -687,7 +715,7 @@ macro_rules! define_style {
             } else {
               parent.registered_custom_properties.clone()
             },
-            lang: parent.lang,
+            lang: parent.lang.clone(),
             $($longhand: define_inherited_default!(parent.$longhand, define_style!(@default $($longhand_default)?) $(, $longhand_inherit)?),)*
           }
         }
@@ -701,7 +729,7 @@ macro_rules! define_style {
         /// parsed into the shaping engine's representation. Unrecognized tags are
         /// ignored. Drives locale-aware shaping and line-breaking.
         pub fn set_lang(&mut self, tag: Option<&str>) {
-          self.lang = tag.and_then(|tag| Language::parse(tag).ok());
+          self.lang = tag.and_then(Lang::parse);
         }
 
         pub(crate) fn apply_interpolated_properties(
