@@ -1,3 +1,9 @@
+## takumi-core@0.3.0
+
+### Refactor `font_families` and `lang` option type
+
+Now both option takes resolved value instead of raw strings.
+
 ## takumi-core@0.2.0
 
 ### Drop `background-blend-mode` from the `background` shorthand
