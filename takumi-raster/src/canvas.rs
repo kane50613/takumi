@@ -20,10 +20,12 @@ pub(crate) use mask::{
   prepare_node_mask, render_mask,
 };
 pub(crate) use paint_source::{PaintSource, SamplingFootprint, interpolate_with_footprint};
-use taffy::{Point, Size};
-use takumi_core::paint::{
-  GradientOverlayTile, LinearGradientFastPathKind, LinearGradientTile, RadialGradientTile,
-  overlay_gradient_tile_fast_normal_unconstrained,
+use takumi_core::{
+  geometry::{Point, Size},
+  paint::{
+    GradientOverlayTile, LinearGradientFastPathKind, LinearGradientTile, RadialGradientTile,
+    overlay_gradient_tile_fast_normal_unconstrained,
+  },
 };
 use tiny_skia::{
   FillRule as TinyFillRule, FilterQuality as TinyFilterQuality, IntSize, Mask as TinyMask,

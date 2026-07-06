@@ -1,6 +1,7 @@
-use taffy::Size;
-
-use crate::style::{BoxShadow, Color, SizingContext, TextShadow};
+use crate::{
+  geometry::Size,
+  style::{BoxShadow, Color, SizingContext, TextShadow},
+};
 
 /// Represents a resolved box shadow with all its properties.
 #[derive(Clone, Copy)]

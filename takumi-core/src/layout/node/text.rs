@@ -24,12 +24,12 @@ pub(crate) fn measure_text_node(
   };
 
   let (max_width, max_height) =
-    create_inline_constraint(context, available_space, known_dimensions);
+    create_inline_constraint(context, available_space.into(), known_dimensions.into());
   let font_style = SizedFontStyle::from_style(&context.style, context);
 
   let mut built = create_inline_layout(InlineLayoutRequest {
     items: vec![inline_content],
-    available_space,
+    available_space: available_space.into(),
     max_width,
     max_height,
     style: &font_style,
@@ -50,4 +50,5 @@ pub(crate) fn measure_text_node(
       parent_font_metrics,
     },
   )
+  .into()
 }

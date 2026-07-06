@@ -14,9 +14,9 @@
 
 use std::{f32::consts::TAU, io};
 
-use taffy::Size;
 use takumi_core::{
   context::RenderContext,
+  geometry::Size,
   layout::node::resolve_image,
   paint::{
     ConicGradientTile, LinearGradientTile, RadialGradientTile, build_color_lut_with_interpolation,

@@ -1,4 +1,6 @@
-use taffy::{AvailableSpace, Size};
+use taffy::AvailableSpace;
+
+use crate::geometry::Size;
 
 /// The default font size in pixels.
 pub(crate) const DEFAULT_FONT_SIZE: f32 = 16.0;

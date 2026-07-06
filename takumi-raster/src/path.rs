@@ -1,6 +1,5 @@
 use svgtypes::{SimplePathSegment, SimplifyingPathParser};
-use taffy::Size;
-use takumi_core::geometry::{PathCommand, Point};
+use takumi_core::geometry::{PathCommand, Point, Size};
 use tiny_skia::{
   FillRule as TinyFillRule, LineCap as TinyLineCap, LineJoin as TinyLineJoin, Path as TinyPath,
   PathBuilder as TinyPathBuilder, PathSegment as TinyPathSegment, Rect as TinyRect,

@@ -8,10 +8,10 @@ use parley::{
   TextStyle, fontique::QueryFamily,
 };
 use smallvec::SmallVec;
-use taffy::{Size, prelude::FromLength};
 
 use crate::{
   context::RenderContext,
+  geometry::Size,
   layout::inline::InlineBrush,
   shadow::SizedShadow,
   style::{
@@ -190,7 +190,7 @@ fn resolved_text_shadows(
             *shadow,
             &context.sizing,
             context.current_color,
-            Size::from_length(context.sizing.font_size),
+            Size::new(context.sizing.font_size, context.sizing.font_size),
           )
         })
         .collect()

@@ -1,6 +1,8 @@
 use smallvec::SmallVec;
-use taffy::{Point, Size};
-use takumi_core::paint::compose_transfer_table;
+use takumi_core::{
+  geometry::{Point, Size},
+  paint::compose_transfer_table,
+};
 use tiny_skia::{Mask as TinyMask, PixmapMut};
 
 use crate::{

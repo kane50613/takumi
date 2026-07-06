@@ -1,5 +1,6 @@
-use taffy::{AbsoluteAxis, Layout, Point, Rect, Size};
-use takumi_core::geometry::transformed_rect_extents;
+use takumi_core::geometry::{
+  ComputedLayout as Layout, Point, Rect, Size, transformed_rect_extents,
+};
 use tiny_skia::{
   FillRule as TinyFillRule, IntSize, Mask as TinyMask, PathBuilder as TinyPathBuilder,
   Rect as TinyRect, Transform as TinyTransform,
@@ -607,7 +608,7 @@ pub(crate) fn render_clip_shape_mask(
         .into();
 
       let border = BorderProperties {
-        width: Rect::zero(),
+        width: Rect::ZERO,
         color: Rect {
           top: Color::transparent(),
           right: Color::transparent(),
@@ -636,8 +637,8 @@ pub(crate) fn render_clip_shape_mask(
       border.append_mask_commands(
         &mut paths,
         Size {
-          width: size.width - inset.grid_axis_sum(AbsoluteAxis::Horizontal),
-          height: size.height - inset.grid_axis_sum(AbsoluteAxis::Vertical),
+          width: size.width - inset.horizontal(),
+          height: size.height - inset.vertical(),
         },
         Point {
           x: inset.left,

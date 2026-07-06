@@ -1,4 +1,4 @@
-use taffy::Layout;
+use takumi_core::geometry::ComputedLayout as Layout;
 
 use crate::{
   BorderPainting, BorderProperties, Canvas,

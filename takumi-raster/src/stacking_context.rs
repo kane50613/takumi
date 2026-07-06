@@ -1,6 +1,6 @@
-use taffy::{AvailableSpace, Layout, Point, geometry::Size};
+use taffy::AvailableSpace;
 use takumi_core::{
-  geometry::transformed_rect_extents,
+  geometry::{ComputedLayout as Layout, Point, Size, transformed_rect_extents},
   scene::{NodePaint, PaintItem, PaintItemKind, SceneBounds, StackingContextNode},
 };
 use tiny_skia::{Pixmap, PixmapMut};
@@ -284,7 +284,7 @@ fn begin_node_render(
   let Some(current) = root.node_at_path_mut(&node_paint.path) else {
     return Err(Error::InvalidLayoutNode(node_paint.node_id.into()));
   };
-  let layout = *layout_results.layout(node_paint.node_id)?;
+  let layout = layout_results.layout(node_paint.node_id)?;
 
   if current.context.style.is_invisible() || !node_paint.transform.is_invertible() {
     return Ok(None);

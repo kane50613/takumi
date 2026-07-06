@@ -59,8 +59,8 @@ impl Rgba {
   }
 }
 
-use taffy::Size;
 use takumi_core::{
+  geometry::Size,
   shadow::SizedShadow,
   style::{Affine, Color, Filter, LUMA_WEIGHTS, SEPIA_WEIGHTS, SizingContext},
 };

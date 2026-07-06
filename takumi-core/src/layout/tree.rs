@@ -14,6 +14,7 @@ use crate::{
   Error,
   context::RenderContext,
   font_style::SizedFontStyle,
+  geometry::{ComputedLayout, Size as CoreSize},
   layout::{
     inline::{
       InlineContentKind, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
@@ -62,12 +63,12 @@ impl LayoutResults {
   }
 
   /// Computed layout of a node.
-  pub fn layout(&self, node_id: NodeId) -> crate::Result<&Layout> {
+  pub fn layout(&self, node_id: NodeId) -> crate::Result<ComputedLayout> {
     let idx: usize = node_id.into();
     self
       .nodes
       .get(idx)
-      .map(|node| &node.layout)
+      .map(|node| ComputedLayout::from(&node.layout))
       .ok_or(Error::InvalidLayoutNode(node_id.into()))
   }
 
@@ -125,7 +126,7 @@ pub struct RenderNode {
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct AtomicInlineMetrics {
-  pub(crate) size: Size<f32>,
+  pub(crate) size: CoreSize<f32>,
   pub(crate) baseline_offset: Option<f32>,
 }
 
@@ -456,9 +457,9 @@ impl<'r> LayoutTree<'r> {
   }
 
   /// Computes and rounds the layout for the whole tree.
-  pub fn compute_layout(&mut self, available_space: Size<AvailableSpace>) {
+  pub fn compute_layout(&mut self, available_space: CoreSize<AvailableSpace>) {
     let root_node_id = self.root_node_id();
-    compute_root_layout(self, root_node_id, available_space);
+    compute_root_layout(self, root_node_id, available_space.into());
     round_layout(self, root_node_id);
   }
 
@@ -1587,7 +1588,8 @@ impl RenderNode {
       available_space: Size {
         width: AvailableSpace::Definite(max_width),
         height: available_space.height,
-      },
+      }
+      .into(),
       max_width,
       max_height: None,
       style: &font_style,
@@ -1723,7 +1725,7 @@ impl RenderNode {
 
     let Some(node) = &self.node else {
       return AtomicInlineMetrics {
-        size: Size::zero(),
+        size: CoreSize::ZERO,
         baseline_offset: None,
       };
     };
@@ -1737,7 +1739,7 @@ impl RenderNode {
     let size = self.inline_replaced_content_size(measured_size, &layout_style);
 
     AtomicInlineMetrics {
-      size,
+      size: size.into(),
       baseline_offset: self.resolve_inline_baseline_offset(available_space, size, None),
     }
   }
@@ -1748,7 +1750,7 @@ impl RenderNode {
   ) -> AtomicInlineMetrics {
     let measure_with = |width: AvailableSpace| {
       let mut tree = LayoutTree::from_render_node(self);
-      tree.compute_layout(Size {
+      tree.compute_layout(CoreSize {
         width,
         height: available_space.height,
       });
@@ -1756,7 +1758,7 @@ impl RenderNode {
 
       results
         .layout(results.root_node_id())
-        .map_or(Size::zero(), |layout| layout.size)
+        .map_or(CoreSize::ZERO, |layout| layout.size)
     };
 
     if self.participates_as_inline_box() {
@@ -1776,7 +1778,7 @@ impl RenderNode {
           node.style.justify_content = Some(taffy::JustifyContent::START);
         }
 
-        tree.compute_layout(Size {
+        tree.compute_layout(CoreSize {
           width: AvailableSpace::MaxContent,
           height: available_space.height,
         });
@@ -1784,7 +1786,7 @@ impl RenderNode {
         let results = tree.into_results();
         results
           .layout(results.root_node_id())
-          .map_or(Size::zero(), |layout| layout.size)
+          .map_or(CoreSize::ZERO, |layout| layout.size)
       };
 
       let used_width = match available_space.width {
@@ -1795,7 +1797,7 @@ impl RenderNode {
         AvailableSpace::MaxContent => max_content.width,
       };
       let mut tree = LayoutTree::from_render_node(self);
-      tree.compute_layout(Size {
+      tree.compute_layout(CoreSize {
         width: AvailableSpace::Definite(used_width),
         height: available_space.height,
       });
@@ -1804,14 +1806,14 @@ impl RenderNode {
 
       return results.layout(root_node_id).map_or(
         AtomicInlineMetrics {
-          size: Size::zero(),
+          size: CoreSize::ZERO,
           baseline_offset: None,
         },
         |layout| {
           let size = layout.size;
           let baseline_offset = self.resolve_inline_baseline_offset(
             available_space,
-            size,
+            size.into(),
             Some((&results, root_node_id)),
           );
           AtomicInlineMetrics {
@@ -1837,14 +1839,17 @@ impl RenderNode {
     is_inline_children: bool,
   ) -> Size<f32> {
     if is_inline_children {
-      let (max_width, max_height) =
-        create_inline_constraint(&self.context, available_space, known_dimensions);
+      let (max_width, max_height) = create_inline_constraint(
+        &self.context,
+        available_space.into(),
+        known_dimensions.into(),
+      );
 
       let font_style = SizedFontStyle::from_style(&self.context.style, &self.context);
 
       let mut built = create_inline_layout(InlineLayoutRequest {
         items: collect_inline_items(self),
-        available_space,
+        available_space: available_space.into(),
         max_width,
         max_height,
         style: &font_style,
@@ -1864,7 +1869,8 @@ impl RenderNode {
           ceil_width,
           parent_font_metrics,
         },
-      );
+      )
+      .into();
     }
 
     assert_ne!(

@@ -1,4 +1,4 @@
-use taffy::Point;
+use takumi_core::geometry::Point;
 use tiny_skia::PixmapMut;
 
 use super::{
