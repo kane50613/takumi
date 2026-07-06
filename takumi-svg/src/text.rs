@@ -361,7 +361,7 @@ fn emit_clip_text_mask_glyphs(
   let run_transform = run.transform(IDENTITY);
   let glyph_offset = run.glyph_offset(frame.layout);
   let mut any = false;
-  for glyph in run.glyph_run.positioned_glyphs() {
+  for glyph in &run.glyph_run.glyphs {
     let Some(ResolvedGlyph::Outline(outline)) = run.resolved_glyphs.get(&glyph.id) else {
       continue;
     };
@@ -394,7 +394,7 @@ fn emit_run_decorations(
   over: bool,
 ) -> io::Result<()> {
   let transform = run.transform(IDENTITY);
-  let opacity = run.glyph_run.brush().opacity;
+  let opacity = run.glyph_run.brush.opacity;
   let opacity_group = (opacity < 1.0)
     .then(|| doc.begin_group(IDENTITY, opacity, None, None))
     .transpose()?;
@@ -424,12 +424,12 @@ fn emit_run_glyphs(
 ) -> io::Result<()> {
   let run_transform = run.transform(IDENTITY);
   let glyph_offset = run.glyph_offset(frame.layout);
-  let fill_color = run.glyph_run.brush().color;
+  let fill_color = run.glyph_run.brush.color;
   let bold_join = line_join_str(font_style.parent.stroke_linejoin);
 
   // Per-run (inline span) opacity, matching the raster backend's
   // `draw_with_inline_opacity`. Skipped while building a clip path (geometry only).
-  let opacity = run.glyph_run.brush().opacity;
+  let opacity = run.glyph_run.brush.opacity;
   let opacity_group = (clip_data.is_none() && opacity < 1.0)
     .then(|| doc.begin_group(IDENTITY, opacity, None, None))
     .transpose()?;
@@ -441,7 +441,7 @@ fn emit_run_glyphs(
   let fill = color_override.unwrap_or(Rgba(fill_color.0));
   let mut merged = String::new();
 
-  for glyph in run.glyph_run.positioned_glyphs() {
+  for glyph in &run.glyph_run.glyphs {
     let Some(resolved) = run.resolved_glyphs.get(&glyph.id) else {
       continue;
     };

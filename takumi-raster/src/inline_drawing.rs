@@ -157,14 +157,14 @@ fn draw_underline_with_skip_ink(
   glyph_bounds_cache: &HashMap<u32, GlyphSkipInkData>,
   options: UnderlineDrawOptions,
 ) {
-  let run_start_x = options.layout.border.left + options.layout.padding.left + glyph_run.offset();
-  let run_end_x = run_start_x + glyph_run.advance();
+  let run_start_x = options.layout.border.left + options.layout.padding.left + glyph_run.offset;
+  let run_end_x = run_start_x + glyph_run.advance;
   let line_top = options.layout.border.top + options.layout.padding.top + options.offset;
   let line_bottom = line_top + options.size;
   let skip_padding = compute_skip_padding(options.size);
   let mut skip_ranges = Vec::new();
 
-  for glyph in glyph_run.positioned_glyphs() {
+  for glyph in &glyph_run.glyphs {
     let Some(glyph_data) = glyph_bounds_cache.get(&glyph.id) else {
       continue;
     };
@@ -301,14 +301,14 @@ fn draw_glyph_run_under_overline(
   canvas: &mut Canvas,
   options: GlyphRunLineOptions,
 ) -> Result<()> {
-  let brush = glyph_run.brush();
-  let metrics = glyph_run.metrics();
+  let brush = glyph_run.brush;
+  let metrics = glyph_run.metrics;
 
   if brush
     .decoration_line
     .contains(TextDecorationLines::UNDERLINE)
   {
-    let offset = glyph_run.baseline() + options.baseline_shift - metrics.underline_offset
+    let offset = glyph_run.baseline + options.baseline_shift - metrics.underline_offset
       + brush.underline_offset;
     let size = match brush.decoration_thickness {
       SizedTextDecorationThickness::Value(v) => v,
@@ -352,8 +352,8 @@ fn draw_glyph_run_under_overline(
     draw_decoration(
       canvas,
       glyph_run,
-      glyph_run.brush().decoration_color,
-      glyph_run.baseline() + options.baseline_shift - metrics.ascent - metrics.underline_offset,
+      glyph_run.brush.decoration_color,
+      glyph_run.baseline + options.baseline_shift - metrics.ascent - metrics.underline_offset,
       match brush.decoration_thickness {
         SizedTextDecorationThickness::Value(v) => v,
         SizedTextDecorationThickness::FromFont => metrics.underline_size,
@@ -371,24 +371,24 @@ fn draw_glyph_run_line_through(
   canvas: &mut Canvas,
   options: GlyphRunLineOptions,
 ) -> Result<()> {
-  let brush = glyph_run.brush();
+  let brush = glyph_run.brush;
   let decoration_line = brush.decoration_line;
 
   if !decoration_line.contains(TextDecorationLines::LINE_THROUGH) {
     return Ok(());
   }
 
-  let metrics = glyph_run.metrics();
+  let metrics = glyph_run.metrics;
   let size = match brush.decoration_thickness {
     SizedTextDecorationThickness::Value(v) => v,
     SizedTextDecorationThickness::FromFont => metrics.strikethrough_size,
   };
-  let offset = glyph_run.baseline() + options.baseline_shift - metrics.strikethrough_offset;
+  let offset = glyph_run.baseline + options.baseline_shift - metrics.strikethrough_offset;
 
   draw_decoration(
     canvas,
     glyph_run,
-    glyph_run.brush().decoration_color,
+    glyph_run.brush.decoration_color,
     offset,
     size,
     options.layout,
@@ -489,13 +489,13 @@ fn draw_glyph_run_content(
   canvas: &mut Canvas,
   options: GlyphRunContentOptions<'_>,
 ) -> Result<()> {
-  let font = FontRef::from_index(glyph_run.font_data(), glyph_run.font_index())
+  let font = FontRef::from_index(glyph_run.font_data(), glyph_run.font_index)
     .map_err(|_| FontError::InvalidFontIndex)?;
   let palettes = font.color_palettes();
   let palette = palettes.get(0);
 
   if let Some(clip_image) = options.clip_image {
-    for glyph in glyph_run.positioned_glyphs() {
+    for glyph in &glyph_run.glyphs {
       let Some(content) = resolved_glyphs.get(&glyph.id) else {
         continue;
       };
@@ -516,7 +516,7 @@ fn draw_glyph_run_content(
     }
   }
 
-  for glyph in glyph_run.positioned_glyphs() {
+  for glyph in &glyph_run.glyphs {
     let Some(content) = resolved_glyphs.get(&glyph.id) else {
       continue;
     };
@@ -532,7 +532,7 @@ fn draw_glyph_run_content(
       options.style,
       options.transform,
       inline_offset,
-      glyph_run.brush().color,
+      glyph_run.brush.color,
       palette.as_ref(),
     )?;
   }
@@ -547,7 +547,7 @@ fn draw_glyph_run_text_shadow(
   canvas: &mut Canvas,
   options: GlyphRunLineOptions,
 ) -> Result<()> {
-  for glyph in glyph_run.positioned_glyphs() {
+  for glyph in &glyph_run.glyphs {
     let Some(content) = resolved_glyphs.get(&glyph.id) else {
       continue;
     };
@@ -640,7 +640,7 @@ pub(crate) fn draw_inline_layout(
   } = resolve_inline_runs(built, context, layout)?;
 
   let decoration_mask = runs.iter().fold(TextDecorationLines::empty(), |acc, run| {
-    acc | run.glyph_run.brush().decoration_line
+    acc | run.glyph_run.brush.decoration_line
   });
   let need_text_shadow = !font_style.text_shadow.is_empty();
   let need_under_overline =
@@ -673,7 +673,7 @@ pub(crate) fn draw_inline_layout(
   if need_text_shadow {
     for run in &runs {
       let opts = line_options(run);
-      draw_with_inline_opacity(canvas, run.glyph_run.brush().opacity, |canvas| {
+      draw_with_inline_opacity(canvas, run.glyph_run.brush.opacity, |canvas| {
         draw_glyph_run_text_shadow(
           font_style,
           &run.glyph_run,
@@ -688,7 +688,7 @@ pub(crate) fn draw_inline_layout(
   if need_under_overline {
     for run in &runs {
       let opts = line_options(run);
-      draw_with_inline_opacity(canvas, run.glyph_run.brush().opacity, |canvas| {
+      draw_with_inline_opacity(canvas, run.glyph_run.brush.opacity, |canvas| {
         draw_glyph_run_under_overline(&run.glyph_run, &run.resolved_glyphs, canvas, opts)
       })?;
     }
@@ -696,7 +696,7 @@ pub(crate) fn draw_inline_layout(
 
   for run in &runs {
     let transform = run.transform(context.transform);
-    draw_with_inline_opacity(canvas, run.glyph_run.brush().opacity, |canvas| {
+    draw_with_inline_opacity(canvas, run.glyph_run.brush.opacity, |canvas| {
       draw_glyph_run_content(
         &run.glyph_run,
         &run.resolved_glyphs,
@@ -718,7 +718,7 @@ pub(crate) fn draw_inline_layout(
   if need_line_through {
     for run in &runs {
       let opts = line_options(run);
-      draw_with_inline_opacity(canvas, run.glyph_run.brush().opacity, |canvas| {
+      draw_with_inline_opacity(canvas, run.glyph_run.brush.opacity, |canvas| {
         draw_glyph_run_line_through(&run.glyph_run, canvas, opts)
       })?;
     }

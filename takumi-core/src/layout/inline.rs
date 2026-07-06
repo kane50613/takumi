@@ -1889,55 +1889,28 @@ pub struct RunMetrics {
 /// `parley::GlyphRun`. Owns everything both backends need to paint a run; carries
 /// no borrow into the parley layout.
 pub struct ShapedRun {
-  glyphs: Vec<PositionedGlyph>,
-  offset: f32,
-  baseline: f32,
-  advance: f32,
-  brush: InlineBrush,
-  metrics: RunMetrics,
+  /// The run's glyphs, in run-local coordinates.
+  pub glyphs: Vec<PositionedGlyph>,
+  /// Horizontal offset of the run's start from the line origin.
+  pub offset: f32,
+  /// Baseline position within the line.
+  pub baseline: f32,
+  /// Total horizontal advance of the run.
+  pub advance: f32,
+  /// Paint attributes carried by the run.
+  pub brush: InlineBrush,
+  /// Vertical font metrics for the run.
+  pub metrics: RunMetrics,
+  /// Collection index for `skrifa::FontRef::from_index`, paired with [`Self::font_data`].
+  pub font_index: u32,
+  // Accessor, not a `pub` field: the backing `parley` blob must not leak into the public API.
   font_data: parley::fontique::Blob<u8>,
-  font_index: u32,
 }
 
 impl ShapedRun {
-  /// The run's glyphs, in run-local coordinates.
-  pub fn positioned_glyphs(&self) -> &[PositionedGlyph] {
-    &self.glyphs
-  }
-
-  /// Horizontal offset of the run's start from the line origin.
-  pub fn offset(&self) -> f32 {
-    self.offset
-  }
-
-  /// Baseline position within the line.
-  pub fn baseline(&self) -> f32 {
-    self.baseline
-  }
-
-  /// Total horizontal advance of the run.
-  pub fn advance(&self) -> f32 {
-    self.advance
-  }
-
-  /// Paint attributes carried by the run.
-  pub fn brush(&self) -> &InlineBrush {
-    &self.brush
-  }
-
-  /// Vertical font metrics for the run.
-  pub fn metrics(&self) -> &RunMetrics {
-    &self.metrics
-  }
-
   /// Font bytes for `skrifa::FontRef::from_index`, paired with [`Self::font_index`].
   pub fn font_data(&self) -> &[u8] {
     self.font_data.as_ref()
-  }
-
-  /// Collection index for `skrifa::FontRef::from_index`.
-  pub fn font_index(&self) -> u32 {
-    self.font_index
   }
 }
 
@@ -1983,7 +1956,7 @@ impl PositionedInlineRun {
     let Some(layers) = outline.color_layers() else {
       return Vec::new();
     };
-    let font = FontRef::from_index(self.glyph_run.font_data(), self.glyph_run.font_index()).ok();
+    let font = FontRef::from_index(self.glyph_run.font_data(), self.glyph_run.font_index).ok();
     let palettes = font.as_ref().map(MetadataProvider::color_palettes);
     let palette = palettes.as_ref().and_then(|palettes| palettes.get(0));
     let foreground_opacity = foreground.0[3] as f32 / 255.0;
@@ -2196,19 +2169,19 @@ pub fn run_decorations(
   transform: Affine,
 ) -> Vec<DecorationRect> {
   let mut out = Vec::new();
-  let brush = glyph_run.brush();
+  let brush = &glyph_run.brush;
   let lines = brush.decoration_line;
   if lines.is_empty() {
     return out;
   }
-  let metrics = glyph_run.metrics();
-  let start_x = layout.border.left + layout.padding.left + glyph_run.offset();
+  let metrics = &glyph_run.metrics;
+  let start_x = layout.border.left + layout.padding.left + glyph_run.offset;
   let snapped_start_x = start_x.floor();
-  let width = (start_x + glyph_run.advance()).ceil() - snapped_start_x;
+  let width = (start_x + glyph_run.advance).ceil() - snapped_start_x;
   if width <= 0.0 {
     return out;
   }
-  let baseline = glyph_run.baseline() + baseline_shift;
+  let baseline = glyph_run.baseline + baseline_shift;
   let top = layout.border.top + layout.padding.top;
   let thickness = |from_font: f32| match brush.decoration_thickness {
     SizedTextDecorationThickness::Value(value) => value,
