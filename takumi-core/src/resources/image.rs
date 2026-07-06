@@ -640,7 +640,7 @@ mod image_cache_tests {
 
 #[cfg(test)]
 mod tests {
-  use std::{assert_matches, borrow::Cow};
+  use std::assert_matches;
 
   use image::{Rgba, RgbaImage};
 
@@ -694,7 +694,7 @@ mod tests {
 
   fn frame_buffer(seed: u8) -> Arc<ImageBuffer> {
     let bitmap = RgbaImage::from_pixel(1, 1, Rgba([seed, 0, 0, 255]));
-    let buffer = ImageBuffer::from_rgba(Cow::Owned(bitmap)).unwrap_or_else(|| {
+    let buffer = ImageBuffer::from_rgba_bytes(bitmap.into_raw(), 1, 1).unwrap_or_else(|| {
       let mut edge = 1_u32;
       loop {
         if let Some(buffer) = ImageBuffer::new(edge, edge) {
@@ -817,7 +817,7 @@ mod tests {
     let mut bitmap = RgbaImage::new(2, 2);
     bitmap.put_pixel(0, 0, Rgba([12, 34, 56, 200]));
     bitmap.put_pixel(1, 0, Rgba([78, 90, 12, 255]));
-    let buffer = ImageBuffer::from_rgba(Cow::Owned(bitmap)).unwrap();
+    let buffer = ImageBuffer::from_rgba_bytes(bitmap.into_raw(), 2, 2).unwrap();
     let image = ImageSource::from(buffer);
 
     let rendered = image.render_for_layout(2, 2, ImageScalingAlgorithm::Auto, 0)?;
@@ -833,7 +833,7 @@ mod tests {
     bitmap.put_pixel(1, 0, Rgba([0, 255, 0, 255]));
     bitmap.put_pixel(0, 1, Rgba([0, 0, 255, 255]));
     bitmap.put_pixel(1, 1, Rgba([255, 255, 255, 255]));
-    let buffer = ImageBuffer::from_rgba(Cow::Owned(bitmap)).unwrap();
+    let buffer = ImageBuffer::from_rgba_bytes(bitmap.into_raw(), 2, 2).unwrap();
     let image = ImageSource::from(buffer);
 
     let rendered = image.render_for_layout(4, 4, ImageScalingAlgorithm::Pixelated, 0)?;

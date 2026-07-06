@@ -27,19 +27,14 @@ use skrifa::{
   raw::types::{BoundingBox, F2Dot14, Tag},
 };
 use thiserror::Error;
-use tiny_skia::{IntSize, PathSegment as Command, Pixmap};
 
 use crate::{
   context::RenderContext,
+  geometry::{PathCommand as Command, Point},
   layout::inline::{InlineBrush, InlineLayout},
   resources::{image_buffer::ImageBuffer, image_decoder::decode_png},
   style::FontStyle as CssFontStyle,
 };
-
-fn pixmap_from_image_buffer(buffer: ImageBuffer) -> Option<Pixmap> {
-  let size = IntSize::from_wh(buffer.width(), buffer.height())?;
-  Pixmap::from_vec(buffer.into_data(), size)
-}
 
 /// A resolved glyph, either an embedded bitmap or a vector outline.
 #[derive(Clone)]
@@ -54,7 +49,7 @@ pub enum ResolvedGlyph {
 #[derive(Clone)]
 pub struct ResolvedBitmapGlyph {
   /// Source bitmap.
-  pub pixmap: Pixmap,
+  pub image: ImageBuffer,
   /// Horizontal scale from source to placement.
   pub scale_x: f32,
   /// Vertical scale from source to placement.
@@ -76,9 +71,9 @@ impl ResolvedBitmapGlyph {
     let mask_len = mask.len();
     let write_len = alpha_len.min(mask_len);
     let mask = &mut mask[..write_len];
-    let source_width = self.pixmap.width() as usize;
-    let source_height = self.pixmap.height() as usize;
-    let source_raw = self.pixmap.data();
+    let source_width = self.image.width() as usize;
+    let source_height = self.image.height() as usize;
+    let source_raw = self.image.data();
 
     if source_width == width && source_height == height {
       for (i, alpha) in source_raw.iter().skip(3).step_by(4).copied().enumerate() {
@@ -271,29 +266,24 @@ impl GlyphOutlinePen {
 
 impl OutlinePen for GlyphOutlinePen {
   fn move_to(&mut self, x: f32, y: f32) {
-    self
-      .paths
-      .push(Command::MoveTo(tiny_skia::Point::from_xy(x, -y)));
+    self.paths.push(Command::MoveTo(Point::new(x, -y)));
   }
 
   fn line_to(&mut self, x: f32, y: f32) {
-    self
-      .paths
-      .push(Command::LineTo(tiny_skia::Point::from_xy(x, -y)));
+    self.paths.push(Command::LineTo(Point::new(x, -y)));
   }
 
   fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
-    self.paths.push(Command::QuadTo(
-      tiny_skia::Point::from_xy(cx0, -cy0),
-      tiny_skia::Point::from_xy(x, -y),
-    ));
+    self
+      .paths
+      .push(Command::QuadTo(Point::new(cx0, -cy0), Point::new(x, -y)));
   }
 
   fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
     self.paths.push(Command::CubicTo(
-      tiny_skia::Point::from_xy(cx0, -cy0),
-      tiny_skia::Point::from_xy(cx1, -cy1),
-      tiny_skia::Point::from_xy(x, -y),
+      Point::new(cx0, -cy0),
+      Point::new(cx1, -cy1),
+      Point::new(x, -y),
     ));
   }
 
@@ -493,9 +483,9 @@ fn transform_commands(paths: &mut [Command], skew_degrees: f32) {
   }
 }
 
-fn decode_bitmap_image(bitmap: &BitmapGlyph<'_>) -> Option<(Pixmap, Origin)> {
-  let pixmap = match &bitmap.data {
-    BitmapData::Png(bytes) => pixmap_from_image_buffer(decode_png(bytes).ok()?)?,
+fn decode_bitmap_image(bitmap: &BitmapGlyph<'_>) -> Option<(ImageBuffer, Origin)> {
+  let image = match &bitmap.data {
+    BitmapData::Png(bytes) => decode_png(bytes).ok()?,
     BitmapData::Bgra(bytes) => {
       let image = RgbaImage::from_fn(bitmap.width, bitmap.height, |x, y| {
         let index = ((y * bitmap.width + x) * 4) as usize;
@@ -506,16 +496,17 @@ fn decode_bitmap_image(bitmap: &BitmapGlyph<'_>) -> Option<(Pixmap, Origin)> {
           bytes[index + 3],
         ])
       });
-      pixmap_from_image_buffer(ImageBuffer::from_rgba(Cow::Owned(image))?)?
+      let (width, height) = (image.width(), image.height());
+      ImageBuffer::from_rgba_bytes(image.into_raw(), width, height)?
     }
     BitmapData::Mask(_) => return None,
   };
 
-  Some((pixmap, bitmap.placement_origin))
+  Some((image, bitmap.placement_origin))
 }
 
 fn scale_bitmap_glyph(bitmap: BitmapGlyph<'_>, font_size: f32) -> Option<ResolvedBitmapGlyph> {
-  let (pixmap, origin) = decode_bitmap_image(&bitmap)?;
+  let (image, origin) = decode_bitmap_image(&bitmap)?;
   let scale_x = if bitmap.ppem_x > 0.0 {
     font_size / bitmap.ppem_x
   } else {
@@ -526,15 +517,15 @@ fn scale_bitmap_glyph(bitmap: BitmapGlyph<'_>, font_size: f32) -> Option<Resolve
   } else {
     1.0
   };
-  let width = ((pixmap.width() as f32) * scale_x).round().max(1.0) as u32;
-  let height = ((pixmap.height() as f32) * scale_y).round().max(1.0) as u32;
+  let width = ((image.width() as f32) * scale_x).round().max(1.0) as u32;
+  let height = ((image.height() as f32) * scale_y).round().max(1.0) as u32;
   let top = match origin {
     Origin::TopLeft => bitmap.inner_bearing_y,
     Origin::BottomLeft => bitmap.inner_bearing_y + bitmap.height as f32,
   };
 
   Some(ResolvedBitmapGlyph {
-    pixmap,
+    image,
     scale_x,
     scale_y,
     placement: ResolvedGlyphPlacement {

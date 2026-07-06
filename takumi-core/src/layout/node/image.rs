@@ -195,7 +195,7 @@ pub fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
 
 #[cfg(test)]
 mod tests {
-  use std::{assert_matches, borrow::Cow};
+  use std::assert_matches;
 
   use image::RgbaImage;
   use serde_json::from_value;
@@ -302,7 +302,7 @@ mod tests {
   #[test]
   fn from_pixmap_creates_loaded_image_source_input() {
     let bitmap = RgbaImage::new(2, 2);
-    let buffer = ImageBuffer::from_rgba(Cow::Owned(bitmap)).unwrap();
+    let buffer = ImageBuffer::from_rgba_bytes(bitmap.into_raw(), 2, 2).unwrap();
     let image = ImageData::from(buffer);
 
     assert_matches!(image.src, ImageSourceInput::Loaded(ImageSource::Bitmap(_)));
@@ -319,7 +319,7 @@ mod tests {
           .build(),
       )
       .build();
-    let buffer = ImageBuffer::from_rgba(Cow::Owned(RgbaImage::new(10, 10))).unwrap();
+    let buffer = ImageBuffer::from_rgba_bytes(RgbaImage::new(10, 10).into_raw(), 10, 10).unwrap();
     let image = ImageData::from(ImageSource::from(buffer));
     let style = Style {
       size: Size {
