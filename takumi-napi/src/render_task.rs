@@ -3,7 +3,7 @@ use std::{collections::HashMap, mem::take, sync::Arc};
 use napi::bindgen_prelude::*;
 use takumi_core::{
   layout::node::Node,
-  style::StyleSheet,
+  style::{FontFamily, Lang, StyleSheet},
   viewport::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
 };
 use takumi_raster::{DitheringAlgorithm, render, write_image};
@@ -28,8 +28,8 @@ pub struct RenderTask {
   pub(crate) time_ms: u64,
   pub(crate) stylesheet: StyleSheet,
   pub(crate) images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
-  pub(crate) font_families: Option<Vec<String>>,
-  pub(crate) lang: Option<Arc<str>>,
+  pub(crate) font_families: Option<FontFamily>,
+  pub(crate) lang: Option<Lang>,
 }
 
 impl RenderTask {
@@ -72,8 +72,13 @@ impl RenderTask {
           ))
         })
         .collect::<Result<_>>()?,
-      font_families: options.font_families,
-      lang: options.lang.map(Arc::from),
+      font_families: options.font_families.map(FontFamily::from_names),
+      lang: options
+        .lang
+        .as_deref()
+        .map(Lang::parse)
+        .transpose()
+        .map_err(map_error)?,
     })
   }
 }

@@ -1,7 +1,11 @@
 use std::{collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
-use takumi_core::{layout::node::Node, style::StyleSheet, viewport::Viewport};
+use takumi_core::{
+  layout::node::Node,
+  style::{FontFamily, Lang, StyleSheet},
+  viewport::Viewport,
+};
 
 use crate::{
   buffer_from_object, map_error, parse_stylesheet,
@@ -17,8 +21,8 @@ pub struct SvgRenderTask {
   pub(crate) time_ms: u64,
   pub(crate) stylesheet: StyleSheet,
   pub(crate) images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
-  pub(crate) font_families: Option<Vec<String>>,
-  pub(crate) lang: Option<Arc<str>>,
+  pub(crate) font_families: Option<FontFamily>,
+  pub(crate) lang: Option<Lang>,
 }
 
 impl SvgRenderTask {
@@ -51,8 +55,11 @@ impl SvgRenderTask {
           ))
         })
         .collect::<Result<_>>()?,
-      font_families: options.font_families,
-      lang: options.lang.map(Arc::from),
+      font_families: options.font_families.map(FontFamily::from_names),
+      lang: options
+        .lang
+        .map(|lang| Lang::parse(&lang).map_err(map_error))
+        .transpose()?,
     })
   }
 }

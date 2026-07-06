@@ -1251,23 +1251,3 @@ fn test_border_radius_calc_infinity_parses_from_stylesheet_declaration() {
     style.border_top_left_radius.x
   );
 }
-
-#[test]
-fn set_lang_parses_valid_tag_and_ignores_invalid() {
-  let mut style = ComputedStyle::default();
-  assert!(style.lang.is_none());
-
-  style.set_lang(Some("zh-Hant"));
-  assert!(style.lang.is_some(), "valid BCP-47 tag should parse");
-
-  style.set_lang(Some("123"));
-  assert!(
-    style.lang.is_none(),
-    "invalid tag should clear the language"
-  );
-
-  style.set_lang(Some("en"));
-  assert!(style.lang.is_some());
-  style.set_lang(None);
-  assert!(style.lang.is_none(), "None should clear the language");
-}

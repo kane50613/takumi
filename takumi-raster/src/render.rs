@@ -4,6 +4,7 @@ use serde::Serialize;
 use takumi_core::{
   geometry::{AvailableSpace, ComputedLayout as Layout, NodeId, Size},
   scene::build_stacking_contexts,
+  style::{ComputedStyle, Lang},
 };
 use typed_builder::TypedBuilder;
 
@@ -20,23 +21,9 @@ use crate::{
   },
   resources::image::ImageSource,
   stacking_context::paint_context,
-  style::{Affine, ComputedStyle, FontFamily, SizingContext, StyleSheet},
+  style::{Affine, FontFamily, SizingContext, StyleSheet},
   viewport::Viewport,
 };
-
-/// Root computed style carrying the render-level `lang` and `fontFamilies` defaults,
-/// inherited by every node that does not set its own.
-fn root_style(lang: Option<&str>, font_families: Option<&[String]>) -> Box<ComputedStyle> {
-  let mut style = ComputedStyle {
-    font_family: font_families.map_or_else(FontFamily::default, |names| {
-      FontFamily::from_names(names.iter().cloned())
-    }),
-    ..Default::default()
-  };
-  style.set_lang(lang);
-
-  Box::new(style)
-}
 
 #[derive(Clone, TypedBuilder)]
 /// Options for rendering a node. Construct using [`RenderOptions::builder`] to avoid breaking changes.
@@ -65,11 +52,11 @@ pub struct RenderOptions<'g> {
   /// Per-render font fallback chain (family names in order). `None` uses all
   /// registered families in registration order.
   #[builder(default)]
-  pub(crate) font_families: Option<Vec<String>>,
+  pub(crate) font_families: Option<FontFamily>,
   /// Default BCP-47 language tag applied to the root, inherited by nodes without
   /// their own `lang`. Drives locale-aware shaping and line-breaking.
   #[builder(default)]
-  pub(crate) lang: Option<Arc<str>>,
+  pub(crate) lang: Option<Lang>,
 }
 
 impl<'g> RenderOptions<'g> {
@@ -177,13 +164,16 @@ pub fn measure<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
   } = options;
 
   let render_context = RenderContext::builder()
-    .fonts(fonts.snapshot_with_fallbacks(font_families.as_deref()))
+    .fonts(fonts.snapshot_with_fallbacks(font_families.as_ref()))
     .sizing(SizingContext::builder().viewport(viewport).build())
     .images(Rc::new(images))
     .stylesheet(stylesheet.into())
     .time_ms(time_ms)
     .draw_debug_border(draw_debug_border)
-    .style(root_style(lang.as_deref(), font_families.as_deref()))
+    .style(Box::new(ComputedStyle {
+      lang,
+      ..Default::default()
+    }))
     .build();
 
   let mut root = RenderNode::from_node(&render_context, node);
@@ -419,13 +409,16 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<Bitmap> {
   } = options;
 
   let render_context = RenderContext::builder()
-    .fonts(fonts.snapshot_with_fallbacks(font_families.as_deref()))
+    .fonts(fonts.snapshot_with_fallbacks(font_families.as_ref()))
     .sizing(SizingContext::builder().viewport(viewport).build())
     .images(Rc::new(images))
     .stylesheet(stylesheet.into())
     .time_ms(time_ms)
     .draw_debug_border(draw_debug_border)
-    .style(root_style(lang.as_deref(), font_families.as_deref()))
+    .style(Box::new(ComputedStyle {
+      lang,
+      ..Default::default()
+    }))
     .build();
 
   let mut root = RenderNode::from_node(&render_context, node);

@@ -9,7 +9,8 @@ use std::{
 
 use image::{Rgba, RgbaImage};
 use parley::{
-  GenericFamily as ParleyGenericFamily, GlyphRun, LayoutContext, TextStyle, TreeBuilder,
+  FontFamilyName, GenericFamily as ParleyGenericFamily, GlyphRun, LayoutContext, TextStyle,
+  TreeBuilder,
   fontique::{
     Attributes, Blob, Collection, CollectionOptions, FallbackKey, FontInfoOverride, FontStyle,
     FontWeight, FontWidth, QueryFamily, QueryStatus, Script, ScriptExt,
@@ -33,7 +34,7 @@ use crate::{
   geometry::{PathCommand as Command, Point},
   layout::inline::{InlineBrush, InlineLayout},
   resources::{image_buffer::ImageBuffer, image_decoder::decode_png},
-  style::FontStyle as CssFontStyle,
+  style::{FontFamily, FontStyle as CssFontStyle},
 };
 
 /// A resolved glyph, either an embedded bitmap or a vector outline.
@@ -753,15 +754,19 @@ impl Fonts {
   }
 
   /// Render-local snapshot whose fallback bucket carries the given families.
-  pub fn snapshot_with_fallbacks(&self, fallbacks: Option<&[String]>) -> FontsSnapshot {
+  pub fn snapshot_with_fallbacks(&self, fallbacks: Option<&FontFamily>) -> FontsSnapshot {
     let mut cloned = self.inner.clone();
 
     if let Some(names) = fallbacks {
       // A name may be a logical subset family; expand it to its registered subset names so
       // the fallback bucket carries the whole stack, matching `font-family` expansion.
       let mut family_ids = Vec::new();
-      for name in names {
-        match self.groups.get(name) {
+      for name in names.names() {
+        let FontFamilyName::Named(literal_name) = name else {
+          continue;
+        };
+
+        match self.groups.get(&*literal_name) {
           Some(subsets) => {
             family_ids.extend(
               subsets
@@ -769,7 +774,7 @@ impl Fonts {
                 .filter_map(|n| cloned.collection.family_id(n)),
             );
           }
-          None => family_ids.extend(cloned.collection.family_id(name)),
+          None => family_ids.extend(cloned.collection.family_id(&*literal_name)),
         }
       }
 

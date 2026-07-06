@@ -9,34 +9,41 @@ const SAMPLE: &str = "直 骨 今 海 真 令 説 器";
 
 const FONT: &str = "CJK Locl Test";
 
-fn lang_row(lang: &'static str) -> Node {
-  Node::container([
-    Node::text(format!("{lang}: ")).with_style(
+fn lang_row(lang: Lang) -> Result<Node> {
+  Ok(
+    Node::container([
+      Node::text(format!("{}: ", lang.as_str())).with_style(
+        Style::default()
+          .with(StyleDeclaration::font_family(
+            FontFamily::from_css_str("Geist").unwrap(),
+          ))
+          .with(StyleDeclaration::font_size(FontSize::Length(Px(40.0)))),
+      ),
+      Node::text(SAMPLE).with_lang(lang).with_style(
+        Style::default()
+          .with(StyleDeclaration::font_family(
+            FontFamily::from_css_str(FONT).unwrap(),
+          ))
+          .with(StyleDeclaration::font_size(FontSize::Length(Px(40.0)))),
+      ),
+    ])
+    .with_style(
       Style::default()
-        .with(StyleDeclaration::font_family(
-          FontFamily::from_css_str("Geist").unwrap(),
-        ))
-        .with(StyleDeclaration::font_size(FontSize::Length(Px(40.0)))),
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with_gap(SpacePair::from_pair(Px(12.0).into(), Px(12.0).into())),
     ),
-    Node::text(SAMPLE).with_lang(lang).with_style(
-      Style::default()
-        .with(StyleDeclaration::font_family(
-          FontFamily::from_css_str(FONT).unwrap(),
-        ))
-        .with(StyleDeclaration::font_size(FontSize::Length(Px(40.0)))),
-    ),
-  ])
-  .with_style(
-    Style::default()
-      .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::align_items(AlignItems::Center))
-      .with_gap(SpacePair::from_pair(Px(12.0).into(), Px(12.0).into())),
   )
 }
 
 #[test]
-fn test_lang_han_unification() {
-  let container = Node::container(["ja", "zh", "ko"].map(lang_row)).with_style(
+fn test_lang_han_unification() -> Result<()> {
+  let rows = ["ja", "zh", "ko"]
+    .iter()
+    .map(|lang| Lang::parse(lang).and_then(lang_row))
+    .collect::<Result<Vec<_>>>()?;
+
+  let container = Node::container(rows).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
@@ -50,5 +57,5 @@ fn test_lang_han_unification() {
       .with_gap(SpacePair::from_pair(Px(32.0).into(), Px(32.0).into())),
   );
 
-  run_fixture_test(container, "lang_han_unification");
+  Ok(run_fixture_test(container, "lang_han_unification"))
 }

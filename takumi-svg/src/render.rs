@@ -18,8 +18,8 @@ use takumi_core::{
   shadow::SizedShadow,
   style::{
     Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BasicShape, BlendMode, BorderStyle,
-    Color, ComputedStyle, FillRule, Isolation, Length, Overflow, ShapeRadius, Sides, SizingContext,
-    SpacePair, StyleSheet, ToCss,
+    Color, ComputedStyle, FillRule, FontFamily, Isolation, Lang, Length, Overflow, ShapeRadius,
+    Sides, SizingContext, SpacePair, StyleSheet, ToCss,
   },
   viewport::Viewport,
 };
@@ -57,11 +57,11 @@ pub struct SvgOptions<'g> {
   /// Per-render font fallback chain (family names in order). `None` uses all
   /// registered families in registration order.
   #[builder(default)]
-  pub(crate) font_families: Option<Vec<String>>,
+  pub(crate) font_families: Option<FontFamily>,
   /// Default BCP-47 language tag applied to the root, inherited by nodes without
   /// their own `lang`. Drives locale-aware shaping and line-breaking.
   #[builder(default)]
-  pub(crate) lang: Option<Arc<str>>,
+  pub(crate) lang: Option<Lang>,
 }
 
 /// Renders a node tree to a vector SVG string.
@@ -72,16 +72,17 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
     .fonts(
       options
         .fonts
-        .snapshot_with_fallbacks(options.font_families.as_deref()),
+        .snapshot_with_fallbacks(options.font_families.as_ref()),
     )
     .sizing(SizingContext::builder().viewport(viewport).build())
     .images(Rc::new(options.images))
     .stylesheet(options.stylesheet.into())
     .time_ms(options.time_ms)
     .style({
-      let mut style = ComputedStyle::default();
-      style.set_lang(options.lang.as_deref());
-      Box::new(style)
+      Box::new(ComputedStyle {
+        lang: options.lang,
+        ..Default::default()
+      })
     })
     .build();
 
