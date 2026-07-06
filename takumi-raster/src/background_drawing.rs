@@ -110,7 +110,7 @@ fn resolve_intrinsic_size(image: &BackgroundImage, context: &RenderContext) -> I
     return IntrinsicSizing::default();
   };
 
-  source.intrinsic_sizing(&context.sizing)
+  source.intrinsic_sizing().scale(&context.sizing)
 }
 
 pub(crate) fn rasterize_layers(

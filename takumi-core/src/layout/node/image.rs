@@ -54,22 +54,45 @@ pub(crate) fn measure_image_node(
     return Size::ZERO;
   };
 
-  let intrinsic_size = match &image_source {
-    #[cfg(feature = "svg")]
-    ImageSource::Svg(svg) => {
-      let (width, height) = svg.dimensions();
+  let intrinsic_sizing = image_source.intrinsic_sizing();
+  const DEFAULT_WIDTH: f32 = 300.0;
+  const DEFAULT_HEIGHT: f32 = 150.0;
+
+  let intrinsic_size = match (intrinsic_sizing.width, intrinsic_sizing.height) {
+    (Some(width), Some(height)) => Size { width, height },
+    (Some(width), None) => {
+      let height = match intrinsic_sizing.ratio {
+        Some(ratio) if ratio > 0.0 => width / ratio,
+        _ => DEFAULT_HEIGHT,
+      };
       Size { width, height }
     }
-    ImageSource::Gif(gif) => {
-      let frame = gif.frame_at_time(context.time_ms);
-      Size {
-        width: frame.width() as f32,
-        height: frame.height() as f32,
-      }
+    (None, Some(height)) => {
+      let width = match intrinsic_sizing.ratio {
+        Some(ratio) if ratio > 0.0 => height * ratio,
+        _ => DEFAULT_WIDTH,
+      };
+      Size { width, height }
     }
-    ImageSource::Bitmap(bitmap) => Size {
-      width: bitmap.width() as f32,
-      height: bitmap.height() as f32,
+    (None, None) => match intrinsic_sizing.ratio {
+      Some(ratio) if ratio > 0.0 => {
+        let solution_width = DEFAULT_HEIGHT * ratio;
+        if solution_width <= DEFAULT_WIDTH {
+          Size {
+            width: solution_width,
+            height: DEFAULT_HEIGHT,
+          }
+        } else {
+          Size {
+            width: DEFAULT_WIDTH,
+            height: DEFAULT_WIDTH / ratio,
+          }
+        }
+      }
+      _ => Size {
+        width: DEFAULT_WIDTH,
+        height: DEFAULT_HEIGHT,
+      },
     },
   };
 

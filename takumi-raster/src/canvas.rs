@@ -1112,9 +1112,16 @@ fn try_fill_color_with_tiny_skia(
   paint.set_color_rgba8(red, green, blue, alpha);
   paint.blend_mode = blend_mode;
   paint.anti_alias = true;
-  let materialized_mask = options
-    .combined_mask
-    .and_then(|mask| materialize_mask(mask, options.size, buffer_pool));
+  let materialized_mask = options.combined_mask.and_then(|mask| {
+    materialize_mask(
+      mask,
+      Size {
+        width: pixmap.width(),
+        height: pixmap.height(),
+      },
+      buffer_pool,
+    )
+  });
   let combined_mask = materialized_mask.as_ref();
   pixmap.fill_path(
     &path,
@@ -1137,9 +1144,16 @@ fn try_fill_image_path_with_tiny_skia(
   let Some(path) = build_border_path(options.border, options.size) else {
     return false;
   };
-  let materialized_mask = options
-    .combined_mask
-    .and_then(|mask| materialize_mask(mask, options.size, buffer_pool));
+  let materialized_mask = options.combined_mask.and_then(|mask| {
+    materialize_mask(
+      mask,
+      Size {
+        width: pixmap.width(),
+        height: pixmap.height(),
+      },
+      buffer_pool,
+    )
+  });
   let combined_mask = materialized_mask.as_ref();
 
   image
@@ -2137,5 +2151,43 @@ mod tests {
       },
       Point { x: 4.0, y: 3.0 },
     );
+  }
+
+  #[test]
+  fn test_overlay_image_with_parent_mask() {
+    use takumi_core::style::{Sides, SpacePair};
+
+    let mut canvas = Canvas::new(Size {
+      width: 10,
+      height: 10,
+    });
+
+    let mut parent_mask = TinyMask::new(10, 10).unwrap();
+    parent_mask.data_mut()[0..50].fill(255);
+    canvas.push_mask(parent_mask);
+
+    let image_data = [0u8, 255, 0, 255].repeat(16);
+    let image_pixmap = PixmapRef::from_bytes(&image_data, 4, 4).unwrap();
+    let paint_source = PaintSource::Pixmap(image_pixmap);
+
+    let border = BorderProperties {
+      radius: Sides([SpacePair::from_single(1.0); 4]),
+      ..Default::default()
+    };
+
+    canvas.overlay_image(
+      paint_source,
+      border,
+      Affine::translation(1.0, 1.0),
+      ImageScalingAlgorithm::Pixelated,
+      BlendMode::Normal,
+    );
+
+    canvas.pop_mask();
+
+    let output = canvas.into_inner().unwrap();
+    let pixel = output.get_pixel(2, 2);
+    assert_eq!(pixel.0[1], 255);
+    assert_eq!(pixel.0[3], 255);
   }
 }

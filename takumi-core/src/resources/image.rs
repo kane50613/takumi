@@ -357,24 +357,20 @@ impl ImageSource {
 
   /// Intrinsic sizing for `background-size`/`mask-size` (§5.3). Bitmaps and GIFs
   /// have both dimensions; an SVG may have only a `viewBox` ratio.
-  pub fn intrinsic_sizing(&self, sizing: &SizingContext) -> IntrinsicSizing {
+  pub fn intrinsic_sizing(&self) -> IntrinsicSizing {
     match self {
       #[cfg(feature = "svg")]
       ImageSource::Svg(svg) => IntrinsicSizing {
-        width: svg.intrinsic.width.map(|width| sizing.to_device(width)),
-        height: svg.intrinsic.height.map(|height| sizing.to_device(height)),
+        width: svg.intrinsic.width,
+        height: svg.intrinsic.height,
         ratio: svg.intrinsic.ratio,
       },
-      ImageSource::Bitmap(bitmap) => IntrinsicSizing::from_dimensions(
-        sizing.to_device(bitmap.width() as f32),
-        sizing.to_device(bitmap.height() as f32),
-      ),
+      ImageSource::Bitmap(bitmap) => {
+        IntrinsicSizing::from_dimensions(bitmap.width() as f32, bitmap.height() as f32)
+      }
       ImageSource::Gif(gif) => {
         let frame = &gif.frames[0].buffer;
-        IntrinsicSizing::from_dimensions(
-          sizing.to_device(frame.width() as f32),
-          sizing.to_device(frame.height() as f32),
-        )
+        IntrinsicSizing::from_dimensions(frame.width() as f32, frame.height() as f32)
       }
     }
   }

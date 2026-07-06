@@ -514,7 +514,7 @@ fn intrinsic_sizing(image: &BackgroundImage, context: &RenderContext) -> Intrins
     return IntrinsicSizing::default();
   };
   match resolve_image(url, context) {
-    Ok(source) => source.intrinsic_sizing(&context.sizing),
+    Ok(source) => source.intrinsic_sizing().scale(&context.sizing),
     Err(_) => IntrinsicSizing::default(),
   }
 }

@@ -35,6 +35,15 @@ impl IntrinsicSizing {
     }
   }
 
+  /// Scale the dimensions using the given sizing context.
+  pub fn scale(self, sizing: &SizingContext) -> Self {
+    Self {
+      width: self.width.map(|w| sizing.to_device(w)),
+      height: self.height.map(|h| sizing.to_device(h)),
+      ratio: self.ratio,
+    }
+  }
+
   /// §5.3 default sizing algorithm with `area` as the default object size
   /// (Blink's `ConcreteObjectSize`).
   fn concrete_size(self, area_width: f32, area_height: f32) -> (u32, u32) {
