@@ -161,6 +161,10 @@ pub enum Error {
   /// The layout engine was asked for a node id it does not know.
   #[error("Invalid layout node id: {0}")]
   InvalidLayoutNode(u64),
+
+  /// An invalid BCP-47 language tag was supplied to a node's `lang` attribute.
+  #[error("Invalid language tag: {0}")]
+  InvalidLanguageTag(String),
 }
 
 impl Error {

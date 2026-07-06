@@ -28,7 +28,7 @@ use html5ever::{
 use markup5ever_rcdom::{Handle, NodeData, RcDom, SerializableHandle};
 use takumi_core::{
   layout::node::{ImageData, ImageSourceInput, Node, NodeKind},
-  style::{Direction, FromCssStr, Style, StyleDeclarationBlock, tw::TailwindValues},
+  style::{Direction, FromCssStr, Lang, Style, StyleDeclarationBlock, tw::TailwindValues},
 };
 use typed_builder::TypedBuilder;
 
@@ -479,9 +479,13 @@ fn apply_metadata(
     match name {
       "class" => node = node.with_class_name(value),
       "id" => node = node.with_id(value),
-      "lang" => node = node.with_lang(value),
+      "lang" => {
+        if let Ok(lang) = Lang::parse(value) {
+          node = node.with_lang(lang);
+        }
+      }
       "dir" => {
-        if let Some(dir) = parse_direction(value) {
+        if let Ok(dir) = Direction::from_css_str(value) {
           node = node.with_dir(dir);
         }
       }
@@ -519,10 +523,6 @@ fn attribute(handle: &Handle, name: &str) -> Option<String> {
 
 fn dimension(handle: &Handle, name: &str) -> Option<f32> {
   attribute(handle, name).and_then(|value| value.parse().ok())
-}
-
-fn parse_direction(value: &str) -> Option<Direction> {
-  Direction::from_css_str(value).ok()
 }
 
 /// Serialize an element including its own tag (outer HTML), used to round-trip

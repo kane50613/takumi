@@ -14,7 +14,7 @@ use takumi_core::{
     font::{FontOverride, FontResource, GenericFamily, RegisteredFamily},
     image::{ImageCache, ImageSource as LoadedImageSource},
   },
-  style::{KeyframesRule, StyleSheet},
+  style::{FontFamily, KeyframesRule, Lang, StyleSheet},
   viewport::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
 };
 use takumi_raster::{
@@ -195,6 +195,11 @@ impl Renderer {
     let stylesheet =
       self.parse_stylesheet(options.stylesheets, options.keyframes.unwrap_or_default())?;
 
+    let lang = options
+      .lang
+      .map(|lang| Lang::parse(&lang).map_err(map_error))
+      .transpose()?;
+
     let render_options = takumi_raster::RenderOptions::builder()
       .viewport(
         Viewport::new((options.width, options.height)).with_device_pixel_ratio(
@@ -210,8 +215,8 @@ impl Renderer {
       .dithering(dithering)
       .node(node)
       .fonts(fonts)
-      .font_families(options.font_families)
-      .lang(options.lang.map(Arc::from))
+      .font_families(options.font_families.map(FontFamily::from_names))
+      .lang(lang)
       .build();
 
     let image = render(render_options).map_err(map_error)?;
@@ -252,6 +257,11 @@ impl Renderer {
       self.parse_stylesheet(options.stylesheets, options.keyframes.unwrap_or_default())?;
     let state = self.read_state()?;
 
+    let lang = options
+      .lang
+      .map(|lang| Lang::parse(&lang).map_err(map_error))
+      .transpose()?;
+
     let svg = takumi_svg::render(
       takumi_svg::SvgOptions::builder()
         .viewport(Viewport::new((options.width, options.height)))
@@ -260,8 +270,8 @@ impl Renderer {
         .time_ms(options.time_ms.unwrap_or_default().max(0) as u64)
         .node(node)
         .fonts(&state)
-        .font_families(options.font_families)
-        .lang(options.lang.map(Arc::from))
+        .font_families(options.font_families.map(FontFamily::from_names))
+        .lang(lang)
         .build(),
     )
     .map_err(map_error)?;
@@ -282,6 +292,11 @@ impl Renderer {
       .transpose()?
       .unwrap_or_default();
 
+    let lang = options
+      .lang
+      .map(|lang| Lang::parse(&lang).map_err(map_error))
+      .transpose()?;
+
     let images = self.images_map(options.images.as_deref())?;
     let stylesheet =
       self.parse_stylesheet(options.stylesheets, options.keyframes.unwrap_or_default())?;
@@ -301,8 +316,8 @@ impl Renderer {
       .time_ms(options.time_ms.unwrap_or_default().max(0) as u64)
       .node(node)
       .fonts(&state)
-      .font_families(options.font_families)
-      .lang(options.lang.map(Arc::from))
+      .font_families(options.font_families.map(FontFamily::from_names))
+      .lang(lang)
       .build();
 
     let layout = measure(render_options).map_err(map_error)?;
@@ -361,8 +376,12 @@ impl Renderer {
       font_families,
       lang,
     } = from_value(options.into()).map_err(map_error)?;
+
+    let lang = lang
+      .map(|lang| Lang::parse(&lang).map_err(map_error))
+      .transpose()?;
+
     let images = self.images_map(images.as_deref())?;
-    let lang = lang.map(Arc::from);
 
     if scenes.is_empty() {
       return Err(JsValue::from_str("Expected at least one animation scene"));
@@ -389,8 +408,8 @@ impl Renderer {
               .stylesheet(stylesheet.clone())
               .node(scene.node)
               .fonts(&state)
-              .font_families(font_families.clone())
-              .lang(lang.clone())
+              .font_families(font_families.clone().map(FontFamily::from_names))
+              .lang(lang)
               .draw_debug_border(draw_debug_border)
               .build(),
           )

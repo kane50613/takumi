@@ -48,8 +48,8 @@ pub(crate) struct NodeMetadata {
   pub tw: Option<TailwindValues>,
   /// The text direction for this node.
   pub dir: Option<Direction>,
-  /// The BCP-47 language tag for this node, from the `lang` attribute.
-  pub lang: Option<Box<str>>,
+  /// The BCP-47 language tag for this node, equivalent to the `lang` attribute.
+  pub lang: Option<Lang>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]
@@ -371,8 +371,8 @@ impl Node {
   }
 
   /// Sets the BCP-47 language tag and returns the updated node.
-  pub fn with_lang(mut self, lang: impl Into<Box<str>>) -> Self {
-    self.metadata.lang = Some(lang.into());
+  pub fn with_lang(mut self, lang: Lang) -> Self {
+    self.metadata.lang = Some(lang);
     self
   }
 
@@ -424,7 +424,7 @@ impl Node {
       attrs.push(format!("dir=\"{}\"", dir_str));
     }
     if let Some(lang) = &self.metadata.lang {
-      attrs.push(format!("lang=\"{}\"", escape_attr(lang)));
+      attrs.push(format!("lang=\"{}\"", escape_attr(lang.as_str())));
     }
     if let Some(attributes) = &self.metadata.attributes {
       for (k, v) in attributes {
@@ -521,7 +521,6 @@ impl Node {
       author_tw: self.metadata.tw.take(),
       inline: self.metadata.style.take(),
       dir: self.metadata.dir.take(),
-      lang: self.metadata.lang.take().map(|tag| Lang::parse(&tag)),
     }
   }
 
@@ -635,10 +634,6 @@ pub(crate) struct NodeStyleLayers {
   /// Inline style attached directly to the element.
   pub(crate) inline: Option<Style>,
   pub(crate) dir: Option<Direction>,
-  /// Resolved `lang` attribute, applied to the computed style after inheritance.
-  /// `None` means absent (inherit the parent). `Some(None)` means present but empty
-  /// or invalid, which per HTML clears the language to unknown.
-  pub(crate) lang: Option<Option<Lang>>,
 }
 
 impl MatchableNode for Node {

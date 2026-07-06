@@ -6,7 +6,7 @@ use crate::{
   geometry::{AvailableSpace, Size},
   layout::node::{ImageData, ImageSourceInput, Node, NodeStyleLayers},
   resources::image::{ImageError, ImageResult, ImageSource, is_svg_like},
-  style::{Lang, Length, Style, StyleDeclaration},
+  style::{Length, Style, StyleDeclaration},
 };
 
 pub(crate) fn image_url(image: &ImageData) -> Option<&str> {
@@ -39,7 +39,6 @@ pub(crate) fn take_image_style_layers(
     author_tw: node.metadata.tw.take(),
     inline: node.metadata.style.take(),
     dir: node.metadata.dir.take(),
-    lang: node.metadata.lang.take().map(|tag| Lang::parse(&tag)),
   }
 }
 

@@ -1174,7 +1174,6 @@ impl RenderNode {
         .map(NodeMatchedDeclarations::element)
         .unwrap_or(&default_matched);
       let layers = node.take_style_layers();
-      let node_lang = layers.lang.clone();
       let style_layers = build_style_layers(layers, matched, parent_context.sizing.viewport);
       let inherited_parent = registered_custom_property_parent_style(
         &parent_context.style,
@@ -1182,9 +1181,6 @@ impl RenderNode {
         parent_context.sizing.viewport,
       );
       let mut style = style_layers.inherit(&inherited_parent);
-      if let Some(resolved) = node_lang {
-        style.lang = resolved;
-      }
 
       // On the root element, `parent_root_font_size` is `None` so `rem` inside
       // its own `font-size` falls back to `viewport.font_size`, per CSS Values 4
@@ -2363,48 +2359,5 @@ mod tests {
       resolved.custom_properties.get("--move"),
       Some(&"red".to_owned()) // syntax validation is skipped, so any value is accepted
     );
-  }
-
-  #[test]
-  fn lang_resolves_and_inherits_to_descendants() {
-    use crate::{
-      context::RenderContext,
-      layout::{node::Node, tree::RenderNode},
-      resources::font::Fonts,
-      style::{Lang, SizingContext},
-    };
-
-    let fonts = Fonts::default();
-    let context = RenderContext::builder()
-      .fonts(fonts.snapshot())
-      .sizing(
-        SizingContext::builder()
-          .viewport(Viewport::default())
-          .build(),
-      )
-      .build();
-
-    let tree = RenderNode::from_node(
-      &context,
-      Node::container([
-        Node::container([Node::text("inherits")]),
-        Node::container([Node::text("overrides")]).with_lang("ja"),
-        // `lang=""` is present-but-empty: HTML treats it as unknown, clearing the
-        // inherited value rather than falling through to the parent.
-        Node::container([Node::text("clears")]).with_lang(""),
-      ])
-      .with_lang("zh-Hant"),
-    );
-
-    let zh = Lang::parse("zh-Hant");
-    let ja = Lang::parse("ja");
-    assert!(zh.is_some() && ja.is_some());
-
-    assert_eq!(tree.context.style.lang, zh);
-
-    let children = tree.children.as_deref().expect("block children");
-    assert_eq!(children[0].context.style.lang, zh);
-    assert_eq!(children[1].context.style.lang, ja);
-    assert_eq!(children[2].context.style.lang, None);
   }
 }

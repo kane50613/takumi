@@ -3,7 +3,7 @@ use std::{collections::HashMap, mem::take, sync::Arc};
 use napi::bindgen_prelude::*;
 use takumi_core::{
   layout::node::Node,
-  style::KeyframesRule,
+  style::{FontFamily, KeyframesRule, Lang},
   viewport::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
 };
 use takumi_raster::{
@@ -12,7 +12,7 @@ use takumi_raster::{
 };
 
 use crate::{
-  buffer_from_object, deserialize_with_tracing, parse_stylesheet,
+  buffer_from_object, deserialize_with_tracing, map_error, parse_stylesheet,
   renderer::{
     AnimationOutputFormat, ImageCacheMode, ImageSource, RenderAnimationOptions, RendererState,
     decode_images, deserialize_keyframes, webp_lossless,
@@ -30,8 +30,8 @@ pub struct RenderAnimationTask {
   pub(crate) stylesheets: Option<Vec<String>>,
   pub(crate) keyframes: Vec<KeyframesRule>,
   pub(crate) images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
-  pub(crate) font_families: Option<Vec<String>>,
-  pub(crate) lang: Option<Arc<str>>,
+  pub(crate) font_families: Option<FontFamily>,
+  pub(crate) lang: Option<Lang>,
   pub(crate) fps: u32,
 }
 
@@ -103,8 +103,12 @@ impl RenderAnimationTask {
           ))
         })
         .collect::<Result<_>>()?,
-      font_families,
-      lang: lang.map(Arc::from),
+      font_families: font_families.map(FontFamily::from_names),
+      lang: lang
+        .as_deref()
+        .map(Lang::parse)
+        .transpose()
+        .map_err(map_error)?,
       fps,
     })
   }
@@ -135,7 +139,7 @@ impl Task for RenderAnimationTask {
                 .node(node)
                 .fonts(&fonts)
                 .font_families(self.font_families.clone())
-                .lang(self.lang.clone())
+                .lang(self.lang)
                 .draw_debug_border(self.draw_debug_border)
                 .build(),
             )

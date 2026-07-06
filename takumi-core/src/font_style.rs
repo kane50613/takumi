@@ -173,7 +173,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
       text_wrap_mode: style.parent.resolved_text_wrap_mode().into_parley(),
       font_width: style.parent.font_stretch.into_parlance(),
 
-      locale: style.parent.lang.as_ref().map(Lang::to_parlance),
+      locale: style.parent.lang.map(Lang::into_parlance),
       has_underline: false,
       underline_offset: None,
       underline_size: None,
