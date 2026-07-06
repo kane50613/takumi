@@ -128,13 +128,13 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
       font_family: style.font_family.to_parley(),
       letter_spacing: style.letter_spacing,
       word_spacing: style.word_spacing,
-      word_break: style.parent.word_break.into(),
+      word_break: style.parent.word_break.into_parley(),
       overflow_wrap: if style.parent.word_break == WordBreak::BreakWord {
         // When word-break is break-word, ignore the overflow-wrap property's value.
         // https://developer.mozilla.org/en-US/docs/Web/CSS/word-break#break-word
         parley::OverflowWrap::Anywhere
       } else {
-        style.parent.overflow_wrap.into()
+        style.parent.overflow_wrap.into_parley()
       },
       brush: InlineBrush {
         source_span_id: None,
@@ -158,7 +158,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
         line_height_scales_with_text_fit: style.line_height_scales_with_text_fit,
         vertical_align: style.parent.vertical_align,
       },
-      text_wrap_mode: style.parent.resolved_text_wrap_mode().into(),
+      text_wrap_mode: style.parent.resolved_text_wrap_mode().into_parley(),
       font_width: style.parent.font_stretch.into(),
 
       locale: style.parent.lang,

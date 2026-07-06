@@ -282,8 +282,8 @@ impl ComputedStyle {
     taffy::Style {
       float: self.float.resolve(self.direction),
       clear: self.clear.resolve(self.direction),
-      direction: self.direction.into(),
-      box_sizing: self.box_sizing.into(),
+      direction: self.direction.into_taffy(),
+      box_sizing: self.box_sizing.into_taffy(),
       size: Size {
         width: self.width,
         height: self.height,
@@ -322,14 +322,14 @@ impl ComputedStyle {
         left: self.margin_left,
       }
       .map(|margin| margin.resolve_to_length_percentage_auto(sizing)),
-      display: self.display.into(),
-      flex_direction: self.flex_direction.into(),
-      position: self.position.into(),
-      justify_content: self.justify_content.into(),
-      align_content: self.align_content.into(),
-      justify_items: self.justify_items.into(),
+      display: self.display.into_taffy(),
+      flex_direction: self.flex_direction.into_taffy(),
+      position: self.position.into_taffy(),
+      justify_content: self.justify_content.into_taffy(),
+      align_content: self.align_content.into_taffy(),
+      justify_items: self.justify_items.into_taffy(),
       flex_grow: self.flex_grow.map(|grow| grow.0).unwrap_or(0.0),
-      align_items: self.align_items.into(),
+      align_items: self.align_items.into_taffy(),
       gap: Size {
         width: self.column_gap.resolve_to_length_percentage(sizing),
         height: self.row_gap.resolve_to_length_percentage(sizing),
@@ -339,7 +339,7 @@ impl ComputedStyle {
         .unwrap_or(Length::Auto)
         .resolve_to_dimension(sizing),
       flex_shrink: self.flex_shrink.map(|shrink| shrink.0).unwrap_or(1.0),
-      flex_wrap: self.flex_wrap.into(),
+      flex_wrap: self.flex_wrap.into_taffy(),
       min_size: Size {
         width: self.min_width,
         height: self.min_height,
@@ -368,14 +368,14 @@ impl ComputedStyle {
             .map(|track| track.to_min_max(sizing))
             .collect()
         }),
-      grid_auto_flow: self.grid_auto_flow.into(),
+      grid_auto_flow: self.grid_auto_flow.into_taffy(),
       grid_column: Line {
-        start: self.grid_column_start.clone().into(),
-        end: self.grid_column_end.clone().into(),
+        start: self.grid_column_start.clone().into_taffy(),
+        end: self.grid_column_end.clone().into_taffy(),
       },
       grid_row: Line {
-        start: self.grid_row_start.clone().into(),
-        end: self.grid_row_end.clone().into(),
+        start: self.grid_row_start.clone().into_taffy(),
+        end: self.grid_row_end.clone().into_taffy(),
       },
       grid_template_columns,
       grid_template_rows,
@@ -386,11 +386,14 @@ impl ComputedStyle {
         .as_ref()
         .cloned()
         .unwrap_or_default()
-        .into(),
+        .into_taffy(),
       aspect_ratio: self.aspect_ratio.into(),
-      align_self: self.align_self.into(),
-      justify_self: self.justify_self.into(),
-      overflow: self.resolve_overflows().into_taffy().map(Into::into),
+      align_self: self.align_self.into_taffy(),
+      justify_self: self.justify_self.into_taffy(),
+      overflow: self
+        .resolve_overflows()
+        .into_taffy()
+        .map(Overflow::into_taffy),
       dummy: PhantomData,
       item_is_table: false,
       item_is_replaced: false,

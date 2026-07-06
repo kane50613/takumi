@@ -171,7 +171,7 @@ impl MakeComputed for VerticalAlign {
 
 impl ResolvedVerticalAlign {
   /// Writes the aligned `y` for a box on a line given its metrics.
-  pub fn apply(
+  pub(crate) fn apply(
     self,
     y: &mut f32,
     metrics: &LineMetrics,

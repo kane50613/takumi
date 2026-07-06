@@ -86,9 +86,9 @@ pub enum TextWrapMode {
   NoWrap,
 }
 
-impl From<TextWrapMode> for parley::TextWrapMode {
-  fn from(value: TextWrapMode) -> Self {
-    match value {
+impl TextWrapMode {
+  pub(crate) fn into_parley(self) -> parley::TextWrapMode {
+    match self {
       TextWrapMode::Wrap => parley::TextWrapMode::Wrap,
       TextWrapMode::NoWrap => parley::TextWrapMode::NoWrap,
     }

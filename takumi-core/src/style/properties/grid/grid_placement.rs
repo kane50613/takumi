@@ -80,9 +80,9 @@ impl TailwindPropertyParser for GridPlacementSpan {
   }
 }
 
-impl From<GridPlacement> for taffy::GridPlacement {
-  fn from(placement: GridPlacement) -> Self {
-    match placement {
+impl GridPlacement {
+  pub(crate) fn into_taffy(self) -> taffy::GridPlacement {
+    match self {
       GridPlacement::Auto | GridPlacement::Named(_) => taffy::GridPlacement::Auto,
       GridPlacement::Line(line) => taffy::GridPlacement::Line(line.into()),
       GridPlacement::Span(GridPlacementSpan::Span(span)) => taffy::GridPlacement::Span(span),

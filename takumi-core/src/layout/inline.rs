@@ -1618,7 +1618,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
 
   built
     .layout
-    .align(style.parent.text_align.into(), Default::default());
+    .align(style.parent.text_align.into_parley(), Default::default());
   built
 }
 

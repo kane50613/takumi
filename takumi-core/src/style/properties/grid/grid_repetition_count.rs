@@ -22,9 +22,9 @@ pub enum GridRepetitionCount {
   Count(u16),
 }
 
-impl From<GridRepetitionCount> for taffy::RepetitionCount {
-  fn from(repetition: GridRepetitionCount) -> Self {
-    match repetition {
+impl GridRepetitionCount {
+  pub(crate) fn into_taffy(self) -> taffy::RepetitionCount {
+    match self {
       GridRepetitionCount::Keyword(GridRepetitionKeyword::AutoFill) => {
         taffy::RepetitionCount::AutoFill
       }

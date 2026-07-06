@@ -25,9 +25,9 @@ pub struct GridAutoFlow {
 
 impl MakeComputed for GridAutoFlow {}
 
-impl From<GridAutoFlow> for taffy::GridAutoFlow {
-  fn from(value: GridAutoFlow) -> Self {
-    match (value.direction, value.dense) {
+impl GridAutoFlow {
+  pub(crate) fn into_taffy(self) -> taffy::GridAutoFlow {
+    match (self.direction, self.dense) {
       (GridDirection::Row, false) => taffy::GridAutoFlow::Row,
       (GridDirection::Column, false) => taffy::GridAutoFlow::Column,
       (GridDirection::Row, true) => taffy::GridAutoFlow::RowDense,

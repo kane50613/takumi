@@ -53,8 +53,8 @@ impl ToCss for OverflowWrap {
   }
 }
 
-impl From<OverflowWrap> for parley::OverflowWrap {
-  fn from(value: OverflowWrap) -> Self {
-    value.0
+impl OverflowWrap {
+  pub(crate) fn into_parley(self) -> parley::OverflowWrap {
+    self.0
   }
 }
