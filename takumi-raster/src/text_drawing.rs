@@ -1,6 +1,5 @@
 use std::{cell::RefCell, collections::HashMap, convert::Into};
 
-use parley::GlyphRun;
 use skrifa::color::ColorPalette;
 use taffy::{Layout, Point, Size};
 use tiny_skia::Pixmap;
@@ -9,7 +8,7 @@ use crate::{
   BorderProperties, Canvas, ColorTile, Command, MaskSamplingOptions, MaskSourceToPixmapOptions,
   PaintSource, Placement, Result, SamplingOptions, SizedFontStyle, Stroke,
   composite_mask_source_to_pixmap, draw_outset_shadow,
-  layout::inline::InlineBrush,
+  layout::inline::ShapedRun,
   pixmap_ref_from_buffer, render_mask,
   resources::font::{ResolvedColorLayer, ResolvedGlyph},
   style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
@@ -86,15 +85,15 @@ pub(crate) struct DecorationSegmentParams {
 
 pub(crate) fn draw_decoration(
   canvas: &mut Canvas,
-  glyph_run: &GlyphRun<'_, InlineBrush>,
+  glyph_run: &ShapedRun,
   color: Color,
   offset: f32,
   size: f32,
   layout: Layout,
   transform: Affine,
 ) {
-  let start_x = layout.border.left + layout.padding.left + glyph_run.offset();
-  let end_x = start_x + glyph_run.advance();
+  let start_x = layout.border.left + layout.padding.left + glyph_run.offset;
+  let end_x = start_x + glyph_run.advance;
   draw_decoration_segment(
     canvas,
     color,

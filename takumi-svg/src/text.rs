@@ -157,7 +157,7 @@ pub(crate) fn emit_inline_content(
 /// decorations, glyphs, then line-through.
 fn emit_runs(
   doc: &mut SvgDocument,
-  runs: &InlineRunLayout<'_>,
+  runs: &InlineRunLayout,
   spans: &[ProcessedInlineSpan<'_>],
   font_style: &SizedFontStyle,
   context: &RenderContext,
@@ -215,7 +215,7 @@ fn emit_runs(
 /// styled span, mirroring the raster backend's merged-island outlines.
 fn emit_inline_outlines(
   doc: &mut SvgDocument,
-  runs: &InlineRunLayout<'_>,
+  runs: &InlineRunLayout,
   spans: &[ProcessedInlineSpan<'_>],
   origin_x: f32,
   origin_y: f32,
@@ -301,7 +301,7 @@ fn emit_outline_island(
 /// fill+stroke coverage.
 fn emit_clip_text_glyphs(
   doc: &mut SvgDocument,
-  runs: &InlineRunLayout<'_>,
+  runs: &InlineRunLayout,
   font_style: &SizedFontStyle,
   context: &RenderContext,
   frame: TextFrame,
@@ -352,7 +352,7 @@ fn emit_clip_text_glyphs(
 /// glyph coverage. Returns whether any glyph was emitted.
 fn emit_clip_text_mask_glyphs(
   doc: &mut SvgDocument,
-  run: &PositionedInlineRun<'_>,
+  run: &PositionedInlineRun,
   frame: TextFrame,
   color: Rgba,
   stroke_width: f32,
@@ -361,7 +361,7 @@ fn emit_clip_text_mask_glyphs(
   let run_transform = run.transform(IDENTITY);
   let glyph_offset = run.glyph_offset(frame.layout);
   let mut any = false;
-  for glyph in run.glyph_run.positioned_glyphs() {
+  for glyph in &run.glyph_run.glyphs {
     let Some(ResolvedGlyph::Outline(outline)) = run.resolved_glyphs.get(&glyph.id) else {
       continue;
     };
@@ -389,12 +389,12 @@ fn emit_clip_text_mask_glyphs(
 /// decoration rects.
 fn emit_run_decorations(
   doc: &mut SvgDocument,
-  run: &PositionedInlineRun<'_>,
+  run: &PositionedInlineRun,
   frame: TextFrame,
   over: bool,
 ) -> io::Result<()> {
   let transform = run.transform(IDENTITY);
-  let opacity = run.glyph_run.style().brush.opacity;
+  let opacity = run.glyph_run.brush.opacity;
   let opacity_group = (opacity < 1.0)
     .then(|| doc.begin_group(IDENTITY, opacity, None, None))
     .transpose()?;
@@ -415,7 +415,7 @@ fn emit_run_decorations(
 /// `background-clip: text` `<clipPath>`) instead of being painted.
 fn emit_run_glyphs(
   doc: &mut SvgDocument,
-  run: &PositionedInlineRun<'_>,
+  run: &PositionedInlineRun,
   font_style: &SizedFontStyle,
   frame: TextFrame,
   color_override: Option<Rgba>,
@@ -424,12 +424,12 @@ fn emit_run_glyphs(
 ) -> io::Result<()> {
   let run_transform = run.transform(IDENTITY);
   let glyph_offset = run.glyph_offset(frame.layout);
-  let fill_color = run.glyph_run.style().brush.color;
+  let fill_color = run.glyph_run.brush.color;
   let bold_join = line_join_str(font_style.parent.stroke_linejoin);
 
   // Per-run (inline span) opacity, matching the raster backend's
   // `draw_with_inline_opacity`. Skipped while building a clip path (geometry only).
-  let opacity = run.glyph_run.style().brush.opacity;
+  let opacity = run.glyph_run.brush.opacity;
   let opacity_group = (clip_data.is_none() && opacity < 1.0)
     .then(|| doc.begin_group(IDENTITY, opacity, None, None))
     .transpose()?;
@@ -441,7 +441,7 @@ fn emit_run_glyphs(
   let fill = color_override.unwrap_or(Rgba(fill_color.0));
   let mut merged = String::new();
 
-  for glyph in run.glyph_run.positioned_glyphs() {
+  for glyph in &run.glyph_run.glyphs {
     let Some(resolved) = run.resolved_glyphs.get(&glyph.id) else {
       continue;
     };

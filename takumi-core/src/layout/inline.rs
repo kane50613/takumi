@@ -1857,12 +1857,69 @@ pub fn scale_text_fit_x(
     + (x - origin_x) * scale
 }
 
+/// A shaped glyph positioned within its run, in run-local coordinates.
+#[derive(Clone, Copy, Debug)]
+pub struct PositionedGlyph {
+  /// Glyph id in the run's font.
+  pub id: u32,
+  /// Run-local horizontal position.
+  pub x: f32,
+  /// Run-local vertical position.
+  pub y: f32,
+}
+
+/// Vertical font metrics for a shaped run, in px.
+#[derive(Clone, Copy, Debug)]
+pub struct RunMetrics {
+  /// Typographic ascent.
+  pub ascent: f32,
+  /// Typographic descent.
+  pub descent: f32,
+  /// Underline offset from the baseline.
+  pub underline_offset: f32,
+  /// Underline stroke thickness.
+  pub underline_size: f32,
+  /// Strikethrough offset from the baseline.
+  pub strikethrough_offset: f32,
+  /// Strikethrough stroke thickness.
+  pub strikethrough_size: f32,
+}
+
+/// A shaped, positioned glyph run — the core-owned replacement for
+/// `parley::GlyphRun`. Owns everything both backends need to paint a run; carries
+/// no borrow into the parley layout.
+pub struct ShapedRun {
+  /// The run's glyphs, in run-local coordinates.
+  pub glyphs: Vec<PositionedGlyph>,
+  /// Horizontal offset of the run's start from the line origin.
+  pub offset: f32,
+  /// Baseline position within the line.
+  pub baseline: f32,
+  /// Total horizontal advance of the run.
+  pub advance: f32,
+  /// Paint attributes carried by the run.
+  pub brush: InlineBrush,
+  /// Vertical font metrics for the run.
+  pub metrics: RunMetrics,
+  /// Collection index for `skrifa::FontRef::from_index`, paired with [`Self::font_data`].
+  pub font_index: u32,
+  // Accessor, not a `pub` field: the backing `parley` blob must not leak into the public API.
+  font_data: parley::fontique::Blob<u8>,
+}
+
+impl ShapedRun {
+  /// Font bytes for `skrifa::FontRef::from_index`, paired with [`Self::font_index`].
+  pub fn font_data(&self) -> &[u8] {
+    self.font_data.as_ref()
+  }
+}
+
 /// One glyph run positioned on its line, carrying everything both backends need
-/// to paint it. Borrows the parley layout owned by the source [`BuiltInlineLayout`].
+/// to paint it.
 #[non_exhaustive]
-pub struct PositionedInlineRun<'l> {
-  /// The parley glyph run (metrics, brush, positioned glyphs, font).
-  pub glyph_run: GlyphRun<'l, InlineBrush>,
+pub struct PositionedInlineRun {
+  /// The shaped glyph run (metrics, brush, positioned glyphs, font).
+  pub glyph_run: ShapedRun,
   /// Glyphs resolved to outlines/bitmaps, keyed by glyph id.
   pub resolved_glyphs: HashMap<u32, ResolvedGlyph>,
   /// Text-fit scale state for the line.
@@ -1873,7 +1930,7 @@ pub struct PositionedInlineRun<'l> {
   pub baseline_shift: f32,
 }
 
-impl PositionedInlineRun<'_> {
+impl PositionedInlineRun {
   /// The run's affine transform composed onto `base` (the element transform for
   /// raster, identity for vector emission).
   pub fn transform(&self, base: Affine) -> Affine {
@@ -1899,8 +1956,7 @@ impl PositionedInlineRun<'_> {
     let Some(layers) = outline.color_layers() else {
       return Vec::new();
     };
-    let run = self.glyph_run.run();
-    let font = FontRef::from_index(run.font().data.as_ref(), run.font().index).ok();
+    let font = FontRef::from_index(self.glyph_run.font_data(), self.glyph_run.font_index).ok();
     let palettes = font.as_ref().map(MetadataProvider::color_palettes);
     let palette = palettes.as_ref().and_then(|palettes| palettes.get(0));
     let foreground_opacity = foreground.0[3] as f32 / 255.0;
@@ -1934,9 +1990,9 @@ impl PositionedInlineRun<'_> {
 /// [`resolve_inline_runs`]; the raster backend rasterizes it and the vector
 /// backend emits it; only the painting differs.
 #[non_exhaustive]
-pub struct InlineRunLayout<'l> {
+pub struct InlineRunLayout {
   /// Glyph runs in line/visual order.
-  pub runs: Vec<PositionedInlineRun<'l>>,
+  pub runs: Vec<PositionedInlineRun>,
   /// In-flow and out-of-flow inline boxes, positioned, sorted by id.
   pub inline_boxes: Vec<VisualInlineBox>,
   /// Text-outline rects (unmerged), in collection order.
@@ -1946,11 +2002,11 @@ pub struct InlineRunLayout<'l> {
 /// Walks `built` once, resolving every glyph run, inline box, and outline rect
 /// into backend-agnostic positioned drawables. This is the one inline-layout
 /// enumeration; backends differ only in how they paint the result.
-pub fn resolve_inline_runs<'l>(
-  built: &'l BuiltInlineLayout<'_>,
+pub fn resolve_inline_runs(
+  built: &BuiltInlineLayout<'_>,
   context: &RenderContext,
   layout: Layout,
-) -> Result<InlineRunLayout<'l>, FontError> {
+) -> Result<InlineRunLayout, FontError> {
   let BuiltInlineLayout {
     layout: inline_layout,
     spans,
@@ -2010,8 +2066,34 @@ pub fn resolve_inline_runs<'l>(
             outline_rects.push(outline_rect);
           }
 
+          let metrics = run.metrics();
+          let shaped = ShapedRun {
+            glyphs: glyph_run
+              .positioned_glyphs()
+              .map(|g| PositionedGlyph {
+                id: g.id,
+                x: g.x,
+                y: g.y,
+              })
+              .collect(),
+            offset: glyph_run.offset(),
+            baseline: glyph_run.baseline(),
+            advance: glyph_run.advance(),
+            brush: glyph_run.style().brush,
+            metrics: RunMetrics {
+              ascent: metrics.ascent,
+              descent: metrics.descent,
+              underline_offset: metrics.underline_offset,
+              underline_size: metrics.underline_size,
+              strikethrough_offset: metrics.strikethrough_offset,
+              strikethrough_size: metrics.strikethrough_size,
+            },
+            font_data: run.font().data.clone(),
+            font_index: run.font().index,
+          };
+
           runs.push(PositionedInlineRun {
-            glyph_run,
+            glyph_run: shaped,
             resolved_glyphs,
             line_scale: setup.state,
             static_inline_prefix,
@@ -2081,25 +2163,25 @@ pub struct DecorationRect {
 /// omitted here). `transform` is the run's border-box transform
 /// ([`PositionedInlineRun::transform`] with an identity base).
 pub fn run_decorations(
-  glyph_run: &GlyphRun<'_, InlineBrush>,
+  glyph_run: &ShapedRun,
   layout: Layout,
   baseline_shift: f32,
   transform: Affine,
 ) -> Vec<DecorationRect> {
   let mut out = Vec::new();
-  let brush = &glyph_run.style().brush;
+  let brush = &glyph_run.brush;
   let lines = brush.decoration_line;
   if lines.is_empty() {
     return out;
   }
-  let metrics = glyph_run.run().metrics();
-  let start_x = layout.border.left + layout.padding.left + glyph_run.offset();
+  let metrics = &glyph_run.metrics;
+  let start_x = layout.border.left + layout.padding.left + glyph_run.offset;
   let snapped_start_x = start_x.floor();
-  let width = (start_x + glyph_run.advance()).ceil() - snapped_start_x;
+  let width = (start_x + glyph_run.advance).ceil() - snapped_start_x;
   if width <= 0.0 {
     return out;
   }
-  let baseline = glyph_run.baseline() + baseline_shift;
+  let baseline = glyph_run.baseline + baseline_shift;
   let top = layout.border.top + layout.padding.top;
   let thickness = |from_font: f32| match brush.decoration_thickness {
     SizedTextDecorationThickness::Value(value) => value,
