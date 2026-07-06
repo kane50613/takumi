@@ -9,69 +9,147 @@ All-in-one guide for rendering with Takumi. Built-in layout rules, advanced styl
 
 ## JS / TS API Reference
 
-### Static Render (`render` / `renderSvg`)
+### 1. Static Render (`render` & `renderSvg`)
+
+Renders JSX templates, HTML strings, or JSON node trees to raster buffers (PNG/JPEG/WebP) or vector SVG markup.
 
 ```typescript
 import { render, renderSvg } from "takumi-js";
-const png = await render(node, options);
-const svg = await renderSvg(node, options);
+
+// Renders dynamic JSX layout directly to PNG bytes
+const pngBuffer = await render(
+  <div tw="w-full h-full bg-zinc-950 flex items-center justify-center">
+    <h1 tw="text-white text-6xl">Takumi Engine</h1>
+  </div>,
+  {
+    width: 1200,
+    height: 630,
+    format: "png", // "png" | "jpeg" | "webp"
+    quality: 90    // (Optional) For JPEG/WebP formats
+  }
+);
+
+// Renders to responsive XML SVG string containing glyph path vector data
+const svgString = await renderSvg(
+  <div tw="w-full h-full bg-zinc-900">
+    <span tw="text-white">Scalable Vector</span>
+  </div>,
+  { width: 800, height: 400 }
+);
 ```
 
-### Animation Render (`renderAnimation`)
+### 2. Animated Render (`renderAnimation`)
+
+Compiles sequences of scenes into animated WebP, GIF, or APNG buffers.
 
 ```typescript
 import { renderAnimation } from "takumi-js";
-const webp = await renderAnimation({
-  width: 400, height: 400, fps: 30, format: "webp", // 'webp' | 'gif' | 'apng'
-  scenes: [{ node: <div />, durationMs: 1000 }]
+
+const animatedBuffer = await renderAnimation({
+  width: 400,
+  height: 400,
+  fps: 30,
+  format: "webp", // "webp" | "gif" | "apng"
+  quality: 80,    // Compression quality (0-100)
+  scenes: [
+    {
+      durationMs: 1500,
+      node: (
+        <div tw="w-full h-full bg-black flex items-center justify-center">
+          <div tw="w-24 h-24 bg-rose-500 animate-bounce rounded-full" />
+        </div>
+      )
+    }
+  ]
 });
 ```
 
-### Options (`RenderOptions`)
+### 3. Edge / Framework Integration (`ImageResponse`)
 
-- `fonts`: Custom font array `[{ name, url, weight, style }]`. URLs, local paths, or Buffers.
-- `emoji`: Emoji fallback provider: `"twemoji"` (default), `"blob-emoji"`, `"openmoji"`, `"noto-emoji"`, or `"from-font"`.
-- `images`: Pre-fetched images `[{ url, buffer }]` or fetch client/cache configuration.
-- `stylesheets`: Array of raw global CSS stylesheet strings.
+A next/og compatible handler designed for Edge runtimes, Cloudflare Workers, Next.js API endpoints, and standard HTTP server frameworks.
+
+```typescript
+import { ImageResponse } from "takumi-js/response";
+
+export function GET() {
+  return new ImageResponse(
+    <div tw="w-full h-full bg-slate-900 flex items-center justify-center">
+      <h1 tw="text-white text-5xl">Dynamic OG Card</h1>
+    </div>,
+    {
+      width: 1200,
+      height: 630
+    }
+  );
+}
+```
+
+### 4. Parsing Helpers (`takumi-js/helpers/*`)
+
+Low-level utilities for compiling layout elements without executing the full renderer.
+
+```typescript
+import { fromHtml } from "takumi-js/helpers/html";
+import { fromJsx } from "takumi-js/helpers/jsx";
+
+// Converts raw HTML template string into JSON layout node tree
+const htmlNodeTree = fromHtml(
+  "<div class='flex'><span>Hello</span></div>",
+  { max_depth: 512 }
+);
+
+// Compiles React ReactNode elements into JSON layout node tree
+const jsxNodeTree = fromJsx(
+  <div tw="flex"><span>Hello</span></div>
+);
+```
 
 ---
 
-## Hidden Features (Deep-Dive from Source)
+## Options Configuration (`RenderOptions`)
+
+- `fonts`: An array of custom fonts `[{ name, url, weight, style }]`. Values can point to remote URLs (WOFF2/WOFF/TTF), local file paths, or binary Node.js `Buffer` arrays.
+- `emoji`: Configures the emoji fallback strategy: `"twemoji"` (default), `"blob-emoji"`, `"openmoji"`, `"noto-emoji"`, or `"from-font"` (uses custom loaded font glyphs).
+- `images`: Option to pass pre-fetched image arrays `[{ url, buffer }]` or supply a shared caching fetch-client configuration.
+- `stylesheets`: An array of raw global CSS string sheets to inject into the rendering layout context.
+
+---
+
+## Hidden Layout Capabilities (Deep-Dive)
 
 ### 1. Auto-scaling Text (`text-fit`)
 
-Scales inline text to fit its container box without overflow.
+Automatically scales font-size to fit the containing inline line-box width, avoiding clipping or wrapping.
 
-- Syntax: `text-fit: [ none | grow | shrink ] [ consistent | per-line | per-line-all ]? [percentage]?`
-- Example: `tw="text-fit-grow-consistent"` or `style={{ textFit: "grow consistent 120%" }}`.
+- **Syntax**: `text-fit: [ none | grow | shrink ] [ consistent | per-line | per-line-all ]? [percentage]?`
+- **Example**: `tw="text-fit-grow-consistent"` or `style={{ textFit: "grow consistent 120%" }}`.
 
 ### 2. CSS Motion Paths (`offset-path`)
 
-Positions or moves items along vector shapes, paths, or rays.
+Enables complex placement and animation sequences of elements along custom vector paths or geometric rays.
 
-- Properties: `offset-path`, `offset-distance` (e.g. `50%`), `offset-rotate` (e.g. `45deg`).
-- Values: `ray(<angle> <size> contain? at <position>?)`, `path("<svg path>")`, basic shapes (`circle()`, `polygon()`, `inset()`), or `<coord-box>` (`content-box`, `border-box`).
+- **Properties**: `offset-path`, `offset-distance` (percentage), `offset-rotate` (angle / auto).
+- **Syntax**: `ray(<angle> <size> contain? at <position>?)` or `path("<svg path command>")` or basic shapes (`circle()`, `polygon()`, `inset()`).
 
-### 3. OpenType Features (`font-variation-settings`)
+### 3. OpenType Typography Settings
 
-Natively supports variable fonts and features.
+Provides fine-grained control over font rendering features and variable layout configurations.
 
-- Properties:
-  - `font-variation-settings`: e.g. `"'wght' 750, 'wdth' 90"`.
-  - `font-feature-settings`: e.g. `"'ss01' 1, 'kern' 1"`.
+- `font-variation-settings`: Configures variable font axis settings (e.g. `"'wght' 750, 'wdth' 90"`).
+- `font-feature-settings`: Enables OpenType font ligatures, kerning, and variants (e.g. `"'ss01' 1, 'kern' 1"`).
 
-### 4. Graphic Filters & Effects
+### 4. Custom Filters & Graphics
 
-- `mix-blend-mode` & `background-blend-mode`: e.g., `multiply`, `screen`, `overlay`.
-- `filter`: `blur()`, `brightness()`, `contrast()`, `drop-shadow()`, `grayscale()`, `hue-rotate()`, `invert()`, `opacity()`, `saturate()`, `sepia()`.
-- `backdrop-filter`: Applied to containers.
-- `clip-path`: Shape clipping via `polygon()`, `circle()`, `ellipse()`, `path()`, `inset()`.
+- `filter`: Supports `blur()`, `brightness()`, `contrast()`, `drop-shadow()`, `grayscale()`, `hue-rotate()`, `invert()`, `opacity()`, `saturate()`, `sepia()`.
+- `mix-blend-mode` & `background-blend-mode`: Layer blending modes (e.g. `multiply`, `screen`, `overlay`).
+- `backdrop-filter`: Applies filter effects to elements behind the container.
+- `clip-path`: Clips elements via shapes: `polygon(...)`, `circle(...)`, `inset(...)`.
 
-### 5. Layout Engine
+### 5. Layout Defaults
 
-- CSS Grid: Fully supported (`grid-cols-X`, `gap-X`, custom rows/cols).
-- Layout modes: Flexbox, block, inline-block, float.
-- Sizing: `aspect-ratio`, `z-index`, `calc()`.
+- CSS Grid support: Supports `grid-cols-X`, `gap-X`, flex, and block layout.
+- Tag Presets: Custom HTML styles are pre-mapped for tags: `h1`–`h6`, `div`, `pre` (keeps space layout), `strong`, `em`, `blockquote`, and `hr`.
+- Line Breaks: `<br>` tags parse to `\n` in text elements automatically.
 
 ---
 
@@ -79,6 +157,15 @@ Natively supports variable fonts and features.
 
 ```rust
 use takumi::{render, RenderOptions, Node};
-let node = Node::from_html(html_str, None).unwrap();
-let png_bytes = render(&node, &RenderOptions { width: 800, height: 600, ..Default::default() }).unwrap();
+
+fn main() {
+    let options = RenderOptions {
+        width: 800,
+        height: 600,
+        ..Default::default()
+    };
+    let html = r#"<div style="background: red; width: 100%; height: 100%;"></div>"#;
+    let node = Node::from_html(html, None).unwrap();
+    let bytes = render(&node, &options).unwrap();
+}
 ```
