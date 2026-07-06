@@ -1,6 +1,6 @@
 ---
 packages:
-  cargo:takumi-core: major
+  cargo:takumi-core: minor
   cargo:takumi: major
 ---
 
