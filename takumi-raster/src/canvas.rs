@@ -92,6 +92,12 @@ impl<'a> DrawTarget<'a, '_> {
       .combined_mask
       .and_then(|mask| resolve_mask(mask, size, self.buffer_pool))
   }
+
+  pub(crate) fn release_resolved_mask(&mut self, resolved: Option<Cow<'_, TinyMask>>) {
+    if let Some(Cow::Owned(mask)) = resolved {
+      self.buffer_pool.release(mask.take());
+    }
+  }
 }
 
 /// A canvas that can be used to draw images onto.
