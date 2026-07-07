@@ -12,7 +12,7 @@ use image::{
 #[cfg(target_arch = "wasm32")]
 use image_webp::WebPDecoder;
 #[cfg(not(target_arch = "wasm32"))]
-use libwebp_sys::{WebPDecodeRGBA, WebPFree};
+use libwebp_sys::{WebPDecodeRGBA, WebPFree, WebPGetInfo};
 
 use crate::resources::image_buffer::ImageBuffer;
 
@@ -104,14 +104,18 @@ enum DetectedImageFormat {
   WebP,
 }
 
+fn decode_limits() -> Limits {
+  let mut limits = Limits::default();
+  limits.max_image_width = Some(MAX_IMAGE_DIMENSION);
+  limits.max_image_height = Some(MAX_IMAGE_DIMENSION);
+  limits
+}
+
 fn decode_with_image_crate(
   mut decoder: impl ImageDecoder,
   format: ImageFormat,
 ) -> ImageResult<ImageBuffer> {
-  let mut limits = Limits::default();
-  limits.max_image_width = Some(MAX_IMAGE_DIMENSION);
-  limits.max_image_height = Some(MAX_IMAGE_DIMENSION);
-  decoder.set_limits(limits)?;
+  decoder.set_limits(decode_limits())?;
   rgba_to_buffer(DynamicImage::from_decoder(decoder)?.to_rgba8(), format)
 }
 
@@ -124,18 +128,15 @@ fn decode_jpeg(bytes: &[u8]) -> ImageResult<ImageBuffer> {
 }
 
 fn decode_gif(bytes: &[u8]) -> ImageResult<DecodedGif> {
-  let decoder = GifDecoder::new(Cursor::new(bytes))?;
+  let mut decoder = GifDecoder::new(Cursor::new(bytes))?;
+  decoder.set_limits(decode_limits())?;
+
   let mut decoded_frames = Vec::new();
   let mut total_pixels: u64 = 0;
-  let mut first_frame = true;
 
   for frame in decoder.into_frames() {
     let frame = frame?;
     let (width, height) = frame.buffer().dimensions();
-    if first_frame {
-      check_pixel_budget(width, height)?;
-      first_frame = false;
-    }
 
     total_pixels += width as u64 * height as u64;
     if total_pixels > MAX_GIF_TOTAL_PIXELS {
@@ -191,6 +192,17 @@ fn decode_webp(bytes: &[u8]) -> ImageResult<ImageBuffer> {
 
   let mut width = 0;
   let mut height = 0;
+  let header_ok = unsafe {
+    // SAFETY: `bytes.as_ptr()` is valid for `bytes.len()` bytes for the duration of the call.
+    WebPGetInfo(bytes.as_ptr(), bytes.len(), &mut width, &mut height)
+  };
+
+  if header_ok == 0 || width <= 0 || height <= 0 {
+    return Err(webp_decode_error(WebPError::InvalidEncodedData));
+  }
+
+  check_pixel_budget(width as u32, height as u32)?;
+
   let decoded_ptr = unsafe {
     // SAFETY: `bytes.as_ptr()` is valid for `bytes.len()` bytes for the duration of the call,
     // and libwebp returns either a null pointer or an owned RGBA buffer freed with `WebPFree`.
@@ -206,13 +218,6 @@ fn decode_webp(bytes: &[u8]) -> ImageResult<ImageBuffer> {
       WebPFree(decoded_ptr.cast());
     }
     return Err(webp_decode_error(WebPError::InvalidEncodedData));
-  }
-
-  if let Err(error) = check_pixel_budget(width as u32, height as u32) {
-    unsafe {
-      WebPFree(decoded_ptr.cast());
-    }
-    return Err(error);
   }
 
   let pixel_count = (width as usize)
