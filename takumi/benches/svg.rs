@@ -1,19 +1,11 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use std::{hint::black_box, path::Path};
-use takumi::base::{
-  Fonts,
-  layout::{
-    Viewport,
-    node::Node,
-    style::{
-      AlignItems, BackgroundClip, BackgroundImages, BackgroundRepeats, BackgroundSizes,
-      BorderRadius, BorderStyle, Color, ColorInput, Display, FlexWrap, FontWeight, FromCss,
-      JustifyContent,
-      Length::{Percentage, Px},
-      PositionValues, Sides, Style, StyleDeclaration,
-    },
-  },
-  resources::font::FontResource,
+use takumi::prelude::{
+  AlignItems, BackgroundClip, BackgroundImages, BackgroundRepeats, BackgroundSizes, BorderRadius,
+  BorderStyle, Color, ColorInput, Display, FlexWrap, FontResource, FontWeight, Fonts, FromCssStr,
+  JustifyContent,
+  Length::{Percentage, Px},
+  Node, PositionValues, Sides, Style, StyleDeclaration, Viewport,
 };
 use takumi_svg::{SvgOptions, render};
 
@@ -123,11 +115,11 @@ fn shape_border_fixture() -> Node {
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([(i * 9) as u8, (255 - i * 9) as u8, 128, 255]),
         )))
-        .with_border_radius(BorderRadius::from_str("24px").unwrap())
-        .with(StyleDeclaration::border_top_width(Px(6.0)))
-        .with(StyleDeclaration::border_right_width(Px(6.0)))
-        .with(StyleDeclaration::border_bottom_width(Px(6.0)))
-        .with(StyleDeclaration::border_left_width(Px(6.0)))
+        .with_border_radius(BorderRadius::from_css_str("24px").unwrap())
+        .with(StyleDeclaration::border_top_width(Px(6.0).into()))
+        .with(StyleDeclaration::border_right_width(Px(6.0).into()))
+        .with(StyleDeclaration::border_bottom_width(Px(6.0).into()))
+        .with(StyleDeclaration::border_left_width(Px(6.0).into()))
         .with(StyleDeclaration::border_top_style(BorderStyle::Solid))
         .with(StyleDeclaration::border_right_style(BorderStyle::Solid))
         .with(StyleDeclaration::border_bottom_style(BorderStyle::Solid))

@@ -1,11 +1,8 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use parley::{GenericFamily, fontique::FontInfoOverride};
 use std::hint::black_box;
 use takumi::{
-  Fonts,
-  layout::{Viewport, node::Node},
-  rendering::{RenderOptions, render},
-  resources::font::FontResource,
+  prelude::{FontOverride, FontResource, Fonts, GenericFamily, Node, RenderOptions, Viewport},
+  render,
 };
 
 const BENCH_WIDTH: u32 = 1200;
@@ -24,21 +21,21 @@ fn load_global() -> Fonts {
   let regular: &[u8] = include_bytes!("../../assets/fonts/geist/Geist[wght].woff2");
   g.register(
     FontResource::new(regular.to_vec())
-      .override_info(FontInfoOverride {
-        family_name: Some("Geist"),
+      .override_info(FontOverride {
+        family_name: Some("Geist".into()),
         ..Default::default()
       })
-      .generic_family(GenericFamily::SansSerif),
+      .generic_family(GenericFamily::SANS_SERIF),
   )
   .unwrap();
   let emoji: &[u8] = include_bytes!("../../assets/fonts/twemoji/TwemojiMozilla-colr.woff2");
   g.register(
     FontResource::new(emoji.to_vec())
-      .override_info(FontInfoOverride {
-        family_name: Some("Twemoji Mozilla"),
+      .override_info(FontOverride {
+        family_name: Some("Twemoji Mozilla".into()),
         ..Default::default()
       })
-      .generic_family(GenericFamily::Emoji),
+      .generic_family(GenericFamily::EMOJI),
   )
   .unwrap();
   g
