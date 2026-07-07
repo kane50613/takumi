@@ -400,7 +400,11 @@ pub(crate) fn overlay_image<'a, I: Into<PaintSource<'a>>>(
     return;
   }
 
-  if options.border.is_zero() && options.transform.only_translation() {
+  if options.border.is_zero()
+    && options.transform.only_translation()
+    && options.transform.x.fract() == 0.0
+    && options.transform.y.fract() == 0.0
+  {
     let offset = Point {
       x: options.transform.x,
       y: options.transform.y,
@@ -533,7 +537,11 @@ pub(crate) fn overlay_sampled_paint_source(
     return;
   }
 
-  if options.border.is_zero() && options.transform.only_translation() {
+  if options.border.is_zero()
+    && options.transform.only_translation()
+    && options.transform.x.fract() == 0.0
+    && options.transform.y.fract() == 0.0
+  {
     blit_sampled_paint_source_translation(
       target.pixmap,
       source,
@@ -567,12 +575,12 @@ mod tests {
 
   use super::*;
   use crate::{
-    BorderProperties, Canvas, PaintSource, pixmap_from_buffer,
+    BorderProperties, Canvas, PaintSource, Result, pixmap_from_buffer,
     resources::image_buffer::ImageBuffer, style::ImageScalingAlgorithm,
   };
 
   #[test]
-  fn test_subcanvas_overlay_sampled_image_matches_direct_render() {
+  fn test_subcanvas_overlay_sampled_image_matches_direct_render() -> Result<()> {
     let source = RgbaImage::from_fn(2, 1, |x, _| {
       if x == 0 {
         Rgba([255, 0, 0, 255])
@@ -609,14 +617,12 @@ mod tests {
       width: 8,
       height: 6,
     });
-    let Ok(subcanvas) = isolated.begin_subcanvas(Placement {
+    let subcanvas = isolated.begin_subcanvas(Placement {
       left: 2,
       top: 2,
       width: 4,
       height: 2,
-    }) else {
-      return;
-    };
+    })?;
     isolated.overlay_sampled_pixmap(
       source_pixmap.as_ref(),
       Size {
@@ -634,9 +640,10 @@ mod tests {
     isolated.composite_subcanvas(subcanvas, BlendMode::Normal, 1.0);
 
     assert_eq!(
-      direct.into_inner().map(RgbaImage::into_raw).ok(),
-      isolated.into_inner().map(RgbaImage::into_raw).ok()
+      direct.into_inner()?.into_raw(),
+      isolated.into_inner()?.into_raw()
     );
+    Ok(())
   }
 
   #[test]

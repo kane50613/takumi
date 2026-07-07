@@ -210,6 +210,9 @@ fn try_translation_blit(
   if !transform.only_translation() || transform.x.fract() != 0.0 || transform.y.fract() != 0.0 {
     return false;
   }
+  if options.sampling.sample_bias != (Point { x: 0.5, y: 0.5 }) {
+    return false;
+  }
   let Some(source_pixmap) = source.as_pixmap_ref() else {
     return false;
   };

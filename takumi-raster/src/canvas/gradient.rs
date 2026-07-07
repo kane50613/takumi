@@ -293,7 +293,7 @@ mod tests {
 
   use super::*;
   use crate::{
-    Canvas, Fonts, RenderContext, blend_pixel,
+    Canvas, Fonts, RenderContext, Result, blend_pixel,
     style::{
       Angle, Color, ColorInterpolationMethod, ConicGradient, FromCssStr, GradientStop, Length,
       LinearGradient, PositionValue, RadialGradient, SizingContext, StopPosition,
@@ -333,7 +333,8 @@ mod tests {
     canvas_size: Size<u32>,
     offset: Point<f32>,
     overlay: impl FnOnce(&mut PixmapMut<'_>, &T, Point<f32>),
-  ) where
+  ) -> Result<()>
+  where
     T: GradientOverlayTile,
   {
     let mut canvas = Canvas::new(canvas_size);
@@ -358,17 +359,17 @@ mod tests {
       },
     );
 
-    let Ok(fast) = canvas.into_inner() else {
-      return;
-    };
+    let fast = canvas.into_inner()?;
     assert_eq!(fast.as_raw(), reference.as_raw());
+    Ok(())
   }
 
   fn assert_gradient_overlay_matches_reference<T>(
     tile: &T,
     canvas_size: Size<u32>,
     offset: Point<f32>,
-  ) where
+  ) -> Result<()>
+  where
     T: GradientOverlayTile,
   {
     assert_gradient_overlay_matches_reference_with(
@@ -378,14 +379,12 @@ mod tests {
       |pixmap, tile, offset| {
         overlay_gradient_tile(pixmap, tile, offset, BlendMode::Normal, None);
       },
-    );
+    )
   }
 
   #[test]
-  fn test_overlay_linear_gradient_matches_reference() {
-    let Ok(gradient) = LinearGradient::from_css_str("linear-gradient(to right, red, blue)") else {
-      return;
-    };
+  fn test_overlay_linear_gradient_matches_reference() -> Result<()> {
+    let gradient = LinearGradient::from_css_str("linear-gradient(to right, red, blue)")?;
     let global_context = Fonts::default();
     let render_context = RenderContext::builder()
       .fonts(global_context.snapshot())
@@ -412,11 +411,12 @@ mod tests {
       |pixmap, tile, offset| {
         overlay_linear_gradient_tile(pixmap, tile, offset, BlendMode::Normal, None);
       },
-    );
+    )?;
+    Ok(())
   }
 
   #[test]
-  fn test_overlay_radial_gradient_fast_paths_match_reference() {
+  fn test_overlay_radial_gradient_fast_paths_match_reference() -> Result<()> {
     let cases = [
       (
         "radial-gradient(circle, red, blue)",
@@ -446,9 +446,7 @@ mod tests {
 
     let global_context = Fonts::default();
     for (gradient_css, tile_size, canvas_size, offset) in cases {
-      let Ok(gradient) = RadialGradient::from_css_str(gradient_css) else {
-        continue;
-      };
+      let gradient = RadialGradient::from_css_str(gradient_css)?;
       let render_context = RenderContext::builder()
         .fonts(global_context.snapshot())
         .sizing(
@@ -471,15 +469,14 @@ mod tests {
         |pixmap, tile, offset| {
           overlay_radial_gradient_tile(pixmap, tile, offset, BlendMode::Normal, None);
         },
-      );
+      )?;
     }
+    Ok(())
   }
 
   #[test]
-  fn test_overlay_conic_gradient_matches_reference() {
-    let Ok(gradient) = ConicGradient::from_css_str("conic-gradient(red, blue)") else {
-      return;
-    };
+  fn test_overlay_conic_gradient_matches_reference() -> Result<()> {
+    let gradient = ConicGradient::from_css_str("conic-gradient(red, blue)")?;
 
     let global_context = Fonts::default();
     let render_context = RenderContext::builder()
@@ -507,11 +504,12 @@ mod tests {
       |pixmap, tile, offset| {
         overlay_gradient_tile(pixmap, tile, offset, BlendMode::Normal, None);
       },
-    );
+    )?;
+    Ok(())
   }
 
   #[test]
-  fn test_overlay_linear_gradient_fast_paths_match_reference() {
+  fn test_overlay_linear_gradient_fast_paths_match_reference() -> Result<()> {
     let cases = [
       (
         "linear-gradient(to right, red 0px, lime 0.5px, blue 32px)",
@@ -577,9 +575,7 @@ mod tests {
 
     let global_context = Fonts::default();
     for (gradient_css, tile_size, canvas_size, offset) in cases {
-      let Ok(gradient) = LinearGradient::from_css_str(gradient_css) else {
-        continue;
-      };
+      let gradient = LinearGradient::from_css_str(gradient_css)?;
       let render_context = RenderContext::builder()
         .fonts(global_context.snapshot())
         .sizing(
@@ -602,12 +598,13 @@ mod tests {
         |pixmap, tile, offset| {
           overlay_linear_gradient_tile(pixmap, tile, offset, BlendMode::Normal, None);
         },
-      );
+      )?;
     }
+    Ok(())
   }
 
   #[test]
-  fn test_overlay_conic_gradient_hard_stops_matches_reference() {
+  fn test_overlay_conic_gradient_hard_stops_matches_reference() -> Result<()> {
     let gradient = ConicGradient {
       repeating: false,
       from_angle: Angle::zero(),
@@ -657,16 +654,13 @@ mod tests {
         height: 56,
       },
       Point { x: 4.0, y: 4.0 },
-    );
+    )
   }
 
   #[test]
-  fn test_overlay_radial_gradient_clustered_stops_matches_reference() {
-    let Ok(gradient) =
-      RadialGradient::from_css_str("radial-gradient(circle, red 0%, lime 1%, blue 100%)")
-    else {
-      return;
-    };
+  fn test_overlay_radial_gradient_clustered_stops_matches_reference() -> Result<()> {
+    let gradient =
+      RadialGradient::from_css_str("radial-gradient(circle, red 0%, lime 1%, blue 100%)")?;
     let global_context = Fonts::default();
     let render_context = RenderContext::builder()
       .fonts(global_context.snapshot())
@@ -690,6 +684,7 @@ mod tests {
         height: 30,
       },
       Point { x: 4.0, y: 3.0 },
-    );
+    )?;
+    Ok(())
   }
 }
