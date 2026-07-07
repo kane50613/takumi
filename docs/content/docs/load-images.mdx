@@ -113,6 +113,15 @@ function OgImage() {
 }
 ```
 
+## Decode limits
+
+Takumi rejects oversized images at decode time. The limits guard server renders against decode bombs: small files that declare huge dimensions to force multi-gigabyte allocations.
+
+| Input        | Limit                                       |
+| ------------ | ------------------------------------------- |
+| Image        | **8192×8192** pixels                        |
+| Animated GIF | 4× the image budget, summed over all frames |
+
 ## Emoji
 
 ### Dynamic fetching
