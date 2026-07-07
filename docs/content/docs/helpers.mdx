@@ -11,7 +11,10 @@ icon: Wrench
 | Helper                           | Use                                                                                                                                           |
 | :------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------- |
 | `googleFonts(options)`           | Load Google Fonts families in one request; `render` keeps the subsets used. See [Fonts & text](/docs/typography-and-fonts#from-google-fonts). |
+| `fontFromUrl(url, options?)`     | Turn a font URL into a lazy `fonts` entry. `options` takes the [fetch limits](/docs/load-images#fetch-limits).                                |
 | `subsetFonts({ fonts, source })` | Trim font subsets to the codepoints `source` renders (what `render` does internally).                                                         |
+
+`googleFonts` and `prepareImages` accept the same [fetch limits](/docs/load-images#fetch-limits): `timeout` (default 5 s on every fetch), `maxBytes`, `allowUrl`, and a custom `fetch`.
 
 ## Building nodes
 
