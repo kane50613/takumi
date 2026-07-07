@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use takumi_core::geometry::{
   ComputedLayout as Layout, Point, Rect, Size, transformed_rect_extents,
 };
@@ -9,7 +11,7 @@ use tiny_skia::{
 use crate::{
   BorderProperties, Command, Fill, PathBuilder, PathData, Placement, RenderContext, Result, Style,
   build_path,
-  canvas::{BufferPool, mask_index_from_coord},
+  canvas::BufferPool,
   create_mask, fast_div_255, scale_commands,
   style::{
     Affine, Axis, BasicShape, BorderStyle, Color, ComputedStyle, FillRule, ImageScalingAlgorithm,
@@ -765,6 +767,136 @@ pub(crate) fn render_mask(
       height,
     },
   )
+}
+
+#[derive(Clone)]
+pub(crate) struct MaskStackEntry {
+  pub(crate) mask: Arc<TinyMask>,
+  pub(crate) origin: Point<u32>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct MaskView<'a> {
+  pub(crate) mask: &'a TinyMask,
+  pub(crate) origin: Point<u32>,
+  pub(crate) canvas_origin: Point<u32>,
+}
+
+impl<'a> MaskView<'a> {
+  #[inline]
+  pub(crate) fn alpha_at(self, x: u32, y: u32) -> u8 {
+    let local_x = x as i32 + self.canvas_origin.x as i32 - self.origin.x as i32;
+    let local_y = y as i32 + self.canvas_origin.y as i32 - self.origin.y as i32;
+    if local_x < 0
+      || local_y < 0
+      || local_x >= self.mask.width() as i32
+      || local_y >= self.mask.height() as i32
+    {
+      return 0;
+    }
+
+    self.mask.data()[mask_index_from_coord(local_x as u32, local_y as u32, self.mask.width())]
+  }
+
+  #[inline]
+  pub(crate) fn row(&self, canvas_y: i32, canvas_x_start: i32) -> MaskRow<'a> {
+    let local_y = canvas_y + self.canvas_origin.y as i32 - self.origin.y as i32;
+    let mask_width = self.mask.width() as i32;
+    let mask_height = self.mask.height() as i32;
+    if local_y < 0 || local_y >= mask_height {
+      return MaskRow::EMPTY;
+    }
+    let local_x_start = canvas_x_start + self.canvas_origin.x as i32 - self.origin.x as i32;
+    let row_offset = local_y as usize * self.mask.width() as usize;
+    MaskRow {
+      data: self.mask.data(),
+      row_offset,
+      local_x_start,
+      mask_width,
+    }
+  }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct MaskRow<'a> {
+  data: &'a [u8],
+  row_offset: usize,
+  local_x_start: i32,
+  mask_width: i32,
+}
+
+impl<'a> MaskRow<'a> {
+  const EMPTY: Self = Self {
+    data: &[],
+    row_offset: 0,
+    local_x_start: 0,
+    mask_width: 0,
+  };
+
+  #[inline]
+  pub(crate) fn alpha_at_offset(&self, offset: usize) -> u8 {
+    let local_x = self.local_x_start + offset as i32;
+    if local_x < 0 || local_x >= self.mask_width {
+      return 0;
+    }
+    self.data[self.row_offset + local_x as usize]
+  }
+}
+
+#[inline(always)]
+pub(crate) fn mask_index_from_coord(x: u32, y: u32, width: u32) -> usize {
+  (y * width + x) as usize
+}
+
+pub(crate) fn materialize_mask(
+  mask: MaskView<'_>,
+  size: Size<u32>,
+  buffer_pool: &mut BufferPool,
+) -> Option<TinyMask> {
+  let mut cropped = TinyMask::from_vec(
+    buffer_pool.acquire((size.width as usize) * (size.height as usize)),
+    IntSize::from_wh(size.width, size.height)?,
+  )?;
+
+  let offset = Point {
+    x: mask.canvas_origin.x as i32 - mask.origin.x as i32,
+    y: mask.canvas_origin.y as i32 - mask.origin.y as i32,
+  };
+  let src_width = mask.mask.width() as i32;
+  let src_height = mask.mask.height() as i32;
+  let start_x = offset.x.max(0);
+  let start_y = offset.y.max(0);
+  let end_x = (offset.x + size.width as i32).min(src_width);
+  let end_y = (offset.y + size.height as i32).min(src_height);
+  if start_x >= end_x || start_y >= end_y {
+    return Some(cropped);
+  }
+
+  let src = mask.mask.data();
+  let dst = cropped.data_mut();
+  if start_x == 0
+    && start_y == 0
+    && end_x == src_width
+    && end_y == src_height
+    && src_width as u32 == size.width
+    && src_height as u32 == size.height
+  {
+    dst.copy_from_slice(src);
+    return Some(cropped);
+  }
+
+  let dst_width = size.width as usize;
+  let src_width = src_width as usize;
+  let copy_width = (end_x - start_x) as usize;
+  let dst_x_start = (start_x - offset.x) as usize;
+  for src_y in start_y..end_y {
+    let dst_y = (src_y - offset.y) as usize;
+    let src_row = src_y as usize * src_width + start_x as usize;
+    let dst_row = dst_y * dst_width + dst_x_start;
+    dst[dst_row..dst_row + copy_width].copy_from_slice(&src[src_row..src_row + copy_width]);
+  }
+
+  Some(cropped)
 }
 
 #[cfg(test)]
