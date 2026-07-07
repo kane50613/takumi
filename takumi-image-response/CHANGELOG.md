@@ -1,10 +1,3 @@
-## @takumi-rs/image-response@2.0.0
-
-### Drop the `./wasm` export
-
-`@takumi-rs/image-response/wasm` aliased the same file as the root entry. Import from
-`@takumi-rs/image-response`.
-
 ## @takumi-rs/image-response@2.0.0-rc.6 (rc)
 
 ### Drop the `./wasm` export

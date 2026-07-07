@@ -1,35 +1,3 @@
-## takumi-js@2.0.0
-
-### Pin `@takumi-rs/*` dependencies to the matching release
-
-`takumi-js` resolved its `@takumi-rs/core`, `@takumi-rs/helpers`, and `@takumi-rs/wasm`
-dependencies to an older release than itself, so `takumi-js/response` imported a helper
-the pinned `@takumi-rs/helpers` did not yet export and failed to load. The internal
-dependencies now track the same release as `takumi-js`.
-
-### Remove `encodeFrames`
-
-`Renderer.encodeFrames` and its `EncodeFramesOptions` / `AnimationFrameSource`
-types are gone. `renderAnimation` covers scene-based animation; pre-rendered
-frame encoding had no callers.
-
-### Replace `fetchResources`/`extractResourceUrls` with `prepareImages`
-
-`@takumi-rs/helpers` exports `prepareImages({ node, sources?, fetchCache?, fetch?, timeout? })`,
-which collects a node tree's remote images and fetches the ones not already supplied. Pass a
-`fetchCache` (a `Map<string, Promise<ArrayBuffer>>`, or any `Map`-like store) to coalesce
-concurrent fetches of the same URL and reuse the bytes across renders; a failed fetch is
-evicted so a later call retries.
-
-The `extractResourceUrls` and `fetchResources` helpers are removed. The `images` render option
-takes the same group form: `{ sources, fetchCache, fetch, timeout }`.
-
-### Keep the format tagged union on `render` options
-
-`render`, `renderSvg`, and `renderAnimation` used a non-distributive `Omit` that
-collapsed the `format`/`quality`/`lossless` union, so `{ format: "webp", quality: 80 }`
-stopped type-checking. A distributive `Omit` restores it.
-
 ## takumi-js@2.0.0-rc.6 (rc)
 
 ### Keep the format tagged union on `render` options

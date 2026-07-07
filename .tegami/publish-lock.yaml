@@ -1,183 +1,77 @@
 core:changelogs:
-  - content: "---\npackages:\n  npm:@takumi-rs/core:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/core)\n  npm:@takumi-rs/wasm:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/wasm)\n  npm:takumi-js:\n    replay:\n      - exit-prerelease(npm:takumi-js)\n---\n\n### Remove `encodeFrames`\n\n`Renderer.encodeFrames` and its `EncodeFramesOptions` / `AnimationFrameSource`\ntypes are gone. `renderAnimation` covers scene-based animation; pre-rendered\nframe encoding had no callers.\n"
-    filename: drop-encode-frames.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi:\n    replay:\n      - exit-prerelease(cargo:takumi)\n  npm:@takumi-rs/core:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/core)\n  npm:@takumi-rs/wasm:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/wasm)\n---\n\n### Cap animation frame rate per format\n\nBrowsers clamp any animation frame of 10ms or less to 100ms, so a high frame\nrate stalls instead of playing fast. `write_animation` now rejects a frame rate\nabove `AnimationFormat::max_fps` with the new `AnimationFrameRateTooHigh` error:\n90 fps for WebP and APNG, 50 fps for GIF (centisecond delays). The napi and WASM\n`renderAnimation` bindings surface the error.\n"
-    filename: animation-frame-rate-cap.md
-    v: 0.0.0
-  - content: "---\npackages:\n  npm:@takumi-rs/wasm:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/wasm)\n  npm:@takumi-rs/core:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/core)\n---\n\n### Shrink the published binaries\n\nSize-optimize the layout and shaping crates that never run per pixel, cutting\nthe published WASM and native binary size.\n"
-    filename: wasm-size-opt-levels.md
-    v: 0.0.0
-  - content: "---\npackages:\n  npm:@takumi-rs/helpers:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/helpers)\n  npm:@takumi-rs/core:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/core)\n  npm:@takumi-rs/wasm:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/wasm)\n---\n\n### Accept a bare URL string in `fonts`\n\n`fonts` entries can now be a URL string, e.g. `fonts: [\"https://example.com/Inter.woff2\"]`.\nThe bytes are fetched on demand and keyed by the URL; family name, weight, and style come\nfrom the font file. The object form stays for overriding those. Adds `fontFromUrl` to\n`@takumi-rs/helpers`.\n"
-    filename: fonts-accept-url-string.md
-    v: 0.0.0
-  - content: "---\npackages:\n  npm:takumi-js:\n    replay:\n      - exit-prerelease(npm:takumi-js)\n  npm:@takumi-rs/helpers:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/helpers)\n  npm:@takumi-rs/core:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/core)\n  npm:@takumi-rs/wasm:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/wasm)\n---\n\n### Replace `fetchResources`/`extractResourceUrls` with `prepareImages`\n\n`@takumi-rs/helpers` exports `prepareImages({ node, sources?, fetchCache?, fetch?, timeout? })`,\nwhich collects a node tree's remote images and fetches the ones not already supplied. Pass a\n`fetchCache` (a `Map<string, Promise<ArrayBuffer>>`, or any `Map`-like store) to coalesce\nconcurrent fetches of the same URL and reuse the bytes across renders; a failed fetch is\nevicted so a later call retries.\n\nThe `extractResourceUrls` and `fetchResources` helpers are removed. The `images` render option\ntakes the same group form: `{ sources, fetchCache, fetch, timeout }`.\n"
-    filename: prepare-images-helper.md
-    v: 0.0.0
-  - content: "---\npackages:\n  npm:@takumi-rs/core:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/core)\n  npm:@takumi-rs/wasm:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/wasm)\n---\n\n### Make subset-group font selection deterministic\n\nSubsets registered under one logical family (via `FontResource::subset_of`) were kept\nin registration order. Callers commonly register fonts concurrently, so that order — and\ntherefore which subset won for a codepoint covered by more than one (e.g. overlapping\nweight subsets, where the loser is faux-bolded) — varied per process. Identical input\ncould render to different bytes run to run.\n\nSubsets are now held in a `BTreeSet`, ordered by their family name, so expansion and\nselection no longer depend on registration timing. Same input renders identically.\n"
-    filename: deterministic-subset-font-order.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi:\n    replay:\n      - exit-prerelease(cargo:takumi)\n  npm:@takumi-rs/core:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/core)\n  npm:@takumi-rs/wasm:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/wasm)\n---\n\n### Stream animation frames straight into the encoder\n\nAdd `write_animation`, which renders a timeline and feeds each frame to the\nencoder as it arrives, holding one raw frame at a time instead of the whole\nsequence. Both the napi and WASM `renderAnimation` bindings use it, so a high\nframe rate or a long duration no longer exhausts memory. On native the WebP\nencoder still runs frames in parallel, now over bounded chunks. The WASM WebP\nencoder now merges runs of identical frames like the native one, so a static or\nslow animation encodes and stores far less. The eager `render_animation` +\n`write_animated_*` path stays for callers that want every frame at once.\n"
-    filename: streaming-animation-encode.md
-    v: 0.0.0
-  - content: "---\npackages:\n  npm:@takumi-rs/core:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/core)\n  npm:@takumi-rs/wasm:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/wasm)\n---\n\n### Apply structured keyframes in `renderAnimation`\n\n`renderAnimation` accepted a `keyframes` option but never registered it, so\nstructured keyframes animated with `render` yet stayed static in animations. It\nnow extends the stylesheet with them like the other entry points.\n"
-    filename: render-animation-keyframes.md
-    v: 0.0.0
-  - content: "---\npackages:\n  npm:@takumi-rs/core:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/core)\n---\n\n### Resolve the native binding under isolated installs\n\nThe bundled loader now finds `@takumi-rs/core-<target>` when it lives in a pnpm\nor bun store rather than a hoisted `node_modules`, so strict installs no longer\nthrow `Cannot find module '@takumi-rs/core-<target>'`.\n"
+  - content: "---\npackages:\n  npm:@takumi-rs/core:\n    type: patch\n---\n\n### Resolve the native binding under isolated installs\n\nThe bundled loader now finds `@takumi-rs/core-<target>` when it lives in a pnpm\nor bun store rather than a hoisted `node_modules`, so strict installs no longer\nthrow `Cannot find module '@takumi-rs/core-<target>'`.\n"
     filename: loader-isolated-install-resolution.md
-    v: 0.0.0
-  - content: "---\npackages:\n  npm:@takumi-rs/helpers:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/helpers)\n---\n\n### Add the `@takumi-rs/helpers/renderer` entrypoint\n\nThe shared renderer wrapper backing the napi and wasm bindings is now exported\nas `@takumi-rs/helpers/renderer`.\n"
-    filename: helpers-renderer-export.md
-    v: 0.0.0
-  - content: "---\npackages:\n  npm:@takumi-rs/helpers:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/helpers)\n---\n\n### Match the Chromium UA stylesheet for default element styles\n\nParse the relative font keywords `bolder`/`lighter` (`font-weight`) and\n`larger`/`smaller` (`font-size`), resolving to the values Chromium uses. Expand\nthe default element presets to cover lists, `sub`/`sup`, `ins`/`del`, forms,\n`details`/`summary`, and `search`.\n"
-    filename: ua-presets-chromium-parity.md
-    v: 0.0.0
-  - content: "---\npackages:\n  npm:@takumi-rs/helpers:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/helpers)\n---\n\n### Shrink and sharpen the Google Fonts family type\n\nGroup the ~1940 families by their distinct weight/style/axis shape (152 of them) so\n`GoogleFontFamily` builds a discriminated union over shapes, not families. The shipped\n`.d.ts` drops from ~192 KB to ~58 KB and the checker does ~75% fewer instantiations. The\nobject form now autocompletes each known family's weight, style, and axes, and still accepts\na name built at runtime. The generator refuses to write a catalog with under 1000 families.\n"
-    filename: font-catalog-shape-union.md
-    v: 0.0.0
-  - content: "---\npackages:\n  npm:@takumi-rs/helpers:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/helpers)\n---\n\n### Keep elements as containers when children carry no text\n\nAn element whose children resolved to a textless iterable (e.g. `{[]}`) became an\nempty text node instead of a container, so its `background` and other box styles\nnever painted. Such elements now stay containers.\n"
-    filename: empty-array-children-background.md
-    v: 0.0.0
-  - content: "---\npackages:\n  npm:@takumi-rs/helpers:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/helpers)\n---\n\n### Add `baseUrl` to `googleFonts`\n\n`googleFonts` takes an optional `baseUrl`, defaulting to Google Fonts, so an API-compatible\ncss2 mirror can be used instead, e.g. `baseUrl: \"https://fonts.bunny.net/css2\"` for Bunny Fonts.\n"
-    filename: google-fonts-base-url.md
-    v: 0.0.0
-  - content: "---\npackages:\n  npm:@takumi-rs/image-response:\n    replay:\n      - exit-prerelease(npm:@takumi-rs/image-response)\n---\n\n### Drop the `./wasm` export\n\n`@takumi-rs/image-response/wasm` aliased the same file as the root entry. Import from\n`@takumi-rs/image-response`.\n"
-    filename: drop-image-response-wasm-subpath.md
-    v: 0.0.0
-  - content: "---\npackages:\n  npm:takumi-js:\n    replay:\n      - exit-prerelease(npm:takumi-js)\n---\n\n### Pin `@takumi-rs/*` dependencies to the matching release\n\n`takumi-js` resolved its `@takumi-rs/core`, `@takumi-rs/helpers`, and `@takumi-rs/wasm`\ndependencies to an older release than itself, so `takumi-js/response` imported a helper\nthe pinned `@takumi-rs/helpers` did not yet export and failed to load. The internal\ndependencies now track the same release as `takumi-js`.\n"
-    filename: sync-internal-dep-versions.md
-    v: 0.0.0
-  - content: "---\npackages:\n  npm:takumi-js:\n    replay:\n      - exit-prerelease(npm:takumi-js)\n---\n\n### Keep the format tagged union on `render` options\n\n`render`, `renderSvg`, and `renderAnimation` used a non-distributive `Omit` that\ncollapsed the `format`/`quality`/`lossless` union, so `{ format: \"webp\", quality: 80 }`\nstopped type-checking. A distributive `Omit` restores it.\n"
-    filename: distributive-omit-render-options.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi:\n    replay:\n      - exit-prerelease(cargo:takumi)\n---\n\n### Seal `parley::Layout` out of the inline-layout boundary\n\n`BuiltInlineLayout::{layout, custom_inline_boxes}` are now private; the\nmeasure-only walk moves into `BuiltInlineLayout::measure_runs`, returning\ncore-owned `MeasuredInlineRun`/`MeasuredInlineBox` (run text borrows the\nlayout). `get_parent_font_metrics`, `resolve_inline_line_metrics`,\n`resolve_inline_line_states`, and `scale_text_fit_x` are no longer public.\n"
-    filename: seal-inline-layout-parley.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi:\n    replay:\n      - exit-prerelease(cargo:takumi)\n---\n\n### Rename the `svg` feature to `svg-source`\n\n`svg` and `svg-backend` read as the same thing at a glance despite gating\nopposite directions (image-source input vs. render output). The umbrella's\ninput-side feature is now `svg-source`; `svg-backend` is unchanged.\n"
-    filename: svg-source-feature-rename.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi:\n    replay:\n      - exit-prerelease(cargo:takumi)\n---\n\n### Represent the `none`/`normal` initial values of `max-*` and gaps\n\n`max-width` and `max-height` are now a `MaxSize` value whose initial is `None`\n(unbounded), instead of borrowing `Length`'s `auto`. `column-gap`, `row-gap`, and\nthe `gap` shorthand are now a `Gap` value whose initial is `Normal`. Rendering is\nunchanged — `none` resolves like the old unbounded default and `normal` computes\nto `0` — but the values now round-trip through `to_css` as `none`/`normal`.\n"
-    filename: max-size-gap-initial-values.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi:\n    replay:\n      - exit-prerelease(cargo:takumi)\n---\n\n### Bump internal crates\n\nReleasing v0 internal crates\n"
-    filename: bump-takumi-crates.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi:\n    replay:\n      - exit-prerelease(cargo:takumi)\n---\n\n### Add `takumi-html` for parsing HTML into a node tree\n\nNew `takumi-html` crate parses HTML + Tailwind markup into a node tree with\n`from_html(source, FromHtmlOptions)`, mirroring the JS `fromHtml`. The `tw`,\n`style`, `class`, `id`, `dir`, and `lang` attributes map to node styling and\nmetadata; `FromHtmlOptions` sets the `StylePresets` table and a `max_depth`\nnesting cap. The `takumi` umbrella re-exports it under the `from-html` feature\nas `takumi::from_html`, plus `Node::from_html` via the `FromHtml` prelude\ntrait.\n"
-    filename: node-from-html.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi:\n    replay:\n      - exit-prerelease(cargo:takumi)\n---\n\n### Refactor `font_families` and `lang` option type\n\nNow both option takes resolved value instead of raw strings.\n"
-    filename: refactor-font-families-lang.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi:\n    replay:\n      - exit-prerelease(cargo:takumi)\n---\n\n### Drop `background-blend-mode` from the `background` shorthand\n\nThe `background` shorthand parsed a blend-mode token and reset\n`background-blend-mode`, unlike browsers, where the shorthand touches neither. It\nnow leaves `background-blend-mode` alone; set it through the longhand. The\n`blend_mode` field is gone from the `Background` shorthand value.\n"
-    filename: background-shorthand-blend-mode.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
   - id: npm:takumi-template
     updated: false
-  - changelogIds:
-      - drop-encode-frames.md
-      - animation-frame-rate-cap.md
-      - wasm-size-opt-levels.md
-      - fonts-accept-url-string.md
-      - prepare-images-helper.md
-      - deterministic-subset-font-order.md
-      - streaming-animation-encode.md
-      - render-animation-keyframes.md
-    id: npm:@takumi-rs/wasm
+  - id: npm:takumi-js
+    updated: true
+  - id: npm:@takumi-rs/image-response
     updated: true
   - changelogIds:
-      - drop-encode-frames.md
       - loader-isolated-install-resolution.md
-      - animation-frame-rate-cap.md
-      - wasm-size-opt-levels.md
-      - fonts-accept-url-string.md
-      - prepare-images-helper.md
-      - deterministic-subset-font-order.md
-      - streaming-animation-encode.md
-      - render-animation-keyframes.md
     id: npm:@takumi-rs/core
     updated: true
-  - changelogIds:
-      - fonts-accept-url-string.md
-      - helpers-renderer-export.md
-      - prepare-images-helper.md
-      - ua-presets-chromium-parity.md
-      - font-catalog-shape-union.md
-      - empty-array-children-background.md
-      - google-fonts-base-url.md
-    id: npm:@takumi-rs/helpers
-    updated: true
-  - changelogIds:
-      - drop-image-response-wasm-subpath.md
-    id: npm:@takumi-rs/image-response
-    updated: true
-  - changelogIds:
-      - sync-internal-dep-versions.md
-      - drop-encode-frames.md
-      - prepare-images-helper.md
-      - distributive-omit-render-options.md
-    id: npm:takumi-js
+  - id: npm:@takumi-rs/wasm
     updated: true
   - id: npm:docs
     updated: false
+  - id: npm:@takumi-rs/helpers
+    updated: true
   - id: npm:example-tanstack-start
+    updated: false
+  - id: npm:waku-ssr
+    updated: false
+  - id: npm:ffplay
+    updated: false
+  - id: npm:example-css-library-integration
+    updated: false
+  - id: npm:example-nextjs
+    updated: false
+  - id: npm:example-twitter-images
+    updated: false
+  - id: npm:example-cloudflare-workers
     updated: false
   - id: npm:example-satori-html
     updated: false
   - id: npm:ffmpeg-keyframe-animation
     updated: false
-  - id: npm:example-nextjs
-    updated: false
   - id: npm:svelte
     updated: false
-  - id: npm:ffplay
-    updated: false
-  - id: npm:waku-ssr
-    updated: false
-  - id: npm:example-twitter-images
-    updated: false
-  - id: npm:example-css-library-integration
-    updated: false
-  - id: npm:example-cloudflare-workers
+  - id: cargo:takumi
+    updated: true
+  - id: cargo:takumi-raster
     updated: false
   - id: cargo:takumi-svg
     updated: false
-  - id: cargo:takumi-html
-    updated: false
   - id: cargo:takumi-core
     updated: false
-  - id: cargo:takumi-raster
+  - id: cargo:takumi-html
     updated: false
-  - changelogIds:
-      - seal-inline-layout-parley.md
-      - svg-source-feature-rename.md
-      - max-size-gap-initial-values.md
-      - animation-frame-rate-cap.md
-      - bump-takumi-crates.md
-      - node-from-html.md
-      - refactor-font-families-lang.md
-      - background-shorthand-blend-mode.md
-      - streaming-animation-encode.md
-    id: cargo:takumi
-    updated: true
 npm:packages:
   - id: npm:takumi
   - id: npm:takumi-template
-  - id: npm:@takumi-rs/wasm
-  - id: npm:@takumi-rs/core
-  - id: npm:@takumi-rs/helpers
-  - id: npm:@takumi-rs/image-response
-  - id: npm:takumi-js
+  - distTag: rc
+    id: npm:takumi-js
+  - distTag: rc
+    id: npm:@takumi-rs/image-response
+  - distTag: rc
+    id: npm:@takumi-rs/core
+  - distTag: rc
+    id: npm:@takumi-rs/wasm
   - id: npm:docs
+  - distTag: rc
+    id: npm:@takumi-rs/helpers
   - id: npm:example-tanstack-start
+  - id: npm:waku-ssr
+  - id: npm:ffplay
+  - id: npm:example-css-library-integration
+  - id: npm:example-nextjs
+  - id: npm:example-twitter-images
+  - id: npm:example-cloudflare-workers
   - id: npm:example-satori-html
   - id: npm:ffmpeg-keyframe-animation
-  - id: npm:example-nextjs
   - id: npm:svelte
-  - id: npm:ffplay
-  - id: npm:waku-ssr
-  - id: npm:example-twitter-images
-  - id: npm:example-css-library-integration
-  - id: npm:example-cloudflare-workers
