@@ -34,6 +34,9 @@ fn bucket_index_clamped(capacity: usize) -> usize {
 /// Bucket whose guarantee (`capacity >= 2^i`) this capacity satisfies.
 #[inline]
 fn release_bucket_index(capacity: usize) -> usize {
+  if capacity == 0 {
+    return 0;
+  }
   let raw = (usize::BITS - 1 - capacity.leading_zeros()) as usize; // floor(log2)
   raw.min(BUCKET_COUNT - 1)
 }

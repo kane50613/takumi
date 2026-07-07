@@ -45,7 +45,7 @@ pub(crate) fn draw_outset_shadow(
     0.0
   };
 
-  let total_padding = (blur_padding * 2.0).min(u32::MAX as f32) as u32;
+  let total_padding = (blur_padding * 2.0) as u32;
   let shadow_width = placement.width.saturating_add(total_padding);
   let shadow_height = placement.height.saturating_add(total_padding);
   let Some(area) = checked_shadow_area(shadow_width, shadow_height) else {
