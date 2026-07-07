@@ -89,7 +89,7 @@ pub(crate) fn apply_blur(
 
   match format {
     BlurFormat::Alpha { data, .. } => {
-      let mut temp_image = pool.acquire_dirty((width * height) as usize);
+      let mut temp_image = pool.acquire_dirty(width as usize * height as usize);
       let temp_data = &mut *temp_image;
 
       for _ in 0..3 {
