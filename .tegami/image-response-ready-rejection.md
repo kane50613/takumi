@@ -1,7 +1,8 @@
 ---
 packages:
   npm:takumi-js:
-    type: patch
+    replay:
+      - exit-prerelease(npm:takumi-js)
 ---
 
 ### Mark `ImageResponse.ready` rejection as handled

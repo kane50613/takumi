@@ -1,3 +1,20 @@
+## @takumi-rs/helpers@2.0.0-rc.13 (rc)
+
+### Bound remote fetches with byte caps and default timeouts
+
+Remote image, font, and Google Fonts CSS fetches now reject bodies past a byte
+cap (`maxBytes`, default 32 MiB; 2 MiB for CSS) and apply the 5 s timeout to
+every fetch, not just images. Set `timeout: 0` to disable it. A new `allowUrl`
+hook on `FetchOptions` skips URLs it rejects.
+
+### Share the renderer facade between the napi and wasm bindings
+
+The napi and wasm `Renderer` wrappers now build on a shared `prepareRenderInput`
+helper in `@takumi-rs/helpers/renderer`, so their option types and render bodies
+live in one place. Both backends check `signal` before and after resolving
+fonts and images: on native, an already-aborted signal now throws before any
+resource fetch.
+
 ## @takumi-rs/helpers@2.0.0-rc.7 (rc)
 
 ### Shrink and sharpen the Google Fonts family type

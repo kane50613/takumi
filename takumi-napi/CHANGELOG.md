@@ -1,3 +1,48 @@
+## @takumi-rs/core@2.0.0-rc.13 (rc)
+
+### Skip mask copies and per-pixel mask lookups in canvas fast paths
+
+Borrow the combined constraint mask directly when it already matches the
+canvas viewport instead of copying it per draw, and hoist mask lookups out of
+the per-pixel blit loops. Output is unchanged.
+
+### Fix gradient stop snapping panic for oversized stop lists
+
+Gradients with more color stops than the LUT can hold no longer panic. The
+sample-index clamp and normalization passes stay within LUT bounds.
+
+### Share the renderer facade between the napi and wasm bindings
+
+The napi and wasm `Renderer` wrappers now build on a shared `prepareRenderInput`
+helper in `@takumi-rs/helpers/renderer`, so their option types and render bodies
+live in one place. Both backends check `signal` before and after resolving
+fonts and images: on native, an already-aborted signal now throws before any
+resource fetch.
+
+### Cap image decode dimensions and GIF frame volume
+
+Decoders reject images beyond 8192x8192 (via `image::Limits` for PNG and JPEG,
+dimension checks for WebP) and GIFs beyond a total-frame pixel budget, stopping
+decode-bomb OOM.
+
+### Reuse per-scene state across animation frames
+
+Compute each scene's font snapshot once and share its image and stylesheet
+handles across frames instead of re-snapshotting and deep-cloning the whole
+option tree per frame. Frame output is unchanged.
+
+### Guard shadow and blur buffer sizing against overflow
+
+Extreme blur radii could overflow the `u32` shadow-buffer area and panic or
+over-allocate. Sizing now uses saturating math and skips shadows above a 256
+Mi-pixel budget.
+
+### Fix buffer pool bucket capacity invariant
+
+Release now buckets a buffer by the floor power of two its capacity guarantees,
+and `acquire_dirty` reserves before `set_len`. A pooled buffer can no longer be
+lengthened past its allocation.
+
 ## @takumi-rs/core@2.0.0-rc.12 (rc)
 
 ### Resolve the native binding under isolated installs

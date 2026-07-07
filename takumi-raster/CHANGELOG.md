@@ -1,3 +1,29 @@
+## takumi-raster@0.2.2
+
+### Skip mask copies and per-pixel mask lookups in canvas fast paths
+
+Borrow the combined constraint mask directly when it already matches the
+canvas viewport instead of copying it per draw, and hoist mask lookups out of
+the per-pixel blit loops. Output is unchanged.
+
+### Reuse per-scene state across animation frames
+
+Compute each scene's font snapshot once and share its image and stylesheet
+handles across frames instead of re-snapshotting and deep-cloning the whole
+option tree per frame. Frame output is unchanged.
+
+### Guard shadow and blur buffer sizing against overflow
+
+Extreme blur radii could overflow the `u32` shadow-buffer area and panic or
+over-allocate. Sizing now uses saturating math and skips shadows above a 256
+Mi-pixel budget.
+
+### Fix buffer pool bucket capacity invariant
+
+Release now buckets a buffer by the floor power of two its capacity guarantees,
+and `acquire_dirty` reserves before `set_len`. A pooled buffer can no longer be
+lengthened past its allocation.
+
 ## takumi-raster@0.2.0
 
 ### Seal remaining `taffy`/`parley` leaks out of the public `style` API

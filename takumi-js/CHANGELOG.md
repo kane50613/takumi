@@ -1,3 +1,11 @@
+## takumi-js@2.0.0-rc.13 (rc)
+
+### Mark `ImageResponse.ready` rejection as handled
+
+A failed render no longer crashes the process with an `unhandledRejection` when
+the caller never awaits `ready`. The failure still reaches the stream and a
+caller that does await `ready` still observes it.
+
 ## takumi-js@2.0.0-rc.6 (rc)
 
 ### Keep the format tagged union on `render` options

@@ -1,3 +1,16 @@
+## takumi-core@0.3.1
+
+### Fix gradient stop snapping panic for oversized stop lists
+
+Gradients with more color stops than the LUT can hold no longer panic. The
+sample-index clamp and normalization passes stay within LUT bounds.
+
+### Cap image decode dimensions and GIF frame volume
+
+Decoders reject images beyond 8192x8192 (via `image::Limits` for PNG and JPEG,
+dimension checks for WebP) and GIFs beyond a total-frame pixel budget, stopping
+decode-bomb OOM.
+
 ## takumi-core@0.3.0
 
 ### Refactor `font_families` and `lang` option type

@@ -1,11 +1,14 @@
 ---
 packages:
   npm:@takumi-rs/helpers:
-    type: minor
+    replay:
+      - exit-prerelease(npm:@takumi-rs/helpers)
   npm:@takumi-rs/core:
-    type: minor
+    replay:
+      - exit-prerelease(npm:@takumi-rs/core)
   npm:@takumi-rs/wasm:
-    type: minor
+    replay:
+      - exit-prerelease(npm:@takumi-rs/wasm)
 ---
 
 ### Share the renderer facade between the napi and wasm bindings

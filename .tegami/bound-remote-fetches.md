@@ -1,7 +1,8 @@
 ---
 packages:
   npm:@takumi-rs/helpers:
-    type: minor
+    replay:
+      - exit-prerelease(npm:@takumi-rs/helpers)
 ---
 
 ### Bound remote fetches with byte caps and default timeouts

@@ -1,9 +1,14 @@
 ---
 packages:
-  "cargo:takumi-raster": patch
-  "cargo:takumi": patch
-  "npm:@takumi-rs/core": patch
-  "npm:@takumi-rs/wasm": patch
+  cargo:takumi:
+    replay:
+      - exit-prerelease(cargo:takumi)
+  npm:@takumi-rs/core:
+    replay:
+      - exit-prerelease(npm:@takumi-rs/core)
+  npm:@takumi-rs/wasm:
+    replay:
+      - exit-prerelease(npm:@takumi-rs/wasm)
 ---
 
 ### Fix buffer pool bucket capacity invariant
