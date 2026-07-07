@@ -1,46 +1,32 @@
 "use client";
 
 import { compile } from "tailwindcss";
-import indexCss from "tailwindcss/index.css?raw";
 import themeCss from "tailwindcss/theme.css?raw";
 import utilitiesCss from "tailwindcss/utilities.css?raw";
 import { useLayoutEffect, useRef, useState } from "react";
 import { FONT_FAMILIES, googleFontsCssUrl } from "../../playground/fonts";
 
-// Takumi's `tw` has no Preflight: it keeps UA presets and defaults to border-box.
-// Drop Preflight's base layer, keep only box-sizing/border, so the pane matches the render.
-const BASE = `@layer base{*,::after,::before,::backdrop,::file-selector-button{box-sizing:border-box;border:0 solid}}`;
-
-function withoutPreflight(css: string) {
-  const start = css.indexOf("@layer base {");
-  if (start === -1) return css;
-  let depth = 0;
-  for (let i = css.indexOf("{", start); i < css.length; i++) {
-    if (css[i] === "{") depth++;
-    else if (css[i] === "}" && --depth === 0) return `${css.slice(0, start)}${css.slice(i + 1)}`;
-  }
-  return css;
-}
-
 const SOURCES: Record<string, string> = {
-  tailwindcss: `${withoutPreflight(indexCss)}\n${BASE}`,
   "tailwindcss/theme.css": themeCss,
-  "tailwindcss/preflight.css": BASE,
   "tailwindcss/utilities.css": utilitiesCss,
 };
+
+// Takumi's `tw` has no Preflight: it keeps UA presets and defaults to border-box.
+// Skip Preflight entirely; keep only its box-sizing/border reset so the pane
+// matches the render.
+const INPUT = `@layer theme, base, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@layer base{*,::after,::before,::backdrop,::file-selector-button{box-sizing:border-box;border:0 solid}}
+@import "tailwindcss/utilities.css" layer(utilities);`;
 
 // Cache the resolved compiler so a remount (e.g. mobile tab switch) can paint
 // the shadow synchronously instead of flashing through an async load.
 let compiler: { build(candidates: string[]): string } | undefined;
 let compilerPromise: Promise<void> | undefined;
 function loadCompiler() {
-  compilerPromise ??= compile(`@import "tailwindcss";`, {
+  compilerPromise ??= compile(INPUT, {
     base: "/",
-    loadStylesheet: async (id, base) => ({
-      path: id,
-      base,
-      content: SOURCES[id] ?? SOURCES[`${id}.css`] ?? "",
-    }),
+    loadStylesheet: async (id, base) => ({ path: id, base, content: SOURCES[id] ?? "" }),
   }).then((c) => {
     compiler = c;
   });
@@ -48,10 +34,12 @@ function loadCompiler() {
 }
 
 // Mirror the worker's font stack so the pane routes text to the same faces: one
-// Noto Sans superfamily across scripts. Override every font var since the render
-// has no serif/mono of its own.
+// Noto Sans superfamily across scripts. Set font-family on :host directly —
+// without Preflight nothing reads the font vars, so text would inherit the docs
+// page's font. Override every font var since the render has no serif/mono of
+// its own.
 const FONT_FAMILY = `${FONT_FAMILIES.map((name) => `"${name}"`).join(", ")}, ui-sans-serif, system-ui, sans-serif`;
-const HOST_CSS = `:host{--font-sans:${FONT_FAMILY};--font-serif:${FONT_FAMILY};--font-mono:${FONT_FAMILY};--default-font-family:${FONT_FAMILY};--default-mono-font-family:${FONT_FAMILY}}`;
+const HOST_CSS = `:host{font-family:${FONT_FAMILY};--font-sans:${FONT_FAMILY};--font-serif:${FONT_FAMILY};--font-mono:${FONT_FAMILY};--default-font-family:${FONT_FAMILY};--default-mono-font-family:${FONT_FAMILY}}`;
 
 // @font-face in a shadow root is ignored by Chrome, so load the same Google Font
 // subsets the worker uses at document level; the `css2` sheet subsets on demand.
