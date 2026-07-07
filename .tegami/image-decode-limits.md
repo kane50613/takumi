@@ -1,9 +1,14 @@
 ---
 packages:
-  "cargo:takumi-core": patch
-  "cargo:takumi": patch
-  "npm:@takumi-rs/core": patch
-  "npm:@takumi-rs/wasm": patch
+  cargo:takumi:
+    replay:
+      - exit-prerelease(cargo:takumi)
+  npm:@takumi-rs/core:
+    replay:
+      - exit-prerelease(npm:@takumi-rs/core)
+  npm:@takumi-rs/wasm:
+    replay:
+      - exit-prerelease(npm:@takumi-rs/wasm)
 ---
 
 ### Cap image decode dimensions and GIF frame volume
