@@ -1,9 +1,8 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
 use takumi::{
-  Fonts,
-  layout::{Viewport, node::Node},
-  rendering::{RenderOptions, render},
+  prelude::{Fonts, Node, RenderOptions, Viewport},
+  render,
 };
 
 fn run_effect_render(fonts: &Fonts, effect_tw: &str) {

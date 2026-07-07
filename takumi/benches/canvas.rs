@@ -1,18 +1,14 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
 use takumi::{
-  Fonts,
-  layout::{
+  prelude::{
+    AlignItems, BackgroundClip, BackgroundImages, BackgroundRepeats, BackgroundSizes, BorderRadius,
+    Color, ColorInput, Display, Fonts, FromCssStr, JustifyContent,
+    Length::{Percentage, Px},
+    Node, ObjectFit, Overflow, PositionValues, RenderOptions, SpacePair, Style, StyleDeclaration,
     Viewport,
-    node::Node,
-    style::{
-      AlignItems, BackgroundClip, BackgroundImages, PositionValues, BackgroundRepeats,
-      BackgroundSizes, BorderRadius, Color, ColorInput, Display, FromCss, JustifyContent,
-      Length::{Percentage, Px},
-      ObjectFit, Overflow, SpacePair, Style, StyleDeclaration,
-    },
   },
-  rendering::{RenderOptions, render},
+  render,
 };
 
 const BENCH_WIDTH: u32 = 800;
@@ -36,7 +32,7 @@ fn nested_clip_masks_fixture() -> Node {
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Percentage(100.0)))
         .with(StyleDeclaration::height(Percentage(100.0)))
-        .with_border_radius(BorderRadius::from_str(radius).unwrap())
+        .with_border_radius(BorderRadius::from_css_str(radius).unwrap())
         .with_overflow(SpacePair::from_single(Overflow::Clip))
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([200, 30, 30, 255]),
@@ -51,7 +47,7 @@ fn nested_clip_masks_fixture() -> Node {
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::width(Percentage(95.0)))
         .with(StyleDeclaration::height(Percentage(95.0)))
-        .with_border_radius(BorderRadius::from_str(radius).unwrap())
+        .with_border_radius(BorderRadius::from_css_str(radius).unwrap())
         .with_overflow(SpacePair::from_single(Overflow::Clip))
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([30, 30, 200, 255]),
@@ -85,7 +81,7 @@ fn scaled_image_fixture() -> Node {
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Px(720.0)))
       .with(StyleDeclaration::height(Px(720.0)))
-      .with_border_radius(BorderRadius::from_str("96px").unwrap())
+      .with_border_radius(BorderRadius::from_css_str("96px").unwrap())
       .with_overflow(SpacePair::from_single(Overflow::Clip))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color([245, 247, 250, 255]),
@@ -103,7 +99,7 @@ fn gradient_clip_mask_fixture() -> Node {
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::width(Px(640.0)))
       .with(StyleDeclaration::height(Px(640.0)))
-      .with_border_radius(BorderRadius::from_str("64px").unwrap())
+      .with_border_radius(BorderRadius::from_css_str("64px").unwrap())
       .with_overflow(SpacePair::from_single(Overflow::Clip))
       .with(StyleDeclaration::background_image(Some(gradient)))
       .with(StyleDeclaration::background_size(

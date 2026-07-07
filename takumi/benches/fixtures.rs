@@ -1,19 +1,14 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
 use takumi::{
-  Fonts,
-  layout::{
-    Viewport,
-    node::Node,
-    style::{
-      AlignItems, BackgroundClip, BackgroundImages, PositionValues, BackgroundRepeats,
-      BackgroundSizes, BorderRadius, Color, ColorInput, Display, FlexDirection, FontWeight,
-      FromCss, JustifyContent,
-      Length::{Percentage, Px},
-      ObjectFit, Overflow, Sides, SpacePair, Style, StyleDeclaration,
-    },
+  prelude::{
+    AlignItems, BackgroundClip, BackgroundImages, BackgroundRepeats, BackgroundSizes, BorderRadius,
+    Color, ColorInput, Display, FlexDirection, FontWeight, Fonts, FromCssStr, JustifyContent,
+    Length::{Percentage, Px},
+    Node, ObjectFit, Overflow, PositionValues, RenderOptions, Sides, SpacePair, Style,
+    StyleDeclaration, Viewport,
   },
-  rendering::{RenderOptions, render},
+  render,
 };
 
 const BENCH_WIDTH: u32 = 1200;
@@ -95,7 +90,7 @@ fn emoji_social_fixture() -> Node {
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
         .with_overflow(SpacePair::from_single(Overflow::Clip))
-        .with_border_radius(BorderRadius::from_str("40px").unwrap()),
+        .with_border_radius(BorderRadius::from_css_str("40px").unwrap()),
     ),
     Node::container([
       Node::text("Ship faster with tiny-skia".to_string()).with_style(

@@ -1,13 +1,11 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
 use takumi::{
-  Fonts,
-  layout::{
+  prelude::{
+    BackgroundImages, Fonts, FromCssStr, Length, Node, RenderOptions, Style, StyleDeclaration,
     Viewport,
-    node::Node,
-    style::{BackgroundImages, FromCss, Length, Style, StyleDeclaration},
   },
-  rendering::{RenderOptions, render},
+  render,
 };
 
 const BENCH_WIDTH: u32 = 1200;

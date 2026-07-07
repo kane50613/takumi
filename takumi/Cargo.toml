@@ -48,6 +48,7 @@ rayon = ["takumi-raster?/rayon"]
 from-html = ["dep:takumi-html"]
 
 [dev-dependencies]
+criterion.workspace = true
 parley.workspace = true
 rayon.workspace = true
 resvg = "0.47"
@@ -65,5 +66,33 @@ workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
+
+[[bench]]
+name = "canvas"
+harness = false
+
+[[bench]]
+name = "effects"
+harness = false
+
+[[bench]]
+name = "encode"
+harness = false
+
+[[bench]]
+name = "fixtures"
+harness = false
+
+[[bench]]
+name = "gradient"
+harness = false
+
+[[bench]]
+name = "svg"
+harness = false
+
+[[bench]]
+name = "text"
+harness = false
 
 

@@ -1,10 +1,9 @@
-use std::{borrow::Cow, hint::black_box};
+use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use takumi::{
-  Fonts,
-  layout::{Viewport, node::Node},
-  rendering::{ImageOutputFormat, RenderOptions, render, write_image},
+  prelude::{Fonts, Node, OutputFormat, Quality, RenderOptions, Viewport},
+  render, write_image,
 };
 
 mod common;
@@ -29,14 +28,24 @@ fn bench_encode(c: &mut Criterion) {
 
   let mut group = c.benchmark_group("encode");
   for (name, format) in [
-    ("png", ImageOutputFormat::Png),
-    ("webp", ImageOutputFormat::WebP),
-    ("jpeg", ImageOutputFormat::Jpeg),
+    ("png", OutputFormat::Png),
+    (
+      "webp",
+      OutputFormat::WebP {
+        quality: Quality::default(),
+      },
+    ),
+    (
+      "jpeg",
+      OutputFormat::Jpeg {
+        quality: Quality::default(),
+      },
+    ),
   ] {
     group.bench_function(name, |b| {
       b.iter(|| {
         let mut buf = Vec::with_capacity(1 << 20);
-        write_image(Cow::Borrowed(&image), &mut buf, format, None).unwrap();
+        write_image(&image, &mut buf, format).unwrap();
         black_box(buf.len())
       })
     });
