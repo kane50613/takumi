@@ -15,6 +15,8 @@ This guide covers local setup, development flow, testing/build commands, fixture
 
 - Rust `1.91+`
 - Bun (latest)
+- [`cargo-rdme`](https://github.com/orium/cargo-rdme) (`cargo install cargo-rdme`) and `jq`,
+  required by the pre-commit hook installed via `bun install`
 
 ## Local Setup
 
@@ -23,6 +25,9 @@ bun install
 ```
 
 This installs all workspace dependencies and sets up `lefthook`.
+The pre-commit hook runs `cargo fmt`, `cargo rdme`, and lint auto-fix; the Rust
+steps are glob-scoped to `*.rs`/`Cargo.toml` changes, so a JS-only commit skips
+them.
 
 ## Development Flow
 
@@ -60,15 +65,23 @@ Run workspace package tests (pick what you changed):
 (cd takumi-helpers && bun test --silent)
 (cd takumi-napi && bun test --silent)
 (cd takumi-wasm && bun test --silent)
-(cd takumi-image-response && bun test --silent)
 (cd takumi-template && bun test --silent)
 ```
 
-To match CI quality gates for Rust changes, also run:
+`takumi-image-response` has no test script; its logic is covered by
+`takumi-js/tests/response.test.tsx`.
+
+Fixture goldens are Linux-canonical: some render ±1-2px differently on macOS.
+Never re-baseline goldens from a macOS run. Pull the updated files from CI's
+`changed-files` artifact instead. See `AGENTS.md` for the full rule.
+
+To match CI quality gates, also run:
 
 ```bash
 cargo clippy --all-targets --all-features -- -D warnings
 cargo machete
+bun knip
+bun publish-lint
 ```
 
 ## Build Commands
@@ -77,14 +90,15 @@ Run build only for packages you touched:
 
 ```bash
 bun --filter ./takumi-helpers run build
-bun --filter ./takumi-napi run build:debug
+bun --filter ./takumi-napi run build
 bun --filter ./takumi-wasm run build:debug
 bun --filter ./takumi-image-response run build
 ```
 
 Notes:
 
-- `takumi-napi` release build needs target-specific setup; for local validation, `build:debug` is usually enough.
+- `takumi-napi` has no debug build script; `build` is always a full `--release`
+  napi build. For fast local iteration, use `cargo check -p takumi-napi`.
 - `takumi-wasm` build requires `wasm-pack`.
 
 ## Fixture Workflow (Rust Rendering)

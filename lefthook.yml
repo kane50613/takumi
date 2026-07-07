@@ -2,6 +2,7 @@ pre-commit:
   piped: true
   jobs:
     - run: cargo fmt --all
+      glob: "*.rs"
       stage_fixed: true
 
     - run: |
@@ -9,8 +10,16 @@ pre-commit:
         cargo metadata --format-version 1 --no-deps \
           | jq -r '.packages[] | select(.publish != []) | select(any(.targets[]; .kind | index("lib"))) | .manifest_path | rtrimstr("/Cargo.toml")' \
           | while read -r dir; do
-              (cd "$dir" && cargo rdme --force && git add README.md) || exit 1
+              # unset: lefthook exports GIT_DIR (not GIT_WORK_TREE) into the job env.
+              # Per git's own GIT_DIR/GIT_WORK_TREE fallback rule, that makes `cd "$dir"`
+              # treat $dir as the repo toplevel, so `git add README.md` stages under the
+              # bare "README.md" path and clobbers the root README's index entry (only
+              # reproduces in linked worktrees; the primary checkout doesn't set GIT_DIR).
+              (cd "$dir" && unset GIT_DIR GIT_WORK_TREE && cargo rdme --force && git add README.md) || exit 1
             done
+      glob:
+        - "*.rs"
+        - "**/Cargo.toml"
 
     - run: bun run lint:fix
       stage_fixed: true
