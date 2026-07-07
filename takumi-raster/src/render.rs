@@ -19,7 +19,7 @@ use crate::{
     node::Node,
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
-  resources::image::ImageSource,
+  resources::{font::FontsSnapshot, image::ImageSource},
   stacking_context::paint_context,
   style::{Affine, FontFamily, SizingContext, StyleSheet},
   viewport::Viewport,
@@ -421,6 +421,18 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<Bitmap> {
     }))
     .build();
 
+  render_with_context(render_context, node, viewport, dithering)
+}
+
+/// Rasterizes `node` under an already-built [`RenderContext`]. The context
+/// carries the font snapshot, images, and stylesheet, so animation frames share
+/// one snapshot instead of re-snapshotting per frame.
+fn render_with_context(
+  render_context: RenderContext,
+  node: Node,
+  viewport: Viewport,
+  dithering: DitheringAlgorithm,
+) -> Result<Bitmap> {
   let mut root = RenderNode::from_node(&render_context, node);
   let mut tree = LayoutTree::from_render_node(&root);
 
@@ -465,22 +477,75 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<Bitmap> {
   Ok(Bitmap::from_rgba(image))
 }
 
-/// Renders a node at a specific time on the global animation timeline.
-pub(crate) fn render_at_time<'g>(mut options: RenderOptions<'g>, time_ms: u64) -> Result<Bitmap> {
-  options.time_ms = time_ms;
-  render(options)
+/// A scene with its per-frame-invariant render state precomputed: the font
+/// snapshot and the shared image and stylesheet handles do not change between
+/// frames of the same scene, so they are built once and cheaply cloned per
+/// frame instead of rebuilt (and the whole option tree deep-cloned) each time.
+///
+/// This is the seam where wider per-frame layout reuse would later live.
+pub(crate) struct PreparedScene<'a, 'g> {
+  scene: &'a SequentialScene<'g>,
+  fonts: FontsSnapshot,
+  images: Rc<HashMap<Arc<str>, ImageSource>>,
+  stylesheet: Rc<StyleSheet>,
 }
 
-/// Renders the active scene for a sequential animation timeline at `time_ms`.
-pub(crate) fn render_sequence_at_time<'g>(
-  scenes: &[SequentialScene<'g>],
-  time_ms: u64,
-) -> Result<Bitmap> {
-  let Some((scene, local_time_ms)) = resolve_scene_at_time(scenes, time_ms) else {
-    return Err(Error::InvalidViewport);
-  };
+impl<'a, 'g> PreparedScene<'a, 'g> {
+  fn new(scene: &'a SequentialScene<'g>) -> Self {
+    let options = &scene.options;
 
-  render_at_time(scene.options.clone(), local_time_ms)
+    Self {
+      fonts: options
+        .fonts
+        .snapshot_with_fallbacks(options.font_families.as_ref()),
+      images: Rc::new(options.images.clone()),
+      stylesheet: Rc::new(options.stylesheet.clone()),
+      scene,
+    }
+  }
+
+  fn render_at_time(&self, time_ms: u64) -> Result<Bitmap> {
+    let options = &self.scene.options;
+
+    let render_context = RenderContext::builder()
+      .fonts(self.fonts.clone())
+      .sizing(SizingContext::builder().viewport(options.viewport).build())
+      .images(self.images.clone())
+      .stylesheet(self.stylesheet.clone())
+      .time_ms(time_ms)
+      .draw_debug_border(options.draw_debug_border)
+      .style(Box::new(ComputedStyle {
+        lang: options.lang,
+        ..Default::default()
+      }))
+      .build();
+
+    render_with_context(
+      render_context,
+      options.node.clone(),
+      options.viewport,
+      options.dithering,
+    )
+  }
+}
+
+/// Precomputes the per-frame-invariant state for every scene in a timeline.
+pub(crate) fn prepare_scenes<'a, 'g>(
+  scenes: &'a [SequentialScene<'g>],
+) -> Vec<PreparedScene<'a, 'g>> {
+  scenes.iter().map(PreparedScene::new).collect()
+}
+
+fn resolve_prepared_at_time<'p, 'a, 'g>(
+  prepared: &'p [PreparedScene<'a, 'g>],
+  time_ms: u64,
+) -> Option<(&'p PreparedScene<'a, 'g>, u64)> {
+  resolve_at_time(
+    prepared.len(),
+    |index| prepared[index].scene.duration_ms,
+    time_ms,
+  )
+  .map(|(index, local_time_ms)| (&prepared[index], local_time_ms))
 }
 
 /// A frame's start offset and displayed duration, both in milliseconds. Computed
@@ -521,11 +586,15 @@ pub(crate) fn frame_spans<'g>(scenes: &[SequentialScene<'g>], fps: u32) -> Vec<F
 }
 
 /// Renders one frame of the timeline for the given [`FrameSpan`].
-pub(crate) fn render_frame<'g>(
-  scenes: &[SequentialScene<'g>],
+pub(crate) fn render_frame(
+  prepared: &[PreparedScene<'_, '_>],
   span: FrameSpan,
 ) -> Result<AnimationFrame> {
-  let image = render_sequence_at_time(scenes, span.start_ms)?;
+  let Some((scene, local_time_ms)) = resolve_prepared_at_time(prepared, span.start_ms) else {
+    return Err(Error::InvalidViewport);
+  };
+
+  let image = scene.render_at_time(local_time_ms)?;
   Ok(AnimationFrame::new(image, span.duration_ms))
 }
 
@@ -537,9 +606,11 @@ pub fn render_animation<'g>(
   scenes: &[SequentialScene<'g>],
   fps: u32,
 ) -> Result<Vec<AnimationFrame>> {
+  let prepared = prepare_scenes(scenes);
+
   frame_spans(scenes, fps)
     .into_iter()
-    .map(|span| render_frame(scenes, span))
+    .map(|span| render_frame(&prepared, span))
     .collect()
 }
 
@@ -550,28 +621,43 @@ fn total_sequence_duration<'g>(scenes: &[SequentialScene<'g>]) -> u64 {
     .sum::<u64>()
 }
 
-fn resolve_scene_at_time<'a, 'g>(
-  scenes: &'a [SequentialScene<'g>],
+/// Resolves which scene of a `count`-long timeline is active at `time_ms` and the
+/// time offset within it, using `duration_ms(index)` for each scene's length.
+/// Times past the end clamp to the last scene's final millisecond.
+fn resolve_at_time(
+  count: usize,
+  duration_ms: impl Fn(usize) -> u32,
   time_ms: u64,
-) -> Option<(&'a SequentialScene<'g>, u64)> {
-  if scenes.is_empty() {
+) -> Option<(usize, u64)> {
+  if count == 0 {
     return None;
   }
 
+  let total_ms = (0..count)
+    .map(|index| u64::from(duration_ms(index)))
+    .sum::<u64>();
+  let clamped_time_ms = time_ms.min(total_ms.saturating_sub(1));
   let mut elapsed_ms = 0_u64;
-  let clamped_time_ms = time_ms.min(total_sequence_duration(scenes).saturating_sub(1));
 
-  for scene in scenes {
-    let next_elapsed_ms = elapsed_ms + u64::from(scene.duration_ms);
+  for index in 0..count {
+    let next_elapsed_ms = elapsed_ms + u64::from(duration_ms(index));
     if clamped_time_ms < next_elapsed_ms {
-      return Some((scene, clamped_time_ms - elapsed_ms));
+      return Some((index, clamped_time_ms - elapsed_ms));
     }
     elapsed_ms = next_elapsed_ms;
   }
 
-  scenes
-    .last()
-    .map(|scene| (scene, u64::from(scene.duration_ms.saturating_sub(1))))
+  let last = count - 1;
+  Some((last, u64::from(duration_ms(last).saturating_sub(1))))
+}
+
+#[cfg(test)]
+fn resolve_scene_at_time<'a, 'g>(
+  scenes: &'a [SequentialScene<'g>],
+  time_ms: u64,
+) -> Option<(&'a SequentialScene<'g>, u64)> {
+  resolve_at_time(scenes.len(), |index| scenes[index].duration_ms, time_ms)
+    .map(|(index, local_time_ms)| (&scenes[index], local_time_ms))
 }
 
 pub(crate) fn render_node(
