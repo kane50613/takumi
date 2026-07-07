@@ -47,10 +47,6 @@
         "types": "./dist/export.d.mts",
         "default": "./not-available.js"
       },
-      "bun": {
-        "types": "./dist/export.d.cts",
-        "default": "./dist/export.cjs"
-      },
       "import": {
         "types": "./dist/export.d.mts",
         "default": "./dist/export.mjs"
