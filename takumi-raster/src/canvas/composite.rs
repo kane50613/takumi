@@ -2,7 +2,8 @@ use takumi_core::geometry::Point;
 use tiny_skia::PixmapMut;
 
 use super::{
-  MaskSamplingOptions, MaskView, PaintSource, SamplingFootprint, compute_overlay_bounds_for_canvas,
+  MaskSamplingOptions, MaskView, PaintSource, SamplingFootprint,
+  blit::{OverlayBounds, compute_overlay_bounds_for_canvas},
   paint_source::{MaskCompositeColor, apply_mask_color_mode, sample_paint_source},
 };
 use crate::{
@@ -13,8 +14,7 @@ use crate::{
 
 #[derive(Clone, Copy)]
 struct DestRegion {
-  bounds: (i32, i32, i32, i32),
-  offset: (i32, i32),
+  bounds: OverlayBounds,
   canvas_width: usize,
   mask_stride: usize,
 }
@@ -42,24 +42,21 @@ pub(super) fn constant(
 
   let canvas_width = pixmap.width();
   let canvas_height = pixmap.height();
-  let Some((offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max)) =
-    compute_overlay_bounds_for_canvas(
-      canvas_width,
-      canvas_height,
-      Point {
-        x: placement.left as f32,
-        y: placement.top as f32,
-      },
-      placement.width,
-      placement.height,
-    )
-  else {
+  let Some(bounds) = compute_overlay_bounds_for_canvas(
+    canvas_width,
+    canvas_height,
+    Point {
+      x: placement.left as f32,
+      y: placement.top as f32,
+    },
+    placement.width,
+    placement.height,
+  ) else {
     return;
   };
 
   let region = DestRegion {
-    bounds: (dest_x_min, dest_x_max, dest_y_min, dest_y_max),
-    offset: (offset_x, offset_y),
+    bounds,
     canvas_width: canvas_width as usize,
     mask_stride: placement.width as usize,
   };
@@ -108,10 +105,8 @@ pub(super) fn source(
   ) else {
     return;
   };
-  let (offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max) = bounds;
   let region = DestRegion {
-    bounds: (dest_x_min, dest_x_max, dest_y_min, dest_y_max),
-    offset: (offset_x, offset_y),
+    bounds,
     canvas_width: canvas_width as usize,
     mask_stride: options.placement.width as usize,
   };
@@ -129,17 +124,16 @@ pub(super) fn source(
 #[inline]
 fn constant_normal(pixels: &mut [[u8; 4]], mask: &[u8], color: [u8; 4], region: DestRegion) {
   let DestRegion {
-    bounds: (dest_x_min, dest_x_max, dest_y_min, dest_y_max),
-    offset: (offset_x, offset_y),
+    bounds,
     canvas_width,
     mask_stride,
   } = region;
-  let span = (dest_x_max - dest_x_min) as usize;
+  let span = (bounds.x_max - bounds.x_min) as usize;
 
-  for dest_y in dest_y_min..dest_y_max {
-    let mask_y = (dest_y - offset_y) as usize;
-    let mask_x = (dest_x_min - offset_x) as usize;
-    let dst_row_start = dest_y as usize * canvas_width + dest_x_min as usize;
+  for dest_y in bounds.y_min..bounds.y_max {
+    let mask_y = (dest_y - bounds.offset_y) as usize;
+    let mask_x = (bounds.x_min - bounds.offset_x) as usize;
+    let dst_row_start = dest_y as usize * canvas_width + bounds.x_min as usize;
     let mask_row_start = mask_y * mask_stride + mask_x;
 
     let dst = &mut pixels[dst_row_start..dst_row_start + span];
@@ -167,18 +161,22 @@ fn constant_general(
   region: DestRegion,
 ) {
   let DestRegion {
-    bounds: (dest_x_min, dest_x_max, dest_y_min, dest_y_max),
-    offset: (offset_x, offset_y),
+    bounds,
     canvas_width,
     mask_stride,
   } = region;
 
-  for dest_y in dest_y_min..dest_y_max {
-    let mask_y = (dest_y - offset_y) as usize;
+  for dest_y in bounds.y_min..bounds.y_max {
+    let combined_row = combined_mask.map(|view| view.row(dest_y, bounds.x_min));
+    if combined_row.is_some_and(|row| row.is_empty()) {
+      continue;
+    }
+
+    let mask_y = (dest_y - bounds.offset_y) as usize;
     let dst_row = dest_y as usize * canvas_width;
     let mask_row = mask_y * mask_stride;
-    for dest_x in dest_x_min..dest_x_max {
-      let alpha = mask[mask_row + (dest_x - offset_x) as usize];
+    for (i, dest_x) in (bounds.x_min..bounds.x_max).enumerate() {
+      let alpha = mask[mask_row + (dest_x - bounds.offset_x) as usize];
       if alpha == 0 {
         continue;
       }
@@ -186,8 +184,8 @@ fn constant_general(
       if src[3] == 0 {
         continue;
       }
-      if let Some(view) = combined_mask {
-        let extra = view.alpha_at(dest_x as u32, dest_y as u32);
+      if let Some(row) = combined_row {
+        let extra = row.alpha_at_offset(i);
         if extra == 0 {
           continue;
         }
@@ -212,13 +210,15 @@ fn try_translation_blit(
   if !transform.only_translation() || transform.x.fract() != 0.0 || transform.y.fract() != 0.0 {
     return false;
   }
+  if options.sampling.sample_bias != (Point { x: 0.5, y: 0.5 }) {
+    return false;
+  }
   let Some(source_pixmap) = source.as_pixmap_ref() else {
     return false;
   };
 
   let DestRegion {
-    bounds: (dest_x_min, dest_x_max, dest_y_min, dest_y_max),
-    offset: (offset_x, offset_y),
+    bounds,
     canvas_width,
     mask_stride,
   } = region;
@@ -228,29 +228,29 @@ fn try_translation_blit(
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
   let sample_dx = transform.x as i32;
   let sample_dy = transform.y as i32;
-  let span = (dest_x_max - dest_x_min) as usize;
+  let span = (bounds.x_max - bounds.x_min) as usize;
 
-  for dest_y in dest_y_min..dest_y_max {
+  for dest_y in bounds.y_min..bounds.y_max {
     let src_y = dest_y + sample_dy;
     if src_y < 0 || src_y >= source_height {
       continue;
     }
-    let mask_y = (dest_y - offset_y) as usize;
-    let mask_x_start = (dest_x_min - offset_x) as usize;
+    let mask_y = (dest_y - bounds.offset_y) as usize;
+    let mask_x_start = (bounds.x_min - bounds.offset_x) as usize;
     let mask_row =
       &mask[mask_y * mask_stride + mask_x_start..mask_y * mask_stride + mask_x_start + span];
 
     let combined_row = options
       .combined_mask
       .as_ref()
-      .map(|view| view.row(dest_y, dest_x_min));
+      .map(|view| view.row(dest_y, bounds.x_min));
 
     let src_row_offset = src_y as usize * source_width as usize;
     let dst_row_offset = dest_y as usize * canvas_width;
     let dst_row = &mut pixels
-      [dst_row_offset + dest_x_min as usize..dst_row_offset + dest_x_min as usize + span];
+      [dst_row_offset + bounds.x_min as usize..dst_row_offset + bounds.x_min as usize + span];
 
-    let src_x_base = dest_x_min + sample_dx;
+    let src_x_base = bounds.x_min + sample_dx;
     for (i, (dst, &mask_alpha)) in dst_row.iter_mut().zip(mask_row).enumerate() {
       if mask_alpha == 0 {
         continue;
@@ -310,24 +310,30 @@ fn source_general(
   region: DestRegion,
 ) {
   let DestRegion {
-    bounds: (dest_x_min, dest_x_max, dest_y_min, dest_y_max),
-    offset: (offset_x, offset_y),
+    bounds,
     canvas_width,
     mask_stride,
   } = region;
   let footprint = sampling_footprint(options.sampling.canvas_to_source);
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
 
-  for dest_y in dest_y_min..dest_y_max {
-    let mask_y = (dest_y - offset_y) as usize;
+  for dest_y in bounds.y_min..bounds.y_max {
+    let combined_row = options
+      .combined_mask
+      .map(|view| view.row(dest_y, bounds.x_min));
+    if combined_row.is_some_and(|row| row.is_empty()) {
+      continue;
+    }
+
+    let mask_y = (dest_y - bounds.offset_y) as usize;
     let dst_row = dest_y as usize * canvas_width;
     let mask_row = mask_y * mask_stride;
     let (mut sample_x, mut sample_y) = options.sampling.canvas_to_source.transform_point(
-      dest_x_min as f32 + options.sampling.sample_bias.x,
+      bounds.x_min as f32 + options.sampling.sample_bias.x,
       dest_y as f32 + options.sampling.sample_bias.y,
     );
-    for dest_x in dest_x_min..dest_x_max {
-      let mask_alpha = mask[mask_row + (dest_x - offset_x) as usize];
+    for (i, dest_x) in (bounds.x_min..bounds.x_max).enumerate() {
+      let mask_alpha = mask[mask_row + (dest_x - bounds.offset_x) as usize];
       let sampled = if mask_alpha == 0 {
         None
       } else {
@@ -352,8 +358,8 @@ fn source_general(
         continue;
       }
 
-      if let Some(view) = options.combined_mask {
-        let extra = view.alpha_at(dest_x as u32, dest_y as u32);
+      if let Some(row) = combined_row {
+        let extra = row.alpha_at_offset(i);
         if extra == 0 {
           continue;
         }

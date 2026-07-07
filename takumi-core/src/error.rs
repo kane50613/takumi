@@ -154,6 +154,10 @@ pub enum Error {
   #[error("Font error: {0}")]
   FontError(#[from] FontError),
 
+  /// Parsing a CSS value or property failed.
+  #[error("Parse error: {0}")]
+  Parse(#[from] crate::style::properties::ParseError),
+
   /// Computing layout failed.
   #[error("Layout error: {0}")]
   Layout(String),

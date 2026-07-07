@@ -1,10 +1,11 @@
+use image::Rgba;
 use tiny_skia::{PixmapRef, PremultipliedColorU8};
 
 use crate::{
   BackgroundTile, ColorTile,
-  blend::premultiplied_from_pixel,
+  blend::{premultiplied_from_pixel, premultiply_rgba},
   canvas::{BufferPool, composite_premultiplied_over},
-  style::ImageScalingAlgorithm,
+  style::{Color, ImageScalingAlgorithm},
 };
 
 #[derive(Clone, Copy)]
@@ -159,10 +160,20 @@ impl<'a> From<&'a ColorTile> for PaintSource<'a> {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum MaskCompositeColor {
+pub(crate) enum MaskCompositeColor {
   SourceOnly,
   SourceOverColor([u8; 4]),
   ColorOverSource([u8; 4]),
+}
+
+impl MaskCompositeColor {
+  pub(crate) fn source_over_color(color: Color) -> Self {
+    Self::SourceOverColor(premultiply_rgba(Rgba(color.0)))
+  }
+
+  pub(crate) fn color_over_source(color: Color) -> Self {
+    Self::ColorOverSource(premultiply_rgba(Rgba(color.0)))
+  }
 }
 
 #[inline(always)]

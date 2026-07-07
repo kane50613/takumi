@@ -5,7 +5,7 @@ use takumi_core::geometry::{ComputedLayout as Layout, Point, Size};
 use tiny_skia::Pixmap;
 
 use crate::{
-  BorderProperties, Canvas, ColorTile, Command, MaskSamplingOptions, MaskSourceToPixmapOptions,
+  BorderProperties, Canvas, ColorTile, Command, MaskCompositeColor, MaskSamplingOptions,
   PaintSource, Placement, Result, SamplingOptions, SizedFontStyle, Stroke,
   composite_mask_source_to_pixmap, draw_outset_shadow,
   layout::inline::ShapedRun,
@@ -173,24 +173,22 @@ pub(crate) fn draw_glyph_clip_image(
         &mut bottom_pixmap,
         &mask,
         clip_image,
-        MaskSourceToPixmapOptions {
-          placement: Placement {
-            left: 0,
-            top: 0,
-            width: bitmap.placement.width,
-            height: bitmap.placement.height,
-          },
-          sampling: MaskSamplingOptions {
-            canvas_to_source: Affine::translation(
-              inline_offset.x + bitmap.placement.left as f32,
-              inline_offset.y - bitmap.placement.top as f32,
-            ),
-            sample_bias: Point::ZERO,
-            algorithm: ImageScalingAlgorithm::Pixelated,
-          },
-          mode: BlendMode::Normal,
-          combined_mask: None,
+        Placement {
+          left: 0,
+          top: 0,
+          width: bitmap.placement.width,
+          height: bitmap.placement.height,
         },
+        MaskSamplingOptions {
+          canvas_to_source: Affine::translation(
+            inline_offset.x + bitmap.placement.left as f32,
+            inline_offset.y - bitmap.placement.top as f32,
+          ),
+          sample_bias: Point::ZERO,
+          algorithm: ImageScalingAlgorithm::Pixelated,
+        },
+        BlendMode::Normal,
+        None,
       );
 
       canvas.overlay_sampled_pixmap(
@@ -241,6 +239,7 @@ pub(crate) fn draw_glyph_clip_image(
             cached_mask,
             placement,
             clip_image,
+            MaskCompositeColor::SourceOnly,
             sampling,
             BlendMode::Normal,
           );
@@ -252,7 +251,14 @@ pub(crate) fn draw_glyph_clip_image(
           None,
           &mut canvas.buffer_pool,
         );
-        canvas.composite_mask_source(&mask, placement, clip_image, sampling, BlendMode::Normal);
+        canvas.composite_mask_source(
+          &mask,
+          placement,
+          clip_image,
+          MaskCompositeColor::SourceOnly,
+          sampling,
+          BlendMode::Normal,
+        );
         canvas.buffer_pool.release(mask);
       }
 
@@ -361,11 +367,11 @@ fn draw_text_stroke_clip_image(ctx: &mut GlyphPaintCtx<'_, '_>, clip_image: Pain
     &mut ctx.canvas.buffer_pool,
   );
 
-  ctx.canvas.composite_mask_color_over_source(
+  ctx.canvas.composite_mask_source(
     &stroke_mask,
     stroke_placement,
     clip_image,
-    ctx.style.text_stroke_color,
+    MaskCompositeColor::color_over_source(ctx.style.text_stroke_color),
     MaskSamplingOptions {
       canvas_to_source: Affine::translation(ctx.inline_offset.x, ctx.inline_offset.y) * inverse,
       sample_bias: Point::ZERO,
@@ -404,6 +410,7 @@ fn draw_text_embolden_clip_image(
     &stroke_mask,
     stroke_placement,
     clip_image,
+    MaskCompositeColor::SourceOnly,
     MaskSamplingOptions {
       canvas_to_source: Affine::translation(ctx.inline_offset.x, ctx.inline_offset.y) * inverse,
       sample_bias: Point::ZERO,
