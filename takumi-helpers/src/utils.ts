@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import type { Node } from "./types";
 
 const defaultFetchTimeout = 5000;
+export const defaultMaxFetchBytes = 32 * 1024 * 1024;
 const cssUrlPattern = /url\(\s*(['"]?)(.*?)\1\s*\)/g;
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -9,17 +10,25 @@ export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 export type FetchOptions = {
   /** Custom fetch implementation. @default globalThis.fetch */
   fetch?: FetchLike;
-  /** Abort the request after this many milliseconds. */
+  /** Abort the request after this many milliseconds; `0` or negative disables it. @default 5000 */
   timeout?: number;
   /** Caller abort signal, combined with the timeout. */
   signal?: AbortSignal;
+  /** Reject bodies larger than this many bytes. @default 33554432 (32 MiB) */
+  maxBytes?: number;
+  /** Return false to skip fetching a URL (e.g. SSRF allowlist). */
+  allowUrl?: (url: string) => boolean;
 };
 
 /** Fetches a URL, applying a timeout signal and throwing on a non-OK status. */
 export async function fetchOk(url: string, options: FetchOptions & { init?: RequestInit } = {}) {
+  if (options.allowUrl && !options.allowUrl(url)) {
+    throw new Error(`URL blocked by allowUrl policy: ${url}`);
+  }
+
   const fetchImpl = options.fetch ?? globalThis.fetch;
-  const timeoutSignal =
-    options.timeout === undefined ? undefined : AbortSignal.timeout(options.timeout);
+  const timeout = options.timeout ?? defaultFetchTimeout;
+  const timeoutSignal = timeout <= 0 ? undefined : AbortSignal.timeout(timeout);
   const signals = [options.signal, options.init?.signal, timeoutSignal].filter(
     (s): s is AbortSignal => s !== undefined,
   );
@@ -29,6 +38,44 @@ export async function fetchOk(url: string, options: FetchOptions & { init?: Requ
     throw new Error(`HTTP ${response.status} ${response.statusText} fetching ${url}`);
   }
   return response;
+}
+
+/** Reads a response body, rejecting once it exceeds `maxBytes` (by content-length or streamed size). */
+export async function readBodyLimited(response: Response, maxBytes: number): Promise<ArrayBuffer> {
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    throw new Error(`Response exceeds ${maxBytes} bytes (content-length ${declared})`);
+  }
+
+  const body = response.body;
+  if (!body) {
+    return response.arrayBuffer();
+  }
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {});
+      throw new Error(`Response exceeds ${maxBytes} bytes`);
+    }
+    chunks.push(value);
+  }
+
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out.buffer;
 }
 
 function isRemoteUrl(value: string): boolean {
@@ -110,7 +157,7 @@ function fetchImageData(
   }
 
   const promise = fetchOk(url, options)
-    .then((response) => response.arrayBuffer())
+    .then((response) => readBodyLimited(response, options.maxBytes ?? defaultMaxFetchBytes))
     .catch((error) => {
       fetchCache?.delete(url);
       throw error;
@@ -146,8 +193,10 @@ export async function prepareImages<T extends { src: string } = FetchedImage>({
   sources = [],
   fetchCache,
   fetch,
-  timeout = defaultFetchTimeout,
+  timeout,
   signal,
+  maxBytes,
+  allowUrl,
   throwOnError = true,
 }: PrepareImagesOptions<T>): Promise<(T | FetchedImage)[]> {
   const nodes = Array.isArray(node) ? node : [node];
@@ -158,7 +207,7 @@ export async function prepareImages<T extends { src: string } = FetchedImage>({
   }
 
   const urls = [...new Set(nodes.flatMap(extractImageUrls))].filter((url) => !provided.has(url));
-  const fetchOptions: FetchOptions = { fetch, timeout, signal };
+  const fetchOptions: FetchOptions = { fetch, timeout, signal, maxBytes, allowUrl };
 
   const tasks = urls.map(
     async (src): Promise<FetchedImage> => ({

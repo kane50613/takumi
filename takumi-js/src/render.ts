@@ -145,7 +145,7 @@ async function collectImages(
   options?: PipelineOptions,
 ): Promise<ImageLoader[]> {
   const images = options?.images;
-  const { sources, fetchCache, fetch, timeout, cache } = Array.isArray(images)
+  const { sources, fetchCache, fetch, timeout, maxBytes, allowUrl, cache } = Array.isArray(images)
     ? { sources: images }
     : (images ?? {});
 
@@ -155,6 +155,8 @@ async function collectImages(
     fetchCache,
     fetch,
     timeout,
+    maxBytes,
+    allowUrl,
     signal: options?.signal,
   });
 

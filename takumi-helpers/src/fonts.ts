@@ -1,6 +1,6 @@
 import type { GoogleFontShapeFamilies, GoogleFontShapes } from "./google-fonts-catalog";
 import type { Node } from "./types";
-import { fetchOk, type FetchOptions } from "./utils";
+import { defaultMaxFetchBytes, fetchOk, type FetchOptions, readBodyLimited } from "./utils";
 
 const chromeUserAgent =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -121,11 +121,15 @@ function buildUrl(options: GoogleFontsOptions) {
   return url.toString();
 }
 
+const maxCssBytes = 2 * 1024 * 1024;
+
 function fetchCss(url: string, options: FetchOptions) {
   return fetchOk(url, {
     ...options,
     init: { headers: { "User-Agent": chromeUserAgent } },
-  }).then((r) => r.text());
+  })
+    .then((r) => readBodyLimited(r, options.maxBytes ?? maxCssBytes))
+    .then((buffer) => new TextDecoder().decode(buffer));
 }
 
 async function fetchCssCached(url: string, options: GoogleFontsOptions) {
@@ -180,7 +184,10 @@ function toSubset(face: SubsetFace, options: FetchOptions): FontSubset {
     weight: face.weight,
     style: face.style,
     ranges: face.ranges,
-    data: () => fetchOk(face.url, options).then((r) => r.arrayBuffer()),
+    data: () =>
+      fetchOk(face.url, options).then((r) =>
+        readBodyLimited(r, options.maxBytes ?? defaultMaxFetchBytes),
+      ),
   };
 }
 
@@ -349,10 +356,13 @@ export function subsetFonts<T>({
  * dedupe. Family name, weight, and style come from the font file. Lets `fonts` take a bare URL
  * string, e.g. `fonts: ["https://example.com/Inter.woff2"]`.
  */
-export function fontFromUrl(url: string) {
+export function fontFromUrl(url: string, options: FetchOptions = {}) {
   return {
     key: url,
-    data: () => fetchOk(url).then((r) => r.arrayBuffer()),
+    data: () =>
+      fetchOk(url, options).then((r) =>
+        readBodyLimited(r, options.maxBytes ?? defaultMaxFetchBytes),
+      ),
   };
 }
 
