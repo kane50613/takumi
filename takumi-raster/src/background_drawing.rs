@@ -14,7 +14,7 @@ use tiny_skia::{IntSize, Pixmap, PixmapMut, PremultipliedColorU8};
 #[cfg(feature = "svg")]
 use crate::resources::image::RenderedImage;
 use crate::{
-  BorderProperties, BufferPool, OverlayOptions, PaintSource, RenderContext, Result,
+  BorderProperties, BufferPool, DrawTarget, OverlayOptions, PaintSource, RenderContext, Result,
   SamplingFootprint, color_to_premultiplied, interpolate_with_footprint,
   layout::node::resolve_image,
   overlay_gradient_tile, overlay_image, overlay_linear_gradient_tile, overlay_radial_gradient_tile,
@@ -182,16 +182,18 @@ pub(crate) fn rasterize_layers(
         }
 
         overlay_image(
-          &mut pixmap,
+          &mut DrawTarget {
+            pixmap: &mut pixmap,
+            combined_mask: None,
+            buffer_pool: &mut *buffer_pool,
+          },
           &layer.tile,
           OverlayOptions {
             border,
             transform: layer_transform,
             algorithm: context.style.image_rendering,
             mode: layer.blend_mode,
-            combined_mask: None,
           },
-          buffer_pool,
         );
       }
     }
