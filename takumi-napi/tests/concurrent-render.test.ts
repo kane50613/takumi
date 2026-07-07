@@ -43,24 +43,27 @@ test("concurrent static renders resolve to distinct valid PNGs", async () => {
 });
 
 test("interleaved concurrent render and measure calls all resolve", async () => {
-  const tasks = Array.from({ length: 16 }, (_, i) =>
-    i % 2 === 0
-      ? renderer.render(textNode(i), { width: 400, height: 100, format: "png" })
-      : renderer.measure(textNode(i), { width: 400, height: 100 }),
+  const renders = Array.from({ length: 8 }, (_, i) =>
+    renderer.render(textNode(i * 2), { width: 400, height: 100, format: "png" }),
+  );
+  const measures = Array.from({ length: 8 }, (_, i) =>
+    renderer.measure(textNode(i * 2 + 1), { width: 400, height: 100 }),
   );
 
-  const results = await Promise.all(tasks);
+  const [renderResults, measureResults] = await Promise.all([
+    Promise.all(renders),
+    Promise.all(measures),
+  ]);
 
-  results.forEach((result, i) => {
-    if (i % 2 === 0) {
-      expect(result).toBeInstanceOf(Buffer);
-      expect((result as Buffer).length).toBeGreaterThan(0);
-    } else {
-      const measured = result as Awaited<ReturnType<typeof renderer.measure>>;
-      expect(Number.isFinite(measured.width)).toBe(true);
-      expect(Number.isFinite(measured.height)).toBe(true);
-    }
-  });
+  for (const result of renderResults) {
+    expect(result).toBeInstanceOf(Buffer);
+    expect(result.length).toBeGreaterThan(0);
+  }
+
+  for (const measured of measureResults) {
+    expect(Number.isFinite(measured.width)).toBe(true);
+    expect(Number.isFinite(measured.height)).toBe(true);
+  }
 });
 
 test("concurrent animation and static render calls all resolve", async () => {
