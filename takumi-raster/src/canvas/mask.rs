@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{borrow::Cow, sync::Arc};
 
 use takumi_core::geometry::{
   ComputedLayout as Layout, Point, Rect, Size, transformed_rect_extents,
@@ -784,21 +784,6 @@ pub(crate) struct MaskView<'a> {
 
 impl<'a> MaskView<'a> {
   #[inline]
-  pub(crate) fn alpha_at(self, x: u32, y: u32) -> u8 {
-    let local_x = x as i32 + self.canvas_origin.x as i32 - self.origin.x as i32;
-    let local_y = y as i32 + self.canvas_origin.y as i32 - self.origin.y as i32;
-    if local_x < 0
-      || local_y < 0
-      || local_x >= self.mask.width() as i32
-      || local_y >= self.mask.height() as i32
-    {
-      return 0;
-    }
-
-    self.mask.data()[mask_index_from_coord(local_x as u32, local_y as u32, self.mask.width())]
-  }
-
-  #[inline]
   pub(crate) fn row(&self, canvas_y: i32, canvas_x_start: i32) -> MaskRow<'a> {
     let local_y = canvas_y + self.canvas_origin.y as i32 - self.origin.y as i32;
     let mask_width = self.mask.width() as i32;
@@ -841,6 +826,28 @@ impl<'a> MaskRow<'a> {
     }
     self.data[self.row_offset + local_x as usize]
   }
+
+  #[inline]
+  pub(crate) fn is_empty(&self) -> bool {
+    self.data.is_empty()
+  }
+}
+
+/// Resolves the combined constraint mask against the pixmap it clips: borrowed
+/// directly when the stored mask already matches the canvas viewport, cropped
+/// into a scratch buffer otherwise.
+pub(crate) fn resolve_mask<'a>(
+  mask: MaskView<'a>,
+  size: Size<u32>,
+  buffer_pool: &mut BufferPool,
+) -> Option<Cow<'a, TinyMask>> {
+  if mask.origin == mask.canvas_origin
+    && mask.mask.width() == size.width
+    && mask.mask.height() == size.height
+  {
+    return Some(Cow::Borrowed(mask.mask));
+  }
+  materialize_mask(mask, size, buffer_pool).map(Cow::Owned)
 }
 
 #[inline(always)]
