@@ -192,3 +192,61 @@ impl ToCss for BackgroundRepeat {
     }
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::style::FromCssStr;
+
+  #[test]
+  fn test_parse_background_repeat() {
+    for (css, expected) in [
+      (
+        "repeat-x",
+        BackgroundRepeat(
+          BackgroundRepeatStyle::Repeat,
+          BackgroundRepeatStyle::NoRepeat,
+        ),
+      ),
+      (
+        "repeat-y",
+        BackgroundRepeat(
+          BackgroundRepeatStyle::NoRepeat,
+          BackgroundRepeatStyle::Repeat,
+        ),
+      ),
+      (
+        "repeat no-repeat",
+        BackgroundRepeat(
+          BackgroundRepeatStyle::Repeat,
+          BackgroundRepeatStyle::NoRepeat,
+        ),
+      ),
+      (
+        "space",
+        BackgroundRepeat(BackgroundRepeatStyle::Space, BackgroundRepeatStyle::Space),
+      ),
+    ] {
+      assert_eq!(
+        BackgroundRepeat::from_css_str(css),
+        Ok(expected),
+        "failed for {css}"
+      );
+    }
+  }
+
+  #[test]
+  fn test_background_repeat_round_trip() {
+    for css in ["repeat-x", "repeat-y", "repeat no-repeat", "space", "round"] {
+      let parsed = BackgroundRepeat::from_css_str(css).unwrap();
+      let reparsed = BackgroundRepeat::from_css_str(&parsed.to_css_string()).unwrap();
+      assert_eq!(parsed, reparsed, "failed for {css}");
+    }
+  }
+
+  #[test]
+  fn test_parse_background_repeat_invalid() {
+    assert!(BackgroundRepeat::from_css_str("123").is_err());
+    assert!(BackgroundRepeat::from_css_str("bogus").is_err());
+  }
+}

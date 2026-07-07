@@ -120,3 +120,64 @@ declare_enum_from_css_impl!(
   "balance" => TextWrapStyle::Balance,
   "pretty" => TextWrapStyle::Pretty,
 );
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::style::{FromCssStr, ToCss};
+
+  #[test]
+  fn test_parse_text_wrap() {
+    for (css, expected) in [
+      (
+        "wrap",
+        TextWrap {
+          mode: TextWrapMode::Wrap,
+          style: TextWrapStyle::Auto,
+        },
+      ),
+      (
+        "balance",
+        TextWrap {
+          mode: TextWrapMode::Wrap,
+          style: TextWrapStyle::Balance,
+        },
+      ),
+      (
+        "nowrap pretty",
+        TextWrap {
+          mode: TextWrapMode::NoWrap,
+          style: TextWrapStyle::Pretty,
+        },
+      ),
+    ] {
+      assert_eq!(
+        TextWrap::from_css_str(css),
+        Ok(expected),
+        "failed for {css}"
+      );
+    }
+  }
+
+  // TextWrap (the shorthand struct) has no ToCss impl, so no round-trip test on it. Its
+  // sub-enums do though.
+  #[test]
+  fn test_text_wrap_sub_enums_round_trip() {
+    for css in ["wrap", "nowrap"] {
+      let parsed = TextWrapMode::from_css_str(css).unwrap();
+      let reparsed = TextWrapMode::from_css_str(&parsed.to_css_string()).unwrap();
+      assert_eq!(parsed, reparsed, "failed for {css}");
+    }
+    for css in ["auto", "balance", "pretty"] {
+      let parsed = TextWrapStyle::from_css_str(css).unwrap();
+      let reparsed = TextWrapStyle::from_css_str(&parsed.to_css_string()).unwrap();
+      assert_eq!(parsed, reparsed, "failed for {css}");
+    }
+  }
+
+  #[test]
+  fn test_parse_text_wrap_invalid() {
+    assert!(TextWrap::from_css_str("bogus").is_err());
+    assert!(TextWrap::from_css_str("123").is_err());
+  }
+}

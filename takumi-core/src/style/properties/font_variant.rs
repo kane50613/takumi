@@ -648,3 +648,208 @@ const VARIANT_TOKEN_LISTS: &[&[CssToken]] = &[
 
 const VARIANT_TOKENS: [CssToken; CssToken::merged_len(VARIANT_TOKEN_LISTS)] =
   CssToken::merge_lists(VARIANT_TOKEN_LISTS);
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::style::FromCssStr;
+
+  #[test]
+  fn test_parse_font_variant_ligatures() {
+    for (css, expected) in [
+      ("normal", FontVariantLigatures::default()),
+      ("none", FontVariantLigatures::none()),
+      (
+        "common-ligatures no-discretionary-ligatures",
+        FontVariantLigatures {
+          common: LigatureState::Enabled,
+          discretionary: LigatureState::Disabled,
+          historical: LigatureState::Normal,
+          contextual: LigatureState::Normal,
+        },
+      ),
+    ] {
+      assert_eq!(
+        FontVariantLigatures::from_css_str(css),
+        Ok(expected),
+        "failed for {css}"
+      );
+    }
+  }
+
+  #[test]
+  fn test_font_variant_ligatures_round_trip() {
+    for css in [
+      "normal",
+      "none",
+      "common-ligatures no-discretionary-ligatures",
+    ] {
+      let parsed = FontVariantLigatures::from_css_str(css).unwrap();
+      let reparsed = FontVariantLigatures::from_css_str(&parsed.to_css_string()).unwrap();
+      assert_eq!(parsed, reparsed, "failed for {css}");
+    }
+  }
+
+  #[test]
+  fn test_parse_font_variant_ligatures_invalid() {
+    assert!(FontVariantLigatures::from_css_str("bogus").is_err());
+    assert!(FontVariantLigatures::from_css_str("123").is_err());
+  }
+
+  #[test]
+  fn test_parse_font_variant_numeric() {
+    for (css, expected) in [
+      ("normal", FontVariantNumeric::default()),
+      (
+        "lining-nums tabular-nums ordinal",
+        FontVariantNumeric {
+          figure: NumericFigure::Lining,
+          spacing: NumericSpacing::Tabular,
+          fraction: NumericFraction::Normal,
+          ordinal: true,
+          slashed_zero: false,
+        },
+      ),
+      (
+        "oldstyle-nums diagonal-fractions slashed-zero",
+        FontVariantNumeric {
+          figure: NumericFigure::Oldstyle,
+          spacing: NumericSpacing::Normal,
+          fraction: NumericFraction::Diagonal,
+          ordinal: false,
+          slashed_zero: true,
+        },
+      ),
+    ] {
+      assert_eq!(
+        FontVariantNumeric::from_css_str(css),
+        Ok(expected),
+        "failed for {css}"
+      );
+    }
+  }
+
+  #[test]
+  fn test_font_variant_numeric_round_trip() {
+    for css in ["normal", "lining-nums tabular-nums ordinal"] {
+      let parsed = FontVariantNumeric::from_css_str(css).unwrap();
+      let reparsed = FontVariantNumeric::from_css_str(&parsed.to_css_string()).unwrap();
+      assert_eq!(parsed, reparsed, "failed for {css}");
+    }
+  }
+
+  #[test]
+  fn test_parse_font_variant_numeric_invalid() {
+    assert!(FontVariantNumeric::from_css_str("bogus").is_err());
+  }
+
+  #[test]
+  fn test_parse_font_variant_east_asian() {
+    for (css, expected) in [
+      ("normal", FontVariantEastAsian::default()),
+      (
+        "jis78 full-width ruby",
+        FontVariantEastAsian {
+          form: EastAsianForm::Jis78,
+          width: EastAsianWidth::Full,
+          ruby: true,
+        },
+      ),
+    ] {
+      assert_eq!(
+        FontVariantEastAsian::from_css_str(css),
+        Ok(expected),
+        "failed for {css}"
+      );
+    }
+  }
+
+  #[test]
+  fn test_font_variant_east_asian_round_trip() {
+    for css in ["normal", "jis78 full-width ruby"] {
+      let parsed = FontVariantEastAsian::from_css_str(css).unwrap();
+      let reparsed = FontVariantEastAsian::from_css_str(&parsed.to_css_string()).unwrap();
+      assert_eq!(parsed, reparsed, "failed for {css}");
+    }
+  }
+
+  #[test]
+  fn test_parse_font_variant_east_asian_invalid() {
+    assert!(FontVariantEastAsian::from_css_str("bogus").is_err());
+  }
+
+  #[test]
+  fn test_parse_font_variant_caps() {
+    for (css, expected) in [
+      ("normal", FontVariantCaps::Normal),
+      ("small-caps", FontVariantCaps::SmallCaps),
+      ("all-small-caps", FontVariantCaps::AllSmallCaps),
+      ("titling-caps", FontVariantCaps::TitlingCaps),
+    ] {
+      assert_eq!(
+        FontVariantCaps::from_css_str(css),
+        Ok(expected),
+        "failed for {css}"
+      );
+    }
+  }
+
+  #[test]
+  fn test_font_variant_caps_round_trip() {
+    for css in ["normal", "small-caps", "all-small-caps", "titling-caps"] {
+      let parsed = FontVariantCaps::from_css_str(css).unwrap();
+      let reparsed = FontVariantCaps::from_css_str(&parsed.to_css_string()).unwrap();
+      assert_eq!(parsed, reparsed, "failed for {css}");
+    }
+  }
+
+  #[test]
+  fn test_parse_font_variant_caps_invalid() {
+    assert!(FontVariantCaps::from_css_str("bogus").is_err());
+    assert!(FontVariantCaps::from_css_str("123").is_err());
+  }
+
+  #[test]
+  fn test_parse_font_variant_position() {
+    for (css, expected) in [
+      ("normal", FontVariantPosition::Normal),
+      ("sub", FontVariantPosition::Sub),
+      ("super", FontVariantPosition::Super),
+    ] {
+      assert_eq!(
+        FontVariantPosition::from_css_str(css),
+        Ok(expected),
+        "failed for {css}"
+      );
+    }
+  }
+
+  #[test]
+  fn test_font_variant_position_round_trip() {
+    for css in ["normal", "sub", "super"] {
+      let parsed = FontVariantPosition::from_css_str(css).unwrap();
+      let reparsed = FontVariantPosition::from_css_str(&parsed.to_css_string()).unwrap();
+      assert_eq!(parsed, reparsed, "failed for {css}");
+    }
+  }
+
+  #[test]
+  fn test_parse_font_variant_position_invalid() {
+    assert!(FontVariantPosition::from_css_str("bogus").is_err());
+  }
+
+  #[test]
+  fn test_parse_font_variant_shorthand() {
+    let value = FontVariant::from_css_str("small-caps sub common-ligatures").unwrap();
+    assert_eq!(value.caps, FontVariantCaps::SmallCaps);
+    assert_eq!(value.position, FontVariantPosition::Sub);
+    assert_eq!(value.ligatures.common, LigatureState::Enabled);
+  }
+
+  // FontVariant (the shorthand struct) has no ToCss impl, so no round-trip test.
+
+  #[test]
+  fn test_parse_font_variant_shorthand_invalid() {
+    assert!(FontVariant::from_css_str("bogus").is_err());
+  }
+}

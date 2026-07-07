@@ -149,3 +149,76 @@ impl TailwindPropertyParser for LineClamp {
     Some(Self::clamp(Some(count), BlockEllipsis::Auto))
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::style::FromCssStr;
+
+  #[test]
+  fn test_parse_block_ellipsis() {
+    for (css, expected) in [
+      ("none", BlockEllipsis::None),
+      ("auto", BlockEllipsis::Auto),
+      ("\"foo\"", BlockEllipsis::String("foo".to_string())),
+    ] {
+      assert_eq!(
+        BlockEllipsis::from_css_str(css),
+        Ok(expected),
+        "failed for {css}"
+      );
+    }
+  }
+
+  #[test]
+  fn test_block_ellipsis_round_trip() {
+    for css in ["none", "auto", "\"foo\""] {
+      let parsed = BlockEllipsis::from_css_str(css).unwrap();
+      let reparsed = BlockEllipsis::from_css_str(&parsed.to_css_string()).unwrap();
+      assert_eq!(parsed, reparsed, "failed for {css}");
+    }
+  }
+
+  #[test]
+  fn test_parse_block_ellipsis_invalid() {
+    assert!(BlockEllipsis::from_css_str("123").is_err());
+  }
+
+  #[test]
+  fn test_parse_line_clamp() {
+    for (css, expected) in [
+      ("none", LineClamp::default()),
+      (
+        "3",
+        LineClamp {
+          max_lines: Some(3),
+          block_ellipsis: BlockEllipsis::Auto,
+          line_continue: Continue::Collapse,
+        },
+      ),
+      (
+        "2 \"foo\"",
+        LineClamp {
+          max_lines: Some(2),
+          block_ellipsis: BlockEllipsis::String("foo".to_string()),
+          line_continue: Continue::Collapse,
+        },
+      ),
+      ("0", LineClamp::default()),
+    ] {
+      assert_eq!(
+        LineClamp::from_css_str(css),
+        Ok(expected),
+        "failed for {css}"
+      );
+    }
+  }
+
+  // LineClamp has no ToCss impl, so no round-trip test.
+
+  #[test]
+  fn test_parse_line_clamp_invalid() {
+    assert!(LineClamp::from_css_str("bogus").is_err());
+    assert!(LineClamp::from_css_str("1.5").is_err());
+  }
+}

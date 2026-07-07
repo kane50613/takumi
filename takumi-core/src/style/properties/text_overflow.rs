@@ -50,3 +50,39 @@ impl ToCss for TextOverflow {
     }
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::style::FromCssStr;
+
+  #[test]
+  fn test_parse_text_overflow() {
+    for (css, expected) in [
+      ("clip", TextOverflow::Clip),
+      ("ellipsis", TextOverflow::Ellipsis),
+      ("\"foo\"", TextOverflow::Custom("foo".to_string())),
+      ("bar", TextOverflow::Custom("bar".to_string())),
+    ] {
+      assert_eq!(
+        TextOverflow::from_css_str(css),
+        Ok(expected),
+        "failed for {css}"
+      );
+    }
+  }
+
+  #[test]
+  fn test_text_overflow_round_trip() {
+    for css in ["clip", "ellipsis", "\"foo\"", "bar"] {
+      let parsed = TextOverflow::from_css_str(css).unwrap();
+      let reparsed = TextOverflow::from_css_str(&parsed.to_css_string()).unwrap();
+      assert_eq!(parsed, reparsed, "failed for {css}");
+    }
+  }
+
+  #[test]
+  fn test_parse_text_overflow_invalid() {
+    assert!(TextOverflow::from_css_str("123").is_err());
+  }
+}

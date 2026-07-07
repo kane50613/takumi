@@ -118,3 +118,60 @@ impl ToCss for TextFit {
     Ok(())
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::style::FromCssStr;
+
+  #[test]
+  fn test_parse_text_fit() {
+    for (css, expected) in [
+      ("none", TextFit::builder().build()),
+      (
+        "grow per-line",
+        TextFit::builder()
+          .mode(TextFitMode::Grow)
+          .target(TextFitTarget::PerLine)
+          .build(),
+      ),
+      (
+        "shrink 50%",
+        TextFit::builder()
+          .mode(TextFitMode::Shrink)
+          .limit(Some(0.5))
+          .build(),
+      ),
+      (
+        "grow per-line-all 75%",
+        TextFit::builder()
+          .mode(TextFitMode::Grow)
+          .target(TextFitTarget::PerLineAll)
+          .limit(Some(0.75))
+          .build(),
+      ),
+    ] {
+      assert_eq!(TextFit::from_css_str(css), Ok(expected), "failed for {css}");
+    }
+  }
+
+  #[test]
+  fn test_text_fit_round_trip() {
+    for css in [
+      "none",
+      "grow per-line",
+      "shrink 50%",
+      "grow per-line-all 75%",
+    ] {
+      let parsed = TextFit::from_css_str(css).unwrap();
+      let reparsed = TextFit::from_css_str(&parsed.to_css_string()).unwrap();
+      assert_eq!(parsed, reparsed, "failed for {css}");
+    }
+  }
+
+  #[test]
+  fn test_parse_text_fit_invalid() {
+    assert!(TextFit::from_css_str("bogus").is_err());
+    assert!(TextFit::from_css_str("50%").is_err());
+  }
+}

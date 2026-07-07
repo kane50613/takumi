@@ -58,3 +58,38 @@ impl OverflowWrap {
     self.0
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_parse_overflow_wrap() {
+    for (css, expected) in [
+      ("normal", OverflowWrap(parley::OverflowWrap::Normal)),
+      ("anywhere", OverflowWrap(parley::OverflowWrap::Anywhere)),
+      ("break-word", OverflowWrap(parley::OverflowWrap::BreakWord)),
+    ] {
+      assert_eq!(
+        OverflowWrap::from_css_str(css),
+        Ok(expected),
+        "failed for {css}"
+      );
+    }
+  }
+
+  #[test]
+  fn test_overflow_wrap_round_trip() {
+    for css in ["normal", "anywhere", "break-word"] {
+      let parsed = OverflowWrap::from_css_str(css).unwrap();
+      let reparsed = OverflowWrap::from_css_str(&parsed.to_css_string()).unwrap();
+      assert_eq!(parsed, reparsed, "failed for {css}");
+    }
+  }
+
+  #[test]
+  fn test_parse_overflow_wrap_invalid() {
+    assert!(OverflowWrap::from_css_str("bogus").is_err());
+    assert!(OverflowWrap::from_css_str("123").is_err());
+  }
+}

@@ -69,3 +69,40 @@ impl ToCss for FontStyle {
     }
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::style::FromCssStr;
+
+  #[test]
+  fn test_parse_font_style() {
+    for (css, expected) in [
+      ("normal", FontStyle::normal()),
+      ("italic", FontStyle::italic()),
+      ("oblique", FontStyle(ParleyFontStyle::Oblique(None))),
+      ("oblique 10deg", FontStyle::oblique(10.0)),
+    ] {
+      assert_eq!(
+        FontStyle::from_css_str(css),
+        Ok(expected),
+        "failed for {css}"
+      );
+    }
+  }
+
+  #[test]
+  fn test_font_style_round_trip() {
+    for css in ["normal", "italic", "oblique", "oblique 10deg"] {
+      let parsed = FontStyle::from_css_str(css).unwrap();
+      let reparsed = FontStyle::from_css_str(&parsed.to_css_string()).unwrap();
+      assert_eq!(parsed, reparsed, "failed for {css}");
+    }
+  }
+
+  #[test]
+  fn test_parse_font_style_invalid() {
+    assert!(FontStyle::from_css_str("bogus").is_err());
+    assert!(FontStyle::from_css_str("123").is_err());
+  }
+}

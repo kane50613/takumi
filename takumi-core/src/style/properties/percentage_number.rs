@@ -82,3 +82,40 @@ impl ToCss for PercentageNumber {
     write!(dest, "{}", self.0)
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::style::FromCssStr;
+
+  #[test]
+  fn test_parse_percentage_number() {
+    for (css, expected) in [
+      ("0.5", PercentageNumber(0.5)),
+      ("50%", PercentageNumber(0.5)),
+      ("1", PercentageNumber(1.0)),
+      ("100%", PercentageNumber(1.0)),
+    ] {
+      assert_eq!(
+        PercentageNumber::from_css_str(css),
+        Ok(expected),
+        "failed for {css}"
+      );
+    }
+  }
+
+  #[test]
+  fn test_percentage_number_round_trip() {
+    for css in ["0.5", "50%", "1"] {
+      let parsed = PercentageNumber::from_css_str(css).unwrap();
+      let reparsed = PercentageNumber::from_css_str(&parsed.to_css_string()).unwrap();
+      assert_eq!(parsed, reparsed, "failed for {css}");
+    }
+  }
+
+  #[test]
+  fn test_parse_percentage_number_invalid() {
+    assert!(PercentageNumber::from_css_str("auto").is_err());
+    assert!(PercentageNumber::from_css_str("\"foo\"").is_err());
+  }
+}
