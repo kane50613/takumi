@@ -13,9 +13,9 @@ export default defineConfig({
     "helpers/jsx": "src/helpers/jsx.ts",
     "helpers/html": "src/helpers/html.ts",
   },
-  // Keep the `#backend` specifier in the output so the consumer's bundler/runtime
-  // resolves it through the import conditions instead of us baking in one backend.
-  external: ["#backend"],
+  deps: {
+    neverBundle: ["#backend"],
+  },
   format: ["esm", "cjs"],
   dts: true,
   publint: {
