@@ -78,9 +78,9 @@ function resolveIsolated(pkgName, binaryName, localRequire) {
   return null;
 }
 
-function loadNativePackage(pkgName, binaryName, localRequire) {
+function loadNativePackage(pkgName, binaryName, localRequire, loadDirect) {
   try {
-    return { binding: localRequire(pkgName + '/' + binaryName), version: localRequire(pkgName + '/package.json').version };
+    return loadDirect();
   } catch (e) {
     const resolved = resolveIsolated(pkgName, binaryName, localRequire);
     if (resolved) {
@@ -100,7 +100,7 @@ function loadNativePackage(pkgName, binaryName, localRequire) {
       .replaceAll(/(["'])\.\/core(\.[^"']+\.node["'])/g, "$1../core$2")
       .replaceAll(
         /const binding = (require(?:\$\d+)?)\((?:\/\*[^*]*\*\/)?\s*(['"])(@takumi-rs\/core-([^'"]+))\2\);?\s*const bindingPackageVersion = \1\((?:\/\*[^*]*\*\/)?\s*\2\3\/package\.json\2\)\.version/g,
-        "const { binding, version: bindingPackageVersion } = loadNativePackage('$3', 'core.$4.node', $1)",
+        "const { binding, version: bindingPackageVersion } = loadNativePackage('$3', 'core.$4.node', $1, () => ({ binding: $1($2$3/core.$4.node$2), version: $1($2$3/package.json$2).version }))",
       )
       .replaceAll(
         /(require(?:\$1)?)\((?!\/\* turbopackOptional: true \*\/ )/g,
