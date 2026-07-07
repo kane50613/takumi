@@ -1,4 +1,5 @@
 import type { Node } from "@takumi-rs/helpers";
+import type { Properties } from "csstype";
 
 export type { ContainerNode, ImageNode, NodeMetadata, TextNode } from "@takumi-rs/helpers";
 
@@ -33,12 +34,12 @@ export interface FontDetails {
 
 export type Font = FontDetails | ByteBuf;
 
-export type KeyframesMap = Record<string, Record<string, CSSStyleDeclaration>>;
+export type KeyframesMap = Record<string, Record<string, Properties>>;
 export type KeyframesRuleList = {
   name: string;
   keyframes: {
     offsets: number[];
-    declarations: Record<string, CSSStyleDeclaration>;
+    declarations: Record<string, Properties>;
   }[];
 }[];
 export type Keyframes = KeyframesMap | KeyframesRuleList;

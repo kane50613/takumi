@@ -121,8 +121,17 @@
   },
   "devDependencies": {
     "@types/bun": "catalog:",
+    "csstype": "catalog:",
     "tsdown": "catalog:",
     "unrun": "catalog:"
+  },
+  "peerDependencies": {
+    "csstype": "*"
+  },
+  "peerDependenciesMeta": {
+    "csstype": {
+      "optional": true
+    }
   },
   "engines": {
     "node": ">=18"

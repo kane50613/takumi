@@ -9,6 +9,7 @@ import { createOnigurumaEngine } from "shiki/engine-oniguruma.mjs";
 import takumiTypings from "../../../node_modules/@takumi-rs/wasm/pkg/takumi_wasm_bg.wasm.d.ts?raw";
 import reactTypings from "../../../node_modules/@types/react/index.d.ts?raw";
 import reactJsxRuntimeTypings from "../../../node_modules/@types/react/jsx-runtime.d.ts?raw";
+import cssTypings from "../../../node_modules/csstype/index.d.ts?raw";
 import playgroundOptionsTypings from "../../playground/options.ts?raw";
 
 function createHighlighter() {
@@ -107,6 +108,10 @@ export function ComponentEditor({
           {
             content: reactJsxRuntimeTypings,
             filePath: "file:///node_modules/react/jsx-runtime.d.ts",
+          },
+          {
+            content: cssTypings,
+            filePath: "file:///node_modules/csstype/index.d.ts",
           },
           {
             content: takumiTypings,

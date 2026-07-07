@@ -1,15 +1,16 @@
 import type { Node } from "@takumi-rs/helpers";
+import type { Properties } from "csstype";
 
 export { ContainerNode, ImageNode, Node, NodeMetadata, TextNode } from "@takumi-rs/helpers";
 
 export type ByteBuf = Uint8Array | ArrayBuffer | Buffer;
 
-export type KeyframesMap = Record<string, Record<string, CSSStyleDeclaration>>;
+export type KeyframesMap = Record<string, Record<string, Properties>>;
 export type KeyframesRuleList = {
   name: string;
   keyframes: {
     offsets: number[];
-    declarations: Record<string, CSSStyleDeclaration>;
+    declarations: Record<string, Properties>;
   }[];
 }[];
 export type Keyframes = KeyframesMap | KeyframesRuleList;
@@ -167,7 +168,7 @@ export type ImageSource = {
 
 export type KeyframeRule = {
   offsets: number[];
-  declarations: Record<string, CSSStyleDeclaration>;
+  declarations: Record<string, Properties>;
 };
 
 export type KeyframesRule = {

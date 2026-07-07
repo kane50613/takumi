@@ -77,11 +77,20 @@
     "@types/bun": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "csstype": "catalog:",
     "lucide-react": "catalog:",
     "mitata": "^1.0.34",
     "react": "catalog:",
     "tsdown": "catalog:",
     "unrun": "catalog:"
+  },
+  "peerDependencies": {
+    "csstype": "*"
+  },
+  "peerDependenciesMeta": {
+    "csstype": {
+      "optional": true
+    }
   },
   "napi": {
     "binaryName": "core",
