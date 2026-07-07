@@ -1,135 +1,79 @@
 core:changelogs:
-  - content: "---\npackages:\n  npm:@takumi-rs/helpers:\n    type: minor\n---\n\n### Bound remote fetches with byte caps and default timeouts\n\nRemote image, font, and Google Fonts CSS fetches now reject bodies past a byte\ncap (`maxBytes`, default 32 MiB; 2 MiB for CSS) and apply the 5 s timeout to\nevery fetch, not just images. Set `timeout: 0` to disable it. A new `allowUrl`\nhook on `FetchOptions` skips URLs it rejects.\n"
-    filename: bound-remote-fetches.md
-    v: 0.0.0
-  - content: "---\npackages:\n  npm:@takumi-rs/helpers:\n    type: minor\n  npm:@takumi-rs/core:\n    type: minor\n  npm:@takumi-rs/wasm:\n    type: minor\n---\n\n### Share the renderer facade between the napi and wasm bindings\n\nThe napi and wasm `Renderer` wrappers now build on a shared `prepareRenderInput`\nhelper in `@takumi-rs/helpers/renderer`, so their option types and render bodies\nlive in one place. Both backends check `signal` before and after resolving\nfonts and images: on native, an already-aborted signal now throws before any\nresource fetch.\n"
-    filename: share-renderer-facade.md
-    v: 0.0.0
-  - content: "---\npackages:\n  npm:takumi-js:\n    type: patch\n---\n\n### Mark `ImageResponse.ready` rejection as handled\n\nA failed render no longer crashes the process with an `unhandledRejection` when\nthe caller never awaits `ready`. The failure still reaches the stream and a\ncaller that does await `ready` still observes it.\n"
-    filename: image-response-ready-rejection.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-raster:\n    type: patch\n  cargo:takumi:\n    type: patch\n  npm:@takumi-rs/core:\n    type: patch\n  npm:@takumi-rs/wasm:\n    type: patch\n---\n\n### Skip mask copies and per-pixel mask lookups in canvas fast paths\n\nBorrow the combined constraint mask directly when it already matches the\ncanvas viewport instead of copying it per draw, and hoist mask lookups out of\nthe per-pixel blit loops. Output is unchanged.\n"
-    filename: canvas-mask-fast-paths.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: patch\n  cargo:takumi:\n    type: patch\n  npm:@takumi-rs/core:\n    type: patch\n  npm:@takumi-rs/wasm:\n    type: patch\n---\n\n### Fix gradient stop snapping panic for oversized stop lists\n\nGradients with more color stops than the LUT can hold no longer panic. The\nsample-index clamp and normalization passes stay within LUT bounds.\n"
-    filename: gradient-lut-stop-clamp.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: patch\n  cargo:takumi:\n    type: patch\n  npm:@takumi-rs/core:\n    type: patch\n  npm:@takumi-rs/wasm:\n    type: patch\n---\n\n### Cap image decode dimensions and GIF frame volume\n\nDecoders reject images beyond 8192x8192 (via `image::Limits` for PNG and JPEG,\ndimension checks for WebP) and GIFs beyond a total-frame pixel budget, stopping\ndecode-bomb OOM.\n"
-    filename: image-decode-limits.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-raster:\n    type: patch\n  cargo:takumi:\n    type: patch\n  npm:@takumi-rs/core:\n    type: patch\n  npm:@takumi-rs/wasm:\n    type: patch\n---\n\n### Reuse per-scene state across animation frames\n\nCompute each scene's font snapshot once and share its image and stylesheet\nhandles across frames instead of re-snapshotting and deep-cloning the whole\noption tree per frame. Frame output is unchanged.\n"
-    filename: reuse-animation-frame-state.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-raster:\n    type: patch\n  cargo:takumi:\n    type: patch\n  npm:@takumi-rs/core:\n    type: patch\n  npm:@takumi-rs/wasm:\n    type: patch\n---\n\n### Guard shadow and blur buffer sizing against overflow\n\nExtreme blur radii could overflow the `u32` shadow-buffer area and panic or\nover-allocate. Sizing now uses saturating math and skips shadows above a 256\nMi-pixel budget.\n"
-    filename: shadow-blur-size-overflow.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-raster:\n    type: patch\n  cargo:takumi:\n    type: patch\n  npm:@takumi-rs/core:\n    type: patch\n  npm:@takumi-rs/wasm:\n    type: patch\n---\n\n### Fix buffer pool bucket capacity invariant\n\nRelease now buckets a buffer by the floor power of two its capacity guarantees,\nand `acquire_dirty` reserves before `set_len`. A pooled buffer can no longer be\nlengthened past its allocation.\n"
-    filename: buffer-pool-capacity-invariant.md
+  - content: "---\npackages:\n  npm:@takumi-rs/core:\n    type: patch\n  npm:@takumi-rs/wasm:\n    type: patch\n---\n\n### Type keyframe declarations with `csstype` instead of DOM's `CSSStyleDeclaration`\n\n`KeyframesMap` and `KeyframeRule` typed each keyframe's declarations as\n`Record<string, CSSStyleDeclaration>`, requiring every CSS property on a single\noffset and needing the `DOM` lib. Declarations are now typed with `csstype`'s\n`Properties`, an optional peer dependency, so a single offset only needs the\nproperties it sets and consumers without the `DOM` lib still typecheck.\n"
+    filename: keyframe-declaration-partial-css.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - id: npm:takumi-template
-    updated: false
   - changelogIds:
-      - bound-remote-fetches.md
-      - share-renderer-facade.md
-    id: npm:@takumi-rs/helpers
-    updated: true
-  - id: npm:docs
-    updated: false
-  - changelogIds:
-      - image-response-ready-rejection.md
-    id: npm:takumi-js
-    updated: true
-  - changelogIds:
-      - canvas-mask-fast-paths.md
-      - gradient-lut-stop-clamp.md
-      - share-renderer-facade.md
-      - image-decode-limits.md
-      - reuse-animation-frame-state.md
-      - shadow-blur-size-overflow.md
-      - buffer-pool-capacity-invariant.md
-    id: npm:@takumi-rs/wasm
+      - keyframe-declaration-partial-css.md
+    id: npm:@takumi-rs/core
     updated: true
   - id: npm:@takumi-rs/image-response
     updated: true
+  - id: npm:takumi-template
+    updated: false
+  - id: npm:docs
+    updated: false
   - changelogIds:
-      - canvas-mask-fast-paths.md
-      - gradient-lut-stop-clamp.md
-      - share-renderer-facade.md
-      - image-decode-limits.md
-      - reuse-animation-frame-state.md
-      - shadow-blur-size-overflow.md
-      - buffer-pool-capacity-invariant.md
-    id: npm:@takumi-rs/core
+      - keyframe-declaration-partial-css.md
+    id: npm:@takumi-rs/wasm
     updated: true
+  - id: npm:@takumi-rs/helpers
+    updated: true
+  - id: npm:takumi-js
+    updated: true
+  - id: npm:ffmpeg-keyframe-animation
+    updated: false
   - id: npm:example-cloudflare-workers
     updated: false
   - id: npm:example-twitter-images
     updated: false
+  - id: npm:example-tanstack-start
+    updated: false
   - id: npm:example-nextjs
-    updated: false
-  - id: npm:ffplay
-    updated: false
-  - id: npm:svelte
-    updated: false
-  - id: npm:example-css-library-integration
-    updated: false
-  - id: npm:ffmpeg-keyframe-animation
     updated: false
   - id: npm:example-satori-html
     updated: false
-  - id: npm:example-tanstack-start
+  - id: npm:example-css-library-integration
     updated: false
   - id: npm:waku-ssr
     updated: false
-  - id: cargo:takumi-svg
-    updated: true
-  - changelogIds:
-      - canvas-mask-fast-paths.md
-      - gradient-lut-stop-clamp.md
-      - image-decode-limits.md
-      - reuse-animation-frame-state.md
-      - shadow-blur-size-overflow.md
-      - buffer-pool-capacity-invariant.md
-    id: cargo:takumi
+  - id: npm:svelte
+    updated: false
+  - id: npm:ffplay
+    updated: false
+  - id: cargo:takumi-raster
+    updated: false
+  - id: cargo:takumi-core
+    updated: false
+  - id: cargo:takumi
     updated: true
   - id: cargo:takumi-html
-    updated: true
-  - changelogIds:
-      - gradient-lut-stop-clamp.md
-      - image-decode-limits.md
-    id: cargo:takumi-core
-    updated: true
-  - changelogIds:
-      - canvas-mask-fast-paths.md
-      - reuse-animation-frame-state.md
-      - shadow-blur-size-overflow.md
-      - buffer-pool-capacity-invariant.md
-    id: cargo:takumi-raster
-    updated: true
+    updated: false
+  - id: cargo:takumi-svg
+    updated: false
 npm:packages:
   - id: npm:takumi
+  - distTag: rc
+    id: npm:@takumi-rs/core
+  - distTag: rc
+    id: npm:@takumi-rs/image-response
   - id: npm:takumi-template
-  - distTag: rc
-    id: npm:@takumi-rs/helpers
   - id: npm:docs
-  - distTag: rc
-    id: npm:takumi-js
   - distTag: rc
     id: npm:@takumi-rs/wasm
   - distTag: rc
-    id: npm:@takumi-rs/image-response
+    id: npm:@takumi-rs/helpers
   - distTag: rc
-    id: npm:@takumi-rs/core
+    id: npm:takumi-js
+  - id: npm:ffmpeg-keyframe-animation
   - id: npm:example-cloudflare-workers
   - id: npm:example-twitter-images
-  - id: npm:example-nextjs
-  - id: npm:ffplay
-  - id: npm:svelte
-  - id: npm:example-css-library-integration
-  - id: npm:ffmpeg-keyframe-animation
-  - id: npm:example-satori-html
   - id: npm:example-tanstack-start
+  - id: npm:example-nextjs
+  - id: npm:example-satori-html
+  - id: npm:example-css-library-integration
   - id: npm:waku-ssr
+  - id: npm:svelte
+  - id: npm:ffplay
