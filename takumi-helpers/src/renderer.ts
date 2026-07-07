@@ -1,4 +1,5 @@
-import { fontFromUrl } from "./fonts";
+import { fontFromUrl, subsetFonts } from "./fonts";
+import type { Node } from "./types";
 
 /**
  * Shared wrapper primitives for the `@takumi-rs/core` (napi) and `@takumi-rs/wasm` renderer
@@ -101,6 +102,25 @@ export type RenderExtras = {
   signal?: AbortSignal;
   images?: ImagesInput;
 };
+
+/** Public `render`/`measure` options for a backend whose binding options are {@link TInternal}. */
+export type BackendRenderOptions<TInternal> = Omit<
+  TInternal,
+  "images" | "format" | "quality" | "lossless"
+> &
+  OutputFormatOptions &
+  RenderExtras;
+
+/** Public `renderAnimation` options for a backend whose binding options are {@link TInternal}. */
+export type BackendAnimationOptions<TInternal> = Omit<
+  TInternal,
+  "images" | "format" | "quality" | "lossless"
+> &
+  AnimationOutputFormatOptions &
+  RenderExtras;
+
+/** Public `renderSvg` options for a backend whose binding options are {@link TInternal}. */
+export type BackendSvgOptions<TInternal> = Omit<TInternal, "images"> & RenderExtras;
 
 function isBuffer(data: unknown): data is ByteBuf {
   return (
@@ -241,4 +261,40 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
       fontFamilies: fontFamilies ?? registeredFamilies,
     };
   }
+}
+
+/** The binding options {@link prepareRenderInput} yields: extras stripped, resolved resources merged in. */
+export type ResolvedRenderOptions<TOptions> = Omit<
+  TOptions,
+  keyof RenderExtras | "fontFamilies"
+> & {
+  images?: ImageSource[];
+  fontFamilies?: string[];
+};
+
+/**
+ * Shared body for every backend render entry point: subsets and registers `fonts` against `source`,
+ * resolves `images`/`fontFamilies`, and enforces one abort policy: `signal` is checked before and
+ * after the (network-bound) resource resolution. Returns the binding options plus the `signal` for
+ * the backend to forward into a native call when it supports cancellation.
+ */
+export async function prepareRenderInput<
+  TOptions extends RenderExtras & { fontFamilies?: string[] },
+  TFamily extends RegisteredFamilyLike,
+>(
+  registry: FontRegistry<TFamily>,
+  options: TOptions,
+  source: string | Node | Node[],
+): Promise<{ options: ResolvedRenderOptions<TOptions>; signal: AbortSignal | undefined }> {
+  const { fonts, fontFamilies, signal, images, ...rest } = options;
+  signal?.throwIfAborted();
+
+  const resolved = await registry.resolveResources(
+    fonts && subsetFonts({ fonts, source }),
+    images,
+    fontFamilies,
+  );
+  signal?.throwIfAborted();
+
+  return { options: { ...rest, ...resolved }, signal };
 }
