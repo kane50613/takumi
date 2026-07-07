@@ -757,7 +757,9 @@ impl Fonts {
   pub fn snapshot_with_fallbacks(&self, fallbacks: Option<&FontFamily>) -> FontsSnapshot {
     let mut cloned = self.inner.clone();
 
-    if let Some(names) = fallbacks {
+    if let Some(names) = fallbacks
+      && !names.is_empty()
+    {
       // A name may be a logical subset family; expand it to its registered subset names so
       // the fallback bucket carries the whole stack, matching `font-family` expansion.
       let mut family_ids = Vec::new();
