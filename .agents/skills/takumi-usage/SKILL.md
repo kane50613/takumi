@@ -155,17 +155,44 @@ Provides fine-grained control over font rendering features and variable layout c
 
 ## Rust Crate API (`takumi`)
 
-```rust
-use takumi::{render, RenderOptions, Node};
+<!-- keep in sync with the doctest in takumi/src/lib.rs -->
 
-fn main() {
-    let options = RenderOptions {
-        width: 800,
-        height: 600,
-        ..Default::default()
-    };
-    let html = r#"<div style="background: red; width: 100%; height: 100%;"></div>"#;
-    let node = Node::from_html(html, None).unwrap();
-    let bytes = render(&node, &options).unwrap();
-}
+```rust
+use takumi::prelude::*;
+use takumi::render;
+
+let node = Node::container([Node::text("Hello, world!").with_style(
+  Style::default().with(StyleDeclaration::font_size(Length::Px(32.0).into())),
+)]);
+
+let mut fonts = Fonts::default();
+fonts.register(FontResource::new(include_bytes!(
+  "../../assets/fonts/geist/Geist[wght].woff2"
+)))?;
+
+let options = RenderOptions::builder()
+  .viewport(Viewport::new((1200, 630)))
+  .node(node)
+  .fonts(&fonts)
+  .build();
+
+let image = render(options)?;
+```
+
+To build the node tree from HTML instead, enable the `from-html` feature and use `from_html`:
+
+```rust
+use takumi::prelude::*;
+use takumi::{from_html, render};
+
+let html = r#"<div style="background: red; width: 100%; height: 100%;"></div>"#;
+let node = from_html(html, FromHtmlOptions::default())?;
+
+let options = RenderOptions::builder()
+  .viewport(Viewport::new((1200, 630)))
+  .node(node)
+  .fonts(&fonts)
+  .build();
+
+let image = render(options)?;
 ```
