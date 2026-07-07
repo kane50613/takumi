@@ -26,3 +26,31 @@ impl ToCss for Order {
     write!(dest, "{}", self.0)
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::style::FromCssStr;
+
+  #[test]
+  fn test_parse_order() {
+    for (css, expected) in [("0", Order(0)), ("5", Order(5)), ("-3", Order(-3))] {
+      assert_eq!(Order::from_css_str(css), Ok(expected), "failed for {css}");
+    }
+  }
+
+  #[test]
+  fn test_order_round_trip() {
+    for css in ["0", "5", "-3"] {
+      let parsed = Order::from_css_str(css).unwrap();
+      let reparsed = Order::from_css_str(&parsed.to_css_string()).unwrap();
+      assert_eq!(parsed, reparsed, "failed for {css}");
+    }
+  }
+
+  #[test]
+  fn test_parse_order_invalid() {
+    assert!(Order::from_css_str("1.5").is_err());
+    assert!(Order::from_css_str("auto").is_err());
+  }
+}

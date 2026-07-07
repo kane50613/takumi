@@ -74,3 +74,61 @@ where
 
   Ok((first, second))
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::style::FromCssStr;
+
+  #[test]
+  fn test_parse_place_items() {
+    for (css, expected) in [
+      (
+        "start end",
+        PlaceItems {
+          align: AlignItems::Start,
+          justify: AlignItems::End,
+        },
+      ),
+      (
+        "center",
+        PlaceItems {
+          align: AlignItems::Center,
+          justify: AlignItems::Center,
+        },
+      ),
+      (
+        "safe start",
+        PlaceItems {
+          align: AlignItems::SafeStart,
+          justify: AlignItems::SafeStart,
+        },
+      ),
+    ] {
+      assert_eq!(
+        PlaceItems::from_css_str(css),
+        Ok(expected),
+        "failed for {css}"
+      );
+    }
+  }
+
+  #[test]
+  fn test_parse_place_content() {
+    assert_eq!(
+      PlaceContent::from_css_str("start end"),
+      Ok(PlaceContent {
+        align: JustifyContent::Start,
+        justify: JustifyContent::End,
+      })
+    );
+  }
+
+  // PlaceItems/PlaceContent/PlaceSelf have no ToCss impl, so no round-trip test.
+
+  #[test]
+  fn test_parse_place_items_invalid() {
+    assert!(PlaceItems::from_css_str("bogus").is_err());
+    assert!(PlaceItems::from_css_str("123").is_err());
+  }
+}

@@ -49,3 +49,39 @@ impl ToCss for FlexGrow {
     write!(dest, "{}", self.0)
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::style::FromCssStr;
+
+  #[test]
+  fn test_parse_flex_grow() {
+    for (css, expected) in [
+      ("0", FlexGrow(0.0)),
+      ("1.5", FlexGrow(1.5)),
+      ("-2", FlexGrow(-2.0)),
+    ] {
+      assert_eq!(
+        FlexGrow::from_css_str(css),
+        Ok(expected),
+        "failed for {css}"
+      );
+    }
+  }
+
+  #[test]
+  fn test_flex_grow_round_trip() {
+    for css in ["0", "1.5", "-2"] {
+      let parsed = FlexGrow::from_css_str(css).unwrap();
+      let reparsed = FlexGrow::from_css_str(&parsed.to_css_string()).unwrap();
+      assert_eq!(parsed, reparsed, "failed for {css}");
+    }
+  }
+
+  #[test]
+  fn test_parse_flex_grow_invalid() {
+    assert!(FlexGrow::from_css_str("auto").is_err());
+    assert!(FlexGrow::from_css_str("\"foo\"").is_err());
+  }
+}

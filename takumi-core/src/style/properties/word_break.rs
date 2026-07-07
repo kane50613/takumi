@@ -34,3 +34,40 @@ impl WordBreak {
     }
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::style::{FromCssStr, ToCss};
+
+  #[test]
+  fn test_parse_word_break() {
+    for (css, expected) in [
+      ("normal", WordBreak::Normal),
+      ("break-all", WordBreak::BreakAll),
+      ("keep-all", WordBreak::KeepAll),
+      ("break-word", WordBreak::BreakWord),
+    ] {
+      assert_eq!(
+        WordBreak::from_css_str(css),
+        Ok(expected),
+        "failed for {css}"
+      );
+    }
+  }
+
+  #[test]
+  fn test_word_break_round_trip() {
+    for css in ["normal", "break-all", "keep-all", "break-word"] {
+      let parsed = WordBreak::from_css_str(css).unwrap();
+      let reparsed = WordBreak::from_css_str(&parsed.to_css_string()).unwrap();
+      assert_eq!(parsed, reparsed, "failed for {css}");
+    }
+  }
+
+  #[test]
+  fn test_parse_word_break_invalid() {
+    assert!(WordBreak::from_css_str("bogus").is_err());
+    assert!(WordBreak::from_css_str("123").is_err());
+  }
+}

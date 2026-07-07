@@ -93,3 +93,52 @@ impl Animatable for BlendMode {
     ListInterpolationStrategy::RepeatToLcm
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::style::ToCss;
+
+  #[test]
+  fn test_parse_blend_mode() {
+    for (css, expected) in [
+      ("normal", BlendMode::Normal),
+      ("multiply", BlendMode::Multiply),
+      ("plus-lighter", BlendMode::PlusLighter),
+      ("color-dodge", BlendMode::ColorDodge),
+    ] {
+      assert_eq!(
+        BlendMode::from_css_str(css),
+        Ok(expected),
+        "failed for {css}"
+      );
+    }
+  }
+
+  #[test]
+  fn test_parse_blend_modes_list() {
+    assert_eq!(
+      BlendModes::from_css_str("screen, overlay"),
+      Ok(Box::new([BlendMode::Screen, BlendMode::Overlay]) as BlendModes)
+    );
+  }
+
+  #[test]
+  fn test_blend_mode_round_trip() {
+    for css in ["normal", "multiply", "plus-lighter"] {
+      let parsed = BlendMode::from_css_str(css).unwrap();
+      let reparsed = BlendMode::from_css_str(&parsed.to_css_string()).unwrap();
+      assert_eq!(parsed, reparsed, "failed for {css}");
+    }
+
+    let parsed = BlendModes::from_css_str("screen, overlay").unwrap();
+    let reparsed = BlendModes::from_css_str(&parsed.to_css_string()).unwrap();
+    assert_eq!(parsed, reparsed);
+  }
+
+  #[test]
+  fn test_parse_blend_mode_invalid() {
+    assert!(BlendMode::from_css_str("bogus").is_err());
+    assert!(BlendMode::from_css_str("123").is_err());
+  }
+}

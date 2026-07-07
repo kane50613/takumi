@@ -37,3 +37,50 @@ impl MakeComputed for TextStroke {
     self.width.make_computed(sizing);
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::style::{Color, FromCssStr};
+
+  #[test]
+  fn test_parse_text_stroke() {
+    for (css, expected) in [
+      (
+        "2px",
+        TextStroke {
+          width: Length::Px(2.0),
+          color: None,
+        },
+      ),
+      (
+        "2px red",
+        TextStroke {
+          width: Length::Px(2.0),
+          color: Some(ColorInput::Value(Color::from_rgb(0xff0000))),
+        },
+      ),
+      (
+        "1em",
+        TextStroke {
+          width: Length::Em(1.0),
+          color: None,
+        },
+      ),
+    ] {
+      assert_eq!(
+        TextStroke::from_css_str(css),
+        Ok(expected),
+        "failed for {css}"
+      );
+    }
+  }
+
+  // TextStroke has no ToCss impl, so no round-trip test.
+
+  #[test]
+  fn test_parse_text_stroke_invalid() {
+    assert!(TextStroke::from_css_str("bogus").is_err());
+    assert!(TextStroke::from_css_str("\"2px\"").is_err());
+  }
+}

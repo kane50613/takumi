@@ -1192,3 +1192,133 @@ impl<'a> FontResource<'a> {
     })
   }
 }
+
+#[cfg(test)]
+#[allow(clippy::panic, clippy::unwrap_used)]
+mod tests {
+  use std::{fs::File, io::Read, path::Path};
+
+  use super::*;
+  use crate::style::FromCssStr;
+
+  fn read_font_asset(relative: &str) -> Vec<u8> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(relative);
+    let mut bytes = Vec::new();
+    let mut file = File::open(&path)
+      .unwrap_or_else(|error| panic!("failed to open test font {}: {error}", path.display()));
+    file
+      .read_to_end(&mut bytes)
+      .unwrap_or_else(|error| panic!("failed to read test font {}: {error}", path.display()));
+    bytes
+  }
+
+  fn geist_bytes() -> Vec<u8> {
+    read_font_asset("../assets/fonts/geist/Geist[wght].woff2")
+  }
+
+  fn geist_mono_bytes() -> Vec<u8> {
+    read_font_asset("../assets/fonts/geist/GeistMono[wght].woff2")
+  }
+
+  fn register_named(fonts: &mut Fonts, bytes: Vec<u8>, family_name: &str) -> Vec<RegisteredFamily> {
+    fonts
+      .register(FontResource::new(bytes).override_info(FontOverride {
+        family_name: Some(family_name.into()),
+        ..Default::default()
+      }))
+      .unwrap()
+  }
+
+  #[test]
+  fn register_returns_family_with_at_least_one_face() {
+    let mut fonts = Fonts::default();
+    let families = register_named(&mut fonts, geist_bytes(), "Geist Test");
+
+    assert_eq!(families.len(), 1);
+    assert_eq!(families[0].name, "Geist Test");
+    assert!(!families[0].faces.is_empty());
+  }
+
+  #[test]
+  fn registering_same_bytes_twice_is_idempotent_in_order() {
+    let mut fonts = Fonts::default();
+    register_named(&mut fonts, geist_bytes(), "Geist Test");
+    register_named(&mut fonts, geist_bytes(), "Geist Test");
+
+    // Registration order dedups by name: registering the same family name twice does not
+    // produce a second entry in `order`, so default fallback selection stays stable.
+    assert_eq!(
+      fonts
+        .order
+        .iter()
+        .filter(|name| *name == "Geist Test")
+        .count(),
+      1
+    );
+  }
+
+  #[test]
+  fn font_override_family_name_renames_family() {
+    let mut fonts = Fonts::default();
+    let families = register_named(&mut fonts, geist_bytes(), "Renamed Family");
+
+    assert_eq!(families[0].name, "Renamed Family");
+    assert!(fonts.order.contains(&"Renamed Family".to_string()));
+  }
+
+  #[test]
+  fn subset_of_groups_multiple_families_under_logical_name() {
+    let mut fonts = Fonts::default();
+    fonts
+      .register(
+        FontResource::new(geist_bytes())
+          .override_info(FontOverride {
+            family_name: Some("Subset A".into()),
+            ..Default::default()
+          })
+          .subset_of("Logical"),
+      )
+      .unwrap();
+    fonts
+      .register(
+        FontResource::new(geist_mono_bytes())
+          .override_info(FontOverride {
+            family_name: Some("Subset B".into()),
+            ..Default::default()
+          })
+          .subset_of("Logical"),
+      )
+      .unwrap();
+
+    let subsets = fonts.groups.get("Logical").expect("logical group present");
+    assert_eq!(
+      subsets,
+      &BTreeSet::from(["Subset A".to_string(), "Subset B".to_string()])
+    );
+
+    let snapshot =
+      fonts.snapshot_with_fallbacks(Some(&FontFamily::from_css_str("Logical").unwrap()));
+    assert_eq!(snapshot.groups.get("Logical"), Some(subsets));
+  }
+
+  #[test]
+  fn registration_order_defines_default_fallbacks() {
+    let mut fonts = Fonts::default();
+    register_named(&mut fonts, geist_bytes(), "B Family");
+    register_named(&mut fonts, geist_mono_bytes(), "A Family");
+
+    assert_eq!(
+      fonts.order,
+      vec!["B Family".to_string(), "A Family".to_string()]
+    );
+  }
+
+  #[test]
+  fn unknown_family_in_fallbacks_does_not_panic() {
+    let fonts = Fonts::default();
+    let unknown = FontFamily::from_css_str("Never Registered").unwrap();
+
+    // Must not panic: an unresolved name simply yields an empty fallback bucket.
+    let _snapshot = fonts.snapshot_with_fallbacks(Some(&unknown));
+  }
+}

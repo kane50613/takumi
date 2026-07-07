@@ -298,3 +298,75 @@ impl ToCss for PositionValue {
     self.0.to_css(dest)
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::style::FromCssStr;
+
+  #[test]
+  fn test_parse_position_value() {
+    for (css, expected) in [
+      (
+        "10px 20px",
+        PositionValue(SpacePair::from_pair(
+          PositionComponent::Length(Length::Px(10.0)),
+          PositionComponent::Length(Length::Px(20.0)),
+        )),
+      ),
+      (
+        "left top",
+        PositionValue(SpacePair::from_pair(
+          PositionComponent::KeywordX(PositionKeywordX::Left),
+          PositionComponent::KeywordY(PositionKeywordY::Top),
+        )),
+      ),
+      (
+        "top",
+        PositionValue(SpacePair::from_pair(
+          PositionComponent::KeywordX(PositionKeywordX::Center),
+          PositionComponent::KeywordY(PositionKeywordY::Top),
+        )),
+      ),
+      ("center", PositionValue::center()),
+    ] {
+      assert_eq!(
+        PositionValue::from_css_str(css),
+        Ok(expected),
+        "failed for {css}"
+      );
+    }
+  }
+
+  #[test]
+  fn test_position_value_round_trip() {
+    for css in ["10px 20px", "left top", "top"] {
+      let parsed = PositionValue::from_css_str(css).unwrap();
+      let reparsed = PositionValue::from_css_str(&parsed.to_css_string()).unwrap();
+      assert_eq!(parsed, reparsed, "failed for {css}");
+    }
+  }
+
+  #[test]
+  fn test_position_value_center_does_not_round_trip() {
+    let parsed = PositionValue::from_css_str("center").unwrap();
+    assert_eq!(parsed, PositionValue::center());
+    let reparsed = PositionValue::from_css_str(&parsed.to_css_string()).unwrap();
+    // TODO: looks wrong: "center" serializes to "center center", and reparsing always reads
+    // the ambiguous second "center" as KeywordX (PositionComponent::from_css keyword order),
+    // so the y-axis silently becomes KeywordX instead of KeywordY.
+    assert_eq!(
+      reparsed,
+      PositionValue(SpacePair::from_pair(
+        PositionComponent::KeywordX(PositionKeywordX::Center),
+        PositionComponent::KeywordX(PositionKeywordX::Center),
+      ))
+    );
+  }
+
+  #[test]
+  fn test_parse_position_value_invalid() {
+    assert!(PositionValue::from_css_str("diagonal").is_err());
+    assert!(PositionValue::from_css_str("\"foo\"").is_err());
+  }
+}

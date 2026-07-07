@@ -95,3 +95,42 @@ impl<T: Copy + ToCss> ToCss for SpacePair<T> {
     self.y.to_css(dest)
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::style::FromCssStr;
+
+  #[test]
+  fn test_parse_space_pair_length() {
+    for (css, expected) in [
+      ("10px", SpacePair::from_single(Length::Px(10.0))),
+      (
+        "10px 20px",
+        SpacePair::from_pair(Length::Px(10.0), Length::Px(20.0)),
+      ),
+      ("auto", SpacePair::from_single(Length::Auto)),
+    ] {
+      assert_eq!(
+        SpacePair::<Length>::from_css_str(css),
+        Ok(expected),
+        "failed for {css}"
+      );
+    }
+  }
+
+  #[test]
+  fn test_space_pair_length_round_trip() {
+    for css in ["10px", "10px 20px", "auto"] {
+      let parsed = SpacePair::<Length>::from_css_str(css).unwrap();
+      let reparsed = SpacePair::<Length>::from_css_str(&parsed.to_css_string()).unwrap();
+      assert_eq!(parsed, reparsed, "failed for {css}");
+    }
+  }
+
+  #[test]
+  fn test_parse_space_pair_length_invalid() {
+    assert!(SpacePair::<Length>::from_css_str("10xyz").is_err());
+    assert!(SpacePair::<Length>::from_css_str("\"foo\"").is_err());
+  }
+}

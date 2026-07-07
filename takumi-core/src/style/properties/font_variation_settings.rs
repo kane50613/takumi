@@ -69,3 +69,48 @@ impl ToCss for FontVariation {
     write!(dest, "\"{}\" {}", self.tag, self.value)
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::style::FromCssStr;
+
+  #[test]
+  fn test_parse_font_variation_settings() {
+    for (css, expected) in [
+      ("normal", Box::new([]) as FontVariationSettings),
+      (
+        "\"wght\" 400",
+        Box::new([FontVariation::new(Tag::new(b"wght"), 400.0)]),
+      ),
+      (
+        "\"wght\" 400, \"slnt\" -10",
+        Box::new([
+          FontVariation::new(Tag::new(b"wght"), 400.0),
+          FontVariation::new(Tag::new(b"slnt"), -10.0),
+        ]),
+      ),
+    ] {
+      assert_eq!(
+        FontVariationSettings::from_css_str(css),
+        Ok(expected),
+        "failed for {css}"
+      );
+    }
+  }
+
+  #[test]
+  fn test_font_variation_settings_round_trip() {
+    for css in ["normal", "\"wght\" 400", "\"wght\" 400, \"slnt\" -10"] {
+      let parsed = FontVariationSettings::from_css_str(css).unwrap();
+      let reparsed = FontVariationSettings::from_css_str(&parsed.to_css_string()).unwrap();
+      assert_eq!(parsed, reparsed, "failed for {css}");
+    }
+  }
+
+  #[test]
+  fn test_parse_font_variation_settings_invalid() {
+    assert!(FontVariationSettings::from_css_str("123").is_err());
+    assert!(FontVariationSettings::from_css_str("wght 400").is_err());
+  }
+}

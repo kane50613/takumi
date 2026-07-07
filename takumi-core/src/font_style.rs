@@ -258,3 +258,66 @@ impl<'s> SizedFontStyle<'s> {
     }
   }
 }
+
+// Weight/stretch/style nearest-match face selection lives in parley's fontique query engine,
+// not in this file; the one testable seam owned by this module is `ExpandedFontFamily::expand`.
+#[cfg(test)]
+mod tests {
+  use std::collections::{BTreeSet, HashMap};
+
+  use parley::{FontFamilyName, GenericFamily};
+
+  use super::ExpandedFontFamily;
+  use crate::style::{FontFamily, FromCssStr};
+
+  fn names(expanded: &ExpandedFontFamily) -> Vec<String> {
+    expanded
+      .iter()
+      .map(|name| match name {
+        FontFamilyName::Named(name) => name.into_owned(),
+        FontFamilyName::Generic(generic) => format!("{generic:?}"),
+      })
+      .collect()
+  }
+
+  #[test]
+  fn names_not_in_groups_pass_through_unchanged() {
+    let family = FontFamily::from_css_str("Geist, serif").unwrap();
+    let expanded = ExpandedFontFamily::expand(&family, &HashMap::new());
+
+    assert_eq!(expanded.0.len(), 2);
+    assert_eq!(
+      names(&expanded),
+      vec!["Geist".to_string(), "Serif".to_string()]
+    );
+  }
+
+  #[test]
+  fn logical_subset_group_expands_to_its_registered_subsets_in_order() {
+    let family = FontFamily::from_css_str("Logical").unwrap();
+    let mut groups = HashMap::new();
+    groups.insert(
+      "Logical".to_string(),
+      BTreeSet::from(["Subset A".to_string(), "Subset B".to_string()]),
+    );
+
+    let expanded = ExpandedFontFamily::expand(&family, &groups);
+
+    assert_eq!(
+      names(&expanded),
+      vec!["Subset A".to_string(), "Subset B".to_string()]
+    );
+  }
+
+  #[test]
+  fn generic_family_tokens_pass_through_expansion() {
+    let family = FontFamily::from_css_str("monospace").unwrap();
+    let expanded = ExpandedFontFamily::expand(&family, &HashMap::new());
+
+    assert_eq!(expanded.0.len(), 1);
+    assert!(matches!(
+      expanded.iter().next(),
+      Some(FontFamilyName::Generic(GenericFamily::Monospace))
+    ));
+  }
+}

@@ -74,3 +74,57 @@ declare_enum_from_css_impl!(
   "auto" => FontSynthesic::Auto,
   "none" => FontSynthesic::None,
 );
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::style::FromCssStr;
+
+  #[test]
+  fn test_parse_font_synthesis() {
+    for (css, expected) in [
+      (
+        "none",
+        FontSynthesis {
+          weight: FontSynthesic::None,
+          style: FontSynthesic::None,
+        },
+      ),
+      (
+        "weight",
+        FontSynthesis {
+          weight: FontSynthesic::Auto,
+          style: FontSynthesic::None,
+        },
+      ),
+      (
+        "style",
+        FontSynthesis {
+          weight: FontSynthesic::None,
+          style: FontSynthesic::Auto,
+        },
+      ),
+      (
+        "weight style",
+        FontSynthesis {
+          weight: FontSynthesic::Auto,
+          style: FontSynthesic::Auto,
+        },
+      ),
+    ] {
+      assert_eq!(
+        FontSynthesis::from_css_str(css),
+        Ok(expected),
+        "failed for {css}"
+      );
+    }
+  }
+
+  // FontSynthesis has no ToCss impl, so no round-trip test.
+
+  #[test]
+  fn test_parse_font_synthesis_invalid() {
+    assert!(FontSynthesis::from_css_str("auto").is_err());
+    assert!(FontSynthesis::from_css_str("123").is_err());
+  }
+}
