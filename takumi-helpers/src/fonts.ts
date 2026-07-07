@@ -384,5 +384,19 @@ export async function googleFonts(options: GoogleFontsOptions): Promise<FontSubs
 
   const css = await fetchCssCached(buildUrl(options), options);
 
-  return mergeVariableFaces(parseSubsetFaces(css)).map((face) => toSubset(face, options));
+  // Google's css2 response orders `@font-face` blocks by its own logic, not by the `family=`
+  // query order — the caller's declared priority survives only if we restore it here. A render
+  // with no explicit `fontFamilies` falls back to registration order, so this is what lets
+  // `families: ["Noto Sans TC", "Noto Sans JP"]` actually prefer the Traditional Chinese face
+  // for a codepoint both cover.
+  const familyOrder = new Map(
+    options.families.map((family, index) => [
+      typeof family === "string" ? family : family.name,
+      index,
+    ]),
+  );
+
+  return mergeVariableFaces(parseSubsetFaces(css))
+    .sort((a, b) => (familyOrder.get(a.family) ?? 0) - (familyOrder.get(b.family) ?? 0))
+    .map((face) => toSubset(face, options));
 }

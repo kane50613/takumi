@@ -4,6 +4,7 @@
 // script, so glyphs across languages share a single design.
 export const FONT_FAMILIES = [
   "Noto Sans",
+  "Noto Sans TC",
   "Noto Sans JP",
   "Noto Sans KR",
   "Noto Sans SC",
