@@ -540,8 +540,12 @@ fn resolve_prepared_at_time<'p, 'a, 'g>(
   prepared: &'p [PreparedScene<'a, 'g>],
   time_ms: u64,
 ) -> Option<(&'p PreparedScene<'a, 'g>, u64)> {
-  resolve_at_time(prepared.len(), |index| prepared[index].scene.duration_ms, time_ms)
-    .map(|(index, local_time_ms)| (&prepared[index], local_time_ms))
+  resolve_at_time(
+    prepared.len(),
+    |index| prepared[index].scene.duration_ms,
+    time_ms,
+  )
+  .map(|(index, local_time_ms)| (&prepared[index], local_time_ms))
 }
 
 /// A frame's start offset and displayed duration, both in milliseconds. Computed
@@ -629,7 +633,9 @@ fn resolve_at_time(
     return None;
   }
 
-  let total_ms = (0..count).map(|index| u64::from(duration_ms(index))).sum::<u64>();
+  let total_ms = (0..count)
+    .map(|index| u64::from(duration_ms(index)))
+    .sum::<u64>();
   let clamped_time_ms = time_ms.min(total_ms.saturating_sub(1));
   let mut elapsed_ms = 0_u64;
 
