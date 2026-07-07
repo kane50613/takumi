@@ -9,11 +9,14 @@ jobs:
   mirror:
     runs-on: ubuntu-slim
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
 
       - name: Push to Codeberg
+        env:
+          CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
         run: |
-          git remote add codeberg https://kanewang:${{ secrets.CODEBERG_TOKEN }}@codeberg.org/kanewang/takumi.git
-          git push --mirror codeberg
+          header="Authorization: Basic $(printf 'kanewang:%s' "$CODEBERG_TOKEN" | base64 -w0)"
+          git -c "http.https://codeberg.org/.extraheader=$header" \
+            push --mirror https://codeberg.org/kanewang/takumi.git
