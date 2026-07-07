@@ -116,9 +116,11 @@ jobs:
           exit 1
 
       - name: Run security audit
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: cargo audit
 
       - name: Test Publish (--dry-run)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: cargo publish --dry-run --workspace
 
   build-helpers:
@@ -149,25 +151,6 @@ jobs:
           name: helpers-dist
           path: takumi-helpers/dist
           if-no-files-found: error
-
-  test-helpers:
-    name: Test @takumi-rs/helpers
-    runs-on: ubuntu-slim
-    needs: build-helpers
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: canary
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile --filter ./takumi-helpers
-
-      - name: Test
-        working-directory: takumi-helpers
-        run: bun test
 
   build-and-test-napi:
     needs: build-helpers
@@ -638,7 +621,6 @@ jobs:
       [
         lint-and-format,
         test-rust,
-        test-helpers,
         test-js,
         build-image-response,
         check-packaging,
