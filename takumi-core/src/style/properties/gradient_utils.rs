@@ -470,14 +470,21 @@ fn assign_stop_sample_indices(
       let stop_index = i + offset;
       let lower_bound = stop_index.min(max_index);
       let upper_bound = max_index.saturating_sub(stop_count - 1 - stop_index);
-      *slot = logical_index.clamp(lower_bound, upper_bound);
+      *slot = if lower_bound <= upper_bound {
+        logical_index.clamp(lower_bound, upper_bound)
+      } else {
+        // More stops than LUT slots: uniqueness is impossible; stay in range.
+        logical_index.min(max_index)
+      };
     }
 
     i = run_end;
   }
 
   for i in 1..stop_count {
-    indices[i] = indices[i].max(indices[i - 1].saturating_add(1));
+    indices[i] = indices[i]
+      .max(indices[i - 1].saturating_add(1))
+      .min(max_index);
   }
 
   for i in (0..stop_count.saturating_sub(1)).rev() {
@@ -1057,5 +1064,41 @@ mod tests {
   fn test_interpolate_rgba_uses_premultiplied_alpha() {
     let mixed = interpolate_rgba(Color([255, 255, 255, 255]), Color([0, 0, 0, 0]), 0.5);
     assert_eq!(mixed, Color([255, 255, 255, 128]));
+  }
+
+  fn evenly_spaced_stops(count: usize, axis_length: f32) -> Vec<ResolvedGradientStop> {
+    (0..count)
+      .map(|i| ResolvedGradientStop {
+        color: Color([255, 0, 0, 255]),
+        position: axis_length * i as f32 / (count - 1) as f32,
+      })
+      .collect()
+  }
+
+  #[test]
+  fn assign_stop_sample_indices_survives_more_stops_than_lut() {
+    let stops = evenly_spaced_stops(9000, 256.0);
+    let indices = assign_stop_sample_indices(&stops, 256.0, 8193);
+
+    assert_eq!(indices.len(), 9000);
+    assert!(indices.iter().all(|&idx| idx < 8193));
+  }
+
+  #[test]
+  fn snap_stop_samples_survives_more_stops_than_lut() {
+    let stops = evenly_spaced_stops(9000, 256.0);
+    let mut lut = vec![PremultipliedColorU8::TRANSPARENT; 8193];
+    snap_stop_samples(&mut lut, &stops, 256.0);
+  }
+
+  #[test]
+  fn assign_stop_sample_indices_in_range_is_strictly_increasing() {
+    let stops = evenly_spaced_stops(5, 512.0);
+    let indices = assign_stop_sample_indices(&stops, 512.0, 512);
+
+    assert!(indices.iter().all(|&idx| idx < 512));
+    for pair in indices.windows(2) {
+      assert!(pair[0] < pair[1]);
+    }
   }
 }

@@ -31,6 +31,16 @@ fn bucket_index_clamped(capacity: usize) -> usize {
   raw.min(BUCKET_COUNT - 1)
 }
 
+/// Bucket whose guarantee (`capacity >= 2^i`) this capacity satisfies.
+#[inline]
+fn release_bucket_index(capacity: usize) -> usize {
+  if capacity == 0 {
+    return 0;
+  }
+  let raw = (usize::BITS - 1 - capacity.leading_zeros()) as usize; // floor(log2)
+  raw.min(BUCKET_COUNT - 1)
+}
+
 #[inline]
 fn pop_from_bucket<T>(pools: &mut [Vec<Vec<T>>; BUCKET_COUNT], index: usize) -> Option<Vec<T>> {
   pools[index..].iter_mut().find_map(Vec::pop)
@@ -66,6 +76,9 @@ impl BufferPool {
       None => Vec::with_capacity(allocate_capacity(index, capacity)),
     };
     buf.clear();
+    if buf.capacity() < capacity {
+      buf.reserve_exact(capacity);
+    }
     unsafe {
       buf.set_len(capacity);
     }
@@ -78,7 +91,7 @@ impl BufferPool {
       return;
     }
     self.current_size += cap;
-    self.pools[bucket_index_clamped(cap)].push(buffer);
+    self.pools[release_bucket_index(cap)].push(buffer);
   }
 
   pub(crate) fn acquire_u32(&mut self, capacity: usize) -> Vec<u32> {
@@ -104,6 +117,46 @@ impl BufferPool {
       return;
     }
     self.current_size += cap_bytes;
-    self.u32_pools[bucket_index_clamped(cap)].push(buffer);
+    self.u32_pools[release_bucket_index(cap)].push(buffer);
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn release_undersized_then_acquire_dirty_larger() {
+    let mut pool = BufferPool::default();
+    let buf = vec![0u8; 3000];
+    pool.release(buf);
+
+    let mut acquired = pool.acquire_dirty(4000);
+    assert_eq!(acquired.len(), 4000);
+    assert!(acquired.capacity() >= 4000);
+    acquired.fill(0xAB);
+    assert!(acquired.iter().all(|&b| b == 0xAB));
+  }
+
+  #[test]
+  fn release_buckets_by_floor_power_of_two() {
+    let mut pool = BufferPool::default();
+    let buf = vec![0u8; 3000];
+    pool.release(buf);
+
+    let acquired = pool.acquire_dirty(2048);
+    assert_eq!(acquired.len(), 2048);
+    assert!(acquired.capacity() >= 2048);
+  }
+
+  #[test]
+  fn release_u32_undersized_then_acquire_larger() {
+    let mut pool = BufferPool::default();
+    let buf = vec![0u32; 3000];
+    pool.release_u32(buf);
+
+    let acquired = pool.acquire_u32(4000);
+    assert_eq!(acquired.len(), 4000);
+    assert!(acquired.capacity() >= 4000);
   }
 }

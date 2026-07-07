@@ -8,6 +8,16 @@ use crate::{
   style::{Affine, BlendMode, ImageScalingAlgorithm, Sides},
 };
 
+/// Shadow buffers above this pixel count are skipped rather than allocated.
+pub(crate) const MAX_SHADOW_AREA: u64 = 1 << 28; // 256 Mi single-channel bytes
+
+/// Guards shadow buffer sizing against `u32` overflow from huge blur radii.
+#[inline]
+pub(crate) fn checked_shadow_area(width: u32, height: u32) -> Option<usize> {
+  let area = width as u64 * height as u64;
+  (area > 0 && area <= MAX_SHADOW_AREA).then_some(area as usize)
+}
+
 /// Draws the outset mask of the shadow.
 pub(crate) fn draw_outset_shadow(
   shadow: &SizedShadow,
@@ -35,11 +45,14 @@ pub(crate) fn draw_outset_shadow(
     0.0
   };
 
-  let shadow_width = placement.width + (blur_padding * 2.0) as u32;
-  let shadow_height = placement.height + (blur_padding * 2.0) as u32;
-  let mut shadow_alpha = canvas
-    .buffer_pool
-    .acquire((shadow_width * shadow_height) as usize);
+  let total_padding = (blur_padding * 2.0) as u32;
+  let shadow_width = placement.width.saturating_add(total_padding);
+  let shadow_height = placement.height.saturating_add(total_padding);
+  let Some(area) = checked_shadow_area(shadow_width, shadow_height) else {
+    canvas.buffer_pool.release(mask);
+    return Ok(());
+  };
+  let mut shadow_alpha = canvas.buffer_pool.acquire(area);
 
   let padding = blur_padding as u32;
   for y in 0..placement.height {
@@ -215,4 +228,29 @@ pub(crate) fn draw_inset_shadow(
   buffer_pool.release(shadow_alpha);
 
   Ok((data, width, height))
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn checked_shadow_area_accepts_sane_dimensions() {
+    assert_eq!(checked_shadow_area(1024, 1024), Some(1024 * 1024));
+    assert_eq!(checked_shadow_area(16384, 16384), Some(1 << 28));
+  }
+
+  #[test]
+  fn checked_shadow_area_rejects_zero() {
+    assert_eq!(checked_shadow_area(0, 1024), None);
+    assert_eq!(checked_shadow_area(1024, 0), None);
+  }
+
+  #[test]
+  fn checked_shadow_area_rejects_extreme_blur_radius() {
+    // `box-shadow: 0 0 100000px` on a large node produces ~1.5M px dimensions;
+    // the u32 product would wrap, but the u64 guard rejects it without panic.
+    assert_eq!(checked_shadow_area(1_500_000, 1_500_000), None);
+    assert_eq!(checked_shadow_area(u32::MAX, u32::MAX), None);
+  }
 }

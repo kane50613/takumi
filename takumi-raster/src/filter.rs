@@ -7,7 +7,8 @@ use tiny_skia::{Mask as TinyMask, PixmapMut};
 
 use crate::{
   BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, Placement, RenderContext, Result,
-  SizedShadow, apply_blur, apply_blur_rgba_bytes, fast_div_255, intersect_alpha_masks, render_mask,
+  SizedShadow, apply_blur, apply_blur_rgba_bytes, checked_shadow_area, fast_div_255,
+  intersect_alpha_masks, render_mask,
   style::{
     Affine, Color, Filter, FilterCategory, LUMA_WEIGHTS, PercentageNumber, SEPIA_WEIGHTS,
     SizingContext, TransferChannel, TransferTable,
@@ -562,10 +563,17 @@ fn apply_drop_shadow_filter(
     return Ok(());
   }
 
-  let shadow_width = source_bounds.width + 2 * padding;
-  let shadow_height = source_bounds.height + 2 * padding;
+  let shadow_width = source_bounds
+    .width
+    .saturating_add(padding.saturating_mul(2));
+  let shadow_height = source_bounds
+    .height
+    .saturating_add(padding.saturating_mul(2));
 
-  let mut shadow_alpha = buffer_pool.acquire_dirty((shadow_width * shadow_height) as usize);
+  let Some(area) = checked_shadow_area(shadow_width, shadow_height) else {
+    return Ok(());
+  };
+  let mut shadow_alpha = buffer_pool.acquire_dirty(area);
   shadow_alpha.fill(0);
 
   for y in 0..source_bounds.height {
