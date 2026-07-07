@@ -26,6 +26,33 @@ const image = await render(element, {
 
 A plain `Map` never evicts. If your URLs are high-cardinality (a different image per render), pass a bounded cache such as an LRU, or omit `fetchCache`.
 
+## Fetch limits
+
+Every remote fetch (images, fonts, Google Fonts CSS) is bounded. The group form of `images` takes the same options:
+
+| Option     | Default            | Use                                                            |
+| :--------- | :----------------- | :------------------------------------------------------------- |
+| `timeout`  | `5000` (ms)        | Abort a hanging host. `0` or negative disables it.             |
+| `maxBytes` | 32 MiB             | Reject a body past this size, by `content-length` or streamed. |
+| `allowUrl` | allow all          | Return `false` to block a URL, e.g. an SSRF allowlist.         |
+| `fetch`    | `globalThis.fetch` | Custom fetch implementation.                                   |
+
+```tsx twoslash
+import { render } from "takumi-js";
+
+const element = <img src="https://example.com/image.png" />;
+
+const image = await render(element, {
+  images: {
+    timeout: 3000,
+    maxBytes: 4 * 1024 * 1024,
+    allowUrl: (url) => new URL(url).hostname === "example.com",
+  },
+});
+```
+
+`allowUrl` only filters the URL string. Redirects and DNS are not inspected; keep a custom `fetch` for a stricter SSRF policy.
+
 ## Pre-fetched Images
 
 Provide images by key so the renderer doesn't have to fetch them itself. Each key can be used in any `src` field or in the `background-image` / `mask-image` CSS properties.

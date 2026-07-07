@@ -142,6 +142,30 @@ describe("ImageResponse", () => {
     expect(onError.mock.calls[0]?.[0]).toBe(error);
   });
 
+  test("does not emit an unhandledRejection when ready is never awaited", async () => {
+    const error = new Error("font load failed");
+
+    const rejections: unknown[] = [];
+    const handler = (reason: unknown) => {
+      rejections.push(reason);
+    };
+    process.on("unhandledRejection", handler);
+
+    try {
+      const response = new ImageResponse(<div>Hello</div>, {
+        fonts: [{ key: "failing-font", data: () => Promise.reject(error) }],
+        onError() {},
+      });
+      await response.arrayBuffer().catch(() => {});
+      await Bun.sleep(50);
+
+      expect(rejections).toHaveLength(0);
+      await expect(response.ready).rejects.toThrow();
+    } finally {
+      process.off("unhandledRejection", handler);
+    }
+  });
+
   test("should not crash on social template with pre-wrap and emoji", async () => {
     const posts = [
       {

@@ -33,6 +33,10 @@ function buildImageResponse(
     rejectReady = reject;
   });
 
+  // A rejection is also surfaced via controller.error; without this, callers
+  // that never await `ready` crash the process with an unhandledRejection.
+  ready.catch(() => {});
+
   const stream = new ReadableStream({
     async start(controller) {
       try {
