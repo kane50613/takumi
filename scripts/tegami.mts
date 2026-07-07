@@ -33,6 +33,11 @@ const refreshLockfile: TegamiPlugin = {
   },
 };
 
+// v2 beta line; clear this for the stable 2.0.0 release.
+const prerelease = "rc";
+
+if (prerelease) process.env.npm_config_tag = prerelease;
+
 const groupedPackages = [
   "npm:takumi-js",
   "npm:@takumi-rs/core",
@@ -66,7 +71,7 @@ const paper = tegami({
     cargo({ updateLockFile: true, bumpDep }),
   ],
   groups: {
-    takumi: { syncBump: true, syncGitTag: true },
+    takumi: { syncBump: true, syncGitTag: true, prerelease },
   },
   packages,
   npm: { client: "bun", updateLockFile: true, bumpDep },
