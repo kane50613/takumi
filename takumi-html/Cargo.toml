@@ -21,4 +21,7 @@ version = "0.3.0"
 [lints]
 workspace = true
 
+[package.metadata.docs.rs]
+all-features = true
+
 
