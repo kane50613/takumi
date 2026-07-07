@@ -18,7 +18,7 @@ use smallvec::SmallVec;
 use crate::{
   style::{
     StyleDeclarationBlock,
-    selector::{CssRule, Ident, PseudoElement, SelectorImpl, StyleSheet},
+    selector::{CssRule, Ident, PseudoClass, PseudoElement, SelectorImpl, StyleSheet},
   },
   viewport::Viewport,
 };
@@ -323,9 +323,23 @@ impl<'a, N: MatchableNode> Element for ArenaElement<'a, N> {
   }
   fn match_non_ts_pseudo_class(
     &self,
-    _pc: &<Self::Impl as SelectorImplTrait>::NonTSPseudoClass,
+    pc: &<Self::Impl as SelectorImplTrait>::NonTSPseudoClass,
     _context: &mut MatchingContext<'_, Self::Impl>,
   ) -> bool {
+    let PseudoClass::Lang(ranges) = pc else {
+      return false;
+    };
+
+    // `lang` is inherited: walk up from this element to the nearest ancestor-or-self that
+    // has one set, matching HTML's language-determination algorithm. No ancestor has one
+    // set means the language is unknown, so `:lang()` never matches.
+    let mut current = Some(*self);
+    while let Some(element) = current {
+      if let Some(lang) = element.tree.nodes[element.index].node.attr("lang") {
+        return ranges.iter().any(|range| lang_matches(lang, range));
+      }
+      current = element.parent_element();
+    }
     false
   }
   fn match_pseudo_element(
@@ -609,4 +623,18 @@ fn take_pseudo_bucket<'a>(rules: &mut Vec<MatchedRule<'a>>) -> Option<MatchedDec
   let mut view = MatchedDeclarationsView::default();
   finalize_bucket(rules, &mut view);
   Some(view)
+}
+
+/// RFC 4647 basic filtering, as `:lang()` uses: `range` matches `lang` if they're equal
+/// (case-insensitive) or `lang` extends `range` with a `-` boundary (`zh` matches `zh-Hant`).
+/// `*` matches any non-empty `lang`.
+fn lang_matches(lang: &str, range: &str) -> bool {
+  if range == "*" {
+    return true;
+  }
+  lang.eq_ignore_ascii_case(range)
+    || lang
+      .get(..range.len())
+      .is_some_and(|prefix| prefix.eq_ignore_ascii_case(range))
+      && lang.as_bytes().get(range.len()) == Some(&b'-')
 }

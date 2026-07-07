@@ -104,19 +104,39 @@ impl PrecomputedHash for Ident {
 #[derive(Debug, Clone)]
 pub(crate) struct SelectorImpl;
 
-// Parsed but never matched, so rules with `:hover`, `::before`, etc. survive
-// alongside their sibling selectors instead of getting dropped wholesale.
-/// A pseudo-class, parsed but never matched.
+// Most pseudo-classes are parsed but never matched, so rules with `:hover`, `::before`,
+// etc. survive alongside their sibling selectors instead of getting dropped wholesale.
+// `:lang()` is matched for real (see `crate::matching`) — it needs no live/interactive
+// state, just the `lang` attribute inherited up the tree, which a static render has.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct PseudoClass(Ident);
+pub(crate) enum PseudoClass {
+  /// `:lang(en, fr, ...)` — one or more comma-separated BCP-47 basic-filtering ranges.
+  Lang(Vec<Box<str>>),
+  /// Any other pseudo-class, parsed but never matched.
+  Other(Ident),
+}
 
 impl ToCss for PseudoClass {
   fn to_css<W>(&self, dest: &mut W) -> fmt::Result
   where
     W: Write,
   {
-    dest.write_char(':')?;
-    self.0.to_css(dest)
+    match self {
+      Self::Lang(ranges) => {
+        dest.write_str(":lang(")?;
+        for (i, range) in ranges.iter().enumerate() {
+          if i > 0 {
+            dest.write_str(", ")?;
+          }
+          dest.write_str(range)?;
+        }
+        dest.write_char(')')
+      }
+      Self::Other(name) => {
+        dest.write_char(':')?;
+        name.to_css(dest)
+      }
+    }
   }
 }
 
@@ -211,7 +231,7 @@ impl<'i> selectors::Parser<'i> for TakumiSelectorParser {
     _location: SourceLocation,
     name: CowRcStr<'i>,
   ) -> Result<<Self::Impl as SelectorImplTrait>::NonTSPseudoClass, ParseError<'i, Self::Error>> {
-    Ok(PseudoClass(Ident::from(&*name)))
+    Ok(PseudoClass::Other(Ident::from(&*name)))
   }
 
   fn parse_non_ts_functional_pseudo_class<'t>(
@@ -220,8 +240,20 @@ impl<'i> selectors::Parser<'i> for TakumiSelectorParser {
     parser: &mut Parser<'i, 't>,
     _after_part: bool,
   ) -> Result<<Self::Impl as SelectorImplTrait>::NonTSPseudoClass, ParseError<'i, Self::Error>> {
+    if name.eq_ignore_ascii_case("lang") {
+      let ranges = parser.parse_comma_separated(|input| {
+        let token = input.next()?.clone();
+        match &token {
+          Token::Ident(ident) => Ok(ident.as_ref().into()),
+          Token::QuotedString(s) => Ok(s.as_ref().into()),
+          _ => Err(input.new_unexpected_token_error(token)),
+        }
+      })?;
+      return Ok(PseudoClass::Lang(ranges));
+    }
+
     while parser.next_including_whitespace_and_comments().is_ok() {}
-    Ok(PseudoClass(Ident::from(&*name)))
+    Ok(PseudoClass::Other(Ident::from(&*name)))
   }
 
   fn parse_pseudo_element(
@@ -1397,15 +1429,27 @@ mod tests {
         .a:hover { width: 10px; }
         .a, .a:hover { height: 20px; }
         .a::before { color: red; }
-        .a:lang(en) { color: blue; }
       "#,
     );
 
-    assert_eq!(sheet.rules.len(), 4);
+    assert_eq!(sheet.rules.len(), 3);
     assert_eq!(selector_text(&sheet.rules[0]), ".a:hover");
     assert_eq!(selector_text(&sheet.rules[1]), ".a, .a:hover");
     assert_eq!(selector_text(&sheet.rules[2]), ".a::before");
-    assert_eq!(selector_text(&sheet.rules[3]), ".a:lang");
+  }
+
+  #[test]
+  fn test_lang_pseudo_class_round_trips_its_ranges() {
+    let sheet = parse_stylesheet_loosy(
+      r#"
+        .a:lang(en) { color: blue; }
+        .a:lang(zh-Hant, "ja") { color: red; }
+      "#,
+    );
+
+    assert_eq!(sheet.rules.len(), 2);
+    assert_eq!(selector_text(&sheet.rules[0]), ".a:lang(en)");
+    assert_eq!(selector_text(&sheet.rules[1]), ".a:lang(zh-Hant, ja)");
   }
 
   #[test]

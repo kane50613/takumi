@@ -615,6 +615,9 @@ impl Node {
     if name.eq_ignore_ascii_case("class") {
       return self.metadata.class_name.as_deref();
     }
+    if name.eq_ignore_ascii_case("lang") {
+      return self.metadata.lang.as_ref().map(Lang::as_str);
+    }
     self
       .metadata
       .attributes

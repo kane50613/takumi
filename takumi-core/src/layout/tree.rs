@@ -2363,4 +2363,51 @@ mod tests {
       Some(&"red".to_owned()) // syntax validation is skipped, so any value is accepted
     );
   }
+
+  #[test]
+  fn lang_pseudo_class_matches_the_nearest_ancestor_or_self_lang_attribute() {
+    use std::rc::Rc;
+
+    use crate::{
+      context::RenderContext,
+      layout::{node::Node, tree::RenderNode},
+      resources::font::Fonts,
+      style::{Lang, SizingContext},
+    };
+
+    let stylesheet = StyleSheet::parse(
+      r#"
+        :lang(zh-Hant) { width: 10px; }
+        :lang(ja) { width: 20px; }
+      "#,
+    )
+    .expect("stylesheet parses");
+
+    let fonts = Fonts::default();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::default())
+          .build(),
+      )
+      .stylesheet(Rc::new(stylesheet))
+      .build();
+
+    let tree = RenderNode::from_node(
+      &context,
+      Node::container([
+        // No `lang` of its own — `:lang(zh-Hant)` must walk up to the root to match.
+        Node::container([Node::text("inherits")]),
+        Node::container([Node::text("overrides")]).with_lang(Lang::parse("ja").unwrap()),
+      ])
+      .with_lang(Lang::parse("zh-Hant").unwrap()),
+    );
+
+    assert_eq!(tree.context.style.width, Length::Px(10.0));
+
+    let children = tree.children.as_deref().expect("block children");
+    assert_eq!(children[0].context.style.width, Length::Px(10.0));
+    assert_eq!(children[1].context.style.width, Length::Px(20.0));
+  }
 }
