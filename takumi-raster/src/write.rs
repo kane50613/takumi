@@ -18,7 +18,7 @@ use crate::webp::write_webp_lossy;
 use crate::{
   Result,
   error::Error,
-  render::{SequentialScene, frame_spans, render_frame},
+  render::{SequentialScene, frame_spans, prepare_scenes, render_frame},
   webp::{encode_animated_webp, has_any_alpha_pixel, strip_alpha_channel, write_webp_lossless},
 };
 
@@ -510,7 +510,8 @@ pub fn write_animation<W: Write>(
     return Err(Error::EmptyAnimationFrames);
   }
 
-  let frames = spans.iter().map(|&span| render_frame(scenes, span));
+  let prepared = prepare_scenes(scenes);
+  let frames = spans.iter().map(|&span| render_frame(&prepared, span));
   match format {
     AnimationFormat::WebP(options) => encode_animated_webp(frames, destination, options),
     AnimationFormat::Gif(options) => encode_animated_gif(frames, destination, options),
