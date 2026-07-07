@@ -7,8 +7,8 @@ use takumi_core::{
 };
 
 use crate::{
-  Canvas, Cap, DashPattern, Fill, MaskSamplingOptions, PaintSource, PathBuilder, Placement, Stroke,
-  Style, intersect_alpha_masks, render_mask,
+  Canvas, Cap, DashPattern, Fill, MaskCompositeColor, MaskSamplingOptions, PaintSource,
+  PathBuilder, Placement, Stroke, Style, intersect_alpha_masks, render_mask,
   style::{Affine, BlendMode, BorderStyle, Color, ImageScalingAlgorithm},
 };
 
@@ -628,11 +628,11 @@ fn paint_mask_with_inverse(
     let Some(inverse) = inverse else {
       return;
     };
-    canvas.composite_mask_source_over_color(
+    canvas.composite_mask_source(
       mask,
       placement,
       clip_image,
-      color,
+      MaskCompositeColor::source_over_color(color),
       MaskSamplingOptions {
         canvas_to_source: inverse,
         sample_bias: Point::ZERO,

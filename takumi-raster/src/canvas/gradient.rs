@@ -11,7 +11,7 @@ use tiny_skia::PixmapMut;
 
 use super::{
   MaskView,
-  blit::{apply_combined_mask, compute_overlay_bounds_for_canvas},
+  blit::{apply_mask_row, compute_overlay_bounds_for_canvas},
 };
 use crate::{blend::*, style::BlendMode};
 
@@ -43,31 +43,33 @@ pub(crate) fn overlay_gradient_tile<T>(
     return;
   }
 
-  let Some((offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max)) =
-    compute_overlay_bounds_for_canvas(
-      bottom_width,
-      bottom_height,
-      offset,
-      top_size.width,
-      top_size.height,
-    )
-  else {
+  let Some(bounds) = compute_overlay_bounds_for_canvas(
+    bottom_width,
+    bottom_height,
+    offset,
+    top_size.width,
+    top_size.height,
+  ) else {
     return;
   };
 
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-  for dest_y in dest_y_min..dest_y_max {
-    let src_y = (dest_y - offset_y) as u32;
+  for dest_y in bounds.y_min..bounds.y_max {
+    let mask_row = combined_mask.map(|view| view.row(dest_y, bounds.x_min));
+    if mask_row.is_some_and(|row| row.is_empty()) {
+      continue;
+    }
+
+    let src_y = (dest_y - bounds.offset_y) as u32;
     let dst_row = dest_y as usize * bottom_width as usize;
-    for dest_x in dest_x_min..dest_x_max {
-      let src_x = (dest_x - offset_x) as u32;
+    for (i, dest_x) in (bounds.x_min..bounds.x_max).enumerate() {
+      let src_x = (dest_x - bounds.offset_x) as u32;
       let src = premultiplied_from_pixel(gradient.sample_pixel(src_x, src_y));
       if src[3] == 0 {
         continue;
       }
 
-      let dest_x = dest_x as u32;
-      let Some(src) = apply_combined_mask(src, combined_mask, dest_x, dest_y as u32) else {
+      let Some(src) = apply_mask_row(src, mask_row, i) else {
         continue;
       };
 
@@ -83,15 +85,13 @@ fn try_overlay_linear_gradient_tile_fast_normal_unconstrained(
   gradient: &LinearGradientTile,
   offset: Point<f32>,
 ) -> bool {
-  let Some((offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max)) =
-    compute_overlay_bounds_for_canvas(
-      bottom_width,
-      bottom_height,
-      offset,
-      gradient.width(),
-      gradient.height(),
-    )
-  else {
+  let Some(bounds) = compute_overlay_bounds_for_canvas(
+    bottom_width,
+    bottom_height,
+    offset,
+    gradient.width(),
+    gradient.height(),
+  ) else {
     return true;
   };
 
@@ -100,15 +100,15 @@ fn try_overlay_linear_gradient_tile_fast_normal_unconstrained(
   };
 
   let row_stride = bottom_width as usize * 4;
-  let row_count = (dest_y_max - dest_y_min) as usize;
-  let segment_pixel_count = (dest_x_max - dest_x_min) as usize;
-  let dest_byte_start = dest_x_min as usize * 4;
+  let row_count = (bounds.y_max - bounds.y_min) as usize;
+  let segment_pixel_count = (bounds.x_max - bounds.x_min) as usize;
+  let dest_byte_start = bounds.x_min as usize * 4;
   let dest_byte_end = dest_byte_start + segment_pixel_count * 4;
-  let rows = &mut data[dest_y_min as usize * row_stride..dest_y_max as usize * row_stride];
+  let rows = &mut data[bounds.y_min as usize * row_stride..bounds.y_max as usize * row_stride];
 
   match fast_path.kind {
     LinearGradientFastPathKind::Horizontal => {
-      let src_x_start = (dest_x_min - offset_x) as usize;
+      let src_x_start = (bounds.x_min - bounds.offset_x) as usize;
       let src_x_end = src_x_start + segment_pixel_count;
       let src_pixels = &fast_path.axis_samples[src_x_start..src_x_end];
 
@@ -125,7 +125,7 @@ fn try_overlay_linear_gradient_tile_fast_normal_unconstrained(
       }
     }
     LinearGradientFastPathKind::Vertical => {
-      let src_y_start = (dest_y_min - offset_y) as usize;
+      let src_y_start = (bounds.y_min - bounds.offset_y) as usize;
       let src_pixels = &fast_path.axis_samples[src_y_start..src_y_start + row_count];
 
       for (row_offset, row) in rows.chunks_mut(row_stride).enumerate() {
@@ -202,15 +202,13 @@ fn try_overlay_radial_gradient_tile_fast_normal_unconstrained(
   gradient: &RadialGradientTile,
   offset: Point<f32>,
 ) -> bool {
-  let Some((offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max)) =
-    compute_overlay_bounds_for_canvas(
-      bottom_width,
-      bottom_height,
-      offset,
-      gradient.width(),
-      gradient.height(),
-    )
-  else {
+  let Some(bounds) = compute_overlay_bounds_for_canvas(
+    bottom_width,
+    bottom_height,
+    offset,
+    gradient.width(),
+    gradient.height(),
+  ) else {
     return true;
   };
 
@@ -228,18 +226,18 @@ fn try_overlay_radial_gradient_tile_fast_normal_unconstrained(
   }
 
   let row_stride = bottom_width as usize * 4;
-  for dest_y in dest_y_min..dest_y_max {
-    let src_y = (dest_y - offset_y) as u32;
-    let src_x_start = (dest_x_min - offset_x) as u32;
-    let src_x_end = (dest_x_max - offset_x) as u32;
+  for dest_y in bounds.y_min..bounds.y_max {
+    let src_y = (dest_y - bounds.offset_y) as u32;
+    let src_x_start = (bounds.x_min - bounds.offset_x) as u32;
+    let src_x_end = (bounds.x_max - bounds.offset_x) as u32;
     let Some((active_x_start, active_x_end)) =
       gradient.non_repeating_active_span(src_x_start, src_x_end, src_y)
     else {
       return false;
     };
 
-    let row_start = dest_y as usize * row_stride + dest_x_min as usize * 4;
-    let row_end = row_start + (dest_x_max - dest_x_min) as usize * 4;
+    let row_start = dest_y as usize * row_stride + bounds.x_min as usize * 4;
+    let row_end = row_start + (bounds.x_max - bounds.x_min) as usize * 4;
     let row = &mut data[row_start..row_end];
 
     let left_pixels = (active_x_start - src_x_start) as usize;

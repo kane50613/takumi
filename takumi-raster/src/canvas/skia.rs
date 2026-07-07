@@ -80,8 +80,8 @@ pub(crate) fn try_draw_image_with_tiny_skia(
     blend_mode,
     quality: to_tiny_filter_quality(algorithm),
   };
-  let materialized_mask = target.materialize_combined_mask();
-  let combined_mask = materialized_mask.as_ref();
+  let resolved_mask = target.resolve_combined_mask();
+  let combined_mask = resolved_mask.as_deref();
 
   image
     .with_pixmap_ref(target.buffer_pool, |source_pixmap| {
@@ -109,8 +109,8 @@ pub(crate) fn try_fill_color_with_tiny_skia(
   paint.set_color_rgba8(red, green, blue, alpha);
   paint.blend_mode = blend_mode;
   paint.anti_alias = true;
-  let materialized_mask = target.materialize_combined_mask();
-  let combined_mask = materialized_mask.as_ref();
+  let resolved_mask = target.resolve_combined_mask();
+  let combined_mask = resolved_mask.as_deref();
   target.pixmap.fill_path(
     &path,
     &paint,
@@ -132,8 +132,8 @@ pub(crate) fn try_fill_image_path_with_tiny_skia(
   let Some(path) = build_border_path(options.border, options.content_size) else {
     return false;
   };
-  let materialized_mask = target.materialize_combined_mask();
-  let combined_mask = materialized_mask.as_ref();
+  let resolved_mask = target.resolve_combined_mask();
+  let combined_mask = resolved_mask.as_deref();
 
   image
     .with_pixmap_ref(target.buffer_pool, |source_pixmap| {

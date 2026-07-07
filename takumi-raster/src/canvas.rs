@@ -11,11 +11,10 @@ mod mask;
 mod paint_source;
 mod skia;
 
-use std::{mem::replace, sync::Arc};
+use std::{borrow::Cow, mem::replace, sync::Arc};
 
 pub(crate) use blit::{
-  composite_mask_source_to_pixmap, compute_overlay_bounds_for_canvas, overlay_image,
-  overlay_sampled_paint_source,
+  composite_mask_source_to_pixmap, overlay_image, overlay_sampled_paint_source,
 };
 pub(crate) use buffer_pool::BufferPool;
 pub(crate) use gradient::{
@@ -29,15 +28,17 @@ pub(crate) use mask::{
   CanvasViewport, MaskView, NodeMaskAction, attenuate_alpha_by_mask, intersect_alpha_masks,
   mask_index_from_coord, prepare_node_mask, render_mask,
 };
-use mask::{MaskStackEntry, materialize_mask};
-pub(crate) use paint_source::{PaintSource, SamplingFootprint, interpolate_with_footprint};
+use mask::{MaskStackEntry, resolve_mask};
+pub(crate) use paint_source::{
+  MaskCompositeColor, PaintSource, SamplingFootprint, interpolate_with_footprint,
+};
 use takumi_core::geometry::{Point, Size};
 use tiny_skia::{
   FilterQuality as TinyFilterQuality, Mask as TinyMask, Pixmap, PixmapMut, PixmapPaint, PixmapRef,
   Transform as TinyTransform,
 };
 
-use self::{paint_source::MaskCompositeColor, skia::to_tiny_blend_mode};
+use self::skia::to_tiny_blend_mode;
 use crate::{
   BackgroundTile, BorderProperties, Placement, Result,
   blend::*,
@@ -67,14 +68,6 @@ pub(crate) struct OverlayOptions {
   pub mode: BlendMode,
 }
 
-#[derive(Clone, Copy)]
-pub(crate) struct MaskSourceToPixmapOptions<'a> {
-  pub placement: Placement,
-  pub sampling: MaskSamplingOptions,
-  pub mode: BlendMode,
-  pub combined_mask: Option<MaskView<'a>>,
-}
-
 /// Borrowed view of the active paint destination: the pixmap, the canvas's
 /// combined constraint mask, and the scratch pool. Primitives take this instead
 /// of threading `(pixmap, mask, pool, size)` separately, so a materialized mask
@@ -85,7 +78,7 @@ pub(crate) struct DrawTarget<'a, 'p> {
   pub buffer_pool: &'a mut BufferPool,
 }
 
-impl DrawTarget<'_, '_> {
+impl<'a> DrawTarget<'a, '_> {
   pub(crate) fn size(&self) -> Size<u32> {
     Size {
       width: self.pixmap.width(),
@@ -93,11 +86,11 @@ impl DrawTarget<'_, '_> {
     }
   }
 
-  pub(crate) fn materialize_combined_mask(&mut self) -> Option<TinyMask> {
+  pub(crate) fn resolve_combined_mask(&mut self) -> Option<Cow<'a, TinyMask>> {
     let size = self.size();
     self
       .combined_mask
-      .and_then(|mask| materialize_mask(mask, size, self.buffer_pool))
+      .and_then(|mask| resolve_mask(mask, size, self.buffer_pool))
   }
 }
 
@@ -316,6 +309,7 @@ impl Canvas {
     mask: &[u8],
     placement: Placement,
     source: PaintSource<'_>,
+    color_mode: MaskCompositeColor,
     sampling: MaskSamplingOptions,
     mode: BlendMode,
   ) {
@@ -329,59 +323,7 @@ impl Canvas {
         composite::Options {
           placement,
           sampling,
-          color_mode: MaskCompositeColor::SourceOnly,
-          mode,
-          combined_mask: target.combined_mask,
-        },
-      );
-    });
-  }
-  pub(crate) fn composite_mask_source_over_color(
-    &mut self,
-    mask: &[u8],
-    placement: Placement,
-    source: PaintSource<'_>,
-    color: Color,
-    sampling: MaskSamplingOptions,
-    mode: BlendMode,
-  ) {
-    let placement = self.localize_placement(placement);
-    let sampling = self.localize_mask_sampling(sampling);
-    self.with_overlay_state(|target| {
-      composite::source(
-        target.pixmap,
-        mask,
-        source,
-        composite::Options {
-          placement,
-          sampling,
-          color_mode: MaskCompositeColor::SourceOverColor(premultiply_rgba(Rgba(color.0))),
-          mode,
-          combined_mask: target.combined_mask,
-        },
-      );
-    });
-  }
-  pub(crate) fn composite_mask_color_over_source(
-    &mut self,
-    mask: &[u8],
-    placement: Placement,
-    source: PaintSource<'_>,
-    color: Color,
-    sampling: MaskSamplingOptions,
-    mode: BlendMode,
-  ) {
-    let placement = self.localize_placement(placement);
-    let sampling = self.localize_mask_sampling(sampling);
-    self.with_overlay_state(|target| {
-      composite::source(
-        target.pixmap,
-        mask,
-        source,
-        composite::Options {
-          placement,
-          sampling,
-          color_mode: MaskCompositeColor::ColorOverSource(premultiply_rgba(Rgba(color.0))),
+          color_mode,
           mode,
           combined_mask: target.combined_mask,
         },
@@ -463,45 +405,39 @@ impl Canvas {
       y: translation.y - self.origin.y as f32,
     };
 
-    match tile {
+    self.with_overlay_state(|target| match tile {
       BackgroundTile::Linear(gradient) => {
-        self.with_overlay_state(|target| {
-          overlay_linear_gradient_tile(
-            target.pixmap,
-            gradient,
-            localized_translation,
-            mode,
-            target.combined_mask,
-          );
-        });
+        overlay_linear_gradient_tile(
+          target.pixmap,
+          gradient,
+          localized_translation,
+          mode,
+          target.combined_mask,
+        );
         true
       }
       BackgroundTile::Radial(gradient) => {
-        self.with_overlay_state(|target| {
-          overlay_radial_gradient_tile(
-            target.pixmap,
-            gradient,
-            localized_translation,
-            mode,
-            target.combined_mask,
-          );
-        });
+        overlay_radial_gradient_tile(
+          target.pixmap,
+          gradient,
+          localized_translation,
+          mode,
+          target.combined_mask,
+        );
         true
       }
       BackgroundTile::Conic(gradient) => {
-        self.with_overlay_state(|target| {
-          overlay_gradient_tile(
-            target.pixmap,
-            gradient,
-            localized_translation,
-            mode,
-            target.combined_mask,
-          );
-        });
+        overlay_gradient_tile(
+          target.pixmap,
+          gradient,
+          localized_translation,
+          mode,
+          target.combined_mask,
+        );
         true
       }
       _ => false,
-    }
+    })
   }
 
   fn with_overlay_state<R>(&mut self, f: impl FnOnce(&mut DrawTarget<'_, '_>) -> R) -> R {
