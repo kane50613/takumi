@@ -5,6 +5,7 @@ import wasm, { init, Renderer } from "takumi-js/wasm";
 import type * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { evaluateCodeExports, renderReact } from "./evaluate";
+import { FONT_FAMILIES } from "./fonts";
 import { messageSchema, type RenderMessageInput } from "./schema";
 
 const fetchCache = new Map<string, Promise<ArrayBuffer>>();
@@ -17,16 +18,7 @@ function postMessage(message: RenderMessageInput, transfer?: Transferable[]) {
 // Dogfood: load Google Font subsets by content. Each subset registers uniquely-named under
 // its `subsetOf` family, so `font-family` routes per script and any leftover falls back. The
 // variable weight axis lets any `font-weight` render with a real face instead of faux bold.
-const GOOGLE_FONTS = [
-  "Inter",
-  "Noto Sans JP",
-  "Noto Sans KR",
-  "Noto Sans SC",
-  "Noto Sans Arabic",
-  "Noto Sans Hebrew",
-  "Noto Sans Devanagari",
-  "Noto Sans Thai",
-].map((name) => ({ name, weight: "100..900" as const }));
+const GOOGLE_FONTS = FONT_FAMILIES.map((name) => ({ name, weight: "100..900" as const }));
 
 let renderer: Renderer | undefined;
 

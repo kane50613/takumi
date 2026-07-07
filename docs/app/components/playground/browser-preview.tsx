@@ -5,7 +5,7 @@ import indexCss from "tailwindcss/index.css?raw";
 import themeCss from "tailwindcss/theme.css?raw";
 import utilitiesCss from "tailwindcss/utilities.css?raw";
 import { useLayoutEffect, useRef, useState } from "react";
-import manropeUrl from "../../../../assets/fonts/manrope/manrope-latin-wght-normal.woff2?url";
+import { FONT_FAMILIES, googleFontsCssUrl } from "../../playground/fonts";
 
 // Takumi's `tw` has no Preflight: it keeps UA presets and defaults to border-box.
 // Drop Preflight's base layer, keep only box-sizing/border, so the pane matches the render.
@@ -47,18 +47,22 @@ function loadCompiler() {
   return compilerPromise;
 }
 
-// WASM registers only Manrope, which Takumi falls back to for every family, so
-// override all font vars to keep the browser pane faithful to the render.
-const FONT_FAMILY = `"Manrope", ui-sans-serif, system-ui, sans-serif`;
+// Mirror the worker's font stack so the pane routes text to the same faces: Inter
+// as the sans default, Noto per script for fallback. Override every font var since
+// the render has no serif/mono of its own.
+const FONT_FAMILY = `${FONT_FAMILIES.map((name) => `"${name}"`).join(", ")}, ui-sans-serif, system-ui, sans-serif`;
 const HOST_CSS = `:host{--font-sans:${FONT_FAMILY};--font-serif:${FONT_FAMILY};--font-mono:${FONT_FAMILY};--default-font-family:${FONT_FAMILY};--default-mono-font-family:${FONT_FAMILY}}`;
 
+// @font-face in a shadow root is ignored by Chrome, so load the same Google Font
+// subsets the worker uses at document level; the `css2` sheet subsets on demand.
 let fontLoaded = false;
 function loadFont() {
   if (fontLoaded || typeof document === "undefined") return;
   fontLoaded = true;
-  new FontFace("Manrope", `url(${manropeUrl}) format("woff2")`, { weight: "100 900" })
-    .load()
-    .then((face) => document.fonts.add(face));
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = googleFontsCssUrl();
+  document.head.append(link);
 }
 
 function extractClasses(html: string) {
