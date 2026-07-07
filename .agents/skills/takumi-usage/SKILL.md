@@ -185,6 +185,11 @@ To build the node tree from HTML instead, enable the `from-html` feature and use
 use takumi::prelude::*;
 use takumi::{from_html, render};
 
+let mut fonts = Fonts::default();
+fonts.register(FontResource::new(include_bytes!(
+  "../../assets/fonts/geist/Geist[wght].woff2"
+)))?;
+
 let html = r#"<div style="background: red; width: 100%; height: 100%;"></div>"#;
 let node = from_html(html, FromHtmlOptions::default())?;
 
