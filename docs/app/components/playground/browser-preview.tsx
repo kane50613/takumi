@@ -47,9 +47,9 @@ function loadCompiler() {
   return compilerPromise;
 }
 
-// Mirror the worker's font stack so the pane routes text to the same faces: Inter
-// as the sans default, Noto per script for fallback. Override every font var since
-// the render has no serif/mono of its own.
+// Mirror the worker's font stack so the pane routes text to the same faces: one
+// Noto Sans superfamily across scripts. Override every font var since the render
+// has no serif/mono of its own.
 const FONT_FAMILY = `${FONT_FAMILIES.map((name) => `"${name}"`).join(", ")}, ui-sans-serif, system-ui, sans-serif`;
 const HOST_CSS = `:host{--font-sans:${FONT_FAMILY};--font-serif:${FONT_FAMILY};--font-mono:${FONT_FAMILY};--default-font-family:${FONT_FAMILY};--default-mono-font-family:${FONT_FAMILY}}`;
 

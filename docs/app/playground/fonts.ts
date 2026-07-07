@@ -1,8 +1,9 @@
 // Shared between the WASM render worker (which registers these via `googleFonts`)
 // and the browser preview pane (which loads the same subsets so text routes to
-// the same faces). Inter first as the sans default, Noto per script for fallback.
+// the same faces). One Noto Sans superfamily: latin default plus a face per
+// script, so glyphs across languages share a single design.
 export const FONT_FAMILIES = [
-  "Inter",
+  "Noto Sans",
   "Noto Sans JP",
   "Noto Sans KR",
   "Noto Sans SC",
