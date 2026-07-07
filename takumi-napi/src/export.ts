@@ -8,13 +8,12 @@ import type {
 export type * from "../index";
 import { Renderer as RendererInternal } from "../index";
 
-import { subsetFonts } from "@takumi-rs/helpers";
-import { FontRegistry } from "@takumi-rs/helpers/renderer";
+import { FontRegistry, prepareRenderInput } from "@takumi-rs/helpers/renderer";
 import type {
-  AnimationOutputFormatOptions,
+  BackendAnimationOptions,
+  BackendRenderOptions,
+  BackendSvgOptions,
   FontLoader,
-  ImagesInput,
-  OutputFormatOptions,
 } from "@takumi-rs/helpers/renderer";
 
 export type {
@@ -25,79 +24,33 @@ export type {
   OutputFormatOptions,
 } from "@takumi-rs/helpers/renderer";
 
-export type RenderOptions = Omit<
-  RenderOptionsInternal,
-  "images" | "format" | "quality" | "lossless"
-> &
-  OutputFormatOptions & {
-    fonts?: FontLoader[];
-    signal?: AbortSignal;
-    images?: ImagesInput;
-  };
-
-export type RenderAnimationOptions = Omit<
-  RenderAnimationOptionsInternal,
-  "images" | "format" | "quality" | "lossless"
-> &
-  AnimationOutputFormatOptions & {
-    fonts?: FontLoader[];
-    signal?: AbortSignal;
-    images?: ImagesInput;
-  };
-
-export type SvgRenderOptions = Omit<SvgRenderOptionsInternal, "images"> & {
-  fonts?: FontLoader[];
-  signal?: AbortSignal;
-  images?: ImagesInput;
-};
+export type RenderOptions = BackendRenderOptions<RenderOptionsInternal>;
+export type RenderAnimationOptions = BackendAnimationOptions<RenderAnimationOptionsInternal>;
+export type SvgRenderOptions = BackendSvgOptions<SvgRenderOptionsInternal>;
 
 export class Renderer {
   private inner = new RendererInternal();
   private fonts = new FontRegistry<RegisteredFamily>((font) => this.inner.registerFont(font));
 
   async render(node: Node, options?: RenderOptions) {
-    const { fonts, fontFamilies, signal, images, ...rest } = options ?? {};
-    const resolved = await this.fonts.resolveResources(
-      fonts && subsetFonts({ fonts, source: node }),
-      images,
-      fontFamilies,
-    );
-
-    return this.inner.render(node, { ...rest, ...resolved }, signal);
+    const { options: opts, signal } = await prepareRenderInput(this.fonts, options ?? {}, node);
+    return this.inner.render(node, opts, signal);
   }
 
   async renderSvg(node: Node, options?: SvgRenderOptions) {
-    const { fonts, fontFamilies, signal, images, ...rest } = options ?? {};
-    const resolved = await this.fonts.resolveResources(
-      fonts && subsetFonts({ fonts, source: node }),
-      images,
-      fontFamilies,
-    );
-
-    return this.inner.renderSvg(node, { ...rest, ...resolved }, signal);
+    const { options: opts, signal } = await prepareRenderInput(this.fonts, options ?? {}, node);
+    return this.inner.renderSvg(node, opts, signal);
   }
 
   async measure(node: Node, options?: RenderOptions) {
-    const { fonts, fontFamilies, signal, images, ...rest } = options ?? {};
-    const resolved = await this.fonts.resolveResources(
-      fonts && subsetFonts({ fonts, source: node }),
-      images,
-      fontFamilies,
-    );
-
-    return this.inner.measure(node, { ...rest, ...resolved }, signal);
+    const { options: opts, signal } = await prepareRenderInput(this.fonts, options ?? {}, node);
+    return this.inner.measure(node, opts, signal);
   }
 
   async renderAnimation(options: RenderAnimationOptions) {
-    const { fonts, fontFamilies, signal, images, ...rest } = options;
     const nodes = options.scenes.map((scene) => scene.node);
-    const resolved = await this.fonts.resolveResources(
-      fonts && subsetFonts({ fonts, source: nodes }),
-      images,
-      fontFamilies,
-    );
-
-    return this.inner.renderAnimation({ ...rest, ...resolved }, signal);
+    const { options: opts, signal } = await prepareRenderInput(this.fonts, options, nodes);
+    return this.inner.renderAnimation(opts, signal);
   }
 
   registerFont(font: FontLoader) {
