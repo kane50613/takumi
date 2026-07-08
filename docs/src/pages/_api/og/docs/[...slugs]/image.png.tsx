@@ -14,7 +14,7 @@ const images: ImageSource[] = [
   },
 ];
 
-export async function GET(_: Request, { params }: ApiContext<"/og/docs/[...slugs]/image.webp">) {
+export async function GET(_: Request, { params }: ApiContext<"/og/docs/[...slugs]/image.png">) {
   const page = source.getPage(params.slugs ?? []);
 
   if (!page) {
@@ -44,7 +44,6 @@ export async function GET(_: Request, { params }: ApiContext<"/og/docs/[...slugs
       fonts,
       width: 1200,
       height: 630,
-      format: "webp",
       // WASM: static prerender shouldn't depend on the native binding resolving in the build sandbox.
       module: wasmModule,
     },

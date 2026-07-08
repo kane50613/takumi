@@ -4,7 +4,7 @@
 import type { PathsForPages, GetConfigResponse, SearchCodecsForPages } from 'waku/router';
 
 // prettier-ignore
-import type { getConfig as File_ApiOgDocsSlugsImageWebp_getConfig } from './pages/_api/og/docs/[...slugs]/image.webp';
+import type { getConfig as File_ApiOgDocsSlugsImagePng_getConfig } from './pages/_api/og/docs/[...slugs]/image.png';
 // prettier-ignore
 import type { getConfig as File_Root_getConfig } from './pages/_root';
 // prettier-ignore
@@ -18,7 +18,7 @@ import type { getConfig as File_Showcase_getConfig } from './pages/showcase';
 
 // prettier-ignore
 type Page =
-| ({ path: '/_api/og/docs/[...slugs]/image.webp' } & GetConfigResponse<typeof File_ApiOgDocsSlugsImageWebp_getConfig>)
+| ({ path: '/_api/og/docs/[...slugs]/image.png' } & GetConfigResponse<typeof File_ApiOgDocsSlugsImagePng_getConfig>)
 | ({ path: '/_root' } & GetConfigResponse<typeof File_Root_getConfig>)
 | ({ path: '/docs/[...slugs]' } & GetConfigResponse<typeof File_DocsSlugs_getConfig>)
 | ({ path: '/' } & GetConfigResponse<typeof File_Index_getConfig>)
