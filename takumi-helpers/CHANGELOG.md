@@ -1,3 +1,86 @@
+## @takumi-rs/helpers@2.0.0
+
+### Cache the Google Fonts CSS promise
+
+`googleFonts`'s `cache` now stores the in-flight `Promise<string>` instead of
+the resolved CSS, so concurrent calls for the same URL share one request
+instead of each missing and fetching. A failed fetch evicts itself, so the
+next call retries. The cache type is now
+`Pick<Map<string, Promise<string>>, "get" | "set" | "delete">`.
+
+### Share the renderer facade between the napi and wasm bindings
+
+The napi and wasm `Renderer` wrappers now build on a shared `prepareRenderInput`
+helper in `@takumi-rs/helpers/renderer`, so their option types and render bodies
+live in one place. Both backends check `signal` before and after resolving
+fonts and images: on native, an already-aborted signal now throws before any
+resource fetch.
+
+### Match the Chromium UA stylesheet for default element styles
+
+Parse the relative font keywords `bolder`/`lighter` (`font-weight`) and
+`larger`/`smaller` (`font-size`), resolving to the values Chromium uses. Expand
+the default element presets to cover lists, `sub`/`sup`, `ins`/`del`, forms,
+`details`/`summary`, and `search`.
+
+### Bound remote fetches with byte caps and default timeouts
+
+Remote image, font, and Google Fonts CSS fetches now reject bodies past a byte
+cap (`maxBytes`, default 32 MiB; 2 MiB for CSS) and apply the 5 s timeout to
+every fetch, not just images. Set `timeout: 0` to disable it. A new `allowUrl`
+hook on `FetchOptions` skips URLs it rejects.
+
+### Add the `@takumi-rs/helpers/renderer` entrypoint
+
+The shared renderer wrapper backing the napi and wasm bindings is now exported
+as `@takumi-rs/helpers/renderer`.
+
+### Fix `googleFonts` losing your declared family order
+
+`googleFonts` returned subsets in whatever order Google's `css2` response happened to list
+`@font-face` blocks in — not the order families were passed in `families`. A render with no
+explicit `fontFamilies` falls back to registration order, so a Han-unified codepoint shared by
+two requested families (e.g. `"Noto Sans TC"` and `"Noto Sans JP"`) could pick the wrong one
+regardless of how `families` was ordered. `googleFonts` now sorts its result to match the
+caller's declared order.
+
+### Replace `fetchResources`/`extractResourceUrls` with `prepareImages`
+
+`@takumi-rs/helpers` exports `prepareImages({ node, sources?, fetchCache?, fetch?, timeout? })`,
+which collects a node tree's remote images and fetches the ones not already supplied. Pass a
+`fetchCache` (a `Map<string, Promise<ArrayBuffer>>`, or any `Map`-like store) to coalesce
+concurrent fetches of the same URL and reuse the bytes across renders; a failed fetch is
+evicted so a later call retries.
+
+The `extractResourceUrls` and `fetchResources` helpers are removed. The `images` render option
+takes the same group form: `{ sources, fetchCache, fetch, timeout }`.
+
+### Keep elements as containers when children carry no text
+
+An element whose children resolved to a textless iterable (e.g. `{[]}`) became an
+empty text node instead of a container, so its `background` and other box styles
+never painted. Such elements now stay containers.
+
+### Shrink and sharpen the Google Fonts family type
+
+Group the ~1940 families by their distinct weight/style/axis shape (152 of them) so
+`GoogleFontFamily` builds a discriminated union over shapes, not families. The shipped
+`.d.ts` drops from ~192 KB to ~58 KB and the checker does ~75% fewer instantiations. The
+object form now autocompletes each known family's weight, style, and axes, and still accepts
+a name built at runtime. The generator refuses to write a catalog with under 1000 families.
+
+### Accept a bare URL string in `fonts`
+
+`fonts` entries can now be a URL string, e.g. `fonts: ["https://example.com/Inter.woff2"]`.
+The bytes are fetched on demand and keyed by the URL; family name, weight, and style come
+from the font file. The object form stays for overriding those. Adds `fontFromUrl` to
+`@takumi-rs/helpers`.
+
+### Add `baseUrl` to `googleFonts`
+
+`googleFonts` takes an optional `baseUrl`, defaulting to Google Fonts, so an API-compatible
+css2 mirror can be used instead, e.g. `baseUrl: "https://fonts.bunny.net/css2"` for Bunny Fonts.
+
 ## @takumi-rs/helpers@2.0.0-rc.15 (rc)
 
 ### Fix `googleFonts` losing your declared family order

@@ -1,3 +1,130 @@
+## @takumi-rs/core@2.0.0
+
+### Make the embedded font a true last resort
+
+Both bindings now embed one font: a Latin Geist subset with a 400 to 700
+weight axis (Geist Mono and Manrope are gone). It no longer claims the
+`sans-serif` generic family and always sorts after registered fonts in
+fallback selection, so generic families and unstyled text resolve to the fonts
+you load. The new `FontResource::last_resort` marks a font's families to sort
+after every normal registration.
+
+### Cap animation frame rate per format
+
+Browsers clamp any animation frame of 10ms or less to 100ms, so a high frame
+rate stalls instead of playing fast. `write_animation` now rejects a frame rate
+above `AnimationFormat::max_fps` with the new `AnimationFrameRateTooHigh` error:
+90 fps for WebP and APNG, 50 fps for GIF (centisecond delays). The napi and WASM
+`renderAnimation` bindings surface the error.
+
+### Apply structured keyframes in `renderAnimation`
+
+`renderAnimation` accepted a `keyframes` option but never registered it, so
+structured keyframes animated with `render` yet stayed static in animations. It
+now extends the stylesheet with them like the other entry points.
+
+### Fix buffer pool bucket capacity invariant
+
+Release now buckets a buffer by the floor power of two its capacity guarantees,
+and `acquire_dirty` reserves before `set_len`. A pooled buffer can no longer be
+lengthened past its allocation.
+
+### Skip mask copies and per-pixel mask lookups in canvas fast paths
+
+Borrow the combined constraint mask directly when it already matches the
+canvas viewport instead of copying it per draw, and hoist mask lookups out of
+the per-pixel blit loops. Output is unchanged.
+
+### Make subset-group font selection deterministic
+
+Subsets registered under one logical family (via `FontResource::subset_of`) were kept
+in registration order. Callers commonly register fonts concurrently, so that order — and
+therefore which subset won for a codepoint covered by more than one (e.g. overlapping
+weight subsets, where the loser is faux-bolded) — varied per process. Identical input
+could render to different bytes run to run.
+
+Subsets are now held in a `BTreeSet`, ordered by their family name, so expansion and
+selection no longer depend on registration timing. Same input renders identically.
+
+### Shrink the published binaries
+
+Size-optimize the layout and shaping crates that never run per pixel, cutting
+the published WASM and native binary size.
+
+### Share the renderer facade between the napi and wasm bindings
+
+The napi and wasm `Renderer` wrappers now build on a shared `prepareRenderInput`
+helper in `@takumi-rs/helpers/renderer`, so their option types and render bodies
+live in one place. Both backends check `signal` before and after resolving
+fonts and images: on native, an already-aborted signal now throws before any
+resource fetch.
+
+### Fix gradient stop snapping panic for oversized stop lists
+
+Gradients with more color stops than the LUT can hold no longer panic. The
+sample-index clamp and normalization passes stay within LUT bounds.
+
+### Reuse per-scene state across animation frames
+
+Compute each scene's font snapshot once and share its image and stylesheet
+handles across frames instead of re-snapshotting and deep-cloning the whole
+option tree per frame. Frame output is unchanged.
+
+### Remove `encodeFrames`
+
+`Renderer.encodeFrames` and its `EncodeFramesOptions` / `AnimationFrameSource`
+types are gone. `renderAnimation` covers scene-based animation; pre-rendered
+frame encoding had no callers.
+
+### Replace `fetchResources`/`extractResourceUrls` with `prepareImages`
+
+`@takumi-rs/helpers` exports `prepareImages({ node, sources?, fetchCache?, fetch?, timeout? })`,
+which collects a node tree's remote images and fetches the ones not already supplied. Pass a
+`fetchCache` (a `Map<string, Promise<ArrayBuffer>>`, or any `Map`-like store) to coalesce
+concurrent fetches of the same URL and reuse the bytes across renders; a failed fetch is
+evicted so a later call retries.
+
+The `extractResourceUrls` and `fetchResources` helpers are removed. The `images` render option
+takes the same group form: `{ sources, fetchCache, fetch, timeout }`.
+
+### Stream animation frames straight into the encoder
+
+Add `write_animation`, which renders a timeline and feeds each frame to the
+encoder as it arrives, holding one raw frame at a time instead of the whole
+sequence. Both the napi and WASM `renderAnimation` bindings use it, so a high
+frame rate or a long duration no longer exhausts memory. On native the WebP
+encoder still runs frames in parallel, now over bounded chunks. The WASM WebP
+encoder now merges runs of identical frames like the native one, so a static or
+slow animation encodes and stores far less. The eager `render_animation` +
+`write_animated_*` path stays for callers that want every frame at once.
+
+### Guard shadow and blur buffer sizing against overflow
+
+Extreme blur radii could overflow the `u32` shadow-buffer area and panic or
+over-allocate. Sizing now uses saturating math and skips shadows above a 256
+Mi-pixel budget.
+
+### Type keyframe declarations with `csstype` instead of DOM's `CSSStyleDeclaration`
+
+`KeyframesMap` and `KeyframeRule` typed each keyframe's declarations as
+`Record<string, CSSStyleDeclaration>`, requiring every CSS property on a single
+offset and needing the `DOM` lib. Declarations are now typed with `csstype`'s
+`Properties`, an optional peer dependency, so a single offset only needs the
+properties it sets and consumers without the `DOM` lib still typecheck.
+
+### Accept a bare URL string in `fonts`
+
+`fonts` entries can now be a URL string, e.g. `fonts: ["https://example.com/Inter.woff2"]`.
+The bytes are fetched on demand and keyed by the URL; family name, weight, and style come
+from the font file. The object form stays for overriding those. Adds `fontFromUrl` to
+`@takumi-rs/helpers`.
+
+### Cap image decode dimensions and GIF frame volume
+
+Decoders reject images beyond 8192x8192 (via `image::Limits` for PNG and JPEG,
+dimension checks for WebP) and GIFs beyond a total-frame pixel budget, stopping
+decode-bomb OOM.
+
 ## @takumi-rs/core@2.0.0-rc.16 (rc)
 
 ### Revert isolated-install native binding resolution
