@@ -2,7 +2,7 @@
 
 use std::{
   collections::HashMap,
-  sync::{Arc, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard},
+  sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 
 use base64::{Engine, prelude::BASE64_STANDARD};
@@ -11,7 +11,7 @@ use takumi_core::{
   Fonts,
   layout::node::Node,
   resources::{
-    font::{FontOverride, FontResource, GenericFamily, RegisteredFamily},
+    font::{FontOverride, FontResource, RegisteredFamily},
     image::{ImageCache, ImageSource as LoadedImageSource},
   },
   style::{FontFamily, KeyframesRule, Lang, StyleSheet},
@@ -25,10 +25,11 @@ use wasm_bindgen::prelude::*;
 
 use crate::{helper::map_error, model::*};
 
-const EMBEDDED_FONTS: &[(&[u8], &str, GenericFamily)] = &[(
-  include_bytes!("../../assets/fonts/manrope/manrope-latin-wght-normal.woff2"),
-  "Manrope",
-  GenericFamily::SANS_SERIF,
+// Last-resort only: no generic family claim, so `sans-serif` and friends resolve
+// to caller-registered fonts via the fallback bucket instead of this face.
+const EMBEDDED_FONTS: &[(&[u8], &str)] = &[(
+  include_bytes!("../../assets/fonts/geist/geist-latin-wght-400-700.woff2"),
+  "Geist",
 )];
 
 /// The main renderer for Takumi image rendering engine.
@@ -42,31 +43,19 @@ pub struct Renderer {
   image_cache: ImageCache,
 }
 
-static DEFAULT_FONTS: OnceLock<Fonts> = OnceLock::new();
-
-/// Returns a clone of the process-wide default font set, decoding the embedded
-/// fonts once and sharing the decoded blobs across every renderer.
+/// Builds the default font set holding the embedded last-resort fonts.
 fn default_fonts() -> Result<Fonts, js_sys::Error> {
-  if let Some(fonts) = DEFAULT_FONTS.get() {
-    return Ok(fonts.clone());
-  }
-
   let mut fonts = Fonts::default();
-  for (font, family_name, generic_family) in EMBEDDED_FONTS {
+
+  for (font, family_name) in EMBEDDED_FONTS {
     let resource = FontResource::new(*font)
       .override_info(FontOverride {
         family_name: Some((*family_name).into()),
         ..Default::default()
       })
-      .generic_family(*generic_family);
+      .last_resort();
 
     drop(fonts.register(resource).map_err(map_error)?);
-  }
-
-  if DEFAULT_FONTS.set(fonts.clone()).is_err()
-    && let Some(stored) = DEFAULT_FONTS.get()
-  {
-    return Ok(stored.clone());
   }
 
   Ok(fonts)

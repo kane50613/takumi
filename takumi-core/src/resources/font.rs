@@ -713,6 +713,9 @@ pub struct Fonts {
   /// this so its per-script priority is deterministic; `fontique`'s `family_names()` iterates
   /// a `HashMap` (hash order), which would otherwise make font selection vary per render.
   order: Vec<String>,
+  /// Families registered via [`FontResource::last_resort`], appended after `order` in the
+  /// fallback bucket regardless of registration arrival.
+  last_resort_order: Vec<String>,
 }
 
 impl Default for Fonts {
@@ -727,6 +730,7 @@ impl Default for Fonts {
       },
       groups: Arc::new(HashMap::new()),
       order: Vec::new(),
+      last_resort_order: Vec::new(),
     }
   }
 }
@@ -757,7 +761,7 @@ impl Fonts {
   pub fn snapshot_with_fallbacks(&self, fallbacks: Option<&FontFamily>) -> FontsSnapshot {
     let mut cloned = self.inner.clone();
 
-    if let Some(names) = fallbacks {
+    let mut family_ids = if let Some(names) = fallbacks {
       // A name may be a logical subset family; expand it to its registered subset names so
       // the fallback bucket carries the whole stack, matching `font-family` expansion.
       let mut family_ids = Vec::new();
@@ -777,27 +781,29 @@ impl Fonts {
           None => family_ids.extend(cloned.collection.family_id(&literal_name)),
         }
       }
-
-      for (script, _) in Script::all_samples() {
-        cloned.collection.set_fallbacks(
-          FallbackKey::new(*script, None),
-          family_ids.clone().into_iter(),
-        );
-      }
+      family_ids
     } else {
       // Registration order, not `family_names()` (hash order), so font selection is stable.
-      let family_ids = self
+      self
         .order
         .iter()
         .filter_map(|name| cloned.collection.family_id(name))
-        .collect::<Vec<_>>();
+        .collect()
+    };
 
-      for (script, _) in Script::all_samples() {
-        cloned.collection.set_fallbacks(
-          FallbackKey::new(*script, None),
-          family_ids.clone().into_iter(),
-        );
-      }
+    // Last-resort families close the bucket so they only serve uncovered text.
+    family_ids.extend(
+      self
+        .last_resort_order
+        .iter()
+        .filter_map(|name| cloned.collection.family_id(name)),
+    );
+
+    for (script, _) in Script::all_samples() {
+      cloned.collection.set_fallbacks(
+        FallbackKey::new(*script, None),
+        family_ids.clone().into_iter(),
+      );
     }
 
     FontsSnapshot {
@@ -805,6 +811,7 @@ impl Fonts {
         inner: cloned,
         groups: self.groups.clone(),
         order: self.order.clone(),
+        last_resort_order: self.last_resort_order.clone(),
       })),
       groups: self.groups.clone(),
     }
@@ -901,6 +908,7 @@ impl Fonts {
       info_override,
       generic_family,
       subset_of,
+      last_resort,
     } = font;
 
     let blob = source.into_blob()?;
@@ -929,8 +937,14 @@ impl Fonts {
         .unwrap_or_default()
         .to_string();
 
-      if !self.order.contains(&name) {
-        self.order.push(name.clone());
+      let order = if last_resort {
+        &mut self.last_resort_order
+      } else {
+        &mut self.order
+      };
+
+      if !order.contains(&name) {
+        order.push(name.clone());
       }
 
       if let Some(logical) = &subset_of {
@@ -1138,6 +1152,9 @@ pub struct FontResource<'a> {
   generic_family: Option<GenericFamily>,
   /// Logical family this font is a coverage subset of (see [`FontResource::subset_of`]).
   subset_of: Option<String>,
+  /// Sorts after every normal family in default fallback selection (see
+  /// [`FontResource::last_resort`]).
+  last_resort: bool,
 }
 
 impl<'a> FontResource<'a> {
@@ -1148,6 +1165,7 @@ impl<'a> FontResource<'a> {
       info_override: None,
       generic_family: None,
       subset_of: None,
+      last_resort: false,
     }
   }
 
@@ -1181,15 +1199,19 @@ impl<'a> FontResource<'a> {
     }
   }
 
+  /// Sorts this font's families after every normal family in default fallback
+  /// selection, so they only serve text no registered font covers.
+  pub fn last_resort(self) -> Self {
+    Self {
+      last_resort: true,
+      ..self
+    }
+  }
+
   /// Convert to resolved font resource, decompressing woff2/woff into a raw buffer.
   pub fn into_resolved(self) -> Result<Self, FontError> {
     let source = self.source.into_decoded()?;
-    Ok(Self {
-      source,
-      info_override: self.info_override,
-      generic_family: self.generic_family,
-      subset_of: self.subset_of,
-    })
+    Ok(Self { source, ..self })
   }
 }
 
@@ -1311,6 +1333,26 @@ mod tests {
       fonts.order,
       vec!["B Family".to_string(), "A Family".to_string()]
     );
+  }
+
+  #[test]
+  fn last_resort_families_sort_after_normal_registrations() {
+    let mut fonts = Fonts::default();
+    fonts
+      .register(
+        FontResource::new(geist_bytes())
+          .override_info(FontOverride {
+            family_name: Some("Embedded".into()),
+            ..Default::default()
+          })
+          .last_resort(),
+      )
+      .unwrap();
+    register_named(&mut fonts, geist_mono_bytes(), "User Font");
+
+    // Registered first, but selected last: a last-resort family never shadows caller fonts.
+    assert_eq!(fonts.order, vec!["User Font".to_string()]);
+    assert_eq!(fonts.last_resort_order, vec!["Embedded".to_string()]);
   }
 
   #[test]

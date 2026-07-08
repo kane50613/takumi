@@ -1,17 +1,16 @@
 use std::{
   collections::HashMap,
-  sync::{Arc, Mutex, OnceLock},
+  sync::{Arc, Mutex},
 };
 
 use arc_swap::ArcSwap;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
-use rayon::prelude::*;
 use takumi_core::{
   Fonts,
   layout::node::Node,
   resources::{
-    font::{FontOverride, FontResource, GenericFamily},
+    font::{FontOverride, FontResource},
     image::{ImageCache, ImageCacheMode as CoreImageCacheMode, ImageSource as LoadedImageSource},
   },
   style::KeyframesRule as CoreKeyframesRule,
@@ -348,53 +347,26 @@ pub struct ImageSource<'ctx> {
   pub cache: Option<ImageCacheMode>,
 }
 
-const EMBEDDED_FONTS: &[(&[u8], &str, GenericFamily)] = &[
-  (
-    include_bytes!("../../assets/fonts/geist/Geist[wght].woff2"),
-    "Geist",
-    GenericFamily::SANS_SERIF,
-  ),
-  (
-    include_bytes!("../../assets/fonts/geist/GeistMono[wght].woff2"),
-    "Geist Mono",
-    GenericFamily::MONOSPACE,
-  ),
-];
+// Last-resort only: no generic family claim, so `sans-serif` and friends resolve
+// to caller-registered fonts via the fallback bucket instead of this face.
+const EMBEDDED_FONTS: &[(&[u8], &str)] = &[(
+  include_bytes!("../../assets/fonts/geist/geist-latin-wght-400-700.woff2"),
+  "Geist",
+)];
 
-static DEFAULT_FONTS: OnceLock<Fonts> = OnceLock::new();
-
-/// Returns a clone of the process-wide default font set, decoding the embedded
-/// fonts once and sharing the decoded blobs across every renderer.
+/// Builds the default font set holding the embedded last-resort fonts.
 fn default_fonts() -> Result<Fonts> {
-  if let Some(fonts) = DEFAULT_FONTS.get() {
-    return Ok(fonts.clone());
-  }
-
   let mut fonts = Fonts::default();
-  let resources = crate::pool::install(|| {
-    EMBEDDED_FONTS
-      .par_iter()
-      .map(|(font, name, generic)| {
-        FontResource::new(*font)
-          .override_info(FontOverride {
-            family_name: Some((*name).to_string().into()),
-            ..Default::default()
-          })
-          .generic_family(*generic)
-          .into_resolved()
-          .map_err(|e| Error::from_reason(format!("Failed to load default font: {e}")))
+
+  for (font, name) in EMBEDDED_FONTS {
+    let resource = FontResource::new(*font)
+      .override_info(FontOverride {
+        family_name: Some((*name).to_string().into()),
+        ..Default::default()
       })
-      .collect::<Result<Vec<_>>>()
-  })?;
+      .last_resort();
 
-  for resource in resources {
     drop(fonts.register(resource).map_err(map_error)?);
-  }
-
-  if DEFAULT_FONTS.set(fonts.clone()).is_err()
-    && let Some(stored) = DEFAULT_FONTS.get()
-  {
-    return Ok(stored.clone());
   }
 
   Ok(fonts)

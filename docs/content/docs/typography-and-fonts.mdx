@@ -6,12 +6,10 @@ icon: Type
 
 Takumi never reads system fonts. Load every font a render needs, or its glyphs fall back to tofu.
 
-Each package ships its own built-in families. Add your own for anything else.
+One **last-resort** font ships built in: Geist, Latin glyphs, weights 400 to 700. It only serves text no registered font covers:
 
-| Environment   | Package           | Bundled families  |
-| ------------- | ----------------- | ----------------- |
-| Node.js       | `@takumi-rs/core` | Geist, Geist Mono |
-| Browser, edge | `@takumi-rs/wasm` | Manrope           |
+- Fonts you load always win.
+- Generic families like `sans-serif` resolve to your fonts, not to it.
 
 ## Loading fonts
 
@@ -117,7 +115,7 @@ return new ImageResponse(<OgImage />, { renderer });
 
 ### Fallback chain
 
-`fontFamilies` is the ordered list of families to try when a glyph is missing. It defaults to all registered families, in registration order. Set it to pin which family wins and what backs it up.
+`fontFamilies` is the ordered list of families to try when a glyph is missing. It defaults to all registered families in registration order, with the built-in Geist last. Set it to pin which family wins and what backs it up.
 
 ```tsx
 const image = await renderer.render(node, {
@@ -134,7 +132,7 @@ Control font axes with `font-variation-settings`. Control OpenType features with
 ```tsx
 <div
   style={{
-    fontFamily: "Manrope",
+    fontFamily: "Inter",
     fontVariationSettings: "'wght' 700, 'wdth' 150",
     fontFeatureSettings: "ss01",
   }}
