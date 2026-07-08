@@ -1,79 +1,93 @@
 core:changelogs:
-  - content: "---\npackages:\n  npm:@takumi-rs/core:\n    type: patch\n  npm:@takumi-rs/wasm:\n    type: patch\n---\n\n### Type keyframe declarations with `csstype` instead of DOM's `CSSStyleDeclaration`\n\n`KeyframesMap` and `KeyframeRule` typed each keyframe's declarations as\n`Record<string, CSSStyleDeclaration>`, requiring every CSS property on a single\noffset and needing the `DOM` lib. Declarations are now typed with `csstype`'s\n`Properties`, an optional peer dependency, so a single offset only needs the\nproperties it sets and consumers without the `DOM` lib still typecheck.\n"
-    filename: keyframe-declaration-partial-css.md
+  - content: "---\npackages:\n  npm:@takumi-rs/helpers:\n    type: patch\n---\n\n### Fix `googleFonts` losing your declared family order\n\n`googleFonts` returned subsets in whatever order Google's `css2` response happened to list\n`@font-face` blocks in — not the order families were passed in `families`. A render with no\nexplicit `fontFamilies` falls back to registration order, so a Han-unified codepoint shared by\ntwo requested families (e.g. `\"Noto Sans TC\"` and `\"Noto Sans JP\"`) could pick the wrong one\nregardless of how `families` was ordered. `googleFonts` now sorts its result to match the\ncaller's declared order.\n"
+    filename: google-fonts-declared-order.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi:\n    type: patch\n  cargo:takumi-core:\n    type: patch\n  cargo:takumi-raster:\n    type: patch\n  cargo:takumi-svg:\n    type: patch\n---\n\n### Fix `fontFamilies` order being ignored\n\n`fontFamilies` only fed the fallback bucket, never the root style, so text\npicked whichever registered font resolved first instead of the requested\norder. `FontFamily`'s default is now empty instead of a generic `sans-serif`\ntoken, so an empty root style falls through to the fallback bucket directly.\n"
+    filename: root-font-family-fallback.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi:\n    type: patch\n  cargo:takumi-core:\n    type: patch\n---\n\n### Make `:lang()` actually match\n\n`:lang()` parsed but never matched, like every other pseudo-class the engine treats as\nstateful. It needs no live state, only the `lang` attribute inherited up the tree, which a\nstatic render already has. It now matches BCP-47 basic filtering (`:lang(zh-Hant)`, comma-separated\nranges, `*`) against the nearest ancestor-or-self with a `lang` set — the standards-based way to\nroute different fonts to different languages on the same page, e.g. `:lang(ja) { font-family:\n\"Noto Sans JP\" }` alongside `:lang(zh-Hant) { font-family: \"Noto Sans TC\" }`.\n"
+    filename: lang-pseudo-class-matching.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - changelogIds:
-      - keyframe-declaration-partial-css.md
-    id: npm:@takumi-rs/core
-    updated: true
-  - id: npm:@takumi-rs/image-response
-    updated: true
   - id: npm:takumi-template
     updated: false
+  - id: npm:@takumi-rs/wasm
+    updated: true
   - id: npm:docs
     updated: false
-  - changelogIds:
-      - keyframe-declaration-partial-css.md
-    id: npm:@takumi-rs/wasm
+  - id: npm:@takumi-rs/core
     updated: true
-  - id: npm:@takumi-rs/helpers
+  - changelogIds:
+      - google-fonts-declared-order.md
+    id: npm:@takumi-rs/helpers
     updated: true
   - id: npm:takumi-js
     updated: true
+  - id: npm:@takumi-rs/image-response
+    updated: true
   - id: npm:ffmpeg-keyframe-animation
-    updated: false
-  - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:example-twitter-images
-    updated: false
-  - id: npm:example-tanstack-start
-    updated: false
-  - id: npm:example-nextjs
-    updated: false
-  - id: npm:example-satori-html
-    updated: false
-  - id: npm:example-css-library-integration
     updated: false
   - id: npm:waku-ssr
     updated: false
-  - id: npm:svelte
+  - id: npm:example-satori-html
+    updated: false
+  - id: npm:example-cloudflare-workers
     updated: false
   - id: npm:ffplay
     updated: false
-  - id: cargo:takumi-raster
+  - id: npm:example-twitter-images
     updated: false
-  - id: cargo:takumi-core
+  - id: npm:example-nextjs
     updated: false
-  - id: cargo:takumi
+  - id: npm:example-css-library-integration
+    updated: false
+  - id: npm:example-tanstack-start
+    updated: false
+  - id: npm:svelte
+    updated: false
+  - changelogIds:
+      - root-font-family-fallback.md
+    id: cargo:takumi-svg
+    updated: true
+  - changelogIds:
+      - root-font-family-fallback.md
+    id: cargo:takumi-raster
+    updated: true
+  - changelogIds:
+      - lang-pseudo-class-matching.md
+      - root-font-family-fallback.md
+    id: cargo:takumi-core
     updated: true
   - id: cargo:takumi-html
-    updated: false
-  - id: cargo:takumi-svg
-    updated: false
+    updated: true
+  - changelogIds:
+      - lang-pseudo-class-matching.md
+      - root-font-family-fallback.md
+    id: cargo:takumi
+    updated: true
 npm:packages:
   - id: npm:takumi
-  - distTag: rc
-    id: npm:@takumi-rs/core
-  - distTag: rc
-    id: npm:@takumi-rs/image-response
   - id: npm:takumi-template
-  - id: npm:docs
   - distTag: rc
     id: npm:@takumi-rs/wasm
+  - id: npm:docs
+  - distTag: rc
+    id: npm:@takumi-rs/core
   - distTag: rc
     id: npm:@takumi-rs/helpers
   - distTag: rc
     id: npm:takumi-js
+  - distTag: rc
+    id: npm:@takumi-rs/image-response
   - id: npm:ffmpeg-keyframe-animation
-  - id: npm:example-cloudflare-workers
-  - id: npm:example-twitter-images
-  - id: npm:example-tanstack-start
-  - id: npm:example-nextjs
-  - id: npm:example-satori-html
-  - id: npm:example-css-library-integration
   - id: npm:waku-ssr
-  - id: npm:svelte
+  - id: npm:example-satori-html
+  - id: npm:example-cloudflare-workers
   - id: npm:ffplay
+  - id: npm:example-twitter-images
+  - id: npm:example-nextjs
+  - id: npm:example-css-library-integration
+  - id: npm:example-tanstack-start
+  - id: npm:svelte

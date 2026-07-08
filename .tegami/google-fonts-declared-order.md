@@ -1,6 +1,8 @@
 ---
 packages:
-  npm:@takumi-rs/helpers: patch
+  npm:@takumi-rs/helpers:
+    replay:
+      - exit-prerelease(npm:@takumi-rs/helpers)
 ---
 
 ### Fix `googleFonts` losing your declared family order
