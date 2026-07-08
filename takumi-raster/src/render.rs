@@ -172,6 +172,7 @@ pub fn measure<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
     .draw_debug_border(draw_debug_border)
     .style(Box::new(ComputedStyle {
       lang,
+      font_family: font_families.unwrap_or_default(),
       ..Default::default()
     }))
     .build();
@@ -417,6 +418,7 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<Bitmap> {
     .draw_debug_border(draw_debug_border)
     .style(Box::new(ComputedStyle {
       lang,
+      font_family: font_families.unwrap_or_default(),
       ..Default::default()
     }))
     .build();
@@ -516,6 +518,7 @@ impl<'a, 'g> PreparedScene<'a, 'g> {
       .draw_debug_border(options.draw_debug_border)
       .style(Box::new(ComputedStyle {
         lang: options.lang,
+        font_family: options.font_families.clone().unwrap_or_default(),
         ..Default::default()
       }))
       .build();

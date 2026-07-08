@@ -10,8 +10,14 @@ use crate::style::{
 
 /// Represents a font family for text rendering.
 /// Multi value fallback is supported.
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FontFamily(Box<[FontFamilyToken]>);
+
+impl Default for FontFamily {
+  fn default() -> Self {
+    Self::from_parlance_generic(GenericFamily::SansSerif)
+  }
+}
 
 /// One entry in a font-family fallback list.
 #[derive(Debug, Clone, PartialEq)]
@@ -25,10 +31,6 @@ pub(crate) enum FontFamilyToken {
 impl MakeComputed for FontFamily {}
 
 impl FontFamily {
-  pub(crate) fn is_empty(&self) -> bool {
-    self.0.is_empty()
-  }
-
   /// Named families ending in `sans-serif`. The trailing generic is the last resort: the
   /// fallback bucket only holds resolved `fontFamilies`, so an unresolved name would otherwise
   /// leave text unrendered.

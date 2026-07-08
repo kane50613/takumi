@@ -79,6 +79,7 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
     .style({
       Box::new(ComputedStyle {
         lang: options.lang,
+        font_family: options.font_families.unwrap_or_default(),
         ..Default::default()
       })
     })
