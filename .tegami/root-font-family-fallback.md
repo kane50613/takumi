@@ -1,9 +1,8 @@
 ---
 packages:
-  cargo:takumi: patch
-  cargo:takumi-core: patch
-  cargo:takumi-raster: patch
-  cargo:takumi-svg: patch
+  cargo:takumi:
+    replay:
+      - exit-prerelease(cargo:takumi)
 ---
 
 ### Fix `fontFamilies` order being ignored

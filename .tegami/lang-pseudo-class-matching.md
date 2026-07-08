@@ -1,7 +1,8 @@
 ---
 packages:
-  cargo:takumi: patch
-  cargo:takumi-core: patch
+  cargo:takumi:
+    replay:
+      - exit-prerelease(cargo:takumi)
 ---
 
 ### Make `:lang()` actually match

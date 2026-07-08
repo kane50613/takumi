@@ -1,3 +1,21 @@
+## takumi@2.0.0-rc.15
+
+### Make `:lang()` actually match
+
+`:lang()` parsed but never matched, like every other pseudo-class the engine treats as
+stateful. It needs no live state, only the `lang` attribute inherited up the tree, which a
+static render already has. It now matches BCP-47 basic filtering (`:lang(zh-Hant)`, comma-separated
+ranges, `*`) against the nearest ancestor-or-self with a `lang` set — the standards-based way to
+route different fonts to different languages on the same page, e.g. `:lang(ja) { font-family:
+"Noto Sans JP" }` alongside `:lang(zh-Hant) { font-family: "Noto Sans TC" }`.
+
+### Fix `fontFamilies` order being ignored
+
+`fontFamilies` only fed the fallback bucket, never the root style, so text
+picked whichever registered font resolved first instead of the requested
+order. `FontFamily`'s default is now empty instead of a generic `sans-serif`
+token, so an empty root style falls through to the fallback bucket directly.
+
 ## takumi@2.0.0-rc.13
 
 ### Skip mask copies and per-pixel mask lookups in canvas fast paths
