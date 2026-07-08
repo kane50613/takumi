@@ -1,8 +1,14 @@
 ---
 packages:
-  cargo:takumi: minor
-  npm:@takumi-rs/core: minor
-  npm:@takumi-rs/wasm: minor
+  cargo:takumi:
+    replay:
+      - exit-prerelease(cargo:takumi)
+  npm:@takumi-rs/core:
+    replay:
+      - exit-prerelease(npm:@takumi-rs/core)
+  npm:@takumi-rs/wasm:
+    replay:
+      - exit-prerelease(npm:@takumi-rs/wasm)
 ---
 
 ### Make the embedded font a true last resort
