@@ -1,93 +1,85 @@
 core:changelogs:
-  - content: "---\npackages:\n  npm:@takumi-rs/helpers:\n    type: patch\n---\n\n### Fix `googleFonts` losing your declared family order\n\n`googleFonts` returned subsets in whatever order Google's `css2` response happened to list\n`@font-face` blocks in — not the order families were passed in `families`. A render with no\nexplicit `fontFamilies` falls back to registration order, so a Han-unified codepoint shared by\ntwo requested families (e.g. `\"Noto Sans TC\"` and `\"Noto Sans JP\"`) could pick the wrong one\nregardless of how `families` was ordered. `googleFonts` now sorts its result to match the\ncaller's declared order.\n"
-    filename: google-fonts-declared-order.md
+  - content: "---\npackages:\n  cargo:takumi:\n    type: minor\n  npm:@takumi-rs/core:\n    type: minor\n  npm:@takumi-rs/wasm:\n    type: minor\n---\n\n### Make the embedded font a true last resort\n\nBoth bindings now embed one font: a Latin Geist subset with a 400 to 700\nweight axis (Geist Mono and Manrope are gone). It no longer claims the\n`sans-serif` generic family and always sorts after registered fonts in\nfallback selection, so generic families and unstyled text resolve to the fonts\nyou load. The new `FontResource::last_resort` marks a font's families to sort\nafter every normal registration.\n"
+    filename: embedded-font-last-resort.md
     v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi:\n    type: patch\n  cargo:takumi-core:\n    type: patch\n  cargo:takumi-raster:\n    type: patch\n  cargo:takumi-svg:\n    type: patch\n---\n\n### Fix `fontFamilies` order being ignored\n\n`fontFamilies` only fed the fallback bucket, never the root style, so text\npicked whichever registered font resolved first instead of the requested\norder. `FontFamily`'s default is now empty instead of a generic `sans-serif`\ntoken, so an empty root style falls through to the fallback bucket directly.\n"
-    filename: root-font-family-fallback.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi:\n    type: patch\n  cargo:takumi-core:\n    type: patch\n---\n\n### Make `:lang()` actually match\n\n`:lang()` parsed but never matched, like every other pseudo-class the engine treats as\nstateful. It needs no live state, only the `lang` attribute inherited up the tree, which a\nstatic render already has. It now matches BCP-47 basic filtering (`:lang(zh-Hant)`, comma-separated\nranges, `*`) against the nearest ancestor-or-self with a `lang` set — the standards-based way to\nroute different fonts to different languages on the same page, e.g. `:lang(ja) { font-family:\n\"Noto Sans JP\" }` alongside `:lang(zh-Hant) { font-family: \"Noto Sans TC\" }`.\n"
-    filename: lang-pseudo-class-matching.md
+  - content: "---\npackages:\n  npm:@takumi-rs/core:\n    type: patch\n---\n\n### Revert isolated-install native binding resolution\n\nDrop the `.pnpm`/`.bun` store scan from the bundled loader; it broke the build.\nThe loader statically requires `@takumi-rs/core-<target>/core.<target>.node` again.\n"
+    filename: revert-loader-isolated-install-resolution.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - id: npm:takumi-template
-    updated: false
-  - id: npm:@takumi-rs/wasm
-    updated: true
   - id: npm:docs
     updated: false
-  - id: npm:@takumi-rs/core
+  - changelogIds:
+      - embedded-font-last-resort.md
+    id: npm:@takumi-rs/wasm
     updated: true
   - changelogIds:
-      - google-fonts-declared-order.md
-    id: npm:@takumi-rs/helpers
+      - revert-loader-isolated-install-resolution.md
+      - embedded-font-last-resort.md
+    id: npm:@takumi-rs/core
     updated: true
-  - id: npm:takumi-js
+  - id: npm:takumi-template
+    updated: false
+  - id: npm:@takumi-rs/helpers
     updated: true
   - id: npm:@takumi-rs/image-response
     updated: true
-  - id: npm:ffmpeg-keyframe-animation
-    updated: false
-  - id: npm:waku-ssr
-    updated: false
-  - id: npm:example-satori-html
-    updated: false
+  - id: npm:takumi-js
+    updated: true
   - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:ffplay
-    updated: false
-  - id: npm:example-twitter-images
     updated: false
   - id: npm:example-nextjs
     updated: false
-  - id: npm:example-css-library-integration
+  - id: npm:ffmpeg-keyframe-animation
     updated: false
   - id: npm:example-tanstack-start
+    updated: false
+  - id: npm:example-satori-html
+    updated: false
+  - id: npm:example-twitter-images
+    updated: false
+  - id: npm:ffplay
+    updated: false
+  - id: npm:waku-ssr
+    updated: false
+  - id: npm:example-css-library-integration
     updated: false
   - id: npm:svelte
     updated: false
   - changelogIds:
-      - root-font-family-fallback.md
-    id: cargo:takumi-svg
-    updated: true
-  - changelogIds:
-      - root-font-family-fallback.md
-    id: cargo:takumi-raster
-    updated: true
-  - changelogIds:
-      - lang-pseudo-class-matching.md
-      - root-font-family-fallback.md
-    id: cargo:takumi-core
-    updated: true
-  - id: cargo:takumi-html
-    updated: true
-  - changelogIds:
-      - lang-pseudo-class-matching.md
-      - root-font-family-fallback.md
+      - embedded-font-last-resort.md
     id: cargo:takumi
     updated: true
+  - id: cargo:takumi-raster
+    updated: false
+  - id: cargo:takumi-svg
+    updated: false
+  - id: cargo:takumi-core
+    updated: false
+  - id: cargo:takumi-html
+    updated: false
 npm:packages:
   - id: npm:takumi
-  - id: npm:takumi-template
-  - distTag: rc
-    id: npm:@takumi-rs/wasm
   - id: npm:docs
   - distTag: rc
+    id: npm:@takumi-rs/wasm
+  - distTag: rc
     id: npm:@takumi-rs/core
+  - id: npm:takumi-template
   - distTag: rc
     id: npm:@takumi-rs/helpers
   - distTag: rc
-    id: npm:takumi-js
-  - distTag: rc
     id: npm:@takumi-rs/image-response
-  - id: npm:ffmpeg-keyframe-animation
-  - id: npm:waku-ssr
-  - id: npm:example-satori-html
+  - distTag: rc
+    id: npm:takumi-js
   - id: npm:example-cloudflare-workers
-  - id: npm:ffplay
-  - id: npm:example-twitter-images
   - id: npm:example-nextjs
-  - id: npm:example-css-library-integration
+  - id: npm:ffmpeg-keyframe-animation
   - id: npm:example-tanstack-start
+  - id: npm:example-satori-html
+  - id: npm:example-twitter-images
+  - id: npm:ffplay
+  - id: npm:waku-ssr
+  - id: npm:example-css-library-integration
   - id: npm:svelte

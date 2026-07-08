@@ -1,6 +1,8 @@
 ---
 packages:
-  npm:@takumi-rs/core: patch
+  npm:@takumi-rs/core:
+    replay:
+      - exit-prerelease(npm:@takumi-rs/core)
 ---
 
 ### Revert isolated-install native binding resolution
