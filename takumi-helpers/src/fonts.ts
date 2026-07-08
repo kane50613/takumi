@@ -49,9 +49,10 @@ export type GoogleFontsOptions = FetchOptions & {
   /** `font-display` strategy passed through to the CSS request. */
   display?: "auto" | "block" | "swap" | "fallback" | "optional";
   /**
-   * Cache for the Google Fonts CSS, keyed by request URL. Reuse one across renders (e.g. a
-   * playground re-rendering on each edit) so the metadata is fetched and parsed once. Holds the
-   * in-flight promise, so concurrent calls share one request; failures evict themselves.
+   * Cache for the Google Fonts CSS, keyed by request URL, so the metadata is fetched once across
+   * renders (e.g. a playground re-rendering on each edit). Holds the in-flight promise, so
+   * concurrent calls share one request; failures evict themselves. Defaults to a process-wide
+   * cache; pass your own `Map` to scope it, or a fresh one per call to opt out.
    */
   cache?: Pick<Map<string, Promise<string>>, "get" | "set" | "delete">;
   /**
@@ -62,6 +63,10 @@ export type GoogleFontsOptions = FetchOptions & {
 };
 
 const GOOGLE_FONTS_CSS = "https://fonts.googleapis.com/css2";
+
+// ponytail: shared default so callers who forget `cache` still fetch each URL once. Entries are
+// small (CSS metadata) and self-evict on failure; pass an explicit `cache` for isolation.
+const defaultCssCache = new Map<string, Promise<string>>();
 
 // Builds a css2 `family=` value, e.g. `Inter:ital,opsz,wght@0,14..32,400`. Takes plain values
 // rather than a GoogleFontFamily so it never relates that ~2000-member union to a parameter, which
@@ -134,16 +139,16 @@ function fetchCss(url: string, options: FetchOptions) {
 }
 
 function fetchCssCached(url: string, options: GoogleFontsOptions) {
-  const cached = options.cache?.get(url);
+  const cache = options.cache ?? defaultCssCache;
+
+  const cached = cache.get(url);
   if (cached) {
     return cached;
   }
 
   const pending = fetchCss(url, options);
-  if (options.cache) {
-    options.cache.set(url, pending);
-    pending.catch(() => options.cache?.delete(url));
-  }
+  cache.set(url, pending);
+  pending.catch(() => cache.delete(url));
 
   return pending;
 }

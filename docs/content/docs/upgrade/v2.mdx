@@ -21,7 +21,7 @@ Upgrade this project from Takumi v1 to v2. Apply `old -> new` for the packages i
 JS (takumi-js, @takumi-rs/*):
 - await the top-level render/renderAnimation/renderSvg and the napi Renderer methods (they await resource loading)
 - new Renderer({fonts}) -> new Renderer(); pass fonts per call: render(node, {fonts:[inter]})
-- loadFont/loadFonts/loadFontSync -> registerFont (only to reuse a font across renders)
+- loadFont/loadFonts/loadFontSync -> fonts option in render/renderAnimation/renderSvg call
 - fonts array now accepts bare URL strings (e.g. fonts: ["https://example.com/Inter.woff2"])
 - render option fetchedResources -> images (keyed by src; no global image store)
 - render option resourcesOptions -> images.fetch/images.timeout; combine pre-fetched entries and a shared byte cache with the group form images: { sources: [...], fetch: myFetch, fetchCache: myMap }
@@ -81,7 +81,15 @@ const image = await renderer.render(node, { fonts: [archivo] }); // [!code ++]
 
 ### `loadFont`, `loadFonts`, and `loadFontSync` become `registerFont`
 
-Passing `fonts` per render covers most cases. To register a font once and reuse it across many renders, a single `registerFont` replaces the three loaders. It accepts either raw bytes or a `{ name, data, weight, style }` descriptor, and resolves to the families it produced.
+Passing `fonts` per render now covers most cases, you mostly don't need to invoke this function.
+
+```ts
+renderer.loadFonts([archivo, geist]); // [!code --]
+renderer.render(node, { fonts: [archivo, geist] }); // [!code ++]
+```
+
+To preload a font once and reuse it across many renders, a single `registerFont` replaces the three loaders.
+It accepts either raw bytes or a `{ name, data, weight, style }` descriptor, and resolves to the families it produced.
 
 ```ts
 renderer.loadFonts([archivo, geist]); // [!code --]

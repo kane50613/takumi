@@ -59,21 +59,38 @@ The takumi-js functions `render`, `renderAnimation`, and `renderSvg` take the sa
 
 `googleFonts` fetches families from Google Fonts in one request and returns `fonts` entries: one lazy loader per coverage subset, downloaded when the renderer first needs it. Reference each family by name in `font-family`. [Subsetting](#subsetting) trims them to the content, so unused weights and scripts download nothing.
 
-```tsx
+```tsx twoslash
 import { render } from "takumi-js";
 import { googleFonts } from "takumi-js/helpers";
 
 const image = await render(<div style={{ fontFamily: "Inter" }}>Hello 你好 こんにちは</div>, {
   width: 1200,
   height: 630,
-  fonts: await googleFonts({ families: ["Inter", "Noto Sans JP", "Noto Sans TC"] }),
+  // [!code ++:3]
+  fonts: await googleFonts({
+    families: ["Inter", "Noto Sans JP", "Noto Sans TC"],
+  }),
 });
 ```
 
 Pass an object instead of a name to set a family's weight or style:
 
-```tsx
-fonts: await googleFonts({ families: [{ name: "Inter", weight: [400, 700], style: "italic" }] }),
+```tsx twoslash
+import { googleFonts } from "takumi-js/helpers";
+
+await googleFonts({
+  families: [
+    {
+      name: "Inter",
+      weight: [400, 700],
+      style: "italic",
+    },
+    {
+      name: "Noto Sans JP",
+      weight: "600..700", // range loads the variable font
+    },
+  ],
+});
 ```
 
 | Option     | Accepts                                       | Effect                                                        |
