@@ -1,3 +1,11 @@
+## @takumi-rs/helpers@2.0.1
+
+### Default the Google Fonts CSS cache
+
+`googleFonts` now caches the CSS metadata process-wide when no `cache` is
+passed, so callers who omit it still fetch each URL once. Pass your own `Map`
+to scope the cache, or a fresh one per call to opt out.
+
 ## @takumi-rs/helpers@2.0.0
 
 ### Cache the Google Fonts CSS promise

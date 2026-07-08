@@ -1,6 +1,6 @@
 {
   "name": "@takumi-rs/wasm",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "WebAssembly bindings for Takumi, a Rust image rendering engine.",
   "keywords": [
     "css",
