@@ -267,7 +267,7 @@ describe("googleFonts", () => {
 
   test("reuses the CSS cache across calls, fetching metadata once", async () => {
     const fetchMock = mockInter();
-    const cache = new Map<string, string>();
+    const cache = new Map<string, Promise<string>>();
 
     await googleFonts({ families: ["Inter"], fetch: fetchMock, cache });
     await googleFonts({ families: ["Inter"], fetch: fetchMock, cache });

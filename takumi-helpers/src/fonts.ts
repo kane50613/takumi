@@ -50,9 +50,10 @@ export type GoogleFontsOptions = FetchOptions & {
   display?: "auto" | "block" | "swap" | "fallback" | "optional";
   /**
    * Cache for the Google Fonts CSS, keyed by request URL. Reuse one across renders (e.g. a
-   * playground re-rendering on each edit) so the metadata is fetched and parsed once.
+   * playground re-rendering on each edit) so the metadata is fetched and parsed once. Holds the
+   * in-flight promise, so concurrent calls share one request; failures evict themselves.
    */
-  cache?: Pick<Map<string, string>, "has" | "get" | "set">;
+  cache?: Pick<Map<string, Promise<string>>, "get" | "set" | "delete">;
   /**
    * css2 base URL. Defaults to Google Fonts; point it at an API-compatible mirror like
    * `https://fonts.bunny.net/css2`.
@@ -132,15 +133,19 @@ function fetchCss(url: string, options: FetchOptions) {
     .then((buffer) => new TextDecoder().decode(buffer));
 }
 
-async function fetchCssCached(url: string, options: GoogleFontsOptions) {
+function fetchCssCached(url: string, options: GoogleFontsOptions) {
   const cached = options.cache?.get(url);
-  if (cached !== undefined) {
+  if (cached) {
     return cached;
   }
 
-  const css = await fetchCss(url, options);
-  options.cache?.set(url, css);
-  return css;
+  const pending = fetchCss(url, options);
+  if (options.cache) {
+    options.cache.set(url, pending);
+    pending.catch(() => options.cache?.delete(url));
+  }
+
+  return pending;
 }
 
 const fontFaceBlockPattern = /(?:\/\*\s*([^*]+?)\s*\*\/\s*)?@font-face\s*\{([^}]*)\}/g;
