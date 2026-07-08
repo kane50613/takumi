@@ -243,7 +243,11 @@ describe("googleFonts", () => {
       );
     });
 
-    await googleFonts({ families: ["Inter", "Noto Sans JP"], fetch: fetchMock });
+    await googleFonts({
+      families: ["Inter", "Noto Sans JP"],
+      fetch: fetchMock,
+      cache: new Map(),
+    });
 
     const families = new URL(requestedUrl).searchParams.getAll("family");
     expect(families).toEqual(["Inter:wght@400", "Noto Sans JP:wght@400"]);
@@ -276,9 +280,21 @@ describe("googleFonts", () => {
     expect(cssCalls).toHaveLength(1);
   });
 
+  test("caches CSS process-wide when no cache is passed", async () => {
+    const fetchMock = mockInter();
+
+    // A unique family so no other test has warmed the shared default cache for its URL.
+    await googleFonts({ families: ["Roboto Flex"], fetch: fetchMock });
+    await googleFonts({ families: ["Roboto Flex"], fetch: fetchMock });
+
+    const cssCalls = fetchMock.mock.calls.filter(([url]) => (url as string).includes("/css2"));
+    expect(cssCalls).toHaveLength(1);
+  });
+
   test("downloads subset bytes lazily — only CSS up front", async () => {
     const fetchMock = mockInter();
-    const fonts = await googleFonts({ families: ["Inter"], fetch: fetchMock });
+    const cache = new Map<string, Promise<string>>();
+    const fonts = await googleFonts({ families: ["Inter"], fetch: fetchMock, cache });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     await fonts[0]!.data();
