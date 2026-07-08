@@ -9,7 +9,6 @@ import { FONT_FAMILIES } from "./fonts";
 import { messageSchema, type RenderMessageInput } from "./schema";
 
 const fetchCache = new Map<string, Promise<ArrayBuffer>>();
-const fontCssCache = new Map<string, Promise<string>>();
 
 function postMessage(message: RenderMessageInput, transfer?: Transferable[]) {
   return self.postMessage(message, { transfer });
@@ -94,7 +93,7 @@ self.onmessage = async (event: MessageEvent) => {
 
         const [images, fonts] = await Promise.all([
           prepareImages({ node, fetchCache }),
-          googleFonts({ families: GOOGLE_FONTS, cache: fontCssCache }),
+          googleFonts({ families: GOOGLE_FONTS }),
         ]);
 
         const start = performance.now();
