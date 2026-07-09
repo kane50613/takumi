@@ -1,21 +1,20 @@
 import tailwindcss from "@tailwindcss/vite";
 import mdx from "fumadocs-mdx/vite";
+import press from "fumapress/vite";
 import { defineConfig } from "waku/config";
-import * as MdxConfig from "./source.config";
 
 export default defineConfig({
   vite: {
     ssr: {
       external: ["typescript", "twoslash", "shiki", "@takumi-rs/core"],
-      noExternal: ["waku", "react-server-dom-webpack"],
     },
     optimizeDeps: {
       exclude: ["lucide-react"],
     },
     resolve: {
       tsconfigPaths: true,
-      dedupe: ["fumadocs-core", "fumadocs-ui"],
+      dedupe: ["fumadocs-ui"],
     },
-    plugins: [tailwindcss(), mdx(MdxConfig)],
+    plugins: [press(), mdx(), tailwindcss()],
   },
 });
