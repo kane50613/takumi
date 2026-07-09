@@ -6,7 +6,7 @@ icon: Type
 
 Takumi never reads system fonts. Load every font a render needs, or its glyphs fall back to tofu.
 
-One **last-resort** font ships built in: Geist, Latin glyphs, weights 400 to 700. It only serves text no registered font covers:
+One **last-resort** font ships built in: Geist, Latin glyphs, weights 400 to 800. It only serves text no registered font covers:
 
 - Fonts you load always win.
 - Generic families like `sans-serif` resolve to your fonts, not to it.
@@ -67,31 +67,29 @@ const image = await render(<div style={{ fontFamily: "Inter" }}>Hello 你好 こ
   width: 1200,
   height: 630,
   // [!code ++:3]
-  fonts: await googleFonts({
-    families: ["Inter", "Noto Sans JP", "Noto Sans TC"],
-  }),
+  fonts: await googleFonts(["Inter", "Noto Sans JP", "Noto Sans TC"]),
 });
 ```
 
-Pass an object instead of a name to set a family's weight or style:
+Pass an list of object instead of a name to set a family's weight or style:
 
 ```tsx twoslash
 import { googleFonts } from "takumi-js/helpers";
 
-await googleFonts({
-  families: [
-    {
-      name: "Inter",
-      weight: [400, 700],
-      style: "italic",
-    },
-    {
-      name: "Noto Sans JP",
-      weight: "600..700", // range loads the variable font
-    },
-  ],
-});
+await googleFonts([
+  {
+    name: "Inter",
+    weight: [400, 700],
+    style: "italic",
+  },
+  {
+    name: "Noto Sans JP",
+    weight: "600..700", // range loads the variable font
+  },
+]);
 ```
+
+Or you can pass an object for more control:
 
 | Option     | Accepts                                       | Effect                                                        |
 | ---------- | --------------------------------------------- | ------------------------------------------------------------- |

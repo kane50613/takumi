@@ -263,7 +263,7 @@ function frame(ms: number) {
   );
 }
 
-const fonts = await googleFonts({ families: [{ name: "Space Grotesk", weight: 700 }] });
+const fonts = await googleFonts([{ name: "Space Grotesk", weight: 700 }]);
 const images = [{ src: "logo", data: logo }];
 const renderer = new Renderer();
 

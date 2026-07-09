@@ -144,12 +144,10 @@ const ff = Bun.spawn(
 
 const framesPerSeg = Math.round((FPS * SEG_MS) / 1000);
 
-const fonts = await googleFonts({
-  families: [
-    ...segments.map((seg) => ({ name: seg.family, weight: seg.weight })),
-    { name: UI, weight: 600 },
-  ],
-});
+const fonts = await googleFonts([
+  ...segments.map((seg) => ({ name: seg.family, weight: seg.weight })),
+  { name: UI, weight: 600 },
+]);
 
 for (const seg of segments) {
   const { node } = await fromJsx(still(seg));

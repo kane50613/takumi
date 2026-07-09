@@ -384,10 +384,16 @@ export function fontFromUrl(url: string, options: FetchOptions = {}) {
  * content uses; or trim them first with {@link subsetFonts}.
  *
  * @example
- * const fonts = await googleFonts({ families: ["Inter", "Noto Sans JP"] });
+ * const fonts = await googleFonts(["Inter", "Noto Sans JP"]);
  * await render(element, { width, height, fonts });
  */
-export async function googleFonts(options: GoogleFontsOptions): Promise<FontSubset[]> {
+export async function googleFonts(
+  options: GoogleFontsOptions | GoogleFontFamily[],
+): Promise<FontSubset[]> {
+  if (Array.isArray(options)) {
+    options = { families: options };
+  }
+
   if (options.families.length === 0) {
     return [];
   }
