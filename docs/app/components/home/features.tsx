@@ -29,7 +29,7 @@ export function Features() {
   return (
     <section className="px-6 pt-20 pb-24 max-sm:py-14">
       <div className="max-w-275 mx-auto">
-        <h2 className="font-display font-[540] text-[clamp(2.25rem,4vw,3.5rem)] leading-[1.06] tracking-tight mb-4">
+        <h2 className="font-[540] text-[clamp(2.25rem,4vw,3.5rem)] leading-[1.06] tracking-tight mb-4">
           The CSS you actually write.
         </h2>
         <p className="text-muted-foreground leading-relaxed max-w-150 mb-10">

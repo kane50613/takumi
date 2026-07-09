@@ -121,14 +121,10 @@
 
 /* ─── Home page theme extensions ─── */
 @theme inline {
-  --font-display: "Newsreader", serif;
+  --default-font-family: "Noto Serif", serif;
+  --font-mono: "Geist Mono", monospace;
 
   --animate-reveal-up: reveal-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-/* Newsreader display headings always use the large optical size */
-.font-display {
-  font-variation-settings: "opsz" 72;
 }
 
 @keyframes reveal-up {

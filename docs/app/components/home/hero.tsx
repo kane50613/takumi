@@ -45,7 +45,7 @@ export function Hero() {
     <section className="px-6 pt-20 pb-24 max-sm:pt-12 max-sm:pb-14">
       <div className="max-w-275 mx-auto flex max-lg:flex-col lg:items-center justify-between gap-14">
         <div className="max-w-160">
-          <h1 className="font-display font-[540] text-[clamp(3rem,5.2vw,4.75rem)] leading-[1.04] tracking-tight text-balance mb-8 animate-reveal-up">
+          <h1 className="font-[540] text-[clamp(3rem,5.2vw,4.75rem)] leading-[1.04] tracking-tight text-balance mb-8 animate-reveal-up">
             Render JSX to images.
             <br />
             <em className="text-primary">Skip the browser.</em>

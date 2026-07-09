@@ -58,7 +58,7 @@ export default function Showcase() {
             </button>
           </div>
 
-          <h1 className="font-display text-[clamp(2.5rem,6vw,4.5rem)] font-[750] tracking-tighter leading-[1.1] mb-6">
+          <h1 className="text-[clamp(2.5rem,6vw,4.5rem)] font-[750] tracking-tighter leading-[1.1] mb-6">
             Crafted with <span className="text-primary">Takumi</span>
           </h1>
           <p className="text-[1.1rem] md:text-[1.25rem] leading-relaxed text-muted-foreground text-pretty">
@@ -81,7 +81,7 @@ export default function Showcase() {
               <span className="inline-block text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground mb-3">
                 Starter Kits
               </span>
-              <h2 className="font-display text-[clamp(2rem,4vw,2.5rem)] font-[750] tracking-tighter leading-tight">
+              <h2 className="text-[clamp(2rem,4vw,2.5rem)] font-[750] tracking-tighter leading-tight">
                 Ready-to-use Templates
               </h2>
             </div>
@@ -105,7 +105,7 @@ export default function Showcase() {
             <div className="text-primary/80 mb-6">
               <GithubIcon size={48} />
             </div>
-            <h2 className="font-display text-3xl md:text-4xl font-[750] tracking-tighter mb-4 text-foreground">
+            <h2 className="text-3xl md:text-4xl font-[750] tracking-tighter mb-4 text-foreground">
               Feature your creation
             </h2>
             <p className="text-muted-foreground text-lg mb-10 max-w-125">

@@ -14,7 +14,7 @@ export function CTA({ highlightedHtml }: { highlightedHtml: ThemedHtml }) {
         >
           匠
         </span>
-        <h2 className="font-display font-[540] text-[clamp(2.25rem,3.5vw,3.25rem)] leading-[1.06] tracking-tight text-balance mb-6">
+        <h2 className="font-[540] text-[clamp(2.25rem,3.5vw,3.25rem)] leading-[1.06] tracking-tight text-balance mb-6">
           Render your first image.
         </h2>
         <ShikiHtml

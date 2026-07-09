@@ -15,7 +15,7 @@ export function Filmstrip() {
       <div className="max-w-275 mx-auto">
         <div className="flex items-end justify-between gap-12 mb-10 max-lg:flex-col max-lg:items-start max-lg:gap-8">
           <div>
-            <h2 className="font-display font-[540] text-[clamp(2.25rem,4vw,3.5rem)] leading-[1.06] tracking-tight mb-4">
+            <h2 className="font-[540] text-[clamp(2.25rem,4vw,3.5rem)] leading-[1.06] tracking-tight mb-4">
               One tree, sampled across time.
             </h2>
             <p className="text-[#a8a29a] leading-relaxed max-w-150">
