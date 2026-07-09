@@ -183,7 +183,12 @@ export default defineConfig({
         return {
           node: <OgCard title={page.data.title} description={page.data.description} />,
           options: {
-            fonts: googleFonts([{ name: "Noto Serif", weight: [600, 800] }]),
+            fonts: googleFonts([
+              {
+                name: "Noto Serif",
+                weight: [600, 800],
+              },
+            ]),
             images: [{ src: "takumi.svg", data: Buffer.from(logo) }],
             module: wasmModule,
           },
