@@ -1,3 +1,11 @@
+## @takumi-rs/helpers@2.0.2
+
+### Accept a families array in `googleFonts`
+
+Pass the families directly instead of wrapping them in an options object:
+`googleFonts(["Inter", "Noto Sans JP"])`. The object form stays for `text`,
+`display`, and the other options.
+
 ## @takumi-rs/helpers@2.0.1
 
 ### Default the Google Fonts CSS cache
