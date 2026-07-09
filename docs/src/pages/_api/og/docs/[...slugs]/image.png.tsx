@@ -25,7 +25,7 @@ export async function GET(_: Request, { params }: ApiContext<"/og/docs/[...slugs
     description: page.data.description,
     icon: <img src="takumi.svg" alt="Takumi" style={{ width: "4rem", height: "4rem" }} />,
     primaryColor: "hsla(354, 90%, 54%, 0.3)",
-    primaryTextColor: "hsl(354, 90%, 54%)",
+    primaryTextColor: "#ff3535",
     site: "Takumi",
     images,
     fonts: googleFonts([
