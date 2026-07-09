@@ -27,7 +27,7 @@
     "oxfmt": "^0.58.0",
     "oxlint": "^1.73.0",
     "publint": "^0.3.21",
-    "tegami": "^1.2.4",
+    "tegami": "^1.2.5",
     "typescript": "catalog:"
   },
   "overrides": {
@@ -41,12 +41,15 @@
     "@types/node": "^26.1.1",
     "@types/react": "19.2.17",
     "@types/react-dom": "^19.2.3",
-    "lucide-react": "^1.23.0",
+    "lucide-react": "^1.24.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "tsdown": "^0.22.4",
     "unrun": "^0.3.1",
     "typescript": "^6.0.3",
     "vite": "^8.1.4"
+  },
+  "patchedDependencies": {
+    "fumapress@0.7.2": "patches/fumapress@0.7.2.patch"
   }
 }

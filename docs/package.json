@@ -21,7 +21,7 @@
     "fumadocs-mdx": "^15.1.0",
     "fumadocs-twoslash": "^3.3.0",
     "fumadocs-ui": "npm:@fumadocs/base-ui@^16.11.1",
-    "fumapress": "^0.7.1",
+    "fumapress": "^0.7.2",
     "js-confetti": "^0.13.1",
     "lucide-react": "catalog:",
     "next-themes": "^0.4.6",
@@ -48,7 +48,7 @@
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "csstype": "catalog:",
-    "prettier": "^3.9.4",
+    "prettier": "^3.9.5",
     "vite": "catalog:"
   }
 }

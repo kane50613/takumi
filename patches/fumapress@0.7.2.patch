@@ -1,0 +1,33 @@
+diff --git a/dist/plugins/takumi.js b/dist/plugins/takumi.js
+index a33ed9a08f356df6d8c1b1138b0b70877779783c..ff6c9e73edf51e0bd7e333ef7fbaee6e18f5e167 100644
+--- a/dist/plugins/takumi.js
++++ b/dist/plugins/takumi.js
+@@ -14,8 +14,8 @@ function takumiPlugin(options = {}) {
+ 	let basePath;
+ 	function slugsToImagePath(slugs, lang) {
+ 		const segments = [...slugs];
+-		if (segments.length === 0) segments.push("index.webp");
+-		else segments[segments.length - 1] += ".webp";
++		if (segments.length === 0) segments.push("index.png");
++		else segments[segments.length - 1] += ".png";
+ 		return {
+ 			staticPath: lang ? [lang, ...segments] : segments,
+ 			pathname: joinPathname(lang ?? "", basePath, ...segments)
+@@ -24,7 +24,7 @@ function takumiPlugin(options = {}) {
+ 	function imagePathToSlugs(segs) {
+ 		if (segs.length === 0) return segs;
+ 		const slugs = [...segs];
+-		slugs[slugs.length - 1] = slugs[slugs.length - 1].replace(/\.webp$/, "");
++		slugs[slugs.length - 1] = slugs[slugs.length - 1].replace(/\.png$/, "");
+ 		if (slugs.length === 1 && slugs[0] === "index") slugs.pop();
+ 		return slugs;
+ 	}
+@@ -68,7 +68,7 @@ function takumiPlugin(options = {}) {
+ 						width,
+ 						height,
+ 						...options,
+-						format: "webp"
++						format: "png"
+ 					});
+ 				}
+ 			});
