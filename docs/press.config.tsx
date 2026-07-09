@@ -10,7 +10,8 @@ import * as Twoslash from "fumadocs-twoslash/ui";
 import { defineConfig } from "fumapress";
 import { fumadocsMdx } from "fumapress/adapters/mdx";
 import { createDocsLayoutPage } from "fumapress/layouts/docs";
-import { flexsearchPlugin } from "fumapress/plugins/flexsearch";
+import { oramaSearchPlugin } from "fumapress/plugins/orama-search";
+import { linkValidationPlugin } from "fumapress/plugins/link-validation";
 import { llmsPlugin } from "fumapress/plugins/llms.txt";
 import { sitemapPlugin } from "fumapress/plugins/sitemap";
 import { takumiPlugin } from "fumapress/plugins/takumi";
@@ -38,6 +39,7 @@ import { TypeTable } from "./app/components/type-table";
 import { Video } from "./app/components/video";
 
 export default defineConfig({
+  mode: "static",
   content: {
     docs: docs.toFumadocsSource({ baseDir: "docs" }),
   },
@@ -128,7 +130,8 @@ export default defineConfig({
     }),
   )
   .plugins(
-    flexsearchPlugin(),
+    oramaSearchPlugin(),
+    linkValidationPlugin(),
     llmsPlugin(),
     sitemapPlugin(),
     takumiPlugin({
