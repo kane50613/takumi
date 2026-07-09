@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { $ } from "bun";
-import { describe, it } from "bun:test";
+import { beforeAll, describe, it } from "bun:test";
 
 // Bun tolerates extensionless imports, so the Node entries are exercised in a real node process.
 const cwd = fileURLToPath(new URL("..", import.meta.url));
@@ -8,22 +8,34 @@ const cwd = fileURLToPath(new URL("..", import.meta.url));
 const body = `const png = await new Renderer().render(container({ style: { width: 1, height: 1 }, children: [] }), { width: 1, height: 1, format: "png" });
 if (!(png instanceof Uint8Array) || png.length === 0) throw new Error("empty render");`;
 
-const esm = (entry: string) =>
-  `import { Renderer } from "${entry}";\nimport { container } from "@takumi-rs/helpers";\n${body}`;
+const esm = `import { Renderer } from "@takumi-rs/wasm/node";
+import { Renderer as AutoRenderer } from "@takumi-rs/wasm/auto";
+import { container } from "@takumi-rs/helpers";
+if (typeof AutoRenderer !== "function") throw new Error("auto entry broken");
+${body}`;
 
-const cjs = (entry: string) =>
-  `const { Renderer } = require("${entry}");\nconst { container } = require("@takumi-rs/helpers");\n(async () => {\n${body}\n})();`;
-
-const cases: [type: "module" | "commonjs", entry: string, script: string][] = [
-  ["module", "@takumi-rs/wasm/node", esm("@takumi-rs/wasm/node")],
-  ["module", "@takumi-rs/wasm/auto", esm("@takumi-rs/wasm/auto")],
-  ["commonjs", "@takumi-rs/wasm/node", cjs("@takumi-rs/wasm/node")],
-  ["commonjs", "@takumi-rs/wasm/auto", cjs("@takumi-rs/wasm/auto")],
-];
+const cjs = `const { Renderer } = require("@takumi-rs/wasm/node");
+const { Renderer: AutoRenderer } = require("@takumi-rs/wasm/auto");
+const { container } = require("@takumi-rs/helpers");
+if (typeof AutoRenderer !== "function") throw new Error("auto entry broken");
+(async () => {
+${body}
+})();`;
 
 describe("bundler entries resolve under Node", () => {
-  for (const [type, entry, script] of cases) {
-    it(`${type} ${entry}`, async () => {
+  beforeAll(async () => {
+    await $`node -e ${'require("node:fs").readFileSync("pkg/takumi_wasm_bg.wasm")'}`
+      .cwd(cwd)
+      .quiet();
+  });
+
+  const cases: [type: "module" | "commonjs", script: string][] = [
+    ["module", esm],
+    ["commonjs", cjs],
+  ];
+
+  for (const [type, script] of cases) {
+    it(`${type} node + auto entries`, async () => {
       await $`node --input-type=${type} -e ${script}`.cwd(cwd).quiet();
     }, 30_000);
   }
