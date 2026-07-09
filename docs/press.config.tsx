@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { Analytics } from "@vercel/analytics/react";
 import { getPageTreePeers } from "fumadocs-core/page-tree";
 import { lucideIconsPlugin } from "fumadocs-core/source/plugins/lucide-icons";
@@ -6,6 +5,7 @@ import { Card, Cards } from "fumadocs-ui/components/card";
 import { Step, Steps } from "fumadocs-ui/components/steps";
 import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 import defaultMdxComponents, { createRelativeLink } from "fumadocs-ui/mdx";
+import { generate as generateOgNode } from "fumadocs-ui/og/takumi";
 import * as Twoslash from "fumadocs-twoslash/ui";
 import { defineConfig } from "fumapress";
 import { fumadocsMdx } from "fumapress/adapters/mdx";
@@ -36,53 +36,6 @@ import { Accordion, Accordions } from "./app/components/accordion";
 import { Mermaid } from "./app/components/mdx/mermaid";
 import { TypeTable } from "./app/components/type-table";
 import { Video } from "./app/components/video";
-
-function OgCard({ title, description }: { title: string; description?: string }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        width: "100%",
-        height: "100%",
-        color: "white",
-        padding: "4rem",
-        backgroundColor: "#16130f",
-        borderBottom: "18px solid rgba(255,53,53,0.3)",
-        fontFamily: "Noto Serif",
-      }}
-    >
-      <p style={{ fontWeight: 800, fontSize: "82px", margin: 0 }}>{title}</p>
-      {description && (
-        <p
-          style={{
-            fontSize: "48px",
-            color: "rgba(240,240,240,0.8)",
-            margin: 0,
-            marginTop: "16px",
-            paddingBottom: "28px",
-            borderBottom: "10px dashed rgba(255,53,53,0.3)",
-          }}
-        >
-          {description}
-        </p>
-      )}
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "row",
-          alignItems: "center",
-          gap: "20px",
-          marginTop: "auto",
-          color: "#ff3535",
-        }}
-      >
-        <img src="takumi.svg" alt="Takumi" style={{ width: "64px", height: "64px" }} />
-        <p style={{ fontSize: "56px", fontWeight: 600, margin: 0 }}>Takumi</p>
-      </div>
-    </div>
-  );
-}
 
 export default defineConfig({
   content: {
@@ -179,16 +132,18 @@ export default defineConfig({
     llmsPlugin(),
     sitemapPlugin(),
     takumiPlugin({
-      generate(page): { node: ReactNode; options: Record<string, unknown> } {
+      generate(page) {
         return {
-          node: <OgCard title={page.data.title} description={page.data.description} />,
+          node: generateOgNode({
+            title: page.data.title,
+            description: page.data.description,
+            site: "Takumi",
+            primaryColor: "hsla(354, 90%, 54%, 0.3)",
+            primaryTextColor: "#ff3535",
+            icon: <img src="takumi.svg" alt="Takumi" style={{ width: "4rem", height: "4rem" }} />,
+          }),
           options: {
-            fonts: googleFonts([
-              {
-                name: "Noto Serif",
-                weight: [600, 800],
-              },
-            ]),
+            fonts: googleFonts([{ name: "Noto Serif", weight: [600, 800] }]),
             images: [{ src: "takumi.svg", data: Buffer.from(logo) }],
             module: wasmModule,
           },
