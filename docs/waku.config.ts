@@ -13,7 +13,7 @@ export default defineConfig({
     },
     resolve: {
       tsconfigPaths: true,
-      dedupe: ["fumadocs-ui"],
+      dedupe: ["fumadocs-ui", "fumadocs-core"],
     },
     plugins: [press(), mdx(), tailwindcss()],
   },
