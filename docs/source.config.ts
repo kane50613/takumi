@@ -5,7 +5,7 @@ import {
 } from "fumadocs-core/mdx-plugins";
 import { defineConfig, defineDocs } from "fumadocs-mdx/config";
 import lastModified from "fumadocs-mdx/plugins/last-modified";
-import { metaSchema, pageSchema } from "fumadocs-core/source/schema";
+import { metaSchema, pageSchema } from "fumapress/adapters/mdx/schema";
 import { transformerTwoslash } from "fumadocs-twoslash";
 import { createFileSystemTypesCache } from "fumadocs-twoslash/cache-fs";
 import type { ShikiTransformer } from "shiki";

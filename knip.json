@@ -9,12 +9,12 @@
     "docs": {
       "entry": [
         "src/pages/**/*.{ts,tsx}",
-        "src/pages.gen.ts",
         "waku.config.ts",
         "source.config.ts",
+        "press.config.tsx",
         "app/playground/worker.ts"
       ],
-      "ignore": ["public/**", "app/playground/templates/**"],
+      "ignore": ["public/**", "app/playground/templates/**", "src/app.css"],
       "ignoreDependencies": ["@takumi-rs/core", "@takumi-rs/wasm", "twoslash"]
     },
     "takumi-helpers": {
