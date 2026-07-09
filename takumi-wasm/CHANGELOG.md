@@ -1,3 +1,14 @@
+## @takumi-rs/wasm@2.0.2
+
+### Accept a promise in the `fonts` option
+
+`fonts` now takes `Promise<FontLoader[]>` as well as the plain list, so
+`googleFonts` results pass straight through without `await`.
+
+### Extend the embedded font weight axis to 800
+
+The embedded last-resort Geist subset now covers weights 400 to 800.
+
 ## @takumi-rs/wasm@2.0.0
 
 ### Make the embedded font a true last resort
