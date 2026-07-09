@@ -28,7 +28,7 @@ export async function GET(_: Request, { params }: ApiContext<"/og/docs/[...slugs
     primaryTextColor: "hsl(354, 90%, 54%)",
     site: "Takumi",
     images,
-    fonts: await googleFonts([
+    fonts: googleFonts([
       {
         name: "Noto Serif",
         weight: [600, 800],

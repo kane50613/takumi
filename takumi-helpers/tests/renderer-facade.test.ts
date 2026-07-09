@@ -102,6 +102,16 @@ describe("prepareRenderInput resource forwarding", () => {
     expect(resolve).toHaveBeenCalledWith([font], images, ["Explicit"]);
   });
 
+  test("fonts accepts a promise of the list", async () => {
+    const { fonts } = registry();
+    const resolve = spyOn(fonts, "resolveResources");
+    const font = rangedFont("Fam", [[0x41, 0x5a]]);
+
+    await prepareRenderInput(fonts, { fonts: Promise.resolve([font]) }, textNode("A"));
+
+    expect(resolve).toHaveBeenCalledWith([font], undefined, undefined);
+  });
+
   test("source drives font subsetting", async () => {
     const { fonts } = registry();
     const resolve = spyOn(fonts, "resolveResources");

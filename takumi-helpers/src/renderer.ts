@@ -98,7 +98,7 @@ export type AnimationOutputFormatOptions =
 
 /** The wrapper-managed extras every render entry point accepts on top of the binding options. */
 export type RenderExtras = {
-  fonts?: FontLoader[];
+  fonts?: FontLoader[] | Promise<FontLoader[]>;
   signal?: AbortSignal;
   images?: ImagesInput;
 };
@@ -289,8 +289,9 @@ export async function prepareRenderInput<
   const { fonts, fontFamilies, signal, images, ...rest } = options;
   signal?.throwIfAborted();
 
+  const resolvedFonts = await fonts;
   const resolved = await registry.resolveResources(
-    fonts && subsetFonts({ fonts, source }),
+    resolvedFonts && subsetFonts({ fonts: resolvedFonts, source }),
     images,
     fontFamilies,
   );

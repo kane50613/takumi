@@ -23,7 +23,7 @@ Pass the fonts a render needs through `fonts`. An entry takes one of three forms
 | Raw bytes  | A `Uint8Array`, `ArrayBuffer`, or `Buffer`, registered directly.                 |
 | Descriptor | `{ name, data, weight, style }`. The fields override what the file reports.      |
 
-A reused renderer decodes each file once.
+A reused renderer decodes each file once. `fonts` also takes a promise of the list, so async helpers like `googleFonts` pass straight through without `await`.
 
 ```tsx twoslash
 import { ImageResponse } from "takumi-js/response";
@@ -67,7 +67,7 @@ const image = await render(<div style={{ fontFamily: "Inter" }}>Hello 你好 こ
   width: 1200,
   height: 630,
   // [!code ++:3]
-  fonts: await googleFonts(["Inter", "Noto Sans JP", "Noto Sans TC"]),
+  fonts: googleFonts(["Inter", "Noto Sans JP", "Noto Sans TC"]),
 });
 ```
 
