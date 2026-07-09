@@ -10,8 +10,7 @@ export function CodeDemo({ highlightedHtml }: { highlightedHtml: ThemedHtml }) {
           The code is the design file.
         </h2>
         <p className="text-muted-foreground leading-relaxed max-w-150 mb-10">
-          ImageResponse is drop-in compatible with next/og. This component is the exact source of
-          the card next to it.
+          Drop-in for next/og. The card is this source file, rendered.
         </p>
 
         <div className="grid xl:grid-cols-2 gap-10 items-start">

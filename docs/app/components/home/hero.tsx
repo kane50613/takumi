@@ -51,9 +51,8 @@ export function Hero() {
             <em className="text-primary">Skip the browser.</em>
           </h1>
           <p className="text-[clamp(1rem,2vw,1.125rem)] leading-relaxed text-muted-foreground mb-10 animate-reveal-up [animation-delay:100ms]">
-            Takumi parses CSS, lays out the tree, shapes text, and encodes pixels in a single Rust
-            binary. Headless Chromium spends 300&nbsp;MB and a cold start on an OG card. Takumi
-            spends a function call.
+            Headless Chromium needs ~300&nbsp;MB and a cold start for one OG card. Takumi needs a
+            function call.
           </p>
           <div className="flex items-center gap-6 flex-wrap animate-reveal-up [animation-delay:200ms]">
             <Button asChild size="lg" className="px-7 font-semibold">

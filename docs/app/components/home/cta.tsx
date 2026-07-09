@@ -9,7 +9,7 @@ export function CTA({ highlightedHtml }: { highlightedHtml: ThemedHtml }) {
       <div className="max-w-130 mx-auto text-center">
         <span
           lang="ja"
-          title="takumi — artisan"
+          title="takumi: artisan"
           className="inline-flex size-9 items-center justify-center bg-primary text-primary-foreground font-bold select-none mb-6"
         >
           匠

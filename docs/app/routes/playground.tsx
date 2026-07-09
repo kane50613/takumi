@@ -8,9 +8,9 @@ import { baseOptions } from "~/layout-config";
 
 const ImageEditor = lazy(() => import("~/components/playground/playground"));
 
-const TITLE = "Playground — Takumi";
+const TITLE = "Playground · Takumi";
 const DESCRIPTION =
-  "Write JSX, watch Takumi render it to an image in your browser — WASM, no server.";
+  "Write JSX, watch Takumi render it to an image in your browser. WASM, no server.";
 
 export default function Playground() {
   return (

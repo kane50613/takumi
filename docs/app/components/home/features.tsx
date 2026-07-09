@@ -30,11 +30,10 @@ export function Features() {
     <section className="px-6 pt-20 pb-24 max-sm:py-14">
       <div className="max-w-275 mx-auto">
         <h2 className="font-[540] text-[clamp(2.25rem,4vw,3.5rem)] leading-[1.06] tracking-tight mb-4">
-          The CSS you actually write.
+          The CSS you write.
         </h2>
         <p className="text-muted-foreground leading-relaxed max-w-150 mb-10">
-          Support reaches past the usual OG-image subset. If your generator made you remove a
-          property, put it back.
+          Not a tiny OG subset. Put the property back.
         </p>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-x-8 gap-y-10 max-w-250">
@@ -55,8 +54,10 @@ export function Features() {
         </div>
 
         <p className="mt-12 text-muted-foreground leading-relaxed max-w-150">
-          Runs as a native Node.js binding, a WASM build for Cloudflare Workers and browsers, and a
-          Rust crate. Prebuilt for macOS, Linux, and Windows on x64 and ARM64.
+          Native on Node. WASM on Workers and browsers. Crate for Rust.
+        </p>
+        <p className="mt-2 font-mono text-xs text-muted-foreground">
+          macOS · Linux · Windows · x64 · ARM64
         </p>
       </div>
     </section>

@@ -44,9 +44,8 @@ const CODE_SNIPPET = `export default function DemoCard() {
 
 const CTA_COMMAND = "bun i takumi-js";
 
-const TITLE = "Takumi — Render JSX to images. Skip the browser.";
-const DESCRIPTION =
-  "Rust-powered image rendering engine. Write JSX, get pixels. Runs on Node, browsers, and Cloudflare Workers.";
+const TITLE = "Takumi: Render JSX to images. Skip the browser.";
+const DESCRIPTION = "JSX to pixels in Rust. Node, Workers, browser. No headless Chrome.";
 
 const highlighter = await createHighlighterCore({
   themes: [githubDarkDefault, githubLightDefault],

@@ -19,9 +19,7 @@ export function Filmstrip() {
               One tree, sampled across time.
             </h2>
             <p className="text-[#a8a29a] leading-relaxed max-w-150">
-              The renderer takes a timestamp. A PNG is your tree at t&nbsp;=&nbsp;0. An animated
-              WebP is the same tree sampled across t. CSS @keyframes and Tailwind animate-*
-              utilities resolve at render time.
+              Pass a timestamp. PNG is t&nbsp;=&nbsp;0. Animated WebP is the same tree over t.
             </p>
           </div>
           <pre className="shrink-0 font-mono text-xs leading-relaxed text-[#a8a29a] whitespace-pre max-lg:overflow-x-auto max-lg:max-w-full">

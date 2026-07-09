@@ -22,10 +22,9 @@ export function Showcase() {
           In production.
         </h2>
         <p className="text-muted-foreground leading-relaxed max-w-150 mb-10">
-          <User href="https://dcard.tw">Dcard</User> renders post share images with it,{" "}
-          <User href="https://fumadocs.dev">Fumadocs</User> generates its docs OG images, and{" "}
-          <User href="https://nuxtseo.com/docs/og-image/renderers/takumi">Nuxt OG Image</User> ships
-          it as a built-in renderer.
+          <User href="https://dcard.tw">Dcard</User> share cards.{" "}
+          <User href="https://fumadocs.dev">Fumadocs</User> OG images. Built into{" "}
+          <User href="https://nuxtseo.com/docs/og-image/renderers/takumi">Nuxt OG Image</User>.
         </p>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

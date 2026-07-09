@@ -11,7 +11,7 @@ import { Seo } from "~/components/seo";
 import { baseOptions } from "~/layout-config";
 import { showcaseProjects, showcaseTemplates } from "~/data/showcase";
 
-const TITLE = "Showcase — Takumi";
+const TITLE = "Showcase · Takumi";
 const DESCRIPTION =
   "Discover how developers are using Takumi to power their dynamic image generation.";
 
