@@ -1,26 +1,37 @@
 import { loadBackend } from "#backend";
 import type { BackendModule } from "./backend/types";
 
-type Imports = Awaited<ReturnType<typeof loadBackend>>;
+export type Imports = Awaited<ReturnType<typeof loadBackend>>;
 
-let importPromise: Promise<Imports> | null = null;
+let backendPromise: Promise<Imports> | null = null;
+let wasmPromise: Promise<Imports> | null = null;
 
 /**
- * Resolves the rendering backend once and caches it. With no `module`, the
- * `#backend` import conditions pick it (napi on Node/Bun, WASM elsewhere). An
- * explicit `module` is a WASM binary, so it forces WASM — the escape hatch for a
- * Node target that can't load the native addon. A failed load clears the cache.
+ * Resolves the rendering backend and caches it, one slot per strategy. With no
+ * `module`, the `#backend` import conditions pick it (napi on Node/Bun, WASM
+ * elsewhere). An explicit `module` is a WASM binary, so it forces WASM — the
+ * escape hatch for a target that can't load the native addon. The slots are
+ * separate so a forced-WASM call never gets a previously cached napi backend
+ * (and vice versa). A failed load clears its slot.
  */
 export function getImports(module?: BackendModule): Promise<Imports> {
-  importPromise ??= (
-    module === undefined
-      ? loadBackend()
-      : import("./backend/wasm-init").then(({ initWasm }) => initWasm(module))
-  ).catch((error) => {
-    importPromise = null;
+  if (module === undefined) {
+    backendPromise ??= loadBackend().catch((error) => {
+      backendPromise = null;
 
-    throw error;
-  });
+      throw error;
+    });
 
-  return importPromise;
+    return backendPromise;
+  }
+
+  wasmPromise ??= import("./backend/wasm-init")
+    .then(({ initWasm }) => initWasm(module))
+    .catch((error) => {
+      wasmPromise = null;
+
+      throw error;
+    });
+
+  return wasmPromise;
 }

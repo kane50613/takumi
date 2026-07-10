@@ -20,6 +20,8 @@ npm i takumi-js
 
 `takumi-js` bundles both bindings: the native renderer (`@takumi-rs/core`) and the WebAssembly one (`@takumi-rs/wasm`). It picks the right one at runtime — native on Node.js, WebAssembly on Cloudflare Workers, Vercel Edge, Deno, and the browser. No extra install.
 
+To pin the WebAssembly backend instead, import the same functions from `takumi-js/wasm`. That entry never resolves the native addon, so use it when a bundler or deploy target chokes on the `.node` binary.
+
 ## Render an image
 
 `render` takes JSX and returns image bytes. A default sans-serif font is built in, so text works without loading a font.

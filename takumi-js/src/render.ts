@@ -3,7 +3,8 @@ import type * as wasm from "@takumi-rs/wasm";
 import { extractEmojis, type EmojiType } from "@takumi-rs/helpers/emoji";
 import { prepareImages, type FetchOptions, type ImageFetchCache } from "@takumi-rs/helpers";
 import { fromJsx, type FromJsxOptions } from "@takumi-rs/helpers/jsx";
-import { getImports } from "./import";
+import { getImports, type Imports } from "./import";
+import type { BackendModule } from "./backend/types";
 import type { ReactNode } from "react";
 import type { Node, ReactElementLike } from "@takumi-rs/helpers";
 import { fromHtml } from "@takumi-rs/helpers/html";
@@ -43,7 +44,7 @@ type ManagedRendererOptions = {
   /**
    * @description The WebAssembly module to use for the renderer. If not provided, the default resolving strategy will be used.
    */
-  module?: wasm.InitInput | Promise<wasm.InitInput> | { default: wasm.InitInput };
+  module?: BackendModule;
 };
 
 /**
@@ -93,7 +94,7 @@ type PipelineOptions = Partial<SharedRenderExtras> &
     stylesheets?: string[];
   };
 
-let globalRenderer: Renderer | undefined;
+const globalRenderers = new WeakMap<Imports, Renderer>();
 
 export type RenderInput = ReactNode | ReactElementLike | Node | string;
 
@@ -120,14 +121,21 @@ async function transformElement(element: RenderInput, options?: PipelineOptions)
   return fromJsx(element, options?.jsx);
 }
 
-/** Resolves the renderer to use: a caller-supplied one, or the shared global. */
+/** Resolves the renderer to use: a caller-supplied one, or the backend's shared global. */
 async function resolveRenderer(options?: PipelineOptions): Promise<Renderer> {
   if (options && "renderer" in options && options.renderer) {
     return options.renderer;
   }
 
   const imports = await getImports(options?.module);
-  return (globalRenderer ??= new imports.Renderer());
+  let renderer = globalRenderers.get(imports);
+
+  if (!renderer) {
+    renderer = new imports.Renderer();
+    globalRenderers.set(imports, renderer);
+  }
+
+  return renderer;
 }
 
 /** Transforms an input into a node tree and extracts its emojis. */
