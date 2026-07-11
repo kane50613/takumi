@@ -65,6 +65,7 @@ export default defineConfig({
               moduleResolution: 100, // ts.ModuleResolutionKind.Bundler
               jsx: 1, // ts.JsxEmit.Preserve
               baseUrl: undefined,
+              types: ["node"],
             },
           },
           typesCache: createFileSystemTypesCache({
