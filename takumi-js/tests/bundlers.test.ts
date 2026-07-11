@@ -59,7 +59,6 @@ function bundleSplit(opts: { target: string }): { entry: string; chunks: string 
   }
 
   const result = Bun.spawnSync(["bun", ...args]);
-
   expect(result.exitCode).toBe(0);
 
   const entryChunk = readFileSync(join(outdir, "entry.js"), "utf8");
