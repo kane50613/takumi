@@ -58,7 +58,17 @@ description: Render OG images from a Nitro server route.
 
     Visit `/og.png?title=Hello&description=From%20Nitro`.
 
-    Takumi picks the render backend from the deployment target: native bindings on the Node preset, WebAssembly on edge presets. No config is needed.
+    Every Nitro preset renders on the WebAssembly backend. Nitro sets the [`unwasm`](https://github.com/unjs/unwasm) export condition while [`wasm`](https://nitro.build/config#wasm) is on (the default), so the WASM binary ships inside your server bundle. Nothing has to resolve a native addon at runtime, so the same route deploys to an edge preset and runs in a WebContainer (StackBlitz, CodeSandbox).
+
+    Prefer the faster native bindings on the Node preset? Drop the condition:
+
+    ```ts title="nitro.config.ts"
+    export default defineNitroConfig({
+      exportConditions: ["!unwasm"],
+    });
+    ```
+
+    `wasm: false` gets you the native bindings too, but it also unplugs unwasm from the build, so `.wasm` imports elsewhere in your app stop resolving. Negating the condition leaves the plugin in place.
 
   </Step>
 </Steps>

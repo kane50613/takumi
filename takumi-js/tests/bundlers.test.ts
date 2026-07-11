@@ -87,6 +87,16 @@ describe("#backend resolution by import condition", () => {
     expect(code).toContain("@takumi-rs/core");
   });
 
+  test("unwasm wins over node → WASM, never native core", () => {
+    // Nitro sets both `unwasm` and `node` on its Node preset, so `unwasm` must
+    // come first in the `#backend` map: its bundler can load a WASM binary, and
+    // the native addon can't be counted on (WebContainer can't load one at all).
+    const code = bundle({ target: "node", conditions: ["unwasm"] });
+
+    expect(code).toContain("@takumi-rs/wasm/auto");
+    expect(code).not.toContain("@takumi-rs/core");
+  });
+
   test("workerd → WASM auto, never native core", () => {
     const code = bundle({
       target: "browser",
