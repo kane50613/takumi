@@ -1,84 +1,72 @@
 core:changelogs:
-  - content: "---\npackages:\n  npm:@takumi-rs/core:\n    type: patch\n  npm:@takumi-rs/wasm:\n    type: patch\n---\n\n### Accept a promise in the `fonts` option\n\n`fonts` now takes `Promise<FontLoader[]>` as well as the plain list, so\n`googleFonts` results pass straight through without `await`.\n"
-    filename: fonts-accept-promise.md
-    v: 0.0.0
-  - content: "---\npackages:\n  npm:@takumi-rs/core:\n    type: patch\n  npm:@takumi-rs/wasm:\n    type: patch\n---\n\n### Extend the embedded font weight axis to 800\n\nThe embedded last-resort Geist subset now covers weights 400 to 800.\n"
-    filename: embedded-font-wght-800.md
-    v: 0.0.0
-  - content: "---\npackages:\n  npm:@takumi-rs/helpers:\n    type: patch\n---\n\n### Accept a families array in `googleFonts`\n\nPass the families directly instead of wrapping them in an options object:\n`googleFonts([\"Inter\", \"Noto Sans JP\"])`. The object form stays for `text`,\n`display`, and the other options.\n"
-    filename: google-fonts-array-input.md
+  - content: "---\npackages:\n  npm:takumi-js:\n    type: patch\n---\n\n### Select the WASM backend under the `unwasm` condition\n\nNitro sets `unwasm` on every preset, including Node, so `takumi-js` resolves\n`#backend` to WASM there instead of the native addon a WebContainer host\n(StackBlitz, CodeSandbox) can't load. Set `exportConditions: [\"!unwasm\"]` to keep\nthe native bindings on the Node preset.\n"
+    filename: unwasm-backend-condition.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
   - changelogIds:
-      - fonts-accept-promise.md
-      - embedded-font-wght-800.md
-    id: npm:@takumi-rs/core
+      - unwasm-backend-condition.md
+    id: npm:takumi-js
+    updated: true
+  - id: npm:@takumi-rs/helpers
+    updated: true
+  - id: npm:docs
+    updated: false
+  - id: npm:@takumi-rs/wasm
+    updated: true
+  - id: npm:@takumi-rs/core
     updated: true
   - id: npm:takumi-template
     updated: false
-  - id: npm:docs
-    updated: false
   - id: npm:@takumi-rs/image-response
     updated: true
-  - changelogIds:
-      - fonts-accept-promise.md
-      - embedded-font-wght-800.md
-    id: npm:@takumi-rs/wasm
-    updated: true
-  - id: npm:takumi-js
-    updated: true
-  - changelogIds:
-      - google-fonts-array-input.md
-    id: npm:@takumi-rs/helpers
-    updated: true
   - id: npm:ffmpeg-keyframe-animation
-    updated: false
-  - id: npm:ffplay
     updated: false
   - id: npm:example-tanstack-start
     updated: false
   - id: npm:example-satori-html
     updated: false
-  - id: npm:example-twitter-images
-    updated: false
   - id: npm:example-nextjs
+    updated: false
+  - id: npm:ffplay
+    updated: false
+  - id: npm:example-cloudflare-workers
     updated: false
   - id: npm:waku-ssr
     updated: false
   - id: npm:example-css-library-integration
     updated: false
-  - id: npm:example-cloudflare-workers
-    updated: false
   - id: npm:svelte
+    updated: false
+  - id: npm:example-twitter-images
+    updated: false
+  - id: cargo:takumi-html
     updated: false
   - id: cargo:takumi-core
     updated: false
   - id: cargo:takumi
     updated: true
-  - id: cargo:takumi-svg
-    updated: false
-  - id: cargo:takumi-html
-    updated: false
   - id: cargo:takumi-raster
+    updated: false
+  - id: cargo:takumi-svg
     updated: false
 npm:packages:
   - id: npm:takumi
-  - id: npm:@takumi-rs/core
-  - id: npm:takumi-template
-  - id: npm:docs
-  - id: npm:@takumi-rs/image-response
-  - id: npm:@takumi-rs/wasm
   - id: npm:takumi-js
   - id: npm:@takumi-rs/helpers
+  - id: npm:docs
+  - id: npm:@takumi-rs/wasm
+  - id: npm:@takumi-rs/core
+  - id: npm:takumi-template
+  - id: npm:@takumi-rs/image-response
   - id: npm:ffmpeg-keyframe-animation
-  - id: npm:ffplay
   - id: npm:example-tanstack-start
   - id: npm:example-satori-html
-  - id: npm:example-twitter-images
   - id: npm:example-nextjs
+  - id: npm:ffplay
+  - id: npm:example-cloudflare-workers
   - id: npm:waku-ssr
   - id: npm:example-css-library-integration
-  - id: npm:example-cloudflare-workers
   - id: npm:svelte
+  - id: npm:example-twitter-images
