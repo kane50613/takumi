@@ -41,7 +41,7 @@ type SharedRenderExtras = {
 
 type ManagedRendererOptions = {
   /**
-   * @description The WebAssembly module to use for the renderer. If not provided, the default resolving strategy will be used.
+   * @description The WebAssembly module to initialize the WASM backend with. Only for runtimes the import conditions map to WASM; the native backend rejects it. If not provided, the default resolving strategy will be used.
    */
   module?: wasm.InitInput | Promise<wasm.InitInput> | { default: wasm.InitInput };
 };

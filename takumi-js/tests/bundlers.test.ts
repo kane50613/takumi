@@ -1,11 +1,11 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 // The `#backend` import map must hand each bundler/runtime the right backend by
-// condition alone: native napi on Node/Bun, WASM everywhere else, and the native
-// `.node` binary must never reach a worker/edge bundle. We bundle a tiny consumer
-// under each condition set and assert which backend got pulled in.
+// condition alone: native napi on Node/Bun, WASM everywhere else, and neither
+// backend may appear in the other's bundle. We bundle a tiny consumer under each
+// condition set and assert which backend got pulled in.
 //
 // Each case runs in its own `bun build` process. In-process Bun.build reuses the
 // running process's module resolution, so once another test imports the package
@@ -49,42 +49,31 @@ function bundle(opts: { target?: string; conditions?: string[] }): string {
   return result.stdout.toString();
 }
 
-/** Splitting build to a dir; returns the entry chunk and the other (lazy) chunks. */
-function bundleSplit(opts: { target: string }): { entry: string; chunks: string } {
-  const outdir = mkdtempSync(join(import.meta.dir, "..", "node_modules", ".bundler-out-"));
-  const args = ["build", entry, `--target=${opts.target}`, "--splitting", `--outdir=${outdir}`];
-
-  for (const pkg of external) {
-    args.push(`--external=${pkg}`);
-  }
-
-  const result = Bun.spawnSync(["bun", ...args]);
-  expect(result.exitCode).toBe(0);
-
-  const entryChunk = readFileSync(join(outdir, "entry.js"), "utf8");
-  const chunks = readdirSync(outdir)
-    .filter((file) => file !== "entry.js")
-    .map((file) => readFileSync(join(outdir, file), "utf8"))
-    .join("\n");
-
-  rmSync(outdir, { recursive: true, force: true });
-
-  return { entry: entryChunk, chunks };
-}
-
 describe("#backend resolution by import condition", () => {
-  // node/bun select napi as the primary backend; the WASM backend is still
-  // reachable as the `module` escape hatch (a lazy chunk), so it may appear too.
-  test("node → native core", () => {
+  // Each backend must stay out of the other's bundle: a bundler that inlines
+  // dynamic imports (Nitro does) would otherwise ship the unused one as dead code.
+  test("node → native core, never WASM", () => {
     const code = bundle({ target: "node" });
 
     expect(code).toContain("@takumi-rs/core");
+    expect(code).not.toContain("@takumi-rs/wasm");
   });
 
-  test("bun → native core", () => {
+  test("bun → native core, never WASM", () => {
     const code = bundle({ target: "bun" });
 
     expect(code).toContain("@takumi-rs/core");
+    expect(code).not.toContain("@takumi-rs/wasm");
+  });
+
+  test("unwasm wins over node → WASM, never native core", () => {
+    // Nitro sets both `unwasm` and `node` on its Node preset, so `unwasm` must
+    // come first in the `#backend` map: its bundler can load a WASM binary, and
+    // the native addon can't be counted on (WebContainer can't load one at all).
+    const code = bundle({ target: "node", conditions: ["unwasm"] });
+
+    expect(code).toContain("@takumi-rs/wasm/auto");
+    expect(code).not.toContain("@takumi-rs/core");
   });
 
   test("workerd → WASM auto, never native core", () => {
@@ -111,16 +100,5 @@ describe("#backend resolution by import condition", () => {
 
     expect(code).toContain("@takumi-rs/wasm");
     expect(code).not.toContain("@takumi-rs/core");
-  });
-
-  // The WASM backend is the `module` escape hatch, reached through a dynamic
-  // import. On a node target it must stay out of the eager entry (napi only) and
-  // live in a split chunk that loads only when a caller passes `module`.
-  test("node WASM escape hatch is a lazy chunk, not in the eager entry", () => {
-    const { entry: entryChunk, chunks } = bundleSplit({ target: "node" });
-
-    expect(entryChunk).toContain("@takumi-rs/core");
-    expect(entryChunk).not.toContain("@takumi-rs/wasm");
-    expect(chunks).toContain("@takumi-rs/wasm");
   });
 });

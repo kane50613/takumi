@@ -18,7 +18,16 @@ Generate OG images and social cards without a headless browser:
 npm i takumi-js
 ```
 
-`takumi-js` bundles both bindings: the native renderer (`@takumi-rs/core`) and the WebAssembly one (`@takumi-rs/wasm`). It picks the right one at runtime — native on Node.js, WebAssembly on Cloudflare Workers, Vercel Edge, Deno, and the browser. No extra install.
+`takumi-js` bundles both bindings: the native renderer (`@takumi-rs/core`) and the WebAssembly one (`@takumi-rs/wasm`). It picks the right one at runtime — native on Node.js, WebAssembly on Cloudflare Workers, Vercel Edge, Deno, the browser, and Nitro. No extra install.
+
+On a Node.js host that can't load a native addon (a WebContainer, an unsupported platform), build a WASM renderer and pass it as `renderer`:
+
+```ts
+import { createRenderer } from "takumi-js/wasm";
+
+const renderer = await createRenderer();
+const image = await render(element, { width: 1200, height: 630, renderer });
+```
 
 ## Render an image
 
