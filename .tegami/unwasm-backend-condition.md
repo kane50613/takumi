@@ -11,6 +11,5 @@ Nitro sets `unwasm` on every preset, including Node, so `takumi-js` resolves
 (StackBlitz, CodeSandbox) can't load. Set `exportConditions: ["!unwasm"]` to keep
 the native bindings on the Node preset.
 
-Neither backend reaches into the other's bundle now: the native backend rejects a
-WASM `module`. To force WASM on a native runtime, pass a `renderer` from
-`createRenderer` (`takumi-js/wasm`).
+The `module` escape hatch now goes through `#backend` instead of loading the WASM
+glue from the shared graph, so it stays a lazy chunk on a native build.
