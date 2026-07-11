@@ -22,11 +22,17 @@ npm i takumi-js
 
 On a Node.js host that can't load a native addon (a WebContainer, an unsupported platform), build a WASM renderer and pass it as `renderer`:
 
-```ts
+```tsx twoslash
+import { render } from "takumi-js";
 import { createRenderer } from "takumi-js/wasm";
 
 const renderer = await createRenderer();
-const image = await render(element, { width: 1200, height: 630, renderer });
+
+const png = await render(<div tw="w-full h-full flex">Hello Takumi</div>, {
+  width: 1200,
+  height: 630,
+  renderer,
+});
 ```
 
 ## Render an image
