@@ -1,7 +1,7 @@
 ---
 packages:
   npm:takumi-js:
-    type: minor
+    type: patch
 ---
 
 ### Select the WASM backend under the `unwasm` condition
