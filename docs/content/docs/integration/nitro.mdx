@@ -68,5 +68,7 @@ description: Render OG images from a Nitro server route.
     });
     ```
 
+    `wasm: false` gets you the native bindings too, but it also unplugs unwasm from the build, so `.wasm` imports elsewhere in your app stop resolving. Negating the condition leaves the plugin in place.
+
   </Step>
 </Steps>
