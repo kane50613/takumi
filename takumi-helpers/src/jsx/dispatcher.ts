@@ -89,8 +89,12 @@ export function readContext(env: RenderEnv, context: unknown): unknown {
 
 const noop = () => {};
 
-function createDispatcher(env: RenderEnv): Record<string, unknown> {
+function createDispatcher(env: RenderEnv, callId: number): Record<string, unknown> {
   const read = (context: unknown) => readContext(env, context);
+
+  // Fresh per dispatcher, so a `use()` replay hands out the same IDs; callId
+  // keeps them unique across components sharing the traversal counter.
+  let localId = 0;
 
   return {
     readContext: read,
@@ -126,7 +130,7 @@ function createDispatcher(env: RenderEnv): Record<string, unknown> {
       getSnapshot: () => unknown,
       getServerSnapshot?: () => unknown,
     ) => (getServerSnapshot ?? getSnapshot)(),
-    useId: () => `:t${env.ids.current++}:`,
+    useId: () => `:t${callId}-${localId++}:`,
     useCacheRefresh: () => noop,
     useHostTransitionStatus: () => ({ pending: false, data: null, method: null, action: null }),
   };
@@ -149,19 +153,24 @@ export async function callWithDispatcher(
   const slot = await getSlot();
   if (!slot) return component(props);
 
+  const callId = env.ids.current++;
+
   for (let replays = 0; ; replays++) {
     const previous = slot.get();
-    slot.set(createDispatcher(env));
+    slot.set(createDispatcher(env, callId));
 
+    let thrown: unknown;
     try {
       return component(props);
-    } catch (thrown) {
-      if (!isThenable(thrown) || replays >= MAX_THENABLE_REPLAYS) throw thrown;
-
-      await settleThenable(thrown);
+    } catch (error) {
+      thrown = error;
     } finally {
       slot.set(previous);
     }
+
+    if (!isThenable(thrown) || replays >= MAX_THENABLE_REPLAYS) throw thrown;
+
+    await settleThenable(thrown);
   }
 }
 

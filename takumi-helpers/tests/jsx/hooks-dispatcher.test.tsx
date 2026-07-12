@@ -54,8 +54,25 @@ describe("hook resolution through the installed dispatcher", () => {
 
     const [a, b] = await Promise.all([fromJsx(<Component />), fromJsx(<Component />)]);
 
-    expect(a.node).toMatchObject({ type: "text", text: ":t0: :t1:" });
+    expect(a.node).toMatchObject({ type: "text", text: ":t0-0: :t0-1:" });
     expect(a.node).toEqual(b.node);
+  });
+
+  test("useId is stable across use() replays", async () => {
+    const pending = new Promise<string>((resolve) => setTimeout(() => resolve("late"), 1));
+    const Component = () => {
+      const id = useId();
+
+      return (
+        <p>
+          {id} {use(pending)}
+        </p>
+      );
+    };
+
+    const { node } = await fromJsx(<Component />);
+
+    expect(node).toMatchObject({ type: "text", text: ":t0-0: late" });
   });
 
   test("use() suspends on a pending promise and replays", async () => {
