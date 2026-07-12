@@ -3,7 +3,6 @@ import { container, image, percentage, text } from "../helpers";
 import type { Node, NodeMetadata, ReactElementLike } from "../types";
 import { extractAttributes, getPresets, type HtmlProps } from "./metadata";
 export type { HtmlProps } from "./metadata";
-import { fromStaticMarkup, type FromStaticMarkupOptions } from "../html/markup";
 import { callWithDispatcher, getProperty, readContext, type RenderEnv } from "./dispatcher";
 import { defaultStylePresets } from "./style-presets";
 import { serializeSvg } from "./svg";
@@ -247,50 +246,6 @@ function getElementChildren(element: ReactElementLike): ReactNode | undefined {
   }
 }
 
-/**
- * Preact vnodes stamp an own `constructor: undefined` (its JSON-injection
- * guard), which no React element or plain element literal has.
- */
-function isPreactVNode(element: ReactElementLike): boolean {
-  return element.constructor === undefined;
-}
-
-let preactRenderPromise: Promise<((vnode: unknown) => string) | null> | undefined;
-
-function getPreactRender(): Promise<((vnode: unknown) => string) | null> {
-  return (preactRenderPromise ??= import("preact-render-to-string")
-    .then((module) => {
-      for (const render of [module.renderToStaticMarkup, module.renderToString, module.default]) {
-        // Parameter widening at the module boundary; the vnode handed in is
-        // always a Preact one.
-        if (typeof render === "function") return render as (vnode: unknown) => string;
-      }
-
-      return null;
-    })
-    .catch(() => null));
-}
-
-/**
- * Preact hooks live on Preact's mangled internals, which are not stable enough
- * to shim the way the React dispatcher is; its own renderer is ~4 kB, so a
- * Preact subtree renders through preact-render-to-string into the markup path.
- * Without it installed, the caller falls through to native traversal, which
- * still handles hook-free trees.
- */
-async function renderWithPreact(
-  element: ReactElementLike,
-  options: ResolvedFromJsxOptions,
-): Promise<FromJsxTraversalResult | null> {
-  const render = await getPreactRender();
-  if (!render) return null;
-
-  return fromStaticMarkup(render(element), {
-    defaultStyles: options.defaultStyles,
-    tailwindClassesProperty: options.tailwindClassesProperty,
-  } satisfies FromStaticMarkupOptions);
-}
-
 function tryCollectTextChildren(element: ReactElementLike): string | undefined {
   if (!isValidElement(element)) return;
   const children = getElementChildren(element);
@@ -387,13 +342,6 @@ async function processReactElement(
   element: ReactElementLike,
   options: ResolvedFromJsxOptions,
 ): Promise<FromJsxTraversalResult> {
-  if (isPreactVNode(element)) {
-    const preactResult = await renderWithPreact(element, options);
-    if (preactResult) {
-      return preactResult;
-    }
-  }
-
   const contextResult = tryHandleContextElement(element, options);
   if (contextResult !== undefined) return contextResult;
 

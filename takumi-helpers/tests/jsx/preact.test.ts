@@ -1,18 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { h } from "preact";
-import { useMemo, useState } from "preact/hooks";
 import { fromJsx } from "../../src/jsx";
 
-describe("preact trees render through preact-render-to-string", () => {
-  test("resolves preact hooks", async () => {
-    const Counter = () => {
-      const [count] = useState(7);
-      const label = useMemo(() => `count ${count}`, [count]);
+describe("preact trees traverse natively", () => {
+  test("renders components", async () => {
+    const Label = ({ text }: { text: string }) => h("p", { tw: "font-bold" }, text);
 
-      return h("p", { tw: "font-bold" }, label);
-    };
-
-    const { node } = await fromJsx(h("div", null, h(Counter, null)));
+    const { node } = await fromJsx(h("div", null, h(Label, { text: "count 7" })));
 
     expect(node).toMatchObject({
       type: "container",

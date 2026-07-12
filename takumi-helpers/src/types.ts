@@ -35,7 +35,7 @@ export type ReactElementLike = {
     | (new (props: never) => unknown)
     | ReactElementLike;
   props: unknown;
-  $$typeof?: symbol;
+  $$typeof?: symbol | string;
 };
 
 export type NodeMetadata = {
