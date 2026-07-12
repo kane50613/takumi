@@ -216,7 +216,7 @@
     },
     "takumi-helpers": {
       "name": "@takumi-rs/helpers",
-      "version": "2.0.3",
+      "version": "2.1.0",
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/react": "catalog:",
@@ -243,7 +243,7 @@
     },
     "takumi-image-response": {
       "name": "@takumi-rs/image-response",
-      "version": "2.0.3",
+      "version": "2.1.0",
       "dependencies": {
         "takumi-js": "workspace:*",
       },
@@ -255,7 +255,7 @@
     },
     "takumi-js": {
       "name": "takumi-js",
-      "version": "2.0.3",
+      "version": "2.1.0",
       "dependencies": {
         "@takumi-rs/core": "workspace:*",
         "@takumi-rs/helpers": "workspace:*",
@@ -271,7 +271,7 @@
     },
     "takumi-napi": {
       "name": "@takumi-rs/core",
-      "version": "2.0.3",
+      "version": "2.1.0",
       "dependencies": {
         "@takumi-rs/helpers": "workspace:*",
       },
@@ -306,7 +306,7 @@
     },
     "takumi-wasm": {
       "name": "@takumi-rs/wasm",
-      "version": "2.0.3",
+      "version": "2.1.0",
       "dependencies": {
         "@takumi-rs/helpers": "workspace:*",
       },
