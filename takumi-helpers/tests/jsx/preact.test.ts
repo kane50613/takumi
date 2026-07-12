@@ -2,11 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { h } from "preact";
 import { useMemo, useState } from "preact/hooks";
 import { fromJsx } from "../../src/jsx";
-import type { ReactElementLike } from "../../src/types";
-
-function asElement(vnode: unknown): ReactElementLike {
-  return vnode as ReactElementLike;
-}
 
 describe("preact trees render through preact-render-to-string", () => {
   test("resolves preact hooks", async () => {
@@ -17,7 +12,7 @@ describe("preact trees render through preact-render-to-string", () => {
       return h("p", { tw: "font-bold" }, label);
     };
 
-    const { node } = await fromJsx(asElement(h("div", null, h(Counter, null))));
+    const { node } = await fromJsx(h("div", null, h(Counter, null)));
 
     expect(node).toMatchObject({
       type: "container",
@@ -33,9 +28,7 @@ describe("preact trees render through preact-render-to-string", () => {
   });
 
   test("keeps inline styles from preact host elements", async () => {
-    const { node } = await fromJsx(
-      asElement(h("div", { style: { backgroundColor: "red" } }, "styled")),
-    );
+    const { node } = await fromJsx(h("div", { style: { backgroundColor: "red" } }, "styled"));
 
     expect(node).toMatchObject({
       type: "text",

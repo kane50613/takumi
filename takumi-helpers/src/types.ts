@@ -23,8 +23,17 @@ declare module "react" {
 
 export type NodeAttributes = Record<string, string>;
 
+/**
+ * A JSX element from any React-shaped runtime; Preact vnodes fit too, so
+ * `fromJsx` and the render inputs accept them without casts.
+ */
 export type ReactElementLike = {
-  type: string | symbol | ((props: unknown) => ReactElementLike) | ReactElementLike;
+  type:
+    | string
+    | symbol
+    | ((props: never) => unknown)
+    | (new (props: never) => unknown)
+    | ReactElementLike;
   props: unknown;
   $$typeof?: symbol;
 };
