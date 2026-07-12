@@ -95,6 +95,10 @@ test("concurrent animation and static render calls all resolve", async () => {
 
   const [gif, webp, ...staticResults] = await Promise.all([...animationTasks, ...staticTasks]);
 
+  if (!gif || !webp) {
+    throw new Error("expected both animations to render");
+  }
+
   expect(gif.length).toBeGreaterThan(0);
   expect(gif.subarray(0, 6).toString("ascii")).toMatch(/^GIF8[79]a$/);
 

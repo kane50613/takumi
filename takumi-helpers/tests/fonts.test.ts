@@ -374,9 +374,11 @@ describe("subsetFonts", () => {
 describe("fontFromUrl", () => {
   test("keys by URL and fetches the bytes on demand", async () => {
     const url = "https://example.com/Inter.woff2";
-    const fetchMock = mock((u: string) => Promise.resolve(new Response(bytes(u))));
+    const fetchMock = mock((u: RequestInfo | URL) =>
+      Promise.resolve(new Response(bytes(String(u)))),
+    );
     const original = globalThis.fetch;
-    globalThis.fetch = fetchMock as typeof fetch;
+    globalThis.fetch = Object.assign(fetchMock, { preconnect: () => Promise.resolve() });
 
     try {
       const loader = fontFromUrl(url);
