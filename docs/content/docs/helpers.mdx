@@ -42,6 +42,8 @@ Length and color shorthands return CSS strings. `vw`/`vh` are viewport width/hei
 | `fromJsx(element, options?)` | `takumi-js/helpers/jsx`  | Convert JSX or a React element to `{ node, stylesheets }`. |
 | `fromHtml(html)`             | `takumi-js/helpers/html` | Convert an HTML string to `{ node, stylesheets }`.         |
 
+`fromJsx` resolves hooks and context itself: components using `useState`, `useContext`, or `use()` render with server semantics (initial state, no effects), without loading `react-dom`. Preact trees render through `preact-render-to-string` when it is installed.
+
 ## Images & emoji
 
 | Helper                           | Import                    | Use                                                                                               |
