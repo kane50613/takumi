@@ -15,7 +15,13 @@ const loadNative: LoadBackend = () =>
 // externalizing this package) resolve `#backend` with Node's default conditions,
 // so the `node` condition lands here even when the host set `unwasm`. Detect it
 // (the same signal Next.js and SvelteKit use) and reroute to the WASM backend.
+//
+// Lazy so the WASM glue stays out of every Node bundle that never runs in a
+// WebContainer.
+const loadWasm: LoadBackend = (module) =>
+  import("./wasm-node").then((backend) => backend.loadBackend(module));
+
 export const loadBackend: LoadBackend = (module) =>
   typeof process !== "undefined" && process.versions?.webcontainer
-    ? import("./wasm").then((backend) => backend.loadBackend(module))
+    ? loadWasm(module)
     : loadNative(module);

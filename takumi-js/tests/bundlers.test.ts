@@ -27,6 +27,28 @@ afterAll(() => rmSync(dir, { recursive: true, force: true }));
 // and skip the .wasm/.node loaders the host bundler would otherwise need.
 const external = ["@takumi-rs/core", "@takumi-rs/wasm", "@takumi-rs/wasm/*"];
 
+/** Bundles with only the native addon external, the way a real app builds. */
+function bundleForReal(opts: { target: string; conditions?: string[] }) {
+  const outdir = mkdtempSync(join(import.meta.dir, "..", "node_modules", ".bundler-out-"));
+  const args = [
+    "build",
+    entry,
+    `--target=${opts.target}`,
+    `--outdir=${outdir}`,
+    "--external=@takumi-rs/core",
+  ];
+
+  for (const condition of opts.conditions ?? []) {
+    args.push(`--conditions=${condition}`);
+  }
+
+  const result = Bun.spawnSync(["bun", ...args]);
+
+  rmSync(outdir, { recursive: true, force: true });
+
+  return result;
+}
+
 function bundle(opts: { target?: string; conditions?: string[] }): string {
   const args = ["build", entry];
 
@@ -126,6 +148,19 @@ describe("#backend resolution by import condition", () => {
   // The WASM backend is the `module` escape hatch, reached through a dynamic
   // import. On a node target it must stay out of the eager entry (napi only) and
   // live in a split chunk that loads only when a caller passes `module`.
+  // Only the native addon needs externalizing: its `.node` binary must resolve
+  // from node_modules. Every other import takumi-js pulls in — including the
+  // WebContainer fallback's WASM loader — has to survive a real bundle, so a
+  // host never has to externalize the package itself. (The `unwasm`, `workerd`,
+  // and `edge-light` loaders import the binary with their own bundler's syntax,
+  // which only that bundler resolves, so they can't be asserted here.)
+  test.each(["node", "bun"])("bundles for %s with only the native addon external", (target) => {
+    const result = bundleForReal({ target });
+
+    expect(result.stderr.toString()).toBe("");
+    expect(result.exitCode).toBe(0);
+  });
+
   test("node WASM escape hatch is a lazy chunk, not in the eager entry", () => {
     const { entry: entryChunk, chunks } = bundleSplit({ target: "node" });
 
