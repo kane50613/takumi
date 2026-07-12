@@ -3,7 +3,8 @@
 
 # takumi-js
 
-**Render JSX to SVG or images. Drop-in next/og replacement.**  
+**Render JSX to SVG or images. Drop-in next/og replacement.**
+
 OG cards, banners, and lightweight animations from one Rust engine, no headless browser required.
 
 [Documentation](https://takumi.kane.tw/docs/) · [Playground](https://takumi.kane.tw/playground)
