@@ -16,6 +16,7 @@
     "lint:fix": "oxlint --fix && oxfmt --write",
     "tegami": "bun scripts/tegami.mts",
     "knip": "knip-bun --no-config-hints",
+    "typecheck": "tsc --noEmit",
     "postinstall": "lefthook install",
     "publish-lint": "bun --filter '*' publish-lint"
   },
@@ -44,9 +45,9 @@
     "lucide-react": "^1.24.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "tsdown": "^0.22.4",
+    "tsdown": "^0.22.5",
     "unrun": "^0.3.1",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "vite": "^8.1.4"
   },
   "patchedDependencies": {

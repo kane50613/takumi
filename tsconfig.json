@@ -1,6 +1,16 @@
 {
   "extends": ["./tsconfig.base.json"],
   "compilerOptions": {
+    "lib": ["ESNext", "DOM"],
     "types": ["bun"]
-  }
+  },
+  "include": [
+    "scripts",
+    "takumi-helpers",
+    "takumi-image-response",
+    "takumi-js",
+    "takumi-napi",
+    "takumi-template",
+    "takumi-wasm"
+  ]
 }
