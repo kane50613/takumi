@@ -68,6 +68,44 @@ export function GET() {
   [Fonts](/docs/typography-and-fonts).
 </Callout>
 
+## Load a font
+
+`googleFonts` fetches families in one request and returns `fonts` entries. A weight range or an `axes` entry loads the variable font, so `font-weight` and `font-variation-settings` drive its axes per element.
+
+```tsx twoslash
+import { render } from "takumi-js";
+import { googleFonts } from "takumi-js/helpers";
+
+const png = await render(
+  <div
+    style={{
+      fontSize: 72,
+      fontFamily: "Fraunces",
+      // [!code highlight]
+      fontVariationSettings: "'opsz' 72, 'wght' 700",
+    }}
+    tw="w-full h-full flex items-center justify-center"
+  >
+    Hello Takumi
+  </div>,
+  {
+    width: 1200,
+    height: 630,
+    // [!code highlight:3]
+    fonts: googleFonts([
+      {
+        name: "Fraunces",
+        weight: "100..900",
+        axes: { opsz: "9..144" },
+      },
+    ]),
+  },
+);
+```
+
+- `fonts` also takes raw bytes, a descriptor, or a bare URL string.
+- Rendering many images? Register the fonts once on a [`Renderer`](/docs/typography-and-fonts#preloading-with-registerfont) and reuse it.
+
 ## Coming from satori
 
 The layout defaults differ. A bare `<div>` is `block` where satori forces `display: flex`, and `flex-direction` defaults to `row` instead of satori's `column`. Takumi supports Flexbox, Grid, and block layout where satori is flex-only, and rasterizes directly instead of returning an SVG to convert.

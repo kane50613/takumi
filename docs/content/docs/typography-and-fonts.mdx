@@ -71,7 +71,7 @@ const image = await render(<div style={{ fontFamily: "Inter" }}>Hello 你好 こ
 });
 ```
 
-Pass an list of object instead of a name to set a family's weight or style:
+Pass an object instead of a name to set a family's weight, style, or variable axes:
 
 ```tsx twoslash
 import { googleFonts } from "takumi-js/helpers";
@@ -86,19 +86,31 @@ await googleFonts([
     name: "Noto Sans JP",
     weight: "600..700", // range loads the variable font
   },
+  {
+    name: "Fraunces",
+    weight: "100..900",
+    axes: { opsz: "9..144" }, // vary the optical-size axis too
+  },
 ]);
 ```
 
-Or you can pass an object for more control:
+Each family accepts:
 
-| Option     | Accepts                                       | Effect                                                        |
-| ---------- | --------------------------------------------- | ------------------------------------------------------------- |
-| `families` | names, or `{ family, weight, style }` objects | The families to load.                                         |
-| `weight`   | a weight, an array, or a range `"100..900"`   | A range loads the variable font; CSS `font-weight` drives it. |
-| `style`    | `"normal"`, `"italic"`, or both               | Which styles to fetch.                                        |
-| `text`     | a string                                      | Downloads only the glyphs that string uses.                   |
-| `display`  | a `font-display` value                        | Maps to CSS `font-display`.                                   |
-| `cache`    | a `Map`                                       | Reuses the metadata CSS across renders.                       |
+| Field    | Accepts                                     | Effect                                                                     |
+| -------- | ------------------------------------------- | -------------------------------------------------------------------------- |
+| `name`   | a family name                               | The family to load. Known families autocomplete their weights and axes.    |
+| `weight` | a weight, an array, or a range `"100..900"` | A range loads the variable font; CSS `font-weight` drives it.              |
+| `style`  | `"normal"`, `"italic"`, or both             | Which styles to fetch.                                                     |
+| `axes`   | `{ tag: value \| "min..max" }`              | Variable axes to load, e.g. `{ opsz: "9..144" }`. A range keeps them live. |
+
+Pass an object instead of a list for request-level options:
+
+| Option     | Accepts                | Effect                                                    |
+| ---------- | ---------------------- | --------------------------------------------------------- |
+| `families` | the list above         | The families to load, in fallback priority order.         |
+| `display`  | a `font-display` value | Maps to CSS `font-display`.                               |
+| `cache`    | a `Map`                | Reuses the metadata CSS across renders.                   |
+| `baseUrl`  | a css2 endpoint        | Point at a mirror such as `https://fonts.bunny.net/css2`. |
 
 Each subset registers under its own internal name; `font-family: Inter` expands across all of them, so each script finds the file that covers it.
 
@@ -147,14 +159,29 @@ Control font axes with `font-variation-settings`. Control OpenType features with
 ```tsx
 <div
   style={{
-    fontFamily: "Inter",
-    fontVariationSettings: "'wght' 700, 'wdth' 150",
+    fontFamily: "Fraunces",
+    fontVariationSettings: "'opsz' 72, 'wght' 700",
     fontFeatureSettings: "ss01",
   }}
 >
   Variable Font Text
 </div>
 ```
+
+Register a variable font once, with no `weight`, and its axes stay live:
+
+```tsx
+// a `weight` here pins the file to that instance instead
+await renderer.registerFont({ name: "Fraunces", data: variableWoff2 });
+```
+
+`googleFonts` does this for you: a weight range or an `axes` entry fetches the variable file and leaves its axes free.
+
+<Callout>
+  Which axes a file exposes depends on the build. Google Fonts bakes the axes you didn't request to
+  their defaults, so `Fraunces` there exposes `opsz` and `wght` only. Other builds keep `SOFT` and
+  `WONK` live, and setting them changes the letterforms.
+</Callout>
 
 ### Synthetic bold & italic
 
