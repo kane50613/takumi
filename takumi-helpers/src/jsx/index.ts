@@ -4,6 +4,7 @@ import type { Node, NodeMetadata, ReactElementLike } from "../types";
 import { extractAttributes, getPresets, type HtmlProps } from "./metadata";
 export type { HtmlProps } from "./metadata";
 import { fromStaticMarkup, type FromStaticMarkupOptions } from "../html/markup";
+import { callWithDispatcher, getProperty, readContext, type RenderEnv } from "./dispatcher";
 import { defaultStylePresets } from "./style-presets";
 import { serializeSvg } from "./svg";
 import {
@@ -41,7 +42,7 @@ export interface FromJsxOptions {
   tailwindClassesProperty?: string;
 }
 
-interface ResolvedFromJsxOptions {
+interface ResolvedFromJsxOptions extends RenderEnv {
   defaultStyles: typeof defaultStylePresets | false;
   presets?: typeof defaultStylePresets;
   tailwindClassesProperty: string;
@@ -61,30 +62,6 @@ function emptyTraversalResult(): FromJsxTraversalResult {
   return { nodes: [], stylesheets: [] };
 }
 
-type ReactModuleLike = {
-  default?: ReactModuleLike;
-  Fragment?: unknown;
-  createElement: (
-    type: unknown,
-    props: Record<string, unknown> | null,
-    ...children: unknown[]
-  ) => ReactNode;
-};
-
-type ReactDomServerModule = {
-  default?: ReactDomServerModule;
-  renderToStaticMarkup: (node: ReactNode) => string;
-};
-
-const INVALID_HOOK_PATTERNS = [
-  /Invalid hook call\./,
-  /Cannot read properties of null \(reading 'use[A-Z][A-Za-z]+'\)/,
-  /null is not an object \(evaluating 'dispatcher\.use[A-Z][A-Za-z]+'\)/,
-];
-
-let reactDomServerPromise: Promise<ReactDomServerModule | null> | undefined;
-let reactModulePromise: Promise<ReactModuleLike | null> | undefined;
-
 export async function fromJsx(
   element: ReactNode | ReactElementLike,
   options?: FromJsxOptions,
@@ -93,19 +70,10 @@ export async function fromJsx(
     defaultStyles: resolveDefaultStyles(options),
     presets: getPresets(options?.defaultStyles),
     tailwindClassesProperty: options?.tailwindClassesProperty ?? "tw",
+    contexts: new Map<unknown, unknown>(),
+    ids: { current: 0 },
   } satisfies ResolvedFromJsxOptions;
-  const result = await fromJsxInternal(element, resolvedOptions).catch(async (error) => {
-    if (!shouldFallbackToReactDomServer(error)) {
-      throw error;
-    }
-
-    const fallbackResult = await renderWithReactDomServer(element, resolvedOptions);
-    if (fallbackResult) {
-      return fallbackResult;
-    }
-
-    return fromJsxInternal(element, resolvedOptions);
-  });
+  const result = await fromJsxInternal(element, resolvedOptions);
   const nodes = result.nodes;
 
   let node: Node;
@@ -168,49 +136,67 @@ function resolveDefaultStyles(options?: FromJsxOptions): typeof defaultStylePres
   return defaultStylePresets;
 }
 
-function containsReactContextProvider(element: ReactNode | ReactElementLike): boolean {
-  if (!isValidElement(element)) {
-    return false;
+const REACT_CONTEXT_TYPE = Symbol.for("react.context");
+const REACT_PROVIDER_TYPE = Symbol.for("react.provider");
+const REACT_CONSUMER_TYPE = Symbol.for("react.consumer");
+
+/**
+ * Handles context provider/consumer elements natively: providers push their
+ * value onto the traversal's context map (read back by the dispatcher's
+ * `useContext`), consumers call their render prop with the current value.
+ * A `react.context` element type is a provider on React 19 and a legacy
+ * consumer on 18; the render-prop children shape disambiguates.
+ */
+function tryHandleContextElement(
+  element: ReactElementLike,
+  options: ResolvedFromJsxOptions,
+): Promise<FromJsxTraversalResult> | undefined {
+  const type = element.type;
+  if (typeof type !== "object" || type === null) return;
+
+  const tag = getProperty(type, "$$typeof");
+
+  if (tag === REACT_PROVIDER_TYPE) {
+    return collectChildrenWithContext(element, getProperty(type, "_context"), options);
   }
 
-  if (typeof element.type !== "object" || element.type === null || !("$$typeof" in element.type)) {
-    return false;
+  if (tag === REACT_CONSUMER_TYPE) {
+    return renderConsumer(element, getProperty(type, "_context") ?? type, options);
   }
 
-  return (
-    element.type.$$typeof === Symbol.for("react.context") ||
-    element.type.$$typeof === Symbol.for("react.provider")
-  );
-}
-
-function shouldFallbackToReactDomServer(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  return INVALID_HOOK_PATTERNS.some((pattern) => pattern.test(error.message));
-}
-
-async function runWithSuppressedInvalidHookWarning<T>(callback: () => Promise<T>): Promise<T> {
-  const originalConsoleError = console.error;
-
-  console.error = (...args: unknown[]) => {
-    const [firstArg] = args;
-    if (
-      typeof firstArg === "string" &&
-      INVALID_HOOK_PATTERNS.some((pattern) => pattern.test(firstArg))
-    ) {
-      return;
+  if (tag === REACT_CONTEXT_TYPE) {
+    if (typeof getElementChildren(element) === "function") {
+      return renderConsumer(element, type, options);
     }
 
-    originalConsoleError(...args);
-  };
-
-  try {
-    return await callback();
-  } finally {
-    console.error = originalConsoleError;
+    return collectChildrenWithContext(element, type, options);
   }
+}
+
+function collectChildrenWithContext(
+  element: ReactElementLike,
+  context: unknown,
+  options: ResolvedFromJsxOptions,
+): Promise<FromJsxTraversalResult> {
+  const contexts = new Map(options.contexts);
+  contexts.set(context, getProperty(element.props, "value"));
+
+  return collectChildren(element, { ...options, contexts });
+}
+
+function isRenderProp(value: unknown): value is (value: unknown) => ReactNode {
+  return typeof value === "function";
+}
+
+function renderConsumer(
+  element: ReactElementLike,
+  context: unknown,
+  options: ResolvedFromJsxOptions,
+): Promise<FromJsxTraversalResult> {
+  const children = getElementChildren(element);
+  if (!isRenderProp(children)) return collectChildren(element, options);
+
+  return fromJsxInternal(children(readContext(options, context)), options);
 }
 
 async function renderFunctionComponent(
@@ -218,7 +204,7 @@ async function renderFunctionComponent(
   props: unknown,
   options: ResolvedFromJsxOptions,
 ): Promise<FromJsxTraversalResult> {
-  return runWithSuppressedInvalidHookWarning(() => fromJsxInternal(component(props), options));
+  return fromJsxInternal(await callWithDispatcher(component, props, options), options);
 }
 
 function tryHandleComponentWrapper(
@@ -261,64 +247,45 @@ function getElementChildren(element: ReactElementLike): ReactNode | undefined {
   }
 }
 
-function isReactModuleLike(module: unknown): module is ReactModuleLike {
-  return (
-    typeof module === "object" &&
-    module !== null &&
-    "createElement" in module &&
-    typeof module.createElement === "function"
-  );
+/**
+ * Preact vnodes stamp an own `constructor: undefined` (its JSON-injection
+ * guard), which no React element or plain element literal has.
+ */
+function isPreactVNode(element: ReactElementLike): boolean {
+  return element.constructor === undefined;
 }
 
-function isReactDomServerModule(module: unknown): module is ReactDomServerModule {
-  return (
-    typeof module === "object" &&
-    module !== null &&
-    "renderToStaticMarkup" in module &&
-    typeof module.renderToStaticMarkup === "function"
-  );
-}
+let preactRenderPromise: Promise<((vnode: unknown) => string) | null> | undefined;
 
-async function getReactModule(): Promise<ReactModuleLike | null> {
-  reactModulePromise ??= import("react")
+function getPreactRender(): Promise<((vnode: unknown) => string) | null> {
+  return (preactRenderPromise ??= import("preact-render-to-string")
     .then((module) => {
-      const resolvedModule = (module.default ?? module) as unknown;
-      return isReactModuleLike(resolvedModule) ? resolvedModule : null;
-    })
-    .catch(() => null);
+      for (const render of [module.renderToStaticMarkup, module.renderToString, module.default]) {
+        // Parameter widening at the module boundary; the vnode handed in is
+        // always a Preact one.
+        if (typeof render === "function") return render as (vnode: unknown) => string;
+      }
 
-  return reactModulePromise;
+      return null;
+    })
+    .catch(() => null));
 }
 
-async function getReactDomServerModule(): Promise<ReactDomServerModule | null> {
-  reactDomServerPromise ??= import("react-dom/server")
-    .then((module) => {
-      const resolvedModule = (module.default ?? module) as unknown;
-      return isReactDomServerModule(resolvedModule) ? resolvedModule : null;
-    })
-    .catch(() => null);
-
-  return reactDomServerPromise;
-}
-
-async function renderWithReactDomServer(
-  element: ReactNode | ReactElementLike,
+/**
+ * Preact hooks live on Preact's mangled internals, which are not stable enough
+ * to shim the way the React dispatcher is; its own renderer is ~4 kB, so a
+ * Preact subtree renders through preact-render-to-string into the markup path.
+ * Without it installed, the caller falls through to native traversal, which
+ * still handles hook-free trees.
+ */
+async function renderWithPreact(
+  element: ReactElementLike,
   options: ResolvedFromJsxOptions,
 ): Promise<FromJsxTraversalResult | null> {
-  const [reactModule, reactDomServerModule] = await Promise.all([
-    getReactModule(),
-    getReactDomServerModule(),
-  ]);
+  const render = await getPreactRender();
+  if (!render) return null;
 
-  if (!reactModule || !reactDomServerModule) {
-    return null;
-  }
-
-  const markup = reactDomServerModule.renderToStaticMarkup(
-    reactModule.createElement(reactModule.Fragment ?? undefined, null, element),
-  );
-
-  return fromStaticMarkup(markup, {
+  return fromStaticMarkup(render(element), {
     defaultStyles: options.defaultStyles,
     tailwindClassesProperty: options.tailwindClassesProperty,
   } satisfies FromStaticMarkupOptions);
@@ -420,14 +387,15 @@ async function processReactElement(
   element: ReactElementLike,
   options: ResolvedFromJsxOptions,
 ): Promise<FromJsxTraversalResult> {
-  if (containsReactContextProvider(element)) {
-    const fallbackResult = await renderWithReactDomServer(element, options);
-    if (fallbackResult) {
-      return fallbackResult;
+  if (isPreactVNode(element)) {
+    const preactResult = await renderWithPreact(element, options);
+    if (preactResult) {
+      return preactResult;
     }
-
-    return collectChildren(element, options);
   }
+
+  const contextResult = tryHandleContextElement(element, options);
+  if (contextResult !== undefined) return contextResult;
 
   if (isFunctionComponent(element.type)) {
     return renderFunctionComponent(element.type, element.props, options);
