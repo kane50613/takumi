@@ -3,7 +3,8 @@
 
 # @takumi-rs/core
 
-**Native Node.js bindings for [Takumi](https://github.com/kane50613/takumi), a Rust image rendering engine.**  
+**Native Node.js bindings for [Takumi](https://github.com/kane50613/takumi), a Rust image rendering engine.**
+
 The high-performance N-API runtime that turns node trees into OG cards, banners, and animations, no headless browser required.
 
 [Documentation](https://takumi.kane.tw/docs/) · [Playground](https://takumi.kane.tw/playground)

@@ -3,7 +3,8 @@
 
 # @takumi-rs/wasm
 
-**WebAssembly bindings for [Takumi](https://github.com/kane50613/takumi), a Rust image rendering engine.**  
+**WebAssembly bindings for [Takumi](https://github.com/kane50613/takumi), a Rust image rendering engine.**
+
 Render OG cards, banners, and animations on Cloudflare Workers, edge runtimes, and browsers, no headless browser required.
 
 [Documentation](https://takumi.kane.tw/docs/) · [Playground](https://takumi.kane.tw/playground)
