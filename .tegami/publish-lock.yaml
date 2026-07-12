@@ -1,56 +1,53 @@
 core:changelogs:
-  - content: "---\npackages:\n  npm:takumi-js:\n    type: patch\n---\n\n### Fall back to the WASM backend in a WebContainer\n\nUnbundled runs (e.g. `nitro dev` externalizing the package) resolve `#backend`\nwith Node's default conditions, so the native addon wins even when the host set\n`unwasm`. The node backend now detects `process.versions.webcontainer` and loads\nthe WASM backend instead.\n"
-    filename: webcontainer-wasm-fallback.md
-    v: 0.0.0
-  - content: "---\npackages:\n  npm:@takumi-rs/helpers:\n    type: minor\n---\n\n### Resolve hooks without react-dom and render Preact trees\n\n`fromJsx` installs a server-semantics hook dispatcher instead of falling back\nto `react-dom/server`, handles context providers and consumers natively, and\nrenders Preact subtrees through `preact-render-to-string`. The `react-dom`\npeer dependency is gone; `preact` and `preact-render-to-string` are new\noptional peers.\n"
-    filename: hook-dispatcher-preact.md
+  - content: "---\npackages:\n  npm:takumi-js:\n    type: patch\n  npm:@takumi-rs/helpers:\n    type: patch\n---\n\n### Bundle the WebContainer fallback instead of `@takumi-rs/wasm/auto`\n\nThe node backend's fallback pulled in `auto`, whose conditions resolve against\nthe host bundler: Turbopack sets `module` and got Vite's `?url` import of the\nbinary, failing the build. It now loads `@takumi-rs/wasm/node`, which every\nbundler resolves, so only `@takumi-rs/core` needs externalizing.\n\n### Drop `preact-render-to-string`\n\nAn optional import no bundler can skip: webpack and Vite have no optional\nimport, so resolving it statically failed the build of every app that renders\nReact and never installed it. Preact trees now traverse natively. Components\ncalling a Preact hook no longer render — those hooks live on Preact's mangled\ninternals, which no dispatcher can stand in for.\n\n### Accept `preact/compat` elements in `ReactElementLike`\n\n`preact/compat` types `$$typeof` as `symbol | string`, so its elements — and a\npropless component's `FunctionComponentElement<never>` — no longer need a cast\nto reach `render`.\n"
+    filename: bundler-optional-imports.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - id: npm:@takumi-rs/core
-    updated: true
+  - id: npm:takumi-template
+    updated: false
   - id: npm:@takumi-rs/image-response
     updated: true
   - changelogIds:
-      - webcontainer-wasm-fallback.md
-    id: npm:takumi-js
-    updated: true
-  - changelogIds:
-      - hook-dispatcher-preact.md
+      - bundler-optional-imports.md
     id: npm:@takumi-rs/helpers
     updated: true
   - id: npm:@takumi-rs/wasm
     updated: true
-  - id: npm:takumi-template
-    updated: false
   - id: npm:docs
     updated: false
-  - id: npm:example-nextjs
-    updated: false
-  - id: npm:example-tanstack-start
-    updated: false
+  - changelogIds:
+      - bundler-optional-imports.md
+    id: npm:takumi-js
+    updated: true
+  - id: npm:@takumi-rs/core
+    updated: true
   - id: npm:example-satori-html
-    updated: false
-  - id: npm:ffmpeg-keyframe-animation
-    updated: false
-  - id: npm:svelte
     updated: false
   - id: npm:example-css-library-integration
     updated: false
-  - id: npm:example-twitter-images
+  - id: npm:example-nextjs
+    updated: false
+  - id: npm:svelte
+    updated: false
+  - id: npm:example-cloudflare-workers
     updated: false
   - id: npm:ffplay
     updated: false
+  - id: npm:example-twitter-images
+    updated: false
   - id: npm:waku-ssr
     updated: false
-  - id: npm:example-cloudflare-workers
+  - id: npm:example-tanstack-start
+    updated: false
+  - id: npm:ffmpeg-keyframe-animation
+    updated: false
+  - id: cargo:takumi-html
     updated: false
   - id: cargo:takumi-raster
     updated: false
   - id: cargo:takumi-svg
-    updated: false
-  - id: cargo:takumi-html
     updated: false
   - id: cargo:takumi-core
     updated: false
@@ -58,20 +55,20 @@ core:packages:
     updated: true
 npm:packages:
   - id: npm:takumi
-  - id: npm:@takumi-rs/core
+  - id: npm:takumi-template
   - id: npm:@takumi-rs/image-response
-  - id: npm:takumi-js
   - id: npm:@takumi-rs/helpers
   - id: npm:@takumi-rs/wasm
-  - id: npm:takumi-template
   - id: npm:docs
-  - id: npm:example-nextjs
-  - id: npm:example-tanstack-start
+  - id: npm:takumi-js
+  - id: npm:@takumi-rs/core
   - id: npm:example-satori-html
-  - id: npm:ffmpeg-keyframe-animation
-  - id: npm:svelte
   - id: npm:example-css-library-integration
-  - id: npm:example-twitter-images
-  - id: npm:ffplay
-  - id: npm:waku-ssr
+  - id: npm:example-nextjs
+  - id: npm:svelte
   - id: npm:example-cloudflare-workers
+  - id: npm:ffplay
+  - id: npm:example-twitter-images
+  - id: npm:waku-ssr
+  - id: npm:example-tanstack-start
+  - id: npm:ffmpeg-keyframe-animation

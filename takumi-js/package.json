@@ -1,6 +1,6 @@
 {
   "name": "takumi-js",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "All-in-one Takumi package for Node.js and WebAssembly runtimes.",
   "keywords": [
     "css",
