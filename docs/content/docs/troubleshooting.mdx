@@ -34,11 +34,20 @@ If the issue persists, file an issue on [our GitHub repository](https://github.c
   <Accordion title="Cannot find native binding">
 This happens when the `@takumi-rs/core` package failed to find the native binding.
 
-If you are using package manager with virtual store such as `pnpm` or `yarn`, add the following to your `.npmrc` file and re-run `pnpm i` to allow hoisting of the native binary.
+If you are using package manager with virtual store such as `pnpm` or `yarn`, allow it to hoist the native binary. The following examples are for pnpm; after updating the configuration, re-run `pnpm i`.
+
+```yaml title="pnpm-workspace.yaml"
+publicHoistPattern:
+  - "@takumi-rs/core-*"
+```
+
+With pnpm versions earlier than 10.5.0, add the equivalent setting to `.npmrc` instead:
 
 ```text title=".npmrc"
 public-hoist-pattern[]=@takumi-rs/core-*
 ```
+
+For other package managers, refer to their docs for hoist config instructions.
 
   </Accordion>
   <Accordion title="TypeError: fetch failed">
