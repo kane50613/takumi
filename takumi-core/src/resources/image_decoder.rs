@@ -163,18 +163,22 @@ pub(crate) fn decode_gif_frames(
       return Ok(true);
     }
 
+    // Skipped frames still decode (compositing needs them) but avoid the
+    // premultiply pass and buffer allocation.
+    if index < skip {
+      continue;
+    }
+
     let (numerator, denominator) = frame.delay().numer_denom_ms();
     let frame_delay_ms = numerator.checked_div(denominator).unwrap_or(numerator);
     let duration_ms = frame_delay_ms.max(1);
     let buffer = Arc::new(rgba_to_buffer(frame.into_buffer(), ImageFormat::Gif)?);
 
-    if index >= skip {
-      push(DecodedGifFrame {
-        buffer,
-        duration_ms,
-      });
-      pushed += 1;
-    }
+    push(DecodedGifFrame {
+      buffer,
+      duration_ms,
+    });
+    pushed += 1;
   }
 
   Ok(true)
