@@ -15,7 +15,7 @@ use image_webp::WebPDecoder;
 #[cfg(not(target_arch = "wasm32"))]
 use libwebp_sys::{WebPDecodeRGBA, WebPFree, WebPGetInfo};
 
-use crate::resources::image_buffer::ImageBuffer;
+use crate::{geometry::Rect, resources::image_buffer::ImageBuffer};
 
 const PNG_SIGNATURE: [u8; 8] = [137, 80, 78, 71, 13, 10, 26, 10];
 const JPEG_SIGNATURE: [u8; 3] = [0xFF, 0xD8, 0xFF];
@@ -148,13 +148,23 @@ pub(crate) fn gif_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
   Ok((decoder.width() as u32, decoder.height() as u32))
 }
 
+/// Rows and columns of the rect that fall inside the canvas, plus the rect's
+/// unclamped pixel stride.
+fn clamped_span(rect: Rect<u32>, canvas_width: u32, canvas_height: u32) -> (u32, usize, usize) {
+  let rows = rect.bottom.min(canvas_height).saturating_sub(rect.top);
+  let cols = rect.right.min(canvas_width).saturating_sub(rect.left) as usize;
+  let stride = (rect.right - rect.left) as usize;
+  (rows, cols, stride)
+}
+
 /// Overwrites the canvas rect with the frame's non-transparent pixels
 /// (straight-alpha RGBA; GIF alpha is 0 or 255).
-fn blit_frame(canvas: &mut [u8], canvas_width: u32, rect: GifFrameRect, pixels: &[u8]) {
-  for row in 0..rect.rows(canvas_width, canvas.len()) {
-    let src_row = (row * rect.width) as usize * 4;
-    let dst_row = ((rect.top + row) * canvas_width + rect.left) as usize * 4;
-    for col in 0..rect.cols(canvas_width) as usize {
+fn blit_frame(canvas: &mut [u8], canvas_size: (u32, u32), rect: Rect<u32>, pixels: &[u8]) {
+  let (rows, cols, stride) = clamped_span(rect, canvas_size.0, canvas_size.1);
+  for row in 0..rows {
+    let src_row = row as usize * stride * 4;
+    let dst_row = ((rect.top + row) * canvas_size.0 + rect.left) as usize * 4;
+    for col in 0..cols {
       let src = src_row + col * 4;
       if pixels[src + 3] != 0 {
         let dst = dst_row + col * 4;
@@ -164,31 +174,11 @@ fn blit_frame(canvas: &mut [u8], canvas_width: u32, rect: GifFrameRect, pixels: 
   }
 }
 
-fn clear_rect(canvas: &mut [u8], canvas_width: u32, rect: GifFrameRect) {
-  for row in 0..rect.rows(canvas_width, canvas.len()) {
-    let dst_row = ((rect.top + row) * canvas_width + rect.left) as usize * 4;
-    let cols = rect.cols(canvas_width) as usize;
+fn clear_rect(canvas: &mut [u8], canvas_size: (u32, u32), rect: Rect<u32>) {
+  let (rows, cols, _) = clamped_span(rect, canvas_size.0, canvas_size.1);
+  for row in 0..rows {
+    let dst_row = ((rect.top + row) * canvas_size.0 + rect.left) as usize * 4;
     canvas[dst_row..dst_row + cols * 4].fill(0);
-  }
-}
-
-/// A GIF frame's placement rect, clamped to the canvas at use sites.
-#[derive(Clone, Copy)]
-struct GifFrameRect {
-  left: u32,
-  top: u32,
-  width: u32,
-  height: u32,
-}
-
-impl GifFrameRect {
-  fn cols(self, canvas_width: u32) -> u32 {
-    self.width.min(canvas_width.saturating_sub(self.left))
-  }
-
-  fn rows(self, canvas_width: u32, canvas_len: usize) -> u32 {
-    let canvas_height = (canvas_len / 4) as u32 / canvas_width.max(1);
-    self.height.min(canvas_height.saturating_sub(self.top))
   }
 }
 
@@ -238,11 +228,11 @@ pub(crate) fn decode_gif_frames(
       return Ok(true);
     }
 
-    let rect = GifFrameRect {
+    let rect = Rect {
       left: frame.left as u32,
       top: frame.top as u32,
-      width: frame.width as u32,
-      height: frame.height as u32,
+      right: frame.left as u32 + frame.width as u32,
+      bottom: frame.top as u32 + frame.height as u32,
     };
     let dispose = frame.dispose;
     let duration_ms = (frame.delay as u32 * 10).max(1);
@@ -260,22 +250,22 @@ pub(crate) fn decode_gif_frames(
     let last_needed = keep && limit.is_some_and(|limit| pushed + 1 >= limit);
     let composited = if last_needed {
       // The canvas is never read again: emit it without cloning.
-      blit_frame(&mut canvas, width, rect, &scratch);
+      blit_frame(&mut canvas, (width, height), rect, &scratch);
       Some(take(&mut canvas))
     } else {
       match dispose {
         DisposalMethod::Any | DisposalMethod::Keep => {
-          blit_frame(&mut canvas, width, rect, &scratch);
+          blit_frame(&mut canvas, (width, height), rect, &scratch);
           keep.then(|| canvas.clone())
         }
         DisposalMethod::Background | DisposalMethod::Previous => {
           let composited = keep.then(|| {
             let mut out = canvas.clone();
-            blit_frame(&mut out, width, rect, &scratch);
+            blit_frame(&mut out, (width, height), rect, &scratch);
             out
           });
           if matches!(dispose, DisposalMethod::Background) {
-            clear_rect(&mut canvas, width, rect);
+            clear_rect(&mut canvas, (width, height), rect);
           }
           composited
         }
