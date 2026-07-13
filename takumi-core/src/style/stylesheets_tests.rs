@@ -84,6 +84,16 @@ fn test_deserialize_numeric_opacity_preserves_fraction() -> Result<(), serde_jso
   Ok(())
 }
 
+#[test]
+fn test_deserialize_skips_null_declarations() -> Result<(), serde_json::Error> {
+  let style = from_value::<Style>(json!({ "color": null, "opacity": 0.3 }))?;
+  let computed = style.inherit(&ComputedStyle::default());
+
+  assert_eq!(computed.opacity, PercentageNumber(0.3));
+  assert_eq!(computed.color, ComputedStyle::default().color);
+  Ok(())
+}
+
 fn feature_tags(features: &[FontFeature]) -> Vec<(String, u16)> {
   features
     .iter()
