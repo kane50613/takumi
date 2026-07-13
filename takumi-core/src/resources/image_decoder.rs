@@ -609,6 +609,34 @@ mod tests {
   }
 
   #[test]
+  fn gif_compositing_matches_image_crate_for_interlaced_frames() {
+    let mut striped = Vec::new();
+    for row in 0..8_u8 {
+      let shade = row * 32;
+      striped.extend(rgba_patch(8, 1, [shade, 255 - shade, row, 255]));
+    }
+    let mut interlaced = test_frame(8, 8, (0, 0), striped, DisposalMethod::Keep, 1);
+    interlaced.interlaced = true;
+
+    let bytes = encode_test_gif(
+      8,
+      8,
+      &[
+        test_frame(
+          8,
+          8,
+          (0, 0),
+          rgba_patch(8, 8, [255, 0, 0, 255]),
+          DisposalMethod::Keep,
+          1,
+        ),
+        interlaced,
+      ],
+    );
+    assert_matches_reference(&bytes);
+  }
+
+  #[test]
   fn gif_zero_delay_clamps_to_one_ms_like_image_crate() {
     let bytes = encode_test_gif(
       2,
