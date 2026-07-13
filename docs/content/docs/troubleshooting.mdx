@@ -6,8 +6,8 @@ icon: Bug
 
 ## General Issues
 
-<Accordions type="single">
-  <Accordion title="Layout is not correct">
+### Layout is not correct
+
 Set the `drawDebugBorder` option to outline every node.
 
 ```tsx
@@ -25,16 +25,15 @@ export function GET() {
 
 If the issue persists, file an issue on [our GitHub repository](https://github.com/kane50613/takumi/issues).
 
-  </Accordion>
-</Accordions>
-
 ## Node.js Issues
 
-<Accordions type="single">
-  <Accordion title="Cannot find native binding">
-This happens when the `@takumi-rs/core` package failed to find the native binding.
+### Cannot find native binding
 
-If you are using package manager with virtual store such as `pnpm` or `yarn`, allow it to hoist the native binary. The following examples are for pnpm; after updating the configuration, re-run `pnpm i`.
+`@takumi-rs/core` loads a platform-specific native package. This error means the package for the current platform is missing.
+
+#### Hoist the native package
+
+If you are using a package manager with virtual store such as `pnpm` or `yarn`, allow it to hoist the native binary. The following examples are for pnpm; after updating the configuration, re-run `pnpm i`.
 
 ```yaml title="pnpm-workspace.yaml"
 publicHoistPattern:
@@ -49,8 +48,29 @@ public-hoist-pattern[]=@takumi-rs/core-*
 
 For other package managers, refer to their docs for hoist config instructions.
 
-  </Accordion>
-  <Accordion title="TypeError: fetch failed">
+#### Install the native package for your deploy target
+
+Package managers only install the native package matching the machine that runs the install. Installing on one platform and deploying to another — for example installing on macOS and deploying to a Linux server — leaves the target's native package missing.
+
+Install the package for the deploy target explicitly:
+
+```bash
+npm install @takumi-rs/core-linux-x64-gnu
+```
+
+Pick the package matching the target platform:
+
+| Target                   | Package                            |
+| ------------------------ | ---------------------------------- |
+| Linux x64 (glibc)        | `@takumi-rs/core-linux-x64-gnu`    |
+| Linux x64 (musl, Alpine) | `@takumi-rs/core-linux-x64-musl`   |
+| Linux arm64 (glibc)      | `@takumi-rs/core-linux-arm64-gnu`  |
+| Linux arm64 (musl)       | `@takumi-rs/core-linux-arm64-musl` |
+| macOS x64                | `@takumi-rs/core-darwin-x64`       |
+| macOS arm64              | `@takumi-rs/core-darwin-arm64`     |
+| Windows x64              | `@takumi-rs/core-win32-x64-msvc`   |
+| Windows arm64            | `@takumi-rs/core-win32-arm64-msvc` |
+
+### TypeError: fetch failed
+
 Node.js fetch (via [undici](https://github.com/nodejs/undici)) can drop the socket while loading a remote `img` URL ([#349](https://github.com/kane50613/takumi/issues/349)). Pass the image as a base64 data URL so Takumi skips the fetch.
-  </Accordion>
-</Accordions>
