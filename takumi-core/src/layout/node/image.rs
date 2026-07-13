@@ -184,7 +184,15 @@ fn resolve_style_size_axis(
 const DATA_URI_PREFIX: &str = "data:";
 
 fn parse_data_uri_image(src: &str) -> ImageResult {
-  let url = DataUrl::process(src).map_err(|_| ImageError::InvalidDataUriFormat)?;
+  // An unescaped `#` (common in inline SVG: `fill="#fff"`, `url(#filter)`) is a URL
+  // fragment delimiter and would truncate the body.
+  let escaped = src.split_once(',').and_then(|(header, body)| {
+    body
+      .contains('#')
+      .then(|| format!("{header},{}", body.replace('#', "%23")))
+  });
+  let url = DataUrl::process(escaped.as_deref().unwrap_or(src))
+    .map_err(|_| ImageError::InvalidDataUriFormat)?;
   let (data, _) = url
     .decode_to_vec()
     .map_err(|_| ImageError::InvalidDataUriFormat)?;
@@ -220,6 +228,8 @@ mod tests {
   use serde_json::from_value;
   use taffy::{Dimension, Size as TaffySize, Style};
 
+  #[cfg(feature = "svg")]
+  use super::parse_data_uri_image;
   use super::{image_url, measure_image_node};
   use crate::{
     Fonts,
@@ -230,6 +240,17 @@ mod tests {
     style::SizingContext,
     viewport::Viewport,
   };
+
+  #[cfg(feature = "svg")]
+  #[test]
+  fn parse_data_uri_svg_with_unescaped_hash() {
+    let source = parse_data_uri_image(
+      "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'><rect width='10' height='10' fill='#f00'/></svg>",
+    )
+    .unwrap();
+
+    assert_matches!(source, ImageSource::Svg(_));
+  }
 
   #[test]
   fn deserialize_image_src_from_string() -> std::result::Result<(), serde_json::Error> {

@@ -10,7 +10,7 @@ use crate::{
   Error,
   error::StyleDeclarationBlockParseError,
   style::{
-    CssInput, CssValueSeed, SizingContext,
+    CssInput, CssUnexpected, CssValueSeed, SizingContext,
     properties::*,
     selector::{PropertyRule, StyleDeclarationParser},
     unexpected_token,
@@ -515,6 +515,12 @@ macro_rules! define_style {
                 }
 
                 let css_input = map.next_value_seed(CssValueSeed)?;
+
+                // `undefined` / `null` values are how JS callers express "no declaration".
+                if matches!(css_input, CssInput::Unexpected(CssUnexpected::Unit)) {
+                  continue;
+                }
+
                 if matches!(property, PropertyId::Custom) {
                   if !matches!(css_input, CssInput::Unexpected(_)) {
                     style.declarations.push(
