@@ -145,15 +145,24 @@ pub(crate) fn decode_gif_frames(
 
   let mut total_pixels: u64 = 0;
   let mut pushed = 0_usize;
+  let mut frames = decoder.into_frames();
+  let mut index = 0_usize;
 
-  for (index, frame) in decoder.into_frames().enumerate() {
+  loop {
+    // Check before pulling the next frame: `next()` decodes its pixels.
     if limit.is_some_and(|limit| pushed >= limit) {
       return Ok(false);
     }
 
+    let Some(frame) = frames.next() else {
+      break;
+    };
+    let current = index;
+    index += 1;
+
     let frame = match frame {
       Ok(frame) => frame,
-      Err(error) if index == 0 => return Err(error),
+      Err(error) if current == 0 => return Err(error),
       Err(_) => return Ok(true),
     };
     let (width, height) = frame.buffer().dimensions();
@@ -165,7 +174,7 @@ pub(crate) fn decode_gif_frames(
 
     // Skipped frames still decode (compositing needs them) but avoid the
     // premultiply pass and buffer allocation.
-    if index < skip {
+    if current < skip {
       continue;
     }
 
