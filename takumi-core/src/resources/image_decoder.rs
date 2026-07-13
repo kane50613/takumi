@@ -127,7 +127,6 @@ fn gif_decode_error(error: gif::DecodingError) -> ImageError {
   ImageError::Decoding(DecodingError::new(ImageFormat::Gif.into(), error))
 }
 
-/// Reads the GIF header and validates the logical screen dimensions.
 fn gif_decoder(bytes: &[u8]) -> ImageResult<GifDecoder<Cursor<&[u8]>>> {
   let mut options = DecodeOptions::new();
   options.set_color_output(ColorOutput::RGBA);
@@ -165,7 +164,6 @@ fn blit_frame(canvas: &mut [u8], canvas_width: u32, rect: GifFrameRect, pixels: 
   }
 }
 
-/// Clears the canvas rect to transparent (`Background` disposal).
 fn clear_rect(canvas: &mut [u8], canvas_width: u32, rect: GifFrameRect) {
   for row in 0..rect.rows(canvas_width, canvas.len()) {
     let dst_row = ((rect.top + row) * canvas_width + rect.left) as usize * 4;
@@ -258,7 +256,6 @@ pub(crate) fn decode_gif_frames(
     }
 
     // The emitted frame is the canvas after compositing, before disposal.
-    // Skipped frames only update the canvas: no clone, no premultiply.
     let keep = current >= skip;
     let last_needed = keep && limit.is_some_and(|limit| pushed + 1 >= limit);
     let composited = if last_needed {
@@ -428,8 +425,6 @@ mod tests {
     decode_image(bytes).expect("small PNG decodes within budget");
   }
 
-  /// A solid-color RGBA frame patch; `alpha: 0` pixels punch through to the
-  /// canvas below.
   fn rgba_patch(width: u16, height: u16, rgba: [u8; 4]) -> Vec<u8> {
     rgba.repeat(width as usize * height as usize)
   }
@@ -460,7 +455,6 @@ mod tests {
     bytes
   }
 
-  /// Reference decode through the `image` crate's compositing.
   fn reference_frames(bytes: &[u8]) -> Vec<(Vec<u8>, u32)> {
     use image::AnimationDecoder;
 
