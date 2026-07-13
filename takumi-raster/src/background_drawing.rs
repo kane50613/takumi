@@ -538,7 +538,7 @@ pub(crate) fn render_tile(
             algo: context.style.image_rendering,
           }),
           ImageSource::Gif(gif) => Some(BackgroundTile::SampledBitmap {
-            source: gif.frame_at_time_arc(context.time_ms),
+            source: gif.frame_at_time(context.time_ms),
             width: tile_w,
             height: tile_h,
             algo: context.style.image_rendering,
@@ -553,7 +553,7 @@ pub(crate) fn render_tile(
             RenderedImage::Rasterized(buffer) => {
               pixmap_from_buffer(&buffer).map(|pixmap| BackgroundTile::Pixmap(Arc::new(pixmap)))
             }
-            RenderedImage::Borrowed { .. } => None,
+            RenderedImage::Sampled { .. } => None,
           },
           _ => None,
         }
