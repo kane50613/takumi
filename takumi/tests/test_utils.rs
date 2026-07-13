@@ -4,13 +4,14 @@ use std::{
   fs::{File, create_dir_all, write},
   io::Read,
   path::{Path, PathBuf},
-  sync::{Arc, LazyLock},
+  sync::{Arc, LazyLock, OnceLock},
 };
 
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use takumi::{
   prelude::*, render, write_animated_gif, write_animated_png, write_animated_webp, write_image,
 };
+use takumi_core::resources::image::ImageCache;
 use takumi_svg::{SvgOptions, render as svg_render};
 
 fn repo_base_path(path: &str) -> PathBuf {
@@ -110,9 +111,12 @@ pub fn create_test_viewport() -> Viewport {
 
 pub static CONTEXT: LazyLock<Fonts> = LazyLock::new(create_test_context);
 
-/// Test images, provided to renders as pre-fetched resources.
+/// Test images, provided to renders as pre-fetched resources. Loaded through
+/// an [`ImageCache`] so fixtures exercise the same decode-at-draw-size path as
+/// the renderer bindings.
 pub static TEST_IMAGES: LazyLock<HashMap<Arc<str>, ImageSource>> = LazyLock::new(|| {
-  IMAGES
+  let cache = ImageCache::default();
+  let images = IMAGES
     .iter()
     .map(|path| {
       let mut data = Vec::new();
@@ -120,10 +124,19 @@ pub static TEST_IMAGES: LazyLock<HashMap<Arc<str>, ImageSource>> = LazyLock::new
         .unwrap()
         .read_to_end(&mut data)
         .unwrap();
-      (Arc::from(*path), ImageSource::from_bytes(&data).unwrap())
+      (
+        Arc::from(*path),
+        cache.get_or_decode(&data, ImageCacheMode::Auto).unwrap(),
+      )
     })
-    .collect()
+    .collect();
+  CACHE.set(cache).ok().unwrap();
+  images
 });
+
+/// Keeps the decode cache alive so lazily decoded sources keep their sized
+/// entries across renders.
+static CACHE: OnceLock<ImageCache> = OnceLock::new();
 
 #[allow(dead_code)]
 pub fn run_fixture_test(node: Node, fixture_name: &str) {

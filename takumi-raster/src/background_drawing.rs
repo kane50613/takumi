@@ -543,6 +543,20 @@ pub(crate) fn render_tile(
             height: tile_h,
             algo: context.style.image_rendering,
           }),
+          ImageSource::Encoded(..) => match source.render_for_layout(
+            tile_w,
+            tile_h,
+            context.style.image_rendering,
+            context.time_ms,
+          )? {
+            RenderedImage::Sampled { source, .. } => Some(BackgroundTile::SampledBitmap {
+              source,
+              width: tile_w,
+              height: tile_h,
+              algo: context.style.image_rendering,
+            }),
+            RenderedImage::Rasterized(..) => None,
+          },
           #[cfg(feature = "svg")]
           ImageSource::Svg(..) => match source.render_for_layout(
             tile_w,
