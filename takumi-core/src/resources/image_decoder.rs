@@ -1,12 +1,13 @@
 use std::{
   io::{Cursor, Error as IoError, ErrorKind},
+  mem::take,
   sync::Arc,
 };
 
+use gif::{ColorOutput, DecodeOptions, Decoder as GifDecoder, DisposalMethod};
 use image::{
-  AnimationDecoder, DynamicImage, ImageDecoder, ImageError, ImageFormat, ImageResult, Limits,
-  RgbaImage,
-  codecs::{gif::GifDecoder, jpeg::JpegDecoder, png::PngDecoder},
+  DynamicImage, ImageDecoder, ImageError, ImageFormat, ImageResult, Limits, RgbaImage,
+  codecs::{jpeg::JpegDecoder, png::PngDecoder},
   error::{DecodingError, ImageFormatHint, UnsupportedError, UnsupportedErrorKind},
 };
 #[cfg(target_arch = "wasm32")]
@@ -122,11 +123,75 @@ fn decode_jpeg(bytes: &[u8]) -> ImageResult<ImageBuffer> {
   decode_with_image_crate(JpegDecoder::new(Cursor::new(bytes))?, ImageFormat::Jpeg)
 }
 
+fn gif_decode_error(error: gif::DecodingError) -> ImageError {
+  ImageError::Decoding(DecodingError::new(ImageFormat::Gif.into(), error))
+}
+
+/// Reads the GIF header and validates the logical screen dimensions.
+fn gif_decoder(bytes: &[u8]) -> ImageResult<GifDecoder<Cursor<&[u8]>>> {
+  let mut options = DecodeOptions::new();
+  options.set_color_output(ColorOutput::RGBA);
+
+  let decoder = options
+    .read_info(Cursor::new(bytes))
+    .map_err(gif_decode_error)?;
+  let (width, height) = (decoder.width() as u32, decoder.height() as u32);
+  if width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION {
+    return Err(pixel_budget_error(width, height));
+  }
+
+  Ok(decoder)
+}
+
 /// GIF logical screen dimensions from the header; decodes no frame.
 pub(crate) fn gif_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
-  let mut decoder = GifDecoder::new(Cursor::new(bytes))?;
-  decoder.set_limits(decode_limits())?;
-  Ok(decoder.dimensions())
+  let decoder = gif_decoder(bytes)?;
+  Ok((decoder.width() as u32, decoder.height() as u32))
+}
+
+/// Overwrites the canvas rect with the frame's non-transparent pixels
+/// (straight-alpha RGBA; GIF alpha is 0 or 255).
+fn blit_frame(canvas: &mut [u8], canvas_width: u32, rect: GifFrameRect, pixels: &[u8]) {
+  for row in 0..rect.rows(canvas_width, canvas.len()) {
+    let src_row = (row * rect.width) as usize * 4;
+    let dst_row = ((rect.top + row) * canvas_width + rect.left) as usize * 4;
+    for col in 0..rect.cols(canvas_width) as usize {
+      let src = src_row + col * 4;
+      if pixels[src + 3] != 0 {
+        let dst = dst_row + col * 4;
+        canvas[dst..dst + 4].copy_from_slice(&pixels[src..src + 4]);
+      }
+    }
+  }
+}
+
+/// Clears the canvas rect to transparent (`Background` disposal).
+fn clear_rect(canvas: &mut [u8], canvas_width: u32, rect: GifFrameRect) {
+  for row in 0..rect.rows(canvas_width, canvas.len()) {
+    let dst_row = ((rect.top + row) * canvas_width + rect.left) as usize * 4;
+    let cols = rect.cols(canvas_width) as usize;
+    canvas[dst_row..dst_row + cols * 4].fill(0);
+  }
+}
+
+/// A GIF frame's placement rect, clamped to the canvas at use sites.
+#[derive(Clone, Copy)]
+struct GifFrameRect {
+  left: u32,
+  top: u32,
+  width: u32,
+  height: u32,
+}
+
+impl GifFrameRect {
+  fn cols(self, canvas_width: u32) -> u32 {
+    self.width.min(canvas_width.saturating_sub(self.left))
+  }
+
+  fn rows(self, canvas_width: u32, canvas_len: usize) -> u32 {
+    let canvas_height = (canvas_len / 4) as u32 / canvas_width.max(1);
+    self.height.min(canvas_height.saturating_sub(self.top))
+  }
 }
 
 /// Decodes GIF frames in stream order, passing each frame past the first
@@ -134,60 +199,104 @@ pub(crate) fn gif_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
 /// ended. A mid-stream decode error or a blown [`MAX_GIF_TOTAL_PIXELS`] budget
 /// truncates the timeline (reported as ended); only a stream with no decodable
 /// first frame errors.
+///
+/// Compositing matches the `image` crate (and browsers): frames blend over a
+/// transparent canvas, `Keep` persists the composited result, `Background`
+/// clears the frame rect, `Previous` restores the pre-frame canvas.
 pub(crate) fn decode_gif_frames(
   bytes: &[u8],
   skip: usize,
   limit: Option<usize>,
   mut push: impl FnMut(DecodedGifFrame),
 ) -> ImageResult<bool> {
-  let mut decoder = GifDecoder::new(Cursor::new(bytes))?;
-  decoder.set_limits(decode_limits())?;
+  let mut decoder = gif_decoder(bytes)?;
+  let (width, height) = (decoder.width() as u32, decoder.height() as u32);
 
+  // GIF alpha is 0 or 255, so the canvas is valid premultiplied RGBA as-is:
+  // blits copy opaque pixels (premultiply is identity) and cleared pixels are
+  // all-zero. Emitted frames skip the premultiply pass entirely.
+  let mut canvas = vec![0_u8; width as usize * height as usize * 4];
+  let mut scratch = Vec::new();
   let mut total_pixels: u64 = 0;
   let mut pushed = 0_usize;
-  let mut frames = decoder.into_frames();
   let mut index = 0_usize;
 
   loop {
-    // Check before pulling the next frame: `next()` decodes its pixels.
     if limit.is_some_and(|limit| pushed >= limit) {
       return Ok(false);
     }
 
-    let Some(frame) = frames.next() else {
-      break;
+    let frame = match decoder.next_frame_info() {
+      Ok(Some(frame)) => frame,
+      Ok(None) => break,
+      Err(error) if index == 0 => return Err(gif_decode_error(error)),
+      Err(_) => return Ok(true),
     };
     let current = index;
     index += 1;
-
-    let frame = match frame {
-      Ok(frame) => frame,
-      Err(error) if current == 0 => return Err(error),
-      Err(_) => return Ok(true),
-    };
-    let (width, height) = frame.buffer().dimensions();
 
     total_pixels += width as u64 * height as u64;
     if total_pixels > MAX_GIF_TOTAL_PIXELS {
       return Ok(true);
     }
 
-    // Skipped frames still decode (compositing needs them) but avoid the
-    // premultiply pass and buffer allocation.
-    if current < skip {
-      continue;
+    let rect = GifFrameRect {
+      left: frame.left as u32,
+      top: frame.top as u32,
+      width: frame.width as u32,
+      height: frame.height as u32,
+    };
+    let dispose = frame.dispose;
+    let duration_ms = (frame.delay as u32 * 10).max(1);
+
+    scratch.resize(decoder.buffer_size(), 0);
+    if let Err(error) = decoder.read_into_buffer(&mut scratch) {
+      if current == 0 {
+        return Err(gif_decode_error(error));
+      }
+      return Ok(true);
     }
 
-    let (numerator, denominator) = frame.delay().numer_denom_ms();
-    let frame_delay_ms = numerator.checked_div(denominator).unwrap_or(numerator);
-    let duration_ms = frame_delay_ms.max(1);
-    let buffer = Arc::new(rgba_to_buffer(frame.into_buffer(), ImageFormat::Gif)?);
+    // The emitted frame is the canvas after compositing, before disposal.
+    // Skipped frames only update the canvas: no clone, no premultiply.
+    let keep = current >= skip;
+    let last_needed = keep && limit.is_some_and(|limit| pushed + 1 >= limit);
+    let composited = if last_needed {
+      // The canvas is never read again: emit it without cloning.
+      blit_frame(&mut canvas, width, rect, &scratch);
+      Some(take(&mut canvas))
+    } else {
+      match dispose {
+        DisposalMethod::Any | DisposalMethod::Keep => {
+          blit_frame(&mut canvas, width, rect, &scratch);
+          keep.then(|| canvas.clone())
+        }
+        DisposalMethod::Background | DisposalMethod::Previous => {
+          let composited = keep.then(|| {
+            let mut out = canvas.clone();
+            blit_frame(&mut out, width, rect, &scratch);
+            out
+          });
+          if matches!(dispose, DisposalMethod::Background) {
+            clear_rect(&mut canvas, width, rect);
+          }
+          composited
+        }
+      }
+    };
 
-    push(DecodedGifFrame {
-      buffer,
-      duration_ms,
-    });
-    pushed += 1;
+    if let Some(composited) = composited {
+      let buffer = ImageBuffer::from_premultiplied_rgba(composited, width, height)
+        .ok_or_else(invalid_buffer_error)?;
+      push(DecodedGifFrame {
+        buffer: Arc::new(buffer),
+        duration_ms,
+      });
+      pushed += 1;
+      if limit.is_some_and(|limit| pushed >= limit) {
+        return Ok(false);
+      }
+    }
   }
 
   Ok(true)
@@ -317,5 +426,260 @@ mod tests {
   fn decode_png_accepts_small_valid_image() {
     let bytes = include_bytes!("../../../assets/images/yeecord.png");
     decode_image(bytes).expect("small PNG decodes within budget");
+  }
+
+  /// A solid-color RGBA frame patch; `alpha: 0` pixels punch through to the
+  /// canvas below.
+  fn rgba_patch(width: u16, height: u16, rgba: [u8; 4]) -> Vec<u8> {
+    rgba.repeat(width as usize * height as usize)
+  }
+
+  fn test_frame(
+    width: u16,
+    height: u16,
+    (left, top): (u16, u16),
+    mut pixels: Vec<u8>,
+    dispose: DisposalMethod,
+    delay: u16,
+  ) -> gif::Frame<'static> {
+    let mut frame = gif::Frame::from_rgba_speed(width, height, &mut pixels, 10);
+    frame.left = left;
+    frame.top = top;
+    frame.dispose = dispose;
+    frame.delay = delay;
+    frame
+  }
+
+  fn encode_test_gif(width: u16, height: u16, frames: &[gif::Frame<'static>]) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    let mut encoder = gif::Encoder::new(&mut bytes, width, height, &[]).unwrap();
+    for frame in frames {
+      encoder.write_frame(frame).unwrap();
+    }
+    drop(encoder);
+    bytes
+  }
+
+  /// Reference decode through the `image` crate's compositing.
+  fn reference_frames(bytes: &[u8]) -> Vec<(Vec<u8>, u32)> {
+    use image::AnimationDecoder;
+
+    let decoder = image::codecs::gif::GifDecoder::new(Cursor::new(bytes)).unwrap();
+    decoder
+      .into_frames()
+      .map(|frame| {
+        let frame = frame.unwrap();
+        let (numerator, denominator) = frame.delay().numer_denom_ms();
+        let duration_ms = numerator
+          .checked_div(denominator)
+          .unwrap_or(numerator)
+          .max(1);
+        let buffer = rgba_to_buffer(frame.into_buffer(), ImageFormat::Gif).unwrap();
+        (buffer.data().to_vec(), duration_ms)
+      })
+      .collect()
+  }
+
+  fn our_frames(bytes: &[u8], skip: usize) -> Vec<(Vec<u8>, u32)> {
+    let mut frames = Vec::new();
+    let ended = decode_gif_frames(bytes, skip, None, |frame| {
+      frames.push((frame.buffer.data().to_vec(), frame.duration_ms));
+    })
+    .unwrap();
+    assert!(ended);
+    frames
+  }
+
+  fn assert_matches_reference(bytes: &[u8]) {
+    let reference = reference_frames(bytes);
+    assert_eq!(our_frames(bytes, 0), reference);
+    assert_eq!(our_frames(bytes, 1), reference[1..]);
+  }
+
+  #[test]
+  fn gif_compositing_matches_image_crate_for_keep_disposal() {
+    let bytes = encode_test_gif(
+      4,
+      4,
+      &[
+        test_frame(
+          4,
+          4,
+          (0, 0),
+          rgba_patch(4, 4, [255, 0, 0, 255]),
+          DisposalMethod::Keep,
+          1,
+        ),
+        test_frame(
+          2,
+          2,
+          (1, 1),
+          rgba_patch(2, 2, [0, 255, 0, 255]),
+          DisposalMethod::Keep,
+          2,
+        ),
+        test_frame(
+          2,
+          2,
+          (2, 2),
+          rgba_patch(2, 2, [0, 0, 255, 255]),
+          DisposalMethod::Keep,
+          3,
+        ),
+      ],
+    );
+    assert_matches_reference(&bytes);
+  }
+
+  #[test]
+  fn gif_compositing_matches_image_crate_for_transparent_patches() {
+    let mut patch = rgba_patch(2, 2, [0, 255, 0, 255]);
+    patch[4..8].fill(0);
+
+    let bytes = encode_test_gif(
+      4,
+      4,
+      &[
+        test_frame(
+          4,
+          4,
+          (0, 0),
+          rgba_patch(4, 4, [255, 0, 0, 255]),
+          DisposalMethod::Keep,
+          1,
+        ),
+        test_frame(2, 2, (1, 1), patch, DisposalMethod::Keep, 1),
+      ],
+    );
+    assert_matches_reference(&bytes);
+  }
+
+  #[test]
+  fn gif_compositing_matches_image_crate_for_background_disposal() {
+    let bytes = encode_test_gif(
+      4,
+      4,
+      &[
+        test_frame(
+          4,
+          4,
+          (0, 0),
+          rgba_patch(4, 4, [255, 0, 0, 255]),
+          DisposalMethod::Background,
+          1,
+        ),
+        test_frame(
+          2,
+          2,
+          (1, 1),
+          rgba_patch(2, 2, [0, 255, 0, 255]),
+          DisposalMethod::Background,
+          1,
+        ),
+        test_frame(
+          2,
+          2,
+          (2, 2),
+          rgba_patch(2, 2, [0, 0, 255, 255]),
+          DisposalMethod::Keep,
+          1,
+        ),
+      ],
+    );
+    assert_matches_reference(&bytes);
+  }
+
+  #[test]
+  fn gif_compositing_matches_image_crate_for_previous_disposal() {
+    let bytes = encode_test_gif(
+      4,
+      4,
+      &[
+        test_frame(
+          4,
+          4,
+          (0, 0),
+          rgba_patch(4, 4, [255, 0, 0, 255]),
+          DisposalMethod::Keep,
+          1,
+        ),
+        test_frame(
+          2,
+          2,
+          (1, 1),
+          rgba_patch(2, 2, [0, 255, 0, 255]),
+          DisposalMethod::Previous,
+          1,
+        ),
+        test_frame(
+          2,
+          2,
+          (2, 2),
+          rgba_patch(2, 2, [0, 0, 255, 255]),
+          DisposalMethod::Keep,
+          1,
+        ),
+      ],
+    );
+    assert_matches_reference(&bytes);
+  }
+
+  #[test]
+  fn gif_zero_delay_clamps_to_one_ms_like_image_crate() {
+    let bytes = encode_test_gif(
+      2,
+      2,
+      &[
+        test_frame(
+          2,
+          2,
+          (0, 0),
+          rgba_patch(2, 2, [255, 0, 0, 255]),
+          DisposalMethod::Keep,
+          0,
+        ),
+        test_frame(
+          2,
+          2,
+          (0, 0),
+          rgba_patch(2, 2, [0, 255, 0, 255]),
+          DisposalMethod::Keep,
+          0,
+        ),
+      ],
+    );
+    assert_matches_reference(&bytes);
+    assert!(our_frames(&bytes, 0).iter().all(|(_, ms)| *ms == 1));
+  }
+
+  #[test]
+  fn gif_limit_stops_before_decoding_later_frames() {
+    let bytes = encode_test_gif(
+      2,
+      2,
+      &[
+        test_frame(
+          2,
+          2,
+          (0, 0),
+          rgba_patch(2, 2, [255, 0, 0, 255]),
+          DisposalMethod::Keep,
+          1,
+        ),
+        test_frame(
+          2,
+          2,
+          (0, 0),
+          rgba_patch(2, 2, [0, 255, 0, 255]),
+          DisposalMethod::Keep,
+          1,
+        ),
+      ],
+    );
+
+    let mut frames = Vec::new();
+    let ended = decode_gif_frames(&bytes, 0, Some(1), |frame| frames.push(frame)).unwrap();
+    assert!(!ended);
+    assert_eq!(frames.len(), 1);
   }
 }
