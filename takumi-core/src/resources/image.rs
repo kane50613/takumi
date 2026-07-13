@@ -3,7 +3,10 @@
 //! This module provides types and utilities for managing image resources,
 //! including loading states, error handling, and image processing operations.
 
-use std::{str::FromStr, sync::Arc};
+use std::{
+  str::FromStr,
+  sync::{Arc, OnceLock},
+};
 
 use quick_cache::{Weighter, sync::Cache};
 use serde::Deserialize;
@@ -15,7 +18,7 @@ use xxhash_rust::xxh3::xxh3_64;
 use crate::{
   resources::{
     image_buffer::ImageBuffer,
-    image_decoder::{DecodedGif, DecodedImage, decode_image},
+    image_decoder::{DecodedGifFrame, decode_gif_frames, decode_image, gif_dimensions, is_gif},
   },
   style::{ImageScalingAlgorithm, IntrinsicSizing, SizingContext},
 };
@@ -74,69 +77,114 @@ struct SvgIntrinsic {
   ratio: Option<f32>,
 }
 
-/// A decoded GIF image with frame timing metadata.
+/// A lazily decoded animated GIF: only the first frame is decoded up front,
+/// the rest of the stream the first time a render samples past it.
 #[derive(Debug, Clone)]
 pub struct GifSource {
-  frames: Arc<[GifFrame]>,
+  inner: Arc<GifInner>,
+}
+
+#[derive(Debug)]
+struct GifInner {
+  bytes: Box<[u8]>,
+  width: u32,
+  height: u32,
+  first: DecodedGifFrame,
+  rest: OnceLock<RestFrames>,
+}
+
+/// Every frame after the first, decoded in one pass.
+#[derive(Debug)]
+struct RestFrames {
+  frames: Box<[DecodedGifFrame]>,
+  /// Duration of the whole animation, first frame included.
   total_duration_ms: u64,
 }
 
-/// A single GIF frame.
-#[derive(Debug, Clone)]
-struct GifFrame {
-  buffer: Arc<ImageBuffer>,
-  duration_ms: u32,
-}
-
 impl GifSource {
-  fn from_decoded(decoded: DecodedGif) -> Result<Self, ImageError> {
-    if decoded.frames.is_empty() {
-      return Err(ImageError::InvalidGif);
-    }
+  fn from_bytes(bytes: &[u8]) -> Result<Self, ImageError> {
+    let (width, height) = gif_dimensions(bytes).map_err(ImageError::decode)?;
 
-    let mut frames = Vec::with_capacity(decoded.frames.len());
-    let mut total_duration_ms = 0_u64;
-    for frame in decoded.frames {
-      total_duration_ms = total_duration_ms.saturating_add(frame.duration_ms as u64);
-      frames.push(GifFrame {
-        buffer: frame.buffer,
-        duration_ms: frame.duration_ms,
-      });
-    }
+    let mut first = None;
+    decode_gif_frames(bytes, 0, Some(1), |frame| first = Some(frame))
+      .map_err(ImageError::decode)?;
+    let Some(first) = first else {
+      return Err(ImageError::InvalidGif);
+    };
 
     Ok(Self {
-      frames: frames.into(),
-      total_duration_ms,
+      inner: Arc::new(GifInner {
+        bytes: bytes.into(),
+        width,
+        height,
+        first,
+        rest: OnceLock::new(),
+      }),
     })
   }
 
-  /// Index of the frame shown at the given playback time, looping over total duration.
-  fn frame_index_at(&self, time_ms: u64) -> usize {
-    if self.total_duration_ms == 0 {
-      return 0;
-    }
-
-    let target_time = time_ms % self.total_duration_ms;
-    let mut elapsed_ms = 0_u64;
-
-    for (index, frame) in self.frames.iter().enumerate() {
-      elapsed_ms = elapsed_ms.saturating_add(frame.duration_ms as u64);
-      if target_time < elapsed_ms {
-        return index;
-      }
-    }
-
-    0
+  /// The GIF logical screen dimensions in pixels.
+  pub fn dimensions(&self) -> (u32, u32) {
+    (self.inner.width, self.inner.height)
   }
 
-  /// Frame shown at the given playback time, looping over total duration.
-  pub fn frame_at_time(&self, time_ms: u64) -> &ImageBuffer {
-    &self.frames[self.frame_index_at(time_ms)].buffer
+  fn rest(&self) -> &RestFrames {
+    self.inner.rest.get_or_init(|| {
+      let mut frames = Vec::new();
+      let mut total_duration_ms = self.inner.first.duration_ms as u64;
+      let _ = decode_gif_frames(&self.inner.bytes, 1, None, |frame| {
+        total_duration_ms += frame.duration_ms as u64;
+        frames.push(frame);
+      });
+      RestFrames {
+        frames: frames.into(),
+        total_duration_ms,
+      }
+    })
   }
 
   /// Shared frame shown at the given playback time, looping over total duration.
-  pub fn frame_at_time_arc(&self, time_ms: u64) -> Arc<ImageBuffer> {
-    self.frames[self.frame_index_at(time_ms)].buffer.clone()
+  pub fn frame_at_time(&self, time_ms: u64) -> Arc<ImageBuffer> {
+    let first = &self.inner.first;
+    if time_ms < first.duration_ms as u64 {
+      return first.buffer.clone();
+    }
+
+    let rest = self.rest();
+    if rest.total_duration_ms == 0 {
+      return first.buffer.clone();
+    }
+
+    let mut elapsed_ms = first.duration_ms as u64;
+    let target_time = time_ms % rest.total_duration_ms;
+    if target_time < elapsed_ms {
+      return first.buffer.clone();
+    }
+
+    for frame in &rest.frames {
+      elapsed_ms += frame.duration_ms as u64;
+      if target_time < elapsed_ms {
+        return frame.buffer.clone();
+      }
+    }
+
+    first.buffer.clone()
+  }
+
+  fn decoded_bytes(&self) -> usize {
+    let rest = self.inner.rest.get().map_or(0, |rest| {
+      rest
+        .frames
+        .iter()
+        .map(|frame| frame.buffer.data().len())
+        .sum()
+    });
+    self.inner.first.buffer.data().len() + rest + self.inner.bytes.len()
+  }
+
+  #[cfg(test)]
+  fn decoded_frame_count(&self) -> usize {
+    1 + self.inner.rest.get().map_or(0, |rest| rest.frames.len())
   }
 }
 
@@ -149,13 +197,13 @@ impl From<SvgSource> for ImageSource {
 
 /// Image data prepared for layout rendering.
 #[derive(Debug, Clone)]
-pub enum RenderedImage<'a> {
+pub enum RenderedImage {
   /// A fully rasterized image, used for SVGs.
   Rasterized(Arc<ImageBuffer>),
-  /// A borrowed bitmap that should be sampled directly.
-  Borrowed {
+  /// A shared bitmap that should be sampled directly.
+  Sampled {
     /// The original bitmap source.
-    source: &'a ImageBuffer,
+    source: Arc<ImageBuffer>,
     /// The logical width that will be rendered on the canvas.
     width: u32,
     /// The logical height that will be rendered on the canvas.
@@ -238,11 +286,7 @@ impl ImageSource {
   pub(crate) fn estimated_bytes(&self) -> usize {
     match self {
       Self::Bitmap(buffer) => buffer.data().len(),
-      Self::Gif(gif) => gif
-        .frames
-        .iter()
-        .map(|frame| frame.buffer.data().len())
-        .sum(),
+      Self::Gif(gif) => gif.decoded_bytes(),
       #[cfg(feature = "svg")]
       Self::Svg(svg) => svg.source.len(),
     }
@@ -250,13 +294,14 @@ impl ImageSource {
 
   /// Whether this decoded source is safe to retain in the byte-budgeted cache.
   ///
-  /// SVGs are excluded: their lazily-populated raster cache grows as they are
-  /// rendered at new sizes and isn't counted by
+  /// SVGs and GIFs are excluded: their lazily-populated state (rasterized
+  /// pixmaps, memoized frames) grows after insertion and isn't counted by
   /// [`estimated_bytes`](Self::estimated_bytes), so caching them across renders
   /// would let memory exceed the configured budget.
   pub(crate) fn is_cacheable(&self) -> bool {
     match self {
-      Self::Bitmap(_) | Self::Gif(_) => true,
+      Self::Bitmap(_) => true,
+      Self::Gif(_) => false,
       #[cfg(feature = "svg")]
       Self::Svg(_) => false,
     }
@@ -279,34 +324,33 @@ impl ImageSource {
       }
     }
 
-    let image = decode_image(bytes).map_err(ImageError::decode)?;
-    let source = match image {
-      DecodedImage::Buffer(buffer) => ImageSource::Bitmap(Arc::new(buffer)),
-      DecodedImage::Gif(gif) => ImageSource::Gif(GifSource::from_decoded(gif)?),
-    };
+    if is_gif(bytes) {
+      return Ok(ImageSource::Gif(GifSource::from_bytes(bytes)?));
+    }
 
-    Ok(source)
+    let buffer = decode_image(bytes).map_err(ImageError::decode)?;
+    Ok(ImageSource::Bitmap(Arc::new(buffer)))
   }
 
   /// Prepare image data for layout rendering.
   ///
-  /// Bitmap images are kept borrowed so the renderer can sample them directly.
-  /// SVG images are rasterized to a bitmap first.
-  pub fn render_for_layout<'i>(
-    &'i self,
+  /// Bitmap images share their buffer so the renderer can sample them
+  /// directly. SVG images are rasterized to a bitmap first.
+  pub fn render_for_layout(
+    &self,
     width: u32,
     height: u32,
     image_rendering: ImageScalingAlgorithm,
     time_ms: u64,
-  ) -> Result<RenderedImage<'i>, ImageError> {
+  ) -> Result<RenderedImage, ImageError> {
     match self {
-      ImageSource::Bitmap(bitmap) => Ok(RenderedImage::Borrowed {
-        source: bitmap.as_ref(),
+      ImageSource::Bitmap(bitmap) => Ok(RenderedImage::Sampled {
+        source: bitmap.clone(),
         width,
         height,
         algorithm: image_rendering,
       }),
-      ImageSource::Gif(gif) => Ok(RenderedImage::Borrowed {
+      ImageSource::Gif(gif) => Ok(RenderedImage::Sampled {
         source: gif.frame_at_time(time_ms),
         width,
         height,
@@ -347,8 +391,8 @@ impl ImageSource {
       ImageSource::Svg(svg) => svg.dimensions(),
       ImageSource::Bitmap(bitmap) => (bitmap.width() as f32, bitmap.height() as f32),
       ImageSource::Gif(gif) => {
-        let frame = &gif.frames[0].buffer;
-        (frame.width() as f32, frame.height() as f32)
+        let (width, height) = gif.dimensions();
+        (width as f32, height as f32)
       }
     };
 
@@ -369,8 +413,8 @@ impl ImageSource {
         IntrinsicSizing::from_dimensions(bitmap.width() as f32, bitmap.height() as f32)
       }
       ImageSource::Gif(gif) => {
-        let frame = &gif.frames[0].buffer;
-        IntrinsicSizing::from_dimensions(frame.width() as f32, frame.height() as f32)
+        let (width, height) = gif.dimensions();
+        IntrinsicSizing::from_dimensions(width as f32, height as f32)
       }
     }
   }
@@ -635,7 +679,6 @@ mod tests {
   use image::{Rgba, RgbaImage};
 
   use super::*;
-  use crate::resources::image_decoder::DecodedGifFrame;
 
   /// `width`/`height` attributes give intrinsic dimensions; a `viewBox` alone
   /// gives only an aspect ratio (per the SVG/CSS intrinsic sizing rules).
@@ -675,58 +718,55 @@ mod tests {
     );
   }
 
-  fn premul_at(image: &RenderedImage<'_>, x: u32, y: u32) -> [u8; 4] {
+  fn premul_at(image: &RenderedImage, x: u32, y: u32) -> [u8; 4] {
     match image {
       RenderedImage::Rasterized(buffer) => buffer.pixel(x, y),
-      RenderedImage::Borrowed { source, .. } => source.pixel(x, y),
+      RenderedImage::Sampled { source, .. } => source.pixel(x, y),
     }
   }
 
-  fn frame_buffer(seed: u8) -> Arc<ImageBuffer> {
-    let bitmap = RgbaImage::from_pixel(1, 1, Rgba([seed, 0, 0, 255]));
-    let buffer = ImageBuffer::from_rgba_bytes(bitmap.into_raw(), 1, 1).unwrap_or_else(|| {
-      let mut edge = 1_u32;
-      loop {
-        if let Some(buffer) = ImageBuffer::new(edge, edge) {
-          break buffer;
-        }
-        edge = edge.saturating_add(1);
-      }
-    });
-    Arc::new(buffer)
+  const GIF_COLORS: [[u8; 4]; 3] = [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]];
+
+  /// Encodes one 4x4 solid frame per `(color index, delay ms)` pair. Delays
+  /// must be multiples of 10 (GIF stores centiseconds).
+  fn encoded_gif(frames: &[(usize, u32)]) -> Vec<u8> {
+    use image::{Delay, Frame, codecs::gif::GifEncoder};
+
+    let mut bytes = Vec::new();
+    let mut encoder = GifEncoder::new(&mut bytes);
+
+    encoder
+      .encode_frames(frames.iter().map(|&(color, delay_ms)| {
+        Frame::from_parts(
+          RgbaImage::from_pixel(4, 4, Rgba(GIF_COLORS[color])),
+          0,
+          0,
+          Delay::from_numer_denom_ms(delay_ms, 1),
+        )
+      }))
+      .unwrap();
+    drop(encoder);
+
+    bytes
   }
 
-  fn gif_with_durations(durations: &[u32]) -> GifSource {
-    let frames = durations
-      .iter()
-      .enumerate()
-      .map(|(index, duration_ms)| DecodedGifFrame {
-        buffer: frame_buffer(index as u8 + 1),
-        duration_ms: *duration_ms,
-      })
-      .collect();
-    match GifSource::from_decoded(DecodedGif { frames }) {
-      Ok(gif) => gif,
-      Err(_) => GifSource {
-        frames: [GifFrame {
-          buffer: frame_buffer(0),
-          duration_ms: 0,
-        }]
-        .into(),
-        total_duration_ms: 0,
-      },
-    }
+  fn gif_source(frames: &[(usize, u32)]) -> GifSource {
+    let Ok(ImageSource::Gif(gif)) = ImageSource::from_bytes(&encoded_gif(frames)) else {
+      unreachable!("valid gif");
+    };
+    gif
   }
 
-  fn expected_frame_index(gif: &GifSource, time_ms: u64) -> usize {
-    if gif.total_duration_ms == 0 {
+  fn expected_frame_index(durations: &[u32], time_ms: u64) -> usize {
+    let total: u64 = durations.iter().map(|d| *d as u64).sum();
+    if total == 0 {
       return 0;
     }
 
-    let target_time = time_ms % gif.total_duration_ms;
+    let target_time = time_ms % total;
     let mut elapsed_ms = 0_u64;
-    for (index, frame) in gif.frames.iter().enumerate() {
-      elapsed_ms = elapsed_ms.saturating_add(frame.duration_ms as u64);
+    for (index, duration_ms) in durations.iter().enumerate() {
+      elapsed_ms += *duration_ms as u64;
       if target_time < elapsed_ms {
         return index;
       }
@@ -803,7 +843,7 @@ mod tests {
   }
 
   #[test]
-  fn bitmap_renders_borrowed() -> Result<(), ImageError> {
+  fn bitmap_renders_sampled() -> Result<(), ImageError> {
     let mut bitmap = RgbaImage::new(2, 2);
     bitmap.put_pixel(0, 0, Rgba([12, 34, 56, 200]));
     bitmap.put_pixel(1, 0, Rgba([78, 90, 12, 255]));
@@ -812,12 +852,12 @@ mod tests {
 
     let rendered = image.render_for_layout(2, 2, ImageScalingAlgorithm::Auto, 0)?;
 
-    assert!(matches!(rendered, RenderedImage::Borrowed { .. }));
+    assert!(matches!(rendered, RenderedImage::Sampled { .. }));
     Ok(())
   }
 
   #[test]
-  fn bitmap_render_for_layout_keeps_borrowed_sampling_parameters() -> Result<(), ImageError> {
+  fn bitmap_render_for_layout_keeps_sampling_parameters() -> Result<(), ImageError> {
     let mut bitmap = RgbaImage::new(2, 2);
     bitmap.put_pixel(0, 0, Rgba([255, 0, 0, 255]));
     bitmap.put_pixel(1, 0, Rgba([0, 255, 0, 255]));
@@ -827,7 +867,7 @@ mod tests {
     let image = ImageSource::from(buffer);
 
     let rendered = image.render_for_layout(4, 4, ImageScalingAlgorithm::Pixelated, 0)?;
-    let RenderedImage::Borrowed {
+    let RenderedImage::Sampled {
       width,
       height,
       algorithm: algo,
@@ -844,58 +884,56 @@ mod tests {
   }
 
   #[test]
-  fn gif_source_from_decoded_rejects_empty_frames() {
-    let result = GifSource::from_decoded(DecodedGif { frames: Vec::new() });
-    assert_matches!(result, Err(ImageError::InvalidGif));
+  fn gif_source_rejects_undecodable_stream() {
+    let result = ImageSource::from_bytes(b"GIF89a\x01\x02\x03");
+    assert_matches!(result, Err(_));
   }
 
   #[test]
-  fn gif_source_from_decoded_preserves_frames_and_total_duration() {
-    let gif = gif_with_durations(&[10, 25, 5]);
+  fn gif_static_render_decodes_only_first_frame() {
+    let gif = gif_source(&[(0, 10), (1, 10), (2, 10)]);
+    assert_eq!(gif.decoded_frame_count(), 1);
 
-    assert_eq!(gif.frames.len(), 3);
-    assert_eq!(gif.total_duration_ms, 40);
-    assert_eq!(gif.frames[0].duration_ms, 10);
-    assert_eq!(gif.frames[1].duration_ms, 25);
-    assert_eq!(gif.frames[2].duration_ms, 5);
+    let frame = gif.frame_at_time(0);
+    assert_eq!(gif.decoded_frame_count(), 1);
+    assert_eq!(frame.pixel(2, 2), GIF_COLORS[0]);
   }
 
   #[test]
   fn gif_source_frame_selection_matches_expected_indices() {
-    let gif = gif_with_durations(&[10, 20, 30]);
+    let durations = [10, 20, 30];
+    let gif = gif_source(&[(0, 10), (1, 20), (2, 30)]);
     let samples = [0_u64, 9, 10, 29, 30, 59, 60, 75];
 
     for time_ms in samples {
-      let expected_index = expected_frame_index(&gif, time_ms);
-      let expected_frame = &gif.frames[expected_index];
-
-      let frame = gif.frame_at_time(time_ms);
-      assert_eq!(frame.data(), expected_frame.buffer.data());
-
-      let frame_arc = gif.frame_at_time_arc(time_ms);
-      assert!(Arc::ptr_eq(&frame_arc, &expected_frame.buffer));
+      let expected_color = GIF_COLORS[expected_frame_index(&durations, time_ms)];
+      assert_eq!(gif.frame_at_time(time_ms).pixel(2, 2), expected_color);
     }
+    assert_eq!(gif.decoded_frame_count(), 3);
   }
 
   #[test]
-  fn gif_source_zero_total_duration_always_returns_first_frame() {
-    let gif = gif_with_durations(&[0, 0, 0]);
+  fn gif_source_zero_delay_clamps_to_one_ms() {
+    let gif = gif_source(&[(0, 0), (1, 0)]);
 
-    assert_eq!(gif.total_duration_ms, 0);
-    for time_ms in [0_u64, 1, 10, 1_000] {
-      let frame = gif.frame_at_time(time_ms);
-      assert_eq!(frame.data(), gif.frames[0].buffer.data());
-
-      let frame_arc = gif.frame_at_time_arc(time_ms);
-      assert!(Arc::ptr_eq(&frame_arc, &gif.frames[0].buffer));
-    }
+    assert_eq!(gif.frame_at_time(0).pixel(2, 2), GIF_COLORS[0]);
+    assert_eq!(gif.frame_at_time(1).pixel(2, 2), GIF_COLORS[1]);
+    assert_eq!(gif.frame_at_time(2).pixel(2, 2), GIF_COLORS[0]);
   }
 
   #[test]
-  fn gif_source_clone_shares_frame_storage() {
-    let gif = gif_with_durations(&[5, 15, 25]);
+  fn gif_source_clone_shares_decoded_state() {
+    let gif = gif_source(&[(0, 10), (1, 10), (2, 10)]);
     let cloned = gif.clone();
 
-    assert!(Arc::ptr_eq(&gif.frames, &cloned.frames));
+    drop(cloned.frame_at_time(25));
+    assert_eq!(gif.decoded_frame_count(), 3);
+  }
+
+  #[test]
+  fn gif_dimensions_come_from_header_without_full_decode() {
+    let gif = gif_source(&[(0, 10), (1, 10)]);
+    assert_eq!(gif.dimensions(), (4, 4));
+    assert_eq!(gif.decoded_frame_count(), 1);
   }
 }

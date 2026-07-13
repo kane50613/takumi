@@ -9,8 +9,8 @@ use crate::{
   },
 };
 
-pub(crate) struct PreparedImage<'a> {
-  image: RenderedImage<'a>,
+pub(crate) struct PreparedImage {
+  image: RenderedImage,
   logical_to_source: Affine,
 }
 
@@ -38,17 +38,17 @@ fn resolve_object_position_axis(
 ///
 /// This function handles resizing, cropping, and positioning of images
 /// based on the ObjectFit property, returning the processed image and offset.
-pub(crate) fn process_image_for_object_fit<'i>(
-  image: &'i ImageSource,
+pub(crate) fn process_image_for_object_fit(
+  image: &ImageSource,
   context: &RenderContext,
   content_box: Size<f32>,
-) -> Result<(PreparedImage<'i>, Point<f32>)> {
+) -> Result<(PreparedImage, Point<f32>)> {
   let (image_width, image_height) = image.size(&context.sizing);
   let (source_width, source_height) = match image {
     ImageSource::Bitmap(bitmap) => (bitmap.width() as f32, bitmap.height() as f32),
     ImageSource::Gif(gif) => {
-      let rendered = gif.frame_at_time(context.time_ms);
-      (rendered.width() as f32, rendered.height() as f32)
+      let (width, height) = gif.dimensions();
+      (width as f32, height as f32)
     }
     #[cfg(feature = "svg")]
     ImageSource::Svg(svg) => svg.dimensions(),
@@ -300,13 +300,13 @@ pub(crate) fn draw_image(
         );
       }
     }
-    RenderedImage::Borrowed {
+    RenderedImage::Sampled {
       source,
       width,
       height,
       algorithm: algo,
     } => {
-      if let Some(pixmap_ref) = pixmap_ref_from_buffer(source) {
+      if let Some(pixmap_ref) = pixmap_ref_from_buffer(source.as_ref()) {
         canvas.overlay_sampled_pixmap(
           pixmap_ref,
           Size { width, height },

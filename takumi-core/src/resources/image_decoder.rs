@@ -47,27 +47,22 @@ fn pixel_budget_error(width: u32, height: u32) -> ImageError {
   ))
 }
 
+#[derive(Debug)]
 pub(crate) struct DecodedGifFrame {
   pub(crate) buffer: Arc<ImageBuffer>,
   pub(crate) duration_ms: u32,
 }
 
-pub(crate) struct DecodedGif {
-  pub(crate) frames: Vec<DecodedGifFrame>,
+pub(crate) fn is_gif(bytes: &[u8]) -> bool {
+  matches!(detect_image_format(bytes), Some(DetectedImageFormat::Gif))
 }
 
-pub(crate) enum DecodedImage {
-  Buffer(ImageBuffer),
-  Gif(DecodedGif),
-}
-
-pub(crate) fn decode_image(bytes: &[u8]) -> ImageResult<DecodedImage> {
+pub(crate) fn decode_image(bytes: &[u8]) -> ImageResult<ImageBuffer> {
   match detect_image_format(bytes) {
-    Some(DetectedImageFormat::Png) => decode_png(bytes).map(DecodedImage::Buffer),
-    Some(DetectedImageFormat::Jpeg) => decode_jpeg(bytes).map(DecodedImage::Buffer),
-    Some(DetectedImageFormat::Gif) => decode_gif(bytes).map(DecodedImage::Gif),
-    Some(DetectedImageFormat::WebP) => decode_webp(bytes).map(DecodedImage::Buffer),
-    None => Err(ImageError::Unsupported(
+    Some(DetectedImageFormat::Png) => decode_png(bytes),
+    Some(DetectedImageFormat::Jpeg) => decode_jpeg(bytes),
+    Some(DetectedImageFormat::WebP) => decode_webp(bytes),
+    Some(DetectedImageFormat::Gif) | None => Err(ImageError::Unsupported(
       UnsupportedError::from_format_and_kind(
         ImageFormatHint::Unknown,
         UnsupportedErrorKind::Format(ImageFormatHint::Unknown),
@@ -127,35 +122,75 @@ fn decode_jpeg(bytes: &[u8]) -> ImageResult<ImageBuffer> {
   decode_with_image_crate(JpegDecoder::new(Cursor::new(bytes))?, ImageFormat::Jpeg)
 }
 
-fn decode_gif(bytes: &[u8]) -> ImageResult<DecodedGif> {
+/// GIF logical screen dimensions from the header; decodes no frame.
+pub(crate) fn gif_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
+  let mut decoder = GifDecoder::new(Cursor::new(bytes))?;
+  decoder.set_limits(decode_limits())?;
+  Ok(decoder.dimensions())
+}
+
+/// Decodes GIF frames in stream order, passing each frame past the first
+/// `skip` to `push`, up to `limit` pushed frames. Returns whether the stream
+/// ended. A mid-stream decode error or a blown [`MAX_GIF_TOTAL_PIXELS`] budget
+/// truncates the timeline (reported as ended); only a stream with no decodable
+/// first frame errors.
+pub(crate) fn decode_gif_frames(
+  bytes: &[u8],
+  skip: usize,
+  limit: Option<usize>,
+  mut push: impl FnMut(DecodedGifFrame),
+) -> ImageResult<bool> {
   let mut decoder = GifDecoder::new(Cursor::new(bytes))?;
   decoder.set_limits(decode_limits())?;
 
-  let mut decoded_frames = Vec::new();
   let mut total_pixels: u64 = 0;
+  let mut pushed = 0_usize;
+  let mut frames = decoder.into_frames();
+  let mut index = 0_usize;
 
-  for frame in decoder.into_frames() {
-    let frame = frame?;
+  loop {
+    // Check before pulling the next frame: `next()` decodes its pixels.
+    if limit.is_some_and(|limit| pushed >= limit) {
+      return Ok(false);
+    }
+
+    let Some(frame) = frames.next() else {
+      break;
+    };
+    let current = index;
+    index += 1;
+
+    let frame = match frame {
+      Ok(frame) => frame,
+      Err(error) if current == 0 => return Err(error),
+      Err(_) => return Ok(true),
+    };
     let (width, height) = frame.buffer().dimensions();
 
     total_pixels += width as u64 * height as u64;
     if total_pixels > MAX_GIF_TOTAL_PIXELS {
-      return Err(pixel_budget_error(width, height));
+      return Ok(true);
+    }
+
+    // Skipped frames still decode (compositing needs them) but avoid the
+    // premultiply pass and buffer allocation.
+    if current < skip {
+      continue;
     }
 
     let (numerator, denominator) = frame.delay().numer_denom_ms();
     let frame_delay_ms = numerator.checked_div(denominator).unwrap_or(numerator);
     let duration_ms = frame_delay_ms.max(1);
     let buffer = Arc::new(rgba_to_buffer(frame.into_buffer(), ImageFormat::Gif)?);
-    decoded_frames.push(DecodedGifFrame {
+
+    push(DecodedGifFrame {
       buffer,
       duration_ms,
     });
+    pushed += 1;
   }
 
-  Ok(DecodedGif {
-    frames: decoded_frames,
-  })
+  Ok(true)
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -281,7 +316,6 @@ mod tests {
   #[test]
   fn decode_png_accepts_small_valid_image() {
     let bytes = include_bytes!("../../../assets/images/yeecord.png");
-    let decoded = decode_image(bytes).expect("small PNG decodes within budget");
-    assert!(matches!(decoded, DecodedImage::Buffer(_)));
+    decode_image(bytes).expect("small PNG decodes within budget");
   }
 }
