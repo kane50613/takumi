@@ -1,3 +1,13 @@
+## takumi-core@0.3.3
+
+### Ignore null style values
+
+Skip `null` and `undefined` style declarations instead of failing to deserialize the style.
+
+### Fix inline SVG data URIs truncated at `#`
+
+Percent-escape `#` in data URI bodies so inline SVGs are not cut off at the first fragment delimiter.
+
 ## takumi-core@0.3.2
 
 ### Make `:lang()` actually match
