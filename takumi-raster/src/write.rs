@@ -1,5 +1,6 @@
 use std::{
   borrow::{Borrow, Cow},
+  collections::VecDeque,
   io::Write,
 };
 
@@ -18,7 +19,7 @@ use crate::webp::write_webp_lossy;
 use crate::{
   Result,
   error::Error,
-  render::{SequentialScene, frame_spans, prepare_scenes, render_frame},
+  render::{FrameSpan, SequentialScene, frame_spans, prepare_scenes, render_frame},
   webp::{encode_animated_webp, has_any_alpha_pixel, strip_alpha_channel, write_webp_lossless},
 };
 
@@ -510,8 +511,33 @@ pub fn write_animation<W: Write>(
     return Err(Error::EmptyAnimationFrames);
   }
 
-  let prepared = prepare_scenes(scenes);
-  let frames = spans.iter().map(|&span| render_frame(&prepared, span));
+  #[cfg(feature = "rayon")]
+  {
+    encode_frames(
+      ChunkedFrames::new(scenes, &spans),
+      &spans,
+      format,
+      destination,
+    )
+  }
+  #[cfg(not(feature = "rayon"))]
+  {
+    let prepared = prepare_scenes(scenes);
+    encode_frames(
+      spans.iter().map(|&span| render_frame(&prepared, span)),
+      &spans,
+      format,
+      destination,
+    )
+  }
+}
+
+fn encode_frames<W: Write>(
+  frames: impl Iterator<Item = Result<AnimationFrame>>,
+  spans: &[FrameSpan],
+  format: AnimationFormat,
+  destination: &mut W,
+) -> Result<()> {
   match format {
     AnimationFormat::WebP(options) => encode_animated_webp(frames, destination, options),
     AnimationFormat::Gif(options) => encode_animated_gif(frames, destination, options),
@@ -520,6 +546,55 @@ pub fn write_animation<W: Write>(
       let min_duration_ms = spans.iter().map(|span| span.duration_ms).min().unwrap_or(0);
       encode_animated_png(frames, frame_count, min_duration_ms, destination, options)
     }
+  }
+}
+
+/// Renders frames one chunk at a time: `next()` renders a chunk of `rayon`
+/// threads' worth of frames in parallel once the encoder has consumed the
+/// previous chunk, so at most one chunk of raw frames is in memory.
+#[cfg(feature = "rayon")]
+struct ChunkedFrames<'a, 'g> {
+  scenes: &'a [SequentialScene<'g>],
+  spans: &'a [FrameSpan],
+  next: usize,
+  ready: VecDeque<Result<AnimationFrame>>,
+}
+
+#[cfg(feature = "rayon")]
+impl<'a, 'g> ChunkedFrames<'a, 'g> {
+  fn new(scenes: &'a [SequentialScene<'g>], spans: &'a [FrameSpan]) -> Self {
+    Self {
+      scenes,
+      spans,
+      next: 0,
+      ready: VecDeque::new(),
+    }
+  }
+}
+
+#[cfg(feature = "rayon")]
+impl Iterator for ChunkedFrames<'_, '_> {
+  type Item = Result<AnimationFrame>;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    use rayon::prelude::*;
+
+    if self.ready.is_empty() && self.next < self.spans.len() {
+      let chunk_len = rayon::current_num_threads().max(1);
+      let chunk = &self.spans[self.next..(self.next + chunk_len).min(self.spans.len())];
+      self.next += chunk.len();
+
+      // `PreparedScene` is not `Send`: each worker prepares and reuses its own copy.
+      self.ready = chunk
+        .par_iter()
+        .map_init(
+          || prepare_scenes(self.scenes),
+          |prepared, &span| render_frame(prepared, span),
+        )
+        .collect();
+    }
+
+    self.ready.pop_front()
   }
 }
 
