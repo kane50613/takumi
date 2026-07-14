@@ -350,7 +350,7 @@ pub struct ImageSource<'ctx> {
 // Last-resort only: no generic family claim, so `sans-serif` and friends resolve
 // to caller-registered fonts via the fallback bucket instead of this face.
 const EMBEDDED_FONTS: &[(&[u8], &str)] = &[(
-  include_bytes!("../../assets/fonts/geist/geist-latin-wght-400-800.woff2"),
+  include_bytes!("../../assets/fonts/geist/geist-latin-wght-300-800.woff2"),
   "Geist",
 )];
 
