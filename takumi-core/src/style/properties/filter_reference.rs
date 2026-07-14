@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use data_url::DataUrl;
-use roxmltree::Document;
+use roxmltree::{Document, Node};
 
 /// Error produced while parsing a filter reference.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -27,20 +27,27 @@ pub enum FilterReferenceError {
   /// The filter contains no primitives.
   #[error("<filter> has no primitives")]
   EmptyFilter,
+  /// An element inside `<filter>` is not a filter primitive.
+  #[error("unsupported element <{0}> inside <filter>")]
+  UnsupportedPrimitive(String),
+  /// An attribute value is outside the supported subset.
+  #[error("unsupported {attribute}: {value}")]
+  UnsupportedValue {
+    /// What was rejected.
+    attribute: &'static str,
+    /// The rejected value.
+    value: String,
+  },
 }
-
-/// Element id used when the referenced `<filter>` declares none.
-const INJECTED_ID: &str = "takumi-filter";
 
 /// A validated SVG filter reference.
 #[derive(Debug, Clone)]
 pub struct FilterReference {
   /// The original `url()` value, kept for serialization and equality.
   pub uri: Arc<str>,
-  /// The `<filter>` element markup, with an `id` attribute guaranteed.
+  /// The `<filter>` element markup. Any author `id` is stripped and replaced
+  /// with [`FilterReference::ID`], so consumers can rewrite it textually.
   pub markup: Arc<str>,
-  /// The value of the markup's `id` attribute.
-  pub id: Arc<str>,
 }
 
 impl PartialEq for FilterReference {
@@ -51,7 +58,40 @@ impl PartialEq for FilterReference {
 
 const SVG_XML_MIME: (&str, &str) = ("image", "svg+xml");
 
+/// Filter primitives and their light-source children. Anything else inside
+/// `<filter>` (scripts, `foreignObject`, animation elements) is rejected, since
+/// the markup is later emitted verbatim into generated SVG.
+const ALLOWED_ELEMENTS: &[&str] = &[
+  "feBlend",
+  "feColorMatrix",
+  "feComponentTransfer",
+  "feComposite",
+  "feConvolveMatrix",
+  "feDiffuseLighting",
+  "feDisplacementMap",
+  "feDistantLight",
+  "feDropShadow",
+  "feFlood",
+  "feFuncA",
+  "feFuncB",
+  "feFuncG",
+  "feFuncR",
+  "feGaussianBlur",
+  "feImage",
+  "feMerge",
+  "feMergeNode",
+  "feMorphology",
+  "feOffset",
+  "fePointLight",
+  "feSpecularLighting",
+  "feSpotLight",
+  "feTile",
+  "feTurbulence",
+];
+
 impl FilterReference {
+  /// The `id` attribute value guaranteed on [`FilterReference::markup`].
+  pub const ID: &str = "takumi-filter";
   /// Parses a `filter: url(...)` value. Only `data:image/svg+xml` URIs are
   /// supported; there is no document to resolve fragments or external URLs
   /// against.
@@ -107,24 +147,63 @@ impl FilterReference {
       return Err(FilterReferenceError::EmptyFilter);
     }
 
-    let markup = &xml[filter.range()];
-    let (markup, id) = match filter.attribute("id") {
-      Some(id) => (markup.into(), id.into()),
-      None => {
-        let rest = markup
-          .strip_prefix("<filter")
-          .ok_or(FilterReferenceError::MissingFilterElement)?;
-        (
-          format!(r#"<filter id="{INJECTED_ID}"{rest}"#).into(),
-          INJECTED_ID.into(),
-        )
+    for node in filter.descendants().filter(Node::is_element) {
+      if node != filter && !ALLOWED_ELEMENTS.contains(&node.tag_name().name()) {
+        return Err(FilterReferenceError::UnsupportedPrimitive(
+          node.tag_name().name().into(),
+        ));
       }
-    };
+      for attribute in node.attributes() {
+        let name = attribute.name();
+        if name.len() >= 3
+          && name
+            .get(..2)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("on"))
+        {
+          return Err(FilterReferenceError::UnsupportedValue {
+            attribute: "event handler",
+            value: name.into(),
+          });
+        }
+        if name == "href"
+          && !attribute
+            .value()
+            .trim_start()
+            .get(..5)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("data:"))
+        {
+          return Err(FilterReferenceError::UnsupportedValue {
+            attribute: "href",
+            value: "only data: URIs are supported".into(),
+          });
+        }
+      }
+    }
+
+    let filter_range = filter.range();
+    let mut markup = xml[filter_range.clone()].to_string();
+
+    // Strip any author id (via its byte range, so whitespace and entity
+    // encoding don't matter) and inject the canonical one, which the SVG
+    // backend rewrites textually.
+    if let Some(id) = filter
+      .attributes()
+      .find(|attribute| attribute.namespace().is_none() && attribute.name() == "id")
+    {
+      let range = id.range();
+      markup.replace_range(
+        range.start - filter_range.start..range.end - filter_range.start,
+        "",
+      );
+    }
+    let rest = markup
+      .strip_prefix("<filter")
+      .ok_or(FilterReferenceError::MissingFilterElement)?;
+    let markup = format!(r#"<filter id="{id}"{rest}"#, id = Self::ID);
 
     Ok(Self {
       uri: uri.into(),
-      markup,
-      id,
+      markup: markup.into(),
     })
   }
 }
@@ -140,7 +219,6 @@ mod tests {
       "test",
     )
     .unwrap();
-    assert_eq!(&*reference.id, "takumi-filter");
     assert!(
       reference
         .markup
@@ -150,16 +228,25 @@ mod tests {
   }
 
   #[test]
-  fn keeps_existing_id() {
+  fn replaces_existing_id() {
     let reference = FilterReference::from_markup(
       r#"<filter id="dither"><feFlood flood-color="red"/></filter>"#,
       "test",
     )
     .unwrap();
-    assert_eq!(&*reference.id, "dither");
     assert_eq!(
       &*reference.markup,
-      r#"<filter id="dither"><feFlood flood-color="red"/></filter>"#
+      r#"<filter id="takumi-filter" ><feFlood flood-color="red"/></filter>"#
+    );
+  }
+
+  #[test]
+  fn replaces_whitespace_and_entity_id() {
+    let reference =
+      FilterReference::from_markup("<filter id = 'a&#98;c'><feFlood/></filter>", "test").unwrap();
+    assert_eq!(
+      &*reference.markup,
+      r#"<filter id="takumi-filter" ><feFlood/></filter>"#
     );
   }
 
@@ -170,7 +257,29 @@ mod tests {
       "test",
     )
     .unwrap();
-    assert_eq!(&*reference.markup, r#"<filter id="f"><feFlood/></filter>"#);
+    assert_eq!(
+      &*reference.markup,
+      r#"<filter id="takumi-filter" ><feFlood/></filter>"#
+    );
+  }
+
+  #[test]
+  fn rejects_active_content() {
+    assert!(matches!(
+      FilterReference::from_markup(r"<filter><script>alert(1)</script></filter>", "test"),
+      Err(FilterReferenceError::UnsupportedPrimitive(name)) if name == "script"
+    ));
+    assert!(matches!(
+      FilterReference::from_markup(r#"<filter><feFlood onload="alert(1)"/></filter>"#, "test",),
+      Err(FilterReferenceError::UnsupportedValue { .. })
+    ));
+    assert!(matches!(
+      FilterReference::from_markup(
+        r#"<filter><feImage href="https://example.com/x.png"/></filter>"#,
+        "test",
+      ),
+      Err(FilterReferenceError::UnsupportedValue { .. })
+    ));
   }
 
   #[test]

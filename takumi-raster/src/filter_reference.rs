@@ -31,7 +31,7 @@ pub(crate) fn apply_filter_reference(
   let document = format!(
     r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="{width}" height="{height}">{markup}<image width="{width}" height="{height}" href="data:image/png;base64,{png}" filter="url(#{id})"/></svg>"#,
     markup = reference.markup,
-    id = reference.id,
+    id = FilterReference::ID,
     png = base64(&png),
   );
 

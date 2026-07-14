@@ -540,14 +540,13 @@ impl SvgDocument {
   /// Emits a referenced `<filter>` verbatim under a fresh document-unique id.
   fn reference_filter(&mut self, reference: &FilterReference) -> io::Result<String> {
     let id = self.alloc_id("fr");
-    let double_quoted = format!(r#"id="{}""#, reference.id);
-    let single_quoted = format!("id='{}'", reference.id);
-    let replacement = format!(r#"id="{id}""#);
-    let markup = if reference.markup.contains(&double_quoted) {
-      reference.markup.replacen(&double_quoted, &replacement, 1)
-    } else {
-      reference.markup.replacen(&single_quoted, &replacement, 1)
-    };
+    // The parser strips any author id and injects the canonical one, so this
+    // textual rewrite always hits.
+    let markup = reference.markup.replacen(
+      &format!(r#"id="{}""#, FilterReference::ID),
+      &format!(r#"id="{id}""#),
+      1,
+    );
     self
       .writer
       .write_event(Event::Text(BytesText::from_escaped(markup)))?;
