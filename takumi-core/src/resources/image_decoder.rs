@@ -143,22 +143,6 @@ pub(crate) fn bitmap_dimensions(bytes: &[u8]) -> Option<ImageResult<(u32, u32)>>
   Some(dimensions)
 }
 
-/// Downscales a decoded (premultiplied) buffer; linear filtering of
-/// premultiplied RGBA is alpha-correct.
-pub(crate) fn resize_buffer(
-  buffer: &ImageBuffer,
-  width: u32,
-  height: u32,
-  algorithm: ImageScalingAlgorithm,
-) -> Option<ImageBuffer> {
-  resample_premultiplied(
-    buffer.data(),
-    (buffer.width(), buffer.height()),
-    (width, height),
-    algorithm,
-  )
-}
-
 /// Decodes bitmap bytes scaled to cover `width` x `height`, never upscaling.
 /// Non-interlaced PNGs stream row-by-row through the resampler without a
 /// full-size buffer; everything else decodes fully and resizes.
@@ -177,7 +161,13 @@ pub(crate) fn decode_bitmap_scaled(
     return Ok(decoded);
   }
 
-  resize_buffer(&decoded, width, height, algorithm).ok_or_else(invalid_buffer_error)
+  resample_premultiplied(
+    decoded.data(),
+    (decoded.width(), decoded.height()),
+    (width, height),
+    algorithm,
+  )
+  .ok_or_else(invalid_buffer_error)
 }
 
 fn png_decode_error(error: png::DecodingError) -> ImageError {
@@ -602,7 +592,13 @@ mod tests {
     ] {
       let streamed = decode_bitmap_scaled(bytes, width, height, algorithm).unwrap();
       let full = decode_image(bytes).unwrap();
-      let resized = resize_buffer(&full, width, height, algorithm).unwrap();
+      let resized = resample_premultiplied(
+        full.data(),
+        (full.width(), full.height()),
+        (width, height),
+        algorithm,
+      )
+      .unwrap();
       assert_eq!(streamed.data(), resized.data(), "{algorithm:?}");
     }
   }

@@ -143,19 +143,18 @@ impl GifSource {
 
   /// The first caller decides the memoized frame size; renders of the same GIF
   /// use one draw box in practice.
-  fn rest(&self, target: Option<(u32, u32, ImageScalingAlgorithm)>) -> &RestFrames {
+  fn rest(&self, target: (u32, u32, ImageScalingAlgorithm)) -> &RestFrames {
     self.inner.rest.get_or_init(|| {
       let mut frames = Vec::new();
       let mut total_duration_ms = self.inner.first.duration_ms as u64;
-      let _ = decode_gif_frames(&self.inner.bytes, 1, None, target, |frame| {
+      let _ = decode_gif_frames(&self.inner.bytes, 1, None, Some(target), |frame| {
         total_duration_ms += frame.duration_ms as u64;
         frames.push(frame);
       });
       RestFrames {
         target: frames
           .first()
-          .map(|frame: &DecodedGifFrame| (frame.buffer.width(), frame.buffer.height()))
-          .filter(|&size| size != (self.inner.width, self.inner.height)),
+          .map(|frame: &DecodedGifFrame| (frame.buffer.width(), frame.buffer.height())),
         frames: frames.into(),
         total_duration_ms,
       }
@@ -186,19 +185,21 @@ impl GifSource {
   }
 
   /// Shared frame shown at the given playback time, looping over total duration.
-  pub fn frame_at_time(&self, time_ms: u64) -> Arc<ImageBuffer> {
+  #[cfg(test)]
+  fn frame_at_time(&self, time_ms: u64) -> Arc<ImageBuffer> {
     self.frame_at_time_covering(
       time_ms,
       self.inner.width,
       self.inner.height,
-      Default::default(),
+      ImageScalingAlgorithm::Auto,
     )
   }
 
-  /// [`frame_at_time`](Self::frame_at_time), but frames past the first are
-  /// decoded scaled to cover a `width` x `height` draw box (never upscaled), so
-  /// the memoized timeline holds draw-sized frames instead of canvas-sized
-  /// ones. A request larger than the memoized size decodes that frame fresh.
+  /// Shared frame shown at the given playback time, looping over total
+  /// duration. Frames past the first decode scaled to cover a `width` x
+  /// `height` draw box (never upscaled), so the memoized timeline holds
+  /// draw-sized frames; a request larger than the memoized size decodes that
+  /// frame fresh.
   pub fn frame_at_time_covering(
     &self,
     time_ms: u64,
@@ -212,38 +213,28 @@ impl GifSource {
     }
 
     let requested = cover_target((self.inner.width, self.inner.height), (width, height));
-    let rest = self.rest(
-      Some((requested.0, requested.1, algorithm))
-        .filter(|&(w, h, _)| (w, h) != (self.inner.width, self.inner.height)),
-    );
+    let rest = self.rest((requested.0, requested.1, algorithm));
     let Some(index) = self.rest_index_at(rest, time_ms) else {
       return first.buffer.clone();
     };
 
     let memoized = rest.target.unwrap_or((self.inner.width, self.inner.height));
     if requested.0 > memoized.0 || requested.1 > memoized.1 {
-      if let Some(frame) = self.decode_single(index + 1, requested, algorithm) {
+      let mut frame = None;
+      let target = (requested.0, requested.1, algorithm);
+      let _ = decode_gif_frames(
+        &self.inner.bytes,
+        index + 1,
+        Some(1),
+        Some(target),
+        |decoded| frame = Some(decoded.buffer),
+      );
+      if let Some(frame) = frame {
         return frame;
       }
     }
 
     rest.frames[index].buffer.clone()
-  }
-
-  /// Decodes one frame fresh at the requested size, bypassing the memo.
-  fn decode_single(
-    &self,
-    frame_index: usize,
-    (width, height): (u32, u32),
-    algorithm: ImageScalingAlgorithm,
-  ) -> Option<Arc<ImageBuffer>> {
-    let mut frame = None;
-    let target = Some((width, height, algorithm)).filter(|&(w, h, _)| (w, h) != self.dimensions());
-    decode_gif_frames(&self.inner.bytes, frame_index, Some(1), target, |decoded| {
-      frame = Some(decoded.buffer)
-    })
-    .ok()?;
-    frame
   }
 
   fn decoded_bytes(&self) -> usize {
@@ -1307,13 +1298,21 @@ mod tests {
 
   #[test]
   fn gif_scaled_frame_matches_resized_native() {
-    use crate::resources::image_decoder::resize_buffer;
+    use crate::resources::image_resampler::resample_premultiplied;
 
-    let native = gif_source(&[(0, 10), (1, 10)]).frame_at_time(15);
+    let source = gif_source(&[(0, 10), (1, 10)]);
+    let (width, height) = source.dimensions();
+    let native = source.frame_at_time_covering(15, width, height, ImageScalingAlgorithm::Auto);
     let scaled =
       gif_source(&[(0, 10), (1, 10)]).frame_at_time_covering(15, 2, 2, ImageScalingAlgorithm::Auto);
 
-    let expected = resize_buffer(&native, 2, 2, ImageScalingAlgorithm::Auto).unwrap();
+    let expected = resample_premultiplied(
+      native.data(),
+      (native.width(), native.height()),
+      (2, 2),
+      ImageScalingAlgorithm::Auto,
+    )
+    .unwrap();
     assert_eq!(scaled.data(), expected.data());
   }
 
