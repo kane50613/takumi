@@ -538,7 +538,12 @@ pub(crate) fn render_tile(
             algo: context.style.image_rendering,
           }),
           ImageSource::Gif(gif) => Some(BackgroundTile::SampledBitmap {
-            source: gif.frame_at_time(context.time_ms),
+            source: gif.frame_at_time_covering(
+              context.time_ms,
+              tile_w,
+              tile_h,
+              context.style.image_rendering,
+            ),
             width: tile_w,
             height: tile_h,
             algo: context.style.image_rendering,

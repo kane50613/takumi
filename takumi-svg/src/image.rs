@@ -11,7 +11,7 @@ use takumi_core::{
   context::RenderContext,
   layout::node::{ImageData, ImageSourceInput, resolve_image},
   resources::image::ImageSource,
-  style::{Length, ObjectFit, PositionComponent},
+  style::{ImageScalingAlgorithm, Length, ObjectFit, PositionComponent},
 };
 
 use crate::{Frame, SvgDocument, box_model::rect_path_data};
@@ -101,10 +101,13 @@ fn loaded_data_url(source: &ImageSource) -> Option<String> {
   match source {
     ImageSource::Bitmap(buffer) => buffer.encode_png().map(|png| encode("image/png", &png)),
     ImageSource::Encoded(encoded) => Some(encode(sniff_mime(encoded.bytes()), encoded.bytes())),
-    ImageSource::Gif(gif) => gif
-      .frame_at_time(0)
-      .encode_png()
-      .map(|png| encode("image/png", &png)),
+    ImageSource::Gif(gif) => {
+      let (width, height) = gif.dimensions();
+      gif
+        .frame_at_time_covering(0, width, height, ImageScalingAlgorithm::Auto)
+        .encode_png()
+        .map(|png| encode("image/png", &png))
+    }
     ImageSource::Svg(svg) => Some(encode("image/svg+xml", svg.source().as_bytes())),
     _ => None,
   }

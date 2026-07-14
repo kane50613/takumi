@@ -244,6 +244,20 @@ impl StreamResampler {
   }
 }
 
+/// Resamples a whole premultiplied RGBA buffer in one call.
+pub(crate) fn resample_premultiplied(
+  data: &[u8],
+  source: (u32, u32),
+  target: (u32, u32),
+  algorithm: ImageScalingAlgorithm,
+) -> Option<ImageBuffer> {
+  let mut resampler = StreamResampler::new(source, target, algorithm);
+  for row in data.chunks_exact(source.0 as usize * 4) {
+    resampler.push_row(row);
+  }
+  resampler.finish()
+}
+
 #[cfg(test)]
 mod tests {
   use image::{RgbaImage, imageops};
