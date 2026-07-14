@@ -53,6 +53,23 @@ describe("googleFonts", () => {
     }
   `;
 
+  test("families Google categorizes as monospace claim the generic automatically", async () => {
+    const monoCss = interCss.replaceAll("Inter", "JetBrains Mono");
+    const fetchMock = mock((url: string) =>
+      Promise.resolve(url.includes("/css2") ? new Response(monoCss) : new Response(bytes(url))),
+    );
+
+    const fonts = await googleFonts({ families: ["JetBrains Mono"], fetch: fetchMock });
+    expect(fonts.length).toBeGreaterThan(0);
+    expect(fonts.every((f) => f.generic === "monospace")).toBe(true);
+
+    const overridden = await googleFonts({
+      families: [{ name: "JetBrains Mono", generic: "ui-monospace" }],
+      fetch: fetchMock,
+    });
+    expect(overridden.every((f) => f.generic === "ui-monospace")).toBe(true);
+  });
+
   test("propagates the family's generic claim to every subset", async () => {
     const fonts = await googleFonts({
       families: [{ name: "Inter", generic: "sans-serif" }],
