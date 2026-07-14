@@ -22,13 +22,17 @@ describe("generic font family", () => {
     expect(Buffer.compare(viaGeneric, viaName)).toBe(0);
   });
 
-  test("without a generic claim, monospace stacks fall back elsewhere", async () => {
+  test("without a generic claim, monospace stacks fall back in registration order", async () => {
     const renderer = new Renderer();
+    const sansData = await Bun.file("../assets/fonts/geist/Geist[wght].woff2").arrayBuffer();
+    await renderer.registerFont({ data: sansData });
     await renderer.registerFont({ data: monoData });
 
     const viaGeneric = await renderer.render(node("monospace"), options);
-    const viaName = await renderer.render(node("Geist Mono"), options);
-    expect(Buffer.compare(viaGeneric, viaName)).not.toBe(0);
+    const viaSans = await renderer.render(node("Geist"), options);
+    const viaMono = await renderer.render(node("Geist Mono"), options);
+    expect(Buffer.compare(viaGeneric, viaSans)).toBe(0);
+    expect(Buffer.compare(viaGeneric, viaMono)).not.toBe(0);
   });
 
   test("an unknown generic keyword rejects", async () => {
