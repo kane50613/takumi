@@ -114,12 +114,13 @@ await googleFonts([
 
 Each family accepts:
 
-| Field    | Accepts                                     | Effect                                                                     |
-| -------- | ------------------------------------------- | -------------------------------------------------------------------------- |
-| `name`   | a family name                               | The family to load. Known families autocomplete their weights and axes.    |
-| `weight` | a weight, an array, or a range `"100..900"` | A range loads the variable font; CSS `font-weight` drives it.              |
-| `style`  | `"normal"`, `"italic"`, or both             | Which styles to fetch.                                                     |
-| `axes`   | `{ tag: value \| "min..max" }`              | Variable axes to load, e.g. `{ opsz: "9..144" }`. A range keeps them live. |
+| Field     | Accepts                                     | Effect                                                                     |
+| --------- | ------------------------------------------- | -------------------------------------------------------------------------- |
+| `name`    | a family name                               | The family to load. Known families autocomplete their weights and axes.    |
+| `weight`  | a weight, an array, or a range `"100..900"` | A range loads the variable font; CSS `font-weight` drives it.              |
+| `style`   | `"normal"`, `"italic"`, or both             | Which styles to fetch.                                                     |
+| `axes`    | `{ tag: value \| "min..max" }`              | Variable axes to load, e.g. `{ opsz: "9..144" }`. A range keeps them live. |
+| `generic` | a CSS generic family keyword                | Every loaded subset claims it, so e.g. `font-mono` resolves to the family. |
 
 Pass an object instead of a list for request-level options:
 

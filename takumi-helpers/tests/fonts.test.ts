@@ -53,6 +53,20 @@ describe("googleFonts", () => {
     }
   `;
 
+  test("propagates the family's generic claim to every subset", async () => {
+    const fonts = await googleFonts({
+      families: [{ name: "Inter", generic: "sans-serif" }],
+      fetch: mockInter(),
+    });
+
+    expect(fonts.length).toBeGreaterThan(0);
+    expect(fonts.every((f) => f.generic === "sans-serif")).toBe(true);
+    expect(fonts.every((f) => f.key.endsWith(":sans-serif"))).toBe(true);
+
+    const plain = await googleFonts({ families: ["Inter"], fetch: mockInter() });
+    expect(plain.every((f) => f.generic === undefined)).toBe(true);
+  });
+
   test("gives each coverage subset a distinct name so glyphs can't collide", async () => {
     const fonts = await googleFonts({ families: ["Inter"], fetch: mockInter() });
 

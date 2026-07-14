@@ -6,6 +6,22 @@ const chromeUserAgent =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 type FontStyle = "normal" | "italic";
+
+/** CSS generic family keywords a font can claim. */
+export type GenericFontFamily =
+  | "serif"
+  | "sans-serif"
+  | "monospace"
+  | "cursive"
+  | "fantasy"
+  | "system-ui"
+  | "ui-serif"
+  | "ui-sans-serif"
+  | "ui-monospace"
+  | "ui-rounded"
+  | "emoji"
+  | "math"
+  | "fangsong";
 type WeightRange = `${number}..${number}`;
 type AxisValue = number | WeightRange;
 
@@ -22,6 +38,8 @@ type KnownGoogleFontFamily = {
     axes?: [GoogleFontShapes[S]["axis"]] extends [never]
       ? never
       : Partial<Record<GoogleFontShapes[S]["axis"], AxisValue>>;
+    /** CSS generic family the loaded subsets claim, e.g. `"monospace"`. */
+    generic?: GenericFontFamily;
   };
 }[keyof GoogleFontShapes];
 
@@ -41,6 +59,8 @@ export type GoogleFontFamily =
       weight?: number | number[] | WeightRange;
       style?: FontStyle | FontStyle[];
       axes?: Record<string, AxisValue>;
+      /** CSS generic family the loaded subsets claim, e.g. `"monospace"`. */
+      generic?: GenericFontFamily;
     };
 
 export type GoogleFontsOptions = FetchOptions & {
@@ -177,11 +197,17 @@ export type FontSubset = {
   style?: string;
   /** Inclusive codepoint ranges this subset covers; empty covers everything. */
   ranges: [number, number][];
+  /** CSS generic family the subset claims, from the family's `generic` option. */
+  generic?: GenericFontFamily;
   /** Fetches the subset bytes. The renderer skips files it has already loaded. */
   data: () => Promise<ArrayBuffer>;
 };
 
-function toSubset(face: SubsetFace, options: FetchOptions): FontSubset {
+function toSubset(
+  face: SubsetFace,
+  options: FetchOptions,
+  generic?: GenericFontFamily,
+): FontSubset {
   const name = `${face.family} ${face.subset}`;
   const range = face.ranges.map(([lo, hi]) => `${lo}-${hi}`).join(",");
 
@@ -190,10 +216,11 @@ function toSubset(face: SubsetFace, options: FetchOptions): FontSubset {
     subsetOf: face.family,
     // Stable coverage identity, not the woff2 URL Google may rotate, so the renderer dedups
     // across calls yet never merges two subsets that cover different ranges.
-    key: `${name}:${face.weight ?? ""}:${face.style ?? ""}:${range}`,
+    key: `${name}:${face.weight ?? ""}:${face.style ?? ""}:${range}:${generic ?? ""}`,
     weight: face.weight,
     style: face.style,
     ranges: face.ranges,
+    generic,
     data: () =>
       fetchOk(face.url, options).then((r) =>
         readBodyLimited(r, options.maxBytes ?? defaultMaxFetchBytes),
@@ -411,8 +438,13 @@ export async function googleFonts(
       index,
     ]),
   );
+  const generics = new Map(
+    options.families.flatMap((family) =>
+      typeof family === "string" || !family.generic ? [] : [[family.name, family.generic] as const],
+    ),
+  );
 
   return mergeVariableFaces(parseSubsetFaces(css))
     .sort((a, b) => (familyOrder.get(a.family) ?? 0) - (familyOrder.get(b.family) ?? 0))
-    .map((face) => toSubset(face, options));
+    .map((face) => toSubset(face, options, generics.get(face.family)));
 }
