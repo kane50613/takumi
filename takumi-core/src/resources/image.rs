@@ -436,8 +436,13 @@ impl ImageSource {
   }
 
   /// [`from_bytes`](Self::from_bytes), but bitmaps stay encoded and decode at
-  /// draw size into `cache`.
-  fn from_bytes_with_cache(bytes: &[u8], hash: u64, cache: &Arc<SharedImageCache>) -> ImageResult {
+  /// draw size. Sized decodes go into `cache` while it is alive; a dead handle
+  /// (inline node bytes, data URIs) decodes per render.
+  pub(crate) fn from_bytes_lazy(
+    bytes: &[u8],
+    hash: u64,
+    cache: Weak<SharedImageCache>,
+  ) -> ImageResult {
     #[cfg(feature = "svg")]
     {
       if let Ok(text) = from_utf8(bytes)
@@ -457,7 +462,7 @@ impl ImageSource {
         width,
         height,
         hash,
-        cache: Arc::downgrade(cache),
+        cache,
       }))),
       Some(Err(error)) => Err(ImageError::decode(error)),
       None => Self::from_bytes(bytes),
@@ -686,7 +691,7 @@ pub enum ImageCacheMode {
 /// Cache key: the content hash alone addresses a source entry; a target size
 /// and filter address a decoded-at-size entry.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-struct ImageCacheKey {
+pub(crate) struct ImageCacheKey {
   hash: u64,
   width: u32,
   height: u32,
@@ -718,13 +723,13 @@ impl ImageCacheKey {
 }
 
 #[derive(Clone)]
-enum CacheEntry {
+pub(crate) enum CacheEntry {
   Source(ImageSource),
   Sized(Arc<ImageBuffer>),
 }
 
 #[derive(Clone)]
-struct ImageWeighter;
+pub(crate) struct ImageWeighter;
 
 impl Weighter<ImageCacheKey, CacheEntry> for ImageWeighter {
   fn weight(&self, _key: &ImageCacheKey, entry: &CacheEntry) -> u64 {
@@ -736,7 +741,7 @@ impl Weighter<ImageCacheKey, CacheEntry> for ImageWeighter {
   }
 }
 
-type SharedImageCache = Cache<ImageCacheKey, CacheEntry, ImageWeighter>;
+pub(crate) type SharedImageCache = Cache<ImageCacheKey, CacheEntry, ImageWeighter>;
 
 /// Content-addressed store of decoded images with a byte budget, used by the renderer to avoid re-decoding.
 pub struct ImageCache {
@@ -783,7 +788,7 @@ impl ImageCache {
       GuardResult::Value(CacheEntry::Source(source)) => Ok(source),
       GuardResult::Value(CacheEntry::Sized(_)) => ImageSource::from_bytes(bytes),
       GuardResult::Guard(guard) => {
-        let source = ImageSource::from_bytes_with_cache(bytes, hash, &self.cache)?;
+        let source = ImageSource::from_bytes_lazy(bytes, hash, Arc::downgrade(&self.cache))?;
         if source.is_cacheable() {
           let _ = guard.insert(CacheEntry::Source(source.clone()));
         }
