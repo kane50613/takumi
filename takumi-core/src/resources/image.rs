@@ -141,8 +141,9 @@ impl GifSource {
     (self.inner.width, self.inner.height)
   }
 
-  /// The first caller decides the memoized frame size; renders of the same GIF
-  /// use one draw box in practice.
+  /// The first caller decides the memoized frame size and filter; renders of
+  /// the same GIF use one draw box in practice, and a single slot is what keeps
+  /// the timeline's memory bounded.
   fn rest(&self, target: (u32, u32, ImageScalingAlgorithm)) -> &RestFrames {
     self.inner.rest.get_or_init(|| {
       let mut frames = Vec::new();
