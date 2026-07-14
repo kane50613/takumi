@@ -82,6 +82,11 @@ fn load_font_internal(
         None => resource,
       };
 
+      let resource = match &details.generic {
+        Some(generic) => resource.generic_family(generic.parse().map_err(map_error)?),
+        None => resource,
+      };
+
       fonts.register(resource).map_err(map_error)
     }
   }

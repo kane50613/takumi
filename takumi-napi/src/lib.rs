@@ -76,6 +76,8 @@ pub(crate) struct FontInput {
   pub style: Option<FontStyleInput>,
   /// Logical family this font is a coverage subset of; expands at render time.
   pub subset_of: Option<String>,
+  /// CSS generic family keyword (e.g. `monospace`) this font resolves for.
+  pub generic: Option<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -129,6 +131,15 @@ pub(crate) fn resolve_font_resource<'a>(
 
   let resource = match &font.subset_of {
     Some(logical) => resource.subset_of(logical.clone()),
+    None => resource,
+  };
+
+  let resource = match &font.generic {
+    Some(generic) => resource.generic_family(
+      generic
+        .parse()
+        .map_err(|e| Error::from_reason(format!("Failed to load font: {e}")))?,
+    ),
     None => resource,
   };
 

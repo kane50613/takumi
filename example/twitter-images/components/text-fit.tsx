@@ -1,6 +1,9 @@
 export const name = "text-fit";
 
-export const fonts = [];
+export const fonts = [
+  "geist/Geist[wght].woff2",
+  { path: "geist/GeistMono[wght].woff2", generic: "monospace" as const },
+];
 
 export const width = 1200;
 export const height = 675;

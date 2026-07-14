@@ -32,13 +32,15 @@ const components = [
 
 type Component = (typeof components)[number];
 
-const renderer = new Renderer();
-
 function fontLoaders(module: Component) {
-  return module.fonts.map((font) => ({
-    key: font,
-    data: () => readFile(join("../../assets/fonts", font)),
-  }));
+  return module.fonts.map((font) => {
+    const { path, ...details } = typeof font === "string" ? { path: font } : font;
+    return {
+      key: path,
+      data: () => readFile(join("../../assets/fonts", path)),
+      ...details,
+    };
+  });
 }
 
 async function render(
@@ -48,6 +50,10 @@ async function render(
   timeMs?: number,
   frameIndex?: number,
 ) {
+  // Fresh renderer per component: registered fonts persist on a renderer, so a
+  // shared one would leak each component's fonts into the next render's
+  // default font stack.
+  const renderer = new Renderer();
   const jsxPrepareStart = performance.now();
   const { node, stylesheets } = await fromJsx(<module.default />);
   const images = await Promise.all(
