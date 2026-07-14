@@ -1,3 +1,21 @@
+## takumi-raster@0.2.5
+
+### Decode GIF frames lazily
+
+Decode only the first GIF frame up front and the rest on first sample past it; static renders no longer decode the whole animation. `GifSource::frame_at_time` returns `Arc<ImageBuffer>` and `RenderedImage::Borrowed` becomes `Sampled`.
+
+### Decode bitmaps at draw size
+
+Bitmaps loaded through `ImageCache` stay encoded until draw time, decode scaled to the box they are drawn into, and cache per content and target size. Adds `ImageSource::Encoded`; `get_or_decode` returns it instead of `Bitmap` for PNG/JPEG/WebP. `cache: "none"` keeps returning an eagerly decoded `Bitmap`.
+
+### Memoize GIF frames at draw size
+
+Frames past the first decode scaled to the box the GIF is drawn into, so an animation's memoized timeline holds draw-sized frames instead of canvas-sized ones. Adds `GifSource::frame_at_time_covering`.
+
+### Render animation frames in parallel chunks
+
+`write_animation` renders one chunk of rayon threads' worth of frames in parallel between encoder drains, keeping at most one chunk of raw frames in memory.
+
 ## takumi-raster@0.2.3
 
 ### Fix `fontFamilies` order being ignored

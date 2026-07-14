@@ -1,76 +1,117 @@
 core:changelogs:
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: patch\n---\n\n### Ignore null style values\n\nSkip `null` and `undefined` style declarations instead of failing to deserialize the style.\n"
-    filename: null-style-values.md
+  - content: "---\npackages:\n  npm:@takumi-rs/core:\n    type: minor\n  npm:@takumi-rs/wasm:\n    type: minor\n---\n\n### Extend the built-in Geist to weight 300\n\nThe embedded last-resort font covers `wght` 300..800 and trims unused stylistic sets, ending up slightly smaller than before.\n"
+    filename: embedded-geist-300.md
     v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: patch\n---\n\n### Fix inline SVG data URIs truncated at `#`\n\nPercent-escape `#` in data URI bodies so inline SVGs are not cut off at the first fragment delimiter.\n"
-    filename: data-uri-svg-hash.md
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n  npm:@takumi-rs/core:\n    type: minor\n  npm:@takumi-rs/wasm:\n    type: minor\n  npm:@takumi-rs/helpers:\n    type: minor\n---\n\n### Claim generic font families from the JS font API\n\nFont descriptors accept `generic` (e.g. `\"monospace\"`), so stacks like Tailwind's `font-mono` resolve to registered fonts without naming the family.\n"
+    filename: font-generic-family.md
+    v: 0.0.0
+  - content: "---\npackages:\n  npm:@takumi-rs/helpers:\n    type: minor\n---\n\n### Support generic on googleFonts families\n\nA family's `generic` (e.g. `\"monospace\"`) propagates to every loaded coverage subset, so generic stacks like `font-mono` resolve to it.\n"
+    filename: google-fonts-generic.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n  cargo:takumi-raster:\n    type: patch\n  cargo:takumi-svg:\n    type: patch\n---\n\n### Decode bitmaps at draw size\n\nBitmaps loaded through `ImageCache` stay encoded until draw time, decode scaled to the box they are drawn into, and cache per content and target size. Adds `ImageSource::Encoded`; `get_or_decode` returns it instead of `Bitmap` for PNG/JPEG/WebP. `cache: \"none\"` keeps returning an eagerly decoded `Bitmap`.\n"
+    filename: decode-to-target-size.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: patch\n---\n\n### Decode GIF frames on the raw `gif` decoder\n\nComposite frames on one reused canvas instead of the `image` crate's per-frame allocations; skipped frames no longer allocate or premultiply.\n"
+    filename: gif-raw-decoder.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n  cargo:takumi-raster:\n    type: patch\n---\n\n### Decode GIF frames lazily\n\nDecode only the first GIF frame up front and the rest on first sample past it; static renders no longer decode the whole animation. `GifSource::frame_at_time` returns `Arc<ImageBuffer>` and `RenderedImage::Borrowed` becomes `Sampled`.\n"
+    filename: lazy-gif-decode.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: patch\n---\n\n### Stream PNG decode at draw size\n\nNon-interlaced PNGs decode row-by-row through a streaming resampler, so downscaling never materializes the full-size buffer. Output is byte-identical to decode-then-resize.\n"
+    filename: png-streaming-decode.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n  cargo:takumi-raster:\n    type: patch\n---\n\n### Memoize GIF frames at draw size\n\nFrames past the first decode scaled to the box the GIF is drawn into, so an animation's memoized timeline holds draw-sized frames instead of canvas-sized ones. Adds `GifSource::frame_at_time_covering`.\n"
+    filename: gif-frames-at-draw-size.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-raster:\n    type: patch\n---\n\n### Render animation frames in parallel chunks\n\n`write_animation` renders one chunk of rayon threads' worth of frames in parallel between encoder drains, keeping at most one chunk of raw frames in memory.\n"
+    filename: chunked-animation-render.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - id: npm:@takumi-rs/wasm
-    updated: true
-  - id: npm:@takumi-rs/core
+  - changelogIds:
+      - embedded-geist-300.md
+      - font-generic-family.md
+    id: npm:@takumi-rs/wasm
     updated: true
   - id: npm:takumi-js
     updated: true
-  - id: npm:docs
-    updated: false
   - id: npm:@takumi-rs/image-response
+    updated: true
+  - changelogIds:
+      - google-fonts-generic.md
+      - font-generic-family.md
+    id: npm:@takumi-rs/helpers
+    updated: true
+  - changelogIds:
+      - embedded-geist-300.md
+      - font-generic-family.md
+    id: npm:@takumi-rs/core
     updated: true
   - id: npm:takumi-template
     updated: false
-  - id: npm:@takumi-rs/helpers
-    updated: true
-  - id: npm:example-satori-html
-    updated: false
-  - id: npm:svelte
-    updated: false
-  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:docs
     updated: false
   - id: npm:example-nextjs
     updated: false
-  - id: npm:waku-ssr
-    updated: false
-  - id: npm:example-cloudflare-workers
-    updated: false
   - id: npm:example-tanstack-start
+    updated: false
+  - id: npm:example-css-library-integration
     updated: false
   - id: npm:ffplay
     updated: false
   - id: npm:example-twitter-images
     updated: false
-  - id: npm:example-css-library-integration
+  - id: npm:example-satori-html
     updated: false
-  - id: cargo:takumi-svg
-    updated: true
-  - id: cargo:takumi-raster
-    updated: true
+  - id: npm:waku-ssr
+    updated: false
+  - id: npm:example-cloudflare-workers
+    updated: false
+  - id: npm:ffmpeg-keyframe-animation
+    updated: false
+  - id: npm:svelte
+    updated: false
   - id: cargo:takumi
     updated: true
   - changelogIds:
-      - null-style-values.md
-      - data-uri-svg-hash.md
+      - decode-to-target-size.md
+    id: cargo:takumi-svg
+    updated: true
+  - changelogIds:
+      - gif-raw-decoder.md
+      - lazy-gif-decode.md
+      - font-generic-family.md
+      - png-streaming-decode.md
+      - decode-to-target-size.md
+      - gif-frames-at-draw-size.md
     id: cargo:takumi-core
+    updated: true
+  - changelogIds:
+      - lazy-gif-decode.md
+      - decode-to-target-size.md
+      - gif-frames-at-draw-size.md
+      - chunked-animation-render.md
+    id: cargo:takumi-raster
     updated: true
   - id: cargo:takumi-html
     updated: true
 npm:packages:
   - id: npm:takumi
   - id: npm:@takumi-rs/wasm
-  - id: npm:@takumi-rs/core
   - id: npm:takumi-js
-  - id: npm:docs
   - id: npm:@takumi-rs/image-response
-  - id: npm:takumi-template
   - id: npm:@takumi-rs/helpers
-  - id: npm:example-satori-html
-  - id: npm:svelte
-  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:@takumi-rs/core
+  - id: npm:takumi-template
+  - id: npm:docs
   - id: npm:example-nextjs
-  - id: npm:waku-ssr
-  - id: npm:example-cloudflare-workers
   - id: npm:example-tanstack-start
+  - id: npm:example-css-library-integration
   - id: npm:ffplay
   - id: npm:example-twitter-images
-  - id: npm:example-css-library-integration
+  - id: npm:example-satori-html
+  - id: npm:waku-ssr
+  - id: npm:example-cloudflare-workers
+  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:svelte
