@@ -64,6 +64,7 @@ export function GET() {
   return new ImageResponse(<div tw="font-mono">let x = 1;</div>, {
     fonts: [
       {
+        name: "Geist Mono",
         generic: "monospace",
         data: () => fetch("https://example.com/GeistMono.woff2").then((res) => res.arrayBuffer()),
       },
