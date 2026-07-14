@@ -549,9 +549,9 @@ fn encode_frames<W: Write>(
   }
 }
 
-/// Renders frames one chunk at a time: a chunk of `rayon` threads' worth of
-/// frames renders in parallel while the encoder drains the previous chunk, so
-/// at most one chunk of raw frames is in memory.
+/// Renders frames one chunk at a time: `next()` renders a chunk of `rayon`
+/// threads' worth of frames in parallel once the encoder has consumed the
+/// previous chunk, so at most one chunk of raw frames is in memory.
 #[cfg(feature = "rayon")]
 struct ChunkedFrames<'a, 'g> {
   scenes: &'a [SequentialScene<'g>],
@@ -584,8 +584,7 @@ impl Iterator for ChunkedFrames<'_, '_> {
       let chunk = &self.spans[self.next..(self.next + chunk_len).min(self.spans.len())];
       self.next += chunk.len();
 
-      // `PreparedScene` is not `Send`; each worker prepares its own copy and
-      // reuses it across the frames it takes from the chunk.
+      // `PreparedScene` is not `Send`: each worker prepares and reuses its own copy.
       self.ready = chunk
         .par_iter()
         .map_init(
