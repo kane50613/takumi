@@ -30,6 +30,8 @@ pub mod style_background_origin;
 pub mod style_clip_path;
 #[path = "fixtures/style_filter.rs"]
 pub mod style_filter;
+#[path = "fixtures/style_filter_reference.rs"]
+pub mod style_filter_reference;
 #[path = "fixtures/style_layout.rs"]
 pub mod style_layout;
 #[path = "fixtures/style_mask_image.rs"]

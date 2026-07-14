@@ -31,9 +31,10 @@ use std::{borrow::Cow, fmt, fmt::Write as _, io};
 
 use quick_xml::{
   Writer,
-  events::{BytesEnd, BytesStart, Event},
+  events::{BytesEnd, BytesStart, BytesText, Event},
 };
 pub use render::{SvgOptions, render};
+use takumi_core::style::FilterReference;
 
 /// Straight-alpha RGBA color.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -480,17 +481,17 @@ impl SvgDocument {
     Ok(reference)
   }
 
-  /// Defines a CSS `filter` chain as an SVG `<filter>` and returns its
-  /// `url(#id)` (or `None` if the list is empty). Primitives are chained with
-  /// `result="fN"`/`in="f(N-1)"`; the region is widened so blur/shadow are not
-  /// clipped. `size` is the element's border-box size, the resolution basis for
-  /// `drop-shadow` lengths (mirroring the raster backend).
+  /// Defines a CSS `filter` list as SVG `<filter>` elements and returns their
+  /// `url(#id)` references, to be applied innermost first (index 0 closest to
+  /// the element). Runs of filter functions become one generated chain filter;
+  /// each `url()` reference becomes its own `<filter>`, emitted verbatim, since
+  /// its own region and `color-interpolation-filters` must keep applying.
   ///
-  /// With `restore_opaque_alpha` the chain ends by snapping alpha back to
-  /// opaque. A backdrop blur feathers the replay's alpha at the canvas edge
-  /// (outside the input is transparent), letting the sharp original bleed
-  /// through; browsers sample the backdrop with edge duplication instead, so
-  /// no feathering exists to begin with.
+  /// With `restore_opaque_alpha` the last filter snaps alpha back to opaque. A
+  /// backdrop blur feathers the replay's alpha at the canvas edge (outside the
+  /// input is transparent), letting the sharp original bleed through; browsers
+  /// sample the backdrop with edge duplication instead, so no feathering exists
+  /// to begin with.
   pub(crate) fn filter(
     &mut self,
     filters: &[Filter],
@@ -498,10 +499,74 @@ impl SvgDocument {
     current_color: Color,
     size: Size<f32>,
     restore_opaque_alpha: bool,
-  ) -> io::Result<Option<String>> {
-    if filters.is_empty() {
-      return Ok(None);
+  ) -> io::Result<Vec<String>> {
+    let mut references = Vec::new();
+    let mut pending: Vec<&Filter> = Vec::new();
+
+    for filter in filters {
+      match filter {
+        Filter::Reference(reference) => {
+          if !pending.is_empty() {
+            references.push(self.function_chain_filter(
+              &pending,
+              sizing,
+              current_color,
+              size,
+              false,
+            )?);
+            pending.clear();
+          }
+          references.push(self.reference_filter(reference)?);
+        }
+        other => pending.push(other),
+      }
     }
+
+    if !pending.is_empty() {
+      references.push(self.function_chain_filter(
+        &pending,
+        sizing,
+        current_color,
+        size,
+        restore_opaque_alpha,
+      )?);
+    } else if restore_opaque_alpha && !references.is_empty() {
+      references.push(self.function_chain_filter(&[], sizing, current_color, size, true)?);
+    }
+
+    Ok(references)
+  }
+
+  /// Emits a referenced `<filter>` verbatim under a fresh document-unique id.
+  fn reference_filter(&mut self, reference: &FilterReference) -> io::Result<String> {
+    let id = self.alloc_id("fr");
+    let double_quoted = format!(r#"id="{}""#, reference.id);
+    let single_quoted = format!("id='{}'", reference.id);
+    let replacement = format!(r#"id="{id}""#);
+    let markup = if reference.markup.contains(&double_quoted) {
+      reference.markup.replacen(&double_quoted, &replacement, 1)
+    } else {
+      reference.markup.replacen(&single_quoted, &replacement, 1)
+    };
+    self
+      .writer
+      .write_event(Event::Text(BytesText::from_escaped(markup)))?;
+    Ok(format!("url(#{id})"))
+  }
+
+  /// Defines a run of CSS filter functions as one chained `<filter>`.
+  /// Primitives are chained with `result="fN"`/`in="f(N-1)"`; the region is
+  /// widened so blur/shadow are not clipped. `size` is the element's border-box
+  /// size, the resolution basis for `drop-shadow` lengths (mirroring the raster
+  /// backend).
+  fn function_chain_filter(
+    &mut self,
+    filters: &[&Filter],
+    sizing: &SizingContext,
+    current_color: Color,
+    size: Size<f32>,
+    restore_opaque_alpha: bool,
+  ) -> io::Result<String> {
     let id = self.alloc_id("ft");
     let reference = format!("url(#{id})");
     self.open(
@@ -517,7 +582,7 @@ impl SvgDocument {
     )?;
 
     let mut prev: Cow<'_, str> = "SourceGraphic".into();
-    for (index, filter) in filters.iter().enumerate() {
+    for (index, filter) in filters.iter().copied().enumerate() {
       let result = format!("f{index}");
       self.filter_primitive(filter, &prev, &result, sizing, current_color, size)?;
       prev = result.into();
@@ -531,7 +596,7 @@ impl SvgDocument {
       self.close("feComponentTransfer")?;
     }
     self.close("filter")?;
-    Ok(Some(reference))
+    Ok(reference)
   }
 
   fn filter_primitive(

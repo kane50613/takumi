@@ -67,7 +67,7 @@ fn emit_backdrop(
     .backdrop_filter
     .iter()
     .filter(|f| !f.is_drop_shadow())
-    .copied()
+    .cloned()
     .collect();
   if filters.is_empty() || layout.size.width <= 0.0 || layout.size.height <= 0.0 {
     return Ok(());
@@ -87,14 +87,22 @@ fn emit_backdrop(
   // Alpha restore approximates the edge-duplicated backdrop sampling browsers
   // use; skipped for opacity(), which lowers alpha on purpose.
   let restore_alpha = !filters.iter().any(|f| matches!(f, Filter::Opacity(_)));
-  let filter_ref = doc.filter(
+  let filter_refs = doc.filter(
     &filters,
     &node.context.sizing,
     node.context.current_color,
     layout.size,
     restore_alpha,
   )?;
-  let filter_group = doc.begin_group(IDENTITY, 1.0, None, filter_ref.as_deref())?;
+  // Later filters in the list apply after earlier ones, so they wrap outside.
+  let filter_wrappers = filter_refs
+    .iter()
+    .skip(1)
+    .rev()
+    .map(|reference| doc.begin_group(IDENTITY, 1.0, None, Some(reference)))
+    .collect::<io::Result<Vec<_>>>()?;
+  let filter_group =
+    doc.begin_group(IDENTITY, 1.0, None, filter_refs.first().map(String::as_str))?;
 
   // The replay is emitted in root coordinates; cancel the current frame.
   let to_root = frame.invert().unwrap_or(IDENTITY);
@@ -108,6 +116,9 @@ fn emit_backdrop(
     doc.end_group(group)?;
   }
   doc.end_group(filter_group)?;
+  for group in filter_wrappers.into_iter().rev() {
+    doc.end_group(group)?;
+  }
   if let Some(group) = mask {
     doc.end_group(group)?;
   }

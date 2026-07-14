@@ -122,6 +122,7 @@ pub(crate) struct BoxChrome {
   blend: Option<crate::GroupToken>,
   isolate: Option<crate::GroupToken>,
   mask: Option<crate::GroupToken>,
+  filter_wrappers: Vec<crate::GroupToken>,
   outer: Option<crate::GroupToken>,
   clip_group: Option<crate::GroupToken>,
   child_group: Option<crate::GroupToken>,
@@ -130,14 +131,14 @@ pub(crate) struct BoxChrome {
 impl BoxChrome {
   /// Closes the box's groups innermost first.
   pub(crate) fn close(self, doc: &mut SvgDocument) -> io::Result<()> {
-    let groups = [
-      self.child_group,
-      self.clip_group,
-      self.outer,
-      self.mask,
-      self.isolate,
-      self.blend,
-    ];
+    let groups = [self.child_group, self.clip_group, self.outer];
+    for group in groups.into_iter().flatten() {
+      doc.end_group(group)?;
+    }
+    for group in self.filter_wrappers.into_iter().rev() {
+      doc.end_group(group)?;
+    }
+    let groups = [self.mask, self.isolate, self.blend];
     for group in groups.into_iter().flatten() {
       doc.end_group(group)?;
     }
@@ -175,13 +176,23 @@ pub(crate) fn emit_box_chrome(
   let mask = emit_mask_group(node, x, y, width, height, doc)?;
 
   let opacity = style.opacity.0;
-  let filter_ref = if !style.filter.is_empty() {
-    doc.filter(&style.filter, &node.context.sizing, cc, layout.size, false)?
-  } else {
-    None
-  };
-  let outer = (!group_transform.is_identity() || opacity < 1.0 || filter_ref.is_some())
-    .then(|| doc.begin_group(group_transform, opacity, None, filter_ref.as_deref()))
+  let filter_refs = doc.filter(&style.filter, &node.context.sizing, cc, layout.size, false)?;
+  // Later filters in the list apply after earlier ones, so they wrap outside.
+  let filter_wrappers = filter_refs
+    .iter()
+    .skip(1)
+    .rev()
+    .map(|reference| doc.begin_group(IDENTITY, 1.0, None, Some(reference)))
+    .collect::<io::Result<Vec<_>>>()?;
+  let outer = (!group_transform.is_identity() || opacity < 1.0 || !filter_refs.is_empty())
+    .then(|| {
+      doc.begin_group(
+        group_transform,
+        opacity,
+        None,
+        filter_refs.first().map(String::as_str),
+      )
+    })
     .transpose()?;
 
   let clip_group = emit_clip_path_group(node, layout.size, x, y, doc)?;
@@ -235,6 +246,7 @@ pub(crate) fn emit_box_chrome(
     blend,
     isolate,
     mask,
+    filter_wrappers,
     outer,
     clip_group,
     child_group,

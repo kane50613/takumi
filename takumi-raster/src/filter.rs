@@ -343,10 +343,10 @@ pub(crate) fn apply_filters_to_pixmap<'f, F: Iterator<Item = &'f Filter>>(
         }
 
         // Apply complex filter
-        match *f {
+        match f {
           Filter::HueRotate(angle) => {
             let raw: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-            apply_hue_rotate_rgba_bytes(raw, *angle as i32);
+            apply_hue_rotate_rgba_bytes(raw, **angle as i32);
           }
           Filter::Blur(blur) => {
             let width = pixmap.width();
@@ -366,9 +366,11 @@ pub(crate) fn apply_filters_to_pixmap<'f, F: Iterator<Item = &'f Filter>>(
               width: pixmap.width() as f32,
               height: pixmap.height() as f32,
             };
-            let shadow = SizedShadow::from_text_shadow(drop_shadow, sizing, current_color, size);
+            let shadow = SizedShadow::from_text_shadow(*drop_shadow, sizing, current_color, size);
             apply_drop_shadow_filter(pixmap, &shadow, buffer_pool)?;
           }
+          #[cfg(feature = "svg")]
+          Filter::Reference(reference) => crate::apply_filter_reference(pixmap, reference)?,
           _ => {}
         }
       }

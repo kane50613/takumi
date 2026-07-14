@@ -22,6 +22,9 @@ mod debug_drawing;
 mod dithering;
 /// Filter rasterization (blur, drop-shadow, backdrop, pixel filters)
 mod filter;
+/// Interpreter for `filter: url(...)` SVG filter graphs
+#[cfg(feature = "svg")]
+mod filter_reference;
 /// Image drawing functions
 mod image_drawing;
 pub(crate) mod inline_drawing;
@@ -43,6 +46,8 @@ pub(crate) use components::*;
 pub(crate) use debug_drawing::*;
 pub use dithering::*;
 pub(crate) use filter::*;
+#[cfg(feature = "svg")]
+pub(crate) use filter_reference::apply_filter_reference;
 pub(crate) use image_drawing::*;
 pub(crate) use node_paint::*;
 pub(crate) use path::*;

@@ -20,6 +20,8 @@ mod color;
 pub(crate) mod conic_gradient;
 mod content;
 pub(crate) mod filter;
+#[cfg(feature = "svg")]
+pub(crate) mod filter_reference;
 mod flex;
 mod flex_grow;
 mod font_family;
@@ -84,6 +86,8 @@ pub use filter::{
   BlurType, Filter, FilterCategory, Filters, LUMA_WEIGHTS, SEPIA_WEIGHTS, TransferChannel,
   TransferTable,
 };
+#[cfg(feature = "svg")]
+pub use filter_reference::{FilterReference, FilterReferenceError};
 pub use flex::*;
 pub use flex_grow::*;
 pub use font_family::*;

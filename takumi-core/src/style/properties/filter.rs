@@ -2,6 +2,8 @@ use std::fmt;
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
+#[cfg(feature = "svg")]
+use crate::style::properties::filter_reference::FilterReference;
 use crate::style::{
   Angle, Animatable, Color, CssDescriptorKind, CssExpectedMessage, CssToken, FromCss, Length,
   ListInterpolationStrategy, MakeComputed, ParseResult, PercentageNumber, SizingContext,
@@ -36,7 +38,7 @@ pub(crate) fn build_transfer_table<F: Fn(usize) -> f32>(f: F) -> TransferTable {
 }
 
 /// Represents a single CSS filter operation
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum Filter {
   /// Brightness multiplier (1 = unchanged). Accepts number or percentage
@@ -59,6 +61,9 @@ pub enum Filter {
   Blur(Length),
   /// Drop shadow effect with offset, blur, and color (reuses TextShadow parsing)
   DropShadow(TextShadow),
+  /// An SVG filter referenced with `url(data:image/svg+xml,...)`
+  #[cfg(feature = "svg")]
+  Reference(std::sync::Arc<FilterReference>),
 }
 
 /// Rec. 709 luma weights for the red, green, and blue channels. The CSS
@@ -129,7 +134,7 @@ impl Animatable for Filter {
   }
 
   fn neutral_value_like(other: &Self) -> Option<Self> {
-    Some(match *other {
+    Some(match other {
       Filter::Brightness(_) => Filter::Brightness(PercentageNumber(1.0)),
       Filter::Contrast(_) => Filter::Contrast(PercentageNumber(1.0)),
       Filter::Grayscale(_) => Filter::Grayscale(PercentageNumber(0.0)),
@@ -145,6 +150,8 @@ impl Animatable for Filter {
         blur_radius: Length::zero(),
         color: Color::transparent().into(),
       }),
+      #[cfg(feature = "svg")]
+      Filter::Reference(_) => return None,
     })
   }
 
@@ -156,8 +163,8 @@ impl Animatable for Filter {
     sizing: &SizingContext,
     current_color: Color,
   ) {
-    *self = match (*from, *to) {
-      (Filter::Brightness(from), Filter::Brightness(to)) => interpolate_field!(
+    *self = match (from, to) {
+      (&Filter::Brightness(from), &Filter::Brightness(to)) => interpolate_field!(
         Filter::Brightness,
         from,
         to,
@@ -165,31 +172,31 @@ impl Animatable for Filter {
         sizing,
         current_color
       ),
-      (Filter::Contrast(from), Filter::Contrast(to)) => {
+      (&Filter::Contrast(from), &Filter::Contrast(to)) => {
         interpolate_field!(Filter::Contrast, from, to, progress, sizing, current_color)
       }
-      (Filter::Grayscale(from), Filter::Grayscale(to)) => {
+      (&Filter::Grayscale(from), &Filter::Grayscale(to)) => {
         interpolate_field!(Filter::Grayscale, from, to, progress, sizing, current_color)
       }
-      (Filter::Saturate(from), Filter::Saturate(to)) => {
+      (&Filter::Saturate(from), &Filter::Saturate(to)) => {
         interpolate_field!(Filter::Saturate, from, to, progress, sizing, current_color)
       }
-      (Filter::HueRotate(from), Filter::HueRotate(to)) => {
+      (&Filter::HueRotate(from), &Filter::HueRotate(to)) => {
         interpolate_field!(Filter::HueRotate, from, to, progress, sizing, current_color)
       }
-      (Filter::Invert(from), Filter::Invert(to)) => {
+      (&Filter::Invert(from), &Filter::Invert(to)) => {
         interpolate_field!(Filter::Invert, from, to, progress, sizing, current_color)
       }
-      (Filter::Sepia(from), Filter::Sepia(to)) => {
+      (&Filter::Sepia(from), &Filter::Sepia(to)) => {
         interpolate_field!(Filter::Sepia, from, to, progress, sizing, current_color)
       }
-      (Filter::Opacity(from), Filter::Opacity(to)) => {
+      (&Filter::Opacity(from), &Filter::Opacity(to)) => {
         interpolate_field!(Filter::Opacity, from, to, progress, sizing, current_color)
       }
-      (Filter::Blur(from), Filter::Blur(to)) => {
+      (&Filter::Blur(from), &Filter::Blur(to)) => {
         interpolate_field!(Filter::Blur, from, to, progress, sizing, current_color)
       }
-      (Filter::DropShadow(from), Filter::DropShadow(to)) => interpolate_field!(
+      (&Filter::DropShadow(from), &Filter::DropShadow(to)) => interpolate_field!(
         Filter::DropShadow,
         from,
         to,
@@ -199,9 +206,9 @@ impl Animatable for Filter {
       ),
       _ => {
         if progress >= 0.5 {
-          *to
+          to.clone()
         } else {
-          *from
+          from.clone()
         }
       }
     };
@@ -224,6 +231,8 @@ impl Filter {
       Filter::Blur(_) | Filter::DropShadow(_) | Filter::HueRotate(_) => {
         FilterCategory::Complex(self)
       }
+      #[cfg(feature = "svg")]
+      Filter::Reference(_) => FilterCategory::Complex(self),
       _ => FilterCategory::Pixel(self),
     }
   }
@@ -298,10 +307,28 @@ impl<'i> FromCss<'i> for Filters {
   const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::ValueOrNone;
 }
 
+#[cfg(feature = "svg")]
+fn parse_filter_reference<'i>(
+  url: &str,
+  location: cssparser::SourceLocation,
+) -> ParseResult<'i, Filter> {
+  FilterReference::from_url(url)
+    .map(|reference| Filter::Reference(std::sync::Arc::new(reference)))
+    .map_err(|error| cssparser::ParseError {
+      kind: cssparser::ParseErrorKind::Custom(std::borrow::Cow::Owned(error.to_string())),
+      location,
+    })
+}
+
 impl<'i> FromCss<'i> for Filter {
   fn from_css(parser: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let location = parser.current_source_location();
     let token = parser.next()?;
+
+    #[cfg(feature = "svg")]
+    if let Token::UnquotedUrl(url) = token {
+      return parse_filter_reference(url, location);
+    }
 
     let Token::Function(function) = token else {
       return Err(
@@ -310,6 +337,14 @@ impl<'i> FromCss<'i> for Filter {
           .into(),
       );
     };
+
+    #[cfg(feature = "svg")]
+    if function.eq_ignore_ascii_case("url") {
+      return parser.parse_nested_block(|input| {
+        let url = input.expect_string()?.clone();
+        parse_filter_reference(&url, location)
+      });
+    }
 
     match_ignore_ascii_case! {function,
       "brightness" => parser.parse_nested_block(|input| {
@@ -364,6 +399,8 @@ impl<'i> FromCss<'i> for Filter {
     CssToken::Descriptor(CssDescriptorKind::SepiaFn),
     CssToken::Descriptor(CssDescriptorKind::BlurFn),
     CssToken::Descriptor(CssDescriptorKind::DropShadowFn),
+    #[cfg(feature = "svg")]
+    CssToken::Descriptor(CssDescriptorKind::UrlFn),
   ];
 }
 
@@ -393,6 +430,17 @@ impl ToCss for Filter {
       Self::Opacity(v) => write_fn!("opacity", v),
       Self::Blur(v) => write_fn!("blur", v),
       Self::DropShadow(v) => write_fn!("drop-shadow", v),
+      #[cfg(feature = "svg")]
+      Self::Reference(reference) => {
+        dest.write_str("url(\"")?;
+        for c in reference.uri.chars() {
+          if matches!(c, '"' | '\\') {
+            dest.write_char('\\')?;
+          }
+          dest.write_char(c)?;
+        }
+        dest.write_str("\")")
+      }
     }
   }
 }

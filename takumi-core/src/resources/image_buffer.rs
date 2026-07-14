@@ -14,7 +14,7 @@ pub struct ImageBuffer {
 
 impl ImageBuffer {
   /// Wraps premultiplied RGBA bytes. Returns `None` if `data.len() != width * height * 4`.
-  pub(crate) fn from_premultiplied_rgba(data: Vec<u8>, width: u32, height: u32) -> Option<Self> {
+  pub fn from_premultiplied_rgba(data: Vec<u8>, width: u32, height: u32) -> Option<Self> {
     let expected = (width as usize)
       .checked_mul(height as usize)?
       .checked_mul(4)?;
