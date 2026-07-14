@@ -8,7 +8,6 @@ interface FamilyMetadata {
   family: string;
   fonts: Record<string, unknown>;
   axes?: { tag: string }[];
-  category?: string;
 }
 
 async function generateCatalog() {
@@ -84,11 +83,6 @@ async function generateCatalog() {
   const shapeFamilyLines = [...shapeFamilies.entries()].map(
     ([name, names]) => `  ${name}: ${names.map((f) => JSON.stringify(f)).join(" | ")};`,
   );
-  // Google's own category misses real mono faces (Cascadia Code, Noto Sans Mono, ...); a
-  // word-bounded name check recovers them with no false positives against the current catalog.
-  const monospaceLines = families
-    .filter(({ category, family }) => category === "Monospace" || /\b(mono|code)\b/i.test(family))
-    .map(({ family }) => `  ${JSON.stringify(family)},`);
 
   await writeFile(
     CATALOG_FILE,
@@ -103,11 +97,6 @@ ${shapeLines.join("\n")}
 export interface GoogleFontShapeFamilies {
 ${shapeFamilyLines.join("\n")}
 }
-
-// Families Google Fonts categorizes as Monospace; they claim the generic automatically.
-export const MONOSPACE_FAMILIES: ReadonlySet<string> = new Set([
-${monospaceLines.join("\n")}
-]);
 `,
   );
 }

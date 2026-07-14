@@ -1,8 +1,4 @@
-import {
-  MONOSPACE_FAMILIES,
-  type GoogleFontShapeFamilies,
-  type GoogleFontShapes,
-} from "./google-fonts-catalog";
+import type { GoogleFontShapeFamilies, GoogleFontShapes } from "./google-fonts-catalog";
 import type { Node } from "./types";
 import { defaultMaxFetchBytes, fetchOk, type FetchOptions, readBodyLimited } from "./utils";
 
@@ -442,16 +438,11 @@ export async function googleFonts(
       index,
     ]),
   );
-  // Explicit `generic` wins; families Google Fonts categorizes as monospace claim it themselves.
-  const generics = new Map<string, GenericFontFamily>();
-  for (const family of options.families) {
-    const name = typeof family === "string" ? family : family.name;
-    const explicit = typeof family === "string" ? undefined : family.generic;
-    const generic = explicit ?? (MONOSPACE_FAMILIES.has(name) ? "monospace" : undefined);
-    if (generic) {
-      generics.set(name, generic);
-    }
-  }
+  const generics = new Map(
+    options.families.flatMap((family) =>
+      typeof family === "string" || !family.generic ? [] : [[family.name, family.generic] as const],
+    ),
+  );
 
   return mergeVariableFaces(parseSubsetFaces(css))
     .sort((a, b) => (familyOrder.get(a.family) ?? 0) - (familyOrder.get(b.family) ?? 0))

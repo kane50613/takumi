@@ -5,4 +5,4 @@ packages:
 
 ### Support generic on googleFonts families
 
-A family's `generic` (e.g. `"monospace"`) propagates to every loaded coverage subset, so generic stacks like `font-mono` resolve to it. Families Google Fonts categorizes as Monospace claim it automatically.
+A family's `generic` (e.g. `"monospace"`) propagates to every loaded coverage subset, so generic stacks like `font-mono` resolve to it.
