@@ -9,14 +9,21 @@ use image::{
   DynamicImage, ImageDecoder, ImageError, ImageFormat, ImageResult, Limits, RgbaImage,
   codecs::{jpeg::JpegDecoder, png::PngDecoder},
   error::{DecodingError, ImageFormatHint, UnsupportedError, UnsupportedErrorKind},
-  imageops::{self, FilterType},
 };
 #[cfg(target_arch = "wasm32")]
 use image_webp::WebPDecoder;
 #[cfg(not(target_arch = "wasm32"))]
 use libwebp_sys::{WebPDecodeRGBA, WebPFree, WebPGetInfo};
+use png::{BitDepth, ColorType, Decoder as PngRowDecoder, Transformations};
 
-use crate::{geometry::Rect, resources::image_buffer::ImageBuffer, style::ImageScalingAlgorithm};
+use crate::{
+  geometry::Rect,
+  resources::{
+    image_buffer::{ImageBuffer, premultiply_rgba_in_place},
+    image_resampler::StreamResampler,
+  },
+  style::ImageScalingAlgorithm,
+};
 
 const PNG_SIGNATURE: [u8; 8] = [137, 80, 78, 71, 13, 10, 26, 10];
 const JPEG_SIGNATURE: [u8; 3] = [0xFF, 0xD8, 0xFF];
@@ -136,15 +143,6 @@ pub(crate) fn bitmap_dimensions(bytes: &[u8]) -> Option<ImageResult<(u32, u32)>>
   Some(dimensions)
 }
 
-/// The filter each [`ImageScalingAlgorithm`] documents.
-fn resize_filter(algorithm: ImageScalingAlgorithm) -> FilterType {
-  match algorithm {
-    ImageScalingAlgorithm::Smooth => FilterType::Lanczos3,
-    ImageScalingAlgorithm::Pixelated => FilterType::Nearest,
-    _ => FilterType::CatmullRom,
-  }
-}
-
 /// Downscales a decoded (premultiplied) buffer; linear filtering of
 /// premultiplied RGBA is alpha-correct.
 pub(crate) fn resize_buffer(
@@ -153,9 +151,108 @@ pub(crate) fn resize_buffer(
   height: u32,
   algorithm: ImageScalingAlgorithm,
 ) -> Option<ImageBuffer> {
-  let image = RgbaImage::from_raw(buffer.width(), buffer.height(), buffer.data().to_vec())?;
-  let resized = imageops::resize(&image, width, height, resize_filter(algorithm));
-  ImageBuffer::from_premultiplied_rgba(resized.into_raw(), width, height)
+  let mut resampler = StreamResampler::new(
+    (buffer.width(), buffer.height()),
+    (width, height),
+    algorithm,
+  );
+  for row in buffer.data().chunks_exact(buffer.width() as usize * 4) {
+    resampler.push_row(row);
+  }
+  resampler.finish()
+}
+
+/// Decodes bitmap bytes scaled to cover `width` x `height`, never upscaling.
+/// Non-interlaced PNGs stream row-by-row through the resampler without a
+/// full-size buffer; everything else decodes fully and resizes.
+pub(crate) fn decode_bitmap_scaled(
+  bytes: &[u8],
+  width: u32,
+  height: u32,
+  algorithm: ImageScalingAlgorithm,
+) -> ImageResult<ImageBuffer> {
+  if let Some(streamed) = decode_png_scaled(bytes, width, height, algorithm) {
+    return streamed;
+  }
+
+  let decoded = decode_image(bytes)?;
+  if width >= decoded.width() && height >= decoded.height() {
+    return Ok(decoded);
+  }
+
+  resize_buffer(&decoded, width, height, algorithm).ok_or_else(invalid_buffer_error)
+}
+
+fn png_decode_error(error: png::DecodingError) -> ImageError {
+  ImageError::Decoding(DecodingError::new(ImageFormat::Png.into(), error))
+}
+
+/// Streams a non-interlaced PNG through [`StreamResampler`]. `None` means the
+/// input isn't eligible (not a PNG, interlaced, unsupported layout, or no
+/// downscale) and the caller should decode fully; errors after eligibility are
+/// real decode failures.
+fn decode_png_scaled(
+  bytes: &[u8],
+  width: u32,
+  height: u32,
+  algorithm: ImageScalingAlgorithm,
+) -> Option<ImageResult<ImageBuffer>> {
+  if !bytes.starts_with(&PNG_SIGNATURE) {
+    return None;
+  }
+
+  let mut decoder = PngRowDecoder::new(Cursor::new(bytes));
+  decoder.set_transformations(
+    Transformations::EXPAND | Transformations::STRIP_16 | Transformations::ALPHA,
+  );
+  let mut reader = decoder.read_info().ok()?;
+
+  let info = reader.info();
+  let (native_width, native_height) = (info.width, info.height);
+  if info.interlaced
+    || native_width == 0
+    || native_height == 0
+    || native_width > MAX_IMAGE_DIMENSION
+    || native_height > MAX_IMAGE_DIMENSION
+    || (width >= native_width && height >= native_height)
+  {
+    return None;
+  }
+
+  let channels = match reader.output_color_type() {
+    (ColorType::Rgba, BitDepth::Eight) => 4,
+    (ColorType::GrayscaleAlpha, BitDepth::Eight) => 2,
+    _ => return None,
+  };
+
+  let mut resampler =
+    StreamResampler::new((native_width, native_height), (width, height), algorithm);
+  let mut rgba_row = vec![0_u8; native_width as usize * 4];
+
+  loop {
+    let row = match reader.next_row() {
+      Ok(Some(row)) => row,
+      Ok(None) => break,
+      Err(error) => return Some(Err(png_decode_error(error))),
+    };
+
+    match channels {
+      4 => rgba_row.copy_from_slice(row.data()),
+      _ => {
+        for (rgba, pixel) in rgba_row.chunks_exact_mut(4).zip(row.data().chunks_exact(2)) {
+          rgba[0] = pixel[0];
+          rgba[1] = pixel[0];
+          rgba[2] = pixel[0];
+          rgba[3] = pixel[1];
+        }
+      }
+    }
+
+    premultiply_rgba_in_place(&mut rgba_row);
+    resampler.push_row(&rgba_row);
+  }
+
+  Some(resampler.finish().ok_or_else(invalid_buffer_error))
 }
 
 fn gif_decode_error(error: gif::DecodingError) -> ImageError {
@@ -472,6 +569,54 @@ mod tests {
   fn decode_png_accepts_small_valid_image() {
     let bytes = include_bytes!("../../../assets/images/yeecord.png");
     decode_image(bytes).expect("small PNG decodes within budget");
+  }
+
+  fn assert_streamed_matches_full(bytes: &[u8], width: u32, height: u32) {
+    for algorithm in [
+      ImageScalingAlgorithm::Auto,
+      ImageScalingAlgorithm::Smooth,
+      ImageScalingAlgorithm::Pixelated,
+    ] {
+      let streamed = decode_bitmap_scaled(bytes, width, height, algorithm).unwrap();
+      let full = decode_image(bytes).unwrap();
+      let resized = resize_buffer(&full, width, height, algorithm).unwrap();
+      assert_eq!(streamed.data(), resized.data(), "{algorithm:?}");
+    }
+  }
+
+  #[test]
+  fn png_streaming_matches_full_decode_for_rgba() {
+    let mut image = RgbaImage::new(40, 30);
+    for (x, y, pixel) in image.enumerate_pixels_mut() {
+      *pixel = image::Rgba([(x * 6) as u8, (y * 8) as u8, ((x + y) * 3) as u8, 200]);
+    }
+    let mut bytes = Vec::new();
+    image
+      .write_to(&mut Cursor::new(&mut bytes), ImageFormat::Png)
+      .unwrap();
+
+    assert_streamed_matches_full(&bytes, 13, 9);
+  }
+
+  #[test]
+  fn png_streaming_matches_full_decode_for_grayscale_alpha() {
+    let mut image = image::GrayAlphaImage::new(32, 24);
+    for (x, y, pixel) in image.enumerate_pixels_mut() {
+      *pixel = image::LumaA([(x * 8) as u8, (255 - y * 4) as u8]);
+    }
+    let mut bytes = Vec::new();
+    image
+      .write_to(&mut Cursor::new(&mut bytes), ImageFormat::Png)
+      .unwrap();
+
+    assert_streamed_matches_full(&bytes, 11, 7);
+  }
+
+  #[test]
+  fn real_png_streaming_matches_full_decode() {
+    let bytes = include_bytes!("../../../assets/images/yeecord.png");
+    let full = decode_image(bytes).unwrap();
+    assert_streamed_matches_full(bytes, full.width() / 3, full.height() / 3);
   }
 
   fn rgba_patch(width: u16, height: u16, rgba: [u8; 4]) -> Vec<u8> {

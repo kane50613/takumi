@@ -25,8 +25,8 @@ use crate::{
   resources::{
     image_buffer::ImageBuffer,
     image_decoder::{
-      DecodedGifFrame, bitmap_dimensions, decode_gif_frames, decode_image, gif_dimensions, is_gif,
-      resize_buffer,
+      DecodedGifFrame, bitmap_dimensions, decode_bitmap_scaled, decode_gif_frames, decode_image,
+      gif_dimensions, is_gif,
     },
   },
   style::{ImageScalingAlgorithm, IntrinsicSizing, SizingContext},
@@ -286,14 +286,9 @@ impl EncodedBitmap {
     height: u32,
     algorithm: ImageScalingAlgorithm,
   ) -> Result<Arc<ImageBuffer>, ImageError> {
-    let decoded = decode_image(&self.bytes).map_err(ImageError::decode)?;
-    if width >= decoded.width() && height >= decoded.height() {
-      return Ok(Arc::new(decoded));
-    }
-
-    let resized =
-      resize_buffer(&decoded, width, height, algorithm).ok_or(ImageError::MismatchedBufferSize)?;
-    Ok(Arc::new(resized))
+    decode_bitmap_scaled(&self.bytes, width, height, algorithm)
+      .map(Arc::new)
+      .map_err(ImageError::decode)
   }
 }
 
