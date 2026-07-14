@@ -20,7 +20,7 @@ use crate::{
   geometry::Rect,
   resources::{
     image_buffer::{ImageBuffer, premultiply_rgba_in_place},
-    image_resampler::StreamResampler,
+    image_resampler::{StreamResampler, resample_premultiplied},
   },
   style::ImageScalingAlgorithm,
 };
@@ -151,15 +151,12 @@ pub(crate) fn resize_buffer(
   height: u32,
   algorithm: ImageScalingAlgorithm,
 ) -> Option<ImageBuffer> {
-  let mut resampler = StreamResampler::new(
+  resample_premultiplied(
+    buffer.data(),
     (buffer.width(), buffer.height()),
     (width, height),
     algorithm,
-  );
-  for row in buffer.data().chunks_exact(buffer.width() as usize * 4) {
-    resampler.push_row(row);
-  }
-  resampler.finish()
+  )
 }
 
 /// Decodes bitmap bytes scaled to cover `width` x `height`, never upscaling.
@@ -320,6 +317,9 @@ fn clear_rect(canvas: &mut [u8], canvas_size: (u32, u32), rect: Rect<u32>) {
 /// truncates the timeline (reported as ended); only a stream with no decodable
 /// first frame errors.
 ///
+/// With `target` set (and smaller than the canvas), pushed frames are resampled
+/// to that size; compositing always happens at canvas size.
+///
 /// Compositing matches the `image` crate (and browsers): frames blend over a
 /// transparent canvas, `Keep` persists the composited result, `Background`
 /// clears the frame rect, `Previous` restores the pre-frame canvas.
@@ -327,10 +327,12 @@ pub(crate) fn decode_gif_frames(
   bytes: &[u8],
   skip: usize,
   limit: Option<usize>,
+  target: Option<(u32, u32, ImageScalingAlgorithm)>,
   mut push: impl FnMut(DecodedGifFrame),
 ) -> ImageResult<bool> {
   let mut decoder = gif_decoder(bytes)?;
   let (width, height) = (decoder.width() as u32, decoder.height() as u32);
+  let target = target.filter(|&(w, h, _)| w < width || h < height);
 
   // GIF alpha is 0 or 255, so the canvas is valid premultiplied RGBA as-is:
   // blits copy opaque pixels (premultiply is identity) and cleared pixels are
@@ -378,35 +380,56 @@ pub(crate) fn decode_gif_frames(
     }
 
     // The emitted frame is the canvas after compositing, before disposal.
+    // With a target, the composited canvas resamples down instead of cloning.
     let keep = current >= skip;
     let last_needed = keep && limit.is_some_and(|limit| pushed + 1 >= limit);
-    let composited = if last_needed {
-      // The canvas is never read again: emit it without cloning.
-      blit_frame(&mut canvas, (width, height), rect, &scratch);
-      Some(take(&mut canvas))
-    } else {
-      match dispose {
-        DisposalMethod::Any | DisposalMethod::Keep => {
-          blit_frame(&mut canvas, (width, height), rect, &scratch);
-          keep.then(|| canvas.clone())
+    let buffer = match dispose {
+      DisposalMethod::Any | DisposalMethod::Keep => {
+        blit_frame(&mut canvas, (width, height), rect, &scratch);
+        if !keep {
+          None
+        } else if let Some((w, h, algorithm)) = target {
+          Some(resample_premultiplied(
+            &canvas,
+            (width, height),
+            (w, h),
+            algorithm,
+          ))
+        } else if last_needed {
+          // The canvas is never read again: emit it without cloning.
+          Some(ImageBuffer::from_premultiplied_rgba(
+            take(&mut canvas),
+            width,
+            height,
+          ))
+        } else {
+          Some(ImageBuffer::from_premultiplied_rgba(
+            canvas.clone(),
+            width,
+            height,
+          ))
         }
-        DisposalMethod::Background | DisposalMethod::Previous => {
-          let composited = keep.then(|| {
-            let mut out = canvas.clone();
-            blit_frame(&mut out, (width, height), rect, &scratch);
-            out
-          });
-          if matches!(dispose, DisposalMethod::Background) {
-            clear_rect(&mut canvas, (width, height), rect);
+      }
+      DisposalMethod::Background | DisposalMethod::Previous => {
+        let buffer = keep.then(|| {
+          let mut out = canvas.clone();
+          blit_frame(&mut out, (width, height), rect, &scratch);
+          match target {
+            Some((w, h, algorithm)) => {
+              resample_premultiplied(&out, (width, height), (w, h), algorithm)
+            }
+            None => ImageBuffer::from_premultiplied_rgba(out, width, height),
           }
-          composited
+        });
+        if matches!(dispose, DisposalMethod::Background) {
+          clear_rect(&mut canvas, (width, height), rect);
         }
+        buffer
       }
     };
 
-    if let Some(composited) = composited {
-      let buffer = ImageBuffer::from_premultiplied_rgba(composited, width, height)
-        .ok_or_else(invalid_buffer_error)?;
+    if let Some(buffer) = buffer {
+      let buffer = buffer.ok_or_else(invalid_buffer_error)?;
       push(DecodedGifFrame {
         buffer: Arc::new(buffer),
         duration_ms,
@@ -670,7 +693,7 @@ mod tests {
 
   fn our_frames(bytes: &[u8], skip: usize) -> Vec<(Vec<u8>, u32)> {
     let mut frames = Vec::new();
-    let ended = decode_gif_frames(bytes, skip, None, |frame| {
+    let ended = decode_gif_frames(bytes, skip, None, None, |frame| {
       frames.push((frame.buffer.data().to_vec(), frame.duration_ms));
     })
     .unwrap();
@@ -894,7 +917,7 @@ mod tests {
     );
 
     let mut frames = Vec::new();
-    let ended = decode_gif_frames(&bytes, 0, Some(1), |frame| frames.push(frame)).unwrap();
+    let ended = decode_gif_frames(&bytes, 0, Some(1), None, |frame| frames.push(frame)).unwrap();
     assert!(!ended);
     assert_eq!(frames.len(), 1);
   }

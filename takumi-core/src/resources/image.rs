@@ -110,6 +110,8 @@ struct RestFrames {
   frames: Box<[DecodedGifFrame]>,
   /// Duration of the whole animation, first frame included.
   total_duration_ms: u64,
+  /// Size the frames were decoded at; `None` means canvas size.
+  target: Option<(u32, u32)>,
 }
 
 impl GifSource {
@@ -117,7 +119,7 @@ impl GifSource {
     let (width, height) = gif_dimensions(bytes).map_err(ImageError::decode)?;
 
     let mut first = None;
-    decode_gif_frames(bytes, 0, Some(1), |frame| first = Some(frame))
+    decode_gif_frames(bytes, 0, Some(1), None, |frame| first = Some(frame))
       .map_err(ImageError::decode)?;
     let Some(first) = first else {
       return Err(ImageError::InvalidGif);
@@ -139,47 +141,109 @@ impl GifSource {
     (self.inner.width, self.inner.height)
   }
 
-  fn rest(&self) -> &RestFrames {
+  /// The first caller decides the memoized frame size; renders of the same GIF
+  /// use one draw box in practice.
+  fn rest(&self, target: Option<(u32, u32, ImageScalingAlgorithm)>) -> &RestFrames {
     self.inner.rest.get_or_init(|| {
       let mut frames = Vec::new();
       let mut total_duration_ms = self.inner.first.duration_ms as u64;
-      let _ = decode_gif_frames(&self.inner.bytes, 1, None, |frame| {
+      let _ = decode_gif_frames(&self.inner.bytes, 1, None, target, |frame| {
         total_duration_ms += frame.duration_ms as u64;
         frames.push(frame);
       });
       RestFrames {
+        target: frames
+          .first()
+          .map(|frame: &DecodedGifFrame| (frame.buffer.width(), frame.buffer.height()))
+          .filter(|&size| size != (self.inner.width, self.inner.height)),
         frames: frames.into(),
         total_duration_ms,
       }
     })
   }
 
+  /// Index into `rest.frames` for the given playback time, or `None` when the
+  /// time falls on the first frame.
+  fn rest_index_at(&self, rest: &RestFrames, time_ms: u64) -> Option<usize> {
+    if rest.total_duration_ms == 0 {
+      return None;
+    }
+
+    let mut elapsed_ms = self.inner.first.duration_ms as u64;
+    let target_time = time_ms % rest.total_duration_ms;
+    if target_time < elapsed_ms {
+      return None;
+    }
+
+    for (index, frame) in rest.frames.iter().enumerate() {
+      elapsed_ms += frame.duration_ms as u64;
+      if target_time < elapsed_ms {
+        return Some(index);
+      }
+    }
+
+    None
+  }
+
   /// Shared frame shown at the given playback time, looping over total duration.
   pub fn frame_at_time(&self, time_ms: u64) -> Arc<ImageBuffer> {
+    self.frame_at_time_covering(
+      time_ms,
+      self.inner.width,
+      self.inner.height,
+      Default::default(),
+    )
+  }
+
+  /// [`frame_at_time`](Self::frame_at_time), but frames past the first are
+  /// decoded scaled to cover a `width` x `height` draw box (never upscaled), so
+  /// the memoized timeline holds draw-sized frames instead of canvas-sized
+  /// ones. A request larger than the memoized size decodes that frame fresh.
+  pub fn frame_at_time_covering(
+    &self,
+    time_ms: u64,
+    width: u32,
+    height: u32,
+    algorithm: ImageScalingAlgorithm,
+  ) -> Arc<ImageBuffer> {
     let first = &self.inner.first;
     if time_ms < first.duration_ms as u64 {
       return first.buffer.clone();
     }
 
-    let rest = self.rest();
-    if rest.total_duration_ms == 0 {
+    let requested = cover_target((self.inner.width, self.inner.height), (width, height));
+    let rest = self.rest(
+      Some((requested.0, requested.1, algorithm))
+        .filter(|&(w, h, _)| (w, h) != (self.inner.width, self.inner.height)),
+    );
+    let Some(index) = self.rest_index_at(rest, time_ms) else {
       return first.buffer.clone();
-    }
+    };
 
-    let mut elapsed_ms = first.duration_ms as u64;
-    let target_time = time_ms % rest.total_duration_ms;
-    if target_time < elapsed_ms {
-      return first.buffer.clone();
-    }
-
-    for frame in &rest.frames {
-      elapsed_ms += frame.duration_ms as u64;
-      if target_time < elapsed_ms {
-        return frame.buffer.clone();
+    let memoized = rest.target.unwrap_or((self.inner.width, self.inner.height));
+    if requested.0 > memoized.0 || requested.1 > memoized.1 {
+      if let Some(frame) = self.decode_single(index + 1, requested, algorithm) {
+        return frame;
       }
     }
 
-    first.buffer.clone()
+    rest.frames[index].buffer.clone()
+  }
+
+  /// Decodes one frame fresh at the requested size, bypassing the memo.
+  fn decode_single(
+    &self,
+    frame_index: usize,
+    (width, height): (u32, u32),
+    algorithm: ImageScalingAlgorithm,
+  ) -> Option<Arc<ImageBuffer>> {
+    let mut frame = None;
+    let target = Some((width, height, algorithm)).filter(|&(w, h, _)| (w, h) != self.dimensions());
+    decode_gif_frames(&self.inner.bytes, frame_index, Some(1), target, |decoded| {
+      frame = Some(decoded.buffer)
+    })
+    .ok()?;
+    frame
   }
 
   fn decoded_bytes(&self) -> usize {
@@ -240,11 +304,7 @@ impl EncodedBitmap {
     height: u32,
     algorithm: ImageScalingAlgorithm,
   ) -> Result<(Arc<ImageBuffer>, (f32, f32)), ImageError> {
-    let scale = (width as f32 / self.width as f32)
-      .max(height as f32 / self.height as f32)
-      .min(1.0);
-    let target_width = ((self.width as f32 * scale).round() as u32).clamp(1, self.width);
-    let target_height = ((self.height as f32 * scale).round() as u32).clamp(1, self.height);
+    let (target_width, target_height) = cover_target((self.width, self.height), (width, height));
 
     let buffer = self.decode_scaled(target_width, target_height, algorithm)?;
     let scale = (
@@ -483,13 +543,20 @@ impl ImageSource {
         algorithm: image_rendering,
         source_scale: (1.0, 1.0),
       }),
-      ImageSource::Gif(gif) => Ok(RenderedImage::Sampled {
-        source: gif.frame_at_time(time_ms),
-        width,
-        height,
-        algorithm: image_rendering,
-        source_scale: (1.0, 1.0),
-      }),
+      ImageSource::Gif(gif) => {
+        let source = gif.frame_at_time_covering(time_ms, width, height, image_rendering);
+        let (native_width, native_height) = gif.dimensions();
+        Ok(RenderedImage::Sampled {
+          source_scale: (
+            source.width() as f32 / native_width as f32,
+            source.height() as f32 / native_height as f32,
+          ),
+          source,
+          width,
+          height,
+          algorithm: image_rendering,
+        })
+      }
       ImageSource::Encoded(encoded) => {
         let (source, source_scale) = encoded.decode_at(width, height, image_rendering)?;
         Ok(RenderedImage::Sampled {
@@ -568,6 +635,17 @@ impl ImageSource {
       }
     }
   }
+}
+
+/// Cover-fit target for a draw box: uniform scale, never upscaled.
+fn cover_target((native_w, native_h): (u32, u32), (box_w, box_h): (u32, u32)) -> (u32, u32) {
+  let scale = (box_w as f32 / native_w as f32)
+    .max(box_h as f32 / native_h as f32)
+    .min(1.0);
+  (
+    ((native_w as f32 * scale).round() as u32).clamp(1, native_w),
+    ((native_h as f32 * scale).round() as u32).clamp(1, native_h),
+  )
 }
 
 /// Check if the string looks like an SVG image.
@@ -1198,6 +1276,45 @@ mod tests {
 
     drop(cloned.frame_at_time(25));
     assert_eq!(gif.decoded_frame_count(), 3);
+  }
+
+  #[test]
+  fn gif_frames_memoize_at_draw_size() {
+    let gif = gif_source(&[(0, 10), (1, 10), (2, 10)]);
+
+    let scaled = gif.frame_at_time_covering(15, 2, 2, ImageScalingAlgorithm::Auto);
+    assert_eq!((scaled.width(), scaled.height()), (2, 2));
+
+    let again = gif.frame_at_time_covering(15, 2, 2, ImageScalingAlgorithm::Auto);
+    assert!(Arc::ptr_eq(&scaled, &again));
+
+    let smaller = gif.frame_at_time_covering(15, 1, 1, ImageScalingAlgorithm::Auto);
+    assert!(Arc::ptr_eq(&scaled, &smaller));
+
+    let larger = gif.frame_at_time_covering(15, 4, 4, ImageScalingAlgorithm::Auto);
+    assert_eq!((larger.width(), larger.height()), (4, 4));
+    assert!(!Arc::ptr_eq(&scaled, &larger));
+  }
+
+  #[test]
+  fn gif_first_frame_stays_native() {
+    let gif = gif_source(&[(0, 10), (1, 10)]);
+
+    let first = gif.frame_at_time_covering(0, 2, 2, ImageScalingAlgorithm::Auto);
+    assert_eq!((first.width(), first.height()), (4, 4));
+    assert_eq!(gif.decoded_frame_count(), 1);
+  }
+
+  #[test]
+  fn gif_scaled_frame_matches_resized_native() {
+    use crate::resources::image_decoder::resize_buffer;
+
+    let native = gif_source(&[(0, 10), (1, 10)]).frame_at_time(15);
+    let scaled =
+      gif_source(&[(0, 10), (1, 10)]).frame_at_time_covering(15, 2, 2, ImageScalingAlgorithm::Auto);
+
+    let expected = resize_buffer(&native, 2, 2, ImageScalingAlgorithm::Auto).unwrap();
+    assert_eq!(scaled.data(), expected.data());
   }
 
   #[test]
