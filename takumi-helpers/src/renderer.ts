@@ -1,4 +1,4 @@
-import { fontFromUrl, subsetFonts } from "./fonts";
+import { fontFromUrl, type GenericFontFamily, subsetFonts } from "./fonts";
 import type { Node } from "./types";
 
 /**
@@ -31,20 +31,7 @@ export type FontDetails = {
    * CSS generic family keyword this font resolves for, so stacks ending in e.g.
    * `monospace` reach it without naming the family.
    */
-  generic?:
-    | "serif"
-    | "sans-serif"
-    | "monospace"
-    | "cursive"
-    | "fantasy"
-    | "system-ui"
-    | "ui-serif"
-    | "ui-sans-serif"
-    | "ui-monospace"
-    | "ui-rounded"
-    | "emoji"
-    | "math"
-    | "fangsong";
+  generic?: GenericFontFamily;
 };
 
 /** A registered font, either detailed or raw bytes. */
