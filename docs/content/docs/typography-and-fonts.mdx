@@ -17,11 +17,11 @@ One **last-resort** font ships built in: Geist, Latin glyphs, weights 400 to 800
 
 Pass the fonts a render needs through `fonts`. An entry takes one of three forms:
 
-| Entry      | Resolves to                                                                      |
-| ---------- | -------------------------------------------------------------------------------- |
-| URL string | Fetched on demand, keyed by the URL. Name, weight, and style come from the file. |
-| Raw bytes  | A `Uint8Array`, `ArrayBuffer`, or `Buffer`, registered directly.                 |
-| Descriptor | `{ name, data, weight, style }`. The fields override what the file reports.      |
+| Entry      | Resolves to                                                                          |
+| ---------- | ------------------------------------------------------------------------------------ |
+| URL string | Fetched on demand, keyed by the URL. Name, weight, and style come from the file.     |
+| Raw bytes  | A `Uint8Array`, `ArrayBuffer`, or `Buffer`, registered directly.                     |
+| Descriptor | `{ name, data, weight, style, generic }`. The fields override what the file reports. |
 
 A reused renderer decodes each file once. `fonts` also takes a promise of the list, so async helpers like `googleFonts` pass straight through without `await`.
 
@@ -54,6 +54,23 @@ export function GET() {
 ```
 
 The takumi-js functions `render`, `renderAnimation`, and `renderSvg` take the same `fonts` option.
+
+`generic` claims a CSS generic family keyword for the font, so stacks ending in `monospace`, `serif`, and friends reach it without naming the family — the way Tailwind's `font-mono` resolves:
+
+```tsx twoslash
+import { ImageResponse } from "takumi-js/response";
+
+export function GET() {
+  return new ImageResponse(<div tw="font-mono">let x = 1;</div>, {
+    fonts: [
+      {
+        generic: "monospace",
+        data: () => fetch("https://example.com/GeistMono.woff2").then((res) => res.arrayBuffer()),
+      },
+    ],
+  });
+}
+```
 
 ### From Google Fonts
 

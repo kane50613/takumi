@@ -4,6 +4,7 @@ use std::{
   collections::{BTreeSet, HashMap, hash_map::Entry},
   iter::once,
   rc::Rc,
+  str::FromStr,
   sync::Arc,
 };
 
@@ -552,6 +553,9 @@ pub enum FontError {
   /// Font index is invalid
   #[error("Font index is invalid")]
   InvalidFontIndex,
+  /// The string is not a CSS generic font family keyword
+  #[error("Unknown generic font family keyword")]
+  UnknownGenericFamily,
 }
 
 /// Supported font formats for loading and processing
@@ -1098,6 +1102,17 @@ impl GenericFamily {
 
   pub(crate) fn into_parlance(self) -> ParleyGenericFamily {
     self.0
+  }
+}
+
+impl FromStr for GenericFamily {
+  type Err = FontError;
+
+  /// Parses a CSS generic family keyword (e.g. `monospace`, `sans-serif`).
+  fn from_str(keyword: &str) -> Result<Self, Self::Err> {
+    ParleyGenericFamily::parse(keyword)
+      .map(Self)
+      .ok_or(FontError::UnknownGenericFamily)
   }
 }
 

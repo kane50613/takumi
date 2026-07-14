@@ -158,6 +158,8 @@ pub struct FontDetails {
   pub style: Option<FontStyle>,
   /// Logical family this font is a coverage subset of; expands at render time.
   pub subset_of: Option<String>,
+  /// CSS generic family keyword (e.g. `monospace`) this font resolves for.
+  pub generic: Option<String>,
 }
 
 /// Font input, either as detailed object or raw buffer.

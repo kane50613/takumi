@@ -2,7 +2,10 @@ export const width = 1200;
 export const height = 675;
 
 export const name = "v1";
-export const fonts = [];
+export const fonts = [
+  "geist/Geist[wght].woff2",
+  { path: "geist/GeistMono[wght].woff2", generic: "monospace" as const },
+];
 
 const Logo = () => (
   <svg width="52" height="52" viewBox="0 0 128 128" tw="mr-8">
