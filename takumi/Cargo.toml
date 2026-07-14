@@ -58,6 +58,9 @@ serde_json.workspace = true
 workspace = true
 features = ["png", "webp"]
 
+[dev-dependencies.takumi-core]
+path = "../takumi-core"
+
 [dev-dependencies.takumi-svg]
 path = "../takumi-svg"
 

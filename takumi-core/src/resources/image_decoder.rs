@@ -9,13 +9,14 @@ use image::{
   DynamicImage, ImageDecoder, ImageError, ImageFormat, ImageResult, Limits, RgbaImage,
   codecs::{jpeg::JpegDecoder, png::PngDecoder},
   error::{DecodingError, ImageFormatHint, UnsupportedError, UnsupportedErrorKind},
+  imageops::{self, FilterType},
 };
 #[cfg(target_arch = "wasm32")]
 use image_webp::WebPDecoder;
 #[cfg(not(target_arch = "wasm32"))]
 use libwebp_sys::{WebPDecodeRGBA, WebPFree, WebPGetInfo};
 
-use crate::{geometry::Rect, resources::image_buffer::ImageBuffer};
+use crate::{geometry::Rect, resources::image_buffer::ImageBuffer, style::ImageScalingAlgorithm};
 
 const PNG_SIGNATURE: [u8; 8] = [137, 80, 78, 71, 13, 10, 26, 10];
 const JPEG_SIGNATURE: [u8; 3] = [0xFF, 0xD8, 0xFF];
@@ -121,6 +122,40 @@ pub(crate) fn decode_png(bytes: &[u8]) -> ImageResult<ImageBuffer> {
 
 fn decode_jpeg(bytes: &[u8]) -> ImageResult<ImageBuffer> {
   decode_with_image_crate(JpegDecoder::new(Cursor::new(bytes))?, ImageFormat::Jpeg)
+}
+
+/// Bitmap dimensions from the format header; decodes no pixels. `None` for
+/// unsupported or GIF bytes (GIFs carry their own lazy source).
+pub(crate) fn bitmap_dimensions(bytes: &[u8]) -> Option<ImageResult<(u32, u32)>> {
+  let dimensions = match detect_image_format(bytes)? {
+    DetectedImageFormat::Png => PngDecoder::new(Cursor::new(bytes)).map(|d| d.dimensions()),
+    DetectedImageFormat::Jpeg => JpegDecoder::new(Cursor::new(bytes)).map(|d| d.dimensions()),
+    DetectedImageFormat::WebP => return Some(webp_dimensions(bytes)),
+    DetectedImageFormat::Gif => return None,
+  };
+  Some(dimensions)
+}
+
+/// The filter each [`ImageScalingAlgorithm`] documents.
+fn resize_filter(algorithm: ImageScalingAlgorithm) -> FilterType {
+  match algorithm {
+    ImageScalingAlgorithm::Smooth => FilterType::Lanczos3,
+    ImageScalingAlgorithm::Pixelated => FilterType::Nearest,
+    _ => FilterType::CatmullRom,
+  }
+}
+
+/// Downscales a decoded (premultiplied) buffer; linear filtering of
+/// premultiplied RGBA is alpha-correct.
+pub(crate) fn resize_buffer(
+  buffer: &ImageBuffer,
+  width: u32,
+  height: u32,
+  algorithm: ImageScalingAlgorithm,
+) -> Option<ImageBuffer> {
+  let image = RgbaImage::from_raw(buffer.width(), buffer.height(), buffer.data().to_vec())?;
+  let resized = imageops::resize(&image, width, height, resize_filter(algorithm));
+  ImageBuffer::from_premultiplied_rgba(resized.into_raw(), width, height)
 }
 
 fn gif_decode_error(error: gif::DecodingError) -> ImageError {
@@ -287,6 +322,30 @@ pub(crate) fn decode_gif_frames(
   }
 
   Ok(true)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
+  let decoder = WebPDecoder::new(Cursor::new(bytes)).map_err(webp_decode_error)?;
+  Ok(decoder.dimensions())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
+  use crate::error::WebPError;
+
+  let mut width = 0;
+  let mut height = 0;
+  let header_ok = unsafe {
+    // SAFETY: `bytes.as_ptr()` is valid for `bytes.len()` bytes for the duration of the call.
+    WebPGetInfo(bytes.as_ptr(), bytes.len(), &mut width, &mut height)
+  };
+
+  if header_ok == 0 || width <= 0 || height <= 0 {
+    return Err(webp_decode_error(WebPError::InvalidEncodedData));
+  }
+
+  Ok((width as u32, height as u32))
 }
 
 #[cfg(target_arch = "wasm32")]

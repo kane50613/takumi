@@ -100,6 +100,7 @@ fn data_url(src: &ImageSourceInput, context: &RenderContext) -> Option<String> {
 fn loaded_data_url(source: &ImageSource) -> Option<String> {
   match source {
     ImageSource::Bitmap(buffer) => buffer.encode_png().map(|png| encode("image/png", &png)),
+    ImageSource::Encoded(encoded) => Some(encode(sniff_mime(encoded.bytes()), encoded.bytes())),
     ImageSource::Gif(gif) => gif
       .frame_at_time(0)
       .encode_png()

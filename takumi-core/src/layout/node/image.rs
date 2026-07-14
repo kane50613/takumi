@@ -1,3 +1,5 @@
+use std::sync::Weak;
+
 use data_url::DataUrl;
 use taffy::{CompactLength, MaybeResolve};
 
@@ -197,7 +199,7 @@ fn parse_data_uri_image(src: &str) -> ImageResult {
     .decode_to_vec()
     .map_err(|_| ImageError::InvalidDataUriFormat)?;
 
-  ImageSource::from_bytes(&data)
+  ImageSource::from_bytes_lazy(&data, 0, Weak::new())
 }
 
 /// Resolve an image source string (data URI, SVG, or registered URL) to its bytes.

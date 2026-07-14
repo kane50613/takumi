@@ -50,6 +50,10 @@ pub(crate) fn process_image_for_object_fit(
       let (width, height) = gif.dimensions();
       (width as f32, height as f32)
     }
+    ImageSource::Encoded(encoded) => {
+      let (width, height) = encoded.dimensions();
+      (width as f32, height as f32)
+    }
     #[cfg(feature = "svg")]
     ImageSource::Svg(svg) => svg.dimensions(),
     _ => (image_width, image_height),
@@ -305,6 +309,7 @@ pub(crate) fn draw_image(
       width,
       height,
       algorithm: algo,
+      source_scale,
     } => {
       if let Some(pixmap_ref) = pixmap_ref_from_buffer(source.as_ref()) {
         canvas.overlay_sampled_pixmap(
@@ -313,7 +318,8 @@ pub(crate) fn draw_image(
           border,
           transform_with_content_offset,
           SamplingOptions {
-            logical_to_source: image.logical_to_source,
+            logical_to_source: Affine::scale(source_scale.0, source_scale.1)
+              * image.logical_to_source,
             algorithm: algo,
           },
           BlendMode::Normal,

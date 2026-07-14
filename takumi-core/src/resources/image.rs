@@ -3,12 +3,18 @@
 //! This module provides types and utilities for managing image resources,
 //! including loading states, error handling, and image processing operations.
 
-use std::{
-  str::FromStr,
-  sync::{Arc, OnceLock},
-};
+#[cfg(feature = "svg")]
+use std::str::{FromStr, from_utf8};
+use std::sync::{Arc, OnceLock, Weak};
 
-use quick_cache::{Weighter, sync::Cache};
+use quick_cache::{
+  Weighter,
+  sync::{Cache, GuardResult},
+};
+#[cfg(feature = "svg")]
+use resvg::usvg::{Options, Transform, Tree};
+#[cfg(feature = "svg")]
+use roxmltree::{Document, ParsingOptions};
 use serde::Deserialize;
 use thiserror::Error;
 #[cfg(feature = "svg")]
@@ -18,7 +24,10 @@ use xxhash_rust::xxh3::xxh3_64;
 use crate::{
   resources::{
     image_buffer::ImageBuffer,
-    image_decoder::{DecodedGifFrame, decode_gif_frames, decode_image, gif_dimensions, is_gif},
+    image_decoder::{
+      DecodedGifFrame, bitmap_dimensions, decode_gif_frames, decode_image, gif_dimensions, is_gif,
+      resize_buffer,
+    },
   },
   style::{ImageScalingAlgorithm, IntrinsicSizing, SizingContext},
 };
@@ -37,6 +46,8 @@ pub enum ImageSource {
   Bitmap(Arc<ImageBuffer>),
   /// An animated gif source.
   Gif(GifSource),
+  /// An encoded bitmap decoded lazily at the size it is drawn at.
+  Encoded(Arc<EncodedBitmap>),
 }
 
 /// Represents the resolved SVG source.
@@ -195,6 +206,97 @@ impl From<SvgSource> for ImageSource {
   }
 }
 
+/// An encoded bitmap (PNG/JPEG/WebP) that decodes lazily at draw time, scaled
+/// down to the box it is drawn into. Decoded results are stored in the owning
+/// [`ImageCache`] keyed by content and target size, so a source drawn at a
+/// stable size decodes once while the retained bytes track the draw size, not
+/// the source size.
+#[derive(Debug)]
+pub struct EncodedBitmap {
+  bytes: Box<[u8]>,
+  width: u32,
+  height: u32,
+  hash: u64,
+  cache: Weak<SharedImageCache>,
+}
+
+impl EncodedBitmap {
+  /// The bitmap dimensions in pixels, from the format header.
+  pub fn dimensions(&self) -> (u32, u32) {
+    (self.width, self.height)
+  }
+
+  /// The original encoded bytes.
+  pub fn bytes(&self) -> &[u8] {
+    &self.bytes
+  }
+
+  /// Decoded buffer covering a `width` x `height` draw box, downscaled with
+  /// `algorithm`'s filter but never upscaled. Returns the buffer and its scale
+  /// relative to the source dimensions.
+  fn decode_at(
+    &self,
+    width: u32,
+    height: u32,
+    algorithm: ImageScalingAlgorithm,
+  ) -> Result<(Arc<ImageBuffer>, (f32, f32)), ImageError> {
+    let scale = (width as f32 / self.width as f32)
+      .max(height as f32 / self.height as f32)
+      .min(1.0);
+    let target_width = ((self.width as f32 * scale).round() as u32).clamp(1, self.width);
+    let target_height = ((self.height as f32 * scale).round() as u32).clamp(1, self.height);
+
+    let buffer = self.decode_scaled(target_width, target_height, algorithm)?;
+    let scale = (
+      target_width as f32 / self.width as f32,
+      target_height as f32 / self.height as f32,
+    );
+
+    Ok((buffer, scale))
+  }
+
+  fn decode_scaled(
+    &self,
+    width: u32,
+    height: u32,
+    algorithm: ImageScalingAlgorithm,
+  ) -> Result<Arc<ImageBuffer>, ImageError> {
+    let Some(cache) = self.cache.upgrade() else {
+      return self.decode_uncached(width, height, algorithm);
+    };
+
+    let key = ImageCacheKey::sized(self.hash, width, height, algorithm);
+
+    match cache.get_value_or_guard(&key, None) {
+      GuardResult::Value(CacheEntry::Sized(buffer)) => Ok(buffer),
+      GuardResult::Value(CacheEntry::Source(_)) => self.decode_uncached(width, height, algorithm),
+      GuardResult::Guard(guard) => {
+        let buffer = self.decode_uncached(width, height, algorithm)?;
+        let _ = guard.insert(CacheEntry::Sized(buffer.clone()));
+        Ok(buffer)
+      }
+      // `None` timeout never times out.
+      GuardResult::Timeout => self.decode_uncached(width, height, algorithm),
+    }
+  }
+
+  fn decode_uncached(
+    &self,
+    width: u32,
+    height: u32,
+    algorithm: ImageScalingAlgorithm,
+  ) -> Result<Arc<ImageBuffer>, ImageError> {
+    let decoded = decode_image(&self.bytes).map_err(ImageError::decode)?;
+    if width >= decoded.width() && height >= decoded.height() {
+      return Ok(Arc::new(decoded));
+    }
+
+    let resized =
+      resize_buffer(&decoded, width, height, algorithm).ok_or(ImageError::MismatchedBufferSize)?;
+    Ok(Arc::new(resized))
+  }
+}
+
 /// Image data prepared for layout rendering.
 #[derive(Debug, Clone)]
 pub enum RenderedImage {
@@ -210,6 +312,9 @@ pub enum RenderedImage {
     height: u32,
     /// The sampling algorithm to use.
     algorithm: ImageScalingAlgorithm,
+    /// The buffer size relative to the source's intrinsic dimensions;
+    /// `(1.0, 1.0)` unless the buffer was decoded pre-scaled.
+    source_scale: (f32, f32),
   },
 }
 
@@ -257,9 +362,6 @@ impl FromStr for SvgSource {
   type Err = ImageError;
 
   fn from_str(src: &str) -> Result<Self, Self::Err> {
-    use resvg::usvg::{Options, Tree};
-    use roxmltree::{Document, ParsingOptions};
-
     // One parse, shared with usvg via `from_xmltree` (what `from_str` does
     // internally). No text stripping: usvg drops `<text>`/`<tspan>` with its
     // `text` feature off.
@@ -287,6 +389,7 @@ impl ImageSource {
     match self {
       Self::Bitmap(buffer) => buffer.data().len(),
       Self::Gif(gif) => gif.decoded_bytes(),
+      Self::Encoded(encoded) => encoded.bytes.len(),
       #[cfg(feature = "svg")]
       Self::Svg(svg) => svg.source.len(),
     }
@@ -297,10 +400,12 @@ impl ImageSource {
   /// SVGs and GIFs are excluded: their lazily-populated state (rasterized
   /// pixmaps, memoized frames) grows after insertion and isn't counted by
   /// [`estimated_bytes`](Self::estimated_bytes), so caching them across renders
-  /// would let memory exceed the configured budget.
+  /// would let memory exceed the configured budget. Encoded bitmaps stay
+  /// cacheable: their decoded-at-size buffers live in the same budgeted cache
+  /// as their own weighted entries.
   pub(crate) fn is_cacheable(&self) -> bool {
     match self {
-      Self::Bitmap(_) => true,
+      Self::Bitmap(_) | Self::Encoded(_) => true,
       Self::Gif(_) => false,
       #[cfg(feature = "svg")]
       Self::Svg(_) => false,
@@ -315,8 +420,6 @@ impl ImageSource {
   pub fn from_bytes(bytes: &[u8]) -> ImageResult {
     #[cfg(feature = "svg")]
     {
-      use std::str::from_utf8;
-
       if let Ok(text) = from_utf8(bytes)
         && is_svg_like(text)
       {
@@ -330,6 +433,40 @@ impl ImageSource {
 
     let buffer = decode_image(bytes).map_err(ImageError::decode)?;
     Ok(ImageSource::Bitmap(Arc::new(buffer)))
+  }
+
+  /// [`from_bytes`](Self::from_bytes), but bitmaps stay encoded and decode at
+  /// draw size. Sized decodes go into `cache` while it is alive; a dead handle
+  /// (inline node bytes, data URIs) decodes per render.
+  pub(crate) fn from_bytes_lazy(
+    bytes: &[u8],
+    hash: u64,
+    cache: Weak<SharedImageCache>,
+  ) -> ImageResult {
+    #[cfg(feature = "svg")]
+    {
+      if let Ok(text) = from_utf8(bytes)
+        && is_svg_like(text)
+      {
+        return Ok(ImageSource::Svg(Arc::new(text.parse()?)));
+      }
+    }
+
+    if is_gif(bytes) {
+      return Ok(ImageSource::Gif(GifSource::from_bytes(bytes)?));
+    }
+
+    match bitmap_dimensions(bytes) {
+      Some(Ok((width, height))) => Ok(ImageSource::Encoded(Arc::new(EncodedBitmap {
+        bytes: bytes.into(),
+        width,
+        height,
+        hash,
+        cache,
+      }))),
+      Some(Err(error)) => Err(ImageError::decode(error)),
+      None => Self::from_bytes(bytes),
+    }
   }
 
   /// Prepare image data for layout rendering.
@@ -349,17 +486,27 @@ impl ImageSource {
         width,
         height,
         algorithm: image_rendering,
+        source_scale: (1.0, 1.0),
       }),
       ImageSource::Gif(gif) => Ok(RenderedImage::Sampled {
         source: gif.frame_at_time(time_ms),
         width,
         height,
         algorithm: image_rendering,
+        source_scale: (1.0, 1.0),
       }),
+      ImageSource::Encoded(encoded) => {
+        let (source, source_scale) = encoded.decode_at(width, height, image_rendering)?;
+        Ok(RenderedImage::Sampled {
+          source,
+          width,
+          height,
+          algorithm: image_rendering,
+          source_scale,
+        })
+      }
       #[cfg(feature = "svg")]
       ImageSource::Svg(svg) => {
-        use resvg::usvg::Transform;
-
         let cache_key = SvgRasterCacheKey::new(width, height, image_rendering);
         if let Some(pixmap) = svg.raster_cache.get(&cache_key) {
           return Ok(RenderedImage::Rasterized(pixmap));
@@ -394,6 +541,10 @@ impl ImageSource {
         let (width, height) = gif.dimensions();
         (width as f32, height as f32)
       }
+      ImageSource::Encoded(encoded) => {
+        let (width, height) = encoded.dimensions();
+        (width as f32, height as f32)
+      }
     };
 
     (sizing.to_device(width), sizing.to_device(height))
@@ -414,6 +565,10 @@ impl ImageSource {
       }
       ImageSource::Gif(gif) => {
         let (width, height) = gif.dimensions();
+        IntrinsicSizing::from_dimensions(width as f32, height as f32)
+      }
+      ImageSource::Encoded(encoded) => {
+        let (width, height) = encoded.dimensions();
         IntrinsicSizing::from_dimensions(width as f32, height as f32)
       }
     }
@@ -533,18 +688,64 @@ pub enum ImageCacheMode {
   None,
 }
 
-#[derive(Clone)]
-struct ImageWeighter;
+/// Cache key: the content hash alone addresses a source entry; a target size
+/// and filter address a decoded-at-size entry.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct ImageCacheKey {
+  hash: u64,
+  width: u32,
+  height: u32,
+  algorithm: u8,
+}
 
-impl Weighter<u64, ImageSource> for ImageWeighter {
-  fn weight(&self, _key: &u64, source: &ImageSource) -> u64 {
-    (source.estimated_bytes() as u64).max(1)
+impl ImageCacheKey {
+  fn source(hash: u64) -> Self {
+    Self {
+      hash,
+      width: 0,
+      height: 0,
+      algorithm: 0,
+    }
+  }
+
+  fn sized(hash: u64, width: u32, height: u32, algorithm: ImageScalingAlgorithm) -> Self {
+    Self {
+      hash,
+      width,
+      height,
+      algorithm: match algorithm {
+        ImageScalingAlgorithm::Smooth => 1,
+        ImageScalingAlgorithm::Pixelated => 2,
+        _ => 0,
+      },
+    }
   }
 }
 
+#[derive(Clone)]
+pub(crate) enum CacheEntry {
+  Source(ImageSource),
+  Sized(Arc<ImageBuffer>),
+}
+
+#[derive(Clone)]
+pub(crate) struct ImageWeighter;
+
+impl Weighter<ImageCacheKey, CacheEntry> for ImageWeighter {
+  fn weight(&self, _key: &ImageCacheKey, entry: &CacheEntry) -> u64 {
+    let bytes = match entry {
+      CacheEntry::Source(source) => source.estimated_bytes(),
+      CacheEntry::Sized(buffer) => buffer.data().len(),
+    };
+    (bytes as u64).max(1)
+  }
+}
+
+pub(crate) type SharedImageCache = Cache<ImageCacheKey, CacheEntry, ImageWeighter>;
+
 /// Content-addressed store of decoded images with a byte budget, used by the renderer to avoid re-decoding.
 pub struct ImageCache {
-  cache: Cache<u64, ImageSource, ImageWeighter>,
+  cache: Arc<SharedImageCache>,
 }
 
 impl Default for ImageCache {
@@ -559,7 +760,11 @@ impl ImageCache {
     let estimated_items = (max_bytes / (64 << 10)).max(1) as usize;
 
     Self {
-      cache: Cache::with_weighter(estimated_items, max_bytes, ImageWeighter),
+      cache: Arc::new(Cache::with_weighter(
+        estimated_items,
+        max_bytes,
+        ImageWeighter,
+      )),
     }
   }
 
@@ -569,23 +774,23 @@ impl ImageCache {
   /// When caching, concurrent misses for the same bytes are single-flighted: one thread
   /// decodes while the others wait, so each unique image is decoded once.
   pub fn get_or_decode(&self, bytes: &[u8], mode: ImageCacheMode) -> ImageResult {
-    let key = xxh3_64(bytes);
+    let hash = xxh3_64(bytes);
+    let key = ImageCacheKey::source(hash);
 
     if matches!(mode, ImageCacheMode::None) {
       return match self.cache.get(&key) {
-        Some(source) => Ok(source),
-        None => ImageSource::from_bytes(bytes),
+        Some(CacheEntry::Source(source)) => Ok(source),
+        _ => ImageSource::from_bytes(bytes),
       };
     }
 
-    use quick_cache::sync::GuardResult;
-
     match self.cache.get_value_or_guard(&key, None) {
-      GuardResult::Value(source) => Ok(source),
+      GuardResult::Value(CacheEntry::Source(source)) => Ok(source),
+      GuardResult::Value(CacheEntry::Sized(_)) => ImageSource::from_bytes(bytes),
       GuardResult::Guard(guard) => {
-        let source = ImageSource::from_bytes(bytes)?;
+        let source = ImageSource::from_bytes_lazy(bytes, hash, Arc::downgrade(&self.cache))?;
         if source.is_cacheable() {
-          let _ = guard.insert(source.clone());
+          let _ = guard.insert(CacheEntry::Source(source.clone()));
         }
         Ok(source)
       }
@@ -599,8 +804,13 @@ impl ImageCache {
 mod image_cache_tests {
   use quick_cache::sync::Cache;
 
-  use super::{ImageCache, ImageCacheMode, ImageWeighter};
-  use crate::resources::{image::ImageSource, image_buffer::ImageBuffer};
+  use super::{
+    CacheEntry, ImageCache, ImageCacheKey, ImageCacheMode, ImageWeighter, RenderedImage,
+  };
+  use crate::{
+    resources::{image::ImageSource, image_buffer::ImageBuffer},
+    style::ImageScalingAlgorithm,
+  };
 
   /// PNG bytes that decode to a tiny bitmap (cacheable).
   fn png_bytes() -> Vec<u8> {
@@ -616,9 +826,74 @@ mod image_cache_tests {
     let second = cache.get_or_decode(&bytes, ImageCacheMode::Auto).unwrap();
 
     match (&first, &second) {
-      (ImageSource::Bitmap(a), ImageSource::Bitmap(b)) => assert!(std::sync::Arc::ptr_eq(a, b)),
-      _ => panic!("expected bitmaps"),
+      (ImageSource::Encoded(a), ImageSource::Encoded(b)) => {
+        assert!(std::sync::Arc::ptr_eq(a, b))
+      }
+      _ => panic!("expected encoded bitmaps"),
     }
+  }
+
+  fn sized_png_bytes(width: u32, height: u32) -> Vec<u8> {
+    ImageBuffer::new(width, height)
+      .unwrap()
+      .encode_png()
+      .unwrap()
+  }
+
+  fn rendered_buffer(
+    source: &ImageSource,
+    width: u32,
+    height: u32,
+  ) -> (std::sync::Arc<ImageBuffer>, (f32, f32)) {
+    match source
+      .render_for_layout(width, height, ImageScalingAlgorithm::Auto, 0)
+      .unwrap()
+    {
+      RenderedImage::Sampled {
+        source,
+        source_scale,
+        ..
+      } => (source, source_scale),
+      _ => panic!("expected sampled"),
+    }
+  }
+
+  #[test]
+  fn encoded_decodes_at_draw_size_and_reuses() {
+    let cache = ImageCache::default();
+    let bytes = sized_png_bytes(64, 64);
+    let source = cache.get_or_decode(&bytes, ImageCacheMode::Auto).unwrap();
+
+    let (first, scale) = rendered_buffer(&source, 16, 16);
+    let (second, _) = rendered_buffer(&source, 16, 16);
+
+    assert_eq!((first.width(), first.height()), (16, 16));
+    assert_eq!(scale, (0.25, 0.25));
+    assert!(std::sync::Arc::ptr_eq(&first, &second));
+  }
+
+  #[test]
+  fn encoded_covers_the_larger_axis() {
+    let cache = ImageCache::default();
+    let bytes = sized_png_bytes(64, 64);
+    let source = cache.get_or_decode(&bytes, ImageCacheMode::Auto).unwrap();
+
+    let (buffer, scale) = rendered_buffer(&source, 32, 16);
+
+    assert_eq!((buffer.width(), buffer.height()), (32, 32));
+    assert_eq!(scale, (0.5, 0.5));
+  }
+
+  #[test]
+  fn encoded_never_upscales() {
+    let cache = ImageCache::default();
+    let bytes = sized_png_bytes(8, 8);
+    let source = cache.get_or_decode(&bytes, ImageCacheMode::Auto).unwrap();
+
+    let (buffer, scale) = rendered_buffer(&source, 32, 32);
+
+    assert_eq!((buffer.width(), buffer.height()), (8, 8));
+    assert_eq!(scale, (1.0, 1.0));
   }
 
   #[test]
@@ -665,7 +940,7 @@ mod image_cache_tests {
     let cache = Cache::with_weighter(8, max_bytes, ImageWeighter);
 
     for key in 0..64u64 {
-      cache.insert(key, image(1024));
+      cache.insert(ImageCacheKey::source(key), CacheEntry::Source(image(1024)));
     }
 
     assert!(cache.weight() <= max_bytes);
