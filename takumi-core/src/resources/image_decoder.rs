@@ -9,7 +9,6 @@ use image::{
   DynamicImage, ImageDecoder, ImageError, ImageFormat, ImageResult, Limits, RgbaImage,
   codecs::{jpeg::JpegDecoder, png::PngDecoder},
   error::{DecodingError, ImageFormatHint, UnsupportedError, UnsupportedErrorKind},
-  imageops::{self, FilterType},
 };
 #[cfg(target_arch = "wasm32")]
 use image_webp::WebPDecoder;
@@ -144,15 +143,6 @@ pub(crate) fn bitmap_dimensions(bytes: &[u8]) -> Option<ImageResult<(u32, u32)>>
   Some(dimensions)
 }
 
-/// The filter each [`ImageScalingAlgorithm`] documents.
-fn resize_filter(algorithm: ImageScalingAlgorithm) -> FilterType {
-  match algorithm {
-    ImageScalingAlgorithm::Smooth => FilterType::Lanczos3,
-    ImageScalingAlgorithm::Pixelated => FilterType::Nearest,
-    _ => FilterType::CatmullRom,
-  }
-}
-
 /// Downscales a decoded (premultiplied) buffer; linear filtering of
 /// premultiplied RGBA is alpha-correct.
 pub(crate) fn resize_buffer(
@@ -161,9 +151,15 @@ pub(crate) fn resize_buffer(
   height: u32,
   algorithm: ImageScalingAlgorithm,
 ) -> Option<ImageBuffer> {
-  let image = RgbaImage::from_raw(buffer.width(), buffer.height(), buffer.data().to_vec())?;
-  let resized = imageops::resize(&image, width, height, resize_filter(algorithm));
-  ImageBuffer::from_premultiplied_rgba(resized.into_raw(), width, height)
+  let mut resampler = StreamResampler::new(
+    (buffer.width(), buffer.height()),
+    (width, height),
+    algorithm,
+  );
+  for row in buffer.data().chunks_exact(buffer.width() as usize * 4) {
+    resampler.push_row(row);
+  }
+  resampler.finish()
 }
 
 /// Decodes bitmap bytes scaled to cover `width` x `height`, never upscaling.
