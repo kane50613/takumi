@@ -1,3 +1,29 @@
+## takumi-core@0.4.0
+
+### Decode GIF frames on the raw `gif` decoder
+
+Composite frames on one reused canvas instead of the `image` crate's per-frame allocations; skipped frames no longer allocate or premultiply.
+
+### Decode GIF frames lazily
+
+Decode only the first GIF frame up front and the rest on first sample past it; static renders no longer decode the whole animation. `GifSource::frame_at_time` returns `Arc<ImageBuffer>` and `RenderedImage::Borrowed` becomes `Sampled`.
+
+### Claim generic font families from the JS font API
+
+Font descriptors accept `generic` (e.g. `"monospace"`), so stacks like Tailwind's `font-mono` resolve to registered fonts without naming the family.
+
+### Stream PNG decode at draw size
+
+Non-interlaced PNGs decode row-by-row through a streaming resampler, so downscaling never materializes the full-size buffer. Output is byte-identical to decode-then-resize.
+
+### Decode bitmaps at draw size
+
+Bitmaps loaded through `ImageCache` stay encoded until draw time, decode scaled to the box they are drawn into, and cache per content and target size. Adds `ImageSource::Encoded`; `get_or_decode` returns it instead of `Bitmap` for PNG/JPEG/WebP. `cache: "none"` keeps returning an eagerly decoded `Bitmap`.
+
+### Memoize GIF frames at draw size
+
+Frames past the first decode scaled to the box the GIF is drawn into, so an animation's memoized timeline holds draw-sized frames instead of canvas-sized ones. Adds `GifSource::frame_at_time_covering`.
+
 ## takumi-core@0.3.3
 
 ### Ignore null style values

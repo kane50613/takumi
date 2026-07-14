@@ -1,3 +1,13 @@
+## @takumi-rs/helpers@2.2.0
+
+### Support generic on googleFonts families
+
+A family's `generic` (e.g. `"monospace"`) propagates to every loaded coverage subset, so generic stacks like `font-mono` resolve to it.
+
+### Claim generic font families from the JS font API
+
+Font descriptors accept `generic` (e.g. `"monospace"`), so stacks like Tailwind's `font-mono` resolve to registered fonts without naming the family.
+
 ## @takumi-rs/helpers@2.1.1
 
 ### Bundle the WebContainer fallback instead of `@takumi-rs/wasm/auto`

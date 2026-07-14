@@ -1,3 +1,13 @@
+## @takumi-rs/core@2.2.0
+
+### Extend the built-in Geist to weight 300
+
+The embedded last-resort font covers `wght` 300..800 and trims unused stylistic sets, ending up slightly smaller than before.
+
+### Claim generic font families from the JS font API
+
+Font descriptors accept `generic` (e.g. `"monospace"`), so stacks like Tailwind's `font-mono` resolve to registered fonts without naming the family.
+
 ## @takumi-rs/core@2.0.2
 
 ### Accept a promise in the `fonts` option
