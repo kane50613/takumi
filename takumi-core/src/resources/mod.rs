@@ -5,3 +5,4 @@ pub mod image;
 /// Backend-agnostic decoded-image buffer
 pub mod image_buffer;
 mod image_decoder;
+mod image_resampler;

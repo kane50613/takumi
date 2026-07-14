@@ -121,7 +121,7 @@ fn has_opaque_alpha(raw: &[u8]) -> bool {
 }
 
 #[inline(always)]
-fn premultiply_rgba_in_place(raw: &mut [u8]) {
+pub(crate) fn premultiply_rgba_in_place(raw: &mut [u8]) {
   for pixel in raw.chunks_exact_mut(4) {
     let alpha = pixel[3];
     if alpha == u8::MAX {
