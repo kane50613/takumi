@@ -1,0 +1,114 @@
+---
+title: Visual Effects
+description: Gradient text, frosted glass, masks, clip shapes, text on a path, and dithering with plain CSS.
+icon: Wand
+---
+
+Effects you may not expect from an OG image renderer. Every image below is real takumi output,
+rendered from the test fixtures.
+
+## Gradient text
+
+`backgroundClip: "text"` fills glyphs with the background; make the text color transparent:
+
+```tsx
+<h1
+  style={{
+    backgroundImage: "linear-gradient(90deg, #ff3b30, #ffcc00, #34c759, #007aff, #5856d6)",
+    backgroundClip: "text",
+    color: "transparent",
+  }}
+>
+  Gradient Text
+</h1>
+```
+
+![Gradient text](https://raw.githubusercontent.com/kane50613/takumi/master/takumi/tests/fixtures-generated/style_background_clip_text_gradient.webp)
+
+## Frosted glass
+
+`backdropFilter` blurs whatever sits behind the panel:
+
+```tsx
+<div
+  style={{
+    backdropFilter: "blur(16px)",
+    backgroundColor: "rgb(255 255 255 / 0.2)",
+    borderRadius: "24px",
+  }}
+/>
+```
+
+![Frosted glass](https://raw.githubusercontent.com/kane50613/takumi/master/takumi/tests/fixtures-generated/style_backdrop_filter_frosted_glass.webp)
+
+## Gradients
+
+`backgroundImage` takes linear, radial, and conic gradients, plus their `repeating-*` forms.
+Layer several in one declaration:
+
+```tsx
+<div
+  style={{
+    backgroundImage: `
+      repeating-linear-gradient(90deg, rgb(99 102 241 / 0.18) 0px, transparent 48px, rgb(99 102 241 / 0.18) 96px),
+      conic-gradient(from 0deg, #ff0080, #7928ca, #0070f3, #ff0080)
+    `,
+  }}
+/>
+```
+
+![Repeating gradients](https://raw.githubusercontent.com/kane50613/takumi/master/takumi/tests/fixtures-generated/style_background_image_repeating_gradients.webp)
+
+## Masks
+
+`maskImage` fades content through a gradient's alpha channel:
+
+```tsx
+<img src={photo} style={{ maskImage: "linear-gradient(to right, black, transparent)" }} />
+```
+
+![Masked image](https://raw.githubusercontent.com/kane50613/takumi/master/takumi/tests/fixtures-generated/style_mask_image_on_image.webp)
+
+## Clip shapes
+
+`clipPath` cuts an element to a `<basic-shape>`:
+
+```tsx
+<div style={{ clipPath: "polygon(50% 0%, 0% 100%, 100% 100%)" }} />
+```
+
+![Clip path triangle](https://raw.githubusercontent.com/kane50613/takumi/master/takumi/tests/fixtures-generated/clip_path_triangle_gradient.webp)
+
+## Text on a path
+
+`offsetPath` places an element along a shape, and `offsetDistance` picks the spot. Wrap each glyph
+and spread the distances to set text on a circle:
+
+```tsx
+{
+  [...ring].map((char, i) => (
+    <div
+      style={{
+        position: "absolute",
+        offsetPath: "ellipse(240px 240px at 600px 315px)",
+        offsetDistance: `${(i / ring.length) * 100}%`,
+      }}
+    >
+      {char}
+    </div>
+  ));
+}
+```
+
+![Circular text](https://raw.githubusercontent.com/kane50613/takumi/master/takumi/tests/fixtures-generated/offset_path_circular_text.webp)
+
+## Dithering and duotone
+
+`filter` mixes filter functions with inline SVG filter graphs for posterize, ordered dithering,
+and duotone. [SVG Filters](/docs/svg-filters) has the recipes:
+
+```tsx
+<div style={{ filter: `contrast(1.4) ${ditherFilterUrl}` }} />
+```
+
+![Ordered dithering](https://raw.githubusercontent.com/kane50613/takumi/master/takumi/tests/fixtures-generated/style_filter_reference_dither.webp)
