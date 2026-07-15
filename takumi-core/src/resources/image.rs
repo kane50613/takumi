@@ -7,12 +7,20 @@
 use std::str::{FromStr, from_utf8};
 use std::sync::{Arc, OnceLock, Weak};
 
+#[cfg(feature = "svg")]
+use image::{
+  ExtendedColorType, ImageEncoder,
+  codecs::png::{CompressionType, FilterType, PngEncoder},
+};
 use quick_cache::{
   Weighter,
   sync::{Cache, GuardResult},
 };
 #[cfg(feature = "svg")]
-use resvg::usvg::{Options, Transform, Tree};
+use resvg::usvg::{ImageHrefResolver, ImageKind, Options, Transform, Tree};
+
+#[cfg(feature = "svg")]
+use crate::resources::image_buffer::unpremultiply_in_place;
 #[cfg(feature = "svg")]
 use roxmltree::{Document, ParsingOptions};
 use serde::Deserialize;
@@ -676,6 +684,54 @@ pub(crate) fn decode_data_uri(src: &str) -> Result<DecodedDataUri, DataUriError>
   let (bytes, _) = url.decode_to_vec().map_err(|_| DataUriError::Undecodable)?;
 
   Ok(DecodedDataUri { mime, bytes })
+}
+
+/// The synthetic href our resolver hands the layer PNG out for.
+#[cfg(feature = "svg")]
+const LAYER_HREF: &str = "takumi:layer";
+
+/// Applies SVG `<filter>` markup (carrying `id="{filter_id}"`) to a
+/// premultiplied-RGBA layer in place through the resvg pipeline.
+///
+/// The layer is wrapped in a minimal document referencing it by a synthetic
+/// href that a custom resolver answers with fast-compressed PNG bytes, so the
+/// only roundtrip is the PNG encode/decode resvg requires — no base64, no
+/// data-URI parsing, no multi-megabyte XML.
+#[cfg(feature = "svg")]
+pub fn apply_svg_filter(
+  layer: &mut [u8],
+  width: u32,
+  height: u32,
+  markup: &str,
+  filter_id: &str,
+) -> Result<(), ImageError> {
+  let mut straight = layer.to_vec();
+
+  unpremultiply_in_place(&mut straight);
+  let mut png = Vec::new();
+  PngEncoder::new_with_quality(&mut png, CompressionType::Fast, FilterType::NoFilter)
+    .write_image(&straight, width, height, ExtendedColorType::Rgba8)
+    .map_err(ImageError::decode)?;
+  let png = Arc::new(png);
+
+  let document = format!(
+    r#"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}">{markup}<image width="{width}" height="{height}" href="{LAYER_HREF}" filter="url(#{filter_id})"/></svg>"#
+  );
+  let options = Options {
+    image_href_resolver: ImageHrefResolver {
+      resolve_data: ImageHrefResolver::default_data_resolver(),
+      resolve_string: Box::new(move |href: &str, _: &Options| {
+        (href == LAYER_HREF).then(|| ImageKind::PNG(png.clone()))
+      }),
+    },
+    ..Options::default()
+  };
+  let tree = Tree::from_str(&document, &options).map_err(ImageError::svg_parse)?;
+
+  let mut pixmap = Pixmap::new(width, height).ok_or(ImageError::InvalidPixmapSize)?;
+  resvg::render(&tree, Transform::identity(), &mut pixmap.as_mut());
+  layer.copy_from_slice(pixmap.data());
+  Ok(())
 }
 
 /// Encodes bytes as a base64 `data:` URI.

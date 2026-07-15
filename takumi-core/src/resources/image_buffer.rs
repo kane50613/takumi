@@ -71,15 +71,8 @@ impl ImageBuffer {
   /// `<image>` data URL. Returns `None` if encoding fails.
   pub fn encode_png(&self) -> Option<Vec<u8>> {
     let mut straight = self.data.clone();
-    for pixel in straight.chunks_exact_mut(4) {
-      let alpha = pixel[3];
-      if alpha != 0 && alpha != 255 {
-        let alpha = alpha as u16;
-        pixel[0] = (pixel[0] as u16 * 255 / alpha).min(255) as u8;
-        pixel[1] = (pixel[1] as u16 * 255 / alpha).min(255) as u8;
-        pixel[2] = (pixel[2] as u16 * 255 / alpha).min(255) as u8;
-      }
-    }
+
+    unpremultiply_in_place(&mut straight);
     let mut out = Vec::new();
     PngEncoder::new(&mut out)
       .write_image(&straight, self.width, self.height, ExtendedColorType::Rgba8)
@@ -99,6 +92,19 @@ impl ImageBuffer {
       self.data[index + 2],
       self.data[index + 3],
     ]
+  }
+}
+
+/// Converts premultiplied RGBA bytes to straight alpha in place.
+pub(crate) fn unpremultiply_in_place(data: &mut [u8]) {
+  for pixel in data.chunks_exact_mut(4) {
+    let alpha = pixel[3];
+    if alpha != 0 && alpha != 255 {
+      let alpha = alpha as u16;
+      pixel[0] = (pixel[0] as u16 * 255 / alpha).min(255) as u8;
+      pixel[1] = (pixel[1] as u16 * 255 / alpha).min(255) as u8;
+      pixel[2] = (pixel[2] as u16 * 255 / alpha).min(255) as u8;
+    }
   }
 }
 
