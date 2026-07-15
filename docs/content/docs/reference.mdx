@@ -194,8 +194,7 @@ Properties use their camelCase names. Longhands are listed in parentheses. `Supp
 | :------------------------------------------ | :---------------------------------------------------------------------------------------------------------------------------- |
 | `boxShadow`                                 | Supported                                                                                                                     |
 | `opacity`                                   | Supported                                                                                                                     |
-| `filter`                                    | `<filter-function>`, `url(data:image/svg+xml,...)` with inline SVG `<filter>` markup                                          |
-| `backdropFilter`                            | `<filter-function>`, `url(data:image/svg+xml,...)` with inline SVG `<filter>` markup                                          |
+| `filter`, `backdropFilter`                  | `<filter-function>`, `url(data:image/svg+xml,...)` <sup>1</sup>                                                               |
 | `mixBlendMode`                              | Supported                                                                                                                     |
 | `isolation`                                 | Supported                                                                                                                     |
 | `transform`, `rotate`, `scale`, `translate` | 2D only; `transform` accepts functions like `translateX()`, `scaleX()`                                                        |
@@ -211,23 +210,16 @@ Properties use their camelCase names. Longhands are listed in parentheses. `Supp
 | `imageRendering`                            | `auto`, `smooth`, `pixelated`                                                                                                 |
 | `strokeLinejoin`                            | `miter`, `round`, `bevel`                                                                                                     |
 
-`filter` also accepts SVG filter references: `url(data:image/svg+xml,...)` where the data URI
-contains inline `<filter>` markup, optionally wrapped in an `<svg>` document. The full SVG filter
-primitive set applies (`feComponentTransfer`, `feColorMatrix`, `feComposite`, `feImage`, `feTile`,
-`feTurbulence`, ...), covering effects like ordered dithering, duotone, and bloom, and a reference
-mixes with filter functions in one list. Browsers parse the same markup, so you can prototype an
-effect on a plain HTML page and paste it in.
+<sup>1</sup> Inline `<filter>` markup in a `data:` URI, optionally wrapped in `<svg>`. The full SVG
+primitive set applies, and references mix with filter functions. Browsers parse the same markup:
+prototype on an HTML page and paste it in. `url(#id)` and external URLs are parse errors. Declare
+`color-interpolation-filters="sRGB"` for threshold effects (spec default: `linearRGB`). Use the
+render-level `dithering` option for error-diffusion dithering.
 
 ```css
 filter: contrast(1.4)
   url("data:image/svg+xml,<filter color-interpolation-filters='sRGB'>...</filter>");
 ```
-
-Only `data:` URIs work: with no surrounding document, `url(#id)` fragments and external URLs are
-parse errors. Per the SVG spec, `color-interpolation-filters` defaults to `linearRGB`; declare
-`sRGB` on the `<filter>` for threshold-style effects. Error-diffusion dithering (Floyd-Steinberg)
-is sequential and out of the filter model's reach in browsers too; use the render-level
-`dithering` output option instead.
 
 ### Animation
 
