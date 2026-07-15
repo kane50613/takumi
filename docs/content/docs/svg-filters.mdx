@@ -1,0 +1,108 @@
+---
+title: SVG Filters
+description: Posterize, ordered dithering, and duotone with SVG filter references in the filter property.
+icon: Sparkles
+---
+
+`filter` and `backdropFilter` accept SVG filter references alongside filter functions:
+
+```css
+filter: contrast(1.4)
+  url("data:image/svg+xml,<filter color-interpolation-filters='sRGB'>...</filter>");
+```
+
+The data URI holds inline `<filter>` markup, optionally wrapped in an `<svg>` document. The full
+SVG filter primitive set applies (`feComponentTransfer`, `feColorMatrix`, `feComposite`, `feImage`,
+`feTile`, `feTurbulence`, ...).
+
+## Rules
+
+| Rule        | Detail                                                                                                                 |
+| :---------- | :--------------------------------------------------------------------------------------------------------------------- |
+| URLs        | `data:` URIs only; `url(#id)` fragments and external URLs are parse errors                                             |
+| Color space | `color-interpolation-filters` defaults to `linearRGB` per spec; declare `sRGB` on the `<filter>` for threshold effects |
+| Mixing      | References chain with filter functions in declaration order                                                            |
+| Content     | Filter primitives only; scripts, event handlers, and non-`data:` `href`s are rejected                                  |
+
+Browsers parse the same markup, so prototype the effect on a plain HTML page and paste it in. A
+small helper keeps the markup readable:
+
+```ts
+const filterUrl = (markup: string) => `url("data:image/svg+xml,${encodeURIComponent(markup)}")`;
+```
+
+## Posterize
+
+`feComponentTransfer` with `discrete` tables snaps each channel to fixed levels:
+
+```xml
+<filter color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">
+  <feComponentTransfer>
+    <feFuncR type="discrete" tableValues="0 0.333 0.667 1" />
+    <feFuncG type="discrete" tableValues="0 0.333 0.667 1" />
+    <feFuncB type="discrete" tableValues="0 0.333 0.667 1" />
+  </feComponentTransfer>
+</filter>
+```
+
+## Ordered dithering
+
+Tile a Bayer threshold matrix over the element, add it as noise, then quantize. The tile is its own
+SVG data URI (a 4×4 grid of gray `<rect>`s with values `(m + 0.5) / 16`), referenced from `feImage`.
+Encode the tile markup too: an XML attribute cannot hold a raw `<`.
+
+```xml
+<filter color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">
+  <feImage href="data:image/svg+xml,..." width="4" height="4" result="bayer" />
+  <feTile in="bayer" result="tile" />
+  <!-- add (bayer - 0.5) * binWidth; binWidth = 1/4 for 4 levels -->
+  <feComposite in="SourceGraphic" in2="tile" operator="arithmetic"
+    k2="1" k3="0.25" k4="-0.125" result="noised" />
+  <feComponentTransfer in="noised" result="quantized">
+    <feFuncR type="discrete" tableValues="0 0.333 0.667 1" />
+    <feFuncG type="discrete" tableValues="0 0.333 0.667 1" />
+    <feFuncB type="discrete" tableValues="0 0.333 0.667 1" />
+  </feComponentTransfer>
+  <feComposite in="quantized" in2="SourceAlpha" operator="in" />
+</filter>
+```
+
+![Ordered dithering](https://raw.githubusercontent.com/kane50613/takumi/master/takumi/tests/fixtures-generated/style_filter_reference_dither.webp)
+
+## Duotone
+
+Map luma to a 1-bit threshold, then look each bit up in a two-color table:
+
+```xml
+<filter color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">
+  <feImage href="data:image/svg+xml,..." width="8" height="8" result="bayer" />
+  <feTile in="bayer" result="tile" />
+  <feColorMatrix in="SourceGraphic" type="matrix" result="luma"
+    values="0.2126 0.7152 0.0722 0 0
+            0.2126 0.7152 0.0722 0 0
+            0.2126 0.7152 0.0722 0 0
+            0 0 0 1 0" />
+  <feComposite in="luma" in2="tile" operator="arithmetic"
+    k2="1" k3="1" k4="-0.5" result="noised" />
+  <feComponentTransfer in="noised" result="bits">
+    <feFuncR type="discrete" tableValues="0 1" />
+    <feFuncG type="discrete" tableValues="0 1" />
+    <feFuncB type="discrete" tableValues="0 1" />
+  </feComponentTransfer>
+  <!-- dark color at 0, bright color at 1, per channel -->
+  <feComponentTransfer in="bits" result="tinted">
+    <feFuncR type="table" tableValues="0.075 0.310" />
+    <feFuncG type="table" tableValues="0.145 0.553" />
+    <feFuncB type="table" tableValues="0.310 0.976" />
+  </feComponentTransfer>
+  <feComposite in="tinted" in2="SourceAlpha" operator="in" />
+</filter>
+```
+
+![Duotone](https://raw.githubusercontent.com/kane50613/takumi/master/takumi/tests/fixtures-generated/style_filter_reference_duotone.webp)
+
+## Limits
+
+Error-diffusion dithering (Floyd–Steinberg) is sequential and out of the filter model's reach, in
+browsers too. Use the render-level `dithering` output option instead; see
+[Output formats](/docs/output-formats).
