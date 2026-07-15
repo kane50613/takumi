@@ -27,8 +27,9 @@ mod image;
 mod render;
 mod scene_emit;
 mod text;
-use std::{borrow::Cow, fmt, fmt::Write as _, io};
+use std::{borrow::Cow, collections::HashMap, fmt, fmt::Write as _, io, mem};
 
+use box_model::quantize_path;
 use quick_xml::{
   Writer,
   events::{BytesEnd, BytesStart, BytesText, Event},
@@ -102,6 +103,11 @@ pub(crate) struct GradientStop {
 pub(crate) struct SvgDocument {
   writer: Writer<Vec<u8>>,
   next_id: u32,
+  /// Interned glyph outlines (path data in glyph space, translation excluded),
+  /// emitted as `<defs>` `<path id="gN">` when the document is rendered. Repeated
+  /// glyphs then cost one `<use>` each instead of a full outline.
+  glyph_defs: Vec<String>,
+  glyph_ids: HashMap<String, u32>,
 }
 
 impl SvgDocument {
@@ -119,7 +125,12 @@ impl SvgDocument {
       format!("0 0 {} {}", num(width), num(height)).as_str(),
     ));
     writer.write_event(Event::Start(svg))?;
-    Ok(Self { writer, next_id: 0 })
+    Ok(Self {
+      writer,
+      next_id: 0,
+      glyph_defs: Vec::new(),
+      glyph_ids: HashMap::new(),
+    })
   }
 
   fn alloc_id(&mut self, prefix: &str) -> String {
@@ -454,18 +465,46 @@ impl SvgDocument {
     fill: Rgba,
     stroke: Option<(Rgba, f32, &str)>,
   ) -> io::Result<()> {
-    let mut attrs: Vec<(&str, Cow<'_, str>)> =
-      vec![("d", data.into()), ("fill", fill.hex().into())];
-    push_opacity(&mut attrs, "fill-opacity", fill.opacity());
-    if let Some((color, width, line_join)) = stroke {
-      attrs.push(("stroke", color.hex().into()));
-      push_opacity(&mut attrs, "stroke-opacity", color.opacity());
-      attrs.push(("stroke-width", num(width).into()));
-      if line_join != "miter" {
-        attrs.push(("stroke-linejoin", line_join.into()));
-      }
-    }
+    let mut attrs: Vec<(&str, Cow<'_, str>)> = vec![("d", data.into())];
+
+    attrs.extend(glyph_paint_attrs(fill, stroke));
     self.empty("path", &attrs)
+  }
+
+  /// Interns a glyph outline (path data in glyph space, translation excluded)
+  /// and returns the id shared by every `<use>` of the same outline.
+  pub(crate) fn glyph_ref(&mut self, data: String) -> u32 {
+    if let Some(&id) = self.glyph_ids.get(&data) {
+      return id;
+    }
+    let id = self.glyph_defs.len() as u32;
+
+    self.glyph_ids.insert(data.clone(), id);
+    self.glyph_defs.push(data);
+    id
+  }
+
+  /// Emits a run of interned glyphs as `<use>` references. Fill and stroke
+  /// attributes go on a shared `<g>` (or directly on a lone `<use>`).
+  pub(crate) fn glyph_uses(
+    &mut self,
+    uses: &[(u32, f32, f32)],
+    fill: Rgba,
+    stroke: Option<(Rgba, f32, &str)>,
+  ) -> io::Result<()> {
+    let paint = glyph_paint_attrs(fill, stroke);
+
+    if let &[(id, x, y)] = uses {
+      let mut attrs = glyph_use_attrs(id, x, y);
+
+      attrs.extend(paint);
+      return self.empty("use", &attrs);
+    }
+    self.open("g", &paint)?;
+    for &(id, x, y) in uses {
+      self.empty("use", &glyph_use_attrs(id, x, y))?;
+    }
+    self.close("g")
   }
 
   /// Defines a gaussian-blur filter (for text-shadow) and returns its `url(#id)`.
@@ -834,8 +873,20 @@ impl SvgDocument {
     self.close("g")
   }
 
-  /// Closes the root `<svg>` and serializes the document to a string.
+  /// Closes the root `<svg>` and serializes the document to a string. Interned
+  /// glyph outlines are flushed as a trailing `<defs>`; `<use>` references
+  /// resolve document-wide, so forward references are fine.
   pub(crate) fn render(mut self) -> io::Result<String> {
+    if !self.glyph_defs.is_empty() {
+      self.open("defs", &[])?;
+      for (id, data) in mem::take(&mut self.glyph_defs).iter().enumerate() {
+        self.empty(
+          "path",
+          &[("id", format!("g{id}").into()), ("d", data.as_str().into())],
+        )?;
+      }
+      self.close("defs")?;
+    }
     self.close("svg")?;
     Ok(String::from_utf8_lossy(&self.writer.into_inner()).into_owned())
   }
@@ -977,6 +1028,36 @@ impl fmt::Display for Num {
 
 fn num(value: f32) -> String {
   Num(value).to_string()
+}
+
+/// Fill plus optional `-webkit-text-stroke` attributes, shared by glyph
+/// `<path>` elements and `<use>` runs.
+fn glyph_paint_attrs<'a>(
+  fill: Rgba,
+  stroke: Option<(Rgba, f32, &'a str)>,
+) -> Vec<(&'a str, Cow<'a, str>)> {
+  let mut attrs: Vec<(&str, Cow<'_, str>)> = vec![("fill", fill.hex().into())];
+
+  push_opacity(&mut attrs, "fill-opacity", fill.opacity());
+  if let Some((color, width, line_join)) = stroke {
+    attrs.push(("stroke", color.hex().into()));
+    push_opacity(&mut attrs, "stroke-opacity", color.opacity());
+    attrs.push(("stroke-width", num(width).into()));
+    if line_join != "miter" {
+      attrs.push(("stroke-linejoin", line_join.into()));
+    }
+  }
+  attrs
+}
+
+/// `<use>` attributes referencing an interned glyph outline. The position is
+/// quantized like the path data it replaces.
+fn glyph_use_attrs(id: u32, x: f32, y: f32) -> Vec<(&'static str, Cow<'static, str>)> {
+  vec![
+    ("href", format!("#g{id}").into()),
+    ("x", num(quantize_path(x)).into()),
+    ("y", num(quantize_path(y)).into()),
+  ]
 }
 
 /// Pushes an `*-opacity` attribute only when it differs from the SVG default of

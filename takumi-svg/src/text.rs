@@ -434,12 +434,12 @@ fn emit_run_glyphs(
     .then(|| doc.begin_group(IDENTITY, opacity, None, None))
     .transpose()?;
 
-  // Plain outline glyphs in a run share one fill (and one `-webkit-text-stroke`)
-  // and use nonzero winding, so their `d` data is concatenated into a single
-  // `<path>` instead of one element per glyph. Faux-bold, COLR layers, and bitmap
-  // glyphs need their own paint, so the merged run is flushed before each.
+  // Plain outline glyphs are interned in glyph space (translation stripped) and
+  // emitted as `<use>` references, so repeated glyphs cost one outline plus a
+  // `<use>` per occurrence. Faux-bold, COLR layers, and bitmap glyphs need their
+  // own paint, so the accumulated run is flushed before each.
   let fill = color_override.unwrap_or(Rgba(fill_color.0));
-  let mut merged = String::new();
+  let mut uses: Vec<(u32, f32, f32)> = Vec::new();
 
   for glyph in &run.glyph_run.glyphs {
     let Some(resolved) = run.resolved_glyphs.get(&glyph.id) else {
@@ -462,24 +462,31 @@ fn emit_run_glyphs(
           run.resolve_color_layers(outline, fill_color)
         };
         if color_layers.is_empty() {
-          let data = path_data(outline.paths(), cols);
-          if data.is_empty() {
-            continue;
-          }
           // Synthesized (faux) bold: the raster backend strokes the glyph with
           // its own fill color (`outline.embolden()`); mirror that here.
           match outline.embolden().filter(|embolden| *embolden > 0.0) {
             Some(embolden) => {
-              flush_glyph_run(doc, &mut merged, fill, stroke)?;
+              let data = path_data(outline.paths(), cols);
+              if data.is_empty() {
+                continue;
+              }
+              flush_glyph_run(doc, &mut uses, fill, stroke)?;
               doc.glyph_path(&data, fill, Some((fill, embolden, bold_join)))?;
               if let Some(text_stroke) = stroke {
                 doc.glyph_path(&data, Rgba([0, 0, 0, 0]), Some(text_stroke))?;
               }
             }
-            None => merged.push_str(&data),
+            None => {
+              let [a, b, c, d, x, y] = cols;
+              let data = path_data(outline.paths(), [a, b, c, d, 0.0, 0.0]);
+
+              if !data.is_empty() {
+                uses.push((doc.glyph_ref(data), x, y));
+              }
+            }
           }
         } else {
-          flush_glyph_run(doc, &mut merged, fill, stroke)?;
+          flush_glyph_run(doc, &mut uses, fill, stroke)?;
           for (color, paths) in color_layers {
             if color.0[3] == 0 {
               continue;
@@ -500,7 +507,7 @@ fn emit_run_glyphs(
         let Some(png) = bitmap.image.encode_png() else {
           continue;
         };
-        flush_glyph_run(doc, &mut merged, fill, stroke)?;
+        flush_glyph_run(doc, &mut uses, fill, stroke)?;
         let (width, height) = (bitmap.image.width(), bitmap.image.height());
         let bitmap_matrix = placed
           * Affine::translation(bitmap.placement.left as f32, -(bitmap.placement.top as f32))
@@ -512,7 +519,7 @@ fn emit_run_glyphs(
       }
     }
   }
-  flush_glyph_run(doc, &mut merged, fill, stroke)?;
+  flush_glyph_run(doc, &mut uses, fill, stroke)?;
 
   if let Some(group) = opacity_group {
     doc.end_group(group)?;
@@ -520,17 +527,17 @@ fn emit_run_glyphs(
   Ok(())
 }
 
-/// Emits the accumulated run of plain outline glyphs as one `<path>` and clears
-/// the buffer. A no-op when nothing has accumulated.
+/// Emits the accumulated run of plain outline glyphs as `<use>` references and
+/// clears the buffer. A no-op when nothing has accumulated.
 fn flush_glyph_run(
   doc: &mut SvgDocument,
-  merged: &mut String,
+  uses: &mut Vec<(u32, f32, f32)>,
   fill: Rgba,
   stroke: Option<(Rgba, f32, &str)>,
 ) -> io::Result<()> {
-  if !merged.is_empty() {
-    doc.glyph_path(merged, fill, stroke)?;
-    merged.clear();
+  if !uses.is_empty() {
+    doc.glyph_uses(uses, fill, stroke)?;
+    uses.clear();
   }
   Ok(())
 }

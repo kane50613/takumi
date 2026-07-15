@@ -90,7 +90,7 @@ const PATH_COORD_FACTOR: f32 = 100.0;
 /// reflection of the previous one, enabling the `s`/`t` shorthands.
 const REFLECT_TOLERANCE: f32 = 1.0 / PATH_COORD_FACTOR;
 
-fn quantize_path(value: f32) -> f32 {
+pub(crate) fn quantize_path(value: f32) -> f32 {
   (value * PATH_COORD_FACTOR).round() / PATH_COORD_FACTOR
 }
 
