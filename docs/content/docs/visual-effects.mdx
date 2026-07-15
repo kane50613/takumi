@@ -85,19 +85,18 @@ Layer several in one declaration:
 and spread the distances to set text on a circle:
 
 ```tsx
-{
-  [...ring].map((char, i) => (
-    <div
-      style={{
-        position: "absolute",
-        offsetPath: "ellipse(240px 240px at 600px 315px)",
-        offsetDistance: `${(i / ring.length) * 100}%`,
-      }}
-    >
-      {char}
-    </div>
-  ));
-}
+const glyphs = [...ring].map((char, i) => (
+  <div
+    key={i}
+    style={{
+      position: "absolute",
+      offsetPath: "ellipse(240px 240px at 600px 315px)",
+      offsetDistance: `${(i / ring.length) * 100}%`,
+    }}
+  >
+    {char}
+  </div>
+));
 ```
 
 ![Circular text](https://raw.githubusercontent.com/kane50613/takumi/master/takumi/tests/fixtures-generated/offset_path_circular_text.webp)
