@@ -37,7 +37,7 @@ dithers away gradient banding. The title crosses the whole hue wheel with two st
 }
 ```
 
-![Aurora mesh with film grain](https://raw.githubusercontent.com/kane50613/takumi/master/takumi/tests/fixtures-generated/showcase_aurora_grain.webp)
+![Aurora mesh with film grain](/images/effects/showcase_aurora_grain.webp)
 
 ## Liquid glass
 
@@ -100,7 +100,7 @@ resvg currently applies `scale` twice, so takumi needs `scale="9"` where a brows
 </filter>
 ```
 
-![Liquid glass](https://raw.githubusercontent.com/kane50613/takumi/master/takumi/tests/fixtures-generated/showcase_liquid_glass.webp)
+![Liquid glass](/images/effects/showcase_liquid_glass.webp)
 
 ## Neon CRT
 
@@ -135,7 +135,7 @@ shadows in opposite directions; scanlines and vignette are gradient overlays:
 }
 ```
 
-![Neon CRT](https://raw.githubusercontent.com/kane50613/takumi/master/takumi/tests/fixtures-generated/showcase_neon_terminal.webp)
+![Neon CRT](/images/effects/showcase_neon_terminal.webp)
 
 ## Chrome type
 
@@ -184,7 +184,7 @@ The starburst behind is one `repeating-conic-gradient`:
 </filter>
 ```
 
-![Chrome type](https://raw.githubusercontent.com/kane50613/takumi/master/takumi/tests/fixtures-generated/showcase_chrome_text.webp)
+![Chrome type](/images/effects/showcase_chrome_text.webp)
 
 ## Halftone
 
@@ -209,7 +209,7 @@ parent):
 }
 ```
 
-![Halftone](https://raw.githubusercontent.com/kane50613/takumi/master/takumi/tests/fixtures-generated/showcase_halftone.webp)
+![Halftone](/images/effects/showcase_halftone.webp)
 
 ## Grid hero
 
@@ -231,7 +231,7 @@ card with a hard offset shadow:
 }
 ```
 
-![Grid hero](https://raw.githubusercontent.com/kane50613/takumi/master/takumi/tests/fixtures-generated/showcase_grid_hero.webp)
+![Grid hero](/images/effects/showcase_grid_hero.webp)
 
 ## Gradient text
 
@@ -249,7 +249,7 @@ card with a hard offset shadow:
 </h1>
 ```
 
-![Gradient text](https://raw.githubusercontent.com/kane50613/takumi/master/takumi/tests/fixtures-generated/style_background_clip_text_gradient.webp)
+![Gradient text](/images/effects/style_background_clip_text_gradient.webp)
 
 ## Masks
 
@@ -259,7 +259,7 @@ card with a hard offset shadow:
 <img src={photo} style={{ maskImage: "linear-gradient(to right, black, transparent)" }} />
 ```
 
-![Masked image](https://raw.githubusercontent.com/kane50613/takumi/master/takumi/tests/fixtures-generated/style_mask_image_on_image.webp)
+![Masked image](/images/effects/style_mask_image_on_image.webp)
 
 ## Clip shapes
 
@@ -269,7 +269,7 @@ card with a hard offset shadow:
 <div style={{ clipPath: "polygon(50% 0%, 0% 100%, 100% 100%)" }} />
 ```
 
-![Clip path triangle](https://raw.githubusercontent.com/kane50613/takumi/master/takumi/tests/fixtures-generated/clip_path_triangle_gradient.webp)
+![Clip path triangle](/images/effects/clip_path_triangle_gradient.webp)
 
 ## Text on a path
 
@@ -291,7 +291,7 @@ const glyphs = [...ring].map((char, i) => (
 ));
 ```
 
-![Circular text](https://raw.githubusercontent.com/kane50613/takumi/master/takumi/tests/fixtures-generated/offset_path_circular_text.webp)
+![Circular text](/images/effects/offset_path_circular_text.webp)
 
 ## Dithering and duotone
 
@@ -323,9 +323,9 @@ the same graph into ordered dithering; a two-color table over a 1-bit luma thres
 The full graphs live in
 [`style_filter_reference.rs`](https://github.com/kane50613/takumi/blob/master/takumi/tests/fixtures/style_filter_reference.rs).
 
-![Ordered dithering](https://raw.githubusercontent.com/kane50613/takumi/master/takumi/tests/fixtures-generated/style_filter_reference_dither.webp)
+![Ordered dithering](/images/effects/style_filter_reference_dither.webp)
 
-![Duotone](https://raw.githubusercontent.com/kane50613/takumi/master/takumi/tests/fixtures-generated/style_filter_reference_duotone.webp)
+![Duotone](/images/effects/style_filter_reference_duotone.webp)
 
 Error-diffusion dithering (Floyd–Steinberg) is sequential and out of the filter model's reach, in
 browsers too. Use the render-level `dithering` output option instead; see
