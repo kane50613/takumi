@@ -41,19 +41,12 @@ pub enum FilterReferenceError {
 }
 
 /// A validated SVG filter reference.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FilterReference {
-  /// The original `url()` value, kept for serialization and equality.
-  pub uri: Arc<str>,
   /// The `<filter>` element markup. Any author `id` is stripped and replaced
   /// with [`FilterReference::ID`], so consumers can rewrite it textually.
+  /// Serialization rebuilds a minimal `data:` URI from it.
   pub markup: Arc<str>,
-}
-
-impl PartialEq for FilterReference {
-  fn eq(&self, other: &Self) -> bool {
-    self.uri == other.uri
-  }
 }
 
 const SVG_XML_MIME: (&str, &str) = ("image", "svg+xml");
@@ -124,12 +117,12 @@ impl FilterReference {
     let text = std::str::from_utf8(&bytes)
       .map_err(|_| FilterReferenceError::InvalidDataUri("body is not UTF-8"))?;
 
-    Self::from_markup(text, url)
+    Self::from_markup(text)
   }
 
   /// Validates `<filter>` markup (optionally wrapped in an `<svg>` document)
   /// and extracts the filter element.
-  pub fn from_markup(xml: &str, uri: &str) -> Result<Self, FilterReferenceError> {
+  pub fn from_markup(xml: &str) -> Result<Self, FilterReferenceError> {
     let document = Document::parse(xml)
       .map_err(|error| FilterReferenceError::InvalidMarkup(error.to_string()))?;
     let root = document.root_element();
@@ -184,17 +177,19 @@ impl FilterReference {
     let mut markup = xml[filter_range.clone()].to_string();
 
     // Strip any author id (via its byte range, so whitespace and entity
-    // encoding don't matter) and inject the canonical one, which the SVG
-    // backend rewrites textually.
+    // encoding don't matter) along with its leading whitespace, and inject the
+    // canonical one, which the SVG backend rewrites textually.
     if let Some(id) = filter
       .attributes()
       .find(|attribute| attribute.namespace().is_none() && attribute.name() == "id")
     {
       let range = id.range();
-      markup.replace_range(
-        range.start - filter_range.start..range.end - filter_range.start,
-        "",
-      );
+      let mut start = range.start - filter_range.start;
+
+      while start > 0 && markup.as_bytes()[start - 1].is_ascii_whitespace() {
+        start -= 1;
+      }
+      markup.replace_range(start..range.end - filter_range.start, "");
     }
     let rest = markup
       .strip_prefix("<filter")
@@ -202,7 +197,6 @@ impl FilterReference {
     let markup = format!(r#"<filter id="{id}"{rest}"#, id = Self::ID);
 
     Ok(Self {
-      uri: uri.into(),
       markup: markup.into(),
     })
   }
@@ -216,7 +210,6 @@ mod tests {
   fn extracts_filter_and_injects_id() {
     let reference = FilterReference::from_markup(
       r#"<filter color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="2"/></filter>"#,
-      "test",
     )
     .unwrap();
     assert!(
@@ -229,24 +222,22 @@ mod tests {
 
   #[test]
   fn replaces_existing_id() {
-    let reference = FilterReference::from_markup(
-      r#"<filter id="dither"><feFlood flood-color="red"/></filter>"#,
-      "test",
-    )
-    .unwrap();
+    let reference =
+      FilterReference::from_markup(r#"<filter id="dither"><feFlood flood-color="red"/></filter>"#)
+        .unwrap();
     assert_eq!(
       &*reference.markup,
-      r#"<filter id="takumi-filter" ><feFlood flood-color="red"/></filter>"#
+      r#"<filter id="takumi-filter"><feFlood flood-color="red"/></filter>"#
     );
   }
 
   #[test]
   fn replaces_whitespace_and_entity_id() {
     let reference =
-      FilterReference::from_markup("<filter id = 'a&#98;c'><feFlood/></filter>", "test").unwrap();
+      FilterReference::from_markup("<filter id = 'a&#98;c'><feFlood/></filter>").unwrap();
     assert_eq!(
       &*reference.markup,
-      r#"<filter id="takumi-filter" ><feFlood/></filter>"#
+      r#"<filter id="takumi-filter"><feFlood/></filter>"#
     );
   }
 
@@ -254,29 +245,28 @@ mod tests {
   fn finds_filter_inside_svg_document() {
     let reference = FilterReference::from_markup(
       r#"<svg xmlns="http://www.w3.org/2000/svg"><defs><filter id="f"><feFlood/></filter></defs><rect/></svg>"#,
-      "test",
     )
     .unwrap();
     assert_eq!(
       &*reference.markup,
-      r#"<filter id="takumi-filter" ><feFlood/></filter>"#
+      r#"<filter id="takumi-filter"><feFlood/></filter>"#
     );
   }
 
   #[test]
   fn rejects_active_content() {
     assert!(matches!(
-      FilterReference::from_markup(r"<filter><script>alert(1)</script></filter>", "test"),
+      FilterReference::from_markup(r"<filter><script>alert(1)</script></filter>",
+    ),
       Err(FilterReferenceError::UnsupportedPrimitive(name)) if name == "script"
     ));
     assert!(matches!(
-      FilterReference::from_markup(r#"<filter><feFlood onload="alert(1)"/></filter>"#, "test",),
+      FilterReference::from_markup(r#"<filter><feFlood onload="alert(1)"/></filter>"#,),
       Err(FilterReferenceError::UnsupportedValue { .. })
     ));
     assert!(matches!(
       FilterReference::from_markup(
         r#"<filter><feImage href="https://example.com/x.png"/></filter>"#,
-        "test",
       ),
       Err(FilterReferenceError::UnsupportedValue { .. })
     ));
@@ -285,7 +275,7 @@ mod tests {
   #[test]
   fn rejects_empty_filter() {
     assert_eq!(
-      FilterReference::from_markup(r"<filter></filter>", "test"),
+      FilterReference::from_markup(r"<filter></filter>",),
       Err(FilterReferenceError::EmptyFilter)
     );
   }
@@ -293,7 +283,7 @@ mod tests {
   #[test]
   fn rejects_missing_filter() {
     assert_eq!(
-      FilterReference::from_markup(r"<svg><rect/></svg>", "test"),
+      FilterReference::from_markup(r"<svg><rect/></svg>",),
       Err(FilterReferenceError::MissingFilterElement)
     );
   }

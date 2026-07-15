@@ -431,13 +431,19 @@ impl ToCss for Filter {
       Self::Blur(v) => write_fn!("blur", v),
       Self::DropShadow(v) => write_fn!("drop-shadow", v),
       #[cfg(feature = "svg")]
+      // A minimal data URI rebuilt from the extracted markup, shorter than the
+      // author's original. Only characters that would break the CSS string or
+      // the data URI body are percent-encoded; `#` is handled on re-parse.
       Self::Reference(reference) => {
-        dest.write_str("url(\"")?;
-        for c in reference.uri.chars() {
-          if matches!(c, '"' | '\\') {
-            dest.write_char('\\')?;
-          }
-          dest.write_char(c)?;
+        dest.write_str("url(\"data:image/svg+xml,")?;
+        for c in reference.markup.chars() {
+          match c {
+            '%' => dest.write_str("%25"),
+            '"' => dest.write_str("%22"),
+            '\n' => dest.write_str("%0A"),
+            '\r' => dest.write_str("%0D"),
+            _ => dest.write_char(c),
+          }?;
         }
         dest.write_str("\")")
       }
@@ -464,6 +470,21 @@ mod tests {
   fn filters_serialize_space_separated() {
     let filters = Filters::from_css_str("blur(3px) grayscale(0.5)").unwrap();
     assert_eq!(filters.to_css_string(), "blur(3px) grayscale(0.5)");
+  }
+
+  #[test]
+  fn reference_serializes_minimal_data_uri() {
+    let filters = Filters::from_css_str(
+      "url(\"data:image/svg+xml,%3Cfilter%3E%3CfeFlood flood-color='%23f00'/%3E%3C/filter%3E\")",
+    )
+    .unwrap();
+    let css = filters.to_css_string();
+
+    assert_eq!(
+      css,
+      r##"url("data:image/svg+xml,<filter id=%22takumi-filter%22><feFlood flood-color='#f00'/></filter>")"##
+    );
+    assert_eq!(Filters::from_css_str(&css).unwrap(), filters);
   }
 
   #[test]
