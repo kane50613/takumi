@@ -104,11 +104,38 @@ and spread the distances to set text on a circle:
 
 ## Dithering and duotone
 
-`filter` mixes filter functions with inline SVG filter graphs for posterize, ordered dithering,
-and duotone. [SVG Filters](/docs/svg-filters) has the recipes:
+`filter` accepts inline SVG filter graphs as `data:` URIs next to filter functions, with the full
+primitive set (`feComponentTransfer`, `feColorMatrix`, `feImage`, `feTile`, `feTurbulence`, ...).
+Browsers parse the same markup, so prototype the effect on an HTML page and paste it in:
 
 ```tsx
-<div style={{ filter: `contrast(1.4) ${ditherFilterUrl}` }} />
+const filterUrl = (markup: string) => `url("data:image/svg+xml,${encodeURIComponent(markup)}")`;
+
+<div style={{ filter: `contrast(1.4) ${filterUrl(markup)}` }} />;
 ```
 
+Threshold effects need `color-interpolation-filters="sRGB"` on the `<filter>`; the spec default is
+`linearRGB`. Posterize snaps each channel to fixed levels:
+
+```xml
+<filter color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">
+  <feComponentTransfer>
+    <feFuncR type="discrete" tableValues="0 0.333 0.667 1" />
+    <feFuncG type="discrete" tableValues="0 0.333 0.667 1" />
+    <feFuncB type="discrete" tableValues="0 0.333 0.667 1" />
+  </feComponentTransfer>
+</filter>
+```
+
+Tiling a Bayer matrix with `feImage` + `feTile` and adding it as noise before the quantize turns
+the same graph into ordered dithering; a two-color table over a 1-bit luma threshold gives duotone.
+The full graphs live in
+[`style_filter_reference.rs`](https://github.com/kane50613/takumi/blob/master/takumi/tests/fixtures/style_filter_reference.rs).
+
 ![Ordered dithering](https://raw.githubusercontent.com/kane50613/takumi/master/takumi/tests/fixtures-generated/style_filter_reference_dither.webp)
+
+![Duotone](https://raw.githubusercontent.com/kane50613/takumi/master/takumi/tests/fixtures-generated/style_filter_reference_duotone.webp)
+
+Error-diffusion dithering (Floyd–Steinberg) is sequential and out of the filter model's reach, in
+browsers too. Use the render-level `dithering` output option instead; see
+[Output formats](/docs/output-formats).
