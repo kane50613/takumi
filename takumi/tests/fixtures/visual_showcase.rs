@@ -134,13 +134,22 @@ fn test_showcase_neon_terminal() {
   run_showcase(root, css, "showcase_neon_terminal");
 }
 
-// Liquid glass: a turbulence-driven displacement map warps the backdrop under
-// the card; inset highlights fake the rim lighting.
+// Liquid glass: the displacement map is not noise but a lens map. Red ramps
+// left-to-right and green top-to-bottom (screen-blended), so each pixel encodes
+// its own direction; a neutral `#808000` radial keeps the center undistorted,
+// leaving refraction only at the rim. Negative scale bends the backdrop
+// outward like a convex lens.
 #[test]
 fn test_showcase_liquid_glass() {
-  let refraction = filter_url(
-    r#"<filter x="0" y="0" width="100%" height="100%"><feTurbulence type="turbulence" baseFrequency="0.008 0.014" numOctaves="1" seed="4" result="raw"/><feComponentTransfer in="raw" result="noise"><feFuncA type="discrete" tableValues="1"/></feComponentTransfer><feDisplacementMap in="SourceGraphic" in2="noise" scale="110" xChannelSelector="R" yChannelSelector="G" result="disp"/><feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="disp"/></feMerge></filter>"#,
+  let lens_map = format!(
+    "data:image/svg+xml,{}",
+    crate::style_filter_reference::percent_encode(
+      r##"<svg xmlns="http://www.w3.org/2000/svg" width="560" height="320"><defs><linearGradient id="x" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000000"/><stop offset="1" stop-color="#ff0000"/></linearGradient><linearGradient id="y" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000000"/><stop offset="1" stop-color="#00ff00"/></linearGradient><radialGradient id="c"><stop offset="0" stop-color="#808000"/><stop offset="0.55" stop-color="#808000"/><stop offset="1" stop-color="#808000" stop-opacity="0"/></radialGradient></defs><rect width="560" height="320" fill="url(#x)"/><rect width="560" height="320" fill="url(#y)" style="mix-blend-mode:screen"/><rect width="560" height="320" fill="url(#c)"/></svg>"##,
+    )
   );
+  let refraction = filter_url(&format!(
+    r#"<filter color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%"><feImage href="{lens_map}" width="560" height="320" result="map"/><feDisplacementMap in="SourceGraphic" in2="map" scale="9" xChannelSelector="R" yChannelSelector="G" result="disp"/><feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="disp"/></feMerge></filter>"#,
+  ));
   let css = format!(
     r#"
     .stage {{
@@ -165,7 +174,7 @@ fn test_showcase_liquid_glass() {
       justify-content: center;
       border-radius: 36px;
       border: 1px solid rgba(255, 255, 255, 0.35);
-      backdrop-filter: {refraction} blur(2px) saturate(1.3);
+      backdrop-filter: {refraction} blur(1px) saturate(1.25);
       box-shadow: inset 1px 1px 1px rgba(255, 255, 255, 0.6), inset -1px -1px 1px rgba(255, 255, 255, 0.15), 0 24px 60px rgba(0, 0, 0, 0.35);
     }}
     .glass-label {{ font-size: 54px; font-weight: 700; color: rgba(255, 255, 255, 0.92); }}
