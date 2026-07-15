@@ -4,7 +4,7 @@ use crate::test_utils::run_fixture_test;
 
 /// Percent-encodes everything outside the URL-unreserved set, so the result is
 /// safe as an unquoted CSS `url()` token and survives nested data-URI decoding.
-fn percent_encode(source: &str) -> String {
+pub fn percent_encode(source: &str) -> String {
   let mut out = String::with_capacity(source.len() * 3);
   for byte in source.bytes() {
     match byte {
@@ -20,7 +20,7 @@ fn percent_encode(source: &str) -> String {
   out
 }
 
-fn filter_url(markup: &str) -> String {
+pub fn filter_url(markup: &str) -> String {
   format!("url(data:image/svg+xml,{})", percent_encode(markup))
 }
 

@@ -72,3 +72,5 @@ pub mod stylesheets;
 pub mod svg;
 #[path = "fixtures/text.rs"]
 pub mod text;
+#[path = "fixtures/visual_showcase.rs"]
+pub mod visual_showcase;
