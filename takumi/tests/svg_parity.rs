@@ -26,12 +26,31 @@ const FLOOR: f32 = 90.0;
 
 /// Fixtures the SVG backend does not yet reproduce, with the divergence cause.
 /// Shrink this as the backend improves; entries are `(name, why)`.
-const KNOWN_DIVERGENT: &[(&str, &str)] = &[(
-  "style_backdrop_filter",
-  "backdrop-filter: opacity() semantics differ: raster replaces the backdrop \
-   pixels, svg (paint-over model, no erase) composites the filtered copy over \
-   the original",
-)];
+const KNOWN_DIVERGENT: &[(&str, &str)] = &[
+  (
+    "style_backdrop_filter",
+    "backdrop-filter: opacity() semantics differ: raster replaces the backdrop \
+     pixels, svg (paint-over model, no erase) composites the filtered copy over \
+     the original",
+  ),
+  (
+    "showcase_halftone",
+    "background-blend-mode is raster-only: the svg backend paints background \
+     layers independently, so the multiply + contrast() dot screen degrades",
+  ),
+  (
+    "showcase_liquid_glass",
+    "backdrop feDisplacementMap: raster displaces the extracted backdrop \
+     region, svg displaces the scene replay; the sampled phase differs at the \
+     rim (84.7%, floor is 90%)",
+  ),
+  (
+    "showcase_chrome_text",
+    "feSpecularLighting bevel: raster lights the rasterized layer's alpha, \
+     svg lights the vector glyph alpha; the rim highlight lands differently \
+     (88.2%, floor is 90%)",
+  ),
+];
 
 /// Straight-alpha composite over white. Transparent pixels become white, so two
 /// pixels that look identical on a white page compare equal regardless of the RGB

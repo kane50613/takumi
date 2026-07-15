@@ -273,6 +273,7 @@
     <feColorMatrix in="f0" type="saturate" values="1.4" result="f1"/>
   </filter>
   <g opacity=".4" filter="url(#ft4)">
+    <rect x="120" y="63" width="960" height="504" fill="#000" fill-opacity="0"/>
     <clipPath id="cp5">
       <path d="M120 63H1080V567H120Z"/>
     </clipPath>
@@ -460,6 +461,7 @@
     </g>
   </g>
   <g style="mix-blend-mode:overlay"><filter id="fr6" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="matrix" values="0 0 0 0 0.9 0 0 0 0 0.9 0 0 0 0 0.9 0 0 0 0.22 0"/></filter><g filter="url(#fr6)">
+      <rect x="0" y="0" width="1200" height="630" fill="#000" fill-opacity="0"/>
     </g>
   </g>
   <mask id="mk7" maskUnits="userSpaceOnUse" style="mask-type:alpha">

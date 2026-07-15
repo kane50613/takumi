@@ -195,6 +195,15 @@ pub(crate) fn emit_box_chrome(
     })
     .transpose()?;
 
+  // Anchor the filter region to the border box: the raster backend filters the
+  // element's full layer box, but an SVG filter's default objectBoundingBox
+  // region collapses when nothing inside the group paints (e.g. an empty
+  // overlay driving feTurbulence). The invisible rect only ever grows the bbox,
+  // so painted content is unaffected.
+  if !filter_refs.is_empty() {
+    doc.rect(x, y, width, height, Rgba([0, 0, 0, 0]))?;
+  }
+
   let clip_group = emit_clip_path_group(node, layout.size, x, y, doc)?;
 
   emit_box_shadows(node, layout, x, y, width, height, doc)?;

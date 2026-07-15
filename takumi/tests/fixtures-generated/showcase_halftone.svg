@@ -9,6 +9,7 @@
       </feComponentTransfer>
     </filter>
     <g filter="url(#ft0)">
+      <rect x="0" y="0" width="1200" height="630" fill="#000" fill-opacity="0"/>
       <linearGradient id="lg1" gradientUnits="userSpaceOnUse" x1="-13.488" y1="28.926" x2="1213.488" y2="601.074">
         <stop offset="0" stop-color="#333"/>
         <stop offset=".016" stop-color="#363636"/>
