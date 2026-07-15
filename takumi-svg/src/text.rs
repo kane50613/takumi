@@ -22,13 +22,13 @@ use takumi_core::{
     node::TextData,
     tree::RenderNode,
   },
-  resources::font::ResolvedGlyph,
+  resources::{font::ResolvedGlyph, image::to_data_url},
   style::{BackgroundClip, BorderStyle, LineJoin},
 };
 
 use crate::{
   Affine, Frame, IDENTITY, Num, Rgba, SvgDocument, box_model::path_data, gradient::LayerEmitter,
-  image::encode, render::emit_inline_box,
+  render::emit_inline_box,
 };
 
 /// Where a run of inline text sits: its container `layout` (border/padding and
@@ -512,7 +512,7 @@ fn emit_run_glyphs(
         let bitmap_matrix = placed
           * Affine::translation(bitmap.placement.left as f32, -(bitmap.placement.top as f32))
           * Affine::scale(bitmap.scale_x, bitmap.scale_y);
-        let href = encode("image/png", &png);
+        let href = to_data_url("image/png", &png);
         let group = doc.begin_group(bitmap_matrix, 1.0, None, None)?;
         doc.image(0.0, 0.0, width as f32, height as f32, &href, None)?;
         doc.end_group(group)?;

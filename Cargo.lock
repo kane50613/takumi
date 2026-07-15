@@ -1922,7 +1922,6 @@ dependencies = [
 name = "takumi-svg"
 version = "0.1.6"
 dependencies = [
- "base64",
  "quick-xml",
  "takumi-core",
  "tiny-skia",

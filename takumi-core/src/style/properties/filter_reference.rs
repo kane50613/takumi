@@ -6,8 +6,9 @@
 
 use std::sync::Arc;
 
-use data_url::DataUrl;
 use roxmltree::{Document, Node};
+
+use crate::resources::image::{DataUriError, decode_data_uri};
 
 /// Error produced while parsing a filter reference.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -96,25 +97,16 @@ impl FilterReference {
       return Err(FilterReferenceError::UnsupportedUrl);
     }
 
-    // An unescaped `#` (`url(#id)` inside the markup, hex colors) is a URL
-    // fragment delimiter and would truncate the body.
-    let escaped = url.split_once(',').and_then(|(header, body)| {
-      body
-        .contains('#')
-        .then(|| format!("{header},{}", body.replace('#', "%23")))
-    });
-    let processed = DataUrl::process(escaped.as_deref().unwrap_or(url))
-      .map_err(|_| FilterReferenceError::InvalidDataUri("malformed data URI"))?;
+    let decoded = decode_data_uri(url).map_err(|error| match error {
+      DataUriError::Malformed => FilterReferenceError::InvalidDataUri("malformed data URI"),
+      DataUriError::Undecodable => FilterReferenceError::InvalidDataUri("undecodable body"),
+    })?;
 
-    let mime = processed.mime_type();
-    if (mime.type_.as_str(), mime.subtype.as_str()) != SVG_XML_MIME {
+    if (decoded.mime.0.as_str(), decoded.mime.1.as_str()) != SVG_XML_MIME {
       return Err(FilterReferenceError::UnsupportedUrl);
     }
 
-    let (bytes, _) = processed
-      .decode_to_vec()
-      .map_err(|_| FilterReferenceError::InvalidDataUri("undecodable body"))?;
-    let text = std::str::from_utf8(&bytes)
+    let text = std::str::from_utf8(&decoded.bytes)
       .map_err(|_| FilterReferenceError::InvalidDataUri("body is not UTF-8"))?;
 
     Self::from_markup(text)

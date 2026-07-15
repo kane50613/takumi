@@ -640,9 +640,75 @@ fn cover_target((native_w, native_h): (u32, u32), (box_w, box_h): (u32, u32)) ->
   )
 }
 
-/// Check if the string looks like an SVG image.
+/// Check if the string looks like an SVG image. No `xmlns` requirement: usvg
+/// accepts a namespace-less `<svg>` root.
 pub(crate) fn is_svg_like(src: &str) -> bool {
-  src.contains("<svg") && src.contains("xmlns")
+  src.contains("<svg")
+}
+
+/// A decoded `data:` URI body with its MIME type.
+pub(crate) struct DecodedDataUri {
+  pub mime: (String, String),
+  pub bytes: Vec<u8>,
+}
+
+pub(crate) enum DataUriError {
+  /// The URI could not be processed.
+  Malformed,
+  /// The body could not be decoded.
+  Undecodable,
+}
+
+/// Decodes a `data:` URI. A raw `#` in the body (hex colors, `url(#id)` in
+/// inline SVG) is a URL fragment delimiter and would truncate it, so it is
+/// escaped first.
+pub(crate) fn decode_data_uri(src: &str) -> Result<DecodedDataUri, DataUriError> {
+  let escaped = src.split_once(',').and_then(|(header, body)| {
+    body
+      .contains('#')
+      .then(|| format!("{header},{}", body.replace('#', "%23")))
+  });
+  let url = data_url::DataUrl::process(escaped.as_deref().unwrap_or(src))
+    .map_err(|_| DataUriError::Malformed)?;
+
+  let mime = url.mime_type();
+  let mime = (mime.type_.clone(), mime.subtype.clone());
+  let (bytes, _) = url.decode_to_vec().map_err(|_| DataUriError::Undecodable)?;
+
+  Ok(DecodedDataUri { mime, bytes })
+}
+
+/// Encodes bytes as a base64 `data:` URI.
+pub fn to_data_url(mime: &str, bytes: &[u8]) -> String {
+  const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  let mut out =
+    String::with_capacity("data:;base64,".len() + mime.len() + bytes.len().div_ceil(3) * 4);
+
+  out.push_str("data:");
+  out.push_str(mime);
+  out.push_str(";base64,");
+  for chunk in bytes.chunks(3) {
+    let b = [
+      chunk[0],
+      *chunk.get(1).unwrap_or(&0),
+      *chunk.get(2).unwrap_or(&0),
+    ];
+    let n = u32::from_be_bytes([0, b[0], b[1], b[2]]);
+    let mut encoded = [
+      ALPHABET[(n >> 18) as usize & 63],
+      ALPHABET[(n >> 12) as usize & 63],
+      ALPHABET[(n >> 6) as usize & 63],
+      ALPHABET[n as usize & 63],
+    ];
+    if chunk.len() < 3 {
+      encoded[3] = b'=';
+    }
+    if chunk.len() < 2 {
+      encoded[2] = b'=';
+    }
+    out.push_str(std::str::from_utf8(&encoded).unwrap_or_default());
+  }
+  out
 }
 
 /// SVG root intrinsic sizing per <https://www.w3.org/TR/SVG/coords.html#IntrinsicSizing>:
@@ -1113,6 +1179,31 @@ mod tests {
     }
 
     0
+  }
+
+  #[test]
+  fn to_data_url_matches_rfc4648_vectors() {
+    assert_eq!(to_data_url("x", b""), "data:x;base64,");
+    assert_eq!(to_data_url("x", b"f"), "data:x;base64,Zg==");
+    assert_eq!(to_data_url("x", b"fo"), "data:x;base64,Zm8=");
+    assert_eq!(to_data_url("x", b"foo"), "data:x;base64,Zm9v");
+    assert_eq!(to_data_url("x", b"foob"), "data:x;base64,Zm9vYg==");
+    assert_eq!(to_data_url("x", b"fooba"), "data:x;base64,Zm9vYmE=");
+    assert_eq!(to_data_url("x", b"foobar"), "data:x;base64,Zm9vYmFy");
+  }
+
+  // usvg accepts a namespace-less root, so markup without `xmlns` is still
+  // detected and rendered as SVG.
+  #[cfg(feature = "svg")]
+  #[test]
+  fn svg_without_xmlns_renders() -> Result<(), ImageError> {
+    let svg = r##"<svg width="4" height="4"><rect width="4" height="4" fill="#ff0000"/></svg>"##;
+    let image = ImageSource::from_bytes(svg.as_bytes())?;
+
+    assert!(matches!(image, ImageSource::Svg(_)));
+    let rendered = image.render_for_layout(4, 4, ImageScalingAlgorithm::Auto, 0)?;
+    assert_eq!(premul_at(&rendered, 2, 2), [255, 0, 0, 255]);
+    Ok(())
   }
 
   // `currentColor` in an SVG loaded as an image is not resolved against the host

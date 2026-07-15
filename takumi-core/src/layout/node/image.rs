@@ -1,13 +1,12 @@
 use std::sync::Weak;
 
-use data_url::DataUrl;
 use taffy::{CompactLength, MaybeResolve};
 
 use crate::{
   context::RenderContext,
   geometry::{AvailableSpace, Size},
   layout::node::{ImageData, ImageSourceInput, Node, NodeStyleLayers},
-  resources::image::{ImageError, ImageResult, ImageSource, is_svg_like},
+  resources::image::{ImageError, ImageResult, ImageSource, decode_data_uri, is_svg_like},
   style::{Length, Style, StyleDeclaration},
 };
 
@@ -186,20 +185,9 @@ fn resolve_style_size_axis(
 const DATA_URI_PREFIX: &str = "data:";
 
 fn parse_data_uri_image(src: &str) -> ImageResult {
-  // An unescaped `#` (common in inline SVG: `fill="#fff"`, `url(#filter)`) is a URL
-  // fragment delimiter and would truncate the body.
-  let escaped = src.split_once(',').and_then(|(header, body)| {
-    body
-      .contains('#')
-      .then(|| format!("{header},{}", body.replace('#', "%23")))
-  });
-  let url = DataUrl::process(escaped.as_deref().unwrap_or(src))
-    .map_err(|_| ImageError::InvalidDataUriFormat)?;
-  let (data, _) = url
-    .decode_to_vec()
-    .map_err(|_| ImageError::InvalidDataUriFormat)?;
+  let decoded = decode_data_uri(src).map_err(|_| ImageError::InvalidDataUriFormat)?;
 
-  ImageSource::from_bytes_lazy(&data, 0, Weak::new())
+  ImageSource::from_bytes_lazy(&decoded.bytes, 0, Weak::new())
 }
 
 /// Resolve an image source string (data URI, SVG, or registered URL) to its bytes.

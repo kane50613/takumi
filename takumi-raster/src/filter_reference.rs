@@ -5,7 +5,7 @@
 use takumi_core::{
   Error, Result,
   resources::{
-    image::{ImageError, ImageSource, RenderedImage},
+    image::{ImageError, ImageSource, RenderedImage, to_data_url},
     image_buffer::ImageBuffer,
   },
   style::{FilterReference, ImageScalingAlgorithm},
@@ -29,10 +29,10 @@ pub(crate) fn apply_filter_reference(
     .ok_or(Error::ImageResolveError(ImageError::InvalidPixmapSize))?;
 
   let document = format!(
-    r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="{width}" height="{height}">{markup}<image width="{width}" height="{height}" href="data:image/png;base64,{png}" filter="url(#{id})"/></svg>"#,
+    r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="{width}" height="{height}">{markup}<image width="{width}" height="{height}" href="{png}" filter="url(#{id})"/></svg>"#,
     markup = reference.markup,
     id = FilterReference::ID,
-    png = base64(&png),
+    png = to_data_url("image/png", &png),
   );
 
   let filtered = ImageSource::from_bytes(document.as_bytes())
@@ -45,47 +45,4 @@ pub(crate) fn apply_filter_reference(
 
   pixmap.data_mut().copy_from_slice(buffer.data());
   Ok(())
-}
-
-fn base64(bytes: &[u8]) -> String {
-  const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
-  for chunk in bytes.chunks(3) {
-    let b = [
-      chunk[0],
-      *chunk.get(1).unwrap_or(&0),
-      *chunk.get(2).unwrap_or(&0),
-    ];
-    let n = u32::from_be_bytes([0, b[0], b[1], b[2]]);
-    let mut encoded = [
-      ALPHABET[(n >> 18) as usize & 63],
-      ALPHABET[(n >> 12) as usize & 63],
-      ALPHABET[(n >> 6) as usize & 63],
-      ALPHABET[n as usize & 63],
-    ];
-    if chunk.len() < 3 {
-      encoded[3] = b'=';
-    }
-    if chunk.len() < 2 {
-      encoded[2] = b'=';
-    }
-    out.push_str(std::str::from_utf8(&encoded).unwrap_or_default());
-  }
-  out
-}
-
-#[cfg(test)]
-mod tests {
-  use super::base64;
-
-  #[test]
-  fn base64_matches_rfc4648_vectors() {
-    assert_eq!(base64(b""), "");
-    assert_eq!(base64(b"f"), "Zg==");
-    assert_eq!(base64(b"fo"), "Zm8=");
-    assert_eq!(base64(b"foo"), "Zm9v");
-    assert_eq!(base64(b"foob"), "Zm9vYg==");
-    assert_eq!(base64(b"fooba"), "Zm9vYmE=");
-    assert_eq!(base64(b"foobar"), "Zm9vYmFy");
-  }
 }
