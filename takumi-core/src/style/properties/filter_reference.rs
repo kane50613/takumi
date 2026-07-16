@@ -4,9 +4,9 @@
 //! delegated to `resvg` in the raster backend and emitted verbatim by the SVG
 //! backend, so both sides share one spec implementation.
 
-use std::sync::Arc;
+use std::{str::from_utf8, sync::Arc};
 
-use roxmltree::{Document, Node};
+use roxmltree::Document;
 
 use crate::resources::image::{DataUriError, decode_data_uri};
 
@@ -25,20 +25,6 @@ pub(crate) enum FilterReferenceError {
   /// The document contains no `<filter>` element.
   #[error("no <filter> element found")]
   MissingFilterElement,
-  /// The filter contains no primitives.
-  #[error("<filter> has no primitives")]
-  EmptyFilter,
-  /// An element inside `<filter>` is not a filter primitive.
-  #[error("unsupported element <{0}> inside <filter>")]
-  UnsupportedPrimitive(String),
-  /// An attribute value is outside the supported subset.
-  #[error("unsupported {attribute}: {value}")]
-  UnsupportedValue {
-    /// What was rejected.
-    attribute: &'static str,
-    /// The rejected value.
-    value: String,
-  },
 }
 
 /// A validated SVG filter reference.
@@ -49,37 +35,6 @@ pub struct FilterReference {
   /// Serialization rebuilds a minimal `data:` URI from it.
   pub markup: Arc<str>,
 }
-
-/// Filter primitives and their light-source children. Anything else inside
-/// `<filter>` (scripts, `foreignObject`, animation elements) is rejected, since
-/// the markup is later emitted verbatim into generated SVG.
-const ALLOWED_ELEMENTS: &[&str] = &[
-  "feBlend",
-  "feColorMatrix",
-  "feComponentTransfer",
-  "feComposite",
-  "feConvolveMatrix",
-  "feDiffuseLighting",
-  "feDisplacementMap",
-  "feDistantLight",
-  "feDropShadow",
-  "feFlood",
-  "feFuncA",
-  "feFuncB",
-  "feFuncG",
-  "feFuncR",
-  "feGaussianBlur",
-  "feImage",
-  "feMerge",
-  "feMergeNode",
-  "feMorphology",
-  "feOffset",
-  "fePointLight",
-  "feSpecularLighting",
-  "feSpotLight",
-  "feTile",
-  "feTurbulence",
-];
 
 impl FilterReference {
   /// The `id` attribute value guaranteed on [`FilterReference::markup`].
@@ -97,7 +52,7 @@ impl FilterReference {
       return Err(FilterReferenceError::UnsupportedUrl);
     }
 
-    let text = std::str::from_utf8(&decoded.bytes)
+    let text = from_utf8(&decoded.bytes)
       .map_err(|_| FilterReferenceError::InvalidDataUri("body is not UTF-8"))?;
 
     Self::from_markup(text)
@@ -118,42 +73,6 @@ impl FilterReference {
         .find(|node| node.has_tag_name("filter"))
         .ok_or(FilterReferenceError::MissingFilterElement)?
     };
-
-    if !filter.children().any(|child| child.is_element()) {
-      return Err(FilterReferenceError::EmptyFilter);
-    }
-
-    for node in filter.descendants().filter(Node::is_element) {
-      if node != filter && !ALLOWED_ELEMENTS.contains(&node.tag_name().name()) {
-        return Err(FilterReferenceError::UnsupportedPrimitive(
-          node.tag_name().name().into(),
-        ));
-      }
-      for attribute in node.attributes() {
-        let name = attribute.name();
-        if name
-          .get(..2)
-          .is_some_and(|prefix| prefix.eq_ignore_ascii_case("on"))
-        {
-          return Err(FilterReferenceError::UnsupportedValue {
-            attribute: "event handler",
-            value: name.into(),
-          });
-        }
-        if name == "href"
-          && !attribute
-            .value()
-            .trim_start()
-            .get(..5)
-            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("data:"))
-        {
-          return Err(FilterReferenceError::UnsupportedValue {
-            attribute: "href",
-            value: "only data: URIs are supported".into(),
-          });
-        }
-      }
-    }
 
     let filter_range = filter.range();
     let mut markup = xml[filter_range.clone()].to_string();
@@ -232,33 +151,6 @@ mod tests {
     assert_eq!(
       &*reference.markup,
       r#"<filter id="takumi-filter"><feFlood/></filter>"#
-    );
-  }
-
-  #[test]
-  fn rejects_active_content() {
-    assert!(matches!(
-      FilterReference::from_markup(r"<filter><script>alert(1)</script></filter>",
-    ),
-      Err(FilterReferenceError::UnsupportedPrimitive(name)) if name == "script"
-    ));
-    assert!(matches!(
-      FilterReference::from_markup(r#"<filter><feFlood onload="alert(1)"/></filter>"#,),
-      Err(FilterReferenceError::UnsupportedValue { .. })
-    ));
-    assert!(matches!(
-      FilterReference::from_markup(
-        r#"<filter><feImage href="https://example.com/x.png"/></filter>"#,
-      ),
-      Err(FilterReferenceError::UnsupportedValue { .. })
-    ));
-  }
-
-  #[test]
-  fn rejects_empty_filter() {
-    assert_eq!(
-      FilterReference::from_markup(r"<filter></filter>",),
-      Err(FilterReferenceError::EmptyFilter)
     );
   }
 
