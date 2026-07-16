@@ -224,7 +224,7 @@ fn convert_paint(
           }
         } else {
           log::warn!("'{}' cannot be used to {} a shape.", tag_name, aid);
-          None
+          from_fallback(node, fallback, opacity).map(|p| (p, None))
         }
       } else {
         from_fallback(node, fallback, opacity).map(|p| (p, None))

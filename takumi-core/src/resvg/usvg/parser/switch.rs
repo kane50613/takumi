@@ -18,8 +18,6 @@ static FEATURES: &[&str] = &[
   "http://www.w3.org/TR/SVG11/feature#Style",
   // "http://www.w3.org/TR/SVG11/feature#ViewportAttribute", // `clip` and `overflow`, not yet
   "http://www.w3.org/TR/SVG11/feature#Shape",
-  "http://www.w3.org/TR/SVG11/feature#Text",
-  "http://www.w3.org/TR/SVG11/feature#BasicText",
   "http://www.w3.org/TR/SVG11/feature#PaintAttribute", // no color-interpolation and color-rendering
   "http://www.w3.org/TR/SVG11/feature#BasicPaintAttribute", // no color-interpolation
   "http://www.w3.org/TR/SVG11/feature#OpacityAttribute",
@@ -73,7 +71,7 @@ pub(crate) fn is_condition_passed(node: SvgNode, opt: &Options) -> bool {
   // If all of the given features are supported, then the attribute evaluates to true;
   // otherwise, the current element and its children are skipped and thus will not be rendered.'
   if let Some(features) = node.attribute::<&str>(AId::RequiredFeatures) {
-    for feature in features.split(' ') {
+    for feature in features.split_ascii_whitespace() {
       if !FEATURES.contains(&feature) {
         return false;
       }
