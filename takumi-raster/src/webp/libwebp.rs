@@ -12,11 +12,15 @@ use crate::{
   write::{AnimatedWebpOptions, AnimationFrame, Bitmap, Quality},
 };
 
+/// libwebp reads `quality` as compression effort when encoding VP8L, not as visual
+/// quality: the output is bit-exact at any value.
+const LOSSLESS_EFFORT: f32 = 50.0;
+
 fn webp_config(lossless: bool, quality: u8, speed: u8) -> Result<WebPConfig> {
   let mut config = WebPConfig::new_with_preset(
     WebPPreset::WEBP_PRESET_TEXT,
     if lossless {
-      20.0
+      LOSSLESS_EFFORT
     } else {
       quality.clamp(0, 100) as f32
     },
@@ -24,7 +28,6 @@ fn webp_config(lossless: bool, quality: u8, speed: u8) -> Result<WebPConfig> {
   .map_err(|_| WebPError::EncoderSetupFailed)?;
 
   config.lossless = if lossless { 1 } else { 0 };
-  config.alpha_compression = if lossless { 0 } else { 1 };
   config.method = speed.clamp(0, 6) as i32;
   if unsafe { WebPValidateConfig(&config) } == 0 {
     return Err(WebPError::EncoderSetupFailed.into());
