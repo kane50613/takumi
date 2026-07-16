@@ -89,7 +89,7 @@ impl ConicGradientTile {
   fn visible_angle_samples(width: u32, height: u32, cx: f32, cy: f32) -> usize {
     let max_dx = cx.max(width as f32 - cx);
     let max_dy = cy.max(height as f32 - cy);
-    (math::hypot(max_dx, max_dy) * TAU).ceil() as usize + 1
+    (max_dx.hypot(max_dy) * TAU).ceil() as usize + 1
   }
 
   /// Adjusted angle at `(dx, dy)` as a fraction of a full turn, measured from

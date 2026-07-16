@@ -18,7 +18,6 @@ use takumi_core::{
   context::RenderContext,
   geometry::Size,
   layout::node::resolve_image,
-  math,
   paint::{
     ConicGradientTile, LinearGradientTile, RadialGradientTile, build_color_lut_with_interpolation,
     collect_repeat_tile_positions, collect_spaced_tile_positions, collect_stretched_tile_positions,
@@ -352,7 +351,7 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
     let (ccx, ccy) = (x + tile.cx, y + tile.cy);
     let radius = [(x, y), (x + w, y), (x, y + h), (x + w, y + h)]
       .into_iter()
-      .map(|(px, py)| math::hypot(px - ccx, py - ccy))
+      .map(|(px, py)| (px - ccx).hypot(py - ccy))
       .fold(0.0_f32, f32::max);
 
     let clip = self.doc.clip_path(&rect_path_data(x, y, w, h))?;
@@ -368,8 +367,8 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
       if fill.0[3] == 0 {
         continue;
       }
-      let (x0, y0) = (ccx + radius * math::sin(a0), ccy - radius * math::cos(a0));
-      let (x1, y1) = (ccx + radius * math::sin(a1), ccy - radius * math::cos(a1));
+      let (x0, y0) = (ccx + radius * a0.sin(), ccy - radius * a0.cos());
+      let (x1, y1) = (ccx + radius * a1.sin(), ccy - radius * a1.cos());
       let mut wedge = PathData::with_capacity(6 * APPROX_CHARS_PER_NUMBER);
       wedge.command(b'M');
       wedge.pair(ccx, ccy);
