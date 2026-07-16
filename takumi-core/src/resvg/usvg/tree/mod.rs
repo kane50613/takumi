@@ -1456,18 +1456,6 @@ pub enum ImageKind {
   GIF(Arc<Vec<u8>>),
   /// A reference to raw WebP data. Should be decoded by the caller.
   WEBP(Arc<Vec<u8>>),
-  /// A premultiplied RGBA8 pixel buffer. Can be rendered as is.
-  ///
-  /// Not part of upstream resvg; lets callers hand a rasterized layer to the
-  /// filter pipeline without an encode roundtrip.
-  Raw {
-    /// Buffer width in pixels.
-    width: u32,
-    /// Buffer height in pixels.
-    height: u32,
-    /// Premultiplied RGBA8 pixels, `width * height * 4` bytes.
-    data: Arc<Vec<u8>>,
-  },
   /// A preprocessed SVG tree. Can be rendered as is.
   SVG(Tree),
 }
@@ -1485,8 +1473,6 @@ impl ImageKind {
         .ok()
         .and_then(|(width, height)| Size::from_wh(width as f32, height as f32))
         .log_none(|| log::warn!("Image has an invalid size. Skipped.")),
-      ImageKind::Raw { width, height, .. } => Size::from_wh(*width as f32, *height as f32)
-        .log_none(|| log::warn!("Image has an invalid size. Skipped.")),
       ImageKind::SVG(svg) => Some(svg.size),
     }
   }
@@ -1499,7 +1485,6 @@ impl std::fmt::Debug for ImageKind {
       ImageKind::PNG(_) => f.write_str("ImageKind::PNG(..)"),
       ImageKind::GIF(_) => f.write_str("ImageKind::GIF(..)"),
       ImageKind::WEBP(_) => f.write_str("ImageKind::WEBP(..)"),
-      ImageKind::Raw { .. } => f.write_str("ImageKind::Raw(..)"),
       ImageKind::SVG(_) => f.write_str("ImageKind::SVG(..)"),
     }
   }
