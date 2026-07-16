@@ -12,7 +12,7 @@ use crate::resources::image::{DataUriError, decode_data_uri};
 
 /// Error produced while parsing a filter reference.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum FilterReferenceError {
+pub(crate) enum FilterReferenceError {
   /// The URL is not a `data:image/svg+xml` URI.
   #[error("filter url() must be a data:image/svg+xml URI")]
   UnsupportedUrl,
@@ -87,7 +87,7 @@ impl FilterReference {
   /// Parses a `filter: url(...)` value. Only `data:image/svg+xml` URIs are
   /// supported; there is no document to resolve fragments or external URLs
   /// against.
-  pub fn from_url(url: &str) -> Result<Self, FilterReferenceError> {
+  pub(crate) fn from_url(url: &str) -> Result<Self, FilterReferenceError> {
     let decoded = decode_data_uri(url).map_err(|error| match error {
       DataUriError::Malformed => FilterReferenceError::UnsupportedUrl,
       DataUriError::Undecodable => FilterReferenceError::InvalidDataUri("undecodable body"),
@@ -105,7 +105,7 @@ impl FilterReference {
 
   /// Validates `<filter>` markup (optionally wrapped in an `<svg>` document)
   /// and extracts the filter element.
-  pub fn from_markup(xml: &str) -> Result<Self, FilterReferenceError> {
+  pub(crate) fn from_markup(xml: &str) -> Result<Self, FilterReferenceError> {
     let document = Document::parse(xml)
       .map_err(|error| FilterReferenceError::InvalidMarkup(error.to_string()))?;
     let root = document.root_element();

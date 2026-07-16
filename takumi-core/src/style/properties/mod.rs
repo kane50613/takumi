@@ -87,7 +87,7 @@ pub use filter::{
   TransferTable,
 };
 #[cfg(feature = "svg")]
-pub use filter_reference::{FilterReference, FilterReferenceError};
+pub use filter_reference::FilterReference;
 pub use flex::*;
 pub use flex_grow::*;
 pub use font_family::*;
