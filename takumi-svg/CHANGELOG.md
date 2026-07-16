@@ -1,3 +1,17 @@
+## takumi-svg@0.2.0
+
+### Anchor element filter regions to the border box
+
+An invisible rect keeps a filtered element's region from collapsing when nothing inside it paints, matching the raster backend for filter-driven overlays like `feTurbulence` grain.
+
+### Support SVG filter references in `filter`
+
+`filter` and `backdrop-filter` accept `url(data:image/svg+xml,...)` with inline `<filter>` markup, mixing freely with filter functions. The raster backend executes the graph through resvg; the SVG backend emits the markup verbatim.
+
+### Deduplicate glyph outlines in SVG output
+
+Glyph outlines land in `<defs>` once and repeat as `<use>` references, shrinking text-heavy documents by 30–75%.
+
 ## takumi-svg@0.1.6
 
 ### Decode bitmaps at draw size

@@ -1,3 +1,17 @@
+## takumi-core@0.5.0
+
+### Apply filter references without the base64 roundtrip
+
+`apply_svg_filter` hands the layer to resvg through a custom href resolver as fast-compressed PNG bytes, dropping the base64 encode, data-URI decode, and multi-megabyte XML parse.
+
+### Support SVG filter references in `filter`
+
+`filter` and `backdrop-filter` accept `url(data:image/svg+xml,...)` with inline `<filter>` markup, mixing freely with filter functions. The raster backend executes the graph through resvg; the SVG backend emits the markup verbatim.
+
+### Accept SVG sources without xmlns
+
+Inline SVG image sources no longer need an `xmlns` declaration. Data-URI decoding and base64 encoding are shared through `resources::image` (new `to_data_url`).
+
 ## takumi-core@0.4.0
 
 ### Decode GIF frames on the raw `gif` decoder
