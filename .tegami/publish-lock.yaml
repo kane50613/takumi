@@ -1,93 +1,72 @@
 core:changelogs:
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: patch\n  cargo:takumi-raster:\n    type: patch\n---\n\n### Apply filter references without the base64 roundtrip\n\n`apply_svg_filter` hands the layer to resvg through a custom href resolver as fast-compressed PNG bytes, dropping the base64 encode, data-URI decode, and multi-megabyte XML parse.\n"
-    filename: filter-reference-fast-path.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n  cargo:takumi-raster:\n    type: minor\n  cargo:takumi-svg:\n    type: minor\n---\n\n### Support SVG filter references in `filter`\n\n`filter` and `backdrop-filter` accept `url(data:image/svg+xml,...)` with inline `<filter>` markup, mixing freely with filter functions. The raster backend executes the graph through resvg; the SVG backend emits the markup verbatim.\n"
-    filename: filter-svg-reference.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: patch\n---\n\n### Accept SVG sources without xmlns\n\nInline SVG image sources no longer need an `xmlns` declaration. Data-URI decoding and base64 encoding are shared through `resources::image` (new `to_data_url`).\n"
-    filename: svg-without-xmlns.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-svg:\n    type: patch\n---\n\n### Anchor element filter regions to the border box\n\nAn invisible rect keeps a filtered element's region from collapsing when nothing inside it paints, matching the raster backend for filter-driven overlays like `feTurbulence` grain.\n"
-    filename: filter-region-anchor.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-svg:\n    type: patch\n---\n\n### Deduplicate glyph outlines in SVG output\n\nGlyph outlines land in `<defs>` once and repeat as `<use>` references, shrinking text-heavy documents by 30–75%.\n"
-    filename: svg-glyph-dedup.md
+  - content: "---\npackages:\n  npm:@takumi-rs/wasm:\n    type: patch\n---\n\n### Fix WebAssembly parsing on Bun/Nitro\n\nRemove `--all-features` from the `wasm-opt` configuration to prevent generating experimental WebAssembly features (such as typed function references) that cause parsing errors (e.g. `unexpected value type 100`) in bundlers like Nitro/unwasm. Explicitly enable stable features (`bulk-memory`, `mutable-globals`, and `sign-ext`) instead.\n"
+    filename: 2026-07-16-fix-wasm-nitro.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - id: npm:@takumi-rs/image-response
+  - changelogIds:
+      - 2026-07-16-fix-wasm-nitro.md
+    id: npm:@takumi-rs/wasm
     updated: true
-  - id: npm:@takumi-rs/wasm
+  - id: npm:@takumi-rs/core
     updated: true
-  - id: npm:takumi-template
-    updated: false
   - id: npm:takumi-js
     updated: true
   - id: npm:docs
     updated: false
-  - id: npm:@takumi-rs/core
+  - id: npm:@takumi-rs/image-response
     updated: true
+  - id: npm:takumi-template
+    updated: false
   - id: npm:@takumi-rs/helpers
     updated: true
-  - id: npm:example-satori-html
-    updated: false
   - id: npm:ffplay
-    updated: false
-  - id: npm:svelte
-    updated: false
-  - id: npm:waku-ssr
-    updated: false
-  - id: npm:ffmpeg-keyframe-animation
-    updated: false
-  - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:example-twitter-images
-    updated: false
-  - id: npm:example-tanstack-start
     updated: false
   - id: npm:example-nextjs
     updated: false
+  - id: npm:waku-ssr
+    updated: false
+  - id: npm:example-twitter-images
+    updated: false
   - id: npm:example-css-library-integration
     updated: false
-  - changelogIds:
-      - filter-reference-fast-path.md
-      - filter-svg-reference.md
-      - svg-without-xmlns.md
-    id: cargo:takumi-core
-    updated: true
+  - id: npm:svelte
+    updated: false
+  - id: npm:example-tanstack-start
+    updated: false
+  - id: npm:example-cloudflare-workers
+    updated: false
+  - id: npm:ffmpeg-keyframe-animation
+    updated: false
+  - id: npm:example-satori-html
+    updated: false
+  - id: cargo:takumi-svg
+    updated: false
+  - id: cargo:takumi-raster
+    updated: false
+  - id: cargo:takumi-core
+    updated: false
   - id: cargo:takumi-html
-    updated: true
-  - changelogIds:
-      - filter-reference-fast-path.md
-      - filter-svg-reference.md
-    id: cargo:takumi-raster
-    updated: true
-  - changelogIds:
-      - filter-region-anchor.md
-      - filter-svg-reference.md
-      - svg-glyph-dedup.md
-    id: cargo:takumi-svg
-    updated: true
+    updated: false
   - id: cargo:takumi
     updated: true
 npm:packages:
   - id: npm:takumi
-  - id: npm:@takumi-rs/image-response
   - id: npm:@takumi-rs/wasm
-  - id: npm:takumi-template
+  - id: npm:@takumi-rs/core
   - id: npm:takumi-js
   - id: npm:docs
-  - id: npm:@takumi-rs/core
+  - id: npm:@takumi-rs/image-response
+  - id: npm:takumi-template
   - id: npm:@takumi-rs/helpers
-  - id: npm:example-satori-html
   - id: npm:ffplay
-  - id: npm:svelte
-  - id: npm:waku-ssr
-  - id: npm:ffmpeg-keyframe-animation
-  - id: npm:example-cloudflare-workers
-  - id: npm:example-twitter-images
-  - id: npm:example-tanstack-start
   - id: npm:example-nextjs
+  - id: npm:waku-ssr
+  - id: npm:example-twitter-images
   - id: npm:example-css-library-integration
+  - id: npm:svelte
+  - id: npm:example-tanstack-start
+  - id: npm:example-cloudflare-workers
+  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-satori-html
