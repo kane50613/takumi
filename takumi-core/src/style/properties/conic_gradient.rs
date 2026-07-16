@@ -60,6 +60,8 @@ pub struct ConicGradientTile {
   pub start_rad: f32,
   /// Starting angle as a fraction of a full turn.
   start_turns: f32,
+  /// Scale converting adjusted turns to a LUT index on the non-repeating path.
+  turns_to_lut_scale: f32,
   /// Whether this gradient repeats.
   pub repeating: bool,
   /// First resolved stop position in degrees, used as repeating origin.
@@ -138,7 +140,7 @@ impl ConicGradientTile {
       let wrapped = (degrees - self.repeat_start_deg).rem_euclid(self.repeat_period_deg);
       Self::stable_round_index(wrapped * self.angle_to_lut_scale, max_index)
     } else {
-      Self::stable_floor_index(adjusted_turns * lut_len as f32, max_index)
+      Self::stable_floor_index(adjusted_turns * self.turns_to_lut_scale, max_index)
     }
   }
 
@@ -212,6 +214,7 @@ impl ConicGradientTile {
       cy,
       start_rad,
       start_turns,
+      turns_to_lut_scale: lut_len as f32,
       repeating,
       repeat_start_deg,
       repeat_period_deg,

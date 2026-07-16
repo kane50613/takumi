@@ -12,16 +12,19 @@ use std::f32::consts::FRAC_PI_2;
 const PIO2_HI: f32 = 1.570_796_2;
 const PIO2_LO: f32 = 7.549_79e-8;
 
+#[inline]
 fn sin_poly(r: f32) -> f32 {
   let z = r * r;
   r + r * z * (-1.666_665_5e-1 + z * (8.332_161e-3 + z * -1.951_529_6e-4))
 }
 
+#[inline]
 fn cos_poly(r: f32) -> f32 {
   let z = r * r;
   1.0 - 0.5 * z + z * z * (4.166_664_6e-2 + z * (-1.388_731_6e-3 + z * 2.443_315_7e-5))
 }
 
+#[inline]
 fn sin_cos(x: f32) -> (f32, f32) {
   if !x.is_finite() {
     return (f32::NAN, f32::NAN);
@@ -40,26 +43,31 @@ fn sin_cos(x: f32) -> (f32, f32) {
 }
 
 /// `f32::sin` with platform-independent results.
+#[inline]
 pub fn sin(x: f32) -> f32 {
   sin_cos(x).0
 }
 
 /// `f32::cos` with platform-independent results.
+#[inline]
 pub fn cos(x: f32) -> f32 {
   sin_cos(x).1
 }
 
 /// `f32::tan` with platform-independent results.
+#[inline]
 pub fn tan(x: f32) -> f32 {
   let (s, c) = sin_cos(x);
   s / c
 }
 
+#[inline]
 fn atan_poly(x: f32) -> f32 {
   let z = x * x;
   x + x * z * (-3.333_295e-1 + z * (1.997_771e-1 + z * (-1.387_768_6e-1 + z * 8.053_744_5e-2)))
 }
 
+#[inline]
 fn atan(x: f32) -> f32 {
   use std::f32::consts::FRAC_PI_4;
 
@@ -79,6 +87,7 @@ fn atan(x: f32) -> f32 {
 }
 
 /// `f32::atan2` with platform-independent results.
+#[inline]
 pub fn atan2(y: f32, x: f32) -> f32 {
   use std::f32::consts::PI;
 
@@ -109,6 +118,7 @@ pub fn atan2_f64(y: f64, x: f64) -> f64 {
 /// Skia's `xy_to_unit_angle` sweep-gradient polynomial (fpminimax of
 /// `atan(t)/2π` over one octant), so it is both deterministic and cheaper than
 /// a libm `atan2` per pixel.
+#[inline(always)]
 pub fn xy_to_unit_angle(x: f32, y: f32) -> f32 {
   let x_abs = x.abs();
   let y_abs = y.abs();
@@ -137,6 +147,7 @@ pub fn xy_to_unit_angle(x: f32, y: f32) -> f32 {
 /// `f32::hypot` with platform-independent results. Plain
 /// `sqrt(x * x + y * y)`: painting operates on pixel-scale magnitudes, so the
 /// overflow guards of a real `hypot` are unnecessary.
+#[inline]
 pub fn hypot(x: f32, y: f32) -> f32 {
   (x * x + y * y).sqrt()
 }
