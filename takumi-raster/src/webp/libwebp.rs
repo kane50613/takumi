@@ -33,11 +33,15 @@ fn webp_config(lossless: bool, quality: u8, speed: u8) -> Result<WebPConfig> {
   Ok(config)
 }
 
-fn import_rgba_picture(image: &RgbaImage) -> Result<WebPPicture> {
+fn import_rgba_picture(image: &RgbaImage, config: &WebPConfig) -> Result<WebPPicture> {
   let mut picture = WebPPicture::new().map_err(|_| WebPError::EncoderSetupFailed)?;
 
   picture.width = image.width() as i32;
   picture.height = image.height() as i32;
+  // Import() subsamples to YUV420 unless use_argb is set; WebPEncode converts back
+  // for VP8L, so a lossless encode would round-trip through chroma subsampling.
+  // https://github.com/webmproject/libwebp/blob/main/src/enc/picture_csp_enc.c
+  picture.use_argb = config.lossless;
 
   let import_ok = unsafe {
     WebPPictureImportRGBA(
@@ -108,7 +112,7 @@ fn encode_single_frame(
   duration_ms: u32,
   config: &WebPConfig,
 ) -> Result<EncodedFrame> {
-  let mut picture = import_rgba_picture(image)?;
+  let mut picture = import_rgba_picture(image, config)?;
   let mut writer = WebPMemoryBuffer::new();
   picture.writer = Some(WebPMemoryWrite);
   picture.custom_ptr = writer.as_mut_ptr().cast();
@@ -285,7 +289,7 @@ fn write_webp(
   destination: &mut impl Write,
   config: WebPConfig,
 ) -> Result<()> {
-  let mut picture = import_rgba_picture(&image)?;
+  let mut picture = import_rgba_picture(&image, &config)?;
   let mut writer = MaybeUninit::<WebPMemoryWriter>::uninit();
   unsafe { WebPMemoryWriterInit(writer.as_mut_ptr()) };
   picture.writer = Some(WebPMemoryWrite);
@@ -522,4 +526,61 @@ fn animation_encoder_error_msg(encoder: *mut WebPAnimEncoder) -> String {
   unsafe { CStr::from_ptr(ptr) }
     .to_string_lossy()
     .into_owned()
+}
+
+#[cfg(test)]
+mod tests {
+  use image::Rgba;
+
+  use super::*;
+
+  fn decode_rgba(encoded: &[u8]) -> RgbaImage {
+    let mut width = 0;
+    let mut height = 0;
+    let pixels =
+      unsafe { WebPDecodeRGBA(encoded.as_ptr(), encoded.len(), &mut width, &mut height) };
+    assert!(!pixels.is_null(), "decode failed");
+
+    let len = width as usize * height as usize * 4;
+    let raw = unsafe { slice::from_raw_parts(pixels, len) }.to_vec();
+    unsafe { WebPFree(pixels.cast()) };
+
+    RgbaImage::from_raw(width as u32, height as u32, raw).unwrap()
+  }
+
+  /// YUV420 subsampling destroys saturated chroma edges.
+  fn chroma_edges() -> RgbaImage {
+    RgbaImage::from_fn(64, 64, |x, y| match (x / 3 + y / 5) % 4 {
+      0 => Rgba([255, 0, 0, 255]),
+      1 => Rgba([0, 0, 255, 255]),
+      2 => Rgba([0, 255, 0, 255]),
+      _ => Rgba([255, 0, 255, 255]),
+    })
+  }
+
+  #[test]
+  fn lossless_round_trip_is_bit_exact() {
+    let image = chroma_edges();
+    let mut encoded = Vec::new();
+    write_webp_lossless(Cow::Borrowed(&image), &mut encoded).unwrap();
+
+    let decoded = decode_rgba(&encoded);
+    let differing = decoded
+      .pixels()
+      .zip(image.pixels())
+      .filter(|(decoded, source)| decoded != source)
+      .count();
+
+    assert_eq!(differing, 0, "lossless encode altered {differing} pixels");
+  }
+
+  #[test]
+  fn lossy_still_encodes() {
+    let image = chroma_edges();
+    let mut encoded = Vec::new();
+    write_webp_lossy(Cow::Borrowed(&image), &mut encoded, Quality::default()).unwrap();
+
+    let decoded = decode_rgba(&encoded);
+    assert_eq!(decoded.dimensions(), image.dimensions());
+  }
 }
