@@ -170,7 +170,7 @@ fn test_showcase_chrome_text() {
   );
 
   let root = stage(vec![
-    Node::text("CHROME".to_string()).with_class_name("chrome"),
+    Node::text("CHROME!".to_string()).with_class_name("chrome"),
     Node::text("Y2K SPECULAR BEVEL".to_string()).with_class_name("tagline"),
   ]);
 
