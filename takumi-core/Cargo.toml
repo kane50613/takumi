@@ -71,7 +71,7 @@ optional = true
 
 [features]
 default = ["woff2", "woff", "svg"]
-svg = ["dep:resvg", "dep:roxmltree"]
+svg = ["dep:resvg", "resvg/raster-images", "dep:roxmltree"]
 woff2 = ["dep:wuff", "wuff/brotli"]
 woff = ["dep:wuff", "wuff/z"]
 

@@ -12,13 +12,14 @@ use crate::{
   geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Size, transformed_rect_extents},
   layout::{
     inline::{
-      InlineLayoutMode, InlineLayoutRequest, collect_inline_items, create_inline_layout,
-      resolve_inline_max_height, resolve_visual_inline_box, scale_text_fit_x,
+      InlineContentKind, InlineLayoutMode, InlineLayoutRequest, collect_inline_items,
+      create_inline_layout, resolve_inline_max_height, resolve_visual_inline_box, scale_text_fit_x,
       text_fit_line_alignment_correction,
     },
+    node::Node,
     tree::{LayoutResults, RenderNode},
   },
-  style::{Affine, ComputedStyle, Display},
+  style::{Affine, ComputedStyle, Display, SizingContext},
 };
 
 /// A node's resolved paint inputs: where it sits in the tree, its accumulated
@@ -349,24 +350,52 @@ pub fn build_stacking_contexts(
     context.buckets.sort();
   }
 
+  // `None` means "unknown extent" and poisons the union; dropping it would
+  // under-report the context and clip or cull visible paint.
   for context_id in (0..contexts.len()).rev() {
-    let mut paint_bounds = contexts[context_id]
-      .root
-      .as_ref()
-      .and_then(|node| node.paint_bounds);
+    let mut paint_bounds = None;
+    let mut unknown = false;
+    if let Some(root) = &contexts[context_id].root {
+      match root.paint_bounds {
+        Some(bounds) => paint_bounds = Some(bounds),
+        None => unknown = true,
+      }
+    }
     for bucket in contexts[context_id].buckets.in_paint_order() {
       for item in bucket {
         let item_bounds = match &item.kind {
           PaintItemKind::Node(node_paint) => node_paint.paint_bounds,
           PaintItemKind::Context(child_context_id) => contexts[*child_context_id].paint_bounds,
         };
-        paint_bounds = merge_bounds(paint_bounds, item_bounds);
+        match item_bounds {
+          Some(bounds) => paint_bounds = merge_bounds(paint_bounds, Some(bounds)),
+          None => unknown = true,
+        }
       }
     }
-    contexts[context_id].paint_bounds = paint_bounds;
+    contexts[context_id].paint_bounds = if unknown { None } else { paint_bounds };
   }
 
   Ok(contexts)
+}
+
+/// Ink whose extent this module does not measure (shadows, outlines, text
+/// strokes) forces `None`: bounds must never underestimate paint output.
+/// `filter` is exempt — backends pad its spread themselves and need the tight
+/// pre-filter extent.
+fn style_paints_unmeasured_ink(style: &ComputedStyle, sizing: &SizingContext) -> bool {
+  style
+    .box_shadow
+    .as_ref()
+    .is_some_and(|shadows| !shadows.is_empty())
+    || style.outline_style.is_rendered()
+    || style
+      .text_shadow
+      .as_ref()
+      .is_some_and(|shadows| !shadows.is_empty())
+    || style
+      .webkit_text_stroke_width
+      .is_some_and(|width| width.to_px(sizing, sizing.font_size) > 0.0)
 }
 
 fn compute_node_paint_bounds(
@@ -374,6 +403,10 @@ fn compute_node_paint_bounds(
   layout: ComputedLayout,
   transform: Affine,
 ) -> Option<SceneBounds> {
+  if style_paints_unmeasured_ink(&node.context.style, &node.context.sizing) {
+    return None;
+  }
+
   let mut bounds = bounds_for_rect(layout.size, transform);
   if !has_inline_paint_content(node) {
     return bounds;
@@ -498,6 +531,10 @@ fn compute_node_paint_bounds(
 fn has_inline_paint_content(node: &RenderNode) -> bool {
   node.should_create_inline_layout()
     || node.anonymous_text_content.is_some()
+    || matches!(
+      node.node.as_ref().and_then(Node::inline_content),
+      Some(InlineContentKind::Text(_))
+    )
     || node.children.as_ref().is_some_and(|children| {
       children
         .iter()

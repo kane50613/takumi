@@ -2,63 +2,63 @@
   <rect x="0" y="0" width="1200" height="630" fill="#967700"/>
   <g style="mix-blend-mode:plus-lighter">
     <g fill="#fff">
-      <use href="#g0" x="429.14" y="210"/>
-      <use href="#g1" x="468.98" y="210"/>
-      <use href="#g2" x="486.32" y="210"/>
-      <use href="#g3" x="521.54" y="210"/>
-      <use href="#g4" x="568.88" y="210"/>
-      <use href="#g5" x="601.76" y="210"/>
-      <use href="#g6" x="617.3" y="210"/>
-      <use href="#g7" x="653.84" y="210"/>
-      <use href="#g8" x="687.68" y="210"/>
-      <use href="#g9" x="712.46" y="210"/>
-      <use href="#g10" x="747.32" y="210"/>
+      <use href="#g0" x="429.14" y="228"/>
+      <use href="#g1" x="468.98" y="228"/>
+      <use href="#g2" x="486.32" y="228"/>
+      <use href="#g3" x="521.54" y="228"/>
+      <use href="#g4" x="568.88" y="228"/>
+      <use href="#g5" x="601.76" y="228"/>
+      <use href="#g6" x="617.3" y="228"/>
+      <use href="#g7" x="653.84" y="228"/>
+      <use href="#g8" x="687.68" y="228"/>
+      <use href="#g9" x="712.46" y="228"/>
+      <use href="#g10" x="747.32" y="228"/>
     </g>
   </g>
   <g style="mix-blend-mode:plus-lighter">
     <g opacity=".1">
       <g fill="#fff">
-        <use href="#g0" x="429.14" y="294"/>
-        <use href="#g1" x="468.98" y="294"/>
-        <use href="#g2" x="486.32" y="294"/>
-        <use href="#g3" x="521.54" y="294"/>
-        <use href="#g4" x="568.88" y="294"/>
-        <use href="#g5" x="601.76" y="294"/>
-        <use href="#g6" x="617.3" y="294"/>
-        <use href="#g7" x="653.84" y="294"/>
-        <use href="#g8" x="687.68" y="294"/>
-        <use href="#g9" x="712.46" y="294"/>
-        <use href="#g10" x="747.32" y="294"/>
+        <use href="#g0" x="429.14" y="300"/>
+        <use href="#g1" x="468.98" y="300"/>
+        <use href="#g2" x="486.32" y="300"/>
+        <use href="#g3" x="521.54" y="300"/>
+        <use href="#g4" x="568.88" y="300"/>
+        <use href="#g5" x="601.76" y="300"/>
+        <use href="#g6" x="617.3" y="300"/>
+        <use href="#g7" x="653.84" y="300"/>
+        <use href="#g8" x="687.68" y="300"/>
+        <use href="#g9" x="712.46" y="300"/>
+        <use href="#g10" x="747.32" y="300"/>
       </g>
     </g>
   </g>
   <g style="mix-blend-mode:plus-darker">
     <g fill="#fff">
-      <use href="#g0" x="434.17" y="378"/>
-      <use href="#g1" x="474.01" y="378"/>
-      <use href="#g2" x="491.35" y="378"/>
-      <use href="#g3" x="526.57" y="378"/>
-      <use href="#g11" x="573.91" y="378"/>
-      <use href="#g12" x="616.93" y="378"/>
-      <use href="#g10" x="651.61" y="378"/>
-      <use href="#g13" x="674.59" y="378"/>
-      <use href="#g9" x="708.43" y="378"/>
-      <use href="#g10" x="743.29" y="378"/>
+      <use href="#g0" x="434.17" y="372"/>
+      <use href="#g1" x="474.01" y="372"/>
+      <use href="#g2" x="491.35" y="372"/>
+      <use href="#g3" x="526.57" y="372"/>
+      <use href="#g11" x="573.91" y="372"/>
+      <use href="#g12" x="616.93" y="372"/>
+      <use href="#g10" x="651.61" y="372"/>
+      <use href="#g13" x="674.59" y="372"/>
+      <use href="#g9" x="708.43" y="372"/>
+      <use href="#g10" x="743.29" y="372"/>
     </g>
   </g>
   <g style="mix-blend-mode:plus-darker">
     <g opacity=".1">
       <g fill="#000">
-        <use href="#g0" x="434.17" y="462"/>
-        <use href="#g1" x="474.01" y="462"/>
-        <use href="#g2" x="491.35" y="462"/>
-        <use href="#g3" x="526.57" y="462"/>
-        <use href="#g11" x="573.91" y="462"/>
-        <use href="#g12" x="616.93" y="462"/>
-        <use href="#g10" x="651.61" y="462"/>
-        <use href="#g13" x="674.59" y="462"/>
-        <use href="#g9" x="708.43" y="462"/>
-        <use href="#g10" x="743.29" y="462"/>
+        <use href="#g0" x="434.17" y="444"/>
+        <use href="#g1" x="474.01" y="444"/>
+        <use href="#g2" x="491.35" y="444"/>
+        <use href="#g3" x="526.57" y="444"/>
+        <use href="#g11" x="573.91" y="444"/>
+        <use href="#g12" x="616.93" y="444"/>
+        <use href="#g10" x="651.61" y="444"/>
+        <use href="#g13" x="674.59" y="444"/>
+        <use href="#g9" x="708.43" y="444"/>
+        <use href="#g10" x="743.29" y="444"/>
       </g>
     </g>
   </g>
