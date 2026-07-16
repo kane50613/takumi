@@ -9,18 +9,11 @@ use std::sync::{Arc, OnceLock, Weak};
 
 #[cfg(feature = "svg")]
 use crate::resvg::usvg::{ImageHrefResolver, ImageKind, Options, Transform, Tree};
-#[cfg(feature = "svg")]
-use image::{
-  ExtendedColorType, ImageEncoder,
-  codecs::png::{CompressionType, FilterType, PngEncoder},
-};
 use quick_cache::{
   Weighter,
   sync::{Cache, GuardResult},
 };
 
-#[cfg(feature = "svg")]
-use crate::resources::image_buffer::unpremultiply_in_place;
 #[cfg(feature = "svg")]
 use roxmltree::{Document, ParsingOptions};
 use serde::Deserialize;
@@ -685,7 +678,7 @@ pub(crate) fn decode_data_uri(src: &str) -> Result<DecodedDataUri, DataUriError>
   Ok(DecodedDataUri { mime, bytes })
 }
 
-/// The synthetic href our resolver hands the layer PNG out for.
+/// The synthetic href our resolver hands the layer pixels out for.
 #[cfg(feature = "svg")]
 const LAYER_HREF: &str = "takumi:layer";
 
@@ -693,9 +686,8 @@ const LAYER_HREF: &str = "takumi:layer";
 /// premultiplied-RGBA layer in place through the resvg pipeline.
 ///
 /// The layer is wrapped in a minimal document referencing it by a synthetic
-/// href that a custom resolver answers with fast-compressed PNG bytes, so the
-/// only roundtrip is the PNG encode/decode resvg requires — no base64, no
-/// data-URI parsing, no multi-megabyte XML.
+/// href that a custom resolver answers with the premultiplied pixels as
+/// [`ImageKind::Raw`] — no encode roundtrip, no base64, no data-URI parsing.
 #[cfg(feature = "svg")]
 pub fn apply_svg_filter(
   layer: &mut [u8],
@@ -704,14 +696,7 @@ pub fn apply_svg_filter(
   markup: &str,
   filter_id: &str,
 ) -> Result<(), ImageError> {
-  // In place: the layer is overwritten with the filter output below, and on
-  // error the whole render fails, so the straight-alpha state never leaks.
-  unpremultiply_in_place(layer);
-  let mut png = Vec::new();
-  PngEncoder::new_with_quality(&mut png, CompressionType::Fast, FilterType::NoFilter)
-    .write_image(layer, width, height, ExtendedColorType::Rgba8)
-    .map_err(ImageError::decode)?;
-  let png = Arc::new(png);
+  let pixels = Arc::new(layer.to_vec());
 
   let document = format!(
     r#"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}">{markup}<image width="{width}" height="{height}" href="{LAYER_HREF}" filter="url(#{filter_id})"/></svg>"#
@@ -720,7 +705,11 @@ pub fn apply_svg_filter(
     image_href_resolver: ImageHrefResolver {
       resolve_data: ImageHrefResolver::default_data_resolver(),
       resolve_string: Box::new(move |href: &str, _: &Options| {
-        (href == LAYER_HREF).then(|| ImageKind::PNG(png.clone()))
+        (href == LAYER_HREF).then(|| ImageKind::Raw {
+          width,
+          height,
+          data: pixels.clone(),
+        })
       }),
     },
     ..Options::default()

@@ -47,9 +47,6 @@ fn draw_children(
 
         crate::resvg::path::fill_path(path, mode, &ctx, transform, pixmap);
       }
-      crate::resvg::usvg::Node::Text(text) => {
-        draw_children(text.flattened(), mode, transform, pixmap);
-      }
       crate::resvg::usvg::Node::Group(group) => {
         let transform = transform.pre_concat(group.transform());
 
