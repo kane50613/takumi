@@ -1,3 +1,13 @@
+## takumi-raster@0.3.1
+
+### Raise the lossless WebP compression effort
+
+Encode `WebPLossless` at effort 50 instead of 20, shrinking output by about 10% at 1.5x the encode time. Drop the `alpha_compression` assignment, which libwebp never read on either path.
+
+### Encode lossless WebP without a YUV420 round trip
+
+Set `use_argb` on the imported picture so `WebPLossless` and lossless animated WebP keep their source pixels instead of passing through chroma subsampling.
+
 ## takumi-raster@0.3.0
 
 ### Apply filter references without the base64 roundtrip
