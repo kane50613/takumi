@@ -17,6 +17,10 @@ Vendored from resvg 0.47.0 (Apache-2.0 OR MIT), stripped of the `text`,
 #![allow(clippy::upper_case_acronyms)]
 #![allow(clippy::wrong_self_convention)]
 
+use std::sync::Arc;
+
+use usvg::filter::Filter;
+
 pub mod usvg;
 
 mod clip;
@@ -81,6 +85,54 @@ pub fn render_node(
 
   let ctx = render::Context { max_bbox };
   render::render_node(node, &ctx, transform, pixmap);
+
+  Some(())
+}
+
+/// Applies parsed filters to a premultiplied RGBA layer in place.
+///
+/// Mirrors the `render_group` filter path: each filter runs on a pixmap sized
+/// to its region (the contract the filter primitives assert), with the layer
+/// placed at the region offset and the region window copied back afterwards.
+///
+/// Returns `None` when a pixmap cannot be allocated.
+pub(crate) fn apply_filters_to_layer(
+  filters: &[Arc<Filter>],
+  layer: &mut [u8],
+  width: u32,
+  height: u32,
+) -> Option<()> {
+  for f in filters {
+    let region = f.rect();
+    let ts = tiny_skia::Transform::from_translate(-region.x(), -region.y());
+    let region_int = region.transform(ts)?.to_int_rect();
+    let mut sub = tiny_skia::Pixmap::new(region_int.width(), region_int.height())?;
+
+    let dx = (-region.x()).round() as i32;
+    let dy = (-region.y()).round() as i32;
+    let layer_ref = tiny_skia::PixmapRef::from_bytes(layer, width, height)?;
+    sub.draw_pixmap(
+      dx,
+      dy,
+      layer_ref,
+      &tiny_skia::PixmapPaint::default(),
+      tiny_skia::Transform::identity(),
+      None,
+    );
+
+    filter::apply(f, ts, &mut sub);
+
+    let mut out = tiny_skia::Pixmap::new(width, height)?;
+    out.draw_pixmap(
+      -dx,
+      -dy,
+      sub.as_ref(),
+      &tiny_skia::PixmapPaint::default(),
+      tiny_skia::Transform::identity(),
+      None,
+    );
+    layer.copy_from_slice(out.data());
+  }
 
   Some(())
 }

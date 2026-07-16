@@ -90,12 +90,6 @@ mod raster_images {
           })
           .log_none(|| log::warn!("Failed to decode a GIF image."))
       }
-      ImageKind::Raw {
-        width,
-        height,
-        data,
-      } => pixmap_from_premultiplied(data.as_ref().clone(), *width, *height)
-        .log_none(|| log::warn!("Raw image buffer has an invalid size. Skipped.")),
     }
   }
 
