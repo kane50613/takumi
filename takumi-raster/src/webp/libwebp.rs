@@ -28,7 +28,6 @@ fn webp_config(lossless: bool, quality: u8, speed: u8) -> Result<WebPConfig> {
   .map_err(|_| WebPError::EncoderSetupFailed)?;
 
   config.lossless = if lossless { 1 } else { 0 };
-  config.alpha_compression = if lossless { 0 } else { 1 };
   config.method = speed.clamp(0, 6) as i32;
   if unsafe { WebPValidateConfig(&config) } == 0 {
     return Err(WebPError::EncoderSetupFailed.into());
