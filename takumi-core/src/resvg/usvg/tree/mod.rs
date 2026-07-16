@@ -3,7 +3,6 @@
 
 pub mod filter;
 mod geom;
-mod text;
 
 use std::fmt::Display;
 use std::sync::Arc;
@@ -13,7 +12,6 @@ pub use strict_num::{self, ApproxEqUlps, NonZeroPositiveF32, NormalizedF32, Posi
 pub use tiny_skia_path;
 
 pub use self::geom::*;
-pub use self::text::*;
 
 use crate::resvg::usvg::OptionLog;
 
@@ -898,7 +896,6 @@ pub enum Node {
   Group(Box<Group>),
   Path(Box<Path>),
   Image(Box<Image>),
-  Text(Box<Text>),
 }
 
 impl Node {
@@ -908,7 +905,6 @@ impl Node {
       Node::Group(e) => e.id.as_str(),
       Node::Path(e) => e.id.as_str(),
       Node::Image(e) => e.id.as_str(),
-      Node::Text(e) => e.id.as_str(),
     }
   }
 
@@ -920,7 +916,6 @@ impl Node {
       Node::Group(group) => group.abs_transform(),
       Node::Path(path) => path.abs_transform(),
       Node::Image(image) => image.abs_transform(),
-      Node::Text(text) => text.abs_transform(),
     }
   }
 
@@ -930,7 +925,6 @@ impl Node {
       Node::Group(group) => group.bounding_box(),
       Node::Path(path) => path.bounding_box(),
       Node::Image(image) => image.bounding_box(),
-      Node::Text(text) => text.bounding_box(),
     }
   }
 
@@ -940,7 +934,6 @@ impl Node {
       Node::Group(group) => group.abs_bounding_box(),
       Node::Path(path) => path.abs_bounding_box(),
       Node::Image(image) => image.abs_bounding_box(),
-      Node::Text(text) => text.abs_bounding_box(),
     }
   }
 
@@ -951,7 +944,6 @@ impl Node {
       Node::Path(path) => path.stroke_bounding_box(),
       // Image cannot be stroked.
       Node::Image(image) => image.bounding_box(),
-      Node::Text(text) => text.stroke_bounding_box(),
     }
   }
 
@@ -962,7 +954,6 @@ impl Node {
       Node::Path(path) => path.abs_stroke_bounding_box(),
       // Image cannot be stroked.
       Node::Image(image) => image.abs_bounding_box(),
-      Node::Text(text) => text.abs_stroke_bounding_box(),
     }
   }
 
@@ -978,7 +969,6 @@ impl Node {
       // Hor/ver path without stroke can return None. This is expected.
       Node::Path(path) => path.abs_bounding_box().to_non_zero_rect(),
       Node::Image(image) => image.abs_bounding_box().to_non_zero_rect(),
-      Node::Text(text) => text.abs_bounding_box().to_non_zero_rect(),
     }
   }
 
@@ -1011,7 +1001,6 @@ impl Node {
       Node::Group(group) => group.subroots(&mut f),
       Node::Path(path) => path.subroots(&mut f),
       Node::Image(image) => image.subroots(&mut f),
-      Node::Text(text) => text.subroots(&mut f),
     }
   }
 }
@@ -1467,6 +1456,18 @@ pub enum ImageKind {
   GIF(Arc<Vec<u8>>),
   /// A reference to raw WebP data. Should be decoded by the caller.
   WEBP(Arc<Vec<u8>>),
+  /// A premultiplied RGBA8 pixel buffer. Can be rendered as is.
+  ///
+  /// Not part of upstream resvg; lets callers hand a rasterized layer to the
+  /// filter pipeline without an encode roundtrip.
+  Raw {
+    /// Buffer width in pixels.
+    width: u32,
+    /// Buffer height in pixels.
+    height: u32,
+    /// Premultiplied RGBA8 pixels, `width * height * 4` bytes.
+    data: Arc<Vec<u8>>,
+  },
   /// A preprocessed SVG tree. Can be rendered as is.
   SVG(Tree),
 }
@@ -1481,6 +1482,8 @@ impl ImageKind {
         .ok()
         .and_then(|size| Size::from_wh(size.width as f32, size.height as f32))
         .log_none(|| log::warn!("Image has an invalid size. Skipped.")),
+      ImageKind::Raw { width, height, .. } => Size::from_wh(*width as f32, *height as f32)
+        .log_none(|| log::warn!("Image has an invalid size. Skipped.")),
       ImageKind::SVG(svg) => Some(svg.size),
     }
   }
@@ -1493,6 +1496,7 @@ impl std::fmt::Debug for ImageKind {
       ImageKind::PNG(_) => f.write_str("ImageKind::PNG(..)"),
       ImageKind::GIF(_) => f.write_str("ImageKind::GIF(..)"),
       ImageKind::WEBP(_) => f.write_str("ImageKind::WEBP(..)"),
+      ImageKind::Raw { .. } => f.write_str("ImageKind::Raw(..)"),
       ImageKind::SVG(_) => f.write_str("ImageKind::SVG(..)"),
     }
   }
@@ -1618,11 +1622,6 @@ impl Tree {
     node_by_id(&self.root, id)
   }
 
-  /// Checks if the current tree has any text nodes.
-  pub fn has_text_nodes(&self) -> bool {
-    has_text_nodes(&self.root)
-  }
-
   /// Checks if the current tree has any `defs` nodes.
   pub fn has_defs_nodes(&self) -> bool {
     !self.linear_gradients().is_empty()
@@ -1709,32 +1708,6 @@ fn node_by_id<'a>(parent: &'a Group, id: &str) -> Option<&'a Node> {
   None
 }
 
-fn has_text_nodes(root: &Group) -> bool {
-  for node in &root.children {
-    if let Node::Text(_) = node {
-      return true;
-    }
-
-    let mut has_text = false;
-
-    if let Node::Image(image) = node {
-      if let ImageKind::SVG(tree) = &image.kind {
-        if has_text_nodes(&tree.root) {
-          has_text = true;
-        }
-      }
-    }
-
-    node.subroots(|subroot| has_text |= has_text_nodes(subroot));
-
-    if has_text {
-      return true;
-    }
-  }
-
-  false
-}
-
 fn loop_over_paint_servers(parent: &Group, f: &mut dyn FnMut(&Paint)) {
   fn push(paint: Option<&Paint>, f: &mut dyn FnMut(&Paint)) {
     if let Some(paint) = paint {
@@ -1750,8 +1723,6 @@ fn loop_over_paint_servers(parent: &Group, f: &mut dyn FnMut(&Paint)) {
         push(path.stroke.as_ref().map(|f| &f.paint), f);
       }
       Node::Image(_) => {}
-      // Flattened text would be used instead.
-      Node::Text(_) => {}
     }
 
     node.subroots(|subroot| loop_over_paint_servers(subroot, f));

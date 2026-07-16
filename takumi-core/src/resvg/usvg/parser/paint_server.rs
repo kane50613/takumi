@@ -651,51 +651,6 @@ fn node_to_user_coordinates(
         update_paint_servers(&mut tree.root, context_transform, context_bbox, None, cache);
       }
     }
-    Node::Text(text) => {
-      // By the SVG spec, `tspan` doesn't have a bbox and uses the parent `text` bbox.
-      // Therefore we have to use text's bbox when converting tspan and flatted text
-      // paint servers.
-      let bbox = text.bounding_box;
-
-      // We need to update three things:
-      // 1. The fills/strokes of the original elements in the usvg tree.
-      // 2. The fills/strokes of the layouted elements of the text.
-      // 3. The fills/strokes of the outlined text.
-
-      // 1.
-      for chunk in &mut text.chunks {
-        for span in &mut chunk.spans {
-          process_fill(
-            &mut span.fill,
-            text.abs_transform,
-            context_transform,
-            context_bbox,
-            bbox,
-            cache,
-          );
-          process_stroke(
-            &mut span.stroke,
-            text.abs_transform,
-            context_transform,
-            context_bbox,
-            bbox,
-            cache,
-          );
-          process_text_decoration(&mut span.decoration.underline, bbox, cache);
-          process_text_decoration(&mut span.decoration.overline, bbox, cache);
-          process_text_decoration(&mut span.decoration.line_through, bbox, cache);
-        }
-      }
-
-      // 3.
-      update_paint_servers(
-        &mut text.flattened,
-        context_transform,
-        context_bbox,
-        Some(bbox),
-        cache,
-      );
-    }
   }
 }
 
@@ -862,27 +817,6 @@ pub(crate) fn process_paint(
   }
 
   true
-}
-
-fn process_text_decoration(style: &mut Option<TextDecorationStyle>, bbox: Rect, cache: &mut Cache) {
-  if let Some(style) = style.as_mut() {
-    process_fill(
-      &mut style.fill,
-      Transform::default(),
-      Transform::default(),
-      None,
-      bbox,
-      cache,
-    );
-    process_stroke(
-      &mut style.stroke,
-      Transform::default(),
-      Transform::default(),
-      None,
-      bbox,
-      cache,
-    );
-  }
 }
 
 impl Paint {
