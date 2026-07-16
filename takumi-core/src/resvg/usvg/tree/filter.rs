@@ -457,7 +457,8 @@ impl ConvolveMatrixData {
     rows: u32,
     data: Vec<f32>,
   ) -> Option<Self> {
-    if (columns * rows) as usize != data.len() || target_x >= columns || target_y >= rows {
+    let len = columns.checked_mul(rows)?;
+    if len as usize != data.len() || target_x >= columns || target_y >= rows {
       return None;
     }
 

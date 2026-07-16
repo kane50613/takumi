@@ -95,7 +95,7 @@ fn init(mut seed: i32) -> (Vec<usize>, Vec<Vec<Vec<f64>>>) {
   let mut gradient = vec![vec![vec![0.0; 2]; B_LEN]; 4];
 
   if seed <= 0 {
-    seed = -seed % (RAND_M - 1) + 1;
+    seed = -(seed % (RAND_M - 1)) + 1;
   }
 
   if seed > RAND_M - 1 {

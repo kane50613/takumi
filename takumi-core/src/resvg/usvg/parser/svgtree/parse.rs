@@ -303,10 +303,9 @@ pub(crate) fn parse_svg_element<'input>(
         // 1) Existing is not important, new is not important -> swap
         // 2) Existing is important, new is not important -> don't swap
         // 3) Existing is not important, new is important -> swap
-        // 4) Existing is important, new is important -> don't swap (since the order
-        // is reversed, so existing important attributes take precedence over new
-        // important attributes)
-        let has_precedence = !doc.attrs[existing_idx].important;
+        // 4) Existing is important, new is important -> swap (all declarations
+        // here share the author origin, so the later one wins as usual)
+        let has_precedence = !doc.attrs[existing_idx].important || important;
 
         if has_precedence {
           doc.attrs.swap(existing_idx, last_idx);
