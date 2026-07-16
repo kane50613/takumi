@@ -8,7 +8,7 @@ use std::str::{FromStr, from_utf8};
 use std::sync::{Arc, OnceLock, Weak};
 
 #[cfg(feature = "svg")]
-use crate::resvg::usvg::{ImageHrefResolver, ImageKind, Options, Transform, Tree};
+use crate::resvg::usvg::{Options, Transform, Tree};
 use quick_cache::{
   Weighter,
   sync::{Cache, GuardResult},
@@ -678,16 +678,11 @@ pub(crate) fn decode_data_uri(src: &str) -> Result<DecodedDataUri, DataUriError>
   Ok(DecodedDataUri { mime, bytes })
 }
 
-/// The synthetic href our resolver hands the layer pixels out for.
-#[cfg(feature = "svg")]
-const LAYER_HREF: &str = "takumi:layer";
-
 /// Applies SVG `<filter>` markup (carrying `id="{filter_id}"`) to a
-/// premultiplied-RGBA layer in place through the resvg pipeline.
+/// premultiplied-RGBA layer in place through the resvg filter pipeline.
 ///
-/// The layer is wrapped in a minimal document referencing it by a synthetic
-/// href that a custom resolver answers with the premultiplied pixels as
-/// [`ImageKind::Raw`] — no encode roundtrip, no base64, no data-URI parsing.
+/// The markup is resolved against the layer bounds and applied straight to
+/// the layer pixels; no render tree is built and nothing is re-encoded.
 #[cfg(feature = "svg")]
 pub fn apply_svg_filter(
   layer: &mut [u8],
@@ -696,30 +691,23 @@ pub fn apply_svg_filter(
   markup: &str,
   filter_id: &str,
 ) -> Result<(), ImageError> {
-  let pixels = Arc::new(layer.to_vec());
+  let filters = crate::resvg::usvg::filters_from_markup(
+    markup,
+    filter_id,
+    width as f32,
+    height as f32,
+    &Options::default(),
+  )
+  .map_err(ImageError::svg_parse)?;
 
-  let document = format!(
-    r#"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}">{markup}<image width="{width}" height="{height}" href="{LAYER_HREF}" filter="url(#{filter_id})"/></svg>"#
-  );
-  let options = Options {
-    image_href_resolver: ImageHrefResolver {
-      resolve_data: ImageHrefResolver::default_data_resolver(),
-      resolve_string: Box::new(move |href: &str, _: &Options| {
-        (href == LAYER_HREF).then(|| ImageKind::Raw {
-          width,
-          height,
-          data: pixels.clone(),
-        })
-      }),
-    },
-    ..Options::default()
+  let Some(filters) = filters else {
+    // An invalid filter reference hides the element.
+    layer.fill(0);
+    return Ok(());
   };
-  let tree = Tree::from_str(&document, &options).map_err(ImageError::svg_parse)?;
 
-  let mut pixmap = Pixmap::new(width, height).ok_or(ImageError::InvalidPixmapSize)?;
-  crate::resvg::render(&tree, Transform::identity(), &mut pixmap.as_mut());
-  layer.copy_from_slice(pixmap.data());
-  Ok(())
+  crate::resvg::apply_filters_to_layer(&filters, layer, width, height)
+    .ok_or(ImageError::InvalidPixmapSize)
 }
 
 /// Encodes bytes as a base64 `data:` URI.
