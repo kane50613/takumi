@@ -314,12 +314,13 @@ fn get_image_file_format(path: &std::path::Path, data: &[u8]) -> Option<ImageFor
 
 /// Checks that file has a PNG, a GIF, a JPEG or a WebP magic bytes.
 fn get_image_data_format(data: &[u8]) -> Option<ImageFormat> {
-  match imagesize::image_type(data).ok()? {
-    imagesize::ImageType::Gif => Some(ImageFormat::GIF),
-    imagesize::ImageType::Jpeg => Some(ImageFormat::JPEG),
-    imagesize::ImageType::Png => Some(ImageFormat::PNG),
-    imagesize::ImageType::Webp => Some(ImageFormat::WEBP),
-    _ => None,
+  use crate::resources::image_decoder::DetectedImageFormat;
+
+  match crate::resources::image_decoder::detect_image_format(data)? {
+    DetectedImageFormat::Gif => Some(ImageFormat::GIF),
+    DetectedImageFormat::Jpeg => Some(ImageFormat::JPEG),
+    DetectedImageFormat::Png => Some(ImageFormat::PNG),
+    DetectedImageFormat::WebP => Some(ImageFormat::WEBP),
   }
 }
 

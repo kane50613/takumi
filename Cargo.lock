@@ -1846,7 +1846,6 @@ dependencies = [
  "gif",
  "image",
  "image-webp",
- "imagesize",
  "kurbo",
  "libwebp-sys",
  "log",
@@ -1875,7 +1874,6 @@ dependencies = [
  "typed-builder",
  "wuff",
  "xxhash-rust",
- "zune-jpeg",
 ]
 
 [[package]]

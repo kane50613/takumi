@@ -80,7 +80,7 @@ pub(crate) fn decode_image(bytes: &[u8]) -> ImageResult<ImageBuffer> {
   }
 }
 
-fn detect_image_format(bytes: &[u8]) -> Option<DetectedImageFormat> {
+pub(crate) fn detect_image_format(bytes: &[u8]) -> Option<DetectedImageFormat> {
   if bytes.starts_with(&PNG_SIGNATURE) {
     return Some(DetectedImageFormat::Png);
   }
@@ -101,7 +101,7 @@ fn detect_image_format(bytes: &[u8]) -> Option<DetectedImageFormat> {
 }
 
 #[derive(Clone, Copy)]
-enum DetectedImageFormat {
+pub(crate) enum DetectedImageFormat {
   Png,
   Jpeg,
   Gif,
