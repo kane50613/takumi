@@ -68,6 +68,15 @@ mod raster_images {
       crate::resvg::usvg::ImageKind::WEBP(data) => {
         decode_webp(data).log_none(|| log::warn!("Failed to decode a WebP image."))
       }
+      crate::resvg::usvg::ImageKind::Raw {
+        width,
+        height,
+        data,
+      } => {
+        let size = tiny_skia::IntSize::from_wh(*width, *height)?;
+        tiny_skia::Pixmap::from_vec(data.as_ref().clone(), size)
+          .log_none(|| log::warn!("Raw image buffer has an invalid size. Skipped."))
+      }
     }
   }
 
