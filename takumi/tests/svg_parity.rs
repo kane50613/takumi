@@ -39,12 +39,6 @@ const KNOWN_DIVERGENT: &[(&str, &str)] = &[
      layers independently, so the multiply + contrast() dot screen degrades",
   ),
   (
-    "showcase_liquid_glass",
-    "backdrop feDisplacementMap: raster displaces the extracted backdrop \
-     region, svg displaces the scene replay; the sampled phase differs at the \
-     rim (84.7%, floor is 90%)",
-  ),
-  (
     "showcase_chrome_text",
     "feSpecularLighting bevel: raster lights the rasterized layer's alpha, \
      svg lights the vector glyph alpha; the rim highlight lands differently \

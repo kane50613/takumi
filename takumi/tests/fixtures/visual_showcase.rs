@@ -134,64 +134,6 @@ fn test_showcase_neon_terminal() {
   run_showcase(root, css, "showcase_neon_terminal");
 }
 
-// Liquid glass: the displacement map is not noise but a lens map. Red ramps
-// left-to-right and green top-to-bottom (screen-blended), so each pixel encodes
-// its own direction; a neutral `#808000` radial keeps the center undistorted,
-// leaving refraction only at the rim. Negative scale bends the backdrop
-// outward like a convex lens.
-#[test]
-fn test_showcase_liquid_glass() {
-  let lens_map = format!(
-    "data:image/svg+xml,{}",
-    crate::style_filter_reference::percent_encode(
-      r##"<svg xmlns="http://www.w3.org/2000/svg" width="560" height="320"><defs><linearGradient id="x" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000000"/><stop offset="1" stop-color="#ff0000"/></linearGradient><linearGradient id="y" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000000"/><stop offset="1" stop-color="#00ff00"/></linearGradient><radialGradient id="c"><stop offset="0" stop-color="#808000"/><stop offset="0.55" stop-color="#808000"/><stop offset="1" stop-color="#808000" stop-opacity="0"/></radialGradient></defs><rect width="560" height="320" fill="url(#x)"/><rect width="560" height="320" fill="url(#y)" style="mix-blend-mode:screen"/><rect width="560" height="320" fill="url(#c)"/></svg>"##,
-    )
-  );
-  let refraction = filter_url(&format!(
-    r#"<filter color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%"><feImage href="{lens_map}" width="560" height="320" result="map"/><feDisplacementMap in="SourceGraphic" in2="map" scale="9" xChannelSelector="R" yChannelSelector="G" result="disp"/><feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="disp"/></feMerge></filter>"#,
-  ));
-  let css = format!(
-    r#"
-    .stage {{
-      background-color: #0b1020;
-      background-image:
-        radial-gradient(ellipse 70% 60% at 15% 20%, rgba(56, 189, 248, 0.7), transparent 68%),
-        radial-gradient(ellipse 70% 60% at 85% 75%, rgba(236, 72, 153, 0.6), transparent 68%),
-        repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.16) 0px, rgba(255, 255, 255, 0.16) 3px, transparent 3px, transparent 34px);
-    }}
-    .caption {{
-      position: absolute;
-      bottom: 42px;
-      font-family: "Geist Mono";
-      font-size: 24px;
-      color: rgba(255, 255, 255, 0.6);
-    }}
-    .glass {{
-      width: 560px;
-      height: 320px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 36px;
-      border: 1px solid rgba(255, 255, 255, 0.35);
-      backdrop-filter: {refraction} blur(1px) saturate(1.25);
-      box-shadow: inset 1px 1px 1px rgba(255, 255, 255, 0.6), inset -1px -1px 1px rgba(255, 255, 255, 0.15), 0 24px 60px rgba(0, 0, 0, 0.35);
-    }}
-    .glass-label {{ font-size: 54px; font-weight: 700; color: rgba(255, 255, 255, 0.92); }}
-  "#
-  );
-
-  let root = stage(vec![
-    Node::container(vec![
-      Node::text("Liquid Glass".to_string()).with_class_name("glass-label"),
-    ])
-    .with_class_name("glass"),
-    Node::text("feDisplacementMap in backdrop-filter".to_string()).with_class_name("caption"),
-  ]);
-
-  run_showcase(root, &css, "showcase_liquid_glass");
-}
-
 // Y2K chrome: a hard-stop metal band gradient clipped to the glyphs, a
 // specular-lighting bevel from the filter graph, over a starburst backdrop.
 #[test]

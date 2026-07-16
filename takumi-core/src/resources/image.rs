@@ -648,8 +648,7 @@ fn cover_target((native_w, native_h): (u32, u32), (box_w, box_h): (u32, u32)) ->
   )
 }
 
-/// Check if the string looks like an SVG image. No `xmlns` requirement: usvg
-/// accepts a namespace-less `<svg>` root.
+/// Check if the string looks like an SVG image.
 pub(crate) fn is_svg_like(src: &str) -> bool {
   src.contains("<svg")
 }

@@ -1,6 +1,6 @@
 ---
 title: Visual Effects
-description: Aurora meshes, liquid glass, neon CRT, chrome type, halftone, and dithering with plain CSS.
+description: Aurora meshes, neon CRT, chrome type, halftone, and dithering with plain CSS.
 icon: Wand
 ---
 
@@ -38,69 +38,6 @@ dithers away gradient banding. The title crosses the whole hue wheel with two st
 ```
 
 ![Aurora mesh with film grain](/images/effects/showcase_aurora_grain.webp)
-
-## Liquid glass
-
-A lens map driven `feDisplacementMap` inside `backdrop-filter` refracts whatever sits behind the
-card; most non-Chromium browsers cannot do this. Plain frosted glass is just
-`backdrop-filter: blur(16px)`.
-
-```css
-.glass {
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: 36px;
-  backdrop-filter: url("data:image/svg+xml,<filter>…</filter>") blur(1px) saturate(1.25);
-  box-shadow:
-    inset 1px 1px 1px rgba(255, 255, 255, 0.6),
-    inset -1px -1px 1px rgba(255, 255, 255, 0.15),
-    0 24px 60px rgba(0, 0, 0, 0.35);
-}
-```
-
-The map is not noise. Red ramps left to right and green top to bottom, so each pixel encodes its
-own displacement direction; a neutral `#808000` radial keeps the center undistorted, leaving
-refraction only at the rim:
-
-```xml
-<svg xmlns="http://www.w3.org/2000/svg" width="560" height="320">
-  <defs>
-    <linearGradient id="x" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#000000" /><stop offset="1" stop-color="#ff0000" />
-    </linearGradient>
-    <linearGradient id="y" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#000000" /><stop offset="1" stop-color="#00ff00" />
-    </linearGradient>
-    <radialGradient id="c">
-      <stop offset="0" stop-color="#808000" />
-      <stop offset="0.55" stop-color="#808000" />
-      <stop offset="1" stop-color="#808000" stop-opacity="0" />
-    </radialGradient>
-  </defs>
-  <rect width="560" height="320" fill="url(#x)" />
-  <rect width="560" height="320" fill="url(#y)" style="mix-blend-mode:screen" />
-  <rect width="560" height="320" fill="url(#c)" />
-</svg>
-```
-
-The filter loads the map (as its own `data:` URI) with `feImage` and displaces the backdrop
-through it. Declare `color-interpolation-filters="sRGB"` so `#808000` stays the neutral midpoint;
-resvg currently applies `scale` twice, so takumi needs `scale="9"` where a browser needs
-`scale="81"`:
-
-```xml
-<filter color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">
-  <feImage href="data:image/svg+xml,…" width="560" height="320" result="map" />
-  <feDisplacementMap in="SourceGraphic" in2="map" scale="9"
-    xChannelSelector="R" yChannelSelector="G" result="disp" />
-  <!-- merge over the source so edges displaced out of range stay covered -->
-  <feMerge>
-    <feMergeNode in="SourceGraphic" />
-    <feMergeNode in="disp" />
-  </feMerge>
-</filter>
-```
-
-![Liquid glass](/images/effects/showcase_liquid_glass.webp)
 
 ## Neon CRT
 
