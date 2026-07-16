@@ -705,12 +705,12 @@ pub fn apply_svg_filter(
   markup: &str,
   filter_id: &str,
 ) -> Result<(), ImageError> {
-  let mut straight = layer.to_vec();
-
-  unpremultiply_in_place(&mut straight);
+  // In place: the layer is overwritten with the filter output below, and on
+  // error the whole render fails, so the straight-alpha state never leaks.
+  unpremultiply_in_place(layer);
   let mut png = Vec::new();
   PngEncoder::new_with_quality(&mut png, CompressionType::Fast, FilterType::NoFilter)
-    .write_image(&straight, width, height, ExtendedColorType::Rgba8)
+    .write_image(layer, width, height, ExtendedColorType::Rgba8)
     .map_err(ImageError::decode)?;
   let png = Arc::new(png);
 
