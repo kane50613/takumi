@@ -487,6 +487,7 @@ impl<'a, 'input: 'a> SvgNode<'a, 'input> {
       doc: self.document(),
       origin: self.id(),
       curr: self.id(),
+      visited: Vec::new(),
       is_first: true,
       is_finished: false,
     }
@@ -612,6 +613,7 @@ pub struct HrefIter<'a, 'input: 'a> {
   doc: &'a Document<'input>,
   origin: NodeId,
   curr: NodeId,
+  visited: Vec<NodeId>,
   is_first: bool,
   is_finished: bool,
 }
@@ -630,7 +632,7 @@ impl<'a, 'input: 'a> Iterator for HrefIter<'a, 'input> {
     }
 
     if let Some(link) = self.doc.get(self.curr).node_attribute(AId::Href) {
-      if link.id() == self.curr || link.id() == self.origin {
+      if link.id() == self.curr || link.id() == self.origin || self.visited.contains(&link.id()) {
         log::warn!(
           "Element '#{}' cannot reference itself via 'xlink:href'.",
           self.doc.get(self.origin).element_id()
@@ -639,6 +641,7 @@ impl<'a, 'input: 'a> Iterator for HrefIter<'a, 'input> {
         return None;
       }
 
+      self.visited.push(self.curr);
       self.curr = link.id();
       Some(self.doc.get(self.curr))
     } else {

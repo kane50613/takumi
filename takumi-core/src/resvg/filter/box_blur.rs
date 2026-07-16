@@ -21,8 +21,10 @@ const STEPS: usize = 5;
 ///
 /// This method will allocate a copy of the `src` image as a back buffer.
 pub fn apply(sigma_x: f64, sigma_y: f64, mut src: ImageRefMut) {
-  let boxes_horz = create_box_gauss(sigma_x as f32);
-  let boxes_vert = create_box_gauss(sigma_y as f32);
+  // A sigma past the image size already blurs into a uniform smear; the cap
+  // keeps the derived box radii addressable on 32-bit targets.
+  let boxes_horz = create_box_gauss(sigma_x.min(src.width as f64) as f32);
+  let boxes_vert = create_box_gauss(sigma_y.min(src.height as f64) as f32);
   let mut backbuf = src.data.to_vec();
   let mut backbuf = ImageRefMut::new(src.width, src.height, &mut backbuf);
 

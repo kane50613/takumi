@@ -49,125 +49,53 @@ fn render_vector(
 }
 
 mod raster_images {
+  use crate::resources::image_buffer::ImageBuffer;
+  use crate::resources::image_decoder::{decode_gif_frames, decode_image};
   use crate::resvg::OptionLog;
   use crate::resvg::usvg::ImageRendering;
-  use std::io::Cursor;
+
+  fn pixmap_from_premultiplied(
+    data: Vec<u8>,
+    width: u32,
+    height: u32,
+  ) -> Option<tiny_skia::Pixmap> {
+    let size = tiny_skia::IntSize::from_wh(width, height)?;
+    tiny_skia::Pixmap::from_vec(data, size)
+  }
+
+  fn buffer_to_pixmap(buffer: ImageBuffer) -> Option<tiny_skia::Pixmap> {
+    let (width, height) = (buffer.width(), buffer.height());
+    pixmap_from_premultiplied(buffer.into_premultiplied_rgba(), width, height)
+  }
 
   fn decode_raster(image: &crate::resvg::usvg::ImageKind) -> Option<tiny_skia::Pixmap> {
+    use crate::resvg::usvg::ImageKind;
+
     match image {
-      crate::resvg::usvg::ImageKind::SVG(_) => None,
-      crate::resvg::usvg::ImageKind::JPEG(data) => {
-        decode_jpeg(data).log_none(|| log::warn!("Failed to decode a JPEG image."))
+      ImageKind::SVG(_) => None,
+      ImageKind::JPEG(data) | ImageKind::PNG(data) | ImageKind::WEBP(data) => decode_image(data)
+        .ok()
+        .and_then(buffer_to_pixmap)
+        .log_none(|| log::warn!("Failed to decode an image.")),
+      ImageKind::GIF(data) => {
+        let mut first = None;
+        decode_gif_frames(data, 0, Some(1), None, |frame| first = Some(frame)).ok()?;
+        first
+          .and_then(|frame| {
+            pixmap_from_premultiplied(
+              frame.buffer.data().to_vec(),
+              frame.buffer.width(),
+              frame.buffer.height(),
+            )
+          })
+          .log_none(|| log::warn!("Failed to decode a GIF image."))
       }
-      crate::resvg::usvg::ImageKind::PNG(data) => {
-        decode_png(data).log_none(|| log::warn!("Failed to decode a PNG image."))
-      }
-      crate::resvg::usvg::ImageKind::GIF(data) => {
-        decode_gif(data).log_none(|| log::warn!("Failed to decode a GIF image."))
-      }
-      crate::resvg::usvg::ImageKind::WEBP(data) => {
-        decode_webp(data).log_none(|| log::warn!("Failed to decode a WebP image."))
-      }
-      crate::resvg::usvg::ImageKind::Raw {
+      ImageKind::Raw {
         width,
         height,
         data,
-      } => {
-        let size = tiny_skia::IntSize::from_wh(*width, *height)?;
-        tiny_skia::Pixmap::from_vec(data.as_ref().clone(), size)
-          .log_none(|| log::warn!("Raw image buffer has an invalid size. Skipped."))
-      }
-    }
-  }
-
-  fn decode_png(data: &[u8]) -> Option<tiny_skia::Pixmap> {
-    tiny_skia::Pixmap::decode_png(data).ok()
-  }
-
-  fn decode_jpeg(data: &[u8]) -> Option<tiny_skia::Pixmap> {
-    use zune_jpeg::zune_core::colorspace::ColorSpace;
-    use zune_jpeg::zune_core::options::DecoderOptions;
-
-    let cursor = Cursor::new(data);
-    let options = DecoderOptions::default().jpeg_set_out_colorspace(ColorSpace::RGBA);
-    let mut decoder = zune_jpeg::JpegDecoder::new_with_options(cursor, options);
-    decoder.decode_headers().ok()?;
-    let output_cs = decoder.output_colorspace()?;
-
-    let img_data = {
-      let data = decoder.decode().ok()?;
-      match output_cs {
-        ColorSpace::RGBA => data,
-        _ => return None,
-      }
-    };
-
-    let info = decoder.info()?;
-
-    let size = tiny_skia::IntSize::from_wh(info.width as u32, info.height as u32)?;
-    tiny_skia::Pixmap::from_vec(img_data, size)
-  }
-
-  fn decode_gif(data: &[u8]) -> Option<tiny_skia::Pixmap> {
-    let mut decoder = gif::DecodeOptions::new();
-    decoder.set_color_output(gif::ColorOutput::RGBA);
-    let mut decoder = decoder.read_info(data).ok()?;
-    let first_frame = decoder.read_next_frame().ok()??;
-
-    let size =
-      tiny_skia::IntSize::from_wh(u32::from(first_frame.width), u32::from(first_frame.height))?;
-
-    let (w, h) = size.dimensions();
-    let mut pixmap = tiny_skia::Pixmap::new(w, h)?;
-    rgba_to_pixmap(&first_frame.buffer, &mut pixmap);
-    Some(pixmap)
-  }
-
-  fn decode_webp(data: &[u8]) -> Option<tiny_skia::Pixmap> {
-    let mut decoder = image_webp::WebPDecoder::new(std::io::Cursor::new(data)).ok()?;
-    let mut first_frame = vec![0; decoder.output_buffer_size()?];
-    decoder.read_image(&mut first_frame).ok()?;
-
-    let (w, h) = decoder.dimensions();
-    let mut pixmap = tiny_skia::Pixmap::new(w, h)?;
-
-    if decoder.has_alpha() {
-      rgba_to_pixmap(&first_frame, &mut pixmap);
-    } else {
-      rgb_to_pixmap(&first_frame, &mut pixmap);
-    }
-
-    Some(pixmap)
-  }
-
-  fn rgb_to_pixmap(data: &[u8], pixmap: &mut tiny_skia::Pixmap) {
-    use rgb::FromSlice;
-
-    let mut i = 0;
-    let dst = pixmap.data_mut();
-    for p in data.as_rgb() {
-      dst[i + 0] = p.r;
-      dst[i + 1] = p.g;
-      dst[i + 2] = p.b;
-      dst[i + 3] = 255;
-
-      i += tiny_skia::BYTES_PER_PIXEL;
-    }
-  }
-
-  fn rgba_to_pixmap(data: &[u8], pixmap: &mut tiny_skia::Pixmap) {
-    use rgb::FromSlice;
-
-    let mut i = 0;
-    let dst = pixmap.data_mut();
-    for p in data.as_rgba() {
-      let a = p.a as f64 / 255.0;
-      dst[i + 0] = (p.r as f64 * a + 0.5) as u8;
-      dst[i + 1] = (p.g as f64 * a + 0.5) as u8;
-      dst[i + 2] = (p.b as f64 * a + 0.5) as u8;
-      dst[i + 3] = p.a;
-
-      i += tiny_skia::BYTES_PER_PIXEL;
+      } => pixmap_from_premultiplied(data.as_ref().clone(), *width, *height)
+        .log_none(|| log::warn!("Raw image buffer has an invalid size. Skipped.")),
     }
   }
 

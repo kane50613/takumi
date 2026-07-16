@@ -674,7 +674,7 @@ fn convert_convolve_matrix(fe: SvgNode, primitives: &[Primitive]) -> Option<Kind
 
   let mut matrix = Vec::new();
   if let Some(list) = fe.attribute::<Vec<f32>>(AId::KernelMatrix) {
-    if list.len() == (order_x * order_y) as usize {
+    if order_x.checked_mul(order_y).map(|len| len as usize) == Some(list.len()) {
       matrix = list;
     }
   }

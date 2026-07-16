@@ -614,9 +614,10 @@ fn apply_drop_shadow(
     *p = color.premultiply().to_color_u8();
   }
 
-  match cs {
-    crate::resvg::usvg::filter::ColorInterpolation::SRGB => shadow_pixmap.into_srgb(),
-    crate::resvg::usvg::filter::ColorInterpolation::LinearRGB => shadow_pixmap.into_linear_rgb(),
+  // The shadow color is defined in sRGB, so only a linearRGB
+  // interpolation space needs a conversion.
+  if cs == crate::resvg::usvg::filter::ColorInterpolation::LinearRGB {
+    shadow_pixmap.into_linear_rgb();
   }
 
   pixmap.draw_pixmap(
@@ -956,7 +957,8 @@ fn apply_displacement_map(
   input2: Image,
 ) -> Result<Image, Error> {
   let pixmap1 = input1.into_color_space(cs)?.take()?;
-  let pixmap2 = input2.into_color_space(cs)?.take()?;
+  let mut pixmap2 = input2.into_color_space(cs)?.take()?;
+  demultiply_alpha(pixmap2.data_mut().as_rgba_mut());
 
   let mut pixmap = tiny_skia::Pixmap::try_create(region.width(), region.height())?;
 
@@ -1075,13 +1077,13 @@ fn transform_light_source(
       let mut point = tiny_skia::Point::from_xy(light.x, light.y);
       ts.map_point(&mut point);
       light.x = point.x - region.x() as f32;
-      light.y = point.y - region.x() as f32;
+      light.y = point.y - region.y() as f32;
       light.z *= sz;
 
       let mut point = tiny_skia::Point::from_xy(light.points_at_x, light.points_at_y);
       ts.map_point(&mut point);
       light.points_at_x = point.x - region.x() as f32;
-      light.points_at_y = point.y - region.x() as f32;
+      light.points_at_y = point.y - region.y() as f32;
       light.points_at_z *= sz;
     }
   }
