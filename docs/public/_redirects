@@ -1,9 +1,9 @@
 /docs/getting-started/* /docs/integrations/:splat 301
 /docs/integrations /docs 301
 /docs/integrations/* /docs 301
-/docs/deep-dives /docs/architecture 301
+/docs/deep-dives /docs/reference 301
 /docs/deep-dives/stylesheets /docs/reference 301
-/docs/deep-dives/* /docs/architecture 301
+/docs/deep-dives/* /docs/reference 301
 /docs/persistent-images /docs/load-images 301
 /docs/tailwind-css /docs/styling 301
 /docs/quickstart /docs 301

@@ -40,7 +40,7 @@ Call `init()` once to load the WASM binary, then reuse the `Renderer`. Build nod
 ## Documentation
 
 - Integration guide: <https://takumi.kane.tw/docs/integration>
-- API reference: <https://takumi.kane.tw/docs/api-reference>
+- API reference: <https://takumi.kane.tw/docs/reference>
 - Repository: <https://github.com/kane50613/takumi>
 
 For Node.js, use the native [@takumi-rs/core](https://npmjs.com/package/@takumi-rs/core) bindings.

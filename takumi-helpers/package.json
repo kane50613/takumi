@@ -11,7 +11,7 @@
     "react",
     "rendering"
   ],
-  "homepage": "https://takumi.kane.tw/docs/architecture#fromjsx-helper",
+  "homepage": "https://takumi.kane.tw/docs/helpers#parsing-templates",
   "bugs": {
     "url": "https://github.com/kane50613/takumi/issues"
   },

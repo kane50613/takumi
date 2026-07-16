@@ -61,7 +61,7 @@ const png = await renderer.render(node, {
 ## Documentation
 
 - Integration guide: <https://takumi.kane.tw/docs/integration>
-- API reference: <https://takumi.kane.tw/docs/api-reference>
+- API reference: <https://takumi.kane.tw/docs/reference>
 - Repository: <https://github.com/kane50613/takumi>
 
 For WebAssembly runtimes (Cloudflare Workers, browsers, edge), use [@takumi-rs/wasm](https://npmjs.com/package/@takumi-rs/wasm).

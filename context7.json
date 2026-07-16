@@ -1,0 +1,26 @@
+{
+  "$schema": "https://context7.com/schema/context7.json",
+  "projectTitle": "Takumi",
+  "description": "Render JSX, HTML, or a node tree to PNG/JPEG/WebP/SVG and animations. Rust core with JS, WASM, and native bindings.",
+  "folders": [
+    "docs/content/docs",
+    "takumi",
+    "takumi-html",
+    "takumi-js",
+    "takumi-svg",
+    "takumi-raster",
+    "takumi-helpers"
+  ],
+  "excludeFiles": ["CHANGELOG.md"],
+  "rules": [
+    "Prefer `render(node, options)` from `takumi-js`, or `new ImageResponse(node, options)` from `takumi-js/response` in a route handler. `Renderer` from `@takumi-rs/core` is an escape hatch for reusing a font cache across renders, not the default.",
+    "`render`, `renderSvg`, and `renderAnimation` are async. Await them.",
+    "Pass fonts per call via the `fonts` option. `registerFont` on a `Renderer` is only for preloading outside the request path.",
+    "Load Google Fonts with the `googleFonts` helper from `takumi-js/helpers`. It returns named subsets, and `render` picks the ones the text needs.",
+    "Only a last-resort font ships built in: Geist, Latin glyphs, weights 300 to 800. Register a font for anything outside that, including CJK. Generic families like `sans-serif` resolve to registered families, not to the built-in.",
+    "The root element does not fill the canvas on its own. Set `width: 100%` and `height: 100%` on it.",
+    "The `tw` prop is a built-in Tailwind subset with no Preflight, so elements keep their UA margins. For full Tailwind, compile the CSS and pass it through `stylesheets`.",
+    "In Rust, import from `takumi::prelude` and build options with `RenderOptions::builder()`. Fonts live in a `Fonts` context, not a global one.",
+    "Code samples carry Fumadocs annotations such as `// [!code --]` and `// [!code highlight]`. Never copy them into generated code, and treat `[!code --]` lines as the removed API."
+  ]
+}

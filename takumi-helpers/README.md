@@ -4,7 +4,7 @@
 
 Convert JSX and HTML into the node trees Takumi's Rust engine renders. Load fonts and process emoji.
 
-[Documentation](https://takumi.kane.tw/docs/architecture#fromjsx-helper) · [GitHub](https://github.com/kane50613/takumi)
+[Documentation](https://takumi.kane.tw/docs/helpers#parsing-templates) · [GitHub](https://github.com/kane50613/takumi)
 
 ## Installation
 
