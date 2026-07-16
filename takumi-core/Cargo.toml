@@ -77,10 +77,6 @@ optional = true
 workspace = true
 optional = true
 
-[dependencies.imagesize]
-workspace = true
-optional = true
-
 [dependencies.log]
 workspace = true
 optional = true
@@ -89,15 +85,7 @@ optional = true
 workspace = true
 optional = true
 
-[dependencies.zune-jpeg]
-workspace = true
-optional = true
-
 [dependencies.tiny-skia-path]
-workspace = true
-optional = true
-
-[dependencies.image-webp]
 workspace = true
 optional = true
 
@@ -113,12 +101,9 @@ svg = [
   "dep:simplecss",
   "dep:siphasher",
   "dep:strict-num",
-  "dep:imagesize",
   "dep:log",
   "dep:rgb",
-  "dep:zune-jpeg",
   "dep:tiny-skia-path",
-  "dep:image-webp",
 ]
 woff2 = ["dep:wuff", "wuff/brotli"]
 woff = ["dep:wuff", "wuff/z"]

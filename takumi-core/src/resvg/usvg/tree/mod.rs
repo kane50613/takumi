@@ -1475,12 +1475,15 @@ pub enum ImageKind {
 impl ImageKind {
   pub(crate) fn actual_size(&self) -> Option<Size> {
     match self {
-      ImageKind::JPEG(data)
-      | ImageKind::PNG(data)
-      | ImageKind::GIF(data)
-      | ImageKind::WEBP(data) => imagesize::blob_size(data)
+      ImageKind::JPEG(data) | ImageKind::PNG(data) | ImageKind::WEBP(data) => {
+        crate::resources::image_decoder::bitmap_dimensions(data)
+          .and_then(Result::ok)
+          .and_then(|(width, height)| Size::from_wh(width as f32, height as f32))
+          .log_none(|| log::warn!("Image has an invalid size. Skipped."))
+      }
+      ImageKind::GIF(data) => crate::resources::image_decoder::gif_dimensions(data)
         .ok()
-        .and_then(|size| Size::from_wh(size.width as f32, size.height as f32))
+        .and_then(|(width, height)| Size::from_wh(width as f32, height as f32))
         .log_none(|| log::warn!("Image has an invalid size. Skipped.")),
       ImageKind::Raw { width, height, .. } => Size::from_wh(*width as f32, *height as f32)
         .log_none(|| log::warn!("Image has an invalid size. Skipped.")),
