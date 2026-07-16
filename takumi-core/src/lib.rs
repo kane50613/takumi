@@ -36,6 +36,20 @@ pub mod style;
 /// Viewport dimensions and device-pixel-ratio resolution.
 pub mod viewport;
 
+/// Vendored resvg 0.47 (see `resvg/mod.rs` for provenance and stripped features).
+/// `dead_code` stays allowed until the unused upstream API surface is pruned.
+#[cfg(feature = "svg")]
+#[allow(
+  clippy::unwrap_used,
+  clippy::expect_used,
+  clippy::panic,
+  clippy::all,
+  missing_docs,
+  dead_code,
+  deprecated
+)]
+mod resvg;
+
 /// Backend painting helpers (gradient LUTs, tile positioning, transfer tables)
 /// shared with the raster and SVG renderers. Deliberately kept out of `style`
 /// (and thus `takumi`'s prelude) since they are rendering-backend internals, not

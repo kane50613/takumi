@@ -8,6 +8,8 @@ use std::str::{FromStr, from_utf8};
 use std::sync::{Arc, OnceLock, Weak};
 
 #[cfg(feature = "svg")]
+use crate::resvg::usvg::{ImageHrefResolver, ImageKind, Options, Transform, Tree};
+#[cfg(feature = "svg")]
 use image::{
   ExtendedColorType, ImageEncoder,
   codecs::png::{CompressionType, FilterType, PngEncoder},
@@ -16,8 +18,6 @@ use quick_cache::{
   Weighter,
   sync::{Cache, GuardResult},
 };
-#[cfg(feature = "svg")]
-use resvg::usvg::{ImageHrefResolver, ImageKind, Options, Transform, Tree};
 
 #[cfg(feature = "svg")]
 use crate::resources::image_buffer::unpremultiply_in_place;
@@ -65,7 +65,7 @@ pub struct SvgSource {
   /// Original SVG source, for embedding directly in a vector backend.
   source: Box<str>,
   /// Parsed SVG tree used for size and initial metadata.
-  pub(crate) tree: resvg::usvg::Tree,
+  pub(crate) tree: crate::resvg::usvg::Tree,
   /// Intrinsic dimensions (non-percentage `width`/`height`) and `viewBox`
   /// aspect ratio, for CSS `background-size`/`mask-size` resolution.
   intrinsic: SvgIntrinsic,
@@ -581,7 +581,7 @@ impl ImageSource {
         let sx = width as f32 / original_size.width();
         let sy = height as f32 / original_size.height();
 
-        resvg::render(tree, Transform::from_scale(sx, sy), &mut pixmap.as_mut());
+        crate::resvg::render(tree, Transform::from_scale(sx, sy), &mut pixmap.as_mut());
 
         let buffer = ImageBuffer::from_premultiplied_rgba(pixmap.data().to_vec(), width, height)
           .ok_or(ImageError::InvalidPixmapSize)?;
@@ -728,7 +728,7 @@ pub fn apply_svg_filter(
   let tree = Tree::from_str(&document, &options).map_err(ImageError::svg_parse)?;
 
   let mut pixmap = Pixmap::new(width, height).ok_or(ImageError::InvalidPixmapSize)?;
-  resvg::render(&tree, Transform::identity(), &mut pixmap.as_mut());
+  crate::resvg::render(&tree, Transform::identity(), &mut pixmap.as_mut());
   layer.copy_from_slice(pixmap.data());
   Ok(())
 }
@@ -771,7 +771,10 @@ pub fn to_data_url(mime: &str, bytes: &[u8]) -> String {
 /// gives the ratio. Absolute px come from `resolved_size` (usvg's parsed size)
 /// to avoid reimplementing SVG length units.
 #[cfg(feature = "svg")]
-fn svg_intrinsic_sizing(root: roxmltree::Node, resolved_size: resvg::usvg::Size) -> SvgIntrinsic {
+fn svg_intrinsic_sizing(
+  root: roxmltree::Node,
+  resolved_size: crate::resvg::usvg::Size,
+) -> SvgIntrinsic {
   let is_absolute = |name| {
     root
       .attribute(name)
