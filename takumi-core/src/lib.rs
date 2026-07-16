@@ -26,6 +26,8 @@ pub mod geometry;
 pub mod keyframes;
 /// Selector matching against an abstract node tree.
 pub(crate) mod matching;
+/// Deterministic float math shared by the painting paths.
+pub mod math;
 /// Font and image resource management.
 pub mod resources;
 pub mod scene;

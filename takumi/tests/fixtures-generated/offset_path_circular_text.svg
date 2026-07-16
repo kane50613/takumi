@@ -18,11 +18,7 @@
     <use href="#g4" x="0" y="40" fill="#6a4c93"/>
   </g>
   <g transform="matrix(-.895 .446 -.446 -.895 735.06 544.953)">
-    <g transform="matrix(1 0 0 1 0 0)">
-    </g>
-    <g transform="matrix(1 0 0 1 0 0)">
-      <use href="#g5" x="0" y="40" fill="#e94560"/>
-    </g>
+    <use href="#g5" x="0" y="40" fill="#e94560"/>
   </g>
   <g transform="matrix(-.962 .273 -.273 -.962 678.593 569.262)">
     <use href="#g6" x="0" y="40" fill="#f39237"/>
@@ -50,27 +46,15 @@
     <use href="#g7" x="0" y="40" fill="#8ac926"/>
   </g>
   <g transform="matrix(-.183 -.983 .983 -.183 341.229 378.637)">
-    <g transform="matrix(1 0 0 1 0 0)">
-    </g>
-    <g transform="matrix(1 0 0 1 0 0)">
-      <use href="#g8" x="0" y="40" fill="#1982c4"/>
-    </g>
+    <use href="#g8" x="0" y="40" fill="#1982c4"/>
   </g>
   <g transform="matrix(-.001 -1 1 -.001 360 315.003)">
   </g>
   <g transform="matrix(.183 -.983 .983 .183 336.021 279.383)">
-    <g transform="matrix(1 0 0 1 0 0)">
-    </g>
-    <g transform="matrix(1 0 0 1 0 0)">
-      <use href="#g9" x="0" y="40" fill="#e94560"/>
-    </g>
+    <use href="#g9" x="0" y="40" fill="#e94560"/>
   </g>
   <g transform="matrix(.361 -.932 .932 .361 346.477 232.883)">
-    <g transform="matrix(1 0 0 1 0 0)">
-    </g>
-    <g transform="matrix(1 0 0 1 0 0)">
-      <use href="#g2" x="0" y="40" fill="#f39237"/>
-    </g>
+    <use href="#g2" x="0" y="40" fill="#f39237"/>
   </g>
   <g transform="matrix(.527 -.85 .85 .527 367.44 185.235)">
     <use href="#g1" x="0" y="40" fill="#ffca3a"/>
@@ -92,14 +76,14 @@
     <use href="#g11" x="0" y="40" fill="#ffca3a"/>
   </g>
   <g transform="matrix(.962 .273 -.273 .962 660.797 55.682)">
-    <use href="#g11" x="0" y="40" fill="#8ac926"/>
+    <g transform="matrix(1 0 0 1 0 0)">
+    </g>
+    <g transform="matrix(1 0 0 1 0 0)">
+      <use href="#g11" x="0" y="40" fill="#8ac926"/>
+    </g>
   </g>
   <g transform="matrix(.895 .446 -.446 .895 705.972 70.551)">
-    <g transform="matrix(1 0 0 1 0 0)">
-    </g>
-    <g transform="matrix(1 0 0 1 0 0)">
-      <use href="#g12" x="0" y="40" fill="#1982c4"/>
-    </g>
+    <use href="#g12" x="0" y="40" fill="#1982c4"/>
   </g>
   <g transform="matrix(.798 .603 -.603 .798 750.262 95.124)">
     <use href="#g13" x="0" y="40" fill="#6a4c93"/>

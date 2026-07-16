@@ -1,4 +1,5 @@
 use takumi_core::geometry::Point;
+use takumi_core::math;
 use tiny_skia::PixmapMut;
 
 use super::{
@@ -377,7 +378,7 @@ fn source_general(
 #[inline(always)]
 pub(super) fn sampling_footprint(transform: Affine) -> SamplingFootprint {
   SamplingFootprint::new(
-    transform.a.hypot(transform.b),
-    transform.c.hypot(transform.d),
+    math::hypot(transform.a, transform.b),
+    math::hypot(transform.c, transform.d),
   )
 }

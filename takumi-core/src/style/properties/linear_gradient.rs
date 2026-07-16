@@ -1,3 +1,4 @@
+use crate::math;
 use std::{
   fmt,
   ops::{Deref, Neg},
@@ -118,7 +119,7 @@ impl LinearGradientTile {
     match gradient.direction {
       LinearGradientDirection::Angle(angle) => {
         let rad = angle.0.to_radians();
-        (rad.sin(), -rad.cos())
+        (math::sin(rad), -math::cos(rad))
       }
       LinearGradientDirection::Keyword(keyword_direction) => {
         if let (Some(horizontal), Some(vertical)) =
@@ -132,7 +133,7 @@ impl LinearGradientTile {
             VerticalKeyword::Top => -(width as f32),
             VerticalKeyword::Bottom => width as f32,
           };
-          let magnitude = dir_x.hypot(dir_y);
+          let magnitude = math::hypot(dir_x, dir_y);
           if magnitude > f32::EPSILON {
             return (dir_x / magnitude, dir_y / magnitude);
           }
@@ -140,7 +141,7 @@ impl LinearGradientTile {
 
         let angle = keyword_direction.to_angle();
         let rad = angle.0.to_radians();
-        (rad.sin(), -rad.cos())
+        (math::sin(rad), -math::cos(rad))
       }
     }
   }

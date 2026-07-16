@@ -1,4 +1,5 @@
 use smallvec::SmallVec;
+use takumi_core::math;
 #[cfg(feature = "svg")]
 use takumi_core::{Error, resources::image::apply_svg_filter, style::FilterReference};
 use takumi_core::{
@@ -162,8 +163,8 @@ fn apply_batched_pixel_filters(data: &mut [u8], filters: &[&Filter]) {
 
 fn apply_hue_rotate_rgba_bytes(data: &mut [u8], angle_degrees: i32) {
   let radians = (angle_degrees as f32).to_radians();
-  let cos = radians.cos();
-  let sin = radians.sin();
+  let cos = math::cos(radians);
+  let sin = math::sin(radians);
 
   let m00 = 0.213 + cos * 0.787 - sin * 0.213;
   let m01 = 0.715 - cos * 0.715 - sin * 0.715;

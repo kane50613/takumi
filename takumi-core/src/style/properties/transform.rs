@@ -1,3 +1,4 @@
+use crate::math;
 use std::{
   fmt,
   ops::{Mul, MulAssign},
@@ -229,7 +230,7 @@ impl Affine {
 
   /// Creates a new rotation transform from an angle in radians
   pub(crate) fn rotation_radians(radians: f32) -> Self {
-    let (sin, cos) = radians.sin_cos();
+    let (sin, cos) = (math::sin(radians), math::cos(radians));
 
     Self {
       a: cos,
@@ -278,8 +279,8 @@ impl Affine {
 
   /// Creates a new skew transform
   pub(crate) fn skew(x: Angle, y: Angle) -> Self {
-    let tanx = x.to_radians().tan();
-    let tany = y.to_radians().tan();
+    let tanx = math::tan(x.to_radians());
+    let tany = math::tan(y.to_radians());
 
     Self {
       a: 1.0,

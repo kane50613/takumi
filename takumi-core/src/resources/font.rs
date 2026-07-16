@@ -1,3 +1,4 @@
+use crate::math;
 use std::{
   borrow::Cow,
   cell::RefCell,
@@ -465,7 +466,7 @@ fn resolve_outline_commands(
 }
 
 fn transform_commands(paths: &mut [Command], skew_degrees: f32) {
-  let skew_tangent = skew_degrees.to_radians().tan();
+  let skew_tangent = math::tan(skew_degrees.to_radians());
   for command in paths {
     match command {
       Command::MoveTo(point) | Command::LineTo(point) => {

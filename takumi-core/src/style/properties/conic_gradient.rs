@@ -1,3 +1,4 @@
+use crate::math;
 use std::{f32::consts::TAU, fmt};
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
@@ -57,6 +58,8 @@ pub struct ConicGradientTile {
   pub cy: f32,
   /// Starting angle in radians (CSS 0deg = from top, clockwise).
   pub start_rad: f32,
+  /// Starting angle as a fraction of a full turn.
+  start_turns: f32,
   /// Whether this gradient repeats.
   pub repeating: bool,
   /// First resolved stop position in degrees, used as repeating origin.
@@ -84,20 +87,17 @@ impl ConicGradientTile {
   fn visible_angle_samples(width: u32, height: u32, cx: f32, cy: f32) -> usize {
     let max_dx = cx.max(width as f32 - cx);
     let max_dy = cy.max(height as f32 - cy);
-    (max_dx.hypot(max_dy) * TAU).ceil() as usize + 1
+    (math::hypot(max_dx, max_dy) * TAU).ceil() as usize + 1
   }
 
+  /// Adjusted angle at `(dx, dy)` as a fraction of a full turn, measured from
+  /// the gradient's start angle (CSS 0deg = from top, clockwise).
   #[inline(always)]
-  fn angle_from_top_normalized(dx: f32, dy: f32) -> f32 {
-    let angle = dx.atan2(-dy);
-    if angle < 0.0 { angle + TAU } else { angle }
-  }
-
-  #[inline(always)]
-  fn adjusted_angle(&self, angle_from_top: f32) -> f32 {
-    let adjusted = angle_from_top - self.start_rad;
+  fn adjusted_turns(&self, dx: f32, dy: f32) -> f32 {
+    let turns = math::xy_to_unit_angle(-dy, dx);
+    let adjusted = turns - self.start_turns;
     if adjusted < 0.0 {
-      adjusted + TAU
+      adjusted + 1.0
     } else {
       adjusted
     }
@@ -124,6 +124,22 @@ impl ConicGradientTile {
       floor
     };
     (sample as usize).min(max_index)
+  }
+
+  #[inline(always)]
+  fn lut_index_for_adjusted_turns(&self, adjusted_turns: f32, lut_len: usize) -> usize {
+    if lut_len <= 1 {
+      return 0;
+    }
+
+    let max_index = lut_len - 1;
+    if self.repeating && self.repeat_period_deg > 1e-6 {
+      let degrees = adjusted_turns * 360.0;
+      let wrapped = (degrees - self.repeat_start_deg).rem_euclid(self.repeat_period_deg);
+      Self::stable_round_index(wrapped * self.angle_to_lut_scale, max_index)
+    } else {
+      Self::stable_floor_index(adjusted_turns * lut_len as f32, max_index)
+    }
   }
 
   /// Maps an adjusted angle in radians to a LUT index for a LUT of `lut_len`.
@@ -159,6 +175,7 @@ impl ConicGradientTile {
     let cy = Length::from(gradient.center.0.y).to_px(sizing, height as f32);
 
     let start_rad = gradient.from_angle.to_radians().rem_euclid(TAU);
+    let start_turns = start_rad / TAU;
 
     // Resolve stop percentages against one full turn (360deg).
     let resolved_stops = resolve_stops_along_axis(&gradient.stops, 360.0, sizing, current_color);
@@ -194,6 +211,7 @@ impl ConicGradientTile {
       cx,
       cy,
       start_rad,
+      start_turns,
       repeating,
       repeat_start_deg,
       repeat_period_deg,
@@ -225,9 +243,8 @@ impl GradientOverlayTile for ConicGradientTile {
       return self.color_lut[0];
     }
 
-    let angle_from_top = Self::angle_from_top_normalized(dx, dy);
-    let adjusted = self.adjusted_angle(angle_from_top);
-    let lut_idx = self.lut_index_for_adjusted_angle_with_len(adjusted, self.color_lut.len());
+    let adjusted = self.adjusted_turns(dx, dy);
+    let lut_idx = self.lut_index_for_adjusted_turns(adjusted, self.color_lut.len());
 
     self.color_lut[lut_idx]
   }
@@ -246,9 +263,8 @@ impl GradientOverlayTile for ConicGradientTile {
     let lut_idx = if row_state.dx.abs() <= f32::EPSILON && row_state.dy.abs() <= f32::EPSILON {
       0
     } else {
-      let angle_from_top = Self::angle_from_top_normalized(row_state.dx, row_state.dy);
-      let adjusted_angle = self.adjusted_angle(angle_from_top);
-      self.lut_index_for_adjusted_angle_with_len(adjusted_angle, row_state.lut_len)
+      let adjusted_turns = self.adjusted_turns(row_state.dx, row_state.dy);
+      self.lut_index_for_adjusted_turns(adjusted_turns, row_state.lut_len)
     };
     row_state.dx += 1.0;
     lut_idx

@@ -99,7 +99,7 @@
     <path d="M600 819 1460.993 1357.008 1441.692 1386.729Z" fill="#5f50a3" fill-opacity=".349"/>
     <path d="M600 819 1377.737 1471.599 1354.488 1498.344Z" fill="#5f50a3" fill-opacity=".349"/>
     <path d="M600 819 1354.488 1498.344 1330.32 1524.262Z" fill="#5f50a3" fill-opacity=".349"/>
-    <path d="M600 819 1252.599 1596.738 1225.059 1619.039Z" fill="#5f50a3" fill-opacity=".349"/>
+    <path d="M600 819 1252.599 1596.737 1225.059 1619.039Z" fill="#5f50a3" fill-opacity=".349"/>
     <path d="M600 819 1225.059 1619.039 1196.757 1640.366Z" fill="#5f50a3" fill-opacity=".349"/>
     <path d="M600 819 1107.632 1698.244 1076.638 1715.425Z" fill="#5f50a3" fill-opacity=".349"/>
     <path d="M600 819 1076.638 1715.425 1045.062 1731.513Z" fill="#5f50a3" fill-opacity=".349"/>
@@ -118,9 +118,9 @@
     <path d="M600 819-52.599 1596.737-79.344 1573.488Z" fill="#5f50a3" fill-opacity=".349"/>
     <path d="M600 819-79.344 1573.488-105.262 1549.32Z" fill="#5f50a3" fill-opacity=".349"/>
     <path d="M600 819-177.737 1471.599-200.039 1444.059Z" fill="#5f50a3" fill-opacity=".349"/>
-    <path d="M600 819-200.039 1444.059-221.366 1415.757Z" fill="#5f50a3" fill-opacity=".349"/>
+    <path d="M600 819-200.039 1444.059-221.366 1415.758Z" fill="#5f50a3" fill-opacity=".349"/>
     <path d="M600 819-279.244 1326.632-296.425 1295.638Z" fill="#5f50a3" fill-opacity=".349"/>
-    <path d="M600 819-296.425 1295.638-312.513 1264.062Z" fill="#5f50a3" fill-opacity=".349"/>
+    <path d="M600 819-296.425 1295.638-312.513 1264.063Z" fill="#5f50a3" fill-opacity=".349"/>
     <path d="M600 819-354.036 1166.241-365.573 1132.734Z" fill="#5f50a3" fill-opacity=".349"/>
     <path d="M600 819-365.573 1132.734-375.934 1098.845Z" fill="#5f50a3" fill-opacity=".349"/>
     <path d="M600 819-399.84 995.299-405.384 960.297Z" fill="#5f50a3" fill-opacity=".349"/>
@@ -128,21 +128,21 @@
     <path d="M600 819-415.264 819-414.646 783.568Z" fill="#5f50a3" fill-opacity=".349"/>
     <path d="M600 819-414.646 783.568-412.791 748.179Z" fill="#5f50a3" fill-opacity=".349"/>
     <path d="M600 819-399.84 642.701-393.078 607.915Z" fill="#5f50a3" fill-opacity=".349"/>
-    <path d="M600 819-393.078 607.915-385.106 573.385Z" fill="#5f50a3" fill-opacity=".349"/>
+    <path d="M600 819-393.078 607.915-385.106 573.386Z" fill="#5f50a3" fill-opacity=".349"/>
     <path d="M600 819-354.036 471.759-341.336 438.675Z" fill="#5f50a3" fill-opacity=".349"/>
     <path d="M600 819-341.336 438.675-327.49 406.055Z" fill="#5f50a3" fill-opacity=".349"/>
-    <path d="M600 819-279.244 311.368-260.993 280.992Z" fill="#5f50a3" fill-opacity=".349"/>
+    <path d="M600 819-279.245 311.368-260.993 280.992Z" fill="#5f50a3" fill-opacity=".349"/>
     <path d="M600 819-260.993 280.992-241.692 251.272Z" fill="#5f50a3" fill-opacity=".349"/>
-    <path d="M600 819-177.737 166.401-154.488 139.656Z" fill="#5f50a3" fill-opacity=".349"/>
-    <path d="M600 819-154.488 139.656-130.319 113.738Z" fill="#5f50a3" fill-opacity=".349"/>
-    <path d="M600 819-52.599 41.263-25.059 18.961Z" fill="#5f50a3" fill-opacity=".349"/>
+    <path d="M600 819-177.738 166.401-154.488 139.656Z" fill="#5f50a3" fill-opacity=".349"/>
+    <path d="M600 819-154.488 139.656-130.32 113.738Z" fill="#5f50a3" fill-opacity=".349"/>
+    <path d="M600 819-52.599 41.262-25.059 18.961Z" fill="#5f50a3" fill-opacity=".349"/>
     <path d="M600 819-25.059 18.961 3.243-2.366Z" fill="#5f50a3" fill-opacity=".349"/>
     <path d="M600 819 92.368-60.245 123.363-77.425Z" fill="#5f50a3" fill-opacity=".349"/>
     <path d="M600 819 123.363-77.425 154.937-93.513Z" fill="#5f50a3" fill-opacity=".349"/>
     <path d="M600 819 252.759-135.036 286.266-146.573Z" fill="#5f50a3" fill-opacity=".349"/>
     <path d="M600 819 286.266-146.573 320.156-156.935Z" fill="#5f50a3" fill-opacity=".349"/>
-    <path d="M600 819 423.701-180.84 458.703-186.383Z" fill="#5f50a3" fill-opacity=".349"/>
-    <path d="M600 819 458.703-186.383 493.876-190.702Z" fill="#5f50a3" fill-opacity=".349"/>
+    <path d="M600 819 423.701-180.84 458.703-186.384Z" fill="#5f50a3" fill-opacity=".349"/>
+    <path d="M600 819 458.703-186.384 493.876-190.702Z" fill="#5f50a3" fill-opacity=".349"/>
   </g><filter id="fr2" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="1.4" in="SourceGraphic" result="blur"/><feSpecularLighting surfaceScale="1.6" specularConstant="0.9" specularExponent="40" lighting-color="#ffffff" in="blur" result="spec"><fePointLight x="600" y="-60" z="900"/></feSpecularLighting><feComposite operator="in" in="spec" in2="SourceAlpha" result="rim"/><feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="rim"/></feMerge></filter><g filter="url(#fr2)">
     <rect x="229" y="182" width="742" height="224" fill="#000" fill-opacity="0"/>
     <mask id="mk3" maskUnits="userSpaceOnUse" style="mask-type:alpha">

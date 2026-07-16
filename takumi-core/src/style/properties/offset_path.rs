@@ -1,3 +1,4 @@
+use crate::math;
 use std::{f32::consts::FRAC_PI_2, fmt};
 
 use cssparser::Parser;
@@ -596,7 +597,7 @@ fn point_and_tangent(segment: PathSeg, t: f64) -> (Point<f32>, f32) {
   let point = segment.eval(t);
   let before = segment.eval((t - 1e-3).max(0.0));
   let after = segment.eval((t + 1e-3).min(1.0));
-  let tangent = (after.y - before.y).atan2(after.x - before.x) as f32;
+  let tangent = math::atan2_f64(after.y - before.y, after.x - before.x) as f32;
 
   (
     Point {
@@ -679,7 +680,7 @@ fn ray_length(start: Point<f32>, ray: &RayShape, size: Size<f32>) -> f32 {
         return 0.0;
       }
       let theta = ray.angle.to_radians();
-      let (mut sin_t, mut cos_t) = (theta.sin(), theta.cos());
+      let (mut sin_t, mut cos_t) = (math::sin(theta), math::cos(theta));
       let vertical = if cos_t >= 0.0 {
         start.y
       } else {
@@ -722,8 +723,8 @@ fn sample_ray(
 
   (
     Point {
-      x: start.x + traveled * direction.cos(),
-      y: start.y + traveled * direction.sin(),
+      x: start.x + traveled * math::cos(direction),
+      y: start.y + traveled * math::sin(direction),
     },
     direction,
   )
