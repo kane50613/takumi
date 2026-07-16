@@ -155,10 +155,6 @@ opt-level = "z"
 # Crates that run at most once per image (parse/decode/encode), never per pixel.
 # Size-optimizing them is perf-neutral (verified via the napi JS bench). Hot
 # raster/shaping and image-webp (wasm webp encode) stay at opt-level 3.
-[profile.release.package.usvg]
-opt-level = "z"
-[profile.release.package.resvg]
-opt-level = "z"
 [profile.release.package.roxmltree]
 opt-level = "z"
 [profile.release.package.svgtypes]
