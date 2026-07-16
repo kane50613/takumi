@@ -982,7 +982,7 @@ impl Node {
   ///
   /// # Example
   ///
-  /// ```no_run
+  /// ```ignore
   /// fn all_nodes(parent: &usvg::Group) {
   ///     for node in parent.children() {
   ///         // do stuff...
