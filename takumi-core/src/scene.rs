@@ -19,7 +19,7 @@ use crate::{
     node::Node,
     tree::{LayoutResults, RenderNode},
   },
-  style::{Affine, ComputedStyle, Display},
+  style::{Affine, ComputedStyle, Display, SizingContext},
 };
 
 /// A node's resolved paint inputs: where it sits in the tree, its accumulated
@@ -383,7 +383,7 @@ pub fn build_stacking_contexts(
 /// strokes) forces `None`: bounds must never underestimate paint output.
 /// `filter` is exempt — backends pad its spread themselves and need the tight
 /// pre-filter extent.
-fn style_paints_unmeasured_ink(style: &ComputedStyle) -> bool {
+fn style_paints_unmeasured_ink(style: &ComputedStyle, sizing: &SizingContext) -> bool {
   style
     .box_shadow
     .as_ref()
@@ -395,7 +395,7 @@ fn style_paints_unmeasured_ink(style: &ComputedStyle) -> bool {
       .is_some_and(|shadows| !shadows.is_empty())
     || style
       .webkit_text_stroke_width
-      .is_some_and(|width| width != Default::default())
+      .is_some_and(|width| width.to_px(sizing, sizing.font_size) > 0.0)
 }
 
 fn compute_node_paint_bounds(
@@ -403,7 +403,7 @@ fn compute_node_paint_bounds(
   layout: ComputedLayout,
   transform: Affine,
 ) -> Option<SceneBounds> {
-  if style_paints_unmeasured_ink(&node.context.style) {
+  if style_paints_unmeasured_ink(&node.context.style, &node.context.sizing) {
     return None;
   }
 
