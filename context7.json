@@ -9,6 +9,8 @@
     "takumi-js",
     "takumi-svg",
     "takumi-raster",
+    "takumi-napi",
+    "takumi-wasm",
     "takumi-helpers"
   ],
   "excludeFiles": ["CHANGELOG.md"],
