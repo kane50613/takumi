@@ -23,9 +23,11 @@ data-url = "0.3"
 gif = "0.14"
 html5ever = "0.39"
 image-webp = "0.2"
+imagesize = "0.14"
 js-sys = "0.3"
 kurbo = "0.13"
 libwebp-sys = "0.14"
+log = "0.4"
 markup5ever_rcdom = "0.39"
 napi-build = "2"
 napi-derive = "3"
@@ -33,14 +35,20 @@ paste = "1.0"
 precomputed-hash = "0.1"
 quick-xml = "0.41"
 rayon = "1.10"
+rgb = "0.8"
 roxmltree = "0.21.1"
 selectors = "0.39"
 serde_bytes = "0.11"
+simplecss = "0.2"
+siphasher = "1"
+strict-num = "0.1"
 serde_json = "1"
 serde-wasm-bindgen = "0.6"
 svgtypes = "0.16"
+zune-jpeg = "0.5"
 thiserror = "2.0"
 tiny-skia = "0.12"
+tiny-skia-path = "0.12"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 typed-builder = "0.23"
@@ -75,10 +83,6 @@ features = ["std"]
 [workspace.dependencies.phf]
 version = "0.14"
 features = ["macros"]
-
-[workspace.dependencies.resvg]
-version = "0.47"
-default-features = false
 
 [workspace.dependencies.serde]
 version = "1"
