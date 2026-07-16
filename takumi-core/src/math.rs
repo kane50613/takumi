@@ -4,6 +4,10 @@
 //! sqrt, round), so every platform renders identical output. Polynomial
 //! coefficients follow Cephes `sinf`/`cosf`/`atanf`; worst-case error is well
 //! under 1e-6, far below 8-bit color resolution.
+//!
+//! Not a libm replacement: inputs are finite, pixel-scale painting values, so
+//! NaN/infinity/signed-zero semantics and extreme-magnitude ranges are out of
+//! scope.
 
 use std::f32::consts::FRAC_PI_2;
 

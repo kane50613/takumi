@@ -5,14 +5,15 @@
 //! horizontal, same windows, weights, and rounding), so streamed output is
 //! byte-identical to decode-then-resize.
 
-use crate::math;
 use std::collections::VecDeque;
 
 use crate::{resources::image_buffer::ImageBuffer, style::ImageScalingAlgorithm};
 
+// std `sin`, not `math::sin`: streamed output must stay bit-exact with
+// `image::imageops::resize`, whose Lanczos kernel uses the platform libm.
 fn sinc(t: f32) -> f32 {
   let a = t * std::f32::consts::PI;
-  if t == 0.0 { 1.0 } else { math::sin(a) / a }
+  if t == 0.0 { 1.0 } else { a.sin() / a }
 }
 
 fn lanczos3_kernel(x: f32) -> f32 {
