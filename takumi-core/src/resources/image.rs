@@ -654,9 +654,9 @@ pub(crate) fn is_svg_like(src: &str) -> bool {
   src.contains("<svg")
 }
 
-/// A decoded `data:` URI body with its MIME type.
+/// A decoded `data:` URI body with its `type/subtype` MIME string.
 pub(crate) struct DecodedDataUri {
-  pub mime: (String, String),
+  pub mime: String,
   pub bytes: Vec<u8>,
 }
 
@@ -680,7 +680,7 @@ pub(crate) fn decode_data_uri(src: &str) -> Result<DecodedDataUri, DataUriError>
     .map_err(|_| DataUriError::Malformed)?;
 
   let mime = url.mime_type();
-  let mime = (mime.type_.clone(), mime.subtype.clone());
+  let mime = format!("{}/{}", mime.type_, mime.subtype);
   let (bytes, _) = url.decode_to_vec().map_err(|_| DataUriError::Undecodable)?;
 
   Ok(DecodedDataUri { mime, bytes })

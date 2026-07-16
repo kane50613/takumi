@@ -50,8 +50,6 @@ pub struct FilterReference {
   pub markup: Arc<str>,
 }
 
-const SVG_XML_MIME: (&str, &str) = ("image", "svg+xml");
-
 /// Filter primitives and their light-source children. Anything else inside
 /// `<filter>` (scripts, `foreignObject`, animation elements) is rejected, since
 /// the markup is later emitted verbatim into generated SVG.
@@ -90,19 +88,12 @@ impl FilterReference {
   /// supported; there is no document to resolve fragments or external URLs
   /// against.
   pub fn from_url(url: &str) -> Result<Self, FilterReferenceError> {
-    if !url
-      .get(..5)
-      .is_some_and(|prefix| prefix.eq_ignore_ascii_case("data:"))
-    {
-      return Err(FilterReferenceError::UnsupportedUrl);
-    }
-
     let decoded = decode_data_uri(url).map_err(|error| match error {
-      DataUriError::Malformed => FilterReferenceError::InvalidDataUri("malformed data URI"),
+      DataUriError::Malformed => FilterReferenceError::UnsupportedUrl,
       DataUriError::Undecodable => FilterReferenceError::InvalidDataUri("undecodable body"),
     })?;
 
-    if (decoded.mime.0.as_str(), decoded.mime.1.as_str()) != SVG_XML_MIME {
+    if decoded.mime != "image/svg+xml" {
       return Err(FilterReferenceError::UnsupportedUrl);
     }
 
@@ -140,10 +131,9 @@ impl FilterReference {
       }
       for attribute in node.attributes() {
         let name = attribute.name();
-        if name.len() >= 3
-          && name
-            .get(..2)
-            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("on"))
+        if name
+          .get(..2)
+          .is_some_and(|prefix| prefix.eq_ignore_ascii_case("on"))
         {
           return Err(FilterReferenceError::UnsupportedValue {
             attribute: "event handler",
