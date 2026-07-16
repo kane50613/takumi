@@ -15,6 +15,7 @@ import * as TextFit from "./components/text-fit";
 import * as HomeDemoCard from "./components/home-demo-card";
 import * as HomeFilmstrip from "./components/home-filmstrip";
 import * as GoogleFontsShowcase from "./components/google-fonts-showcase";
+import * as DitherOg from "./components/dither-og";
 
 const components = [
   TextFit,
@@ -28,6 +29,7 @@ const components = [
   HomeDemoCard,
   HomeFilmstrip,
   GoogleFontsShowcase,
+  DitherOg,
 ];
 
 type Component = (typeof components)[number];
