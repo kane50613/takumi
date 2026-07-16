@@ -8,7 +8,10 @@ use std::str::{FromStr, from_utf8};
 use std::sync::{Arc, OnceLock, Weak};
 
 #[cfg(feature = "svg")]
-use crate::resvg::usvg::{Options, Transform, Tree};
+use crate::resvg::{
+  apply_filters_to_layer,
+  usvg::{Options, Transform, Tree, filters_from_markup},
+};
 use quick_cache::{
   Weighter,
   sync::{Cache, GuardResult},
@@ -691,7 +694,7 @@ pub fn apply_svg_filter(
   markup: &str,
   filter_id: &str,
 ) -> Result<(), ImageError> {
-  let filters = crate::resvg::usvg::filters_from_markup(
+  let filters = filters_from_markup(
     markup,
     filter_id,
     width as f32,
@@ -706,8 +709,7 @@ pub fn apply_svg_filter(
     return Ok(());
   };
 
-  crate::resvg::apply_filters_to_layer(&filters, layer, width, height)
-    .ok_or(ImageError::InvalidPixmapSize)
+  apply_filters_to_layer(&filters, layer, width, height).ok_or(ImageError::InvalidPixmapSize)
 }
 
 /// Encodes bytes as a base64 `data:` URI.

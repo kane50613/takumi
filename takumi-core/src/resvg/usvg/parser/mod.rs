@@ -16,6 +16,12 @@ mod switch;
 mod units;
 mod use_node;
 
+use std::sync::Arc;
+
+use crate::resvg::usvg::NonZeroRect;
+use crate::resvg::usvg::filter::Filter;
+use svgtree::AId;
+
 pub use image::ImageHrefResolver;
 pub use options::Options;
 
@@ -161,7 +167,7 @@ pub(crate) fn filters_from_markup(
   width: f32,
   height: f32,
   opt: &Options,
-) -> Result<Option<Vec<std::sync::Arc<crate::resvg::usvg::filter::Filter>>>, Error> {
+) -> Result<Option<Vec<Arc<Filter>>>, Error> {
   let document = format!(
     r#"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}">{markup}<rect width="{width}" height="{height}" filter="url(#{filter_id})"/></svg>"#
   );
@@ -173,8 +179,7 @@ pub(crate) fn filters_from_markup(
     roxmltree::Document::parse_with_options(&document, xml_opt).map_err(Error::ParsingFailed)?;
   let doc = svgtree::Document::parse_tree(&xml, None)?;
 
-  let bbox = crate::resvg::usvg::NonZeroRect::from_xywh(0.0, 0.0, width, height)
-    .ok_or(Error::InvalidSize)?;
+  let bbox = NonZeroRect::from_xywh(0.0, 0.0, width, height).ok_or(Error::InvalidSize)?;
   let state = converter::State {
     parent_clip_path: None,
     parent_markers: Vec::new(),
@@ -187,7 +192,7 @@ pub(crate) fn filters_from_markup(
   let mut cache = converter::Cache::new();
   let node = doc
     .descendants()
-    .find(|n| n.has_attribute(svgtree::AId::Filter))
+    .find(|n| n.has_attribute(AId::Filter))
     .ok_or(Error::InvalidSize)?;
 
   Ok(filter::convert(node, &state, Some(bbox), &mut cache).ok())

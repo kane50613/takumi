@@ -17,6 +17,10 @@ Vendored from resvg 0.47.0 (Apache-2.0 OR MIT), stripped of the `text`,
 #![allow(clippy::upper_case_acronyms)]
 #![allow(clippy::wrong_self_convention)]
 
+use std::sync::Arc;
+
+use usvg::filter::Filter;
+
 pub mod usvg;
 
 mod clip;
@@ -93,7 +97,7 @@ pub fn render_node(
 ///
 /// Returns `None` when a pixmap cannot be allocated.
 pub(crate) fn apply_filters_to_layer(
-  filters: &[std::sync::Arc<usvg::filter::Filter>],
+  filters: &[Arc<Filter>],
   layer: &mut [u8],
   width: u32,
   height: u32,
