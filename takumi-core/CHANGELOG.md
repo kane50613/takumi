@@ -1,3 +1,13 @@
+## takumi-core@0.5.1
+
+### Stop blend isolation from clipping text descenders
+
+Include plain text nodes' glyph ink in scene paint bounds; `mix-blend-mode` on a text node no longer cuts glyphs that overflow the line box. Bounds now report unknown instead of underestimating for styles whose ink extent is not measured (shadows, outlines, text strokes), falling back to full-viewport isolation.
+
+### Sample conic gradients deterministically
+
+Replace the per-pixel libm `atan2` in conic gradient sampling with Skia's `xy_to_unit_angle` polynomial, so every platform renders identical conic output and sampling gets cheaper.
+
 ## takumi-core@0.5.0
 
 ### Apply filter references without the base64 roundtrip
