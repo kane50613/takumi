@@ -6,11 +6,10 @@
 
 use std::io;
 
-use base64::{Engine, engine::general_purpose::STANDARD};
 use takumi_core::{
   context::RenderContext,
   layout::node::{ImageData, ImageSourceInput, resolve_image},
-  resources::image::ImageSource,
+  resources::image::{ImageSource, to_data_url},
   style::{ImageScalingAlgorithm, Length, ObjectFit, PositionComponent},
 };
 
@@ -89,7 +88,7 @@ fn intrinsic_size(src: &ImageSourceInput, context: &RenderContext) -> Option<(f3
 fn data_url(src: &ImageSourceInput, context: &RenderContext) -> Option<String> {
   match src {
     // Embed the original encoded bytes losslessly.
-    ImageSourceInput::Buffer(bytes) => Some(encode(sniff_mime(bytes), bytes)),
+    ImageSourceInput::Buffer(bytes) => Some(to_data_url(sniff_mime(bytes), bytes)),
     ImageSourceInput::Loaded(source) => loaded_data_url(source),
     // Only resolvable when the render supplied a resource map (usually empty).
     ImageSourceInput::Url(_) => src.resolve(context).ok().and_then(|s| loaded_data_url(&s)),
@@ -99,22 +98,22 @@ fn data_url(src: &ImageSourceInput, context: &RenderContext) -> Option<String> {
 
 fn loaded_data_url(source: &ImageSource) -> Option<String> {
   match source {
-    ImageSource::Bitmap(buffer) => buffer.encode_png().map(|png| encode("image/png", &png)),
-    ImageSource::Encoded(encoded) => Some(encode(sniff_mime(encoded.bytes()), encoded.bytes())),
+    ImageSource::Bitmap(buffer) => buffer
+      .encode_png()
+      .map(|png| to_data_url("image/png", &png)),
+    ImageSource::Encoded(encoded) => {
+      Some(to_data_url(sniff_mime(encoded.bytes()), encoded.bytes()))
+    }
     ImageSource::Gif(gif) => {
       let (width, height) = gif.dimensions();
       gif
         .frame_at_time_covering(0, width, height, ImageScalingAlgorithm::Auto)
         .encode_png()
-        .map(|png| encode("image/png", &png))
+        .map(|png| to_data_url("image/png", &png))
     }
-    ImageSource::Svg(svg) => Some(encode("image/svg+xml", svg.source().as_bytes())),
+    ImageSource::Svg(svg) => Some(to_data_url("image/svg+xml", svg.source().as_bytes())),
     _ => None,
   }
-}
-
-pub(crate) fn encode(mime: &str, bytes: &[u8]) -> String {
-  format!("data:{mime};base64,{}", STANDARD.encode(bytes))
 }
 
 fn sniff_mime(bytes: &[u8]) -> &'static str {
@@ -166,6 +165,9 @@ mod tests {
 
   #[test]
   fn encodes_data_url() {
-    assert_eq!(encode("image/png", b"AB"), "data:image/png;base64,QUI=");
+    assert_eq!(
+      to_data_url("image/png", b"AB"),
+      "data:image/png;base64,QUI="
+    );
   }
 }

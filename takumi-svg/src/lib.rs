@@ -27,13 +27,15 @@ mod image;
 mod render;
 mod scene_emit;
 mod text;
-use std::{borrow::Cow, fmt, fmt::Write as _, io};
+use std::{borrow::Cow, collections::HashMap, fmt, fmt::Write as _, io, mem};
 
+use box_model::quantize_path;
 use quick_xml::{
   Writer,
-  events::{BytesEnd, BytesStart, Event},
+  events::{BytesEnd, BytesStart, BytesText, Event},
 };
 pub use render::{SvgOptions, render};
+use takumi_core::style::FilterReference;
 
 /// Straight-alpha RGBA color.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,6 +103,11 @@ pub(crate) struct GradientStop {
 pub(crate) struct SvgDocument {
   writer: Writer<Vec<u8>>,
   next_id: u32,
+  /// Interned glyph outlines (path data in glyph space, translation excluded),
+  /// emitted as `<defs>` `<path id="gN">` when the document is rendered. Repeated
+  /// glyphs then cost one `<use>` each instead of a full outline.
+  glyph_defs: Vec<String>,
+  glyph_ids: HashMap<String, u32>,
 }
 
 impl SvgDocument {
@@ -118,7 +125,12 @@ impl SvgDocument {
       format!("0 0 {} {}", num(width), num(height)).as_str(),
     ));
     writer.write_event(Event::Start(svg))?;
-    Ok(Self { writer, next_id: 0 })
+    Ok(Self {
+      writer,
+      next_id: 0,
+      glyph_defs: Vec::new(),
+      glyph_ids: HashMap::new(),
+    })
   }
 
   fn alloc_id(&mut self, prefix: &str) -> String {
@@ -453,18 +465,46 @@ impl SvgDocument {
     fill: Rgba,
     stroke: Option<(Rgba, f32, &str)>,
   ) -> io::Result<()> {
-    let mut attrs: Vec<(&str, Cow<'_, str>)> =
-      vec![("d", data.into()), ("fill", fill.hex().into())];
-    push_opacity(&mut attrs, "fill-opacity", fill.opacity());
-    if let Some((color, width, line_join)) = stroke {
-      attrs.push(("stroke", color.hex().into()));
-      push_opacity(&mut attrs, "stroke-opacity", color.opacity());
-      attrs.push(("stroke-width", num(width).into()));
-      if line_join != "miter" {
-        attrs.push(("stroke-linejoin", line_join.into()));
-      }
-    }
+    let mut attrs: Vec<(&str, Cow<'_, str>)> = vec![("d", data.into())];
+
+    attrs.extend(glyph_paint_attrs(fill, stroke));
     self.empty("path", &attrs)
+  }
+
+  /// Interns a glyph outline (path data in glyph space, translation excluded)
+  /// and returns the id shared by every `<use>` of the same outline.
+  pub(crate) fn glyph_ref(&mut self, data: String) -> u32 {
+    if let Some(&id) = self.glyph_ids.get(&data) {
+      return id;
+    }
+    let id = self.glyph_defs.len() as u32;
+
+    self.glyph_ids.insert(data.clone(), id);
+    self.glyph_defs.push(data);
+    id
+  }
+
+  /// Emits a run of interned glyphs as `<use>` references. Fill and stroke
+  /// attributes go on a shared `<g>` (or directly on a lone `<use>`).
+  pub(crate) fn glyph_uses(
+    &mut self,
+    uses: &[(u32, f32, f32)],
+    fill: Rgba,
+    stroke: Option<(Rgba, f32, &str)>,
+  ) -> io::Result<()> {
+    let paint = glyph_paint_attrs(fill, stroke);
+
+    if let &[(id, x, y)] = uses {
+      let mut attrs = glyph_use_attrs(id, x, y);
+
+      attrs.extend(paint);
+      return self.empty("use", &attrs);
+    }
+    self.open("g", &paint)?;
+    for &(id, x, y) in uses {
+      self.empty("use", &glyph_use_attrs(id, x, y))?;
+    }
+    self.close("g")
   }
 
   /// Defines a gaussian-blur filter (for text-shadow) and returns its `url(#id)`.
@@ -480,17 +520,17 @@ impl SvgDocument {
     Ok(reference)
   }
 
-  /// Defines a CSS `filter` chain as an SVG `<filter>` and returns its
-  /// `url(#id)` (or `None` if the list is empty). Primitives are chained with
-  /// `result="fN"`/`in="f(N-1)"`; the region is widened so blur/shadow are not
-  /// clipped. `size` is the element's border-box size, the resolution basis for
-  /// `drop-shadow` lengths (mirroring the raster backend).
+  /// Defines a CSS `filter` list as SVG `<filter>` elements and returns their
+  /// `url(#id)` references, to be applied innermost first (index 0 closest to
+  /// the element). Runs of filter functions become one generated chain filter;
+  /// each `url()` reference becomes its own `<filter>`, emitted verbatim, since
+  /// its own region and `color-interpolation-filters` must keep applying.
   ///
-  /// With `restore_opaque_alpha` the chain ends by snapping alpha back to
-  /// opaque. A backdrop blur feathers the replay's alpha at the canvas edge
-  /// (outside the input is transparent), letting the sharp original bleed
-  /// through; browsers sample the backdrop with edge duplication instead, so
-  /// no feathering exists to begin with.
+  /// With `restore_opaque_alpha` the last filter snaps alpha back to opaque. A
+  /// backdrop blur feathers the replay's alpha at the canvas edge (outside the
+  /// input is transparent), letting the sharp original bleed through; browsers
+  /// sample the backdrop with edge duplication instead, so no feathering exists
+  /// to begin with.
   pub(crate) fn filter(
     &mut self,
     filters: &[Filter],
@@ -498,10 +538,73 @@ impl SvgDocument {
     current_color: Color,
     size: Size<f32>,
     restore_opaque_alpha: bool,
-  ) -> io::Result<Option<String>> {
-    if filters.is_empty() {
-      return Ok(None);
+  ) -> io::Result<Vec<String>> {
+    let mut references = Vec::new();
+    let mut pending: Vec<&Filter> = Vec::new();
+
+    for filter in filters {
+      match filter {
+        Filter::Reference(reference) => {
+          if !pending.is_empty() {
+            references.push(self.function_chain_filter(
+              &pending,
+              sizing,
+              current_color,
+              size,
+              false,
+            )?);
+            pending.clear();
+          }
+          references.push(self.reference_filter(reference)?);
+        }
+        other => pending.push(other),
+      }
     }
+
+    if !pending.is_empty() {
+      references.push(self.function_chain_filter(
+        &pending,
+        sizing,
+        current_color,
+        size,
+        restore_opaque_alpha,
+      )?);
+    } else if restore_opaque_alpha && !references.is_empty() {
+      references.push(self.function_chain_filter(&[], sizing, current_color, size, true)?);
+    }
+
+    Ok(references)
+  }
+
+  /// Emits a referenced `<filter>` verbatim under a fresh document-unique id.
+  fn reference_filter(&mut self, reference: &FilterReference) -> io::Result<String> {
+    let id = self.alloc_id("fr");
+    // The parser strips any author id and injects the canonical one, so this
+    // textual rewrite always hits.
+    let markup = reference.markup.replacen(
+      &format!(r#"id="{}""#, FilterReference::ID),
+      &format!(r#"id="{id}""#),
+      1,
+    );
+    self
+      .writer
+      .write_event(Event::Text(BytesText::from_escaped(markup)))?;
+    Ok(format!("url(#{id})"))
+  }
+
+  /// Defines a run of CSS filter functions as one chained `<filter>`.
+  /// Primitives are chained with `result="fN"`/`in="f(N-1)"`; the region is
+  /// widened so blur/shadow are not clipped. `size` is the element's border-box
+  /// size, the resolution basis for `drop-shadow` lengths (mirroring the raster
+  /// backend).
+  fn function_chain_filter(
+    &mut self,
+    filters: &[&Filter],
+    sizing: &SizingContext,
+    current_color: Color,
+    size: Size<f32>,
+    restore_opaque_alpha: bool,
+  ) -> io::Result<String> {
     let id = self.alloc_id("ft");
     let reference = format!("url(#{id})");
     self.open(
@@ -517,7 +620,7 @@ impl SvgDocument {
     )?;
 
     let mut prev: Cow<'_, str> = "SourceGraphic".into();
-    for (index, filter) in filters.iter().enumerate() {
+    for (index, filter) in filters.iter().copied().enumerate() {
       let result = format!("f{index}");
       self.filter_primitive(filter, &prev, &result, sizing, current_color, size)?;
       prev = result.into();
@@ -531,7 +634,7 @@ impl SvgDocument {
       self.close("feComponentTransfer")?;
     }
     self.close("filter")?;
-    Ok(Some(reference))
+    Ok(reference)
   }
 
   fn filter_primitive(
@@ -770,8 +873,20 @@ impl SvgDocument {
     self.close("g")
   }
 
-  /// Closes the root `<svg>` and serializes the document to a string.
+  /// Closes the root `<svg>` and serializes the document to a string. Interned
+  /// glyph outlines are flushed as a trailing `<defs>`; `<use>` references
+  /// resolve document-wide, so forward references are fine.
   pub(crate) fn render(mut self) -> io::Result<String> {
+    if !self.glyph_defs.is_empty() {
+      self.open("defs", &[])?;
+      for (id, data) in mem::take(&mut self.glyph_defs).iter().enumerate() {
+        self.empty(
+          "path",
+          &[("id", format!("g{id}").into()), ("d", data.as_str().into())],
+        )?;
+      }
+      self.close("defs")?;
+    }
     self.close("svg")?;
     Ok(String::from_utf8_lossy(&self.writer.into_inner()).into_owned())
   }
@@ -913,6 +1028,36 @@ impl fmt::Display for Num {
 
 fn num(value: f32) -> String {
   Num(value).to_string()
+}
+
+/// Fill plus optional `-webkit-text-stroke` attributes, shared by glyph
+/// `<path>` elements and `<use>` runs.
+fn glyph_paint_attrs<'a>(
+  fill: Rgba,
+  stroke: Option<(Rgba, f32, &'a str)>,
+) -> Vec<(&'a str, Cow<'a, str>)> {
+  let mut attrs: Vec<(&str, Cow<'_, str>)> = vec![("fill", fill.hex().into())];
+
+  push_opacity(&mut attrs, "fill-opacity", fill.opacity());
+  if let Some((color, width, line_join)) = stroke {
+    attrs.push(("stroke", color.hex().into()));
+    push_opacity(&mut attrs, "stroke-opacity", color.opacity());
+    attrs.push(("stroke-width", num(width).into()));
+    if line_join != "miter" {
+      attrs.push(("stroke-linejoin", line_join.into()));
+    }
+  }
+  attrs
+}
+
+/// `<use>` attributes referencing an interned glyph outline. The position is
+/// quantized like the path data it replaces.
+fn glyph_use_attrs(id: u32, x: f32, y: f32) -> Vec<(&'static str, Cow<'static, str>)> {
+  vec![
+    ("href", format!("#g{id}").into()),
+    ("x", num(quantize_path(x)).into()),
+    ("y", num(quantize_path(y)).into()),
+  ]
 }
 
 /// Pushes an `*-opacity` attribute only when it differs from the SVG default of

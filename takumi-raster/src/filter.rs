@@ -1,4 +1,6 @@
 use smallvec::SmallVec;
+#[cfg(feature = "svg")]
+use takumi_core::{Error, resources::image::apply_svg_filter, style::FilterReference};
 use takumi_core::{
   geometry::{Point, Size},
   paint::compose_transfer_table,
@@ -343,10 +345,10 @@ pub(crate) fn apply_filters_to_pixmap<'f, F: Iterator<Item = &'f Filter>>(
         }
 
         // Apply complex filter
-        match *f {
+        match f {
           Filter::HueRotate(angle) => {
             let raw: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-            apply_hue_rotate_rgba_bytes(raw, *angle as i32);
+            apply_hue_rotate_rgba_bytes(raw, **angle as i32);
           }
           Filter::Blur(blur) => {
             let width = pixmap.width();
@@ -366,8 +368,24 @@ pub(crate) fn apply_filters_to_pixmap<'f, F: Iterator<Item = &'f Filter>>(
               width: pixmap.width() as f32,
               height: pixmap.height() as f32,
             };
-            let shadow = SizedShadow::from_text_shadow(drop_shadow, sizing, current_color, size);
+            let shadow = SizedShadow::from_text_shadow(*drop_shadow, sizing, current_color, size);
             apply_drop_shadow_filter(pixmap, &shadow, buffer_pool)?;
+          }
+          // Delegates to the resvg pipeline; `apply_svg_filter` hands the
+          // layer over without a base64 / data-URI roundtrip.
+          #[cfg(feature = "svg")]
+          Filter::Reference(reference) => {
+            let (width, height) = (pixmap.width(), pixmap.height());
+            if width > 0 && height > 0 {
+              apply_svg_filter(
+                pixmap.data_mut(),
+                width,
+                height,
+                &reference.markup,
+                FilterReference::ID,
+              )
+              .map_err(Error::ImageResolveError)?;
+            }
           }
           _ => {}
         }
