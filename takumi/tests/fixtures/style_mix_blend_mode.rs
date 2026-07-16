@@ -157,7 +157,7 @@ fn test_style_mix_blend_mode_text_regression() {
     .with(StyleDeclaration::font_family(family))
     .with(StyleDeclaration::font_size(Px(60.0).into()))
     .with(StyleDeclaration::font_weight(FontWeight::from(600.0)))
-    .with(StyleDeclaration::line_height(LineHeight::Length(Px(60.0))))
+    .with(StyleDeclaration::line_height(LineHeight::Length(Px(48.0))))
     .with(StyleDeclaration::text_align(TextAlign::Center));
 
   let container = Node::container([Node::container([
