@@ -103,7 +103,7 @@
     "react": "catalog:",
     "react-dom": "catalog:",
     "tsdown": "catalog:",
-    "ultrahtml": "^1.6.0",
+    "ultrahtml": "^1.7.0",
     "unrun": "catalog:"
   },
   "peerDependencies": {

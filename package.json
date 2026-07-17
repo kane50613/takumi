@@ -20,12 +20,12 @@
     "publish-lint": "bun --filter '*' publish-lint"
   },
   "devDependencies": {
-    "@arethetypeswrong/cli": "0.18.4",
+    "@arethetypeswrong/cli": "0.18.5",
     "@types/bun": "catalog:",
-    "knip": "^6.25.0",
+    "knip": "^6.27.0",
     "lefthook": "^2.1.10",
-    "oxfmt": "^0.58.0",
-    "oxlint": "^1.73.0",
+    "oxfmt": "^0.59.0",
+    "oxlint": "^1.74.0",
     "publint": "^0.3.21",
     "tegami": "^1.2.5",
     "typescript": "catalog:"
@@ -44,12 +44,9 @@
     "lucide-react": "^1.24.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "tsdown": "^0.22.5",
+    "tsdown": "^0.22.9",
     "unrun": "^0.3.1",
     "typescript": "^6.0.3",
-    "vite": "^8.1.4"
-  },
-  "patchedDependencies": {
-    "fumapress@0.7.2": "patches/fumapress@0.7.2.patch"
+    "vite": "^8.1.5"
   }
 }
