@@ -45,6 +45,8 @@ const ff = Bun.spawn(
   [
     "ffmpeg",
     "-y",
+    "-loglevel",
+    "error",
     "-f",
     "rawvideo",
     "-pixel_format",
@@ -67,7 +69,7 @@ const ff = Bun.spawn(
     "+faststart",
     output,
   ],
-  { stdin: "pipe", stdout: "ignore", stderr: "ignore" },
+  { stdin: "pipe", stdout: "ignore", stderr: "inherit" },
 );
 
 // Frames render in parallel batches; writes stay in order for ffmpeg.
@@ -100,5 +102,10 @@ for (let start = 0; start < frameCount; start += BATCH) {
 }
 
 ff.stdin.end();
-await ff.exited;
+const code = await ff.exited;
+
+if (code !== 0) {
+  console.error(`ffmpeg exited with code ${code}`);
+  process.exit(1);
+}
 console.log(`${output} — ${frameCount} frames @ ${fps}fps`);
