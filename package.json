@@ -32,6 +32,7 @@
   },
   "overrides": {
     "@takumi-rs/image-response": "workspace:*",
+    "rolldown-plugin-dts": "0.27.6",
     "takumi-js": "workspace:*",
     "vite": "8.1.4"
   },
