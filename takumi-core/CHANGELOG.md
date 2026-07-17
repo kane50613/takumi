@@ -1,3 +1,9 @@
+## takumi-core@0.6.0
+
+### Accept raw RGBA pixels as an image source
+
+An image node's `src` takes `{ width, height, data, premultiplied? }` and renders the pixels without decoding; the `Bitmap` JSX helper wraps it as an `<img>`.
+
 ## takumi-core@0.5.1
 
 ### Feed filter layers to resvg without a PNG roundtrip
