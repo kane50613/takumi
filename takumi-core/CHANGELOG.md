@@ -1,5 +1,29 @@
 ## takumi-core@0.5.1
 
+### Feed filter layers to resvg without a PNG roundtrip
+
+Hand the premultiplied layer pixels to the vendored resvg pipeline through a new raw image kind, dropping the unpremultiply + PNG encode/decode in `apply_svg_filter`.
+
+### Fix inherited resvg filter and parser bugs
+
+Correct the spotlight Y offset, drop-shadow sRGB double conversion and displacement-map premultiplied reads; guard href cycles, turbulence seed overflow, convolve-matrix size overflow and oversized blur/morphology radii; make `<switch>` skip text branches and paint fallbacks apply for non-paint-server references.
+
+### Prune the dead text node chain from vendored resvg
+
+Remove `Node::Text`, the text tree types and their render, clip and paint-server arms; the parser already dropped text elements with the text feature stripped.
+
+### Route vendored resvg image decoding through the core decoders
+
+SVG-embedded raster images now decode through the shared image pipeline, dropping the imagesize and zune-jpeg dependencies and tiny-skia's png-format feature.
+
+### Apply filter references without building a render tree
+
+Parse `<filter>` markup straight into resolved filters and run them on the layer pixels, skipping the synthetic document render.
+
+### Vendor resvg into takumi-core
+
+Replace the external resvg dependency with a vendored copy of usvg + resvg 0.47, stripped of the text, svgz, system-fonts, memmap-fonts and writer features and the CLI. Rendering output is unchanged.
+
 ### Stop blend isolation from clipping text descenders
 
 Include plain text nodes' glyph ink in scene paint bounds; `mix-blend-mode` on a text node no longer cuts glyphs that overflow the line box. Bounds now report unknown instead of underestimating for styles whose ink extent is not measured (shadows, outlines, text strokes), falling back to full-viewport isolation.
