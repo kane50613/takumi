@@ -1,9 +1,9 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type OutputFormat } from "takumi-js";
 import { Renderer } from "takumi-js/node";
 import { fromJsx } from "takumi-js/helpers/jsx";
-import { googleFonts } from "takumi-js/helpers";
+import { loadFonts, loadImages } from "./assets";
 import * as FiveHundredStars from "./components/500-stars";
 import * as GithubSocialPreview from "./components/github-social-preview";
 import * as OgImage from "./components/og-image";
@@ -34,17 +34,6 @@ const components = [
 
 type Component = (typeof components)[number];
 
-function fontLoaders(module: Component) {
-  return module.fonts.map((font) => {
-    const { path, ...details } = typeof font === "string" ? { path: font } : font;
-    return {
-      key: path,
-      data: () => readFile(join("../../assets/fonts", path)),
-      ...details,
-    };
-  });
-}
-
 async function render(
   module: Component,
   ratio = 1,
@@ -58,15 +47,7 @@ async function render(
   const renderer = new Renderer();
   const jsxPrepareStart = performance.now();
   const { node, stylesheets } = await fromJsx(<module.default />);
-  const images = await Promise.all(
-    ("images" in module ? module.images : []).map(async ({ src, path }) => ({
-      src,
-      data: await readFile(join("../../assets/images", path)),
-    })),
-  );
-  const loaders = fontLoaders(module);
-  const subsets = "googleFonts" in module ? await googleFonts(module.googleFonts) : [];
-  const fonts = [...loaders, ...subsets];
+  const [fonts, images] = await Promise.all([loadFonts(module), loadImages(module)]);
   const renderStart = performance.now();
 
   const buffer = await renderer.render(node, {
