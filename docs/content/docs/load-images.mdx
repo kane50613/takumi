@@ -89,6 +89,24 @@ function OgImage() {
 }
 ```
 
+## Raw pixels
+
+For pixels you compute yourself (charts, generative art), pass raw RGBA instead of encoding a PNG first; nothing is decoded. The `Bitmap` helper renders a row-major `width * height * 4` byte buffer as an `<img>`:
+
+```tsx twoslash
+import { render } from "takumi-js";
+import { Bitmap } from "takumi-js/helpers/jsx";
+
+const pixels = new Uint8Array(64 * 64 * 4);
+
+const image = await render(<Bitmap width={64} height={64} data={pixels} />, {
+  width: 64,
+  height: 64,
+});
+```
+
+Set `premultiplied` when the bytes are already alpha-premultiplied and the renderer takes them as-is. Outside JSX, an image node's `src` takes the same `{ width, height, data, premultiplied? }` object.
+
 ## Decode caching
 
 Takumi caches each decoded image so repeated content is decoded once. Two independent layers exist:

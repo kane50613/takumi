@@ -1,7 +1,13 @@
 import type { Node } from "@takumi-rs/helpers";
 import type { Properties } from "csstype";
 
-export type { ContainerNode, ImageNode, NodeMetadata, TextNode } from "@takumi-rs/helpers";
+export type {
+  ContainerNode,
+  ImageNode,
+  NodeMetadata,
+  RawRgbaImage,
+  TextNode,
+} from "@takumi-rs/helpers";
 
 export type { Node };
 

@@ -124,6 +124,58 @@ describe("render", () => {
     expect(Buffer.from(result.subarray(0, 4))).toEqual(Buffer.from([0, 0, 1, 0]));
   });
 
+  test("raw RGBA image source", async () => {
+    const data = new Uint8Array(8 * 8 * 4);
+    for (let i = 0; i < data.length; i += 4) {
+      data[i] = 255;
+      data[i + 3] = 128;
+    }
+
+    const result = await renderer.render(
+      container({
+        children: [image({ src: { width: 8, height: 8, data } })],
+        style: { width: "100%", height: "100%", backgroundColor: "black" },
+      }),
+      { width: 8, height: 8, format: "raw" },
+    );
+
+    // 50% red premultiplied over black.
+    expect(Math.abs((result[0] ?? 0) - 128)).toBeLessThanOrEqual(2);
+    expect(result[1]).toBe(0);
+    expect(result[3]).toBe(255);
+  });
+
+  test("raw RGBA image source with premultiplied bytes", async () => {
+    const data = new Uint8Array(8 * 8 * 4);
+    for (let i = 0; i < data.length; i += 4) {
+      data[i] = 128;
+      data[i + 3] = 128;
+    }
+
+    const result = await renderer.render(
+      container({
+        children: [image({ src: { width: 8, height: 8, data, premultiplied: true } })],
+        style: { width: "100%", height: "100%", backgroundColor: "black" },
+      }),
+      { width: 8, height: 8, format: "raw" },
+    );
+
+    expect(Math.abs((result[0] ?? 0) - 128)).toBeLessThanOrEqual(2);
+    expect(result[3]).toBe(255);
+  });
+
+  test("raw RGBA image source rejects mismatched length", async () => {
+    await expect(
+      renderer.render(
+        container({ children: [image({ src: { width: 8, height: 8, data: new Uint8Array(4) } })] }),
+        {
+          width: 8,
+          height: 8,
+        },
+      ),
+    ).rejects.toThrow();
+  });
+
   test("auto-calculated dimensions", async () => {
     const result = await renderer.render(node, {
       format: "png",

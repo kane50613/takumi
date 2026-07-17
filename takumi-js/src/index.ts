@@ -5,6 +5,7 @@ export type {
   Node,
   NodeAttributes,
   NodeMetadata,
+  RawRgbaImage,
   ReactElementLike,
   TextNode,
 } from "@takumi-rs/helpers";
