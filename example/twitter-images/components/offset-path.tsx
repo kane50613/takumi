@@ -1,16 +1,21 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import type { ReactNode } from "react";
-import { Renderer } from "takumi-js/node";
-import { fromJsx } from "takumi-js/helpers/jsx";
-import { googleFonts } from "takumi-js/helpers";
+import type { GoogleFontFamily } from "takumi-js/helpers";
+
+export const name = "offset-path";
 
 // 1:1 for Twitter, rendered 1:1 (dpr 1) — offset-path coordinates aren't
 // dpr-scaled in the engine yet, so a supersample would drift the paths.
-const W = 1200;
-const H = 1200;
-const FPS = 60;
-const TOTAL_MS = 16000;
+export const width = 1200;
+
+export const height = 1200;
+
+export const fonts = [];
+
+export const googleFonts: GoogleFontFamily[] = [{ name: "Space Grotesk", weight: 700 }];
+
+export const images = [{ src: "logo", path: "takumi.svg" }];
+
+export const video = { durationMs: 16000, fps: 60 };
 
 type Stops = ReadonlyArray<readonly [number, number, number]>;
 
@@ -185,8 +190,6 @@ const HEAD_TAPE: Tape = {
   stops: HEAD_STOPS,
 };
 
-const logo = await readFile(join("../../assets/images/takumi.svg"));
-
 function rider(path: string, distance: number, child: ReactNode) {
   return (
     <div
@@ -244,7 +247,7 @@ function tapeNodes(tape: Tape, ms: number, key: string) {
   );
 }
 
-function frame(ms: number) {
+export function frame(ms: number) {
   return (
     <div
       style={{
@@ -263,60 +266,6 @@ function frame(ms: number) {
   );
 }
 
-const fonts = await googleFonts([
-  {
-    name: "Space Grotesk",
-    weight: 700,
-  },
-]);
-const images = [{ src: "logo", data: logo }];
-const renderer = new Renderer();
-
-const ff = Bun.spawn(
-  [
-    "ffmpeg",
-    "-y",
-    "-f",
-    "rawvideo",
-    "-pixel_format",
-    "rgba",
-    "-video_size",
-    `${W}x${H}`,
-    "-framerate",
-    String(FPS),
-    "-i",
-    "-",
-    "-r",
-    String(FPS),
-    "-crf",
-    "18",
-    "-pix_fmt",
-    "yuv420p",
-    "-c:v",
-    "libx264",
-    "-movflags",
-    "+faststart",
-    "output/offset-path.mp4",
-  ],
-  { stdin: "pipe", stdout: "ignore", stderr: "ignore" },
-);
-
-const frameCount = Math.round((FPS * TOTAL_MS) / 1000);
-
-for (let f = 0; f < frameCount; f++) {
-  const ms = (f * 1000) / FPS;
-  const { node } = await fromJsx(frame(ms));
-  const buf = await renderer.render(node, {
-    width: W,
-    height: H,
-    format: "raw",
-    images,
-    fonts,
-  });
-  ff.stdin.write(buf);
-  await ff.stdin.flush();
+export default function OffsetPathStill() {
+  return frame(0);
 }
-
-ff.stdin.end();
-await ff.exited;
-console.log(`mp4 done — ${frameCount} frames`);

@@ -62,9 +62,21 @@ export type TextNode = NodeMetadata & {
   text: string;
 };
 
+/** Raw row-major RGBA pixels, rendered without decoding. */
+export type RgbaImage = {
+  /** The image width in pixels. */
+  width: number;
+  /** The image height in pixels. */
+  height: number;
+  /** RGBA bytes, `width * height * 4` long. */
+  data: Uint8Array | ArrayBuffer;
+  /** The bytes are already alpha-premultiplied, so the premultiply pass is skipped. */
+  premultiplied?: boolean;
+};
+
 export type ImageNode = NodeMetadata & {
   type: "image";
-  src: string | Uint8Array | ArrayBuffer;
+  src: string | Uint8Array | ArrayBuffer | RgbaImage;
   width?: number;
   height?: number;
 };

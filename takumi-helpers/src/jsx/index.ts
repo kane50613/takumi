@@ -1,6 +1,6 @@
 import type { ComponentProps, CSSProperties, ReactElement, ReactNode } from "react";
 import { container, image, percentage, text } from "../helpers";
-import type { Node, NodeMetadata, ReactElementLike } from "../types";
+import type { Node, NodeMetadata, RgbaImage, ReactElementLike } from "../types";
 import { extractAttributes, getPresets, type HtmlProps } from "./metadata";
 export type { HtmlProps } from "./metadata";
 import { callWithDispatcher, getProperty, readContext, type RenderEnv } from "./dispatcher";
@@ -22,6 +22,25 @@ declare module "react" {
   interface DOMAttributes<T> {
     tw?: string;
   }
+}
+
+export type BitmapProps = RgbaImage & Omit<ComponentProps<"img">, "src" | "width" | "height">;
+
+type BitmapImgProps = Omit<BitmapProps, keyof RgbaImage> & { src: RgbaImage };
+
+/** An `<img>` fed by raw RGBA pixels instead of an encoded file. */
+export function Bitmap({
+  width,
+  height,
+  data,
+  premultiplied,
+  ...props
+}: BitmapProps): ReactElement<BitmapImgProps, "img"> {
+  return {
+    type: "img",
+    props: { ...props, src: { width, height, data, premultiplied } },
+    key: null,
+  };
 }
 
 export interface FromJsxOptions {

@@ -1,7 +1,14 @@
 import type { Node } from "@takumi-rs/helpers";
 import type { Properties } from "csstype";
 
-export { ContainerNode, ImageNode, Node, NodeMetadata, TextNode } from "@takumi-rs/helpers";
+export {
+  ContainerNode,
+  ImageNode,
+  Node,
+  NodeMetadata,
+  RgbaImage,
+  TextNode,
+} from "@takumi-rs/helpers";
 
 export type ByteBuf = Uint8Array | ArrayBuffer | Buffer;
 

@@ -24,7 +24,7 @@ use crate::{
   layout::{inline::InlineContentKind, node::image::image_url},
   matching::MatchableNode,
   resources::{
-    image::{ImageResult, ImageSource},
+    image::{ImageError, ImageResult, ImageSource},
     image_buffer::ImageBuffer,
   },
   style::{Direction, Lang, Style, StyleDeclaration, TailwindValues, ToCss},
@@ -65,7 +65,8 @@ pub struct TextData {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
-/// An image source as received from input: URL, raw bytes, or already loaded.
+/// An image source as received from input: URL, raw bytes, raw pixels, or
+/// already loaded.
 #[non_exhaustive]
 pub enum ImageSourceInput {
   /// Source URL or path.
@@ -74,9 +75,69 @@ pub enum ImageSourceInput {
   // rather than a number array, deserializes here.
   /// Raw image bytes.
   Buffer(#[serde(with = "serde_bytes")] Vec<u8>),
+  /// Raw RGBA pixels with explicit dimensions, used without decoding.
+  Rgba(RgbaImage),
   /// Pre-resolved image source.
   #[serde(skip_deserializing)]
   Loaded(ImageSource),
+}
+
+/// Raw row-major RGBA pixels, converted to a premultiplied bitmap once at
+/// construction; resolving is a reference-count bump.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(try_from = "RgbaImageData")]
+pub struct RgbaImage {
+  source: ImageSource,
+}
+
+impl RgbaImage {
+  /// Wraps raw RGBA pixels, premultiplying in place unless `premultiplied`
+  /// says the bytes already are. Errors if `data.len() != width * height * 4`.
+  pub fn new(
+    data: Vec<u8>,
+    width: u32,
+    height: u32,
+    premultiplied: bool,
+  ) -> Result<Self, ImageError> {
+    let buffer = if premultiplied {
+      ImageBuffer::from_premultiplied_rgba(data, width, height)
+    } else {
+      ImageBuffer::from_rgba_bytes(data, width, height)
+    };
+
+    buffer
+      .map(|buffer| Self {
+        source: ImageSource::from(buffer),
+      })
+      .ok_or(ImageError::MismatchedBufferSize)
+  }
+}
+
+/// The wire shape of [`RgbaImage`]: straight alpha unless `premultiplied`.
+/// `Option` so an explicit JS `undefined`, surfaced as a unit value, still
+/// deserializes.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RgbaImageData {
+  width: u32,
+  height: u32,
+  #[serde(with = "serde_bytes")]
+  data: Vec<u8>,
+  #[serde(default)]
+  premultiplied: Option<bool>,
+}
+
+impl TryFrom<RgbaImageData> for RgbaImage {
+  type Error = ImageError;
+
+  fn try_from(raw: RgbaImageData) -> Result<Self, Self::Error> {
+    Self::new(
+      raw.data,
+      raw.width,
+      raw.height,
+      raw.premultiplied.unwrap_or_default(),
+    )
+  }
 }
 
 impl ImageSourceInput {
@@ -85,6 +146,7 @@ impl ImageSourceInput {
     match self {
       Self::Url(src) => resolve_image(src, context),
       Self::Buffer(data) => ImageSource::from_bytes_lazy(data, 0, Weak::new()),
+      Self::Rgba(raw) => Ok(raw.source.clone()),
       Self::Loaded(source) => Ok(source.clone()),
     }
   }
@@ -676,6 +738,57 @@ mod tests {
 
   use super::*;
   use crate::style::{BackgroundImage, Style, StyleDeclaration, TailwindValues};
+
+  #[test]
+  fn image_source_input_deserializes_raw_rgba() {
+    let input: ImageSourceInput = serde_json::from_value(serde_json::json!({
+      "width": 2,
+      "height": 1,
+      "data": [255, 0, 0, 128, 0, 255, 0, 255],
+    }))
+    .unwrap();
+
+    let ImageSourceInput::Rgba(raw) = input else {
+      panic!("expected Rgba, got {input:?}");
+    };
+    let ImageSource::Bitmap(buffer) = &raw.source else {
+      panic!("expected bitmap source");
+    };
+
+    assert_eq!((buffer.width(), buffer.height()), (2, 1));
+    assert_eq!(buffer.data(), [128, 0, 0, 128, 0, 255, 0, 255]);
+  }
+
+  #[test]
+  fn image_source_input_raw_rgba_premultiplied_skips_premultiply() {
+    let input: ImageSourceInput = serde_json::from_value(serde_json::json!({
+      "width": 1,
+      "height": 1,
+      "data": [100, 50, 0, 128],
+      "premultiplied": true,
+    }))
+    .unwrap();
+
+    let ImageSourceInput::Rgba(raw) = input else {
+      panic!("expected Rgba, got {input:?}");
+    };
+    let ImageSource::Bitmap(buffer) = &raw.source else {
+      panic!("expected bitmap source");
+    };
+
+    assert_eq!(buffer.data(), [100, 50, 0, 128]);
+  }
+
+  #[test]
+  fn image_source_input_rejects_mismatched_raw_rgba() {
+    let result: Result<ImageSourceInput, _> = serde_json::from_value(serde_json::json!({
+      "width": 4,
+      "height": 4,
+      "data": [0, 0, 0, 0],
+    }));
+
+    assert!(result.is_err());
+  }
 
   #[test]
   fn collect_style_fetch_tasks_collects_nested_background_image_urls() {

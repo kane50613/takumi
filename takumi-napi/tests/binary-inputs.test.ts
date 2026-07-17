@@ -68,6 +68,56 @@ describe("binary inputs", () => {
     expect(Buffer.compare(fromArrayBuffer, reference)).toBe(0);
   });
 
+  test("render accepts raw RGBA pixels as src", async () => {
+    const renderer = new Renderer();
+    const solid = (r: number, a: number) => {
+      const data = new Uint8Array(8 * 8 * 4);
+      for (let i = 0; i < data.length; i += 4) {
+        data[i] = r;
+        data[i + 3] = a;
+      }
+      return data;
+    };
+    const over = (src: Parameters<typeof image>[0]["src"]) =>
+      container({
+        style: { width: 8, height: 8, backgroundColor: "black" },
+        children: [image({ src })],
+      });
+    const centerOf = async (src: Parameters<typeof image>[0]["src"]) => {
+      const raw = await renderer.render(over(src), { width: 8, height: 8, format: "raw" });
+      return [...raw.subarray(0, 4)];
+    };
+
+    // Straight 50% red premultiplies to ~128; premultiplied bytes pass through.
+    const straight = await centerOf({ width: 8, height: 8, data: solid(255, 128) });
+    expect(Math.abs((straight[0] ?? 0) - 128)).toBeLessThanOrEqual(2);
+    expect(straight[3]).toBe(255);
+
+    const premultiplied = await centerOf({
+      width: 8,
+      height: 8,
+      data: solid(128, 128),
+      premultiplied: true,
+    });
+    expect(Math.abs((premultiplied[0] ?? 0) - 128)).toBeLessThanOrEqual(2);
+
+    // An explicit undefined must deserialize like an absent field.
+    const explicitUndefined = await centerOf({
+      width: 8,
+      height: 8,
+      data: solid(255, 128),
+      premultiplied: undefined,
+    });
+    expect(explicitUndefined).toEqual(straight);
+
+    await expect(
+      renderer.render(over({ width: 8, height: 8, data: new Uint8Array(4) }), {
+        width: 8,
+        height: 8,
+      }),
+    ).rejects.toThrow();
+  });
+
   test("render accepts inline SVG markup as bytes", async () => {
     const renderer = new Renderer();
     const svg =
