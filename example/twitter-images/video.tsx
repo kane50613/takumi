@@ -11,6 +11,7 @@ type VideoModule = AssetModule & {
   video: { durationMs: number; fps?: number; dpr?: number };
   stylesheets?: string[];
   frame?: (ms: number) => ReactNode;
+  fontFamilies?: (ms: number) => string[];
   default: () => ReactNode;
 };
 
@@ -38,7 +39,7 @@ const renderer = new Renderer();
 // CSS animations drive a plain component through timeMs; a `frame` export
 // rebuilds the tree per frame instead.
 const frameAt = module.frame ?? (() => <module.default />);
-const output = join("output", `${name}.mp4`);
+const output = join("output", `${module.name}.mp4`);
 
 const ff = Bun.spawn(
   [
@@ -69,23 +70,33 @@ const ff = Bun.spawn(
   { stdin: "pipe", stdout: "ignore", stderr: "ignore" },
 );
 
-for (let f = 0; f < frameCount; f++) {
-  const ms = (f * 1000) / fps;
-  const { node, stylesheets } = await fromJsx(frameAt(ms));
+// Frames render in parallel batches; writes stay in order for ffmpeg.
+const BATCH = 8;
 
-  const buffer = await renderer.render(node, {
-    width: outWidth,
-    height: outHeight,
-    devicePixelRatio: dpr,
-    format: "raw",
-    stylesheets: [...stylesheets, ...(module.stylesheets ?? [])],
-    images,
-    fonts: fonts.length > 0 ? fonts : undefined,
-    timeMs: ms,
-  });
+for (let start = 0; start < frameCount; start += BATCH) {
+  const buffers = await Promise.all(
+    Array.from({ length: Math.min(BATCH, frameCount - start) }, async (_, offset) => {
+      const ms = ((start + offset) * 1000) / fps;
+      const { node, stylesheets } = await fromJsx(frameAt(ms));
 
-  ff.stdin.write(buffer);
-  await ff.stdin.flush();
+      return renderer.render(node, {
+        width: outWidth,
+        height: outHeight,
+        devicePixelRatio: dpr,
+        format: "raw",
+        stylesheets: [...stylesheets, ...(module.stylesheets ?? [])],
+        images,
+        fonts: fonts.length > 0 ? fonts : undefined,
+        fontFamilies: module.fontFamilies?.(ms),
+        timeMs: ms,
+      });
+    }),
+  );
+
+  for (const buffer of buffers) {
+    ff.stdin.write(buffer);
+    await ff.stdin.flush();
+  }
 }
 
 ff.stdin.end();

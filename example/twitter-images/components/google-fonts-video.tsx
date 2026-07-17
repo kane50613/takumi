@@ -1,15 +1,12 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { fromJsx } from "takumi-js/helpers/jsx";
-import { googleFonts } from "takumi-js/helpers";
-import { render } from "takumi-js";
+import type { GoogleFontFamily } from "takumi-js/helpers";
 
-// Logical width; rendered straight to 1080p (devicePixelRatio keeps it crisp, no supersample).
-const W = 1600;
-const OUT_W = 1920;
-const OUT_H = 1080;
-const DPR = OUT_W / W;
-const FPS = 60;
+export const name = "google-fonts-showcase";
+
+// Logical size; dpr 1.2 renders straight to 1920x1080.
+export const width = 1600;
+
+export const height = 900;
+
 const SEG_MS = 1150;
 const INK = "#1d1d1f";
 const MUTED = "#86868b";
@@ -32,7 +29,16 @@ const segments = [
   { text: "Trăm năm trong cõi người ta", family: "Playfair Display", weight: 500, size: 96 },
 ];
 
-const stylesheets = [
+export const fonts = [];
+
+export const googleFonts: GoogleFontFamily[] = [
+  ...segments.map((seg) => ({ name: seg.family, weight: seg.weight })),
+  { name: UI, weight: 600 },
+];
+
+export const images = [{ src: "takumi.svg", path: "takumi.svg" }];
+
+export const stylesheets = [
   `@keyframes slide {
     0% { opacity: 0; transform: translateY(34px) scale(0.99); }
     24% { opacity: 1; transform: translateY(0) scale(1); }
@@ -41,10 +47,33 @@ const stylesheets = [
   }`,
 ];
 
-const logo = await readFile(join("../../assets/images/takumi.svg"));
+export const video = { durationMs: segments.length * SEG_MS, fps: 60, dpr: 1.2 };
 
-function still(seg: (typeof segments)[number]) {
-  const gf = `${seg.family}, sans-serif`;
+function segmentAt(ms: number) {
+  return Math.min(Math.floor(ms / SEG_MS), segments.length - 1);
+}
+
+export function fontFamilies(ms: number) {
+  const seg = segments[segmentAt(ms)];
+
+  return seg ? [seg.family, UI] : [UI];
+}
+
+export function frame(ms: number) {
+  return <Still index={segmentAt(ms)} />;
+}
+
+export default function GoogleFontsVideoStill() {
+  return <Still index={0} />;
+}
+
+// The entrance animation is delayed to the segment's slot on the global
+// timeline, so the shared pipeline's single timeMs drives every segment.
+function Still({ index }: { index: number }) {
+  const seg = segments[index] ?? segments[0];
+
+  if (!seg) return null;
+
   return (
     <div
       style={{
@@ -80,11 +109,12 @@ function still(seg: (typeof segments)[number]) {
           justifyContent: "center",
           gap: "36px",
           animation: `slide ${SEG_MS}ms cubic-bezier(0.4, 0, 0.2, 1) both`,
+          animationDelay: `${index * SEG_MS}ms`,
         }}
       >
         <span
           style={{
-            fontFamily: gf,
+            fontFamily: `${seg.family}, sans-serif`,
             fontWeight: seg.weight,
             fontSize: `${seg.size}px`,
             lineHeight: 1,
@@ -111,72 +141,3 @@ function still(seg: (typeof segments)[number]) {
     </div>
   );
 }
-
-// Pipe raw RGBA frames straight to ffmpeg — no PNG encode, no disk.
-const ff = Bun.spawn(
-  [
-    "ffmpeg",
-    "-y",
-    "-f",
-    "rawvideo",
-    "-pixel_format",
-    "rgba",
-    "-video_size",
-    `${OUT_W}x${OUT_H}`,
-    "-framerate",
-    String(FPS),
-    "-i",
-    "-",
-    "-r",
-    String(FPS),
-    "-crf",
-    "18",
-    "-pix_fmt",
-    "yuv420p",
-    "-c:v",
-    "libx264",
-    "-movflags",
-    "+faststart",
-    "output/google-fonts-showcase.mp4",
-  ],
-  { stdin: "pipe", stdout: "ignore", stderr: "ignore" },
-);
-
-const framesPerSeg = Math.round((FPS * SEG_MS) / 1000);
-
-const fonts = await googleFonts([
-  ...segments.map((seg) => ({ name: seg.family, weight: seg.weight })),
-  { name: UI, weight: 600 },
-]);
-
-for (const seg of segments) {
-  const { node } = await fromJsx(still(seg));
-
-  const renderAt = (timeMs: number) =>
-    render(node, {
-      width: OUT_W,
-      height: OUT_H,
-      devicePixelRatio: DPR,
-      format: "raw",
-      stylesheets,
-      images: [{ src: "takumi.svg", data: logo }],
-      fonts,
-      timeMs,
-      fontFamilies: [seg.family, UI],
-    });
-
-  const bufs = await Promise.all(
-    Array.from({ length: framesPerSeg }, (_, f) => renderAt(Math.round((f * 1000) / FPS))),
-  );
-
-  for (const buf of bufs) {
-    ff.stdin.write(buf);
-    await ff.stdin.flush();
-  }
-
-  console.log(`seg ${seg.text} (${seg.family})`);
-}
-
-ff.stdin.end();
-await ff.exited;
-console.log("mp4 done");
