@@ -1,3 +1,9 @@
+## @takumi-rs/wasm@2.3.0
+
+### Accept raw RGBA pixels as an image source
+
+An image node's `src` takes `{ width, height, data, premultiplied? }` and renders the pixels without decoding; the `Bitmap` JSX helper wraps it as an `<img>`.
+
 ## @takumi-rs/wasm@2.2.2
 
 ### Fix WebAssembly parsing on Bun/Nitro

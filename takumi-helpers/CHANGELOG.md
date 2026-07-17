@@ -1,3 +1,9 @@
+## @takumi-rs/helpers@2.3.0
+
+### Accept raw RGBA pixels as an image source
+
+An image node's `src` takes `{ width, height, data, premultiplied? }` and renders the pixels without decoding; the `Bitmap` JSX helper wraps it as an `<img>`.
+
 ## @takumi-rs/helpers@2.2.0
 
 ### Support generic on googleFonts families

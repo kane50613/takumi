@@ -1,85 +1,82 @@
 core:changelogs:
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: patch\n---\n\n### Stop blend isolation from clipping text descenders\n\nInclude plain text nodes' glyph ink in scene paint bounds; `mix-blend-mode` on a text node no longer cuts glyphs that overflow the line box. Bounds now report unknown instead of underestimating for styles whose ink extent is not measured (shadows, outlines, text strokes), falling back to full-viewport isolation.\n"
-    filename: scene-paint-bounds-text-ink.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: patch\n---\n\n### Sample conic gradients deterministically\n\nReplace the per-pixel libm `atan2` in conic gradient sampling with Skia's `xy_to_unit_angle` polynomial, so every platform renders identical conic output and sampling gets cheaper.\n"
-    filename: deterministic-paint-math.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-raster:\n    type: patch\n---\n\n### Raise the lossless WebP compression effort\n\nEncode `WebPLossless` at effort 50 instead of 20, shrinking output by about 10% at 1.5x the encode time. Drop the `alpha_compression` assignment, which libwebp never read on either path.\n"
-    filename: webp-lossless-effort.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-raster:\n    type: patch\n---\n\n### Encode lossless WebP without a YUV420 round trip\n\nSet `use_argb` on the imported picture so `WebPLossless` and lossless animated WebP keep their source pixels instead of passing through chroma subsampling.\n"
-    filename: webp-lossless-use-argb.md
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n  cargo:takumi:\n    type: minor\n  npm:@takumi-rs/helpers:\n    type: minor\n  npm:@takumi-rs/core:\n    type: minor\n  npm:@takumi-rs/wasm:\n    type: minor\n  npm:takumi-js:\n    type: minor\n---\n\n### Accept raw RGBA pixels as an image source\n\nAn image node's `src` takes `{ width, height, data, premultiplied? }` and renders the pixels without decoding; the `Bitmap` JSX helper wraps it as an `<img>`.\n"
+    filename: raw-rgba-image-input.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - id: npm:@takumi-rs/helpers
+  - changelogIds:
+      - raw-rgba-image-input.md
+    id: npm:takumi-js
     updated: true
   - id: npm:@takumi-rs/image-response
     updated: true
+  - changelogIds:
+      - raw-rgba-image-input.md
+    id: npm:@takumi-rs/wasm
+    updated: true
+  - changelogIds:
+      - raw-rgba-image-input.md
+    id: npm:@takumi-rs/core
+    updated: true
   - id: npm:docs
     updated: false
-  - id: npm:takumi-js
+  - changelogIds:
+      - raw-rgba-image-input.md
+    id: npm:@takumi-rs/helpers
     updated: true
   - id: npm:takumi-template
-    updated: false
-  - id: npm:@takumi-rs/wasm
-    updated: true
-  - id: npm:@takumi-rs/core
-    updated: true
-  - id: npm:example-tanstack-start
-    updated: false
-  - id: npm:ffplay
-    updated: false
-  - id: npm:waku-ssr
-    updated: false
-  - id: npm:svelte
-    updated: false
-  - id: npm:example-cloudflare-workers
     updated: false
   - id: npm:example-twitter-images
     updated: false
   - id: npm:example-satori-html
     updated: false
-  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-tanstack-start
+    updated: false
+  - id: npm:example-cloudflare-workers
     updated: false
   - id: npm:example-css-library-integration
     updated: false
   - id: npm:example-nextjs
     updated: false
-  - changelogIds:
-      - scene-paint-bounds-text-ink.md
-      - deterministic-paint-math.md
-    id: cargo:takumi-core
-    updated: true
-  - id: cargo:takumi
-    updated: true
+  - id: npm:ffplay
+    updated: false
+  - id: npm:svelte
+    updated: false
+  - id: npm:ffmpeg-keyframe-animation
+    updated: false
+  - id: npm:waku-ssr
+    updated: false
   - id: cargo:takumi-svg
+    updated: true
+  - id: cargo:takumi-raster
+    updated: true
+  - changelogIds:
+      - raw-rgba-image-input.md
+    id: cargo:takumi-core
     updated: true
   - id: cargo:takumi-html
     updated: true
   - changelogIds:
-      - webp-lossless-effort.md
-      - webp-lossless-use-argb.md
-    id: cargo:takumi-raster
+      - raw-rgba-image-input.md
+    id: cargo:takumi
     updated: true
 npm:packages:
   - id: npm:takumi
-  - id: npm:@takumi-rs/helpers
-  - id: npm:@takumi-rs/image-response
-  - id: npm:docs
   - id: npm:takumi-js
-  - id: npm:takumi-template
+  - id: npm:@takumi-rs/image-response
   - id: npm:@takumi-rs/wasm
   - id: npm:@takumi-rs/core
-  - id: npm:example-tanstack-start
-  - id: npm:ffplay
-  - id: npm:waku-ssr
-  - id: npm:svelte
-  - id: npm:example-cloudflare-workers
+  - id: npm:docs
+  - id: npm:@takumi-rs/helpers
+  - id: npm:takumi-template
   - id: npm:example-twitter-images
   - id: npm:example-satori-html
-  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-tanstack-start
+  - id: npm:example-cloudflare-workers
   - id: npm:example-css-library-integration
   - id: npm:example-nextjs
+  - id: npm:ffplay
+  - id: npm:svelte
+  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:waku-ssr

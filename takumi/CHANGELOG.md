@@ -1,3 +1,9 @@
+## takumi@2.3.0
+
+### Accept raw RGBA pixels as an image source
+
+An image node's `src` takes `{ width, height, data, premultiplied? }` and renders the pixels without decoding; the `Bitmap` JSX helper wraps it as an `<img>`.
+
 ## takumi@2.0.0
 
 ### Refactor `font_families` and `lang` option type
