@@ -76,7 +76,7 @@ pub enum ImageSourceInput {
   /// Raw image bytes.
   Buffer(#[serde(with = "serde_bytes")] Vec<u8>),
   /// Raw RGBA pixels with explicit dimensions, used without decoding.
-  RawRgba(RawRgbaImage),
+  Rgba(RgbaImage),
   /// Pre-resolved image source.
   #[serde(skip_deserializing)]
   Loaded(ImageSource),
@@ -85,12 +85,12 @@ pub enum ImageSourceInput {
 /// Raw row-major RGBA pixels, converted to a premultiplied bitmap once at
 /// construction; resolving is a reference-count bump.
 #[derive(Debug, Clone, Deserialize)]
-#[serde(try_from = "RawRgbaData")]
-pub struct RawRgbaImage {
+#[serde(try_from = "RgbaImageData")]
+pub struct RgbaImage {
   source: ImageSource,
 }
 
-impl RawRgbaImage {
+impl RgbaImage {
   /// Wraps raw RGBA pixels, premultiplying in place unless `premultiplied`
   /// says the bytes already are. Errors if `data.len() != width * height * 4`.
   pub fn new(
@@ -113,12 +113,12 @@ impl RawRgbaImage {
   }
 }
 
-/// The wire shape of [`RawRgbaImage`]: straight alpha unless `premultiplied`.
+/// The wire shape of [`RgbaImage`]: straight alpha unless `premultiplied`.
 /// `Option` so an explicit JS `undefined`, surfaced as a unit value, still
 /// deserializes.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RawRgbaData {
+struct RgbaImageData {
   width: u32,
   height: u32,
   #[serde(with = "serde_bytes")]
@@ -127,10 +127,10 @@ struct RawRgbaData {
   premultiplied: Option<bool>,
 }
 
-impl TryFrom<RawRgbaData> for RawRgbaImage {
+impl TryFrom<RgbaImageData> for RgbaImage {
   type Error = ImageError;
 
-  fn try_from(raw: RawRgbaData) -> Result<Self, Self::Error> {
+  fn try_from(raw: RgbaImageData) -> Result<Self, Self::Error> {
     Self::new(
       raw.data,
       raw.width,
@@ -146,7 +146,7 @@ impl ImageSourceInput {
     match self {
       Self::Url(src) => resolve_image(src, context),
       Self::Buffer(data) => ImageSource::from_bytes_lazy(data, 0, Weak::new()),
-      Self::RawRgba(raw) => Ok(raw.source.clone()),
+      Self::Rgba(raw) => Ok(raw.source.clone()),
       Self::Loaded(source) => Ok(source.clone()),
     }
   }
@@ -748,8 +748,8 @@ mod tests {
     }))
     .unwrap();
 
-    let ImageSourceInput::RawRgba(raw) = input else {
-      panic!("expected RawRgba, got {input:?}");
+    let ImageSourceInput::Rgba(raw) = input else {
+      panic!("expected Rgba, got {input:?}");
     };
     let ImageSource::Bitmap(buffer) = &raw.source else {
       panic!("expected bitmap source");
@@ -769,8 +769,8 @@ mod tests {
     }))
     .unwrap();
 
-    let ImageSourceInput::RawRgba(raw) = input else {
-      panic!("expected RawRgba, got {input:?}");
+    let ImageSourceInput::Rgba(raw) = input else {
+      panic!("expected Rgba, got {input:?}");
     };
     let ImageSource::Bitmap(buffer) = &raw.source else {
       panic!("expected bitmap source");

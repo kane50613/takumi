@@ -57,7 +57,7 @@
 pub mod prelude {
   pub use takumi_core::{
     Error, Fonts, Result,
-    layout::node::{ImageData, ImageSourceInput, Node, NodeKind, RawRgbaImage, TextData},
+    layout::node::{ImageData, ImageSourceInput, Node, NodeKind, RgbaImage, TextData},
     resources::{
       font::{FontError, FontOverride, FontResource, GenericFamily, RegisteredFamily},
       image::{ImageCacheMode, ImageSource},

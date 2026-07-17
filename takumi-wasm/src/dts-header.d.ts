@@ -6,7 +6,7 @@ export {
   ImageNode,
   Node,
   NodeMetadata,
-  RawRgbaImage,
+  RgbaImage,
   TextNode,
 } from "@takumi-rs/helpers";
 

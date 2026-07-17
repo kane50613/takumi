@@ -5,7 +5,7 @@ export type {
   ContainerNode,
   ImageNode,
   NodeMetadata,
-  RawRgbaImage,
+  RgbaImage,
   TextNode,
 } from "@takumi-rs/helpers";
 

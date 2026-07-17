@@ -63,7 +63,7 @@ export type TextNode = NodeMetadata & {
 };
 
 /** Raw row-major RGBA pixels, rendered without decoding. */
-export type RawRgbaImage = {
+export type RgbaImage = {
   /** The image width in pixels. */
   width: number;
   /** The image height in pixels. */
@@ -76,7 +76,7 @@ export type RawRgbaImage = {
 
 export type ImageNode = NodeMetadata & {
   type: "image";
-  src: string | Uint8Array | ArrayBuffer | RawRgbaImage;
+  src: string | Uint8Array | ArrayBuffer | RgbaImage;
   width?: number;
   height?: number;
 };
