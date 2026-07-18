@@ -61,7 +61,11 @@ const output = await render(<div tw="animate-[move_1s_ease-in-out_infinite_alter
 
 Use stylesheet `@keyframes` when you want the animation to travel with the JSX tree and then render it with either `renderAnimation()` or `render()` + `stylesheets`.
 
-`renderAnimation()` takes the scenes directly: each scene's JSX (or HTML string, or node tree) is transformed and its `<style>` is extracted automatically, and images are fetched once across every scene.
+`renderAnimation()` takes the scenes directly and handles the rest:
+
+- Transforms each scene's JSX (or HTML string, or node tree)
+- Extracts its `<style>` automatically
+- Fetches images once across every scene
 
 ```tsx twoslash title="render.tsx"
 // @noErrors

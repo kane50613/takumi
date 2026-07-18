@@ -13,7 +13,7 @@ Most v2 breakages surface as type or compile errors, so a coding agent can do th
 npm install takumi-js @takumi-rs/core @takumi-rs/wasm
 ```
 
-Then paste the prompt below. Apply only the lines for packages you import, then run the type checker (`cargo check` for Rust) and fix the rest.
+Paste the prompt below. Apply only the lines for packages you import, run the type checker (`cargo check` for Rust), and fix the rest.
 
 ```text
 Upgrade this project from Takumi v1 to v2. Apply `old -> new` for the packages it imports.
@@ -67,7 +67,7 @@ const image = render(node, options); // [!code --]
 const image = await render(node, options); // [!code ++]
 ```
 
-`measure` is a `Renderer` method, not a top-level export. `encodeFrames` is removed — use `renderAnimation` (or `render` per frame for raw output).
+`measure` is a `Renderer` method, not a top-level export. `encodeFrames` is removed; use `renderAnimation` (or `render` per frame for raw output).
 
 ### The `Renderer` constructor takes no arguments
 
@@ -210,7 +210,7 @@ The sections below cover the subtler cases.
 
 In v1, an SVG supplied as an image (`Node::image`, `background-image: url(...)`, or `mask-image`) had its `currentColor` rewritten to the host element's `color` before rendering. v2 removes this.
 
-An SVG referenced as an image is an isolated document, so it does not inherit `color` from the host, the same rule browsers, [satori](https://github.com/vercel/satori), and `@vercel/og` follow. Its `currentColor` now resolves to the SVG's own default (black) instead of the surrounding text color. This also makes the raster and vector (SVG) backends agree, and lets the raster backend reuse its cached parse instead of reparsing the SVG on every render.
+An SVG referenced as an image is an isolated document. It does not inherit `color` from the host, the same rule browsers, [satori](https://github.com/vercel/satori), and `@vercel/og` follow. Its `currentColor` now resolves to the SVG's own default (black) instead of the surrounding text color. This also makes the raster and vector (SVG) backends agree, and lets the raster backend reuse its cached parse instead of reparsing the SVG on every render.
 
 `currentColor` for Takumi's own properties (text `color`, `border-color`, `box-shadow`, `outline`, `text-decoration-color`) is unchanged. Only the contents of SVG images are affected.
 
@@ -316,7 +316,12 @@ write_image(&image, ImageOutputFormat::WebP, 80)?; // [!code --]
 write_image(&image, &mut output, OutputFormat::WebP { quality: Quality::new(80) })?; // [!code ++]
 ```
 
-In the napi binding, `format` is a string (`"png"` | `"jpeg"` | `"webp"` | ...) with separate optional `quality` and `lossless` fields. `quality` applies to JPEG and lossy WebP; `lossless` applies to WebP. On the wasm binding WebP is always lossless, so there is no `lossless` field and `quality` applies to JPEG only.
+In the napi binding, `format` is a string (`"png"` | `"jpeg"` | `"webp"` | ...) with separate optional `quality` and `lossless` fields. Field support differs by binding:
+
+| Binding | `quality`           | `lossless`                       |
+| ------- | ------------------- | -------------------------------- |
+| napi    | JPEG and lossy WebP | WebP                             |
+| wasm    | JPEG only           | absent (WebP is always lossless) |
 
 ```ts
 renderer.render(node, { format: "jpeg", quality: 80 });
@@ -348,7 +353,7 @@ image.render_for_layout(width, height, image_rendering, time_ms)?; // [!code ++]
 
 ### `Length` and `ColorInput` drop their default-flavor type parameter
 
-`Length` and `ColorInput` were generic over a `const` bool so one enum could default two ways (`auto` vs `0`, `currentColor` vs `transparent`). That parameter is gone: both are plain enums. The `LengthDefaultsToZero` and `ColorDefaultsToTransparent` aliases are removed — use `Length` and `ColorInput`. Rendering is unchanged: the zero/transparent initial values are now declared per field.
+`Length` and `ColorInput` were generic over a `const` bool so one enum could default two ways (`auto` vs `0`, `currentColor` vs `transparent`). That parameter is gone: both are plain enums. The `LengthDefaultsToZero` and `ColorDefaultsToTransparent` aliases are removed; use `Length` and `ColorInput`. Rendering is unchanged: the zero/transparent initial values are now declared per field.
 
 ```rust
 let inset: LengthDefaultsToZero = Length::Px(0.0); // [!code --]
@@ -357,7 +362,7 @@ let inset: Length = Length::Px(0.0); // [!code ++]
 
 ### `BackgroundPosition` is renamed to `PositionValue`
 
-The CSS `<position>` value backs `background-position`, `object-position`, `transform-origin`, `mask-position`, and gradient centers, so `BackgroundPosition` was renamed to `PositionValue`, and `BackgroundPositions` to `PositionValues`. The `ObjectPosition` and `TransformOrigin` aliases are removed — they were aliases of `BackgroundPosition`, so their `Default` was top-left, not the `50% 50%` those properties actually default to. Use `PositionValue`, and `PositionValue::center()` for the `center center` initial value.
+The CSS `<position>` value backs `background-position`, `object-position`, `transform-origin`, `mask-position`, and gradient centers, so `BackgroundPosition` was renamed to `PositionValue`, and `BackgroundPositions` to `PositionValues`. The `ObjectPosition` and `TransformOrigin` aliases are removed; they were aliases of `BackgroundPosition`, so their `Default` was top-left, not the `50% 50%` those properties actually default to. Use `PositionValue`, and `PositionValue::center()` for the `center center` initial value.
 
 ```rust
 let origin: TransformOrigin = TransformOrigin::default(); // [!code --]
@@ -366,7 +371,13 @@ let origin: PositionValue = PositionValue::center(); // [!code ++]
 
 ### Core enums are `#[non_exhaustive]`
 
-Several public enums gained `#[non_exhaustive]`: `NodeKind`, `ImageSource`, `ImageSourceInput`, `ImageCacheMode`, `Length`, and `ColorInput`, plus `PropertyId`, `StyleDeclaration`, and the spec-tracking CSS value enums (`BlendMode`, `Filter`, `BasicShape`, `ContentValue`, `TextTransform`, `WhiteSpaceCollapse`, `OffsetPath`, `ImageScalingAlgorithm`, `Position`) in `takumi-core`. You can no longer build these variants with a struct literal from outside the crate, and a `match` on them needs a wildcard arm.
+Several public enums in `takumi-core` gained `#[non_exhaustive]`:
+
+- **Core**: `NodeKind`, `ImageSource`, `ImageSourceInput`, `ImageCacheMode`, `Length`, `ColorInput`
+- **Style**: `PropertyId`, `StyleDeclaration`
+- **Spec-tracking CSS values**: `BlendMode`, `Filter`, `BasicShape`, `ContentValue`, `TextTransform`, `WhiteSpaceCollapse`, `OffsetPath`, `ImageScalingAlgorithm`, `Position`
+
+You can no longer build these variants with a struct literal from outside the crate, and a `match` on them needs a wildcard arm.
 
 ```rust
 match node.kind {
@@ -378,7 +389,12 @@ match node.kind {
 
 ### CSS value lists are type aliases
 
-The multi-value CSS lists are plain aliases instead of newtypes. `Filters` and `GridTemplateComponents` are `Vec<_>`; `BackgroundImages`, `BackgroundSizes`, `BackgroundRepeats`, and `PositionValues` are `Box<[_]>`. Drop the newtype wrapper when you build one. To parse a value from a string, use the `FromCssStr` trait, which returns an owned `ParseError` and keeps `cssparser` out of the public API.
+The multi-value CSS lists are plain aliases instead of newtypes. Drop the newtype wrapper when you build one.
+
+| Underlying type | Aliases                                                                      |
+| --------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Vec<_>`        | `Filters`, `GridTemplateComponents`                                          |
+| `Box<[_]>`      | `BackgroundImages`, `BackgroundSizes`, `BackgroundRepeats`, `PositionValues` | To parse a value from a string, use the `FromCssStr` trait, which returns an owned `ParseError` and keeps `cssparser` out of the public API. |
 
 ```rust
 let filters = Filters(vec![Filter::Blur(Length::Px(4.0))]); // [!code --]
@@ -388,8 +404,12 @@ let sizes = BackgroundSizes::from_css_str("cover")?;
 
 ### `max-width` / `max-height` and `gap` representation
 
-`max-width` and `max-height` are now represented as a `MaxSize` enum instead of using `Length`'s `auto` to mean unbounded. Its initial value is `MaxSize::None`.
-`column-gap`, `row-gap`, and the `gap` shorthand are represented as a `Gap` enum, whose initial value is `Gap::Normal` (which computes to `0`).
+Two properties moved off `Length` onto dedicated enums:
+
+| Property                       | Enum      | Initial                         |
+| ------------------------------ | --------- | ------------------------------- |
+| `max-width`, `max-height`      | `MaxSize` | `MaxSize::None` (unbounded)     |
+| `column-gap`, `row-gap`, `gap` | `Gap`     | `Gap::Normal` (computes to `0`) |
 
 ```rust
 let max_width = Length::Auto; // [!code --]

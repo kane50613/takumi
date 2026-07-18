@@ -41,8 +41,11 @@ dithers away gradient banding. The title crosses the whole hue wheel with two st
 
 ## Neon CRT
 
-Neon is stacked `text-shadow`s widening in the brand color; chromatic aberration is two hard
-shadows in opposite directions; scanlines and vignette are gradient overlays:
+Three layered effects:
+
+- **Neon**: stacked `text-shadow`s widening in the brand color
+- **Chromatic aberration**: two hard shadows in opposite directions
+- **Scanlines and vignette**: gradient overlays
 
 ```css
 .neon {
@@ -125,9 +128,11 @@ The starburst behind is one `repeating-conic-gradient`:
 
 ## Halftone
 
-A dot screen in three declarations: multiply a tiled radial gradient with a tone ramp, then crush
-it with `contrast()`. A `lighten` overlay re-inks the black dots (set `isolation: isolate` on the
-parent):
+A dot screen in three declarations:
+
+- Multiply a tiled radial gradient with a tone ramp
+- Crush it with `contrast()`
+- Re-ink the black dots with a `lighten` overlay (set `isolation: isolate` on the parent)
 
 ```css
 .dots {
@@ -256,7 +261,7 @@ Threshold effects need `color-interpolation-filters="sRGB"` on the `<filter>`; t
 ```
 
 Tiling a Bayer matrix with `feImage` + `feTile` and adding it as noise before the quantize turns
-the same graph into ordered dithering; a two-color table over a 1-bit luma threshold gives duotone.
+the same graph into ordered dithering. A two-color table over a 1-bit luma threshold gives duotone.
 The full graphs live in
 [`style_filter_reference.rs`](https://github.com/kane50613/takumi/blob/master/takumi/tests/fixtures/style_filter_reference.rs).
 

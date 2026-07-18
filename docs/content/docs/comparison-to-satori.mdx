@@ -4,7 +4,7 @@ description: How Takumi differs from satori and next/og, and how to migrate a te
 icon: Scale
 ---
 
-[satori](https://github.com/vercel/satori) pioneered OG images without a headless browser and powers `next/og`. It turns JSX into an SVG string, so a bitmap takes a pipeline: yoga computes layout in WebAssembly, satori emits SVG, then `resvg` or `sharp` rasterizes it. Takumi is one Rust engine that does the whole job: JSX in, encoded image out.
+[satori](https://github.com/vercel/satori) pioneered OG images without a headless browser and powers `next/og`. It turns JSX into an SVG string, so a bitmap takes a pipeline: yoga computes layout in WebAssembly, satori emits SVG, and `resvg` or `sharp` rasterizes it. Takumi is one Rust engine that does the whole job: JSX in, encoded image out.
 
 ```mermaid
 flowchart LR
@@ -139,7 +139,7 @@ satori renders one static frame. Takumi threads a time axis through the pipeline
 
 ## Performance and memory
 
-satori runs layout and text shaping in JavaScript on the calling thread, then hands the SVG string to a separate rasterizer. Takumi's native binding moves the whole pipeline off the event loop:
+satori runs layout and text shaping in JavaScript on the calling thread. It hands the SVG string to a separate rasterizer. Takumi's native binding moves the whole pipeline off the event loop:
 
 - **Renders run on worker threads.** `render` executes as an async task, so the event loop stays free, and concurrent renders read the font store without locking.
 - **Animation frames render in parallel** across a thread pool and stream into the encoder, so memory stays flat as frame count grows.
@@ -158,7 +158,7 @@ Measured from a clean `npm install` (macOS arm64) and gzip of the published arti
 | `@vercel/og`               | 35 MB (16 MB is optional `sharp`) | ~0.7 MB (`index.edge.js` + `resvg.wasm`) |
 | `takumi-js`                | 8.6 MB                            | 1.5 MB (`takumi_wasm_bg.wasm`)           |
 
-The WebAssembly binary is the weak spot: 3.7 MB raw, 1.5 MB gzipped, about twice the `@vercel/og` edge stack. Cold starts download and compile more, and it takes a bigger bite out of platform script-size limits. On Node the picture flips: one native binary replaces satori, yoga, opentype.js, and resvg.
+The WebAssembly binary is the weak spot: **3.7 MB raw, 1.5 MB gzipped**, about twice the `@vercel/og` edge stack. Cold starts download and compile more, and it takes a bigger bite out of platform script-size limits. On Node the picture flips: one native binary replaces satori, yoga, opentype.js, and resvg.
 
 ## Used in production
 

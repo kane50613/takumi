@@ -55,7 +55,7 @@ export function GET() {
 
 The takumi-js functions `render`, `renderAnimation`, and `renderSvg` take the same `fonts` option.
 
-`generic` claims a CSS generic family keyword for the font, so stacks ending in `monospace`, `serif`, and friends reach it without naming the family — the way Tailwind's `font-mono` resolves:
+`generic` claims a CSS generic family keyword for the font, so stacks ending in `monospace`, `serif`, and friends reach it without naming the family, the way Tailwind's `font-mono` resolves:
 
 ```tsx twoslash
 import { ImageResponse } from "takumi-js/response";
@@ -146,7 +146,7 @@ To trim before the render, call `subsetFonts({ fonts, source })`, where `source`
 
 ### Preloading with `registerFont`
 
-`registerFont` is the escape hatch for preloading. Register a font on a renderer up front, outside the request path. Then reuse that renderer. It takes the same entries as `fonts` and returns the families it made.
+`registerFont` is the escape hatch for preloading. Register a font on a renderer up front, outside the request path, and reuse that renderer. It takes the same entries as `fonts` and returns the families it made.
 
 ```tsx
 import { Renderer } from "@takumi-rs/core";
@@ -292,7 +292,7 @@ Takumi supports `balance` and `pretty` wrapping, adapted from [satori](https://g
 <div style={{ textWrap: "balance" }}>Super Long Text</div>
 ```
 
-`word-break` and `overflow-wrap` decide where a long token splits. `break-all`, `keep-all`, and `anywhere` cover CJK and long URLs.
+`word-break` and `overflow-wrap` decide where a long token splits. `break-all`, `keep-all`, and `anywhere` cover CJK (Chinese/Japanese/Korean) and long URLs.
 
 ### Truncation
 
