@@ -82,8 +82,22 @@ export function applyLiquidGlassCpu(
     return acc / 9;
   };
 
+  const shadowReach = 120;
+  const minX = Math.max(0, Math.floor(glass.x - shadowReach));
+  const maxX = Math.min(width, Math.ceil(glass.x + glass.width + shadowReach));
+  const minY = Math.max(0, Math.floor(glass.y - shadowReach));
+  const maxY = Math.min(height, Math.ceil(glass.y + glass.height + shadowReach));
+
   for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
+    if (y < minY || y >= maxY) {
+      out.set(pixels.subarray(y * width * 4, (y + 1) * width * 4), y * width * 4);
+      continue;
+    }
+
+    out.set(pixels.subarray(y * width * 4, (y * width + minX) * 4), y * width * 4);
+    out.set(pixels.subarray((y * width + maxX) * 4, (y + 1) * width * 4), (y * width + maxX) * 4);
+
+    for (let x = minX; x < maxX; x++) {
       const i = (y * width + x) * 4;
       const px = x + 0.5;
       const py = y + 0.5;
