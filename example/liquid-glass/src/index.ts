@@ -1,26 +1,21 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { render } from "takumi-js";
-import { container, image, text } from "takumi-js/helpers";
+import { container, googleFonts, image, text } from "takumi-js/helpers";
 import { applyLiquidGlass } from "./liquid-glass.ts";
+import { applyLiquidGlassCpu } from "./liquid-glass-cpu.ts";
 
 const width = 1200;
 const height = 630;
 const dpr = 2;
-const glass = { x: 280, y: 195, width: 640, height: 240, radius: 48 };
+const glass = { x: 280, y: 320, width: 640, height: 240, radius: 48 };
 
 const assets = join(import.meta.dirname, "../../../assets");
-const fonts = [
-  { name: "Geist", data: await readFile(join(assets, "fonts/geist/Geist[wght].woff2")) },
-  {
-    name: "Noto Sans TC",
-    data: await readFile(join(assets, "fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2")),
-  },
-];
+const fonts = await googleFonts(["Instrument Sans", "Noto Serif", "Noto Sans TC"]);
 const images = [
   {
     src: "wallpaper",
-    data: await readFile(join(assets, "images/martin-martz-W0NRebXbsjM-unsplash.jpg")),
+    data: await readFile(join(assets, "images/benjamin-voros-phIFdC6lA4E-unsplash.jpg")),
   },
 ];
 
@@ -37,19 +32,22 @@ const raw = await render(scene, {
   fonts,
   images,
 });
-const processed = await applyLiquidGlass(
-  new Uint8Array(raw),
-  width * dpr,
-  height * dpr,
-  {
-    x: glass.x * dpr,
-    y: glass.y * dpr,
-    width: glass.width * dpr,
-    height: glass.height * dpr,
-    radius: glass.radius * dpr,
-  },
-  20 * dpr,
-);
+const useCpu = process.argv.includes("--cpu");
+const glassPx = {
+  x: glass.x * dpr,
+  y: glass.y * dpr,
+  width: glass.width * dpr,
+  height: glass.height * dpr,
+  radius: glass.radius * dpr,
+};
+const thickness = 20 * dpr;
+
+const start = performance.now();
+const processed = useCpu
+  ? applyLiquidGlassCpu(new Uint8Array(raw), width * dpr, height * dpr, glassPx, thickness)
+  : await applyLiquidGlass(new Uint8Array(raw), width * dpr, height * dpr, glassPx, thickness);
+
+console.log(`${useCpu ? "cpu" : "gpu"} filter: ${(performance.now() - start).toFixed(0)}ms`);
 
 const progress = 0.42;
 
@@ -93,9 +91,9 @@ const widget = container({
             text({
               text: "Glasswork",
               style: {
-                fontSize: 34,
-                fontWeight: 600,
-                letterSpacing: "-0.01em",
+                fontFamily: "Noto Serif",
+                fontSize: 42,
+                letterSpacing: "0.01em",
                 color: "white",
               },
             }),
@@ -168,6 +166,8 @@ const webp = await render(composed, {
 });
 const outDir = join(import.meta.dirname, "../output");
 
+const outFile = useCpu ? "liquid-glass-cpu.webp" : "liquid-glass.webp";
+
 await mkdir(outDir, { recursive: true });
-await writeFile(join(outDir, "liquid-glass.webp"), webp);
-console.log("wrote output/liquid-glass.webp");
+await writeFile(join(outDir, outFile), webp);
+console.log(`wrote output/${outFile}`);
