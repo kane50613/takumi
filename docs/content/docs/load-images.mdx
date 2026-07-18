@@ -8,7 +8,7 @@ icon: Image
 
 Takumi fetches external images in `src` attributes and CSS `background-image` / `mask-image`.
 
-To reuse fetched bytes across renders, pass a `fetchCache` — a `Map<string, Promise<ArrayBuffer>>`, or anything with `Map`-like `get`/`set`/`delete`. It stores the in-flight promise, so concurrent renders needing the same URL share one fetch:
+To reuse fetched bytes across renders, pass a `fetchCache`: a `Map<string, Promise<ArrayBuffer>>`, or anything with `Map`-like `get`/`set`/`delete`. It stores the in-flight promise, so concurrent renders needing the same URL share one fetch:
 
 ```tsx twoslash
 import { render } from "takumi-js";
@@ -30,12 +30,12 @@ A plain `Map` never evicts. If your URLs are high-cardinality (a different image
 
 Every remote fetch (images, fonts, Google Fonts CSS) is bounded. The group form of `images` takes the same options:
 
-| Option     | Default            | Use                                                            |
-| :--------- | :----------------- | :------------------------------------------------------------- |
-| `timeout`  | `5000` (ms)        | Abort a hanging host. `0` or negative disables it.             |
-| `maxBytes` | 32 MiB             | Reject a body past this size, by `content-length` or streamed. |
-| `allowUrl` | allow all          | Return `false` to block a URL, e.g. an SSRF allowlist.         |
-| `fetch`    | `globalThis.fetch` | Custom fetch implementation.                                   |
+| Option     | Default            | Use                                                                                  |
+| :--------- | :----------------- | :----------------------------------------------------------------------------------- |
+| `timeout`  | `5000` (ms)        | Abort a hanging host. `0` or negative disables it.                                   |
+| `maxBytes` | 32 MiB             | Reject a body past this size, by `content-length` or streamed.                       |
+| `allowUrl` | allow all          | Return `false` to block a URL, e.g. an SSRF (server-side request forgery) allowlist. |
+| `fetch`    | `globalThis.fetch` | Custom fetch implementation.                                                         |
 
 ```tsx twoslash
 import { render } from "takumi-js";

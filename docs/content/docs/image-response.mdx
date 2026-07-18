@@ -91,7 +91,7 @@ try {
 }
 ```
 
-`onError` is a notification hook for side effects like logging. Its return value is ignored and the response stream still errors, so it cannot substitute a fallback image — use `ready` for that.
+`onError` is a notification hook for side effects like logging. Its return value is ignored and the response stream still errors, so it cannot substitute a fallback image; use `ready` for that.
 
 ```tsx
 new ImageResponse(<OgImage />, {
