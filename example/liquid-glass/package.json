@@ -1,0 +1,17 @@
+{
+  "name": "example-liquid-glass",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "node src/index.ts"
+  },
+  "dependencies": {
+    "takumi-js": "workspace:*",
+    "webgpu": "^0.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}
