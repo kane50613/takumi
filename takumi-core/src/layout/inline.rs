@@ -1559,6 +1559,13 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
     } = &mut built;
 
     if style.parent.text_overflow == TextOverflow::Ellipsis {
+      // A line's advance is an f32 sum over glyphs, so an exactly-fitting line
+      // can land a hair past max_width and must not sprout an ellipsis. A
+      // quarter pixel sits above that drift and below visible overflow. Blink
+      // avoids the problem class entirely by comparing in 1/64px fixed-point
+      // LayoutUnit.
+      const INLINE_OVERFLOW_TOLERANCE: f32 = 0.25;
+
       // Overflow shows up two ways: text truncated past the last committed
       // line, or a line wider than the box because nothing in it could break.
       // Browsers ellipsize the second case too: Blink runs
@@ -1572,7 +1579,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
         let metrics = last_line.metrics();
         last_line.text_range().end < text.len()
           || metrics.inline_min_coord + metrics.advance - metrics.trailing_whitespace
-            > max_width + 0.25
+            > max_width + INLINE_OVERFLOW_TOLERANCE
       });
 
       if is_overflowing {
