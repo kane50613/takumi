@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./assets/images/sticker.svg" alt="Takumi Sticker" height="64" />
+  <img src="./assets/images/sticker.svg" alt="Takumi Sticker" height="96" />
 
 # Takumi
 

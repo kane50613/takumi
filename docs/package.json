@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "waku build",
-    "dev": "waku dev",
+    "dev": "portless run --name takumi --app-port 3000 waku dev",
     "start": "waku start",
     "typecheck": "fumadocs-mdx && tsc --noEmit"
   },
@@ -48,6 +48,7 @@
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "csstype": "catalog:",
+    "portless": "^0.15.4",
     "prettier": "^3.9.5",
     "vite": "catalog:"
   }
