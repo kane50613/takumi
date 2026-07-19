@@ -8,12 +8,7 @@ export const OG_IMAGE =
 export const baseOptions: BaseLayoutProps = {
   githubUrl: "https://github.com/kane50613/takumi",
   nav: {
-    title: (
-      <>
-        <img src="/logo.svg" alt="Takumi" width={24} height={24} />
-        <span className="font-semibold">Takumi</span>
-      </>
-    ),
+    title: <img src="/sticker.svg" alt="Takumi" className="h-8 w-fit" height={210} width={530} />,
   },
   links: [
     {

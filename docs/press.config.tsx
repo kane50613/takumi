@@ -31,7 +31,7 @@ import {
 import { googleFonts } from "takumi-js/helpers";
 import wasmModule from "takumi-js/wasm";
 import { docs } from "./.source/server";
-import logo from "./public/logo.svg?raw";
+import sticker from "./public/sticker.svg?raw";
 import { baseOptions } from "./app/layout-config";
 import { Accordion, Accordions } from "./app/components/accordion";
 import { Mermaid } from "./app/components/mdx/mermaid";
@@ -140,10 +140,9 @@ export default defineConfig({
           node: generateOgNode({
             title: page.data.title,
             description: page.data.description,
-            site: "Takumi",
             primaryColor: "hsla(354, 90%, 54%, 0.3)",
             primaryTextColor: "#ff3535",
-            icon: <img src={logo} alt="Takumi" style={{ width: "4rem", height: "4rem" }} />,
+            icon: <img src={sticker} alt="Takumi" style={{ height: "4rem" }} />,
           }),
           options: {
             fonts: googleFonts([{ name: "Noto Serif", weight: [600, 800] }]),
