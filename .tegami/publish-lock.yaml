@@ -1,75 +1,75 @@
 core:changelogs:
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: patch\n---\n\n### Include glyph ink extents in text paint bounds\n\nText paint bounds only covered the advance × (ascent + descent) metrics box, so isolation surfaces (opacity, filters) clipped ink outside it: synthetic-italic overhang, faux-bold outset, and negative bearings. Node paint bounds now merge each glyph's ink extents.\n"
-    filename: text-ink-paint-bounds.md
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: patch\n---\n\n### Ellipsize nowrap text without a break opportunity\n\n`text-overflow: ellipsis` with `white-space: nowrap` only kicked in when the text could wrap, so a single long token was clipped with no ellipsis. Overflow detection now also checks the line's inline advance against the box, matching how Blink truncates any overflowing line at a character boundary.\n"
+    filename: nowrap-ellipsis-unbreakable.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - id: npm:docs
-    updated: false
-  - id: npm:@takumi-rs/helpers
-    updated: true
   - id: npm:@takumi-rs/image-response
-    updated: true
-  - id: npm:@takumi-rs/wasm
     updated: true
   - id: npm:takumi-template
     updated: false
-  - id: npm:@takumi-rs/core
+  - id: npm:@takumi-rs/helpers
     updated: true
   - id: npm:takumi-js
     updated: true
-  - id: npm:ffplay
+  - id: npm:@takumi-rs/wasm
+    updated: true
+  - id: npm:docs
     updated: false
-  - id: npm:waku-ssr
+  - id: npm:@takumi-rs/core
+    updated: true
+  - id: npm:example-css-library-integration
     updated: false
-  - id: npm:example-tanstack-start
-    updated: false
-  - id: npm:ffmpeg-keyframe-animation
-    updated: false
-  - id: npm:example-twitter-images
+  - id: npm:example-satori-html
     updated: false
   - id: npm:example-cloudflare-workers
     updated: false
-  - id: npm:example-css-library-integration
+  - id: npm:ffmpeg-keyframe-animation
     updated: false
-  - id: npm:example-liquid-glass
+  - id: npm:ffplay
+    updated: false
+  - id: npm:example-tanstack-start
+    updated: false
+  - id: npm:example-twitter-images
     updated: false
   - id: npm:example-nextjs
     updated: false
-  - id: npm:example-satori-html
+  - id: npm:example-liquid-glass
+    updated: false
+  - id: npm:waku-ssr
     updated: false
   - id: npm:svelte
     updated: false
-  - changelogIds:
-      - text-ink-paint-bounds.md
-    id: cargo:takumi-core
+  - id: cargo:takumi
     updated: true
   - id: cargo:takumi-html
     updated: true
-  - id: cargo:takumi-raster
-    updated: true
   - id: cargo:takumi-svg
     updated: true
-  - id: cargo:takumi
+  - id: cargo:takumi-raster
+    updated: true
+  - changelogIds:
+      - nowrap-ellipsis-unbreakable.md
+    id: cargo:takumi-core
     updated: true
 npm:packages:
   - id: npm:takumi
-  - id: npm:docs
-  - id: npm:@takumi-rs/helpers
   - id: npm:@takumi-rs/image-response
-  - id: npm:@takumi-rs/wasm
   - id: npm:takumi-template
-  - id: npm:@takumi-rs/core
+  - id: npm:@takumi-rs/helpers
   - id: npm:takumi-js
-  - id: npm:ffplay
-  - id: npm:waku-ssr
-  - id: npm:example-tanstack-start
-  - id: npm:ffmpeg-keyframe-animation
-  - id: npm:example-twitter-images
-  - id: npm:example-cloudflare-workers
+  - id: npm:@takumi-rs/wasm
+  - id: npm:docs
+  - id: npm:@takumi-rs/core
   - id: npm:example-css-library-integration
-  - id: npm:example-liquid-glass
-  - id: npm:example-nextjs
   - id: npm:example-satori-html
+  - id: npm:example-cloudflare-workers
+  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:ffplay
+  - id: npm:example-tanstack-start
+  - id: npm:example-twitter-images
+  - id: npm:example-nextjs
+  - id: npm:example-liquid-glass
+  - id: npm:waku-ssr
   - id: npm:svelte
