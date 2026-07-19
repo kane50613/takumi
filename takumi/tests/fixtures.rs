@@ -12,6 +12,8 @@ pub mod inline;
 pub mod inline_vertical_align;
 #[path = "fixtures/lang.rs"]
 pub mod lang;
+#[path = "fixtures/paint_bounds_text_ink.rs"]
+pub mod paint_bounds_text_ink;
 #[path = "fixtures/pseudo.rs"]
 pub mod pseudo;
 #[path = "fixtures/rtl.rs"]

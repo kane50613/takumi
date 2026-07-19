@@ -6,6 +6,8 @@ use std::collections::HashMap;
 
 use parley::{InlineBoxKind, PositionedLayoutItem};
 
+use skrifa::FontRef;
+
 use crate::{
   error::{Error, Result},
   font_style::SizedFontStyle,
@@ -19,6 +21,7 @@ use crate::{
     node::Node,
     tree::{LayoutResults, RenderNode},
   },
+  resources::font::ResolvedGlyph,
   style::{Affine, ComputedStyle, Display, SizingContext},
 };
 
@@ -478,6 +481,62 @@ fn compute_node_paint_bounds(
           let glyph_transform =
             Affine::translation(glyph_origin.x, glyph_origin.y) * inline_transform;
           bounds = merge_bounds(bounds, bounds_for_rect(glyph_size, glyph_transform));
+
+          // The metrics box above misses ink outside advance × (ascent+descent):
+          // synthetic-italic skew, faux-bold outset, negative bearings, and
+          // glyphs taller than the font's metrics. Merge per-glyph ink extents
+          // so isolation surfaces sized from these bounds never clip text.
+          let Ok(font) = FontRef::from_index(
+            glyph_run.run().font().data.as_ref(),
+            glyph_run.run().font().index,
+          ) else {
+            continue;
+          };
+          let glyph_ids = glyph_run.positioned_glyphs().map(|glyph| glyph.id);
+          let resolved_glyphs = node
+            .context
+            .fonts
+            .with_context(|fonts| fonts.resolve_glyphs(&glyph_run, font, glyph_ids));
+
+          for glyph in glyph_run.positioned_glyphs() {
+            let Some((min_x, min_y, max_x, max_y)) = resolved_glyphs
+              .get(&glyph.id)
+              .and_then(ResolvedGlyph::ink_extents)
+            else {
+              continue;
+            };
+
+            let mut ink_origin = Point {
+              x: glyph.x + min_x,
+              y: glyph.y + baseline_shift + min_y,
+            };
+            let mut ink_size = Size {
+              width: max_x - min_x,
+              height: max_y - min_y,
+            };
+            if (line_scale - 1.0).abs() > f32::EPSILON {
+              ink_origin = Point {
+                x: scale_text_fit_x(
+                  ink_origin.x,
+                  line_scale_origin.x,
+                  line_scale,
+                  static_inline_prefix,
+                  line_alignment_correction,
+                ),
+                y: line_scale_origin.y + (ink_origin.y - line_scale_origin.y) * line_scale,
+              };
+              ink_size.width *= line_scale;
+              ink_size.height *= line_scale;
+            }
+
+            bounds = merge_bounds(
+              bounds,
+              bounds_for_rect(
+                ink_size,
+                Affine::translation(ink_origin.x, ink_origin.y) * inline_transform,
+              ),
+            );
+          }
         }
         PositionedLayoutItem::InlineBox(inline_box) => {
           if inline_box.kind != InlineBoxKind::InFlow {
