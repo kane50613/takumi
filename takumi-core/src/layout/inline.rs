@@ -1559,10 +1559,21 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
     } = &mut built;
 
     if style.parent.text_overflow == TextOverflow::Ellipsis {
-      let is_overflowing = layout
-        .lines()
-        .last()
-        .is_some_and(|last_line| last_line.text_range().end < text.len());
+      // Overflow shows up two ways: text truncated past the last committed
+      // line, or a line wider than the box because nothing in it could break.
+      // Browsers ellipsize the second case too: Blink runs
+      // LineTruncator::TruncateLine on any overflowing line under
+      // text-overflow: ellipsis and finds the cut with
+      // ShapeResult::OffsetToFit, which walks shaped glyph positions rather
+      // than break opportunities (blink/renderer/core/layout/inline/
+      // line_truncator.cc). The spec never conditions ellipsing on soft wrap
+      // opportunities either: https://drafts.csswg.org/css-overflow-3/#text-overflow
+      let is_overflowing = layout.lines().last().is_some_and(|last_line| {
+        let metrics = last_line.metrics();
+        last_line.text_range().end < text.len()
+          || metrics.inline_min_coord + metrics.advance - metrics.trailing_whitespace
+            > max_width + 0.25
+      });
 
       if is_overflowing {
         make_ellipsis_layout(
