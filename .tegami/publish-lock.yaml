@@ -1,82 +1,75 @@
 core:changelogs:
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n  cargo:takumi:\n    type: minor\n  npm:@takumi-rs/helpers:\n    type: minor\n  npm:@takumi-rs/core:\n    type: minor\n  npm:@takumi-rs/wasm:\n    type: minor\n  npm:takumi-js:\n    type: minor\n---\n\n### Accept raw RGBA pixels as an image source\n\nAn image node's `src` takes `{ width, height, data, premultiplied? }` and renders the pixels without decoding; the `Bitmap` JSX helper wraps it as an `<img>`.\n"
-    filename: raw-rgba-image-input.md
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: patch\n---\n\n### Include glyph ink extents in text paint bounds\n\nText paint bounds only covered the advance × (ascent + descent) metrics box, so isolation surfaces (opacity, filters) clipped ink outside it: synthetic-italic overhang, faux-bold outset, and negative bearings. Node paint bounds now merge each glyph's ink extents.\n"
+    filename: text-ink-paint-bounds.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - changelogIds:
-      - raw-rgba-image-input.md
-    id: npm:takumi-js
+  - id: npm:docs
+    updated: false
+  - id: npm:@takumi-rs/helpers
     updated: true
   - id: npm:@takumi-rs/image-response
     updated: true
-  - changelogIds:
-      - raw-rgba-image-input.md
-    id: npm:@takumi-rs/wasm
-    updated: true
-  - changelogIds:
-      - raw-rgba-image-input.md
-    id: npm:@takumi-rs/core
-    updated: true
-  - id: npm:docs
-    updated: false
-  - changelogIds:
-      - raw-rgba-image-input.md
-    id: npm:@takumi-rs/helpers
+  - id: npm:@takumi-rs/wasm
     updated: true
   - id: npm:takumi-template
     updated: false
-  - id: npm:example-twitter-images
+  - id: npm:@takumi-rs/core
+    updated: true
+  - id: npm:takumi-js
+    updated: true
+  - id: npm:ffplay
     updated: false
-  - id: npm:example-satori-html
+  - id: npm:waku-ssr
     updated: false
   - id: npm:example-tanstack-start
+    updated: false
+  - id: npm:ffmpeg-keyframe-animation
+    updated: false
+  - id: npm:example-twitter-images
     updated: false
   - id: npm:example-cloudflare-workers
     updated: false
   - id: npm:example-css-library-integration
     updated: false
+  - id: npm:example-liquid-glass
+    updated: false
   - id: npm:example-nextjs
     updated: false
-  - id: npm:ffplay
+  - id: npm:example-satori-html
     updated: false
   - id: npm:svelte
     updated: false
-  - id: npm:ffmpeg-keyframe-animation
-    updated: false
-  - id: npm:waku-ssr
-    updated: false
-  - id: cargo:takumi-svg
-    updated: true
-  - id: cargo:takumi-raster
-    updated: true
   - changelogIds:
-      - raw-rgba-image-input.md
+      - text-ink-paint-bounds.md
     id: cargo:takumi-core
     updated: true
   - id: cargo:takumi-html
     updated: true
-  - changelogIds:
-      - raw-rgba-image-input.md
-    id: cargo:takumi
+  - id: cargo:takumi-raster
+    updated: true
+  - id: cargo:takumi-svg
+    updated: true
+  - id: cargo:takumi
     updated: true
 npm:packages:
   - id: npm:takumi
-  - id: npm:takumi-js
-  - id: npm:@takumi-rs/image-response
-  - id: npm:@takumi-rs/wasm
-  - id: npm:@takumi-rs/core
   - id: npm:docs
   - id: npm:@takumi-rs/helpers
+  - id: npm:@takumi-rs/image-response
+  - id: npm:@takumi-rs/wasm
   - id: npm:takumi-template
-  - id: npm:example-twitter-images
-  - id: npm:example-satori-html
+  - id: npm:@takumi-rs/core
+  - id: npm:takumi-js
+  - id: npm:ffplay
+  - id: npm:waku-ssr
   - id: npm:example-tanstack-start
+  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-twitter-images
   - id: npm:example-cloudflare-workers
   - id: npm:example-css-library-integration
+  - id: npm:example-liquid-glass
   - id: npm:example-nextjs
-  - id: npm:ffplay
+  - id: npm:example-satori-html
   - id: npm:svelte
-  - id: npm:ffmpeg-keyframe-animation
-  - id: npm:waku-ssr
