@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect x="0" y="0" width="480" height="200" fill="#fff"/>
+  <g opacity=".6">
+    <g fill="#000">
+      <use href="#g0" x="0" y="141"/>
+      <use href="#g1" x="36.4" y="141"/>
+      <use href="#g1" x="72.38" y="141"/>
+      <use href="#g1" x="108.36" y="141"/>
+    </g>
+  </g>
+  <defs>
+    <path id="g0" d="M12.88 0l24.78-99.41h12.05l-24.79 99.41Z"/>
+    <path id="g1" d="M25.77 0q-6.46 0-9.68-3.36t-1.4-10.64l21.3-85.41h11.75l-21.05 84.43q-.56 2.25.33 3.43.91 1.19 3.14 1.19h6.44l-2.58 10.36Z"/>
+  </defs>
+</svg>

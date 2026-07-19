@@ -193,6 +193,72 @@ impl ResolvedOutlineGlyph {
   }
 }
 
+impl ResolvedGlyph {
+  /// Conservative ink extents relative to the glyph's pen origin, in device
+  /// pixels: `(min_x, min_y, max_x, max_y)`. Curve control points are included,
+  /// so the box may slightly overestimate but never undercuts, and the
+  /// faux-bold stroke outset is accounted for.
+  pub fn ink_extents(&self) -> Option<(f32, f32, f32, f32)> {
+    match self {
+      Self::Bitmap(bitmap) => {
+        let placement = bitmap.placement;
+        (placement.width > 0 && placement.height > 0).then(|| {
+          (
+            placement.left as f32,
+            placement.top as f32,
+            (placement.left + placement.width as i32) as f32,
+            (placement.top + placement.height as i32) as f32,
+          )
+        })
+      }
+      Self::Outline(outline) => {
+        let mut min = Point {
+          x: f32::INFINITY,
+          y: f32::INFINITY,
+        };
+        let mut max = Point {
+          x: f32::NEG_INFINITY,
+          y: f32::NEG_INFINITY,
+        };
+        let mut include = |point: &Point<f32>| {
+          min.x = min.x.min(point.x);
+          min.y = min.y.min(point.y);
+          max.x = max.x.max(point.x);
+          max.y = max.y.max(point.y);
+        };
+
+        for command in outline.paths() {
+          match command {
+            Command::MoveTo(point) | Command::LineTo(point) => include(point),
+            Command::QuadTo(control, point) => {
+              include(control);
+              include(point);
+            }
+            Command::CubicTo(control1, control2, point) => {
+              include(control1);
+              include(control2);
+              include(point);
+            }
+            Command::Close => {}
+          }
+        }
+
+        if !min.x.is_finite() {
+          return None;
+        }
+
+        let outset = outline.embolden().map_or(0.0, |embolden| embolden / 2.0);
+        Some((
+          min.x - outset,
+          min.y - outset,
+          max.x + outset,
+          max.y + outset,
+        ))
+      }
+    }
+  }
+}
+
 /// CSS `kBoldThreshold` — weights at or above this synthesize bold when no bolder face
 /// exists; lighter weights do not. https://drafts.csswg.org/css-fonts-4/#font-weight-prop
 const BOLD_THRESHOLD: f32 = 600.0;
