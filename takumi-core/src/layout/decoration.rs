@@ -118,7 +118,13 @@ pub fn outline_geometry(context: &RenderContext, size: Size<f32>) -> OutlineGeom
     .to_px(&context.sizing, size.width)
     .max(0.0);
   let offset = style.outline_offset.to_px(&context.sizing, size.width);
-  let grow = offset + width;
+  // CSS: the outline shape must not shrink below `2 * outline-width` in either
+  // dimension, so a large negative `outline-offset` can't invert the ring.
+  let min_grow = (2.0 * width - size.width)
+    .max(2.0 * width - size.height)
+    .min(0.0)
+    / 2.0;
+  let grow = (offset + width).max(min_grow);
 
   let mut border = BorderProperties {
     width: Sides([width; 4]).into(),
