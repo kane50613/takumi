@@ -1614,3 +1614,94 @@ fn test_nowrap_ellipsis_without_break_opportunity() {
   );
   assert_ne!(clipped.as_raw(), ellipsized.as_raw());
 }
+
+fn kerning_row(label: &str, kerning: FontKerning, features: Box<[FontFeature]>) -> Node {
+  Node::container([
+    Node::text(label.to_string()).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::font_size(Px(16.0).into()))
+        .with(StyleDeclaration::width(Px(120.0))),
+    ),
+    Node::text("AVAVAWAY To Ta.".to_string()).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::font_kerning(kerning))
+        .with(StyleDeclaration::font_feature_settings(features)),
+    ),
+  ])
+  .with_style(Style::default().with(StyleDeclaration::display(Display::Flex)))
+}
+
+#[test]
+fn text_font_kerning() {
+  let container = Node::container([
+    kerning_row("auto", FontKerning::Auto, Box::new([])),
+    kerning_row("none", FontKerning::None, Box::new([])),
+    kerning_row(
+      "none+fss",
+      FontKerning::None,
+      Box::new([FontFeature::new(Tag::new(b"kern"), 1)]),
+    ),
+  ])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+      .with(StyleDeclaration::font_size(Px(40.0).into()))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([240, 240, 240, 255]),
+      ))),
+  );
+
+  run_fixture_test(container, "text_font_kerning");
+}
+
+fn tab_size_block(label: &str, tab_size: Option<TabSize>) -> Node {
+  let Ok(family) = FontFamily::from_css_str("Geist Mono") else {
+    unreachable!()
+  };
+
+  let mut style = Style::default()
+    .with(StyleDeclaration::display(Display::Flex))
+    .with(StyleDeclaration::font_family(family))
+    .with(StyleDeclaration::font_size(Px(20.0).into()))
+    .with_white_space(WhiteSpace::pre());
+
+  if let Some(tab_size) = tab_size {
+    style = style.with(StyleDeclaration::tab_size(tab_size));
+  }
+
+  Node::container([
+    Node::text(label.to_string()).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::font_size(Px(16.0).into())),
+    ),
+    Node::text("fn main() {\n\tlet x = 1;\n\t\tnested\n}".to_string()).with_style(style),
+  ])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::flex_direction(FlexDirection::Column)),
+  )
+}
+
+#[test]
+fn text_tab_size_pre() {
+  let container = Node::container([
+    tab_size_block("default", None),
+    tab_size_block("tab-size: 2", Some(TabSize::from(2.0))),
+    tab_size_block("tab-size: 8", Some(TabSize::from(8.0))),
+  ])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([240, 240, 240, 255]),
+      ))),
+  );
+
+  run_fixture_test(container, "text_tab_size_pre");
+}
