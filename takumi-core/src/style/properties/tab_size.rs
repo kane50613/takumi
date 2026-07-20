@@ -9,12 +9,19 @@ use crate::style::{
 
 /// `tab-size` as a number of spaces. `<length>` values are not supported; preserved tabs
 /// expand to `round(n)` spaces before shaping rather than advancing to true tab stops.
+/// The representation is private so `<length>` support can land without a breaking change.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct TabSize(pub f32);
+pub struct TabSize(f32);
 
 impl Default for TabSize {
   fn default() -> Self {
     Self(8.0)
+  }
+}
+
+impl From<f32> for TabSize {
+  fn from(spaces: f32) -> Self {
+    Self(spaces)
   }
 }
 

@@ -1691,8 +1691,8 @@ fn tab_size_block(label: &str, tab_size: Option<TabSize>) -> Node {
 fn text_tab_size_pre() {
   let container = Node::container([
     tab_size_block("default", None),
-    tab_size_block("tab-size: 2", Some(TabSize(2.0))),
-    tab_size_block("tab-size: 8", Some(TabSize(8.0))),
+    tab_size_block("tab-size: 2", Some(TabSize::from(2.0))),
+    tab_size_block("tab-size: 8", Some(TabSize::from(8.0))),
   ])
   .with_style(
     Style::default()
