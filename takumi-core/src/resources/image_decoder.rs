@@ -13,7 +13,9 @@ use image::{
 #[cfg(target_arch = "wasm32")]
 use image_webp::WebPDecoder;
 #[cfg(not(target_arch = "wasm32"))]
-use libwebp_sys::{WebPDecodeRGBA, WebPFree, WebPGetInfo};
+use libwebp_sys::{
+  VP8StatusCode, WEBP_CSP_MODE, WebPDecode, WebPDecoderConfig, WebPGetInfo, WebPRGBABuffer,
+};
 use png::{BitDepth, ColorType, Decoder as PngRowDecoder, Transformations};
 
 use crate::{
@@ -120,7 +122,7 @@ fn decode_with_image_crate(
   format: ImageFormat,
 ) -> ImageResult<ImageBuffer> {
   decoder.set_limits(decode_limits())?;
-  rgba_to_buffer(DynamicImage::from_decoder(decoder)?.to_rgba8(), format)
+  rgba_to_buffer(DynamicImage::from_decoder(decoder)?.into_rgba8(), format)
 }
 
 pub(crate) fn decode_png(bytes: &[u8]) -> ImageResult<ImageBuffer> {
@@ -536,35 +538,32 @@ fn decode_webp(bytes: &[u8]) -> ImageResult<ImageBuffer> {
 
   check_pixel_budget(width as u32, height as u32)?;
 
-  let decoded_ptr = unsafe {
-    // SAFETY: `bytes.as_ptr()` is valid for `bytes.len()` bytes for the duration of the call,
-    // and libwebp returns either a null pointer or an owned RGBA buffer freed with `WebPFree`.
-    WebPDecodeRGBA(bytes.as_ptr(), bytes.len(), &mut width, &mut height)
-  };
-
-  if decoded_ptr.is_null() {
-    return Err(webp_decode_error(WebPError::EncodeFailed));
-  }
-
-  if width <= 0 || height <= 0 {
-    unsafe {
-      WebPFree(decoded_ptr.cast());
-    }
-    return Err(webp_decode_error(WebPError::InvalidEncodedData));
-  }
-
-  let pixel_count = (width as usize)
+  let buffer_len = (width as usize)
     .checked_mul(height as usize)
     .and_then(|pixels| pixels.checked_mul(4))
     .ok_or_else(invalid_buffer_error)?;
-  let buffer_len = pixel_count;
-  let image_data = unsafe {
-    // SAFETY: `decoded_ptr` points to a `buffer_len`-byte RGBA allocation returned by libwebp.
-    let slice = std::slice::from_raw_parts(decoded_ptr, buffer_len);
-    let owned = slice.to_vec();
-    WebPFree(decoded_ptr.cast());
-    owned
+  let mut image_data = vec![0u8; buffer_len];
+
+  let mut config =
+    WebPDecoderConfig::new().map_err(|()| webp_decode_error(WebPError::InvalidEncodedData))?;
+  config.output.colorspace = WEBP_CSP_MODE::MODE_RGBA;
+  config.output.is_external_memory = 1;
+  config.output.u.RGBA = WebPRGBABuffer {
+    rgba: image_data.as_mut_ptr(),
+    stride: width * 4,
+    size: buffer_len,
   };
+
+  let status = unsafe {
+    // SAFETY: `bytes.as_ptr()` is valid for `bytes.len()` bytes for the duration of the call,
+    // and `config.output` points at `image_data`, which outlives the call and is sized for the
+    // full RGBA frame. External memory means libwebp allocates no output buffer of its own.
+    WebPDecode(bytes.as_ptr(), bytes.len(), &mut config)
+  };
+
+  if status != VP8StatusCode::VP8_STATUS_OK {
+    return Err(webp_decode_error(WebPError::EncodeFailed));
+  }
 
   RgbaImage::from_raw(width as u32, height as u32, image_data)
     .ok_or_else(invalid_buffer_error)
