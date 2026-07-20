@@ -975,7 +975,7 @@ impl ResourceCache {
     // Parsed rules retain roughly this much beyond the source text.
     let weight = sources
       .iter()
-      .map(|source| source.len())
+      .map(String::len)
       .sum::<usize>()
       .saturating_mul(3)
       .min(u32::MAX as usize) as u32;
