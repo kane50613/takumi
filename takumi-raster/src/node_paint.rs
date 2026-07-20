@@ -1,10 +1,13 @@
-//! Box-decoration painting (backgrounds, borders, outlines, box-shadows).
+//! Raster box-decoration painting (backgrounds, borders, outlines, box-shadows).
 //!
-//! These functions depend only on the resolved [`RenderContext`] and computed
-//! [`Layout`], not on the node tree. They are candidates for promotion to a
-//! backend-agnostic scene layer when an alternative (e.g. SVG) backend lands.
+//! The backend-agnostic geometry — clip regions and the outline ring — lives in
+//! [`takumi_core::layout::decoration`]; these functions composite it with
+//! tiny-skia, and the SVG backend emits the same geometry as vector paths.
 
-use takumi_core::geometry::{AvailableSpace, ComputedLayout as Layout, Point, Size};
+use takumi_core::{
+  geometry::{AvailableSpace, ComputedLayout as Layout, Point, Size},
+  layout::decoration::{ClipBox, outline_geometry},
+};
 
 use super::{
   BackgroundTile, BorderPainting, BorderProperties, Canvas, Fill, PaintSource, RenderContext,
@@ -21,7 +24,7 @@ use crate::{
     },
     node::{ImageData, Node, NodeKind, TextData},
   },
-  style::{Affine, BackgroundClip, BlendMode, Length, Sides},
+  style::{Affine, BackgroundClip, BlendMode},
 };
 
 pub(crate) fn draw_outset_box_shadow(
@@ -103,7 +106,7 @@ pub(crate) fn draw_background(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  let mut border_radius = BorderProperties::from_context(context, layout.size, layout.border);
+  let border_radius = BorderProperties::from_context(context, layout.size, layout.border);
 
   match context.style.background_clip {
     BackgroundClip::BorderBox => {
@@ -166,65 +169,54 @@ pub(crate) fn draw_background(
       }
     }
     BackgroundClip::PaddingBox => {
-      border_radius.inset_by_border_width();
-
-      let layers = collect_background_layers(context, layout, &mut canvas.buffer_pool)?;
-
-      if let Some(tile) = rasterize_layers(
-        layers,
-        Size {
-          width: (layout.size.width - layout.border.left - layout.border.right) as u32,
-          height: (layout.size.height - layout.border.top - layout.border.bottom) as u32,
-        },
+      draw_clipped_background(
+        ClipBox::padding_box(border_radius, layout),
         context,
-        border_radius,
-        Affine::translation(-layout.border.left, -layout.border.top),
-        &mut canvas.buffer_pool,
-      )? {
-        canvas.overlay_image(
-          &tile,
-          BorderProperties::default(),
-          context.transform * Affine::translation(layout.border.left, layout.border.top),
-          context.style.image_rendering,
-          BlendMode::Normal,
-        );
-
-        release_rasterized_background_tile(tile, &mut canvas.buffer_pool);
-      }
+        canvas,
+        layout,
+      )?;
     }
     BackgroundClip::ContentBox => {
-      border_radius.inset_by_border_width();
-      border_radius.expand_by(layout.padding.map(|size| -size));
-
-      let layers = collect_background_layers(context, layout, &mut canvas.buffer_pool)?;
-
-      if let Some(tile) = rasterize_layers(
-        layers,
-        layout.content_box_size().map(|x| x as u32),
+      draw_clipped_background(
+        ClipBox::content_box(border_radius, layout),
         context,
-        border_radius,
-        Affine::translation(
-          -layout.padding.left - layout.border.left,
-          -layout.padding.top - layout.border.top,
-        ),
-        &mut canvas.buffer_pool,
-      )? {
-        canvas.overlay_image(
-          &tile,
-          BorderProperties::default(),
-          context.transform
-            * Affine::translation(
-              layout.padding.left + layout.border.left,
-              layout.padding.top + layout.border.top,
-            ),
-          context.style.image_rendering,
-          BlendMode::Normal,
-        );
-
-        release_rasterized_background_tile(tile, &mut canvas.buffer_pool);
-      }
+        canvas,
+        layout,
+      )?;
     }
     _ => {}
+  }
+
+  Ok(())
+}
+
+/// Rasterizes the background layers into `clip`'s rounded region and composites
+/// it. Shared by the padding-box and content-box `background-clip` modes.
+fn draw_clipped_background(
+  clip: ClipBox,
+  context: &RenderContext,
+  canvas: &mut Canvas,
+  layout: Layout,
+) -> Result<()> {
+  let layers = collect_background_layers(context, layout, &mut canvas.buffer_pool)?;
+
+  if let Some(tile) = rasterize_layers(
+    layers,
+    clip.size.map(|size| size as u32),
+    context,
+    clip.border,
+    Affine::translation(-clip.offset.x, -clip.offset.y),
+    &mut canvas.buffer_pool,
+  )? {
+    canvas.overlay_image(
+      &tile,
+      BorderProperties::default(),
+      context.transform * Affine::translation(clip.offset.x, clip.offset.y),
+      context.style.image_rendering,
+      BlendMode::Normal,
+    );
+
+    release_rasterized_background_tile(tile, &mut canvas.buffer_pool);
   }
 
   Ok(())
@@ -266,29 +258,10 @@ pub(crate) fn draw_outline(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  let width = Length::from(context.style.outline_width)
-    .to_px(&context.sizing, layout.size.width)
-    .max(0.0);
+  let outline = outline_geometry(context, layout.size);
+  let transform = Affine::translation(-outline.grow, -outline.grow) * context.transform;
 
-  let offset = context
-    .style
-    .outline_offset
-    .to_px(&context.sizing, layout.size.width);
-
-  let mut border = BorderProperties {
-    width: Sides([width; 4]).into(),
-    color: Sides([context.style.outline_color.resolve(context.current_color); 4]).into(),
-    style: Sides([context.style.outline_style; 4]).into(),
-    image_rendering: context.style.image_rendering,
-    radius: BorderProperties::resolve_radius_part(context, layout.size),
-  };
-
-  border.expand_by(Sides([offset + width; 4]).into());
-
-  let transform = Affine::translation(-offset - width, -offset - width) * context.transform;
-  let size = layout.size.map(|x| x + (offset + width) * 2.0);
-
-  border.draw(canvas, size, transform, None);
+  outline.border.draw(canvas, outline.size, transform, None);
 
   Ok(())
 }

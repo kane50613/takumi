@@ -1,11 +1,14 @@
-use takumi_core::geometry::{ComputedLayout as Layout, Point, Size};
+use takumi_core::{
+  geometry::{ComputedLayout as Layout, Point, Size},
+  layout::decoration::ClipBox,
+};
 use tiny_skia::PixmapRef;
 
 pub(crate) use crate::shadow::SizedShadow;
 use crate::{
   BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, Command, Fill, Placement, Result,
   SamplingOptions, Style, apply_blur, attenuate_alpha_by_mask, fast_div_255, render_mask,
-  style::{Affine, BlendMode, ImageScalingAlgorithm, Sides},
+  style::{Affine, BlendMode, ImageScalingAlgorithm},
 };
 
 /// Shadow buffers above this pixel count are skipped rather than allocated.
@@ -147,7 +150,7 @@ pub(crate) fn draw_inset_shadow_to_canvas(
 
 pub(crate) fn draw_inset_shadow(
   shadow: &SizedShadow,
-  mut border: BorderProperties,
+  border: BorderProperties,
   border_box: Size<f32>,
   buffer_pool: &mut BufferPool,
 ) -> Result<(Vec<u8>, u32, u32)> {
@@ -157,27 +160,20 @@ pub(crate) fn draw_inset_shadow(
   let mut shadow_alpha = buffer_pool.acquire_dirty((width * height) as usize);
   shadow_alpha.fill(alpha);
 
-  let offset = Point {
-    x: shadow.offset_x,
-    y: shadow.offset_y,
-  };
+  let hole = ClipBox::inset_shadow_hole(
+    border,
+    border_box,
+    shadow.spread_radius,
+    Point {
+      x: shadow.offset_x,
+      y: shadow.offset_y,
+    },
+  );
 
   let mut paths = Vec::new();
-
-  border.expand_by(Sides([-shadow.spread_radius; 4]).into());
-  border.append_mask_commands(
-    &mut paths,
-    border_box
-      - Size {
-        width: shadow.spread_radius * 2.0,
-        height: shadow.spread_radius * 2.0,
-      },
-    offset
-      + Point {
-        x: shadow.spread_radius,
-        y: shadow.spread_radius,
-      },
-  );
+  hole
+    .border
+    .append_mask_commands(&mut paths, hole.size, hole.offset);
 
   let (mask, placement) = render_mask(&paths, None, Some(Fill::NonZero.into()), buffer_pool);
 

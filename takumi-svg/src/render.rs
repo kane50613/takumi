@@ -9,6 +9,7 @@ use takumi_core::{
   geometry::{AvailableSpace, ComputedLayout as Layout, NodeId, Point, Rect, Size},
   layout::{
     border::{BorderProperties, BorderSide, border_dash_pattern},
+    decoration::{ClipBox, outline_geometry},
     inline::{InlineBoxItem, VisualInlineBox},
     node::{ImageData, Node, NodeKind},
     tree::{LayoutTree, RenderNode},
@@ -241,7 +242,7 @@ pub(crate) fn emit_box_chrome(
     .clips_overflow()
     .then(|| {
       let path = if rounded {
-        padding_box_path_data(&border, layout.border, layout.size, x, y)
+        padding_box_path_data(&border, layout, x, y)
       } else {
         overflow_clip_rect_data(style, layout, x, y)
       };
@@ -483,44 +484,44 @@ fn resolve_shape_radius(
   }
 }
 
-/// Absolute SVG path `d` for the border-box rounded rectangle, reusing core's
+/// Absolute SVG path `d` for a [`ClipBox`]'s rounded rectangle, reusing core's
 /// `BorderProperties` geometry (cubic-bezier corners, overlap-scaled radii).
+fn clip_box_path_data(clip: ClipBox, x: f32, y: f32) -> String {
+  let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
+  clip
+    .border
+    .append_mask_commands(&mut commands, clip.size, clip.offset);
+  path_data(&commands, [1.0, 0.0, 0.0, 1.0, x, y])
+}
+
+/// Absolute SVG path `d` for a rounded rectangle of `size` with `border`'s
+/// corner geometry. Also used for shadow spread boxes, whose size is not the
+/// border box.
 pub(crate) fn border_box_path_data(
   border: &BorderProperties,
   size: Size<f32>,
   x: f32,
   y: f32,
 ) -> String {
-  let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
-  border.append_mask_commands(&mut commands, size, Point::ZERO);
-  path_data(&commands, [1.0, 0.0, 0.0, 1.0, x, y])
+  clip_box_path_data(
+    ClipBox {
+      border: *border,
+      size,
+      offset: Point::ZERO,
+    },
+    x,
+    y,
+  )
 }
 
-/// Absolute SVG path `d` for the padding-box rounded rectangle (border-box inset
-/// by the border widths, with inner radii), reusing core geometry.
+/// Absolute SVG path `d` for the padding-box rounded rectangle.
 pub(crate) fn padding_box_path_data(
   border: &BorderProperties,
-  border_width: Rect<f32>,
-  size: Size<f32>,
+  layout: Layout,
   x: f32,
   y: f32,
 ) -> String {
-  let mut inner = *border;
-  inner.inset_by_border_width();
-  let inner_size = Size {
-    width: (size.width - border_width.left - border_width.right).max(0.0),
-    height: (size.height - border_width.top - border_width.bottom).max(0.0),
-  };
-  let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
-  inner.append_mask_commands(
-    &mut commands,
-    inner_size,
-    Point {
-      x: border_width.left,
-      y: border_width.top,
-    },
-  );
-  path_data(&commands, [1.0, 0.0, 0.0, 1.0, x, y])
+  clip_box_path_data(ClipBox::padding_box(*border, layout), x, y)
 }
 
 /// Absolute SVG path `d` for the (non-rounded) overflow clip rectangle. Each
@@ -581,37 +582,22 @@ fn background_clip_path(
     BackgroundClip::BorderBox => {
       rounded.then(|| (border_box_path_data(border, layout.size, x, y), false))
     }
-    BackgroundClip::PaddingBox => Some((
-      padding_box_path_data(border, layout.border, layout.size, x, y),
+    BackgroundClip::PaddingBox => Some((padding_box_path_data(border, layout, x, y), false)),
+    BackgroundClip::ContentBox => Some((
+      clip_box_path_data(ClipBox::content_box(*border, layout), x, y),
       false,
     )),
-    BackgroundClip::ContentBox => Some((content_box_path_data(border, layout, x, y), false)),
     BackgroundClip::BorderArea => {
       // The border ring: the (rounded) border-box with the (rounded) padding box
       // punched out, drawn even-odd so the background shows only under the border.
       let outer = border_box_path_data(border, layout.size, x, y);
-      let inner = padding_box_path_data(border, layout.border, layout.size, x, y);
+      let inner = padding_box_path_data(border, layout, x, y);
       Some((format!("{outer}{inner}"), true))
     }
     // `text` is handled separately by the text path; treat anything else as the
     // full border box.
     _ => rounded.then(|| (border_box_path_data(border, layout.size, x, y), false)),
   }
-}
-
-/// Absolute SVG path `d` for the content-box rounded rectangle (border-box inset
-/// by border widths and padding, with inner radii), reusing core geometry.
-fn content_box_path_data(border: &BorderProperties, layout: Layout, x: f32, y: f32) -> String {
-  let mut inner = *border;
-  inner.inset_by_border_width();
-  inner.expand_by(layout.padding.map(|size| -size));
-  let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
-  inner.append_mask_commands(
-    &mut commands,
-    layout.content_box_size(),
-    layout.content_box_offset(),
-  );
-  path_data(&commands, [1.0, 0.0, 0.0, 1.0, x, y])
 }
 
 /// Emits a node's own content — its inline run set, or its replaced image/text —
@@ -728,7 +714,7 @@ fn emit_image_node(
     return emit_image(image, &node.context, content, doc);
   }
 
-  let path = padding_box_path_data(&border, layout.border, layout.size, x, y);
+  let path = padding_box_path_data(&border, layout, x, y);
   let clip = doc.clip_path(&path)?;
   let group = doc.begin_group(IDENTITY, 1.0, Some(&clip), None)?;
   emit_image(image, &node.context, content, doc)?;
@@ -928,27 +914,14 @@ pub(crate) fn emit_outline(
   if color.0[3] == 0 {
     return Ok(());
   }
-  let offset = style.outline_offset.to_px(sizing, size.width);
-
-  let mut outline = BorderProperties {
-    width: Sides([width; 4]).into(),
-    color: Sides([color; 4]).into(),
-    style: Sides([style.outline_style; 4]).into(),
-    image_rendering: style.image_rendering,
-    radius: BorderProperties::resolve_radius_part(&node.context, size),
-  };
-  let grow = offset + width;
-  outline.expand_by(Rect {
-    top: grow,
-    right: grow,
-    bottom: grow,
-    left: grow,
-  });
-  let outer_size = Size {
-    width: size.width + 2.0 * grow,
-    height: size.height + 2.0 * grow,
-  };
-  emit_borders(&outline, x - grow, y - grow, outer_size, doc)
+  let outline = outline_geometry(&node.context, size);
+  emit_borders(
+    &outline.border,
+    x - outline.grow,
+    y - outline.grow,
+    outline.size,
+    doc,
+  )
 }
 
 /// Builds the centerline rounded-rect path (border box inset by `inset` on each
@@ -1136,35 +1109,19 @@ pub(crate) fn emit_inset_box_shadows(
       continue;
     }
     let fill = Rgba(resolved.color.0);
-    let spread = resolved.spread_radius;
 
-    // The region the shadow leaves uncovered: the rounded border box shrunk by the
-    // spread on every side and shifted by the shadow offset (core geometry, the
-    // same the raster backend uses).
-    let mut hole = *border;
-    hole.expand_by(Rect {
-      top: -spread,
-      right: -spread,
-      bottom: -spread,
-      left: -spread,
-    });
-    let hole_size = Size {
-      width: (size.width - 2.0 * spread).max(0.0),
-      height: (size.height - 2.0 * spread).max(0.0),
-    };
-    let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
-    hole.append_mask_commands(
-      &mut commands,
-      hole_size,
+    // The shadow fills the border box minus the hole it leaves uncovered (shared
+    // core geometry with the raster backend), drawn even-odd.
+    let hole = ClipBox::inset_shadow_hole(
+      *border,
+      size,
+      resolved.spread_radius,
       Point {
-        x: resolved.offset_x + spread,
-        y: resolved.offset_y + spread,
+        x: resolved.offset_x,
+        y: resolved.offset_y,
       },
     );
-    let ring = format!(
-      "{outer}{}",
-      path_data(&commands, [1.0, 0.0, 0.0, 1.0, x, y])
-    );
+    let ring = format!("{outer}{}", clip_box_path_data(hole, x, y));
 
     // Border box minus the hole, drawn even-odd, blurred, and clipped to the
     // rounded border box so the blur stays inside the element.
