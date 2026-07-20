@@ -236,13 +236,6 @@ impl GifSource {
   fn decoded_bytes(&self) -> usize {
     self.inner.first.buffer.data().len() + self.inner.bytes.len()
   }
-
-  /// Decoded frames held resident. Always 1 — only the first frame is retained;
-  /// the rest are decoded on demand and dropped.
-  #[cfg(test)]
-  fn decoded_frame_count(&self) -> usize {
-    1
-  }
 }
 
 #[cfg(feature = "svg")]
@@ -1344,16 +1337,6 @@ mod tests {
   }
 
   #[test]
-  fn gif_static_render_decodes_only_first_frame() {
-    let gif = gif_source(&[(0, 10), (1, 10), (2, 10)]);
-    assert_eq!(gif.decoded_frame_count(), 1);
-
-    let frame = gif.frame_at_time(0);
-    assert_eq!(gif.decoded_frame_count(), 1);
-    assert_eq!(frame.pixel(2, 2), GIF_COLORS[0]);
-  }
-
-  #[test]
   fn gif_source_frame_selection_matches_expected_indices() {
     let durations = [10, 20, 30];
     let gif = gif_source(&[(0, 10), (1, 20), (2, 30)]);
@@ -1363,7 +1346,6 @@ mod tests {
       let expected_color = GIF_COLORS[expected_frame_index(&durations, time_ms)];
       assert_eq!(gif.frame_at_time(time_ms).pixel(2, 2), expected_color);
     }
-    assert_eq!(gif.decoded_frame_count(), 1);
   }
 
   #[test]
@@ -1376,16 +1358,7 @@ mod tests {
   }
 
   #[test]
-  fn gif_clone_shares_source_without_retaining_frames() {
-    let gif = gif_source(&[(0, 10), (1, 10), (2, 10)]);
-    let cloned = gif.clone();
-
-    drop(cloned.frame_at_time(25));
-    assert_eq!(gif.decoded_frame_count(), 1);
-  }
-
-  #[test]
-  fn gif_later_frame_decodes_at_draw_size_without_retention() {
+  fn gif_later_frame_decodes_at_draw_size() {
     let gif = gif_source(&[(0, 10), (1, 10), (2, 10)]);
 
     let scaled = gif.frame_at_time_covering(15, 2, 2, ImageScalingAlgorithm::Auto);
@@ -1396,8 +1369,6 @@ mod tests {
 
     let larger = gif.frame_at_time_covering(15, 4, 4, ImageScalingAlgorithm::Auto);
     assert_eq!((larger.width(), larger.height()), (4, 4));
-
-    assert_eq!(gif.decoded_frame_count(), 1);
   }
 
   #[test]
@@ -1406,7 +1377,6 @@ mod tests {
 
     let first = gif.frame_at_time_covering(0, 2, 2, ImageScalingAlgorithm::Auto);
     assert_eq!((first.width(), first.height()), (4, 4));
-    assert_eq!(gif.decoded_frame_count(), 1);
   }
 
   #[test]
@@ -1430,9 +1400,8 @@ mod tests {
   }
 
   #[test]
-  fn gif_dimensions_come_from_header_without_full_decode() {
+  fn gif_dimensions_come_from_header() {
     let gif = gif_source(&[(0, 10), (1, 10)]);
     assert_eq!(gif.dimensions(), (4, 4));
-    assert_eq!(gif.decoded_frame_count(), 1);
   }
 }

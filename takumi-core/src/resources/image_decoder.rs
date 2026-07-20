@@ -277,10 +277,20 @@ pub(crate) fn gif_frame_durations(bytes: &[u8]) -> ImageResult<Box<[u32]>> {
     .read_info(Cursor::new(bytes))
     .map_err(gif_decode_error)?;
 
+  // Stop at the same cumulative pixel budget as `decode_gif_frames`, so the
+  // timing covers exactly the frames that are actually decodable.
+  let frame_pixels = decoder.width() as u64 * decoder.height() as u64;
+  let mut total_pixels = 0_u64;
   let mut durations = Vec::new();
   loop {
     match decoder.read_next_frame() {
-      Ok(Some(frame)) => durations.push((frame.delay as u32 * 10).max(1)),
+      Ok(Some(frame)) => {
+        total_pixels += frame_pixels;
+        if total_pixels > MAX_GIF_TOTAL_PIXELS {
+          break;
+        }
+        durations.push((frame.delay as u32 * 10).max(1));
+      }
       Ok(None) => break,
       Err(error) if durations.is_empty() => return Err(gif_decode_error(error)),
       Err(_) => break,
