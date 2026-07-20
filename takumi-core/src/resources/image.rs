@@ -355,6 +355,16 @@ impl From<ImageBuffer> for ImageSource {
   }
 }
 
+/// Parse options for untrusted SVG markup: the string href resolver is
+/// disabled so `<image>`/`<feImage href>` cannot read local files. `data:`
+/// URIs still resolve through the default data resolver.
+#[cfg(feature = "svg")]
+fn svg_parse_options() -> Options<'static> {
+  let mut options = Options::default();
+  options.image_href_resolver.resolve_string = Box::new(|_, _| None);
+  options
+}
+
 #[cfg(feature = "svg")]
 impl SvgSource {
   /// Parses SVG markup; rasterized pixmaps go into `cache` while it is alive,
@@ -369,7 +379,8 @@ impl SvgSource {
     };
     let document = Document::parse_with_options(src, options).map_err(ImageError::svg_parse)?;
 
-    let tree = Tree::from_xmltree(&document, &Options::default()).map_err(ImageError::svg_parse)?;
+    let tree =
+      Tree::from_xmltree(&document, &svg_parse_options()).map_err(ImageError::svg_parse)?;
     let intrinsic = svg_intrinsic_sizing(document.root_element(), tree.size());
 
     Ok(SvgSource {
@@ -670,7 +681,7 @@ pub fn apply_svg_filter(
     filter_id,
     width as f32,
     height as f32,
-    &Options::default(),
+    &svg_parse_options(),
   )
   .map_err(ImageError::svg_parse)?;
 
@@ -1476,5 +1487,33 @@ mod tests {
   fn gif_dimensions_come_from_header() {
     let gif = gif_source(&[(0, 10), (1, 10)]);
     assert_eq!(gif.dimensions(), (4, 4));
+  }
+
+  /// An `<image>` whose href is a local file path must not be read from disk;
+  /// the referenced file's pixels must never appear in the rasterized output.
+  #[cfg(feature = "svg")]
+  #[test]
+  fn svg_image_href_local_path_is_not_read() {
+    let opaque_red = ImageBuffer::from_rgba_bytes([255, 0, 0, 255].repeat(4 * 4), 4, 4)
+      .unwrap()
+      .encode_png()
+      .unwrap();
+    let path = std::env::temp_dir().join(format!("takumi_lfi_{}.png", std::process::id()));
+    std::fs::write(&path, &opaque_red).unwrap();
+
+    let ns = r#"xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink""#;
+    let svg = format!(
+      r#"<svg {ns} width="8" height="8"><image xlink:href="{}" x="0" y="0" width="8" height="8"/></svg>"#,
+      path.display()
+    );
+    let source = svg.parse::<SvgSource>().unwrap();
+    let rasterized = source.rasterize(8, 8).unwrap();
+
+    std::fs::remove_file(&path).ok();
+
+    assert!(
+      rasterized.data().iter().all(|&byte| byte == 0),
+      "local file was read and composited into the SVG output"
+    );
   }
 }
