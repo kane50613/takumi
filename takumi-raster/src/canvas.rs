@@ -117,21 +117,31 @@ pub(crate) struct CanvasSubcanvas {
 }
 
 impl Canvas {
-  /// Creates a new canvas handle from a draw command sender.
-  pub(crate) fn new(size: Size<u32>) -> Self {
-    let Some(image) = Pixmap::new(size.width, size.height) else {
-      return Self::new(Size {
-        width: 1,
-        height: 1,
-      });
-    };
-    Self {
+  /// Creates a canvas backed by a `size`-sized pixmap, or `None` when the pixmap
+  /// cannot be allocated (zero size, or dimensions large enough to overflow the
+  /// pixel-buffer length).
+  pub(crate) fn try_new(size: Size<u32>) -> Option<Self> {
+    let image = Pixmap::new(size.width, size.height)?;
+    Some(Self {
       image,
       origin: Point { x: 0, y: 0 },
       offscreen_pool: Vec::new(),
       constraint_mask_stack: Vec::new(),
       buffer_pool: BufferPool::default(),
-    }
+    })
+  }
+
+  /// Test-only infallible constructor, falling back to 1x1 when `size` cannot be
+  /// allocated. Production code uses [`Canvas::try_new`] and surfaces the error.
+  #[cfg(test)]
+  pub(crate) fn new(size: Size<u32>) -> Self {
+    Self::try_new(size).unwrap_or_else(|| {
+      Self::try_new(Size {
+        width: 1,
+        height: 1,
+      })
+      .expect("1x1 pixmap always allocates")
+    })
   }
 
   fn acquire_offscreen(&mut self, size: Size<u32>) -> Result<Pixmap> {
