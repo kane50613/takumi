@@ -152,6 +152,40 @@ fn font_variant_ligatures_none_disables_defaults() {
 }
 
 #[test]
+fn font_kerning_expands_to_kern_feature() {
+  let auto = inherited_style_from_pairs([("font-kerning", "auto")], &ComputedStyle::default());
+  assert!(auto.resolved_font_features().is_empty());
+
+  let normal = inherited_style_from_pairs([("font-kerning", "normal")], &ComputedStyle::default());
+  assert_eq!(
+    feature_tags(&normal.resolved_font_features()),
+    vec![("kern".into(), 1)],
+  );
+
+  let none = inherited_style_from_pairs([("font-kerning", "none")], &ComputedStyle::default());
+  assert_eq!(
+    feature_tags(&none.resolved_font_features()),
+    vec![("kern".into(), 0)],
+  );
+}
+
+#[test]
+fn font_feature_settings_override_font_kerning() {
+  let style = inherited_style_from_pairs(
+    [
+      ("font-kerning", "none"),
+      ("font-feature-settings", "\"kern\" 1"),
+    ],
+    &ComputedStyle::default(),
+  );
+
+  assert_eq!(
+    feature_tags(&style.resolved_font_features()),
+    vec![("kern".into(), 0), ("kern".into(), 1)],
+  );
+}
+
+#[test]
 fn font_variant_shorthand_distributes_and_settings_win() {
   let style = inherited_style_from_pairs(
     [

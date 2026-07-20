@@ -1252,6 +1252,7 @@ fn build_inline_layout_tree<'c>(
         let collapsed = apply_white_space_collapse(
           &transformed,
           context.style.white_space_collapse,
+          context.style.tab_size.spaces(),
           &mut previous_collapsible_space,
           &mut previous_was_line_break,
         );

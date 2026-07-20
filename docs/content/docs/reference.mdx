@@ -236,6 +236,7 @@ Properties use their camelCase names. Longhands are listed in parentheses. `Supp
 | `fontVariationSettings`                                                                                                        | Supported                                                                                    |
 | `fontFeatureSettings`                                                                                                          | Supported                                                                                    |
 | `fontVariant` (`fontVariantLigatures`, `fontVariantNumeric`, `fontVariantEastAsian`, `fontVariantCaps`, `fontVariantPosition`) | Supported <sup>1</sup>                                                                       |
+| `fontKerning`                                                                                                                  | `auto`, `normal`, `none` <sup>1</sup>                                                        |
 | `fontSynthesis`                                                                                                                | `none`, `weight`, `style`                                                                    |
 | `fontSynthesisWeight`                                                                                                          | `auto`, `none`                                                                               |
 | `fontSynthesisStyle`                                                                                                           | `auto`, `none`                                                                               |
@@ -256,6 +257,7 @@ Properties use their camelCase names. Longhands are listed in parentheses. `Supp
 | `wordBreak`                                                                                                                    | `normal`, `break-all`, `keep-all`, `break-word`                                              |
 | `whiteSpace`                                                                                                                   | `normal`, `nowrap`, `pre`, `pre-wrap`, `pre-line`, `<text-wrap-mode> <white-space-collapse>` |
 | `whiteSpaceCollapse`                                                                                                           | `preserve`, `collapse`, `preserve-spaces`, `preserve-breaks`                                 |
+| `tabSize`                                                                                                                      | `<number>` (preserved tabs expand to that many spaces; no `<length>`, no tab stops)          |
 | `textWrap` (`textWrapMode`, `textWrapStyle`)                                                                                   | `wrap`, `nowrap`; `auto`, `balance`, `pretty`                                                |
 | `textFit`                                                                                                                      | [Supported](https://drafts.csswg.org/css-text-4/#text-fit-property)                          |
 | `textDecoration` (`textDecorationLine`, `textDecorationStyle`, `textDecorationColor`, `textDecorationThickness`)               | `underline`, `line-through`, `overline`; `solid`                                             |
@@ -263,7 +265,7 @@ Properties use their camelCase names. Longhands are listed in parentheses. `Supp
 | `textUnderlineOffset`                                                                                                          | `auto`, `<length-percentage>`                                                                |
 | `WebkitTextStroke` (`WebkitTextStrokeWidth`, `WebkitTextStrokeColor`, `WebkitTextFillColor`)                                   | Supported                                                                                    |
 
-<sup>1</sup> `fontVariant*` map to OpenType features applied before `fontFeatureSettings`, so an
-explicit setting wins on a tag conflict. `alternates` and `emoji` are not supported. Features apply
-only when the font ships them; unlike browsers, missing ones are not synthesized (for example, small
-capitals from scaled capitals).
+<sup>1</sup> `fontVariant*` and `fontKerning` map to OpenType features applied before
+`fontFeatureSettings`, so an explicit setting wins on a tag conflict. `alternates` and `emoji` are
+not supported. Features apply only when the font ships them; unlike browsers, missing ones are not
+synthesized (for example, small capitals from scaled capitals).

@@ -261,6 +261,7 @@ impl ComputedStyle {
       &self.font_variant_position,
       &mut features,
     );
+    self.font_kerning.append_features(&mut features);
 
     if features.is_empty() {
       return Cow::Borrowed(self.font_feature_settings.as_ref());
