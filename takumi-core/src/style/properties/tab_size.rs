@@ -26,8 +26,11 @@ impl From<f32> for TabSize {
 }
 
 impl TabSize {
+  /// Caps expansion so a hostile `tab-size` can't multiply text length unboundedly.
+  const MAX_SPACES: usize = 512;
+
   pub(crate) fn spaces(&self) -> usize {
-    self.0.round().max(0.0) as usize
+    (self.0.round().max(0.0) as usize).min(Self::MAX_SPACES)
   }
 }
 
@@ -89,5 +92,10 @@ mod tests {
   fn test_tab_size_spaces_rounds() {
     assert_eq!(TabSize(2.5).spaces(), 3);
     assert_eq!(TabSize::default().spaces(), 8);
+  }
+
+  #[test]
+  fn test_tab_size_spaces_capped() {
+    assert_eq!(TabSize(1e9).spaces(), TabSize::MAX_SPACES);
   }
 }
