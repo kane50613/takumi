@@ -1825,6 +1825,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "takumi-bindings-common"
+version = "0.0.0"
+dependencies = [
+ "takumi-core",
+]
+
+[[package]]
 name = "takumi-core"
 version = "0.6.3"
 dependencies = [
@@ -1887,6 +1894,7 @@ dependencies = [
  "napi-derive",
  "rayon",
  "serde",
+ "takumi-bindings-common",
  "takumi-core",
  "takumi-raster",
  "takumi-svg",
@@ -1933,6 +1941,7 @@ dependencies = [
  "serde",
  "serde-wasm-bindgen",
  "serde_bytes",
+ "takumi-bindings-common",
  "takumi-core",
  "takumi-raster",
  "takumi-svg",

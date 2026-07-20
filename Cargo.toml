@@ -6,6 +6,7 @@ members = [
   "takumi-raster",
   "takumi-svg",
   "takumi-html",
+  "takumi-bindings-common",
   "takumi-napi",
   "takumi-wasm",
   "example/rust",
@@ -144,6 +145,9 @@ codegen-units = 1
 
 [profile.release.package."takumi-wasm"]
 strip = "debuginfo"
+
+[profile.release.package."takumi-bindings-common"]
+opt-level = "z"
 
 [profile.bench]
 debug = true

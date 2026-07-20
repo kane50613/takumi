@@ -7,11 +7,12 @@ use std::{
 
 use base64::{Engine, prelude::BASE64_STANDARD};
 use serde_wasm_bindgen::{from_value, to_value};
+use takumi_bindings_common::{build_font_resource, default_fonts, stylesheet};
 use takumi_core::{
   Fonts,
   layout::node::Node,
   resources::{
-    font::{FontOverride, FontResource, RegisteredFamily},
+    font::{FontResource, RegisteredFamily},
     image::{ImageCache, ImageSource as LoadedImageSource},
   },
   style::{FontFamily, KeyframesRule, Lang, StyleSheet},
@@ -25,13 +26,6 @@ use wasm_bindgen::prelude::*;
 
 use crate::{helper::map_error, model::*};
 
-// Last-resort only: no generic family claim, so `sans-serif` and friends resolve
-// to caller-registered fonts via the fallback bucket instead of this face.
-const EMBEDDED_FONTS: &[(&[u8], &str)] = &[(
-  include_bytes!("../../assets/fonts/geist/geist-latin-wght-300-800.woff2"),
-  "Geist",
-)];
-
 /// The main renderer for Takumi image rendering engine.
 ///
 /// State lives behind a lock and every method takes `&self`, mirroring the
@@ -43,24 +37,6 @@ pub struct Renderer {
   image_cache: ImageCache,
 }
 
-/// Builds the default font set holding the embedded last-resort fonts.
-fn default_fonts() -> Result<Fonts, js_sys::Error> {
-  let mut fonts = Fonts::default();
-
-  for (font, family_name) in EMBEDDED_FONTS {
-    let resource = FontResource::new(*font)
-      .override_info(FontOverride {
-        family_name: Some((*family_name).into()),
-        ..Default::default()
-      })
-      .last_resort();
-
-    drop(fonts.register(resource).map_err(map_error)?);
-  }
-
-  Ok(fonts)
-}
-
 fn load_font_internal(
   fonts: &mut Fonts,
   font: Font,
@@ -70,22 +46,16 @@ fn load_font_internal(
       .register(FontResource::new(buffer.into_vec()))
       .map_err(map_error),
     Font::Object(details) => {
-      let resource = FontResource::new(details.data.into_vec()).override_info(FontOverride {
-        family_name: details.name.map(Into::into),
-        style: details.style.map(Into::into),
-        weight: details.weight.map(|weight| weight as f32),
-        ..Default::default()
-      });
-
-      let resource = match &details.subset_of {
-        Some(logical) => resource.subset_of(logical.clone()),
-        None => resource,
-      };
-
-      let resource = match &details.generic {
-        Some(generic) => resource.generic_family(generic.parse().map_err(map_error)?),
-        None => resource,
-      };
+      let data = details.data.into_vec();
+      let resource = build_font_resource(
+        &data,
+        details.name,
+        details.weight.map(|weight| weight as f32),
+        details.style.map(Into::into),
+        details.subset_of,
+        details.generic,
+      )
+      .map_err(map_error)?;
 
       fonts.register(resource).map_err(map_error)
     }
@@ -115,10 +85,7 @@ impl Renderer {
     stylesheets: Option<Vec<String>>,
     keyframes: Vec<KeyframesRule>,
   ) -> Result<StyleSheet, JsValue> {
-    let stylesheet = StyleSheet::parse_owned_list_loosy(stylesheets.unwrap_or_default());
-    let mut stylesheet = stylesheet;
-    stylesheet.extend_keyframes(keyframes);
-    Ok(stylesheet)
+    Ok(stylesheet(stylesheets, keyframes))
   }
 
   fn images_map(
@@ -144,7 +111,7 @@ impl Renderer {
   #[wasm_bindgen(constructor)]
   pub fn new() -> Result<Renderer, js_sys::Error> {
     Ok(Renderer {
-      state: RwLock::new(default_fonts()?),
+      state: RwLock::new(default_fonts().map_err(map_error)?),
       image_cache: ImageCache::default(),
     })
   }
