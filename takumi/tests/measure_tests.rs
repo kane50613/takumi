@@ -1751,6 +1751,50 @@ fn test_block_container_drops_whitespace_between_absolute_and_in_flow_sibling() 
   assert_eq!(with_result, without_result);
 }
 
+// https://github.com/kane50613/takumi/issues/992
+#[test]
+fn test_block_container_drops_whitespace_between_absolute_only_siblings() {
+  let absolute_child = || {
+    Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::position(Position::Absolute))
+        .with(StyleDeclaration::width(Px(40.0)))
+        .with(StyleDeclaration::height(Px(40.0))),
+    )
+  };
+  let block_style = || {
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::position(Position::Relative))
+      .with(StyleDeclaration::width(Px(200.0)))
+      .with(StyleDeclaration::height(Px(200.0)))
+  };
+
+  let with_whitespace = Node::container([
+    Node::text("\n  ".to_string()),
+    absolute_child(),
+    Node::text("\n  ".to_string()),
+    absolute_child(),
+    Node::text("\n".to_string()),
+  ])
+  .with_style(block_style());
+
+  let without_whitespace =
+    Node::container([absolute_child(), absolute_child()]).with_style(block_style());
+
+  let with_result = measure(with_whitespace, create_measure_viewport());
+  let without_result = measure(without_whitespace, create_measure_viewport());
+
+  assert_eq!(with_result.children.len(), 2);
+  assert!(with_result.runs.is_empty());
+  for child in &with_result.children {
+    assert_close(child.width, 40.0);
+    assert_close(child.height, 40.0);
+  }
+  assert_eq!(with_result, without_result);
+}
+
 // https://github.com/kane50613/takumi/issues/711
 #[test]
 fn test_block_container_preserves_whitespace_between_inline_siblings() {
