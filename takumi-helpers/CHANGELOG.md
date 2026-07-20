@@ -1,3 +1,9 @@
+## @takumi-rs/helpers@2.4.0
+
+### Enforce allowUrl on every redirect hop
+
+`fetchOk` with an `allowUrl` policy now follows redirects manually (capped at 5 hops) and re-checks the resolved target of each hop, so an allowed URL can no longer redirect to a blocked address. Callers without a policy keep default redirect handling.
+
 ## @takumi-rs/helpers@2.3.3
 
 ### Honour per-element white-space when collapsing inline text
