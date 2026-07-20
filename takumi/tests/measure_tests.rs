@@ -1786,6 +1786,12 @@ fn test_block_container_drops_whitespace_between_absolute_only_siblings() {
   let with_result = measure(with_whitespace, create_measure_viewport());
   let without_result = measure(without_whitespace, create_measure_viewport());
 
+  assert_eq!(with_result.children.len(), 2);
+  assert!(with_result.runs.is_empty());
+  for child in &with_result.children {
+    assert_close(child.width, 40.0);
+    assert_close(child.height, 40.0);
+  }
   assert_eq!(with_result, without_result);
 }
 
