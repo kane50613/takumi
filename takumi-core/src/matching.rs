@@ -446,17 +446,6 @@ pub(crate) fn match_stylesheets_view<'a, N: MatchableNode>(
   stylesheet: &'a StyleSheet,
   viewport: Viewport,
 ) -> Vec<NodeMatchedDeclarations<'a>> {
-  let arena = StyleArena::new(root);
-  let node_count = arena.nodes.len();
-  let mut per_node = vec![NodeMatchedDeclarations::default(); node_count];
-
-  let mut matched_element: Vec<Vec<MatchedRule<'a>>> = vec![Vec::new(); node_count];
-  let mut matched_before: Vec<Vec<MatchedRule<'a>>> = vec![Vec::new(); node_count];
-  let mut matched_after: Vec<Vec<MatchedRule<'a>>> = vec![Vec::new(); node_count];
-
-  let mut ancestor_bloom_filter = BloomFilter::new();
-  let mut ancestor_stack: Vec<usize> = Vec::new();
-  let mut selector_ancestor_hashes_cache: HashMap<usize, AncestorHashes> = HashMap::new();
   let flattened_rules: Vec<&CssRule> = stylesheet
     .rules
     .iter()
@@ -467,6 +456,24 @@ pub(crate) fn match_stylesheets_view<'a, N: MatchableNode>(
         .all(|media_queries| media_queries.matches(viewport))
     })
     .collect();
+
+  let arena = StyleArena::new(root);
+  let node_count = arena.nodes.len();
+  let mut per_node = vec![NodeMatchedDeclarations::default(); node_count];
+
+  // No rules survive the media-query filter, so every node keeps the default
+  // declarations. Skip the per-node match buckets and the matching walk.
+  if flattened_rules.is_empty() {
+    return per_node;
+  }
+
+  let mut matched_element: Vec<Vec<MatchedRule<'a>>> = vec![Vec::new(); node_count];
+  let mut matched_before: Vec<Vec<MatchedRule<'a>>> = vec![Vec::new(); node_count];
+  let mut matched_after: Vec<Vec<MatchedRule<'a>>> = vec![Vec::new(); node_count];
+
+  let mut ancestor_bloom_filter = BloomFilter::new();
+  let mut ancestor_stack: Vec<usize> = Vec::new();
+  let mut selector_ancestor_hashes_cache: HashMap<usize, AncestorHashes> = HashMap::new();
 
   let mut element_caches = SelectorCaches::default();
   let mut pseudo_caches = SelectorCaches::default();
