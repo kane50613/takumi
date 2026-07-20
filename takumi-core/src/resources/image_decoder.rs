@@ -158,6 +158,11 @@ pub(crate) fn decode_bitmap_scaled(
     return streamed;
   }
 
+  #[cfg(not(target_arch = "wasm32"))]
+  if let Some(scaled) = decode_webp_scaled(bytes, width, height) {
+    return scaled;
+  }
+
   let decoded = decode_image(bytes)?;
   if width >= decoded.width() && height >= decoded.height() {
     return Ok(decoded);
@@ -523,41 +528,81 @@ fn decode_webp(bytes: &[u8]) -> ImageResult<ImageBuffer> {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn decode_webp(bytes: &[u8]) -> ImageResult<ImageBuffer> {
-  use crate::error::WebPError;
+  let (width, height) = webp_dimensions(bytes)?;
 
-  let mut width = 0;
-  let mut height = 0;
-  let header_ok = unsafe {
-    // SAFETY: `bytes.as_ptr()` is valid for `bytes.len()` bytes for the duration of the call.
-    WebPGetInfo(bytes.as_ptr(), bytes.len(), &mut width, &mut height)
-  };
+  check_pixel_budget(width, height)?;
+  decode_webp_into(bytes, width, height, false)
+}
 
-  if header_ok == 0 || width <= 0 || height <= 0 {
-    return Err(webp_decode_error(WebPError::InvalidEncodedData));
+/// Decodes a WebP directly at the target size via libwebp's internal rescaler,
+/// so no full-size frame is ever allocated. `None` when the input isn't WebP,
+/// needs no downscale, or has a target libwebp can't take; the caller decodes
+/// fully. libwebp's rescaler is not CatmullRom/Lanczos, so pixels differ
+/// slightly from full-decode + resample.
+#[cfg(not(target_arch = "wasm32"))]
+fn decode_webp_scaled(bytes: &[u8], width: u32, height: u32) -> Option<ImageResult<ImageBuffer>> {
+  if !matches!(detect_image_format(bytes), Some(DetectedImageFormat::WebP)) {
+    return None;
   }
 
-  check_pixel_budget(width as u32, height as u32)?;
+  let (native_width, native_height) = webp_dimensions(bytes).ok()?;
+  if width >= native_width && height >= native_height {
+    return None;
+  }
+
+  i32::try_from(width).ok()?;
+  i32::try_from(height).ok()?;
+
+  if let Err(error) =
+    check_pixel_budget(native_width, native_height).and_then(|()| check_pixel_budget(width, height))
+  {
+    return Some(Err(error));
+  }
+
+  Some(decode_webp_into(bytes, width, height, true))
+}
+
+/// Decodes into a caller-owned buffer sized `width` x `height`; with `scale`,
+/// libwebp rescales to those dimensions, otherwise they must be the native ones.
+#[cfg(not(target_arch = "wasm32"))]
+fn decode_webp_into(
+  bytes: &[u8],
+  width: u32,
+  height: u32,
+  scale: bool,
+) -> ImageResult<ImageBuffer> {
+  use crate::error::WebPError;
 
   let buffer_len = (width as usize)
     .checked_mul(height as usize)
     .and_then(|pixels| pixels.checked_mul(4))
     .ok_or_else(invalid_buffer_error)?;
+  let stride = i32::try_from(width)
+    .ok()
+    .and_then(|w| w.checked_mul(4))
+    .ok_or_else(invalid_buffer_error)?;
   let mut image_data = vec![0u8; buffer_len];
 
   let mut config =
     WebPDecoderConfig::new().map_err(|()| webp_decode_error(WebPError::InvalidEncodedData))?;
+  if scale {
+    config.options.use_scaling = 1;
+    config.options.scaled_width = width as i32;
+    config.options.scaled_height = height as i32;
+  }
   config.output.colorspace = WEBP_CSP_MODE::MODE_RGBA;
   config.output.is_external_memory = 1;
   config.output.u.RGBA = WebPRGBABuffer {
     rgba: image_data.as_mut_ptr(),
-    stride: width * 4,
+    stride,
     size: buffer_len,
   };
 
   let status = unsafe {
     // SAFETY: `bytes.as_ptr()` is valid for `bytes.len()` bytes for the duration of the call,
-    // and `config.output` points at `image_data`, which outlives the call and is sized for the
-    // full RGBA frame. External memory means libwebp allocates no output buffer of its own.
+    // and `config.output` points at `image_data`, which outlives the call and is sized for
+    // `width` x `height` RGBA. External memory means libwebp allocates no output buffer of
+    // its own.
     WebPDecode(bytes.as_ptr(), bytes.len(), &mut config)
   };
 
@@ -565,7 +610,7 @@ fn decode_webp(bytes: &[u8]) -> ImageResult<ImageBuffer> {
     return Err(webp_decode_error(WebPError::EncodeFailed));
   }
 
-  RgbaImage::from_raw(width as u32, height as u32, image_data)
+  RgbaImage::from_raw(width, height, image_data)
     .ok_or_else(invalid_buffer_error)
     .and_then(|image| rgba_to_buffer(image, ImageFormat::WebP))
 }
@@ -668,6 +713,69 @@ mod tests {
     let bytes = include_bytes!("../../../assets/images/yeecord.png");
     let full = decode_image(bytes).unwrap();
     assert_streamed_matches_full(bytes, full.width() / 3, full.height() / 3);
+  }
+
+  #[cfg(not(target_arch = "wasm32"))]
+  fn encode_test_webp(width: u32, height: u32) -> Vec<u8> {
+    let mut rgba = Vec::with_capacity(width as usize * height as usize * 4);
+    for y in 0..height {
+      for x in 0..width {
+        rgba.extend_from_slice(&[(x * 6) as u8, (y * 8) as u8, ((x + y) * 3) as u8, 255]);
+      }
+    }
+
+    let mut output = std::ptr::null_mut();
+    let size = unsafe {
+      // SAFETY: `rgba` holds `width * height` RGBA pixels with a `width * 4` stride; libwebp
+      // returns an owned buffer freed below with `WebPFree`.
+      libwebp_sys::WebPEncodeLosslessRGBA(
+        rgba.as_ptr(),
+        width as i32,
+        height as i32,
+        width as i32 * 4,
+        &mut output,
+      )
+    };
+    assert!(size > 0);
+
+    unsafe {
+      // SAFETY: `output` points to a `size`-byte buffer returned by libwebp.
+      let owned = std::slice::from_raw_parts(output, size).to_vec();
+      libwebp_sys::WebPFree(output.cast());
+      owned
+    }
+  }
+
+  #[cfg(not(target_arch = "wasm32"))]
+  #[test]
+  fn webp_scaled_decode_approximates_full_decode() {
+    let bytes = encode_test_webp(40, 30);
+    let scaled = decode_bitmap_scaled(&bytes, 13, 9, ImageScalingAlgorithm::Auto).unwrap();
+    assert_eq!((scaled.width(), scaled.height()), (13, 9));
+
+    let full = decode_image(&bytes).unwrap();
+    let resized =
+      resample_premultiplied(full.data(), (40, 30), (13, 9), ImageScalingAlgorithm::Auto).unwrap();
+    let max_diff = scaled
+      .data()
+      .iter()
+      .zip(resized.data())
+      .map(|(a, b)| a.abs_diff(*b))
+      .max()
+      .unwrap();
+    assert!(
+      max_diff <= 16,
+      "libwebp rescaler drifted {max_diff} from CatmullRom"
+    );
+  }
+
+  #[cfg(not(target_arch = "wasm32"))]
+  #[test]
+  fn webp_scaled_decode_skips_upscale() {
+    let bytes = encode_test_webp(40, 30);
+    let unscaled = decode_bitmap_scaled(&bytes, 80, 60, ImageScalingAlgorithm::Auto).unwrap();
+    assert_eq!((unscaled.width(), unscaled.height()), (40, 30));
+    assert_eq!(unscaled.data(), decode_image(&bytes).unwrap().data());
   }
 
   fn rgba_patch(width: u16, height: u16, rgba: [u8; 4]) -> Vec<u8> {
