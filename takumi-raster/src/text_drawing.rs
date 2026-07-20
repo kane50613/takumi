@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, convert::Into};
+use std::{cell::RefCell, convert::Into};
 
 use skrifa::color::ColorPalette;
 use takumi_core::geometry::{ComputedLayout as Layout, Point, Size};
@@ -10,30 +10,32 @@ use crate::{
   composite_mask_source_to_pixmap, draw_outset_shadow,
   layout::inline::ShapedRun,
   pixmap_ref_from_buffer, render_mask,
-  resources::glyph::{ResolvedColorLayer, ResolvedGlyph},
+  resources::{
+    glyph::{ResolvedColorLayer, ResolvedGlyph},
+    glyph_cache::GlyphCache,
+  },
   style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
 };
 
-pub(crate) type GlyphMaskCache = HashMap<u64, (Vec<u8>, Placement)>;
-
-const GLYPH_MASK_CACHE_MAX_ENTRIES: usize = 4096;
+pub(crate) type GlyphMaskCache = GlyphCache<(Vec<u8>, Placement)>;
 
 thread_local! {
-  static SHARED_GLYPH_MASK_CACHE: RefCell<GlyphMaskCache> = RefCell::new(HashMap::new());
+  static SHARED_GLYPH_MASK_CACHE: RefCell<GlyphMaskCache> = RefCell::new(GlyphCache::default());
+}
+
+/// Ages this thread's mask cache by one render.
+pub(crate) fn begin_glyph_mask_render() {
+  SHARED_GLYPH_MASK_CACHE.with(|c| {
+    if let Ok(mut cache) = c.try_borrow_mut() {
+      cache.begin_render();
+    }
+  });
 }
 
 pub(crate) fn with_shared_glyph_cache<R>(f: impl FnOnce(&mut GlyphMaskCache) -> R) -> R {
   SHARED_GLYPH_MASK_CACHE.with(|c| match c.try_borrow_mut() {
-    Ok(mut cache) => {
-      if cache.len() > GLYPH_MASK_CACHE_MAX_ENTRIES {
-        cache.clear();
-      }
-      f(&mut cache)
-    }
-    Err(_) => {
-      let mut local = HashMap::new();
-      f(&mut local)
-    }
+    Ok(mut cache) => f(&mut cache),
+    Err(_) => f(&mut GlyphCache::default()),
   })
 }
 
@@ -63,13 +65,25 @@ fn draw_outline_with_cache(
     return;
   };
   with_shared_glyph_cache(|cache| {
-    let (cached_mask, cached_placement) = cache.entry(key).or_insert_with(|| {
-      let bucket_x = (key & 3) as f32 * 0.25;
-      let cache_transform = Affine::translation(bucket_x, 0.0);
-      render_mask(paths, Some(cache_transform), None, &mut canvas.buffer_pool)
-    });
-    let placement = cached_placement.translate(int_x, int_y);
-    canvas.draw_mask(cached_mask, placement, color, BlendMode::Normal);
+    if let Some((mask, cached_placement)) = cache.get(key) {
+      let placement = cached_placement.translate(int_x, int_y);
+      canvas.draw_mask(mask, placement, color, BlendMode::Normal);
+      return;
+    }
+
+    let bucket_x = (key & 3) as f32 * 0.25;
+    let cache_transform = Affine::translation(bucket_x, 0.0);
+    let (mask, cached_placement) =
+      render_mask(paths, Some(cache_transform), None, &mut canvas.buffer_pool);
+    canvas.draw_mask(
+      &mask,
+      cached_placement.translate(int_x, int_y),
+      color,
+      BlendMode::Normal,
+    );
+
+    let bytes = mask.len() + 64;
+    cache.insert(key, (mask, cached_placement), bytes);
   });
 }
 
@@ -224,25 +238,37 @@ pub(crate) fn draw_glyph_clip_image(
         glyph_cache_key_and_offset(transform, outline.cache_signature())
       {
         with_shared_glyph_cache(|cache| {
-          let (cached_mask, cached_placement) = cache.entry(key).or_insert_with(|| {
-            let bucket_x = (key & 3) as f32 * 0.25;
-            let cache_transform = Affine::translation(bucket_x, 0.0);
-            render_mask(
-              outline.paths(),
-              Some(cache_transform),
-              None,
-              &mut canvas.buffer_pool,
-            )
-          });
-          let placement = cached_placement.translate(int_x, int_y);
+          if let Some((mask, cached_placement)) = cache.get(key) {
+            canvas.composite_mask_source(
+              mask,
+              cached_placement.translate(int_x, int_y),
+              clip_image,
+              MaskCompositeColor::SourceOnly,
+              sampling,
+              BlendMode::Normal,
+            );
+            return;
+          }
+
+          let bucket_x = (key & 3) as f32 * 0.25;
+          let cache_transform = Affine::translation(bucket_x, 0.0);
+          let (mask, cached_placement) = render_mask(
+            outline.paths(),
+            Some(cache_transform),
+            None,
+            &mut canvas.buffer_pool,
+          );
           canvas.composite_mask_source(
-            cached_mask,
-            placement,
+            &mask,
+            cached_placement.translate(int_x, int_y),
             clip_image,
             MaskCompositeColor::SourceOnly,
             sampling,
             BlendMode::Normal,
           );
+
+          let bytes = mask.len() + 64;
+          cache.insert(key, (mask, cached_placement), bytes);
         });
       } else {
         let (mask, placement) = render_mask(

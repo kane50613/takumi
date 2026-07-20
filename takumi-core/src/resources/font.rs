@@ -26,8 +26,9 @@ use thiserror::Error;
 use crate::{
   context::RenderContext,
   layout::inline::{InlineBrush, InlineLayout},
-  resources::glyph::{
-    BOLD_THRESHOLD, GlyphResolveContext, ResolvedGlyph, synthesis_embolden_strength,
+  resources::{
+    glyph::{BOLD_THRESHOLD, GlyphResolveContext, ResolvedGlyph, synthesis_embolden_strength},
+    glyph_cache::GlyphCache,
   },
   style::{FontFamily, FontStyle as CssFontStyle},
 };
@@ -110,11 +111,9 @@ fn guess_font_format(source: &[u8]) -> Result<FontFormat, FontError> {
 
 thread_local! {
   static LAYOUT_CONTEXT: RefCell<LayoutContext<InlineBrush>> = RefCell::new(LayoutContext::new());
-  static SHARED_RESOLVED_GLYPH_CACHE: RefCell<HashMap<u64, ResolvedGlyph>> =
-    RefCell::new(HashMap::new());
+  static SHARED_RESOLVED_GLYPH_CACHE: RefCell<GlyphCache<ResolvedGlyph>> =
+    RefCell::new(GlyphCache::default());
 }
-
-const RESOLVED_GLYPH_CACHE_MAX_ENTRIES: usize = 4096;
 
 fn resolved_glyph_cache_key(
   font_id: u64,
@@ -256,6 +255,12 @@ impl Fonts {
 
   /// Render-local snapshot whose fallback bucket carries the given families.
   pub fn snapshot_with_fallbacks(&self, fallbacks: Option<&FontFamily>) -> FontsSnapshot {
+    SHARED_RESOLVED_GLYPH_CACHE.with(|cache| {
+      if let Ok(mut cache) = cache.try_borrow_mut() {
+        cache.begin_render();
+      }
+    });
+
     let mut cloned = self.inner.clone();
 
     let mut family_ids = if let Some(names) = fallbacks {
@@ -372,18 +377,20 @@ impl Fonts {
           skew,
           glyph_id,
         );
-        let cached = SHARED_RESOLVED_GLYPH_CACHE.with(|c| c.borrow().get(&key).cloned());
+        let cached = SHARED_RESOLVED_GLYPH_CACHE.with(|c| {
+          c.try_borrow_mut()
+            .ok()
+            .and_then(|mut cache| cache.get(key).cloned())
+        });
         let glyph = if let Some(g) = cached {
           Some(g)
         } else {
           let resolved = resolver.resolve_glyph(glyph_id);
           if let Some(g) = resolved.as_ref() {
             SHARED_RESOLVED_GLYPH_CACHE.with(|c| {
-              let mut cache = c.borrow_mut();
-              if cache.len() > RESOLVED_GLYPH_CACHE_MAX_ENTRIES {
-                cache.clear();
+              if let Ok(mut cache) = c.try_borrow_mut() {
+                cache.insert(key, g.clone(), g.estimated_bytes());
               }
-              cache.insert(key, g.clone());
             });
           }
           resolved
