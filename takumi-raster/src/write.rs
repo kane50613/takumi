@@ -166,8 +166,10 @@ impl AnimationFrame {
 #[non_exhaustive]
 pub struct AnimatedWebpOptions {
   /// Whether frames should be alpha-blended with previous content.
+  #[builder(default = true)]
   pub blend: bool,
   /// Whether frame disposal clears to background before the next frame.
+  #[builder(default = false)]
   pub dispose: bool,
   /// Number of times to loop; `None` means infinite loop.
   pub loop_count: Option<u16>,
@@ -1114,5 +1116,14 @@ mod tests {
       WebPDemuxReleaseIterator(&mut iter);
       WebPDemuxDelete(demux);
     }
+  }
+
+  #[test]
+  fn animated_webp_builder_blend_matches_default() {
+    let built = AnimatedWebpOptions::builder().build();
+
+    assert!(built.blend);
+    assert_eq!(built.blend, AnimatedWebpOptions::default().blend);
+    assert_eq!(built.dispose, AnimatedWebpOptions::default().dispose);
   }
 }
