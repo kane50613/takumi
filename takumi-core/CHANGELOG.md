@@ -1,3 +1,21 @@
+## takumi-core@0.6.3
+
+### Drop whitespace between absolute-only block siblings
+
+When every element child of a block container was absolutely positioned, the whitespace text nodes from pretty-printed HTML formed an inline formatting context that swallowed the out-of-flow boxes, so none of them rendered. The whitespace drop now also runs when the only in-flow content is whitespace, keeping the absolute children in the layout.
+
+### Serialize `text-fit: none` without its target and limit
+
+The computed value of `text-fit` kept the target and limit keywords after `none`, so `none per-line 50%` round-tripped verbatim. Chromium drops both, since neither scales anything when the value is `none`. The serializer now stops after `none`.
+
+### Keep whitespace collapse state across empty inline spans
+
+An empty span with `white-space: pre` reset the cross-span collapse state, so a boundary space next to it could double up or vanish. Empty spans now leave the state untouched, matching Blink's opaque-to-collapsing empty text items.
+
+### Honour per-element white-space when collapsing inline text
+
+Inline whitespace collapsing read the block's white-space value for every span, so a `white-space: pre` child inside a normal-collapsing parent lost its spaces and line breaks. Each span now collapses against its own value. `<br>` also carries a `white-space: pre` preset, so its line break survives.
+
 ## takumi-core@0.6.2
 
 ### Ellipsize nowrap text without a break opportunity
