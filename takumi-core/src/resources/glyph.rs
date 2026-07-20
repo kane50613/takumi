@@ -538,6 +538,13 @@ fn decode_bitmap_image(bitmap: &BitmapGlyph<'_>) -> Option<(ImageBuffer, Origin)
   let image = match &bitmap.data {
     BitmapData::Png(bytes) => decode_png(bytes).ok()?,
     BitmapData::Bgra(bytes) => {
+      let expected = (bitmap.width as usize)
+        .checked_mul(bitmap.height as usize)?
+        .checked_mul(4)?;
+      if bytes.len() < expected {
+        return None;
+      }
+
       let image = RgbaImage::from_fn(bitmap.width, bitmap.height, |x, y| {
         let index = ((y * bitmap.width + x) * 4) as usize;
         Rgba([
