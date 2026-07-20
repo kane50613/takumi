@@ -34,7 +34,7 @@ pub struct RenderContext {
   pub(crate) images: Rc<HashMap<Arc<str>, ImageSource>>,
   /// The stylesheets to apply before layout/rendering.
   #[builder(default)]
-  pub(crate) stylesheet: Rc<StyleSheet>,
+  pub(crate) stylesheet: Arc<StyleSheet>,
 }
 
 impl RenderContext {

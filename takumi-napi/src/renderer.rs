@@ -10,7 +10,7 @@ use takumi_core::{
   Fonts,
   layout::node::Node,
   resources::image::{
-    ImageCache, ImageCacheMode as CoreImageCacheMode, ImageSource as LoadedImageSource,
+    ImageCacheMode as CoreImageCacheMode, ImageSource as LoadedImageSource, ResourceCache,
   },
   style::KeyframesRule as CoreKeyframesRule,
 };
@@ -90,19 +90,19 @@ pub(crate) struct RendererState {
   /// a fresh `Arc<Fonts>` via `store`. Renders in flight keep their old snapshot alive.
   pub(crate) fonts: ArcSwap<Fonts>,
   pub(crate) font_write: Mutex<()>,
-  pub(crate) image_cache: ImageCache,
+  pub(crate) resource_cache: ResourceCache,
 }
 
-/// Decodes the per-call image buffers into a `src`-keyed map. The image cache is
+/// Decodes the per-call image buffers into a `src`-keyed map. The resource cache is
 /// `quick_cache::sync` (internally locked, single-flight), so it needs no outer lock.
 pub(crate) fn decode_images(
-  image_cache: &ImageCache,
+  resource_cache: &ResourceCache,
   images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
 ) -> Result<HashMap<Arc<str>, LoadedImageSource>> {
   let mut map = HashMap::new();
 
   for (src, (buffer, mode)) in images {
-    let decoded = image_cache
+    let decoded = resource_cache
       .get_or_decode(&buffer, mode.into())
       .map_err(map_error)?;
 
@@ -346,18 +346,31 @@ pub struct ImageSource<'ctx> {
   pub cache: Option<ImageCacheMode>,
 }
 
+/// Options for constructing a [`Renderer`].
+#[napi(object)]
+#[derive(Default)]
+pub struct RendererOptions {
+  /// Byte budget shared by every cached resource — decoded images, SVG
+  /// rasters, parsed stylesheets. `0` disables caching.
+  /// @default 16 MiB
+  pub cache_max_bytes: Option<f64>,
+}
+
 #[napi]
 impl Renderer {
   /// Creates a new Renderer instance.
   #[napi(constructor)]
-  pub fn new(env: Env) -> Result<Self> {
+  pub fn new(env: Env, options: Option<RendererOptions>) -> Result<Self> {
     crate::pool::register_cleanup(&env);
 
     Ok(Self {
       state: Arc::new(RendererState {
         fonts: ArcSwap::from_pointee(takumi_bindings_common::default_fonts().map_err(map_error)?),
         font_write: Mutex::new(()),
-        image_cache: ImageCache::default(),
+        resource_cache: match options.and_then(|options| options.cache_max_bytes) {
+          Some(bytes) => ResourceCache::new(bytes.max(0.0) as u64),
+          None => ResourceCache::default(),
+        },
       }),
     })
   }

@@ -3,6 +3,7 @@ import type {
   RegisteredFamily,
   RenderAnimationOptions as RenderAnimationOptionsInternal,
   RenderOptions as RenderOptionsInternal,
+  RendererOptions,
   SvgRenderOptions as SvgRenderOptionsInternal,
 } from "../index";
 export type * from "../index";
@@ -29,8 +30,13 @@ export type RenderAnimationOptions = BackendAnimationOptions<RenderAnimationOpti
 export type SvgRenderOptions = BackendSvgOptions<SvgRenderOptionsInternal>;
 
 export class Renderer {
-  private inner = new RendererInternal();
-  private fonts = new FontRegistry<RegisteredFamily>((font) => this.inner.registerFont(font));
+  private inner: RendererInternal;
+  private fonts: FontRegistry<RegisteredFamily>;
+
+  constructor(options?: RendererOptions) {
+    this.inner = new RendererInternal(options);
+    this.fonts = new FontRegistry<RegisteredFamily>((font) => this.inner.registerFont(font));
+  }
 
   async render(node: Node, options?: RenderOptions) {
     const { options: opts, signal } = await prepareRenderInput(this.fonts, options ?? {}, node);

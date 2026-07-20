@@ -11,7 +11,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use takumi::{
   prelude::*, render, write_animated_gif, write_animated_png, write_animated_webp, write_image,
 };
-use takumi_core::resources::image::ImageCache;
+use takumi_core::resources::image::ResourceCache;
 use takumi_svg::{SvgOptions, render as svg_render};
 
 fn repo_base_path(path: &str) -> PathBuf {
@@ -112,10 +112,10 @@ pub fn create_test_viewport() -> Viewport {
 pub static CONTEXT: LazyLock<Fonts> = LazyLock::new(create_test_context);
 
 /// Test images, provided to renders as pre-fetched resources. Loaded through
-/// an [`ImageCache`] so fixtures exercise the same decode-at-draw-size path as
+/// an [`ResourceCache`] so fixtures exercise the same decode-at-draw-size path as
 /// the renderer bindings.
 pub static TEST_IMAGES: LazyLock<HashMap<Arc<str>, ImageSource>> = LazyLock::new(|| {
-  let cache = ImageCache::default();
+  let cache = ResourceCache::default();
   let images = IMAGES
     .iter()
     .map(|path| {
@@ -136,7 +136,7 @@ pub static TEST_IMAGES: LazyLock<HashMap<Arc<str>, ImageSource>> = LazyLock::new
 
 /// Keeps the decode cache alive so lazily decoded sources keep their sized
 /// entries across renders.
-static CACHE: OnceLock<ImageCache> = OnceLock::new();
+static CACHE: OnceLock<ResourceCache> = OnceLock::new();
 
 #[allow(dead_code)]
 pub fn run_fixture_test(node: Node, fixture_name: &str) {

@@ -42,7 +42,7 @@ pub struct RenderOptions<'g> {
   pub(crate) images: HashMap<Arc<str>, ImageSource>,
   /// CSS stylesheets to apply before layout/rendering.
   #[builder(default)]
-  pub(crate) stylesheet: StyleSheet,
+  pub(crate) stylesheet: Arc<StyleSheet>,
   /// Global animation time in milliseconds.
   #[builder(default = 0)]
   pub(crate) time_ms: u64,
@@ -76,7 +76,7 @@ impl<'g> RenderOptions<'g> {
   }
 
   /// Returns the CSS stylesheet applied before layout.
-  pub fn stylesheet(&self) -> &StyleSheet {
+  pub fn stylesheet(&self) -> &Arc<StyleSheet> {
     &self.stylesheet
   }
 
@@ -167,7 +167,7 @@ pub fn measure<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
     .fonts(fonts.snapshot_with_fallbacks(font_families.as_ref()))
     .sizing(SizingContext::builder().viewport(viewport).build())
     .images(Rc::new(images))
-    .stylesheet(stylesheet.into())
+    .stylesheet(stylesheet)
     .time_ms(time_ms)
     .draw_debug_border(draw_debug_border)
     .style(Box::new(ComputedStyle {
@@ -413,7 +413,7 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<Bitmap> {
     .fonts(fonts.snapshot_with_fallbacks(font_families.as_ref()))
     .sizing(SizingContext::builder().viewport(viewport).build())
     .images(Rc::new(images))
-    .stylesheet(stylesheet.into())
+    .stylesheet(stylesheet)
     .time_ms(time_ms)
     .draw_debug_border(draw_debug_border)
     .style(Box::new(ComputedStyle {
@@ -489,7 +489,7 @@ pub(crate) struct PreparedScene<'a, 'g> {
   scene: &'a SequentialScene<'g>,
   fonts: FontsSnapshot,
   images: Rc<HashMap<Arc<str>, ImageSource>>,
-  stylesheet: Rc<StyleSheet>,
+  stylesheet: Arc<StyleSheet>,
 }
 
 impl<'a, 'g> PreparedScene<'a, 'g> {
@@ -501,7 +501,7 @@ impl<'a, 'g> PreparedScene<'a, 'g> {
         .fonts
         .snapshot_with_fallbacks(options.font_families.as_ref()),
       images: Rc::new(options.images.clone()),
-      stylesheet: Rc::new(options.stylesheet.clone()),
+      stylesheet: options.stylesheet.clone(),
       scene,
     }
   }
@@ -693,6 +693,7 @@ mod tests {
     style::{
       AnimationFillMode, AnimationTime, AnimationTimingFunction, Color, ColorInput, Display,
       KeyframeRule, KeyframesRule, Length, Length::Px, Position, Style, StyleDeclaration,
+      StyleSheet,
     },
     viewport::Viewport,
   };
@@ -905,7 +906,7 @@ mod tests {
       .viewport(Viewport::new((200, 100)))
       .node(node)
       .stylesheet(
-        vec![KeyframesRule {
+        StyleSheet::from(vec![KeyframesRule {
           name: "grow".to_string(),
           keyframes: vec![
             KeyframeRule::builder()
@@ -926,7 +927,7 @@ mod tests {
               .build(),
           ],
           media_queries: Vec::new(),
-        }]
+        }])
         .into(),
       )
       .time_ms(500)

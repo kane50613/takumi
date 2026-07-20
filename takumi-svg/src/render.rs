@@ -49,7 +49,7 @@ pub struct SvgOptions<'g> {
   pub(crate) images: HashMap<Arc<str>, ImageSource>,
   /// CSS stylesheets to apply before layout.
   #[builder(default)]
-  pub(crate) stylesheet: StyleSheet,
+  pub(crate) stylesheet: Arc<StyleSheet>,
   /// Global animation time in milliseconds.
   #[builder(default = 0)]
   pub(crate) time_ms: u64,
@@ -75,7 +75,7 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
     )
     .sizing(SizingContext::builder().viewport(viewport).build())
     .images(Rc::new(options.images))
-    .stylesheet(options.stylesheet.into())
+    .stylesheet(options.stylesheet)
     .time_ms(options.time_ms)
     .style({
       Box::new(ComputedStyle {

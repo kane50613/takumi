@@ -125,8 +125,12 @@ impl Task for RenderAnimationTask {
         unreachable!()
       };
       let fonts = self.state.fonts.load();
-      let initialized_images = decode_images(&self.state.image_cache, take(&mut self.images))?;
-      let stylesheet = stylesheet(take(&mut self.stylesheets), take(&mut self.keyframes));
+      let initialized_images = decode_images(&self.state.resource_cache, take(&mut self.images))?;
+      let stylesheet = stylesheet(
+        &self.state.resource_cache,
+        take(&mut self.stylesheets),
+        take(&mut self.keyframes),
+      );
       let scene_options = scenes
         .into_iter()
         .map(|(node, duration_ms)| {

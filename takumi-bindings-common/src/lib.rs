@@ -6,9 +6,14 @@
 //! binding keeps only its platform-specific glue (JS type coercion, error
 //! mapping, threading).
 
+use std::sync::Arc;
+
 use takumi_core::{
   Fonts,
-  resources::font::{FontError, FontOverride, FontResource},
+  resources::{
+    font::{FontError, FontOverride, FontResource},
+    image::ResourceCache,
+  },
   style::{FontStyle, KeyframesRule, StyleSheet},
 };
 
@@ -67,8 +72,20 @@ pub fn build_font_resource<'a>(
 }
 
 /// The stylesheet for a render: the loose-parsed sheet list with its keyframes.
-pub fn stylesheet(stylesheets: Option<Vec<String>>, keyframes: Vec<KeyframesRule>) -> StyleSheet {
-  let mut stylesheet = StyleSheet::parse_owned_list_loosy(stylesheets.unwrap_or_default());
-  stylesheet.extend_keyframes(keyframes);
-  stylesheet
+/// Parsed sheets are cached by source text in `cache`; per-render keyframes are
+/// grafted onto a copy so the cached parse stays pristine.
+pub fn stylesheet(
+  cache: &ResourceCache,
+  stylesheets: Option<Vec<String>>,
+  keyframes: Vec<KeyframesRule>,
+) -> Arc<StyleSheet> {
+  let sheet = cache.get_or_parse_stylesheet(stylesheets.unwrap_or_default());
+
+  if keyframes.is_empty() {
+    return sheet;
+  }
+
+  let mut extended = (*sheet).clone();
+  extended.extend_keyframes(keyframes);
+  Arc::new(extended)
 }

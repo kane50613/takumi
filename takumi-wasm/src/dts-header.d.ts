@@ -34,6 +34,15 @@ export type DitheringAlgorithm = "none" | "ordered-bayer" | "floyd-steinberg";
 /** Cache policy for a decoded image. Defaults to `"auto"`. */
 export type ImageCacheMode = "auto" | "none";
 
+export type RendererOptions = {
+  /**
+   * Byte budget shared by every cached resource — decoded images, SVG
+   * rasters, parsed stylesheets. `0` disables caching.
+   * @default 16 MiB
+   */
+  cacheMaxBytes?: number;
+};
+
 export type RenderOptions = {
   /**
    * The width of the image. If not provided, the width will be automatically calculated based on the content.

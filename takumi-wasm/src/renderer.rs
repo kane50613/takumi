@@ -13,7 +13,7 @@ use takumi_core::{
   layout::node::Node,
   resources::{
     font::{FontResource, RegisteredFamily},
-    image::{ImageCache, ImageSource as LoadedImageSource},
+    image::{ImageSource as LoadedImageSource, ResourceCache},
   },
   style::{FontFamily, Lang},
   viewport::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
@@ -34,7 +34,7 @@ use crate::{helper::map_error, model::*};
 #[wasm_bindgen]
 pub struct Renderer {
   state: RwLock<Fonts>,
-  image_cache: ImageCache,
+  resource_cache: ResourceCache,
 }
 
 fn load_font_internal(
@@ -89,7 +89,7 @@ impl Renderer {
     for source in images.unwrap_or_default() {
       let mode = source.cache.unwrap_or_default();
       let image = self
-        .image_cache
+        .resource_cache
         .get_or_decode(&source.data, mode)
         .map_err(map_error)?;
 
@@ -101,10 +101,18 @@ impl Renderer {
 
   /// Creates a new Renderer instance.
   #[wasm_bindgen(constructor)]
-  pub fn new() -> Result<Renderer, js_sys::Error> {
+  pub fn new(options: Option<RendererOptionsType>) -> Result<Renderer, js_sys::Error> {
+    let options: RendererOptions = options
+      .map(|options| from_value(options.into()).map_err(map_error))
+      .transpose()?
+      .unwrap_or_default();
+
     Ok(Renderer {
       state: RwLock::new(default_fonts().map_err(map_error)?),
-      image_cache: ImageCache::default(),
+      resource_cache: match options.cache_max_bytes {
+        Some(bytes) => ResourceCache::new(bytes),
+        None => ResourceCache::default(),
+      },
     })
   }
 
@@ -145,7 +153,11 @@ impl Renderer {
     images: HashMap<Arc<str>, LoadedImageSource>,
   ) -> Result<Vec<u8>, JsValue> {
     let dithering = options.dithering.unwrap_or_default();
-    let stylesheet = stylesheet(options.stylesheets, options.keyframes.unwrap_or_default());
+    let stylesheet = stylesheet(
+      &self.resource_cache,
+      options.stylesheets,
+      options.keyframes.unwrap_or_default(),
+    );
 
     let lang = options
       .lang
@@ -205,7 +217,11 @@ impl Renderer {
       .unwrap_or_default();
 
     let images = self.images_map(options.images.as_deref())?;
-    let stylesheet = stylesheet(options.stylesheets, options.keyframes.unwrap_or_default());
+    let stylesheet = stylesheet(
+      &self.resource_cache,
+      options.stylesheets,
+      options.keyframes.unwrap_or_default(),
+    );
     let state = self.read_state()?;
 
     let lang = options
@@ -249,7 +265,11 @@ impl Renderer {
       .transpose()?;
 
     let images = self.images_map(options.images.as_deref())?;
-    let stylesheet = stylesheet(options.stylesheets, options.keyframes.unwrap_or_default());
+    let stylesheet = stylesheet(
+      &self.resource_cache,
+      options.stylesheets,
+      options.keyframes.unwrap_or_default(),
+    );
 
     let state = self.read_state()?;
     let render_options = takumi_raster::RenderOptions::builder()
@@ -344,7 +364,11 @@ impl Renderer {
     let viewport = Viewport::new((width, height))
       .with_device_pixel_ratio(device_pixel_ratio.unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO));
     let draw_debug_border = draw_debug_border.unwrap_or_default();
-    let stylesheet = stylesheet(stylesheets, keyframes.unwrap_or_default());
+    let stylesheet = stylesheet(
+      &self.resource_cache,
+      stylesheets,
+      keyframes.unwrap_or_default(),
+    );
     let state = self.read_state()?;
     let scene_options = scenes
       .into_iter()

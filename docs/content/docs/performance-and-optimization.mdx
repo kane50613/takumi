@@ -14,6 +14,14 @@ The `Renderer` holds Takumi's caches. Reuse one instance across renders instead 
 
 [`ImageResponse`](/docs/image-response) manages an internal renderer, or pass your own through the `renderer` option. See [Typography & Fonts](/docs/typography-and-fonts) and [Load Images](/docs/load-images).
 
+### Size the Resource Cache
+
+Decoded images, SVG rasters, and parsed stylesheets share one byte budget, 16 MiB by default. The default suits a single-template server; raise it when many large images stay hot across renders:
+
+```ts
+const renderer = new Renderer({ cacheMaxBytes: 64 * 1024 * 1024 });
+```
+
 ### Preload Frequently Used Images
 
 Loading images from URLs or bytes during the rendering pass is a bottleneck. Register [Load Images](/docs/load-images) to avoid re-decoding.
