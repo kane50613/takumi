@@ -1,3 +1,49 @@
+## takumi-core@0.7.0
+
+### Move resolved-glyph types to `resources::glyph`
+
+Glyph rasterization — resolving a shaped glyph to a bitmap or vector outline — now lives in its own `resources::glyph` module, split out of the font registry it was tangled with. `ResolvedGlyph`, `ResolvedOutlineGlyph`, and `ResolvedColorLayer` move there from `resources::font`; imports of those types need updating.
+
+### Decode animated GIF frames on demand instead of holding the whole timeline
+
+Once a render scrubbed past the first frame, an animated GIF decoded and kept every remaining frame, so the encoded bytes, the first frame, and all later frames stayed resident at once — and none of it counted against the image cache budget. Frames past the first now decode at draw size when they are sampled and drop right after, so a GIF holds only its encoded bytes and first frame. Output is unchanged.
+
+### Stop untrusted SVG from reading local files via `<image href>`
+
+An `<image>` or `<feImage>` element whose href is a filesystem path is no longer read from disk when parsing untrusted SVG markup or applying SVG filters. The string href resolver is disabled at both entry points, matching the nested-SVG path that already ignored external references. `data:` URI images keep working.
+
+### Bound the thread-local glyph caches by bytes
+
+The resolved-glyph and glyph-mask caches were thread-local maps capped at 4096 entries each: per-entry size was unbounded, the cap multiplied per worker thread, and overflowing flushed the whole map so hot glyphs paid the rebuild cost. Both caches now weigh entries in bytes against one process-wide 8 MiB budget, tunable through `takumi_core::resources::glyph_cache::set_glyph_cache_max_bytes`. Going over budget first drops entries no recent render touched, then only as many fresh ones as the overage requires; the map is never flushed whole. A retention test renders the same content 200 times and asserts live heap bytes stay flat, so budget regressions fail in CI.
+
+### Halve peak memory for native WebP decode
+
+Native WebP decode now writes straight into a caller-owned buffer via `WebPDecode` with external memory, dropping the extra full-frame copy `WebPDecodeRGBA` required. Already-RGBA sources decoded through the `image` crate also skip one transient full-frame clone (`into_rgba8`). Output is bit-identical.
+
+### Cut wasted work in style matching
+
+`record_matches` no longer pushes entries for empty declaration blocks, and the per-node ancestor bloom filters (one multi-kilobyte copy per node) are replaced by a single counting filter walked along the DFS ancestor chain. Rendered output is unchanged.
+
+### Unify decoded resources behind one budgeted cache
+
+Decoded images had a byte budget, but each SVG kept up to 32 rasterized pixmaps outside it, and every render re-parsed its stylesheets from scratch. `ImageCache` is now `ResourceCache`: SVG sources, their rasterized pixmaps, and parsed stylesheets all weigh against the same budget as decoded images. The default budget drops from 64 MiB to 16 MiB and becomes configurable — `new Renderer({ cacheMaxBytes })` in the bindings, `ResourceCache::new(max_bytes)` in Rust, with `0` disabling caching. SVG rasters and parsed stylesheets now also survive across renders, so a server re-rendering the same template stops re-rasterizing and re-parsing per request. Rust callers: `RenderOptions.stylesheet` is now `Arc<StyleSheet>`; pass `sheet.into()`.
+
+### Skip the style-match arena allocations when no CSS rules apply
+
+`match_stylesheets_view` now filters the stylesheet rules before it builds the per-node match buckets, and returns early when nothing survives. Renders driven only by inline styles or Tailwind classes (the common case) no longer allocate the per-node bucket vectors or walk the matcher for zero rules. Rendered output is unchanged.
+
+### Decode downscaled WebP at the target size
+
+Native WebP sources drawn smaller than their pixel size now decode through libwebp's `use_scaling`, so the full-size frame is never allocated (~6 MB instead of ~48 MB for a 12 MP hero). libwebp's rescaler replaces the in-house resampler on this path, which can shift pixels slightly; wasm keeps the full-decode path.
+
+### Add `font-kerning` and `tab-size`
+
+`font-kerning: auto | normal | none` toggles the shaper's `kern` feature; an explicit `font-feature-settings` still wins on a tag conflict. `tab-size: <number>` expands preserved tabs to that many spaces (default 8) before shaping. Preserved tabs previously reached the shaper as U+0009 and rendered a font-dependent glyph, so tab characters under `white-space: pre` now render correctly.
+
+### Share one path-builder helper between layout and raster
+
+`takumi-core` and `takumi-raster` each kept a private single-impl trait wrapping `Vec<PathCommand>` pushes, plus two more one-method traits that existed only for method-call syntax. The push helpers now live once as the public `takumi_core::geometry::PathBuilder` trait; the private traits are gone. Rendered output is unchanged.
+
 ## takumi-core@0.6.3
 
 ### Drop whitespace between absolute-only block siblings

@@ -1,3 +1,21 @@
+## @takumi-rs/core@2.4.0
+
+### Unify decoded resources behind one budgeted cache
+
+Decoded images had a byte budget, but each SVG kept up to 32 rasterized pixmaps outside it, and every render re-parsed its stylesheets from scratch. `ImageCache` is now `ResourceCache`: SVG sources, their rasterized pixmaps, and parsed stylesheets all weigh against the same budget as decoded images. The default budget drops from 64 MiB to 16 MiB and becomes configurable — `new Renderer({ cacheMaxBytes })` in the bindings, `ResourceCache::new(max_bytes)` in Rust, with `0` disabling caching. SVG rasters and parsed stylesheets now also survive across renders, so a server re-rendering the same template stops re-rasterizing and re-parsing per request. Rust callers: `RenderOptions.stylesheet` is now `Arc<StyleSheet>`; pass `sheet.into()`.
+
+### Return an error for viewports too large to allocate
+
+A viewport whose pixel buffer overflowed the backing allocation used to fall back to a 1x1 canvas, so the render produced a valid-looking but wrong tiny image with no error. The root canvas is now built through a fallible path that surfaces the allocation failure as an `InvalidViewport` error instead. Internal offscreen canvases keep their bounded sizes and are unaffected.
+
+### Blend animated WebP frames by default on the native binding
+
+`AnimatedWebpOptions::builder()` left `blend` and `dispose` unset, so they fell back to `false` while the type's `Default` and the wasm backend use `blend: true`. Native animated WebP now alpha-blends frames over prior content like wasm does, so animations with partially transparent later frames render the same on both backends. The builder defaults are pinned to the `Default` values.
+
+### Convert native panics into catchable errors instead of aborting the process
+
+The published napi artifacts are now built with unwind panics, so a Rust panic reached through malformed input surfaces as a JS error rather than killing the host process. Wasm keeps abort panics by design.
+
 ## @takumi-rs/core@2.3.0
 
 ### Accept raw RGBA pixels as an image source
