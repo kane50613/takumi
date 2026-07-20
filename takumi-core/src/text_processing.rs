@@ -55,6 +55,11 @@ pub(crate) fn apply_white_space_collapse<'a>(
   previous_collapsible_space: &mut bool,
   previous_was_line_break: &mut bool,
 ) -> Cow<'a, str> {
+  // An empty span contributes no characters, so boundary state carries through.
+  if input.is_empty() {
+    return Cow::Borrowed(input);
+  }
+
   match collapse {
     WhiteSpaceCollapse::Preserve => {
       // A following collapsible span drops its leading space when this span
@@ -448,6 +453,32 @@ mod tests {
     );
 
     assert_eq!(format!("{left}{right}"), "A B");
+  }
+
+  #[test]
+  fn test_white_space_empty_span_keeps_boundary_state() {
+    let mut previous_collapsible_space = false;
+    let mut previous_was_line_break = false;
+    let left = apply_white_space_collapse(
+      "A ",
+      WhiteSpaceCollapse::Collapse,
+      &mut previous_collapsible_space,
+      &mut previous_was_line_break,
+    );
+    let middle = apply_white_space_collapse(
+      "",
+      WhiteSpaceCollapse::Preserve,
+      &mut previous_collapsible_space,
+      &mut previous_was_line_break,
+    );
+    let right = apply_white_space_collapse(
+      " B",
+      WhiteSpaceCollapse::Collapse,
+      &mut previous_collapsible_space,
+      &mut previous_was_line_break,
+    );
+
+    assert_eq!(format!("{left}{middle}{right}"), "A B");
   }
 
   #[test]
