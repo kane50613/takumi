@@ -27,7 +27,7 @@ use crate::{
     BackgroundImage, BackgroundImages, BlendMode, BoxSizing, Color, ComputedStyle, ContentItem,
     ContentValue, Display, Filters, Float, Isolation, Length, LineHeight, PercentageNumber,
     Position, SizingContext, Style as NodeStyle, StyleDeclaration, StyleSheet, TextWrapMode,
-    apply_stylesheet_animations,
+    WhiteSpaceCollapse, apply_stylesheet_animations,
   },
   viewport::Viewport,
 };
@@ -1044,6 +1044,14 @@ impl RenderNode {
       .is_some_and(Node::is_whitespace_only_text)
   }
 
+  // Only fully-collapsible whitespace may be dropped. preserve / preserve-spaces
+  // keep their spaces, and preserve-breaks may hold a forced break, so a
+  // whitespace-only node in any of those still renders.
+  fn is_collapsible_whitespace_only_text_node(&self) -> bool {
+    self.context.style.white_space_collapse == WhiteSpaceCollapse::Collapse
+      && self.is_whitespace_only_text_node()
+  }
+
   /// True if any direct child is an anonymous text item.
   pub fn has_anonymous_text_item_child(&self) -> bool {
     self
@@ -1303,16 +1311,6 @@ impl RenderNode {
       };
 
       if let Some(child) = current.pending_children.next() {
-        // CSS Grid L1 §6 / Flexbox L1 §4: whitespace-only anonymous items
-        // are not rendered. Advance the preorder cursor to keep
-        // `matched_declarations` indices aligned with the original tree.
-        if current.context.style.display.should_blockify_children()
-          && child.is_whitespace_only_text()
-        {
-          next_preorder_index(&mut preorder_cursor);
-          continue;
-        }
-
         let child_pending = build_pending_node(
           &current.context,
           child,
@@ -1346,6 +1344,10 @@ impl RenderNode {
 
       let render_node = if let Some(mut children) = children {
         if finished.context.style.display.should_blockify_children() {
+          // CSS Flexbox L1 §4 / Grid L1 §6: collapsible whitespace-only text
+          // between items is not rendered; every remaining child blockifies.
+          let mut children = Vec::from(children);
+          children.retain(|child| !child.is_collapsible_whitespace_only_text_node());
           for child in &mut children {
             child.context.style.display.blockify();
           }
@@ -1353,20 +1355,21 @@ impl RenderNode {
           RenderNode {
             context: finished.context,
             node: Some(finished.node),
-            children: Some(children),
+            children: Some(children.into_boxed_slice()),
             layout_style_override: None,
             anonymous_text_content: None,
             force_inline_layout: false,
           }
         } else {
-          // https://github.com/kane50613/takumi/issues/711
-          // https://github.com/kane50613/takumi/issues/992
-          if children
-            .iter()
-            .any(|child| !child.participates_in_inflow_inline_formatting_context())
-          {
-            children = drop_block_boundary_whitespace(Vec::from(children)).into_boxed_slice();
-          }
+          // Blink's Text::TextLayoutObjectIsNeeded: collapsible
+          // whitespace-only text renders only after an in-flow inline-level
+          // sibling, and leading whitespace only inside an inline parent
+          // (#711, #992).
+          children = drop_collapsible_boundary_whitespace(
+            Vec::from(children),
+            finished.context.style.display.is_inline(),
+          )
+          .into_boxed_slice();
 
           // https://github.com/kane50613/takumi/issues/738: out-of-flow boxes
           // must not be swept into an anonymous block box.
@@ -1376,9 +1379,15 @@ impl RenderNode {
           let has_block = children
             .iter()
             .any(|child| !child.participates_in_inline_formatting_context());
-          let requires_inline_parent_blockification =
-            finished.context.style.display.is_inline() && has_block;
-          let needs_anonymous_boxes = has_inline && has_block;
+          let has_out_of_flow = children.iter().any(RenderNode::is_out_of_flow);
+          let parent_is_inline = finished.context.style.display.is_inline();
+          let requires_inline_parent_blockification = parent_is_inline && has_block;
+          // A block parent mixing inline content with out-of-flow children wraps
+          // the inline part so the absolute boxes stay as block-level children.
+          // An inline parent keeps its inline formatting context untouched — an
+          // anonymous block there would be dropped by the surrounding line box.
+          let needs_anonymous_boxes =
+            has_inline && (has_block || (!parent_is_inline && has_out_of_flow));
 
           if requires_inline_parent_blockification {
             finished.context.style.display = finished.context.style.display.as_blockified();
@@ -1898,31 +1907,28 @@ fn flush_inline_group(
   ));
 }
 
-fn drop_block_boundary_whitespace(input: Vec<RenderNode>) -> Vec<RenderNode> {
-  let mut result = Vec::with_capacity(input.len());
-  let mut run: Vec<RenderNode> = Vec::new();
-
-  fn flush(run: &mut Vec<RenderNode>, out: &mut Vec<RenderNode>) {
-    let has_meaningful_inline = run.iter().any(|c| {
-      c.participates_in_inflow_inline_formatting_context() && !c.is_whitespace_only_text_node()
-    });
-    if has_meaningful_inline {
-      out.append(run);
-    } else {
-      out.extend(run.drain(..).filter(|c| !c.is_whitespace_only_text_node()));
-    }
-  }
+// Mirrors Blink's Text::TextLayoutObjectIsNeeded, minus the ends-with-space
+// refinement (inline collapsing already merges adjacent spaces).
+fn drop_collapsible_boundary_whitespace(
+  input: Vec<RenderNode>,
+  parent_is_inline: bool,
+) -> Vec<RenderNode> {
+  let mut out = Vec::with_capacity(input.len());
+  let mut after_in_flow_inline = parent_is_inline;
 
   for child in input {
-    if !child.participates_in_inline_formatting_context() {
-      flush(&mut run, &mut result);
-      result.push(child);
-    } else {
-      run.push(child);
+    if child.is_collapsible_whitespace_only_text_node() && !after_in_flow_inline {
+      continue;
     }
+
+    if !child.is_out_of_flow() && child.context.style.float == Float::None {
+      after_in_flow_inline = child.participates_in_inflow_inline_formatting_context();
+    }
+
+    out.push(child);
   }
-  flush(&mut run, &mut result);
-  result
+
+  out
 }
 
 #[cfg(test)]

@@ -817,7 +817,7 @@ describe("fromJsx", () => {
     expect(node).toEqual({
       type: "text",
       text: "\n",
-      preset: defaultStylePresets.span,
+      preset: defaultStylePresets.br,
       tagName: "br",
       id: "line-break",
       className: "spacer",

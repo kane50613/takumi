@@ -146,6 +146,7 @@ const DEFAULT_PRESETS: &[(&str, &str)] = &[
   ("sub", "font-size:smaller;vertical-align:sub"),
   ("sup", "font-size:smaller;vertical-align:super"),
   ("div", "display:block"),
+  ("br", "white-space:pre"),
 ];
 
 static DEFAULT_STYLE_PRESETS: LazyLock<HashMap<Box<str>, Style>> = LazyLock::new(|| {

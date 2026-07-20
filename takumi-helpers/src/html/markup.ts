@@ -101,7 +101,7 @@ function buildStaticNodes(
     nodes.push(
       text({
         text: "\n",
-        preset: presets?.span,
+        preset: presets?.br,
         ...metadata,
       }),
     );

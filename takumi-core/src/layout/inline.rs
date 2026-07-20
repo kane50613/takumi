@@ -1248,7 +1248,7 @@ fn build_inline_layout_tree<'c>(
         let transformed = apply_text_transform(text, context.style.text_transform);
         let collapsed = apply_white_space_collapse(
           &transformed,
-          style.parent.white_space_collapse,
+          context.style.white_space_collapse,
           &mut previous_collapsible_space,
           &mut previous_was_line_break,
         );

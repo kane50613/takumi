@@ -395,7 +395,7 @@ async function processReactElement(
       nodes: [
         text({
           text: "\n",
-          preset: options.presets?.span,
+          preset: options.presets?.br,
           ...metadata,
         }),
       ],

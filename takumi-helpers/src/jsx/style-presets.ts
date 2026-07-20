@@ -257,6 +257,9 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
     margin: "1em 0",
     display: "block",
   },
+  br: {
+    whiteSpace: "pre",
+  },
   mark: {
     backgroundColor: "yellow",
     color: "black",
