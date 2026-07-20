@@ -21,7 +21,7 @@ use crate::{
     node::Node,
     tree::{LayoutResults, RenderNode},
   },
-  resources::font::ResolvedGlyph,
+  resources::glyph::ResolvedGlyph,
   style::{Affine, ComputedStyle, Display, SizingContext},
 };
 

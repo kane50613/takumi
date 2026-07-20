@@ -20,7 +20,7 @@ use crate::{
   mask_index_from_coord, rasterize_layers, release_rasterized_background_tile,
   render::render_node,
   render_mask,
-  resources::font::{FontError, ResolvedGlyph},
+  resources::{font::FontError, glyph::ResolvedGlyph},
   style::{
     Affine, BackgroundClip, BlendMode, BorderStyle, Color, SizedTextDecorationThickness,
     TextDecorationLines, TextDecorationSkipInk,

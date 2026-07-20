@@ -22,7 +22,7 @@ use takumi_core::{
     node::TextData,
     tree::RenderNode,
   },
-  resources::{font::ResolvedGlyph, image::to_data_url},
+  resources::{glyph::ResolvedGlyph, image::to_data_url},
   style::{BackgroundClip, BorderStyle, LineJoin},
 };
 

@@ -11,7 +11,10 @@ use crate::{
   font_style::SizedFontStyle,
   geometry::{AvailableSpace, ComputedLayout, PathCommand, Point, Rect, Size},
   layout::{border::BorderPath, node::Node, tree::RenderNode},
-  resources::font::{FontError, ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},
+  resources::{
+    font::FontError,
+    glyph::{ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},
+  },
   style::{
     Affine, BoxSizing, Color, Float, FontSynthesis, Length, ResolvedVerticalAlign,
     SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk, TextFitMode,
