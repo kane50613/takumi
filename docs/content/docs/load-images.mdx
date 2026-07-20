@@ -51,7 +51,7 @@ const image = await render(element, {
 });
 ```
 
-`allowUrl` only filters the URL string. Redirects and DNS are not inspected; keep a custom `fetch` for a stricter SSRF policy.
+`render()` and `ImageResponse` fetch these URLs from your server, so set an `allowUrl` allowlist whenever user input can influence the markup. The policy is checked on every redirect hop (capped at 5), so an allowed URL can't 3xx its way to an internal address. DNS is not inspected; keep a custom `fetch` for a stricter policy such as resolved-address filtering.
 
 ## Pre-fetched Images
 

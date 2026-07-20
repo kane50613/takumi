@@ -70,6 +70,87 @@ describe("allowUrl policy", () => {
     ).rejects.toThrow(/blocked by allowUrl/);
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  const redirectTo = (location: string) =>
+    new Response(null, { status: 302, headers: { location } });
+
+  const routedFetch = (routes: Record<string, () => Response>) =>
+    mock((url: string) => {
+      const route = routes[url];
+      if (!route) {
+        throw new Error(`unexpected fetch: ${url}`);
+      }
+      return Promise.resolve(route());
+    });
+
+  test("rejects a redirect to a disallowed url without fetching it", async () => {
+    const fetchMock = routedFetch({
+      "https://allowed.example.com/a.png": () => redirectTo("http://169.254.169.254/meta"),
+    });
+
+    await expect(
+      prepareImages({
+        node: tree("https://allowed.example.com/a.png"),
+        fetch: fetchMock,
+        allowUrl: (url) => url.startsWith("https://allowed.example.com/"),
+      }),
+    ).rejects.toThrow(/blocked by allowUrl/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("follows an allowed redirect chain and checks every hop", async () => {
+    const payload = new TextEncoder().encode("pixels");
+    const fetchMock = routedFetch({
+      "https://allowed.example.com/a.png": () => redirectTo("/b.png"),
+      "https://allowed.example.com/b.png": () => new Response(streamOf(payload)),
+    });
+    const checked: string[] = [];
+
+    const images = await prepareImages({
+      node: tree("https://allowed.example.com/a.png"),
+      fetch: fetchMock,
+      allowUrl: (url) => {
+        checked.push(url);
+        return url.startsWith("https://allowed.example.com/");
+      },
+    });
+
+    expect(images.map((image) => new Uint8Array(image.data))).toEqual([payload]);
+    expect(checked).toEqual([
+      "https://allowed.example.com/a.png",
+      "https://allowed.example.com/b.png",
+    ]);
+  });
+
+  test("rejects a redirect chain longer than the hop cap", async () => {
+    const fetchMock = mock((url: string) =>
+      Promise.resolve(redirectTo(`${url.split("?")[0]}?hop=${Math.random()}`)),
+    );
+
+    await expect(
+      prepareImages({
+        node: tree("https://allowed.example.com/loop.png"),
+        fetch: fetchMock,
+        allowUrl: () => true,
+      }),
+    ).rejects.toThrow(/Too many redirects/);
+  });
+
+  test("without allowUrl a redirecting fetch keeps default handling", async () => {
+    const payload = new TextEncoder().encode("pixels");
+    const fetchMock = mock((_url: string, init?: RequestInit) => {
+      expect(init?.redirect).toBeUndefined();
+      return Promise.resolve(new Response(streamOf(payload)));
+    });
+
+    const images = await prepareImages({
+      node: tree("https://anywhere.example.com/a.png"),
+      fetch: fetchMock,
+    });
+
+    expect(images.map((image) => new Uint8Array(image.data))).toEqual([payload]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("default fetch timeout", () => {

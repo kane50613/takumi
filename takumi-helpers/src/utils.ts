@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import type { Node } from "./types";
 
 const defaultFetchTimeout = 5000;
+const maxRedirectHops = 5;
 export const defaultMaxFetchBytes = 32 * 1024 * 1024;
 const cssUrlPattern = /url\(\s*(['"]?)(.*?)\1\s*\)/g;
 
@@ -33,11 +34,37 @@ export async function fetchOk(url: string, options: FetchOptions & { init?: Requ
     (s): s is AbortSignal => s !== undefined,
   );
   const signal = signals.length ? AbortSignal.any(signals) : undefined;
-  const response = await fetchImpl(url, { ...options.init, signal });
+  const init = { ...options.init, signal };
+  const response = options.allowUrl
+    ? await followRedirectsWithPolicy(url, options.allowUrl, fetchImpl, init)
+    : await fetchImpl(url, init);
   if (!response.ok) {
     throw new Error(`HTTP ${response.status} ${response.statusText} fetching ${url}`);
   }
   return response;
+}
+
+/** Follows redirects manually so `allowUrl` is enforced on every hop, not just the first URL. */
+async function followRedirectsWithPolicy(
+  url: string,
+  allowUrl: (url: string) => boolean,
+  fetchImpl: FetchLike,
+  init: RequestInit,
+): Promise<Response> {
+  let current = url;
+  for (let hop = 0; hop < maxRedirectHops; hop++) {
+    const response = await fetchImpl(current, { ...init, redirect: "manual" });
+    const location = response.headers.get("location");
+    if (response.status < 300 || response.status >= 400 || !location) {
+      return response;
+    }
+
+    current = new URL(location, current).toString();
+    if (!allowUrl(current)) {
+      throw new Error(`URL blocked by allowUrl policy: ${current}`);
+    }
+  }
+  throw new Error(`Too many redirects fetching ${url}`);
 }
 
 /** Reads a response body, rejecting once it exceeds `maxBytes` (by content-length or streamed size). */
