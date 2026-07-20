@@ -1,75 +1,91 @@
 core:changelogs:
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: patch\n---\n\n### Ellipsize nowrap text without a break opportunity\n\n`text-overflow: ellipsis` with `white-space: nowrap` only kicked in when the text could wrap, so a single long token was clipped with no ellipsis. Overflow detection now also checks the line's inline advance against the box, matching how Blink truncates any overflowing line at a character boundary.\n"
-    filename: nowrap-ellipsis-unbreakable.md
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: patch\n  cargo:takumi-html:\n    type: patch\n  npm:@takumi-rs/helpers:\n    type: patch\n---\n\n### Honour per-element white-space when collapsing inline text\n\nInline whitespace collapsing read the block's white-space value for every span, so a `white-space: pre` child inside a normal-collapsing parent lost its spaces and line breaks. Each span now collapses against its own value. `<br>` also carries a `white-space: pre` preset, so its line break survives.\n"
+    filename: br-white-space-pre.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: patch\n---\n\n### Drop whitespace between absolute-only block siblings\n\nWhen every element child of a block container was absolutely positioned, the whitespace text nodes from pretty-printed HTML formed an inline formatting context that swallowed the out-of-flow boxes, so none of them rendered. The whitespace drop now also runs when the only in-flow content is whitespace, keeping the absolute children in the layout.\n"
+    filename: abs-only-whitespace-siblings.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: patch\n---\n\n### Serialize `text-fit: none` without its target and limit\n\nThe computed value of `text-fit` kept the target and limit keywords after `none`, so `none per-line 50%` round-tripped verbatim. Chromium drops both, since neither scales anything when the value is `none`. The serializer now stops after `none`.\n"
+    filename: text-fit-none-serialization.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: patch\n---\n\n### Keep whitespace collapse state across empty inline spans\n\nAn empty span with `white-space: pre` reset the cross-span collapse state, so a boundary space next to it could double up or vanish. Empty spans now leave the state untouched, matching Blink's opaque-to-collapsing empty text items.\n"
+    filename: empty-span-collapse-state.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
   - id: npm:@takumi-rs/image-response
     updated: true
-  - id: npm:takumi-template
-    updated: false
-  - id: npm:@takumi-rs/helpers
-    updated: true
   - id: npm:takumi-js
     updated: true
   - id: npm:@takumi-rs/wasm
     updated: true
   - id: npm:docs
     updated: false
+  - id: npm:takumi-template
+    updated: false
   - id: npm:@takumi-rs/core
     updated: true
+  - changelogIds:
+      - br-white-space-pre.md
+    id: npm:@takumi-rs/helpers
+    updated: true
+  - id: npm:example-twitter-images
+    updated: false
+  - id: npm:ffmpeg-keyframe-animation
+    updated: false
+  - id: npm:waku-ssr
+    updated: false
+  - id: npm:example-liquid-glass
+    updated: false
+  - id: npm:svelte
+    updated: false
   - id: npm:example-css-library-integration
     updated: false
   - id: npm:example-satori-html
     updated: false
-  - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-nextjs
     updated: false
   - id: npm:ffplay
     updated: false
   - id: npm:example-tanstack-start
     updated: false
-  - id: npm:example-twitter-images
+  - id: npm:example-cloudflare-workers
     updated: false
-  - id: npm:example-nextjs
-    updated: false
-  - id: npm:example-liquid-glass
-    updated: false
-  - id: npm:waku-ssr
-    updated: false
-  - id: npm:svelte
-    updated: false
-  - id: cargo:takumi
+  - changelogIds:
+      - br-white-space-pre.md
+    id: cargo:takumi-html
     updated: true
-  - id: cargo:takumi-html
+  - changelogIds:
+      - abs-only-whitespace-siblings.md
+      - text-fit-none-serialization.md
+      - empty-span-collapse-state.md
+      - br-white-space-pre.md
+    id: cargo:takumi-core
     updated: true
   - id: cargo:takumi-svg
     updated: true
-  - id: cargo:takumi-raster
+  - id: cargo:takumi
     updated: true
-  - changelogIds:
-      - nowrap-ellipsis-unbreakable.md
-    id: cargo:takumi-core
+  - id: cargo:takumi-raster
     updated: true
 npm:packages:
   - id: npm:takumi
   - id: npm:@takumi-rs/image-response
-  - id: npm:takumi-template
-  - id: npm:@takumi-rs/helpers
   - id: npm:takumi-js
   - id: npm:@takumi-rs/wasm
   - id: npm:docs
+  - id: npm:takumi-template
   - id: npm:@takumi-rs/core
+  - id: npm:@takumi-rs/helpers
+  - id: npm:example-twitter-images
+  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:waku-ssr
+  - id: npm:example-liquid-glass
+  - id: npm:svelte
   - id: npm:example-css-library-integration
   - id: npm:example-satori-html
-  - id: npm:example-cloudflare-workers
-  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-nextjs
   - id: npm:ffplay
   - id: npm:example-tanstack-start
-  - id: npm:example-twitter-images
-  - id: npm:example-nextjs
-  - id: npm:example-liquid-glass
-  - id: npm:waku-ssr
-  - id: npm:svelte
+  - id: npm:example-cloudflare-workers
