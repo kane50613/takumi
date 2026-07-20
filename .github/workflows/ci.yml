@@ -42,6 +42,8 @@ jobs:
 
       - run: bun knip
 
+      - run: bun --filter './takumi-helpers' --filter './takumi-js' --filter './takumi-image-response' typecheck
+
   test-rust:
     name: Rust Test
     runs-on: ubuntu-latest

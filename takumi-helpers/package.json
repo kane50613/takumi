@@ -92,6 +92,7 @@
   },
   "scripts": {
     "build": "tsdown",
+    "typecheck": "tsc --noEmit",
     "publish-lint": "attw --pack . && publint --strict ."
   },
   "devDependencies": {
