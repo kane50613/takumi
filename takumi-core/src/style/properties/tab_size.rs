@@ -20,8 +20,10 @@ impl Default for TabSize {
 }
 
 impl From<f32> for TabSize {
+  /// Sanitizes to the parser's invariant: non-negative and finite (NaN and
+  /// negative become 0, values above the expansion cap clamp to it).
   fn from(spaces: f32) -> Self {
-    Self(spaces)
+    Self(spaces.max(0.0).min(Self::MAX_SPACES as f32))
   }
 }
 
@@ -97,5 +99,16 @@ mod tests {
   #[test]
   fn test_tab_size_spaces_capped() {
     assert_eq!(TabSize(1e9).spaces(), TabSize::MAX_SPACES);
+  }
+
+  #[test]
+  fn test_tab_size_from_sanitizes() {
+    assert_eq!(TabSize::from(-3.0), TabSize(0.0));
+    assert_eq!(TabSize::from(f32::NAN), TabSize(0.0));
+    assert_eq!(
+      TabSize::from(f32::INFINITY),
+      TabSize(TabSize::MAX_SPACES as f32)
+    );
+    assert_eq!(TabSize::from(4.0), TabSize(4.0));
   }
 }
