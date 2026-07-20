@@ -553,7 +553,9 @@ fn decode_webp_scaled(bytes: &[u8], width: u32, height: u32) -> Option<ImageResu
   i32::try_from(width).ok()?;
   i32::try_from(height).ok()?;
 
-  if let Err(error) = check_pixel_budget(native_width, native_height) {
+  if let Err(error) =
+    check_pixel_budget(native_width, native_height).and_then(|()| check_pixel_budget(width, height))
+  {
     return Some(Err(error));
   }
 
@@ -575,6 +577,10 @@ fn decode_webp_into(
     .checked_mul(height as usize)
     .and_then(|pixels| pixels.checked_mul(4))
     .ok_or_else(invalid_buffer_error)?;
+  let stride = i32::try_from(width)
+    .ok()
+    .and_then(|w| w.checked_mul(4))
+    .ok_or_else(invalid_buffer_error)?;
   let mut image_data = vec![0u8; buffer_len];
 
   let mut config =
@@ -588,7 +594,7 @@ fn decode_webp_into(
   config.output.is_external_memory = 1;
   config.output.u.RGBA = WebPRGBABuffer {
     rgba: image_data.as_mut_ptr(),
-    stride: width as i32 * 4,
+    stride,
     size: buffer_len,
   };
 
