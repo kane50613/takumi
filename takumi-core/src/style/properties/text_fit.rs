@@ -107,6 +107,13 @@ declare_enum_from_css_impl!(
 impl ToCss for TextFit {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     self.mode.to_css(dest)?;
+
+    // Matching Chromium's ValueForTextFit: `none` drops the target and limit,
+    // since neither applies when nothing is scaled.
+    if self.mode == TextFitMode::None {
+      return Ok(());
+    }
+
     if self.target != TextFitTarget::Consistent {
       dest.write_char(' ')?;
       self.target.to_css(dest)?;
@@ -167,6 +174,12 @@ mod tests {
       let reparsed = TextFit::from_css_str(&parsed.to_css_string()).unwrap();
       assert_eq!(parsed, reparsed, "failed for {css}");
     }
+  }
+
+  #[test]
+  fn test_text_fit_none_drops_target_and_limit() {
+    let parsed = TextFit::from_css_str("none per-line 50%").unwrap();
+    assert_eq!(parsed.to_css_string(), "none");
   }
 
   #[test]
