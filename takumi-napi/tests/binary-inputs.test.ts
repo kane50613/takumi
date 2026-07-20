@@ -25,6 +25,60 @@ const imageNode = container({
   ],
 });
 
+const recoveryNode = container({ style: { width: 8, height: 8, backgroundColor: "black" } });
+
+const withImageBytes = (data: Uint8Array) =>
+  container({
+    style: { width: 64, height: 64 },
+    children: [image({ src: data, width: 64, height: 64 })],
+  });
+
+// Undecodable image sources are skipped at paint like a browser's broken
+// image, so renders complete instead of rejecting; these cases pin that no
+// input aborts the process and the renderer stays usable afterwards.
+describe("malformed binary inputs", () => {
+  const renderer = new Renderer();
+
+  const expectRecovery = async () => {
+    const recovered = await renderer.render(recoveryNode, { width: 8, height: 8 });
+    expect(recovered).toBeInstanceOf(Buffer);
+  };
+
+  test("corrupt PNG bytes render without crashing", async () => {
+    const corrupt = new Uint8Array(72);
+    corrupt.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    for (let i = 8; i < corrupt.length; i++) {
+      corrupt[i] = (i * 37) % 256;
+    }
+
+    const result = await renderer.render(withImageBytes(corrupt), { width: 64, height: 64 });
+    expect(result).toBeInstanceOf(Buffer);
+    await expectRecovery();
+  });
+
+  test("truncated font rejects", async () => {
+    await expect(renderer.registerFont(fontArrayBuffer.slice(0, 100))).rejects.toThrow();
+    await expectRecovery();
+  });
+
+  test("malformed inline SVG bytes render without crashing", async () => {
+    const bytes = new TextEncoder().encode("<svg garbage");
+
+    const result = await renderer.render(withImageBytes(bytes), { width: 64, height: 64 });
+    expect(result).toBeInstanceOf(Buffer);
+    await expectRecovery();
+  });
+
+  test("truncated GIF bytes render without crashing", async () => {
+    const truncated = new Uint8Array(16);
+    truncated.set(new TextEncoder().encode("GIF89a"));
+
+    const result = await renderer.render(withImageBytes(truncated), { width: 64, height: 64 });
+    expect(result).toBeInstanceOf(Buffer);
+    await expectRecovery();
+  });
+});
+
 describe("binary inputs", () => {
   test("registerFont accepts Buffer, Uint8Array, and ArrayBuffer", async () => {
     const renderer = new Renderer();
