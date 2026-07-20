@@ -220,9 +220,12 @@ jobs:
       - name: Build
         working-directory: takumi-napi
         env:
-          CARGO_UNSTABLE_BUILD_STD: std,panic_abort
+          CARGO_UNSTABLE_BUILD_STD: std
           CARGO_UNSTABLE_BUILD_STD_FEATURES: optimize_for_size
-          RUSTFLAGS: ${{ env.RUSTFLAGS }} -Zunstable-options -Cpanic=immediate-abort
+          # Unwind panics so napi-rs converts panics into catchable JS errors
+          # instead of aborting the host process.
+          CARGO_PROFILE_RELEASE_PANIC: unwind
+          RUSTFLAGS: ${{ env.RUSTFLAGS }} -Zunstable-options
         run: ${{ matrix.settings.build }} && bun build:js
 
       - name: Upload artifact
