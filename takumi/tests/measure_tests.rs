@@ -1795,6 +1795,55 @@ fn test_block_container_drops_whitespace_between_absolute_only_siblings() {
   assert_eq!(with_result, without_result);
 }
 
+#[test]
+fn test_block_container_preserves_pre_whitespace_next_to_absolute_sibling() {
+  let abs = || {
+    Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::position(Position::Absolute))
+        .with(StyleDeclaration::width(Px(40.0)))
+        .with(StyleDeclaration::height(Px(40.0))),
+    )
+  };
+  let parent = Node::container([Node::text("\n\n".to_string()), abs()]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::white_space_collapse(
+        WhiteSpaceCollapse::Preserve,
+      ))
+      .with(StyleDeclaration::width(Px(200.0))),
+  );
+
+  let result = measure(parent, create_measure_viewport());
+
+  assert!(
+    result
+      .children
+      .iter()
+      .any(|child| child.width == 40.0 && child.height == 40.0),
+    "absolute child must stay in the layout"
+  );
+  assert!(
+    result.height > 0.0,
+    "preserved line breaks should keep their line boxes"
+  );
+}
+
+#[test]
+fn test_block_container_drops_whitespace_only_child() {
+  let parent = Node::container([Node::text("\n  ".to_string())]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::width(Px(200.0))),
+  );
+
+  let result = measure(parent, create_measure_viewport());
+
+  assert!(result.runs.is_empty());
+  assert_close(result.height, 0.0);
+}
+
 // https://github.com/kane50613/takumi/issues/711
 #[test]
 fn test_block_container_preserves_whitespace_between_inline_siblings() {
@@ -1834,5 +1883,38 @@ fn test_block_container_preserves_whitespace_between_inline_siblings() {
     with_result.height > without_result.height
       || with_result.children[0] != without_result.children[0],
     "inline-interior whitespace should change layout (preserved space between siblings)"
+  );
+}
+
+// https://github.com/kane50613/takumi/issues/992
+#[test]
+fn test_block_container_keeps_absolute_child_next_to_text() {
+  let abs = || {
+    Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::position(Position::Absolute))
+        .with(StyleDeclaration::width(Px(40.0)))
+        .with(StyleDeclaration::height(Px(40.0))),
+    )
+  };
+  let parent = Node::container([Node::text("hi".to_string()), abs()]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::width(Px(200.0))),
+  );
+
+  let result = measure(parent, create_measure_viewport());
+
+  assert!(
+    result
+      .children
+      .iter()
+      .any(|child| child.width == 40.0 && child.height == 40.0),
+    "absolute child must stay in the layout"
+  );
+  assert!(
+    result.height > 0.0,
+    "text sibling must still produce a line box"
   );
 }
