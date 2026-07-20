@@ -181,7 +181,7 @@ impl ResolvedGlyph {
   /// pixels: `(min_x, min_y, max_x, max_y)`. Curve control points are included,
   /// so the box may slightly overestimate but never undercuts, and the
   /// faux-bold stroke outset is accounted for.
-  pub fn ink_extents(&self) -> Option<(f32, f32, f32, f32)> {
+  pub(crate) fn ink_extents(&self) -> Option<(f32, f32, f32, f32)> {
     match self {
       Self::Bitmap(bitmap) => {
         let placement = bitmap.placement;
