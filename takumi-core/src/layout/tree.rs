@@ -1044,13 +1044,12 @@ impl RenderNode {
       .is_some_and(Node::is_whitespace_only_text)
   }
 
-  // Blink's ComputedStyle::ShouldPreserveBreaks marks pre/pre-line whitespace
-  // as always rendered; only the collapsible modes may be dropped.
+  // Only fully-collapsible whitespace may be dropped. preserve / preserve-spaces
+  // keep their spaces, and preserve-breaks may hold a forced break, so a
+  // whitespace-only node in any of those still renders.
   fn is_collapsible_whitespace_only_text_node(&self) -> bool {
-    matches!(
-      self.context.style.white_space_collapse,
-      WhiteSpaceCollapse::Collapse | WhiteSpaceCollapse::PreserveSpaces
-    ) && self.is_whitespace_only_text_node()
+    self.context.style.white_space_collapse == WhiteSpaceCollapse::Collapse
+      && self.is_whitespace_only_text_node()
   }
 
   /// True if any direct child is an anonymous text item.
@@ -1381,11 +1380,14 @@ impl RenderNode {
             .iter()
             .any(|child| !child.participates_in_inline_formatting_context());
           let has_out_of_flow = children.iter().any(RenderNode::is_out_of_flow);
-          let requires_inline_parent_blockification =
-            finished.context.style.display.is_inline() && has_block;
-          // Out-of-flow boxes cannot live inside the inline layout, so any mix
-          // of inline content and absolute children needs the anonymous block.
-          let needs_anonymous_boxes = has_inline && (has_block || has_out_of_flow);
+          let parent_is_inline = finished.context.style.display.is_inline();
+          let requires_inline_parent_blockification = parent_is_inline && has_block;
+          // A block parent mixing inline content with out-of-flow children wraps
+          // the inline part so the absolute boxes stay as block-level children.
+          // An inline parent keeps its inline formatting context untouched — an
+          // anonymous block there would be dropped by the surrounding line box.
+          let needs_anonymous_boxes =
+            has_inline && (has_block || (!parent_is_inline && has_out_of_flow));
 
           if requires_inline_parent_blockification {
             finished.context.style.display = finished.context.style.display.as_blockified();

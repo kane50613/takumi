@@ -57,6 +57,9 @@ pub(crate) fn apply_white_space_collapse<'a>(
 ) -> Cow<'a, str> {
   match collapse {
     WhiteSpaceCollapse::Preserve => {
+      // A following collapsible span drops its leading space when this span
+      // already ends in whitespace, so carry that state across the mode switch.
+      *previous_collapsible_space = input.chars().next_back().is_some_and(char::is_whitespace);
       *previous_was_line_break = false;
       Cow::Borrowed(input)
     }
@@ -414,6 +417,26 @@ mod tests {
     let left = apply_white_space_collapse(
       "A ",
       WhiteSpaceCollapse::Collapse,
+      &mut previous_collapsible_space,
+      &mut previous_was_line_break,
+    );
+    let right = apply_white_space_collapse(
+      " B",
+      WhiteSpaceCollapse::Collapse,
+      &mut previous_collapsible_space,
+      &mut previous_was_line_break,
+    );
+
+    assert_eq!(format!("{left}{right}"), "A B");
+  }
+
+  #[test]
+  fn test_white_space_collapse_after_preserve_span_drops_leading_space() {
+    let mut previous_collapsible_space = false;
+    let mut previous_was_line_break = false;
+    let left = apply_white_space_collapse(
+      "A ",
+      WhiteSpaceCollapse::Preserve,
       &mut previous_collapsible_space,
       &mut previous_was_line_break,
     );
