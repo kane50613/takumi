@@ -53,10 +53,12 @@ fn empty_rule_blocks_do_not_disturb_the_cascade() {
 fn descendant_selector_matches_after_sibling_subtrees() {
   let plain = Node::container([block("probe")]);
   let outer = Node::container([block("probe")]).with_class_name("outer");
-  let root = Node::container([plain, outer]);
+  let trailing = Node::container([block("probe")]);
+  let root = Node::container([plain, outer, trailing]);
   let result = measure_with_css(root, r#".outer .probe { width: 150px; }"#);
 
   let default_width = result.children[0].children[0].width;
   assert_ne!(default_width, 150.0);
   assert_eq!(result.children[1].children[0].width, 150.0);
+  assert_eq!(result.children[2].children[0].width, default_width);
 }
