@@ -462,7 +462,7 @@ fn render_with_context(
     return Err(Error::InvalidViewport);
   }
 
-  let mut canvas = Canvas::new(root_size);
+  let mut canvas = Canvas::try_new(root_size).ok_or(Error::InvalidViewport)?;
 
   render_node(
     &mut root,
@@ -751,6 +751,36 @@ mod tests {
     let frames = frames_result.unwrap_or_default();
 
     assert!(frames.is_empty());
+  }
+
+  #[test]
+  fn oversized_viewport_errors_instead_of_silent_1x1() {
+    let fonts = Fonts::default();
+    // A width whose row byte length (width * 4) overflows u32, so the backing
+    // pixmap cannot allocate.
+    let options = RenderOptions::builder()
+      .fonts(&fonts)
+      .viewport(Viewport::new((2_000_000_000, 1)))
+      .node(Node::container([]))
+      .build();
+
+    assert!(matches!(
+      render(options),
+      Err(crate::Error::InvalidViewport)
+    ));
+  }
+
+  #[test]
+  fn ordinary_viewport_still_renders() {
+    let fonts = Fonts::default();
+    let options = RenderOptions::builder()
+      .fonts(&fonts)
+      .viewport(Viewport::new((100, 100)))
+      .node(Node::container([]))
+      .build();
+
+    let bitmap = render(options).unwrap();
+    assert_eq!((bitmap.width(), bitmap.height()), (100, 100));
   }
 
   #[test]
