@@ -30,7 +30,7 @@ use crate::{
     image_buffer::ImageBuffer,
     image_decoder::{
       DecodedGifFrame, bitmap_dimensions, decode_bitmap_scaled, decode_gif_frames, decode_image,
-      gif_dimensions, is_gif,
+      gif_dimensions, gif_frame_durations, is_gif,
     },
   },
   style::{ImageScalingAlgorithm, IntrinsicSizing, SizingContext},
@@ -92,8 +92,11 @@ struct SvgIntrinsic {
   ratio: Option<f32>,
 }
 
-/// A lazily decoded animated GIF: only the first frame is decoded up front,
-/// the rest of the stream the first time a render samples past it.
+/// A lazily decoded animated GIF. Only the first frame and the (pixel-free)
+/// per-frame timing are retained; every later frame is decoded on demand at the
+/// size it is drawn and dropped afterwards, so the whole timeline never sits in
+/// memory at once. No cache holds decoded frames — retention stays a single
+/// frame, and the byte budget can account for it exactly.
 #[derive(Debug, Clone)]
 pub struct GifSource {
   inner: Arc<GifInner>,
@@ -105,17 +108,16 @@ struct GifInner {
   width: u32,
   height: u32,
   first: DecodedGifFrame,
-  rest: OnceLock<RestFrames>,
+  timing: OnceLock<GifTiming>,
 }
 
-/// Every frame after the first, decoded in one pass.
+/// Per-frame timing for the whole animation, decoded once without pixels.
 #[derive(Debug)]
-struct RestFrames {
-  frames: Box<[DecodedGifFrame]>,
-  /// Duration of the whole animation, first frame included.
-  total_duration_ms: u64,
-  /// Size the frames were decoded at; `None` means canvas size.
-  target: Option<(u32, u32)>,
+struct GifTiming {
+  /// Millisecond delay of each frame in stream order, first frame included.
+  durations: Box<[u32]>,
+  /// Duration of the whole loop.
+  total_ms: u64,
 }
 
 impl GifSource {
@@ -135,7 +137,7 @@ impl GifSource {
         width,
         height,
         first,
-        rest: OnceLock::new(),
+        timing: OnceLock::new(),
       }),
     })
   }
@@ -145,51 +147,43 @@ impl GifSource {
     (self.inner.width, self.inner.height)
   }
 
-  /// The first caller decides the memoized frame size and filter; renders of
-  /// the same GIF use one draw box in practice, and a single slot is what keeps
-  /// the timeline's memory bounded.
-  fn rest(&self, target: (u32, u32, ImageScalingAlgorithm)) -> &RestFrames {
-    self.inner.rest.get_or_init(|| {
-      let mut frames = Vec::new();
-      let mut total_duration_ms = self.inner.first.duration_ms as u64;
-      let _ = decode_gif_frames(&self.inner.bytes, 1, None, Some(target), |frame| {
-        total_duration_ms += frame.duration_ms as u64;
-        frames.push(frame);
-      });
-      RestFrames {
-        target: frames
-          .first()
-          .map(|frame: &DecodedGifFrame| (frame.buffer.width(), frame.buffer.height())),
-        frames: frames.into(),
-        total_duration_ms,
+  /// Per-frame timing, decoded once (pixel-free) and memoized. Falls back to a
+  /// single-frame loop if the stream can't be re-read.
+  fn timing(&self) -> &GifTiming {
+    self.inner.timing.get_or_init(|| {
+      let durations = gif_frame_durations(&self.inner.bytes)
+        .ok()
+        .filter(|durations| !durations.is_empty())
+        .unwrap_or_else(|| Box::from([self.inner.first.duration_ms]));
+      let total_ms = durations.iter().map(|&duration| duration as u64).sum();
+
+      GifTiming {
+        durations,
+        total_ms,
       }
     })
   }
 
-  /// Index into `rest.frames` for the given playback time, or `None` when the
-  /// time falls on the first frame.
-  fn rest_index_at(&self, rest: &RestFrames, time_ms: u64) -> Option<usize> {
-    if rest.total_duration_ms == 0 {
-      return None;
+  /// Stream index of the frame shown at the given playback time, looping over
+  /// the total duration.
+  fn frame_index_at(&self, timing: &GifTiming, time_ms: u64) -> usize {
+    if timing.total_ms == 0 || timing.durations.len() <= 1 {
+      return 0;
     }
 
-    let mut elapsed_ms = self.inner.first.duration_ms as u64;
-    let target_time = time_ms % rest.total_duration_ms;
-    if target_time < elapsed_ms {
-      return None;
-    }
-
-    for (index, frame) in rest.frames.iter().enumerate() {
-      elapsed_ms += frame.duration_ms as u64;
+    let target_time = time_ms % timing.total_ms;
+    let mut elapsed_ms = 0_u64;
+    for (index, &duration) in timing.durations.iter().enumerate() {
+      elapsed_ms += duration as u64;
       if target_time < elapsed_ms {
-        return Some(index);
+        return index;
       }
     }
 
-    None
+    timing.durations.len() - 1
   }
 
-  /// Shared frame shown at the given playback time, looping over total duration.
+  /// Frame shown at the given playback time, looping over total duration.
   #[cfg(test)]
   fn frame_at_time(&self, time_ms: u64) -> Arc<ImageBuffer> {
     self.frame_at_time_covering(
@@ -200,11 +194,10 @@ impl GifSource {
     )
   }
 
-  /// Shared frame shown at the given playback time, looping over total
-  /// duration. Frames past the first decode scaled to cover a `width` x
-  /// `height` draw box (never upscaled), so the memoized timeline holds
-  /// draw-sized frames; a request larger than the memoized size decodes that
-  /// frame fresh.
+  /// Frame shown at the given playback time, looping over total duration,
+  /// decoded to cover a `width` x `height` draw box (never upscaled). The first
+  /// frame is served from the retained copy; any later frame is decoded fresh
+  /// and not retained.
   pub fn frame_at_time_covering(
     &self,
     time_ms: u64,
@@ -212,50 +205,36 @@ impl GifSource {
     height: u32,
     algorithm: ImageScalingAlgorithm,
   ) -> Arc<ImageBuffer> {
-    let first = &self.inner.first;
-    if time_ms < first.duration_ms as u64 {
-      return first.buffer.clone();
+    let timing = self.timing();
+    let index = self.frame_index_at(timing, time_ms);
+    if index == 0 {
+      return self.inner.first.buffer.clone();
     }
 
-    let requested = cover_target((self.inner.width, self.inner.height), (width, height));
-    let rest = self.rest((requested.0, requested.1, algorithm));
-    let Some(index) = self.rest_index_at(rest, time_ms) else {
-      return first.buffer.clone();
-    };
+    // ponytail: decode-to-index each call — GIF disposal is stateful, so
+    // reaching frame N replays frames 0..N. O(N) per sample, O(1) retained;
+    // fine for a static render (one sample per GIF). A GIF re-encoded to an
+    // animation samples every frame → O(N²); if that path gets hot, cache a
+    // thread-local resumable decode cursor (canvas + position) keyed by GIF id.
+    let (target_width, target_height) =
+      cover_target((self.inner.width, self.inner.height), (width, height));
+    let mut frame = None;
+    let _ = decode_gif_frames(
+      &self.inner.bytes,
+      index,
+      Some(1),
+      Some((target_width, target_height, algorithm)),
+      |decoded| frame = Some(decoded.buffer),
+    );
 
-    let memoized = rest.target.unwrap_or((self.inner.width, self.inner.height));
-    if requested.0 > memoized.0 || requested.1 > memoized.1 {
-      let mut frame = None;
-      let target = (requested.0, requested.1, algorithm);
-      let _ = decode_gif_frames(
-        &self.inner.bytes,
-        index + 1,
-        Some(1),
-        Some(target),
-        |decoded| frame = Some(decoded.buffer),
-      );
-      if let Some(frame) = frame {
-        return frame;
-      }
-    }
-
-    rest.frames[index].buffer.clone()
+    frame.unwrap_or_else(|| self.inner.first.buffer.clone())
   }
 
+  /// Bytes retained for cache budgeting: the encoded stream plus the single
+  /// decoded first frame. Later frames are decoded on demand and dropped, so
+  /// they never count.
   fn decoded_bytes(&self) -> usize {
-    let rest = self.inner.rest.get().map_or(0, |rest| {
-      rest
-        .frames
-        .iter()
-        .map(|frame| frame.buffer.data().len())
-        .sum()
-    });
-    self.inner.first.buffer.data().len() + rest + self.inner.bytes.len()
-  }
-
-  #[cfg(test)]
-  fn decoded_frame_count(&self) -> usize {
-    1 + self.inner.rest.get().map_or(0, |rest| rest.frames.len())
+    self.inner.first.buffer.data().len() + self.inner.bytes.len()
   }
 }
 
@@ -1358,16 +1337,6 @@ mod tests {
   }
 
   #[test]
-  fn gif_static_render_decodes_only_first_frame() {
-    let gif = gif_source(&[(0, 10), (1, 10), (2, 10)]);
-    assert_eq!(gif.decoded_frame_count(), 1);
-
-    let frame = gif.frame_at_time(0);
-    assert_eq!(gif.decoded_frame_count(), 1);
-    assert_eq!(frame.pixel(2, 2), GIF_COLORS[0]);
-  }
-
-  #[test]
   fn gif_source_frame_selection_matches_expected_indices() {
     let durations = [10, 20, 30];
     let gif = gif_source(&[(0, 10), (1, 20), (2, 30)]);
@@ -1377,7 +1346,6 @@ mod tests {
       let expected_color = GIF_COLORS[expected_frame_index(&durations, time_ms)];
       assert_eq!(gif.frame_at_time(time_ms).pixel(2, 2), expected_color);
     }
-    assert_eq!(gif.decoded_frame_count(), 3);
   }
 
   #[test]
@@ -1390,30 +1358,17 @@ mod tests {
   }
 
   #[test]
-  fn gif_source_clone_shares_decoded_state() {
-    let gif = gif_source(&[(0, 10), (1, 10), (2, 10)]);
-    let cloned = gif.clone();
-
-    drop(cloned.frame_at_time(25));
-    assert_eq!(gif.decoded_frame_count(), 3);
-  }
-
-  #[test]
-  fn gif_frames_memoize_at_draw_size() {
+  fn gif_later_frame_decodes_at_draw_size() {
     let gif = gif_source(&[(0, 10), (1, 10), (2, 10)]);
 
     let scaled = gif.frame_at_time_covering(15, 2, 2, ImageScalingAlgorithm::Auto);
     assert_eq!((scaled.width(), scaled.height()), (2, 2));
 
-    let again = gif.frame_at_time_covering(15, 2, 2, ImageScalingAlgorithm::Auto);
-    assert!(Arc::ptr_eq(&scaled, &again));
-
     let smaller = gif.frame_at_time_covering(15, 1, 1, ImageScalingAlgorithm::Auto);
-    assert!(Arc::ptr_eq(&scaled, &smaller));
+    assert_eq!((smaller.width(), smaller.height()), (1, 1));
 
     let larger = gif.frame_at_time_covering(15, 4, 4, ImageScalingAlgorithm::Auto);
     assert_eq!((larger.width(), larger.height()), (4, 4));
-    assert!(!Arc::ptr_eq(&scaled, &larger));
   }
 
   #[test]
@@ -1422,7 +1377,6 @@ mod tests {
 
     let first = gif.frame_at_time_covering(0, 2, 2, ImageScalingAlgorithm::Auto);
     assert_eq!((first.width(), first.height()), (4, 4));
-    assert_eq!(gif.decoded_frame_count(), 1);
   }
 
   #[test]
@@ -1446,9 +1400,8 @@ mod tests {
   }
 
   #[test]
-  fn gif_dimensions_come_from_header_without_full_decode() {
+  fn gif_dimensions_come_from_header() {
     let gif = gif_source(&[(0, 10), (1, 10)]);
     assert_eq!(gif.dimensions(), (4, 4));
-    assert_eq!(gif.decoded_frame_count(), 1);
   }
 }

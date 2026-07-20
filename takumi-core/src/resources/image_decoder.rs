@@ -267,6 +267,39 @@ pub(crate) fn gif_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
   Ok((decoder.width() as u32, decoder.height() as u32))
 }
 
+/// Per-frame delays in milliseconds, in stream order (first frame included),
+/// without decoding any pixels. Uses the same `delay * 10` (min 1ms) rule as
+/// [`decode_gif_frames`], so the durations line up with decoded frames.
+pub(crate) fn gif_frame_durations(bytes: &[u8]) -> ImageResult<Box<[u32]>> {
+  let mut options = DecodeOptions::new();
+  options.skip_frame_decoding(true);
+  let mut decoder = options
+    .read_info(Cursor::new(bytes))
+    .map_err(gif_decode_error)?;
+
+  // Stop at the same cumulative pixel budget as `decode_gif_frames`, so the
+  // timing covers exactly the frames that are actually decodable.
+  let frame_pixels = decoder.width() as u64 * decoder.height() as u64;
+  let mut total_pixels = 0_u64;
+  let mut durations = Vec::new();
+  loop {
+    match decoder.read_next_frame() {
+      Ok(Some(frame)) => {
+        total_pixels += frame_pixels;
+        if total_pixels > MAX_GIF_TOTAL_PIXELS {
+          break;
+        }
+        durations.push((frame.delay as u32 * 10).max(1));
+      }
+      Ok(None) => break,
+      Err(error) if durations.is_empty() => return Err(gif_decode_error(error)),
+      Err(_) => break,
+    }
+  }
+
+  Ok(durations.into())
+}
+
 /// Rows and columns of the rect that fall inside the canvas, plus the rect's
 /// unclamped pixel stride.
 fn clamped_span(rect: Rect<u32>, canvas_width: u32, canvas_height: u32) -> (u32, usize, usize) {
