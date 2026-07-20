@@ -103,7 +103,11 @@ fn test_pseudo_text_attr() {
     .viewport(create_test_viewport())
     .node(root)
     .fonts(&CONTEXT)
-    .stylesheet(StyleSheet::parse(&format!("{SHARED_CSS}{pseudo_css}")).unwrap())
+    .stylesheet(
+      StyleSheet::parse(&format!("{SHARED_CSS}{pseudo_css}"))
+        .unwrap()
+        .into(),
+    )
     .build();
 
   run_fixture_test_with_options(options, "pseudo_text_attr");
@@ -160,7 +164,11 @@ fn test_pseudo_display_image() {
     .node(root)
     .fonts(&CONTEXT)
     .images(TEST_IMAGES.clone())
-    .stylesheet(StyleSheet::parse(&format!("{SHARED_CSS}{pseudo_css}")).unwrap())
+    .stylesheet(
+      StyleSheet::parse(&format!("{SHARED_CSS}{pseudo_css}"))
+        .unwrap()
+        .into(),
+    )
     .build();
 
   run_fixture_test_with_options(options, "pseudo_display_image");

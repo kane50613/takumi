@@ -2373,7 +2373,7 @@ mod tests {
 
   #[test]
   fn lang_pseudo_class_matches_the_nearest_ancestor_or_self_lang_attribute() {
-    use std::rc::Rc;
+    use std::sync::Arc;
 
     use crate::{
       context::RenderContext,
@@ -2398,7 +2398,7 @@ mod tests {
           .viewport(Viewport::default())
           .build(),
       )
-      .stylesheet(Rc::new(stylesheet))
+      .stylesheet(Arc::new(stylesheet))
       .build();
 
     let tree = RenderNode::from_node(

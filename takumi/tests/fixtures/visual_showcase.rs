@@ -30,7 +30,7 @@ fn run_showcase(node: Node, css: &str, fixture_name: &str) {
     .node(node)
     .fonts(&CONTEXT)
     .images(TEST_IMAGES.clone())
-    .stylesheet(StyleSheet::parse(&stylesheet).unwrap())
+    .stylesheet(StyleSheet::parse(&stylesheet).unwrap().into())
     .build();
 
   run_fixture_test_with_options(options, fixture_name);

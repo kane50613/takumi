@@ -20,7 +20,7 @@ pub struct SvgRenderTask {
   pub(crate) state: Arc<RendererState>,
   pub(crate) viewport: Viewport,
   pub(crate) time_ms: u64,
-  pub(crate) stylesheet: StyleSheet,
+  pub(crate) stylesheet: Arc<StyleSheet>,
   pub(crate) images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
   pub(crate) font_families: Option<FontFamily>,
   pub(crate) lang: Option<Lang>,
@@ -33,15 +33,18 @@ impl SvgRenderTask {
     options: SvgRenderOptions,
     state: Arc<RendererState>,
   ) -> Result<Self> {
+    let stylesheet = stylesheet(
+      &state.resource_cache,
+      options.stylesheets,
+      deserialize_keyframes(options.keyframes)?,
+    );
+
     Ok(SvgRenderTask {
       node: Some(node),
       state,
       viewport: Viewport::new((options.width, options.height)),
       time_ms: options.time_ms.unwrap_or_default().max(0) as u64,
-      stylesheet: stylesheet(
-        options.stylesheets,
-        deserialize_keyframes(options.keyframes)?,
-      ),
+      stylesheet,
       images: options
         .images
         .unwrap_or_default()
@@ -76,7 +79,7 @@ impl Task for SvgRenderTask {
 
     let fonts = self.state.fonts.load();
 
-    let images = decode_images(&self.state.image_cache, take(&mut self.images))?;
+    let images = decode_images(&self.state.resource_cache, take(&mut self.images))?;
 
     takumi_svg::render(
       takumi_svg::SvgOptions::builder()

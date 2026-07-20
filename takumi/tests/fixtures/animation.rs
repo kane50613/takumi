@@ -127,7 +127,7 @@ fn keyframe_interpolation_options() -> RenderOptions<'static> {
     .viewport(Viewport::new((800, 400)))
     .node(keyframe_interpolation_node())
     .fonts(&CONTEXT)
-    .stylesheet(stylesheet)
+    .stylesheet(stylesheet.into())
     .build()
 }
 

@@ -20,6 +20,10 @@ extern "C" {
   #[derive(Debug)]
   pub type NodeType;
 
+  /// JavaScript object representing renderer construction options.
+  #[wasm_bindgen(typescript_type = "RendererOptions")]
+  pub type RendererOptionsType;
+
   /// JavaScript object representing render options.
   #[wasm_bindgen(typescript_type = "RenderOptions")]
   pub type RenderOptionsType;
@@ -51,6 +55,15 @@ extern "C" {
   /// JavaScript object representing an animation scene source.
   #[wasm_bindgen(typescript_type = "AnimationScene")]
   pub type AnimationSceneType;
+}
+
+/// Options for constructing a `Renderer`.
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RendererOptions {
+  /// Byte budget shared by every cached resource — decoded images, SVG
+  /// rasters, parsed stylesheets. `0` disables caching. Defaults to 16 MiB.
+  pub cache_max_bytes: Option<u64>,
 }
 
 /// Options for rendering an image.

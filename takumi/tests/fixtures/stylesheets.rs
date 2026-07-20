@@ -72,7 +72,8 @@ fn test_stylesheets() {
           }
         "#,
       )
-      .unwrap(),
+      .unwrap()
+      .into(),
     )
     .build();
 
@@ -118,7 +119,7 @@ fn test_stylesheets_background_multiple_gradients() {
           }
         "#,
       )
-      .unwrap()).build()
+      .unwrap().into()).build()
   };
 
   run_fixture_test_with_options(build_options(), "stylesheets_background_multiple_gradients");

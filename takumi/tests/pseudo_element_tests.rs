@@ -18,7 +18,7 @@ fn measure_with_css(node: Node, css: &str) -> MeasuredNode {
     RenderOptions::builder()
       .viewport(viewport())
       .node(node)
-      .stylesheet(stylesheet)
+      .stylesheet(stylesheet.into())
       .fonts(&CONTEXT)
       .build(),
   )

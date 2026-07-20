@@ -49,7 +49,7 @@ pub struct SvgOptions<'g> {
   pub(crate) images: HashMap<Arc<str>, ImageSource>,
   /// CSS stylesheets to apply before layout.
   #[builder(default)]
-  pub(crate) stylesheet: StyleSheet,
+  pub(crate) stylesheet: Arc<StyleSheet>,
   /// Global animation time in milliseconds.
   #[builder(default = 0)]
   pub(crate) time_ms: u64,

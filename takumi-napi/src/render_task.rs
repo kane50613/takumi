@@ -27,7 +27,7 @@ pub struct RenderTask {
   pub(crate) lossless: Option<bool>,
   pub(crate) dithering: DitheringAlgorithm,
   pub(crate) time_ms: u64,
-  pub(crate) stylesheet: StyleSheet,
+  pub(crate) stylesheet: Arc<StyleSheet>,
   pub(crate) images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
   pub(crate) font_families: Option<FontFamily>,
   pub(crate) lang: Option<Lang>,
@@ -40,6 +40,12 @@ impl RenderTask {
     options: RenderOptions,
     state: Arc<RendererState>,
   ) -> Result<Self> {
+    let stylesheet = stylesheet(
+      &state.resource_cache,
+      options.stylesheets,
+      deserialize_keyframes(options.keyframes)?,
+    );
+
     Ok(RenderTask {
       node: Some(node),
       state,
@@ -55,10 +61,7 @@ impl RenderTask {
       dithering: options.dithering.map(Into::into).unwrap_or_default(),
       time_ms: options.time_ms.unwrap_or_default().max(0) as u64,
       draw_debug_border: options.draw_debug_border.unwrap_or_default(),
-      stylesheet: stylesheet(
-        options.stylesheets,
-        deserialize_keyframes(options.keyframes)?,
-      ),
+      stylesheet,
       images: options
         .images
         .unwrap_or_default()
@@ -95,7 +98,7 @@ impl Task for RenderTask {
 
     let fonts = self.state.fonts.load();
 
-    let initialized_images = decode_images(&self.state.image_cache, take(&mut self.images))?;
+    let initialized_images = decode_images(&self.state.resource_cache, take(&mut self.images))?;
 
     let image = render(
       takumi_raster::RenderOptions::builder()
