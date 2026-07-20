@@ -177,20 +177,20 @@ impl ResolvedOutlineGlyph {
 }
 
 impl ResolvedGlyph {
-  /// Approximate retained size in bytes, for glyph-cache budgeting.
+  /// Approximate retained size in bytes, for glyph-cache budgeting. Element
+  /// sizes are exact; the constant covers map-slot and allocator overhead.
   pub(crate) fn estimated_bytes(&self) -> usize {
     const ENTRY_OVERHEAD: usize = 64;
-    const COMMAND_BYTES: usize = 32;
 
     match self {
       Self::Bitmap(bitmap) => bitmap.image.data().len() + ENTRY_OVERHEAD,
       Self::Outline(ResolvedOutlineGlyph::Plain { paths, .. }) => {
-        paths.len() * COMMAND_BYTES + ENTRY_OVERHEAD
+        paths.len() * size_of::<Command>() + ENTRY_OVERHEAD
       }
       Self::Outline(ResolvedOutlineGlyph::Color { paths, layers, .. }) => {
         let layer_commands: usize = layers.iter().map(|layer| layer.paths.len()).sum();
-        (paths.len() + layer_commands) * COMMAND_BYTES
-          + layers.len() * ENTRY_OVERHEAD
+        (paths.len() + layer_commands) * size_of::<Command>()
+          + layers.len() * size_of::<ResolvedColorLayer>()
           + ENTRY_OVERHEAD
       }
     }

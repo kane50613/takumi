@@ -80,15 +80,17 @@ impl<V> GlyphCache<V> {
 
     let used = USED_BYTES.fetch_add(bytes, Ordering::Relaxed) + bytes;
     if used > max {
-      self.evict_stale();
+      self.evict_stale(used - max);
     }
   }
 
-  /// Drops entries no render touched since the previous one; when everything
-  /// is that fresh, drops the whole map. Only this thread's entries are
+  /// Drops entries no render touched since the previous one; when that frees
+  /// less than `target` bytes, drops arbitrary fresh entries until it is
+  /// covered, so one over-budget render degrades gradually instead of
+  /// flushing everything it just cached. Only this thread's entries are
   /// considered — an idle thread keeps its share until it renders again, so
   /// the ceiling holds even though reclaim is local.
-  fn evict_stale(&mut self) {
+  fn evict_stale(&mut self, target: usize) {
     let cutoff = self.tick.saturating_sub(1);
     let mut freed = 0;
 
@@ -99,8 +101,16 @@ impl<V> GlyphCache<V> {
       }
     });
 
-    if freed == 0 {
-      freed = self.entries.drain().map(|(_, entry)| entry.bytes).sum();
+    if freed < target {
+      let fresh: Vec<u64> = self.entries.keys().copied().collect();
+      for key in fresh {
+        if freed >= target {
+          break;
+        }
+        if let Some(entry) = self.entries.remove(&key) {
+          freed += entry.bytes;
+        }
+      }
     }
 
     USED_BYTES.fetch_sub(freed, Ordering::Relaxed);
@@ -142,7 +152,7 @@ mod tests {
   }
 
   #[test]
-  fn over_budget_with_only_fresh_entries_clears_all() {
+  fn over_budget_with_only_fresh_entries_evicts_just_enough() {
     let _guard = BUDGET_LOCK.lock().unwrap();
     set_glyph_cache_max_bytes(512);
     let mut cache = GlyphCache::default();
@@ -151,8 +161,9 @@ mod tests {
     cache.insert(1, "a", 300);
     cache.insert(2, "b", 300);
 
-    assert!(cache.get(1).is_none());
-    assert!(cache.get(2).is_none());
+    // 88 bytes over budget: dropping either 300-byte entry covers it, the
+    // other survives instead of the whole map flushing.
+    assert!(cache.get(1).is_some() ^ cache.get(2).is_some());
     set_glyph_cache_max_bytes(DEFAULT_GLYPH_CACHE_MAX_BYTES);
   }
 }
