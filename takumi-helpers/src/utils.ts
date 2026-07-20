@@ -59,6 +59,7 @@ async function followRedirectsWithPolicy(
       return response;
     }
 
+    await response.body?.cancel().catch(() => {});
     current = new URL(location, current).toString();
     if (!allowUrl(current)) {
       throw new Error(`URL blocked by allowUrl policy: ${current}`);
