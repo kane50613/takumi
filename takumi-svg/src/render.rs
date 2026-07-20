@@ -75,7 +75,7 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
     )
     .sizing(SizingContext::builder().viewport(viewport).build())
     .images(Rc::new(options.images))
-    .stylesheet(options.stylesheet.into())
+    .stylesheet(options.stylesheet)
     .time_ms(options.time_ms)
     .style({
       Box::new(ComputedStyle {

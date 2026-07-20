@@ -167,7 +167,7 @@ pub fn measure<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
     .fonts(fonts.snapshot_with_fallbacks(font_families.as_ref()))
     .sizing(SizingContext::builder().viewport(viewport).build())
     .images(Rc::new(images))
-    .stylesheet(stylesheet.into())
+    .stylesheet(stylesheet)
     .time_ms(time_ms)
     .draw_debug_border(draw_debug_border)
     .style(Box::new(ComputedStyle {
@@ -413,7 +413,7 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<Bitmap> {
     .fonts(fonts.snapshot_with_fallbacks(font_families.as_ref()))
     .sizing(SizingContext::builder().viewport(viewport).build())
     .images(Rc::new(images))
-    .stylesheet(stylesheet.into())
+    .stylesheet(stylesheet)
     .time_ms(time_ms)
     .draw_debug_border(draw_debug_border)
     .style(Box::new(ComputedStyle {
