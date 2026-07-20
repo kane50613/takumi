@@ -583,7 +583,10 @@ fn background_clip_path(
       rounded.then(|| (border_box_path_data(border, layout.size, x, y), false))
     }
     BackgroundClip::PaddingBox => Some((padding_box_path_data(border, layout, x, y), false)),
-    BackgroundClip::ContentBox => Some((content_box_path_data(border, layout, x, y), false)),
+    BackgroundClip::ContentBox => Some((
+      clip_box_path_data(ClipBox::content_box(*border, layout), x, y),
+      false,
+    )),
     BackgroundClip::BorderArea => {
       // The border ring: the (rounded) border-box with the (rounded) padding box
       // punched out, drawn even-odd so the background shows only under the border.
@@ -595,11 +598,6 @@ fn background_clip_path(
     // full border box.
     _ => rounded.then(|| (border_box_path_data(border, layout.size, x, y), false)),
   }
-}
-
-/// Absolute SVG path `d` for the content-box rounded rectangle.
-fn content_box_path_data(border: &BorderProperties, layout: Layout, x: f32, y: f32) -> String {
-  clip_box_path_data(ClipBox::content_box(*border, layout), x, y)
 }
 
 /// Emits a node's own content — its inline run set, or its replaced image/text —
