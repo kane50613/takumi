@@ -13,85 +13,73 @@ use crate::{
 };
 
 /// Canvas-backed rasterization of [`BorderProperties`].
-pub(crate) trait BorderPainting {
-  fn draw(
-    self,
-    canvas: &mut Canvas,
-    border_box: Size<f32>,
-    transform: Affine,
-    clip_image: Option<PaintSource<'_>>,
-  );
-}
+pub(crate) fn paint_border(
+  properties: BorderProperties,
+  canvas: &mut Canvas,
+  border_box: Size<f32>,
+  transform: Affine,
+  clip_image: Option<PaintSource<'_>>,
+) {
+  if let Some(clip_image) = &clip_image {
+    assert_eq!(
+      (clip_image.width(), clip_image.height()),
+      (border_box.width as u32, border_box.height as u32),
+    );
+  }
 
-impl BorderPainting for BorderProperties {
-  fn draw(
-    self,
-    canvas: &mut Canvas,
-    border_box: Size<f32>,
-    transform: Affine,
-    clip_image: Option<PaintSource<'_>>,
-  ) {
-    if let Some(clip_image) = &clip_image {
-      assert_eq!(
-        (clip_image.width(), clip_image.height()),
-        (border_box.width as u32, border_box.height as u32),
-      );
+  if !properties.has_visible_sides() {
+    return;
+  }
+
+  if properties.draw_uniform_fast_path(canvas, border_box, transform, clip_image) {
+    return;
+  }
+
+  let inverse = if clip_image.is_some() {
+    transform.invert()
+  } else {
+    None
+  };
+  let mut paint = SidePaintContext {
+    canvas,
+    transform,
+    clip_image,
+    inverse,
+  };
+
+  let mut border = properties;
+  border.width = properties.visible_side_widths();
+
+  for (side, style, width, color) in [
+    (
+      BorderSide::Top,
+      border.style.top,
+      border.width.top,
+      border.color.top,
+    ),
+    (
+      BorderSide::Right,
+      border.style.right,
+      border.width.right,
+      border.color.right,
+    ),
+    (
+      BorderSide::Bottom,
+      border.style.bottom,
+      border.width.bottom,
+      border.color.bottom,
+    ),
+    (
+      BorderSide::Left,
+      border.style.left,
+      border.width.left,
+      border.color.left,
+    ),
+  ] {
+    if !BorderProperties::is_side_visible(style, width) {
+      continue;
     }
-
-    if !self.has_visible_sides() {
-      return;
-    }
-
-    if self.draw_uniform_fast_path(canvas, border_box, transform, clip_image) {
-      return;
-    }
-
-    let inverse = if clip_image.is_some() {
-      transform.invert()
-    } else {
-      None
-    };
-    let mut paint = SidePaintContext {
-      canvas,
-      transform,
-      clip_image,
-      inverse,
-    };
-
-    let mut border = self;
-    border.width = self.visible_side_widths();
-
-    for (side, style, width, color) in [
-      (
-        BorderSide::Top,
-        border.style.top,
-        border.width.top,
-        border.color.top,
-      ),
-      (
-        BorderSide::Right,
-        border.style.right,
-        border.width.right,
-        border.color.right,
-      ),
-      (
-        BorderSide::Bottom,
-        border.style.bottom,
-        border.width.bottom,
-        border.color.bottom,
-      ),
-      (
-        BorderSide::Left,
-        border.style.left,
-        border.width.left,
-        border.color.left,
-      ),
-    ] {
-      if !BorderProperties::is_side_visible(style, width) {
-        continue;
-      }
-      border.draw_visible_side(&mut paint, side, border_box, style, color);
-    }
+    border.draw_visible_side(&mut paint, side, border_box, style, color);
   }
 }
 
@@ -653,7 +641,7 @@ mod tests {
     style::{Affine, BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair},
   };
 
-  use super::{BorderPainting, Cap, compute_side_stroke};
+  use super::{Cap, compute_side_stroke, paint_border};
   use crate::Canvas;
 
   fn test_border(style: BorderStyle, width: f32) -> BorderProperties {
@@ -688,7 +676,8 @@ mod tests {
       height: 48,
     });
 
-    test_border(BorderStyle::Solid, 4.0).draw(
+    paint_border(
+      test_border(BorderStyle::Solid, 4.0),
       &mut canvas,
       Size {
         width: 48.0,
@@ -711,7 +700,8 @@ mod tests {
       height: 24,
     });
 
-    test_border(BorderStyle::Hidden, 4.0).draw(
+    paint_border(
+      test_border(BorderStyle::Hidden, 4.0),
       &mut canvas,
       Size {
         width: 24.0,
@@ -734,7 +724,8 @@ mod tests {
       height: 48,
     });
 
-    test_border(BorderStyle::Dashed, 4.0).draw(
+    paint_border(
+      test_border(BorderStyle::Dashed, 4.0),
       &mut canvas,
       Size {
         width: 48.0,
@@ -768,7 +759,8 @@ mod tests {
       height: 48,
     });
 
-    test_border(BorderStyle::Dotted, 4.0).draw(
+    paint_border(
+      test_border(BorderStyle::Dotted, 4.0),
       &mut canvas,
       Size {
         width: 48.0,
@@ -813,7 +805,8 @@ mod tests {
     let mut border = test_border(BorderStyle::Dashed, 0.0);
     border.width.top = 4.0;
 
-    border.draw(
+    paint_border(
+      border,
       &mut canvas,
       Size {
         width: 48.0,
@@ -862,7 +855,8 @@ mod tests {
     let mut border = test_border(BorderStyle::Dotted, 0.0);
     border.width.left = 4.0;
 
-    border.draw(
+    paint_border(
+      border,
       &mut canvas,
       Size {
         width: 48.0,
@@ -911,7 +905,8 @@ mod tests {
     let mut border = test_border(BorderStyle::Solid, 4.0);
     border.style.top = BorderStyle::Hidden;
 
-    border.draw(
+    paint_border(
+      border,
       &mut canvas,
       Size {
         width: 48.0,
@@ -946,7 +941,8 @@ mod tests {
     let mut border = test_border(BorderStyle::Double, 6.0);
     border.style.top = BorderStyle::Hidden;
 
-    border.draw(
+    paint_border(
+      border,
       &mut canvas,
       Size {
         width: 48.0,
@@ -985,7 +981,8 @@ mod tests {
     border.width.right = 8.0;
     border.width.left = 24.0;
 
-    border.draw(
+    paint_border(
+      border,
       &mut canvas,
       Size {
         width: 64.0,
@@ -1018,7 +1015,8 @@ mod tests {
     });
     let border = test_border(BorderStyle::Solid, 40.0);
 
-    border.draw(
+    paint_border(
+      border,
       &mut canvas,
       Size {
         width: 20.0,

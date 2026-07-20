@@ -352,6 +352,41 @@ pub enum PathCommand {
   Close,
 }
 
+/// Push-style sugar over a [`PathCommand`] list, shared by the geometry and
+/// rasterization path builders.
+pub trait PathBuilder {
+  /// Starts a new subpath at the given point.
+  fn move_to(&mut self, point: (f32, f32));
+  /// Draws a line to the given point.
+  fn line_to(&mut self, point: (f32, f32));
+  /// Draws a cubic Bezier curve through the two control points to the end point.
+  fn curve_to(&mut self, p1: (f32, f32), p2: (f32, f32), p3: (f32, f32));
+  /// Closes the current subpath.
+  fn close(&mut self);
+}
+
+impl PathBuilder for Vec<PathCommand> {
+  fn move_to(&mut self, point: (f32, f32)) {
+    self.push(PathCommand::MoveTo(Point::new(point.0, point.1)));
+  }
+
+  fn line_to(&mut self, point: (f32, f32)) {
+    self.push(PathCommand::LineTo(Point::new(point.0, point.1)));
+  }
+
+  fn curve_to(&mut self, p1: (f32, f32), p2: (f32, f32), p3: (f32, f32)) {
+    self.push(PathCommand::CubicTo(
+      Point::new(p1.0, p1.1),
+      Point::new(p2.0, p2.1),
+      Point::new(p3.0, p3.1),
+    ));
+  }
+
+  fn close(&mut self) {
+    self.push(PathCommand::Close);
+  }
+}
+
 /// Transforms a rect's four corners and returns the axis-aligned `(min_x, min_y,
 /// max_x, max_y)` extents, or `None` if any corner is non-finite.
 pub fn transformed_rect_extents(

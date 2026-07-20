@@ -9,10 +9,10 @@ use tiny_skia::{
 };
 
 use crate::{
-  BorderProperties, Command, Fill, PathBuilder, PathData, Placement, RenderContext, Result, Style,
+  BorderProperties, Command, Fill, PathBuilder, Placement, RenderContext, Result, Style,
   build_path,
   canvas::BufferPool,
-  create_mask, fast_div_255, scale_commands,
+  create_mask, fast_div_255, parse_svg_path_segments, push_ellipse, scale_commands,
   style::{
     Affine, Axis, BasicShape, BorderStyle, Color, ComputedStyle, FillRule, ImageScalingAlgorithm,
     Overflow, ShapeRadius, Sides, SizingContext, SpacePair,
@@ -654,7 +654,8 @@ pub(crate) fn render_clip_shape_mask(
         height: shape.position.0.y.to_px(&context.sizing, size.height),
       };
 
-      paths.add_ellipse(
+      push_ellipse(
+        &mut paths,
         (distance.width, distance.height),
         resolve_radius(shape.radius_x, distance, &context.sizing, size.width),
         resolve_radius(shape.radius_y, distance, &context.sizing, size.height),
@@ -680,7 +681,10 @@ pub(crate) fn render_clip_shape_mask(
     BasicShape::Path(shape) => {
       // path() coords are CSS px; scale to device space like the to_px shapes.
       let scale = context.sizing.to_device(1.0);
-      paths.extend(scale_commands(shape.path.as_ref().commands(), scale));
+      paths.extend(scale_commands(
+        parse_svg_path_segments(shape.path.as_ref()).unwrap_or_default(),
+        scale,
+      ));
     }
     _ => {}
   }

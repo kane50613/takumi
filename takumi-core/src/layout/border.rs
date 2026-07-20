@@ -2,7 +2,7 @@ use std::f32::consts::{PI, SQRT_2};
 
 use crate::{
   context::RenderContext,
-  geometry::{PathCommand as Command, Point, Rect, Size},
+  geometry::{PathBuilder, PathCommand as Command, Point, Rect, Size},
   style::{BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair},
 };
 
@@ -17,35 +17,6 @@ pub enum BorderSide {
   Bottom,
   /// Left side.
   Left,
-}
-
-pub(crate) trait BorderPath {
-  fn move_to(&mut self, point: (f32, f32));
-  fn line_to(&mut self, point: (f32, f32));
-  fn curve_to(&mut self, p1: (f32, f32), p2: (f32, f32), p3: (f32, f32));
-  fn close(&mut self);
-}
-
-impl BorderPath for Vec<Command> {
-  fn move_to(&mut self, point: (f32, f32)) {
-    self.push(Command::MoveTo(Point::new(point.0, point.1)));
-  }
-
-  fn line_to(&mut self, point: (f32, f32)) {
-    self.push(Command::LineTo(Point::new(point.0, point.1)));
-  }
-
-  fn curve_to(&mut self, p1: (f32, f32), p2: (f32, f32), p3: (f32, f32)) {
-    self.push(Command::CubicTo(
-      Point::new(p1.0, p1.1),
-      Point::new(p2.0, p2.1),
-      Point::new(p3.0, p3.1),
-    ));
-  }
-
-  fn close(&mut self) {
-    self.push(Command::Close);
-  }
 }
 
 /// Represents the properties of a border, including corner radii and drawing metadata.

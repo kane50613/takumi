@@ -10,10 +10,10 @@ use takumi_core::{
 };
 
 use super::{
-  BackgroundTile, BorderPainting, BorderProperties, Canvas, Fill, PaintSource, RenderContext,
-  SizedFontStyle, SizedShadow, TileLayer, collect_background_layers, draw_image,
-  draw_inset_shadow_to_canvas, draw_outset_shadow, inline_drawing::draw_inline_layout,
-  rasterize_layers, release_rasterized_background_tile,
+  BackgroundTile, BorderProperties, Canvas, Fill, PaintSource, RenderContext, SizedFontStyle,
+  SizedShadow, TileLayer, collect_background_layers, draw_image, draw_inset_shadow_to_canvas,
+  draw_outset_shadow, inline_drawing::draw_inline_layout, paint_border, rasterize_layers,
+  release_rasterized_background_tile,
 };
 use crate::{
   Result,
@@ -240,7 +240,8 @@ pub(crate) fn draw_border(
     None
   };
 
-  BorderProperties::from_context(context, layout.size, layout.border).draw(
+  paint_border(
+    BorderProperties::from_context(context, layout.size, layout.border),
     canvas,
     layout.size,
     context.transform,
@@ -261,7 +262,7 @@ pub(crate) fn draw_outline(
   let outline = outline_geometry(context, layout.size);
   let transform = Affine::translation(-outline.grow, -outline.grow) * context.transform;
 
-  outline.border.draw(canvas, outline.size, transform, None);
+  paint_border(outline.border, canvas, outline.size, transform, None);
 
   Ok(())
 }
