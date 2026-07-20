@@ -1111,35 +1111,19 @@ pub(crate) fn emit_inset_box_shadows(
       continue;
     }
     let fill = Rgba(resolved.color.0);
-    let spread = resolved.spread_radius;
 
-    // The region the shadow leaves uncovered: the rounded border box shrunk by the
-    // spread on every side and shifted by the shadow offset (core geometry, the
-    // same the raster backend uses).
-    let mut hole = *border;
-    hole.expand_by(Rect {
-      top: -spread,
-      right: -spread,
-      bottom: -spread,
-      left: -spread,
-    });
-    let hole_size = Size {
-      width: (size.width - 2.0 * spread).max(0.0),
-      height: (size.height - 2.0 * spread).max(0.0),
-    };
-    let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
-    hole.append_mask_commands(
-      &mut commands,
-      hole_size,
+    // The shadow fills the border box minus the hole it leaves uncovered (shared
+    // core geometry with the raster backend), drawn even-odd.
+    let hole = ClipBox::inset_shadow_hole(
+      *border,
+      size,
+      resolved.spread_radius,
       Point {
-        x: resolved.offset_x + spread,
-        y: resolved.offset_y + spread,
+        x: resolved.offset_x,
+        y: resolved.offset_y,
       },
     );
-    let ring = format!(
-      "{outer}{}",
-      path_data(&commands, [1.0, 0.0, 0.0, 1.0, x, y])
-    );
+    let ring = format!("{outer}{}", clip_box_path_data(hole, x, y));
 
     // Border box minus the hole, drawn even-odd, blurred, and clipped to the
     // rounded border box so the blur stays inside the element.

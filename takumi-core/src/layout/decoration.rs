@@ -66,6 +66,36 @@ impl ClipBox {
       offset: layout.content_box_offset(),
     }
   }
+
+  /// The region an inset `box-shadow` leaves uncovered: the border box shrunk by
+  /// `spread` on every side and shifted by the shadow `offset`. An inset shadow
+  /// fills the border box minus this hole.
+  pub fn inset_shadow_hole(
+    border: BorderProperties,
+    border_box: Size<f32>,
+    spread: f32,
+    offset: Point<f32>,
+  ) -> Self {
+    let mut hole = border;
+    hole.expand_by(Rect {
+      top: -spread,
+      right: -spread,
+      bottom: -spread,
+      left: -spread,
+    });
+
+    Self {
+      border: hole,
+      size: Size {
+        width: (border_box.width - 2.0 * spread).max(0.0),
+        height: (border_box.height - 2.0 * spread).max(0.0),
+      },
+      offset: Point {
+        x: offset.x + spread,
+        y: offset.y + spread,
+      },
+    }
+  }
 }
 
 /// The CSS `outline`: a uniform border ring expanded outward from the border box
