@@ -8,12 +8,14 @@ license = "MIT OR Apache-2.0"
 crate-type = ["cdylib"]
 
 [dependencies]
-takumi-bindings-common = { path = "../takumi-bindings-common" }
 serde-wasm-bindgen.workspace = true
 wasm-bindgen.workspace = true
 base64.workspace = true
 serde_bytes.workspace = true
 js-sys.workspace = true
+
+[dependencies.takumi-bindings-common]
+path = "../takumi-bindings-common"
 
 [dependencies.serde]
 workspace = true

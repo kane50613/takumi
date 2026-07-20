@@ -146,6 +146,9 @@ codegen-units = 1
 [profile.release.package."takumi-wasm"]
 strip = "debuginfo"
 
+[profile.release.package."takumi-bindings-common"]
+opt-level = "z"
+
 [profile.bench]
 debug = true
 strip = "debuginfo"

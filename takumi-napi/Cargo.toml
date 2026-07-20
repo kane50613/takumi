@@ -13,7 +13,9 @@ rayon.workspace = true
 napi.workspace = true
 napi-derive.workspace = true
 arc-swap.workspace = true
-takumi-bindings-common = { path = "../takumi-bindings-common" }
+
+[dependencies.takumi-bindings-common]
+path = "../takumi-bindings-common"
 
 [dependencies.takumi-core]
 path = "../takumi-core"
