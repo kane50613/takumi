@@ -15,7 +15,7 @@ use takumi_core::{
     font::{FontResource, RegisteredFamily},
     image::{ImageCache, ImageSource as LoadedImageSource},
   },
-  style::{FontFamily, KeyframesRule, Lang, StyleSheet},
+  style::{FontFamily, Lang},
   viewport::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
 };
 use takumi_raster::{
@@ -80,14 +80,6 @@ impl Renderer {
 
 #[wasm_bindgen]
 impl Renderer {
-  fn parse_stylesheet(
-    &self,
-    stylesheets: Option<Vec<String>>,
-    keyframes: Vec<KeyframesRule>,
-  ) -> Result<StyleSheet, JsValue> {
-    Ok(stylesheet(stylesheets, keyframes))
-  }
-
   fn images_map(
     &self,
     images: Option<&[ImageSource]>,
@@ -153,8 +145,7 @@ impl Renderer {
     images: HashMap<Arc<str>, LoadedImageSource>,
   ) -> Result<Vec<u8>, JsValue> {
     let dithering = options.dithering.unwrap_or_default();
-    let stylesheet =
-      self.parse_stylesheet(options.stylesheets, options.keyframes.unwrap_or_default())?;
+    let stylesheet = stylesheet(options.stylesheets, options.keyframes.unwrap_or_default());
 
     let lang = options
       .lang
@@ -214,8 +205,7 @@ impl Renderer {
       .unwrap_or_default();
 
     let images = self.images_map(options.images.as_deref())?;
-    let stylesheet =
-      self.parse_stylesheet(options.stylesheets, options.keyframes.unwrap_or_default())?;
+    let stylesheet = stylesheet(options.stylesheets, options.keyframes.unwrap_or_default());
     let state = self.read_state()?;
 
     let lang = options
@@ -259,8 +249,7 @@ impl Renderer {
       .transpose()?;
 
     let images = self.images_map(options.images.as_deref())?;
-    let stylesheet =
-      self.parse_stylesheet(options.stylesheets, options.keyframes.unwrap_or_default())?;
+    let stylesheet = stylesheet(options.stylesheets, options.keyframes.unwrap_or_default());
 
     let state = self.read_state()?;
     let render_options = takumi_raster::RenderOptions::builder()
@@ -355,7 +344,7 @@ impl Renderer {
     let viewport = Viewport::new((width, height))
       .with_device_pixel_ratio(device_pixel_ratio.unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO));
     let draw_debug_border = draw_debug_border.unwrap_or_default();
-    let stylesheet = self.parse_stylesheet(stylesheets, keyframes.unwrap_or_default())?;
+    let stylesheet = stylesheet(stylesheets, keyframes.unwrap_or_default());
     let state = self.read_state()?;
     let scene_options = scenes
       .into_iter()

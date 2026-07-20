@@ -9,12 +9,13 @@ use takumi_core::{
 use takumi_raster::{DitheringAlgorithm, render, write_image};
 
 use crate::{
-  buffer_from_object, map_error, parse_stylesheet,
+  buffer_from_object, map_error,
   renderer::{
     ImageCacheMode, OutputFormat, RenderOptions, RendererState, decode_images,
     deserialize_keyframes,
   },
 };
+use takumi_bindings_common::stylesheet;
 
 pub struct RenderTask {
   pub(crate) draw_debug_border: bool,
@@ -54,10 +55,10 @@ impl RenderTask {
       dithering: options.dithering.map(Into::into).unwrap_or_default(),
       time_ms: options.time_ms.unwrap_or_default().max(0) as u64,
       draw_debug_border: options.draw_debug_border.unwrap_or_default(),
-      stylesheet: parse_stylesheet(
+      stylesheet: stylesheet(
         options.stylesheets,
         deserialize_keyframes(options.keyframes)?,
-      )?,
+      ),
       images: options
         .images
         .unwrap_or_default()

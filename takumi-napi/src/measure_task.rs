@@ -9,12 +9,13 @@ use takumi_core::{
 use takumi_raster::measure;
 
 use crate::{
-  buffer_from_object, map_error, parse_stylesheet,
+  buffer_from_object, map_error,
   renderer::{
     ImageCacheMode, MeasuredNode, RenderOptions, RendererState, decode_images,
     deserialize_keyframes,
   },
 };
+use takumi_bindings_common::stylesheet;
 
 pub struct MeasureTask {
   pub(crate) node: Option<Node>,
@@ -44,10 +45,10 @@ impl MeasureTask {
           .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
       ),
       time_ms: options.time_ms.unwrap_or_default().max(0) as u64,
-      stylesheet: parse_stylesheet(
+      stylesheet: stylesheet(
         options.stylesheets,
         deserialize_keyframes(options.keyframes)?,
-      )?,
+      ),
       images: options
         .images
         .unwrap_or_default()

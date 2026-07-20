@@ -346,11 +346,6 @@ pub struct ImageSource<'ctx> {
   pub cache: Option<ImageCacheMode>,
 }
 
-/// Builds the default font set holding the embedded last-resort fonts.
-fn default_fonts() -> Result<Fonts> {
-  takumi_bindings_common::default_fonts().map_err(map_error)
-}
-
 #[napi]
 impl Renderer {
   /// Creates a new Renderer instance.
@@ -360,7 +355,7 @@ impl Renderer {
 
     Ok(Self {
       state: Arc::new(RendererState {
-        fonts: ArcSwap::from_pointee(default_fonts()?),
+        fonts: ArcSwap::from_pointee(takumi_bindings_common::default_fonts().map_err(map_error)?),
         font_write: Mutex::new(()),
         image_cache: ImageCache::default(),
       }),

@@ -12,12 +12,13 @@ use takumi_raster::{
 };
 
 use crate::{
-  buffer_from_object, deserialize_with_tracing, map_error, parse_stylesheet,
+  buffer_from_object, deserialize_with_tracing, map_error,
   renderer::{
     AnimationOutputFormat, ImageCacheMode, ImageSource, RenderAnimationOptions, RendererState,
     decode_images, deserialize_keyframes, webp_lossless,
   },
 };
+use takumi_bindings_common::stylesheet;
 
 pub struct RenderAnimationTask {
   pub(crate) scenes: Option<Vec<(Node, u32)>>,
@@ -125,7 +126,7 @@ impl Task for RenderAnimationTask {
       };
       let fonts = self.state.fonts.load();
       let initialized_images = decode_images(&self.state.image_cache, take(&mut self.images))?;
-      let stylesheet = parse_stylesheet(take(&mut self.stylesheets), take(&mut self.keyframes))?;
+      let stylesheet = stylesheet(take(&mut self.stylesheets), take(&mut self.keyframes));
       let scene_options = scenes
         .into_iter()
         .map(|(node, duration_ms)| {
