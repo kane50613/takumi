@@ -1360,9 +1360,10 @@ impl RenderNode {
           }
         } else {
           // https://github.com/kane50613/takumi/issues/711
+          // https://github.com/kane50613/takumi/issues/992
           if children
             .iter()
-            .any(|child| !child.participates_in_inline_formatting_context())
+            .any(|child| !child.participates_in_inflow_inline_formatting_context())
           {
             children = drop_block_boundary_whitespace(Vec::from(children)).into_boxed_slice();
           }
