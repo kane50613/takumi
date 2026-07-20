@@ -21,8 +21,9 @@ use serde::{
   Deserialize, Deserializer,
   de::{DeserializeOwned, Error as DeError},
 };
+use takumi_bindings_common::{build_font_resource, stylesheet};
 use takumi_core::{
-  resources::font::{FontOverride, FontResource},
+  resources::font::FontResource,
   style::{FontStyle, FromCssStr, KeyframesRule, StyleSheet},
 };
 
@@ -122,30 +123,17 @@ pub(crate) fn resolve_font_resource<'a>(
   font: &'a FontInput,
   buffer: &'a [u8],
 ) -> Result<FontResource<'a>> {
-  let resource = FontResource::new(buffer).override_info(FontOverride {
-    family_name: font.name.clone().map(Into::into),
-    style: font.style.map(|style| style.0),
-    weight: font.weight.map(|weight| weight as f32),
-    ..Default::default()
-  });
-
-  let resource = match &font.subset_of {
-    Some(logical) => resource.subset_of(logical.clone()),
-    None => resource,
-  };
-
-  let resource = match &font.generic {
-    Some(generic) => resource.generic_family(
-      generic
-        .parse()
-        .map_err(|e| Error::from_reason(format!("Failed to load font: {e}")))?,
-    ),
-    None => resource,
-  };
-
-  resource
-    .into_resolved()
-    .map_err(|e| Error::from_reason(format!("Failed to load font: {e}")))
+  build_font_resource(
+    buffer,
+    font.name.clone(),
+    font.weight.map(|weight| weight as f32),
+    font.style.map(|style| style.0),
+    font.subset_of.clone(),
+    font.generic.clone(),
+  )
+  .map_err(map_error)?
+  .into_resolved()
+  .map_err(map_error)
 }
 
 pub(crate) enum BufferOrSlice<'env> {
@@ -209,7 +197,5 @@ pub(crate) fn parse_stylesheet(
   stylesheets: Option<Vec<String>>,
   keyframes: Vec<KeyframesRule>,
 ) -> Result<StyleSheet> {
-  let mut stylesheet = StyleSheet::parse_owned_list_loosy(stylesheets.unwrap_or_default());
-  stylesheet.extend_keyframes(keyframes);
-  Ok(stylesheet)
+  Ok(stylesheet(stylesheets, keyframes))
 }

@@ -1,0 +1,13 @@
+[package]
+name = "takumi-bindings-common"
+publish = false
+edition = "2024"
+license = "MIT OR Apache-2.0"
+
+[dependencies.takumi-core]
+path = "../takumi-core"
+default-features = false
+features = ["woff2", "woff", "svg"]
+
+[lints]
+workspace = true

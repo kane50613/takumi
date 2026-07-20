@@ -9,9 +9,8 @@ use napi_derive::napi;
 use takumi_core::{
   Fonts,
   layout::node::Node,
-  resources::{
-    font::{FontOverride, FontResource},
-    image::{ImageCache, ImageCacheMode as CoreImageCacheMode, ImageSource as LoadedImageSource},
+  resources::image::{
+    ImageCache, ImageCacheMode as CoreImageCacheMode, ImageSource as LoadedImageSource,
   },
   style::KeyframesRule as CoreKeyframesRule,
 };
@@ -312,7 +311,7 @@ impl OutputFormat {
 
 /// WebP is lossless when explicitly requested or when no `quality` is given.
 pub(crate) fn webp_lossless(quality: Option<u8>, lossless: Option<bool>) -> bool {
-  lossless.unwrap_or(quality.is_none())
+  takumi_bindings_common::webp_lossless(quality, lossless)
 }
 
 /// Cache policy for a decoded image. Defaults to `"auto"`.
@@ -347,29 +346,9 @@ pub struct ImageSource<'ctx> {
   pub cache: Option<ImageCacheMode>,
 }
 
-// Last-resort only: no generic family claim, so `sans-serif` and friends resolve
-// to caller-registered fonts via the fallback bucket instead of this face.
-const EMBEDDED_FONTS: &[(&[u8], &str)] = &[(
-  include_bytes!("../../assets/fonts/geist/geist-latin-wght-300-800.woff2"),
-  "Geist",
-)];
-
 /// Builds the default font set holding the embedded last-resort fonts.
 fn default_fonts() -> Result<Fonts> {
-  let mut fonts = Fonts::default();
-
-  for (font, name) in EMBEDDED_FONTS {
-    let resource = FontResource::new(*font)
-      .override_info(FontOverride {
-        family_name: Some((*name).to_string().into()),
-        ..Default::default()
-      })
-      .last_resort();
-
-    drop(fonts.register(resource).map_err(map_error)?);
-  }
-
-  Ok(fonts)
+  takumi_bindings_common::default_fonts().map_err(map_error)
 }
 
 #[napi]
