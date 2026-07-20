@@ -10,7 +10,7 @@ use crate::{
   composite_mask_source_to_pixmap, draw_outset_shadow,
   layout::inline::ShapedRun,
   pixmap_ref_from_buffer, render_mask,
-  resources::font::{ResolvedColorLayer, ResolvedGlyph},
+  resources::glyph::{ResolvedColorLayer, ResolvedGlyph},
   style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
 };
 
