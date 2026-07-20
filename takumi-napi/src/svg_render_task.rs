@@ -8,11 +8,12 @@ use takumi_core::{
 };
 
 use crate::{
-  buffer_from_object, map_error, parse_stylesheet,
+  buffer_from_object, map_error,
   renderer::{
     ImageCacheMode, RendererState, SvgRenderOptions, decode_images, deserialize_keyframes,
   },
 };
+use takumi_bindings_common::stylesheet;
 
 pub struct SvgRenderTask {
   pub(crate) node: Option<Node>,
@@ -37,10 +38,10 @@ impl SvgRenderTask {
       state,
       viewport: Viewport::new((options.width, options.height)),
       time_ms: options.time_ms.unwrap_or_default().max(0) as u64,
-      stylesheet: parse_stylesheet(
+      stylesheet: stylesheet(
         options.stylesheets,
         deserialize_keyframes(options.keyframes)?,
-      )?,
+      ),
       images: options
         .images
         .unwrap_or_default()

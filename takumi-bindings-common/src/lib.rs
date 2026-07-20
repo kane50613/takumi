@@ -2,9 +2,9 @@
 //!
 //! Both bindings lower raw JS input into a takumi render request the same way —
 //! the embedded fallback fonts, a font resource from optional fields, the
-//! stylesheet, the WebP encoding policy. That lowering lives here so neither
-//! binding re-derives it. Each binding keeps only its platform-specific glue
-//! (JS type coercion, error mapping, threading).
+//! stylesheet. That lowering lives here so neither binding re-derives it. Each
+//! binding keeps only its platform-specific glue (JS type coercion, error
+//! mapping, threading).
 
 use takumi_core::{
   Fonts,
@@ -71,12 +71,4 @@ pub fn stylesheet(stylesheets: Option<Vec<String>>, keyframes: Vec<KeyframesRule
   let mut stylesheet = StyleSheet::parse_owned_list_loosy(stylesheets.unwrap_or_default());
   stylesheet.extend_keyframes(keyframes);
   stylesheet
-}
-
-/// WebP is lossless when explicitly requested, or when no `quality` is given.
-///
-/// The wasm binding does not use this: its `image-webp` backend has no lossy
-/// encoder, so it always encodes lossless regardless of `quality`.
-pub fn webp_lossless(quality: Option<u8>, lossless: Option<bool>) -> bool {
-  lossless.unwrap_or(quality.is_none())
 }

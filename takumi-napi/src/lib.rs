@@ -21,10 +21,10 @@ use serde::{
   Deserialize, Deserializer,
   de::{DeserializeOwned, Error as DeError},
 };
-use takumi_bindings_common::{build_font_resource, stylesheet};
+use takumi_bindings_common::build_font_resource;
 use takumi_core::{
   resources::font::FontResource,
-  style::{FontStyle, FromCssStr, KeyframesRule, StyleSheet},
+  style::{FontStyle, FromCssStr},
 };
 
 /// A font family produced by `registerFont`, with the faces it contains.
@@ -191,11 +191,4 @@ pub(crate) fn deserialize_with_tracing<T: DeserializeOwned>(value: Object) -> Re
 
 pub(crate) fn map_error<E: Display>(err: E) -> napi::Error {
   napi::Error::from_reason(err.to_string())
-}
-
-pub(crate) fn parse_stylesheet(
-  stylesheets: Option<Vec<String>>,
-  keyframes: Vec<KeyframesRule>,
-) -> Result<StyleSheet> {
-  Ok(stylesheet(stylesheets, keyframes))
 }
