@@ -9,7 +9,7 @@ use std::sync::{Arc, OnceLock, Weak};
 
 #[cfg(feature = "svg")]
 use crate::resvg::{
-  apply_filters_to_layer,
+  apply_filters_to_layer, render as render_svg_tree,
   usvg::{Options, Transform, Tree, filters_from_markup},
 };
 use quick_cache::{
@@ -23,7 +23,7 @@ use serde::Deserialize;
 use thiserror::Error;
 #[cfg(feature = "svg")]
 use tiny_skia::Pixmap;
-use xxhash_rust::xxh3::xxh3_64;
+use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 
 use crate::{
   resources::{
@@ -388,7 +388,7 @@ impl SvgSource {
     let sx = width as f32 / original_size.width();
     let sy = height as f32 / original_size.height();
 
-    crate::resvg::render(
+    render_svg_tree(
       &self.tree,
       Transform::from_scale(sx, sy),
       &mut pixmap.as_mut(),
@@ -965,8 +965,6 @@ impl ResourceCache {
   /// Returns the parsed sheet for `sources`, parsing on a miss. Keyed by the
   /// source text, so a server re-sending the same CSS parses it once.
   pub fn get_or_parse_stylesheet(&self, sources: Vec<String>) -> Arc<StyleSheet> {
-    use xxhash_rust::xxh3::Xxh3;
-
     let mut hasher = Xxh3::new();
     for source in &sources {
       hasher.update(source.as_bytes());
