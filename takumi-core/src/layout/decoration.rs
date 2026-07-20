@@ -25,15 +25,6 @@ pub struct ClipBox {
 }
 
 impl ClipBox {
-  /// The full border box: the border geometry as-is.
-  pub fn border_box(border: BorderProperties, layout: Layout) -> Self {
-    Self {
-      border,
-      size: layout.size,
-      offset: Point::ZERO,
-    }
-  }
-
   /// The padding box: the border box inset by the border widths, with inner
   /// radii.
   pub fn padding_box(border: BorderProperties, layout: Layout) -> Self {
