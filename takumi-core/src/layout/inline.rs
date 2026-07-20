@@ -9,8 +9,8 @@ use skrifa::{FontRef, MetadataProvider};
 use crate::{
   context::RenderContext,
   font_style::SizedFontStyle,
-  geometry::{AvailableSpace, ComputedLayout, PathCommand, Point, Rect, Size},
-  layout::{border::BorderPath, node::Node, tree::RenderNode},
+  geometry::{AvailableSpace, ComputedLayout, PathBuilder, PathCommand, Point, Rect, Size},
+  layout::{node::Node, tree::RenderNode},
   resources::{
     font::FontError,
     glyph::{ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},

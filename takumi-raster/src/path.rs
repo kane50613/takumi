@@ -221,51 +221,28 @@ fn from_tiny(segment: TinyPathSegment) -> Command {
   }
 }
 
-pub(crate) trait PathBuilder {
-  fn move_to(&mut self, point: (f32, f32));
-  fn line_to(&mut self, point: (f32, f32));
-  fn close(&mut self);
-  fn add_ellipse(&mut self, center: (f32, f32), radius_x: f32, radius_y: f32);
-}
+pub(crate) use takumi_core::geometry::PathBuilder;
 
-impl PathBuilder for Vec<Command> {
-  fn move_to(&mut self, point: (f32, f32)) {
-    self.push(Command::MoveTo(Point::new(point.0, point.1)));
-  }
+/// Appends an axis-aligned ellipse outline to `commands`.
+pub(crate) fn push_ellipse(
+  commands: &mut Vec<Command>,
+  center: (f32, f32),
+  radius_x: f32,
+  radius_y: f32,
+) {
+  let Some(rect) = TinyRect::from_ltrb(
+    center.0 - radius_x,
+    center.1 - radius_y,
+    center.0 + radius_x,
+    center.1 + radius_y,
+  ) else {
+    return;
+  };
 
-  fn line_to(&mut self, point: (f32, f32)) {
-    self.push(Command::LineTo(Point::new(point.0, point.1)));
-  }
-
-  fn close(&mut self) {
-    self.push(Command::Close);
-  }
-
-  fn add_ellipse(&mut self, center: (f32, f32), radius_x: f32, radius_y: f32) {
-    let Some(rect) = TinyRect::from_ltrb(
-      center.0 - radius_x,
-      center.1 - radius_y,
-      center.0 + radius_x,
-      center.1 + radius_y,
-    ) else {
-      return;
-    };
-
-    let mut builder = TinyPathBuilder::new();
-    builder.push_oval(rect);
-    if let Some(path) = builder.finish() {
-      self.extend(path.segments().map(from_tiny));
-    }
-  }
-}
-
-pub(crate) trait PathData {
-  fn commands(&self) -> Vec<Command>;
-}
-
-impl PathData for str {
-  fn commands(&self) -> Vec<Command> {
-    parse_svg_path_segments(self).unwrap_or_default()
+  let mut builder = TinyPathBuilder::new();
+  builder.push_oval(rect);
+  if let Some(path) = builder.finish() {
+    commands.extend(path.segments().map(from_tiny));
   }
 }
 
@@ -303,7 +280,7 @@ pub(crate) fn build_path(commands: &[Command]) -> Option<TinyPath> {
   builder.finish()
 }
 
-fn parse_svg_path_segments(input: &str) -> Option<Vec<Command>> {
+pub(crate) fn parse_svg_path_segments(input: &str) -> Option<Vec<Command>> {
   let mut commands = Vec::new();
 
   for segment in SimplifyingPathParser::from(input) {
