@@ -28,19 +28,19 @@ runs:
   using: composite
   steps:
     - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@master
+      uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master 2026-07
       with:
         toolchain: ${{ inputs.toolchain }}
         components: ${{ inputs.components }}
         targets: ${{ inputs.targets }}
 
     - name: Rust Cache
-      uses: Swatinem/rust-cache@v2
+      uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       with:
         prefix-key: rust-${{ inputs.stage }}
 
     - name: Install cargo-binstall
       if: ${{ inputs.binstall }}
-      uses: taiki-e/install-action@v2
+      uses: taiki-e/install-action@a6b2e2dcd845ddd7f509ce4f3ed3d922b80cc5d9 # v2.84.0
       with:
         tool: ${{ inputs.binstall }}
