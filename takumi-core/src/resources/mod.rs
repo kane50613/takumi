@@ -2,6 +2,7 @@
 pub mod font;
 /// Glyph rasterization: shaped glyph ids to bitmaps or vector outlines.
 pub mod glyph;
+pub mod glyph_cache;
 /// Image state and resource management
 pub mod image;
 /// Backend-agnostic decoded-image buffer
