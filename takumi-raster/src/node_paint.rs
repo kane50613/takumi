@@ -13,7 +13,6 @@ use super::{
   BackgroundTile, BorderProperties, Canvas, Fill, PaintSource, RenderContext, SizedFontStyle,
   SizedShadow, TileLayer, collect_background_layers, draw_image, draw_inset_shadow_to_canvas,
   draw_outset_shadow, inline_drawing::draw_inline_layout, paint_border, rasterize_layers,
-  release_rasterized_background_tile,
 };
 use crate::{
   Result,
@@ -110,7 +109,7 @@ pub(crate) fn draw_background(
 
   match context.style.background_clip {
     BackgroundClip::BorderBox => {
-      let layers = collect_background_layers(context, layout, &mut canvas.buffer_pool)?;
+      let layers = collect_background_layers(context, layout)?;
 
       if border_radius.is_zero() {
         for tile in layers {
@@ -155,7 +154,6 @@ pub(crate) fn draw_background(
         context,
         BorderProperties::default(),
         Affine::IDENTITY,
-        &mut canvas.buffer_pool,
       )? {
         canvas.overlay_image(
           &tile,
@@ -164,8 +162,6 @@ pub(crate) fn draw_background(
           context.style.image_rendering,
           BlendMode::Normal,
         );
-
-        release_rasterized_background_tile(tile, &mut canvas.buffer_pool);
       }
     }
     BackgroundClip::PaddingBox => {
@@ -198,7 +194,7 @@ fn draw_clipped_background(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  let layers = collect_background_layers(context, layout, &mut canvas.buffer_pool)?;
+  let layers = collect_background_layers(context, layout)?;
 
   if let Some(tile) = rasterize_layers(
     layers,
@@ -206,7 +202,6 @@ fn draw_clipped_background(
     context,
     clip.border,
     Affine::translation(-clip.offset.x, -clip.offset.y),
-    &mut canvas.buffer_pool,
   )? {
     canvas.overlay_image(
       &tile,
@@ -215,8 +210,6 @@ fn draw_clipped_background(
       context.style.image_rendering,
       BlendMode::Normal,
     );
-
-    release_rasterized_background_tile(tile, &mut canvas.buffer_pool);
   }
 
   Ok(())
@@ -229,12 +222,11 @@ pub(crate) fn draw_border(
 ) -> Result<()> {
   let clip_image = if context.style.background_clip == BackgroundClip::BorderArea {
     rasterize_layers(
-      collect_background_layers(context, layout, &mut canvas.buffer_pool)?,
+      collect_background_layers(context, layout)?,
       layout.size.map(|x| x as u32),
       context,
       BorderProperties::default(),
       Affine::IDENTITY,
-      &mut canvas.buffer_pool,
     )?
   } else {
     None
@@ -248,9 +240,6 @@ pub(crate) fn draw_border(
     clip_image.as_ref().map(PaintSource::from),
   );
 
-  if let Some(tile) = clip_image {
-    release_rasterized_background_tile(tile, &mut canvas.buffer_pool);
-  }
   Ok(())
 }
 

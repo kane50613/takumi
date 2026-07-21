@@ -157,12 +157,7 @@ impl BorderRasterization for BorderProperties {
       border.width = self.visible_side_widths();
       let mut paths = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
       border.append_border_ring_commands(&mut paths, border_box);
-      let (mask, placement) = render_mask(
-        &paths,
-        Some(transform),
-        Some(Fill::EvenOdd.into()),
-        &mut canvas.buffer_pool,
-      );
+      let (mask, placement) = render_mask(&paths, Some(transform), Some(Fill::EvenOdd.into()));
 
       paint_mask(
         canvas,
@@ -173,7 +168,6 @@ impl BorderRasterization for BorderProperties {
         transform,
         self.image_rendering,
       );
-      canvas.buffer_pool.release(mask);
       return true;
     }
 
@@ -299,12 +293,7 @@ impl BorderRasterization for BorderProperties {
       rect_offset(inset),
     );
 
-    let (mask, placement) = render_mask(
-      &paths,
-      Some(transform),
-      Some(Fill::EvenOdd.into()),
-      &mut canvas.buffer_pool,
-    );
+    let (mask, placement) = render_mask(&paths, Some(transform), Some(Fill::EvenOdd.into()));
     paint_mask(
       canvas,
       &mask,
@@ -314,7 +303,6 @@ impl BorderRasterization for BorderProperties {
       transform,
       self.image_rendering,
     );
-    canvas.buffer_pool.release(mask);
   }
 
   fn draw_uniform_pattern(
@@ -345,12 +333,7 @@ impl BorderRasterization for BorderProperties {
 
     let stroke = compute_side_stroke(width, style, perimeter, true);
 
-    let (mask, placement) = render_mask(
-      &paths,
-      Some(transform),
-      Some(Style::Stroke(stroke)),
-      &mut canvas.buffer_pool,
-    );
+    let (mask, placement) = render_mask(&paths, Some(transform), Some(Style::Stroke(stroke)));
 
     paint_mask(
       canvas,
@@ -361,7 +344,6 @@ impl BorderRasterization for BorderProperties {
       transform,
       self.image_rendering,
     );
-    canvas.buffer_pool.release(mask);
   }
 
   fn draw_side_band(
@@ -390,12 +372,8 @@ impl BorderRasterization for BorderProperties {
     if border.is_zero() {
       let mut paths = Vec::with_capacity(5);
       border.append_side_polygon_commands_at(side, &mut paths, band_box, offset);
-      let (mask, placement) = render_mask(
-        &paths,
-        Some(paint.transform),
-        Some(Fill::NonZero.into()),
-        &mut paint.canvas.buffer_pool,
-      );
+      let (mask, placement) =
+        render_mask(&paths, Some(paint.transform), Some(Fill::NonZero.into()));
       paint_mask_with_inverse(
         paint.canvas,
         &mask,
@@ -405,7 +383,6 @@ impl BorderRasterization for BorderProperties {
         paint.inverse,
         self.image_rendering,
       );
-      paint.canvas.buffer_pool.release(mask);
       return;
     }
 
@@ -415,7 +392,6 @@ impl BorderRasterization for BorderProperties {
       &ring_paths,
       Some(paint.transform),
       Some(Fill::EvenOdd.into()),
-      &mut paint.canvas.buffer_pool,
     );
 
     if !ring_mask.is_empty() {
@@ -425,7 +401,6 @@ impl BorderRasterization for BorderProperties {
         &clip_paths,
         Some(paint.transform),
         Some(Fill::NonZero.into()),
-        &mut paint.canvas.buffer_pool,
       );
 
       if let Some((mask, placement)) =
@@ -441,9 +416,7 @@ impl BorderRasterization for BorderProperties {
           self.image_rendering,
         );
       }
-      paint.canvas.buffer_pool.release(clip_mask);
     }
-    paint.canvas.buffer_pool.release(ring_mask);
   }
 
   fn draw_side_pattern_border(
@@ -469,12 +442,8 @@ impl BorderRasterization for BorderProperties {
     }
 
     let stroke = compute_side_stroke(line.width, style, line.end - line.start, false);
-    let (pattern_mask, pattern_placement) = render_mask(
-      &path,
-      Some(paint.transform),
-      Some(Style::Stroke(stroke)),
-      &mut paint.canvas.buffer_pool,
-    );
+    let (pattern_mask, pattern_placement) =
+      render_mask(&path, Some(paint.transform), Some(Style::Stroke(stroke)));
 
     if !pattern_mask.is_empty() {
       let mut ring_path = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
@@ -483,7 +452,6 @@ impl BorderRasterization for BorderProperties {
         &ring_path,
         Some(paint.transform),
         Some(Fill::EvenOdd.into()),
-        &mut paint.canvas.buffer_pool,
       );
 
       let mut clip_path = Vec::with_capacity(5);
@@ -492,7 +460,6 @@ impl BorderRasterization for BorderProperties {
         &clip_path,
         Some(paint.transform),
         Some(Fill::NonZero.into()),
-        &mut paint.canvas.buffer_pool,
       );
 
       if !ring_mask.is_empty()
@@ -511,10 +478,7 @@ impl BorderRasterization for BorderProperties {
           self.image_rendering,
         );
       }
-      paint.canvas.buffer_pool.release(clip_mask);
-      paint.canvas.buffer_pool.release(ring_mask);
     }
-    paint.canvas.buffer_pool.release(pattern_mask);
   }
 }
 

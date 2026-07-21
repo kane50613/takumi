@@ -17,7 +17,7 @@ use crate::{
     },
     tree::LayoutTree,
   },
-  mask_index_from_coord, rasterize_layers, release_rasterized_background_tile,
+  mask_index_from_coord, rasterize_layers,
   render::render_node,
   render_mask,
   resources::{font::FontError, glyph::ResolvedGlyph},
@@ -98,7 +98,6 @@ struct GlyphRunContentOptions<'a> {
 }
 
 fn build_glyph_bounds_cache(
-  canvas: &mut Canvas,
   resolved_glyphs: &HashMap<u32, ResolvedGlyph>,
 ) -> HashMap<u32, GlyphSkipInkData> {
   let mut bounds = HashMap::with_capacity(resolved_glyphs.len());
@@ -120,13 +119,13 @@ fn build_glyph_bounds_cache(
         },
       },
       ResolvedGlyph::Outline(outline) => {
-        let (mask, placement) = render_mask(outline.paths(), None, None, &mut canvas.buffer_pool);
+        let (mask, placement) = render_mask(outline.paths(), None, None);
 
         if placement.width == 0 || placement.height == 0 {
           continue;
         }
 
-        let data = GlyphSkipInkData {
+        GlyphSkipInkData {
           bounds: GlyphLocalBounds {
             left: placement.left as f32,
             top: placement.top as f32,
@@ -134,10 +133,8 @@ fn build_glyph_bounds_cache(
           },
           width: placement.width,
           height: placement.height,
-          alpha: mask.to_vec(),
-        };
-        canvas.buffer_pool.release(mask);
-        data
+          alpha: mask,
+        }
       }
     };
 
@@ -318,7 +315,7 @@ fn draw_glyph_run_under_overline(
     if options.transform.only_translation()
       && brush.decoration_skip_ink != TextDecorationSkipInk::None
     {
-      let glyph_bounds_cache = build_glyph_bounds_cache(canvas, resolved_glyphs);
+      let glyph_bounds_cache = build_glyph_bounds_cache(resolved_glyphs);
       draw_underline_with_skip_ink(
         canvas,
         glyph_run,
@@ -459,15 +456,8 @@ fn draw_outline_island_content(
     | BorderStyle::Outset => return,
     _ => {}
   }
-  let (mask, placement) = render_mask(
-    &path,
-    Some(transform),
-    Some(stroke.into()),
-    &mut canvas.buffer_pool,
-  );
+  let (mask, placement) = render_mask(&path, Some(transform), Some(stroke.into()));
   canvas.draw_mask(&mask, placement, style.outline_color, BlendMode::Normal);
-
-  canvas.buffer_pool.release(mask);
 }
 
 fn draw_merged_outline_rects(
@@ -648,7 +638,7 @@ pub(crate) fn draw_inline_layout(
   let need_line_through = decoration_mask.contains(TextDecorationLines::LINE_THROUGH);
 
   let clip_image = if context.style.background_clip == BackgroundClip::Text {
-    let layers = collect_background_layers(context, layout, &mut canvas.buffer_pool)?;
+    let layers = collect_background_layers(context, layout)?;
 
     rasterize_layers(
       layers,
@@ -656,7 +646,6 @@ pub(crate) fn draw_inline_layout(
       context,
       BorderProperties::default(),
       Affine::IDENTITY,
-      &mut canvas.buffer_pool,
     )?
   } else {
     None
@@ -722,10 +711,6 @@ pub(crate) fn draw_inline_layout(
         draw_glyph_run_line_through(&run.glyph_run, canvas, opts)
       })?;
     }
-  }
-
-  if let Some(tile) = clip_image {
-    release_rasterized_background_tile(tile, &mut canvas.buffer_pool);
   }
 
   Ok(inline_boxes)

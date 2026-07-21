@@ -83,17 +83,14 @@ pub(crate) fn try_draw_image_with_tiny_skia(
   let resolved_mask = target.resolve_combined_mask();
   let combined_mask = resolved_mask.as_deref();
 
-  let drawn = image
-    .with_pixmap_ref(target.buffer_pool, |source_pixmap| {
+  image
+    .with_pixmap_ref(|source_pixmap| {
       target
         .pixmap
         .draw_pixmap(0, 0, source_pixmap, &paint, transform.into(), combined_mask);
       true
     })
-    .unwrap_or(false);
-
-  target.release_resolved_mask(resolved_mask);
-  drawn
+    .unwrap_or(false)
 }
 
 pub(crate) fn try_fill_color_with_tiny_skia(
@@ -122,7 +119,6 @@ pub(crate) fn try_fill_color_with_tiny_skia(
     combined_mask,
   );
 
-  target.release_resolved_mask(resolved_mask);
   true
 }
 
@@ -140,8 +136,8 @@ pub(crate) fn try_fill_image_path_with_tiny_skia(
   let resolved_mask = target.resolve_combined_mask();
   let combined_mask = resolved_mask.as_deref();
 
-  let filled = image
-    .with_pixmap_ref(target.buffer_pool, |source_pixmap| {
+  image
+    .with_pixmap_ref(|source_pixmap| {
       let paint = TinyPaint {
         shader: TinyPattern::new(
           source_pixmap,
@@ -165,10 +161,7 @@ pub(crate) fn try_fill_image_path_with_tiny_skia(
 
       true
     })
-    .unwrap_or(false);
-
-  target.release_resolved_mask(resolved_mask);
-  filled
+    .unwrap_or(false)
 }
 
 fn build_border_path(border: BorderProperties, size: Size<u32>) -> Option<TinyPath> {
