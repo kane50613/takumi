@@ -6,9 +6,10 @@ use tiny_skia::PixmapRef;
 
 pub(crate) use crate::shadow::SizedShadow;
 use crate::{
-  BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, Command, Fill, Placement, Result,
+  BlurFormat, BlurType, BorderProperties, Canvas, Command, Fill, Placement, Result,
   SamplingOptions, Style, apply_blur, attenuate_alpha_by_mask, fast_div_255, render_mask,
   style::{Affine, BlendMode, ImageScalingAlgorithm},
+  uninit_buffer,
 };
 
 /// Shadow buffers above this pixel count are skipped rather than allocated.
@@ -30,15 +31,13 @@ pub(crate) fn draw_outset_shadow(
   style: Style,
   cutout_paths: Option<&[Command]>,
 ) -> Result<()> {
-  let (mask, mut placement) =
-    render_mask(paths, Some(transform), Some(style), &mut canvas.buffer_pool);
+  let (mask, mut placement) = render_mask(paths, Some(transform), Some(style));
 
   placement.left += shadow.offset_x as i32;
   placement.top += shadow.offset_y as i32;
 
   if shadow.blur_radius <= 0.0 && cutout_paths.is_none() {
     canvas.draw_mask(&mask, placement, shadow.color, BlendMode::Normal);
-    canvas.buffer_pool.release(mask);
     return Ok(());
   }
 
@@ -52,10 +51,9 @@ pub(crate) fn draw_outset_shadow(
   let shadow_width = placement.width.saturating_add(total_padding);
   let shadow_height = placement.height.saturating_add(total_padding);
   let Some(area) = checked_shadow_area(shadow_width, shadow_height) else {
-    canvas.buffer_pool.release(mask);
     return Ok(());
   };
-  let mut shadow_alpha = canvas.buffer_pool.acquire(area);
+  let mut shadow_alpha = vec![0; area];
 
   let padding = blur_padding as u32;
   for y in 0..placement.height {
@@ -64,7 +62,6 @@ pub(crate) fn draw_outset_shadow(
     shadow_alpha[dst_row..dst_row + placement.width as usize]
       .copy_from_slice(&mask[src_row..src_row + placement.width as usize]);
   }
-  canvas.buffer_pool.release(mask);
 
   apply_blur(
     BlurFormat::Alpha {
@@ -74,19 +71,14 @@ pub(crate) fn draw_outset_shadow(
     },
     shadow.blur_radius,
     BlurType::Shadow,
-    &mut canvas.buffer_pool,
   )?;
 
   let img_origin_x = placement.left as f32 - blur_padding;
   let img_origin_y = placement.top as f32 - blur_padding;
 
   if let Some(cutout_paths) = cutout_paths {
-    let (erase_mask, erase_placement) = render_mask(
-      cutout_paths,
-      Some(transform),
-      Some(Fill::NonZero.into()),
-      &mut canvas.buffer_pool,
-    );
+    let (erase_mask, erase_placement) =
+      render_mask(cutout_paths, Some(transform), Some(Fill::NonZero.into()));
 
     if !erase_mask.is_empty() {
       let shadow_placement = Placement {
@@ -102,7 +94,6 @@ pub(crate) fn draw_outset_shadow(
         erase_placement,
       );
     }
-    canvas.buffer_pool.release(erase_mask);
   }
 
   canvas.draw_mask(
@@ -116,7 +107,6 @@ pub(crate) fn draw_outset_shadow(
     shadow.color,
     BlendMode::Normal,
   );
-  canvas.buffer_pool.release(shadow_alpha);
   Ok(())
 }
 
@@ -127,8 +117,7 @@ pub(crate) fn draw_inset_shadow_to_canvas(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  let (data, width, height) =
-    draw_inset_shadow(shadow, border_radius, layout.size, &mut canvas.buffer_pool)?;
+  let (data, width, height) = draw_inset_shadow(shadow, border_radius, layout.size)?;
 
   if let Some(source) = PixmapRef::from_bytes(&data, width, height) {
     canvas.overlay_sampled_pixmap(
@@ -143,7 +132,6 @@ pub(crate) fn draw_inset_shadow_to_canvas(
       BlendMode::Normal,
     );
   }
-  canvas.buffer_pool.release(data);
 
   Ok(())
 }
@@ -152,13 +140,11 @@ pub(crate) fn draw_inset_shadow(
   shadow: &SizedShadow,
   border: BorderProperties,
   border_box: Size<f32>,
-  buffer_pool: &mut BufferPool,
 ) -> Result<(Vec<u8>, u32, u32)> {
   let width = border_box.width as u32;
   let height = border_box.height as u32;
   let [red, green, blue, alpha] = shadow.color.0;
-  let mut shadow_alpha = buffer_pool.acquire_dirty((width * height) as usize);
-  shadow_alpha.fill(alpha);
+  let mut shadow_alpha = vec![alpha; (width * height) as usize];
 
   let hole = ClipBox::inset_shadow_hole(
     border,
@@ -175,7 +161,7 @@ pub(crate) fn draw_inset_shadow(
     .border
     .append_mask_commands(&mut paths, hole.size, hole.offset);
 
-  let (mask, placement) = render_mask(&paths, None, Some(Fill::NonZero.into()), buffer_pool);
+  let (mask, placement) = render_mask(&paths, None, Some(Fill::NonZero.into()));
 
   if !mask.is_empty() {
     let shadow_placement = Placement {
@@ -186,7 +172,6 @@ pub(crate) fn draw_inset_shadow(
     };
     attenuate_alpha_by_mask(&mut shadow_alpha, shadow_placement, &mask, placement);
   }
-  buffer_pool.release(mask);
 
   apply_blur(
     BlurFormat::Alpha {
@@ -196,10 +181,9 @@ pub(crate) fn draw_inset_shadow(
     },
     shadow.blur_radius,
     BlurType::Shadow,
-    buffer_pool,
   )?;
 
-  let mut data = buffer_pool.acquire_dirty((width * height * 4) as usize);
+  let mut data = uninit_buffer((width * height * 4) as usize);
   for (pixel, &alpha) in bytemuck::cast_slice_mut::<u8, [u8; 4]>(&mut data)
     .iter_mut()
     .zip(&shadow_alpha)
@@ -221,7 +205,6 @@ pub(crate) fn draw_inset_shadow(
       alpha,
     ];
   }
-  buffer_pool.release(shadow_alpha);
 
   Ok((data, width, height))
 }

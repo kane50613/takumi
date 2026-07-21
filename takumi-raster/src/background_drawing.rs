@@ -14,13 +14,14 @@ use tiny_skia::{IntSize, Pixmap, PixmapMut, PremultipliedColorU8};
 #[cfg(feature = "svg")]
 use crate::resources::image::RenderedImage;
 use crate::{
-  BorderProperties, BufferPool, DrawTarget, OverlayOptions, PaintSource, RenderContext, Result,
+  BorderProperties, DrawTarget, OverlayOptions, PaintSource, RenderContext, Result,
   SamplingFootprint, color_to_premultiplied, interpolate_with_footprint,
   layout::node::resolve_image,
   overlay_gradient_tile, overlay_image, overlay_linear_gradient_tile, overlay_radial_gradient_tile,
   pixmap_from_buffer, pixmap_ref_from_buffer,
   resources::{image::ImageSource, image_buffer::ImageBuffer},
   style::*,
+  uninit_buffer,
 };
 
 pub(crate) struct TileLayer {
@@ -48,7 +49,6 @@ pub(crate) struct ResolveLayerTilesInput<'a> {
   /// Offset of the positioning area within the border box.
   pub origin_offset: Point<i32>,
   pub context: &'a RenderContext,
-  pub buffer_pool: &'a mut BufferPool,
 }
 
 pub(crate) struct ResolveTileLayersInput<'a> {
@@ -64,7 +64,6 @@ pub(crate) struct ResolveTileLayersInput<'a> {
   pub paint: Size<u32>,
   /// Offset of the positioning area within the border box.
   pub origin_offset: Point<i32>,
-  pub buffer_pool: &'a mut BufferPool,
 }
 
 fn should_rasterize_repeated_tile(
@@ -82,12 +81,12 @@ fn should_rasterize_repeated_tile(
     )
 }
 
-fn rasterize_tile(tile: BackgroundTile, buffer_pool: &mut BufferPool) -> Result<BackgroundTile> {
+fn rasterize_tile(tile: BackgroundTile) -> Result<BackgroundTile> {
   let (width, height) = tile.dimensions();
   let Some(size) = IntSize::from_wh(width, height) else {
     return Ok(tile);
   };
-  let mut data = buffer_pool.acquire_dirty((width * height * 4) as usize);
+  let mut data = uninit_buffer((width * height * 4) as usize);
 
   for y in 0..height {
     let row_offset = (y * width * 4) as usize;
@@ -119,7 +118,6 @@ pub(crate) fn rasterize_layers(
   context: &RenderContext,
   border: BorderProperties,
   transform: Affine,
-  buffer_pool: &mut BufferPool,
 ) -> Result<Option<BackgroundTile>> {
   if layers.is_empty() || size.width == 0 || size.height == 0 {
     return Ok(None);
@@ -128,9 +126,8 @@ pub(crate) fn rasterize_layers(
   let Some(pixmap_size) = IntSize::from_wh(size.width, size.height) else {
     return Ok(None);
   };
-  let mut composed = buffer_pool.acquire((size.width * size.height * 4) as usize);
+  let mut composed = vec![0; (size.width * size.height * 4) as usize];
   let Some(mut pixmap) = PixmapMut::from_bytes(&mut composed, size.width, size.height) else {
-    buffer_pool.release(composed);
     return Ok(None);
   };
 
@@ -185,7 +182,6 @@ pub(crate) fn rasterize_layers(
           &mut DrawTarget {
             pixmap: &mut pixmap,
             combined_mask: None,
-            buffer_pool: &mut *buffer_pool,
           },
           &layer.tile,
           OverlayOptions {
@@ -203,17 +199,6 @@ pub(crate) fn rasterize_layers(
     return Ok(None);
   };
   Ok(Some(BackgroundTile::Pixmap(Arc::new(pixmap))))
-}
-
-pub(crate) fn release_rasterized_background_tile(
-  tile: BackgroundTile,
-  buffer_pool: &mut BufferPool,
-) {
-  if let BackgroundTile::Pixmap(pixmap) = tile
-    && let Ok(pixmap) = Arc::try_unwrap(pixmap)
-  {
-    buffer_pool.release(pixmap.take());
-  }
 }
 
 pub(crate) struct ColorTile {
@@ -698,7 +683,7 @@ pub(crate) fn resolve_layer_tiles(
     return Ok(None);
   };
   let tile = if should_rasterize_repeated_tile(&tile, &xs, &ys) {
-    rasterize_tile(tile, input.buffer_pool)?
+    rasterize_tile(tile)?
   } else {
     tile
   };
@@ -734,7 +719,6 @@ pub(crate) fn resolve_tile_layers(input: ResolveTileLayersInput<'_>) -> Result<T
         paint: input.paint,
         origin_offset: input.origin_offset,
         context: input.context,
-        buffer_pool: input.buffer_pool,
       },
     )?);
   }
@@ -745,7 +729,6 @@ pub(crate) fn resolve_tile_layers(input: ResolveTileLayersInput<'_>) -> Result<T
 pub(crate) fn create_mask(
   context: &RenderContext,
   border_box: Size<f32>,
-  buffer_pool: &mut BufferPool,
 ) -> Result<Option<Vec<u8>>> {
   let mask_image = context.style.mask_image.as_deref().unwrap_or(&[]);
   let mask_position = context.style.mask_position.as_ref();
@@ -762,7 +745,6 @@ pub(crate) fn create_mask(
     area: border_box.map(|x| x as u32),
     paint: border_box.map(|x| x as u32),
     origin_offset: Point { x: 0, y: 0 },
-    buffer_pool,
   })?;
 
   if layers.is_empty() {
@@ -776,11 +758,10 @@ pub(crate) fn create_mask(
       context,
       BorderProperties::default(),
       Affine::IDENTITY,
-      buffer_pool,
     )?
     .map(|tile| {
       let (w, h) = tile.dimensions();
-      let mut alpha = buffer_pool.acquire_dirty((w * h) as usize);
+      let mut alpha = uninit_buffer((w * h) as usize);
 
       if let Some(raw) = tile.as_raw() {
         let count = alpha.len().min(raw.len() / 4);
@@ -804,8 +785,6 @@ pub(crate) fn create_mask(
           *alpha_val = 0;
         }
       }
-
-      release_rasterized_background_tile(tile, buffer_pool);
 
       alpha
     }),
@@ -850,7 +829,6 @@ fn background_origin_box(origin: BackgroundOrigin, layout: Layout) -> OriginBox 
 pub(crate) fn collect_background_layers(
   context: &RenderContext,
   layout: Layout,
-  buffer_pool: &mut BufferPool,
 ) -> Result<TileLayers> {
   let border_box = layout.size;
   // `background-origin` sets the positioning area that `background-position`/`-size`
@@ -871,7 +849,6 @@ pub(crate) fn collect_background_layers(
       x: origin.offset.x as i32,
       y: origin.offset.y as i32,
     },
-    buffer_pool,
   })?;
 
   let background_color = context

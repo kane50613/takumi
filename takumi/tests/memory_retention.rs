@@ -8,7 +8,7 @@ use std::{
   alloc::{GlobalAlloc, Layout, System},
   collections::HashMap,
   sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicIsize, Ordering},
   },
 };
@@ -51,6 +51,9 @@ unsafe impl GlobalAlloc for CountingAllocator {
 
 #[global_allocator]
 static ALLOCATOR: CountingAllocator = CountingAllocator;
+
+/// `LIVE_BYTES` is process-wide; serialize tests that measure it.
+static MEASURE_LOCK: Mutex<()> = Mutex::new(());
 
 const CSS: &str = ".card { background-color: #1e293b; border-radius: 12px; padding: 24px; }";
 
@@ -103,6 +106,8 @@ fn repeated_renders_keep_live_bytes_flat() {
   const MEASURED_RENDERS: usize = 180;
   const SLACK_BYTES: isize = 4 << 20;
 
+  let _guard = MEASURE_LOCK.lock().unwrap();
+
   let photo_png = ImageBuffer::from_rgba_bytes(vec![128; 256 * 256 * 4], 256, 256)
     .unwrap()
     .encode_png()
@@ -122,5 +127,65 @@ fn repeated_renders_keep_live_bytes_flat() {
   assert!(
     settled <= baseline + SLACK_BYTES,
     "live bytes grew from {baseline} to {settled} over {MEASURED_RENDERS} renders"
+  );
+}
+
+const UNIQUE_TEXT_CSS: &str = "
+.bg { width: 2400px; height: 1260px; background-image: radial-gradient(circle at 0% 0%, #e94560 0%, transparent 60%), radial-gradient(circle at 100% 100%, #533483 0%, #1a1a2e 70%); padding: 96px; }
+.title { background-image: linear-gradient(90deg, #ffffff, #e94560); background-clip: text; color: transparent; }";
+
+/// Eight CJK codepoints never rendered before, so every glyph is a fresh
+/// mask-cache key and a guaranteed miss; repeated Latin strings would re-hit
+/// the same glyph keys after the first few renders.
+fn unique_text_card(index: usize) -> Node {
+  let title: String = (0..8)
+    .map(|offset| char::from_u32(0x4E00 + (index * 8 + offset) as u32).unwrap())
+    .collect();
+
+  Node::container([Node::container([Node::text(title)]).with_class_name("title")])
+    .with_class_name("bg")
+    .with_style(Style::default().with(StyleDeclaration::font_size(FontSize::Length(Px(128.0)))))
+}
+
+/// Every render inserts glyph masks under keys the cache has never seen, so
+/// entries accumulate until eviction kicks in. Retained bytes must track the
+/// glyph-cache byte budget: each entry is charged the capacity it actually
+/// holds, so unique-text floods plateau near the budget instead of growing by
+/// whatever allocation each mask arrived in (issue #1023).
+#[test]
+fn unique_text_renders_stay_near_glyph_cache_budget() {
+  const WARMUP_RENDERS: usize = 8;
+  const MEASURED_RENDERS: usize = 120;
+  const SLACK_BYTES: isize = 20 << 20;
+
+  let _guard = MEASURE_LOCK.lock().unwrap();
+
+  let cache = ResourceCache::default();
+  let stylesheet = cache.get_or_parse_stylesheet(vec![UNIQUE_TEXT_CSS.to_string()]);
+  let viewport = Viewport::new((2400, 1260));
+  let render_card = |index: usize| {
+    let options = RenderOptions::builder()
+      .viewport(viewport)
+      .node(unique_text_card(index))
+      .fonts(&CONTEXT)
+      .stylesheet(stylesheet.clone())
+      .build();
+
+    render(options).unwrap();
+  };
+
+  for _ in 0..WARMUP_RENDERS {
+    render_card(0);
+  }
+  let baseline = LIVE_BYTES.load(Ordering::Relaxed);
+
+  for index in 1..=MEASURED_RENDERS {
+    render_card(index);
+  }
+  let settled = LIVE_BYTES.load(Ordering::Relaxed);
+
+  assert!(
+    settled <= baseline + SLACK_BYTES,
+    "live bytes grew from {baseline} to {settled} over {MEASURED_RENDERS} unique-text renders"
   );
 }

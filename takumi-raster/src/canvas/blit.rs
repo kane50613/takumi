@@ -480,7 +480,7 @@ fn composite_bordered_source(
     .border
     .append_mask_commands(&mut paths, size.map(|v| v as f32), Point::ZERO);
 
-  let (mask, placement) = render_mask(&paths, Some(options.transform), None, target.buffer_pool);
+  let (mask, placement) = render_mask(&paths, Some(options.transform), None);
   let canvas_to_source =
     if options.transform.is_identity() && placement.left >= 0 && placement.top >= 0 {
       Some(logical_to_source)
@@ -509,8 +509,6 @@ fn composite_bordered_source(
       },
     );
   }
-
-  target.buffer_pool.release(mask);
 }
 
 pub(crate) fn overlay_sampled_paint_source(

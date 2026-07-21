@@ -21,6 +21,7 @@ use crate::{
   },
   prepare_node_mask,
   style::{Affine, BackgroundImage, BlendMode, Filter, SizingContext},
+  uninit_buffer,
 };
 
 fn bounds_intersects_viewport(bounds: SceneBounds, viewport: CanvasViewport) -> bool {
@@ -168,9 +169,9 @@ fn finish_node_render(
     {
       let row_bytes = region.width as usize * 4;
       let region_len = row_bytes * region.height as usize;
-      let mut region_raw = canvas.buffer_pool.acquire(region_len);
+      let mut region_raw = uninit_buffer(region_len);
 
-      canvas.with_pixmap_ref_and_pool(|pixmap, _| {
+      canvas.with_pixmap_ref(|pixmap| {
         let canvas_width = pixmap.width() as usize;
         let canvas_raw: &[u8] = bytemuck::cast_slice(pixmap.pixels());
         for (y, dest_row) in region_raw.chunks_exact_mut(row_bytes).enumerate() {
@@ -183,7 +184,6 @@ fn finish_node_render(
       let Some(mut region_pixmap) =
         PixmapMut::from_bytes(&mut region_raw, region.width, region.height)
       else {
-        canvas.buffer_pool.release(region_raw);
         return Ok(());
       };
 
@@ -191,11 +191,10 @@ fn finish_node_render(
         &mut region_pixmap,
         &node.context.sizing,
         node.context.current_color,
-        &mut canvas.buffer_pool,
         node.context.style.filter.iter(),
       )?;
 
-      canvas.with_pixmap_and_pool(|pixmap, _| {
+      canvas.with_pixmap(|pixmap| {
         let canvas_width = pixmap.width() as usize;
         let canvas_raw: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
         for (y, src_row) in region_raw.chunks_exact(row_bytes).enumerate() {
@@ -204,16 +203,13 @@ fn finish_node_render(
           canvas_raw[dst_start..dst_start + row_bytes].copy_from_slice(src_row);
         }
       });
-
-      canvas.buffer_pool.release(region_raw);
     } else {
-      canvas.with_pixmap_and_pool(|pixmap, pool| {
+      canvas.with_pixmap(|pixmap| {
         let mut pixmap_mut = pixmap.as_mut();
         apply_filters_to_pixmap(
           &mut pixmap_mut,
           &node.context.sizing,
           node.context.current_color,
-          pool,
           node.context.style.filter.iter(),
         )
       })?;
@@ -314,7 +310,6 @@ fn begin_node_render(
         layout,
         node_paint.transform,
         canvas.viewport(),
-        &mut canvas.buffer_pool,
       )? {
         NodeMaskAction::Shell(mask) => Some(mask),
         NodeMaskAction::SkipRendering => return Ok(Some(DeferredNodeRender::SkipRendering)),
@@ -354,7 +349,6 @@ fn begin_node_render(
     layout,
     node_paint.transform,
     canvas.viewport(),
-    &mut canvas.buffer_pool,
   )?;
   if matches!(mask_action, NodeMaskAction::SkipRendering) {
     if let Some(isolated_canvas) = isolated_canvas {

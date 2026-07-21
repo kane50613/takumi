@@ -4,11 +4,11 @@
 //! fast image blending and pixel manipulation operations.
 
 mod blit;
-mod buffer_pool;
 mod composite;
 mod gradient;
 mod mask;
 mod paint_source;
+mod scratch;
 mod skia;
 
 use std::{borrow::Cow, mem::replace, sync::Arc};
@@ -16,7 +16,6 @@ use std::{borrow::Cow, mem::replace, sync::Arc};
 pub(crate) use blit::{
   composite_mask_source_to_pixmap, overlay_image, overlay_sampled_paint_source,
 };
-pub(crate) use buffer_pool::BufferPool;
 pub(crate) use gradient::{
   overlay_gradient_tile, overlay_linear_gradient_tile, overlay_radial_gradient_tile,
 };
@@ -32,6 +31,7 @@ use mask::{MaskStackEntry, resolve_mask};
 pub(crate) use paint_source::{
   MaskCompositeColor, PaintSource, SamplingFootprint, interpolate_with_footprint,
 };
+pub(crate) use scratch::uninit_buffer;
 use takumi_core::geometry::{Point, Size};
 use tiny_skia::{
   FilterQuality as TinyFilterQuality, Mask as TinyMask, Pixmap, PixmapMut, PixmapPaint, PixmapRef,
@@ -68,14 +68,13 @@ pub(crate) struct OverlayOptions {
   pub mode: BlendMode,
 }
 
-/// Borrowed view of the active paint destination: the pixmap, the canvas's
-/// combined constraint mask, and the scratch pool. Primitives take this instead
-/// of threading `(pixmap, mask, pool, size)` separately, so a materialized mask
-/// always matches the pixmap it clips.
+/// Borrowed view of the active paint destination: the pixmap and the canvas's
+/// combined constraint mask. Primitives take this instead of threading
+/// `(pixmap, mask, size)` separately, so a materialized mask always matches
+/// the pixmap it clips.
 pub(crate) struct DrawTarget<'a, 'p> {
   pub pixmap: &'a mut PixmapMut<'p>,
   pub combined_mask: Option<MaskView<'a>>,
-  pub buffer_pool: &'a mut BufferPool,
 }
 
 impl<'a> DrawTarget<'a, '_> {
@@ -88,15 +87,7 @@ impl<'a> DrawTarget<'a, '_> {
 
   pub(crate) fn resolve_combined_mask(&mut self) -> Option<Cow<'a, TinyMask>> {
     let size = self.size();
-    self
-      .combined_mask
-      .and_then(|mask| resolve_mask(mask, size, self.buffer_pool))
-  }
-
-  pub(crate) fn release_resolved_mask(&mut self, resolved: Option<Cow<'_, TinyMask>>) {
-    if let Some(Cow::Owned(mask)) = resolved {
-      self.buffer_pool.release(mask.take());
-    }
+    self.combined_mask.and_then(|mask| resolve_mask(mask, size))
   }
 }
 
@@ -106,7 +97,6 @@ pub(crate) struct Canvas {
   origin: Point<u32>,
   offscreen_pool: Vec<Pixmap>,
   constraint_mask_stack: Vec<Option<MaskStackEntry>>,
-  pub(crate) buffer_pool: BufferPool,
 }
 
 pub(crate) struct CanvasSubcanvas {
@@ -127,7 +117,6 @@ impl Canvas {
       origin: Point { x: 0, y: 0 },
       offscreen_pool: Vec::new(),
       constraint_mask_stack: Vec::new(),
-      buffer_pool: BufferPool::default(),
     })
   }
 
@@ -287,18 +276,12 @@ impl Canvas {
     self.offscreen_pool.push(image);
   }
 
-  pub(crate) fn with_pixmap_and_pool<R>(
-    &mut self,
-    f: impl FnOnce(&mut Pixmap, &mut BufferPool) -> R,
-  ) -> R {
-    f(&mut self.image, &mut self.buffer_pool)
+  pub(crate) fn with_pixmap<R>(&mut self, f: impl FnOnce(&mut Pixmap) -> R) -> R {
+    f(&mut self.image)
   }
 
-  pub(crate) fn with_pixmap_ref_and_pool<R>(
-    &mut self,
-    f: impl FnOnce(&Pixmap, &mut BufferPool) -> R,
-  ) -> R {
-    f(&self.image, &mut self.buffer_pool)
+  pub(crate) fn with_pixmap_ref<R>(&mut self, f: impl FnOnce(&Pixmap) -> R) -> R {
+    f(&self.image)
   }
 
   pub(crate) fn draw_mask(
@@ -467,7 +450,6 @@ impl Canvas {
     let mut target = DrawTarget {
       pixmap: &mut pixmap,
       combined_mask,
-      buffer_pool: &mut self.buffer_pool,
     };
     f(&mut target)
   }

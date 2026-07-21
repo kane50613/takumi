@@ -8,13 +8,14 @@ use takumi_core::{
 use tiny_skia::{Mask as TinyMask, PixmapMut};
 
 use crate::{
-  BlurFormat, BlurType, BorderProperties, BufferPool, Canvas, Placement, RenderContext, Result,
-  SizedShadow, apply_blur, apply_blur_rgba_bytes, checked_shadow_area, fast_div_255,
-  intersect_alpha_masks, render_mask,
+  BlurFormat, BlurType, BorderProperties, Canvas, Placement, RenderContext, Result, SizedShadow,
+  apply_blur, apply_blur_rgba_bytes, checked_shadow_area, fast_div_255, intersect_alpha_masks,
+  render_mask,
   style::{
     Affine, Color, Filter, FilterCategory, LUMA_WEIGHTS, PercentageNumber, SEPIA_WEIGHTS,
     SizingContext, TransferChannel, TransferTable,
   },
+  uninit_buffer,
 };
 
 /// Calculates the luma of an RGB pixel.
@@ -324,7 +325,6 @@ pub(crate) fn apply_filters_to_pixmap<'f, F: Iterator<Item = &'f Filter>>(
   pixmap: &mut PixmapMut<'_>,
   sizing: &SizingContext,
   current_color: Color,
-  buffer_pool: &mut BufferPool,
   filters: F,
 ) -> Result<()> {
   // Collect filters and batch consecutive pixel filters
@@ -360,7 +360,6 @@ pub(crate) fn apply_filters_to_pixmap<'f, F: Iterator<Item = &'f Filter>>(
               height,
               blur.to_px(sizing, 1.0),
               BlurType::Filter,
-              buffer_pool,
             )?;
           }
           Filter::DropShadow(drop_shadow) => {
@@ -369,7 +368,7 @@ pub(crate) fn apply_filters_to_pixmap<'f, F: Iterator<Item = &'f Filter>>(
               height: pixmap.height() as f32,
             };
             let shadow = SizedShadow::from_text_shadow(*drop_shadow, sizing, current_color, size);
-            apply_drop_shadow_filter(pixmap, &shadow, buffer_pool)?;
+            apply_drop_shadow_filter(pixmap, &shadow)?;
           }
           // Delegates to the resvg pipeline; `apply_svg_filter` hands the
           // layer over without a base64 / data-URI roundtrip.
@@ -433,11 +432,9 @@ pub(crate) fn apply_backdrop_filter(
   border.append_mask_commands(&mut paths, layout_size, Point::ZERO);
 
   // Render the mask for compositing.
-  let (mut mask_data, mut placement) =
-    render_mask(&paths, Some(transform), None, &mut canvas.buffer_pool);
+  let (mut mask_data, mut placement) = render_mask(&paths, Some(transform), None);
 
   if placement.width == 0 || placement.height == 0 {
-    canvas.buffer_pool.release(mask_data);
     return Ok(());
   }
 
@@ -450,7 +447,6 @@ pub(crate) fn apply_backdrop_filter(
     };
     let intersected =
       intersect_alpha_masks(&mask_data, placement, node_mask.data(), node_placement);
-    canvas.buffer_pool.release(mask_data);
     let Some(intersected) = intersected else {
       return Ok(());
     };
@@ -458,13 +454,11 @@ pub(crate) fn apply_backdrop_filter(
   }
 
   let Some(mask_bounds) = mask_bounds(&mask_data, placement.width, placement.height) else {
-    canvas.buffer_pool.release(mask_data);
     return Ok(());
   };
 
   let padding = backdrop_filter_padding(filters, &context.sizing);
   let Some(region) = backdrop_region(placement, mask_bounds, padding, canvas_size) else {
-    canvas.buffer_pool.release(mask_data);
     return Ok(());
   };
 
@@ -474,9 +468,9 @@ pub(crate) fn apply_backdrop_filter(
   let backdrop_len = region_row_bytes * region_height as usize;
 
   // Extract the region from the canvas using pooled raw bytes.
-  let mut backdrop_raw = canvas.buffer_pool.acquire_dirty(backdrop_len);
+  let mut backdrop_raw = uninit_buffer(backdrop_len);
 
-  canvas.with_pixmap_ref_and_pool(|pixmap, _| {
+  canvas.with_pixmap_ref(|pixmap| {
     let canvas_width = pixmap.width() as usize;
     let canvas_raw: &[u8] = bytemuck::cast_slice(pixmap.pixels());
     for (y, dest_row) in backdrop_raw.chunks_exact_mut(region_row_bytes).enumerate() {
@@ -489,8 +483,6 @@ pub(crate) fn apply_backdrop_filter(
   let Some(mut backdrop_pixmap) =
     PixmapMut::from_bytes(&mut backdrop_raw, region_width, region_height)
   else {
-    canvas.buffer_pool.release(backdrop_raw);
-    canvas.buffer_pool.release(mask_data);
     return Ok(());
   };
 
@@ -498,7 +490,6 @@ pub(crate) fn apply_backdrop_filter(
     &mut backdrop_pixmap,
     &context.sizing,
     context.current_color,
-    &mut canvas.buffer_pool,
     drop_shadow_filtered,
   )?;
 
@@ -511,7 +502,7 @@ pub(crate) fn apply_backdrop_filter(
     .max(0) as usize;
   let visible_width = x_end.saturating_sub(x_start);
 
-  canvas.with_pixmap_and_pool(|pixmap, _| {
+  canvas.with_pixmap(|pixmap| {
     let canvas_width = pixmap.width() as usize;
     let canvas_raw: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
 
@@ -542,18 +533,11 @@ pub(crate) fn apply_backdrop_filter(
     }
   });
 
-  canvas.buffer_pool.release(backdrop_raw);
-  canvas.buffer_pool.release(mask_data);
-
   Ok(())
 }
 
 /// Applies a drop-shadow filter effect to an image.
-fn apply_drop_shadow_filter(
-  pixmap: &mut PixmapMut<'_>,
-  shadow: &SizedShadow,
-  buffer_pool: &mut BufferPool,
-) -> Result<()> {
+fn apply_drop_shadow_filter(pixmap: &mut PixmapMut<'_>, shadow: &SizedShadow) -> Result<()> {
   let canvas_width = pixmap.width();
   let canvas_height = pixmap.height();
   if canvas_width == 0 || canvas_height == 0 {
@@ -591,8 +575,7 @@ fn apply_drop_shadow_filter(
   let Some(area) = checked_shadow_area(shadow_width, shadow_height) else {
     return Ok(());
   };
-  let mut shadow_alpha = buffer_pool.acquire_dirty(area);
-  shadow_alpha.fill(0);
+  let mut shadow_alpha = vec![0; area];
 
   for y in 0..source_bounds.height {
     let src_row = (source_bounds.top as u32 + y) as usize * canvas_width as usize;
@@ -612,7 +595,6 @@ fn apply_drop_shadow_filter(
     },
     blur_radius,
     BlurType::Shadow,
-    buffer_pool,
   )?;
 
   let dest_left = source_bounds.left + offset_x - padding as i32;
@@ -625,7 +607,6 @@ fn apply_drop_shadow_filter(
   let end_x = dest_right.min(canvas_width as i32);
   let end_y = dest_bottom.min(canvas_height as i32);
   if start_x >= end_x || start_y >= end_y {
-    buffer_pool.release(shadow_alpha);
     return Ok(());
   }
 
@@ -646,7 +627,6 @@ fn apply_drop_shadow_filter(
     }
   }
 
-  buffer_pool.release(shadow_alpha);
   Ok(())
 }
 
@@ -672,19 +652,12 @@ mod tests {
     let sizing = SizingContext::builder()
       .viewport(Viewport::new((100, 100)))
       .build();
-    let mut buffer_pool = BufferPool::default();
     let width = image.width();
     let height = image.height();
     let Some(mut pixmap) = PixmapMut::from_bytes(image.as_mut(), width, height) else {
       return Ok(());
     };
-    apply_filters_to_pixmap(
-      &mut pixmap,
-      &sizing,
-      Color::black(),
-      &mut buffer_pool,
-      filters.iter(),
-    )?;
+    apply_filters_to_pixmap(&mut pixmap, &sizing, Color::black(), filters.iter())?;
 
     let pixel = image.get_pixel(0, 0);
     assert_eq!(pixel.0[0], 135);

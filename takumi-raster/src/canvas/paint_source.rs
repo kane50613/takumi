@@ -4,7 +4,7 @@ use tiny_skia::{PixmapRef, PremultipliedColorU8};
 use crate::{
   BackgroundTile, ColorTile,
   blend::{premultiplied_from_pixel, premultiply_rgba},
-  canvas::{BufferPool, composite_premultiplied_over},
+  canvas::{composite_premultiplied_over, scratch::uninit_buffer},
   style::{Color, ImageScalingAlgorithm},
 };
 
@@ -111,11 +111,7 @@ impl<'a> PaintSource<'a> {
     }
   }
 
-  pub(crate) fn with_pixmap_ref<R>(
-    self,
-    buffer_pool: &mut BufferPool,
-    f: impl FnOnce(PixmapRef<'_>) -> R,
-  ) -> Option<R> {
+  pub(crate) fn with_pixmap_ref<R>(self, f: impl FnOnce(PixmapRef<'_>) -> R) -> Option<R> {
     if let Some(source) = self.as_pixmap_ref() {
       return Some(f(source));
     }
@@ -123,11 +119,10 @@ impl<'a> PaintSource<'a> {
     let width = self.width();
     let height = self.height();
     let source_len = width as usize * height as usize * 4;
-    let mut premultiplied = buffer_pool.acquire_dirty(source_len);
+    let mut premultiplied = uninit_buffer(source_len);
     self.write_premultiplied(&mut premultiplied);
-    let result = PixmapRef::from_bytes(&premultiplied, width, height).map(f);
-    buffer_pool.release(premultiplied);
-    result
+
+    PixmapRef::from_bytes(&premultiplied, width, height).map(f)
   }
 
   pub(crate) fn supports_rounded_fill_fast_path(self) -> bool {

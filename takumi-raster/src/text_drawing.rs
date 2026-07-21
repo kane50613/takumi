@@ -15,6 +15,7 @@ use crate::{
     glyph_cache::GlyphCache,
   },
   style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
+  uninit_buffer,
 };
 
 pub(crate) type GlyphMaskCache = GlyphCache<(Vec<u8>, Placement)>;
@@ -39,6 +40,13 @@ pub(crate) fn with_shared_glyph_cache<R>(f: impl FnOnce(&mut GlyphMaskCache) -> 
   })
 }
 
+/// Charges the capacity the cache actually retains, not just the mask length.
+fn cache_mask(cache: &mut GlyphMaskCache, key: u64, mask: Vec<u8>, placement: Placement) {
+  let bytes = mask.capacity() + 64;
+
+  cache.insert(key, (mask, placement), bytes);
+}
+
 fn glyph_cache_key_and_offset(transform: Affine, glyph_signature: u64) -> Option<(u64, i32, i32)> {
   if !transform.only_translation() {
     return None;
@@ -59,9 +67,8 @@ fn draw_outline_with_cache(
   canvas: &mut Canvas,
 ) {
   let Some((key, int_x, int_y)) = glyph_cache_key_and_offset(transform, glyph_signature) else {
-    let (mask, placement) = render_mask(paths, Some(transform), None, &mut canvas.buffer_pool);
+    let (mask, placement) = render_mask(paths, Some(transform), None);
     canvas.draw_mask(&mask, placement, color, BlendMode::Normal);
-    canvas.buffer_pool.release(mask);
     return;
   };
   with_shared_glyph_cache(|cache| {
@@ -73,8 +80,7 @@ fn draw_outline_with_cache(
 
     let bucket_x = (key & 3) as f32 * 0.25;
     let cache_transform = Affine::translation(bucket_x, 0.0);
-    let (mask, cached_placement) =
-      render_mask(paths, Some(cache_transform), None, &mut canvas.buffer_pool);
+    let (mask, cached_placement) = render_mask(paths, Some(cache_transform), None);
     canvas.draw_mask(
       &mask,
       cached_placement.translate(int_x, int_y),
@@ -82,8 +88,7 @@ fn draw_outline_with_cache(
       BlendMode::Normal,
     );
 
-    let bytes = mask.len() + 64;
-    cache.insert(key, (mask, cached_placement), bytes);
+    cache_mask(cache, key, mask, cached_placement);
   });
 }
 
@@ -172,7 +177,7 @@ pub(crate) fn draw_glyph_clip_image(
       transform *= Affine::translation(bitmap.placement.left as f32, -bitmap.placement.top as f32);
 
       let mask_capacity = (bitmap.placement.width * bitmap.placement.height) as usize;
-      let mut mask = canvas.buffer_pool.acquire_dirty(mask_capacity);
+      let mut mask = uninit_buffer(mask_capacity);
       if mask_capacity > 0 {
         let mask_len = mask.len();
         let write_len = mask_capacity.min(mask_len);
@@ -219,8 +224,6 @@ pub(crate) fn draw_glyph_clip_image(
         },
         BlendMode::Normal,
       );
-
-      canvas.buffer_pool.release(mask);
     }
     ResolvedGlyph::Outline(outline) => {
       // If the transform is not invertible, we can't draw the glyph
@@ -252,12 +255,7 @@ pub(crate) fn draw_glyph_clip_image(
 
           let bucket_x = (key & 3) as f32 * 0.25;
           let cache_transform = Affine::translation(bucket_x, 0.0);
-          let (mask, cached_placement) = render_mask(
-            outline.paths(),
-            Some(cache_transform),
-            None,
-            &mut canvas.buffer_pool,
-          );
+          let (mask, cached_placement) = render_mask(outline.paths(), Some(cache_transform), None);
           canvas.composite_mask_source(
             &mask,
             cached_placement.translate(int_x, int_y),
@@ -267,16 +265,10 @@ pub(crate) fn draw_glyph_clip_image(
             BlendMode::Normal,
           );
 
-          let bytes = mask.len() + 64;
-          cache.insert(key, (mask, cached_placement), bytes);
+          cache_mask(cache, key, mask, cached_placement);
         });
       } else {
-        let (mask, placement) = render_mask(
-          outline.paths(),
-          Some(transform),
-          None,
-          &mut canvas.buffer_pool,
-        );
+        let (mask, placement) = render_mask(outline.paths(), Some(transform), None);
         canvas.composite_mask_source(
           &mask,
           placement,
@@ -285,7 +277,6 @@ pub(crate) fn draw_glyph_clip_image(
           sampling,
           BlendMode::Normal,
         );
-        canvas.buffer_pool.release(mask);
       }
 
       let mut ctx = GlyphPaintCtx {
@@ -386,12 +377,8 @@ fn draw_text_stroke_clip_image(ctx: &mut GlyphPaintCtx<'_, '_>, clip_image: Pain
   let mut stroke = Stroke::new(ctx.style.stroke_width / scale);
   stroke.join = ctx.style.parent.stroke_linejoin.into();
 
-  let (stroke_mask, stroke_placement) = render_mask(
-    ctx.paths,
-    Some(ctx.transform),
-    Some(stroke.into()),
-    &mut ctx.canvas.buffer_pool,
-  );
+  let (stroke_mask, stroke_placement) =
+    render_mask(ctx.paths, Some(ctx.transform), Some(stroke.into()));
 
   ctx.canvas.composite_mask_source(
     &stroke_mask,
@@ -405,8 +392,6 @@ fn draw_text_stroke_clip_image(ctx: &mut GlyphPaintCtx<'_, '_>, clip_image: Pain
     },
     BlendMode::Normal,
   );
-
-  ctx.canvas.buffer_pool.release(stroke_mask);
 }
 
 fn draw_text_embolden_clip_image(
@@ -425,12 +410,8 @@ fn draw_text_embolden_clip_image(
   let mut stroke = Stroke::new(embolden);
   stroke.join = ctx.style.parent.stroke_linejoin.into();
 
-  let (stroke_mask, stroke_placement) = render_mask(
-    ctx.paths,
-    Some(ctx.transform),
-    Some(stroke.into()),
-    &mut ctx.canvas.buffer_pool,
-  );
+  let (stroke_mask, stroke_placement) =
+    render_mask(ctx.paths, Some(ctx.transform), Some(stroke.into()));
 
   ctx.canvas.composite_mask_source(
     &stroke_mask,
@@ -444,8 +425,6 @@ fn draw_text_embolden_clip_image(
     },
     BlendMode::Normal,
   );
-
-  ctx.canvas.buffer_pool.release(stroke_mask);
 }
 
 fn draw_text_stroke(ctx: &mut GlyphPaintCtx<'_, '_>) {
@@ -457,12 +436,8 @@ fn draw_text_stroke(ctx: &mut GlyphPaintCtx<'_, '_>) {
   let mut stroke = Stroke::new(ctx.style.stroke_width / scale);
   stroke.join = ctx.style.parent.stroke_linejoin.into();
 
-  let (stroke_mask, stroke_placement) = render_mask(
-    ctx.paths,
-    Some(ctx.transform),
-    Some(stroke.into()),
-    &mut ctx.canvas.buffer_pool,
-  );
+  let (stroke_mask, stroke_placement) =
+    render_mask(ctx.paths, Some(ctx.transform), Some(stroke.into()));
 
   ctx.canvas.draw_mask(
     &stroke_mask,
@@ -470,8 +445,6 @@ fn draw_text_stroke(ctx: &mut GlyphPaintCtx<'_, '_>) {
     ctx.style.text_stroke_color,
     BlendMode::Normal,
   );
-
-  ctx.canvas.buffer_pool.release(stroke_mask);
 }
 
 fn draw_text_embolden(ctx: &mut GlyphPaintCtx<'_, '_>, color: Color, embolden: f32) {
@@ -482,18 +455,12 @@ fn draw_text_embolden(ctx: &mut GlyphPaintCtx<'_, '_>, color: Color, embolden: f
   let mut stroke = Stroke::new(embolden);
   stroke.join = ctx.style.parent.stroke_linejoin.into();
 
-  let (stroke_mask, stroke_placement) = render_mask(
-    ctx.paths,
-    Some(ctx.transform),
-    Some(stroke.into()),
-    &mut ctx.canvas.buffer_pool,
-  );
+  let (stroke_mask, stroke_placement) =
+    render_mask(ctx.paths, Some(ctx.transform), Some(stroke.into()));
 
   ctx
     .canvas
     .draw_mask(&stroke_mask, stroke_placement, color, BlendMode::Normal);
-
-  ctx.canvas.buffer_pool.release(stroke_mask);
 }
 
 fn draw_text_shadow(
@@ -561,9 +528,7 @@ fn draw_color_outline_image(
       Color([record.red(), record.green(), record.blue(), alpha])
     };
 
-    let (mask, placement) =
-      render_mask(&layer.paths, Some(transform), None, &mut canvas.buffer_pool);
+    let (mask, placement) = render_mask(&layer.paths, Some(transform), None);
     canvas.draw_mask(&mask, placement, color, BlendMode::Normal);
-    canvas.buffer_pool.release(mask);
   }
 }

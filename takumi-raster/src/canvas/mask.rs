@@ -10,9 +10,7 @@ use tiny_skia::{
 
 use crate::{
   BorderProperties, Command, Fill, PathBuilder, Placement, RenderContext, Result, Style,
-  build_path,
-  canvas::BufferPool,
-  create_mask, fast_div_255, parse_svg_path_segments, push_ellipse, scale_commands,
+  build_path, create_mask, fast_div_255, parse_svg_path_segments, push_ellipse, scale_commands,
   style::{
     Affine, Axis, BasicShape, BorderStyle, Color, ComputedStyle, FillRule, ImageScalingAlgorithm,
     Overflow, ShapeRadius, Sides, SizingContext, SpacePair,
@@ -54,24 +52,20 @@ pub(crate) fn prepare_node_mask(
   layout: Layout,
   transform: Affine,
   viewport: CanvasViewport,
-  buffer_pool: &mut BufferPool,
 ) -> Result<NodeMaskAction> {
   if let Some(clip_path) = &style.clip_path {
-    let (mask, placement) = render_clip_shape_mask(clip_path, context, layout.size, buffer_pool);
+    let (mask, placement) = render_clip_shape_mask(clip_path, context, layout.size);
     let end_x = placement.left + placement.width as i32;
     let end_y = placement.top + placement.height as i32;
 
     if end_x < 0 || end_y < 0 {
-      buffer_pool.release(mask);
       return Ok(NodeMaskAction::SkipRendering);
     }
 
     let Some(mut full_mask) = TinyMask::new(viewport.size.width, viewport.size.height) else {
-      buffer_pool.release(mask);
       return Ok(NodeMaskAction::SkipRendering);
     };
     copy_mask_into_canvas(&mut full_mask, viewport.origin, &mask, placement);
-    buffer_pool.release(mask);
     return Ok(NodeMaskAction::Shell(full_mask));
   }
 
@@ -79,9 +73,8 @@ pub(crate) fn prepare_node_mask(
     return Ok(NodeMaskAction::SkipRendering);
   };
 
-  if let Some(mask) = create_mask(context, layout.size, buffer_pool)? {
+  if let Some(mask) = create_mask(context, layout.size)? {
     let Some(placement) = transformed_rect_placement(layout.size, transform) else {
-      buffer_pool.release(mask);
       return Ok(NodeMaskAction::SkipRendering);
     };
     let mask_placement = Placement {
@@ -108,10 +101,8 @@ pub(crate) fn prepare_node_mask(
       })
     };
     let Some(full_mask) = full_mask else {
-      buffer_pool.release(mask);
       return Ok(NodeMaskAction::SkipRendering);
     };
-    buffer_pool.release(mask);
     return Ok(NodeMaskAction::Shell(full_mask));
   }
 
@@ -146,14 +137,12 @@ pub(crate) fn prepare_node_mask(
     };
     inner_props.append_mask_commands(&mut paths, padding_box, padding_origin);
 
-    let (mask_data, local_placement) = render_mask(&paths, None, None, buffer_pool);
+    let (mask_data, local_placement) = render_mask(&paths, None, None);
     if local_placement.width == 0 || local_placement.height == 0 {
-      buffer_pool.release(mask_data);
       return Ok(NodeMaskAction::SkipRendering);
     }
 
     let Some(placement) = transformed_local_placement(local_placement, transform) else {
-      buffer_pool.release(mask_data);
       return Ok(NodeMaskAction::SkipRendering);
     };
 
@@ -180,10 +169,8 @@ pub(crate) fn prepare_node_mask(
       })
     };
     let Some(full_mask) = full_mask else {
-      buffer_pool.release(mask_data);
       return Ok(NodeMaskAction::SkipRendering);
     };
-    buffer_pool.release(mask_data);
     return Ok(NodeMaskAction::Content(full_mask));
   }
 
@@ -590,7 +577,6 @@ pub(crate) fn render_clip_shape_mask(
   shape: &BasicShape,
   context: &RenderContext,
   size: Size<f32>,
-  buffer_pool: &mut BufferPool,
 ) -> (Vec<u8>, Placement) {
   let mut paths = Vec::new();
 
@@ -693,7 +679,6 @@ pub(crate) fn render_clip_shape_mask(
     &paths,
     Some(context.transform),
     Some(Fill::from(shape.fill_rule().unwrap_or(context.style.clip_rule)).into()),
-    buffer_pool,
   )
 }
 
@@ -701,7 +686,6 @@ pub(crate) fn render_mask(
   paths: &[Command],
   transform: Option<Affine>,
   style: Option<Style>,
-  buffer_pool: &mut BufferPool,
 ) -> (Vec<u8>, Placement) {
   let style = style.unwrap_or_default();
   let Some(mut path) = build_path(paths) else {
@@ -746,7 +730,7 @@ pub(crate) fn render_mask(
     return (Vec::new(), Placement::default());
   };
   let buffer_len = (width as usize) * (height as usize);
-  let buffer = buffer_pool.acquire(buffer_len);
+  let buffer = vec![0; buffer_len];
   let Some(mut mask) = TinyMask::from_vec(buffer, size) else {
     return (Vec::new(), Placement::default());
   };
@@ -840,18 +824,14 @@ impl<'a> MaskRow<'a> {
 /// Resolves the combined constraint mask against the pixmap it clips: borrowed
 /// directly when the stored mask already matches the canvas viewport, cropped
 /// into a scratch buffer otherwise.
-pub(crate) fn resolve_mask<'a>(
-  mask: MaskView<'a>,
-  size: Size<u32>,
-  buffer_pool: &mut BufferPool,
-) -> Option<Cow<'a, TinyMask>> {
+pub(crate) fn resolve_mask<'a>(mask: MaskView<'a>, size: Size<u32>) -> Option<Cow<'a, TinyMask>> {
   if mask.origin == mask.canvas_origin
     && mask.mask.width() == size.width
     && mask.mask.height() == size.height
   {
     return Some(Cow::Borrowed(mask.mask));
   }
-  materialize_mask(mask, size, buffer_pool).map(Cow::Owned)
+  materialize_mask(mask, size).map(Cow::Owned)
 }
 
 #[inline(always)]
@@ -859,13 +839,9 @@ pub(crate) fn mask_index_from_coord(x: u32, y: u32, width: u32) -> usize {
   (y * width + x) as usize
 }
 
-pub(crate) fn materialize_mask(
-  mask: MaskView<'_>,
-  size: Size<u32>,
-  buffer_pool: &mut BufferPool,
-) -> Option<TinyMask> {
+pub(crate) fn materialize_mask(mask: MaskView<'_>, size: Size<u32>) -> Option<TinyMask> {
   let mut cropped = TinyMask::from_vec(
-    buffer_pool.acquire((size.width as usize) * (size.height as usize)),
+    vec![0; (size.width as usize) * (size.height as usize)],
     IntSize::from_wh(size.width, size.height)?,
   )?;
 

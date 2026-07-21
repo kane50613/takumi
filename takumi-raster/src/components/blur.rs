@@ -1,4 +1,4 @@
-use crate::{BufferPool, Error, Result};
+use crate::{Error, Result, uninit_buffer};
 
 const BLUR_DOWNSAMPLE_TARGET_SIGMA: f32 = 6.0;
 const BLUR_DOWNSAMPLE_MIN_DIMENSION: u32 = 128;
@@ -73,35 +73,26 @@ fn blur_pass_params(
 }
 
 /// Applies a Gaussian approximation using 3-pass Box Blur.
-pub(crate) fn apply_blur(
-  format: BlurFormat<'_>,
-  radius: f32,
-  blur_type: BlurType,
-  pool: &mut BufferPool,
-) -> Result<()> {
+pub(crate) fn apply_blur(format: BlurFormat<'_>, radius: f32, blur_type: BlurType) -> Result<()> {
   let width = format.width();
   let height = format.height();
   let Some(pass_params) = blur_pass_params(width, height, radius, blur_type, width as usize) else {
     return Ok(());
   };
 
-  let mut col_sums = pool.acquire_u32(pass_params.stride);
+  let mut col_sums = vec![0u32; pass_params.stride];
 
   match format {
     BlurFormat::Alpha { data, .. } => {
-      let mut temp_image = pool.acquire_dirty(width as usize * height as usize);
+      let mut temp_image = uninit_buffer(width as usize * height as usize);
       let temp_data = &mut *temp_image;
 
       for _ in 0..3 {
         box_blur_h_alpha(data, temp_data, pass_params);
         box_blur_v_alpha(temp_data, data, pass_params, &mut col_sums);
       }
-
-      pool.release(temp_image);
     }
   }
-
-  pool.release_u32(col_sums);
 
   Ok(())
 }
@@ -112,9 +103,8 @@ pub(crate) fn apply_blur_rgba_bytes(
   height: u32,
   radius: f32,
   blur_type: BlurType,
-  pool: &mut BufferPool,
 ) -> Result<()> {
-  apply_blur_rgba_bytes_internal(data, Dims { width, height }, radius, blur_type, pool, true)
+  apply_blur_rgba_bytes_internal(data, Dims { width, height }, radius, blur_type, true)
 }
 
 fn apply_blur_rgba_bytes_internal(
@@ -122,7 +112,6 @@ fn apply_blur_rgba_bytes_internal(
   dims: Dims,
   radius: f32,
   blur_type: BlurType,
-  pool: &mut BufferPool,
   allow_downsample: bool,
 ) -> Result<()> {
   let Dims { width, height } = dims;
@@ -143,7 +132,7 @@ fn apply_blur_rgba_bytes_internal(
   if allow_downsample {
     let scale = blur_downsample_scale(width, height, radius, blur_type);
     if scale > 1 {
-      return apply_blur_rgba_downsampled(data, dims, radius, blur_type, pool, scale);
+      return apply_blur_rgba_downsampled(data, dims, radius, blur_type, scale);
     }
   }
 
@@ -151,17 +140,15 @@ fn apply_blur_rgba_bytes_internal(
   else {
     return Ok(());
   };
-  let mut col_sums = pool.acquire_u32(pass_params.stride);
+  let mut col_sums = vec![0u32; pass_params.stride];
 
-  let mut temp = pool.acquire_dirty(expected);
+  let mut temp = uninit_buffer(expected);
   let src_pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(data);
   let temp_pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(&mut temp);
   for _ in 0..3 {
     box_blur_h_rgba(src_pixels, temp_pixels, pass_params);
     box_blur_v_rgba(temp_pixels, src_pixels, pass_params, &mut col_sums);
   }
-  pool.release(temp);
-  pool.release_u32(col_sums);
 
   Ok(())
 }
@@ -197,7 +184,6 @@ fn apply_blur_rgba_downsampled(
   dims: Dims,
   radius: f32,
   blur_type: BlurType,
-  pool: &mut BufferPool,
   scale: u32,
 ) -> Result<()> {
   let ds_dims = Dims {
@@ -208,21 +194,13 @@ fn apply_blur_rgba_downsampled(
     .saturating_mul(ds_dims.height as usize)
     .saturating_mul(4);
 
-  let mut downsampled = pool.acquire_dirty(ds_len);
+  let mut downsampled = uninit_buffer(ds_len);
   downsample_rgba_box(data, dims, &mut downsampled, ds_dims, scale);
 
   let scaled_radius = radius / scale as f32;
-  apply_blur_rgba_bytes_internal(
-    &mut downsampled,
-    ds_dims,
-    scaled_radius,
-    blur_type,
-    pool,
-    false,
-  )?;
+  apply_blur_rgba_bytes_internal(&mut downsampled, ds_dims, scaled_radius, blur_type, false)?;
 
   upsample_rgba_bilinear(&downsampled, ds_dims, data, dims, scale);
-  pool.release(downsampled);
   Ok(())
 }
 
@@ -601,15 +579,14 @@ mod tests {
   use super::{
     BlurType, Dims, apply_blur_rgba_bytes, blur_downsample_scale, upsample_rgba_bilinear,
   };
-  use crate::{BufferPool, Error};
+  use crate::Error;
 
   #[test]
   fn apply_blur_rgba_bytes_returns_error_for_invalid_buffer_length() {
     let mut data = vec![0u8; 3];
-    let mut pool = BufferPool::default();
 
     assert_matches!(
-      apply_blur_rgba_bytes(&mut data, 1, 1, 4.0, BlurType::Filter, &mut pool),
+      apply_blur_rgba_bytes(&mut data, 1, 1, 4.0, BlurType::Filter),
       Err(Error::InvalidRgbaBufferLength {
         actual: 3,
         expected: 4
