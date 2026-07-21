@@ -120,7 +120,7 @@ export const showcaseProjects: Project[] = [
     width: 800,
     height: 400,
   },
-   {
+  {
     title: "TS SAAS",
     image: "https://ts-saas.com/og/home",
     url: "https://ts-saas.com",
