@@ -1,169 +1,101 @@
-//! Thread-local glyph caches under one process-wide byte budget.
+//! Process-global glyph caches under one byte budget.
 //!
-//! Glyph lookups are the hottest cache path in a render, so entries stay in
-//! thread-local maps: a hit is a plain `HashMap` read with no atomics. Only
-//! inserts and evictions touch the shared byte counter, which enforces one
-//! ceiling across every worker thread.
+//! Entries live in sharded concurrent caches shared by every worker thread, so
+//! a glyph resolved on one thread is a hit on all of them and eviction is
+//! global — no thread keeps a stale share the way per-thread maps did.
 
-use std::{
-  collections::HashMap,
-  sync::atomic::{AtomicUsize, Ordering},
-};
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+use quick_cache::{Weighter, sync::Cache};
 
 const DEFAULT_GLYPH_CACHE_MAX_BYTES: usize = 8 << 20; // 8 MiB
 
-static USED_BYTES: AtomicUsize = AtomicUsize::new(0);
 static MAX_BYTES: AtomicUsize = AtomicUsize::new(DEFAULT_GLYPH_CACHE_MAX_BYTES);
 
-/// Sets the process-wide byte budget shared by every thread's glyph caches.
-/// `0` stops further caching. Defaults to 8 MiB.
+/// Sets the byte budget shared by the glyph caches. `0` stops caching. Takes
+/// effect for caches not yet used; call it before the first render. Defaults
+/// to 8 MiB.
 pub fn set_glyph_cache_max_bytes(bytes: usize) {
   MAX_BYTES.store(bytes, Ordering::Relaxed);
 }
 
+/// Half of the configured budget: the mask and resolved-glyph caches each get
+/// an equal share of the process-wide total.
+pub fn glyph_cache_share_bytes() -> u64 {
+  (MAX_BYTES.load(Ordering::Relaxed) / 2) as u64
+}
+
+#[derive(Clone)]
 struct Entry<V> {
   value: V,
-  bytes: usize,
-  last_used: u32,
+  bytes: u32,
 }
 
-/// A thread-local glyph cache charging its entries against the process-wide
-/// budget. Entries age per render; going over budget drops this thread's
-/// entries that no recent render touched.
-pub struct GlyphCache<V> {
-  entries: HashMap<u64, Entry<V>>,
-  tick: u32,
+#[derive(Clone)]
+struct ByBytes;
+
+impl<V: Clone> Weighter<u64, Entry<V>> for ByBytes {
+  fn weight(&self, _key: &u64, entry: &Entry<V>) -> u64 {
+    u64::from(entry.bytes).max(1)
+  }
 }
 
-impl<V> Default for GlyphCache<V> {
-  fn default() -> Self {
+/// A weighted concurrent glyph cache: entries are charged the byte weight the
+/// caller reports, and going over budget evicts cold entries globally.
+pub struct GlyphCache<V: Clone> {
+  cache: Cache<u64, Entry<V>, ByBytes>,
+}
+
+impl<V: Clone> GlyphCache<V> {
+  /// Creates a cache holding at most `max_bytes` across its entries; `0`
+  /// disables retention.
+  pub fn new(max_bytes: u64) -> Self {
+    // ~4 KiB average glyph entry ⇒ item-count hint for the budget.
+    let estimated_items = (max_bytes / (4 << 10)).max(1) as usize;
+
     Self {
-      entries: HashMap::new(),
-      tick: 0,
+      cache: Cache::with_weighter(estimated_items, max_bytes, ByBytes),
     }
   }
-}
 
-impl<V> GlyphCache<V> {
-  /// Ages the cache by one render; entries untouched for two renders become
-  /// eviction candidates.
-  pub fn begin_render(&mut self) {
-    self.tick = self.tick.saturating_add(1);
+  /// Returns a clone of the cached value.
+  pub fn get(&self, key: u64) -> Option<V> {
+    self.cache.get(&key).map(|entry| entry.value)
   }
 
-  /// Returns the cached value and marks it live for the current render.
-  pub fn get(&mut self, key: u64) -> Option<&V> {
-    let tick = self.tick;
-
-    self.entries.get_mut(&key).map(|entry| {
-      entry.last_used = tick;
-      &entry.value
-    })
-  }
-
-  /// Caches `value` at `bytes` weight, evicting stale entries when the shared
-  /// budget overflows.
-  pub fn insert(&mut self, key: u64, value: V, bytes: usize) {
-    let max = MAX_BYTES.load(Ordering::Relaxed);
-    if max == 0 {
-      return;
-    }
-
+  /// Caches `value` at `bytes` weight. Entries heavier than the whole budget
+  /// are rejected by the cache rather than evicting everything else.
+  pub fn insert(&self, key: u64, value: V, bytes: usize) {
     let entry = Entry {
       value,
-      bytes,
-      last_used: self.tick,
+      bytes: bytes.min(u32::MAX as usize) as u32,
     };
-    if let Some(old) = self.entries.insert(key, entry) {
-      USED_BYTES.fetch_sub(old.bytes, Ordering::Relaxed);
-    }
 
-    let used = USED_BYTES.fetch_add(bytes, Ordering::Relaxed) + bytes;
-    if used > max {
-      self.evict_stale(used - max);
-    }
-  }
-
-  /// Drops entries no render touched since the previous one; when that frees
-  /// less than `target` bytes, drops arbitrary fresh entries until it is
-  /// covered, so one over-budget render degrades gradually instead of
-  /// flushing everything it just cached. Only this thread's entries are
-  /// considered — an idle thread keeps its share until it renders again, so
-  /// the ceiling holds even though reclaim is local.
-  fn evict_stale(&mut self, target: usize) {
-    let cutoff = self.tick.saturating_sub(1);
-    let mut freed = 0;
-
-    self.entries.retain(|_, entry| {
-      entry.last_used >= cutoff || {
-        freed += entry.bytes;
-        false
-      }
-    });
-
-    if freed < target {
-      let fresh: Vec<u64> = self.entries.keys().copied().collect();
-      for key in fresh {
-        if freed >= target {
-          break;
-        }
-        if let Some(entry) = self.entries.remove(&key) {
-          freed += entry.bytes;
-        }
-      }
-    }
-
-    USED_BYTES.fetch_sub(freed, Ordering::Relaxed);
-  }
-}
-
-impl<V> Drop for GlyphCache<V> {
-  fn drop(&mut self) {
-    let held: usize = self.entries.values().map(|entry| entry.bytes).sum();
-
-    USED_BYTES.fetch_sub(held, Ordering::Relaxed);
+    self.cache.insert(key, entry);
   }
 }
 
 #[cfg(test)]
 mod tests {
-  use std::sync::Mutex;
-
   use super::*;
 
-  /// The budget statics are process-wide; serialize tests that reconfigure them.
-  static BUDGET_LOCK: Mutex<()> = Mutex::new(());
-
   #[test]
-  fn eviction_keeps_entries_of_recent_renders() {
-    let _guard = BUDGET_LOCK.lock().unwrap();
-    set_glyph_cache_max_bytes(1024);
-    let mut cache = GlyphCache::default();
+  fn over_budget_evicts_down_to_the_ceiling() {
+    let cache = GlyphCache::new(1024);
 
-    cache.begin_render();
-    cache.insert(1, "old", 256);
-    cache.begin_render();
-    cache.begin_render();
-    cache.insert(2, "hot", 900);
+    for key in 0..8 {
+      cache.insert(key, "entry", 300);
+    }
 
-    assert!(cache.get(1).is_none());
-    assert!(cache.get(2).is_some());
-    set_glyph_cache_max_bytes(DEFAULT_GLYPH_CACHE_MAX_BYTES);
+    let live: usize = (0..8).filter(|key| cache.get(*key).is_some()).count();
+    assert!((1..=3).contains(&live), "live entries: {live}");
   }
 
   #[test]
-  fn over_budget_with_only_fresh_entries_evicts_just_enough() {
-    let _guard = BUDGET_LOCK.lock().unwrap();
-    set_glyph_cache_max_bytes(512);
-    let mut cache = GlyphCache::default();
+  fn zero_budget_disables_retention() {
+    let cache = GlyphCache::new(0);
 
-    cache.begin_render();
-    cache.insert(1, "a", 300);
-    cache.insert(2, "b", 300);
-
-    // 88 bytes over budget: dropping either 300-byte entry covers it, the
-    // other survives instead of the whole map flushing.
-    assert!(cache.get(1).is_some() ^ cache.get(2).is_some());
-    set_glyph_cache_max_bytes(DEFAULT_GLYPH_CACHE_MAX_BYTES);
+    cache.insert(1, "entry", 64);
+    assert!(cache.get(1).is_none());
   }
 }

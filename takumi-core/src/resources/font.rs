@@ -5,7 +5,7 @@ use std::{
   iter::once,
   rc::Rc,
   str::FromStr,
-  sync::Arc,
+  sync::{Arc, LazyLock},
 };
 
 use parley::{
@@ -28,7 +28,7 @@ use crate::{
   layout::inline::{InlineBrush, InlineLayout},
   resources::{
     glyph::{BOLD_THRESHOLD, GlyphResolveContext, ResolvedGlyph, synthesis_embolden_strength},
-    glyph_cache::GlyphCache,
+    glyph_cache::{GlyphCache, glyph_cache_share_bytes},
   },
   style::{FontFamily, FontStyle as CssFontStyle},
 };
@@ -111,9 +111,10 @@ fn guess_font_format(source: &[u8]) -> Result<FontFormat, FontError> {
 
 thread_local! {
   static LAYOUT_CONTEXT: RefCell<LayoutContext<InlineBrush>> = RefCell::new(LayoutContext::new());
-  static SHARED_RESOLVED_GLYPH_CACHE: RefCell<GlyphCache<ResolvedGlyph>> =
-    RefCell::new(GlyphCache::default());
 }
+
+static SHARED_RESOLVED_GLYPH_CACHE: LazyLock<GlyphCache<ResolvedGlyph>> =
+  LazyLock::new(|| GlyphCache::new(glyph_cache_share_bytes()));
 
 fn resolved_glyph_cache_key(
   font_id: u64,
@@ -255,12 +256,6 @@ impl Fonts {
 
   /// Render-local snapshot whose fallback bucket carries the given families.
   pub fn snapshot_with_fallbacks(&self, fallbacks: Option<&FontFamily>) -> FontsSnapshot {
-    SHARED_RESOLVED_GLYPH_CACHE.with(|cache| {
-      if let Ok(mut cache) = cache.try_borrow_mut() {
-        cache.begin_render();
-      }
-    });
-
     let mut cloned = self.inner.clone();
 
     let mut family_ids = if let Some(names) = fallbacks {
@@ -377,21 +372,12 @@ impl Fonts {
           skew,
           glyph_id,
         );
-        let cached = SHARED_RESOLVED_GLYPH_CACHE.with(|c| {
-          c.try_borrow_mut()
-            .ok()
-            .and_then(|mut cache| cache.get(key).cloned())
-        });
-        let glyph = if let Some(g) = cached {
+        let glyph = if let Some(g) = SHARED_RESOLVED_GLYPH_CACHE.get(key) {
           Some(g)
         } else {
           let resolved = resolver.resolve_glyph(glyph_id);
           if let Some(g) = resolved.as_ref() {
-            SHARED_RESOLVED_GLYPH_CACHE.with(|c| {
-              if let Ok(mut cache) = c.try_borrow_mut() {
-                cache.insert(key, g.clone(), g.estimated_bytes());
-              }
-            });
+            SHARED_RESOLVED_GLYPH_CACHE.insert(key, g.clone(), g.estimated_bytes());
           }
           resolved
         };

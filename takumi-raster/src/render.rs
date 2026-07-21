@@ -22,7 +22,6 @@ use crate::{
   resources::{font::FontsSnapshot, image::ImageSource},
   stacking_context::paint_context,
   style::{Affine, FontFamily, SizingContext, StyleSheet},
-  text_drawing::begin_glyph_mask_render,
   viewport::Viewport,
 };
 
@@ -436,8 +435,6 @@ fn render_with_context(
   viewport: Viewport,
   dithering: DitheringAlgorithm,
 ) -> Result<Bitmap> {
-  begin_glyph_mask_render();
-
   let mut root = RenderNode::from_node(&render_context, node);
   let mut tree = LayoutTree::from_render_node(&root);
 
