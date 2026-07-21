@@ -1,3 +1,13 @@
+## takumi-raster@0.4.1
+
+### Share the glyph caches across worker threads
+
+The glyph mask and resolved-glyph caches were thread-local maps under one process-wide byte counter, but eviction only pruned the inserting thread. An idle worker kept its share forever, so real retention multiplied with the thread pool (the emoji-bitmap growth noted in #1023). Both caches are now process-global `quick_cache` instances splitting the same 8 MiB budget: a glyph resolved on one thread is a hit on every thread, and eviction is global. `GlyphCache` methods take `&self` and `get` returns a clone; `set_glyph_cache_max_bytes` now applies to caches not yet used, so call it before the first render.
+
+### Stop the glyph mask cache from retaining more memory than its budget
+
+Cached glyph masks were charged `mask.len()` bytes but stored buffers recycled from the canvas buffer pool, which hands out any larger bucket — so a KB-sized mask could pin a much larger allocation and the 8 MiB budget under-enforced by a pool-state-dependent factor (#1023). A/B benchmarks showed the pool itself has no measurable win over the allocator on the render suites, so scratch buffers are now plain allocations: cached masks own exactly-sized buffers charged by capacity, and the buffer pool is gone. A retention test renders unique text over gradient cards and asserts live heap bytes stay near the budget.
+
 ## takumi-raster@0.4.0
 
 ### Bound the thread-local glyph caches by bytes
