@@ -1,4 +1,7 @@
-use std::{cell::RefCell, convert::Into};
+use std::{
+  convert::Into,
+  sync::{Arc, LazyLock},
+};
 
 use skrifa::color::ColorPalette;
 use takumi_core::geometry::{ComputedLayout as Layout, Point, Size};
@@ -12,39 +15,22 @@ use crate::{
   pixmap_ref_from_buffer, render_mask,
   resources::{
     glyph::{ResolvedColorLayer, ResolvedGlyph},
-    glyph_cache::GlyphCache,
+    glyph_cache::{GlyphCache, glyph_cache_share_bytes},
   },
   style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
   uninit_buffer,
 };
 
-pub(crate) type GlyphMaskCache = GlyphCache<(Vec<u8>, Placement)>;
+type GlyphMaskCache = GlyphCache<(Arc<Vec<u8>>, Placement)>;
 
-thread_local! {
-  static SHARED_GLYPH_MASK_CACHE: RefCell<GlyphMaskCache> = RefCell::new(GlyphCache::default());
-}
-
-/// Ages this thread's mask cache by one render.
-pub(crate) fn begin_glyph_mask_render() {
-  SHARED_GLYPH_MASK_CACHE.with(|c| {
-    if let Ok(mut cache) = c.try_borrow_mut() {
-      cache.begin_render();
-    }
-  });
-}
-
-pub(crate) fn with_shared_glyph_cache<R>(f: impl FnOnce(&mut GlyphMaskCache) -> R) -> R {
-  SHARED_GLYPH_MASK_CACHE.with(|c| match c.try_borrow_mut() {
-    Ok(mut cache) => f(&mut cache),
-    Err(_) => f(&mut GlyphCache::default()),
-  })
-}
+static SHARED_GLYPH_MASK_CACHE: LazyLock<GlyphMaskCache> =
+  LazyLock::new(|| GlyphCache::new(glyph_cache_share_bytes()));
 
 /// Charges the capacity the cache actually retains, not just the mask length.
-fn cache_mask(cache: &mut GlyphMaskCache, key: u64, mask: Vec<u8>, placement: Placement) {
+fn cache_mask(key: u64, mask: Vec<u8>, placement: Placement) {
   let bytes = mask.capacity() + 64;
 
-  cache.insert(key, (mask, placement), bytes);
+  SHARED_GLYPH_MASK_CACHE.insert(key, (Arc::new(mask), placement), bytes);
 }
 
 fn glyph_cache_key_and_offset(transform: Affine, glyph_signature: u64) -> Option<(u64, i32, i32)> {
@@ -71,25 +57,23 @@ fn draw_outline_with_cache(
     canvas.draw_mask(&mask, placement, color, BlendMode::Normal);
     return;
   };
-  with_shared_glyph_cache(|cache| {
-    if let Some((mask, cached_placement)) = cache.get(key) {
-      let placement = cached_placement.translate(int_x, int_y);
-      canvas.draw_mask(mask, placement, color, BlendMode::Normal);
-      return;
-    }
+  if let Some((mask, cached_placement)) = SHARED_GLYPH_MASK_CACHE.get(key) {
+    let placement = cached_placement.translate(int_x, int_y);
+    canvas.draw_mask(&mask, placement, color, BlendMode::Normal);
+    return;
+  }
 
-    let bucket_x = (key & 3) as f32 * 0.25;
-    let cache_transform = Affine::translation(bucket_x, 0.0);
-    let (mask, cached_placement) = render_mask(paths, Some(cache_transform), None);
-    canvas.draw_mask(
-      &mask,
-      cached_placement.translate(int_x, int_y),
-      color,
-      BlendMode::Normal,
-    );
+  let bucket_x = (key & 3) as f32 * 0.25;
+  let cache_transform = Affine::translation(bucket_x, 0.0);
+  let (mask, cached_placement) = render_mask(paths, Some(cache_transform), None);
+  canvas.draw_mask(
+    &mask,
+    cached_placement.translate(int_x, int_y),
+    color,
+    BlendMode::Normal,
+  );
 
-    cache_mask(cache, key, mask, cached_placement);
-  });
+  cache_mask(key, mask, cached_placement);
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -240,19 +224,16 @@ pub(crate) fn draw_glyph_clip_image(
       if let Some((key, int_x, int_y)) =
         glyph_cache_key_and_offset(transform, outline.cache_signature())
       {
-        with_shared_glyph_cache(|cache| {
-          if let Some((mask, cached_placement)) = cache.get(key) {
-            canvas.composite_mask_source(
-              mask,
-              cached_placement.translate(int_x, int_y),
-              clip_image,
-              MaskCompositeColor::SourceOnly,
-              sampling,
-              BlendMode::Normal,
-            );
-            return;
-          }
-
+        if let Some((mask, cached_placement)) = SHARED_GLYPH_MASK_CACHE.get(key) {
+          canvas.composite_mask_source(
+            &mask,
+            cached_placement.translate(int_x, int_y),
+            clip_image,
+            MaskCompositeColor::SourceOnly,
+            sampling,
+            BlendMode::Normal,
+          );
+        } else {
           let bucket_x = (key & 3) as f32 * 0.25;
           let cache_transform = Affine::translation(bucket_x, 0.0);
           let (mask, cached_placement) = render_mask(outline.paths(), Some(cache_transform), None);
@@ -265,8 +246,8 @@ pub(crate) fn draw_glyph_clip_image(
             BlendMode::Normal,
           );
 
-          cache_mask(cache, key, mask, cached_placement);
-        });
+          cache_mask(key, mask, cached_placement);
+        }
       } else {
         let (mask, placement) = render_mask(outline.paths(), Some(transform), None);
         canvas.composite_mask_source(
