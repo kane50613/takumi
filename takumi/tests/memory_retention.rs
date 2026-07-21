@@ -134,21 +134,24 @@ const UNIQUE_TEXT_CSS: &str = "
 .bg { width: 2400px; height: 1260px; background-image: radial-gradient(circle at 0% 0%, #e94560 0%, transparent 60%), radial-gradient(circle at 100% 100%, #533483 0%, #1a1a2e 70%); padding: 96px; }
 .title { background-image: linear-gradient(90deg, #ffffff, #e94560); background-clip: text; color: transparent; }";
 
+/// Eight CJK codepoints never rendered before, so every glyph is a fresh
+/// mask-cache key and a guaranteed miss; repeated Latin strings would re-hit
+/// the same glyph keys after the first few renders.
 fn unique_text_card(index: usize) -> Node {
-  let title = format!(
-    "Unique post title number {index} — every string is new {}",
-    index * 31
-  );
+  let title: String = (0..8)
+    .map(|offset| char::from_u32(0x4E00 + (index * 8 + offset) as u32).unwrap())
+    .collect();
 
   Node::container([Node::container([Node::text(title)]).with_class_name("title")])
     .with_class_name("bg")
     .with_style(Style::default().with(StyleDeclaration::font_size(FontSize::Length(Px(128.0)))))
 }
 
-/// Every render introduces glyphs the mask cache has never seen, on a large
-/// canvas whose scratch buffers cycle through the buffer pool. Retained bytes
-/// must track the glyph-cache budget, not the capacity of whatever pooled
-/// buffer each mask happened to be rendered into (issue #1023).
+/// Every render inserts glyph masks under keys the cache has never seen, so
+/// entries accumulate until eviction kicks in. Retained bytes must track the
+/// glyph-cache byte budget: each entry is charged the capacity it actually
+/// holds, so unique-text floods plateau near the budget instead of growing by
+/// whatever allocation each mask arrived in (issue #1023).
 #[test]
 fn unique_text_renders_stay_near_glyph_cache_budget() {
   const WARMUP_RENDERS: usize = 8;
