@@ -63,15 +63,23 @@ impl<V: Clone> GlyphCache<V> {
     self.cache.get(&key).map(|entry| entry.value)
   }
 
-  /// Caches `value` at `bytes` weight. Entries heavier than the whole budget
-  /// are rejected by the cache rather than evicting everything else.
-  pub fn insert(&self, key: u64, value: V, bytes: usize) {
-    let entry = Entry {
-      value,
-      bytes: bytes.min(u32::MAX as usize) as u32,
-    };
-
-    self.cache.insert(key, entry);
+  /// Returns the cached value, or computes and caches it with `f` — the value
+  /// and its byte weight. Concurrent callers for the same key wait for the
+  /// first compute instead of repeating it. `f` returning `None` caches
+  /// nothing, and a later call retries.
+  pub fn get_or_insert_with(&self, key: u64, f: impl FnOnce() -> Option<(V, usize)>) -> Option<V> {
+    self
+      .cache
+      .get_or_insert_with(&key, || {
+        f()
+          .map(|(value, bytes)| Entry {
+            value,
+            bytes: bytes.min(u32::MAX as usize) as u32,
+          })
+          .ok_or(())
+      })
+      .ok()
+      .map(|entry| entry.value)
   }
 }
 
@@ -84,7 +92,7 @@ mod tests {
     let cache = GlyphCache::new(1024);
 
     for key in 0..8 {
-      cache.insert(key, "entry", 300);
+      cache.get_or_insert_with(key, || Some(("entry", 300)));
     }
 
     let live: usize = (0..8).filter(|key| cache.get(*key).is_some()).count();
@@ -95,7 +103,21 @@ mod tests {
   fn zero_budget_disables_retention() {
     let cache = GlyphCache::new(0);
 
-    cache.insert(1, "entry", 64);
+    assert_eq!(
+      cache.get_or_insert_with(1, || Some(("entry", 64))),
+      Some("entry")
+    );
     assert!(cache.get(1).is_none());
+  }
+
+  #[test]
+  fn failed_compute_caches_nothing_and_retries() {
+    let cache = GlyphCache::new(1024);
+
+    assert_eq!(cache.get_or_insert_with(1, || None::<(&str, usize)>), None);
+    assert_eq!(
+      cache.get_or_insert_with(1, || Some(("entry", 64))),
+      Some("entry")
+    );
   }
 }

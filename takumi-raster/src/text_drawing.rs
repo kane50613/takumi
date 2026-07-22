@@ -26,11 +26,32 @@ type GlyphMaskCache = GlyphCache<(Arc<Vec<u8>>, Placement)>;
 static SHARED_GLYPH_MASK_CACHE: LazyLock<GlyphMaskCache> =
   LazyLock::new(|| GlyphCache::new(glyph_cache_share_bytes()));
 
-/// Charges the capacity the cache actually retains, not just the mask length.
-fn cache_mask(key: u64, mask: Vec<u8>, placement: Placement) {
-  let bytes = mask.capacity() + 64;
+/// Rasterizes `paths` at the subpixel bucket encoded in the low bits of `key`.
+fn render_bucket_mask(key: u64, paths: &[Command]) -> (Vec<u8>, Placement) {
+  let bucket_x = (key & 3) as f32 * 0.25;
 
-  SHARED_GLYPH_MASK_CACHE.insert(key, (Arc::new(mask), placement), bytes);
+  render_mask(paths, Some(Affine::translation(bucket_x, 0.0)), None)
+}
+
+/// Fetches the cached mask for `key`, rasterizing it on a miss; concurrent
+/// misses for the same key rasterize once. Charges the capacity the cache
+/// retains, not just the mask length.
+fn get_or_render_cached_mask(key: u64, paths: &[Command]) -> (Arc<Vec<u8>>, Placement) {
+  let cached = SHARED_GLYPH_MASK_CACHE.get_or_insert_with(key, || {
+    let (mask, placement) = render_bucket_mask(key, paths);
+    let bytes = mask.capacity() + 64;
+
+    Some(((Arc::new(mask), placement), bytes))
+  });
+
+  match cached {
+    Some(entry) => entry,
+    None => {
+      let (mask, placement) = render_bucket_mask(key, paths);
+
+      (Arc::new(mask), placement)
+    }
+  }
 }
 
 fn glyph_cache_key_and_offset(transform: Affine, glyph_signature: u64) -> Option<(u64, i32, i32)> {
@@ -57,23 +78,13 @@ fn draw_outline_with_cache(
     canvas.draw_mask(&mask, placement, color, BlendMode::Normal);
     return;
   };
-  if let Some((mask, cached_placement)) = SHARED_GLYPH_MASK_CACHE.get(key) {
-    let placement = cached_placement.translate(int_x, int_y);
-    canvas.draw_mask(&mask, placement, color, BlendMode::Normal);
-    return;
-  }
-
-  let bucket_x = (key & 3) as f32 * 0.25;
-  let cache_transform = Affine::translation(bucket_x, 0.0);
-  let (mask, cached_placement) = render_mask(paths, Some(cache_transform), None);
+  let (mask, cached_placement) = get_or_render_cached_mask(key, paths);
   canvas.draw_mask(
     &mask,
     cached_placement.translate(int_x, int_y),
     color,
     BlendMode::Normal,
   );
-
-  cache_mask(key, mask, cached_placement);
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -224,30 +235,15 @@ pub(crate) fn draw_glyph_clip_image(
       if let Some((key, int_x, int_y)) =
         glyph_cache_key_and_offset(transform, outline.cache_signature())
       {
-        if let Some((mask, cached_placement)) = SHARED_GLYPH_MASK_CACHE.get(key) {
-          canvas.composite_mask_source(
-            &mask,
-            cached_placement.translate(int_x, int_y),
-            clip_image,
-            MaskCompositeColor::SourceOnly,
-            sampling,
-            BlendMode::Normal,
-          );
-        } else {
-          let bucket_x = (key & 3) as f32 * 0.25;
-          let cache_transform = Affine::translation(bucket_x, 0.0);
-          let (mask, cached_placement) = render_mask(outline.paths(), Some(cache_transform), None);
-          canvas.composite_mask_source(
-            &mask,
-            cached_placement.translate(int_x, int_y),
-            clip_image,
-            MaskCompositeColor::SourceOnly,
-            sampling,
-            BlendMode::Normal,
-          );
-
-          cache_mask(key, mask, cached_placement);
-        }
+        let (mask, cached_placement) = get_or_render_cached_mask(key, outline.paths());
+        canvas.composite_mask_source(
+          &mask,
+          cached_placement.translate(int_x, int_y),
+          clip_image,
+          MaskCompositeColor::SourceOnly,
+          sampling,
+          BlendMode::Normal,
+        );
       } else {
         let (mask, placement) = render_mask(outline.paths(), Some(transform), None);
         canvas.composite_mask_source(

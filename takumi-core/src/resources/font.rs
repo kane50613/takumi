@@ -372,15 +372,13 @@ impl Fonts {
           skew,
           glyph_id,
         );
-        let glyph = if let Some(g) = SHARED_RESOLVED_GLYPH_CACHE.get(key) {
-          Some(g)
-        } else {
-          let resolved = resolver.resolve_glyph(glyph_id);
-          if let Some(g) = resolved.as_ref() {
-            SHARED_RESOLVED_GLYPH_CACHE.insert(key, g.clone(), g.estimated_bytes());
-          }
-          resolved
-        };
+        let glyph = SHARED_RESOLVED_GLYPH_CACHE.get_or_insert_with(key, || {
+          resolver.resolve_glyph(glyph_id).map(|glyph| {
+            let bytes = glyph.estimated_bytes();
+
+            (glyph, bytes)
+          })
+        });
         if let Some(g) = glyph {
           slot.insert(g);
         }
