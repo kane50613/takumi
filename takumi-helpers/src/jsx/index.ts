@@ -202,17 +202,13 @@ function collectChildrenWithContext(
   return collectChildren(element, { ...options, contexts });
 }
 
-function isRenderProp(value: unknown): value is (value: unknown) => ReactNode {
-  return typeof value === "function";
-}
-
 function renderConsumer(
   element: ReactElementLike,
   context: unknown,
   options: ResolvedFromJsxOptions,
 ): Promise<FromJsxTraversalResult> {
   const children = getElementChildren(element);
-  if (!isRenderProp(children)) return collectChildren(element, options);
+  if (!isFunctionComponent(children)) return collectChildren(element, options);
 
   return fromJsxInternal(children(readContext(options, context)), options);
 }

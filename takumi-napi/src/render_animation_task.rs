@@ -4,7 +4,7 @@ use napi::bindgen_prelude::*;
 use takumi_core::{
   layout::node::Node,
   style::{FontFamily, KeyframesRule, Lang},
-  viewport::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
+  viewport::Viewport,
 };
 use takumi_raster::{
   AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFormat, RenderOptions,
@@ -12,10 +12,10 @@ use takumi_raster::{
 };
 
 use crate::{
-  buffer_from_object, deserialize_with_tracing, map_error,
+  deserialize_with_tracing,
   renderer::{
-    AnimationOutputFormat, ImageCacheMode, ImageSource, RenderAnimationOptions, RendererState,
-    decode_images, deserialize_keyframes, webp_lossless,
+    AnimationOutputFormat, ImageCacheMode, RenderAnimationOptions, RendererState, collect_images,
+    decode_images, deserialize_keyframes, device_pixel_ratio, parse_lang, webp_lossless,
   },
 };
 use takumi_bindings_common::stylesheet;
@@ -54,7 +54,7 @@ impl RenderAnimationTask {
       images,
       stylesheets,
       keyframes,
-      device_pixel_ratio,
+      device_pixel_ratio: dpr,
       font_families,
       lang,
     } = options;
@@ -80,36 +80,16 @@ impl RenderAnimationTask {
     Ok(Self {
       scenes: Some(scenes),
       state,
-      viewport: Viewport::new((width, height)).with_device_pixel_ratio(
-        device_pixel_ratio
-          .map(|ratio| ratio as f32)
-          .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
-      ),
+      viewport: Viewport::new((width, height)).with_device_pixel_ratio(device_pixel_ratio(dpr)),
       format: format.unwrap_or(AnimationOutputFormat::WebP),
       quality,
       lossless,
       draw_debug_border: draw_debug_border.unwrap_or_default(),
       stylesheets,
       keyframes: deserialize_keyframes(keyframes)?,
-      images: images
-        .unwrap_or_default()
-        .into_iter()
-        .map(|image: ImageSource<'_>| {
-          Ok((
-            Arc::from(image.src),
-            (
-              buffer_from_object(env, image.data)?,
-              image.cache.unwrap_or_default(),
-            ),
-          ))
-        })
-        .collect::<Result<_>>()?,
+      images: collect_images(env, images)?,
       font_families: font_families.map(FontFamily::from_names),
-      lang: lang
-        .as_deref()
-        .map(Lang::parse)
-        .transpose()
-        .map_err(map_error)?,
+      lang: parse_lang(lang)?,
       fps,
     })
   }

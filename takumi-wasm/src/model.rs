@@ -44,17 +44,9 @@ extern "C" {
   #[wasm_bindgen(typescript_type = "RegisteredFamily[]")]
   pub type RegisteredFamiliesType;
 
-  /// JavaScript object representing an image source.
-  #[wasm_bindgen(typescript_type = "ImageSource")]
-  pub type ImageSourceType;
-
   /// JavaScript object representing a measured node tree.
   #[wasm_bindgen(typescript_type = "MeasuredNode")]
   pub type MeasuredNodeType;
-
-  /// JavaScript object representing an animation scene source.
-  #[wasm_bindgen(typescript_type = "AnimationScene")]
-  pub type AnimationSceneType;
 }
 
 /// Options for constructing a `Renderer`.

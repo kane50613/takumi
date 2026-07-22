@@ -11,20 +11,8 @@ const KEYCAP_EMOJI_REGEX = /^[#*0-9]\uFE0F?\u20E3$/u;
 
 function getIconCode(char: string) {
   const c = char.indexOf(U200D) < 0 ? char.replace(UFE0Fg, "") : char;
-  let r = "";
-  for (let i = 0, p = 0; i < c.length; i++) {
-    const cc = c.charCodeAt(i);
-    if (p) {
-      const code = (65536 + ((p - 55296) << 10) + (cc - 56320)).toString(16);
-      r += (r ? "-" : "") + code;
-      p = 0;
-    } else if (55296 <= cc && cc <= 56319) {
-      p = cc;
-    } else {
-      r += (r ? "-" : "") + cc.toString(16);
-    }
-  }
-  return r;
+
+  return [...c].map((ch) => ch.codePointAt(0)?.toString(16)).join("-");
 }
 
 const apis = {
@@ -46,25 +34,10 @@ function getEmojiUrl(icon: string, type: EmojiType) {
   return typeof api === "function" ? api(code) : `${api}${code.toUpperCase()}.svg`;
 }
 
-let segmenter: Intl.Segmenter | null | undefined;
+const segmenter = new Intl.Segmenter("en", { granularity: "grapheme" });
 
-function getSegmenter(): Intl.Segmenter | null {
-  if (segmenter === undefined) {
-    if (typeof Intl !== "undefined" && typeof Intl.Segmenter === "function") {
-      segmenter = new Intl.Segmenter("en", { granularity: "grapheme" });
-    } else {
-      segmenter = null;
-    }
-  }
-  return segmenter;
-}
-
-function getSegments(text: string): { segment: string }[] {
-  const s = getSegmenter();
-  if (s) {
-    return Array.from(s.segment(text));
-  }
-  return Array.from(text).map((s) => ({ segment: s }));
+function getSegments(text: string) {
+  return Array.from(segmenter.segment(text));
 }
 
 function isEmojiSegment(segment: string): boolean {

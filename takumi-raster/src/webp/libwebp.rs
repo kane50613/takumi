@@ -1,4 +1,4 @@
-use std::{borrow::Cow, ffi::CStr, io::Write, mem::MaybeUninit, ops::Range, slice};
+use std::{borrow::Cow, io::Write, mem::MaybeUninit, ops::Range, slice};
 
 use image::RgbaImage;
 use libwebp_sys::*;
@@ -518,17 +518,6 @@ pub fn write_animated_webp<W: Write>(
   )?;
 
   Ok(())
-}
-
-#[allow(dead_code)]
-fn animation_encoder_error_msg(encoder: *mut WebPAnimEncoder) -> String {
-  let ptr = unsafe { WebPAnimEncoderGetError(encoder) };
-  if ptr.is_null() {
-    return "WebP animation encode error".into();
-  }
-  unsafe { CStr::from_ptr(ptr) }
-    .to_string_lossy()
-    .into_owned()
 }
 
 #[cfg(test)]

@@ -8,9 +8,10 @@ use takumi_core::{
 };
 
 use crate::{
-  buffer_from_object, map_error,
+  map_error,
   renderer::{
-    ImageCacheMode, RendererState, SvgRenderOptions, decode_images, deserialize_keyframes,
+    ImageCacheMode, RendererState, SvgRenderOptions, collect_images, decode_images,
+    deserialize_keyframes, parse_lang,
   },
 };
 use takumi_bindings_common::stylesheet;
@@ -45,25 +46,9 @@ impl SvgRenderTask {
       viewport: Viewport::new((options.width, options.height)),
       time_ms: options.time_ms.unwrap_or_default().max(0) as u64,
       stylesheet,
-      images: options
-        .images
-        .unwrap_or_default()
-        .into_iter()
-        .map(|image| {
-          Ok((
-            Arc::from(image.src),
-            (
-              buffer_from_object(env, image.data)?,
-              image.cache.unwrap_or_default(),
-            ),
-          ))
-        })
-        .collect::<Result<_>>()?,
+      images: collect_images(env, options.images)?,
       font_families: options.font_families.map(FontFamily::from_names),
-      lang: options
-        .lang
-        .map(|lang| Lang::parse(&lang).map_err(map_error))
-        .transpose()?,
+      lang: parse_lang(options.lang)?,
     })
   }
 }

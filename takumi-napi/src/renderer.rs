@@ -12,16 +12,17 @@ use takumi_core::{
   resources::image::{
     ImageCacheMode as CoreImageCacheMode, ImageSource as LoadedImageSource, ResourceCache,
   },
-  style::KeyframesRule as CoreKeyframesRule,
+  style::{KeyframesRule as CoreKeyframesRule, Lang},
+  viewport::DEFAULT_DEVICE_PIXEL_RATIO,
 };
 use takumi_raster::{
   DitheringAlgorithm as CoreDitheringAlgorithm, OutputFormat as RasterOutputFormat, Quality,
 };
 
 use crate::{
-  De, deserialize_with_tracing, load_font_task::LoadFontTask, map_error, measure_task::MeasureTask,
-  parse_font_input, render_animation_task::RenderAnimationTask, render_task::RenderTask,
-  svg_render_task::SvgRenderTask,
+  De, buffer_from_object, deserialize_with_tracing, load_font_task::LoadFontTask, map_error,
+  measure_task::MeasureTask, parse_font_input, render_animation_task::RenderAnimationTask,
+  render_task::RenderTask, svg_render_task::SvgRenderTask,
 };
 
 /// Represents a single run of text in a measured node.
@@ -110,6 +111,39 @@ pub(crate) fn decode_images(
   }
 
   Ok(map)
+}
+
+pub(crate) fn collect_images(
+  env: Env,
+  images: Option<Vec<ImageSource>>,
+) -> Result<HashMap<Arc<str>, (Buffer, ImageCacheMode)>> {
+  images
+    .unwrap_or_default()
+    .into_iter()
+    .map(|image| {
+      Ok((
+        Arc::from(image.src),
+        (
+          buffer_from_object(env, image.data)?,
+          image.cache.unwrap_or_default(),
+        ),
+      ))
+    })
+    .collect()
+}
+
+pub(crate) fn parse_lang(lang: Option<String>) -> Result<Option<Lang>> {
+  lang
+    .as_deref()
+    .map(Lang::parse)
+    .transpose()
+    .map_err(map_error)
+}
+
+pub(crate) fn device_pixel_ratio(ratio: Option<f64>) -> f32 {
+  ratio
+    .map(|ratio| ratio as f32)
+    .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO)
 }
 
 pub(crate) fn deserialize_keyframes(keyframes: Option<Object>) -> Result<Vec<CoreKeyframesRule>> {
