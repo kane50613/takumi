@@ -51,33 +51,34 @@ ffplay.exited.then(() => {
   cleanup();
 });
 
-// Prevent rendering delay accumulation
-let isRendering = false;
+const renderOptions = { width, height, format: "raw" } as const;
+const frameInterval = 1000 / fps;
 
-const interval = setInterval(async () => {
-  if (isRendering) return; // Skip frame if still rendering
+// Backpressure-driven loop: render the next frame while the current one is
+// being written, and let stdin.flush() throttle production to ffplay's pace.
+async function run() {
+  const start = Date.now();
 
-  isRendering = true;
-  try {
-    // Render raw RGBA frame
-    const frame = await renderer.render(createFrame(), {
-      width,
-      height,
-      format: "raw",
-    });
+  let frameIndex = 0;
+  let pending = renderer.render(createFrame(), renderOptions);
+
+  while (!ffplay.killed) {
+    const frame = await pending;
+
+    pending = renderer.render(createFrame(), renderOptions);
 
     ffplay.stdin.write(frame);
-  } catch (error) {
-    console.error("Error rendering frame:", error);
-    cleanup();
-  } finally {
-    isRendering = false;
+    await ffplay.stdin.flush();
+
+    frameIndex++;
+    const nextDeadline = start + frameIndex * frameInterval;
+
+    await Bun.sleep(Math.max(0, nextDeadline - Date.now()));
   }
-}, 1000 / fps);
+}
 
 // Cleanup on exit
 function cleanup() {
-  clearInterval(interval);
   ffplay.stdin.end();
   ffplay.kill();
   process.exit(0);
@@ -86,11 +87,15 @@ function cleanup() {
 process.on("SIGINT", cleanup);
 process.on("SIGTERM", cleanup);
 
-// DVD logo bouncing position and velocity
-let posX = width / 2;
-let posY = height / 2;
-let velocityX = 3;
-let velocityY = 2;
+// DVD logo bounce: position derived from wall-clock time so frame jitter
+// never distorts the trajectory
+const speedX = 180; // px/s
+const speedY = 120;
+
+function bounce(distance: number, range: number): number {
+  const phase = distance % (2 * range);
+  return phase < range ? phase : 2 * range - phase;
+}
 
 function getTextMeasurement(time: number) {
   return renderer.measure(
@@ -102,21 +107,17 @@ function getTextMeasurement(time: number) {
 }
 
 const { width: textWidth, height: textHeight } = await getTextMeasurement(Date.now());
+const animationStart = Date.now();
+
+run().catch((error) => {
+  console.error("Error rendering frame:", error);
+  cleanup();
+});
 
 function createFrame(time = Date.now()): Node {
-  // Update position
-  posX += velocityX;
-  posY += velocityY;
-
-  // Bounce off edges
-  if (posX <= 0 || posX + textWidth >= width) {
-    velocityX *= -1;
-    posX = Math.max(0, Math.min(posX, width - textWidth));
-  }
-  if (posY <= 0 || posY + textHeight >= height) {
-    velocityY *= -1;
-    posY = Math.max(0, Math.min(posY, height - textHeight));
-  }
+  const elapsed = (time - animationStart) / 1000;
+  const posX = bounce(width / 2 + elapsed * speedX, width - textWidth);
+  const posY = bounce(height / 2 + elapsed * speedY, height - textHeight);
 
   // Calculate hue rotation based on time for visible smooth color animation
   const hue = ((time / 1000) * 36) % 360; // Rotate through full color spectrum every 10 seconds
