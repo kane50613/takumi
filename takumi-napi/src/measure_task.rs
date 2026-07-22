@@ -4,15 +4,15 @@ use napi::bindgen_prelude::*;
 use takumi_core::{
   layout::node::Node,
   style::{FontFamily, Lang, StyleSheet},
-  viewport::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
+  viewport::Viewport,
 };
 use takumi_raster::measure;
 
 use crate::{
-  buffer_from_object, map_error,
+  map_error,
   renderer::{
-    ImageCacheMode, MeasuredNode, RenderOptions, RendererState, decode_images,
-    deserialize_keyframes,
+    ImageCacheMode, MeasuredNode, RenderOptions, RendererState, collect_images, decode_images,
+    deserialize_keyframes, device_pixel_ratio, parse_lang,
   },
 };
 use takumi_bindings_common::stylesheet;
@@ -44,35 +44,13 @@ impl MeasureTask {
     Ok(MeasureTask {
       node: Some(node),
       state,
-      viewport: Viewport::new((options.width, options.height)).with_device_pixel_ratio(
-        options
-          .device_pixel_ratio
-          .map(|ratio| ratio as f32)
-          .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
-      ),
+      viewport: Viewport::new((options.width, options.height))
+        .with_device_pixel_ratio(device_pixel_ratio(options.device_pixel_ratio)),
       time_ms: options.time_ms.unwrap_or_default().max(0) as u64,
       stylesheet,
-      images: options
-        .images
-        .unwrap_or_default()
-        .into_iter()
-        .map(|image| {
-          Ok((
-            Arc::from(image.src),
-            (
-              buffer_from_object(env, image.data)?,
-              image.cache.unwrap_or_default(),
-            ),
-          ))
-        })
-        .collect::<Result<_>>()?,
+      images: collect_images(env, options.images)?,
       font_families: options.font_families.map(FontFamily::from_names),
-      lang: options
-        .lang
-        .as_deref()
-        .map(Lang::parse)
-        .transpose()
-        .map_err(map_error)?,
+      lang: parse_lang(options.lang)?,
     })
   }
 }

@@ -22,7 +22,6 @@ use crate::{
   context::RenderContext,
   geometry::{AvailableSpace, Size},
   layout::{inline::InlineContentKind, node::image::image_url},
-  matching::MatchableNode,
   resources::{
     image::{ImageError, ImageResult, ImageSource},
     image_buffer::ImageBuffer,
@@ -706,28 +705,29 @@ pub(crate) struct NodeStyleLayers {
   pub(crate) lang: Option<Lang>,
 }
 
-impl MatchableNode for Node {
-  fn tag_name(&self) -> Option<&str> {
+/// Selector-matching queries read by [`crate::matching`].
+impl Node {
+  pub(crate) fn tag_name(&self) -> Option<&str> {
     self.metadata.tag_name.as_deref()
   }
 
-  fn id(&self) -> Option<&str> {
+  pub(crate) fn id(&self) -> Option<&str> {
     self.metadata.id.as_deref()
   }
 
-  fn class_name(&self) -> Option<&str> {
+  pub(crate) fn class_name(&self) -> Option<&str> {
     self.metadata.class_name.as_deref()
   }
 
-  fn attr(&self, name: &str) -> Option<&str> {
+  pub(crate) fn attr(&self, name: &str) -> Option<&str> {
     self.attribute(name)
   }
 
-  fn is_replaced(&self) -> bool {
+  pub(crate) fn is_replaced(&self) -> bool {
     self.is_replaced_element()
   }
 
-  fn children(&self) -> Option<&[Self]> {
+  pub(crate) fn children(&self) -> Option<&[Self]> {
     self.children_ref()
   }
 }

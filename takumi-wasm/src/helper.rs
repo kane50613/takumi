@@ -6,6 +6,3 @@ use std::fmt::Display;
 pub fn map_error<E: Display>(err: E) -> js_sys::Error {
   js_sys::Error::new(&err.to_string())
 }
-
-/// Type alias for JavaScript result.
-pub type JsResult<T> = Result<T, js_sys::Error>;

@@ -62,6 +62,50 @@ fn load_font_internal(
   }
 }
 
+fn parse_lang(lang: Option<String>) -> Result<Option<Lang>, js_sys::Error> {
+  lang
+    .as_deref()
+    .map(Lang::parse)
+    .transpose()
+    .map_err(map_error)
+}
+
+fn raster_options<'fonts>(
+  resource_cache: &ResourceCache,
+  fonts: &'fonts Fonts,
+  node: Node,
+  options: RenderOptions,
+  images: HashMap<Arc<str>, LoadedImageSource>,
+) -> Result<takumi_raster::RenderOptions<'fonts>, js_sys::Error> {
+  let stylesheet = stylesheet(
+    resource_cache,
+    options.stylesheets,
+    options.keyframes.unwrap_or_default(),
+  );
+  let lang = parse_lang(options.lang)?;
+
+  Ok(
+    takumi_raster::RenderOptions::builder()
+      .viewport(
+        Viewport::new((options.width, options.height)).with_device_pixel_ratio(
+          options
+            .device_pixel_ratio
+            .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
+        ),
+      )
+      .draw_debug_border(options.draw_debug_border.unwrap_or_default())
+      .images(images)
+      .stylesheet(stylesheet)
+      .time_ms(options.time_ms.unwrap_or_default().max(0) as u64)
+      .dithering(options.dithering.unwrap_or_default())
+      .node(node)
+      .fonts(fonts)
+      .font_families(options.font_families.map(FontFamily::from_names))
+      .lang(lang)
+      .build(),
+  )
+}
+
 impl Renderer {
   fn read_state(&self) -> Result<RwLockReadGuard<'_, Fonts>, js_sys::Error> {
     self
@@ -152,40 +196,11 @@ impl Renderer {
     options: RenderOptions,
     images: HashMap<Arc<str>, LoadedImageSource>,
   ) -> Result<Vec<u8>, JsValue> {
-    let dithering = options.dithering.unwrap_or_default();
-    let stylesheet = stylesheet(
-      &self.resource_cache,
-      options.stylesheets,
-      options.keyframes.unwrap_or_default(),
-    );
-
-    let lang = options
-      .lang
-      .map(|lang| Lang::parse(&lang).map_err(map_error))
-      .transpose()?;
-
-    let render_options = takumi_raster::RenderOptions::builder()
-      .viewport(
-        Viewport::new((options.width, options.height)).with_device_pixel_ratio(
-          options
-            .device_pixel_ratio
-            .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
-        ),
-      )
-      .draw_debug_border(options.draw_debug_border.unwrap_or_default())
-      .images(images)
-      .stylesheet(stylesheet)
-      .time_ms(options.time_ms.unwrap_or_default().max(0) as u64)
-      .dithering(dithering)
-      .node(node)
-      .fonts(fonts)
-      .font_families(options.font_families.map(FontFamily::from_names))
-      .lang(lang)
-      .build();
+    let format = options.format.unwrap_or(OutputFormat::Png);
+    let quality = options.quality;
+    let render_options = raster_options(&self.resource_cache, fonts, node, options, images)?;
 
     let image = render(render_options).map_err(map_error)?;
-
-    let format = options.format.unwrap_or(OutputFormat::Png);
 
     if format == OutputFormat::Raw {
       return Ok(image.into_raw());
@@ -196,7 +211,7 @@ impl Renderer {
     write_image(
       &image,
       &mut buffer,
-      format.into_image_output_format(options.quality),
+      format.into_image_output_format(quality),
     )
     .map_err(map_error)?;
 
@@ -224,10 +239,7 @@ impl Renderer {
     );
     let state = self.read_state()?;
 
-    let lang = options
-      .lang
-      .map(|lang| Lang::parse(&lang).map_err(map_error))
-      .transpose()?;
+    let lang = parse_lang(options.lang)?;
 
     let svg = takumi_svg::render(
       takumi_svg::SvgOptions::builder()
@@ -259,36 +271,10 @@ impl Renderer {
       .transpose()?
       .unwrap_or_default();
 
-    let lang = options
-      .lang
-      .map(|lang| Lang::parse(&lang).map_err(map_error))
-      .transpose()?;
-
     let images = self.images_map(options.images.as_deref())?;
-    let stylesheet = stylesheet(
-      &self.resource_cache,
-      options.stylesheets,
-      options.keyframes.unwrap_or_default(),
-    );
 
     let state = self.read_state()?;
-    let render_options = takumi_raster::RenderOptions::builder()
-      .viewport(
-        Viewport::new((options.width, options.height)).with_device_pixel_ratio(
-          options
-            .device_pixel_ratio
-            .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO),
-        ),
-      )
-      .draw_debug_border(options.draw_debug_border.unwrap_or_default())
-      .images(images)
-      .stylesheet(stylesheet)
-      .time_ms(options.time_ms.unwrap_or_default().max(0) as u64)
-      .node(node)
-      .fonts(&state)
-      .font_families(options.font_families.map(FontFamily::from_names))
-      .lang(lang)
-      .build();
+    let render_options = raster_options(&self.resource_cache, &state, node, options, images)?;
 
     let layout = measure(render_options).map_err(map_error)?;
 
@@ -347,9 +333,7 @@ impl Renderer {
       lang,
     } = from_value(options.into()).map_err(map_error)?;
 
-    let lang = lang
-      .map(|lang| Lang::parse(&lang).map_err(map_error))
-      .transpose()?;
+    let lang = parse_lang(lang)?;
 
     let images = self.images_map(images.as_deref())?;
 

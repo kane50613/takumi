@@ -12,7 +12,7 @@ mod render_task;
 pub(crate) mod renderer;
 mod svg_render_task;
 
-use std::{fmt::Display, ops::Deref};
+use std::fmt::Display;
 
 use napi::{De, Env, Error, bindgen_prelude::*};
 use napi_derive::napi;
@@ -149,14 +149,6 @@ impl AsRef<[u8]> for BufferOrSlice<'_> {
       BufferOrSlice::Buffer(buffer) => buffer,
       BufferOrSlice::Uint8Array(buffer) => buffer,
     }
-  }
-}
-
-impl Deref for BufferOrSlice<'_> {
-  type Target = [u8];
-
-  fn deref(&self) -> &Self::Target {
-    self.as_ref()
   }
 }
 
