@@ -20,10 +20,9 @@ use takumi_raster::{
 };
 
 use crate::{
-  De, JsBytes, bytes_from_object, deserialize_with_tracing, load_font_task::LoadFontTask,
-  map_error, measure_task::MeasureTask, parse_font_input,
-  render_animation_task::RenderAnimationTask, render_task::RenderTask,
-  svg_render_task::SvgRenderTask,
+  De, JsBytes, deserialize_with_tracing, load_font_task::LoadFontTask, map_error,
+  measure_task::MeasureTask, parse_font_input, render_animation_task::RenderAnimationTask,
+  render_task::RenderTask, svg_render_task::SvgRenderTask,
 };
 
 /// Represents a single run of text in a measured node.
@@ -125,7 +124,7 @@ pub(crate) fn collect_images(
       Ok((
         Arc::from(image.src),
         (
-          bytes_from_object(env, image.data)?,
+          JsBytes::from_object(env, image.data)?,
           image.cache.unwrap_or_default(),
         ),
       ))
