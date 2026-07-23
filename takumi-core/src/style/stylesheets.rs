@@ -342,7 +342,6 @@ macro_rules! define_style {
         }
 
         /// Resolves a property from a camelCase name.
-        #[allow(dead_code)]
         pub(crate) fn from_camel_case(name: &str) -> Self {
           PropertyId::from_name(name, normalize_camel_property_name)
         }

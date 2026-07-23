@@ -9,7 +9,7 @@ use takumi_core::{
 use takumi_raster::{DitheringAlgorithm, render, write_image};
 
 use crate::{
-  map_error,
+  JsBytes, map_error,
   renderer::{
     ImageCacheMode, OutputFormat, RenderOptions, RendererState, collect_images, decode_images,
     deserialize_keyframes, device_pixel_ratio, parse_lang,
@@ -28,7 +28,7 @@ pub struct RenderTask {
   pub(crate) dithering: DitheringAlgorithm,
   pub(crate) time_ms: u64,
   pub(crate) stylesheet: Arc<StyleSheet>,
-  pub(crate) images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
+  pub(crate) images: HashMap<Arc<str>, (JsBytes, ImageCacheMode)>,
   pub(crate) font_families: Option<FontFamily>,
   pub(crate) lang: Option<Lang>,
 }

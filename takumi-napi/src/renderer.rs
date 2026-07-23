@@ -20,7 +20,7 @@ use takumi_raster::{
 };
 
 use crate::{
-  De, buffer_from_object, deserialize_with_tracing, load_font_task::LoadFontTask, map_error,
+  De, JsBytes, deserialize_with_tracing, load_font_task::LoadFontTask, map_error,
   measure_task::MeasureTask, parse_font_input, render_animation_task::RenderAnimationTask,
   render_task::RenderTask, svg_render_task::SvgRenderTask,
 };
@@ -98,13 +98,13 @@ pub(crate) struct RendererState {
 /// `quick_cache::sync` (internally locked, single-flight), so it needs no outer lock.
 pub(crate) fn decode_images(
   resource_cache: &ResourceCache,
-  images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
+  images: HashMap<Arc<str>, (JsBytes, ImageCacheMode)>,
 ) -> Result<HashMap<Arc<str>, LoadedImageSource>> {
   let mut map = HashMap::new();
 
   for (src, (buffer, mode)) in images {
     let decoded = resource_cache
-      .get_or_decode(&buffer, mode.into())
+      .get_or_decode(buffer.as_ref(), mode.into())
       .map_err(map_error)?;
 
     map.insert(src, decoded);
@@ -116,7 +116,7 @@ pub(crate) fn decode_images(
 pub(crate) fn collect_images(
   env: Env,
   images: Option<Vec<ImageSource>>,
-) -> Result<HashMap<Arc<str>, (Buffer, ImageCacheMode)>> {
+) -> Result<HashMap<Arc<str>, (JsBytes, ImageCacheMode)>> {
   images
     .unwrap_or_default()
     .into_iter()
@@ -124,7 +124,7 @@ pub(crate) fn collect_images(
       Ok((
         Arc::from(image.src),
         (
-          buffer_from_object(env, image.data)?,
+          JsBytes::from_object(env, image.data)?,
           image.cache.unwrap_or_default(),
         ),
       ))

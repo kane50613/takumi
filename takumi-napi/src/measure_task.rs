@@ -9,7 +9,7 @@ use takumi_core::{
 use takumi_raster::measure;
 
 use crate::{
-  map_error,
+  JsBytes, map_error,
   renderer::{
     ImageCacheMode, MeasuredNode, RenderOptions, RendererState, collect_images, decode_images,
     deserialize_keyframes, device_pixel_ratio, parse_lang,
@@ -23,7 +23,7 @@ pub struct MeasureTask {
   pub(crate) viewport: Viewport,
   pub(crate) time_ms: u64,
   pub(crate) stylesheet: Arc<StyleSheet>,
-  pub(crate) images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
+  pub(crate) images: HashMap<Arc<str>, (JsBytes, ImageCacheMode)>,
   pub(crate) font_families: Option<FontFamily>,
   pub(crate) lang: Option<Lang>,
 }
