@@ -135,6 +135,11 @@ function isBuffer(data: unknown): data is ByteBuf {
   );
 }
 
+// The native binding copies bare ArrayBuffers but passes typed-array views zero-copy.
+function asView(data: ByteBuf): Uint8Array {
+  return data instanceof ArrayBuffer ? new Uint8Array(data) : data;
+}
+
 function extractFontBuffer(font: Exclude<FontLoader, string>) {
   if (isBuffer(font)) {
     return font;
@@ -175,7 +180,7 @@ export async function resolveImageLoaders(images: ImagesInput): Promise<ImageSou
   return Promise.all(
     [...bySrc.values()].map(async ({ src, data, cache: own }) => ({
       src,
-      data: typeof data === "function" ? await data() : data,
+      data: asView(typeof data === "function" ? await data() : data),
       cache: own ?? cache,
     })),
   );
@@ -228,7 +233,11 @@ export class FontRegistry<TFamily extends RegisteredFamilyLike> {
     const extracted = extractFontBuffer(loader);
 
     const promise = Promise.resolve(extracted)
-      .then((data) => this.registerInner(isBuffer(loader) ? data : { ...loader, data }))
+      .then((data) => {
+        const view = asView(data);
+
+        return this.registerInner(isBuffer(loader) ? view : { ...loader, data: view });
+      })
       .catch((error) => {
         this.deleteFont(key);
         throw error;
