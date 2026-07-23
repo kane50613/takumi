@@ -97,6 +97,8 @@ impl<'de> Deserialize<'de> for FontStyleInput {
 }
 
 /// Ref-counted view of JS-owned bytes, sendable into async tasks without copying.
+/// Callers must not mutate the bytes on the JS side while a task reads them —
+/// the same aliasing contract Buffer inputs have always had.
 pub(crate) enum JsBytes {
   Buffer(Buffer),
   Array(Uint8Array),
