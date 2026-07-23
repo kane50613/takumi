@@ -96,20 +96,35 @@ impl<'de> Deserialize<'de> for FontStyleInput {
   }
 }
 
-pub(crate) fn buffer_from_object(env: Env, value: Object) -> Result<Buffer> {
+/// Ref-counted view of JS-owned bytes, sendable into async tasks without copying.
+pub(crate) enum JsBytes {
+  Buffer(Buffer),
+  Array(Uint8Array),
+}
+
+impl AsRef<[u8]> for JsBytes {
+  fn as_ref(&self) -> &[u8] {
+    match self {
+      JsBytes::Buffer(buffer) => buffer,
+      JsBytes::Array(array) => array,
+    }
+  }
+}
+
+pub(crate) fn bytes_from_object(env: Env, value: Object) -> Result<JsBytes> {
   if value.is_buffer()? {
     let buffer = unsafe { BufferSlice::from_napi_value(env.raw(), value.raw()) }?;
-    return buffer.into_buffer(&env);
+    return Ok(JsBytes::Buffer(buffer.into_buffer(&env)?));
+  }
+
+  if value.is_typedarray()? {
+    let array = unsafe { Uint8Array::from_napi_value(env.raw(), value.raw()) }?;
+    return Ok(JsBytes::Array(array));
   }
 
   if value.is_arraybuffer()? {
     let buffer = unsafe { ArrayBuffer::from_napi_value(env.raw(), value.raw()) }?;
-    return Ok(Buffer::from(buffer.to_vec()));
-  }
-
-  if value.is_typedarray()? {
-    let buffer = unsafe { Uint8ArraySlice::from_napi_value(env.raw(), value.raw()) }?;
-    return Ok(Buffer::from(buffer.to_vec()));
+    return Ok(JsBytes::Buffer(Buffer::from(buffer.to_vec())));
   }
 
   Err(Error::from_reason(
@@ -117,13 +132,13 @@ pub(crate) fn buffer_from_object(env: Env, value: Object) -> Result<Buffer> {
   ))
 }
 
-pub(crate) fn parse_font_input(env: Env, font: Object) -> Result<(FontInput, Buffer)> {
-  if let Ok(buffer) = buffer_from_object(env, font) {
+pub(crate) fn parse_font_input(env: Env, font: Object) -> Result<(FontInput, JsBytes)> {
+  if let Ok(buffer) = bytes_from_object(env, font) {
     Ok((FontInput::default(), buffer))
   } else {
     let buffer = font
       .get_named_property("data")
-      .and_then(|buffer| buffer_from_object(env, buffer))?;
+      .and_then(|buffer| bytes_from_object(env, buffer))?;
     let font: FontInput = deserialize_with_tracing(font).map_err(map_error)?;
 
     Ok((font, buffer))

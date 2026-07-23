@@ -12,7 +12,7 @@ use takumi_raster::{
 };
 
 use crate::{
-  deserialize_with_tracing,
+  JsBytes, deserialize_with_tracing,
   renderer::{
     AnimationOutputFormat, ImageCacheMode, RenderAnimationOptions, RendererState, collect_images,
     decode_images, deserialize_keyframes, device_pixel_ratio, parse_lang, webp_lossless,
@@ -30,7 +30,7 @@ pub struct RenderAnimationTask {
   pub(crate) draw_debug_border: bool,
   pub(crate) stylesheets: Option<Vec<String>>,
   pub(crate) keyframes: Vec<KeyframesRule>,
-  pub(crate) images: HashMap<Arc<str>, (Buffer, ImageCacheMode)>,
+  pub(crate) images: HashMap<Arc<str>, (JsBytes, ImageCacheMode)>,
   pub(crate) font_families: Option<FontFamily>,
   pub(crate) lang: Option<Lang>,
   pub(crate) fps: u32,
