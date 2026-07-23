@@ -102,8 +102,19 @@ pub(crate) fn buffer_from_object(env: Env, value: Object) -> Result<Buffer> {
     return buffer.into_buffer(&env);
   }
 
-  let bytes = buffer_slice_from_object(env, value)?;
-  Ok(Buffer::from(bytes.as_ref().to_vec()))
+  if value.is_arraybuffer()? {
+    let buffer = unsafe { ArrayBuffer::from_napi_value(env.raw(), value.raw()) }?;
+    return Ok(Buffer::from(buffer.to_vec()));
+  }
+
+  if value.is_typedarray()? {
+    let buffer = unsafe { Uint8ArraySlice::from_napi_value(env.raw(), value.raw()) }?;
+    return Ok(Buffer::from(buffer.to_vec()));
+  }
+
+  Err(Error::from_reason(
+    "Expected Buffer, ArrayBuffer, or Uint8Array".to_owned(),
+  ))
 }
 
 pub(crate) fn parse_font_input(env: Env, font: Object) -> Result<(FontInput, Buffer)> {
@@ -134,46 +145,6 @@ pub(crate) fn resolve_font_resource<'a>(
   .map_err(map_error)?
   .into_resolved()
   .map_err(map_error)
-}
-
-pub(crate) enum BufferOrSlice<'env> {
-  ArrayBuffer(ArrayBuffer<'env>),
-  Buffer(BufferSlice<'env>),
-  Uint8Array(Uint8ArraySlice<'env>),
-}
-
-impl AsRef<[u8]> for BufferOrSlice<'_> {
-  fn as_ref(&self) -> &[u8] {
-    match self {
-      BufferOrSlice::ArrayBuffer(buffer) => buffer,
-      BufferOrSlice::Buffer(buffer) => buffer,
-      BufferOrSlice::Uint8Array(buffer) => buffer,
-    }
-  }
-}
-
-pub(crate) fn buffer_slice_from_object<'env>(
-  env: Env,
-  value: Object<'env>,
-) -> Result<BufferOrSlice<'env>> {
-  if value.is_buffer()? {
-    let buffer = unsafe { BufferSlice::from_napi_value(env.raw(), value.raw()) }?;
-    return Ok(BufferOrSlice::Buffer(buffer));
-  }
-
-  if value.is_arraybuffer()? {
-    let buffer = unsafe { ArrayBuffer::from_napi_value(env.raw(), value.raw()) }?;
-    return Ok(BufferOrSlice::ArrayBuffer(buffer));
-  }
-
-  if value.is_typedarray()? {
-    let buffer = unsafe { Uint8ArraySlice::from_napi_value(env.raw(), value.raw()) }?;
-    return Ok(BufferOrSlice::Uint8Array(buffer));
-  }
-
-  Err(Error::from_reason(
-    "Expected Buffer, ArrayBuffer, or Uint8Array".to_owned(),
-  ))
 }
 
 pub(crate) fn deserialize_with_tracing<T: DeserializeOwned>(value: Object) -> Result<T> {
