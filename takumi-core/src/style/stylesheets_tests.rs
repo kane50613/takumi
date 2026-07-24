@@ -1318,3 +1318,37 @@ fn test_border_radius_calc_infinity_parses_from_stylesheet_declaration() {
     style.border_top_left_radius.x
   );
 }
+
+#[test]
+fn overflow_visible_paired_with_hidden_computes_to_hidden() {
+  let mixed = inherited_style_from_pairs(
+    [("overflow-x", "hidden"), ("overflow-y", "visible")],
+    &ComputedStyle::default(),
+  );
+  assert_eq!(
+    mixed.resolve_overflows(),
+    SpacePair::from_pair(Overflow::Hidden, Overflow::Hidden)
+  );
+
+  let mirrored = inherited_style_from_pairs(
+    [("overflow-x", "visible"), ("overflow-y", "hidden")],
+    &ComputedStyle::default(),
+  );
+  assert_eq!(
+    mirrored.resolve_overflows(),
+    SpacePair::from_pair(Overflow::Hidden, Overflow::Hidden)
+  );
+}
+
+#[test]
+fn overflow_visible_paired_with_clip_stays_mixed() {
+  let style = inherited_style_from_pairs(
+    [("overflow-x", "clip"), ("overflow-y", "visible")],
+    &ComputedStyle::default(),
+  );
+
+  assert_eq!(
+    style.resolve_overflows(),
+    SpacePair::from_pair(Overflow::Clip, Overflow::Visible)
+  );
+}
