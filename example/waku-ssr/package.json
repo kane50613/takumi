@@ -3,21 +3,23 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "waku dev",
+    "dev": "portless run --name waku-ssr.takumi sh -c 'waku dev --port $PORT'",
     "build": "waku build",
     "start": "waku start",
     "test": "vitest run"
   },
   "dependencies": {
-    "react": "~19.2.7",
-    "react-dom": "~19.2.7",
+    "react": "~19.2.8",
+    "react-dom": "~19.2.8",
+    "react-server-dom-webpack": "~19.2.8",
     "takumi-js": "workspace:*",
-    "waku": "1.0.0-beta.6"
+    "waku": "1.0.0-beta.8"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "portless": "^0.15.4",
     "tailwindcss": "^4.3.3",
     "typescript": "catalog:",
     "vitest": "^4.1.10"

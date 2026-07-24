@@ -3,17 +3,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite dev --port 3000",
+    "dev": "portless run --name tanstack.takumi vite dev",
     "build": "vite build",
     "serve": "vite preview",
     "test": "vitest run"
   },
   "dependencies": {
-    "@cloudflare/vite-plugin": "^1.45.0",
+    "@cloudflare/vite-plugin": "^1.47.0",
     "@tanstack/react-router": "^1.170.18",
     "@tanstack/react-router-ssr-query": "^1.167.1",
-    "@tanstack/react-start": "^1.168.28",
-    "@tanstack/router-plugin": "^1.168.20",
+    "@tanstack/react-start": "^1.168.32",
+    "@tanstack/router-plugin": "^1.168.23",
     "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
@@ -23,6 +23,7 @@
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "portless": "^0.15.4",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "^4.1.10"
