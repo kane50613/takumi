@@ -15,7 +15,7 @@ members = [
 [workspace.dependencies]
 arc-swap = "1"
 base64 = "0.22"
-bitflags = "2.11"
+bitflags = "2.13"
 bytemuck = "1.25"
 color = "0.3"
 criterion = "0.8"
@@ -34,7 +34,7 @@ napi-derive = "3"
 paste = "1.0"
 precomputed-hash = "0.1"
 quick-xml = "0.41"
-rayon = "1.10"
+rayon = "1.12"
 rgb = "0.8"
 roxmltree = "0.21.1"
 selectors = "0.39"
@@ -84,7 +84,7 @@ default-features = false
 features = ["std"]
 
 [workspace.dependencies.phf]
-version = "0.14"
+version = "0.13"
 features = ["macros"]
 
 [workspace.dependencies.serde]
