@@ -251,8 +251,8 @@ fn fill_rect_mask(viewport: CanvasViewport, from: Point<u32>, to: Point<u32>) ->
   let viewport_bottom = viewport.bottom();
   let start_x = (from.x as i32).max(viewport.origin.x as i32);
   let start_y = (from.y as i32).max(viewport.origin.y as i32);
-  let end_x = (to.x as i32).min(viewport_right);
-  let end_y = (to.y as i32).min(viewport_bottom);
+  let end_x = viewport_right.min(to.x.min(i32::MAX as u32) as i32);
+  let end_y = viewport_bottom.min(to.y.min(i32::MAX as u32) as i32);
   if start_x >= end_x || start_y >= end_y {
     return Some(mask);
   }

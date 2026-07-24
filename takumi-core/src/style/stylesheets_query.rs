@@ -162,9 +162,19 @@ impl ComputedStyle {
     !self.local_transform(width, height, sizing).is_identity()
   }
 
-  /// The `(overflow-x, overflow-y)` pair.
+  /// The computed `(overflow-x, overflow-y)` pair. `visible` paired with an axis
+  /// that is neither `visible` nor `clip` computes to a clipping value, per
+  /// <https://drafts.csswg.org/css-overflow-3/#overflow-properties>. Blink
+  /// resolves it to `auto`; without a scrolling box that is `hidden` here.
   pub fn resolve_overflows(&self) -> SpacePair<Overflow> {
-    SpacePair::from_pair(self.overflow_x, self.overflow_y)
+    let (x, y) = match (self.overflow_x, self.overflow_y) {
+      (Overflow::Visible, Overflow::Hidden) | (Overflow::Hidden, Overflow::Visible) => {
+        (Overflow::Hidden, Overflow::Hidden)
+      }
+      pair => pair,
+    };
+
+    SpacePair::from_pair(x, y)
   }
 
   /// Whether overflowing content is clipped.

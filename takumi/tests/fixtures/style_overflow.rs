@@ -282,3 +282,48 @@ fn test_overflow_issue_630_grid() {
   let container = create_overflow_issue_630_grid_fixture();
   run_fixture_test(container, "style_overflow_issue_630_grid");
 }
+
+// `clip` on one axis with `visible` on the other survives the computed-value
+// coupling, so it is the mixed state that reaches the mask builder. A block root
+// keeps the transform at identity, and the padding keeps the clip rect inside
+// the viewport, which is the combination the fast path mishandled.
+fn create_identity_transform_mixed_overflow_fixture() -> Node {
+  Node::container([Node::container([Node::text(
+    "This is a very long text that should overflow the container vertically.".to_string(),
+  )
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::font_size(Rem(3.0).into()))
+      .with(StyleDeclaration::color(ColorInput::Value(Color([
+        0, 0, 0, 255,
+      ])))),
+  )])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::width(Px(400.0)))
+      .with(StyleDeclaration::height(Px(120.0)))
+      .with_padding(Sides([Px(24.0); 4]))
+      .with_border_width(Sides([Px(4.0).into(); 4]))
+      .with_border_style(Sides([BorderStyle::Solid; 4]))
+      .with_border_color(Sides([Color([0, 0, 0, 255]).into(); 4]))
+      .with_overflow(SpacePair::from_pair(Overflow::Clip, Overflow::Visible)),
+  )])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::white(),
+      ))),
+  )
+}
+
+#[test]
+fn test_overflow_mixed_axes_at_identity_transform() {
+  let container = create_identity_transform_mixed_overflow_fixture();
+
+  run_fixture_test(container, "style_overflow_clip_visible_identity_transform");
+}
