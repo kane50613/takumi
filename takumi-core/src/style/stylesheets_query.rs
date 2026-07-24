@@ -168,9 +168,8 @@ impl ComputedStyle {
   /// resolves it to `auto`; without a scrolling box that is `hidden` here.
   pub fn resolve_overflows(&self) -> SpacePair<Overflow> {
     let (x, y) = match (self.overflow_x, self.overflow_y) {
-      (Overflow::Visible, Overflow::Hidden) | (Overflow::Hidden, Overflow::Visible) => {
-        (Overflow::Hidden, Overflow::Hidden)
-      }
+      (Overflow::Visible, other) if !other.is_clip_or_visible() => (Overflow::Hidden, other),
+      (other, Overflow::Visible) if !other.is_clip_or_visible() => (other, Overflow::Hidden),
       pair => pair,
     };
 
