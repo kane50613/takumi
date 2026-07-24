@@ -6,7 +6,7 @@ use taffy::{CompactLength, Dimension, LengthPercentage, LengthPercentageAuto};
 use crate::style::{
   AspectRatio, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
   SizingContext, ToCss,
-  calc::{CalcFormula, CalcValue, parse_calc_sum},
+  calc::{CalcFormula, CalcLinear, CalcValue, parse_calc_sum},
   tw::{TW_VAR_SPACING, TailwindPropertyParser},
   unexpected_token,
 };
@@ -413,16 +413,22 @@ impl Length {
       | Length::VMax(_) => CompactLength::length(self.to_px_pre_dpr(sizing, 0.0)),
       Length::Calc(formula) => {
         let linear = formula.resolve(sizing);
+        let px = clamp_px_for_integer_cast(linear.px);
+        let percent = clamp_px_for_integer_cast(linear.percent);
 
-        if is_near_zero(linear.percent) {
-          return CompactLength::length(linear.px);
+        if is_near_zero(percent) {
+          return CompactLength::length(px);
         }
 
-        if is_near_zero(linear.px) {
-          return CompactLength::percent(linear.percent);
+        if is_near_zero(px) {
+          return CompactLength::percent(percent);
         }
 
-        CompactLength::calc(sizing.calc_arena.register_linear(linear))
+        CompactLength::calc(
+          sizing
+            .calc_arena
+            .register_linear(CalcLinear { px, percent }),
+        )
       }
       _ => CompactLength::length(self.to_px(
         sizing,
@@ -890,5 +896,56 @@ mod tests {
 
     assert_eq!(resolved, SAFE_INT_MAX_PX);
     assert!(resolved.is_finite());
+  }
+
+  #[test]
+  fn calc_non_finite_never_reaches_compact_length() {
+    let sizing = sizing();
+
+    for css in [
+      "calc(1px * nan)",
+      "calc(1px * infinity)",
+      "calc(1px * -infinity)",
+      "calc(100% * nan)",
+      "calc(100% * nan + 1px)",
+    ] {
+      let parsed = Length::from_css_str(css);
+      assert!(parsed.is_ok(), "expected {css} to parse, got {parsed:?}");
+      let Ok(length) = parsed else {
+        continue;
+      };
+      let compact = length.to_compact_length(&sizing);
+
+      assert!(
+        compact.is_calc() || compact.value().is_finite(),
+        "{css} produced a non-finite CompactLength"
+      );
+    }
+  }
+
+  #[test]
+  fn calc_rejects_deeply_nested_unary_signs() {
+    let css = format!("calc({}1px)", "- ".repeat(200));
+
+    assert!(Length::from_css_str(&css).is_err());
+  }
+
+  #[test]
+  fn calc_rejects_deeply_nested_calc_functions() {
+    let css = format!("{}1px{}", "calc(".repeat(200), ")".repeat(200));
+
+    assert!(Length::from_css_str(&css).is_err());
+  }
+
+  #[test]
+  fn calc_still_accepts_shallow_nesting() {
+    let sizing = sizing();
+    let parsed = Length::from_css_str("calc(calc(calc(1px + 2px)))");
+    assert!(parsed.is_ok(), "expected successful parse, got {parsed:?}");
+    let Ok(length) = parsed else {
+      return;
+    };
+
+    assert_near(length.to_px(&sizing, 200.0), sizing.to_device(3.0));
   }
 }

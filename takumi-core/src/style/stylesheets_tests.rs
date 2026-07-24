@@ -1219,6 +1219,29 @@ fn test_var_resolves_inside_nested_blocks() {
 }
 
 #[test]
+fn test_var_gives_up_on_exponential_fan_out() {
+  let mut custom_properties = HashMap::from([("--l0".to_owned(), "x".to_owned())]);
+  for level in 1..=24 {
+    custom_properties.insert(
+      format!("--l{level}"),
+      format!("var(--l{prev})var(--l{prev})", prev = level - 1),
+    );
+  }
+
+  let resolved = resolve_var_references("var(--l24)", &custom_properties, &mut Vec::new());
+
+  assert_eq!(resolved, None);
+}
+
+#[test]
+fn test_var_gives_up_on_deeply_nested_blocks() {
+  let specified_value = format!("{}1px{}", "(".repeat(200), ")".repeat(200));
+  let resolved = resolve_var_references(&specified_value, &HashMap::new(), &mut Vec::new());
+
+  assert_eq!(resolved, None);
+}
+
+#[test]
 fn test_var_drops_declaration_when_substitution_stays_invalid() {
   let style = inherited_style_from_pairs(
     [("--size", "red"), ("width", "var(--size)")],

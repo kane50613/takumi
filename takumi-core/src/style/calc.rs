@@ -205,12 +205,19 @@ pub(crate) enum CalcValue {
   Formula(CalcFormula),
 }
 
+// Matches Blink's `kMaxExpressionDepth` (css_math_expression_node.h).
+const MAX_CALC_DEPTH: u32 = 100;
+
 pub(crate) fn parse_calc_sum<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcValue> {
-  let mut value = parse_calc_product(input)?;
+  parse_calc_sum_at(input, 0)
+}
+
+fn parse_calc_sum_at<'i>(input: &mut Parser<'i, '_>, depth: u32) -> ParseResult<'i, CalcValue> {
+  let mut value = parse_calc_product_at(input, depth)?;
 
   loop {
     if input.try_parse(|parser| parser.expect_delim('+')).is_ok() {
-      let rhs = parse_calc_product(input)?;
+      let rhs = parse_calc_product_at(input, depth)?;
       value = match (value, rhs) {
         (CalcValue::Number(lhs), CalcValue::Number(rhs)) => CalcValue::Number(lhs + rhs),
         (CalcValue::Formula(lhs), CalcValue::Formula(rhs)) => CalcValue::Formula(lhs.add(rhs)),
@@ -226,7 +233,7 @@ pub(crate) fn parse_calc_sum<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, 
     }
 
     if input.try_parse(|parser| parser.expect_delim('-')).is_ok() {
-      let rhs = parse_calc_product(input)?;
+      let rhs = parse_calc_product_at(input, depth)?;
       value = match (value, rhs) {
         (CalcValue::Number(lhs), CalcValue::Number(rhs)) => CalcValue::Number(lhs - rhs),
         (CalcValue::Formula(lhs), CalcValue::Formula(rhs)) => CalcValue::Formula(lhs.sub(rhs)),
@@ -263,12 +270,12 @@ pub(crate) fn parse_calc_number_expression<'i>(input: &mut Parser<'i, '_>) -> Pa
   }
 }
 
-fn parse_calc_product<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcValue> {
-  let mut value = parse_calc_factor(input)?;
+fn parse_calc_product_at<'i>(input: &mut Parser<'i, '_>, depth: u32) -> ParseResult<'i, CalcValue> {
+  let mut value = parse_calc_factor_at(input, depth)?;
 
   loop {
     if input.try_parse(|parser| parser.expect_delim('*')).is_ok() {
-      let rhs = parse_calc_factor(input)?;
+      let rhs = parse_calc_factor_at(input, depth)?;
       value = match (value, rhs) {
         (CalcValue::Formula(lhs), CalcValue::Number(rhs)) => CalcValue::Formula(lhs.scale(rhs)),
         (CalcValue::Number(lhs), CalcValue::Formula(rhs)) => CalcValue::Formula(rhs.scale(lhs)),
@@ -285,7 +292,7 @@ fn parse_calc_product<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcVal
     }
 
     if input.try_parse(|parser| parser.expect_delim('/')).is_ok() {
-      let rhs = parse_calc_factor(input)?;
+      let rhs = parse_calc_factor_at(input, depth)?;
       value = match (value, rhs) {
         (_, CalcValue::Number(0.0)) => {
           return Err(unexpected_token!(
@@ -343,19 +350,23 @@ impl CalcFormula {
   }
 }
 
-fn parse_calc_factor<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcValue> {
+fn parse_calc_factor_at<'i>(input: &mut Parser<'i, '_>, depth: u32) -> ParseResult<'i, CalcValue> {
+  let location = input.current_source_location();
+  if depth >= MAX_CALC_DEPTH {
+    return Err(location.new_unexpected_token_error(Token::ParenthesisBlock));
+  }
+
   if input.try_parse(|parser| parser.expect_delim('+')).is_ok() {
-    return parse_calc_factor(input);
+    return parse_calc_factor_at(input, depth + 1);
   }
 
   if input.try_parse(|parser| parser.expect_delim('-')).is_ok() {
-    return Ok(match parse_calc_factor(input)? {
+    return Ok(match parse_calc_factor_at(input, depth + 1)? {
       CalcValue::Number(value) => CalcValue::Number(-value),
       CalcValue::Formula(formula) => CalcValue::Formula(formula.neg()),
     });
   }
 
-  let location = input.current_source_location();
   let token = input.next()?;
 
   match token {
@@ -370,7 +381,7 @@ fn parse_calc_factor<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, CalcValu
       }
     }
     Token::Function(name) if name.eq_ignore_ascii_case("calc") => {
-      input.parse_nested_block(parse_calc_sum)
+      input.parse_nested_block(|input| parse_calc_sum_at(input, depth + 1))
     }
     Token::Ident(ident) => match_ignore_ascii_case! {ident.as_ref(),
       "e" => Ok(CalcValue::Number(std::f32::consts::E)),
