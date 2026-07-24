@@ -24,12 +24,12 @@
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
     "@types/bun": "catalog:",
-    "knip": "^6.27.0",
+    "knip": "^6.29.0",
     "lefthook": "^2.1.10",
-    "oxfmt": "^0.59.0",
-    "oxlint": "^1.74.0",
-    "publint": "^0.3.21",
-    "tegami": "^1.2.5",
+    "oxfmt": "^0.60.0",
+    "oxlint": "^1.75.0",
+    "publint": "^0.3.22",
+    "tegami": "^1.2.6",
     "typescript": "catalog:"
   },
   "overrides": {
@@ -44,10 +44,10 @@
     "@types/node": "^26.1.1",
     "@types/react": "19.2.17",
     "@types/react-dom": "^19.2.3",
-    "lucide-react": "^1.24.0",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
-    "tsdown": "0.22.5",
+    "lucide-react": "^1.26.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "tsdown": "0.22.14",
     "unrun": "^0.3.1",
     "typescript": "^6.0.3",
     "vite": "^8.1.5"
