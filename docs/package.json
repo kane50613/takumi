@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "waku build",
-    "dev": "portless run --name takumi sh -c 'waku dev --port $PORT'",
+    "dev": "portless run --name takumi waku dev",
     "start": "waku start",
     "typecheck": "fumadocs-mdx && tsc --noEmit"
   },
