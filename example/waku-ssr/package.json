@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "portless run --name waku-ssr.takumi sh -c 'waku dev --port $PORT'",
+    "dev": "waku dev",
     "build": "waku build",
     "start": "waku start",
     "test": "vitest run"
@@ -19,7 +19,6 @@
     "@tailwindcss/vite": "4.3.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "portless": "^0.15.4",
     "tailwindcss": "^4.3.3",
     "typescript": "catalog:",
     "vitest": "^4.1.10"

@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "deploy": "wrangler deploy",
-    "dev": "portless run --name workers.takumi sh -c 'wrangler dev --port $PORT'",
+    "dev": "wrangler dev",
     "start": "wrangler dev",
     "cf-typegen": "wrangler types",
     "build": "wrangler build",
@@ -16,7 +16,6 @@
   },
   "devDependencies": {
     "@types/react": "catalog:",
-    "portless": "^0.15.4",
     "typescript": "catalog:",
     "vitest": "^4.1.10",
     "wrangler": "^4.114.0"

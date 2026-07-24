@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "portless run --name tanstack.takumi vite dev",
+    "dev": "vite dev --port 3000",
     "build": "vite build",
     "serve": "vite preview",
     "test": "vitest run"
@@ -23,7 +23,6 @@
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "portless": "^0.15.4",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "^4.1.10"

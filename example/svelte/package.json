@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "portless run --name svelte.takumi vite dev",
+    "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
     "prepare": "svelte-kit sync || echo ''",
@@ -17,7 +17,6 @@
     "@sveltejs/adapter-vercel": "^6.3.4",
     "@sveltejs/kit": "^2.70.1",
     "@tailwindcss/vite": "^4.3.3",
-    "portless": "^0.15.4",
     "svelte": "^5.56.7",
     "svelte-check": "^4.7.3",
     "tailwindcss": "^4.3.3",
