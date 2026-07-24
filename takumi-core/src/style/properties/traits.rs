@@ -550,6 +550,11 @@ impl<T: Animatable + Clone> Animatable for Vec<T> {
   }
 }
 
+// Matches Blink's `kRepeatableListMaxLength` (list_interpolation_functions.cc);
+// transitions restarted on an already-animating value otherwise compound the
+// LCM expansion until it exhausts memory. See crbug.com/739197.
+const MAX_INTERPOLATED_LIST_LEN: usize = 1000;
+
 fn interpolate_list<T: Animatable + Clone, C: AsRef<[T]>, O>(
   from: &C,
   to: &C,
@@ -572,14 +577,8 @@ fn interpolate_list<T: Animatable + Clone, C: AsRef<[T]>, O>(
       if from.is_empty() || to.is_empty() {
         return None;
       }
-      interpolate_pairwise_list(
-        from,
-        to,
-        lcm(from.len(), to.len()),
-        progress,
-        sizing,
-        current_color,
-      )
+      let output_len = lcm(from.len(), to.len()).min(MAX_INTERPOLATED_LIST_LEN);
+      interpolate_pairwise_list(from, to, output_len, progress, sizing, current_color)
     }
     ListInterpolationStrategy::PadToLongestWithNeutral => {
       interpolate_neutral_padded_list(from, to, progress, sizing, current_color)?
@@ -870,3 +869,44 @@ macro_rules! declare_box_alignment_enum_impl {
 }
 
 pub(crate) use declare_box_alignment_enum_impl;
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::{
+    style::{BackgroundRepeat, BackgroundRepeatStyle},
+    viewport::Viewport,
+  };
+
+  fn repeats(len: usize, style: BackgroundRepeatStyle) -> Vec<BackgroundRepeat> {
+    vec![BackgroundRepeat(style, style); len]
+  }
+
+  fn interpolated(from_len: usize, to_len: usize) -> Option<Vec<BackgroundRepeat>> {
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::default())
+      .build();
+
+    interpolate_list(
+      &repeats(from_len, BackgroundRepeatStyle::Repeat),
+      &repeats(to_len, BackgroundRepeatStyle::NoRepeat),
+      0.75,
+      &sizing,
+      Color([0, 0, 0, 255]),
+      |values| values,
+    )
+  }
+
+  #[test]
+  fn repeat_to_lcm_interpolates_under_the_cap() {
+    assert_eq!(interpolated(2, 3).map(|values| values.len()), Some(6));
+  }
+
+  #[test]
+  fn repeat_to_lcm_clamps_past_the_cap() {
+    assert_eq!(
+      interpolated(61, 67).map(|values| values.len()),
+      Some(MAX_INTERPOLATED_LIST_LEN)
+    );
+  }
+}
