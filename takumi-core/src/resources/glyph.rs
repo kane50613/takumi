@@ -17,7 +17,7 @@ use skrifa::{
 };
 
 use crate::{
-  geometry::{PathCommand as Command, Point},
+  geometry::{PathCommand as Command, Placement, Point},
   resources::{image_buffer::ImageBuffer, image_decoder::decode_png},
 };
 
@@ -40,7 +40,7 @@ pub struct ResolvedBitmapGlyph {
   /// Vertical scale from source to placement.
   pub scale_y: f32,
   /// Pixel placement of the glyph.
-  pub placement: ResolvedGlyphPlacement,
+  pub placement: Placement,
 }
 
 impl ResolvedBitmapGlyph {
@@ -124,19 +124,6 @@ pub struct ResolvedColorLayer {
   pub palette_index: u16,
   /// Layer opacity, 0..=1.
   pub alpha: f32,
-}
-
-/// Pixel placement of a rendered glyph.
-#[derive(Clone, Copy)]
-pub struct ResolvedGlyphPlacement {
-  /// Left offset in pixels.
-  pub left: i32,
-  /// Top offset in pixels.
-  pub top: i32,
-  /// Width in pixels.
-  pub width: u32,
-  /// Height in pixels.
-  pub height: u32,
 }
 
 impl ResolvedOutlineGlyph {
@@ -605,7 +592,7 @@ fn scale_bitmap_glyph(bitmap: BitmapGlyph<'_>, font_size: f32) -> Option<Resolve
     image,
     scale_x,
     scale_y,
-    placement: ResolvedGlyphPlacement {
+    placement: Placement {
       left: (bitmap.inner_bearing_x * scale_x).round() as i32,
       top: (top * scale_y).round() as i32,
       width,

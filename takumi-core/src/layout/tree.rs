@@ -1,4 +1,4 @@
-use std::{collections::HashMap, mem::take, vec::IntoIter};
+use std::{borrow::Cow, collections::HashMap, mem::take, vec::IntoIter};
 
 use parley::fontique::Attributes;
 use taffy::{
@@ -207,11 +207,18 @@ fn build_style_layers(
   style
 }
 
-fn registered_custom_property_parent_style(
-  parent_style: &ComputedStyle,
+fn registered_custom_property_parent_style<'a>(
+  parent_style: &'a ComputedStyle,
   stylesheets: &[StyleSheet],
   viewport: Viewport,
-) -> ComputedStyle {
+) -> Cow<'a, ComputedStyle> {
+  if stylesheets
+    .iter()
+    .all(|sheet| sheet.property_rules().is_empty())
+  {
+    return Cow::Borrowed(parent_style);
+  }
+
   let mut adjusted_parent = parent_style.clone();
 
   for sheet in stylesheets {
@@ -255,7 +262,7 @@ fn registered_custom_property_parent_style(
     }
   }
 
-  adjusted_parent
+  Cow::Owned(adjusted_parent)
 }
 
 fn pseudo_computed_style(

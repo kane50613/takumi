@@ -1,7 +1,6 @@
-use std::{
-  convert::Into,
-  sync::{Arc, LazyLock},
-};
+use std::{convert::Into, sync::Arc};
+
+use xxhash_rust::xxh3::Xxh3;
 
 use skrifa::color::ColorPalette;
 use takumi_core::geometry::{ComputedLayout as Layout, Point, Size};
@@ -15,46 +14,70 @@ use crate::{
   pixmap_ref_from_buffer, render_mask,
   resources::{
     glyph::{ResolvedColorLayer, ResolvedGlyph},
-    glyph_cache::{GlyphCache, glyph_cache_share_bytes},
+    glyph_cache::glyph_mask,
   },
   style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
   uninit_buffer,
 };
 
-type GlyphMaskCache = GlyphCache<(Arc<Vec<u8>>, Placement)>;
+/// Identifies a mask by everything that changes its pixels: the outline, the
+/// subpixel bucket it is rasterized at, and the stroke applied to it.
+fn mask_key(glyph_signature: u64, bucket_x: u64, stroke: Option<Stroke>) -> u64 {
+  let mut hasher = Xxh3::new();
+  hasher.update(&glyph_signature.to_le_bytes());
+  hasher.update(&bucket_x.to_le_bytes());
 
-static SHARED_GLYPH_MASK_CACHE: LazyLock<GlyphMaskCache> =
-  LazyLock::new(|| GlyphCache::new(glyph_cache_share_bytes()));
-
-/// Rasterizes `paths` at the subpixel bucket encoded in the low bits of `key`.
-fn render_bucket_mask(key: u64, paths: &[Command]) -> (Vec<u8>, Placement) {
-  let bucket_x = (key & 3) as f32 * 0.25;
-
-  render_mask(paths, Some(Affine::translation(bucket_x, 0.0)), None)
-}
-
-/// Fetches the cached mask for `key`, rasterizing it on a miss; concurrent
-/// misses for the same key rasterize once. Charges the capacity the cache
-/// retains, not just the mask length.
-fn get_or_render_cached_mask(key: u64, paths: &[Command]) -> (Arc<Vec<u8>>, Placement) {
-  let cached = SHARED_GLYPH_MASK_CACHE.get_or_insert_with(key, || {
-    let (mask, placement) = render_bucket_mask(key, paths);
-    let bytes = mask.capacity() + 64;
-
-    Some(((Arc::new(mask), placement), bytes))
-  });
-
-  match cached {
-    Some(entry) => entry,
-    None => {
-      let (mask, placement) = render_bucket_mask(key, paths);
-
-      (Arc::new(mask), placement)
+  match stroke {
+    Some(stroke) => {
+      hasher.update(&[1, stroke.join as u8, stroke.cap as u8]);
+      hasher.update(&stroke.width.to_le_bytes());
     }
+    None => hasher.update(&[0]),
   }
+
+  hasher.digest()
 }
 
-fn glyph_cache_key_and_offset(transform: Affine, glyph_signature: u64) -> Option<(u64, i32, i32)> {
+fn render_bucket_mask(
+  bucket_x: u64,
+  paths: &[Command],
+  stroke: Option<Stroke>,
+) -> (Vec<u8>, Placement) {
+  let offset = bucket_x as f32 * 0.25;
+
+  render_mask(
+    paths,
+    Some(Affine::translation(offset, 0.0)),
+    stroke.map(Into::into),
+  )
+}
+
+/// Fetches the cached mask, rasterizing it on a miss; concurrent misses for the
+/// same mask rasterize once.
+fn cached_mask(
+  glyph_signature: u64,
+  bucket_x: u64,
+  paths: &[Command],
+  stroke: Option<Stroke>,
+) -> (Arc<Vec<u8>>, Placement) {
+  glyph_mask(mask_key(glyph_signature, bucket_x, stroke), || {
+    render_bucket_mask(bucket_x, paths, stroke)
+  })
+}
+
+/// The mask for `paths` with no subpixel offset: what a caller wants when it
+/// needs the glyph's shape rather than where it lands.
+pub(crate) fn unshifted_glyph_mask(
+  glyph_signature: u64,
+  paths: &[Command],
+) -> (Arc<Vec<u8>>, Placement) {
+  cached_mask(glyph_signature, 0, paths, None)
+}
+
+/// Splits a translation into the subpixel bucket baked into the mask and the
+/// whole pixels the blit offsets by. `None` when the transform is not a pure
+/// translation, which the cache cannot represent.
+fn glyph_cache_bucket_and_offset(transform: Affine) -> Option<(u64, i32, i32)> {
   if !transform.only_translation() {
     return None;
   }
@@ -62,8 +85,37 @@ fn glyph_cache_key_and_offset(transform: Affine, glyph_signature: u64) -> Option
   let int_x = scaled_x.div_euclid(4) as i32;
   let bucket_x = scaled_x.rem_euclid(4) as u64;
   let int_y = transform.y.round() as i32;
-  let key = (glyph_signature << 2) | bucket_x;
-  Some((key, int_x, int_y))
+  Some((bucket_x, int_x, int_y))
+}
+
+/// Paints `paths` through the mask cache, falling back to a direct rasterization
+/// when the transform or the stroke is outside what the cache keys on.
+fn draw_mask_with_cache(
+  paths: &[Command],
+  glyph_signature: u64,
+  transform: Affine,
+  stroke: Option<Stroke>,
+  color: Color,
+  canvas: &mut Canvas,
+) {
+  let cacheable = stroke.is_none_or(|stroke| stroke.dash.is_none());
+  let bucket = cacheable
+    .then(|| glyph_cache_bucket_and_offset(transform))
+    .flatten();
+
+  let Some((bucket_x, int_x, int_y)) = bucket else {
+    let (mask, placement) = render_mask(paths, Some(transform), stroke.map(Into::into));
+    canvas.draw_mask(&mask, placement, color, BlendMode::Normal);
+    return;
+  };
+
+  let (mask, cached_placement) = cached_mask(glyph_signature, bucket_x, paths, stroke);
+  canvas.draw_mask(
+    &mask,
+    cached_placement.translate(int_x, int_y),
+    color,
+    BlendMode::Normal,
+  );
 }
 
 fn draw_outline_with_cache(
@@ -73,18 +125,7 @@ fn draw_outline_with_cache(
   color: Color,
   canvas: &mut Canvas,
 ) {
-  let Some((key, int_x, int_y)) = glyph_cache_key_and_offset(transform, glyph_signature) else {
-    let (mask, placement) = render_mask(paths, Some(transform), None);
-    canvas.draw_mask(&mask, placement, color, BlendMode::Normal);
-    return;
-  };
-  let (mask, cached_placement) = get_or_render_cached_mask(key, paths);
-  canvas.draw_mask(
-    &mask,
-    cached_placement.translate(int_x, int_y),
-    color,
-    BlendMode::Normal,
-  );
+  draw_mask_with_cache(paths, glyph_signature, transform, None, color, canvas);
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -155,6 +196,7 @@ struct GlyphPaintCtx<'a, 'b> {
   transform: Affine,
   inline_offset: Point<f32>,
   paths: &'b [Command],
+  glyph_signature: u64,
 }
 
 pub(crate) fn draw_glyph_clip_image(
@@ -232,10 +274,9 @@ pub(crate) fn draw_glyph_clip_image(
         algorithm: style.parent.image_rendering,
       };
 
-      if let Some((key, int_x, int_y)) =
-        glyph_cache_key_and_offset(transform, outline.cache_signature())
-      {
-        let (mask, cached_placement) = get_or_render_cached_mask(key, outline.paths());
+      if let Some((bucket_x, int_x, int_y)) = glyph_cache_bucket_and_offset(transform) {
+        let (mask, cached_placement) =
+          cached_mask(outline.cache_signature(), bucket_x, outline.paths(), None);
         canvas.composite_mask_source(
           &mask,
           cached_placement.translate(int_x, int_y),
@@ -262,6 +303,7 @@ pub(crate) fn draw_glyph_clip_image(
         transform,
         inline_offset,
         paths: outline.paths(),
+        glyph_signature: outline.cache_signature(),
       };
 
       if let Some(embolden) = outline.embolden() {
@@ -328,6 +370,7 @@ pub(crate) fn draw_glyph(
         transform,
         inline_offset,
         paths: outline.paths(),
+        glyph_signature: outline.cache_signature(),
       };
 
       if let Some(embolden) = outline.embolden() {
@@ -413,14 +456,13 @@ fn draw_text_stroke(ctx: &mut GlyphPaintCtx<'_, '_>) {
   let mut stroke = Stroke::new(ctx.style.stroke_width / scale);
   stroke.join = ctx.style.parent.stroke_linejoin.into();
 
-  let (stroke_mask, stroke_placement) =
-    render_mask(ctx.paths, Some(ctx.transform), Some(stroke.into()));
-
-  ctx.canvas.draw_mask(
-    &stroke_mask,
-    stroke_placement,
+  draw_mask_with_cache(
+    ctx.paths,
+    ctx.glyph_signature,
+    ctx.transform,
+    Some(stroke),
     ctx.style.text_stroke_color,
-    BlendMode::Normal,
+    ctx.canvas,
   );
 }
 
@@ -432,12 +474,14 @@ fn draw_text_embolden(ctx: &mut GlyphPaintCtx<'_, '_>, color: Color, embolden: f
   let mut stroke = Stroke::new(embolden);
   stroke.join = ctx.style.parent.stroke_linejoin.into();
 
-  let (stroke_mask, stroke_placement) =
-    render_mask(ctx.paths, Some(ctx.transform), Some(stroke.into()));
-
-  ctx
-    .canvas
-    .draw_mask(&stroke_mask, stroke_placement, color, BlendMode::Normal);
+  draw_mask_with_cache(
+    ctx.paths,
+    ctx.glyph_signature,
+    ctx.transform,
+    Some(stroke),
+    color,
+    ctx.canvas,
+  );
 }
 
 fn draw_text_shadow(
@@ -507,5 +551,26 @@ fn draw_color_outline_image(
 
     let (mask, placement) = render_mask(&layer.paths, Some(transform), None);
     canvas.draw_mask(&mask, placement, color, BlendMode::Normal);
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn bucket_zero_mask_matches_untransformed_render() {
+    let paths = vec![
+      Command::MoveTo(Point::new(1.5, 1.0)),
+      Command::LineTo(Point::new(9.0, 2.25)),
+      Command::QuadTo(Point::new(11.0, 7.0), Point::new(4.0, 10.5)),
+      Command::Close,
+    ];
+
+    let (untransformed, untransformed_placement) = render_mask(&paths, None, None);
+    let (bucket_zero, bucket_zero_placement) = render_bucket_mask(0, &paths, None);
+
+    assert_eq!(untransformed, bucket_zero);
+    assert_eq!(untransformed_placement, bucket_zero_placement);
   }
 }

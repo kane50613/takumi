@@ -419,6 +419,75 @@ pub fn transformed_rect_extents(
   Some((min_x, min_y, max_x, max_y))
 }
 
+/// Pixel-space placement of a rasterized surface: a glyph mask, a shadow, a
+/// filtered layer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Placement {
+  /// Left offset in pixels.
+  pub left: i32,
+  /// Top offset in pixels.
+  pub top: i32,
+  /// Width in pixels.
+  pub width: u32,
+  /// Height in pixels.
+  pub height: u32,
+}
+
+impl Placement {
+  /// Right edge, exclusive.
+  pub fn right(self) -> i32 {
+    self.left + self.width as i32
+  }
+
+  /// Bottom edge, exclusive.
+  pub fn bottom(self) -> i32 {
+    self.top + self.height as i32
+  }
+
+  /// Builds a placement from edges, or `None` when they enclose no pixels.
+  pub fn from_bounds(left: i32, top: i32, right: i32, bottom: i32) -> Option<Self> {
+    if left >= right || top >= bottom {
+      return None;
+    }
+
+    Some(Self {
+      left,
+      top,
+      width: (right - left) as u32,
+      height: (bottom - top) as u32,
+    })
+  }
+
+  /// Moves the placement without resizing it.
+  pub fn translate(self, dx: i32, dy: i32) -> Self {
+    Self {
+      left: self.left + dx,
+      top: self.top + dy,
+      ..self
+    }
+  }
+
+  /// Grows the placement by `padding` on every side.
+  pub fn inflate(self, padding: i32) -> Option<Self> {
+    Self::from_bounds(
+      self.left - padding,
+      self.top - padding,
+      self.right() + padding,
+      self.bottom() + padding,
+    )
+  }
+
+  /// Intersects the placement with a `size`-sized surface at the origin.
+  pub fn clamp_to(self, size: Size<u32>) -> Option<Self> {
+    Self::from_bounds(
+      self.left.clamp(0, size.width as i32),
+      self.top.clamp(0, size.height as i32),
+      self.right().clamp(0, size.width as i32),
+      self.bottom().clamp(0, size.height as i32),
+    )
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::Size;

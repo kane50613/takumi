@@ -50,6 +50,7 @@ pub(crate) use image_drawing::*;
 pub(crate) use node_paint::*;
 pub(crate) use path::*;
 pub use render::*;
+pub(crate) use takumi_core::geometry::Placement;
 pub(crate) use text_drawing::*;
 use tiny_skia::{IntSize, Pixmap, PixmapRef};
 pub use write::*;
