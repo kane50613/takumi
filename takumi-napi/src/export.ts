@@ -9,6 +9,8 @@ import type {
 export type * from "../index";
 import { Renderer as RendererInternal } from "../index";
 
+export { setGlyphCacheMaxBytes } from "../index";
+
 import { FontRegistry, prepareRenderInput } from "@takumi-rs/helpers/renderer";
 import type {
   BackendAnimationOptions,

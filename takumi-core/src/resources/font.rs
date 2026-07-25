@@ -22,6 +22,7 @@ use skrifa::{
   raw::types::{F2Dot14, Tag},
 };
 use thiserror::Error;
+use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 
 use crate::{
   context::RenderContext,
@@ -125,7 +126,6 @@ fn resolved_glyph_cache_key(
   skew: Option<f32>,
   glyph_id: u32,
 ) -> u64 {
-  use xxhash_rust::xxh3::Xxh3;
   let mut h = Xxh3::new();
   h.update(&font_id.to_le_bytes());
   h.update(&font_index.to_le_bytes());
@@ -540,7 +540,12 @@ impl<'a> FontSource<'a> {
       load_font(self.bytes, None)?
     };
 
-    Ok(Blob::new(Arc::new(decoded)))
+    // `Blob::new` draws its id from a global counter, and that id keys the shared glyph
+    // caches. Registering the same face again — a second renderer, a rebuilt one — would
+    // then miss every glyph it had already resolved, so the id comes from the content.
+    let id = xxh3_64(&decoded);
+
+    Ok(Blob::from_raw_parts(Arc::new(decoded), id))
   }
 }
 
@@ -852,6 +857,24 @@ mod tests {
     // Registered first, but selected last: a last-resort family never shadows caller fonts.
     assert_eq!(fonts.order, vec!["User Font".to_string()]);
     assert_eq!(fonts.last_resort_order, vec!["Embedded".to_string()]);
+  }
+
+  #[test]
+  fn same_bytes_produce_the_same_blob_id() {
+    let first = FontSource::from(geist_bytes()).into_blob().unwrap();
+    // Decoded up front rather than during `into_blob`, so the id has to come from the
+    // decoded sfnt and not from whatever the caller happened to hand over.
+    let second = FontSource::from(geist_bytes())
+      .into_decoded()
+      .unwrap()
+      .into_blob()
+      .unwrap();
+    let other = FontSource::from(geist_mono_bytes()).into_blob().unwrap();
+
+    // The glyph caches key on this id, so a re-registered face has to keep the entries
+    // it already resolved.
+    assert_eq!(first.id(), second.id());
+    assert_ne!(first.id(), other.id());
   }
 
   #[test]
