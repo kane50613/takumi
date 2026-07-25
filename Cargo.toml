@@ -11,6 +11,9 @@ members = [
   "takumi-wasm",
   "example/rust",
 ]
+# cargo doesn't need this. tegami reads every Cargo.toml under a member, so
+# @napi-rs/cli's vendored `napi-derive` fixture crate shadows the real dependency.
+exclude = ["**/node_modules/**"]
 
 [workspace.dependencies]
 arc-swap = "1"
