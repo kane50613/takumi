@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use skrifa::{FontRef, MetadataProvider};
 use takumi_core::geometry::{AvailableSpace, ComputedLayout as Layout, NodeId, Point, Size};
@@ -8,7 +8,7 @@ use crate::{
   RenderContext, Result, SizedFontStyle, Stroke, collect_background_layers, draw_background,
   draw_border, draw_decoration, draw_decoration_segment, draw_glyph, draw_glyph_clip_image,
   draw_glyph_text_shadow, draw_inset_box_shadow, draw_node_content, draw_outline,
-  draw_outset_box_shadow,
+  draw_outset_box_shadow, get_or_render_cached_mask,
   layout::{
     inline::{
       BuiltInlineLayout, InlineBoxItem, InlineOutlineRect, InlineRunLayout, PositionedInlineRun,
@@ -70,7 +70,7 @@ struct GlyphSkipInkData {
   bounds: GlyphLocalBounds,
   width: u32,
   height: u32,
-  alpha: Vec<u8>,
+  alpha: Arc<Vec<u8>>,
 }
 
 #[derive(Clone, Copy)]
@@ -115,11 +115,12 @@ fn build_glyph_bounds_cache(
         alpha: {
           let mut alpha = vec![0; (bitmap.placement.width * bitmap.placement.height) as usize];
           bitmap.write_alpha_mask(&mut alpha);
-          alpha
+          Arc::new(alpha)
         },
       },
       ResolvedGlyph::Outline(outline) => {
-        let (mask, placement) = render_mask(outline.paths(), None, None);
+        let (mask, placement) =
+          get_or_render_cached_mask(outline.cache_signature() << 2, outline.paths());
 
         if placement.width == 0 || placement.height == 0 {
           continue;
