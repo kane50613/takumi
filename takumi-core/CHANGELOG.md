@@ -1,3 +1,25 @@
+## takumi-core@0.9.0
+
+### Bound calc() depth, var() substitution size, and list interpolation length
+
+Four places in the CSS value layer let caller-supplied text drive unbounded recursion or allocation. `calc()` recursed once per leading unary sign and once per nested `calc(`. `var()` substitution capped neither its nesting nor its total substituted bytes; its cycle guard is pushed and popped per reference, so it stops a property referencing itself but not fan-out, and `--n: var(--n-1)var(--n-1)` doubles per link. `RepeatToLcm` list interpolation allocated the full LCM of the two list lengths. A `calc()` resolving to NaN or infinity reached taffy unclamped, where every other `Length` arm is clamped on its way through `to_px`.
+
+Release builds abort on panic, so a stack overflow or a failed allocation here took down the host process instead of returning an error. The limits match Blink: depth 100, 2 MiB of substituted text (the value the spec and Firefox use as well), and 1000 interpolated list entries.
+
+### Replace `ResolvedGlyphPlacement` with `geometry::Placement`
+
+`Placement` moves into `takumi_core::geometry` and takes over from `ResolvedGlyphPlacement`, which described the same four fields. `BuiltInlineLayout::resolved_glyphs` is now keyed to `Arc<ResolvedGlyph>`, so a glyph cache hit stops copying the outline commands.
+
+### Key the glyph caches on font content instead of blob identity
+
+`Blob::new` draws its id from a global counter, and that id is part of the key for the shared resolved-glyph and glyph-mask caches, as well as parley's shaping data cache. Registering the same face again produced a fresh id, so a second renderer, or one rebuilt to reclaim memory, missed every glyph the face had already resolved and filled the budget with entries nothing would hit again. The id is now a hash of the decoded font bytes, so identical faces share cache entries no matter how often they are registered.
+
+### Couple the overflow axes and stop mixed overflow from blanking a node
+
+`overflow-x` and `overflow-y` were read straight off the computed style, so `overflow-x: hidden` next to `overflow-y: visible` stayed mixed. CSS Overflow 3 says a `visible` axis paired with one that is neither `visible` nor `clip` computes to a scrolling value instead, which is why Chrome clips both axes there. `resolve_overflows` now applies that coupling, so the pair reaches layout, painting, and the SVG backend already resolved. `clip` next to `visible` is a legal combination and still passes through untouched.
+
+That legal pair then hit a second bug. The mask builder marks an unclipped axis with `u32::MAX`, and the identity-transform fast path narrowed it with `as i32`, which truncates to `-1` rather than saturating. The clip rectangle came out empty, so the node rendered nothing at all. The comparison now clamps before narrowing, matching the rotated path, which had always compared in `u32`.
+
 ## takumi-core@0.8.0
 
 ### Share the glyph caches across worker threads
