@@ -17,6 +17,7 @@ svgtypes.workspace = true
 typed-builder.workspace = true
 smallvec.workspace = true
 skrifa.workspace = true
+xxhash-rust.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 image-webp.workspace = true

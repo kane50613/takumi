@@ -1888,6 +1888,7 @@ dependencies = [
  "takumi-core",
  "tiny-skia",
  "typed-builder",
+ "xxhash-rust",
 ]
 
 [[package]]
