@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap, ops::Range};
+use std::{borrow::Cow, collections::HashMap, ops::Range, sync::Arc};
 
 use parley::{
   BreakReason, GlyphRun, IndentOptions, InlineBox, InlineBoxKind, Line, LineMetrics,
@@ -2035,7 +2035,7 @@ pub struct PositionedInlineRun {
   /// The shaped glyph run (metrics, brush, positioned glyphs, font).
   pub glyph_run: ShapedRun,
   /// Glyphs resolved to outlines/bitmaps, keyed by glyph id.
-  pub resolved_glyphs: HashMap<u32, ResolvedGlyph>,
+  pub resolved_glyphs: HashMap<u32, Arc<ResolvedGlyph>>,
   /// Text-fit scale state for the line.
   pub(crate) line_scale: LineScaleState,
   /// Cumulative in-flow inline-box width before this run on the line.

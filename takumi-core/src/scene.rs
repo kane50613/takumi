@@ -21,7 +21,6 @@ use crate::{
     node::Node,
     tree::{LayoutResults, RenderNode},
   },
-  resources::glyph::ResolvedGlyph,
   style::{Affine, ComputedStyle, Display, SizingContext},
 };
 
@@ -501,7 +500,7 @@ fn compute_node_paint_bounds(
           for glyph in glyph_run.positioned_glyphs() {
             let Some((min_x, min_y, max_x, max_y)) = resolved_glyphs
               .get(&glyph.id)
-              .and_then(ResolvedGlyph::ink_extents)
+              .and_then(|glyph| glyph.ink_extents())
             else {
               continue;
             };

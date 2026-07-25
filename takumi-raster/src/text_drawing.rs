@@ -1,7 +1,4 @@
-use std::{
-  convert::Into,
-  sync::{Arc, LazyLock},
-};
+use std::{convert::Into, sync::Arc};
 
 use skrifa::color::ColorPalette;
 use takumi_core::geometry::{ComputedLayout as Layout, Point, Size};
@@ -15,16 +12,11 @@ use crate::{
   pixmap_ref_from_buffer, render_mask,
   resources::{
     glyph::{ResolvedColorLayer, ResolvedGlyph},
-    glyph_cache::{GlyphCache, glyph_cache_share_bytes},
+    glyph_cache::glyph_mask,
   },
   style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
   uninit_buffer,
 };
-
-type GlyphMaskCache = GlyphCache<(Arc<Vec<u8>>, Placement)>;
-
-static SHARED_GLYPH_MASK_CACHE: LazyLock<GlyphMaskCache> =
-  LazyLock::new(|| GlyphCache::new(glyph_cache_share_bytes()));
 
 /// Rasterizes `paths` at the subpixel bucket encoded in the low bits of `key`.
 fn render_bucket_mask(key: u64, paths: &[Command]) -> (Vec<u8>, Placement) {
@@ -42,25 +34,9 @@ pub(crate) fn unshifted_glyph_mask(
   get_or_render_cached_mask(glyph_signature << 2, paths)
 }
 
-/// Fetches the cached mask for `key`, rasterizing it on a miss; concurrent
-/// misses for the same key rasterize once. Charges the capacity the cache
-/// retains, not just the mask length.
+/// Fetches the cached mask for `key`, rasterizing it on a miss.
 fn get_or_render_cached_mask(key: u64, paths: &[Command]) -> (Arc<Vec<u8>>, Placement) {
-  let cached = SHARED_GLYPH_MASK_CACHE.get_or_insert_with(key, || {
-    let (mask, placement) = render_bucket_mask(key, paths);
-    let bytes = mask.capacity() + 64;
-
-    Some(((Arc::new(mask), placement), bytes))
-  });
-
-  match cached {
-    Some(entry) => entry,
-    None => {
-      let (mask, placement) = render_bucket_mask(key, paths);
-
-      (Arc::new(mask), placement)
-    }
-  }
+  glyph_mask(key, || render_bucket_mask(key, paths))
 }
 
 fn glyph_cache_key_and_offset(transform: Affine, glyph_signature: u64) -> Option<(u64, i32, i32)> {

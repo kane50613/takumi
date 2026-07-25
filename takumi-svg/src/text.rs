@@ -6,7 +6,7 @@
 //! text-shadows, and `-webkit-text-stroke`. The layout/positioning is shared with
 //! raster; only the painting differs.
 
-use std::io;
+use std::{io, sync::Arc};
 
 use takumi_core::{
   context::RenderContext,
@@ -362,7 +362,8 @@ fn emit_clip_text_mask_glyphs(
   let glyph_offset = run.glyph_offset(frame.layout);
   let mut any = false;
   for glyph in &run.glyph_run.glyphs {
-    let Some(ResolvedGlyph::Outline(outline)) = run.resolved_glyphs.get(&glyph.id) else {
+    let Some(ResolvedGlyph::Outline(outline)) = run.resolved_glyphs.get(&glyph.id).map(Arc::as_ref)
+    else {
       continue;
     };
     let matrix =
@@ -450,7 +451,7 @@ fn emit_run_glyphs(
     let placed = offset(matrix.to_cols_array(), frame.origin_x, frame.origin_y);
     let cols = placed.to_cols_array();
 
-    match resolved {
+    match resolved.as_ref() {
       ResolvedGlyph::Outline(outline) => {
         if let Some(clip) = clip_data.as_deref_mut() {
           clip.push_str(&path_data(outline.paths(), cols));

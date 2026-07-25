@@ -5,7 +5,7 @@ use std::{
   iter::once,
   rc::Rc,
   str::FromStr,
-  sync::{Arc, LazyLock},
+  sync::Arc,
 };
 
 use parley::{
@@ -29,7 +29,7 @@ use crate::{
   layout::inline::{InlineBrush, InlineLayout},
   resources::{
     glyph::{BOLD_THRESHOLD, GlyphResolveContext, ResolvedGlyph, synthesis_embolden_strength},
-    glyph_cache::{GlyphCache, glyph_cache_share_bytes},
+    glyph_cache::resolved_glyph,
   },
   style::{FontFamily, FontStyle as CssFontStyle},
 };
@@ -113,9 +113,6 @@ fn guess_font_format(source: &[u8]) -> Result<FontFormat, FontError> {
 thread_local! {
   static LAYOUT_CONTEXT: RefCell<LayoutContext<InlineBrush>> = RefCell::new(LayoutContext::new());
 }
-
-static SHARED_RESOLVED_GLYPH_CACHE: LazyLock<GlyphCache<ResolvedGlyph>> =
-  LazyLock::new(|| GlyphCache::new(glyph_cache_share_bytes()));
 
 fn resolved_glyph_cache_key(
   font_id: u64,
@@ -319,7 +316,7 @@ impl Fonts {
     run: &GlyphRun<'_, InlineBrush>,
     font_ref: FontRef,
     glyph_ids: impl Iterator<Item = u32> + Clone,
-  ) -> HashMap<u32, ResolvedGlyph> {
+  ) -> HashMap<u32, Arc<ResolvedGlyph>> {
     let has_emoji_cluster = run
       .run()
       .visual_clusters()
@@ -360,7 +357,7 @@ impl Fonts {
       skew,
     };
 
-    let mut result: HashMap<u32, ResolvedGlyph> = HashMap::new();
+    let mut result: HashMap<u32, Arc<ResolvedGlyph>> = HashMap::new();
     for glyph_id in glyph_ids {
       if let Entry::Vacant(slot) = result.entry(glyph_id) {
         let key = resolved_glyph_cache_key(
@@ -372,15 +369,8 @@ impl Fonts {
           skew,
           glyph_id,
         );
-        let glyph = SHARED_RESOLVED_GLYPH_CACHE.get_or_insert_with(key, || {
-          resolver.resolve_glyph(glyph_id).map(|glyph| {
-            let bytes = glyph.estimated_bytes();
-
-            (glyph, bytes)
-          })
-        });
-        if let Some(g) = glyph {
-          slot.insert(g);
+        if let Some(glyph) = resolved_glyph(key, || resolver.resolve_glyph(glyph_id)) {
+          slot.insert(glyph);
         }
       }
     }
