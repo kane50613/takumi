@@ -22,6 +22,18 @@ Decoded images, SVG rasters, and parsed stylesheets share one byte budget, 16 Mi
 const renderer = new Renderer({ cacheMaxBytes: 64 * 1024 * 1024 });
 ```
 
+### Size the Glyph Cache
+
+Resolved glyph outlines and their rasterized masks share a separate 8 MiB budget. These caches belong to the module rather than to a `Renderer`, so `setGlyphCacheMaxBytes` covers every renderer in the process and has to run before the first render — the budget is read when a cache is first used.
+
+The default suits Latin text. A CJK outline runs a few kilobytes, so 8 MiB holds on the order of a thousand of them, and a page of Chinese re-rasterizes glyphs it just evicted:
+
+```ts
+import { setGlyphCacheMaxBytes } from "@takumi-rs/core";
+
+setGlyphCacheMaxBytes(64 * 1024 * 1024);
+```
+
 ### Preload Frequently Used Images
 
 Loading images from URLs or bytes during the rendering pass is a bottleneck. Register [Load Images](/docs/load-images) to avoid re-decoding.
