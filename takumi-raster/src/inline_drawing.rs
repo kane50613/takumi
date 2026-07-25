@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use skrifa::{FontRef, MetadataProvider};
 use takumi_core::geometry::{AvailableSpace, ComputedLayout as Layout, NodeId, Point, Size};
@@ -25,6 +25,7 @@ use crate::{
     Affine, BackgroundClip, BlendMode, BorderStyle, Color, SizedTextDecorationThickness,
     TextDecorationLines, TextDecorationSkipInk,
   },
+  unshifted_glyph_mask,
 };
 
 fn draw_with_inline_opacity(
@@ -70,7 +71,7 @@ struct GlyphSkipInkData {
   bounds: GlyphLocalBounds,
   width: u32,
   height: u32,
-  alpha: Vec<u8>,
+  alpha: Arc<Vec<u8>>,
 }
 
 #[derive(Clone, Copy)]
@@ -115,11 +116,11 @@ fn build_glyph_bounds_cache(
         alpha: {
           let mut alpha = vec![0; (bitmap.placement.width * bitmap.placement.height) as usize];
           bitmap.write_alpha_mask(&mut alpha);
-          alpha
+          Arc::new(alpha)
         },
       },
       ResolvedGlyph::Outline(outline) => {
-        let (mask, placement) = render_mask(outline.paths(), None, None);
+        let (mask, placement) = unshifted_glyph_mask(outline.cache_signature(), outline.paths());
 
         if placement.width == 0 || placement.height == 0 {
           continue;

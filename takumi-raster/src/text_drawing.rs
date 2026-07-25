@@ -33,6 +33,15 @@ fn render_bucket_mask(key: u64, paths: &[Command]) -> (Vec<u8>, Placement) {
   render_mask(paths, Some(Affine::translation(bucket_x, 0.0)), None)
 }
 
+/// The mask for `paths` with no subpixel offset: what a caller wants when it
+/// needs the glyph's shape rather than where it lands.
+pub(crate) fn unshifted_glyph_mask(
+  glyph_signature: u64,
+  paths: &[Command],
+) -> (Arc<Vec<u8>>, Placement) {
+  get_or_render_cached_mask(glyph_signature << 2, paths)
+}
+
 /// Fetches the cached mask for `key`, rasterizing it on a miss; concurrent
 /// misses for the same key rasterize once. Charges the capacity the cache
 /// retains, not just the mask length.
@@ -507,5 +516,26 @@ fn draw_color_outline_image(
 
     let (mask, placement) = render_mask(&layer.paths, Some(transform), None);
     canvas.draw_mask(&mask, placement, color, BlendMode::Normal);
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn bucket_zero_mask_matches_untransformed_render() {
+    let paths = vec![
+      Command::MoveTo(Point::new(1.5, 1.0)),
+      Command::LineTo(Point::new(9.0, 2.25)),
+      Command::QuadTo(Point::new(11.0, 7.0), Point::new(4.0, 10.5)),
+      Command::Close,
+    ];
+
+    let (untransformed, untransformed_placement) = render_mask(&paths, None, None);
+    let (bucket_zero, bucket_zero_placement) = render_bucket_mask(0, &paths);
+
+    assert_eq!(untransformed, bucket_zero);
+    assert_eq!(untransformed_placement, bucket_zero_placement);
   }
 }
