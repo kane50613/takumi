@@ -42,16 +42,26 @@ struct Entry {
   bytes: u32,
 }
 
+/// Which stage a slot holds. Part of the key rather than a bit folded into it,
+/// so a caller keeps its full 64 bits and the two stages cannot alias.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum GlyphKind {
+  Resolved,
+  Mask,
+}
+
+type Key = (u64, GlyphKind);
+
 #[derive(Clone)]
 struct ByBytes;
 
-impl Weighter<u64, Entry> for ByBytes {
-  fn weight(&self, _key: &u64, entry: &Entry) -> u64 {
+impl Weighter<Key, Entry> for ByBytes {
+  fn weight(&self, _key: &Key, entry: &Entry) -> u64 {
     u64::from(entry.bytes).max(1)
   }
 }
 
-static SHARED: LazyLock<Cache<u64, Entry, ByBytes>> = LazyLock::new(|| {
+static SHARED: LazyLock<Cache<Key, Entry, ByBytes>> = LazyLock::new(|| {
   let max_bytes = MAX_BYTES.load(Ordering::Relaxed) as u64;
   // ~4 KiB average entry ⇒ item-count hint for the budget.
   let estimated_items = (max_bytes / (4 << 10)).max(1) as usize;
@@ -59,14 +69,8 @@ static SHARED: LazyLock<Cache<u64, Entry, ByBytes>> = LazyLock::new(|| {
   Cache::with_weighter(estimated_items, max_bytes, ByBytes)
 });
 
-// Both callers hand in a hash-derived key, so without a bit reserved on each
-// side their key spaces would alias. Folding the kind into the hash input would
-// not help: a resolved digest can still land on a mask key.
-const RESOLVED: u64 = 0;
-const MASK: u64 = 1;
-
 fn get_or_insert(
-  key: u64,
+  key: Key,
   f: impl FnOnce() -> Option<(CachedGlyph, usize)>,
 ) -> Option<CachedGlyph> {
   SHARED
@@ -89,7 +93,7 @@ pub fn resolved_glyph(
   key: u64,
   resolve: impl Fn() -> Option<ResolvedGlyph>,
 ) -> Option<Arc<ResolvedGlyph>> {
-  let cached = get_or_insert(key << 1 | RESOLVED, || {
+  let cached = get_or_insert((key, GlyphKind::Resolved), || {
     resolve().map(|glyph| {
       let bytes = glyph.estimated_bytes();
 
@@ -99,8 +103,7 @@ pub fn resolved_glyph(
 
   match cached {
     Some(CachedGlyph::Resolved(glyph)) => Some(glyph),
-    // A digest collision across the two kinds: rare enough to just redo the work.
-    Some(CachedGlyph::Mask(..)) => resolve().map(Arc::new),
+    Some(CachedGlyph::Mask(..)) => None,
     None => None,
   }
 }
@@ -112,7 +115,7 @@ pub fn glyph_mask(
   key: u64,
   render: impl Fn() -> (Vec<u8>, Placement),
 ) -> (Arc<Vec<u8>>, Placement) {
-  let cached = get_or_insert(key << 1 | MASK, || {
+  let cached = get_or_insert((key, GlyphKind::Mask), || {
     let (mask, placement) = render();
     let bytes = mask.capacity() + ENTRY_OVERHEAD;
 
@@ -171,6 +174,17 @@ mod tests {
     assert_eq!(*mask.0, vec![7; 4]);
     assert_eq!(signature_of(&resolved), Some(42));
     assert_eq!(*glyph_mask(key, || (vec![0; 4], placement())).0, vec![7; 4]);
+  }
+
+  #[test]
+  fn the_whole_key_is_kept() {
+    // Two keys that differ only in the top bit, which a key packed into a shifted
+    // u64 would have dropped.
+    let low = resolved_glyph(0, || Some(outline(1))).unwrap();
+    let high = resolved_glyph(1 << 63, || Some(outline(2))).unwrap();
+
+    assert_eq!(signature_of(&low), Some(1));
+    assert_eq!(signature_of(&high), Some(2));
   }
 
   #[test]
