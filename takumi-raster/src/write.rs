@@ -383,28 +383,15 @@ pub fn write_animated_png<W: Write>(
   ensure_uniform_frame_dimensions(frames)?;
 
   let frame_count = frames.len() as u32;
-  // APNG doesn't support variable frame duration, so use the minimum across frames.
-  let min_duration_ms = frames
-    .iter()
-    .map(|frame| frame.duration_ms)
-    .min()
-    .unwrap_or(0);
 
-  encode_animated_png(
-    frames.iter().map(Ok),
-    frame_count,
-    min_duration_ms,
-    destination,
-    options,
-  )
+  encode_animated_png(frames.iter().map(Ok), frame_count, destination, options)
 }
 
-/// Streams frames into an animated PNG. `frame_count` and `min_duration_ms` are
-/// passed in because APNG writes both into the header before the first frame.
+/// Streams frames into an animated PNG. `frame_count` is passed in because APNG
+/// writes it into the header before the first frame.
 pub(crate) fn encode_animated_png<W, F, I>(
   mut frames: I,
   frame_count: u32,
-  min_duration_ms: u32,
   destination: &mut W,
   options: AnimatedPngOptions,
 ) -> Result<()>
@@ -427,7 +414,7 @@ where
     .set_animated(frame_count, options.loop_count.unwrap_or(0) as u32)
     .map_err(Error::encode)?;
   encoder
-    .set_frame_delay(min_duration_ms.clamp(0, u16::MAX as u32) as u16, 1000)
+    .set_frame_delay(first.duration_ms.min(u16::MAX as u32) as u16, 1000)
     .map_err(Error::encode)?;
 
   let mut writer = encoder.write_header().map_err(Error::encode)?;
@@ -441,6 +428,9 @@ where
     if frame.image.width() != width || frame.image.height() != height {
       return Err(Error::MixedAnimationFrameDimensions);
     }
+    writer
+      .set_frame_delay(frame.duration_ms.min(u16::MAX as u32) as u16, 1000)
+      .map_err(Error::encode)?;
     writer
       .write_image_data(frame.image.as_raw())
       .map_err(Error::encode)?;
@@ -546,9 +536,7 @@ fn encode_frames<W: Write>(
     AnimationFormat::WebP(options) => encode_animated_webp(frames, destination, options),
     AnimationFormat::Gif(options) => encode_animated_gif(frames, destination, options),
     AnimationFormat::Apng(options) => {
-      let frame_count = spans.len() as u32;
-      let min_duration_ms = spans.iter().map(|span| span.duration_ms).min().unwrap_or(0);
-      encode_animated_png(frames, frame_count, min_duration_ms, destination, options)
+      encode_animated_png(frames, spans.len() as u32, destination, options)
     }
   }
 }
@@ -622,6 +610,44 @@ mod tests {
       image: Bitmap::from_rgba(image),
       duration_ms,
     }
+  }
+
+  #[test]
+  fn write_animated_png_writes_per_frame_delays() {
+    let frames = vec![
+      mk_frame(
+        RgbaImage::from_pixel(2, 2, image::Rgba([255, 0, 0, 255])),
+        120,
+      ),
+      mk_frame(
+        RgbaImage::from_pixel(2, 2, image::Rgba([0, 255, 0, 255])),
+        30,
+      ),
+    ];
+
+    let mut bytes = Vec::new();
+    let encode_result =
+      write_animated_png(&frames, &mut bytes, AnimatedPngOptions { loop_count: None });
+    assert!(encode_result.is_ok(), "failed to encode animated png");
+
+    let decode_result = png::Decoder::new(Cursor::new(&bytes)).read_info();
+    assert!(decode_result.is_ok(), "failed to decode animated png");
+    let mut reader = match decode_result {
+      Ok(reader) => reader,
+      Err(_) => return,
+    };
+
+    let Some(first) = reader.info().frame_control else {
+      panic!("missing frame control for the first png frame");
+    };
+    assert_eq!((first.delay_num, first.delay_den), (120, 1000));
+
+    let second = reader.next_frame_info();
+    assert!(second.is_ok(), "missing frame control for the second frame");
+    let Ok(second) = second else {
+      return;
+    };
+    assert_eq!((second.delay_num, second.delay_den), (30, 1000));
   }
 
   #[test]
