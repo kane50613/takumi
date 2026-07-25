@@ -13,4 +13,4 @@ The resolved-glyph and glyph-mask caches share an 8 MiB budget that no binding e
 
 The default suits Latin text. A CJK outline runs a few kilobytes, so 8 MiB holds on the order of a thousand of them and a page of Chinese re-rasterizes glyphs it evicted a moment earlier.
 
-`takumi-js` forwards it too. That one is async, since it has to resolve the backend before it can set anything.
+`takumi-js` forwards it too. That one records the budget and hands it to the backend as it loads, so it stays synchronous and cannot race the resolution.
