@@ -1,3 +1,9 @@
+## takumi-svg@0.3.2
+
+### Replace `ResolvedGlyphPlacement` with `geometry::Placement`
+
+`Placement` moves into `takumi_core::geometry` and takes over from `ResolvedGlyphPlacement`, which described the same four fields. `BuiltInlineLayout::resolved_glyphs` is now keyed to `Arc<ResolvedGlyph>`, so a glyph cache hit stops copying the outline commands.
+
 ## takumi-svg@0.3.0
 
 ### Unify decoded resources behind one budgeted cache

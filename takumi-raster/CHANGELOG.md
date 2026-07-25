@@ -1,3 +1,25 @@
+## takumi-raster@0.4.2
+
+### Replace `ResolvedGlyphPlacement` with `geometry::Placement`
+
+`Placement` moves into `takumi_core::geometry` and takes over from `ResolvedGlyphPlacement`, which described the same four fields. `BuiltInlineLayout::resolved_glyphs` is now keyed to `Arc<ResolvedGlyph>`, so a glyph cache hit stops copying the outline commands.
+
+### Cache text-stroke and faux-bold glyph masks
+
+Both rasterized through `render_mask` on every draw, so CJK bold, which triggers synthesis at weight 600 and up, paid a full stroke rasterization per glyph per render. They go through the shared glyph cache now, keyed on the stroke as well as the outline. Stroked masks land on the same quarter-pixel grid as the fill, which shifts antialiasing on stroked and synthesized text by a fraction of a pixel and stops the stroke drifting from the fill it outlines.
+
+### Write per-frame delays into animated PNG output
+
+Every APNG frame was written with the shortest frame's delay. The delay was set once on the encoder, before the header, so the header's `fcTL` covered the whole animation, on the premise that APNG has no per-frame duration. It does: each frame carries its own `fcTL`, and the `png` crate exposes it as `Writer::set_frame_delay`.
+
+The header now takes the first frame's duration and every later frame gets its own. A 150 ms timeline that renders as frames of 33, 33, 34, 33 and 17 ms used to play back as five 17 ms frames, roughly 1.8× too fast. A short scene followed by a long hold was much worse. WebP and GIF already wrote per-frame delays and are unchanged.
+
+### Couple the overflow axes and stop mixed overflow from blanking a node
+
+`overflow-x` and `overflow-y` were read straight off the computed style, so `overflow-x: hidden` next to `overflow-y: visible` stayed mixed. CSS Overflow 3 says a `visible` axis paired with one that is neither `visible` nor `clip` computes to a scrolling value instead, which is why Chrome clips both axes there. `resolve_overflows` now applies that coupling, so the pair reaches layout, painting, and the SVG backend already resolved. `clip` next to `visible` is a legal combination and still passes through untouched.
+
+That legal pair then hit a second bug. The mask builder marks an unclipped axis with `u32::MAX`, and the identity-transform fast path narrowed it with `as i32`, which truncates to `-1` rather than saturating. The clip rectangle came out empty, so the node rendered nothing at all. The comparison now clamps before narrowing, matching the rotated path, which had always compared in `u32`.
+
 ## takumi-raster@0.4.1
 
 ### Share the glyph caches across worker threads
