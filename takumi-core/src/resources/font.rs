@@ -862,7 +862,13 @@ mod tests {
   #[test]
   fn same_bytes_produce_the_same_blob_id() {
     let first = FontSource::from(geist_bytes()).into_blob().unwrap();
-    let second = FontSource::from(geist_bytes()).into_blob().unwrap();
+    // Decoded up front rather than during `into_blob`, so the id has to come from the
+    // decoded sfnt and not from whatever the caller happened to hand over.
+    let second = FontSource::from(geist_bytes())
+      .into_decoded()
+      .unwrap()
+      .into_blob()
+      .unwrap();
     let other = FontSource::from(geist_mono_bytes()).into_blob().unwrap();
 
     // The glyph caches key on this id, so a re-registered face has to keep the entries

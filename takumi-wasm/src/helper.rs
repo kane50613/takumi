@@ -21,6 +21,6 @@ pub fn map_error<E: Display>(err: E) -> js_sys::Error {
 /// kilobytes, so the default holds around a thousand of them and a page of
 /// Chinese re-rasterizes glyphs it just evicted.
 #[wasm_bindgen(js_name = setGlyphCacheMaxBytes)]
-pub fn set_glyph_cache_max_bytes(bytes: usize) {
-  glyph_cache::set_glyph_cache_max_bytes(bytes);
+pub fn set_glyph_cache_max_bytes(bytes: f64) {
+  glyph_cache::set_glyph_cache_max_bytes(bytes.max(0.0) as usize);
 }
