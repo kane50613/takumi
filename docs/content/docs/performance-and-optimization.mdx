@@ -34,6 +34,14 @@ import { setGlyphCacheMaxBytes } from "@takumi-rs/core";
 setGlyphCacheMaxBytes(64 * 1024 * 1024);
 ```
 
+`takumi-js` exports it as well. That one is async because it resolves the backend first:
+
+```ts
+import { setGlyphCacheMaxBytes } from "takumi-js";
+
+await setGlyphCacheMaxBytes(64 * 1024 * 1024);
+```
+
 ### Preload Frequently Used Images
 
 Loading images from URLs or bytes during the rendering pass is a bottleneck. Register [Load Images](/docs/load-images) to avoid re-decoding.

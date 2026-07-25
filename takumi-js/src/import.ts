@@ -24,3 +24,24 @@ export function getImports(module?: BackendModule): Promise<Imports> {
 
   return importPromise;
 }
+
+/**
+ * Sets the byte budget shared by the resolved-glyph and glyph-mask caches; `0` stops
+ * caching. Defaults to 8 MiB.
+ *
+ * The caches belong to the backend rather than to a renderer, so this budget covers
+ * every render the process makes, and the value is read the first time a cache is
+ * used. Await this before the first render.
+ *
+ * Raise it for scripts with large glyph sets: a CJK outline runs a few kilobytes, so
+ * the default holds around a thousand of them and a page of Chinese re-rasterizes
+ * glyphs it evicted a moment earlier.
+ */
+export async function setGlyphCacheMaxBytes(
+  bytes: number,
+  options?: { module?: BackendModule },
+): Promise<void> {
+  const backend = await getImports(options?.module);
+
+  backend.setGlyphCacheMaxBytes(bytes);
+}

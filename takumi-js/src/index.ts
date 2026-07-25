@@ -23,6 +23,7 @@ export type {
   MeasuredTextRun,
   OutputFormat,
 } from "@takumi-rs/core";
+export { setGlyphCacheMaxBytes } from "./import";
 export { render, renderAnimation, renderSvg } from "./render";
 
 export type {
