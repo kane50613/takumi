@@ -1,84 +1,75 @@
 core:changelogs:
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n---\n\n### Register a font from bytes the caller already holds\n\n`FontSource::from_shared` takes an `Arc<dyn AsRef<[u8]> + Send + Sync>` and passes it to the font system untouched, so a memory-mapped face stays paged from disk instead of being copied onto the heap, which for a CJK family is tens of megabytes that never reach the heap at all. WOFF and WOFF2 still decompress into a fresh buffer.\n"
-    filename: font-source-shared-bytes.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n---\n\n### Register a font straight out of the binary\n\n`FontSource::from_static` takes a `&'static [u8]`, so an `include_bytes!` face is read where it already sits, in the read-only segment, and the caller writes no `Arc` of its own: the one held internally wraps the slice reference, never a copy of the font. Its blob id comes from the address and length instead of a hash of the content, so registering a 30 MiB CJK face no longer reads through every page of it and the face is paged in a glyph at a time.\n"
-    filename: font-source-from-static.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-raster:\n    type: patch\n---\n\n### Stop parking retired subcanvas pixmaps for the rest of the render\n\nA canvas held on to up to eight full-size pixmaps that isolated groups had finished with, so a page with several stacking contexts kept multiples of its own viewport alive until the render returned. They are plain allocations now, freed as each group composites, which is where the rest of the scratch buffers already went.\n"
-    filename: drop-offscreen-pixmap-pool.md
+  - content: "---\npackages:\n  cargo:takumi:\n    type: patch\n---\n\n### Export `FontSource` from the prelude\n\n`FontResource::new` takes anything that converts into a `FontSource`, and naming that type is the only way to reach `FontSource::from_static` or `from_shared`. It was missing from the prelude, so registering an `include_bytes!` face meant going through the semver-exempt `unstable` module.\n"
+    filename: prelude-font-source.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - id: npm:docs
-    updated: false
-  - id: npm:@takumi-rs/wasm
-    updated: true
   - id: npm:@takumi-rs/helpers
     updated: true
   - id: npm:takumi-js
+    updated: true
+  - id: npm:@takumi-rs/core
     updated: true
   - id: npm:takumi-template
     updated: false
   - id: npm:@takumi-rs/image-response
     updated: true
-  - id: npm:@takumi-rs/core
+  - id: npm:@takumi-rs/wasm
     updated: true
+  - id: npm:docs
+    updated: false
+  - id: npm:example-liquid-glass
+    updated: false
+  - id: npm:example-tanstack-start
+    updated: false
+  - id: npm:example-cloudflare-workers
+    updated: false
+  - id: npm:example-twitter-images
+    updated: false
   - id: npm:example-satori-html
+    updated: false
+  - id: npm:example-css-library-integration
     updated: false
   - id: npm:ffmpeg-keyframe-animation
     updated: false
   - id: npm:waku-ssr
     updated: false
+  - id: npm:svelte
+    updated: false
   - id: npm:example-nextjs
     updated: false
   - id: npm:ffplay
     updated: false
-  - id: npm:svelte
-    updated: false
-  - id: npm:example-twitter-images
-    updated: false
-  - id: npm:example-tanstack-start
-    updated: false
-  - id: npm:example-liquid-glass
-    updated: false
-  - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:example-css-library-integration
-    updated: false
-  - id: cargo:takumi
+  - changelogIds:
+      - prelude-font-source.md
+    id: cargo:takumi
     updated: true
   - id: cargo:takumi-html
-    updated: true
-  - changelogIds:
-      - font-source-shared-bytes.md
-      - font-source-from-static.md
-    id: cargo:takumi-core
-    updated: true
+    updated: false
   - id: cargo:takumi-svg
-    updated: true
-  - changelogIds:
-      - drop-offscreen-pixmap-pool.md
-    id: cargo:takumi-raster
-    updated: true
+    updated: false
+  - id: cargo:takumi-core
+    updated: false
+  - id: cargo:takumi-raster
+    updated: false
 npm:packages:
   - id: npm:takumi
-  - id: npm:docs
-  - id: npm:@takumi-rs/wasm
   - id: npm:@takumi-rs/helpers
   - id: npm:takumi-js
+  - id: npm:@takumi-rs/core
   - id: npm:takumi-template
   - id: npm:@takumi-rs/image-response
-  - id: npm:@takumi-rs/core
+  - id: npm:@takumi-rs/wasm
+  - id: npm:docs
+  - id: npm:example-liquid-glass
+  - id: npm:example-tanstack-start
+  - id: npm:example-cloudflare-workers
+  - id: npm:example-twitter-images
   - id: npm:example-satori-html
+  - id: npm:example-css-library-integration
   - id: npm:ffmpeg-keyframe-animation
   - id: npm:waku-ssr
+  - id: npm:svelte
   - id: npm:example-nextjs
   - id: npm:ffplay
-  - id: npm:svelte
-  - id: npm:example-twitter-images
-  - id: npm:example-tanstack-start
-  - id: npm:example-liquid-glass
-  - id: npm:example-cloudflare-workers
-  - id: npm:example-css-library-integration
