@@ -127,6 +127,13 @@ export const showcaseProjects: Project[] = [
     width: 1200,
     height: 630,
   },
+  {
+    title: "Rail Radar",
+    image: "https://www.railradar24.com/og?id=CH03000",
+    url: "https://railradar.com",
+    width: 1200,
+    height: 630,
+  },
 ];
 
 export const showcaseTemplates: Template[] = [
