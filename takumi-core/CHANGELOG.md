@@ -1,3 +1,13 @@
+## takumi-core@0.10.0
+
+### Register a font from bytes the caller already holds
+
+`FontSource::from_shared` takes an `Arc<dyn AsRef<[u8]> + Send + Sync>` and passes it to the font system untouched, so a memory-mapped face stays paged from disk instead of being copied onto the heap, which for a CJK family is tens of megabytes that never reach the heap at all. WOFF and WOFF2 still decompress into a fresh buffer.
+
+### Register a font straight out of the binary
+
+`FontSource::from_static` takes a `&'static [u8]`, so an `include_bytes!` face is read where it already sits, in the read-only segment, and the caller writes no `Arc` of its own: the one held internally wraps the slice reference, never a copy of the font. Its blob id comes from the address and length instead of a hash of the content, so registering a 30 MiB CJK face no longer reads through every page of it and the face is paged in a glyph at a time.
+
 ## takumi-core@0.9.0
 
 ### Bound calc() depth, var() substitution size, and list interpolation length
