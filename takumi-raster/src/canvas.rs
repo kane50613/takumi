@@ -95,7 +95,6 @@ impl<'a> DrawTarget<'a, '_> {
 pub(crate) struct Canvas {
   image: Pixmap,
   origin: Point<u32>,
-  offscreen_pool: Vec<Pixmap>,
   constraint_mask_stack: Vec<Option<MaskStackEntry>>,
 }
 
@@ -115,7 +114,6 @@ impl Canvas {
     Some(Self {
       image,
       origin: Point { x: 0, y: 0 },
-      offscreen_pool: Vec::new(),
       constraint_mask_stack: Vec::new(),
     })
   }
@@ -133,15 +131,7 @@ impl Canvas {
     })
   }
 
-  fn acquire_offscreen(&mut self, size: Size<u32>) -> Result<Pixmap> {
-    if let Some(index) = self
-      .offscreen_pool
-      .iter()
-      .position(|image| image.width() == size.width && image.height() == size.height)
-    {
-      return Ok(self.offscreen_pool.swap_remove(index));
-    }
-
+  fn acquire_offscreen(size: Size<u32>) -> Result<Pixmap> {
     Pixmap::new(size.width, size.height).ok_or_else(|| {
       Error::encode(ImageError::Parameter(ParameterError::from_kind(
         ParameterErrorKind::DimensionMismatch,
@@ -154,8 +144,7 @@ impl Canvas {
       width: bounds.width,
       height: bounds.height,
     };
-    let mut image = self.acquire_offscreen(size)?;
-    image.data_mut().fill(0);
+    let image = Self::acquire_offscreen(size)?;
 
     let viewport = self.viewport();
     if bounds.left == viewport.origin.x as i32
@@ -207,7 +196,9 @@ impl Canvas {
     } = subcanvas;
 
     if opacity <= 0.0 {
-      self.recycle_offscreen_image(image);
+      // `image` is the parent pixmap the subcanvas replaced, so it goes back even
+      // when nothing the group painted is kept.
+      self.image = image;
       self.restore_subcanvas_state(origin, constraint_mask_stack);
       return;
     }
@@ -232,8 +223,6 @@ impl Canvas {
     } else {
       blend_pixmap_software(&mut self.image, &isolated_image, mode, offset, opacity);
     }
-
-    self.recycle_offscreen_image(isolated_image);
   }
 
   pub(crate) fn has_no_constraint_mask(&self) -> bool {
@@ -266,14 +255,6 @@ impl Canvas {
         ParameterErrorKind::DimensionMismatch,
       )))
     })
-  }
-
-  pub(crate) fn recycle_offscreen_image(&mut self, image: Pixmap) {
-    const MAX_OFFSCREEN_POOL: usize = 8;
-    if self.offscreen_pool.len() >= MAX_OFFSCREEN_POOL {
-      return;
-    }
-    self.offscreen_pool.push(image);
   }
 
   pub(crate) fn with_pixmap<R>(&mut self, f: impl FnOnce(&mut Pixmap) -> R) -> R {
@@ -525,5 +506,36 @@ impl Canvas {
     if let Some(constraint_mask_stack) = constraint_mask_stack {
       self.constraint_mask_stack = constraint_mask_stack;
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn an_invisible_subcanvas_gives_the_parent_pixmap_back() {
+    let mut canvas = Canvas::new(Size {
+      width: 4,
+      height: 4,
+    });
+
+    canvas.with_pixmap(|pixmap| pixmap.data_mut().fill(0xff));
+
+    let subcanvas = canvas
+      .begin_subcanvas(Placement {
+        left: 0,
+        top: 0,
+        width: 2,
+        height: 2,
+      })
+      .expect("the subcanvas pixmap allocates");
+
+    canvas.composite_subcanvas(subcanvas, BlendMode::Normal, 0.0);
+
+    let painted = canvas.into_inner().expect("the canvas converts");
+
+    assert_eq!(painted.dimensions(), (4, 4));
+    assert!(painted.as_raw().iter().all(|byte| *byte == 0xff));
   }
 }
