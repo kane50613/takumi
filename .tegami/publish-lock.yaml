@@ -1,109 +1,84 @@
 core:changelogs:
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-js:\n    type: minor\n---\n\n### Add `setGlyphCacheMaxBytes`\n\nThe resolved-glyph and glyph-mask caches share an 8 MiB budget that no binding exposed. `cacheMaxBytes` looks like the knob for it but covers a different set of caches: decoded images, SVG rasters, and parsed stylesheets.\n\n`setGlyphCacheMaxBytes` sets the glyph budget. It is a module-level function rather than a `Renderer` option because those caches live in the module and are shared by every renderer, and the budget is read the first time a cache is used, so the call has to come before the first render.\n\nThe default suits Latin text. A CJK outline runs a few kilobytes, so 8 MiB holds on the order of a thousand of them and a page of Chinese re-rasterizes glyphs it evicted a moment earlier.\n\n`takumi-js` forwards it too. That one records the budget and hands it to the backend as it loads, so it stays synchronous and cannot race the resolution.\n"
-    filename: set-glyph-cache-max-bytes.md
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n---\n\n### Register a font from bytes the caller already holds\n\n`FontSource::from_shared` takes an `Arc<dyn AsRef<[u8]> + Send + Sync>` and passes it to the font system untouched, so a memory-mapped face stays paged from disk instead of being copied onto the heap, which for a CJK family is tens of megabytes that never reach the heap at all. WOFF and WOFF2 still decompress into a fresh buffer.\n"
+    filename: font-source-shared-bytes.md
     v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n  cargo:takumi-raster:\n    type: patch\n  cargo:takumi-svg:\n    type: patch\n---\n\n### Replace `ResolvedGlyphPlacement` with `geometry::Placement`\n\n`Placement` moves into `takumi_core::geometry` and takes over from `ResolvedGlyphPlacement`, which described the same four fields. `BuiltInlineLayout::resolved_glyphs` is now keyed to `Arc<ResolvedGlyph>`, so a glyph cache hit stops copying the outline commands.\n"
-    filename: unify-glyph-cache.md
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n---\n\n### Register a font straight out of the binary\n\n`FontSource::from_static` takes a `&'static [u8]`, so an `include_bytes!` face is read where it already sits, in the read-only segment, and the caller writes no `Arc` of its own: the one held internally wraps the slice reference, never a copy of the font. Its blob id comes from the address and length instead of a hash of the content, so registering a 30 MiB CJK face no longer reads through every page of it and the face is paged in a glyph at a time.\n"
+    filename: font-source-from-static.md
     v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-raster:\n    type: patch\n---\n\n### Cache text-stroke and faux-bold glyph masks\n\nBoth rasterized through `render_mask` on every draw, so CJK bold, which triggers synthesis at weight 600 and up, paid a full stroke rasterization per glyph per render. They go through the shared glyph cache now, keyed on the stroke as well as the outline. Stroked masks land on the same quarter-pixel grid as the fill, which shifts antialiasing on stroked and synthesized text by a fraction of a pixel and stops the stroke drifting from the fill it outlines.\n"
-    filename: cache-stroked-glyph-masks.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-raster:\n    type: patch\n---\n\n### Write per-frame delays into animated PNG output\n\nEvery APNG frame was written with the shortest frame's delay. The delay was set once on the encoder, before the header, so the header's `fcTL` covered the whole animation, on the premise that APNG has no per-frame duration. It does: each frame carries its own `fcTL`, and the `png` crate exposes it as `Writer::set_frame_delay`.\n\nThe header now takes the first frame's duration and every later frame gets its own. A 150 ms timeline that renders as frames of 33, 33, 34, 33 and 17 ms used to play back as five 17 ms frames, roughly 1.8× too fast. A short scene followed by a long hold was much worse. WebP and GIF already wrote per-frame delays and are unchanged.\n"
-    filename: apng-per-frame-delays.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: patch\n  cargo:takumi-raster:\n    type: patch\n---\n\n### Couple the overflow axes and stop mixed overflow from blanking a node\n\n`overflow-x` and `overflow-y` were read straight off the computed style, so `overflow-x: hidden` next to `overflow-y: visible` stayed mixed. CSS Overflow 3 says a `visible` axis paired with one that is neither `visible` nor `clip` computes to a scrolling value instead, which is why Chrome clips both axes there. `resolve_overflows` now applies that coupling, so the pair reaches layout, painting, and the SVG backend already resolved. `clip` next to `visible` is a legal combination and still passes through untouched.\n\nThat legal pair then hit a second bug. The mask builder marks an unclipped axis with `u32::MAX`, and the identity-transform fast path narrowed it with `as i32`, which truncates to `-1` rather than saturating. The clip rectangle came out empty, so the node rendered nothing at all. The comparison now clamps before narrowing, matching the rotated path, which had always compared in `u32`.\n"
-    filename: overflow-axis-coupling.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: patch\n---\n\n### Bound calc() depth, var() substitution size, and list interpolation length\n\nFour places in the CSS value layer let caller-supplied text drive unbounded recursion or allocation. `calc()` recursed once per leading unary sign and once per nested `calc(`. `var()` substitution capped neither its nesting nor its total substituted bytes; its cycle guard is pushed and popped per reference, so it stops a property referencing itself but not fan-out, and `--n: var(--n-1)var(--n-1)` doubles per link. `RepeatToLcm` list interpolation allocated the full LCM of the two list lengths. A `calc()` resolving to NaN or infinity reached taffy unclamped, where every other `Length` arm is clamped on its way through `to_px`.\n\nRelease builds abort on panic, so a stack overflow or a failed allocation here took down the host process instead of returning an error. The limits match Blink: depth 100, 2 MiB of substituted text (the value the spec and Firefox use as well), and 1000 interpolated list entries.\n"
-    filename: bound-css-value-layer.md
-    v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: patch\n---\n\n### Key the glyph caches on font content instead of blob identity\n\n`Blob::new` draws its id from a global counter, and that id is part of the key for the shared resolved-glyph and glyph-mask caches, as well as parley's shaping data cache. Registering the same face again produced a fresh id, so a second renderer, or one rebuilt to reclaim memory, missed every glyph the face had already resolved and filled the budget with entries nothing would hit again. The id is now a hash of the decoded font bytes, so identical faces share cache entries no matter how often they are registered.\n"
-    filename: glyph-cache-font-identity.md
+  - content: "---\npackages:\n  cargo:takumi-raster:\n    type: patch\n---\n\n### Stop parking retired subcanvas pixmaps for the rest of the render\n\nA canvas held on to up to eight full-size pixmaps that isolated groups had finished with, so a page with several stacking contexts kept multiples of its own viewport alive until the render returned. They are plain allocations now, freed as each group composites, which is where the rest of the scratch buffers already went.\n"
+    filename: drop-offscreen-pixmap-pool.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - changelogIds:
-      - set-glyph-cache-max-bytes.md
-    id: npm:@takumi-rs/core
-    updated: true
   - id: npm:docs
     updated: false
-  - id: npm:@takumi-rs/image-response
+  - id: npm:@takumi-rs/wasm
+    updated: true
+  - id: npm:@takumi-rs/helpers
+    updated: true
+  - id: npm:takumi-js
     updated: true
   - id: npm:takumi-template
     updated: false
-  - id: npm:@takumi-rs/helpers
+  - id: npm:@takumi-rs/image-response
     updated: true
-  - changelogIds:
-      - set-glyph-cache-max-bytes.md
-    id: npm:@takumi-rs/wasm
+  - id: npm:@takumi-rs/core
     updated: true
-  - changelogIds:
-      - set-glyph-cache-max-bytes.md
-    id: npm:takumi-js
-    updated: true
+  - id: npm:example-satori-html
+    updated: false
   - id: npm:ffmpeg-keyframe-animation
+    updated: false
+  - id: npm:waku-ssr
+    updated: false
+  - id: npm:example-nextjs
+    updated: false
+  - id: npm:ffplay
     updated: false
   - id: npm:svelte
     updated: false
-  - id: npm:example-css-library-integration
+  - id: npm:example-twitter-images
     updated: false
-  - id: npm:example-nextjs
+  - id: npm:example-tanstack-start
     updated: false
   - id: npm:example-liquid-glass
     updated: false
   - id: npm:example-cloudflare-workers
     updated: false
-  - id: npm:ffplay
-    updated: false
-  - id: npm:example-tanstack-start
-    updated: false
-  - id: npm:example-twitter-images
-    updated: false
-  - id: npm:waku-ssr
-    updated: false
-  - id: npm:example-satori-html
+  - id: npm:example-css-library-integration
     updated: false
   - id: cargo:takumi
-    updated: true
-  - changelogIds:
-      - unify-glyph-cache.md
-      - cache-stroked-glyph-masks.md
-      - apng-per-frame-delays.md
-      - overflow-axis-coupling.md
-    id: cargo:takumi-raster
     updated: true
   - id: cargo:takumi-html
     updated: true
   - changelogIds:
-      - unify-glyph-cache.md
-    id: cargo:takumi-svg
+      - font-source-shared-bytes.md
+      - font-source-from-static.md
+    id: cargo:takumi-core
+    updated: true
+  - id: cargo:takumi-svg
     updated: true
   - changelogIds:
-      - bound-css-value-layer.md
-      - unify-glyph-cache.md
-      - glyph-cache-font-identity.md
-      - overflow-axis-coupling.md
-    id: cargo:takumi-core
+      - drop-offscreen-pixmap-pool.md
+    id: cargo:takumi-raster
     updated: true
 npm:packages:
   - id: npm:takumi
-  - id: npm:@takumi-rs/core
   - id: npm:docs
-  - id: npm:@takumi-rs/image-response
-  - id: npm:takumi-template
-  - id: npm:@takumi-rs/helpers
   - id: npm:@takumi-rs/wasm
+  - id: npm:@takumi-rs/helpers
   - id: npm:takumi-js
+  - id: npm:takumi-template
+  - id: npm:@takumi-rs/image-response
+  - id: npm:@takumi-rs/core
+  - id: npm:example-satori-html
   - id: npm:ffmpeg-keyframe-animation
-  - id: npm:svelte
-  - id: npm:example-css-library-integration
+  - id: npm:waku-ssr
   - id: npm:example-nextjs
+  - id: npm:ffplay
+  - id: npm:svelte
+  - id: npm:example-twitter-images
+  - id: npm:example-tanstack-start
   - id: npm:example-liquid-glass
   - id: npm:example-cloudflare-workers
-  - id: npm:ffplay
-  - id: npm:example-tanstack-start
-  - id: npm:example-twitter-images
-  - id: npm:waku-ssr
-  - id: npm:example-satori-html
+  - id: npm:example-css-library-integration
