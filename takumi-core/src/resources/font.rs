@@ -533,6 +533,9 @@ pub struct FontSource<'a> {
   bytes: FontBytes<'a>,
   /// Whether `bytes` is already decompressed (woff/woff2 expanded to raw sfnt).
   is_decoded: bool,
+  /// Blob id to use in place of hashing the decoded bytes, set by
+  /// [`FontSource::from_static`].
+  cache_id: Option<u64>,
 }
 
 impl<'a, T> From<T> for FontSource<'a>
@@ -543,6 +546,7 @@ where
     Self {
       bytes: FontBytes::Inline(value.into()),
       is_decoded: false,
+      cache_id: None,
     }
   }
 }
@@ -556,6 +560,28 @@ impl<'a> FontSource<'a> {
     Self {
       bytes: FontBytes::Shared(bytes),
       is_decoded: false,
+      cache_id: None,
+    }
+  }
+
+  /// Takes bytes that live as long as the process, `include_bytes!` above all.
+  /// Nothing is copied, and the blob id comes from the address and length rather
+  /// than from the content, so registering a 30 MiB face never reads through it.
+  /// A face embedded in the binary is then paged in one glyph at a time.
+  ///
+  /// The same slice always yields the same id, which is what the glyph caches
+  /// need. Two faces with the same bytes may still land on separate ids, and
+  /// resolve their glyphs separately, if one of them arrives as a `Vec`.
+  pub fn from_static(bytes: &'static [u8]) -> Self {
+    let mut id = Xxh3::new();
+
+    id.update(&bytes.as_ptr().addr().to_le_bytes());
+    id.update(&bytes.len().to_le_bytes());
+
+    Self {
+      bytes: FontBytes::Shared(Arc::new(bytes)),
+      is_decoded: false,
+      cache_id: Some(id.digest()),
     }
   }
 
@@ -581,11 +607,13 @@ impl<'a> FontSource<'a> {
         None,
       )?)),
       is_decoded: true,
+      cache_id: self.cache_id,
     })
   }
 
   fn into_blob(self) -> Result<Blob<u8>, FontError> {
     let passthrough = self.is_decoded || self.is_sfnt();
+    let cache_id = self.cache_id;
     let decoded: SharedBytes = match self.bytes {
       FontBytes::Shared(bytes) if passthrough => bytes,
       bytes => Arc::new(load_font(Cow::Owned(bytes.into_owned()), None)?),
@@ -594,7 +622,7 @@ impl<'a> FontSource<'a> {
     // `Blob::new` draws its id from a global counter, and that id keys the shared glyph
     // caches. Registering the same face again — a second renderer, a rebuilt one — would
     // then miss every glyph it had already resolved, so the id comes from the content.
-    let id = xxh3_64((*decoded).as_ref());
+    let id = cache_id.unwrap_or_else(|| xxh3_64((*decoded).as_ref()));
 
     Ok(Blob::from_raw_parts(decoded, id))
   }
@@ -826,6 +854,42 @@ mod tests {
       .unwrap();
 
     assert_eq!(blob.data().as_ptr(), address);
+  }
+
+  #[test]
+  fn static_bytes_keep_one_blob_id_without_reading_them() {
+    static TTF: &[u8] = &[0x00, 0x01, 0x00, 0x00];
+    static OTF: &[u8] = b"OTTO";
+
+    let id = |bytes| FontSource::from_static(bytes).into_blob().unwrap().id();
+
+    // Same slice, same id, so a re-registered face keeps the glyphs it resolved.
+    assert_eq!(id(TTF), id(TTF));
+    assert_ne!(id(TTF), id(OTF));
+  }
+
+  #[test]
+  fn static_sfnt_bytes_reach_the_font_system_uncopied() {
+    let sfnt: &'static [u8] = load_font(Cow::Owned(geist_bytes()), None).unwrap().leak();
+    let blob = FontSource::from_static(sfnt).into_blob().unwrap();
+
+    assert_eq!(blob.data().as_ptr(), sfnt.as_ptr());
+  }
+
+  #[test]
+  fn a_static_woff2_face_keeps_its_id_through_decompression() {
+    let woff2: &'static [u8] = geist_bytes().leak();
+    let registered = FontSource::from_static(woff2).into_blob().unwrap();
+    let resolved_first = FontSource::from_static(woff2)
+      .into_decoded()
+      .unwrap()
+      .into_blob()
+      .unwrap();
+
+    // The bytes the font system holds are the decompressed sfnt either way, so only
+    // the id carried past decompression keeps the two from being separate faces.
+    assert_ne!(registered.data().as_ptr(), woff2.as_ptr());
+    assert_eq!(registered.id(), resolved_first.id());
   }
 
   #[test]
