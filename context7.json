@@ -13,6 +13,13 @@
     "takumi-wasm",
     "takumi-helpers"
   ],
+  "excludeFolders": [
+    "takumi/tests",
+    "takumi-js/tests",
+    "takumi-napi/tests",
+    "takumi-wasm/tests",
+    "takumi-helpers/tests"
+  ],
   "excludeFiles": ["CHANGELOG.md"],
   "rules": [
     "Prefer `render(node, options)` from `takumi-js`, or `new ImageResponse(node, options)` from `takumi-js/response` in a route handler. `Renderer` from `@takumi-rs/core` is an escape hatch for reusing a font cache across renders, not the default.",
