@@ -2,6 +2,7 @@ use std::{
   borrow::Cow,
   cell::RefCell,
   collections::{BTreeSet, HashMap, hash_map::Entry},
+  fmt::{self, Debug, Formatter},
   iter::once,
   rc::Rc,
   str::FromStr,
@@ -490,11 +491,46 @@ impl RenderContext {
   }
 }
 
-/// A font source buffer. Construct from raw bytes via `From`; woff/woff2 are
+/// Bytes the caller already holds behind an `Arc`, taken as they are.
+type SharedBytes = Arc<dyn AsRef<[u8]> + Send + Sync>;
+
+enum FontBytes<'a> {
+  Inline(Cow<'a, [u8]>),
+  Shared(SharedBytes),
+}
+
+impl FontBytes<'_> {
+  fn into_owned(self) -> Vec<u8> {
+    match self {
+      Self::Inline(bytes) => bytes.into_owned(),
+      Self::Shared(bytes) => (*bytes).as_ref().to_vec(),
+    }
+  }
+}
+
+impl Debug for FontBytes<'_> {
+  fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    f.debug_tuple("FontBytes")
+      .field(&self.as_ref().len())
+      .finish()
+  }
+}
+
+impl AsRef<[u8]> for FontBytes<'_> {
+  fn as_ref(&self) -> &[u8] {
+    match self {
+      Self::Inline(bytes) => bytes,
+      Self::Shared(bytes) => (**bytes).as_ref(),
+    }
+  }
+}
+
+/// A font source buffer. Construct from raw bytes via `From`, or from bytes the
+/// caller keeps alive elsewhere via [`FontSource::from_shared`]; woff/woff2 are
 /// decompressed internally when the font is registered.
 #[derive(Debug)]
 pub struct FontSource<'a> {
-  bytes: Cow<'a, [u8]>,
+  bytes: FontBytes<'a>,
   /// Whether `bytes` is already decompressed (woff/woff2 expanded to raw sfnt).
   is_decoded: bool,
 }
@@ -505,43 +541,68 @@ where
 {
   fn from(value: T) -> Self {
     Self {
-      bytes: value.into(),
+      bytes: FontBytes::Inline(value.into()),
       is_decoded: false,
     }
   }
 }
 
 impl<'a> FontSource<'a> {
+  /// Takes shared bytes as they are, so registering the font copies nothing: a
+  /// memory-mapped file stays paged from disk and the process never holds a second
+  /// copy on the heap. Only sfnt (ttf/otf/ttc) is passed through — woff and woff2
+  /// still decompress into a fresh buffer.
+  pub fn from_shared(bytes: SharedBytes) -> Self {
+    Self {
+      bytes: FontBytes::Shared(bytes),
+      is_decoded: false,
+    }
+  }
+
+  /// Whether the bytes can go to the font system untouched.
+  fn is_sfnt(&self) -> bool {
+    matches!(
+      guess_font_format(self.bytes.as_ref()),
+      Ok(FontFormat::Ttf | FontFormat::Otf | FontFormat::Ttc)
+    )
+  }
+
   fn into_decoded(self) -> Result<Self, FontError> {
-    if self.is_decoded {
-      return Ok(self);
+    if self.is_decoded || (matches!(self.bytes, FontBytes::Shared(_)) && self.is_sfnt()) {
+      return Ok(Self {
+        is_decoded: true,
+        ..self
+      });
     }
 
     Ok(Self {
-      bytes: Cow::Owned(load_font(self.bytes, None)?),
+      bytes: FontBytes::Inline(Cow::Owned(load_font(
+        Cow::Owned(self.bytes.into_owned()),
+        None,
+      )?)),
       is_decoded: true,
     })
   }
 
   fn into_blob(self) -> Result<Blob<u8>, FontError> {
-    let decoded = if self.is_decoded {
-      self.bytes.into_owned()
-    } else {
-      load_font(self.bytes, None)?
+    let passthrough = self.is_decoded || self.is_sfnt();
+    let decoded: SharedBytes = match self.bytes {
+      FontBytes::Shared(bytes) if passthrough => bytes,
+      bytes => Arc::new(load_font(Cow::Owned(bytes.into_owned()), None)?),
     };
 
     // `Blob::new` draws its id from a global counter, and that id keys the shared glyph
     // caches. Registering the same face again — a second renderer, a rebuilt one — would
     // then miss every glyph it had already resolved, so the id comes from the content.
-    let id = xxh3_64(&decoded);
+    let id = xxh3_64((*decoded).as_ref());
 
-    Ok(Blob::from_raw_parts(Arc::new(decoded), id))
+    Ok(Blob::from_raw_parts(decoded, id))
   }
 }
 
 impl<'a> AsRef<[u8]> for FontSource<'a> {
   fn as_ref(&self) -> &[u8] {
-    &self.bytes
+    self.bytes.as_ref()
   }
 }
 
@@ -752,6 +813,35 @@ mod tests {
 
     assert_eq!(families.len(), 1);
     assert_eq!(families[0].name, "Geist Test");
+    assert!(!families[0].faces.is_empty());
+  }
+
+  #[test]
+  fn shared_sfnt_bytes_reach_the_font_system_uncopied() {
+    let sfnt = load_font(Cow::Owned(geist_bytes()), None).unwrap();
+    let bytes: Arc<dyn AsRef<[u8]> + Send + Sync> = Arc::new(sfnt);
+    let address = (*bytes).as_ref().as_ptr();
+    let blob = FontSource::from_shared(Arc::clone(&bytes))
+      .into_blob()
+      .unwrap();
+
+    assert_eq!(blob.data().as_ptr(), address);
+  }
+
+  #[test]
+  fn shared_woff2_bytes_still_decompress() {
+    let mut fonts = Fonts::default();
+    let bytes: Arc<dyn AsRef<[u8]> + Send + Sync> = Arc::new(geist_bytes());
+    let families = fonts
+      .register(
+        FontResource::new(FontSource::from_shared(bytes)).override_info(FontOverride {
+          family_name: Some("Shared Geist".into()),
+          ..Default::default()
+        }),
+      )
+      .unwrap();
+
+    assert_eq!(families[0].name, "Shared Geist");
     assert!(!families[0].faces.is_empty());
   }
 
