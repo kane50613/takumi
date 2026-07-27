@@ -95,7 +95,6 @@ impl<'a> DrawTarget<'a, '_> {
 pub(crate) struct Canvas {
   image: Pixmap,
   origin: Point<u32>,
-  offscreen_pool: Vec<Pixmap>,
   constraint_mask_stack: Vec<Option<MaskStackEntry>>,
 }
 
@@ -115,7 +114,6 @@ impl Canvas {
     Some(Self {
       image,
       origin: Point { x: 0, y: 0 },
-      offscreen_pool: Vec::new(),
       constraint_mask_stack: Vec::new(),
     })
   }
@@ -133,15 +131,7 @@ impl Canvas {
     })
   }
 
-  fn acquire_offscreen(&mut self, size: Size<u32>) -> Result<Pixmap> {
-    if let Some(index) = self
-      .offscreen_pool
-      .iter()
-      .position(|image| image.width() == size.width && image.height() == size.height)
-    {
-      return Ok(self.offscreen_pool.swap_remove(index));
-    }
-
+  fn acquire_offscreen(size: Size<u32>) -> Result<Pixmap> {
     Pixmap::new(size.width, size.height).ok_or_else(|| {
       Error::encode(ImageError::Parameter(ParameterError::from_kind(
         ParameterErrorKind::DimensionMismatch,
@@ -154,8 +144,7 @@ impl Canvas {
       width: bounds.width,
       height: bounds.height,
     };
-    let mut image = self.acquire_offscreen(size)?;
-    image.data_mut().fill(0);
+    let image = Self::acquire_offscreen(size)?;
 
     let viewport = self.viewport();
     if bounds.left == viewport.origin.x as i32
@@ -207,7 +196,7 @@ impl Canvas {
     } = subcanvas;
 
     if opacity <= 0.0 {
-      self.recycle_offscreen_image(image);
+      drop(image);
       self.restore_subcanvas_state(origin, constraint_mask_stack);
       return;
     }
@@ -232,8 +221,6 @@ impl Canvas {
     } else {
       blend_pixmap_software(&mut self.image, &isolated_image, mode, offset, opacity);
     }
-
-    self.recycle_offscreen_image(isolated_image);
   }
 
   pub(crate) fn has_no_constraint_mask(&self) -> bool {
@@ -266,14 +253,6 @@ impl Canvas {
         ParameterErrorKind::DimensionMismatch,
       )))
     })
-  }
-
-  pub(crate) fn recycle_offscreen_image(&mut self, image: Pixmap) {
-    const MAX_OFFSCREEN_POOL: usize = 8;
-    if self.offscreen_pool.len() >= MAX_OFFSCREEN_POOL {
-      return;
-    }
-    self.offscreen_pool.push(image);
   }
 
   pub(crate) fn with_pixmap<R>(&mut self, f: impl FnOnce(&mut Pixmap) -> R) -> R {
