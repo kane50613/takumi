@@ -877,6 +877,22 @@ mod tests {
   }
 
   #[test]
+  fn a_static_woff2_face_keeps_its_id_through_decompression() {
+    let woff2: &'static [u8] = geist_bytes().leak();
+    let registered = FontSource::from_static(woff2).into_blob().unwrap();
+    let resolved_first = FontSource::from_static(woff2)
+      .into_decoded()
+      .unwrap()
+      .into_blob()
+      .unwrap();
+
+    // The bytes the font system holds are the decompressed sfnt either way, so only
+    // the id carried past decompression keeps the two from being separate faces.
+    assert_ne!(registered.data().as_ptr(), woff2.as_ptr());
+    assert_eq!(registered.id(), resolved_first.id());
+  }
+
+  #[test]
   fn shared_woff2_bytes_still_decompress() {
     let mut fonts = Fonts::default();
     let bytes: Arc<dyn AsRef<[u8]> + Send + Sync> = Arc::new(geist_bytes());
