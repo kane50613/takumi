@@ -552,7 +552,7 @@ impl<'a> FontSource<'a> {
   /// memory-mapped file stays paged from disk and the process never holds a second
   /// copy on the heap. Only sfnt (ttf/otf/ttc) is passed through — woff and woff2
   /// still decompress into a fresh buffer.
-  pub fn from_shared(bytes: SharedBytes) -> Self {
+  pub fn from_shared(bytes: Arc<dyn AsRef<[u8]> + Send + Sync>) -> Self {
     Self {
       bytes: FontBytes::Shared(bytes),
       is_decoded: false,
