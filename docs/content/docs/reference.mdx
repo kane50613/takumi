@@ -6,7 +6,7 @@ icon: BookMarked
 
 ## Node Types
 
-Every node is a `container`, `text`, or `image`.
+Every node is a `container`, `text`, or `image`. A node tree holds content and style only. Fonts, images, and output options are separate arguments to `render`, so a tree stays plain JSON and can come straight out of a structured-output schema.
 
 All nodes accept these fields:
 
@@ -30,7 +30,8 @@ All nodes accept these fields:
     },
     preset: {
       type: "Style",
-      description: "Default HTML element styles (lowest priority)",
+      description:
+        "Default HTML element styles (lowest priority); fromHtml and fromJsx fill it from tagName",
       typeDescriptionLink: "#style-properties",
     },
     tw: {
@@ -105,6 +106,12 @@ Displays a rasterized image or SVG. Adds:
 ## Style Properties
 
 Properties use their camelCase names. Longhands are listed in parentheses. `Supported` means the property follows its CSS spec; a value cell instead lists the accepted keywords.
+
+| Declaration                     | Result                             |
+| :------------------------------ | :--------------------------------- |
+| A name outside this list        | Dropped without an error           |
+| A `--custom` property           | Kept, and readable through `var()` |
+| A listed name, unparsable value | Fails the whole style object       |
 
 ### Layout & display
 
