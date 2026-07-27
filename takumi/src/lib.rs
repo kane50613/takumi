@@ -59,7 +59,7 @@ pub mod prelude {
     Error, Fonts, Result,
     layout::node::{ImageData, ImageSourceInput, Node, NodeKind, RgbaImage, TextData},
     resources::{
-      font::{FontError, FontOverride, FontResource, GenericFamily, RegisteredFamily},
+      font::{FontError, FontOverride, FontResource, FontSource, GenericFamily, RegisteredFamily},
       image::{ImageCacheMode, ImageSource},
     },
     style::*,
