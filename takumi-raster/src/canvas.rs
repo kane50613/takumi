@@ -196,7 +196,9 @@ impl Canvas {
     } = subcanvas;
 
     if opacity <= 0.0 {
-      drop(image);
+      // `image` is the parent pixmap the subcanvas replaced, so it goes back even
+      // when nothing the group painted is kept.
+      self.image = image;
       self.restore_subcanvas_state(origin, constraint_mask_stack);
       return;
     }
@@ -504,5 +506,36 @@ impl Canvas {
     if let Some(constraint_mask_stack) = constraint_mask_stack {
       self.constraint_mask_stack = constraint_mask_stack;
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn an_invisible_subcanvas_gives_the_parent_pixmap_back() {
+    let mut canvas = Canvas::new(Size {
+      width: 4,
+      height: 4,
+    });
+
+    canvas.with_pixmap(|pixmap| pixmap.data_mut().fill(0xff));
+
+    let subcanvas = canvas
+      .begin_subcanvas(Placement {
+        left: 0,
+        top: 0,
+        width: 2,
+        height: 2,
+      })
+      .expect("the subcanvas pixmap allocates");
+
+    canvas.composite_subcanvas(subcanvas, BlendMode::Normal, 0.0);
+
+    let painted = canvas.into_inner().expect("the canvas converts");
+
+    assert_eq!(painted.dimensions(), (4, 4));
+    assert!(painted.as_raw().iter().all(|byte| *byte == 0xff));
   }
 }
