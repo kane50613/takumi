@@ -306,8 +306,8 @@ fn draw_glyph_run_under_overline(
     .decoration_line
     .contains(TextDecorationLines::UNDERLINE)
   {
-    let offset = glyph_run.baseline + options.baseline_shift - metrics.underline_offset
-      + brush.underline_offset;
+    let offset =
+      glyph_run.baseline + options.baseline_shift + glyph_run.underline_offset_from_baseline();
     let size = match brush.decoration_thickness {
       SizedTextDecorationThickness::Value(v) => v,
       SizedTextDecorationThickness::FromFont => metrics.underline_size,

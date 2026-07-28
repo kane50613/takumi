@@ -4,7 +4,7 @@ use parley::{
   BreakReason, GlyphRun, IndentOptions, InlineBox, InlineBoxKind, Line, LineMetrics,
   PositionedInlineBox, PositionedLayoutItem, TextStyle, TreeBuilder, YieldData,
 };
-use skrifa::{FontRef, MetadataProvider};
+use skrifa::{FontRef, MetadataProvider, raw::TableProvider};
 
 use crate::{
   context::RenderContext,
@@ -18,7 +18,8 @@ use crate::{
   style::{
     Affine, BoxSizing, Color, Float, FontSynthesis, Length, ResolvedVerticalAlign,
     SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk, TextFitMode,
-    TextFitTarget, TextOverflow, TextWrapMode, TextWrapStyle, VerticalAlign, VerticalAlignKeyword,
+    TextFitTarget, TextOverflow, TextUnderlinePosition, TextWrapMode, TextWrapStyle, VerticalAlign,
+    VerticalAlignKeyword,
   },
   text_processing::{
     MaxHeight, RebreakOptions, apply_text_transform, apply_white_space_collapse,
@@ -344,6 +345,8 @@ pub struct InlineBrush {
   pub decoration_thickness: SizedTextDecorationThickness,
   /// Extra offset of the underline away from the text, in pixels.
   pub underline_offset: f32,
+  /// Which baseline the underline is measured from.
+  pub underline_position: TextUnderlinePosition,
   /// Which decoration lines to draw.
   pub decoration_line: TextDecorationLines,
   /// Whether decorations skip over glyph ink.
@@ -363,6 +366,7 @@ impl Default for InlineBrush {
       decoration_color: Color::black(),
       decoration_thickness: SizedTextDecorationThickness::Value(0.0),
       underline_offset: 0.0,
+      underline_position: TextUnderlinePosition::default(),
       decoration_line: TextDecorationLines::empty(),
       decoration_skip_ink: TextDecorationSkipInk::default(),
       stroke_color: Color::black(),
@@ -2015,6 +2019,8 @@ pub struct ShapedRun {
   pub brush: InlineBrush,
   /// Vertical font metrics for the run.
   pub metrics: RunMetrics,
+  /// Font size the run was shaped at, in pixels.
+  pub font_size: f32,
   /// Collection index for `skrifa::FontRef::from_index`, paired with [`Self::font_data`].
   pub font_index: u32,
   // Accessor, not a `pub` field: the backing `parley` blob must not leak into the public API.
@@ -2025,6 +2031,46 @@ impl ShapedRun {
   /// Font bytes for `skrifa::FontRef::from_index`, paired with [`Self::font_index`].
   pub fn font_data(&self) -> &[u8] {
     self.font_data.as_ref()
+  }
+
+  /// Underline top edge relative to the run's baseline, positive downwards.
+  pub fn underline_offset_from_baseline(&self) -> f32 {
+    let from_metrics = match self.brush.underline_position {
+      TextUnderlinePosition::Auto | TextUnderlinePosition::FromFont => {
+        -self.metrics.underline_offset
+      }
+      TextUnderlinePosition::Under => self.em_box_descent(),
+    };
+
+    from_metrics + self.brush.underline_offset
+  }
+
+  /// Bottom edge of the em box below the baseline. The typographic ascender and
+  /// descender are normalized to sum to the font size, keeping their ratio, which is
+  /// how browsers derive the em box: https://drafts.csswg.org/css-inline-3/#ascent-descent
+  fn em_box_descent(&self) -> f32 {
+    let (ascent, descent) = self.typographic_ascent_descent();
+    let height = ascent + descent;
+
+    if height <= 0.0 || ascent < 0.0 {
+      return self.metrics.descent;
+    }
+
+    self.font_size * descent / height
+  }
+
+  fn typographic_ascent_descent(&self) -> (f32, f32) {
+    FontRef::from_index(self.font_data(), self.font_index)
+      .ok()
+      .and_then(|font| font.os2().ok())
+      .map(|os2| {
+        (
+          f32::from(os2.s_typo_ascender()),
+          -f32::from(os2.s_typo_descender()),
+        )
+      })
+      .filter(|(ascent, descent)| ascent + descent > 0.0)
+      .unwrap_or((self.metrics.ascent, self.metrics.descent))
   }
 }
 
@@ -2203,6 +2249,7 @@ pub fn resolve_inline_runs(
               strikethrough_offset: metrics.strikethrough_offset,
               strikethrough_size: metrics.strikethrough_size,
             },
+            font_size: run.font_size(),
             font_data: run.font().data.clone(),
             font_index: run.font().index,
           };
@@ -2384,7 +2431,7 @@ pub fn run_decorations(
   };
   if lines.contains(TextDecorationLines::UNDERLINE) {
     emit(
-      baseline - metrics.underline_offset + brush.underline_offset,
+      baseline + glyph_run.underline_offset_from_baseline(),
       thickness(metrics.underline_size),
       false,
     );
@@ -2638,6 +2685,62 @@ mod tests {
       )
       .unwrap_or_else(|error| panic!("failed to load test font {}: {error}", path.display()));
     context
+  }
+
+  fn shaped_run(position: TextUnderlinePosition, underline_offset: f32) -> ShapedRun {
+    ShapedRun {
+      glyphs: Vec::new(),
+      offset: 0.0,
+      baseline: 0.0,
+      advance: 0.0,
+      brush: InlineBrush {
+        underline_offset,
+        underline_position: position,
+        ..Default::default()
+      },
+      metrics: RunMetrics {
+        ascent: 40.0,
+        descent: 10.0,
+        underline_offset: -5.0,
+        underline_size: 2.0,
+        strikethrough_offset: 20.0,
+        strikethrough_size: 2.0,
+      },
+      font_size: 100.0,
+      font_index: 0,
+      // Not a font: `em_box_descent` falls back to the run metrics instead of OS/2.
+      font_data: parley::fontique::Blob::new(Arc::new(Vec::new())),
+    }
+  }
+
+  #[test]
+  fn underline_offset_from_baseline_follows_the_underline_position() {
+    // The font's underline offset is negative above the baseline, so `auto` flips it.
+    assert_eq!(
+      shaped_run(TextUnderlinePosition::Auto, 0.0).underline_offset_from_baseline(),
+      5.0
+    );
+    assert_eq!(
+      shaped_run(TextUnderlinePosition::FromFont, 0.0).underline_offset_from_baseline(),
+      5.0
+    );
+    // 100px em split in the metrics' 40:10 ratio puts the em box bottom 20px down.
+    assert_eq!(
+      shaped_run(TextUnderlinePosition::Under, 0.0).underline_offset_from_baseline(),
+      20.0
+    );
+  }
+
+  #[test]
+  fn underline_offset_from_baseline_adds_the_style_offset() {
+    assert_eq!(
+      shaped_run(TextUnderlinePosition::Auto, 3.0).underline_offset_from_baseline(),
+      8.0
+    );
+    assert_eq!(
+      shaped_run(TextUnderlinePosition::Under, -4.0).underline_offset_from_baseline(),
+      16.0
+    );
   }
 
   #[test]

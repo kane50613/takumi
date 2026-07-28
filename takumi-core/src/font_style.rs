@@ -160,6 +160,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
         decoration_color: style.text_decoration_color,
         decoration_thickness: style.text_decoration_thickness,
         underline_offset: style.text_underline_offset,
+        underline_position: style.parent.text_underline_position,
         decoration_line: style.parent.text_decoration_line.unwrap_or_default(),
         decoration_skip_ink: style.parent.text_decoration_skip_ink,
         stroke_color: style.text_stroke_color,

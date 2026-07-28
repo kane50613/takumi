@@ -271,6 +271,28 @@ impl ToCss for TextUnderlineOffset {
   }
 }
 
+/// Represents the `text-underline-position` value, choosing the baseline the underline
+/// is measured from. The `left` and `right` keywords apply to vertical writing modes,
+/// which are not supported.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
+pub enum TextUnderlinePosition {
+  /// Use the font's underline metrics.
+  #[default]
+  Auto,
+  /// Use the font's underline metrics, falling back to `auto` when the font has none.
+  FromFont,
+  /// Place the underline below the text's descenders.
+  Under,
+}
+
+declare_enum_from_css_impl!(
+  TextUnderlinePosition,
+  "auto" => TextUnderlinePosition::Auto,
+  "from-font" => TextUnderlinePosition::FromFont,
+  "under" => TextUnderlinePosition::Under
+);
+
 /// Represents text decoration style options (currently only solid is supported).
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[non_exhaustive]
@@ -460,5 +482,26 @@ mod tests {
   #[test]
   fn test_parse_text_underline_offset_invalid() {
     assert!(TextUnderlineOffset::from_css_str("solid").is_err());
+  }
+
+  #[test]
+  fn test_parse_text_underline_position() {
+    assert_eq!(
+      TextUnderlinePosition::from_css_str("auto"),
+      Ok(TextUnderlinePosition::Auto)
+    );
+    assert_eq!(
+      TextUnderlinePosition::from_css_str("from-font"),
+      Ok(TextUnderlinePosition::FromFont)
+    );
+    assert_eq!(
+      TextUnderlinePosition::from_css_str("under"),
+      Ok(TextUnderlinePosition::Under)
+    );
+  }
+
+  #[test]
+  fn test_parse_text_underline_position_invalid() {
+    assert!(TextUnderlinePosition::from_css_str("left").is_err());
   }
 }

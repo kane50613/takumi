@@ -1161,6 +1161,7 @@ define_style! {
     text_decoration_color: ColorInput,
     text_decoration_thickness: TextDecorationThickness,
     text_underline_offset: TextUnderlineOffset where inherit = true,
+    text_underline_position: TextUnderlinePosition where inherit = true,
     text_decoration_skip_ink: TextDecorationSkipInk where inherit = true,
     text_indent: TextIndent where inherit = true,
     letter_spacing: Length where inherit = true,

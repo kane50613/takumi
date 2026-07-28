@@ -64,6 +64,8 @@ pub mod style_text_decoration;
 pub mod style_text_decoration_thickness;
 #[path = "fixtures/style_text_underline_offset.rs"]
 pub mod style_text_underline_offset;
+#[path = "fixtures/style_text_underline_position.rs"]
+pub mod style_text_underline_position;
 #[path = "fixtures/style_transform.rs"]
 pub mod style_transform;
 #[path = "fixtures/style_visuals.rs"]
