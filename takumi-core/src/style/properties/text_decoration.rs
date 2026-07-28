@@ -487,6 +487,10 @@ mod tests {
   #[test]
   fn test_parse_text_underline_position() {
     assert_eq!(
+      TextUnderlinePosition::from_css_str("auto"),
+      Ok(TextUnderlinePosition::Auto)
+    );
+    assert_eq!(
       TextUnderlinePosition::from_css_str("from-font"),
       Ok(TextUnderlinePosition::FromFont)
     );

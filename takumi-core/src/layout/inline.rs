@@ -2687,6 +2687,62 @@ mod tests {
     context
   }
 
+  fn shaped_run(position: TextUnderlinePosition, underline_offset: f32) -> ShapedRun {
+    ShapedRun {
+      glyphs: Vec::new(),
+      offset: 0.0,
+      baseline: 0.0,
+      advance: 0.0,
+      brush: InlineBrush {
+        underline_offset,
+        underline_position: position,
+        ..Default::default()
+      },
+      metrics: RunMetrics {
+        ascent: 40.0,
+        descent: 10.0,
+        underline_offset: -5.0,
+        underline_size: 2.0,
+        strikethrough_offset: 20.0,
+        strikethrough_size: 2.0,
+      },
+      font_size: 100.0,
+      font_index: 0,
+      // Not a font: `em_box_descent` falls back to the run metrics instead of OS/2.
+      font_data: parley::fontique::Blob::new(Arc::new(Vec::new())),
+    }
+  }
+
+  #[test]
+  fn underline_offset_from_baseline_follows_the_underline_position() {
+    // The font's underline offset is negative above the baseline, so `auto` flips it.
+    assert_eq!(
+      shaped_run(TextUnderlinePosition::Auto, 0.0).underline_offset_from_baseline(),
+      5.0
+    );
+    assert_eq!(
+      shaped_run(TextUnderlinePosition::FromFont, 0.0).underline_offset_from_baseline(),
+      5.0
+    );
+    // 100px em split in the metrics' 40:10 ratio puts the em box bottom 20px down.
+    assert_eq!(
+      shaped_run(TextUnderlinePosition::Under, 0.0).underline_offset_from_baseline(),
+      20.0
+    );
+  }
+
+  #[test]
+  fn underline_offset_from_baseline_adds_the_style_offset() {
+    assert_eq!(
+      shaped_run(TextUnderlinePosition::Auto, 3.0).underline_offset_from_baseline(),
+      8.0
+    );
+    assert_eq!(
+      shaped_run(TextUnderlinePosition::Under, -4.0).underline_offset_from_baseline(),
+      16.0
+    );
+  }
+
   #[test]
   fn slice_text_at_char_boundaries_trims_invalid_utf8_edges() {
     let text = "a🦀b";

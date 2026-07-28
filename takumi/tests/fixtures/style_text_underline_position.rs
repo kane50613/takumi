@@ -21,10 +21,30 @@ fn test_style_text_underline_position() {
     )
   };
 
+  let inherited = Node::container([Node::text("inherited: pgjy underline").with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::text_align(TextAlign::Center))
+      .with(StyleDeclaration::font_size(Px(48.0).into()))
+      .with_text_decoration(
+        TextDecoration::builder()
+          .line(TextDecorationLines::UNDERLINE)
+          .color(ColorInput::Value(Color([255, 0, 0, 255])))
+          .build(),
+      ),
+  )])
+  .with_style(
+    Style::default().with(StyleDeclaration::text_underline_position(
+      TextUnderlinePosition::Under,
+    )),
+  );
+
   let container = Node::container([
     make_line("auto", TextUnderlinePosition::Auto),
     make_line("from-font", TextUnderlinePosition::FromFont),
     make_line("under", TextUnderlinePosition::Under),
+    inherited,
   ])
   .with_style(
     Style::default()
