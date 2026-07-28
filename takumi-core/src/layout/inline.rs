@@ -4,7 +4,7 @@ use parley::{
   BreakReason, GlyphRun, IndentOptions, InlineBox, InlineBoxKind, Line, LineMetrics,
   PositionedInlineBox, PositionedLayoutItem, TextStyle, TreeBuilder, YieldData,
 };
-use skrifa::{FontRef, MetadataProvider};
+use skrifa::{FontRef, MetadataProvider, raw::TableProvider};
 
 use crate::{
   context::RenderContext,
@@ -2019,6 +2019,8 @@ pub struct ShapedRun {
   pub brush: InlineBrush,
   /// Vertical font metrics for the run.
   pub metrics: RunMetrics,
+  /// Font size the run was shaped at, in pixels.
+  pub font_size: f32,
   /// Collection index for `skrifa::FontRef::from_index`, paired with [`Self::font_data`].
   pub font_index: u32,
   // Accessor, not a `pub` field: the backing `parley` blob must not leak into the public API.
@@ -2037,10 +2039,38 @@ impl ShapedRun {
       TextUnderlinePosition::Auto | TextUnderlinePosition::FromFont => {
         -self.metrics.underline_offset
       }
-      TextUnderlinePosition::Under => self.metrics.descent,
+      TextUnderlinePosition::Under => self.em_box_descent(),
     };
 
     from_metrics + self.brush.underline_offset
+  }
+
+  /// Bottom edge of the em box below the baseline. The typographic ascender and
+  /// descender are normalized to sum to the font size, keeping their ratio, which is
+  /// how browsers derive the em box: https://drafts.csswg.org/css-inline-3/#ascent-descent
+  fn em_box_descent(&self) -> f32 {
+    let (ascent, descent) = self.typographic_ascent_descent();
+    let height = ascent + descent;
+
+    if height <= 0.0 || ascent < 0.0 {
+      return self.metrics.descent;
+    }
+
+    self.font_size * descent / height
+  }
+
+  fn typographic_ascent_descent(&self) -> (f32, f32) {
+    FontRef::from_index(self.font_data(), self.font_index)
+      .ok()
+      .and_then(|font| font.os2().ok())
+      .map(|os2| {
+        (
+          f32::from(os2.s_typo_ascender()),
+          -f32::from(os2.s_typo_descender()),
+        )
+      })
+      .filter(|(ascent, descent)| ascent + descent > 0.0)
+      .unwrap_or((self.metrics.ascent, self.metrics.descent))
   }
 }
 
@@ -2219,6 +2249,7 @@ pub fn resolve_inline_runs(
               strikethrough_offset: metrics.strikethrough_offset,
               strikethrough_size: metrics.strikethrough_size,
             },
+            font_size: run.font_size(),
             font_data: run.font().data.clone(),
             font_index: run.font().index,
           };
