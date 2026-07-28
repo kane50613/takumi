@@ -130,7 +130,7 @@ export const showcaseProjects: Project[] = [
   {
     title: "Rail Radar",
     image: "https://www.railradar24.com/og?id=CH03000",
-    url: "https://railradar.com",
+    url: "https://www.railradar24.com",
     width: 1200,
     height: 630,
   },
