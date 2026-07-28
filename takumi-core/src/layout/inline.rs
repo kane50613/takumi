@@ -18,7 +18,8 @@ use crate::{
   style::{
     Affine, BoxSizing, Color, Float, FontSynthesis, Length, ResolvedVerticalAlign,
     SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk, TextFitMode,
-    TextFitTarget, TextOverflow, TextWrapMode, TextWrapStyle, VerticalAlign, VerticalAlignKeyword,
+    TextFitTarget, TextOverflow, TextUnderlinePosition, TextWrapMode, TextWrapStyle, VerticalAlign,
+    VerticalAlignKeyword,
   },
   text_processing::{
     MaxHeight, RebreakOptions, apply_text_transform, apply_white_space_collapse,
@@ -344,6 +345,8 @@ pub struct InlineBrush {
   pub decoration_thickness: SizedTextDecorationThickness,
   /// Extra offset of the underline away from the text, in pixels.
   pub underline_offset: f32,
+  /// Which baseline the underline is measured from.
+  pub underline_position: TextUnderlinePosition,
   /// Which decoration lines to draw.
   pub decoration_line: TextDecorationLines,
   /// Whether decorations skip over glyph ink.
@@ -363,6 +366,7 @@ impl Default for InlineBrush {
       decoration_color: Color::black(),
       decoration_thickness: SizedTextDecorationThickness::Value(0.0),
       underline_offset: 0.0,
+      underline_position: TextUnderlinePosition::default(),
       decoration_line: TextDecorationLines::empty(),
       decoration_skip_ink: TextDecorationSkipInk::default(),
       stroke_color: Color::black(),
@@ -2026,6 +2030,18 @@ impl ShapedRun {
   pub fn font_data(&self) -> &[u8] {
     self.font_data.as_ref()
   }
+
+  /// Underline top edge relative to the run's baseline, positive downwards.
+  pub fn underline_offset_from_baseline(&self) -> f32 {
+    let from_metrics = match self.brush.underline_position {
+      TextUnderlinePosition::Auto | TextUnderlinePosition::FromFont => {
+        -self.metrics.underline_offset
+      }
+      TextUnderlinePosition::Under => self.metrics.descent,
+    };
+
+    from_metrics + self.brush.underline_offset
+  }
 }
 
 /// One glyph run positioned on its line, carrying everything both backends need
@@ -2384,7 +2400,7 @@ pub fn run_decorations(
   };
   if lines.contains(TextDecorationLines::UNDERLINE) {
     emit(
-      baseline - metrics.underline_offset + brush.underline_offset,
+      baseline + glyph_run.underline_offset_from_baseline(),
       thickness(metrics.underline_size),
       false,
     );
