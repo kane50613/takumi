@@ -76,6 +76,24 @@ new ImageResponse(<OgImage />, {
 });
 ```
 
+## ETag
+
+`imageResponse` renders the image before it builds the `Response`, so it can hash the bytes into a strong `ETag`. Clients revalidate with `If-None-Match` and skip the download while the image is unchanged.
+
+```tsx
+import { imageResponse } from "takumi-js/response";
+
+export function GET() {
+  return imageResponse(<OgImage />, {
+    width: 1200,
+    height: 630,
+    headers: { "Cache-Control": "public, max-age=0, must-revalidate" },
+  });
+}
+```
+
+`new ImageResponse(...)` carries no `ETag`, because a framework reads its headers while the render is still running. `imageResponse` takes the same options, but awaits instead: it has no `ready` promise, the returned promise rejects when the render fails, and `onError` still runs. An `etag` of your own in `headers` is left alone.
+
 ## Error handling
 
 `ImageResponse` exposes a `ready` promise: it resolves when the render succeeds and rejects when it fails. Await it to serve a fallback.

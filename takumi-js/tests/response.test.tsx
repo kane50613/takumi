@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { createContext, useContext } from "react";
-import ImageResponse from "../src/response";
+import ImageResponse, { imageResponse } from "../src/response";
 import { render } from "../src";
 import type { Node } from "@takumi-rs/helpers";
 
@@ -164,6 +164,44 @@ describe("ImageResponse", () => {
     } finally {
       process.off("unhandledRejection", handler);
     }
+  });
+
+  test("should set an etag matching the rendered bytes", async () => {
+    const renderer = { render: mock(async () => new Uint8Array([1, 2, 3])) } as any;
+
+    const response = await imageResponse(<div>Hello</div>, { renderer });
+    const digest = await crypto.subtle.digest("SHA-256", await response.arrayBuffer());
+    const hex = Array.from(new Uint8Array(digest), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+
+    expect(response.headers.get("etag")).toBe(`"${hex}"`);
+    expect(response.headers.get("content-type")).toBe("image/png");
+  });
+
+  test("should keep an etag passed through headers", async () => {
+    const renderer = { render: mock(async () => new Uint8Array([1, 2, 3])) } as any;
+
+    const response = await imageResponse(<div>Hello</div>, {
+      renderer,
+      headers: { etag: `"pinned"` },
+    });
+
+    expect(response.headers.get("etag")).toBe(`"pinned"`);
+  });
+
+  test("should call onError and reject when the render fails", async () => {
+    const error = new Error("render failed");
+    const renderer = {
+      render: mock(async () => {
+        throw error;
+      }),
+    } as any;
+    const onError = mock();
+
+    await expect(imageResponse(<div>Hello</div>, { renderer, onError })).rejects.toBe(error);
+
+    expect(onError).toHaveBeenCalledTimes(1);
   });
 
   test("should not crash on social template with pre-wrap and emoji", async () => {

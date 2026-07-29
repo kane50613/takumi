@@ -22,6 +22,35 @@ function defaultErrorHandler(error: unknown) {
   console.error(error);
 }
 
+function responseHeaders(options?: ImageResponseOptions) {
+  const headers = new Headers(options?.headers);
+
+  if (!headers.get("content-type")) {
+    headers.set("content-type", contentTypeMap[options?.format ?? "png"]);
+  }
+
+  return headers;
+}
+
+// Web Crypto and `Response` reject a view that could be backed by a SharedArrayBuffer,
+// which no renderer returns; the copy is a fallback the type system asks for.
+function arrayBufferView(image: Uint8Array): Uint8Array<ArrayBuffer> {
+  return image.buffer instanceof ArrayBuffer
+    ? new Uint8Array(image.buffer, image.byteOffset, image.byteLength)
+    : new Uint8Array(image);
+}
+
+async function strongEtag(image: Uint8Array<ArrayBuffer>) {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", image));
+  let hex = "";
+
+  for (const byte of digest) {
+    hex += byte.toString(16).padStart(2, "0");
+  }
+
+  return `"${hex}"`;
+}
+
 function buildImageResponse(
   element: RenderInput,
   options?: ImageResponseOptions,
@@ -41,7 +70,7 @@ function buildImageResponse(
     async start(controller) {
       try {
         const image = await render(element, options);
-        controller.enqueue(image as ArrayBufferView<ArrayBuffer>);
+        controller.enqueue(arrayBufferView(image));
         controller.close();
         resolveReady();
       } catch (error) {
@@ -54,14 +83,9 @@ function buildImageResponse(
       }
     },
   });
-  const headers = new Headers(options?.headers);
-
-  if (!headers.get("content-type")) {
-    headers.set("content-type", contentTypeMap[options?.format ?? "png"]);
-  }
 
   const response = new Response(stream, {
-    headers,
+    headers: responseHeaders(options),
     status: options?.status,
     statusText: options?.statusText,
   });
@@ -104,6 +128,50 @@ export class ImageResponse extends Response {
 
     super(response.body, response);
     this.ready = response.ready;
+  }
+}
+
+/**
+ * Renders the image before the `Response` exists, so its bytes can be hashed into a
+ * strong `ETag`. Clients revalidate with `If-None-Match` and skip the download when the
+ * image is unchanged, which `new ImageResponse(...)` cannot offer: its headers are read
+ * while the render is still in flight.
+ *
+ * An `etag` passed through `headers` wins.
+ *
+ * @example
+ * ```tsx
+ * import { imageResponse } from "takumi-js/response";
+ *
+ * export function GET() {
+ *   return imageResponse(<OgImage />, { width: 1200, height: 630 });
+ * }
+ * ```
+ *
+ * @param component - The JSX element to render.
+ * @param options - Rendering and response options.
+ */
+export async function imageResponse(
+  component: RenderInput,
+  options?: ImageResponseOptions,
+): Promise<Response> {
+  try {
+    const image = arrayBufferView(await render(component, options));
+    const headers = responseHeaders(options);
+
+    if (!headers.has("etag")) {
+      headers.set("etag", await strongEtag(image));
+    }
+
+    return new Response(image, {
+      headers,
+      status: options?.status,
+      statusText: options?.statusText,
+    });
+  } catch (error) {
+    await (options?.onError ?? defaultErrorHandler)(error);
+
+    throw error;
   }
 }
 
