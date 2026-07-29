@@ -22,6 +22,44 @@ function defaultErrorHandler(error: unknown) {
   console.error(error);
 }
 
+async function notifyError(error: unknown, options?: ImageResponseOptions) {
+  try {
+    await (options?.onError ?? defaultErrorHandler)(error);
+  } catch (handlerError) {
+    console.error("The onError handler failed.");
+    console.error(handlerError);
+  }
+}
+
+function responseHeaders(options?: ImageResponseOptions) {
+  const headers = new Headers(options?.headers);
+
+  if (!headers.get("content-type")) {
+    headers.set("content-type", contentTypeMap[options?.format ?? "png"]);
+  }
+
+  return headers;
+}
+
+// Web Crypto and `Response` reject a view that could be backed by a SharedArrayBuffer,
+// which no renderer returns; the copy is a fallback the type system asks for.
+function arrayBufferView(image: Uint8Array): Uint8Array<ArrayBuffer> {
+  return image.buffer instanceof ArrayBuffer
+    ? new Uint8Array(image.buffer, image.byteOffset, image.byteLength)
+    : new Uint8Array(image);
+}
+
+async function strongEtag(image: Uint8Array<ArrayBuffer>) {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", image));
+  let hex = "";
+
+  for (const byte of digest) {
+    hex += byte.toString(16).padStart(2, "0");
+  }
+
+  return `"${hex}"`;
+}
+
 function buildImageResponse(
   element: RenderInput,
   options?: ImageResponseOptions,
@@ -41,27 +79,20 @@ function buildImageResponse(
     async start(controller) {
       try {
         const image = await render(element, options);
-        controller.enqueue(image as ArrayBufferView<ArrayBuffer>);
+        controller.enqueue(arrayBufferView(image));
         controller.close();
         resolveReady();
       } catch (error) {
         controller.error(error);
 
         rejectReady(error);
-        const errorHandler = options?.onError ?? defaultErrorHandler;
-
-        await errorHandler(error);
+        await notifyError(error, options);
       }
     },
   });
-  const headers = new Headers(options?.headers);
-
-  if (!headers.get("content-type")) {
-    headers.set("content-type", contentTypeMap[options?.format ?? "png"]);
-  }
 
   const response = new Response(stream, {
-    headers,
+    headers: responseHeaders(options),
     status: options?.status,
     statusText: options?.statusText,
   });
@@ -104,6 +135,58 @@ export class ImageResponse extends Response {
 
     super(response.body, response);
     this.ready = response.ready;
+  }
+
+  /**
+   * The awaited counterpart of the constructor: it renders first, then hands back a
+   * `Response` whose body is the finished bytes instead of a stream. That costs an `await`
+   * at the call site and buys a known body length, no stream to pump, and a strong `ETag`
+   * derived from the bytes, which the constructor cannot set because its headers are read
+   * while the render is still in flight.
+   *
+   * Nothing here inspects `If-None-Match`. The `ETag` is what lets a server, adapter, or
+   * CDN answer a conditional request with `304 Not Modified`.
+   *
+   * An `etag` passed through `headers` is left alone. Rejects with the render error, after
+   * `onError` runs.
+   *
+   * The digest comes from global Web Crypto, which Node exposes from 19 onwards (18 needs
+   * `--experimental-global-webcrypto`).
+   *
+   * @example
+   * ```tsx
+   * import { ImageResponse } from "takumi-js/response";
+   *
+   * export function GET() {
+   *   return ImageResponse.buffered(<OgImage />, { width: 1200, height: 630 });
+   * }
+   * ```
+   *
+   * @param component - The JSX element to render.
+   * @param options - Rendering and response options.
+   */
+  static async buffered(component: RenderInput, options?: ImageResponseOptions): Promise<Response> {
+    let image: Uint8Array<ArrayBuffer>;
+
+    try {
+      image = arrayBufferView(await render(component, options));
+    } catch (error) {
+      await notifyError(error, options);
+
+      throw error;
+    }
+
+    const headers = responseHeaders(options);
+
+    if (!headers.has("etag")) {
+      headers.set("etag", await strongEtag(image));
+    }
+
+    return new Response(image, {
+      headers,
+      status: options?.status,
+      statusText: options?.statusText,
+    });
   }
 }
 

@@ -76,6 +76,28 @@ new ImageResponse(<OgImage />, {
 });
 ```
 
+## Buffered responses and ETag
+
+The constructor hands back a streaming `Response` while the render is still running, which is why its headers can carry no `ETag`. `ImageResponse.buffered` takes the same options and awaits instead, so its body is the finished bytes: the runtime knows the length and can skip chunked encoding, and the headers carry a strong `ETag` hashed from those bytes.
+
+```tsx
+import { ImageResponse } from "takumi-js/response";
+
+export function GET() {
+  return ImageResponse.buffered(<OgImage />, {
+    width: 1200,
+    height: 630,
+    headers: { "Cache-Control": "public, max-age=0, must-revalidate" },
+  });
+}
+```
+
+Takumi never sees the request, so it cannot answer one with `304 Not Modified`. The `ETag` is what lets your server, framework adapter, or CDN compare `If-None-Match` and skip resending the image.
+
+An `etag` of your own in `headers` is left alone. There is no `ready` promise here: the returned promise rejects with the render error, and `onError` still runs.
+
+The digest comes from global Web Crypto. Node exposes it from version 19 onwards; on Node 18 you need `--experimental-global-webcrypto`.
+
 ## Error handling
 
 `ImageResponse` exposes a `ready` promise: it resolves when the render succeeds and rejects when it fails. Await it to serve a fallback.
