@@ -76,15 +76,15 @@ new ImageResponse(<OgImage />, {
 });
 ```
 
-## Buffered responses and ETag
+## Awaiting the render, and ETag
 
-The constructor hands back a streaming `Response` while the render is still running, which is why its headers can carry no `ETag`. `ImageResponse.buffered` takes the same options and awaits instead, so its body is the finished bytes: the runtime knows the length and can skip chunked encoding, and the headers carry a strong `ETag` hashed from those bytes.
+The constructor hands back a streaming `Response` while the render is still running, which is why its headers can carry no `ETag`. `ImageResponse.render` takes the same options and awaits instead, so its body is the finished bytes: the runtime knows the length and can skip chunked encoding, and the headers carry a strong `ETag` hashed from those bytes.
 
 ```tsx
 import { ImageResponse } from "takumi-js/response";
 
 export function GET() {
-  return ImageResponse.buffered(<OgImage />, {
+  return ImageResponse.render(<OgImage />, {
     width: 1200,
     height: 630,
     headers: { "Cache-Control": "public, max-age=0, must-revalidate" },

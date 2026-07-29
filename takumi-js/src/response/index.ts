@@ -158,14 +158,14 @@ export class ImageResponse extends Response {
    * import { ImageResponse } from "takumi-js/response";
    *
    * export function GET() {
-   *   return ImageResponse.buffered(<OgImage />, { width: 1200, height: 630 });
+   *   return ImageResponse.render(<OgImage />, { width: 1200, height: 630 });
    * }
    * ```
    *
    * @param component - The JSX element to render.
    * @param options - Rendering and response options.
    */
-  static async buffered(component: RenderInput, options?: ImageResponseOptions): Promise<Response> {
+  static async render(component: RenderInput, options?: ImageResponseOptions): Promise<Response> {
     let image: Uint8Array<ArrayBuffer>;
 
     try {

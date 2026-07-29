@@ -166,11 +166,11 @@ describe("ImageResponse", () => {
     }
   });
 
-  test("should buffer the bytes and etag them", async () => {
+  test("should return the rendered bytes with an etag", async () => {
     const image = new Uint8Array([1, 2, 3]);
     const renderer = { render: mock(async () => image) } as any;
 
-    const response = await ImageResponse.buffered(<div>Hello</div>, { renderer });
+    const response = await ImageResponse.render(<div>Hello</div>, { renderer });
     const body = new Uint8Array(await response.arrayBuffer());
     const digest = await crypto.subtle.digest("SHA-256", body);
     const hex = Array.from(new Uint8Array(digest), (byte) =>
@@ -185,7 +185,7 @@ describe("ImageResponse", () => {
   test("should keep an etag passed through headers", async () => {
     const renderer = { render: mock(async () => new Uint8Array([1, 2, 3])) } as any;
 
-    const response = await ImageResponse.buffered(<div>Hello</div>, {
+    const response = await ImageResponse.render(<div>Hello</div>, {
       renderer,
       headers: { etag: `"pinned"` },
     });
@@ -204,7 +204,7 @@ describe("ImageResponse", () => {
     const consoleError = spyOn(console, "error").mockImplementation(() => {});
 
     try {
-      await expect(ImageResponse.buffered(<div>Hello</div>, { renderer, onError })).rejects.toBe(
+      await expect(ImageResponse.render(<div>Hello</div>, { renderer, onError })).rejects.toBe(
         error,
       );
     } finally {
