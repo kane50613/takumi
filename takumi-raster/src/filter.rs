@@ -253,7 +253,7 @@ fn find_nonzero_bounds<T>(
     }
   }
 
-  has_alpha.then_some(Placement {
+  has_alpha.then(|| Placement {
     left: min_x as i32,
     top: min_y as i32,
     width: max_x - min_x + 1,
@@ -666,5 +666,25 @@ mod tests {
     assert_eq!(pixel.0[3], 127);
 
     Ok(())
+  }
+
+  #[test]
+  fn drop_shadow_on_transparent_content_does_not_panic() -> Result<()> {
+    let mut image = RgbaImage::new(16, 16);
+    let width = image.width();
+    let height = image.height();
+    let Some(mut pixmap) = PixmapMut::from_bytes(image.as_mut(), width, height) else {
+      return Ok(());
+    };
+
+    let shadow = SizedShadow {
+      offset_x: 1.0,
+      offset_y: 1.0,
+      blur_radius: 1.0,
+      spread_radius: 0.0,
+      color: Color::black(),
+    };
+
+    apply_drop_shadow_filter(&mut pixmap, &shadow)
   }
 }
