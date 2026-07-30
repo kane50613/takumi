@@ -253,7 +253,7 @@ fn find_nonzero_bounds<T>(
     }
   }
 
-  has_alpha.then_some(Placement {
+  has_alpha.then(|| Placement {
     left: min_x as i32,
     top: min_y as i32,
     width: max_x - min_x + 1,
