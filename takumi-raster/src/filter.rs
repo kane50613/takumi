@@ -667,4 +667,24 @@ mod tests {
 
     Ok(())
   }
+
+  #[test]
+  fn drop_shadow_on_transparent_content_does_not_panic() -> Result<()> {
+    let mut image = RgbaImage::new(16, 16);
+    let width = image.width();
+    let height = image.height();
+    let Some(mut pixmap) = PixmapMut::from_bytes(image.as_mut(), width, height) else {
+      return Ok(());
+    };
+
+    let shadow = SizedShadow {
+      offset_x: 1.0,
+      offset_y: 1.0,
+      blur_radius: 1.0,
+      spread_radius: 0.0,
+      color: Color::black(),
+    };
+
+    apply_drop_shadow_filter(&mut pixmap, &shadow)
+  }
 }
