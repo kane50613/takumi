@@ -1,3 +1,9 @@
+## takumi-raster@0.4.5
+
+### Fix debug-build panic when drop-shadow hits a fully transparent element
+
+`drop-shadow()` on an element with no visible pixels panicked with an integer underflow in debug builds. The bounds check now short-circuits before computing the empty region's size.
+
 ## takumi-raster@0.4.3
 
 ### Stop parking retired subcanvas pixmaps for the rest of the render
