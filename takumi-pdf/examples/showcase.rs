@@ -310,8 +310,8 @@ fn invoice_html() -> String {
   </div>
 
   <div style="display: flex; align-items: flex-start; margin-top: 10px;">
-    <div style="flex: 1; height: 2px; background-color: #6b7280; margin-top: 0;"></div>
-    <div style="width: 26px; height: 2px; background-color: #6b7280; transform: rotate(18deg); transform-origin: left top;"></div>
+    <div style="flex: 1; height: 2px; background-color: #6b7280;"></div>
+    <div style="width: 26px; height: 2px; background-color: #6b7280; transform: skewY(17.1deg); transform-origin: left top;"></div>
     <div style="width: 300px; height: 2px; background-color: #6b7280; margin-top: 8px;"></div>
   </div>
 
