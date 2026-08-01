@@ -104,3 +104,52 @@ fn renders_multi_page_pdf() {
   let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/takumi-pdf-poc-pages.pdf");
   fs::write(&out, &pdf).expect("write paged poc pdf");
 }
+
+#[test]
+fn renders_page_footer_with_counters() {
+  let lines: Vec<Node> = (1..=40)
+    .map(|i| {
+      Node::text(format!("Row {i}")).with_style(
+        Style::default()
+          .with(StyleDeclaration::color(ColorInput::Value(Color([
+            0, 0, 0, 255,
+          ]))))
+          .with(StyleDeclaration::font_size(FontSize::Length(Px(16.0)))),
+      )
+    })
+    .collect();
+  let node = Node::container(lines).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+      .with(StyleDeclaration::width(Percentage(100.0))),
+  );
+  let footer = Node::text("Page {page} of {pages}".to_string()).with_style(
+    Style::default()
+      .with(StyleDeclaration::color(ColorInput::Value(Color([
+        90, 90, 90, 255,
+      ]))))
+      .with(StyleDeclaration::font_size(FontSize::Length(Px(12.0)))),
+  );
+
+  let fonts = fonts();
+  let pdf = render(
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((400, 200)))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: 24.0,
+      })
+      .footer(footer)
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render paged pdf with footer");
+
+  assert!(pdf.starts_with(b"%PDF-"));
+
+  let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/takumi-pdf-poc-footer.pdf");
+  fs::write(&out, &pdf).expect("write footer poc pdf");
+}

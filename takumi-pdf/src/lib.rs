@@ -87,6 +87,13 @@ pub struct PdfOptions<'g> {
   /// Paged output; `None` renders a single page at the viewport size.
   #[builder(default, setter(strip_option))]
   pub(crate) page: Option<PageOptions>,
+  /// Band repeated at the top of every page. Text may use the `{page}` and
+  /// `{pages}` placeholders. Its height is carved out of the content window.
+  #[builder(default, setter(strip_option))]
+  pub(crate) header: Option<Node>,
+  /// Band repeated at the bottom of every page; same placeholders as `header`.
+  #[builder(default, setter(strip_option))]
+  pub(crate) footer: Option<Node>,
   /// Per-render font fallback chain (family names in order).
   #[builder(default)]
   pub(crate) font_families: Option<FontFamily>,
@@ -204,37 +211,59 @@ impl PageOptions {
   }
 }
 
-/// Renders a node tree to a PDF: single-page at the viewport size, or paged
-/// when [`PdfOptions::page`] is set.
-pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
-  let viewport = match options.page {
-    Some(page) => {
-      let (content_width, _) = page.content_size();
-      if content_width <= 0.0 {
-        return Err(PdfError::InvalidPageSize);
-      }
-      Viewport::new((content_width as u32, None))
-    }
-    None => options.viewport,
-  };
+/// Shared inputs for laying out an independent node tree: the main content or
+/// a header/footer band.
+struct TreeInputs<'g> {
+  fonts: &'g Fonts,
+  stylesheet: Arc<StyleSheet>,
+  font_families: Option<FontFamily>,
+  lang: Option<Lang>,
+}
 
+/// A node tree taken through layout and scene building, ready to emit.
+struct PreparedTree {
+  root: RenderNode,
+  results: LayoutResults,
+  contexts: Vec<StackingContextNode>,
+  width: f32,
+  height: f32,
+}
+
+impl PreparedTree {
+  fn emitter<'a>(&'a self, fonts: &'a mut FontMap) -> Emitter<'a> {
+    Emitter {
+      root: &self.root,
+      contexts: &self.contexts,
+      results: &self.results,
+      fonts,
+      window: None,
+      line_window: None,
+    }
+  }
+}
+
+fn prepare_tree(
+  inputs: &TreeInputs<'_>,
+  node: Node,
+  viewport: Viewport,
+) -> Result<PreparedTree, PdfError> {
   let context = RenderContext::builder()
     .fonts(
-      options
+      inputs
         .fonts
-        .snapshot_with_fallbacks(options.font_families.as_ref()),
+        .snapshot_with_fallbacks(inputs.font_families.as_ref()),
     )
     .sizing(SizingContext::builder().viewport(viewport).build())
     .images(Rc::new(HashMap::new()))
-    .stylesheet(options.stylesheet)
+    .stylesheet(inputs.stylesheet.clone())
     .style(Box::new(ComputedStyle {
-      lang: options.lang,
-      font_family: options.font_families.unwrap_or_default(),
+      lang: inputs.lang,
+      font_family: inputs.font_families.clone().unwrap_or_default(),
       ..Default::default()
     }))
     .build();
 
-  let root = RenderNode::from_node(&context, options.node);
+  let root = RenderNode::from_node(&context, node);
   let mut tree = LayoutTree::from_render_node(&root);
 
   tree.compute_layout(viewport.into());
@@ -249,7 +278,6 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
     .size
     .height
     .map_or(root_layout.size.height, |h| h as f32);
-
   let contexts = build_stacking_contexts(
     &root,
     &results,
@@ -258,52 +286,180 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
     (Some(width), Some(height)),
   )?;
 
-  let mut document = Document::new();
-  let mut emitter = Emitter {
-    root: &root,
-    contexts: &contexts,
-    results: &results,
-    fonts: HashMap::new(),
-    window: None,
-    line_window: None,
+  Ok(PreparedTree {
+    root,
+    results,
+    contexts,
+    width,
+    height,
+  })
+}
+
+/// Replaces `{page}` / `{pages}` in every text node.
+fn substitute_page_counters(node: &mut Node, page: usize, pages: usize) {
+  match &mut node.kind {
+    NodeKind::Text(text) => {
+      if text.text.contains("{page}") || text.text.contains("{pages}") {
+        text.text = text
+          .text
+          .replace("{page}", &page.to_string())
+          .replace("{pages}", &pages.to_string());
+      }
+    }
+    NodeKind::Container { children } => {
+      for child in children {
+        substitute_page_counters(child, page, pages);
+      }
+    }
+    _ => {}
+  }
+}
+
+/// Lays out a band template with the given counter values.
+fn prepare_band(
+  inputs: &TreeInputs<'_>,
+  template: &Node,
+  page: usize,
+  pages: usize,
+  viewport: Viewport,
+) -> Result<PreparedTree, PdfError> {
+  let mut node = template.clone();
+
+  substitute_page_counters(&mut node, page, pages);
+  prepare_tree(inputs, node, viewport)
+}
+
+/// Emits a band clipped to `(x, y, width, height)` on the page.
+fn emit_band(
+  band: &PreparedTree,
+  fonts: &mut FontMap,
+  x: f32,
+  y: f32,
+  width: f32,
+  height: f32,
+  surface: &mut Surface,
+) -> Result<(), PdfError> {
+  let Some(rect) = KrillaRect::from_xywh(x, y, width, height) else {
+    return Ok(());
   };
+  let mut builder = PathBuilder::new();
+
+  builder.push_rect(rect);
+  let Some(path) = builder.finish() else {
+    return Ok(());
+  };
+
+  surface.push_clip_path(&path, &FillRule::NonZero);
+  surface.push_transform(&Transform::from_translate(x, y));
+  let mut emitter = band.emitter(fonts);
+
+  emitter.emit_context(0, Affine::IDENTITY, surface)?;
+  surface.pop();
+  surface.pop();
+  Ok(())
+}
+
+/// Renders a node tree to a PDF: single-page at the viewport size, or paged
+/// when [`PdfOptions::page`] is set.
+pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
+  let inputs = TreeInputs {
+    fonts: options.fonts,
+    stylesheet: options.stylesheet,
+    font_families: options.font_families,
+    lang: options.lang,
+  };
+  let mut fonts = FontMap::new();
+  let mut document = Document::new();
 
   match options.page {
     Some(page) => {
       let page_size =
         KrillaSize::from_wh(page.width, page.height).ok_or(PdfError::InvalidPageSize)?;
       let (content_width, content_height) = page.content_size();
-      if content_height <= 0.0 {
+      if content_width <= 0.0 || content_height <= 0.0 {
+        return Err(PdfError::InvalidPageSize);
+      }
+      let band_viewport = Viewport::new((content_width as u32, None));
+
+      // Band heights are measured once with three-digit counters; per-page
+      // emission clips to the measured band, so a wrap caused by a wider real
+      // counter cannot push the content window around between pages.
+      let header_height = match &options.header {
+        Some(template) => prepare_band(&inputs, template, 999, 999, band_viewport)?.height,
+        None => 0.0,
+      };
+      let footer_height = match &options.footer {
+        Some(template) => prepare_band(&inputs, template, 999, 999, band_viewport)?.height,
+        None => 0.0,
+      };
+      let window_height = content_height - header_height - footer_height;
+      if window_height <= 0.0 {
         return Err(PdfError::InvalidPageSize);
       }
 
+      let content = prepare_tree(&inputs, options.node, band_viewport)?;
       let mut atoms = Vec::new();
 
-      emitter.collect_atoms(0, Affine::IDENTITY, &mut atoms)?;
-      let starts = page_starts(&mut atoms, height, content_height);
+      content
+        .emitter(&mut fonts)
+        .collect_atoms(0, Affine::IDENTITY, &mut atoms)?;
+      let starts = page_starts(&mut atoms, content.height, window_height);
+      let pages = starts.len();
 
       for (index, &y0) in starts.iter().enumerate() {
-        let line_start = if index == 0 { f32::NEG_INFINITY } else { y0 };
-        let line_end = starts.get(index + 1).copied().unwrap_or(f32::INFINITY);
-
-        emitter.window = Some((y0, y0 + content_height));
-        emitter.line_window = Some((line_start, line_end));
         let mut pdf_page = document.start_page_with(PageSettings::new(page_size));
         let mut surface = pdf_page.surface();
 
+        if let Some(template) = &options.header {
+          let band = prepare_band(&inputs, template, index + 1, pages, band_viewport)?;
+
+          emit_band(
+            &band,
+            &mut fonts,
+            page.margin,
+            page.margin,
+            content_width,
+            header_height,
+            &mut surface,
+          )?;
+        }
+
+        let content_top = page.margin + header_height;
+
         if let Some(window) =
-          KrillaRect::from_xywh(page.margin, page.margin, content_width, content_height)
+          KrillaRect::from_xywh(page.margin, content_top, content_width, window_height)
         {
           let mut builder = PathBuilder::new();
 
           builder.push_rect(window);
           if let Some(path) = builder.finish() {
             surface.push_clip_path(&path, &FillRule::NonZero);
-            surface.push_transform(&Transform::from_translate(page.margin, page.margin - y0));
+            surface.push_transform(&Transform::from_translate(page.margin, content_top - y0));
+            let mut emitter = content.emitter(&mut fonts);
+
+            emitter.window = Some((y0, y0 + window_height));
+            emitter.line_window = Some((
+              if index == 0 { f32::NEG_INFINITY } else { y0 },
+              starts.get(index + 1).copied().unwrap_or(f32::INFINITY),
+            ));
             emitter.emit_context(0, Affine::IDENTITY, &mut surface)?;
             surface.pop();
             surface.pop();
           }
+        }
+
+        if let Some(template) = &options.footer {
+          let band = prepare_band(&inputs, template, index + 1, pages, band_viewport)?;
+
+          emit_band(
+            &band,
+            &mut fonts,
+            page.margin,
+            page.height - page.margin - footer_height,
+            content_width,
+            footer_height,
+            &mut surface,
+          )?;
         }
 
         surface.finish();
@@ -311,9 +467,12 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       }
     }
     None => {
-      let page_size = KrillaSize::from_wh(width, height).ok_or(PdfError::InvalidPageSize)?;
+      let content = prepare_tree(&inputs, options.node, options.viewport)?;
+      let page_size =
+        KrillaSize::from_wh(content.width, content.height).ok_or(PdfError::InvalidPageSize)?;
       let mut page = document.start_page_with(PageSettings::new(page_size));
       let mut surface = page.surface();
+      let mut emitter = content.emitter(&mut fonts);
 
       emitter.emit_context(0, Affine::IDENTITY, &mut surface)?;
       surface.finish();
@@ -359,11 +518,13 @@ fn page_starts(atoms: &mut [Atom], total: f32, window: f32) -> Vec<f32> {
 
 /// Scene walker state: the render tree, the stacking-context scene, and a cache
 /// of krilla fonts keyed by the backing blob identity.
+type FontMap = HashMap<(usize, usize, u32), Font>;
+
 struct Emitter<'a> {
   root: &'a RenderNode,
   contexts: &'a [StackingContextNode],
   results: &'a LayoutResults,
-  fonts: HashMap<(usize, usize, u32), Font>,
+  fonts: &'a mut FontMap,
   /// Vertical content window `[top, bottom)` of the page being emitted;
   /// paint wholly outside it is skipped so clipped-away content never reaches
   /// the content stream (or text extraction).
