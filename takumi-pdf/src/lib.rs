@@ -50,9 +50,9 @@ use takumi_core::{
     border::{BorderProperties, BorderSide},
     decoration::ClipBox,
     inline::{
-      BuiltInlineLayout, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineRunLayout,
-      ShapedRun, collect_inline_items, create_inline_layout, resolve_inline_max_height,
-      resolve_inline_runs,
+      BuiltInlineLayout, DecorationRect, InlineItem, InlineLayoutMode, InlineLayoutRequest,
+      InlineRunLayout, ShapedRun, collect_inline_items, create_inline_layout,
+      resolve_inline_max_height, resolve_inline_runs, run_decorations,
     },
     node::{Node, NodeKind, TextData},
     tree::{LayoutResults, LayoutTree, RenderNode},
@@ -902,6 +902,16 @@ impl Emitter<'_> {
           continue;
         }
       }
+      let decorations = run_decorations(
+        shaped,
+        layout,
+        run.baseline_shift,
+        run.transform(Affine::IDENTITY),
+      );
+
+      for decoration in decorations.iter().filter(|d| !d.over) {
+        draw_decoration(surface, decoration, x, y);
+      }
       let run_text = built
         .text
         .get(shaped.text_range.clone())
@@ -931,6 +941,9 @@ impl Emitter<'_> {
         shaped.font_size,
         false,
       );
+      for decoration in decorations.iter().filter(|d| d.over) {
+        draw_decoration(surface, decoration, x, y);
+      }
     }
     Ok(())
   }
@@ -1147,6 +1160,28 @@ fn overflow_clip_rect(style: &ComputedStyle, layout: Layout, x: f32, y: f32) -> 
 
   builder.push_rect(rect);
   builder.finish()
+}
+
+/// Fills one decoration rect under its border-box transform offset by `(x, y)`.
+fn draw_decoration(surface: &mut Surface, decoration: &DecorationRect, x: f32, y: f32) {
+  if decoration.color.0[3] == 0 || decoration.width <= 0.0 || decoration.height <= 0.0 {
+    return;
+  }
+  let Some(rect) = KrillaRect::from_xywh(0.0, 0.0, decoration.width, decoration.height) else {
+    return;
+  };
+  let [a, b, c, d, e, f] = decoration.transform;
+  let mut builder = PathBuilder::new();
+
+  builder.push_rect(rect);
+  let Some(path) = builder.finish() else {
+    return;
+  };
+
+  surface.push_transform(&Transform::from_row(a, b, c, d, e + x, f + y));
+  surface.set_fill(Some(fill_from_rgba(decoration.color.0, 1.0)));
+  surface.draw_path(&path);
+  surface.pop();
 }
 
 fn krilla_blend(mode: BlendMode) -> KrillaBlendMode {
