@@ -316,3 +316,49 @@ fn renders_box_chrome() {
   let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/takumi-pdf-poc-chrome.pdf");
   fs::write(&out, &pdf).expect("write chrome poc pdf");
 }
+
+#[test]
+fn renders_gradients() {
+  use takumi_core::style::{BackgroundImages, FromCssStr};
+
+  let swatch = |css: &str| {
+    Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::width(Px(110.0)))
+        .with(StyleDeclaration::height(Px(110.0)))
+        .with(StyleDeclaration::background_image(Some(
+          BackgroundImages::from_css_str(css).expect("parse gradient"),
+        ))),
+    )
+  };
+  let node = Node::container([
+    swatch("linear-gradient(135deg, #ff5f6d, #3a1c71)"),
+    swatch("radial-gradient(circle, #fddb92, #4481eb)"),
+    swatch("conic-gradient(from 0deg, red, yellow, lime, cyan, blue, magenta, red)"),
+  ])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::padding_top(Px(20.0)))
+      .with(StyleDeclaration::padding_left(Px(20.0)))
+      .with(StyleDeclaration::column_gap(Px(20.0).into()))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([255, 255, 255, 255]),
+      ))),
+  );
+
+  let fonts = fonts();
+  let pdf = render(
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((440, 160)))
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render gradients pdf");
+
+  let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/takumi-pdf-poc-gradients.pdf");
+  fs::write(&out, &pdf).expect("write gradients poc pdf");
+}

@@ -34,7 +34,10 @@ use krilla::{
   },
   num::NormalizedF32,
   page::PageSettings,
-  paint::{Fill, FillRule},
+  paint::{
+    Fill, FillRule, LinearGradient as KrillaLinearGradient, Paint,
+    RadialGradient as KrillaRadialGradient, SpreadMethod, Stop, SweepGradient,
+  },
   surface::Surface,
   text::{Font, Glyph, GlyphId},
 };
@@ -57,11 +60,12 @@ use takumi_core::{
     node::{Node, NodeKind, TextData},
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
+  paint::{ConicGradientTile, LinearGradientTile, RadialGradientTile, resolve_stops_along_axis},
   resources::font::FontError,
   scene::{NodePaint, PaintItemKind, StackingContextNode, build_stacking_contexts},
   style::{
-    Affine, BlendMode, BreakBetween, BreakInside, ComputedStyle, FontFamily, Isolation, Lang,
-    Overflow, SizingContext, StyleSheet,
+    Affine, BackgroundImage, BlendMode, BreakBetween, BreakInside, ComputedStyle, FontFamily,
+    Isolation, Lang, Overflow, ResolvedGradientStop, SizingContext, StyleSheet,
   },
   viewport::Viewport,
 };
@@ -689,6 +693,7 @@ impl Emitter<'_> {
     let border = BorderProperties::from_context(&node.context, layout.size, layout.border);
 
     self.emit_background(node, &border, layout, x, y, surface);
+    self.emit_background_layers(node, &border, layout, x, y, surface);
     self.emit_borders(&border, x, y, layout.size, surface);
 
     // Children and own content clip to the (rounded) padding box when overflow
@@ -741,6 +746,192 @@ impl Emitter<'_> {
     };
 
     surface.set_fill(Some(fill_from_rgba(color.0, 1.0)));
+    surface.draw_path(&path);
+  }
+
+  /// Paints `background-image` gradient layers, bottom layer first, clipped to
+  /// the rounded border box. Each layer fills the whole positioning area.
+  // ponytail: background-size/position/repeat and url() layers are not
+  // resolved yet; port takumi-svg's placement logic when needed.
+  fn emit_background_layers(
+    &self,
+    node: &RenderNode,
+    border: &BorderProperties,
+    layout: Layout,
+    x: f32,
+    y: f32,
+    surface: &mut Surface,
+  ) {
+    let style = &node.context.style;
+    let Some(images) = style.background_image.as_deref() else {
+      return;
+    };
+    if images
+      .iter()
+      .all(|image| matches!(image, BackgroundImage::None))
+    {
+      return;
+    }
+    let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
+
+    border.append_mask_commands(&mut commands, layout.size, CorePoint::ZERO);
+    let Some(clip) = krilla_path(&commands, x, y) else {
+      return;
+    };
+
+    surface.push_clip_path(&clip, &FillRule::NonZero);
+    for image in images.iter().rev() {
+      self.background_layer(image, node, layout, x, y, surface);
+    }
+    surface.pop();
+  }
+
+  fn background_layer(
+    &self,
+    image: &BackgroundImage,
+    node: &RenderNode,
+    layout: Layout,
+    x: f32,
+    y: f32,
+    surface: &mut Surface,
+  ) {
+    let (w, h) = (layout.size.width, layout.size.height);
+    let sizing = &node.context.sizing;
+    let current_color = node.context.current_color;
+
+    let paint: Paint = match image {
+      BackgroundImage::Linear(gradient) => {
+        let tile = LinearGradientTile::new(gradient, w as u32, h as u32, sizing, current_color);
+        let resolved = resolve_stops_along_axis(
+          &gradient.stops,
+          tile.axis_length.max(1e-6),
+          sizing,
+          current_color,
+        );
+        if resolved.is_empty() {
+          return;
+        }
+        let max_extent = tile.axis_length / 2.0;
+        let (cx, cy) = (x + w / 2.0, y + h / 2.0);
+        let point_at = |t: f32| {
+          (
+            cx + (t - max_extent) * tile.dir_x,
+            cy + (t - max_extent) * tile.dir_y,
+          )
+        };
+        let (t0, t1, base, span) = if gradient.repeating {
+          let first = resolved.first().map_or(0.0, |s| s.position);
+          let last = resolved.last().map_or(tile.axis_length, |s| s.position);
+          (first, last, first, (last - first).max(1e-6))
+        } else {
+          (0.0, tile.axis_length, 0.0, tile.axis_length.max(1e-6))
+        };
+        let (x1, y1) = point_at(t0);
+        let (x2, y2) = point_at(t1);
+
+        KrillaLinearGradient {
+          x1,
+          y1,
+          x2,
+          y2,
+          transform: Transform::identity(),
+          spread_method: spread(gradient.repeating),
+          stops: krilla_stops(&resolved, base, span),
+          anti_alias: false,
+        }
+        .into()
+      }
+      BackgroundImage::Radial(gradient) => {
+        let tile = RadialGradientTile::new(gradient, w as u32, h as u32, sizing, current_color);
+        let resolved = resolve_stops_along_axis(
+          &gradient.stops,
+          tile.radius_scale.max(1e-6),
+          sizing,
+          current_color,
+        );
+        if resolved.is_empty() {
+          return;
+        }
+        let radius_x = tile.inv_radius_x.recip();
+        let radius_y = tile.inv_radius_y.recip();
+        let (r, base, span) = if gradient.repeating {
+          let first = resolved.first().map_or(0.0, |s| s.position);
+          let last = resolved.last().map_or(tile.radius_scale, |s| s.position);
+          ((last - first).max(1e-6), first, (last - first).max(1e-6))
+        } else {
+          (
+            tile.radius_scale.max(1e-6),
+            0.0,
+            tile.radius_scale.max(1e-6),
+          )
+        };
+        let scale_x = (radius_x / tile.radius_scale.max(1e-6)).max(1e-6);
+        let scale_y = (radius_y / tile.radius_scale.max(1e-6)).max(1e-6);
+
+        KrillaRadialGradient {
+          fx: 0.0,
+          fy: 0.0,
+          fr: 0.0,
+          cx: 0.0,
+          cy: 0.0,
+          cr: r,
+          transform: Transform::from_row(scale_x, 0.0, 0.0, scale_y, x + tile.cx, y + tile.cy),
+          spread_method: spread(gradient.repeating),
+          stops: krilla_stops(&resolved, base, span),
+          anti_alias: false,
+        }
+        .into()
+      }
+      BackgroundImage::Conic(gradient) => {
+        let tile = ConicGradientTile::new(gradient, w as u32, h as u32, sizing, current_color);
+        let lut_len = tile.color_lut.len();
+        if lut_len == 0 {
+          return;
+        }
+        const SWEEP_STOPS: usize = 64;
+        let stops = (0..=SWEEP_STOPS)
+          .map(|i| {
+            let t = i as f32 / SWEEP_STOPS as f32;
+            let index =
+              tile.lut_index_for_adjusted_angle_with_len(t * core::f32::consts::TAU, lut_len);
+            let color = tile.color_lut[index].demultiply();
+
+            krilla_stop(t, [color.red(), color.green(), color.blue(), color.alpha()])
+          })
+          .collect();
+        let (ccx, ccy) = (x + tile.cx, y + tile.cy);
+
+        SweepGradient {
+          cx: ccx,
+          cy: ccy,
+          start_angle: 0.0,
+          end_angle: 360.0,
+          transform: Transform::from_rotate_at(tile.start_rad.to_degrees() - 90.0, ccx, ccy),
+          spread_method: SpreadMethod::Pad,
+          stops,
+          anti_alias: false,
+        }
+        .into()
+      }
+      BackgroundImage::Url(_) | BackgroundImage::None => return,
+      _ => return,
+    };
+
+    let Some(rect) = KrillaRect::from_xywh(x, y, w, h) else {
+      return;
+    };
+    let mut builder = PathBuilder::new();
+
+    builder.push_rect(rect);
+    let Some(path) = builder.finish() else {
+      return;
+    };
+
+    surface.set_fill(Some(Fill {
+      paint,
+      opacity: NormalizedF32::ONE,
+      rule: FillRule::NonZero,
+    }));
     surface.draw_path(&path);
   }
 
@@ -1182,6 +1373,29 @@ fn draw_decoration(surface: &mut Surface, decoration: &DecorationRect, x: f32, y
   surface.set_fill(Some(fill_from_rgba(decoration.color.0, 1.0)));
   surface.draw_path(&path);
   surface.pop();
+}
+
+fn spread(repeating: bool) -> SpreadMethod {
+  if repeating {
+    SpreadMethod::Repeat
+  } else {
+    SpreadMethod::Pad
+  }
+}
+
+fn krilla_stop(offset: f32, rgba: [u8; 4]) -> Stop {
+  Stop {
+    offset: NormalizedF32::new(offset.clamp(0.0, 1.0)).unwrap_or(NormalizedF32::ZERO),
+    color: rgb::Color::new(rgba[0], rgba[1], rgba[2]).into(),
+    opacity: NormalizedF32::new(f32::from(rgba[3]) / 255.0).unwrap_or(NormalizedF32::ONE),
+  }
+}
+
+fn krilla_stops(resolved: &[ResolvedGradientStop], base: f32, span: f32) -> Vec<Stop> {
+  resolved
+    .iter()
+    .map(|stop| krilla_stop((stop.position - base) / span, stop.color.0))
+    .collect()
 }
 
 fn krilla_blend(mode: BlendMode) -> KrillaBlendMode {
