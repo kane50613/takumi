@@ -24,3 +24,6 @@ features = ["woff2"]
 
 [lints]
 workspace = true
+
+[dev-dependencies.takumi-html]
+path = "../takumi-html"
