@@ -26,9 +26,12 @@ use std::{collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
 use krilla::{
   Data, Document,
+  blend::BlendMode as KrillaBlendMode,
   color::rgb,
   error::KrillaError,
-  geom::{PathBuilder, Point, Rect as KrillaRect, Size as KrillaSize, Transform},
+  geom::{
+    Path as KrillaPath, PathBuilder, Point, Rect as KrillaRect, Size as KrillaSize, Transform,
+  },
   num::NormalizedF32,
   page::PageSettings,
   paint::{Fill, FillRule},
@@ -40,8 +43,12 @@ use takumi_core::{
   context::RenderContext,
   error::Error as TakumiError,
   font_style::SizedFontStyle,
-  geometry::{AvailableSpace, ComputedLayout as Layout, NodeId, Size},
+  geometry::{
+    AvailableSpace, ComputedLayout as Layout, NodeId, PathCommand, Point as CorePoint, Size,
+  },
   layout::{
+    border::{BorderProperties, BorderSide},
+    decoration::ClipBox,
     inline::{
       BuiltInlineLayout, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineRunLayout,
       ShapedRun, collect_inline_items, create_inline_layout, resolve_inline_max_height,
@@ -53,7 +60,8 @@ use takumi_core::{
   resources::font::FontError,
   scene::{NodePaint, PaintItemKind, StackingContextNode, build_stacking_contexts},
   style::{
-    Affine, BreakBetween, BreakInside, ComputedStyle, FontFamily, Lang, SizingContext, StyleSheet,
+    Affine, BlendMode, BreakBetween, BreakInside, ComputedStyle, FontFamily, Isolation, Lang,
+    Overflow, SizingContext, StyleSheet,
   },
   viewport::Viewport,
 };
@@ -596,13 +604,9 @@ impl Emitter<'_> {
       return Ok(());
     };
 
-    let child_frame = match context.root() {
-      Some(paint) => {
-        let (frame, pushed) = self.emit_box(paint, parent, surface)?;
-        pop_transforms(surface, pushed);
-        frame
-      }
-      None => parent,
+    let (child_frame, root_pushed) = match context.root() {
+      Some(paint) => self.emit_box(paint, parent, surface)?,
+      None => (parent, 0),
     };
 
     for bucket in context.in_paint_order() {
@@ -624,6 +628,7 @@ impl Emitter<'_> {
         }
       }
     }
+    pop_transforms(surface, root_pushed);
     Ok(())
   }
 
@@ -645,23 +650,68 @@ impl Emitter<'_> {
       return Ok((parent, 0));
     }
 
+    let style = &node.context.style;
+    let mut pushed = 0;
+
+    if style.mix_blend_mode != BlendMode::Normal {
+      surface.push_blend_mode(krilla_blend(style.mix_blend_mode));
+      pushed += 1;
+    }
+    if style.isolation == Isolation::Isolate {
+      surface.push_isolated();
+      pushed += 1;
+    }
+    let opacity = style.opacity.0;
+
+    if opacity < 1.0 {
+      surface
+        .push_opacity(NormalizedF32::new(opacity.clamp(0.0, 1.0)).unwrap_or(NormalizedF32::ONE));
+      pushed += 1;
+    }
+
     let relative = parent.invert().unwrap_or(Affine::IDENTITY) * paint.transform;
-    let (x, y, pushed) = if relative.only_translation() {
-      (relative.x, relative.y, 0)
+    let (x, y) = if relative.only_translation() {
+      (relative.x, relative.y)
     } else {
       let cols = relative.to_cols_array();
+
       surface.push_transform(&Transform::from_row(
         cols[0], cols[1], cols[2], cols[3], cols[4], cols[5],
       ));
-      (0.0, 0.0, 1)
+      pushed += 1;
+      (0.0, 0.0)
     };
-    let frame = if pushed == 0 {
+    let frame = if relative.only_translation() {
       parent
     } else {
       parent * relative
     };
+    let border = BorderProperties::from_context(&node.context, layout.size, layout.border);
 
-    self.emit_background(node, layout, x, y, surface);
+    self.emit_background(node, &border, layout, x, y, surface);
+    self.emit_borders(&border, x, y, layout.size, surface);
+
+    // Children and own content clip to the (rounded) padding box when overflow
+    // is hidden; without radius a per-axis overflow leaves the visible axis
+    // unbounded.
+    if style.clips_overflow() {
+      let path = if border.is_zero() {
+        overflow_clip_rect(style, layout, x, y)
+      } else {
+        let clip = ClipBox::padding_box(border, layout);
+        let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
+
+        clip
+          .border
+          .append_mask_commands(&mut commands, clip.size, clip.offset);
+        krilla_path(&commands, x, y)
+      };
+      if let Some(path) = path {
+        surface.push_clip_path(&path, &FillRule::NonZero);
+        pushed += 1;
+      }
+    }
+
     self.emit_own_content(node, layout, x, y, surface)?;
     Ok((frame, pushed))
   }
@@ -669,6 +719,7 @@ impl Emitter<'_> {
   fn emit_background(
     &self,
     node: &RenderNode,
+    border: &BorderProperties,
     layout: Layout,
     x: f32,
     y: f32,
@@ -682,18 +733,89 @@ impl Emitter<'_> {
     if color.0[3] == 0 {
       return;
     }
-    let Some(rect) = KrillaRect::from_xywh(x, y, layout.size.width, layout.size.height) else {
-      return;
-    };
-    let mut builder = PathBuilder::new();
+    let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
 
-    builder.push_rect(rect);
-    let Some(path) = builder.finish() else {
+    border.append_mask_commands(&mut commands, layout.size, CorePoint::ZERO);
+    let Some(path) = krilla_path(&commands, x, y) else {
       return;
     };
 
     surface.set_fill(Some(fill_from_rgba(color.0, 1.0)));
     surface.draw_path(&path);
+  }
+
+  /// Fills the border ring: one even-odd fill for a uniform color, per-side
+  /// trapezoids clipped to the ring otherwise.
+  // ponytail: dashed/dotted/double render as solid; port the stroke-based
+  // patterns from takumi-svg when someone needs them.
+  fn emit_borders(
+    &self,
+    border: &BorderProperties,
+    x: f32,
+    y: f32,
+    size: Size<f32>,
+    surface: &mut Surface,
+  ) {
+    if !border.has_visible_sides() {
+      return;
+    }
+    let mut ring = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
+
+    border.append_border_ring_commands(&mut ring, size);
+    let Some(ring_path) = krilla_path(&ring, x, y) else {
+      return;
+    };
+
+    if let Some(color) = border.has_uniform_visible_color() {
+      if color.0[3] != 0 {
+        surface.set_fill(Some(Fill {
+          rule: FillRule::EvenOdd,
+          ..fill_from_rgba(color.0, 1.0)
+        }));
+        surface.draw_path(&ring_path);
+      }
+      return;
+    }
+
+    surface.push_clip_path(&ring_path, &FillRule::EvenOdd);
+    for (side, width, color, style) in [
+      (
+        BorderSide::Top,
+        border.width.top,
+        border.color.top,
+        border.style.top,
+      ),
+      (
+        BorderSide::Right,
+        border.width.right,
+        border.color.right,
+        border.style.right,
+      ),
+      (
+        BorderSide::Bottom,
+        border.width.bottom,
+        border.color.bottom,
+        border.style.bottom,
+      ),
+      (
+        BorderSide::Left,
+        border.width.left,
+        border.color.left,
+        border.style.left,
+      ),
+    ] {
+      if width <= 0.0 || color.0[3] == 0 || !style.is_rendered() {
+        continue;
+      }
+      let mut polygon = Vec::new();
+
+      border.append_side_polygon_commands_at(side, &mut polygon, size, CorePoint::ZERO);
+      if let Some(path) = krilla_path(&polygon, x, y) {
+        surface.set_fill(Some(fill_from_rgba(color.0, 1.0)));
+        surface.draw_path(&path);
+      }
+    }
+    surface.pop();
   }
 
   fn emit_own_content(
@@ -979,6 +1101,73 @@ fn build_inline_runs<'c>(
   let runs = resolve_inline_runs(&built, context, layout).map_err(PdfError::Font)?;
 
   Ok(Some((built, runs)))
+}
+
+/// Converts takumi-core path commands to a krilla path translated by `(x, y)`.
+fn krilla_path(commands: &[PathCommand], x: f32, y: f32) -> Option<KrillaPath> {
+  let mut builder = PathBuilder::new();
+
+  for command in commands {
+    match command {
+      PathCommand::MoveTo(p) => builder.move_to(p.x + x, p.y + y),
+      PathCommand::LineTo(p) => builder.line_to(p.x + x, p.y + y),
+      PathCommand::QuadTo(c, p) => builder.quad_to(c.x + x, c.y + y, p.x + x, p.y + y),
+      PathCommand::CubicTo(c1, c2, p) => {
+        builder.cubic_to(c1.x + x, c1.y + y, c2.x + x, c2.y + y, p.x + x, p.y + y);
+      }
+      PathCommand::Close => builder.close(),
+    }
+  }
+  builder.finish()
+}
+
+/// The rectangular overflow clip: each hidden axis bounds to the padding box,
+/// a visible axis is left effectively unbounded.
+fn overflow_clip_rect(style: &ComputedStyle, layout: Layout, x: f32, y: f32) -> Option<KrillaPath> {
+  const UNBOUNDED: f32 = 1.0e6;
+  let clip_x = style.overflow_x != Overflow::Visible;
+  let clip_y = style.overflow_y != Overflow::Visible;
+
+  let (left, right) = if clip_x {
+    let padding_left = x + layout.border.left;
+    let padding_right = (x + layout.size.width - layout.border.right).max(padding_left);
+    (padding_left, padding_right)
+  } else {
+    (x - UNBOUNDED, x + layout.size.width + UNBOUNDED)
+  };
+  let (top, bottom) = if clip_y {
+    let padding_top = y + layout.border.top;
+    let padding_bottom = (y + layout.size.height - layout.border.bottom).max(padding_top);
+    (padding_top, padding_bottom)
+  } else {
+    (y - UNBOUNDED, y + layout.size.height + UNBOUNDED)
+  };
+  let rect = KrillaRect::from_ltrb(left, top, right, bottom)?;
+  let mut builder = PathBuilder::new();
+
+  builder.push_rect(rect);
+  builder.finish()
+}
+
+fn krilla_blend(mode: BlendMode) -> KrillaBlendMode {
+  match mode {
+    BlendMode::Multiply => KrillaBlendMode::Multiply,
+    BlendMode::Screen => KrillaBlendMode::Screen,
+    BlendMode::Overlay => KrillaBlendMode::Overlay,
+    BlendMode::Darken => KrillaBlendMode::Darken,
+    BlendMode::Lighten => KrillaBlendMode::Lighten,
+    BlendMode::ColorDodge => KrillaBlendMode::ColorDodge,
+    BlendMode::ColorBurn => KrillaBlendMode::ColorBurn,
+    BlendMode::HardLight => KrillaBlendMode::HardLight,
+    BlendMode::SoftLight => KrillaBlendMode::SoftLight,
+    BlendMode::Difference => KrillaBlendMode::Difference,
+    BlendMode::Exclusion => KrillaBlendMode::Exclusion,
+    BlendMode::Hue => KrillaBlendMode::Hue,
+    BlendMode::Saturation => KrillaBlendMode::Saturation,
+    BlendMode::Color => KrillaBlendMode::Color,
+    BlendMode::Luminosity => KrillaBlendMode::Luminosity,
+    _ => KrillaBlendMode::Normal,
+  }
 }
 
 fn pop_transforms(surface: &mut Surface, pushed: usize) {

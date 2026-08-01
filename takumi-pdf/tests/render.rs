@@ -8,8 +8,8 @@ use takumi_core::{
   layout::node::Node,
   resources::font::FontResource,
   style::{
-    BreakBetween, Color, ColorInput, Display, FlexDirection, FontSize, Length::*, Style,
-    StyleDeclaration,
+    BorderStyle, BreakBetween, Color, ColorInput, Display, FlexDirection, FontSize, Length::*,
+    LineWidth, PercentageNumber, SpacePair, Style, StyleDeclaration,
   },
   viewport::Viewport,
 };
@@ -228,4 +228,91 @@ fn break_before_forces_new_page() {
 
   let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/takumi-pdf-poc-breaks.pdf");
   fs::write(&out, &pdf).expect("write breaks poc pdf");
+}
+
+#[test]
+fn renders_box_chrome() {
+  let card = Node::container([Node::text("Chrome card".to_string()).with_style(
+    Style::default()
+      .with(StyleDeclaration::color(ColorInput::Value(Color([
+        20, 20, 60, 255,
+      ]))))
+      .with(StyleDeclaration::font_size(FontSize::Length(Px(20.0)))),
+  )])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Px(300.0)))
+      .with(StyleDeclaration::height(Px(120.0)))
+      .with(StyleDeclaration::padding_top(Px(16.0)))
+      .with(StyleDeclaration::padding_left(Px(16.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([255, 255, 255, 255]),
+      )))
+      .with(StyleDeclaration::border_top_width(LineWidth::Length(Px(
+        3.0,
+      ))))
+      .with(StyleDeclaration::border_right_width(LineWidth::Length(Px(
+        3.0,
+      ))))
+      .with(StyleDeclaration::border_bottom_width(LineWidth::Length(
+        Px(3.0),
+      )))
+      .with(StyleDeclaration::border_left_width(LineWidth::Length(Px(
+        3.0,
+      ))))
+      .with(StyleDeclaration::border_top_style(BorderStyle::Solid))
+      .with(StyleDeclaration::border_right_style(BorderStyle::Solid))
+      .with(StyleDeclaration::border_bottom_style(BorderStyle::Solid))
+      .with(StyleDeclaration::border_left_style(BorderStyle::Solid))
+      .with(StyleDeclaration::border_top_color(ColorInput::Value(
+        Color([180, 40, 40, 255]),
+      )))
+      .with(StyleDeclaration::border_right_color(ColorInput::Value(
+        Color([180, 40, 40, 255]),
+      )))
+      .with(StyleDeclaration::border_bottom_color(ColorInput::Value(
+        Color([180, 40, 40, 255]),
+      )))
+      .with(StyleDeclaration::border_left_color(ColorInput::Value(
+        Color([180, 40, 40, 255]),
+      )))
+      .with(StyleDeclaration::border_top_left_radius(
+        SpacePair::from_single(Px(16.0)),
+      ))
+      .with(StyleDeclaration::border_top_right_radius(
+        SpacePair::from_single(Px(16.0)),
+      ))
+      .with(StyleDeclaration::border_bottom_right_radius(
+        SpacePair::from_single(Px(16.0)),
+      ))
+      .with(StyleDeclaration::border_bottom_left_radius(
+        SpacePair::from_single(Px(16.0)),
+      ))
+      .with(StyleDeclaration::opacity(PercentageNumber(0.8))),
+  );
+  let node = Node::container([card]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::padding_top(Px(24.0)))
+      .with(StyleDeclaration::padding_left(Px(24.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([235, 240, 250, 255]),
+      ))),
+  );
+
+  let fonts = fonts();
+  let pdf = render(
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((400, 200)))
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render chrome pdf");
+
+  let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/takumi-pdf-poc-chrome.pdf");
+  fs::write(&out, &pdf).expect("write chrome poc pdf");
 }
