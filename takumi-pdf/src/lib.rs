@@ -1,16 +1,23 @@
 #![deny(missing_docs)]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
-//! Vector PDF output for takumi — proof of concept.
+//! Vector PDF output for takumi.
 //!
 //! [`render`] runs takumi-core layout, walks the same backend-agnostic
-//! stacking-context scene as `takumi-svg`, and emits a single-page PDF through
-//! [`krilla`]: background rects as filled paths and text as real glyph runs with
-//! embedded, subsetted fonts — selectable, searchable, copyable.
+//! stacking-context scene as `takumi-svg`, and emits a PDF through [`krilla`]:
+//! background rects as filled paths and text as real glyph runs with embedded,
+//! subsetted fonts — selectable, searchable, copyable.
 //!
-//! POC coverage: background-color, text runs (fill color and opacity), nested
-//! containers, affine transforms. Everything else (borders, radius, gradients,
-//! shadows, images, filters, clipping, text decorations) is out of scope for now.
+//! With [`PdfOptions::page`] set, content lays out at the page's content width
+//! with unbounded height and is sliced into pages: unsplittable atoms (text
+//! lines, images, transformed subtrees) are collected, cut points move up to
+//! avoid splitting them, and each page re-walks the scene through a vertical
+//! window (clip + translate). Every text line is emitted on exactly one page.
+//!
+//! Coverage so far: background-color, text runs (fill color and opacity),
+//! nested containers, affine transforms, pagination. Not yet: borders, radius,
+//! gradients, images, shadows, filters, clipping, text decorations,
+//! break-* properties, page headers/footers.
 
 use std::{collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
@@ -77,6 +84,9 @@ pub struct PdfOptions<'g> {
   /// CSS stylesheets to apply before layout.
   #[builder(default)]
   pub(crate) stylesheet: Arc<StyleSheet>,
+  /// Paged output; `None` renders a single page at the viewport size.
+  #[builder(default, setter(strip_option))]
+  pub(crate) page: Option<PageOptions>,
   /// Per-render font fallback chain (family names in order).
   #[builder(default)]
   pub(crate) font_families: Option<FontFamily>,
@@ -85,9 +95,50 @@ pub struct PdfOptions<'g> {
   pub(crate) lang: Option<Lang>,
 }
 
-/// Renders a node tree to a single-page PDF.
+/// Paged output geometry: fixed page size with a uniform margin. Content lays
+/// out at `width - 2 * margin` and flows across as many pages as it needs.
+#[derive(Clone, Copy)]
+pub struct PageOptions {
+  /// Page width in px (A4 at 96 dpi ≈ 794).
+  pub width: f32,
+  /// Page height in px (A4 at 96 dpi ≈ 1123).
+  pub height: f32,
+  // ponytail: uniform margin; per-side margins when someone asks.
+  /// Margin applied to all four sides, in px.
+  pub margin: f32,
+}
+
+impl PageOptions {
+  /// A4 portrait at 96 dpi with a half-inch margin.
+  pub fn a4() -> Self {
+    Self {
+      width: 794.0,
+      height: 1123.0,
+      margin: 48.0,
+    }
+  }
+
+  fn content_size(&self) -> (f32, f32) {
+    (
+      self.width - 2.0 * self.margin,
+      self.height - 2.0 * self.margin,
+    )
+  }
+}
+
+/// Renders a node tree to a PDF: single-page at the viewport size, or paged
+/// when [`PdfOptions::page`] is set.
 pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
-  let viewport = options.viewport;
+  let viewport = match options.page {
+    Some(page) => {
+      let (content_width, _) = page.content_size();
+      if content_width <= 0.0 {
+        return Err(PdfError::InvalidPageSize);
+      }
+      Viewport::new((content_width as u32, None))
+    }
+    None => options.viewport,
+  };
 
   let context = RenderContext::builder()
     .fonts(
@@ -120,7 +171,6 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
     .size
     .height
     .map_or(root_layout.size.height, |h| h as f32);
-  let page_size = KrillaSize::from_wh(width, height).ok_or(PdfError::InvalidPageSize)?;
 
   let contexts = build_stacking_contexts(
     &root,
@@ -131,20 +181,102 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
   )?;
 
   let mut document = Document::new();
-  let mut page = document.start_page_with(PageSettings::new(page_size));
-  let mut surface = page.surface();
   let mut emitter = Emitter {
     root: &root,
     contexts: &contexts,
     results: &results,
     fonts: HashMap::new(),
+    window: None,
+    line_window: None,
   };
 
-  emitter.emit_context(0, Affine::IDENTITY, &mut surface)?;
+  match options.page {
+    Some(page) => {
+      let page_size =
+        KrillaSize::from_wh(page.width, page.height).ok_or(PdfError::InvalidPageSize)?;
+      let (content_width, content_height) = page.content_size();
+      if content_height <= 0.0 {
+        return Err(PdfError::InvalidPageSize);
+      }
 
-  surface.finish();
-  page.finish();
+      let mut atoms = Vec::new();
+
+      emitter.collect_atoms(0, Affine::IDENTITY, &mut atoms)?;
+      let starts = page_starts(&mut atoms, height, content_height);
+
+      for (index, &y0) in starts.iter().enumerate() {
+        let line_start = if index == 0 { f32::NEG_INFINITY } else { y0 };
+        let line_end = starts.get(index + 1).copied().unwrap_or(f32::INFINITY);
+
+        emitter.window = Some((y0, y0 + content_height));
+        emitter.line_window = Some((line_start, line_end));
+        let mut pdf_page = document.start_page_with(PageSettings::new(page_size));
+        let mut surface = pdf_page.surface();
+
+        if let Some(window) =
+          KrillaRect::from_xywh(page.margin, page.margin, content_width, content_height)
+        {
+          let mut builder = PathBuilder::new();
+
+          builder.push_rect(window);
+          if let Some(path) = builder.finish() {
+            surface.push_clip_path(&path, &FillRule::NonZero);
+            surface.push_transform(&Transform::from_translate(page.margin, page.margin - y0));
+            emitter.emit_context(0, Affine::IDENTITY, &mut surface)?;
+            surface.pop();
+            surface.pop();
+          }
+        }
+
+        surface.finish();
+        pdf_page.finish();
+      }
+    }
+    None => {
+      let page_size = KrillaSize::from_wh(width, height).ok_or(PdfError::InvalidPageSize)?;
+      let mut page = document.start_page_with(PageSettings::new(page_size));
+      let mut surface = page.surface();
+
+      emitter.emit_context(0, Affine::IDENTITY, &mut surface)?;
+      surface.finish();
+      page.finish();
+    }
+  }
+
   document.finish().map_err(PdfError::Krilla)
+}
+
+/// Unsplittable vertical extents in content coordinates: text lines, images,
+/// and transformed subtrees (which cannot be windowed without distortion).
+type Atom = (f32, f32);
+
+/// Page start offsets for slicing `total` height into windows of `window`
+/// height. Each cut moves up to the top of any atom straddling the ideal cut
+/// line, so atoms land whole on the next page; an atom taller than the window
+/// is cut anyway.
+fn page_starts(atoms: &mut [Atom], total: f32, window: f32) -> Vec<f32> {
+  atoms.sort_by(|a, b| a.0.total_cmp(&b.0));
+
+  let mut starts = vec![0.0_f32];
+  let mut y0 = 0.0_f32;
+
+  while y0 + window < total {
+    let ideal = y0 + window;
+    let pushed_up = atoms
+      .iter()
+      .filter(|(top, bottom)| *top < ideal && *bottom > ideal)
+      .map(|(top, _)| *top)
+      .fold(ideal, f32::min);
+    let cut = if pushed_up > y0 + 1.0 {
+      pushed_up
+    } else {
+      ideal
+    };
+
+    starts.push(cut);
+    y0 = cut;
+  }
+  starts
 }
 
 /// Scene walker state: the render tree, the stacking-context scene, and a cache
@@ -154,6 +286,36 @@ struct Emitter<'a> {
   contexts: &'a [StackingContextNode],
   results: &'a LayoutResults,
   fonts: HashMap<(usize, usize, u32), Font>,
+  /// Vertical content window `[top, bottom)` of the page being emitted;
+  /// paint wholly outside it is skipped so clipped-away content never reaches
+  /// the content stream (or text extraction).
+  window: Option<(f32, f32)>,
+  /// Text-line ownership window: `[this page's cut, next page's cut)`. Wider
+  /// than `window` at the edges (first page reaches up to −∞, last to +∞) and
+  /// narrower at the bottom when a cut lands above the page's full height, so
+  /// every line is emitted on exactly one page.
+  line_window: Option<(f32, f32)>,
+}
+
+impl Emitter<'_> {
+  fn window_excludes(&self, top: f32, bottom: f32) -> bool {
+    self
+      .window
+      .is_some_and(|(y0, y1)| bottom <= y0 || top >= y1)
+  }
+
+  /// Whether a text line whose band starts at `top` belongs to another page.
+  /// Lines use a half-open ownership rule (the page containing their top) so
+  /// overlapping ascent/descent bands of adjacent lines never emit twice.
+  fn window_disowns_line(&self, top: f32) -> bool {
+    self
+      .line_window
+      .is_some_and(|(y0, y1)| top < y0 || top >= y1)
+  }
+
+  fn window_excludes_bounds(&self, bounds: Option<takumi_core::scene::SceneBounds>) -> bool {
+    bounds.is_some_and(|b| self.window_excludes(b.top as f32, b.bottom as f32))
+  }
 }
 
 impl Emitter<'_> {
@@ -184,7 +346,13 @@ impl Emitter<'_> {
             pop_transforms(surface, pushed);
           }
           PaintItemKind::Context(child) => {
-            self.emit_context(*child, child_frame, surface)?;
+            let excluded = self
+              .contexts
+              .get(*child)
+              .is_some_and(|ctx| self.window_excludes_bounds(ctx.paint_bounds()));
+            if !excluded {
+              self.emit_context(*child, child_frame, surface)?;
+            }
           }
         }
       }
@@ -206,6 +374,9 @@ impl Emitter<'_> {
     let Ok(layout) = self.results.layout(paint.node_id) else {
       return Ok((parent, 0));
     };
+    if self.window_excludes_bounds(paint.paint_bounds) {
+      return Ok((parent, 0));
+    }
 
     let relative = parent.invert().unwrap_or(Affine::IDENTITY) * paint.transform;
     let (x, y, pushed) = if relative.only_translation() {
@@ -291,8 +462,12 @@ impl Emitter<'_> {
       text: text.text.as_str().into(),
       context,
     }];
+    let font_style = SizedFontStyle::from_style(&context.style, context);
+    let Some((built, runs)) = build_inline_runs(items, &font_style, context, layout)? else {
+      return Ok(());
+    };
 
-    self.layout_and_draw_runs(items, context, layout, x, y, surface)
+    self.draw_runs(&runs, &built, layout, x, y, surface)
   }
 
   fn emit_inline_content(
@@ -303,45 +478,13 @@ impl Emitter<'_> {
     y: f32,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
-    self.layout_and_draw_runs(
-      collect_inline_items(node),
-      &node.context,
-      layout,
-      x,
-      y,
-      surface,
-    )
-  }
-
-  fn layout_and_draw_runs(
-    &mut self,
-    items: Vec<InlineItem<'_>>,
-    context: &RenderContext,
-    layout: Layout,
-    x: f32,
-    y: f32,
-    surface: &mut Surface,
-  ) -> Result<(), PdfError> {
+    let context = &node.context;
     let font_style = SizedFontStyle::from_style(&context.style, context);
-    let content = layout.content_box_size();
-    if font_style.sizing.font_size == 0.0 || content.width <= 0.0 || content.height <= 0.0 {
+    let Some((built, runs)) =
+      build_inline_runs(collect_inline_items(node), &font_style, context, layout)?
+    else {
       return Ok(());
-    }
-
-    let built = create_inline_layout(InlineLayoutRequest {
-      items,
-      available_space: Size {
-        width: AvailableSpace::Definite(content.width),
-        height: AvailableSpace::Definite(content.height),
-      },
-      max_width: content.width,
-      max_height: resolve_inline_max_height(&font_style, content.height),
-      style: &font_style,
-      context,
-      mode: InlineLayoutMode::Draw,
-    });
-
-    let runs = resolve_inline_runs(&built, context, layout).map_err(PdfError::Font)?;
+    };
 
     self.draw_runs(&runs, &built, layout, x, y, surface)
   }
@@ -364,6 +507,12 @@ impl Emitter<'_> {
         continue;
       };
       let offset = run.glyph_offset(layout);
+      if let Some(glyph) = shaped.glyphs.first() {
+        let baseline = y + offset.y + glyph.y;
+        if self.window_disowns_line(baseline - shaped.metrics.ascent) {
+          continue;
+        }
+      }
       let run_text = built
         .text
         .get(shaped.text_range.clone())
@@ -410,6 +559,146 @@ impl Emitter<'_> {
     self.fonts.insert(key, font.clone());
     Some(font)
   }
+}
+
+impl Emitter<'_> {
+  /// Mirrors [`Self::emit_context`] but records unsplittable vertical extents
+  /// instead of painting.
+  fn collect_atoms(
+    &mut self,
+    id: usize,
+    parent: Affine,
+    atoms: &mut Vec<Atom>,
+  ) -> Result<(), PdfError> {
+    let Some(context) = self.contexts.get(id) else {
+      return Ok(());
+    };
+
+    let child_frame = match context.root() {
+      Some(paint) => self.collect_box_atoms(paint, parent, atoms)?,
+      None => parent,
+    };
+
+    for bucket in context.in_paint_order() {
+      for item in bucket {
+        match &item.kind {
+          PaintItemKind::Node(paint) => {
+            self.collect_box_atoms(paint, child_frame, atoms)?;
+          }
+          PaintItemKind::Context(child) => {
+            self.collect_atoms(*child, child_frame, atoms)?;
+          }
+        }
+      }
+    }
+    Ok(())
+  }
+
+  /// Records one node's atoms and returns the frame its children sit in. A
+  /// node painted under a non-translation transform becomes a single atom
+  /// spanning its device bounds — windowing through a rotation would distort.
+  fn collect_box_atoms(
+    &mut self,
+    paint: &NodePaint,
+    parent: Affine,
+    atoms: &mut Vec<Atom>,
+  ) -> Result<Affine, PdfError> {
+    let Some(node) = self.root.node_at_path(&paint.path) else {
+      return Ok(parent);
+    };
+    let Ok(layout) = self.results.layout(paint.node_id) else {
+      return Ok(parent);
+    };
+
+    let relative = parent.invert().unwrap_or(Affine::IDENTITY) * paint.transform;
+    if !relative.only_translation() {
+      if let Some(bounds) = paint.paint_bounds {
+        atoms.push((bounds.top as f32, bounds.bottom as f32));
+      }
+      return Ok(parent * relative);
+    }
+    let y = relative.y;
+
+    if node.should_create_inline_layout() {
+      self.collect_text_atoms(collect_inline_items(node), &node.context, layout, y, atoms)?;
+    } else if !node.has_anonymous_text_item_child() {
+      match node.node.as_ref().map(|n| &n.kind) {
+        Some(NodeKind::Text(text)) => {
+          let items = vec![InlineItem::Text {
+            text: text.text.as_str().into(),
+            context: &node.context,
+          }];
+
+          self.collect_text_atoms(items, &node.context, layout, y, atoms)?;
+        }
+        Some(NodeKind::Image(_)) => {
+          atoms.push((y, y + layout.size.height));
+        }
+        _ => {}
+      }
+    }
+    Ok(parent)
+  }
+
+  /// One atom per text line: the union of each run's ascent-to-descent band.
+  fn collect_text_atoms(
+    &mut self,
+    items: Vec<InlineItem<'_>>,
+    context: &RenderContext,
+    layout: Layout,
+    y: f32,
+    atoms: &mut Vec<Atom>,
+  ) -> Result<(), PdfError> {
+    let font_style = SizedFontStyle::from_style(&context.style, context);
+    let Some((_, runs)) = build_inline_runs(items, &font_style, context, layout)? else {
+      return Ok(());
+    };
+
+    for run in &runs.runs {
+      let shaped = &run.glyph_run;
+      let Some(glyph) = shaped.glyphs.first() else {
+        continue;
+      };
+      let offset = run.glyph_offset(layout);
+      let baseline = y + offset.y + glyph.y;
+
+      atoms.push((
+        baseline - shaped.metrics.ascent,
+        baseline + shaped.metrics.descent,
+      ));
+    }
+    Ok(())
+  }
+}
+
+/// Runs inline layout and resolves the paintable run set. `None` when the font
+/// size or content box is degenerate.
+fn build_inline_runs<'c>(
+  items: Vec<InlineItem<'c>>,
+  font_style: &'c SizedFontStyle<'c>,
+  context: &'c RenderContext,
+  layout: Layout,
+) -> Result<Option<(BuiltInlineLayout<'c>, InlineRunLayout)>, PdfError> {
+  let content = layout.content_box_size();
+  if font_style.sizing.font_size == 0.0 || content.width <= 0.0 || content.height <= 0.0 {
+    return Ok(None);
+  }
+
+  let built = create_inline_layout(InlineLayoutRequest {
+    items,
+    available_space: Size {
+      width: AvailableSpace::Definite(content.width),
+      height: AvailableSpace::Definite(content.height),
+    },
+    max_width: content.width,
+    max_height: resolve_inline_max_height(font_style, content.height),
+    style: font_style,
+    context,
+    mode: InlineLayoutMode::Draw,
+  });
+  let runs = resolve_inline_runs(&built, context, layout).map_err(PdfError::Font)?;
+
+  Ok(Some((built, runs)))
 }
 
 fn pop_transforms(surface: &mut Surface, pushed: usize) {
@@ -488,5 +777,35 @@ impl Glyph for PdfGlyph {
 
   fn location(&self) -> Option<krilla::surface::Location> {
     None
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn page_starts_without_atoms_cuts_at_window() {
+    assert_eq!(page_starts(&mut [], 250.0, 100.0), vec![0.0, 100.0, 200.0]);
+  }
+
+  #[test]
+  fn page_starts_pushes_straddling_atom_to_next_page() {
+    let mut atoms = [(90.0, 110.0)];
+
+    assert_eq!(
+      page_starts(&mut atoms, 250.0, 100.0),
+      vec![0.0, 90.0, 190.0]
+    );
+  }
+
+  #[test]
+  fn page_starts_hard_cuts_atom_taller_than_window() {
+    let mut atoms = [(0.0, 300.0)];
+
+    assert_eq!(
+      page_starts(&mut atoms, 300.0, 100.0),
+      vec![0.0, 100.0, 200.0]
+    );
   }
 }

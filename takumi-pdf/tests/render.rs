@@ -7,10 +7,12 @@ use takumi_core::{
   Fonts,
   layout::node::Node,
   resources::font::FontResource,
-  style::{Color, ColorInput, Display, FontSize, Length::*, Style, StyleDeclaration},
+  style::{
+    Color, ColorInput, Display, FlexDirection, FontSize, Length::*, Style, StyleDeclaration,
+  },
   viewport::Viewport,
 };
-use takumi_pdf::{PdfOptions, render};
+use takumi_pdf::{PageOptions, PdfOptions, render};
 
 fn fonts() -> Fonts {
   let mut fonts = Fonts::default();
@@ -57,4 +59,48 @@ fn renders_text_pdf() {
 
   let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/takumi-pdf-poc.pdf");
   fs::write(&out, &pdf).expect("write poc pdf");
+}
+
+#[test]
+fn renders_multi_page_pdf() {
+  let lines: Vec<Node> = (1..=40)
+    .map(|i| {
+      Node::text(format!("Line {i} of the paginated report body")).with_style(
+        Style::default()
+          .with(StyleDeclaration::color(ColorInput::Value(Color([
+            30, 30, 30, 255,
+          ]))))
+          .with(StyleDeclaration::font_size(FontSize::Length(Px(16.0)))),
+      )
+    })
+    .collect();
+  let node = Node::container(lines).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([255, 255, 255, 255]),
+      ))),
+  );
+
+  let fonts = fonts();
+  let pdf = render(
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((400, 200)))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: 24.0,
+      })
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render paged pdf");
+
+  assert!(pdf.starts_with(b"%PDF-"));
+
+  let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/takumi-pdf-poc-pages.pdf");
+  fs::write(&out, &pdf).expect("write paged poc pdf");
 }
