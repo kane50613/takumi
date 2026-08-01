@@ -2023,6 +2023,9 @@ pub struct ShapedRun {
   pub font_size: f32,
   /// Collection index for `skrifa::FontRef::from_index`, paired with [`Self::font_data`].
   pub font_index: u32,
+  /// Byte range of the run's source text within its inline layout's
+  /// [`BuiltInlineLayout::text`].
+  pub text_range: Range<usize>,
   // Accessor, not a `pub` field: the backing `parley` blob must not leak into the public API.
   font_data: parley::fontique::Blob<u8>,
 }
@@ -2250,8 +2253,9 @@ pub fn resolve_inline_runs(
               strikethrough_size: metrics.strikethrough_size,
             },
             font_size: run.font_size(),
-            font_data: run.font().data.clone(),
             font_index: run.font().index,
+            text_range: run.text_range(),
+            font_data: run.font().data.clone(),
           };
 
           runs.push(PositionedInlineRun {
@@ -2708,6 +2712,7 @@ mod tests {
       },
       font_size: 100.0,
       font_index: 0,
+      text_range: 0..0,
       // Not a font: `em_box_descent` falls back to the run metrics instead of OS/2.
       font_data: parley::fontique::Blob::new(Arc::new(Vec::new())),
     }
