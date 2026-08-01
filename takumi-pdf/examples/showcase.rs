@@ -48,156 +48,298 @@ fn html(source: &str) -> Node {
   from_html(source, FromHtmlOptions::default()).unwrap()
 }
 
-fn invoice_items() -> Vec<(&'static str, &'static str, u32, f32)> {
+struct Line {
+  pos: u32,
+  count: u32,
+  product: &'static str,
+  detail: Option<&'static str>,
+  unit: &'static str,
+  quantity: f32,
+  unit_price: f32,
+}
+
+struct Project {
+  name: &'static str,
+  period: &'static str,
+  lines: Vec<Line>,
+}
+
+fn projects() -> Vec<Project> {
+  let mut pos = 0;
+  let mut line = |count, product, detail, unit, quantity, unit_price| {
+    pos += 1;
+    Line {
+      pos,
+      count,
+      product,
+      detail,
+      unit,
+      quantity,
+      unit_price,
+    }
+  };
+
   vec![
-    ("Brand identity refresh", "Fixed fee", 1, 2400.0),
-    ("Landing page build", "Fixed fee", 1, 3200.0),
-    ("OG image pipeline setup", "Fixed fee", 1, 1450.0),
-    ("Design system tokens", "Fixed fee", 1, 980.0),
-    ("Marketing site copywriting", "Per page", 6, 240.0),
-    ("Blog template set", "Per template", 3, 320.0),
-    ("Email template suite", "Per template", 4, 260.0),
-    ("Checkout flow audit", "Fixed fee", 1, 1200.0),
-    ("Accessibility review", "Fixed fee", 1, 890.0),
-    ("Performance tuning sprint", "Per sprint", 2, 1100.0),
-    ("Analytics dashboard", "Fixed fee", 1, 2750.0),
-    ("Illustration pack", "Per piece", 12, 85.0),
-    ("Documentation portal", "Fixed fee", 1, 1980.0),
-    ("Component library QA", "Per sprint", 2, 640.0),
-    ("Social media kit", "Fixed fee", 1, 540.0),
-    ("Onboarding walkthrough", "Fixed fee", 1, 760.0),
-    ("Print collateral templates", "Per template", 5, 180.0),
-    ("Investor deck redesign", "Fixed fee", 1, 1650.0),
-    ("Icon set expansion", "Per piece", 24, 45.0),
-    ("Localization pass (ja, de)", "Per locale", 2, 720.0),
-    ("Newsletter automation setup", "Fixed fee", 1, 830.0),
-    ("Quarterly maintenance retainer", "Per month", 3, 900.0),
-    ("Photography art direction", "Per day", 2, 650.0),
-    ("Launch-day support", "Per day", 1, 480.0),
+    Project {
+      name: "atlas",
+      period: "07/2026",
+      lines: vec![
+        line(
+          1,
+          "Backup",
+          Some("( 20.00% of instance price)"),
+          "%",
+          20.0,
+          7.99,
+        ),
+        line(1, "RX41 Cloud Server", None, "Months", 1.0, 7.99),
+        line(1, "RX22 Cloud Server", None, "Months", 1.0, 4.49),
+        line(2, "Primary IPv4", None, "Months", 2.0, 0.5),
+        line(4, "Snapshot", None, "GB-months", 8.2903, 0.0143),
+        line(
+          2,
+          "TB add. Traffic (20 TB incl. traffic)",
+          None,
+          "TB",
+          0.0,
+          1.0,
+        ),
+        line(1, "Load Balancer LB11", None, "Months", 1.0, 5.39),
+        line(3, "Volume 40 GB", None, "Months", 3.0, 1.91),
+      ],
+    },
+    Project {
+      name: "atlas-staging",
+      period: "07/2026",
+      lines: vec![
+        line(2, "RX23 Cloud Server", None, "Months", 2.0, 3.99),
+        line(1, "Primary IPv4", None, "Months", 1.0, 0.5),
+        line(3, "Snapshot", None, "GB-months", 5.3534, 0.0143),
+        line(
+          1,
+          "TB add. Traffic (20 TB incl. traffic)",
+          None,
+          "TB",
+          0.0,
+          1.0,
+        ),
+      ],
+    },
+    Project {
+      name: "atlas-batch",
+      period: "07/2026",
+      lines: vec![
+        line(6, "RX33 Cloud Server", None, "Months", 6.0, 5.99),
+        line(6, "Primary IPv4", None, "Months", 6.0, 0.5),
+        line(2, "Volume 80 GB", None, "Months", 2.0, 3.83),
+        line(8, "Snapshot", None, "GB-months", 41.208, 0.0143),
+        line(2, "Load Balancer LB11", None, "Months", 2.0, 5.39),
+        line(
+          6,
+          "TB add. Traffic (20 TB incl. traffic)",
+          None,
+          "TB",
+          1.62,
+          1.0,
+        ),
+        line(
+          1,
+          "Backup",
+          Some("( 20.00% of instance price)"),
+          "%",
+          20.0,
+          5.99,
+        ),
+        line(2, "Floating IPv4", None, "Months", 2.0, 4.34),
+      ],
+    },
+    Project {
+      name: "atlas-analytics",
+      period: "07/2026",
+      lines: vec![
+        line(1, "RX52 Cloud Server", None, "Months", 1.0, 12.49),
+        line(2, "Volume 120 GB", None, "Months", 2.0, 5.74),
+        line(
+          1,
+          "Backup",
+          Some("( 20.00% of instance price)"),
+          "%",
+          20.0,
+          12.49,
+        ),
+        line(5, "Snapshot", None, "GB-months", 22.118, 0.0143),
+        line(1, "Floating IPv4", None, "Months", 1.0, 4.34),
+        line(
+          1,
+          "TB add. Traffic (20 TB incl. traffic)",
+          None,
+          "TB",
+          0.14,
+          1.0,
+        ),
+      ],
+    },
   ]
 }
 
-fn invoice_rows(items: &[(&str, &str, u32, f32)]) -> String {
-  items
-    .iter()
-    .map(|(name, basis, qty, rate)| {
-      let amount = *qty as f32 * rate;
+const CELL_RIGHT: &str = "border-left: 1px solid #1c1917; padding: 5px 8px;";
 
-      format!(
-        r##"<div style="display: flex; align-items: center; padding: 9px 0; border-bottom: 1px solid #e7e5e4; font-size: 11px; color: #1c1917;">
-          <div style="flex: 1; display: flex; flex-direction: column;">
-            <span>{name}</span>
-            <span style="font-size: 9px; color: #78716c;">{basis}</span>
+fn table_rows() -> String {
+  let mut out = String::new();
+
+  for project in projects() {
+    let header = format!(
+      r##"<div style="display: flex; border-top: 1px solid #1c1917; font-size: 12px; font-weight: 700; padding: 5px 8px;">Project "{}" ({})</div>"##,
+      project.name, project.period
+    );
+    let mut rows: Vec<String> = Vec::new();
+    let mut subtotal = 0.0_f32;
+
+    for line in &project.lines {
+      let amount = line_amount(line);
+
+      subtotal += amount;
+      let stripe = if line.pos % 2 == 1 {
+        "background-color: #d9d9d9;"
+      } else {
+        ""
+      };
+      let detail = line
+        .detail
+        .map(|d| format!(r##"<span>{d}</span>"##))
+        .unwrap_or_default();
+
+      rows.push(format!(
+        r##"<div style="display: flex; border-top: 1px solid #1c1917; font-size: 12px; {stripe}">
+          <div style="width: 44px; text-align: right; padding: 5px 8px;">{pos}</div>
+          <div style="width: 74px; text-align: right; {CELL_RIGHT}">{count}</div>
+          <div style="flex: 1; display: flex; flex-direction: column; {CELL_RIGHT}">
+            <span>{product}</span>{detail}
           </div>
-          <div style="width: 60px; text-align: right;">{qty}</div>
-          <div style="width: 110px; text-align: right;">{rate:.2}</div>
-          <div style="width: 120px; text-align: right;">{amount:.2}</div>
-        </div>"##
-      )
-    })
-    .collect()
+          <div style="width: 88px; {CELL_RIGHT}">{unit}</div>
+          <div style="width: 82px; text-align: right; {CELL_RIGHT}">{quantity}</div>
+          <div style="width: 92px; text-align: right; {CELL_RIGHT}">€ {unit_price:.4}</div>
+          <div style="width: 106px; text-align: right; {CELL_RIGHT}">€ {amount:.4}</div>
+        </div>"##,
+        pos = line.pos,
+        count = line.count,
+        product = line.product,
+        unit = line.unit,
+        quantity = line.quantity,
+        unit_price = line.unit_price,
+      ));
+    }
+
+    let subtotal_row = format!(
+      r##"<div style="display: flex; justify-content: flex-end; border-top: 1px solid #1c1917; font-size: 12px; font-weight: 700;">
+        <div style="padding: 5px 8px;">Subtotal (excl. VAT)</div>
+        <div style="width: 106px; text-align: right; {CELL_RIGHT}">€ {subtotal:.2}</div>
+      </div>"##
+    );
+
+    // The section header stays with its first row, and the subtotal with the
+    // last row, so a page cut never strands either alone.
+    let first = rows.remove(0);
+    let last = rows.pop();
+
+    out.push_str(&format!(
+      r##"<div style="display: flex; flex-direction: column; break-inside: avoid;">{header}{first}</div>"##
+    ));
+    for row in &rows {
+      out.push_str(row);
+    }
+    match last {
+      Some(last) => out.push_str(&format!(
+        r##"<div style="display: flex; flex-direction: column; break-inside: avoid;">{last}{subtotal_row}</div>"##
+      )),
+      None => out.push_str(&subtotal_row),
+    }
+  }
+  out
 }
 
-const INVOICE_FOOTER: &str = r##"<div style="display: flex; width: 100%; justify-content: space-between; align-items: center; padding: 14px 64px; font-size: 8.5px; color: #a8a29e; border-top: 1px solid #e7e5e4;">
-  <span>Northwind Studio LLC · Registered in Oregon, USA · EIN 87-1234567</span>
-  <span>Page {page} of {pages}</span>
+const INVOICE_FOOTER: &str = r##"<div style="display: flex; flex-direction: column; width: 100%; padding: 0 72px 20px 72px; font-size: 8.5px; color: #1c1917;">
+  <div style="display: flex; justify-content: flex-end; padding-bottom: 10px;"><span>{page} / {pages}</span></div>
+  <div style="display: flex; gap: 24px; padding-top: 10px; border-top: 1px solid #9ca3af;">
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 1px;">
+      <span style="font-weight: 700;">Ridgeline Cloud GmbH</span>
+      <span>CEO: Mara Lindqvist,</span>
+      <span>Jonas Weber, Priya Nair</span>
+      <span>Freiburg Registration Office: HRB 71442</span>
+      <span>VAT Reg. No.: DE318271644</span>
+    </div>
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 1px;">
+      <span>Bergwerkstr. 11</span>
+      <span>79098 Freiburg | Germany</span>
+      <span>Tel.: +49 761 4405-0</span>
+      <span>Fax: +49 761 4405-19</span>
+      <span>billing@ridgeline.example | www.ridgeline.example</span>
+    </div>
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 1px;">
+      <span>Bank details:</span>
+      <span>Commerzbank AG Freiburg</span>
+      <span>IBAN: DE89 6808 0030 0110 2334 00</span>
+      <span>BIC: COBADEFFXXX</span>
+    </div>
+  </div>
 </div>"##;
 
-fn thousands(value: f32) -> String {
-  let cents = (value * 100.0).round() as i64;
-  let (whole, frac) = (cents / 100, cents % 100);
-  let mut digits = whole.to_string();
-  let mut grouped = String::new();
-
-  while digits.len() > 3 {
-    let tail = digits.split_off(digits.len() - 3);
-
-    grouped = format!(",{tail}{grouped}");
+fn line_amount(line: &Line) -> f32 {
+  if line.unit == "%" {
+    line.unit_price * line.quantity / 100.0 * line.count as f32
+  } else {
+    line.unit_price * line.quantity
   }
-  format!("{digits}{grouped}.{frac:02}")
 }
 
 fn invoice_html() -> String {
-  let items = invoice_items();
-  let rows = invoice_rows(&items);
-  let subtotal: f32 = items
+  let rows = table_rows();
+  let net: f32 = projects()
     .iter()
-    .map(|(_, _, qty, rate)| *qty as f32 * rate)
+    .flat_map(|p| p.lines.iter())
+    .map(line_amount)
     .sum();
-  let tax = subtotal * 0.08;
-  let total = subtotal + tax;
-  let subtotal = thousands(subtotal);
-  let tax = thousands(tax);
-  let total = thousands(total);
+  let vat = net * 0.19;
+  let gross = net + vat;
 
   format!(
-    r##"<div style="display: flex; flex-direction: column; width: 100%; background-color: #ffffff; color: #1c1917; padding: 56px 64px 0 64px;">
+    r##"<div style="display: flex; flex-direction: column; width: 100%; color: #1c1917; padding: 48px 72px 0 72px;">
 
-  <div style="display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 18px; border-bottom: 2px solid #1c1917;">
-    <div style="display: flex; flex-direction: column; gap: 3px;">
-      <span style="font-size: 15px; font-weight: 700; letter-spacing: 3px;">NORTHWIND STUDIO</span>
-      <span style="font-size: 9.5px; color: #57534e;">128 Harbor Lane, Suite 4, Portland, OR 97209 · +1 (503) 555-0148 · billing@northwindstudio.example</span>
-    </div>
-    <span style="font-size: 24px; font-weight: 300; letter-spacing: 6px;">INVOICE</span>
+  <div style="display: flex; justify-content: flex-end;">
+    <span style="font-size: 34px; font-weight: 800; letter-spacing: 2px; color: #d50c2d;">RIDGELINE</span>
   </div>
 
-  <div style="display: flex; padding: 18px 0; border-bottom: 1px solid #e7e5e4;">
-    <div style="flex: 1; display: flex; flex-direction: column; gap: 3px;">
-      <span style="font-size: 8.5px; letter-spacing: 1.5px; color: #78716c;">BILLED TO</span>
-      <span style="font-size: 12px; font-weight: 600;">Acme Robotics Inc.</span>
-      <span style="font-size: 10px; color: #57534e;">501 Mission Street, Floor 9</span>
-      <span style="font-size: 10px; color: #57534e;">San Francisco, CA 94105</span>
-      <span style="font-size: 10px; color: #57534e;">accounts-payable@acme.example</span>
-    </div>
-    <div style="display: flex; gap: 40px;">
-      <div style="display: flex; flex-direction: column; gap: 10px;">
-        <div style="display: flex; flex-direction: column; gap: 2px;">
-          <span style="font-size: 8.5px; letter-spacing: 1.5px; color: #78716c;">INVOICE NO.</span>
-          <span style="font-size: 11px;">2026-0142</span>
-        </div>
-        <div style="display: flex; flex-direction: column; gap: 2px;">
-          <span style="font-size: 8.5px; letter-spacing: 1.5px; color: #78716c;">TERMS</span>
-          <span style="font-size: 11px;">Net 30</span>
-        </div>
-      </div>
-      <div style="display: flex; flex-direction: column; gap: 10px;">
-        <div style="display: flex; flex-direction: column; gap: 2px;">
-          <span style="font-size: 8.5px; letter-spacing: 1.5px; color: #78716c;">ISSUE DATE</span>
-          <span style="font-size: 11px;">August 2, 2026</span>
-        </div>
-        <div style="display: flex; flex-direction: column; gap: 2px;">
-          <span style="font-size: 8.5px; letter-spacing: 1.5px; color: #78716c;">DUE DATE</span>
-          <span style="font-size: 11px;">September 1, 2026</span>
-        </div>
-      </div>
-    </div>
+  <div style="display: flex; align-items: flex-start; margin-top: 10px;">
+    <div style="flex: 1; height: 2px; background-color: #6b7280; margin-top: 0;"></div>
+    <div style="width: 26px; height: 2px; background-color: #6b7280; transform: rotate(18deg); transform-origin: left top;"></div>
+    <div style="width: 300px; height: 2px; background-color: #6b7280; margin-top: 8px;"></div>
   </div>
 
-  <div style="display: flex; flex-direction: column; margin-top: 26px;">
-    <div style="display: flex; padding-bottom: 7px; border-bottom: 1px solid #1c1917; font-size: 8.5px; letter-spacing: 1.5px; color: #57534e;">
-      <div style="flex: 1;">DESCRIPTION</div>
-      <div style="width: 60px; text-align: right;">QTY</div>
-      <div style="width: 110px; text-align: right;">UNIT PRICE (USD)</div>
-      <div style="width: 120px; text-align: right;">AMOUNT (USD)</div>
+  <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 1px; margin-top: 56px; font-size: 12px;">
+    <span>Customer ID: K1846220317</span>
+    <span>Invoice no.: 086001022594</span>
+    <span>Invoice date: 28/07/2026</span>
+  </div>
+
+  <div style="display: flex; flex-direction: column; border: 1px solid #1c1917; border-top-width: 0; margin-top: 28px;">
+    <div style="display: flex; border-top: 1px solid #1c1917; font-size: 12px; font-weight: 700;">
+      <div style="width: 44px; text-align: right; padding: 5px 8px; display: flex; align-items: flex-end; justify-content: flex-end;">Pos</div>
+      <div style="width: 74px; text-align: right; {CELL_RIGHT}">Product count</div>
+      <div style="flex: 1; display: flex; align-items: flex-end; {CELL_RIGHT}">Product</div>
+      <div style="width: 88px; display: flex; align-items: flex-end; {CELL_RIGHT}">Unit</div>
+      <div style="width: 82px; text-align: right; display: flex; align-items: flex-end; justify-content: flex-end; {CELL_RIGHT}">Quantity</div>
+      <div style="width: 92px; text-align: right; display: flex; align-items: flex-end; justify-content: flex-end; {CELL_RIGHT}">Unit Price</div>
+      <div style="width: 106px; text-align: right; display: flex; align-items: flex-end; justify-content: flex-end; {CELL_RIGHT}">Price (excl. VAT)</div>
     </div>
     {rows}
   </div>
 
-  <div style="display: flex; justify-content: flex-end; padding-top: 14px; break-inside: avoid;">
-    <div style="width: 290px; display: flex; flex-direction: column; font-size: 11px; color: #1c1917;">
-      <div style="display: flex; justify-content: space-between; padding: 4px 0;"><span style="color: #57534e;">Subtotal</span><span>{subtotal}</span></div>
-      <div style="display: flex; justify-content: space-between; padding: 4px 0;"><span style="color: #57534e;">Sales tax (8.0%)</span><span>{tax}</span></div>
-      <div style="display: flex; justify-content: space-between; margin-top: 6px; padding: 7px 0 2px 0; border-top: 1px solid #1c1917; font-weight: 700; font-size: 12.5px;">
-        <span>Total due</span><span>USD {total}</span>
-      </div>
-      <div style="height: 1px; background-color: #1c1917; margin-top: 2px;"></div>
+  <div style="display: flex; justify-content: flex-end; margin: 14px 0 40px 0; break-inside: avoid;">
+    <div style="width: 300px; display: flex; flex-direction: column; font-size: 12px;">
+      <div style="display: flex; justify-content: space-between; padding: 3px 8px;"><span>Total (excl. VAT)</span><span>€ {net:.2}</span></div>
+      <div style="display: flex; justify-content: space-between; padding: 3px 8px;"><span>VAT 19.00%</span><span>€ {vat:.2}</span></div>
+      <div style="display: flex; justify-content: space-between; padding: 5px 8px; border-top: 1px solid #1c1917; font-weight: 700;"><span>Invoice amount</span><span>€ {gross:.2}</span></div>
     </div>
-  </div>
-
-  <div style="display: flex; flex-direction: column; gap: 3px; margin: 30px 0 48px 0; padding-top: 14px; border-top: 1px solid #e7e5e4; break-inside: avoid;">
-    <span style="font-size: 8.5px; letter-spacing: 1.5px; color: #78716c;">PAYMENT INSTRUCTIONS</span>
-    <span style="font-size: 10px; color: #57534e;">First National Bank · Account 4402-118821 · Routing 123000848 · Reference: INV 2026-0142</span>
-    <span style="font-size: 10px; color: #57534e;">Payment is due within 30 days of the issue date. Please reference the invoice number with your remittance.</span>
   </div>
 </div>"##
   )
