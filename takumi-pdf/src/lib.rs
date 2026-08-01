@@ -436,9 +436,14 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         }
 
         let content_top = page.margin + header_height;
+        // Paint stops at the next cut: the region between a raised cut and the
+        // page's full height belongs to the next page and stays blank, exactly
+        // like browser print fragmentation.
+        let next_start = starts.get(index + 1).copied().unwrap_or(f32::INFINITY);
+        let paint_height = (next_start - y0).min(window_height);
 
         if let Some(window) =
-          KrillaRect::from_xywh(page.margin, content_top, content_width, window_height)
+          KrillaRect::from_xywh(page.margin, content_top, content_width, paint_height)
         {
           let mut builder = PathBuilder::new();
 
@@ -448,11 +453,9 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
             surface.push_transform(&Transform::from_translate(page.margin, content_top - y0));
             let mut emitter = content.emitter(&mut fonts);
 
-            emitter.window = Some((y0, y0 + window_height));
-            emitter.line_window = Some((
-              if index == 0 { f32::NEG_INFINITY } else { y0 },
-              starts.get(index + 1).copied().unwrap_or(f32::INFINITY),
-            ));
+            emitter.window = Some((y0, y0 + paint_height));
+            emitter.line_window =
+              Some((if index == 0 { f32::NEG_INFINITY } else { y0 }, next_start));
             emitter.emit_context(0, Affine::IDENTITY, &mut surface)?;
             surface.pop();
             surface.pop();
