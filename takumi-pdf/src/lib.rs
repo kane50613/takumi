@@ -108,14 +108,92 @@ pub struct PageOptions {
   pub margin: f32,
 }
 
+/// Millimeters to CSS px (96 dpi).
+fn mm(value: f32) -> f32 {
+  value / 25.4 * 96.0
+}
+
+/// Inches to CSS px (96 dpi).
+fn inches(value: f32) -> f32 {
+  value * 96.0
+}
+
+/// Every preset is portrait with a half-inch margin; chain
+/// [`landscape`](Self::landscape) and [`with_margin`](Self::with_margin) to
+/// adjust. The set mirrors the CSS `@page` size keywords.
 impl PageOptions {
-  /// A4 portrait at 96 dpi with a half-inch margin.
-  pub fn a4() -> Self {
+  const DEFAULT_MARGIN: f32 = 48.0;
+
+  fn preset(width: f32, height: f32) -> Self {
     Self {
-      width: 794.0,
-      height: 1123.0,
-      margin: 48.0,
+      width,
+      height,
+      margin: Self::DEFAULT_MARGIN,
     }
+  }
+
+  /// ISO A3: 297 × 420 mm.
+  pub fn a3() -> Self {
+    Self::preset(mm(297.0), mm(420.0))
+  }
+
+  /// ISO A4: 210 × 297 mm.
+  pub fn a4() -> Self {
+    Self::preset(mm(210.0), mm(297.0))
+  }
+
+  /// ISO A5: 148 × 210 mm.
+  pub fn a5() -> Self {
+    Self::preset(mm(148.0), mm(210.0))
+  }
+
+  /// ISO B4: 250 × 353 mm.
+  pub fn b4() -> Self {
+    Self::preset(mm(250.0), mm(353.0))
+  }
+
+  /// ISO B5: 176 × 250 mm.
+  pub fn b5() -> Self {
+    Self::preset(mm(176.0), mm(250.0))
+  }
+
+  /// JIS B4: 257 × 364 mm.
+  pub fn jis_b4() -> Self {
+    Self::preset(mm(257.0), mm(364.0))
+  }
+
+  /// JIS B5: 182 × 257 mm.
+  pub fn jis_b5() -> Self {
+    Self::preset(mm(182.0), mm(257.0))
+  }
+
+  /// US Letter: 8.5 × 11 in.
+  pub fn letter() -> Self {
+    Self::preset(inches(8.5), inches(11.0))
+  }
+
+  /// US Legal: 8.5 × 14 in.
+  pub fn legal() -> Self {
+    Self::preset(inches(8.5), inches(14.0))
+  }
+
+  /// US Ledger/Tabloid: 11 × 17 in.
+  pub fn ledger() -> Self {
+    Self::preset(inches(11.0), inches(17.0))
+  }
+
+  /// Swaps width and height.
+  pub fn landscape(self) -> Self {
+    Self {
+      width: self.height,
+      height: self.width,
+      ..self
+    }
+  }
+
+  /// Replaces the uniform margin.
+  pub fn with_margin(self, margin: f32) -> Self {
+    Self { margin, ..self }
   }
 
   fn content_size(&self) -> (f32, f32) {
@@ -807,5 +885,23 @@ mod tests {
       page_starts(&mut atoms, 300.0, 100.0),
       vec![0.0, 100.0, 200.0]
     );
+  }
+
+  #[test]
+  fn presets_match_css_page_keywords() {
+    let a4 = PageOptions::a4();
+
+    assert!((a4.width - 793.7).abs() < 0.1);
+    assert!((a4.height - 1122.5).abs() < 0.1);
+
+    let letter = PageOptions::letter();
+
+    assert_eq!((letter.width, letter.height), (816.0, 1056.0));
+
+    let landscape = PageOptions::a4().landscape();
+
+    assert_eq!(landscape.width, a4.height);
+    assert_eq!(landscape.height, a4.width);
+    assert_eq!(PageOptions::a4().with_margin(0.0).margin, 0.0);
   }
 }
