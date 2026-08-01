@@ -22,7 +22,7 @@ fn main() {
     PdfOptions::builder()
       .node(invoice())
       .viewport(Viewport::new((794, 1123)))
-      .page(PageOptions::a4().with_margin(0.0))
+      .page(PageOptions::a4().with_margin(36.0))
       .footer(html(INVOICE_FOOTER))
       .fonts(&fonts)
       .build(),
@@ -258,7 +258,7 @@ fn table_rows() -> String {
   out
 }
 
-const INVOICE_FOOTER: &str = r##"<div style="display: flex; flex-direction: column; width: 100%; padding: 0 72px 20px 72px; font-size: 8.5px; color: #1c1917;">
+const INVOICE_FOOTER: &str = r##"<div style="display: flex; flex-direction: column; width: 100%; padding: 0 36px; font-size: 8.5px; color: #1c1917;">
   <div style="display: flex; justify-content: flex-end; padding-bottom: 10px;"><span>{page} / {pages}</span></div>
   <div style="display: flex; gap: 24px; padding-top: 10px; border-top: 1px solid #9ca3af;">
     <div style="flex: 1; display: flex; flex-direction: column; gap: 1px;">
@@ -303,7 +303,7 @@ fn invoice_html() -> String {
   let gross = net + vat;
 
   format!(
-    r##"<div style="display: flex; flex-direction: column; width: 100%; color: #1c1917; padding: 48px 72px 0 72px;">
+    r##"<div style="display: flex; flex-direction: column; width: 100%; color: #1c1917; padding: 8px 36px 0 36px;">
 
   <div style="display: flex; justify-content: flex-end;">
     <span style="font-size: 34px; font-weight: 800; letter-spacing: 2px; color: #d50c2d;">RIDGELINE</span>
