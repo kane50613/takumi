@@ -153,3 +153,33 @@ fn renders_page_footer_with_counters() {
   let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/takumi-pdf-poc-footer.pdf");
   fs::write(&out, &pdf).expect("write footer poc pdf");
 }
+
+#[test]
+fn renders_ligature_text() {
+  let text = Node::text("Difficult office traffic affix".to_string()).with_style(
+    Style::default()
+      .with(StyleDeclaration::color(ColorInput::Value(Color([
+        0, 0, 0, 255,
+      ]))))
+      .with(StyleDeclaration::font_size(FontSize::Length(Px(24.0)))),
+  );
+  let node = Node::container([text]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0))),
+  );
+
+  let fonts = fonts();
+  let pdf = render(
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((600, 100)))
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render ligature pdf");
+
+  let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/takumi-pdf-poc-liga.pdf");
+  fs::write(&out, &pdf).expect("write liga poc pdf");
+}

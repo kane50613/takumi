@@ -2003,6 +2003,51 @@ pub struct RunMetrics {
   pub strikethrough_size: f32,
 }
 
+/// Per-glyph cluster text ranges for a [`GlyphRun`], aligned to its positioned
+/// glyphs. A `GlyphRun` is a style-split window into its underlying run, so the
+/// full visual-order cluster expansion is matched against the positioned glyph
+/// ids to find the window offset; the common single-style case starts at zero.
+/// Returns an empty vec when no window matches (alignment unknown).
+fn glyph_cluster_ranges(
+  glyph_run: &GlyphRun<'_, InlineBrush>,
+  positioned: &[PositionedGlyph],
+) -> Vec<Range<usize>> {
+  let mut full: Vec<(u32, Range<usize>)> = Vec::new();
+
+  for cluster in glyph_run.run().visual_clusters() {
+    let range = cluster.text_range();
+    let before = full.len();
+
+    for glyph in cluster.glyphs() {
+      full.push((glyph.id, range.clone()));
+    }
+    // A glyph-less cluster is a ligature continuation: fold its text into the
+    // carrying glyph so the ligature maps to its full source text.
+    if full.len() == before
+      && let Some((_, last)) = full.last_mut()
+    {
+      last.start = last.start.min(range.start);
+      last.end = last.end.max(range.end);
+    }
+  }
+  let count = positioned.len();
+
+  let matches_at = |start: usize| {
+    full[start..start + count]
+      .iter()
+      .zip(positioned)
+      .all(|((id, _), glyph)| *id == glyph.id)
+  };
+  let Some(start) = (0..=full.len().saturating_sub(count)).find(|&s| matches_at(s)) else {
+    return Vec::new();
+  };
+
+  full[start..start + count]
+    .iter()
+    .map(|(_, range)| range.clone())
+    .collect()
+}
+
 /// A shaped, positioned glyph run — the core-owned replacement for
 /// `parley::GlyphRun`. Owns everything both backends need to paint a run; carries
 /// no borrow into the parley layout.
@@ -2026,6 +2071,10 @@ pub struct ShapedRun {
   /// Byte range of the run's source text within its inline layout's
   /// [`BuiltInlineLayout::text`].
   pub text_range: Range<usize>,
+  /// Per-glyph cluster byte ranges into [`BuiltInlineLayout::text`], parallel
+  /// to [`Self::glyphs`] (visual order). Empty when alignment failed; treat as
+  /// unknown.
+  pub cluster_ranges: Vec<Range<usize>>,
   // Accessor, not a `pub` field: the backing `parley` blob must not leak into the public API.
   font_data: parley::fontique::Blob<u8>,
 }
@@ -2231,15 +2280,17 @@ pub fn resolve_inline_runs(
           }
 
           let metrics = run.metrics();
+          let glyphs: Vec<PositionedGlyph> = glyph_run
+            .positioned_glyphs()
+            .map(|g| PositionedGlyph {
+              id: g.id,
+              x: g.x,
+              y: g.y,
+            })
+            .collect();
+          let cluster_ranges = glyph_cluster_ranges(&glyph_run, &glyphs);
           let shaped = ShapedRun {
-            glyphs: glyph_run
-              .positioned_glyphs()
-              .map(|g| PositionedGlyph {
-                id: g.id,
-                x: g.x,
-                y: g.y,
-              })
-              .collect(),
+            glyphs,
             offset: glyph_run.offset(),
             baseline: glyph_run.baseline(),
             advance: glyph_run.advance(),
@@ -2255,6 +2306,7 @@ pub fn resolve_inline_runs(
             font_size: run.font_size(),
             font_index: run.font().index,
             text_range: run.text_range(),
+            cluster_ranges,
             font_data: run.font().data.clone(),
           };
 
@@ -2713,6 +2765,7 @@ mod tests {
       font_size: 100.0,
       font_index: 0,
       text_range: 0..0,
+      cluster_ranges: Vec::new(),
       // Not a font: `em_box_descent` falls back to the run metrics instead of OS/2.
       font_data: parley::fontique::Blob::new(Arc::new(Vec::new())),
     }

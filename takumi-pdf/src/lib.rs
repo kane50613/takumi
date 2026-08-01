@@ -41,7 +41,8 @@ use takumi_core::{
   layout::{
     inline::{
       BuiltInlineLayout, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineRunLayout,
-      collect_inline_items, create_inline_layout, resolve_inline_max_height, resolve_inline_runs,
+      ShapedRun, collect_inline_items, create_inline_layout, resolve_inline_max_height,
+      resolve_inline_runs,
     },
     node::{Node, NodeKind, TextData},
     tree::{LayoutResults, LayoutTree, RenderNode},
@@ -756,7 +757,7 @@ impl Emitter<'_> {
         .text
         .get(shaped.text_range.clone())
         .unwrap_or_default();
-      let spans = glyph_text_spans(run_text, shaped.glyphs.len());
+      let spans = glyph_text_spans(shaped, run_text);
 
       let glyphs: Vec<PdfGlyph> = shaped
         .glyphs
@@ -956,13 +957,28 @@ fn fill_from_rgba(rgba: [u8; 4], opacity: f32) -> Fill {
   }
 }
 
-/// Per-glyph byte ranges into `run_text` for ToUnicode. One char per glyph when
-/// the counts line up (true for 1:1 shaping, which covers Latin without
-/// ligatures and CJK); otherwise every glyph maps to the whole run.
-// ponytail: cluster-accurate ranges need per-glyph cluster data threaded through
-// takumi-core's ShapedRun; add when ligature-heavy scripts matter.
-fn glyph_text_spans(run_text: &str, glyph_count: usize) -> Vec<Range<usize>> {
+/// Per-glyph byte ranges into `run_text` for ToUnicode, from the shaper's
+/// cluster segmentation (correct for ligatures and complex scripts).
+fn glyph_text_spans(shaped: &ShapedRun, run_text: &str) -> Vec<Range<usize>> {
+  let base = shaped.text_range.start;
+
+  if shaped.cluster_ranges.len() == shaped.glyphs.len() {
+    return shaped
+      .cluster_ranges
+      .iter()
+      .map(|range| {
+        let start = range.start.saturating_sub(base).min(run_text.len());
+        let end = range.end.saturating_sub(base).min(run_text.len());
+
+        if start <= end { start..end } else { 0..0 }
+      })
+      .collect();
+  }
+
+  // Alignment unknown: fall back to one char per glyph when the counts line
+  // up, else map every glyph to the whole run.
   let char_count = run_text.chars().count();
+  let glyph_count = shaped.glyphs.len();
 
   if char_count == glyph_count {
     let mut spans = Vec::with_capacity(glyph_count);
@@ -970,6 +986,7 @@ fn glyph_text_spans(run_text: &str, glyph_count: usize) -> Vec<Range<usize>> {
 
     while let Some((start, _)) = indices.next() {
       let end = indices.peek().map_or(run_text.len(), |(next, _)| *next);
+
       spans.push(start..end);
     }
     spans
