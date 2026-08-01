@@ -18,12 +18,16 @@
 //! `break-inside: avoid`; repeated header/footer bands carve their height out
 //! of the content window and substitute `{page}` / `{pages}` in text.
 //!
-//! Coverage so far: background-color, text runs (fill color and opacity),
-//! nested containers, affine transforms, pagination. Not yet: borders, radius,
-//! gradients, images, shadows, filters, clipping, text decorations.
+//! Coverage: backgrounds (color and gradient layers), borders and radius,
+//! images (`object-fit`/`object-position`), text with decorations, opacity,
+//! blend modes, overflow clipping, affine transforms, pagination. Not yet:
+//! box-shadow, filters, `clip-path`, masks, `background-size`/`position`/
+//! `repeat`, url() background layers, SVG image sources.
 
 use std::{collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
+#[cfg(feature = "images")]
+use krilla::image::Image as KrillaImage;
 use krilla::{
   Data, Document,
   blend::BlendMode as KrillaBlendMode,
@@ -69,6 +73,12 @@ use takumi_core::{
   },
   viewport::Viewport,
 };
+#[cfg(feature = "images")]
+use takumi_core::{
+  layout::node::ImageData,
+  resources::image::{ImageSource, RenderedImage},
+  style::{Length, ObjectFit, PositionComponent},
+};
 use typed_builder::TypedBuilder;
 
 /// Errors from [`render`].
@@ -102,6 +112,9 @@ pub struct PdfOptions<'g> {
   /// CSS stylesheets to apply before layout.
   #[builder(default)]
   pub(crate) stylesheet: Arc<StyleSheet>,
+  /// Resources fetched externally, keyed by URL.
+  #[builder(default)]
+  pub(crate) images: HashMap<Arc<str>, takumi_core::resources::image::ImageSource>,
   /// Paged output; `None` renders a single page at the viewport size.
   #[builder(default, setter(strip_option))]
   pub(crate) page: Option<PageOptions>,
@@ -234,6 +247,7 @@ impl PageOptions {
 struct TreeInputs<'g> {
   fonts: &'g Fonts,
   stylesheet: Arc<StyleSheet>,
+  images: Rc<HashMap<Arc<str>, takumi_core::resources::image::ImageSource>>,
   font_families: Option<FontFamily>,
   lang: Option<Lang>,
 }
@@ -272,7 +286,7 @@ fn prepare_tree(
         .snapshot_with_fallbacks(inputs.font_families.as_ref()),
     )
     .sizing(SizingContext::builder().viewport(viewport).build())
-    .images(Rc::new(HashMap::new()))
+    .images(inputs.images.clone())
     .stylesheet(inputs.stylesheet.clone())
     .style(Box::new(ComputedStyle {
       lang: inputs.lang,
@@ -383,6 +397,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
   let inputs = TreeInputs {
     fonts: options.fonts,
     stylesheet: options.stylesheet,
+    images: Rc::new(options.images),
     font_families: options.font_families,
     lang: options.lang,
   };
@@ -914,7 +929,6 @@ impl Emitter<'_> {
         .into()
       }
       BackgroundImage::Url(_) | BackgroundImage::None => return,
-      _ => return,
     };
 
     let Some(rect) = KrillaRect::from_xywh(x, y, w, h) else {
@@ -1025,7 +1039,88 @@ impl Emitter<'_> {
     }
     match node.node.as_ref().map(|n| &n.kind) {
       Some(NodeKind::Text(text)) => self.emit_text(text, &node.context, layout, x, y, surface),
+      #[cfg(feature = "images")]
+      Some(NodeKind::Image(image)) => {
+        self.emit_image(image, &node.context, layout, x, y, surface);
+        Ok(())
+      }
       _ => Ok(()),
+    }
+  }
+
+  #[cfg(feature = "images")]
+  /// Draws an image node into its content box, honoring `object-fit` and
+  /// `object-position`. The source rasterizes at its intrinsic size and embeds
+  /// once per distinct pixel data (krilla dedups by content hash).
+  // ponytail: JPEG bytes re-encode as flate; DCT passthrough needs krilla's
+  // raster-images feature, add when PDF size from photos matters.
+  fn emit_image(
+    &self,
+    image: &ImageData,
+    context: &RenderContext,
+    layout: Layout,
+    x: f32,
+    y: f32,
+    surface: &mut Surface,
+  ) {
+    let content = layout.content_box_size();
+    let offset = layout.content_box_offset();
+    let (bx, by, w, h) = (x + offset.x, y + offset.y, content.width, content.height);
+    if w <= 0.0 || h <= 0.0 {
+      return;
+    }
+    let Ok(source) = image.src.resolve(context) else {
+      return;
+    };
+    let Some(krilla_image) = rasterized_image(&source, context) else {
+      return;
+    };
+
+    let (iw, ih) = {
+      let (width, height) = source.size(&context.sizing);
+      if width <= 0.0 || height <= 0.0 {
+        return;
+      }
+      (width, height)
+    };
+    let scale = match context.style.object_fit {
+      ObjectFit::Contain => (w / iw).min(h / ih),
+      ObjectFit::Cover => (w / iw).max(h / ih),
+      ObjectFit::ScaleDown => (w / iw).min(h / ih).min(1.0),
+      _ => 0.0,
+    };
+    let (dw, dh) = if matches!(context.style.object_fit, ObjectFit::Fill) || scale == 0.0 {
+      (w, h)
+    } else {
+      (iw * scale, ih * scale)
+    };
+    let position = context.style.object_position.0;
+    let ix = bx + position_axis(position.x, context, w - dw);
+    let iy = by + position_axis(position.y, context, h - dh);
+
+    let Some(size) = KrillaSize::from_wh(dw, dh) else {
+      return;
+    };
+    let overflows = dw > w + 0.5 || dh > h + 0.5;
+
+    if overflows {
+      let Some(rect) = KrillaRect::from_xywh(bx, by, w, h) else {
+        return;
+      };
+      let mut builder = PathBuilder::new();
+
+      builder.push_rect(rect);
+      if let Some(path) = builder.finish() {
+        surface.push_clip_path(&path, &FillRule::NonZero);
+      } else {
+        return;
+      }
+    }
+    surface.push_transform(&Transform::from_translate(ix, iy));
+    surface.draw_image(krilla_image, size);
+    surface.pop();
+    if overflows {
+      surface.pop();
     }
   }
 
@@ -1373,6 +1468,53 @@ fn draw_decoration(surface: &mut Surface, decoration: &DecorationRect, x: f32, y
   surface.set_fill(Some(fill_from_rgba(decoration.color.0, 1.0)));
   surface.draw_path(&path);
   surface.pop();
+}
+
+/// Resolves one `object-position` axis to an offset within `available` space.
+#[cfg(feature = "images")]
+fn position_axis(component: PositionComponent, context: &RenderContext, available: f32) -> f32 {
+  match Length::from(component) {
+    Length::Auto => available * 0.5,
+    length => length.to_px(&context.sizing, available),
+  }
+}
+
+/// Rasterizes an image source at its intrinsic size into a krilla image.
+/// SVG sources are skipped for now.
+#[cfg(feature = "images")]
+fn rasterized_image(source: &ImageSource, context: &RenderContext) -> Option<KrillaImage> {
+  let (width, height) = match source {
+    ImageSource::Bitmap(bitmap) => (bitmap.width(), bitmap.height()),
+    ImageSource::Gif(gif) => gif.dimensions(),
+    ImageSource::Encoded(encoded) => encoded.dimensions(),
+    _ => return None,
+  };
+  if width == 0 || height == 0 {
+    return None;
+  }
+  let rendered = source
+    .render_for_layout(width, height, context.style.image_rendering, 0)
+    .ok()?;
+  let buffer = match &rendered {
+    RenderedImage::Rasterized(buffer) => buffer.as_ref(),
+    RenderedImage::Sampled { source, .. } => source.as_ref(),
+  };
+  let mut data = buffer.data().to_vec();
+
+  for pixel in data.chunks_exact_mut(4) {
+    let alpha = pixel[3];
+    if alpha != 0 && alpha != 255 {
+      let alpha16 = u16::from(alpha);
+      pixel[0] = ((u16::from(pixel[0]) * 255 + alpha16 / 2) / alpha16).min(255) as u8;
+      pixel[1] = ((u16::from(pixel[1]) * 255 + alpha16 / 2) / alpha16).min(255) as u8;
+      pixel[2] = ((u16::from(pixel[2]) * 255 + alpha16 / 2) / alpha16).min(255) as u8;
+    }
+  }
+  Some(KrillaImage::from_rgba8(
+    data,
+    buffer.width(),
+    buffer.height(),
+  ))
 }
 
 fn spread(repeating: bool) -> SpreadMethod {

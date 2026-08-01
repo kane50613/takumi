@@ -362,3 +362,51 @@ fn renders_gradients() {
   let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/takumi-pdf-poc-gradients.pdf");
   fs::write(&out, &pdf).expect("write gradients poc pdf");
 }
+
+#[test]
+fn renders_image_node() {
+  use takumi_core::layout::node::{ImageData, ImageSourceInput, RgbaImage};
+
+  let mut pixels = Vec::with_capacity(8 * 8 * 4);
+
+  for row in 0..8u32 {
+    for col in 0..8u32 {
+      let on = (row / 2 + col / 2) % 2 == 0;
+
+      pixels.extend_from_slice(if on {
+        &[220, 60, 60, 255]
+      } else {
+        &[60, 60, 220, 255]
+      });
+    }
+  }
+  let image = Node::image(ImageData {
+    src: ImageSourceInput::Rgba(RgbaImage::new(pixels, 8, 8, false).expect("build rgba image")),
+    width: Some(96.0),
+    height: Some(96.0),
+  });
+  let node = Node::container([image]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::padding_top(Px(16.0)))
+      .with(StyleDeclaration::padding_left(Px(16.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([255, 255, 255, 255]),
+      ))),
+  );
+
+  let fonts = fonts();
+  let pdf = render(
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((160, 160)))
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render image pdf");
+
+  let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/takumi-pdf-poc-image.pdf");
+  fs::write(&out, &pdf).expect("write image poc pdf");
+}
