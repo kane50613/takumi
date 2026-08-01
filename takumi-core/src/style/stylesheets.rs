@@ -1161,6 +1161,7 @@ define_style! {
     break_before: BreakBetween,
     break_after: BreakBetween,
     break_inside: BreakInside,
+    box_decoration_break: BoxDecorationBreak,
     text_decoration_color: ColorInput,
     text_decoration_thickness: TextDecorationThickness,
     text_underline_offset: TextUnderlineOffset where inherit = true,

@@ -68,8 +68,9 @@ use takumi_core::{
   resources::font::FontError,
   scene::{NodePaint, PaintItemKind, StackingContextNode, build_stacking_contexts},
   style::{
-    Affine, BackgroundImage, BlendMode, BreakBetween, BreakInside, ComputedStyle, FontFamily,
-    Isolation, Lang, Overflow, ResolvedGradientStop, SizingContext, StyleSheet,
+    Affine, BackgroundImage, BlendMode, BoxDecorationBreak, BreakBetween, BreakInside,
+    ComputedStyle, FontFamily, Isolation, Lang, Overflow, ResolvedGradientStop, SizingContext,
+    StyleSheet,
   },
   viewport::Viewport,
 };
@@ -705,20 +706,41 @@ impl Emitter<'_> {
     } else {
       parent * relative
     };
-    let border = BorderProperties::from_context(&node.context, layout.size, layout.border);
+    // `box-decoration-break: clone`: the fragment of the box on this page
+    // paints its own complete decorations (paint-only; cloned padding does not
+    // reserve layout space). `slice` needs nothing — the page window slices
+    // the full-box decorations, which is exactly the sliced rendering.
+    let (deco_y, deco_size) = if style.box_decoration_break == BoxDecorationBreak::Clone
+      && let Some((window_top, window_bottom)) = self.window
+    {
+      let top = y.max(window_top);
+      let bottom = (y + layout.size.height).min(window_bottom);
 
-    self.emit_background(node, &border, layout, x, y, surface);
-    self.emit_background_layers(node, &border, layout, x, y, surface);
-    self.emit_borders(&border, x, y, layout.size, surface);
+      (
+        top,
+        Size {
+          width: layout.size.width,
+          height: (bottom - top).max(0.0),
+        },
+      )
+    } else {
+      (y, layout.size)
+    };
+    let border = BorderProperties::from_context(&node.context, deco_size, layout.border);
+
+    self.emit_background(node, &border, deco_size, x, deco_y, surface);
+    self.emit_background_layers(node, &border, deco_size, x, deco_y, surface);
+    self.emit_borders(&border, x, deco_y, deco_size, surface);
 
     // Children and own content clip to the (rounded) padding box when overflow
     // is hidden; without radius a per-axis overflow leaves the visible axis
     // unbounded.
     if style.clips_overflow() {
-      let path = if border.is_zero() {
+      let clip_border = BorderProperties::from_context(&node.context, layout.size, layout.border);
+      let path = if clip_border.is_zero() {
         overflow_clip_rect(style, layout, x, y)
       } else {
-        let clip = ClipBox::padding_box(border, layout);
+        let clip = ClipBox::padding_box(clip_border, layout);
         let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
 
         clip
@@ -740,7 +762,7 @@ impl Emitter<'_> {
     &self,
     node: &RenderNode,
     border: &BorderProperties,
-    layout: Layout,
+    size: Size<f32>,
     x: f32,
     y: f32,
     surface: &mut Surface,
@@ -755,7 +777,7 @@ impl Emitter<'_> {
     }
     let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
 
-    border.append_mask_commands(&mut commands, layout.size, CorePoint::ZERO);
+    border.append_mask_commands(&mut commands, size, CorePoint::ZERO);
     let Some(path) = krilla_path(&commands, x, y) else {
       return;
     };
@@ -772,7 +794,7 @@ impl Emitter<'_> {
     &self,
     node: &RenderNode,
     border: &BorderProperties,
-    layout: Layout,
+    size: Size<f32>,
     x: f32,
     y: f32,
     surface: &mut Surface,
@@ -789,14 +811,14 @@ impl Emitter<'_> {
     }
     let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
 
-    border.append_mask_commands(&mut commands, layout.size, CorePoint::ZERO);
+    border.append_mask_commands(&mut commands, size, CorePoint::ZERO);
     let Some(clip) = krilla_path(&commands, x, y) else {
       return;
     };
 
     surface.push_clip_path(&clip, &FillRule::NonZero);
     for image in images.iter().rev() {
-      self.background_layer(image, node, layout, x, y, surface);
+      self.background_layer(image, node, size, x, y, surface);
     }
     surface.pop();
   }
@@ -805,12 +827,12 @@ impl Emitter<'_> {
     &self,
     image: &BackgroundImage,
     node: &RenderNode,
-    layout: Layout,
+    size: Size<f32>,
     x: f32,
     y: f32,
     surface: &mut Surface,
   ) {
-    let (w, h) = (layout.size.width, layout.size.height);
+    let (w, h) = (size.width, size.height);
     let sizing = &node.context.sizing;
     let current_color = node.context.current_color;
 

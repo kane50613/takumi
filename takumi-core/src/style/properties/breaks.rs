@@ -37,6 +37,25 @@ declare_enum_from_css_impl!(
   "avoid" => BreakInside::Avoid
 );
 
+/// A `box-decoration-break` value, deciding how box decorations paint across
+/// page fragments.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
+pub enum BoxDecorationBreak {
+  /// Decorations paint as if the box were unfragmented, then get sliced: the
+  /// edge at a break is open.
+  #[default]
+  Slice,
+  /// Every fragment paints its own complete decorations.
+  Clone,
+}
+
+declare_enum_from_css_impl!(
+  BoxDecorationBreak,
+  "slice" => BoxDecorationBreak::Slice,
+  "clone" => BoxDecorationBreak::Clone
+);
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -47,6 +66,18 @@ mod tests {
     assert_eq!(BreakBetween::from_css_str("auto"), Ok(BreakBetween::Auto));
     assert_eq!(BreakBetween::from_css_str("page"), Ok(BreakBetween::Page));
     assert!(BreakBetween::from_css_str("column").is_err());
+  }
+
+  #[test]
+  fn parses_box_decoration_break() {
+    assert_eq!(
+      BoxDecorationBreak::from_css_str("slice"),
+      Ok(BoxDecorationBreak::Slice)
+    );
+    assert_eq!(
+      BoxDecorationBreak::from_css_str("clone"),
+      Ok(BoxDecorationBreak::Clone)
+    );
   }
 
   #[test]
