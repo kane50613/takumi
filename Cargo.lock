@@ -903,8 +903,12 @@ dependencies = [
  "bumpalo",
  "flate2",
  "float-cmp",
+ "gif",
+ "image-webp",
+ "imagesize",
  "indexmap",
  "pdf-writer",
+ "png",
  "rustc-hash",
  "siphasher",
  "skrifa 0.42.1",
@@ -913,6 +917,7 @@ dependencies = [
  "tiny-skia-path",
  "xmp-writer",
  "yoke",
+ "zune-jpeg",
 ]
 
 [[package]]
@@ -1968,6 +1973,7 @@ version = "0.1.0"
 dependencies = [
  "krilla",
  "takumi-core",
+ "takumi-html",
  "typed-builder",
 ]
 
