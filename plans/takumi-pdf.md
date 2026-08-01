@@ -17,10 +17,11 @@ and sharing takumi-core.
 - **Pagination**: single layout at unbounded height, then window-slicing per
   page. Atoms = text lines, images, `break-inside: avoid` boxes. Supported CSS:
   `break-before/after: page`, `break-inside: avoid`. Container backgrounds and
-  borders clip across pages (browser print semantics). No widows/orphans/@page
-  in v1.
-- **Visual scope v1**: background, border, radius, text, decorations, images,
-  opacity, clip, transform, gradients (krilla native, incl. sweep/conic).
+  borders clip across pages (browser print semantics). Page size presets mirror the CSS `@page`
+  size keywords; the `@page` at-rule itself, widows, and orphans are not in v1.
+- **Visual scope v1** (M2, stacked PR): background, border, radius, text,
+  decorations, images, opacity, clip, transform, gradients (krilla native,
+  incl. sweep/conic).
   Deferred: box-shadow / filter / backdrop-filter (PDF has no blur primitive —
   needs rasterization).
 - **Text**: embedded subset fonts via krilla, selectable/searchable.

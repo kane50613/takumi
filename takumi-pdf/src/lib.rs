@@ -382,7 +382,11 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       let page_size =
         KrillaSize::from_wh(page.width, page.height).ok_or(PdfError::InvalidPageSize)?;
       let (content_width, content_height) = page.content_size();
-      if content_width <= 0.0 || content_height <= 0.0 {
+      if !(content_width.is_finite()
+        && content_height.is_finite()
+        && content_width > 0.0
+        && content_height > 0.0)
+      {
         return Err(PdfError::InvalidPageSize);
       }
       let band_viewport = Viewport::new((content_width as u32, None));
@@ -538,7 +542,7 @@ fn page_starts(atoms: &mut [Atom], forced: &mut Vec<f32>, total: f32, window: f3
 
 /// Scene walker state: the render tree, the stacking-context scene, and a cache
 /// of krilla fonts keyed by the backing blob identity.
-type FontMap = HashMap<(usize, usize, u32), Font>;
+type FontMap = HashMap<(u64, u32), Font>;
 
 struct Emitter<'a> {
   root: &'a RenderNode,
@@ -763,7 +767,7 @@ impl Emitter<'_> {
       if shaped.glyphs.is_empty() {
         continue;
       }
-      let Some(font) = self.cached_font(shaped.font_data(), shaped.font_index) else {
+      let Some(font) = self.cached_font(shaped) else {
         continue;
       };
       let offset = run.glyph_offset(layout);
@@ -806,15 +810,15 @@ impl Emitter<'_> {
     Ok(())
   }
 
-  /// A krilla font for a run's backing blob, cached by blob identity. Copies the
-  /// blob into the cache once per distinct font.
-  fn cached_font(&mut self, data: &[u8], index: u32) -> Option<Font> {
-    let key = (data.as_ptr() as usize, data.len(), index);
+  /// A krilla font for a run's backing blob, cached by the blob's stable id.
+  /// Copies the blob into the cache once per distinct font.
+  fn cached_font(&mut self, shaped: &ShapedRun) -> Option<Font> {
+    let key = (shaped.font_id(), shaped.font_index);
 
     if let Some(font) = self.fonts.get(&key) {
       return Some(font.clone());
     }
-    let font = Font::new(Data::from(data.to_vec()), index)?;
+    let font = Font::new(Data::from(shaped.font_data().to_vec()), shaped.font_index)?;
 
     self.fonts.insert(key, font.clone());
     Some(font)

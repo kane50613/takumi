@@ -2085,6 +2085,11 @@ impl ShapedRun {
     self.font_data.as_ref()
   }
 
+  /// Stable identifier of the backing font blob, usable as a cache key.
+  pub fn font_id(&self) -> u64 {
+    self.font_data.id()
+  }
+
   /// Underline top edge relative to the run's baseline, positive downwards.
   pub fn underline_offset_from_baseline(&self) -> f32 {
     let from_metrics = match self.brush.underline_position {
