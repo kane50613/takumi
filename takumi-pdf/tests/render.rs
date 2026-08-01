@@ -8,7 +8,8 @@ use takumi_core::{
   layout::node::Node,
   resources::font::FontResource,
   style::{
-    Color, ColorInput, Display, FlexDirection, FontSize, Length::*, Style, StyleDeclaration,
+    BreakBetween, Color, ColorInput, Display, FlexDirection, FontSize, Length::*, Style,
+    StyleDeclaration,
   },
   viewport::Viewport,
 };
@@ -182,4 +183,49 @@ fn renders_ligature_text() {
 
   let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/takumi-pdf-poc-liga.pdf");
   fs::write(&out, &pdf).expect("write liga poc pdf");
+}
+
+#[test]
+fn break_before_forces_new_page() {
+  let section = |title: &str| {
+    Node::container(
+      (1..=3)
+        .map(|i| {
+          Node::text(format!("{title} row {i}")).with_style(
+            Style::default().with(StyleDeclaration::font_size(FontSize::Length(Px(14.0)))),
+          )
+        })
+        .collect::<Vec<_>>(),
+    )
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+        .with(StyleDeclaration::break_before(BreakBetween::Page)),
+    )
+  };
+  let node = Node::container([section("Alpha"), section("Beta")]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+      .with(StyleDeclaration::width(Percentage(100.0))),
+  );
+
+  let fonts = fonts();
+  let pdf = render(
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((400, 200)))
+      .page(PageOptions {
+        width: 400.0,
+        height: 400.0,
+        margin: 24.0,
+      })
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render break-before pdf");
+
+  let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/takumi-pdf-poc-breaks.pdf");
+  fs::write(&out, &pdf).expect("write breaks poc pdf");
 }

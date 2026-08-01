@@ -14,10 +14,13 @@
 //! avoid splitting them, and each page re-walks the scene through a vertical
 //! window (clip + translate). Every text line is emitted on exactly one page.
 //!
+//! Pagination honors `break-before: page`, `break-after: page`, and
+//! `break-inside: avoid`; repeated header/footer bands carve their height out
+//! of the content window and substitute `{page}` / `{pages}` in text.
+//!
 //! Coverage so far: background-color, text runs (fill color and opacity),
 //! nested containers, affine transforms, pagination. Not yet: borders, radius,
-//! gradients, images, shadows, filters, clipping, text decorations,
-//! break-* properties, page headers/footers.
+//! gradients, images, shadows, filters, clipping, text decorations.
 
 use std::{collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
@@ -49,7 +52,9 @@ use takumi_core::{
   },
   resources::font::FontError,
   scene::{NodePaint, PaintItemKind, StackingContextNode, build_stacking_contexts},
-  style::{Affine, ComputedStyle, FontFamily, Lang, SizingContext, StyleSheet},
+  style::{
+    Affine, BreakBetween, BreakInside, ComputedStyle, FontFamily, Lang, SizingContext, StyleSheet,
+  },
   viewport::Viewport,
 };
 use typed_builder::TypedBuilder;
@@ -400,11 +405,12 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
 
       let content = prepare_tree(&inputs, options.node, band_viewport)?;
       let mut atoms = Vec::new();
+      let mut forced = Vec::new();
 
       content
         .emitter(&mut fonts)
-        .collect_atoms(0, Affine::IDENTITY, &mut atoms)?;
-      let starts = page_starts(&mut atoms, content.height, window_height);
+        .collect_atoms(0, Affine::IDENTITY, &mut atoms, &mut forced)?;
+      let starts = page_starts(&mut atoms, &mut forced, content.height, window_height);
       let pages = starts.len();
 
       for (index, &y0) in starts.iter().enumerate() {
@@ -492,23 +498,36 @@ type Atom = (f32, f32);
 /// height. Each cut moves up to the top of any atom straddling the ideal cut
 /// line, so atoms land whole on the next page; an atom taller than the window
 /// is cut anyway.
-fn page_starts(atoms: &mut [Atom], total: f32, window: f32) -> Vec<f32> {
+fn page_starts(atoms: &mut [Atom], forced: &mut Vec<f32>, total: f32, window: f32) -> Vec<f32> {
   atoms.sort_by(|a, b| a.0.total_cmp(&b.0));
+  forced.retain(|cut| *cut > 1.0 && *cut < total - 1.0);
+  forced.sort_by(f32::total_cmp);
 
   let mut starts = vec![0.0_f32];
   let mut y0 = 0.0_f32;
 
-  while y0 + window < total {
-    let ideal = y0 + window;
+  loop {
+    let limit = y0 + window;
+
+    if let Some(cut) = forced.iter().copied().find(|cut| *cut > y0 + 1.0)
+      && cut <= limit
+    {
+      starts.push(cut);
+      y0 = cut;
+      continue;
+    }
+    if limit >= total {
+      break;
+    }
     let pushed_up = atoms
       .iter()
-      .filter(|(top, bottom)| *top < ideal && *bottom > ideal)
+      .filter(|(top, bottom)| *top < limit && *bottom > limit)
       .map(|(top, _)| *top)
-      .fold(ideal, f32::min);
+      .fold(limit, f32::min);
     let cut = if pushed_up > y0 + 1.0 {
       pushed_up
     } else {
-      ideal
+      limit
     };
 
     starts.push(cut);
@@ -544,13 +563,14 @@ impl Emitter<'_> {
       .is_some_and(|(y0, y1)| bottom <= y0 || top >= y1)
   }
 
-  /// Whether a text line whose band starts at `top` belongs to another page.
-  /// Lines use a half-open ownership rule (the page containing their top) so
-  /// overlapping ascent/descent bands of adjacent lines never emit twice.
-  fn window_disowns_line(&self, top: f32) -> bool {
+  /// Whether a text line at `baseline` belongs to another page. Ownership is
+  /// keyed on the baseline (always inside the line's own box, unlike the font
+  /// ascent band, which can poke above the container a forced break cut at) and
+  /// half-open, so each line is emitted exactly once.
+  fn window_disowns_line(&self, baseline: f32) -> bool {
     self
       .line_window
-      .is_some_and(|(y0, y1)| top < y0 || top >= y1)
+      .is_some_and(|(y0, y1)| baseline < y0 || baseline >= y1)
   }
 
   fn window_excludes_bounds(&self, bounds: Option<takumi_core::scene::SceneBounds>) -> bool {
@@ -749,7 +769,7 @@ impl Emitter<'_> {
       let offset = run.glyph_offset(layout);
       if let Some(glyph) = shaped.glyphs.first() {
         let baseline = y + offset.y + glyph.y;
-        if self.window_disowns_line(baseline - shaped.metrics.ascent) {
+        if self.window_disowns_line(baseline) {
           continue;
         }
       }
@@ -809,13 +829,14 @@ impl Emitter<'_> {
     id: usize,
     parent: Affine,
     atoms: &mut Vec<Atom>,
+    forced: &mut Vec<f32>,
   ) -> Result<(), PdfError> {
     let Some(context) = self.contexts.get(id) else {
       return Ok(());
     };
 
     let child_frame = match context.root() {
-      Some(paint) => self.collect_box_atoms(paint, parent, atoms)?,
+      Some(paint) => self.collect_box_atoms(paint, parent, atoms, forced)?,
       None => parent,
     };
 
@@ -823,10 +844,10 @@ impl Emitter<'_> {
       for item in bucket {
         match &item.kind {
           PaintItemKind::Node(paint) => {
-            self.collect_box_atoms(paint, child_frame, atoms)?;
+            self.collect_box_atoms(paint, child_frame, atoms, forced)?;
           }
           PaintItemKind::Context(child) => {
-            self.collect_atoms(*child, child_frame, atoms)?;
+            self.collect_atoms(*child, child_frame, atoms, forced)?;
           }
         }
       }
@@ -842,6 +863,7 @@ impl Emitter<'_> {
     paint: &NodePaint,
     parent: Affine,
     atoms: &mut Vec<Atom>,
+    forced: &mut Vec<f32>,
   ) -> Result<Affine, PdfError> {
     let Some(node) = self.root.node_at_path(&paint.path) else {
       return Ok(parent);
@@ -858,6 +880,17 @@ impl Emitter<'_> {
       return Ok(parent * relative);
     }
     let y = relative.y;
+    let style = &node.context.style;
+
+    if style.break_before == BreakBetween::Page {
+      forced.push(y);
+    }
+    if style.break_after == BreakBetween::Page {
+      forced.push(y + layout.size.height);
+    }
+    if style.break_inside == BreakInside::Avoid {
+      atoms.push((y, y + layout.size.height));
+    }
 
     if node.should_create_inline_layout() {
       self.collect_text_atoms(collect_inline_items(node), &node.context, layout, y, atoms)?;
@@ -1042,7 +1075,10 @@ mod tests {
 
   #[test]
   fn page_starts_without_atoms_cuts_at_window() {
-    assert_eq!(page_starts(&mut [], 250.0, 100.0), vec![0.0, 100.0, 200.0]);
+    assert_eq!(
+      page_starts(&mut [], &mut Vec::new(), 250.0, 100.0),
+      vec![0.0, 100.0, 200.0]
+    );
   }
 
   #[test]
@@ -1050,7 +1086,7 @@ mod tests {
     let mut atoms = [(90.0, 110.0)];
 
     assert_eq!(
-      page_starts(&mut atoms, 250.0, 100.0),
+      page_starts(&mut atoms, &mut Vec::new(), 250.0, 100.0),
       vec![0.0, 90.0, 190.0]
     );
   }
@@ -1060,8 +1096,18 @@ mod tests {
     let mut atoms = [(0.0, 300.0)];
 
     assert_eq!(
-      page_starts(&mut atoms, 300.0, 100.0),
+      page_starts(&mut atoms, &mut Vec::new(), 300.0, 100.0),
       vec![0.0, 100.0, 200.0]
+    );
+  }
+
+  #[test]
+  fn page_starts_honors_forced_cuts() {
+    let mut forced = vec![40.0, 150.0];
+
+    assert_eq!(
+      page_starts(&mut [], &mut forced, 250.0, 100.0),
+      vec![0.0, 40.0, 140.0, 150.0]
     );
   }
 
