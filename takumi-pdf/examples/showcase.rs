@@ -189,7 +189,7 @@ fn table_rows() -> String {
 
   for project in projects() {
     let header = format!(
-      r##"<div style="display: flex; border-top: 1px solid #1c1917; font-size: 12px; font-weight: 700; padding: 5px 8px;">Project "{}" ({})</div>"##,
+      r##"<div style="display: flex; font-size: 12px; font-weight: 700; padding: 5px 8px;">Project "{}" ({})</div>"##,
       project.name, project.period
     );
     let mut rows: Vec<String> = Vec::new();
@@ -231,7 +231,7 @@ fn table_rows() -> String {
     }
 
     let subtotal_row = format!(
-      r##"<div style="display: flex; justify-content: flex-end; border-top: 1px solid #1c1917; font-size: 12px; font-weight: 700;">
+      r##"<div style="display: flex; justify-content: flex-end; border-top: 1px solid #1c1917; border-bottom: 1px solid #1c1917; font-size: 12px; font-weight: 700;">
         <div style="padding: 5px 8px;">Subtotal (excl. VAT)</div>
         <div style="width: 106px; text-align: right; {CELL_RIGHT}">€ {subtotal:.2}</div>
       </div>"##
@@ -321,7 +321,7 @@ fn invoice_html() -> String {
     <span>Invoice date: 28/07/2026</span>
   </div>
 
-  <div style="display: flex; flex-direction: column; border: 1px solid #1c1917; border-top-width: 0; margin-top: 28px;">
+  <div style="display: flex; flex-direction: column; border-left: 1px solid #1c1917; border-right: 1px solid #1c1917; margin-top: 28px;">
     <div style="display: flex; border-top: 1px solid #1c1917; font-size: 12px; font-weight: 700;">
       <div style="width: 44px; text-align: right; padding: 5px 8px; display: flex; align-items: flex-end; justify-content: flex-end;">Pos</div>
       <div style="width: 74px; text-align: right; {CELL_RIGHT}">Product count</div>
