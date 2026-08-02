@@ -1978,17 +1978,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "takumi-pdf-wasm"
-version = "0.0.0"
-dependencies = [
- "js-sys",
- "serde-wasm-bindgen",
- "takumi-core",
- "takumi-pdf",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "takumi-raster"
 version = "0.4.5"
 dependencies = [

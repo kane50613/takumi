@@ -65,7 +65,7 @@ use takumi_core::{
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
   paint::{ConicGradientTile, LinearGradientTile, RadialGradientTile, resolve_stops_along_axis},
-  resources::font::FontError,
+  resources::{font::FontError, image::ImageSource},
   scene::{NodePaint, PaintItemKind, StackingContextNode, build_stacking_contexts},
   style::{
     Affine, BackgroundImage, BlendMode, BoxDecorationBreak, BreakBetween, BreakInside,
@@ -77,7 +77,7 @@ use takumi_core::{
 #[cfg(feature = "images")]
 use takumi_core::{
   layout::node::ImageData,
-  resources::image::{ImageSource, RenderedImage},
+  resources::image::RenderedImage,
   style::{Length, ObjectFit, PositionComponent},
 };
 use typed_builder::TypedBuilder;
@@ -93,6 +93,8 @@ pub enum PdfError {
   Krilla(KrillaError),
   /// The computed page size is empty or non-finite.
   InvalidPageSize,
+  /// Single-page output ([`PdfOptions::page`] unset) needs a viewport.
+  MissingViewport,
 }
 
 impl From<TakumiError> for PdfError {
@@ -104,8 +106,10 @@ impl From<TakumiError> for PdfError {
 /// Inputs for [`render`], built with [`PdfOptions::builder`].
 #[derive(TypedBuilder)]
 pub struct PdfOptions<'g> {
-  /// The viewport to render in.
-  pub(crate) viewport: Viewport,
+  /// The viewport to render in. Required for single-page output; ignored when
+  /// [`Self::page`] is set (the page geometry defines the layout width).
+  #[builder(default, setter(strip_option))]
+  pub(crate) viewport: Option<Viewport>,
   /// The font context.
   pub(crate) fonts: &'g Fonts,
   /// The root node to render.
@@ -115,7 +119,7 @@ pub struct PdfOptions<'g> {
   pub(crate) stylesheet: Arc<StyleSheet>,
   /// Resources fetched externally, keyed by URL.
   #[builder(default)]
-  pub(crate) images: HashMap<Arc<str>, takumi_core::resources::image::ImageSource>,
+  pub(crate) images: HashMap<Arc<str>, ImageSource>,
   /// Paged output; `None` renders a single page at the viewport size.
   #[builder(default, setter(strip_option))]
   pub(crate) page: Option<PageOptions>,
@@ -157,9 +161,10 @@ fn inches(value: f32) -> f32 {
   value * 96.0
 }
 
-/// Every preset is portrait with a half-inch margin; chain
+/// Presets are portrait with a half-inch margin; chain
 /// [`landscape`](Self::landscape) and [`with_margin`](Self::with_margin) to
-/// adjust. The set mirrors the CSS `@page` size keywords.
+/// adjust, or fill the fields directly for any other size.
+// ponytail: a4 + letter only; add other @page keywords when someone asks.
 impl PageOptions {
   const DEFAULT_MARGIN: f32 = 48.0;
 
@@ -171,54 +176,14 @@ impl PageOptions {
     }
   }
 
-  /// ISO A3: 297 × 420 mm.
-  pub fn a3() -> Self {
-    Self::preset(mm(297.0), mm(420.0))
-  }
-
   /// ISO A4: 210 × 297 mm.
   pub fn a4() -> Self {
     Self::preset(mm(210.0), mm(297.0))
   }
 
-  /// ISO A5: 148 × 210 mm.
-  pub fn a5() -> Self {
-    Self::preset(mm(148.0), mm(210.0))
-  }
-
-  /// ISO B4: 250 × 353 mm.
-  pub fn b4() -> Self {
-    Self::preset(mm(250.0), mm(353.0))
-  }
-
-  /// ISO B5: 176 × 250 mm.
-  pub fn b5() -> Self {
-    Self::preset(mm(176.0), mm(250.0))
-  }
-
-  /// JIS B4: 257 × 364 mm.
-  pub fn jis_b4() -> Self {
-    Self::preset(mm(257.0), mm(364.0))
-  }
-
-  /// JIS B5: 182 × 257 mm.
-  pub fn jis_b5() -> Self {
-    Self::preset(mm(182.0), mm(257.0))
-  }
-
   /// US Letter: 8.5 × 11 in.
   pub fn letter() -> Self {
     Self::preset(inches(8.5), inches(11.0))
-  }
-
-  /// US Legal: 8.5 × 14 in.
-  pub fn legal() -> Self {
-    Self::preset(inches(8.5), inches(14.0))
-  }
-
-  /// US Ledger/Tabloid: 11 × 17 in.
-  pub fn ledger() -> Self {
-    Self::preset(inches(11.0), inches(17.0))
   }
 
   /// Swaps width and height.
@@ -248,7 +213,7 @@ impl PageOptions {
 struct TreeInputs<'g> {
   fonts: &'g Fonts,
   stylesheet: Arc<StyleSheet>,
-  images: Rc<HashMap<Arc<str>, takumi_core::resources::image::ImageSource>>,
+  images: Rc<HashMap<Arc<str>, ImageSource>>,
   font_families: Option<FontFamily>,
   lang: Option<Lang>,
 }
@@ -372,13 +337,7 @@ fn emit_band(
   height: f32,
   surface: &mut Surface,
 ) -> Result<(), PdfError> {
-  let Some(rect) = KrillaRect::from_xywh(x, y, width, height) else {
-    return Ok(());
-  };
-  let mut builder = PathBuilder::new();
-
-  builder.push_rect(rect);
-  let Some(path) = builder.finish() else {
+  let Some(path) = KrillaRect::from_xywh(x, y, width, height).and_then(rect_path) else {
     return Ok(());
   };
 
@@ -470,24 +429,19 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         let next_start = starts.get(index + 1).copied().unwrap_or(f32::INFINITY);
         let paint_height = (next_start - y0).min(window_height);
 
-        if let Some(window) =
+        if let Some(path) =
           KrillaRect::from_xywh(page.margin, content_top, content_width, paint_height)
+            .and_then(rect_path)
         {
-          let mut builder = PathBuilder::new();
+          surface.push_clip_path(&path, &FillRule::NonZero);
+          surface.push_transform(&Transform::from_translate(page.margin, content_top - y0));
+          let mut emitter = content.emitter(&mut fonts);
 
-          builder.push_rect(window);
-          if let Some(path) = builder.finish() {
-            surface.push_clip_path(&path, &FillRule::NonZero);
-            surface.push_transform(&Transform::from_translate(page.margin, content_top - y0));
-            let mut emitter = content.emitter(&mut fonts);
-
-            emitter.window = Some((y0, y0 + paint_height));
-            emitter.line_window =
-              Some((if index == 0 { f32::NEG_INFINITY } else { y0 }, next_start));
-            emitter.emit_context(0, Affine::IDENTITY, &mut surface)?;
-            surface.pop();
-            surface.pop();
-          }
+          emitter.window = Some((y0, y0 + paint_height));
+          emitter.line_window = Some((if index == 0 { f32::NEG_INFINITY } else { y0 }, next_start));
+          emitter.emit_context(0, Affine::IDENTITY, &mut surface)?;
+          surface.pop();
+          surface.pop();
         }
 
         if let Some(template) = &options.footer {
@@ -509,7 +463,8 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       }
     }
     None => {
-      let content = prepare_tree(&inputs, options.node, options.viewport)?;
+      let viewport = options.viewport.ok_or(PdfError::MissingViewport)?;
+      let content = prepare_tree(&inputs, options.node, viewport)?;
       let page_size =
         KrillaSize::from_wh(content.width, content.height).ok_or(PdfError::InvalidPageSize)?;
       let mut page = document.start_page_with(PageSettings::new(page_size));
@@ -953,13 +908,7 @@ impl Emitter<'_> {
       BackgroundImage::Url(_) | BackgroundImage::None => return,
     };
 
-    let Some(rect) = KrillaRect::from_xywh(x, y, w, h) else {
-      return;
-    };
-    let mut builder = PathBuilder::new();
-
-    builder.push_rect(rect);
-    let Some(path) = builder.finish() else {
+    let Some(path) = KrillaRect::from_xywh(x, y, w, h).and_then(rect_path) else {
       return;
     };
 
@@ -1126,17 +1075,11 @@ impl Emitter<'_> {
     let overflows = dw > w + 0.5 || dh > h + 0.5;
 
     if overflows {
-      let Some(rect) = KrillaRect::from_xywh(bx, by, w, h) else {
+      let Some(path) = KrillaRect::from_xywh(bx, by, w, h).and_then(rect_path) else {
         return;
       };
-      let mut builder = PathBuilder::new();
 
-      builder.push_rect(rect);
-      if let Some(path) = builder.finish() {
-        surface.push_clip_path(&path, &FillRule::NonZero);
-      } else {
-        return;
-      }
+      surface.push_clip_path(&path, &FillRule::NonZero);
     }
     surface.push_transform(&Transform::from_translate(ix, iy));
     surface.draw_image(krilla_image, size);
@@ -1155,12 +1098,14 @@ impl Emitter<'_> {
     y: f32,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
-    let items = vec![InlineItem::Text {
-      text: text.text.as_str().into(),
-      context,
-    }];
     let font_style = SizedFontStyle::from_style(&context.style, context);
-    let Some((built, runs)) = build_inline_runs(items, &font_style, context, layout)? else {
+    let Some((built, runs)) = build_inline_runs(
+      single_text_items(text, context),
+      &font_style,
+      context,
+      layout,
+    )?
+    else {
       return Ok(());
     };
 
@@ -1347,12 +1292,13 @@ impl Emitter<'_> {
     } else if !node.has_anonymous_text_item_child() {
       match node.node.as_ref().map(|n| &n.kind) {
         Some(NodeKind::Text(text)) => {
-          let items = vec![InlineItem::Text {
-            text: text.text.as_str().into(),
-            context: &node.context,
-          }];
-
-          self.collect_text_atoms(items, &node.context, layout, y, atoms)?;
+          self.collect_text_atoms(
+            single_text_items(text, &node.context),
+            &node.context,
+            layout,
+            y,
+            atoms,
+          )?;
         }
         Some(NodeKind::Image(_)) => {
           atoms.push((y, y + layout.size.height));
@@ -1394,6 +1340,14 @@ impl Emitter<'_> {
   }
 }
 
+/// The inline item list for a lone text node.
+fn single_text_items<'c>(text: &'c TextData, context: &'c RenderContext) -> Vec<InlineItem<'c>> {
+  vec![InlineItem::Text {
+    text: text.text.as_str().into(),
+    context,
+  }]
+}
+
 /// Runs inline layout and resolves the paintable run set. `None` when the font
 /// size or content box is degenerate.
 fn build_inline_runs<'c>(
@@ -1422,6 +1376,14 @@ fn build_inline_runs<'c>(
   let runs = resolve_inline_runs(&built, context, layout).map_err(PdfError::Font)?;
 
   Ok(Some((built, runs)))
+}
+
+/// A single-rectangle krilla path.
+fn rect_path(rect: KrillaRect) -> Option<KrillaPath> {
+  let mut builder = PathBuilder::new();
+
+  builder.push_rect(rect);
+  builder.finish()
 }
 
 /// Converts takumi-core path commands to a krilla path translated by `(x, y)`.
@@ -1463,11 +1425,7 @@ fn overflow_clip_rect(style: &ComputedStyle, layout: Layout, x: f32, y: f32) -> 
   } else {
     (y - UNBOUNDED, y + layout.size.height + UNBOUNDED)
   };
-  let rect = KrillaRect::from_ltrb(left, top, right, bottom)?;
-  let mut builder = PathBuilder::new();
-
-  builder.push_rect(rect);
-  builder.finish()
+  KrillaRect::from_ltrb(left, top, right, bottom).and_then(rect_path)
 }
 
 /// Fills one decoration rect under its border-box transform offset by `(x, y)`.
@@ -1475,16 +1433,12 @@ fn draw_decoration(surface: &mut Surface, decoration: &DecorationRect, x: f32, y
   if decoration.color.0[3] == 0 || decoration.width <= 0.0 || decoration.height <= 0.0 {
     return;
   }
-  let Some(rect) = KrillaRect::from_xywh(0.0, 0.0, decoration.width, decoration.height) else {
+  let Some(path) =
+    KrillaRect::from_xywh(0.0, 0.0, decoration.width, decoration.height).and_then(rect_path)
+  else {
     return;
   };
   let [a, b, c, d, e, f] = decoration.transform;
-  let mut builder = PathBuilder::new();
-
-  builder.push_rect(rect);
-  let Some(path) = builder.finish() else {
-    return;
-  };
 
   surface.push_transform(&Transform::from_row(a, b, c, d, e + x, f + y));
   surface.set_fill(Some(fill_from_rgba(decoration.color.0, 1.0)));
@@ -1617,24 +1571,8 @@ fn glyph_text_spans(shaped: &ShapedRun, run_text: &str) -> Vec<Range<usize>> {
       .collect();
   }
 
-  // Alignment unknown: fall back to one char per glyph when the counts line
-  // up, else map every glyph to the whole run.
-  let char_count = run_text.chars().count();
-  let glyph_count = shaped.glyphs.len();
-
-  if char_count == glyph_count {
-    let mut spans = Vec::with_capacity(glyph_count);
-    let mut indices = run_text.char_indices().peekable();
-
-    while let Some((start, _)) = indices.next() {
-      let end = indices.peek().map_or(run_text.len(), |(next, _)| *next);
-
-      spans.push(start..end);
-    }
-    spans
-  } else {
-    vec![0..run_text.len(); glyph_count]
-  }
+  // Alignment unknown: map every glyph to the whole run.
+  vec![0..run_text.len(); shaped.glyphs.len()]
 }
 
 /// A positioned glyph adapter. Offsets are stored em-normalized (position ÷ font

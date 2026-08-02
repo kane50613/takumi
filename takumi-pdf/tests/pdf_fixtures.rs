@@ -121,7 +121,6 @@ fn paged_lines() {
 
     PdfOptions::builder()
       .node(column(lines))
-      .viewport(Viewport::new((400, 200)))
       .page(PageOptions {
         width: 400.0,
         height: 300.0,
@@ -139,7 +138,6 @@ fn paged_footer_counters() {
 
     PdfOptions::builder()
       .node(column(rows))
-      .viewport(Viewport::new((400, 200)))
       .page(PageOptions {
         width: 400.0,
         height: 300.0,
@@ -170,7 +168,6 @@ fn paged_breaks() {
 
     PdfOptions::builder()
       .node(column(vec![section("Alpha"), section("Beta")]))
-      .viewport(Viewport::new((400, 200)))
       .page(PageOptions {
         width: 400.0,
         height: 400.0,
@@ -259,7 +256,6 @@ fn invoice() {
   run_pdf_fixture("invoice", |fonts| {
     PdfOptions::builder()
       .node(html_fixture("invoice.html"))
-      .viewport(Viewport::new((794, 1123)))
       .page(PageOptions::a4().with_margin(36.0))
       .footer(html_fixture("invoice-footer.html"))
       .fonts(fonts)
