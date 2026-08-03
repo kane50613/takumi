@@ -101,11 +101,29 @@ enum MarginInput {
   },
 }
 
-fn resolve_page(
-  size: Option<&SizeInput>,
-  landscape: bool,
-  margin: Option<&MarginInput>,
-) -> Result<PageOptions, js_sys::Error> {
+/// Paged output: geometry plus the repeated bands.
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct PageInput {
+  /// Page size. Defaults to A4.
+  size: Option<SizeInput>,
+  /// Swaps the page's width and height.
+  landscape: Option<bool>,
+  /// Page margin in CSS px: one number or per-side values.
+  margin: Option<MarginInput>,
+  /// Band repeated at the top of every page (`{page}`/`{pages}` in text).
+  header: Option<Node>,
+  /// Band repeated at the bottom of every page.
+  footer: Option<Node>,
+}
+
+fn resolve_page(input: &PageInput) -> Result<PageOptions, js_sys::Error> {
+  let PageInput {
+    size,
+    landscape,
+    margin,
+    ..
+  } = input;
   let mut page = match size {
     None => PageOptions::A4,
     Some(SizeInput::Dimensions(dimensions)) => PageOptions {
@@ -122,7 +140,7 @@ fn resolve_page(
     },
   };
 
-  if landscape {
+  if landscape.unwrap_or(false) {
     page = page.landscape();
   }
   match margin {
@@ -152,16 +170,8 @@ struct PdfRenderOptions {
   /// Fixed viewport for single-page output: percentage heights resolve
   /// against it and overflowing content is clipped.
   viewport: Option<Dimensions>,
-  /// Page size for paged output. Without `viewport` this defaults to A4.
-  size: Option<SizeInput>,
-  /// Swaps the page's width and height.
-  landscape: Option<bool>,
-  /// Page margin in CSS px for paged output: one number or per-side values.
-  margin: Option<MarginInput>,
-  /// Band repeated at the top of every page (`{page}`/`{pages}` in text).
-  header: Option<Node>,
-  /// Band repeated at the bottom of every page.
-  footer: Option<Node>,
+  /// Paged output settings. Without `viewport` an absent `page` means A4.
+  page: Option<PageInput>,
   /// Pre-fetched images keyed by URL.
   images: Option<Vec<ImageSource>>,
   /// CSS stylesheets to apply before layout.
@@ -252,10 +262,10 @@ impl PdfRenderer {
       images.insert(source.src, image);
     }
 
-    let (viewport, page) = match (options.viewport, &options.size) {
+    let (viewport, page, bands) = match (options.viewport, options.page) {
       (Some(_), Some(_)) => {
         return Err(js_sys::Error::new(
-          "viewport and size are mutually exclusive; pick single-page or paged output",
+          "viewport and page are mutually exclusive; pick single-page or paged output",
         ));
       }
       (Some(dimensions), None) => (
@@ -264,15 +274,17 @@ impl PdfRenderer {
           dimensions.height as u32,
         ))),
         None,
+        (None, None),
       ),
-      (None, size) => (
-        None,
-        Some(resolve_page(
-          size.as_ref(),
-          options.landscape.unwrap_or(false),
-          options.margin.as_ref(),
-        )?),
-      ),
+      (None, page) => {
+        let mut input = page.unwrap_or_default();
+
+        (
+          None,
+          Some(resolve_page(&input)?),
+          (input.header.take(), input.footer.take()),
+        )
+      }
     };
     let lang = options
       .lang
@@ -292,8 +304,8 @@ impl PdfRenderer {
       stylesheet: stylesheet(&self.resource_cache, options.stylesheets, Vec::new()),
       images,
       page,
-      header: options.header,
-      footer: options.footer,
+      header: bands.0,
+      footer: bands.1,
       font_families: options.font_families.map(FontFamily::from_names),
       lang,
     })

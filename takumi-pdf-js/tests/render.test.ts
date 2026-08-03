@@ -38,38 +38,41 @@ test("paginates and substitutes footer counters", async () => {
     children: Array.from({ length: 60 }, (_, i) => text(`Row ${i + 1}`, { fontSize: 16 })),
   });
   const pdf = await renderer.render(rows, {
-    size: { width: 400, height: 300 },
-    margin: 24,
-    footer: text("Page {page} of {pages}", { fontSize: 12 }),
+    page: {
+      size: { width: 400, height: 300 },
+      margin: 24,
+      footer: text("Page {page} of {pages}", { fontSize: 12 }),
+    },
   });
 
   expect(pageCount(pdf)).toBeGreaterThan(1);
 });
 
 test("letter landscape", async () => {
-  const pdf = await renderer.render(doc, { size: "letter", landscape: true });
+  const pdf = await renderer.render(doc, { page: { size: "letter", landscape: true } });
 
   expect(pageCount(pdf)).toBe(1);
 });
 
 test("accepts case-insensitive presets and per-side margins", async () => {
   const pdf = await renderer.render(doc, {
-    size: "A4" as "a4",
-    margin: { top: 60, bottom: 40 },
+    page: { size: "A4" as "a4", margin: { top: 60, bottom: 40 } },
   });
 
   expect(pageCount(pdf)).toBe(1);
 });
 
 test("rejects an unknown size keyword", () => {
-  expect(renderer.render(doc, { size: "tabloid" as "a4" })).rejects.toThrow("unknown page size");
+  expect(renderer.render(doc, { page: { size: "tabloid" as "a4" } })).rejects.toThrow(
+    "unknown page size",
+  );
 });
 
-test("rejects viewport combined with size", () => {
+test("rejects viewport combined with page", () => {
   expect(
     renderer.render(doc, {
       viewport: { width: 600, height: 300 },
-      size: "a4",
+      page: { size: "a4" },
     } as never),
   ).rejects.toThrow("mutually exclusive");
 });

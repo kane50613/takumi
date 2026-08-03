@@ -21,13 +21,12 @@ export type PageSize = "a4" | "letter" | Dimensions;
 export type PageMargin = number | { top?: number; right?: number; bottom?: number; left?: number };
 
 /**
- * Paged output (the default): content flows across pages of `size`. Note the
+ * Paged output settings: content flows across pages of `size`. Note the
  * layout canvas has unbounded height, so percentage heights do not resolve.
  * CSS `@page` rules in `stylesheets` are not supported — page geometry comes
- * from these options.
+ * from here.
  */
-type PagedOptions = {
-  viewport?: never;
+export type PageOptions = {
   /** Page size. Defaults to A4. */
   size?: PageSize;
   /** Swaps the page's width and height. */
@@ -40,20 +39,21 @@ type PagedOptions = {
   footer?: NodeInput;
 };
 
-/**
- * Single-page output: a fixed viewport, like an image render. Percentage
- * heights resolve against it and overflowing content is clipped.
- */
-type ViewportOptions = {
-  viewport: Dimensions;
-  size?: never;
-  landscape?: never;
-  margin?: never;
-  header?: never;
-  footer?: never;
-};
-
-export type RenderOptions = (PagedOptions | ViewportOptions) & {
+export type RenderOptions = (
+  | {
+      /** Paged output (the default: A4). */
+      page?: PageOptions;
+      viewport?: never;
+    }
+  | {
+      /**
+       * Single-page output: a fixed viewport, like an image render.
+       * Percentage heights resolve against it and overflow is clipped.
+       */
+      viewport: Dimensions;
+      page?: never;
+    }
+) & {
   /** Fonts to register before rendering, deduped across calls. */
   fonts?: FontLoader[];
   /**
@@ -92,17 +92,22 @@ export class PdfRenderer {
 
   /** Renders a node tree or JSX to PDF bytes. See {@link RenderOptions}. */
   async render(node: NodeInput, options: RenderOptions = {}): Promise<Uint8Array> {
-    const { fonts, images, header, footer, stylesheets, fontFamilies, ...rest } = options;
+    const { fonts, images, page, stylesheets, fontFamilies, ...rest } = options;
     const sheets = [...(stylesheets ?? [])];
     const resolved = await resolveNode(node, sheets);
-    const headerNode = header === undefined ? undefined : await resolveNode(header, sheets);
-    const footerNode = footer === undefined ? undefined : await resolveNode(footer, sheets);
+    const resolvedPage =
+      page === undefined
+        ? undefined
+        : {
+            ...page,
+            header: page.header === undefined ? undefined : await resolveNode(page.header, sheets),
+            footer: page.footer === undefined ? undefined : await resolveNode(page.footer, sheets),
+          };
     const resources = await this.fonts.resolveResources(fonts, images, fontFamilies);
 
     return this.inner.render(resolved, {
       ...rest,
-      header: headerNode,
-      footer: footerNode,
+      page: resolvedPage,
       stylesheets: sheets.length > 0 ? sheets : undefined,
       images: resources.images,
       fontFamilies: resources.fontFamilies,
