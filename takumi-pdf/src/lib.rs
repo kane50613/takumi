@@ -126,7 +126,7 @@ pub struct PdfOptions<'g> {
   pub page: Option<PageOptions>,
   /// Band repeated at the top of every page. Nodes classed `pageNumber` /
   /// `totalPages` receive the counters, optionally formatted by a
-  /// `@counter-style` name in the same class list (e.g. `cjk-decimal`). The
+  /// supported `@counter-style` name in the same class list (e.g. `cjk-decimal`). The
   /// band's height is carved out of the content window.
   #[builder(default, setter(strip_option))]
   pub header: Option<Node>,
@@ -319,6 +319,16 @@ fn prepare_tree(
   })
 }
 
+const COUNTER_STYLES: [&str; 7] = [
+  "decimal",
+  "decimal-leading-zero",
+  "lower-roman",
+  "upper-roman",
+  "cjk-decimal",
+  "trad-chinese-informal",
+  "cjk-ideographic",
+];
+
 /// Formats a page counter in a CSS `@counter-style` named style. Unknown
 /// styles fall back to `decimal`.
 fn format_counter(value: usize, style: &str) -> String {
@@ -426,7 +436,7 @@ fn counter_text(node: &Node, page: usize, pages: usize) -> Option<String> {
   };
   let style = classes
     .split_whitespace()
-    .find(|class| *class != "pageNumber" && *class != "totalPages")
+    .find(|class| COUNTER_STYLES.contains(class))
     .unwrap_or("decimal");
 
   Some(format_counter(value, style))
