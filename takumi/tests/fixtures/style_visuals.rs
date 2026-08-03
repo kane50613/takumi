@@ -78,6 +78,44 @@ fn test_style_border_width() {
   run_fixture_test(container, "style_border_width");
 }
 
+/// A fractional width must paint evenly through coverage AA — layout rounding
+/// used to turn a uniform 2.5px border into a 2px top and a 3px bottom
+/// depending on where each edge landed on the pixel grid.
+#[test]
+fn test_style_border_fractional_width() {
+  let chips: Vec<Node> = (0..4)
+    .map(|index| {
+      Node::container([]).with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Flex))
+          .with(StyleDeclaration::width(Px(180.0)))
+          .with(StyleDeclaration::height(Px(41.0 + index as f32 * 0.25)))
+          .with(StyleDeclaration::background_color(ColorInput::Value(
+            Color::white(),
+          )))
+          .with_border_width(Sides([Px(2.5).into(); 4]))
+          .with_border_style(Sides([BorderStyle::Solid; 4]))
+          .with_border_color(Sides([ColorInput::Value(Color([51, 41, 27, 255])); 4]))
+          .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(10.0)); 4]))),
+      )
+    })
+    .collect();
+  let container = Node::container(chips).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([239, 230, 205, 255]),
+      )))
+      .with(StyleDeclaration::justify_content(JustifyContent::Center))
+      .with(StyleDeclaration::align_items(AlignItems::Center))
+      .with_gap(SpacePair::from_single(Px(24.0).into())),
+  );
+
+  run_fixture_test(container, "style_border_fractional_width");
+}
+
 #[test]
 fn test_style_border_per_side_color_and_width() {
   let container = Node::container([Node::container([]).with_style(
