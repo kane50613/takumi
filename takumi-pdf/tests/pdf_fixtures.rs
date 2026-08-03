@@ -256,7 +256,7 @@ fn invoice() {
   run_pdf_fixture("invoice", |fonts| {
     PdfOptions::builder()
       .node(html_fixture("invoice.html"))
-      .page(PageOptions::a4().with_margin(36.0))
+      .page(PageOptions::A4.with_margin(36.0))
       .footer(html_fixture("invoice-footer.html"))
       .fonts(fonts)
       .build()

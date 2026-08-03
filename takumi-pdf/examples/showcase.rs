@@ -24,7 +24,7 @@ fn main() {
   let invoice = render(
     PdfOptions::builder()
       .node(fixture(root, "invoice.html"))
-      .page(PageOptions::a4().with_margin(36.0))
+      .page(PageOptions::A4.with_margin(36.0))
       .footer(fixture(root, "invoice-footer.html"))
       .fonts(&fonts)
       .build(),

@@ -152,23 +152,29 @@ pub struct PageOptions {
 }
 
 /// Millimeters to CSS px (96 dpi).
-fn mm(value: f32) -> f32 {
+const fn mm(value: f32) -> f32 {
   value / 25.4 * 96.0
 }
 
 /// Inches to CSS px (96 dpi).
-fn inches(value: f32) -> f32 {
+const fn inches(value: f32) -> f32 {
   value * 96.0
 }
 
 /// Presets are portrait with a half-inch margin; chain
 /// [`landscape`](Self::landscape) and [`with_margin`](Self::with_margin) to
 /// adjust, or fill the fields directly for any other size.
-// ponytail: a4 + letter only; add other @page keywords when someone asks.
+// ponytail: A4 + LETTER only; add other @page keywords when someone asks.
 impl PageOptions {
   const DEFAULT_MARGIN: f32 = 48.0;
 
-  fn preset(width: f32, height: f32) -> Self {
+  /// ISO A4: 210 × 297 mm.
+  pub const A4: Self = Self::preset(mm(210.0), mm(297.0));
+
+  /// US Letter: 8.5 × 11 in.
+  pub const LETTER: Self = Self::preset(inches(8.5), inches(11.0));
+
+  const fn preset(width: f32, height: f32) -> Self {
     Self {
       width,
       height,
@@ -176,18 +182,8 @@ impl PageOptions {
     }
   }
 
-  /// ISO A4: 210 × 297 mm.
-  pub fn a4() -> Self {
-    Self::preset(mm(210.0), mm(297.0))
-  }
-
-  /// US Letter: 8.5 × 11 in.
-  pub fn letter() -> Self {
-    Self::preset(inches(8.5), inches(11.0))
-  }
-
   /// Swaps width and height.
-  pub fn landscape(self) -> Self {
+  pub const fn landscape(self) -> Self {
     Self {
       width: self.height,
       height: self.width,
@@ -196,11 +192,11 @@ impl PageOptions {
   }
 
   /// Replaces the uniform margin.
-  pub fn with_margin(self, margin: f32) -> Self {
+  pub const fn with_margin(self, margin: f32) -> Self {
     Self { margin, ..self }
   }
 
-  fn content_size(&self) -> (f32, f32) {
+  const fn content_size(&self) -> (f32, f32) {
     (
       self.width - 2.0 * self.margin,
       self.height - 2.0 * self.margin,
@@ -1493,7 +1489,7 @@ fn rasterized_image(source: &ImageSource, context: &RenderContext) -> Option<Kri
   ))
 }
 
-fn spread(repeating: bool) -> SpreadMethod {
+const fn spread(repeating: bool) -> SpreadMethod {
   if repeating {
     SpreadMethod::Repeat
   } else {
@@ -1516,7 +1512,7 @@ fn krilla_stops(resolved: &[ResolvedGradientStop], base: f32, span: f32) -> Vec<
     .collect()
 }
 
-fn krilla_blend(mode: BlendMode) -> KrillaBlendMode {
+const fn krilla_blend(mode: BlendMode) -> KrillaBlendMode {
   match mode {
     BlendMode::Multiply => KrillaBlendMode::Multiply,
     BlendMode::Screen => KrillaBlendMode::Screen,
@@ -1660,19 +1656,19 @@ mod tests {
 
   #[test]
   fn presets_match_css_page_keywords() {
-    let a4 = PageOptions::a4();
+    let a4 = PageOptions::A4;
 
     assert!((a4.width - 793.7).abs() < 0.1);
     assert!((a4.height - 1122.5).abs() < 0.1);
 
-    let letter = PageOptions::letter();
+    let letter = PageOptions::LETTER;
 
     assert_eq!((letter.width, letter.height), (816.0, 1056.0));
 
-    let landscape = PageOptions::a4().landscape();
+    let landscape = PageOptions::A4.landscape();
 
     assert_eq!(landscape.width, a4.height);
     assert_eq!(landscape.height, a4.width);
-    assert_eq!(PageOptions::a4().with_margin(0.0).margin, 0.0);
+    assert_eq!(PageOptions::A4.with_margin(0.0).margin, 0.0);
   }
 }
