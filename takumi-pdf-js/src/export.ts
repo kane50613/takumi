@@ -11,28 +11,29 @@ export type { FontLoader, ImagesInput } from "@takumi-rs/helpers/renderer";
 /** A document input: a takumi node tree or JSX. */
 export type NodeInput = Node | ReactNode | ReactElementLike;
 
-/** Paged output geometry. The preset supplies the size (default `a4`), explicit fields override. */
-export type PageInput = {
-  preset?: "a4" | "letter";
-  landscape?: boolean;
-  /** Page width in CSS px (96 dpi). */
-  width?: number;
-  /** Page height in CSS px (96 dpi). */
-  height?: number;
-  /** Uniform margin in CSS px. Presets default to half an inch. */
-  margin?: number;
-};
+/**
+ * A page size, like the CSS `@page` `size` descriptor: a keyword (optionally
+ * with `landscape`) or `[width, height]` in CSS px (96 dpi).
+ */
+export type PageSize =
+  | "a4"
+  | "letter"
+  | "a4 landscape"
+  | "letter landscape"
+  | [width: number, height: number];
 
 export type RenderOptions = {
-  /** Viewport width for single-page output. Requires `height`; ignored when `page` is set. */
+  /** Viewport width for single-page output. Requires `height`; ignored when `size` is set. */
   width?: number;
   /** Viewport height for single-page output. */
   height?: number;
   /**
-   * Paged output. A preset name or a {@link PageInput}. Omitting `page`,
-   * `width`, and `height` entirely renders paged A4.
+   * Page size for paged output. Omitting `size`, `width`, and `height`
+   * entirely renders paged A4.
    */
-  page?: PageInput | "a4" | "letter";
+  size?: PageSize;
+  /** Uniform page margin in CSS px for paged output. Presets default to half an inch. */
+  margin?: number;
   /** Band repeated at the top of every page. Text may use `{page}` and `{pages}`. */
   header?: NodeInput;
   /** Band repeated at the bottom of every page; same placeholders as `header`. */
@@ -72,7 +73,7 @@ export class PdfRenderer {
 
   /** Renders a node tree or JSX to PDF bytes. See {@link RenderOptions}. */
   async render(node: NodeInput, options: RenderOptions = {}): Promise<Uint8Array> {
-    const { fonts, images, header, footer, page, stylesheets, fontFamilies, ...rest } = options;
+    const { fonts, images, header, footer, stylesheets, fontFamilies, ...rest } = options;
     const sheets = [...(stylesheets ?? [])];
     const resolved = await resolveNode(node, sheets);
     const headerNode = header === undefined ? undefined : await resolveNode(header, sheets);
@@ -81,7 +82,6 @@ export class PdfRenderer {
 
     return this.inner.render(resolved, {
       ...rest,
-      page: typeof page === "string" ? { preset: page } : page,
       header: headerNode,
       footer: footerNode,
       stylesheets: sheets.length > 0 ? sheets : undefined,

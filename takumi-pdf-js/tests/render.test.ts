@@ -38,21 +38,20 @@ test("paginates and substitutes footer counters", async () => {
     children: Array.from({ length: 60 }, (_, i) => text(`Row ${i + 1}`, { fontSize: 16 })),
   });
   const pdf = await renderer.render(rows, {
-    page: { width: 400, height: 300, margin: 24 },
+    size: [400, 300],
+    margin: 24,
     footer: text("Page {page} of {pages}", { fontSize: 12 }),
   });
 
   expect(pageCount(pdf)).toBeGreaterThan(1);
 });
 
-test("letter preset in landscape", async () => {
-  const pdf = await renderer.render(doc, { page: { preset: "letter", landscape: true } });
+test("letter landscape keyword", async () => {
+  const pdf = await renderer.render(doc, { size: "letter landscape" });
 
   expect(pageCount(pdf)).toBe(1);
 });
 
-test("rejects an unknown preset", () => {
-  expect(renderer.render(doc, { page: { preset: "tabloid" as "a4" } })).rejects.toThrow(
-    "unknown page preset",
-  );
+test("rejects an unknown size keyword", () => {
+  expect(renderer.render(doc, { size: "tabloid" as "a4" })).rejects.toThrow("unknown page size");
 });

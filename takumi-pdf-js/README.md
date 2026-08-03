@@ -12,13 +12,13 @@ const pdf = await render(
 );
 ```
 
-Without options the document flows across A4 pages. Fixed single-page output takes `width`/`height`; paged output takes `page` (`"a4"`, `"letter"`, or `{ width, height, margin, landscape }`) plus repeating `header`/`footer` bands where text may use the `{page}` and `{pages}` placeholders.
+Without options the document flows across A4 pages. Fixed single-page output takes `width`/`height`; paged output takes `size` like the CSS `@page` descriptor (`"a4"`, `"letter landscape"`, or `[width, height]` in px) with a uniform `margin`, plus repeating `header`/`footer` bands where text may use the `{page}` and `{pages}` placeholders.
 
 Pagination honors `break-before: page`, `break-after: page`, `break-inside: avoid`, and `box-decoration-break`.
 
 ```ts
 const pdf = await render(report, {
-  page: "a4",
+  size: "a4",
   footer: text("Page {page} of {pages}", { fontSize: 12 }),
   fonts: ["https://takumi.kane.tw/fonts/geist.woff2"],
 });
