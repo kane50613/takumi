@@ -1,0 +1,32 @@
+[package]
+name = "takumi-pdf"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Vector PDF output backend for takumi. Emits selectable, searchable text with embedded subset fonts via krilla."
+repository = "https://github.com/kane50613/takumi"
+rust-version = "1.91"
+publish = false
+
+[features]
+default = ["images"]
+images = ["krilla/raster-images"]
+
+[dependencies]
+typed-builder.workspace = true
+
+[dependencies.krilla]
+version = "0.8"
+default-features = false
+
+[dependencies.takumi-core]
+path = "../takumi-core"
+version = "0.11.0"
+default-features = false
+features = ["woff2"]
+
+[lints]
+workspace = true
+
+[dev-dependencies.takumi-html]
+path = "../takumi-html"

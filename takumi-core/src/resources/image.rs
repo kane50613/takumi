@@ -633,6 +633,7 @@ pub(crate) fn is_svg_like(src: &str) -> bool {
 
 /// A decoded `data:` URI body with its `type/subtype` MIME string.
 pub(crate) struct DecodedDataUri {
+  #[cfg_attr(not(feature = "svg"), allow(dead_code))]
   pub mime: String,
   pub bytes: Vec<u8>,
 }
