@@ -303,6 +303,24 @@
         "csstype",
       ],
     },
+    "takumi-pdf-js": {
+      "name": "takumi-pdf",
+      "version": "0.0.1",
+      "dependencies": {
+        "@takumi-rs/helpers": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@types/react": "catalog:",
+        "tsdown": "catalog:",
+      },
+      "peerDependencies": {
+        "react": "^18.0.0 || ^19.0.0",
+      },
+      "optionalPeers": [
+        "react",
+      ],
+    },
     "takumi-template": {
       "name": "takumi-template",
       "dependencies": {
@@ -2265,6 +2283,8 @@
     "tailwindcss": ["tailwindcss@4.3.3", "", {}, "sha512-gOhV3P7ufE62QDGg1zVaTgCR+EtPv92k2nIhVcVKcLmxT1sUBsQGhnZj175j+MqRt4zLF7ic+sCYjfhxMxj7YQ=="],
 
     "takumi-js": ["takumi-js@workspace:takumi-js"],
+
+    "takumi-pdf": ["takumi-pdf@workspace:takumi-pdf-js"],
 
     "takumi-template": ["takumi-template@workspace:takumi-template"],
 

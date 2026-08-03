@@ -1,0 +1,105 @@
+{
+  "name": "takumi-pdf",
+  "version": "0.0.1",
+  "description": "HTML/JSX to paged, selectable-text PDF, powered by takumi. WebAssembly, no Chromium.",
+  "keywords": [
+    "css",
+    "invoice",
+    "jsx",
+    "pdf",
+    "react",
+    "rendering",
+    "webassembly"
+  ],
+  "homepage": "https://takumi.kane.tw/docs/",
+  "bugs": {
+    "url": "https://github.com/kane50613/takumi/issues"
+  },
+  "license": "(MIT OR Apache-2.0)",
+  "author": {
+    "name": "Kane Wang",
+    "email": "me@kane.tw",
+    "url": "https://kane.tw"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kane50613/takumi.git",
+    "directory": "takumi-pdf-js"
+  },
+  "files": [
+    "pkg/takumi_pdf_wasm_bg.wasm",
+    "pkg/takumi_pdf_wasm_bg.wasm.d.ts",
+    "dist",
+    "bundlers"
+  ],
+  "type": "module",
+  "main": "./dist/export.cjs",
+  "module": "./dist/export.mjs",
+  "types": "./dist/export.d.mts",
+  "exports": {
+    ".": {
+      "bun": {
+        "types": "./bundlers/node.d.ts",
+        "default": "./bundlers/node.mjs"
+      },
+      "workerd": {
+        "types": "./bundlers/node.d.ts",
+        "default": "./bundlers/workerd.mjs"
+      },
+      "node": {
+        "require": {
+          "types": "./bundlers/node.d.cts",
+          "default": "./bundlers/node.cjs"
+        },
+        "default": {
+          "types": "./bundlers/node.d.ts",
+          "default": "./bundlers/node.mjs"
+        }
+      },
+      "default": {
+        "types": "./dist/export.d.mts",
+        "default": "./dist/export.mjs"
+      }
+    },
+    "./no-init": {
+      "import": {
+        "types": "./dist/export.d.mts",
+        "default": "./dist/export.mjs"
+      },
+      "require": {
+        "types": "./dist/export.d.cts",
+        "default": "./dist/export.cjs"
+      }
+    },
+    "./takumi_pdf_wasm_bg.wasm": {
+      "types": "./pkg/takumi_pdf_wasm_bg.wasm.d.ts",
+      "default": "./pkg/takumi_pdf_wasm_bg.wasm"
+    }
+  },
+  "scripts": {
+    "build": "wasm-pack build ../takumi-pdf-wasm --no-pack --release --out-dir ../takumi-pdf-js/pkg --target web && bun build:js",
+    "build:js": "tsdown",
+    "build:debug": "wasm-pack build ../takumi-pdf-wasm --no-pack --dev --out-dir ../takumi-pdf-js/pkg --target web && bun build:js",
+    "publish-lint": "attw --pack . && publint --strict ."
+  },
+  "dependencies": {
+    "@takumi-rs/helpers": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "tsdown": "catalog:"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "readme": "README.md"
+}

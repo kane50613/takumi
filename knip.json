@@ -35,6 +35,11 @@
     "takumi-wasm": {
       "entry": ["tests/**/*.test.{ts,tsx}"],
       "ignore": ["pkg*/**"]
+    },
+    "takumi-pdf-js": {
+      "entry": ["tests/**/*.test.{ts,tsx}"],
+      "ignore": ["pkg*/**"],
+      "ignoreDependencies": ["react"]
     }
   }
 }

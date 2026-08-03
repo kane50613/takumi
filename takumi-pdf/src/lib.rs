@@ -16,7 +16,8 @@
 //!
 //! Pagination honors `break-before: page`, `break-after: page`, and
 //! `break-inside: avoid`; repeated header/footer bands carve their height out
-//! of the content window and substitute `{page}` / `{pages}` in text.
+//! of the content window. Nodes classed `pageNumber` / `totalPages` are
+//! filled with the page counters, matching Chromium's print templates.
 //!
 //! Coverage: backgrounds (color and gradient layers), borders and radius,
 //! images (`object-fit`/`object-position`), text with decorations, opacity,
@@ -109,46 +110,72 @@ pub struct PdfOptions<'g> {
   /// The viewport to render in. Required for single-page output; ignored when
   /// [`Self::page`] is set (the page geometry defines the layout width).
   #[builder(default, setter(strip_option))]
-  pub(crate) viewport: Option<Viewport>,
+  pub viewport: Option<Viewport>,
   /// The font context.
-  pub(crate) fonts: &'g Fonts,
+  pub fonts: &'g Fonts,
   /// The root node to render.
-  pub(crate) node: Node,
+  pub node: Node,
   /// CSS stylesheets to apply before layout.
   #[builder(default)]
-  pub(crate) stylesheet: Arc<StyleSheet>,
+  pub stylesheet: Arc<StyleSheet>,
   /// Resources fetched externally, keyed by URL.
   #[builder(default)]
-  pub(crate) images: HashMap<Arc<str>, ImageSource>,
+  pub images: HashMap<Arc<str>, ImageSource>,
   /// Paged output; `None` renders a single page at the viewport size.
   #[builder(default, setter(strip_option))]
-  pub(crate) page: Option<PageOptions>,
-  /// Band repeated at the top of every page. Text may use the `{page}` and
-  /// `{pages}` placeholders. Its height is carved out of the content window.
+  pub page: Option<PageOptions>,
+  /// Band repeated at the top of every page. Nodes classed `pageNumber` /
+  /// `totalPages` receive the counters, optionally formatted by a
+  /// `@counter-style` name in the same class list (e.g. `cjk-decimal`). The
+  /// band's height is carved out of the content window.
   #[builder(default, setter(strip_option))]
-  pub(crate) header: Option<Node>,
-  /// Band repeated at the bottom of every page; same placeholders as `header`.
+  pub header: Option<Node>,
+  /// Band repeated at the bottom of every page; same class hooks as `header`.
   #[builder(default, setter(strip_option))]
-  pub(crate) footer: Option<Node>,
+  pub footer: Option<Node>,
   /// Per-render font fallback chain (family names in order).
   #[builder(default)]
-  pub(crate) font_families: Option<FontFamily>,
+  pub font_families: Option<FontFamily>,
   /// Default BCP-47 language tag applied to the root.
   #[builder(default)]
-  pub(crate) lang: Option<Lang>,
+  pub lang: Option<Lang>,
 }
 
-/// Paged output geometry: fixed page size with a uniform margin. Content lays
-/// out at `width - 2 * margin` and flows across as many pages as it needs.
+/// Per-side page margins in px.
+#[derive(Clone, Copy)]
+pub struct PageMargins {
+  /// Top margin.
+  pub top: f32,
+  /// Right margin.
+  pub right: f32,
+  /// Bottom margin.
+  pub bottom: f32,
+  /// Left margin.
+  pub left: f32,
+}
+
+impl PageMargins {
+  /// The same margin on all four sides.
+  pub const fn uniform(value: f32) -> Self {
+    Self {
+      top: value,
+      right: value,
+      bottom: value,
+      left: value,
+    }
+  }
+}
+
+/// Paged output geometry: fixed page size with margins. Content lays out at
+/// the width inside the margins and flows across as many pages as it needs.
 #[derive(Clone, Copy)]
 pub struct PageOptions {
   /// Page width in px (A4 at 96 dpi ≈ 794).
   pub width: f32,
   /// Page height in px (A4 at 96 dpi ≈ 1123).
   pub height: f32,
-  // ponytail: uniform margin; per-side margins when someone asks.
-  /// Margin applied to all four sides, in px.
-  pub margin: f32,
+  /// Page margins in px.
+  pub margin: PageMargins,
 }
 
 /// Millimeters to CSS px (96 dpi).
@@ -178,7 +205,7 @@ impl PageOptions {
     Self {
       width,
       height,
-      margin: Self::DEFAULT_MARGIN,
+      margin: PageMargins::uniform(Self::DEFAULT_MARGIN),
     }
   }
 
@@ -191,15 +218,18 @@ impl PageOptions {
     }
   }
 
-  /// Replaces the uniform margin.
+  /// Replaces the margins with a uniform value.
   pub const fn with_margin(self, margin: f32) -> Self {
-    Self { margin, ..self }
+    Self {
+      margin: PageMargins::uniform(margin),
+      ..self
+    }
   }
 
   const fn content_size(&self) -> (f32, f32) {
     (
-      self.width - 2.0 * self.margin,
-      self.height - 2.0 * self.margin,
+      self.width - self.margin.left - self.margin.right,
+      self.height - self.margin.top - self.margin.bottom,
     )
   }
 }
@@ -289,23 +319,134 @@ fn prepare_tree(
   })
 }
 
-/// Replaces `{page}` / `{pages}` in every text node.
+/// Formats a page counter in a CSS `@counter-style` named style. Unknown
+/// styles fall back to `decimal`.
+fn format_counter(value: usize, style: &str) -> String {
+  match style {
+    "cjk-decimal" => value
+      .to_string()
+      .bytes()
+      .map(|digit| CHINESE_DIGITS[usize::from(digit - b'0')])
+      .collect(),
+    // Blink defines cjk-ideographic as `extends trad-chinese-informal`.
+    "trad-chinese-informal" | "cjk-ideographic" => chinese_informal(value),
+    "lower-roman" => roman(value).to_ascii_lowercase(),
+    "upper-roman" => roman(value),
+    "decimal-leading-zero" => format!("{value:02}"),
+    _ => value.to_string(),
+  }
+}
+
+const CHINESE_DIGITS: [char; 10] = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+
+/// Reading-style Chinese numerals (一, 十二, 一百零三) up to 9999; larger
+/// values fall back to positional digits.
+fn chinese_informal(value: usize) -> String {
+  if value >= 10_000 {
+    return format_counter(value, "cjk-decimal");
+  }
+  if value == 0 {
+    return CHINESE_DIGITS[0].to_string();
+  }
+  let mut out = String::new();
+  let mut needs_zero = false;
+
+  for (unit, name) in [
+    (1000, Some('千')),
+    (100, Some('百')),
+    (10, Some('十')),
+    (1, None),
+  ] {
+    let digit = value / unit % 10;
+
+    if digit == 0 {
+      needs_zero = !out.is_empty();
+      continue;
+    }
+    if needs_zero {
+      out.push(CHINESE_DIGITS[0]);
+      needs_zero = false;
+    }
+    // 10-19 reads 十 not 一十.
+    if !(unit == 10 && digit == 1 && value < 20) {
+      out.push(CHINESE_DIGITS[digit]);
+    }
+    if let Some(name) = name {
+      out.push(name);
+    }
+  }
+  out
+}
+
+fn roman(value: usize) -> String {
+  const NUMERALS: [(usize, &str); 13] = [
+    (1000, "M"),
+    (900, "CM"),
+    (500, "D"),
+    (400, "CD"),
+    (100, "C"),
+    (90, "XC"),
+    (50, "L"),
+    (40, "XL"),
+    (10, "X"),
+    (9, "IX"),
+    (5, "V"),
+    (4, "IV"),
+    (1, "I"),
+  ];
+  let mut remaining = value;
+  let mut out = String::new();
+
+  for (unit, numeral) in NUMERALS {
+    while remaining >= unit {
+      out.push_str(numeral);
+      remaining -= unit;
+    }
+  }
+  out
+}
+
+/// The counter value a node's class hooks request, if any: `pageNumber` or
+/// `totalPages`, optionally paired with a `@counter-style` name — the same
+/// contract as Chromium's print header/footer templates.
+fn counter_text(node: &Node, page: usize, pages: usize) -> Option<String> {
+  let classes = node.class_name()?;
+  let value = if classes
+    .split_whitespace()
+    .any(|class| class == "pageNumber")
+  {
+    page
+  } else if classes
+    .split_whitespace()
+    .any(|class| class == "totalPages")
+  {
+    pages
+  } else {
+    return None;
+  };
+  let style = classes
+    .split_whitespace()
+    .find(|class| *class != "pageNumber" && *class != "totalPages")
+    .unwrap_or("decimal");
+
+  Some(format_counter(value, style))
+}
+
+/// Fills `pageNumber` / `totalPages` class hooks with the formatted counter,
+/// like Chromium assigning `textContent` in its header/footer template.
 fn substitute_page_counters(node: &mut Node, page: usize, pages: usize) {
-  match &mut node.kind {
-    NodeKind::Text(text) => {
-      if text.text.contains("{page}") || text.text.contains("{pages}") {
-        text.text = text
-          .text
-          .replace("{page}", &page.to_string())
-          .replace("{pages}", &pages.to_string());
-      }
+  if let Some(text) = counter_text(node, page, pages) {
+    match &mut node.kind {
+      NodeKind::Text(data) => data.text = text,
+      NodeKind::Container { children } => *children = vec![Node::text(text)],
+      _ => {}
     }
-    NodeKind::Container { children } => {
-      for child in children {
-        substitute_page_counters(child, page, pages);
-      }
+    return;
+  }
+  if let NodeKind::Container { children } = &mut node.kind {
+    for child in children {
+      substitute_page_counters(child, page, pages);
     }
-    _ => {}
   }
 }
 
@@ -410,15 +551,15 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           emit_band(
             &band,
             &mut fonts,
-            page.margin,
-            page.margin,
+            page.margin.left,
+            page.margin.top,
             content_width,
             header_height,
             &mut surface,
           )?;
         }
 
-        let content_top = page.margin + header_height;
+        let content_top = page.margin.top + header_height;
         // Paint stops at the next cut: the region between a raised cut and the
         // page's full height belongs to the next page and stays blank, exactly
         // like browser print fragmentation.
@@ -426,11 +567,14 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         let paint_height = (next_start - y0).min(window_height);
 
         if let Some(path) =
-          KrillaRect::from_xywh(page.margin, content_top, content_width, paint_height)
+          KrillaRect::from_xywh(page.margin.left, content_top, content_width, paint_height)
             .and_then(rect_path)
         {
           surface.push_clip_path(&path, &FillRule::NonZero);
-          surface.push_transform(&Transform::from_translate(page.margin, content_top - y0));
+          surface.push_transform(&Transform::from_translate(
+            page.margin.left,
+            content_top - y0,
+          ));
           let mut emitter = content.emitter(&mut fonts);
 
           emitter.window = Some((y0, y0 + paint_height));
@@ -446,8 +590,8 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           emit_band(
             &band,
             &mut fonts,
-            page.margin,
-            page.height - page.margin - footer_height,
+            page.margin.left,
+            page.height - page.margin.bottom - footer_height,
             content_width,
             footer_height,
             &mut surface,
@@ -1699,6 +1843,6 @@ mod tests {
 
     assert_eq!(landscape.width, a4.height);
     assert_eq!(landscape.height, a4.width);
-    assert_eq!(PageOptions::A4.with_margin(0.0).margin, 0.0);
+    assert_eq!(PageOptions::A4.with_margin(0.0).margin.top, 0.0);
   }
 }

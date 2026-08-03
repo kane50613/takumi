@@ -18,17 +18,21 @@ use takumi_core::{
   viewport::Viewport,
 };
 use takumi_html::{FromHtmlOptions, from_html};
-use takumi_pdf::{PageOptions, PdfOptions, render};
+use takumi_pdf::{PageMargins, PageOptions, PdfOptions, render};
 
 fn fonts() -> Fonts {
   let mut fonts = Fonts::default();
-  let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-    .join("../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf");
-  let data = fs::read(&path).expect("read test font");
 
-  fonts
-    .register(FontResource::new(data))
-    .expect("load test font");
+  for path in [
+    "../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf",
+    "../assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2",
+  ] {
+    let data = fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join(path)).expect("read test font");
+
+    fonts
+      .register(FontResource::new(data))
+      .expect("load test font");
+  }
   fonts
 }
 
@@ -126,7 +130,7 @@ fn paged_lines() {
       .page(PageOptions {
         width: 400.0,
         height: 300.0,
-        margin: 24.0,
+        margin: PageMargins::uniform(24.0),
       })
       .fonts(fonts)
       .build()
@@ -143,9 +147,19 @@ fn paged_footer_counters() {
       .page(PageOptions {
         width: 400.0,
         height: 300.0,
-        margin: 24.0,
+        margin: PageMargins::uniform(24.0),
       })
-      .footer(text("Page {page} of {pages}", 12.0))
+      .footer(
+        from_html(
+          r#"<div style="display: flex; column-gap: 3px; font-size: 12px; color: #141414;">
+            Page <span class="pageNumber"></span> of <span class="totalPages"></span>,
+            page <span class="pageNumber trad-chinese-informal"></span> in Chinese,
+            <span class="pageNumber lower-roman"></span> in roman
+          </div>"#,
+          FromHtmlOptions::default(),
+        )
+        .expect("parse footer fixture"),
+      )
       .fonts(fonts)
       .build()
   });
@@ -173,7 +187,7 @@ fn paged_breaks() {
       .page(PageOptions {
         width: 400.0,
         height: 400.0,
-        margin: 24.0,
+        margin: PageMargins::uniform(24.0),
       })
       .fonts(fonts)
       .build()
@@ -305,7 +319,7 @@ fn paged_clone_decorations() {
       .page(PageOptions {
         width: 360.0,
         height: 260.0,
-        margin: 20.0,
+        margin: PageMargins::uniform(20.0),
       })
       .fonts(fonts)
       .build()
@@ -331,7 +345,7 @@ fn paged_transform_atoms() {
       .page(PageOptions {
         width: 400.0,
         height: 300.0,
-        margin: 24.0,
+        margin: PageMargins::uniform(24.0),
       })
       .fonts(fonts)
       .build()
@@ -360,7 +374,7 @@ fn paged_header_footer() {
         &format!(
           r#"<div style="display: flex; width: 100%; justify-content: space-between; font-size: 11px; color: #57534e; padding: 6px 0;">
             <div>{label}</div>
-            <div>Page {{page}} of {{pages}}</div>
+            <div style="display: flex; column-gap: 3px">Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>
           </div>"#
         ),
         FromHtmlOptions::default(),
@@ -373,7 +387,7 @@ fn paged_header_footer() {
       .page(PageOptions {
         width: 400.0,
         height: 320.0,
-        margin: 24.0,
+        margin: PageMargins::uniform(24.0),
       })
       .header(band("Quarterly report"))
       .footer(band("Confidential"))
@@ -500,7 +514,7 @@ fn paged_images() {
       .page(PageOptions {
         width: 300.0,
         height: 260.0,
-        margin: 20.0,
+        margin: PageMargins::uniform(20.0),
       })
       .fonts(fonts)
       .build()
@@ -556,7 +570,7 @@ fn paged_narrow() {
       .page(PageOptions {
         width: 200.0,
         height: 420.0,
-        margin: 16.0,
+        margin: PageMargins::uniform(16.0),
       })
       .fonts(fonts)
       .build()
