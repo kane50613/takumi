@@ -1,3 +1,17 @@
+## takumi-core@0.12.0
+
+### Add box-decoration-break
+
+`box-decoration-break: slice | clone` parses. The paged PDF backend uses it to decide how a box painted across page fragments closes its edges: `slice` (the default) leaves the edge at a break open, matching browser print behavior, while `clone` paints every fragment's complete borders and background. Cloned padding is paint-only and does not reserve layout space.
+
+### Paint fractional border widths evenly
+
+Layout rounding snapped border widths to whole pixels per edge, so a uniform 2.5px border could come out as a 2px top and a 3px bottom depending on where each edge landed on the pixel grid. Border widths now keep their fractional values through layout rounding and paint with coverage antialiasing, matching how browsers draw them.
+
+### Add break-before, break-after, and break-inside
+
+The three fragmentation properties parse with their page values: `break-before: page`, `break-after: page`, and `break-inside: avoid`. Raster and SVG output ignores them; the paged PDF backend consumes them. `ShapedRun` now carries its source text range and per-glyph cluster ranges for text-extraction backends, and the JPEG, WebP, and GIF decoders sit behind a new default-on `image-decoding` feature so slim builds can drop them.
+
 ## takumi-core@0.11.0
 
 ### Place the underline below descenders with text-underline-position

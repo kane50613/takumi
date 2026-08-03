@@ -1,7 +1,4 @@
----
-packages:
-  "takumi-pdf": minor
----
+## takumi-pdf@0.2.0
 
 ### Publish takumi-pdf, the wasm PDF package
 
