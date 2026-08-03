@@ -78,14 +78,8 @@ function isNode(value: NodeInput): value is Node {
   return typeof value === "object" && value !== null && "type" in value && !("$$typeof" in value);
 }
 
-async function resolveNode(input: NodeInput, stylesheets: string[]): Promise<Node> {
-  if (isNode(input)) {
-    return input;
-  }
-  const result = await fromJsx(input as ReactNode);
-
-  stylesheets.push(...result.stylesheets);
-  return result.node;
+async function resolveNode(input: NodeInput): Promise<{ node: Node; stylesheets: string[] }> {
+  return isNode(input) ? { node: input, stylesheets: [] } : fromJsx(input as ReactNode);
 }
 
 /** A PDF renderer holding registered fonts. Reuse one instance across renders. */
@@ -98,16 +92,23 @@ export class PdfRenderer {
   /** Renders a node tree or JSX to PDF bytes. See {@link RenderOptions}. */
   async render(node: NodeInput, options: RenderOptions = {}): Promise<Uint8Array> {
     const { fonts, images, header, footer, stylesheets, fontFamilies, ...rest } = options;
-    const sheets = [...(stylesheets ?? [])];
-    const resolved = await resolveNode(node, sheets);
-    const headerNode = header === undefined ? undefined : await resolveNode(header, sheets);
-    const footerNode = footer === undefined ? undefined : await resolveNode(footer, sheets);
-    const resources = await this.fonts.resolveResources(fonts, images, fontFamilies);
+    const [main, headerResult, footerResult, resources] = await Promise.all([
+      resolveNode(node),
+      header === undefined ? undefined : resolveNode(header),
+      footer === undefined ? undefined : resolveNode(footer),
+      this.fonts.resolveResources(fonts, images, fontFamilies),
+    ]);
+    const sheets = [
+      ...(stylesheets ?? []),
+      ...main.stylesheets,
+      ...(headerResult?.stylesheets ?? []),
+      ...(footerResult?.stylesheets ?? []),
+    ];
 
-    return this.inner.render(resolved, {
+    return this.inner.render(main.node, {
       ...rest,
-      header: headerNode,
-      footer: footerNode,
+      header: headerResult?.node,
+      footer: footerResult?.node,
       stylesheets: sheets.length > 0 ? sheets : undefined,
       images: resources.images,
       fontFamilies: resources.fontFamilies,

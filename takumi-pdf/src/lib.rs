@@ -325,19 +325,8 @@ fn format_counter(value: usize, style: &str) -> String {
   match style {
     "cjk-decimal" => value
       .to_string()
-      .chars()
-      .map(|digit| match digit {
-        '0' => '〇',
-        '1' => '一',
-        '2' => '二',
-        '3' => '三',
-        '4' => '四',
-        '5' => '五',
-        '6' => '六',
-        '7' => '七',
-        '8' => '八',
-        _ => '九',
-      })
+      .bytes()
+      .map(|digit| CHINESE_DIGITS[usize::from(digit - b'0')])
       .collect(),
     // Blink defines cjk-ideographic as `extends trad-chinese-informal`.
     "trad-chinese-informal" | "cjk-ideographic" => chinese_informal(value),
@@ -348,16 +337,16 @@ fn format_counter(value: usize, style: &str) -> String {
   }
 }
 
+const CHINESE_DIGITS: [char; 10] = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+
 /// Reading-style Chinese numerals (一, 十二, 一百零三) up to 9999; larger
 /// values fall back to positional digits.
 fn chinese_informal(value: usize) -> String {
-  const DIGITS: [char; 10] = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
-
   if value >= 10_000 {
     return format_counter(value, "cjk-decimal");
   }
   if value == 0 {
-    return DIGITS[0].to_string();
+    return CHINESE_DIGITS[0].to_string();
   }
   let mut out = String::new();
   let mut needs_zero = false;
@@ -375,12 +364,12 @@ fn chinese_informal(value: usize) -> String {
       continue;
     }
     if needs_zero {
-      out.push(DIGITS[0]);
+      out.push(CHINESE_DIGITS[0]);
       needs_zero = false;
     }
     // 10-19 reads 十 not 一十.
     if !(unit == 10 && digit == 1 && value < 20) {
-      out.push(DIGITS[digit]);
+      out.push(CHINESE_DIGITS[digit]);
     }
     if let Some(name) = name {
       out.push(name);
