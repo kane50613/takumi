@@ -481,9 +481,11 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
 type Atom = (f32, f32);
 
 /// Page start offsets for slicing `total` height into windows of `window`
-/// height. Each cut moves up to the top of any atom straddling the ideal cut
-/// line, so atoms land whole on the next page; an atom taller than the window
-/// is cut anyway.
+/// height. Each cut moves up to the top of any atom straddling it, repeated
+/// until no atom straddles (a raised cut can land inside another atom). An
+/// atom taller than the window can never fit a page, so it does not push cuts
+/// at all — matching browsers, where `break-inside: avoid` is dropped for
+/// boxes taller than the fragmentainer.
 fn page_starts(atoms: &mut [Atom], forced: &mut Vec<f32>, total: f32, window: f32) -> Vec<f32> {
   atoms.sort_by(|a, b| a.0.total_cmp(&b.0));
   forced.retain(|cut| *cut > 1.0 && *cut < total - 1.0);
@@ -505,16 +507,24 @@ fn page_starts(atoms: &mut [Atom], forced: &mut Vec<f32>, total: f32, window: f3
     if limit >= total {
       break;
     }
-    let pushed_up = atoms
-      .iter()
-      .filter(|(top, bottom)| *top < limit && *bottom > limit)
-      .map(|(top, _)| *top)
-      .fold(limit, f32::min);
-    let cut = if pushed_up > y0 + 1.0 {
-      pushed_up
-    } else {
-      limit
-    };
+    let mut cut = limit;
+
+    loop {
+      let pushed_up = atoms
+        .iter()
+        .filter(|(top, bottom)| *top < cut && *bottom > cut && bottom - top <= window)
+        .map(|(top, _)| *top)
+        .fold(cut, f32::min);
+
+      if pushed_up >= cut {
+        break;
+      }
+      if pushed_up <= y0 + 1.0 {
+        cut = limit;
+        break;
+      }
+      cut = pushed_up;
+    }
 
     starts.push(cut);
     y0 = cut;
@@ -840,21 +850,18 @@ impl Emitter<'_> {
         if resolved.is_empty() {
           return;
         }
-        let radius_x = tile.inv_radius_x.recip();
-        let radius_y = tile.inv_radius_y.recip();
-        let (r, base, span) = if gradient.repeating {
-          let first = resolved.first().map_or(0.0, |s| s.position);
-          let last = resolved.last().map_or(tile.radius_scale, |s| s.position);
-          ((last - first).max(1e-6), first, (last - first).max(1e-6))
+        let radius_x = tile.inv_radius_x.max(1e-6).recip();
+        let radius_y = tile.inv_radius_y.max(1e-6).recip();
+        let extent = tile.radius_scale.max(1e-6);
+        // PDF radial shadings cannot repeat, so a repeating gradient expands
+        // its period across the full radius instead of relying on the spread.
+        let stops = if gradient.repeating {
+          expanded_radial_stops(&resolved, extent)
         } else {
-          (
-            tile.radius_scale.max(1e-6),
-            0.0,
-            tile.radius_scale.max(1e-6),
-          )
+          krilla_stops(&resolved, 0.0, extent)
         };
-        let scale_x = (radius_x / tile.radius_scale.max(1e-6)).max(1e-6);
-        let scale_y = (radius_y / tile.radius_scale.max(1e-6)).max(1e-6);
+        let scale_x = (radius_x / extent).max(1e-6);
+        let scale_y = (radius_y / extent).max(1e-6);
 
         KrillaRadialGradient {
           fx: 0.0,
@@ -862,10 +869,10 @@ impl Emitter<'_> {
           fr: 0.0,
           cx: 0.0,
           cy: 0.0,
-          cr: r,
+          cr: extent,
           transform: Transform::from_row(scale_x, 0.0, 0.0, scale_y, x + tile.cx, y + tile.cy),
-          spread_method: spread(gradient.repeating),
-          stops: krilla_stops(&resolved, base, span),
+          spread_method: SpreadMethod::Pad,
+          stops,
           anti_alias: false,
         }
         .into()
@@ -1019,8 +1026,8 @@ impl Emitter<'_> {
   /// Draws an image node into its content box, honoring `object-fit` and
   /// `object-position`. The source rasterizes at its intrinsic size and embeds
   /// once per distinct pixel data (krilla dedups by content hash).
-  // ponytail: JPEG bytes re-encode as flate; DCT passthrough needs krilla's
-  // raster-images feature, add when PDF size from photos matters.
+  // ponytail: pixels upload as un-premultiplied RGBA8, so JPEG bytes re-encode
+  // as flate; add DCT passthrough when PDF size from photos matters.
   fn emit_image(
     &self,
     image: &ImageData,
@@ -1054,9 +1061,10 @@ impl Emitter<'_> {
       ObjectFit::Contain => (w / iw).min(h / ih),
       ObjectFit::Cover => (w / iw).max(h / ih),
       ObjectFit::ScaleDown => (w / iw).min(h / ih).min(1.0),
+      ObjectFit::None => 1.0,
       _ => 0.0,
     };
-    let (dw, dh) = if matches!(context.style.object_fit, ObjectFit::Fill) || scale == 0.0 {
+    let (dw, dh) = if scale == 0.0 {
       (w, h)
     } else {
       (iw * scale, ih * scale)
@@ -1510,6 +1518,28 @@ fn krilla_stops(resolved: &[ResolvedGradientStop], base: f32, span: f32) -> Vec<
     .iter()
     .map(|stop| krilla_stop((stop.position - base) / span, stop.color.0))
     .collect()
+}
+
+/// Tiles one period of repeating stops across `extent` (the full gradient
+/// radius), for shadings that cannot express a repeat natively.
+fn expanded_radial_stops(resolved: &[ResolvedGradientStop], extent: f32) -> Vec<Stop> {
+  let first = resolved.first().map_or(0.0, |s| s.position);
+  let last = resolved.last().map_or(extent, |s| s.position);
+  let period = (last - first).max(1e-6);
+  let cycles = (((extent - first) / period).ceil().max(1.0)) as usize;
+  let mut stops = Vec::with_capacity(cycles * resolved.len());
+
+  for cycle in 0..cycles {
+    let offset = first + cycle as f32 * period;
+
+    for stop in resolved {
+      stops.push(krilla_stop(
+        (offset + stop.position - first) / extent,
+        stop.color.0,
+      ));
+    }
+  }
+  stops
 }
 
 const fn krilla_blend(mode: BlendMode) -> KrillaBlendMode {

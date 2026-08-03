@@ -12,7 +12,7 @@ use takumi_core::{
   layout::node::{ImageData, ImageSourceInput, Node, RgbaImage},
   resources::font::FontResource,
   style::{
-    BreakBetween, Color, ColorInput, Display, FlexDirection, FontSize, Length::*, Style,
+    BreakBetween, Color, ColorInput, Display, FlexDirection, FontSize, Length::*, ObjectFit, Style,
     StyleDeclaration,
   },
   viewport::Viewport,
@@ -50,8 +50,10 @@ fn run_pdf_fixture(name: &str, build: impl Fn(&Fonts) -> PdfOptions<'_>) {
   assert_eq!(first, second, "nondeterministic pdf output for {name}");
   assert!(first.starts_with(b"%PDF-"), "not a pdf: {name}");
 
-  fs::create_dir_all("tests/fixtures-generated").ok();
-  fs::write(format!("tests/fixtures-generated/{name}.pdf"), &first).expect("write pdf golden");
+  let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures-generated");
+
+  fs::create_dir_all(&dir).expect("create golden directory");
+  fs::write(dir.join(format!("{name}.pdf")), &first).expect("write pdf golden");
 }
 
 fn text(content: &str, size: f32) -> Node {
@@ -178,40 +180,64 @@ fn paged_breaks() {
   });
 }
 
+fn checker_pixels() -> Vec<u8> {
+  let mut pixels = Vec::with_capacity(8 * 8 * 4);
+
+  for row in 0..8u32 {
+    for col in 0..8u32 {
+      let on = (row / 2 + col / 2) % 2 == 0;
+
+      pixels.extend_from_slice(if on {
+        &[220, 60, 60, 255]
+      } else {
+        &[60, 60, 220, 255]
+      });
+    }
+  }
+  pixels
+}
+
+/// One image per `object-fit` value in a non-square box, so every sizing
+/// branch (stretch, letterbox, crop, shrink cap, intrinsic) is on the page.
 #[test]
 fn image_object_fit() {
   run_pdf_fixture("image-object-fit", |fonts| {
-    let mut pixels = Vec::with_capacity(8 * 8 * 4);
-
-    for row in 0..8u32 {
-      for col in 0..8u32 {
-        let on = (row / 2 + col / 2) % 2 == 0;
-
-        pixels.extend_from_slice(if on {
-          &[220, 60, 60, 255]
-        } else {
-          &[60, 60, 220, 255]
-        });
-      }
-    }
-    let image = Node::image(ImageData {
-      src: ImageSourceInput::Rgba(RgbaImage::new(pixels, 8, 8, false).expect("rgba image")),
-      width: Some(96.0),
-      height: Some(96.0),
-    });
+    let fits = [
+      ObjectFit::Fill,
+      ObjectFit::Contain,
+      ObjectFit::Cover,
+      ObjectFit::ScaleDown,
+      ObjectFit::None,
+    ];
+    let images: Vec<Node> = fits
+      .iter()
+      .map(|fit| {
+        Node::image(ImageData {
+          src: ImageSourceInput::Rgba(
+            RgbaImage::new(checker_pixels(), 8, 8, false).expect("rgba image"),
+          ),
+          width: Some(72.0),
+          height: Some(48.0),
+        })
+        .with_style(
+          Style::default()
+            .with(StyleDeclaration::object_fit(*fit))
+            .with(StyleDeclaration::margin_left(Px(12.0))),
+        )
+      })
+      .collect();
 
     PdfOptions::builder()
       .node(
-        Node::container([image]).with_style(
+        Node::container(images).with_style(
           Style::default()
             .with(StyleDeclaration::display(Display::Flex))
             .with(StyleDeclaration::width(Percentage(100.0)))
             .with(StyleDeclaration::height(Percentage(100.0)))
-            .with(StyleDeclaration::padding_top(Px(16.0)))
-            .with(StyleDeclaration::padding_left(Px(16.0))),
+            .with(StyleDeclaration::padding_top(Px(16.0))),
         ),
       )
-      .viewport(Viewport::new((160, 160)))
+      .viewport(Viewport::new((460, 90)))
       .fonts(fonts)
       .build()
   });
@@ -476,6 +502,75 @@ fn paged_images() {
         height: 260.0,
         margin: 20.0,
       })
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// Degenerate inputs stay silent instead of panicking or emitting garbage:
+/// zero-sized boxes, empty and zero-font-size text, transparent paint.
+#[test]
+fn edge_degenerate() {
+  run_pdf_fixture("edge-degenerate", |fonts| {
+    let source = r#"<div style="display: flex; flex-direction: column; width: 100%; height: 100%; padding: 12px; row-gap: 6px; background-color: #ffffff;">
+      <div style="width: 0px; height: 40px; background-color: #ef4444;"></div>
+      <div style="width: 120px; height: 0px; background-color: #22c55e;"></div>
+      <div style="font-size: 14px;"> </div>
+      <div style="font-size: 0px;">Zero font size</div>
+      <div style="opacity: 0; font-size: 14px;">Fully transparent text</div>
+      <div style="width: 80px; height: 20px; background-color: rgba(0, 0, 0, 0); border: 2px solid rgba(255, 0, 0, 0);"></div>
+      <div style="width: 1px; height: 1px; background-color: #3b82f6;"></div>
+      <div style="width: 40px; height: 40px; border-radius: 50%; border: 1px solid #111111; background-color: #d4d4d8;"></div>
+      <div style="font-size: 13px; color: #111111;">Visible sentinel after the degenerates</div>
+    </div>"#;
+    let node = from_html(source, FromHtmlOptions::default()).expect("parse degenerate fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((300, 260)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+fn wrapping_rows(count: usize) -> Node {
+  column(
+    (1..=count)
+      .map(|i| {
+        text(
+          &format!("Paragraph {i}: text long enough to wrap onto several lines when the page gets narrow, exercising line breaking against the page width"),
+          13.0,
+        )
+      })
+      .collect(),
+  )
+}
+
+/// The same wrapping content on a narrow tall page: many short lines, cuts
+/// landing mid-paragraph.
+#[test]
+fn paged_narrow() {
+  run_pdf_fixture("paged-narrow", |fonts| {
+    PdfOptions::builder()
+      .node(wrapping_rows(10))
+      .page(PageOptions {
+        width: 200.0,
+        height: 420.0,
+        margin: 16.0,
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// The same wrapping content on landscape US Letter with a wide margin: long
+/// lines, few per page, preset + landscape + with_margin all in play.
+#[test]
+fn paged_landscape() {
+  run_pdf_fixture("paged-landscape", |fonts| {
+    PdfOptions::builder()
+      .node(wrapping_rows(60))
+      .page(PageOptions::LETTER.landscape().with_margin(60.0))
       .fonts(fonts)
       .build()
   });

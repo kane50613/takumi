@@ -13,6 +13,9 @@ use takumi_pdf::{PageOptions, PdfOptions, render};
 
 fn main() {
   let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+  let out = root.join("../target");
+
+  fs::create_dir_all(&out).expect("create output directory");
   let mut fonts = Fonts::default();
   let data = fs::read(root.join("../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf"))
     .expect("read font");
@@ -31,7 +34,7 @@ fn main() {
   )
   .expect("render invoice");
 
-  fs::write(root.join("../target/showcase-invoice.pdf"), invoice).expect("write invoice");
+  fs::write(out.join("showcase-invoice.pdf"), invoice).expect("write invoice");
 
   let certificate = render(
     PdfOptions::builder()
@@ -42,8 +45,7 @@ fn main() {
   )
   .expect("render certificate");
 
-  fs::write(root.join("../target/showcase-certificate.pdf"), certificate)
-    .expect("write certificate");
+  fs::write(out.join("showcase-certificate.pdf"), certificate).expect("write certificate");
   println!("wrote target/showcase-invoice.pdf and target/showcase-certificate.pdf");
 }
 
