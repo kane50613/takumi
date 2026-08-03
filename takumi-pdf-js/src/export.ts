@@ -21,17 +21,18 @@ export type PageSize = "a4" | "letter" | Dimensions;
 export type PageMargin = number | { top?: number; right?: number; bottom?: number; left?: number };
 
 /**
- * Paged output settings: content flows across pages of `size`. Note the
- * layout canvas has unbounded height, so percentage heights do not resolve.
- * CSS `@page` rules in `stylesheets` are not supported — page geometry comes
- * from here.
+ * Paged output (the default): content flows across pages of `size`, like
+ * Puppeteer's `page.pdf()`. The layout canvas has unbounded height, so
+ * percentage heights do not resolve. CSS `@page` rules in `stylesheets` are
+ * not supported — page geometry comes from these options.
  */
-export type PageOptions = {
+type PagedOptions = {
+  viewport?: never;
   /** Page size. Defaults to A4. */
   size?: PageSize;
   /** Swaps the page's width and height. */
   landscape?: boolean;
-  /** Page margin. Presets default to a uniform 48 (half an inch). */
+  /** Page margin. Defaults to a uniform 48 (half an inch). */
   margin?: PageMargin;
   /** Band repeated at the top of every page. Text may use `{page}` and `{pages}`. */
   header?: NodeInput;
@@ -39,21 +40,20 @@ export type PageOptions = {
   footer?: NodeInput;
 };
 
-export type RenderOptions = (
-  | {
-      /** Paged output (the default: A4). */
-      page?: PageOptions;
-      viewport?: never;
-    }
-  | {
-      /**
-       * Single-page output: a fixed viewport, like an image render.
-       * Percentage heights resolve against it and overflow is clipped.
-       */
-      viewport: Dimensions;
-      page?: never;
-    }
-) & {
+/**
+ * Single-page output: a fixed viewport, like an image render. Percentage
+ * heights resolve against it and overflowing content is clipped.
+ */
+type ViewportOptions = {
+  viewport: Dimensions;
+  size?: never;
+  landscape?: never;
+  margin?: never;
+  header?: never;
+  footer?: never;
+};
+
+export type RenderOptions = (PagedOptions | ViewportOptions) & {
   /** Fonts to register before rendering, deduped across calls. */
   fonts?: FontLoader[];
   /**
@@ -92,22 +92,17 @@ export class PdfRenderer {
 
   /** Renders a node tree or JSX to PDF bytes. See {@link RenderOptions}. */
   async render(node: NodeInput, options: RenderOptions = {}): Promise<Uint8Array> {
-    const { fonts, images, page, stylesheets, fontFamilies, ...rest } = options;
+    const { fonts, images, header, footer, stylesheets, fontFamilies, ...rest } = options;
     const sheets = [...(stylesheets ?? [])];
     const resolved = await resolveNode(node, sheets);
-    const resolvedPage =
-      page === undefined
-        ? undefined
-        : {
-            ...page,
-            header: page.header === undefined ? undefined : await resolveNode(page.header, sheets),
-            footer: page.footer === undefined ? undefined : await resolveNode(page.footer, sheets),
-          };
+    const headerNode = header === undefined ? undefined : await resolveNode(header, sheets);
+    const footerNode = footer === undefined ? undefined : await resolveNode(footer, sheets);
     const resources = await this.fonts.resolveResources(fonts, images, fontFamilies);
 
     return this.inner.render(resolved, {
       ...rest,
-      page: resolvedPage,
+      header: headerNode,
+      footer: footerNode,
       stylesheets: sheets.length > 0 ? sheets : undefined,
       images: resources.images,
       fontFamilies: resources.fontFamilies,

@@ -12,16 +12,14 @@ const pdf = await render(
 );
 ```
 
-Without options the document flows across A4 pages with a 48px (half-inch) margin. Paged output is configured under `page`: `size` (`"a4"`, `"letter"`, or `{ width, height }` in px), `landscape`, `margin` (a number or `{ top, right, bottom, left }`), and repeating `header`/`footer` bands where text may use the `{page}` and `{pages}` placeholders. A fixed `viewport: { width, height }` renders one clipped page instead, where percentage heights resolve against the viewport. CSS `@page` rules are not supported; page geometry comes from these options.
+Without options the document flows across A4 pages with a 48px (half-inch) margin. The options mirror Puppeteer's `page.pdf()`: `size` (`"a4"`, `"letter"`, or `{ width, height }` in px), `landscape`, `margin` (a number or `{ top, right, bottom, left }`), and repeating `header`/`footer` bands where text may use the `{page}` and `{pages}` placeholders. A fixed `viewport: { width, height }` renders one clipped page instead, where percentage heights resolve against the viewport — use it for single-page designs that rely on percentage heights, like certificates. CSS `@page` rules are not supported; page geometry comes from these options.
 
 Pagination honors `break-before: page`, `break-after: page`, `break-inside: avoid`, and `box-decoration-break`.
 
 ```ts
 const pdf = await render(report, {
-  page: {
-    size: "a4",
-    footer: text("Page {page} of {pages}", { fontSize: 12 }),
-  },
+  size: "a4",
+  footer: text("Page {page} of {pages}", { fontSize: 12 }),
   fonts: ["https://takumi.kane.tw/fonts/geist.woff2"],
 });
 ```

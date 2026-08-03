@@ -101,29 +101,11 @@ enum MarginInput {
   },
 }
 
-/// Paged output: geometry plus the repeated bands.
-#[derive(Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-struct PageInput {
-  /// Page size. Defaults to A4.
-  size: Option<SizeInput>,
-  /// Swaps the page's width and height.
-  landscape: Option<bool>,
-  /// Page margin in CSS px: one number or per-side values.
-  margin: Option<MarginInput>,
-  /// Band repeated at the top of every page (`{page}`/`{pages}` in text).
-  header: Option<Node>,
-  /// Band repeated at the bottom of every page.
-  footer: Option<Node>,
-}
-
-fn resolve_page(input: &PageInput) -> Result<PageOptions, js_sys::Error> {
-  let PageInput {
-    size,
-    landscape,
-    margin,
-    ..
-  } = input;
+fn resolve_page(
+  size: Option<&SizeInput>,
+  landscape: bool,
+  margin: Option<&MarginInput>,
+) -> Result<PageOptions, js_sys::Error> {
   let mut page = match size {
     None => PageOptions::A4,
     Some(SizeInput::Dimensions(dimensions)) => PageOptions {
@@ -140,7 +122,7 @@ fn resolve_page(input: &PageInput) -> Result<PageOptions, js_sys::Error> {
     },
   };
 
-  if landscape.unwrap_or(false) {
+  if landscape {
     page = page.landscape();
   }
   match margin {
@@ -168,10 +150,19 @@ fn resolve_page(input: &PageInput) -> Result<PageOptions, js_sys::Error> {
 #[serde(rename_all = "camelCase")]
 struct PdfRenderOptions {
   /// Fixed viewport for single-page output: percentage heights resolve
-  /// against it and overflowing content is clipped.
+  /// against it and overflowing content is clipped. Mutually exclusive with
+  /// the paged fields.
   viewport: Option<Dimensions>,
-  /// Paged output settings. Without `viewport` an absent `page` means A4.
-  page: Option<PageInput>,
+  /// Page size for paged output. Defaults to A4.
+  size: Option<SizeInput>,
+  /// Swaps the page's width and height.
+  landscape: Option<bool>,
+  /// Page margin in CSS px: one number or per-side values.
+  margin: Option<MarginInput>,
+  /// Band repeated at the top of every page (`{page}`/`{pages}` in text).
+  header: Option<Node>,
+  /// Band repeated at the bottom of every page.
+  footer: Option<Node>,
   /// Pre-fetched images keyed by URL.
   images: Option<Vec<ImageSource>>,
   /// CSS stylesheets to apply before layout.
@@ -262,29 +253,32 @@ impl PdfRenderer {
       images.insert(source.src, image);
     }
 
-    let (viewport, page, bands) = match (options.viewport, options.page) {
-      (Some(_), Some(_)) => {
+    let paged_field_set = options.size.is_some()
+      || options.landscape.is_some()
+      || options.margin.is_some()
+      || options.header.is_some()
+      || options.footer.is_some();
+    let (viewport, page) = match options.viewport {
+      Some(_) if paged_field_set => {
         return Err(js_sys::Error::new(
-          "viewport and page are mutually exclusive; pick single-page or paged output",
+          "viewport is mutually exclusive with the paged options (size, landscape, margin, header, footer)",
         ));
       }
-      (Some(dimensions), None) => (
+      Some(dimensions) => (
         Some(Viewport::new((
           dimensions.width as u32,
           dimensions.height as u32,
         ))),
         None,
-        (None, None),
       ),
-      (None, page) => {
-        let mut input = page.unwrap_or_default();
-
-        (
-          None,
-          Some(resolve_page(&input)?),
-          (input.header.take(), input.footer.take()),
-        )
-      }
+      None => (
+        None,
+        Some(resolve_page(
+          options.size.as_ref(),
+          options.landscape.unwrap_or(false),
+          options.margin.as_ref(),
+        )?),
+      ),
     };
     let lang = options
       .lang
@@ -304,8 +298,8 @@ impl PdfRenderer {
       stylesheet: stylesheet(&self.resource_cache, options.stylesheets, Vec::new()),
       images,
       page,
-      header: bands.0,
-      footer: bands.1,
+      header: options.header,
+      footer: options.footer,
       font_families: options.font_families.map(FontFamily::from_names),
       lang,
     })
