@@ -159,9 +159,11 @@ struct PdfRenderOptions {
   landscape: Option<bool>,
   /// Page margin in CSS px: one number or per-side values.
   margin: Option<MarginInput>,
-  /// Band repeated at the top of every page (`{page}`/`{pages}` in text).
+  /// Band repeated at the top of every page. Nodes classed `pageNumber` /
+  /// `totalPages` receive the counters, optionally formatted by a
+  /// `@counter-style` name in the same class list.
   header: Option<Node>,
-  /// Band repeated at the bottom of every page.
+  /// Band repeated at the bottom of every page; same class hooks as `header`.
   footer: Option<Node>,
   /// Pre-fetched images keyed by URL.
   images: Option<Vec<ImageSource>>,

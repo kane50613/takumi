@@ -153,7 +153,7 @@ fn paged_footer_counters() {
         from_html(
           r#"<div style="display: flex; column-gap: 3px; font-size: 12px; color: #141414;">
             Page <span class="pageNumber"></span> of <span class="totalPages"></span>,
-            page <span class="pageNumber trad-chinese-informal"></span> in Chinese,
+            page <span class="pageNumber muted trad-chinese-informal"></span> in Chinese,
             <span class="pageNumber lower-roman"></span> in roman
           </div>"#,
           FromHtmlOptions::default(),

@@ -319,6 +319,17 @@ fn prepare_tree(
   })
 }
 
+/// The `@counter-style` names [`format_counter`] understands.
+const COUNTER_STYLES: [&str; 7] = [
+  "decimal",
+  "decimal-leading-zero",
+  "lower-roman",
+  "upper-roman",
+  "cjk-decimal",
+  "trad-chinese-informal",
+  "cjk-ideographic",
+];
+
 /// Formats a page counter in a CSS `@counter-style` named style. Unknown
 /// styles fall back to `decimal`.
 fn format_counter(value: usize, style: &str) -> String {
@@ -426,7 +437,7 @@ fn counter_text(node: &Node, page: usize, pages: usize) -> Option<String> {
   };
   let style = classes
     .split_whitespace()
-    .find(|class| *class != "pageNumber" && *class != "totalPages")
+    .find(|class| COUNTER_STYLES.contains(class))
     .unwrap_or("decimal");
 
   Some(format_counter(value, style))
