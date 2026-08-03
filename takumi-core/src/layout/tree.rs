@@ -877,6 +877,10 @@ impl RoundTree for LayoutTree<'_> {
     if node.is_inline_children {
       final_layout.size.width = node.unrounded_layout.size.width;
     }
+    // Snap the box, not the stroke: a rounded border width comes out as 2px on
+    // one edge and 3px on another for a uniform 2.5px border, while the
+    // fractional width paints evenly through coverage AA, as browsers do.
+    final_layout.border = node.unrounded_layout.border;
     node.final_layout = final_layout;
   }
 }
