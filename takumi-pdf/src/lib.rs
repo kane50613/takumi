@@ -18,20 +18,30 @@
 //! `break-inside: avoid`; repeated header/footer bands carve their height out
 //! of the content window and substitute `{page}` / `{pages}` in text.
 //!
-//! Coverage so far: background-color, text runs (fill color and opacity),
-//! nested containers, affine transforms, pagination. Not yet: borders, radius,
-//! gradients, images, shadows, filters, clipping, text decorations.
+//! Coverage: backgrounds (color and gradient layers), borders and radius,
+//! images (`object-fit`/`object-position`), text with decorations, opacity,
+//! blend modes, overflow clipping, affine transforms, pagination. Not yet:
+//! box-shadow, filters, `clip-path`, masks, `background-size`/`position`/
+//! `repeat`, url() background layers, SVG image sources.
 
 use std::{collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
+#[cfg(feature = "images")]
+use krilla::image::Image as KrillaImage;
 use krilla::{
   Data, Document,
+  blend::BlendMode as KrillaBlendMode,
   color::rgb,
   error::KrillaError,
-  geom::{PathBuilder, Point, Rect as KrillaRect, Size as KrillaSize, Transform},
+  geom::{
+    Path as KrillaPath, PathBuilder, Point, Rect as KrillaRect, Size as KrillaSize, Transform,
+  },
   num::NormalizedF32,
   page::PageSettings,
-  paint::{Fill, FillRule},
+  paint::{
+    Fill, FillRule, LinearGradient as KrillaLinearGradient, Paint,
+    RadialGradient as KrillaRadialGradient, SpreadMethod, Stop, SweepGradient,
+  },
   surface::Surface,
   text::{Font, Glyph, GlyphId},
 };
@@ -40,22 +50,35 @@ use takumi_core::{
   context::RenderContext,
   error::Error as TakumiError,
   font_style::SizedFontStyle,
-  geometry::{AvailableSpace, ComputedLayout as Layout, NodeId, Size},
+  geometry::{
+    AvailableSpace, ComputedLayout as Layout, NodeId, PathCommand, Point as CorePoint, Size,
+  },
   layout::{
+    border::{BorderProperties, BorderSide},
+    decoration::ClipBox,
     inline::{
-      BuiltInlineLayout, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineRunLayout,
-      ShapedRun, collect_inline_items, create_inline_layout, resolve_inline_max_height,
-      resolve_inline_runs,
+      BuiltInlineLayout, DecorationRect, InlineItem, InlineLayoutMode, InlineLayoutRequest,
+      InlineRunLayout, ShapedRun, collect_inline_items, create_inline_layout,
+      resolve_inline_max_height, resolve_inline_runs, run_decorations,
     },
     node::{Node, NodeKind, TextData},
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
-  resources::font::FontError,
+  paint::{ConicGradientTile, LinearGradientTile, RadialGradientTile, resolve_stops_along_axis},
+  resources::{font::FontError, image::ImageSource},
   scene::{NodePaint, PaintItemKind, StackingContextNode, build_stacking_contexts},
   style::{
-    Affine, BreakBetween, BreakInside, ComputedStyle, FontFamily, Lang, SizingContext, StyleSheet,
+    Affine, BackgroundImage, BlendMode, BoxDecorationBreak, BreakBetween, BreakInside,
+    ComputedStyle, FontFamily, Isolation, Lang, Overflow, ResolvedGradientStop, SizingContext,
+    StyleSheet,
   },
   viewport::Viewport,
+};
+#[cfg(feature = "images")]
+use takumi_core::{
+  layout::node::ImageData,
+  resources::image::RenderedImage,
+  style::{Length, ObjectFit, PositionComponent},
 };
 use typed_builder::TypedBuilder;
 
@@ -70,6 +93,8 @@ pub enum PdfError {
   Krilla(KrillaError),
   /// The computed page size is empty or non-finite.
   InvalidPageSize,
+  /// Single-page output ([`PdfOptions::page`] unset) needs a viewport.
+  MissingViewport,
 }
 
 impl From<TakumiError> for PdfError {
@@ -81,8 +106,10 @@ impl From<TakumiError> for PdfError {
 /// Inputs for [`render`], built with [`PdfOptions::builder`].
 #[derive(TypedBuilder)]
 pub struct PdfOptions<'g> {
-  /// The viewport to render in.
-  pub(crate) viewport: Viewport,
+  /// The viewport to render in. Required for single-page output; ignored when
+  /// [`Self::page`] is set (the page geometry defines the layout width).
+  #[builder(default, setter(strip_option))]
+  pub(crate) viewport: Option<Viewport>,
   /// The font context.
   pub(crate) fonts: &'g Fonts,
   /// The root node to render.
@@ -90,6 +117,9 @@ pub struct PdfOptions<'g> {
   /// CSS stylesheets to apply before layout.
   #[builder(default)]
   pub(crate) stylesheet: Arc<StyleSheet>,
+  /// Resources fetched externally, keyed by URL.
+  #[builder(default)]
+  pub(crate) images: HashMap<Arc<str>, ImageSource>,
   /// Paged output; `None` renders a single page at the viewport size.
   #[builder(default, setter(strip_option))]
   pub(crate) page: Option<PageOptions>,
@@ -122,22 +152,29 @@ pub struct PageOptions {
 }
 
 /// Millimeters to CSS px (96 dpi).
-fn mm(value: f32) -> f32 {
+const fn mm(value: f32) -> f32 {
   value / 25.4 * 96.0
 }
 
 /// Inches to CSS px (96 dpi).
-fn inches(value: f32) -> f32 {
+const fn inches(value: f32) -> f32 {
   value * 96.0
 }
 
-/// Every preset is portrait with a half-inch margin; chain
+/// Presets are portrait with a half-inch margin; chain
 /// [`landscape`](Self::landscape) and [`with_margin`](Self::with_margin) to
-/// adjust. The set mirrors the CSS `@page` size keywords.
+/// adjust, or fill the fields directly for any other size.
+// ponytail: A4 + LETTER only; add other @page keywords when someone asks.
 impl PageOptions {
   const DEFAULT_MARGIN: f32 = 48.0;
 
-  fn preset(width: f32, height: f32) -> Self {
+  /// ISO A4: 210 × 297 mm.
+  pub const A4: Self = Self::preset(mm(210.0), mm(297.0));
+
+  /// US Letter: 8.5 × 11 in.
+  pub const LETTER: Self = Self::preset(inches(8.5), inches(11.0));
+
+  const fn preset(width: f32, height: f32) -> Self {
     Self {
       width,
       height,
@@ -145,58 +182,8 @@ impl PageOptions {
     }
   }
 
-  /// ISO A3: 297 × 420 mm.
-  pub fn a3() -> Self {
-    Self::preset(mm(297.0), mm(420.0))
-  }
-
-  /// ISO A4: 210 × 297 mm.
-  pub fn a4() -> Self {
-    Self::preset(mm(210.0), mm(297.0))
-  }
-
-  /// ISO A5: 148 × 210 mm.
-  pub fn a5() -> Self {
-    Self::preset(mm(148.0), mm(210.0))
-  }
-
-  /// ISO B4: 250 × 353 mm.
-  pub fn b4() -> Self {
-    Self::preset(mm(250.0), mm(353.0))
-  }
-
-  /// ISO B5: 176 × 250 mm.
-  pub fn b5() -> Self {
-    Self::preset(mm(176.0), mm(250.0))
-  }
-
-  /// JIS B4: 257 × 364 mm.
-  pub fn jis_b4() -> Self {
-    Self::preset(mm(257.0), mm(364.0))
-  }
-
-  /// JIS B5: 182 × 257 mm.
-  pub fn jis_b5() -> Self {
-    Self::preset(mm(182.0), mm(257.0))
-  }
-
-  /// US Letter: 8.5 × 11 in.
-  pub fn letter() -> Self {
-    Self::preset(inches(8.5), inches(11.0))
-  }
-
-  /// US Legal: 8.5 × 14 in.
-  pub fn legal() -> Self {
-    Self::preset(inches(8.5), inches(14.0))
-  }
-
-  /// US Ledger/Tabloid: 11 × 17 in.
-  pub fn ledger() -> Self {
-    Self::preset(inches(11.0), inches(17.0))
-  }
-
   /// Swaps width and height.
-  pub fn landscape(self) -> Self {
+  pub const fn landscape(self) -> Self {
     Self {
       width: self.height,
       height: self.width,
@@ -205,11 +192,11 @@ impl PageOptions {
   }
 
   /// Replaces the uniform margin.
-  pub fn with_margin(self, margin: f32) -> Self {
+  pub const fn with_margin(self, margin: f32) -> Self {
     Self { margin, ..self }
   }
 
-  fn content_size(&self) -> (f32, f32) {
+  const fn content_size(&self) -> (f32, f32) {
     (
       self.width - 2.0 * self.margin,
       self.height - 2.0 * self.margin,
@@ -222,6 +209,7 @@ impl PageOptions {
 struct TreeInputs<'g> {
   fonts: &'g Fonts,
   stylesheet: Arc<StyleSheet>,
+  images: Rc<HashMap<Arc<str>, ImageSource>>,
   font_families: Option<FontFamily>,
   lang: Option<Lang>,
 }
@@ -260,7 +248,7 @@ fn prepare_tree(
         .snapshot_with_fallbacks(inputs.font_families.as_ref()),
     )
     .sizing(SizingContext::builder().viewport(viewport).build())
-    .images(Rc::new(HashMap::new()))
+    .images(inputs.images.clone())
     .stylesheet(inputs.stylesheet.clone())
     .style(Box::new(ComputedStyle {
       lang: inputs.lang,
@@ -345,13 +333,7 @@ fn emit_band(
   height: f32,
   surface: &mut Surface,
 ) -> Result<(), PdfError> {
-  let Some(rect) = KrillaRect::from_xywh(x, y, width, height) else {
-    return Ok(());
-  };
-  let mut builder = PathBuilder::new();
-
-  builder.push_rect(rect);
-  let Some(path) = builder.finish() else {
+  let Some(path) = KrillaRect::from_xywh(x, y, width, height).and_then(rect_path) else {
     return Ok(());
   };
 
@@ -371,6 +353,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
   let inputs = TreeInputs {
     fonts: options.fonts,
     stylesheet: options.stylesheet,
+    images: Rc::new(options.images),
     font_families: options.font_families,
     lang: options.lang,
   };
@@ -442,24 +425,19 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         let next_start = starts.get(index + 1).copied().unwrap_or(f32::INFINITY);
         let paint_height = (next_start - y0).min(window_height);
 
-        if let Some(window) =
+        if let Some(path) =
           KrillaRect::from_xywh(page.margin, content_top, content_width, paint_height)
+            .and_then(rect_path)
         {
-          let mut builder = PathBuilder::new();
+          surface.push_clip_path(&path, &FillRule::NonZero);
+          surface.push_transform(&Transform::from_translate(page.margin, content_top - y0));
+          let mut emitter = content.emitter(&mut fonts);
 
-          builder.push_rect(window);
-          if let Some(path) = builder.finish() {
-            surface.push_clip_path(&path, &FillRule::NonZero);
-            surface.push_transform(&Transform::from_translate(page.margin, content_top - y0));
-            let mut emitter = content.emitter(&mut fonts);
-
-            emitter.window = Some((y0, y0 + paint_height));
-            emitter.line_window =
-              Some((if index == 0 { f32::NEG_INFINITY } else { y0 }, next_start));
-            emitter.emit_context(0, Affine::IDENTITY, &mut surface)?;
-            surface.pop();
-            surface.pop();
-          }
+          emitter.window = Some((y0, y0 + paint_height));
+          emitter.line_window = Some((if index == 0 { f32::NEG_INFINITY } else { y0 }, next_start));
+          emitter.emit_context(0, Affine::IDENTITY, &mut surface)?;
+          surface.pop();
+          surface.pop();
         }
 
         if let Some(template) = &options.footer {
@@ -481,7 +459,8 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       }
     }
     None => {
-      let content = prepare_tree(&inputs, options.node, options.viewport)?;
+      let viewport = options.viewport.ok_or(PdfError::MissingViewport)?;
+      let content = prepare_tree(&inputs, options.node, viewport)?;
       let page_size =
         KrillaSize::from_wh(content.width, content.height).ok_or(PdfError::InvalidPageSize)?;
       let mut page = document.start_page_with(PageSettings::new(page_size));
@@ -596,13 +575,9 @@ impl Emitter<'_> {
       return Ok(());
     };
 
-    let child_frame = match context.root() {
-      Some(paint) => {
-        let (frame, pushed) = self.emit_box(paint, parent, surface)?;
-        pop_transforms(surface, pushed);
-        frame
-      }
-      None => parent,
+    let (child_frame, root_pushed) = match context.root() {
+      Some(paint) => self.emit_box(paint, parent, surface)?,
+      None => (parent, 0),
     };
 
     for bucket in context.in_paint_order() {
@@ -624,6 +599,7 @@ impl Emitter<'_> {
         }
       }
     }
+    pop_transforms(surface, root_pushed);
     Ok(())
   }
 
@@ -645,23 +621,90 @@ impl Emitter<'_> {
       return Ok((parent, 0));
     }
 
+    let style = &node.context.style;
+    let mut pushed = 0;
+
+    if style.mix_blend_mode != BlendMode::Normal {
+      surface.push_blend_mode(krilla_blend(style.mix_blend_mode));
+      pushed += 1;
+    }
+    if style.isolation == Isolation::Isolate {
+      surface.push_isolated();
+      pushed += 1;
+    }
+    let opacity = style.opacity.0;
+
+    if opacity < 1.0 {
+      surface
+        .push_opacity(NormalizedF32::new(opacity.clamp(0.0, 1.0)).unwrap_or(NormalizedF32::ONE));
+      pushed += 1;
+    }
+
     let relative = parent.invert().unwrap_or(Affine::IDENTITY) * paint.transform;
-    let (x, y, pushed) = if relative.only_translation() {
-      (relative.x, relative.y, 0)
+    let (x, y) = if relative.only_translation() {
+      (relative.x, relative.y)
     } else {
       let cols = relative.to_cols_array();
+
       surface.push_transform(&Transform::from_row(
         cols[0], cols[1], cols[2], cols[3], cols[4], cols[5],
       ));
-      (0.0, 0.0, 1)
+      pushed += 1;
+      (0.0, 0.0)
     };
-    let frame = if pushed == 0 {
+    let frame = if relative.only_translation() {
       parent
     } else {
       parent * relative
     };
+    // `box-decoration-break: clone`: the fragment of the box on this page
+    // paints its own complete decorations (paint-only; cloned padding does not
+    // reserve layout space). `slice` needs nothing — the page window slices
+    // the full-box decorations, which is exactly the sliced rendering.
+    let (deco_y, deco_size) = if style.box_decoration_break == BoxDecorationBreak::Clone
+      && let Some((window_top, window_bottom)) = self.window
+    {
+      let top = y.max(window_top);
+      let bottom = (y + layout.size.height).min(window_bottom);
 
-    self.emit_background(node, layout, x, y, surface);
+      (
+        top,
+        Size {
+          width: layout.size.width,
+          height: (bottom - top).max(0.0),
+        },
+      )
+    } else {
+      (y, layout.size)
+    };
+    let border = BorderProperties::from_context(&node.context, deco_size, layout.border);
+
+    self.emit_background(node, &border, deco_size, x, deco_y, surface);
+    self.emit_background_layers(node, &border, deco_size, x, deco_y, surface);
+    self.emit_borders(&border, x, deco_y, deco_size, surface);
+
+    // Children and own content clip to the (rounded) padding box when overflow
+    // is hidden; without radius a per-axis overflow leaves the visible axis
+    // unbounded.
+    if style.clips_overflow() {
+      let clip_border = BorderProperties::from_context(&node.context, layout.size, layout.border);
+      let path = if clip_border.is_zero() {
+        overflow_clip_rect(style, layout, x, y)
+      } else {
+        let clip = ClipBox::padding_box(clip_border, layout);
+        let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
+
+        clip
+          .border
+          .append_mask_commands(&mut commands, clip.size, clip.offset);
+        krilla_path(&commands, x, y)
+      };
+      if let Some(path) = path {
+        surface.push_clip_path(&path, &FillRule::NonZero);
+        pushed += 1;
+      }
+    }
+
     self.emit_own_content(node, layout, x, y, surface)?;
     Ok((frame, pushed))
   }
@@ -669,7 +712,8 @@ impl Emitter<'_> {
   fn emit_background(
     &self,
     node: &RenderNode,
-    layout: Layout,
+    border: &BorderProperties,
+    size: Size<f32>,
     x: f32,
     y: f32,
     surface: &mut Surface,
@@ -682,18 +726,268 @@ impl Emitter<'_> {
     if color.0[3] == 0 {
       return;
     }
-    let Some(rect) = KrillaRect::from_xywh(x, y, layout.size.width, layout.size.height) else {
-      return;
-    };
-    let mut builder = PathBuilder::new();
+    let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
 
-    builder.push_rect(rect);
-    let Some(path) = builder.finish() else {
+    border.append_mask_commands(&mut commands, size, CorePoint::ZERO);
+    let Some(path) = krilla_path(&commands, x, y) else {
       return;
     };
 
     surface.set_fill(Some(fill_from_rgba(color.0, 1.0)));
     surface.draw_path(&path);
+  }
+
+  /// Paints `background-image` gradient layers, bottom layer first, clipped to
+  /// the rounded border box. Each layer fills the whole positioning area.
+  // ponytail: background-size/position/repeat and url() layers are not
+  // resolved yet; port takumi-svg's placement logic when needed.
+  fn emit_background_layers(
+    &self,
+    node: &RenderNode,
+    border: &BorderProperties,
+    size: Size<f32>,
+    x: f32,
+    y: f32,
+    surface: &mut Surface,
+  ) {
+    let style = &node.context.style;
+    let Some(images) = style.background_image.as_deref() else {
+      return;
+    };
+    if images
+      .iter()
+      .all(|image| matches!(image, BackgroundImage::None))
+    {
+      return;
+    }
+    let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
+
+    border.append_mask_commands(&mut commands, size, CorePoint::ZERO);
+    let Some(clip) = krilla_path(&commands, x, y) else {
+      return;
+    };
+
+    surface.push_clip_path(&clip, &FillRule::NonZero);
+    for image in images.iter().rev() {
+      self.background_layer(image, node, size, x, y, surface);
+    }
+    surface.pop();
+  }
+
+  fn background_layer(
+    &self,
+    image: &BackgroundImage,
+    node: &RenderNode,
+    size: Size<f32>,
+    x: f32,
+    y: f32,
+    surface: &mut Surface,
+  ) {
+    let (w, h) = (size.width, size.height);
+    let sizing = &node.context.sizing;
+    let current_color = node.context.current_color;
+
+    let paint: Paint = match image {
+      BackgroundImage::Linear(gradient) => {
+        let tile = LinearGradientTile::new(gradient, w as u32, h as u32, sizing, current_color);
+        let resolved = resolve_stops_along_axis(
+          &gradient.stops,
+          tile.axis_length.max(1e-6),
+          sizing,
+          current_color,
+        );
+        if resolved.is_empty() {
+          return;
+        }
+        let max_extent = tile.axis_length / 2.0;
+        let (cx, cy) = (x + w / 2.0, y + h / 2.0);
+        let point_at = |t: f32| {
+          (
+            cx + (t - max_extent) * tile.dir_x,
+            cy + (t - max_extent) * tile.dir_y,
+          )
+        };
+        let (t0, t1, base, span) = if gradient.repeating {
+          let first = resolved.first().map_or(0.0, |s| s.position);
+          let last = resolved.last().map_or(tile.axis_length, |s| s.position);
+          (first, last, first, (last - first).max(1e-6))
+        } else {
+          (0.0, tile.axis_length, 0.0, tile.axis_length.max(1e-6))
+        };
+        let (x1, y1) = point_at(t0);
+        let (x2, y2) = point_at(t1);
+
+        KrillaLinearGradient {
+          x1,
+          y1,
+          x2,
+          y2,
+          transform: Transform::identity(),
+          spread_method: spread(gradient.repeating),
+          stops: krilla_stops(&resolved, base, span),
+          anti_alias: false,
+        }
+        .into()
+      }
+      BackgroundImage::Radial(gradient) => {
+        let tile = RadialGradientTile::new(gradient, w as u32, h as u32, sizing, current_color);
+        let resolved = resolve_stops_along_axis(
+          &gradient.stops,
+          tile.radius_scale.max(1e-6),
+          sizing,
+          current_color,
+        );
+        if resolved.is_empty() {
+          return;
+        }
+        let radius_x = tile.inv_radius_x.recip();
+        let radius_y = tile.inv_radius_y.recip();
+        let (r, base, span) = if gradient.repeating {
+          let first = resolved.first().map_or(0.0, |s| s.position);
+          let last = resolved.last().map_or(tile.radius_scale, |s| s.position);
+          ((last - first).max(1e-6), first, (last - first).max(1e-6))
+        } else {
+          (
+            tile.radius_scale.max(1e-6),
+            0.0,
+            tile.radius_scale.max(1e-6),
+          )
+        };
+        let scale_x = (radius_x / tile.radius_scale.max(1e-6)).max(1e-6);
+        let scale_y = (radius_y / tile.radius_scale.max(1e-6)).max(1e-6);
+
+        KrillaRadialGradient {
+          fx: 0.0,
+          fy: 0.0,
+          fr: 0.0,
+          cx: 0.0,
+          cy: 0.0,
+          cr: r,
+          transform: Transform::from_row(scale_x, 0.0, 0.0, scale_y, x + tile.cx, y + tile.cy),
+          spread_method: spread(gradient.repeating),
+          stops: krilla_stops(&resolved, base, span),
+          anti_alias: false,
+        }
+        .into()
+      }
+      BackgroundImage::Conic(gradient) => {
+        let tile = ConicGradientTile::new(gradient, w as u32, h as u32, sizing, current_color);
+        let lut_len = tile.color_lut.len();
+        if lut_len == 0 {
+          return;
+        }
+        const SWEEP_STOPS: usize = 64;
+        let stops = (0..=SWEEP_STOPS)
+          .map(|i| {
+            let t = i as f32 / SWEEP_STOPS as f32;
+            let index =
+              tile.lut_index_for_adjusted_angle_with_len(t * core::f32::consts::TAU, lut_len);
+            let color = tile.color_lut[index].demultiply();
+
+            krilla_stop(t, [color.red(), color.green(), color.blue(), color.alpha()])
+          })
+          .collect();
+        let (ccx, ccy) = (x + tile.cx, y + tile.cy);
+
+        SweepGradient {
+          cx: ccx,
+          cy: ccy,
+          start_angle: 0.0,
+          end_angle: 360.0,
+          transform: Transform::from_rotate_at(tile.start_rad.to_degrees() - 90.0, ccx, ccy),
+          spread_method: SpreadMethod::Pad,
+          stops,
+          anti_alias: false,
+        }
+        .into()
+      }
+      BackgroundImage::Url(_) | BackgroundImage::None => return,
+    };
+
+    let Some(path) = KrillaRect::from_xywh(x, y, w, h).and_then(rect_path) else {
+      return;
+    };
+
+    surface.set_fill(Some(Fill {
+      paint,
+      opacity: NormalizedF32::ONE,
+      rule: FillRule::NonZero,
+    }));
+    surface.draw_path(&path);
+  }
+
+  /// Fills the border ring: one even-odd fill for a uniform color, per-side
+  /// trapezoids clipped to the ring otherwise.
+  // ponytail: dashed/dotted/double render as solid; port the stroke-based
+  // patterns from takumi-svg when someone needs them.
+  fn emit_borders(
+    &self,
+    border: &BorderProperties,
+    x: f32,
+    y: f32,
+    size: Size<f32>,
+    surface: &mut Surface,
+  ) {
+    if !border.has_visible_sides() {
+      return;
+    }
+    let mut ring = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
+
+    border.append_border_ring_commands(&mut ring, size);
+    let Some(ring_path) = krilla_path(&ring, x, y) else {
+      return;
+    };
+
+    if let Some(color) = border.has_uniform_visible_color() {
+      if color.0[3] != 0 {
+        surface.set_fill(Some(Fill {
+          rule: FillRule::EvenOdd,
+          ..fill_from_rgba(color.0, 1.0)
+        }));
+        surface.draw_path(&ring_path);
+      }
+      return;
+    }
+
+    surface.push_clip_path(&ring_path, &FillRule::EvenOdd);
+    for (side, width, color, style) in [
+      (
+        BorderSide::Top,
+        border.width.top,
+        border.color.top,
+        border.style.top,
+      ),
+      (
+        BorderSide::Right,
+        border.width.right,
+        border.color.right,
+        border.style.right,
+      ),
+      (
+        BorderSide::Bottom,
+        border.width.bottom,
+        border.color.bottom,
+        border.style.bottom,
+      ),
+      (
+        BorderSide::Left,
+        border.width.left,
+        border.color.left,
+        border.style.left,
+      ),
+    ] {
+      if width <= 0.0 || color.0[3] == 0 || !style.is_rendered() {
+        continue;
+      }
+      let mut polygon = Vec::new();
+
+      border.append_side_polygon_commands_at(side, &mut polygon, size, CorePoint::ZERO);
+      if let Some(path) = krilla_path(&polygon, x, y) {
+        surface.set_fill(Some(fill_from_rgba(color.0, 1.0)));
+        surface.draw_path(&path);
+      }
+    }
+    surface.pop();
   }
 
   fn emit_own_content(
@@ -712,7 +1006,82 @@ impl Emitter<'_> {
     }
     match node.node.as_ref().map(|n| &n.kind) {
       Some(NodeKind::Text(text)) => self.emit_text(text, &node.context, layout, x, y, surface),
+      #[cfg(feature = "images")]
+      Some(NodeKind::Image(image)) => {
+        self.emit_image(image, &node.context, layout, x, y, surface);
+        Ok(())
+      }
       _ => Ok(()),
+    }
+  }
+
+  #[cfg(feature = "images")]
+  /// Draws an image node into its content box, honoring `object-fit` and
+  /// `object-position`. The source rasterizes at its intrinsic size and embeds
+  /// once per distinct pixel data (krilla dedups by content hash).
+  // ponytail: JPEG bytes re-encode as flate; DCT passthrough needs krilla's
+  // raster-images feature, add when PDF size from photos matters.
+  fn emit_image(
+    &self,
+    image: &ImageData,
+    context: &RenderContext,
+    layout: Layout,
+    x: f32,
+    y: f32,
+    surface: &mut Surface,
+  ) {
+    let content = layout.content_box_size();
+    let offset = layout.content_box_offset();
+    let (bx, by, w, h) = (x + offset.x, y + offset.y, content.width, content.height);
+    if w <= 0.0 || h <= 0.0 {
+      return;
+    }
+    let Ok(source) = image.src.resolve(context) else {
+      return;
+    };
+    let Some(krilla_image) = rasterized_image(&source, context) else {
+      return;
+    };
+
+    let (iw, ih) = {
+      let (width, height) = source.size(&context.sizing);
+      if width <= 0.0 || height <= 0.0 {
+        return;
+      }
+      (width, height)
+    };
+    let scale = match context.style.object_fit {
+      ObjectFit::Contain => (w / iw).min(h / ih),
+      ObjectFit::Cover => (w / iw).max(h / ih),
+      ObjectFit::ScaleDown => (w / iw).min(h / ih).min(1.0),
+      _ => 0.0,
+    };
+    let (dw, dh) = if matches!(context.style.object_fit, ObjectFit::Fill) || scale == 0.0 {
+      (w, h)
+    } else {
+      (iw * scale, ih * scale)
+    };
+    let position = context.style.object_position.0;
+    let ix = bx + position_axis(position.x, context, w - dw);
+    let iy = by + position_axis(position.y, context, h - dh);
+
+    let Some(size) = KrillaSize::from_wh(dw, dh) else {
+      return;
+    };
+    let overflows = dw > w + 0.5 || dh > h + 0.5;
+
+    if overflows {
+      let Some(path) = KrillaRect::from_xywh(bx, by, w, h).and_then(rect_path) else {
+        return;
+      };
+
+      surface.push_clip_path(&path, &FillRule::NonZero);
+    }
+    surface.push_transform(&Transform::from_translate(ix, iy));
+    surface.draw_image(krilla_image, size);
+    surface.pop();
+    if overflows {
+      surface.pop();
     }
   }
 
@@ -725,12 +1094,14 @@ impl Emitter<'_> {
     y: f32,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
-    let items = vec![InlineItem::Text {
-      text: text.text.as_str().into(),
-      context,
-    }];
     let font_style = SizedFontStyle::from_style(&context.style, context);
-    let Some((built, runs)) = build_inline_runs(items, &font_style, context, layout)? else {
+    let Some((built, runs)) = build_inline_runs(
+      single_text_items(text, context),
+      &font_style,
+      context,
+      layout,
+    )?
+    else {
       return Ok(());
     };
 
@@ -780,6 +1151,16 @@ impl Emitter<'_> {
           continue;
         }
       }
+      let decorations = run_decorations(
+        shaped,
+        layout,
+        run.baseline_shift,
+        run.transform(Affine::IDENTITY),
+      );
+
+      for decoration in decorations.iter().filter(|d| !d.over) {
+        draw_decoration(surface, decoration, x, y);
+      }
       let run_text = built
         .text
         .get(shaped.text_range.clone())
@@ -809,6 +1190,9 @@ impl Emitter<'_> {
         shaped.font_size,
         false,
       );
+      for decoration in decorations.iter().filter(|d| d.over) {
+        draw_decoration(surface, decoration, x, y);
+      }
     }
     Ok(())
   }
@@ -904,12 +1288,13 @@ impl Emitter<'_> {
     } else if !node.has_anonymous_text_item_child() {
       match node.node.as_ref().map(|n| &n.kind) {
         Some(NodeKind::Text(text)) => {
-          let items = vec![InlineItem::Text {
-            text: text.text.as_str().into(),
-            context: &node.context,
-          }];
-
-          self.collect_text_atoms(items, &node.context, layout, y, atoms)?;
+          self.collect_text_atoms(
+            single_text_items(text, &node.context),
+            &node.context,
+            layout,
+            y,
+            atoms,
+          )?;
         }
         Some(NodeKind::Image(_)) => {
           atoms.push((y, y + layout.size.height));
@@ -951,6 +1336,14 @@ impl Emitter<'_> {
   }
 }
 
+/// The inline item list for a lone text node.
+fn single_text_items<'c>(text: &'c TextData, context: &'c RenderContext) -> Vec<InlineItem<'c>> {
+  vec![InlineItem::Text {
+    text: text.text.as_str().into(),
+    context,
+  }]
+}
+
 /// Runs inline layout and resolves the paintable run set. `None` when the font
 /// size or content box is degenerate.
 fn build_inline_runs<'c>(
@@ -979,6 +1372,165 @@ fn build_inline_runs<'c>(
   let runs = resolve_inline_runs(&built, context, layout).map_err(PdfError::Font)?;
 
   Ok(Some((built, runs)))
+}
+
+/// A single-rectangle krilla path.
+fn rect_path(rect: KrillaRect) -> Option<KrillaPath> {
+  let mut builder = PathBuilder::new();
+
+  builder.push_rect(rect);
+  builder.finish()
+}
+
+/// Converts takumi-core path commands to a krilla path translated by `(x, y)`.
+fn krilla_path(commands: &[PathCommand], x: f32, y: f32) -> Option<KrillaPath> {
+  let mut builder = PathBuilder::new();
+
+  for command in commands {
+    match command {
+      PathCommand::MoveTo(p) => builder.move_to(p.x + x, p.y + y),
+      PathCommand::LineTo(p) => builder.line_to(p.x + x, p.y + y),
+      PathCommand::QuadTo(c, p) => builder.quad_to(c.x + x, c.y + y, p.x + x, p.y + y),
+      PathCommand::CubicTo(c1, c2, p) => {
+        builder.cubic_to(c1.x + x, c1.y + y, c2.x + x, c2.y + y, p.x + x, p.y + y);
+      }
+      PathCommand::Close => builder.close(),
+    }
+  }
+  builder.finish()
+}
+
+/// The rectangular overflow clip: each hidden axis bounds to the padding box,
+/// a visible axis is left effectively unbounded.
+fn overflow_clip_rect(style: &ComputedStyle, layout: Layout, x: f32, y: f32) -> Option<KrillaPath> {
+  const UNBOUNDED: f32 = 1.0e6;
+  let clip_x = style.overflow_x != Overflow::Visible;
+  let clip_y = style.overflow_y != Overflow::Visible;
+
+  let (left, right) = if clip_x {
+    let padding_left = x + layout.border.left;
+    let padding_right = (x + layout.size.width - layout.border.right).max(padding_left);
+    (padding_left, padding_right)
+  } else {
+    (x - UNBOUNDED, x + layout.size.width + UNBOUNDED)
+  };
+  let (top, bottom) = if clip_y {
+    let padding_top = y + layout.border.top;
+    let padding_bottom = (y + layout.size.height - layout.border.bottom).max(padding_top);
+    (padding_top, padding_bottom)
+  } else {
+    (y - UNBOUNDED, y + layout.size.height + UNBOUNDED)
+  };
+  KrillaRect::from_ltrb(left, top, right, bottom).and_then(rect_path)
+}
+
+/// Fills one decoration rect under its border-box transform offset by `(x, y)`.
+fn draw_decoration(surface: &mut Surface, decoration: &DecorationRect, x: f32, y: f32) {
+  if decoration.color.0[3] == 0 || decoration.width <= 0.0 || decoration.height <= 0.0 {
+    return;
+  }
+  let Some(path) =
+    KrillaRect::from_xywh(0.0, 0.0, decoration.width, decoration.height).and_then(rect_path)
+  else {
+    return;
+  };
+  let [a, b, c, d, e, f] = decoration.transform;
+
+  surface.push_transform(&Transform::from_row(a, b, c, d, e + x, f + y));
+  surface.set_fill(Some(fill_from_rgba(decoration.color.0, 1.0)));
+  surface.draw_path(&path);
+  surface.pop();
+}
+
+/// Resolves one `object-position` axis to an offset within `available` space.
+#[cfg(feature = "images")]
+fn position_axis(component: PositionComponent, context: &RenderContext, available: f32) -> f32 {
+  match Length::from(component) {
+    Length::Auto => available * 0.5,
+    length => length.to_px(&context.sizing, available),
+  }
+}
+
+/// Rasterizes an image source at its intrinsic size into a krilla image.
+/// SVG sources are skipped for now.
+#[cfg(feature = "images")]
+fn rasterized_image(source: &ImageSource, context: &RenderContext) -> Option<KrillaImage> {
+  let (width, height) = match source {
+    ImageSource::Bitmap(bitmap) => (bitmap.width(), bitmap.height()),
+    ImageSource::Gif(gif) => gif.dimensions(),
+    ImageSource::Encoded(encoded) => encoded.dimensions(),
+    _ => return None,
+  };
+  if width == 0 || height == 0 {
+    return None;
+  }
+  let rendered = source
+    .render_for_layout(width, height, context.style.image_rendering, 0)
+    .ok()?;
+  let buffer = match &rendered {
+    RenderedImage::Rasterized(buffer) => buffer.as_ref(),
+    RenderedImage::Sampled { source, .. } => source.as_ref(),
+  };
+  let mut data = buffer.data().to_vec();
+
+  for pixel in data.chunks_exact_mut(4) {
+    let alpha = pixel[3];
+    if alpha != 0 && alpha != 255 {
+      let alpha16 = u16::from(alpha);
+      pixel[0] = ((u16::from(pixel[0]) * 255 + alpha16 / 2) / alpha16).min(255) as u8;
+      pixel[1] = ((u16::from(pixel[1]) * 255 + alpha16 / 2) / alpha16).min(255) as u8;
+      pixel[2] = ((u16::from(pixel[2]) * 255 + alpha16 / 2) / alpha16).min(255) as u8;
+    }
+  }
+  Some(KrillaImage::from_rgba8(
+    data,
+    buffer.width(),
+    buffer.height(),
+  ))
+}
+
+const fn spread(repeating: bool) -> SpreadMethod {
+  if repeating {
+    SpreadMethod::Repeat
+  } else {
+    SpreadMethod::Pad
+  }
+}
+
+fn krilla_stop(offset: f32, rgba: [u8; 4]) -> Stop {
+  Stop {
+    offset: NormalizedF32::new(offset.clamp(0.0, 1.0)).unwrap_or(NormalizedF32::ZERO),
+    color: rgb::Color::new(rgba[0], rgba[1], rgba[2]).into(),
+    opacity: NormalizedF32::new(f32::from(rgba[3]) / 255.0).unwrap_or(NormalizedF32::ONE),
+  }
+}
+
+fn krilla_stops(resolved: &[ResolvedGradientStop], base: f32, span: f32) -> Vec<Stop> {
+  resolved
+    .iter()
+    .map(|stop| krilla_stop((stop.position - base) / span, stop.color.0))
+    .collect()
+}
+
+const fn krilla_blend(mode: BlendMode) -> KrillaBlendMode {
+  match mode {
+    BlendMode::Multiply => KrillaBlendMode::Multiply,
+    BlendMode::Screen => KrillaBlendMode::Screen,
+    BlendMode::Overlay => KrillaBlendMode::Overlay,
+    BlendMode::Darken => KrillaBlendMode::Darken,
+    BlendMode::Lighten => KrillaBlendMode::Lighten,
+    BlendMode::ColorDodge => KrillaBlendMode::ColorDodge,
+    BlendMode::ColorBurn => KrillaBlendMode::ColorBurn,
+    BlendMode::HardLight => KrillaBlendMode::HardLight,
+    BlendMode::SoftLight => KrillaBlendMode::SoftLight,
+    BlendMode::Difference => KrillaBlendMode::Difference,
+    BlendMode::Exclusion => KrillaBlendMode::Exclusion,
+    BlendMode::Hue => KrillaBlendMode::Hue,
+    BlendMode::Saturation => KrillaBlendMode::Saturation,
+    BlendMode::Color => KrillaBlendMode::Color,
+    BlendMode::Luminosity => KrillaBlendMode::Luminosity,
+    _ => KrillaBlendMode::Normal,
+  }
 }
 
 fn pop_transforms(surface: &mut Surface, pushed: usize) {
@@ -1015,24 +1567,8 @@ fn glyph_text_spans(shaped: &ShapedRun, run_text: &str) -> Vec<Range<usize>> {
       .collect();
   }
 
-  // Alignment unknown: fall back to one char per glyph when the counts line
-  // up, else map every glyph to the whole run.
-  let char_count = run_text.chars().count();
-  let glyph_count = shaped.glyphs.len();
-
-  if char_count == glyph_count {
-    let mut spans = Vec::with_capacity(glyph_count);
-    let mut indices = run_text.char_indices().peekable();
-
-    while let Some((start, _)) = indices.next() {
-      let end = indices.peek().map_or(run_text.len(), |(next, _)| *next);
-
-      spans.push(start..end);
-    }
-    spans
-  } else {
-    vec![0..run_text.len(); glyph_count]
-  }
+  // Alignment unknown: map every glyph to the whole run.
+  vec![0..run_text.len(); shaped.glyphs.len()]
 }
 
 /// A positioned glyph adapter. Offsets are stored em-normalized (position ÷ font
@@ -1120,19 +1656,19 @@ mod tests {
 
   #[test]
   fn presets_match_css_page_keywords() {
-    let a4 = PageOptions::a4();
+    let a4 = PageOptions::A4;
 
     assert!((a4.width - 793.7).abs() < 0.1);
     assert!((a4.height - 1122.5).abs() < 0.1);
 
-    let letter = PageOptions::letter();
+    let letter = PageOptions::LETTER;
 
     assert_eq!((letter.width, letter.height), (816.0, 1056.0));
 
-    let landscape = PageOptions::a4().landscape();
+    let landscape = PageOptions::A4.landscape();
 
     assert_eq!(landscape.width, a4.height);
     assert_eq!(landscape.height, a4.width);
-    assert_eq!(PageOptions::a4().with_margin(0.0).margin, 0.0);
+    assert_eq!(PageOptions::A4.with_margin(0.0).margin, 0.0);
   }
 }

@@ -14,7 +14,6 @@ ignored = ["serde_bytes"]
 
 [dependencies]
 png.workspace = true
-gif = { workspace = true, optional = true }
 data-url.workspace = true
 color.workspace = true
 serde_bytes.workspace = true
@@ -34,6 +33,10 @@ paste.workspace = true
 phf.workspace = true
 precomputed-hash.workspace = true
 selectors.workspace = true
+
+[dependencies.gif]
+workspace = true
+optional = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies.image-webp]
 workspace = true

@@ -559,6 +559,7 @@ impl_passthrough_animatable!(
   TextUnderlinePosition,
   BreakBetween,
   BreakInside,
+  BoxDecorationBreak,
   ImageScalingAlgorithm,
   OverflowWrap,
   WordBreak,

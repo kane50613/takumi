@@ -6,7 +6,6 @@ members = [
   "takumi-raster",
   "takumi-svg",
   "takumi-pdf",
-  "takumi-pdf-wasm",
   "takumi-html",
   "takumi-bindings-common",
   "takumi-napi",

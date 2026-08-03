@@ -8,9 +8,16 @@ repository = "https://github.com/kane50613/takumi"
 rust-version = "1.91"
 publish = false
 
+[features]
+default = ["images"]
+images = ["krilla/raster-images"]
+
 [dependencies]
-krilla = { version = "0.8", default-features = false }
 typed-builder.workspace = true
+
+[dependencies.krilla]
+version = "0.8"
+default-features = false
 
 [dependencies.takumi-core]
 path = "../takumi-core"
@@ -20,3 +27,6 @@ features = ["woff2"]
 
 [lints]
 workspace = true
+
+[dev-dependencies.takumi-html]
+path = "../takumi-html"
