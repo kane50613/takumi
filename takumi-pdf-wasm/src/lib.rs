@@ -72,48 +72,45 @@ struct ImageSource {
   cache: Option<ImageCacheMode>,
 }
 
-/// A page size, like the CSS `@page` `size` descriptor: a keyword string
-/// (`"a4"`, `"letter"`, optionally followed by `landscape`) or `[width, height]`
-/// in CSS px.
+/// Explicit page or viewport dimensions in CSS px.
+#[derive(Deserialize, Clone, Copy)]
+struct Dimensions {
+  width: f32,
+  height: f32,
+}
+
+/// A page size: a preset name (`"a4"`, `"letter"`) or explicit dimensions.
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum SizeInput {
   Named(String),
-  Dimensions([f32; 2]),
+  Dimensions(Dimensions),
 }
 
 fn resolve_page(
   size: Option<&SizeInput>,
+  landscape: bool,
   margin: Option<f32>,
 ) -> Result<PageOptions, js_sys::Error> {
   let mut page = match size {
     None => PageOptions::A4,
-    Some(SizeInput::Dimensions([width, height])) => PageOptions {
-      width: *width,
-      height: *height,
+    Some(SizeInput::Dimensions(dimensions)) => PageOptions {
+      width: dimensions.width,
+      height: dimensions.height,
       ..PageOptions::A4
     },
-    Some(SizeInput::Named(keywords)) => {
-      let mut page = None;
-      let mut landscape = false;
-
-      for keyword in keywords.split_whitespace() {
-        match keyword {
-          "a4" => page = Some(PageOptions::A4),
-          "letter" => page = Some(PageOptions::LETTER),
-          "landscape" => landscape = true,
-          "portrait" => {}
-          other => {
-            return Err(js_sys::Error::new(&format!("unknown page size: {other}")));
-          }
-        }
+    Some(SizeInput::Named(name)) => match name.as_str() {
+      "a4" => PageOptions::A4,
+      "letter" => PageOptions::LETTER,
+      other => {
+        return Err(js_sys::Error::new(&format!("unknown page size: {other}")));
       }
-      let page = page.unwrap_or(PageOptions::A4);
-
-      if landscape { page.landscape() } else { page }
-    }
+    },
   };
 
+  if landscape {
+    page = page.landscape();
+  }
   if let Some(margin) = margin {
     page.margin = margin;
   }
@@ -124,12 +121,13 @@ fn resolve_page(
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct PdfRenderOptions {
-  /// Viewport width for single-page output.
-  width: Option<u32>,
-  /// Viewport height for single-page output.
-  height: Option<u32>,
-  /// Page size for paged output. Without `width`/`height` this defaults to A4.
+  /// Fixed viewport for single-page output: percentage heights resolve
+  /// against it and overflowing content is clipped.
+  viewport: Option<Dimensions>,
+  /// Page size for paged output. Without `viewport` this defaults to A4.
   size: Option<SizeInput>,
+  /// Swaps the page's width and height.
+  landscape: Option<bool>,
   /// Uniform page margin in CSS px for paged output.
   margin: Option<f32>,
   /// Band repeated at the top of every page (`{page}`/`{pages}` in text).
@@ -202,7 +200,7 @@ impl PdfRenderer {
   }
 
   /// Renders a node tree to PDF bytes. Without options the output is paged A4;
-  /// `width` + `height` without `size` renders a single fixed page.
+  /// `viewport` renders a single fixed page instead.
   #[wasm_bindgen]
   pub fn render(
     &self,
@@ -226,9 +224,22 @@ impl PdfRenderer {
       images.insert(source.src, image);
     }
 
-    let (viewport, page) = match (&options.size, options.width, options.height) {
-      (None, Some(width), Some(height)) => (Some(Viewport::new((width, height))), None),
-      (size, _, _) => (None, Some(resolve_page(size.as_ref(), options.margin)?)),
+    let (viewport, page) = match (options.viewport, &options.size) {
+      (Some(dimensions), None) => (
+        Some(Viewport::new((
+          dimensions.width as u32,
+          dimensions.height as u32,
+        ))),
+        None,
+      ),
+      (_, size) => (
+        None,
+        Some(resolve_page(
+          size.as_ref(),
+          options.landscape.unwrap_or(false),
+          options.margin,
+        )?),
+      ),
     };
     let lang = options
       .lang

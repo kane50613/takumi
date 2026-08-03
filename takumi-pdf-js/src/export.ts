@@ -11,27 +11,23 @@ export type { FontLoader, ImagesInput } from "@takumi-rs/helpers/renderer";
 /** A document input: a takumi node tree or JSX. */
 export type NodeInput = Node | ReactNode | ReactElementLike;
 
-/**
- * A page size, like the CSS `@page` `size` descriptor: a keyword (optionally
- * with `landscape`) or `[width, height]` in CSS px (96 dpi).
- */
-export type PageSize =
-  | "a4"
-  | "letter"
-  | "a4 landscape"
-  | "letter landscape"
-  | [width: number, height: number];
+/** Explicit dimensions in CSS px (96 dpi). */
+export type Dimensions = { width: number; height: number };
+
+/** A page size: a preset name or explicit {@link Dimensions}. */
+export type PageSize = "a4" | "letter" | Dimensions;
 
 export type RenderOptions = {
-  /** Viewport width for single-page output. Requires `height`; ignored when `size` is set. */
-  width?: number;
-  /** Viewport height for single-page output. */
-  height?: number;
   /**
-   * Page size for paged output. Omitting `size`, `width`, and `height`
-   * entirely renders paged A4.
+   * Fixed viewport for single-page output: percentage heights resolve against
+   * it and overflowing content is clipped. Mutually exclusive with the paged
+   * options below.
    */
+  viewport?: Dimensions;
+  /** Page size for paged output. Omitting `size` and `viewport` renders paged A4. */
   size?: PageSize;
+  /** Swaps the page's width and height. */
+  landscape?: boolean;
   /** Uniform page margin in CSS px for paged output. Presets default to half an inch. */
   margin?: number;
   /** Band repeated at the top of every page. Text may use `{page}` and `{pages}`. */

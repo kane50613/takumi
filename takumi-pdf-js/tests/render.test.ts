@@ -18,7 +18,7 @@ const doc = container({
 });
 
 test("renders a single fixed page", async () => {
-  const pdf = await renderer.render(doc, { width: 600, height: 300 });
+  const pdf = await renderer.render(doc, { viewport: { width: 600, height: 300 } });
 
   expect(pdf).toBeInstanceOf(Uint8Array);
   expect(decoder.decode(pdf.subarray(0, 5))).toBe("%PDF-");
@@ -38,7 +38,7 @@ test("paginates and substitutes footer counters", async () => {
     children: Array.from({ length: 60 }, (_, i) => text(`Row ${i + 1}`, { fontSize: 16 })),
   });
   const pdf = await renderer.render(rows, {
-    size: [400, 300],
+    size: { width: 400, height: 300 },
     margin: 24,
     footer: text("Page {page} of {pages}", { fontSize: 12 }),
   });
@@ -46,8 +46,8 @@ test("paginates and substitutes footer counters", async () => {
   expect(pageCount(pdf)).toBeGreaterThan(1);
 });
 
-test("letter landscape keyword", async () => {
-  const pdf = await renderer.render(doc, { size: "letter landscape" });
+test("letter landscape", async () => {
+  const pdf = await renderer.render(doc, { size: "letter", landscape: true });
 
   expect(pageCount(pdf)).toBe(1);
 });
