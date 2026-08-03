@@ -715,7 +715,8 @@ impl Node {
     self.metadata.id.as_deref()
   }
 
-  pub(crate) fn class_name(&self) -> Option<&str> {
+  /// The element's `class` attribute, space-separated.
+  pub fn class_name(&self) -> Option<&str> {
     self.metadata.class_name.as_deref()
   }
 

@@ -34,9 +34,14 @@ type PagedOptions = {
   landscape?: boolean;
   /** Page margin. Defaults to a uniform 48 (half an inch). */
   margin?: PageMargin;
-  /** Band repeated at the top of every page. Text may use `{page}` and `{pages}`. */
+  /**
+   * Band repeated at the top of every page. Nodes with the `pageNumber` or
+   * `totalPages` class receive the counter as text, like Chromium's print
+   * templates; add a CSS `@counter-style` name (e.g. `cjk-decimal`,
+   * `lower-roman`) to the class list to format it.
+   */
   header?: NodeInput;
-  /** Band repeated at the bottom of every page; same placeholders as `header`. */
+  /** Band repeated at the bottom of every page; same class hooks as `header`. */
   footer?: NodeInput;
 };
 

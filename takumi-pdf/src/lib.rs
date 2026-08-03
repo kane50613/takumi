@@ -16,7 +16,8 @@
 //!
 //! Pagination honors `break-before: page`, `break-after: page`, and
 //! `break-inside: avoid`; repeated header/footer bands carve their height out
-//! of the content window and substitute `{page}` / `{pages}` in text.
+//! of the content window. Nodes classed `pageNumber` / `totalPages` are
+//! filled with the page counters, matching Chromium's print templates.
 //!
 //! Coverage: backgrounds (color and gradient layers), borders and radius,
 //! images (`object-fit`/`object-position`), text with decorations, opacity,
@@ -123,11 +124,13 @@ pub struct PdfOptions<'g> {
   /// Paged output; `None` renders a single page at the viewport size.
   #[builder(default, setter(strip_option))]
   pub page: Option<PageOptions>,
-  /// Band repeated at the top of every page. Text may use the `{page}` and
-  /// `{pages}` placeholders. Its height is carved out of the content window.
+  /// Band repeated at the top of every page. Nodes classed `pageNumber` /
+  /// `totalPages` receive the counters, optionally formatted by a
+  /// `@counter-style` name in the same class list (e.g. `cjk-decimal`). The
+  /// band's height is carved out of the content window.
   #[builder(default, setter(strip_option))]
   pub header: Option<Node>,
-  /// Band repeated at the bottom of every page; same placeholders as `header`.
+  /// Band repeated at the bottom of every page; same class hooks as `header`.
   #[builder(default, setter(strip_option))]
   pub footer: Option<Node>,
   /// Per-render font fallback chain (family names in order).
@@ -316,23 +319,144 @@ fn prepare_tree(
   })
 }
 
-/// Replaces `{page}` / `{pages}` in every text node.
+/// Formats a page counter in a CSS `@counter-style` named style. Unknown
+/// styles fall back to `decimal`.
+fn format_counter(value: usize, style: &str) -> String {
+  match style {
+    "cjk-decimal" => value
+      .to_string()
+      .chars()
+      .map(|digit| match digit {
+        '0' => '〇',
+        '1' => '一',
+        '2' => '二',
+        '3' => '三',
+        '4' => '四',
+        '5' => '五',
+        '6' => '六',
+        '7' => '七',
+        '8' => '八',
+        _ => '九',
+      })
+      .collect(),
+    "trad-chinese-informal" => chinese_informal(value),
+    "lower-roman" => roman(value).to_ascii_lowercase(),
+    "upper-roman" => roman(value),
+    "decimal-leading-zero" => format!("{value:02}"),
+    _ => value.to_string(),
+  }
+}
+
+/// Reading-style Chinese numerals (一, 十二, 一百零三) up to 9999; larger
+/// values fall back to positional digits.
+fn chinese_informal(value: usize) -> String {
+  const DIGITS: [char; 10] = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+
+  if value >= 10_000 {
+    return format_counter(value, "cjk-decimal");
+  }
+  if value == 0 {
+    return DIGITS[0].to_string();
+  }
+  let mut out = String::new();
+  let mut needs_zero = false;
+
+  for (unit, name) in [
+    (1000, Some('千')),
+    (100, Some('百')),
+    (10, Some('十')),
+    (1, None),
+  ] {
+    let digit = value / unit % 10;
+
+    if digit == 0 {
+      needs_zero = !out.is_empty();
+      continue;
+    }
+    if needs_zero {
+      out.push(DIGITS[0]);
+      needs_zero = false;
+    }
+    // 10-19 reads 十 not 一十.
+    if !(unit == 10 && digit == 1 && value < 20) {
+      out.push(DIGITS[digit]);
+    }
+    if let Some(name) = name {
+      out.push(name);
+    }
+  }
+  out
+}
+
+fn roman(value: usize) -> String {
+  const NUMERALS: [(usize, &str); 13] = [
+    (1000, "M"),
+    (900, "CM"),
+    (500, "D"),
+    (400, "CD"),
+    (100, "C"),
+    (90, "XC"),
+    (50, "L"),
+    (40, "XL"),
+    (10, "X"),
+    (9, "IX"),
+    (5, "V"),
+    (4, "IV"),
+    (1, "I"),
+  ];
+  let mut remaining = value;
+  let mut out = String::new();
+
+  for (unit, numeral) in NUMERALS {
+    while remaining >= unit {
+      out.push_str(numeral);
+      remaining -= unit;
+    }
+  }
+  out
+}
+
+/// The counter value a node's class hooks request, if any: `pageNumber` or
+/// `totalPages`, optionally paired with a `@counter-style` name — the same
+/// contract as Chromium's print header/footer templates.
+fn counter_text(node: &Node, page: usize, pages: usize) -> Option<String> {
+  let classes = node.class_name()?;
+  let value = if classes
+    .split_whitespace()
+    .any(|class| class == "pageNumber")
+  {
+    page
+  } else if classes
+    .split_whitespace()
+    .any(|class| class == "totalPages")
+  {
+    pages
+  } else {
+    return None;
+  };
+  let style = classes
+    .split_whitespace()
+    .find(|class| *class != "pageNumber" && *class != "totalPages")
+    .unwrap_or("decimal");
+
+  Some(format_counter(value, style))
+}
+
+/// Fills `pageNumber` / `totalPages` class hooks with the formatted counter,
+/// like Chromium assigning `textContent` in its header/footer template.
 fn substitute_page_counters(node: &mut Node, page: usize, pages: usize) {
-  match &mut node.kind {
-    NodeKind::Text(text) => {
-      if text.text.contains("{page}") || text.text.contains("{pages}") {
-        text.text = text
-          .text
-          .replace("{page}", &page.to_string())
-          .replace("{pages}", &pages.to_string());
-      }
+  if let Some(text) = counter_text(node, page, pages) {
+    match &mut node.kind {
+      NodeKind::Text(data) => data.text = text,
+      NodeKind::Container { children } => *children = vec![Node::text(text)],
+      _ => {}
     }
-    NodeKind::Container { children } => {
-      for child in children {
-        substitute_page_counters(child, page, pages);
-      }
+    return;
+  }
+  if let NodeKind::Container { children } = &mut node.kind {
+    for child in children {
+      substitute_page_counters(child, page, pages);
     }
-    _ => {}
   }
 }
 

@@ -40,7 +40,15 @@ test("paginates and substitutes footer counters", async () => {
   const pdf = await renderer.render(rows, {
     size: { width: 400, height: 300 },
     margin: 24,
-    footer: text("Page {page} of {pages}", { fontSize: 12 }),
+    footer: container({
+      style: { display: "flex", columnGap: 3, fontSize: 12 },
+      children: [
+        text("Page"),
+        container({ className: "pageNumber" }),
+        text("of"),
+        container({ className: "totalPages trad-chinese-informal" }),
+      ],
+    }),
   });
 
   expect(pageCount(pdf)).toBeGreaterThan(1);
