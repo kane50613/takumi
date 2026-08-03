@@ -16,16 +16,19 @@ Without options the document flows across A4 pages with a 48px (half-inch) margi
 
 Pagination honors `break-before: page`, `break-after: page`, `break-inside: avoid`, and `box-decoration-break`.
 
-```ts
+```tsx
 const pdf = await render(report, {
   size: "a4",
   footer: (
     <div style={{ fontSize: 12 }}>
-      Page <span className="pageNumber" /> of <span className="totalPages" />
+      第 <span className="pageNumber trad-chinese-informal" /> 頁, page{" "}
+      <span className="pageNumber" /> of <span className="totalPages" />
     </div>
   ),
   fonts: ["https://takumi.kane.tw/fonts/geist.woff2"],
 });
 ```
+
+Counter styles: `decimal` (default), `decimal-leading-zero`, `lower-roman`, `upper-roman`, `cjk-decimal`, `trad-chinese-informal`, and `cjk-ideographic`.
 
 Works on Node, Bun, and Cloudflare Workers. See the [documentation](https://takumi.kane.tw/docs/) for the shared node/JSX model.

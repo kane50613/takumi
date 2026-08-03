@@ -339,7 +339,8 @@ fn format_counter(value: usize, style: &str) -> String {
         _ => '九',
       })
       .collect(),
-    "trad-chinese-informal" => chinese_informal(value),
+    // Blink defines cjk-ideographic as `extends trad-chinese-informal`.
+    "trad-chinese-informal" | "cjk-ideographic" => chinese_informal(value),
     "lower-roman" => roman(value).to_ascii_lowercase(),
     "upper-roman" => roman(value),
     "decimal-leading-zero" => format!("{value:02}"),
