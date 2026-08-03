@@ -319,7 +319,6 @@ fn prepare_tree(
   })
 }
 
-/// The `@counter-style` names [`format_counter`] understands.
 const COUNTER_STYLES: [&str; 7] = [
   "decimal",
   "decimal-leading-zero",
