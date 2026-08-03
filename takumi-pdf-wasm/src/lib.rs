@@ -161,7 +161,7 @@ struct PdfRenderOptions {
   margin: Option<MarginInput>,
   /// Band repeated at the top of every page. Nodes classed `pageNumber` /
   /// `totalPages` receive the counters, optionally formatted by a
-  /// `@counter-style` name in the same class list.
+  /// supported `@counter-style` name in the same class list.
   header: Option<Node>,
   /// Band repeated at the bottom of every page; same class hooks as `header`.
   footer: Option<Node>,

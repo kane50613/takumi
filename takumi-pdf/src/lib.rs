@@ -126,7 +126,7 @@ pub struct PdfOptions<'g> {
   pub page: Option<PageOptions>,
   /// Band repeated at the top of every page. Nodes classed `pageNumber` /
   /// `totalPages` receive the counters, optionally formatted by a
-  /// `@counter-style` name in the same class list (e.g. `cjk-decimal`). The
+  /// supported `@counter-style` name in the same class list (e.g. `cjk-decimal`). The
   /// band's height is carved out of the content window.
   #[builder(default, setter(strip_option))]
   pub header: Option<Node>,
