@@ -41,7 +41,7 @@ function buildImageResponse(
     async start(controller) {
       try {
         const image = await render(element, options);
-        controller.enqueue(image as ArrayBufferView<ArrayBuffer>);
+        controller.enqueue(image);
         controller.close();
         resolveReady();
       } catch (error) {

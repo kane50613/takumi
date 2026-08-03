@@ -436,7 +436,7 @@ impl Renderer {
   /// Renders a node tree into an image buffer asynchronously.
   #[napi(
     ts_args_type = "source: Node, options?: RenderOptions, signal?: AbortSignal",
-    ts_return_type = "Promise<Buffer>"
+    ts_return_type = "Promise<Buffer<ArrayBuffer>>"
   )]
   pub fn render(
     &self,
@@ -511,7 +511,7 @@ impl Renderer {
   /// Renders a sequential scene animation into a buffer asynchronously.
   #[napi(
     ts_args_type = "options: RenderAnimationOptions, signal?: AbortSignal",
-    ts_return_type = "Promise<Buffer>"
+    ts_return_type = "Promise<Buffer<ArrayBuffer>>"
   )]
   pub fn render_animation(
     &self,

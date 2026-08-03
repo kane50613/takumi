@@ -172,7 +172,7 @@ impl Renderer {
   }
 
   /// Renders a node tree into an image buffer.
-  #[wasm_bindgen]
+  #[wasm_bindgen(unchecked_return_type = "Uint8Array<ArrayBuffer>")]
   pub fn render(
     &self,
     node: NodeType,
@@ -316,7 +316,7 @@ impl Renderer {
   }
 
   /// Renders a sequential animation timeline into a buffer.
-  #[wasm_bindgen(js_name = renderAnimation)]
+  #[wasm_bindgen(js_name = renderAnimation, unchecked_return_type = "Uint8Array<ArrayBuffer>")]
   pub fn render_animation(&self, options: RenderAnimationOptionsType) -> Result<Vec<u8>, JsValue> {
     let RenderAnimationOptions {
       scenes,
