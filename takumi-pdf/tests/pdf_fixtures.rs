@@ -251,6 +251,236 @@ fn gradients() {
   });
 }
 
+/// `box-decoration-break: clone` on a fragmented container: every page
+/// fragment paints full borders and radius; the avoided child moves whole.
+#[test]
+fn paged_clone_decorations() {
+  run_pdf_fixture("paged-clone-decorations", |fonts| {
+    let rows: String = (1..=24)
+      .map(|i| {
+        format!(
+          r#"<div style="font-size: 13px; color: #1c1917;">Clause {i} of the agreement</div>"#
+        )
+      })
+      .collect();
+    let source = format!(
+      r#"<div style="display: flex; flex-direction: column; width: 100%; padding: 14px; row-gap: 4px; border: 3px solid #1c1917; border-radius: 14px; box-decoration-break: clone; background-color: #fafaf9;">
+        {rows}
+        <div style="display: flex; flex-direction: column; row-gap: 4px; padding: 10px; background-color: #e7e5e4; break-inside: avoid;">
+          <div style="font-size: 13px;">Kept-together block line one</div>
+          <div style="font-size: 13px;">Kept-together block line two</div>
+          <div style="font-size: 13px;">Kept-together block line three</div>
+        </div>
+      </div>"#
+    );
+
+    PdfOptions::builder()
+      .node(from_html(&source, FromHtmlOptions::default()).expect("parse clone fixture"))
+      .page(PageOptions {
+        width: 360.0,
+        height: 260.0,
+        margin: 20.0,
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// Transformed subtrees become unsplittable atoms: the rotated card near a cut
+/// moves whole to the next page; the skewed divider stays intact.
+#[test]
+fn paged_transform_atoms() {
+  run_pdf_fixture("paged-transforms", |fonts| {
+    let source = r#"<div style="display: flex; flex-direction: column; width: 100%; row-gap: 10px;">
+      <div style="height: 150px; background-color: #dbeafe;"></div>
+      <div style="width: 100%; height: 10px; transform: skewY(4deg); background-color: #111111;"></div>
+      <div style="width: 220px; height: 90px; transform: rotate(8deg); background-color: #fecaca; border: 2px solid #b91c1c;"></div>
+      <div style="height: 140px; background-color: #dcfce7;"></div>
+      <div style="width: 200px; height: 70px; transform: scale(1.2) translate(20px, 0px); background-color: #fde68a;"></div>
+      <div style="height: 150px; background-color: #f3e8ff;"></div>
+    </div>"#;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse transforms fixture"))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: 24.0,
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// Header and footer bands together, counters in both, a forced break, and a
+/// keep-together block taller than the window (hard cut).
+#[test]
+fn paged_header_footer() {
+  run_pdf_fixture("paged-header-footer", |fonts| {
+    let tall_rows: String = (1..=30)
+      .map(|i| format!(r#"<div style="font-size: 12px;">Overflowing row {i}</div>"#))
+      .collect();
+    let source = format!(
+      r#"<div style="display: flex; flex-direction: column; width: 100%; row-gap: 4px;">
+        <div style="font-size: 14px; break-after: page;">Section one ends here</div>
+        <div style="display: flex; flex-direction: column; row-gap: 4px; break-inside: avoid; background-color: #f5f5f4;">
+          {tall_rows}
+        </div>
+        <div style="font-size: 14px;">Trailing content</div>
+      </div>"#
+    );
+    let band = |label: &str| {
+      from_html(
+        &format!(
+          r#"<div style="display: flex; width: 100%; justify-content: space-between; font-size: 11px; color: #57534e; padding: 6px 0;">
+            <div>{label}</div>
+            <div>Page {{page}} of {{pages}}</div>
+          </div>"#
+        ),
+        FromHtmlOptions::default(),
+      )
+      .expect("parse band fixture")
+    };
+
+    PdfOptions::builder()
+      .node(from_html(&source, FromHtmlOptions::default()).expect("parse header-footer fixture"))
+      .page(PageOptions {
+        width: 400.0,
+        height: 320.0,
+        margin: 24.0,
+      })
+      .header(band("Quarterly report"))
+      .footer(band("Confidential"))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// Blend modes, nested opacity, and isolation on overlapping circles.
+#[test]
+fn blend_opacity_isolation() {
+  run_pdf_fixture("blend-opacity", |fonts| {
+    let source = r#"<div style="display: flex; width: 100%; height: 100%; padding: 20px; background-color: #ffffff;">
+      <div style="display: flex; isolation: isolate; opacity: 0.9;">
+        <div style="width: 110px; height: 110px; border-radius: 50%; background-color: #ef4444; mix-blend-mode: multiply;"></div>
+        <div style="width: 110px; height: 110px; border-radius: 50%; margin-left: -40px; background-color: #3b82f6; mix-blend-mode: multiply;"></div>
+        <div style="width: 110px; height: 110px; border-radius: 50%; margin-left: -40px; background-color: #22c55e; mix-blend-mode: screen; opacity: 0.6;"></div>
+      </div>
+    </div>"#;
+    let node = from_html(source, FromHtmlOptions::default()).expect("parse blend fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((320, 160)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// Overflow clipping: rounded clip on both axes, and a single-axis clip that
+/// leaves the other axis unbounded.
+#[test]
+fn overflow_clipping() {
+  run_pdf_fixture("overflow-clip", |fonts| {
+    let source = r#"<div style="display: flex; width: 100%; height: 100%; padding: 16px; column-gap: 24px; background-color: #ffffff;">
+      <div style="overflow: hidden; border-radius: 24px; width: 140px; height: 110px; border: 2px solid #333333;">
+        <div style="width: 300px; height: 300px; background-image: linear-gradient(45deg, #f97316, #0ea5e9);"></div>
+      </div>
+      <div style="overflow-x: hidden; width: 120px; height: 110px; border: 2px solid #999999;">
+        <div style="width: 300px; height: 80px; background-color: #a3e635;"></div>
+      </div>
+    </div>"#;
+    let node = from_html(source, FromHtmlOptions::default()).expect("parse overflow fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((360, 150)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// Repeating gradient variants and a stacked multi-layer background.
+#[test]
+fn repeating_gradients() {
+  run_pdf_fixture("repeating-gradients", |fonts| {
+    let source = r#"<div style="display: flex; width: 100%; height: 100%; padding: 20px; column-gap: 20px; background-color: #ffffff;">
+      <div style="width: 110px; height: 110px; background-image: repeating-linear-gradient(45deg, #0f172a 0px, #0f172a 8px, #f8fafc 8px, #f8fafc 16px);"></div>
+      <div style="width: 110px; height: 110px; background-image: repeating-radial-gradient(circle, #7c3aed 0px, #7c3aed 10px, #ede9fe 10px, #ede9fe 20px);"></div>
+      <div style="width: 110px; height: 110px; background-image: linear-gradient(180deg, rgba(255, 0, 0, 0.5), rgba(255, 0, 0, 0)), conic-gradient(from 45deg, #fbbf24, #10b981, #fbbf24);"></div>
+    </div>"#;
+    let node = from_html(source, FromHtmlOptions::default()).expect("parse repeating fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((440, 160)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// Decoration lines with custom colors, letter spacing, and variable weight.
+#[test]
+fn text_decorations() {
+  run_pdf_fixture("text-decorations", |fonts| {
+    let source = r#"<div style="display: flex; flex-direction: column; width: 100%; height: 100%; padding: 16px; row-gap: 8px; background-color: #ffffff; font-size: 18px; color: #111111;">
+      <div style="text-decoration-line: underline; text-decoration-color: #dc2626;">Underlined in red</div>
+      <div style="text-decoration-line: line-through;">Struck through</div>
+      <div style="text-decoration-line: overline underline;">Over and under</div>
+      <div style="letter-spacing: 4px;">Wide tracking</div>
+      <div style="font-weight: 700;">Bold weight text</div>
+    </div>"#;
+    let node = from_html(source, FromHtmlOptions::default()).expect("parse decorations fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((360, 220)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// Images flowing across a page cut are atoms: the straddling image moves
+/// whole to the next page.
+#[test]
+fn paged_images() {
+  run_pdf_fixture("paged-images", |fonts| {
+    let checker = |dark: [u8; 4], light: [u8; 4]| {
+      let mut pixels = Vec::with_capacity(8 * 8 * 4);
+
+      for row in 0..8u32 {
+        for col in 0..8u32 {
+          let on = (row / 2 + col / 2) % 2 == 0;
+
+          pixels.extend_from_slice(if on { &dark } else { &light });
+        }
+      }
+      Node::image(ImageData {
+        src: ImageSourceInput::Rgba(RgbaImage::new(pixels, 8, 8, false).expect("rgba image")),
+        width: Some(120.0),
+        height: Some(120.0),
+      })
+    };
+    let children = vec![
+      text("Before the images", 14.0),
+      checker([220, 60, 60, 255], [255, 235, 235, 255]),
+      checker([60, 60, 220, 255], [235, 235, 255, 255]),
+      checker([60, 180, 90, 255], [230, 250, 235, 255]),
+      text("After the images", 14.0),
+    ];
+
+    PdfOptions::builder()
+      .node(column(children))
+      .page(PageOptions {
+        width: 300.0,
+        height: 260.0,
+        margin: 20.0,
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
 #[test]
 fn invoice() {
   run_pdf_fixture("invoice", |fonts| {
