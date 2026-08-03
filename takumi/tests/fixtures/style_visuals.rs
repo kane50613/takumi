@@ -78,9 +78,9 @@ fn test_style_border_width() {
   run_fixture_test(container, "style_border_width");
 }
 
-/// A fractional width must paint evenly through coverage AA — layout rounding
-/// used to turn a uniform 2.5px border into a 2px top and a 3px bottom
-/// depending on where each edge landed on the pixel grid.
+/// A fractional width paints evenly through coverage AA, whichever half of the
+/// pixel grid each edge lands on — the chips step by 0.25px to cover the
+/// landings.
 #[test]
 fn test_style_border_fractional_width() {
   let chips: Vec<Node> = (0..4)
