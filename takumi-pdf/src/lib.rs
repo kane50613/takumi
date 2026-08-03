@@ -109,33 +109,33 @@ pub struct PdfOptions<'g> {
   /// The viewport to render in. Required for single-page output; ignored when
   /// [`Self::page`] is set (the page geometry defines the layout width).
   #[builder(default, setter(strip_option))]
-  pub(crate) viewport: Option<Viewport>,
+  pub viewport: Option<Viewport>,
   /// The font context.
-  pub(crate) fonts: &'g Fonts,
+  pub fonts: &'g Fonts,
   /// The root node to render.
-  pub(crate) node: Node,
+  pub node: Node,
   /// CSS stylesheets to apply before layout.
   #[builder(default)]
-  pub(crate) stylesheet: Arc<StyleSheet>,
+  pub stylesheet: Arc<StyleSheet>,
   /// Resources fetched externally, keyed by URL.
   #[builder(default)]
-  pub(crate) images: HashMap<Arc<str>, ImageSource>,
+  pub images: HashMap<Arc<str>, ImageSource>,
   /// Paged output; `None` renders a single page at the viewport size.
   #[builder(default, setter(strip_option))]
-  pub(crate) page: Option<PageOptions>,
+  pub page: Option<PageOptions>,
   /// Band repeated at the top of every page. Text may use the `{page}` and
   /// `{pages}` placeholders. Its height is carved out of the content window.
   #[builder(default, setter(strip_option))]
-  pub(crate) header: Option<Node>,
+  pub header: Option<Node>,
   /// Band repeated at the bottom of every page; same placeholders as `header`.
   #[builder(default, setter(strip_option))]
-  pub(crate) footer: Option<Node>,
+  pub footer: Option<Node>,
   /// Per-render font fallback chain (family names in order).
   #[builder(default)]
-  pub(crate) font_families: Option<FontFamily>,
+  pub font_families: Option<FontFamily>,
   /// Default BCP-47 language tag applied to the root.
   #[builder(default)]
-  pub(crate) lang: Option<Lang>,
+  pub lang: Option<Lang>,
 }
 
 /// Paged output geometry: fixed page size with a uniform margin. Content lays
