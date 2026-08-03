@@ -155,7 +155,7 @@ struct PdfRenderOptions {
   viewport: Option<Dimensions>,
   /// Page size for paged output. Defaults to A4.
   size: Option<SizeInput>,
-  /// Swaps the page's width and height.
+  /// Swaps the page's width and height — presets and explicit sizes alike.
   landscape: Option<bool>,
   /// Page margin in CSS px: one number or per-side values.
   margin: Option<MarginInput>,

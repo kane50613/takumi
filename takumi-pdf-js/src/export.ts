@@ -30,7 +30,7 @@ type PagedOptions = {
   viewport?: never;
   /** Page size. Defaults to A4. */
   size?: PageSize;
-  /** Swaps the page's width and height. */
+  /** Swaps the page's width and height — presets and explicit sizes alike. */
   landscape?: boolean;
   /** Page margin. Defaults to a uniform 48 (half an inch). */
   margin?: PageMargin;
