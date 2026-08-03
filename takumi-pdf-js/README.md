@@ -12,7 +12,7 @@ const pdf = await render(
 );
 ```
 
-Without options the document flows across A4 pages. Paged output takes `size` (`"a4"`, `"letter"`, or `{ width, height }` in px), `landscape`, and a uniform `margin`, plus repeating `header`/`footer` bands where text may use the `{page}` and `{pages}` placeholders. A fixed `viewport: { width, height }` renders one clipped page instead, where percentage heights resolve against the viewport.
+Without options the document flows across A4 pages with a 48px (half-inch) margin. Paged output takes `size` (`"a4"`, `"letter"`, or `{ width, height }` in px), `landscape`, and `margin` (a number or `{ top, right, bottom, left }`), plus repeating `header`/`footer` bands where text may use the `{page}` and `{pages}` placeholders. A fixed `viewport: { width, height }` renders one clipped page instead, where percentage heights resolve against the viewport. CSS `@page` rules are not supported; page geometry comes from these options.
 
 Pagination honors `break-before: page`, `break-after: page`, `break-inside: avoid`, and `box-decoration-break`.
 

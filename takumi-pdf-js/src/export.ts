@@ -14,29 +14,52 @@ export type NodeInput = Node | ReactNode | ReactElementLike;
 /** Explicit dimensions in CSS px (96 dpi). */
 export type Dimensions = { width: number; height: number };
 
-/** A page size: a preset name or explicit {@link Dimensions}. */
+/** A page size: a preset name (case-insensitive) or explicit {@link Dimensions}. */
 export type PageSize = "a4" | "letter" | Dimensions;
 
-export type RenderOptions = {
-  /**
-   * Fixed viewport for single-page output: percentage heights resolve against
-   * it and overflowing content is clipped. Mutually exclusive with the paged
-   * options below.
-   */
-  viewport?: Dimensions;
-  /** Page size for paged output. Omitting `size` and `viewport` renders paged A4. */
+/** A page margin in CSS px: one number for all sides, or per-side values (missing sides are zero). */
+export type PageMargin = number | { top?: number; right?: number; bottom?: number; left?: number };
+
+/**
+ * Paged output (the default): content flows across pages of `size`. Note the
+ * layout canvas has unbounded height, so percentage heights do not resolve.
+ * CSS `@page` rules in `stylesheets` are not supported — page geometry comes
+ * from these options.
+ */
+type PagedOptions = {
+  viewport?: never;
+  /** Page size. Defaults to A4. */
   size?: PageSize;
   /** Swaps the page's width and height. */
   landscape?: boolean;
-  /** Uniform page margin in CSS px for paged output. Presets default to half an inch. */
-  margin?: number;
+  /** Page margin. Presets default to a uniform 48 (half an inch). */
+  margin?: PageMargin;
   /** Band repeated at the top of every page. Text may use `{page}` and `{pages}`. */
   header?: NodeInput;
   /** Band repeated at the bottom of every page; same placeholders as `header`. */
   footer?: NodeInput;
+};
+
+/**
+ * Single-page output: a fixed viewport, like an image render. Percentage
+ * heights resolve against it and overflowing content is clipped.
+ */
+type ViewportOptions = {
+  viewport: Dimensions;
+  size?: never;
+  landscape?: never;
+  margin?: never;
+  header?: never;
+  footer?: never;
+};
+
+export type RenderOptions = (PagedOptions | ViewportOptions) & {
   /** Fonts to register before rendering, deduped across calls. */
   fonts?: FontLoader[];
-  /** Pre-fetched images keyed by URL. */
+  /**
+   * Pre-fetched images for `src` URLs in the tree, e.g.
+   * `[{ src: "https://…/logo.png", data: bytes }]`.
+   */
   images?: ImagesInput;
   /** CSS stylesheets to apply before layout. */
   stylesheets?: string[];

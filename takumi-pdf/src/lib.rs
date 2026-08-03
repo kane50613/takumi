@@ -138,17 +138,41 @@ pub struct PdfOptions<'g> {
   pub lang: Option<Lang>,
 }
 
-/// Paged output geometry: fixed page size with a uniform margin. Content lays
-/// out at `width - 2 * margin` and flows across as many pages as it needs.
+/// Per-side page margins in px.
+#[derive(Clone, Copy)]
+pub struct PageMargins {
+  /// Top margin.
+  pub top: f32,
+  /// Right margin.
+  pub right: f32,
+  /// Bottom margin.
+  pub bottom: f32,
+  /// Left margin.
+  pub left: f32,
+}
+
+impl PageMargins {
+  /// The same margin on all four sides.
+  pub const fn uniform(value: f32) -> Self {
+    Self {
+      top: value,
+      right: value,
+      bottom: value,
+      left: value,
+    }
+  }
+}
+
+/// Paged output geometry: fixed page size with margins. Content lays out at
+/// the width inside the margins and flows across as many pages as it needs.
 #[derive(Clone, Copy)]
 pub struct PageOptions {
   /// Page width in px (A4 at 96 dpi ≈ 794).
   pub width: f32,
   /// Page height in px (A4 at 96 dpi ≈ 1123).
   pub height: f32,
-  // ponytail: uniform margin; per-side margins when someone asks.
-  /// Margin applied to all four sides, in px.
-  pub margin: f32,
+  /// Page margins in px.
+  pub margin: PageMargins,
 }
 
 /// Millimeters to CSS px (96 dpi).
@@ -178,7 +202,7 @@ impl PageOptions {
     Self {
       width,
       height,
-      margin: Self::DEFAULT_MARGIN,
+      margin: PageMargins::uniform(Self::DEFAULT_MARGIN),
     }
   }
 
@@ -191,15 +215,18 @@ impl PageOptions {
     }
   }
 
-  /// Replaces the uniform margin.
+  /// Replaces the margins with a uniform value.
   pub const fn with_margin(self, margin: f32) -> Self {
-    Self { margin, ..self }
+    Self {
+      margin: PageMargins::uniform(margin),
+      ..self
+    }
   }
 
   const fn content_size(&self) -> (f32, f32) {
     (
-      self.width - 2.0 * self.margin,
-      self.height - 2.0 * self.margin,
+      self.width - self.margin.left - self.margin.right,
+      self.height - self.margin.top - self.margin.bottom,
     )
   }
 }
@@ -410,15 +437,15 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           emit_band(
             &band,
             &mut fonts,
-            page.margin,
-            page.margin,
+            page.margin.left,
+            page.margin.top,
             content_width,
             header_height,
             &mut surface,
           )?;
         }
 
-        let content_top = page.margin + header_height;
+        let content_top = page.margin.top + header_height;
         // Paint stops at the next cut: the region between a raised cut and the
         // page's full height belongs to the next page and stays blank, exactly
         // like browser print fragmentation.
@@ -426,11 +453,14 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         let paint_height = (next_start - y0).min(window_height);
 
         if let Some(path) =
-          KrillaRect::from_xywh(page.margin, content_top, content_width, paint_height)
+          KrillaRect::from_xywh(page.margin.left, content_top, content_width, paint_height)
             .and_then(rect_path)
         {
           surface.push_clip_path(&path, &FillRule::NonZero);
-          surface.push_transform(&Transform::from_translate(page.margin, content_top - y0));
+          surface.push_transform(&Transform::from_translate(
+            page.margin.left,
+            content_top - y0,
+          ));
           let mut emitter = content.emitter(&mut fonts);
 
           emitter.window = Some((y0, y0 + paint_height));
@@ -446,8 +476,8 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           emit_band(
             &band,
             &mut fonts,
-            page.margin,
-            page.height - page.margin - footer_height,
+            page.margin.left,
+            page.height - page.margin.bottom - footer_height,
             content_width,
             footer_height,
             &mut surface,
@@ -1699,6 +1729,6 @@ mod tests {
 
     assert_eq!(landscape.width, a4.height);
     assert_eq!(landscape.height, a4.width);
-    assert_eq!(PageOptions::A4.with_margin(0.0).margin, 0.0);
+    assert_eq!(PageOptions::A4.with_margin(0.0).margin.top, 0.0);
   }
 }

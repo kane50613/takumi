@@ -52,6 +52,24 @@ test("letter landscape", async () => {
   expect(pageCount(pdf)).toBe(1);
 });
 
+test("accepts case-insensitive presets and per-side margins", async () => {
+  const pdf = await renderer.render(doc, {
+    size: "A4" as "a4",
+    margin: { top: 60, bottom: 40 },
+  });
+
+  expect(pageCount(pdf)).toBe(1);
+});
+
 test("rejects an unknown size keyword", () => {
   expect(renderer.render(doc, { size: "tabloid" as "a4" })).rejects.toThrow("unknown page size");
+});
+
+test("rejects viewport combined with size", () => {
+  expect(
+    renderer.render(doc, {
+      viewport: { width: 600, height: 300 },
+      size: "a4",
+    } as never),
+  ).rejects.toThrow("mutually exclusive");
 });

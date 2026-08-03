@@ -18,7 +18,7 @@ use takumi_core::{
   viewport::Viewport,
 };
 use takumi_html::{FromHtmlOptions, from_html};
-use takumi_pdf::{PageOptions, PdfOptions, render};
+use takumi_pdf::{PageMargins, PageOptions, PdfOptions, render};
 
 fn fonts() -> Fonts {
   let mut fonts = Fonts::default();
@@ -126,7 +126,7 @@ fn paged_lines() {
       .page(PageOptions {
         width: 400.0,
         height: 300.0,
-        margin: 24.0,
+        margin: PageMargins::uniform(24.0),
       })
       .fonts(fonts)
       .build()
@@ -143,7 +143,7 @@ fn paged_footer_counters() {
       .page(PageOptions {
         width: 400.0,
         height: 300.0,
-        margin: 24.0,
+        margin: PageMargins::uniform(24.0),
       })
       .footer(text("Page {page} of {pages}", 12.0))
       .fonts(fonts)
@@ -173,7 +173,7 @@ fn paged_breaks() {
       .page(PageOptions {
         width: 400.0,
         height: 400.0,
-        margin: 24.0,
+        margin: PageMargins::uniform(24.0),
       })
       .fonts(fonts)
       .build()
@@ -305,7 +305,7 @@ fn paged_clone_decorations() {
       .page(PageOptions {
         width: 360.0,
         height: 260.0,
-        margin: 20.0,
+        margin: PageMargins::uniform(20.0),
       })
       .fonts(fonts)
       .build()
@@ -331,7 +331,7 @@ fn paged_transform_atoms() {
       .page(PageOptions {
         width: 400.0,
         height: 300.0,
-        margin: 24.0,
+        margin: PageMargins::uniform(24.0),
       })
       .fonts(fonts)
       .build()
@@ -373,7 +373,7 @@ fn paged_header_footer() {
       .page(PageOptions {
         width: 400.0,
         height: 320.0,
-        margin: 24.0,
+        margin: PageMargins::uniform(24.0),
       })
       .header(band("Quarterly report"))
       .footer(band("Confidential"))
@@ -500,7 +500,7 @@ fn paged_images() {
       .page(PageOptions {
         width: 300.0,
         height: 260.0,
-        margin: 20.0,
+        margin: PageMargins::uniform(20.0),
       })
       .fonts(fonts)
       .build()
@@ -556,7 +556,7 @@ fn paged_narrow() {
       .page(PageOptions {
         width: 200.0,
         height: 420.0,
-        margin: 16.0,
+        margin: PageMargins::uniform(16.0),
       })
       .fonts(fonts)
       .build()

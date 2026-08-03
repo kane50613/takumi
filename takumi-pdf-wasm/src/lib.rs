@@ -22,7 +22,7 @@ use takumi_core::{
   style::{FontFamily, FontStyle as CssFontStyle, FromCssStr, Lang},
   viewport::Viewport,
 };
-use takumi_pdf::{PageOptions, PdfOptions};
+use takumi_pdf::{PageMargins, PageOptions, PdfOptions};
 use wasm_bindgen::prelude::*;
 
 fn map_error(error: impl core::fmt::Debug) -> js_sys::Error {
@@ -87,10 +87,24 @@ enum SizeInput {
   Dimensions(Dimensions),
 }
 
+/// A page margin: one number for all sides, or per-side values (missing
+/// sides are zero).
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum MarginInput {
+  Uniform(f32),
+  Sides {
+    top: Option<f32>,
+    right: Option<f32>,
+    bottom: Option<f32>,
+    left: Option<f32>,
+  },
+}
+
 fn resolve_page(
   size: Option<&SizeInput>,
   landscape: bool,
-  margin: Option<f32>,
+  margin: Option<&MarginInput>,
 ) -> Result<PageOptions, js_sys::Error> {
   let mut page = match size {
     None => PageOptions::A4,
@@ -99,7 +113,7 @@ fn resolve_page(
       height: dimensions.height,
       ..PageOptions::A4
     },
-    Some(SizeInput::Named(name)) => match name.as_str() {
+    Some(SizeInput::Named(name)) => match name.to_ascii_lowercase().as_str() {
       "a4" => PageOptions::A4,
       "letter" => PageOptions::LETTER,
       other => {
@@ -111,8 +125,22 @@ fn resolve_page(
   if landscape {
     page = page.landscape();
   }
-  if let Some(margin) = margin {
-    page.margin = margin;
+  match margin {
+    None => {}
+    Some(MarginInput::Uniform(value)) => page.margin = PageMargins::uniform(*value),
+    Some(MarginInput::Sides {
+      top,
+      right,
+      bottom,
+      left,
+    }) => {
+      page.margin = PageMargins {
+        top: top.unwrap_or(0.0),
+        right: right.unwrap_or(0.0),
+        bottom: bottom.unwrap_or(0.0),
+        left: left.unwrap_or(0.0),
+      };
+    }
   }
   Ok(page)
 }
@@ -128,8 +156,8 @@ struct PdfRenderOptions {
   size: Option<SizeInput>,
   /// Swaps the page's width and height.
   landscape: Option<bool>,
-  /// Uniform page margin in CSS px for paged output.
-  margin: Option<f32>,
+  /// Page margin in CSS px for paged output: one number or per-side values.
+  margin: Option<MarginInput>,
   /// Band repeated at the top of every page (`{page}`/`{pages}` in text).
   header: Option<Node>,
   /// Band repeated at the bottom of every page.
@@ -225,6 +253,11 @@ impl PdfRenderer {
     }
 
     let (viewport, page) = match (options.viewport, &options.size) {
+      (Some(_), Some(_)) => {
+        return Err(js_sys::Error::new(
+          "viewport and size are mutually exclusive; pick single-page or paged output",
+        ));
+      }
       (Some(dimensions), None) => (
         Some(Viewport::new((
           dimensions.width as u32,
@@ -232,12 +265,12 @@ impl PdfRenderer {
         ))),
         None,
       ),
-      (_, size) => (
+      (None, size) => (
         None,
         Some(resolve_page(
           size.as_ref(),
           options.landscape.unwrap_or(false),
-          options.margin,
+          options.margin.as_ref(),
         )?),
       ),
     };
