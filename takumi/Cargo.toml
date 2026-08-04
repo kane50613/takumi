@@ -1,6 +1,6 @@
 [package]
 name = "takumi"
-version = "2.5.5"
+version = "2.5.6"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Render UI component trees to images."
@@ -13,24 +13,24 @@ autobenches = false
 
 [dependencies.takumi-core]
 path = "../takumi-core"
-version = "0.12.0"
+version = "0.13.0"
 default-features = false
 
 [dependencies.takumi-raster]
 path = "../takumi-raster"
-version = "0.4.6"
+version = "0.4.7"
 default-features = false
 optional = true
 
 [dependencies.takumi-svg]
 path = "../takumi-svg"
-version = "0.3.5"
+version = "0.3.6"
 default-features = false
 optional = true
 
 [dependencies.takumi-html]
 path = "../takumi-html"
-version = "0.1.18"
+version = "0.1.19"
 default-features = false
 optional = true
 
