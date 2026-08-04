@@ -1086,6 +1086,10 @@ define_style! {
     border_top_right_radius: SpacePair<Length> = SpacePair::from_single(Length::zero()),
     border_bottom_right_radius: SpacePair<Length> = SpacePair::from_single(Length::zero()),
     border_bottom_left_radius: SpacePair<Length> = SpacePair::from_single(Length::zero()),
+    corner_top_left_shape: Superellipse,
+    corner_top_right_shape: Superellipse,
+    corner_bottom_right_shape: Superellipse,
+    corner_bottom_left_shape: Superellipse,
     border_top_width: LineWidth,
     border_right_width: LineWidth,
     border_bottom_width: LineWidth,
@@ -1336,6 +1340,16 @@ define_style! {
         border_top_right_radius,
         border_bottom_right_radius,
         border_bottom_left_radius
+      );
+    },
+    corner_shape: Sides<Superellipse> => [CornerTopLeftShape, CornerTopRightShape, CornerBottomRightShape, CornerBottomLeftShape] |value, target| {
+      push_four_side_declarations!(
+        target,
+        value.0,
+        corner_top_left_shape,
+        corner_top_right_shape,
+        corner_bottom_right_shape,
+        corner_bottom_left_shape
       );
     },
     border_width: Sides<LineWidth> => [BorderTopWidth, BorderRightWidth, BorderBottomWidth, BorderLeftWidth] |value, target| {

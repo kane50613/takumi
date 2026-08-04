@@ -20,6 +20,7 @@ mod clip_path;
 mod color;
 pub(crate) mod conic_gradient;
 mod content;
+mod corner_shape;
 pub(crate) mod filter;
 #[cfg(feature = "svg")]
 pub(crate) mod filter_reference;
@@ -85,6 +86,7 @@ pub use clip_path::*;
 pub use color::*;
 pub use conic_gradient::ConicGradient;
 pub use content::*;
+pub use corner_shape::*;
 use cssparser::{Parser, match_ignore_ascii_case};
 pub use filter::{
   BlurType, Filter, FilterCategory, Filters, LUMA_WEIGHTS, SEPIA_WEIGHTS, TransferChannel,

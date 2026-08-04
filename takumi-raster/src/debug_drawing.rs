@@ -14,6 +14,7 @@ pub(crate) fn draw_debug_border(canvas: &mut Canvas, layout: Layout, transform: 
     radius: Sides([SpacePair::from_single(0.0); 4]),
     image_rendering: ImageScalingAlgorithm::Auto,
     style: Sides([BorderStyle::Solid; 4]).into(),
+    shape: Sides::default(),
   };
   paint_border(border_box, canvas, layout.size, transform, None);
 
@@ -24,6 +25,7 @@ pub(crate) fn draw_debug_border(canvas: &mut Canvas, layout: Layout, transform: 
     radius: Sides([SpacePair::from_single(0.0); 4]),
     image_rendering: ImageScalingAlgorithm::Auto,
     style: Sides([BorderStyle::Solid; 4]).into(),
+    shape: Sides::default(),
   };
   paint_border(
     content_box,

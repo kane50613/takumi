@@ -197,6 +197,8 @@ pub(crate) enum CssDescriptorKind {
   SepiaFn,
   /// `<steps()>`
   StepsFn,
+  /// `<superellipse()>`
+  SuperellipseFn,
   /// `<text-wrap-mode>`
   TextWrapMode,
   /// `<text-wrap-style>`
@@ -238,6 +240,7 @@ impl CssDescriptorKind {
       Self::SaturateFn => "saturate()",
       Self::SepiaFn => "sepia()",
       Self::StepsFn => "steps()",
+      Self::SuperellipseFn => "superellipse()",
       Self::TextWrapMode => "text-wrap-mode",
       Self::TextWrapStyle => "text-wrap-style",
       Self::UrlFn => "url()",

@@ -828,7 +828,7 @@ pub(crate) fn emit_borders(
       }
       _ => {
         let mut polygon = Vec::new();
-        border.append_side_polygon_commands_at(side, &mut polygon, size, Point::ZERO);
+        border.append_side_clip_polygon_commands_at(side, &mut polygon, size, Point::ZERO);
         doc.path(&path_data(&polygon, matrix), Rgba(color.0))?;
       }
     }

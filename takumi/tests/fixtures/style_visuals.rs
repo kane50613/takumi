@@ -60,6 +60,77 @@ fn test_style_border_radius_per_corner() {
   run_fixture_test(container, "style_border_radius_per_corner");
 }
 
+fn corner_shape_box(shape: Superellipse, border_colors: [Color; 4]) -> Node {
+  Node::container([]).with_style(
+    Style::default()
+      .with(StyleDeclaration::width(Px(180.0)))
+      .with(StyleDeclaration::height(Px(180.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([255, 196, 0, 255]),
+      )))
+      .with_border_width(Sides([LineWidth::Length(Px(10.0)); 4]))
+      .with_border_style(Sides([BorderStyle::Solid; 4]))
+      .with_border_color(Sides(border_colors.map(ColorInput::Value)))
+      .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(60.0)); 4])))
+      .with_corner_shape(Sides([shape; 4])),
+  )
+}
+
+#[test]
+fn test_style_corner_shape() {
+  let shapes = [
+    Superellipse::ROUND,
+    Superellipse::SQUIRCLE,
+    Superellipse::BEVEL,
+    Superellipse::SCOOP,
+    Superellipse::NOTCH,
+    Superellipse::SQUARE,
+  ];
+
+  let uniform_row = shapes.map(|shape| corner_shape_box(shape, [Color([15, 23, 42, 255]); 4]));
+  let per_side_row = shapes.map(|shape| {
+    corner_shape_box(
+      shape,
+      [
+        Color([220, 38, 38, 255]),
+        Color([22, 163, 74, 255]),
+        Color([37, 99, 235, 255]),
+        Color([217, 70, 239, 255]),
+      ],
+    )
+  });
+
+  let row_style = || {
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::justify_content(
+        JustifyContent::SpaceEvenly,
+      ))
+  };
+
+  let container = Node::container([
+    Node::container(uniform_row).with_style(row_style()),
+    Node::container(per_side_row).with_style(row_style()),
+  ])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([30, 41, 59, 255]),
+      )))
+      .with(StyleDeclaration::align_items(AlignItems::Center))
+      .with(StyleDeclaration::justify_content(
+        JustifyContent::SpaceEvenly,
+      )),
+  );
+
+  run_fixture_test(container, "style_corner_shape");
+}
+
 #[test]
 fn test_style_border_width() {
   let container = Node::container([]).with_style(
