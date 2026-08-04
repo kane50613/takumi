@@ -1142,7 +1142,7 @@ impl Emitter<'_> {
       }
       let mut polygon = Vec::new();
 
-      border.append_side_polygon_commands_at(side, &mut polygon, size, CorePoint::ZERO);
+      border.append_side_clip_polygon_commands_at(side, &mut polygon, size, CorePoint::ZERO);
       if let Some(path) = krilla_path(&polygon, x, y) {
         surface.set_fill(Some(fill_from_rgba(color.0, 1.0)));
         surface.draw_path(&path);
