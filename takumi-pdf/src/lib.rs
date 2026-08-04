@@ -305,12 +305,17 @@ struct PreparedTree {
 }
 
 impl PreparedTree {
-  fn emitter<'a>(&'a self, fonts: &'a mut FontMap) -> Emitter<'a> {
+  fn emitter<'a>(
+    &'a self,
+    fonts: &'a mut FontMap,
+    inline: Option<&'a InlineMap<'a>>,
+  ) -> Emitter<'a> {
     Emitter {
       root: &self.root,
       contexts: &self.contexts,
       results: &self.results,
       fonts,
+      inline,
       window: None,
       line_window: None,
     }
@@ -573,7 +578,7 @@ fn emit_band(
 
   surface.push_clip_path(&path, &FillRule::NonZero);
   surface.push_transform(&Transform::from_translate(x, y));
-  let mut emitter = band.emitter(fonts);
+  let mut emitter = band.emitter(fonts, None);
 
   emitter.emit_context(0, Affine::IDENTITY, surface)?;
   surface.pop();
@@ -637,11 +642,13 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       }
 
       let content = prepare_tree(&inputs, options.node, band_viewport)?;
+      let text_boxes = collect_text_boxes(&content);
+      let inline_map = build_inline_map(&text_boxes)?;
       let mut atoms = Vec::new();
       let mut forced = Vec::new();
 
       content
-        .emitter(&mut fonts)
+        .emitter(&mut fonts, Some(&inline_map))
         .collect_atoms(0, Affine::IDENTITY, &mut atoms, &mut forced)?;
       let starts = page_starts(&mut atoms, &mut forced, content.height, window_height);
       let pages = starts.len();
@@ -687,7 +694,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
             page.margin.left,
             content_top - y0,
           ));
-          let mut emitter = content.emitter(&mut fonts);
+          let mut emitter = content.emitter(&mut fonts, Some(&inline_map));
 
           emitter.window = Some((y0, y0 + paint_height));
           emitter.line_window = Some((if index == 0 { f32::NEG_INFINITY } else { y0 }, next_start));
@@ -742,9 +749,11 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       let content = prepare_tree(&inputs, options.node, viewport)?;
       let page_size =
         KrillaSize::from_wh(content.width, content.height).ok_or(PdfError::InvalidPageSize)?;
+      let text_boxes = collect_text_boxes(&content);
+      let inline_map = build_inline_map(&text_boxes)?;
       let mut page = document.start_page_with(PageSettings::new(page_size));
       let mut surface = page.surface();
-      let mut emitter = content.emitter(&mut fonts);
+      let mut emitter = content.emitter(&mut fonts, Some(&inline_map));
 
       emitter.emit_context(0, Affine::IDENTITY, &mut surface)?;
       surface.finish();
@@ -1112,6 +1121,103 @@ fn build_outline(
   outline
 }
 
+/// A text box's inline layout, built once per render and reused by atom
+/// collection and every page's emission.
+struct PreparedInline<'c> {
+  built: BuiltInlineLayout<'c>,
+  runs: InlineRunLayout,
+}
+
+/// Inline layouts keyed by the source [`RenderNode`]'s address.
+type InlineMap<'c> = HashMap<usize, PreparedInline<'c>>;
+
+fn inline_key(node: &RenderNode) -> usize {
+  std::ptr::from_ref(node) as usize
+}
+
+/// The text-bearing boxes of a prepared tree, with the resolved font style
+/// each inline layout borrows.
+fn collect_text_boxes<'t>(tree: &'t PreparedTree) -> Vec<TextBox<'t>> {
+  let mut boxes = Vec::new();
+
+  collect_text_boxes_context(tree, 0, &mut boxes);
+  boxes
+}
+
+struct TextBox<'t> {
+  node: &'t RenderNode,
+  layout: Layout,
+  font_style: SizedFontStyle<'t>,
+}
+
+fn collect_text_boxes_context<'t>(tree: &'t PreparedTree, id: usize, boxes: &mut Vec<TextBox<'t>>) {
+  let Some(context) = tree.contexts.get(id) else {
+    return;
+  };
+
+  if let Some(paint) = context.root() {
+    collect_text_boxes_paint(tree, paint, boxes);
+  }
+  for bucket in context.in_paint_order() {
+    for item in bucket {
+      match &item.kind {
+        PaintItemKind::Node(paint) => collect_text_boxes_paint(tree, paint, boxes),
+        PaintItemKind::Context(child) => collect_text_boxes_context(tree, *child, boxes),
+      }
+    }
+  }
+}
+
+fn collect_text_boxes_paint<'t>(
+  tree: &'t PreparedTree,
+  paint: &NodePaint,
+  boxes: &mut Vec<TextBox<'t>>,
+) {
+  let Some(node) = tree.root.node_at_path(&paint.path) else {
+    return;
+  };
+  let Ok(layout) = tree.results.layout(paint.node_id) else {
+    return;
+  };
+  let is_text = node.should_create_inline_layout()
+    || (!node.has_anonymous_text_item_child()
+      && matches!(node.node.as_ref().map(|n| &n.kind), Some(NodeKind::Text(_))));
+
+  if is_text {
+    boxes.push(TextBox {
+      node,
+      layout,
+      font_style: SizedFontStyle::from_style(&node.context.style, &node.context),
+    });
+  }
+}
+
+/// Builds every text box's inline layout once. Entries borrow the boxes'
+/// font styles, so the map lives no longer than `boxes`.
+fn build_inline_map<'c>(boxes: &'c [TextBox<'c>]) -> Result<InlineMap<'c>, PdfError> {
+  let mut map = InlineMap::new();
+
+  for text_box in boxes {
+    let items = if text_box.node.should_create_inline_layout() {
+      collect_inline_items(text_box.node)
+    } else if let Some(NodeKind::Text(text)) = text_box.node.node.as_ref().map(|n| &n.kind) {
+      single_text_items(text, &text_box.node.context)
+    } else {
+      continue;
+    };
+
+    if let Some((built, runs)) = build_inline_runs(
+      items,
+      &text_box.font_style,
+      &text_box.node.context,
+      text_box.layout,
+    )? {
+      map.insert(inline_key(text_box.node), PreparedInline { built, runs });
+    }
+  }
+  Ok(map)
+}
+
 /// Scene walker state: the render tree, the stacking-context scene, and a cache
 /// of krilla fonts keyed by the backing blob identity.
 type FontMap = HashMap<(u64, u32), Font>;
@@ -1121,6 +1227,9 @@ struct Emitter<'a> {
   contexts: &'a [StackingContextNode],
   results: &'a LayoutResults,
   fonts: &'a mut FontMap,
+  /// Pre-built inline layouts for the content tree; band trees build on the
+  /// fly.
+  inline: Option<&'a InlineMap<'a>>,
   /// Vertical content window `[top, bottom)` of the page being emitted;
   /// paint wholly outside it is skipped so clipped-away content never reaches
   /// the content stream (or text extraction).
@@ -1586,13 +1695,13 @@ impl Emitter<'_> {
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
     if node.should_create_inline_layout() {
-      return self.emit_inline_content(node, layout, x, y, surface);
+      return self.emit_node_text(node, layout, x, y, surface);
     }
     if node.has_anonymous_text_item_child() {
       return Ok(());
     }
     match node.node.as_ref().map(|n| &n.kind) {
-      Some(NodeKind::Text(text)) => self.emit_text(text, &node.context, layout, x, y, surface),
+      Some(NodeKind::Text(_)) => self.emit_node_text(node, layout, x, y, surface),
       #[cfg(feature = "images")]
       Some(NodeKind::Image(image)) => {
         self.emit_image(image, &node.context, layout, x, y, surface);
@@ -1673,30 +1782,9 @@ impl Emitter<'_> {
     }
   }
 
-  fn emit_text(
-    &mut self,
-    text: &TextData,
-    context: &RenderContext,
-    layout: Layout,
-    x: f32,
-    y: f32,
-    surface: &mut Surface,
-  ) -> Result<(), PdfError> {
-    let font_style = SizedFontStyle::from_style(&context.style, context);
-    let Some((built, runs)) = build_inline_runs(
-      single_text_items(text, context),
-      &font_style,
-      context,
-      layout,
-    )?
-    else {
-      return Ok(());
-    };
-
-    self.draw_runs(&runs, &built, layout, x, y, surface)
-  }
-
-  fn emit_inline_content(
+  /// Draws a text-bearing box's runs, from the pre-built inline map when the
+  /// node is in it (content tree) or built on the fly (band trees).
+  fn emit_node_text(
     &mut self,
     node: &RenderNode,
     layout: Layout,
@@ -1704,11 +1792,15 @@ impl Emitter<'_> {
     y: f32,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
+    if let Some(prepared) = self.inline.and_then(|map| map.get(&inline_key(node))) {
+      return self.draw_runs(&prepared.runs, &prepared.built, layout, x, y, surface);
+    }
     let context = &node.context;
+    let Some(items) = node_inline_items(node) else {
+      return Ok(());
+    };
     let font_style = SizedFontStyle::from_style(&context.style, context);
-    let Some((built, runs)) =
-      build_inline_runs(collect_inline_items(node), &font_style, context, layout)?
-    else {
+    let Some((built, runs)) = build_inline_runs(items, &font_style, context, layout)? else {
       return Ok(());
     };
 
@@ -1872,17 +1964,11 @@ impl Emitter<'_> {
     }
 
     if node.should_create_inline_layout() {
-      self.collect_text_atoms(collect_inline_items(node), &node.context, layout, y, atoms)?;
+      self.collect_text_atoms(node, layout, y, atoms)?;
     } else if !node.has_anonymous_text_item_child() {
       match node.node.as_ref().map(|n| &n.kind) {
-        Some(NodeKind::Text(text)) => {
-          self.collect_text_atoms(
-            single_text_items(text, &node.context),
-            &node.context,
-            layout,
-            y,
-            atoms,
-          )?;
+        Some(NodeKind::Text(_)) => {
+          self.collect_text_atoms(node, layout, y, atoms)?;
         }
         Some(NodeKind::Image(_)) => {
           atoms.push((y, y + layout.size.height));
@@ -1896,31 +1982,55 @@ impl Emitter<'_> {
   /// One atom per text line: the union of each run's ascent-to-descent band.
   fn collect_text_atoms(
     &mut self,
-    items: Vec<InlineItem<'_>>,
-    context: &RenderContext,
+    node: &RenderNode,
     layout: Layout,
     y: f32,
     atoms: &mut Vec<Atom>,
   ) -> Result<(), PdfError> {
+    if let Some(prepared) = self.inline.and_then(|map| map.get(&inline_key(node))) {
+      text_line_atoms(&prepared.runs, layout, y, atoms);
+      return Ok(());
+    }
+    let context = &node.context;
+    let Some(items) = node_inline_items(node) else {
+      return Ok(());
+    };
     let font_style = SizedFontStyle::from_style(&context.style, context);
     let Some((_, runs)) = build_inline_runs(items, &font_style, context, layout)? else {
       return Ok(());
     };
 
-    for run in &runs.runs {
-      let shaped = &run.glyph_run;
-      let Some(glyph) = shaped.glyphs.first() else {
-        continue;
-      };
-      let offset = run.glyph_offset(layout);
-      let baseline = y + offset.y + glyph.y;
-
-      atoms.push((
-        baseline - shaped.metrics.ascent,
-        baseline + shaped.metrics.descent,
-      ));
-    }
+    text_line_atoms(&runs, layout, y, atoms);
     Ok(())
+  }
+}
+
+/// The inline items an emitted box lays out: the flattened subtree for an
+/// inline formatting context, the lone run for a text node, nothing otherwise.
+fn node_inline_items(node: &RenderNode) -> Option<Vec<InlineItem<'_>>> {
+  if node.should_create_inline_layout() {
+    return Some(collect_inline_items(node));
+  }
+  if let Some(NodeKind::Text(text)) = node.node.as_ref().map(|n| &n.kind) {
+    return Some(single_text_items(text, &node.context));
+  }
+  None
+}
+
+/// One atom per text line: each run's ascent-to-descent band.
+fn text_line_atoms(runs: &InlineRunLayout, layout: Layout, y: f32, atoms: &mut Vec<Atom>) {
+  for run in &runs.runs {
+    let shaped = &run.glyph_run;
+    let Some(glyph) = shaped.glyphs.first() else {
+      continue;
+    };
+    let offset = run.glyph_offset(layout);
+    let baseline = y + offset.y + glyph.y;
+
+    atoms.push((
+      baseline - shaped.metrics.ascent,
+      baseline + shaped.metrics.descent,
+    ));
   }
 }
 
