@@ -33,7 +33,6 @@ export function ReceiptDocument({ data }: { data: Invoice }) {
         flexDirection: "column",
         gap: 12,
         width: "100%",
-        height: "100%",
         padding: 20,
         backgroundColor: "#ffffff",
         color: "#111827",

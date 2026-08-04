@@ -36,7 +36,7 @@ const invoicePdf = await render(<InvoiceDocument data={invoice} />, {
 await write("output/invoice.pdf", invoicePdf);
 
 const receiptPdf = await render(<ReceiptDocument data={invoice} />, {
-  viewport: { width: 302, height: 500 },
+  viewport: { width: 302 },
   images,
 });
 

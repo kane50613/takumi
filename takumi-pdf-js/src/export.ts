@@ -14,6 +14,9 @@ export type NodeInput = Node | ReactNode | ReactElementLike;
 /** Explicit dimensions in CSS px (96 dpi). */
 export type Dimensions = { width: number; height: number };
 
+/** A single-page viewport. Omitting `height` sizes the page to the content. */
+export type ViewportInput = { width: number; height?: number };
+
 /** A page size: a preset name (case-insensitive) or explicit {@link Dimensions}. */
 export type PageSize = "a4" | "letter" | Dimensions;
 
@@ -47,10 +50,12 @@ type PagedOptions = {
 
 /**
  * Single-page output: a fixed viewport, like an image render. Percentage
- * heights resolve against it and overflowing content is clipped.
+ * heights resolve against it and overflowing content is clipped. Omitting
+ * `height` instead sizes the single page to the laid-out content, like a
+ * thermal receipt; percentage heights do not resolve there.
  */
 type ViewportOptions = {
-  viewport: Dimensions;
+  viewport: ViewportInput;
   size?: never;
   landscape?: never;
   margin?: never;

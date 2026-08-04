@@ -79,6 +79,14 @@ struct Dimensions {
   height: f32,
 }
 
+/// Viewport for single-page output. A missing height sizes the page to the
+/// laid-out content.
+#[derive(Deserialize, Clone, Copy)]
+struct ViewportInput {
+  width: f32,
+  height: Option<f32>,
+}
+
 /// A page size: a preset name (`"a4"`, `"letter"`) or explicit dimensions.
 #[derive(Deserialize)]
 #[serde(untagged)]
@@ -152,7 +160,7 @@ struct PdfRenderOptions {
   /// Fixed viewport for single-page output: percentage heights resolve
   /// against it and overflowing content is clipped. Mutually exclusive with
   /// the paged fields.
-  viewport: Option<Dimensions>,
+  viewport: Option<ViewportInput>,
   /// Page size for paged output. Defaults to A4.
   size: Option<SizeInput>,
   /// Swaps the page's width and height, including explicit sizes.
@@ -266,10 +274,10 @@ impl PdfRenderer {
           "viewport is mutually exclusive with the paged options (size, landscape, margin, header, footer)",
         ));
       }
-      Some(dimensions) => (
+      Some(input) => (
         Some(Viewport::new((
-          dimensions.width as u32,
-          dimensions.height as u32,
+          input.width as u32,
+          input.height.map(|height| height as u32),
         ))),
         None,
       ),
