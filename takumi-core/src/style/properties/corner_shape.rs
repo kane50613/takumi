@@ -241,6 +241,8 @@ mod tests {
   fn rejects_invalid_values() {
     assert!(Superellipse::from_css_str("rounded").is_err());
     assert!(Superellipse::from_css_str("superellipse(auto)").is_err());
+    assert!(Superellipse::from_css_str("superellipse()").is_err());
+    assert!(Superellipse::from_css_str("superellipse(2 3)").is_err());
   }
 
   #[test]
@@ -265,6 +267,22 @@ mod tests {
     assert_eq!(Superellipse::SQUIRCLE.exponent(), 4.0);
     assert_eq!(Superellipse::BEVEL.exponent(), 1.0);
     assert_eq!(Superellipse::SCOOP.exponent(), 0.5);
+    assert_eq!(Superellipse::SQUARE.exponent(), 65536.0);
+    assert_eq!(Superellipse::NOTCH.exponent(), 65536.0f32.recip());
+  }
+
+  #[test]
+  fn interpolable_mapping_round_trips() {
+    for parameter in [-8.0, -1.5, -1.0, 0.0, 0.7, 1.0, 2.0, 8.0] {
+      let shape = Superellipse(parameter);
+      let round_tripped = Superellipse::from_interpolable(shape.to_interpolable());
+
+      assert!(
+        (round_tripped.0 - parameter).abs() < 1e-3,
+        "{parameter} round-tripped to {}",
+        round_tripped.0
+      );
+    }
   }
 
   #[test]

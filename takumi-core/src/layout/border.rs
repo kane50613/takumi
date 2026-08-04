@@ -364,144 +364,50 @@ impl BorderProperties {
 
     match side {
       BorderSide::Top => {
-        if top_left.x > 0.0 && top_left.y > 0.0 {
-          inner_tl = line_intersection(
-            outer_tl,
-            inner_tl,
-            Point {
-              x: inner_tl.x + top_left.x,
-              y: inner_tl.y,
-            },
-            Point {
-              x: inner_tl.x,
-              y: inner_tl.y + top_left.y,
-            },
-          )
-          .unwrap_or(inner_tl);
-        }
-        if top_right.x > 0.0 && top_right.y > 0.0 {
-          inner_tr = line_intersection(
-            outer_tr,
-            inner_tr,
-            Point {
-              x: inner_tr.x - top_right.x,
-              y: inner_tr.y,
-            },
-            Point {
-              x: inner_tr.x,
-              y: inner_tr.y + top_right.y,
-            },
-          )
-          .unwrap_or(inner_tr);
-        }
+        inner_tl = side_clip_inner_corner(self.shape.0[0], outer_tl, inner_tl, top_left, 1.0, 1.0);
+        inner_tr =
+          side_clip_inner_corner(self.shape.0[1], outer_tr, inner_tr, top_right, -1.0, 1.0);
         path.move_to((outer_tl.x, outer_tl.y));
         path.line_to((inner_tl.x, inner_tl.y));
         path.line_to((inner_tr.x, inner_tr.y));
         path.line_to((outer_tr.x, outer_tr.y));
       }
       BorderSide::Right => {
-        if top_right.x > 0.0 && top_right.y > 0.0 {
-          inner_tr = line_intersection(
-            outer_tr,
-            inner_tr,
-            Point {
-              x: inner_tr.x - top_right.x,
-              y: inner_tr.y,
-            },
-            Point {
-              x: inner_tr.x,
-              y: inner_tr.y + top_right.y,
-            },
-          )
-          .unwrap_or(inner_tr);
-        }
-        if bottom_right.x > 0.0 && bottom_right.y > 0.0 {
-          inner_br = line_intersection(
-            outer_br,
-            inner_br,
-            Point {
-              x: inner_br.x - bottom_right.x,
-              y: inner_br.y,
-            },
-            Point {
-              x: inner_br.x,
-              y: inner_br.y - bottom_right.y,
-            },
-          )
-          .unwrap_or(inner_br);
-        }
+        inner_tr =
+          side_clip_inner_corner(self.shape.0[1], outer_tr, inner_tr, top_right, -1.0, 1.0);
+        inner_br = side_clip_inner_corner(
+          self.shape.0[2],
+          outer_br,
+          inner_br,
+          bottom_right,
+          -1.0,
+          -1.0,
+        );
         path.move_to((outer_tr.x, outer_tr.y));
         path.line_to((inner_tr.x, inner_tr.y));
         path.line_to((inner_br.x, inner_br.y));
         path.line_to((outer_br.x, outer_br.y));
       }
       BorderSide::Bottom => {
-        if bottom_left.x > 0.0 && bottom_left.y > 0.0 {
-          inner_bl = line_intersection(
-            outer_bl,
-            inner_bl,
-            Point {
-              x: inner_bl.x + bottom_left.x,
-              y: inner_bl.y,
-            },
-            Point {
-              x: inner_bl.x,
-              y: inner_bl.y - bottom_left.y,
-            },
-          )
-          .unwrap_or(inner_bl);
-        }
-        if bottom_right.x > 0.0 && bottom_right.y > 0.0 {
-          inner_br = line_intersection(
-            outer_br,
-            inner_br,
-            Point {
-              x: inner_br.x - bottom_right.x,
-              y: inner_br.y,
-            },
-            Point {
-              x: inner_br.x,
-              y: inner_br.y - bottom_right.y,
-            },
-          )
-          .unwrap_or(inner_br);
-        }
+        inner_bl =
+          side_clip_inner_corner(self.shape.0[3], outer_bl, inner_bl, bottom_left, 1.0, -1.0);
+        inner_br = side_clip_inner_corner(
+          self.shape.0[2],
+          outer_br,
+          inner_br,
+          bottom_right,
+          -1.0,
+          -1.0,
+        );
         path.move_to((outer_br.x, outer_br.y));
         path.line_to((inner_br.x, inner_br.y));
         path.line_to((inner_bl.x, inner_bl.y));
         path.line_to((outer_bl.x, outer_bl.y));
       }
       BorderSide::Left => {
-        if top_left.x > 0.0 && top_left.y > 0.0 {
-          inner_tl = line_intersection(
-            outer_tl,
-            inner_tl,
-            Point {
-              x: inner_tl.x + top_left.x,
-              y: inner_tl.y,
-            },
-            Point {
-              x: inner_tl.x,
-              y: inner_tl.y + top_left.y,
-            },
-          )
-          .unwrap_or(inner_tl);
-        }
-        if bottom_left.x > 0.0 && bottom_left.y > 0.0 {
-          inner_bl = line_intersection(
-            outer_bl,
-            inner_bl,
-            Point {
-              x: inner_bl.x + bottom_left.x,
-              y: inner_bl.y,
-            },
-            Point {
-              x: inner_bl.x,
-              y: inner_bl.y - bottom_left.y,
-            },
-          )
-          .unwrap_or(inner_bl);
-        }
+        inner_tl = side_clip_inner_corner(self.shape.0[0], outer_tl, inner_tl, top_left, 1.0, 1.0);
+        inner_bl =
+          side_clip_inner_corner(self.shape.0[3], outer_bl, inner_bl, bottom_left, 1.0, -1.0);
         path.move_to((outer_bl.x, outer_bl.y));
         path.line_to((inner_bl.x, inner_bl.y));
         path.line_to((inner_tl.x, inner_tl.y));
@@ -818,6 +724,45 @@ pub fn rect_offset(rect: Rect<f32>) -> Point<f32> {
     x: rect.left,
     y: rect.top,
   }
+}
+
+/// The corner point where a side's clip polygon meets the inner contour.
+///
+/// Convex corners miter along the line from the outer corner through the inner
+/// rect corner to the inner curve's chord. Concave contours reach past that
+/// chord to the corner's center point, so the polygon clips there instead —
+/// otherwise the notch/scoop flank would fall outside every side's clip.
+/// `direction_x`/`direction_y` are `±1.0` pointing from the inner rect corner
+/// toward the box center.
+fn side_clip_inner_corner(
+  shape: Superellipse,
+  outer: Point<f32>,
+  inner: Point<f32>,
+  radius: SpacePair<f32>,
+  direction_x: f32,
+  direction_y: f32,
+) -> Point<f32> {
+  if radius.x <= 0.0 || radius.y <= 0.0 {
+    return inner;
+  }
+
+  let chord_x = Point {
+    x: inner.x + direction_x * radius.x,
+    y: inner.y,
+  };
+  let chord_y = Point {
+    x: inner.x,
+    y: inner.y + direction_y * radius.y,
+  };
+
+  if shape.is_concave() {
+    return Point {
+      x: chord_x.x,
+      y: chord_y.y,
+    };
+  }
+
+  line_intersection(outer, inner, chord_x, chord_y).unwrap_or(inner)
 }
 
 pub(crate) fn line_intersection(
