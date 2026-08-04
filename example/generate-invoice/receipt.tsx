@@ -34,7 +34,7 @@ export function ReceiptDocument({ data }: { data: Invoice }) {
       <div tw="flex flex-col gap-2">
         {data.items.map((item) => (
           <div key={item.description} tw="flex flex-col">
-            <span tw="font-medium">{item.description}</span>
+            <span tw="font-bold">{item.description}</span>
             <div tw="flex justify-between text-[#6b7280]">
               <span>
                 {item.quantity} × {money(item.unitPrice)}

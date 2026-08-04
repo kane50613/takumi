@@ -122,6 +122,7 @@
     "example/generate-invoice": {
       "name": "example-generate-invoice",
       "dependencies": {
+        "@takumi-rs/helpers": "workspace:*",
         "react": "catalog:",
         "takumi-pdf": "workspace:*",
       },
