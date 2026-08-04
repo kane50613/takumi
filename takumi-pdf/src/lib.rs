@@ -1200,9 +1200,6 @@ impl Emitter<'_> {
     let Ok(source) = image.src.resolve(context) else {
       return;
     };
-    let Some(krilla_image) = rasterized_image(&source, context) else {
-      return;
-    };
 
     let (iw, ih) = {
       let (width, height) = source.size(&context.sizing);
@@ -1222,6 +1219,9 @@ impl Emitter<'_> {
       (w, h)
     } else {
       (iw * scale, ih * scale)
+    };
+    let Some(krilla_image) = rasterized_image(&source, context, (dw, dh)) else {
+      return;
     };
     let position = context.style.object_position.0;
     let ix = bx + position_axis(position.x, context, w - dw);
@@ -1613,14 +1613,23 @@ fn position_axis(component: PositionComponent, context: &RenderContext, availabl
   }
 }
 
-/// Rasterizes an image source at its intrinsic size into a krilla image.
-/// SVG sources are skipped for now.
+/// Rasterizes an image source into a krilla image. Bitmap sources rasterize at
+/// their intrinsic size; SVG sources at twice the target size for print density.
 #[cfg(feature = "images")]
-fn rasterized_image(source: &ImageSource, context: &RenderContext) -> Option<KrillaImage> {
+fn rasterized_image(
+  source: &ImageSource,
+  context: &RenderContext,
+  target: (f32, f32),
+) -> Option<KrillaImage> {
   let (width, height) = match source {
     ImageSource::Bitmap(bitmap) => (bitmap.width(), bitmap.height()),
     ImageSource::Gif(gif) => gif.dimensions(),
     ImageSource::Encoded(encoded) => encoded.dimensions(),
+    #[cfg(feature = "svg")]
+    ImageSource::Svg(_) => (
+      (target.0 * 2.0).ceil() as u32,
+      (target.1 * 2.0).ceil() as u32,
+    ),
     _ => return None,
   };
   if width == 0 || height == 0 {
