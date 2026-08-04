@@ -660,11 +660,13 @@ mod tests {
     )
     .unwrap();
 
-    let mut style = ComputedStyle::default();
-    style.animation_name = AnimationNames::from_css_str("morph").unwrap();
-    style.animation_duration = AnimationDurations::from_css_str("1000ms").unwrap();
-    style.animation_timing_function = AnimationTimingFunctions::from_css_str("linear").unwrap();
-    style.animation_fill_mode = AnimationFillModes::from_css_str("both").unwrap();
+    let style = ComputedStyle {
+      animation_name: AnimationNames::from_css_str("morph").unwrap(),
+      animation_duration: AnimationDurations::from_css_str("1000ms").unwrap(),
+      animation_timing_function: AnimationTimingFunctions::from_css_str("linear").unwrap(),
+      animation_fill_mode: AnimationFillModes::from_css_str("both").unwrap(),
+      ..Default::default()
+    };
 
     let at = |time: u64| {
       apply_stylesheet_animations(style.clone(), &stylesheet, time, &sizing(), current_color())
