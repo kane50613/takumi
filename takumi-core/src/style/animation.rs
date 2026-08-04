@@ -648,6 +648,41 @@ mod tests {
     viewport::Viewport,
   };
 
+  #[test]
+  fn stylesheet_animation_interpolates_corner_shape() {
+    let stylesheet = StyleSheet::parse(
+      r#"
+      @keyframes morph {
+        from { corner-shape: squircle; }
+        to { corner-shape: bevel; }
+      }
+      "#,
+    )
+    .unwrap();
+
+    let mut style = ComputedStyle::default();
+    style.animation_name = AnimationNames::from_css_str("morph").unwrap();
+    style.animation_duration = AnimationDurations::from_css_str("1000ms").unwrap();
+    style.animation_timing_function = AnimationTimingFunctions::from_css_str("linear").unwrap();
+    style.animation_fill_mode = AnimationFillModes::from_css_str("both").unwrap();
+
+    let at = |time: u64| {
+      apply_stylesheet_animations(style.clone(), &stylesheet, time, &sizing(), current_color())
+        .corner_top_left_shape
+    };
+
+    assert_eq!(at(0), Superellipse::SQUIRCLE);
+    assert_eq!(at(1000), Superellipse::BEVEL);
+
+    let midpoint = at(500);
+
+    assert!(
+      midpoint.0 > 0.0 && midpoint.0 < 2.0,
+      "expected value between bevel and squircle, got {}",
+      midpoint.0
+    );
+  }
+
   fn sizing() -> SizingContext {
     SizingContext {
       viewport: Viewport::new((200, 100)),
