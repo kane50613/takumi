@@ -1,3 +1,17 @@
+## takumi-pdf@0.1.1
+
+### Auto-height viewport
+
+`viewport.height` is now optional. Omitting it sizes the single page to the laid-out content, like a thermal receipt.
+
+### Render SVG image sources
+
+SVG images passed via `images` came out as blank space; the backend only embedded bitmap sources. SVG sources now rasterize at twice their displayed size and embed like other images.
+
+### Ship the `tw` prop type
+
+Importing only `takumi-pdf` left JSX `tw` props failing to typecheck; the react module augmentation now ships with the package types.
+
 ## takumi-pdf@0.1.0
 
 ### Publish takumi-pdf, the wasm PDF package
