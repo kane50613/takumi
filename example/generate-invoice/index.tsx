@@ -1,4 +1,5 @@
 import { mkdir } from "node:fs/promises";
+import { googleFonts } from "@takumi-rs/helpers";
 import { write } from "bun";
 import { render } from "takumi-pdf";
 import { invoice } from "./data";
@@ -14,10 +15,16 @@ const images = [
   },
 ];
 
+const fonts = await googleFonts([
+  { name: "Inter", weight: [400, 500, 600] },
+  { name: "Space Mono", weight: [400, 700] },
+]);
+
 const invoicePdf = await render(<InvoiceDocument data={invoice} />, {
   size: "a4",
   margin: 48,
   images,
+  fonts,
   footer: (
     <div tw="flex w-full justify-center text-[10px] text-[#6b7280]">
       Page <span className="pageNumber" /> of <span className="totalPages" />
@@ -30,6 +37,8 @@ await write("output/invoice.pdf", invoicePdf);
 const receiptPdf = await render(<ReceiptDocument data={invoice} />, {
   viewport: { width: 302 },
   images,
+  fonts,
+  fontFamilies: ["Space Mono"],
 });
 
 await write("output/receipt.pdf", receiptPdf);
