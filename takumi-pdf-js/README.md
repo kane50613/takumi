@@ -32,35 +32,17 @@ import { writeFile } from "node:fs/promises";
 import { googleFonts } from "@takumi-rs/helpers";
 import { render } from "takumi-pdf";
 
-const fonts = await googleFonts(["Inter"]);
-
 const pdf = await render(
-  <main tw="flex flex-col gap-8 text-gray-900">
-    <header tw="flex items-start justify-between border-b border-gray-200 pb-6">
-      <div>
-        <h1 tw="text-2xl font-bold">Invoice</h1>
-        <p tw="text-sm text-gray-500">INV-2026-001</p>
-      </div>
-      <p tw="text-right text-sm">
-        Due August 31, 2026
-        <br />
-        $1,250.00
-      </p>
-    </header>
-    <section tw="flex flex-col gap-2 text-sm">
-      <div tw="flex justify-between">
-        <span>Design services</span>
-        <span>$1,250.00</span>
-      </div>
-      <div tw="border-t border-gray-200 pt-2 flex justify-between font-bold">
-        <span>Total</span>
-        <span>$1,250.00</span>
-      </div>
-    </section>
+  <main tw="flex flex-col gap-4">
+    <h1 tw="text-2xl font-bold">Invoice INV-2026-001</h1>
+    <div tw="flex justify-between border-t border-gray-200 pt-2 font-bold">
+      <span>Total</span>
+      <span>$1,250.00</span>
+    </div>
   </main>,
   {
     size: "a4",
-    fonts,
+    fonts: await googleFonts(["Inter"]),
     footer: (
       <div tw="flex w-full justify-center text-[10px] text-gray-500">
         Page <span className="pageNumber" /> of <span className="totalPages" />
