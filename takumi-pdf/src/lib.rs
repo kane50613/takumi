@@ -23,7 +23,7 @@
 //! images (`object-fit`/`object-position`), text with decorations, opacity,
 //! blend modes, overflow clipping, affine transforms, pagination. Not yet:
 //! box-shadow, filters, `clip-path`, masks, `background-size`/`position`/
-//! `repeat`, url() background layers, SVG image sources.
+//! `repeat`, url() background layers.
 
 use std::{collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 

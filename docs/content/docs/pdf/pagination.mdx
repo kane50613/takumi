@@ -1,0 +1,42 @@
+---
+title: Pagination
+description: Control where pages break with CSS.
+---
+
+Content lays out once at unbounded height, then splits into pages. Unsplittable atoms (text lines, images, transformed subtrees) never straddle a cut: a cut that would land inside one moves up to its top, matching browser print fragmentation.
+
+## Break properties
+
+```tsx
+const pdf = await render(
+  <article>
+    <h1 style={{ breakBefore: "page" }}>Chapter two</h1>
+    <section style={{ breakInside: "avoid" }}>Keep this together.</section>
+  </article>,
+);
+```
+
+| Property                      | Effect                                                  |
+| ----------------------------- | ------------------------------------------------------- |
+| `break-before: page`          | Starts the element on a new page.                       |
+| `break-after: page`           | Starts the following content on a new page.             |
+| `break-inside: avoid`         | Keeps the element on one page when it fits.             |
+| `box-decoration-break: clone` | Repeats borders and backgrounds on every page fragment. |
+
+A `break-inside: avoid` box taller than the page window cannot fit any page, so it stops participating in cut avoidance, the same rule browsers apply.
+
+## Split decorations
+
+A box that crosses a page break slices its border and background by default. Set `box-decoration-break: clone` to give each fragment complete decorations:
+
+```tsx
+<section
+  style={{
+    border: "1px solid #d1d5db",
+    borderRadius: 8,
+    boxDecorationBreak: "clone",
+  }}
+>
+  Long content that continues on the next page.
+</section>
+```

@@ -1,0 +1,41 @@
+---
+title: Headers & footers
+description: Repeat bands on every page with page counters.
+---
+
+`header` and `footer` take any node input and repeat on every page. Their measured height is carved out of the content window, so band and content never overlap.
+
+```tsx
+const pdf = await render(report, {
+  footer: (
+    <div tw="flex w-full justify-center text-[10px] text-gray-500">
+      Page <span className="pageNumber" /> of <span className="totalPages" />
+    </div>
+  ),
+});
+```
+
+## Page counters
+
+Elements with `pageNumber` or `totalPages` in their class list receive the counter as text, the same contract as Chromium's print header and footer templates.
+
+Add a CSS `@counter-style` name to the class list to format the number:
+
+```tsx
+footer: (
+  <div style={{ fontSize: 12 }}>
+    第 <span className="pageNumber trad-chinese-informal" /> 頁,共{" "}
+    <span className="totalPages trad-chinese-informal" /> 頁
+  </div>
+),
+```
+
+| Counter style                               | Example       |
+| ------------------------------------------- | ------------- |
+| `decimal` (default)                         | `12`          |
+| `decimal-leading-zero`                      | `07`          |
+| `lower-roman` / `upper-roman`               | `xii` / `XII` |
+| `cjk-decimal`                               | `一二`        |
+| `trad-chinese-informal` / `cjk-ideographic` | `十二`        |
+
+Band height is measured once with three-digit counters, so a page count reaching 100 does not shift the layout between pages.

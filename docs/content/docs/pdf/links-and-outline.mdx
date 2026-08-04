@@ -1,0 +1,45 @@
+---
+title: Links, outline & metadata
+description: Clickable hyperlinks, bookmarks, and document properties.
+---
+
+## Hyperlinks
+
+Anchors with an `href` become clickable link annotations, on every page their box touches:
+
+```tsx
+<p>
+  Pay online at <a href="https://example.com/pay/1042">example.com/pay/1042</a>.
+</p>
+```
+
+Inline anchors annotate each text run, so a link that wraps across lines stays clickable on both. Block-level anchors annotate their whole box.
+
+## Outline
+
+Set `outline: true` to build PDF bookmarks from `h1`–`h6` headings. Deeper headings nest under the previous shallower one, like an HTML document outline:
+
+```tsx
+const pdf = await render(report, { outline: true });
+```
+
+Clicking a bookmark jumps to the page and position of its heading.
+
+## Document metadata
+
+`metadata` fills the PDF's document properties; `lang` doubles as the metadata language:
+
+```tsx
+const pdf = await render(report, {
+  lang: "en",
+  metadata: {
+    title: "Annual report 2026",
+    description: "Consolidated results for fiscal year 2026",
+    authors: ["Acme Inc."],
+    keywords: ["annual report", "2026"],
+    creator: "acme-reporting",
+  },
+});
+```
+
+All fields are optional. Omitting `metadata` writes no document properties, which keeps output byte-identical across runs for golden testing.

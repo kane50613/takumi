@@ -1,0 +1,37 @@
+---
+title: Fonts & images
+description: Embed subset fonts and pre-fetched images.
+---
+
+## Fonts
+
+Text embeds as real glyph runs with subset fonts, so it stays selectable, searchable, and copyable. Pass a URL, raw bytes, or the [`googleFonts`](/docs/typography-and-fonts#from-google-fonts) helper:
+
+```tsx
+import { googleFonts } from "@takumi-rs/helpers";
+
+const pdf = await render(doc, {
+  fonts: [...(await googleFonts(["Inter"])), { name: "Brand Sans", weight: 700, data: fontBytes }],
+  fontFamilies: ["Brand Sans", "Inter", "sans-serif"],
+});
+```
+
+`fontFamilies` sets the per-render fallback chain. Registered fonts deduplicate across calls on the same renderer.
+
+## Images
+
+The renderer never fetches over the network. Pass pre-fetched bytes for every image URL the document references:
+
+```tsx
+const logoBytes = new Uint8Array(await (await fetch(logoUrl)).arrayBuffer());
+
+const pdf = await render(doc, {
+  images: [{ src: logoUrl, data: logoBytes }],
+});
+```
+
+SVG image sources rasterize at 2× the placed size; raster sources embed once per distinct pixel data.
+
+## Runtimes
+
+`takumi-pdf` is wasm-only and runs on Node.js, Bun, and Cloudflare Workers. The module fits within Workers' free-tier size limit. Import from `takumi-pdf/no-init` to control wasm instantiation yourself.
