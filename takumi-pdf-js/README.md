@@ -84,6 +84,12 @@ const pdf = await render(<div style={{ width: "100%", height: "100%" }}>Certific
 });
 ```
 
+Omit `height` to size the single page to its content, like a thermal receipt. Percentage heights do not resolve there.
+
+```tsx
+const pdf = await render(receipt, { viewport: { width: 302 } });
+```
+
 `viewport` cannot be combined with `size`, `landscape`, `margin`, `header`, or `footer`.
 
 ## Fonts

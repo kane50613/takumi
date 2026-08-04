@@ -54,6 +54,23 @@ test("paginates and substitutes footer counters", async () => {
   expect(pageCount(pdf)).toBeGreaterThan(1);
 });
 
+test("auto-height viewport sizes the page to content", async () => {
+  const rows = container({
+    style: { display: "flex", flexDirection: "column", width: "100%" },
+    children: Array.from({ length: 40 }, (_, i) => text(`Row ${i + 1}`, { fontSize: 16 })),
+  });
+  const pdf = await renderer.render(rows, { viewport: { width: 300 } });
+
+  expect(pageCount(pdf)).toBe(1);
+
+  const box = decoder.decode(pdf).match(/\/MediaBox\s*\[0 0 ([\d.]+) ([\d.]+)\]/);
+  const [width, height] = [Number(box?.[1]), Number(box?.[2])];
+
+  expect(width).toBe(300);
+  // 40 rows of 16px text need at least 40 line boxes of font-size height.
+  expect(height).toBeGreaterThanOrEqual(40 * 16);
+});
+
 test("letter landscape", async () => {
   const pdf = await renderer.render(doc, { size: "letter", landscape: true });
 

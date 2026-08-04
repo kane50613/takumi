@@ -9,8 +9,9 @@ rust-version = "1.91"
 publish = false
 
 [features]
-default = ["images"]
+default = ["images", "svg"]
 images = ["krilla/raster-images"]
+svg = ["takumi-core/svg"]
 
 [dependencies]
 typed-builder.workspace = true
