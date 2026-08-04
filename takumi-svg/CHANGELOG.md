@@ -1,3 +1,9 @@
+## takumi-svg@0.3.6
+
+### Fill side border corners in vector backends
+
+With per-side border colors and rounded corners, the SVG and PDF backends left the corner arcs unpainted: side fills used straight-edged polygons that stop short of the curve. Sides now fill with the same contour-following polygons the raster backend uses.
+
 ## takumi-svg@0.3.2
 
 ### Replace `ResolvedGlyphPlacement` with `geometry::Placement`
