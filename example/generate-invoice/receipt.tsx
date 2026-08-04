@@ -52,8 +52,6 @@ export function ReceiptDocument({ data }: { data: Invoice }) {
         </span>
       </div>
 
-      <Divider />
-
       <div style={{ display: "flex", justifyContent: "space-between", color: muted, fontSize: 10 }}>
         <span>{data.issuedAt}</span>
         <span>{data.number}</span>
@@ -75,8 +73,6 @@ export function ReceiptDocument({ data }: { data: Invoice }) {
         ))}
       </div>
 
-      <Divider />
-
       <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
         <Row label="Subtotal" value={money(net)} />
         <Row label={`Tax (${data.taxRate * 100}%)`} value={money(net * data.taxRate)} />
@@ -86,9 +82,9 @@ export function ReceiptDocument({ data }: { data: Invoice }) {
 
       <Row label="Total" value={money(net * (1 + data.taxRate))} strong />
 
-      <Divider />
-
-      <span style={{ textAlign: "center", color: muted, fontSize: 10, letterSpacing: 1 }}>
+      <span
+        style={{ textAlign: "center", color: muted, fontSize: 10, letterSpacing: 1, marginTop: 8 }}
+      >
         THANK YOU FOR YOUR BUSINESS
       </span>
     </div>
