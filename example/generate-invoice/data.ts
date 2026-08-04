@@ -1,34 +1,40 @@
 export const invoice = {
-  number: "INV-2026-0042",
+  number: "INV-2026-0128",
   issuedAt: "2026-08-04",
   dueAt: "2026-09-03",
   seller: {
-    name: "Kagi Studio Co.",
+    name: "Takumi Woodworks",
     address: "12F, 88 Songren Rd, Xinyi District, Taipei 110",
-    email: "billing@kagi.studio",
+    email: "workshop@takumi.kane.tw",
   },
   buyer: {
-    name: "Northwind Trading Ltd.",
-    address: "3 Harbour View St, Central, Hong Kong",
-    email: "ap@northwind.example",
+    name: "Puppeteer & Sons Marionette Co.",
+    address: "404 Headless Way, DevTools District",
+    email: "ap@puppeteer.example",
   },
   items: [
-    { description: "Design system audit", quantity: 1, unitPrice: 2400 },
-    { description: "Landing page implementation", quantity: 3, unitPrice: 1150 },
-    { description: "PDF export integration", quantity: 1, unitPrice: 1800 },
-    { description: "CI pipeline setup", quantity: 2, unitPrice: 650 },
-    { description: "Monthly maintenance (July)", quantity: 1, unitPrice: 900 },
+    { description: "Kerning chisel, hand-ground", quantity: 2, unitPrice: 1280 },
+    { description: "Baseline alignment jig", quantity: 1, unitPrice: 3600 },
+    { description: "Subpixel sanding block, 1/256 grit", quantity: 3, unitPrice: 480 },
+    { description: "Glyph cache, walnut, 512 × 512", quantity: 1, unitPrice: 5120 },
+    { description: "Chromium removal service", quantity: 1, unitPrice: 0 },
   ],
   taxRate: 0.05,
-  notes: "Payment by bank transfer within 30 days. Please reference the invoice number.",
+  notes:
+    "Hand-finished in Taipei. Payment by bank transfer within 30 days; please reference the invoice number. No Chromium was used.",
 };
 
 export type Invoice = typeof invoice;
 
-const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const twd = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "TWD",
+  currencyDisplay: "code",
+  minimumFractionDigits: 0,
+});
 
 export function money(value: number): string {
-  return usd.format(value);
+  return twd.format(value);
 }
 
 export function subtotal(data: Invoice): number {
