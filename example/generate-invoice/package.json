@@ -1,0 +1,15 @@
+{
+  "name": "example-generate-invoice",
+  "private": true,
+  "type": "module",
+  "module": "index.tsx",
+  "dependencies": {
+    "react": "catalog:",
+    "takumi-pdf": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "typescript": "catalog:"
+  }
+}
