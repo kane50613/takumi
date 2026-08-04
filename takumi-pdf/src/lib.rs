@@ -511,6 +511,38 @@ fn substitute_page_counters(node: &mut Node, page: usize, pages: usize) {
   }
 }
 
+/// A band measured before pagination: the laid-out tree plus whether it must
+/// re-prepare per page (it contains counter hooks).
+struct MeasuredBand {
+  measured: PreparedTree,
+  dynamic: bool,
+}
+
+/// Measures a band with three-digit counters and records whether it must
+/// re-prepare per page.
+fn measure_band(
+  inputs: &TreeInputs<'_>,
+  template: &Node,
+  viewport: Viewport,
+) -> Result<MeasuredBand, PdfError> {
+  Ok(MeasuredBand {
+    measured: prepare_band(inputs, template, 999, 999, viewport)?,
+    dynamic: band_has_counters(template),
+  })
+}
+
+/// Whether a band template contains any page-counter hook. A band without one
+/// lays out identically on every page, so it is prepared once and reused.
+fn band_has_counters(node: &Node) -> bool {
+  if counter_text(node, 1, 1).is_some() {
+    return true;
+  }
+  match &node.kind {
+    NodeKind::Container { children } => children.iter().any(band_has_counters),
+    _ => false,
+  }
+}
+
 /// Lays out a band template with the given counter values.
 fn prepare_band(
   inputs: &TreeInputs<'_>,
@@ -581,15 +613,24 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
 
       // Band heights are measured once with three-digit counters; per-page
       // emission clips to the measured band, so a wrap caused by a wider real
-      // counter cannot push the content window around between pages.
-      let header_height = match &options.header {
-        Some(template) => prepare_band(&inputs, template, 999, 999, band_viewport)?.height,
-        None => 0.0,
-      };
-      let footer_height = match &options.footer {
-        Some(template) => prepare_band(&inputs, template, 999, 999, band_viewport)?.height,
-        None => 0.0,
-      };
+      // counter cannot push the content window around between pages. A band
+      // without counter hooks reuses the measured layout on every page.
+      let header_band = options
+        .header
+        .as_ref()
+        .map(|template| measure_band(&inputs, template, band_viewport))
+        .transpose()?;
+      let footer_band = options
+        .footer
+        .as_ref()
+        .map(|template| measure_band(&inputs, template, band_viewport))
+        .transpose()?;
+      let header_height = header_band
+        .as_ref()
+        .map_or(0.0, |band| band.measured.height);
+      let footer_height = footer_band
+        .as_ref()
+        .map_or(0.0, |band| band.measured.height);
       let window_height = content_height - header_height - footer_height;
       if window_height <= 0.0 {
         return Err(PdfError::InvalidPageSize);
@@ -610,11 +651,17 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         let mut pdf_page = document.start_page_with(PageSettings::new(page_size));
         let mut surface = pdf_page.surface();
 
-        if let Some(template) = &options.header {
-          let band = prepare_band(&inputs, template, index + 1, pages, band_viewport)?;
+        if let (Some(band), Some(template)) = (&header_band, &options.header) {
+          let prepared;
+          let tree = if band.dynamic {
+            prepared = prepare_band(&inputs, template, index + 1, pages, band_viewport)?;
+            &prepared
+          } else {
+            &band.measured
+          };
 
           emit_band(
-            &band,
+            tree,
             &mut fonts,
             page.margin.left,
             page.margin.top,
@@ -649,11 +696,17 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           surface.pop();
         }
 
-        if let Some(template) = &options.footer {
-          let band = prepare_band(&inputs, template, index + 1, pages, band_viewport)?;
+        if let (Some(band), Some(template)) = (&footer_band, &options.footer) {
+          let prepared;
+          let tree = if band.dynamic {
+            prepared = prepare_band(&inputs, template, index + 1, pages, band_viewport)?;
+            &prepared
+          } else {
+            &band.measured
+          };
 
           emit_band(
-            &band,
+            tree,
             &mut fonts,
             page.margin.left,
             page.height - page.margin.bottom - footer_height,
