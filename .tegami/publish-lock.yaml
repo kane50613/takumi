@@ -1,75 +1,102 @@
 core:changelogs:
-  - content: "---\npackages:\n  cargo:takumi-raster:\n    type: patch\n---\n\n### Fix debug-build panic when drop-shadow hits a fully transparent element\n\n`drop-shadow()` on an element with no visible pixels panicked with an integer underflow in debug builds. The bounds check now short-circuits before computing the empty region's size.\n"
-    filename: transparent-drop-shadow-panic.md
+  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n  \"@takumi-rs/wasm\":\n    type: patch\n---\n\n### Type render output as backed by `ArrayBuffer`\n\n`render` and `renderAnimation` declared their output as `Buffer` / `Uint8Array` over `ArrayBufferLike`, so passing the bytes straight to `new Response(...)` failed to typecheck. They now declare `Buffer<ArrayBuffer>` / `Uint8Array<ArrayBuffer>`, which `BodyInit` accepts.\n"
+    filename: render-return-arraybuffer.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n### Publish takumi-pdf, the wasm PDF package\n\n`render(jsx)` turns a node tree or JSX into a paged PDF with selectable text and embedded subset fonts, on Node, Bun, and Cloudflare Workers. Options mirror Puppeteer's `page.pdf()`: `size` (`\"a4\"`, `\"letter\"`, `{ width, height }`), `landscape`, per-side margins, and repeating header/footer bands with Chromium-style `pageNumber`/`totalPages` class hooks and CSS counter styles, while `viewport` renders a fixed single page instead. Fonts, images, and stylesheets round out the options.\n"
+    filename: takumi-pdf-npm-package.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n---\n\n### Add box-decoration-break\n\n`box-decoration-break: slice | clone` parses. The paged PDF backend uses it to decide how a box painted across page fragments closes its edges: `slice` (the default) leaves the edge at a break open, matching browser print behavior, while `clone` paints every fragment's complete borders and background. Cloned padding is paint-only and does not reserve layout space.\n"
+    filename: box-decoration-break.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: patch\n---\n\n### Paint fractional border widths evenly\n\nLayout rounding snapped border widths to whole pixels per edge, so a uniform 2.5px border could come out as a 2px top and a 3px bottom depending on where each edge landed on the pixel grid. Border widths now keep their fractional values through layout rounding and paint with coverage antialiasing, matching how browsers draw them.\n"
+    filename: fractional-border-width.md
+    v: 0.0.0
+  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n---\n\n### Add break-before, break-after, and break-inside\n\nThe three fragmentation properties parse with their page values: `break-before: page`, `break-after: page`, and `break-inside: avoid`. Raster and SVG output ignores them; the paged PDF backend consumes them. `ShapedRun` now carries its source text range and per-glyph cluster ranges for text-extraction backends, and the JPEG, WebP, and GIF decoders sit behind a new default-on `image-decoding` feature so slim builds can drop them.\n"
+    filename: break-properties-and-pdf-groundwork.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - id: npm:takumi-js
-    updated: true
-  - id: npm:@takumi-rs/core
-    updated: true
-  - id: npm:docs
-    updated: false
-  - id: npm:takumi-template
-    updated: false
-  - id: npm:@takumi-rs/wasm
-    updated: true
   - id: npm:@takumi-rs/image-response
     updated: true
   - id: npm:@takumi-rs/helpers
     updated: true
-  - id: npm:example-nextjs
+  - id: npm:takumi-template
     updated: false
-  - id: npm:svelte
-    updated: false
-  - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:waku-ssr
-    updated: false
-  - id: npm:example-css-library-integration
-    updated: false
-  - id: npm:example-twitter-images
-    updated: false
-  - id: npm:ffplay
-    updated: false
-  - id: npm:example-satori-html
-    updated: false
-  - id: npm:example-tanstack-start
-    updated: false
-  - id: npm:ffmpeg-keyframe-animation
-    updated: false
-  - id: npm:example-liquid-glass
+  - id: npm:docs
     updated: false
   - changelogIds:
-      - transparent-drop-shadow-panic.md
-    id: cargo:takumi-raster
+      - render-return-arraybuffer.md
+    id: npm:@takumi-rs/core
     updated: true
-  - id: cargo:takumi-svg
+  - id: npm:takumi-js
+    updated: true
+  - changelogIds:
+      - render-return-arraybuffer.md
+    id: npm:@takumi-rs/wasm
+    updated: true
+  - changelogIds:
+      - takumi-pdf-npm-package.md
+    id: npm:takumi-pdf
+    updated: true
+  - id: npm:example-satori-html
     updated: false
-  - id: cargo:takumi-core
+  - id: npm:example-tanstack-start
     updated: false
-  - id: cargo:takumi
+  - id: npm:svelte
+    updated: false
+  - id: npm:example-liquid-glass
+    updated: false
+  - id: npm:ffplay
+    updated: false
+  - id: npm:example-css-library-integration
+    updated: false
+  - id: npm:waku-ssr
+    updated: false
+  - id: npm:example-cloudflare-workers
+    updated: false
+  - id: npm:ffmpeg-keyframe-animation
+    updated: false
+  - id: npm:example-nextjs
+    updated: false
+  - id: npm:example-twitter-images
+    updated: false
+  - changelogIds:
+      - box-decoration-break.md
+      - fractional-border-width.md
+      - break-properties-and-pdf-groundwork.md
+    id: cargo:takumi-core
     updated: true
   - id: cargo:takumi-html
-    updated: false
+    updated: true
+  - id: cargo:takumi-raster
+    updated: true
+  - id: cargo:takumi-svg
+    updated: true
+  - changelogIds:
+      - takumi-pdf-npm-package.md
+    id: cargo:takumi-pdf
+    updated: true
+  - id: cargo:takumi
+    updated: true
 npm:packages:
   - id: npm:takumi
-  - id: npm:takumi-js
-  - id: npm:@takumi-rs/core
-  - id: npm:docs
-  - id: npm:takumi-template
-  - id: npm:@takumi-rs/wasm
   - id: npm:@takumi-rs/image-response
   - id: npm:@takumi-rs/helpers
-  - id: npm:example-nextjs
-  - id: npm:svelte
-  - id: npm:example-cloudflare-workers
-  - id: npm:waku-ssr
-  - id: npm:example-css-library-integration
-  - id: npm:example-twitter-images
-  - id: npm:ffplay
+  - id: npm:takumi-template
+  - id: npm:docs
+  - id: npm:@takumi-rs/core
+  - id: npm:takumi-js
+  - id: npm:@takumi-rs/wasm
+  - id: npm:takumi-pdf
   - id: npm:example-satori-html
   - id: npm:example-tanstack-start
-  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:svelte
   - id: npm:example-liquid-glass
+  - id: npm:ffplay
+  - id: npm:example-css-library-integration
+  - id: npm:waku-ssr
+  - id: npm:example-cloudflare-workers
+  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-nextjs
+  - id: npm:example-twitter-images
