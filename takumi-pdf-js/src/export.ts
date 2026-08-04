@@ -69,6 +69,20 @@ type ViewportOptions = {
   footer?: never;
 };
 
+/** Document metadata written to the PDF's info dictionary. */
+export type PdfMetadata = {
+  /** The document title. */
+  title?: string;
+  /** The document description (the info dictionary's subject). */
+  description?: string;
+  /** The document authors. */
+  authors?: string[];
+  /** The document keywords. */
+  keywords?: string[];
+  /** The tool that created the source document. */
+  creator?: string;
+};
+
 export type RenderOptions = (PagedOptions | ViewportOptions) & {
   /** Fonts to register before rendering, deduped across calls. */
   fonts?: FontLoader[];
@@ -83,6 +97,10 @@ export type RenderOptions = (PagedOptions | ViewportOptions) & {
   fontFamilies?: string[];
   /** Default BCP-47 language tag applied to the root. */
   lang?: string;
+  /** Document metadata; `lang` doubles as the metadata language. */
+  metadata?: PdfMetadata;
+  /** Generates a PDF outline (bookmarks) from `h1`–`h6` headings. */
+  outline?: boolean;
 };
 
 function isNode(value: NodeInput): value is Node {

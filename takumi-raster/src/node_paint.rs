@@ -333,6 +333,7 @@ fn draw_text_node_content(
   let inline_text: InlineItem<'_> = InlineItem::Text {
     text: text.text.as_str().into(),
     context,
+    link: None,
   };
 
   let built = create_inline_layout(InlineLayoutRequest {

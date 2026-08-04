@@ -31,13 +31,18 @@ use std::{collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 use krilla::image::Image as KrillaImage;
 use krilla::{
   Data, Document,
+  action::{Action, LinkAction},
+  annotation::{Annotation, LinkAnnotation, Target},
   blend::BlendMode as KrillaBlendMode,
   color::rgb,
+  destination::XyzDestination,
   error::KrillaError,
   geom::{
     Path as KrillaPath, PathBuilder, Point, Rect as KrillaRect, Size as KrillaSize, Transform,
   },
+  metadata::Metadata,
   num::NormalizedF32,
+  outline::{Outline, OutlineNode},
   page::PageSettings,
   paint::{
     Fill, FillRule, LinearGradient as KrillaLinearGradient, Paint,
@@ -139,6 +144,52 @@ pub struct PdfOptions<'g> {
   /// Default BCP-47 language tag applied to the root.
   #[builder(default)]
   pub lang: Option<Lang>,
+  /// Document metadata written to the PDF's info dictionary.
+  #[builder(default, setter(strip_option))]
+  pub metadata: Option<PdfMetadata>,
+  /// Generates a PDF outline (bookmarks) from `h1`–`h6` headings.
+  #[builder(default)]
+  pub outline: bool,
+}
+
+/// Document metadata for the PDF's info dictionary. [`PdfOptions::lang`]
+/// doubles as the metadata language.
+#[derive(Default, Clone)]
+pub struct PdfMetadata {
+  /// The document title.
+  pub title: Option<String>,
+  /// The document description (the info dictionary's subject).
+  pub description: Option<String>,
+  /// The document authors.
+  pub authors: Vec<String>,
+  /// The document keywords.
+  pub keywords: Vec<String>,
+  /// The tool that created the source document.
+  pub creator: Option<String>,
+}
+
+fn build_metadata(metadata: &PdfMetadata, lang: Option<Lang>) -> Metadata {
+  let mut result = Metadata::new();
+
+  if let Some(title) = &metadata.title {
+    result = result.title(title.clone());
+  }
+  if let Some(description) = &metadata.description {
+    result = result.description(description.clone());
+  }
+  if !metadata.authors.is_empty() {
+    result = result.authors(metadata.authors.clone());
+  }
+  if !metadata.keywords.is_empty() {
+    result = result.keywords(metadata.keywords.clone());
+  }
+  if let Some(creator) = &metadata.creator {
+    result = result.creator(creator.clone());
+  }
+  if let Some(lang) = lang {
+    result = result.language(lang.as_str().to_string());
+  }
+  result
 }
 
 /// Per-side page margins in px.
@@ -511,6 +562,9 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
   let mut fonts = FontMap::new();
   let mut document = Document::new();
 
+  if let Some(metadata) = &options.metadata {
+    document.set_metadata(build_metadata(metadata, inputs.lang));
+  }
   match options.page {
     Some(page) => {
       let page_size =
@@ -550,6 +604,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         .collect_atoms(0, Affine::IDENTITY, &mut atoms, &mut forced)?;
       let starts = page_starts(&mut atoms, &mut forced, content.height, window_height);
       let pages = starts.len();
+      let (links, headings) = collect_interactive(&content);
 
       for (index, &y0) in starts.iter().enumerate() {
         let mut pdf_page = document.start_page_with(PageSettings::new(page_size));
@@ -609,7 +664,24 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         }
 
         surface.finish();
+        add_link_annotations(
+          &mut pdf_page,
+          &links,
+          (y0, y0 + paint_height),
+          (page.margin.left, content_top),
+        );
         pdf_page.finish();
+      }
+
+      if options.outline && !headings.is_empty() {
+        document.set_outline(build_outline(&headings, |heading| {
+          let index = starts
+            .partition_point(|start| *start <= heading.top)
+            .saturating_sub(1);
+          let y = page.margin.top + header_height + (heading.top - starts[index]).max(0.0);
+
+          XyzDestination::new(index, Point::from_xy(page.margin.left, y))
+        }));
       }
     }
     None => {
@@ -623,7 +695,15 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
 
       emitter.emit_context(0, Affine::IDENTITY, &mut surface)?;
       surface.finish();
+      let (links, headings) = collect_interactive(&content);
+
+      add_link_annotations(&mut page, &links, (0.0, content.height), (0.0, 0.0));
       page.finish();
+      if options.outline && !headings.is_empty() {
+        document.set_outline(build_outline(&headings, |heading| {
+          XyzDestination::new(0, Point::from_xy(0.0, heading.top.max(0.0)))
+        }));
+      }
     }
   }
 
@@ -684,6 +764,286 @@ fn page_starts(atoms: &mut [Atom], forced: &mut Vec<f32>, total: f32, window: f3
     y0 = cut;
   }
   starts
+}
+
+/// A hyperlink box in content coordinates.
+struct LinkTarget {
+  uri: String,
+  rect: KrillaRect,
+}
+
+/// A heading in content coordinates, for the outline.
+struct HeadingTarget {
+  level: u8,
+  text: String,
+  top: f32,
+}
+
+/// The axis-aligned bounding box of a node-local rect under the node's
+/// absolute transform, in content coordinates.
+fn transformed_rect(transform: Affine, origin: (f32, f32), size: Size<f32>) -> Option<KrillaRect> {
+  let cols = transform.to_cols_array();
+  let corners = [
+    (origin.0, origin.1),
+    (origin.0 + size.width, origin.1),
+    (origin.0, origin.1 + size.height),
+    (origin.0 + size.width, origin.1 + size.height),
+  ];
+  let mut left = f32::INFINITY;
+  let mut top = f32::INFINITY;
+  let mut right = f32::NEG_INFINITY;
+  let mut bottom = f32::NEG_INFINITY;
+
+  for (x, y) in corners {
+    let px = cols[0] * x + cols[2] * y + cols[4];
+    let py = cols[1] * x + cols[3] * y + cols[5];
+
+    left = left.min(px);
+    top = top.min(py);
+    right = right.max(px);
+    bottom = bottom.max(py);
+  }
+  KrillaRect::from_ltrb(left, top, right, bottom)
+}
+
+fn heading_level(tag: &str) -> Option<u8> {
+  let mut bytes = tag.bytes();
+
+  if !bytes.next()?.eq_ignore_ascii_case(&b'h') {
+    return None;
+  }
+  let level = bytes.next()?;
+
+  if bytes.next().is_none() && (b'1'..=b'6').contains(&level) {
+    Some(level - b'0')
+  } else {
+    None
+  }
+}
+
+fn node_text(node: &Node, out: &mut String) {
+  match &node.kind {
+    NodeKind::Text(text) => out.push_str(&text.text),
+    NodeKind::Container { children } => {
+      for child in children {
+        node_text(child, out);
+      }
+    }
+    _ => {}
+  }
+}
+
+/// Collects hyperlinks and headings from the prepared scene, in paint order.
+fn collect_interactive(tree: &PreparedTree) -> (Vec<LinkTarget>, Vec<HeadingTarget>) {
+  let mut links = Vec::new();
+  let mut headings = Vec::new();
+
+  collect_interactive_context(tree, 0, &mut links, &mut headings);
+  headings.sort_by(|a, b| a.top.total_cmp(&b.top));
+  (links, headings)
+}
+
+fn collect_interactive_context(
+  tree: &PreparedTree,
+  id: usize,
+  links: &mut Vec<LinkTarget>,
+  headings: &mut Vec<HeadingTarget>,
+) {
+  let Some(context) = tree.contexts.get(id) else {
+    return;
+  };
+
+  if let Some(paint) = context.root() {
+    collect_interactive_paint(tree, paint, links, headings);
+  }
+  for bucket in context.in_paint_order() {
+    for item in bucket {
+      match &item.kind {
+        PaintItemKind::Node(paint) => collect_interactive_paint(tree, paint, links, headings),
+        PaintItemKind::Context(child) => {
+          collect_interactive_context(tree, *child, links, headings);
+        }
+      }
+    }
+  }
+}
+
+fn collect_interactive_paint(
+  tree: &PreparedTree,
+  paint: &NodePaint,
+  links: &mut Vec<LinkTarget>,
+  headings: &mut Vec<HeadingTarget>,
+) {
+  let Some(node) = tree.root.node_at_path(&paint.path) else {
+    return;
+  };
+  let Ok(layout) = tree.results.layout(paint.node_id) else {
+    return;
+  };
+  let Some(source) = node.node.as_ref() else {
+    return;
+  };
+  let Some(rect) = transformed_rect(paint.transform, (0.0, 0.0), layout.size) else {
+    return;
+  };
+
+  if let Some(uri) = source.attribute("href")
+    && !uri.is_empty()
+  {
+    links.push(LinkTarget {
+      uri: uri.to_string(),
+      rect,
+    });
+  }
+  if node.should_create_inline_layout() {
+    collect_inline_links(node, layout, paint.transform, links);
+  }
+  if let Some(level) = source.tag_name().and_then(heading_level) {
+    let mut text = String::new();
+
+    node_text(source, &mut text);
+    let text = text.trim();
+
+    if !text.is_empty() {
+      headings.push(HeadingTarget {
+        level,
+        text: text.to_string(),
+        top: rect.top(),
+      });
+    }
+  }
+}
+
+/// Measures a box's inline layout and records one link box per glyph run that
+/// sits inside an anchor.
+fn collect_inline_links(
+  node: &RenderNode,
+  layout: Layout,
+  transform: Affine,
+  links: &mut Vec<LinkTarget>,
+) {
+  let context = &node.context;
+  let font_style = SizedFontStyle::from_style(&context.style, context);
+  let content = layout.content_box_size();
+
+  if font_style.sizing.font_size == 0.0 || content.width <= 0.0 || content.height <= 0.0 {
+    return;
+  }
+  let items = collect_inline_items(node);
+
+  if !items
+    .iter()
+    .any(|item| matches!(item, InlineItem::Text { link: Some(_), .. }))
+  {
+    return;
+  }
+  let built = create_inline_layout(InlineLayoutRequest {
+    items,
+    available_space: Size {
+      width: AvailableSpace::Definite(content.width),
+      height: AvailableSpace::Definite(content.height),
+    },
+    max_width: content.width,
+    max_height: resolve_inline_max_height(&font_style, content.height),
+    style: &font_style,
+    context,
+    mode: InlineLayoutMode::Measure,
+  });
+  let (runs, _) = built.measure_runs(layout);
+
+  for run in runs {
+    let Some(uri) = run.link else {
+      continue;
+    };
+    let Some(rect) = transformed_rect(
+      transform,
+      (run.x, run.y),
+      Size {
+        width: run.width,
+        height: run.height,
+      },
+    ) else {
+      continue;
+    };
+
+    links.push(LinkTarget {
+      uri: uri.to_string(),
+      rect,
+    });
+  }
+}
+
+/// Adds this page's slice of every link as annotations. `window` is the page's
+/// content window in content coordinates; `offset` maps content to page
+/// coordinates.
+fn add_link_annotations(
+  page: &mut krilla::page::Page,
+  links: &[LinkTarget],
+  window: (f32, f32),
+  offset: (f32, f32),
+) {
+  for link in links {
+    let top = link.rect.top().max(window.0);
+    let bottom = link.rect.bottom().min(window.1);
+
+    if bottom <= top {
+      continue;
+    }
+    let Some(rect) = KrillaRect::from_ltrb(
+      link.rect.left() + offset.0,
+      top - window.0 + offset.1,
+      link.rect.right() + offset.0,
+      bottom - window.0 + offset.1,
+    ) else {
+      continue;
+    };
+
+    page.add_annotation(Annotation::new_link(
+      LinkAnnotation::new(
+        rect,
+        Target::Action(Action::Link(LinkAction::new(link.uri.clone()))),
+      ),
+      None,
+    ));
+  }
+}
+
+/// Nests flat headings into an outline tree: a heading adopts the following
+/// deeper headings as children, like an HTML document outline.
+fn build_outline(
+  headings: &[HeadingTarget],
+  destination: impl Fn(&HeadingTarget) -> XyzDestination,
+) -> Outline {
+  fn take(
+    headings: &[HeadingTarget],
+    index: &mut usize,
+    level: u8,
+    destination: &impl Fn(&HeadingTarget) -> XyzDestination,
+  ) -> Vec<OutlineNode> {
+    let mut nodes = Vec::new();
+
+    while let Some(heading) = headings.get(*index) {
+      if heading.level < level {
+        break;
+      }
+      *index += 1;
+      let mut node = OutlineNode::new(heading.text.clone(), destination(heading));
+
+      for child in take(headings, index, heading.level + 1, destination) {
+        node.push_child(child);
+      }
+      nodes.push(node);
+    }
+    nodes
+  }
+
+  let mut outline = Outline::new();
+  let mut index = 0;
+
+  for node in take(headings, &mut index, 1, &destination) {
+    outline.push_child(node);
+  }
+  outline
 }
 
 /// Scene walker state: the render tree, the stacking-context scene, and a cache
@@ -1503,6 +1863,7 @@ fn single_text_items<'c>(text: &'c TextData, context: &'c RenderContext) -> Vec<
   vec![InlineItem::Text {
     text: text.text.as_str().into(),
     context,
+    link: None,
   }]
 }
 

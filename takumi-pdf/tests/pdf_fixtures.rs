@@ -18,7 +18,7 @@ use takumi_core::{
   viewport::Viewport,
 };
 use takumi_html::{FromHtmlOptions, from_html};
-use takumi_pdf::{PageMargins, PageOptions, PdfOptions, render};
+use takumi_pdf::{PageMargins, PageOptions, PdfMetadata, PdfOptions, render};
 
 fn fonts() -> Fonts {
   let mut fonts = Fonts::default();
@@ -611,4 +611,39 @@ fn certificate() {
       .fonts(fonts)
       .build()
   });
+}
+
+/// Headings across a forced page break become outline entries; anchors become
+/// link annotations on the page owning their box.
+#[test]
+fn report_links_outline() {
+  run_pdf_fixture("report-links-outline", |fonts| {
+    PdfOptions::builder()
+      .node(html_fixture("report.html"))
+      .page(PageOptions::A4)
+      .outline(true)
+      .metadata(PdfMetadata {
+        title: Some("Annual report".into()),
+        description: Some("Fixture exercising metadata, links, and outline".into()),
+        authors: vec!["Takumi".into()],
+        keywords: vec!["report".into(), "fixture".into()],
+        creator: Some("takumi-pdf fixtures".into()),
+      })
+      .fonts(fonts)
+      .build()
+  });
+
+  let golden = fs::read(
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures-generated/report-links-outline.pdf"),
+  )
+  .expect("read golden");
+  let haystack = String::from_utf8_lossy(&golden);
+
+  for needle in [
+    "https://example.com/numbers",
+    "https://example.com/data",
+    "/Outlines",
+  ] {
+    assert!(haystack.contains(needle), "missing {needle} in pdf");
+  }
 }

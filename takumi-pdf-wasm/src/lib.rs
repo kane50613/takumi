@@ -22,7 +22,7 @@ use takumi_core::{
   style::{FontFamily, FontStyle as CssFontStyle, FromCssStr, Lang},
   viewport::Viewport,
 };
-use takumi_pdf::{PageMargins, PageOptions, PdfOptions};
+use takumi_pdf::{PageMargins, PageOptions, PdfMetadata, PdfOptions};
 use wasm_bindgen::prelude::*;
 
 fn map_error(error: impl core::fmt::Debug) -> js_sys::Error {
@@ -181,6 +181,33 @@ struct PdfRenderOptions {
   font_families: Option<Vec<String>>,
   /// Default BCP-47 language tag applied to the root.
   lang: Option<String>,
+  /// Document metadata written to the PDF's info dictionary.
+  metadata: Option<MetadataInput>,
+  /// Generates a PDF outline (bookmarks) from `h1`–`h6` headings.
+  outline: Option<bool>,
+}
+
+/// Document metadata fields.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MetadataInput {
+  title: Option<String>,
+  description: Option<String>,
+  authors: Option<Vec<String>>,
+  keywords: Option<Vec<String>>,
+  creator: Option<String>,
+}
+
+impl From<MetadataInput> for PdfMetadata {
+  fn from(input: MetadataInput) -> Self {
+    Self {
+      title: input.title,
+      description: input.description,
+      authors: input.authors.unwrap_or_default(),
+      keywords: input.keywords.unwrap_or_default(),
+      creator: input.creator,
+    }
+  }
 }
 
 /// A PDF renderer holding registered fonts and a decoded-resource cache.
@@ -312,6 +339,8 @@ impl PdfRenderer {
       footer: options.footer,
       font_families: options.font_families.map(FontFamily::from_names),
       lang,
+      metadata: options.metadata.map(PdfMetadata::from),
+      outline: options.outline.unwrap_or(false),
     })
     .map_err(map_error)
   }
