@@ -1,7 +1,7 @@
 ---
 packages:
   takumi-pdf:
-    type: minor
+    type: patch
 ---
 
 ### Render SVG image sources
