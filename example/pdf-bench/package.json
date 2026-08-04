@@ -1,0 +1,18 @@
+{
+  "name": "pdf-bench",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bench": "bun bench-takumi.tsx && bun bench-reactpdf.tsx && bun bench-puppeteer.ts"
+  },
+  "dependencies": {
+    "@react-pdf/renderer": "^4.5.1",
+    "puppeteer-core": "^25.5.0",
+    "react": "catalog:",
+    "takumi-pdf": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:"
+  }
+}
