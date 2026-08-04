@@ -620,6 +620,7 @@ pub(crate) fn render_clip_shape_mask(
           bottom: BorderStyle::Solid,
           left: BorderStyle::Solid,
         },
+        shape: Sides::default(),
       };
 
       border.append_mask_commands(

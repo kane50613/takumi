@@ -61,6 +61,63 @@ fn test_style_border_radius_per_corner() {
 }
 
 #[test]
+fn test_style_corner_shape_squircle() {
+  let container = Node::container([]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([255, 0, 0, 255]),
+      )))
+      .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(60.0)); 4])))
+      .with_corner_shape(Sides([Superellipse::SQUIRCLE; 4])),
+  );
+
+  run_fixture_test(container, "style_corner_shape_squircle");
+}
+
+#[test]
+fn test_style_corner_shape_variants() {
+  let shapes = [
+    Superellipse::BEVEL,
+    Superellipse::SCOOP,
+    Superellipse::NOTCH,
+    Superellipse::SQUARE,
+    Superellipse(3.0),
+  ];
+
+  let children = shapes.map(|shape| {
+    Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::width(Px(140.0)))
+        .with(StyleDeclaration::height(Px(140.0)))
+        .with(StyleDeclaration::background_color(ColorInput::Value(
+          Color([0, 128, 255, 255]),
+        )))
+        .with_border_width(Sides([LineWidth::Length(Px(6.0)); 4]))
+        .with_border_style(Sides([BorderStyle::Solid; 4]))
+        .with_border_color(Sides([ColorInput::Value(Color([0, 0, 0, 255])); 4]))
+        .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(40.0)); 4])))
+        .with_corner_shape(Sides([shape; 4])),
+    )
+  });
+
+  let container = Node::container(children).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::align_items(AlignItems::Center))
+      .with(StyleDeclaration::justify_content(
+        JustifyContent::SpaceEvenly,
+      )),
+  );
+
+  run_fixture_test(container, "style_corner_shape_variants");
+}
+
+#[test]
 fn test_style_border_width() {
   let container = Node::container([]).with_style(
     Style::default()

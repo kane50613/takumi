@@ -3,7 +3,8 @@ use std::f32::consts::{PI, SQRT_2};
 use crate::{
   context::RenderContext,
   geometry::{PathBuilder, PathCommand as Command, Point, Rect, Size},
-  style::{BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair},
+  layout::corner_shape::{CornerContour, contour_arc_length, corner_contour},
+  style::{BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair, Superellipse},
 };
 
 /// Border side identifier used by per-side geometry and rasterization.
@@ -28,6 +29,8 @@ pub struct BorderProperties {
   pub color: Rect<Color>,
   /// Corner radii: top, right, bottom, left (in pixels)
   pub radius: Sides<SpacePair<f32>>,
+  /// Corner shapes: top-left, top-right, bottom-right, bottom-left.
+  pub shape: Sides<Superellipse>,
   /// The style of each border side.
   pub style: Rect<BorderStyle>,
   /// The image rendering algorithm to use when sampling the image.
@@ -37,7 +40,7 @@ pub struct BorderProperties {
 impl BorderProperties {
   /// The amount of path commands to append for this border.
   /// This is used to pre-allocate the vector size for the mask commands.
-  pub const PATH_COMMANDS_AMOUNT: usize = 10;
+  pub const PATH_COMMANDS_AMOUNT: usize = 14;
 
   /// Resolves the border radius from the context and layout.
   pub fn resolve_radius_part(
@@ -68,6 +71,16 @@ impl BorderProperties {
     Sides([top_left, top_right, bottom_right, bottom_left])
   }
 
+  /// Resolves the corner shapes from the context.
+  pub fn resolve_shape_part(context: &RenderContext) -> Sides<Superellipse> {
+    Sides([
+      context.style.corner_top_left_shape,
+      context.style.corner_top_right_shape,
+      context.style.corner_bottom_right_shape,
+      context.style.corner_bottom_left_shape,
+    ])
+  }
+
   /// Resolves the border radius from the context and layout.
   pub fn from_context(
     context: &RenderContext,
@@ -95,6 +108,7 @@ impl BorderProperties {
           .resolve(context.current_color),
       },
       radius: Self::resolve_radius_part(context, border_box),
+      shape: Self::resolve_shape_part(context),
       style: Rect {
         top: context.style.border_top_style,
         right: context.style.border_right_style,
@@ -560,33 +574,41 @@ impl BorderProperties {
 
   /// CSS overlapping-curves scale factor: shrinks corner radii so adjacent radii on a side never
   /// exceed the border-box edge.
-  fn overlapping_curves_scale(&self, border_box: Size<f32>) -> f32 {
+  fn overlapping_curves_scale(radii: &Sides<SpacePair<f32>>, border_box: Size<f32>) -> f32 {
     let axis_scale = |a: f32, b: f32, extent: f32| {
       let sum = a + b;
       if sum > extent { extent / sum } else { 1.0 }
     };
 
     1.0f32
-      .min(axis_scale(
-        self.radius.0[0].x,
-        self.radius.0[1].x,
-        border_box.width,
-      ))
-      .min(axis_scale(
-        self.radius.0[3].x,
-        self.radius.0[2].x,
-        border_box.width,
-      ))
-      .min(axis_scale(
-        self.radius.0[0].y,
-        self.radius.0[3].y,
-        border_box.height,
-      ))
-      .min(axis_scale(
-        self.radius.0[1].y,
-        self.radius.0[2].y,
-        border_box.height,
-      ))
+      .min(axis_scale(radii.0[0].x, radii.0[1].x, border_box.width))
+      .min(axis_scale(radii.0[3].x, radii.0[2].x, border_box.width))
+      .min(axis_scale(radii.0[0].y, radii.0[3].y, border_box.height))
+      .min(axis_scale(radii.0[1].y, radii.0[2].y, border_box.height))
+  }
+
+  /// Shrinks diagonally-opposite corner pairs involving a concave shape until
+  /// their corner boxes no longer overlap, so concave contours cannot
+  /// self-intersect. Coarser than Chromium's hull-based solve, which scales by
+  /// the curve hull instead of the full corner box.
+  fn constrain_concave_pairs(&self, radii: &mut Sides<SpacePair<f32>>, border_box: Size<f32>) {
+    for (a, b) in [(0, 2), (1, 3)] {
+      if !self.shape.0[a].is_concave() && !self.shape.0[b].is_concave() {
+        continue;
+      }
+
+      let sum_x = radii.0[a].x + radii.0[b].x;
+      let sum_y = radii.0[a].y + radii.0[b].y;
+
+      if sum_x > border_box.width && sum_y > border_box.height {
+        let factor = (border_box.width / sum_x).max(border_box.height / sum_y);
+
+        for corner in [a, b] {
+          radii.0[corner].x *= factor;
+          radii.0[corner].y *= factor;
+        }
+      }
+    }
   }
 
   /// Append rounded-rect path commands for this border's corner radii.
@@ -605,27 +627,38 @@ impl BorderProperties {
     // The magic number for the cubic bezier curve
     const KAPPA: f32 = 4.0 / 3.0 * (SQRT_2 - 1.0);
 
-    let scale = self.overlapping_curves_scale(border_box);
+    let radii = self.scaled_corner_radii(border_box);
+    let [top_left, top_right, bottom_right, bottom_left] = radii.0;
 
     // --- Top Edge ---
     // Start after Top-Left corner
-    path.move_to((offset.x + (self.radius.0[0].x * scale).max(0.0), offset.y));
+    path.move_to((offset.x + top_left.x, offset.y));
 
     // Line to start of Top-Right corner
-    path.line_to((
-      offset.x + border_box.width - (self.radius.0[1].x * scale).max(0.0),
-      offset.y,
-    ));
+    path.line_to((offset.x + border_box.width - top_right.x, offset.y));
 
     // --- Top-Right Corner ---
-    if self.radius.0[1].x > 0.0 && self.radius.0[1].y > 0.0 {
-      let rx = self.radius.0[1].x * scale;
-      let ry = self.radius.0[1].y * scale;
-      path.curve_to(
-        (offset.x + border_box.width - rx * (1.0 - KAPPA), offset.y),
-        (offset.x + border_box.width, offset.y + ry * (1.0 - KAPPA)),
-        (offset.x + border_box.width, offset.y + ry),
-      );
+    if top_right.x > 0.0 && top_right.y > 0.0 {
+      let SpacePair { x: rx, y: ry } = top_right;
+
+      if self.shape.0[1].is_round() {
+        path.curve_to(
+          (offset.x + border_box.width - rx * (1.0 - KAPPA), offset.y),
+          (offset.x + border_box.width, offset.y + ry * (1.0 - KAPPA)),
+          (offset.x + border_box.width, offset.y + ry),
+        );
+      } else {
+        append_shaped_corner(
+          path,
+          self.shape.0[1],
+          Point {
+            x: offset.x + border_box.width - rx,
+            y: offset.y + ry,
+          },
+          Point { x: rx, y: 0.0 },
+          Point { x: 0.0, y: -ry },
+        );
+      }
     } else {
       path.line_to((offset.x + border_box.width, offset.y));
     }
@@ -633,62 +666,98 @@ impl BorderProperties {
     // --- Right Edge ---
     path.line_to((
       offset.x + border_box.width,
-      offset.y + border_box.height - (self.radius.0[2].y * scale).max(0.0),
+      offset.y + border_box.height - bottom_right.y,
     ));
 
     // --- Bottom-Right Corner ---
-    if self.radius.0[2].x > 0.0 && self.radius.0[2].y > 0.0 {
-      let rx = self.radius.0[2].x * scale;
-      let ry = self.radius.0[2].y * scale;
-      path.curve_to(
-        (
-          offset.x + border_box.width,
-          offset.y + border_box.height - ry * (1.0 - KAPPA),
-        ),
-        (
-          offset.x + border_box.width - rx * (1.0 - KAPPA),
-          offset.y + border_box.height,
-        ),
-        (
-          offset.x + border_box.width - rx,
-          offset.y + border_box.height,
-        ),
-      );
+    if bottom_right.x > 0.0 && bottom_right.y > 0.0 {
+      let SpacePair { x: rx, y: ry } = bottom_right;
+
+      if self.shape.0[2].is_round() {
+        path.curve_to(
+          (
+            offset.x + border_box.width,
+            offset.y + border_box.height - ry * (1.0 - KAPPA),
+          ),
+          (
+            offset.x + border_box.width - rx * (1.0 - KAPPA),
+            offset.y + border_box.height,
+          ),
+          (
+            offset.x + border_box.width - rx,
+            offset.y + border_box.height,
+          ),
+        );
+      } else {
+        append_shaped_corner(
+          path,
+          self.shape.0[2],
+          Point {
+            x: offset.x + border_box.width - rx,
+            y: offset.y + border_box.height - ry,
+          },
+          Point { x: 0.0, y: ry },
+          Point { x: rx, y: 0.0 },
+        );
+      }
     } else {
       path.line_to((offset.x + border_box.width, offset.y + border_box.height));
     }
 
     // --- Bottom Edge ---
-    path.line_to((
-      offset.x + (self.radius.0[3].x * scale).max(0.0),
-      offset.y + border_box.height,
-    ));
+    path.line_to((offset.x + bottom_left.x, offset.y + border_box.height));
 
     // --- Bottom-Left Corner ---
-    if self.radius.0[3].x > 0.0 && self.radius.0[3].y > 0.0 {
-      let rx = self.radius.0[3].x * scale;
-      let ry = self.radius.0[3].y * scale;
-      path.curve_to(
-        (offset.x + rx * (1.0 - KAPPA), offset.y + border_box.height),
-        (offset.x, offset.y + border_box.height - ry * (1.0 - KAPPA)),
-        (offset.x, offset.y + border_box.height - ry),
-      );
+    if bottom_left.x > 0.0 && bottom_left.y > 0.0 {
+      let SpacePair { x: rx, y: ry } = bottom_left;
+
+      if self.shape.0[3].is_round() {
+        path.curve_to(
+          (offset.x + rx * (1.0 - KAPPA), offset.y + border_box.height),
+          (offset.x, offset.y + border_box.height - ry * (1.0 - KAPPA)),
+          (offset.x, offset.y + border_box.height - ry),
+        );
+      } else {
+        append_shaped_corner(
+          path,
+          self.shape.0[3],
+          Point {
+            x: offset.x + rx,
+            y: offset.y + border_box.height - ry,
+          },
+          Point { x: -rx, y: 0.0 },
+          Point { x: 0.0, y: ry },
+        );
+      }
     } else {
       path.line_to((offset.x, offset.y + border_box.height));
     }
 
     // --- Left Edge ---
-    path.line_to((offset.x, offset.y + (self.radius.0[0].y * scale).max(0.0)));
+    path.line_to((offset.x, offset.y + top_left.y));
 
     // --- Top-Left Corner ---
-    if self.radius.0[0].x > 0.0 && self.radius.0[0].y > 0.0 {
-      let rx = self.radius.0[0].x * scale;
-      let ry = self.radius.0[0].y * scale;
-      path.curve_to(
-        (offset.x, offset.y + ry * (1.0 - KAPPA)),
-        (offset.x + rx * (1.0 - KAPPA), offset.y),
-        (offset.x + rx, offset.y),
-      );
+    if top_left.x > 0.0 && top_left.y > 0.0 {
+      let SpacePair { x: rx, y: ry } = top_left;
+
+      if self.shape.0[0].is_round() {
+        path.curve_to(
+          (offset.x, offset.y + ry * (1.0 - KAPPA)),
+          (offset.x + rx * (1.0 - KAPPA), offset.y),
+          (offset.x + rx, offset.y),
+        );
+      } else {
+        append_shaped_corner(
+          path,
+          self.shape.0[0],
+          Point {
+            x: offset.x + rx,
+            y: offset.y + ry,
+          },
+          Point { x: 0.0, y: -ry },
+          Point { x: -rx, y: 0.0 },
+        );
+      }
     } else {
       path.line_to((offset.x, offset.y));
     }
@@ -714,22 +783,31 @@ impl BorderProperties {
       + right
       + bottom
       + left
-      + approximate_quarter_ellipse_arc_length(top_left.x, top_left.y)
-      + approximate_quarter_ellipse_arc_length(top_right.x, top_right.y)
-      + approximate_quarter_ellipse_arc_length(bottom_right.x, bottom_right.y)
-      + approximate_quarter_ellipse_arc_length(bottom_left.x, bottom_left.y)
+      + corner_arc_length(self.shape.0[0], top_left.x, top_left.y)
+      + corner_arc_length(self.shape.0[1], top_right.x, top_right.y)
+      + corner_arc_length(self.shape.0[2], bottom_right.x, bottom_right.y)
+      + corner_arc_length(self.shape.0[3], bottom_left.x, bottom_left.y)
   }
 
   pub(crate) fn scaled_corner_radii(&self, border_box: Size<f32>) -> Sides<SpacePair<f32>> {
-    // Match `append_mask_commands` overlapping-curves scaling so dash adjustment aligns with the
-    // actual rendered contour.
-    let scale = self.overlapping_curves_scale(border_box);
-
     let mut scaled = self.radius;
+
+    // `square` corners render with no curvature regardless of `border-radius`.
+    for (corner, shape) in scaled.0.iter_mut().zip(self.shape.0) {
+      if shape.is_degenerate() {
+        *corner = SpacePair::from_single(0.0);
+      }
+    }
+
+    let scale = Self::overlapping_curves_scale(&scaled, border_box);
+
     for corner in &mut scaled.0 {
       corner.x = (corner.x * scale).max(0.0);
       corner.y = (corner.y * scale).max(0.0);
     }
+
+    self.constrain_concave_pairs(&mut scaled, border_box);
+
     scaled
   }
 }
@@ -760,6 +838,63 @@ pub(crate) fn line_intersection(
     x: (a_cross * (b0.x - b1.x) - (a0.x - a1.x) * b_cross) / denom,
     y: (a_cross * (b0.y - b1.y) - (a0.y - a1.y) * b_cross) / denom,
   })
+}
+
+/// Appends a non-`round` corner contour, mapping normalized contour points
+/// through `anchor + p[0] * u + p[1] * v` into pixel space.
+fn append_shaped_corner(
+  path: &mut Vec<Command>,
+  shape: Superellipse,
+  anchor: Point<f32>,
+  u: Point<f32>,
+  v: Point<f32>,
+) {
+  match corner_contour(shape) {
+    CornerContour::Bevel => path.line_to(corner_point(anchor, u, v, [1.0, 0.0])),
+    CornerContour::Notch => {
+      path.line_to(corner_point(anchor, u, v, [0.0, 0.0]));
+      path.line_to(corner_point(anchor, u, v, [1.0, 0.0]));
+    }
+    CornerContour::Cubic(cubic) => append_corner_cubic(path, anchor, u, v, cubic),
+    CornerContour::Cubics(first, second) => {
+      append_corner_cubic(path, anchor, u, v, first);
+      append_corner_cubic(path, anchor, u, v, second);
+    }
+  }
+}
+
+fn append_corner_cubic(
+  path: &mut Vec<Command>,
+  anchor: Point<f32>,
+  u: Point<f32>,
+  v: Point<f32>,
+  [control1, control2, end]: [[f32; 2]; 3],
+) {
+  path.curve_to(
+    corner_point(anchor, u, v, control1),
+    corner_point(anchor, u, v, control2),
+    corner_point(anchor, u, v, end),
+  );
+}
+
+fn corner_point(anchor: Point<f32>, u: Point<f32>, v: Point<f32>, point: [f32; 2]) -> (f32, f32) {
+  (
+    anchor.x + point[0] * u.x + point[1] * v.x,
+    anchor.y + point[0] * u.y + point[1] * v.y,
+  )
+}
+
+/// Length of one corner's outline arc, honoring its `corner-shape`.
+fn corner_arc_length(shape: Superellipse, radius_x: f32, radius_y: f32) -> f32 {
+  if radius_x <= 0.0 || radius_y <= 0.0 {
+    return 0.0;
+  }
+
+  if shape.is_round() {
+    return approximate_quarter_ellipse_arc_length(radius_x, radius_y);
+  }
+
+  contour_arc_length(&corner_contour(shape), radius_x, radius_y)
 }
 
 pub(crate) fn approximate_quarter_ellipse_arc_length(radius_x: f32, radius_y: f32) -> f32 {
