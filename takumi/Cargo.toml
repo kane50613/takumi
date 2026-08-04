@@ -51,7 +51,7 @@ from-html = ["dep:takumi-html"]
 criterion.workspace = true
 parley.workspace = true
 rayon.workspace = true
-resvg = "0.47"
+resvg = "0.48"
 serde_json.workspace = true
 
 [dev-dependencies.image]
