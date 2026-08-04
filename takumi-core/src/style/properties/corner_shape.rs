@@ -31,29 +31,29 @@ impl Superellipse {
   const DEGENERATE_PARAMETER: f32 = 16.0;
 
   /// The superellipse exponent `k = 2^s`, clamped to `2^±16`.
-  pub fn exponent(self) -> f32 {
+  pub(crate) fn exponent(self) -> f32 {
     Self::DEGENERATE_PARAMETER
       .min(self.0.max(-Self::DEGENERATE_PARAMETER))
       .exp2()
   }
 
   /// Treated as `square`: the corner renders with no curvature.
-  pub fn is_degenerate(self) -> bool {
+  pub(crate) fn is_degenerate(self) -> bool {
     self.0 >= Self::DEGENERATE_PARAMETER
   }
 
   /// Treated as `notch`: the corner cuts straight into the center point.
-  pub fn is_fully_concave(self) -> bool {
+  pub(crate) fn is_fully_concave(self) -> bool {
     self.0 <= -Self::DEGENERATE_PARAMETER
   }
 
   /// True for `round`, which keeps the legacy quarter-ellipse path.
-  pub fn is_round(self) -> bool {
+  pub(crate) fn is_round(self) -> bool {
     self.0 == 1.0
   }
 
   /// True for concave shapes (`scoop`, `notch`, negative parameters).
-  pub fn is_concave(self) -> bool {
+  pub(crate) fn is_concave(self) -> bool {
     self.0 < 0.0
   }
 

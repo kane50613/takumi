@@ -72,7 +72,7 @@ impl BorderProperties {
   }
 
   /// Resolves the corner shapes from the context.
-  pub fn resolve_shape_part(context: &RenderContext) -> Sides<Superellipse> {
+  pub(crate) fn resolve_shape_part(context: &RenderContext) -> Sides<Superellipse> {
     Sides([
       context.style.corner_top_left_shape,
       context.style.corner_top_right_shape,
