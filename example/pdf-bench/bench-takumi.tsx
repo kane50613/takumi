@@ -52,7 +52,7 @@ console.log(
   JSON.stringify({
     engine: "takumi-pdf",
     coldMs: Math.round(coldMs),
-    warmMedianMs: Math.round(times[10]!),
+    warmMedianMs: Math.round((times[9]! + times[10]!) / 2),
     bytes: first.byteLength,
   }),
 );

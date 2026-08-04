@@ -940,16 +940,16 @@ fn collect_interactive_paint(
     return;
   };
 
-  if let Some(uri) = source.attribute("href")
-    && !uri.is_empty()
-  {
-    links.push(LinkTarget {
+  match source.attribute("href").filter(|uri| allowed_link_uri(uri)) {
+    // The whole box is one link; per-run collection would double-annotate it.
+    Some(uri) => links.push(LinkTarget {
       uri: uri.to_string(),
       rect,
-    });
-  }
-  if node.should_create_inline_layout() {
-    collect_inline_links(node, layout, paint.transform, links);
+    }),
+    None if node.should_create_inline_layout() => {
+      collect_inline_links(node, layout, paint.transform, links);
+    }
+    None => {}
   }
   if let Some(level) = source.tag_name().and_then(heading_level) {
     let mut text = String::new();
@@ -965,6 +965,19 @@ fn collect_interactive_paint(
       });
     }
   }
+}
+
+/// Whether an `href` is written to the PDF: `http`, `https`, `mailto`, or
+/// `tel`. Other schemes (and scheme-less values, which have no meaning inside
+/// a standalone document) are dropped.
+fn allowed_link_uri(uri: &str) -> bool {
+  let Some((scheme, _)) = uri.split_once(':') else {
+    return false;
+  };
+
+  ["http", "https", "mailto", "tel"]
+    .iter()
+    .any(|allowed| scheme.eq_ignore_ascii_case(allowed))
 }
 
 /// Measures a box's inline layout and records one link box per glyph run that
@@ -1005,7 +1018,7 @@ fn collect_inline_links(
   let (runs, _) = built.measure_runs(layout);
 
   for run in runs {
-    let Some(uri) = run.link else {
+    let Some(uri) = run.link.filter(|uri| allowed_link_uri(uri)) else {
       continue;
     };
     let Some(rect) = transformed_rect(

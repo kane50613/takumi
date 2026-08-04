@@ -3,35 +3,37 @@ import { items, total } from "./invoice-data";
 const t0 = performance.now();
 const { Document, Page, Text, View, StyleSheet, pdf } = await import("@react-pdf/renderer");
 
+// react-pdf styles are in pt (1px at 96 dpi = 0.75pt); values mirror the px
+// used by the takumi and Puppeteer harnesses.
 const styles = StyleSheet.create({
-  page: { padding: 48, fontSize: 11 },
+  page: { padding: 36, fontSize: 9.75 },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
-    borderBottomWidth: 1,
+    borderBottomWidth: 0.75,
     borderBottomColor: "#d1d5db",
-    paddingBottom: 8,
-    marginBottom: 8,
+    paddingBottom: 12,
+    marginBottom: 12,
   },
-  title: { fontSize: 20, fontWeight: 700 },
-  row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 2 },
+  title: { fontSize: 18, fontWeight: 700 },
+  row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 3 },
   description: { width: "80%" },
   totalRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    borderTopWidth: 1,
+    borderTopWidth: 0.75,
     borderTopColor: "#d1d5db",
-    marginTop: 8,
-    paddingTop: 4,
+    marginTop: 12,
+    paddingTop: 6,
     fontWeight: 700,
   },
   pageNumber: {
     position: "absolute",
-    bottom: 20,
+    bottom: 15,
     left: 0,
     right: 0,
     textAlign: "center",
-    fontSize: 8,
+    fontSize: 7.5,
     color: "#6b7280",
   },
 });
@@ -90,7 +92,7 @@ console.log(
   JSON.stringify({
     engine: "@react-pdf/renderer",
     coldMs: Math.round(coldMs),
-    warmMedianMs: Math.round(times[10]!),
+    warmMedianMs: Math.round((times[9]! + times[10]!) / 2),
     bytes: first.byteLength,
   }),
 );

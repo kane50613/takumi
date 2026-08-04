@@ -20,10 +20,12 @@ Browser-based PDF generation brings the Chromium serverless tax: browser cold st
 ## Install
 
 ```bash
-npm install takumi-pdf
+npm install takumi-pdf @takumi-rs/helpers react
 # or
-bun add takumi-pdf
+bun add takumi-pdf @takumi-rs/helpers react
 ```
+
+`react` provides the JSX runtime and `@takumi-rs/helpers` the font helpers; both are optional when passing prebuilt node trees and font bytes.
 
 ## Quick start
 

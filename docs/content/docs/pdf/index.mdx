@@ -7,8 +7,10 @@ index: true
 `takumi-pdf` renders the same JSX, Tailwind classes, and node trees as image output, but writes a paged vector PDF: selectable and searchable text, embedded subset fonts, page breaks, and repeating headers and footers. It ships as a WebAssembly module and runs on Node.js, Bun, and Cloudflare Workers without Chromium.
 
 ```npm
-npm i takumi-pdf
+npm i takumi-pdf @takumi-rs/helpers react
 ```
+
+`react` provides the JSX runtime and `@takumi-rs/helpers` the font helpers; both are optional when passing prebuilt node trees and font bytes.
 
 ## Render a document
 
