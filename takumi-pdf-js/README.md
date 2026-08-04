@@ -1,6 +1,21 @@
+<div align="center">
+  <img src="https://takumi.kane.tw/logo.svg" alt="Takumi" width="64" />
+
 # takumi-pdf
 
-Render JSX to paged PDF in WebAssembly. No Chromium or native binary.
+**Render JSX to paged, selectable-text PDF. WebAssembly, no Chromium.**
+
+Invoices, reports, and receipts from the Takumi renderer, with CSS layout and vector PDF output.
+
+[Documentation](https://takumi.kane.tw/docs/) · [Playground](https://takumi.kane.tw/playground)
+
+</div>
+
+## Why
+
+Browser-based PDF generation brings the Chromium serverless tax: browser cold starts, browser memory, a large browser binary, and headless-browser work before a document can render. It is a capable screenshot pipeline, but it is still a browser.
+
+`takumi-pdf` uses Takumi's own layout and PDF rendering primitives, compiled to WebAssembly. There is no browser process. Render JSX or a Takumi node tree with CSS and Tailwind classes, then receive vector PDF bytes with selectable, searchable text and embedded subset fonts.
 
 ## Install
 
@@ -13,17 +28,33 @@ bun add takumi-pdf
 ## Quick start
 
 ```tsx
-import { render } from "takumi-pdf";
 import { writeFile } from "node:fs/promises";
+import { googleFonts } from "@takumi-rs/helpers";
+import { render } from "takumi-pdf";
 
-const pdf = await render(<h1>Invoice #1042</h1>);
+const pdf = await render(
+  <main tw="flex flex-col gap-4">
+    <h1 tw="text-2xl font-bold">Invoice INV-2026-001</h1>
+    <div tw="flex justify-between border-t border-gray-200 pt-2 font-bold">
+      <span>Total</span>
+      <span>$1,250.00</span>
+    </div>
+  </main>,
+  {
+    size: "a4",
+    fonts: await googleFonts(["Inter"]),
+    footer: (
+      <div tw="flex w-full justify-center text-[10px] text-gray-500">
+        Page <span className="pageNumber" /> of <span className="totalPages" />
+      </div>
+    ),
+  },
+);
 
 await writeFile("invoice.pdf", pdf);
 ```
 
-`render()` returns `Uint8Array` PDF bytes. Output is paged A4 with a 48px margin by default; content flows onto as many pages as it needs. Text stays selectable and searchable, with fonts subset and embedded.
-
-See the [Takumi documentation](https://takumi.kane.tw/docs/) for the shared node and JSX model.
+`render()` returns `Promise<Uint8Array>`. Paged output defaults to A4 with a uniform 48px margin; content flows across as many pages as it needs.
 
 ## Page setup
 
@@ -43,7 +74,7 @@ const pdf = await render(report, {
 
 ## Headers and footers
 
-Headers and footers repeat on every page. Elements with `pageNumber` or `totalPages` in their class list receive the counter as text, the same contract as Chromium print templates.
+Headers and footers repeat on every page. Elements whose class list includes `pageNumber` or `totalPages` receive the counter as text.
 
 ```tsx
 const pdf = await render(report, {
@@ -94,15 +125,14 @@ const pdf = await render(receipt, { viewport: { width: 302 } });
 
 ## Fonts
 
-Pass a font URL or font bytes. Registered fonts are deduplicated across calls.
+Pass a font URL, font bytes, or the `googleFonts` helper. Registered fonts are deduplicated across calls.
 
 ```tsx
+import { googleFonts } from "@takumi-rs/helpers";
+
 const pdf = await render(doc, {
-  fonts: [
-    "https://example.com/Inter-Regular.woff2",
-    { name: "Brand Sans", weight: 700, data: fontBytes },
-  ],
-  fontFamilies: ["Brand Sans", "sans-serif"],
+  fonts: [...(await googleFonts(["Inter"])), { name: "Brand Sans", weight: 700, data: fontBytes }],
+  fontFamilies: ["Brand Sans", "Inter", "sans-serif"],
 });
 ```
 
@@ -115,6 +145,7 @@ const renderer = new PdfRenderer();
 await renderer.registerFont("https://example.com/Inter-Regular.woff2");
 
 const pdf = await renderer.render(doc);
+renderer.free();
 ```
 
 ## Pagination CSS
@@ -148,3 +179,7 @@ const pdf = await render(doc, {
 ```
 
 `@page` CSS rules are not supported. Set page geometry with `size`, `landscape`, and `margin`.
+
+## License
+
+MIT or Apache-2.0
