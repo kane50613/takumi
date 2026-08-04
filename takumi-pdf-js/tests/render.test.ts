@@ -66,7 +66,9 @@ test("auto-height viewport sizes the page to content", async () => {
   const box = decoder.decode(pdf).match(/\/MediaBox\s*\[0 0 ([\d.]+) ([\d.]+)\]/);
   const [width, height] = [Number(box?.[1]), Number(box?.[2])];
 
-  expect(height).toBeGreaterThan(width);
+  expect(width).toBe(300);
+  // 40 rows of 16px text need at least 40 line boxes of font-size height.
+  expect(height).toBeGreaterThanOrEqual(40 * 16);
 });
 
 test("letter landscape", async () => {

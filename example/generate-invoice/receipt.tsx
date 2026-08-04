@@ -1,24 +1,14 @@
 import { type Invoice, money, subtotal } from "./data";
 
-const muted = "#6b7280";
-
 function Divider() {
-  return <div style={{ borderBottom: "1px dashed #d1d5db" }} />;
+  return <div tw="border-b border-dashed border-[#d1d5db]" />;
 }
 
 function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        fontSize: strong ? 15 : 11,
-        fontWeight: strong ? 700 : 400,
-        color: strong ? "#111827" : muted,
-      }}
-    >
+    <div tw={`flex justify-between ${strong ? "text-[15px] font-bold" : "text-[#6b7280]"}`}>
       <span>{label}</span>
-      <span style={{ color: "#111827" }}>{value}</span>
+      <span tw="text-[#111827]">{value}</span>
     </div>
   );
 }
@@ -27,52 +17,35 @@ export function ReceiptDocument({ data }: { data: Invoice }) {
   const net = subtotal(data);
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 12,
-        width: "100%",
-        padding: 20,
-        backgroundColor: "#ffffff",
-        color: "#111827",
-        fontSize: 11,
-      }}
-    >
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-        <img src="logo.svg" style={{ width: 32, height: 32 }} />
-        <span
-          style={{ fontSize: 15, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase" }}
-        >
-          {data.seller.name}
-        </span>
-        <span style={{ color: muted, textAlign: "center", fontSize: 10 }}>
-          {data.seller.address}
-        </span>
+    <div tw="flex w-full flex-col gap-3 bg-white p-5 text-[11px] text-[#111827]">
+      <div tw="flex flex-col items-center gap-1.5">
+        <img src="logo.svg" tw="h-8 w-8" />
+        <span tw="text-[15px] font-bold uppercase tracking-[2px]">{data.seller.name}</span>
+        <span tw="text-center text-[10px] text-[#6b7280]">{data.seller.address}</span>
       </div>
 
-      <div style={{ display: "flex", justifyContent: "space-between", color: muted, fontSize: 10 }}>
+      <div tw="flex justify-between text-[10px] text-[#6b7280]">
         <span>{data.issuedAt}</span>
         <span>{data.number}</span>
       </div>
 
       <Divider />
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div tw="flex flex-col gap-2">
         {data.items.map((item) => (
-          <div key={item.description} style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-            <span style={{ fontWeight: 500 }}>{item.description}</span>
-            <div style={{ display: "flex", justifyContent: "space-between", color: muted }}>
+          <div key={item.description} tw="flex flex-col">
+            <span tw="font-medium">{item.description}</span>
+            <div tw="flex justify-between text-[#6b7280]">
               <span>
                 {item.quantity} × {money(item.unitPrice)}
               </span>
-              <span style={{ color: "#111827" }}>{money(item.quantity * item.unitPrice)}</span>
+              <span tw="text-[#111827]">{money(item.quantity * item.unitPrice)}</span>
             </div>
           </div>
         ))}
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+      <div tw="flex flex-col gap-1">
         <Row label="Subtotal" value={money(net)} />
         <Row label={`Tax (${data.taxRate * 100}%)`} value={money(net * data.taxRate)} />
       </div>
@@ -81,9 +54,7 @@ export function ReceiptDocument({ data }: { data: Invoice }) {
 
       <Row label="Total" value={money(net * (1 + data.taxRate))} strong />
 
-      <span
-        style={{ textAlign: "center", color: muted, fontSize: 10, letterSpacing: 1, marginTop: 8 }}
-      >
+      <span tw="mt-2 text-center text-[10px] tracking-[1px] text-[#6b7280]">
         THANK YOU FOR YOUR BUSINESS
       </span>
     </div>

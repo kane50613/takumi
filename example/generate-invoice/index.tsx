@@ -19,15 +19,7 @@ const invoicePdf = await render(<InvoiceDocument data={invoice} />, {
   margin: 48,
   images,
   footer: (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "center",
-        width: "100%",
-        fontSize: 10,
-        color: "#6b7280",
-      }}
-    >
+    <div tw="flex w-full justify-center text-[10px] text-[#6b7280]">
       Page <span className="pageNumber" /> of <span className="totalPages" />
     </div>
   ),

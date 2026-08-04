@@ -8,6 +8,12 @@ import { PdfRenderer as PdfRendererInternal } from "../pkg/takumi_pdf_wasm";
 export { default, initSync } from "../pkg/takumi_pdf_wasm";
 export type { FontLoader, ImagesInput } from "@takumi-rs/helpers/renderer";
 
+declare module "react" {
+  interface DOMAttributes<T> {
+    tw?: string;
+  }
+}
+
 /** A document input: a takumi node tree or JSX. */
 export type NodeInput = Node | ReactNode | ReactElementLike;
 
