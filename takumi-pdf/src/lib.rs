@@ -15,9 +15,9 @@
 //! window (clip + translate). Every text line is emitted on exactly one page.
 //!
 //! Pagination honors `break-before: page`, `break-after: page`, and
-//! `break-inside: avoid`; repeated header/footer bands carve their height out
-//! of the content window. Nodes classed `pageNumber` / `totalPages` are
-//! filled with the page counters, matching Chromium's print templates.
+//! `break-inside: avoid`; repeated header/footer bands draw in the page
+//! margin areas like Chromium's print templates. Nodes classed `pageNumber`
+//! / `totalPages` are filled with the page counters.
 //!
 //! Coverage: backgrounds (color and gradient layers), borders and radius,
 //! images (`object-fit`/`object-position`), text with decorations, opacity,
@@ -132,7 +132,8 @@ pub struct PdfOptions<'g> {
   /// Band repeated at the top of every page. Nodes classed `pageNumber` /
   /// `totalPages` receive the counters, optionally formatted by a
   /// supported `@counter-style` name in the same class list (e.g. `cjk-decimal`). The
-  /// band's height is carved out of the content window.
+  /// band lays out at full page width and draws in the top margin area, like
+  /// Chromium's print templates; it does not shrink the content window.
   #[builder(default, setter(strip_option))]
   pub header: Option<Node>,
   /// Band repeated at the bottom of every page; same class hooks as `header`.
@@ -233,6 +234,11 @@ pub struct PageOptions {
 /// annotations, and destinations are written in pt so pages print at their
 /// physical size.
 const PT_PER_PX: f32 = 72.0 / 96.0;
+
+/// Chromium's print template page insets bands 15pt from the paper edge
+/// (`#header { padding-top: 15pt }`, `#footer { padding-bottom: 15pt }` in
+/// components/printing/resources/print_header_footer_template_page.html).
+const BAND_EDGE_PADDING: f32 = 20.0;
 
 /// Millimeters to CSS px (96 dpi).
 const fn mm(value: f32) -> f32 {
@@ -636,12 +642,17 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       {
         return Err(PdfError::InvalidPageSize);
       }
-      let band_viewport = Viewport::new((content_width as u32, None));
+      // Bands lay out at full page width and draw inside the margin areas,
+      // like Chromium's print header and footer templates. The content window
+      // is always the full margin box; a band taller than its margin overlaps
+      // content, exactly as in Chromium.
+      let band_viewport = Viewport::new((page.width as u32, None));
+      let content_viewport = Viewport::new((content_width as u32, None));
 
       // Band heights are measured once with three-digit counters; per-page
       // emission clips to the measured band, so a wrap caused by a wider real
-      // counter cannot push the content window around between pages. A band
-      // without counter hooks reuses the measured layout on every page.
+      // counter cannot move the band box between pages. A band without counter
+      // hooks reuses the measured layout on every page.
       let header_band = options
         .header
         .as_ref()
@@ -658,12 +669,9 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       let footer_height = footer_band
         .as_ref()
         .map_or(0.0, |band| band.measured.height);
-      let window_height = content_height - header_height - footer_height;
-      if window_height <= 0.0 {
-        return Err(PdfError::InvalidPageSize);
-      }
+      let window_height = content_height;
 
-      let content = prepare_tree(&inputs, options.node, band_viewport)?;
+      let content = prepare_tree(&inputs, options.node, content_viewport)?;
       let text_boxes = collect_text_boxes(&content);
       let inline_map = build_inline_map(&text_boxes)?;
       let mut atoms = Vec::new();
@@ -693,15 +701,15 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           emit_band(
             tree,
             &mut fonts,
-            page.margin.left,
-            page.margin.top,
-            content_width,
+            0.0,
+            BAND_EDGE_PADDING,
+            page.width,
             header_height,
             &mut surface,
           )?;
         }
 
-        let content_top = page.margin.top + header_height;
+        let content_top = page.margin.top;
         // Paint stops at the next cut: the region between a raised cut and the
         // page's full height belongs to the next page and stays blank, exactly
         // like browser print fragmentation.
@@ -738,9 +746,9 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           emit_band(
             tree,
             &mut fonts,
-            page.margin.left,
-            page.height - page.margin.bottom - footer_height,
-            content_width,
+            0.0,
+            page.height - BAND_EDGE_PADDING - footer_height,
+            page.width,
             footer_height,
             &mut surface,
           )?;
@@ -762,7 +770,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           let index = starts
             .partition_point(|start| *start <= heading.top)
             .saturating_sub(1);
-          let y = page.margin.top + header_height + (heading.top - starts[index]).max(0.0);
+          let y = page.margin.top + (heading.top - starts[index]).max(0.0);
 
           XyzDestination::new(
             index,

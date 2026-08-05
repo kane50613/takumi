@@ -3,7 +3,7 @@ title: Headers & footers
 description: Repeat bands on every page with page counters.
 ---
 
-`header` and `footer` accept any node input. They repeat on every page. Their measured height is removed from the content window. Bands never overlap with content.
+`header` and `footer` accept any node input. They repeat on every page. Bands lay out at full page width and draw in the page margin areas, like Chromium's print templates. Pick a margin at least as tall as the band, or the band overlaps content, exactly as in Chromium.
 
 ```tsx twoslash
 import type { ReactNode } from "react";
