@@ -5,7 +5,7 @@ description: Embed subset fonts and pre-fetched images.
 
 ## Fonts
 
-Text embeds as real glyph runs with subset fonts, so it stays selectable, searchable, and copyable. Pass a URL, raw bytes, or the [`googleFonts`](/docs/typography-and-fonts#from-google-fonts) helper:
+Text embeds as real glyph runs with subset fonts. It stays selectable, searchable, and copyable. Pass a URL or raw bytes. You can also use the [`googleFonts`](/docs/typography-and-fonts#from-google-fonts) helper:
 
 ```tsx twoslash
 import type { ReactNode } from "react";
@@ -21,11 +21,11 @@ const pdf = await render(doc, {
 });
 ```
 
-`fontFamilies` sets the per-render fallback chain. Registered fonts deduplicate across calls on the same renderer.
+`fontFamilies` sets the fallback chain for each render. Registered fonts deduplicate across calls that use the same renderer.
 
 ## Images
 
-The renderer never fetches over the network. Pass pre-fetched bytes for every image URL the document references:
+The renderer never fetches over the network. Pass pre-fetched bytes for each image URL in the document:
 
 ```tsx twoslash
 import type { ReactNode } from "react";
@@ -40,8 +40,8 @@ const pdf = await render(doc, {
 });
 ```
 
-SVG image sources rasterize at 2× the placed size; raster sources embed once per distinct pixel data.
+SVG image sources rasterize at 2× their placed size. Raster sources embed once for each distinct pixel data.
 
 ## Runtimes
 
-`takumi-pdf` is wasm-only and runs on Node.js, Bun, and Cloudflare Workers. The module fits within Workers' free-tier size limit. Import from `takumi-pdf/no-init` to control wasm instantiation yourself.
+`takumi-pdf` is wasm-only. It runs on Node.js, Bun, and Cloudflare Workers. The module fits within the Workers free-tier size limit. Import `takumi-pdf/no-init` to control wasm instantiation.

@@ -3,7 +3,7 @@ title: Pagination
 description: Control where pages break with CSS.
 ---
 
-Content lays out once at unbounded height, then splits into pages. Unsplittable atoms (text lines, images, transformed subtrees) never straddle a cut: a cut that would land inside one moves up to its top, matching browser print fragmentation.
+Content lays out once at unbounded height. It then splits into pages. Unsplittable atoms never straddle a cut. These atoms include text lines, images, and transformed subtrees. A cut inside an atom moves to its top. This matches browser print fragmentation.
 
 ## Break properties
 
@@ -25,7 +25,7 @@ const pdf = await render(
 | `break-inside: avoid`         | Keeps the element on one page when it fits.             |
 | `box-decoration-break: clone` | Repeats borders and backgrounds on every page fragment. |
 
-A `break-inside: avoid` box taller than the page window cannot fit any page, so it stops participating in cut avoidance, the same rule browsers apply.
+A `break-inside: avoid` box taller than the page window cannot fit on a page. It stops participating in cut avoidance. Browsers apply the same rule.
 
 ## Split decorations
 
