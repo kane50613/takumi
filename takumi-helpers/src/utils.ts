@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import type { Node } from "./types";
 
-const defaultFetchTimeout = 5000;
+const defaultFetchTimeout = 30_000;
 const maxRedirectHops = 5;
 export const defaultMaxFetchBytes = 32 * 1024 * 1024;
 const cssUrlPattern = /url\(\s*(['"]?)(.*?)\1\s*\)/g;
@@ -11,7 +11,7 @@ export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 export type FetchOptions = {
   /** Custom fetch implementation. @default globalThis.fetch */
   fetch?: FetchLike;
-  /** Abort the request after this many milliseconds; `0` or negative disables it. @default 5000 */
+  /** Abort the request after this many milliseconds; `0` or negative disables it. @default 30000 */
   timeout?: number;
   /** Caller abort signal, combined with the timeout. */
   signal?: AbortSignal;
