@@ -1,12 +1,21 @@
+import { interFonts } from "./fonts";
 import { items, total } from "./invoice-data";
 
+const interPaths = await interFonts();
+
 const t0 = performance.now();
-const { Document, Page, Text, View, StyleSheet, pdf } = await import("@react-pdf/renderer");
+const { Document, Page, Text, View, StyleSheet, Font, pdf } = await import("@react-pdf/renderer");
+
+Font.register({
+  family: "Inter",
+  fonts: [{ src: interPaths.regular }, { src: interPaths.bold, fontWeight: 700 }],
+});
+Font.registerHyphenationCallback((word) => [word]);
 
 // react-pdf styles are in pt (1px at 96 dpi = 0.75pt); values mirror the px
 // used by the takumi and Puppeteer harnesses.
 const styles = StyleSheet.create({
-  page: { padding: 36, fontSize: 9.75 },
+  page: { padding: 36, fontSize: 9.75, fontFamily: "Inter", color: "#111827" },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -16,8 +25,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   title: { fontSize: 18, fontWeight: 700 },
-  row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 3 },
-  description: { width: "80%" },
+  row: { flexDirection: "row", paddingVertical: 3 },
+  description: { flexGrow: 1, flexShrink: 1, flexBasis: 0, paddingRight: 12 },
+  qty: { width: 24, textAlign: "right" },
+  price: { width: 67.5, textAlign: "right" },
   totalRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -49,8 +60,8 @@ function Invoice() {
         {items.map((item, i) => (
           <View key={i} style={styles.row} wrap={false}>
             <Text style={styles.description}>{item.description}</Text>
-            <Text>{item.qty}</Text>
-            <Text>${(item.qty * item.unit).toFixed(2)}</Text>
+            <Text style={styles.qty}>{item.qty}</Text>
+            <Text style={styles.price}>${(item.qty * item.unit).toFixed(2)}</Text>
           </View>
         ))}
         <View style={styles.totalRow}>

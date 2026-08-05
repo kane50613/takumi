@@ -1,4 +1,8 @@
+import { interFonts } from "./fonts";
 import { items, total } from "./invoice-data";
+
+const fonts = await interFonts();
+const fontData = [await Bun.file(fonts.regular).bytes(), await Bun.file(fonts.bold).bytes()];
 
 const t0 = performance.now();
 const { render } = await import("takumi-pdf");
@@ -7,15 +11,15 @@ function Invoice() {
   return (
     <main tw="flex flex-col text-[13px] text-gray-900">
       <div tw="flex justify-between border-b border-gray-300 pb-4 mb-4">
-        <h1 tw="text-2xl font-bold">Invoice INV-2026-001</h1>
-        <p>Due August 31, 2026</p>
+        <h1 tw="m-0 text-2xl font-bold">Invoice INV-2026-001</h1>
+        <p tw="m-0">Due August 31, 2026</p>
       </div>
       <div tw="flex flex-col">
         {items.map((item, i) => (
-          <div key={i} tw="flex justify-between py-1" style={{ breakInside: "avoid" }}>
-            <span tw="w-4/5">{item.description}</span>
-            <span>{item.qty}</span>
-            <span>${(item.qty * item.unit).toFixed(2)}</span>
+          <div key={i} tw="flex py-1" style={{ breakInside: "avoid" }}>
+            <span tw="flex-1 pr-4">{item.description}</span>
+            <span tw="w-8 text-right">{item.qty}</span>
+            <span tw="w-[90px] text-right">${(item.qty * item.unit).toFixed(2)}</span>
           </div>
         ))}
       </div>
@@ -29,6 +33,8 @@ function Invoice() {
 
 const options = {
   size: "a4",
+  fonts: fontData,
+  fontFamilies: ["Inter"],
   footer: (
     <div tw="flex w-full justify-center text-[10px] text-gray-500">
       Page <span className="pageNumber" /> of <span className="totalPages" />
