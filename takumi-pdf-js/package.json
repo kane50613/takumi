@@ -1,6 +1,6 @@
 {
   "name": "takumi-pdf",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "HTML/JSX to paged, selectable-text PDF, powered by takumi. WebAssembly, no Chromium.",
   "keywords": [
     "css",
