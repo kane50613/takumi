@@ -12,7 +12,12 @@ export async function interFonts(): Promise<{ regular: string; bold: string }> {
   if ((await Bun.file(regular).exists()) && (await Bun.file(bold).exists())) {
     return { regular, bold };
   }
-  const css = await (await fetch(CSS_URL, { headers: { "user-agent": "curl/8" } })).text();
+  const cssResponse = await fetch(CSS_URL, { headers: { "user-agent": "curl/8" } });
+
+  if (!cssResponse.ok) {
+    throw new Error(`font css request failed: ${cssResponse.status}`);
+  }
+  const css = await cssResponse.text();
   const urls = [...css.matchAll(/url\((https:[^)]+\.ttf)\)/g)].map((m) => m[1]!);
 
   if (urls.length < 2) {
@@ -20,7 +25,12 @@ export async function interFonts(): Promise<{ regular: string; bold: string }> {
   }
   await mkdir(DIR, { recursive: true });
   for (const [i, path] of [regular, bold].entries()) {
-    await Bun.write(path, await (await fetch(urls[i]!)).arrayBuffer());
+    const fontResponse = await fetch(urls[i]!);
+
+    if (!fontResponse.ok) {
+      throw new Error(`font download failed: ${fontResponse.status}`);
+    }
+    await Bun.write(path, await fontResponse.arrayBuffer());
   }
   return { regular, bold };
 }
