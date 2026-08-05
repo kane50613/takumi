@@ -319,6 +319,12 @@ const TEXT_SHADOW_LG: [TextShadow; 3] = [ts(1.0, 2.0, 26), ts(3.0, 2.0, 26), ts(
 /// Maps a complete utility token to its fixed property.
 pub(crate) static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! {
   "border" => TailwindProperty::BorderDefault,
+  "border-t" => TailwindProperty::BorderTopWidth(LineWidth::Length(Length::Px(1.0))),
+  "border-r" => TailwindProperty::BorderRightWidth(LineWidth::Length(Length::Px(1.0))),
+  "border-b" => TailwindProperty::BorderBottomWidth(LineWidth::Length(Length::Px(1.0))),
+  "border-l" => TailwindProperty::BorderLeftWidth(LineWidth::Length(Length::Px(1.0))),
+  "border-x" => TailwindProperty::BorderXWidth(LineWidth::Length(Length::Px(1.0))),
+  "border-y" => TailwindProperty::BorderYWidth(LineWidth::Length(Length::Px(1.0))),
   "outline" => TailwindProperty::OutlineDefault,
   "box-border" => TailwindProperty::BoxSizing(BoxSizing::BorderBox),
   "box-content" => TailwindProperty::BoxSizing(BoxSizing::ContentBox),
