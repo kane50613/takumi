@@ -229,6 +229,11 @@ pub struct PageOptions {
   pub margin: PageMargins,
 }
 
+/// CSS px (96 dpi) to PDF pt (72 dpi). Layout runs in px; page geometry,
+/// annotations, and destinations are written in pt so pages print at their
+/// physical size.
+const PT_PER_PX: f32 = 72.0 / 96.0;
+
 /// Millimeters to CSS px (96 dpi).
 const fn mm(value: f32) -> f32 {
   value / 25.4 * 96.0
@@ -621,8 +626,8 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
   }
   match options.page {
     Some(page) => {
-      let page_size =
-        KrillaSize::from_wh(page.width, page.height).ok_or(PdfError::InvalidPageSize)?;
+      let page_size = KrillaSize::from_wh(page.width * PT_PER_PX, page.height * PT_PER_PX)
+        .ok_or(PdfError::InvalidPageSize)?;
       let (content_width, content_height) = page.content_size();
       if !(content_width.is_finite()
         && content_height.is_finite()
@@ -675,6 +680,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         let mut pdf_page = document.start_page_with(PageSettings::new(page_size));
         let mut surface = pdf_page.surface();
 
+        surface.push_transform(&Transform::from_scale(PT_PER_PX, PT_PER_PX));
         if let (Some(band), Some(template)) = (&header_band, &options.header) {
           let prepared;
           let tree = if band.dynamic {
@@ -740,6 +746,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           )?;
         }
 
+        surface.pop();
         surface.finish();
         add_link_annotations(
           &mut pdf_page,
@@ -757,22 +764,28 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
             .saturating_sub(1);
           let y = page.margin.top + header_height + (heading.top - starts[index]).max(0.0);
 
-          XyzDestination::new(index, Point::from_xy(page.margin.left, y))
+          XyzDestination::new(
+            index,
+            Point::from_xy(page.margin.left * PT_PER_PX, y * PT_PER_PX),
+          )
         }));
       }
     }
     None => {
       let viewport = options.viewport.ok_or(PdfError::MissingViewport)?;
       let content = prepare_tree(&inputs, options.node, viewport)?;
-      let page_size =
-        KrillaSize::from_wh(content.width, content.height).ok_or(PdfError::InvalidPageSize)?;
+      let page_size = KrillaSize::from_wh(content.width * PT_PER_PX, content.height * PT_PER_PX)
+        .ok_or(PdfError::InvalidPageSize)?;
       let text_boxes = collect_text_boxes(&content);
       let inline_map = build_inline_map(&text_boxes)?;
       let mut page = document.start_page_with(PageSettings::new(page_size));
       let mut surface = page.surface();
+
+      surface.push_transform(&Transform::from_scale(PT_PER_PX, PT_PER_PX));
       let mut emitter = content.emitter(&mut fonts, Some(&inline_map));
 
       emitter.emit_context(0, Affine::IDENTITY, &mut surface)?;
+      surface.pop();
       surface.finish();
       let (links, headings) = collect_interactive(&content);
 
@@ -780,7 +793,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       page.finish();
       if options.outline && !headings.is_empty() {
         document.set_outline(build_outline(&headings, |heading| {
-          XyzDestination::new(0, Point::from_xy(0.0, heading.top.max(0.0)))
+          XyzDestination::new(0, Point::from_xy(0.0, heading.top.max(0.0) * PT_PER_PX))
         }));
       }
     }
@@ -1083,10 +1096,10 @@ fn add_link_annotations(
       continue;
     }
     let Some(rect) = KrillaRect::from_ltrb(
-      link.rect.left() + offset.0,
-      top - window.0 + offset.1,
-      link.rect.right() + offset.0,
-      bottom - window.0 + offset.1,
+      (link.rect.left() + offset.0) * PT_PER_PX,
+      (top - window.0 + offset.1) * PT_PER_PX,
+      (link.rect.right() + offset.0) * PT_PER_PX,
+      (bottom - window.0 + offset.1) * PT_PER_PX,
     ) else {
       continue;
     };
