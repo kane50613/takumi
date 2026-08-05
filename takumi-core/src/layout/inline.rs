@@ -52,8 +52,10 @@ pub struct InlineLayoutRequest<'c> {
 /// A per-render cache of shaped text-only parley layouts, keyed by a hash of
 /// the span texts and styles. Shaping is width-independent for pure text
 /// (inline boxes bake in measured sizes, so they bypass the cache); line
-/// breaking and alignment run on a clone per call.
-pub(crate) type ShapeCache = Rc<RefCell<HashMap<u64, (InlineLayout, String)>>>;
+/// breaking and alignment run on a clone per call. A layout is stored only
+/// once its fingerprint repeats (`None` marks first sight), so single-use
+/// text costs one map entry, not a retained layout clone.
+pub(crate) type ShapeCache = Rc<RefCell<HashMap<u64, Option<(InlineLayout, String)>>>>;
 
 /// Hashes everything shaping depends on: each span's processed text and
 /// style, plus the root style and language.
@@ -292,7 +294,7 @@ pub enum ProcessedInlineSpan<'c> {
     /// Processed text content.
     text: String,
     /// Resolved font style.
-    style: SizedFontStyle<'c>,
+    style: Box<SizedFontStyle<'c>>,
     /// URI of the nearest enclosing anchor's `href`, if any.
     link: Option<Arc<str>>,
   },
@@ -495,7 +497,7 @@ fn tail_text_span<'a, 'c>(
   spans: &'a [ProcessedInlineSpan<'c>],
 ) -> Option<(&'a SizedFontStyle<'c>, u64)> {
   spans.iter().rev().find_map(|span| match span {
-    ProcessedInlineSpan::Text { span_id, style, .. } => Some((style, *span_id)),
+    ProcessedInlineSpan::Text { span_id, style, .. } => Some((style.as_ref(), *span_id)),
     ProcessedInlineSpan::Box(_) => None,
   })
 }
@@ -1197,7 +1199,7 @@ fn text_span_style_by_id<'a, 'c>(
       span_id: current_span_id,
       style,
       ..
-    } if *current_span_id == span_id => Some(style),
+    } if *current_span_id == span_id => Some(style.as_ref()),
     ProcessedInlineSpan::Text { .. } | ProcessedInlineSpan::Box(_) => None,
   })
 }
@@ -1335,7 +1337,7 @@ fn build_inline_layout_tree<'c>(
           span_id,
           byte_range: start..end,
           text: collapsed.into_owned(),
-          style: span_style,
+          style: Box::new(span_style),
           link: link.clone(),
         });
       }
@@ -1447,14 +1449,15 @@ fn build_inline_layout_tree<'c>(
       joined
     })
   });
-  let cached = match (cache_key, &expected_text) {
-    (Some(key), Some(expected)) => context
-      .shape_cache
-      .borrow()
-      .get(&key)
-      .filter(|(_, text)| text == expected)
-      .cloned(),
-    _ => None,
+  let (cached, seen) = match (cache_key, &expected_text) {
+    (Some(key), Some(expected)) => match context.shape_cache.borrow().get(&key) {
+      Some(Some((layout, text))) if text == expected => {
+        ((Some((layout.clone(), text.clone()))), true)
+      }
+      Some(_) => (None, true),
+      None => (None, false),
+    },
+    _ => (None, false),
   };
   let (layout, text) = match cached {
     Some(cached) => cached,
@@ -1464,10 +1467,9 @@ fn build_inline_layout_tree<'c>(
       });
 
       if let Some(key) = cache_key {
-        context
-          .shape_cache
-          .borrow_mut()
-          .insert(key, (layout.clone(), text.clone()));
+        let stored = seen.then(|| (layout.clone(), text.clone()));
+
+        context.shape_cache.borrow_mut().insert(key, stored);
       }
       (layout, text)
     }
