@@ -1,3 +1,9 @@
+## takumi-core@0.14.1
+
+### Render bare `border-t`/`border-r`/`border-b`/`border-l`/`border-x`/`border-y`
+
+The side utilities only parsed with a width suffix, so plain `border-b` drew nothing.
+
 ## takumi-core@0.14.0
 
 ### Add PDF hyperlinks, outline, and document metadata
