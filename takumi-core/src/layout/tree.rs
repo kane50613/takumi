@@ -1615,6 +1615,7 @@ impl RenderNode {
       style: &font_style,
       context: &self.context,
       mode: InlineLayoutMode::Measure,
+      shape_cacheable: true,
     });
     let line = if use_last_line {
       built.layout.lines().last()?
@@ -1872,6 +1873,7 @@ impl RenderNode {
         style: &font_style,
         context: &self.context,
         mode: InlineLayoutMode::Measure,
+        shape_cacheable: true,
       });
 
       let ceil_width = font_style.parent.resolved_text_wrap_mode() == TextWrapMode::Wrap;

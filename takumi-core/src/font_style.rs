@@ -114,6 +114,69 @@ pub struct SizedFontStyle<'s> {
   pub sizing: SizingContext,
 }
 
+/// Feeds a [`fmt::Debug`] stream straight into a hasher, so style fields hash
+/// without intermediate strings.
+struct HashWriter<'a, H: core::hash::Hasher>(&'a mut H);
+
+impl<H: core::hash::Hasher> core::fmt::Write for HashWriter<'_, H> {
+  fn write_str(&mut self, s: &str) -> core::fmt::Result {
+    self.0.write(s.as_bytes());
+    Ok(())
+  }
+}
+
+impl SizedFontStyle<'_> {
+  /// Hashes every input the `TextStyle` conversion below reads, so shaped
+  /// text-only layouts can be cached by content. Keep in sync with
+  /// `From<&SizedFontStyle> for TextStyle`.
+  pub(crate) fn hash_shaping_inputs(&self, hasher: &mut impl core::hash::Hasher) {
+    use core::fmt::Write;
+    use core::hash::Hash;
+
+    self.sizing.font_size.to_bits().hash(hasher);
+    self.letter_spacing.to_bits().hash(hasher);
+    self.word_spacing.to_bits().hash(hasher);
+    self.text_underline_offset.to_bits().hash(hasher);
+    self.line_height_scales_with_text_fit.hash(hasher);
+    self.color.0.hash(hasher);
+    self.text_decoration_color.0.hash(hasher);
+    self.text_stroke_color.0.hash(hasher);
+    for token in &self.font_family.0 {
+      match token {
+        ExpandedFamilyToken::Named(name) => name.hash(hasher),
+        ExpandedFamilyToken::Generic(generic) => (*generic as u8).hash(hasher),
+      }
+    }
+
+    let parent = self.parent;
+    let mut writer = HashWriter(hasher);
+
+    let _ = write!(
+      writer,
+      "{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}",
+      self.line_height,
+      self.text_decoration_thickness,
+      parent.font_weight,
+      parent.font_style,
+      parent.font_stretch,
+      parent.font_variation_settings,
+      parent.resolved_font_features(),
+      parent.word_break,
+      parent.overflow_wrap,
+      parent.display,
+      parent.opacity,
+      parent.text_underline_position,
+      parent.text_decoration_line,
+      parent.text_decoration_skip_ink,
+      parent.font_synthesis_weight,
+      parent.font_synthesis_style,
+      parent.vertical_align,
+      parent.resolved_text_wrap_mode(),
+    );
+    parent.lang.as_ref().map(Lang::as_str).hash(hasher);
+  }
+}
+
 impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
   fn from(style: &'s SizedFontStyle<'s>) -> Self {
     TextStyle {

@@ -1023,6 +1023,7 @@ fn collect_inline_links(
     style: &font_style,
     context,
     mode: InlineLayoutMode::Measure,
+    shape_cacheable: true,
   });
   let (runs, _) = built.measure_runs(layout);
 
@@ -2067,6 +2068,7 @@ fn build_inline_runs<'c>(
     style: font_style,
     context,
     mode: InlineLayoutMode::Draw,
+    shape_cacheable: true,
   });
   let runs = resolve_inline_runs(&built, context, layout).map_err(PdfError::Font)?;
 

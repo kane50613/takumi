@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap, ops::Range, sync::Arc};
+use std::{borrow::Cow, cell::RefCell, collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
 use parley::{
   BreakReason, GlyphRun, IndentOptions, InlineBox, InlineBoxKind, Line, LineMetrics,
@@ -16,7 +16,7 @@ use crate::{
     glyph::{ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},
   },
   style::{
-    Affine, BoxSizing, Color, Float, FontSynthesis, Length, ResolvedVerticalAlign,
+    Affine, BoxSizing, Color, Float, FontSynthesis, Lang, Length, ResolvedVerticalAlign,
     SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk, TextFitMode,
     TextFitTarget, TextOverflow, TextUnderlinePosition, TextWrapMode, TextWrapStyle, VerticalAlign,
     VerticalAlignKeyword,
@@ -43,6 +43,45 @@ pub struct InlineLayoutRequest<'c> {
   pub context: &'c RenderContext,
   /// Measure or draw.
   pub mode: InlineLayoutMode,
+  /// Whether text-only shaping may be served from the per-render shape
+  /// cache, deduplicating repeated measure calls, scene building, and
+  /// drawing of the same content.
+  pub shape_cacheable: bool,
+}
+
+/// A per-render cache of shaped text-only parley layouts, keyed by a hash of
+/// the span texts and styles. Shaping is width-independent for pure text
+/// (inline boxes bake in measured sizes, so they bypass the cache); line
+/// breaking and alignment run on a clone per call.
+pub(crate) type ShapeCache = Rc<RefCell<HashMap<u64, (InlineLayout, String)>>>;
+
+/// Hashes everything shaping depends on: each span's processed text and
+/// style, plus the root style and language.
+fn shape_fingerprint(
+  spans: &[ProcessedInlineSpan<'_>],
+  style: &SizedFontStyle<'_>,
+  lang: Option<&str>,
+) -> u64 {
+  use std::hash::{Hash, Hasher};
+
+  let mut hasher = std::collections::hash_map::DefaultHasher::new();
+
+  style.hash_shaping_inputs(&mut hasher);
+  lang.hash(&mut hasher);
+  for span in spans {
+    if let ProcessedInlineSpan::Text {
+      span_id,
+      text,
+      style,
+      ..
+    } = span
+    {
+      span_id.hash(&mut hasher);
+      text.hash(&mut hasher);
+      style.hash_shaping_inputs(&mut hasher);
+    }
+  }
+  hasher.finish()
 }
 
 /// A completed inline layout with its source text, spans, and per-line scales.
@@ -1262,6 +1301,7 @@ fn build_inline_layout_tree<'c>(
   available_space: Size<AvailableSpace>,
   style: &'c SizedFontStyle,
   context: &'c RenderContext,
+  shape_cacheable: bool,
 ) -> BuiltInlineLayout<'c> {
   // Build spans first: measuring an inline box re-enters layout, so it must run
   // before `tree_builder` holds the shared font borrow.
@@ -1390,9 +1430,48 @@ fn build_inline_layout_tree<'c>(
     }
   }
 
-  let (layout, text) = context.tree_builder(style.into(), |builder| {
-    push_spans_into_builder(builder, &spans)
+  // Inline boxes bake constraint-dependent measured sizes into the layout, so
+  // only pure-text content is safe to cache across calls.
+  let cacheable = shape_cacheable
+    && spans
+      .iter()
+      .all(|span| matches!(span, ProcessedInlineSpan::Text { .. }));
+  let cache_key = cacheable
+    .then(|| shape_fingerprint(&spans, style, context.style.lang.as_ref().map(Lang::as_str)));
+  // The stored text double-checks the fingerprint against hash collisions.
+  let expected_text = cacheable.then(|| {
+    spans.iter().fold(String::new(), |mut joined, span| {
+      if let ProcessedInlineSpan::Text { text, .. } = span {
+        joined.push_str(text);
+      }
+      joined
+    })
   });
+  let cached = match (cache_key, &expected_text) {
+    (Some(key), Some(expected)) => context
+      .shape_cache
+      .borrow()
+      .get(&key)
+      .filter(|(_, text)| text == expected)
+      .cloned(),
+    _ => None,
+  };
+  let (layout, text) = match cached {
+    Some(cached) => cached,
+    None => {
+      let (layout, text) = context.tree_builder(style.into(), |builder| {
+        push_spans_into_builder(builder, &spans)
+      });
+
+      if let Some(key) = cache_key {
+        context
+          .shape_cache
+          .borrow_mut()
+          .insert(key, (layout.clone(), text.clone()));
+      }
+      (layout, text)
+    }
+  };
 
   BuiltInlineLayout {
     layout,
@@ -1579,8 +1658,10 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
     style,
     context,
     mode,
+    shape_cacheable,
   } = request;
-  let mut built = build_inline_layout_tree(&items, available_space, style, context);
+  let mut built =
+    build_inline_layout_tree(&items, available_space, style, context, shape_cacheable);
   let (text_wrap_mode, line_height_hint) =
     prepare_inline_layout(&mut built, max_width, max_height, style);
 
@@ -2876,6 +2957,7 @@ mod tests {
       style: &font_style,
       context: &render_node.context,
       mode: InlineLayoutMode::Measure,
+      shape_cacheable: false,
     });
 
     built
