@@ -75,8 +75,8 @@ use takumi_core::{
   scene::{NodePaint, PaintItemKind, StackingContextNode, build_stacking_contexts},
   style::{
     Affine, BackgroundImage, BlendMode, BoxDecorationBreak, BreakBetween, BreakInside,
-    ComputedStyle, FontFamily, Isolation, Lang, Overflow, ResolvedGradientStop, SizingContext,
-    StyleSheet,
+    ComputedStyle, Display, FlexDirection, FontFamily, Isolation, Lang, Length, Overflow,
+    ResolvedGradientStop, SizingContext, Style, StyleDeclaration, StyleSheet,
   },
   viewport::Viewport,
 };
@@ -84,7 +84,7 @@ use takumi_core::{
 use takumi_core::{
   layout::node::ImageData,
   resources::image::RenderedImage,
-  style::{Length, ObjectFit, PositionComponent},
+  style::{ObjectFit, PositionComponent},
 };
 use typed_builder::TypedBuilder;
 
@@ -322,11 +322,28 @@ impl PreparedTree {
   }
 }
 
+// The root fills the content box like a browser body: a fit-content root
+// resolves child percentages against a tentative width first and the final
+// width later, and taffy does not reconcile heights across those passes.
+fn fill_root(node: Node, viewport: Viewport) -> Node {
+  let mut style = Style::default()
+    .with(StyleDeclaration::display(Display::Flex))
+    .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+    .with(StyleDeclaration::width(Length::Percentage(100.0)));
+
+  if viewport.size.height.is_some() {
+    style = style.with(StyleDeclaration::height(Length::Percentage(100.0)));
+  }
+
+  Node::container([node]).with_style(style)
+}
+
 fn prepare_tree(
   inputs: &TreeInputs<'_>,
   node: Node,
   viewport: Viewport,
 ) -> Result<PreparedTree, PdfError> {
+  let node = fill_root(node, viewport);
   let context = RenderContext::builder()
     .fonts(
       inputs
