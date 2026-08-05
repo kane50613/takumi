@@ -198,6 +198,19 @@ opt-level = "s"
 [profile.release.package.skrifa]
 opt-level = "s"
 
+# PDF serialization and font subsetting: runs once per document, never per
+# pixel. Only reachable from takumi-pdf-wasm (napi graph excludes krilla).
+[profile.release.package.krilla]
+opt-level = "s"
+[profile.release.package.subsetter]
+opt-level = "z"
+[profile.release.package.write-fonts]
+opt-level = "z"
+[profile.release.package.pdf-writer]
+opt-level = "z"
+[profile.release.package.xmp-writer]
+opt-level = "z"
+
 # Shaping (per text run) and layout/geometry (per render) — never per pixel.
 # opt-s/z, perf-neutral on the napi bench.
 [profile.release.package.harfrust]
