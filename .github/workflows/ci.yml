@@ -556,6 +556,7 @@ jobs:
             takumi-pdf-js/pkg/takumi_pdf_wasm_bg.wasm
             takumi-pdf-js/pkg/takumi_pdf_wasm_bg.wasm.d.ts
             takumi-pdf-js/dist
+            takumi-pdf-js/dist
           if-no-files-found: error
 
   test-wasm:
@@ -851,6 +852,12 @@ jobs:
         with:
           name: image-response-dist
           path: takumi-image-response/dist
+
+      - name: Download takumi-pdf artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: pdf-package
+          path: takumi-pdf-js
 
       - name: Install dependencies
         run: bun install --frozen-lockfile --filter ./docs
