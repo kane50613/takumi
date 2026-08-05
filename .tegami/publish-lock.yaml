@@ -1,84 +1,84 @@
 core:changelogs:
-  - content: "---\npackages:\n  cargo:takumi-pdf:\n    type: minor\n  cargo:takumi-core:\n    type: minor\n---\n\n### Add PDF hyperlinks, outline, and document metadata\n\nAnchors with an `href` become clickable link annotations, at the box for block anchors and per text run for inline ones. An `outline: true` option builds PDF bookmarks from `h1`–`h6` headings, and a `metadata` option fills the document's title, description, authors, keywords, and creator.\n"
-    filename: pdf-links-outline-metadata.md
+  - content: "---\npackages:\n  npm:@takumi-rs/helpers:\n    type: patch\n---\n\n### Raise the default fetch timeout to 30 seconds\n\n`AbortSignal.timeout` counts wall-clock time, so a 5-second budget aborted otherwise-healthy font fetches whenever heavy synchronous work (SSG, wasm rendering) blocked the event loop past it.\n"
+    filename: font-fetch-timeout.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - id: npm:takumi-js
-    updated: true
-  - id: npm:@takumi-rs/image-response
-    updated: true
-  - id: npm:@takumi-rs/helpers
+  - id: npm:takumi-template
+    updated: false
+  - id: npm:takumi-pdf
     updated: true
   - id: npm:@takumi-rs/core
     updated: true
-  - id: npm:takumi-pdf
+  - id: npm:@takumi-rs/image-response
     updated: true
   - id: npm:@takumi-rs/wasm
     updated: true
-  - id: npm:takumi-template
-    updated: false
-  - id: npm:docs
-    updated: false
-  - id: npm:example-satori-html
-    updated: false
-  - id: npm:pdf-bench
-    updated: false
-  - id: npm:example-nextjs
-    updated: false
-  - id: npm:example-tanstack-start
-    updated: false
-  - id: npm:example-generate-invoice
-    updated: false
-  - id: npm:svelte
-    updated: false
-  - id: npm:waku-ssr
-    updated: false
-  - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:example-twitter-images
-    updated: false
-  - id: npm:example-liquid-glass
-    updated: false
-  - id: npm:ffmpeg-keyframe-animation
-    updated: false
-  - id: npm:example-css-library-integration
-    updated: false
-  - id: npm:ffplay
-    updated: false
-  - id: cargo:takumi-svg
-    updated: true
-  - id: cargo:takumi
+  - id: npm:takumi-js
     updated: true
   - changelogIds:
-      - pdf-links-outline-metadata.md
-    id: cargo:takumi-core
+      - font-fetch-timeout.md
+    id: npm:@takumi-rs/helpers
     updated: true
+  - id: npm:docs
+    updated: false
+  - id: npm:pdf-bench
+    updated: false
+  - id: npm:ffplay
+    updated: false
+  - id: npm:example-satori-html
+    updated: false
+  - id: npm:waku-ssr
+    updated: false
+  - id: npm:svelte
+    updated: false
+  - id: npm:example-nextjs
+    updated: false
+  - id: npm:example-generate-invoice
+    updated: false
+  - id: npm:example-tanstack-start
+    updated: false
+  - id: npm:example-twitter-images
+    updated: false
+  - id: npm:ffmpeg-keyframe-animation
+    updated: false
+  - id: npm:example-cloudflare-workers
+    updated: false
+  - id: npm:example-css-library-integration
+    updated: false
+  - id: npm:example-liquid-glass
+    updated: false
+  - id: cargo:takumi-svg
+    updated: false
   - id: cargo:takumi-raster
-    updated: true
+    updated: false
   - id: cargo:takumi-html
+    updated: false
+  - id: cargo:takumi
     updated: true
+  - id: cargo:takumi-core
+    updated: false
 npm:packages:
   - id: npm:takumi
-  - id: npm:takumi-js
-  - id: npm:@takumi-rs/image-response
-  - id: npm:@takumi-rs/helpers
-  - id: npm:@takumi-rs/core
-  - id: npm:takumi-pdf
-  - id: npm:@takumi-rs/wasm
   - id: npm:takumi-template
+  - id: npm:takumi-pdf
+  - id: npm:@takumi-rs/core
+  - id: npm:@takumi-rs/image-response
+  - id: npm:@takumi-rs/wasm
+  - id: npm:takumi-js
+  - id: npm:@takumi-rs/helpers
   - id: npm:docs
-  - id: npm:example-satori-html
   - id: npm:pdf-bench
-  - id: npm:example-nextjs
-  - id: npm:example-tanstack-start
-  - id: npm:example-generate-invoice
-  - id: npm:svelte
-  - id: npm:waku-ssr
-  - id: npm:example-cloudflare-workers
-  - id: npm:example-twitter-images
-  - id: npm:example-liquid-glass
-  - id: npm:ffmpeg-keyframe-animation
-  - id: npm:example-css-library-integration
   - id: npm:ffplay
+  - id: npm:example-satori-html
+  - id: npm:waku-ssr
+  - id: npm:svelte
+  - id: npm:example-nextjs
+  - id: npm:example-generate-invoice
+  - id: npm:example-tanstack-start
+  - id: npm:example-twitter-images
+  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-cloudflare-workers
+  - id: npm:example-css-library-integration
+  - id: npm:example-liquid-glass

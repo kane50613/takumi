@@ -1,3 +1,9 @@
+## @takumi-rs/helpers@2.5.8
+
+### Raise the default fetch timeout to 30 seconds
+
+`AbortSignal.timeout` counts wall-clock time, so a 5-second budget aborted otherwise-healthy font fetches whenever heavy synchronous work (SSG, wasm rendering) blocked the event loop past it.
+
 ## @takumi-rs/helpers@2.4.2
 
 ### Hand font and image bytes to the bindings as Uint8Array views
