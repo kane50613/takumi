@@ -94,6 +94,39 @@ pub struct CalcFormula {
   pub(crate) pc: f32,
 }
 
+impl CalcFormula {
+  /// Hashes every coefficient by bit pattern. Keep in sync with the fields
+  /// above.
+  pub(crate) fn hash_bits(&self, hasher: &mut impl core::hash::Hasher) {
+    use core::hash::Hash;
+
+    for value in [
+      self.px,
+      self.percent,
+      self.rem,
+      self.em,
+      self.lh,
+      self.rlh,
+      self.vh,
+      self.vw,
+      self.cqh,
+      self.cqw,
+      self.cqmin,
+      self.cqmax,
+      self.vmin,
+      self.vmax,
+      self.cm,
+      self.mm,
+      self.inch,
+      self.q,
+      self.pt,
+      self.pc,
+    ] {
+      value.to_bits().hash(hasher);
+    }
+  }
+}
+
 /// Invokes `$callback!` with every `CalcFormula` field, keeping constructors and ops in sync.
 macro_rules! for_each_unit {
   ($callback:ident) => {

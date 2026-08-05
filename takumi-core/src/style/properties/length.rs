@@ -129,6 +129,39 @@ pub enum Length {
 }
 
 impl Length {
+  /// Hashes the unit and value by bit pattern.
+  pub(crate) fn hash_bits(&self, hasher: &mut impl core::hash::Hasher) {
+    use core::hash::Hash;
+
+    core::mem::discriminant(self).hash(hasher);
+    match self {
+      Self::Auto => {}
+      Self::Calc(formula) => formula.hash_bits(hasher),
+      Self::Percentage(value)
+      | Self::Rem(value)
+      | Self::Em(value)
+      | Self::Lh(value)
+      | Self::Rlh(value)
+      | Self::Vh(value)
+      | Self::Vw(value)
+      | Self::CqH(value)
+      | Self::CqW(value)
+      | Self::CqMin(value)
+      | Self::CqMax(value)
+      | Self::VMin(value)
+      | Self::VMax(value)
+      | Self::Cm(value)
+      | Self::Mm(value)
+      | Self::In(value)
+      | Self::Q(value)
+      | Self::Pt(value)
+      | Self::Pc(value)
+      | Self::Px(value) => value.to_bits().hash(hasher),
+    }
+  }
+}
+
+impl Length {
   /// Construct a length from a Tailwind spacing-scale multiplier.
   #[inline]
   pub(crate) fn from_spacing(units: f32) -> Self {
