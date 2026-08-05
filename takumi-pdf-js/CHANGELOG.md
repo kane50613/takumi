@@ -1,3 +1,9 @@
+## takumi-pdf@0.2.1
+
+### Shrink the WebAssembly binary by 5%
+
+Size-optimize the PDF serialization and font subsetting crates. The shipped wasm drops about 220KB with render speed and output bytes unchanged.
+
 ## takumi-pdf@0.2.0
 
 ### Draw header and footer bands in the page margins
