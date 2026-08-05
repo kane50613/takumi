@@ -66,9 +66,10 @@ test("auto-height viewport sizes the page to content", async () => {
   const box = decoder.decode(pdf).match(/\/MediaBox\s*\[0 0 ([\d.]+) ([\d.]+)\]/);
   const [width, height] = [Number(box?.[1]), Number(box?.[2])];
 
-  expect(width).toBe(300);
+  // Page geometry is written in pt: 300px at 96 dpi is 225pt.
+  expect(width).toBe(225);
   // 40 rows of 16px text need at least 40 line boxes of font-size height.
-  expect(height).toBeGreaterThanOrEqual(40 * 16);
+  expect(height).toBeGreaterThanOrEqual(40 * 16 * 0.75);
 });
 
 test("letter landscape", async () => {
