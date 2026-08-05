@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Analytics } from "@vercel/analytics/react";
 import { getPageTreePeers } from "fumadocs-core/page-tree";
 import { lucideIconsPlugin } from "fumadocs-core/source/plugins/lucide-icons";
@@ -39,6 +40,27 @@ import { Accordion, Accordions } from "./app/components/accordion";
 import { Mermaid } from "./app/components/mdx/mermaid";
 import { TypeTable } from "./app/components/type-table";
 import { Video } from "./app/components/video";
+
+function tabIcon(icon: ReactNode, color: string) {
+  return (
+    <div
+      style={{
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: "6px",
+        padding: "3px",
+        color,
+        backgroundColor: `color-mix(in srgb, ${color} 12%, transparent)`,
+        border: `1px solid color-mix(in srgb, ${color} 35%, transparent)`,
+      }}
+    >
+      {icon}
+    </div>
+  );
+}
 
 export default defineConfig({
   mode: "static",
@@ -183,13 +205,13 @@ export default defineConfig({
                   title: "Image",
                   description: "OG images, animations & SVG",
                   url: "/docs",
-                  icon: <ImageIcon />,
+                  icon: tabIcon(<ImageIcon size="100%" />, "#e11d48"),
                 },
                 {
                   title: "PDF",
                   description: "Paged documents with takumi-pdf",
                   url: "/docs/pdf",
-                  icon: <FileText />,
+                  icon: tabIcon(<FileText size="100%" />, "#3b82f6"),
                 },
               ],
             },
