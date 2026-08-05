@@ -15,7 +15,13 @@
         "app/playground/worker.ts"
       ],
       "ignore": ["public/**", "app/playground/templates/**", "src/app.css"],
-      "ignoreDependencies": ["@takumi-rs/core", "@takumi-rs/wasm", "twoslash"]
+      "ignoreDependencies": [
+        "@takumi-rs/core",
+        "@takumi-rs/helpers",
+        "@takumi-rs/wasm",
+        "takumi-pdf",
+        "twoslash"
+      ]
     },
     "takumi-helpers": {
       "entry": ["tests/**/*.test.{ts,tsx}"],
