@@ -340,8 +340,7 @@ fn collect_inline_items_impl<'n>(
   let anchor = node
     .node
     .as_ref()
-    .and_then(|source| source.attribute("href"))
-    .filter(|href| !href.is_empty())
+    .and_then(Node::href)
     .map(Arc::<str>::from);
   let link = anchor.as_ref().or(link);
 

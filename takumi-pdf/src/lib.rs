@@ -949,7 +949,7 @@ fn collect_interactive_paint(
     return;
   };
 
-  match source.attribute("href").filter(|uri| allowed_link_uri(uri)) {
+  match source.href().filter(|uri| allowed_link_uri(uri)) {
     // The whole box is one link; per-run collection would double-annotate it.
     Some(uri) => links.push(LinkTarget {
       uri: uri.to_string(),

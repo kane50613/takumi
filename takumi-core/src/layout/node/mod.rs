@@ -670,9 +670,14 @@ impl Node {
     matches!(self.kind, NodeKind::Image(_))
   }
 
+  /// The element's `href` attribute, when present and non-empty.
+  pub fn href(&self) -> Option<&str> {
+    self.attribute("href").filter(|href| !href.is_empty())
+  }
+
   /// `id` and `class` resolve to the structured metadata fields rather than
   /// the `attributes` map.
-  pub fn attribute(&self, name: &str) -> Option<&str> {
+  pub(crate) fn attribute(&self, name: &str) -> Option<&str> {
     if name.eq_ignore_ascii_case("id") {
       return self.metadata.id.as_deref();
     }
