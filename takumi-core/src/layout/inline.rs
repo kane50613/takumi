@@ -5,6 +5,7 @@ use parley::{
   PositionedInlineBox, PositionedLayoutItem, TextStyle, TreeBuilder, YieldData,
 };
 use skrifa::{FontRef, MetadataProvider, raw::TableProvider};
+use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
   context::RenderContext,
@@ -57,6 +58,10 @@ pub struct InlineLayoutRequest<'c> {
 /// text costs one map entry, not a retained layout clone.
 pub(crate) type ShapeCache = Rc<RefCell<HashMap<u64, Option<(InlineLayout, String)>>>>;
 
+/// Per-render map from a text node's measure inputs to its measured size.
+/// Keyed by content hash plus text length as a cheap collision guard.
+pub(crate) type MeasureCache = Rc<RefCell<HashMap<(u64, u32), Size<f32>>>>;
+
 /// Hashes everything shaping depends on: each span's processed text and
 /// style, plus the root style and language.
 fn shape_fingerprint(
@@ -66,7 +71,7 @@ fn shape_fingerprint(
 ) -> u64 {
   use std::hash::{Hash, Hasher};
 
-  let mut hasher = std::collections::hash_map::DefaultHasher::new();
+  let mut hasher = Xxh3::new();
 
   style.hash_shaping_inputs(&mut hasher);
   lang.hash(&mut hasher);

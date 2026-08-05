@@ -3,7 +3,7 @@ use std::{collections::HashMap, rc::Rc, sync::Arc};
 use typed_builder::TypedBuilder;
 
 use crate::{
-  layout::inline::ShapeCache,
+  layout::inline::{MeasureCache, ShapeCache},
   resources::{font::FontsSnapshot, image::ImageSource},
   style::{Affine, Color, ComputedStyle, SizingContext, StyleSheet},
 };
@@ -40,6 +40,9 @@ pub struct RenderContext {
   /// context derived from the same root.
   #[builder(default)]
   pub(crate) shape_cache: ShapeCache,
+  /// Per-render cache of measured text-node sizes, shared like `shape_cache`.
+  #[builder(default)]
+  pub(crate) measure_cache: MeasureCache,
 }
 
 impl RenderContext {
@@ -60,6 +63,7 @@ impl RenderContext {
       sizing,
       stylesheet: parent.stylesheet.clone(),
       shape_cache: parent.shape_cache.clone(),
+      measure_cache: parent.measure_cache.clone(),
     }
   }
 }
