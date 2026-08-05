@@ -41,6 +41,17 @@
     "Liberation Mono", Menlo, "Courier New", monospace;
 }
 
+.pdf-section {
+  --primary: #2563eb;
+  --ring: rgba(37, 99, 235, 0.3);
+  --color-fd-primary: var(--primary);
+}
+
+.dark .pdf-section {
+  --primary: #60a5fa;
+  --ring: rgba(96, 165, 250, 0.3);
+}
+
 .dark {
   --destructive: oklch(0.704 0.191 22.216);
   --input: oklch(1 0 0 / 15%);

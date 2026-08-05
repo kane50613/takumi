@@ -41,6 +41,8 @@ import { Mermaid } from "./app/components/mdx/mermaid";
 import { TypeTable } from "./app/components/type-table";
 import { Video } from "./app/components/video";
 
+const PDF_ACCENT = "#3b82f6";
+
 function tabIcon(icon: ReactNode, color: string) {
   return (
     <div
@@ -50,11 +52,7 @@ function tabIcon(icon: ReactNode, color: string) {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        borderRadius: "6px",
-        padding: "3px",
         color,
-        backgroundColor: `color-mix(in srgb, ${color} 12%, transparent)`,
-        border: `1px solid color-mix(in srgb, ${color} 35%, transparent)`,
       }}
     >
       {icon}
@@ -184,7 +182,7 @@ export default defineConfig({
       };
     },
     page: createDocsLayoutPage({
-      async render() {
+      async render(page) {
         const source = await this.getLoader();
         let tree = source.getPageTree(this.lang);
 
@@ -193,10 +191,12 @@ export default defineConfig({
             tree = { ...tree, children: child.children };
           }
         }
+        const inPdfSection = page.url === "/docs/pdf" || page.url.startsWith("/docs/pdf/");
 
         return {
           layoutProps: {
             tree,
+            containerProps: inPdfSection ? { className: "pdf-section" } : undefined,
             sidebar: {
               // Active tab resolves by findLast + prefix match, so the nested
               // PDF root must come after the whole-docs tab.
@@ -211,7 +211,7 @@ export default defineConfig({
                   title: "PDF",
                   description: "Paged documents with takumi-pdf",
                   url: "/docs/pdf",
-                  icon: tabIcon(<FileText size="100%" />, "#3b82f6"),
+                  icon: tabIcon(<FileText size="100%" />, PDF_ACCENT),
                 },
               ],
             },
