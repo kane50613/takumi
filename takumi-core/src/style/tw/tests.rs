@@ -259,6 +259,18 @@ fn test_parse_border_width() {
     Some(TailwindProperty::BorderDefault)
   );
   assert_eq!(
+    TailwindProperty::parse("border-b"),
+    Some(TailwindProperty::BorderBottomWidth(LineWidth::Length(
+      Length::Px(1.0)
+    )))
+  );
+  assert_eq!(
+    TailwindProperty::parse("border-y"),
+    Some(TailwindProperty::BorderYWidth(LineWidth::Length(
+      Length::Px(1.0)
+    )))
+  );
+  assert_eq!(
     TailwindProperty::parse("border-t-2"),
     Some(TailwindProperty::BorderTopWidth(LineWidth::Length(
       Length::Px(2.0)
