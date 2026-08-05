@@ -1,84 +1,84 @@
 core:changelogs:
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: patch\n---\n\n### Render bare `border-t`/`border-r`/`border-b`/`border-l`/`border-x`/`border-y`\n\nThe side utilities only parsed with a width suffix, so plain `border-b` drew nothing.\n"
-    filename: tw-bare-border-sides.md
+  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n### Draw header and footer bands in the page margins\n\nBands previously reserved their height inside the content window, so a footered document paginated earlier than Chrome's print output. They now lay out at full page width and draw in the margin areas with Chromium's 15pt edge inset. The content window always spans the full margin box.\n"
+    filename: pdf-chrome-margin-bands.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - id: npm:@takumi-rs/helpers
-    updated: true
-  - id: npm:takumi-pdf
-    updated: true
-  - id: npm:@takumi-rs/core
-    updated: true
-  - id: npm:@takumi-rs/wasm
-    updated: true
-  - id: npm:takumi-js
-    updated: true
-  - id: npm:takumi-template
+  - id: npm:@takumi-rs/image-response
     updated: false
+  - id: npm:takumi-js
+    updated: false
+  - changelogIds:
+      - pdf-chrome-margin-bands.md
+    id: npm:takumi-pdf
+    updated: true
   - id: npm:docs
     updated: false
-  - id: npm:@takumi-rs/image-response
-    updated: true
-  - id: npm:example-tanstack-start
+  - id: npm:@takumi-rs/core
     updated: false
-  - id: npm:ffplay
+  - id: npm:@takumi-rs/helpers
     updated: false
-  - id: npm:example-cloudflare-workers
+  - id: npm:@takumi-rs/wasm
     updated: false
-  - id: npm:pdf-bench
+  - id: npm:takumi-template
     updated: false
   - id: npm:waku-ssr
     updated: false
-  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:svelte
+    updated: false
+  - id: npm:example-tanstack-start
     updated: false
   - id: npm:example-satori-html
     updated: false
-  - id: npm:example-nextjs
+  - id: npm:example-liquid-glass
+    updated: false
+  - id: npm:ffmpeg-keyframe-animation
+    updated: false
+  - id: npm:example-cloudflare-workers
     updated: false
   - id: npm:example-css-library-integration
     updated: false
-  - id: npm:example-twitter-images
-    updated: false
-  - id: npm:svelte
-    updated: false
   - id: npm:example-generate-invoice
     updated: false
-  - id: npm:example-liquid-glass
+  - id: npm:example-twitter-images
+    updated: false
+  - id: npm:ffplay
+    updated: false
+  - id: npm:example-nextjs
+    updated: false
+  - id: npm:pdf-bench
+    updated: false
+  - id: cargo:takumi-svg
+    updated: false
+  - id: cargo:takumi-core
+    updated: false
+  - id: cargo:takumi-raster
+    updated: false
+  - id: cargo:takumi
     updated: false
   - id: cargo:takumi-html
-    updated: true
-  - id: cargo:takumi-raster
-    updated: true
-  - changelogIds:
-      - tw-bare-border-sides.md
-    id: cargo:takumi-core
-    updated: true
-  - id: cargo:takumi-svg
-    updated: true
-  - id: cargo:takumi
-    updated: true
+    updated: false
 npm:packages:
   - id: npm:takumi
-  - id: npm:@takumi-rs/helpers
-  - id: npm:takumi-pdf
-  - id: npm:@takumi-rs/core
-  - id: npm:@takumi-rs/wasm
-  - id: npm:takumi-js
-  - id: npm:takumi-template
-  - id: npm:docs
   - id: npm:@takumi-rs/image-response
-  - id: npm:example-tanstack-start
-  - id: npm:ffplay
-  - id: npm:example-cloudflare-workers
-  - id: npm:pdf-bench
+  - id: npm:takumi-js
+  - id: npm:takumi-pdf
+  - id: npm:docs
+  - id: npm:@takumi-rs/core
+  - id: npm:@takumi-rs/helpers
+  - id: npm:@takumi-rs/wasm
+  - id: npm:takumi-template
   - id: npm:waku-ssr
-  - id: npm:ffmpeg-keyframe-animation
-  - id: npm:example-satori-html
-  - id: npm:example-nextjs
-  - id: npm:example-css-library-integration
-  - id: npm:example-twitter-images
   - id: npm:svelte
-  - id: npm:example-generate-invoice
+  - id: npm:example-tanstack-start
+  - id: npm:example-satori-html
   - id: npm:example-liquid-glass
+  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-cloudflare-workers
+  - id: npm:example-css-library-integration
+  - id: npm:example-generate-invoice
+  - id: npm:example-twitter-images
+  - id: npm:ffplay
+  - id: npm:example-nextjs
+  - id: npm:pdf-bench
