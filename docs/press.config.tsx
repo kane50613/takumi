@@ -19,7 +19,9 @@ import {
   ArrowBigRight,
   BookOpen,
   FileCode2,
+  FileText,
   Hand,
+  Image as ImageIcon,
   Palette,
   Shovel,
   Sparkles,
@@ -173,6 +175,24 @@ export default defineConfig({
         return {
           layoutProps: {
             tree,
+            sidebar: {
+              // Active tab resolves by findLast + prefix match, so the nested
+              // PDF root must come after the whole-docs tab.
+              tabs: [
+                {
+                  title: "Image",
+                  description: "OG images, animations & SVG",
+                  url: "/docs",
+                  icon: <ImageIcon />,
+                },
+                {
+                  title: "PDF",
+                  description: "Paged documents with takumi-pdf",
+                  url: "/docs/pdf",
+                  icon: <FileText />,
+                },
+              ],
+            },
             links: [
               { icon: <Shovel />, text: "Try in Playground", url: "/playground" },
               { icon: <Sparkles />, text: "Showcase", url: "/showcase" },

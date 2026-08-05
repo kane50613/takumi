@@ -1,5 +1,7 @@
 {
-  "defaultOpen": true,
+  "title": "PDF",
+  "description": "Paged documents with takumi-pdf",
+  "root": true,
   "icon": "FileText",
   "pages": [
     "index",
