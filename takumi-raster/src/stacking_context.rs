@@ -656,6 +656,7 @@ fn draw_render_node_inline(
     style: &font_style,
     context: &node.context,
     mode: InlineLayoutMode::Draw,
+    shape_cacheable: true,
   });
   let inline_layout_box = layout;
 

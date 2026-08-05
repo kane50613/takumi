@@ -266,6 +266,7 @@ fn collect_measure_result(
             style: &font_style,
             context: &current.context,
             mode: InlineLayoutMode::Measure,
+            shape_cacheable: true,
           });
           let (measured_runs, measured_boxes) = built.measure_runs(layout);
           runs.extend(measured_runs.into_iter().map(|run| MeasuredTextRun {

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Analytics } from "@vercel/analytics/react";
 import { getPageTreePeers } from "fumadocs-core/page-tree";
 import { lucideIconsPlugin } from "fumadocs-core/source/plugins/lucide-icons";
@@ -19,7 +20,9 @@ import {
   ArrowBigRight,
   BookOpen,
   FileCode2,
+  FileText,
   Hand,
+  Image as ImageIcon,
   Palette,
   Shovel,
   Sparkles,
@@ -37,6 +40,25 @@ import { Accordion, Accordions } from "./app/components/accordion";
 import { Mermaid } from "./app/components/mdx/mermaid";
 import { TypeTable } from "./app/components/type-table";
 import { Video } from "./app/components/video";
+
+const PDF_ACCENT = "#3b82f6";
+
+function tabIcon(icon: ReactNode, color: string) {
+  return (
+    <div
+      style={{
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color,
+      }}
+    >
+      {icon}
+    </div>
+  );
+}
 
 export default defineConfig({
   mode: "static",
@@ -160,7 +182,7 @@ export default defineConfig({
       };
     },
     page: createDocsLayoutPage({
-      async render() {
+      async render(page) {
         const source = await this.getLoader();
         let tree = source.getPageTree(this.lang);
 
@@ -169,10 +191,30 @@ export default defineConfig({
             tree = { ...tree, children: child.children };
           }
         }
+        const inPdfSection = page.url === "/docs/pdf" || page.url.startsWith("/docs/pdf/");
 
         return {
           layoutProps: {
             tree,
+            containerProps: inPdfSection ? { className: "pdf-section" } : undefined,
+            sidebar: {
+              // Active tab resolves by findLast + prefix match, so the nested
+              // PDF root must come after the whole-docs tab.
+              tabs: [
+                {
+                  title: "Image",
+                  description: "OG images, animations & SVG",
+                  url: "/docs",
+                  icon: tabIcon(<ImageIcon size="100%" />, "#e11d48"),
+                },
+                {
+                  title: "PDF",
+                  description: "Paged documents with takumi-pdf",
+                  url: "/docs/pdf",
+                  icon: tabIcon(<FileText size="100%" />, PDF_ACCENT),
+                },
+              ],
+            },
             links: [
               { icon: <Shovel />, text: "Try in Playground", url: "/playground" },
               { icon: <Sparkles />, text: "Showcase", url: "/showcase" },

@@ -433,6 +433,7 @@ fn compute_node_paint_bounds(
     style: &font_style,
     context: &node.context,
     mode: InlineLayoutMode::Measure,
+    shape_cacheable: true,
   });
   let inline_transform = Affine::translation(
     layout.border.left + layout.padding.left,

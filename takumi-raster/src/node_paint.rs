@@ -347,6 +347,7 @@ fn draw_text_node_content(
     style: &font_style,
     context,
     mode: InlineLayoutMode::Draw,
+    shape_cacheable: true,
   });
 
   draw_inline_layout(context, canvas, layout, &built, &font_style)?;

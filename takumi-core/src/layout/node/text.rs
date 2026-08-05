@@ -35,6 +35,7 @@ pub(crate) fn measure_text_node(
     style: &font_style,
     context,
     mode: InlineLayoutMode::Measure,
+    shape_cacheable: true,
   });
 
   let parent_font_metrics = built.parent_font_metrics();

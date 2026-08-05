@@ -7,7 +7,12 @@ description: Embed subset fonts and pre-fetched images.
 
 Text embeds as real glyph runs with subset fonts, so it stays selectable, searchable, and copyable. Pass a URL, raw bytes, or the [`googleFonts`](/docs/typography-and-fonts#from-google-fonts) helper:
 
-```tsx
+```tsx twoslash
+import type { ReactNode } from "react";
+import { render } from "takumi-pdf";
+declare const doc: ReactNode;
+declare const fontBytes: Uint8Array;
+// ---cut---
 import { googleFonts } from "@takumi-rs/helpers";
 
 const pdf = await render(doc, {
@@ -22,7 +27,12 @@ const pdf = await render(doc, {
 
 The renderer never fetches over the network. Pass pre-fetched bytes for every image URL the document references:
 
-```tsx
+```tsx twoslash
+import type { ReactNode } from "react";
+import { render } from "takumi-pdf";
+declare const doc: ReactNode;
+declare const logoUrl: string;
+// ---cut---
 const logoBytes = new Uint8Array(await (await fetch(logoUrl)).arrayBuffer());
 
 const pdf = await render(doc, {

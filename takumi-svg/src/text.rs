@@ -92,6 +92,7 @@ pub(crate) fn emit_text(
     style: &font_style,
     context,
     mode: InlineLayoutMode::Draw,
+    shape_cacheable: true,
   });
 
   let runs = resolve_inline_runs(&built, context, layout).map_err(font_error)?;
@@ -134,6 +135,7 @@ pub(crate) fn emit_inline_content(
     style: &font_style,
     context,
     mode: InlineLayoutMode::Draw,
+    shape_cacheable: true,
   });
 
   let runs = resolve_inline_runs(&built, context, layout).map_err(font_error)?;

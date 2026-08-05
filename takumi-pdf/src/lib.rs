@@ -949,7 +949,7 @@ fn collect_interactive_paint(
     return;
   };
 
-  match source.attribute("href").filter(|uri| allowed_link_uri(uri)) {
+  match source.href().filter(|uri| allowed_link_uri(uri)) {
     // The whole box is one link; per-run collection would double-annotate it.
     Some(uri) => links.push(LinkTarget {
       uri: uri.to_string(),
@@ -1023,6 +1023,7 @@ fn collect_inline_links(
     style: &font_style,
     context,
     mode: InlineLayoutMode::Measure,
+    shape_cacheable: true,
   });
   let (runs, _) = built.measure_runs(layout);
 
@@ -2067,6 +2068,7 @@ fn build_inline_runs<'c>(
     style: font_style,
     context,
     mode: InlineLayoutMode::Draw,
+    shape_cacheable: true,
   });
   let runs = resolve_inline_runs(&built, context, layout).map_err(PdfError::Font)?;
 
