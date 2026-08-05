@@ -672,7 +672,7 @@ impl Node {
 
   /// `id` and `class` resolve to the structured metadata fields rather than
   /// the `attributes` map.
-  pub(crate) fn attribute(&self, name: &str) -> Option<&str> {
+  pub fn attribute(&self, name: &str) -> Option<&str> {
     if name.eq_ignore_ascii_case("id") {
       return self.metadata.id.as_deref();
     }
@@ -707,7 +707,8 @@ pub(crate) struct NodeStyleLayers {
 
 /// Selector-matching queries read by [`crate::matching`].
 impl Node {
-  pub(crate) fn tag_name(&self) -> Option<&str> {
+  /// The element's tag name.
+  pub fn tag_name(&self) -> Option<&str> {
     self.metadata.tag_name.as_deref()
   }
 

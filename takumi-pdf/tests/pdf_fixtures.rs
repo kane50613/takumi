@@ -18,7 +18,7 @@ use takumi_core::{
   viewport::Viewport,
 };
 use takumi_html::{FromHtmlOptions, from_html};
-use takumi_pdf::{PageMargins, PageOptions, PdfOptions, render};
+use takumi_pdf::{PageMargins, PageOptions, PdfMetadata, PdfOptions, render};
 
 fn fonts() -> Fonts {
   let mut fonts = Fonts::default();
@@ -45,8 +45,9 @@ fn html_fixture(name: &str) -> Node {
   from_html(&source, FromHtmlOptions::default()).expect("parse html fixture")
 }
 
-/// Renders the case twice, asserts determinism, and writes the golden.
-fn run_pdf_fixture(name: &str, build: impl Fn(&Fonts) -> PdfOptions<'_>) {
+/// Renders the case twice, asserts determinism, writes the golden, and
+/// returns the bytes.
+fn run_pdf_fixture(name: &str, build: impl Fn(&Fonts) -> PdfOptions<'_>) -> Vec<u8> {
   let fonts = fonts();
   let first = render(build(&fonts)).expect("render pdf fixture");
   let second = render(build(&fonts)).expect("render pdf fixture again");
@@ -58,6 +59,7 @@ fn run_pdf_fixture(name: &str, build: impl Fn(&Fonts) -> PdfOptions<'_>) {
 
   fs::create_dir_all(&dir).expect("create golden directory");
   fs::write(dir.join(format!("{name}.pdf")), &first).expect("write pdf golden");
+  first
 }
 
 fn text(content: &str, size: f32) -> Node {
@@ -611,4 +613,37 @@ fn certificate() {
       .fonts(fonts)
       .build()
   });
+}
+
+/// Headings across a forced page break become outline entries; anchors become
+/// link annotations on the page owning their box.
+#[test]
+fn report_links_outline() {
+  let pdf = run_pdf_fixture("report-links-outline", |fonts| {
+    PdfOptions::builder()
+      .node(html_fixture("report.html"))
+      .page(PageOptions::A4)
+      .outline(true)
+      .metadata(PdfMetadata {
+        title: Some("Annual report".into()),
+        description: Some("Fixture exercising metadata, links, and outline".into()),
+        authors: vec!["Takumi".into()],
+        keywords: vec!["report".into(), "fixture".into()],
+        creator: Some("takumi-pdf fixtures".into()),
+      })
+      .fonts(fonts)
+      .build()
+  });
+
+  // Annotation dictionaries and the outline root serialize uncompressed, so
+  // substring checks hold; revisit with a PDF parser if that changes.
+  let haystack = String::from_utf8_lossy(&pdf);
+
+  for needle in [
+    "https://example.com/numbers",
+    "https://example.com/data",
+    "/Outlines",
+  ] {
+    assert!(haystack.contains(needle), "missing {needle} in pdf");
+  }
 }

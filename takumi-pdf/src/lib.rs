@@ -23,7 +23,7 @@
 //! images (`object-fit`/`object-position`), text with decorations, opacity,
 //! blend modes, overflow clipping, affine transforms, pagination. Not yet:
 //! box-shadow, filters, `clip-path`, masks, `background-size`/`position`/
-//! `repeat`, url() background layers, SVG image sources.
+//! `repeat`, url() background layers.
 
 use std::{collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
@@ -31,13 +31,18 @@ use std::{collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 use krilla::image::Image as KrillaImage;
 use krilla::{
   Data, Document,
+  action::{Action, LinkAction},
+  annotation::{Annotation, LinkAnnotation, Target},
   blend::BlendMode as KrillaBlendMode,
   color::rgb,
+  destination::XyzDestination,
   error::KrillaError,
   geom::{
     Path as KrillaPath, PathBuilder, Point, Rect as KrillaRect, Size as KrillaSize, Transform,
   },
+  metadata::Metadata,
   num::NormalizedF32,
+  outline::{Outline, OutlineNode},
   page::PageSettings,
   paint::{
     Fill, FillRule, LinearGradient as KrillaLinearGradient, Paint,
@@ -139,6 +144,52 @@ pub struct PdfOptions<'g> {
   /// Default BCP-47 language tag applied to the root.
   #[builder(default)]
   pub lang: Option<Lang>,
+  /// Document metadata written to the PDF's info dictionary.
+  #[builder(default, setter(strip_option))]
+  pub metadata: Option<PdfMetadata>,
+  /// Generates a PDF outline (bookmarks) from `h1`–`h6` headings.
+  #[builder(default)]
+  pub outline: bool,
+}
+
+/// Document metadata for the PDF's info dictionary. [`PdfOptions::lang`]
+/// doubles as the metadata language.
+#[derive(Default, Clone)]
+pub struct PdfMetadata {
+  /// The document title.
+  pub title: Option<String>,
+  /// The document description (the info dictionary's subject).
+  pub description: Option<String>,
+  /// The document authors.
+  pub authors: Vec<String>,
+  /// The document keywords.
+  pub keywords: Vec<String>,
+  /// The tool that created the source document.
+  pub creator: Option<String>,
+}
+
+fn build_metadata(metadata: &PdfMetadata, lang: Option<Lang>) -> Metadata {
+  let mut result = Metadata::new();
+
+  if let Some(title) = &metadata.title {
+    result = result.title(title.clone());
+  }
+  if let Some(description) = &metadata.description {
+    result = result.description(description.clone());
+  }
+  if !metadata.authors.is_empty() {
+    result = result.authors(metadata.authors.clone());
+  }
+  if !metadata.keywords.is_empty() {
+    result = result.keywords(metadata.keywords.clone());
+  }
+  if let Some(creator) = &metadata.creator {
+    result = result.creator(creator.clone());
+  }
+  if let Some(lang) = lang {
+    result = result.language(lang.as_str().to_string());
+  }
+  result
 }
 
 /// Per-side page margins in px.
@@ -254,12 +305,17 @@ struct PreparedTree {
 }
 
 impl PreparedTree {
-  fn emitter<'a>(&'a self, fonts: &'a mut FontMap) -> Emitter<'a> {
+  fn emitter<'a>(
+    &'a self,
+    fonts: &'a mut FontMap,
+    inline: Option<&'a InlineMap<'a>>,
+  ) -> Emitter<'a> {
     Emitter {
       root: &self.root,
       contexts: &self.contexts,
       results: &self.results,
       fonts,
+      inline,
       window: None,
       line_window: None,
     }
@@ -460,6 +516,38 @@ fn substitute_page_counters(node: &mut Node, page: usize, pages: usize) {
   }
 }
 
+/// A band measured before pagination: the laid-out tree plus whether it must
+/// re-prepare per page (it contains counter hooks).
+struct MeasuredBand {
+  measured: PreparedTree,
+  dynamic: bool,
+}
+
+/// Measures a band with three-digit counters and records whether it must
+/// re-prepare per page.
+fn measure_band(
+  inputs: &TreeInputs<'_>,
+  template: &Node,
+  viewport: Viewport,
+) -> Result<MeasuredBand, PdfError> {
+  Ok(MeasuredBand {
+    measured: prepare_band(inputs, template, 999, 999, viewport)?,
+    dynamic: band_has_counters(template),
+  })
+}
+
+/// Whether a band template contains any page-counter hook. A band without one
+/// lays out identically on every page, so it is prepared once and reused.
+fn band_has_counters(node: &Node) -> bool {
+  if counter_text(node, 1, 1).is_some() {
+    return true;
+  }
+  match &node.kind {
+    NodeKind::Container { children } => children.iter().any(band_has_counters),
+    _ => false,
+  }
+}
+
 /// Lays out a band template with the given counter values.
 fn prepare_band(
   inputs: &TreeInputs<'_>,
@@ -490,7 +578,7 @@ fn emit_band(
 
   surface.push_clip_path(&path, &FillRule::NonZero);
   surface.push_transform(&Transform::from_translate(x, y));
-  let mut emitter = band.emitter(fonts);
+  let mut emitter = band.emitter(fonts, None);
 
   emitter.emit_context(0, Affine::IDENTITY, surface)?;
   surface.pop();
@@ -511,6 +599,9 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
   let mut fonts = FontMap::new();
   let mut document = Document::new();
 
+  if let Some(metadata) = &options.metadata {
+    document.set_metadata(build_metadata(metadata, inputs.lang));
+  }
   match options.page {
     Some(page) => {
       let page_size =
@@ -527,39 +618,57 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
 
       // Band heights are measured once with three-digit counters; per-page
       // emission clips to the measured band, so a wrap caused by a wider real
-      // counter cannot push the content window around between pages.
-      let header_height = match &options.header {
-        Some(template) => prepare_band(&inputs, template, 999, 999, band_viewport)?.height,
-        None => 0.0,
-      };
-      let footer_height = match &options.footer {
-        Some(template) => prepare_band(&inputs, template, 999, 999, band_viewport)?.height,
-        None => 0.0,
-      };
+      // counter cannot push the content window around between pages. A band
+      // without counter hooks reuses the measured layout on every page.
+      let header_band = options
+        .header
+        .as_ref()
+        .map(|template| measure_band(&inputs, template, band_viewport))
+        .transpose()?;
+      let footer_band = options
+        .footer
+        .as_ref()
+        .map(|template| measure_band(&inputs, template, band_viewport))
+        .transpose()?;
+      let header_height = header_band
+        .as_ref()
+        .map_or(0.0, |band| band.measured.height);
+      let footer_height = footer_band
+        .as_ref()
+        .map_or(0.0, |band| band.measured.height);
       let window_height = content_height - header_height - footer_height;
       if window_height <= 0.0 {
         return Err(PdfError::InvalidPageSize);
       }
 
       let content = prepare_tree(&inputs, options.node, band_viewport)?;
+      let text_boxes = collect_text_boxes(&content);
+      let inline_map = build_inline_map(&text_boxes)?;
       let mut atoms = Vec::new();
       let mut forced = Vec::new();
 
       content
-        .emitter(&mut fonts)
+        .emitter(&mut fonts, Some(&inline_map))
         .collect_atoms(0, Affine::IDENTITY, &mut atoms, &mut forced)?;
       let starts = page_starts(&mut atoms, &mut forced, content.height, window_height);
       let pages = starts.len();
+      let (links, headings) = collect_interactive(&content);
 
       for (index, &y0) in starts.iter().enumerate() {
         let mut pdf_page = document.start_page_with(PageSettings::new(page_size));
         let mut surface = pdf_page.surface();
 
-        if let Some(template) = &options.header {
-          let band = prepare_band(&inputs, template, index + 1, pages, band_viewport)?;
+        if let (Some(band), Some(template)) = (&header_band, &options.header) {
+          let prepared;
+          let tree = if band.dynamic {
+            prepared = prepare_band(&inputs, template, index + 1, pages, band_viewport)?;
+            &prepared
+          } else {
+            &band.measured
+          };
 
           emit_band(
-            &band,
+            tree,
             &mut fonts,
             page.margin.left,
             page.margin.top,
@@ -585,7 +694,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
             page.margin.left,
             content_top - y0,
           ));
-          let mut emitter = content.emitter(&mut fonts);
+          let mut emitter = content.emitter(&mut fonts, Some(&inline_map));
 
           emitter.window = Some((y0, y0 + paint_height));
           emitter.line_window = Some((if index == 0 { f32::NEG_INFINITY } else { y0 }, next_start));
@@ -594,11 +703,17 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           surface.pop();
         }
 
-        if let Some(template) = &options.footer {
-          let band = prepare_band(&inputs, template, index + 1, pages, band_viewport)?;
+        if let (Some(band), Some(template)) = (&footer_band, &options.footer) {
+          let prepared;
+          let tree = if band.dynamic {
+            prepared = prepare_band(&inputs, template, index + 1, pages, band_viewport)?;
+            &prepared
+          } else {
+            &band.measured
+          };
 
           emit_band(
-            &band,
+            tree,
             &mut fonts,
             page.margin.left,
             page.height - page.margin.bottom - footer_height,
@@ -609,7 +724,24 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         }
 
         surface.finish();
+        add_link_annotations(
+          &mut pdf_page,
+          &links,
+          (y0, y0 + paint_height),
+          (page.margin.left, content_top),
+        );
         pdf_page.finish();
+      }
+
+      if options.outline && !headings.is_empty() {
+        document.set_outline(build_outline(&headings, |heading| {
+          let index = starts
+            .partition_point(|start| *start <= heading.top)
+            .saturating_sub(1);
+          let y = page.margin.top + header_height + (heading.top - starts[index]).max(0.0);
+
+          XyzDestination::new(index, Point::from_xy(page.margin.left, y))
+        }));
       }
     }
     None => {
@@ -617,13 +749,23 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       let content = prepare_tree(&inputs, options.node, viewport)?;
       let page_size =
         KrillaSize::from_wh(content.width, content.height).ok_or(PdfError::InvalidPageSize)?;
+      let text_boxes = collect_text_boxes(&content);
+      let inline_map = build_inline_map(&text_boxes)?;
       let mut page = document.start_page_with(PageSettings::new(page_size));
       let mut surface = page.surface();
-      let mut emitter = content.emitter(&mut fonts);
+      let mut emitter = content.emitter(&mut fonts, Some(&inline_map));
 
       emitter.emit_context(0, Affine::IDENTITY, &mut surface)?;
       surface.finish();
+      let (links, headings) = collect_interactive(&content);
+
+      add_link_annotations(&mut page, &links, (0.0, content.height), (0.0, 0.0));
       page.finish();
+      if options.outline && !headings.is_empty() {
+        document.set_outline(build_outline(&headings, |heading| {
+          XyzDestination::new(0, Point::from_xy(0.0, heading.top.max(0.0)))
+        }));
+      }
     }
   }
 
@@ -686,6 +828,396 @@ fn page_starts(atoms: &mut [Atom], forced: &mut Vec<f32>, total: f32, window: f3
   starts
 }
 
+/// A hyperlink box in content coordinates.
+struct LinkTarget {
+  uri: String,
+  rect: KrillaRect,
+}
+
+/// A heading in content coordinates, for the outline.
+struct HeadingTarget {
+  level: u8,
+  text: String,
+  top: f32,
+}
+
+/// The axis-aligned bounding box of a node-local rect under the node's
+/// absolute transform, in content coordinates.
+fn transformed_rect(transform: Affine, origin: (f32, f32), size: Size<f32>) -> Option<KrillaRect> {
+  let cols = transform.to_cols_array();
+  let corners = [
+    (origin.0, origin.1),
+    (origin.0 + size.width, origin.1),
+    (origin.0, origin.1 + size.height),
+    (origin.0 + size.width, origin.1 + size.height),
+  ];
+  let mut left = f32::INFINITY;
+  let mut top = f32::INFINITY;
+  let mut right = f32::NEG_INFINITY;
+  let mut bottom = f32::NEG_INFINITY;
+
+  for (x, y) in corners {
+    let px = cols[0] * x + cols[2] * y + cols[4];
+    let py = cols[1] * x + cols[3] * y + cols[5];
+
+    left = left.min(px);
+    top = top.min(py);
+    right = right.max(px);
+    bottom = bottom.max(py);
+  }
+  KrillaRect::from_ltrb(left, top, right, bottom)
+}
+
+fn heading_level(tag: &str) -> Option<u8> {
+  let mut bytes = tag.bytes();
+
+  if !bytes.next()?.eq_ignore_ascii_case(&b'h') {
+    return None;
+  }
+  let level = bytes.next()?;
+
+  if bytes.next().is_none() && (b'1'..=b'6').contains(&level) {
+    Some(level - b'0')
+  } else {
+    None
+  }
+}
+
+fn node_text(node: &Node, out: &mut String) {
+  match &node.kind {
+    NodeKind::Text(text) => out.push_str(&text.text),
+    NodeKind::Container { children } => {
+      for child in children {
+        node_text(child, out);
+      }
+    }
+    _ => {}
+  }
+}
+
+/// Collects hyperlinks and headings from the prepared scene, in paint order.
+fn collect_interactive(tree: &PreparedTree) -> (Vec<LinkTarget>, Vec<HeadingTarget>) {
+  let mut links = Vec::new();
+  let mut headings = Vec::new();
+
+  collect_interactive_context(tree, 0, &mut links, &mut headings);
+  headings.sort_by(|a, b| a.top.total_cmp(&b.top));
+  (links, headings)
+}
+
+fn collect_interactive_context(
+  tree: &PreparedTree,
+  id: usize,
+  links: &mut Vec<LinkTarget>,
+  headings: &mut Vec<HeadingTarget>,
+) {
+  let Some(context) = tree.contexts.get(id) else {
+    return;
+  };
+
+  if let Some(paint) = context.root() {
+    collect_interactive_paint(tree, paint, links, headings);
+  }
+  for bucket in context.in_paint_order() {
+    for item in bucket {
+      match &item.kind {
+        PaintItemKind::Node(paint) => collect_interactive_paint(tree, paint, links, headings),
+        PaintItemKind::Context(child) => {
+          collect_interactive_context(tree, *child, links, headings);
+        }
+      }
+    }
+  }
+}
+
+fn collect_interactive_paint(
+  tree: &PreparedTree,
+  paint: &NodePaint,
+  links: &mut Vec<LinkTarget>,
+  headings: &mut Vec<HeadingTarget>,
+) {
+  let Some(node) = tree.root.node_at_path(&paint.path) else {
+    return;
+  };
+  let Ok(layout) = tree.results.layout(paint.node_id) else {
+    return;
+  };
+  let Some(source) = node.node.as_ref() else {
+    return;
+  };
+  let Some(rect) = transformed_rect(paint.transform, (0.0, 0.0), layout.size) else {
+    return;
+  };
+
+  match source.attribute("href").filter(|uri| allowed_link_uri(uri)) {
+    // The whole box is one link; per-run collection would double-annotate it.
+    Some(uri) => links.push(LinkTarget {
+      uri: uri.to_string(),
+      rect,
+    }),
+    None if node.should_create_inline_layout() => {
+      collect_inline_links(node, layout, paint.transform, links);
+    }
+    None => {}
+  }
+  if let Some(level) = source.tag_name().and_then(heading_level) {
+    let mut text = String::new();
+
+    node_text(source, &mut text);
+    let text = text.trim();
+
+    if !text.is_empty() {
+      headings.push(HeadingTarget {
+        level,
+        text: text.to_string(),
+        top: rect.top(),
+      });
+    }
+  }
+}
+
+/// Whether an `href` is written to the PDF: `http`, `https`, `mailto`, or
+/// `tel`. Other schemes (and scheme-less values, which have no meaning inside
+/// a standalone document) are dropped.
+fn allowed_link_uri(uri: &str) -> bool {
+  let Some((scheme, _)) = uri.split_once(':') else {
+    return false;
+  };
+
+  ["http", "https", "mailto", "tel"]
+    .iter()
+    .any(|allowed| scheme.eq_ignore_ascii_case(allowed))
+}
+
+/// Measures a box's inline layout and records one link box per glyph run that
+/// sits inside an anchor.
+fn collect_inline_links(
+  node: &RenderNode,
+  layout: Layout,
+  transform: Affine,
+  links: &mut Vec<LinkTarget>,
+) {
+  let context = &node.context;
+  let font_style = SizedFontStyle::from_style(&context.style, context);
+  let content = layout.content_box_size();
+
+  if font_style.sizing.font_size == 0.0 || content.width <= 0.0 || content.height <= 0.0 {
+    return;
+  }
+  let items = collect_inline_items(node);
+
+  if !items
+    .iter()
+    .any(|item| matches!(item, InlineItem::Text { link: Some(_), .. }))
+  {
+    return;
+  }
+  let built = create_inline_layout(InlineLayoutRequest {
+    items,
+    available_space: Size {
+      width: AvailableSpace::Definite(content.width),
+      height: AvailableSpace::Definite(content.height),
+    },
+    max_width: content.width,
+    max_height: resolve_inline_max_height(&font_style, content.height),
+    style: &font_style,
+    context,
+    mode: InlineLayoutMode::Measure,
+  });
+  let (runs, _) = built.measure_runs(layout);
+
+  for run in runs {
+    let Some(uri) = run.link.filter(|uri| allowed_link_uri(uri)) else {
+      continue;
+    };
+    let Some(rect) = transformed_rect(
+      transform,
+      (run.x, run.y),
+      Size {
+        width: run.width,
+        height: run.height,
+      },
+    ) else {
+      continue;
+    };
+
+    links.push(LinkTarget {
+      uri: uri.to_string(),
+      rect,
+    });
+  }
+}
+
+/// Adds this page's slice of every link as annotations. `window` is the page's
+/// content window in content coordinates; `offset` maps content to page
+/// coordinates.
+fn add_link_annotations(
+  page: &mut krilla::page::Page,
+  links: &[LinkTarget],
+  window: (f32, f32),
+  offset: (f32, f32),
+) {
+  for link in links {
+    let top = link.rect.top().max(window.0);
+    let bottom = link.rect.bottom().min(window.1);
+
+    if bottom <= top {
+      continue;
+    }
+    let Some(rect) = KrillaRect::from_ltrb(
+      link.rect.left() + offset.0,
+      top - window.0 + offset.1,
+      link.rect.right() + offset.0,
+      bottom - window.0 + offset.1,
+    ) else {
+      continue;
+    };
+
+    page.add_annotation(Annotation::new_link(
+      LinkAnnotation::new(
+        rect,
+        Target::Action(Action::Link(LinkAction::new(link.uri.clone()))),
+      ),
+      None,
+    ));
+  }
+}
+
+/// Nests flat headings into an outline tree: a heading adopts the following
+/// deeper headings as children, like an HTML document outline.
+fn build_outline(
+  headings: &[HeadingTarget],
+  destination: impl Fn(&HeadingTarget) -> XyzDestination,
+) -> Outline {
+  fn take(
+    headings: &[HeadingTarget],
+    index: &mut usize,
+    level: u8,
+    destination: &impl Fn(&HeadingTarget) -> XyzDestination,
+  ) -> Vec<OutlineNode> {
+    let mut nodes = Vec::new();
+
+    while let Some(heading) = headings.get(*index) {
+      if heading.level < level {
+        break;
+      }
+      *index += 1;
+      let mut node = OutlineNode::new(heading.text.clone(), destination(heading));
+
+      for child in take(headings, index, heading.level + 1, destination) {
+        node.push_child(child);
+      }
+      nodes.push(node);
+    }
+    nodes
+  }
+
+  let mut outline = Outline::new();
+  let mut index = 0;
+
+  for node in take(headings, &mut index, 1, &destination) {
+    outline.push_child(node);
+  }
+  outline
+}
+
+/// A text box's inline layout, built once per render and reused by atom
+/// collection and every page's emission.
+struct PreparedInline<'c> {
+  built: BuiltInlineLayout<'c>,
+  runs: InlineRunLayout,
+}
+
+/// Inline layouts keyed by the source [`RenderNode`]'s address.
+type InlineMap<'c> = HashMap<usize, PreparedInline<'c>>;
+
+fn inline_key(node: &RenderNode) -> usize {
+  std::ptr::from_ref(node) as usize
+}
+
+/// The text-bearing boxes of a prepared tree, with the resolved font style
+/// each inline layout borrows.
+fn collect_text_boxes<'t>(tree: &'t PreparedTree) -> Vec<TextBox<'t>> {
+  let mut boxes = Vec::new();
+
+  collect_text_boxes_context(tree, 0, &mut boxes);
+  boxes
+}
+
+struct TextBox<'t> {
+  node: &'t RenderNode,
+  layout: Layout,
+  font_style: SizedFontStyle<'t>,
+}
+
+fn collect_text_boxes_context<'t>(tree: &'t PreparedTree, id: usize, boxes: &mut Vec<TextBox<'t>>) {
+  let Some(context) = tree.contexts.get(id) else {
+    return;
+  };
+
+  if let Some(paint) = context.root() {
+    collect_text_boxes_paint(tree, paint, boxes);
+  }
+  for bucket in context.in_paint_order() {
+    for item in bucket {
+      match &item.kind {
+        PaintItemKind::Node(paint) => collect_text_boxes_paint(tree, paint, boxes),
+        PaintItemKind::Context(child) => collect_text_boxes_context(tree, *child, boxes),
+      }
+    }
+  }
+}
+
+fn collect_text_boxes_paint<'t>(
+  tree: &'t PreparedTree,
+  paint: &NodePaint,
+  boxes: &mut Vec<TextBox<'t>>,
+) {
+  let Some(node) = tree.root.node_at_path(&paint.path) else {
+    return;
+  };
+  let Ok(layout) = tree.results.layout(paint.node_id) else {
+    return;
+  };
+  let is_text = node.should_create_inline_layout()
+    || (!node.has_anonymous_text_item_child()
+      && matches!(node.node.as_ref().map(|n| &n.kind), Some(NodeKind::Text(_))));
+
+  if is_text {
+    boxes.push(TextBox {
+      node,
+      layout,
+      font_style: SizedFontStyle::from_style(&node.context.style, &node.context),
+    });
+  }
+}
+
+/// Builds every text box's inline layout once. Entries borrow the boxes'
+/// font styles, so the map lives no longer than `boxes`.
+fn build_inline_map<'c>(boxes: &'c [TextBox<'c>]) -> Result<InlineMap<'c>, PdfError> {
+  let mut map = InlineMap::new();
+
+  for text_box in boxes {
+    let items = if text_box.node.should_create_inline_layout() {
+      collect_inline_items(text_box.node)
+    } else if let Some(NodeKind::Text(text)) = text_box.node.node.as_ref().map(|n| &n.kind) {
+      single_text_items(text, &text_box.node.context)
+    } else {
+      continue;
+    };
+
+    if let Some((built, runs)) = build_inline_runs(
+      items,
+      &text_box.font_style,
+      &text_box.node.context,
+      text_box.layout,
+    )? {
+      map.insert(inline_key(text_box.node), PreparedInline { built, runs });
+    }
+  }
+  Ok(map)
+}
+
 /// Scene walker state: the render tree, the stacking-context scene, and a cache
 /// of krilla fonts keyed by the backing blob identity.
 type FontMap = HashMap<(u64, u32), Font>;
@@ -695,6 +1227,9 @@ struct Emitter<'a> {
   contexts: &'a [StackingContextNode],
   results: &'a LayoutResults,
   fonts: &'a mut FontMap,
+  /// Pre-built inline layouts for the content tree; band trees build on the
+  /// fly.
+  inline: Option<&'a InlineMap<'a>>,
   /// Vertical content window `[top, bottom)` of the page being emitted;
   /// paint wholly outside it is skipped so clipped-away content never reaches
   /// the content stream (or text extraction).
@@ -1160,13 +1695,13 @@ impl Emitter<'_> {
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
     if node.should_create_inline_layout() {
-      return self.emit_inline_content(node, layout, x, y, surface);
+      return self.emit_node_text(node, layout, x, y, surface);
     }
     if node.has_anonymous_text_item_child() {
       return Ok(());
     }
     match node.node.as_ref().map(|n| &n.kind) {
-      Some(NodeKind::Text(text)) => self.emit_text(text, &node.context, layout, x, y, surface),
+      Some(NodeKind::Text(_)) => self.emit_node_text(node, layout, x, y, surface),
       #[cfg(feature = "images")]
       Some(NodeKind::Image(image)) => {
         self.emit_image(image, &node.context, layout, x, y, surface);
@@ -1247,30 +1782,9 @@ impl Emitter<'_> {
     }
   }
 
-  fn emit_text(
-    &mut self,
-    text: &TextData,
-    context: &RenderContext,
-    layout: Layout,
-    x: f32,
-    y: f32,
-    surface: &mut Surface,
-  ) -> Result<(), PdfError> {
-    let font_style = SizedFontStyle::from_style(&context.style, context);
-    let Some((built, runs)) = build_inline_runs(
-      single_text_items(text, context),
-      &font_style,
-      context,
-      layout,
-    )?
-    else {
-      return Ok(());
-    };
-
-    self.draw_runs(&runs, &built, layout, x, y, surface)
-  }
-
-  fn emit_inline_content(
+  /// Draws a text-bearing box's runs, from the pre-built inline map when the
+  /// node is in it (content tree) or built on the fly (band trees).
+  fn emit_node_text(
     &mut self,
     node: &RenderNode,
     layout: Layout,
@@ -1278,11 +1792,15 @@ impl Emitter<'_> {
     y: f32,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
+    if let Some(prepared) = self.inline.and_then(|map| map.get(&inline_key(node))) {
+      return self.draw_runs(&prepared.runs, &prepared.built, layout, x, y, surface);
+    }
     let context = &node.context;
+    let Some(items) = node_inline_items(node) else {
+      return Ok(());
+    };
     let font_style = SizedFontStyle::from_style(&context.style, context);
-    let Some((built, runs)) =
-      build_inline_runs(collect_inline_items(node), &font_style, context, layout)?
-    else {
+    let Some((built, runs)) = build_inline_runs(items, &font_style, context, layout)? else {
       return Ok(());
     };
 
@@ -1446,17 +1964,11 @@ impl Emitter<'_> {
     }
 
     if node.should_create_inline_layout() {
-      self.collect_text_atoms(collect_inline_items(node), &node.context, layout, y, atoms)?;
+      self.collect_text_atoms(node, layout, y, atoms)?;
     } else if !node.has_anonymous_text_item_child() {
       match node.node.as_ref().map(|n| &n.kind) {
-        Some(NodeKind::Text(text)) => {
-          self.collect_text_atoms(
-            single_text_items(text, &node.context),
-            &node.context,
-            layout,
-            y,
-            atoms,
-          )?;
+        Some(NodeKind::Text(_)) => {
+          self.collect_text_atoms(node, layout, y, atoms)?;
         }
         Some(NodeKind::Image(_)) => {
           atoms.push((y, y + layout.size.height));
@@ -1470,31 +1982,55 @@ impl Emitter<'_> {
   /// One atom per text line: the union of each run's ascent-to-descent band.
   fn collect_text_atoms(
     &mut self,
-    items: Vec<InlineItem<'_>>,
-    context: &RenderContext,
+    node: &RenderNode,
     layout: Layout,
     y: f32,
     atoms: &mut Vec<Atom>,
   ) -> Result<(), PdfError> {
+    if let Some(prepared) = self.inline.and_then(|map| map.get(&inline_key(node))) {
+      text_line_atoms(&prepared.runs, layout, y, atoms);
+      return Ok(());
+    }
+    let context = &node.context;
+    let Some(items) = node_inline_items(node) else {
+      return Ok(());
+    };
     let font_style = SizedFontStyle::from_style(&context.style, context);
     let Some((_, runs)) = build_inline_runs(items, &font_style, context, layout)? else {
       return Ok(());
     };
 
-    for run in &runs.runs {
-      let shaped = &run.glyph_run;
-      let Some(glyph) = shaped.glyphs.first() else {
-        continue;
-      };
-      let offset = run.glyph_offset(layout);
-      let baseline = y + offset.y + glyph.y;
-
-      atoms.push((
-        baseline - shaped.metrics.ascent,
-        baseline + shaped.metrics.descent,
-      ));
-    }
+    text_line_atoms(&runs, layout, y, atoms);
     Ok(())
+  }
+}
+
+/// The inline items an emitted box lays out: the flattened subtree for an
+/// inline formatting context, the lone run for a text node, nothing otherwise.
+fn node_inline_items(node: &RenderNode) -> Option<Vec<InlineItem<'_>>> {
+  if node.should_create_inline_layout() {
+    return Some(collect_inline_items(node));
+  }
+  if let Some(NodeKind::Text(text)) = node.node.as_ref().map(|n| &n.kind) {
+    return Some(single_text_items(text, &node.context));
+  }
+  None
+}
+
+/// One atom per text line: each run's ascent-to-descent band.
+fn text_line_atoms(runs: &InlineRunLayout, layout: Layout, y: f32, atoms: &mut Vec<Atom>) {
+  for run in &runs.runs {
+    let shaped = &run.glyph_run;
+    let Some(glyph) = shaped.glyphs.first() else {
+      continue;
+    };
+    let offset = run.glyph_offset(layout);
+    let baseline = y + offset.y + glyph.y;
+
+    atoms.push((
+      baseline - shaped.metrics.ascent,
+      baseline + shaped.metrics.descent,
+    ));
   }
 }
 
@@ -1503,6 +2039,7 @@ fn single_text_items<'c>(text: &'c TextData, context: &'c RenderContext) -> Vec<
   vec![InlineItem::Text {
     text: text.text.as_str().into(),
     context,
+    link: None,
   }]
 }
 

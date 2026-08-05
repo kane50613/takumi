@@ -1,0 +1,13 @@
+{
+  "defaultOpen": true,
+  "icon": "FileText",
+  "pages": [
+    "index",
+    "pagination",
+    "headers-and-footers",
+    "links-and-outline",
+    "single-page",
+    "fonts-and-images",
+    "comparison"
+  ]
+}

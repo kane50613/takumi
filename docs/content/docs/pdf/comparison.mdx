@@ -1,0 +1,26 @@
+---
+title: Comparison
+description: takumi-pdf against Puppeteer and react-pdf, measured.
+---
+
+Three ways to render a PDF from JavaScript, benchmarked on a two-page, 80-line invoice with a page-number footer. Each harness writes the invoice in its engine's native template language with the same geometry (react-pdf's pt values mirror the px used by the other two), so this is an indicative end-to-end comparison, not a pixel-identical one. Warm figures are the median of 20 renders; the [bench source](https://github.com/kane50613/takumi/tree/master/example/pdf-bench) reproduces the table with `bun bench`.
+
+Environment: Apple M1 Pro, macOS 15.7, Bun 1.3.14, Chrome 150.
+
+|                               | takumi-pdf 0.1.2                            | @react-pdf/renderer 4.5.1                             | Puppeteer + Chrome              |
+| :---------------------------- | :------------------------------------------ | :---------------------------------------------------- | :------------------------------ |
+| Cold start to first PDF       | 258 ms                                      | 389 ms                                                | 1.6–6.8 s                       |
+| Warm render (median)          | 58 ms                                       | 132 ms                                                | 206 ms                          |
+| Output size                   | 11 KB                                       | 5 KB                                                  | 102 KB                          |
+| Deploy needs                  | 1.4 MB gzip wasm                            | pure JS                                               | Chrome install (hundreds of MB) |
+| Template language             | JSX, HTML, node trees with CSS and Tailwind | its own primitives (`<View>`, `<Text>`, `StyleSheet`) | HTML with full CSS              |
+| Selectable text, subset fonts | yes                                         | yes (standard fonts not embedded)                     | yes                             |
+| Runs on edge runtimes         | yes (Cloudflare Workers)                    | no (Node)                                             | no                              |
+
+Reading the numbers honestly:
+
+- Chrome's cold start covers launching a browser process; it varies with machine state, and its memory spreads across several processes that a single-process measurement misses. Once warm, Chrome is a capable renderer with the most complete CSS support of the three.
+- react-pdf's smaller output comes from the standard 14 PDF fonts, which viewers substitute rather than embed. Its cost is the template: documents are written in its own component set, so existing HTML/JSX and Tailwind markup cannot be reused.
+- takumi-pdf reuses OG-image components unchanged, but its CSS coverage is narrower than Chromium's: no `box-shadow`, `filter`, `clip-path`, or masks in PDF output yet.
+
+Rule of thumb: pixel-perfect reproduction of an existing complex web page favors Puppeteer; documents written from scratch for PDF work in any of the three; reusing Takumi image components, deploying to edge runtimes, or cutting per-document latency favors takumi-pdf.

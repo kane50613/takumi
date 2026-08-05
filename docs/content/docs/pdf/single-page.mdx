@@ -1,0 +1,22 @@
+---
+title: Single-page viewport
+description: Fixed one-page PDFs for certificates, cards, and receipts.
+---
+
+`viewport` renders one fixed page instead of paged output, behaving like an image render: percentage heights resolve against the viewport and overflow is clipped.
+
+```tsx
+const pdf = await render(<div style={{ width: "100%", height: "100%" }}>Certificate</div>, {
+  viewport: { width: 1123, height: 794 }, // A4 landscape in px
+});
+```
+
+## Content-sized pages
+
+Omit `height` to size the single page to its laid-out content, like a thermal receipt. Percentage heights do not resolve in this mode:
+
+```tsx
+const pdf = await render(receipt, { viewport: { width: 302 } }); // 80mm at 96 dpi
+```
+
+`viewport` cannot be combined with `size`, `landscape`, `margin`, `header`, or `footer`; those options exist only for paged output. Hyperlinks, `outline`, and `metadata` work in both modes.

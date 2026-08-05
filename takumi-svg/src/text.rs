@@ -81,6 +81,7 @@ pub(crate) fn emit_text(
     items: vec![InlineItem::Text {
       text: text.text.as_str().into(),
       context,
+      link: None,
     }],
     available_space: Size {
       width: AvailableSpace::Definite(content.width),

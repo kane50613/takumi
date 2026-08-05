@@ -20,6 +20,7 @@ pub(crate) fn measure_text_node(
   let inline_content: InlineItem<'_> = InlineItem::Text {
     text: text.text.as_str().into(),
     context,
+    link: None,
   };
 
   let (max_width, max_height) =

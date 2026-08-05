@@ -138,12 +138,20 @@ impl BuiltInlineLayout<'_> {
               height *= setup.state.scale;
             }
 
+            let link = glyph_run.style().brush.source_span_id.and_then(|span_id| {
+              match self.spans.get(span_id as usize) {
+                Some(ProcessedInlineSpan::Text { link, .. }) => link.as_deref(),
+                _ => None,
+              }
+            });
+
             runs.push(MeasuredInlineRun {
               text,
               x,
               y,
               width,
               height,
+              link,
             });
           }
           PositionedLayoutItem::InlineBox(positioned_box) => {
@@ -246,6 +254,8 @@ pub enum ProcessedInlineSpan<'c> {
     text: String,
     /// Resolved font style.
     style: SizedFontStyle<'c>,
+    /// URI of the nearest enclosing anchor's `href`, if any.
+    link: Option<Arc<str>>,
   },
   /// An inline box.
   Box(InlineBoxItem<'c>),
@@ -264,30 +274,41 @@ pub enum InlineItem<'c> {
     text: Cow<'c, str>,
     /// Render context for the text.
     context: &'c RenderContext,
+    /// URI of the nearest enclosing anchor's `href`, if any.
+    link: Option<Arc<str>>,
   },
 }
 
 /// Flatten a render node subtree into its inline items.
 pub fn collect_inline_items<'n>(root: &'n RenderNode) -> Vec<InlineItem<'n>> {
   let mut items = Vec::new();
-  collect_inline_items_impl(root, 0, &mut items);
+  collect_inline_items_impl(root, 0, None, &mut items);
   items
 }
 
 fn collect_inline_items_impl<'n>(
   node: &'n RenderNode,
   depth: usize,
+  link: Option<&Arc<str>>,
   items: &mut Vec<InlineItem<'n>>,
 ) {
   if depth > 0 && node.participates_as_inline_box() {
     items.push(InlineItem::RenderNode { render_node: node });
     return;
   }
+  let anchor = node
+    .node
+    .as_ref()
+    .and_then(|source| source.attribute("href"))
+    .filter(|href| !href.is_empty())
+    .map(Arc::<str>::from);
+  let link = anchor.as_ref().or(link);
 
   if let Some(text) = node.anonymous_text_content.as_deref() {
     items.push(InlineItem::Text {
       text: Cow::Borrowed(text),
       context: &node.context,
+      link: link.cloned(),
     });
   }
 
@@ -297,13 +318,14 @@ fn collect_inline_items_impl<'n>(
       InlineContentKind::Text(text) => items.push(InlineItem::Text {
         text,
         context: &node.context,
+        link: link.cloned(),
       }),
     }
   }
 
   if let Some(children) = &node.children {
     for child in children {
-      collect_inline_items_impl(child, depth + 1, items);
+      collect_inline_items_impl(child, depth + 1, link, items);
     }
   }
 }
@@ -1250,7 +1272,11 @@ fn build_inline_layout_tree<'c>(
 
   for item in items {
     match item {
-      InlineItem::Text { text, context } => {
+      InlineItem::Text {
+        text,
+        context,
+        link,
+      } => {
         let span_style = SizedFontStyle::from_style(&context.style, context);
         let transformed = apply_text_transform(text, context.style.text_transform);
         let collapsed = apply_white_space_collapse(
@@ -1270,6 +1296,7 @@ fn build_inline_layout_tree<'c>(
           byte_range: start..end,
           text: collapsed.into_owned(),
           style: span_style,
+          link: link.clone(),
         });
       }
       InlineItem::RenderNode { render_node } => {
@@ -2381,6 +2408,8 @@ pub struct MeasuredInlineRun<'a> {
   pub width: f32,
   /// Run height.
   pub height: f32,
+  /// URI of the nearest enclosing anchor's `href`, if any.
+  pub link: Option<&'a str>,
 }
 
 /// A measured inline box's local bounding box, with text-fit line scaling
