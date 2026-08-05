@@ -5,7 +5,7 @@ description: Clickable hyperlinks, bookmarks, and document properties.
 
 ## Hyperlinks
 
-Anchors with an `href` become clickable link annotations, on every page their box touches:
+Anchors with an `href` become clickable link annotations. They appear on every page that their box touches:
 
 ```tsx twoslash
 import { render } from "takumi-pdf";
@@ -19,11 +19,11 @@ const pdf = await render(
 );
 ```
 
-Inline anchors annotate each text run, so a link that wraps across lines stays clickable on both. Block-level anchors annotate their whole box.
+Inline anchors annotate each text run. A link that wraps across lines stays clickable on both lines. Block-level anchors annotate their entire box.
 
 ## Outline
 
-Set `outline: true` to build PDF bookmarks from `h1`–`h6` headings. Deeper headings nest under the previous shallower one, like an HTML document outline:
+Set `outline: true` to build PDF bookmarks from `h1`–`h6` headings. Deeper headings nest under the previous shallower heading. This matches an HTML document outline:
 
 ```tsx twoslash
 import type { ReactNode } from "react";
@@ -37,7 +37,7 @@ Clicking a bookmark jumps to the page and position of its heading.
 
 ## Document metadata
 
-`metadata` fills the PDF's document properties; `lang` doubles as the metadata language:
+`metadata` fills the PDF document properties. `lang` also sets the metadata language:
 
 ```tsx twoslash
 import type { ReactNode } from "react";
@@ -56,4 +56,4 @@ const pdf = await render(report, {
 });
 ```
 
-All fields are optional. Omitting `metadata` writes no document properties, which keeps output byte-identical across runs for golden testing.
+All fields are optional. Omitting `metadata` writes no document properties. This keeps output byte-identical across runs for golden testing.

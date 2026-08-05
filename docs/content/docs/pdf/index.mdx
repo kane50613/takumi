@@ -4,7 +4,7 @@ description: Render JSX to paged, selectable-text PDF with takumi-pdf.
 index: true
 ---
 
-`takumi-pdf` renders the same JSX, Tailwind classes, and node trees as image output, but writes a paged vector PDF: selectable and searchable text, embedded subset fonts, page breaks, and repeating headers and footers. It ships as a WebAssembly module and runs on Node.js, Bun, and Cloudflare Workers without Chromium.
+`takumi-pdf` renders the same JSX, Tailwind classes, and node trees as image output. It writes a paged vector PDF instead: selectable text, embedded subset fonts, page breaks, and repeating headers and footers. It ships as a WebAssembly module. It runs on Node.js, Bun, and Cloudflare Workers without Chromium.
 
 ```npm
 npm i takumi-pdf
@@ -35,7 +35,7 @@ const pdf = await render(<Invoice data={data} />, {
 await writeFile("invoice.pdf", pdf);
 ```
 
-`render()` accepts JSX, HTML strings converted with `@takumi-rs/helpers`, or JSON node trees, and returns `Uint8Array` PDF bytes. Content lays out at the page's content width and flows onto as many pages as it needs.
+`render()` accepts JSX, HTML strings converted with `@takumi-rs/helpers`, or JSON node trees. It returns `Uint8Array` PDF bytes. Content lays out at the page's content width. It flows onto as many pages as needed.
 
 ## Page setup
 
@@ -57,11 +57,11 @@ const pdf = await render(report, {
 | `landscape` | `boolean`                                      | `false` | Swaps page width and height, including explicit sizes.       |
 | `margin`    | `number` or `{ top?, right?, bottom?, left? }` | `48`    | A number applies to all sides. Missing object sides are `0`. |
 
-`@page` CSS rules are not supported; these options are the page geometry.
+`@page` CSS rules are not supported. Use these options to set the page geometry.
 
 ## Reuse a renderer
 
-`render()` keeps one shared renderer alive. When an application manages several font sets, construct `PdfRenderer` directly:
+`render()` keeps one shared renderer alive. Construct `PdfRenderer` directly for applications that manage several font sets:
 
 ```tsx twoslash
 import type { ReactNode } from "react";
@@ -75,4 +75,4 @@ await renderer.registerFont("https://example.com/Inter-Regular.woff2");
 const pdf = await renderer.render(doc);
 ```
 
-Registered fonts deduplicate across calls, so rendering many documents pays the font cost once.
+Registered fonts deduplicate across calls. Rendering many documents pays the font cost once.

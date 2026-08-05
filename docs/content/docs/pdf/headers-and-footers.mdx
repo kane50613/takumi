@@ -3,7 +3,7 @@ title: Headers & footers
 description: Repeat bands on every page with page counters.
 ---
 
-`header` and `footer` take any node input and repeat on every page. Their measured height is carved out of the content window, so band and content never overlap.
+`header` and `footer` accept any node input. They repeat on every page. Their measured height is removed from the content window. Bands never overlap with content.
 
 ```tsx twoslash
 import type { ReactNode } from "react";
@@ -21,9 +21,9 @@ const pdf = await render(report, {
 
 ## Page counters
 
-Elements with `pageNumber` or `totalPages` in their class list receive the counter as text, the same contract as Chromium's print header and footer templates.
+Elements with `pageNumber` or `totalPages` receive counter text. This matches Chromium's print header and footer template contract.
 
-Add a CSS `@counter-style` name to the class list to format the number:
+Add a CSS `@counter-style` name to the class list. It formats the number:
 
 ```tsx twoslash
 import type { ReactNode } from "react";
@@ -49,4 +49,4 @@ const pdf = await render(report, {
 | `cjk-decimal`                               | `一二`        |
 | `trad-chinese-informal` / `cjk-ideographic` | `十二`        |
 
-Band height is measured once with three-digit counters, so a page count reaching 100 does not shift the layout between pages.
+Band height is measured once with three-digit counters. Reaching 100 pages does not shift the layout between pages.
