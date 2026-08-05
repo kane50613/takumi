@@ -12,7 +12,11 @@ npm i takumi-pdf
 
 ## Render a document
 
-```tsx
+```tsx twoslash
+import type { ReactNode } from "react";
+declare const data: { total: number };
+declare function Invoice(props: { data: typeof data }): ReactNode;
+// ---cut---
 import { render } from "takumi-pdf";
 import { googleFonts } from "@takumi-rs/helpers";
 import { writeFile } from "node:fs/promises";
@@ -35,7 +39,11 @@ await writeFile("invoice.pdf", pdf);
 
 ## Page setup
 
-```tsx
+```tsx twoslash
+import type { ReactNode } from "react";
+import { render } from "takumi-pdf";
+declare const report: ReactNode;
+// ---cut---
 const pdf = await render(report, {
   size: "letter", // "a4", "letter", or { width, height } in CSS px at 96 dpi
   landscape: true,
@@ -55,7 +63,10 @@ const pdf = await render(report, {
 
 `render()` keeps one shared renderer alive. When an application manages several font sets, construct `PdfRenderer` directly:
 
-```tsx
+```tsx twoslash
+import type { ReactNode } from "react";
+declare const doc: ReactNode;
+// ---cut---
 import { PdfRenderer } from "takumi-pdf";
 
 const renderer = new PdfRenderer();

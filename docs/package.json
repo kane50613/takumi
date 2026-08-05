@@ -42,6 +42,7 @@
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "@takumi-rs/core": "workspace:*",
+    "@takumi-rs/helpers": "workspace:*",
     "@takumi-rs/wasm": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
@@ -50,6 +51,7 @@
     "csstype": "catalog:",
     "portless": "^0.15.4",
     "prettier": "^3.9.6",
+    "takumi-pdf": "workspace:*",
     "vite": "catalog:"
   }
 }

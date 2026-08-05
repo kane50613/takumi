@@ -5,7 +5,11 @@ description: Repeat bands on every page with page counters.
 
 `header` and `footer` take any node input and repeat on every page. Their measured height is carved out of the content window, so band and content never overlap.
 
-```tsx
+```tsx twoslash
+import type { ReactNode } from "react";
+import { render } from "takumi-pdf";
+declare const report: ReactNode;
+// ---cut---
 const pdf = await render(report, {
   footer: (
     <div tw="flex w-full justify-center text-[10px] text-gray-500">
@@ -21,13 +25,20 @@ Elements with `pageNumber` or `totalPages` in their class list receive the count
 
 Add a CSS `@counter-style` name to the class list to format the number:
 
-```tsx
-footer: (
-  <div style={{ fontSize: 12 }}>
-    第 <span className="pageNumber trad-chinese-informal" /> 頁,共{" "}
-    <span className="totalPages trad-chinese-informal" /> 頁
-  </div>
-),
+```tsx twoslash
+import type { ReactNode } from "react";
+import { render } from "takumi-pdf";
+declare const report: ReactNode;
+const pdf = await render(report, {
+  // ---cut---
+  footer: (
+    <div style={{ fontSize: 12 }}>
+      第 <span className="pageNumber trad-chinese-informal" /> 頁,共{" "}
+      <span className="totalPages trad-chinese-informal" /> 頁
+    </div>
+  ),
+  // ---cut-after---
+});
 ```
 
 | Counter style                               | Example       |

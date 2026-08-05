@@ -7,10 +7,16 @@ description: Clickable hyperlinks, bookmarks, and document properties.
 
 Anchors with an `href` become clickable link annotations, on every page their box touches:
 
-```tsx
-<p>
-  Pay online at <a href="https://example.com/pay/1042">example.com/pay/1042</a>.
-</p>
+```tsx twoslash
+import { render } from "takumi-pdf";
+
+const pdf = await render(
+  // ---cut---
+  <p>
+    Pay online at <a href="https://example.com/pay/1042">example.com/pay/1042</a>.
+  </p>,
+  // ---cut-after---
+);
 ```
 
 Inline anchors annotate each text run, so a link that wraps across lines stays clickable on both. Block-level anchors annotate their whole box.
@@ -19,7 +25,11 @@ Inline anchors annotate each text run, so a link that wraps across lines stays c
 
 Set `outline: true` to build PDF bookmarks from `h1`–`h6` headings. Deeper headings nest under the previous shallower one, like an HTML document outline:
 
-```tsx
+```tsx twoslash
+import type { ReactNode } from "react";
+import { render } from "takumi-pdf";
+declare const report: ReactNode;
+// ---cut---
 const pdf = await render(report, { outline: true });
 ```
 
@@ -29,7 +39,11 @@ Clicking a bookmark jumps to the page and position of its heading.
 
 `metadata` fills the PDF's document properties; `lang` doubles as the metadata language:
 
-```tsx
+```tsx twoslash
+import type { ReactNode } from "react";
+import { render } from "takumi-pdf";
+declare const report: ReactNode;
+// ---cut---
 const pdf = await render(report, {
   lang: "en",
   metadata: {
