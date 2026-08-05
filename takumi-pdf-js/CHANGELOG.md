@@ -1,3 +1,13 @@
+## takumi-pdf@0.1.5
+
+### Write page geometry in PDF points
+
+Pages were sized in CSS px written as pt, so an A4 document came out 33% oversized when printed. Page size, annotations, and outline destinations now convert at 0.75 pt/px. Layout still runs in px.
+
+### Fill the page content box like a browser body
+
+A fit-content root resolved child percentage widths inconsistently across layout passes. Long documents could overlap trailing content and drop pages entirely.
+
 ## takumi-pdf@0.1.1
 
 ### Auto-height viewport
