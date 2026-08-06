@@ -1,3 +1,21 @@
+## takumi-core@0.16.0
+
+### Clip elements with `clip-path`
+
+`inset()`, `ellipse()`, `polygon()` and `path()` now clip an element and its decorations, as a real PDF clipping path rather than a rasterized mask.
+
+`clip_shape_commands` in takumi-core resolves a basic shape to path commands, which is where the raster backend's copy of that geometry now lives too.
+
+### Link to anchors inside the document
+
+`<a href="#section">` now resolves to the element with that `id` and lands on the page holding it, so a table of contents works inside the PDF. A fragment matching no element is dropped rather than written as a link that goes nowhere.
+
+`Node::id` is public, alongside the existing `href`, `alt` and `tag_name` accessors.
+
+### Bound allocations and loops driven by untrusted input
+
+Three denial-of-service paths are closed. SVG rasterization and canvas allocation now cap at 16M pixels and return an error past it, instead of aborting on a huge allocation. A `background-size` past `i32::MAX` no longer wraps a repeat step negative and loops forever.
+
 ## takumi-core@0.15.0
 
 ### Vendored resvg updated to 0.48.1
