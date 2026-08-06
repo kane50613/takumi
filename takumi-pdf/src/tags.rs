@@ -14,7 +14,7 @@ use takumi_core::{
   style::{Display, FlexDirection},
 };
 
-use crate::krilla::tagging::{Identifier, Tag, TagGroup, TagKind, TagTree};
+use crate::krilla::tagging::{Identifier, ListNumbering, Tag, TagGroup, TagKind, TagTree};
 
 /// Marked-content identifiers recorded during emission, keyed by the source
 /// node's path from the root.
@@ -55,23 +55,35 @@ pub(crate) fn build_tag_tree(
     &mut top,
     &mut pending,
     false,
+    Wrap::Paragraph,
   );
-  flush_paragraph(&mut pending, &mut top);
+  flush_paragraph(&mut pending, &mut top, Wrap::Paragraph);
   for group in top {
     tree.push(group);
   }
   tree
 }
 
-/// Drains a run of bare-content identifiers into a single `P`. Bare content
-/// under an untagged ancestor still needs a structure parent, and one
-/// paragraph per block container mirrors HTML text flow without emitting a
-/// structure element per text node.
-fn flush_paragraph(pending: &mut Vec<Identifier>, parent: &mut Vec<TagGroup>) {
+/// What a run of bare content wraps into: `P` in normal flow, `LBody` inside
+/// a list item (the only child kinds `LI` allows).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Wrap {
+  Paragraph,
+  ListBody,
+}
+
+/// Drains a run of bare-content identifiers into a single wrapper element.
+/// Bare content under an untagged ancestor still needs a structure parent,
+/// and one wrapper per block container mirrors HTML text flow without
+/// emitting a structure element per text node.
+fn flush_paragraph(pending: &mut Vec<Identifier>, parent: &mut Vec<TagGroup>, wrap: Wrap) {
   if pending.is_empty() {
     return;
   }
-  let mut group = TagGroup::new(Tag::P);
+  let mut group = TagGroup::new(match wrap {
+    Wrap::Paragraph => TagKind::from(Tag::P),
+    Wrap::ListBody => Tag::LBody.into(),
+  });
 
   for identifier in pending.drain(..) {
     group.push(identifier);
@@ -86,22 +98,40 @@ fn build_node(
   parent: &mut Vec<TagGroup>,
   pending: &mut Vec<Identifier>,
   in_row: bool,
+  wrap: Wrap,
 ) {
   let identifiers = collector.take(path);
 
   match role(node) {
     Some(kind) => {
-      flush_paragraph(pending, parent);
+      flush_paragraph(pending, parent, wrap);
+      let child_wrap = if matches!(kind, TagKind::LI(_)) {
+        Wrap::ListBody
+      } else {
+        Wrap::Paragraph
+      };
       let mut group = TagGroup::new(kind);
-
-      for identifier in identifiers {
-        group.push(identifier);
-      }
       let mut children = Vec::new();
       let mut child_pending = Vec::new();
 
-      build_children(node, path, collector, &mut children, &mut child_pending);
-      flush_paragraph(&mut child_pending, &mut children);
+      // `LI` only admits `Lbl`/`LBody` children, so its own content joins the
+      // body run instead of hanging off the item directly.
+      if child_wrap == Wrap::ListBody {
+        child_pending.extend(identifiers);
+      } else {
+        for identifier in identifiers {
+          group.push(identifier);
+        }
+      }
+      build_children(
+        node,
+        path,
+        collector,
+        &mut children,
+        &mut child_pending,
+        child_wrap,
+      );
+      flush_paragraph(&mut child_pending, &mut children, child_wrap);
       for child in children {
         group.push(child);
       }
@@ -113,12 +143,12 @@ fn build_node(
       let block = is_block(node) && !in_row;
 
       if block {
-        flush_paragraph(pending, parent);
+        flush_paragraph(pending, parent, wrap);
       }
       pending.extend(identifiers);
-      build_children(node, path, collector, parent, pending);
+      build_children(node, path, collector, parent, pending, wrap);
       if block {
-        flush_paragraph(pending, parent);
+        flush_paragraph(pending, parent, wrap);
       }
     }
   }
@@ -130,6 +160,7 @@ fn build_children(
   collector: &mut TagCollector,
   parent: &mut Vec<TagGroup>,
   pending: &mut Vec<Identifier>,
+  wrap: Wrap,
 ) {
   let Some(children) = node.children.as_ref() else {
     return;
@@ -138,7 +169,7 @@ fn build_children(
 
   for (index, child) in children.iter().enumerate() {
     path.push(index);
-    build_node(child, path, collector, parent, pending, in_row);
+    build_node(child, path, collector, parent, pending, in_row, wrap);
     path.pop();
   }
 }
@@ -180,6 +211,13 @@ fn role(node: &RenderNode) -> Option<TagKind> {
     "blockquote" => Some(Tag::BlockQuote.into()),
     "section" => Some(Tag::Section.into()),
     "article" => Some(Tag::Article.into()),
+    "ul" => Some(Tag::L(ListNumbering::Disc).into()),
+    "ol" => Some(Tag::L(ListNumbering::Decimal).into()),
+    "li" => Some(Tag::LI.into()),
+    "strong" | "b" => Some(Tag::Strong.into()),
+    "em" | "i" => Some(Tag::Em.into()),
+    "code" => Some(Tag::Code.into()),
+    "figcaption" => Some(Tag::Caption.into()),
     _ => None,
   }
 }

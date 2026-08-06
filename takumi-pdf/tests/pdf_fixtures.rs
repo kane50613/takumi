@@ -759,6 +759,24 @@ fn tagged_standards() {
     "missing structure tree"
   );
 
+  let list_doc = r#"<main style="display:flex;flex-direction:column;font-size:14px;color:#141414;">
+    <h1>Checklist</h1>
+    <p>Steps with <strong>bold</strong> and <code>code</code>:</p>
+    <ul><li>First item</li><li>Second item</li></ul>
+    <ol><li>Ordered one</li><li>Ordered two</li></ol>
+  </main>"#;
+
+  run_pdf_fixture("list-tagged-ua1", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(list_doc, FromHtmlOptions::default()).expect("parse list doc"))
+      .page(PageOptions::A4)
+      .standard(PdfStandard::Ua1)
+      .lang(Some(lang()))
+      .metadata(metadata())
+      .fonts(fonts)
+      .build()
+  });
+
   run_pdf_fixture("report-tagged-a2a", |fonts| {
     PdfOptions::builder()
       .node(html_fixture("report.html"))
