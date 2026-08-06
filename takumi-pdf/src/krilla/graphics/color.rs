@@ -99,6 +99,15 @@ pub enum SpecialColor {
   Separation(separation::Color),
 }
 
+/// An eight-bit colour component as a PDF number.
+///
+/// Four decimals resolve far finer than the 1/255 the component came from, and
+/// shortest round-trip would otherwise spell out `0.047058824` for every one of
+/// them.
+fn component(value: u8) -> f32 {
+  (f32::from(value) / 255.0 * 10_000.0).round() / 10_000.0
+}
+
 impl Color {
   pub(crate) fn to_pdf_color(&self) -> Vec<f32> {
     match self {
@@ -193,7 +202,7 @@ pub mod luma {
     }
 
     pub(crate) fn to_pdf_color(self) -> f32 {
-      self.0 as f32 / 255.0
+      crate::krilla::graphics::color::component(self.0)
     }
   }
 
@@ -254,10 +263,10 @@ pub mod cmyk {
 
     pub(crate) fn to_pdf_color(self) -> [f32; 4] {
       [
-        self.0 as f32 / 255.0,
-        self.1 as f32 / 255.0,
-        self.2 as f32 / 255.0,
-        self.3 as f32 / 255.0,
+        crate::krilla::graphics::color::component(self.0),
+        crate::krilla::graphics::color::component(self.1),
+        crate::krilla::graphics::color::component(self.2),
+        crate::krilla::graphics::color::component(self.3),
       ]
     }
   }
@@ -343,9 +352,9 @@ pub mod rgb {
 
     pub(crate) fn to_pdf_color(self) -> [f32; 3] {
       [
-        self.0 as f32 / 255.0,
-        self.1 as f32 / 255.0,
-        self.2 as f32 / 255.0,
+        crate::krilla::graphics::color::component(self.0),
+        crate::krilla::graphics::color::component(self.1),
+        crate::krilla::graphics::color::component(self.2),
       ]
     }
 
@@ -393,7 +402,7 @@ pub mod separation {
     }
 
     pub(crate) fn to_pdf_color(&self) -> f32 {
-      self.tint as f32 / 255.0
+      crate::krilla::graphics::color::component(self.tint)
     }
 
     pub(crate) fn color_space(&self) -> SeparationSpace {
