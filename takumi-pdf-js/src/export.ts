@@ -133,23 +133,36 @@ export type Attachment = {
   modificationDate?: string;
 };
 
-/** Levels based on PDF 1.7, where PDF/UA-1 tagging can combine. */
-type Pdfa17 = "2b" | "2u" | "3b" | "3u";
+/** An attachment under the PDF/A-3 levels, which require the descriptive fields. */
+export type ArchivalAttachment = Attachment & {
+  mimeType: string;
+  description: string;
+};
 
 /**
  * Standards conformance. Invalid combinations are type errors: the `a` levels
- * imply a structure tree so `tagged: false` is rejected, and PDF/A-4 is
- * PDF 2.0 while PDF/UA-1 is PDF 1.7-only, so they cannot combine.
+ * imply a structure tree so `tagged: false` is rejected, PDF/A-4 is PDF 2.0
+ * while PDF/UA-1 is PDF 1.7-only so they cannot combine, and only the
+ * PDF/A-3 levels (or plain PDF) accept attachments.
  */
 type ConformanceOptions =
   | {
-      /** PDF/A conformance level. Validation failures reject the render. */
-      pdfa?: Pdfa17;
+      pdfa?: never;
       /** Structure tree: off, on (default), or validated against PDF/UA-1. */
       tagged?: boolean | "ua1";
+      /** Files attached to the document. */
+      attachments?: Attachment[];
     }
-  | { pdfa: "2a" | "3a"; tagged?: true | "ua1" }
-  | { pdfa: "4"; tagged?: boolean };
+  | {
+      /** PDF/A conformance level. Validation failures reject the render. */
+      pdfa: "2b" | "2u";
+      tagged?: boolean | "ua1";
+      attachments?: never;
+    }
+  | { pdfa: "2a"; tagged?: true | "ua1"; attachments?: never }
+  | { pdfa: "3b" | "3u"; tagged?: boolean | "ua1"; attachments?: ArchivalAttachment[] }
+  | { pdfa: "3a"; tagged?: true | "ua1"; attachments?: ArchivalAttachment[] }
+  | { pdfa: "4"; tagged?: boolean; attachments?: never };
 
 export type RenderOptions = (PagedOptions | ViewportOptions) &
   ConformanceOptions & {
@@ -170,8 +183,6 @@ export type RenderOptions = (PagedOptions | ViewportOptions) &
     metadata?: PdfMetadata;
     /** Generates a PDF outline (bookmarks) from `h1`–`h6` headings. */
     outline?: boolean;
-    /** Files attached to the document. */
-    attachments?: Attachment[];
   };
 
 function isNode(value: NodeInput): value is Node {

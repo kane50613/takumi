@@ -61,6 +61,14 @@ const pdf = await render(invoice, {
 });
 ```
 
-The PDF/A-3 levels require each attachment to carry a `mimeType`, a `description`, and a modification date. `modificationDate` falls back to `metadata.creationDate`. A missing requirement fails the render with the violated rule.
+The PDF/A-3 levels require three fields on each attachment:
+
+- `mimeType`
+- `description`
+- a modification date: `modificationDate`, or the `metadata.creationDate` fallback
+
+A missing field fails the render with the violated rule.
+
+Invalid combinations are **TypeScript type errors**. The PDF/A-2 levels and `"4"` forbid attachments. The PDF/A-3 levels require `mimeType` and `description` on each one.
 
 Full Factur-X conformance also expects its XMP extension schema. Takumi does not write it yet.

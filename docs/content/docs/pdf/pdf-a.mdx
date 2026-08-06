@@ -76,7 +76,7 @@ The structure tree comes from the HTML semantics:
 
 Set `tagged: false` to skip the tree when file size matters more than accessibility.
 
-Invalid combinations are TypeScript type errors. `pdfa: "2a"` and `pdfa: "3a"` forbid `tagged: false`. `pdfa: "4"` forbids `tagged: "ua1"`, because PDF/UA-1 is PDF 1.7-only and PDF/A-4 is PDF 2.0.
+Invalid combinations are TypeScript type errors. `pdfa: "2a"` and `pdfa: "3a"` forbid `tagged: false`. `pdfa: "4"` forbids `tagged: "ua1"`, because PDF/UA-1 is PDF 1.7-only and PDF/A-4 is PDF 2.0. The `2` levels and `"4"` forbid `attachments`. See [Attachments](/docs/pdf/attachments).
 
 Validators require inputs the renderer cannot supply:
 
