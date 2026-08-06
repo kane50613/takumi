@@ -19,6 +19,8 @@ use takumi_core::{
 };
 use typed_builder::TypedBuilder;
 
+use crate::FontCache;
+
 /// Errors from [`crate::render`].
 #[derive(Debug)]
 pub enum PdfError {
@@ -116,6 +118,12 @@ pub struct PdfOptions<'g> {
   pub viewport: Option<Viewport>,
   /// The font context.
   pub fonts: &'g Fonts,
+  /// Fonts already converted for PDF output, reused across renders. Converting
+  /// one copies and hashes its whole blob, which is most of a render that uses
+  /// a large face, so a renderer outliving one document should keep a
+  /// [`FontCache`] beside its font context and pass it here.
+  #[builder(default, setter(strip_option))]
+  pub font_cache: Option<&'g mut FontCache>,
   /// The root node to render.
   pub node: Node,
   /// CSS stylesheets to apply before layout.

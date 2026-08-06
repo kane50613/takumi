@@ -18,7 +18,9 @@ use takumi_core::{
   resources::{font::FontResource, image::ResourceCache},
   style::{FontFamily, Lang},
 };
-use takumi_pdf::{Attachment, MeasureOptions, PdfMetadata, PdfOptions, PdfStandard, Tagging};
+use takumi_pdf::{
+  Attachment, FontCache, MeasureOptions, PdfMetadata, PdfOptions, PdfStandard, Tagging,
+};
 use wasm_bindgen::prelude::*;
 
 use crate::font::Font;
@@ -74,6 +76,9 @@ struct MeasuredSizeOutput {
 pub struct PdfRenderer {
   state: RwLock<Fonts>,
   resource_cache: ResourceCache,
+  /// Converting a font for PDF output copies and hashes its whole blob, so it
+  /// is done once per renderer rather than once per render.
+  font_cache: RwLock<FontCache>,
 }
 
 #[wasm_bindgen]
@@ -84,6 +89,7 @@ impl PdfRenderer {
     Ok(PdfRenderer {
       state: RwLock::new(default_fonts().map_err(map_error)?),
       resource_cache: ResourceCache::default(),
+      font_cache: RwLock::default(),
     })
   }
 
@@ -147,9 +153,15 @@ impl PdfRenderer {
       .try_read()
       .map_err(|error| js_sys::Error::new(&format!("Renderer state is locked: {error}")))?;
 
+    let mut font_cache = self
+      .font_cache
+      .try_write()
+      .map_err(|error| js_sys::Error::new(&format!("Renderer state is locked: {error}")))?;
+
     takumi_pdf::render(PdfOptions {
       viewport,
       fonts: &state,
+      font_cache: Some(&mut font_cache),
       node,
       stylesheet: stylesheet(&self.resource_cache, options.stylesheets, Vec::new()),
       images,

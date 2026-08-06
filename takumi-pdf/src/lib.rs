@@ -91,6 +91,15 @@ use takumi_core::{
 
 use crate::bands::{emit_band, measure_band, prepare_band};
 use crate::emitter::FontMap;
+
+/// Fonts already converted for PDF output, held across renders.
+///
+/// Converting a font copies its blob and hashes it, which is most of the work
+/// of a render that uses a large face. A renderer that outlives one document
+/// keeps one of these beside its font context and passes it to every render;
+/// it grows to the fonts that renderer has drawn with.
+#[derive(Default)]
+pub struct FontCache(FontMap);
 use crate::inline::{build_inline_map, collect_text_boxes};
 use crate::interactive::{add_link_annotations, build_outline, collect_interactive};
 use crate::options::{
@@ -149,7 +158,14 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
     font_families: options.font_families,
     lang: options.lang,
   };
-  let mut fonts = FontMap::new();
+  let mut owned;
+  let fonts = match options.font_cache {
+    Some(cache) => &mut cache.0,
+    None => {
+      owned = FontMap::new();
+      &mut owned
+    }
+  };
   let mut document = {
     let mut builder = ConfigurationBuilder::new();
     let mut validated = false;
@@ -257,7 +273,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       let mut forced = Vec::new();
 
       content
-        .emitter(&mut fonts, Some(&inline_map), None)
+        .emitter(fonts, Some(&inline_map), None)
         .collect_atoms(0, Affine::IDENTITY, &mut atoms, &mut forced)?;
       let starts = page_starts(&mut atoms, &mut forced, content.height, window_height);
       let pages = starts.len();
@@ -290,7 +306,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
 
           emit_band(
             tree,
-            &mut fonts,
+            fonts,
             (0.0, BAND_EDGE_PADDING, page.width, header_height),
             tag_collector.is_some(),
             &mut surface,
@@ -313,7 +329,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
             page.margin.left,
             content_top - y0,
           ));
-          let mut emitter = content.emitter(&mut fonts, Some(&inline_map), tag_collector.as_ref());
+          let mut emitter = content.emitter(fonts, Some(&inline_map), tag_collector.as_ref());
 
           emitter.window = Some((y0, y0 + paint_height));
           emitter.line_window = Some((if index == 0 { f32::NEG_INFINITY } else { y0 }, next_start));
@@ -333,7 +349,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
 
           emit_band(
             tree,
-            &mut fonts,
+            fonts,
             (
               0.0,
               page.height - BAND_EDGE_PADDING - footer_height,
@@ -382,7 +398,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       let mut surface = page.surface();
 
       surface.push_transform(&Transform::from_scale(PT_PER_PX, PT_PER_PX));
-      let mut emitter = content.emitter(&mut fonts, Some(&inline_map), tag_collector.as_ref());
+      let mut emitter = content.emitter(fonts, Some(&inline_map), tag_collector.as_ref());
 
       emitter.emit_context(0, Affine::IDENTITY, &mut surface)?;
       surface.pop();
