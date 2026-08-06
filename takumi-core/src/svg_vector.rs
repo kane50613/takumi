@@ -142,6 +142,18 @@ pub enum SvgPaint {
     /// Shared gradient parameters.
     gradient: SvgGradient,
   },
+  /// Tiling pattern: `ops` draw one `width` x `height` tile placed by
+  /// `transform`.
+  Pattern {
+    /// Tile content, flattened recursively.
+    ops: Vec<SvgOp>,
+    /// Pattern space transform `(sx, ky, kx, sy, tx, ty)`.
+    transform: [f32; 6],
+    /// Tile width.
+    width: f32,
+    /// Tile height.
+    height: f32,
+  },
 }
 
 /// Parameters shared by both gradient kinds.
@@ -232,12 +244,12 @@ fn flatten_group(group: &Group, raster_scale: f32, ops: &mut Vec<SvgOp>) {
 fn flatten_node(node: &Node, raster_scale: f32, ops: &mut Vec<SvgOp>) {
   match node {
     Node::Group(group) => flatten_group(group, raster_scale, ops),
-    Node::Path(path) => flatten_path(path, ops),
+    Node::Path(path) => flatten_path(path, raster_scale, ops),
     Node::Image(image) => flatten_image(image, raster_scale, ops),
   }
 }
 
-fn flatten_path(path: &usvg::Path, ops: &mut Vec<SvgOp>) {
+fn flatten_path(path: &usvg::Path, raster_scale: f32, ops: &mut Vec<SvgOp>) {
   if !path.is_visible() {
     return;
   }
@@ -246,8 +258,11 @@ fn flatten_path(path: &usvg::Path, ops: &mut Vec<SvgOp>) {
     return;
   }
 
-  let fill = path.fill().and_then(convert_fill);
-  let stroke = path.stroke().and_then(convert_stroke);
+  let fill = path.fill().map(|fill| convert_fill(fill, raster_scale));
+  let stroke = path
+    .stroke()
+    .map(|stroke| convert_stroke(stroke, raster_scale));
+
   if fill.is_none() && stroke.is_none() {
     return;
   }
@@ -525,17 +540,17 @@ fn mask_op(mask: &Mask, raster_scale: f32) -> SvgOp {
   }
 }
 
-fn convert_fill(fill: &usvg::Fill) -> Option<SvgFill> {
-  Some(SvgFill {
-    paint: convert_paint(fill.paint())?,
+fn convert_fill(fill: &usvg::Fill, raster_scale: f32) -> SvgFill {
+  SvgFill {
+    paint: convert_paint(fill.paint(), raster_scale),
     opacity: fill.opacity().get(),
     evenodd: fill.rule() == usvg::FillRule::EvenOdd,
-  })
+  }
 }
 
-fn convert_stroke(stroke: &usvg::Stroke) -> Option<SvgStrokeStyle> {
-  Some(SvgStrokeStyle {
-    paint: convert_paint(stroke.paint())?,
+fn convert_stroke(stroke: &usvg::Stroke, raster_scale: f32) -> SvgStrokeStyle {
+  SvgStrokeStyle {
+    paint: convert_paint(stroke.paint(), raster_scale),
     opacity: stroke.opacity().get(),
     width: stroke.width().get(),
     miter_limit: stroke.miterlimit().get(),
@@ -552,17 +567,13 @@ fn convert_stroke(stroke: &usvg::Stroke) -> Option<SvgStrokeStyle> {
     dash: stroke
       .dasharray()
       .map(|array| (array.to_vec(), stroke.dashoffset())),
-  })
+  }
 }
 
-/// Converts a usvg paint. Patterns return `None`: the caller's path falls
-/// back to rasterization.
-// ponytail: SVG pattern fills rasterize; emit a tiling-pattern op if a real
-// logo ever needs vector patterns.
-fn convert_paint(paint: &Paint) -> Option<SvgPaint> {
+fn convert_paint(paint: &Paint, raster_scale: f32) -> SvgPaint {
   match paint {
-    Paint::Color(color) => Some(SvgPaint::Color([color.red, color.green, color.blue])),
-    Paint::LinearGradient(linear) => Some(SvgPaint::Linear {
+    Paint::Color(color) => SvgPaint::Color([color.red, color.green, color.blue]),
+    Paint::LinearGradient(linear) => SvgPaint::Linear {
       start: Point {
         x: linear.x1(),
         y: linear.y1(),
@@ -572,8 +583,8 @@ fn convert_paint(paint: &Paint) -> Option<SvgPaint> {
         y: linear.y2(),
       },
       gradient: convert_gradient(linear.transform(), linear.spread_method(), linear.stops()),
-    }),
-    Paint::RadialGradient(radial) => Some(SvgPaint::Radial {
+    },
+    Paint::RadialGradient(radial) => SvgPaint::Radial {
       center: Point {
         x: radial.cx(),
         y: radial.cy(),
@@ -584,8 +595,23 @@ fn convert_paint(paint: &Paint) -> Option<SvgPaint> {
         y: radial.fy(),
       },
       gradient: convert_gradient(radial.transform(), radial.spread_method(), radial.stops()),
-    }),
-    Paint::Pattern(_) => None,
+    },
+    Paint::Pattern(pattern) => {
+      let mut tile_ops = Vec::new();
+
+      flatten_group(pattern.root(), raster_scale, &mut tile_ops);
+      let rect = pattern.rect();
+      let transform = pattern
+        .transform()
+        .pre_concat(Transform::from_translate(rect.x(), rect.y()));
+
+      SvgPaint::Pattern {
+        ops: tile_ops,
+        transform: transform_array(transform),
+        width: rect.width(),
+        height: rect.height(),
+      }
+    }
   }
 }
 

@@ -298,6 +298,56 @@ fn svg_vector_image() {
   assert!(text.contains("/Shading"), "gradient lost its shading");
 }
 
+/// Filters rasterize, luminance masks become soft masks, and pattern fills
+/// become tiling patterns.
+#[test]
+fn svg_fallback_and_masks() {
+  let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 24" width="48" height="24">
+  <defs>
+    <filter id="b"><feGaussianBlur stdDeviation="1"/></filter>
+    <mask id="m" maskUnits="userSpaceOnUse" x="16" y="0" width="16" height="24">
+      <rect x="16" y="0" width="16" height="24" fill="#888"/>
+    </mask>
+    <pattern id="p" width="4" height="4" patternUnits="userSpaceOnUse">
+      <rect width="2" height="2" fill="#e33"/>
+    </pattern>
+  </defs>
+  <circle cx="8" cy="12" r="6" fill="#3a3" filter="url(#b)"/>
+  <rect x="18" y="4" width="12" height="16" fill="#33a" mask="url(#m)"/>
+  <rect x="34" y="4" width="12" height="16" fill="url(#p)"/>
+</svg>"##;
+  let pdf = run_pdf_fixture("svg-fallback-and-masks", |fonts| {
+    let image = Node::image(ImageData {
+      src: ImageSourceInput::Buffer(svg.as_bytes().to_vec()),
+      width: Some(48.0),
+      height: Some(24.0),
+    });
+
+    PdfOptions::builder()
+      .node(
+        Node::container(vec![image]).with_style(
+          Style::default()
+            .with(StyleDeclaration::display(Display::Flex))
+            .with(StyleDeclaration::padding_top(Px(8.0))),
+        ),
+      )
+      .viewport(Viewport::new((120, 60)))
+      .fonts(fonts)
+      .build()
+  });
+  let text = String::from_utf8_lossy(&pdf);
+
+  assert!(
+    text.contains("/Subtype/Image"),
+    "filtered subtree should rasterize"
+  );
+  assert!(text.contains("/SMask"), "mask lost its soft mask");
+  assert!(
+    text.contains("/PatternType 1"),
+    "pattern fill lost its tiling pattern"
+  );
+}
+
 #[test]
 fn box_chrome() {
   run_pdf_fixture("box-chrome", |fonts| {

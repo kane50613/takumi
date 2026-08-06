@@ -167,8 +167,6 @@ fn prepare_context<'a>(
     glyf::closure(&face, &mut gid_remapper)?;
   }
 
-  let _ = variation_coordinates;
-
   // For CFF, we _always_ want to do normal subsetting, since CFF cannot have variations.
   // For TrueType, we prefer normal subsetting in case the requested variation coordinates
   // resolve to the default location. If we do have variations, we use `skrifa` to instance.

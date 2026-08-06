@@ -1777,8 +1777,9 @@ impl Emitter<'_> {
 
   #[cfg(feature = "images")]
   /// Draws an image node into its content box, honoring `object-fit` and
-  /// `object-position`. The source rasterizes at its intrinsic size and embeds
-  /// once per distinct pixel data (krilla dedups by content hash).
+  /// `object-position`. SVG sources draw as vector ops; everything else
+  /// rasterizes at its intrinsic size and embeds once per distinct pixel data
+  /// (krilla dedups by content hash).
   // ponytail: pixels upload as un-premultiplied RGBA8, so JPEG bytes re-encode
   // as flate; add DCT passthrough when PDF size from photos matters.
   fn emit_image(
@@ -1861,8 +1862,8 @@ impl Emitter<'_> {
       surface.push_clip_path(&path, &FillRule::NonZero);
     }
     #[cfg(feature = "svg")]
-    if let Some((ops, svg_width, svg_height)) = &vector {
-      let canvas = KrillaRect::from_xywh(0.0, 0.0, *svg_width, *svg_height).and_then(rect_path);
+    if let Some((ops, svg_width, svg_height)) = vector {
+      let canvas = KrillaRect::from_xywh(0.0, 0.0, svg_width, svg_height).and_then(rect_path);
 
       surface.push_transform(&Transform::from_row(
         dw / svg_width,

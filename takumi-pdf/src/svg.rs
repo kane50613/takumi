@@ -14,8 +14,8 @@ use crate::krilla::{
   mask::{Mask, MaskType},
   num::NormalizedF32,
   paint::{
-    Fill, FillRule, LineCap, LineJoin, LinearGradient, Paint, RadialGradient, SpreadMethod, Stop,
-    Stroke, StrokeDash,
+    Fill, FillRule, LineCap, LineJoin, LinearGradient, Paint, Pattern, RadialGradient,
+    SpreadMethod, Stop, Stroke, StrokeDash,
   },
   surface::Surface,
 };
@@ -23,28 +23,28 @@ use crate::{KrillaImage, krilla_path};
 
 /// Draws `ops` onto `surface` in the current coordinate space and resets the
 /// fill/stroke state afterwards.
-pub(crate) fn draw_svg_ops(surface: &mut Surface, ops: &[SvgOp]) {
+pub(crate) fn draw_svg_ops(surface: &mut Surface, ops: Vec<SvgOp>) {
   draw_ops(surface, ops);
   surface.set_fill(None);
   surface.set_stroke(None);
 }
 
-fn draw_ops(surface: &mut Surface, ops: &[SvgOp]) {
+fn draw_ops(surface: &mut Surface, ops: Vec<SvgOp>) {
   for op in ops {
     match op {
       SvgOp::PushTransform([a, b, c, d, e, f]) => {
-        surface.push_transform(&Transform::from_row(*a, *b, *c, *d, *e, *f));
+        surface.push_transform(&Transform::from_row(a, b, c, d, e, f));
       }
       SvgOp::PushClip { path, evenodd } => {
-        let Some(path) = svg_path(path) else {
+        let Some(path) = svg_path(&path) else {
           continue;
         };
 
-        surface.push_clip_path(&path, &fill_rule(*evenodd));
+        surface.push_clip_path(&path, &fill_rule(evenodd));
       }
-      SvgOp::PushBlend(blend) => surface.push_blend_mode(crate::krilla_blend(*blend)),
+      SvgOp::PushBlend(blend) => surface.push_blend_mode(crate::krilla_blend(blend)),
       SvgOp::PushOpacity(opacity) => {
-        surface.push_opacity(normalized(*opacity));
+        surface.push_opacity(normalized(opacity));
       }
       SvgOp::PushMask { ops, luminance } => {
         let mut stream_builder = surface.stream_builder();
@@ -53,7 +53,7 @@ fn draw_ops(surface: &mut Surface, ops: &[SvgOp]) {
         draw_ops(&mut sub_surface, ops);
         sub_surface.finish();
         let stream = stream_builder.finish();
-        let kind = if *luminance {
+        let kind = if luminance {
           MaskType::Luminosity
         } else {
           MaskType::Alpha
@@ -63,12 +63,14 @@ fn draw_ops(surface: &mut Surface, ops: &[SvgOp]) {
       }
       SvgOp::Pop => surface.pop(),
       SvgOp::Draw { path, fill, stroke } => {
-        let Some(path) = svg_path(path) else {
+        let Some(path) = svg_path(&path) else {
           continue;
         };
+        let fill = fill.map(|fill| svg_fill(fill, surface));
+        let stroke = stroke.map(|stroke| svg_stroke(stroke, surface));
 
-        surface.set_fill(fill.as_ref().map(svg_fill));
-        surface.set_stroke(stroke.as_ref().map(svg_stroke));
+        surface.set_fill(fill);
+        surface.set_stroke(stroke);
         surface.draw_path(&path);
       }
       SvgOp::Raster {
@@ -77,12 +79,12 @@ fn draw_ops(surface: &mut Surface, ops: &[SvgOp]) {
         height,
         rect: (x, y, dest_width, dest_height),
       } => {
-        let Some(size) = KrillaSize::from_wh(*dest_width, *dest_height) else {
+        let Some(size) = KrillaSize::from_wh(dest_width, dest_height) else {
           continue;
         };
 
-        surface.push_transform(&Transform::from_translate(*x, *y));
-        surface.draw_image(KrillaImage::from_rgba8(rgba.clone(), *width, *height), size);
+        surface.push_transform(&Transform::from_translate(x, y));
+        surface.draw_image(KrillaImage::from_rgba8(rgba, width, height), size);
         surface.pop();
       }
     }
@@ -93,17 +95,17 @@ fn svg_path(commands: &[PathCommand]) -> Option<KrillaPath> {
   krilla_path(commands, 0.0, 0.0)
 }
 
-fn svg_fill(fill: &SvgFill) -> Fill {
+fn svg_fill(fill: SvgFill, surface: &mut Surface) -> Fill {
   Fill {
-    paint: svg_paint(&fill.paint),
+    paint: svg_paint(fill.paint, surface),
     opacity: normalized(fill.opacity),
     rule: fill_rule(fill.evenodd),
   }
 }
 
-fn svg_stroke(stroke: &SvgStrokeStyle) -> Stroke {
+fn svg_stroke(stroke: SvgStrokeStyle, surface: &mut Surface) -> Stroke {
   Stroke {
-    paint: svg_paint(&stroke.paint),
+    paint: svg_paint(stroke.paint, surface),
     width: stroke.width,
     miter_limit: stroke.miter_limit,
     line_cap: match stroke.cap {
@@ -117,16 +119,15 @@ fn svg_stroke(stroke: &SvgStrokeStyle) -> Stroke {
       SvgLineJoin::Bevel => LineJoin::Bevel,
     },
     opacity: normalized(stroke.opacity),
-    dash: stroke.dash.as_ref().map(|(array, offset)| StrokeDash {
-      array: array.clone(),
-      offset: *offset,
-    }),
+    dash: stroke
+      .dash
+      .map(|(array, offset)| StrokeDash { array, offset }),
   }
 }
 
-fn svg_paint(paint: &SvgPaint) -> Paint {
+fn svg_paint(paint: SvgPaint, surface: &mut Surface) -> Paint {
   match paint {
-    SvgPaint::Color([red, green, blue]) => rgb::Color::new(*red, *green, *blue).into(),
+    SvgPaint::Color([red, green, blue]) => rgb::Color::new(red, green, blue).into(),
     SvgPaint::Linear {
       start,
       end,
@@ -136,9 +137,9 @@ fn svg_paint(paint: &SvgPaint) -> Paint {
       y1: start.y,
       x2: end.x,
       y2: end.y,
-      transform: gradient_transform(gradient),
+      transform: gradient_transform(&gradient),
       spread_method: spread_method(gradient.spread),
-      stops: gradient_stops(gradient),
+      stops: gradient_stops(&gradient),
       anti_alias: false,
     }
     .into(),
@@ -150,16 +151,36 @@ fn svg_paint(paint: &SvgPaint) -> Paint {
     } => RadialGradient {
       cx: center.x,
       cy: center.y,
-      cr: *radius,
+      cr: radius,
       fx: focal.x,
       fy: focal.y,
       fr: 0.0,
-      transform: gradient_transform(gradient),
+      transform: gradient_transform(&gradient),
       spread_method: spread_method(gradient.spread),
-      stops: gradient_stops(gradient),
+      stops: gradient_stops(&gradient),
       anti_alias: false,
     }
     .into(),
+    SvgPaint::Pattern {
+      ops,
+      transform: [a, b, c, d, e, f],
+      width,
+      height,
+    } => {
+      let mut stream_builder = surface.stream_builder();
+      let mut tile = stream_builder.surface();
+
+      draw_ops(&mut tile, ops);
+      tile.finish();
+
+      Pattern {
+        stream: stream_builder.finish(),
+        transform: Transform::from_row(a, b, c, d, e, f),
+        width,
+        height,
+      }
+      .into()
+    }
   }
 }
 
