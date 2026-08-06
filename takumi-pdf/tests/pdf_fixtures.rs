@@ -18,7 +18,9 @@ use takumi_core::{
   viewport::Viewport,
 };
 use takumi_html::{FromHtmlOptions, from_html};
-use takumi_pdf::{PageMargins, PageOptions, PdfDate, PdfMetadata, PdfOptions, PdfStandard, render};
+use takumi_pdf::{
+  PageMargins, PageOptions, PdfDate, PdfMetadata, PdfOptions, PdfStandard, Tagging, render,
+};
 
 fn fonts() -> Fonts {
   let mut fonts = Fonts::default();
@@ -747,7 +749,7 @@ fn tagged_standards() {
     PdfOptions::builder()
       .node(html_fixture("report.html"))
       .page(PageOptions::A4)
-      .pdfua(true)
+      .tagged(Tagging::Ua1)
       .standard(PdfStandard::A2a)
       .lang(Some(lang()))
       .metadata(metadata())
@@ -772,7 +774,7 @@ fn tagged_standards() {
     PdfOptions::builder()
       .node(from_html(list_doc, FromHtmlOptions::default()).expect("parse list doc"))
       .page(PageOptions::A4)
-      .pdfua(true)
+      .tagged(Tagging::Ua1)
       .lang(Some(lang()))
       .metadata(metadata())
       .fonts(fonts)

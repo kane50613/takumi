@@ -186,6 +186,20 @@ impl PdfStandard {
   }
 }
 
+/// Whether the output carries a tagged structure tree, and to which standard.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Tagging {
+  /// No structure tree.
+  Off,
+  /// Structure tree from the HTML semantics, unvalidated.
+  #[default]
+  On,
+  /// Structure tree validated against PDF/UA-1. Requires a PDF 1.7 level in
+  /// [`PdfOptions::standard`] (PDF/A-4 is PDF 2.0; the ranges do not
+  /// overlap).
+  Ua1,
+}
+
 /// Inputs for [`render`], built with [`PdfOptions::builder`].
 #[derive(TypedBuilder)]
 pub struct PdfOptions<'g> {
@@ -232,14 +246,11 @@ pub struct PdfOptions<'g> {
   /// render.
   #[builder(default)]
   pub standard: PdfStandard,
-  /// Builds a tagged-PDF structure tree from the HTML semantics, like
-  /// Chromium's print-to-PDF. On by default; the tagged standards (`A2a`,
-  /// `A3a`) and [`Self::pdfua`] force it on.
-  #[builder(default = true)]
-  pub tagged: bool,
-  /// Validates against PDF/UA-1. Combines with any [`Self::standard`].
+  /// Structure-tree emission: on by default like Chromium's print-to-PDF,
+  /// optionally validated against PDF/UA-1. The tagged standards (`A2a`,
+  /// `A3a`) force it on.
   #[builder(default)]
-  pub pdfua: bool,
+  pub tagged: Tagging,
 }
 
 /// Document metadata for the PDF's info dictionary. [`PdfOptions::lang`]
@@ -765,7 +776,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       builder = builder.with_archival_validator(archival);
       validated = true;
     }
-    if options.pdfua {
+    if options.tagged == Tagging::Ua1 {
       builder = builder.with_accessibility_validator(Accessibility::UA1);
       validated = true;
     }
@@ -780,7 +791,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       Document::new()
     }
   };
-  let tag_collector = (options.tagged || options.pdfua || options.standard.requires_tagging())
+  let tag_collector = (options.tagged != Tagging::Off || options.standard.requires_tagging())
     .then(|| RefCell::new(TagCollector::default()));
 
   if let Some(metadata) = &options.metadata {
@@ -926,7 +937,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         pdf_page.finish();
       }
 
-      if (options.outline || options.pdfua) && !headings.is_empty() {
+      if (options.outline || options.tagged == Tagging::Ua1) && !headings.is_empty() {
         document.set_outline(build_outline(&headings, |heading| {
           let index = starts
             .partition_point(|start| *start <= heading.top)
@@ -973,7 +984,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         tag_collector.as_ref(),
       );
       page.finish();
-      if (options.outline || options.pdfua) && !headings.is_empty() {
+      if (options.outline || options.tagged == Tagging::Ua1) && !headings.is_empty() {
         document.set_outline(build_outline(&headings, |heading| {
           XyzDestination::new(0, Point::from_xy(0.0, heading.top.max(0.0) * PT_PER_PX))
         }));

@@ -22,7 +22,9 @@ use takumi_core::{
   style::{FontFamily, FontStyle as CssFontStyle, FromCssStr, Lang},
   viewport::Viewport,
 };
-use takumi_pdf::{PageMargins, PageOptions, PdfDate, PdfMetadata, PdfOptions, PdfStandard};
+use takumi_pdf::{
+  PageMargins, PageOptions, PdfDate, PdfMetadata, PdfOptions, PdfStandard, Tagging,
+};
 use wasm_bindgen::prelude::*;
 
 fn map_error(error: impl core::fmt::Debug) -> js_sys::Error {
@@ -187,11 +189,43 @@ struct PdfRenderOptions {
   outline: Option<bool>,
   /// PDF/A conformance level: "2a", "2b", "2u", "3a", "3b", "3u" or "4".
   pdfa: Option<PdfaInput>,
-  /// PDF/UA-1 accessible output; combines with any `pdfa` level.
-  pdfua: Option<bool>,
-  /// Builds a tagged structure tree, like Chromium's print-to-PDF. Defaults
-  /// to true.
-  tagged: Option<bool>,
+  /// Structure-tree emission: `false`, `true` (default) or `"ua1"` to also
+  /// validate against PDF/UA-1.
+  tagged: Option<TaggedInput>,
+}
+
+/// `tagged` values accepted from JS.
+#[derive(Deserialize, Clone, Copy)]
+#[serde(untagged)]
+enum TaggedInput {
+  Enabled(bool),
+  #[serde(with = "ua1_literal")]
+  Ua1,
+}
+
+/// Deserializes the `"ua1"` string literal.
+mod ua1_literal {
+  use serde::{Deserialize, Deserializer};
+
+  pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<(), D::Error> {
+    let value = String::deserialize(deserializer)?;
+
+    if value == "ua1" {
+      Ok(())
+    } else {
+      Err(serde::de::Error::custom("expected \"ua1\""))
+    }
+  }
+}
+
+impl From<TaggedInput> for Tagging {
+  fn from(tagged: TaggedInput) -> Self {
+    match tagged {
+      TaggedInput::Enabled(false) => Tagging::Off,
+      TaggedInput::Enabled(true) => Tagging::On,
+      TaggedInput::Ua1 => Tagging::Ua1,
+    }
+  }
 }
 
 /// PDF/A conformance level names accepted from JS.
@@ -424,8 +458,7 @@ impl PdfRenderer {
       metadata: options.metadata.map(PdfMetadata::from),
       outline: options.outline.unwrap_or(false),
       standard: options.pdfa.map(PdfStandard::from).unwrap_or_default(),
-      pdfua: options.pdfua.unwrap_or(false),
-      tagged: options.tagged.unwrap_or(true),
+      tagged: options.tagged.map(Tagging::from).unwrap_or_default(),
     })
     .map_err(map_error)
   }

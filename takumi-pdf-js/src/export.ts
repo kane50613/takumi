@@ -88,31 +88,44 @@ export type PdfMetadata = {
   creationDate?: string;
 };
 
-export type RenderOptions = (PagedOptions | ViewportOptions) & {
-  /** Fonts to register before rendering, deduped across calls. */
-  fonts?: FontLoader[];
-  /**
-   * Pre-fetched images for `src` URLs in the tree, e.g.
-   * `[{ src: "https://…/logo.png", data: bytes }]`.
-   */
-  images?: ImagesInput;
-  /** CSS stylesheets to apply before layout. */
-  stylesheets?: string[];
-  /** Per-render font stack: ordered family names used as the fallback chain. */
-  fontFamilies?: string[];
-  /** Default BCP-47 language tag applied to the root. */
-  lang?: string;
-  /** Document metadata; `lang` doubles as the metadata language. */
-  metadata?: PdfMetadata;
-  /** Generates a PDF outline (bookmarks) from `h1`–`h6` headings. */
-  outline?: boolean;
-  /** PDF/A conformance level. Validation failures reject the render. */
-  pdfa?: "2a" | "2b" | "2u" | "3a" | "3b" | "3u" | "4";
-  /** PDF/UA-1 accessible output; builds a tagged structure tree. */
-  pdfua?: boolean;
-  /** Builds a tagged (accessible) structure tree, like Chromium's print-to-PDF. Defaults to `true`. */
-  tagged?: boolean;
-};
+/** Levels based on PDF 1.7, where PDF/UA-1 tagging can combine. */
+type Pdfa17 = "2b" | "2u" | "3b" | "3u";
+
+/**
+ * Standards conformance. Invalid combinations are type errors: the `a` levels
+ * imply a structure tree so `tagged: false` is rejected, and PDF/A-4 is
+ * PDF 2.0 while PDF/UA-1 is PDF 1.7-only, so they cannot combine.
+ */
+type ConformanceOptions =
+  | {
+      /** PDF/A conformance level. Validation failures reject the render. */
+      pdfa?: Pdfa17;
+      /** Structure tree: off, on (default), or validated against PDF/UA-1. */
+      tagged?: boolean | "ua1";
+    }
+  | { pdfa: "2a" | "3a"; tagged?: true | "ua1" }
+  | { pdfa: "4"; tagged?: boolean };
+
+export type RenderOptions = (PagedOptions | ViewportOptions) &
+  ConformanceOptions & {
+    /** Fonts to register before rendering, deduped across calls. */
+    fonts?: FontLoader[];
+    /**
+     * Pre-fetched images for `src` URLs in the tree, e.g.
+     * `[{ src: "https://…/logo.png", data: bytes }]`.
+     */
+    images?: ImagesInput;
+    /** CSS stylesheets to apply before layout. */
+    stylesheets?: string[];
+    /** Per-render font stack: ordered family names used as the fallback chain. */
+    fontFamilies?: string[];
+    /** Default BCP-47 language tag applied to the root. */
+    lang?: string;
+    /** Document metadata; `lang` doubles as the metadata language. */
+    metadata?: PdfMetadata;
+    /** Generates a PDF outline (bookmarks) from `h1`–`h6` headings. */
+    outline?: boolean;
+  };
 
 function isNode(value: NodeInput): value is Node {
   return typeof value === "object" && value !== null && "type" in value && !("$$typeof" in value);

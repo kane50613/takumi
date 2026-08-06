@@ -39,7 +39,7 @@ Validation runs twice. krilla checks every rule it can while rendering, and a do
 
 ## Tagged output
 
-Every render embeds a structure tree by default, like Chromium's print-to-PDF: the machine-readable document semantics screen readers navigate. Takumi builds it from the HTML tags — headings become `Hn` with titles, paragraphs `P`, images `Figure` with their `alt` text, anchors `Link` elements that also hold the link annotation, lists `L`/`LI`, inline `strong`/`em`/`code` their PDF equivalents, and page headers and footers become artifacts. Pass `tagged: false` to skip it when file size matters more than accessibility.
+Every render embeds a structure tree by default, like Chromium's print-to-PDF: the machine-readable document semantics screen readers navigate. Set `tagged: "ua1"` to also validate it against PDF/UA-1. That combines with any PDF 1.7 `pdfa` level; with `pdfa: "4"` it is a type error, since PDF/UA-1 is PDF 1.7-only. Takumi builds the tree from the HTML tags — headings become `Hn` with titles, paragraphs `P`, images `Figure` with their `alt` text, anchors `Link` elements that also hold the link annotation, lists `L`/`LI`, inline `strong`/`em`/`code` their PDF equivalents, and page headers and footers become artifacts. Pass `tagged: false` to skip it when file size matters more than accessibility.
 
 ```tsx twoslash
 import type { ReactNode } from "react";
@@ -47,7 +47,7 @@ import { render } from "takumi-pdf";
 declare const report: ReactNode;
 // ---cut---
 const pdf = await render(report, {
-  pdfua: true,
+  tagged: "ua1",
   lang: "en",
   metadata: {
     title: "Annual report",
