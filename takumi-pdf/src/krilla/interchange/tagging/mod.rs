@@ -1244,13 +1244,13 @@ fn serialize_children(
           let page_ref = sc
             .page_infos()
             .get(pi.page_index)
-            .unwrap_or_else(|| {
-              panic!(
+            .ok_or_else(|| {
+              KrillaError::TagTree(format!(
                 "tag tree contains identifier from page {}, but document only has {} pages",
                 pi.page_index + 1,
                 sc.page_infos().len()
-              )
-            })
+              ))
+            })?
             .ref_();
 
           if struct_page_ref.is_none() {
@@ -1258,7 +1258,9 @@ fn serialize_children(
           }
 
           if parent_tree_map.contains_key(&pi.into()) {
-            panic!("the identifier {pi:?} appears twice in the tag tree");
+            return Err(KrillaError::TagTree(format!(
+              "the identifier {pi:?} appears twice in the tag tree"
+            )));
           }
 
           parent_tree_map.insert(pi.into(), parent_ref);
@@ -1273,28 +1275,30 @@ fn serialize_children(
           }
         }
         IdentifierType::AnnotationIdentifier(ai) => {
+          let page_count = sc.page_infos().len();
           let Some(page_info) = sc.page_infos_mut().get_mut(ai.page_index) else {
-            panic!(
-              "tag tree contains identifier from page {}, but document only has {} pages",
+            return Err(KrillaError::TagTree(format!(
+              "tag tree contains identifier from page {}, but document only has {page_count} pages",
               ai.page_index + 1,
-              sc.page_infos().len()
-            );
+            )));
           };
 
           let page_ref = page_info.ref_();
+          let annotation_count = page_info.annotations().len();
           let Some((annotation_ref, struct_parent)) =
             page_info.annotations_mut().get_mut(ai.annot_index)
           else {
-            panic!(
-              "tag tree contains identifier from annotation {} on page {}, but page only has {} annotations",
+            return Err(KrillaError::TagTree(format!(
+              "tag tree contains identifier from annotation {} on page {}, but page only has {annotation_count} annotations",
               ai.annot_index + 1,
               ai.page_index + 1,
-              page_info.annotations().len()
-            );
+            )));
           };
 
           if parent_tree_map.contains_key(&ai.into()) {
-            panic!("identifier {ai:?} appears twice in the tag tree");
+            return Err(KrillaError::TagTree(format!(
+              "identifier {ai:?} appears twice in the tag tree"
+            )));
           }
           parent_tree_map.insert(ai.into(), *annotation_ref);
 

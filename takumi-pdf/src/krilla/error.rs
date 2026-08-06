@@ -40,6 +40,11 @@ pub enum KrillaError {
   ///
   /// [`TagTree`]: crate::krilla::interchange::tagging::TagTree
   UnknownTagId(TagId, Option<Location>),
+  /// The tag tree references content that does not exist, references it
+  /// twice, or omits recorded content.
+  ///
+  /// [`TagTree`]: crate::krilla::interchange::tagging::TagTree
+  TagTree(String),
   /// An image couldn't be processed properly.
   ///
   /// The third argument contains the error message.
@@ -68,13 +73,22 @@ impl Display for KrillaError {
         write!(f, "duplicate named destination: {name}")
       }
       KrillaError::DuplicateTagId(id, location) => {
-        write!(f, "duplicate tag id {id:?}")?;
+        write!(
+          f,
+          "duplicate tag id {}",
+          String::from_utf8_lossy(id.as_bytes())
+        )?;
         write_location(f, *location)
       }
       KrillaError::UnknownTagId(id, location) => {
-        write!(f, "unknown tag id {id:?}")?;
+        write!(
+          f,
+          "unknown tag id {}",
+          String::from_utf8_lossy(id.as_bytes())
+        )?;
         write_location(f, *location)
       }
+      KrillaError::TagTree(message) => write!(f, "invalid tag tree: {message}"),
       #[cfg(feature = "raster-images")]
       KrillaError::Image(_, location, message) => {
         write!(f, "failed to process image")?;

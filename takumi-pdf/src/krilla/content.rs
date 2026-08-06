@@ -115,6 +115,7 @@ impl ContentBuilder {
     )
   }
 
+  #[track_caller]
   fn start_marked_content_prelude(&mut self) {
     if self.active_marked_content {
       panic!("can't start marked content twice");
@@ -153,6 +154,7 @@ impl ContentBuilder {
     tag.write_properties(sc, properties, page_height);
   }
 
+  #[track_caller]
   pub(crate) fn end_marked_content(&mut self) {
     if !self.active_marked_content {
       panic!("can't end marked content when none has been started");

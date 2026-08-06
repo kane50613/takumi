@@ -234,7 +234,9 @@ impl Output for Attr {
           writeln!(f, "/BorderThickness:{space}{sides}")
         }
         Padding(sides) => {
-          writeln!(f, "/Padding: {}", sides.display_indent(indent.inc()))
+          let space = omit_if(" ", sides.is_multiline());
+          let sides = sides.display_indent(indent.inc());
+          writeln!(f, "/Padding:{space}{sides}")
         }
         Color(color) => writeln!(f, "/Color: {}", color.display()),
         SpaceBefore(space) => writeln!(f, "/SpaceBefore: {}", space.display()),
@@ -323,8 +325,9 @@ impl Output for TagId {
       let str = std::str::from_utf8(self.as_bytes()).unwrap();
       write!(f, "\"{str}\"")?;
     } else {
+      write!(f, "0x")?;
       for b in self.as_bytes() {
-        write!(f, "0x{b:02x}")?;
+        write!(f, "{b:02x}")?;
       }
     }
     Ok(())

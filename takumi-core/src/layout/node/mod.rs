@@ -675,9 +675,10 @@ impl Node {
     self.attribute("href").filter(|href| !href.is_empty())
   }
 
-  /// The element's `alt` attribute, when present and non-empty.
+  /// The element's `alt` attribute, when present. An explicitly empty value
+  /// marks a decorative image, distinct from a missing attribute.
   pub fn alt(&self) -> Option<&str> {
-    self.attribute("alt").filter(|alt| !alt.is_empty())
+    self.attribute("alt")
   }
 
   /// `id` and `class` resolve to the structured metadata fields rather than

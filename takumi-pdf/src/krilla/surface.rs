@@ -192,6 +192,12 @@ impl<'a> Surface<'a> {
               ));
           }
 
+          if artifact.requires_bbox(self.sc.serialize_settings().pdf_version())
+            && artifact.bbox.is_none()
+          {
+            panic!("Background artifact must have a bounding box in PDF 1.7");
+          }
+
           if artifact.requires_properties(self.sc.serialize_settings().pdf_version()) {
             self
               .bd
@@ -199,12 +205,6 @@ impl<'a> Surface<'a> {
               .start_marked_content_with_properties(self.sc, None, tag);
           } else {
             self.bd.get_mut().start_marked_content(tag.name());
-          }
-
-          if artifact.requires_bbox(self.sc.serialize_settings().pdf_version())
-            && artifact.bbox.is_none()
-          {
-            panic!("Background artifact must have a bounding box in PDF 1.7");
           }
 
           Identifier::dummy()
