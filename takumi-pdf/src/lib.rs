@@ -3,30 +3,37 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 //! Vector PDF output for takumi.
 //!
-//! [`render`] runs takumi-core layout, walks the same backend-agnostic
-//! stacking-context scene as `takumi-svg`, and emits a PDF through a vendored
-//! krilla fork:
-//! background rects as filled paths and text as real glyph runs with embedded,
-//! subsetted fonts — selectable, searchable, copyable.
+//! [`render`] runs takumi-core layout and walks the same backend-agnostic
+//! stacking-context scene as `takumi-svg`. A vendored krilla fork writes the
+//! PDF. Backgrounds become filled paths. Text becomes real glyph runs with
+//! embedded subset fonts: selectable, searchable, copyable.
 //!
-//! With [`PdfOptions::page`] set, content lays out at the page's content width
-//! with unbounded height and is sliced into pages: unsplittable atoms (text
-//! lines, images, transformed subtrees) are collected, cut points move up to
-//! avoid splitting them, and each page re-walks the scene through a vertical
-//! window (clip + translate). Every text line is emitted on exactly one page.
+//! # Pagination
+//!
+//! With [`PdfOptions::page`] set, content lays out at the page's content
+//! width with unbounded height, then slices into pages. Unsplittable atoms
+//! (text lines, images, transformed subtrees) push cut points up, so none of
+//! them is cut in half. Each page re-walks the scene through a vertical
+//! window (clip + translate). Every text line lands on exactly one page.
 //!
 //! Pagination honors `break-before: page`, `break-after: page`, and
-//! `break-inside: avoid`; repeated header/footer bands draw in the page
-//! margin areas like Chromium's print templates. Nodes classed `pageNumber`
-//! / `totalPages` are filled with the page counters.
+//! `break-inside: avoid`. Header and footer bands repeat in the page margin
+//! areas, like Chromium's print templates. Nodes classed `pageNumber` /
+//! `totalPages` receive the page counters.
 //!
-//! Coverage: backgrounds (color and gradient layers, with `background-size`,
-//! `-position` and `-repeat`), borders and radius, images
-//! (`object-fit`/`object-position`), text with decorations, opacity, blend
-//! modes, overflow clipping, `clip-path`, `box-shadow` (blur approximated by
-//! bands), the color `filter` primitives, `mask-image`, affine transforms,
-//! pagination. Not yet: `filter: blur()`/`drop-shadow()`, url() background and
-//! mask layers.
+//! # CSS coverage
+//!
+//! - backgrounds: color, gradient and url() layers, with `background-size`,
+//!   `-position`, `-repeat`, `-origin`, `-clip` (including `text`) and
+//!   per-layer blend modes
+//! - borders, border-radius, `outline`, and `box-shadow` (blur approximated
+//!   by bands)
+//! - text with decorations, `text-shadow`, and `-webkit-text-stroke`
+//! - images, with `object-fit` and `object-position`
+//! - `clip-path`, `mask-image`, and the color `filter` primitives
+//! - opacity, blend modes, overflow clipping, and affine transforms
+//!
+//! Not yet: `filter: blur()` / `drop-shadow()`, `backdrop-filter`.
 
 use std::{cell::RefCell, rc::Rc};
 

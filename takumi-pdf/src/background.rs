@@ -5,8 +5,8 @@ use takumi_core::{
   context::RenderContext,
   geometry::Size,
   style::{
-    BackgroundRepeat, BackgroundRepeatStyle, BackgroundSize, Length, PositionComponent,
-    PositionValue,
+    BackgroundRepeat, BackgroundRepeatStyle, BackgroundSize, IntrinsicSizing, Length,
+    PositionComponent, PositionValue,
   },
 };
 
@@ -42,16 +42,18 @@ struct Axis {
   step: f32,
 }
 
-/// Resolves one layer's placement. Gradients have no intrinsic size, so `auto`,
-/// `cover` and `contain` all resolve to the positioning area.
+/// Resolves one layer's placement. An image layer carries its intrinsic
+/// sizing, which `auto`, `cover` and `contain` resolve against; a gradient has
+/// none, so those all resolve to the positioning area.
 pub(crate) fn place(
   area: Size<f32>,
   size: BackgroundSize,
   position: PositionValue,
   repeat: BackgroundRepeat,
+  intrinsic: Option<IntrinsicSizing>,
   context: &RenderContext,
 ) -> Placement {
-  let tile = tile_size(area, size, context);
+  let tile = tile_size(area, size, intrinsic, context);
   let x = axis(area.width, tile.width, position.0.x, repeat.0, context);
   let y = axis(area.height, tile.height, position.0.y, repeat.1, context);
 
@@ -67,7 +69,29 @@ pub(crate) fn place(
   }
 }
 
-fn tile_size(area: Size<f32>, size: BackgroundSize, context: &RenderContext) -> Size<f32> {
+fn tile_size(
+  area: Size<f32>,
+  size: BackgroundSize,
+  intrinsic: Option<IntrinsicSizing>,
+  context: &RenderContext,
+) -> Size<f32> {
+  // An image resolves through the core §5.3 algorithm, in whole device
+  // pixels like the raster backend. Gradients stay on the exact float path.
+  if let Some(intrinsic) = intrinsic {
+    let resolved = size.resolve(
+      Size {
+        width: area.width.max(0.0) as u32,
+        height: area.height.max(0.0) as u32,
+      },
+      &context.sizing,
+      intrinsic,
+    );
+
+    return Size {
+      width: resolved.width as f32,
+      height: resolved.height as f32,
+    };
+  }
   let BackgroundSize::Explicit { width, height } = size else {
     return area;
   };

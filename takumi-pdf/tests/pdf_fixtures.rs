@@ -687,6 +687,172 @@ fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     .position(|window| window == needle)
 }
 
+/// CSS `outline`: a ring outside the border box, offset outward, following the
+/// border radius, with no effect on layout.
+#[test]
+fn outlines() {
+  let pdf = run_pdf_fixture("outlines", |fonts| {
+    let cell = |style: &str| {
+      format!(
+        r##"<div style="width: 90px; height: 90px; margin: 24px; background-color: #e0e7ff; border-radius: 10px; {style}"></div>"##
+      )
+    };
+    let source = format!(
+      r##"<div style="display: flex; width: 100%; height: 100%; padding: 8px; background-color: #ffffff;">
+        {}{}{}
+      </div>"##,
+      cell("outline: 4px solid #4338ca;"),
+      cell("outline: 4px solid #4338ca; outline-offset: 6px;"),
+      // A negative offset pulls the ring inside the border box.
+      cell("outline: 3px dashed #b91c1c; outline-offset: -12px;"),
+    );
+    let node = from_html(&source, FromHtmlOptions::default()).expect("parse outline fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((420, 150)))
+      .fonts(fonts)
+      .build()
+  });
+  // The solid indigo rings and the dashed red one fill with their outline
+  // colors, inside the deflated content streams.
+  let content: Vec<Vec<u8>> = content_lines(&pdf).collect();
+
+  for needle in [
+    &b"0.2627451 0.21960784 0.7921569 rg"[..],
+    &b"0.7254902 0.10980392 0.10980392 rg"[..],
+  ] {
+    assert!(
+      content.iter().any(|line| find(line, needle).is_some()),
+      "expected an outline color fill"
+    );
+  }
+}
+
+/// `background-origin` moves the positioning area, `background-clip` shrinks
+/// the painted region, `border-area` paints over the borders, and
+/// `background-blend-mode` blends a layer into the one below.
+#[test]
+fn background_boxes() {
+  let pdf = run_pdf_fixture("background-boxes", |fonts| {
+    let cell = |style: &str| {
+      format!(
+        r##"<div style="width: 100px; height: 100px; padding: 14px; border: 8px solid rgba(17, 24, 39, 0.35); background-color: #fef3c7; background-image: linear-gradient(135deg, #ff5f6d, #3a1c71); background-size: 40px 40px; background-repeat: no-repeat; {style}"></div>"##
+      )
+    };
+    let source = format!(
+      r##"<div style="display: flex; width: 100%; height: 100%; padding: 10px; column-gap: 10px; background-color: #ffffff;">
+        {}{}{}{}{}
+      </div>"##,
+      cell("background-origin: border-box;"),
+      cell("background-origin: content-box;"),
+      cell("background-clip: content-box;"),
+      cell("background-clip: border-area;"),
+      cell("background-blend-mode: multiply;"),
+    );
+    let node = from_html(&source, FromHtmlOptions::default()).expect("parse background boxes");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((600, 130)))
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = String::from_utf8_lossy(&pdf);
+
+  assert!(
+    haystack.contains("/Multiply"),
+    "expected the blended layer to set its blend mode"
+  );
+}
+
+/// `text-shadow` draws shifted glyph passes under the text, and
+/// `-webkit-text-stroke` strokes the glyph outlines around the fill.
+#[test]
+fn text_shadow_and_stroke() {
+  let pdf = run_pdf_fixture("text-shadow-stroke", |fonts| {
+    let source = r##"<div style="display: flex; flex-direction: column; row-gap: 8px; width: 100%; height: 100%; padding: 16px; background-color: #ffffff; font-size: 28px; color: #111827;">
+      <div style="text-shadow: 3px 3px 0 #f59e0b;">Sharp shadow</div>
+      <div style="text-shadow: 2px 2px 4px rgba(17, 24, 39, 0.5);">Blurred shadow</div>
+      <div style="-webkit-text-stroke: 1px #b91c1c; color: #fef3c7;">Stroked text</div>
+      <div style="background-image: linear-gradient(90deg, #ff5f6d, #3a1c71); background-clip: text; color: transparent;">Gradient text</div>
+    </div>"##;
+    let node = from_html(source, FromHtmlOptions::default()).expect("parse text shadow fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((360, 200)))
+      .fonts(fonts)
+      .build()
+  });
+  let content: Vec<Vec<u8>> = content_lines(&pdf).collect();
+  let contains = |needle: &[u8]| content.iter().any(|line| find(line, needle).is_some());
+
+  // The amber shadow pass fills before the text color does.
+  assert!(
+    contains(b"0.9607843 0.61960787 0.043137256 rg"),
+    "expected the shadow color fill"
+  );
+  // The stroke sets a red stroke color (RG) next to the cream fill.
+  assert!(
+    contains(b"0.7254902 0.10980392 0.10980392 RG"),
+    "expected the text stroke color"
+  );
+  // The clip-text line fills its glyphs with the gradient shading.
+  assert!(
+    contains(b"/Pattern cs"),
+    "expected a gradient fill on the clip-text glyphs"
+  );
+}
+
+/// `url()` layers: a bitmap background sized by its intrinsic dimensions,
+/// tiled, covered, and used as a `mask-image` alpha source.
+#[test]
+fn url_layers() {
+  let pdf = run_pdf_fixture("url-layers", |fonts| {
+    let cell = |style: &str| {
+      format!(
+        r##"<div style="width: 96px; height: 96px; background-color: #f4f4f5; {style}"></div>"##
+      )
+    };
+    let source = format!(
+      r##"<div style="display: flex; width: 100%; height: 100%; padding: 12px; column-gap: 12px; background-color: #ffffff;">
+        {}{}{}{}
+      </div>"##,
+      // background-size defaults to auto: the 8x8 checker's intrinsic size.
+      cell("background-image: url(checker); background-repeat: no-repeat;"),
+      cell("background-image: url(checker); background-size: 24px 24px;"),
+      cell("background-image: url(checker); background-size: cover;"),
+      cell(
+        "background-color: #1d4ed8; mask-image: url(checker); mask-size: 48px 48px; mask-repeat: repeat;"
+      ),
+    );
+    let node = from_html(&source, FromHtmlOptions::default()).expect("parse url layer fixture");
+    let buffer =
+      ImageBuffer::from_rgba_bytes(checker_pixels(), 8, 8).expect("checker image buffer");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((460, 120)))
+      .images(HashMap::from([(
+        "checker".into(),
+        ImageSource::Bitmap(Arc::new(buffer)),
+      )]))
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = String::from_utf8_lossy(&pdf);
+
+  assert!(
+    haystack.contains("/Subtype/Image"),
+    "expected image XObjects for the url() layers"
+  );
+  assert!(
+    haystack.contains("/XStep 48/YStep 48"),
+    "expected the tiled mask layer to repeat at its mask-size"
+  );
+}
+
 /// `background-size`, `-position` and the four `-repeat` styles: a sized tile
 /// placed once, tiled, spaced out, and rounded to fit whole tiles.
 #[test]
