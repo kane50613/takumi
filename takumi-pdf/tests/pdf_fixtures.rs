@@ -1079,7 +1079,8 @@ fn certificate() {
 }
 
 /// Headings across a forced page break become outline entries; anchors become
-/// link annotations on the page owning their box.
+/// link annotations on the page owning their box. An `href="#id"` resolves to
+/// a destination in the document, and one pointing at no element is dropped.
 #[test]
 fn report_links_outline() {
   let pdf = run_pdf_fixture("report-links-outline", |fonts| {
@@ -1107,10 +1108,16 @@ fn report_links_outline() {
   for needle in [
     "https://example.com/numbers",
     "https://example.com/data",
+    "/Dest",
     "/Outlines",
   ] {
     assert!(haystack.contains(needle), "missing {needle} in pdf");
   }
+
+  assert!(
+    !haystack.contains("#nowhere"),
+    "a fragment matching no element still produced an annotation"
+  );
 }
 
 /// Measuring at a page lays out at the full page width; counter hooks are

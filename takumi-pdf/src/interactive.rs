@@ -1,11 +1,13 @@
-//! Collection of link and heading targets, and emission of link annotations and the outline.
+//! Collection of link, heading and anchor targets, and emission of link
+//! annotations and the outline.
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 
 use crate::krilla::{
   action::{Action, LinkAction},
   annotation::{Annotation, LinkAnnotation, Target},
-  destination::XyzDestination,
+  destination::{Destination, XyzDestination},
   geom::Rect as KrillaRect,
   outline::{Outline, OutlineNode},
 };
@@ -35,6 +37,14 @@ pub(crate) struct LinkTarget {
   rect: KrillaRect,
   /// Source-node path, so the annotation can join that node's `Link` element.
   path: Vec<usize>,
+}
+
+/// Link, heading and anchor targets collected from one tree.
+pub(crate) struct Interactive {
+  pub(crate) links: Vec<LinkTarget>,
+  pub(crate) headings: Vec<HeadingTarget>,
+  /// Element ids to their top in content coordinates, for `href="#id"`.
+  pub(crate) anchors: HashMap<Box<str>, f32>,
 }
 
 /// A heading in content coordinates, for the outline.
@@ -99,46 +109,39 @@ fn node_text(node: &Node, out: &mut String) {
 }
 
 /// Collects hyperlinks and headings from the prepared scene, in paint order.
-pub(crate) fn collect_interactive(tree: &PreparedTree) -> (Vec<LinkTarget>, Vec<HeadingTarget>) {
-  let mut links = Vec::new();
-  let mut headings = Vec::new();
+pub(crate) fn collect_interactive(tree: &PreparedTree) -> Interactive {
+  let mut collected = Interactive {
+    links: Vec::new(),
+    headings: Vec::new(),
+    anchors: HashMap::new(),
+  };
 
-  collect_interactive_context(tree, 0, &mut links, &mut headings);
-  headings.sort_by(|a, b| a.top.total_cmp(&b.top));
-  (links, headings)
+  collect_interactive_context(tree, 0, &mut collected);
+  collected.headings.sort_by(|a, b| a.top.total_cmp(&b.top));
+  collected
 }
 
-fn collect_interactive_context(
-  tree: &PreparedTree,
-  id: usize,
-  links: &mut Vec<LinkTarget>,
-  headings: &mut Vec<HeadingTarget>,
-) {
+fn collect_interactive_context(tree: &PreparedTree, id: usize, collected: &mut Interactive) {
   let Some(context) = tree.contexts.get(id) else {
     return;
   };
 
   if let Some(paint) = context.root() {
-    collect_interactive_paint(tree, paint, links, headings);
+    collect_interactive_paint(tree, paint, collected);
   }
   for bucket in context.in_paint_order() {
     for item in bucket {
       match &item.kind {
-        PaintItemKind::Node(paint) => collect_interactive_paint(tree, paint, links, headings),
+        PaintItemKind::Node(paint) => collect_interactive_paint(tree, paint, collected),
         PaintItemKind::Context(child) => {
-          collect_interactive_context(tree, *child, links, headings);
+          collect_interactive_context(tree, *child, collected);
         }
       }
     }
   }
 }
 
-fn collect_interactive_paint(
-  tree: &PreparedTree,
-  paint: &NodePaint,
-  links: &mut Vec<LinkTarget>,
-  headings: &mut Vec<HeadingTarget>,
-) {
+fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: &mut Interactive) {
   let Some(node) = tree.root.node_at_path(&paint.path) else {
     return;
   };
@@ -152,15 +155,27 @@ fn collect_interactive_paint(
     return;
   };
 
+  if let Some(id) = source.id() {
+    // The first box wins: a duplicated id is invalid HTML, and the earlier one
+    // is what a browser would scroll to.
+    collected.anchors.entry(id.into()).or_insert(rect.top());
+  }
+
   match source.href().filter(|uri| allowed_link_uri(uri)) {
     // The whole box is one link; per-run collection would double-annotate it.
-    Some(uri) => links.push(LinkTarget {
+    Some(uri) => collected.links.push(LinkTarget {
       uri: uri.to_string(),
       rect,
       path: paint.path.clone(),
     }),
     None if node.should_create_inline_layout() => {
-      collect_inline_links(node, layout, paint.transform, &paint.path, links);
+      collect_inline_links(
+        node,
+        layout,
+        paint.transform,
+        &paint.path,
+        &mut collected.links,
+      );
     }
     None => {}
   }
@@ -171,7 +186,7 @@ fn collect_interactive_paint(
     let text = text.trim();
 
     if !text.is_empty() {
-      headings.push(HeadingTarget {
+      collected.headings.push(HeadingTarget {
         level,
         text: text.to_string(),
         top: rect.top(),
@@ -180,10 +195,14 @@ fn collect_interactive_paint(
   }
 }
 
-/// Whether an `href` is written to the PDF: `http`, `https`, `mailto`, or
-/// `tel`. Other schemes (and scheme-less values, which have no meaning inside
-/// a standalone document) are dropped.
+/// Whether an `href` is written to the PDF: a `#fragment` pointing inside the
+/// document, or an `http`, `https`, `mailto` or `tel` URI. Other schemes (and
+/// scheme-less values, which have no meaning inside a standalone document) are
+/// dropped.
 fn allowed_link_uri(uri: &str) -> bool {
+  if let Some(id) = uri.strip_prefix('#') {
+    return !id.is_empty();
+  }
   let Some((scheme, _)) = uri.split_once(':') else {
     return false;
   };
@@ -264,6 +283,7 @@ pub(crate) fn add_link_annotations(
   window: (f32, f32),
   offset: (f32, f32),
   tags: Option<&RefCell<TagCollector>>,
+  anchor: impl Fn(&str) -> Option<XyzDestination>,
 ) {
   for link in links {
     let top = link.rect.top().max(window.0);
@@ -281,11 +301,17 @@ pub(crate) fn add_link_annotations(
       continue;
     };
 
+    // A fragment that matches no element is dropped: the annotation would be a
+    // clickable box that goes nowhere.
+    let target = match link.uri.strip_prefix('#') {
+      Some(id) => match anchor(id) {
+        Some(destination) => Target::Destination(Destination::Xyz(destination)),
+        None => continue,
+      },
+      None => Target::Action(Action::Link(LinkAction::new(link.uri.clone()))),
+    };
     let annotation = Annotation::new_link(
-      LinkAnnotation::new(
-        rect,
-        Target::Action(Action::Link(LinkAction::new(link.uri.clone()))),
-      ),
+      LinkAnnotation::new(rect, target),
       // Tagged output requires alt text on link annotations; the target URI
       // is the honest description available.
       tags.is_some().then(|| link.uri.clone()),
