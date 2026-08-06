@@ -25,21 +25,21 @@ The output gains an sRGB output intent and XMP metadata. Everything else stays t
 | ------ | ------- | -------------------------------------------------- |
 | `"2b"` | PDF 1.7 | Basic conformance. The common choice.              |
 | `"2u"` | PDF 1.7 | `2b` plus guaranteed Unicode mapping for all text. |
+| `"2a"` | PDF 1.7 | `2u` plus a tagged structure tree.                 |
 | `"3b"` | PDF 1.7 | `2b` plus permission to attach arbitrary files.    |
 | `"3u"` | PDF 1.7 | `2u` plus the same attachment permission.          |
-| `"4"`  | PDF 2.0 | The current revision of the standard.              |
-| `"2a"` | PDF 1.7 | `2u` plus a tagged structure tree.                 |
 | `"3a"` | PDF 1.7 | `3u` plus a tagged structure tree.                 |
+| `"4"`  | PDF 2.0 | The current revision of the standard.              |
 
 Takumi always writes ToUnicode maps, so the `u` levels cost nothing extra. Electronic invoice formats built on PDF/A-3 (ZUGFeRD, Factur-X) expect `"3b"`.
 
 PDF/A-1 is not offered. It predates transparency, which most documents use.
 
-Validation runs during rendering. A document that cannot conform rejects the render with the failing rule instead of writing a broken file.
+Validation runs twice. krilla checks every rule it can while rendering, and a document that cannot conform rejects the render with the failing rule instead of writing a broken file. Output at every level, and under PDF/UA-1, also passes [veraPDF](https://verapdf.org), the industry reference validator.
 
 ## Tagged output
 
-Every render embeds a structure tree by default, like Chromium's print-to-PDF: the machine-readable document semantics screen readers navigate. Takumi builds it from the HTML tags — headings become `Hn`, paragraphs `P`, images `Figure` with their `alt` text, anchors `Link`, and page headers and footers become artifacts. Pass `tagged: false` to skip it when file size matters more than accessibility.
+Every render embeds a structure tree by default, like Chromium's print-to-PDF: the machine-readable document semantics screen readers navigate. Takumi builds it from the HTML tags — headings become `Hn` with titles, paragraphs `P`, images `Figure` with their `alt` text, anchors `Link` elements that also hold the link annotation, lists `L`/`LI`, inline `strong`/`em`/`code` their PDF equivalents, and page headers and footers become artifacts. Pass `tagged: false` to skip it when file size matters more than accessibility.
 
 ```tsx twoslash
 import type { ReactNode } from "react";
