@@ -583,6 +583,31 @@ jobs:
           RUSTFLAGS: ${{ env.RUSTFLAGS }} -Zunstable-options -Cpanic=immediate-abort -Ctarget-feature=+simd128
         run: bun run build
 
+      # A Worker is capped at 3 MB gzip, and takumi-pdf has to leave room for
+      # the code around it. The ceiling catches a step change, not drift; read
+      # the reported numbers to see where the budget is going.
+      - name: Report wasm size
+        working-directory: takumi-pdf-js
+        env:
+          CEILING_BYTES: 2097152
+        run: |
+          set -eu
+          wasm=pkg/takumi_pdf_wasm_bg.wasm
+          raw=$(wc -c < "$wasm")
+          gz=$(gzip -9 -c "$wasm" | wc -c)
+          {
+            echo "| takumi-pdf wasm | bytes | MiB |"
+            echo "| --- | ---: | ---: |"
+            awk -v raw="$raw" -v gz="$gz" 'BEGIN {
+              printf "| raw | %d | %.2f |\n", raw, raw / 1048576
+              printf "| gzip | %d | %.2f |\n", gz, gz / 1048576
+            }'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$gz" -gt "$CEILING_BYTES" ]; then
+            echo "::error::gzipped wasm is $gz bytes, over the $CEILING_BYTES ceiling"
+            exit 1
+          fi
+
       - name: Test takumi-pdf
         working-directory: takumi-pdf-js
         run: bun test
