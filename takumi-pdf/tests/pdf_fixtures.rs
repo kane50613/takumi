@@ -433,7 +433,8 @@ fn background_placement() {
       cell("background-repeat: repeat; background-size: 120px 120px; background-position: 20px 0;"),
       cell("background-repeat: repeat;"),
       cell("background-repeat: space;"),
-      cell("background-repeat: round;"),
+      // The position still applies to the rescaled tile, shifting its phase.
+      cell("background-repeat: round; background-position: center;"),
     );
     let node =
       from_html(&source, FromHtmlOptions::default()).expect("parse background placement fixture");

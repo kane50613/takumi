@@ -116,10 +116,12 @@ fn axis(
     BackgroundRepeatStyle::Round => {
       let count = (area / tile).round().max(1.0);
       let rounded = area / count;
+      // The position still applies, against the rescaled tile.
+      let anchor = position_axis(position, context, area - rounded);
 
       Axis {
         tile: rounded,
-        origin: 0.0,
+        origin: anchor - (anchor / rounded).ceil() * rounded,
         step: rounded,
       }
     }
