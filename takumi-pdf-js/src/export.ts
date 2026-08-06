@@ -69,6 +69,29 @@ type ViewportOptions = {
   footer?: never;
 };
 
+/**
+ * Options for {@link PdfRenderer.measure}: page geometry (or a viewport) plus
+ * layout resources. Margins do not affect the result.
+ */
+export type MeasureOptions = (
+  | { size?: PageSize; landscape?: boolean; viewport?: never }
+  | { viewport: ViewportInput; size?: never; landscape?: never }
+) & {
+  /** Fonts to register before layout, deduped across calls. */
+  fonts?: FontLoader[];
+  /** Pre-fetched images for `src` URLs in the tree. */
+  images?: ImagesInput;
+  /** CSS stylesheets to apply before layout. */
+  stylesheets?: string[];
+  /** Per-render font stack: ordered family names used as the fallback chain. */
+  fontFamilies?: string[];
+  /** Default BCP-47 language tag applied to the root. */
+  lang?: string;
+};
+
+/** A node tree's laid-out size in CSS px. */
+export type MeasuredSize = { width: number; height: number };
+
 /** Document metadata written to the PDF's info dictionary. */
 export type PdfMetadata = {
   /** The document title. */
@@ -168,6 +191,30 @@ export class PdfRenderer {
     });
   }
 
+  /**
+   * Lays out a node tree without rendering and returns its size in CSS px.
+   *
+   * With page options the tree lays out at the full page width with unbounded
+   * height, exactly how {@link render} measures a header or footer band
+   * (`pageNumber` / `totalPages` hooks are filled with three-digit counters),
+   * so the height tells you how much margin a band needs.
+   */
+  async measure(node: NodeInput, options: MeasureOptions = {}): Promise<MeasuredSize> {
+    const { fonts, images, stylesheets, fontFamilies, ...rest } = options;
+    const [main, resources] = await Promise.all([
+      resolveNode(node),
+      this.fonts.resolveResources(fonts, images, fontFamilies),
+    ]);
+    const sheets = [...(stylesheets ?? []), ...main.stylesheets];
+
+    return this.inner.measure(main.node, {
+      ...rest,
+      stylesheets: sheets.length > 0 ? sheets : undefined,
+      images: resources.images,
+      fontFamilies: resources.fontFamilies,
+    });
+  }
+
   /** Registers a font ahead of time, deduped against earlier registrations. */
   registerFont(font: FontLoader) {
     return this.fonts.register(font);
@@ -185,4 +232,10 @@ let shared: PdfRenderer | undefined;
 export function render(node: NodeInput, options?: RenderOptions): Promise<Uint8Array> {
   shared ??= new PdfRenderer();
   return shared.render(node, options);
+}
+
+/** Measures with a lazily created shared {@link PdfRenderer}. */
+export function measure(node: NodeInput, options?: MeasureOptions): Promise<MeasuredSize> {
+  shared ??= new PdfRenderer();
+  return shared.measure(node, options);
 }

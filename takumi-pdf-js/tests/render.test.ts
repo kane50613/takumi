@@ -91,6 +91,25 @@ test("rejects an unknown size keyword", () => {
   expect(renderer.render(doc, { size: "tabloid" as "a4" })).rejects.toThrow("unknown page size");
 });
 
+test("measures a band at full page width with counters filled", async () => {
+  const footer = container({
+    style: { display: "flex", columnGap: 3, fontSize: 12 },
+    children: [text("Page"), container({ className: "pageNumber" })],
+  });
+  const size = await renderer.measure(footer, { size: { width: 400, height: 300 } });
+
+  expect(size.width).toBe(400);
+  expect(size.height).toBeGreaterThanOrEqual(12);
+});
+
+test("measure defaults to paged A4", async () => {
+  const size = await renderer.measure(doc);
+
+  // A4 at 96 dpi is 793.7px wide; the layout viewport truncates to 793.
+  expect(size.width).toBe(793);
+  expect(size.height).toBeGreaterThan(0);
+});
+
 test("rejects viewport combined with paged options", () => {
   expect(
     renderer.render(doc, {
