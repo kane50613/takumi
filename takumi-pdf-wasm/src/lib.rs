@@ -8,8 +8,6 @@ mod font;
 mod metadata;
 mod options;
 
-use std::sync::RwLock;
-
 use serde_wasm_bindgen::{from_value, to_value};
 use takumi_bindings_common::{build_font_resource, default_fonts, stylesheet};
 use takumi_core::{
@@ -74,11 +72,11 @@ struct MeasuredSizeOutput {
 /// flag permanently set.
 #[wasm_bindgen]
 pub struct PdfRenderer {
-  state: RwLock<Fonts>,
+  state: Fonts,
   resource_cache: ResourceCache,
   /// Converting a font for PDF output copies and hashes its whole blob, so it
   /// is done once per renderer rather than once per render.
-  font_cache: RwLock<FontCache>,
+  font_cache: FontCache,
 }
 
 #[wasm_bindgen]
@@ -87,24 +85,21 @@ impl PdfRenderer {
   #[wasm_bindgen(constructor)]
   pub fn new() -> Result<PdfRenderer, js_sys::Error> {
     Ok(PdfRenderer {
-      state: RwLock::new(default_fonts().map_err(map_error)?),
+      state: default_fonts().map_err(map_error)?,
       resource_cache: ResourceCache::default(),
-      font_cache: RwLock::default(),
+      font_cache: FontCache::default(),
     })
   }
 
   /// Registers a font (raw bytes or a details object), returning the families
   /// it produced.
   #[wasm_bindgen(js_name = registerFont)]
-  pub fn register_font(&self, font: FontType) -> Result<RegisteredFamiliesType, js_sys::Error> {
+  pub fn register_font(&mut self, font: FontType) -> Result<RegisteredFamiliesType, js_sys::Error> {
     let font: Font = from_value(font.into()).map_err(map_error)?;
-    let mut state = self
-      .state
-      .try_write()
-      .map_err(|error| js_sys::Error::new(&format!("Renderer state is locked: {error}")))?;
 
     let registered = match font {
-      Font::Buffer(buffer) => state
+      Font::Buffer(buffer) => self
+        .state
         .register(FontResource::new(buffer.into_vec()))
         .map_err(map_error)?,
       Font::Object(details) => {
@@ -119,7 +114,7 @@ impl PdfRenderer {
         )
         .map_err(map_error)?;
 
-        state.register(resource).map_err(map_error)?
+        self.state.register(resource).map_err(map_error)?
       }
     };
 
@@ -130,7 +125,7 @@ impl PdfRenderer {
   /// `viewport` renders a single fixed page instead.
   #[wasm_bindgen(unchecked_return_type = "Uint8Array<ArrayBuffer>")]
   pub fn render(
-    &self,
+    &mut self,
     node: NodeType,
     options: Option<PdfRenderOptionsType>,
   ) -> Result<Vec<u8>, js_sys::Error> {
@@ -148,20 +143,10 @@ impl PdfRenderer {
       .map(Lang::parse)
       .transpose()
       .map_err(map_error)?;
-    let state = self
-      .state
-      .try_read()
-      .map_err(|error| js_sys::Error::new(&format!("Renderer state is locked: {error}")))?;
-
-    let mut font_cache = self
-      .font_cache
-      .try_write()
-      .map_err(|error| js_sys::Error::new(&format!("Renderer state is locked: {error}")))?;
-
     takumi_pdf::render(PdfOptions {
       viewport,
-      fonts: &state,
-      font_cache: Some(&mut font_cache),
+      fonts: &self.state,
+      font_cache: Some(&mut self.font_cache),
       node,
       stylesheet: stylesheet(&self.resource_cache, options.stylesheets, Vec::new()),
       images,
@@ -206,13 +191,9 @@ impl PdfRenderer {
       .map(Lang::parse)
       .transpose()
       .map_err(map_error)?;
-    let state = self
-      .state
-      .try_read()
-      .map_err(|error| js_sys::Error::new(&format!("Renderer state is locked: {error}")))?;
     let measured = takumi_pdf::measure(MeasureOptions {
       viewport,
-      fonts: &state,
+      fonts: &self.state,
       node,
       stylesheet: stylesheet(&self.resource_cache, options.stylesheets, Vec::new()),
       images,
