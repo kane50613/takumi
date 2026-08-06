@@ -39,7 +39,7 @@ Validation runs during rendering. A document that cannot conform rejects the ren
 
 ## Tagged output
 
-The `a` levels and PDF/UA embed a structure tree: the machine-readable document semantics screen readers navigate. Takumi builds it from the HTML tags — headings become `Hn`, paragraphs `P`, images `Figure` with their `alt` text, anchors `Link`, and page headers and footers become artifacts.
+Every render embeds a structure tree by default, like Chromium's print-to-PDF: the machine-readable document semantics screen readers navigate. Takumi builds it from the HTML tags — headings become `Hn`, paragraphs `P`, images `Figure` with their `alt` text, anchors `Link`, and page headers and footers become artifacts. Pass `tagged: false` to skip it when file size matters more than accessibility.
 
 ```tsx twoslash
 import type { ReactNode } from "react";
@@ -62,4 +62,4 @@ The validators demand a few inputs the renderer cannot invent:
 - `metadata.title` — required by PDF/UA.
 - `metadata.creationDate` — required by the `a` levels. A fixed date keeps output byte-identical across runs.
 
-PDF/UA also requires an outline; it is generated from headings automatically. To build the structure tree without enforcing any standard, pass `tagged: true`.
+PDF/UA also requires an outline; it is generated from headings automatically.

@@ -241,9 +241,10 @@ pub struct PdfOptions<'g> {
   /// render.
   #[builder(default)]
   pub standard: PdfStandard,
-  /// Builds a tagged-PDF structure tree from the HTML semantics. Implied by
-  /// the tagged standards (`A2a`, `A3a`, `Ua1`).
-  #[builder(default)]
+  /// Builds a tagged-PDF structure tree from the HTML semantics, like
+  /// Chromium's print-to-PDF. On by default; the tagged standards (`A2a`,
+  /// `A3a`, `Ua1`) force it on.
+  #[builder(default = true)]
   pub tagged: bool,
 }
 

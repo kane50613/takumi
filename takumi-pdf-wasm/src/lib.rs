@@ -189,7 +189,8 @@ struct PdfRenderOptions {
   pdfa: Option<PdfaInput>,
   /// PDF/UA-1 accessible output; builds a tagged structure tree.
   pdfua: Option<bool>,
-  /// Builds a tagged structure tree without enforcing a standard.
+  /// Builds a tagged structure tree, like Chromium's print-to-PDF. Defaults
+  /// to true.
   tagged: Option<bool>,
 }
 
@@ -419,7 +420,7 @@ impl PdfRenderer {
       } else {
         options.pdfa.map(PdfStandard::from).unwrap_or_default()
       },
-      tagged: options.tagged.unwrap_or(false),
+      tagged: options.tagged.unwrap_or(true),
     })
     .map_err(map_error)
   }

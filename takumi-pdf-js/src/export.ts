@@ -110,7 +110,7 @@ export type RenderOptions = (PagedOptions | ViewportOptions) & {
   pdfa?: "2a" | "2b" | "2u" | "3a" | "3b" | "3u" | "4";
   /** PDF/UA-1 accessible output; builds a tagged structure tree. */
   pdfua?: boolean;
-  /** Builds a tagged structure tree without enforcing a standard. */
+  /** Builds a tagged (accessible) structure tree, like Chromium's print-to-PDF. Defaults to `true`. */
   tagged?: boolean;
 };
 
