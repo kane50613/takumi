@@ -732,8 +732,8 @@ fn outlines() {
   let content: Vec<Vec<u8>> = content_lines(&pdf).collect();
 
   for needle in [
-    &b"0.2627451 0.21960784 0.7921569 rg"[..],
-    &b"0.7254902 0.10980392 0.10980392 rg"[..],
+    &b"0.2627 0.2196 0.7922 rg"[..],
+    &b"0.7255 0.1098 0.1098 rg"[..],
   ] {
     assert!(
       content.iter().any(|line| find(line, needle).is_some()),
@@ -803,12 +803,12 @@ fn text_shadow_and_stroke() {
 
   // The amber shadow pass fills before the text color does.
   assert!(
-    contains(b"0.9607843 0.61960787 0.043137256 rg"),
+    contains(b"0.9608 0.6196 0.0431 rg"),
     "expected the shadow color fill"
   );
   // The stroke sets a red stroke color (RG) next to the cream fill.
   assert!(
-    contains(b"0.7254902 0.10980392 0.10980392 RG"),
+    contains(b"0.7255 0.1098 0.1098 RG"),
     "expected the text stroke color"
   );
   // The clip-text line fills its glyphs with the gradient shading.
