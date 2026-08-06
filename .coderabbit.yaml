@@ -2,5 +2,11 @@ language: "en-US"
 reviews:
   poem: false
   sequence_diagrams: false
+  # Stacked pull requests target the branch below them, not the default one,
+  # and would otherwise go unreviewed until the stack lands.
+  auto_review:
+    base_branches:
+      - ".*"
   path_filters:
     - "!takumi/tests/fixtures-generated/**"
+    - "!takumi-pdf/tests/fixtures-generated/**"
