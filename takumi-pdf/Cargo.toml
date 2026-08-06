@@ -59,8 +59,6 @@ path = "../takumi-core"
 default-features = false
 features = ["woff2"]
 
-[dependencies.roxmltree]
-workspace = true
 
 [lints]
 workspace = true

@@ -81,9 +81,7 @@ use crate::bands::{emit_band, measure_band, prepare_band};
 use crate::emitter::FontMap;
 use crate::inline::{build_inline_map, collect_text_boxes};
 use crate::interactive::{add_link_annotations, build_outline, collect_interactive};
-use crate::options::{
-  BAND_EDGE_PADDING, PT_PER_PX, build_metadata, krilla_datetime, validate_custom_xmp,
-};
+use crate::options::{BAND_EDGE_PADDING, PT_PER_PX, build_metadata, krilla_datetime};
 use crate::pagination::page_starts;
 use crate::paint::rect_path;
 use crate::tags::{TagCollector, build_tag_tree};
@@ -91,7 +89,7 @@ use crate::tree::{TreeInputs, prepare_tree};
 
 pub use crate::options::{
   Attachment, AttachmentRelationship, MeasureOptions, MeasuredSize, PageMargins, PageOptions,
-  PdfDate, PdfError, PdfMetadata, PdfOptions, PdfStandard, Tagging,
+  PdfDate, PdfError, PdfMetadata, PdfOptions, PdfStandard, Tagging, XmpProperty, XmpSchema,
 };
 
 /// Lays out a node tree without rendering and returns its size.
@@ -165,7 +163,6 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
     .then(|| RefCell::new(TagCollector::default()));
 
   if let Some(metadata) = &options.metadata {
-    validate_custom_xmp(metadata)?;
     document.set_metadata(build_metadata(metadata, inputs.lang));
   } else if tag_collector.is_some() && inputs.lang.is_some() {
     // Tagged standards check the document language even without metadata.

@@ -1,3 +1,5 @@
+import type { XmpSchema } from "takumi-pdf";
+
 export const invoice = {
   number: "INV-2026-0042",
   issuedAt: "2026-08-04",
@@ -47,51 +49,36 @@ const escape = (value: string) =>
 
 const FX_NAMESPACE = "urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#";
 
-const XMP_PROPERTIES = [
-  ["DocumentFileName", "name of the embedded XML invoice file"],
-  ["DocumentType", "INVOICE"],
-  ["Version", "the version of the Factur-X standard"],
-  ["ConformanceLevel", "the profile the XML conforms to"],
-];
-
 /**
- * The `fx:` properties a Factur-X reader looks for.
+ * The `fx:` schema a Factur-X reader looks for: four properties plus the
+ * description PDF/A requires for them.
  *
  * @see https://github.com/atgp/factur-x/blob/master/xmp/Factur-X_extension_schema.xmp
  */
-export function facturXmp(fileName: string, profile: string) {
-  return `<rdf:Description rdf:about="" xmlns:fx="${FX_NAMESPACE}">
-      <fx:DocumentType>INVOICE</fx:DocumentType>
-      <fx:DocumentFileName>${escape(fileName)}</fx:DocumentFileName>
-      <fx:Version>1.0</fx:Version>
-      <fx:ConformanceLevel>${escape(profile.toUpperCase())}</fx:ConformanceLevel>
-    </rdf:Description>`;
-}
-
-/**
- * Describes the `fx:` schema for PDF/A, which rejects properties whose schema
- * carries no description. Merged into the packet's own schema bag.
- */
-export function facturXmpSchema() {
-  const properties = XMP_PROPERTIES.map(
-    ([name, description]) => `<rdf:li rdf:parseType="Resource">
-              <pdfaProperty:name>${name}</pdfaProperty:name>
-              <pdfaProperty:valueType>Text</pdfaProperty:valueType>
-              <pdfaProperty:category>external</pdfaProperty:category>
-              <pdfaProperty:description>${description}</pdfaProperty:description>
-            </rdf:li>`,
-  ).join("\n            ");
-
-  return `<rdf:li rdf:parseType="Resource">
-        <pdfaSchema:schema>Factur-X PDFA Extension Schema</pdfaSchema:schema>
-        <pdfaSchema:namespaceURI>${FX_NAMESPACE}</pdfaSchema:namespaceURI>
-        <pdfaSchema:prefix>fx</pdfaSchema:prefix>
-        <pdfaSchema:property>
-          <rdf:Seq>
-            ${properties}
-          </rdf:Seq>
-        </pdfaSchema:property>
-      </rdf:li>`;
+export function facturXmp(fileName: string, profile: string): XmpSchema {
+  return {
+    name: "Factur-X PDF/A Extension",
+    prefix: "fx",
+    namespace: FX_NAMESPACE,
+    properties: [
+      {
+        name: "DocumentType",
+        value: "INVOICE",
+        description: "the type of document the XML describes",
+      },
+      {
+        name: "DocumentFileName",
+        value: fileName,
+        description: "name of the embedded XML invoice file",
+      },
+      { name: "Version", value: "1.0", description: "the version of the Factur-X standard" },
+      {
+        name: "ConformanceLevel",
+        value: profile.toUpperCase(),
+        description: "the profile the XML conforms to",
+      },
+    ],
+  };
 }
 
 /** Factur-X 1.0 MINIMUM profile, the CII payload every EU e-invoice reader looks for. */

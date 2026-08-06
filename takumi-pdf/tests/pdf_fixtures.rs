@@ -20,7 +20,7 @@ use takumi_core::{
 use takumi_html::{FromHtmlOptions, from_html};
 use takumi_pdf::{
   Attachment, AttachmentRelationship, MeasureOptions, PageMargins, PageOptions, PdfDate, PdfError,
-  PdfMetadata, PdfOptions, PdfStandard, Tagging, measure, render,
+  PdfMetadata, PdfOptions, PdfStandard, Tagging, XmpProperty, XmpSchema, measure, render,
 };
 
 fn fonts() -> Fonts {
@@ -756,9 +756,20 @@ fn archival_standards() {
   assert!(String::from_utf8_lossy(&a4).starts_with("%PDF-2.0"));
 }
 
-const FACTUR_X_XMP: &str = r#"<rdf:Description rdf:about="" xmlns:fx="urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#"><fx:DocumentFileName>factur-x.xml</fx:DocumentFileName></rdf:Description>"#;
+const FACTUR_X_NAMESPACE: &str = "urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#";
 
-const FACTUR_X_XMP_SCHEMA: &str = r#"<rdf:li rdf:parseType="Resource"><pdfaSchema:schema>Factur-X PDFA Extension Schema</pdfaSchema:schema><pdfaSchema:namespaceURI>urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#</pdfaSchema:namespaceURI><pdfaSchema:prefix>fx</pdfaSchema:prefix><pdfaSchema:property><rdf:Seq><rdf:li rdf:parseType="Resource"><pdfaProperty:name>DocumentFileName</pdfaProperty:name><pdfaProperty:valueType>Text</pdfaProperty:valueType><pdfaProperty:category>external</pdfaProperty:category><pdfaProperty:description>name of the embedded XML invoice file</pdfaProperty:description></rdf:li></rdf:Seq></pdfaSchema:property></rdf:li>"#;
+fn factur_x_schema() -> XmpSchema {
+  XmpSchema {
+    name: "Factur-X PDF/A Extension".to_string(),
+    prefix: "fx".to_string(),
+    namespace: FACTUR_X_NAMESPACE.to_string(),
+    properties: vec![XmpProperty {
+      name: "DocumentFileName".to_string(),
+      value: "factur-x.xml".to_string(),
+      description: "name of the embedded XML invoice file".to_string(),
+    }],
+  }
+}
 
 /// The invoice carries a machine-readable XML attachment under PDF/A-3b:
 /// the file spec, association kind, and name tree all serialize, the
@@ -784,8 +795,7 @@ fn attachments() {
       minute: 0,
       second: 0,
     }),
-    xmp: Some(FACTUR_X_XMP.to_string()),
-    xmp_schemas: Some(FACTUR_X_XMP_SCHEMA.to_string()),
+    xmp: vec![factur_x_schema()],
     ..PdfMetadata::default()
   };
   let a3b = run_pdf_fixture("invoice-pdfa-3b-attachment", |fonts| {
@@ -816,8 +826,8 @@ fn attachments() {
     .expect("missing XMP packet");
 
   assert!(
-    packet.contains(FACTUR_X_XMP),
-    "custom XMP fragment not spliced into the packet"
+    packet.contains("<fx:DocumentFileName>factur-x.xml</fx:DocumentFileName>"),
+    "custom property missing from the packet"
   );
   // A packet carries at most one schema bag, so the custom entry has to land in
   // the one krilla writes: a second bag makes the whole packet unparseable.
@@ -827,8 +837,8 @@ fn attachments() {
     "custom schema entry did not merge into the packet's schema bag"
   );
   assert!(
-    packet.contains(FACTUR_X_XMP_SCHEMA),
-    "custom schema entry missing from the packet"
+    packet.contains(FACTUR_X_NAMESPACE),
+    "custom schema description missing from the packet"
   );
 
   let fonts = fonts();
@@ -856,20 +866,6 @@ fn attachments() {
   );
 
   assert!(matches!(invalid_mime, Err(PdfError::InvalidMimeType(mime)) if mime == "not-a-mime"));
-
-  let malformed_xmp = render(
-    PdfOptions::builder()
-      .node(text("xmp", 16.0))
-      .page(PageOptions::A4)
-      .metadata(PdfMetadata {
-        xmp: Some("<rdf:Description rdf:about=\"\">".to_string()),
-        ..metadata()
-      })
-      .fonts(&fonts)
-      .build(),
-  );
-
-  assert!(matches!(malformed_xmp, Err(PdfError::InvalidXmp)));
 
   // PDF/A-2 forbids arbitrary attachments; PDF/A-3 requires the descriptive
   // fields and a date. These reach the render through Rust and wasm callers,
@@ -1075,8 +1071,7 @@ fn report_links_outline() {
         keywords: vec!["report".into(), "fixture".into()],
         creator: Some("takumi-pdf fixtures".into()),
         creation_date: None,
-        xmp: None,
-        xmp_schemas: None,
+        xmp: Vec::new(),
       })
       .fonts(fonts)
       .build()

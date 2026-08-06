@@ -6,7 +6,7 @@ packages:
 
 ### Custom XMP metadata
 
-`metadata.xmp` writes an RDF fragment into the XMP packet, for schemas the renderer knows nothing about. One is the `fx:` block that turns a PDF/A-3 with an attached invoice into a Factur-X file.
+`metadata.xmp` takes namespaces to write into the XMP packet, for metadata the renderer knows nothing about. One is the `fx:` schema that turns a PDF/A-3 with an attached invoice into a Factur-X file.
 
-- `metadata.xmpSchemas` carries the `pdfaExtension:schemas` entries describing those properties, which PDF/A requires and a packet allows only once, so they merge into the bag the renderer writes
-- both are written verbatim; a fragment that is not well-formed XML rejects the render
+- each schema carries a prefix, a namespace URI, and its properties
+- every property is written as a value and described in the `pdfaExtension:schemas` entry PDF/A requires, so the two cannot drift apart

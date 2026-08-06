@@ -60,4 +60,4 @@ java -jar Mustang-CLI.jar --action validate --source output/invoice.pdf
 <summary status="valid"/>
 ```
 
-Mustang keys on the `fx:` XMP block to find the profile and the attachment. That block comes from `metadata.xmp`, and its schema description from `metadata.xmpSchemas`, both written into the PDF verbatim. Neither is validated during the render beyond being well-formed XML, so a wrong profile name or a missing property surfaces here rather than at render time.
+Mustang reads the `fx:` XMP block to find the profile and the attachment. That block comes from `metadata.xmp`, which takes the namespace and its properties as data. The renderer writes both the values and the schema description PDF/A requires, so they cannot disagree. It does not check the values themselves: a wrong profile name surfaces here, not at render time.

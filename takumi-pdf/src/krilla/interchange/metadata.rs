@@ -7,7 +7,10 @@
 //! [`Document::set_metadata`]: crate::krilla::document::Document::set_metadata
 use pdf_writer::{Finish, Pdf, Ref, TextStr};
 use std::cell::LazyCell;
-use xmp_writer::{LangId, Timezone, XmpWriter};
+use xmp_writer::pdfa::PdfAExtSchemasWriter;
+use xmp_writer::{CustomNamespace, LangId, Namespace, Timezone, XmpWriter};
+
+use crate::options::XmpSchema;
 
 use crate::krilla::configure::{Configuration, PdfVersion, ValidationError};
 use crate::krilla::serialize::SerializeContext;
@@ -26,47 +29,51 @@ pub struct Metadata {
   pub(crate) creation_date: Option<DateTime>,
   pub(crate) text_direction: Option<TextDirection>,
   pub(crate) page_layout: Option<PageLayout>,
-  pub(crate) custom_xmp: Option<String>,
-  pub(crate) custom_xmp_schemas: Option<String>,
+  pub(crate) custom_schemas: Vec<XmpSchema>,
 }
 
-const RDF_END: &str = "</rdf:RDF>";
-const SCHEMAS_END: &str = "</rdf:Bag></pdfaExtension:schemas>";
-
-const SCHEMAS_DESCRIPTION: &str = concat!(
-  r#"<rdf:Description rdf:about="""#,
-  r#" xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/""#,
-  r#" xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#""#,
-  r#" xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#">"#,
-  "<pdfaExtension:schemas><rdf:Bag>",
-);
-
-fn insert_before(packet: &str, anchor: &str, fragment: &str) -> Option<String> {
-  let index = packet.rfind(anchor)?;
-
-  Some(format!(
-    "{}{}{}",
-    &packet[..index],
-    fragment,
-    &packet[index..]
-  ))
-}
-
-/// Appends a caller-supplied RDF fragment to a finished XMP packet, so custom
-/// properties ride along with the ones krilla writes itself.
-pub(crate) fn insert_custom_xmp(packet: &str, fragment: &str) -> String {
-  insert_before(packet, RDF_END, fragment).unwrap_or_else(|| packet.to_string())
-}
-
-/// Merges caller-supplied `pdfaExtension:schemas` entries into the packet's own
-/// schema bag, which XMP allows only once per packet.
-pub(crate) fn insert_custom_xmp_schemas(packet: &str, entries: &str) -> String {
-  if let Some(merged) = insert_before(packet, SCHEMAS_END, entries) {
-    return merged;
+/// Writes the caller's namespaces as properties. Their schema descriptions are
+/// written by the validators, which own the packet's single schema bag.
+pub(crate) fn write_custom_properties<'n>(xmp: &mut XmpWriter<'n>, schemas: &'n [XmpSchema]) {
+  for schema in schemas {
+    for property in &schema.properties {
+      xmp
+        .element(&property.name, custom_namespace(schema))
+        .value(property.value.as_str());
+    }
   }
-  let description = format!("{SCHEMAS_DESCRIPTION}{entries}{SCHEMAS_END}</rdf:Description>");
+}
 
-  insert_custom_xmp(packet, &description)
+fn custom_namespace(schema: &XmpSchema) -> Namespace<'_> {
+  Namespace::Custom(Box::new(CustomNamespace::new(
+    &schema.name,
+    &schema.prefix,
+    &schema.namespace,
+  )))
+}
+
+/// Describes the caller's namespaces in the schema bag PDF/A requires them to
+/// appear in.
+pub(crate) fn write_custom_schemas<'n>(
+  extension_schemas: &mut PdfAExtSchemasWriter<'_, 'n>,
+  schemas: &'n [XmpSchema],
+) {
+  for schema in schemas {
+    let mut described = extension_schemas.add_schema();
+
+    described.namespace(custom_namespace(schema));
+
+    let mut properties = described.properties();
+
+    for property in &schema.properties {
+      properties
+        .add_property()
+        .name(&property.name)
+        .value_type("Text")
+        .category(false)
+        .description(&property.description);
+    }
+  }
 }
 
 impl Metadata {
@@ -151,15 +158,9 @@ impl Metadata {
     self
   }
 
-  /// An RDF fragment written verbatim into the XMP packet.
-  pub fn custom_xmp(mut self, custom_xmp: String) -> Self {
-    self.custom_xmp = Some(custom_xmp);
-    self
-  }
-
-  /// `pdfaExtension:schemas` entries merged into the packet's schema bag.
-  pub fn custom_xmp_schemas(mut self, custom_xmp_schemas: String) -> Self {
-    self.custom_xmp_schemas = Some(custom_xmp_schemas);
+  /// Custom namespaces written into the XMP packet.
+  pub fn custom_schemas(mut self, custom_schemas: Vec<XmpSchema>) -> Self {
+    self.custom_schemas = custom_schemas;
     self
   }
 

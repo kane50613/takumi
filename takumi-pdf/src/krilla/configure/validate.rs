@@ -35,9 +35,11 @@ use crate::krilla::color::separation::SeparationColorant;
 use crate::krilla::color::separation::SeparationSpace;
 use crate::krilla::configure::PdfVersion;
 use crate::krilla::interchange::embed::EmbedError;
+use crate::krilla::interchange::metadata::write_custom_schemas;
 use crate::krilla::surface::Location;
 use crate::krilla::text::Font;
 use crate::krilla::text::GlyphId;
+use crate::options::XmpSchema;
 
 /// An error that occurred during validation/
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -291,8 +293,10 @@ impl Validators {
     self.a.map(Archival::output_intent)
   }
 
-  pub(crate) fn write_xmp(self, xmp: &mut XmpWriter) {
-    if self.requires_xmp_metadata_extension_schema() {
+  pub(crate) fn write_xmp<'n>(self, xmp: &mut XmpWriter<'n>, custom_schemas: &'n [XmpSchema]) {
+    // A packet carries at most one schema bag, so the caller's descriptions go
+    // in the same one the validators write.
+    if self.requires_xmp_metadata_extension_schema() || !custom_schemas.is_empty() {
       let mut extension_schemas = xmp.extension_schemas();
       if let Some(a) = self.a {
         a.write_xmp_extension_schema_description(&mut extension_schemas);
@@ -300,6 +304,7 @@ impl Validators {
       if let Some(ua) = self.ua {
         ua.write_xmp_extension_schema_description(&mut extension_schemas);
       }
+      write_custom_schemas(&mut extension_schemas, custom_schemas);
     }
 
     if let Some(a) = self.a {

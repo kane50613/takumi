@@ -110,18 +110,38 @@ export type PdfMetadata = {
    */
   creationDate?: string;
   /**
-   * An RDF fragment written verbatim into the XMP packet, for schemas the
-   * renderer knows nothing about, e.g. the `fx:` properties a Factur-X invoice
-   * needs. The render does not validate it.
+   * Custom XMP schemas written into the packet, for metadata the renderer
+   * knows nothing about, e.g. the `fx:` properties a Factur-X invoice needs.
    */
-  xmp?: string;
+  xmp?: XmpSchema[];
+};
+
+/**
+ * A namespace written into the XMP packet, with the schema description PDF/A
+ * requires for it.
+ */
+export type XmpSchema = {
+  /** Human-readable name, e.g. "Factur-X PDF/A Extension". */
+  name: string;
+  /** Namespace prefix the properties are written under, e.g. "fx". */
+  prefix: string;
+  /** Namespace URI. */
+  namespace: string;
   /**
-   * `pdfaExtension:schemas` entries (`rdf:li` elements) describing the schemas
-   * `xmp` uses. PDF/A rejects properties whose schema carries no description,
-   * and a packet allows one schema bag, so these merge into the bag the
-   * renderer writes rather than arriving as their own block.
+   * Properties written under the namespace. Each is written as a value and
+   * described in the schema, so the two cannot drift apart.
    */
-  xmpSchemas?: string;
+  properties: XmpProperty[];
+};
+
+/** A property of an {@link XmpSchema}. */
+export type XmpProperty = {
+  /** Property name, e.g. "DocumentFileName". */
+  name: string;
+  /** Property value. */
+  value: string;
+  /** What the property means. PDF/A requires one. */
+  description: string;
 };
 
 /** A file attached to the PDF, shown in the viewer's attachment panel. */

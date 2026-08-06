@@ -2,7 +2,7 @@ import { mkdir } from "node:fs/promises";
 import { googleFonts } from "@takumi-rs/helpers";
 import { write } from "bun";
 import { measure, render } from "takumi-pdf";
-import { facturXml, facturXmp, facturXmpSchema, invoice } from "./facturx";
+import { facturXml, facturXmp, invoice } from "./facturx";
 import { InvoiceDocument } from "./invoice";
 
 const ATTACHMENT_NAME = "factur-x.xml";
@@ -45,8 +45,7 @@ const pdf = await render(<InvoiceDocument data={invoice} />, {
     title: `Invoice ${invoice.number}`,
     authors: [invoice.seller.name],
     creationDate: invoice.issuedAt,
-    xmp: facturXmp(ATTACHMENT_NAME, PROFILE),
-    xmpSchemas: facturXmpSchema(),
+    xmp: [facturXmp(ATTACHMENT_NAME, PROFILE)],
   },
   attachments: [
     {

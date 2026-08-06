@@ -5,9 +5,7 @@ use xmp_writer::{RenditionClass, XmpWriter};
 
 use crate::krilla::configure::{PdfVersion, ValidationError};
 use crate::krilla::error::KrillaResult;
-use crate::krilla::interchange::metadata::{
-  Metadata, insert_custom_xmp, insert_custom_xmp_schemas,
-};
+use crate::krilla::interchange::metadata::{Metadata, write_custom_properties};
 use crate::krilla::metadata::PageLayout;
 use crate::krilla::serialize::SerializeContext;
 use crate::krilla::util::{Deferred, stable_hash_base64};
@@ -181,9 +179,16 @@ impl ChunkContainer {
       metadata.serialize_xmp_metadata(&mut xmp, sc, &instance_id);
     }
 
+    let custom_schemas = self
+      .metadata
+      .as_ref()
+      .map(|metadata| metadata.custom_schemas.as_slice())
+      .unwrap_or_default();
     let settings = sc.serialize_settings();
     let validators = settings.validators();
-    validators.write_xmp(&mut xmp);
+    validators.write_xmp(&mut xmp, custom_schemas);
+
+    write_custom_properties(&mut xmp, custom_schemas);
 
     xmp.num_pages(sc.page_infos().len() as u32);
     xmp.format("application/pdf");
@@ -211,16 +216,7 @@ impl ChunkContainer {
     {
       let meta_ref = if sc.serialize_settings().xmp_metadata {
         let meta_ref = remapped_ref.bump();
-        let mut xmp_buf = xmp.finish(None);
-
-        if let Some(metadata) = &self.metadata {
-          if let Some(entries) = &metadata.custom_xmp_schemas {
-            xmp_buf = insert_custom_xmp_schemas(&xmp_buf, entries);
-          }
-          if let Some(fragment) = &metadata.custom_xmp {
-            xmp_buf = insert_custom_xmp(&xmp_buf, fragment);
-          }
-        }
+        let xmp_buf = xmp.finish(None);
         pdf
           .stream(meta_ref, xmp_buf.as_bytes())
           .pair(Name(b"Type"), Name(b"Metadata"))

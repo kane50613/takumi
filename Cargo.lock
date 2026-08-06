@@ -1931,7 +1931,6 @@ dependencies = [
  "pdf-writer",
  "png",
  "pretty_assertions",
- "roxmltree 0.21.1",
  "rustc-hash",
  "siphasher",
  "skrifa 0.43.2",
