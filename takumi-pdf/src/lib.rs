@@ -23,8 +23,9 @@
 //! Coverage: backgrounds (color and gradient layers, with `background-size`,
 //! `-position` and `-repeat`), borders and radius, images
 //! (`object-fit`/`object-position`), text with decorations, opacity, blend
-//! modes, overflow clipping, `clip-path`, affine transforms, pagination. Not
-//! yet: box-shadow, filters, masks, url() background layers.
+//! modes, overflow clipping, `clip-path`, `box-shadow` (blur approximated by
+//! bands), affine transforms, pagination. Not yet: filters, masks, url()
+//! background layers.
 
 use std::{cell::RefCell, rc::Rc};
 
@@ -38,6 +39,7 @@ mod interactive;
 mod options;
 mod pagination;
 mod paint;
+mod shadow;
 #[cfg(all(feature = "svg", feature = "images"))]
 mod svg;
 mod tags;

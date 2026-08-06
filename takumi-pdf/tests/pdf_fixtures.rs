@@ -416,6 +416,42 @@ fn gradients() {
   });
 }
 
+/// `box-shadow`: a sharp shadow is one exact ring, a blurred one is a stack of
+/// bands, and an inset shadow fills the box minus the hole it casts.
+#[test]
+fn box_shadows() {
+  let pdf = run_pdf_fixture("box-shadows", |fonts| {
+    let cell = |shadow: &str| {
+      format!(
+        r##"<div style="width: 90px; height: 90px; margin: 20px; border-radius: 12px; background-color: #ffffff; box-shadow: {shadow};"></div>"##
+      )
+    };
+    let source = format!(
+      r##"<div style="display: flex; width: 100%; height: 100%; padding: 8px; background-color: #f4f4f5;">
+        {}{}{}
+      </div>"##,
+      cell("6px 6px 0 0 #111827"),
+      cell("0 8px 16px rgba(17, 24, 39, 0.45)"),
+      cell("inset 0 0 0 8px #111827"),
+    );
+    let node = from_html(&source, FromHtmlOptions::default()).expect("parse box shadow fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((450, 150)))
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = String::from_utf8_lossy(&pdf);
+
+  // The blurred cell is the only one that needs partial opacity, and it draws
+  // one band per step; the two sharp cells fill once each at full opacity.
+  assert!(
+    haystack.contains("/ca "),
+    "expected the blurred shadow to set fill opacity"
+  );
+}
+
 /// `clip-path` basic shapes clip the element and its decorations: an inset with
 /// a radius, an ellipse, a polygon, and a `path()`.
 #[test]

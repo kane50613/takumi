@@ -33,8 +33,9 @@ use takumi_core::{
   },
   paint::{ConicGradientTile, LinearGradientTile, RadialGradientTile, resolve_stops_along_axis},
   scene::{NodePaint, PaintItemKind, StackingContextNode},
+  shadow::SizedShadow,
   style::{
-    Affine, BackgroundImage, BlendMode, BoxDecorationBreak, BreakBetween, BreakInside,
+    Affine, BackgroundImage, BlendMode, BoxDecorationBreak, BoxShadow, BreakBetween, BreakInside,
     FillRule as CoreFillRule, Isolation,
   },
 };
@@ -50,6 +51,7 @@ use crate::paint::{
 };
 #[cfg(feature = "images")]
 use crate::paint::{position_axis, rasterized_image};
+use crate::shadow::{emit_inset_shadows, emit_outer_shadows};
 #[cfg(all(feature = "svg", feature = "images"))]
 use crate::svg;
 use crate::tags::TagCollector;
@@ -236,8 +238,12 @@ impl Emitter<'_> {
         pushed += 1;
       }
     }
+    let (inset, outer) = sized_shadows(node, deco_size);
+
+    self.shadows(&outer, &border, deco_size, (x, deco_y), surface, false);
     self.emit_background(node, &border, deco_size, x, deco_y, surface);
     self.emit_background_layers(node, &border, deco_size, x, deco_y, surface);
+    self.shadows(&inset, &border, deco_size, (x, deco_y), surface, true);
     self.emit_borders(&border, x, deco_y, deco_size, surface);
 
     // Children and own content clip to the (rounded) padding box when overflow
@@ -556,6 +562,32 @@ impl Emitter<'_> {
       rule: FillRule::NonZero,
     }));
     surface.draw_path(&path);
+  }
+
+  /// Paints one side of a box's shadows inside its own artifact sequence, so
+  /// the fills stay out of the structure tree like the other decorations.
+  fn shadows(
+    &self,
+    shadows: &[SizedShadow],
+    border: &BorderProperties,
+    size: Size<f32>,
+    at: (f32, f32),
+    surface: &mut Surface,
+    inset: bool,
+  ) {
+    if shadows.is_empty() {
+      return;
+    }
+    let artifact = self.start_artifact(surface);
+
+    if inset {
+      emit_inset_shadows(shadows, border, size, at, surface);
+    } else {
+      emit_outer_shadows(shadows, border, size, at, surface);
+    }
+    if artifact {
+      surface.end_tagged();
+    }
   }
 
   /// Opens an artifact sequence around a decoration when tagging is on, so it
@@ -1017,6 +1049,26 @@ impl Emitter<'_> {
     text_line_atoms(&runs, layout, y, atoms);
     Ok(())
   }
+}
+
+/// A node's shadows resolved against its box, split into inset and outer.
+fn sized_shadows(node: &RenderNode, size: Size<f32>) -> (Vec<SizedShadow>, Vec<SizedShadow>) {
+  let Some(shadows) = node.context.style.box_shadow.as_deref() else {
+    return (Vec::new(), Vec::new());
+  };
+  let resolve = |shadow: &BoxShadow| {
+    SizedShadow::from_box_shadow(
+      *shadow,
+      &node.context.sizing,
+      node.context.current_color,
+      size,
+    )
+  };
+
+  (
+    shadows.iter().filter(|s| s.inset).map(resolve).collect(),
+    shadows.iter().filter(|s| !s.inset).map(resolve).collect(),
+  )
 }
 
 /// Whether the node draws own content (text or an image), i.e. whether a
