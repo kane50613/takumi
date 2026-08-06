@@ -187,11 +187,14 @@ pub(crate) fn expanded_radial_stops(resolved: &[ResolvedGradientStop], extent: f
   let span = extent - first;
   let requested = (span / period).ceil().max(1.0);
   let cycles = requested.min(MAX_CYCLES);
-  let period = if cycles < requested {
-    span / cycles
+  // Past the cap the period stretches, and the stops inside one period stretch
+  // with it, so the last stop still reaches the full radius.
+  let scale = if cycles < requested {
+    (span / cycles) / period
   } else {
-    period
+    1.0
   };
+  let period = period * scale;
   let cycles = cycles as usize;
   let mut stops = Vec::with_capacity(cycles * resolved.len());
 
@@ -200,7 +203,7 @@ pub(crate) fn expanded_radial_stops(resolved: &[ResolvedGradientStop], extent: f
 
     for stop in resolved {
       stops.push(krilla_stop(
-        (offset + stop.position - first) / extent,
+        (offset + (stop.position - first) * scale) / extent,
         stop.color.0,
       ));
     }

@@ -22,6 +22,10 @@ pub(crate) fn cycled<T: Copy + Default>(values: &[T], index: usize) -> T {
 
 /// Where one background layer's tiles land inside the positioning area.
 pub(crate) struct Placement {
+  /// Whether either axis tiles. A tiling axis becomes a pattern even when one
+  /// tile would span the area, because the phase can still pull a second tile
+  /// into view.
+  pub(crate) tiles: bool,
   /// Tile size after `background-size`, and after `round` rescales it.
   pub(crate) tile: Size<f32>,
   /// Top-left of the first tile, relative to the positioning area.
@@ -29,13 +33,6 @@ pub(crate) struct Placement {
   /// Distance between tile origins. Equals the tile size for `repeat`, grows
   /// for `space`, and covers the whole area on an axis that does not repeat.
   pub(crate) step: (f32, f32),
-}
-
-impl Placement {
-  /// Whether the layer tiles at all, i.e. whether one draw is not enough.
-  pub(crate) fn repeats(&self, area: Size<f32>) -> bool {
-    self.step.0 < area.width || self.step.1 < area.height
-  }
 }
 
 /// One axis of a tiled layer.
@@ -59,6 +56,8 @@ pub(crate) fn place(
   let y = axis(area.height, tile.height, position.0.y, repeat.1, context);
 
   Placement {
+    tiles: repeat.0 != BackgroundRepeatStyle::NoRepeat
+      || repeat.1 != BackgroundRepeatStyle::NoRepeat,
     tile: Size {
       width: x.tile,
       height: y.tile,

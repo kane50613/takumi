@@ -426,9 +426,11 @@ fn background_placement() {
     };
     let source = format!(
       r##"<div style="display: flex; width: 100%; height: 100%; padding: 16px; column-gap: 16px; background-color: #ffffff;">
-        {}{}{}{}
+        {}{}{}{}{}
       </div>"##,
       cell("background-repeat: no-repeat; background-position: right bottom;"),
+      // A tile as wide as the box still tiles: the phase pulls a second one in.
+      cell("background-repeat: repeat; background-size: 120px 120px; background-position: 20px 0;"),
       cell("background-repeat: repeat;"),
       cell("background-repeat: space;"),
       cell("background-repeat: round;"),
@@ -438,7 +440,7 @@ fn background_placement() {
 
     PdfOptions::builder()
       .node(node)
-      .viewport(Viewport::new((580, 160)))
+      .viewport(Viewport::new((720, 160)))
       .fonts(fonts)
       .build()
   });
@@ -457,7 +459,7 @@ fn background_placement() {
   }
   assert_eq!(
     haystack.matches("/PatternType 1").count(),
-    3,
+    4,
     "expected one tiling pattern per repeating cell"
   );
 }

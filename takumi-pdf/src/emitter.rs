@@ -340,7 +340,7 @@ impl Emitter<'_> {
         &node.context,
       );
 
-      if placement.repeats(size) {
+      if placement.tiles {
         self.tiled_layer(image, node, &placement, size, (x, y), surface);
       } else {
         self.background_layer(
