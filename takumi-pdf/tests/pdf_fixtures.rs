@@ -416,6 +416,102 @@ fn gradients() {
   });
 }
 
+/// The color half of `filter`: each cell paints the same red, transformed by a
+/// different filter, so the fills carry different colors.
+#[test]
+fn color_filters() {
+  let pdf = run_pdf_fixture("color-filters", |fonts| {
+    let cell = |filter: &str| {
+      format!(
+        r##"<div style="width: 70px; height: 70px; background-color: #e11d48; filter: {filter};"></div>"##
+      )
+    };
+    let source = format!(
+      r##"<div style="display: flex; width: 100%; height: 100%; padding: 10px; column-gap: 10px; background-color: #ffffff;">
+        {}{}{}{}{}{}{}
+      </div>"##,
+      cell("none"),
+      cell("grayscale(1)"),
+      cell("sepia(1)"),
+      cell("invert(1)"),
+      cell("hue-rotate(180deg)"),
+      cell("hue-rotate(90deg)"),
+      // A filter covers the whole rendered element, shadows included.
+      r##"<div style="width: 70px; height: 70px; background-color: #ffffff; box-shadow: 4px 4px 0 0 #e11d48; filter: grayscale(1);"></div>"##,
+    );
+    let node = from_html(&source, FromHtmlOptions::default()).expect("parse filter fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((520, 100)))
+      .fonts(fonts)
+      .build()
+  });
+  let fills = fill_colors(&pdf);
+  // A fill line ends with the three color components before the `rg` operator.
+  let rounded = |color: &str| {
+    let components: Vec<&str> = color.split_whitespace().rev().take(3).collect();
+
+    components
+      .into_iter()
+      .rev()
+      .map(|part| (part.parse::<f32>().unwrap_or_default() * 255.0).round() as u8)
+      .collect::<Vec<_>>()
+  };
+  let colors: Vec<Vec<u8>> = fills.iter().map(|color| rounded(color)).collect();
+
+  // The page background, then one fill per cell.
+  assert_eq!(
+    colors.len(),
+    9,
+    "expected one fill per cell, got {colors:?}"
+  );
+  assert_eq!(colors[1], vec![225, 29, 72], "unfiltered #e11d48");
+  // Rec. 709 luma of the source color.
+  assert_eq!(colors[2], vec![74, 74, 74], "grayscale(1)");
+  assert_eq!(
+    colors[4],
+    vec![30, 226, 183],
+    "invert(1) is 255 minus source"
+  );
+  assert_ne!(
+    colors[6], colors[5],
+    "hue-rotate(90deg) differs from 180deg"
+  );
+  assert_ne!(colors[6], colors[1], "hue-rotate(90deg) changes the color");
+  // The shadow of the last cell is grayscaled like the rest of the element.
+  assert_eq!(colors[7], vec![74, 74, 74], "shadow follows the filter");
+}
+
+/// Collects the `rg` fill colors from the deflated page content streams.
+fn fill_colors(pdf: &[u8]) -> Vec<String> {
+  let mut colors = Vec::new();
+  let mut rest = pdf;
+
+  while let Some(start) = find(rest, b"stream\n") {
+    let body = &rest[start + 7..];
+    let Some(end) = find(body, b"endstream") else {
+      break;
+    };
+    let mut decoded = Vec::new();
+
+    if ZlibDecoder::new(&body[..end])
+      .read_to_end(&mut decoded)
+      .is_ok()
+    {
+      let text = String::from_utf8_lossy(&decoded).into_owned();
+
+      colors.extend(
+        text
+          .lines()
+          .filter_map(|line| line.split_once(" rg").map(|(color, _)| color.to_string())),
+      );
+    }
+    rest = &body[end..];
+  }
+  colors
+}
+
 /// `box-shadow`: a sharp shadow is one exact ring, a blurred one is a stack of
 /// bands, and an inset shadow fills the box minus the hole it casts.
 #[test]

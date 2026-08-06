@@ -51,6 +51,7 @@ impl PreparedTree {
     tags: Option<&'a RefCell<TagCollector>>,
   ) -> Emitter<'a> {
     Emitter {
+      color_filter: None,
       root: &self.root,
       contexts: &self.contexts,
       results: &self.results,

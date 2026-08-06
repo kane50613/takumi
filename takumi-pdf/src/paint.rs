@@ -1,5 +1,6 @@
 //! Path, gradient, decoration and image helpers translating takumi paint into krilla.
 
+use crate::filter::ColorFilter;
 #[cfg(feature = "images")]
 use crate::krilla::image::Image as KrillaImage;
 use crate::krilla::{
@@ -86,7 +87,13 @@ pub(crate) fn overflow_clip_rect(
 }
 
 /// Fills one decoration rect under its border-box transform offset by `(x, y)`.
-pub(crate) fn draw_decoration(surface: &mut Surface, decoration: &DecorationRect, x: f32, y: f32) {
+pub(crate) fn draw_decoration(
+  surface: &mut Surface,
+  decoration: &DecorationRect,
+  x: f32,
+  y: f32,
+  filter: Option<&ColorFilter>,
+) {
   if decoration.color.0[3] == 0 || decoration.width <= 0.0 || decoration.height <= 0.0 {
     return;
   }
@@ -98,7 +105,12 @@ pub(crate) fn draw_decoration(surface: &mut Surface, decoration: &DecorationRect
   let [a, b, c, d, e, f] = decoration.transform;
 
   surface.push_transform(&Transform::from_row(a, b, c, d, e + x, f + y));
-  surface.set_fill(Some(fill_from_rgba(decoration.color.0, 1.0)));
+  let color = match filter {
+    Some(filter) => filter.apply(decoration.color.0),
+    None => decoration.color.0,
+  };
+
+  surface.set_fill(Some(fill_from_rgba(color, 1.0)));
   surface.draw_path(&path);
   surface.pop();
 }
@@ -122,6 +134,7 @@ pub(crate) fn rasterized_image(
   source: &ImageSource,
   context: &RenderContext,
   target: (f32, f32),
+  filter: Option<&ColorFilter>,
 ) -> Option<KrillaImage> {
   let (width, height) = match source {
     ImageSource::Bitmap(bitmap) => (bitmap.width(), bitmap.height()),
@@ -153,6 +166,11 @@ pub(crate) fn rasterized_image(
       pixel[0] = ((u16::from(pixel[0]) * 255 + alpha16 / 2) / alpha16).min(255) as u8;
       pixel[1] = ((u16::from(pixel[1]) * 255 + alpha16 / 2) / alpha16).min(255) as u8;
       pixel[2] = ((u16::from(pixel[2]) * 255 + alpha16 / 2) / alpha16).min(255) as u8;
+    }
+  }
+  if let Some(filter) = filter {
+    for pixel in data.chunks_exact_mut(4) {
+      pixel.copy_from_slice(&filter.apply([pixel[0], pixel[1], pixel[2], pixel[3]]));
     }
   }
   Some(KrillaImage::from_rgba8(
