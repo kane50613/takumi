@@ -1,0 +1,112 @@
+---
+title: From Puppeteer
+description: Replace headless Chrome with a 1.5 MB wasm module.
+icon: Globe
+---
+
+`takumi-pdf` was designed against Puppeteer's `page.pdf()`. The options carry the same names, the header and footer templates use the same class hooks, and pagination follows Chromium's fragmentation rules. Most migrations are a rename.
+
+What changes is the deploy. No browser process, no Chrome install, no page to navigate. The renderer takes a tree and returns bytes, so it runs on Cloudflare Workers.
+
+## Before and after
+
+```ts
+// Puppeteer
+const browser = await puppeteer.launch();
+const page = await browser.newPage();
+await page.setContent(html, { waitUntil: "networkidle0" });
+
+const pdf = await page.pdf({
+  format: "A4",
+  margin: { top: "48px", bottom: "64px", left: "48px", right: "48px" },
+  displayHeaderFooter: true,
+  footerTemplate: `<div style="font-size:10px;width:100%;text-align:center">
+    Page <span class="pageNumber"></span> of <span class="totalPages"></span>
+  </div>`,
+  printBackground: true,
+});
+
+await browser.close();
+```
+
+```tsx twoslash
+declare const html: string;
+// ---cut---
+// takumi-pdf
+import { googleFonts } from "@takumi-rs/helpers";
+import { fromHtml } from "@takumi-rs/helpers/html";
+import { render } from "takumi-pdf";
+
+const { node, stylesheets } = fromHtml(html);
+
+const pdf = await render(node, {
+  size: "a4",
+  margin: { top: 48, bottom: 64, left: 48, right: 48 },
+  stylesheets,
+  footer: (
+    <div tw="flex w-full justify-center text-[10px]">
+      Page <span className="pageNumber" /> of <span className="totalPages" />
+    </div>
+  ),
+  fonts: await googleFonts(["Inter"]),
+});
+```
+
+`fromHtml` converts the markup already being fed to `setContent`. JSX and node trees skip that step. Bands take the same input, so a header can be a component instead of a template string.
+
+## Option map
+
+| `page.pdf()`                             | `takumi-pdf`                           |
+| ---------------------------------------- | -------------------------------------- |
+| `format: "A4"`                           | `size: "a4"`                           |
+| `width`, `height`                        | `size: { width, height }`              |
+| `landscape`                              | `landscape`                            |
+| `margin`                                 | `margin`, in CSS px                    |
+| `displayHeaderFooter` + `headerTemplate` | `header`                               |
+| `footerTemplate`                         | `footer`                               |
+| `pageNumber`, `totalPages` classes       | the same classes                       |
+| `date`, `title`, `url` classes           | interpolate the value yourself         |
+| `tagged` (default on)                    | `tagged` (default on)                  |
+| `outline`                                | `outline`                              |
+| `printBackground`                        | always on                              |
+| `path`                                   | write the returned `Uint8Array`        |
+| `timeout`, `waitForFonts`                | not needed: no page to load            |
+| `scale`                                  | not supported: scale the CSS instead   |
+| `pageRanges`                             | not supported                          |
+| `preferCSSPageSize`, `@page`             | not supported: set `size` and `margin` |
+| `omitBackground`                         | not supported                          |
+
+Margins take numbers in CSS px. Chromium's `"0.5in"` strings have no equivalent; `48` is that half inch.
+
+## Fetching moves to your code
+
+Nothing is fetched implicitly. A browser resolved image URLs and web fonts while it loaded the page. Now the fetch is a call you make:
+
+```tsx twoslash
+declare const html: string;
+// ---cut---
+import { prepareImages } from "@takumi-rs/helpers";
+import { fromHtml } from "@takumi-rs/helpers/html";
+import { render } from "takumi-pdf";
+
+const { node, stylesheets } = fromHtml(html);
+const images = await prepareImages({ node });
+
+const pdf = await render(node, { images, stylesheets });
+```
+
+`prepareImages` walks the tree, fetches every remote `<img>`, `background-image`, and `mask-image` URL, and returns the `images` entries. It takes a `fetchCache` to reuse bytes, an `allowUrl` predicate, and a `timeout`.
+
+Fonts come from the `fonts` option rather than a CSS `@font-face` rule. See [Fonts & images](/docs/pdf/fonts-and-images).
+
+A render never reaches for a URL on its own. Timeouts and allow-lists sit in the fetch, where they can be enforced.
+
+## What Chrome still does better
+
+Chrome is a browser. Takumi is a layout engine with a document-shaped CSS subset.
+
+- **No scripts.** Charts and diagrams have to arrive as markup, SVG, or images. A client-side chart library will not run.
+- **Narrower CSS.** No `filter: blur()`, `drop-shadow()`, or `backdrop-filter` in PDF output. A blurred `box-shadow` approximates with bands. Grid and flex, transforms, gradients, masks, and clip paths all work.
+- **No `@page`.** Page geometry lives in the options.
+
+Keep Puppeteer to reproduce a live web page as it appears in a browser. Move to `takumi-pdf` for documents written for print, and see [Comparison](/docs/pdf/comparison) for the measured numbers.
