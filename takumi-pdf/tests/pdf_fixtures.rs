@@ -19,7 +19,8 @@ use takumi_core::{
 };
 use takumi_html::{FromHtmlOptions, from_html};
 use takumi_pdf::{
-  PageMargins, PageOptions, PdfDate, PdfMetadata, PdfOptions, PdfStandard, Tagging, render,
+  MeasureOptions, PageMargins, PageOptions, PdfDate, PdfMetadata, PdfOptions, PdfStandard, Tagging,
+  measure, render,
 };
 
 fn fonts() -> Fonts {
@@ -884,4 +885,65 @@ fn report_links_outline() {
   ] {
     assert!(haystack.contains(needle), "missing {needle} in pdf");
   }
+}
+
+/// Measuring at a page lays out at the full page width; counter hooks are
+/// filled with three-digit numbers so a counter-only band measures its real
+/// height.
+#[test]
+fn measure_band_at_page_width() {
+  let fonts = fonts();
+  let band = from_html(
+    r#"<div style="display: flex; justify-content: center; font-size: 12px;">
+      Page <span class="pageNumber"></span> of <span class="totalPages"></span>
+    </div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parse band");
+  let size = measure(
+    MeasureOptions::builder()
+      .node(band)
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("measure band");
+
+  assert_eq!(size.width, PageOptions::A4.width.floor());
+  assert!(size.height >= 12.0, "band height {}", size.height);
+}
+
+/// Without a page, measurement uses the viewport; omitting both is an error.
+#[test]
+fn measure_viewport_and_missing_viewport() {
+  let fonts = fonts();
+  let node = || {
+    from_html(
+      r#"<div style="font-size: 16px;">A line of wrapped text that needs several rows at a narrow width</div>"#,
+      FromHtmlOptions::default(),
+    )
+    .expect("parse node")
+  };
+  let narrow = measure(
+    MeasureOptions::builder()
+      .node(node())
+      .viewport(Viewport::new((120, None)))
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("measure at viewport");
+  let wide = measure(
+    MeasureOptions::builder()
+      .node(node())
+      .viewport(Viewport::new((600, None)))
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("measure at wide viewport");
+
+  assert!(narrow.height > wide.height);
+  assert!(
+    measure(MeasureOptions::builder().node(node()).fonts(&fonts).build()).is_err(),
+    "expected MissingViewport"
+  );
 }

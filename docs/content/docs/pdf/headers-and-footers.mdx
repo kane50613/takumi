@@ -19,6 +19,31 @@ const pdf = await render(report, {
 });
 ```
 
+## Sizing the margin
+
+Band height depends on layout, so it is hard to guess ahead of time. `measure` lays out a tree the same way `render` measures a band: full page width, counter hooks filled with three-digit numbers. Use the height to pick a margin:
+
+```tsx twoslash
+import type { ReactNode } from "react";
+import { measure, render } from "takumi-pdf";
+declare const report: ReactNode;
+// ---cut---
+const footer = (
+  <div tw="flex w-full justify-center text-[10px] text-gray-500">
+    Page <span className="pageNumber" /> of <span className="totalPages" />
+  </div>
+);
+const { height } = await measure(footer, { size: "a4" });
+const pdf = await render(report, {
+  footer,
+  margin: { top: 48, bottom: Math.max(48, height + 20) },
+});
+```
+
+Bands sit 20px in from the paper edge, so leave that on top of the measured height.
+
+Passing `viewport` instead of a page size measures the tree as-is. Counter hooks stay empty.
+
 ## Page counters
 
 Elements with `pageNumber` or `totalPages` receive counter text. This matches Chromium's print header and footer template contract.

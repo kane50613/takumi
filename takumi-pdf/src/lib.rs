@@ -757,6 +757,77 @@ fn emit_band(
   Ok(())
 }
 
+/// Inputs for [`measure`], built with [`MeasureOptions::builder`].
+#[derive(TypedBuilder)]
+pub struct MeasureOptions<'g> {
+  /// The viewport to lay out in. Required unless [`Self::page`] is set.
+  #[builder(default, setter(strip_option))]
+  pub viewport: Option<Viewport>,
+  /// The font context.
+  pub fonts: &'g Fonts,
+  /// The node tree to measure.
+  pub node: Node,
+  /// CSS stylesheets to apply before layout.
+  #[builder(default)]
+  pub stylesheet: Arc<StyleSheet>,
+  /// Resources fetched externally, keyed by URL.
+  #[builder(default)]
+  pub images: HashMap<Arc<str>, ImageSource>,
+  /// Lays out at the full page width with unbounded height, exactly how
+  /// [`render`] measures a header/footer band. Margins do not affect the
+  /// result.
+  #[builder(default, setter(strip_option))]
+  pub page: Option<PageOptions>,
+  /// Per-render font fallback chain (family names in order).
+  #[builder(default)]
+  pub font_families: Option<FontFamily>,
+  /// Default BCP-47 language tag applied to the root.
+  #[builder(default)]
+  pub lang: Option<Lang>,
+}
+
+/// A node tree's laid-out size in px.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MeasuredSize {
+  /// The layout width.
+  pub width: f32,
+  /// The laid-out content height.
+  pub height: f32,
+}
+
+/// Lays out a node tree without rendering and returns its size.
+///
+/// With [`MeasureOptions::page`] set the tree lays out like a header/footer
+/// band in [`render`]: full page width, unbounded height, `pageNumber` /
+/// `totalPages` class hooks filled with three-digit counters. The returned
+/// height is the band height a page margin needs to accommodate. With a
+/// viewport the tree is measured as-is, counter hooks untouched.
+pub fn measure(options: MeasureOptions<'_>) -> Result<MeasuredSize, PdfError> {
+  let inputs = TreeInputs {
+    fonts: options.fonts,
+    stylesheet: options.stylesheet,
+    images: Rc::new(options.images),
+    font_families: options.font_families,
+    lang: options.lang,
+  };
+  let tree = match (options.page, options.viewport) {
+    (Some(page), _) => prepare_band(
+      &inputs,
+      &options.node,
+      999,
+      999,
+      Viewport::new((page.width as u32, None)),
+    )?,
+    (None, Some(viewport)) => prepare_tree(&inputs, options.node, viewport)?,
+    (None, None) => return Err(PdfError::MissingViewport),
+  };
+
+  Ok(MeasuredSize {
+    width: tree.width,
+    height: tree.height,
+  })
+}
+
 /// Renders a node tree to a PDF: single-page at the viewport size, or paged
 /// when [`PdfOptions::page`] is set.
 pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {

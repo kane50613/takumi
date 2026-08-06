@@ -18,18 +18,48 @@ use takumi_core::{
   layout::node::Node,
   resources::{
     font::FontResource,
-    image::{ImageCacheMode, ResourceCache},
+    image::{ImageCacheMode, ImageSource as DecodedImage, ResourceCache},
   },
   style::{FontFamily, FontStyle as CssFontStyle, FromCssStr, Lang},
   viewport::Viewport,
 };
 use takumi_pdf::{
-  PageMargins, PageOptions, PdfDate, PdfMetadata, PdfOptions, PdfStandard, Tagging,
+  MeasureOptions, PageMargins, PageOptions, PdfDate, PdfMetadata, PdfOptions, PdfStandard, Tagging,
 };
 use wasm_bindgen::prelude::*;
 
 fn map_error(error: impl core::fmt::Debug) -> js_sys::Error {
   js_sys::Error::new(&format!("{error:?}"))
+}
+
+#[wasm_bindgen(typescript_custom_section)]
+const TS_APPEND_CONTENT: &'static str = include_str!("./dts-header.d.ts");
+
+#[wasm_bindgen]
+extern "C" {
+  /// JavaScript object representing a layout node.
+  #[wasm_bindgen(typescript_type = "Node")]
+  pub type NodeType;
+
+  /// JavaScript type for font input (details object or raw buffer).
+  #[wasm_bindgen(typescript_type = "Font")]
+  pub type FontType;
+
+  /// JavaScript type for the families produced by `registerFont`.
+  #[wasm_bindgen(typescript_type = "RegisteredFamily[]")]
+  pub type RegisteredFamiliesType;
+
+  /// JavaScript object representing render options.
+  #[wasm_bindgen(typescript_type = "PdfRenderOptions")]
+  pub type PdfRenderOptionsType;
+
+  /// JavaScript object representing measure options.
+  #[wasm_bindgen(typescript_type = "MeasureOptions")]
+  pub type MeasureOptionsType;
+
+  /// JavaScript object representing a measured size.
+  #[wasm_bindgen(typescript_type = "MeasuredSize")]
+  pub type MeasuredSizeType;
 }
 
 /// Details for loading a custom font.
@@ -351,6 +381,62 @@ impl TryFrom<MetadataInput> for PdfMetadata {
   }
 }
 
+fn decode_images(
+  cache: &ResourceCache,
+  sources: Option<Vec<ImageSource>>,
+) -> Result<HashMap<Arc<str>, DecodedImage>, js_sys::Error> {
+  let mut images = HashMap::new();
+
+  for source in sources.unwrap_or_default() {
+    let image = cache
+      .get_or_decode(&source.data, source.cache.unwrap_or_default())
+      .map_err(map_error)?;
+
+    images.insert(source.src, image);
+  }
+  Ok(images)
+}
+
+/// Splits the options into single-page viewport or paged geometry, rejecting
+/// a mix of both.
+fn resolve_geometry(
+  options: &PdfRenderOptions,
+) -> Result<(Option<Viewport>, Option<PageOptions>), js_sys::Error> {
+  let paged_field_set = options.size.is_some()
+    || options.landscape.is_some()
+    || options.margin.is_some()
+    || options.header.is_some()
+    || options.footer.is_some();
+
+  match options.viewport {
+    Some(_) if paged_field_set => Err(js_sys::Error::new(
+      "viewport is mutually exclusive with the paged options (size, landscape, margin, header, footer)",
+    )),
+    Some(input) => Ok((
+      Some(Viewport::new((
+        input.width as u32,
+        input.height.map(|height| height as u32),
+      ))),
+      None,
+    )),
+    None => Ok((
+      None,
+      Some(resolve_page(
+        options.size.as_ref(),
+        options.landscape.unwrap_or(false),
+        options.margin.as_ref(),
+      )?),
+    )),
+  }
+}
+
+/// The size returned by [`PdfRenderer::measure`].
+#[derive(serde::Serialize)]
+struct MeasuredSizeOutput {
+  width: f32,
+  height: f32,
+}
+
 /// A PDF renderer holding registered fonts and a decoded-resource cache.
 ///
 /// State lives behind a lock and every method takes `&self`, mirroring the
@@ -376,8 +462,8 @@ impl PdfRenderer {
   /// Registers a font (raw bytes or a details object), returning the families
   /// it produced.
   #[wasm_bindgen(js_name = registerFont)]
-  pub fn register_font(&self, font: JsValue) -> Result<JsValue, js_sys::Error> {
-    let font: Font = from_value(font).map_err(map_error)?;
+  pub fn register_font(&self, font: FontType) -> Result<RegisteredFamiliesType, js_sys::Error> {
+    let font: Font = from_value(font.into()).map_err(map_error)?;
     let mut state = self
       .state
       .try_write()
@@ -403,61 +489,25 @@ impl PdfRenderer {
       }
     };
 
-    to_value(&registered).map_err(map_error)
+    Ok(to_value(&registered).map_err(map_error)?.unchecked_into())
   }
 
   /// Renders a node tree to PDF bytes. Without options the output is paged A4;
   /// `viewport` renders a single fixed page instead.
-  #[wasm_bindgen]
+  #[wasm_bindgen(unchecked_return_type = "Uint8Array<ArrayBuffer>")]
   pub fn render(
     &self,
-    node: JsValue,
-    options: Option<js_sys::Object>,
+    node: NodeType,
+    options: Option<PdfRenderOptionsType>,
   ) -> Result<Vec<u8>, js_sys::Error> {
-    let node: Node = from_value(node).map_err(map_error)?;
-    let options: PdfRenderOptions = options
+    let node: Node = from_value(node.into()).map_err(map_error)?;
+    let mut options: PdfRenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
       .unwrap_or_default();
 
-    let mut images = HashMap::new();
-
-    for source in options.images.unwrap_or_default() {
-      let image = self
-        .resource_cache
-        .get_or_decode(&source.data, source.cache.unwrap_or_default())
-        .map_err(map_error)?;
-
-      images.insert(source.src, image);
-    }
-
-    let paged_field_set = options.size.is_some()
-      || options.landscape.is_some()
-      || options.margin.is_some()
-      || options.header.is_some()
-      || options.footer.is_some();
-    let (viewport, page) = match options.viewport {
-      Some(_) if paged_field_set => {
-        return Err(js_sys::Error::new(
-          "viewport is mutually exclusive with the paged options (size, landscape, margin, header, footer)",
-        ));
-      }
-      Some(input) => (
-        Some(Viewport::new((
-          input.width as u32,
-          input.height.map(|height| height as u32),
-        ))),
-        None,
-      ),
-      None => (
-        None,
-        Some(resolve_page(
-          options.size.as_ref(),
-          options.landscape.unwrap_or(false),
-          options.margin.as_ref(),
-        )?),
-      ),
-    };
+    let images = decode_images(&self.resource_cache, options.images.take())?;
+    let (viewport, page) = resolve_geometry(&options)?;
     let lang = options
       .lang
       .as_deref()
@@ -486,6 +536,54 @@ impl PdfRenderer {
       tagged: options.tagged.map(Tagging::from).unwrap_or_default(),
     })
     .map_err(map_error)
+  }
+
+  /// Lays out a node tree without rendering and returns its size in CSS px.
+  /// Page options lay out at the full page width, like a header/footer band;
+  /// `pageNumber` / `totalPages` hooks are filled with three-digit counters.
+  #[wasm_bindgen]
+  pub fn measure(
+    &self,
+    node: NodeType,
+    options: Option<MeasureOptionsType>,
+  ) -> Result<MeasuredSizeType, js_sys::Error> {
+    let node: Node = from_value(node.into()).map_err(map_error)?;
+    let mut options: PdfRenderOptions = options
+      .map(|options| from_value(options.into()).map_err(map_error))
+      .transpose()?
+      .unwrap_or_default();
+    let images = decode_images(&self.resource_cache, options.images.take())?;
+    let (viewport, page) = resolve_geometry(&options)?;
+    let lang = options
+      .lang
+      .as_deref()
+      .map(Lang::parse)
+      .transpose()
+      .map_err(map_error)?;
+    let state = self
+      .state
+      .try_read()
+      .map_err(|error| js_sys::Error::new(&format!("Renderer state is locked: {error}")))?;
+    let measured = takumi_pdf::measure(MeasureOptions {
+      viewport,
+      fonts: &state,
+      node,
+      stylesheet: stylesheet(&self.resource_cache, options.stylesheets, Vec::new()),
+      images,
+      page,
+      font_families: options.font_families.map(FontFamily::from_names),
+      lang,
+    })
+    .map_err(map_error)?;
+
+    Ok(
+      to_value(&MeasuredSizeOutput {
+        width: measured.width,
+        height: measured.height,
+      })
+      .map_err(map_error)?
+      .unchecked_into(),
+    )
   }
 }
 
