@@ -473,7 +473,7 @@ fn clip_operators(pdf: &[u8]) -> usize {
         .filter(|line| line.ends_with(b"W"))
         .count();
     }
-    rest = &body[end..];
+    rest = &body[end + "endstream".len()..];
   }
   clips
 }

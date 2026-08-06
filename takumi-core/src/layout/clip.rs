@@ -79,16 +79,16 @@ pub fn clip_shape_commands(
       );
     }
     BasicShape::Ellipse(shape) => {
-      let center = Size {
-        width: shape.position.0.x.to_px(&context.sizing, size.width),
-        height: shape.position.0.y.to_px(&context.sizing, size.height),
-      };
+      let center = (
+        shape.position.0.x.to_px(&context.sizing, size.width),
+        shape.position.0.y.to_px(&context.sizing, size.height),
+      );
 
       push_ellipse(
         &mut commands,
-        (center.width, center.height),
-        resolve_radius(shape.radius_x, center, &context.sizing, size.width),
-        resolve_radius(shape.radius_y, center, &context.sizing, size.height),
+        center,
+        resolve_radius(shape.radius_x, center.0, &context.sizing, size.width),
+        resolve_radius(shape.radius_y, center.1, &context.sizing, size.height),
       );
     }
     BasicShape::Polygon(shape) => {
@@ -150,15 +150,15 @@ fn push_ellipse(commands: &mut Vec<PathCommand>, center: (f32, f32), radius_x: f
   commands.close();
 }
 
-fn resolve_radius(
-  radius: ShapeRadius,
-  distance: Size<f32>,
-  sizing: &SizingContext,
-  full: f32,
-) -> f32 {
+/// The keyword radii measure to the sides on the shape's own axis, so both
+/// distances come from the same edge pair: the center's coordinate and what is
+/// left of the box beyond it.
+fn resolve_radius(radius: ShapeRadius, center: f32, sizing: &SizingContext, full: f32) -> f32 {
+  let (near, far) = (center, full - center);
+
   match radius {
-    ShapeRadius::ClosestSide => distance.width.min(distance.height),
-    ShapeRadius::FarthestSide => distance.width.max(distance.height),
+    ShapeRadius::ClosestSide => near.min(far),
+    ShapeRadius::FarthestSide => near.max(far),
     ShapeRadius::Length(length) => length.to_px(sizing, full),
   }
 }
@@ -217,4 +217,35 @@ fn parse_path(input: &str) -> Vec<PathCommand> {
 #[cfg(not(feature = "svg"))]
 fn parse_path(_input: &str) -> Vec<PathCommand> {
   Vec::new()
+}
+
+#[cfg(test)]
+mod tests {
+  use super::resolve_radius;
+  use crate::{
+    style::{Length, ShapeRadius, SizingContext},
+    viewport::Viewport,
+  };
+
+  #[test]
+  fn keyword_radii_measure_along_their_own_axis() {
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((110, 110)))
+      .build();
+
+    // A 110px axis with the center at 10px: the near side is 10 away, the far
+    // side 100.
+    assert_eq!(
+      resolve_radius(ShapeRadius::ClosestSide, 10.0, &sizing, 110.0),
+      10.0
+    );
+    assert_eq!(
+      resolve_radius(ShapeRadius::FarthestSide, 10.0, &sizing, 110.0),
+      100.0
+    );
+    assert_eq!(
+      resolve_radius(ShapeRadius::Length(Length::Px(25.0)), 10.0, &sizing, 110.0),
+      25.0
+    );
+  }
 }
