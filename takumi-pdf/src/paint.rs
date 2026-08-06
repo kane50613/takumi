@@ -92,7 +92,7 @@ pub(crate) fn draw_decoration(
   decoration: &DecorationRect,
   x: f32,
   y: f32,
-  filter: Option<ColorFilter>,
+  filter: Option<&ColorFilter>,
 ) {
   if decoration.color.0[3] == 0 || decoration.width <= 0.0 || decoration.height <= 0.0 {
     return;
@@ -134,7 +134,7 @@ pub(crate) fn rasterized_image(
   source: &ImageSource,
   context: &RenderContext,
   target: (f32, f32),
-  filter: Option<ColorFilter>,
+  filter: Option<&ColorFilter>,
 ) -> Option<KrillaImage> {
   let (width, height) = match source {
     ImageSource::Bitmap(bitmap) => (bitmap.width(), bitmap.height()),

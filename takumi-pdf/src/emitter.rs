@@ -1,6 +1,6 @@
 //! The scene walker that emits boxes, text and images onto a krilla surface.
 
-use std::{cell::RefCell, collections::HashMap};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[cfg(feature = "images")]
 use crate::krilla::geom::Size as KrillaSize;
@@ -83,7 +83,7 @@ pub(crate) struct Emitter<'a> {
   pub(crate) tags: Option<&'a RefCell<TagCollector>>,
   /// Color transform from the `filter` properties of the enclosing stacking
   /// contexts, applied to every color this subtree paints.
-  pub(crate) color_filter: Option<ColorFilter>,
+  pub(crate) color_filter: Option<Rc<ColorFilter>>,
 }
 
 impl Emitter<'_> {
@@ -119,13 +119,14 @@ impl Emitter<'_> {
       return Ok(());
     };
 
-    let outer_filter = self.color_filter;
+    let outer_filter = self.color_filter.clone();
 
     if let Some(node) = context
       .root()
       .and_then(|paint| self.root.node_at_path(&paint.path))
     {
-      self.color_filter = ColorFilter::compose(outer_filter, &node.context.style.filter);
+      self.color_filter =
+        ColorFilter::compose(outer_filter.as_deref(), &node.context.style.filter).map(Rc::new);
     }
 
     let (child_frame, root_pushed) = match context.root() {
@@ -650,7 +651,7 @@ impl Emitter<'_> {
 
   /// A color as this subtree's `filter` leaves it.
   fn filtered(&self, color: Color) -> [u8; 4] {
-    match self.color_filter {
+    match &self.color_filter {
       Some(filter) => filter.apply(color.0),
       None => color.0,
     }
@@ -661,7 +662,7 @@ impl Emitter<'_> {
   where
     S: AsMut<[ResolvedGradientStop]>,
   {
-    if let Some(filter) = self.color_filter {
+    if let Some(filter) = &self.color_filter {
       for stop in resolved.as_mut() {
         stop.color = filter.apply_color(stop.color);
       }
@@ -838,7 +839,7 @@ impl Emitter<'_> {
     // SVG sources embed as vector ops; everything else rasterizes. A color
     // filter rasterizes them too, since the transform applies to pixels.
     #[cfg(feature = "svg")]
-    let vector = if let (ImageSource::Svg(svg), None) = (&source, self.color_filter) {
+    let vector = if let (ImageSource::Svg(svg), None) = (&source, &self.color_filter) {
       let (svg_width, svg_height) = svg.dimensions();
       if svg_width <= 0.0 || svg_height <= 0.0 {
         return;
@@ -854,7 +855,7 @@ impl Emitter<'_> {
     let vector: Option<((), f32, f32)> = None;
 
     let krilla_image = if vector.is_none() {
-      match rasterized_image(&source, context, (dw, dh), self.color_filter) {
+      match rasterized_image(&source, context, (dw, dh), self.color_filter.as_deref()) {
         Some(image) => Some(image),
         None => return,
       }
@@ -965,7 +966,7 @@ impl Emitter<'_> {
       );
 
       for decoration in decorations.iter().filter(|d| !d.over) {
-        draw_decoration(surface, decoration, x, y, self.color_filter);
+        draw_decoration(surface, decoration, x, y, self.color_filter.as_deref());
       }
       let run_text = built
         .text
@@ -1000,7 +1001,7 @@ impl Emitter<'_> {
         false,
       );
       for decoration in decorations.iter().filter(|d| d.over) {
-        draw_decoration(surface, decoration, x, y, self.color_filter);
+        draw_decoration(surface, decoration, x, y, self.color_filter.as_deref());
       }
     }
     Ok(())

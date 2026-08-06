@@ -9,15 +9,23 @@
 
 use takumi_core::style::{Angle, Color, Filter, LUMA_WEIGHTS, PercentageNumber, SEPIA_WEIGHTS};
 
+/// The filter list as written, applied in order. CSS clamps each function's
+/// result before handing it to the next, so the matrices stay separate rather
+/// than composing into one.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct ColorFilter {
+  functions: Vec<ColorMatrix>,
+}
+
 /// Rows of `[r, g, b, offset]` for the three color channels, plus an alpha
 /// multiplier. Colors are transformed in the 0..1 range.
-#[derive(Clone, Copy)]
-pub(crate) struct ColorFilter {
+#[derive(Clone, Copy, Debug)]
+struct ColorMatrix {
   rows: [[f32; 4]; 3],
   alpha: f32,
 }
 
-const IDENTITY: ColorFilter = ColorFilter {
+const IDENTITY: ColorMatrix = ColorMatrix {
   rows: [
     [1.0, 0.0, 0.0, 0.0],
     [0.0, 1.0, 0.0, 0.0],
@@ -27,27 +35,35 @@ const IDENTITY: ColorFilter = ColorFilter {
 };
 
 impl ColorFilter {
-  /// Folds a filter list onto whatever the ancestors already apply. Returns
+  /// Appends a filter list to whatever the ancestors already apply. Returns
   /// `None` when nothing in the list changes color, so the common case stays
   /// free.
-  pub(crate) fn compose(outer: Option<Self>, filters: &[Filter]) -> Option<Self> {
-    let mut composed = outer;
+  pub(crate) fn compose(outer: Option<&Self>, filters: &[Filter]) -> Option<Self> {
+    let mut functions = outer
+      .map(|filter| filter.functions.clone())
+      .unwrap_or_default();
 
-    for filter in filters {
-      let Some(next) = Self::from_filter(filter) else {
-        continue;
-      };
-
-      composed = Some(match composed {
-        Some(current) => next.after(current),
-        None => next,
-      });
-    }
-    composed
+    functions.extend(filters.iter().filter_map(ColorMatrix::from_filter));
+    (!functions.is_empty()).then_some(Self { functions })
   }
 
-  /// Applies the filter to a straight (non-premultiplied) RGBA color.
-  pub(crate) fn apply(self, rgba: [u8; 4]) -> [u8; 4] {
+  /// Applies every filter in order, clamping between them like CSS does.
+  pub(crate) fn apply(&self, rgba: [u8; 4]) -> [u8; 4] {
+    self
+      .functions
+      .iter()
+      .fold(rgba, |color, function| function.apply(color))
+  }
+
+  /// Applies the filter to a color value.
+  pub(crate) fn apply_color(&self, color: Color) -> Color {
+    Color(self.apply(color.0))
+  }
+}
+
+impl ColorMatrix {
+  /// Applies the matrix to a straight (non-premultiplied) RGBA color.
+  fn apply(self, rgba: [u8; 4]) -> [u8; 4] {
     let channel = |value: u8| value as f32 / 255.0;
     let (r, g, b) = (channel(rgba[0]), channel(rgba[1]), channel(rgba[2]));
     let mixed = self
@@ -62,38 +78,15 @@ impl ColorFilter {
     ]
   }
 
-  /// Applies the filter to a color value.
-  pub(crate) fn apply_color(self, color: Color) -> Color {
-    Color(self.apply(color.0))
-  }
-
-  /// This filter applied after `earlier`, as one matrix.
-  fn after(self, earlier: Self) -> Self {
-    let mut rows = [[0.0; 4]; 3];
-
-    for (index, row) in rows.iter_mut().enumerate() {
-      for (column, cell) in row.iter_mut().take(3).enumerate() {
-        *cell = (0..3)
-          .map(|k| self.rows[index][k] * earlier.rows[k][column])
-          .sum();
-      }
-      row[3] = (0..3)
-        .map(|k| self.rows[index][k] * earlier.rows[k][3])
-        .sum::<f32>()
-        + self.rows[index][3];
-    }
-
-    Self {
-      rows,
-      alpha: self.alpha * earlier.alpha,
-    }
-  }
-
   fn from_filter(filter: &Filter) -> Option<Self> {
     match *filter {
       Filter::Brightness(PercentageNumber(value)) => Some(Self::scale(value, 0.0)),
       Filter::Contrast(PercentageNumber(value)) => Some(Self::scale(value, 0.5 - 0.5 * value)),
-      Filter::Invert(PercentageNumber(value)) => Some(Self::scale(1.0 - 2.0 * value, value)),
+      Filter::Invert(PercentageNumber(value)) => {
+        let value = value.clamp(0.0, 1.0);
+
+        Some(Self::scale(1.0 - 2.0 * value, value))
+      }
       Filter::Opacity(PercentageNumber(value)) => Some(Self {
         alpha: value.clamp(0.0, 1.0),
         ..IDENTITY
@@ -164,5 +157,36 @@ impl ColorFilter {
       ],
       alpha: 1.0,
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::ColorFilter;
+  use takumi_core::style::{Filter, PercentageNumber};
+
+  #[test]
+  fn each_function_clamps_before_the_next_one_runs() {
+    // brightness(200%) drives #cc3333 past white on the red channel; CSS clamps
+    // it to #ff6666 before grayscale sees it, which lands on #878787.
+    let filters = [
+      Filter::Brightness(PercentageNumber(2.0)),
+      Filter::Grayscale(PercentageNumber(1.0)),
+    ];
+    let filter = ColorFilter::compose(None, &filters).expect("a filter");
+    let [red, green, blue, _] = filter.apply([0xcc, 0x33, 0x33, 255]);
+
+    assert_eq!([red, green, blue], [0x87, 0x87, 0x87]);
+  }
+
+  #[test]
+  fn invert_clamps_its_amount() {
+    let filter =
+      ColorFilter::compose(None, &[Filter::Invert(PercentageNumber(2.0))]).expect("a filter");
+
+    assert_eq!(
+      filter.apply([0x40, 0x40, 0x40, 255]),
+      [0xbf, 0xbf, 0xbf, 255]
+    );
   }
 }
