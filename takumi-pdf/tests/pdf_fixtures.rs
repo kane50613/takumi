@@ -5,12 +5,12 @@
 //! committed; CI's dirty-tree check catches drift, so a changed .pdf in `git
 //! diff` is a real rendering change to review.
 
-use std::{fs, path::Path};
+use std::{collections::HashMap, fs, path::Path, sync::Arc};
 
 use takumi_core::{
   Fonts,
   layout::node::{ImageData, ImageSourceInput, Node, RgbaImage},
-  resources::font::FontResource,
+  resources::{font::FontResource, image::ImageSource, image_buffer::ImageBuffer},
   style::{
     BreakBetween, Color, ColorInput, Display, FlexDirection, FontSize, Length::*, ObjectFit, Style,
     StyleDeclaration,
@@ -770,7 +770,7 @@ fn tagged_standards() {
     <ol><li>Ordered one</li><li>Ordered two</li></ol>
   </main>"#;
 
-  run_pdf_fixture("list-tagged-ua1", |fonts| {
+  let list = run_pdf_fixture("list-tagged-ua1", |fonts| {
     PdfOptions::builder()
       .node(from_html(list_doc, FromHtmlOptions::default()).expect("parse list doc"))
       .page(PageOptions::A4)
@@ -780,6 +780,16 @@ fn tagged_standards() {
       .fonts(fonts)
       .build()
   });
+  let haystack = String::from_utf8_lossy(&list);
+
+  for name in [
+    "/S/LI",
+    "/S/LBody",
+    "/ListNumbering/Disc",
+    "/ListNumbering/Decimal",
+  ] {
+    assert!(haystack.contains(name), "missing {name} structure element");
+  }
 
   run_pdf_fixture("report-tagged-a2a", |fonts| {
     PdfOptions::builder()
@@ -791,6 +801,44 @@ fn tagged_standards() {
       .fonts(fonts)
       .build()
   });
+}
+
+/// `alt=""` marks an image decorative: its content is an artifact and no
+/// `Figure` element enters the structure tree. A non-empty `alt` still
+/// produces a `Figure` that satisfies PDF/UA-1.
+#[test]
+fn decorative_image_artifact() {
+  let doc = r#"<main style="display:flex;flex-direction:column;font-size:14px;color:#141414;">
+    <h1>Images</h1>
+    <img src="pixel" alt="" style="width:40px;height:40px;" />
+    <img src="pixel" alt="a described pixel" style="width:40px;height:40px;" />
+  </main>"#;
+  let pdf = run_pdf_fixture("decorative-image-ua1", |fonts| {
+    let buffer = ImageBuffer::from_rgba_bytes(vec![128; 4 * 4 * 4], 4, 4).expect("image buffer");
+
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse image doc"))
+      .images(HashMap::from([(
+        "pixel".into(),
+        ImageSource::Bitmap(Arc::new(buffer)),
+      )]))
+      .page(PageOptions::A4)
+      .tagged(Tagging::Ua1)
+      .lang(Some(takumi_core::style::Lang::parse("en").expect("lang")))
+      .metadata(PdfMetadata {
+        title: Some("Images".into()),
+        ..Default::default()
+      })
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = String::from_utf8_lossy(&pdf);
+
+  assert_eq!(
+    haystack.matches("/S/Figure").count(),
+    1,
+    "decorative image must not produce a Figure element"
+  );
 }
 
 #[test]

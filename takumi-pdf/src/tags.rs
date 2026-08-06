@@ -7,7 +7,7 @@
 //! tagged ancestor, and bare text under an untagged ancestor wraps in `P` so
 //! no content stays outside the tree.
 
-use std::{collections::HashMap, num::NonZeroU16};
+use std::{collections::HashMap, mem, num::NonZeroU16};
 
 use takumi_core::{
   layout::tree::RenderNode,
@@ -103,7 +103,7 @@ fn build_node(
   in_row: bool,
 ) {
   let identifiers = collector.take(path);
-  let annotations = collector.take_annotations(path);
+  let mut annotations = collector.take_annotations(path);
 
   match role(node) {
     Some(kind) => {
@@ -126,6 +126,11 @@ fn build_node(
       }
       build_children(node, path, collector, &mut children, &mut child_pending);
       flush_paragraph(&mut child_pending, &mut children);
+      // Wrapped annotations join the element's own children so they read
+      // after the content they decorate, not before the element.
+      if !is_link {
+        push_link_wrappers(mem::take(&mut annotations), &mut children);
+      }
       has_content |= !children.is_empty();
       if is_list_item {
         if !children.is_empty() {
@@ -146,8 +151,6 @@ fn build_node(
         for annotation in annotations {
           group.push(annotation);
         }
-      } else {
-        push_link_wrappers(annotations, parent);
       }
       // Inline formatting inside a text run leaves its element without any
       // content of its own; an empty structure element is pure noise.
@@ -164,10 +167,15 @@ fn build_node(
         flush_paragraph(pending, parent);
       }
       pending.extend(identifiers);
-      push_link_wrappers(annotations, parent);
       build_children(node, path, collector, parent, pending);
       if block {
         flush_paragraph(pending, parent);
+      }
+      // The content a link annotation decorates sits in the run collected so
+      // far; flush it first so the `Link` element follows it in reading order.
+      if !annotations.is_empty() {
+        flush_paragraph(pending, parent);
+        push_link_wrappers(annotations, parent);
       }
     }
   }
@@ -235,7 +243,8 @@ fn role(node: &RenderNode) -> Option<TagKind> {
       NonZeroU16::new(u16::from(level)).map(|level| Tag::Hn(level, title).into())
     }
     "p" => Some(Tag::P.into()),
-    "img" => Some(Tag::Figure(source.alt().map(str::to_string)).into()),
+    // `alt=""` marks a decorative image: emitted as an artifact, no element.
+    "img" if source.alt() != Some("") => Some(Tag::Figure(source.alt().map(str::to_string)).into()),
     "a" if source.href().is_some() => Some(Tag::Link.into()),
     "blockquote" => Some(Tag::BlockQuote.into()),
     "section" => Some(Tag::Section.into()),

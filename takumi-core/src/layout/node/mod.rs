@@ -675,9 +675,10 @@ impl Node {
     self.attribute("href").filter(|href| !href.is_empty())
   }
 
-  /// The element's `alt` attribute, when present and non-empty.
+  /// The element's `alt` attribute, when present. An explicitly empty value
+  /// marks a decorative image, distinct from a missing attribute.
   pub fn alt(&self) -> Option<&str> {
-    self.attribute("alt").filter(|alt| !alt.is_empty())
+    self.attribute("alt")
   }
 
   /// `id` and `class` resolve to the structured metadata fields rather than
@@ -750,6 +751,17 @@ mod tests {
 
   use super::*;
   use crate::style::{BackgroundImage, Style, StyleDeclaration, TailwindValues};
+
+  #[test]
+  fn alt_distinguishes_missing_from_empty() {
+    let node = Node::container(Vec::new());
+
+    assert_eq!(node.alt(), None);
+
+    let node = node.with_attributes(BTreeMap::from([("alt".into(), "".into())]));
+
+    assert_eq!(node.alt(), Some(""));
+  }
 
   #[test]
   fn image_source_input_deserializes_raw_rgba() {

@@ -15,12 +15,11 @@ use crate::krilla::content::ContentBuilder;
 use crate::krilla::error::KrillaResult;
 use crate::krilla::geom::{Rect, Size, Transform};
 use crate::krilla::interactive::annotation::Annotation;
-use crate::krilla::interchange::tagging::{Identifier, PageTagIdentifier};
+use crate::krilla::interchange::tagging::{AnnotationIdentifier, Identifier, PageTagIdentifier};
 use crate::krilla::resource::ResourceDictionary;
 use crate::krilla::serialize::{PageInfo, SerializeContext};
 use crate::krilla::stream::{FilterStreamBuilder, Stream};
 use crate::krilla::surface::Surface;
-use crate::krilla::tagging::AnnotationIdentifier;
 use crate::krilla::util::Deferred;
 
 #[derive(Clone, Debug)]

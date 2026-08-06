@@ -826,9 +826,11 @@ impl SerializeContext {
 
               for mcid in 0..num_mcids {
                 let rci = PageTagIdentifier::new(page_index, mcid);
-                refs.item(parent_tree_map.get(&rci.into()).unwrap_or_else(|| {
-                  panic!("page tag identifier {rci:?} doesn't appear in the tag tree")
-                }));
+                refs.item(parent_tree_map.get(&rci.into()).ok_or_else(|| {
+                  KrillaError::TagTree(format!(
+                    "page tag identifier {rci:?} doesn't appear in the tag tree"
+                  ))
+                })?);
               }
 
               refs.finish();
@@ -843,9 +845,11 @@ impl SerializeContext {
               // > (see 14.7.5.3, "PDF objects as content items"), the value shall be an
               // > indirect reference to the parent structure element.
               let page_annotations = &self.page_infos[ai.page_index].annotations();
-              let parent_ref = *page_annotations[ai.annot_index].1.get().unwrap_or_else(|| {
-                panic!("annotation identifier {ai:?} doesn't appear in the tag tree")
-              });
+              let parent_ref = *page_annotations[ai.annot_index].1.get().ok_or_else(|| {
+                KrillaError::TagTree(format!(
+                  "annotation identifier {ai:?} doesn't appear in the tag tree"
+                ))
+              })?;
               tree_nums.insert(index as i32, parent_ref);
             }
           }

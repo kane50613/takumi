@@ -1658,10 +1658,17 @@ impl Emitter<'_> {
     let tagged = self.tags.is_some() && has_own_content(node);
 
     if tagged {
-      let identifier = surface.start_tagged(ContentTag::Other);
+      if decorative_image(node) {
+        surface.start_tagged(ContentTag::Artifact(Artifact::new(
+          ArtifactType::Other,
+          None,
+        )));
+      } else {
+        let identifier = surface.start_tagged(ContentTag::Other);
 
-      if let Some(tags) = self.tags {
-        tags.borrow_mut().record(&paint.path, identifier);
+        if let Some(tags) = self.tags {
+          tags.borrow_mut().record(&paint.path, identifier);
+        }
       }
     }
     self.emit_own_content(node, layout, x, y, surface)?;
@@ -2588,6 +2595,14 @@ fn has_own_content(node: &RenderNode) -> bool {
     Some(NodeKind::Image(_)) => true,
     _ => false,
   }
+}
+
+/// Whether the node is an image explicitly marked decorative (`alt=""`), so
+/// its content is emitted as an artifact instead of a `Figure` element.
+fn decorative_image(node: &RenderNode) -> bool {
+  node.node.as_ref().is_some_and(|source| {
+    source.tag_name().is_some_and(|name| name == "img") && source.alt() == Some("")
+  })
 }
 
 fn pop_transforms(surface: &mut Surface, pushed: usize) {

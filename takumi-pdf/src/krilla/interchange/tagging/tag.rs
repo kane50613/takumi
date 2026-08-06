@@ -357,7 +357,8 @@ impl BBox {
 }
 
 /// An RGB color within the tag tree. The color space of this color is not
-/// specified. Each component is in the range [0.0, 1.0].
+/// specified. Each component is in the range `0..=255`; see [`Self::new_f32`]
+/// for `[0.0, 1.0]` float input.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NaiveRgbColor {
   /// The red component of the color.
