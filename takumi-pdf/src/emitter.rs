@@ -7,6 +7,7 @@ use crate::krilla::geom::Size as KrillaSize;
 use crate::krilla::{
   Data,
   geom::{Point, Rect as KrillaRect, Transform},
+  mask::{Mask, MaskType},
   num::NormalizedF32,
   paint::{
     Fill, FillRule, LinearGradient as KrillaLinearGradient, Paint, Pattern,
@@ -233,6 +234,13 @@ impl Emitter<'_> {
       (y, layout.size)
     };
     let border = BorderProperties::from_context(&node.context, deco_size, layout.border);
+
+    // A mask covers the element and its descendants, so it is pushed with the
+    // rest of the box's state and popped with it.
+    if let Some(mask) = self.mask(node, layout.size, (x, y), surface) {
+      surface.push_mask(mask);
+      pushed += 1;
+    }
 
     // `clip-path` clips the element itself, decorations included, so it goes on
     // before anything is painted.
@@ -647,6 +655,40 @@ impl Emitter<'_> {
       shadows.iter().filter(|s| s.inset).map(resolve).collect(),
       shadows.iter().filter(|s| !s.inset).map(resolve).collect(),
     )
+  }
+
+  /// Builds the soft mask for `mask-image`, drawing its layers into their own
+  /// stream. The layers are alpha masks, which is what `mask-mode` resolves to
+  /// for an image source.
+  fn mask(
+    &self,
+    node: &RenderNode,
+    size: Size<f32>,
+    at: (f32, f32),
+    surface: &mut Surface,
+  ) -> Option<Mask> {
+    let images = node.context.style.mask_image.as_deref()?;
+
+    if !images.iter().any(|image| {
+      matches!(
+        image,
+        BackgroundImage::Linear(_) | BackgroundImage::Radial(_) | BackgroundImage::Conic(_)
+      )
+    }) {
+      return None;
+    }
+    let stream = {
+      let mut builder = surface.stream_builder();
+      let mut content = builder.surface();
+
+      for image in images.iter().rev() {
+        self.background_layer(image, node, size, at.0, at.1, &mut content);
+      }
+      content.finish();
+      builder.finish()
+    };
+
+    Some(Mask::new(stream, MaskType::Alpha))
   }
 
   /// A color as this subtree's `filter` leaves it.

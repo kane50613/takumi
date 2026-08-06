@@ -416,6 +416,36 @@ fn gradients() {
   });
 }
 
+/// `mask-image` fades an element out through a soft mask rather than a
+/// rasterized copy of it.
+#[test]
+fn mask_image() {
+  let pdf = run_pdf_fixture("mask-image", |fonts| {
+    let source = r##"<div style="display: flex; width: 100%; height: 100%; padding: 12px; column-gap: 12px; background-color: #ffffff;">
+      <div style="width: 120px; height: 80px; background-color: #1d4ed8; mask-image: linear-gradient(to right, rgba(0,0,0,1), rgba(0,0,0,0));"></div>
+      <div style="width: 120px; height: 80px; background-image: linear-gradient(135deg, #ff5f6d, #3a1c71); mask-image: radial-gradient(circle, rgba(0,0,0,1), rgba(0,0,0,0));"></div>
+    </div>"##;
+    let node = from_html(source, FromHtmlOptions::default()).expect("parse mask fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((290, 110)))
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = String::from_utf8_lossy(&pdf);
+
+  assert!(
+    haystack.contains("/SMask"),
+    "expected a soft mask in the graphics state"
+  );
+  assert_eq!(
+    haystack.matches("/S/Alpha").count(),
+    2,
+    "expected one alpha mask per element"
+  );
+}
+
 /// The color half of `filter`: each cell paints the same red, transformed by a
 /// different filter, so the fills carry different colors.
 #[test]
