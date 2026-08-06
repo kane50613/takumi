@@ -501,13 +501,13 @@ impl PdfRenderer {
     options: Option<PdfRenderOptionsType>,
   ) -> Result<Vec<u8>, js_sys::Error> {
     let node: Node = from_value(node.into()).map_err(map_error)?;
-    let options: PdfRenderOptions = options
+    let mut options: PdfRenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
       .unwrap_or_default();
 
+    let images = decode_images(&self.resource_cache, options.images.take())?;
     let (viewport, page) = resolve_geometry(&options)?;
-    let images = decode_images(&self.resource_cache, options.images)?;
     let lang = options
       .lang
       .as_deref()
@@ -548,12 +548,12 @@ impl PdfRenderer {
     options: Option<MeasureOptionsType>,
   ) -> Result<MeasuredSizeType, js_sys::Error> {
     let node: Node = from_value(node.into()).map_err(map_error)?;
-    let options: PdfRenderOptions = options
+    let mut options: PdfRenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
       .unwrap_or_default();
+    let images = decode_images(&self.resource_cache, options.images.take())?;
     let (viewport, page) = resolve_geometry(&options)?;
-    let images = decode_images(&self.resource_cache, options.images)?;
     let lang = options
       .lang
       .as_deref()

@@ -107,10 +107,11 @@ export type PdfRenderOptions = {
 };
 
 /** Options for `measure`: page geometry (or a viewport) plus layout resources. */
-export type MeasureOptions = Pick<
-  PdfRenderOptions,
-  "viewport" | "size" | "landscape" | "images" | "stylesheets" | "fontFamilies" | "lang"
->;
+export type MeasureOptions = (
+  | { size?: PageSize; landscape?: boolean; viewport?: never }
+  | { viewport: ViewportInput; size?: never; landscape?: never }
+) &
+  Pick<PdfRenderOptions, "images" | "stylesheets" | "fontFamilies" | "lang">;
 
 /** A node tree's laid-out size in CSS px. */
 export type MeasuredSize = { width: number; height: number };
