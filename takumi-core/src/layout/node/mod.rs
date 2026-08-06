@@ -723,7 +723,8 @@ impl Node {
     self.metadata.tag_name.as_deref()
   }
 
-  pub(crate) fn id(&self) -> Option<&str> {
+  /// The element's `id` attribute, when present.
+  pub fn id(&self) -> Option<&str> {
     self.metadata.id.as_deref()
   }
 

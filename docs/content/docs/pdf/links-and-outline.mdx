@@ -21,6 +21,23 @@ const pdf = await render(
 
 Inline anchors annotate each text run. A link that wraps across lines stays clickable on both lines. Block-level anchors annotate their entire box.
 
+`http`, `https`, `mailto` and `tel` links open outside the document. An `href` starting with `#` points inside it instead, to the element carrying that `id`:
+
+```tsx twoslash
+import { render } from "takumi-pdf";
+
+const pdf = await render(
+  // ---cut---
+  <div>
+    <a href="#appendix">Jump to the appendix</a>
+    <h1 id="appendix">Appendix</h1>
+  </div>,
+  // ---cut-after---
+);
+```
+
+Clicking it moves to the page holding that element. A fragment matching no element is dropped, so the reader never gets a link that goes nowhere. Other schemes are dropped too: they have no meaning inside a standalone document.
+
 ## Outline
 
 Set `outline: true` to build PDF bookmarks from `h1`–`h6` headings. Deeper headings nest under the previous shallower heading. This matches an HTML document outline:
