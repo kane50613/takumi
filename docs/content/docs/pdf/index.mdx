@@ -42,9 +42,10 @@ await writeFile("invoice.pdf", pdf);
 
 ```tsx twoslash
 import type { ReactNode } from "react";
-import { render } from "takumi-pdf";
 declare const report: ReactNode;
 // ---cut---
+import { render } from "takumi-pdf";
+
 const pdf = await render(report, {
   size: "letter", // "a4", "letter", or { width, height } in CSS px at 96 dpi
   landscape: true,

@@ -4,7 +4,7 @@ description: Replace headless Chrome with a 1.5 MB wasm module.
 icon: Globe
 ---
 
-`takumi-pdf` was designed against Puppeteer's `page.pdf()`. The options carry the same names, the header and footer templates use the same class hooks, and pagination follows Chromium's fragmentation rules. Most migrations are a rename.
+`takumi-pdf` was designed against Puppeteer's `page.pdf()`. Most options have a direct counterpart, header and footer bands use the same class hooks, and pagination follows Chromium's fragmentation rules. Names and input types differ in places, so read the map below.
 
 What changes is the deploy. No browser process, no Chrome install, no page to navigate. The renderer takes a tree and returns bytes, so it runs on Cloudflare Workers.
 

@@ -41,9 +41,10 @@ const pdf = await render(<InvoiceDocument data={invoice} />, {
 Mark each line row `break-inside: avoid` so a row never straddles a page. The Tailwind class is `break-inside-avoid`:
 
 ```tsx twoslash
-import "takumi-pdf";
 declare const item: { description: string; amount: string };
 // ---cut---
+import "takumi-pdf";
+
 <div tw="flex break-inside-avoid gap-3 pt-3 text-xs">
   <span tw="flex-1">{item.description}</span>
   <span tw="w-[100px] text-right">{item.amount}</span>
@@ -56,22 +57,25 @@ Wrap the totals block the same way. It is the part a reader most expects to see 
 
 Factur-X and ZUGFeRD are the same file twice: a readable invoice, plus the invoice as XML attached inside it. The standards pin how that file is packaged.
 
-| The standard requires        | The option              |
-| ---------------------------- | ----------------------- |
-| A PDF/A-3 container          | `pdfa: "3b"`            |
-| The XML attached by name     | `attachments`           |
-| An `fx:` XMP block           | `metadata.xmp`          |
-| A modification date per file | `metadata.creationDate` |
-| Embedded subset fonts        | always on               |
+| The standard requires        | The option         |
+| ---------------------------- | ------------------ |
+| A PDF/A-3 container          | `pdfa: "3b"`       |
+| The XML attached by name     | `attachments`      |
+| An `fx:` XMP block           | `metadata.xmp`     |
+| A modification date per file | `modificationDate` |
+| Embedded subset fonts        | always on          |
+
+Each attachment's `modificationDate` falls back to `metadata.creationDate`. Setting the document date once covers both.
 
 ```tsx twoslash
 import type { ReactNode } from "react";
-import { render } from "takumi-pdf";
 import type { XmpSchema } from "takumi-pdf";
 declare const invoice: ReactNode;
 declare const xml: string;
 declare const facturXmp: XmpSchema;
 // ---cut---
+import { render } from "takumi-pdf";
+
 const pdf = await render(invoice, {
   lang: "en",
   // [!code highlight:2]

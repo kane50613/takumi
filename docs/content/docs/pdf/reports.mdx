@@ -36,9 +36,10 @@ See [Pagination](/docs/pdf/pagination) for the full set of break properties.
 
 ```tsx twoslash
 import type { ReactNode } from "react";
-import { render } from "takumi-pdf";
 declare const report: ReactNode;
 // ---cut---
+import { render } from "takumi-pdf";
+
 const pdf = await render(report, {
   // [!code highlight]
   outline: true,
@@ -55,9 +56,10 @@ A report header usually names the document and the period. A footer usually carr
 
 ```tsx twoslash
 import type { ReactNode } from "react";
-import { render } from "takumi-pdf";
 declare const report: ReactNode;
 // ---cut---
+import { render } from "takumi-pdf";
+
 const pdf = await render(report, {
   header: (
     <div tw="flex w-full justify-between px-12 text-[10px] text-gray-500">
@@ -81,12 +83,13 @@ Bands draw in the margin, so the margin has to be tall enough. [Headers & footer
 Takumi lays out tables as flex rows, and a header row does not repeat across pages on its own. Split the rows into groups and give each group its own header:
 
 ```tsx twoslash
-import "takumi-pdf";
 import type { ReactNode } from "react";
 declare const rows: { id: string; label: string; amount: string }[];
 declare function chunk<T>(items: T[], size: number): T[][];
 declare function HeaderRow(): ReactNode;
 // ---cut---
+import "takumi-pdf";
+
 <div tw="flex flex-col">
   {chunk(rows, 24).map((group, index) => (
     <div key={index} tw="flex break-inside-avoid flex-col">

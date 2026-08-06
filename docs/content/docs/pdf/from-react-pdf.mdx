@@ -70,7 +70,7 @@ const pdf = await render(
 
 ## Three differences that bite
 
-**Units are CSS px.** react-pdf measures in pt. Takumi measures in CSS px at 96 dpi. Multiply every number by `96 / 72`, or about `1.333`. A4 is `595 × 842` pt and `794 × 1123` px.
+**Units are CSS px.** react-pdf measures lengths in pt. Takumi measures them in CSS px at 96 dpi. Multiply every length by `96 / 72`, or about `1.333`. A4 is `595 × 842` pt and `794 × 1123` px. Unitless values carry over as they are: `flexGrow`, `opacity`, `fontWeight`.
 
 **Flex direction defaults to row.** react-pdf defaults every container to `column`, unlike the web. CSS defaults to `row`. A stacked layout needs `flex-direction: column` written out.
 
@@ -82,9 +82,10 @@ react-pdf repeats a band by marking a `<View>` as `fixed` inside the page. Takum
 
 ```tsx twoslash
 import type { ReactNode } from "react";
-import { render } from "takumi-pdf";
 declare const report: ReactNode;
 // ---cut---
+import { render } from "takumi-pdf";
+
 const pdf = await render(report, {
   footer: (
     <div tw="flex w-full justify-center text-[10px] text-gray-500">

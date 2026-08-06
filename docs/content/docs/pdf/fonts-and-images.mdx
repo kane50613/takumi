@@ -10,10 +10,11 @@ Text embeds as real glyph runs with subset fonts. It stays selectable, searchabl
 
 ```tsx twoslash
 import type { ReactNode } from "react";
-import { render } from "takumi-pdf";
 declare const doc: ReactNode;
 declare const fontBytes: Uint8Array;
 // ---cut---
+import { render } from "takumi-pdf";
+
 import { googleFonts } from "@takumi-rs/helpers";
 
 const pdf = await render(doc, {
@@ -30,10 +31,11 @@ The renderer never fetches over the network. Pass pre-fetched bytes for each ima
 
 ```tsx twoslash
 import type { ReactNode } from "react";
-import { render } from "takumi-pdf";
 declare const doc: ReactNode;
 declare const logoUrl: string;
 // ---cut---
+import { render } from "takumi-pdf";
+
 const logoBytes = new Uint8Array(await (await fetch(logoUrl)).arrayBuffer());
 
 const pdf = await render(doc, {

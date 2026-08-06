@@ -8,10 +8,11 @@ Attach files with `attachments`. They appear in the viewer's attachment panel:
 
 ```tsx twoslash
 import type { ReactNode } from "react";
-import { render } from "takumi-pdf";
 declare const invoice: ReactNode;
 declare const xml: string;
 // ---cut---
+import { render } from "takumi-pdf";
+
 const pdf = await render(invoice, {
   attachments: [
     {
@@ -43,10 +44,11 @@ ZUGFeRD and Factur-X invoices are PDF/A-3 documents with the invoice XML attache
 
 ```tsx twoslash
 import type { ReactNode } from "react";
-import { render } from "takumi-pdf";
 declare const invoice: ReactNode;
 declare const xml: string;
 // ---cut---
+import { render } from "takumi-pdf";
+
 const pdf = await render(invoice, {
   pdfa: "3b",
   metadata: { title: "Invoice 1042", creationDate: "2026-08-06" },

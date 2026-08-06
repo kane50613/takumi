@@ -10,7 +10,7 @@ Content lays out once at unbounded height. It then splits into pages. Unsplittab
 
 ```tsx twoslash
 import { render } from "takumi-pdf";
-// ---cut---
+
 const pdf = await render(
   <article>
     <h1 style={{ breakBefore: "page" }}>Chapter two</h1>

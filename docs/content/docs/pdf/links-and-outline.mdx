@@ -41,9 +41,10 @@ Set `outline: true` to build PDF bookmarks from `h1`–`h6` headings. Deeper hea
 
 ```tsx twoslash
 import type { ReactNode } from "react";
-import { render } from "takumi-pdf";
 declare const report: ReactNode;
 // ---cut---
+import { render } from "takumi-pdf";
+
 const pdf = await render(report, { outline: true });
 ```
 
@@ -55,9 +56,10 @@ Clicking a bookmark jumps to the page and position of its heading.
 
 ```tsx twoslash
 import type { ReactNode } from "react";
-import { render } from "takumi-pdf";
 declare const report: ReactNode;
 // ---cut---
+import { render } from "takumi-pdf";
+
 const pdf = await render(report, {
   lang: "en",
   metadata: {

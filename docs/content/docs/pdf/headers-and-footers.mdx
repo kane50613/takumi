@@ -8,9 +8,10 @@ icon: PanelTop
 
 ```tsx twoslash
 import type { ReactNode } from "react";
-import { render } from "takumi-pdf";
 declare const report: ReactNode;
 // ---cut---
+import { render } from "takumi-pdf";
+
 const pdf = await render(report, {
   footer: (
     <div tw="flex w-full justify-center text-[10px] text-gray-500">
@@ -26,9 +27,10 @@ Band height depends on layout, so it is hard to guess ahead of time. `measure` l
 
 ```tsx twoslash
 import type { ReactNode } from "react";
-import { measure, render } from "takumi-pdf";
 declare const report: ReactNode;
 // ---cut---
+import { measure, render } from "takumi-pdf";
+
 const footer = (
   <div tw="flex w-full justify-center text-[10px] text-gray-500">
     Page <span className="pageNumber" /> of <span className="totalPages" />
@@ -53,9 +55,10 @@ Add a CSS `@counter-style` name to the class list. It formats the number:
 
 ```tsx twoslash
 import type { ReactNode } from "react";
-import { render } from "takumi-pdf";
 declare const report: ReactNode;
 // ---cut---
+import { render } from "takumi-pdf";
+
 const pdf = await render(report, {
   footer: (
     <div style={{ fontSize: 12 }}>
