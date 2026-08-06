@@ -428,7 +428,7 @@ fn color_filters() {
     };
     let source = format!(
       r##"<div style="display: flex; width: 100%; height: 100%; padding: 10px; column-gap: 10px; background-color: #ffffff;">
-        {}{}{}{}{}{}
+        {}{}{}{}{}{}{}
       </div>"##,
       cell("none"),
       cell("grayscale(1)"),
@@ -436,12 +436,14 @@ fn color_filters() {
       cell("invert(1)"),
       cell("hue-rotate(180deg)"),
       cell("hue-rotate(90deg)"),
+      // A filter covers the whole rendered element, shadows included.
+      r##"<div style="width: 70px; height: 70px; background-color: #ffffff; box-shadow: 4px 4px 0 0 #e11d48; filter: grayscale(1);"></div>"##,
     );
     let node = from_html(&source, FromHtmlOptions::default()).expect("parse filter fixture");
 
     PdfOptions::builder()
       .node(node)
-      .viewport(Viewport::new((420, 100)))
+      .viewport(Viewport::new((520, 100)))
       .fonts(fonts)
       .build()
   });
@@ -461,7 +463,7 @@ fn color_filters() {
   // The page background, then one fill per cell.
   assert_eq!(
     colors.len(),
-    7,
+    9,
     "expected one fill per cell, got {colors:?}"
   );
   assert_eq!(colors[1], vec![225, 29, 72], "unfiltered #e11d48");
@@ -477,6 +479,8 @@ fn color_filters() {
     "hue-rotate(90deg) differs from 180deg"
   );
   assert_ne!(colors[6], colors[1], "hue-rotate(90deg) changes the color");
+  // The shadow of the last cell is grayscaled like the rest of the element.
+  assert_eq!(colors[7], vec![74, 74, 74], "shadow follows the filter");
 }
 
 /// Collects the `rg` fill colors from the deflated page content streams.

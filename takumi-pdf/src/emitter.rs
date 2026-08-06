@@ -252,7 +252,7 @@ impl Emitter<'_> {
         pushed += 1;
       }
     }
-    let (inset, outer) = sized_shadows(node, deco_size);
+    let (inset, outer) = self.sized_shadows(node, deco_size);
 
     let deco_layout = Layout {
       size: deco_size,
@@ -615,6 +615,37 @@ impl Emitter<'_> {
     if artifact {
       surface.end_tagged();
     }
+  }
+
+  /// A node's shadows resolved against its box, split into inset and outer.
+  /// The shadow color goes through the subtree's `filter` like every other
+  /// color the element paints.
+  fn sized_shadows(
+    &self,
+    node: &RenderNode,
+    size: Size<f32>,
+  ) -> (Vec<SizedShadow>, Vec<SizedShadow>) {
+    let Some(shadows) = node.context.style.box_shadow.as_deref() else {
+      return (Vec::new(), Vec::new());
+    };
+    let resolve = |shadow: &BoxShadow| {
+      let sized = SizedShadow::from_box_shadow(
+        *shadow,
+        &node.context.sizing,
+        node.context.current_color,
+        size,
+      );
+
+      SizedShadow {
+        color: Color(self.filtered(sized.color)),
+        ..sized
+      }
+    };
+
+    (
+      shadows.iter().filter(|s| s.inset).map(resolve).collect(),
+      shadows.iter().filter(|s| !s.inset).map(resolve).collect(),
+    )
   }
 
   /// A color as this subtree's `filter` leaves it.
@@ -1101,26 +1132,6 @@ impl Emitter<'_> {
     text_line_atoms(&runs, layout, y, atoms);
     Ok(())
   }
-}
-
-/// A node's shadows resolved against its box, split into inset and outer.
-fn sized_shadows(node: &RenderNode, size: Size<f32>) -> (Vec<SizedShadow>, Vec<SizedShadow>) {
-  let Some(shadows) = node.context.style.box_shadow.as_deref() else {
-    return (Vec::new(), Vec::new());
-  };
-  let resolve = |shadow: &BoxShadow| {
-    SizedShadow::from_box_shadow(
-      *shadow,
-      &node.context.sizing,
-      node.context.current_color,
-      size,
-    )
-  };
-
-  (
-    shadows.iter().filter(|s| s.inset).map(resolve).collect(),
-    shadows.iter().filter(|s| !s.inset).map(resolve).collect(),
-  )
 }
 
 /// Whether the node draws own content (text or an image), i.e. whether a

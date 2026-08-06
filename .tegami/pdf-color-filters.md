@@ -10,5 +10,6 @@ packages:
 
 - filters compose down the stacking contexts, so a filtered ancestor reaches its descendants
 - SVG images rasterize while a filter is active, since the transform applies to pixels
+- shadows follow the filter too, like every other color the element paints
 - `blur()` and `drop-shadow()` need a convolution and are still ignored, as are referenced SVG filters
 - transforming each color before compositing matches compositing first only while the filtered content is opaque; overlapping translucent content differs
