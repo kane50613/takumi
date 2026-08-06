@@ -1934,7 +1934,6 @@ dependencies = [
  "rustc-hash",
  "siphasher",
  "skrifa",
- "smallvec",
  "takumi-core",
  "takumi-html",
  "tiny-skia-path",
