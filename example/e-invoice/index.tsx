@@ -47,7 +47,7 @@ const pdf = await render(<InvoiceDocument data={invoice} />, {
     {
       name: "factur-x.xml",
       data: facturXml(invoice),
-      mimeType: "application/xml",
+      mimeType: "text/xml",
       description: "Factur-X 1.0 MINIMUM invoice data",
       relationship: "data",
     },

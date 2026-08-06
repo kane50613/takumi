@@ -19,7 +19,7 @@ use takumi_core::{
 };
 use typed_builder::TypedBuilder;
 
-/// Errors from [`render`].
+/// Errors from [`crate::render`].
 #[derive(Debug)]
 pub enum PdfError {
   /// Layout or resource resolution failed in takumi-core.
@@ -104,7 +104,7 @@ pub enum Tagging {
   Ua1,
 }
 
-/// Inputs for [`render`], built with [`PdfOptions::builder`].
+/// Inputs for [`crate::render`], built with [`PdfOptions::builder`].
 #[derive(TypedBuilder)]
 pub struct PdfOptions<'g> {
   /// The viewport to render in. Required for single-page output; ignored when
@@ -322,7 +322,8 @@ pub struct PageOptions {
 /// physical size.
 pub(crate) const PT_PER_PX: f32 = 72.0 / 96.0;
 
-/// Chromium's print template page insets bands 15pt from the paper edge
+/// 20px, which is Chromium's 15pt inset at 96 dpi: its print template page
+/// insets bands 15pt from the paper edge
 /// (`#header { padding-top: 15pt }`, `#footer { padding-bottom: 15pt }` in
 /// components/printing/resources/print_header_footer_template_page.html).
 pub(crate) const BAND_EDGE_PADDING: f32 = 20.0;
@@ -383,7 +384,7 @@ impl PageOptions {
   }
 }
 
-/// Inputs for [`measure`], built with [`MeasureOptions::builder`].
+/// Inputs for [`crate::measure`], built with [`MeasureOptions::builder`].
 #[derive(TypedBuilder)]
 pub struct MeasureOptions<'g> {
   /// The viewport to lay out in. Required unless [`Self::page`] is set.
@@ -400,7 +401,7 @@ pub struct MeasureOptions<'g> {
   #[builder(default)]
   pub images: HashMap<Arc<str>, ImageSource>,
   /// Lays out at the full page width with unbounded height, exactly how
-  /// [`render`] measures a header/footer band. Margins do not affect the
+  /// [`crate::render`] measures a header/footer band. Margins do not affect the
   /// result.
   #[builder(default, setter(strip_option))]
   pub page: Option<PageOptions>,
