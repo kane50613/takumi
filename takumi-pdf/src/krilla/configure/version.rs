@@ -114,10 +114,6 @@ impl PdfVersion {
   pub(crate) fn deprecates_proc_sets(&self) -> bool {
     *self >= PdfVersion::Pdf20
   }
-
-  pub(crate) fn deprecates_cid_set(&self) -> bool {
-    *self >= PdfVersion::Pdf20
-  }
 }
 
 /// The ICC v4 profile for the SRGB color space.

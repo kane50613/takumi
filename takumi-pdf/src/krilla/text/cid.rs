@@ -3,9 +3,6 @@ use pdf_writer::types::{CidFontType, FontFlags, SystemInfo, UnicodeCmap};
 use pdf_writer::writers::WMode;
 use pdf_writer::{Finish, Name, Ref, Str};
 use rustc_hash::FxHashMap;
-use skrifa::instance::Size;
-use skrifa::outline::DrawSettings;
-use skrifa::prelude::LocationRef;
 use skrifa::raw::tables::cff::Cff;
 use skrifa::raw::{TableProvider, TopLevelTable};
 use std::hash::Hash;
@@ -22,7 +19,6 @@ use crate::krilla::stream::FilterStreamBuilder;
 use crate::krilla::surface::Location;
 use crate::krilla::text::Font;
 use crate::krilla::text::GlyphId;
-use crate::krilla::text::outline::OutlineBuilder;
 use crate::krilla::util::{SliceExt, stable_hash128};
 
 const SUBSET_TAG_LEN: usize = 6;
@@ -197,7 +193,6 @@ impl CIDFont {
     let cid_ref = sc.new_ref();
     let descriptor_ref = sc.new_ref();
     let cmap_ref = sc.new_ref();
-    let cid_set_ref = sc.new_ref();
     let data_ref = sc.new_ref();
 
     let glyph_remapper = &self.glyph_remapper;
@@ -236,7 +231,6 @@ impl CIDFont {
     }
 
     let (subsetted, global_bbox) = subset_font(self.font.clone(), glyph_remapper)?;
-    let num_glyphs = subsetted.num_glyphs();
     let subsetted_data = subsetted.font_data().0;
 
     let font_stream = {
@@ -268,6 +262,12 @@ impl CIDFont {
       .descendant_font(cid_ref)
       .to_unicode(cmap_ref);
 
+    // IN CID fonts, a upem value of 1000 is assumed for all fonts, so we need to convert.
+    let to_pdf_units = |v: f32| v / self.font.units_per_em() * self.units_per_em();
+    // `/DW` states one width for the whole font, so the width most glyphs share
+    // costs nothing. A monospaced or CJK face leaves `/W` almost empty.
+    let default_width = most_common_width(&self.widths);
+
     let mut cid = chunk.cid_font(cid_ref);
     cid.subtype(if is_cff {
       CidFontType::Type0
@@ -277,20 +277,17 @@ impl CIDFont {
     cid.base_font(Name(base_font.as_bytes()));
     cid.system_info(SYSTEM_INFO);
     cid.font_descriptor(descriptor_ref);
-    cid.default_width(0.0);
+    cid.default_width(to_pdf_units(default_width));
 
     if !is_cff {
       cid.cid_to_gid_map_predefined(Name(b"Identity"));
     }
 
-    // IN CID fonts, a upem value of 1000 is assumed for all fonts, so we need to convert.
-    let to_pdf_units = |v: f32| v / self.font.units_per_em() * self.units_per_em();
-
     let mut first = 0;
     let mut width_writer = cid.widths();
     for (w, group) in self.widths.group_by_key(|&w| w) {
       let end = first + group.len();
-      if w != 0.0 {
+      if w != default_width {
         let last = end - 1;
         width_writer.same(first as u16, last as u16, to_pdf_units(w));
       }
@@ -299,30 +296,6 @@ impl CIDFont {
 
     width_writer.finish();
     cid.finish();
-
-    // The only reason we write this in the first place is that PDF/A-1b requires
-    // a CIDSet.
-    if !sc.serialize_settings().pdf_version().deprecates_cid_set() {
-      let cid_stream_data = {
-        // It's always guaranteed by the subsetter that CIDs start from 0 and are
-        // consecutive, so this encoding is very straight-forward.
-        let mut bytes = vec![];
-        bytes.extend([0xFFu8].repeat((num_glyphs / 8) as usize));
-        let padding = num_glyphs % 8;
-        if padding != 0 {
-          bytes.push(!(0xFF >> padding))
-        }
-
-        bytes
-      };
-
-      let cid_stream = FilterStreamBuilder::new_from_binary_data(&cid_stream_data)
-        .finish(&sc.serialize_settings());
-      let mut cid_set = stream_chunk.stream(cid_set_ref, cid_stream.encoded_data());
-      cid_stream.write_filters(cid_set.deref_mut());
-      cid_set.finish();
-      cid_stream.finish();
-    }
 
     let mut flags = FontFlags::empty();
     flags.set(
@@ -364,10 +337,6 @@ impl CIDFont {
       .descent(descender)
       .cap_height(cap_height)
       .stem_v(stem_v);
-
-    if !sc.serialize_settings().pdf_version().deprecates_cid_set() {
-      font_descriptor.cid_set(cid_set_ref);
-    }
 
     if is_cff {
       font_descriptor.font_file3(data_ref);
@@ -424,6 +393,21 @@ pub(crate) fn subset_tag<T: Hash>(data: &T) -> String {
   std::str::from_utf8(&letter).unwrap().to_string()
 }
 
+/// The width the most glyphs share, which `/DW` then states once.
+fn most_common_width(widths: &[f32]) -> f32 {
+  let mut counts: FxHashMap<u32, usize> = FxHashMap::default();
+
+  for width in widths {
+    *counts.entry(width.to_bits()).or_default() += 1;
+  }
+
+  widths
+    .iter()
+    .copied()
+    .max_by_key(|width| counts.get(&width.to_bits()).copied().unwrap_or_default())
+    .unwrap_or_default()
+}
+
 pub(crate) fn base_font_name<T: Hash>(font: &Font, data: &T) -> String {
   const REST_LEN: usize = SUBSET_TAG_LEN + 1 + 1 + IDENTITY_H.len();
 
@@ -436,8 +420,6 @@ pub(crate) fn base_font_name<T: Hash>(font: &Font, data: &T) -> String {
 }
 
 fn subset_font(font: Font, glyph_remapper: &GlyphRemapper) -> KrillaResult<(Font, Rect)> {
-  let mut bbox: Option<Rect> = None;
-
   let variation_coordinates = font
     .variation_coordinates()
     .iter()
@@ -456,33 +438,10 @@ fn subset_font(font: Font, glyph_remapper: &GlyphRemapper) -> KrillaResult<(Font
       "failed to subset font".to_string(),
     ))
   })?;
-  let global_bbox = font.bbox();
+  // `/FontBBox` has to enclose every glyph in the font, which the font's own
+  // box already does. Tracing each outline to tighten it costs a full pass over
+  // the subset per render and buys nothing a reader looks at.
+  let bbox = font.bbox();
 
-  for g in 0..font.num_glyphs() {
-    if let Some(path_bbox) = compute_bbox(&font, skrifa::GlyphId::new(g)) {
-      bbox = bbox
-        .map(|mut r| {
-          r.expand(&path_bbox);
-          r
-        })
-        .or(Some(path_bbox));
-    }
-  }
-
-  Ok((font, bbox.unwrap_or(global_bbox)))
-}
-
-fn compute_bbox(font: &Font, glyph: skrifa::GlyphId) -> Option<Rect> {
-  let outline_glyphs = font.outline_glyphs();
-
-  if let Some(outline_glyph) = outline_glyphs.get(glyph) {
-    let mut glyph_builder = OutlineBuilder::new();
-    let _ = outline_glyph.draw(
-      DrawSettings::unhinted(Size::unscaled(), LocationRef::default()),
-      &mut glyph_builder,
-    );
-    glyph_builder.finish().map(|p| Rect::from_tsp(p.bounds()))
-  } else {
-    None
-  }
+  Ok((font, bbox))
 }
