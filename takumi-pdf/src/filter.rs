@@ -35,24 +35,38 @@ const IDENTITY: ColorMatrix = ColorMatrix {
 };
 
 impl ColorFilter {
-  /// Appends a filter list to whatever the ancestors already apply. Returns
-  /// `None` when nothing in the list changes color, so the common case stays
-  /// free.
+  /// Prepends a filter list to whatever the ancestors already apply: CSS
+  /// filters the element first and the ancestor's group afterwards, and the
+  /// matrices do not commute. Returns `None` when nothing changes color.
   pub(crate) fn compose(outer: Option<&Self>, filters: &[Filter]) -> Option<Self> {
-    let mut functions = outer
-      .map(|filter| filter.functions.clone())
-      .unwrap_or_default();
+    let mut functions: Vec<ColorMatrix> = filters
+      .iter()
+      .filter_map(ColorMatrix::from_filter)
+      .collect();
 
-    functions.extend(filters.iter().filter_map(ColorMatrix::from_filter));
+    if let Some(outer) = outer {
+      functions.extend_from_slice(&outer.functions);
+    }
     (!functions.is_empty()).then_some(Self { functions })
   }
 
-  /// Applies every filter in order, clamping between them like CSS does.
+  /// Applies every filter in order. Each result is clamped before the next one
+  /// runs, as CSS requires, but the pipeline stays in floats so the channels
+  /// are quantized once at the end rather than between functions.
   pub(crate) fn apply(&self, rgba: [u8; 4]) -> [u8; 4] {
-    self
+    let channel = |value: u8| f32::from(value) / 255.0;
+    let color = [
+      channel(rgba[0]),
+      channel(rgba[1]),
+      channel(rgba[2]),
+      channel(rgba[3]),
+    ];
+    let mixed = self
       .functions
       .iter()
-      .fold(rgba, |color, function| function.apply(color))
+      .fold(color, |color, function| function.apply(color));
+
+    mixed.map(|value| (value * 255.0).round() as u8)
   }
 
   /// Applies the filter to a color value.
@@ -62,19 +76,18 @@ impl ColorFilter {
 }
 
 impl ColorMatrix {
-  /// Applies the matrix to a straight (non-premultiplied) RGBA color.
-  fn apply(self, rgba: [u8; 4]) -> [u8; 4] {
-    let channel = |value: u8| value as f32 / 255.0;
-    let (r, g, b) = (channel(rgba[0]), channel(rgba[1]), channel(rgba[2]));
+  /// Applies the matrix to a straight (non-premultiplied) color in 0..1.
+  fn apply(self, color: [f32; 4]) -> [f32; 4] {
+    let [r, g, b, a] = color;
     let mixed = self
       .rows
       .map(|row| (row[0] * r + row[1] * g + row[2] * b + row[3]).clamp(0.0, 1.0));
 
     [
-      (mixed[0] * 255.0).round() as u8,
-      (mixed[1] * 255.0).round() as u8,
-      (mixed[2] * 255.0).round() as u8,
-      (channel(rgba[3]) * self.alpha * 255.0).round() as u8,
+      mixed[0],
+      mixed[1],
+      mixed[2],
+      (a * self.alpha).clamp(0.0, 1.0),
     ]
   }
 
@@ -135,35 +148,43 @@ impl ColorMatrix {
     filter
   }
 
-  /// The CSS hue-rotate matrix, which rotates around the luma axis.
+  /// The `hue-rotate` matrix from Filter Effects: a luma column plus cosine and
+  /// sine terms. The coefficients are the spec's own, not derivable from the
+  /// luma weights, and match this repo's SVG filter implementation.
   fn hue_rotate(angle: Angle) -> Self {
-    let radians = angle.to_degrees().to_radians();
-    let (sin, cos) = radians.sin_cos();
-    let [lr, lg, lb] = LUMA_WEIGHTS;
-    let row = |base: [f32; 3], cosine: [f32; 3], sine: [f32; 3]| {
-      [
-        base[0] + cos * cosine[0] + sin * sine[0],
-        base[1] + cos * cosine[1] + sin * sine[1],
-        base[2] + cos * cosine[2] + sin * sine[2],
-        0.0,
-      ]
-    };
+    const BASE: [[f32; 3]; 3] = [
+      [0.213, 0.715, 0.072],
+      [0.213, 0.715, 0.072],
+      [0.213, 0.715, 0.072],
+    ];
+    const COSINE: [[f32; 3]; 3] = [
+      [0.787, -0.715, -0.072],
+      [-0.213, 0.285, -0.072],
+      [-0.213, -0.715, 0.928],
+    ];
+    const SINE: [[f32; 3]; 3] = [
+      [-0.213, -0.715, 0.928],
+      [0.143, 0.140, -0.283],
+      [-0.787, 0.715, 0.072],
+    ];
+    // `Angle` derefs to its degree value, so the conversion runs on the f32.
+    let (sin, cos) = f32::to_radians(*angle).sin_cos();
+    let mut rows = [[0.0; 4]; 3];
 
-    Self {
-      rows: [
-        row([lr, lg, lb], [1.0 - lr, -lg, -lb], [-lr, -lg, 1.0 - lb]),
-        row([lr, lg, lb], [-lr, 1.0 - lg, -lb], [lr, lg - 1.0, lb]),
-        row([lr, lg, lb], [-lr, -lg, 1.0 - lb], [lr - 1.0, lg, lb]),
-      ],
-      alpha: 1.0,
+    for (index, row) in rows.iter_mut().enumerate() {
+      for (column, cell) in row.iter_mut().take(3).enumerate() {
+        *cell = BASE[index][column] + cos * COSINE[index][column] + sin * SINE[index][column];
+      }
     }
+
+    Self { rows, alpha: 1.0 }
   }
 }
 
 #[cfg(test)]
 mod tests {
   use super::ColorFilter;
-  use takumi_core::style::{Filter, PercentageNumber};
+  use takumi_core::style::{Angle, Filter, PercentageNumber};
 
   #[test]
   fn each_function_clamps_before_the_next_one_runs() {
@@ -177,6 +198,31 @@ mod tests {
     let [red, green, blue, _] = filter.apply([0xcc, 0x33, 0x33, 255]);
 
     assert_eq!([red, green, blue], [0x87, 0x87, 0x87]);
+  }
+
+  #[test]
+  fn an_ancestor_filter_runs_after_the_element_own() {
+    // CSS renders the child, filters it, then filters the parent's group.
+    let own = ColorFilter::compose(None, &[Filter::Contrast(PercentageNumber(2.0))]);
+    let composed = ColorFilter::compose(
+      ColorFilter::compose(None, &[Filter::Brightness(PercentageNumber(0.5))]).as_ref(),
+      &[Filter::Contrast(PercentageNumber(2.0))],
+    )
+    .expect("a filter");
+
+    assert!(own.is_some());
+    assert_eq!(
+      composed.apply([0x80, 0x80, 0x80, 255]),
+      [0x40, 0x40, 0x40, 255]
+    );
+  }
+
+  #[test]
+  fn hue_rotate_reads_its_angle_in_degrees() {
+    let filter =
+      ColorFilter::compose(None, &[Filter::HueRotate(Angle::new(180.0))]).expect("filter");
+
+    assert_eq!(filter.apply([225, 29, 72, 255]), [0, 119, 76, 255]);
   }
 
   #[test]
