@@ -32,6 +32,8 @@ const footer = (
 
 const { height } = await measure(footer, { size: "a4", fonts });
 
+const startTime = Date.now();
+
 const pdf = await render(<InvoiceDocument data={invoice} />, {
   size: "a4",
   margin: { top: 48, bottom: height + 32, left: 48, right: 48 },
@@ -58,6 +60,6 @@ const pdf = await render(<InvoiceDocument data={invoice} />, {
   ],
 });
 
-await write("output/invoice.pdf", pdf);
+console.log(`Rendered output/invoice.pdf in ${Date.now() - startTime}ms`);
 
-console.log(`Wrote output/invoice.pdf, footer band measured at ${height}px`);
+await write("output/invoice.pdf", pdf);
