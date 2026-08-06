@@ -11,6 +11,7 @@ use crate::krilla::configure::{ValidationError, Validators};
 #[cfg(feature = "raster-images")]
 use crate::krilla::graphics::image::Image;
 use crate::krilla::surface::Location;
+use crate::krilla::tagging::TagId;
 use crate::krilla::text::Font;
 
 /// A wrapper type for krilla errors.
@@ -31,6 +32,14 @@ pub enum KrillaError {
   /// The same destination name has been associated with two different destinations,
   /// which is prohibited.
   DuplicateNamedDestination(Arc<String>),
+  /// A duplicate [`Tag::id`] was provided.
+  ///
+  /// [`Tag::id`]: crate::krilla::interchange::tagging::Tag::id
+  DuplicateTagId(TagId, Option<Location>),
+  /// A [`TagId`] was not found in the [`TagTree`].
+  ///
+  /// [`TagTree`]: crate::krilla::interchange::tagging::TagTree
+  UnknownTagId(TagId, Option<Location>),
   /// An image couldn't be processed properly.
   ///
   /// The third argument contains the error message.
@@ -57,6 +66,14 @@ impl Display for KrillaError {
       KrillaError::Limit(error) => write!(f, "PDF version limit exceeded: {error}"),
       KrillaError::DuplicateNamedDestination(name) => {
         write!(f, "duplicate named destination: {name}")
+      }
+      KrillaError::DuplicateTagId(id, location) => {
+        write!(f, "duplicate tag id {id:?}")?;
+        write_location(f, *location)
+      }
+      KrillaError::UnknownTagId(id, location) => {
+        write!(f, "unknown tag id {id:?}")?;
+        write_location(f, *location)
       }
       #[cfg(feature = "raster-images")]
       KrillaError::Image(_, location, message) => {

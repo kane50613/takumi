@@ -107,7 +107,9 @@ impl<'a> StreamBuilder<'a> {
 
   /// Get the surface of the stream builder.
   pub fn surface(&mut self) -> Surface<'_> {
-    let finish_fn = Box::new(|stream| {
+    // Stream builders cannot have any tags since we always pass a dummy
+    // identifier. Only main page content streams can have one.
+    let finish_fn = Box::new(|stream, _| {
       self.stream = stream;
     });
 
@@ -115,6 +117,7 @@ impl<'a> StreamBuilder<'a> {
       self.sc,
       self.chunk_container,
       ContentBuilder::new(Transform::identity(), true, self.sc),
+      None,
       finish_fn,
     )
   }

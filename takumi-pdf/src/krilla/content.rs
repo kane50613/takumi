@@ -30,6 +30,7 @@ use crate::krilla::graphics::shading_function::{
 use crate::krilla::graphics::shading_pattern::ShadingPattern;
 use crate::krilla::graphics::tiling_pattern::TilingPattern;
 use crate::krilla::graphics::xobject::XObject;
+use crate::krilla::interchange::tagging::ContentTag;
 use crate::krilla::num::NormalizedF32;
 use crate::krilla::resource;
 use crate::krilla::resource::{Resource, ResourceDictionaryBuilder};
@@ -58,6 +59,7 @@ pub(crate) struct ContentBuilder {
   bbox_important: bool,
   /// A temporary buffer that's reused across the builder.
   scratch: Vec<u8>,
+  pub(crate) active_marked_content: bool,
 }
 
 /// Stores either a device-specific color space,
@@ -84,6 +86,7 @@ impl ContentBuilder {
       graphics_states: GraphicsStates::new(),
       bbox: None,
       scratch: Vec::new(),
+      active_marked_content: false,
     }
   }
 
@@ -110,6 +113,53 @@ impl ContentBuilder {
       self.rd_builder.finish(),
       self.uses_mask,
     )
+  }
+
+  fn start_marked_content_prelude(&mut self) {
+    if self.active_marked_content {
+      panic!("can't start marked content twice");
+    }
+
+    self.active_marked_content = true;
+  }
+
+  #[track_caller]
+  pub(crate) fn start_marked_content(&mut self, name: Name) {
+    self.start_marked_content_prelude();
+    self.content.begin_marked_content(name);
+  }
+
+  #[track_caller]
+  pub(crate) fn start_marked_content_with_properties(
+    &mut self,
+    sc: &mut SerializeContext,
+    mcid: Option<i32>,
+    tag: ContentTag,
+  ) {
+    self.start_marked_content_prelude();
+
+    let mut mc = self
+      .content
+      .begin_marked_content_with_properties(tag.name());
+    let mut properties = mc.properties();
+
+    if let Some(mcid) = mcid {
+      properties.pairs([(Name(b"MCID"), mcid)]);
+    }
+
+    // Page height extracted from transform and passed to function to allow
+    // its dependants to flip the y-axis, mirroring Krilla conventions.
+    let page_height = self.root_transform.ty();
+    tag.write_properties(sc, properties, page_height);
+  }
+
+  pub(crate) fn end_marked_content(&mut self) {
+    if !self.active_marked_content {
+      panic!("can't end marked content when none has been started");
+    }
+
+    self.content.end_marked_content();
+    self.active_marked_content = false;
   }
 
   pub(crate) fn concat_transform(&mut self, transform: &Transform) {

@@ -26,10 +26,11 @@
 //! box-shadow, filters, `clip-path`, masks, `background-size`/`position`/
 //! `repeat`, url() background layers.
 
-use std::{collections::HashMap, ops::Range, rc::Rc, sync::Arc};
+use std::{cell::RefCell, collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
 #[cfg(all(feature = "svg", feature = "images"))]
 mod svg;
+mod tags;
 
 #[allow(
   dead_code,
@@ -60,13 +61,13 @@ use crate::krilla::{
   annotation::{Annotation, LinkAnnotation, Target},
   blend::BlendMode as KrillaBlendMode,
   color::rgb,
-  configure::{Archival, ConfigurationBuilder},
+  configure::{Accessibility, Archival, ConfigurationBuilder},
   destination::XyzDestination,
   error::KrillaError,
   geom::{
     Path as KrillaPath, PathBuilder, Point, Rect as KrillaRect, Size as KrillaSize, Transform,
   },
-  metadata::Metadata,
+  metadata::{DateTime, Metadata},
   num::NormalizedF32,
   outline::{Outline, OutlineNode},
   page::PageSettings,
@@ -75,6 +76,7 @@ use crate::krilla::{
     RadialGradient as KrillaRadialGradient, SpreadMethod, Stop, SweepGradient,
   },
   surface::Surface,
+  tagging::{Artifact, ArtifactType, ContentTag},
   text::{Font, Glyph, GlyphId},
 };
 use takumi_core::{
@@ -113,6 +115,8 @@ use takumi_core::{
   style::{ObjectFit, PositionComponent},
 };
 use typed_builder::TypedBuilder;
+
+use crate::tags::{TagCollector, build_tag_tree};
 
 /// Errors from [`render`].
 #[derive(Debug)]
@@ -157,18 +161,37 @@ pub enum PdfStandard {
   A3u,
   /// PDF/A-4: archival, PDF 2.0.
   A4,
+  /// PDF/A-2a: PDF/A-2 with accessibility (tagged) conformance.
+  A2a,
+  /// PDF/A-3a: PDF/A-3 with accessibility (tagged) conformance.
+  A3a,
+  /// PDF/UA-1: accessible PDF, tagged.
+  Ua1,
 }
 
 impl PdfStandard {
   fn archival(self) -> Option<Archival> {
     match self {
-      PdfStandard::None => None,
+      PdfStandard::None | PdfStandard::Ua1 => None,
       PdfStandard::A2b => Some(Archival::A2_B),
       PdfStandard::A2u => Some(Archival::A2_U),
       PdfStandard::A3b => Some(Archival::A3_B),
       PdfStandard::A3u => Some(Archival::A3_U),
       PdfStandard::A4 => Some(Archival::A4),
+      PdfStandard::A2a => Some(Archival::A2_A),
+      PdfStandard::A3a => Some(Archival::A3_A),
     }
+  }
+
+  fn accessibility(self) -> Option<Accessibility> {
+    match self {
+      PdfStandard::Ua1 => Some(Accessibility::UA1),
+      _ => None,
+    }
+  }
+
+  fn requires_tagging(self) -> bool {
+    matches!(self, PdfStandard::A2a | PdfStandard::A3a | PdfStandard::Ua1)
   }
 }
 
@@ -218,6 +241,10 @@ pub struct PdfOptions<'g> {
   /// render.
   #[builder(default)]
   pub standard: PdfStandard,
+  /// Builds a tagged-PDF structure tree from the HTML semantics. Implied by
+  /// the tagged standards (`A2a`, `A3a`, `Ua1`).
+  #[builder(default)]
+  pub tagged: bool,
 }
 
 /// Document metadata for the PDF's info dictionary. [`PdfOptions::lang`]
@@ -234,6 +261,26 @@ pub struct PdfMetadata {
   pub keywords: Vec<String>,
   /// The tool that created the source document.
   pub creator: Option<String>,
+  /// The document creation date, interpreted as UTC. Tagged archival
+  /// standards require one; supplying it keeps output deterministic.
+  pub creation_date: Option<PdfDate>,
+}
+
+/// A UTC timestamp for [`PdfMetadata::creation_date`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PdfDate {
+  /// Full year, e.g. 2026.
+  pub year: u16,
+  /// Month `1..=12`.
+  pub month: u8,
+  /// Day of month `1..=31`.
+  pub day: u8,
+  /// Hour `0..=23`.
+  pub hour: u8,
+  /// Minute `0..=59`.
+  pub minute: u8,
+  /// Second `0..=59`.
+  pub second: u8,
 }
 
 fn build_metadata(metadata: &PdfMetadata, lang: Option<Lang>) -> Metadata {
@@ -256,6 +303,17 @@ fn build_metadata(metadata: &PdfMetadata, lang: Option<Lang>) -> Metadata {
   }
   if let Some(lang) = lang {
     result = result.language(lang.as_str().to_string());
+  }
+  if let Some(date) = metadata.creation_date {
+    result = result.creation_date(
+      DateTime::new(date.year)
+        .month(date.month)
+        .day(date.day)
+        .hour(date.hour)
+        .minute(date.minute)
+        .second(date.second)
+        .utc_offset_hour(0),
+    );
   }
   result
 }
@@ -387,6 +445,7 @@ impl PreparedTree {
     &'a self,
     fonts: &'a mut FontMap,
     inline: Option<&'a InlineMap<'a>>,
+    tags: Option<&'a RefCell<TagCollector>>,
   ) -> Emitter<'a> {
     Emitter {
       root: &self.root,
@@ -396,6 +455,7 @@ impl PreparedTree {
       inline,
       window: None,
       line_window: None,
+      tags,
     }
   }
 }
@@ -661,23 +721,33 @@ fn prepare_band(
 fn emit_band(
   band: &PreparedTree,
   fonts: &mut FontMap,
-  x: f32,
-  y: f32,
-  width: f32,
-  height: f32,
+  bounds: (f32, f32, f32, f32),
+  artifact: bool,
   surface: &mut Surface,
 ) -> Result<(), PdfError> {
+  let (x, y, width, height) = bounds;
   let Some(path) = KrillaRect::from_xywh(x, y, width, height).and_then(rect_path) else {
     return Ok(());
   };
 
+  if artifact {
+    // `Other` stays valid below PDF 2.0, where the header/footer artifact
+    // subtypes do not exist yet.
+    surface.start_tagged(ContentTag::Artifact(Artifact::new(
+      ArtifactType::Other,
+      None,
+    )));
+  }
   surface.push_clip_path(&path, &FillRule::NonZero);
   surface.push_transform(&Transform::from_translate(x, y));
-  let mut emitter = band.emitter(fonts, None);
+  let mut emitter = band.emitter(fonts, None, None);
 
   emitter.emit_context(0, Affine::IDENTITY, surface)?;
   surface.pop();
   surface.pop();
+  if artifact {
+    surface.end_tagged();
+  }
   Ok(())
 }
 
@@ -692,24 +762,37 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
     lang: options.lang,
   };
   let mut fonts = FontMap::new();
-  let mut document = match options.standard.archival() {
-    Some(archival) => {
-      let configuration = ConfigurationBuilder::new()
-        .with_archival_validator(archival)
-        .finish()
-        .map_err(|_| PdfError::InvalidStandard)?;
-      let settings = SerializeSettings {
+  let mut document = {
+    let mut builder = ConfigurationBuilder::new();
+    let mut validated = false;
+
+    if let Some(archival) = options.standard.archival() {
+      builder = builder.with_archival_validator(archival);
+      validated = true;
+    }
+    if let Some(accessibility) = options.standard.accessibility() {
+      builder = builder.with_accessibility_validator(accessibility);
+      validated = true;
+    }
+    if validated {
+      let configuration = builder.finish().map_err(|_| PdfError::InvalidStandard)?;
+
+      Document::new_with(SerializeSettings {
         configuration,
         ..SerializeSettings::default()
-      };
-
-      Document::new_with(settings)
+      })
+    } else {
+      Document::new()
     }
-    None => Document::new(),
   };
+  let tag_collector = (options.tagged || options.standard.requires_tagging())
+    .then(|| RefCell::new(TagCollector::default()));
 
   if let Some(metadata) = &options.metadata {
     document.set_metadata(build_metadata(metadata, inputs.lang));
+  } else if tag_collector.is_some() && inputs.lang.is_some() {
+    // Tagged standards check the document language even without metadata.
+    document.set_metadata(build_metadata(&PdfMetadata::default(), inputs.lang));
   }
   match options.page {
     Some(page) => {
@@ -759,7 +842,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       let mut forced = Vec::new();
 
       content
-        .emitter(&mut fonts, Some(&inline_map))
+        .emitter(&mut fonts, Some(&inline_map), None)
         .collect_atoms(0, Affine::IDENTITY, &mut atoms, &mut forced)?;
       let starts = page_starts(&mut atoms, &mut forced, content.height, window_height);
       let pages = starts.len();
@@ -782,10 +865,8 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           emit_band(
             tree,
             &mut fonts,
-            0.0,
-            BAND_EDGE_PADDING,
-            page.width,
-            header_height,
+            (0.0, BAND_EDGE_PADDING, page.width, header_height),
+            tag_collector.is_some(),
             &mut surface,
           )?;
         }
@@ -806,7 +887,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
             page.margin.left,
             content_top - y0,
           ));
-          let mut emitter = content.emitter(&mut fonts, Some(&inline_map));
+          let mut emitter = content.emitter(&mut fonts, Some(&inline_map), tag_collector.as_ref());
 
           emitter.window = Some((y0, y0 + paint_height));
           emitter.line_window = Some((if index == 0 { f32::NEG_INFINITY } else { y0 }, next_start));
@@ -827,10 +908,13 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           emit_band(
             tree,
             &mut fonts,
-            0.0,
-            page.height - BAND_EDGE_PADDING - footer_height,
-            page.width,
-            footer_height,
+            (
+              0.0,
+              page.height - BAND_EDGE_PADDING - footer_height,
+              page.width,
+              footer_height,
+            ),
+            tag_collector.is_some(),
             &mut surface,
           )?;
         }
@@ -842,11 +926,12 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           &links,
           (y0, y0 + paint_height),
           (page.margin.left, content_top),
+          tag_collector.is_some(),
         );
         pdf_page.finish();
       }
 
-      if options.outline && !headings.is_empty() {
+      if (options.outline || options.standard == PdfStandard::Ua1) && !headings.is_empty() {
         document.set_outline(build_outline(&headings, |heading| {
           let index = starts
             .partition_point(|start| *start <= heading.top)
@@ -858,6 +943,13 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
             Point::from_xy(page.margin.left * PT_PER_PX, y * PT_PER_PX),
           )
         }));
+      }
+      if let Some(collector) = &tag_collector {
+        document.set_tag_tree(build_tag_tree(
+          &content.root,
+          inputs.lang.as_ref().map(Lang::as_str),
+          &mut collector.borrow_mut(),
+        ));
       }
     }
     None => {
@@ -871,19 +963,32 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       let mut surface = page.surface();
 
       surface.push_transform(&Transform::from_scale(PT_PER_PX, PT_PER_PX));
-      let mut emitter = content.emitter(&mut fonts, Some(&inline_map));
+      let mut emitter = content.emitter(&mut fonts, Some(&inline_map), tag_collector.as_ref());
 
       emitter.emit_context(0, Affine::IDENTITY, &mut surface)?;
       surface.pop();
       surface.finish();
       let (links, headings) = collect_interactive(&content);
 
-      add_link_annotations(&mut page, &links, (0.0, content.height), (0.0, 0.0));
+      add_link_annotations(
+        &mut page,
+        &links,
+        (0.0, content.height),
+        (0.0, 0.0),
+        tag_collector.is_some(),
+      );
       page.finish();
-      if options.outline && !headings.is_empty() {
+      if (options.outline || options.standard == PdfStandard::Ua1) && !headings.is_empty() {
         document.set_outline(build_outline(&headings, |heading| {
           XyzDestination::new(0, Point::from_xy(0.0, heading.top.max(0.0) * PT_PER_PX))
         }));
+      }
+      if let Some(collector) = &tag_collector {
+        document.set_tag_tree(build_tag_tree(
+          &content.root,
+          inputs.lang.as_ref().map(Lang::as_str),
+          &mut collector.borrow_mut(),
+        ));
       }
     }
   }
@@ -1176,6 +1281,7 @@ fn add_link_annotations(
   links: &[LinkTarget],
   window: (f32, f32),
   offset: (f32, f32),
+  tagged: bool,
 ) {
   for link in links {
     let top = link.rect.top().max(window.0);
@@ -1193,12 +1299,16 @@ fn add_link_annotations(
       continue;
     };
 
+    // Tagged standards require alt text on link annotations; the target URI
+    // is the honest description available.
+    let alt = tagged.then(|| link.uri.clone());
+
     page.add_annotation(Annotation::new_link(
       LinkAnnotation::new(
         rect,
         Target::Action(Action::Link(LinkAction::new(link.uri.clone()))),
       ),
-      None,
+      alt,
     ));
   }
 }
@@ -1359,6 +1469,9 @@ struct Emitter<'a> {
   /// narrower at the bottom when a cut lands above the page's full height, so
   /// every line is emitted on exactly one page.
   line_window: Option<(f32, f32)>,
+  /// Records a marked-content identifier per source node while drawing, for
+  /// the structure tree built after emission.
+  tags: Option<&'a RefCell<TagCollector>>,
 }
 
 impl Emitter<'_> {
@@ -1524,7 +1637,19 @@ impl Emitter<'_> {
       }
     }
 
+    let tagged = self.tags.is_some() && has_own_content(node);
+
+    if tagged {
+      let identifier = surface.start_tagged(ContentTag::Other);
+
+      if let Some(tags) = self.tags {
+        tags.borrow_mut().record(&paint.path, identifier);
+      }
+    }
     self.emit_own_content(node, layout, x, y, surface)?;
+    if tagged {
+      surface.end_tagged();
+    }
     Ok((frame, pushed))
   }
 
@@ -2427,6 +2552,23 @@ const fn krilla_blend(mode: BlendMode) -> KrillaBlendMode {
     BlendMode::Color => KrillaBlendMode::Color,
     BlendMode::Luminosity => KrillaBlendMode::Luminosity,
     _ => KrillaBlendMode::Normal,
+  }
+}
+
+/// Whether the node draws own content (text or an image), i.e. whether a
+/// tagged content sequence around it would be non-empty.
+fn has_own_content(node: &RenderNode) -> bool {
+  if node.should_create_inline_layout() {
+    return true;
+  }
+  if node.has_anonymous_text_item_child() {
+    return false;
+  }
+  match node.node.as_ref().map(|n| &n.kind) {
+    Some(NodeKind::Text(_)) => true,
+    #[cfg(feature = "images")]
+    Some(NodeKind::Image(_)) => true,
+    _ => false,
   }
 }
 

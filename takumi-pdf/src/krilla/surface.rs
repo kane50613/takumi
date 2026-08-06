@@ -8,6 +8,8 @@ use std::num::NonZeroU64;
 
 use crate::krilla::chunk_container::ChunkContainer;
 use crate::krilla::color::rgb;
+use crate::krilla::configure::ValidationError;
+use crate::krilla::configure::validate::VersionedFeature;
 use crate::krilla::content::ContentBuilder;
 use crate::krilla::geom::Path;
 #[cfg(feature = "raster-images")]
@@ -21,10 +23,12 @@ use crate::krilla::graphics::image::Image;
 use crate::krilla::graphics::mask::Mask;
 use crate::krilla::graphics::paint::{Fill, FillRule, Stroke};
 use crate::krilla::graphics::shading_function::ShadingFunction;
+use crate::krilla::interchange::tagging::{ContentTag, Identifier, PageTagIdentifier};
 use crate::krilla::num::NormalizedF32;
 use crate::krilla::paint::{InnerPaint, Paint};
 use crate::krilla::serialize::SerializeContext;
 use crate::krilla::stream::{Stream, StreamBuilder};
+use crate::krilla::tagging::ArtifactType;
 use crate::krilla::text::Font;
 use crate::krilla::text::{Glyph, draw_glyph};
 
@@ -68,7 +72,8 @@ pub struct Surface<'a> {
   stroke: Option<Stroke>,
   bd: Builders,
   push_instructions: Vec<PushInstruction>,
-  finish_fn: Box<dyn FnMut(Stream) + 'a>,
+  page_identifier: Option<PageTagIdentifier>,
+  finish_fn: Box<dyn FnMut(Stream, i32) + 'a>,
 }
 
 impl<'a> Surface<'a> {
@@ -76,12 +81,14 @@ impl<'a> Surface<'a> {
     sc: &'a mut SerializeContext,
     chunk_container: &'a mut ChunkContainer,
     root_builder: ContentBuilder,
-    finish_fn: Box<dyn FnMut(Stream) + 'a>,
+    page_identifier: Option<PageTagIdentifier>,
+    finish_fn: Box<dyn FnMut(Stream, i32) + 'a>,
   ) -> Surface<'a> {
     Self {
       sc,
       chunk_container,
       bd: Builders::new(root_builder),
+      page_identifier,
       fill: None,
       stroke: None,
       push_instructions: vec![],
@@ -156,6 +163,72 @@ impl<'a> Surface<'a> {
         self.sc,
         self.chunk_container,
       );
+    }
+  }
+
+  /// Start a new tagged content section.
+  ///
+  /// # Panics
+  /// Panics if a tagged section has already been started.
+  /// Panics if an artifact with a required bbox has none.
+  pub fn start_tagged(&mut self, tag: ContentTag) -> Identifier {
+    if let Some(id) = &mut self.page_identifier {
+      match tag {
+        // An artifact is actually not really part of tagged PDF and doesn't have
+        // a marked content identifier, so we need to return a dummy one here. It's just
+        // the API of krilla that conflates artifacts with tagged content,
+        // for the sake of simplicity. But the user of the library does not need to know
+        // about this.
+        ContentTag::Artifact(artifact) => {
+          if matches!(artifact.kind, ArtifactType::Header | ArtifactType::Footer)
+            && self.sc.serialize_settings().pdf_version()
+              < VersionedFeature::HeaderFooterArtifactSubtypes.minimum_pdf_version()
+          {
+            self
+              .sc
+              .register_validation_error(ValidationError::RequiresNewerPdfVersion(
+                VersionedFeature::HeaderFooterArtifactSubtypes,
+                self.sc.location,
+              ));
+          }
+
+          if artifact.requires_properties(self.sc.serialize_settings().pdf_version()) {
+            self
+              .bd
+              .get_mut()
+              .start_marked_content_with_properties(self.sc, None, tag);
+          } else {
+            self.bd.get_mut().start_marked_content(tag.name());
+          }
+
+          if artifact.requires_bbox(self.sc.serialize_settings().pdf_version())
+            && artifact.bbox.is_none()
+          {
+            panic!("Background artifact must have a bounding box in PDF 1.7");
+          }
+
+          Identifier::dummy()
+        }
+        ContentTag::Span(_) | ContentTag::Other => {
+          self
+            .bd
+            .get_mut()
+            .start_marked_content_with_properties(self.sc, Some(id.mcid), tag);
+          id.bump().into()
+        }
+      }
+    } else {
+      Identifier::dummy()
+    }
+  }
+
+  /// End the current tagged section.
+  ///
+  /// # Panics
+  /// Panics if no tagged section has been started.
+  pub fn end_tagged(&mut self) {
+    if self.page_identifier.is_some() {
+      self.bd.get_mut().end_marked_content();
     }
   }
 
@@ -487,10 +560,16 @@ impl Drop for Surface<'_> {
       &mut self.bd.root_builder,
       ContentBuilder::new(Transform::identity(), false, self.sc),
     );
+    let num_mcids = match self.page_identifier {
+      Some(pi) => pi.mcid,
+      None => 0,
+    };
+
     assert!(self.bd.sub_builders.is_empty());
     assert!(self.push_instructions.is_empty());
+    assert!(!root_builder.active_marked_content);
 
-    (self.finish_fn)(root_builder.finish(self.sc))
+    (self.finish_fn)(root_builder.finish(self.sc), num_mcids)
   }
 }
 

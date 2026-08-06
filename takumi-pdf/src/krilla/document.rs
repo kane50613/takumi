@@ -20,6 +20,7 @@ use crate::krilla::error::KrillaResult;
 use crate::krilla::interchange::embed::EmbeddedFile;
 use crate::krilla::interchange::metadata::Metadata;
 use crate::krilla::interchange::outline::Outline;
+use crate::krilla::interchange::tagging::TagTree;
 use crate::krilla::page::{Page, PageSettings};
 use crate::krilla::serialize::{SerializeContext, SerializeSettings};
 use crate::krilla::surface::Location;
@@ -99,6 +100,11 @@ impl Document {
   /// Set the metadata of the document.
   pub fn set_metadata(&mut self, metadata: Metadata) {
     self.chunk_container.metadata = Some(metadata);
+  }
+
+  /// Set the tag tree of the document.
+  pub fn set_tag_tree(&mut self, tag_tree: TagTree) {
+    self.serializer_context.set_tag_tree(tag_tree);
   }
 
   /// Embed a new file in the PDF document.

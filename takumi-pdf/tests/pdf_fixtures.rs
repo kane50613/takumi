@@ -18,7 +18,7 @@ use takumi_core::{
   viewport::Viewport,
 };
 use takumi_html::{FromHtmlOptions, from_html};
-use takumi_pdf::{PageMargins, PageOptions, PdfMetadata, PdfOptions, PdfStandard, render};
+use takumi_pdf::{PageMargins, PageOptions, PdfDate, PdfMetadata, PdfOptions, PdfStandard, render};
 
 fn fonts() -> Fonts {
   let mut fonts = Fonts::default();
@@ -724,6 +724,53 @@ fn archival_standards() {
   assert!(String::from_utf8_lossy(&a4).starts_with("%PDF-2.0"));
 }
 
+/// The report renders tagged under PDF/UA-1 and PDF/A-2a: heading structure,
+/// link alt text, document language, title and date all satisfy the
+/// validators, and the structure tree serializes.
+#[test]
+fn tagged_standards() {
+  let metadata = || PdfMetadata {
+    title: Some("Annual report".into()),
+    creation_date: Some(PdfDate {
+      year: 2026,
+      month: 8,
+      day: 6,
+      hour: 0,
+      minute: 0,
+      second: 0,
+    }),
+    ..Default::default()
+  };
+  let lang = || takumi_core::style::Lang::parse("en").expect("lang");
+  let ua1 = run_pdf_fixture("report-tagged-ua1", |fonts| {
+    PdfOptions::builder()
+      .node(html_fixture("report.html"))
+      .page(PageOptions::A4)
+      .standard(PdfStandard::Ua1)
+      .lang(Some(lang()))
+      .metadata(metadata())
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = String::from_utf8_lossy(&ua1);
+
+  assert!(
+    haystack.contains("StructTreeRoot"),
+    "missing structure tree"
+  );
+
+  run_pdf_fixture("report-tagged-a2a", |fonts| {
+    PdfOptions::builder()
+      .node(html_fixture("report.html"))
+      .page(PageOptions::A4)
+      .standard(PdfStandard::A2a)
+      .lang(Some(lang()))
+      .metadata(metadata())
+      .fonts(fonts)
+      .build()
+  });
+}
+
 #[test]
 fn certificate() {
   run_pdf_fixture("certificate", |fonts| {
@@ -750,6 +797,7 @@ fn report_links_outline() {
         authors: vec!["Takumi".into()],
         keywords: vec!["report".into(), "fixture".into()],
         creator: Some("takumi-pdf fixtures".into()),
+        creation_date: None,
       })
       .fonts(fonts)
       .build()

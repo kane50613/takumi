@@ -81,6 +81,11 @@ export type PdfMetadata = {
   keywords?: string[];
   /** The tool that created the source document. */
   creator?: string;
+  /**
+   * UTC creation date, `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`. Tagged archival
+   * standards require one; supplying it keeps output deterministic.
+   */
+  creationDate?: string;
 };
 
 export type RenderOptions = (PagedOptions | ViewportOptions) & {
@@ -102,7 +107,11 @@ export type RenderOptions = (PagedOptions | ViewportOptions) & {
   /** Generates a PDF outline (bookmarks) from `h1`–`h6` headings. */
   outline?: boolean;
   /** PDF/A conformance level. Validation failures reject the render. */
-  pdfa?: "2b" | "2u" | "3b" | "3u" | "4";
+  pdfa?: "2a" | "2b" | "2u" | "3a" | "3b" | "3u" | "4";
+  /** PDF/UA-1 accessible output; builds a tagged structure tree. */
+  pdfua?: boolean;
+  /** Builds a tagged structure tree without enforcing a standard. */
+  tagged?: boolean;
 };
 
 function isNode(value: NodeInput): value is Node {

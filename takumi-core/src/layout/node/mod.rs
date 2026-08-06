@@ -675,6 +675,11 @@ impl Node {
     self.attribute("href").filter(|href| !href.is_empty())
   }
 
+  /// The element's `alt` attribute, when present and non-empty.
+  pub fn alt(&self) -> Option<&str> {
+    self.attribute("alt").filter(|alt| !alt.is_empty())
+  }
+
   /// `id` and `class` resolve to the structured metadata fields rather than
   /// the `attributes` map.
   pub(crate) fn attribute(&self, name: &str) -> Option<&str> {
