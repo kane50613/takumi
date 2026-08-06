@@ -36,11 +36,12 @@ use takumi_core::{
   shadow::SizedShadow,
   style::{
     Affine, BackgroundImage, BlendMode, BoxDecorationBreak, BoxShadow, BreakBetween, BreakInside,
-    FillRule as CoreFillRule, Isolation,
+    Color, FillRule as CoreFillRule, Isolation, ResolvedGradientStop,
   },
 };
 
 use crate::background::{Placement, cycled, place};
+use crate::filter::ColorFilter;
 use crate::glyph::{PdfGlyph, glyph_text_spans};
 use crate::inline::{InlineMap, build_inline_runs, inline_key, node_inline_items, text_line_atoms};
 use crate::options::PdfError;
@@ -80,6 +81,9 @@ pub(crate) struct Emitter<'a> {
   /// Records a marked-content identifier per source node while drawing, for
   /// the structure tree built after emission.
   pub(crate) tags: Option<&'a RefCell<TagCollector>>,
+  /// Color transform from the `filter` properties of the enclosing stacking
+  /// contexts, applied to every color this subtree paints.
+  pub(crate) color_filter: Option<ColorFilter>,
 }
 
 impl Emitter<'_> {
@@ -115,6 +119,15 @@ impl Emitter<'_> {
       return Ok(());
     };
 
+    let outer_filter = self.color_filter;
+
+    if let Some(node) = context
+      .root()
+      .and_then(|paint| self.root.node_at_path(&paint.path))
+    {
+      self.color_filter = ColorFilter::compose(outer_filter, &node.context.style.filter);
+    }
+
     let (child_frame, root_pushed) = match context.root() {
       Some(paint) => self.emit_box(paint, parent, surface)?,
       None => (parent, 0),
@@ -140,6 +153,7 @@ impl Emitter<'_> {
       }
     }
     pop_transforms(surface, root_pushed);
+    self.color_filter = outer_filter;
     Ok(())
   }
 
@@ -322,7 +336,7 @@ impl Emitter<'_> {
 
     let artifact = self.start_artifact(surface);
 
-    surface.set_fill(Some(fill_from_rgba(color.0, 1.0)));
+    surface.set_fill(Some(fill_from_rgba(self.filtered(color), 1.0)));
     surface.draw_path(&path);
     if artifact {
       surface.end_tagged();
@@ -446,12 +460,12 @@ impl Emitter<'_> {
     let paint: Paint = match image {
       BackgroundImage::Linear(gradient) => {
         let tile = LinearGradientTile::new(gradient, w as u32, h as u32, sizing, current_color);
-        let resolved = resolve_stops_along_axis(
+        let resolved = self.filtered_stops(resolve_stops_along_axis(
           &gradient.stops,
           tile.axis_length.max(1e-6),
           sizing,
           current_color,
-        );
+        ));
         if resolved.is_empty() {
           return;
         }
@@ -487,12 +501,12 @@ impl Emitter<'_> {
       }
       BackgroundImage::Radial(gradient) => {
         let tile = RadialGradientTile::new(gradient, w as u32, h as u32, sizing, current_color);
-        let resolved = resolve_stops_along_axis(
+        let resolved = self.filtered_stops(resolve_stops_along_axis(
           &gradient.stops,
           tile.radius_scale.max(1e-6),
           sizing,
           current_color,
-        );
+        ));
         if resolved.is_empty() {
           return;
         }
@@ -537,7 +551,15 @@ impl Emitter<'_> {
               tile.lut_index_for_adjusted_angle_with_len(t * core::f32::consts::TAU, lut_len);
             let color = tile.color_lut[index].demultiply();
 
-            krilla_stop(t, [color.red(), color.green(), color.blue(), color.alpha()])
+            krilla_stop(
+              t,
+              self.filtered(Color([
+                color.red(),
+                color.green(),
+                color.blue(),
+                color.alpha(),
+              ])),
+            )
           })
           .collect();
         let (ccx, ccy) = (x + tile.cx, y + tile.cy);
@@ -595,6 +617,27 @@ impl Emitter<'_> {
     }
   }
 
+  /// A color as this subtree's `filter` leaves it.
+  fn filtered(&self, color: Color) -> [u8; 4] {
+    match self.color_filter {
+      Some(filter) => filter.apply(color.0),
+      None => color.0,
+    }
+  }
+
+  /// Gradient stops as this subtree's `filter` leaves them.
+  fn filtered_stops<S>(&self, mut resolved: S) -> S
+  where
+    S: AsMut<[ResolvedGradientStop]>,
+  {
+    if let Some(filter) = self.color_filter {
+      for stop in resolved.as_mut() {
+        stop.color = filter.apply_color(stop.color);
+      }
+    }
+    resolved
+  }
+
   /// Opens an artifact sequence around a decoration when tagging is on, so it
   /// stays out of the structure tree. Returns whether one was opened.
   fn start_artifact(&self, surface: &mut Surface) -> bool {
@@ -636,7 +679,7 @@ impl Emitter<'_> {
 
         surface.set_fill(Some(Fill {
           rule: FillRule::EvenOdd,
-          ..fill_from_rgba(color.0, 1.0)
+          ..fill_from_rgba(self.filtered(color), 1.0)
         }));
         surface.draw_path(&ring_path);
         if artifact {
@@ -681,7 +724,7 @@ impl Emitter<'_> {
 
       border.append_side_clip_polygon_commands_at(side, &mut polygon, size, CorePoint::ZERO);
       if let Some(path) = krilla_path(&polygon, x, y) {
-        surface.set_fill(Some(fill_from_rgba(color.0, 1.0)));
+        surface.set_fill(Some(fill_from_rgba(self.filtered(color), 1.0)));
         surface.draw_path(&path);
       }
     }
@@ -779,7 +822,7 @@ impl Emitter<'_> {
     let vector: Option<((), f32, f32)> = None;
 
     let krilla_image = if vector.is_none() {
-      match rasterized_image(&source, context, (dw, dh)) {
+      match rasterized_image(&source, context, (dw, dh), self.color_filter) {
         Some(image) => Some(image),
         None => return,
       }
@@ -912,7 +955,10 @@ impl Emitter<'_> {
 
       let color = shaped.brush.color;
 
-      surface.set_fill(Some(fill_from_rgba(color.0, shaped.brush.opacity)));
+      surface.set_fill(Some(fill_from_rgba(
+        self.filtered(color),
+        shaped.brush.opacity,
+      )));
       surface.draw_glyphs(
         Point::from_xy(x + offset.x, y + offset.y),
         &glyphs,

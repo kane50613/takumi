@@ -24,8 +24,8 @@
 //! `-position` and `-repeat`), borders and radius, images
 //! (`object-fit`/`object-position`), text with decorations, opacity, blend
 //! modes, overflow clipping, `clip-path`, `box-shadow` (blur approximated by
-//! bands), affine transforms, pagination. Not yet: filters, masks, url()
-//! background layers.
+//! bands), the color `filter` primitives, affine transforms, pagination. Not
+//! yet: `filter: blur()`/`drop-shadow()`, masks, url() background layers.
 
 use std::{cell::RefCell, rc::Rc};
 
@@ -33,6 +33,7 @@ mod background;
 mod bands;
 mod counters;
 mod emitter;
+mod filter;
 mod glyph;
 mod inline;
 mod interactive;

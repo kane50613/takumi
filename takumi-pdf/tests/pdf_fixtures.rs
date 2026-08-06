@@ -416,6 +416,78 @@ fn gradients() {
   });
 }
 
+/// The color half of `filter`: each cell paints the same red, transformed by a
+/// different filter, so the fills carry different colors.
+#[test]
+fn color_filters() {
+  let pdf = run_pdf_fixture("color-filters", |fonts| {
+    let cell = |filter: &str| {
+      format!(
+        r##"<div style="width: 70px; height: 70px; background-color: #e11d48; filter: {filter};"></div>"##
+      )
+    };
+    let source = format!(
+      r##"<div style="display: flex; width: 100%; height: 100%; padding: 10px; column-gap: 10px; background-color: #ffffff;">
+        {}{}{}{}{}
+      </div>"##,
+      cell("none"),
+      cell("grayscale(1)"),
+      cell("sepia(1)"),
+      cell("invert(1)"),
+      cell("hue-rotate(180deg)"),
+    );
+    let node = from_html(&source, FromHtmlOptions::default()).expect("parse filter fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((420, 100)))
+      .fonts(fonts)
+      .build()
+  });
+  let fills = fill_colors(&pdf);
+
+  assert!(
+    fills.len() >= 5,
+    "expected one fill per cell, got {}",
+    fills.len()
+  );
+  let unique: std::collections::BTreeSet<_> = fills.iter().collect();
+
+  assert!(
+    unique.len() >= 5,
+    "expected each filter to change the color, got {unique:?}"
+  );
+}
+
+/// Collects the `rg` fill colors from the deflated page content streams.
+fn fill_colors(pdf: &[u8]) -> Vec<String> {
+  let mut colors = Vec::new();
+  let mut rest = pdf;
+
+  while let Some(start) = find(rest, b"stream\n") {
+    let body = &rest[start + 7..];
+    let Some(end) = find(body, b"endstream") else {
+      break;
+    };
+    let mut decoded = Vec::new();
+
+    if ZlibDecoder::new(&body[..end])
+      .read_to_end(&mut decoded)
+      .is_ok()
+    {
+      let text = String::from_utf8_lossy(&decoded).into_owned();
+
+      colors.extend(
+        text
+          .lines()
+          .filter_map(|line| line.split_once(" rg").map(|(color, _)| color.to_string())),
+      );
+    }
+    rest = &body[end..];
+  }
+  colors
+}
+
 /// `box-shadow`: a sharp shadow is one exact ring, a blurred one is a stack of
 /// bands, and an inset shadow fills the box minus the hole it casts.
 #[test]

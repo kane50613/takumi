@@ -1,6 +1,7 @@
 //! Path, gradient, decoration and image helpers translating takumi paint into krilla.
 
 #[cfg(feature = "images")]
+use crate::filter::ColorFilter;
 use crate::krilla::image::Image as KrillaImage;
 use crate::krilla::{
   blend::BlendMode as KrillaBlendMode,
@@ -122,6 +123,7 @@ pub(crate) fn rasterized_image(
   source: &ImageSource,
   context: &RenderContext,
   target: (f32, f32),
+  filter: Option<ColorFilter>,
 ) -> Option<KrillaImage> {
   let (width, height) = match source {
     ImageSource::Bitmap(bitmap) => (bitmap.width(), bitmap.height()),
@@ -153,6 +155,11 @@ pub(crate) fn rasterized_image(
       pixel[0] = ((u16::from(pixel[0]) * 255 + alpha16 / 2) / alpha16).min(255) as u8;
       pixel[1] = ((u16::from(pixel[1]) * 255 + alpha16 / 2) / alpha16).min(255) as u8;
       pixel[2] = ((u16::from(pixel[2]) * 255 + alpha16 / 2) / alpha16).min(255) as u8;
+    }
+  }
+  if let Some(filter) = filter {
+    for pixel in data.chunks_exact_mut(4) {
+      pixel.copy_from_slice(&filter.apply([pixel[0], pixel[1], pixel[2], pixel[3]]));
     }
   }
   Some(KrillaImage::from_rgba8(
