@@ -21,7 +21,7 @@ const pdf = await render(report, {
 
 ## Sizing the margin
 
-Band height depends on layout, so it is hard to guess ahead of time. `measure` lays out a tree the same way `render` measures a band: full page width, with `pageNumber` and `totalPages` both filled as 999. Use the height to pick a margin:
+Band height depends on layout, so it is hard to guess ahead of time. `measure` lays out a tree the same way `render` measures a band: full page width, counter hooks filled with three-digit numbers. Use the height to pick a margin:
 
 ```tsx twoslash
 import type { ReactNode } from "react";
