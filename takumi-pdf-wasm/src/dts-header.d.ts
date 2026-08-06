@@ -63,6 +63,28 @@ export type PdfMetadata = {
   creationDate?: string;
 };
 
+/** A file attached to the PDF, shown in the viewer's attachment panel. */
+export type Attachment = {
+  /** File name in the PDF, e.g. "factur-x.xml". */
+  name: string;
+  /** The file's bytes, or a string encoded as UTF-8. */
+  data: Uint8Array | string;
+  /** IANA media type, e.g. "application/xml". The PDF/A-3 levels require one. */
+  mimeType?: string;
+  /** Human-readable description. The PDF/A-3 levels require one. */
+  description?: string;
+  /**
+   * How the file relates to the document (the PDF/A-3 AFRelationship).
+   * Defaults to "unspecified".
+   */
+  relationship?: "source" | "data" | "alternative" | "supplement" | "unspecified";
+  /**
+   * UTC modification date, `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`; falls back
+   * to `metadata.creationDate`. The PDF/A-3 levels require one.
+   */
+  modificationDate?: string;
+};
+
 /** PDF/A conformance level. Validation failures reject the render. */
 export type Pdfa = "2a" | "2b" | "2u" | "3a" | "3b" | "3u" | "4";
 
@@ -104,6 +126,8 @@ export type PdfRenderOptions = {
   pdfa?: Pdfa;
   /** Structure-tree emission: `false`, `true` (default) or `"ua1"`. */
   tagged?: Tagged;
+  /** Files attached to the document. */
+  attachments?: Attachment[];
 };
 
 /** Options for `measure`: page geometry (or a viewport) plus layout resources. */

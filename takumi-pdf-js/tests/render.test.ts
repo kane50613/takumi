@@ -118,3 +118,52 @@ test("rejects viewport combined with paged options", () => {
     } as never),
   ).rejects.toThrow("mutually exclusive");
 });
+
+test("embeds attachments from string and Uint8Array data", async () => {
+  const pdf = await renderer.render(doc, {
+    pdfa: "3b",
+    metadata: { title: "Invoice", creationDate: "2026-08-06" },
+    attachments: [
+      {
+        name: "factur-x.xml",
+        data: '<invoice total="1290"/>',
+        mimeType: "application/xml",
+        description: "Factur-X invoice data",
+        relationship: "alternative",
+      },
+      {
+        name: "readings.csv",
+        data: new TextEncoder().encode("a,b\n1,2"),
+        mimeType: "text/csv",
+        description: "Raw readings",
+      },
+    ],
+  });
+  const bytes = decoder.decode(pdf);
+
+  expect(bytes).toContain("factur-x.xml");
+  expect(bytes).toContain("readings.csv");
+  expect(bytes).toContain("/AFRelationship");
+});
+
+test("rejects duplicate attachment names", async () => {
+  const attachment = { name: "dup.txt", data: "x" };
+
+  await expect(renderer.render(doc, { attachments: [attachment, attachment] })).rejects.toThrow(
+    "DuplicateAttachment",
+  );
+});
+
+test("rejects an invalid attachment mime type", async () => {
+  await expect(
+    renderer.render(doc, { attachments: [{ name: "a.txt", data: "x", mimeType: "nope" }] }),
+  ).rejects.toThrow("InvalidMimeType");
+});
+
+test("rejects an invalid attachment modificationDate", async () => {
+  await expect(
+    renderer.render(doc, {
+      attachments: [{ name: "a.txt", data: "x", modificationDate: "yesterday" }],
+    }),
+  ).rejects.toThrow("modificationDate");
+});

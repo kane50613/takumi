@@ -19,8 +19,8 @@ use takumi_core::{
 };
 use takumi_html::{FromHtmlOptions, from_html};
 use takumi_pdf::{
-  MeasureOptions, PageMargins, PageOptions, PdfDate, PdfMetadata, PdfOptions, PdfStandard, Tagging,
-  measure, render,
+  Attachment, AttachmentRelationship, MeasureOptions, PageMargins, PageOptions, PdfDate, PdfError,
+  PdfMetadata, PdfOptions, PdfStandard, Tagging, measure, render,
 };
 
 fn fonts() -> Fonts {
@@ -725,6 +725,142 @@ fn archival_standards() {
   });
 
   assert!(String::from_utf8_lossy(&a4).starts_with("%PDF-2.0"));
+}
+
+/// The invoice carries a machine-readable XML attachment under PDF/A-3b:
+/// the file spec, association kind, and name tree all serialize, and the
+/// modification date falls back to the metadata creation date.
+#[test]
+fn attachments() {
+  let attachment = || Attachment {
+    name: "factur-x.xml".to_string(),
+    data: b"<invoice total=\"1290\"/>".to_vec(),
+    mime_type: Some("application/xml".to_string()),
+    description: Some("Factur-X invoice data".to_string()),
+    relationship: AttachmentRelationship::Alternative,
+    modification_date: None,
+  };
+  let metadata = || PdfMetadata {
+    title: Some("Invoice".to_string()),
+    creation_date: Some(PdfDate {
+      year: 2026,
+      month: 8,
+      day: 6,
+      hour: 0,
+      minute: 0,
+      second: 0,
+    }),
+    ..PdfMetadata::default()
+  };
+  let a3b = run_pdf_fixture("invoice-pdfa-3b-attachment", |fonts| {
+    PdfOptions::builder()
+      .node(html_fixture("invoice.html"))
+      .page(PageOptions::A4.with_margin(36.0))
+      .footer(html_fixture("invoice-footer.html"))
+      .standard(PdfStandard::A3b)
+      .metadata(metadata())
+      .attachments(vec![attachment()])
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = String::from_utf8_lossy(&a3b);
+
+  assert!(haystack.contains("factur-x.xml"), "missing file spec name");
+  assert!(haystack.contains("/EmbeddedFiles"), "missing name tree");
+  assert!(haystack.contains("/AFRelationship"), "missing association");
+  // Scoped to the embedded file's Params dict: the Info dict also carries a
+  // /ModDate, so a document-wide match would not prove the fallback.
+  assert!(
+    haystack.contains("/Params<</Size 23/ModDate(D:20260806000000Z)>>"),
+    "missing attachment modification date fallback"
+  );
+
+  let fonts = fonts();
+  let duplicate = render(
+    PdfOptions::builder()
+      .node(text("dup", 16.0))
+      .page(PageOptions::A4)
+      .attachments(vec![attachment(), attachment()])
+      .fonts(&fonts)
+      .build(),
+  );
+
+  assert!(matches!(duplicate, Err(PdfError::DuplicateAttachment(name)) if name == "factur-x.xml"));
+
+  let invalid_mime = render(
+    PdfOptions::builder()
+      .node(text("mime", 16.0))
+      .page(PageOptions::A4)
+      .attachments(vec![Attachment {
+        mime_type: Some("not-a-mime".to_string()),
+        ..attachment()
+      }])
+      .fonts(&fonts)
+      .build(),
+  );
+
+  assert!(matches!(invalid_mime, Err(PdfError::InvalidMimeType(mime)) if mime == "not-a-mime"));
+
+  // PDF/A-2 forbids arbitrary attachments; PDF/A-3 requires the descriptive
+  // fields and a date. These reach the render through Rust and wasm callers,
+  // which the TypeScript union cannot guard.
+  let a2b = render(
+    PdfOptions::builder()
+      .node(text("a2b", 16.0))
+      .page(PageOptions::A4)
+      .standard(PdfStandard::A2b)
+      .metadata(metadata())
+      .attachments(vec![attachment()])
+      .fonts(&fonts)
+      .build(),
+  );
+
+  assert!(
+    matches!(a2b, Err(PdfError::Krilla(_))),
+    "A-2b must reject attachments"
+  );
+
+  for stripped in [
+    Attachment {
+      mime_type: None,
+      ..attachment()
+    },
+    Attachment {
+      description: None,
+      ..attachment()
+    },
+  ] {
+    let incomplete = render(
+      PdfOptions::builder()
+        .node(text("incomplete", 16.0))
+        .page(PageOptions::A4)
+        .standard(PdfStandard::A3b)
+        .metadata(metadata())
+        .attachments(vec![stripped])
+        .fonts(&fonts)
+        .build(),
+    );
+
+    assert!(
+      matches!(incomplete, Err(PdfError::Krilla(_))),
+      "A-3b must require the field"
+    );
+  }
+
+  let dateless = render(
+    PdfOptions::builder()
+      .node(text("dateless", 16.0))
+      .page(PageOptions::A4)
+      .standard(PdfStandard::A3b)
+      .attachments(vec![attachment()])
+      .fonts(&fonts)
+      .build(),
+  );
+
+  assert!(
+    matches!(dateless, Err(PdfError::Krilla(_))),
+    "A-3b must require a date when the metadata fallback is absent"
+  );
 }
 
 /// The report renders tagged under PDF/UA-1 and PDF/A-2a: heading structure,

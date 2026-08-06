@@ -111,23 +111,58 @@ export type PdfMetadata = {
   creationDate?: string;
 };
 
-/** Levels based on PDF 1.7, where PDF/UA-1 tagging can combine. */
-type Pdfa17 = "2b" | "2u" | "3b" | "3u";
+/** A file attached to the PDF, shown in the viewer's attachment panel. */
+export type Attachment = {
+  /** File name in the PDF, e.g. "factur-x.xml". */
+  name: string;
+  /** The file's bytes, or a string encoded as UTF-8. */
+  data: Uint8Array | string;
+  /** IANA media type, e.g. "application/xml". The PDF/A-3 levels require one. */
+  mimeType?: string;
+  /** Human-readable description. The PDF/A-3 levels require one. */
+  description?: string;
+  /**
+   * How the file relates to the document (the PDF/A-3 AFRelationship).
+   * Defaults to "unspecified".
+   */
+  relationship?: "source" | "data" | "alternative" | "supplement" | "unspecified";
+  /**
+   * UTC modification date, `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`; falls back
+   * to `metadata.creationDate`. The PDF/A-3 levels require one.
+   */
+  modificationDate?: string;
+};
+
+/** An attachment under the PDF/A-3 levels, which require the descriptive fields. */
+export type ArchivalAttachment = Attachment & {
+  mimeType: string;
+  description: string;
+};
 
 /**
  * Standards conformance. Invalid combinations are type errors: the `a` levels
- * imply a structure tree so `tagged: false` is rejected, and PDF/A-4 is
- * PDF 2.0 while PDF/UA-1 is PDF 1.7-only, so they cannot combine.
+ * imply a structure tree so `tagged: false` is rejected, PDF/A-4 is PDF 2.0
+ * while PDF/UA-1 is PDF 1.7-only so they cannot combine, and only the
+ * PDF/A-3 levels (or plain PDF) accept attachments.
  */
 type ConformanceOptions =
   | {
-      /** PDF/A conformance level. Validation failures reject the render. */
-      pdfa?: Pdfa17;
+      pdfa?: never;
       /** Structure tree: off, on (default), or validated against PDF/UA-1. */
       tagged?: boolean | "ua1";
+      /** Files attached to the document. */
+      attachments?: Attachment[];
     }
-  | { pdfa: "2a" | "3a"; tagged?: true | "ua1" }
-  | { pdfa: "4"; tagged?: boolean };
+  | {
+      /** PDF/A conformance level. Validation failures reject the render. */
+      pdfa: "2b" | "2u";
+      tagged?: boolean | "ua1";
+      attachments?: never;
+    }
+  | { pdfa: "2a"; tagged?: true | "ua1"; attachments?: never }
+  | { pdfa: "3b" | "3u"; tagged?: boolean | "ua1"; attachments?: ArchivalAttachment[] }
+  | { pdfa: "3a"; tagged?: true | "ua1"; attachments?: ArchivalAttachment[] }
+  | { pdfa: "4"; tagged?: boolean; attachments?: never };
 
 export type RenderOptions = (PagedOptions | ViewportOptions) &
   ConformanceOptions & {
