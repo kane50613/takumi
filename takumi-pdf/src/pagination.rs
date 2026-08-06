@@ -2,6 +2,9 @@
 
 /// Unsplittable vertical extents in content coordinates: text lines, images,
 /// and transformed subtrees (which cannot be windowed without distortion).
+/// An unsplittable box as `(top, bottom)` in content coordinates. Both are
+/// finite: they come from resolved layout, which is what lets the cut search
+/// sort and bisect them.
 pub(crate) type Atom = (f32, f32);
 
 /// Page start offsets for slicing `total` height into windows of `window`
