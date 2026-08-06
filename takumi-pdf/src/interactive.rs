@@ -13,7 +13,9 @@ use crate::krilla::{
 };
 use takumi_core::{
   font_style::SizedFontStyle,
-  geometry::{AvailableSpace, ComputedLayout as Layout, Size},
+  geometry::{
+    AvailableSpace, ComputedLayout as Layout, Point as CorePoint, Size, transformed_rect_extents,
+  },
   layout::{
     inline::{
       InlineItem, InlineLayoutMode, InlineLayoutRequest, collect_inline_items,
@@ -57,27 +59,15 @@ pub(crate) struct HeadingTarget {
 /// The axis-aligned bounding box of a node-local rect under the node's
 /// absolute transform, in content coordinates.
 fn transformed_rect(transform: Affine, origin: (f32, f32), size: Size<f32>) -> Option<KrillaRect> {
-  let cols = transform.to_cols_array();
-  let corners = [
-    (origin.0, origin.1),
-    (origin.0 + size.width, origin.1),
-    (origin.0, origin.1 + size.height),
-    (origin.0 + size.width, origin.1 + size.height),
-  ];
-  let mut left = f32::INFINITY;
-  let mut top = f32::INFINITY;
-  let mut right = f32::NEG_INFINITY;
-  let mut bottom = f32::NEG_INFINITY;
+  let (left, top, right, bottom) = transformed_rect_extents(
+    CorePoint {
+      x: origin.0,
+      y: origin.1,
+    },
+    size,
+    transform,
+  )?;
 
-  for (x, y) in corners {
-    let px = cols[0] * x + cols[2] * y + cols[4];
-    let py = cols[1] * x + cols[3] * y + cols[5];
-
-    left = left.min(px);
-    top = top.min(py);
-    right = right.max(px);
-    bottom = bottom.max(py);
-  }
   KrillaRect::from_ltrb(left, top, right, bottom)
 }
 
