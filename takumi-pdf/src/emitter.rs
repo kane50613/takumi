@@ -804,9 +804,10 @@ impl Emitter<'_> {
     } else {
       (iw * scale, ih * scale)
     };
-    // SVG sources embed as vector ops; everything else rasterizes.
+    // SVG sources embed as vector ops; everything else rasterizes. A color
+    // filter rasterizes them too, since the transform applies to pixels.
     #[cfg(feature = "svg")]
-    let vector = if let ImageSource::Svg(svg) = &source {
+    let vector = if let (ImageSource::Svg(svg), None) = (&source, self.color_filter) {
       let (svg_width, svg_height) = svg.dimensions();
       if svg_width <= 0.0 || svg_height <= 0.0 {
         return;
@@ -933,7 +934,7 @@ impl Emitter<'_> {
       );
 
       for decoration in decorations.iter().filter(|d| !d.over) {
-        draw_decoration(surface, decoration, x, y);
+        draw_decoration(surface, decoration, x, y, self.color_filter);
       }
       let run_text = built
         .text
@@ -968,7 +969,7 @@ impl Emitter<'_> {
         false,
       );
       for decoration in decorations.iter().filter(|d| d.over) {
-        draw_decoration(surface, decoration, x, y);
+        draw_decoration(surface, decoration, x, y, self.color_filter);
       }
     }
     Ok(())
