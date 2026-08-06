@@ -425,12 +425,13 @@ fn mask_image() {
       <div style="width: 120px; height: 80px; background-color: #1d4ed8; mask-image: linear-gradient(to right, rgba(0,0,0,1), rgba(0,0,0,0));"></div>
       <div style="width: 120px; height: 80px; background-image: linear-gradient(135deg, #ff5f6d, #3a1c71); mask-image: radial-gradient(circle, rgba(0,0,0,1), rgba(0,0,0,0));"></div>
       <div style="width: 120px; height: 80px; background-color: #047857; mask-image: radial-gradient(circle, rgba(0,0,0,1), rgba(0,0,0,0)); mask-size: 30px 20px; mask-repeat: repeat;"></div>
+      <div style="width: 120px; height: 80px; background-color: #b91c1c; filter: opacity(0.5); mask-image: linear-gradient(to bottom, rgba(0,0,0,1), rgba(0,0,0,0));"></div>
     </div>"##;
     let node = from_html(source, FromHtmlOptions::default()).expect("parse mask fixture");
 
     PdfOptions::builder()
       .node(node)
-      .viewport(Viewport::new((420, 110)))
+      .viewport(Viewport::new((550, 110)))
       .fonts(fonts)
       .build()
   });
@@ -442,8 +443,14 @@ fn mask_image() {
   );
   assert_eq!(
     haystack.matches("/S/Alpha").count(),
-    3,
+    4,
     "expected one alpha mask per element"
+  );
+  // The filtered cell's opacity lands once: on its content, not also on the
+  // mask that covers it.
+  assert!(
+    haystack.contains("/ca 0.5"),
+    "expected the element filter to set half opacity exactly once"
   );
   // The tiled mask resolves through the same placement as a background layer.
   assert!(

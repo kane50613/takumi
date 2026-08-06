@@ -660,8 +660,12 @@ impl Emitter<'_> {
   /// Builds the soft mask for `mask-image`, drawing its layers into their own
   /// stream. The layers are alpha masks, which is what `mask-mode` resolves to
   /// for an image source.
+  ///
+  /// The element's own `filter` stays off the mask: it already applies to the
+  /// content the mask covers, and applying it to both would compound, so
+  /// `opacity(0.5)` behind a mask would leave a quarter of the alpha.
   fn mask(
-    &self,
+    &mut self,
     node: &RenderNode,
     size: Size<f32>,
     at: (f32, f32),
@@ -677,6 +681,7 @@ impl Emitter<'_> {
     }) {
       return None;
     }
+    let filter = self.color_filter.take();
     let style = &node.context.style;
     let stream = {
       let mut builder = surface.stream_builder();
@@ -708,6 +713,7 @@ impl Emitter<'_> {
       builder.finish()
     };
 
+    self.color_filter = filter;
     Some(Mask::new(stream, MaskType::Alpha))
   }
 
