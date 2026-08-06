@@ -156,6 +156,7 @@ mod chunk_container;
 mod graphics;
 mod interactive;
 mod interchange;
+mod object_stream;
 mod resource;
 mod serialize;
 mod util;
