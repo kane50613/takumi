@@ -11,15 +11,12 @@ use crate::krilla::{
   surface::Surface,
 };
 #[cfg(feature = "images")]
+use takumi_core::resources::image::{ImageSource, RenderedImage};
 use takumi_core::{
   context::RenderContext,
-  resources::image::{ImageSource, RenderedImage},
-  style::{Length, PositionComponent},
-};
-use takumi_core::{
   geometry::{ComputedLayout as Layout, PathCommand},
   layout::inline::DecorationRect,
-  style::{BlendMode, ComputedStyle, Overflow, ResolvedGradientStop},
+  style::{BlendMode, ComputedStyle, Length, Overflow, PositionComponent, ResolvedGradientStop},
 };
 
 /// A single-rectangle krilla path.
@@ -96,7 +93,6 @@ pub(crate) fn draw_decoration(surface: &mut Surface, decoration: &DecorationRect
 }
 
 /// Resolves one `object-position` axis to an offset within `available` space.
-#[cfg(feature = "images")]
 pub(crate) fn position_axis(
   component: PositionComponent,
   context: &RenderContext,
