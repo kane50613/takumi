@@ -11,15 +11,12 @@ use crate::krilla::{
   surface::Surface,
 };
 #[cfg(feature = "images")]
+use takumi_core::resources::image::{ImageSource, RenderedImage};
 use takumi_core::{
   context::RenderContext,
-  resources::image::{ImageSource, RenderedImage},
-  style::{Length, PositionComponent},
-};
-use takumi_core::{
   geometry::{ComputedLayout as Layout, PathCommand},
   layout::inline::DecorationRect,
-  style::{BlendMode, ComputedStyle, Overflow, ResolvedGradientStop},
+  style::{BlendMode, ComputedStyle, Length, Overflow, PositionComponent, ResolvedGradientStop},
 };
 
 /// A single-rectangle krilla path.
@@ -96,7 +93,6 @@ pub(crate) fn draw_decoration(surface: &mut Surface, decoration: &DecorationRect
 }
 
 /// Resolves one `object-position` axis to an offset within `available` space.
-#[cfg(feature = "images")]
 pub(crate) fn position_axis(
   component: PositionComponent,
   context: &RenderContext,
@@ -184,7 +180,22 @@ pub(crate) fn expanded_radial_stops(resolved: &[ResolvedGradientStop], extent: f
   let first = resolved.first().map_or(0.0, |s| s.position);
   let last = resolved.last().map_or(extent, |s| s.position);
   let period = (last - first).max(1e-6);
-  let cycles = (((extent - first) / period).ceil().max(1.0)) as usize;
+  // ponytail: a degenerate period (every stop at one position) would tile
+  // millions of times. Past the cap the period stretches instead, so the stops
+  // still reach the full radius rather than leaving the outer ring flat.
+  const MAX_CYCLES: f32 = 512.0;
+  let span = extent - first;
+  let requested = (span / period).ceil().max(1.0);
+  let cycles = requested.min(MAX_CYCLES);
+  // Past the cap the period stretches, and the stops inside one period stretch
+  // with it, so the last stop still reaches the full radius.
+  let scale = if cycles < requested {
+    (span / cycles) / period
+  } else {
+    1.0
+  };
+  let period = period * scale;
+  let cycles = cycles as usize;
   let mut stops = Vec::with_capacity(cycles * resolved.len());
 
   for cycle in 0..cycles {
@@ -192,7 +203,7 @@ pub(crate) fn expanded_radial_stops(resolved: &[ResolvedGradientStop], extent: f
 
     for stop in resolved {
       stops.push(krilla_stop(
-        (offset + stop.position - first) / extent,
+        (offset + (stop.position - first) * scale) / extent,
         stop.color.0,
       ));
     }

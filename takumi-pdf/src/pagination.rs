@@ -2,6 +2,9 @@
 
 /// Unsplittable vertical extents in content coordinates: text lines, images,
 /// and transformed subtrees (which cannot be windowed without distortion).
+/// An unsplittable box as `(top, bottom)` in content coordinates. Both are
+/// finite: they come from resolved layout, which is what lets the cut search
+/// sort and bisect them.
 pub(crate) type Atom = (f32, f32);
 
 /// Page start offsets for slicing `total` height into windows of `window`
@@ -39,11 +42,20 @@ pub(crate) fn page_starts(
     let mut cut = limit;
 
     loop {
-      let pushed_up = atoms
-        .iter()
-        .filter(|(top, bottom)| *top < cut && *bottom > cut && bottom - top <= window)
-        .map(|(top, _)| *top)
-        .fold(cut, f32::min);
+      // `atoms` is sorted by top, and an atom that fits the window can only
+      // straddle the cut if it starts within one window of it, so the scan
+      // walks back from the cut and stops there instead of reading every atom.
+      let straddling = atoms.partition_point(|(top, _)| *top < cut);
+      let mut pushed_up = cut;
+
+      for &(top, bottom) in atoms[..straddling].iter().rev() {
+        if top <= cut - window {
+          break;
+        }
+        if bottom > cut && bottom - top <= window {
+          pushed_up = pushed_up.min(top);
+        }
+      }
 
       if pushed_up >= cut {
         break;

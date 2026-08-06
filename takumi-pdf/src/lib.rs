@@ -20,14 +20,15 @@
 //! margin areas like Chromium's print templates. Nodes classed `pageNumber`
 //! / `totalPages` are filled with the page counters.
 //!
-//! Coverage: backgrounds (color and gradient layers), borders and radius,
-//! images (`object-fit`/`object-position`), text with decorations, opacity,
-//! blend modes, overflow clipping, affine transforms, pagination. Not yet:
-//! box-shadow, filters, `clip-path`, masks, `background-size`/`position`/
-//! `repeat`, url() background layers.
+//! Coverage: backgrounds (color and gradient layers, with `background-size`,
+//! `-position` and `-repeat`), borders and radius, images
+//! (`object-fit`/`object-position`), text with decorations, opacity, blend
+//! modes, overflow clipping, affine transforms, pagination. Not yet:
+//! box-shadow, filters, `clip-path`, masks, url() background layers.
 
 use std::{cell::RefCell, rc::Rc};
 
+mod background;
 mod bands;
 mod counters;
 mod emitter;
