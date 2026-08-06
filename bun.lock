@@ -94,6 +94,19 @@
         "unocss": "^66.7.5",
       },
     },
+    "example/e-invoice": {
+      "name": "example-e-invoice",
+      "dependencies": {
+        "@takumi-rs/helpers": "workspace:*",
+        "react": "catalog:",
+        "takumi-pdf": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@types/react": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "example/ffmpeg-keyframe-animation": {
       "name": "ffmpeg-keyframe-animation",
       "dependencies": {
@@ -1769,6 +1782,8 @@
     "example-cloudflare-workers": ["example-cloudflare-workers@workspace:example/cloudflare-workers"],
 
     "example-css-library-integration": ["example-css-library-integration@workspace:example/css-library-integration"],
+
+    "example-e-invoice": ["example-e-invoice@workspace:example/e-invoice"],
 
     "example-generate-invoice": ["example-generate-invoice@workspace:example/generate-invoice"],
 

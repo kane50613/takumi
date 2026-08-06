@@ -1,0 +1,423 @@
+//! Public option, metadata and error types for the render and measure entry
+//! points, plus the page geometry constants.
+
+use std::{collections::HashMap, sync::Arc};
+
+use crate::krilla::{
+  configure::Archival,
+  embed::AssociationKind,
+  error::KrillaError,
+  metadata::{DateTime, Metadata},
+};
+use takumi_core::{
+  Fonts,
+  error::Error as TakumiError,
+  layout::node::Node,
+  resources::{font::FontError, image::ImageSource},
+  style::{FontFamily, Lang, StyleSheet},
+  viewport::Viewport,
+};
+use typed_builder::TypedBuilder;
+
+/// Errors from [`crate::render`].
+#[derive(Debug)]
+pub enum PdfError {
+  /// Layout or resource resolution failed in takumi-core.
+  Render(TakumiError),
+  /// Font data could not be interpreted.
+  Font(FontError),
+  /// PDF serialization failed.
+  Krilla(KrillaError),
+  /// The computed page size is empty or non-finite.
+  InvalidPageSize,
+  /// Single-page output ([`PdfOptions::page`] unset) needs a viewport.
+  MissingViewport,
+  /// The requested archival standard could not be configured.
+  InvalidStandard,
+  /// An attachment's mime type is not a valid `type/subtype` pair.
+  InvalidMimeType(String),
+  /// Two attachments share the same file name.
+  DuplicateAttachment(String),
+}
+
+impl From<TakumiError> for PdfError {
+  fn from(error: TakumiError) -> Self {
+    Self::Render(error)
+  }
+}
+
+/// Archival standard the output conforms to.
+///
+/// PDF/A-1 is not offered: it prohibits transparency, which most takumi output
+/// uses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PdfStandard {
+  /// Plain PDF 1.7, no validation.
+  #[default]
+  None,
+  /// PDF/A-2b: archival, basic conformance.
+  A2b,
+  /// PDF/A-2u: archival with guaranteed Unicode mapping.
+  A2u,
+  /// PDF/A-3b: PDF/A-2b plus arbitrary file attachments.
+  A3b,
+  /// PDF/A-3u: PDF/A-2u plus arbitrary file attachments.
+  A3u,
+  /// PDF/A-4: archival, PDF 2.0.
+  A4,
+  /// PDF/A-2a: PDF/A-2 with accessibility (tagged) conformance.
+  A2a,
+  /// PDF/A-3a: PDF/A-3 with accessibility (tagged) conformance.
+  A3a,
+}
+
+impl PdfStandard {
+  pub(crate) fn archival(self) -> Option<Archival> {
+    match self {
+      PdfStandard::None => None,
+      PdfStandard::A2b => Some(Archival::A2_B),
+      PdfStandard::A2u => Some(Archival::A2_U),
+      PdfStandard::A3b => Some(Archival::A3_B),
+      PdfStandard::A3u => Some(Archival::A3_U),
+      PdfStandard::A4 => Some(Archival::A4),
+      PdfStandard::A2a => Some(Archival::A2_A),
+      PdfStandard::A3a => Some(Archival::A3_A),
+    }
+  }
+
+  pub(crate) fn requires_tagging(self) -> bool {
+    matches!(self, PdfStandard::A2a | PdfStandard::A3a)
+  }
+}
+
+/// Whether the output carries a tagged structure tree, and to which standard.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Tagging {
+  /// No structure tree.
+  Off,
+  /// Structure tree from the HTML semantics, unvalidated.
+  #[default]
+  On,
+  /// Structure tree validated against PDF/UA-1. Requires a PDF 1.7 level in
+  /// [`PdfOptions::standard`] (PDF/A-4 is PDF 2.0; the ranges do not
+  /// overlap).
+  Ua1,
+}
+
+/// Inputs for [`crate::render`], built with [`PdfOptions::builder`].
+#[derive(TypedBuilder)]
+pub struct PdfOptions<'g> {
+  /// The viewport to render in. Required for single-page output; ignored when
+  /// [`Self::page`] is set (the page geometry defines the layout width).
+  #[builder(default, setter(strip_option))]
+  pub viewport: Option<Viewport>,
+  /// The font context.
+  pub fonts: &'g Fonts,
+  /// The root node to render.
+  pub node: Node,
+  /// CSS stylesheets to apply before layout.
+  #[builder(default)]
+  pub stylesheet: Arc<StyleSheet>,
+  /// Resources fetched externally, keyed by URL.
+  #[builder(default)]
+  pub images: HashMap<Arc<str>, ImageSource>,
+  /// Paged output; `None` renders a single page at the viewport size.
+  #[builder(default, setter(strip_option))]
+  pub page: Option<PageOptions>,
+  /// Band repeated at the top of every page. Nodes classed `pageNumber` /
+  /// `totalPages` receive the counters, optionally formatted by a
+  /// supported `@counter-style` name in the same class list (e.g. `cjk-decimal`). The
+  /// band lays out at full page width and draws in the top margin area, like
+  /// Chromium's print templates; it does not shrink the content window.
+  #[builder(default, setter(strip_option))]
+  pub header: Option<Node>,
+  /// Band repeated at the bottom of every page; same class hooks as `header`.
+  #[builder(default, setter(strip_option))]
+  pub footer: Option<Node>,
+  /// Per-render font fallback chain (family names in order).
+  #[builder(default)]
+  pub font_families: Option<FontFamily>,
+  /// Default BCP-47 language tag applied to the root.
+  #[builder(default)]
+  pub lang: Option<Lang>,
+  /// Document metadata written to the PDF's info dictionary.
+  #[builder(default, setter(strip_option))]
+  pub metadata: Option<PdfMetadata>,
+  /// Generates a PDF outline (bookmarks) from `h1`–`h6` headings.
+  #[builder(default)]
+  pub outline: bool,
+  /// Archival standard the output conforms to. Validation failures fail the
+  /// render.
+  #[builder(default)]
+  pub standard: PdfStandard,
+  /// Structure-tree emission: on by default like Chromium's print-to-PDF,
+  /// optionally validated against PDF/UA-1. The tagged standards (`A2a`,
+  /// `A3a`) force it on.
+  #[builder(default)]
+  pub tagged: Tagging,
+  /// Files attached to the document, shown in the viewer's attachment panel.
+  /// The PDF/A-3 levels require each to carry a mime type, a description, and
+  /// a modification date ([`PdfMetadata::creation_date`] is the fallback).
+  #[builder(default)]
+  pub attachments: Vec<Attachment>,
+}
+
+/// A file attached to the document.
+#[derive(Clone)]
+pub struct Attachment {
+  /// The file name in the PDF, e.g. `factur-x.xml`.
+  pub name: String,
+  /// The file's bytes.
+  pub data: Vec<u8>,
+  /// IANA media type, e.g. `application/xml`.
+  pub mime_type: Option<String>,
+  /// Human-readable description.
+  pub description: Option<String>,
+  /// How the file relates to the document (the PDF/A-3 AFRelationship).
+  pub relationship: AttachmentRelationship,
+  /// UTC modification date; falls back to [`PdfMetadata::creation_date`].
+  pub modification_date: Option<PdfDate>,
+}
+
+/// How an attached file relates to the document it is embedded in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AttachmentRelationship {
+  /// The document was created from this file.
+  Source,
+  /// The file was used to derive a visual presentation in the document.
+  Data,
+  /// An alternative representation of the document.
+  Alternative,
+  /// Additional resources for the document.
+  Supplement,
+  /// No clear relationship, or it is not known.
+  #[default]
+  Unspecified,
+}
+
+impl AttachmentRelationship {
+  pub(crate) fn association_kind(self) -> AssociationKind {
+    match self {
+      Self::Source => AssociationKind::Source,
+      Self::Data => AssociationKind::Data,
+      Self::Alternative => AssociationKind::Alternative,
+      Self::Supplement => AssociationKind::Supplement,
+      Self::Unspecified => AssociationKind::Unspecified,
+    }
+  }
+}
+
+/// Document metadata for the PDF's info dictionary. [`PdfOptions::lang`]
+/// doubles as the metadata language.
+#[derive(Default, Clone)]
+pub struct PdfMetadata {
+  /// The document title.
+  pub title: Option<String>,
+  /// The document description (the info dictionary's subject).
+  pub description: Option<String>,
+  /// The document authors.
+  pub authors: Vec<String>,
+  /// The document keywords.
+  pub keywords: Vec<String>,
+  /// The tool that created the source document.
+  pub creator: Option<String>,
+  /// The document creation date, interpreted as UTC. Tagged archival
+  /// standards require one; supplying it keeps output deterministic.
+  pub creation_date: Option<PdfDate>,
+}
+
+/// A UTC timestamp for [`PdfMetadata::creation_date`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PdfDate {
+  /// Full year, e.g. 2026.
+  pub year: u16,
+  /// Month `1..=12`.
+  pub month: u8,
+  /// Day of month `1..=31`.
+  pub day: u8,
+  /// Hour `0..=23`.
+  pub hour: u8,
+  /// Minute `0..=59`.
+  pub minute: u8,
+  /// Second `0..=59`.
+  pub second: u8,
+}
+
+pub(crate) fn build_metadata(metadata: &PdfMetadata, lang: Option<Lang>) -> Metadata {
+  let mut result = Metadata::new();
+
+  if let Some(title) = &metadata.title {
+    result = result.title(title.clone());
+  }
+  if let Some(description) = &metadata.description {
+    result = result.description(description.clone());
+  }
+  if !metadata.authors.is_empty() {
+    result = result.authors(metadata.authors.clone());
+  }
+  if !metadata.keywords.is_empty() {
+    result = result.keywords(metadata.keywords.clone());
+  }
+  if let Some(creator) = &metadata.creator {
+    result = result.creator(creator.clone());
+  }
+  if let Some(lang) = lang {
+    result = result.language(lang.as_str().to_string());
+  }
+  if let Some(date) = metadata.creation_date {
+    result = result.creation_date(krilla_datetime(date));
+  }
+  result
+}
+
+pub(crate) fn krilla_datetime(date: PdfDate) -> DateTime {
+  DateTime::new(date.year)
+    .month(date.month)
+    .day(date.day)
+    .hour(date.hour)
+    .minute(date.minute)
+    .second(date.second)
+    .utc_offset_hour(0)
+}
+
+/// Per-side page margins in px.
+#[derive(Clone, Copy)]
+pub struct PageMargins {
+  /// Top margin.
+  pub top: f32,
+  /// Right margin.
+  pub right: f32,
+  /// Bottom margin.
+  pub bottom: f32,
+  /// Left margin.
+  pub left: f32,
+}
+
+impl PageMargins {
+  /// The same margin on all four sides.
+  pub const fn uniform(value: f32) -> Self {
+    Self {
+      top: value,
+      right: value,
+      bottom: value,
+      left: value,
+    }
+  }
+}
+
+/// Paged output geometry: fixed page size with margins. Content lays out at
+/// the width inside the margins and flows across as many pages as it needs.
+#[derive(Clone, Copy)]
+pub struct PageOptions {
+  /// Page width in px (A4 at 96 dpi ≈ 794).
+  pub width: f32,
+  /// Page height in px (A4 at 96 dpi ≈ 1123).
+  pub height: f32,
+  /// Page margins in px.
+  pub margin: PageMargins,
+}
+
+/// CSS px (96 dpi) to PDF pt (72 dpi). Layout runs in px; page geometry,
+/// annotations, and destinations are written in pt so pages print at their
+/// physical size.
+pub(crate) const PT_PER_PX: f32 = 72.0 / 96.0;
+
+/// 20px, which is Chromium's 15pt inset at 96 dpi: its print template page
+/// insets bands 15pt from the paper edge
+/// (`#header { padding-top: 15pt }`, `#footer { padding-bottom: 15pt }` in
+/// components/printing/resources/print_header_footer_template_page.html).
+pub(crate) const BAND_EDGE_PADDING: f32 = 20.0;
+
+/// Millimeters to CSS px (96 dpi).
+const fn mm(value: f32) -> f32 {
+  value / 25.4 * 96.0
+}
+
+/// Inches to CSS px (96 dpi).
+const fn inches(value: f32) -> f32 {
+  value * 96.0
+}
+
+/// Presets are portrait with a half-inch margin; chain
+/// [`landscape`](Self::landscape) and [`with_margin`](Self::with_margin) to
+/// adjust, or fill the fields directly for any other size.
+// ponytail: A4 + LETTER only; add other @page keywords when someone asks.
+impl PageOptions {
+  const DEFAULT_MARGIN: f32 = 48.0;
+
+  /// ISO A4: 210 × 297 mm.
+  pub const A4: Self = Self::preset(mm(210.0), mm(297.0));
+
+  /// US Letter: 8.5 × 11 in.
+  pub const LETTER: Self = Self::preset(inches(8.5), inches(11.0));
+
+  const fn preset(width: f32, height: f32) -> Self {
+    Self {
+      width,
+      height,
+      margin: PageMargins::uniform(Self::DEFAULT_MARGIN),
+    }
+  }
+
+  /// Swaps width and height.
+  pub const fn landscape(self) -> Self {
+    Self {
+      width: self.height,
+      height: self.width,
+      ..self
+    }
+  }
+
+  /// Replaces the margins with a uniform value.
+  pub const fn with_margin(self, margin: f32) -> Self {
+    Self {
+      margin: PageMargins::uniform(margin),
+      ..self
+    }
+  }
+
+  pub(crate) const fn content_size(&self) -> (f32, f32) {
+    (
+      self.width - self.margin.left - self.margin.right,
+      self.height - self.margin.top - self.margin.bottom,
+    )
+  }
+}
+
+/// Inputs for [`crate::measure`], built with [`MeasureOptions::builder`].
+#[derive(TypedBuilder)]
+pub struct MeasureOptions<'g> {
+  /// The viewport to lay out in. Required unless [`Self::page`] is set.
+  #[builder(default, setter(strip_option))]
+  pub viewport: Option<Viewport>,
+  /// The font context.
+  pub fonts: &'g Fonts,
+  /// The node tree to measure.
+  pub node: Node,
+  /// CSS stylesheets to apply before layout.
+  #[builder(default)]
+  pub stylesheet: Arc<StyleSheet>,
+  /// Resources fetched externally, keyed by URL.
+  #[builder(default)]
+  pub images: HashMap<Arc<str>, ImageSource>,
+  /// Lays out at the full page width with unbounded height, exactly how
+  /// [`crate::render`] measures a header/footer band. Margins do not affect the
+  /// result.
+  #[builder(default, setter(strip_option))]
+  pub page: Option<PageOptions>,
+  /// Per-render font fallback chain (family names in order).
+  #[builder(default)]
+  pub font_families: Option<FontFamily>,
+  /// Default BCP-47 language tag applied to the root.
+  #[builder(default)]
+  pub lang: Option<Lang>,
+}
+
+/// A node tree's laid-out size in px.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MeasuredSize {
+  /// The layout width.
+  pub width: f32,
+  /// The laid-out content height.
+  pub height: f32,
+}
