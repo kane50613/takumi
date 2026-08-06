@@ -18,7 +18,9 @@ use takumi_core::{
   viewport::Viewport,
 };
 use takumi_html::{FromHtmlOptions, from_html};
-use takumi_pdf::{PageMargins, PageOptions, PdfMetadata, PdfOptions, PdfStandard, render};
+use takumi_pdf::{
+  PageMargins, PageOptions, PdfDate, PdfMetadata, PdfOptions, PdfStandard, Tagging, render,
+};
 
 fn fonts() -> Fonts {
   let mut fonts = Fonts::default();
@@ -724,6 +726,73 @@ fn archival_standards() {
   assert!(String::from_utf8_lossy(&a4).starts_with("%PDF-2.0"));
 }
 
+/// The report renders tagged under PDF/UA-1 and PDF/A-2a: heading structure,
+/// link alt text, document language, title and date all satisfy the
+/// validators, and the structure tree serializes.
+#[test]
+fn tagged_standards() {
+  let metadata = || PdfMetadata {
+    title: Some("Annual report".into()),
+    creation_date: Some(PdfDate {
+      year: 2026,
+      month: 8,
+      day: 6,
+      hour: 0,
+      minute: 0,
+      second: 0,
+    }),
+    ..Default::default()
+  };
+  let lang = || takumi_core::style::Lang::parse("en").expect("lang");
+  // PDF/UA-1 combined with PDF/A-2a: both validators run on one render.
+  let ua1 = run_pdf_fixture("report-tagged-ua1", |fonts| {
+    PdfOptions::builder()
+      .node(html_fixture("report.html"))
+      .page(PageOptions::A4)
+      .tagged(Tagging::Ua1)
+      .standard(PdfStandard::A2a)
+      .lang(Some(lang()))
+      .metadata(metadata())
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = String::from_utf8_lossy(&ua1);
+
+  assert!(
+    haystack.contains("StructTreeRoot"),
+    "missing structure tree"
+  );
+
+  let list_doc = r#"<main style="display:flex;flex-direction:column;font-size:14px;color:#141414;">
+    <h1>Checklist</h1>
+    <p>Steps with <strong>bold</strong> and <code>code</code>:</p>
+    <ul><li>First item</li><li>Second item</li></ul>
+    <ol><li>Ordered one</li><li>Ordered two</li></ol>
+  </main>"#;
+
+  run_pdf_fixture("list-tagged-ua1", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(list_doc, FromHtmlOptions::default()).expect("parse list doc"))
+      .page(PageOptions::A4)
+      .tagged(Tagging::Ua1)
+      .lang(Some(lang()))
+      .metadata(metadata())
+      .fonts(fonts)
+      .build()
+  });
+
+  run_pdf_fixture("report-tagged-a2a", |fonts| {
+    PdfOptions::builder()
+      .node(html_fixture("report.html"))
+      .page(PageOptions::A4)
+      .standard(PdfStandard::A2a)
+      .lang(Some(lang()))
+      .metadata(metadata())
+      .fonts(fonts)
+      .build()
+  });
+}
+
 #[test]
 fn certificate() {
   run_pdf_fixture("certificate", |fonts| {
@@ -750,6 +819,7 @@ fn report_links_outline() {
         authors: vec!["Takumi".into()],
         keywords: vec!["report".into(), "fixture".into()],
         creator: Some("takumi-pdf fixtures".into()),
+        creation_date: None,
       })
       .fonts(fonts)
       .build()

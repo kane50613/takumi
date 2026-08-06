@@ -3,9 +3,7 @@ title: PDF/A
 description: Archival output that validators accept
 ---
 
-PDF/A is the ISO standard for archival PDFs. Archives, courts, and procurement systems often require it. A conforming file embeds every font, declares its color space, and carries XMP metadata.
-
-Set `pdfa` to a conformance level:
+Render a PDF/A document with `pdfa`.
 
 ```tsx twoslash
 import type { ReactNode } from "react";
@@ -17,20 +15,72 @@ const pdf = await render(invoice, {
 });
 ```
 
-The output gains an sRGB output intent and XMP metadata. Everything else stays the same. Fonts are always embedded and subset, with or without PDF/A.
+Conforming output includes an sRGB output intent and XMP metadata. Fonts are always embedded and subset, with or without PDF/A.
 
 ## Levels
 
-| Level  | Base    | Notes                                              |
-| ------ | ------- | -------------------------------------------------- |
-| `"2b"` | PDF 1.7 | Basic conformance. The common choice.              |
-| `"2u"` | PDF 1.7 | `2b` plus guaranteed Unicode mapping for all text. |
-| `"3b"` | PDF 1.7 | `2b` plus permission to attach arbitrary files.    |
-| `"3u"` | PDF 1.7 | `2u` plus the same attachment permission.          |
-| `"4"`  | PDF 2.0 | The current revision of the standard.              |
+| Level  | PDF version | What it adds                          |
+| ------ | ----------- | ------------------------------------- |
+| `"2b"` | PDF 1.7     | Basic conformance.                    |
+| `"2u"` | PDF 1.7     | `2b` plus guaranteed Unicode mapping. |
+| `"2a"` | PDF 1.7     | `2u` plus a tagged structure tree.    |
+| `"3b"` | PDF 1.7     | `2b` plus arbitrary file attachments. |
+| `"3u"` | PDF 1.7     | `2u` plus arbitrary file attachments. |
+| `"3a"` | PDF 1.7     | `3u` plus a tagged structure tree.    |
+| `"4"`  | PDF 2.0     | The PDF 2.0 revision of the standard. |
 
-Takumi always writes ToUnicode maps, so the `u` levels cost nothing extra. Electronic invoice formats built on PDF/A-3 (ZUGFeRD, Factur-X) expect `"3b"`.
+The `u` levels add no output cost. Takumi always writes ToUnicode maps.
 
-The accessible `a` levels and PDF/UA require tagged PDF and are not offered. PDF/A-1 is not offered either. It predates transparency, which most documents use.
+PDF/A-3 allows arbitrary file attachments. ZUGFeRD and Factur-X electronic invoices expect `"3b"`.
 
-Validation runs during rendering. A document that cannot conform rejects the render with the failing rule instead of writing a broken file.
+PDF/A-1 is not offered. It prohibits transparency.
+
+Validation runs during rendering. When a document cannot conform, the render fails with the violated rule instead of writing a broken file.
+
+Every level, and PDF/UA-1, passes [veraPDF](https://verapdf.org), the reference validator.
+
+## Tagged output
+
+`tagged` defaults to `true`. Tagged output mirrors Chromium's print-to-PDF.
+
+Set `tagged: "ua1"` to also validate against PDF/UA-1:
+
+```tsx twoslash
+import type { ReactNode } from "react";
+import { render } from "takumi-pdf";
+declare const report: ReactNode;
+// ---cut---
+const pdf = await render(report, {
+  pdfa: "2a",
+  tagged: "ua1",
+  lang: "en",
+  metadata: {
+    title: "Annual report",
+    creationDate: "2026-08-06",
+  },
+});
+```
+
+The structure tree comes from the HTML semantics:
+
+| HTML                     | PDF                                 |
+| ------------------------ | ----------------------------------- |
+| `h1`–`h6`                | `Hn` with the heading text as title |
+| `p`, bare text           | `P`                                 |
+| `img`                    | `Figure` with the `alt` text        |
+| `a`                      | `Link`, holding the link annotation |
+| `ul`, `ol`, `li`         | `L`, `LI`, `LBody`                  |
+| `strong`, `em`, `code`   | `Strong`, `Em`, `Code`              |
+| page headers and footers | artifacts                           |
+
+Set `tagged: false` to skip the tree when file size matters more than accessibility.
+
+Invalid combinations are TypeScript type errors. `pdfa: "2a"` and `pdfa: "3a"` forbid `tagged: false`. `pdfa: "4"` forbids `tagged: "ua1"`, because PDF/UA-1 is PDF 1.7-only and PDF/A-4 is PDF 2.0.
+
+Validators require inputs the renderer cannot supply:
+
+- `lang` is the document language. A-levels and PDF/UA require it.
+- `metadata.title` is required by PDF/UA.
+- `metadata.creationDate` is required by the `a` levels. Use UTC `"YYYY-MM-DD"` or `"YYYY-MM-DDTHH:MM:SS"`. A fixed date keeps output byte-identical across runs.
+
+PDF/UA also requires a document outline. Takumi generates it from headings.

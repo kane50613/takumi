@@ -14,14 +14,19 @@
 //!
 //! [`Page`]: Page
 
+use pdf_writer::{Filter, XRefFilter};
+
 use crate::krilla::chunk_container::ChunkContainer;
+use crate::krilla::configure::PdfVersion;
 use crate::krilla::destination::NamedDestination;
 use crate::krilla::error::KrillaResult;
 use crate::krilla::interchange::embed::EmbeddedFile;
 use crate::krilla::interchange::metadata::Metadata;
 use crate::krilla::interchange::outline::Outline;
+use crate::krilla::interchange::tagging::TagTree;
 use crate::krilla::page::{Page, PageSettings};
 use crate::krilla::serialize::{SerializeContext, SerializeSettings};
+use crate::krilla::stream::deflate_encode;
 use crate::krilla::surface::Location;
 
 /// A PDF document.
@@ -101,6 +106,11 @@ impl Document {
     self.chunk_container.metadata = Some(metadata);
   }
 
+  /// Set the tag tree of the document.
+  pub fn set_tag_tree(&mut self, tag_tree: TagTree) {
+    self.serializer_context.set_tag_tree(tag_tree);
+  }
+
   /// Embed a new file in the PDF document.
   ///
   /// Returns `None` if the file couldn't be embedded because a file
@@ -138,6 +148,20 @@ impl Document {
       chunk_container,
     } = self;
 
-    Ok(serializer_context.finish(chunk_container)?.finish())
+    let version = serializer_context.serialize_settings().pdf_version();
+    let (pdf, xref_ref) = serializer_context.finish(chunk_container)?;
+
+    // Cross-reference streams compress the per-object xref rows; they exist
+    // from PDF 1.5 onwards.
+    if version >= PdfVersion::Pdf15 {
+      Ok(pdf.finish_with_xref_stream_and_filter(xref_ref, |data| {
+        (
+          deflate_encode(data),
+          XRefFilter::Single(Filter::FlateDecode),
+        )
+      }))
+    } else {
+      Ok(pdf.finish())
+    }
   }
 }

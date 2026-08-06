@@ -6,9 +6,9 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use indexmap::IndexMap;
-
-use pdf_writer::writers::OutputIntent;
-use pdf_writer::{Chunk, Content, Finish, Limits, Pdf, Ref, Settings, TextStr};
+use pdf_writer::types::{StructRole, StructRole2};
+use pdf_writer::writers::{OutputIntent, StructTreeRoot};
+use pdf_writer::{Chunk, Content, Finish, Limits, Name, Pdf, Ref, Settings, Str, TextStr};
 
 use crate::krilla::chunk_container::ChunkContainer;
 use crate::krilla::color::{CieBasedColorSpace, DeviceColorSpace, SpecialColorSpace};
@@ -24,6 +24,7 @@ use crate::krilla::graphics::separation::SeparationColorSpace;
 use crate::krilla::interactive::destination::{NamedDestination, XyzDestination};
 use crate::krilla::interchange::embed::EmbeddedFile;
 use crate::krilla::interchange::outline::Outline;
+use crate::krilla::interchange::tagging::{AnnotationIdentifier, PageTagIdentifier, TagTree};
 use crate::krilla::page::{InternalPage, PageLabel, PageLabelContainer};
 use crate::krilla::resource;
 use crate::krilla::resource::{Resource, Resourceable};
@@ -93,6 +94,22 @@ pub struct SerializeSettings {
   ///
   /// [`validate`]: crate::krilla::configure::validate
   pub configuration: Configuration,
+  /// Whether to enable the creation of tagged documents. See the module documentation
+  /// of [`tagging`] for more information about tagged PDF documents.
+  ///
+  /// Note that enabling this does not automatically make your documents tagged, as tagging implies
+  /// enriching the document with semantic information, which krilla cannot do
+  /// for you, since it's content-agnostic. All this setting does is to allow you
+  /// to dynamically disable tagging if you wish to do so. This allows you to write
+  /// your code primarily with tagging in mind, but still allows you to
+  /// disable it dynamically, without having to make any changes to your code.
+  ///
+  /// Note that this value might be overridden depending on which validator
+  /// you use. For example, when exporting with PDF/UA, this value will always
+  /// be set to `true`.
+  ///
+  /// [`tagging`]: crate::krilla::interchange::tagging
+  pub enable_tagging: bool,
   /// A function that should be used to render SVG glyphs. If you don't need this, yu can
   /// just use the default function which doesn't render them at all. If you do want this, it
   /// is recommended that you use the function provided by the `krilla-svg` crate.
@@ -127,6 +144,7 @@ impl Default for SerializeSettings {
       xmp_metadata: true,
       cmyk_profile: None,
       configuration: Configuration::default(),
+      enable_tagging: true,
       render_svg_glyph_fn: |_, _, _, _, _| None,
     }
   }
@@ -196,6 +214,14 @@ impl PageInfo {
   }
 }
 
+enum StructParentElement {
+  /// The index of the page and the number of marked content IDs present on that page.
+  Page(usize, i32),
+  /// The index of the page where the annotation is present, as well as the index of the
+  /// annotation within that one page.
+  Annotation(AnnotationIdentifier),
+}
+
 #[derive(Debug)]
 pub(crate) enum MaybeDeviceColorSpace {
   DeviceRgb,
@@ -251,6 +277,7 @@ impl SerializeContext {
   pub(crate) fn new(mut serialize_settings: SerializeSettings) -> Self {
     // Override flags as required by the validator
     serialize_settings.no_device_cs |= serialize_settings.validators().requires_no_device_cs();
+    serialize_settings.enable_tagging |= serialize_settings.validators().requires_tagging();
     serialize_settings.xmp_metadata |= serialize_settings.validators().requires_xmp_metadata();
 
     let mut cur_ref = Ref::new(1);
@@ -329,6 +356,13 @@ impl SerializeContext {
     }
   }
 
+  pub(crate) fn set_tag_tree(&mut self, root: TagTree) {
+    // Only set the tag tree if the user actually enabled tagging.
+    if self.serialize_settings.enable_tagging {
+      self.global_objects.tag_tree = MaybeTaken::new(Some(root))
+    }
+  }
+
   pub(crate) fn new_ref(&mut self) -> Ref {
     self.cur_ref.bump()
   }
@@ -370,7 +404,7 @@ impl SerializeContext {
     &mut self.validation_store
   }
 
-  pub(crate) fn finish(mut self, mut chunk_container: ChunkContainer) -> KrillaResult<Pdf> {
+  pub(crate) fn finish(mut self, mut chunk_container: ChunkContainer) -> KrillaResult<(Pdf, Ref)> {
     // We need to be careful here that we serialize the objects in the right order,
     // as in some cases we use MaybeTake::take to remove an object, which means that
     // no object that is serialized afterwards must depend on it.
@@ -386,9 +420,10 @@ impl SerializeContext {
     // It is important that we serialize the tags AFTER we have serialized the pages,
     // because page serialization will update the annotation refs of the page infos,
     // and when serializing the parent tree map we need to know the refs of the annotations
+    self.serialize_tag_tree(&mut chunk_container)?;
 
     // Create the final PDF.
-    let pdf = chunk_container.finish(&mut self)?;
+    let (pdf, next_ref) = chunk_container.finish(&mut self)?;
     self.register_limits(pdf.limits());
 
     self.check_validator_limits();
@@ -415,7 +450,7 @@ impl SerializeContext {
     // Just a sanity check that we've actually processed all items.
     self.global_objects.assert_all_taken();
 
-    Ok(pdf)
+    Ok((pdf, next_ref))
   }
 }
 
@@ -429,6 +464,42 @@ impl SerializeContext {
 
   pub(crate) fn register_limits(&mut self, limits: &Limits) {
     self.limits.merge(limits);
+  }
+
+  pub(crate) fn register_page_struct_parent(
+    &mut self,
+    page_index: usize,
+    num_mcids: i32,
+  ) -> Option<i32> {
+    if self.serialize_settings.enable_tagging {
+      if num_mcids == 0 {
+        return None;
+      }
+
+      let id = self.global_objects.struct_parents.len();
+      self
+        .global_objects
+        .struct_parents
+        .push(StructParentElement::Page(page_index, num_mcids));
+      Some(i32::try_from(id).unwrap())
+    } else {
+      None
+    }
+  }
+
+  /// Register the struct parent integer in the parent tree.
+  /// The annotation parent must be later set using [`Self::set_annotation_parent`].
+  pub(crate) fn register_annotation_parent(&mut self, ai: AnnotationIdentifier) -> Option<i32> {
+    if self.serialize_settings.enable_tagging {
+      let id = self.global_objects.struct_parents.len();
+      self
+        .global_objects
+        .struct_parents
+        .push(StructParentElement::Annotation(ai));
+      Some(i32::try_from(id).unwrap())
+    } else {
+      None
+    }
   }
 
   pub(crate) fn register_named_destination(&mut self, nd: NamedDestination) -> Option<Ref> {
@@ -678,6 +749,138 @@ impl SerializeContext {
     Ok(())
   }
 
+  fn serialize_tag_tree(&mut self, chunk_container: &mut ChunkContainer) -> KrillaResult<()> {
+    let tag_tree = self.global_objects.tag_tree.take();
+    let struct_parents = self.global_objects.struct_parents.take();
+    if let Some(root) = &tag_tree {
+      let mut parent_tree_map = HashMap::new();
+      let mut id_tree_map = BTreeMap::new();
+      let struct_tree_root_ref = self.new_ref();
+      let document_ref = root.serialize(
+        self,
+        chunk_container,
+        &mut parent_tree_map,
+        &mut id_tree_map,
+        struct_tree_root_ref,
+      )?;
+
+      root.validate(&id_tree_map)?;
+
+      let mut chunk = self.new_chunk();
+      let mut tree = chunk
+        .indirect(struct_tree_root_ref)
+        .start::<StructTreeRoot>();
+
+      let mut sub_chunks = vec![];
+
+      if self.serialize_settings.pdf_version() < PdfVersion::Pdf20 {
+        let mut role_map = tree.role_map();
+        // Custom structure elements.
+        role_map.insert(Name(b"Datetime"), StructRole::Span);
+        role_map.insert(Name(b"Terms"), StructRole::Part);
+
+        // PDF 2.0 exclusive structure elements.
+        role_map.insert(Name(b"Title"), StructRole::P);
+        role_map.insert(Name(b"Strong"), StructRole::Span);
+        role_map.insert(Name(b"Em"), StructRole::Span);
+        for level in self.global_objects.custom_heading_roles.iter() {
+          let role2 = StructRole2::Heading(*level);
+          role_map.insert(role2.to_name(&mut [0; 6]), StructRole::P);
+        }
+      } else {
+        let mut namespaces = tree.namespaces();
+
+        // PDF 2.0 standard structure namespace
+        namespaces.item(self.pdf2_ns.ssn_ref);
+        let mut ns_chunk = self.new_chunk();
+        ns_chunk.namespace(self.pdf2_ns.ssn_ref).pdf_2_ns();
+        sub_chunks.push(ns_chunk);
+
+        // Custom krilla namspace
+        namespaces.item(self.pdf2_ns.krilla_ref);
+        let mut ns_chunk = self.new_chunk();
+        let mut ns = ns_chunk.namespace(self.pdf2_ns.krilla_ref);
+        ns.ns(TextStr("https://github.com/LaurenzV/krilla"));
+
+        // Custom structure elements.
+        ns.role_map_ns()
+          .to_pdf_2_0(Name(b"Datetime"), StructRole2::Span, self.pdf2_ns.ssn_ref)
+          .to_pdf_2_0(Name(b"Terms"), StructRole2::Part, self.pdf2_ns.ssn_ref);
+
+        ns.finish();
+        sub_chunks.push(ns_chunk);
+      }
+      tree.children().item(document_ref);
+
+      if !struct_parents.is_empty() {
+        let mut parent_tree = tree.parent_tree();
+        let mut tree_nums = parent_tree.nums();
+
+        for (index, struct_parent) in struct_parents.iter().enumerate() {
+          match *struct_parent {
+            StructParentElement::Page(page_index, num_mcids) => {
+              let mut list_chunk = self.new_chunk();
+              let list_ref = self.new_ref();
+
+              let mut refs = list_chunk.indirect(list_ref).array();
+
+              for mcid in 0..num_mcids {
+                let rci = PageTagIdentifier::new(page_index, mcid);
+                refs.item(parent_tree_map.get(&rci.into()).unwrap_or_else(|| {
+                  panic!("page tag identifier {rci:?} doesn't appear in the tag tree")
+                }));
+              }
+
+              refs.finish();
+
+              sub_chunks.push(list_chunk);
+              tree_nums.insert(index as i32, list_ref);
+            }
+            StructParentElement::Annotation(ai) => {
+              // Write a reference to the parent structure element.
+              // From the PDF 1.7 spec (14.7.5.4 Finding structure elements from content items):
+              // > For an object identified as a content item by means of an object reference
+              // > (see 14.7.5.3, "PDF objects as content items"), the value shall be an
+              // > indirect reference to the parent structure element.
+              let page_annotations = &self.page_infos[ai.page_index].annotations();
+              let parent_ref = *page_annotations[ai.annot_index].1.get().unwrap_or_else(|| {
+                panic!("annotation identifier {ai:?} doesn't appear in the tag tree")
+              });
+              tree_nums.insert(index as i32, parent_ref);
+            }
+          }
+        }
+
+        tree_nums.finish();
+        parent_tree.finish();
+      }
+
+      if !id_tree_map.is_empty() {
+        let mut id_tree = tree.id_tree();
+        let mut names = id_tree.names();
+
+        for (name, ref_) in id_tree_map {
+          names.insert(Str(name.as_bytes()), ref_);
+        }
+      }
+
+      if !struct_parents.is_empty() {
+        tree.parent_tree_next_key(struct_parents.len() as i32);
+      }
+      tree.finish();
+
+      for sub_chunk in sub_chunks {
+        chunk.extend(&sub_chunk);
+      }
+
+      chunk_container.non_stream.struct_tree_root = Some((struct_tree_root_ref, chunk));
+    } else {
+      self.register_validation_error(ValidationError::MissingTagging);
+    }
+
+    Ok(())
+  }
+
   fn check_validator_limits(&mut self) {
     if self.cur_ref > Ref::new(8388607) {
       self.register_validation_error(ValidationError::TooManyIndirectObjects)
@@ -797,8 +1000,12 @@ pub(crate) struct GlobalObjects {
   /// depend on future pages (not written yet), so pages must also only be written in the
   /// very end.
   pages: MaybeTaken<Vec<(Ref, InternalPage)>>,
+  /// Stores the struct parent elements.
+  struct_parents: MaybeTaken<Vec<StructParentElement>>,
   /// Stores the document outline.
   outline: MaybeTaken<Option<Outline>>,
+  /// Stores the tag tree.
+  tag_tree: MaybeTaken<Option<TagTree>>,
   /// Stores the association of the names of embedded files to their refs,
   /// for the catalog dictionary.
   pub(crate) embedded_files: MaybeTaken<BTreeMap<String, Ref>>,
@@ -812,7 +1019,9 @@ impl GlobalObjects {
     assert!(self.font_map.is_taken());
     assert!(self.xyz_destinations.is_taken());
     assert!(self.pages.is_taken());
+    assert!(self.struct_parents.is_taken());
     assert!(self.outline.is_taken());
+    assert!(self.tag_tree.is_taken());
     assert!(self.embedded_files.is_taken());
   }
 }

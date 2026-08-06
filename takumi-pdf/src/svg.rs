@@ -35,13 +35,11 @@ fn draw_ops(surface: &mut Surface, ops: Vec<SvgOp>) {
       SvgOp::PushTransform([a, b, c, d, e, f]) => {
         surface.push_transform(&Transform::from_row(a, b, c, d, e, f));
       }
-      SvgOp::PushClip { path, evenodd } => {
-        let Some(path) = svg_path(&path) else {
-          continue;
-        };
-
-        surface.push_clip_path(&path, &fill_rule(evenodd));
-      }
+      SvgOp::PushClip { path, evenodd } => match svg_path(&path) {
+        Some(path) => surface.push_clip_path(&path, &fill_rule(evenodd)),
+        // The matching `Pop` still comes; keep the layer stack balanced.
+        None => surface.push_transform(&Transform::identity()),
+      },
       SvgOp::PushBlend(blend) => surface.push_blend_mode(crate::krilla_blend(blend)),
       SvgOp::PushOpacity(opacity) => {
         surface.push_opacity(normalized(opacity));

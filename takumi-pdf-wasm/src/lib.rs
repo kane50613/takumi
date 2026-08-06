@@ -22,7 +22,9 @@ use takumi_core::{
   style::{FontFamily, FontStyle as CssFontStyle, FromCssStr, Lang},
   viewport::Viewport,
 };
-use takumi_pdf::{PageMargins, PageOptions, PdfMetadata, PdfOptions, PdfStandard};
+use takumi_pdf::{
+  PageMargins, PageOptions, PdfDate, PdfMetadata, PdfOptions, PdfStandard, Tagging,
+};
 use wasm_bindgen::prelude::*;
 
 fn map_error(error: impl core::fmt::Debug) -> js_sys::Error {
@@ -185,13 +187,54 @@ struct PdfRenderOptions {
   metadata: Option<MetadataInput>,
   /// Generates a PDF outline (bookmarks) from `h1`–`h6` headings.
   outline: Option<bool>,
-  /// PDF/A conformance level: "2b", "2u", "3b", "3u" or "4".
+  /// PDF/A conformance level: "2a", "2b", "2u", "3a", "3b", "3u" or "4".
   pdfa: Option<PdfaInput>,
+  /// Structure-tree emission: `false`, `true` (default) or `"ua1"` to also
+  /// validate against PDF/UA-1.
+  tagged: Option<TaggedInput>,
+}
+
+/// `tagged` values accepted from JS.
+#[derive(Deserialize, Clone, Copy)]
+#[serde(untagged)]
+enum TaggedInput {
+  Enabled(bool),
+  #[serde(with = "ua1_literal")]
+  Ua1,
+}
+
+/// Deserializes the `"ua1"` string literal.
+mod ua1_literal {
+  use serde::{Deserialize, Deserializer};
+
+  pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<(), D::Error> {
+    let value = String::deserialize(deserializer)?;
+
+    if value == "ua1" {
+      Ok(())
+    } else {
+      Err(serde::de::Error::custom("expected \"ua1\""))
+    }
+  }
+}
+
+impl From<TaggedInput> for Tagging {
+  fn from(tagged: TaggedInput) -> Self {
+    match tagged {
+      TaggedInput::Enabled(false) => Tagging::Off,
+      TaggedInput::Enabled(true) => Tagging::On,
+      TaggedInput::Ua1 => Tagging::Ua1,
+    }
+  }
 }
 
 /// PDF/A conformance level names accepted from JS.
 #[derive(Deserialize, Clone, Copy)]
 enum PdfaInput {
+  #[serde(rename = "2a")]
+  A2a,
+  #[serde(rename = "3a")]
+  A3a,
   #[serde(rename = "2b")]
   A2b,
   #[serde(rename = "2u")]
@@ -207,6 +250,8 @@ enum PdfaInput {
 impl From<PdfaInput> for PdfStandard {
   fn from(pdfa: PdfaInput) -> Self {
     match pdfa {
+      PdfaInput::A2a => PdfStandard::A2a,
+      PdfaInput::A3a => PdfStandard::A3a,
       PdfaInput::A2b => PdfStandard::A2b,
       PdfaInput::A2u => PdfStandard::A2u,
       PdfaInput::A3b => PdfStandard::A3b,
@@ -225,6 +270,47 @@ struct MetadataInput {
   authors: Option<Vec<String>>,
   keywords: Option<Vec<String>>,
   creator: Option<String>,
+  /// UTC creation date as `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`.
+  creation_date: Option<String>,
+}
+
+fn parse_date(value: &str) -> Option<PdfDate> {
+  let (date, time) = match value.split_once('T') {
+    Some((date, time)) => (date, Some(time.trim_end_matches('Z'))),
+    None => (value, None),
+  };
+  let mut parts = date.splitn(3, '-');
+  let year = parts.next()?.parse().ok()?;
+  let month: u8 = parts.next()?.parse().ok()?;
+  let day: u8 = parts.next()?.parse().ok()?;
+  let (hour, minute, second) = match time {
+    Some(time) => {
+      let mut parts = time.splitn(3, ':');
+      (
+        parts.next()?.parse().ok()?,
+        parts.next()?.parse().ok()?,
+        parts.next()?.parse().ok()?,
+      )
+    }
+    None => (0, 0, 0),
+  };
+
+  if !(1..=12).contains(&month)
+    || !(1..=31).contains(&day)
+    || hour > 23
+    || minute > 59
+    || second > 59
+  {
+    return None;
+  }
+  Some(PdfDate {
+    year,
+    month,
+    day,
+    hour,
+    minute,
+    second,
+  })
 }
 
 impl From<MetadataInput> for PdfMetadata {
@@ -235,6 +321,7 @@ impl From<MetadataInput> for PdfMetadata {
       authors: input.authors.unwrap_or_default(),
       keywords: input.keywords.unwrap_or_default(),
       creator: input.creator,
+      creation_date: input.creation_date.as_deref().and_then(parse_date),
     }
   }
 }
@@ -371,6 +458,7 @@ impl PdfRenderer {
       metadata: options.metadata.map(PdfMetadata::from),
       outline: options.outline.unwrap_or(false),
       standard: options.pdfa.map(PdfStandard::from).unwrap_or_default(),
+      tagged: options.tagged.map(Tagging::from).unwrap_or_default(),
     })
     .map_err(map_error)
   }

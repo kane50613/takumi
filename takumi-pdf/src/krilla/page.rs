@@ -15,10 +15,12 @@ use crate::krilla::content::ContentBuilder;
 use crate::krilla::error::KrillaResult;
 use crate::krilla::geom::{Rect, Size, Transform};
 use crate::krilla::interactive::annotation::Annotation;
+use crate::krilla::interchange::tagging::{Identifier, PageTagIdentifier};
 use crate::krilla::resource::ResourceDictionary;
 use crate::krilla::serialize::{PageInfo, SerializeContext};
 use crate::krilla::stream::{FilterStreamBuilder, Stream};
 use crate::krilla::surface::Surface;
+use crate::krilla::tagging::AnnotationIdentifier;
 use crate::krilla::util::Deferred;
 
 #[derive(Clone, Debug)]
@@ -191,6 +193,7 @@ pub struct Page<'a> {
   page_settings: PageSettings,
   page_index: usize,
   page_stream: Stream,
+  num_mcids: i32,
   annotations: Vec<Annotation>,
 }
 
@@ -206,6 +209,7 @@ impl<'a> Page<'a> {
       chunk_container,
       page_settings,
       page_index,
+      num_mcids: 0,
       page_stream: Stream::empty(),
       annotations: vec![],
     }
@@ -220,6 +224,20 @@ impl<'a> Page<'a> {
     self.annotations.push(annotation);
   }
 
+  /// Add a tagged annotation to the page.
+  pub fn add_tagged_annotation(&mut self, mut annotation: Annotation) -> Identifier {
+    let annot_index = self.annotations.len();
+    let ai = AnnotationIdentifier::new(self.page_index, annot_index);
+    let struct_parent = self.sc.register_annotation_parent(ai);
+    annotation.struct_parent = struct_parent;
+    self.add_annotation(annotation);
+
+    match struct_parent {
+      None => Identifier::dummy(),
+      Some(_) => Identifier::new_annotation(self.page_index, annot_index),
+    }
+  }
+
   /// Get the surface of the page to draw on. Calling this multiple times
   /// on the same page will reset any previous drawings.
   pub fn surface(&mut self) -> Surface<'_> {
@@ -229,11 +247,24 @@ impl<'a> Page<'a> {
       self.sc,
     );
 
-    let finish_fn = Box::new(|stream| {
+    let finish_fn = Box::new(|stream, num_mcids| {
       self.page_stream = stream;
+      self.num_mcids = num_mcids;
     });
 
-    Surface::new(self.sc, self.chunk_container, root_builder, finish_fn)
+    let page_identifier = if self.sc.serialize_settings().enable_tagging {
+      Some(PageTagIdentifier::new(self.page_index, 0))
+    } else {
+      None
+    };
+
+    Surface::new(
+      self.sc,
+      self.chunk_container,
+      root_builder,
+      page_identifier,
+      finish_fn,
+    )
   }
 
   /// A shorthand for `std::mem::drop`.
@@ -251,8 +282,19 @@ impl Drop for Page<'_> {
     let annotations = std::mem::take(&mut self.annotations);
     let page_settings = std::mem::take(&mut self.page_settings);
 
+    let struct_parent = self
+      .sc
+      .register_page_struct_parent(self.page_index, self.num_mcids);
+
     let stream = std::mem::replace(&mut self.page_stream, Stream::empty());
-    let page = InternalPage::new(stream, self.sc, annotations, page_settings, self.page_index);
+    let page = InternalPage::new(
+      stream,
+      self.sc,
+      annotations,
+      struct_parent,
+      page_settings,
+      self.page_index,
+    );
     self.sc.register_page(page);
   }
 }
@@ -290,6 +332,7 @@ pub(crate) struct InternalPage {
   pub stream_chunk: Deferred<Chunk>,
   pub page_settings: PageSettings,
   pub page_index: usize,
+  pub struct_parent: Option<i32>,
   pub bbox: Rect,
   pub annotations: Vec<Annotation>,
 }
@@ -299,6 +342,7 @@ impl InternalPage {
     mut stream: Stream,
     sc: &mut SerializeContext,
     annotations: Vec<Annotation>,
+    struct_parent: Option<i32>,
     page_settings: PageSettings,
     page_index: usize,
   ) -> Self {
@@ -327,6 +371,7 @@ impl InternalPage {
       stream_resources,
       stream_ref,
       stream_chunk,
+      struct_parent,
       bbox: stream.bbox,
       annotations,
       page_settings,
@@ -397,6 +442,10 @@ impl InternalPage {
       page.art_box(art_box.to_pdf_rect());
     }
 
+    if let Some(struct_parent) = self.struct_parent {
+      page.struct_parents(struct_parent);
+    }
+
     // Only required for PDF/UA, but might as well always set it if there
     // are annotations.
     //
@@ -414,7 +463,7 @@ impl InternalPage {
     // check the target version.
     //
     // [1]: https://helpx.adobe.com/acrobat/using/create-verify-pdf-accessibility.html#TabOrder "Create and verify PDF accessibility (Acrobat Pro): Tab order"
-    if !self.annotations.is_empty()
+    if (!self.annotations.is_empty()
       || ((sc
         .serialize_settings()
         .validators()
@@ -422,7 +471,8 @@ impl InternalPage {
         .is_some()
         || sc.serialize_settings().validators().requires_tagging())
         && sc.serialize_settings().pdf_version()
-          >= VersionedFeature::StructureOrderTabbing.minimum_pdf_version())
+          >= VersionedFeature::StructureOrderTabbing.minimum_pdf_version()))
+      && sc.serialize_settings().enable_tagging
     {
       if sc.serialize_settings().pdf_version()
         >= VersionedFeature::StructureOrderTabbing.minimum_pdf_version()
