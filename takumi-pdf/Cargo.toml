@@ -26,6 +26,7 @@ indexmap = "2.10"
 pdf-writer = "0.15"
 png = { version = "0.18", optional = true }
 rustc-hash = "2.1"
+smallvec = { version = "1.15", features = ["union", "const_new", "write"] }
 siphasher = "1.0"
 skrifa.workspace = true
 kurbo = "0.13"
