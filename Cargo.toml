@@ -19,7 +19,7 @@ exclude = ["**/node_modules/**"]
 
 [workspace.dependencies]
 arc-swap = "1"
-base64 = "0.22"
+base64 = "0.23"
 bitflags = "2.13"
 bytemuck = "1.25"
 color = "0.3"
@@ -42,7 +42,7 @@ quick-xml = "0.41"
 rayon = "1.12"
 rgb = "0.8"
 roxmltree = "0.21.1"
-selectors = "0.39"
+selectors = "0.40"
 serde_bytes = "0.11"
 simplecss = "0.2"
 siphasher = "1"

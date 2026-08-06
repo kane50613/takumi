@@ -237,12 +237,10 @@ export async function prepareImages<T extends { src: string } = FetchedImage>({
   const urls = [...new Set(nodes.flatMap(extractImageUrls))].filter((url) => !provided.has(url));
   const fetchOptions: FetchOptions = { fetch, timeout, signal, maxBytes, allowUrl };
 
-  const tasks = urls.map(
-    async (src): Promise<FetchedImage> => ({
-      src,
-      data: await fetchImageData(src, fetchOptions, fetchCache),
-    }),
-  );
+  const tasks = urls.map(async (src): Promise<FetchedImage> => ({
+    src,
+    data: await fetchImageData(src, fetchOptions, fetchCache),
+  }));
   const fetched = throwOnError
     ? await Promise.all(tasks)
     : (await Promise.allSettled(tasks))
