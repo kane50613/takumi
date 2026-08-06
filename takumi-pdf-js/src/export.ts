@@ -101,6 +101,8 @@ export type RenderOptions = (PagedOptions | ViewportOptions) & {
   metadata?: PdfMetadata;
   /** Generates a PDF outline (bookmarks) from `h1`–`h6` headings. */
   outline?: boolean;
+  /** PDF/A conformance level. Validation failures reject the render. */
+  pdfa?: "2b" | "2u" | "3b" | "3u" | "4";
 };
 
 function isNode(value: NodeInput): value is Node {

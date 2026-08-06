@@ -22,7 +22,7 @@ use takumi_core::{
   style::{FontFamily, FontStyle as CssFontStyle, FromCssStr, Lang},
   viewport::Viewport,
 };
-use takumi_pdf::{PageMargins, PageOptions, PdfMetadata, PdfOptions};
+use takumi_pdf::{PageMargins, PageOptions, PdfMetadata, PdfOptions, PdfStandard};
 use wasm_bindgen::prelude::*;
 
 fn map_error(error: impl core::fmt::Debug) -> js_sys::Error {
@@ -185,6 +185,35 @@ struct PdfRenderOptions {
   metadata: Option<MetadataInput>,
   /// Generates a PDF outline (bookmarks) from `h1`–`h6` headings.
   outline: Option<bool>,
+  /// PDF/A conformance level: "2b", "2u", "3b", "3u" or "4".
+  pdfa: Option<PdfaInput>,
+}
+
+/// PDF/A conformance level names accepted from JS.
+#[derive(Deserialize, Clone, Copy)]
+enum PdfaInput {
+  #[serde(rename = "2b")]
+  A2b,
+  #[serde(rename = "2u")]
+  A2u,
+  #[serde(rename = "3b")]
+  A3b,
+  #[serde(rename = "3u")]
+  A3u,
+  #[serde(rename = "4")]
+  A4,
+}
+
+impl From<PdfaInput> for PdfStandard {
+  fn from(pdfa: PdfaInput) -> Self {
+    match pdfa {
+      PdfaInput::A2b => PdfStandard::A2b,
+      PdfaInput::A2u => PdfStandard::A2u,
+      PdfaInput::A3b => PdfStandard::A3b,
+      PdfaInput::A3u => PdfStandard::A3u,
+      PdfaInput::A4 => PdfStandard::A4,
+    }
+  }
 }
 
 /// Document metadata fields.
@@ -341,6 +370,7 @@ impl PdfRenderer {
       lang,
       metadata: options.metadata.map(PdfMetadata::from),
       outline: options.outline.unwrap_or(false),
+      standard: options.pdfa.map(PdfStandard::from).unwrap_or_default(),
     })
     .map_err(map_error)
   }

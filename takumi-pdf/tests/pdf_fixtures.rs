@@ -18,7 +18,7 @@ use takumi_core::{
   viewport::Viewport,
 };
 use takumi_html::{FromHtmlOptions, from_html};
-use takumi_pdf::{PageMargins, PageOptions, PdfMetadata, PdfOptions, render};
+use takumi_pdf::{PageMargins, PageOptions, PdfMetadata, PdfOptions, PdfStandard, render};
 
 fn fonts() -> Fonts {
   let mut fonts = Fonts::default();
@@ -691,6 +691,37 @@ fn invoice() {
       .fonts(fonts)
       .build()
   });
+}
+
+/// The invoice (paged, footer, gradients, links) renders under PDF/A-2b with
+/// an sRGB output intent, and under PDF/A-4 with a PDF 2.0 header.
+#[test]
+fn archival_standards() {
+  let a2b = run_pdf_fixture("invoice-pdfa-2b", |fonts| {
+    PdfOptions::builder()
+      .node(html_fixture("invoice.html"))
+      .page(PageOptions::A4.with_margin(36.0))
+      .footer(html_fixture("invoice-footer.html"))
+      .standard(PdfStandard::A2b)
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = String::from_utf8_lossy(&a2b);
+
+  assert!(haystack.starts_with("%PDF-1.7"));
+  assert!(haystack.contains("GTS_PDFA1"), "missing output intent");
+
+  let a4 = run_pdf_fixture("invoice-pdfa-4", |fonts| {
+    PdfOptions::builder()
+      .node(html_fixture("invoice.html"))
+      .page(PageOptions::A4.with_margin(36.0))
+      .footer(html_fixture("invoice-footer.html"))
+      .standard(PdfStandard::A4)
+      .fonts(fonts)
+      .build()
+  });
+
+  assert!(String::from_utf8_lossy(&a4).starts_with("%PDF-2.0"));
 }
 
 #[test]
