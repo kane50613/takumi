@@ -195,6 +195,34 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
   }
 }
 
+/// Decodes the percent escapes an `id` fragment carries in a URL, so
+/// `#section%201` finds the element with `id="section 1"`.
+fn percent_decode(fragment: &str) -> String {
+  let mut decoded = Vec::with_capacity(fragment.len());
+  let bytes = fragment.as_bytes();
+  let mut index = 0;
+
+  while index < bytes.len() {
+    let escape = (bytes[index] == b'%' && index + 2 < bytes.len())
+      .then(|| std::str::from_utf8(&bytes[index + 1..index + 3]).ok())
+      .flatten()
+      .and_then(|hex| u8::from_str_radix(hex, 16).ok());
+
+    match escape {
+      Some(byte) => {
+        decoded.push(byte);
+        index += 3;
+      }
+      None => {
+        decoded.push(bytes[index]);
+        index += 1;
+      }
+    }
+  }
+
+  String::from_utf8(decoded).unwrap_or_else(|_| fragment.to_string())
+}
+
 /// Whether an `href` is written to the PDF: a `#fragment` pointing inside the
 /// document, or an `http`, `https`, `mailto` or `tel` URI. Other schemes (and
 /// scheme-less values, which have no meaning inside a standalone document) are
@@ -304,7 +332,7 @@ pub(crate) fn add_link_annotations(
     // A fragment that matches no element is dropped: the annotation would be a
     // clickable box that goes nowhere.
     let target = match link.uri.strip_prefix('#') {
-      Some(id) => match anchor(id) {
+      Some(id) => match anchor(&percent_decode(id)) {
         Some(destination) => Target::Destination(Destination::Xyz(destination)),
         None => continue,
       },
