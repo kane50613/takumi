@@ -70,7 +70,12 @@ fn render_group(
   } else {
     // The bounding box for groups with filters is special and should not be expanded by 2px,
     // because it's already acting as a clipping region.
-    let bbox = bbox.to_int_rect();
+    let bbox = tiny_skia::IntRect::from_xywh(
+      bbox.x().floor() as i32,
+      bbox.y().floor() as i32,
+      bbox.width().ceil().max(1.0) as u32,
+      bbox.height().ceil().max(1.0) as u32,
+    )?;
     // Make sure our filter region is not bigger than 4x the canvas size.
     // This is required mainly to prevent huge filter regions that would tank the performance.
     // It should not affect the final result in any way.
@@ -152,5 +157,25 @@ pub fn convert_blend_mode(mode: crate::resvg::usvg::BlendMode) -> tiny_skia::Ble
     crate::resvg::usvg::BlendMode::Saturation => tiny_skia::BlendMode::Saturation,
     crate::resvg::usvg::BlendMode::Color => tiny_skia::BlendMode::Color,
     crate::resvg::usvg::BlendMode::Luminosity => tiny_skia::BlendMode::Luminosity,
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use crate::resvg::usvg;
+
+  // Derived from https://github.com/servo/servo/issues/42258.
+  #[test]
+  fn filter_bbox_outside_int_rect() {
+    let svg = r#"<svg filter="url(#f)"><filter id="f" x="2em"><feFlood/></filter><path d="M0 0H1e8V1"/></svg>"#;
+    let tree = usvg::Tree::from_str(svg, &usvg::Options::default()).unwrap();
+    let mut pixmap = tiny_skia::Pixmap::new(1, 1).unwrap();
+
+    // Just make sure we don't panic.
+    crate::resvg::render(
+      &tree,
+      tiny_skia::Transform::identity(),
+      &mut pixmap.as_mut(),
+    );
   }
 }

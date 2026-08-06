@@ -36,7 +36,7 @@ pub mod style;
 /// Viewport dimensions and device-pixel-ratio resolution.
 pub mod viewport;
 
-/// Vendored resvg 0.47 (see `resvg/mod.rs` for provenance and stripped features).
+/// Vendored resvg 0.48 (see `resvg/mod.rs` for provenance and stripped features).
 /// `dead_code` stays allowed until the unused upstream API surface is pruned.
 #[cfg(feature = "svg")]
 #[allow(
