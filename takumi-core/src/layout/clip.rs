@@ -46,14 +46,15 @@ pub fn clip_shape_commands(
           bottom: Color::transparent(),
           left: Color::transparent(),
         },
+        // A corner's horizontal radius resolves against the box width and its
+        // vertical one against the height, like `border-radius`.
         radius: shape
           .border_radius
           .map(|radius| {
-            Sides(
-              radius
-                .0
-                .map(|corner| SpacePair::from_single(corner.to_px(&context.sizing, size.width))),
-            )
+            Sides(radius.0.map(|corner| SpacePair {
+              x: corner.to_px(&context.sizing, size.width),
+              y: corner.to_px(&context.sizing, size.height),
+            }))
           })
           .unwrap_or_default(),
         image_rendering: ImageScalingAlgorithm::Auto,
