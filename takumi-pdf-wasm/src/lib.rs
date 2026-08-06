@@ -32,6 +32,36 @@ fn map_error(error: impl core::fmt::Debug) -> js_sys::Error {
   js_sys::Error::new(&format!("{error:?}"))
 }
 
+#[wasm_bindgen(typescript_custom_section)]
+const TS_APPEND_CONTENT: &'static str = include_str!("./dts-header.d.ts");
+
+#[wasm_bindgen]
+extern "C" {
+  /// JavaScript object representing a layout node.
+  #[wasm_bindgen(typescript_type = "Node")]
+  pub type NodeType;
+
+  /// JavaScript type for font input (details object or raw buffer).
+  #[wasm_bindgen(typescript_type = "Font")]
+  pub type FontType;
+
+  /// JavaScript type for the families produced by `registerFont`.
+  #[wasm_bindgen(typescript_type = "RegisteredFamily[]")]
+  pub type RegisteredFamiliesType;
+
+  /// JavaScript object representing render options.
+  #[wasm_bindgen(typescript_type = "PdfRenderOptions")]
+  pub type PdfRenderOptionsType;
+
+  /// JavaScript object representing measure options.
+  #[wasm_bindgen(typescript_type = "MeasureOptions")]
+  pub type MeasureOptionsType;
+
+  /// JavaScript object representing a measured size.
+  #[wasm_bindgen(typescript_type = "MeasuredSize")]
+  pub type MeasuredSizeType;
+}
+
 /// Details for loading a custom font.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -432,8 +462,8 @@ impl PdfRenderer {
   /// Registers a font (raw bytes or a details object), returning the families
   /// it produced.
   #[wasm_bindgen(js_name = registerFont)]
-  pub fn register_font(&self, font: JsValue) -> Result<JsValue, js_sys::Error> {
-    let font: Font = from_value(font).map_err(map_error)?;
+  pub fn register_font(&self, font: FontType) -> Result<RegisteredFamiliesType, js_sys::Error> {
+    let font: Font = from_value(font.into()).map_err(map_error)?;
     let mut state = self
       .state
       .try_write()
@@ -459,18 +489,18 @@ impl PdfRenderer {
       }
     };
 
-    to_value(&registered).map_err(map_error)
+    Ok(to_value(&registered).map_err(map_error)?.unchecked_into())
   }
 
   /// Renders a node tree to PDF bytes. Without options the output is paged A4;
   /// `viewport` renders a single fixed page instead.
-  #[wasm_bindgen]
+  #[wasm_bindgen(unchecked_return_type = "Uint8Array<ArrayBuffer>")]
   pub fn render(
     &self,
-    node: JsValue,
-    options: Option<js_sys::Object>,
+    node: NodeType,
+    options: Option<PdfRenderOptionsType>,
   ) -> Result<Vec<u8>, js_sys::Error> {
-    let node: Node = from_value(node).map_err(map_error)?;
+    let node: Node = from_value(node.into()).map_err(map_error)?;
     let options: PdfRenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
@@ -514,10 +544,10 @@ impl PdfRenderer {
   #[wasm_bindgen]
   pub fn measure(
     &self,
-    node: JsValue,
-    options: Option<js_sys::Object>,
-  ) -> Result<JsValue, js_sys::Error> {
-    let node: Node = from_value(node).map_err(map_error)?;
+    node: NodeType,
+    options: Option<MeasureOptionsType>,
+  ) -> Result<MeasuredSizeType, js_sys::Error> {
+    let node: Node = from_value(node.into()).map_err(map_error)?;
     let options: PdfRenderOptions = options
       .map(|options| from_value(options.into()).map_err(map_error))
       .transpose()?
@@ -546,11 +576,14 @@ impl PdfRenderer {
     })
     .map_err(map_error)?;
 
-    to_value(&MeasuredSizeOutput {
-      width: measured.width,
-      height: measured.height,
-    })
-    .map_err(map_error)
+    Ok(
+      to_value(&MeasuredSizeOutput {
+        width: measured.width,
+        height: measured.height,
+      })
+      .map_err(map_error)?
+      .unchecked_into(),
+    )
   }
 }
 
