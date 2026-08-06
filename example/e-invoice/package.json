@@ -1,0 +1,16 @@
+{
+  "name": "example-e-invoice",
+  "private": true,
+  "type": "module",
+  "module": "index.tsx",
+  "dependencies": {
+    "@takumi-rs/helpers": "workspace:*",
+    "react": "catalog:",
+    "takumi-pdf": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "typescript": "catalog:"
+  }
+}

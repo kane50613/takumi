@@ -8,6 +8,7 @@ use takumi_core::{
   },
 };
 
+use crate::krilla::image::Image as KrillaImage;
 use crate::krilla::{
   color::rgb,
   geom::{Path as KrillaPath, Size as KrillaSize, Transform},
@@ -19,7 +20,7 @@ use crate::krilla::{
   },
   surface::Surface,
 };
-use crate::{KrillaImage, krilla_path};
+use crate::paint::{krilla_blend, krilla_path};
 
 /// Draws `ops` onto `surface` in the current coordinate space and resets the
 /// fill/stroke state afterwards.
@@ -40,7 +41,7 @@ fn draw_ops(surface: &mut Surface, ops: Vec<SvgOp>) {
         // The matching `Pop` still comes; keep the layer stack balanced.
         None => surface.push_transform(&Transform::identity()),
       },
-      SvgOp::PushBlend(blend) => surface.push_blend_mode(crate::krilla_blend(blend)),
+      SvgOp::PushBlend(blend) => surface.push_blend_mode(krilla_blend(blend)),
       SvgOp::PushOpacity(opacity) => {
         surface.push_opacity(normalized(opacity));
       }
