@@ -1109,6 +1109,8 @@ fn report_links_outline() {
     "https://example.com/numbers",
     "https://example.com/data",
     "/Dest",
+    // A percent-encoded fragment resolves to the id it decodes to.
+    "(#raw%20data)",
     "/Outlines",
   ] {
     assert!(haystack.contains(needle), "missing {needle} in pdf");
