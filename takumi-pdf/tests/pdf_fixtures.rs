@@ -687,6 +687,85 @@ fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     .position(|window| window == needle)
 }
 
+/// CSS `outline`: a ring outside the border box, offset outward, following the
+/// border radius, with no effect on layout.
+#[test]
+fn outlines() {
+  let pdf = run_pdf_fixture("outlines", |fonts| {
+    let cell = |style: &str| {
+      format!(
+        r##"<div style="width: 90px; height: 90px; margin: 24px; background-color: #e0e7ff; border-radius: 10px; {style}"></div>"##
+      )
+    };
+    let source = format!(
+      r##"<div style="display: flex; width: 100%; height: 100%; padding: 8px; background-color: #ffffff;">
+        {}{}{}
+      </div>"##,
+      cell("outline: 4px solid #4338ca;"),
+      cell("outline: 4px solid #4338ca; outline-offset: 6px;"),
+      // A negative offset pulls the ring inside the border box.
+      cell("outline: 3px dashed #b91c1c; outline-offset: -12px;"),
+    );
+    let node = from_html(&source, FromHtmlOptions::default()).expect("parse outline fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((420, 150)))
+      .fonts(fonts)
+      .build()
+  });
+  // The solid indigo rings and the dashed red one fill with their outline
+  // colors, inside the deflated content streams.
+  let content: Vec<Vec<u8>> = content_lines(&pdf).collect();
+
+  for needle in [
+    &b"0.2627451 0.21960784 0.7921569 rg"[..],
+    &b"0.7254902 0.10980392 0.10980392 rg"[..],
+  ] {
+    assert!(
+      content.iter().any(|line| find(line, needle).is_some()),
+      "expected an outline color fill"
+    );
+  }
+}
+
+/// `background-origin` moves the positioning area, `background-clip` shrinks
+/// the painted region, `border-area` paints over the borders, and
+/// `background-blend-mode` blends a layer into the one below.
+#[test]
+fn background_boxes() {
+  let pdf = run_pdf_fixture("background-boxes", |fonts| {
+    let cell = |style: &str| {
+      format!(
+        r##"<div style="width: 100px; height: 100px; padding: 14px; border: 8px solid rgba(17, 24, 39, 0.35); background-color: #fef3c7; background-image: linear-gradient(135deg, #ff5f6d, #3a1c71); background-size: 40px 40px; background-repeat: no-repeat; {style}"></div>"##
+      )
+    };
+    let source = format!(
+      r##"<div style="display: flex; width: 100%; height: 100%; padding: 10px; column-gap: 10px; background-color: #ffffff;">
+        {}{}{}{}{}
+      </div>"##,
+      cell("background-origin: border-box;"),
+      cell("background-origin: content-box;"),
+      cell("background-clip: content-box;"),
+      cell("background-clip: border-area;"),
+      cell("background-blend-mode: multiply;"),
+    );
+    let node = from_html(&source, FromHtmlOptions::default()).expect("parse background boxes");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((600, 130)))
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = String::from_utf8_lossy(&pdf);
+
+  assert!(
+    haystack.contains("/Multiply"),
+    "expected the blended layer to set its blend mode"
+  );
+}
+
 /// `background-size`, `-position` and the four `-repeat` styles: a sized tile
 /// placed once, tiled, spaced out, and rounded to fit whole tiles.
 #[test]

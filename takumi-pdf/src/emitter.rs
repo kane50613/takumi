@@ -27,7 +27,7 @@ use takumi_core::{
   layout::{
     border::{BorderProperties, BorderSide},
     clip::clip_shape_commands,
-    decoration::ClipBox,
+    decoration::{ClipBox, outline_geometry},
     inline::{BuiltInlineLayout, InlineRunLayout, ShapedRun, run_decorations},
     node::NodeKind,
     tree::{LayoutResults, RenderNode},
@@ -36,8 +36,9 @@ use takumi_core::{
   scene::{NodePaint, PaintItemKind, StackingContextNode},
   shadow::SizedShadow,
   style::{
-    Affine, BackgroundImage, BlendMode, BoxDecorationBreak, BoxShadow, BreakBetween, BreakInside,
-    Color, FillRule as CoreFillRule, Isolation, ResolvedGradientStop,
+    Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BlendMode, BoxDecorationBreak,
+    BoxShadow, BreakBetween, BreakInside, Color, FillRule as CoreFillRule, Isolation, Length,
+    ResolvedGradientStop,
   },
 };
 
@@ -269,10 +270,21 @@ impl Emitter<'_> {
     };
 
     self.shadows(&outer, &border, deco_layout, (x, deco_y), surface, false);
-    self.emit_background(node, &border, deco_size, x, deco_y, surface);
-    self.emit_background_layers(node, &border, deco_size, x, deco_y, surface);
+    // `background-clip: border-area` paints the fills over the borders,
+    // clipped to the border ring; every other clip paints them underneath.
+    let border_area = style.background_clip == BackgroundClip::BorderArea;
+
+    if !border_area {
+      self.emit_background(node, &border, deco_layout, x, deco_y, surface);
+      self.emit_background_layers(node, &border, deco_layout, x, deco_y, surface);
+    }
     self.shadows(&inset, &border, deco_layout, (x, deco_y), surface, true);
     self.emit_borders(&border, x, deco_y, deco_size, surface);
+    if border_area {
+      self.emit_background(node, &border, deco_layout, x, deco_y, surface);
+      self.emit_background_layers(node, &border, deco_layout, x, deco_y, surface);
+    }
+    self.emit_outline(node, deco_size, x, deco_y, surface);
 
     // Children and own content clip to the (rounded) padding box when overflow
     // is hidden; without radius a per-axis overflow leaves the visible axis
@@ -323,7 +335,7 @@ impl Emitter<'_> {
     &self,
     node: &RenderNode,
     border: &BorderProperties,
-    size: Size<f32>,
+    layout: Layout,
     x: f32,
     y: f32,
     surface: &mut Surface,
@@ -336,16 +348,20 @@ impl Emitter<'_> {
     if color.0[3] == 0 {
       return;
     }
-    let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
-
-    border.append_mask_commands(&mut commands, size, CorePoint::ZERO);
+    let Some((commands, rule)) = background_clip_commands(&node.context.style, border, layout)
+    else {
+      return;
+    };
     let Some(path) = krilla_path(&commands, x, y) else {
       return;
     };
 
     let artifact = self.start_artifact(surface);
 
-    surface.set_fill(Some(fill_from_rgba(self.filtered(color), 1.0)));
+    surface.set_fill(Some(Fill {
+      rule,
+      ..fill_from_rgba(self.filtered(color), 1.0)
+    }));
     surface.draw_path(&path);
     if artifact {
       surface.end_tagged();
@@ -353,19 +369,21 @@ impl Emitter<'_> {
   }
 
   /// Paints `background-image` gradient layers, bottom layer first, clipped to
-  /// the rounded border box.
-  // ponytail: url() layers are not resolved yet, and the positioning area is
-  // the border box regardless of `background-origin`.
+  /// the `background-clip` box. `background-origin` sets the positioning area
+  /// the size and position resolve against; a repeating layer still tiles
+  /// across the whole clip region.
+  // ponytail: url() layers are not resolved yet.
   fn emit_background_layers(
     &self,
     node: &RenderNode,
     border: &BorderProperties,
-    size: Size<f32>,
+    layout: Layout,
     x: f32,
     y: f32,
     surface: &mut Surface,
   ) {
     let style = &node.context.style;
+    let size = layout.size;
     let Some(images) = style.background_image.as_deref() else {
       return;
     };
@@ -377,35 +395,46 @@ impl Emitter<'_> {
     }) {
       return;
     }
-    let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
-
-    border.append_mask_commands(&mut commands, size, CorePoint::ZERO);
+    let Some((commands, rule)) = background_clip_commands(style, border, layout) else {
+      return;
+    };
     let Some(clip) = krilla_path(&commands, x, y) else {
       return;
     };
+    let (origin_offset, area) = background_origin_area(style.background_origin, layout);
     let artifact = self.start_artifact(surface);
 
-    surface.push_clip_path(&clip, &FillRule::NonZero);
+    surface.push_clip_path(&clip, &rule);
     for (index, image) in images.iter().enumerate().rev() {
       let placement = place(
-        size,
+        area,
         cycled(&style.background_size, index),
         cycled(&style.background_position, index),
         cycled(&style.background_repeat, index),
         &node.context,
       );
+      let blend = cycled(&style.background_blend_mode, index);
+      let blended = blend != BlendMode::Normal;
+
+      if blended {
+        surface.push_blend_mode(krilla_blend(blend));
+      }
+      let at = (x + origin_offset.x, y + origin_offset.y);
 
       if placement.tiles {
-        self.tiled_layer(image, node, &placement, size, (x, y), surface);
+        self.tiled_layer(image, node, &placement, size, (x, y), at, surface);
       } else {
         self.background_layer(
           image,
           node,
           placement.tile,
-          x + placement.origin.0,
-          y + placement.origin.1,
+          at.0 + placement.origin.0,
+          at.1 + placement.origin.1,
           surface,
         );
+      }
+      if blended {
+        surface.pop();
       }
     }
     surface.pop();
@@ -415,17 +444,19 @@ impl Emitter<'_> {
   }
 
   /// Draws one tile into a pattern and fills the layer's area with it, so a
-  /// repeated layer costs one shading instead of one per tile.
+  /// repeated layer costs one shading instead of one per tile. The filled rect
+  /// covers the paint box at `rect_at`; the first tile hangs off `anchor`,
+  /// which `background-origin` may inset from the paint box.
   fn tiled_layer(
     &self,
     image: &BackgroundImage,
     node: &RenderNode,
     placement: &Placement,
     size: Size<f32>,
-    at: (f32, f32),
+    rect_at: (f32, f32),
+    anchor: (f32, f32),
     surface: &mut Surface,
   ) {
-    let (x, y) = at;
     let stream = {
       let mut builder = surface.stream_builder();
       let mut tile = builder.surface();
@@ -434,7 +465,8 @@ impl Emitter<'_> {
       tile.finish();
       builder.finish()
     };
-    let Some(path) = KrillaRect::from_xywh(x, y, size.width, size.height).and_then(rect_path)
+    let Some(path) =
+      KrillaRect::from_xywh(rect_at.0, rect_at.1, size.width, size.height).and_then(rect_path)
     else {
       return;
     };
@@ -442,7 +474,10 @@ impl Emitter<'_> {
     surface.set_fill(Some(Fill {
       paint: Pattern {
         stream,
-        transform: Transform::from_translate(x + placement.origin.0, y + placement.origin.1),
+        transform: Transform::from_translate(
+          anchor.0 + placement.origin.0,
+          anchor.1 + placement.origin.1,
+        ),
         width: placement.step.0,
         height: placement.step.1,
       }
@@ -697,7 +732,7 @@ impl Emitter<'_> {
         );
 
         if placement.tiles {
-          self.tiled_layer(image, node, &placement, size, at, &mut content);
+          self.tiled_layer(image, node, &placement, size, at, at, &mut content);
         } else {
           self.background_layer(
             image,
@@ -755,6 +790,40 @@ impl Emitter<'_> {
   /// trapezoids clipped to the ring otherwise.
   // ponytail: dashed/dotted/double render as solid; port the stroke-based
   // patterns from takumi-svg when someone needs them.
+  /// Draws the CSS `outline` as a ring around the border box, expanded outward
+  /// by `outline-offset + outline-width`. It does not affect layout and reuses
+  /// the border machinery, like the other backends.
+  fn emit_outline(
+    &self,
+    node: &RenderNode,
+    size: Size<f32>,
+    x: f32,
+    y: f32,
+    surface: &mut Surface,
+  ) {
+    let style = &node.context.style;
+
+    if !style.outline_style.is_rendered() {
+      return;
+    }
+    let width = Length::from(style.outline_width)
+      .to_px(&node.context.sizing, size.width)
+      .max(0.0);
+
+    if width <= 0.0 || style.outline_color.resolve(node.context.current_color).0[3] == 0 {
+      return;
+    }
+    let outline = outline_geometry(&node.context, size);
+
+    self.emit_borders(
+      &outline.border,
+      x - outline.grow,
+      y - outline.grow,
+      outline.size,
+      surface,
+    );
+  }
+
   fn emit_borders(
     &self,
     border: &BorderProperties,
@@ -1205,6 +1274,74 @@ impl Emitter<'_> {
 
 /// Whether the node draws own content (text or an image), i.e. whether a
 /// tagged content sequence around it would be non-empty.
+/// The rounded region a background paints into, per `background-clip`, as path
+/// commands in box-local coordinates with the fill rule to clip by. `None`
+/// means the box paints no background at all: `text` moves the fill onto the
+/// glyphs.
+fn background_clip_commands(
+  style: &takumi_core::style::ComputedStyle,
+  border: &BorderProperties,
+  layout: Layout,
+) -> Option<(Vec<takumi_core::geometry::PathCommand>, FillRule)> {
+  let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
+
+  match style.background_clip {
+    BackgroundClip::BorderBox => {
+      border.append_mask_commands(&mut commands, layout.size, CorePoint::ZERO);
+      Some((commands, FillRule::NonZero))
+    }
+    BackgroundClip::PaddingBox => {
+      let clip = ClipBox::padding_box(*border, layout);
+
+      clip
+        .border
+        .append_mask_commands(&mut commands, clip.size, clip.offset);
+      Some((commands, FillRule::NonZero))
+    }
+    BackgroundClip::ContentBox => {
+      let clip = ClipBox::content_box(*border, layout);
+
+      clip
+        .border
+        .append_mask_commands(&mut commands, clip.size, clip.offset);
+      Some((commands, FillRule::NonZero))
+    }
+    BackgroundClip::BorderArea => {
+      border.append_border_ring_commands(&mut commands, layout.size);
+      Some((commands, FillRule::EvenOdd))
+    }
+    // `text` moves the fill onto the glyphs; the box itself paints nothing.
+    _ => None,
+  }
+}
+
+/// The positioning area `background-size` and `-position` resolve against,
+/// per `background-origin`: an offset into the border box and its size.
+fn background_origin_area(origin: BackgroundOrigin, layout: Layout) -> (CorePoint<f32>, Size<f32>) {
+  let inset = |left: f32, right: f32, top: f32, bottom: f32| {
+    (
+      CorePoint { x: left, y: top },
+      Size {
+        width: (layout.size.width - left - right).max(0.0),
+        height: (layout.size.height - top - bottom).max(0.0),
+      },
+    )
+  };
+  let border = layout.border;
+  let padding = layout.padding;
+
+  match origin {
+    BackgroundOrigin::PaddingBox => inset(border.left, border.right, border.top, border.bottom),
+    BackgroundOrigin::ContentBox => inset(
+      border.left + padding.left,
+      border.right + padding.right,
+      border.top + padding.top,
+      border.bottom + padding.bottom,
+    ),
+    _ => (CorePoint::ZERO, layout.size),
+  }
+}
+
 fn has_own_content(node: &RenderNode) -> bool {
   if node.should_create_inline_layout() {
     return true;
