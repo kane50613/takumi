@@ -23,8 +23,8 @@
 //! Coverage: backgrounds (color and gradient layers, with `background-size`,
 //! `-position` and `-repeat`), borders and radius, images
 //! (`object-fit`/`object-position`), text with decorations, opacity, blend
-//! modes, overflow clipping, affine transforms, pagination. Not yet:
-//! box-shadow, filters, `clip-path`, masks, url() background layers.
+//! modes, overflow clipping, `clip-path`, affine transforms, pagination. Not
+//! yet: box-shadow, filters, masks, url() background layers.
 
 use std::{cell::RefCell, rc::Rc};
 

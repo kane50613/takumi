@@ -25,6 +25,7 @@ use takumi_core::{
   geometry::{ComputedLayout as Layout, Point as CorePoint, Size},
   layout::{
     border::{BorderProperties, BorderSide},
+    clip::clip_shape_commands,
     decoration::ClipBox,
     inline::{BuiltInlineLayout, InlineRunLayout, ShapedRun, run_decorations},
     node::NodeKind,
@@ -33,7 +34,8 @@ use takumi_core::{
   paint::{ConicGradientTile, LinearGradientTile, RadialGradientTile, resolve_stops_along_axis},
   scene::{NodePaint, PaintItemKind, StackingContextNode},
   style::{
-    Affine, BackgroundImage, BlendMode, BoxDecorationBreak, BreakBetween, BreakInside, Isolation,
+    Affine, BackgroundImage, BlendMode, BoxDecorationBreak, BreakBetween, BreakInside,
+    FillRule as CoreFillRule, Isolation,
   },
 };
 
@@ -215,6 +217,21 @@ impl Emitter<'_> {
     };
     let border = BorderProperties::from_context(&node.context, deco_size, layout.border);
 
+    // `clip-path` clips the element itself, decorations included, so it goes on
+    // before anything is painted.
+    if let Some(shape) = &style.clip_path {
+      let commands = clip_shape_commands(shape, &node.context, layout.size);
+
+      if let Some(path) = krilla_path(&commands, x, y) {
+        let rule = match shape.fill_rule().unwrap_or(style.clip_rule) {
+          CoreFillRule::EvenOdd => FillRule::EvenOdd,
+          _ => FillRule::NonZero,
+        };
+
+        surface.push_clip_path(&path, &rule);
+        pushed += 1;
+      }
+    }
     self.emit_background(node, &border, deco_size, x, deco_y, surface);
     self.emit_background_layers(node, &border, deco_size, x, deco_y, surface);
     self.emit_borders(&border, x, deco_y, deco_size, surface);

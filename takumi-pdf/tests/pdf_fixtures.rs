@@ -5,7 +5,9 @@
 //! committed; CI's dirty-tree check catches drift, so a changed .pdf in `git
 //! diff` is a real rendering change to review.
 
-use std::{collections::HashMap, fs, path::Path, sync::Arc};
+use std::{collections::HashMap, fs, io::Read, path::Path, sync::Arc};
+
+use flate2::read::ZlibDecoder;
 
 use takumi_core::{
   Fonts,
@@ -412,6 +414,74 @@ fn gradients() {
       .fonts(fonts)
       .build()
   });
+}
+
+/// `clip-path` basic shapes clip the element and its decorations: an inset with
+/// a radius, an ellipse, a polygon, and a `path()`.
+#[test]
+fn clip_path_shapes() {
+  let pdf = run_pdf_fixture("clip-path-shapes", |fonts| {
+    let cell = |clip: &str| {
+      format!(
+        r##"<div style="width: 110px; height: 110px; background-image: linear-gradient(135deg, #ff5f6d, #3a1c71); border: 4px solid #111827; clip-path: {clip};"></div>"##
+      )
+    };
+    let source = format!(
+      r##"<div style="display: flex; width: 100%; height: 100%; padding: 16px; column-gap: 16px; background-color: #ffffff;">
+        {}{}{}{}
+      </div>"##,
+      cell("inset(10px 12px round 16px)"),
+      cell("ellipse(45px 30px at 55px 55px)"),
+      cell("polygon(50% 0%, 100% 100%, 0% 100%)"),
+      cell("path('M 10 10 H 100 V 100 H 10 Z')"),
+    );
+    let node = from_html(&source, FromHtmlOptions::default()).expect("parse clip path fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((540, 150)))
+      .fonts(fonts)
+      .build()
+  });
+
+  // Four shape clips, plus the rounded-box clip each gradient layer pushes.
+  assert_eq!(
+    clip_operators(&pdf),
+    8,
+    "expected one clip per shape, before its decorations"
+  );
+}
+
+/// Counts clip operators across the page content streams, which are deflated.
+fn clip_operators(pdf: &[u8]) -> usize {
+  let mut clips = 0;
+  let mut rest = pdf;
+
+  while let Some(start) = find(rest, b"stream\n") {
+    let body = &rest[start + 7..];
+    let Some(end) = find(body, b"endstream") else {
+      break;
+    };
+    let mut decoded = Vec::new();
+
+    if ZlibDecoder::new(&body[..end])
+      .read_to_end(&mut decoded)
+      .is_ok()
+    {
+      clips += decoded
+        .split(|byte| *byte == b'\n')
+        .filter(|line| line.ends_with(b"W"))
+        .count();
+    }
+    rest = &body[end..];
+  }
+  clips
+}
+
+fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+  haystack
+    .windows(needle.len())
+    .position(|window| window == needle)
 }
 
 /// `background-size`, `-position` and the four `-repeat` styles: a sized tile

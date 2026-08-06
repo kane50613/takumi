@@ -67,4 +67,5 @@ workspace = true
 path = "../takumi-html"
 
 [dev-dependencies]
+flate2.workspace = true
 pretty_assertions.workspace = true
