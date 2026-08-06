@@ -259,6 +259,45 @@ fn image_object_fit() {
   });
 }
 
+/// An SVG logo (gradient circle + stroked check) embeds as vector paths and
+/// shading patterns, never as a rasterized image XObject.
+#[test]
+fn svg_vector_image() {
+  let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#ff0044"/><stop offset="1" stop-color="#0044ff"/>
+  </linearGradient></defs>
+  <circle cx="12" cy="12" r="10" fill="url(#g)"/>
+  <path d="M6 12 L11 17 L18 7" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>"##;
+  let pdf = run_pdf_fixture("svg-vector-image", |fonts| {
+    let logo = Node::image(ImageData {
+      src: ImageSourceInput::Buffer(svg.as_bytes().to_vec()),
+      width: Some(22.0),
+      height: Some(22.0),
+    });
+
+    PdfOptions::builder()
+      .node(
+        Node::container(vec![logo]).with_style(
+          Style::default()
+            .with(StyleDeclaration::display(Display::Flex))
+            .with(StyleDeclaration::padding_top(Px(8.0))),
+        ),
+      )
+      .viewport(Viewport::new((120, 60)))
+      .fonts(fonts)
+      .build()
+  });
+  let text = String::from_utf8_lossy(&pdf);
+
+  assert!(
+    !text.contains("/Subtype/Image"),
+    "svg image fell back to raster"
+  );
+  assert!(text.contains("/Shading"), "gradient lost its shading");
+}
+
 #[test]
 fn box_chrome() {
   run_pdf_fixture("box-chrome", |fonts| {

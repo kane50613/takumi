@@ -30,6 +30,7 @@ mod image;
 mod mask;
 mod path;
 mod render;
+pub mod vector;
 
 /// Renders a tree onto the pixmap.
 ///
