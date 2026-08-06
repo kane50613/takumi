@@ -5,6 +5,7 @@
   "icon": "FileText",
   "pages": [
     "index",
+    "--- Guides ---",
     "pagination",
     "headers-and-footers",
     "links-and-outline",
@@ -12,6 +13,13 @@
     "fonts-and-images",
     "pdf-a",
     "attachments",
+    "--- Use cases ---",
+    "invoices",
+    "reports",
+    "tickets",
+    "--- Migration ---",
+    "from-puppeteer",
+    "from-react-pdf",
     "comparison"
   ]
 }

@@ -1,0 +1,83 @@
+---
+title: Tickets & receipts
+description: One-page output at an exact paper size, or sized to its content.
+icon: Ticket
+---
+
+Some documents are one page by definition. A ticket, a shipping label, a certificate, a till receipt. `viewport` renders exactly one page and skips pagination entirely. See [Single-page viewport](/docs/pdf/single-page) for how the mode behaves.
+
+## Labels and tickets
+
+Give `viewport` the paper size in CSS px at 96 dpi. Percentage heights resolve against it, so a full-bleed background is `height: "100%"`:
+
+```tsx twoslash
+declare const qrSvg: Uint8Array;
+// ---cut---
+import { render } from "takumi-pdf";
+
+// 4in × 6in shipping label
+const pdf = await render(
+  <div tw="flex h-full w-full flex-col justify-between bg-white p-6">
+    <span tw="text-2xl font-semibold">ACME · Priority</span>
+    <img src="qr.svg" alt="Tracking code" tw="h-40 w-40 self-center" />
+    <span tw="text-xs text-gray-500">1Z 999 AA1 0123 4567</span>
+  </div>,
+  { viewport: { width: 384, height: 576 }, images: [{ src: "qr.svg", data: qrSvg }] },
+);
+```
+
+Generate the QR or barcode as SVG and pass its bytes through `images`. SVG sources embed as vector paths, so the code stays crisp at any zoom and any print resolution.
+
+Common sizes in CSS px:
+
+| Paper           | Width × height |
+| --------------- | -------------- |
+| A4 portrait     | 794 × 1123     |
+| A4 landscape    | 1123 × 794     |
+| A6 postcard     | 397 × 559      |
+| 4in × 6in label | 384 × 576      |
+| 80mm receipt    | 302 × auto     |
+
+## Receipts
+
+Omit `height` and the page grows to fit the content. A till receipt is one continuous strip, however many lines it has:
+
+```tsx twoslash
+import type { ReactNode } from "react";
+declare const receipt: ReactNode;
+// ---cut---
+import { render } from "takumi-pdf";
+
+const pdf = await render(receipt, { viewport: { width: 302 } }); // 80mm at 96 dpi
+```
+
+Percentage heights do not resolve in this mode. Nothing knows the final height until the layout finishes.
+
+## Certificates
+
+A certificate is a fixed page with artwork behind the text. Gradients, borders, radii, and transforms all draw as vectors:
+
+```tsx twoslash
+declare const recipient: string;
+// ---cut---
+import { render } from "takumi-pdf";
+
+const pdf = await render(
+  <div
+    tw="flex h-full w-full flex-col items-center justify-center"
+    style={{ backgroundImage: "linear-gradient(135deg, #eef2ff, #ffffff)" }}
+  >
+    <span tw="text-sm tracking-[0.3em] text-indigo-500">CERTIFICATE OF COMPLETION</span>
+    <span tw="mt-6 text-5xl">{recipient}</span>
+  </div>,
+  { viewport: { width: 1123, height: 794 } },
+);
+```
+
+Overflowing content is clipped, exactly like an image render. Size the text to the box, or measure it first.
+
+## What the mode gives up
+
+`viewport` rejects the paged options as type errors. Everything else carries over, including `pdfa` and `attachments`. See [Single-page viewport](/docs/pdf/single-page).
+
+Rendering the same component as a PNG for email or as a PDF for print is a matter of swapping the renderer. The tree, the CSS, and the Tailwind classes stay as they are.

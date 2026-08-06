@@ -1,15 +1,17 @@
 ---
 title: PDF/A
 description: Archival output that validators accept
+icon: Archive
 ---
 
 Render a PDF/A document with `pdfa`.
 
 ```tsx twoslash
 import type { ReactNode } from "react";
-import { render } from "takumi-pdf";
 declare const invoice: ReactNode;
 // ---cut---
+import { render } from "takumi-pdf";
+
 const pdf = await render(invoice, {
   pdfa: "3b",
 });
@@ -47,9 +49,10 @@ Set `tagged: "ua1"` to also validate against PDF/UA-1:
 
 ```tsx twoslash
 import type { ReactNode } from "react";
-import { render } from "takumi-pdf";
 declare const report: ReactNode;
 // ---cut---
+import { render } from "takumi-pdf";
+
 const pdf = await render(report, {
   pdfa: "2a",
   tagged: "ua1",

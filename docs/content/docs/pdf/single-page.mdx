@@ -1,13 +1,14 @@
 ---
 title: Single-page viewport
 description: Fixed one-page PDFs for certificates, cards, and receipts.
+icon: File
 ---
 
 `viewport` renders one fixed page instead of paged output. It behaves like an image render. Percentage heights resolve against the viewport. It clips overflow.
 
 ```tsx twoslash
 import { render } from "takumi-pdf";
-// ---cut---
+
 const pdf = await render(<div style={{ width: "100%", height: "100%" }}>Certificate</div>, {
   viewport: { width: 1123, height: 794 }, // A4 landscape in px
 });
@@ -19,9 +20,10 @@ Omit `height` to size the single page to its laid-out content. This works like a
 
 ```tsx twoslash
 import type { ReactNode } from "react";
-import { render } from "takumi-pdf";
 declare const receipt: ReactNode;
 // ---cut---
+import { render } from "takumi-pdf";
+
 const pdf = await render(receipt, { viewport: { width: 302 } }); // 80mm at 96 dpi
 ```
 

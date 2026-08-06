@@ -1,6 +1,7 @@
 ---
 title: Links, outline & metadata
 description: Clickable hyperlinks, bookmarks, and document properties.
+icon: Link
 ---
 
 ## Hyperlinks
@@ -11,11 +12,9 @@ Anchors with an `href` become clickable link annotations. They appear on every p
 import { render } from "takumi-pdf";
 
 const pdf = await render(
-  // ---cut---
   <p>
     Pay online at <a href="https://example.com/pay/1042">example.com/pay/1042</a>.
   </p>,
-  // ---cut-after---
 );
 ```
 
@@ -27,12 +26,10 @@ Inline anchors annotate each text run. A link that wraps across lines stays clic
 import { render } from "takumi-pdf";
 
 const pdf = await render(
-  // ---cut---
   <div>
     <a href="#appendix">Jump to the appendix</a>
     <h1 id="appendix">Appendix</h1>
   </div>,
-  // ---cut-after---
 );
 ```
 
@@ -44,9 +41,10 @@ Set `outline: true` to build PDF bookmarks from `h1`–`h6` headings. Deeper hea
 
 ```tsx twoslash
 import type { ReactNode } from "react";
-import { render } from "takumi-pdf";
 declare const report: ReactNode;
 // ---cut---
+import { render } from "takumi-pdf";
+
 const pdf = await render(report, { outline: true });
 ```
 
@@ -58,9 +56,10 @@ Clicking a bookmark jumps to the page and position of its heading.
 
 ```tsx twoslash
 import type { ReactNode } from "react";
-import { render } from "takumi-pdf";
 declare const report: ReactNode;
 // ---cut---
+import { render } from "takumi-pdf";
+
 const pdf = await render(report, {
   lang: "en",
   metadata: {

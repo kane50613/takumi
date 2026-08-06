@@ -1,0 +1,114 @@
+---
+title: From react-pdf
+description: Trade a private component set for HTML, CSS, and Tailwind.
+icon: Atom
+---
+
+`@react-pdf/renderer` gives React a private set of document primitives: `<Document>`, `<Page>`, `<View>`, `<Text>`, and a `StyleSheet` that accepts part of CSS. `takumi-pdf` renders ordinary markup instead. A component built for an OG image renders to PDF unchanged.
+
+## Before and after
+
+```tsx
+// @react-pdf/renderer
+import { Document, Page, View, Text, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
+
+const styles = StyleSheet.create({
+  page: { padding: 48, fontFamily: "Inter" },
+  row: { flexDirection: "row", justifyContent: "space-between" },
+  label: { fontSize: 10, color: "#6b7280" },
+});
+
+const pdf = await renderToBuffer(
+  <Document>
+    <Page size="A4" style={styles.page}>
+      <View style={styles.row}>
+        <Text style={styles.label}>Invoice</Text>
+        <Text style={styles.label}>INV-0042</Text>
+      </View>
+    </Page>
+  </Document>,
+);
+```
+
+```tsx twoslash
+// takumi-pdf
+import { googleFonts } from "@takumi-rs/helpers";
+import { render } from "takumi-pdf";
+
+const pdf = await render(
+  <div tw="flex justify-between text-[10px] text-gray-500">
+    <span>Invoice</span>
+    <span>INV-0042</span>
+  </div>,
+  { size: "a4", margin: 48, fonts: await googleFonts(["Inter"]) },
+);
+```
+
+## Component map
+
+| `@react-pdf/renderer`                   | `takumi-pdf`                          |
+| --------------------------------------- | ------------------------------------- |
+| `<Document>`                            | none: `render()` takes the tree       |
+| `<Page size="A4">`                      | the `size` option                     |
+| `<View>`                                | `<div>`                               |
+| `<Text>`                                | `<span>`, `<p>`, or bare text         |
+| `<Image src>`                           | `<img src>` plus the `images` option  |
+| `<Link src>`                            | `<a href>`                            |
+| `<Svg>` primitives                      | `<svg>`, or an SVG through `images`   |
+| `StyleSheet.create`                     | `style` objects or `tw` classes       |
+| `Font.register`                         | the `fonts` option                    |
+| `renderToBuffer`                        | `render()` returns a `Uint8Array`     |
+| `renderToStream`, `renderToFile`        | write the returned bytes yourself     |
+| a `fixed` header or footer `<View>`     | the `header` and `footer` options     |
+| `render={({ pageNumber, totalPages })}` | `pageNumber` and `totalPages` classes |
+| the `break` prop                        | `break-before: page`                  |
+| `wrap={false}`                          | `break-inside: avoid`                 |
+| `orphans`, `widows`, `minPresenceAhead` | not supported                         |
+| `Font.registerHyphenationCallback`      | not supported                         |
+| `Font.registerEmojiSource`              | `extractEmojis`, then `prepareImages` |
+| `<PDFViewer>`, `<PDFDownloadLink>`      | not supported: render on the server   |
+
+## Three differences that bite
+
+**Units are CSS px.** react-pdf measures lengths in pt. Takumi measures them in CSS px at 96 dpi. Multiply every length by `96 / 72`, or about `1.333`. A4 is `595 × 842` pt and `794 × 1123` px. Unitless values carry over as they are: `flexGrow`, `opacity`, `fontWeight`.
+
+**Flex direction defaults to row.** react-pdf defaults every container to `column`, unlike the web. CSS defaults to `row`. A stacked layout needs `flex-direction: column` written out.
+
+**Layout is not implicit.** react-pdf's `<View>` is always a flex container. Plain HTML elements are not, so a `<div>` meant to lay out children needs `display: flex` or `display: grid`. The `tw` shorthand covers this: `tw="flex flex-col"`.
+
+## Page bands
+
+react-pdf repeats a band by marking a `<View>` as `fixed` inside the page. Takumi takes the band as a separate option, and it draws in the margin:
+
+```tsx twoslash
+import type { ReactNode } from "react";
+declare const report: ReactNode;
+// ---cut---
+import { render } from "takumi-pdf";
+
+const pdf = await render(report, {
+  footer: (
+    <div tw="flex w-full justify-center text-[10px] text-gray-500">
+      Page <span className="pageNumber" /> of <span className="totalPages" />
+    </div>
+  ),
+  margin: { top: 48, bottom: 72 },
+});
+```
+
+The counter is a class on an element, not a `render` callback. See [Headers & footers](/docs/pdf/headers-and-footers) for counter styles and for sizing the margin to the band.
+
+## What each side is better at
+
+`@react-pdf/renderer` keeps:
+
+- **A browser build.** `<PDFViewer>` and `<PDFDownloadLink>` render in the tab. Takumi renders on a server or a worker.
+- **Text refinements.** `orphans`, `widows`, and a hyphenation callback have no equivalent.
+- **The standard 14 fonts.** Skipping font embedding produces a smaller file.
+
+`takumi-pdf` brings:
+
+- **Real CSS and Tailwind**, on the same components an image render uses.
+- **Archival output.** PDF/A, PDF/UA, and attachments, validated during the render.
+- **Edge runtimes.** One wasm module, no Node built-ins.
+- **Lower latency.** See [Comparison](/docs/pdf/comparison) for the benchmark.

@@ -1,6 +1,7 @@
 ---
 title: Pagination
 description: Control where pages break with CSS.
+icon: Scissors
 ---
 
 Content lays out once at unbounded height. It then splits into pages. Unsplittable atoms never straddle a cut. These atoms include text lines, images, and transformed subtrees. A cut inside an atom moves to its top. This matches browser print fragmentation.
@@ -9,7 +10,7 @@ Content lays out once at unbounded height. It then splits into pages. Unsplittab
 
 ```tsx twoslash
 import { render } from "takumi-pdf";
-// ---cut---
+
 const pdf = await render(
   <article>
     <h1 style={{ breakBefore: "page" }}>Chapter two</h1>
@@ -35,16 +36,15 @@ A box that crosses a page break slices its border and background by default. Set
 import { render } from "takumi-pdf";
 
 const pdf = await render(
-  // ---cut---
   <section
     style={{
       border: "1px solid #d1d5db",
       borderRadius: 8,
+      // [!code highlight]
       boxDecorationBreak: "clone",
     }}
   >
     Long content that continues on the next page.
   </section>,
-  // ---cut-after---
 );
 ```
