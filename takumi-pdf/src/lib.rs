@@ -927,7 +927,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           &links,
           (y0, y0 + paint_height),
           (page.margin.left, content_top),
-          tag_collector.is_some(),
+          tag_collector.as_ref(),
         );
         pdf_page.finish();
       }
@@ -976,7 +976,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         &links,
         (0.0, content.height),
         (0.0, 0.0),
-        tag_collector.is_some(),
+        tag_collector.as_ref(),
       );
       page.finish();
       if (options.outline || options.standard == PdfStandard::Ua1) && !headings.is_empty() {
@@ -1057,6 +1057,8 @@ fn page_starts(atoms: &mut [Atom], forced: &mut Vec<f32>, total: f32, window: f3
 struct LinkTarget {
   uri: String,
   rect: KrillaRect,
+  /// Source-node path, so the annotation can join that node's `Link` element.
+  path: Vec<usize>,
 }
 
 /// A heading in content coordinates, for the outline.
@@ -1179,9 +1181,10 @@ fn collect_interactive_paint(
     Some(uri) => links.push(LinkTarget {
       uri: uri.to_string(),
       rect,
+      path: paint.path.clone(),
     }),
     None if node.should_create_inline_layout() => {
-      collect_inline_links(node, layout, paint.transform, links);
+      collect_inline_links(node, layout, paint.transform, &paint.path, links);
     }
     None => {}
   }
@@ -1220,6 +1223,7 @@ fn collect_inline_links(
   node: &RenderNode,
   layout: Layout,
   transform: Affine,
+  path: &[usize],
   links: &mut Vec<LinkTarget>,
 ) {
   let context = &node.context;
@@ -1270,6 +1274,7 @@ fn collect_inline_links(
     links.push(LinkTarget {
       uri: uri.to_string(),
       rect,
+      path: path.to_vec(),
     });
   }
 }
@@ -1282,7 +1287,7 @@ fn add_link_annotations(
   links: &[LinkTarget],
   window: (f32, f32),
   offset: (f32, f32),
-  tagged: bool,
+  tags: Option<&RefCell<TagCollector>>,
 ) {
   for link in links {
     let top = link.rect.top().max(window.0);
@@ -1300,17 +1305,24 @@ fn add_link_annotations(
       continue;
     };
 
-    // Tagged standards require alt text on link annotations; the target URI
-    // is the honest description available.
-    let alt = tagged.then(|| link.uri.clone());
-
-    page.add_annotation(Annotation::new_link(
+    let annotation = Annotation::new_link(
       LinkAnnotation::new(
         rect,
         Target::Action(Action::Link(LinkAction::new(link.uri.clone()))),
       ),
-      alt,
-    ));
+      // Tagged output requires alt text on link annotations; the target URI
+      // is the honest description available.
+      tags.is_some().then(|| link.uri.clone()),
+    );
+
+    match tags {
+      Some(tags) => {
+        let identifier = page.add_tagged_annotation(annotation);
+
+        tags.borrow_mut().record_annotation(&link.path, identifier);
+      }
+      None => page.add_annotation(annotation),
+    }
   }
 }
 

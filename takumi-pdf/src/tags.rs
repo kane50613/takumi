@@ -21,6 +21,9 @@ use crate::krilla::tagging::{Identifier, ListNumbering, Tag, TagGroup, TagKind, 
 #[derive(Default)]
 pub(crate) struct TagCollector {
   identifiers: HashMap<Vec<usize>, Vec<Identifier>>,
+  /// Link-annotation identifiers per source node, joined into that node's
+  /// `Link` element (or wrapped in one) so annotations sit inside the tree.
+  annotations: HashMap<Vec<usize>, Vec<Identifier>>,
 }
 
 impl TagCollector {
@@ -32,8 +35,20 @@ impl TagCollector {
       .push(identifier);
   }
 
+  pub(crate) fn record_annotation(&mut self, path: &[usize], identifier: Identifier) {
+    self
+      .annotations
+      .entry(path.to_vec())
+      .or_default()
+      .push(identifier);
+  }
+
   fn take(&mut self, path: &[usize]) -> Vec<Identifier> {
     self.identifiers.remove(path).unwrap_or_default()
+  }
+
+  fn take_annotations(&mut self, path: &[usize]) -> Vec<Identifier> {
+    self.annotations.remove(path).unwrap_or_default()
   }
 }
 
@@ -101,10 +116,12 @@ fn build_node(
   wrap: Wrap,
 ) {
   let identifiers = collector.take(path);
+  let annotations = collector.take_annotations(path);
 
   match role(node) {
     Some(kind) => {
       flush_paragraph(pending, parent, wrap);
+      let is_link = matches!(kind, TagKind::Link(_));
       let child_wrap = if matches!(kind, TagKind::LI(_)) {
         Wrap::ListBody
       } else {
@@ -135,6 +152,13 @@ fn build_node(
       for child in children {
         group.push(child);
       }
+      if is_link {
+        for annotation in annotations {
+          group.push(annotation);
+        }
+      } else {
+        push_link_wrappers(annotations, parent);
+      }
       parent.push(group);
     }
     None => {
@@ -146,11 +170,23 @@ fn build_node(
         flush_paragraph(pending, parent, wrap);
       }
       pending.extend(identifiers);
+      push_link_wrappers(annotations, parent);
       build_children(node, path, collector, parent, pending, wrap);
       if block {
         flush_paragraph(pending, parent, wrap);
       }
     }
+  }
+}
+
+/// Wraps loose link-annotation identifiers (inline anchors have no painted
+/// box of their own) in `Link` elements of their own.
+fn push_link_wrappers(annotations: Vec<Identifier>, parent: &mut Vec<TagGroup>) {
+  for annotation in annotations {
+    let mut group = TagGroup::new(Tag::Link);
+
+    group.push(annotation);
+    parent.push(group);
   }
 }
 
