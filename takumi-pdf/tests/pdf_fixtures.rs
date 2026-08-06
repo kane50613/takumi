@@ -775,12 +775,13 @@ fn text_shadow_and_stroke() {
       <div style="text-shadow: 3px 3px 0 #f59e0b;">Sharp shadow</div>
       <div style="text-shadow: 2px 2px 4px rgba(17, 24, 39, 0.5);">Blurred shadow</div>
       <div style="-webkit-text-stroke: 1px #b91c1c; color: #fef3c7;">Stroked text</div>
+      <div style="background-image: linear-gradient(90deg, #ff5f6d, #3a1c71); background-clip: text; color: transparent;">Gradient text</div>
     </div>"##;
     let node = from_html(source, FromHtmlOptions::default()).expect("parse text shadow fixture");
 
     PdfOptions::builder()
       .node(node)
-      .viewport(Viewport::new((360, 160)))
+      .viewport(Viewport::new((360, 200)))
       .fonts(fonts)
       .build()
   });
@@ -796,6 +797,11 @@ fn text_shadow_and_stroke() {
   assert!(
     contains(b"0.7254902 0.10980392 0.10980392 RG"),
     "expected the text stroke color"
+  );
+  // The clip-text line fills its glyphs with the gradient shading.
+  assert!(
+    contains(b"/Pattern cs"),
+    "expected a gradient fill on the clip-text glyphs"
   );
 }
 

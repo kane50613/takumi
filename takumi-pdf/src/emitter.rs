@@ -497,8 +497,6 @@ impl Emitter<'_> {
     surface: &mut Surface,
   ) {
     let (w, h) = (size.width, size.height);
-    let sizing = &node.context.sizing;
-    let current_color = node.context.current_color;
 
     // A url() layer draws as an image tile; the transform applies to pixels,
     // so it goes through the same rasterization as a filtered <img>.
@@ -521,6 +519,35 @@ impl Emitter<'_> {
       surface.pop();
       return;
     }
+    let Some(paint) = self.gradient_paint(image, node, size, x, y) else {
+      return;
+    };
+    let Some(path) = KrillaRect::from_xywh(x, y, w, h).and_then(rect_path) else {
+      return;
+    };
+
+    surface.set_fill(Some(Fill {
+      paint,
+      opacity: NormalizedF32::ONE,
+      rule: FillRule::NonZero,
+    }));
+    surface.draw_path(&path);
+  }
+
+  /// The krilla paint of one gradient layer, its geometry anchored at `(x, y)`
+  /// with `size` as the tile. `None` for layers that are not gradients.
+  fn gradient_paint(
+    &self,
+    image: &BackgroundImage,
+    node: &RenderNode,
+    size: Size<f32>,
+    x: f32,
+    y: f32,
+  ) -> Option<Paint> {
+    let (w, h) = (size.width, size.height);
+    let sizing = &node.context.sizing;
+    let current_color = node.context.current_color;
+
     let paint: Paint = match image {
       BackgroundImage::Linear(gradient) => {
         let tile = LinearGradientTile::new(gradient, w as u32, h as u32, sizing, current_color);
@@ -531,7 +558,7 @@ impl Emitter<'_> {
           current_color,
         ));
         if resolved.is_empty() {
-          return;
+          return None;
         }
         let max_extent = tile.axis_length / 2.0;
         let (cx, cy) = (x + w / 2.0, y + h / 2.0);
@@ -572,7 +599,7 @@ impl Emitter<'_> {
           current_color,
         ));
         if resolved.is_empty() {
-          return;
+          return None;
         }
         let radius_x = tile.inv_radius_x.max(1e-6).recip();
         let radius_y = tile.inv_radius_y.max(1e-6).recip();
@@ -605,7 +632,7 @@ impl Emitter<'_> {
         let tile = ConicGradientTile::new(gradient, w as u32, h as u32, sizing, current_color);
         let lut_len = tile.color_lut.len();
         if lut_len == 0 {
-          return;
+          return None;
         }
         const SWEEP_STOPS: usize = 64;
         let stops = (0..=SWEEP_STOPS)
@@ -640,19 +667,10 @@ impl Emitter<'_> {
         }
         .into()
       }
-      BackgroundImage::Url(_) | BackgroundImage::None => return,
+      BackgroundImage::Url(_) | BackgroundImage::None => return None,
     };
 
-    let Some(path) = KrillaRect::from_xywh(x, y, w, h).and_then(rect_path) else {
-      return;
-    };
-
-    surface.set_fill(Some(Fill {
-      paint,
-      opacity: NormalizedF32::ONE,
-      rule: FillRule::NonZero,
-    }));
-    surface.draw_path(&path);
+    Some(paint)
   }
 
   /// Paints one side of a box's shadows inside its own artifact sequence, so
@@ -1076,6 +1094,7 @@ impl Emitter<'_> {
       let font_style = SizedFontStyle::from_style(&node.context.style, &node.context);
 
       return self.draw_runs(
+        node,
         &prepared.runs,
         &prepared.built,
         layout,
@@ -1094,11 +1113,13 @@ impl Emitter<'_> {
       return Ok(());
     };
 
-    self.draw_runs(&runs, &built, layout, x, y, &font_style, surface)
+    self.draw_runs(node, &runs, &built, layout, x, y, &font_style, surface)
   }
 
+  #[allow(clippy::too_many_arguments)]
   fn draw_runs(
     &mut self,
+    node: &RenderNode,
     runs: &InlineRunLayout,
     built: &BuiltInlineLayout<'_>,
     layout: Layout,
@@ -1124,6 +1145,7 @@ impl Emitter<'_> {
       );
     }
     let stroke = font_style.stroke_width > 0.0 && font_style.text_stroke_color.0[3] != 0;
+    let text_fills = self.text_clip_fills(node, layout, x, y);
 
     for run in &runs.runs {
       let shaped = &run.glyph_run;
@@ -1168,6 +1190,19 @@ impl Emitter<'_> {
         })
         .collect();
 
+      // `background-clip: text` paints the background through the glyphs,
+      // under the text's own (usually transparent) fill.
+      for fill in &text_fills {
+        surface.set_fill(Some(fill.clone()));
+        surface.draw_glyphs(
+          Point::from_xy(x + offset.x, y + offset.y),
+          &glyphs,
+          font.clone(),
+          run_text,
+          shaped.font_size,
+          false,
+        );
+      }
       let color = shaped.brush.color;
 
       surface.set_fill(Some(fill_from_rgba(
@@ -1198,6 +1233,60 @@ impl Emitter<'_> {
       }
     }
     Ok(())
+  }
+
+  /// The fills a `background-clip: text` box paints through its glyphs:
+  /// the background color, then each gradient layer bottom-up, anchored to the
+  /// box the way the box background would be. Empty for every other clip.
+  fn text_clip_fills(&self, node: &RenderNode, layout: Layout, x: f32, y: f32) -> Vec<Fill> {
+    let style = &node.context.style;
+
+    if style.background_clip != BackgroundClip::Text {
+      return Vec::new();
+    }
+    let mut fills = Vec::new();
+    let color = style.background_color.resolve(node.context.current_color);
+
+    if color.0[3] != 0 {
+      fills.push(fill_from_rgba(self.filtered(color), 1.0));
+    }
+    let (origin_offset, area) = background_origin_area(style.background_origin, layout);
+
+    for (index, image) in style
+      .background_image
+      .as_deref()
+      .unwrap_or_default()
+      .iter()
+      .enumerate()
+      .rev()
+    {
+      let placement = place(
+        area,
+        cycled(&style.background_size, index),
+        cycled(&style.background_position, index),
+        cycled(&style.background_repeat, index),
+        layer_intrinsic(image, &node.context),
+        &node.context,
+      );
+      // ponytail: one tile per layer; a repeating gradient behind text would
+      // need a pattern paint here.
+      let Some(paint) = self.gradient_paint(
+        image,
+        node,
+        placement.tile,
+        x + origin_offset.x + placement.origin.0,
+        y + origin_offset.y + placement.origin.1,
+      ) else {
+        continue;
+      };
+
+      fills.push(Fill {
+        paint,
+        opacity: NormalizedF32::ONE,
+        rule: FillRule::NonZero,
+      });
+    }
+    fills
   }
 
   /// Draws every run's glyphs once, in `color` when set, with no decorations:
