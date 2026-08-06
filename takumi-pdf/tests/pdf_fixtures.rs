@@ -447,9 +447,10 @@ fn mask_image() {
     "expected one alpha mask per element"
   );
   // The filtered cell's opacity lands once: on its content, not also on the
-  // mask that covers it.
-  assert!(
-    haystack.contains("/ca 0.5"),
+  // mask that covers it, which would compound to a quarter.
+  assert_eq!(
+    haystack.matches("/ca 0.5").count(),
+    1,
     "expected the element filter to set half opacity exactly once"
   );
   // The tiled mask resolves through the same placement as a background layer.
