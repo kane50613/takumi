@@ -4,7 +4,8 @@
 //! Vector PDF output for takumi.
 //!
 //! [`render`] runs takumi-core layout, walks the same backend-agnostic
-//! stacking-context scene as `takumi-svg`, and emits a PDF through [`krilla`]:
+//! stacking-context scene as `takumi-svg`, and emits a PDF through a vendored
+//! krilla fork:
 //! background rects as filled paths and text as real glyph runs with embedded,
 //! subsetted fonts — selectable, searchable, copyable.
 //!
@@ -27,9 +28,33 @@
 
 use std::{collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
+#[cfg(all(feature = "svg", feature = "images"))]
+mod svg;
+
+#[allow(
+  dead_code,
+  missing_docs,
+  clippy::all,
+  clippy::redundant_closure_for_method_calls,
+  clippy::unwrap_used,
+  clippy::expect_used,
+  clippy::panic
+)]
+mod krilla;
+#[allow(
+  dead_code,
+  missing_docs,
+  clippy::all,
+  clippy::redundant_closure_for_method_calls,
+  clippy::unwrap_used,
+  clippy::expect_used,
+  clippy::panic
+)]
+mod subsetter;
+
 #[cfg(feature = "images")]
-use krilla::image::Image as KrillaImage;
-use krilla::{
+use crate::krilla::image::Image as KrillaImage;
+use crate::krilla::{
   Data, Document,
   action::{Action, LinkAction},
   annotation::{Annotation, LinkAnnotation, Target},
@@ -1091,7 +1116,7 @@ fn collect_inline_links(
 /// content window in content coordinates; `offset` maps content to page
 /// coordinates.
 fn add_link_annotations(
-  page: &mut krilla::page::Page,
+  page: &mut crate::krilla::page::Page,
   links: &[LinkTarget],
   window: (f32, f32),
   offset: (f32, f32),
@@ -1752,8 +1777,9 @@ impl Emitter<'_> {
 
   #[cfg(feature = "images")]
   /// Draws an image node into its content box, honoring `object-fit` and
-  /// `object-position`. The source rasterizes at its intrinsic size and embeds
-  /// once per distinct pixel data (krilla dedups by content hash).
+  /// `object-position`. SVG sources draw as vector ops; everything else
+  /// rasterizes at its intrinsic size and embeds once per distinct pixel data
+  /// (krilla dedups by content hash).
   // ponytail: pixels upload as un-premultiplied RGBA8, so JPEG bytes re-encode
   // as flate; add DCT passthrough when PDF size from photos matters.
   fn emit_image(
@@ -1794,8 +1820,30 @@ impl Emitter<'_> {
     } else {
       (iw * scale, ih * scale)
     };
-    let Some(krilla_image) = rasterized_image(&source, context, (dw, dh)) else {
-      return;
+    // SVG sources embed as vector ops; everything else rasterizes.
+    #[cfg(feature = "svg")]
+    let vector = if let ImageSource::Svg(svg) = &source {
+      let (svg_width, svg_height) = svg.dimensions();
+      if svg_width <= 0.0 || svg_height <= 0.0 {
+        return;
+      }
+      // Fallback rasters (filters, embedded bitmaps) keep the old 2x density.
+      let raster_scale = 2.0 * (dw / svg_width).max(dh / svg_height);
+
+      Some((svg.vector_ops(raster_scale), svg_width, svg_height))
+    } else {
+      None
+    };
+    #[cfg(not(feature = "svg"))]
+    let vector: Option<((), f32, f32)> = None;
+
+    let krilla_image = if vector.is_none() {
+      match rasterized_image(&source, context, (dw, dh)) {
+        Some(image) => Some(image),
+        None => return,
+      }
+    } else {
+      None
     };
     let position = context.style.object_position.0;
     let ix = bx + position_axis(position.x, context, w - dw);
@@ -1813,9 +1861,32 @@ impl Emitter<'_> {
 
       surface.push_clip_path(&path, &FillRule::NonZero);
     }
-    surface.push_transform(&Transform::from_translate(ix, iy));
-    surface.draw_image(krilla_image, size);
-    surface.pop();
+    #[cfg(feature = "svg")]
+    if let Some((ops, svg_width, svg_height)) = vector {
+      let canvas = KrillaRect::from_xywh(0.0, 0.0, svg_width, svg_height).and_then(rect_path);
+
+      surface.push_transform(&Transform::from_row(
+        dw / svg_width,
+        0.0,
+        0.0,
+        dh / svg_height,
+        ix,
+        iy,
+      ));
+      if let Some(canvas) = &canvas {
+        surface.push_clip_path(canvas, &FillRule::NonZero);
+      }
+      svg::draw_svg_ops(surface, ops);
+      if canvas.is_some() {
+        surface.pop();
+      }
+      surface.pop();
+    }
+    if let Some(krilla_image) = krilla_image {
+      surface.push_transform(&Transform::from_translate(ix, iy));
+      surface.draw_image(krilla_image, size);
+      surface.pop();
+    }
     if overflows {
       surface.pop();
     }
@@ -2377,7 +2448,7 @@ impl Glyph for PdfGlyph {
     0.0
   }
 
-  fn location(&self) -> Option<krilla::surface::Location> {
+  fn location(&self) -> Option<crate::krilla::surface::Location> {
     None
   }
 }

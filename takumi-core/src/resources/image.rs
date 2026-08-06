@@ -12,6 +12,11 @@ use crate::resvg::{
   apply_filters_to_layer, render as render_svg_tree,
   usvg::{Options, Transform, Tree, filters_from_markup},
 };
+#[cfg(feature = "svg")]
+pub use crate::svg_vector::{
+  SvgFill, SvgGradient, SvgGradientStop, SvgLineCap, SvgLineJoin, SvgOp, SvgPaint, SvgSpreadMethod,
+  SvgStrokeStyle,
+};
 use quick_cache::{
   Weighter,
   sync::{Cache, GuardResult},
@@ -81,6 +86,14 @@ impl SvgSource {
   /// The original SVG markup, for embedding directly in a vector backend.
   pub fn source(&self) -> &str {
     &self.source
+  }
+
+  /// Flattens the SVG into backend-agnostic vector drawing ops in SVG canvas
+  /// coordinates. `raster_scale` is the device-pixels-per-user-unit factor
+  /// used when a subtree (filters, embedded bitmaps) has to fall back to
+  /// rasterization.
+  pub fn vector_ops(&self, raster_scale: f32) -> Vec<SvgOp> {
+    crate::svg_vector::flatten(&self.tree, raster_scale)
   }
 }
 

@@ -199,8 +199,9 @@ opt-level = "s"
 opt-level = "s"
 
 # PDF serialization and font subsetting: runs once per document, never per
-# pixel. Only reachable from takumi-pdf-wasm (napi graph excludes krilla).
-[profile.release.package.krilla]
+# pixel. Only reachable from takumi-pdf-wasm (napi graph excludes takumi-pdf).
+# takumi-pdf includes the vendored krilla fork.
+[profile.release.package.takumi-pdf]
 opt-level = "s"
 [profile.release.package.subsetter]
 opt-level = "z"

@@ -40,7 +40,7 @@ const pdf = await render(doc, {
 });
 ```
 
-SVG image sources rasterize at 2× their placed size. Raster sources embed once for each distinct pixel data.
+SVG image sources embed as vector paths and gradients, so logos stay sharp at any zoom. Subtrees that vectors cannot express (filters, embedded bitmaps) rasterize at 2× their placed size. Raster sources embed once for each distinct pixel data.
 
 ## Runtimes
 
