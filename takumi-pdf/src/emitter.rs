@@ -19,7 +19,10 @@ use crate::krilla::{
 };
 #[cfg(feature = "images")]
 use takumi_core::{
-  context::RenderContext, layout::node::ImageData, resources::image::ImageSource, style::ObjectFit,
+  context::RenderContext,
+  layout::node::{ImageData, resolve_image},
+  resources::image::ImageSource,
+  style::ObjectFit,
 };
 use takumi_core::{
   font_style::SizedFontStyle,
@@ -387,12 +390,7 @@ impl Emitter<'_> {
     let Some(images) = style.background_image.as_deref() else {
       return;
     };
-    if !images.iter().any(|image| {
-      matches!(
-        image,
-        BackgroundImage::Linear(_) | BackgroundImage::Radial(_) | BackgroundImage::Conic(_)
-      )
-    }) {
+    if !images.iter().any(paintable_layer) {
       return;
     }
     let Some((commands, rule)) = background_clip_commands(style, border, layout) else {
@@ -411,6 +409,7 @@ impl Emitter<'_> {
         cycled(&style.background_size, index),
         cycled(&style.background_position, index),
         cycled(&style.background_repeat, index),
+        layer_intrinsic(image, &node.context),
         &node.context,
       );
       let blend = cycled(&style.background_blend_mode, index);
@@ -501,6 +500,27 @@ impl Emitter<'_> {
     let sizing = &node.context.sizing;
     let current_color = node.context.current_color;
 
+    // A url() layer draws as an image tile; the transform applies to pixels,
+    // so it goes through the same rasterization as a filtered <img>.
+    #[cfg(feature = "images")]
+    if let BackgroundImage::Url(url) = image {
+      let Ok(source) = resolve_image(url, &node.context) else {
+        return;
+      };
+      let Some(krilla_image) =
+        rasterized_image(&source, &node.context, (w, h), self.color_filter.as_deref())
+      else {
+        return;
+      };
+      let Some(target) = KrillaSize::from_wh(w, h) else {
+        return;
+      };
+
+      surface.push_transform(&Transform::from_translate(x, y));
+      surface.draw_image(krilla_image, target);
+      surface.pop();
+      return;
+    }
     let paint: Paint = match image {
       BackgroundImage::Linear(gradient) => {
         let tile = LinearGradientTile::new(gradient, w as u32, h as u32, sizing, current_color);
@@ -708,12 +728,7 @@ impl Emitter<'_> {
   ) -> Option<Mask> {
     let images = node.context.style.mask_image.as_deref()?;
 
-    if !images.iter().any(|image| {
-      matches!(
-        image,
-        BackgroundImage::Linear(_) | BackgroundImage::Radial(_) | BackgroundImage::Conic(_)
-      )
-    }) {
+    if !images.iter().any(|image| paintable_layer(image)) {
       return None;
     }
     let filter = self.color_filter.take();
@@ -728,6 +743,7 @@ impl Emitter<'_> {
           cycled(&style.mask_size, index),
           cycled(&style.mask_position, index),
           cycled(&style.mask_repeat, index),
+          layer_intrinsic(image, &node.context),
           &node.context,
         );
 
@@ -1274,6 +1290,40 @@ impl Emitter<'_> {
 
 /// Whether the node draws own content (text or an image), i.e. whether a
 /// tagged content sequence around it would be non-empty.
+/// Whether a background or mask layer draws anything in this build: gradients
+/// always, `url()` images only with the `images` feature.
+fn paintable_layer(image: &BackgroundImage) -> bool {
+  match image {
+    BackgroundImage::Linear(_) | BackgroundImage::Radial(_) | BackgroundImage::Conic(_) => true,
+    #[cfg(feature = "images")]
+    BackgroundImage::Url(_) => true,
+    _ => false,
+  }
+}
+
+/// Intrinsic sizing of a `url()` layer, which `background-size` resolves
+/// against. Gradients have none.
+#[cfg(feature = "images")]
+fn layer_intrinsic(
+  image: &BackgroundImage,
+  context: &RenderContext,
+) -> Option<takumi_core::style::IntrinsicSizing> {
+  let BackgroundImage::Url(url) = image else {
+    return None;
+  };
+  let source = resolve_image(url, context).ok()?;
+
+  Some(source.intrinsic_sizing().scale(&context.sizing))
+}
+
+#[cfg(not(feature = "images"))]
+fn layer_intrinsic(
+  _image: &BackgroundImage,
+  _context: &takumi_core::context::RenderContext,
+) -> Option<takumi_core::style::IntrinsicSizing> {
+  None
+}
+
 /// The rounded region a background paints into, per `background-clip`, as path
 /// commands in box-local coordinates with the fill rule to clip by. `None`
 /// means the box paints no background at all: `text` moves the fill onto the

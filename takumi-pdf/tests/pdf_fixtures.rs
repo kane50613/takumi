@@ -766,6 +766,54 @@ fn background_boxes() {
   );
 }
 
+/// `url()` layers: a bitmap background sized by its intrinsic dimensions,
+/// tiled, covered, and used as a `mask-image` alpha source.
+#[test]
+fn url_layers() {
+  let pdf = run_pdf_fixture("url-layers", |fonts| {
+    let cell = |style: &str| {
+      format!(
+        r##"<div style="width: 96px; height: 96px; background-color: #f4f4f5; {style}"></div>"##
+      )
+    };
+    let source = format!(
+      r##"<div style="display: flex; width: 100%; height: 100%; padding: 12px; column-gap: 12px; background-color: #ffffff;">
+        {}{}{}{}
+      </div>"##,
+      // background-size defaults to auto: the 8x8 checker's intrinsic size.
+      cell("background-image: url(checker); background-repeat: no-repeat;"),
+      cell("background-image: url(checker); background-size: 24px 24px;"),
+      cell("background-image: url(checker); background-size: cover;"),
+      cell(
+        "background-color: #1d4ed8; mask-image: url(checker); mask-size: 48px 48px; mask-repeat: repeat;"
+      ),
+    );
+    let node = from_html(&source, FromHtmlOptions::default()).expect("parse url layer fixture");
+    let buffer =
+      ImageBuffer::from_rgba_bytes(checker_pixels(), 8, 8).expect("checker image buffer");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((460, 120)))
+      .images(HashMap::from([(
+        "checker".into(),
+        ImageSource::Bitmap(Arc::new(buffer)),
+      )]))
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = String::from_utf8_lossy(&pdf);
+
+  assert!(
+    haystack.contains("/Subtype/Image"),
+    "expected image XObjects for the url() layers"
+  );
+  assert!(
+    haystack.contains("/XStep 48/YStep 48"),
+    "expected the tiled mask layer to repeat at its mask-size"
+  );
+}
+
 /// `background-size`, `-position` and the four `-repeat` styles: a sized tile
 /// placed once, tiled, spaced out, and rounded to fit whole tiles.
 #[test]
