@@ -742,11 +742,13 @@ fn tagged_standards() {
     ..Default::default()
   };
   let lang = || takumi_core::style::Lang::parse("en").expect("lang");
+  // PDF/UA-1 combined with PDF/A-2a: both validators run on one render.
   let ua1 = run_pdf_fixture("report-tagged-ua1", |fonts| {
     PdfOptions::builder()
       .node(html_fixture("report.html"))
       .page(PageOptions::A4)
-      .standard(PdfStandard::Ua1)
+      .pdfua(true)
+      .standard(PdfStandard::A2a)
       .lang(Some(lang()))
       .metadata(metadata())
       .fonts(fonts)
@@ -770,7 +772,7 @@ fn tagged_standards() {
     PdfOptions::builder()
       .node(from_html(list_doc, FromHtmlOptions::default()).expect("parse list doc"))
       .page(PageOptions::A4)
-      .standard(PdfStandard::Ua1)
+      .pdfua(true)
       .lang(Some(lang()))
       .metadata(metadata())
       .fonts(fonts)

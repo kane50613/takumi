@@ -187,7 +187,7 @@ struct PdfRenderOptions {
   outline: Option<bool>,
   /// PDF/A conformance level: "2a", "2b", "2u", "3a", "3b", "3u" or "4".
   pdfa: Option<PdfaInput>,
-  /// PDF/UA-1 accessible output; builds a tagged structure tree.
+  /// PDF/UA-1 accessible output; combines with any `pdfa` level.
   pdfua: Option<bool>,
   /// Builds a tagged structure tree, like Chromium's print-to-PDF. Defaults
   /// to true.
@@ -247,20 +247,28 @@ fn parse_date(value: &str) -> Option<PdfDate> {
   };
   let mut parts = date.splitn(3, '-');
   let year = parts.next()?.parse().ok()?;
-  let month = parts.next()?.parse().ok()?;
-  let day = parts.next()?.parse().ok()?;
+  let month: u8 = parts.next()?.parse().ok()?;
+  let day: u8 = parts.next()?.parse().ok()?;
   let (hour, minute, second) = match time {
     Some(time) => {
       let mut parts = time.splitn(3, ':');
       (
         parts.next()?.parse().ok()?,
-        parts.next().unwrap_or("0").parse().ok()?,
-        parts.next().unwrap_or("0").parse().ok()?,
+        parts.next()?.parse().ok()?,
+        parts.next()?.parse().ok()?,
       )
     }
     None => (0, 0, 0),
   };
 
+  if !(1..=12).contains(&month)
+    || !(1..=31).contains(&day)
+    || hour > 23
+    || minute > 59
+    || second > 59
+  {
+    return None;
+  }
   Some(PdfDate {
     year,
     month,
@@ -415,11 +423,8 @@ impl PdfRenderer {
       lang,
       metadata: options.metadata.map(PdfMetadata::from),
       outline: options.outline.unwrap_or(false),
-      standard: if options.pdfua.unwrap_or(false) {
-        PdfStandard::Ua1
-      } else {
-        options.pdfa.map(PdfStandard::from).unwrap_or_default()
-      },
+      standard: options.pdfa.map(PdfStandard::from).unwrap_or_default(),
+      pdfua: options.pdfua.unwrap_or(false),
       tagged: options.tagged.unwrap_or(true),
     })
     .map_err(map_error)

@@ -70,35 +70,23 @@ pub(crate) fn build_tag_tree(
     &mut top,
     &mut pending,
     false,
-    Wrap::Paragraph,
   );
-  flush_paragraph(&mut pending, &mut top, Wrap::Paragraph);
+  flush_paragraph(&mut pending, &mut top);
   for group in top {
     tree.push(group);
   }
   tree
 }
 
-/// What a run of bare content wraps into: `P` in normal flow, `LBody` inside
-/// a list item (the only child kinds `LI` allows).
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Wrap {
-  Paragraph,
-  ListBody,
-}
-
-/// Drains a run of bare-content identifiers into a single wrapper element.
-/// Bare content under an untagged ancestor still needs a structure parent,
-/// and one wrapper per block container mirrors HTML text flow without
-/// emitting a structure element per text node.
-fn flush_paragraph(pending: &mut Vec<Identifier>, parent: &mut Vec<TagGroup>, wrap: Wrap) {
+/// Drains a run of bare-content identifiers into a single `P`. Bare content
+/// under an untagged ancestor still needs a structure parent, and one
+/// paragraph per block container mirrors HTML text flow without emitting a
+/// structure element per text node.
+fn flush_paragraph(pending: &mut Vec<Identifier>, parent: &mut Vec<TagGroup>) {
   if pending.is_empty() {
     return;
   }
-  let mut group = TagGroup::new(match wrap {
-    Wrap::Paragraph => TagKind::from(Tag::P),
-    Wrap::ListBody => Tag::LBody.into(),
-  });
+  let mut group = TagGroup::new(Tag::P);
 
   for identifier in pending.drain(..) {
     group.push(identifier);
@@ -113,53 +101,59 @@ fn build_node(
   parent: &mut Vec<TagGroup>,
   pending: &mut Vec<Identifier>,
   in_row: bool,
-  wrap: Wrap,
 ) {
   let identifiers = collector.take(path);
   let annotations = collector.take_annotations(path);
 
   match role(node) {
     Some(kind) => {
-      flush_paragraph(pending, parent, wrap);
+      flush_paragraph(pending, parent);
       let is_link = matches!(kind, TagKind::Link(_));
-      let child_wrap = if matches!(kind, TagKind::LI(_)) {
-        Wrap::ListBody
-      } else {
-        Wrap::Paragraph
-      };
+      let is_list_item = matches!(kind, TagKind::LI(_));
       let mut group = TagGroup::new(kind);
       let mut children = Vec::new();
       let mut child_pending = Vec::new();
+      let mut has_content = !identifiers.is_empty();
 
-      // `LI` only admits `Lbl`/`LBody` children, so its own content joins the
-      // body run instead of hanging off the item directly.
-      if child_wrap == Wrap::ListBody {
+      // `LI` only admits `Lbl`/`LBody` children, so its whole subtree wraps
+      // in a single body element.
+      if is_list_item {
         child_pending.extend(identifiers);
       } else {
         for identifier in identifiers {
           group.push(identifier);
         }
       }
-      build_children(
-        node,
-        path,
-        collector,
-        &mut children,
-        &mut child_pending,
-        child_wrap,
-      );
-      flush_paragraph(&mut child_pending, &mut children, child_wrap);
-      for child in children {
-        group.push(child);
+      build_children(node, path, collector, &mut children, &mut child_pending);
+      flush_paragraph(&mut child_pending, &mut children);
+      has_content |= !children.is_empty();
+      if is_list_item {
+        if !children.is_empty() {
+          let mut body = TagGroup::new(Tag::LBody);
+
+          for child in children {
+            body.push(child);
+          }
+          group.push(body);
+        }
+      } else {
+        for child in children {
+          group.push(child);
+        }
       }
       if is_link {
+        has_content |= !annotations.is_empty();
         for annotation in annotations {
           group.push(annotation);
         }
       } else {
         push_link_wrappers(annotations, parent);
       }
-      parent.push(group);
+      // Inline formatting inside a text run leaves its element without any
+      // content of its own; an empty structure element is pure noise.
+      if has_content {
+        parent.push(group);
+      }
     }
     None => {
       // Items of a row-direction flex container read as one visual line, so
@@ -167,13 +161,13 @@ fn build_node(
       let block = is_block(node) && !in_row;
 
       if block {
-        flush_paragraph(pending, parent, wrap);
+        flush_paragraph(pending, parent);
       }
       pending.extend(identifiers);
       push_link_wrappers(annotations, parent);
-      build_children(node, path, collector, parent, pending, wrap);
+      build_children(node, path, collector, parent, pending);
       if block {
-        flush_paragraph(pending, parent, wrap);
+        flush_paragraph(pending, parent);
       }
     }
   }
@@ -196,7 +190,6 @@ fn build_children(
   collector: &mut TagCollector,
   parent: &mut Vec<TagGroup>,
   pending: &mut Vec<Identifier>,
-  wrap: Wrap,
 ) {
   let Some(children) = node.children.as_ref() else {
     return;
@@ -205,7 +198,7 @@ fn build_children(
 
   for (index, child) in children.iter().enumerate() {
     path.push(index);
-    build_node(child, path, collector, parent, pending, in_row, wrap);
+    build_node(child, path, collector, parent, pending, in_row);
     path.pop();
   }
 }
