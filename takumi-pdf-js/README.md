@@ -166,9 +166,83 @@ const pdf = await render(
 | `break-inside: avoid`         | Keeps the element on one page when it fits.             |
 | `box-decoration-break: clone` | Repeats borders and backgrounds on every page fragment. |
 
+## Links, outline, and metadata
+
+Anchors with an `href` become clickable link annotations. `outline: true` builds PDF bookmarks from `h1`–`h6` headings. `metadata` fills the document properties:
+
+```tsx
+const pdf = await render(report, {
+  outline: true,
+  lang: "en",
+  metadata: {
+    title: "Annual report 2026",
+    authors: ["Acme Inc."],
+    creationDate: "2026-08-06",
+  },
+});
+```
+
+Omit `metadata` to keep output byte-identical across runs.
+
+## Tagged output and PDF/A
+
+Output is **tagged by default**: HTML semantics (`h1`–`h6`, `p`, `img` with `alt`, `a`, lists) become a PDF structure tree, like Chromium's print-to-PDF. Set `tagged: "ua1"` to validate against PDF/UA-1, or `tagged: false` to drop the tree when file size matters more than accessibility.
+
+`pdfa` renders archival output. Validation runs during rendering; a document that cannot conform fails with the violated rule instead of writing a broken file. Every level, and PDF/UA-1, passes [veraPDF](https://verapdf.org).
+
+```tsx
+const pdf = await render(report, {
+  pdfa: "2a",
+  tagged: "ua1",
+  lang: "en",
+  metadata: { title: "Annual report", creationDate: "2026-08-06" },
+});
+```
+
+| Level           | What it adds                          |
+| --------------- | ------------------------------------- |
+| `"2b"` / `"2u"` | Basic conformance / Unicode mapping.  |
+| `"2a"` / `"3a"` | A tagged structure tree.              |
+| `"3b"` / `"3u"` | Arbitrary file attachments.           |
+| `"4"`           | The PDF 2.0 revision of the standard. |
+
+Invalid combinations are **TypeScript type errors**. See the [PDF/A docs](https://takumi.kane.tw/docs/pdf/pdf-a) for the structure-tree mapping and required metadata.
+
+## Attachments
+
+Attach files with `attachments`. They appear in the viewer's attachment panel. Combine with `pdfa: "3b"` for ZUGFeRD and Factur-X electronic invoices:
+
+```tsx
+const pdf = await render(invoice, {
+  pdfa: "3b",
+  metadata: { title: "Invoice 1042", creationDate: "2026-08-06" },
+  attachments: [
+    {
+      name: "factur-x.xml",
+      data: xml,
+      mimeType: "application/xml",
+      description: "Factur-X invoice data",
+      relationship: "alternative",
+    },
+  ],
+});
+```
+
+## Measuring
+
+`measure()` lays out a tree without rendering and returns its size in CSS px. Use it to size a header or footer band before setting `margin`:
+
+```tsx
+import { measure } from "takumi-pdf";
+
+const { height } = await measure(footer, { size: "a4" });
+```
+
 ## Images and runtimes
 
 `takumi-pdf` runs on Node.js, Bun, and Cloudflare Workers.
+
+SVG images embed as vectors, not rasterized bitmaps.
 
 The renderer does not fetch remote images. Pass pre-fetched bytes for image URLs in the document:
 
