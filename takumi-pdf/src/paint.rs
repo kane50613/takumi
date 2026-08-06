@@ -184,7 +184,11 @@ pub(crate) fn expanded_radial_stops(resolved: &[ResolvedGradientStop], extent: f
   let first = resolved.first().map_or(0.0, |s| s.position);
   let last = resolved.last().map_or(extent, |s| s.position);
   let period = (last - first).max(1e-6);
-  let cycles = (((extent - first) / period).ceil().max(1.0)) as usize;
+  // ponytail: a degenerate period (every stop at one position) would tile
+  // millions of times, so the expansion stops at a period no viewer resolves;
+  // emit a real repeating shading if PDF ever grows one.
+  const MAX_CYCLES: usize = 512;
+  let cycles = (((extent - first) / period).ceil().max(1.0) as usize).min(MAX_CYCLES);
   let mut stops = Vec::with_capacity(cycles * resolved.len());
 
   for cycle in 0..cycles {
