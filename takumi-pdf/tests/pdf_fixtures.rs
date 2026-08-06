@@ -435,7 +435,7 @@ fn mask_image() {
       .fonts(fonts)
       .build()
   });
-  let haystack = String::from_utf8_lossy(&pdf);
+  let haystack = inflated_text(&pdf);
 
   assert!(
     haystack.contains("/SMask"),
@@ -585,7 +585,7 @@ fn box_shadows() {
       .fonts(fonts)
       .build()
   });
-  let haystack = String::from_utf8_lossy(&pdf);
+  let haystack = inflated_text(&pdf);
 
   // The blurred cell needs partial opacity, and so does the translucent inset
   // one: a band's opacity multiplies the color's alpha rather than replacing it.
@@ -681,6 +681,19 @@ fn content_lines(pdf: &[u8]) -> impl Iterator<Item = Vec<u8>> {
   lines.into_iter()
 }
 
+/// The document's text with every deflated stream inflated, so a structure
+/// element reads the same whether or not it sits in an object stream.
+fn inflated_text(pdf: &[u8]) -> String {
+  let mut text = String::from_utf8_lossy(pdf).into_owned();
+
+  for line in content_lines(pdf) {
+    text.push('\n');
+    text.push_str(&String::from_utf8_lossy(&line));
+  }
+
+  text
+}
+
 fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
   haystack
     .windows(needle.len())
@@ -758,7 +771,7 @@ fn background_boxes() {
       .fonts(fonts)
       .build()
   });
-  let haystack = String::from_utf8_lossy(&pdf);
+  let haystack = inflated_text(&pdf);
 
   assert!(
     haystack.contains("/Multiply"),
@@ -841,7 +854,7 @@ fn url_layers() {
       .fonts(fonts)
       .build()
   });
-  let haystack = String::from_utf8_lossy(&pdf);
+  let haystack = inflated_text(&pdf);
 
   assert!(
     haystack.contains("/Subtype/Image"),
@@ -884,7 +897,7 @@ fn background_placement() {
       .fonts(fonts)
       .build()
   });
-  let haystack = String::from_utf8_lossy(&pdf);
+  let haystack = inflated_text(&pdf);
 
   // Three of the four cells tile, and a tiling pattern is one shading reused
   // by a pattern object rather than one shading per tile. In a 120px box a
@@ -1496,7 +1509,7 @@ fn tagged_standards() {
       .fonts(fonts)
       .build()
   });
-  let haystack = String::from_utf8_lossy(&list);
+  let haystack = inflated_text(&list);
 
   for name in [
     "/S/LI",
@@ -1548,7 +1561,7 @@ fn decorative_image_artifact() {
       .fonts(fonts)
       .build()
   });
-  let haystack = String::from_utf8_lossy(&pdf);
+  let haystack = inflated_text(&pdf);
 
   assert_eq!(
     haystack.matches("/S/Figure").count(),
@@ -1591,9 +1604,9 @@ fn report_links_outline() {
       .build()
   });
 
-  // Annotation dictionaries and the outline root serialize uncompressed, so
-  // substring checks hold; revisit with a PDF parser if that changes.
-  let haystack = String::from_utf8_lossy(&pdf);
+  // `inflated_text` inflates every deflated stream, so a substring check finds
+  // what it is after wherever the object ended up.
+  let haystack = inflated_text(&pdf);
 
   for needle in [
     "https://example.com/numbers",

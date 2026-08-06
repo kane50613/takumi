@@ -149,14 +149,23 @@ impl Document {
     } = self;
 
     let version = serializer_context.serialize_settings().pdf_version();
-    let (pdf, xref_ref) = serializer_context.finish(chunk_container)?;
+    let (pdf, xref_ref, object_stream) = serializer_context.finish(chunk_container)?;
 
     // Cross-reference streams compress the per-object xref rows; they exist
     // from PDF 1.5 onwards.
     if version >= PdfVersion::Pdf15 {
+      // The xref stream is the last object, so its number is the row count.
+      let xref_len = xref_ref.get() as usize + 1;
+
       Ok(pdf.finish_with_xref_stream_and_filter(xref_ref, |data| {
+        let mut rows = data.to_vec();
+
+        if let Some(object_stream) = &object_stream {
+          object_stream.patch_xref(&mut rows, xref_len);
+        }
+
         (
-          deflate_encode(data),
+          deflate_encode(&rows),
           XRefFilter::Single(Filter::FlateDecode),
         )
       }))

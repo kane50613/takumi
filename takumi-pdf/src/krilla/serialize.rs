@@ -25,6 +25,7 @@ use crate::krilla::interactive::destination::{NamedDestination, XyzDestination};
 use crate::krilla::interchange::embed::EmbeddedFile;
 use crate::krilla::interchange::outline::Outline;
 use crate::krilla::interchange::tagging::{AnnotationIdentifier, PageTagIdentifier, TagTree};
+use crate::krilla::object_stream::ObjectStream;
 use crate::krilla::page::{InternalPage, PageLabel, PageLabelContainer};
 use crate::krilla::resource;
 use crate::krilla::resource::{Resource, Resourceable};
@@ -404,7 +405,10 @@ impl SerializeContext {
     &mut self.validation_store
   }
 
-  pub(crate) fn finish(mut self, mut chunk_container: ChunkContainer) -> KrillaResult<(Pdf, Ref)> {
+  pub(crate) fn finish(
+    mut self,
+    mut chunk_container: ChunkContainer,
+  ) -> KrillaResult<(Pdf, Ref, Option<ObjectStream>)> {
     // We need to be careful here that we serialize the objects in the right order,
     // as in some cases we use MaybeTake::take to remove an object, which means that
     // no object that is serialized afterwards must depend on it.
@@ -423,7 +427,7 @@ impl SerializeContext {
     self.serialize_tag_tree(&mut chunk_container)?;
 
     // Create the final PDF.
-    let (pdf, next_ref) = chunk_container.finish(&mut self)?;
+    let (pdf, next_ref, object_stream) = chunk_container.finish(&mut self)?;
     self.register_limits(pdf.limits());
 
     self.check_validator_limits();
@@ -450,7 +454,7 @@ impl SerializeContext {
     // Just a sanity check that we've actually processed all items.
     self.global_objects.assert_all_taken();
 
-    Ok((pdf, next_ref))
+    Ok((pdf, next_ref, object_stream))
   }
 }
 
