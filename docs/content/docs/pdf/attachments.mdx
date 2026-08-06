@@ -1,0 +1,66 @@
+---
+title: Attachments
+description: Embed files in the PDF, including PDF/A-3 e-invoice data
+---
+
+Attach files with `attachments`. They appear in the viewer's attachment panel:
+
+```tsx twoslash
+import type { ReactNode } from "react";
+import { render } from "takumi-pdf";
+declare const invoice: ReactNode;
+declare const xml: string;
+// ---cut---
+const pdf = await render(invoice, {
+  attachments: [
+    {
+      name: "factur-x.xml",
+      data: xml,
+      mimeType: "application/xml",
+      description: "Factur-X invoice data",
+      relationship: "alternative",
+    },
+  ],
+});
+```
+
+`data` takes raw bytes as a `Uint8Array`, or a string encoded as UTF-8.
+
+`relationship` states how the file relates to the document. It becomes the PDF/A-3 `AFRelationship`:
+
+| Value           | Meaning                                          |
+| --------------- | ------------------------------------------------ |
+| `"source"`      | The document was created from this file.         |
+| `"alternative"` | An alternative representation of the document.   |
+| `"data"`        | The file backs a visual presentation in the PDF. |
+| `"supplement"`  | Additional resources for the document.           |
+| `"unspecified"` | No clear relationship. The default.              |
+
+## Electronic invoices
+
+ZUGFeRD and Factur-X invoices are PDF/A-3 documents with the invoice XML attached. Combine `attachments` with `pdfa`:
+
+```tsx twoslash
+import type { ReactNode } from "react";
+import { render } from "takumi-pdf";
+declare const invoice: ReactNode;
+declare const xml: string;
+// ---cut---
+const pdf = await render(invoice, {
+  pdfa: "3b",
+  metadata: { title: "Invoice 1042", creationDate: "2026-08-06" },
+  attachments: [
+    {
+      name: "factur-x.xml",
+      data: xml,
+      mimeType: "application/xml",
+      description: "Factur-X invoice data",
+      relationship: "alternative",
+    },
+  ],
+});
+```
+
+The PDF/A-3 levels require each attachment to carry a `mimeType`, a `description`, and a modification date. `modificationDate` falls back to `metadata.creationDate`. A missing requirement fails the render with the violated rule.
+
+Full Factur-X conformance also expects its XMP extension schema. Takumi does not write it yet.

@@ -24,7 +24,8 @@ use takumi_core::{
   viewport::Viewport,
 };
 use takumi_pdf::{
-  MeasureOptions, PageMargins, PageOptions, PdfDate, PdfMetadata, PdfOptions, PdfStandard, Tagging,
+  Attachment, AttachmentRelationship, MeasureOptions, PageMargins, PageOptions, PdfDate,
+  PdfMetadata, PdfOptions, PdfStandard, Tagging,
 };
 use wasm_bindgen::prelude::*;
 
@@ -223,6 +224,80 @@ struct PdfRenderOptions {
   /// Structure-tree emission: `false`, `true` (default) or `"ua1"` to also
   /// validate against PDF/UA-1.
   tagged: Option<TaggedInput>,
+  /// Files attached to the document.
+  attachments: Option<Vec<AttachmentInput>>,
+}
+
+/// A file attached to the document.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AttachmentInput {
+  name: String,
+  data: AttachmentData,
+  mime_type: Option<String>,
+  description: Option<String>,
+  relationship: Option<RelationshipInput>,
+  /// UTC modification date as `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`.
+  modification_date: Option<String>,
+}
+
+/// Attachment bytes, or a string encoded as UTF-8.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum AttachmentData {
+  Bytes(ByteBuf),
+  Text(String),
+}
+
+/// AFRelationship names accepted from JS.
+#[derive(Deserialize, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+enum RelationshipInput {
+  Source,
+  Data,
+  Alternative,
+  Supplement,
+  Unspecified,
+}
+
+impl From<RelationshipInput> for AttachmentRelationship {
+  fn from(relationship: RelationshipInput) -> Self {
+    match relationship {
+      RelationshipInput::Source => Self::Source,
+      RelationshipInput::Data => Self::Data,
+      RelationshipInput::Alternative => Self::Alternative,
+      RelationshipInput::Supplement => Self::Supplement,
+      RelationshipInput::Unspecified => Self::Unspecified,
+    }
+  }
+}
+
+impl TryFrom<AttachmentInput> for Attachment {
+  type Error = js_sys::Error;
+
+  fn try_from(input: AttachmentInput) -> Result<Self, Self::Error> {
+    let modification_date = input
+      .modification_date
+      .as_deref()
+      .map(|value| {
+        parse_date(value).ok_or_else(|| {
+          js_sys::Error::new("invalid modificationDate: expected YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS")
+        })
+      })
+      .transpose()?;
+
+    Ok(Self {
+      name: input.name,
+      data: match input.data {
+        AttachmentData::Bytes(bytes) => bytes.into_vec(),
+        AttachmentData::Text(text) => text.into_bytes(),
+      },
+      mime_type: input.mime_type,
+      description: input.description,
+      relationship: input.relationship.map(Into::into).unwrap_or_default(),
+      modification_date,
+    })
+  }
 }
 
 /// `tagged` values accepted from JS.
@@ -534,6 +609,12 @@ impl PdfRenderer {
       outline: options.outline.unwrap_or(false),
       standard: options.pdfa.map(PdfStandard::from).unwrap_or_default(),
       tagged: options.tagged.map(Tagging::from).unwrap_or_default(),
+      attachments: options
+        .attachments
+        .unwrap_or_default()
+        .into_iter()
+        .map(Attachment::try_from)
+        .collect::<Result<_, _>>()?,
     })
     .map_err(map_error)
   }

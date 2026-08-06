@@ -63,6 +63,7 @@ use crate::krilla::{
   color::rgb,
   configure::{Accessibility, Archival, ConfigurationBuilder},
   destination::XyzDestination,
+  embed::{AssociationKind, EmbeddedFile, MimeType},
   error::KrillaError,
   geom::{
     Path as KrillaPath, PathBuilder, Point, Rect as KrillaRect, Size as KrillaSize, Transform,
@@ -133,6 +134,10 @@ pub enum PdfError {
   MissingViewport,
   /// The requested archival standard could not be configured.
   InvalidStandard,
+  /// An attachment's mime type is not a valid `type/subtype` pair.
+  InvalidMimeType(String),
+  /// Two attachments share the same file name.
+  DuplicateAttachment(String),
 }
 
 impl From<TakumiError> for PdfError {
@@ -251,6 +256,56 @@ pub struct PdfOptions<'g> {
   /// `A3a`) force it on.
   #[builder(default)]
   pub tagged: Tagging,
+  /// Files attached to the document, shown in the viewer's attachment panel.
+  /// The PDF/A-3 levels require each to carry a mime type, a description, and
+  /// a modification date ([`PdfMetadata::creation_date`] is the fallback).
+  #[builder(default)]
+  pub attachments: Vec<Attachment>,
+}
+
+/// A file attached to the document.
+#[derive(Clone)]
+pub struct Attachment {
+  /// The file name in the PDF, e.g. `factur-x.xml`.
+  pub name: String,
+  /// The file's bytes.
+  pub data: Vec<u8>,
+  /// IANA media type, e.g. `application/xml`.
+  pub mime_type: Option<String>,
+  /// Human-readable description.
+  pub description: Option<String>,
+  /// How the file relates to the document (the PDF/A-3 AFRelationship).
+  pub relationship: AttachmentRelationship,
+  /// UTC modification date; falls back to [`PdfMetadata::creation_date`].
+  pub modification_date: Option<PdfDate>,
+}
+
+/// How an attached file relates to the document it is embedded in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AttachmentRelationship {
+  /// The document was created from this file.
+  Source,
+  /// The file was used to derive a visual presentation in the document.
+  Data,
+  /// An alternative representation of the document.
+  Alternative,
+  /// Additional resources for the document.
+  Supplement,
+  /// No clear relationship, or it is not known.
+  #[default]
+  Unspecified,
+}
+
+impl AttachmentRelationship {
+  fn association_kind(self) -> AssociationKind {
+    match self {
+      Self::Source => AssociationKind::Source,
+      Self::Data => AssociationKind::Data,
+      Self::Alternative => AssociationKind::Alternative,
+      Self::Supplement => AssociationKind::Supplement,
+      Self::Unspecified => AssociationKind::Unspecified,
+    }
+  }
 }
 
 /// Document metadata for the PDF's info dictionary. [`PdfOptions::lang`]
@@ -311,17 +366,19 @@ fn build_metadata(metadata: &PdfMetadata, lang: Option<Lang>) -> Metadata {
     result = result.language(lang.as_str().to_string());
   }
   if let Some(date) = metadata.creation_date {
-    result = result.creation_date(
-      DateTime::new(date.year)
-        .month(date.month)
-        .day(date.day)
-        .hour(date.hour)
-        .minute(date.minute)
-        .second(date.second)
-        .utc_offset_hour(0),
-    );
+    result = result.creation_date(krilla_datetime(date));
   }
   result
+}
+
+fn krilla_datetime(date: PdfDate) -> DateTime {
+  DateTime::new(date.year)
+    .month(date.month)
+    .day(date.day)
+    .hour(date.hour)
+    .minute(date.minute)
+    .second(date.second)
+    .utc_offset_hour(0)
 }
 
 /// Per-side page margins in px.
@@ -870,6 +927,32 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
   } else if tag_collector.is_some() && inputs.lang.is_some() {
     // Tagged standards check the document language even without metadata.
     document.set_metadata(build_metadata(&PdfMetadata::default(), inputs.lang));
+  }
+
+  let fallback_date = options.metadata.as_ref().and_then(|m| m.creation_date);
+
+  for attachment in options.attachments {
+    let mime_type = match attachment.mime_type {
+      Some(mime) => Some(MimeType::new(&mime).ok_or(PdfError::InvalidMimeType(mime))?),
+      None => None,
+    };
+    let file = EmbeddedFile {
+      path: attachment.name.clone(),
+      mime_type,
+      description: attachment.description,
+      association_kind: attachment.relationship.association_kind(),
+      data: attachment.data.into(),
+      modification_date: attachment
+        .modification_date
+        .or(fallback_date)
+        .map(krilla_datetime),
+      compress: None,
+      location: None,
+    };
+
+    document
+      .embed_file(file)
+      .ok_or(PdfError::DuplicateAttachment(attachment.name))?;
   }
   match options.page {
     Some(page) => {
