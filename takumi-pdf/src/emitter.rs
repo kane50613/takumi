@@ -7,6 +7,7 @@ use crate::krilla::geom::Size as KrillaSize;
 use crate::krilla::{
   Data,
   geom::{Point, Rect as KrillaRect, Transform},
+  mask::{Mask, MaskType},
   num::NormalizedF32,
   paint::{
     Fill, FillRule, LinearGradient as KrillaLinearGradient, Paint, Pattern,
@@ -233,6 +234,13 @@ impl Emitter<'_> {
       (y, layout.size)
     };
     let border = BorderProperties::from_context(&node.context, deco_size, layout.border);
+
+    // A mask covers the element and its descendants, so it is pushed with the
+    // rest of the box's state and popped with it.
+    if let Some(mask) = self.mask(node, layout.size, (x, y), surface) {
+      surface.push_mask(mask);
+      pushed += 1;
+    }
 
     // `clip-path` clips the element itself, decorations included, so it goes on
     // before anything is painted.
@@ -647,6 +655,66 @@ impl Emitter<'_> {
       shadows.iter().filter(|s| s.inset).map(resolve).collect(),
       shadows.iter().filter(|s| !s.inset).map(resolve).collect(),
     )
+  }
+
+  /// Builds the soft mask for `mask-image`, drawing its layers into their own
+  /// stream. The layers are alpha masks, which is what `mask-mode` resolves to
+  /// for an image source.
+  ///
+  /// The element's own `filter` stays off the mask: it already applies to the
+  /// content the mask covers, and applying it to both would compound, so
+  /// `opacity(0.5)` behind a mask would leave a quarter of the alpha.
+  fn mask(
+    &mut self,
+    node: &RenderNode,
+    size: Size<f32>,
+    at: (f32, f32),
+    surface: &mut Surface,
+  ) -> Option<Mask> {
+    let images = node.context.style.mask_image.as_deref()?;
+
+    if !images.iter().any(|image| {
+      matches!(
+        image,
+        BackgroundImage::Linear(_) | BackgroundImage::Radial(_) | BackgroundImage::Conic(_)
+      )
+    }) {
+      return None;
+    }
+    let filter = self.color_filter.take();
+    let style = &node.context.style;
+    let stream = {
+      let mut builder = surface.stream_builder();
+      let mut content = builder.surface();
+
+      for (index, image) in images.iter().enumerate().rev() {
+        let placement = place(
+          size,
+          cycled(&style.mask_size, index),
+          cycled(&style.mask_position, index),
+          cycled(&style.mask_repeat, index),
+          &node.context,
+        );
+
+        if placement.tiles {
+          self.tiled_layer(image, node, &placement, size, at, &mut content);
+        } else {
+          self.background_layer(
+            image,
+            node,
+            placement.tile,
+            at.0 + placement.origin.0,
+            at.1 + placement.origin.1,
+            &mut content,
+          );
+        }
+      }
+      content.finish();
+      builder.finish()
+    };
+
+    self.color_filter = filter;
+    Some(Mask::new(stream, MaskType::Alpha))
   }
 
   /// A color as this subtree's `filter` leaves it.
