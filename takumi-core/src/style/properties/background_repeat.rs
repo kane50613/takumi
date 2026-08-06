@@ -25,11 +25,11 @@ pub fn collect_repeat_tile_positions(
   // callers keep within the canvas pixel budget.
   let area_end = i64::from(area_size);
   let tile_size = i64::from(tile_size);
-  let start = if origin > 0 {
-    i64::from(origin).rem_euclid(tile_size) - tile_size
-  } else {
-    i64::from(origin)
-  };
+  // Any origin normalizes to the phase-equivalent first tile at or just
+  // before the area start, so a far-negative origin cannot make the walk
+  // begin billions of tiles away.
+  let rem = i64::from(origin).rem_euclid(tile_size);
+  let start = if rem == 0 { 0 } else { rem - tile_size };
 
   successors(Some(start), |&x| Some(x + tile_size))
     .take_while(|&x| x < area_end)
@@ -255,6 +255,22 @@ mod tests {
     assert_eq!(
       collect_repeat_tile_positions(100, u32::MAX, 0).as_slice(),
       &[0]
+    );
+  }
+
+  #[test]
+  fn far_negative_origin_normalizes_to_the_area_edge() {
+    // i32::MIN is a multiple of 1: the walk starts at 0, not two billion
+    // tiles below the area.
+    let positions = collect_repeat_tile_positions(100, 1, i32::MIN);
+
+    assert_eq!(positions.len(), 100);
+    assert_eq!(positions.first(), Some(&0));
+    assert_eq!(positions.last(), Some(&99));
+    // The phase survives normalization: -25 and -5 are the same tile grid.
+    assert_eq!(
+      collect_repeat_tile_positions(30, 10, -25).as_slice(),
+      &[-5, 5, 15, 25]
     );
   }
 
