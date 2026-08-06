@@ -456,10 +456,10 @@ fn extend_clip_commands(group: &Group, transform: &Transform, commands: &mut Vec
   for child in group.children() {
     match child {
       Node::Path(path) => {
-        if path.is_visible() {
-          if let Some(transformed) = path.data().clone().transform(*transform) {
-            commands.extend(path_commands(&transformed));
-          }
+        if path.is_visible()
+          && let Some(transformed) = path.data().clone().transform(*transform)
+        {
+          commands.extend(path_commands(&transformed));
         }
       }
       Node::Group(group) => {

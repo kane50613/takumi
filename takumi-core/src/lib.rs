@@ -49,6 +49,8 @@ pub mod viewport;
   deprecated
 )]
 mod resvg;
+#[cfg(feature = "svg")]
+mod svg_vector;
 
 /// Backend painting helpers (gradient LUTs, tile positioning, transfer tables)
 /// shared with the raster and SVG renderers. Deliberately kept out of `style`

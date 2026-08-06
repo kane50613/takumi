@@ -414,7 +414,7 @@ impl InternalPage {
     // check the target version.
     //
     // [1]: https://helpx.adobe.com/acrobat/using/create-verify-pdf-accessibility.html#TabOrder "Create and verify PDF accessibility (Acrobat Pro): Tab order"
-    if (!self.annotations.is_empty()
+    if !self.annotations.is_empty()
       || ((sc
         .serialize_settings()
         .validators()
@@ -422,7 +422,7 @@ impl InternalPage {
         .is_some()
         || sc.serialize_settings().validators().requires_tagging())
         && sc.serialize_settings().pdf_version()
-          >= VersionedFeature::StructureOrderTabbing.minimum_pdf_version()))
+          >= VersionedFeature::StructureOrderTabbing.minimum_pdf_version())
     {
       if sc.serialize_settings().pdf_version()
         >= VersionedFeature::StructureOrderTabbing.minimum_pdf_version()

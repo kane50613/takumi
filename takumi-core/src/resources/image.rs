@@ -8,14 +8,14 @@ use std::str::{FromStr, from_utf8};
 use std::sync::{Arc, OnceLock, Weak};
 
 #[cfg(feature = "svg")]
-pub use crate::resvg::vector::{
-  SvgFill, SvgGradient, SvgGradientStop, SvgLineCap, SvgLineJoin, SvgOp, SvgPaint, SvgSpreadMethod,
-  SvgStrokeStyle,
-};
-#[cfg(feature = "svg")]
 use crate::resvg::{
   apply_filters_to_layer, render as render_svg_tree,
   usvg::{Options, Transform, Tree, filters_from_markup},
+};
+#[cfg(feature = "svg")]
+pub use crate::svg_vector::{
+  SvgFill, SvgGradient, SvgGradientStop, SvgLineCap, SvgLineJoin, SvgOp, SvgPaint, SvgSpreadMethod,
+  SvgStrokeStyle,
 };
 use quick_cache::{
   Weighter,
@@ -93,7 +93,7 @@ impl SvgSource {
   /// used when a subtree (filters, embedded bitmaps) has to fall back to
   /// rasterization.
   pub fn vector_ops(&self, raster_scale: f32) -> Vec<SvgOp> {
-    crate::resvg::vector::flatten(&self.tree, raster_scale)
+    crate::svg_vector::flatten(&self.tree, raster_scale)
   }
 }
 
