@@ -769,6 +769,21 @@ mod tests {
   }
 
   #[test]
+  fn viewport_over_pixel_budget_errors_before_allocating() {
+    let fonts = Fonts::default();
+    let options = RenderOptions::builder()
+      .fonts(&fonts)
+      .viewport(Viewport::new((4097, 4096)))
+      .node(Node::container([]))
+      .build();
+
+    assert!(matches!(
+      render(options),
+      Err(crate::Error::InvalidViewport)
+    ));
+  }
+
+  #[test]
   fn ordinary_viewport_still_renders() {
     let fonts = Fonts::default();
     let options = RenderOptions::builder()

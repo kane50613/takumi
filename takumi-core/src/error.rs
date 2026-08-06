@@ -107,8 +107,8 @@ pub enum Error {
   #[error("WebP error: {0}")]
   WebPError(#[from] WebPError),
 
-  /// Invalid viewport dimensions (e.g., width or height is 0).
-  #[error("Invalid viewport: width or height cannot be 0")]
+  /// Invalid viewport dimensions (e.g., zero-sized or over the pixel budget).
+  #[error("Invalid viewport dimensions")]
   InvalidViewport,
 
   /// RGBA buffer length does not match `width * height * 4`.

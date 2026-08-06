@@ -20,14 +20,20 @@ pub fn collect_repeat_tile_positions(
     return SmallVec::default();
   }
 
-  let mut start = origin;
-  if start > 0 {
-    let n = ((start as f32) / tile_size as f32).ceil() as i32;
-    start -= n * tile_size as i32;
-  }
+  // The arithmetic runs in i64 so a dimension near the u32 range neither
+  // wraps nor drops tiles; every emitted position also fits the area, which
+  // callers keep within the canvas pixel budget.
+  let area_end = i64::from(area_size);
+  let tile_size = i64::from(tile_size);
+  let start = if origin > 0 {
+    i64::from(origin).rem_euclid(tile_size) - tile_size
+  } else {
+    i64::from(origin)
+  };
 
-  successors(Some(start), |&x| Some(x + tile_size as i32))
-    .take_while(|&x| x < area_size as i32)
+  successors(Some(start), |&x| Some(x + tile_size))
+    .take_while(|&x| x < area_end)
+    .filter_map(|x| i32::try_from(x).ok())
     .collect()
 }
 
@@ -242,6 +248,14 @@ mod tests {
       let reparsed = BackgroundRepeat::from_css_str(&parsed.to_css_string()).unwrap();
       assert_eq!(parsed, reparsed, "failed for {css}");
     }
+  }
+
+  #[test]
+  fn oversized_repeat_tile_does_not_wrap_into_an_infinite_iterator() {
+    assert_eq!(
+      collect_repeat_tile_positions(100, u32::MAX, 0).as_slice(),
+      &[0]
+    );
   }
 
   #[test]
