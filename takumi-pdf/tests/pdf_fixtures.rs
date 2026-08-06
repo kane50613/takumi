@@ -756,9 +756,14 @@ fn archival_standards() {
   assert!(String::from_utf8_lossy(&a4).starts_with("%PDF-2.0"));
 }
 
+const FACTUR_X_XMP: &str = r#"<rdf:Description rdf:about="" xmlns:fx="urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#"><fx:DocumentFileName>factur-x.xml</fx:DocumentFileName></rdf:Description>"#;
+
+const FACTUR_X_XMP_SCHEMA: &str = r#"<rdf:li rdf:parseType="Resource"><pdfaSchema:schema>Factur-X PDFA Extension Schema</pdfaSchema:schema><pdfaSchema:namespaceURI>urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#</pdfaSchema:namespaceURI><pdfaSchema:prefix>fx</pdfaSchema:prefix><pdfaSchema:property><rdf:Seq><rdf:li rdf:parseType="Resource"><pdfaProperty:name>DocumentFileName</pdfaProperty:name><pdfaProperty:valueType>Text</pdfaProperty:valueType><pdfaProperty:category>external</pdfaProperty:category><pdfaProperty:description>name of the embedded XML invoice file</pdfaProperty:description></rdf:li></rdf:Seq></pdfaSchema:property></rdf:li>"#;
+
 /// The invoice carries a machine-readable XML attachment under PDF/A-3b:
-/// the file spec, association kind, and name tree all serialize, and the
-/// modification date falls back to the metadata creation date.
+/// the file spec, association kind, and name tree all serialize, the
+/// modification date falls back to the metadata creation date, and a custom
+/// XMP fragment lands inside the packet krilla writes.
 #[test]
 fn attachments() {
   let attachment = || Attachment {
@@ -779,6 +784,8 @@ fn attachments() {
       minute: 0,
       second: 0,
     }),
+    xmp: Some(FACTUR_X_XMP.to_string()),
+    xmp_schemas: Some(FACTUR_X_XMP_SCHEMA.to_string()),
     ..PdfMetadata::default()
   };
   let a3b = run_pdf_fixture("invoice-pdfa-3b-attachment", |fonts| {
@@ -802,6 +809,26 @@ fn attachments() {
   assert!(
     haystack.contains("/Params<</Size 23/ModDate(D:20260806000000Z)>>"),
     "missing attachment modification date fallback"
+  );
+
+  let (packet, _) = haystack
+    .split_once("</rdf:RDF>")
+    .expect("missing XMP packet");
+
+  assert!(
+    packet.contains(FACTUR_X_XMP),
+    "custom XMP fragment not spliced into the packet"
+  );
+  // A packet carries at most one schema bag, so the custom entry has to land in
+  // the one krilla writes: a second bag makes the whole packet unparseable.
+  assert_eq!(
+    packet.matches("<pdfaExtension:schemas>").count(),
+    1,
+    "custom schema entry did not merge into the packet's schema bag"
+  );
+  assert!(
+    packet.contains(FACTUR_X_XMP_SCHEMA),
+    "custom schema entry missing from the packet"
   );
 
   let fonts = fonts();
@@ -829,6 +856,20 @@ fn attachments() {
   );
 
   assert!(matches!(invalid_mime, Err(PdfError::InvalidMimeType(mime)) if mime == "not-a-mime"));
+
+  let malformed_xmp = render(
+    PdfOptions::builder()
+      .node(text("xmp", 16.0))
+      .page(PageOptions::A4)
+      .metadata(PdfMetadata {
+        xmp: Some("<rdf:Description rdf:about=\"\">".to_string()),
+        ..metadata()
+      })
+      .fonts(&fonts)
+      .build(),
+  );
+
+  assert!(matches!(malformed_xmp, Err(PdfError::InvalidXmp)));
 
   // PDF/A-2 forbids arbitrary attachments; PDF/A-3 requires the descriptive
   // fields and a date. These reach the render through Rust and wasm callers,
@@ -1034,6 +1075,8 @@ fn report_links_outline() {
         keywords: vec!["report".into(), "fixture".into()],
         creator: Some("takumi-pdf fixtures".into()),
         creation_date: None,
+        xmp: None,
+        xmp_schemas: None,
       })
       .fonts(fonts)
       .build()

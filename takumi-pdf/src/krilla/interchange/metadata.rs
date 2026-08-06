@@ -26,6 +26,47 @@ pub struct Metadata {
   pub(crate) creation_date: Option<DateTime>,
   pub(crate) text_direction: Option<TextDirection>,
   pub(crate) page_layout: Option<PageLayout>,
+  pub(crate) custom_xmp: Option<String>,
+  pub(crate) custom_xmp_schemas: Option<String>,
+}
+
+const RDF_END: &str = "</rdf:RDF>";
+const SCHEMAS_END: &str = "</rdf:Bag></pdfaExtension:schemas>";
+
+const SCHEMAS_DESCRIPTION: &str = concat!(
+  r#"<rdf:Description rdf:about="""#,
+  r#" xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/""#,
+  r#" xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#""#,
+  r#" xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#">"#,
+  "<pdfaExtension:schemas><rdf:Bag>",
+);
+
+fn insert_before(packet: &str, anchor: &str, fragment: &str) -> Option<String> {
+  let index = packet.rfind(anchor)?;
+
+  Some(format!(
+    "{}{}{}",
+    &packet[..index],
+    fragment,
+    &packet[index..]
+  ))
+}
+
+/// Appends a caller-supplied RDF fragment to a finished XMP packet, so custom
+/// properties ride along with the ones krilla writes itself.
+pub(crate) fn insert_custom_xmp(packet: &str, fragment: &str) -> String {
+  insert_before(packet, RDF_END, fragment).unwrap_or_else(|| packet.to_string())
+}
+
+/// Merges caller-supplied `pdfaExtension:schemas` entries into the packet's own
+/// schema bag, which XMP allows only once per packet.
+pub(crate) fn insert_custom_xmp_schemas(packet: &str, entries: &str) -> String {
+  if let Some(merged) = insert_before(packet, SCHEMAS_END, entries) {
+    return merged;
+  }
+  let description = format!("{SCHEMAS_DESCRIPTION}{entries}{SCHEMAS_END}</rdf:Description>");
+
+  insert_custom_xmp(packet, &description)
 }
 
 impl Metadata {
@@ -107,6 +148,18 @@ impl Metadata {
   /// different versions of the same document.
   pub fn document_id(mut self, document_id: String) -> Self {
     self.document_id = Some(document_id);
+    self
+  }
+
+  /// An RDF fragment written verbatim into the XMP packet.
+  pub fn custom_xmp(mut self, custom_xmp: String) -> Self {
+    self.custom_xmp = Some(custom_xmp);
+    self
+  }
+
+  /// `pdfaExtension:schemas` entries merged into the packet's schema bag.
+  pub fn custom_xmp_schemas(mut self, custom_xmp_schemas: String) -> Self {
+    self.custom_xmp_schemas = Some(custom_xmp_schemas);
     self
   }
 

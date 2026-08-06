@@ -157,6 +157,10 @@ pub(crate) struct MetadataInput {
   creator: Option<String>,
   /// UTC creation date as `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`.
   creation_date: Option<String>,
+  /// RDF fragment written verbatim into the XMP packet.
+  xmp: Option<String>,
+  /// `pdfaExtension:schemas` entries describing the schemas `xmp` uses.
+  xmp_schemas: Option<String>,
 }
 
 impl TryFrom<MetadataInput> for PdfMetadata {
@@ -180,6 +184,8 @@ impl TryFrom<MetadataInput> for PdfMetadata {
       keywords: input.keywords.unwrap_or_default(),
       creator: input.creator,
       creation_date,
+      xmp: input.xmp,
+      xmp_schemas: input.xmp_schemas,
     })
   }
 }

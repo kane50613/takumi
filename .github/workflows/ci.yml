@@ -78,6 +78,42 @@ jobs:
       - name: Run tests
         run: CARGO_PROFILE_TEST_STRIP="debuginfo" cargo test
 
+      # The fixtures claim PDF/A and PDF/UA conformance in their metadata. Only
+      # the reference validator can tell whether the claim holds.
+      - name: Install veraPDF
+        run: |
+          curl -sL -o verapdf-installer.zip https://software.verapdf.org/rel/verapdf-installer.zip
+          unzip -q verapdf-installer.zip
+          cat > auto-install.xml <<XML
+          <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+          <AutomatedInstallation langpack="eng">
+            <com.izforge.izpack.panels.htmlhello.HTMLHelloPanel id="welcome"/>
+            <com.izforge.izpack.panels.target.TargetPanel id="install_dir">
+              <installpath>$PWD/verapdf</installpath>
+            </com.izforge.izpack.panels.target.TargetPanel>
+            <com.izforge.izpack.panels.packs.PacksPanel id="sdk_pack_select">
+              <pack index="0" name="veraPDF GUI" selected="true"/>
+              <pack index="1" name="veraPDF Mac and *nix Scripts" selected="true"/>
+            </com.izforge.izpack.panels.packs.PacksPanel>
+            <com.izforge.izpack.panels.install.InstallPanel id="install"/>
+            <com.izforge.izpack.panels.finish.FinishPanel id="finish"/>
+          </AutomatedInstallation>
+          XML
+          java -jar verapdf-greenfield-*/verapdf-izpack-installer-*.jar auto-install.xml
+
+      - name: Validate PDF conformance
+        run: |
+          fail=0
+          for pdf in takumi-pdf/tests/fixtures-generated/*.pdf; do
+            if grep -qa "pdfaid:part" "$pdf"; then
+              ./verapdf/verapdf --flavour 0 --format text "$pdf" || fail=1
+            fi
+            if grep -qa "pdfuaid:part" "$pdf"; then
+              ./verapdf/verapdf --flavour ua1 --format text "$pdf" || fail=1
+            fi
+          done
+          exit $fail
+
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 

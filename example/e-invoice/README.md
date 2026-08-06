@@ -4,7 +4,7 @@ Builds the container an EU e-invoice needs, from JSX, using [takumi-pdf](../../t
 
 An e-invoice is one file that has to satisfy two readers. A human opens it and sees an invoice. A machine opens it and reads `factur-x.xml`, the structured payload attached inside the PDF. The container has to be PDF/A-3, the only PDF/A level that allows arbitrary attachments.
 
-The output is a valid PDF/A-3B and PDF/UA-1 document carrying a valid Factur-X MINIMUM payload. It is not yet a conforming Factur-X file: that also needs an `fx:` XMP block, which takumi-pdf cannot write today. See [Validating](#validating).
+The output is a conforming Factur-X MINIMUM invoice: a valid PDF/A-3B container that is also PDF/UA-1, carrying the XML payload and the `fx:` XMP block that identifies it. veraPDF and Mustang both pass on it, see [Validating](#validating).
 
 Build the wasm package first (needs [Rust](https://www.rust-lang.org/tools/install) and [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/)):
 
@@ -56,4 +56,8 @@ The [Mustang](https://www.mustangproject.org/) CLI validates the Factur-X half, 
 java -jar Mustang-CLI.jar --action validate --source output/invoice.pdf
 ```
 
-The XML section reports `valid`. The PDF section still reports errors, because Factur-X also wants an `fx:` XMP extension schema naming the profile and the attachment. takumi-pdf writes the PDF/A extension schemas but has no hook for a payload-specific one yet, so a full Factur-X container needs a post-processing step for that block today.
+```text
+<summary status="valid"/>
+```
+
+Mustang keys on the `fx:` XMP block to find the profile and the attachment. That block comes from `metadata.xmp`, and its schema description from `metadata.xmpSchemas`, both written into the PDF verbatim. Neither is validated during the render beyond being well-formed XML, so a wrong profile name or a missing property surfaces here rather than at render time.

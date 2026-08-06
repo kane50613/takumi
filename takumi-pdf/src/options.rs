@@ -9,6 +9,7 @@ use crate::krilla::{
   error::KrillaError,
   metadata::{DateTime, Metadata},
 };
+use roxmltree::Document as XmlDocument;
 use takumi_core::{
   Fonts,
   error::Error as TakumiError,
@@ -38,6 +39,8 @@ pub enum PdfError {
   InvalidMimeType(String),
   /// Two attachments share the same file name.
   DuplicateAttachment(String),
+  /// A custom XMP fragment closes the packet the renderer owns.
+  InvalidXmp,
 }
 
 impl From<TakumiError> for PdfError {
@@ -224,6 +227,15 @@ pub struct PdfMetadata {
   /// The document creation date, interpreted as UTC. Tagged archival
   /// standards require one; supplying it keeps output deterministic.
   pub creation_date: Option<PdfDate>,
+  /// An RDF fragment written verbatim into the XMP packet, for schemas the
+  /// renderer knows nothing about, e.g. the `fx:` properties a Factur-X
+  /// invoice needs. The render does not validate it.
+  pub xmp: Option<String>,
+  /// `pdfaExtension:schemas` entries (`rdf:li` elements) describing the schemas
+  /// [`Self::xmp`] uses. PDF/A rejects properties whose schema carries no
+  /// description, and the packet allows one schema bag, so these merge into the
+  /// bag the renderer writes rather than arriving as their own block.
+  pub xmp_schemas: Option<String>,
 }
 
 /// A UTC timestamp for [`PdfMetadata::creation_date`].
@@ -241,6 +253,29 @@ pub struct PdfDate {
   pub minute: u8,
   /// Second `0..=59`.
   pub second: u8,
+}
+
+/// Namespaces a fragment may use without declaring them itself, matching the
+/// element it is spliced into.
+const XMP_FRAGMENT_ROOT: &str = concat!(
+  r#"<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#""#,
+  r#" xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/""#,
+  r#" xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#""#,
+  r#" xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#">"#,
+);
+
+/// Rejects fragments that would not survive being spliced into the packet: the
+/// renderer writes them verbatim, so malformed markup breaks metadata a viewer
+/// still opens and only a validator flags.
+pub(crate) fn validate_custom_xmp(metadata: &PdfMetadata) -> Result<(), PdfError> {
+  let fragments = [metadata.xmp.as_deref(), metadata.xmp_schemas.as_deref()];
+
+  for fragment in fragments.into_iter().flatten() {
+    let document = format!("{XMP_FRAGMENT_ROOT}{fragment}</rdf:RDF>");
+
+    XmlDocument::parse(&document).map_err(|_| PdfError::InvalidXmp)?;
+  }
+  Ok(())
 }
 
 pub(crate) fn build_metadata(metadata: &PdfMetadata, lang: Option<Lang>) -> Metadata {
@@ -266,6 +301,12 @@ pub(crate) fn build_metadata(metadata: &PdfMetadata, lang: Option<Lang>) -> Meta
   }
   if let Some(date) = metadata.creation_date {
     result = result.creation_date(krilla_datetime(date));
+  }
+  if let Some(xmp) = &metadata.xmp {
+    result = result.custom_xmp(xmp.clone());
+  }
+  if let Some(schemas) = &metadata.xmp_schemas {
+    result = result.custom_xmp_schemas(schemas.clone());
   }
   result
 }

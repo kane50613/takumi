@@ -2,8 +2,11 @@ import { mkdir } from "node:fs/promises";
 import { googleFonts } from "@takumi-rs/helpers";
 import { write } from "bun";
 import { measure, render } from "takumi-pdf";
-import { facturXml, invoice } from "./facturx";
+import { facturXml, facturXmp, facturXmpSchema, invoice } from "./facturx";
 import { InvoiceDocument } from "./invoice";
+
+const ATTACHMENT_NAME = "factur-x.xml";
+const PROFILE = "minimum";
 
 await mkdir("output", { recursive: true });
 
@@ -42,10 +45,12 @@ const pdf = await render(<InvoiceDocument data={invoice} />, {
     title: `Invoice ${invoice.number}`,
     authors: [invoice.seller.name],
     creationDate: invoice.issuedAt,
+    xmp: facturXmp(ATTACHMENT_NAME, PROFILE),
+    xmpSchemas: facturXmpSchema(),
   },
   attachments: [
     {
-      name: "factur-x.xml",
+      name: ATTACHMENT_NAME,
       data: facturXml(invoice),
       mimeType: "text/xml",
       description: "Factur-X 1.0 MINIMUM invoice data",

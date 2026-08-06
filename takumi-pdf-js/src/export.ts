@@ -109,6 +109,19 @@ export type PdfMetadata = {
    * standards require one; supplying it keeps output deterministic.
    */
   creationDate?: string;
+  /**
+   * An RDF fragment written verbatim into the XMP packet, for schemas the
+   * renderer knows nothing about, e.g. the `fx:` properties a Factur-X invoice
+   * needs. The render does not validate it.
+   */
+  xmp?: string;
+  /**
+   * `pdfaExtension:schemas` entries (`rdf:li` elements) describing the schemas
+   * `xmp` uses. PDF/A rejects properties whose schema carries no description,
+   * and a packet allows one schema bag, so these merge into the bag the
+   * renderer writes rather than arriving as their own block.
+   */
+  xmpSchemas?: string;
 };
 
 /** A file attached to the PDF, shown in the viewer's attachment panel. */
