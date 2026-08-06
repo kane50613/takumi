@@ -16,7 +16,7 @@ bun run build
 Then run the example:
 
 ```bash
-cd example/e-invoice
+cd ../example/e-invoice
 bun index.tsx
 ```
 
@@ -43,7 +43,7 @@ verapdf --flavour 3b --format text output/invoice.pdf
 verapdf --flavour ua1 --format text output/invoice.pdf
 ```
 
-```
+```text
 PASS output/invoice.pdf 3b
 PASS output/invoice.pdf ua1
 ```

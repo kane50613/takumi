@@ -48,9 +48,8 @@ impl From<TakumiError> for PdfError {
 
 /// Archival standard the output conforms to.
 ///
-/// Levels that require tagged PDF (the `a` conformance levels, PDF/UA) are not
-/// offered. PDF/A-1 is omitted too: it prohibits transparency, which most
-/// takumi output uses.
+/// PDF/A-1 is not offered: it prohibits transparency, which most takumi output
+/// uses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PdfStandard {
   /// Plain PDF 1.7, no validation.

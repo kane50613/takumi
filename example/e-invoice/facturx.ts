@@ -26,8 +26,8 @@ export const invoice = {
 
 export type Invoice = typeof invoice;
 
-export const money = (amount: number) =>
-  amount.toLocaleString("en-IE", { style: "currency", currency: invoice.currency });
+export const money = (amount: number, currency: string) =>
+  amount.toLocaleString("en-IE", { style: "currency", currency });
 
 export const totals = (data: Invoice) => {
   const net = data.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
@@ -37,6 +37,13 @@ export const totals = (data: Invoice) => {
 };
 
 const amount = (value: number) => value.toFixed(2);
+
+const escape = (value: string) =>
+  value.replace(
+    /[&<>"]/g,
+    (character) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[character] ?? character,
+  );
 
 /** Factur-X 1.0 MINIMUM profile, the CII payload every EU e-invoice reader looks for. */
 export function facturXml(data: Invoice) {
@@ -53,7 +60,7 @@ export function facturXml(data: Invoice) {
     </ram:GuidelineSpecifiedDocumentContextParameter>
   </rsm:ExchangedDocumentContext>
   <rsm:ExchangedDocument>
-    <ram:ID>${data.number}</ram:ID>
+    <ram:ID>${escape(data.number)}</ram:ID>
     <ram:TypeCode>380</ram:TypeCode>
     <ram:IssueDateTime>
       <udt:DateTimeString format="102">${data.issuedAt.replaceAll("-", "")}</udt:DateTimeString>
@@ -62,27 +69,27 @@ export function facturXml(data: Invoice) {
   <rsm:SupplyChainTradeTransaction>
     <ram:ApplicableHeaderTradeAgreement>
       <ram:SellerTradeParty>
-        <ram:Name>${data.seller.name}</ram:Name>
+        <ram:Name>${escape(data.seller.name)}</ram:Name>
         <ram:PostalTradeAddress>
-          <ram:CountryID>${data.seller.country}</ram:CountryID>
+          <ram:CountryID>${escape(data.seller.country)}</ram:CountryID>
         </ram:PostalTradeAddress>
         <ram:SpecifiedTaxRegistration>
-          <ram:ID schemeID="VA">${data.seller.vatId}</ram:ID>
+          <ram:ID schemeID="VA">${escape(data.seller.vatId)}</ram:ID>
         </ram:SpecifiedTaxRegistration>
       </ram:SellerTradeParty>
       <ram:BuyerTradeParty>
-        <ram:Name>${data.buyer.name}</ram:Name>
+        <ram:Name>${escape(data.buyer.name)}</ram:Name>
         <ram:SpecifiedTaxRegistration>
-          <ram:ID schemeID="VA">${data.buyer.vatId}</ram:ID>
+          <ram:ID schemeID="VA">${escape(data.buyer.vatId)}</ram:ID>
         </ram:SpecifiedTaxRegistration>
       </ram:BuyerTradeParty>
     </ram:ApplicableHeaderTradeAgreement>
     <ram:ApplicableHeaderTradeDelivery />
     <ram:ApplicableHeaderTradeSettlement>
-      <ram:InvoiceCurrencyCode>${data.currency}</ram:InvoiceCurrencyCode>
+      <ram:InvoiceCurrencyCode>${escape(data.currency)}</ram:InvoiceCurrencyCode>
       <ram:SpecifiedTradeSettlementHeaderMonetarySummation>
         <ram:TaxBasisTotalAmount>${amount(net)}</ram:TaxBasisTotalAmount>
-        <ram:TaxTotalAmount currencyID="${data.currency}">${amount(tax)}</ram:TaxTotalAmount>
+        <ram:TaxTotalAmount currencyID="${escape(data.currency)}">${amount(tax)}</ram:TaxTotalAmount>
         <ram:GrandTotalAmount>${amount(gross)}</ram:GrandTotalAmount>
         <ram:DuePayableAmount>${amount(gross)}</ram:DuePayableAmount>
       </ram:SpecifiedTradeSettlementHeaderMonetarySummation>

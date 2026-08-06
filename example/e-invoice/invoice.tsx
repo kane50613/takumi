@@ -43,8 +43,12 @@ export function InvoiceDocument({ data }: { data: Invoice }) {
           <div key={item.description} tw="flex break-inside-avoid gap-3 pt-3 text-xs">
             <span tw="flex-1">{item.description}</span>
             <span tw="w-[60px] text-right text-[#687385]">{item.quantity}</span>
-            <span tw="w-[100px] text-right text-[#687385]">{money(item.unitPrice)}</span>
-            <span tw="w-[100px] text-right">{money(item.quantity * item.unitPrice)}</span>
+            <span tw="w-[100px] text-right text-[#687385]">
+              {money(item.unitPrice, data.currency)}
+            </span>
+            <span tw="w-[100px] text-right">
+              {money(item.quantity * item.unitPrice, data.currency)}
+            </span>
           </div>
         ))}
       </div>
@@ -53,15 +57,15 @@ export function InvoiceDocument({ data }: { data: Invoice }) {
         <div tw="flex w-[280px] flex-col gap-2.5 text-xs">
           <div tw="flex justify-between">
             <span tw="text-[#687385]">Taxable base</span>
-            <span>{money(net)}</span>
+            <span>{money(net, data.currency)}</span>
           </div>
           <div tw="flex justify-between">
             <span tw="text-[#687385]">VAT ({data.taxRate * 100}%)</span>
-            <span>{money(tax)}</span>
+            <span>{money(tax, data.currency)}</span>
           </div>
           <div tw="flex justify-between border-t border-[#ebeef1] pt-2.5 text-[13px] font-semibold">
             <span>Amount due</span>
-            <span>{money(gross)}</span>
+            <span>{money(gross, data.currency)}</span>
           </div>
         </div>
       </div>

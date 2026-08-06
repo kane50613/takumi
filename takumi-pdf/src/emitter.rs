@@ -478,10 +478,6 @@ impl Emitter<'_> {
     surface.draw_path(&path);
   }
 
-  /// Fills the border ring: one even-odd fill for a uniform color, per-side
-  /// trapezoids clipped to the ring otherwise.
-  // ponytail: dashed/dotted/double render as solid; port the stroke-based
-  // patterns from takumi-svg when someone needs them.
   /// Opens an artifact sequence around a decoration when tagging is on, so it
   /// stays out of the structure tree. Returns whether one was opened.
   fn start_artifact(&self, surface: &mut Surface) -> bool {
@@ -495,6 +491,10 @@ impl Emitter<'_> {
     true
   }
 
+  /// Fills the border ring: one even-odd fill for a uniform color, per-side
+  /// trapezoids clipped to the ring otherwise.
+  // ponytail: dashed/dotted/double render as solid; port the stroke-based
+  // patterns from takumi-svg when someone needs them.
   fn emit_borders(
     &self,
     border: &BorderProperties,
