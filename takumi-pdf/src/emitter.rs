@@ -677,12 +677,32 @@ impl Emitter<'_> {
     }) {
       return None;
     }
+    let style = &node.context.style;
     let stream = {
       let mut builder = surface.stream_builder();
       let mut content = builder.surface();
 
-      for image in images.iter().rev() {
-        self.background_layer(image, node, size, at.0, at.1, &mut content);
+      for (index, image) in images.iter().enumerate().rev() {
+        let placement = place(
+          size,
+          cycled(&style.mask_size, index),
+          cycled(&style.mask_position, index),
+          cycled(&style.mask_repeat, index),
+          &node.context,
+        );
+
+        if placement.repeats(size) {
+          self.tiled_layer(image, node, &placement, size, at, &mut content);
+        } else {
+          self.background_layer(
+            image,
+            node,
+            placement.tile,
+            at.0 + placement.origin.0,
+            at.1 + placement.origin.1,
+            &mut content,
+          );
+        }
       }
       content.finish();
       builder.finish()

@@ -424,12 +424,13 @@ fn mask_image() {
     let source = r##"<div style="display: flex; width: 100%; height: 100%; padding: 12px; column-gap: 12px; background-color: #ffffff;">
       <div style="width: 120px; height: 80px; background-color: #1d4ed8; mask-image: linear-gradient(to right, rgba(0,0,0,1), rgba(0,0,0,0));"></div>
       <div style="width: 120px; height: 80px; background-image: linear-gradient(135deg, #ff5f6d, #3a1c71); mask-image: radial-gradient(circle, rgba(0,0,0,1), rgba(0,0,0,0));"></div>
+      <div style="width: 120px; height: 80px; background-color: #047857; mask-image: radial-gradient(circle, rgba(0,0,0,1), rgba(0,0,0,0)); mask-size: 30px 20px; mask-repeat: repeat;"></div>
     </div>"##;
     let node = from_html(source, FromHtmlOptions::default()).expect("parse mask fixture");
 
     PdfOptions::builder()
       .node(node)
-      .viewport(Viewport::new((290, 110)))
+      .viewport(Viewport::new((420, 110)))
       .fonts(fonts)
       .build()
   });
@@ -441,8 +442,13 @@ fn mask_image() {
   );
   assert_eq!(
     haystack.matches("/S/Alpha").count(),
-    2,
+    3,
     "expected one alpha mask per element"
+  );
+  // The tiled mask resolves through the same placement as a background layer.
+  assert!(
+    haystack.contains("/XStep 30/YStep 20"),
+    "expected the mask layer to tile at its mask-size"
   );
 }
 
