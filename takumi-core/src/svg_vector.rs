@@ -31,8 +31,6 @@ pub enum SvgOp {
   PushBlend(BlendMode),
   /// Applies uniform opacity to nested ops as one isolated group.
   PushOpacity(f32),
-  /// Isolates nested ops into their own compositing group.
-  PushIsolated,
   /// Masks nested ops with the rendering of `ops` (an alpha or luminance
   /// soft mask).
   PushMask {
@@ -222,19 +220,6 @@ fn flatten_group(group: &Group, raster_scale: f32, ops: &mut Vec<SvgOp>) {
     pop_count += 1;
   }
 
-  // Opacity, masks and non-normal blending already isolate in PDF, so only
-  // explicit isolation needs its own group. Clip paths also technically
-  // isolate, but treating them as such would create an XObject per clip for
-  // no visual difference (krilla-svg makes the same trade).
-  if group.isolate()
-    && group.opacity().get() >= 1.0
-    && group.mask().is_none()
-    && group.blend_mode() == usvg::BlendMode::Normal
-  {
-    ops.push(SvgOp::PushIsolated);
-    pop_count += 1;
-  }
-
   for child in group.children() {
     flatten_node(child, raster_scale, ops);
   }
@@ -403,38 +388,32 @@ fn raster_node(
 /// mask, mirroring krilla-svg.
 fn flatten_clip_path(clip_path: &ClipPath, raster_scale: f32, ops: &mut Vec<SvgOp>) -> usize {
   let clip_rules = collect_clip_rules(clip_path.root());
+  // Uniform nonzero rules always convert; even-odd only as a single shape
+  // (overlapping even-odd shapes render differently in PDF).
   let simple = is_simple_clip_path(clip_path.root())
-    && (clip_rules
-      .iter()
-      .all(|rule| *rule == usvg::FillRule::NonZero)
-      || (clip_rules
-        .iter()
-        .all(|rule| *rule == usvg::FillRule::EvenOdd)
-        && clip_rules.len() == 1));
+    && match clip_rules.as_slice() {
+      [usvg::FillRule::EvenOdd] => true,
+      rules => rules.iter().all(|rule| *rule == usvg::FillRule::NonZero),
+    };
 
   if simple {
     let rule = clip_rules
       .first()
       .copied()
       .unwrap_or(usvg::FillRule::NonZero);
-    let mut pushed = 0;
 
-    push_simple_clips(clip_path, rule, ops, &mut pushed);
-    pushed
+    push_simple_clips(clip_path, rule, ops)
   } else {
     ops.push(complex_clip_op(clip_path, raster_scale));
     1
   }
 }
 
-fn push_simple_clips(
-  clip_path: &ClipPath,
-  rule: usvg::FillRule,
-  ops: &mut Vec<SvgOp>,
-  pushed: &mut usize,
-) {
+fn push_simple_clips(clip_path: &ClipPath, rule: usvg::FillRule, ops: &mut Vec<SvgOp>) -> usize {
+  let mut pushed = 0;
+
   if let Some(nested) = clip_path.clip_path() {
-    push_simple_clips(nested, rule, ops, pushed);
+    pushed += push_simple_clips(nested, rule, ops);
   }
 
   let mut commands = Vec::new();
@@ -449,7 +428,7 @@ fn push_simple_clips(
     path: commands,
     evenodd: rule == usvg::FillRule::EvenOdd,
   });
-  *pushed += 1;
+  pushed + 1
 }
 
 fn extend_clip_commands(group: &Group, transform: &Transform, commands: &mut Vec<PathCommand>) {

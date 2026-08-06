@@ -46,7 +46,6 @@ fn draw_ops(surface: &mut Surface, ops: &[SvgOp]) {
       SvgOp::PushOpacity(opacity) => {
         surface.push_opacity(normalized(*opacity));
       }
-      SvgOp::PushIsolated => surface.push_isolated(),
       SvgOp::PushMask { ops, luminance } => {
         let mut stream_builder = surface.stream_builder();
         let mut sub_surface = stream_builder.surface();
