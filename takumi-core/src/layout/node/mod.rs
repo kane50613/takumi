@@ -753,6 +753,17 @@ mod tests {
   use crate::style::{BackgroundImage, Style, StyleDeclaration, TailwindValues};
 
   #[test]
+  fn alt_distinguishes_missing_from_empty() {
+    let node = Node::container(Vec::new());
+
+    assert_eq!(node.alt(), None);
+
+    let node = node.with_attributes(BTreeMap::from([("alt".into(), "".into())]));
+
+    assert_eq!(node.alt(), Some(""));
+  }
+
+  #[test]
   fn image_source_input_deserializes_raw_rgba() {
     let input: ImageSourceInput = serde_json::from_value(serde_json::json!({
       "width": 2,

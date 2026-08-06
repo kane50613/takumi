@@ -286,7 +286,7 @@ fn parse_field<T: FromStr>(part: Option<&str>, width: usize) -> Option<T> {
 
 fn parse_date(value: &str) -> Option<PdfDate> {
   let (date, time) = match value.split_once('T') {
-    Some((date, time)) => (date, Some(time.trim_end_matches('Z'))),
+    Some((date, time)) => (date, Some(time.strip_suffix('Z').unwrap_or(time))),
     None => (value, None),
   };
   let mut parts = date.splitn(3, '-');
@@ -486,5 +486,26 @@ impl PdfRenderer {
       tagged: options.tagged.map(Tagging::from).unwrap_or_default(),
     })
     .map_err(map_error)
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::parse_date;
+
+  #[test]
+  fn parse_date_accepts_documented_formats() {
+    assert!(parse_date("2026-08-06").is_some());
+    assert!(parse_date("2026-08-06T01:02:03").is_some());
+    assert!(parse_date("2026-08-06T01:02:03Z").is_some());
+    assert!(parse_date("2028-02-29").is_some());
+  }
+
+  #[test]
+  fn parse_date_rejects_invalid_input() {
+    assert!(parse_date("2026-08-06T01:02:03ZZ").is_none());
+    assert!(parse_date("2026-02-30").is_none());
+    assert!(parse_date("2026-13-01").is_none());
+    assert!(parse_date("26-08-06").is_none());
   }
 }
