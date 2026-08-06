@@ -428,26 +428,28 @@ fn clip_path_shapes() {
     };
     let source = format!(
       r##"<div style="display: flex; width: 100%; height: 100%; padding: 16px; column-gap: 16px; background-color: #ffffff;">
-        {}{}{}{}
+        {}{}{}{}{}
       </div>"##,
       cell("inset(10px 12px round 16px)"),
       cell("ellipse(45px 30px at 55px 55px)"),
       cell("polygon(50% 0%, 100% 100%, 0% 100%)"),
       cell("path('M 10 10 H 100 V 100 H 10 Z')"),
+      // A shape with no area hides the element instead of leaving it visible.
+      cell("inset(50% 0)"),
     );
     let node = from_html(&source, FromHtmlOptions::default()).expect("parse clip path fixture");
 
     PdfOptions::builder()
       .node(node)
-      .viewport(Viewport::new((540, 150)))
+      .viewport(Viewport::new((670, 150)))
       .fonts(fonts)
       .build()
   });
 
-  // Four shape clips, plus the rounded-box clip each gradient layer pushes.
+  // Five shape clips, plus the rounded-box clip each gradient layer pushes.
   assert_eq!(
     clip_operators(&pdf),
-    8,
+    10,
     "expected one clip per shape, before its decorations"
   );
 }

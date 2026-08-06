@@ -19,6 +19,17 @@ use takumi_core::{
   style::{BlendMode, ComputedStyle, Length, Overflow, PositionComponent, ResolvedGradientStop},
 };
 
+/// A degenerate path, for a clip that must hide everything: an empty region is
+/// what CSS asks for when a shape resolves to no area.
+pub(crate) fn empty_path(x: f32, y: f32) -> Option<KrillaPath> {
+  let mut builder = PathBuilder::new();
+
+  builder.move_to(x, y);
+  builder.line_to(x, y);
+  builder.close();
+  builder.finish()
+}
+
 /// A single-rectangle krilla path.
 pub(crate) fn rect_path(rect: KrillaRect) -> Option<KrillaPath> {
   let mut builder = PathBuilder::new();

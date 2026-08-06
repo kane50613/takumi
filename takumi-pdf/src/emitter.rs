@@ -45,8 +45,8 @@ use crate::inline::{InlineMap, build_inline_runs, inline_key, node_inline_items,
 use crate::options::PdfError;
 use crate::pagination::Atom;
 use crate::paint::{
-  draw_decoration, expanded_radial_stops, fill_from_rgba, krilla_blend, krilla_path, krilla_stop,
-  krilla_stops, overflow_clip_rect, pop_transforms, rect_path, spread,
+  draw_decoration, empty_path, expanded_radial_stops, fill_from_rgba, krilla_blend, krilla_path,
+  krilla_stop, krilla_stops, overflow_clip_rect, pop_transforms, rect_path, spread,
 };
 #[cfg(feature = "images")]
 use crate::paint::{position_axis, rasterized_image};
@@ -221,8 +221,11 @@ impl Emitter<'_> {
     // before anything is painted.
     if let Some(shape) = &style.clip_path {
       let commands = clip_shape_commands(shape, &node.context, layout.size);
+      // A shape that resolves to no area clips everything away, so a missing
+      // path becomes an empty region rather than no clip at all.
+      let path = krilla_path(&commands, x, y).or_else(|| empty_path(x, y));
 
-      if let Some(path) = krilla_path(&commands, x, y) {
+      if let Some(path) = path {
         let rule = match shape.fill_rule().unwrap_or(style.clip_rule) {
           CoreFillRule::EvenOdd => FillRule::EvenOdd,
           _ => FillRule::NonZero,
