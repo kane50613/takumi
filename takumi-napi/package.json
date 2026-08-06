@@ -1,6 +1,6 @@
 {
   "name": "@takumi-rs/core",
-  "version": "2.5.9",
+  "version": "2.5.10",
   "description": "Native Node.js bindings for the Takumi Rust image rendering engine.",
   "keywords": [
     "css",
