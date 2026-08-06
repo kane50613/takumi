@@ -11,7 +11,7 @@ use crate::krilla::{
   num::NormalizedF32,
   paint::{
     Fill, FillRule, LinearGradient as KrillaLinearGradient, Paint, Pattern,
-    RadialGradient as KrillaRadialGradient, SpreadMethod, SweepGradient,
+    RadialGradient as KrillaRadialGradient, SpreadMethod, Stroke, SweepGradient,
   },
   surface::Surface,
   tagging::{Artifact, ArtifactType, ContentTag},
@@ -1073,7 +1073,17 @@ impl Emitter<'_> {
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
     if let Some(prepared) = self.inline.and_then(|map| map.get(&inline_key(node))) {
-      return self.draw_runs(&prepared.runs, &prepared.built, layout, x, y, surface);
+      let font_style = SizedFontStyle::from_style(&node.context.style, &node.context);
+
+      return self.draw_runs(
+        &prepared.runs,
+        &prepared.built,
+        layout,
+        x,
+        y,
+        &font_style,
+        surface,
+      );
     }
     let context = &node.context;
     let Some(items) = node_inline_items(node) else {
@@ -1084,7 +1094,7 @@ impl Emitter<'_> {
       return Ok(());
     };
 
-    self.draw_runs(&runs, &built, layout, x, y, surface)
+    self.draw_runs(&runs, &built, layout, x, y, &font_style, surface)
   }
 
   fn draw_runs(
@@ -1094,8 +1104,27 @@ impl Emitter<'_> {
     layout: Layout,
     x: f32,
     y: f32,
+    font_style: &SizedFontStyle,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
+    // text-shadow paints below the glyphs, later-listed shadows lowest. PDF
+    // has no blur operator, so a blurred text shadow draws sharp.
+    for shadow in font_style.text_shadow.iter().rev() {
+      if shadow.color.0[3] == 0 {
+        continue;
+      }
+      self.glyph_pass(
+        runs,
+        built,
+        layout,
+        x + shadow.offset_x,
+        y + shadow.offset_y,
+        Some(shadow.color),
+        surface,
+      );
+    }
+    let stroke = font_style.stroke_width > 0.0 && font_style.text_stroke_color.0[3] != 0;
+
     for run in &runs.runs {
       let shaped = &run.glyph_run;
       if shaped.glyphs.is_empty() {
@@ -1145,6 +1174,14 @@ impl Emitter<'_> {
         self.filtered(color),
         shaped.brush.opacity,
       )));
+      // `-webkit-text-stroke` strokes the glyph outlines around the fill.
+      if stroke {
+        surface.set_stroke(Some(Stroke {
+          paint: fill_from_rgba(self.filtered(font_style.text_stroke_color), 1.0).paint,
+          width: font_style.stroke_width,
+          ..Stroke::default()
+        }));
+      }
       surface.draw_glyphs(
         Point::from_xy(x + offset.x, y + offset.y),
         &glyphs,
@@ -1153,11 +1190,76 @@ impl Emitter<'_> {
         shaped.font_size,
         false,
       );
+      if stroke {
+        surface.set_stroke(None);
+      }
       for decoration in decorations.iter().filter(|d| d.over) {
         draw_decoration(surface, decoration, x, y, self.color_filter.as_deref());
       }
     }
     Ok(())
+  }
+
+  /// Draws every run's glyphs once, in `color` when set, with no decorations:
+  /// the shadow passes under the real text.
+  fn glyph_pass(
+    &mut self,
+    runs: &InlineRunLayout,
+    built: &BuiltInlineLayout<'_>,
+    layout: Layout,
+    x: f32,
+    y: f32,
+    color: Option<Color>,
+    surface: &mut Surface,
+  ) {
+    for run in &runs.runs {
+      let shaped = &run.glyph_run;
+      if shaped.glyphs.is_empty() {
+        continue;
+      }
+      let Some(font) = self.cached_font(shaped) else {
+        continue;
+      };
+      let offset = run.glyph_offset(layout);
+      if let Some(glyph) = shaped.glyphs.first() {
+        let baseline = y + offset.y + glyph.y;
+        if self.window_disowns_line(baseline) {
+          continue;
+        }
+      }
+      let run_text = built
+        .text
+        .get(shaped.text_range.clone())
+        .unwrap_or_default();
+      let spans = glyph_text_spans(shaped, run_text);
+
+      let glyphs: Vec<PdfGlyph> = shaped
+        .glyphs
+        .iter()
+        .zip(spans)
+        .map(|(glyph, range)| PdfGlyph {
+          id: GlyphId::new(glyph.id),
+          x_offset: glyph.x / shaped.font_size,
+          y_offset: -glyph.y / shaped.font_size,
+          range,
+        })
+        .collect();
+
+      let color = color.unwrap_or(shaped.brush.color);
+
+      surface.set_fill(Some(fill_from_rgba(
+        self.filtered(color),
+        shaped.brush.opacity,
+      )));
+      surface.draw_glyphs(
+        Point::from_xy(x + offset.x, y + offset.y),
+        &glyphs,
+        font,
+        run_text,
+        shaped.font_size,
+        false,
+      );
+    }
   }
 
   /// A krilla font for a run's backing blob, cached by the blob's stable id.

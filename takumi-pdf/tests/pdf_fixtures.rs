@@ -766,6 +766,39 @@ fn background_boxes() {
   );
 }
 
+/// `text-shadow` draws shifted glyph passes under the text, and
+/// `-webkit-text-stroke` strokes the glyph outlines around the fill.
+#[test]
+fn text_shadow_and_stroke() {
+  let pdf = run_pdf_fixture("text-shadow-stroke", |fonts| {
+    let source = r##"<div style="display: flex; flex-direction: column; row-gap: 8px; width: 100%; height: 100%; padding: 16px; background-color: #ffffff; font-size: 28px; color: #111827;">
+      <div style="text-shadow: 3px 3px 0 #f59e0b;">Sharp shadow</div>
+      <div style="text-shadow: 2px 2px 4px rgba(17, 24, 39, 0.5);">Blurred shadow</div>
+      <div style="-webkit-text-stroke: 1px #b91c1c; color: #fef3c7;">Stroked text</div>
+    </div>"##;
+    let node = from_html(source, FromHtmlOptions::default()).expect("parse text shadow fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((360, 160)))
+      .fonts(fonts)
+      .build()
+  });
+  let content: Vec<Vec<u8>> = content_lines(&pdf).collect();
+  let contains = |needle: &[u8]| content.iter().any(|line| find(line, needle).is_some());
+
+  // The amber shadow pass fills before the text color does.
+  assert!(
+    contains(b"0.9607843 0.61960787 0.043137256 rg"),
+    "expected the shadow color fill"
+  );
+  // The stroke sets a red stroke color (RG) next to the cream fill.
+  assert!(
+    contains(b"0.7254902 0.10980392 0.10980392 RG"),
+    "expected the text stroke color"
+  );
+}
+
 /// `url()` layers: a bitmap background sized by its intrinsic dimensions,
 /// tiled, covered, and used as a `mask-image` alpha source.
 #[test]
