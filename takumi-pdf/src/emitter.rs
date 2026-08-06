@@ -4,6 +4,8 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[cfg(feature = "images")]
 use crate::krilla::geom::Size as KrillaSize;
+#[cfg(feature = "raster-filters")]
+use crate::krilla::image::Image as KrillaImage;
 use crate::krilla::{
   Data,
   geom::{Point, Rect as KrillaRect, Transform},
@@ -130,6 +132,15 @@ impl Emitter<'_> {
       .root()
       .and_then(|paint| self.root.node_at_path(&paint.path))
     {
+      // blur() and drop-shadow() need a convolution: the whole subtree
+      // rasterizes like a Chromium filtered layer instead of emitting vectors.
+      #[cfg(feature = "raster-filters")]
+      if crate::raster_filter::needs_raster(&node.context.style.filter) {
+        if let Some(paint) = context.root() {
+          self.emit_rasterized_context(context, paint, parent, surface);
+        }
+        return Ok(());
+      }
       self.color_filter =
         ColorFilter::compose(outer_filter.as_deref(), &node.context.style.filter).map(Rc::new);
     }
@@ -1483,6 +1494,95 @@ impl Emitter<'_> {
 
 /// Whether the node draws own content (text or an image), i.e. whether a
 /// tagged content sequence around it would be non-empty.
+#[cfg(feature = "raster-filters")]
+impl Emitter<'_> {
+  /// Rasterizes a filtered stacking context and embeds it as one image, the
+  /// way Chromium renders a filtered layer offscreen. The raster pass applies
+  /// every filter function in order; ancestor color filters then apply to the
+  /// pixels like they do to every other color.
+  fn emit_rasterized_context(
+    &mut self,
+    context: &StackingContextNode,
+    paint: &NodePaint,
+    parent: Affine,
+    surface: &mut Surface,
+  ) {
+    // ponytail: 1x keeps the raster pass's filter radii in canvas pixels,
+    // where CSS px and device px agree. Supersampling needs the subtree's
+    // sizing to carry the scale as a device-pixel ratio first.
+    const SUPERSAMPLE: f32 = 1.0;
+
+    let Some(node) = self.root.node_at_path(&paint.path) else {
+      return;
+    };
+    let Ok(layout) = self.results.layout(paint.node_id) else {
+      return;
+    };
+    let style = &node.context.style;
+    let bleed = crate::raster_filter::bleed(&style.filter, &node.context);
+    let (tx, ty) = (paint.transform.x, paint.transform.y);
+    // Absolute paint bounds of the subtree; the border box is the fallback.
+    let (left, top, right, bottom) = match context.paint_bounds() {
+      Some(b) => (b.left as f32, b.top as f32, b.right as f32, b.bottom as f32),
+      None => (tx, ty, tx + layout.size.width, ty + layout.size.height),
+    };
+    // The bitmap rect relative to the node's border-box origin.
+    let ox = left - tx - bleed;
+    let oy = top - ty - bleed;
+    let width = right - left + 2.0 * bleed;
+    let height = bottom - top + 2.0 * bleed;
+    let pixels = Size {
+      width: (width * SUPERSAMPLE).ceil() as u32,
+      height: (height * SUPERSAMPLE).ceil() as u32,
+    };
+
+    if pixels.width == 0 || pixels.height == 0 {
+      return;
+    }
+    // The clone gives the raster walk a tree it can own; layout ids and paths
+    // stay valid because the clone preserves them.
+    let mut subtree = node.clone();
+    let transform = Affine::scale(SUPERSAMPLE, SUPERSAMPLE)
+      * Affine::translation(-ox - layout.location.x, -oy - layout.location.y);
+    let Ok(bitmap) =
+      takumi_raster::rasterize_node(&mut subtree, self.results, paint.node_id, pixels, transform)
+    else {
+      return;
+    };
+    let mut data = bitmap.into_raw();
+
+    if let Some(filter) = &self.color_filter {
+      for pixel in data.chunks_exact_mut(4) {
+        pixel.copy_from_slice(&filter.apply([pixel[0], pixel[1], pixel[2], pixel[3]]));
+      }
+    }
+    let krilla_image = KrillaImage::from_rgba8(data, pixels.width, pixels.height);
+    let Some(target) = KrillaSize::from_wh(width, height) else {
+      return;
+    };
+    let relative = parent.invert().unwrap_or(Affine::IDENTITY) * paint.transform;
+    let cols = relative.to_cols_array();
+    let mut pushed = 1;
+
+    surface.push_transform(&Transform::from_row(
+      cols[0], cols[1], cols[2], cols[3], cols[4], cols[5],
+    ));
+    if style.mix_blend_mode != BlendMode::Normal {
+      surface.push_blend_mode(krilla_blend(style.mix_blend_mode));
+      pushed += 1;
+    }
+    let artifact = self.start_artifact(surface);
+
+    surface.push_transform(&Transform::from_translate(ox, oy));
+    surface.draw_image(krilla_image, target);
+    surface.pop();
+    if artifact {
+      surface.end_tagged();
+    }
+    pop_transforms(surface, pushed);
+  }
+}
+
 /// Whether a background or mask layer draws anything in this build: gradients
 /// always, `url()` images only with the `images` feature.
 fn paintable_layer(image: &BackgroundImage) -> bool {

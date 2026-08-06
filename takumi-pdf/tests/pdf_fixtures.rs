@@ -460,6 +460,45 @@ fn mask_image() {
   );
 }
 
+/// `filter: blur()` and `drop-shadow()` rasterize the filtered subtree into an
+/// image, like Chromium's offscreen filtered layers. Color-only filters stay
+/// vector.
+#[test]
+fn raster_filters() {
+  let pdf = run_pdf_fixture("raster-filters", |fonts| {
+    let source = r##"<div style="display: flex; width: 100%; height: 100%; padding: 24px; column-gap: 24px; background-color: #ffffff;">
+      <div style="width: 100px; height: 100px; background-color: #1d4ed8; border-radius: 12px; filter: blur(6px);"></div>
+      <div style="width: 100px; height: 100px; background-color: #047857; border-radius: 12px; filter: drop-shadow(6px 6px 8px rgba(17, 24, 39, 0.6));"></div>
+      <div style="width: 100px; height: 100px; background-color: #b91c1c; border-radius: 12px; filter: grayscale(1);"></div>
+    </div>"##;
+    let node = from_html(source, FromHtmlOptions::default()).expect("parse raster filter fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((420, 150)))
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = String::from_utf8_lossy(&pdf);
+
+  // The blurred and drop-shadowed cells embed as images; the grayscale cell
+  // stays a vector fill. Each translucent image carries its alpha as a second
+  // image object, the soft mask.
+  assert_eq!(
+    haystack.matches("/Subtype/Image").count(),
+    4,
+    "expected exactly the blur and drop-shadow subtrees to rasterize"
+  );
+  let content: Vec<Vec<u8>> = content_lines(&pdf).collect();
+
+  assert!(
+    content
+      .iter()
+      .any(|line| find(line, b"0.23921569 0.23921569 0.23921569 rg").is_some()),
+    "expected the grayscale cell to stay a vector fill"
+  );
+}
+
 /// The color half of `filter`: each cell paints the same red, transformed by a
 /// different filter, so the fills carry different colors.
 #[test]

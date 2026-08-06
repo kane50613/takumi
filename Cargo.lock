@@ -1937,6 +1937,7 @@ dependencies = [
  "smallvec",
  "takumi-core",
  "takumi-html",
+ "takumi-raster",
  "tiny-skia-path",
  "typed-builder",
  "write-fonts",

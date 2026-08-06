@@ -395,6 +395,34 @@ fn create_measured_node(
   }
 }
 
+/// Rasterizes one laid-out subtree into a bitmap, its filters applied.
+///
+/// For backends that keep vector output but need a pixel copy of part of the
+/// scene, like the PDF backend under `filter: blur()`. `transform` maps the
+/// subtree into the bitmap, so the caller controls supersampling and margins.
+pub fn rasterize_node(
+  node: &mut RenderNode,
+  layout_results: &LayoutResults,
+  node_id: NodeId,
+  size: Size<u32>,
+  transform: Affine,
+) -> Result<Bitmap> {
+  let mut canvas = Canvas::try_new(size).ok_or(Error::InvalidViewport)?;
+
+  render_node(
+    node,
+    layout_results,
+    node_id,
+    &mut canvas,
+    transform,
+    Size {
+      width: None,
+      height: None,
+    },
+  )?;
+  Ok(Bitmap::from_rgba(canvas.into_inner()?))
+}
+
 /// Renders a node to an image.
 pub fn render<'g>(options: RenderOptions<'g>) -> Result<Bitmap> {
   let RenderOptions {

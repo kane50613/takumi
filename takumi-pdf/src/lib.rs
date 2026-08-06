@@ -31,9 +31,12 @@
 //! - text with decorations, `text-shadow`, and `-webkit-text-stroke`
 //! - images, with `object-fit` and `object-position`
 //! - `clip-path`, `mask-image`, and the color `filter` primitives
+//! - `filter: blur()` and `drop-shadow()`, by rasterizing the filtered
+//!   subtree like Chromium's offscreen filtered layers (the `raster-filters`
+//!   feature)
 //! - opacity, blend modes, overflow clipping, and affine transforms
 //!
-//! Not yet: `filter: blur()` / `drop-shadow()`, `backdrop-filter`.
+//! Not yet: `backdrop-filter`.
 
 use std::{cell::RefCell, rc::Rc};
 
@@ -48,6 +51,8 @@ mod interactive;
 mod options;
 mod pagination;
 mod paint;
+#[cfg(feature = "raster-filters")]
+mod raster_filter;
 mod shadow;
 #[cfg(all(feature = "svg", feature = "images"))]
 mod svg;
