@@ -9,7 +9,10 @@
 
 use std::{collections::HashMap, num::NonZeroU16};
 
-use takumi_core::layout::tree::RenderNode;
+use takumi_core::{
+  layout::tree::RenderNode,
+  style::{Display, FlexDirection},
+};
 
 use crate::krilla::tagging::{Identifier, Tag, TagGroup, TagKind, TagTree};
 
@@ -43,12 +46,37 @@ pub(crate) fn build_tag_tree(
 ) -> TagTree {
   let mut tree = TagTree::new().with_lang(lang.map(str::to_string));
   let mut top = Vec::new();
+  let mut pending = Vec::new();
 
-  build_node(root, &mut Vec::new(), collector, &mut top);
+  build_node(
+    root,
+    &mut Vec::new(),
+    collector,
+    &mut top,
+    &mut pending,
+    false,
+  );
+  flush_paragraph(&mut pending, &mut top);
   for group in top {
     tree.push(group);
   }
   tree
+}
+
+/// Drains a run of bare-content identifiers into a single `P`. Bare content
+/// under an untagged ancestor still needs a structure parent, and one
+/// paragraph per block container mirrors HTML text flow without emitting a
+/// structure element per text node.
+fn flush_paragraph(pending: &mut Vec<Identifier>, parent: &mut Vec<TagGroup>) {
+  if pending.is_empty() {
+    return;
+  }
+  let mut group = TagGroup::new(Tag::P);
+
+  for identifier in pending.drain(..) {
+    group.push(identifier);
+  }
+  parent.push(group);
 }
 
 fn build_node(
@@ -56,36 +84,42 @@ fn build_node(
   path: &mut Vec<usize>,
   collector: &mut TagCollector,
   parent: &mut Vec<TagGroup>,
+  pending: &mut Vec<Identifier>,
+  in_row: bool,
 ) {
   let identifiers = collector.take(path);
 
   match role(node) {
     Some(kind) => {
+      flush_paragraph(pending, parent);
       let mut group = TagGroup::new(kind);
 
       for identifier in identifiers {
         group.push(identifier);
       }
       let mut children = Vec::new();
+      let mut child_pending = Vec::new();
 
-      build_children(node, path, collector, &mut children);
+      build_children(node, path, collector, &mut children, &mut child_pending);
+      flush_paragraph(&mut child_pending, &mut children);
       for child in children {
         group.push(child);
       }
       parent.push(group);
     }
     None => {
-      // Bare content under an untagged ancestor still needs a structure
-      // parent; paragraphs are the honest default for HTML text flow.
-      if !identifiers.is_empty() {
-        let mut group = TagGroup::new(Tag::P);
+      // Items of a row-direction flex container read as one visual line, so
+      // their block boundaries do not split the paragraph run.
+      let block = is_block(node) && !in_row;
 
-        for identifier in identifiers {
-          group.push(identifier);
-        }
-        parent.push(group);
+      if block {
+        flush_paragraph(pending, parent);
       }
-      build_children(node, path, collector, parent);
+      pending.extend(identifiers);
+      build_children(node, path, collector, parent, pending);
+      if block {
+        flush_paragraph(pending, parent);
+      }
     }
   }
 }
@@ -95,16 +129,38 @@ fn build_children(
   path: &mut Vec<usize>,
   collector: &mut TagCollector,
   parent: &mut Vec<TagGroup>,
+  pending: &mut Vec<Identifier>,
 ) {
   let Some(children) = node.children.as_ref() else {
     return;
   };
+  let in_row = is_row_flex(node);
 
   for (index, child) in children.iter().enumerate() {
     path.push(index);
-    build_node(child, path, collector, parent);
+    build_node(child, path, collector, parent, pending, in_row);
     path.pop();
   }
+}
+
+/// Whether the node opens a block-level container, i.e. a paragraph boundary
+/// for bare text runs.
+fn is_block(node: &RenderNode) -> bool {
+  !matches!(
+    node.context.style.display,
+    Display::Inline | Display::InlineBlock | Display::InlineFlex | Display::InlineGrid
+  )
+}
+
+/// Whether the node lays its children out on one horizontal line.
+fn is_row_flex(node: &RenderNode) -> bool {
+  matches!(
+    node.context.style.display,
+    Display::Flex | Display::InlineFlex
+  ) && matches!(
+    node.context.style.flex_direction,
+    FlexDirection::Row | FlexDirection::RowReverse
+  )
 }
 
 fn role(node: &RenderNode) -> Option<TagKind> {

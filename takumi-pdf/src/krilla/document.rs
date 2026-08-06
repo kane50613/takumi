@@ -14,7 +14,10 @@
 //!
 //! [`Page`]: Page
 
+use pdf_writer::{Filter, XRefFilter};
+
 use crate::krilla::chunk_container::ChunkContainer;
+use crate::krilla::configure::PdfVersion;
 use crate::krilla::destination::NamedDestination;
 use crate::krilla::error::KrillaResult;
 use crate::krilla::interchange::embed::EmbeddedFile;
@@ -23,6 +26,7 @@ use crate::krilla::interchange::outline::Outline;
 use crate::krilla::interchange::tagging::TagTree;
 use crate::krilla::page::{Page, PageSettings};
 use crate::krilla::serialize::{SerializeContext, SerializeSettings};
+use crate::krilla::stream::deflate_encode;
 use crate::krilla::surface::Location;
 
 /// A PDF document.
@@ -144,6 +148,20 @@ impl Document {
       chunk_container,
     } = self;
 
-    Ok(serializer_context.finish(chunk_container)?.finish())
+    let version = serializer_context.serialize_settings().pdf_version();
+    let (pdf, xref_ref) = serializer_context.finish(chunk_container)?;
+
+    // Cross-reference streams compress the per-object xref rows; they exist
+    // from PDF 1.5 onwards.
+    if version >= PdfVersion::Pdf15 {
+      Ok(pdf.finish_with_xref_stream_and_filter(xref_ref, |data| {
+        (
+          deflate_encode(data),
+          XRefFilter::Single(Filter::FlateDecode),
+        )
+      }))
+    } else {
+      Ok(pdf.finish())
+    }
   }
 }
