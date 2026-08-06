@@ -5,7 +5,7 @@ use xmp_writer::{RenditionClass, XmpWriter};
 
 use crate::krilla::configure::{PdfVersion, ValidationError};
 use crate::krilla::error::KrillaResult;
-use crate::krilla::interchange::metadata::Metadata;
+use crate::krilla::interchange::metadata::{Metadata, write_custom_properties};
 use crate::krilla::metadata::PageLayout;
 use crate::krilla::serialize::SerializeContext;
 use crate::krilla::util::{Deferred, stable_hash_base64};
@@ -179,9 +179,16 @@ impl ChunkContainer {
       metadata.serialize_xmp_metadata(&mut xmp, sc, &instance_id);
     }
 
+    let custom_schemas = self
+      .metadata
+      .as_ref()
+      .map(|metadata| metadata.custom_schemas.as_slice())
+      .unwrap_or_default();
     let settings = sc.serialize_settings();
     let validators = settings.validators();
-    validators.write_xmp(&mut xmp);
+    validators.write_xmp(&mut xmp, custom_schemas);
+
+    write_custom_properties(&mut xmp, custom_schemas);
 
     xmp.num_pages(sc.page_infos().len() as u32);
     xmp.format("application/pdf");

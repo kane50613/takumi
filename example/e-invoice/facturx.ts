@@ -1,3 +1,5 @@
+import type { XmpSchema } from "takumi-pdf";
+
 export const invoice = {
   number: "INV-2026-0042",
   issuedAt: "2026-08-04",
@@ -44,6 +46,40 @@ const escape = (value: string) =>
     (character) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[character] ?? character,
   );
+
+const FX_NAMESPACE = "urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#";
+
+/**
+ * The `fx:` schema a Factur-X reader looks for: four properties plus the
+ * description PDF/A requires for them.
+ *
+ * @see https://github.com/atgp/factur-x/blob/master/xmp/Factur-X_extension_schema.xmp
+ */
+export function facturXmp(fileName: string, profile: string): XmpSchema {
+  return {
+    name: "Factur-X PDF/A Extension",
+    prefix: "fx",
+    namespace: FX_NAMESPACE,
+    properties: [
+      {
+        name: "DocumentType",
+        value: "INVOICE",
+        description: "the type of document the XML describes",
+      },
+      {
+        name: "DocumentFileName",
+        value: fileName,
+        description: "name of the embedded XML invoice file",
+      },
+      { name: "Version", value: "1.0", description: "the version of the Factur-X standard" },
+      {
+        name: "ConformanceLevel",
+        value: profile.toUpperCase(),
+        description: "the profile the XML conforms to",
+      },
+    ],
+  };
+}
 
 /** Factur-X 1.0 MINIMUM profile, the CII payload every EU e-invoice reader looks for. */
 export function facturXml(data: Invoice) {

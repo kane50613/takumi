@@ -3,7 +3,9 @@
 
 use serde::Deserialize;
 use serde_bytes::ByteBuf;
-use takumi_pdf::{Attachment, AttachmentRelationship, PdfMetadata, PdfStandard, Tagging};
+use takumi_pdf::{
+  Attachment, AttachmentRelationship, PdfMetadata, PdfStandard, Tagging, XmpProperty, XmpSchema,
+};
 
 use crate::date::parse_date;
 
@@ -157,6 +159,46 @@ pub(crate) struct MetadataInput {
   creator: Option<String>,
   /// UTC creation date as `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`.
   creation_date: Option<String>,
+  /// Custom XMP schemas written into the packet.
+  xmp: Option<Vec<XmpSchemaInput>>,
+}
+
+/// A custom XMP namespace and the properties written under it.
+#[derive(Deserialize)]
+pub(crate) struct XmpSchemaInput {
+  name: String,
+  prefix: String,
+  namespace: String,
+  properties: Vec<XmpPropertyInput>,
+}
+
+/// A property of an [`XmpSchemaInput`].
+#[derive(Deserialize)]
+pub(crate) struct XmpPropertyInput {
+  name: String,
+  value: String,
+  description: String,
+}
+
+impl From<XmpSchemaInput> for XmpSchema {
+  fn from(input: XmpSchemaInput) -> Self {
+    Self {
+      name: input.name,
+      prefix: input.prefix,
+      namespace: input.namespace,
+      properties: input.properties.into_iter().map(Into::into).collect(),
+    }
+  }
+}
+
+impl From<XmpPropertyInput> for XmpProperty {
+  fn from(input: XmpPropertyInput) -> Self {
+    Self {
+      name: input.name,
+      value: input.value,
+      description: input.description,
+    }
+  }
 }
 
 impl TryFrom<MetadataInput> for PdfMetadata {
@@ -180,6 +222,12 @@ impl TryFrom<MetadataInput> for PdfMetadata {
       keywords: input.keywords.unwrap_or_default(),
       creator: input.creator,
       creation_date,
+      xmp: input
+        .xmp
+        .unwrap_or_default()
+        .into_iter()
+        .map(Into::into)
+        .collect(),
     })
   }
 }

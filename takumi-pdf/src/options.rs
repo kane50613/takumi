@@ -38,6 +38,9 @@ pub enum PdfError {
   InvalidMimeType(String),
   /// Two attachments share the same file name.
   DuplicateAttachment(String),
+  /// An XMP schema carries a prefix, property name or namespace URI that
+  /// cannot be written into XML.
+  InvalidXmpSchema(String),
 }
 
 impl From<TakumiError> for PdfError {
@@ -224,6 +227,67 @@ pub struct PdfMetadata {
   /// The document creation date, interpreted as UTC. Tagged archival
   /// standards require one; supplying it keeps output deterministic.
   pub creation_date: Option<PdfDate>,
+  /// Custom XMP schemas written into the packet, for metadata the renderer
+  /// knows nothing about, e.g. the `fx:` properties a Factur-X invoice needs.
+  pub xmp: Vec<XmpSchema>,
+}
+
+/// A namespace written into the XMP packet, with the schema description PDF/A
+/// requires for it.
+#[derive(Debug, Default, Clone)]
+pub struct XmpSchema {
+  /// Human-readable name, e.g. `Factur-X PDF/A Extension`.
+  pub name: String,
+  /// Namespace prefix the properties are written under, e.g. `fx`.
+  pub prefix: String,
+  /// Namespace URI.
+  pub namespace: String,
+  /// Properties written under the namespace. Each is written as a value and
+  /// described in the schema, so the two cannot drift apart.
+  pub properties: Vec<XmpProperty>,
+}
+
+/// A property of an [`XmpSchema`].
+#[derive(Debug, Default, Clone)]
+pub struct XmpProperty {
+  /// Property name, e.g. `DocumentFileName`.
+  pub name: String,
+  /// Property value.
+  pub value: String,
+  /// What the property means. PDF/A requires one.
+  pub description: String,
+}
+
+/// Rejects schemas the XMP writer would serialize into broken XML: it escapes
+/// property values but writes names, prefixes and namespace URIs verbatim.
+pub(crate) fn validate_xmp_schemas(schemas: &[XmpSchema]) -> Result<(), PdfError> {
+  let name_ok = |name: &str| {
+    let mut chars = name.chars();
+
+    chars
+      .next()
+      .is_some_and(|first| first.is_alphabetic() || first == '_')
+      && chars.all(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | '.'))
+  };
+
+  for schema in schemas {
+    if !name_ok(&schema.prefix) {
+      return Err(PdfError::InvalidXmpSchema(schema.prefix.clone()));
+    }
+    if schema.namespace.is_empty()
+      || schema
+        .namespace
+        .contains(|c: char| c.is_whitespace() || matches!(c, '"' | '\'' | '<' | '>' | '&'))
+    {
+      return Err(PdfError::InvalidXmpSchema(schema.namespace.clone()));
+    }
+    for property in &schema.properties {
+      if !name_ok(&property.name) {
+        return Err(PdfError::InvalidXmpSchema(property.name.clone()));
+      }
+    }
+  }
+  Ok(())
 }
 
 /// A UTC timestamp for [`PdfMetadata::creation_date`].
@@ -266,6 +330,9 @@ pub(crate) fn build_metadata(metadata: &PdfMetadata, lang: Option<Lang>) -> Meta
   }
   if let Some(date) = metadata.creation_date {
     result = result.creation_date(krilla_datetime(date));
+  }
+  if !metadata.xmp.is_empty() {
+    result = result.custom_schemas(metadata.xmp.clone());
   }
   result
 }

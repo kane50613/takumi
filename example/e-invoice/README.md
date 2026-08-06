@@ -2,9 +2,9 @@
 
 Builds the container an EU e-invoice needs, from JSX, using [takumi-pdf](../../takumi-pdf-js).
 
-An e-invoice is one file that has to satisfy two readers. A human opens it and sees an invoice. A machine opens it and reads `factur-x.xml`, the structured payload attached inside the PDF. The container has to be PDF/A-3, the only PDF/A level that allows arbitrary attachments.
+An e-invoice is one file that has to satisfy two readers. A human opens it and sees an invoice. A machine opens it and reads `factur-x.xml`, the structured payload attached inside the PDF. Factur-X requires PDF/A-3 for the container.
 
-The output is a valid PDF/A-3B and PDF/UA-1 document carrying a valid Factur-X MINIMUM payload. It is not yet a conforming Factur-X file: that also needs an `fx:` XMP block, which takumi-pdf cannot write today. See [Validating](#validating).
+The output is a Factur-X MINIMUM invoice: a PDF/A-3B container that is also PDF/UA-1, carrying the XML payload and the `fx:` XMP block that identifies it. veraPDF and Mustang both pass it, see [Validating](#validating).
 
 Build the wasm package first (needs [Rust](https://www.rust-lang.org/tools/install) and [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/)):
 
@@ -26,7 +26,7 @@ Open `output/invoice.pdf`. The attachment panel holds `factur-x.xml`.
 
 `pdfa: "3b"` emits the archival container: an sRGB output intent, XMP metadata, and embedded subset fonts. A document that cannot conform rejects the render instead of writing a broken file.
 
-`attachments` embeds the XML with the `AFRelationship` of `Data`, the filename `factur-x.xml`, and a media type, all of which Factur-X readers key on. `metadata.creationDate` supplies the attachment's modification date, so two runs produce identical bytes.
+`attachments` embeds the XML with the `AFRelationship` of `Data`, the file name `factur-x.xml`, and a media type. Factur-X pins all three. `metadata.creationDate` supplies the attachment's modification date, so the date does not change between runs.
 
 `measure` lays out the footer band on its own and returns its height. The bottom margin is that height plus a gap, so the footer never collides with the body no matter what the band contains.
 
@@ -36,7 +36,7 @@ Open `output/invoice.pdf`. The attachment panel holds `factur-x.xml`.
 
 Two validators cover the two halves of the file. Both need Java.
 
-[veraPDF](https://verapdf.org/) is the reference implementation for PDF/A and PDF/UA. Download the installer, then run it against the output:
+[veraPDF](https://verapdf.org/) validates PDF/A and PDF/UA. Download the installer, then run it against the output:
 
 ```bash
 verapdf --flavour 3b --format text output/invoice.pdf
@@ -56,4 +56,8 @@ The [Mustang](https://www.mustangproject.org/) CLI validates the Factur-X half, 
 java -jar Mustang-CLI.jar --action validate --source output/invoice.pdf
 ```
 
-The XML section reports `valid`. The PDF section still reports errors, because Factur-X also wants an `fx:` XMP extension schema naming the profile and the attachment. takumi-pdf writes the PDF/A extension schemas but has no hook for a payload-specific one yet, so a full Factur-X container needs a post-processing step for that block today.
+```text
+<summary status="valid"/>
+```
+
+Mustang reads the `fx:` XMP block to find the profile and the attachment. That block comes from `metadata.xmp`, which takes the namespace and its properties as data. The renderer writes both the values and the schema description PDF/A requires, so they cannot disagree. It does not check the values themselves: a wrong profile name surfaces here, not at render time.

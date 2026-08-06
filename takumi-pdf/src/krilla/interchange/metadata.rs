@@ -7,7 +7,10 @@
 //! [`Document::set_metadata`]: crate::krilla::document::Document::set_metadata
 use pdf_writer::{Finish, Pdf, Ref, TextStr};
 use std::cell::LazyCell;
-use xmp_writer::{LangId, Timezone, XmpWriter};
+use xmp_writer::pdfa::PdfAExtSchemasWriter;
+use xmp_writer::{CustomNamespace, LangId, Namespace, Timezone, XmpWriter};
+
+use crate::options::XmpSchema;
 
 use crate::krilla::configure::{Configuration, PdfVersion, ValidationError};
 use crate::krilla::serialize::SerializeContext;
@@ -26,6 +29,51 @@ pub struct Metadata {
   pub(crate) creation_date: Option<DateTime>,
   pub(crate) text_direction: Option<TextDirection>,
   pub(crate) page_layout: Option<PageLayout>,
+  pub(crate) custom_schemas: Vec<XmpSchema>,
+}
+
+/// Writes the caller's namespaces as properties. Their schema descriptions are
+/// written by the validators, which own the packet's single schema bag.
+pub(crate) fn write_custom_properties<'n>(xmp: &mut XmpWriter<'n>, schemas: &'n [XmpSchema]) {
+  for schema in schemas {
+    for property in &schema.properties {
+      xmp
+        .element(&property.name, custom_namespace(schema))
+        .value(property.value.as_str());
+    }
+  }
+}
+
+fn custom_namespace(schema: &XmpSchema) -> Namespace<'_> {
+  Namespace::Custom(Box::new(CustomNamespace::new(
+    &schema.name,
+    &schema.prefix,
+    &schema.namespace,
+  )))
+}
+
+/// Describes the caller's namespaces in the schema bag PDF/A requires them to
+/// appear in.
+pub(crate) fn write_custom_schemas<'n>(
+  extension_schemas: &mut PdfAExtSchemasWriter<'_, 'n>,
+  schemas: &'n [XmpSchema],
+) {
+  for schema in schemas {
+    let mut described = extension_schemas.add_schema();
+
+    described.namespace(custom_namespace(schema));
+
+    let mut properties = described.properties();
+
+    for property in &schema.properties {
+      properties
+        .add_property()
+        .name(&property.name)
+        .value_type("Text")
+        .category(false)
+        .description(&property.description);
+    }
+  }
 }
 
 impl Metadata {
@@ -107,6 +155,12 @@ impl Metadata {
   /// different versions of the same document.
   pub fn document_id(mut self, document_id: String) -> Self {
     self.document_id = Some(document_id);
+    self
+  }
+
+  /// Custom namespaces written into the XMP packet.
+  pub fn custom_schemas(mut self, custom_schemas: Vec<XmpSchema>) -> Self {
+    self.custom_schemas = custom_schemas;
     self
   }
 

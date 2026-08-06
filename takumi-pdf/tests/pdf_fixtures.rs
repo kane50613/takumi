@@ -20,7 +20,7 @@ use takumi_core::{
 use takumi_html::{FromHtmlOptions, from_html};
 use takumi_pdf::{
   Attachment, AttachmentRelationship, MeasureOptions, PageMargins, PageOptions, PdfDate, PdfError,
-  PdfMetadata, PdfOptions, PdfStandard, Tagging, measure, render,
+  PdfMetadata, PdfOptions, PdfStandard, Tagging, XmpProperty, XmpSchema, measure, render,
 };
 
 fn fonts() -> Fonts {
@@ -756,9 +756,48 @@ fn archival_standards() {
   assert!(String::from_utf8_lossy(&a4).starts_with("%PDF-2.0"));
 }
 
+const FACTUR_X_NAMESPACE: &str = "urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#";
+
+fn factur_x_schema() -> XmpSchema {
+  XmpSchema {
+    name: "Factur-X PDF/A Extension".to_string(),
+    prefix: "fx".to_string(),
+    namespace: FACTUR_X_NAMESPACE.to_string(),
+    properties: vec![XmpProperty {
+      name: "DocumentFileName".to_string(),
+      value: "factur-x.xml".to_string(),
+      description: "name of the embedded XML invoice file".to_string(),
+    }],
+  }
+}
+
+/// A schema whose prefix cannot be an XML name rejects the render: the XMP
+/// writer would serialize it verbatim into a packet nothing can parse.
+#[test]
+fn invalid_xmp_schema_rejects() {
+  let metadata = PdfMetadata {
+    xmp: vec![XmpSchema {
+      prefix: "1fx bad".to_string(),
+      ..factur_x_schema()
+    }],
+    ..PdfMetadata::default()
+  };
+  let result = render(
+    PdfOptions::builder()
+      .node(text("invalid xmp", 16.0))
+      .viewport(Viewport::new((200, 100)))
+      .fonts(&fonts())
+      .metadata(metadata)
+      .build(),
+  );
+
+  assert!(matches!(result, Err(PdfError::InvalidXmpSchema(prefix)) if prefix == "1fx bad"));
+}
+
 /// The invoice carries a machine-readable XML attachment under PDF/A-3b:
-/// the file spec, association kind, and name tree all serialize, and the
-/// modification date falls back to the metadata creation date.
+/// the file spec, association kind, and name tree all serialize, the
+/// modification date falls back to the metadata creation date, and a custom
+/// XMP fragment lands inside the packet krilla writes.
 #[test]
 fn attachments() {
   let attachment = || Attachment {
@@ -779,6 +818,7 @@ fn attachments() {
       minute: 0,
       second: 0,
     }),
+    xmp: vec![factur_x_schema()],
     ..PdfMetadata::default()
   };
   let a3b = run_pdf_fixture("invoice-pdfa-3b-attachment", |fonts| {
@@ -802,6 +842,26 @@ fn attachments() {
   assert!(
     haystack.contains("/Params<</Size 23/ModDate(D:20260806000000Z)>>"),
     "missing attachment modification date fallback"
+  );
+
+  let (packet, _) = haystack
+    .split_once("</rdf:RDF>")
+    .expect("missing XMP packet");
+
+  assert!(
+    packet.contains("<fx:DocumentFileName>factur-x.xml</fx:DocumentFileName>"),
+    "custom property missing from the packet"
+  );
+  // A packet carries at most one schema bag, so the custom entry has to land in
+  // the one krilla writes: a second bag makes the whole packet unparseable.
+  assert_eq!(
+    packet.matches("<pdfaExtension:schemas>").count(),
+    1,
+    "custom schema entry did not merge into the packet's schema bag"
+  );
+  assert!(
+    packet.contains(FACTUR_X_NAMESPACE),
+    "custom schema description missing from the packet"
   );
 
   let fonts = fonts();
@@ -1034,6 +1094,7 @@ fn report_links_outline() {
         keywords: vec!["report".into(), "fixture".into()],
         creator: Some("takumi-pdf fixtures".into()),
         creation_date: None,
+        xmp: Vec::new(),
       })
       .fonts(fonts)
       .build()
