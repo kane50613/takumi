@@ -771,6 +771,29 @@ fn factur_x_schema() -> XmpSchema {
   }
 }
 
+/// A schema whose prefix cannot be an XML name rejects the render: the XMP
+/// writer would serialize it verbatim into a packet nothing can parse.
+#[test]
+fn invalid_xmp_schema_rejects() {
+  let metadata = PdfMetadata {
+    xmp: vec![XmpSchema {
+      prefix: "1fx bad".to_string(),
+      ..factur_x_schema()
+    }],
+    ..PdfMetadata::default()
+  };
+  let result = render(
+    PdfOptions::builder()
+      .node(text("invalid xmp", 16.0))
+      .viewport(Viewport::new((200, 100)))
+      .fonts(&fonts())
+      .metadata(metadata)
+      .build(),
+  );
+
+  assert!(matches!(result, Err(PdfError::InvalidXmpSchema(prefix)) if prefix == "1fx bad"));
+}
+
 /// The invoice carries a machine-readable XML attachment under PDF/A-3b:
 /// the file spec, association kind, and name tree all serialize, the
 /// modification date falls back to the metadata creation date, and a custom

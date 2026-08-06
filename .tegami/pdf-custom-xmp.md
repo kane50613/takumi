@@ -10,3 +10,4 @@ packages:
 
 - each schema carries a prefix, a namespace URI, and its properties
 - every property is written as a value and described in the `pdfaExtension:schemas` entry PDF/A requires, so the two cannot drift apart
+- a prefix, property name or namespace the XMP writer cannot serialize rejects the render instead of writing a broken packet
