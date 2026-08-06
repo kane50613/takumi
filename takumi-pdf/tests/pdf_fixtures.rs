@@ -428,7 +428,7 @@ fn clip_path_shapes() {
     };
     let source = format!(
       r##"<div style="display: flex; width: 100%; height: 100%; padding: 16px; column-gap: 16px; background-color: #ffffff;">
-        {}{}{}{}{}
+        {}{}{}{}{}{}
       </div>"##,
       cell("inset(10px 12px round 16px)"),
       cell("ellipse(45px 30px at 55px 55px)"),
@@ -436,27 +436,52 @@ fn clip_path_shapes() {
       cell("path('M 10 10 H 100 V 100 H 10 Z')"),
       // A shape with no area hides the element instead of leaving it visible.
       cell("inset(50% 0)"),
+      // An even-odd rule leaves the inner ring of a self-overlapping polygon
+      // unpainted, and the shape's own rule wins over `clip-rule`.
+      cell(
+        "polygon(evenodd, 55px 5px, 105px 105px, 5px 105px, 105px 40px, 5px 40px); clip-rule: nonzero",
+      ),
     );
     let node = from_html(&source, FromHtmlOptions::default()).expect("parse clip path fixture");
 
     PdfOptions::builder()
       .node(node)
-      .viewport(Viewport::new((670, 150)))
+      .viewport(Viewport::new((800, 150)))
       .fonts(fonts)
       .build()
   });
 
-  // Five shape clips, plus the rounded-box clip each gradient layer pushes.
+  // Five non-zero shape clips (the sixth is even-odd), plus the rounded-box
+  // clip each gradient layer pushes.
   assert_eq!(
     clip_operators(&pdf),
-    10,
+    11,
     "expected one clip per shape, before its decorations"
+  );
+  assert_eq!(
+    even_odd_clip_operators(&pdf),
+    1,
+    "expected the even-odd shape to clip with W*"
   );
 }
 
-/// Counts clip operators across the page content streams, which are deflated.
+/// Counts even-odd clip operators, which end their line with `W*`.
+fn even_odd_clip_operators(pdf: &[u8]) -> usize {
+  content_lines(pdf)
+    .filter(|line| line.ends_with(b"W*"))
+    .count()
+}
+
+/// Counts non-zero clip operators across the page content streams.
 fn clip_operators(pdf: &[u8]) -> usize {
-  let mut clips = 0;
+  content_lines(pdf)
+    .filter(|line| line.ends_with(b"W"))
+    .count()
+}
+
+/// The lines of every deflated content stream in the document.
+fn content_lines(pdf: &[u8]) -> impl Iterator<Item = Vec<u8>> {
+  let mut lines = Vec::new();
   let mut rest = pdf;
 
   while let Some(start) = find(rest, b"stream\n") {
@@ -470,14 +495,11 @@ fn clip_operators(pdf: &[u8]) -> usize {
       .read_to_end(&mut decoded)
       .is_ok()
     {
-      clips += decoded
-        .split(|byte| *byte == b'\n')
-        .filter(|line| line.ends_with(b"W"))
-        .count();
+      lines.extend(decoded.split(|byte| *byte == b'\n').map(<[u8]>::to_vec));
     }
     rest = &body[end + "endstream".len()..];
   }
-  clips
+  lines.into_iter()
 }
 
 fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {

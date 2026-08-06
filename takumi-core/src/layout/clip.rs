@@ -17,11 +17,15 @@ const KAPPA: f32 = 0.552_284_8;
 ///
 /// The commands are unclosed for `path()`, which carries its own closes, and
 /// closed for the shapes that describe a region.
+/// Returns `None` when the shape cannot be resolved at all, which today means
+/// a `path()` in a build without the `svg` feature and its path parser. That is
+/// different from a shape that resolves to no area: callers must not turn it
+/// into an empty clip, which would hide the element.
 pub fn clip_shape_commands(
   shape: &BasicShape,
   context: &RenderContext,
   size: Size<f32>,
-) -> Vec<PathCommand> {
+) -> Option<Vec<PathCommand>> {
   let mut commands = Vec::new();
 
   match shape {
@@ -94,7 +98,7 @@ pub fn clip_shape_commands(
     }
     BasicShape::Polygon(shape) => {
       let Some((first, rest)) = shape.coordinates.split_first() else {
-        return commands;
+        return Some(commands);
       };
 
       commands.move_to((
@@ -113,10 +117,10 @@ pub fn clip_shape_commands(
       // path() coordinates are CSS px; scale them like the to_px shapes.
       let scale = context.sizing.to_device(1.0);
 
-      commands.extend(scale_commands(parse_path(shape.path.as_ref()), scale));
+      commands.extend(scale_commands(parse_path(shape.path.as_ref())?, scale));
     }
   }
-  commands
+  Some(commands)
 }
 
 /// Appends an axis-aligned ellipse outline as four cubics.
@@ -180,14 +184,14 @@ fn scale_commands(commands: Vec<PathCommand>, scale: f32) -> Vec<PathCommand> {
 }
 
 #[cfg(feature = "svg")]
-fn parse_path(input: &str) -> Vec<PathCommand> {
+fn parse_path(input: &str) -> Option<Vec<PathCommand>> {
   use svgtypes::{SimplePathSegment, SimplifyingPathParser};
 
   let mut commands = Vec::new();
 
   for segment in SimplifyingPathParser::from(input) {
     let Ok(segment) = segment else {
-      return Vec::new();
+      return Some(Vec::new());
     };
 
     match segment {
@@ -212,12 +216,13 @@ fn parse_path(input: &str) -> Vec<PathCommand> {
       SimplePathSegment::ClosePath => commands.close(),
     }
   }
-  commands
+  Some(commands)
 }
 
+/// Without the path parser a `path()` shape cannot be resolved at all.
 #[cfg(not(feature = "svg"))]
-fn parse_path(_input: &str) -> Vec<PathCommand> {
-  Vec::new()
+fn parse_path(_input: &str) -> Option<Vec<PathCommand>> {
+  None
 }
 
 #[cfg(test)]

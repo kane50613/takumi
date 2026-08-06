@@ -219,8 +219,9 @@ impl Emitter<'_> {
 
     // `clip-path` clips the element itself, decorations included, so it goes on
     // before anything is painted.
-    if let Some(shape) = &style.clip_path {
-      let commands = clip_shape_commands(shape, &node.context, layout.size);
+    if let Some(shape) = &style.clip_path
+      && let Some(commands) = clip_shape_commands(shape, &node.context, layout.size)
+    {
       // A shape that resolves to no area clips everything away, so a missing
       // path becomes an empty region rather than no clip at all.
       let path = krilla_path(&commands, x, y).or_else(|| empty_path(x, y));
