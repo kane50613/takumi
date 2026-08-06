@@ -117,7 +117,9 @@ fn bands(shadow: &SizedShadow) -> Vec<Band> {
       alpha: 1.0,
     }];
   }
-  let mut bands = Vec::with_capacity(BLUR_BANDS);
+  // The shifted, unblurred shape is fully opaque; the blur only fades outward
+  // from its edge, so that core is the last band drawn.
+  let mut bands = Vec::with_capacity(BLUR_BANDS + 1);
   let mut covered = 0.0;
 
   for index in 0..BLUR_BANDS {
@@ -133,6 +135,10 @@ fn bands(shadow: &SizedShadow) -> Vec<Band> {
       alpha,
     });
   }
+  bands.push(Band {
+    spread: shadow.spread_radius,
+    alpha: 1.0,
+  });
   bands
 }
 
@@ -183,6 +189,25 @@ fn fill(commands: &[PathCommand], color: Color, alpha: f32, at: (f32, f32), surf
 #[cfg(test)]
 mod tests {
   use super::coverage;
+
+  use super::bands;
+  use takumi_core::{shadow::SizedShadow, style::Color};
+
+  #[test]
+  fn a_blurred_shadow_has_an_opaque_core() {
+    let shadow = SizedShadow {
+      offset_x: 0.0,
+      offset_y: 0.0,
+      blur_radius: 12.0,
+      spread_radius: 2.0,
+      color: Color([0, 0, 0, 255]),
+    };
+    let bands = bands(&shadow);
+    let core = bands.last().expect("a band");
+
+    assert_eq!(core.alpha, 1.0);
+    assert_eq!(core.spread, shadow.spread_radius);
+  }
 
   #[test]
   fn coverage_follows_the_gaussian_edge() {
