@@ -41,6 +41,12 @@ use crate::{
   style::{ImageScalingAlgorithm, IntrinsicSizing, SizingContext, StyleSheet},
 };
 
+const MAX_RASTER_PIXELS: u64 = 16 << 20;
+
+fn within_raster_pixel_budget(width: u32, height: u32) -> bool {
+  u64::from(width) * u64::from(height) <= MAX_RASTER_PIXELS
+}
+
 /// Represents the state of an image resource.
 pub(crate) type ImageResult = Result<ImageSource, ImageError>;
 
@@ -406,6 +412,10 @@ impl SvgSource {
   }
 
   fn rasterize(&self, width: u32, height: u32) -> Result<Arc<ImageBuffer>, ImageError> {
+    if !within_raster_pixel_budget(width, height) {
+      return Err(ImageError::InvalidPixmapSize);
+    }
+
     let mut pixmap = Pixmap::new(width, height).ok_or(ImageError::InvalidPixmapSize)?;
 
     let original_size = self.tree.size();
@@ -1426,6 +1436,19 @@ mod tests {
     assert_eq!(height, 4);
     assert_matches!(algo, ImageScalingAlgorithm::Pixelated);
     Ok(())
+  }
+
+  #[cfg(feature = "svg")]
+  #[test]
+  fn svg_rasterization_rejects_oversized_target() {
+    let source: ImageSource = "<svg width=\"1\" height=\"1\"/>"
+      .parse::<SvgSource>()
+      .unwrap()
+      .into();
+
+    let result = source.render_for_layout(4097, 4096, ImageScalingAlgorithm::Auto, 0);
+
+    assert_matches!(result, Err(ImageError::InvalidPixmapSize));
   }
 
   #[test]

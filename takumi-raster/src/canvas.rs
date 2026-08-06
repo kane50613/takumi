@@ -47,6 +47,12 @@ use crate::{
   style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
 };
 
+const MAX_PIXMAP_PIXELS: u64 = 16 << 20;
+
+fn within_pixmap_pixel_budget(size: Size<u32>) -> bool {
+  u64::from(size.width) * u64::from(size.height) <= MAX_PIXMAP_PIXELS
+}
+
 #[derive(Clone, Copy)]
 pub(crate) struct SamplingOptions {
   pub logical_to_source: Affine,
@@ -107,9 +113,13 @@ pub(crate) struct CanvasSubcanvas {
 
 impl Canvas {
   /// Creates a canvas backed by a `size`-sized pixmap, or `None` when the pixmap
-  /// cannot be allocated (zero size, or dimensions large enough to overflow the
-  /// pixel-buffer length).
+  /// cannot be allocated (zero size, over the pixel budget, or dimensions large
+  /// enough to overflow the pixel-buffer length).
   pub(crate) fn try_new(size: Size<u32>) -> Option<Self> {
+    if !within_pixmap_pixel_budget(size) {
+      return None;
+    }
+
     let image = Pixmap::new(size.width, size.height)?;
     Some(Self {
       image,
@@ -132,6 +142,10 @@ impl Canvas {
   }
 
   fn acquire_offscreen(size: Size<u32>) -> Result<Pixmap> {
+    if !within_pixmap_pixel_budget(size) {
+      return Err(Error::InvalidViewport);
+    }
+
     Pixmap::new(size.width, size.height).ok_or_else(|| {
       Error::encode(ImageError::Parameter(ParameterError::from_kind(
         ParameterErrorKind::DimensionMismatch,
