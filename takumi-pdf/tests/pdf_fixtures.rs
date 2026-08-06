@@ -1604,8 +1604,8 @@ fn report_links_outline() {
       .build()
   });
 
-  // Annotation dictionaries and the outline root serialize uncompressed, so
-  // substring checks hold; revisit with a PDF parser if that changes.
+  // `inflated_text` inflates every deflated stream, so a substring check finds
+  // what it is after wherever the object ended up.
   let haystack = inflated_text(&pdf);
 
   for needle in [

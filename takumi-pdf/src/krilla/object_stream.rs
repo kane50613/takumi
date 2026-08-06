@@ -76,8 +76,9 @@ impl ObjectStream {
     }
 
     let row = rows.len() / xref_len;
-    // A row is a type byte, then the offset field, then a two-byte field.
-    let Some(offset_width) = row.checked_sub(3) else {
+    // A row is a type byte, then the offset field, then a two-byte field. The
+    // offset field holds a byte count, so it never outgrows a `u64`.
+    let Some(offset_width) = row.checked_sub(3).filter(|width| *width <= 8) else {
       return;
     };
 

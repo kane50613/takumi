@@ -144,21 +144,21 @@ impl ChunkContainer {
     // bulk of a tagged document, so they move into an object stream, which
     // exists from PDF 1.5 onwards like the cross-reference stream that has to
     // point at them.
-    let object_stream = self
-      .non_stream
-      .struct_elements
-      .take()
-      .filter(|_| sc.serialize_settings().pdf_version() >= PdfVersion::Pdf15)
-      .and_then(|chunk| {
+    let object_stream = if sc.serialize_settings().pdf_version() >= PdfVersion::Pdf15 {
+      self.non_stream.struct_elements.take().and_then(|chunk| {
         let renumbered = chunk.renumber(|old| remapper[&old]);
         let packed = object_stream::pack(&renumbered, remapped_ref.bump(), &mut pdf);
 
+        // Put the chunk back for the visit below to write as it stands.
         if packed.is_none() {
           self.non_stream.struct_elements = Some(chunk);
         }
 
         packed
-      });
+      })
+    } else {
+      None
+    };
 
     // Write the chunks in all the fields.
     self.visit(sc, &mut |chunk| {
