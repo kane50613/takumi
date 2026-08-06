@@ -371,11 +371,11 @@ impl Emitter<'_> {
     }
   }
 
-  /// Paints `background-image` gradient layers, bottom layer first, clipped to
-  /// the `background-clip` box. `background-origin` sets the positioning area
-  /// the size and position resolve against; a repeating layer still tiles
-  /// across the whole clip region.
-  // ponytail: url() layers are not resolved yet.
+  /// Paints `background-image` layers, bottom layer first, clipped to the
+  /// `background-clip` box. Gradient layers paint as shadings; `url()` layers
+  /// rasterize when the `images` feature is on. `background-origin` sets the
+  /// positioning area the size and position resolve against; a repeating
+  /// layer still tiles across the whole clip region.
   fn emit_background_layers(
     &self,
     node: &RenderNode,
