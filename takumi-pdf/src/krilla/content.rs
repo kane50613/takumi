@@ -1276,7 +1276,15 @@ impl ContentBuilder {
 
     let mut p_prev = None;
 
-    for operation in path_data {
+    for operation in simplify_path(path_data) {
+      let operation = match operation {
+        PathOp::Rect { x, y, w, h } => {
+          self.content.rect(x, y, w, h);
+          continue;
+        }
+        PathOp::Segment(segment) => segment,
+      };
+
       match operation {
         PathSegment::MoveTo(p) => {
           self.content.move_to(p.x, p.y);
@@ -1312,6 +1320,101 @@ impl ContentBuilder {
   }
 }
 
+/// One drawing operation of a simplified path.
+enum PathOp {
+  Segment(PathSegment),
+  /// An axis-aligned rectangle, which `re` writes in four numbers instead of
+  /// four operators.
+  Rect {
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+  },
+}
+
+/// Rewrites a path into the shortest operators that paint the same region.
+///
+/// Box decorations arrive from the shared geometry builder with every corner
+/// point repeated, from the zero-radius arcs, and with the closing edge written
+/// out before the close. Neither paints anything. What is left of a rectangle is
+/// then four points, which `re` states in one operator.
+fn simplify_path(path_data: impl Iterator<Item = PathSegment>) -> Vec<PathOp> {
+  let mut out = Vec::new();
+  let mut subpath: Vec<PathSegment> = Vec::new();
+
+  let flush = |subpath: &mut Vec<PathSegment>, out: &mut Vec<PathOp>, closed: bool| {
+    // `re` appends a closed subpath, so it stands in for the close as well.
+    if closed && let Some(rect) = as_rect(subpath) {
+      subpath.clear();
+      out.push(rect);
+      return;
+    }
+
+    out.extend(subpath.drain(..).map(PathOp::Segment));
+
+    if closed {
+      out.push(PathOp::Segment(PathSegment::Close));
+    }
+  };
+
+  for segment in path_data {
+    match segment {
+      PathSegment::MoveTo(_) => {
+        flush(&mut subpath, &mut out, false);
+        subpath.push(segment);
+      }
+      // A segment that goes nowhere.
+      PathSegment::LineTo(p) if subpath.last().and_then(end_point) == Some(p) => {}
+      PathSegment::Close => {
+        // `h` draws the closing edge itself.
+        if let (Some(PathSegment::MoveTo(start)), Some(PathSegment::LineTo(last))) =
+          (subpath.first().copied(), subpath.last().copied())
+          && start == last
+        {
+          subpath.pop();
+        }
+
+        flush(&mut subpath, &mut out, true);
+      }
+      _ => subpath.push(segment),
+    }
+  }
+
+  flush(&mut subpath, &mut out, false);
+  out
+}
+
+fn end_point(segment: &PathSegment) -> Option<tiny_skia_path::Point> {
+  match *segment {
+    PathSegment::MoveTo(p) | PathSegment::LineTo(p) => Some(p),
+    PathSegment::QuadTo(_, p) | PathSegment::CubicTo(_, _, p) => Some(p),
+    PathSegment::Close => None,
+  }
+}
+
+/// Matches a subpath that `re` traces point for point: a horizontal edge, then a
+/// vertical one, then a horizontal one back. Any other winding or start point
+/// stays as it is, so the fill rule and the dash phase cannot shift.
+fn as_rect(subpath: &[PathSegment]) -> Option<PathOp> {
+  let [
+    PathSegment::MoveTo(p0),
+    PathSegment::LineTo(p1),
+    PathSegment::LineTo(p2),
+    PathSegment::LineTo(p3),
+  ] = subpath
+  else {
+    return None;
+  };
+
+  (p0.y == p1.y && p1.x == p2.x && p2.y == p3.y && p3.x == p0.x).then_some(PathOp::Rect {
+    x: p0.x,
+    y: p0.y,
+    w: p1.x - p0.x,
+    h: p2.y - p1.y,
+  })
+}
+
 // Note that this isn't a 100% accurate calculation, it can overestimate (and in a few cases
 // even underestimate), but it should be good enough for the majority of the cases.
 // TODO: Improve this so that `zalgo_text` test case shows up fully in the reference image.
@@ -1345,4 +1448,72 @@ fn get_glyphs_bbox(glyphs: &[impl Glyph], x: f32, y: f32, size: f32, font: Font)
   }
 
   Rect::from_ltrb(bl, bt, br, bb).unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+  use super::{PathOp, simplify_path};
+
+  use tiny_skia_path::{PathSegment, Point};
+
+  fn line(x: f32, y: f32) -> PathSegment {
+    PathSegment::LineTo(Point::from_xy(x, y))
+  }
+
+  fn start(x: f32, y: f32) -> PathSegment {
+    PathSegment::MoveTo(Point::from_xy(x, y))
+  }
+
+  fn describe(segments: Vec<PathSegment>) -> Vec<String> {
+    simplify_path(segments.into_iter())
+      .into_iter()
+      .map(|op| match op {
+        PathOp::Rect { x, y, w, h } => format!("re {x} {y} {w} {h}"),
+        PathOp::Segment(PathSegment::MoveTo(p)) => format!("m {} {}", p.x, p.y),
+        PathOp::Segment(PathSegment::LineTo(p)) => format!("l {} {}", p.x, p.y),
+        PathOp::Segment(PathSegment::Close) => "h".to_string(),
+        PathOp::Segment(_) => "curve".to_string(),
+      })
+      .collect()
+  }
+
+  #[test]
+  fn a_rectangle_with_repeated_corners_collapses_to_one_operator() {
+    let path = vec![
+      start(36.0, 55.0),
+      line(359.0, 55.0),
+      line(359.0, 55.0),
+      line(359.0, 57.0),
+      line(359.0, 57.0),
+      line(36.0, 57.0),
+      line(36.0, 57.0),
+      line(36.0, 55.0),
+      PathSegment::Close,
+    ];
+
+    assert_eq!(describe(path), ["re 36 55 323 2"]);
+  }
+
+  #[test]
+  fn a_rectangle_traced_the_other_way_stays_a_path() {
+    let path = vec![
+      start(0.0, 0.0),
+      line(0.0, 10.0),
+      line(20.0, 10.0),
+      line(20.0, 0.0),
+      PathSegment::Close,
+    ];
+
+    assert_eq!(
+      describe(path),
+      ["m 0 0", "l 0 10", "l 20 10", "l 20 0", "h"]
+    );
+  }
+
+  #[test]
+  fn an_open_path_keeps_its_closing_edge() {
+    let path = vec![start(0.0, 0.0), line(10.0, 0.0), line(0.0, 0.0)];
+
+    assert_eq!(describe(path), ["m 0 0", "l 10 0", "l 0 0"]);
+  }
 }
