@@ -20,13 +20,14 @@
 //! margin areas like Chromium's print templates. Nodes classed `pageNumber`
 //! / `totalPages` are filled with the page counters.
 //!
-//! Coverage: backgrounds (color and gradient layers, with `background-size`,
-//! `-position` and `-repeat`), borders and radius, images
-//! (`object-fit`/`object-position`), text with decorations, opacity, blend
-//! modes, overflow clipping, `clip-path`, `box-shadow` (blur approximated by
-//! bands), the color `filter` primitives, `mask-image`, affine transforms,
-//! pagination. Not yet: `filter: blur()`/`drop-shadow()`, url() background and
-//! mask layers.
+//! Coverage: backgrounds (color, gradient and url() layers, with
+//! `background-size`, `-position`, `-repeat`, `-origin`, `-clip` including
+//! `text`, and per-layer blend modes), borders, radius and `outline`, images
+//! (`object-fit`/`object-position`), text with decorations, `text-shadow` and
+//! `-webkit-text-stroke`, opacity, blend modes, overflow clipping,
+//! `clip-path`, `box-shadow` (blur approximated by bands), the color `filter`
+//! primitives, `mask-image`, affine transforms, pagination. Not yet:
+//! `filter: blur()`/`drop-shadow()`, `backdrop-filter`.
 
 use std::{cell::RefCell, rc::Rc};
 

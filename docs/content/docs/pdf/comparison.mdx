@@ -42,6 +42,6 @@ Reading the numbers honestly:
 
 - Chrome's cold start includes launching a browser process. It varies with machine state. Its memory spans several processes. A single-process measurement misses this. Chrome performs well after warming. It has the most complete CSS support of the three.
 - react-pdf embeds the same Inter subsets as the other two. Subsetting on every render is most of its warm cost; the standard 14 PDF fonts avoid it. Documents use react-pdf's component set. Existing HTML, JSX, and Tailwind markup cannot be reused.
-- takumi-pdf reuses OG-image components unchanged. Its CSS coverage is narrower than Chromium's. PDF output does not support `box-shadow`, `filter`, `clip-path`, or masks yet. Tagged output is on by default since 0.3 and adds about 10 KB to this invoice. `tagged: false` removes it.
+- takumi-pdf reuses OG-image components unchanged. Its CSS coverage is narrower than Chromium's. PDF output does not support `filter: blur()`, `drop-shadow()`, or `backdrop-filter`, and a blurred `box-shadow` is approximated with bands. Tagged output is on by default since 0.3 and adds about 10 KB to this invoice. `tagged: false` removes it.
 
 Rule of thumb: use Puppeteer to reproduce a complex web page pixel-perfectly. Any renderer suits documents written from scratch for PDF work. Use takumi-pdf to reuse Takumi image components. It suits edge runtimes. It also offers lower per-document latency.

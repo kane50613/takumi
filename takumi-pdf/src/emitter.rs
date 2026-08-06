@@ -446,6 +446,7 @@ impl Emitter<'_> {
   /// repeated layer costs one shading instead of one per tile. The filled rect
   /// covers the paint box at `rect_at`; the first tile hangs off `anchor`,
   /// which `background-origin` may inset from the paint box.
+  #[allow(clippy::too_many_arguments)]
   fn tiled_layer(
     &self,
     image: &BackgroundImage,
@@ -746,7 +747,7 @@ impl Emitter<'_> {
   ) -> Option<Mask> {
     let images = node.context.style.mask_image.as_deref()?;
 
-    if !images.iter().any(|image| paintable_layer(image)) {
+    if !images.iter().any(paintable_layer) {
       return None;
     }
     let filter = self.color_filter.take();
@@ -1291,6 +1292,7 @@ impl Emitter<'_> {
 
   /// Draws every run's glyphs once, in `color` when set, with no decorations:
   /// the shadow passes under the real text.
+  #[allow(clippy::too_many_arguments)]
   fn glyph_pass(
     &mut self,
     runs: &InlineRunLayout,

@@ -36,7 +36,7 @@ Open `output/invoice.pdf`. The attachment panel holds `factur-x.xml`.
 
 Two validators cover the two halves of the file. Both need Java.
 
-[veraPDF](https://verapdf.org/) validates PDF/A and PDF/UA. Download the installer, then run it against the output:
+[veraPDF](https://verapdf.org/) validates PDF/A and PDF/UA. Install it with `brew install verapdf`, or download the installer from the site. Then run it against the output:
 
 ```bash
 verapdf --flavour 3b --format text output/invoice.pdf
@@ -50,10 +50,11 @@ PASS output/invoice.pdf ua1
 
 Swap `--format text` for `--format mrr` to see which rule failed and where.
 
-The [Mustang](https://www.mustangproject.org/) CLI validates the Factur-X half, both the XML against the profile's schematron and the PDF against the Factur-X packaging rules:
+The [Mustang](https://www.mustangproject.org/) CLI validates the Factur-X half, both the XML against the profile's schematron and the PDF against the Factur-X packaging rules. Grab the jar from the latest [mustangproject release](https://github.com/ZUGFeRD/mustangproject/releases), then:
 
 ```bash
-java -jar Mustang-CLI.jar --action validate --source output/invoice.pdf
+curl -sLO https://github.com/ZUGFeRD/mustangproject/releases/download/core-2.25.0/Mustang-CLI-2.25.0.jar
+java -jar Mustang-CLI-2.25.0.jar --action validate --source output/invoice.pdf
 ```
 
 ```text
