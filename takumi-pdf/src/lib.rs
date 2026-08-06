@@ -249,7 +249,18 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         .collect_atoms(0, Affine::IDENTITY, &mut atoms, &mut forced)?;
       let starts = page_starts(&mut atoms, &mut forced, content.height, window_height);
       let pages = starts.len();
-      let (links, headings) = collect_interactive(&content);
+      let interactive = collect_interactive(&content);
+      let destination = |top: f32| {
+        let index = starts
+          .partition_point(|start| *start <= top)
+          .saturating_sub(1);
+        let y = page.margin.top + (top - starts[index]).max(0.0);
+
+        XyzDestination::new(
+          index,
+          Point::from_xy(page.margin.left * PT_PER_PX, y * PT_PER_PX),
+        )
+      };
 
       for (index, &y0) in starts.iter().enumerate() {
         let mut pdf_page = document.start_page_with(PageSettings::new(page_size));
@@ -326,25 +337,18 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         surface.finish();
         add_link_annotations(
           &mut pdf_page,
-          &links,
+          &interactive.links,
           (y0, y0 + paint_height),
           (page.margin.left, content_top),
           tag_collector.as_ref(),
+          |id| interactive.anchors.get(id).copied().map(destination),
         );
         pdf_page.finish();
       }
 
-      if (options.outline || options.tagged == Tagging::Ua1) && !headings.is_empty() {
-        document.set_outline(build_outline(&headings, |heading| {
-          let index = starts
-            .partition_point(|start| *start <= heading.top)
-            .saturating_sub(1);
-          let y = page.margin.top + (heading.top - starts[index]).max(0.0);
-
-          XyzDestination::new(
-            index,
-            Point::from_xy(page.margin.left * PT_PER_PX, y * PT_PER_PX),
-          )
+      if (options.outline || options.tagged == Tagging::Ua1) && !interactive.headings.is_empty() {
+        document.set_outline(build_outline(&interactive.headings, |heading| {
+          destination(heading.top)
         }));
       }
       if let Some(collector) = &tag_collector {
@@ -371,19 +375,22 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       emitter.emit_context(0, Affine::IDENTITY, &mut surface)?;
       surface.pop();
       surface.finish();
-      let (links, headings) = collect_interactive(&content);
+      let interactive = collect_interactive(&content);
+      let destination =
+        |top: f32| XyzDestination::new(0, Point::from_xy(0.0, top.max(0.0) * PT_PER_PX));
 
       add_link_annotations(
         &mut page,
-        &links,
+        &interactive.links,
         (0.0, content.height),
         (0.0, 0.0),
         tag_collector.as_ref(),
+        |id| interactive.anchors.get(id).copied().map(destination),
       );
       page.finish();
-      if (options.outline || options.tagged == Tagging::Ua1) && !headings.is_empty() {
-        document.set_outline(build_outline(&headings, |heading| {
-          XyzDestination::new(0, Point::from_xy(0.0, heading.top.max(0.0) * PT_PER_PX))
+      if (options.outline || options.tagged == Tagging::Ua1) && !interactive.headings.is_empty() {
+        document.set_outline(build_outline(&interactive.headings, |heading| {
+          destination(heading.top)
         }));
       }
       if let Some(collector) = &tag_collector {
