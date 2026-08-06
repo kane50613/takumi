@@ -55,11 +55,12 @@ mod subsetter;
 #[cfg(feature = "images")]
 use crate::krilla::image::Image as KrillaImage;
 use crate::krilla::{
-  Data, Document,
+  Data, Document, SerializeSettings,
   action::{Action, LinkAction},
   annotation::{Annotation, LinkAnnotation, Target},
   blend::BlendMode as KrillaBlendMode,
   color::rgb,
+  configure::{Archival, ConfigurationBuilder},
   destination::XyzDestination,
   error::KrillaError,
   geom::{
@@ -126,11 +127,48 @@ pub enum PdfError {
   InvalidPageSize,
   /// Single-page output ([`PdfOptions::page`] unset) needs a viewport.
   MissingViewport,
+  /// The requested archival standard could not be configured.
+  InvalidStandard,
 }
 
 impl From<TakumiError> for PdfError {
   fn from(error: TakumiError) -> Self {
     Self::Render(error)
+  }
+}
+
+/// Archival standard the output conforms to.
+///
+/// Levels that require tagged PDF (the `a` conformance levels, PDF/UA) are not
+/// offered. PDF/A-1 is omitted too: it prohibits transparency, which most
+/// takumi output uses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PdfStandard {
+  /// Plain PDF 1.7, no validation.
+  #[default]
+  None,
+  /// PDF/A-2b: archival, basic conformance.
+  A2b,
+  /// PDF/A-2u: archival with guaranteed Unicode mapping.
+  A2u,
+  /// PDF/A-3b: PDF/A-2b plus arbitrary file attachments.
+  A3b,
+  /// PDF/A-3u: PDF/A-2u plus arbitrary file attachments.
+  A3u,
+  /// PDF/A-4: archival, PDF 2.0.
+  A4,
+}
+
+impl PdfStandard {
+  fn archival(self) -> Option<Archival> {
+    match self {
+      PdfStandard::None => None,
+      PdfStandard::A2b => Some(Archival::A2_B),
+      PdfStandard::A2u => Some(Archival::A2_U),
+      PdfStandard::A3b => Some(Archival::A3_B),
+      PdfStandard::A3u => Some(Archival::A3_U),
+      PdfStandard::A4 => Some(Archival::A4),
+    }
   }
 }
 
@@ -176,6 +214,10 @@ pub struct PdfOptions<'g> {
   /// Generates a PDF outline (bookmarks) from `h1`–`h6` headings.
   #[builder(default)]
   pub outline: bool,
+  /// Archival standard the output conforms to. Validation failures fail the
+  /// render.
+  #[builder(default)]
+  pub standard: PdfStandard,
 }
 
 /// Document metadata for the PDF's info dictionary. [`PdfOptions::lang`]
@@ -650,7 +692,21 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
     lang: options.lang,
   };
   let mut fonts = FontMap::new();
-  let mut document = Document::new();
+  let mut document = match options.standard.archival() {
+    Some(archival) => {
+      let configuration = ConfigurationBuilder::new()
+        .with_archival_validator(archival)
+        .finish()
+        .map_err(|_| PdfError::InvalidStandard)?;
+      let settings = SerializeSettings {
+        configuration,
+        ..SerializeSettings::default()
+      };
+
+      Document::new_with(settings)
+    }
+    None => Document::new(),
+  };
 
   if let Some(metadata) = &options.metadata {
     document.set_metadata(build_metadata(metadata, inputs.lang));

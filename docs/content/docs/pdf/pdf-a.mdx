@@ -1,0 +1,36 @@
+---
+title: PDF/A
+description: Archival output that validators accept
+---
+
+PDF/A is the ISO standard for archival PDFs. Archives, courts, and procurement systems often require it. A conforming file embeds every font, declares its color space, and carries XMP metadata.
+
+Set `pdfa` to a conformance level:
+
+```tsx twoslash
+import type { ReactNode } from "react";
+import { render } from "takumi-pdf";
+declare const invoice: ReactNode;
+// ---cut---
+const pdf = await render(invoice, {
+  pdfa: "3b",
+});
+```
+
+The output gains an sRGB output intent and XMP metadata. Everything else stays the same. Fonts are always embedded and subset, with or without PDF/A.
+
+## Levels
+
+| Level  | Base    | Notes                                              |
+| ------ | ------- | -------------------------------------------------- |
+| `"2b"` | PDF 1.7 | Basic conformance. The common choice.              |
+| `"2u"` | PDF 1.7 | `2b` plus guaranteed Unicode mapping for all text. |
+| `"3b"` | PDF 1.7 | `2b` plus permission to attach arbitrary files.    |
+| `"3u"` | PDF 1.7 | `2u` plus the same attachment permission.          |
+| `"4"`  | PDF 2.0 | The current revision of the standard.              |
+
+Takumi always writes ToUnicode maps, so the `u` levels cost nothing extra. Electronic invoice formats built on PDF/A-3 (ZUGFeRD, Factur-X) expect `"3b"`.
+
+The accessible `a` levels and PDF/UA require tagged PDF and are not offered. PDF/A-1 is not offered either. It predates transparency, which most documents use.
+
+Validation runs during rendering. A document that cannot conform rejects the render with the failing rule instead of writing a broken file.
