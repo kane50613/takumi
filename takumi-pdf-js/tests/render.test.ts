@@ -146,22 +146,22 @@ test("embeds attachments from string and Uint8Array data", async () => {
   expect(bytes).toContain("/AFRelationship");
 });
 
-test("rejects duplicate attachment names", () => {
+test("rejects duplicate attachment names", async () => {
   const attachment = { name: "dup.txt", data: "x" };
 
-  expect(renderer.render(doc, { attachments: [attachment, attachment] })).rejects.toThrow(
+  await expect(renderer.render(doc, { attachments: [attachment, attachment] })).rejects.toThrow(
     "DuplicateAttachment",
   );
 });
 
-test("rejects an invalid attachment mime type", () => {
-  expect(
+test("rejects an invalid attachment mime type", async () => {
+  await expect(
     renderer.render(doc, { attachments: [{ name: "a.txt", data: "x", mimeType: "nope" }] }),
   ).rejects.toThrow("InvalidMimeType");
 });
 
-test("rejects an invalid attachment modificationDate", () => {
-  expect(
+test("rejects an invalid attachment modificationDate", async () => {
+  await expect(
     renderer.render(doc, {
       attachments: [{ name: "a.txt", data: "x", modificationDate: "yesterday" }],
     }),
