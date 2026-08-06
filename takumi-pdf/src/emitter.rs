@@ -9,7 +9,7 @@ use crate::krilla::{
   geom::{Point, Rect as KrillaRect, Transform},
   num::NormalizedF32,
   paint::{
-    Fill, FillRule, LinearGradient as KrillaLinearGradient, Paint,
+    Fill, FillRule, LinearGradient as KrillaLinearGradient, Paint, Pattern,
     RadialGradient as KrillaRadialGradient, SpreadMethod, SweepGradient,
   },
   surface::Surface,
@@ -37,6 +37,7 @@ use takumi_core::{
   },
 };
 
+use crate::background::{Placement, cycled, place};
 use crate::glyph::{PdfGlyph, glyph_text_spans};
 use crate::inline::{InlineMap, build_inline_runs, inline_key, node_inline_items, text_line_atoms};
 use crate::options::PdfError;
@@ -297,9 +298,9 @@ impl Emitter<'_> {
   }
 
   /// Paints `background-image` gradient layers, bottom layer first, clipped to
-  /// the rounded border box. Each layer fills the whole positioning area.
-  // ponytail: background-size/position/repeat and url() layers are not
-  // resolved yet; port takumi-svg's placement logic when needed.
+  /// the rounded border box.
+  // ponytail: url() layers are not resolved yet, and the positioning area is
+  // the border box regardless of `background-origin`.
   fn emit_background_layers(
     &self,
     node: &RenderNode,
@@ -330,13 +331,71 @@ impl Emitter<'_> {
     let artifact = self.start_artifact(surface);
 
     surface.push_clip_path(&clip, &FillRule::NonZero);
-    for image in images.iter().rev() {
-      self.background_layer(image, node, size, x, y, surface);
+    for (index, image) in images.iter().enumerate().rev() {
+      let placement = place(
+        size,
+        cycled(&style.background_size, index),
+        cycled(&style.background_position, index),
+        cycled(&style.background_repeat, index),
+        &node.context,
+      );
+
+      if placement.repeats(size) {
+        self.tiled_layer(image, node, &placement, size, (x, y), surface);
+      } else {
+        self.background_layer(
+          image,
+          node,
+          placement.tile,
+          x + placement.origin.0,
+          y + placement.origin.1,
+          surface,
+        );
+      }
     }
     surface.pop();
     if artifact {
       surface.end_tagged();
     }
+  }
+
+  /// Draws one tile into a pattern and fills the layer's area with it, so a
+  /// repeated layer costs one shading instead of one per tile.
+  fn tiled_layer(
+    &self,
+    image: &BackgroundImage,
+    node: &RenderNode,
+    placement: &Placement,
+    size: Size<f32>,
+    at: (f32, f32),
+    surface: &mut Surface,
+  ) {
+    let (x, y) = at;
+    let stream = {
+      let mut builder = surface.stream_builder();
+      let mut tile = builder.surface();
+
+      self.background_layer(image, node, placement.tile, 0.0, 0.0, &mut tile);
+      tile.finish();
+      builder.finish()
+    };
+    let Some(path) = KrillaRect::from_xywh(x, y, size.width, size.height).and_then(rect_path)
+    else {
+      return;
+    };
+
+    surface.set_fill(Some(Fill {
+      paint: Pattern {
+        stream,
+        transform: Transform::from_translate(x + placement.origin.0, y + placement.origin.1),
+        width: placement.step.0,
+        height: placement.step.1,
+      }
+      .into(),
+      opacity: NormalizedF32::ONE,
+      rule: FillRule::NonZero,
+    }));
+    surface.draw_path(&path);
   }
 
   fn background_layer(

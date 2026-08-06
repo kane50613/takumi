@@ -414,6 +414,54 @@ fn gradients() {
   });
 }
 
+/// `background-size`, `-position` and the four `-repeat` styles: a sized tile
+/// placed once, tiled, spaced out, and rounded to fit whole tiles.
+#[test]
+fn background_placement() {
+  let pdf = run_pdf_fixture("background-placement", |fonts| {
+    let cell = |style: &str| {
+      format!(
+        r##"<div style="width: 120px; height: 120px; background-color: #f4f4f5; background-image: linear-gradient(135deg, #ff5f6d, #3a1c71); background-size: 50px 35px; {style}"></div>"##
+      )
+    };
+    let source = format!(
+      r##"<div style="display: flex; width: 100%; height: 100%; padding: 16px; column-gap: 16px; background-color: #ffffff;">
+        {}{}{}{}
+      </div>"##,
+      cell("background-repeat: no-repeat; background-position: right bottom;"),
+      cell("background-repeat: repeat;"),
+      cell("background-repeat: space;"),
+      cell("background-repeat: round;"),
+    );
+    let node =
+      from_html(&source, FromHtmlOptions::default()).expect("parse background placement fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((580, 160)))
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = String::from_utf8_lossy(&pdf);
+
+  // Three of the four cells tile, and a tiling pattern is one shading reused
+  // by a pattern object rather than one shading per tile. In a 120px box a
+  // 50x35 tile repeats at its own size, spaces out to 70x42.5, and rounds to
+  // two by three whole tiles.
+  for needle in [
+    "/XStep 50/YStep 35",
+    "/XStep 70/YStep 42.5",
+    "/XStep 60/YStep 40",
+  ] {
+    assert!(haystack.contains(needle), "missing pattern step {needle}");
+  }
+  assert_eq!(
+    haystack.matches("/PatternType 1").count(),
+    3,
+    "expected one tiling pattern per repeating cell"
+  );
+}
+
 /// `box-decoration-break: clone` on a fragmented container: every page
 /// fragment paints full borders and radius; the avoided child moves whole.
 #[test]
