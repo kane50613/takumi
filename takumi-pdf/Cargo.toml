@@ -28,7 +28,6 @@ png = { version = "0.18", optional = true }
 rustc-hash = "2.1"
 siphasher = "1.0"
 skrifa.workspace = true
-smallvec = { version = "1.15", features = ["union", "const_new", "write"] }
 kurbo = "0.13"
 write-fonts = "0.49"
 tiny-skia-path = "0.12"
