@@ -111,8 +111,15 @@ pub(crate) trait GradientPropertiesExt {
 fn get_expanded_bbox(mut bbox: Rect, shading_transform: Transform) -> Rect {
   // We need to make sure the shading covers the whole bbox of the object after
   // the transform as been applied. In order to know that, we need to calculate the
-  // resulting bbox from the inverted transform.
-  bbox.expand(&bbox.transform(shading_transform.invert().unwrap()).unwrap());
+  // resulting bbox from the inverted transform. A singular transform (e.g.
+  // `gradientTransform="scale(0)"`) is not invertible; the shading collapses to
+  // nothing, so the unexpanded bbox is enough.
+  if let Some(expanded) = shading_transform
+    .invert()
+    .and_then(|inverted| bbox.transform(inverted))
+  {
+    bbox.expand(&expanded);
+  }
   bbox
 }
 

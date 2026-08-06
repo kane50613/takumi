@@ -301,6 +301,35 @@ fn svg_vector_image() {
   assert!(text.contains("/Shading"), "gradient lost its shading");
 }
 
+/// Repeat-spread gradients with singular `gradientTransform`s (zero and
+/// rank-1) render instead of panicking on the non-invertible transform.
+#[test]
+fn svg_singular_gradient_transform() {
+  let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="8" y2="0" gradientUnits="userSpaceOnUse" gradientTransform="scale(0)" spreadMethod="repeat">
+    <stop offset="0" stop-color="#ff0044"/><stop offset="1" stop-color="#0044ff"/>
+  </linearGradient>
+  <linearGradient id="h" x1="0" y1="0" x2="8" y2="0" gradientUnits="userSpaceOnUse" gradientTransform="matrix(1 1 0 0 0 0)" spreadMethod="repeat">
+    <stop offset="0" stop-color="#ff0044"/><stop offset="1" stop-color="#0044ff"/>
+  </linearGradient></defs>
+  <rect width="24" height="12" fill="url(#g)"/>
+  <rect y="12" width="24" height="12" fill="url(#h)"/>
+</svg>"##;
+  run_pdf_fixture("svg-singular-gradient-transform", |fonts| {
+    let image = Node::image(ImageData {
+      src: ImageSourceInput::Buffer(svg.as_bytes().to_vec()),
+      width: Some(22.0),
+      height: Some(22.0),
+    });
+
+    PdfOptions::builder()
+      .node(Node::container(vec![image]))
+      .viewport(Viewport::new((60, 60)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
 /// Filters rasterize, luminance masks become soft masks, and pattern fills
 /// become tiling patterns.
 #[test]
