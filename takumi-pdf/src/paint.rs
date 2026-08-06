@@ -1,7 +1,7 @@
 //! Path, gradient, decoration and image helpers translating takumi paint into krilla.
 
-#[cfg(feature = "images")]
 use crate::filter::ColorFilter;
+#[cfg(feature = "images")]
 use crate::krilla::image::Image as KrillaImage;
 use crate::krilla::{
   blend::BlendMode as KrillaBlendMode,
