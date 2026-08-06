@@ -20,16 +20,20 @@ pub fn collect_repeat_tile_positions(
     return SmallVec::default();
   }
 
-  let area_end = i32::try_from(area_size).unwrap_or(i32::MAX);
-  let tile_size = i32::try_from(tile_size).unwrap_or(i32::MAX);
+  // The arithmetic runs in i64 so a dimension near the u32 range neither
+  // wraps nor drops tiles; every emitted position also fits the area, which
+  // callers keep within the canvas pixel budget.
+  let area_end = i64::from(area_size);
+  let tile_size = i64::from(tile_size);
   let start = if origin > 0 {
-    origin.rem_euclid(tile_size) - tile_size
+    i64::from(origin).rem_euclid(tile_size) - tile_size
   } else {
-    origin
+    i64::from(origin)
   };
 
-  successors(Some(start), |&x| x.checked_add(tile_size))
+  successors(Some(start), |&x| Some(x + tile_size))
     .take_while(|&x| x < area_end)
+    .filter_map(|x| i32::try_from(x).ok())
     .collect()
 }
 
