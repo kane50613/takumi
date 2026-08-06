@@ -28,9 +28,12 @@ use crate::{helper::map_error, model::*};
 
 /// The main renderer for Takumi image rendering engine.
 ///
-/// State lives behind a lock and every method takes `&self`, mirroring the
-/// napi bindings: a panic mid-call can't leave the wasm-bindgen borrow flag
-/// permanently set, which would otherwise fail all subsequent calls.
+/// State lives behind a lock so every method can take `&self`. Nothing
+/// contends for it today: an isolate never shares a wasm instance, and the call
+/// into wasm is synchronous, so two requests cannot be inside one. It is
+/// `&self` that the lock buys, and `&self` is what a shared-memory build would
+/// need — `&mut self` on an instance two threads can reach is unsound, and
+/// wasm-bindgen's borrow flag would be the only thing left catching it.
 #[wasm_bindgen]
 pub struct Renderer {
   state: RwLock<Fonts>,
