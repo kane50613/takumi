@@ -240,10 +240,15 @@ impl Emitter<'_> {
     }
     let (inset, outer) = sized_shadows(node, deco_size);
 
-    self.shadows(&outer, &border, deco_size, (x, deco_y), surface, false);
+    let deco_layout = Layout {
+      size: deco_size,
+      ..layout
+    };
+
+    self.shadows(&outer, &border, deco_layout, (x, deco_y), surface, false);
     self.emit_background(node, &border, deco_size, x, deco_y, surface);
     self.emit_background_layers(node, &border, deco_size, x, deco_y, surface);
-    self.shadows(&inset, &border, deco_size, (x, deco_y), surface, true);
+    self.shadows(&inset, &border, deco_layout, (x, deco_y), surface, true);
     self.emit_borders(&border, x, deco_y, deco_size, surface);
 
     // Children and own content clip to the (rounded) padding box when overflow
@@ -570,7 +575,7 @@ impl Emitter<'_> {
     &self,
     shadows: &[SizedShadow],
     border: &BorderProperties,
-    size: Size<f32>,
+    layout: Layout,
     at: (f32, f32),
     surface: &mut Surface,
     inset: bool,
@@ -581,9 +586,9 @@ impl Emitter<'_> {
     let artifact = self.start_artifact(surface);
 
     if inset {
-      emit_inset_shadows(shadows, border, size, at, surface);
+      emit_inset_shadows(shadows, &ClipBox::padding_box(*border, layout), at, surface);
     } else {
-      emit_outer_shadows(shadows, border, size, at, surface);
+      emit_outer_shadows(shadows, border, layout.size, at, surface);
     }
     if artifact {
       surface.end_tagged();

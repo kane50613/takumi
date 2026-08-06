@@ -428,11 +428,14 @@ fn box_shadows() {
     };
     let source = format!(
       r##"<div style="display: flex; width: 100%; height: 100%; padding: 8px; background-color: #f4f4f5;">
-        {}{}{}
+        {}{}{}{}
       </div>"##,
       cell("6px 6px 0 0 #111827"),
       cell("0 8px 16px rgba(17, 24, 39, 0.45)"),
       cell("inset 0 0 0 8px #111827"),
+      // A transparent border must not carry inset shadow paint: CSS draws inset
+      // shadows inside the padding box.
+      cell("inset 0 0 0 6px rgba(17, 24, 39, 0.4); border: 10px solid transparent"),
     );
     let node = from_html(&source, FromHtmlOptions::default()).expect("parse box shadow fixture");
 
@@ -444,11 +447,11 @@ fn box_shadows() {
   });
   let haystack = String::from_utf8_lossy(&pdf);
 
-  // The blurred cell is the only one that needs partial opacity, and it draws
-  // one band per step; the two sharp cells fill once each at full opacity.
+  // The blurred cell needs partial opacity, and so does the translucent inset
+  // one: a band's opacity multiplies the color's alpha rather than replacing it.
   assert!(
     haystack.contains("/ca "),
-    "expected the blurred shadow to set fill opacity"
+    "expected a shadow to set fill opacity"
   );
 }
 

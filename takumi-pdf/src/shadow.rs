@@ -7,13 +7,12 @@
 
 use takumi_core::{
   geometry::{PathCommand, Point as CorePoint, Size},
-  layout::border::BorderProperties,
+  layout::{border::BorderProperties, decoration::ClipBox},
   shadow::SizedShadow,
   style::Color,
 };
 
 use crate::krilla::{
-  num::NormalizedF32,
   paint::{Fill, FillRule},
   surface::Surface,
 };
@@ -57,23 +56,31 @@ pub(crate) fn emit_outer_shadows(
   }
 }
 
-/// Paints the inset shadows of a box, on top of its background.
+/// Paints the inset shadows of a box, on top of its background. CSS draws
+/// these inside the padding box, so a border neither carries shadow paint nor
+/// widens it.
 pub(crate) fn emit_inset_shadows(
   shadows: &[SizedShadow],
-  border: &BorderProperties,
-  size: Size<f32>,
+  clip: &ClipBox,
   at: (f32, f32),
   surface: &mut Surface,
 ) {
+  let origin = CorePoint {
+    x: at.0 + clip.offset.x,
+    y: at.1 + clip.offset.y,
+  };
+
   for shadow in shadows.iter().rev() {
     for band in bands(shadow) {
       let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
 
-      // The filled region is the box minus the hole the shadow casts into, so
-      // a positive spread shrinks the hole.
-      border.append_mask_commands(&mut commands, size, CorePoint::ZERO);
+      // The filled region is the padding box minus the hole the shadow casts
+      // into it, so a positive spread shrinks the hole.
+      clip
+        .border
+        .append_mask_commands(&mut commands, clip.size, CorePoint::ZERO);
 
-      let (hole, hole_size) = border.outset_shadow_box(size, -band.spread);
+      let (hole, hole_size) = clip.border.outset_shadow_box(clip.size, -band.spread);
 
       hole.append_mask_commands(
         &mut commands,
@@ -83,7 +90,13 @@ pub(crate) fn emit_inset_shadows(
           y: shadow.offset_y + band.spread,
         },
       );
-      fill(&commands, shadow.color, band.alpha, at, surface);
+      fill(
+        &commands,
+        shadow.color,
+        band.alpha,
+        (origin.x, origin.y),
+        surface,
+      );
     }
   }
 }
@@ -123,27 +136,60 @@ fn bands(shadow: &SizedShadow) -> Vec<Band> {
   bands
 }
 
-/// Coverage a Gaussian blur leaves at `distance` blur radii outside the shape,
-/// approximated by a smoothstep, which stays within a few percent of the error
-/// function over the range a shadow spans.
+/// Coverage a Gaussian blur leaves `distance` blur radii outside the shape.
+///
+/// CSS blurs with a standard deviation of half the blur radius, so the edge
+/// profile is `0.5 * erfc(distance * blur / (sigma * sqrt(2)))`, which reduces
+/// to `0.5 * erfc(sqrt(2) * distance)`.
 fn coverage(distance: f32) -> f32 {
-  let t = (1.0 - distance).clamp(0.0, 1.0);
+  0.5 * erfc(core::f32::consts::SQRT_2 * distance)
+}
 
-  t * t * (3.0 - 2.0 * t)
+/// Abramowitz and Stegun 7.1.26, accurate to about 1e-7 over the range a
+/// shadow band asks about.
+fn erfc(x: f32) -> f32 {
+  const A: [f32; 5] = [
+    0.254_829_6,
+    -0.284_496_74,
+    1.421_413_7,
+    -1.453_152,
+    1.061_405_4,
+  ];
+  let sign = if x < 0.0 { -1.0 } else { 1.0 };
+  let x = x.abs();
+  let t = 1.0 / (1.0 + 0.327_591_1 * x);
+  let poly = A.iter().rev().fold(0.0, |accumulated, coefficient| {
+    (accumulated + coefficient) * t
+  });
+  let erf = 1.0 - poly * (-x * x).exp();
+
+  1.0 - sign * erf
 }
 
 fn fill(commands: &[PathCommand], color: Color, alpha: f32, at: (f32, f32), surface: &mut Surface) {
   let Some(path) = krilla_path(commands, at.0, at.1) else {
     return;
   };
-  let Some(opacity) = NormalizedF32::new(alpha) else {
-    return;
-  };
 
+  // The band's own opacity multiplies the color's alpha, so a translucent
+  // shadow stays translucent and a fully transparent one paints nothing.
   surface.set_fill(Some(Fill {
     rule: FillRule::EvenOdd,
-    opacity,
-    ..fill_from_rgba(color.0, 1.0)
+    ..fill_from_rgba(color.0, alpha)
   }));
   surface.draw_path(&path);
+}
+
+#[cfg(test)]
+mod tests {
+  use super::coverage;
+
+  #[test]
+  fn coverage_follows_the_gaussian_edge() {
+    // A CSS blur has a standard deviation of half the blur radius, so half a
+    // blur radius out is one sigma, where a normal tail leaves 0.1587.
+    assert!((coverage(0.0) - 0.5).abs() < 1e-3);
+    assert!((coverage(0.5) - 0.158_7).abs() < 1e-3);
+    assert!(coverage(1.0) < 0.024);
+  }
 }
