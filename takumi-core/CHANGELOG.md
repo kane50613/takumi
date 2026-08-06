@@ -1,3 +1,13 @@
+## takumi-core@0.15.0
+
+### Vendored resvg updated to 0.48.1
+
+Pulls the upstream parser and filter fixes: nested `svg` transforms are no longer applied twice, a missing `width`/`height` is computed from the viewBox aspect ratio, `href` takes precedence over `xlink:href`, `fr` is inherited for radial gradients referenced via `href`, and oversized filter regions no longer panic.
+
+### `Node::alt` keeps empty values
+
+`alt()` now returns `Some("")` for an explicitly empty attribute, so callers can tell a decorative image apart from a missing `alt`.
+
 ## takumi-core@0.14.1
 
 ### Render bare `border-t`/`border-r`/`border-b`/`border-l`/`border-x`/`border-y`

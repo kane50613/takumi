@@ -1,3 +1,23 @@
+## takumi-pdf@0.3.0
+
+### Measure a tree without rendering
+
+`measure` returns a tree's laid-out size in CSS px. With page options it lays out at the full-page width with counter hooks filled, exactly how `render` measures a header or footer band. The height tells you how much margin the band needs.
+
+### File attachments
+
+Attach files with `attachments`, the PDF/A-3 shape ZUGFeRD and Factur-X e-invoices use. `data` takes bytes or a UTF-8 string. `modificationDate` falls back to `metadata.creationDate`. Invalid `pdfa` combinations are TypeScript type errors. Without type checking they reject the render at runtime.
+
+### Embed SVG image sources as vectors
+
+SVG images previously rasterized at 2× their placed size, leaving small logos soft next to vector text. They now embed as real paths, gradients and clips, sharp at any zoom. Filters and bitmaps embedded inside an SVG still rasterize at 2×.
+
+### PDF/A and tagged output
+
+Output is now tagged by default, like Chromium's print-to-PDF. The structure tree comes from the HTML semantics: headings, paragraphs, figures with alt text, links, and header/footer artifacts. Decorative `<img alt="">` images are artifacts. `tagged: false` turns the tree off. `tagged: "ua1"` validates against PDF/UA-1.
+
+Set `pdfa` to a level from `"2b"` to `"4"` to emit archival PDFs with an sRGB output intent and XMP metadata. The `a` levels require the structure tree and `metadata.creationDate`. A document that cannot conform rejects the render instead of writing a broken file.
+
 ## takumi-pdf@0.2.1
 
 ### Shrink the WebAssembly binary by 5%
