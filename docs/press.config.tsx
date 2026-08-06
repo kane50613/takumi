@@ -35,7 +35,7 @@ import { googleFonts } from "takumi-js/helpers";
 import wasmModule from "takumi-js/wasm";
 import { docs } from "./.source/server";
 import sticker from "./public/sticker.svg?raw";
-import { baseOptions } from "./app/layout-config";
+import { baseOptions, SITE_URL } from "./app/layout-config";
 import { Accordion, Accordions } from "./app/components/accordion";
 import { Mermaid } from "./app/components/mdx/mermaid";
 import { TypeTable } from "./app/components/type-table";
@@ -82,8 +82,6 @@ export default defineConfig({
     root() {
       return (
         <>
-          <meta charSet="utf-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1" />
           <meta name="twitter:card" content="summary_large_image" />
           <meta name="twitter:image:width" content="1200" />
           <meta name="twitter:image:height" content="630" />
@@ -99,6 +97,18 @@ export default defineConfig({
             href="https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400..800;1,400..800&family=Geist+Mono:wght@400&display=swap"
           />
           <Analytics />
+        </>
+      );
+    },
+    page(page) {
+      const url = `${SITE_URL}${page.url}`;
+
+      return (
+        <>
+          {page.data.description && <meta name="description" content={page.data.description} />}
+          <meta property="og:url" content={url} />
+          <meta property="og:image:alt" content={`${page.data.title} — Takumi`} />
+          <link rel="canonical" href={url} />
         </>
       );
     },

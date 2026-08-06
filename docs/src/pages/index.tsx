@@ -11,7 +11,7 @@ import { Features } from "~/components/home/features";
 import { Filmstrip } from "~/components/home/filmstrip";
 import { Hero } from "~/components/home/hero";
 import { Showcase } from "~/components/home/showcase";
-import { Seo } from "~/components/seo";
+import { Seo, SiteJsonLd } from "~/components/seo";
 import { baseOptions } from "~/layout-config";
 
 // Source of example/twitter-images/components/home-demo-card.tsx; keep in sync.
@@ -77,6 +77,7 @@ export default function Home() {
   return (
     <HomeLayout className="overflow-x-hidden" {...baseOptions}>
       <Seo title={TITLE} description={DESCRIPTION} path="" />
+      <SiteJsonLd />
 
       <Hero />
       <CodeDemo highlightedHtml={highlightedCodeDemo} />
