@@ -188,6 +188,8 @@ Omit `metadata` to keep output byte-identical across runs.
 
 Output is **tagged by default**: HTML semantics (`h1`–`h6`, `p`, `img` with `alt`, `a`, lists) become a PDF structure tree, like Chromium's print-to-PDF. Set `tagged: "ua1"` to validate against PDF/UA-1, or `tagged: false` to drop the tree when file size matters more than accessibility.
 
+`<table>` markup is not supported, and a table built out of flex rows carries no `Table` structure elements.
+
 `pdfa` renders archival output. Validation runs during rendering. A document that cannot conform fails with the violated rule instead of writing a broken file. Every level, and PDF/UA-1, passes [veraPDF](https://verapdf.org).
 
 ```tsx
