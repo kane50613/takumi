@@ -1196,12 +1196,19 @@ impl Emitter<'_> {
         })
         .collect();
 
-      // `background-clip: text` paints the background through the glyphs,
-      // under the text's own (usually transparent) fill.
-      for fill in &text_fills {
-        surface.set_fill(Some(fill.clone()));
+      let color = shaped.brush.color;
+      let fill = fill_from_rgba(self.filtered(color), shaped.brush.opacity);
+      let origin = Point::from_xy(x + offset.x, y + offset.y);
+      let oblique = self.push_oblique(shaped, origin, surface);
+
+      // `background-clip: text` paints the background through the glyphs, under
+      // the text's own (usually transparent) fill. Faux bold widens the glyph
+      // itself, so the background has to fill the widened shape too.
+      for background in &text_fills {
+        surface.set_fill(Some(background.clone()));
+        surface.set_stroke(synthetic_stroke(shaped, background));
         surface.draw_glyphs(
-          Point::from_xy(x + offset.x, y + offset.y),
+          origin,
           &glyphs,
           font.clone(),
           run_text,
@@ -1209,9 +1216,6 @@ impl Emitter<'_> {
           false,
         );
       }
-      let color = shaped.brush.color;
-      let fill = fill_from_rgba(self.filtered(color), shaped.brush.opacity);
-      let origin = Point::from_xy(x + offset.x, y + offset.y);
 
       surface.set_fill(Some(fill.clone()));
       // `-webkit-text-stroke` strokes the glyph outlines around the fill, and
@@ -1225,8 +1229,6 @@ impl Emitter<'_> {
       } else {
         synthetic_stroke(shaped, &fill)
       });
-
-      let oblique = self.push_oblique(shaped, origin, surface);
 
       surface.draw_glyphs(origin, &glyphs, font, run_text, shaped.font_size, false);
 
