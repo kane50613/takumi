@@ -15,7 +15,7 @@ use crate::krilla::{
   },
   surface::Surface,
   tagging::{Artifact, ArtifactType, ContentTag},
-  text::{Font, GlyphId},
+  text::{Font, GlyphId, Tag},
 };
 #[cfg(feature = "images")]
 use takumi_core::{
@@ -62,9 +62,14 @@ use crate::shadow::{emit_inset_shadows, emit_outer_shadows};
 use crate::svg;
 use crate::tags::TagCollector;
 
+/// Blob identity, collection index, and the variation coordinates the run was
+/// shaped at. One blob instanced at two weights is two embedded fonts, so the
+/// coordinates belong in the key.
+pub(crate) type FontKey = (u64, u32, Vec<([u8; 4], u32)>);
+
 /// Scene walker state: the render tree, the stacking-context scene, and a cache
-/// of krilla fonts keyed by the backing blob identity.
-pub(crate) type FontMap = HashMap<(u64, u32), Font>;
+/// of krilla fonts.
+pub(crate) type FontMap = HashMap<FontKey, Font>;
 
 pub(crate) struct Emitter<'a> {
   pub(crate) root: &'a RenderNode,
@@ -1205,30 +1210,30 @@ impl Emitter<'_> {
         );
       }
       let color = shaped.brush.color;
+      let fill = fill_from_rgba(self.filtered(color), shaped.brush.opacity);
+      let origin = Point::from_xy(x + offset.x, y + offset.y);
 
-      surface.set_fill(Some(fill_from_rgba(
-        self.filtered(color),
-        shaped.brush.opacity,
-      )));
-      // `-webkit-text-stroke` strokes the glyph outlines around the fill.
-      if stroke {
-        surface.set_stroke(Some(Stroke {
+      surface.set_fill(Some(fill.clone()));
+      // `-webkit-text-stroke` strokes the glyph outlines around the fill, and
+      // takes the run's own width over the faux bold one.
+      surface.set_stroke(if stroke {
+        Some(Stroke {
           paint: fill_from_rgba(self.filtered(font_style.text_stroke_color), 1.0).paint,
           width: font_style.stroke_width,
           ..Stroke::default()
-        }));
+        })
+      } else {
+        synthetic_stroke(shaped, &fill)
+      });
+
+      let oblique = self.push_oblique(shaped, origin, surface);
+
+      surface.draw_glyphs(origin, &glyphs, font, run_text, shaped.font_size, false);
+
+      if oblique {
+        surface.pop();
       }
-      surface.draw_glyphs(
-        Point::from_xy(x + offset.x, y + offset.y),
-        &glyphs,
-        font,
-        run_text,
-        shaped.font_size,
-        false,
-      );
-      if stroke {
-        surface.set_stroke(None);
-      }
+      surface.set_stroke(None);
       for decoration in decorations.iter().filter(|d| d.over) {
         draw_decoration(surface, decoration, x, y, self.color_filter.as_deref());
       }
@@ -1338,30 +1343,69 @@ impl Emitter<'_> {
 
       let color = color.unwrap_or(shaped.brush.color);
 
-      surface.set_fill(Some(fill_from_rgba(
-        self.filtered(color),
-        shaped.brush.opacity,
-      )));
-      surface.draw_glyphs(
-        Point::from_xy(x + offset.x, y + offset.y),
-        &glyphs,
-        font,
-        run_text,
-        shaped.font_size,
-        false,
-      );
+      let fill = fill_from_rgba(self.filtered(color), shaped.brush.opacity);
+      let origin = Point::from_xy(x + offset.x, y + offset.y);
+
+      surface.set_fill(Some(fill.clone()));
+      surface.set_stroke(synthetic_stroke(shaped, &fill));
+
+      let oblique = self.push_oblique(shaped, origin, surface);
+
+      surface.draw_glyphs(origin, &glyphs, font, run_text, shaped.font_size, false);
+
+      if oblique {
+        surface.pop();
+      }
+      surface.set_stroke(None);
     }
   }
 
-  /// A krilla font for a run's backing blob, cached by the blob's stable id.
-  /// Copies the blob into the cache once per distinct font.
+  /// Shears the text about its baseline, the faux oblique the raster renderer
+  /// applies to glyph outlines. Surface space runs y down, so the sign flips.
+  /// Returns whether the transform was pushed.
+  fn push_oblique(&self, shaped: &ShapedRun, origin: Point, surface: &mut Surface) -> bool {
+    let Some(degrees) = shaped.synthetic_skew else {
+      return false;
+    };
+    let tangent = degrees.to_radians().tan();
+
+    surface.push_transform(&Transform::from_row(
+      1.0,
+      0.0,
+      -tangent,
+      1.0,
+      tangent * origin.y,
+      0.0,
+    ));
+    true
+  }
+
+  /// A krilla font for a run's backing blob, instanced at the run's variation
+  /// coordinates. Copies the blob into the cache once per distinct instance.
   fn cached_font(&mut self, shaped: &ShapedRun) -> Option<Font> {
-    let key = (shaped.font_id(), shaped.font_index);
+    let key = (
+      shaped.font_id(),
+      shaped.font_index,
+      shaped
+        .variations
+        .iter()
+        .map(|(axis, value)| (*axis, value.to_bits()))
+        .collect(),
+    );
 
     if let Some(font) = self.fonts.get(&key) {
       return Some(font.clone());
     }
-    let font = Font::new(Data::from(shaped.font_data().to_vec()), shaped.font_index)?;
+    let variations: Vec<(Tag, f32)> = shaped
+      .variations
+      .iter()
+      .map(|(axis, value)| (Tag::new(axis), *value))
+      .collect();
+    let font = Font::new_variable(
+      Data::from(shaped.font_data().to_vec()),
+      shaped.font_index,
+      &variations,
+    )?;
 
     self.fonts.insert(key, font.clone());
     Some(font)
@@ -1605,5 +1649,16 @@ fn has_own_content(node: &RenderNode) -> bool {
 fn decorative_image(node: &RenderNode) -> bool {
   node.node.as_ref().is_some_and(|source| {
     source.tag_name().is_some_and(|name| name == "img") && source.alt() == Some("")
+  })
+}
+
+/// The stroke that fakes bold for a face with no weight of its own to reach,
+/// at the width the raster renderer emboldens with. Filling and stroking keeps
+/// the run as text, so it stays selectable.
+fn synthetic_stroke(shaped: &ShapedRun, fill: &Fill) -> Option<Stroke> {
+  Some(Stroke {
+    paint: fill.paint.clone(),
+    width: shaped.synthetic_bold?,
+    ..Stroke::default()
   })
 }

@@ -1853,3 +1853,88 @@ fn heading_levels_and_orphan_list_item() {
     "heading with inline children missing from the outline"
   );
 }
+
+/// A variable font must be embedded at the weight the run was shaped at, once
+/// per weight. A face with no bold or italic of its own gets the same faux bold
+/// and faux oblique the raster renderer applies, so weight survives across
+/// scripts either way.
+#[test]
+fn font_weights() {
+  let mut fonts = Fonts::default();
+  let mut families = Vec::new();
+
+  for path in [
+    "../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf",
+    "../assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2",
+    "../assets/fonts/sil/scheherazade-new-v17-arabic-regular.woff2",
+    "../assets/fonts/noto-sans/noto-sans-devanagari-v30-devanagari-regular.woff2",
+  ] {
+    let data = fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join(path)).expect("read test font");
+    let registered = fonts
+      .register(FontResource::new(data))
+      .expect("load test font");
+
+    families.push(registered.first().expect("registered family").name.clone());
+  }
+
+  let [latin, chinese, arabic, devanagari]: [String; 4] =
+    families.try_into().expect("four families");
+  let weights = [100, 300, 400, 600, 700, 900];
+  let latin_rows = weights
+    .iter()
+    .map(|weight| {
+      format!(r#"<p style="font-weight:{weight};">Weight {weight} · Variable axis</p>"#)
+    })
+    .collect::<String>();
+  let chinese_rows = weights
+    .iter()
+    .map(|weight| {
+      format!(r#"<p lang="zh-Hant" style="font-family:{chinese};font-weight:{weight};">字重 {weight} 的中文字樣</p>"#)
+    })
+    .collect::<String>();
+  let doc = format!(
+    r#"<main style="display:flex;flex-direction:column;font-family:{latin};font-size:16px;color:#141414;">
+      <h1 style="font-weight:800;">Font weights</h1>
+      {latin_rows}
+      <p style="font-style:italic;">Oblique from the same variable face</p>
+      {chinese_rows}
+      <p lang="ar" style="font-family:{arabic};font-weight:700;">نص عربي عريض</p>
+      <p lang="ar" style="font-family:{arabic};">نص عربي عادي</p>
+      <p lang="hi" style="font-family:{devanagari};font-weight:700;">मोटा देवनागरी</p>
+      <p lang="hi" style="font-family:{devanagari};font-style:italic;">तिरछा देवनागरी</p>
+    </main>"#
+  );
+
+  let pdf = run_pdf_fixture_with("font-weights", &fonts, |fonts| {
+    PdfOptions::builder()
+      .node(from_html(&doc, FromHtmlOptions::default()).expect("parse weights doc"))
+      .page(PageOptions::A4)
+      .lang(Some(takumi_core::style::Lang::parse("en").expect("lang")))
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  // One embedded font per distinct instance: a single subset would mean every
+  // weight fell back to the variable font's default instance.
+  let instances = |family: &str| {
+    haystack
+      .match_indices("/FontFile2")
+      .count()
+      .max(haystack.matches(family).count())
+  };
+
+  assert!(
+    instances("Archivo") >= weights.len(),
+    "variable latin face embedded once instead of per weight"
+  );
+  assert!(
+    instances("NotoSansTC") >= weights.len(),
+    "variable chinese face embedded once instead of per weight"
+  );
+  // Faux bold strokes what it fills, which is text rendering mode 2.
+  assert!(
+    haystack.contains(" 2 Tr"),
+    "no synthesized bold for the static faces"
+  );
+}

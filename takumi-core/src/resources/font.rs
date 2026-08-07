@@ -246,6 +246,52 @@ impl FontsSnapshot {
   }
 }
 
+/// What the matched face still needs to reach the requested style, once variable
+/// axes have been applied: a faux bold stroke, a faux oblique skew, or neither.
+pub(crate) struct RunSynthesis {
+  /// Stroke width in px for synthetic bold.
+  pub embolden: Option<f32>,
+  /// Synthetic oblique angle in degrees.
+  pub skew: Option<f32>,
+}
+
+/// Shared by the raster glyph cache and the PDF emitter so both fake the same faces.
+pub(crate) fn run_synthesis(run: &GlyphRun<'_, InlineBrush>) -> RunSynthesis {
+  let has_emoji_cluster = run
+    .run()
+    .visual_clusters()
+    .any(|cluster| cluster.is_emoji());
+
+  RunSynthesis {
+    // Only synthesize bold at the CSS bold threshold (>= 600), matching browsers; a lighter
+    // requested weight keeps the regular face rather than faux-bolding it.
+    embolden: (!has_emoji_cluster
+      && run.run().synthesis().embolden()
+      && run.run().font_attrs().weight.value() >= BOLD_THRESHOLD
+      && run.style().brush.font_synthesis.weight.is_allowed())
+    .then_some(synthesis_embolden_strength(run.run().font_size())),
+    skew: run
+      .run()
+      .synthesis()
+      .skew()
+      .filter(|_| !has_emoji_cluster)
+      .filter(|_| run.style().brush.font_synthesis.style.is_allowed())
+      .map(|degrees| -degrees),
+  }
+}
+
+/// User-space variation coordinates the run was shaped at, e.g. `[(*b"wght", 700.0)]`.
+/// Fontique writes the requested weight and width here when it instances a variable face.
+pub(crate) fn run_variations(run: &GlyphRun<'_, InlineBrush>) -> Vec<([u8; 4], f32)> {
+  run
+    .run()
+    .synthesis()
+    .variation_settings()
+    .iter()
+    .map(|(tag, value)| (tag.to_be_bytes(), *value))
+    .collect()
+}
+
 impl Fonts {
   /// Render-local snapshot with no extra fallbacks.
   pub fn snapshot(&self) -> FontsSnapshot {
@@ -318,10 +364,6 @@ impl Fonts {
     font_ref: FontRef,
     glyph_ids: impl Iterator<Item = u32> + Clone,
   ) -> HashMap<u32, Arc<ResolvedGlyph>> {
-    let has_emoji_cluster = run
-      .run()
-      .visual_clusters()
-      .any(|cluster| cluster.is_emoji());
     let font_size = run.run().font_size();
     let normalized_coords = run
       .run()
@@ -330,20 +372,7 @@ impl Fonts {
       .copied()
       .map(F2Dot14::from_bits)
       .collect::<Vec<_>>();
-    // Only synthesize bold at the CSS bold threshold (>= 600), matching browsers; a lighter
-    // requested weight keeps the regular face rather than faux-bolding it.
-    let embolden = (!has_emoji_cluster
-      && run.run().synthesis().embolden()
-      && run.run().font_attrs().weight.value() >= BOLD_THRESHOLD
-      && run.style().brush.font_synthesis.weight.is_allowed())
-    .then_some(synthesis_embolden_strength(font_size));
-    let skew = run
-      .run()
-      .synthesis()
-      .skew()
-      .filter(|_| !has_emoji_cluster)
-      .filter(|_| run.style().brush.font_synthesis.style.is_allowed())
-      .map(|degrees| -degrees);
+    let RunSynthesis { embolden, skew } = run_synthesis(run);
 
     let font_id = run.run().font().data.id();
     let font_index = run.run().font().index;
