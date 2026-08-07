@@ -30,10 +30,11 @@ Conforming output includes an sRGB output intent and XMP metadata. Fonts are alw
 | `"3u"` | PDF 1.7     | `2u` plus arbitrary file attachments. |
 | `"3a"` | PDF 1.7     | `3u` plus a tagged structure tree.    |
 | `"4"`  | PDF 2.0     | The PDF 2.0 revision of the standard. |
+| `"4f"` | PDF 2.0     | `4` plus arbitrary file attachments.  |
 
 The `u` levels add no output cost. Takumi always writes ToUnicode maps.
 
-PDF/A-3 allows arbitrary file attachments. ZUGFeRD and Factur-X electronic invoices expect `"3b"`. See [Attachments](/docs/pdf/attachments).
+PDF/A-3 and PDF/A-4f allow arbitrary file attachments. ZUGFeRD and Factur-X electronic invoices expect `"3b"`. See [Attachments](/docs/pdf/attachments).
 
 PDF/A-1 is not offered. It prohibits transparency.
 
@@ -77,11 +78,13 @@ The structure tree comes from the HTML semantics:
 | `strong`, `em`, `code`   | `Strong`, `Em`, `Code`              |
 | page headers and footers | artifacts                           |
 
-Tables are missing from that list. `<table>` markup is not supported, and a table built out of flex rows carries no `Table`, `TR` or `TH` elements, so a screen reader cannot navigate it by row and column. Such a file still passes PDF/UA-1, because the validator checks the tags that are there, not the ones the content deserves.
+Heading levels come from nesting, not the tag name. A document that starts with `h2` gets an `H1`. A jump from `h1` to `h4` becomes `H1` then `H2`. PDF/UA rejects a sequence that skips a level or starts below `H1`. HTML written for visual styling does this all the time.
+
+Tables are missing from that list. `<table>` markup is not supported. A table built out of flex rows carries no `Table`, `TR` or `TH` elements, so a screen reader cannot navigate it by row and column. The file still passes PDF/UA-1. The validator checks the tags that are there, not the ones the content deserves.
 
 Set `tagged: false` to skip the tree when file size matters more than accessibility.
 
-Invalid combinations are TypeScript type errors. `pdfa: "2a"` and `pdfa: "3a"` forbid `tagged: false`. `pdfa: "4"` forbids `tagged: "ua1"`, because PDF/UA-1 is PDF 1.7-only and PDF/A-4 is PDF 2.0. The `2` levels and `"4"` forbid `attachments`. See [Attachments](/docs/pdf/attachments).
+Invalid combinations are TypeScript type errors. `pdfa: "2a"` and `pdfa: "3a"` forbid `tagged: false`. `pdfa: "4"` forbids `tagged: "ua1"`, because PDF/UA-1 is PDF 1.7-only and PDF/A-4 is PDF 2.0. The `2` levels and `"4"` forbid `attachments`. Use `"4f"` for attachments in PDF 2.0. See [Attachments](/docs/pdf/attachments).
 
 Validators require inputs the renderer cannot supply:
 

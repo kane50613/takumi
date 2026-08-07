@@ -176,7 +176,7 @@ export type ArchivalAttachment = Attachment & {
  * Standards conformance. Invalid combinations are type errors: the `a` levels
  * imply a structure tree so `tagged: false` is rejected, PDF/A-4 is PDF 2.0
  * while PDF/UA-1 is PDF 1.7-only so they cannot combine, and only the
- * PDF/A-3 levels (or plain PDF) accept attachments.
+ * PDF/A-3 levels, PDF/A-4f (or plain PDF) accept attachments.
  */
 type ConformanceOptions =
   | {
@@ -195,7 +195,8 @@ type ConformanceOptions =
   | { pdfa: "2a"; tagged?: true | "ua1"; attachments?: never }
   | { pdfa: "3b" | "3u"; tagged?: boolean | "ua1"; attachments?: ArchivalAttachment[] }
   | { pdfa: "3a"; tagged?: true | "ua1"; attachments?: ArchivalAttachment[] }
-  | { pdfa: "4"; tagged?: boolean; attachments?: never };
+  | { pdfa: "4"; tagged?: boolean; attachments?: never }
+  | { pdfa: "4f"; tagged?: boolean; attachments?: ArchivalAttachment[] };
 
 export type RenderOptions = (PagedOptions | ViewportOptions) &
   ConformanceOptions & {

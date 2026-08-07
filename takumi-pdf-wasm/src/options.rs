@@ -137,7 +137,8 @@ pub(crate) struct PdfRenderOptions {
   pub(crate) metadata: Option<MetadataInput>,
   /// Generates a PDF outline (bookmarks) from `h1`–`h6` headings.
   pub(crate) outline: Option<bool>,
-  /// PDF/A conformance level: "2a", "2b", "2u", "3a", "3b", "3u" or "4".
+  /// PDF/A conformance level: "2a", "2b", "2u", "3a", "3b", "3u", "4" or
+  /// "4f".
   pub(crate) pdfa: Option<PdfaInput>,
   /// Structure-tree emission: `false`, `true` (default) or `"ua1"` to also
   /// validate against PDF/UA-1.
