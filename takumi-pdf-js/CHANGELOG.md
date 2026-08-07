@@ -1,3 +1,13 @@
+## takumi-pdf@0.4.2
+
+### Render the weight the text asked for
+
+A variable font is embedded at the coordinates the run was shaped at, so `font-weight` and `font-stretch` reach the page instead of the font's default instance. A face with no bold or oblique of its own gets the same synthesized ones the raster renderer applies.
+
+### Render HTML strings
+
+`render()`, `measure()`, and the header and footer options accept HTML strings, the same input format as `takumi-js`. A `<style>` tag applies only to that render.
+
 ## takumi-pdf@0.4.1
 
 ### Attach files under PDF/A-4
