@@ -55,6 +55,8 @@ export function ComponentEditor({
     Parameters<NonNullable<React.ComponentProps<typeof Editor>["onMount"]>>[0] | null
   >(null);
   const isApplyingExternalCodeRef = useRef(false);
+  /** The last value the editor itself produced, so its own edits never bounce back. */
+  const lastEmittedRef = useRef(code);
   const theme = resolvedTheme === "dark" ? "github-dark-default" : "github-light-default";
 
   useEffect(() => {
@@ -73,17 +75,30 @@ export function ComponentEditor({
     };
   }, []);
 
+  // Only a change from outside the editor (a template, a reset, formatting) is
+  // worth writing back. An IME composes through several intermediate values, and
+  // the state lags behind them, so comparing against the model alone would make
+  // every stale round trip look external.
   useEffect(() => {
     const editor = editorRef.current;
     const model = editor?.getModel();
 
-    if (!editor || !model || model.getValue() === code) {
+    if (!editor || !model || code === lastEmittedRef.current || model.getValue() === code) {
       return;
     }
 
+    const selection = editor.getSelection();
+
     isApplyingExternalCodeRef.current = true;
-    editor.setValue(code);
+    // A full-range edit rather than `setValue`: it keeps the undo stack and
+    // leaves the cursor where it was instead of dropping it at the top.
+    model.pushEditOperations([], [{ range: model.getFullModelRange(), text: code }], () => null);
     isApplyingExternalCodeRef.current = false;
+    lastEmittedRef.current = code;
+
+    if (selection) {
+      editor.setSelection(selection);
+    }
   }, [code]);
 
   return (
@@ -169,6 +184,7 @@ export function ComponentEditor({
       defaultValue={code}
       onChange={(value) => {
         if (value !== undefined && !isApplyingExternalCodeRef.current) {
+          lastEmittedRef.current = value;
           setCode(value);
         }
       }}
