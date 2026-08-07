@@ -2,11 +2,14 @@ import { googleFonts, prepareImages } from "takumi-js/helpers";
 import { extractEmojis } from "takumi-js/helpers/emoji";
 import { fromJsx } from "takumi-js/helpers/jsx";
 import wasm, { init, Renderer } from "takumi-js/wasm";
+import type { PdfRenderer } from "takumi-pdf";
+import pdfWasm from "takumi-pdf/takumi_pdf_wasm_bg.wasm?url";
 import type * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { evaluateCodeExports, renderReact } from "./evaluate";
 import { FONT_FAMILIES } from "./fonts";
-import { messageSchema, type RenderMessageInput } from "./schema";
+import { inspectPdf } from "./inspect-pdf";
+import { messageSchema, type OutputKind, type RenderMessageInput } from "./schema";
 
 const fetchCache = new Map<string, Promise<ArrayBuffer>>();
 
@@ -28,6 +31,19 @@ let renderer: Renderer | undefined;
 
   postMessage({ type: "ready" });
 })();
+
+// The PDF engine is a second 3.7 MB wasm module, so it only loads once a template
+// asks for one.
+let pdfRenderer: Promise<PdfRenderer> | undefined;
+
+function loadPdfRenderer() {
+  pdfRenderer ??= import("takumi-pdf").then(async ({ default: initPdf, PdfRenderer }) => {
+    await initPdf({ module_or_path: pdfWasm });
+    return new PdfRenderer();
+  });
+
+  return pdfRenderer;
+}
 
 function declarationsToCss(declarations: object): string {
   return Object.entries(declarations)
@@ -60,6 +76,47 @@ function keyframesToCss(keyframes: NonNullable<PlaygroundOptions["keyframes"]>):
   return rules.join("\n");
 }
 
+const PX_PER_MM = 96 / 25.4;
+const PAGE_SIZES = {
+  a4: { width: 210 * PX_PER_MM, height: 297 * PX_PER_MM },
+  letter: { width: 8.5 * 96, height: 11 * 96 },
+};
+const DEFAULT_PAGE_MARGIN = 48;
+
+type PdfOptions = NonNullable<PlaygroundOptions["pdf"]>;
+
+function marginPadding(margin: PdfOptions["margin"]): string {
+  if (margin === undefined) return `${DEFAULT_PAGE_MARGIN}px`;
+  if (typeof margin === "number") return `${margin}px`;
+
+  const { top = 0, right = 0, bottom = 0, left = 0 } = margin;
+  return `${top}px ${right}px ${bottom}px ${left}px`;
+}
+
+/**
+ * Page geometry for the browser pane and the status bar. A paged PDF has no
+ * preview height: the pane shows the HTML as one continuous flow, since the
+ * browser cannot paginate it the way the renderer does.
+ */
+function pdfGeometry(pdf: PdfOptions) {
+  if (pdf.viewport) {
+    const { width, height } = pdf.viewport;
+    return { width, height, label: `${width} × ${height ?? "auto"}` };
+  }
+
+  const size = typeof pdf.size === "object" ? pdf.size : PAGE_SIZES[pdf.size ?? "a4"];
+  const preset = typeof pdf.size === "object" ? undefined : (pdf.size ?? "a4");
+  const width = Math.round(pdf.landscape ? size.height : size.width);
+  const height = Math.round(pdf.landscape ? size.width : size.height);
+  const name = preset ? preset.toUpperCase() : `${width} × ${height}`;
+
+  return {
+    width,
+    label: pdf.landscape ? `${name} landscape` : name,
+    padding: marginPadding(pdf.margin),
+  };
+}
+
 self.onmessage = async (event: MessageEvent) => {
   const payload = messageSchema.parse(event.data);
 
@@ -79,13 +136,21 @@ self.onmessage = async (event: MessageEvent) => {
         const previewStylesheets = options.keyframes
           ? [...effectiveStylesheets, keyframesToCss(options.keyframes)]
           : effectiveStylesheets;
+        const geometry = options.pdf
+          ? pdfGeometry(options.pdf)
+          : {
+              width: options.width ?? 1200,
+              height: options.height ?? 630,
+              label: `${options.width ?? 1200} × ${options.height ?? 630}`,
+            };
 
         postMessage({
           type: "preview-result",
           id: payload.id,
           html: renderToStaticMarkup(element),
-          width: options.width,
-          height: options.height,
+          width: geometry.width,
+          height: "height" in geometry ? geometry.height : undefined,
+          padding: "padding" in geometry ? geometry.padding : undefined,
           cssContents: previewStylesheets,
         });
 
@@ -96,38 +161,39 @@ self.onmessage = async (event: MessageEvent) => {
           googleFonts(GOOGLE_FONTS),
         ]);
 
+        const pdf = options.pdf && (await loadPdfRenderer());
         const start = performance.now();
         const animationOptions = options.animation;
-        const outputBuffer = await (animationOptions
-          ? (() => {
-              const format = animationOptions.format ?? "webp";
-              const fps = animationOptions.fps ?? 30;
-              return renderer.renderAnimation({
-                scenes: [
-                  {
-                    node,
-                    durationMs: animationOptions.durationMs,
-                  },
-                ],
+        const outputBuffer = await (pdf
+          ? pdf.render(node, {
+              ...options.pdf,
+              stylesheets: effectiveStylesheets,
+              images,
+              fonts,
+            })
+          : animationOptions
+            ? renderer.renderAnimation({
+                scenes: [{ node, durationMs: animationOptions.durationMs }],
                 width: options.width ?? 1200,
                 height: options.height ?? 630,
-                format,
+                format: animationOptions.format ?? "webp",
                 quality: options.quality,
                 devicePixelRatio: options.devicePixelRatio,
                 images,
                 stylesheets: effectiveStylesheets,
                 keyframes: options.keyframes,
                 fonts,
-                fps,
-              });
-            })()
-          : renderer.render(node, {
-              ...options,
-              stylesheets: effectiveStylesheets,
-              images,
-              fonts,
-            }));
+                fps: animationOptions.fps ?? 30,
+              })
+            : renderer.render(node, {
+                ...options,
+                stylesheets: effectiveStylesheets,
+                images,
+                fonts,
+              }));
         const duration = performance.now() - start;
+
+        const outputKind: OutputKind = pdf ? "pdf" : animationOptions ? "animation" : "image";
 
         postMessage(
           {
@@ -137,9 +203,10 @@ self.onmessage = async (event: MessageEvent) => {
               id: payload.id,
               outputBuffer,
               duration,
-              node,
-              outputFormat: animationOptions?.format ?? options.format ?? "png",
-              options,
+              outputKind,
+              outputFormat: pdf ? "pdf" : (animationOptions?.format ?? options.format ?? "png"),
+              label: geometry.label,
+              inspection: pdf ? inspectPdf(outputBuffer) : undefined,
             },
           },
           [outputBuffer.buffer],

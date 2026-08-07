@@ -1,4 +1,15 @@
 import type { Keyframes } from "takumi-js";
+import type { RenderOptions } from "takumi-pdf";
+
+// `Omit` collapses a union, which would lose the paged/viewport split that makes
+// the PDF options self-documenting in the editor.
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+
+/** PDF options the playground forwards; it supplies fonts, images and stylesheets itself. */
+export type PlaygroundPdfOptions = DistributiveOmit<
+  RenderOptions,
+  "fonts" | "images" | "stylesheets" | "fontFamilies"
+>;
 
 declare global {
   // oxlint-disable-next-line no-unused-vars
@@ -53,6 +64,10 @@ declare global {
        */
       format?: "webp" | "apng" | "gif";
     };
+    /**
+     * @description PDF output. When present, the playground renders a paged PDF instead of an image, and `width`/`height` are ignored. Pass `{}` for A4 defaults.
+     */
+    pdf?: PlaygroundPdfOptions;
     /**
      * @description emoji style to use.
      * @default twemoji

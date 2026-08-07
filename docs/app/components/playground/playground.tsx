@@ -7,7 +7,10 @@ import {
   Code2Icon,
   DownloadIcon,
   EyeIcon,
+  FileTextIcon,
+  FilmIcon,
   GlobeIcon,
+  ImageIcon,
   LinkIcon,
   Loader2Icon,
   RotateCcwIcon,
@@ -19,11 +22,14 @@ import type { z } from "zod/mini";
 import { cn } from "~/lib/utils";
 import {
   messageSchema,
+  type OutputKind,
+  outputKinds,
   type RenderMessageInput,
   type renderResultSchema,
 } from "~/playground/schema";
+import type { PdfInspection } from "~/playground/inspect-pdf";
 import { compressCode, decompressCode } from "~/playground/share";
-import { defaultTemplate, templates } from "~/playground/templates";
+import { defaultTemplate, type Template, templates } from "~/playground/templates";
 import TakumiWorker from "~/playground/worker?worker";
 import { Button } from "../ui/button";
 import {
@@ -46,6 +52,19 @@ const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: "preview", label: "Preview", icon: EyeIcon },
 ];
 
+const KINDS: Record<OutputKind, { label: string; icon: LucideIcon }> = {
+  image: { label: "Images", icon: ImageIcon },
+  animation: { label: "Animations", icon: FilmIcon },
+  pdf: { label: "Documents", icon: FileTextIcon },
+};
+
+type PdfView = "preview" | "document";
+
+const PDF_VIEWS: { id: PdfView; label: string }[] = [
+  { id: "preview", label: "Preview" },
+  { id: "document", label: "Document" },
+];
+
 type RenderResult = z.infer<typeof renderResultSchema>["result"];
 type RenderSuccess = Extract<RenderResult, { status: "success" }> & { outputSize: number };
 type RenderError = Extract<RenderResult, { status: "error" }>;
@@ -55,10 +74,28 @@ function isBlobUrl(url: string | undefined): url is string {
   return typeof url === "string" && url.startsWith("blob:");
 }
 
+function mimeType(result: RenderResult & { status: "success" }) {
+  return result.outputKind === "pdf" ? "application/pdf" : `image/${result.outputFormat}`;
+}
+
+function fileName(result: RenderSuccess) {
+  const slug = result.label.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+  return `takumi-${slug}.${result.outputFormat}`;
+}
+
 function formatStats(result: RenderSuccess) {
-  const { width = 1200, height = 630 } = result.options;
-  const size = `${(result.outputSize / 1024).toFixed(1)} KB`;
-  return `${width} × ${height} · ${result.outputFormat.toUpperCase()} · ${size} · ${Math.round(result.duration)} ms`;
+  const parts = [result.label];
+  const pages = result.inspection?.pages;
+
+  if (pages) parts.push(`${pages} page${pages === 1 ? "" : "s"}`);
+
+  parts.push(
+    result.outputFormat.toUpperCase(),
+    `${(result.outputSize / 1024).toFixed(1)} KB`,
+    `${Math.round(result.duration)} ms`,
+  );
+
+  return parts.join(" · ");
 }
 
 export default function Playground() {
@@ -68,12 +105,14 @@ export default function Playground() {
     html: string;
     width?: number;
     height?: number;
+    padding?: string;
     cssContents?: string[];
   }>();
   const [renderError, setRenderError] = useState<RenderError>();
   const [isReady, setIsReady] = useState(false);
   const [isFormatting, setIsFormatting] = useState(false);
   const [zoom, setZoom] = useState<Zoom>("fit");
+  const [pdfView, setPdfView] = useState<PdfView>("preview");
   const [copied, setCopied] = useState(false);
   const [searchParams, setSearchParams] = useState(() => {
     if (typeof window === "undefined") {
@@ -90,7 +129,8 @@ export default function Playground() {
   const codeQuery = searchParams.get("code");
   const templateQuery = searchParams.get("template");
   const matchedTemplate = templates.find((template) => template.code === code);
-  const selectedTemplateName = matchedTemplate?.name ?? "Templates";
+  const selectedTemplateName = matchedTemplate?.name ?? "Custom";
+  const outputKind = lastSuccess?.outputKind;
 
   useEffect(() => {
     const onPopState = () => {
@@ -191,6 +231,7 @@ export default function Playground() {
               html: message.html,
               width: message.width,
               height: message.height,
+              padding: message.padding,
               cssContents: message.cssContents,
             });
           }
@@ -201,9 +242,7 @@ export default function Playground() {
           if (result.id !== currentRequestIdRef.current) break;
 
           if (result.status === "success") {
-            const blob = new Blob([result.outputBuffer as BlobPart], {
-              type: `image/${result.outputFormat}`,
-            });
+            const blob = new Blob([result.outputBuffer as BlobPart], { type: mimeType(result) });
             setLastSuccess({
               ...result,
               outputUrl: URL.createObjectURL(blob),
@@ -253,8 +292,8 @@ export default function Playground() {
     return () => URL.revokeObjectURL(url);
   }, [lastSuccess]);
 
-  const loadTemplate = (templateCode: string) => {
-    setCode(templateCode);
+  const loadTemplate = (template: Template) => {
+    setCode(template.code);
   };
   const resetCode = () => {
     setCode(DEFAULT_TEMPLATE.code);
@@ -290,13 +329,12 @@ export default function Playground() {
     setTimeout(() => setCopied(false), 1500);
   };
 
-  const downloadImage = () => {
+  const downloadOutput = () => {
     if (!lastSuccess?.outputUrl) return;
 
-    const { width = 1200, height = 630 } = lastSuccess.options;
     const link = document.createElement("a");
     link.href = lastSuccess.outputUrl;
-    link.download = `takumi-${width}x${height}.${lastSuccess.outputFormat}`;
+    link.download = fileName(lastSuccess);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -308,7 +346,13 @@ export default function Playground() {
     </div>
   );
   const takumiPane = (
-    <PreviewPanel lastSuccess={lastSuccess} error={renderError} zoom={zoom} isReady={isReady} />
+    <OutputPanel
+      lastSuccess={lastSuccess}
+      error={renderError}
+      zoom={zoom}
+      isReady={isReady}
+      pdfView={pdfView}
+    />
   );
   const browserPane = (
     <Suspense fallback={<div className="h-full bg-muted/20" />}>
@@ -316,6 +360,7 @@ export default function Playground() {
         html={browserPreview?.html}
         width={browserPreview?.width}
         height={browserPreview?.height}
+        padding={browserPreview?.padding}
         cssContents={browserPreview?.cssContents}
       />
     </Suspense>
@@ -323,7 +368,29 @@ export default function Playground() {
   const splitPreview = (
     <ResizablePanelGroup orientation="vertical">
       <ResizablePanel defaultSize={50} minSize={20}>
-        <LabeledPane label="Takumi" icon={AxeIcon}>
+        <LabeledPane
+          label={outputKind === "pdf" ? "Takumi PDF" : "Takumi"}
+          icon={AxeIcon}
+          actions={
+            outputKind === "pdf" && (
+              <>
+                {PDF_VIEWS.map(({ id, label }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setPdfView(id)}
+                    className={cn(
+                      "rounded-sm px-1.5 py-0.5 uppercase transition-colors hover:text-foreground",
+                      pdfView === id && "bg-muted text-foreground",
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </>
+            )
+          }
+        >
           {takumiPane}
         </LabeledPane>
       </ResizablePanel>
@@ -357,29 +424,11 @@ export default function Playground() {
           ))}
         </div>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 min-w-0 max-w-40 px-2 font-mono text-xs text-muted-foreground"
-            >
-              <span className="truncate">{selectedTemplateName}</span>
-              <ChevronDownIcon className="size-3" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            {templates.map((t) => (
-              <DropdownMenuItem
-                key={t.name}
-                onClick={() => loadTemplate(t.code)}
-                className="cursor-pointer font-mono text-xs"
-              >
-                {t.name}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <TemplateMenu
+          selectedName={selectedTemplateName}
+          selectedId={matchedTemplate?.id}
+          onSelect={loadTemplate}
+        />
 
         <div className={cn("flex items-center gap-0.5", activeTab !== "code" && "max-md:hidden")}>
           <Button
@@ -408,15 +457,17 @@ export default function Playground() {
         </div>
 
         <div className="ml-auto flex items-center gap-0.5">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 font-mono text-xs text-muted-foreground max-md:hidden"
-            onClick={() => setZoom(zoom === "fit" ? "actual" : "fit")}
-            title="Toggle zoom"
-          >
-            {zoom === "fit" ? "Fit" : "100%"}
-          </Button>
+          {outputKind !== "pdf" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 font-mono text-xs text-muted-foreground max-md:hidden"
+              onClick={() => setZoom(zoom === "fit" ? "actual" : "fit")}
+              title="Toggle zoom"
+            >
+              {zoom === "fit" ? "Fit" : "100%"}
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"
@@ -435,9 +486,9 @@ export default function Playground() {
             variant="ghost"
             size="icon-sm"
             className="size-7 text-muted-foreground"
-            onClick={downloadImage}
+            onClick={downloadOutput}
             disabled={!lastSuccess}
-            title="Download image"
+            title="Download output"
           >
             <DownloadIcon className="size-3.5" />
           </Button>
@@ -478,13 +529,70 @@ export default function Playground() {
   );
 }
 
+function TemplateMenu({
+  selectedName,
+  selectedId,
+  onSelect,
+}: {
+  selectedName: string;
+  selectedId: string | undefined;
+  onSelect: (template: Template) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 min-w-0 max-w-40 px-2 font-mono text-xs text-muted-foreground"
+        >
+          <span className="truncate">{selectedName}</span>
+          <ChevronDownIcon className="size-3" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="max-w-72">
+        {outputKinds.map((kind) => {
+          const group = templates.filter((template) => template.kind === kind);
+          if (group.length === 0) return null;
+
+          const { label, icon: Icon } = KINDS[kind];
+
+          return (
+            <div key={kind} className="border-b py-1 last:border-b-0">
+              <div className="flex items-center gap-1.5 px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+                <Icon className="size-3" />
+                {label}
+              </div>
+              {group.map((template) => (
+                <DropdownMenuItem
+                  key={template.id}
+                  onClick={() => onSelect(template)}
+                  className="cursor-pointer flex-col items-start gap-0.5"
+                >
+                  <span className="flex items-center gap-1.5 font-mono text-xs">
+                    {template.name}
+                    {template.id === selectedId && <CheckIcon className="size-3 text-primary" />}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">{template.description}</span>
+                </DropdownMenuItem>
+              ))}
+            </div>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function LabeledPane({
   label,
   icon: Icon,
+  actions,
   children,
 }: {
   label: string;
   icon: LucideIcon;
+  actions?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -492,35 +600,92 @@ function LabeledPane({
       <div className="flex h-6 shrink-0 items-center gap-1.5 border-b px-3 font-mono text-[11px] uppercase tracking-wide text-muted-foreground">
         <Icon className="size-3" />
         {label}
+        {actions && <div className="ml-auto flex items-center gap-1">{actions}</div>}
       </div>
       <div className="min-h-0 flex-1">{children}</div>
     </div>
   );
 }
 
-function PreviewPanel({
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex gap-3 border-b py-1.5 last:border-b-0">
+      <span className="w-24 shrink-0 text-muted-foreground">{label}</span>
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * Reads the rendered bytes back, so the options in the editor are not the only
+ * evidence that the document carries what it claims.
+ */
+function DocumentPanel({ inspection }: { inspection: PdfInspection }) {
+  return (
+    <div className="h-full overflow-auto bg-muted/20 px-4 py-3 font-mono text-xs">
+      <Field label="Standards">
+        {inspection.standards.length > 0 ? (
+          <span className="text-primary">{inspection.standards.join(" · ")}</span>
+        ) : (
+          <span className="text-muted-foreground">plain PDF</span>
+        )}
+      </Field>
+      <Field label="Tagged">{inspection.tagged ? "yes" : "no"}</Field>
+      <Field label="Pages">{inspection.pages}</Field>
+      {inspection.title && <Field label="Title">{inspection.title}</Field>}
+      {inspection.authors && <Field label="Authors">{inspection.authors.join(", ")}</Field>}
+      {inspection.created && <Field label="Created">{inspection.created}</Field>}
+      <Field label="Bookmarks">
+        {inspection.bookmarks.length === 0 ? (
+          <span className="text-muted-foreground">none</span>
+        ) : (
+          inspection.bookmarks.map((bookmark, index) => (
+            <div
+              key={`${bookmark.title}-${index}`}
+              style={{ paddingLeft: bookmark.depth * 12 }}
+              className="truncate"
+            >
+              {bookmark.title}
+            </div>
+          ))
+        )}
+      </Field>
+      <Field label="Attachments">
+        {inspection.attachments.length === 0 ? (
+          <span className="text-muted-foreground">none</span>
+        ) : (
+          inspection.attachments.map((attachment) => (
+            <div key={attachment.name} className="truncate">
+              {attachment.name}
+              {attachment.description && (
+                <span className="text-muted-foreground"> — {attachment.description}</span>
+              )}
+            </div>
+          ))
+        )}
+      </Field>
+      <p className="mt-3 text-[11px] leading-5 text-muted-foreground">
+        These come from the rendered bytes: the page tree, the outline, the file specs and the XMP
+        packet. A standard listed here is what the file claims about itself. Takumi checks the claim
+        with veraPDF in CI.
+      </p>
+    </div>
+  );
+}
+
+function OutputPanel({
   lastSuccess,
   error,
   zoom,
   isReady,
+  pdfView,
 }: {
   lastSuccess: RenderSuccess | undefined;
   error: RenderError | undefined;
   zoom: Zoom;
   isReady: boolean;
+  pdfView: PdfView;
 }) {
-  const image = lastSuccess && (
-    <img
-      src={lastSuccess.outputUrl}
-      alt="Rendered output"
-      className={cn(
-        "border",
-        zoom === "fit" ? "max-h-full max-w-full object-contain" : "max-w-none",
-        error && "opacity-40",
-      )}
-    />
-  );
-
   if (!lastSuccess && !error) {
     return (
       <div className="flex h-full items-center justify-center gap-2 bg-muted/20 font-mono text-xs text-muted-foreground">
@@ -530,14 +695,43 @@ function PreviewPanel({
     );
   }
 
+  // The browser's own PDF viewer brings paging, zoom and text selection, which
+  // is the point of the format.
+  if (lastSuccess?.outputKind === "pdf" && pdfView === "document" && lastSuccess.inspection) {
+    return <DocumentPanel inspection={lastSuccess.inspection} />;
+  }
+
+  const output =
+    lastSuccess &&
+    (lastSuccess.outputKind === "pdf" ? (
+      <iframe
+        key={lastSuccess.outputUrl}
+        src={lastSuccess.outputUrl}
+        title="Rendered PDF"
+        className={cn("h-full w-full border-0 bg-white", error && "opacity-40")}
+      />
+    ) : (
+      <img
+        src={lastSuccess.outputUrl}
+        alt="Rendered output"
+        className={cn(
+          "border",
+          zoom === "fit" ? "max-h-full max-w-full object-contain" : "max-w-none",
+          error && "opacity-40",
+        )}
+      />
+    ));
+
   return (
     <div className="relative h-full min-w-0 overflow-hidden bg-muted/20">
-      {zoom === "fit" ? (
-        <div className="absolute inset-0 flex items-center justify-center">{image}</div>
+      {lastSuccess?.outputKind === "pdf" ? (
+        <div className="absolute inset-0">{output}</div>
+      ) : zoom === "fit" ? (
+        <div className="absolute inset-0 flex items-center justify-center">{output}</div>
       ) : (
         <div className="absolute inset-0 overflow-auto">
           <div className="flex h-fit min-h-full w-fit min-w-full items-center justify-center">
-            {image}
+            {output}
           </div>
         </div>
       )}
