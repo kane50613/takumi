@@ -188,11 +188,15 @@ impl Animatable for ColorInput {
   ) {
     *self = match (from, to) {
       (ColorInput::CurrentColor, ColorInput::CurrentColor) => ColorInput::CurrentColor,
+      // Animating a color is not `color-mix()`: every colour this engine holds is
+      // a legacy sRGB one, and those interpolate in sRGB with premultiplied alpha.
+      // Oklab is for colours a legacy space cannot express.
+      // https://www.w3.org/TR/css-color-4/#interpolation-space
       _ => ColorInput::Value(interpolate_with_color_space(
         from.resolve(current_color),
         to.resolve(current_color),
         progress,
-        ColorSpaceTag::Oklab,
+        ColorSpaceTag::Srgb,
         HueDirection::Shorter,
       )),
     };
@@ -837,7 +841,61 @@ impl<'i> FromCss<'i> for Color {
 
 #[cfg(test)]
 mod tests {
+  use std::rc::Rc;
+
   use super::*;
+  use crate::{
+    geometry::Size,
+    style::{CalcArena, sizing::SizingContext},
+    viewport::Viewport,
+  };
+
+  fn sizing() -> SizingContext {
+    SizingContext {
+      viewport: Viewport::new((200, 100)),
+      container_size: Size::NONE,
+      font_size: 16.0,
+      root_font_size: None,
+      line_height: 0.0,
+      root_line_height: None,
+      calc_arena: Rc::new(CalcArena::default()),
+    }
+  }
+
+  #[test]
+  fn animating_a_colour_interpolates_in_srgb() {
+    let mut result = ColorInput::default();
+
+    result.interpolate(
+      &ColorInput::Value(Color([0, 0, 255, 255])),
+      &ColorInput::Value(Color([255, 255, 0, 255])),
+      0.5,
+      &sizing(),
+      Color([0, 0, 0, 255]),
+    );
+
+    // Oklab would swing the midpoint through a lighter, pinker path; sRGB keeps
+    // each channel on its own straight line, which is what Chromium does for a
+    // legacy colour.
+    assert_eq!(result, ColorInput::Value(Color([128, 128, 128, 255])));
+  }
+
+  #[test]
+  fn animating_a_transparent_colour_premultiplies() {
+    let mut result = ColorInput::default();
+
+    result.interpolate(
+      &ColorInput::Value(Color([255, 0, 0, 0])),
+      &ColorInput::Value(Color([0, 0, 255, 255])),
+      0.5,
+      &sizing(),
+      Color([0, 0, 0, 255]),
+    );
+
+    // Premultiplied, the transparent red contributes nothing to the midpoint's
+    // hue: half-opaque blue, not purple.
+    assert_eq!(result, ColorInput::Value(Color([0, 0, 255, 128])));
+  }
 
   #[test]
   fn test_color_from_f32_array_clamps_before_rounding() {

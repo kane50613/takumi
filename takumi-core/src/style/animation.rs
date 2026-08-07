@@ -802,7 +802,7 @@ mod tests {
       current_color(),
     );
 
-    assert_eq!(target, ColorInput::Value(Color([57, 67, 77, 255])));
+    assert_eq!(target, ColorInput::Value(Color([60, 70, 80, 255])));
   }
 
   #[test]
@@ -1014,7 +1014,7 @@ mod tests {
         offset_y: Length::Px(20.0),
         blur_radius: Length::Px(30.0),
         spread_radius: Length::Px(40.0),
-        color: ColorInput::Value(Color([76, 34, 13, 255])),
+        color: ColorInput::Value(Color([100, 50, 25, 255])),
       }
     );
   }
@@ -1051,7 +1051,7 @@ mod tests {
         offset_x: Length::Px(10.0),
         offset_y: Length::Px(20.0),
         blur_radius: Length::Px(30.0),
-        color: ColorInput::Value(Color([76, 34, 13, 255])),
+        color: ColorInput::Value(Color([100, 50, 25, 255])),
       }
     );
   }
@@ -1387,7 +1387,7 @@ mod tests {
 
     assert_eq!(
       base_style.webkit_text_stroke_color,
-      Some(ColorInput::Value(Color([57, 67, 77, 255])))
+      Some(ColorInput::Value(Color([60, 70, 80, 255])))
     );
   }
 
@@ -1416,7 +1416,7 @@ mod tests {
 
     assert_eq!(
       base_style.webkit_text_fill_color,
-      Some(ColorInput::Value(Color([68, 88, 108, 255])))
+      Some(ColorInput::Value(Color([70, 90, 110, 255])))
     );
   }
 
