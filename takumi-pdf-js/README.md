@@ -207,6 +207,7 @@ const pdf = await render(report, {
 | `"2a"` / `"3a"`          | A tagged structure tree.              |
 | `"3b"` / `"3u"` / `"3a"` | Arbitrary file attachments.           |
 | `"4"`                    | The PDF 2.0 revision of the standard. |
+| `"4f"`                   | PDF 2.0 with file attachments.        |
 
 Invalid combinations are **TypeScript type errors**. See the [PDF/A docs](https://takumi.kane.tw/docs/pdf/pdf-a) for the structure-tree mapping and required metadata.
 

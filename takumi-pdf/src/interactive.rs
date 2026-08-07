@@ -21,7 +21,6 @@ use takumi_core::{
       InlineItem, InlineLayoutMode, InlineLayoutRequest, collect_inline_items,
       create_inline_layout, resolve_inline_max_height,
     },
-    node::{Node, NodeKind},
     tree::RenderNode,
   },
   scene::{NodePaint, PaintItemKind},
@@ -31,6 +30,7 @@ use takumi_core::{
 use crate::krilla::page::Page;
 use crate::options::PT_PER_PX;
 use crate::tags::TagCollector;
+use crate::tags::text_content;
 use crate::tree::PreparedTree;
 
 /// A hyperlink box in content coordinates.
@@ -54,6 +54,9 @@ pub(crate) struct HeadingTarget {
   level: u8,
   text: String,
   pub(crate) top: f32,
+  /// Path of the heading element. A heading whose text sits in child elements
+  /// paints once per child, and the outline wants one entry.
+  path: Vec<usize>,
 }
 
 /// The axis-aligned bounding box of a node-local rect under the node's
@@ -83,18 +86,6 @@ fn heading_level(tag: &str) -> Option<u8> {
     Some(level - b'0')
   } else {
     None
-  }
-}
-
-fn node_text(node: &Node, out: &mut String) {
-  match &node.kind {
-    NodeKind::Text(text) => out.push_str(&text.text),
-    NodeKind::Container { children } => {
-      for child in children {
-        node_text(child, out);
-      }
-    }
-    _ => {}
   }
 }
 
@@ -169,20 +160,47 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
     }
     None => {}
   }
-  if let Some(level) = source.tag_name().and_then(heading_level) {
-    let mut text = String::new();
+  // The heading itself paints only when it holds the text directly; markup
+  // like `<h1>Plain <strong>bold</strong></h1>` paints the children instead.
+  let Some((path, heading, level)) = heading_ancestor(tree, &paint.path) else {
+    return;
+  };
 
-    node_text(source, &mut text);
-    let text = text.trim();
+  if collected
+    .headings
+    .iter()
+    .any(|collected| collected.path == path)
+  {
+    return;
+  }
+  let text = text_content(heading);
 
-    if !text.is_empty() {
-      collected.headings.push(HeadingTarget {
-        level,
-        text: text.to_string(),
-        top: rect.top(),
-      });
+  if !text.is_empty() {
+    collected.headings.push(HeadingTarget {
+      level,
+      text,
+      top: rect.top(),
+      path,
+    });
+  }
+}
+
+/// The nearest heading at or above `path`, with its own path and level.
+fn heading_ancestor<'t>(
+  tree: &'t PreparedTree,
+  path: &[usize],
+) -> Option<(Vec<usize>, &'t RenderNode, u8)> {
+  for length in (0..=path.len()).rev() {
+    let ancestor = tree.root.node_at_path(&path[..length])?;
+    let Some(source) = ancestor.node.as_ref() else {
+      continue;
+    };
+
+    if let Some(level) = source.tag_name().and_then(heading_level) {
+      return Some((path[..length].to_vec(), ancestor, level));
     }
   }
+  None
 }
 
 /// Decodes the percent escapes an `id` fragment carries in a URL, so

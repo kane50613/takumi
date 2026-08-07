@@ -132,6 +132,8 @@ pub(crate) enum PdfaInput {
   A3u,
   #[serde(rename = "4")]
   A4,
+  #[serde(rename = "4f")]
+  A4f,
 }
 
 impl From<PdfaInput> for PdfStandard {
@@ -144,6 +146,7 @@ impl From<PdfaInput> for PdfStandard {
       PdfaInput::A3b => PdfStandard::A3b,
       PdfaInput::A3u => PdfStandard::A3u,
       PdfaInput::A4 => PdfStandard::A4,
+      PdfaInput::A4f => PdfStandard::A4f,
     }
   }
 }

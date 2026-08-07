@@ -72,6 +72,6 @@ The PDF/A-3 levels require three fields on each attachment:
 
 A missing field fails the render with the violated rule.
 
-Invalid combinations are **TypeScript type errors**. The PDF/A-2 levels and `"4"` forbid attachments. The PDF/A-3 levels require `mimeType` and `description` on each one.
+Invalid combinations are **TypeScript type errors**. The PDF/A-2 levels and `"4"` forbid attachments. Use `"4f"` for an attachment inside a PDF 2.0 archival file. The PDF/A-3 levels require `mimeType` and `description` on each one.
 
 Full Factur-X conformance also expects its `fx:` XMP extension schema. `metadata.xmp` writes it. See [Invoices](/docs/pdf/invoices).

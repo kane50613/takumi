@@ -68,6 +68,8 @@ pub enum PdfStandard {
   A3u,
   /// PDF/A-4: archival, PDF 2.0.
   A4,
+  /// PDF/A-4f: PDF/A-4 plus arbitrary file attachments.
+  A4f,
   /// PDF/A-2a: PDF/A-2 with accessibility (tagged) conformance.
   A2a,
   /// PDF/A-3a: PDF/A-3 with accessibility (tagged) conformance.
@@ -83,6 +85,7 @@ impl PdfStandard {
       PdfStandard::A3b => Some(Archival::A3_B),
       PdfStandard::A3u => Some(Archival::A3_U),
       PdfStandard::A4 => Some(Archival::A4),
+      PdfStandard::A4f => Some(Archival::A4F),
       PdfStandard::A2a => Some(Archival::A2_A),
       PdfStandard::A3a => Some(Archival::A3_A),
     }

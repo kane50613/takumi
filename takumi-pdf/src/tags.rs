@@ -62,14 +62,18 @@ pub(crate) fn build_tag_tree(
   let mut tree = TagTree::new().with_lang(lang.map(str::to_string));
   let mut top = Vec::new();
   let mut pending = Vec::new();
+  let mut walk = Walk {
+    collector,
+    headings: Vec::new(),
+  };
 
   build_node(
     root,
     &mut Vec::new(),
-    collector,
+    &mut walk,
     &mut top,
     &mut pending,
-    false,
+    Nesting::default(),
   );
   flush_paragraph(&mut pending, &mut top);
   for group in top {
@@ -94,22 +98,52 @@ fn flush_paragraph(pending: &mut Vec<Identifier>, parent: &mut Vec<TagGroup>) {
   parent.push(group);
 }
 
+/// State carried across the walk: the identifiers to place, plus the source
+/// heading levels open at this point, whose depth becomes the emitted `Hn`.
+struct Walk<'c> {
+  collector: &'c mut TagCollector,
+  headings: Vec<u8>,
+}
+
+impl Walk<'_> {
+  /// PDF/UA rejects a heading sequence that skips a level or opens below
+  /// `H1`, which HTML happily writes. Numbering by nesting depth keeps the
+  /// document's hierarchy and always produces a sequence validators accept.
+  fn heading_level(&mut self, source: u8) -> NonZeroU16 {
+    while self.headings.last().is_some_and(|open| *open >= source) {
+      self.headings.pop();
+    }
+    self.headings.push(source);
+
+    NonZeroU16::new(self.headings.len().min(6) as u16).unwrap_or(NonZeroU16::MIN)
+  }
+}
+
+#[derive(Default, Clone, Copy)]
+struct Nesting {
+  /// Inside a row-direction flex container, whose items read as one line.
+  in_row: bool,
+  /// Inside an `L`, so a list item already has the parent it requires.
+  in_list: bool,
+}
+
 fn build_node(
   node: &RenderNode,
   path: &mut Vec<usize>,
-  collector: &mut TagCollector,
+  walk: &mut Walk,
   parent: &mut Vec<TagGroup>,
   pending: &mut Vec<Identifier>,
-  in_row: bool,
+  nesting: Nesting,
 ) {
-  let identifiers = collector.take(path);
-  let mut annotations = collector.take_annotations(path);
+  let identifiers = walk.collector.take(path);
+  let mut annotations = walk.collector.take_annotations(path);
 
-  match role(node) {
+  match role(node, walk) {
     Some(kind) => {
       flush_paragraph(pending, parent);
       let is_link = matches!(kind, TagKind::Link(_));
       let is_list_item = matches!(kind, TagKind::LI(_));
+      let is_list = matches!(kind, TagKind::L(_));
       let mut group = TagGroup::new(kind);
       let mut children = Vec::new();
       let mut child_pending = Vec::new();
@@ -124,7 +158,17 @@ fn build_node(
           group.push(identifier);
         }
       }
-      build_children(node, path, collector, &mut children, &mut child_pending);
+      build_children(
+        node,
+        path,
+        walk,
+        &mut children,
+        &mut child_pending,
+        Nesting {
+          in_list: is_list,
+          ..nesting
+        },
+      );
       flush_paragraph(&mut child_pending, &mut children);
       // Wrapped annotations join the element's own children so they read
       // after the content they decorate, not before the element.
@@ -155,19 +199,28 @@ fn build_node(
       // Inline formatting inside a text run leaves its element without any
       // content of its own; an empty structure element is pure noise.
       if has_content {
-        parent.push(group);
+        // An `LI` outside a list is invalid on its own, so it brings a list
+        // of its own along.
+        if is_list_item && !nesting.in_list {
+          let mut list = TagGroup::new(Tag::L(ListNumbering::None));
+
+          list.push(group);
+          parent.push(list);
+        } else {
+          parent.push(group);
+        }
       }
     }
     None => {
       // Items of a row-direction flex container read as one visual line, so
       // their block boundaries do not split the paragraph run.
-      let block = is_block(node) && !in_row;
+      let block = is_block(node) && !nesting.in_row;
 
       if block {
         flush_paragraph(pending, parent);
       }
       pending.extend(identifiers);
-      build_children(node, path, collector, parent, pending);
+      build_children(node, path, walk, parent, pending, nesting);
       if block {
         flush_paragraph(pending, parent);
       }
@@ -195,18 +248,22 @@ fn push_link_wrappers(annotations: Vec<Identifier>, parent: &mut Vec<TagGroup>) 
 fn build_children(
   node: &RenderNode,
   path: &mut Vec<usize>,
-  collector: &mut TagCollector,
+  walk: &mut Walk,
   parent: &mut Vec<TagGroup>,
   pending: &mut Vec<Identifier>,
+  nesting: Nesting,
 ) {
   let Some(children) = node.children.as_ref() else {
     return;
   };
-  let in_row = is_row_flex(node);
+  let nesting = Nesting {
+    in_row: is_row_flex(node),
+    ..nesting
+  };
 
   for (index, child) in children.iter().enumerate() {
     path.push(index);
-    build_node(child, path, collector, parent, pending, in_row);
+    build_node(child, path, walk, parent, pending, nesting);
     path.pop();
   }
 }
@@ -231,16 +288,16 @@ fn is_row_flex(node: &RenderNode) -> bool {
   )
 }
 
-fn role(node: &RenderNode) -> Option<TagKind> {
+fn role(node: &RenderNode, walk: &mut Walk) -> Option<TagKind> {
   let source = node.node.as_ref()?;
   let tag_name = source.tag_name()?;
 
   match tag_name {
     "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {
-      let level = tag_name.as_bytes()[1] - b'0';
+      let level = walk.heading_level(tag_name.as_bytes()[1] - b'0');
       let title = Some(text_content(node)).filter(|title| !title.is_empty());
 
-      NonZeroU16::new(u16::from(level)).map(|level| Tag::Hn(level, title).into())
+      Some(Tag::Hn(level, title).into())
     }
     "p" => Some(Tag::P.into()),
     // `alt=""` marks a decorative image: emitted as an artifact, no element.
@@ -260,7 +317,9 @@ fn role(node: &RenderNode) -> Option<TagKind> {
   }
 }
 
-fn text_content(node: &RenderNode) -> String {
+/// The text a node contributes, including the anonymous runs the layout
+/// merges inline children into.
+pub(crate) fn text_content(node: &RenderNode) -> String {
   let mut out = String::new();
 
   collect_text(node, &mut out);

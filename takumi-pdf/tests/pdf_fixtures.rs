@@ -1374,6 +1374,23 @@ fn attachments() {
     "custom schema description missing from the packet"
   );
 
+  // PDF/A-4f is the PDF 2.0 spelling of the same container.
+  let a4f = run_pdf_fixture("invoice-pdfa-4f-attachment", |fonts| {
+    PdfOptions::builder()
+      .node(html_fixture("invoice.html"))
+      .page(PageOptions::A4.with_margin(36.0))
+      .footer(html_fixture("invoice-footer.html"))
+      .standard(PdfStandard::A4f)
+      .metadata(metadata())
+      .attachments(vec![attachment()])
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = String::from_utf8_lossy(&a4f);
+
+  assert!(haystack.starts_with("%PDF-2.0"));
+  assert!(haystack.contains("/EmbeddedFiles"), "missing name tree");
+
   let fonts = fonts();
   let duplicate = render(
     PdfOptions::builder()
@@ -1780,4 +1797,55 @@ fn font_format_standards() {
       );
     }
   }
+}
+
+/// HTML numbers headings for looks, so a document can open at `h2` or jump
+/// from `h1` to `h4`. PDF/UA rejects both, and rejects a list item without a
+/// list around it. The structure tree renumbers by nesting depth and gives an
+/// orphan item a list of its own. A heading whose text sits in child elements
+/// still reaches the outline, which PDF/UA requires.
+#[test]
+fn heading_levels_and_orphan_list_item() {
+  let doc = r#"<main style="display:flex;flex-direction:column;font-size:14px;color:#141414;">
+    <h2>Opens below h1</h2>
+    <p>Body</p>
+    <h4>Skips two levels</h4>
+    <h3>Wrapped <strong>bold</strong> text</h3>
+    <li>An item with no list</li>
+  </main>"#;
+  let pdf = run_pdf_fixture("heading-levels-ua1", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse heading doc"))
+      .page(PageOptions::A4)
+      .standard(PdfStandard::A3a)
+      .tagged(Tagging::Ua1)
+      .lang(Some(takumi_core::style::Lang::parse("en").expect("lang")))
+      .metadata(PdfMetadata {
+        title: Some("Headings".into()),
+        creation_date: Some(PdfDate {
+          year: 2026,
+          month: 8,
+          day: 7,
+          hour: 0,
+          minute: 0,
+          second: 0,
+        }),
+        ..Default::default()
+      })
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  for name in ["/S/H1", "/S/H2", "/S/L", "/S/LI"] {
+    assert!(haystack.contains(name), "missing {name} structure element");
+  }
+  assert!(
+    !haystack.contains("/S/H4"),
+    "heading levels reached the file unnormalized"
+  );
+  assert!(
+    haystack.contains("Wrapped bold text"),
+    "heading with inline children missing from the outline"
+  );
 }
