@@ -1,3 +1,13 @@
+## takumi-pdf@0.4.1
+
+### Attach files under PDF/A-4
+
+`pdfa: "4f"` renders the PDF 2.0 archival level that takes attachments. The other `"4"` level still rejects them.
+
+### Emit a structure tree PDF/UA accepts
+
+Headings are renumbered by nesting depth, so a document that opens at `h2` or jumps from `h1` to `h4` no longer writes a tree the validator rejects. A list item outside a list now brings its own list. A heading whose text sits in child elements, such as `<h1>Plain <strong>bold</strong></h1>`, reaches the outline instead of being dropped, which used to fail a `tagged: "ua1"` render outright.
+
 ## takumi-pdf@0.4.0
 
 ### Write shorter paths
