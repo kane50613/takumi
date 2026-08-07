@@ -687,6 +687,61 @@ function DocumentPanel({ inspection }: { inspection: PdfInspection }) {
   );
 }
 
+/**
+ * Every render mints a new blob URL, and pointing the viewer at one reloads it:
+ * a white flash on each keystroke. Two viewers take turns instead. The next
+ * document loads in the hidden one, and the swap is a visibility change, so the
+ * viewer on screen is never the one loading. The timer covers a viewer that
+ * never fires `load`, which would otherwise leave a stale page up for good.
+ */
+function PdfPreview({ url, dimmed }: { url: string | undefined; dimmed: boolean }) {
+  const [slots, setSlots] = useState<(string | undefined)[]>([url, undefined]);
+  const [front, setFront] = useState(0);
+  const back = 1 - front;
+
+  useEffect(() => {
+    if (!url || slots[front] === url || slots[back] === url) return;
+
+    setSlots((current) => current.map((slot, index) => (index === back ? url : slot)));
+
+    const timer = setTimeout(() => setFront(back), 2000);
+
+    return () => clearTimeout(timer);
+  }, [url, slots, front, back]);
+
+  return (
+    <div className={cn("relative h-full w-full bg-white", dimmed && "opacity-40")}>
+      {slots.map((slot, index) =>
+        slot === undefined ? null : (
+          <object
+            // The slot, not the URL: rekeying on the URL would remount the
+            // element and load it all over again.
+            // oxlint-disable-next-line no-array-index-key
+            key={index}
+            data={slot}
+            type="application/pdf"
+            aria-label={index === front ? "Rendered PDF" : undefined}
+            aria-hidden={index !== front}
+            onLoad={() => setFront(index)}
+            className={cn(
+              "absolute inset-0 size-full",
+              index !== front && "pointer-events-none opacity-0",
+            )}
+          >
+            {/* Most mobile browsers have no inline PDF viewer, and `object`
+                renders this instead of an empty frame. */}
+            <div className="flex h-full items-center justify-center p-6 text-center font-mono text-xs text-muted-foreground">
+              <a href={slot} target="_blank" rel="noreferrer" className="underline">
+                This browser cannot show the PDF here. Open it in a new tab.
+              </a>
+            </div>
+          </object>
+        ),
+      )}
+    </div>
+  );
+}
+
 function OutputPanel({
   lastSuccess,
   error,
@@ -718,12 +773,7 @@ function OutputPanel({
   const output =
     lastSuccess &&
     (lastSuccess.outputKind === "pdf" ? (
-      <iframe
-        key={lastSuccess.outputUrl}
-        src={lastSuccess.outputUrl}
-        title="Rendered PDF"
-        className={cn("h-full w-full border-0 bg-white", error && "opacity-40")}
-      />
+      <PdfPreview url={lastSuccess.outputUrl} dimmed={Boolean(error)} />
     ) : (
       <img
         src={lastSuccess.outputUrl}
