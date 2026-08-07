@@ -94,11 +94,6 @@ function DocumentPanel({ inspection }: { inspection: PdfInspection }) {
           ))
         )}
       </Field>
-      <p className="mt-3 text-[11px] leading-5 text-muted-foreground">
-        These come from the rendered bytes: the page tree, the outline, the file specs and the XMP
-        packet. A standard listed here is what the file claims about itself. Takumi checks the claim
-        with veraPDF in CI.
-      </p>
     </div>
   );
 }
