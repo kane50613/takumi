@@ -61,14 +61,15 @@ function extractClasses(html: string) {
   return [...classes];
 }
 
-function useFitScale(width: number, height: number) {
+function useFitScale(width: number, height: number | undefined) {
   const ref = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
 
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const measure = () => setScale(Math.min(el.clientWidth / width, el.clientHeight / height, 1));
+    const measure = () =>
+      setScale(Math.min(el.clientWidth / width, height ? el.clientHeight / height : Infinity, 1));
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(el);
@@ -81,17 +82,22 @@ function useFitScale(width: number, height: number) {
 export default function BrowserPreview({
   html,
   width = 1200,
-  height = 630,
+  height,
+  padding,
   cssContents,
 }: {
   html: string | undefined;
   width?: number;
+  /** Omitted for paged PDF: the pane grows with the content instead of clipping. */
   height?: number;
+  padding?: string;
   cssContents?: string[];
 }) {
   const { ref, scale } = useFitScale(width, height);
   const hostRef = useRef<HTMLDivElement>(null);
-  const shadowRef = useRef<{ mount: HTMLElement; sheet: CSSStyleSheet }>(undefined);
+  const shadowRef = useRef<{ host: HTMLElement; mount: HTMLElement; sheet: CSSStyleSheet }>(
+    undefined,
+  );
 
   useLayoutEffect(() => {
     const host = hostRef.current;
@@ -99,14 +105,15 @@ export default function BrowserPreview({
 
     loadFont();
 
-    if (!shadowRef.current) {
+    // The host element is swapped when the pane switches between fixed-size and
+    // flowing layouts, which leaves the old shadow root behind.
+    if (shadowRef.current?.host !== host) {
       const root = host.shadowRoot ?? host.attachShadow({ mode: "open" });
       const sheet = new CSSStyleSheet();
       root.adoptedStyleSheets = [sheet];
       const mount = document.createElement("div");
-      mount.style.cssText = "width:100%;height:100%;display:flex";
       root.replaceChildren(mount);
-      shadowRef.current = { mount, sheet };
+      shadowRef.current = { host, mount, sheet };
     }
 
     const paint = () => {
@@ -114,6 +121,7 @@ export default function BrowserPreview({
       shadowRef.current.sheet.replaceSync(
         [HOST_CSS, compiler.build(extractClasses(html)), ...(cssContents ?? [])].join("\n\n"),
       );
+      shadowRef.current.mount.style.cssText = `display:flex;width:100%;height:${height ? "100%" : "auto"};padding:${padding ?? "0"}`;
       shadowRef.current.mount.innerHTML = html;
     };
 
@@ -128,7 +136,21 @@ export default function BrowserPreview({
     return () => {
       cancelled = true;
     };
-  }, [html, cssContents]);
+  }, [html, cssContents, height, padding]);
+
+  // Without a height the pane scrolls the flow at page width, since the browser
+  // cannot paginate the HTML the way the PDF renderer does.
+  // Vertical padding only: `clientWidth` counts horizontal padding, so the
+  // scaled page would end up that much wider than the pane.
+  if (!height) {
+    return (
+      <div ref={ref} className="h-full min-w-0 overflow-auto bg-muted/20 py-4">
+        {html && (
+          <div ref={hostRef} className="mx-auto border bg-white" style={{ width, zoom: scale }} />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div ref={ref} className="relative h-full min-w-0 overflow-hidden bg-muted/20">

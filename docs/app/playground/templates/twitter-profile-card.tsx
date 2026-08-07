@@ -1,32 +1,34 @@
+const stats = [
+  { value: "125K", label: "Following" },
+  { value: "8.2M", label: "Followers" },
+];
+
 export default function Profile() {
   return (
-    <div tw="flex h-full w-full bg-slate-900 border-t-8 border-t-blue-500 py-12 px-16 text-white text-sans">
-      <div tw="flex flex-col h-full w-full">
-        <div tw="flex w-full items-center mb-8">
-          <img
-            src="https://avatars.githubusercontent.com/u/1024025"
-            alt="Linus Torvalds"
-            tw="w-32 h-32 rounded-full border-4 border-slate-700 bg-slate-400"
-          />
-          <div tw="flex flex-col ml-8">
-            <span tw="text-5xl font-bold text-white">Linus Torvalds</span>
-            <span tw="text-3xl text-slate-400 mt-2">@torvalds</span>
-          </div>
+    <div tw="flex h-full w-full flex-col border-t-8 border-t-blue-500 bg-slate-900 px-16 py-12 text-white">
+      <div tw="flex items-center">
+        <img
+          src="https://avatars.githubusercontent.com/u/1024025"
+          alt=""
+          tw="h-32 w-32 rounded-full border-4 border-slate-700"
+        />
+        <div tw="ml-8 flex flex-col">
+          <span tw="text-5xl font-bold">Linus Torvalds</span>
+          <span tw="mt-2 text-3xl text-slate-400">@torvalds</span>
         </div>
+      </div>
 
-        <div tw="flex max-w-[800px] text-4xl leading-tight text-slate-200 mt-4">
-          Creator of Linux and Git. Passionate about operating systems, open source, and making
-          computers do what they're told.
-        </div>
+      <p tw="mt-8 mb-0 max-w-[820px] text-4xl leading-tight text-slate-200">
+        Wrote Linux in 1991 and Git in 2005. Still reviews patches on the mailing list.
+      </p>
 
-        <div tw="flex mt-auto text-3xl font-medium w-full items-center">
-          <div tw="flex items-center text-slate-400 mr-12">
-            <strong tw="text-white font-bold mr-3">125K</strong> Following
+      <div tw="mt-auto flex text-3xl">
+        {stats.map((stat) => (
+          <div key={stat.label} tw="mr-12 flex text-slate-400">
+            <strong tw="mr-3 font-bold text-white">{stat.value}</strong>
+            {stat.label}
           </div>
-          <div tw="flex items-center text-slate-400">
-            <strong tw="text-white font-bold mr-3">8.2M</strong> Followers
-          </div>
-        </div>
+        ))}
       </div>
     </div>
   );

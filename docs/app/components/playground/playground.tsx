@@ -1,263 +1,97 @@
 "use client";
 
-import {
-  AxeIcon,
-  CheckIcon,
-  ChevronDownIcon,
-  Code2Icon,
-  DownloadIcon,
-  EyeIcon,
-  GlobeIcon,
-  LinkIcon,
-  Loader2Icon,
-  RotateCcwIcon,
-  Wand2Icon,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import { lazy, type ReactNode, Suspense, useEffect, useRef, useState } from "react";
-import type { z } from "zod/mini";
+import { AxeIcon, ExternalLinkIcon, GlobeIcon } from "lucide-react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { cn } from "~/lib/utils";
-import {
-  messageSchema,
-  type RenderMessageInput,
-  type renderResultSchema,
-} from "~/playground/schema";
-import { compressCode, decompressCode } from "~/playground/share";
-import { defaultTemplate, templates } from "~/playground/templates";
-import TakumiWorker from "~/playground/worker?worker";
-import { Button } from "../ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "../ui/dropdown-menu";
+import type { Template } from "~/playground/templates";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../ui/resizable";
 import { ComponentEditor } from "./component-editor";
+import { LabeledPane, OutputPanel, PDF_VIEWS, type PdfView, type Zoom } from "./output-panel";
+import { Toolbar, type TabId } from "./toolbar";
+import { DEFAULT_TEMPLATE, useSharedCode } from "./use-shared-code";
+import { type RenderSuccess, useRenderWorker } from "./use-render-worker";
 
 const BrowserPreview = lazy(() => import("./browser-preview"));
 
-const DEFAULT_TEMPLATE = templates[0];
+const RUN_HINT_KEY = "takumi-playground-run-hint";
 
-type TabId = "code" | "preview";
-
-const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
-  { id: "code", label: "Code", icon: Code2Icon },
-  { id: "preview", label: "Preview", icon: EyeIcon },
-];
-
-type RenderResult = z.infer<typeof renderResultSchema>["result"];
-type RenderSuccess = Extract<RenderResult, { status: "success" }> & { outputSize: number };
-type RenderError = Extract<RenderResult, { status: "error" }>;
-type Zoom = "fit" | "actual";
-
-function isBlobUrl(url: string | undefined): url is string {
-  return typeof url === "string" && url.startsWith("blob:");
+function fileName(result: RenderSuccess) {
+  const slug = result.label.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+  return `takumi-${slug}.${result.outputFormat}`;
 }
 
 function formatStats(result: RenderSuccess) {
-  const { width = 1200, height = 630 } = result.options;
-  const size = `${(result.outputSize / 1024).toFixed(1)} KB`;
-  return `${width} × ${height} · ${result.outputFormat.toUpperCase()} · ${size} · ${Math.round(result.duration)} ms`;
+  const parts = [result.label];
+  const pages = result.inspection?.pages;
+
+  if (pages) parts.push(`${pages} page${pages === 1 ? "" : "s"}`);
+
+  parts.push(
+    result.outputFormat.toUpperCase(),
+    `${(result.outputSize / 1024).toFixed(1)} KB`,
+    `${Math.round(result.duration)} ms`,
+  );
+
+  return parts.join(" · ");
 }
 
 export default function Playground() {
-  const [code, setCode] = useState<string>();
-  const [lastSuccess, setLastSuccess] = useState<RenderSuccess>();
-  const [browserPreview, setBrowserPreview] = useState<{
-    html: string;
-    width?: number;
-    height?: number;
-    cssContents?: string[];
-  }>();
-  const [renderError, setRenderError] = useState<RenderError>();
-  const [isReady, setIsReady] = useState(false);
+  const { code, setCode, matchedTemplate } = useSharedCode();
   const [isFormatting, setIsFormatting] = useState(false);
   const [zoom, setZoom] = useState<Zoom>("fit");
+  const [pdfView, setPdfView] = useState<PdfView>("preview");
+  /** The code the preview was rendered from; `code` runs ahead of it while editing. */
+  const [ranCode, setRanCode] = useState<string>();
+  const [hintDismissed, setHintDismissed] = useState(true);
   const [copied, setCopied] = useState(false);
-  const [searchParams, setSearchParams] = useState(() => {
-    if (typeof window === "undefined") {
-      return new URLSearchParams();
-    }
-
-    return new URLSearchParams(window.location.search);
-  });
-  const currentRequestIdRef = useRef(0);
-
-  const workerRef = useRef<Worker | undefined>(undefined);
   const [activeTab, setActiveTab] = useState<TabId>("code");
 
-  const codeQuery = searchParams.get("code");
-  const templateQuery = searchParams.get("template");
-  const matchedTemplate = templates.find((template) => template.code === code);
-  const selectedTemplateName = matchedTemplate?.name ?? "Templates";
+  const { isReady, lastSuccess, renderError, browserPreview } = useRenderWorker(ranCode);
+
+  const selectedTemplateName = matchedTemplate?.name ?? "Custom";
+  const outputKind = lastSuccess?.outputKind;
+  const isStale = code !== undefined && ranCode !== undefined && code !== ranCode;
 
   useEffect(() => {
-    const onPopState = () => {
-      setSearchParams(new URLSearchParams(window.location.search));
-    };
-
-    window.addEventListener("popstate", onPopState);
-
-    return () => {
-      window.removeEventListener("popstate", onPopState);
-    };
+    setHintDismissed(localStorage.getItem(RUN_HINT_KEY) === "seen");
   }, []);
 
-  const replaceSearchParams = (updater: (current: URLSearchParams) => URLSearchParams) => {
-    const next = updater(new URLSearchParams(window.location.search));
-    const search = next.toString();
-    const url = `${window.location.pathname}${search ? `?${search}` : ""}${window.location.hash}`;
+  // The first render happens on its own; after that the editor waits for Run,
+  // so a half-typed line never reloads the preview.
+  useEffect(() => {
+    if (ranCode === undefined && code !== undefined) setRanCode(code);
+  }, [code, ranCode]);
 
-    window.history.replaceState(window.history.state, "", url);
-    setSearchParams(next);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        run();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
+
+  const run = () => {
+    setRanCode(code);
+    dismissHint();
   };
-
-  useEffect(() => {
-    if (code !== undefined) return;
-
-    let cancelled = false;
-
-    void (async () => {
-      const templateCode = templates.find((template) => template.id === templateQuery)?.code;
-      const initialCode = codeQuery
-        ? await decompressCode(codeQuery)
-        : (templateCode ?? DEFAULT_TEMPLATE.code);
-
-      if (!cancelled) {
-        setCode(initialCode);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [codeQuery, code, templateQuery]);
-
-  useEffect(() => {
-    if (!code) return;
-
-    if (code === defaultTemplate) {
-      replaceSearchParams((current) => {
-        const next = new URLSearchParams(current);
-        next.delete("code");
-        next.delete("template");
-        return next;
-      });
-      return;
-    }
-
-    if (matchedTemplate) {
-      replaceSearchParams((current) => {
-        const next = new URLSearchParams(current);
-        next.delete("code");
-        next.set("template", matchedTemplate.id);
-        return next;
-      });
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      compressCode(code).then((base64) => {
-        replaceSearchParams((current) => {
-          const next = new URLSearchParams(current);
-          next.delete("template");
-          next.set("code", base64);
-          return next;
-        });
-      });
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [code, matchedTemplate]);
-
-  useEffect(() => {
-    const worker = new TakumiWorker();
-
-    worker.onmessage = (event: MessageEvent) => {
-      const message = messageSchema.parse(event.data);
-
-      switch (message.type) {
-        case "ready": {
-          setIsReady(true);
-          break;
-        }
-        case "render-request": {
-          throw new Error("request is not possible for response");
-        }
-        case "preview-result": {
-          if (message.id === currentRequestIdRef.current) {
-            setBrowserPreview({
-              html: message.html,
-              width: message.width,
-              height: message.height,
-              cssContents: message.cssContents,
-            });
-          }
-          break;
-        }
-        case "render-result": {
-          const { result } = message;
-          if (result.id !== currentRequestIdRef.current) break;
-
-          if (result.status === "success") {
-            const blob = new Blob([result.outputBuffer as BlobPart], {
-              type: `image/${result.outputFormat}`,
-            });
-            setLastSuccess({
-              ...result,
-              outputUrl: URL.createObjectURL(blob),
-              outputSize: blob.size,
-            });
-            setRenderError(undefined);
-          } else {
-            setRenderError(result);
-          }
-          break;
-        }
-        default: {
-          message satisfies never;
-        }
-      }
-    };
-
-    workerRef.current = worker;
-
-    return () => {
-      worker.terminate();
-      workerRef.current = undefined;
-      setIsReady(false);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (isReady && code !== undefined) {
-      const timer = setTimeout(() => {
-        const requestId = currentRequestIdRef.current + 1;
-        currentRequestIdRef.current = requestId;
-        workerRef.current?.postMessage({
-          type: "render-request",
-          id: requestId,
-          code,
-        } satisfies RenderMessageInput);
-      }, 300);
-
-      return () => clearTimeout(timer);
-    }
-  }, [isReady, code]);
-
-  useEffect(() => {
-    if (!isBlobUrl(lastSuccess?.outputUrl)) return;
-
-    const url = lastSuccess.outputUrl;
-    return () => URL.revokeObjectURL(url);
-  }, [lastSuccess]);
-
-  const loadTemplate = (templateCode: string) => {
-    setCode(templateCode);
+  const dismissHint = () => {
+    setHintDismissed(true);
+    localStorage.setItem(RUN_HINT_KEY, "seen");
+  };
+  // Picking a template or resetting is its own deliberate action, so those
+  // render straight away instead of waiting for Run.
+  const loadTemplate = (template: Template) => {
+    setCode(template.code);
+    setRanCode(template.code);
   };
   const resetCode = () => {
     setCode(DEFAULT_TEMPLATE.code);
+    setRanCode(DEFAULT_TEMPLATE.code);
     setActiveTab("code");
   };
 
@@ -277,6 +111,8 @@ export default function Playground() {
       });
 
       setCode(formatted);
+      // Formatting cannot change the output, so it must not make the preview stale.
+      if (!isStale) setRanCode(formatted);
     } catch (error) {
       console.error("Failed to format code:", error);
     } finally {
@@ -290,13 +126,12 @@ export default function Playground() {
     setTimeout(() => setCopied(false), 1500);
   };
 
-  const downloadImage = () => {
+  const downloadOutput = () => {
     if (!lastSuccess?.outputUrl) return;
 
-    const { width = 1200, height = 630 } = lastSuccess.options;
     const link = document.createElement("a");
     link.href = lastSuccess.outputUrl;
-    link.download = `takumi-${width}x${height}.${lastSuccess.outputFormat}`;
+    link.download = fileName(lastSuccess);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -304,11 +139,17 @@ export default function Playground() {
 
   const editor = (
     <div className="relative h-full min-w-0 overflow-hidden">
-      {code && <ComponentEditor code={code} setCode={setCode} />}
+      {code && <ComponentEditor code={code} setCode={setCode} onRun={run} />}
     </div>
   );
   const takumiPane = (
-    <PreviewPanel lastSuccess={lastSuccess} error={renderError} zoom={zoom} isReady={isReady} />
+    <OutputPanel
+      lastSuccess={lastSuccess}
+      error={renderError}
+      zoom={zoom}
+      isReady={isReady}
+      pdfView={pdfView}
+    />
   );
   const browserPane = (
     <Suspense fallback={<div className="h-full bg-muted/20" />}>
@@ -316,6 +157,7 @@ export default function Playground() {
         html={browserPreview?.html}
         width={browserPreview?.width}
         height={browserPreview?.height}
+        padding={browserPreview?.padding}
         cssContents={browserPreview?.cssContents}
       />
     </Suspense>
@@ -323,7 +165,42 @@ export default function Playground() {
   const splitPreview = (
     <ResizablePanelGroup orientation="vertical">
       <ResizablePanel defaultSize={50} minSize={20}>
-        <LabeledPane label="Takumi" icon={AxeIcon}>
+        <LabeledPane
+          label={outputKind === "pdf" ? "Takumi PDF" : "Takumi"}
+          icon={AxeIcon}
+          actions={
+            outputKind === "pdf" && (
+              <>
+                {PDF_VIEWS.map(({ id, label }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setPdfView(id)}
+                    className={cn(
+                      "rounded-sm px-1.5 py-0.5 uppercase transition-colors hover:text-foreground",
+                      pdfView === id && "bg-muted text-foreground",
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+                {/* Mobile browsers mostly refuse to paint a PDF inside a frame,
+                    so the file needs a way out to the viewer. */}
+                {lastSuccess?.outputUrl && (
+                  <a
+                    href={lastSuccess.outputUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="Open the PDF in a new tab"
+                    className="rounded-sm px-1 py-0.5 transition-colors hover:text-foreground"
+                  >
+                    <ExternalLinkIcon className="size-3" />
+                  </a>
+                )}
+              </>
+            )
+          }
+        >
           {takumiPane}
         </LabeledPane>
       </ResizablePanel>
@@ -338,111 +215,28 @@ export default function Playground() {
 
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] flex-col bg-background">
-      <div className="flex h-10 shrink-0 items-center gap-1 border-b px-2 md:px-3">
-        <div className="flex items-center rounded-md border p-0.5 md:hidden">
-          {TABS.map(({ id, label, icon: Icon }) => (
-            <Button
-              key={id}
-              variant="ghost"
-              size="sm"
-              className={cn(
-                "h-6 gap-1 rounded-sm px-2 font-mono text-xs",
-                activeTab === id ? "bg-muted text-foreground" : "text-muted-foreground",
-              )}
-              onClick={() => setActiveTab(id)}
-            >
-              <Icon className="size-3" />
-              {label}
-            </Button>
-          ))}
-        </div>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 min-w-0 max-w-40 px-2 font-mono text-xs text-muted-foreground"
-            >
-              <span className="truncate">{selectedTemplateName}</span>
-              <ChevronDownIcon className="size-3" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            {templates.map((t) => (
-              <DropdownMenuItem
-                key={t.name}
-                onClick={() => loadTemplate(t.code)}
-                className="cursor-pointer font-mono text-xs"
-              >
-                {t.name}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <div className={cn("flex items-center gap-0.5", activeTab !== "code" && "max-md:hidden")}>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="size-7 text-muted-foreground"
-            onClick={formatCode}
-            disabled={isFormatting}
-            title="Format code"
-          >
-            {isFormatting ? (
-              <Loader2Icon className="size-3.5 animate-spin" />
-            ) : (
-              <Wand2Icon className="size-3.5" />
-            )}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="size-7 text-muted-foreground"
-            onClick={resetCode}
-            title="Reset code"
-          >
-            <RotateCcwIcon className="size-3.5" />
-          </Button>
-        </div>
-
-        <div className="ml-auto flex items-center gap-0.5">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 font-mono text-xs text-muted-foreground max-md:hidden"
-            onClick={() => setZoom(zoom === "fit" ? "actual" : "fit")}
-            title="Toggle zoom"
-          >
-            {zoom === "fit" ? "Fit" : "100%"}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1.5 px-2 font-mono text-xs text-muted-foreground"
-            onClick={copyShareLink}
-            title="Copy share link"
-          >
-            {copied ? (
-              <CheckIcon className="size-3.5 text-primary" />
-            ) : (
-              <LinkIcon className="size-3.5" />
-            )}
-            <span className="max-md:hidden">{copied ? "Copied" : "Share"}</span>
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="size-7 text-muted-foreground"
-            onClick={downloadImage}
-            disabled={!lastSuccess}
-            title="Download image"
-          >
-            <DownloadIcon className="size-3.5" />
-          </Button>
-        </div>
-      </div>
+      <Toolbar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        selectedTemplateName={selectedTemplateName}
+        selectedTemplateId={matchedTemplate?.id}
+        onSelectTemplate={loadTemplate}
+        isStale={isStale}
+        isReady={isReady}
+        onRun={run}
+        hintDismissed={hintDismissed}
+        onDismissHint={dismissHint}
+        isFormatting={isFormatting}
+        onFormat={formatCode}
+        onReset={resetCode}
+        outputKind={outputKind}
+        zoom={zoom}
+        onToggleZoom={() => setZoom(zoom === "fit" ? "actual" : "fit")}
+        copied={copied}
+        onCopyShareLink={copyShareLink}
+        hasOutput={Boolean(lastSuccess)}
+        onDownload={downloadOutput}
+      />
 
       <div className="min-h-0 flex-1">
         <div className="hidden h-full md:block">
@@ -474,80 +268,6 @@ export default function Playground() {
           <span>rendering…</span>
         )}
       </div>
-    </div>
-  );
-}
-
-function LabeledPane({
-  label,
-  icon: Icon,
-  children,
-}: {
-  label: string;
-  icon: LucideIcon;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex h-full flex-col">
-      <div className="flex h-6 shrink-0 items-center gap-1.5 border-b px-3 font-mono text-[11px] uppercase tracking-wide text-muted-foreground">
-        <Icon className="size-3" />
-        {label}
-      </div>
-      <div className="min-h-0 flex-1">{children}</div>
-    </div>
-  );
-}
-
-function PreviewPanel({
-  lastSuccess,
-  error,
-  zoom,
-  isReady,
-}: {
-  lastSuccess: RenderSuccess | undefined;
-  error: RenderError | undefined;
-  zoom: Zoom;
-  isReady: boolean;
-}) {
-  const image = lastSuccess && (
-    <img
-      src={lastSuccess.outputUrl}
-      alt="Rendered output"
-      className={cn(
-        "border",
-        zoom === "fit" ? "max-h-full max-w-full object-contain" : "max-w-none",
-        error && "opacity-40",
-      )}
-    />
-  );
-
-  if (!lastSuccess && !error) {
-    return (
-      <div className="flex h-full items-center justify-center gap-2 bg-muted/20 font-mono text-xs text-muted-foreground">
-        <Loader2Icon className="size-3.5 animate-spin" />
-        {isReady ? "rendering…" : "loading wasm…"}
-      </div>
-    );
-  }
-
-  return (
-    <div className="relative h-full min-w-0 overflow-hidden bg-muted/20">
-      {zoom === "fit" ? (
-        <div className="absolute inset-0 flex items-center justify-center">{image}</div>
-      ) : (
-        <div className="absolute inset-0 overflow-auto">
-          <div className="flex h-fit min-h-full w-fit min-w-full items-center justify-center">
-            {image}
-          </div>
-        </div>
-      )}
-      {error && (
-        <div className="absolute inset-x-0 bottom-0 border-t bg-background/95 px-3 py-2 font-mono text-xs">
-          <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-muted-foreground">
-            {error.message}
-          </pre>
-        </div>
-      )}
     </div>
   );
 }

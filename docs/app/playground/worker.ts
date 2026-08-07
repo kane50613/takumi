@@ -1,12 +1,18 @@
 import { googleFonts, prepareImages } from "takumi-js/helpers";
 import { extractEmojis } from "takumi-js/helpers/emoji";
 import { fromJsx } from "takumi-js/helpers/jsx";
+import type { FetchedImage, Node } from "takumi-js/helpers";
 import wasm, { init, Renderer } from "takumi-js/wasm";
+import type { PdfRenderer } from "takumi-pdf";
+import pdfWasm from "takumi-pdf/takumi_pdf_wasm_bg.wasm?url";
 import type * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { evaluateCodeExports, renderReact } from "./evaluate";
 import { FONT_FAMILIES } from "./fonts";
-import { messageSchema, type RenderMessageInput } from "./schema";
+import { type OutputGeometry, outputGeometry } from "./geometry";
+import { inspectPdf } from "./inspect-pdf";
+import { keyframesToCss } from "./preview-css";
+import { messageSchema, type OutputKind, type RenderMessageInput } from "./schema";
 
 const fetchCache = new Map<string, Promise<ArrayBuffer>>();
 
@@ -29,35 +35,141 @@ let renderer: Renderer | undefined;
   postMessage({ type: "ready" });
 })();
 
-function declarationsToCss(declarations: object): string {
-  return Object.entries(declarations)
-    .map(
-      ([property, value]) =>
-        `${property.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}: ${value};`,
-    )
-    .join(" ");
+// The PDF engine is a second wasm module, so it only loads once a template asks
+// for one.
+let pdfRenderer: Promise<PdfRenderer> | undefined;
+
+function loadPdfRenderer() {
+  pdfRenderer ??= import("takumi-pdf").then(async ({ default: initPdf, PdfRenderer }) => {
+    await initPdf({ module_or_path: pdfWasm });
+    return new PdfRenderer();
+  });
+
+  return pdfRenderer;
 }
 
-/** Serializes structured keyframes into a `@keyframes` rule for the browser preview. */
-function keyframesToCss(keyframes: NonNullable<PlaygroundOptions["keyframes"]>): string {
-  const rules = Array.isArray(keyframes)
-    ? keyframes.map((rule) => {
-        const body = rule.keyframes
-          .map(
-            (frame) =>
-              `${frame.offsets.map((offset) => `${offset * 100}%`).join(", ")} { ${declarationsToCss(frame.declarations)} }`,
-          )
-          .join(" ");
-        return `@keyframes ${rule.name} { ${body} }`;
-      })
-    : Object.entries(keyframes).map(([name, offsets]) => {
-        const body = Object.entries(offsets)
-          .map(([offset, declarations]) => `${offset} { ${declarationsToCss(declarations)} }`)
-          .join(" ");
-        return `@keyframes ${name} { ${body} }`;
-      });
+/** Everything a render needs beyond the tree itself, fetched once per request. */
+async function loadResources(node: Node, stylesheets: string[]) {
+  const [images, fonts] = await Promise.all([
+    prepareImages<FetchedImage>({ node, fetchCache }),
+    googleFonts(GOOGLE_FONTS),
+  ]);
 
-  return rules.join("\n");
+  return { images, fonts, stylesheets };
+}
+
+type Resources = Awaited<ReturnType<typeof loadResources>>;
+
+type RenderInput = Resources & {
+  renderer: Renderer;
+  node: Node;
+  options: PlaygroundOptions;
+  geometry: OutputGeometry;
+};
+
+type Output = {
+  buffer: Uint8Array;
+  kind: OutputKind;
+  format: string;
+};
+
+/** The options pick the backend: a document, a timeline, or a single frame. */
+async function renderOutput({
+  renderer,
+  node,
+  options,
+  geometry,
+  images,
+  fonts,
+  stylesheets,
+}: RenderInput): Promise<Output> {
+  if (options.pdf) {
+    const pdf = await loadPdfRenderer();
+
+    return {
+      buffer: await pdf.render(node, { ...options.pdf, stylesheets, images, fonts }),
+      kind: "pdf",
+      format: "pdf",
+    };
+  }
+
+  if (options.animation) {
+    const { durationMs, fps = 30, format = "webp" } = options.animation;
+
+    return {
+      buffer: await renderer.renderAnimation({
+        scenes: [{ node, durationMs }],
+        width: geometry.width,
+        height: geometry.height ?? geometry.width,
+        format,
+        fps,
+        quality: options.quality,
+        devicePixelRatio: options.devicePixelRatio,
+        keyframes: options.keyframes,
+        images,
+        fonts,
+        stylesheets,
+      }),
+      kind: "animation",
+      format,
+    };
+  }
+
+  return {
+    buffer: await renderer.render(node, { ...options, stylesheets, images, fonts }),
+    kind: "image",
+    format: options.format ?? "png",
+  };
+}
+
+async function renderRequest(renderer: Renderer, id: number, code: string) {
+  const { default: component, options } = evaluateCodeExports(code, renderReact);
+  const element = renderReact.createElement(component as React.JSXElementConstructor<unknown>);
+  const { node, stylesheets } = await fromJsx(element);
+  const effectiveStylesheets = options.stylesheets ?? stylesheets;
+  const geometry = outputGeometry(options);
+
+  postMessage({
+    type: "preview-result",
+    id,
+    html: renderToStaticMarkup(element),
+    width: geometry.width,
+    height: geometry.height,
+    padding: geometry.padding,
+    cssContents: options.keyframes
+      ? [...effectiveStylesheets, keyframesToCss(options.keyframes)]
+      : effectiveStylesheets,
+  });
+
+  const emojified = extractEmojis(node, options.emoji ?? "twemoji");
+  const resources = await loadResources(emojified, effectiveStylesheets);
+
+  const start = performance.now();
+  const output = await renderOutput({
+    renderer,
+    node: emojified,
+    options,
+    geometry,
+    ...resources,
+  });
+  const duration = performance.now() - start;
+
+  postMessage(
+    {
+      type: "render-result",
+      result: {
+        status: "success",
+        id,
+        outputBuffer: output.buffer,
+        duration,
+        outputKind: output.kind,
+        outputFormat: output.format,
+        label: geometry.label,
+        inspection: output.kind === "pdf" ? inspectPdf(output.buffer) : undefined,
+      },
+    },
+    [output.buffer.buffer],
+  );
 }
 
 self.onmessage = async (event: MessageEvent) => {
@@ -68,82 +180,7 @@ self.onmessage = async (event: MessageEvent) => {
       if (!renderer) throw new Error("WASM is not ready yet!");
 
       try {
-        const { default: component, options } = evaluateCodeExports(payload.code, renderReact);
-        const element = renderReact.createElement(
-          component as React.JSXElementConstructor<unknown>,
-        );
-        let { node, stylesheets } = await fromJsx(element);
-        const effectiveStylesheets = options.stylesheets ?? stylesheets;
-        // The browser preview only understands CSS, so serialize any structured
-        // keyframes (which the engine takes as an object) into a `@keyframes` rule.
-        const previewStylesheets = options.keyframes
-          ? [...effectiveStylesheets, keyframesToCss(options.keyframes)]
-          : effectiveStylesheets;
-
-        postMessage({
-          type: "preview-result",
-          id: payload.id,
-          html: renderToStaticMarkup(element),
-          width: options.width,
-          height: options.height,
-          cssContents: previewStylesheets,
-        });
-
-        node = extractEmojis(node, options.emoji ?? "twemoji");
-
-        const [images, fonts] = await Promise.all([
-          prepareImages({ node, fetchCache }),
-          googleFonts(GOOGLE_FONTS),
-        ]);
-
-        const start = performance.now();
-        const animationOptions = options.animation;
-        const outputBuffer = await (animationOptions
-          ? (() => {
-              const format = animationOptions.format ?? "webp";
-              const fps = animationOptions.fps ?? 30;
-              return renderer.renderAnimation({
-                scenes: [
-                  {
-                    node,
-                    durationMs: animationOptions.durationMs,
-                  },
-                ],
-                width: options.width ?? 1200,
-                height: options.height ?? 630,
-                format,
-                quality: options.quality,
-                devicePixelRatio: options.devicePixelRatio,
-                images,
-                stylesheets: effectiveStylesheets,
-                keyframes: options.keyframes,
-                fonts,
-                fps,
-              });
-            })()
-          : renderer.render(node, {
-              ...options,
-              stylesheets: effectiveStylesheets,
-              images,
-              fonts,
-            }));
-        const duration = performance.now() - start;
-
-        postMessage(
-          {
-            type: "render-result",
-            result: {
-              status: "success",
-              id: payload.id,
-              outputBuffer,
-              duration,
-              node,
-              outputFormat: animationOptions?.format ?? options.format ?? "png",
-              options,
-            },
-          },
-          [outputBuffer.buffer],
-        );
+        await renderRequest(renderer, payload.id, payload.code);
       } catch (error) {
         postMessage({
           type: "render-result",

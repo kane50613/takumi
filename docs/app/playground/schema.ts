@@ -1,5 +1,7 @@
 import type { Keyframes } from "takumi-js";
 import * as z from "zod/mini";
+import type { PdfInspection } from "./inspect-pdf";
+import type { PlaygroundPdfOptions } from "./options";
 
 export const optionsSchema = z.object({
   width: z.optional(z.int().check(z.positive(), z.minimum(1))),
@@ -16,8 +18,15 @@ export const optionsSchema = z.object({
       format: z.optional(z.enum(["webp", "apng", "gif"])),
     }),
   ),
+  // The renderer validates these; the playground only forwards them. They may hold
+  // JSX (`header`, `footer`), so they never travel back to the main thread.
+  pdf: z.optional(z.custom<PlaygroundPdfOptions>()),
   emoji: z.optional(z.enum(["twemoji", "blobmoji", "noto", "openmoji"])),
 });
+
+export const outputKinds = ["image", "animation", "pdf"] as const;
+
+export type OutputKind = (typeof outputKinds)[number];
 
 const renderSuccessSchema = z.object({
   status: z.literal("success"),
@@ -25,9 +34,12 @@ const renderSuccessSchema = z.object({
   outputBuffer: z.any(),
   outputUrl: z.optional(z.string()),
   duration: z.number(),
-  node: z.unknown(),
+  outputKind: z.enum(outputKinds),
   outputFormat: z.string(),
-  options: optionsSchema,
+  /** Human-readable geometry for the status bar, e.g. `1200 × 630` or `A4`. */
+  label: z.string(),
+  /** What the PDF bytes turned out to contain, for PDF output. */
+  inspection: z.optional(z.custom<PdfInspection>()),
 });
 
 const renderErrorSchema = z.object({
@@ -59,7 +71,10 @@ const previewResultSchema = z.object({
   id: z.int().check(z.positive(), z.minimum(1)),
   html: z.string(),
   width: z.optional(z.int().check(z.positive(), z.minimum(1))),
+  // Omitted for paged PDF: the pane shows one continuous flow instead of pages.
   height: z.optional(z.int().check(z.positive(), z.minimum(1))),
+  /** CSS `padding` shorthand mirroring the PDF page margin. */
+  padding: z.optional(z.string()),
   cssContents: z.optional(z.array(z.string())),
 });
 
