@@ -36,7 +36,20 @@ const pdf = await render(<Invoice data={data} />, {
 await writeFile("invoice.pdf", pdf);
 ```
 
-`render()` accepts JSX, HTML strings converted with `@takumi-rs/helpers`, or JSON node trees. It returns `Uint8Array` PDF bytes. Content lays out at the page's content width. It flows onto as many pages as needed.
+`render()` accepts JSX, HTML strings, or JSON node trees. It returns `Uint8Array` PDF bytes. Content lays out at the page's content width. It flows onto as many pages as needed.
+
+HTML strings use the same parser as `takumi-js`. A `<style>` tag in the string applies only to that render:
+
+```ts twoslash
+import { render } from "takumi-pdf";
+
+const pdf = await render(`
+  <style>.total { font-weight: 700 }</style>
+  <div><span class="total">Total: $1,290</span></div>
+`);
+```
+
+Headers, footers, and `measure()` accept the same inputs.
 
 ## Page setup
 
