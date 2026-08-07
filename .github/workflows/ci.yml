@@ -109,14 +109,24 @@ jobs:
       - name: Validate PDF conformance
         run: |
           fail=0
+          checked=0
           for pdf in takumi-pdf/tests/fixtures-generated/*.pdf; do
             if grep -qa "pdfaid:part" "$pdf"; then
               ./verapdf/verapdf --flavour 0 --format text "$pdf" || fail=1
+              checked=$((checked + 1))
             fi
             if grep -qa "pdfuaid:part" "$pdf"; then
               ./verapdf/verapdf --flavour ua1 --format text "$pdf" || fail=1
+              checked=$((checked + 1))
             fi
           done
+          echo "validated $checked conformance claims"
+          # A rename or a lost fixture would otherwise leave this step green
+          # with nothing to validate.
+          if [ "$checked" -lt 15 ]; then
+            echo "too few conformance claims to validate" >&2
+            fail=1
+          fi
           exit $fail
 
       - name: Setup Bun

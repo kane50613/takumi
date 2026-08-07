@@ -53,9 +53,16 @@ fn html_fixture(name: &str) -> Node {
 /// Renders the case twice, asserts determinism, writes the golden, and
 /// returns the bytes.
 fn run_pdf_fixture(name: &str, build: impl Fn(&Fonts) -> PdfOptions<'_>) -> Vec<u8> {
-  let fonts = fonts();
-  let first = render(build(&fonts)).expect("render pdf fixture");
-  let second = render(build(&fonts)).expect("render pdf fixture again");
+  run_pdf_fixture_with(name, &fonts(), build)
+}
+
+fn run_pdf_fixture_with(
+  name: &str,
+  fonts: &Fonts,
+  build: impl Fn(&Fonts) -> PdfOptions<'_>,
+) -> Vec<u8> {
+  let first = render(build(fonts)).expect("render pdf fixture");
+  let second = render(build(fonts)).expect("render pdf fixture again");
 
   assert_eq!(first, second, "nondeterministic pdf output for {name}");
   assert!(first.starts_with(b"%PDF-"), "not a pdf: {name}");
@@ -1684,4 +1691,93 @@ fn measure_viewport_and_missing_viewport() {
     measure(MeasureOptions::builder().node(node()).fonts(&fonts).build()).is_err(),
     "expected MissingViewport"
   );
+}
+
+/// Font programs that leave the plain TrueType path: CFF outlines become a
+/// `CIDFontType0`, colour tables become `Type3` glyph procedures, and a
+/// collection file carries several faces. Scripts that reorder or join while
+/// shaping ride along, because their `ToUnicode` maps are what the `u` and `a`
+/// levels require. Every level renders the same document, so CI's veraPDF step
+/// validates each conformance claim the renderer can make.
+#[test]
+fn font_format_standards() {
+  let mut fonts = Fonts::default();
+  let mut families = Vec::new();
+
+  for path in [
+    "../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf",
+    "../assets/fonts/cjk-locl-test/CJKLoclTest.woff2",
+    "../assets/fonts/ubuntu/Ubuntu.ttc",
+    "../assets/fonts/twemoji/TwemojiMozilla-colr.woff2",
+    "../assets/fonts/sil/scheherazade-new-v17-arabic-regular.woff2",
+    "../assets/fonts/noto-sans/noto-sans-devanagari-v30-devanagari-regular.woff2",
+  ] {
+    let data = fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join(path)).expect("read test font");
+    let registered = fonts
+      .register(FontResource::new(data))
+      .expect("load test font");
+
+    families.push(registered.first().expect("registered family").name.clone());
+  }
+
+  let [base, cff, collection, colr, arabic, devanagari]: [String; 6] =
+    families.try_into().expect("six families");
+  let doc = format!(
+    r#"<main style="display:flex;flex-direction:column;font-family:{base};font-size:16px;color:#141414;">
+      <h1>Font formats</h1>
+      <p lang="zh" style="font-family:{cff};">直 骨 今 海 真 令 説 器</p>
+      <p style="font-family:{collection};">A face out of a TrueType collection</p>
+      <p style="font-family:{colr};">Colour glyphs 🎉 🚀</p>
+      <p lang="ar" style="font-family:{arabic};">نص عربي للتشكيل</p>
+      <p lang="hi" style="font-family:{devanagari};">संयुक्ताक्षर क्षत्र</p>
+    </main>"#
+  );
+  let metadata = || PdfMetadata {
+    title: Some("Font formats".into()),
+    creation_date: Some(PdfDate {
+      year: 2026,
+      month: 8,
+      day: 7,
+      hour: 0,
+      minute: 0,
+      second: 0,
+    }),
+    ..Default::default()
+  };
+
+  for (name, standard) in [
+    ("2b", PdfStandard::A2b),
+    ("2u", PdfStandard::A2u),
+    ("2a", PdfStandard::A2a),
+    ("3b", PdfStandard::A3b),
+    ("3u", PdfStandard::A3u),
+    ("3a", PdfStandard::A3a),
+    ("4", PdfStandard::A4),
+  ] {
+    // PDF/UA-1 is PDF 1.7 only, so it cannot ride along with PDF/A-4.
+    let tagging = if standard == PdfStandard::A4 {
+      Tagging::On
+    } else {
+      Tagging::Ua1
+    };
+    let pdf = run_pdf_fixture_with(&format!("font-formats-pdfa-{name}"), &fonts, |fonts| {
+      PdfOptions::builder()
+        .node(from_html(&doc, FromHtmlOptions::default()).expect("parse font doc"))
+        .page(PageOptions::A4)
+        .standard(standard)
+        .tagged(tagging)
+        .lang(Some(takumi_core::style::Lang::parse("en").expect("lang")))
+        .metadata(metadata())
+        .fonts(fonts)
+        .build()
+    });
+    let haystack = inflated_text(&pdf);
+
+    for subtype in ["/CIDFontType0", "/CIDFontType2", "/Type3"] {
+      assert!(
+        haystack.contains(subtype),
+        "missing {subtype} font in font-formats-pdfa-{name}"
+      );
+    }
+  }
 }
