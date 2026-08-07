@@ -459,8 +459,8 @@ export default function Playground() {
 
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] flex-col bg-background">
-      <div className="flex h-10 shrink-0 items-center gap-1 border-b px-2 md:px-3">
-        <div className="flex items-center rounded-md border p-0.5 md:hidden">
+      <div className="flex h-10 shrink-0 items-center gap-1 overflow-x-auto border-b px-2 md:px-3">
+        <div className="flex shrink-0 items-center rounded-md border p-0.5 md:hidden">
           {TABS.map(({ id, label, icon: Icon }) => (
             <Button
               key={id}
@@ -473,7 +473,7 @@ export default function Playground() {
               onClick={() => setActiveTab(id)}
             >
               <Icon className="size-3" />
-              {label}
+              <span className="max-[400px]:hidden">{label}</span>
             </Button>
           ))}
         </div>
@@ -484,7 +484,7 @@ export default function Playground() {
           onSelect={loadTemplate}
         />
 
-        <div className="relative flex items-center gap-0.5">
+        <div className="relative flex shrink-0 items-center gap-0.5">
           <Button
             variant={isStale ? "default" : "ghost"}
             size="sm"
@@ -494,7 +494,7 @@ export default function Playground() {
             title="Run the code (⌘↵)"
           >
             <PlayIcon className="size-3.5" />
-            Run
+            <span className="max-md:hidden">Run</span>
           </Button>
           {isStale && !hintDismissed && (
             <div className="absolute top-9 left-0 z-20 w-56 rounded-md border bg-popover p-3 text-xs shadow-md">
@@ -512,7 +512,12 @@ export default function Playground() {
           )}
         </div>
 
-        <div className={cn("flex items-center gap-0.5", activeTab !== "code" && "max-md:hidden")}>
+        <div
+          className={cn(
+            "flex shrink-0 items-center gap-0.5",
+            activeTab !== "code" && "max-md:hidden",
+          )}
+        >
           <Button
             variant="ghost"
             size="icon-sm"
@@ -538,7 +543,7 @@ export default function Playground() {
           </Button>
         </div>
 
-        <div className="ml-auto flex items-center gap-0.5">
+        <div className="ml-auto flex shrink-0 items-center gap-0.5">
           {outputKind !== "pdf" && (
             <Button
               variant="ghost"
@@ -626,7 +631,7 @@ function TemplateMenu({
         <Button
           variant="ghost"
           size="sm"
-          className="h-7 min-w-0 max-w-40 px-2 font-mono text-xs text-muted-foreground"
+          className="h-7 min-w-0 max-w-28 px-2 font-mono text-xs text-muted-foreground md:max-w-40"
         >
           <span className="truncate">{selectedName}</span>
           <ChevronDownIcon className="size-3" />

@@ -140,9 +140,11 @@ export default function BrowserPreview({
 
   // Without a height the pane scrolls the flow at page width, since the browser
   // cannot paginate the HTML the way the PDF renderer does.
+  // Vertical padding only: `clientWidth` counts horizontal padding, so the
+  // scaled page would end up that much wider than the pane.
   if (!height) {
     return (
-      <div ref={ref} className="h-full min-w-0 overflow-auto bg-muted/20 p-4">
+      <div ref={ref} className="h-full min-w-0 overflow-auto bg-muted/20 py-4">
         {html && (
           <div ref={hostRef} className="mx-auto border bg-white" style={{ width, zoom: scale }} />
         )}
