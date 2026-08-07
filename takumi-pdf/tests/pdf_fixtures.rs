@@ -5,7 +5,13 @@
 //! committed; CI's dirty-tree check catches drift, so a changed .pdf in `git
 //! diff` is a real rendering change to review.
 
-use std::{collections::HashMap, fs, io::Read, path::Path, sync::Arc};
+use std::{
+  collections::{HashMap, HashSet},
+  fs,
+  io::Read,
+  path::Path,
+  sync::Arc,
+};
 
 use flate2::read::ZlibDecoder;
 
@@ -1854,6 +1860,25 @@ fn heading_levels_and_orphan_list_item() {
   );
 }
 
+/// Distinct subsets embedded for a family. Each one is written as
+/// `/BaseFont/ABCDEF+Family`, with one tag per instanced font.
+fn embedded_subsets(haystack: &str, family: &str) -> usize {
+  haystack
+    .match_indices("/BaseFont/")
+    .filter_map(|(index, marker)| {
+      haystack[index + marker.len()..]
+        .split(|c: char| !(c.is_ascii_alphanumeric() || "+-,#".contains(c)))
+        .next()
+    })
+    .filter(|name| {
+      name
+        .split_once('+')
+        .is_some_and(|(_, rest)| rest.starts_with(family))
+    })
+    .collect::<HashSet<_>>()
+    .len()
+}
+
 /// A variable font must be embedded at the weight the run was shaped at, once
 /// per weight. A face with no bold or italic of its own gets the same faux bold
 /// and faux oblique the raster renderer applies, so weight survives across
@@ -1894,7 +1919,7 @@ fn font_weights() {
     .collect::<String>();
   let doc = format!(
     r#"<main style="display:flex;flex-direction:column;font-family:{latin};font-size:16px;color:#141414;">
-      <h1 style="font-weight:800;">Font weights</h1>
+      <h1 style="font-weight:700;">Font weights</h1>
       {latin_rows}
       <p style="font-style:italic;">Oblique from the same variable face</p>
       {chinese_rows}
@@ -1902,6 +1927,7 @@ fn font_weights() {
       <p lang="ar" style="font-family:{arabic};">نص عربي عادي</p>
       <p lang="hi" style="font-family:{devanagari};font-weight:700;">मोटा देवनागरी</p>
       <p lang="hi" style="font-family:{devanagari};font-style:italic;">तिरछा देवनागरी</p>
+      <p lang="hi" style="font-family:{devanagari};font-weight:700;background-image:linear-gradient(90deg,#ff5f6d,#3a1c71);background-clip:text;color:transparent;">मोटा देवनागरी</p>
     </main>"#
   );
 
@@ -1915,26 +1941,27 @@ fn font_weights() {
   });
   let haystack = inflated_text(&pdf);
 
-  // One embedded font per distinct instance: a single subset would mean every
-  // weight fell back to the variable font's default instance.
-  let instances = |family: &str| {
-    haystack
-      .match_indices("/FontFile2")
-      .count()
-      .max(haystack.matches(family).count())
-  };
-
-  assert!(
-    instances("Archivo") >= weights.len(),
-    "variable latin face embedded once instead of per weight"
+  // One embedded subset per weight: a single subset would mean they all fell
+  // back to the variable font's default instance.
+  assert_eq!(
+    embedded_subsets(&haystack, "Archivo"),
+    weights.len(),
+    "variable latin face not embedded once per weight"
   );
-  assert!(
-    instances("NotoSansTC") >= weights.len(),
-    "variable chinese face embedded once instead of per weight"
+  assert_eq!(
+    embedded_subsets(&haystack, "NotoSansTC"),
+    weights.len(),
+    "variable chinese face not embedded once per weight"
   );
   // Faux bold strokes what it fills, which is text rendering mode 2.
   assert!(
     haystack.contains(" 2 Tr"),
     "no synthesized bold for the static faces"
+  );
+  // `background-clip: text` paints through the widened outline as well, so the
+  // gradient reaches the stroke colour and not only the fill.
+  assert!(
+    haystack.contains("/Pattern CS"),
+    "clip-text background missing from the synthesized bold outline"
   );
 }
