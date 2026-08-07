@@ -35,8 +35,8 @@ let renderer: Renderer | undefined;
   postMessage({ type: "ready" });
 })();
 
-// The PDF engine is a second 3.7 MB wasm module, so it only loads once a template
-// asks for one.
+// The PDF engine is a second wasm module, so it only loads once a template asks
+// for one.
 let pdfRenderer: Promise<PdfRenderer> | undefined;
 
 function loadPdfRenderer() {
