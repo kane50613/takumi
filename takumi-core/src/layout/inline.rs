@@ -13,7 +13,7 @@ use crate::{
   geometry::{AvailableSpace, ComputedLayout, PathBuilder, PathCommand, Point, Rect, Size},
   layout::{node::Node, tree::RenderNode},
   resources::{
-    font::FontError,
+    font::{FontError, run_synthesis, run_variations},
     glyph::{ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},
   },
   style::{
@@ -2189,6 +2189,13 @@ pub struct ShapedRun {
   /// to [`Self::glyphs`] (visual order). Empty when alignment failed; treat as
   /// unknown.
   pub cluster_ranges: Vec<Range<usize>>,
+  /// User-space variation coordinates the run was shaped at, e.g. `[(*b"wght", 700.0)]`.
+  /// A consumer that re-reads the font must apply these or it gets the default instance.
+  pub variations: Vec<([u8; 4], f32)>,
+  /// Stroke width in px for synthetic bold, when the face has no weight of its own to reach.
+  pub synthetic_bold: Option<f32>,
+  /// Synthetic oblique angle in degrees.
+  pub synthetic_skew: Option<f32>,
   // Accessor, not a `pub` field: the backing `parley` blob must not leak into the public API.
   font_data: parley::fontique::Blob<u8>,
 }
@@ -2408,6 +2415,7 @@ pub fn resolve_inline_runs(
             })
             .collect();
           let cluster_ranges = glyph_cluster_ranges(&glyph_run, &glyphs);
+          let synthesis = run_synthesis(&glyph_run);
           let shaped = ShapedRun {
             glyphs,
             offset: glyph_run.offset(),
@@ -2426,6 +2434,9 @@ pub fn resolve_inline_runs(
             font_index: run.font().index,
             text_range: run.text_range(),
             cluster_ranges,
+            variations: run_variations(&glyph_run),
+            synthetic_bold: synthesis.embolden,
+            synthetic_skew: synthesis.skew,
             font_data: run.font().data.clone(),
           };
 
@@ -2887,6 +2898,9 @@ mod tests {
       font_index: 0,
       text_range: 0..0,
       cluster_ranges: Vec::new(),
+      variations: Vec::new(),
+      synthetic_bold: None,
+      synthetic_skew: None,
       // Not a font: `em_box_descent` falls back to the run metrics instead of OS/2.
       font_data: parley::fontique::Blob::new(Arc::new(Vec::new())),
     }
