@@ -1,105 +1,148 @@
 core:changelogs:
-  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n### Measure a tree without rendering\n\n`measure` returns a tree's laid-out size in CSS px. With page options it lays out at the full-page width with counter hooks filled, exactly how `render` measures a header or footer band. The height tells you how much margin the band needs.\n"
-    filename: pdf-measure.md
+  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n### Write shorter paths\n\nBox decorations wrote every corner point twice and spelled out the closing edge that `h` draws anyway. Rectangles now use the `re` operator, and segments that go nowhere are dropped. A two-page invoice loses 12% of its bytes and renders about 3% faster.\n"
+    filename: pdf-shorter-paths.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n### File attachments\n\nAttach files with `attachments`, the PDF/A-3 shape ZUGFeRD and Factur-X e-invoices use. `data` takes bytes or a UTF-8 string. `modificationDate` falls back to `metadata.creationDate`. Invalid `pdfa` combinations are TypeScript type errors. Without type checking they reject the render at runtime.\n"
-    filename: pdf-attachments.md
+  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n### Close the CSS paint gaps against the raster backend\n\n`outline`, `text-shadow`, `-webkit-text-stroke`, `url()` background and mask layers, `background-origin`, `background-clip` (including `text` and `border-area`) and `background-blend-mode` now paint.\n\n- outlines ride the border machinery: offset outward, following the radius, no layout impact\n- text shadows draw as shifted glyph passes under the text; PDF has no blur operator, so a blurred one draws sharp\n- `background-clip: text` fills the glyphs with the background color and gradient layers, so gradient text stays selectable vector text\n- url() layers rasterize like a filtered image and honor intrinsic sizing, so `background-size: auto`, `cover` and `contain` resolve like the raster backend\n"
+    filename: pdf-css-parity.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n### Embed SVG image sources as vectors\n\nSVG images previously rasterized at 2× their placed size, leaving small logos soft next to vector text. They now embed as real paths, gradients and clips, sharp at any zoom. Filters and bitmaps embedded inside an SVG still rasterize at 2×.\n"
-    filename: pdf-svg-vector-embed.md
+  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n### Draw `box-shadow`\n\nOuter and inset shadows now paint. The offset, spread and rounded corners are exact: the shadow is the border box spread and moved, with the box itself cut out by an even-odd fill so nothing paints under an opaque element.\n\nPDF has no blur operator, so a blurred shadow is approximated by eight bands whose opacity follows the Gaussian edge coverage CSS specifies, with a standard deviation of half the blur radius. The shifted, unblurred shape stays fully opaque underneath, and a shadow with no blur draws as one exact fill.\n\nInset shadows draw inside the padding box, so a border neither carries shadow paint nor widens the shadow.\n"
+    filename: pdf-box-shadow.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n### PDF/A and tagged output\n\nOutput is now tagged by default, like Chromium's print-to-PDF. The structure tree comes from the HTML semantics: headings, paragraphs, figures with alt text, links, and header/footer artifacts. Decorative `<img alt=\"\">` images are artifacts. `tagged: false` turns the tree off. `tagged: \"ua1\"` validates against PDF/UA-1.\n\nSet `pdfa` to a level from `\"2b\"` to `\"4\"` to emit archival PDFs with an sRGB output intent and XMP metadata. The `a` levels require the structure tree and `metadata.creationDate`. A document that cannot conform rejects the render instead of writing a broken file.\n"
-    filename: pdf-archival.md
+  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n### Mark backgrounds and borders as artifacts\n\nBackgrounds and borders were painted outside any tagged content sequence. PDF/UA-1 validators reported untagged content on every page that drew one. They are now artifacts, like header and footer bands.\n"
+    filename: pdf-decoration-artifacts.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n### Vendored resvg updated to 0.48.1\n\nPulls the upstream parser and filter fixes: nested `svg` transforms are no longer applied twice, a missing `width`/`height` is computed from the viewBox aspect ratio, `href` takes precedence over `xlink:href`, `fr` is inherited for radial gradients referenced via `href`, and oversized filter regions no longer panic.\n"
-    filename: resvg-0-48.md
+  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n### Write colours to four decimals\n\nAn eight-bit colour component divided by 255 printed as `0.047058824`, once per painted element. Four decimals resolve finer than the value it came from, and readers see the same colour.\n"
+    filename: pdf-color-precision.md
     v: 0.0.0
-  - content: "---\npackages:\n  cargo:takumi-core:\n    type: minor\n---\n\n### `Node::alt` keeps empty values\n\n`alt()` now returns `Some(\"\")` for an explicitly empty attribute, so callers can tell a decorative image apart from a missing `alt`.\n"
-    filename: core-alt-empty.md
+  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n### Custom XMP metadata\n\n`metadata.xmp` takes namespaces to write into the XMP packet, for metadata the renderer knows nothing about. One is the `fx:` schema that turns a PDF/A-3 with an attached invoice into a Factur-X file.\n\n- each schema carries a prefix, a namespace URI, and its properties\n- every property is written as a value and described in the `pdfaExtension:schemas` entry PDF/A requires, so the two cannot drift apart\n- a prefix, property name or namespace the XMP writer cannot serialize rejects the render instead of writing a broken packet\n"
+    filename: pdf-custom-xmp.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n### Fade elements with `mask-image`\n\nGradient mask layers now apply, as a PDF soft mask holding the mask's own vector content. The masked element and its descendants stay vector: nothing is rasterized to fade an element out.\n\n`mask-size`, `mask-position` and `mask-repeat` place the layers, the same way they place a background. `url()` mask sources are still ignored, and the mask is an alpha mask, which is what `mask-mode: match-source` resolves to for an image source.\n"
+    filename: pdf-mask-image.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n  takumi-core:\n    type: minor\n---\n\n### Clip elements with `clip-path`\n\n`inset()`, `ellipse()`, `polygon()` and `path()` now clip an element and its decorations, as a real PDF clipping path rather than a rasterized mask.\n\n`clip_shape_commands` in takumi-core resolves a basic shape to path commands, which is where the raster backend's copy of that geometry now lives too.\n"
+    filename: pdf-clip-path.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n### Write less per embedded font\n\n`/DW` now states the width most glyphs share, so `/W` only lists the ones that differ, which empties it almost entirely for monospaced and CJK faces. The `CIDSet` stream is gone: only PDF/A-1b asks for one, and that level is not offered. `/FontBBox` comes from the subset's own box instead of a pass over every glyph outline.\n"
+    filename: pdf-cid-font-slimming.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n### Apply the color `filter` primitives\n\n`grayscale`, `sepia`, `saturate`, `hue-rotate`, `invert`, `brightness`, `contrast` and `opacity` now apply. They are linear transforms of the source color, so they fold into the colors written to the page, including gradient stops, text and decoded image pixels, instead of rasterizing the element.\n\n- filters apply in order, clamping between them as CSS requires, and an ancestor's filter runs after the element's own, like the group it wraps\n- SVG images rasterize while a filter is active, since the transform applies to pixels\n- shadows follow the filter too, like every other color the element paints\n- `blur()` and `drop-shadow()` need a convolution and are still ignored, as are referenced SVG filters\n- transforming each color before compositing matches compositing first only while the filtered content is opaque; overlapping translucent content differs\n"
+    filename: pdf-color-filters.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n  takumi-core:\n    type: minor\n---\n\n### Link to anchors inside the document\n\n`<a href=\"#section\">` now resolves to the element with that `id` and lands on the page holding it, so a table of contents works inside the PDF. A fragment matching no element is dropped rather than written as a link that goes nowhere.\n\n`Node::id` is public, alongside the existing `href`, `alt` and `tag_name` accessors.\n"
+    filename: pdf-internal-links.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n### Place background layers\n\n`background-size`, `background-position` and `background-repeat` now apply to gradient layers, which used to stretch across the whole box whatever those properties said.\n\n- `repeat`, `space` and `round` become one PDF tiling pattern per layer, so a repeated gradient costs one shading rather than one per tile\n- the positioning area is still the border box; `background-origin` is not read yet\n"
+    filename: pdf-background-placement.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n### Bound repeating radial gradients\n\nA repeating radial gradient whose stops all sit at one position expanded to millions of stops, since the period it tiles by collapsed to zero. The expansion now tiles at most 512 periods, stretching the period to keep covering the full radius.\n"
+    filename: pdf-radial-cycle-cap.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n### Pack the structure tree into an object stream\n\nA tagged document wrote one small uncompressed dictionary per structure element, a third of a text-heavy file. They now share a single compressed object stream. A two-page invoice drops 31%, and the whole fixture suite 15%. Tagging, PDF/A and PDF/UA output are unchanged; veraPDF still passes every level.\n"
+    filename: pdf-object-streams.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi-raster:\n    type: patch\n---\n\n### Bound allocations and loops driven by untrusted input\n\nThree denial-of-service paths are closed. SVG rasterization and canvas allocation now cap at 16M pixels and return an error past it, instead of aborting on a huge allocation. A `background-size` past `i32::MAX` no longer wraps a repeat step negative and loops forever.\n"
+    filename: untrusted-input-dos.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
+  - id: npm:@takumi-rs/image-response
+    updated: true
   - id: npm:takumi-js
     updated: true
-  - id: npm:@takumi-rs/core
-    updated: true
-  - changelogIds:
-      - pdf-measure.md
-      - pdf-attachments.md
-      - pdf-svg-vector-embed.md
-      - pdf-archival.md
-    id: npm:takumi-pdf
-    updated: true
-  - id: npm:docs
-    updated: false
-  - id: npm:@takumi-rs/wasm
+  - id: npm:@takumi-rs/helpers
     updated: true
   - id: npm:takumi-template
     updated: false
-  - id: npm:@takumi-rs/helpers
+  - id: npm:@takumi-rs/wasm
     updated: true
-  - id: npm:@takumi-rs/image-response
+  - changelogIds:
+      - pdf-shorter-paths.md
+      - pdf-css-parity.md
+      - pdf-box-shadow.md
+      - pdf-decoration-artifacts.md
+      - pdf-color-precision.md
+      - pdf-custom-xmp.md
+      - pdf-mask-image.md
+      - pdf-clip-path.md
+      - pdf-cid-font-slimming.md
+      - pdf-color-filters.md
+      - pdf-internal-links.md
+      - pdf-background-placement.md
+      - pdf-radial-cycle-cap.md
+      - pdf-object-streams.md
+    id: npm:takumi-pdf
     updated: true
-  - id: npm:svelte
-    updated: false
-  - id: npm:ffplay
+  - id: npm:@takumi-rs/core
+    updated: true
+  - id: npm:docs
     updated: false
   - id: npm:pdf-bench
     updated: false
-  - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:waku-ssr
-    updated: false
-  - id: npm:example-nextjs
-    updated: false
-  - id: npm:example-css-library-integration
-    updated: false
-  - id: npm:example-twitter-images
-    updated: false
-  - id: npm:example-generate-invoice
-    updated: false
-  - id: npm:ffmpeg-keyframe-animation
-    updated: false
   - id: npm:example-tanstack-start
     updated: false
-  - id: npm:example-liquid-glass
+  - id: npm:ffplay
     updated: false
   - id: npm:example-satori-html
     updated: false
-  - id: cargo:takumi
-    updated: true
+  - id: npm:svelte
+    updated: false
+  - id: npm:example-liquid-glass
+    updated: false
+  - id: npm:waku-ssr
+    updated: false
+  - id: npm:example-css-library-integration
+    updated: false
+  - id: npm:example-cloudflare-workers
+    updated: false
+  - id: npm:example-generate-invoice
+    updated: false
+  - id: npm:example-twitter-images
+    updated: false
+  - id: npm:example-nextjs
+    updated: false
+  - id: npm:example-e-invoice
+    updated: false
+  - id: npm:ffmpeg-keyframe-animation
+    updated: false
   - changelogIds:
-      - resvg-0-48.md
-      - core-alt-empty.md
-    id: cargo:takumi-core
+      - untrusted-input-dos.md
+    id: cargo:takumi-raster
     updated: true
   - id: cargo:takumi-html
     updated: true
-  - id: cargo:takumi-raster
-    updated: true
   - id: cargo:takumi-svg
+    updated: true
+  - id: cargo:takumi
+    updated: true
+  - changelogIds:
+      - pdf-clip-path.md
+      - pdf-internal-links.md
+      - untrusted-input-dos.md
+    id: cargo:takumi-core
     updated: true
 npm:packages:
   - id: npm:takumi
-  - id: npm:takumi-js
-  - id: npm:@takumi-rs/core
-  - id: npm:takumi-pdf
-  - id: npm:docs
-  - id: npm:@takumi-rs/wasm
-  - id: npm:takumi-template
-  - id: npm:@takumi-rs/helpers
   - id: npm:@takumi-rs/image-response
-  - id: npm:svelte
-  - id: npm:ffplay
+  - id: npm:takumi-js
+  - id: npm:@takumi-rs/helpers
+  - id: npm:takumi-template
+  - id: npm:@takumi-rs/wasm
+  - id: npm:takumi-pdf
+  - id: npm:@takumi-rs/core
+  - id: npm:docs
   - id: npm:pdf-bench
-  - id: npm:example-cloudflare-workers
-  - id: npm:waku-ssr
-  - id: npm:example-nextjs
-  - id: npm:example-css-library-integration
-  - id: npm:example-twitter-images
-  - id: npm:example-generate-invoice
-  - id: npm:ffmpeg-keyframe-animation
   - id: npm:example-tanstack-start
-  - id: npm:example-liquid-glass
+  - id: npm:ffplay
   - id: npm:example-satori-html
+  - id: npm:svelte
+  - id: npm:example-liquid-glass
+  - id: npm:waku-ssr
+  - id: npm:example-css-library-integration
+  - id: npm:example-cloudflare-workers
+  - id: npm:example-generate-invoice
+  - id: npm:example-twitter-images
+  - id: npm:example-nextjs
+  - id: npm:example-e-invoice
+  - id: npm:ffmpeg-keyframe-animation
