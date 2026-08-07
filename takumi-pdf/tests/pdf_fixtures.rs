@@ -1802,11 +1802,13 @@ fn font_format_standards() {
 /// HTML numbers headings for looks, so a document can open at `h2` or jump
 /// from `h1` to `h4`. PDF/UA rejects both, and rejects a list item without a
 /// list around it. The structure tree renumbers by nesting depth and gives an
-/// orphan item a list of its own. A heading whose text sits in child elements
-/// still reaches the outline, which PDF/UA requires.
+/// orphan item a list of its own. An empty heading is dropped without shifting
+/// the ones that follow, and a heading whose text sits in child elements still
+/// reaches the outline, which PDF/UA requires.
 #[test]
 fn heading_levels_and_orphan_list_item() {
   let doc = r#"<main style="display:flex;flex-direction:column;font-size:14px;color:#141414;">
+    <h1></h1>
     <h2>Opens below h1</h2>
     <p>Body</p>
     <h4>Skips two levels</h4>
@@ -1844,8 +1846,10 @@ fn heading_levels_and_orphan_list_item() {
     !haystack.contains("/S/H4"),
     "heading levels reached the file unnormalized"
   );
+  // The structure element carries the same text under `/T`, so the outline's
+  // own key is what proves the entry reached the bookmarks.
   assert!(
-    haystack.contains("Wrapped bold text"),
+    haystack.contains("/Title(Wrapped bold text)"),
     "heading with inline children missing from the outline"
   );
 }

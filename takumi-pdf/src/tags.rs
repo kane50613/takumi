@@ -294,8 +294,19 @@ fn role(node: &RenderNode, walk: &mut Walk) -> Option<TagKind> {
 
   match tag_name {
     "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {
-      let level = walk.heading_level(tag_name.as_bytes()[1] - b'0');
       let title = Some(text_content(node)).filter(|title| !title.is_empty());
+
+      // A heading with nothing in it is dropped further down, and numbering it
+      // would still shift every heading that follows.
+      if title.is_none()
+        && node
+          .children
+          .as_ref()
+          .is_none_or(|children| children.is_empty())
+      {
+        return None;
+      }
+      let level = walk.heading_level(tag_name.as_bytes()[1] - b'0');
 
       Some(Tag::Hn(level, title).into())
     }
