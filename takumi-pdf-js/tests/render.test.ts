@@ -32,6 +32,16 @@ test("defaults to paged A4 without options", async () => {
   expect(pageCount(pdf)).toBe(1);
 });
 
+test("renders an HTML string with its own stylesheet", async () => {
+  const pdf = await renderer.render(
+    `<style>.title { font-size: 32px }</style><div class="title">Hello PDF</div>`,
+    { viewport: { width: 600, height: 300 } },
+  );
+
+  expect(decoder.decode(pdf.subarray(0, 5))).toBe("%PDF-");
+  expect(pageCount(pdf)).toBe(1);
+});
+
 test("paginates and substitutes footer counters", async () => {
   const rows = container({
     style: { display: "flex", flexDirection: "column", width: "100%" },

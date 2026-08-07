@@ -1,3 +1,4 @@
+import { fromHtml } from "@takumi-rs/helpers/html";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 import type { FontLoader, ImagesInput, RegisteredFamilyLike } from "@takumi-rs/helpers/renderer";
 import { FontRegistry } from "@takumi-rs/helpers/renderer";
@@ -14,8 +15,8 @@ declare module "react" {
   }
 }
 
-/** A document input: a takumi node tree or JSX. */
-export type NodeInput = Node | ReactNode | ReactElementLike;
+/** A document input: a takumi node tree, JSX, or an HTML string. */
+export type NodeInput = Node | ReactNode | ReactElementLike | string;
 
 /** Explicit dimensions in CSS px (96 dpi). */
 export type Dimensions = { width: number; height: number };
@@ -224,7 +225,15 @@ function isNode(value: NodeInput): value is Node {
 }
 
 async function resolveNode(input: NodeInput): Promise<{ node: Node; stylesheets: string[] }> {
-  return isNode(input) ? { node: input, stylesheets: [] } : fromJsx(input as ReactNode);
+  if (isNode(input)) {
+    return { node: input, stylesheets: [] };
+  }
+
+  if (typeof input === "string") {
+    return fromHtml(input);
+  }
+
+  return fromJsx(input as ReactNode);
 }
 
 /** A PDF renderer holding registered fonts. Reuse one instance across renders. */
@@ -234,7 +243,7 @@ export class PdfRenderer {
     (font) => this.inner.registerFont(font) as RegisteredFamilyLike[],
   );
 
-  /** Renders a node tree or JSX to PDF bytes. See {@link RenderOptions}. */
+  /** Renders a node tree, JSX, or an HTML string to PDF bytes. See {@link RenderOptions}. */
   async render(node: NodeInput, options: RenderOptions = {}): Promise<Uint8Array> {
     const { fonts, images, header, footer, stylesheets, fontFamilies, ...rest } = options;
     const [main, headerResult, footerResult, resources] = await Promise.all([
