@@ -1,91 +1,91 @@
 core:changelogs:
-  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n### Attach files under PDF/A-4\n\n`pdfa: \"4f\"` renders the PDF 2.0 archival level that takes attachments. The other `\"4\"` level still rejects them.\n"
-    filename: pdf-a4f.md
+  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n### Render the weight the text asked for\n\nA variable font is embedded at the coordinates the run was shaped at, so `font-weight` and `font-stretch` reach the page instead of the font's default instance. A face with no bold or oblique of its own gets the same synthesized ones the raster renderer applies.\n"
+    filename: pdf-font-weights.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n### Emit a structure tree PDF/UA accepts\n\nHeadings are renumbered by nesting depth, so a document that opens at `h2` or jumps from `h1` to `h4` no longer writes a tree the validator rejects. A list item outside a list now brings its own list. A heading whose text sits in child elements, such as `<h1>Plain <strong>bold</strong></h1>`, reaches the outline instead of being dropped, which used to fail a `tagged: \"ua1\"` render outright.\n"
-    filename: pdf-ua-structure.md
+  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n### Render HTML strings\n\n`render()`, `measure()`, and the header and footer options accept HTML strings, the same input format as `takumi-js`. A `<style>` tag applies only to that render.\n"
+    filename: pdf-html-input.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
+  - id: npm:takumi-js
+    updated: false
+  - id: npm:takumi-template
+    updated: false
+  - id: npm:@takumi-rs/wasm
+    updated: false
   - id: npm:@takumi-rs/helpers
     updated: false
   - id: npm:@takumi-rs/image-response
     updated: false
-  - id: npm:docs
-    updated: false
   - changelogIds:
-      - pdf-a4f.md
-      - pdf-ua-structure.md
+      - pdf-font-weights.md
+      - pdf-html-input.md
     id: npm:takumi-pdf
     updated: true
+  - id: npm:docs
+    updated: false
   - id: npm:@takumi-rs/core
     updated: false
-  - id: npm:takumi-js
-    updated: false
-  - id: npm:@takumi-rs/wasm
-    updated: false
-  - id: npm:takumi-template
+  - id: npm:example-satori-html
     updated: false
   - id: npm:svelte
     updated: false
-  - id: npm:ffplay
-    updated: false
-  - id: npm:example-css-library-integration
-    updated: false
-  - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:waku-ssr
+  - id: npm:pdf-bench
     updated: false
   - id: npm:example-e-invoice
-    updated: false
-  - id: npm:example-twitter-images
-    updated: false
-  - id: npm:ffmpeg-keyframe-animation
-    updated: false
-  - id: npm:example-generate-invoice
-    updated: false
-  - id: npm:example-satori-html
     updated: false
   - id: npm:example-nextjs
     updated: false
   - id: npm:example-liquid-glass
     updated: false
-  - id: npm:pdf-bench
+  - id: npm:ffmpeg-keyframe-animation
+    updated: false
+  - id: npm:example-css-library-integration
     updated: false
   - id: npm:example-tanstack-start
     updated: false
-  - id: cargo:takumi-raster
+  - id: npm:ffplay
     updated: false
-  - id: cargo:takumi-svg
+  - id: npm:example-cloudflare-workers
+    updated: false
+  - id: npm:example-generate-invoice
+    updated: false
+  - id: npm:waku-ssr
+    updated: false
+  - id: npm:example-twitter-images
     updated: false
   - id: cargo:takumi
     updated: false
+  - id: cargo:takumi-core
+    updated: false
+  - id: cargo:takumi-raster
+    updated: false
   - id: cargo:takumi-html
     updated: false
-  - id: cargo:takumi-core
+  - id: cargo:takumi-svg
     updated: false
 npm:packages:
   - id: npm:takumi
+  - id: npm:takumi-js
+  - id: npm:takumi-template
+  - id: npm:@takumi-rs/wasm
   - id: npm:@takumi-rs/helpers
   - id: npm:@takumi-rs/image-response
-  - id: npm:docs
   - id: npm:takumi-pdf
+  - id: npm:docs
   - id: npm:@takumi-rs/core
-  - id: npm:takumi-js
-  - id: npm:@takumi-rs/wasm
-  - id: npm:takumi-template
-  - id: npm:svelte
-  - id: npm:ffplay
-  - id: npm:example-css-library-integration
-  - id: npm:example-cloudflare-workers
-  - id: npm:waku-ssr
-  - id: npm:example-e-invoice
-  - id: npm:example-twitter-images
-  - id: npm:ffmpeg-keyframe-animation
-  - id: npm:example-generate-invoice
   - id: npm:example-satori-html
+  - id: npm:svelte
+  - id: npm:pdf-bench
+  - id: npm:example-e-invoice
   - id: npm:example-nextjs
   - id: npm:example-liquid-glass
-  - id: npm:pdf-bench
+  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-css-library-integration
   - id: npm:example-tanstack-start
+  - id: npm:ffplay
+  - id: npm:example-cloudflare-workers
+  - id: npm:example-generate-invoice
+  - id: npm:waku-ssr
+  - id: npm:example-twitter-images
