@@ -16,7 +16,7 @@ export type PdfInspection = {
   attachments: { name: string; description?: string }[];
 };
 
-export type Bookmark = { title: string; depth: number };
+type Bookmark = { title: string; depth: number };
 
 /**
  * One char per byte. `TextDecoder("latin1")` is windows-1252 by spec, which
