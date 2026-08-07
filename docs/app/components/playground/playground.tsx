@@ -14,6 +14,7 @@ import {
   ImageIcon,
   LinkIcon,
   Loader2Icon,
+  PlayIcon,
   RotateCcwIcon,
   Wand2Icon,
 } from "lucide-react";
@@ -45,6 +46,8 @@ import { ComponentEditor } from "./component-editor";
 const BrowserPreview = lazy(() => import("./browser-preview"));
 
 const DEFAULT_TEMPLATE = templates[0];
+
+const RUN_HINT_KEY = "takumi-playground-run-hint";
 
 type TabId = "code" | "preview";
 
@@ -114,6 +117,9 @@ export default function Playground() {
   const [isFormatting, setIsFormatting] = useState(false);
   const [zoom, setZoom] = useState<Zoom>("fit");
   const [pdfView, setPdfView] = useState<PdfView>("preview");
+  /** The code the preview was rendered from; `code` runs ahead of it while editing. */
+  const [ranCode, setRanCode] = useState<string>();
+  const [hintDismissed, setHintDismissed] = useState(true);
   const [copied, setCopied] = useState(false);
   const [searchParams, setSearchParams] = useState(() => {
     if (typeof window === "undefined") {
@@ -132,6 +138,11 @@ export default function Playground() {
   const matchedTemplate = templates.find((template) => template.code === code);
   const selectedTemplateName = matchedTemplate?.name ?? "Custom";
   const outputKind = lastSuccess?.outputKind;
+  const isStale = code !== undefined && ranCode !== undefined && code !== ranCode;
+
+  useEffect(() => {
+    setHintDismissed(localStorage.getItem(RUN_HINT_KEY) === "seen");
+  }, []);
 
   useEffect(() => {
     const onPopState = () => {
@@ -271,20 +282,35 @@ export default function Playground() {
   }, []);
 
   useEffect(() => {
-    if (isReady && code !== undefined) {
-      const timer = setTimeout(() => {
-        const requestId = currentRequestIdRef.current + 1;
-        currentRequestIdRef.current = requestId;
-        workerRef.current?.postMessage({
-          type: "render-request",
-          id: requestId,
-          code,
-        } satisfies RenderMessageInput);
-      }, 300);
+    if (!isReady || ranCode === undefined) return;
 
-      return () => clearTimeout(timer);
-    }
-  }, [isReady, code]);
+    const requestId = currentRequestIdRef.current + 1;
+    currentRequestIdRef.current = requestId;
+    workerRef.current?.postMessage({
+      type: "render-request",
+      id: requestId,
+      code: ranCode,
+    } satisfies RenderMessageInput);
+  }, [isReady, ranCode]);
+
+  // The first render happens on its own; after that the editor waits for Run,
+  // so a half-typed line never reloads the preview.
+  useEffect(() => {
+    if (ranCode === undefined && code !== undefined) setRanCode(code);
+  }, [code, ranCode]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        run();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
 
   useEffect(() => {
     if (!isBlobUrl(lastSuccess?.outputUrl)) return;
@@ -293,11 +319,23 @@ export default function Playground() {
     return () => URL.revokeObjectURL(url);
   }, [lastSuccess]);
 
+  const run = () => {
+    setRanCode(code);
+    dismissHint();
+  };
+  const dismissHint = () => {
+    setHintDismissed(true);
+    localStorage.setItem(RUN_HINT_KEY, "seen");
+  };
+  // Picking a template or resetting is its own deliberate action, so those
+  // render straight away instead of waiting for Run.
   const loadTemplate = (template: Template) => {
     setCode(template.code);
+    setRanCode(template.code);
   };
   const resetCode = () => {
     setCode(DEFAULT_TEMPLATE.code);
+    setRanCode(DEFAULT_TEMPLATE.code);
     setActiveTab("code");
   };
 
@@ -317,6 +355,8 @@ export default function Playground() {
       });
 
       setCode(formatted);
+      // Formatting cannot change the output, so it must not make the preview stale.
+      if (!isStale) setRanCode(formatted);
     } catch (error) {
       console.error("Failed to format code:", error);
     } finally {
@@ -443,6 +483,34 @@ export default function Playground() {
           selectedId={matchedTemplate?.id}
           onSelect={loadTemplate}
         />
+
+        <div className="relative flex items-center gap-0.5">
+          <Button
+            variant={isStale ? "default" : "ghost"}
+            size="sm"
+            className="h-7 gap-1.5 px-2 font-mono text-xs"
+            onClick={run}
+            disabled={!isStale || !isReady}
+            title="Run the code (⌘↵)"
+          >
+            <PlayIcon className="size-3.5" />
+            Run
+          </Button>
+          {isStale && !hintDismissed && (
+            <div className="absolute top-9 left-0 z-20 w-56 rounded-md border bg-popover p-3 text-xs shadow-md">
+              <p className="m-0 text-popover-foreground">
+                The preview waits for you. Hit Run, or press ⌘↵, to render what you just wrote.
+              </p>
+              <button
+                type="button"
+                onClick={dismissHint}
+                className="mt-2 font-mono text-[11px] text-muted-foreground underline"
+              >
+                Got it
+              </button>
+            </div>
+          )}
+        </div>
 
         <div className={cn("flex items-center gap-0.5", activeTab !== "code" && "max-md:hidden")}>
           <Button
@@ -687,58 +755,24 @@ function DocumentPanel({ inspection }: { inspection: PdfInspection }) {
   );
 }
 
-/**
- * Every render mints a new blob URL, and pointing the viewer at one reloads it:
- * a white flash on each keystroke. Two viewers take turns instead. The next
- * document loads in the hidden one, and the swap is a visibility change, so the
- * viewer on screen is never the one loading. The timer covers a viewer that
- * never fires `load`, which would otherwise leave a stale page up for good.
- */
 function PdfPreview({ url, dimmed }: { url: string | undefined; dimmed: boolean }) {
-  const [slots, setSlots] = useState<(string | undefined)[]>([url, undefined]);
-  const [front, setFront] = useState(0);
-  const back = 1 - front;
-
-  useEffect(() => {
-    if (!url || slots[front] === url || slots[back] === url) return;
-
-    setSlots((current) => current.map((slot, index) => (index === back ? url : slot)));
-
-    const timer = setTimeout(() => setFront(back), 2000);
-
-    return () => clearTimeout(timer);
-  }, [url, slots, front, back]);
+  if (!url) return null;
 
   return (
-    <div className={cn("relative h-full w-full bg-white", dimmed && "opacity-40")}>
-      {slots.map((slot, index) =>
-        slot === undefined ? null : (
-          <object
-            // The slot, not the URL: rekeying on the URL would remount the
-            // element and load it all over again.
-            // oxlint-disable-next-line no-array-index-key
-            key={index}
-            data={slot}
-            type="application/pdf"
-            aria-label={index === front ? "Rendered PDF" : undefined}
-            aria-hidden={index !== front}
-            onLoad={() => setFront(index)}
-            className={cn(
-              "absolute inset-0 size-full",
-              index !== front && "pointer-events-none opacity-0",
-            )}
-          >
-            {/* Most mobile browsers have no inline PDF viewer, and `object`
-                renders this instead of an empty frame. */}
-            <div className="flex h-full items-center justify-center p-6 text-center font-mono text-xs text-muted-foreground">
-              <a href={slot} target="_blank" rel="noreferrer" className="underline">
-                This browser cannot show the PDF here. Open it in a new tab.
-              </a>
-            </div>
-          </object>
-        ),
-      )}
-    </div>
+    <object
+      data={url}
+      type="application/pdf"
+      aria-label="Rendered PDF"
+      className={cn("size-full", dimmed && "opacity-40")}
+    >
+      {/* Most mobile browsers have no inline PDF viewer, and `object` renders
+          this instead of an empty frame. */}
+      <div className="flex h-full items-center justify-center p-6 text-center font-mono text-xs text-muted-foreground">
+        <a href={url} target="_blank" rel="noreferrer" className="underline">
+          This browser cannot show the PDF here. Open it in a new tab.
+        </a>
+      </div>
+    </object>
   );
 }
 
