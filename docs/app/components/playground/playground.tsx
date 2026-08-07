@@ -383,7 +383,7 @@ export default function Playground() {
 
   const editor = (
     <div className="relative h-full min-w-0 overflow-hidden">
-      {code && <ComponentEditor code={code} setCode={setCode} />}
+      {code && <ComponentEditor code={code} setCode={setCode} onRun={run} />}
     </div>
   );
   const takumiPane = (

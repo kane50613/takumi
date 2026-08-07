@@ -45,9 +45,11 @@ declare namespace React {
 export function ComponentEditor({
   code,
   setCode,
+  onRun,
 }: {
   code: string;
   setCode: (code: string) => void;
+  onRun: () => void;
 }) {
   const { resolvedTheme } = useTheme();
   const [isMobileViewport, setIsMobileViewport] = useState(false);
@@ -55,6 +57,10 @@ export function ComponentEditor({
     Parameters<NonNullable<React.ComponentProps<typeof Editor>["onMount"]>>[0] | null
   >(null);
   const isApplyingExternalCodeRef = useRef(false);
+  // The command is registered once, so it reads the callback through a ref.
+  const onRunRef = useRef(onRun);
+
+  onRunRef.current = onRun;
   /** The last value the editor itself produced, so its own edits never bounce back. */
   const lastEmittedRef = useRef(code);
   const theme = resolvedTheme === "dark" ? "github-dark-default" : "github-light-default";
@@ -144,8 +150,11 @@ export function ComponentEditor({
 
         shikiToMonaco(highlighter, monaco);
       }}
-      onMount={(editor) => {
+      onMount={(editor, monaco) => {
         editorRef.current = editor;
+        // Monaco owns the keyboard inside the editor and binds ⌘↵ itself, so the
+        // shortcut has to be registered here rather than on the window.
+        editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => onRunRef.current());
       }}
       width="100%"
       height="100%"
