@@ -6,6 +6,7 @@ import {
   ChevronDownIcon,
   Code2Icon,
   DownloadIcon,
+  ExternalLinkIcon,
   EyeIcon,
   FileTextIcon,
   FilmIcon,
@@ -387,6 +388,19 @@ export default function Playground() {
                     {label}
                   </button>
                 ))}
+                {/* Mobile browsers mostly refuse to paint a PDF inside a frame,
+                    so the file needs a way out to the viewer. */}
+                {lastSuccess?.outputUrl && (
+                  <a
+                    href={lastSuccess.outputUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="Open the PDF in a new tab"
+                    className="rounded-sm px-1 py-0.5 transition-colors hover:text-foreground"
+                  >
+                    <ExternalLinkIcon className="size-3" />
+                  </a>
+                )}
               </>
             )
           }
