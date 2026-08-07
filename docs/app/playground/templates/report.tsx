@@ -1,19 +1,24 @@
 const sections = [
   {
     title: "Summary",
+    lang: "en",
     body: "Render throughput held steady through the quarter while the output size dropped by a fifth. The gains came from the layout cache and a tighter content stream, not from lowering quality.",
   },
   {
-    title: "Throughput",
-    body: "Median render time fell from 41 ms to 28 ms on the reference document. Cold starts still dominate the first request, so the shared renderer is worth keeping alive between calls.",
+    title: "本季重點",
+    lang: "zh-Hant",
+    body: "中位數渲染時間從 41 毫秒降到 28 毫秒。冷啟動仍然主導第一個請求,所以共用的 renderer 值得留著不要關掉。字型子集化改成逐份文件丟掉沒用到的字符,四頁的發票從 78 KB 降到 62 KB。",
   },
   {
-    title: "Output size",
-    body: "Font subsetting now drops unused glyphs per document instead of per family. A four-page invoice ships 62 KB, down from 78 KB.",
+    title: "この四半期の成果",
+    lang: "ja",
+    body: "レイアウトキャッシュにより、同じ文書を二度組む必要がなくなりました。日本語の本文も欧文と同じ経路で組版され、行分割は言語ごとの規則に従います。",
   },
   {
-    title: "Next quarter",
-    body: "Tagged output moves to the default path, and the archival levels get a validator run in CI so a regression fails the build instead of a customer's upload.",
+    title: "ملخص",
+    lang: "ar",
+    rtl: true,
+    body: "يجري النص العربي من اليمين إلى اليسار، ويحتفظ الجدول أدناه باتجاهه الأصلي.",
   },
 ];
 
@@ -28,14 +33,19 @@ export default function Report() {
   return (
     <div tw="flex w-full flex-col text-[#1f2430]">
       <h1 tw="m-0 text-3xl font-semibold">Rendering report</h1>
-      <p tw="mt-2 mb-0 text-xs text-[#6b7280]">Q1 2026 · Takumi Werkstatt</p>
+      <p tw="mt-2 mb-0 text-xs text-[#6b7280]">Q1 2026 · 匠 Werkstatt</p>
 
       {sections.map((section) => (
         <div key={section.title} tw="mt-8 flex flex-col">
-          <h2 tw="m-0 text-lg font-semibold">{section.title}</h2>
-          <p tw="mt-2 mb-0 text-sm leading-6 text-[#374151]">{section.body}</p>
-          <p tw="mt-3 mb-0 text-sm leading-6 text-[#374151]">
-            {section.body} {section.body}
+          <h2 lang={section.lang} tw="m-0 text-lg font-semibold">
+            {section.title}
+          </h2>
+          <p
+            lang={section.lang}
+            dir={section.rtl ? "rtl" : undefined}
+            tw="mt-2 mb-0 text-sm leading-6 text-[#374151]"
+          >
+            {section.body}
           </p>
         </div>
       ))}
@@ -71,10 +81,11 @@ export const options: PlaygroundOptions = {
     ),
     footer: (
       <div tw="flex w-full justify-center pb-6 text-[10px] text-[#9ca3af]">
-        Page <span className="pageNumber" /> of <span className="totalPages" />
+        第 <span className="pageNumber trad-chinese-informal" /> 頁,共{" "}
+        <span className="totalPages trad-chinese-informal" /> 頁
       </div>
     ),
-    // Turns the h1/h2 headings into PDF bookmarks.
+    // Turns the h1/h2 headings into PDF bookmarks, in whichever script they use.
     outline: true,
     metadata: { title: "Rendering report — Q1 2026", creationDate: "2026-04-02" },
   },

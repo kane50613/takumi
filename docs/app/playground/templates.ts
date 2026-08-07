@@ -2,6 +2,7 @@ import animatedShowcase from "./templates/animated-showcase?raw";
 import articleCover from "./templates/article-cover?raw";
 import gradientPoster from "./templates/gradient-poster?raw";
 import invoice from "./templates/invoice?raw";
+import multilingual from "./templates/multilingual?raw";
 import receipt from "./templates/receipt?raw";
 import report from "./templates/report?raw";
 import twitterProfileCard from "./templates/twitter-profile-card?raw";
@@ -20,14 +21,21 @@ export const templates: Template[] = [
   {
     id: "welcome",
     name: "Welcome",
-    description: "Edit the code, watch the image re-render",
+    description: "Edit the code, press Run, watch it render",
     kind: "image",
     code: welcome,
   },
   {
+    id: "multilingual",
+    name: "Every script",
+    description: "Eight writing systems, including right-to-left",
+    kind: "image",
+    code: multilingual,
+  },
+  {
     id: "twitter-profile-card",
     name: "Profile card",
-    description: "Avatar, handle and stats in a 1200 × 630 card",
+    description: "Remote avatar, rounded borders, stats row",
     kind: "image",
     code: twitterProfileCard,
   },
@@ -41,28 +49,28 @@ export const templates: Template[] = [
   {
     id: "gradient-poster",
     name: "Gradient poster",
-    description: "Layered gradients and blend modes",
+    description: "Conic gradient, backdrop blur and a blend mode",
     kind: "image",
     code: gradientPoster,
   },
   {
     id: "keyframe-animation",
     name: "Keyframe loop",
-    description: "CSS keyframes sampled into an animated WebP",
+    description: "Staggered Japanese text sampled into an animated WebP",
     kind: "animation",
     code: animatedShowcase,
   },
   {
     id: "invoice",
     name: "Invoice",
-    description: "A4 page in PDF/A-3b, with the invoice XML attached",
+    description: "Bilingual A4 page in PDF/A-3b, with the invoice XML attached",
     kind: "pdf",
     code: invoice,
   },
   {
     id: "report",
     name: "Report",
-    description: "Multi-page flow with a repeating footer and bookmarks",
+    description: "Four scripts across pages, with a counted footer and bookmarks",
     kind: "pdf",
     code: report,
   },

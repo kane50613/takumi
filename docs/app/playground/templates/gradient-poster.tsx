@@ -2,22 +2,23 @@ export default function Poster() {
   return (
     <div
       tw="flex h-full w-full items-center justify-center"
-      style={{
-        backgroundImage: "linear-gradient(135deg, #FF6B6B 0%, #556270 100%)",
-      }}
+      style={{ backgroundImage: "conic-gradient(from 210deg, #ff6b6b, #556270, #ffd93d, #ff6b6b)" }}
     >
-      <div tw="flex flex-col items-center shadow-2xl bg-white/10 rounded-[64px] border border-white/20 p-24 backdrop-blur-md">
-        <div tw="text-[120px] mb-8 filter drop-shadow-lg leading-none">✨</div>
-        <h1 tw="text-8xl font-black text-white text-center tracking-tighter filter drop-shadow-md">
-          Create Magic
+      <div
+        tw="flex h-[560px] w-[560px] flex-col items-center justify-center rounded-full border border-white/25 bg-white/10 text-white"
+        style={{ backdropFilter: "blur(12px)" }}
+      >
+        <span tw="text-[140px] leading-none">🌗</span>
+        <h1 tw="m-0 mt-6 text-7xl font-black tracking-tighter" style={{ mixBlendMode: "overlay" }}>
+          Half light
         </h1>
-        <p tw="mt-6 text-4xl text-white/80 font-medium tracking-wide">Unleash your creativity</p>
+        <p tw="mt-4 mb-0 text-3xl text-white/80">Conic gradient · blur · blend mode</p>
       </div>
     </div>
   );
 }
 
-export const options = {
+export const options: PlaygroundOptions = {
   width: 1080,
   height: 1080,
   format: "png",

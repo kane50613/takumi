@@ -1,25 +1,34 @@
 const DURATION_MS = 3000;
 
+const words = [
+  { text: "動", delay: 0 },
+  { text: "く", delay: 200 },
+  { text: "文", delay: 400 },
+  { text: "字", delay: 600 },
+];
+
 export default function AnimatedShowcase() {
   return (
     <div
-      tw="flex h-full w-full items-center justify-center overflow-hidden bg-[#fff7ed]"
-      style={{
-        backgroundImage: "linear-gradient(180deg, #fff7ed 0%, #fee2e2 100%)",
-      }}
+      tw="flex h-full w-full items-center justify-center"
+      style={{ backgroundImage: "linear-gradient(180deg, #fff7ed 0%, #fee2e2 100%)" }}
     >
-      <div
-        tw="flex h-32 w-32 items-center justify-center rounded-2xl bg-amber-300 font-semibold text-xl text-orange-950"
-        style={{
-          transformOrigin: "center",
-          animationName: "stretch-cube",
-          animationDuration: `${DURATION_MS}ms`,
-          animationTimingFunction: "cubic-bezier(0.65, 0, 0.35, 1)",
-          animationIterationCount: "infinite",
-        }}
-      >
-        Animated!
-      </div>
+      {words.map((word) => (
+        <span
+          key={word.text}
+          lang="ja"
+          tw="mx-2 text-7xl font-bold text-orange-950"
+          style={{
+            animationName: "bob",
+            animationDuration: `${DURATION_MS}ms`,
+            animationDelay: `${word.delay}ms`,
+            animationIterationCount: "infinite",
+            animationTimingFunction: "cubic-bezier(0.65, 0, 0.35, 1)",
+          }}
+        >
+          {word.text}
+        </span>
+      ))}
     </div>
   );
 }
@@ -28,12 +37,11 @@ export const options: PlaygroundOptions = {
   width: 640,
   height: 360,
   keyframes: {
-    "stretch-cube": {
-      "0%": { transform: "rotate(0deg) scale(1, 1)", borderRadius: "16px" },
-      "25%": { transform: "rotate(-3deg) scale(1.08, 0.92)", borderRadius: "28px 18px 24px 14px" },
-      "50%": { transform: "rotate(0deg) scale(0.94, 1.06)", borderRadius: "50%" },
-      "75%": { transform: "rotate(3deg) scale(1.04, 0.96)", borderRadius: "14px 26px 18px 30px" },
-      "100%": { transform: "rotate(0deg) scale(1, 1)", borderRadius: "16px" },
+    bob: {
+      "0%": { transform: "translateY(0) scale(1)", color: "#7c2d12" },
+      "35%": { transform: "translateY(-28px) scale(1.15)", color: "#ea580c" },
+      "70%": { transform: "translateY(0) scale(1)", color: "#7c2d12" },
+      "100%": { transform: "translateY(0) scale(1)", color: "#7c2d12" },
     },
   },
   animation: {
