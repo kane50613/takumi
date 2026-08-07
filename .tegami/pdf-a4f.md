@@ -1,7 +1,7 @@
 ---
 packages:
   takumi-pdf:
-    type: minor
+    type: patch
 ---
 
 ### Attach files under PDF/A-4
