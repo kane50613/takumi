@@ -449,7 +449,12 @@ fn test_background_size_auto_axis_round() {
   // is asserted here. Removing the file first keeps a stale one from a previous
   // run out of the assertion.
   let svg_path = "tests/fixtures-generated/style_background_size_auto_axis_round.svg";
-  let _ = std::fs::remove_file(svg_path);
+
+  match std::fs::remove_file(svg_path) {
+    Ok(()) => {}
+    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+    Err(error) => panic!("could not clear the stale svg: {error}"),
+  }
 
   run_fixture_test(container, "style_background_size_auto_axis_round");
 
@@ -457,7 +462,10 @@ fn test_background_size_auto_axis_round() {
   let pattern = svg
     .split_once("<pattern ")
     .expect("no background pattern in the svg")
-    .1;
+    .1
+    .split_once('>')
+    .expect("unterminated pattern element")
+    .0;
   let attr = |name: &str| {
     pattern
       .split_once(&format!("{name}=\""))

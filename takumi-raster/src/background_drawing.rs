@@ -315,10 +315,7 @@ impl BackgroundTile {
   }
 }
 
-/// One axis of the `background-origin` positioning area within the border box.
-/// `position` and `space`/`round` distribution resolve against `area`; `repeat`
-/// tiles across `paint` (the painting/border box) so a repeating layer still
-/// covers the clip region when origin and clip differ.
+/// Builds one tile of a background layer at the size the geometry resolved to.
 pub(crate) fn render_tile(
   image: &BackgroundImage,
   tile_w: u32,
