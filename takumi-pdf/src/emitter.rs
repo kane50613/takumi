@@ -26,17 +26,20 @@ use takumi_core::{
 };
 use takumi_core::{
   font_style::SizedFontStyle,
-  geometry::{ComputedLayout as Layout, Point as CorePoint, Size},
+  geometry::{AvailableSpace, ComputedLayout as Layout, NodeId, Point as CorePoint, Size},
   layout::{
     border::{BorderProperties, BorderSide},
     clip::clip_shape_commands,
     decoration::{ClipBox, outline_geometry},
-    inline::{BuiltInlineLayout, InlineRunLayout, ShapedRun, run_decorations},
+    inline::{
+      BuiltInlineLayout, InlineBoxItem, InlineRunLayout, ProcessedInlineSpan, ShapedRun,
+      run_decorations,
+    },
     node::NodeKind,
-    tree::{LayoutResults, RenderNode},
+    tree::{LayoutResults, LayoutTree, RenderNode},
   },
   paint::{ConicGradientTile, LinearGradientTile, RadialGradientTile, resolve_stops_along_axis},
-  scene::{NodePaint, PaintItemKind, StackingContextNode},
+  scene::{NodePaint, PaintItemKind, StackingContextNode, build_stacking_contexts},
   shadow::SizedShadow,
   style::{
     Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BlendMode, BoxDecorationBreak,
@@ -1240,7 +1243,180 @@ impl Emitter<'_> {
         draw_decoration(surface, decoration, x, y, self.color_filter.as_deref());
       }
     }
+    #[cfg(feature = "images")]
+    self.emit_inline_boxes(node, runs, built, layout, x, y, surface);
     Ok(())
+  }
+
+  /// Paints the replaced content of an inline layout's boxes. Glyph runs carry
+  /// the text; an `<img>` between them is a box, and only this pass draws it.
+  ///
+  /// An inline-block subtree needs its own layout pass before it can paint, so
+  /// it is left alone here.
+  #[cfg(feature = "images")]
+  #[allow(clippy::too_many_arguments)]
+  fn emit_inline_boxes(
+    &mut self,
+    owner: &RenderNode,
+    runs: &InlineRunLayout,
+    built: &BuiltInlineLayout<'_>,
+    layout: Layout,
+    x: f32,
+    y: f32,
+    surface: &mut Surface,
+  ) {
+    let offset = layout.content_box_offset();
+    // The caller opened a marked-content region for the text around these
+    // boxes. Marked content does not nest, so each image closes it, takes a
+    // region of its own, and hands it back.
+    let owner_tagged = self.tags.is_some() && has_own_content(owner);
+
+    for positioned in &runs.inline_boxes {
+      let Some(ProcessedInlineSpan::Box(item)) = built.spans.get(positioned.id as usize) else {
+        continue;
+      };
+      let node = item.render_node;
+
+      if node.context.style.opacity.0 == 0.0 {
+        continue;
+      }
+      let content = if node.participates_as_inline_box() {
+        InlineBoxContent::Subtree
+      } else if matches!(
+        node.node.as_ref().map(|source| &source.kind),
+        Some(NodeKind::Image(_))
+      ) {
+        InlineBoxContent::Image
+      } else {
+        continue;
+      };
+      if owner_tagged {
+        surface.end_tagged();
+      }
+      if self.tags.is_some() {
+        self.start_tagged_node(node, surface);
+      }
+      // The box never reaches `emit_box`, so the state that would paint it
+      // there is applied here: its own opacity, and its `filter` composed onto
+      // the one the enclosing stacking contexts left.
+      let opacity = node.context.style.opacity.0;
+      let faded = opacity < 1.0;
+
+      if faded {
+        surface
+          .push_opacity(NormalizedF32::new(opacity.clamp(0.0, 1.0)).unwrap_or(NormalizedF32::ONE));
+      }
+      let outer_filter = self.color_filter.clone();
+      self.color_filter =
+        ColorFilter::compose(outer_filter.as_deref(), &node.context.style.filter).map(Rc::new);
+
+      let origin = (x + offset.x + positioned.x, y + offset.y + positioned.y);
+
+      match content {
+        InlineBoxContent::Image => {
+          if let Some(NodeKind::Image(image)) = node.node.as_ref().map(|source| &source.kind) {
+            self.emit_image(
+              image,
+              &node.context,
+              Layout::from(item),
+              origin.0,
+              origin.1,
+              surface,
+            );
+          }
+        }
+        InlineBoxContent::Subtree => {
+          self.emit_inline_subtree(node, item, Layout::from(item).size, origin, surface)
+        }
+      }
+      self.color_filter = outer_filter;
+      if faded {
+        surface.pop();
+      }
+      if self.tags.is_some() {
+        surface.end_tagged();
+      }
+      if owner_tagged {
+        self.start_tagged_node(owner, surface);
+      }
+    }
+  }
+
+  /// Lays out and paints an inline-level container (`inline-block`,
+  /// `inline-flex`, `inline-grid`, or a float) at the position the inline
+  /// layout gave it. The box is not in the paint list, so it needs a layout
+  /// pass and a scene of its own.
+  #[cfg(feature = "images")]
+  fn emit_inline_subtree(
+    &mut self,
+    node: &RenderNode,
+    item: &InlineBoxItem<'_>,
+    size: Size<f32>,
+    origin: (f32, f32),
+    surface: &mut Surface,
+  ) {
+    let width = (size.width - item.margin.horizontal()).max(0.0);
+    let height = (size.height - item.margin.vertical()).max(0.0);
+
+    if width <= 0.0 || height <= 0.0 {
+      return;
+    }
+    let root = node.clone();
+    let mut tree = LayoutTree::from_render_node(&root);
+
+    tree.compute_layout(Size {
+      width: AvailableSpace::Definite(width),
+      height: AvailableSpace::Definite(height),
+    });
+
+    let results = tree.into_results();
+    let Ok(contexts) = build_stacking_contexts(
+      &root,
+      &results,
+      NodeId::ROOT,
+      Affine::IDENTITY,
+      (Some(width), Some(height)),
+    ) else {
+      return;
+    };
+    let mut emitter = Emitter {
+      root: &root,
+      contexts: &contexts,
+      results: &results,
+      fonts: &mut *self.fonts,
+      inline: None,
+      window: None,
+      line_window: None,
+      tags: None,
+      color_filter: self.color_filter.clone(),
+    };
+    let x = origin.0 + item.margin.left;
+    let y = origin.1 + item.margin.top;
+
+    surface.push_transform(&Transform::from_translate(x, y));
+    let _ = emitter.emit_context(0, Affine::IDENTITY, surface);
+    surface.pop();
+  }
+
+  /// Opens a marked-content region for a node the paint list never visited, so
+  /// its content still reaches the structure tree.
+  #[cfg(feature = "images")]
+  fn start_tagged_node(&self, node: &RenderNode, surface: &mut Surface) {
+    if decorative_image(node) {
+      surface.start_tagged(ContentTag::Artifact(Artifact::new(
+        ArtifactType::Other,
+        None,
+      )));
+      return;
+    }
+    let identifier = surface.start_tagged(ContentTag::Other);
+    let mut path = Vec::new();
+
+    if let Some(tags) = self.tags
+      && node_path(self.root, node, &mut path)
+    {
+      tags.borrow_mut().record(&path, identifier);
+    }
   }
 
   /// The fills a `background-clip: text` box paints through its glyphs:
@@ -1644,6 +1820,34 @@ fn has_own_content(node: &RenderNode) -> bool {
     Some(NodeKind::Image(_)) => true,
     _ => false,
   }
+}
+
+/// What an inline box paints: replaced content, or a whole subtree that needs
+/// its own layout pass.
+#[cfg(feature = "images")]
+#[derive(Clone, Copy)]
+enum InlineBoxContent {
+  Image,
+  Subtree,
+}
+
+/// Fills `path` with the child indices leading from `root` to `target`,
+/// matched by identity. An inline box arrives as a bare node reference, so the
+/// key the tag collector wants has to be recovered from the tree.
+#[cfg(feature = "images")]
+fn node_path(root: &RenderNode, target: &RenderNode, path: &mut Vec<usize>) -> bool {
+  if std::ptr::eq(root, target) {
+    return true;
+  }
+  for (index, child) in root.children.iter().flatten().enumerate() {
+    path.push(index);
+
+    if node_path(child, target, path) {
+      return true;
+    }
+    path.pop();
+  }
+  false
 }
 
 /// Whether the node is an image explicitly marked decorative (`alt=""`), so
