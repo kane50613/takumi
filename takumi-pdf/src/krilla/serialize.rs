@@ -797,7 +797,13 @@ impl SerializeContext {
         // PDF 2.0 standard structure namespace
         namespaces.item(self.pdf2_ns.ssn_ref);
         let mut ns_chunk = self.new_chunk();
-        ns_chunk.namespace(self.pdf2_ns.ssn_ref).pdf_2_ns();
+        // TODO: restore `pdf_2_ns()` once pdf-writer > 0.15.0 ships the fix. It
+        // writes `https://www.iso.org/pdf2/ssn`, while ISO 32000-2:2020, 14.8.6
+        // defines the identifier below.
+        // https://github.com/typst/pdf-writer/pull/85
+        ns_chunk
+          .namespace(self.pdf2_ns.ssn_ref)
+          .ns(TextStr("http://iso.org/pdf2/ssn"));
         sub_chunks.push(ns_chunk);
 
         // Custom krilla namspace
