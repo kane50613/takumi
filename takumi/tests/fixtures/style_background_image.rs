@@ -432,6 +432,22 @@ fn test_background_size_contain() {
   run_fixture_test(container, "style_background_size_contain");
 }
 
+/// `background-size` with one auto axis re-derives that axis from the image's
+/// intrinsic ratio after `round` rescales the other one. The SVG backend used
+/// to skip that step and disagree with the raster one.
+#[test]
+fn test_background_size_auto_axis_round() {
+  let images = BackgroundImages::from_css_str("url(assets/images/yeecord.png)").unwrap();
+  let container = create_container_with(
+    images,
+    Some(BackgroundSizes::from_css_str("auto 80px").unwrap()),
+    Some(PositionValues::from_css_str("left top").unwrap()),
+    Some(BackgroundRepeats::from_css_str("round").unwrap()),
+  );
+
+  run_fixture_test(container, "style_background_size_auto_axis_round");
+}
+
 #[test]
 fn test_background_size_cover() {
   let images = BackgroundImages::from_css_str("url(assets/images/yeecord.png)").unwrap();

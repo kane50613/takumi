@@ -5,8 +5,7 @@ use smallvec::SmallVec;
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Size},
   layout::background::{
-    LayerTileStyle, ResolveBackgroundLayerInput, ResolveBackgroundLayersInput,
-    background_origin_box, resolve_background_layer,
+    ResolveBackgroundLayersInput, background_origin_box, resolve_background_layers,
   },
   paint::{ConicGradientTile, GradientOverlayTile, LinearGradientTile, RadialGradientTile},
 };
@@ -405,60 +404,33 @@ pub(crate) fn render_tile(
 }
 
 /// Resolve tile image, positions along X and Y for a background-like layer.
-fn resolve_layer_tiles(
-  image: &BackgroundImage,
-  style: LayerTileStyle,
-  input: ResolveBackgroundLayerInput<'_>,
-) -> Result<Option<TileLayer>> {
-  let context = input.context;
-  let Some(geometry) = resolve_background_layer(image, style, input) else {
-    return Ok(None);
-  };
-  let Some(tile) = render_tile(image, geometry.tile_width, geometry.tile_height, context)? else {
-    return Ok(None);
-  };
-  let tile = if should_rasterize_repeated_tile(&tile, &geometry.xs, &geometry.ys) {
-    rasterize_tile(tile)?
-  } else {
-    tile
-  };
-
-  Ok(Some(TileLayer {
-    tile,
-    xs: geometry.xs,
-    ys: geometry.ys,
-    blend_mode: geometry.blend_mode,
-  }))
-}
-
 pub(crate) fn resolve_tile_layers(input: ResolveBackgroundLayersInput<'_>) -> Result<TileLayers> {
-  let last_position = input.positions.last().copied().unwrap_or_default();
-  let last_size = input.sizes.last().copied().unwrap_or_default();
-  let last_repeat = input.repeats.last().copied().unwrap_or_default();
-  let last_blend_mode = input.blend_modes.last().copied().unwrap_or_default();
+  let images = input.images;
+  let context = input.context;
+  let mut layers = Vec::new();
 
-  let mut results = Vec::new();
-  for (i, image) in input.images.iter().enumerate().rev() {
-    let style = LayerTileStyle {
-      pos: input.positions.get(i).copied().unwrap_or(last_position),
-      size: input.sizes.get(i).copied().unwrap_or(last_size),
-      repeat: input.repeats.get(i).copied().unwrap_or(last_repeat),
-      blend_mode: input.blend_modes.get(i).copied().unwrap_or(last_blend_mode),
+  for (index, geometry) in resolve_background_layers(input) {
+    let Some(image) = images.get(index) else {
+      continue;
+    };
+    let Some(tile) = render_tile(image, geometry.tile_width, geometry.tile_height, context)? else {
+      continue;
+    };
+    let tile = if should_rasterize_repeated_tile(&tile, &geometry.xs, &geometry.ys) {
+      rasterize_tile(tile)?
+    } else {
+      tile
     };
 
-    results.push(resolve_layer_tiles(
-      image,
-      style,
-      ResolveBackgroundLayerInput {
-        area: input.area,
-        paint: input.paint,
-        origin_offset: input.origin_offset,
-        context: input.context,
-      },
-    )?);
+    layers.push(TileLayer {
+      tile,
+      xs: geometry.xs,
+      ys: geometry.ys,
+      blend_mode: geometry.blend_mode,
+    });
   }
 
-  Ok(results.into_iter().flatten().collect())
+  Ok(layers)
 }
 
 pub(crate) fn create_mask(
