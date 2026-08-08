@@ -1562,6 +1562,76 @@ fn tagged_standards() {
   });
 }
 
+/// Every structure element takumi emits, under PDF/A-4. A PDF 2.0 tag carries a
+/// namespace and a role map that the PDF 1.7 fixtures never exercise.
+#[test]
+fn structure_types_pdf20() {
+  let doc = r##"<main style="display:flex;flex-direction:column;font-size:14px;color:#141414;">
+    <h1 id="top">Structure types</h1>
+    <section>
+      <h2>Prose</h2>
+      <p>A paragraph with <strong>bold</strong>, <em>italic</em> and <code>code</code>.</p>
+      <blockquote>A quotation on its own.</blockquote>
+    </section>
+    <article>
+      <h3>Lists</h3>
+      <ul><li>Unordered one</li><li>Unordered two</li></ul>
+      <ol><li>Ordered one</li><li>Ordered two</li></ol>
+    </article>
+    <figure>
+      <img src="pixel" alt="a grey square" style="width:40px;height:40px;" />
+      <figcaption>A described pixel.</figcaption>
+    </figure>
+    <p><a href="#top">Back to the top</a> and <a href="https://example.com">out to the web</a>.</p>
+  </main>"##;
+  let pdf = run_pdf_fixture("structure-types-a4", |fonts| {
+    let buffer = ImageBuffer::from_rgba_bytes(vec![128; 4 * 4 * 4], 4, 4).expect("image buffer");
+
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse structure doc"))
+      .images(HashMap::from([(
+        "pixel".into(),
+        ImageSource::Bitmap(Arc::new(buffer)),
+      )]))
+      .page(PageOptions::A4)
+      .standard(PdfStandard::A4)
+      .lang(Some(takumi_core::style::Lang::parse("en").expect("lang")))
+      .metadata(PdfMetadata {
+        title: Some("Structure types".into()),
+        creation_date: Some(PdfDate {
+          year: 2026,
+          month: 8,
+          day: 8,
+          hour: 0,
+          minute: 0,
+          second: 0,
+        }),
+        ..Default::default()
+      })
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  for name in [
+    "/Sect",
+    "/Art",
+    "/H1",
+    "/H2",
+    "/H3",
+    "/P",
+    "/BlockQuote",
+    "/L",
+    "/LI",
+    "/LBody",
+    "/Figure",
+    "/Caption",
+    "/Link",
+  ] {
+    assert!(haystack.contains(name), "missing {name} structure element");
+  }
+}
+
 /// An image inside a wrapper is an inline box rather than a node of its own,
 /// so it draws from the inline layout. Only a direct child of the root used to
 /// reach the page.
