@@ -81,7 +81,7 @@ The structure tree comes from the HTML semantics:
 
 Heading levels come from nesting, not the tag name. A document that starts with `h2` gets an `H1`. A jump from `h1` to `h4` becomes `H1` then `H2`. PDF/UA rejects a sequence that skips a level or starts below `H1`. HTML written for visual styling does this all the time.
 
-Tables are missing from that list. `<table>` markup is not supported. A table built out of flex rows carries no `Table`, `TR` or `TH` elements, so a screen reader cannot navigate it by row and column. The file still passes PDF/UA-1. The validator checks the tags that are there, not the ones the content deserves.
+Tables are missing from that list. `<table>` markup is not supported. Flex-row tables omit `Table`, `TR` and `TH` elements. Screen readers cannot navigate them by row or column. The file still passes PDF/UA-1, because the validator only checks the tags that are there.
 
 Set `tagged: false` to skip the tree when file size matters more than accessibility.
 
@@ -106,11 +106,11 @@ const pdf = await render(report, {
 });
 ```
 
-Links and outline entries inside the document still target a page position. veraPDF reports rule 8.8-1 on a document with headings or internal links.
+Links and outline entries still target a page position. veraPDF reports rule 8.8-1 on a document with headings or internal links.
 
 ### What combines with what
 
-Invalid combinations are TypeScript type errors. PDF/UA-1 is PDF 1.7, PDF/A-4 and PDF/UA-2 are PDF 2.0, so the two generations never mix.
+Invalid combinations are TypeScript type errors. PDF/UA-1 uses PDF 1.7. PDF/A-4 and PDF/UA-2 use PDF 2.0. The two generations never mix.
 
 | `pdfa`     | `tagged`                          | `attachments` |
 | ---------- | --------------------------------- | ------------- |
@@ -126,7 +126,7 @@ See [Attachments](/docs/pdf/attachments).
 
 Validators require inputs the renderer cannot supply:
 
-- `lang` is the document language. A-levels and PDF/UA require it, and PDF/UA-2 fails the render without it.
+- `lang` is the document language. A-levels and PDF/UA require it. PDF/UA-2 fails the render without it.
 - `metadata.title` is required by PDF/UA.
 - `metadata.creationDate` is required by the `a` levels. Use UTC `"YYYY-MM-DD"` or `"YYYY-MM-DDTHH:MM:SS"`. A fixed date keeps output byte-identical across runs.
 
