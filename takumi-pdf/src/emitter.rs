@@ -1241,7 +1241,7 @@ impl Emitter<'_> {
       }
     }
     #[cfg(feature = "images")]
-    self.emit_inline_boxes(runs, built, layout, x, y, surface);
+    self.emit_inline_boxes(node, runs, built, layout, x, y, surface);
     Ok(())
   }
 
@@ -1251,8 +1251,10 @@ impl Emitter<'_> {
   /// An inline-block subtree needs its own layout pass before it can paint, so
   /// it is left alone here.
   #[cfg(feature = "images")]
+  #[allow(clippy::too_many_arguments)]
   fn emit_inline_boxes(
     &self,
+    owner: &RenderNode,
     runs: &InlineRunLayout,
     built: &BuiltInlineLayout<'_>,
     layout: Layout,
@@ -1261,6 +1263,10 @@ impl Emitter<'_> {
     surface: &mut Surface,
   ) {
     let offset = layout.content_box_offset();
+    // The caller opened a marked-content region for the text around these
+    // boxes. Marked content does not nest, so each image closes it, takes a
+    // region of its own, and hands it back.
+    let owner_tagged = self.tags.is_some() && has_own_content(owner);
 
     for positioned in &runs.inline_boxes {
       let Some(ProcessedInlineSpan::Box(item)) = built.spans.get(positioned.id as usize) else {
@@ -1274,6 +1280,12 @@ impl Emitter<'_> {
       let Some(NodeKind::Image(image)) = node.node.as_ref().map(|source| &source.kind) else {
         continue;
       };
+      if owner_tagged {
+        surface.end_tagged();
+      }
+      if self.tags.is_some() {
+        self.start_tagged_node(node, surface);
+      }
       self.emit_image(
         image,
         &node.context,
@@ -1282,6 +1294,33 @@ impl Emitter<'_> {
         y + offset.y + positioned.y,
         surface,
       );
+      if self.tags.is_some() {
+        surface.end_tagged();
+      }
+      if owner_tagged {
+        self.start_tagged_node(owner, surface);
+      }
+    }
+  }
+
+  /// Opens a marked-content region for a node the paint list never visited, so
+  /// its content still reaches the structure tree.
+  #[cfg(feature = "images")]
+  fn start_tagged_node(&self, node: &RenderNode, surface: &mut Surface) {
+    if decorative_image(node) {
+      surface.start_tagged(ContentTag::Artifact(Artifact::new(
+        ArtifactType::Other,
+        None,
+      )));
+      return;
+    }
+    let identifier = surface.start_tagged(ContentTag::Other);
+    let mut path = Vec::new();
+
+    if let Some(tags) = self.tags
+      && node_path(self.root, node, &mut path)
+    {
+      tags.borrow_mut().record(&path, identifier);
     }
   }
 
@@ -1686,6 +1725,25 @@ fn has_own_content(node: &RenderNode) -> bool {
     Some(NodeKind::Image(_)) => true,
     _ => false,
   }
+}
+
+/// Fills `path` with the child indices leading from `root` to `target`,
+/// matched by identity. An inline box arrives as a bare node reference, so the
+/// key the tag collector wants has to be recovered from the tree.
+#[cfg(feature = "images")]
+fn node_path(root: &RenderNode, target: &RenderNode, path: &mut Vec<usize>) -> bool {
+  if std::ptr::eq(root, target) {
+    return true;
+  }
+  for (index, child) in root.children.iter().flatten().enumerate() {
+    path.push(index);
+
+    if node_path(child, target, path) {
+      return true;
+    }
+    path.pop();
+  }
+  false
 }
 
 /// Whether the node is an image explicitly marked decorative (`alt=""`), so
