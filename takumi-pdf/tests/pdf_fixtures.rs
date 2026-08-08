@@ -1568,10 +1568,7 @@ fn tagged_standards() {
 #[test]
 fn inline_images() {
   let doc = r#"<main style="display:flex;flex-direction:column;font-size:14px;color:#141414;">
-    <figure>
-      <img src="pixel" alt="wrapped in a figure" style="width:40px;height:40px;" />
-      <figcaption>Inside a figure.</figcaption>
-    </figure>
+    <div><img src="pixel" alt="wrapped in a div" style="width:40px;height:40px;" /></div>
     <div style="display:block">Text before <img src="pixel" alt="between words" style="width:20px;height:20px;" /> and after.</div>
   </main>"#;
   let pdf = run_pdf_fixture("inline-images", |fonts| {
