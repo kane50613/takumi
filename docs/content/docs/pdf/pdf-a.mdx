@@ -87,7 +87,7 @@ Set `tagged: false` to skip the tree when file size matters more than accessibil
 
 ### PDF/UA-2
 
-`tagged: "ua2"` validates against PDF/UA-2 instead. That standard is written against PDF 2.0, so it pairs with `pdfa: "4"` and `pdfa: "4f"`, or with plain PDF. Every structure element carries the PDF 2.0 namespace.
+`tagged: "ua2"` validates against PDF/UA-2 instead. The standard is PDF 2.0 only, so it pairs with `pdfa: "4"`, `pdfa: "4f"`, or plain PDF.
 
 ```tsx twoslash
 import type { ReactNode } from "react";
@@ -106,9 +106,23 @@ const pdf = await render(report, {
 });
 ```
 
-One piece is missing. PDF/UA-2 asks every link and outline entry that points inside the document to target a structure element rather than a page position. Takumi still writes page positions, so veraPDF reports rule 8.8-1 on any document with headings or internal links. The rest of the standard validates.
+Links and outline entries inside the document still target a page position. veraPDF reports rule 8.8-1 on a document with headings or internal links.
 
-Invalid combinations are TypeScript type errors. `pdfa: "2a"` and `pdfa: "3a"` forbid `tagged: false`. The `2` and `3` levels forbid `tagged: "ua2"` and `pdfa: "4"` forbids `tagged: "ua1"`, because PDF/UA-1 is PDF 1.7-only while PDF/A-4 and PDF/UA-2 are PDF 2.0. The `2` levels and `"4"` forbid `attachments`. Use `"4f"` for attachments in PDF 2.0. See [Attachments](/docs/pdf/attachments).
+### What combines with what
+
+Invalid combinations are TypeScript type errors. PDF/UA-1 is PDF 1.7, PDF/A-4 and PDF/UA-2 are PDF 2.0, so the two generations never mix.
+
+| `pdfa`     | `tagged`                          | `attachments` |
+| ---------- | --------------------------------- | ------------- |
+| unset      | `false`, `true`, `"ua1"`, `"ua2"` | yes           |
+| `2b`, `2u` | `false`, `true`, `"ua1"`          | no            |
+| `2a`       | `true`, `"ua1"`                   | no            |
+| `3b`, `3u` | `false`, `true`, `"ua1"`          | yes           |
+| `3a`       | `true`, `"ua1"`                   | yes           |
+| `4`        | `false`, `true`, `"ua2"`          | no            |
+| `4f`       | `false`, `true`, `"ua2"`          | yes           |
+
+See [Attachments](/docs/pdf/attachments).
 
 Validators require inputs the renderer cannot supply:
 
