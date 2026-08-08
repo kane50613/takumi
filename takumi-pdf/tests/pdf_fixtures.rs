@@ -1568,27 +1568,38 @@ fn tagged_standards() {
 #[test]
 fn inline_images() {
   let doc = r#"<main style="display:flex;flex-direction:column;font-size:14px;color:#141414;">
-    <div><img src="pixel" alt="wrapped in a div" style="width:40px;height:40px;" /></div>
-    <div style="display:block">Text before <img src="pixel" alt="between words" style="width:20px;height:20px;" /> and after.</div>
+    <div><img src="wrapped" alt="wrapped in a div" style="width:40px;height:40px;" /></div>
+    <div style="display:block">Text before <img src="inline" alt="between words" style="width:20px;height:20px;opacity:0.5;" /> and after.</div>
   </main>"#;
   let pdf = run_pdf_fixture("inline-images", |fonts| {
-    let buffer = ImageBuffer::from_rgba_bytes(vec![128; 4 * 4 * 4], 4, 4).expect("image buffer");
+    // Distinct pixels: krilla dedups images by content, so one bitmap for both
+    // would let a single painted box satisfy the assertion below.
+    let wrapped = ImageBuffer::from_rgba_bytes(vec![64; 4 * 4 * 4], 4, 4).expect("image buffer");
+    let inline = ImageBuffer::from_rgba_bytes(vec![192; 4 * 4 * 4], 4, 4).expect("image buffer");
 
     PdfOptions::builder()
       .node(from_html(doc, FromHtmlOptions::default()).expect("parse image doc"))
-      .images(HashMap::from([(
-        "pixel".into(),
-        ImageSource::Bitmap(Arc::new(buffer)),
-      )]))
+      .images(HashMap::from([
+        ("wrapped".into(), ImageSource::Bitmap(Arc::new(wrapped))),
+        ("inline".into(), ImageSource::Bitmap(Arc::new(inline))),
+      ]))
       .page(PageOptions::A4)
       .fonts(fonts)
       .build()
   });
-  let haystack = String::from_utf8_lossy(&pdf);
+  let haystack = inflated_text(&pdf);
 
+  for name in ["/x0 Do", "/x1 Do"] {
+    assert!(
+      haystack.contains(name),
+      "an inline image never reached the page: {name} missing"
+    );
+  }
+  // The second image is half transparent, and an inline box gets its paint
+  // state here rather than from the paint list.
   assert!(
-    haystack.contains("/Subtype /Image") || haystack.contains("/Subtype/Image"),
-    "no image reached the page"
+    haystack.contains("/ca 0.5"),
+    "an inline image ignored its opacity"
   );
 }
 

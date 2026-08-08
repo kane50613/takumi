@@ -1253,7 +1253,7 @@ impl Emitter<'_> {
   #[cfg(feature = "images")]
   #[allow(clippy::too_many_arguments)]
   fn emit_inline_boxes(
-    &self,
+    &mut self,
     owner: &RenderNode,
     runs: &InlineRunLayout,
     built: &BuiltInlineLayout<'_>,
@@ -1286,6 +1286,20 @@ impl Emitter<'_> {
       if self.tags.is_some() {
         self.start_tagged_node(node, surface);
       }
+      // The box never reaches `emit_box`, so the state that would paint it
+      // there is applied here: its own opacity, and its `filter` composed onto
+      // the one the enclosing stacking contexts left.
+      let opacity = node.context.style.opacity.0;
+      let faded = opacity < 1.0;
+
+      if faded {
+        surface
+          .push_opacity(NormalizedF32::new(opacity.clamp(0.0, 1.0)).unwrap_or(NormalizedF32::ONE));
+      }
+      let outer_filter = self.color_filter.clone();
+      self.color_filter =
+        ColorFilter::compose(outer_filter.as_deref(), &node.context.style.filter).map(Rc::new);
+
       self.emit_image(
         image,
         &node.context,
@@ -1294,6 +1308,10 @@ impl Emitter<'_> {
         y + offset.y + positioned.y,
         surface,
       );
+      self.color_filter = outer_filter;
+      if faded {
+        surface.pop();
+      }
       if self.tags.is_some() {
         surface.end_tagged();
       }
