@@ -14,6 +14,7 @@ use tiny_skia_path::Transform;
 use crate::krilla::chunk_container::ChunkContainer;
 use crate::krilla::error::{KrillaError, KrillaResult};
 use crate::krilla::geom::Point;
+use crate::krilla::interchange::tagging::TagId;
 use crate::krilla::serialize::{PageInfo, SerializeContext};
 
 /// The type of destination.
@@ -80,6 +81,10 @@ impl NamedDestination {
 struct XyzDestRepr {
   page_index: usize,
   point: Point,
+  /// The structure element the destination targets, if the caller tagged one.
+  /// PDF/UA-2 requires an in-document destination to name a structure element
+  /// rather than a page position.
+  structure: Option<TagId>,
 }
 
 impl Hash for XyzDestRepr {
@@ -87,6 +92,7 @@ impl Hash for XyzDestRepr {
     self.page_index.hash(state);
     self.point.x.to_bits().hash(state);
     self.point.y.to_bits().hash(state);
+    self.structure.hash(state);
   }
 }
 
@@ -95,6 +101,7 @@ impl PartialEq for XyzDestRepr {
     self.page_index == other.page_index
       && self.point.x == other.point.x
       && self.point.y == other.point.y
+      && self.structure == other.structure
   }
 }
 
@@ -115,7 +122,21 @@ impl XyzDestination {
   /// target page, and point indicates the specific location on that page that should be
   /// targeted. If the `page_index` is out of range, export will panic.
   pub fn new(page_index: usize, point: Point) -> Self {
-    Self(Arc::new(XyzDestRepr { page_index, point }))
+    Self(Arc::new(XyzDestRepr {
+      page_index,
+      point,
+      structure: None,
+    }))
+  }
+
+  /// Targets the structure element carrying `id`, making this a structure
+  /// destination. The tag tree must contain the id or export fails.
+  pub fn with_structure(self, id: TagId) -> Self {
+    Self(Arc::new(XyzDestRepr {
+      page_index: self.0.page_index,
+      point: self.0.point,
+      structure: Some(id),
+    }))
   }
 
   pub(crate) fn serialize(
@@ -150,9 +171,13 @@ impl XyzDestination {
     let invert_transform = Transform::from_row(1.0, 0.0, 0.0, -1.0, 0.0, page_size);
     invert_transform.map_point(&mut mapped_point);
 
-    destination
-      .page(page_ref)
-      .xyz(mapped_point.x, mapped_point.y, None);
+    let mut destination = destination;
+
+    match self.0.structure.as_ref().and_then(|id| sc.tag_ref(id)) {
+      Some(struct_ref) => destination.item(struct_ref),
+      None => destination.item(page_ref),
+    };
+    destination.xyz(mapped_point.x, mapped_point.y, None);
   }
 }
 

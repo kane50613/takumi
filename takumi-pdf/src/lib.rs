@@ -92,13 +92,15 @@ use takumi_core::{
 use crate::bands::{emit_band, measure_band, prepare_band};
 use crate::emitter::FontMap;
 use crate::inline::{build_inline_map, collect_text_boxes};
-use crate::interactive::{add_link_annotations, build_outline, collect_interactive};
+use crate::interactive::{
+  add_link_annotations, build_outline, collect_interactive, destination_targets,
+};
 use crate::options::{
   BAND_EDGE_PADDING, PT_PER_PX, build_metadata, krilla_datetime, validate_xmp_schemas,
 };
 use crate::pagination::page_starts;
 use crate::paint::rect_path;
-use crate::tags::{TagCollector, build_tag_tree};
+use crate::tags::{TagCollector, build_tag_tree, tag_id};
 use crate::tree::{TreeInputs, prepare_tree};
 
 pub use crate::options::{
@@ -262,16 +264,21 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       let starts = page_starts(&mut atoms, &mut forced, content.height, window_height);
       let pages = starts.len();
       let interactive = collect_interactive(&content);
-      let destination = |top: f32| {
+      let structural = options.tagged.names_structure_destinations();
+      let destination = |top: f32, path: &[usize]| {
         let index = starts
           .partition_point(|start| *start <= top)
           .saturating_sub(1);
         let y = page.margin.top + (top - starts[index]).max(0.0);
-
-        XyzDestination::new(
+        let dest = XyzDestination::new(
           index,
           Point::from_xy(page.margin.left * PT_PER_PX, y * PT_PER_PX),
-        )
+        );
+
+        match structural {
+          true => dest.with_structure(tag_id(path)),
+          false => dest,
+        }
       };
 
       for (index, &y0) in starts.iter().enumerate() {
@@ -353,7 +360,12 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           (y0, y0 + paint_height),
           (page.margin.left, content_top),
           tag_collector.as_ref(),
-          |id| interactive.anchors.get(id).copied().map(destination),
+          |id| {
+            interactive
+              .anchors
+              .get(id)
+              .map(|anchor| destination(anchor.top, &anchor.path))
+          },
         );
         pdf_page.finish();
       }
@@ -361,7 +373,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       if (options.outline || options.tagged.requires_outline()) && !interactive.headings.is_empty()
       {
         document.set_outline(build_outline(&interactive.headings, |heading| {
-          destination(heading.top)
+          destination(heading.top, &heading.path)
         }));
       }
       if let Some(collector) = &tag_collector {
@@ -369,6 +381,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           &content.root,
           inputs.lang.as_ref().map(Lang::as_str),
           &mut collector.borrow_mut(),
+          &destination_targets(&interactive),
         ));
       }
     }
@@ -389,8 +402,15 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       surface.pop();
       surface.finish();
       let interactive = collect_interactive(&content);
-      let destination =
-        |top: f32| XyzDestination::new(0, Point::from_xy(0.0, top.max(0.0) * PT_PER_PX));
+      let structural = options.tagged.names_structure_destinations();
+      let destination = |top: f32, path: &[usize]| {
+        let dest = XyzDestination::new(0, Point::from_xy(0.0, top.max(0.0) * PT_PER_PX));
+
+        match structural {
+          true => dest.with_structure(tag_id(path)),
+          false => dest,
+        }
+      };
 
       add_link_annotations(
         &mut page,
@@ -398,13 +418,18 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         (0.0, content.height),
         (0.0, 0.0),
         tag_collector.as_ref(),
-        |id| interactive.anchors.get(id).copied().map(destination),
+        |id| {
+          interactive
+            .anchors
+            .get(id)
+            .map(|anchor| destination(anchor.top, &anchor.path))
+        },
       );
       page.finish();
       if (options.outline || options.tagged.requires_outline()) && !interactive.headings.is_empty()
       {
         document.set_outline(build_outline(&interactive.headings, |heading| {
-          destination(heading.top)
+          destination(heading.top, &heading.path)
         }));
       }
       if let Some(collector) = &tag_collector {
@@ -412,6 +437,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           &content.root,
           inputs.lang.as_ref().map(Lang::as_str),
           &mut collector.borrow_mut(),
+          &destination_targets(&interactive),
         ));
       }
     }

@@ -2,7 +2,7 @@
 //! annotations and the outline.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::krilla::{
   action::{Action, LinkAction},
@@ -45,8 +45,16 @@ pub(crate) struct LinkTarget {
 pub(crate) struct Interactive {
   pub(crate) links: Vec<LinkTarget>,
   pub(crate) headings: Vec<HeadingTarget>,
-  /// Element ids to their top in content coordinates, for `href="#id"`.
-  pub(crate) anchors: HashMap<Box<str>, f32>,
+  /// Element ids to the box they name, for `href="#id"`.
+  pub(crate) anchors: HashMap<Box<str>, AnchorTarget>,
+}
+
+/// An element carrying an `id`, in content coordinates.
+#[derive(Clone)]
+pub(crate) struct AnchorTarget {
+  pub(crate) top: f32,
+  /// Path of the element, so a destination can name its structure element.
+  pub(crate) path: Vec<usize>,
 }
 
 /// A heading in content coordinates, for the outline.
@@ -56,7 +64,7 @@ pub(crate) struct HeadingTarget {
   pub(crate) top: f32,
   /// Path of the heading element. A heading whose text sits in child elements
   /// paints once per child, and the outline wants one entry.
-  path: Vec<usize>,
+  pub(crate) path: Vec<usize>,
 }
 
 /// The axis-aligned bounding box of a node-local rect under the node's
@@ -87,6 +95,23 @@ fn heading_level(tag: &str) -> Option<u8> {
   } else {
     None
   }
+}
+
+/// The element paths a destination can point at: every anchor and every
+/// heading the outline lists. Their structure elements need an id so a
+/// structure destination can name them.
+pub(crate) fn destination_targets(interactive: &Interactive) -> HashSet<Vec<usize>> {
+  interactive
+    .anchors
+    .values()
+    .map(|anchor| anchor.path.clone())
+    .chain(
+      interactive
+        .headings
+        .iter()
+        .map(|heading| heading.path.clone()),
+    )
+    .collect()
 }
 
 /// Collects hyperlinks and headings from the prepared scene, in paint order.
@@ -139,7 +164,10 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
   if let Some(id) = source.id() {
     // The first box wins: a duplicated id is invalid HTML, and the earlier one
     // is what a browser would scroll to.
-    collected.anchors.entry(id.into()).or_insert(rect.top());
+    collected.anchors.entry(id.into()).or_insert(AnchorTarget {
+      top: rect.top(),
+      path: paint.path.clone(),
+    });
   }
 
   match source.href().filter(|uri| allowed_link_uri(uri)) {

@@ -115,8 +115,12 @@ jobs:
               ./verapdf/verapdf --flavour 0 --format text "$pdf" || fail=1
               checked=$((checked + 1))
             fi
-            if grep -qa "pdfuaid:part" "$pdf"; then
+            if grep -qa "<pdfuaid:part>1</pdfuaid:part>" "$pdf"; then
               ./verapdf/verapdf --flavour ua1 --format text "$pdf" || fail=1
+              checked=$((checked + 1))
+            fi
+            if grep -qa "<pdfuaid:part>2</pdfuaid:part>" "$pdf"; then
+              ./verapdf/verapdf --flavour ua2 --format text "$pdf" || fail=1
               checked=$((checked + 1))
             fi
           done

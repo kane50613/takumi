@@ -126,6 +126,13 @@ impl Tagging {
   pub(crate) fn requires_outline(self) -> bool {
     self.accessibility().is_some()
   }
+
+  /// PDF/UA-2 requires a destination inside the document to name the structure
+  /// element it lands on. PDF/UA-1 predates them, and an untagged reader gains
+  /// nothing from the indirection.
+  pub(crate) fn names_structure_destinations(self) -> bool {
+    self == Self::Ua2
+  }
 }
 
 /// Inputs for [`crate::render`], built with [`PdfOptions::builder`].

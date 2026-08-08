@@ -7,14 +7,18 @@
 //! tagged ancestor, and bare text under an untagged ancestor wraps in `P` so
 //! no content stays outside the tree.
 
-use std::{collections::HashMap, mem, num::NonZeroU16};
+use std::{
+  collections::{HashMap, HashSet},
+  mem,
+  num::NonZeroU16,
+};
 
 use takumi_core::{
   layout::tree::RenderNode,
   style::{Display, FlexDirection},
 };
 
-use crate::krilla::tagging::{Identifier, ListNumbering, Tag, TagGroup, TagKind, TagTree};
+use crate::krilla::tagging::{Identifier, ListNumbering, Tag, TagGroup, TagId, TagKind, TagTree};
 
 /// Marked-content identifiers recorded during emission, keyed by the source
 /// node's path from the root.
@@ -54,10 +58,23 @@ impl TagCollector {
 
 /// Walks the source tree in logical order and builds the structure tree from
 /// the recorded identifiers.
+/// The id a destination uses to name the structure element built from `path`.
+pub(crate) fn tag_id(path: &[usize]) -> TagId {
+  let mut bytes = Vec::with_capacity(path.len() * 3 + 1);
+
+  bytes.push(b'n');
+  for index in path {
+    bytes.push(b'.');
+    bytes.extend_from_slice(index.to_string().as_bytes());
+  }
+  TagId::from(bytes)
+}
+
 pub(crate) fn build_tag_tree(
   root: &RenderNode,
   lang: Option<&str>,
   collector: &mut TagCollector,
+  targets: &HashSet<Vec<usize>>,
 ) -> TagTree {
   let mut tree = TagTree::new().with_lang(lang.map(str::to_string));
   let mut top = Vec::new();
@@ -65,6 +82,7 @@ pub(crate) fn build_tag_tree(
   let mut walk = Walk {
     collector,
     headings: Vec::new(),
+    targets,
   };
 
   build_node(
@@ -103,6 +121,8 @@ fn flush_paragraph(pending: &mut Vec<Identifier>, parent: &mut Vec<TagGroup>) {
 struct Walk<'c> {
   collector: &'c mut TagCollector,
   headings: Vec<u8>,
+  /// Paths a destination points at, whose structure elements need an id.
+  targets: &'c HashSet<Vec<usize>>,
 }
 
 impl Walk<'_> {
@@ -147,6 +167,11 @@ fn build_node(
       let is_list_item = matches!(kind, TagKind::LI(_));
       let is_list = matches!(kind, TagKind::L(_));
       let is_figure = matches!(kind, TagKind::Figure(_));
+      let mut kind = kind;
+
+      if walk.targets.contains(path.as_slice()) {
+        kind.set_id(Some(tag_id(path)));
+      }
       let mut group = TagGroup::new(kind);
       let mut children = Vec::new();
       let mut child_pending = Vec::new();
