@@ -6,4 +6,4 @@ packages:
 
 ### Tag `<figure>` as a Figure
 
-A `<figure>` becomes a `Figure` carrying its image's `alt`. The `<figcaption>` inside becomes a `Caption` child of it. The caption used to float up to the document root, where no standard allows it.
+A `<figure>` becomes a `Figure` carrying its image's `alt`. The `<figcaption>` inside becomes a `Caption` child of it. Captions used to reach the document root, which no standard allows.
