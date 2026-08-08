@@ -1603,6 +1603,39 @@ fn inline_images() {
   );
 }
 
+/// An inline-level container is laid out by the inline layout, not the paint
+/// list, so it needs a layout pass and a scene of its own to reach the page.
+#[test]
+fn inline_containers() {
+  let doc = r#"<main style="display:flex;flex-direction:column;font-size:20px;color:#141414;">
+    <div style="display:block">before <span style="display:inline-block;background-color:#ff0000;">block</span> after</div>
+    <div style="display:block">before <span style="display:inline-flex;background-color:#00ff00;"><span>fl</span><span>ex</span></span> after</div>
+    <div style="display:block">before <span style="display:inline-block;background-color:#0000ff;"><span style="display:inline-block;background-color:#ffff00;">nested</span></span> after</div>
+    <div style="display:block"><span style="float:left;width:30px;height:30px;background-color:#ff00ff;"></span>floated</div>
+  </main>"#;
+  let pdf = run_pdf_fixture("inline-containers", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse inline doc"))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  for (name, fill) in [
+    ("inline-block", "1 0 0 rg"),
+    ("inline-flex", "0 1 0 rg"),
+    ("nested inline-block", "1 1 0 rg"),
+    ("float", "1 0 1 rg"),
+  ] {
+    assert!(haystack.contains(fill), "{name} never reached the page");
+  }
+  assert!(
+    haystack.matches("Tj").count() + haystack.matches("TJ").count() > 8,
+    "text inside the inline containers is missing"
+  );
+}
+
 /// `alt=""` marks an image decorative: its content is an artifact and no
 /// `Figure` element enters the structure tree. A non-empty `alt` still
 /// produces a `Figure` that satisfies PDF/UA-1.
