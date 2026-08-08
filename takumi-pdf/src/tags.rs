@@ -330,8 +330,10 @@ fn role(node: &RenderNode, walk: &mut Walk, nesting: Nesting) -> Option<TagKind>
     "p" => Some(Tag::P.into()),
     // A `Figure` encloses everything the illustration is made of, so the
     // caption has a parent to sit under and the image inside adds no element
-    // of its own.
-    "figure" => Some(Tag::Figure(figure_alt(node)).into()),
+    // of its own. Without an alternate description there is nothing to
+    // enclose that a `Figure` would describe, and PDF/UA rejects one that
+    // carries no text.
+    "figure" => Some(Tag::Figure(Some(figure_alt(node)?)).into()),
     "img" if nesting.in_figure => None,
     // `alt=""` marks a decorative image: emitted as an artifact, no element.
     "img" if source.alt() != Some("") => Some(Tag::Figure(source.alt().map(str::to_string)).into()),
