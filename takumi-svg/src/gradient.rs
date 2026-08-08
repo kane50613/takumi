@@ -16,17 +16,15 @@ use std::{f32::consts::TAU, io};
 
 use takumi_core::{
   context::RenderContext,
-  geometry::Size,
-  layout::node::resolve_image,
+  geometry::{Point, Size},
+  layout::background::{LayerTileStyle, ResolveBackgroundLayerInput, resolve_background_layer},
   paint::{
     ConicGradientTile, LinearGradientTile, RadialGradientTile, build_color_lut_with_interpolation,
-    collect_repeat_tile_positions, collect_spaced_tile_positions, collect_stretched_tile_positions,
     resolve_stops_along_axis,
   },
   style::{
-    BackgroundImage, BackgroundRepeat, BackgroundRepeatStyle, BackgroundSize,
-    ColorInterpolationMethod, ConicGradient, IntrinsicSizing, Length, LinearGradient,
-    PositionComponent, PositionValue, RadialGradient, ResolvedGradientStop, SizingContext,
+    BackgroundImage, BackgroundRepeat, BackgroundSize, BlendMode, ColorInterpolationMethod,
+    ConicGradient, LinearGradient, PositionValue, RadialGradient, ResolvedGradientStop,
   },
 };
 
@@ -408,115 +406,37 @@ fn resolve_placement(
   area: Frame,
   paint: Frame,
 ) -> Option<LayerPlacement> {
-  let area_size = Size {
-    width: area.w.round().max(0.0) as u32,
-    height: area.h.round().max(0.0) as u32,
-  };
-  let intrinsic = intrinsic_sizing(image, context);
-  let resolved = size.resolve(area_size, &context.sizing, intrinsic);
-  let tile_w = resolved.width as f32;
-  let tile_h = resolved.height as f32;
-  if tile_w <= 0.0 || tile_h <= 0.0 {
-    return None;
-  }
-
-  // Positions are relative to the painting box; the positioning area's offset
-  // within it shifts placement.
-  let axis_x = AxisFrame {
-    area: area_size.width,
-    paint: paint.w.round().max(0.0) as u32,
-    offset: (area.x - paint.x).round() as i32,
-  };
-  let axis_y = AxisFrame {
-    area: area_size.height,
-    paint: paint.h.round().max(0.0) as u32,
-    offset: (area.y - paint.y).round() as i32,
-  };
-  let (xs, tile_w) = resolve_axis(repeat.0, position.0.x, tile_w, axis_x, &context.sizing);
-  let (ys, tile_h) = resolve_axis(repeat.1, position.0.y, tile_h, axis_y, &context.sizing);
+  let geometry = resolve_background_layer(
+    image,
+    LayerTileStyle {
+      pos: position,
+      size,
+      repeat,
+      blend_mode: BlendMode::Normal,
+    },
+    ResolveBackgroundLayerInput {
+      area: Size {
+        width: area.w.round().max(0.0) as u32,
+        height: area.h.round().max(0.0) as u32,
+      },
+      paint: Size {
+        width: paint.w.round().max(0.0) as u32,
+        height: paint.h.round().max(0.0) as u32,
+      },
+      origin_offset: Point {
+        x: (area.x - paint.x).round() as i32,
+        y: (area.y - paint.y).round() as i32,
+      },
+      context,
+    },
+  )?;
 
   Some(LayerPlacement {
-    tile_w,
-    tile_h,
-    xs,
-    ys,
+    tile_w: geometry.tile_width as f32,
+    tile_h: geometry.tile_height as f32,
+    xs: geometry.xs.iter().map(|x| *x as f32).collect(),
+    ys: geometry.ys.iter().map(|y| *y as f32).collect(),
   })
-}
-
-/// One axis of the positioning area within the painting box. Mirrors the raster
-/// backend's `AxisArea`.
-#[derive(Clone, Copy)]
-struct AxisFrame {
-  area: u32,
-  paint: u32,
-  offset: i32,
-}
-
-/// Resolves one axis' painting-box-relative tile positions and (for `round`)
-/// adjusted tile size, mirroring the raster backend's `resolve_axis_tiles`.
-fn resolve_axis(
-  repeat: BackgroundRepeatStyle,
-  component: PositionComponent,
-  tile_size: f32,
-  axis: AxisFrame,
-  sizing: &SizingContext,
-) -> (Vec<f32>, f32) {
-  let tile = tile_size.round().max(0.0) as u32;
-  let anchor = || axis.offset + resolve_position(component, tile, axis.area, sizing);
-
-  match repeat {
-    BackgroundRepeatStyle::NoRepeat => (vec![anchor() as f32], tile_size),
-    BackgroundRepeatStyle::Repeat => {
-      let positions = collect_repeat_tile_positions(axis.paint, tile, anchor())
-        .into_iter()
-        .map(|x| x as f32)
-        .collect();
-      (positions, tile_size)
-    }
-    BackgroundRepeatStyle::Space => (
-      collect_spaced_tile_positions(axis.area, tile)
-        .into_iter()
-        .map(|x| (x + axis.offset) as f32)
-        .collect(),
-      tile_size,
-    ),
-    BackgroundRepeatStyle::Round => {
-      let (positions, new_tile) = collect_stretched_tile_positions(axis.area, tile);
-      (
-        positions
-          .into_iter()
-          .map(|x| (x + axis.offset) as f32)
-          .collect(),
-        new_tile as f32,
-      )
-    }
-  }
-}
-
-/// `position% → (area − tile) × %`; lengths/keywords resolve against the
-/// available space. Mirrors the raster backend's position resolution.
-fn resolve_position(
-  component: PositionComponent,
-  tile_size: u32,
-  area_size: u32,
-  sizing: &SizingContext,
-) -> i32 {
-  let available = (area_size as i32).saturating_sub_unsigned(tile_size);
-  let length = Length::from(component);
-  match length {
-    Length::Auto => available / 2,
-    _ => length.to_px(sizing, available as f32) as i32,
-  }
-}
-
-fn intrinsic_sizing(image: &BackgroundImage, context: &RenderContext) -> IntrinsicSizing {
-  let BackgroundImage::Url(url) = image else {
-    return IntrinsicSizing::default();
-  };
-  match resolve_image(url, context) {
-    Ok(source) => source.intrinsic_sizing().scale(&context.sizing),
-    Err(_) => IntrinsicSizing::default(),
-  }
 }
 
 fn svg_stops(stops: &[ResolvedGradientStop], base: f32, span: f32) -> Vec<GradientStop> {
