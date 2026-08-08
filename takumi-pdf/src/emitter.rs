@@ -399,16 +399,13 @@ impl Emitter<'_> {
       FillShape::Rect(size) => {
         KrillaRect::from_xywh(x, y, size.width, size.height).and_then(rect_path)
       }
-      FillShape::Path { commands, .. } => krilla_path(commands, x, y),
+      _ => krilla_path(&shape.to_commands(), x, y),
     };
     let Some(clip) = clip else {
       return;
     };
-    let rule = match &shape {
-      FillShape::Path {
-        rule: CoreFillRule::EvenOdd,
-        ..
-      } => FillRule::EvenOdd,
+    let rule = match shape.rule() {
+      CoreFillRule::EvenOdd => FillRule::EvenOdd,
       _ => FillRule::NonZero,
     };
     let (origin_offset, area) = background_origin_area(style.background_origin, layout);
@@ -1788,7 +1785,7 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
       FillShape::Rect(size) => {
         KrillaRect::from_xywh(origin.x, origin.y, size.width, size.height).and_then(rect_path)
       }
-      FillShape::Path { commands, .. } => krilla_path(commands, origin.x, origin.y),
+      _ => krilla_path(&shape.to_commands(), origin.x, origin.y),
     };
     let Some(path) = path else {
       return;
@@ -1807,11 +1804,8 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
         )));
     }
     self.surface.set_fill(Some(Fill {
-      rule: match shape {
-        FillShape::Path {
-          rule: CoreFillRule::EvenOdd,
-          ..
-        } => FillRule::EvenOdd,
+      rule: match shape.rule() {
+        CoreFillRule::EvenOdd => FillRule::EvenOdd,
         _ => FillRule::NonZero,
       },
       ..fill_from_rgba(color, 1.0)

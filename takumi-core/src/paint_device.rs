@@ -18,6 +18,16 @@ use crate::style::{BackgroundClip, Color, ComputedStyle, FillRule};
 pub enum FillShape {
   /// An axis-aligned rectangle at the box origin.
   Rect(Size<f32>),
+  /// A rectangle with the corners `border` gives it. A rasterizer composites
+  /// one directly; a vector backend turns it into a path.
+  RoundedRect {
+    /// The corner geometry.
+    border: BorderProperties,
+    /// The rectangle's size.
+    size: Size<f32>,
+    /// Where the rectangle sits inside the box.
+    offset: Point<f32>,
+  },
   /// Anything else.
   Path {
     /// The path.
@@ -25,6 +35,34 @@ pub enum FillShape {
     /// How to decide what lies inside the path.
     rule: FillRule,
   },
+}
+
+impl FillShape {
+  /// The shape as path commands, for a backend that only draws paths.
+  pub fn to_commands(&self) -> Vec<PathCommand> {
+    let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
+
+    match self {
+      Self::Rect(size) => {
+        BorderProperties::default().append_mask_commands(&mut commands, *size, Point::ZERO);
+      }
+      Self::RoundedRect {
+        border,
+        size,
+        offset,
+      } => border.append_mask_commands(&mut commands, *size, *offset),
+      Self::Path { commands: path, .. } => commands.extend_from_slice(path),
+    }
+    commands
+  }
+
+  /// How to decide what lies inside the shape.
+  pub fn rule(&self) -> FillRule {
+    match self {
+      Self::Path { rule, .. } => *rule,
+      _ => FillRule::NonZero,
+    }
+  }
 }
 
 /// What a backend has to be able to do for the shared painting code to drive
@@ -50,33 +88,27 @@ pub fn background_clip_shape(
 
   match clip {
     BackgroundClip::BorderBox if border.is_zero() => Some(FillShape::Rect(layout.size)),
-    BackgroundClip::BorderBox => {
-      border.append_mask_commands(&mut commands, layout.size, Point::ZERO);
-      Some(FillShape::Path {
-        commands,
-        rule: FillRule::NonZero,
-      })
-    }
+    BackgroundClip::BorderBox => Some(FillShape::RoundedRect {
+      border: *border,
+      size: layout.size,
+      offset: Point::ZERO,
+    }),
     BackgroundClip::PaddingBox => {
       let clip = ClipBox::padding_box(*border, layout);
 
-      clip
-        .border
-        .append_mask_commands(&mut commands, clip.size, clip.offset);
-      Some(FillShape::Path {
-        commands,
-        rule: FillRule::NonZero,
+      Some(FillShape::RoundedRect {
+        border: clip.border,
+        size: clip.size,
+        offset: clip.offset,
       })
     }
     BackgroundClip::ContentBox => {
       let clip = ClipBox::content_box(*border, layout);
 
-      clip
-        .border
-        .append_mask_commands(&mut commands, clip.size, clip.offset);
-      Some(FillShape::Path {
-        commands,
-        rule: FillRule::NonZero,
+      Some(FillShape::RoundedRect {
+        border: clip.border,
+        size: clip.size,
+        offset: clip.offset,
       })
     }
     BackgroundClip::BorderArea => {

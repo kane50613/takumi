@@ -5,14 +5,17 @@
 //! tiny-skia, and the SVG backend emits the same geometry as vector paths.
 
 use takumi_core::{
-  geometry::{AvailableSpace, ComputedLayout as Layout, Point, Size},
+  geometry::{AvailableSpace, ComputedLayout as Layout, Point, Point as CorePoint, Size},
   layout::decoration::{ClipBox, outline_geometry},
+  paint_device::{FillShape, PaintDevice, paint_background_color},
+  style::{Color, ImageScalingAlgorithm},
 };
 
 use super::{
-  BackgroundTile, BorderProperties, Canvas, Fill, PaintSource, RenderContext, SizedFontStyle,
-  SizedShadow, TileLayer, collect_background_layers, draw_image, draw_inset_shadow_to_canvas,
-  draw_outset_shadow, inline_drawing::draw_inline_layout, paint_border, rasterize_layers,
+  BackgroundTile, BorderProperties, Canvas, ColorTile, Fill, PaintSource, RenderContext,
+  SizedFontStyle, SizedShadow, TileLayer, background_image_layers, collect_background_layers,
+  draw_image, draw_inset_shadow_to_canvas, draw_outset_shadow, inline_drawing::draw_inline_layout,
+  paint_border, rasterize_layers,
 };
 use crate::{
   Result,
@@ -100,16 +103,66 @@ pub(crate) fn draw_inset_box_shadow(
   Ok(())
 }
 
+/// The canvas as a [`PaintDevice`]. A rounded rectangle composites through the
+/// same border machinery the tile path uses, so nothing rasterizes a path that
+/// did not before.
+pub(crate) struct CanvasDevice<'c> {
+  pub(crate) canvas: &'c mut Canvas,
+  pub(crate) transform: Affine,
+  pub(crate) algorithm: ImageScalingAlgorithm,
+}
+
+impl PaintDevice for CanvasDevice<'_> {
+  fn fill_shape(&mut self, shape: &FillShape, color: Color, origin: Point<f32>) {
+    let (border, size, offset) = match shape {
+      FillShape::Rect(size) => (BorderProperties::default(), *size, CorePoint::ZERO),
+      FillShape::RoundedRect {
+        border,
+        size,
+        offset,
+      } => (*border, *size, *offset),
+      // A path that is not a rectangle never reaches a background colour.
+      FillShape::Path { .. } => return,
+    };
+    if size.width <= 0.0 || size.height <= 0.0 {
+      return;
+    }
+    let tile = ColorTile::new(color, size.width as u32, size.height as u32);
+
+    self.canvas.overlay_image(
+      &BackgroundTile::Color(tile),
+      border,
+      self.transform * Affine::translation(origin.x + offset.x, origin.y + offset.y),
+      self.algorithm,
+      BlendMode::Normal,
+    );
+  }
+}
+
 pub(crate) fn draw_background(
   context: &RenderContext,
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
   let border_radius = BorderProperties::from_context(context, layout.size, layout.border);
+  let mut device = CanvasDevice {
+    canvas,
+    transform: context.transform,
+    algorithm: context.style.image_rendering,
+  };
+
+  paint_background_color(
+    &context.style,
+    context.current_color,
+    &border_radius,
+    layout,
+    Point { x: 0.0, y: 0.0 },
+    &mut device,
+  );
 
   match context.style.background_clip {
     BackgroundClip::BorderBox => {
-      let layers = collect_background_layers(context, layout)?;
+      let layers = background_image_layers(context, layout)?;
 
       if border_radius.is_zero() {
         for tile in layers {
@@ -194,7 +247,7 @@ fn draw_clipped_background(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  let layers = collect_background_layers(context, layout)?;
+  let layers = background_image_layers(context, layout)?;
 
   if let Some(tile) = rasterize_layers(
     layers,

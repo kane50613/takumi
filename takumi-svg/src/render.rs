@@ -606,13 +606,16 @@ impl PaintDevice for DocumentDevice<'_> {
           .doc
           .rect(origin.x, origin.y, size.width, size.height, Rgba(color.0))
       }
-      FillShape::Path { commands, rule } => {
-        let data = path_data(commands, [1.0, 0.0, 0.0, 1.0, origin.x, origin.y]);
+      _ => {
+        let data = path_data(
+          &shape.to_commands(),
+          [1.0, 0.0, 0.0, 1.0, origin.x, origin.y],
+        );
 
         self.doc.fill_path(
           &data,
           Rgba(color.0),
-          matches!(rule, takumi_core::style::FillRule::EvenOdd),
+          matches!(shape.rule(), takumi_core::style::FillRule::EvenOdd),
         )
       }
     };
