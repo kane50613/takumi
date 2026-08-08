@@ -77,7 +77,7 @@ mod subsetter;
 
 use crate::krilla::{
   Document, SerializeSettings,
-  configure::{Accessibility, ConfigurationBuilder},
+  configure::ConfigurationBuilder,
   destination::XyzDestination,
   embed::{EmbeddedFile, MimeType},
   geom::{Point, Rect as KrillaRect, Size as KrillaSize, Transform},
@@ -158,8 +158,8 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       builder = builder.with_archival_validator(archival);
       validated = true;
     }
-    if options.tagged == Tagging::Ua1 {
-      builder = builder.with_accessibility_validator(Accessibility::UA1);
+    if let Some(accessibility) = options.tagged.accessibility() {
+      builder = builder.with_accessibility_validator(accessibility);
       validated = true;
     }
     if validated {
@@ -358,7 +358,8 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         pdf_page.finish();
       }
 
-      if (options.outline || options.tagged == Tagging::Ua1) && !interactive.headings.is_empty() {
+      if (options.outline || options.tagged.requires_outline()) && !interactive.headings.is_empty()
+      {
         document.set_outline(build_outline(&interactive.headings, |heading| {
           destination(heading.top)
         }));
@@ -400,7 +401,8 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         |id| interactive.anchors.get(id).copied().map(destination),
       );
       page.finish();
-      if (options.outline || options.tagged == Tagging::Ua1) && !interactive.headings.is_empty() {
+      if (options.outline || options.tagged.requires_outline()) && !interactive.headings.is_empty()
+      {
         document.set_outline(build_outline(&interactive.headings, |heading| {
           destination(heading.top)
         }));

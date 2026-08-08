@@ -88,8 +88,8 @@ export type Attachment = {
 /** PDF/A conformance level. Validation failures reject the render. */
 export type Pdfa = "2a" | "2b" | "2u" | "3a" | "3b" | "3u" | "4" | "4f";
 
-/** Structure-tree emission: off, on (default), or validated against PDF/UA-1. */
-export type Tagged = boolean | "ua1";
+/** Structure-tree emission: off, on (default), or validated against an accessibility standard. */
+export type Tagged = boolean | "ua1" | "ua2";
 
 export type PdfRenderOptions = {
   /**
@@ -124,7 +124,7 @@ export type PdfRenderOptions = {
   outline?: boolean;
   /** PDF/A conformance level. */
   pdfa?: Pdfa;
-  /** Structure-tree emission: `false`, `true` (default) or `"ua1"`. */
+  /** Structure-tree emission: `false`, `true` (default), `"ua1"` or `"ua2"`. */
   tagged?: Tagged;
   /** Files attached to the document. */
   attachments?: Attachment[];

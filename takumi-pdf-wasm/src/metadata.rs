@@ -86,23 +86,15 @@ impl TryFrom<AttachmentInput> for Attachment {
 #[serde(untagged)]
 pub(crate) enum TaggedInput {
   Enabled(bool),
-  #[serde(with = "ua1_literal")]
-  Ua1,
+  Accessibility(AccessibilityInput),
 }
 
-/// Deserializes the `"ua1"` string literal.
-mod ua1_literal {
-  use serde::{Deserialize, Deserializer};
-
-  pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<(), D::Error> {
-    let value = String::deserialize(deserializer)?;
-
-    if value == "ua1" {
-      Ok(())
-    } else {
-      Err(serde::de::Error::custom("expected \"ua1\""))
-    }
-  }
+/// The accessibility standard names accepted from JS.
+#[derive(Deserialize, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum AccessibilityInput {
+  Ua1,
+  Ua2,
 }
 
 impl From<TaggedInput> for Tagging {
@@ -110,7 +102,8 @@ impl From<TaggedInput> for Tagging {
     match tagged {
       TaggedInput::Enabled(false) => Tagging::Off,
       TaggedInput::Enabled(true) => Tagging::On,
-      TaggedInput::Ua1 => Tagging::Ua1,
+      TaggedInput::Accessibility(AccessibilityInput::Ua1) => Tagging::Ua1,
+      TaggedInput::Accessibility(AccessibilityInput::Ua2) => Tagging::Ua2,
     }
   }
 }
