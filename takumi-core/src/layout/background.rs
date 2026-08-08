@@ -158,7 +158,7 @@ fn resolve_auto_axis_from_intrinsic(
 }
 
 /// Resolves a `background-position` length against the free space on an axis.
-pub fn resolve_length_to_position_component(
+fn resolve_length_to_position_component(
   length: Length,
   available: i32,
   sizing: &SizingContext,
@@ -176,7 +176,7 @@ fn calculate_available_space(area_size: u32, tile_size: u32) -> i32 {
 }
 
 /// Resolves the x component of a `background-position`.
-pub fn resolve_position_component_x(
+fn resolve_position_component_x(
   comp: PositionValue,
   tile_w: u32,
   area_w: u32,
@@ -195,7 +195,7 @@ pub fn resolve_position_component_x(
 }
 
 /// Resolves the y component of a `background-position`.
-pub fn resolve_position_component_y(
+fn resolve_position_component_y(
   comp: PositionValue,
   tile_h: u32,
   area_h: u32,
@@ -213,7 +213,6 @@ pub fn resolve_position_component_y(
   }
 }
 
-/// Rasterize a single background image into a tile of the given size.
 /// A `background-origin` positioning area.
 pub struct OriginBox {
   /// Offset of the positioning area inside the border box.
