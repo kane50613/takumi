@@ -446,6 +446,19 @@ fn test_background_size_auto_axis_round() {
   );
 
   run_fixture_test(container, "style_background_size_auto_axis_round");
+
+  // The fixture harness rewrites its goldens, so the geometry is asserted here
+  // rather than left to the dirty-tree check.
+  let svg =
+    std::fs::read_to_string("tests/fixtures-generated/style_background_size_auto_axis_round.svg")
+      .expect("read the svg the fixture just wrote");
+
+  assert!(
+    svg.contains(
+      r#"<pattern id="pat0" patternUnits="userSpaceOnUse" x="0" y="0" width="92" height="90""#
+    ),
+    "the auto axis did not follow the rounded one"
+  );
 }
 
 #[test]
