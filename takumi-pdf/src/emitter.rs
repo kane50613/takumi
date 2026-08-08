@@ -30,7 +30,7 @@ use takumi_core::{
   layout::{
     border::{BorderProperties, BorderSide},
     clip::clip_shape_commands,
-    decoration::ClipBox,
+    decoration::{ClipBox, OutlineGeometry},
     inline::{BuiltInlineLayout, InlineRunLayout, ProcessedInlineSpan, ShapedRun, run_decorations},
     inline_box::{InlineBoxPaint, InlineSubtree, resolve_inline_box},
     node::NodeKind,
@@ -63,6 +63,14 @@ use crate::shadow::{emit_inset_shadows, emit_outer_shadows};
 use crate::svg;
 use crate::tags::TagCollector;
 use takumi_core::painter::{BoxPainter, FillShape, PaintDevice};
+
+/// An outline waiting for its box's state to be popped.
+#[derive(Clone)]
+pub(crate) struct PendingOutline {
+  outline: OutlineGeometry,
+  x: f32,
+  y: f32,
+}
 
 /// Blob identity, collection index, and the variation coordinates the run was
 /// shaped at. One blob instanced at two weights is two embedded fonts, so the
@@ -141,17 +149,18 @@ impl Emitter<'_> {
         ColorFilter::compose(outer_filter.as_deref(), &node.context.style.filter).map(Rc::new);
     }
 
-    let (child_frame, root_pushed) = match context.root() {
+    let (child_frame, root_pushed, root_outline) = match context.root() {
       Some(paint) => self.emit_box(paint, parent, surface)?,
-      None => (parent, 0),
+      None => (parent, 0, None),
     };
 
     for bucket in context.in_paint_order() {
       for item in bucket {
         match &item.kind {
           PaintItemKind::Node(paint) => {
-            let (_, pushed) = self.emit_box(paint, child_frame, surface)?;
+            let (_, pushed, outline) = self.emit_box(paint, child_frame, surface)?;
             pop_transforms(surface, pushed);
+            self.paint_outline(outline.as_ref(), surface);
           }
           PaintItemKind::Context(child) => {
             let excluded = self
@@ -166,6 +175,7 @@ impl Emitter<'_> {
       }
     }
     pop_transforms(surface, root_pushed);
+    self.paint_outline(root_outline.as_ref(), surface);
     self.color_filter = outer_filter;
     Ok(())
   }
@@ -177,15 +187,15 @@ impl Emitter<'_> {
     paint: &NodePaint,
     parent: Affine,
     surface: &mut Surface,
-  ) -> Result<(Affine, usize), PdfError> {
+  ) -> Result<(Affine, usize, Option<PendingOutline>), PdfError> {
     let Some(node) = self.root.node_at_path(&paint.path) else {
-      return Ok((parent, 0));
+      return Ok((parent, 0, None));
     };
     let Ok(layout) = self.results.layout(paint.node_id) else {
-      return Ok((parent, 0));
+      return Ok((parent, 0, None));
     };
     if self.window_excludes_bounds(paint.paint_bounds) {
-      return Ok((parent, 0));
+      return Ok((parent, 0, None));
     }
 
     let style = &node.context.style;
@@ -294,8 +304,6 @@ impl Emitter<'_> {
       self.emit_background(node, deco_layout, x, deco_y, surface);
       self.emit_background_layers(node, deco_layout, x, deco_y, surface);
     }
-    self.emit_outline(node, deco_layout, deco_size, x, deco_y, surface);
-
     // Children and own content clip to the (rounded) padding box when overflow
     // is hidden; without radius a per-axis overflow leaves the visible axis
     // unbounded.
@@ -338,7 +346,15 @@ impl Emitter<'_> {
     if tagged {
       surface.end_tagged();
     }
-    Ok((frame, pushed))
+
+    Ok((
+      frame,
+      pushed,
+      // CSS 2.1 Appendix E paints the outline last. The caller pops this box's
+      // state first, so the outline lands above the content and outside the
+      // box's own overflow clip.
+      self.pending_outline(node, deco_layout, deco_size, x, deco_y),
+    ))
   }
 
   fn emit_background(
@@ -826,17 +842,17 @@ impl Emitter<'_> {
   /// Draws the CSS `outline` as a ring around the border box, expanded outward
   /// by `outline-offset + outline-width`. It does not affect layout and reuses
   /// the border machinery, like the other backends.
-  fn emit_outline(
+  /// The outline the box will paint once its own state is popped, or `None`
+  /// when it paints none. A transparent outline is a fill nobody sees, so it
+  /// is skipped to keep the content stream shorter.
+  fn pending_outline(
     &self,
     node: &RenderNode,
     layout: Layout,
     size: Size<f32>,
     x: f32,
     y: f32,
-    surface: &mut Surface,
-  ) {
-    // A transparent outline is a fill nobody sees; skipping it keeps the
-    // content stream shorter without changing the page.
+  ) -> Option<PendingOutline> {
     if node
       .context
       .style
@@ -845,17 +861,26 @@ impl Emitter<'_> {
       .0[3]
       == 0
     {
-      return;
+      return None;
     }
-    let Some(outline) = BoxPainter::fragment(&node.context, layout, size).outline() else {
+
+    Some(PendingOutline {
+      outline: BoxPainter::fragment(&node.context, layout, size).outline()?,
+      x,
+      y,
+    })
+  }
+
+  fn paint_outline(&self, pending: Option<&PendingOutline>, surface: &mut Surface) {
+    let Some(pending) = pending else {
       return;
     };
 
     self.emit_borders(
-      &outline.border,
-      x - outline.grow,
-      y - outline.grow,
-      outline.size,
+      &pending.outline.border,
+      pending.x - pending.outline.grow,
+      pending.y - pending.outline.grow,
+      pending.outline.size,
       surface,
     );
   }
@@ -1336,7 +1361,12 @@ impl Emitter<'_> {
     if let Some(NodeKind::Image(image)) = node.node.as_ref().map(|source| &source.kind) {
       self.emit_image(image, &node.context, layout, x, y, surface);
     }
-    self.emit_outline(node, layout, layout.size, x, y, surface);
+    self.paint_outline(
+      self
+        .pending_outline(node, layout, layout.size, x, y)
+        .as_ref(),
+      surface,
+    );
   }
 
   /// Paints an inline-level container from the scene it carries. The box is not

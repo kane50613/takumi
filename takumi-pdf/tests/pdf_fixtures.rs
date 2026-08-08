@@ -1761,6 +1761,28 @@ fn inline_images() {
   );
 }
 
+/// CSS 2.1 Appendix E paints the outline last, so a negative `outline-offset`
+/// draws over the box's own text instead of under it.
+#[test]
+fn outline_over_content() {
+  let doc = r#"<main style="display:flex;font-size:40px;color:#141414;"><div style="display:block;outline:8px solid #ff0000;outline-offset:-8px;background-color:#ffffff;">TEXT</div></main>"#;
+  let pdf = run_pdf_fixture("outline-over-content", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse outline doc"))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+  let outline = haystack.find("1 0 0 rg").expect("no outline fill");
+  let glyphs = haystack.find("Tj").or_else(|| haystack.find("TJ"));
+
+  assert!(
+    glyphs.is_some_and(|glyphs| outline > glyphs),
+    "the outline painted under the text"
+  );
+}
+
 /// An inline-level container is laid out by the inline layout, not the paint
 /// list, so it needs a layout pass and a scene of its own to reach the page.
 #[test]

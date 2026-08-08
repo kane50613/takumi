@@ -75,6 +75,26 @@ pub trait PaintDevice {
   fn fill_shape(&mut self, shape: &FillShape, color: Color, origin: Point<f32>);
 }
 
+/// One step of painting a box, in the order the steps run.
+///
+/// Follows CSS 2.1 Appendix E and Blink's `PaintPhase`, where the outline is
+/// the last phase and so paints above the box's own content.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BoxPaintStep {
+  /// `box-shadow` layers that fall outside the box.
+  OuterShadow,
+  /// `background-color` and the `background-image` layers.
+  Background,
+  /// `box-shadow` layers that fall inside the box.
+  InsetShadow,
+  /// `border-*`.
+  Border,
+  /// The box's own content: its text, its image, its inline layout.
+  Content,
+  /// `outline`, above everything else the box paints.
+  Outline,
+}
+
 /// Everything a backend needs to paint one box, decided once.
 ///
 /// The decisions live here so a backend never repeats them: which shape a
@@ -140,6 +160,33 @@ impl<'c> BoxPainter<'c> {
   /// The outline the box paints, or `None` when it paints none.
   pub fn outline(&self) -> Option<OutlineGeometry> {
     outline_paint(self.context, self.layout.size)
+  }
+
+  /// The order the box's steps run in.
+  ///
+  /// `background-clip: border-area` fills the border ring, so its background
+  /// paints over the border rather than under it.
+  pub fn paint_order(&self) -> [BoxPaintStep; 6] {
+    use BoxPaintStep::*;
+
+    match self.context.style.background_clip {
+      BackgroundClip::BorderArea => [
+        OuterShadow,
+        InsetShadow,
+        Border,
+        Background,
+        Content,
+        Outline,
+      ],
+      _ => [
+        OuterShadow,
+        Background,
+        InsetShadow,
+        Border,
+        Content,
+        Outline,
+      ],
+    }
   }
 }
 

@@ -375,6 +375,8 @@ fn begin_node_render(
   }
 
   draw_render_node_content(current, canvas, layout)?;
+  // CSS 2.1 Appendix E paints the outline last, above the box's own content.
+  draw_outline(&current.context, canvas, layout)?;
 
   if current.context.draw_debug_border {
     draw_debug_border(canvas, layout, node_paint.transform);
@@ -617,7 +619,6 @@ fn draw_render_node_shell(node: &RenderNode, canvas: &mut Canvas, layout: Layout
   draw_background(&node.context, canvas, layout)?;
   draw_inset_box_shadow(&node.context, canvas, layout)?;
   draw_border(&node.context, canvas, layout)?;
-  draw_outline(&node.context, canvas, layout)?;
   Ok(())
 }
 

@@ -10,7 +10,7 @@ use takumi_core::{
   geometry::{ComputedLayout as Layout, NodeId, Point, Rect, Size},
   layout::{
     border::{BorderProperties, BorderSide, border_dash_pattern},
-    decoration::ClipBox,
+    decoration::{ClipBox, OutlineGeometry},
     inline::{InlineBoxItem, VisualInlineBox},
     inline_box::{InlineBoxPaint, resolve_inline_box},
     node::{ImageData, Node, NodeKind},
@@ -122,6 +122,9 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
 /// Open group tokens from [`emit_box_chrome`], to be closed (innermost first:
 /// `child_group`, `outer`, then `blend`) after the box content.
 pub(crate) struct BoxChrome {
+  /// The outline, painted when the box closes. CSS 2.1 Appendix E puts it
+  /// above the box's own content, so it cannot go with the other decorations.
+  outline: Option<PendingOutline>,
   blend: Option<crate::GroupToken>,
   isolate: Option<crate::GroupToken>,
   mask: Option<crate::GroupToken>,
@@ -131,10 +134,25 @@ pub(crate) struct BoxChrome {
   child_group: Option<crate::GroupToken>,
 }
 
+/// An outline waiting for its box's content to finish.
+struct PendingOutline {
+  outline: OutlineGeometry,
+  x: f32,
+  y: f32,
+}
+
 impl BoxChrome {
-  /// Closes the box's groups innermost first.
+  /// Closes the box's groups innermost first, painting the outline once the
+  /// content group is closed so it lands above the content and outside its
+  /// overflow clip.
   pub(crate) fn close(self, doc: &mut SvgDocument) -> io::Result<()> {
-    let groups = [self.child_group, self.clip_group, self.outer];
+    if let Some(group) = self.child_group {
+      doc.end_group(group)?;
+    }
+    if let Some(pending) = self.outline {
+      paint_outline(&pending, doc)?;
+    }
+    let groups = [self.clip_group, self.outer];
     for group in groups.into_iter().flatten() {
       doc.end_group(group)?;
     }
@@ -233,8 +251,6 @@ pub(crate) fn emit_box_chrome(
     fills(doc)?;
   }
 
-  emit_outline(node, layout, layout.size, x, y, doc)?;
-
   // Children, clipped to the (rounded) padding box when overflow is not visible.
   // With border-radius present the raster backend clips both axes to the rounded
   // padding box regardless of the per-axis overflow values, so the rounded path is
@@ -255,6 +271,7 @@ pub(crate) fn emit_box_chrome(
     .transpose()?;
 
   Ok(BoxChrome {
+    outline: pending_outline(node, layout, layout.size, x, y),
     blend,
     isolate,
     mask,
@@ -930,32 +947,39 @@ fn emit_side_pattern(
 /// `BorderProperties` (outline width/color/style on all four sides, radii from the
 /// element) drawn on an expanded box, so all border styles (solid/dashed/dotted/
 /// double, and the 3D approximations) are reused from [`emit_borders`].
-pub(crate) fn emit_outline(
+/// The outline a box will paint once its content is done, or `None` when it
+/// paints none. A transparent outline is an element nobody sees, so it is
+/// skipped to keep the document smaller.
+fn pending_outline(
   node: &RenderNode,
   layout: Layout,
   size: Size<f32>,
   x: f32,
   y: f32,
-  doc: &mut SvgDocument,
-) -> io::Result<()> {
-  // A transparent outline is an element nobody sees; skipping it keeps the
-  // document smaller without changing the picture.
+) -> Option<PendingOutline> {
   let color = node
     .context
     .style
     .outline_color
     .resolve(node.context.current_color);
+
   if color.0[3] == 0 {
-    return Ok(());
+    return None;
   }
-  let Some(outline) = BoxPainter::fragment(&node.context, layout, size).outline() else {
-    return Ok(());
-  };
+
+  Some(PendingOutline {
+    outline: BoxPainter::fragment(&node.context, layout, size).outline()?,
+    x,
+    y,
+  })
+}
+
+fn paint_outline(pending: &PendingOutline, doc: &mut SvgDocument) -> io::Result<()> {
   emit_borders(
-    &outline.border,
-    x - outline.grow,
-    y - outline.grow,
-    outline.size,
+    &pending.outline.border,
+    pending.x - pending.outline.grow,
+    pending.y - pending.outline.grow,
+    pending.outline.size,
     doc,
   )
 }
