@@ -140,8 +140,8 @@ pub(crate) struct PdfRenderOptions {
   /// PDF/A conformance level: "2a", "2b", "2u", "3a", "3b", "3u", "4" or
   /// "4f".
   pub(crate) pdfa: Option<PdfaInput>,
-  /// Structure-tree emission: `false`, `true` (default) or `"ua1"` to also
-  /// validate against PDF/UA-1.
+  /// Structure-tree emission: `false`, `true` (default), or `"ua1"` / `"ua2"`
+  /// to also validate against that accessibility standard.
   pub(crate) tagged: Option<TaggedInput>,
   /// Files attached to the document.
   pub(crate) attachments: Option<Vec<AttachmentInput>>,

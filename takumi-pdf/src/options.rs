@@ -4,7 +4,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::krilla::{
-  configure::Archival,
+  configure::{Accessibility, Archival},
   embed::AssociationKind,
   error::KrillaError,
   metadata::{DateTime, Metadata},
@@ -108,6 +108,24 @@ pub enum Tagging {
   /// [`PdfOptions::standard`] (PDF/A-4 is PDF 2.0; the ranges do not
   /// overlap).
   Ua1,
+  /// Structure tree validated against PDF/UA-2. PDF 2.0 only, so it pairs with
+  /// [`PdfStandard::A4`] and its variants and with nothing below them.
+  Ua2,
+}
+
+impl Tagging {
+  pub(crate) fn accessibility(self) -> Option<Accessibility> {
+    match self {
+      Self::Off | Self::On => None,
+      Self::Ua1 => Some(Accessibility::UA1),
+      Self::Ua2 => Some(Accessibility::UA2),
+    }
+  }
+
+  /// PDF/UA requires a document outline whenever the document has headings.
+  pub(crate) fn requires_outline(self) -> bool {
+    self.accessibility().is_some()
+  }
 }
 
 /// Inputs for [`crate::render`], built with [`PdfOptions::builder`].
@@ -157,8 +175,8 @@ pub struct PdfOptions<'g> {
   #[builder(default)]
   pub standard: PdfStandard,
   /// Structure-tree emission: on by default like Chromium's print-to-PDF,
-  /// optionally validated against PDF/UA-1. The tagged standards (`A2a`,
-  /// `A3a`) force it on.
+  /// optionally validated against PDF/UA-1 or PDF/UA-2. The tagged standards
+  /// (`A2a`, `A3a`) force it on.
   #[builder(default)]
   pub tagged: Tagging,
   /// Files attached to the document, shown in the viewer's attachment panel.

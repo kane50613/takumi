@@ -85,7 +85,30 @@ Tables are missing from that list. `<table>` markup is not supported. A table bu
 
 Set `tagged: false` to skip the tree when file size matters more than accessibility.
 
-Invalid combinations are TypeScript type errors. `pdfa: "2a"` and `pdfa: "3a"` forbid `tagged: false`. `pdfa: "4"` forbids `tagged: "ua1"`, because PDF/UA-1 is PDF 1.7-only and PDF/A-4 is PDF 2.0. The `2` levels and `"4"` forbid `attachments`. Use `"4f"` for attachments in PDF 2.0. See [Attachments](/docs/pdf/attachments).
+### PDF/UA-2
+
+`tagged: "ua2"` validates against PDF/UA-2 instead. That standard is written against PDF 2.0, so it pairs with `pdfa: "4"` and `pdfa: "4f"`, or with plain PDF. Every structure element carries the PDF 2.0 namespace.
+
+```tsx twoslash
+import type { ReactNode } from "react";
+declare const report: ReactNode;
+// ---cut---
+import { render } from "takumi-pdf";
+
+const pdf = await render(report, {
+  pdfa: "4",
+  tagged: "ua2",
+  lang: "en",
+  metadata: {
+    title: "Annual report",
+    creationDate: "2026-08-08",
+  },
+});
+```
+
+One piece is missing. PDF/UA-2 asks every link and outline entry that points inside the document to target a structure element rather than a page position. Takumi still writes page positions, so veraPDF reports rule 8.8-1 on any document with headings or internal links. The rest of the standard validates.
+
+Invalid combinations are TypeScript type errors. `pdfa: "2a"` and `pdfa: "3a"` forbid `tagged: false`. The `2` and `3` levels forbid `tagged: "ua2"` and `pdfa: "4"` forbids `tagged: "ua1"`, because PDF/UA-1 is PDF 1.7-only while PDF/A-4 and PDF/UA-2 are PDF 2.0. The `2` levels and `"4"` forbid `attachments`. Use `"4f"` for attachments in PDF 2.0. See [Attachments](/docs/pdf/attachments).
 
 Validators require inputs the renderer cannot supply:
 

@@ -1188,7 +1188,7 @@ impl TagTree {
     }
 
     let mut struct_elem = struct_elems.indirect(root_ref).start::<StructElement>();
-    struct_elem.kind(StructRole::Document);
+    write_kind_compat(sc, &mut struct_elem, StructRole2::Document);
     struct_elem.parent(struct_tree_ref);
     if let Some(lang) = &self.lang {
       if sc.serialize_settings().pdf_version() >= PdfVersion::Pdf14 {
