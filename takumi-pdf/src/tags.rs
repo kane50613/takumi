@@ -125,6 +125,8 @@ struct Nesting {
   in_row: bool,
   /// Inside an `L`, so a list item already has the parent it requires.
   in_list: bool,
+  /// Inside a `Figure`, which already encloses the image's content.
+  in_figure: bool,
 }
 
 fn build_node(
@@ -138,12 +140,13 @@ fn build_node(
   let identifiers = walk.collector.take(path);
   let mut annotations = walk.collector.take_annotations(path);
 
-  match role(node, walk) {
+  match role(node, walk, nesting) {
     Some(kind) => {
       flush_paragraph(pending, parent);
       let is_link = matches!(kind, TagKind::Link(_));
       let is_list_item = matches!(kind, TagKind::LI(_));
       let is_list = matches!(kind, TagKind::L(_));
+      let is_figure = matches!(kind, TagKind::Figure(_));
       let mut group = TagGroup::new(kind);
       let mut children = Vec::new();
       let mut child_pending = Vec::new();
@@ -166,6 +169,7 @@ fn build_node(
         &mut child_pending,
         Nesting {
           in_list: is_list,
+          in_figure: nesting.in_figure || is_figure,
           ..nesting
         },
       );
@@ -268,6 +272,19 @@ fn build_children(
   }
 }
 
+/// The alternate description a `<figure>` takes from the image it illustrates.
+fn figure_alt(node: &RenderNode) -> Option<String> {
+  if let Some(source) = node.node.as_ref()
+    && source.tag_name() == Some("img")
+  {
+    return source
+      .alt()
+      .filter(|alt| !alt.is_empty())
+      .map(str::to_string);
+  }
+  node.children.iter().flatten().find_map(figure_alt)
+}
+
 /// Whether the node opens a block-level container, i.e. a paragraph boundary
 /// for bare text runs.
 fn is_block(node: &RenderNode) -> bool {
@@ -288,7 +305,7 @@ fn is_row_flex(node: &RenderNode) -> bool {
   )
 }
 
-fn role(node: &RenderNode, walk: &mut Walk) -> Option<TagKind> {
+fn role(node: &RenderNode, walk: &mut Walk, nesting: Nesting) -> Option<TagKind> {
   let source = node.node.as_ref()?;
   let tag_name = source.tag_name()?;
 
@@ -311,6 +328,11 @@ fn role(node: &RenderNode, walk: &mut Walk) -> Option<TagKind> {
       Some(Tag::Hn(level, title).into())
     }
     "p" => Some(Tag::P.into()),
+    // A `Figure` encloses everything the illustration is made of, so the
+    // caption has a parent to sit under and the image inside adds no element
+    // of its own.
+    "figure" => Some(Tag::Figure(figure_alt(node)).into()),
+    "img" if nesting.in_figure => None,
     // `alt=""` marks a decorative image: emitted as an artifact, no element.
     "img" if source.alt() != Some("") => Some(Tag::Figure(source.alt().map(str::to_string)).into()),
     "a" if source.href().is_some() => Some(Tag::Link.into()),
