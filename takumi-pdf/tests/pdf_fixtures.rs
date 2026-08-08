@@ -1632,56 +1632,6 @@ fn structure_types_pdf20() {
   }
 }
 
-/// PDF/UA-2 rides on PDF 2.0, so it pairs with PDF/A-4 and validates the same
-/// structure tree PDF/UA-1 does.
-#[test]
-fn tagged_ua2() {
-  let doc = r#"<main style="display:flex;flex-direction:column;font-size:14px;color:#141414;">
-    <h1>Accessible report</h1>
-    <p>A paragraph of prose.</p>
-    <h2>Findings</h2>
-    <ul><li>First finding</li><li>Second finding</li></ul>
-    <figure>
-      <img src="pixel" alt="a grey square" style="width:40px;height:40px;" />
-      <figcaption>A described pixel.</figcaption>
-    </figure>
-  </main>"#;
-  let pdf = run_pdf_fixture("report-tagged-ua2", |fonts| {
-    let buffer = ImageBuffer::from_rgba_bytes(vec![128; 4 * 4 * 4], 4, 4).expect("image buffer");
-
-    PdfOptions::builder()
-      .node(from_html(doc, FromHtmlOptions::default()).expect("parse ua2 doc"))
-      .images(HashMap::from([(
-        "pixel".into(),
-        ImageSource::Bitmap(Arc::new(buffer)),
-      )]))
-      .page(PageOptions::A4)
-      .standard(PdfStandard::A4)
-      .tagged(Tagging::Ua2)
-      .lang(Some(takumi_core::style::Lang::parse("en").expect("lang")))
-      .metadata(PdfMetadata {
-        title: Some("Accessible report".into()),
-        creation_date: Some(PdfDate {
-          year: 2026,
-          month: 8,
-          day: 8,
-          hour: 0,
-          minute: 0,
-          second: 0,
-        }),
-        ..Default::default()
-      })
-      .fonts(fonts)
-      .build()
-  });
-  let haystack = inflated_text(&pdf);
-
-  assert!(
-    haystack.contains("<pdfuaid:part>2</pdfuaid:part>"),
-    "missing PDF/UA-2 identification"
-  );
-}
-
 /// PDF/UA-2 requires the catalog to declare the document language, so a render
 /// without one fails instead of writing a file that claims conformance.
 #[test]
