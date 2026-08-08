@@ -1562,6 +1562,39 @@ fn tagged_standards() {
   });
 }
 
+/// An image inside a wrapper is an inline box rather than a node of its own,
+/// so it draws from the inline layout. Only a direct child of the root used to
+/// reach the page.
+#[test]
+fn inline_images() {
+  let doc = r#"<main style="display:flex;flex-direction:column;font-size:14px;color:#141414;">
+    <figure>
+      <img src="pixel" alt="wrapped in a figure" style="width:40px;height:40px;" />
+      <figcaption>Inside a figure.</figcaption>
+    </figure>
+    <div style="display:block">Text before <img src="pixel" alt="between words" style="width:20px;height:20px;" /> and after.</div>
+  </main>"#;
+  let pdf = run_pdf_fixture("inline-images", |fonts| {
+    let buffer = ImageBuffer::from_rgba_bytes(vec![128; 4 * 4 * 4], 4, 4).expect("image buffer");
+
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse image doc"))
+      .images(HashMap::from([(
+        "pixel".into(),
+        ImageSource::Bitmap(Arc::new(buffer)),
+      )]))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = String::from_utf8_lossy(&pdf);
+
+  assert!(
+    haystack.contains("/Subtype /Image") || haystack.contains("/Subtype/Image"),
+    "no image reached the page"
+  );
+}
+
 /// `alt=""` marks an image decorative: its content is an artifact and no
 /// `Figure` element enters the structure tree. A non-empty `alt` still
 /// produces a `Figure` that satisfies PDF/UA-1.

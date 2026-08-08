@@ -31,7 +31,7 @@ use takumi_core::{
     border::{BorderProperties, BorderSide},
     clip::clip_shape_commands,
     decoration::{ClipBox, outline_geometry},
-    inline::{BuiltInlineLayout, InlineRunLayout, ShapedRun, run_decorations},
+    inline::{BuiltInlineLayout, InlineRunLayout, ProcessedInlineSpan, ShapedRun, run_decorations},
     node::NodeKind,
     tree::{LayoutResults, RenderNode},
   },
@@ -1240,7 +1240,49 @@ impl Emitter<'_> {
         draw_decoration(surface, decoration, x, y, self.color_filter.as_deref());
       }
     }
+    #[cfg(feature = "images")]
+    self.emit_inline_boxes(runs, built, layout, x, y, surface);
     Ok(())
+  }
+
+  /// Paints the replaced content of an inline layout's boxes. Glyph runs carry
+  /// the text; an `<img>` between them is a box, and only this pass draws it.
+  ///
+  /// An inline-block subtree needs its own layout pass before it can paint, so
+  /// it is left alone here.
+  #[cfg(feature = "images")]
+  fn emit_inline_boxes(
+    &self,
+    runs: &InlineRunLayout,
+    built: &BuiltInlineLayout<'_>,
+    layout: Layout,
+    x: f32,
+    y: f32,
+    surface: &mut Surface,
+  ) {
+    let offset = layout.content_box_offset();
+
+    for positioned in &runs.inline_boxes {
+      let Some(ProcessedInlineSpan::Box(item)) = built.spans.get(positioned.id as usize) else {
+        continue;
+      };
+      let node = item.render_node;
+
+      if node.participates_as_inline_box() || node.context.style.opacity.0 == 0.0 {
+        continue;
+      }
+      let Some(NodeKind::Image(image)) = node.node.as_ref().map(|source| &source.kind) else {
+        continue;
+      };
+      self.emit_image(
+        image,
+        &node.context,
+        Layout::from(item),
+        x + offset.x + positioned.x,
+        y + offset.y + positioned.y,
+        surface,
+      );
+    }
   }
 
   /// The fills a `background-clip: text` box paints through its glyphs:
