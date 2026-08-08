@@ -201,6 +201,18 @@ impl SvgDocument {
   }
 
   /// Appends a solid-fill path from SVG path data (`d`).
+  /// Fills a path, with the even-odd rule for ring shapes.
+  pub(crate) fn fill_path(&mut self, data: &str, fill: Rgba, even_odd: bool) -> io::Result<()> {
+    let mut attrs: Vec<(&str, Cow<'_, str>)> =
+      vec![("d", data.into()), ("fill", fill.hex().into())];
+
+    if even_odd {
+      attrs.push(("fill-rule", "evenodd".into()));
+    }
+    push_opacity(&mut attrs, "fill-opacity", fill.opacity());
+    self.empty("path", &attrs)
+  }
+
   pub(crate) fn path(&mut self, data: &str, fill: Rgba) -> io::Result<()> {
     let mut attrs: Vec<(&str, Cow<'_, str>)> =
       vec![("d", data.into()), ("fill", fill.hex().into())];

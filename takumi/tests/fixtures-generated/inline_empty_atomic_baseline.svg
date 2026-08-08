@@ -14,12 +14,7 @@
   <path d="M133.76 30h40v56h-40v-56Zm2 2h36v52h-36v-52Z" fill="#1e293b" fill-rule="evenodd"/>
   <rect x="183.76" y="30" width="40" height="56" fill="#93c5fd"/>
   <path d="M183.76 30h40v56h-40v-56Zm2 2h36v52h-36v-52Z" fill="#1e293b" fill-rule="evenodd"/>
-  <clipPath id="cp0">
-    <path d="M266.76 24c18.23 0 33 14.77 33 33v30c0 18.23-14.77 33-33 33s-33-14.77-33-33v-30c0-18.23 14.77-33 33-33Z"/>
-  </clipPath>
-  <g clip-path="url(#cp0)">
-    <rect x="233.76" y="24" width="66" height="96" fill="#fde047"/>
-  </g>
+  <path d="M266.76 24c18.23 0 33 14.77 33 33v30c0 18.23-14.77 33-33 33s-33-14.77-33-33v-30c0-18.23 14.77-33 33-33Z" fill="#fde047"/>
   <g fill="#000">
     <use href="#g2" x="247.76" y="86"/>
     <use href="#g3" x="275.48" y="86"/>

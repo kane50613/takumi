@@ -14,12 +14,7 @@
     <use href="#g1" x="122.32" y="63"/>
     <use href="#g6" x="132.78" y="63"/>
   </g>
-  <clipPath id="cp0">
-    <path d="M28 128h1144v64h-1144v-64Z"/>
-  </clipPath>
-  <g clip-path="url(#cp0)">
-    <rect x="20" y="120" width="1160" height="80" fill="#0080ff"/>
-  </g>
+  <path d="M28 128h1144v64h-1144v-64Z" fill="#0080ff"/>
   <path d="M20 120h1160v80h-1160v-80Zm8 8h1144v64h-1144v-64Z" fill="#000" fill-opacity=".502" fill-rule="evenodd"/>
   <g fill="#fff">
     <use href="#g7" x="43" y="163"/>
@@ -34,12 +29,7 @@
     <use href="#g1" x="137.42" y="163"/>
     <use href="#g6" x="147.88" y="163"/>
   </g>
-  <clipPath id="cp1">
-    <path d="M43 243h1114v34h-1114v-34Z"/>
-  </clipPath>
-  <g clip-path="url(#cp1)">
-    <rect x="20" y="220" width="1160" height="80" fill="#22c55e"/>
-  </g>
+  <path d="M43 243h1114v34h-1114v-34Z" fill="#22c55e"/>
   <path d="M20 220h1160v80h-1160v-80Zm8 8h1144v64h-1144v-64Z" fill="#000" fill-opacity=".502" fill-rule="evenodd"/>
   <g fill="#fff">
     <use href="#g12" x="43" y="263"/>

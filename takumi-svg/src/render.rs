@@ -2,6 +2,7 @@
 
 use std::{collections::HashMap, io, rc::Rc, sync::Arc};
 
+use takumi_core::paint_device::{FillShape, PaintDevice, paint_background_color};
 use takumi_core::{
   Fonts,
   context::RenderContext,
@@ -315,6 +316,26 @@ pub(crate) fn emit_background(
     return Ok(());
   }
 
+  // The colour fill carries the clip shape itself, so it goes outside the
+  // group. Only the image layers need the clip.
+  if background.0[3] != 0 {
+    let mut device = DocumentDevice { doc, error: None };
+
+    paint_background_color(
+      style,
+      node.context.current_color,
+      border,
+      layout,
+      Point { x, y },
+      &mut device,
+    );
+    if let Some(error) = device.error {
+      return Err(error);
+    }
+  }
+  if !has_bg_image {
+    return Ok(());
+  }
   let bg_clip = background_clip_path(style.background_clip, border, layout, x, y)
     .map(|(data, even_odd)| {
       if even_odd {
@@ -328,9 +349,6 @@ pub(crate) fn emit_background(
     .as_deref()
     .map(|clip| doc.begin_group(IDENTITY, 1.0, Some(clip), None))
     .transpose()?;
-  if background.0[3] != 0 {
-    doc.rect(x, y, width, height, Rgba(background.0))?;
-  }
   if let Some(images) = style.background_image.as_deref() {
     LayerEmitter::new(&node.context, doc).background_images(
       images,
@@ -571,6 +589,40 @@ pub(crate) fn overflow_clip_rect_data(
 /// `background-clip`, or `None` when no clip is needed (an unrounded
 /// `border-box`, which the full border-box rect already covers). Mirrors the
 /// raster backend's `draw_background` clip regions.
+/// The SVG document as a [`PaintDevice`].
+struct DocumentDevice<'d> {
+  doc: &'d mut SvgDocument,
+  error: Option<io::Error>,
+}
+
+impl PaintDevice for DocumentDevice<'_> {
+  fn fill_shape(&mut self, shape: &FillShape, color: Color, origin: Point<f32>) {
+    if self.error.is_some() {
+      return;
+    }
+    let result = match shape {
+      FillShape::Rect(size) => {
+        self
+          .doc
+          .rect(origin.x, origin.y, size.width, size.height, Rgba(color.0))
+      }
+      FillShape::Path { commands, rule } => {
+        let data = path_data(commands, [1.0, 0.0, 0.0, 1.0, origin.x, origin.y]);
+
+        self.doc.fill_path(
+          &data,
+          Rgba(color.0),
+          matches!(rule, takumi_core::style::FillRule::EvenOdd),
+        )
+      }
+    };
+
+    if let Err(error) = result {
+      self.error = Some(error);
+    }
+  }
+}
+
 fn background_clip_path(
   clip: BackgroundClip,
   border: &BorderProperties,

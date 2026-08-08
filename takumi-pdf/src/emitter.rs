@@ -62,6 +62,9 @@ use crate::shadow::{emit_inset_shadows, emit_outer_shadows};
 #[cfg(all(feature = "svg", feature = "images"))]
 use crate::svg;
 use crate::tags::TagCollector;
+use takumi_core::paint_device::{
+  FillShape, PaintDevice, background_clip_shape, paint_background_color,
+};
 
 /// Blob identity, collection index, and the variation coordinates the run was
 /// shaped at. One blob instanced at two weights is two embedded fonts, so the
@@ -349,32 +352,22 @@ impl Emitter<'_> {
     y: f32,
     surface: &mut Surface,
   ) {
-    let color = node
-      .context
-      .style
-      .background_color
-      .resolve(node.context.current_color);
-    if color.0[3] == 0 {
-      return;
-    }
-    let Some((commands, rule)) = background_clip_commands(&node.context.style, border, layout)
-    else {
-      return;
-    };
-    let Some(path) = krilla_path(&commands, x, y) else {
-      return;
+    let mut device = SurfaceDevice {
+      surface,
+      filter: self.color_filter.as_deref(),
+      // An artifact opens only once something actually paints, because marked
+      // content does not nest and an empty region would still have to close.
+      artifact: self.tags.is_some(),
     };
 
-    let artifact = self.start_artifact(surface);
-
-    surface.set_fill(Some(Fill {
-      rule,
-      ..fill_from_rgba(self.filtered(color), 1.0)
-    }));
-    surface.draw_path(&path);
-    if artifact {
-      surface.end_tagged();
-    }
+    paint_background_color(
+      &node.context.style,
+      node.context.current_color,
+      border,
+      layout,
+      CorePoint { x, y },
+      &mut device,
+    );
   }
 
   /// Paints `background-image` layers, bottom layer first, clipped to the
@@ -399,11 +392,24 @@ impl Emitter<'_> {
     if !images.iter().any(paintable_layer) {
       return;
     }
-    let Some((commands, rule)) = background_clip_commands(style, border, layout) else {
+    let Some(shape) = background_clip_shape(style.background_clip, border, layout) else {
       return;
     };
-    let Some(clip) = krilla_path(&commands, x, y) else {
+    let clip = match &shape {
+      FillShape::Rect(size) => {
+        KrillaRect::from_xywh(x, y, size.width, size.height).and_then(rect_path)
+      }
+      FillShape::Path { commands, .. } => krilla_path(commands, x, y),
+    };
+    let Some(clip) = clip else {
       return;
+    };
+    let rule = match &shape {
+      FillShape::Path {
+        rule: CoreFillRule::EvenOdd,
+        ..
+      } => FillRule::EvenOdd,
+      _ => FillRule::NonZero,
     };
     let (origin_offset, area) = background_origin_area(style.background_origin, layout);
     let artifact = self.start_artifact(surface);
@@ -1725,47 +1731,6 @@ fn layer_intrinsic(
   None
 }
 
-/// The rounded region a background paints into, per `background-clip`, as path
-/// commands in box-local coordinates with the fill rule to clip by. `None`
-/// means the box paints no background at all: `text` moves the fill onto the
-/// glyphs.
-fn background_clip_commands(
-  style: &takumi_core::style::ComputedStyle,
-  border: &BorderProperties,
-  layout: Layout,
-) -> Option<(Vec<takumi_core::geometry::PathCommand>, FillRule)> {
-  let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
-
-  match style.background_clip {
-    BackgroundClip::BorderBox => {
-      border.append_mask_commands(&mut commands, layout.size, CorePoint::ZERO);
-      Some((commands, FillRule::NonZero))
-    }
-    BackgroundClip::PaddingBox => {
-      let clip = ClipBox::padding_box(*border, layout);
-
-      clip
-        .border
-        .append_mask_commands(&mut commands, clip.size, clip.offset);
-      Some((commands, FillRule::NonZero))
-    }
-    BackgroundClip::ContentBox => {
-      let clip = ClipBox::content_box(*border, layout);
-
-      clip
-        .border
-        .append_mask_commands(&mut commands, clip.size, clip.offset);
-      Some((commands, FillRule::NonZero))
-    }
-    BackgroundClip::BorderArea => {
-      border.append_border_ring_commands(&mut commands, layout.size);
-      Some((commands, FillRule::EvenOdd))
-    }
-    // `text` moves the fill onto the glyphs; the box itself paints nothing.
-    _ => None,
-  }
-}
-
 /// The positioning area `background-size` and `-position` resolve against,
 /// per `background-origin`: an offset into the border box and its size.
 fn background_origin_area(origin: BackgroundOrigin, layout: Layout) -> (CorePoint<f32>, Size<f32>) {
@@ -1805,6 +1770,56 @@ fn has_own_content(node: &RenderNode) -> bool {
     #[cfg(feature = "images")]
     Some(NodeKind::Image(_)) => true,
     _ => false,
+  }
+}
+
+/// The PDF surface as a [`PaintDevice`], so the shared painting code can drive
+/// it without knowing about krilla.
+struct SurfaceDevice<'s, 'a> {
+  surface: &'s mut Surface<'a>,
+  filter: Option<&'s ColorFilter>,
+  /// Whether painted content needs an artifact region around it.
+  artifact: bool,
+}
+
+impl PaintDevice for SurfaceDevice<'_, '_> {
+  fn fill_shape(&mut self, shape: &FillShape, color: Color, origin: CorePoint<f32>) {
+    let path = match shape {
+      FillShape::Rect(size) => {
+        KrillaRect::from_xywh(origin.x, origin.y, size.width, size.height).and_then(rect_path)
+      }
+      FillShape::Path { commands, .. } => krilla_path(commands, origin.x, origin.y),
+    };
+    let Some(path) = path else {
+      return;
+    };
+    let color = match self.filter {
+      Some(filter) => filter.apply(color.0),
+      None => color.0,
+    };
+
+    if self.artifact {
+      self
+        .surface
+        .start_tagged(ContentTag::Artifact(Artifact::new(
+          ArtifactType::Other,
+          None,
+        )));
+    }
+    self.surface.set_fill(Some(Fill {
+      rule: match shape {
+        FillShape::Path {
+          rule: CoreFillRule::EvenOdd,
+          ..
+        } => FillRule::EvenOdd,
+        _ => FillRule::NonZero,
+      },
+      ..fill_from_rgba(color, 1.0)
+    }));
+    self.surface.draw_path(&path);
+    if self.artifact {
+      self.surface.end_tagged();
+    }
   }
 }
 
