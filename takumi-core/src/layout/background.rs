@@ -60,7 +60,7 @@ pub struct ResolveBackgroundLayerInput<'a> {
 
 /// Inputs for every layer of a box.
 pub struct ResolveBackgroundLayersInput<'a> {
-  /// `background-image`, bottom layer first.
+  /// `background-image` in CSS order, so the first entry is the topmost layer.
   pub images: &'a [BackgroundImage],
   /// `background-position`, one per layer.
   pub positions: &'a [PositionValue],
@@ -370,8 +370,9 @@ pub fn resolve_background_layer(
   })
 }
 
-/// Resolves every background layer, bottom layer first. Each entry carries
-/// the index of the `background-image` it came from.
+/// Resolves every background layer in painting order: the returned entries go
+/// bottom layer first, which is the reverse of `images`, since CSS puts the
+/// first `background-image` on top. Each entry carries the index it came from.
 pub fn resolve_background_layers(
   input: ResolveBackgroundLayersInput<'_>,
 ) -> Vec<(usize, BackgroundLayerGeometry)> {
