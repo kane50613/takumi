@@ -1098,6 +1098,9 @@ pub enum Accessibility {
 impl Accessibility {
   fn prohibits(self, error: &ValidationError) -> bool {
     match (self, error) {
+      // ISO 14289-2, 8.4.4 requires the catalog to declare the default
+      // natural language. PDF/UA-1 only recommends it.
+      (Self::UA2, ValidationError::NoDocumentLanguage) => true,
       (
         Self::UA1 | Self::UA2,
         ValidationError::ContainsNotDefGlyph(_, _, _)

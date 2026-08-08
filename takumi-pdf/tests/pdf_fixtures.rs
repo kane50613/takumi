@@ -1682,6 +1682,40 @@ fn tagged_ua2() {
   );
 }
 
+/// PDF/UA-2 requires the catalog to declare the document language, so a render
+/// without one fails instead of writing a file that claims conformance.
+#[test]
+fn tagged_ua2_needs_lang() {
+  let doc = "<main><h1>No language</h1></main>";
+  let error = render(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse ua2 doc"))
+      .page(PageOptions::A4)
+      .standard(PdfStandard::A4)
+      .tagged(Tagging::Ua2)
+      .metadata(PdfMetadata {
+        title: Some("No language".into()),
+        creation_date: Some(PdfDate {
+          year: 2026,
+          month: 8,
+          day: 8,
+          hour: 0,
+          minute: 0,
+          second: 0,
+        }),
+        ..Default::default()
+      })
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect_err("a document without a language cannot claim PDF/UA-2");
+
+  assert!(
+    format!("{error:?}").contains("NoDocumentLanguage"),
+    "unexpected error: {error:?}"
+  );
+}
+
 /// An image inside a wrapper is an inline box rather than a node of its own,
 /// so it draws from the inline layout. Only a direct child of the root used to
 /// reach the page.

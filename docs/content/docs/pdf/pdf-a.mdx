@@ -112,7 +112,7 @@ Invalid combinations are TypeScript type errors. `pdfa: "2a"` and `pdfa: "3a"` f
 
 Validators require inputs the renderer cannot supply:
 
-- `lang` is the document language. A-levels and PDF/UA require it.
+- `lang` is the document language. A-levels and PDF/UA require it, and PDF/UA-2 fails the render without it.
 - `metadata.title` is required by PDF/UA.
 - `metadata.creationDate` is required by the `a` levels. Use UTC `"YYYY-MM-DD"` or `"YYYY-MM-DDTHH:MM:SS"`. A fixed date keeps output byte-identical across runs.
 
