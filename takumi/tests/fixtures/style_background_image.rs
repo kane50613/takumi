@@ -445,20 +445,30 @@ fn test_background_size_auto_axis_round() {
     Some(BackgroundRepeats::from_css_str("round").unwrap()),
   );
 
+  // The fixture harness rewrites its goldens without comparing, so the geometry
+  // is asserted here. Removing the file first keeps a stale one from a previous
+  // run out of the assertion.
+  let svg_path = "tests/fixtures-generated/style_background_size_auto_axis_round.svg";
+  let _ = std::fs::remove_file(svg_path);
+
   run_fixture_test(container, "style_background_size_auto_axis_round");
 
-  // The fixture harness rewrites its goldens, so the geometry is asserted here
-  // rather than left to the dirty-tree check.
-  let svg =
-    std::fs::read_to_string("tests/fixtures-generated/style_background_size_auto_axis_round.svg")
-      .expect("read the svg the fixture just wrote");
+  let svg = std::fs::read_to_string(svg_path).expect("the fixture wrote no svg");
+  let pattern = svg
+    .split_once("<pattern ")
+    .expect("no background pattern in the svg")
+    .1;
+  let attr = |name: &str| {
+    pattern
+      .split_once(&format!("{name}=\""))
+      .and_then(|(_, rest)| rest.split_once('"'))
+      .map(|(value, _)| value.to_string())
+      .unwrap_or_default()
+  };
 
-  assert!(
-    svg.contains(
-      r#"<pattern id="pat0" patternUnits="userSpaceOnUse" x="0" y="0" width="92" height="90""#
-    ),
-    "the auto axis did not follow the rounded one"
-  );
+  // The fixed axis rounds to 90, the auto axis follows the intrinsic ratio and
+  // then rounds to 92. Without the re-derivation the auto axis stays at 80.
+  assert_eq!((attr("width"), attr("height")), ("92".into(), "90".into()));
 }
 
 #[test]
