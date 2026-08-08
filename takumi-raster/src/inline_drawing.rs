@@ -1,7 +1,8 @@
 use std::{collections::HashMap, sync::Arc};
 
 use skrifa::{FontRef, MetadataProvider};
-use takumi_core::geometry::{AvailableSpace, ComputedLayout as Layout, NodeId, Point, Size};
+use takumi_core::geometry::{ComputedLayout as Layout, NodeId, Point, Size};
+use takumi_core::layout::inline_box::{InlineBoxPaint, resolve_inline_box};
 
 use crate::{
   BorderProperties, Canvas, Cap, DashPattern, DecorationSegmentParams, PaintSource, Placement,
@@ -9,13 +10,10 @@ use crate::{
   draw_border, draw_decoration, draw_decoration_segment, draw_glyph, draw_glyph_clip_image,
   draw_glyph_text_shadow, draw_inset_box_shadow, draw_node_content, draw_outline,
   draw_outset_box_shadow,
-  layout::{
-    inline::{
-      BuiltInlineLayout, InlineBoxItem, InlineOutlineRect, InlineRunLayout, PositionedInlineRun,
-      ProcessedInlineSpan, ShapedRun, VisualInlineBox, outline_island_contour, outline_islands,
-      resolve_inline_runs,
-    },
-    tree::LayoutTree,
+  layout::inline::{
+    BuiltInlineLayout, InlineBoxItem, InlineOutlineRect, InlineRunLayout, PositionedInlineRun,
+    ProcessedInlineSpan, ShapedRun, VisualInlineBox, outline_island_contour, outline_islands,
+    resolve_inline_runs,
   },
   mask_index_from_coord, rasterize_layers,
   render::render_node,
@@ -559,60 +557,47 @@ fn draw_glyph_run_text_shadow(
 pub(crate) fn draw_inline_box(
   inline_box: &VisualInlineBox,
   item: &InlineBoxItem<'_>,
+  container: Layout,
   canvas: &mut Canvas,
   transform: Affine,
 ) -> Result<()> {
-  if item.render_node.context.style.opacity.0 == 0.0 {
-    return Ok(());
-  }
-
-  if item.render_node.participates_as_inline_box() {
-    let mut subtree_root = item.render_node.clone();
-    let mut layout_tree = LayoutTree::from_render_node(&subtree_root);
-
-    let inline_width = (inline_box.width - item.margin.horizontal()).max(0.0);
-    let inline_height = (inline_box.height - item.margin.vertical()).max(0.0);
-
-    layout_tree.compute_layout(Size {
-      width: AvailableSpace::Definite(inline_width),
-      height: AvailableSpace::Definite(inline_height),
-    });
-    let layout_results = layout_tree.into_results();
-    let root_node_id = NodeId::ROOT;
-
-    render_node(
-      &mut subtree_root,
-      &layout_results,
-      root_node_id,
-      canvas,
-      Affine::translation(inline_box.x, inline_box.y)
-        * transform
-        * Affine::translation(item.margin.left, item.margin.top),
-      Size {
-        width: Some(inline_width),
-        height: Some(inline_height),
-      },
-    )?;
-    return Ok(());
-  }
-
-  let Some(node) = &item.render_node.node else {
+  let Some((origin, paint)) = resolve_inline_box(inline_box, item, container) else {
     return Ok(());
   };
 
-  let mut context = item.render_node.context.clone();
-  context.transform = Affine::translation(inline_box.x, inline_box.y) * transform;
+  match paint {
+    InlineBoxPaint::Container(subtree) => {
+      let mut root = subtree.root;
 
-  let layout = item.into();
+      render_node(
+        &mut root,
+        &subtree.results,
+        NodeId::ROOT,
+        canvas,
+        Affine::translation(origin.x, origin.y)
+          * transform
+          * Affine::translation(subtree.margin_offset.x, subtree.margin_offset.y),
+        Size {
+          width: Some(subtree.size.width),
+          height: Some(subtree.size.height),
+        },
+      )
+    }
+    InlineBoxPaint::Replaced { node, layout } => {
+      let Some(source) = &node.node else {
+        return Ok(());
+      };
+      let mut context = node.context.clone();
+      context.transform = Affine::translation(origin.x, origin.y) * transform;
 
-  draw_outset_box_shadow(&context, canvas, layout)?;
-  draw_background(&context, canvas, layout)?;
-  draw_inset_box_shadow(&context, canvas, layout)?;
-  draw_border(&context, canvas, layout)?;
-  draw_node_content(node, &context, canvas, layout)?;
-  draw_outline(&context, canvas, layout)?;
-
-  Ok(())
+      draw_outset_box_shadow(&context, canvas, layout)?;
+      draw_background(&context, canvas, layout)?;
+      draw_inset_box_shadow(&context, canvas, layout)?;
+      draw_border(&context, canvas, layout)?;
+      draw_node_content(source, &context, canvas, layout)?;
+      draw_outline(&context, canvas, layout)
+    }
+  }
 }
 
 pub(crate) fn draw_inline_layout(

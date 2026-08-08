@@ -26,17 +26,15 @@ use takumi_core::{
 };
 use takumi_core::{
   font_style::SizedFontStyle,
-  geometry::{AvailableSpace, ComputedLayout as Layout, NodeId, Point as CorePoint, Size},
+  geometry::{ComputedLayout as Layout, NodeId, Point as CorePoint, Size},
   layout::{
     border::{BorderProperties, BorderSide},
     clip::clip_shape_commands,
     decoration::{ClipBox, outline_geometry},
-    inline::{
-      BuiltInlineLayout, InlineBoxItem, InlineRunLayout, ProcessedInlineSpan, ShapedRun,
-      run_decorations,
-    },
+    inline::{BuiltInlineLayout, InlineRunLayout, ProcessedInlineSpan, ShapedRun, run_decorations},
+    inline_box::{InlineBoxPaint, InlineSubtree, resolve_inline_box},
     node::NodeKind,
-    tree::{LayoutResults, LayoutTree, RenderNode},
+    tree::{LayoutResults, RenderNode},
   },
   paint::{ConicGradientTile, LinearGradientTile, RadialGradientTile, resolve_stops_along_axis},
   scene::{NodePaint, PaintItemKind, StackingContextNode, build_stacking_contexts},
@@ -1265,9 +1263,8 @@ impl Emitter<'_> {
     y: f32,
     surface: &mut Surface,
   ) {
-    let offset = layout.content_box_offset();
     // The caller opened a marked-content region for the text around these
-    // boxes. Marked content does not nest, so each image closes it, takes a
+    // boxes. Marked content does not nest, so each box closes it, takes a
     // region of its own, and hands it back.
     let owner_tagged = self.tags.is_some() && has_own_content(owner);
 
@@ -1275,21 +1272,11 @@ impl Emitter<'_> {
       let Some(ProcessedInlineSpan::Box(item)) = built.spans.get(positioned.id as usize) else {
         continue;
       };
-      let node = item.render_node;
-
-      if node.context.style.opacity.0 == 0.0 {
-        continue;
-      }
-      let content = if node.participates_as_inline_box() {
-        InlineBoxContent::Subtree
-      } else if matches!(
-        node.node.as_ref().map(|source| &source.kind),
-        Some(NodeKind::Image(_))
-      ) {
-        InlineBoxContent::Image
-      } else {
+      let Some((offset, paint)) = resolve_inline_box(positioned, item, layout) else {
         continue;
       };
+      let node = item.render_node;
+
       if owner_tagged {
         surface.end_tagged();
       }
@@ -1310,24 +1297,14 @@ impl Emitter<'_> {
       self.color_filter =
         ColorFilter::compose(outer_filter.as_deref(), &node.context.style.filter).map(Rc::new);
 
-      let origin = (x + offset.x + positioned.x, y + offset.y + positioned.y);
+      let origin = (x + offset.x, y + offset.y);
 
-      match content {
-        InlineBoxContent::Image => {
-          if let Some(NodeKind::Image(image)) = node.node.as_ref().map(|source| &source.kind) {
-            self.emit_image(
-              image,
-              &node.context,
-              Layout::from(item),
-              origin.0,
-              origin.1,
-              surface,
-            );
-          }
-        }
-        InlineBoxContent::Subtree => {
-          self.emit_inline_subtree(node, item, Layout::from(item).size, origin, surface)
-        }
+      match paint {
+        InlineBoxPaint::Replaced {
+          node,
+          layout: box_layout,
+        } => self.emit_inline_replaced(node, box_layout, origin, surface),
+        InlineBoxPaint::Container(subtree) => self.emit_inline_subtree(subtree, origin, surface),
       }
       self.color_filter = outer_filter;
       if faded {
@@ -1342,47 +1319,56 @@ impl Emitter<'_> {
     }
   }
 
-  /// Lays out and paints an inline-level container (`inline-block`,
-  /// `inline-flex`, `inline-grid`, or a float) at the position the inline
-  /// layout gave it. The box is not in the paint list, so it needs a layout
-  /// pass and a scene of its own.
+  /// Paints a replaced inline box: its decorations, then its content.
   #[cfg(feature = "images")]
-  fn emit_inline_subtree(
+  fn emit_inline_replaced(
     &mut self,
     node: &RenderNode,
-    item: &InlineBoxItem<'_>,
-    size: Size<f32>,
+    layout: Layout,
     origin: (f32, f32),
     surface: &mut Surface,
   ) {
-    let width = (size.width - item.margin.horizontal()).max(0.0);
-    let height = (size.height - item.margin.vertical()).max(0.0);
+    let (x, y) = origin;
+    let border = BorderProperties::from_context(&node.context, layout.size, layout.border);
+    let (inset, outer) = self.sized_shadows(node, layout.size);
 
-    if width <= 0.0 || height <= 0.0 {
+    self.shadows(&outer, &border, layout, (x, y), surface, false);
+    self.emit_background(node, &border, layout, x, y, surface);
+    self.emit_background_layers(node, &border, layout, x, y, surface);
+    self.shadows(&inset, &border, layout, (x, y), surface, true);
+    self.emit_borders(&border, x, y, layout.size, surface);
+
+    if let Some(NodeKind::Image(image)) = node.node.as_ref().map(|source| &source.kind) {
+      self.emit_image(image, &node.context, layout, x, y, surface);
+    }
+    self.emit_outline(node, layout.size, x, y, surface);
+  }
+
+  /// Paints an inline-level container from the scene it carries. The box is not
+  /// in the paint list, so it needs a stacking context of its own.
+  #[cfg(feature = "images")]
+  fn emit_inline_subtree(
+    &mut self,
+    subtree: Box<InlineSubtree>,
+    origin: (f32, f32),
+    surface: &mut Surface,
+  ) {
+    if subtree.size.width <= 0.0 || subtree.size.height <= 0.0 {
       return;
     }
-    let root = node.clone();
-    let mut tree = LayoutTree::from_render_node(&root);
-
-    tree.compute_layout(Size {
-      width: AvailableSpace::Definite(width),
-      height: AvailableSpace::Definite(height),
-    });
-
-    let results = tree.into_results();
     let Ok(contexts) = build_stacking_contexts(
-      &root,
-      &results,
+      &subtree.root,
+      &subtree.results,
       NodeId::ROOT,
       Affine::IDENTITY,
-      (Some(width), Some(height)),
+      (Some(subtree.size.width), Some(subtree.size.height)),
     ) else {
       return;
     };
     let mut emitter = Emitter {
-      root: &root,
+      root: &subtree.root,
       contexts: &contexts,
-      results: &results,
+      results: &subtree.results,
       fonts: &mut *self.fonts,
       inline: None,
       window: None,
@@ -1390,8 +1376,8 @@ impl Emitter<'_> {
       tags: None,
       color_filter: self.color_filter.clone(),
     };
-    let x = origin.0 + item.margin.left;
-    let y = origin.1 + item.margin.top;
+    let x = origin.0 + subtree.margin_offset.x;
+    let y = origin.1 + subtree.margin_offset.y;
 
     surface.push_transform(&Transform::from_translate(x, y));
     let _ = emitter.emit_context(0, Affine::IDENTITY, surface);
@@ -1820,15 +1806,6 @@ fn has_own_content(node: &RenderNode) -> bool {
     Some(NodeKind::Image(_)) => true,
     _ => false,
   }
-}
-
-/// What an inline box paints: replaced content, or a whole subtree that needs
-/// its own layout pass.
-#[cfg(feature = "images")]
-#[derive(Clone, Copy)]
-enum InlineBoxContent {
-  Image,
-  Subtree,
 }
 
 /// Fills `path` with the child indices leading from `root` to `target`,

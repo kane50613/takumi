@@ -6,6 +6,8 @@ pub(crate) mod corner_shape;
 pub mod decoration;
 /// Inline-level layout: text shaping, line breaking, and text fitting.
 pub mod inline;
+/// Resolving what an inline box paints.
+pub mod inline_box;
 /// Node Tree
 pub mod node;
 /// Layout tree: render nodes and their computed layout results.

@@ -6,11 +6,12 @@ use takumi_core::{
   Fonts,
   context::RenderContext,
   error::Result,
-  geometry::{AvailableSpace, ComputedLayout as Layout, NodeId, Point, Rect, Size},
+  geometry::{ComputedLayout as Layout, NodeId, Point, Rect, Size},
   layout::{
     border::{BorderProperties, BorderSide, border_dash_pattern},
     decoration::{ClipBox, outline_geometry},
     inline::{InlineBoxItem, VisualInlineBox},
+    inline_box::{InlineBoxPaint, resolve_inline_box},
     node::{ImageData, Node, NodeKind},
     tree::{LayoutTree, RenderNode},
   },
@@ -638,54 +639,43 @@ pub(crate) fn emit_inline_box(
   container_y: f32,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
-  let node = item.render_node;
-  if node.context.style.opacity.0 == 0.0 {
+  let Some((offset, paint)) = resolve_inline_box(inline_box, item, container_layout) else {
     return Ok(());
+  };
+  let box_x = container_x + offset.x;
+  let box_y = container_y + offset.y;
+
+  match paint {
+    InlineBoxPaint::Container(subtree) => {
+      let origin = Affine::translation(
+        box_x + subtree.margin_offset.x,
+        box_y + subtree.margin_offset.y,
+      );
+      let contexts = build_stacking_contexts(
+        &subtree.root,
+        &subtree.results,
+        NodeId::ROOT,
+        origin,
+        (Some(subtree.size.width), Some(subtree.size.height)),
+      )
+      .map_err(io::Error::other)?;
+
+      emit_scene(&subtree.root, &contexts, &subtree.results, doc)
+    }
+    InlineBoxPaint::Replaced { node, layout } => {
+      let group_transform =
+        element_transform(&node.context, layout.size, box_x, box_y).unwrap_or(IDENTITY);
+      let chrome = emit_box_chrome(node, layout, box_x, box_y, group_transform, doc)?;
+
+      match node.node.as_ref().map(|n| &n.kind) {
+        Some(NodeKind::Image(image)) => emit_image_node(image, node, layout, box_x, box_y, doc)?,
+        Some(NodeKind::Text(text)) => emit_text(text, &node.context, layout, box_x, box_y, doc)?,
+        _ => {}
+      }
+
+      chrome.close(doc)
+    }
   }
-
-  let content_offset = container_layout.content_box_offset();
-  let box_x = container_x + content_offset.x + inline_box.x;
-  let box_y = container_y + content_offset.y + inline_box.y;
-
-  if node.participates_as_inline_box() {
-    // Atomic inline box (inline-block/float): recompute the subtree at the box
-    // size, mirroring the raster backend.
-    let subtree = node.clone();
-    let mut tree = LayoutTree::from_render_node(&subtree);
-    let inline_width = (inline_box.width - item.margin.horizontal()).max(0.0);
-    let inline_height = (inline_box.height - item.margin.vertical()).max(0.0);
-    tree.compute_layout(Size {
-      width: AvailableSpace::Definite(inline_width),
-      height: AvailableSpace::Definite(inline_height),
-    });
-    let results = tree.into_results();
-    let root_id = NodeId::ROOT;
-    // Emit the recomputed subtree through the scene, offset to the box origin.
-    let origin = Affine::translation(box_x + item.margin.left, box_y + item.margin.top);
-    let contexts = build_stacking_contexts(
-      &subtree,
-      &results,
-      root_id,
-      origin,
-      (Some(inline_width), Some(inline_height)),
-    )
-    .map_err(io::Error::other)?;
-    return emit_scene(&subtree, &contexts, &results, doc);
-  }
-
-  // Replaced inline box (e.g. an image): no in-flow layout to recompute.
-  let box_layout: Layout = item.into();
-  let group_transform =
-    element_transform(&node.context, box_layout.size, box_x, box_y).unwrap_or(IDENTITY);
-  let chrome = emit_box_chrome(node, box_layout, box_x, box_y, group_transform, doc)?;
-
-  match node.node.as_ref().map(|n| &n.kind) {
-    Some(NodeKind::Image(image)) => emit_image_node(image, node, box_layout, box_x, box_y, doc)?,
-    Some(NodeKind::Text(text)) => emit_text(text, &node.context, box_layout, box_x, box_y, doc)?,
-    _ => {}
-  }
-
-  chrome.close(doc)
 }
 
 /// Emits an image node's content into its content box. When the element has a
