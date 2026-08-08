@@ -30,7 +30,7 @@ use takumi_core::{
   layout::{
     border::{BorderProperties, BorderSide},
     clip::clip_shape_commands,
-    decoration::{ClipBox, outline_geometry},
+    decoration::ClipBox,
     inline::{BuiltInlineLayout, InlineRunLayout, ProcessedInlineSpan, ShapedRun, run_decorations},
     inline_box::{InlineBoxPaint, InlineSubtree, resolve_inline_box},
     node::NodeKind,
@@ -41,7 +41,7 @@ use takumi_core::{
   shadow::SizedShadow,
   style::{
     Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BlendMode, BoxDecorationBreak,
-    BoxShadow, BreakBetween, BreakInside, Color, FillRule as CoreFillRule, Isolation, Length,
+    BoxShadow, BreakBetween, BreakInside, Color, FillRule as CoreFillRule, Isolation,
     ResolvedGradientStop,
   },
 };
@@ -62,9 +62,7 @@ use crate::shadow::{emit_inset_shadows, emit_outer_shadows};
 #[cfg(all(feature = "svg", feature = "images"))]
 use crate::svg;
 use crate::tags::TagCollector;
-use takumi_core::paint_device::{
-  FillShape, PaintDevice, background_clip_shape, paint_background_color,
-};
+use takumi_core::painter::{BoxPainter, FillShape, PaintDevice};
 
 /// Blob identity, collection index, and the variation coordinates the run was
 /// shaped at. One blob instanced at two weights is two embedded fonts, so the
@@ -287,16 +285,16 @@ impl Emitter<'_> {
     let border_area = style.background_clip == BackgroundClip::BorderArea;
 
     if !border_area {
-      self.emit_background(node, &border, deco_layout, x, deco_y, surface);
-      self.emit_background_layers(node, &border, deco_layout, x, deco_y, surface);
+      self.emit_background(node, deco_layout, x, deco_y, surface);
+      self.emit_background_layers(node, deco_layout, x, deco_y, surface);
     }
     self.shadows(&inset, &border, deco_layout, (x, deco_y), surface, true);
     self.emit_borders(&border, x, deco_y, deco_size, surface);
     if border_area {
-      self.emit_background(node, &border, deco_layout, x, deco_y, surface);
-      self.emit_background_layers(node, &border, deco_layout, x, deco_y, surface);
+      self.emit_background(node, deco_layout, x, deco_y, surface);
+      self.emit_background_layers(node, deco_layout, x, deco_y, surface);
     }
-    self.emit_outline(node, deco_size, x, deco_y, surface);
+    self.emit_outline(node, deco_layout, deco_size, x, deco_y, surface);
 
     // Children and own content clip to the (rounded) padding box when overflow
     // is hidden; without radius a per-axis overflow leaves the visible axis
@@ -346,7 +344,6 @@ impl Emitter<'_> {
   fn emit_background(
     &self,
     node: &RenderNode,
-    border: &BorderProperties,
     layout: Layout,
     x: f32,
     y: f32,
@@ -360,14 +357,7 @@ impl Emitter<'_> {
       artifact: self.tags.is_some(),
     };
 
-    paint_background_color(
-      &node.context.style,
-      node.context.current_color,
-      border,
-      layout,
-      CorePoint { x, y },
-      &mut device,
-    );
+    BoxPainter::new(&node.context, layout).background_color(CorePoint { x, y }, &mut device);
   }
 
   /// Paints `background-image` layers, bottom layer first, clipped to the
@@ -378,7 +368,6 @@ impl Emitter<'_> {
   fn emit_background_layers(
     &self,
     node: &RenderNode,
-    border: &BorderProperties,
     layout: Layout,
     x: f32,
     y: f32,
@@ -392,7 +381,7 @@ impl Emitter<'_> {
     if !images.iter().any(paintable_layer) {
       return;
     }
-    let Some(shape) = background_clip_shape(style.background_clip, border, layout) else {
+    let Some(shape) = BoxPainter::new(&node.context, layout).background_clip_shape() else {
       return;
     };
     let clip = match &shape {
@@ -840,24 +829,27 @@ impl Emitter<'_> {
   fn emit_outline(
     &self,
     node: &RenderNode,
+    layout: Layout,
     size: Size<f32>,
     x: f32,
     y: f32,
     surface: &mut Surface,
   ) {
-    let style = &node.context.style;
-
-    if !style.outline_style.is_rendered() {
+    // A transparent outline is a fill nobody sees; skipping it keeps the
+    // content stream shorter without changing the page.
+    if node
+      .context
+      .style
+      .outline_color
+      .resolve(node.context.current_color)
+      .0[3]
+      == 0
+    {
       return;
     }
-    let width = Length::from(style.outline_width)
-      .to_px(&node.context.sizing, size.width)
-      .max(0.0);
-
-    if width <= 0.0 || style.outline_color.resolve(node.context.current_color).0[3] == 0 {
+    let Some(outline) = BoxPainter::fragment(&node.context, layout, size).outline() else {
       return;
-    }
-    let outline = outline_geometry(&node.context, size);
+    };
 
     self.emit_borders(
       &outline.border,
@@ -1336,15 +1328,15 @@ impl Emitter<'_> {
     let (inset, outer) = self.sized_shadows(node, layout.size);
 
     self.shadows(&outer, &border, layout, (x, y), surface, false);
-    self.emit_background(node, &border, layout, x, y, surface);
-    self.emit_background_layers(node, &border, layout, x, y, surface);
+    self.emit_background(node, layout, x, y, surface);
+    self.emit_background_layers(node, layout, x, y, surface);
     self.shadows(&inset, &border, layout, (x, y), surface, true);
     self.emit_borders(&border, x, y, layout.size, surface);
 
     if let Some(NodeKind::Image(image)) = node.node.as_ref().map(|source| &source.kind) {
       self.emit_image(image, &node.context, layout, x, y, surface);
     }
-    self.emit_outline(node, layout.size, x, y, surface);
+    self.emit_outline(node, layout, layout.size, x, y, surface);
   }
 
   /// Paints an inline-level container from the scene it carries. The box is not

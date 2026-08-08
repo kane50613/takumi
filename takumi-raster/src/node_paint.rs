@@ -6,8 +6,8 @@
 
 use takumi_core::{
   geometry::{AvailableSpace, ComputedLayout as Layout, Point, Point as CorePoint, Size},
-  layout::decoration::{ClipBox, outline_geometry},
-  paint_device::{FillShape, PaintDevice, paint_background_color},
+  layout::decoration::ClipBox,
+  painter::{BoxPainter, FillShape, PaintDevice},
   style::{Color, ImageScalingAlgorithm},
 };
 
@@ -151,14 +151,7 @@ pub(crate) fn draw_background(
     algorithm: context.style.image_rendering,
   };
 
-  paint_background_color(
-    &context.style,
-    context.current_color,
-    &border_radius,
-    layout,
-    Point { x: 0.0, y: 0.0 },
-    &mut device,
-  );
+  BoxPainter::new(context, layout).background_color(Point { x: 0.0, y: 0.0 }, &mut device);
 
   match context.style.background_clip {
     BackgroundClip::BorderBox => {
@@ -301,7 +294,9 @@ pub(crate) fn draw_outline(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  let outline = outline_geometry(context, layout.size);
+  let Some(outline) = BoxPainter::new(context, layout).outline() else {
+    return Ok(());
+  };
   let transform = Affine::translation(-outline.grow, -outline.grow) * context.transform;
 
   paint_border(outline.border, canvas, outline.size, transform, None);

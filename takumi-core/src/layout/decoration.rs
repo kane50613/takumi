@@ -103,6 +103,28 @@ pub struct OutlineGeometry {
 
 /// Resolves the outline ring geometry from the element's style. Callers guard
 /// visibility (zero width, transparent color, `none` style) themselves.
+/// The outline a box paints, or `None` when it paints none.
+///
+/// Matches Blink's `ComputedStyle::HasOutline`: a width that rounds to zero
+/// paints nothing, and otherwise `outline-style` has to draw something. A
+/// transparent colour still counts as an outline, so the decision does not
+/// look at alpha; a backend is free to skip the invisible fill.
+///
+/// Each backend used to guard this differently, and one of them not at all.
+pub fn outline_paint(context: &RenderContext, size: Size<f32>) -> Option<OutlineGeometry> {
+  let style = &context.style;
+  let width = Length::from(style.outline_width)
+    .to_px(&context.sizing, size.width)
+    .max(0.0);
+
+  if width <= 0.0 || !style.outline_style.is_rendered() {
+    return None;
+  }
+  Some(outline_geometry(context, size))
+}
+
+/// The outline ring's border geometry and how far it grows past the border box.
+/// Says nothing about whether the outline paints; see [`outline_paint`].
 pub fn outline_geometry(context: &RenderContext, size: Size<f32>) -> OutlineGeometry {
   let style = &context.style;
   let width = Length::from(style.outline_width)

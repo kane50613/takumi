@@ -2,7 +2,7 @@
 
 use std::{collections::HashMap, io, rc::Rc, sync::Arc};
 
-use takumi_core::paint_device::{FillShape, PaintDevice, paint_background_color};
+use takumi_core::painter::{BoxPainter, FillShape, PaintDevice};
 use takumi_core::{
   Fonts,
   context::RenderContext,
@@ -10,7 +10,7 @@ use takumi_core::{
   geometry::{ComputedLayout as Layout, NodeId, Point, Rect, Size},
   layout::{
     border::{BorderProperties, BorderSide, border_dash_pattern},
-    decoration::{ClipBox, outline_geometry},
+    decoration::ClipBox,
     inline::{InlineBoxItem, VisualInlineBox},
     inline_box::{InlineBoxPaint, resolve_inline_box},
     node::{ImageData, Node, NodeKind},
@@ -21,8 +21,8 @@ use takumi_core::{
   shadow::SizedShadow,
   style::{
     Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BasicShape, BlendMode, BorderStyle,
-    Color, ComputedStyle, FillRule, FontFamily, Isolation, Lang, Length, Overflow, ShapeRadius,
-    Sides, SizingContext, SpacePair, StyleSheet, ToCss,
+    Color, ComputedStyle, FillRule, FontFamily, Isolation, Lang, Overflow, ShapeRadius, Sides,
+    SizingContext, SpacePair, StyleSheet, ToCss,
   },
   viewport::Viewport,
 };
@@ -233,7 +233,7 @@ pub(crate) fn emit_box_chrome(
     fills(doc)?;
   }
 
-  emit_outline(node, layout.size, x, y, doc)?;
+  emit_outline(node, layout, layout.size, x, y, doc)?;
 
   // Children, clipped to the (rounded) padding box when overflow is not visible.
   // With border-radius present the raster backend clips both axes to the rounded
@@ -321,14 +321,7 @@ pub(crate) fn emit_background(
   if background.0[3] != 0 {
     let mut device = DocumentDevice { doc, error: None };
 
-    paint_background_color(
-      style,
-      node.context.current_color,
-      border,
-      layout,
-      Point { x, y },
-      &mut device,
-    );
+    BoxPainter::new(&node.context, layout).background_color(Point { x, y }, &mut device);
     if let Some(error) = device.error {
       return Err(error);
     }
@@ -939,27 +932,25 @@ fn emit_side_pattern(
 /// double, and the 3D approximations) are reused from [`emit_borders`].
 pub(crate) fn emit_outline(
   node: &RenderNode,
+  layout: Layout,
   size: Size<f32>,
   x: f32,
   y: f32,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
-  let style = &node.context.style;
-  if !style.outline_style.is_rendered() {
-    return Ok(());
-  }
-  let sizing = &node.context.sizing;
-  let width = Length::from(style.outline_width)
-    .to_px(sizing, size.width)
-    .max(0.0);
-  if width <= 0.0 {
-    return Ok(());
-  }
-  let color = style.outline_color.resolve(node.context.current_color);
+  // A transparent outline is an element nobody sees; skipping it keeps the
+  // document smaller without changing the picture.
+  let color = node
+    .context
+    .style
+    .outline_color
+    .resolve(node.context.current_color);
   if color.0[3] == 0 {
     return Ok(());
   }
-  let outline = outline_geometry(&node.context, size);
+  let Some(outline) = BoxPainter::fragment(&node.context, layout, size).outline() else {
+    return Ok(());
+  };
   emit_borders(
     &outline.border,
     x - outline.grow,

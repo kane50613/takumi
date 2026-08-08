@@ -29,7 +29,7 @@ pub(crate) mod matching;
 /// Deterministic float math shared by the painting paths.
 pub mod math;
 /// The seam between deciding what to paint and painting it.
-pub mod paint_device;
+pub mod painter;
 /// Font and image resource management.
 pub mod resources;
 pub mod scene;

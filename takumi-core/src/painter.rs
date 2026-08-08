@@ -5,10 +5,12 @@
 //! Below it, a rasterizer writes pixels, an SVG writer emits elements, and a
 //! PDF writer emits operators. Only the second half belongs to a backend.
 
+use crate::context::RenderContext;
 use crate::geometry::{ComputedLayout, PathCommand, Point, Size};
 use crate::layout::border::BorderProperties;
 use crate::layout::decoration::ClipBox;
-use crate::style::{BackgroundClip, Color, ComputedStyle, FillRule};
+use crate::layout::decoration::{OutlineGeometry, outline_paint};
+use crate::style::{BackgroundClip, Color, FillRule};
 
 /// A closed shape to fill, in the coordinate space of the box that owns it.
 ///
@@ -73,10 +75,75 @@ pub trait PaintDevice {
   fn fill_shape(&mut self, shape: &FillShape, color: Color, origin: Point<f32>);
 }
 
-/// The box a background paints into, per `background-clip`. `None` when the
-/// declaration paints no box at all, which is what `text` does: the fill moves
-/// onto the glyphs.
-pub fn background_clip_shape(
+/// Everything a backend needs to paint one box, decided once.
+///
+/// The decisions live here so a backend never repeats them: which shape a
+/// declaration paints into, whether it paints at all, and with what. A backend
+/// supplies a [`PaintDevice`] and gets pixels, elements, or operators out.
+pub struct BoxPainter<'c> {
+  context: &'c RenderContext,
+  layout: ComputedLayout,
+  border: BorderProperties,
+}
+
+impl<'c> BoxPainter<'c> {
+  /// Prepares the box at `layout` for painting.
+  pub fn new(context: &'c RenderContext, layout: ComputedLayout) -> Self {
+    Self {
+      context,
+      layout,
+      border: BorderProperties::from_context(context, layout.size, layout.border),
+    }
+  }
+
+  /// Prepares a fragment of the box that paints its own decorations, which is
+  /// what `box-decoration-break: clone` asks for.
+  pub fn fragment(context: &'c RenderContext, layout: ComputedLayout, size: Size<f32>) -> Self {
+    Self::new(context, ComputedLayout { size, ..layout })
+  }
+
+  /// The box's border geometry, corners included.
+  pub fn border(&self) -> &BorderProperties {
+    &self.border
+  }
+
+  /// The box a background paints into, per `background-clip`. `None` when the
+  /// declaration paints no box at all, which is what `text` does: the fill
+  /// moves onto the glyphs.
+  pub fn background_clip_shape(&self) -> Option<FillShape> {
+    background_clip_shape(
+      self.context.style.background_clip,
+      &self.border,
+      self.layout,
+    )
+  }
+
+  /// Paints `background-color`. Does nothing when the colour is transparent or
+  /// `background-clip` moves the fill onto the glyphs.
+  pub fn background_color<D: PaintDevice>(&self, origin: Point<f32>, device: &mut D) {
+    let color = self
+      .context
+      .style
+      .background_color
+      .resolve(self.context.current_color);
+
+    if color.0[3] == 0 {
+      return;
+    }
+    let Some(shape) = self.background_clip_shape() else {
+      return;
+    };
+
+    device.fill_shape(&shape, color, origin);
+  }
+
+  /// The outline the box paints, or `None` when it paints none.
+  pub fn outline(&self) -> Option<OutlineGeometry> {
+    outline_paint(self.context, self.layout.size)
+  }
+}
+
+fn background_clip_shape(
   clip: BackgroundClip,
   border: &BorderProperties,
   layout: ComputedLayout,
@@ -120,26 +187,4 @@ pub fn background_clip_shape(
     }
     BackgroundClip::Text => None,
   }
-}
-
-/// Paints a box's `background-color`. Does nothing when the colour is
-/// transparent or `background-clip` moves the fill onto the glyphs.
-pub fn paint_background_color<D: PaintDevice>(
-  style: &ComputedStyle,
-  current_color: Color,
-  border: &BorderProperties,
-  layout: ComputedLayout,
-  origin: Point<f32>,
-  device: &mut D,
-) {
-  let color = style.background_color.resolve(current_color);
-
-  if color.0[3] == 0 {
-    return;
-  }
-  let Some(shape) = background_clip_shape(style.background_clip, border, layout) else {
-    return;
-  };
-
-  device.fill_shape(&shape, color, origin);
 }
