@@ -24,7 +24,9 @@ use crate::krilla::graphics::separation::SeparationColorSpace;
 use crate::krilla::interactive::destination::{NamedDestination, XyzDestination};
 use crate::krilla::interchange::embed::EmbeddedFile;
 use crate::krilla::interchange::outline::Outline;
-use crate::krilla::interchange::tagging::{AnnotationIdentifier, PageTagIdentifier, TagTree};
+use crate::krilla::interchange::tagging::{
+  AnnotationIdentifier, PageTagIdentifier, TagId, TagTree,
+};
 use crate::krilla::object_stream::ObjectStream;
 use crate::krilla::page::{InternalPage, PageLabel, PageLabelContainer};
 use crate::krilla::resource;
@@ -254,6 +256,10 @@ pub(crate) struct SerializeContext {
   /// is based on this field) to generate a new Ref, instead of creating one manually with
   /// `Ref::new`.
   pub(crate) cur_ref: Ref,
+  /// The ref of every structure element that carries a [`TagId`], filled in
+  /// once the tag tree is serialized. Structure destinations resolve through
+  /// it, so they can only be written afterwards.
+  tag_refs: BTreeMap<TagId, Ref>,
   /// All validation errors that are collected as part of the export process
   /// alongside the validators that raised the error.
   validation_errors: Vec<(ValidationError, Validators)>,
@@ -300,6 +306,7 @@ impl SerializeContext {
       page_tree_ref,
       page_infos: vec![],
       location: None,
+      tag_refs: BTreeMap::new(),
       validation_errors: vec![],
       serialize_settings: Arc::new(serialize_settings),
       chunk_settings,
@@ -310,6 +317,11 @@ impl SerializeContext {
 
   pub(crate) fn page_infos(&self) -> &[PageInfo] {
     &self.page_infos
+  }
+
+  /// The structure element `id` names, once the tag tree has been serialized.
+  pub(crate) fn tag_ref(&self, id: &TagId) -> Option<Ref> {
+    self.tag_refs.get(id).copied()
   }
 
   pub(crate) fn page_infos_mut(&mut self) -> &mut [PageInfo] {
@@ -420,11 +432,13 @@ impl SerializeContext {
     self.serialize_fonts(&mut chunk_container)?;
     self.serialize_pages(&mut chunk_container)?;
     self.serialize_page_tree(&mut chunk_container);
-    self.serialize_xyz_destinations(&mut chunk_container)?;
     // It is important that we serialize the tags AFTER we have serialized the pages,
     // because page serialization will update the annotation refs of the page infos,
-    // and when serializing the parent tree map we need to know the refs of the annotations
+    // and when serializing the parent tree map we need to know the refs of the annotations.
+    // Destinations follow the tags, because a structure destination names the
+    // structure element the tag tree just assigned a ref to.
     self.serialize_tag_tree(&mut chunk_container)?;
+    self.serialize_xyz_destinations(&mut chunk_container)?;
 
     // Create the final PDF.
     let (pdf, next_ref, object_stream) = chunk_container.finish(&mut self)?;
@@ -769,6 +783,7 @@ impl SerializeContext {
       )?;
 
       root.validate(&id_tree_map)?;
+      self.tag_refs = id_tree_map.clone();
 
       let mut chunk = self.new_chunk();
       let mut tree = chunk
