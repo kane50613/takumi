@@ -296,6 +296,8 @@ fn draw_glyph_run_content(
     .map_err(|_| FontError::InvalidFontIndex)?;
   let palettes = font.color_palettes();
   let palette = palettes.get(0);
+  // A span may set `-webkit-text-stroke` for itself, so it comes off the run.
+  let stroke = (glyph_run.brush.stroke_width, glyph_run.brush.stroke_color);
 
   if let Some(clip_image) = options.clip_image {
     for glyph in &glyph_run.glyphs {
@@ -312,6 +314,7 @@ fn draw_glyph_run_content(
         content,
         canvas,
         options.style,
+        stroke,
         options.transform,
         inline_offset,
         clip_image,
@@ -333,6 +336,7 @@ fn draw_glyph_run_content(
       content,
       canvas,
       options.style,
+      stroke,
       options.transform,
       inline_offset,
       glyph_run.brush.color,

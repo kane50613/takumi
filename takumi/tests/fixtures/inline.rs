@@ -861,3 +861,35 @@ fn inline_social_post_regression() {
 
   run_fixture_test(node, "inline_social_post_regression");
 }
+
+#[test]
+fn inline_span_text_stroke() {
+  let children = vec![
+    Node::text("Plain ".to_string())
+      .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+    Node::text("Stroked".to_string()).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Inline))
+        .with(StyleDeclaration::webkit_text_stroke_width(Some(Px(4.0))))
+        .with(StyleDeclaration::webkit_text_stroke_color(Some(
+          ColorInput::Value(Color([255, 0, 0, 255])),
+        ))),
+    ),
+  ];
+
+  let node = Node::container(children).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::align_items(AlignItems::Center))
+      .with(StyleDeclaration::justify_content(JustifyContent::Center))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::white(),
+      )))
+      .with(StyleDeclaration::font_size(Px(72.0).into()))
+      .with(StyleDeclaration::font_weight(FontWeight::from(700.0))),
+  );
+
+  run_fixture_test(node, "inline_span_text_stroke");
+}

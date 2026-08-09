@@ -183,6 +183,8 @@ pub(crate) fn draw_decoration_segment(
 struct GlyphPaintCtx<'a, 'b> {
   canvas: &'a mut Canvas,
   style: &'a SizedFontStyle<'a>,
+  /// The run's own `-webkit-text-stroke`, which a span may set for itself.
+  stroke: (f32, Color),
   transform: Affine,
   inline_offset: Point<f32>,
   paths: &'b [Command],
@@ -193,6 +195,7 @@ pub(crate) fn draw_glyph_clip_image(
   glyph: &ResolvedGlyph,
   canvas: &mut Canvas,
   style: &SizedFontStyle,
+  stroke: (f32, Color),
   mut transform: Affine,
   inline_offset: Point<f32>,
   clip_image: PaintSource<'_>,
@@ -290,6 +293,7 @@ pub(crate) fn draw_glyph_clip_image(
       let mut ctx = GlyphPaintCtx {
         canvas,
         style,
+        stroke,
         transform,
         inline_offset,
         paths: outline.paths(),
@@ -306,10 +310,12 @@ pub(crate) fn draw_glyph_clip_image(
 
   Ok(())
 }
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_glyph(
   glyph: &ResolvedGlyph,
   canvas: &mut Canvas,
   style: &SizedFontStyle,
+  stroke: (f32, Color),
   mut transform: Affine,
   inline_offset: Point<f32>,
   color: Color,
@@ -357,6 +363,7 @@ pub(crate) fn draw_glyph(
       let mut ctx = GlyphPaintCtx {
         canvas,
         style,
+        stroke,
         transform,
         inline_offset,
         paths: outline.paths(),
@@ -375,7 +382,7 @@ pub(crate) fn draw_glyph(
 }
 
 fn draw_text_stroke_clip_image(ctx: &mut GlyphPaintCtx<'_, '_>, clip_image: PaintSource<'_>) {
-  if ctx.style.stroke_width <= 0.0 {
+  if ctx.stroke.0 <= 0.0 {
     return;
   }
 
@@ -384,7 +391,7 @@ fn draw_text_stroke_clip_image(ctx: &mut GlyphPaintCtx<'_, '_>, clip_image: Pain
   };
 
   let scale = ctx.transform.uniform_scale().max(f32::EPSILON);
-  let mut stroke = Stroke::new(ctx.style.stroke_width / scale);
+  let mut stroke = Stroke::new(ctx.stroke.0 / scale);
   stroke.join = ctx.style.parent.stroke_linejoin.into();
 
   let (stroke_mask, stroke_placement) =
@@ -394,7 +401,7 @@ fn draw_text_stroke_clip_image(ctx: &mut GlyphPaintCtx<'_, '_>, clip_image: Pain
     &stroke_mask,
     stroke_placement,
     clip_image,
-    MaskCompositeColor::color_over_source(ctx.style.text_stroke_color),
+    MaskCompositeColor::color_over_source(ctx.stroke.1),
     MaskSamplingOptions {
       canvas_to_source: Affine::translation(ctx.inline_offset.x, ctx.inline_offset.y) * inverse,
       sample_bias: Point::ZERO,
@@ -438,12 +445,12 @@ fn draw_text_embolden_clip_image(
 }
 
 fn draw_text_stroke(ctx: &mut GlyphPaintCtx<'_, '_>) {
-  if ctx.style.stroke_width <= 0.0 {
+  if ctx.stroke.0 <= 0.0 {
     return;
   }
 
   let scale = ctx.transform.uniform_scale().max(f32::EPSILON);
-  let mut stroke = Stroke::new(ctx.style.stroke_width / scale);
+  let mut stroke = Stroke::new(ctx.stroke.0 / scale);
   stroke.join = ctx.style.parent.stroke_linejoin.into();
 
   draw_mask_with_cache(
@@ -451,7 +458,7 @@ fn draw_text_stroke(ctx: &mut GlyphPaintCtx<'_, '_>) {
     ctx.glyph_signature,
     ctx.transform,
     Some(stroke),
-    ctx.style.text_stroke_color,
+    ctx.stroke.1,
     ctx.canvas,
   );
 }

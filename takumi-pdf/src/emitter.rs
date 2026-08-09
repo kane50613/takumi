@@ -1209,7 +1209,6 @@ impl Emitter<'_> {
         surface,
       );
     }
-    let stroke = font_style.stroke_width > 0.0 && font_style.text_stroke_color.0[3] != 0;
     let text_fills = self.text_clip_fills(node, layout, x, y);
 
     for run in &runs.runs {
@@ -1279,21 +1278,22 @@ impl Emitter<'_> {
       surface.set_fill(Some(fill.clone()));
       // `-webkit-text-stroke` strokes the glyph outlines around the fill, and
       // takes the run's own width over the faux bold one.
-      surface.set_stroke(if stroke {
-        let stroke_fill = fill_from_rgba(
-          self.filtered(font_style.text_stroke_color),
-          shaped.brush.opacity,
-        );
+      let brush = &shaped.brush;
 
-        Some(Stroke {
-          paint: stroke_fill.paint,
-          opacity: stroke_fill.opacity,
-          width: font_style.stroke_width,
-          ..Stroke::default()
-        })
-      } else {
-        synthetic_stroke(shaped, &fill)
-      });
+      surface.set_stroke(
+        if brush.stroke_width > 0.0 && brush.stroke_color.0[3] != 0 {
+          let stroke_fill = fill_from_rgba(self.filtered(brush.stroke_color), brush.opacity);
+
+          Some(Stroke {
+            paint: stroke_fill.paint,
+            opacity: stroke_fill.opacity,
+            width: brush.stroke_width,
+            ..Stroke::default()
+          })
+        } else {
+          synthetic_stroke(shaped, &fill)
+        },
+      );
 
       surface.draw_glyphs(origin, &glyphs, font, run_text, shaped.font_size, false);
 

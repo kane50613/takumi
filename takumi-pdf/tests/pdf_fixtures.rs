@@ -805,6 +805,7 @@ fn text_shadow_and_stroke() {
       <div style="text-shadow: 2px 2px 4px rgba(17, 24, 39, 0.5);">Blurred shadow</div>
       <div style="-webkit-text-stroke: 1px #b91c1c; color: #fef3c7;">Stroked text</div>
       <div style="-webkit-text-stroke: 2px rgba(185, 28, 28, 0.25); color: #fef3c7;">Faded stroke</div>
+      <div>Plain <span style="-webkit-text-stroke: 1px #2563eb;">span stroke</span></div>
       <div style="background-image: linear-gradient(90deg, #ff5f6d, #3a1c71); background-clip: text; color: transparent;">Gradient text</div>
     </div>"##;
     let node = from_html(source, FromHtmlOptions::default()).expect("parse text shadow fixture");
@@ -827,6 +828,12 @@ fn text_shadow_and_stroke() {
   assert!(
     contains(b"0.7255 0.1098 0.1098 RG"),
     "expected the text stroke color"
+  );
+  // A span sets the stroke for itself, so the blue outline reaches the file
+  // even though the line it sits on carries none.
+  assert!(
+    contains(b"0.1451 0.3882 0.9216 RG"),
+    "expected the inline span stroke color"
   );
   // The clip-text line fills its glyphs with the gradient shading.
   assert!(

@@ -15,7 +15,7 @@ use takumi_core::{
   layout::{
     inline::{
       DecorationRect, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineOutlineRect,
-      InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan, collect_inline_items,
+      InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan, ShapedRun, collect_inline_items,
       create_inline_layout, outline_island_contour, outline_islands, resolve_inline_runs,
       run_decorations,
     },
@@ -157,13 +157,6 @@ fn emit_runs(
   context: &RenderContext,
   frame: TextFrame,
 ) -> io::Result<()> {
-  let stroke =
-    (font_style.stroke_width > 0.0 && font_style.text_stroke_color.0[3] != 0).then_some((
-      Rgba(font_style.text_stroke_color.0),
-      font_style.stroke_width,
-      line_join_str(font_style.parent.stroke_linejoin),
-    ));
-
   // text-shadow paints below the glyphs; later-listed shadows paint lowest.
   for shadow in font_style.painted_text_shadows() {
     let color = Rgba(shadow.color.0);
@@ -199,9 +192,11 @@ fn emit_runs(
   }
 
   if context.style.background_clip == BackgroundClip::Text {
-    emit_clip_text_glyphs(doc, runs, font_style, context, frame, stroke)?;
+    emit_clip_text_glyphs(doc, runs, font_style, context, frame)?;
   } else {
     for run in &runs.runs {
+      let stroke = run_stroke(&run.glyph_run, font_style);
+
       emit_run_glyphs(doc, run, font_style, frame, None, stroke, None)?;
     }
   }
@@ -281,6 +276,18 @@ fn emit_outline_island(
   Ok(())
 }
 
+/// The `-webkit-text-stroke` a run carries. A span may set it for itself, so it
+/// comes off the run; the join is a box-level property and stays with the node.
+fn run_stroke<'j>(run: &ShapedRun, font_style: &'j SizedFontStyle) -> Option<(Rgba, f32, &'j str)> {
+  let brush = &run.brush;
+
+  (brush.stroke_width > 0.0 && brush.stroke_color.0[3] != 0).then_some((
+    Rgba(brush.stroke_color.0),
+    brush.stroke_width,
+    line_join_str(font_style.parent.stroke_linejoin),
+  ))
+}
+
 /// Emits glyphs filled by the element's background (`background-clip: text`).
 ///
 /// Mirrors the raster backend: the background (color + images) is painted into
@@ -299,16 +306,21 @@ fn emit_clip_text_glyphs(
   font_style: &SizedFontStyle,
   context: &RenderContext,
   frame: TextFrame,
-  stroke: Option<(Rgba, f32, &str)>,
 ) -> io::Result<()> {
   let white = Rgba([255, 255, 255, 255]);
   let join = line_join_str(font_style.parent.stroke_linejoin);
-  let stroke_width = font_style.stroke_width;
 
   let (mask_token, mask_ref) = doc.begin_mask()?;
   let mut any = false;
   for run in &runs.runs {
-    any |= emit_clip_text_mask_glyphs(doc, run, frame, white, stroke_width, join)?;
+    any |= emit_clip_text_mask_glyphs(
+      doc,
+      run,
+      frame,
+      white,
+      run.glyph_run.brush.stroke_width,
+      join,
+    )?;
   }
   doc.end_mask(mask_token)?;
   if !any {
@@ -336,6 +348,8 @@ fn emit_clip_text_glyphs(
   // The `color` (brush) fills the glyph interiors on top of the background, with
   // the real text stroke (a transparent stroke adds nothing visible).
   for run in &runs.runs {
+    let stroke = run_stroke(&run.glyph_run, font_style);
+
     emit_run_glyphs(doc, run, font_style, frame, None, stroke, None)?;
   }
   Ok(())
