@@ -1,15 +1,20 @@
 {
   "name": "takumi-js",
   "version": "2.6.0",
-  "description": "All-in-one Takumi package for Node.js and WebAssembly runtimes.",
+  "description": "Render OG images from JSX, HTML, and CSS. No headless browser.",
   "keywords": [
+    "animated-webp",
     "css",
+    "html-to-image",
     "image",
+    "image-generation",
     "jsx",
     "next-og",
     "og-image",
+    "open-graph",
     "react",
-    "rendering",
+    "svg",
+    "tailwind",
     "wasm"
   ],
   "homepage": "https://takumi.kane.tw/docs/",

@@ -1,13 +1,14 @@
 {
   "name": "@takumi-rs/wasm",
   "version": "2.6.0",
-  "description": "WebAssembly bindings for Takumi, a Rust image rendering engine.",
+  "description": "Render OG images from Takumi node trees with WebAssembly. No headless browser.",
   "keywords": [
+    "cloudflare-workers",
     "css",
+    "edge",
     "image",
-    "jsx",
-    "react",
-    "rendering",
+    "image-generation",
+    "og-image",
     "webassembly"
   ],
   "license": "(MIT OR Apache-2.0)",

@@ -3,9 +3,9 @@
 
 # takumi-pdf
 
-**Render JSX to paged, selectable-text PDF. WebAssembly, no Chromium.**
+**Render paged PDFs from JSX, HTML, and CSS. No headless browser.**
 
-Invoices, reports, and receipts from the Takumi renderer, with CSS layout and vector PDF output.
+Build invoices and reports with CSS or Tailwind. The renderer writes vector PDF with selectable text.
 
 [Documentation](https://takumi.kane.tw/docs/) · [Playground](https://takumi.kane.tw/playground)
 
@@ -13,9 +13,9 @@ Invoices, reports, and receipts from the Takumi renderer, with CSS layout and ve
 
 ## Why
 
-Browser-based PDF generation brings the Chromium serverless tax: browser cold starts, browser memory, a large browser binary, and headless-browser work before a document can render. It is a capable screenshot pipeline, but it is still a browser.
+Browser-based PDF generation starts a browser process and ships a Chrome installation. `takumi-pdf` compiles Takumi's layout and PDF code to WebAssembly.
 
-`takumi-pdf` uses Takumi's own layout and PDF rendering primitives, compiled to WebAssembly. There is no browser process. Render JSX or a Takumi node tree with CSS and Tailwind classes, then receive vector PDF bytes with selectable, searchable text and embedded subset fonts.
+Pass JSX or a Takumi node tree with CSS. The renderer returns vector PDF bytes with searchable text and embedded subset fonts.
 
 ## Install
 
@@ -168,7 +168,7 @@ const pdf = await render(
 
 ## Links, outline, and metadata
 
-Anchors with an `href` become clickable link annotations. `outline: true` builds PDF bookmarks from `h1`–`h6` headings. `metadata` fills the document properties:
+Anchors with an `href` become clickable link annotations. `outline: true` builds PDF bookmarks from `h1` through `h6` headings. `metadata` fills the document properties:
 
 ```tsx
 const pdf = await render(report, {
@@ -186,7 +186,7 @@ Omit `metadata` to keep output byte-identical across runs.
 
 ## Tagged output and PDF/A
 
-Output is **tagged by default**: HTML semantics (`h1`–`h6`, `p`, `img` with `alt`, `a`, lists) become a PDF structure tree, like Chromium's print-to-PDF. Set `tagged: "ua1"` to validate against PDF/UA-1, or `tagged: false` to drop the tree when file size matters more than accessibility.
+Output is **tagged by default**: HTML semantics (`h1` through `h6`, `p`, `img` with `alt`, `a`, lists) become a PDF structure tree, like Chromium's print-to-PDF. Set `tagged: "ua1"` to validate against PDF/UA-1, or `tagged: false` to drop the tree when file size matters more than accessibility.
 
 `<table>` markup is not supported, and a table built out of flex rows carries no `Table` structure elements.
 

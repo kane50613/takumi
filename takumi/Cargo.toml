@@ -3,8 +3,9 @@ name = "takumi"
 version = "2.6.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-description = "Render UI component trees to images."
-keywords = ["react", "image", "css", "flexbox"]
+description = "Render OG images from HTML, CSS, or component trees. No headless browser."
+keywords = ["html-to-image", "image", "css", "svg", "og-image"]
+categories = ["graphics", "rendering", "web-programming"]
 repository = "https://github.com/kane50613/takumi"
 homepage = "https://takumi.kane.tw"
 readme = "README.md"
@@ -97,5 +98,4 @@ harness = false
 [[bench]]
 name = "text"
 harness = false
-
 
