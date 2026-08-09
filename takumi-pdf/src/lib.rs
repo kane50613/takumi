@@ -115,6 +115,9 @@ pub use crate::options::{
 /// `totalPages` class hooks filled with three-digit counters. The returned
 /// height is the band height a page margin needs to accommodate. With a
 /// viewport the tree is measured as-is, counter hooks untouched.
+///
+/// The size is the tree's own, not the space it laid out against: a box with
+/// `width: 100px` measures 100 wide on any page.
 pub fn measure(options: MeasureOptions<'_>) -> Result<MeasuredSize, PdfError> {
   let inputs = TreeInputs {
     fonts: options.fonts,
@@ -135,9 +138,11 @@ pub fn measure(options: MeasureOptions<'_>) -> Result<MeasuredSize, PdfError> {
     (None, None) => return Err(PdfError::MissingViewport),
   };
 
+  let size = tree.content_size();
+
   Ok(MeasuredSize {
-    width: tree.width,
-    height: tree.height,
+    width: size.width,
+    height: size.height,
   })
 }
 
