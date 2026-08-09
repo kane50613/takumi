@@ -1,5 +1,7 @@
 use std::f32::consts::{PI, SQRT_2};
 
+use smallvec::SmallVec;
+
 use crate::{
   context::RenderContext,
   geometry::{PathBuilder, PathCommand as Command, Point, Rect, Size},
@@ -18,6 +20,19 @@ pub enum BorderSide {
   Bottom,
   /// Left side.
   Left,
+}
+
+/// One strip of a border side: where it sits, how thick it is, and what colour
+/// fills it. `solid` and the 3D bevels paint one; `double` and `groove`/`ridge`
+/// paint two.
+#[derive(Debug, Clone, Copy)]
+pub struct SideBand {
+  /// How far in from the border box the strip starts, per side.
+  pub inset: Rect<f32>,
+  /// The strip's thickness, per side.
+  pub width: Rect<f32>,
+  /// The fill colour, already shaded for the 3D styles.
+  pub color: Color,
 }
 
 /// One side of a border that paints, with the values needed to draw it.
@@ -992,13 +1007,9 @@ pub(crate) fn border_paint(border: &BorderProperties) -> BorderPaint {
   if border.is_uniform_all_sides_style(BorderStyle::Double) {
     return BorderPaint::Double { color, width };
   }
-  // A dashed or dotted side breaks the ring into segments, so a border that
-  // mixes one in has to be walked side by side even though its colour is
-  // uniform. Filling the ring would quietly paint that side solid.
-  if border
-    .painted_sides()
-    .any(|side| matches!(side.style, BorderStyle::Dashed | BorderStyle::Dotted))
-  {
+  // Only a solid side fills as part of one ring: a dashed or dotted side breaks
+  // the ring into segments, and the 3D bevels shade each side differently.
+  if !border.visible_sides_match(BorderStyle::Solid) {
     return BorderPaint::Sides;
   }
 
@@ -1106,6 +1117,65 @@ pub fn shade_3d_border_color(color: Color, side: BorderSide, style: BorderStyle)
     },
     0.35,
   )
+}
+
+/// The strips a side fills, outermost first.
+///
+/// A dashed or dotted side has none: it strokes a centerline instead. The 3D
+/// bevels shade their strips, which is the only thing that separates them from
+/// a plain `solid` side.
+pub fn side_bands(border: &BorderProperties, side: PaintedSide) -> SmallVec<[SideBand; 2]> {
+  let mut bands = SmallVec::new();
+  let color = side.color;
+  let shaded = |style| shade_3d_border_color(color, side.side, style);
+
+  match side.style {
+    BorderStyle::Dashed | BorderStyle::Dotted => {}
+    BorderStyle::Double => {
+      let width = border.width.map(|value| value / 3.0);
+
+      bands.push(SideBand {
+        inset: Rect::ZERO,
+        width,
+        color,
+      });
+      bands.push(SideBand {
+        inset: border.width.map(|value| value * (2.0 / 3.0)),
+        width,
+        color,
+      });
+    }
+    BorderStyle::Inset | BorderStyle::Outset => bands.push(SideBand {
+      inset: Rect::ZERO,
+      width: border.width,
+      color: shaded(side.style),
+    }),
+    BorderStyle::Groove | BorderStyle::Ridge => {
+      let outer_width = border.width.map(|value| value / 2.0);
+      let (outer, inner) = match side.style {
+        BorderStyle::Groove => (BorderStyle::Inset, BorderStyle::Outset),
+        _ => (BorderStyle::Outset, BorderStyle::Inset),
+      };
+
+      bands.push(SideBand {
+        inset: Rect::ZERO,
+        width: outer_width,
+        color: shaded(outer),
+      });
+      bands.push(SideBand {
+        inset: outer_width,
+        width: subtract_rect(border.width, outer_width),
+        color: shaded(inner),
+      });
+    }
+    _ => bands.push(SideBand {
+      inset: Rect::ZERO,
+      width: border.width,
+      color,
+    }),
+  }
+
+  bands
 }
 
 pub(crate) fn mix_color(color: Color, target: Color, amount: f32) -> Color {

@@ -13,7 +13,7 @@ use takumi_core::{
   font_style::SizedFontStyle,
   geometry::{ComputedLayout as Layout, NodeId, Point as CorePoint, Size},
   layout::{
-    border::BorderProperties,
+    border::{BorderProperties, inset_size, rect_offset, side_bands},
     clip::clip_shape_commands,
     decoration::{ClipBox, OutlineGeometry},
     inline::{BuiltInlineLayout, InlineRunLayout, ProcessedInlineSpan, ShapedRun, run_decorations},
@@ -937,12 +937,24 @@ impl Emitter<'_> {
 
     surface.push_clip_path(&ring_path, &FillRule::EvenOdd);
     for side in sides {
-      let mut polygon = Vec::new();
+      for band in side_bands(border, side) {
+        let mut strip = *border;
 
-      border.append_side_clip_polygon_commands_at(side.side, &mut polygon, size, CorePoint::ZERO);
-      if let Some(path) = krilla_path(&polygon, x, y) {
-        surface.set_fill(Some(fill_from_rgba(self.filtered(side.color), 1.0)));
-        surface.draw_path(&path);
+        strip.width = band.width;
+        strip.expand_by(band.inset.map(|value| -value));
+
+        let mut polygon = Vec::new();
+
+        strip.append_side_clip_polygon_commands_at(
+          side.side,
+          &mut polygon,
+          inset_size(size, band.inset),
+          rect_offset(band.inset),
+        );
+        if let Some(path) = krilla_path(&polygon, x, y) {
+          surface.set_fill(Some(fill_from_rgba(self.filtered(band.color), 1.0)));
+          surface.draw_path(&path);
+        }
       }
     }
     surface.pop();
