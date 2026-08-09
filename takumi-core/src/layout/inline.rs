@@ -11,7 +11,7 @@ use crate::{
   context::RenderContext,
   font_style::SizedFontStyle,
   geometry::{AvailableSpace, ComputedLayout, PathBuilder, PathCommand, Point, Rect, Size},
-  layout::{node::Node, tree::RenderNode},
+  layout::{intercept::skip_ink_spans, node::Node, tree::RenderNode},
   resources::{
     font::{FontError, run_synthesis, run_variations},
     glyph::{ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},
@@ -2637,8 +2637,36 @@ pub struct DecorationRect {
 /// raster geometry in `draw_decoration` (skip-ink is a raster-only refinement and
 /// omitted here). `transform` is the run's border-box transform
 /// ([`PositionedInlineRun::transform`] with an identity base).
+/// Each glyph's outline, placed where the run draws it.
+fn glyph_outlines(
+  glyph_run: &ShapedRun,
+  resolved_glyphs: &HashMap<u32, Arc<ResolvedGlyph>>,
+  baseline_shift: f32,
+) -> Vec<(Point<f32>, Vec<PathCommand>)> {
+  glyph_run
+    .glyphs
+    .iter()
+    .filter_map(|glyph| {
+      let ResolvedGlyph::Outline(outline) = resolved_glyphs.get(&glyph.id)?.as_ref() else {
+        return None;
+      };
+
+      Some((
+        Point {
+          x: glyph.x,
+          y: glyph.y + baseline_shift,
+        },
+        outline.paths().to_vec(),
+      ))
+    })
+    .collect()
+}
+
+/// The rectangles a run's `text-decoration` paints. An underline arrives split
+/// where the glyphs cross it, when `text-decoration-skip-ink` asks for that.
 pub fn run_decorations(
   glyph_run: &ShapedRun,
+  resolved_glyphs: &HashMap<u32, Arc<ResolvedGlyph>>,
   layout: ComputedLayout,
   baseline_shift: f32,
   transform: Affine,
@@ -2662,30 +2690,58 @@ pub fn run_decorations(
     SizedTextDecorationThickness::Value(value) => value,
     SizedTextDecorationThickness::FromFont => from_font,
   };
-  let mut emit = |y_offset: f32, height: f32, over: bool, line: TextDecorationLines| {
-    if height <= 0.0 {
-      return;
-    }
-    let matrix = transform * Affine::translation(snapped_start_x, top + y_offset);
-    out.push(DecorationRect {
-      width,
-      height,
-      color: brush.decoration_color,
-      transform: matrix.to_cols_array(),
-      over,
-      line,
-    });
-  };
+  let mut emit =
+    |x: f32, span_width: f32, y_offset: f32, height: f32, over: bool, line: TextDecorationLines| {
+      if height <= 0.0 || span_width <= 0.0 {
+        return;
+      }
+      let matrix = transform * Affine::translation(x, top + y_offset);
+      out.push(DecorationRect {
+        width: span_width,
+        height,
+        color: brush.decoration_color,
+        transform: matrix.to_cols_array(),
+        over,
+        line,
+      });
+    };
+
   if lines.contains(TextDecorationLines::UNDERLINE) {
-    emit(
-      baseline + glyph_run.underline_offset_from_baseline(),
-      thickness(metrics.underline_size),
-      false,
-      TextDecorationLines::UNDERLINE,
-    );
+    let y_offset = baseline + glyph_run.underline_offset_from_baseline();
+    let height = thickness(metrics.underline_size);
+    // `skip-ink` cuts the line where the glyphs cross it. The pieces carry the
+    // same transform, so a backend paints them exactly as it paints one line.
+    let spans = if brush.decoration_skip_ink == TextDecorationSkipInk::None {
+      [(snapped_start_x, snapped_start_x + width)]
+        .into_iter()
+        .collect()
+    } else {
+      let outlines = glyph_outlines(glyph_run, resolved_glyphs, baseline_shift);
+
+      skip_ink_spans(
+        outlines.iter().map(|(at, paths)| (*at, paths.as_slice())),
+        snapped_start_x,
+        snapped_start_x + width,
+        y_offset,
+        y_offset + height,
+      )
+    };
+
+    for (start, end) in spans {
+      emit(
+        start,
+        end - start,
+        y_offset,
+        height,
+        false,
+        TextDecorationLines::UNDERLINE,
+      );
+    }
   }
   if lines.contains(TextDecorationLines::OVERLINE) {
     emit(
+      snapped_start_x,
+      width,
       baseline - metrics.ascent - metrics.underline_offset,
       thickness(metrics.underline_size),
       false,
@@ -2694,6 +2750,8 @@ pub fn run_decorations(
   }
   if lines.contains(TextDecorationLines::LINE_THROUGH) {
     emit(
+      snapped_start_x,
+      width,
       baseline - metrics.strikethrough_offset,
       thickness(metrics.strikethrough_size),
       true,

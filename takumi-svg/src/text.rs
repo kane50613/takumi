@@ -381,7 +381,13 @@ fn emit_run_decorations(
   let opacity_group = (opacity < 1.0)
     .then(|| doc.begin_group(IDENTITY, opacity, None, None))
     .transpose()?;
-  let decorations = run_decorations(&run.glyph_run, frame.layout, run.baseline_shift, transform);
+  let decorations = run_decorations(
+    &run.glyph_run,
+    &run.resolved_glyphs,
+    frame.layout,
+    run.baseline_shift,
+    transform,
+  );
   let mut device = DocumentDevice { doc, error: None };
 
   paint_run_decorations(

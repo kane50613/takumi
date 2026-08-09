@@ -1190,6 +1190,7 @@ impl Emitter<'_> {
       }
       let decorations = run_decorations(
         shaped,
+        &run.resolved_glyphs,
         layout,
         run.baseline_shift,
         run.transform(Affine::IDENTITY),

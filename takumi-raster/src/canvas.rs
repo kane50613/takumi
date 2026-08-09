@@ -25,7 +25,7 @@ use image::{
 };
 pub(crate) use mask::{
   CanvasViewport, MaskView, NodeMaskAction, attenuate_alpha_by_mask, intersect_alpha_masks,
-  mask_index_from_coord, prepare_node_mask, render_mask,
+  prepare_node_mask, render_mask,
 };
 use mask::{MaskStackEntry, resolve_mask};
 pub(crate) use paint_source::{

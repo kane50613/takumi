@@ -10,6 +10,8 @@ pub mod decoration;
 pub mod inline;
 /// Resolving what an inline box paints.
 pub mod inline_box;
+/// Where a glyph outline crosses a horizontal band.
+pub mod intercept;
 /// Node Tree
 pub mod node;
 /// Layout tree: render nodes and their computed layout results.
