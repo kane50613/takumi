@@ -347,6 +347,53 @@ function pageFonts(
   return cmaps;
 }
 
+type ObjectSource = {
+  number: string;
+  raw: string;
+  stream: Uint8Array | undefined;
+  body: string | undefined;
+  pages: number[] | undefined;
+  text: string | undefined;
+};
+
+/** The object itself, followed by whatever an `/ObjStm` was hiding inside it. */
+function describeObject({ number, raw, stream, body, pages, text }: ObjectSource): PdfObject[] {
+  const keyword = raw.indexOf("stream");
+  const dict = (keyword === -1 ? raw : raw.slice(0, keyword)).trim();
+  const packed = stream && /\/Type\s*\/ObjStm\b/.test(dict) ? expandObjectStream(dict, stream) : [];
+
+  return [
+    {
+      number,
+      label: pages
+        ? `content stream, page${pages.length > 1 ? "s" : ""} ${pages.join(", ")}`
+        : (raw.match(/\/(?:Sub)?Type\s*\/(\w+)/)?.[1] ?? ""),
+      dict,
+      body:
+        packed.length > 0
+          ? undefined
+          : stream && (body === undefined ? `${stream.length} bytes, not text` : clamp(body)),
+      text,
+    },
+    ...packed,
+  ];
+}
+
+function countPageText(
+  pageText: { blocks: number; words: number }[],
+  pages: number[],
+  body: string,
+  text: string,
+) {
+  const blocks = body.match(/\bBT\b/g)?.length ?? 0;
+  const words = text.split(/\s+/).filter(Boolean).length;
+
+  for (const page of pages) {
+    pageText[page - 1].blocks += blocks;
+    pageText[page - 1].words += words;
+  }
+}
+
 /** Every object the file declares, in file order, with `/ObjStm` contents unpacked in place. */
 async function readObjects(text: string, bytes: Uint8Array) {
   const ranges = objectRanges(text);
@@ -386,10 +433,7 @@ async function readObjects(text: string, bytes: Uint8Array) {
   });
 
   const pageText = kids.map(() => ({ blocks: 0, words: 0 }));
-  const objects = [...ranges].map(([number, range]) => {
-    const raw = text.slice(...range);
-    const keyword = raw.indexOf("stream");
-    const dict = (keyword === -1 ? raw : raw.slice(0, keyword)).trim();
+  const objects = [...ranges].flatMap(([number, range]) => {
     const stream = streams.get(number);
     const body = stream && readable(stream);
     const pages = pageOf.get(number);
@@ -398,37 +442,12 @@ async function readObjects(text: string, bytes: Uint8Array) {
         ? clamp(extractText(bytesToChars(stream), fontsOf.get(number) ?? new Map()))
         : undefined;
 
-    if (pages && body) {
-      const blocks = body.match(/\bBT\b/g)?.length ?? 0;
-      const words = (drawn ?? "").split(/\s+/).filter(Boolean).length;
+    if (pages && body) countPageText(pageText, pages, body, drawn ?? "");
 
-      for (const page of pages) {
-        pageText[page - 1].blocks += blocks;
-        pageText[page - 1].words += words;
-      }
-    }
-
-    const packed =
-      stream && /\/Type\s*\/ObjStm\b/.test(dict) ? expandObjectStream(dict, stream) : [];
-
-    return [
-      {
-        number,
-        label: pages
-          ? `content stream, page${pages.length > 1 ? "s" : ""} ${pages.join(", ")}`
-          : (raw.match(/\/(?:Sub)?Type\s*\/(\w+)/)?.[1] ?? ""),
-        dict,
-        body:
-          packed.length > 0
-            ? undefined
-            : stream && (body === undefined ? `${stream.length} bytes, not text` : clamp(body)),
-        text: drawn,
-      },
-      ...packed,
-    ];
+    return describeObject({ number, raw: text.slice(...range), stream, body, pages, text: drawn });
   });
 
-  return { objects: objects.flat(), pageText };
+  return { objects, pageText };
 }
 
 export async function inspectPdf(bytes: Uint8Array): Promise<PdfInspection> {
