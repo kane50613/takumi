@@ -472,7 +472,10 @@ pub struct InlineBrush {
   pub decoration_line: TextDecorationLines,
   /// Whether decorations skip over glyph ink.
   pub decoration_skip_ink: TextDecorationSkipInk,
-  pub(crate) stroke_color: Color,
+  /// `-webkit-text-stroke` colour, which a span may set for itself.
+  pub stroke_color: Color,
+  /// `-webkit-text-stroke` width in pixels.
+  pub stroke_width: f32,
   pub(crate) font_synthesis: FontSynthesis,
   pub(crate) line_height_scales_with_text_fit: bool,
   pub(crate) vertical_align: VerticalAlign,
@@ -491,6 +494,7 @@ impl Default for InlineBrush {
       decoration_line: TextDecorationLines::empty(),
       decoration_skip_ink: TextDecorationSkipInk::default(),
       stroke_color: Color::black(),
+      stroke_width: 0.0,
       font_synthesis: FontSynthesis::default(),
       line_height_scales_with_text_fit: false,
       vertical_align: VerticalAlign::default(),

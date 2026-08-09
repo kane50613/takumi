@@ -291,6 +291,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
         decoration_line: style.parent.text_decoration_line.unwrap_or_default(),
         decoration_skip_ink: style.parent.text_decoration_skip_ink,
         stroke_color: style.text_stroke_color,
+        stroke_width: style.stroke_width,
         font_synthesis: FontSynthesis {
           weight: style.parent.font_synthesis_weight,
           style: style.parent.font_synthesis_style,
