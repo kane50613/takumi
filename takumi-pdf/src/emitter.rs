@@ -1267,7 +1267,7 @@ impl Emitter<'_> {
       // itself, so the background has to fill the widened shape too.
       for background in &text_fills {
         surface.set_fill(Some(background.clone()));
-        surface.set_stroke(synthetic_stroke(shaped, background));
+        surface.set_stroke(background_stroke(shaped, background));
         // Outlined: text extraction keys on the text-showing operator, whatever
         // the rendering mode, so a second run of glyphs would put the text in
         // the text layer twice. Paths paint the same pixels and stay out of it.
@@ -2010,6 +2010,22 @@ fn decorative_image(node: &RenderNode) -> bool {
 /// The stroke that fakes bold for a face with no weight of its own to reach,
 /// at the width the raster renderer emboldens with. Filling and stroking keeps
 /// the run as text, so it stays selectable.
+/// The stroke that widens the glyph coverage a `background-clip: text` fill
+/// paints through: `-webkit-text-stroke`, faux bold, or whichever is wider.
+fn background_stroke(shaped: &ShapedRun, fill: &Fill) -> Option<Stroke> {
+  let width = shaped
+    .synthetic_bold
+    .unwrap_or(0.0)
+    .max(shaped.brush.stroke_width);
+
+  (width > 0.0).then(|| Stroke {
+    paint: fill.paint.clone(),
+    opacity: fill.opacity,
+    width,
+    ..Stroke::default()
+  })
+}
+
 fn synthetic_stroke(shaped: &ShapedRun, fill: &Fill) -> Option<Stroke> {
   Some(Stroke {
     paint: fill.paint.clone(),

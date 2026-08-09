@@ -806,7 +806,10 @@ fn text_shadow_and_stroke() {
       <div style="-webkit-text-stroke: 1px #b91c1c; color: #fef3c7;">Stroked text</div>
       <div style="-webkit-text-stroke: 2px rgba(185, 28, 28, 0.25); color: #fef3c7;">Faded stroke</div>
       <div>Plain <span style="-webkit-text-stroke: 1px #2563eb;">span stroke</span></div>
+      <div style="-webkit-text-stroke: 3px #b91c1c;">Same words</div>
+      <div style="-webkit-text-stroke: 9px #b91c1c;">Same words</div>
       <div style="background-image: linear-gradient(90deg, #ff5f6d, #3a1c71); background-clip: text; color: transparent;">Gradient text</div>
+      <div style="background-image: linear-gradient(90deg, #ff5f6d, #3a1c71); background-clip: text; color: transparent; -webkit-text-stroke: 6px transparent;">Ringed text</div>
     </div>"##;
     let node = from_html(source, FromHtmlOptions::default()).expect("parse text shadow fixture");
 
@@ -835,6 +838,15 @@ fn text_shadow_and_stroke() {
     contains(b"0.1451 0.3882 0.9216 RG"),
     "expected the inline span stroke color"
   );
+  // Two lines of the same words differ only in stroke width, so the shaping
+  // cache has to key on it.
+  assert!(
+    contains(b"3 w") && contains(b"9 w"),
+    "one stroke width served both lines"
+  );
+  // A transparent `-webkit-text-stroke` reveals a background-coloured ring, so
+  // the background pass widens the glyph coverage by the stroke width.
+  assert!(contains(b"6 w"), "expected the widened clip-text coverage");
   // The clip-text line fills its glyphs with the gradient shading.
   assert!(
     contains(b"/Pattern cs"),
