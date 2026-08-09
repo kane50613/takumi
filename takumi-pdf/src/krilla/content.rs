@@ -699,13 +699,14 @@ impl ContentBuilder {
         if do_text_span {
           // Separate into distinct glyph runs that either are encoded using actual text, or are
           // not.
+          // Every glyph gets a codepoint, not just the first of a cluster. A
+          // viewer without `/ActualText` support otherwise reads the subset
+          // glyph index for the rest of the cluster.
           let spanned = GlyphSpanner::new(
             glyphs,
             text,
             reversed,
-            sc.serialize_settings()
-              .validators()
-              .requires_codepoint_mappings(),
+            true,
             context_color,
             font_container.clone(),
           );
