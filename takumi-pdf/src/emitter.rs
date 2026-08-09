@@ -30,8 +30,8 @@ use takumi_core::{
   shadow::SizedShadow,
   style::{
     Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BlendMode, BoxDecorationBreak,
-    BreakBetween, BreakInside, Color, FillRule as CoreFillRule, Isolation, ResolvedGradientStop,
-    TextDecorationLines,
+    BreakBetween, BreakInside, Color, FillRule as CoreFillRule, Isolation, Lang,
+    ResolvedGradientStop, TextDecorationLines,
   },
 };
 
@@ -56,7 +56,7 @@ use crate::{
       RadialGradient as KrillaRadialGradient, SpreadMethod, Stroke, StrokeDash, SweepGradient,
     },
     surface::Surface,
-    tagging::{Artifact, ArtifactType, ContentTag},
+    tagging::{Artifact, ArtifactType, ContentTag, SpanTag},
     text::{Font, Tag},
   },
   options::PdfError,
@@ -121,6 +121,10 @@ pub(crate) struct Emitter<'a> {
   /// Color transform from the `filter` properties of the enclosing stacking
   /// contexts, applied to every color this subtree paints.
   pub(crate) color_filter: Option<Rc<ColorFilter>>,
+  /// The document's default language. A node declaring a different one has
+  /// its content marked with that language, which is how a reader knows to
+  /// switch voices mid-document.
+  pub(crate) document_lang: Option<&'a str>,
   /// Characters no registered font covered. Collected rather than raised on the
   /// spot: the surface has open transforms and clips mid-page, and unwinding
   /// past them would leave it unbalanced.
@@ -146,6 +150,20 @@ impl Emitter<'_> {
 
   fn window_excludes_bounds(&self, bounds: Option<takumi_core::scene::SceneBounds>) -> bool {
     bounds.is_some_and(|b| self.window_excludes(b.top as f32, b.bottom as f32))
+  }
+
+  /// The marked-content tag a node's own content opens.
+  ///
+  /// A node whose language differs from the document's carries it on a `Span`,
+  /// which is how PDF records a language change. Content in the document's own
+  /// language needs nothing: the catalog already declares it.
+  fn content_tag<'t>(&self, node: &'t RenderNode) -> ContentTag<'t> {
+    match node.context.style.lang.as_ref().map(Lang::as_str) {
+      Some(lang) if Some(lang) != self.document_lang => {
+        ContentTag::Span(SpanTag::empty().with_lang(Some(lang)))
+      }
+      _ => ContentTag::Other,
+    }
   }
 }
 
@@ -353,7 +371,7 @@ impl Emitter<'_> {
           None,
         )));
       } else {
-        let identifier = surface.start_tagged(ContentTag::Other);
+        let identifier = surface.start_tagged(self.content_tag(node));
 
         if let Some(tags) = self.tags {
           tags.borrow_mut().record(&paint.path, identifier);
@@ -1410,6 +1428,7 @@ impl Emitter<'_> {
       tags: None,
       color_filter: self.color_filter.clone(),
       uncovered: self.uncovered,
+      document_lang: self.document_lang,
     };
     let x = origin.0 + subtree.margin_offset.x;
     let y = origin.1 + subtree.margin_offset.y;

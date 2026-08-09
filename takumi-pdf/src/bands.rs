@@ -75,6 +75,7 @@ pub(crate) fn emit_band(
   bounds: (f32, f32, f32, f32),
   artifact: bool,
   uncovered: &RefCell<String>,
+  document_lang: Option<&str>,
   surface: &mut Surface,
 ) -> Result<(), PdfError> {
   let (x, y, width, height) = bounds;
@@ -92,7 +93,7 @@ pub(crate) fn emit_band(
   }
   surface.push_clip_path(&path, &FillRule::NonZero);
   surface.push_transform(&Transform::from_translate(x, y));
-  let mut emitter = band.emitter(fonts, None, None, uncovered);
+  let mut emitter = band.emitter(fonts, None, None, uncovered, document_lang);
 
   emitter.emit_context(0, Affine::IDENTITY, surface)?;
   surface.pop();

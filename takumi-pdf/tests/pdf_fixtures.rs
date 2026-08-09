@@ -2210,6 +2210,14 @@ fn font_format_standards() {
         "missing {subtype} font in font-formats-pdfa-{name}"
       );
     }
+    // A paragraph in another language says so, so a reader switches voice
+    // rather than reading Arabic aloud in English.
+    for lang in ["/Lang(zh)", "/Lang(ar)", "/Lang(hi)"] {
+      assert!(
+        haystack.contains(lang),
+        "missing {lang} in font-formats-pdfa-{name}"
+      );
+    }
   }
 }
 
