@@ -2209,40 +2209,10 @@ fn glyph_cluster_ranges(
   let Some(start) = (0..=full.len().saturating_sub(count)).find(|&s| matches_at(s)) else {
     return Vec::new();
   };
-  let mut ranges: Vec<Range<usize>> = full[start..start + count]
+  full[start..start + count]
     .iter()
     .map(|(_, range)| range.clone())
-    .collect();
-
-  merge_overlapping_spans(&mut ranges);
-  ranges
-}
-
-/// Gives every glyph whose text overlaps its neighbour's the union of the two.
-///
-/// A consonant and its matra come back as two clusters over the same source
-/// text rather than a partition of it, so each glyph would map to the base
-/// character again. Sharing one range instead marks them as a single cluster,
-/// which is what the PDF backend needs to emit them under one `ActualText`.
-fn merge_overlapping_spans(ranges: &mut [Range<usize>]) {
-  let mut group = 0;
-
-  for index in 1..ranges.len() {
-    if !spans_overlap(&ranges[group], &ranges[index]) {
-      group = index;
-      continue;
-    }
-    let union =
-      ranges[group].start.min(ranges[index].start)..ranges[group].end.max(ranges[index].end);
-
-    for range in &mut ranges[group..=index] {
-      *range = union.clone();
-    }
-  }
-}
-
-fn spans_overlap(left: &Range<usize>, right: &Range<usize>) -> bool {
-  left.start < right.end && right.start < left.end
+    .collect()
 }
 
 /// A shaped, positioned glyph run — the core-owned replacement for
@@ -3229,27 +3199,5 @@ mod tests {
       segments.iter().any(|(_, text, _)| text.contains("before")),
       "{segments:#?}"
     );
-  }
-
-  #[test]
-  fn overlapping_spans_share_one_range() {
-    // A consonant and its matra, twice, around a space.
-    let mut ranges = vec![0..3, 0..6, 6..9, 6..12, 12..13];
-
-    merge_overlapping_spans(&mut ranges);
-    assert_eq!(ranges, vec![0..6, 0..6, 6..12, 6..12, 12..13]);
-  }
-
-  #[test]
-  fn disjoint_spans_stay_apart() {
-    let ascending = vec![0..1, 1..2, 2..3];
-    let descending = vec![4..6, 2..4, 0..2];
-
-    for original in [ascending, descending] {
-      let mut ranges = original.clone();
-
-      merge_overlapping_spans(&mut ranges);
-      assert_eq!(ranges, original);
-    }
   }
 }
