@@ -67,6 +67,15 @@ struct MeasuredSizeOutput {
   height: f32,
 }
 
+/// The characters the page counters named by these class names can produce.
+///
+/// A counter's characters appear nowhere in the document, so a caller choosing
+/// which faces to load has no other way to learn it needs, say, Thai digits.
+#[wasm_bindgen(js_name = counterCharacters)]
+pub fn counter_characters(classes: Vec<String>) -> String {
+  takumi_pdf::counter_characters(classes.iter().map(String::as_str))
+}
+
 /// A PDF renderer holding registered fonts and a decoded-resource cache.
 ///
 /// State lives behind a lock and every method takes `&self`, mirroring the

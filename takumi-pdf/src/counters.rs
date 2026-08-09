@@ -79,6 +79,9 @@ const ALPHABET_STYLES: [(&str, &str); 7] = [
   ),
 ];
 
+/// The class hooks a page counter is requested through.
+const COUNTER_HOOKS: [&str; 2] = ["pageNumber", "totalPages"];
+
 const OTHER_STYLES: [&str; 5] = [
   "decimal",
   "decimal-leading-zero",
@@ -208,6 +211,52 @@ fn roman(value: usize) -> String {
   out
 }
 
+/// Every character a counter in `style` can produce.
+fn style_characters(style: &str) -> String {
+  if let Some((_, digits)) = DIGIT_STYLES.iter().find(|(name, _)| *name == style) {
+    return digits.iter().collect();
+  }
+  if let Some((_, alphabet)) = ALPHABET_STYLES.iter().find(|(name, _)| *name == style) {
+    return (*alphabet).to_string();
+  }
+
+  match style {
+    "lower-roman" => "ivxlcdm".to_string(),
+    "upper-roman" => "IVXLCDM".to_string(),
+    "trad-chinese-informal" | "cjk-ideographic" => {
+      CHINESE_DIGITS.iter().collect::<String>() + "十百千"
+    }
+    _ => "0123456789".to_string(),
+  }
+}
+
+/// The characters the page counters named by `classes` can produce, or nothing
+/// when no class asks for a counter.
+///
+/// A counter's characters appear nowhere in the document, so a caller choosing
+/// which faces to load has no other way to learn it needs, say, Thai digits.
+pub fn counter_characters<'c>(classes: impl IntoIterator<Item = &'c str>) -> String {
+  let mut hooked = false;
+  let mut characters = String::new();
+
+  for class in classes {
+    if COUNTER_HOOKS.contains(&class) {
+      hooked = true;
+      continue;
+    }
+    if is_counter_style(class) {
+      characters.push_str(&style_characters(class));
+    }
+  }
+
+  match (hooked, characters.is_empty()) {
+    (false, _) => String::new(),
+    // A hook without a style counts in decimal.
+    (true, true) => style_characters("decimal"),
+    (true, false) => characters,
+  }
+}
+
 /// The counter value a node's class hooks request, if any: `pageNumber` or
 /// `totalPages`, optionally paired with a `@counter-style` name — the same
 /// contract as Chromium's print header/footer templates.
@@ -215,12 +264,12 @@ pub(crate) fn counter_text(node: &Node, page: usize, pages: usize) -> Option<Str
   let classes = node.class_name()?;
   let value = if classes
     .split_whitespace()
-    .any(|class| class == "pageNumber")
+    .any(|class| class == COUNTER_HOOKS[0])
   {
     page
   } else if classes
     .split_whitespace()
-    .any(|class| class == "totalPages")
+    .any(|class| class == COUNTER_HOOKS[1])
   {
     pages
   } else {

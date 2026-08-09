@@ -4,7 +4,7 @@ import type { FontLoader, ImagesInput, RegisteredFamilyLike } from "@takumi-rs/h
 import { FontRegistry } from "@takumi-rs/helpers/renderer";
 import { type Node, type ReactElementLike, subsetFonts } from "@takumi-rs/helpers";
 import type { ReactNode } from "react";
-import { PdfRenderer as PdfRendererInternal } from "../pkg/takumi_pdf_wasm";
+import { counterCharacters, PdfRenderer as PdfRendererInternal } from "../pkg/takumi_pdf_wasm";
 
 export { default, initSync } from "../pkg/takumi_pdf_wasm";
 export type { FontLoader, ImagesInput } from "@takumi-rs/helpers/renderer";
@@ -15,38 +15,22 @@ declare module "react" {
   }
 }
 
-/** What a page counter renders in the style every band gets by default. */
-const COUNTER_DIGITS = "0123456789";
-
-/** The class hooks a page counter is requested through. */
-const COUNTER_HOOKS = ["pageNumber", "totalPages"];
-
-/**
- * Whether a tree asks for a page counter in a style other than decimal.
- *
- * A face is kept only when its `unicode-range` covers something the render asks
- * for, and a counter's characters appear nowhere in the document. Which
- * characters a style reaches for is the renderer's to know, so rather than
- * keeping a copy of that here, a non-decimal counter keeps every face.
- */
-function usesNonDecimalCounter(node: unknown): boolean {
+/** Every class name in a tree, so the renderer can say what its counters draw. */
+function classNames(node: unknown, into: string[] = []): string[] {
   if (typeof node !== "object" || node === null) {
-    return false;
+    return into;
   }
   const { className, children } = node as { className?: unknown; children?: unknown };
 
   if (typeof className === "string") {
-    const classes = className.split(/\s+/);
-
-    if (
-      classes.some((name) => COUNTER_HOOKS.includes(name)) &&
-      classes.some((name) => name !== "decimal" && name.includes("-"))
-    ) {
-      return true;
+    into.push(...className.split(/\s+/).filter(Boolean));
+  }
+  if (Array.isArray(children)) {
+    for (const child of children) {
+      classNames(child, into);
     }
   }
-
-  return Array.isArray(children) && children.some(usesNonDecimalCounter);
+  return into;
 }
 
 /** A document input: a takumi node tree, JSX, or an HTML string. */
@@ -287,16 +271,12 @@ export class PdfRenderer {
       footer === undefined ? undefined : resolveNode(footer),
     ]);
     const bands = [headerResult?.node, footerResult?.node].filter((band) => band !== undefined);
-    const keepEveryFace = bands.some(usesNonDecimalCounter);
+    // A band's page counters render characters no node in the tree carries, and
+    // which ones depends on the counter style, so the renderer names them.
+    const counters =
+      bands.length > 0 ? counterCharacters(bands.flatMap((band) => classNames(band))) : "";
     const resources = await this.fonts.resolveResources(
-      fonts &&
-        (keepEveryFace
-          ? fonts
-          : subsetFonts({
-              fonts,
-              // A band's page counters render digits no node in the tree carries.
-              source: bands.length > 0 ? [main.node, ...bands, COUNTER_DIGITS] : main.node,
-            })),
+      fonts && subsetFonts({ fonts, source: [main.node, ...bands, counters] }),
       images,
       fontFamilies,
     );
@@ -333,7 +313,11 @@ export class PdfRenderer {
     const main = await resolveNode(node);
     // The tree measured may itself be a band, so its counters are always in play.
     const resources = await this.fonts.resolveResources(
-      fonts && subsetFonts({ fonts, source: [main.node, COUNTER_DIGITS] }),
+      fonts &&
+        subsetFonts({
+          fonts,
+          source: [main.node, counterCharacters(classNames(main.node))],
+        }),
       images,
       fontFamilies,
     );
