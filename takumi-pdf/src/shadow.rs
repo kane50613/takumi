@@ -80,16 +80,19 @@ pub(crate) fn emit_inset_shadows(
         .border
         .append_mask_commands(&mut commands, clip.size, CorePoint::ZERO);
 
-      let (hole, hole_size) = clip.border.outset_shadow_box(clip.size, -band.spread);
-
-      hole.append_mask_commands(
-        &mut commands,
-        hole_size,
+      let hole = ClipBox::inset_shadow_hole(
+        clip.border,
+        clip.size,
+        band.spread,
         CorePoint {
-          x: shadow.offset_x + band.spread,
-          y: shadow.offset_y + band.spread,
+          x: shadow.offset_x,
+          y: shadow.offset_y,
         },
       );
+
+      hole
+        .border
+        .append_mask_commands(&mut commands, hole.size, hole.offset);
       fill(
         &commands,
         shadow.color,
