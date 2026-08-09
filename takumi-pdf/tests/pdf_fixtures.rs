@@ -326,6 +326,40 @@ fn target_counters_settle_after_they_move_their_own_page() {
 }
 
 #[test]
+fn target_counter_in_a_band_drops_its_placeholder() {
+  let band = |cell: &str| {
+    format!(
+      r##"<div style="display: flex; column-gap: 3px; font-size: 12px; color: #141414;">Page <span class="pageNumber"></span>, section {cell}</div>"##
+    )
+  };
+  let body = toc_document(["", "", ""]);
+  let banded = |footer: String, fonts: &Fonts| {
+    render(
+      PdfOptions::builder()
+        .node(from_html(&body, FromHtmlOptions::default()).expect("parse toc"))
+        .page(PageOptions {
+          width: 320.0,
+          height: 240.0,
+          margin: PageMargins::uniform(24.0),
+        })
+        .footer(from_html(&footer, FromHtmlOptions::default()).expect("parse band"))
+        .fonts(fonts)
+        .build(),
+    )
+  };
+  let fonts = fonts();
+  let hooked = banded(
+    band(r##"<a href="#alpha"><span class="targetPageNumber">99</span></a>"##),
+    &fonts,
+  )
+  .expect("render band with a target hook");
+  let empty = banded(band(r##"<a href="#alpha"><span></span></a>"##), &fonts)
+    .expect("render band without one");
+
+  assert_eq!(hooked, empty, "a band hook kept its placeholder");
+}
+
+#[test]
 fn target_counter_without_a_target_renders_empty() {
   let dangling = toc_document([r#"<span class="targetPageNumber"></span>"#; 3])
     .replace("#alpha", "#missing")
