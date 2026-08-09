@@ -1,6 +1,6 @@
 import { Loader2Icon } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { cn } from "~/lib/utils";
 import type { PdfInspection, PdfObject } from "~/playground/inspect-pdf";
 import type { RenderError, RenderSuccess } from "./use-render-worker";
@@ -100,22 +100,88 @@ function DocumentPanel({ inspection }: { inspection: PdfInspection }) {
   );
 }
 
+const objectId = (number: string) => `pdf-object-${number}`;
+
+/** Turns every `12 0 R` in a dictionary into a jump to that object. */
+function linkReferences(dict: string, onJump: (number: string) => void): ReactNode[] {
+  return dict.split(/(\d+ 0 R)/g).map((part, index) => {
+    const number = part.match(/^(\d+) 0 R$/)?.[1];
+
+    if (!number) return part;
+
+    return (
+      <button
+        key={`${index}-${part}`}
+        type="button"
+        onClick={() => onJump(number)}
+        className="text-primary underline underline-offset-2"
+      >
+        {part}
+      </button>
+    );
+  });
+}
+
 /** The file as written: every object's dictionary, and the streams that read as text. */
 function ObjectsPanel({ objects }: { objects: PdfObject[] }) {
+  const [query, setQuery] = useState("");
+  const [opened, setOpened] = useState<string[]>([]);
+
+  const needle = query.toLowerCase();
+  const matches = objects.filter((object) =>
+    `${object.number} ${object.label} ${object.dict} ${object.body ?? ""}`
+      .toLowerCase()
+      .includes(needle),
+  );
+
+  const toggle = (number: string, open: boolean) =>
+    setOpened((current) =>
+      open ? [...new Set([...current, number])] : current.filter((entry) => entry !== number),
+    );
+
+  // The target may be filtered out, so the scroll waits for the cleared list to paint.
+  const jump = (number: string) => {
+    setQuery("");
+    toggle(number, true);
+    requestAnimationFrame(() => document.getElementById(objectId(number))?.scrollIntoView());
+  };
+
   return (
-    <div className="h-full overflow-auto bg-muted/20 px-4 py-3 font-mono text-xs">
-      {objects.map((object) => (
-        <details key={object.number} className="border-b py-1.5 last:border-b-0">
-          <summary className="cursor-pointer select-none">
-            {object.number} 0 obj
-            {object.label && <span className="text-muted-foreground"> · {object.label}</span>}
-          </summary>
-          <pre className="mt-1 whitespace-pre-wrap break-all text-muted-foreground">
-            {object.dict}
-          </pre>
-          {object.body && <pre className="mt-1 whitespace-pre-wrap break-all">{object.body}</pre>}
-        </details>
-      ))}
+    <div className="flex h-full flex-col bg-muted/20 font-mono text-xs">
+      <div className="flex shrink-0 items-center gap-3 border-b px-4 py-2">
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Filter by number, type, dictionary or operator"
+          aria-label="Filter objects"
+          className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
+        />
+        <span className="shrink-0 text-muted-foreground">
+          {matches.length === objects.length
+            ? `${objects.length} objects`
+            : `${matches.length} of ${objects.length}`}
+        </span>
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto px-4 py-1">
+        {matches.map((object) => (
+          <details
+            key={object.number}
+            id={objectId(object.number)}
+            open={opened.includes(object.number)}
+            onToggle={(event) => toggle(object.number, event.currentTarget.open)}
+            className="scroll-mt-1 border-b py-1.5 last:border-b-0"
+          >
+            <summary className="cursor-pointer select-none">
+              {object.number} 0 obj
+              {object.label && <span className="text-muted-foreground"> · {object.label}</span>}
+            </summary>
+            <pre className="mt-1 whitespace-pre-wrap break-all text-muted-foreground">
+              {linkReferences(object.dict, jump)}
+            </pre>
+            {object.body && <pre className="mt-1 whitespace-pre-wrap break-all">{object.body}</pre>}
+          </details>
+        ))}
+      </div>
     </div>
   );
 }
