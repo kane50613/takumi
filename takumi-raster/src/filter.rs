@@ -2,6 +2,7 @@ use smallvec::SmallVec;
 #[cfg(feature = "svg")]
 use takumi_core::{Error, resources::image::apply_svg_filter, style::FilterReference};
 use takumi_core::{
+  filter::ColorMatrix,
   geometry::{Point, Size},
   paint::compose_transfer_table,
 };
@@ -12,7 +13,7 @@ use crate::{
   apply_blur, apply_blur_rgba_bytes, checked_shadow_area, fast_div_255, intersect_alpha_masks,
   render_mask,
   style::{
-    Affine, Color, Filter, FilterCategory, LUMA_WEIGHTS, PercentageNumber, SEPIA_WEIGHTS,
+    Affine, Angle, Color, Filter, FilterCategory, LUMA_WEIGHTS, PercentageNumber, SEPIA_WEIGHTS,
     SizingContext, TransferChannel, TransferTable,
   },
   uninit_buffer,
@@ -161,35 +162,28 @@ fn apply_batched_pixel_filters(data: &mut [u8], filters: &[&Filter]) {
   }
 }
 
-fn apply_hue_rotate_rgba_bytes(data: &mut [u8], angle_degrees: i32) {
-  let radians = (angle_degrees as f32).to_radians();
-  let cos = radians.cos();
-  let sin = radians.sin();
-
-  let m00 = 0.213 + cos * 0.787 - sin * 0.213;
-  let m01 = 0.715 - cos * 0.715 - sin * 0.715;
-  let m02 = 0.072 - cos * 0.072 + sin * 0.928;
-
-  let m10 = 0.213 - cos * 0.213 + sin * 0.143;
-  let m11 = 0.715 + cos * 0.285 + sin * 0.140;
-  let m12 = 0.072 - cos * 0.072 - sin * 0.283;
-
-  let m20 = 0.213 - cos * 0.213 - sin * 0.787;
-  let m21 = 0.715 - cos * 0.715 + sin * 0.715;
-  let m22 = 0.072 + cos * 0.928 + sin * 0.072;
+/// Rotates every opaque pixel's hue by `angle`, through the matrix Filter
+/// Effects defines for it.
+fn apply_hue_rotate_rgba_bytes(data: &mut [u8], angle: Angle) {
+  let Some(matrix) = ColorMatrix::from_filter(&Filter::HueRotate(angle)) else {
+    return;
+  };
 
   for pixel in bytemuck::cast_slice_mut::<u8, [u8; 4]>(data) {
     if pixel[3] == 0 {
       continue;
     }
+    let channel = |value: u8| f32::from(value) / 255.0;
+    let out = matrix.apply([
+      channel(pixel[0]),
+      channel(pixel[1]),
+      channel(pixel[2]),
+      channel(pixel[3]),
+    ]);
 
-    let r = pixel[0] as f32;
-    let g = pixel[1] as f32;
-    let b = pixel[2] as f32;
-
-    pixel[0] = (r * m00 + g * m01 + b * m02).clamp(0.0, 255.0) as u8;
-    pixel[1] = (r * m10 + g * m11 + b * m12).clamp(0.0, 255.0) as u8;
-    pixel[2] = (r * m20 + g * m21 + b * m22).clamp(0.0, 255.0) as u8;
+    for (slot, value) in pixel.iter_mut().zip(out) {
+      *slot = (value * 255.0).round() as u8;
+    }
   }
 }
 
@@ -348,7 +342,7 @@ pub(crate) fn apply_filters_to_pixmap<'f, F: Iterator<Item = &'f Filter>>(
         match f {
           Filter::HueRotate(angle) => {
             let raw: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-            apply_hue_rotate_rgba_bytes(raw, **angle as i32);
+            apply_hue_rotate_rgba_bytes(raw, *angle);
           }
           Filter::Blur(blur) => {
             let width = pixmap.width();

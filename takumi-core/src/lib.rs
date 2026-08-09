@@ -13,6 +13,8 @@ pub mod layout;
 
 /// Render context threading style, sizing, and resources through layout.
 pub mod context;
+/// A CSS `filter` function as a colour matrix.
+pub mod filter;
 /// Font style resolved against a sizing context.
 pub mod font_style;
 /// Box, text, and inset shadow resolution.
