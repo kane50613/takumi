@@ -4,9 +4,10 @@
 use takumi_core::{
   context::RenderContext,
   geometry::Size,
+  layout::background::auto_axis_from_intrinsic,
   style::{
-    BackgroundRepeat, BackgroundRepeatStyle, BackgroundSize, IntrinsicSizing, Length,
-    PositionComponent, PositionValue,
+    AutoBackgroundAxis, BackgroundRepeat, BackgroundRepeatStyle, BackgroundSize, IntrinsicSizing,
+    Length, PositionComponent, PositionValue,
   },
 };
 
@@ -51,9 +52,32 @@ pub(crate) fn place(
   intrinsic: Option<IntrinsicSizing>,
   context: &RenderContext,
 ) -> Placement {
-  let tile = tile_size(area, size, intrinsic, context);
-  let x = axis(area.width, tile.width, position.0.x, repeat.0, context);
-  let y = axis(area.height, tile.height, position.0.y, repeat.1, context);
+  let (tile, auto) = tile_size(area, size, intrinsic, context);
+  // `round` rescales the axis it applies to. An axis left `auto` follows from
+  // the image's ratio, so it has to resolve after the one it depends on.
+  let (x, y) = match auto {
+    Some((AutoBackgroundAxis::Width, ratio)) => {
+      let y = axis(area.height, tile.height, position.0.y, repeat.1, context);
+      let width =
+        auto_axis_from_intrinsic(AutoBackgroundAxis::Width, ratio, y.tile).unwrap_or(tile.width);
+
+      (axis(area.width, width, position.0.x, repeat.0, context), y)
+    }
+    Some((AutoBackgroundAxis::Height, ratio)) => {
+      let x = axis(area.width, tile.width, position.0.x, repeat.0, context);
+      let height =
+        auto_axis_from_intrinsic(AutoBackgroundAxis::Height, ratio, x.tile).unwrap_or(tile.height);
+
+      (
+        x,
+        axis(area.height, height, position.0.y, repeat.1, context),
+      )
+    }
+    None => (
+      axis(area.width, tile.width, position.0.x, repeat.0, context),
+      axis(area.height, tile.height, position.0.y, repeat.1, context),
+    ),
+  };
 
   Placement {
     tiles: repeat.0 != BackgroundRepeatStyle::NoRepeat
@@ -67,12 +91,16 @@ pub(crate) fn place(
   }
 }
 
+/// The tile before repeat rescales it, and which axis the ratio still has to
+/// settle once the other one is known.
+type AutoAxis = Option<(AutoBackgroundAxis, Option<f32>)>;
+
 fn tile_size(
   area: Size<f32>,
   size: BackgroundSize,
   intrinsic: Option<IntrinsicSizing>,
   context: &RenderContext,
-) -> Size<f32> {
+) -> (Size<f32>, AutoAxis) {
   // An image resolves through the core §5.3 algorithm, in whole device
   // pixels like the raster backend. Gradients stay on the exact float path.
   if let Some(intrinsic) = intrinsic {
@@ -85,23 +113,31 @@ fn tile_size(
       intrinsic,
     );
 
-    return Size {
-      width: resolved.width as f32,
-      height: resolved.height as f32,
-    };
+    return (
+      Size {
+        width: resolved.width as f32,
+        height: resolved.height as f32,
+      },
+      resolved
+        .auto_axis
+        .map(|axis| (axis, resolved.intrinsic_ratio)),
+    );
   }
   let BackgroundSize::Explicit { width, height } = size else {
-    return area;
+    return (area, None);
   };
   let resolve = |length: Length, available: f32| match length {
     Length::Auto => available,
     length => length.to_px(&context.sizing, available).max(0.0),
   };
 
-  Size {
-    width: resolve(width, area.width),
-    height: resolve(height, area.height),
-  }
+  (
+    Size {
+      width: resolve(width, area.width),
+      height: resolve(height, area.height),
+    },
+    None,
+  )
 }
 
 /// A repeating axis starts one step before the anchor so the tiles also cover
@@ -159,5 +195,56 @@ fn axis(
         step: tile + (area - count * tile) / (count - 1.0),
       }
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use takumi_core::{
+    Fonts,
+    context::RenderContext,
+    geometry::Size,
+    style::{
+      BackgroundRepeats, BackgroundSizes, FromCssStr, IntrinsicSizing, PositionValues,
+      SizingContext,
+    },
+    viewport::Viewport,
+  };
+
+  use super::place;
+
+  /// `round` rescales the axis it applies to, and an `auto` axis follows from
+  /// the image's ratio rather than keeping the size it was asked for.
+  #[test]
+  fn an_auto_axis_follows_the_rounded_one() {
+    let fonts = Fonts::default();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1200, 630)))
+          .build(),
+      )
+      .build();
+    let placement = place(
+      Size {
+        width: 1200.0,
+        height: 630.0,
+      },
+      BackgroundSizes::from_css_str("auto 80px").unwrap()[0],
+      PositionValues::from_css_str("left top").unwrap()[0],
+      BackgroundRepeats::from_css_str("no-repeat round").unwrap()[0],
+      Some(IntrinsicSizing {
+        width: Some(512.0),
+        height: Some(512.0),
+        ratio: Some(1.0),
+      }),
+      &context,
+    );
+
+    // 630 fits eight 80px tiles once rounded, so each is 78.75 tall. The width
+    // is `auto` against a square image, so it follows rather than staying 80.
+    assert_eq!(placement.tile.height, 78.75);
+    assert_eq!(placement.tile.width, 78.75);
   }
 }
