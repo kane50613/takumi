@@ -5,9 +5,13 @@
 //! container, lay its subtree out again at the size the line gave it. That
 //! decision is the same everywhere; only the drawing differs.
 
-use crate::geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Size};
-use crate::layout::inline::{InlineBoxItem, VisualInlineBox};
-use crate::layout::tree::{LayoutResults, LayoutTree, RenderNode};
+use crate::{
+  geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Size},
+  layout::{
+    inline::{InlineBoxItem, VisualInlineBox},
+    tree::{LayoutResults, LayoutTree, RenderNode},
+  },
+};
 
 /// What an inline box paints.
 pub enum InlineBoxPaint<'n> {

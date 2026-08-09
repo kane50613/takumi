@@ -7,6 +7,18 @@
 use std::str::{FromStr, from_utf8};
 use std::sync::{Arc, OnceLock, Weak};
 
+use quick_cache::{
+  Weighter,
+  sync::{Cache, GuardResult},
+};
+#[cfg(feature = "svg")]
+use roxmltree::{Document, ParsingOptions};
+use serde::Deserialize;
+use thiserror::Error;
+#[cfg(feature = "svg")]
+use tiny_skia::Pixmap;
+use xxhash_rust::xxh3::{Xxh3, xxh3_64};
+
 #[cfg(feature = "svg")]
 use crate::resvg::{
   apply_filters_to_layer, render as render_svg_tree,
@@ -17,19 +29,6 @@ pub use crate::svg_vector::{
   SvgFill, SvgGradient, SvgGradientStop, SvgLineCap, SvgLineJoin, SvgOp, SvgPaint, SvgSpreadMethod,
   SvgStrokeStyle,
 };
-use quick_cache::{
-  Weighter,
-  sync::{Cache, GuardResult},
-};
-
-#[cfg(feature = "svg")]
-use roxmltree::{Document, ParsingOptions};
-use serde::Deserialize;
-use thiserror::Error;
-#[cfg(feature = "svg")]
-use tiny_skia::Pixmap;
-use xxhash_rust::xxh3::{Xxh3, xxh3_64};
-
 use crate::{
   resources::{
     image_buffer::ImageBuffer,

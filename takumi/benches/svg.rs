@@ -1,5 +1,6 @@
-use criterion::{Criterion, criterion_group, criterion_main};
 use std::{hint::black_box, path::Path};
+
+use criterion::{Criterion, criterion_group, criterion_main};
 use takumi::prelude::{
   AlignItems, BackgroundClip, BackgroundImages, BackgroundRepeats, BackgroundSizes, BorderRadius,
   BorderStyle, Color, ColorInput, Display, FlexWrap, FontResource, FontWeight, Fonts, FromCssStr,

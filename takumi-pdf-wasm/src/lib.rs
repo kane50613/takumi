@@ -21,8 +21,10 @@ use takumi_core::{
 use takumi_pdf::{Attachment, MeasureOptions, PdfMetadata, PdfOptions, PdfStandard, Tagging};
 use wasm_bindgen::prelude::*;
 
-use crate::font::Font;
-use crate::options::{PdfRenderOptions, decode_images, resolve_geometry};
+use crate::{
+  font::Font,
+  options::{PdfRenderOptions, decode_images, resolve_geometry},
+};
 
 pub(crate) fn map_error(error: impl core::fmt::Debug) -> js_sys::Error {
   js_sys::Error::new(&format!("{error:?}"))

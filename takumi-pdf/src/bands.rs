@@ -1,22 +1,24 @@
 //! Measurement, per-page preparation and emission of the repeated header/footer bands.
 
-use crate::krilla::{
-  geom::{Rect as KrillaRect, Transform},
-  paint::FillRule,
-  surface::Surface,
-  tagging::{Artifact, ArtifactType, ContentTag},
-};
 use takumi_core::{
   layout::node::{Node, NodeKind},
   style::Affine,
   viewport::Viewport,
 };
 
-use crate::counters::{counter_text, substitute_page_counters};
-use crate::emitter::FontMap;
-use crate::options::PdfError;
-use crate::paint::rect_path;
-use crate::tree::{PreparedTree, TreeInputs, prepare_tree};
+use crate::{
+  counters::{counter_text, substitute_page_counters},
+  emitter::FontMap,
+  krilla::{
+    geom::{Rect as KrillaRect, Transform},
+    paint::FillRule,
+    surface::Surface,
+    tagging::{Artifact, ArtifactType, ContentTag},
+  },
+  options::PdfError,
+  paint::rect_path,
+  tree::{PreparedTree, TreeInputs, prepare_tree},
+};
 
 /// A band measured before pagination: the laid-out tree plus whether it must
 /// re-prepare per page (it contains counter hooks).

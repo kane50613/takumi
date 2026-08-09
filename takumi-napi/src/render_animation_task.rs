@@ -1,6 +1,7 @@
 use std::{collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
+use takumi_bindings_common::stylesheet;
 use takumi_core::{
   layout::node::Node,
   style::{FontFamily, KeyframesRule, Lang},
@@ -18,7 +19,6 @@ use crate::{
     decode_images, deserialize_keyframes, device_pixel_ratio, parse_lang, webp_lossless,
   },
 };
-use takumi_bindings_common::stylesheet;
 
 pub struct RenderAnimationTask {
   pub(crate) scenes: Option<Vec<(Node, u32)>>,

@@ -1,8 +1,10 @@
 use std::{collections::HashMap, sync::Arc};
 
 use skrifa::{FontRef, MetadataProvider};
-use takumi_core::geometry::{ComputedLayout as Layout, NodeId, Point, Size};
-use takumi_core::layout::inline_box::{InlineBoxPaint, resolve_inline_box};
+use takumi_core::{
+  geometry::{ComputedLayout as Layout, NodeId, Point, Size},
+  layout::inline_box::{InlineBoxPaint, resolve_inline_box},
+};
 
 use crate::{
   BorderProperties, Canvas, Cap, DashPattern, DecorationSegmentParams, PaintSource, Placement,
@@ -15,13 +17,15 @@ use crate::{
     ProcessedInlineSpan, ShapedRun, VisualInlineBox, outline_island_contour, outline_islands,
     resolve_inline_runs,
   },
-  mask_index_from_coord, rasterize_layers,
+  mask_index_from_coord,
+  painter::StrokeStyle,
+  rasterize_layers,
   render::render_node,
   render_mask,
   resources::{font::FontError, glyph::ResolvedGlyph},
   style::{
-    Affine, BackgroundClip, BlendMode, BorderStyle, Color, SizedTextDecorationThickness,
-    TextDecorationLines, TextDecorationSkipInk,
+    Affine, BackgroundClip, BlendMode, Color, SizedTextDecorationThickness, TextDecorationLines,
+    TextDecorationSkipInk,
   },
   unshifted_glyph_mask,
 };
@@ -407,14 +411,12 @@ fn draw_outline_island(
     return Ok(());
   };
 
-  let width = style.outline_width;
-  if width == 0.0 || !style.outline_style.is_rendered() {
+  let Some(stroke) = style.outline_stroke() else {
     return Ok(());
-  }
-
+  };
   let opacity = style.parent.opacity.0;
   draw_with_inline_opacity(canvas, opacity, |canvas| {
-    draw_outline_island_content(outline_rects, canvas, style, transform);
+    draw_outline_island_content(outline_rects, canvas, style, &stroke, transform);
     Ok(())
   })
 }
@@ -423,40 +425,28 @@ fn draw_outline_island_content(
   outline_rects: &[InlineOutlineRect],
   canvas: &mut Canvas,
   style: &SizedFontStyle,
+  outline: &StrokeStyle,
   transform: Affine,
 ) {
-  let width = style.outline_width;
-
-  let path = outline_island_contour(outline_rects, style.outline_offset + width / 2.0);
+  let path = outline_island_contour(outline_rects, style.outline_offset + outline.width / 2.0);
   if path.is_empty() {
     return;
   }
 
-  let mut stroke = Stroke::new(width);
-  match style.outline_style {
-    BorderStyle::Dotted => {
-      stroke.cap = Cap::Round;
-      stroke.dash = Some(DashPattern {
-        intervals: [0.0, width * 2.0],
-        offset: 0.0,
-      });
-    }
-    BorderStyle::Dashed => {
-      stroke.dash = Some(DashPattern {
-        intervals: [width * 3.0, width * 2.0],
-        offset: 0.0,
-      });
-    }
-    BorderStyle::Hidden
-    | BorderStyle::Double
-    | BorderStyle::Groove
-    | BorderStyle::Ridge
-    | BorderStyle::Inset
-    | BorderStyle::Outset => return,
-    _ => {}
+  let mut stroke = Stroke::new(outline.width);
+
+  if let Some(intervals) = outline.dash {
+    stroke.dash = Some(DashPattern {
+      intervals,
+      offset: 0.0,
+    });
   }
+  if outline.round_cap {
+    stroke.cap = Cap::Round;
+  }
+
   let (mask, placement) = render_mask(&path, Some(transform), Some(stroke.into()));
-  canvas.draw_mask(&mask, placement, style.outline_color, BlendMode::Normal);
+  canvas.draw_mask(&mask, placement, outline.color, BlendMode::Normal);
 }
 
 fn draw_merged_outline_rects(

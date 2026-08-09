@@ -1,10 +1,9 @@
+#[cfg(feature = "rayon")]
+use std::collections::VecDeque;
 use std::{
   borrow::{Borrow, Cow},
   io::Write,
 };
-
-#[cfg(feature = "rayon")]
-use std::collections::VecDeque;
 
 use gif::{Encoder as GifEncoder, Frame as GifFrame, Repeat};
 use image::{

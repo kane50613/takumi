@@ -947,7 +947,7 @@ const DOTTED_ENDPOINT_EPSILON: f32 = 1.0e-2;
 /// the pattern has to run around the whole ring, so it strokes a centerline
 /// instead. Every backend makes this call the same way.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum BorderPaint {
+pub(crate) enum BorderPaint {
   /// Stroke the centerline with the dash pattern for `style`.
   Stroked {
     /// The uniform colour.
@@ -974,7 +974,7 @@ pub enum BorderPaint {
 }
 
 /// Decides how `border` paints. See [`BorderPaint`].
-pub fn border_paint(border: &BorderProperties) -> BorderPaint {
+pub(crate) fn border_paint(border: &BorderProperties) -> BorderPaint {
   let Some(color) = border.has_uniform_visible_color() else {
     return BorderPaint::Sides;
   };

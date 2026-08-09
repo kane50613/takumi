@@ -107,12 +107,12 @@ pub struct BuiltInlineLayout<'c> {
 
 impl BuiltInlineLayout<'_> {
   /// Parent font metrics from the first run.
-  pub fn parent_font_metrics(&self) -> Option<ParentFontMetrics> {
+  pub(crate) fn parent_font_metrics(&self) -> Option<ParentFontMetrics> {
     get_parent_font_metrics(&self.layout)
   }
 
   /// Resolved metrics for each line.
-  pub fn line_metrics(&self) -> Vec<ResolvedLineMetrics> {
+  pub(crate) fn line_metrics(&self) -> Vec<ResolvedLineMetrics> {
     resolve_inline_line_metrics(
       &self.layout,
       &self.spans,
@@ -122,7 +122,7 @@ impl BuiltInlineLayout<'_> {
   }
 
   /// Resolved state for each line.
-  pub fn line_states(&self) -> Vec<ResolvedInlineLineState> {
+  pub(crate) fn line_states(&self) -> Vec<ResolvedInlineLineState> {
     resolve_inline_line_states(
       &self.layout,
       &self.spans,
@@ -385,7 +385,7 @@ pub(crate) type InlineLayout = parley::Layout<InlineBrush>;
 
 #[derive(Clone, Copy, Debug)]
 /// x-height and ascent/descent of the parent font.
-pub struct ParentFontMetrics {
+pub(crate) struct ParentFontMetrics {
   pub(crate) x_height: Option<f32>,
   pub(crate) text_metrics: (f32, f32),
 }
@@ -536,7 +536,7 @@ pub(crate) fn get_parent_font_metrics(layout: &InlineLayout) -> Option<ParentFon
 
 #[derive(Clone, Copy, Debug)]
 /// Final vertical metrics computed for one inline line.
-pub struct ResolvedLineMetrics {
+pub(crate) struct ResolvedLineMetrics {
   pub(crate) resolved_ascent: f32,
   pub(crate) resolved_descent: f32,
   pub(crate) resolved_leading: f32,
@@ -1005,7 +1005,7 @@ pub(crate) fn resolved_line_metrics_for_apply(
 
 #[derive(Clone, Copy, Debug)]
 /// Resolved metrics and parent context for a single inline line.
-pub struct ResolvedInlineLineState {
+pub(crate) struct ResolvedInlineLineState {
   pub(crate) adjusted_metrics: LineMetrics,
   /// Vertical shift applied to the baseline.
   pub baseline_shift: f32,
@@ -1082,7 +1082,7 @@ pub struct VisualInlineBox {
 }
 
 /// Resolve a positioned inline box into its painted geometry.
-pub fn resolve_visual_inline_box(
+pub(crate) fn resolve_visual_inline_box(
   inline_box: PositionedInlineBox,
   line_state: Option<ResolvedInlineLineState>,
   spans: &[ProcessedInlineSpan<'_>],
@@ -1622,7 +1622,7 @@ fn text_fit_line_scales(layout: &InlineLayout, max_width: f32, style: &SizedFont
 }
 
 /// Line start and offset correction for a scaled text-fit line.
-pub fn text_fit_line_alignment_correction(
+pub(crate) fn text_fit_line_alignment_correction(
   line: &Line<'_, InlineBrush>,
   line_scale: f32,
   container_width: f32,

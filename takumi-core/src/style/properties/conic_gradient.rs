@@ -1,4 +1,3 @@
-use crate::math;
 use std::{f32::consts::TAU, fmt};
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
@@ -10,10 +9,13 @@ use super::gradient_utils::{
   compute_repeat_setup, gradient_tile_accessors, parse_gradient_stops, resolve_stops_along_axis,
   write_gradient_css,
 };
-use crate::style::{
-  Angle, Color, ColorInterpolationMethod, CssDescriptorKind, CssToken, FromCss, GradientStop,
-  Length, MakeComputed, ParseResult, PositionValue, SizingContext, StopPosition, ToCss,
-  unexpected_token,
+use crate::{
+  math,
+  style::{
+    Angle, Color, ColorInterpolationMethod, CssDescriptorKind, CssToken, FromCss, GradientStop,
+    Length, MakeComputed, ParseResult, PositionValue, SizingContext, StopPosition, ToCss,
+    unexpected_token,
+  },
 };
 
 const LUT_INDEX_BOUNDARY_EPSILON: f32 = 0.001;

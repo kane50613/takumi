@@ -12,8 +12,10 @@ use takumi_core::{
 };
 use takumi_pdf::{PageMargins, PageOptions};
 
-use crate::map_error;
-use crate::metadata::{AttachmentInput, MetadataInput, PdfaInput, TaggedInput};
+use crate::{
+  map_error,
+  metadata::{AttachmentInput, MetadataInput, PdfaInput, TaggedInput},
+};
 
 /// An image source with its URL and raw data.
 #[derive(Deserialize)]

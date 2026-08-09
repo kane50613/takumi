@@ -3,7 +3,10 @@ use std::{borrow::Cow, collections::HashMap, fmt, str::FromStr};
 use cssparser::{Parser, ParserInput, RuleBodyParser, Token, match_ignore_ascii_case};
 use parley::Language;
 use paste::paste;
-use serde::{Deserialize, de::Error as DeError, de::IgnoredAny};
+use serde::{
+  Deserialize,
+  de::{Error as DeError, IgnoredAny},
+};
 use smallvec::{SmallVec, smallvec};
 
 use crate::{

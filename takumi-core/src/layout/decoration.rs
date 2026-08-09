@@ -109,7 +109,7 @@ pub struct OutlineGeometry {
 /// look at alpha; a backend is free to skip the invisible fill.
 ///
 /// Each backend used to guard this differently, and one of them not at all.
-pub fn outline_paint(context: &RenderContext, size: Size<f32>) -> Option<OutlineGeometry> {
+pub(crate) fn outline_paint(context: &RenderContext, size: Size<f32>) -> Option<OutlineGeometry> {
   let style = &context.style;
   let width = Length::from(style.outline_width)
     .to_px(&context.sizing, size.width)
@@ -123,7 +123,7 @@ pub fn outline_paint(context: &RenderContext, size: Size<f32>) -> Option<Outline
 
 /// The outline ring's border geometry and how far it grows past the border box.
 /// Says nothing about whether the outline paints; see [`outline_paint`].
-pub fn outline_geometry(context: &RenderContext, size: Size<f32>) -> OutlineGeometry {
+pub(crate) fn outline_geometry(context: &RenderContext, size: Size<f32>) -> OutlineGeometry {
   let style = &context.style;
   let width = Length::from(style.outline_width)
     .to_px(&context.sizing, size.width)

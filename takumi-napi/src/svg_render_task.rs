@@ -1,6 +1,7 @@
 use std::{collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
+use takumi_bindings_common::stylesheet;
 use takumi_core::{
   layout::node::Node,
   style::{FontFamily, Lang, StyleSheet},
@@ -14,7 +15,6 @@ use crate::{
     deserialize_keyframes, parse_lang,
   },
 };
-use takumi_bindings_common::stylesheet;
 
 pub struct SvgRenderTask {
   pub(crate) node: Option<Node>,

@@ -6,11 +6,11 @@
 use tiny_skia::Pixmap;
 use tiny_skia_path::{NonZeroRect, PathSegment, Transform};
 
-use crate::geometry::{PathCommand, Point};
-use crate::resvg::usvg::{
-  self, ClipPath, Group, ImageKind, Mask, MaskType, Node, Paint, PaintOrder, Tree,
+use crate::{
+  geometry::{PathCommand, Point},
+  resvg::usvg::{self, ClipPath, Group, ImageKind, Mask, MaskType, Node, Paint, PaintOrder, Tree},
+  style::BlendMode,
 };
-use crate::style::BlendMode;
 
 /// One flattened SVG drawing instruction, in SVG canvas coordinates.
 ///

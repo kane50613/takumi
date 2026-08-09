@@ -5,16 +5,17 @@
 //! Below it, a rasterizer writes pixels, an SVG writer emits elements, and a
 //! PDF writer emits operators. Only the second half belongs to a backend.
 
-use crate::context::RenderContext;
-use crate::geometry::Rect;
-use crate::geometry::{ComputedLayout, PathCommand, Point, Size};
-use crate::layout::border::{BorderPaint, BorderProperties, border_dash_pattern, border_paint};
-use crate::layout::decoration::ClipBox;
-use crate::layout::decoration::{OutlineGeometry, outline_paint};
-use crate::layout::inline::DecorationRect;
-use crate::shadow::SizedShadow;
-use crate::style::BoxShadow;
-use crate::style::{Affine, BackgroundClip, Color, FillRule, Sides, TextDecorationLines};
+use crate::{
+  context::RenderContext,
+  geometry::{ComputedLayout, PathCommand, Point, Rect, Size},
+  layout::{
+    border::{BorderPaint, BorderProperties, border_dash_pattern, border_paint},
+    decoration::{ClipBox, OutlineGeometry, outline_paint},
+    inline::DecorationRect,
+  },
+  shadow::SizedShadow,
+  style::{Affine, BackgroundClip, BoxShadow, Color, FillRule, Sides, TextDecorationLines},
+};
 
 /// A closed shape to fill, in the coordinate space of the box that owns it.
 ///

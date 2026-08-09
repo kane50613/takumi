@@ -2,7 +2,6 @@
 
 use std::{collections::HashMap, io, rc::Rc, sync::Arc};
 
-use takumi_core::painter::{BoxPainter, FillShape, PaintDevice, StrokeStyle, paint_border};
 use takumi_core::{
   Fonts,
   context::RenderContext,
@@ -16,6 +15,7 @@ use takumi_core::{
     node::{ImageData, Node, NodeKind},
     tree::{LayoutTree, RenderNode},
   },
+  painter::{BoxPainter, FillShape, PaintDevice, StrokeStyle, paint_border},
   resources::image::ImageSource,
   scene::build_stacking_contexts,
   style::{

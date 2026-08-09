@@ -1,10 +1,9 @@
 use std::{convert::Into, sync::Arc};
 
-use xxhash_rust::xxh3::Xxh3;
-
 use skrifa::color::ColorPalette;
 use takumi_core::geometry::{ComputedLayout as Layout, Point, Size};
 use tiny_skia::Pixmap;
+use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
   BorderProperties, Canvas, ColorTile, Command, MaskCompositeColor, MaskSamplingOptions,

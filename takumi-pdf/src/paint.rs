@@ -1,22 +1,25 @@
 //! Path, gradient, decoration and image helpers translating takumi paint into krilla.
 
-use crate::filter::ColorFilter;
-#[cfg(feature = "images")]
-use crate::krilla::image::Image as KrillaImage;
-use crate::krilla::{
-  blend::BlendMode as KrillaBlendMode,
-  color::rgb,
-  geom::{Path as KrillaPath, PathBuilder, Rect as KrillaRect},
-  num::NormalizedF32,
-  paint::{Fill, FillRule, SpreadMethod, Stop},
-  surface::Surface,
-};
 #[cfg(feature = "images")]
 use takumi_core::resources::image::{ImageSource, RenderedImage};
 use takumi_core::{
   context::RenderContext,
   geometry::{ComputedLayout as Layout, PathCommand},
   style::{BlendMode, ComputedStyle, Length, Overflow, PositionComponent, ResolvedGradientStop},
+};
+
+#[cfg(feature = "images")]
+use crate::krilla::image::Image as KrillaImage;
+use crate::{
+  filter::ColorFilter,
+  krilla::{
+    blend::BlendMode as KrillaBlendMode,
+    color::rgb,
+    geom::{Path as KrillaPath, PathBuilder, Rect as KrillaRect},
+    num::NormalizedF32,
+    paint::{Fill, FillRule, SpreadMethod, Stop},
+    surface::Surface,
+  },
 };
 
 /// A degenerate path, for a clip that must hide everything: an empty region is

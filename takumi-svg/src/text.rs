@@ -24,7 +24,7 @@ use takumi_core::{
   },
   painter::paint_run_decorations,
   resources::{glyph::ResolvedGlyph, image::to_data_url},
-  style::{BackgroundClip, BorderStyle, LineJoin, TextDecorationLines},
+  style::{BackgroundClip, LineJoin, TextDecorationLines},
 };
 
 use crate::{
@@ -248,27 +248,16 @@ fn emit_outline_island(
   let Some(ProcessedInlineSpan::Text { style, .. }) = spans.get(first_rect.span_id as usize) else {
     return Ok(());
   };
-  let width = style.outline_width;
-  if width <= 0.0 || !style.outline_style.is_rendered() || style.outline_color.0[3] == 0 {
+  // The device skips a transparent stroke, but an inline outline never reaches
+  // one, so the emptiness is checked here instead.
+  let Some(stroke) = style.outline_stroke().filter(|s| s.color.0[3] != 0) else {
     return Ok(());
-  }
-
-  // Dash geometry mirrors the raster stroke; non-stroked styles (double, the
-  // 3D bevels) paint nothing here, as in the raster backend.
-  let (dasharray, linecap) = match style.outline_style {
-    BorderStyle::Dotted => (Some(format!("0 {}", Num(width * 2.0))), Some("round")),
-    BorderStyle::Dashed => (
-      Some(format!("{} {}", Num(width * 3.0), Num(width * 2.0))),
-      None,
-    ),
-    BorderStyle::Hidden
-    | BorderStyle::Double
-    | BorderStyle::Groove
-    | BorderStyle::Ridge
-    | BorderStyle::Inset
-    | BorderStyle::Outset => return Ok(()),
-    _ => (None, None),
   };
+  let width = stroke.width;
+  let dasharray = stroke
+    .dash
+    .map(|[dash, gap]| format!("{} {}", Num(dash), Num(gap)));
+  let linecap = stroke.round_cap.then_some("round");
 
   let contour = outline_island_contour(island, style.outline_offset + width / 2.0);
   let data = path_data(&contour, [1.0, 0.0, 0.0, 1.0, origin_x, origin_y]);
@@ -282,7 +271,7 @@ fn emit_outline_island(
     .transpose()?;
   doc.stroke_path(
     &data,
-    Rgba(style.outline_color.0),
+    Rgba(stroke.color.0),
     width,
     dasharray.as_deref(),
     linecap,
