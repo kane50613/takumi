@@ -11,24 +11,27 @@ use std::{io, sync::Arc};
 use takumi_core::{
   context::RenderContext,
   font_style::SizedFontStyle,
-  geometry::{AvailableSpace, ComputedLayout as Layout, Size},
+  geometry::{AvailableSpace, ComputedLayout as Layout, Point, Size},
   layout::{
     inline::{
-      DecorationRect, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineOutlineRect,
-      InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan, collect_inline_items,
-      create_inline_layout, outline_island_contour, outline_islands, resolve_inline_max_height,
-      resolve_inline_runs, run_decorations,
+      InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineOutlineRect, InlineRunLayout,
+      PositionedInlineRun, ProcessedInlineSpan, collect_inline_items, create_inline_layout,
+      outline_island_contour, outline_islands, resolve_inline_max_height, resolve_inline_runs,
+      run_decorations,
     },
     node::TextData,
     tree::RenderNode,
   },
+  painter::paint_run_decorations,
   resources::{glyph::ResolvedGlyph, image::to_data_url},
-  style::{BackgroundClip, BorderStyle, LineJoin},
+  style::{BackgroundClip, BorderStyle, LineJoin, TextDecorationLines},
 };
 
 use crate::{
-  Affine, Frame, IDENTITY, Num, Rgba, SvgDocument, box_model::path_data, gradient::LayerEmitter,
-  render::emit_inline_box,
+  Affine, Frame, IDENTITY, Num, Rgba, SvgDocument,
+  box_model::path_data,
+  gradient::LayerEmitter,
+  render::{DocumentDevice, emit_inline_box},
 };
 
 /// Where a run of inline text sits: its container `layout` (border/padding and
@@ -402,10 +405,21 @@ fn emit_run_decorations(
   let opacity_group = (opacity < 1.0)
     .then(|| doc.begin_group(IDENTITY, opacity, None, None))
     .transpose()?;
-  for decoration in run_decorations(&run.glyph_run, frame.layout, run.baseline_shift, transform) {
-    if decoration.over == over {
-      emit_decoration(doc, &decoration, frame.origin_x, frame.origin_y)?;
-    }
+  let decorations = run_decorations(&run.glyph_run, frame.layout, run.baseline_shift, transform);
+  let mut device = DocumentDevice { doc, error: None };
+
+  paint_run_decorations(
+    &decorations,
+    over,
+    TextDecorationLines::empty(),
+    Point {
+      x: frame.origin_x,
+      y: frame.origin_y,
+    },
+    &mut device,
+  );
+  if let Some(error) = device.error {
+    return Err(error);
   }
   if let Some(group) = opacity_group {
     doc.end_group(group)?;
@@ -544,24 +558,6 @@ fn flush_glyph_run(
     uses.clear();
   }
   Ok(())
-}
-
-fn emit_decoration(
-  doc: &mut SvgDocument,
-  decoration: &DecorationRect,
-  origin_x: f32,
-  origin_y: f32,
-) -> io::Result<()> {
-  let matrix = offset(decoration.transform, origin_x, origin_y);
-  let group = doc.begin_group(matrix, 1.0, None, None)?;
-  doc.rect(
-    0.0,
-    0.0,
-    decoration.width,
-    decoration.height,
-    Rgba(decoration.color.0),
-  )?;
-  doc.end_group(group)
 }
 
 fn line_join_str(join: LineJoin) -> &'static str {

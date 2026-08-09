@@ -599,9 +599,9 @@ pub(crate) fn overflow_clip_rect_data(
 /// `border-box`, which the full border-box rect already covers). Mirrors the
 /// raster backend's `draw_background` clip regions.
 /// The SVG document as a [`PaintDevice`].
-struct DocumentDevice<'d> {
-  doc: &'d mut SvgDocument,
-  error: Option<io::Error>,
+pub(crate) struct DocumentDevice<'d> {
+  pub(crate) doc: &'d mut SvgDocument,
+  pub(crate) error: Option<io::Error>,
 }
 
 impl PaintDevice for DocumentDevice<'_> {
