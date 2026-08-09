@@ -85,6 +85,7 @@ impl PreparedTree {
       window: None,
       line_window: None,
       tags,
+      tag_prefix: Vec::new(),
     }
   }
 }

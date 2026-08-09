@@ -1646,6 +1646,35 @@ fn tagged_standards() {
   });
 }
 
+/// An inline-block lays out in a subtree of its own. Its content still belongs
+/// to the structure tree, down to the elements nested inside it.
+#[test]
+fn tagged_inline_block_subtree() {
+  let source = r#"<main style="display:flex;flex-direction:column;font-size:14px;color:#141414;">
+    <h1>Report</h1>
+    <div>Before <span style="display:inline-block;width:160px;"><h2>Inner heading</h2></span> after</div>
+  </main>"#;
+
+  let pdf = run_pdf_fixture("inline-block-tagged", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse inline-block doc"))
+      .page(PageOptions::A4)
+      .tagged(Tagging::Ua1)
+      .lang(Some(takumi_core::style::Lang::parse("en").expect("lang")))
+      .metadata(PdfMetadata {
+        title: Some("Report".into()),
+        ..Default::default()
+      })
+      .fonts(fonts)
+      .build()
+  });
+
+  assert!(
+    inflated_text(&pdf).contains("/S/H2"),
+    "the element inside the inline-block never reached the structure tree"
+  );
+}
+
 /// Every structure element takumi emits, under PDF/A-4. A PDF 2.0 tag carries a
 /// namespace and a role map that the PDF 1.7 fixtures never exercise.
 #[test]
