@@ -249,12 +249,12 @@ pub fn counter_characters<'c>(classes: impl IntoIterator<Item = &'c str>) -> Str
     }
   }
 
-  match (hooked, characters.is_empty()) {
-    (false, _) => String::new(),
-    // A hook without a style counts in decimal.
-    (true, true) => style_characters("decimal"),
-    (true, false) => characters,
+  if !hooked {
+    return String::new();
   }
+  // A hook without a style counts in decimal, and a band can hold both: a
+  // plain `pageNumber` beside a `totalPages thai` still needs its own digits.
+  style_characters("decimal") + &characters
 }
 
 /// The counter value a node's class hooks request, if any: `pageNumber` or
@@ -323,6 +323,20 @@ mod tests {
     assert_eq!(format_counter(28, "upper-latin"), "AB");
     assert_eq!(format_counter(1, "lower-greek"), "α");
     assert_eq!(format_counter(1, "katakana"), "ア");
+  }
+
+  #[test]
+  fn a_styled_counter_leaves_an_unstyled_one_its_digits() {
+    let mixed = counter_characters(["pageNumber", "totalPages", "thai"]);
+
+    assert!(mixed.contains('7'), "the plain counter lost its digits");
+    assert!(mixed.contains('๗'), "the styled counter lost its digits");
+    assert_eq!(
+      counter_characters(["nav", "thai"]),
+      "",
+      "no counter, no characters"
+    );
+    assert_eq!(counter_characters(["pageNumber"]), "0123456789");
   }
 
   #[test]
