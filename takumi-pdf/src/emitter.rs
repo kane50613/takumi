@@ -44,7 +44,7 @@ use crate::svg;
 use crate::{
   background::{Placement, cycled, place},
   filter::ColorFilter,
-  glyph::{PdfGlyph, glyph_text_spans},
+  glyph::run_glyphs,
   inline::{InlineMap, build_inline_runs, inline_key, node_inline_items, text_line_atoms},
   krilla::{
     Data,
@@ -57,7 +57,7 @@ use crate::{
     },
     surface::Surface,
     tagging::{Artifact, ArtifactType, ContentTag},
-    text::{Font, GlyphId, Tag},
+    text::{Font, Tag},
   },
   options::PdfError,
   pagination::Atom,
@@ -121,6 +121,10 @@ pub(crate) struct Emitter<'a> {
   /// Color transform from the `filter` properties of the enclosing stacking
   /// contexts, applied to every color this subtree paints.
   pub(crate) color_filter: Option<Rc<ColorFilter>>,
+  /// Characters no registered font covered. Collected rather than raised on the
+  /// spot: the surface has open transforms and clips mid-page, and unwinding
+  /// past them would leave it unbalanced.
+  pub(crate) uncovered: &'a RefCell<String>,
 }
 
 impl Emitter<'_> {
@@ -1208,19 +1212,7 @@ impl Emitter<'_> {
         .text
         .get(shaped.text_range.clone())
         .unwrap_or_default();
-      let spans = glyph_text_spans(shaped, run_text);
-
-      let glyphs: Vec<PdfGlyph> = shaped
-        .glyphs
-        .iter()
-        .zip(spans)
-        .map(|(glyph, range)| PdfGlyph {
-          id: GlyphId::new(glyph.id),
-          x_offset: glyph.x / shaped.font_size,
-          y_offset: -glyph.y / shaped.font_size,
-          range,
-        })
-        .collect();
+      let glyphs = run_glyphs(shaped, run_text, &mut self.uncovered.borrow_mut());
 
       let color = shaped.brush.color;
       let fill = fill_from_rgba(self.filtered(color), shaped.brush.opacity);
@@ -1414,6 +1406,7 @@ impl Emitter<'_> {
       line_window: None,
       tags: None,
       color_filter: self.color_filter.clone(),
+      uncovered: self.uncovered,
     };
     let x = origin.0 + subtree.margin_offset.x;
     let y = origin.1 + subtree.margin_offset.y;
@@ -1530,19 +1523,7 @@ impl Emitter<'_> {
         .text
         .get(shaped.text_range.clone())
         .unwrap_or_default();
-      let spans = glyph_text_spans(shaped, run_text);
-
-      let glyphs: Vec<PdfGlyph> = shaped
-        .glyphs
-        .iter()
-        .zip(spans)
-        .map(|(glyph, range)| PdfGlyph {
-          id: GlyphId::new(glyph.id),
-          x_offset: glyph.x / shaped.font_size,
-          y_offset: -glyph.y / shaped.font_size,
-          range,
-        })
-        .collect();
+      let glyphs = run_glyphs(shaped, run_text, &mut self.uncovered.borrow_mut());
 
       let color = color.unwrap_or(shaped.brush.color);
 
