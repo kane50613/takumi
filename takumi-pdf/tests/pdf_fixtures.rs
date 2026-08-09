@@ -2221,6 +2221,54 @@ fn font_format_standards() {
   }
 }
 
+/// An inline box carries its own language, and the text around it goes back to
+/// the paragraph's when the box ends. Both sit on a path of their own: the box
+/// is tagged where the inline run places it, not where a block would be, and
+/// the owner reopens after it.
+///
+/// The box's own subtree is a separate matter. It renders through a nested
+/// emitter that tags nothing at all, so the Hindi word inside it reaches the
+/// page unmarked.
+#[test]
+fn inline_box_language() {
+  let doc = r#"<main style="display:flex;flex-direction:column;font-size:14px;color:#141414;">
+    <h1>Inline language</h1>
+    <p lang="ar">before <span style="display:inline-block;" lang="hi">inside</span> after</p>
+  </main>"#;
+  let pdf = run_pdf_fixture("inline-box-lang-ua1", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse inline lang doc"))
+      .page(PageOptions::A4)
+      .standard(PdfStandard::A3a)
+      .tagged(Tagging::Ua1)
+      .lang(Some(takumi_core::style::Lang::parse("en").expect("lang")))
+      .metadata(PdfMetadata {
+        title: Some("Inline language".into()),
+        creation_date: Some(PdfDate {
+          year: 2026,
+          month: 8,
+          day: 7,
+          hour: 0,
+          minute: 0,
+          second: 0,
+        }),
+        ..Default::default()
+      })
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  assert!(
+    haystack.matches("/Lang(ar)").count() >= 2,
+    "the paragraph's language stops at the inline box instead of resuming after it"
+  );
+  assert!(
+    haystack.contains("/Lang(hi)"),
+    "the inline box does not carry its own language"
+  );
+}
+
 /// HTML numbers headings for looks, so a document can open at `h2` or jump
 /// from `h1` to `h4`. PDF/UA rejects both, and rejects a list item without a
 /// list around it. The structure tree renumbers by nesting depth and gives an

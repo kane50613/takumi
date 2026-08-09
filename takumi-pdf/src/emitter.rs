@@ -1449,7 +1449,7 @@ impl Emitter<'_> {
       )));
       return;
     }
-    let identifier = surface.start_tagged(ContentTag::Other);
+    let identifier = surface.start_tagged(self.content_tag(node));
     let mut path = Vec::new();
 
     if let Some(tags) = self.tags
