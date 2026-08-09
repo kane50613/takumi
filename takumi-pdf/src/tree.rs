@@ -71,10 +71,12 @@ impl PreparedTree {
     inline: Option<&'a InlineMap<'a>>,
     tags: Option<&'a RefCell<TagCollector>>,
     uncovered: &'a RefCell<String>,
+    document_lang: Option<&'a str>,
   ) -> Emitter<'a> {
     Emitter {
       color_filter: None,
       uncovered,
+      document_lang,
       root: &self.root,
       contexts: &self.contexts,
       results: &self.results,

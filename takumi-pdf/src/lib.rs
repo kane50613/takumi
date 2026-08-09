@@ -156,6 +156,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
   };
   let mut fonts = FontMap::new();
   let uncovered = RefCell::new(String::new());
+  let document_lang = inputs.lang.as_ref().map(Lang::as_str);
   let mut document = {
     let mut builder = ConfigurationBuilder::new();
     let mut validated = false;
@@ -263,7 +264,13 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       let mut forced = Vec::new();
 
       content
-        .emitter(&mut fonts, Some(&inline_map), None, &uncovered)
+        .emitter(
+          &mut fonts,
+          Some(&inline_map),
+          None,
+          &uncovered,
+          document_lang,
+        )
         .collect_atoms(0, Affine::IDENTITY, &mut atoms, &mut forced)?;
       let starts = page_starts(&mut atoms, &mut forced, content.height, window_height);
       let pages = starts.len();
@@ -305,6 +312,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
             (0.0, BAND_EDGE_PADDING, page.width, header_height),
             tag_collector.is_some(),
             &uncovered,
+            document_lang,
             &mut surface,
           )?;
         }
@@ -330,6 +338,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
             Some(&inline_map),
             tag_collector.as_ref(),
             &uncovered,
+            document_lang,
           );
 
           emitter.window = Some((y0, y0 + paint_height));
@@ -359,6 +368,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
             ),
             tag_collector.is_some(),
             &uncovered,
+            document_lang,
             &mut surface,
           )?;
         }
@@ -412,6 +422,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         Some(&inline_map),
         tag_collector.as_ref(),
         &uncovered,
+        document_lang,
       );
 
       emitter.emit_context(0, Affine::IDENTITY, &mut surface)?;

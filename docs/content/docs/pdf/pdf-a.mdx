@@ -126,7 +126,7 @@ See [Attachments](/docs/pdf/attachments).
 
 Validators require inputs the renderer cannot supply:
 
-- `lang` is the document language. A-levels and PDF/UA require it. PDF/UA-2 fails the render without it.
+- `lang` is the document language. A-levels and PDF/UA require it. PDF/UA-2 fails the render without it. A passage in another language needs its own `lang` attribute.
 - `metadata.title` is required by PDF/UA.
 - `metadata.creationDate` is required by the `a` levels. Use UTC `"YYYY-MM-DD"` or `"YYYY-MM-DDTHH:MM:SS"`. A fixed date keeps output byte-identical across runs.
 
