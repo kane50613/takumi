@@ -130,14 +130,12 @@ impl SizedFontStyle<'_> {
       return None;
     }
     let (dash, round_cap) = match self.outline_style {
+      BorderStyle::Solid => (None, false),
       BorderStyle::Dotted => (Some([0.0, width * 2.0]), true),
       BorderStyle::Dashed => (Some([width * 3.0, width * 2.0]), false),
-      BorderStyle::Double
-      | BorderStyle::Groove
-      | BorderStyle::Ridge
-      | BorderStyle::Inset
-      | BorderStyle::Outset => return None,
-      _ => (None, false),
+      // Everything else needs more than one stroke, so a new style has to say
+      // how it draws rather than falling through to a plain one.
+      _ => return None,
     };
 
     Some(StrokeStyle {
@@ -387,8 +385,16 @@ mod tests {
 
   use parley::{FontFamilyName, GenericFamily};
 
-  use super::ExpandedFontFamily;
-  use crate::style::{FontFamily, FromCssStr};
+  use super::{ExpandedFontFamily, SizedFontStyle};
+  use crate::{
+    Fonts,
+    context::RenderContext,
+    painter::StrokeStyle,
+    style::{
+      BorderStyle, Color, ComputedStyle, Display, FontFamily, FromCssStr, Length, SizingContext,
+    },
+    viewport::Viewport,
+  };
 
   fn names(expanded: &ExpandedFontFamily) -> Vec<String> {
     expanded
@@ -439,5 +445,65 @@ mod tests {
       expanded.iter().next(),
       Some(FontFamilyName::Generic(GenericFamily::Monospace))
     ));
+  }
+
+  fn outline(style: BorderStyle, width: f32) -> Option<StrokeStyle> {
+    let computed = ComputedStyle {
+      display: Display::Inline,
+      outline_style: style,
+      outline_width: Length::Px(width).into(),
+      outline_color: Color([255, 0, 0, 255]).into(),
+      ..Default::default()
+    };
+    let fonts = Fonts::default();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((100, 100)))
+          .build(),
+      )
+      .build();
+
+    SizedFontStyle::from_style(&computed, &context).outline_stroke()
+  }
+
+  #[test]
+  fn a_solid_inline_outline_strokes_without_dashes() {
+    let stroke = outline(BorderStyle::Solid, 4.0).expect("solid outline strokes");
+
+    assert_eq!(stroke.color, Color([255, 0, 0, 255]));
+    assert_eq!(stroke.width, 4.0);
+    assert_eq!(stroke.dash, None);
+    assert!(!stroke.round_cap);
+  }
+
+  #[test]
+  fn dotted_and_dashed_inline_outlines_carry_their_intervals() {
+    let dotted = outline(BorderStyle::Dotted, 4.0).expect("dotted outline strokes");
+
+    assert_eq!(dotted.dash, Some([0.0, 8.0]));
+    assert!(dotted.round_cap);
+
+    let dashed = outline(BorderStyle::Dashed, 4.0).expect("dashed outline strokes");
+
+    assert_eq!(dashed.dash, Some([12.0, 8.0]));
+    assert!(!dashed.round_cap);
+  }
+
+  #[test]
+  fn an_inline_outline_that_cannot_be_one_stroke_paints_nothing() {
+    for style in [
+      BorderStyle::Double,
+      BorderStyle::Groove,
+      BorderStyle::Ridge,
+      BorderStyle::Inset,
+      BorderStyle::Outset,
+      BorderStyle::None,
+      BorderStyle::Hidden,
+    ] {
+      assert!(outline(style, 4.0).is_none(), "{style:?} stroked something");
+    }
+    assert!(outline(BorderStyle::Solid, 0.0).is_none());
   }
 }
