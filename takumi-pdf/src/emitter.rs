@@ -356,13 +356,9 @@ impl Emitter<'_> {
       if relative.only_translation() {
         let (top, bottom) = (y, y + layout.size.height);
 
-        if let Some((from, to)) = self.window {
-          self.window = Some((from.max(top), to.min(bottom)));
-        }
+        self.window = Some(narrowed(self.window, top, bottom));
         // A text line is owned by its baseline, against its own window.
-        if let Some((from, to)) = self.line_window {
-          self.line_window = Some((from.max(top), to.min(bottom)));
-        }
+        self.line_window = Some(narrowed(self.line_window, top, bottom));
       }
       let clip_border = BorderProperties::from_context(&node.context, layout.size, layout.border);
       let path = if clip_border.is_zero() {
@@ -1972,6 +1968,15 @@ fn decorative_image(node: &RenderNode) -> bool {
 /// The stroke that fakes bold for a face with no weight of its own to reach,
 /// at the width the raster renderer emboldens with. Filling and stroking keeps
 /// the run as text, so it stays selectable.
+/// The band a clip leaves of `window`. A single page and an inline subtree both
+/// start out unbounded, and a clip inside one still decides what may be emitted.
+fn narrowed(window: Option<(f32, f32)>, top: f32, bottom: f32) -> (f32, f32) {
+  match window {
+    Some((from, to)) => (from.max(top), to.min(bottom)),
+    None => (top, bottom),
+  }
+}
+
 fn synthetic_stroke(shaped: &ShapedRun, fill: &Fill) -> Option<Stroke> {
   Some(Stroke {
     paint: fill.paint.clone(),

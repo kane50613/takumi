@@ -1096,6 +1096,43 @@ fn a_clipped_away_line_reaches_no_page() {
   );
 }
 
+/// A single page and an inline subtree both render without a page window, and a
+/// clip inside one still decides what may be emitted. The cut-away line is the
+/// only Chinese on the page, so the face it would need says whether it reached
+/// the file.
+#[test]
+fn a_clip_binds_content_with_no_page_window() {
+  let cases = [
+    r#"<div style="width:700px">
+      <div style="overflow:hidden;height:40px">
+        <div style="height:2600px"><div style="margin-top:1500px;font-size:24px">裁掉</div></div>
+      </div>
+    </div>"#,
+    r#"<div style="width:700px">
+      <span style="display:inline-block;overflow:hidden;height:40px;width:200px">
+        <span style="display:block;margin-top:1500px;font-size:24px">裁掉</span>
+      </span>
+    </div>"#,
+  ];
+
+  for doc in cases {
+    let pdf = render(
+      PdfOptions::builder()
+        .node(from_html(doc, FromHtmlOptions::default()).expect("parse clipped doc"))
+        .viewport(Viewport::new((700, 300)))
+        .fonts(&fonts())
+        .build(),
+    )
+    .expect("render clipped doc");
+
+    assert_eq!(
+      embedded_subsets(&inflated_text(&pdf), "NotoSansTC"),
+      0,
+      "content an overflow clip cuts away still reached the file"
+    );
+  }
+}
+
 /// Overflow clipping: rounded clip on both axes, and a single-axis clip that
 /// leaves the other axis unbounded.
 #[test]
