@@ -40,6 +40,8 @@ use std::{cell::RefCell, rc::Rc};
 mod background;
 mod bands;
 mod counters;
+
+pub use counters::counter_characters;
 mod emitter;
 mod filter;
 mod glyph;

@@ -4,7 +4,7 @@ import type { FontLoader, ImagesInput, RegisteredFamilyLike } from "@takumi-rs/h
 import { FontRegistry } from "@takumi-rs/helpers/renderer";
 import { type Node, type ReactElementLike, subsetFonts } from "@takumi-rs/helpers";
 import type { ReactNode } from "react";
-import { PdfRenderer as PdfRendererInternal } from "../pkg/takumi_pdf_wasm";
+import { counterCharacters, PdfRenderer as PdfRendererInternal } from "../pkg/takumi_pdf_wasm";
 
 export { default, initSync } from "../pkg/takumi_pdf_wasm";
 export type { FontLoader, ImagesInput } from "@takumi-rs/helpers/renderer";
@@ -15,8 +15,29 @@ declare module "react" {
   }
 }
 
-/** Every character a page counter can produce, so subsetting keeps the fonts a band needs. */
-const COUNTER_DIGITS = "0123456789";
+/** Every class name in a tree, so the renderer can say what its counters draw. */
+function classNames(node: unknown): string[] {
+  const into: string[] = [];
+
+  collectClassNames(node, into);
+  return into;
+}
+
+function collectClassNames(node: unknown, into: string[]): void {
+  if (typeof node !== "object" || node === null) {
+    return;
+  }
+  const { className, children } = node as { className?: unknown; children?: unknown };
+
+  if (typeof className === "string") {
+    into.push(...className.split(/\s+/).filter(Boolean));
+  }
+  if (Array.isArray(children)) {
+    for (const child of children) {
+      collectClassNames(child, into);
+    }
+  }
+}
 
 /** A document input: a takumi node tree, JSX, or an HTML string. */
 export type NodeInput = Node | ReactNode | ReactElementLike | string;
@@ -260,8 +281,13 @@ export class PdfRenderer {
       fonts &&
         subsetFonts({
           fonts,
-          // A band's page counters render digits no node in the tree carries.
-          source: bands.length > 0 ? [main.node, ...bands, COUNTER_DIGITS] : main.node,
+          // A band's page counters render characters no node in the tree
+          // carries, and which ones depends on the style, so the renderer says.
+          source: [
+            main.node,
+            ...bands,
+            counterCharacters(bands.flatMap((band) => classNames(band))),
+          ],
         }),
       images,
       fontFamilies,
@@ -299,7 +325,11 @@ export class PdfRenderer {
     const main = await resolveNode(node);
     // The tree measured may itself be a band, so its counters are always in play.
     const resources = await this.fonts.resolveResources(
-      fonts && subsetFonts({ fonts, source: [main.node, COUNTER_DIGITS] }),
+      fonts &&
+        subsetFonts({
+          fonts,
+          source: [main.node, counterCharacters(classNames(main.node))],
+        }),
       images,
       fontFamilies,
     );
