@@ -64,15 +64,6 @@ fn cached_mask(
   })
 }
 
-/// The mask for `paths` with no subpixel offset: what a caller wants when it
-/// needs the glyph's shape rather than where it lands.
-pub(crate) fn unshifted_glyph_mask(
-  glyph_signature: u64,
-  paths: &[Command],
-) -> (Arc<Vec<u8>>, Placement) {
-  cached_mask(glyph_signature, 0, paths, None)
-}
-
 /// Splits a translation into the subpixel bucket baked into the mask and the
 /// whole pixels the blit offsets by. `None` when the transform is not a pure
 /// translation, which the cache cannot represent.

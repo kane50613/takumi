@@ -836,7 +836,7 @@ pub(crate) fn resolve_mask<'a>(mask: MaskView<'a>, size: Size<u32>) -> Option<Co
 }
 
 #[inline(always)]
-pub(crate) fn mask_index_from_coord(x: u32, y: u32, width: u32) -> usize {
+fn mask_index_from_coord(x: u32, y: u32, width: u32) -> usize {
   (y * width + x) as usize
 }
 

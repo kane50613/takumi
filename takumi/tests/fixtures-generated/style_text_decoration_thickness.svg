@@ -1,6 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="475" fill="#f0f0f0"/>
-  <rect x="56" y="92.8" width="1088" height="2.4" fill="#f00"/>
+  <rect x="56" y="92.8" width="372.044" height="2.4" fill="#f00"/>
+  <rect x="436.875" y="92.8" width="308.929" height="2.4" fill="#f00"/>
+  <rect x="754.635" y="92.8" width="88.705" height="2.4" fill="#f00"/>
+  <rect x="852.171" y="92.8" width="44.102" height="2.4" fill="#f00"/>
+  <rect x="909.409" y="92.8" width="132.229" height="2.4" fill="#f00"/>
+  <rect x="1062.169" y="92.8" width="81.831" height="2.4" fill="#f00"/>
   <g fill="#000">
     <use href="#g0" x="56.33" y="88"/>
     <use href="#g1" x="82.3" y="88"/>
@@ -48,7 +53,11 @@
     <use href="#g2" x="1100.66" y="88"/>
     <use href="#g23" x="1118.71" y="88"/>
   </g>
-  <rect x="169" y="175.8" width="862" height="2.4" fill="#f00"/>
+  <rect x="169" y="175.8" width="463.572" height="2.4" fill="#f00"/>
+  <rect x="641.403" y="175.8" width="88.705" height="2.4" fill="#f00"/>
+  <rect x="738.939" y="175.8" width="44.102" height="2.4" fill="#f00"/>
+  <rect x="796.177" y="175.8" width="132.229" height="2.4" fill="#f00"/>
+  <rect x="948.937" y="175.8" width="82.063" height="2.4" fill="#f00"/>
   <g fill="#000">
     <use href="#g28" x="169.56" y="171"/>
     <use href="#g24" x="187.08" y="171"/>
@@ -87,7 +96,12 @@
     <use href="#g2" x="987.43" y="171"/>
     <use href="#g23" x="1005.48" y="171"/>
   </g>
-  <rect x="234" y="258.8" width="732" height="2" fill="#f00"/>
+  <rect x="234" y="258.8" width="31.7" height="2" fill="#f00"/>
+  <rect x="273.731" y="258.8" width="294.657" height="2" fill="#f00"/>
+  <rect x="576.419" y="258.8" width="89.505" height="2" fill="#f00"/>
+  <rect x="673.955" y="258.8" width="44.903" height="2" fill="#f00"/>
+  <rect x="731.193" y="258.8" width="133.029" height="2" fill="#f00"/>
+  <rect x="883.953" y="258.8" width="82.047" height="2" fill="#f00"/>
   <g fill="#000">
     <use href="#g10" x="234.14" y="254"/>
     <use href="#g13" x="263.86" y="254"/>
@@ -120,7 +134,12 @@
     <use href="#g2" x="922.85" y="254"/>
     <use href="#g23" x="940.9" y="254"/>
   </g>
-  <rect x="233" y="341.8" width="734" height="5" fill="#f00"/>
+  <rect x="233" y="341.8" width="29.868" height="5" fill="#f00"/>
+  <rect x="276.899" y="341.8" width="288.657" height="5" fill="#f00"/>
+  <rect x="579.587" y="341.8" width="83.505" height="5" fill="#f00"/>
+  <rect x="677.123" y="341.8" width="38.903" height="5" fill="#f00"/>
+  <rect x="734.361" y="341.8" width="127.029" height="5" fill="#f00"/>
+  <rect x="887.121" y="341.8" width="79.879" height="5" fill="#f00"/>
   <g fill="#000">
     <use href="#g31" x="233.98" y="337"/>
     <use href="#g13" x="264.02" y="337"/>
@@ -153,7 +172,12 @@
     <use href="#g2" x="923.02" y="337"/>
     <use href="#g23" x="941.06" y="337"/>
   </g>
-  <rect x="224" y="424.8" width="752" height="10" fill="#f00"/>
+  <rect x="224" y="424.8" width="43.732" height="10" fill="#f00"/>
+  <rect x="291.763" y="424.8" width="278.657" height="10" fill="#f00"/>
+  <rect x="594.451" y="424.8" width="73.505" height="10" fill="#f00"/>
+  <rect x="691.987" y="424.8" width="28.903" height="10" fill="#f00"/>
+  <rect x="749.225" y="424.8" width="117.029" height="10" fill="#f00"/>
+  <rect x="901.985" y="424.8" width="74.016" height="10" fill="#f00"/>
   <g fill="#000">
     <use href="#g8" x="224.11" y="420"/>
     <use href="#g32" x="242.06" y="420"/>

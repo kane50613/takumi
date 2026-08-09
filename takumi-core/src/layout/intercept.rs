@@ -24,7 +24,11 @@ const BAND_SAMPLES: usize = 8;
 ///
 /// Ranges stay separate when the outline leaves the band between them, so the
 /// gap inside a `u` stays a gap rather than being swallowed with the stems.
-pub fn text_intercepts(paths: &[PathCommand], top: f32, bottom: f32) -> SmallVec<[(f32, f32); 4]> {
+pub(crate) fn text_intercepts(
+  paths: &[PathCommand],
+  top: f32,
+  bottom: f32,
+) -> SmallVec<[(f32, f32); 4]> {
   let mut spans: SmallVec<[(f32, f32); 4]> = SmallVec::new();
 
   if bottom <= top {
@@ -51,13 +55,32 @@ const MAX_DILATION: f32 = 13.0;
 /// insetting the decoration bounds before asking for intercepts.
 const MIN_INTERSECTION: f32 = 0.5;
 
+/// The stretches of a decoration that survive `text-decoration-skip-ink`.
+///
+/// `glyphs` places each outline in the decoration's own space; `start` and
+/// `end` bound the line; `top` and `bottom` bound its thickness. Chromium asks
+/// Skia which x-ranges the glyphs occupy inside that band and clips them out,
+/// growing each by the line's thickness so a stroke never touches the line it
+/// interrupts. This answers the same question from the outlines themselves.
+pub fn skip_ink_spans<'g>(
+  glyphs: impl Iterator<Item = (Point<f32>, &'g [PathCommand])>,
+  start: f32,
+  end: f32,
+  top: f32,
+  bottom: f32,
+) -> SmallVec<[(f32, f32); 4]> {
+  let skips = skip_ink_ranges(glyphs, top, bottom, bottom - top);
+
+  remaining_spans(start, end, &skips)
+}
+
 /// The x-ranges a decoration gives up to the glyphs it runs through.
 ///
 /// `glyphs` places each outline in the decoration's own space. `top` and
 /// `bottom` bound the decoration; `thickness` sets how far a skipped range
 /// grows past the ink, which keeps a stroke from touching the line it
 /// interrupts.
-pub fn skip_ink_ranges<'g>(
+fn skip_ink_ranges<'g>(
   glyphs: impl Iterator<Item = (Point<f32>, &'g [PathCommand])>,
   top: f32,
   bottom: f32,
@@ -86,7 +109,7 @@ pub fn skip_ink_ranges<'g>(
 
 /// What is left of `start..end` once `skips` are taken out of it. `skips` must
 /// be sorted and disjoint, which is what [`skip_ink_ranges`] returns.
-pub fn remaining_spans(start: f32, end: f32, skips: &[(f32, f32)]) -> SmallVec<[(f32, f32); 4]> {
+fn remaining_spans(start: f32, end: f32, skips: &[(f32, f32)]) -> SmallVec<[(f32, f32); 4]> {
   let mut spans: SmallVec<[(f32, f32); 4]> = SmallVec::new();
   let mut left = start;
 
