@@ -1069,6 +1069,43 @@ fn blend_opacity_isolation() {
   });
 }
 
+/// A clip keeps content off the page, but a PDF clip does not keep it out of
+/// the text layer. Content an ancestor cuts away must never be emitted, or it
+/// stays extractable on whichever page its own geometry happens to land on.
+///
+/// The cut-away line is the only Chinese on the page, so the face it would need
+/// says whether it reached the file.
+#[test]
+fn a_clipped_away_line_reaches_no_page() {
+  let doc = r#"<div style="width:700px">
+    <div style="overflow:hidden;height:40px;background:#eee">
+      <div style="height:2600px">
+        <div style="margin-top:1500px;font-size:24px">裁掉的秘密</div>
+      </div>
+    </div>
+    <div style="font-size:24px;height:2200px">visible after box</div>
+  </div>"#;
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse clipped doc"))
+      .page(PageOptions::A4)
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect("render clipped doc");
+  let haystack = inflated_text(&pdf);
+
+  assert!(
+    embedded_subsets(&haystack, "Archivo") > 0,
+    "the fixture stopped covering what it was meant to keep"
+  );
+  assert_eq!(
+    embedded_subsets(&haystack, "NotoSansTC"),
+    0,
+    "content an overflow clip cuts away still reached the file"
+  );
+}
+
 /// Overflow clipping: rounded clip on both axes, and a single-axis clip that
 /// leaves the other axis unbounded.
 #[test]
