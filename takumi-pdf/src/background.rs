@@ -4,7 +4,6 @@
 use takumi_core::{
   context::RenderContext,
   geometry::Size,
-  layout::replaced::position_axis,
   style::{
     BackgroundRepeat, BackgroundRepeatStyle, BackgroundSize, IntrinsicSizing, Length,
     PositionComponent, PositionValue,
@@ -122,7 +121,7 @@ fn axis(
       step: area.max(1.0),
     };
   }
-  let anchor = position_axis(position, context, area - tile);
+  let anchor = position.resolve(context, area - tile);
   let once = Axis {
     tile,
     origin: anchor,
@@ -140,7 +139,7 @@ fn axis(
       let count = (area / tile).round().max(1.0);
       let rounded = area / count;
       // The position still applies, against the rescaled tile.
-      let anchor = position_axis(position, context, area - rounded);
+      let anchor = position.resolve(context, area - rounded);
 
       Axis {
         tile: rounded,

@@ -7,7 +7,7 @@
 use crate::{
   context::RenderContext,
   geometry::{Point, Size},
-  style::{Length, ObjectFit, PositionComponent},
+  style::ObjectFit,
 };
 
 /// Where and how large replaced content draws.
@@ -65,24 +65,14 @@ pub fn place_replaced(
   ReplacedPlacement {
     size,
     offset: Point {
-      x: position_axis(position.x, context, content.width - size.width),
-      y: position_axis(position.y, context, content.height - size.height),
+      x: position.x.resolve(context, content.width - size.width),
+      y: position.y.resolve(context, content.height - size.height),
     },
-  }
-}
-
-/// One axis of a `position` value against the space it has to move in. A
-/// keyword is a percentage of that space, so `center` lands halfway.
-pub fn position_axis(component: PositionComponent, context: &RenderContext, available: f32) -> f32 {
-  match Length::from(component) {
-    Length::Auto => available * 0.5,
-    length => length.to_px(&context.sizing, available),
   }
 }
 
 #[cfg(test)]
 mod tests {
-  use super::position_axis;
   use crate::{
     Fonts,
     context::RenderContext,
@@ -103,7 +93,7 @@ mod tests {
       )
       .build();
 
-    position_axis(component, &context, available)
+    component.resolve(&context, available)
   }
 
   #[test]

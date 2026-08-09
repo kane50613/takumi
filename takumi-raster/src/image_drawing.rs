@@ -1,7 +1,4 @@
-use takumi_core::{
-  geometry::{ComputedLayout as Layout, Point, Size},
-  layout::replaced::position_axis,
-};
+use takumi_core::geometry::{ComputedLayout as Layout, Point, Size};
 
 use crate::{
   BorderProperties, Canvas, RenderContext, Result, SamplingOptions, pixmap_ref_from_buffer,
@@ -77,8 +74,8 @@ pub(crate) fn process_image_for_object_fit(
       let available_x = content_box.width - new_width;
       let available_y = content_box.height - new_height;
 
-      let offset_x = position_axis(object_position.x, context, available_x);
-      let offset_y = position_axis(object_position.y, context, available_y);
+      let offset_x = object_position.x.resolve(context, available_x);
+      let offset_y = object_position.y.resolve(context, available_y);
 
       Ok((
         PreparedImage {
@@ -111,8 +108,8 @@ pub(crate) fn process_image_for_object_fit(
       let available_crop_x = new_width - content_box.width;
       let available_crop_y = new_height - content_box.height;
 
-      let crop_x = position_axis(object_position.x, context, available_crop_x);
-      let crop_y = position_axis(object_position.y, context, available_crop_y);
+      let crop_x = object_position.x.resolve(context, available_crop_x);
+      let crop_y = object_position.y.resolve(context, available_crop_y);
 
       Ok((
         PreparedImage {
@@ -159,8 +156,8 @@ pub(crate) fn process_image_for_object_fit(
       let available_x = content_box.width - new_width;
       let available_y = content_box.height - new_height;
 
-      let offset_x = position_axis(object_position.x, context, available_x);
-      let offset_y = position_axis(object_position.y, context, available_y);
+      let offset_x = object_position.x.resolve(context, available_x);
+      let offset_y = object_position.y.resolve(context, available_y);
 
       Ok((
         PreparedImage {
@@ -183,8 +180,8 @@ pub(crate) fn process_image_for_object_fit(
         let available_x = (content_box.width - image_width).max(0.0);
         let available_y = (content_box.height - image_height).max(0.0);
 
-        let offset_x = position_axis(object_position.x, context, available_x);
-        let offset_y = position_axis(object_position.y, context, available_y);
+        let offset_x = object_position.x.resolve(context, available_x);
+        let offset_y = object_position.y.resolve(context, available_y);
 
         return Ok((
           PreparedImage {
@@ -206,22 +203,18 @@ pub(crate) fn process_image_for_object_fit(
       let available_crop_x = (image_width - content_box.width).max(0.0);
       let available_crop_y = (image_height - content_box.height).max(0.0);
 
-      let crop_x = position_axis(object_position.x, context, available_crop_x);
-      let crop_y = position_axis(object_position.y, context, available_crop_y);
+      let crop_x = object_position.x.resolve(context, available_crop_x);
+      let crop_y = object_position.y.resolve(context, available_crop_y);
 
       let crop_width = content_box.width.min(image_width);
       let crop_height = content_box.height.min(image_height);
 
-      let offset_x = position_axis(
-        object_position.x,
-        context,
-        (content_box.width - crop_width).max(0.0),
-      );
-      let offset_y = position_axis(
-        object_position.y,
-        context,
-        (content_box.height - crop_height).max(0.0),
-      );
+      let offset_x = object_position
+        .x
+        .resolve(context, (content_box.width - crop_width).max(0.0));
+      let offset_y = object_position
+        .y
+        .resolve(context, (content_box.height - crop_height).max(0.0));
 
       Ok((
         PreparedImage {
