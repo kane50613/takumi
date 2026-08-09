@@ -8,9 +8,13 @@ use std::io;
 
 use takumi_core::{
   context::RenderContext,
-  layout::node::{ImageData, ImageSourceInput, resolve_image},
+  geometry::Size,
+  layout::{
+    node::{ImageData, ImageSourceInput, resolve_image},
+    replaced::place_replaced,
+  },
   resources::image::{ImageSource, to_data_url},
-  style::{ImageScalingAlgorithm, Length, ObjectFit, PositionComponent},
+  style::{ImageScalingAlgorithm, ObjectFit},
 };
 
 use crate::{Frame, SvgDocument, box_model::rect_path_data};
@@ -23,15 +27,6 @@ pub(crate) fn data_url_for_url(url: &str, context: &RenderContext) -> Option<Str
   resolve_image(url, context)
     .ok()
     .and_then(|s| loaded_data_url(&s))
-}
-
-/// Resolves one `object-position` axis to a destination offset within
-/// `available` space, mirroring the raster backend's `resolve_object_position_axis`.
-fn position_axis(component: PositionComponent, context: &RenderContext, available: f32) -> f32 {
-  match Length::from(component) {
-    Length::Auto => available * 0.5,
-    length => length.to_px(&context.sizing, available),
-  }
 }
 
 /// Emits an image node's content into the given content-box rectangle.
@@ -48,8 +43,6 @@ pub(crate) fn emit_image(
   let Some(href) = data_url(&image.src, context) else {
     return Ok(());
   };
-  let position = context.style.object_position;
-
   if matches!(context.style.object_fit, ObjectFit::Fill) {
     return doc.image(x, y, w, h, &href, Some("none"));
   }
@@ -57,21 +50,22 @@ pub(crate) fn emit_image(
   let Some((iw, ih)) = intrinsic_size(&image.src, context) else {
     return doc.image(x, y, w, h, &href, Some("xMidYMid meet"));
   };
-
-  let scale = match context.style.object_fit {
-    ObjectFit::Fill => 1.0,
-    ObjectFit::Contain => (w / iw).min(h / ih),
-    ObjectFit::Cover => (w / iw).max(h / ih),
-    ObjectFit::ScaleDown => (w / iw).min(h / ih).min(1.0),
-    _ => 1.0,
+  let content = Size {
+    width: w,
+    height: h,
   };
-  let (dw, dh) = (iw * scale, ih * scale);
+  let placement = place_replaced(
+    context,
+    content,
+    Size {
+      width: iw,
+      height: ih,
+    },
+  );
+  let (dw, dh) = (placement.size.width, placement.size.height);
+  let (ix, iy) = (x + placement.offset.x, y + placement.offset.y);
 
-  let off_x = position_axis(position.0.x, context, w - dw);
-  let off_y = position_axis(position.0.y, context, h - dh);
-  let (ix, iy) = (x + off_x, y + off_y);
-
-  if dw > w + 0.5 || dh > h + 0.5 {
+  if placement.overflows(content) {
     let clip = doc.clip_path(&rect_path_data(x, y, w, h))?;
     let group = doc.begin_group(crate::IDENTITY, 1.0, Some(&clip), None)?;
     doc.image(ix, iy, dw, dh, &href, Some(PRESERVE_ASPECT_NONE))?;

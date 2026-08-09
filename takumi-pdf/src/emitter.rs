@@ -7,7 +7,6 @@ use takumi_core::{
   context::RenderContext,
   layout::node::{ImageData, resolve_image},
   resources::image::ImageSource,
-  style::ObjectFit,
 };
 use takumi_core::{
   font_style::SizedFontStyle,
@@ -19,6 +18,7 @@ use takumi_core::{
     inline::{BuiltInlineLayout, InlineRunLayout, ProcessedInlineSpan, ShapedRun, run_decorations},
     inline_box::{InlineBoxPaint, InlineSubtree, resolve_inline_box},
     node::NodeKind,
+    replaced::place_replaced,
     tree::{LayoutResults, RenderNode},
   },
   paint::{ConicGradientTile, LinearGradientTile, RadialGradientTile, resolve_stops_along_axis},
@@ -38,7 +38,7 @@ use takumi_core::{
 #[cfg(feature = "images")]
 use crate::krilla::geom::Size as KrillaSize;
 #[cfg(feature = "images")]
-use crate::paint::{position_axis, rasterized_image};
+use crate::paint::rasterized_image;
 #[cfg(all(feature = "svg", feature = "images"))]
 use crate::svg;
 use crate::{
@@ -1021,18 +1021,19 @@ impl Emitter<'_> {
       }
       (width, height)
     };
-    let scale = match context.style.object_fit {
-      ObjectFit::Contain => (w / iw).min(h / ih),
-      ObjectFit::Cover => (w / iw).max(h / ih),
-      ObjectFit::ScaleDown => (w / iw).min(h / ih).min(1.0),
-      ObjectFit::None => 1.0,
-      _ => 0.0,
+    let content = Size {
+      width: w,
+      height: h,
     };
-    let (dw, dh) = if scale == 0.0 {
-      (w, h)
-    } else {
-      (iw * scale, ih * scale)
-    };
+    let placement = place_replaced(
+      context,
+      content,
+      Size {
+        width: iw,
+        height: ih,
+      },
+    );
+    let (dw, dh) = (placement.size.width, placement.size.height);
     // SVG sources embed as vector ops; everything else rasterizes. A color
     // filter rasterizes them too, since the transform applies to pixels.
     #[cfg(feature = "svg")]
@@ -1059,14 +1060,13 @@ impl Emitter<'_> {
     } else {
       None
     };
-    let position = context.style.object_position.0;
-    let ix = bx + position_axis(position.x, context, w - dw);
-    let iy = by + position_axis(position.y, context, h - dh);
+    let ix = bx + placement.offset.x;
+    let iy = by + placement.offset.y;
 
     let Some(size) = KrillaSize::from_wh(dw, dh) else {
       return;
     };
-    let overflows = dw > w + 0.5 || dh > h + 0.5;
+    let overflows = placement.overflows(content);
 
     if overflows {
       let Some(path) = KrillaRect::from_xywh(bx, by, w, h).and_then(rect_path) else {

@@ -4,13 +4,12 @@
 use takumi_core::{
   context::RenderContext,
   geometry::Size,
+  layout::replaced::position_axis,
   style::{
     BackgroundRepeat, BackgroundRepeatStyle, BackgroundSize, IntrinsicSizing, Length,
     PositionComponent, PositionValue,
   },
 };
-
-use crate::paint::position_axis;
 
 /// The value for one layer: CSS cycles the shorter list over the layers.
 pub(crate) fn cycled<T: Copy + Default>(values: &[T], index: usize) -> T {
