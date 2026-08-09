@@ -50,6 +50,60 @@ pub struct InlineLayoutRequest<'c> {
   pub shape_cacheable: bool,
 }
 
+impl<'c> InlineLayoutRequest<'c> {
+  /// A request that lays `items` into a content box. The available space, the
+  /// wrap width and the height clamp all follow from the box, so a caller only
+  /// says what it is laying out and whether it is measuring.
+  pub fn in_content_box(
+    items: Vec<InlineItem<'c>>,
+    content: Size<f32>,
+    style: &'c SizedFontStyle<'c>,
+    context: &'c RenderContext,
+    mode: InlineLayoutMode,
+  ) -> Self {
+    Self {
+      items,
+      available_space: Size {
+        width: AvailableSpace::Definite(content.width),
+        height: AvailableSpace::Definite(content.height),
+      },
+      max_width: content.width,
+      max_height: resolve_inline_max_height(style, content.height),
+      style,
+      context,
+      mode,
+      shape_cacheable: true,
+    }
+  }
+
+  /// A request measured against taffy's own constraint, which is what a layout
+  /// pass hands down: the box may still be sizing itself, so the wrap width
+  /// comes from the available space and `box-sizing` rather than from a
+  /// content box that does not exist yet.
+  pub fn in_available_space(
+    items: Vec<InlineItem<'c>>,
+    available_space: Size<AvailableSpace>,
+    known_dimensions: Size<Option<f32>>,
+    style: &'c SizedFontStyle<'c>,
+    context: &'c RenderContext,
+    mode: InlineLayoutMode,
+  ) -> Self {
+    let (max_width, max_height) =
+      create_inline_constraint(context, available_space, known_dimensions);
+
+    Self {
+      items,
+      available_space,
+      max_width,
+      max_height,
+      style,
+      context,
+      mode,
+      shape_cacheable: true,
+    }
+  }
+}
+
 /// A per-render cache of shaped text-only parley layouts, keyed by a hash of
 /// the span texts and styles. Shaping is width-independent for pure text
 /// (inline boxes bake in measured sizes, so they bypass the cache); line
@@ -1763,7 +1817,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
 }
 
 /// Resolve the max height constraint from line clamping and content box height.
-pub fn resolve_inline_max_height(
+pub(crate) fn resolve_inline_max_height(
   font_style: &SizedFontStyle,
   content_box_height: f32,
 ) -> Option<MaxHeight> {
@@ -2650,7 +2704,7 @@ pub fn run_decorations(
 }
 
 /// Resolve the inline layout's max width and optional max height from available space and known dimensions.
-pub fn create_inline_constraint(
+pub(crate) fn create_inline_constraint(
   context: &RenderContext,
   available_space: Size<AvailableSpace>,
   known_dimensions: Size<Option<f32>>,

@@ -1,7 +1,5 @@
 use takumi_core::{
-  geometry::{
-    AvailableSpace, ComputedLayout as Layout, NodeId, Point, Size, transformed_rect_extents,
-  },
+  geometry::{ComputedLayout as Layout, NodeId, Point, Size, transformed_rect_extents},
   scene::{NodePaint, PaintItem, PaintItemKind, SceneBounds, StackingContextNode},
 };
 use tiny_skia::{Pixmap, PixmapMut};
@@ -15,7 +13,7 @@ use crate::{
   layout::{
     inline::{
       InlineLayoutMode, InlineLayoutRequest, ProcessedInlineSpan, collect_inline_items,
-      create_inline_layout, resolve_inline_max_height,
+      create_inline_layout,
     },
     tree::{LayoutResults, RenderNode},
   },
@@ -656,21 +654,13 @@ fn draw_render_node_inline(
 
   let font_style = SizedFontStyle::from_style(&node.context.style, &node.context);
 
-  let max_height = resolve_inline_max_height(&font_style, layout.content_box_height());
-
-  let built = create_inline_layout(InlineLayoutRequest {
-    items: collect_inline_items(node),
-    available_space: Size {
-      width: AvailableSpace::Definite(layout.content_box_width()),
-      height: AvailableSpace::Definite(layout.content_box_height()),
-    },
-    max_width: layout.content_box_width(),
-    max_height,
-    style: &font_style,
-    context: &node.context,
-    mode: InlineLayoutMode::Draw,
-    shape_cacheable: true,
-  });
+  let built = create_inline_layout(InlineLayoutRequest::in_content_box(
+    collect_inline_items(node),
+    layout.content_box_size(),
+    &font_style,
+    &node.context,
+    InlineLayoutMode::Draw,
+  ));
   let inline_layout_box = layout;
 
   let boxes = built.spans.iter().filter_map(|span| match span {

@@ -11,13 +11,12 @@ use std::{io, sync::Arc};
 use takumi_core::{
   context::RenderContext,
   font_style::SizedFontStyle,
-  geometry::{AvailableSpace, ComputedLayout as Layout, Point, Size},
+  geometry::{ComputedLayout as Layout, Point},
   layout::{
     inline::{
       InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineOutlineRect, InlineRunLayout,
       PositionedInlineRun, ProcessedInlineSpan, collect_inline_items, create_inline_layout,
-      outline_island_contour, outline_islands, resolve_inline_max_height, resolve_inline_runs,
-      run_decorations,
+      outline_island_contour, outline_islands, resolve_inline_runs, run_decorations,
     },
     node::TextData,
     tree::RenderNode,
@@ -80,23 +79,17 @@ pub(crate) fn emit_text(
     return Ok(());
   }
 
-  let built = create_inline_layout(InlineLayoutRequest {
-    items: vec![InlineItem::Text {
+  let built = create_inline_layout(InlineLayoutRequest::in_content_box(
+    vec![InlineItem::Text {
       text: text.text.as_str().into(),
       context,
       link: None,
     }],
-    available_space: Size {
-      width: AvailableSpace::Definite(content.width),
-      height: AvailableSpace::Definite(content.height),
-    },
-    max_width: content.width,
-    max_height: resolve_inline_max_height(&font_style, content.height),
-    style: &font_style,
+    content,
+    &font_style,
     context,
-    mode: InlineLayoutMode::Draw,
-    shape_cacheable: true,
-  });
+    InlineLayoutMode::Draw,
+  ));
 
   let runs = resolve_inline_runs(&built, context, layout).map_err(font_error)?;
   emit_runs(
@@ -127,19 +120,13 @@ pub(crate) fn emit_inline_content(
   }
   let content = layout.content_box_size();
 
-  let built = create_inline_layout(InlineLayoutRequest {
-    items: collect_inline_items(node),
-    available_space: Size {
-      width: AvailableSpace::Definite(content.width),
-      height: AvailableSpace::Definite(content.height),
-    },
-    max_width: content.width,
-    max_height: resolve_inline_max_height(&font_style, content.height),
-    style: &font_style,
+  let built = create_inline_layout(InlineLayoutRequest::in_content_box(
+    collect_inline_items(node),
+    content,
+    &font_style,
     context,
-    mode: InlineLayoutMode::Draw,
-    shape_cacheable: true,
-  });
+    InlineLayoutMode::Draw,
+  ));
 
   let runs = resolve_inline_runs(&built, context, layout).map_err(font_error)?;
   emit_runs(

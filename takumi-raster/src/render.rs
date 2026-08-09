@@ -12,10 +12,7 @@ use crate::{
   AnimationFrame, Bitmap, Canvas, DitheringAlgorithm, Error, Fonts, RenderContext, Result,
   SizedFontStyle, apply_dithering,
   layout::{
-    inline::{
-      InlineLayoutMode, InlineLayoutRequest, collect_inline_items, create_inline_constraint,
-      create_inline_layout,
-    },
+    inline::{InlineLayoutMode, InlineLayoutRequest, collect_inline_items, create_inline_layout},
     node::Node,
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
@@ -246,28 +243,17 @@ fn collect_measure_result(
 
         if current.should_create_inline_layout() {
           let font_style = SizedFontStyle::from_style(&current.context.style, &current.context);
-          let (max_width, max_height) = create_inline_constraint(
-            &current.context,
+          let built = create_inline_layout(InlineLayoutRequest::in_available_space(
+            collect_inline_items(current),
             Size {
               width: AvailableSpace::Definite(layout.content_box_width()),
               height: AvailableSpace::Definite(layout.content_box_height()),
             },
             Size::NONE,
-          );
-
-          let built = create_inline_layout(InlineLayoutRequest {
-            items: collect_inline_items(current),
-            available_space: Size {
-              width: AvailableSpace::Definite(layout.content_box_width()),
-              height: AvailableSpace::Definite(layout.content_box_height()),
-            },
-            max_width,
-            max_height,
-            style: &font_style,
-            context: &current.context,
-            mode: InlineLayoutMode::Measure,
-            shape_cacheable: true,
-          });
+            &font_style,
+            &current.context,
+            InlineLayoutMode::Measure,
+          ));
           let (measured_runs, measured_boxes) = built.measure_runs(layout);
           runs.extend(measured_runs.into_iter().map(|run| MeasuredTextRun {
             text: run.text.to_string(),
