@@ -15,15 +15,24 @@ export type PdfInspection = {
   bookmarks: Bookmark[];
   attachments: { name: string; description?: string }[];
   /**
-   * `BT` blocks per page. One shaped run emits one block, so a count far above
-   * the word count means something is cutting runs apart.
+   * One shaped run emits one `BT` block, so a page with about as many blocks as
+   * words is drawing every word separately and extractors will lose the spaces.
    */
-  textObjects: number[];
+  pageText: { blocks: number; words: number }[];
   objects: PdfObject[];
 };
 
-/** One indirect object, with its stream decoded when the bytes read as text. */
-export type PdfObject = { number: string; label: string; dict: string; body?: string };
+/**
+ * One indirect object, with its stream decoded when the bytes read as text.
+ * `text` is a content stream's glyph codes read back through `/ToUnicode`.
+ */
+export type PdfObject = {
+  number: string;
+  label: string;
+  dict: string;
+  body?: string;
+  text?: string;
+};
 
 type Bookmark = { title: string; depth: number };
 
@@ -148,14 +157,19 @@ async function readStream(
   if (keyword === -1 || close === -1) return undefined;
 
   const from = start + keyword + (object.startsWith("\r\n", keyword + 6) ? 8 : 7);
+  const dict = object.slice(0, keyword);
+  const length = Number(dict.match(/\/Length\s+(\d+)/)?.[1]);
   let to = start + close;
 
-  while (to > from && (bytes[to - 1] === 0x0a || bytes[to - 1] === 0x0d)) to -= 1;
+  // Only trust the `endstream` offset when `/Length` is indirect: compressed
+  // data ending in 0x0a is real, and trimming it corrupts the stream.
+  if (Number.isInteger(length) && from + length <= to) to = from + length;
+  else while (to > from && (bytes[to - 1] === 0x0a || bytes[to - 1] === 0x0d)) to -= 1;
 
   const raw = bytes.subarray(from, to);
 
   try {
-    return /\/FlateDecode/.test(object.slice(0, keyword)) ? await inflate(raw) : raw;
+    return /\/FlateDecode/.test(dict) ? await inflate(raw) : raw;
   } catch {
     return undefined;
   }
@@ -170,6 +184,114 @@ function readable(data: Uint8Array): string | undefined {
   const escaped = printable(data);
 
   return escaped.length > data.length * 2 ? undefined : escaped;
+}
+
+/** A dictionary entry's raw value: a nested dictionary, or the reference standing in for one. */
+function dictValue(dict: string, key: string): string | undefined {
+  const at = dict.search(new RegExp(`/${key}\\b`));
+
+  if (at === -1) return undefined;
+
+  const rest = dict.slice(at + key.length + 1).trimStart();
+
+  if (!rest.startsWith("<<")) return rest.match(/^\d+\s+0\s+R/)?.[0];
+
+  let depth = 0;
+
+  for (let index = 0; index < rest.length; index += 1) {
+    if (rest.startsWith("<<", index)) depth += 1;
+    else if (rest.startsWith(">>", index)) {
+      depth -= 1;
+      if (depth === 0) return rest.slice(0, index + 2);
+    } else continue;
+
+    index += 1;
+  }
+
+  return undefined;
+}
+
+/** Reads `beginbfchar` and `beginbfrange`, the two forms Takumi's CMaps use. */
+function parseCMap(cmap: string): Map<number, string> {
+  const utf16 = (hex: string) =>
+    (hex.match(/.{4}/g) ?? [])
+      .map((unit) => String.fromCharCode(Number.parseInt(unit, 16)))
+      .join("");
+
+  const codes = new Map<number, string>();
+
+  for (const block of cmap.matchAll(/beginbfchar([\s\S]*?)endbfchar/g)) {
+    for (const [, code, value] of block[1].matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g)) {
+      codes.set(Number.parseInt(code, 16), utf16(value));
+    }
+  }
+
+  // The `[ <a> <b> ]` destination form is skipped: Takumi never writes it.
+  for (const block of cmap.matchAll(/beginbfrange([\s\S]*?)endbfrange/g)) {
+    const entries = block[1].matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g);
+
+    for (const [, low, high, value] of entries) {
+      const start = Number.parseInt(low, 16);
+      const first = Number.parseInt(value, 16);
+
+      for (let code = start; code <= Number.parseInt(high, 16); code += 1) {
+        codes.set(code, String.fromCodePoint(first + code - start));
+      }
+    }
+  }
+
+  return codes;
+}
+
+/** Undoes the `\ooo` and `\n` escapes a PDF literal string is written with. */
+function pdfLiteral(raw: string): string {
+  return raw.replace(/\\(\d{1,3}|[\s\S])/g, (_, escape: string) =>
+    /^\d/.test(escape)
+      ? String.fromCharCode(Number.parseInt(escape, 8))
+      : ({ n: "\n", r: "\r", t: "\t", b: "\b", f: "\f" }[escape] ?? escape),
+  );
+}
+
+/**
+ * The words a content stream draws. Codes are two bytes because every font
+ * Takumi embeds is Identity-encoded, and `Tf` says which CMap reads them.
+ */
+function extractText(content: string, fonts: Map<string, Map<number, string>>): string {
+  const tokens = content.matchAll(
+    /\/(\w+)\s+[\d.]+\s+Tf|\(((?:\\[\s\S]|[^\\()])*)\)|<([0-9A-Fa-f\s]+)>/g,
+  );
+
+  let cmap: Map<number, string> | undefined;
+  let out = "";
+
+  for (const [, font, literal, hex] of tokens) {
+    if (font !== undefined) {
+      cmap = fonts.get(font);
+      continue;
+    }
+
+    if (!cmap) continue;
+
+    for (const code of showCodes(literal, hex)) out += cmap.get(code) ?? "";
+  }
+
+  return out;
+}
+
+/** Both string forms carry the same two-byte codes, written differently. */
+function showCodes(literal: string | undefined, hex: string | undefined): number[] {
+  if (literal === undefined) {
+    return ((hex ?? "").replace(/\s/g, "").match(/.{4}/g) ?? []).map((unit) =>
+      Number.parseInt(unit, 16),
+    );
+  }
+
+  const bytes = pdfLiteral(literal);
+
+  return Array.from(
+    { length: bytes.length >> 1 },
+    (_, index) => (bytes.charCodeAt(index * 2) << 8) | bytes.charCodeAt(index * 2 + 1),
+  );
 }
 
 /** Objects packed into an `/ObjStm`, which the file never lists at the top level. */
@@ -195,6 +317,31 @@ function expandObjectStream(dict: string, data: Uint8Array): PdfObject[] {
   });
 }
 
+/** The `/Font` resources a page names, each paired with the CMap that reads its codes. */
+function pageFonts(
+  page: string,
+  source: (number: string) => string | undefined,
+  streams: Map<string, Uint8Array>,
+): Map<string, Map<number, string>> {
+  const resolve = (value: string | undefined) => {
+    const reference = value?.match(/^(\d+)\s+0\s+R/)?.[1];
+    return reference ? source(reference) : value;
+  };
+
+  const resources = resolve(dictValue(page, "Resources")) ?? "";
+  const fonts = resolve(dictValue(resources, "Font")) ?? "";
+  const cmaps = new Map<string, Map<number, string>>();
+
+  for (const [, name, reference] of fonts.matchAll(/\/(\w+)\s+(\d+)\s+0\s+R/g)) {
+    const toUnicode = dictValue(source(reference) ?? "", "ToUnicode")?.match(/^\d+/)?.[0];
+    const cmap = toUnicode && streams.get(toUnicode);
+
+    if (cmap) cmaps.set(name, parseCMap(bytesToChars(cmap)));
+  }
+
+  return cmaps;
+}
+
 /** Every object the file declares, in file order, with `/ObjStm` contents unpacked in place. */
 async function readObjects(text: string, bytes: Uint8Array) {
   const ranges = objectRanges(text);
@@ -217,48 +364,77 @@ async function readObjects(text: string, bytes: Uint8Array) {
     }
   });
 
-  const textObjects = kids.map(() => 0);
-  const objects = await Promise.all(
+  // Streams are decoded up front because a content stream is only readable
+  // through the `/ToUnicode` stream of a font two references away.
+  const streams = new Map<string, Uint8Array>();
+
+  await Promise.all(
     [...ranges].map(async ([number, range]) => {
-      const raw = text.slice(...range);
-      const keyword = raw.indexOf("stream");
-      const dict = (keyword === -1 ? raw : raw.slice(0, keyword)).trim();
       const stream = await readStream(text, bytes, range);
-      const body = stream && readable(stream);
-      const pages = pageOf.get(number);
 
-      if (pages && body) {
-        const count = body.match(/\bBT\b/g)?.length ?? 0;
-
-        for (const page of pages) textObjects[page - 1] += count;
-      }
-
-      const packed =
-        stream && /\/Type\s*\/ObjStm\b/.test(dict) ? expandObjectStream(dict, stream) : [];
-
-      return [
-        {
-          number,
-          label: pages
-            ? `content stream, page${pages.length > 1 ? "s" : ""} ${pages.join(", ")}`
-            : (raw.match(/\/(?:Sub)?Type\s*\/(\w+)/)?.[1] ?? ""),
-          dict,
-          body:
-            packed.length > 0
-              ? undefined
-              : stream && (body === undefined ? `${stream.length} bytes, not text` : clamp(body)),
-        },
-        ...packed,
-      ];
+      if (stream) streams.set(number, stream);
     }),
   );
 
-  return { objects: objects.flat(), textObjects };
+  const fontsOf = new Map<string, Map<string, Map<number, string>>>();
+
+  kids.forEach((kid, index) => {
+    const fonts = pageFonts(source(kid) ?? "", source, streams);
+
+    for (const number of pageOf.keys()) {
+      if (pageOf.get(number)?.includes(index + 1)) fontsOf.set(number, fonts);
+    }
+  });
+
+  const pageText = kids.map(() => ({ blocks: 0, words: 0 }));
+  const objects = [...ranges].map(([number, range]) => {
+    const raw = text.slice(...range);
+    const keyword = raw.indexOf("stream");
+    const dict = (keyword === -1 ? raw : raw.slice(0, keyword)).trim();
+    const stream = streams.get(number);
+    const body = stream && readable(stream);
+    const pages = pageOf.get(number);
+    const drawn =
+      pages && stream
+        ? clamp(extractText(bytesToChars(stream), fontsOf.get(number) ?? new Map()))
+        : undefined;
+
+    if (pages && body) {
+      const blocks = body.match(/\bBT\b/g)?.length ?? 0;
+      const words = (drawn ?? "").split(/\s+/).filter(Boolean).length;
+
+      for (const page of pages) {
+        pageText[page - 1].blocks += blocks;
+        pageText[page - 1].words += words;
+      }
+    }
+
+    const packed =
+      stream && /\/Type\s*\/ObjStm\b/.test(dict) ? expandObjectStream(dict, stream) : [];
+
+    return [
+      {
+        number,
+        label: pages
+          ? `content stream, page${pages.length > 1 ? "s" : ""} ${pages.join(", ")}`
+          : (raw.match(/\/(?:Sub)?Type\s*\/(\w+)/)?.[1] ?? ""),
+        dict,
+        body:
+          packed.length > 0
+            ? undefined
+            : stream && (body === undefined ? `${stream.length} bytes, not text` : clamp(body)),
+        text: drawn,
+      },
+      ...packed,
+    ];
+  });
+
+  return { objects: objects.flat(), pageText };
 }
 
 export async function inspectPdf(bytes: Uint8Array): Promise<PdfInspection> {
   const text = bytesToChars(bytes);
-  const { objects: indirect, textObjects } = await readObjects(text, bytes);
+  const { objects: indirect, pageText } = await readObjects(text, bytes);
   const objects = text.split("endobj");
   const xmp = text.match(/<x:xmpmeta[\s\S]*?<\/x:xmpmeta>/)?.[0] ?? "";
   const xmpValue = (tag: string) => xmp.match(new RegExp(`<${tag}>([^<]*)<`))?.[1];
@@ -286,7 +462,7 @@ export async function inspectPdf(bytes: Uint8Array): Promise<PdfInspection> {
       .filter((object) => object.includes("/Filespec"))
       .map((object) => ({ name: entry(object, "F") ?? "", description: entry(object, "Desc") }))
       .filter((attachment) => attachment.name),
-    textObjects,
+    pageText,
     objects: indirect,
   };
 }

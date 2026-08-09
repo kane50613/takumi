@@ -63,7 +63,13 @@ function DocumentPanel({ inspection }: { inspection: PdfInspection }) {
       </Field>
       <Field label="Tagged">{inspection.tagged ? "yes" : "no"}</Field>
       <Field label="Pages">{inspection.pages}</Field>
-      <Field label="Text objects">{inspection.textObjects.join(" · ")}</Field>
+      <Field label="Text">
+        {inspection.pageText.map((page, index) => (
+          <div key={`page-${index + 1}`}>
+            page {index + 1}: {page.blocks} blocks / {page.words} words
+          </div>
+        ))}
+      </Field>
       {inspection.title && <Field label="Title">{inspection.title}</Field>}
       {inspection.authors && <Field label="Authors">{inspection.authors.join(", ")}</Field>}
       {inspection.created && <Field label="Created">{inspection.created}</Field>}
@@ -129,7 +135,7 @@ function ObjectsPanel({ objects }: { objects: PdfObject[] }) {
 
   const needle = query.toLowerCase();
   const matches = objects.filter((object) =>
-    `${object.number} ${object.label} ${object.dict} ${object.body ?? ""}`
+    `${object.number} ${object.label} ${object.dict} ${object.text ?? ""} ${object.body ?? ""}`
       .toLowerCase()
       .includes(needle),
   );
@@ -152,7 +158,7 @@ function ObjectsPanel({ objects }: { objects: PdfObject[] }) {
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Filter by number, type, dictionary or operator"
+          placeholder="Filter by number, type, dictionary, text or operator"
           aria-label="Filter objects"
           className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
         />
@@ -178,6 +184,11 @@ function ObjectsPanel({ objects }: { objects: PdfObject[] }) {
             <pre className="mt-1 whitespace-pre-wrap break-all text-muted-foreground">
               {linkReferences(object.dict, jump)}
             </pre>
+            {object.text !== undefined && (
+              <p className="mt-1 whitespace-pre-wrap break-words border-l-2 pl-2">
+                {object.text || <span className="text-muted-foreground">draws no text</span>}
+              </p>
+            )}
             {object.body && <pre className="mt-1 whitespace-pre-wrap break-all">{object.body}</pre>}
           </details>
         ))}
