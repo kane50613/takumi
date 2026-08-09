@@ -546,7 +546,7 @@ fn serialize_outer_html(handle: &Handle) -> Vec<u8> {
 /// Parse a CSS declaration block, ignoring it if it fails to parse. Parses the
 /// whole block so values containing `;` (e.g. `data:` URIs) survive.
 fn parse_declarations(css: &str) -> StyleDeclarationBlock {
-  StyleDeclarationBlock::from_str(css).unwrap_or_default()
+  StyleDeclarationBlock::parse_loosy(css)
 }
 
 #[cfg(test)]
@@ -555,6 +555,16 @@ mod tests {
 
   fn parse(source: &str) -> Node {
     from_html(source, FromHtmlOptions::default()).unwrap()
+  }
+
+  /// A `style` attribute is a declaration list, and CSS drops only the declaration it
+  /// cannot read. `fit-content` is not a width this crate understands, and it used to take
+  /// the whole attribute down with it.
+  #[test]
+  fn an_unreadable_declaration_leaves_its_neighbours_alone() {
+    let block = parse_declarations("font-size:64px;width:fit-content;color:red");
+
+    assert_eq!(block.len(), 2);
   }
 
   #[test]
