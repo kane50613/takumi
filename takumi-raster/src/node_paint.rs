@@ -204,9 +204,8 @@ pub(crate) fn draw_background(
         layout,
       )?;
     }
-    // `border-area` clips the background to the shape the border strokes, which
-    // is what filling that shape with the layers gives. Blink paints it here,
-    // in the background phase, and lets the border paint over it.
+    // Filling the border's own shape with the layers is the clip `border-area`
+    // asks for. The border then paints over it, as it does in Blink.
     BackgroundClip::BorderArea => {
       let layers = rasterize_layers(
         collect_background_layers(context, layout)?,

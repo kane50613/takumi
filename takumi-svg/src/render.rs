@@ -237,9 +237,8 @@ pub(crate) fn emit_box_chrome(
   let border = BorderProperties::from_context(&node.context, layout.size, layout.border);
   let rounded = !border.is_zero();
 
-  // `background-clip` only changes the shape the background fills, never when it
-  // paints: Blink runs every clip through the background phase, before the
-  // border. `border-area` fills the border ring and the border draws over it.
+  // `background-clip` picks the shape a background fills, never when it paints:
+  // the border draws over the ring, as it does in Blink.
   emit_background(node, &border, layout, x, y, doc)?;
   emit_inset_box_shadows(node, &border, layout, x, y, doc)?;
   emit_borders(&border, x, y, layout.size, doc)?;

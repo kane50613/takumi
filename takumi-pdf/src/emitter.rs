@@ -309,9 +309,8 @@ impl Emitter<'_> {
     self.shadows(&outer, &border, deco_layout, (x, deco_y), surface, false);
     // `background-clip: border-area` paints the fills over the borders,
     // clipped to the border ring; every other clip paints them underneath.
-    // `background-clip` only changes the shape the background fills, never when
-    // it paints: Blink runs every clip through the background phase, before the
-    // border. `border-area` fills the border ring and the border draws over it.
+    // `background-clip` picks the shape a background fills, never when it
+    // paints: the border draws over the ring, as it does in Blink.
     self.emit_background(node, deco_layout, x, deco_y, surface);
     self.emit_background_layers(node, deco_layout, x, deco_y, surface);
     self.shadows(&inset, &border, deco_layout, (x, deco_y), surface, true);
