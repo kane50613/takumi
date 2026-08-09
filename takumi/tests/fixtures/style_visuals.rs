@@ -564,6 +564,54 @@ fn test_style_outline_with_text() {
 }
 
 #[test]
+fn test_style_outline_over_child_box() {
+  // CSS 2.1 Appendix E, and Blink's `kDescendantOutlinesOnly` phase, paint a
+  // box's outline after everything inside it. A negative `outline-offset` drags
+  // the ring across the child, so a backend that paints the outline with the
+  // box's own decorations buries it under the child.
+  let child = Node::container([]).with_style(
+    Style::default()
+      .with(StyleDeclaration::width(Px(320.0)))
+      .with(StyleDeclaration::height(Px(200.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([250, 204, 21, 255]),
+      ))),
+  );
+
+  let card = Node::container([child]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Px(360.0)))
+      .with(StyleDeclaration::height(Px(240.0)))
+      .with(StyleDeclaration::align_items(AlignItems::Center))
+      .with(StyleDeclaration::justify_content(JustifyContent::Center))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([226, 232, 240, 255]),
+      )))
+      .with(StyleDeclaration::outline_width(Px(12.0).into()))
+      .with(StyleDeclaration::outline_color(ColorInput::Value(Color([
+        220, 38, 38, 255,
+      ]))))
+      .with(StyleDeclaration::outline_offset(Px(-60.0)))
+      .with(StyleDeclaration::outline_style(BorderStyle::Solid)),
+  );
+
+  let container = Node::container([card]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([15, 23, 42, 255]),
+      )))
+      .with(StyleDeclaration::justify_content(JustifyContent::Center))
+      .with(StyleDeclaration::align_items(AlignItems::Center)),
+  );
+
+  run_fixture_test(container, "style_outline_over_child_box");
+}
+
+#[test]
 fn test_style_outline_over_children_and_text() {
   // CSS 2.1 Appendix E paints the outline after everything the box holds. A
   // negative `outline-offset` drags the ring inward until it crosses the line of
