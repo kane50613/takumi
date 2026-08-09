@@ -1156,10 +1156,7 @@ impl Emitter<'_> {
   ) -> Result<(), PdfError> {
     // text-shadow paints below the glyphs, later-listed shadows lowest. PDF
     // has no blur operator, so a blurred text shadow draws sharp.
-    for shadow in font_style.text_shadow.iter().rev() {
-      if shadow.color.0[3] == 0 {
-        continue;
-      }
+    for shadow in font_style.painted_text_shadows() {
       self.glyph_pass(
         runs,
         built,

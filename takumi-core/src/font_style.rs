@@ -116,6 +116,18 @@ pub struct SizedFontStyle<'s> {
 }
 
 impl SizedFontStyle<'_> {
+  /// The `text-shadow` layers in painting order: back to front, so the first
+  /// one authored ends up on top, and without the ones nobody would see.
+  ///
+  /// Blink walks its shadow vector the same way in `TextPainter`.
+  pub fn painted_text_shadows(&self) -> impl Iterator<Item = &SizedShadow> {
+    self
+      .text_shadow
+      .iter()
+      .rev()
+      .filter(|shadow| shadow.color.0[3] != 0)
+  }
+
   /// The stroke this inline box's `outline` runs along its island contour, or
   /// `None` when it paints none.
   ///

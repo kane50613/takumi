@@ -165,11 +165,8 @@ fn emit_runs(
     ));
 
   // text-shadow paints below the glyphs; later-listed shadows paint lowest.
-  for shadow in font_style.text_shadow.iter().rev() {
+  for shadow in font_style.painted_text_shadows() {
     let color = Rgba(shadow.color.0);
-    if color.0[3] == 0 {
-      continue;
-    }
     let filter = if shadow.blur_radius > 0.0 {
       Some(doc.blur_filter(shadow.blur_radius / 2.0)?)
     } else {

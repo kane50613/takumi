@@ -484,7 +484,7 @@ fn draw_text_shadow(
     return Ok(());
   }
 
-  for shadow in style.text_shadow.iter() {
+  for shadow in style.painted_text_shadows() {
     draw_outset_shadow(shadow, canvas, paths, transform, Default::default(), None)?;
   }
 
