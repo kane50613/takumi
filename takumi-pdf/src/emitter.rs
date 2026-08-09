@@ -188,6 +188,7 @@ impl Emitter<'_> {
         ColorFilter::compose(outer_filter.as_deref(), &node.context.style.filter).map(Rc::new);
     }
 
+    let (outer_window, outer_line_window) = (self.window, self.line_window);
     let (child_frame, root_state) = match context.root() {
       Some(paint) => self.emit_box(paint, parent, surface)?,
       None => (parent, BoxState::default()),
@@ -197,6 +198,13 @@ impl Emitter<'_> {
       for item in bucket {
         match &item.kind {
           PaintItemKind::Node(paint) => {
+            // Skipping a node that paints outside the window only saves work;
+            // the page's own clip would drop it anyway. A context's root is
+            // never skipped this way, because the clip it opens decides what
+            // its descendants are allowed to emit.
+            if self.window_excludes_bounds(paint.paint_bounds) {
+              continue;
+            }
             let (_, state) = self.emit_box(paint, child_frame, surface)?;
             self.finish_box(state, surface);
           }
@@ -213,6 +221,7 @@ impl Emitter<'_> {
       }
     }
     self.finish_box(root_state, surface);
+    (self.window, self.line_window) = (outer_window, outer_line_window);
     self.color_filter = outer_filter;
     Ok(())
   }
@@ -231,9 +240,6 @@ impl Emitter<'_> {
     let Ok(layout) = self.results.layout(paint.node_id) else {
       return Ok((parent, BoxState::default()));
     };
-    if self.window_excludes_bounds(paint.paint_bounds) {
-      return Ok((parent, BoxState::default()));
-    }
 
     let style = &node.context.style;
     let mut pushed = 0;
@@ -344,6 +350,20 @@ impl Emitter<'_> {
     let mut overflow_clip = 0;
 
     if style.clips_overflow() {
+      // A clip keeps content off the page but not out of the text layer, so
+      // what it cuts away must never be emitted. Only a translated frame maps
+      // the box onto the window's axis.
+      if relative.only_translation() {
+        let (top, bottom) = (y, y + layout.size.height);
+
+        if let Some((from, to)) = self.window {
+          self.window = Some((from.max(top), to.min(bottom)));
+        }
+        // A text line is owned by its baseline, against its own window.
+        if let Some((from, to)) = self.line_window {
+          self.line_window = Some((from.max(top), to.min(bottom)));
+        }
+      }
       let clip_border = BorderProperties::from_context(&node.context, layout.size, layout.border);
       let path = if clip_border.is_zero() {
         overflow_clip_rect(style, layout, x, y)
