@@ -102,7 +102,7 @@ use crate::{
     paint::FillRule,
   },
   options::{BAND_EDGE_PADDING, PT_PER_PX, build_metadata, krilla_datetime, validate_xmp_schemas},
-  pagination::page_starts,
+  pagination::{MAX_PAGES, page_starts},
   paint::rect_path,
   tags::{TagCollector, build_tag_tree, tag_id},
   tree::{TreeInputs, prepare_tree},
@@ -275,6 +275,10 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         )
         .collect_atoms(0, Affine::IDENTITY, &mut atoms, &mut forced)?;
       let starts = page_starts(&mut atoms, &mut forced, content.height, window_height);
+
+      if starts.len() >= MAX_PAGES {
+        return Err(PdfError::TooManyPages(starts.len()));
+      }
       let pages = starts.len();
       let interactive = collect_interactive(&content);
       let structural = options.tagged.names_structure_destinations();
@@ -482,6 +486,13 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn content_taller_than_a_render_allows_stops_counting() {
+    let starts = page_starts(&mut [], &mut Vec::new(), 2_000_000.0, 10.0);
+
+    assert_eq!(starts.len(), MAX_PAGES, "the page count runs unbounded");
+  }
 
   #[test]
   fn page_starts_without_atoms_cuts_at_window() {

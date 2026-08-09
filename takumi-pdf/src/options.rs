@@ -42,6 +42,8 @@ pub enum PdfError {
   /// An XMP schema carries a prefix, property name or namespace URI that
   /// cannot be written into XML.
   InvalidXmpSchema(String),
+  /// The content would cut into more pages than one render may produce.
+  TooManyPages(usize),
   /// No registered font covers these characters. They would draw nothing and
   /// leave no trace in the text layer, so the render stops instead.
   MissingGlyphs(String),
