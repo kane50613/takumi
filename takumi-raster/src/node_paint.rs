@@ -5,7 +5,7 @@
 //! tiny-skia, and the SVG backend emits the same geometry as vector paths.
 
 use takumi_core::{
-  geometry::{AvailableSpace, ComputedLayout as Layout, Point, Point as CorePoint, Size},
+  geometry::{ComputedLayout as Layout, Point, Point as CorePoint},
   layout::decoration::ClipBox,
   painter::{BoxPainter, FillShape, PaintDevice},
   style::{Color, ImageScalingAlgorithm},
@@ -20,10 +20,7 @@ use super::{
 use crate::{
   Result,
   layout::{
-    inline::{
-      InlineItem, InlineLayoutMode, InlineLayoutRequest, create_inline_layout,
-      resolve_inline_max_height,
-    },
+    inline::{InlineItem, InlineLayoutMode, InlineLayoutRequest, create_inline_layout},
     node::{ImageData, Node, NodeKind, TextData},
   },
   style::{Affine, BackgroundClip, BlendMode},
@@ -357,27 +354,19 @@ fn draw_text_node_content(
     return Ok(());
   }
 
-  let max_height = resolve_inline_max_height(&font_style, size.height);
-
   let inline_text: InlineItem<'_> = InlineItem::Text {
     text: text.text.as_str().into(),
     context,
     link: None,
   };
 
-  let built = create_inline_layout(InlineLayoutRequest {
-    items: vec![inline_text],
-    available_space: Size {
-      width: AvailableSpace::Definite(size.width),
-      height: AvailableSpace::Definite(size.height),
-    },
-    max_width: size.width,
-    max_height,
-    style: &font_style,
+  let built = create_inline_layout(InlineLayoutRequest::in_content_box(
+    vec![inline_text],
+    size,
+    &font_style,
     context,
-    mode: InlineLayoutMode::Draw,
-    shape_cacheable: true,
-  });
+    InlineLayoutMode::Draw,
+  ));
 
   draw_inline_layout(context, canvas, layout, &built, &font_style)?;
 

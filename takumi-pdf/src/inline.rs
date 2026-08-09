@@ -5,11 +5,11 @@ use std::collections::HashMap;
 use takumi_core::{
   context::RenderContext,
   font_style::SizedFontStyle,
-  geometry::{AvailableSpace, ComputedLayout as Layout, Size},
+  geometry::ComputedLayout as Layout,
   layout::{
     inline::{
       BuiltInlineLayout, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineRunLayout,
-      collect_inline_items, create_inline_layout, resolve_inline_max_height, resolve_inline_runs,
+      collect_inline_items, create_inline_layout, resolve_inline_runs,
     },
     node::{NodeKind, TextData},
     tree::RenderNode,
@@ -172,19 +172,13 @@ pub(crate) fn build_inline_runs<'c>(
     return Ok(None);
   }
 
-  let built = create_inline_layout(InlineLayoutRequest {
+  let built = create_inline_layout(InlineLayoutRequest::in_content_box(
     items,
-    available_space: Size {
-      width: AvailableSpace::Definite(content.width),
-      height: AvailableSpace::Definite(content.height),
-    },
-    max_width: content.width,
-    max_height: resolve_inline_max_height(font_style, content.height),
-    style: font_style,
+    content,
+    font_style,
     context,
-    mode: InlineLayoutMode::Draw,
-    shape_cacheable: true,
-  });
+    InlineLayoutMode::Draw,
+  ));
   let runs = resolve_inline_runs(&built, context, layout).map_err(PdfError::Font)?;
 
   Ok(Some((built, runs)))

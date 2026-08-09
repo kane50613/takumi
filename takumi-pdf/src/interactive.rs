@@ -8,13 +8,10 @@ use std::{
 
 use takumi_core::{
   font_style::SizedFontStyle,
-  geometry::{
-    AvailableSpace, ComputedLayout as Layout, Point as CorePoint, Size, transformed_rect_extents,
-  },
+  geometry::{ComputedLayout as Layout, Point as CorePoint, Size, transformed_rect_extents},
   layout::{
     inline::{
-      InlineItem, InlineLayoutMode, InlineLayoutRequest, collect_inline_items,
-      create_inline_layout, resolve_inline_max_height,
+      InlineItem, InlineLayoutMode, InlineLayoutRequest, collect_inline_items, create_inline_layout,
     },
     tree::RenderNode,
   },
@@ -303,19 +300,13 @@ fn collect_inline_links(
   {
     return;
   }
-  let built = create_inline_layout(InlineLayoutRequest {
+  let built = create_inline_layout(InlineLayoutRequest::in_content_box(
     items,
-    available_space: Size {
-      width: AvailableSpace::Definite(content.width),
-      height: AvailableSpace::Definite(content.height),
-    },
-    max_width: content.width,
-    max_height: resolve_inline_max_height(&font_style, content.height),
-    style: &font_style,
+    content,
+    &font_style,
     context,
-    mode: InlineLayoutMode::Measure,
-    shape_cacheable: true,
-  });
+    InlineLayoutMode::Measure,
+  ));
   let (runs, _) = built.measure_runs(layout);
 
   for run in runs {
