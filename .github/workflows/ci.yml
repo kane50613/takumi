@@ -110,18 +110,23 @@ jobs:
         run: |
           fail=0
           checked=0
-          for pdf in takumi-pdf/tests/fixtures-generated/*.pdf; do
-            if grep -qa "pdfaid:part" "$pdf"; then
-              ./verapdf/verapdf --flavour 0 --format text "$pdf" || fail=1
-              checked=$((checked + 1))
-            fi
-            if grep -qa "<pdfuaid:part>1</pdfuaid:part>" "$pdf"; then
-              ./verapdf/verapdf --flavour ua1 --format text "$pdf" || fail=1
-              checked=$((checked + 1))
-            fi
-            if grep -qa "<pdfuaid:part>2</pdfuaid:part>" "$pdf"; then
-              ./verapdf/verapdf --flavour ua2 --format text "$pdf" || fail=1
-              checked=$((checked + 1))
+          # One veraPDF run per flavour, not per file: starting the JVM costs
+          # more than the validation it then performs.
+          for flavour in 0 ua1 ua2; do
+            case $flavour in
+              0) claim="pdfaid:part" ;;
+              ua1) claim="<pdfuaid:part>1</pdfuaid:part>" ;;
+              ua2) claim="<pdfuaid:part>2</pdfuaid:part>" ;;
+            esac
+            files=()
+            for pdf in takumi-pdf/tests/fixtures-generated/*.pdf; do
+              if grep -qa "$claim" "$pdf"; then
+                files+=("$pdf")
+              fi
+            done
+            if [ ${#files[@]} -gt 0 ]; then
+              ./verapdf/verapdf --flavour "$flavour" --format text "${files[@]}" || fail=1
+              checked=$((checked + ${#files[@]}))
             fi
           done
           echo "validated $checked conformance claims"
@@ -205,33 +210,26 @@ jobs:
     needs: build-helpers
     strategy:
       fail-fast: false
+      # A pull request builds only the target the rest of the pipeline consumes.
+      # The other seven take longer than every other job put together, and
+      # nothing downstream reads them until master publishes.
+      # `--use-napi-cross` pins libc at 2.31 on the gnu targets (cross-rs docs).
       matrix:
-        settings:
-          - host: windows-2025
-            target: x86_64-pc-windows-msvc
-            build: bun run build --target x86_64-pc-windows-msvc
-          - host: windows-11-arm
-            target: aarch64-pc-windows-msvc
-            build: bun run build --target aarch64-pc-windows-msvc
-          - host: macos-15
-            target: aarch64-apple-darwin
-            build: bun run build --target aarch64-apple-darwin
-          - host: macos-15-intel
-            target: x86_64-apple-darwin
-            build: bun run build --target x86_64-apple-darwin
-          - host: ubuntu-24.04-arm
-            target: aarch64-unknown-linux-gnu
-            build: bun run build --target aarch64-unknown-linux-gnu --use-napi-cross
-          - host: ubuntu-24.04-arm
-            target: aarch64-unknown-linux-musl
-            build: bun run build --target aarch64-unknown-linux-musl -x
-          - host: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            # --use-napi-cross is required to pin libc version at 2.31 (from cross-rs docs)
-            build: bun run build --target x86_64-unknown-linux-gnu --use-napi-cross
-          - host: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-            build: bun run build --target x86_64-unknown-linux-musl -x
+        settings: >-
+          ${{ github.event_name == 'pull_request'
+          && fromJSON('[
+          {"host": "ubuntu-latest", "target": "x86_64-unknown-linux-gnu", "build": "bun run build --target x86_64-unknown-linux-gnu --use-napi-cross"}
+          ]')
+          || fromJSON('[
+          {"host": "windows-2025", "target": "x86_64-pc-windows-msvc", "build": "bun run build --target x86_64-pc-windows-msvc"},
+          {"host": "windows-11-arm", "target": "aarch64-pc-windows-msvc", "build": "bun run build --target aarch64-pc-windows-msvc"},
+          {"host": "macos-15", "target": "aarch64-apple-darwin", "build": "bun run build --target aarch64-apple-darwin"},
+          {"host": "macos-15-intel", "target": "x86_64-apple-darwin", "build": "bun run build --target x86_64-apple-darwin"},
+          {"host": "ubuntu-24.04-arm", "target": "aarch64-unknown-linux-gnu", "build": "bun run build --target aarch64-unknown-linux-gnu --use-napi-cross"},
+          {"host": "ubuntu-24.04-arm", "target": "aarch64-unknown-linux-musl", "build": "bun run build --target aarch64-unknown-linux-musl -x"},
+          {"host": "ubuntu-latest", "target": "x86_64-unknown-linux-gnu", "build": "bun run build --target x86_64-unknown-linux-gnu --use-napi-cross"},
+          {"host": "ubuntu-latest", "target": "x86_64-unknown-linux-musl", "build": "bun run build --target x86_64-unknown-linux-musl -x"}
+          ]') }}
 
     name: Build @takumi-rs/core for ${{ matrix.settings.target }}
     runs-on: ${{ matrix.settings.host }}
