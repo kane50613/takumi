@@ -2,7 +2,7 @@ use takumi_core::{
   geometry::{Point, Rect, Size},
   layout::border::{
     BorderProperties, BorderSide, PaintedSide, border_dash_pattern, inset_size, rect_offset,
-    shade_3d_border_color, subtract_rect,
+    side_bands,
   },
 };
 
@@ -127,81 +127,14 @@ fn draw_visible_side(
   side: PaintedSide,
   border_box: Size<f32>,
 ) {
-  let PaintedSide {
-    side, style, color, ..
-  } = side;
-
-  match style {
-    BorderStyle::Dashed | BorderStyle::Dotted => {
-      draw_side_pattern_border(border, paint, side, border_box, color, style);
-    }
-    BorderStyle::Double => {
-      let stripe_width = border.width.map(|value| value / 3.0);
-      draw_side_band(
-        border,
-        paint,
-        side,
-        border_box,
-        Rect::ZERO,
-        stripe_width,
-        color,
-      );
-
-      let inset = border.width.map(|value| value * (2.0 / 3.0));
-      draw_side_band(border, paint, side, border_box, inset, stripe_width, color);
-    }
-    BorderStyle::Inset | BorderStyle::Outset => {
-      draw_side_band(
-        border,
-        paint,
-        side,
-        border_box,
-        Rect::ZERO,
-        border.width,
-        shade_3d_border_color(color, side, style),
-      );
-    }
-    BorderStyle::Groove | BorderStyle::Ridge => {
-      let outer_width = border.width.map(|value| value / 2.0);
-      let inner_inset = outer_width;
-      let inner_width = subtract_rect(border.width, outer_width);
-      let (outer_style, inner_style) = match style {
-        BorderStyle::Groove => (BorderStyle::Inset, BorderStyle::Outset),
-        BorderStyle::Ridge => (BorderStyle::Outset, BorderStyle::Inset),
-        _ => unreachable!("non groove/ridge style in groove/ridge branch"),
-      };
-
-      draw_side_band(
-        border,
-        paint,
-        side,
-        border_box,
-        Rect::ZERO,
-        outer_width,
-        shade_3d_border_color(color, side, outer_style),
-      );
-      draw_side_band(
-        border,
-        paint,
-        side,
-        border_box,
-        inner_inset,
-        inner_width,
-        shade_3d_border_color(color, side, inner_style),
-      );
-    }
-    BorderStyle::Solid => {
-      draw_side_band(
-        border,
-        paint,
-        side,
-        border_box,
-        Rect::ZERO,
-        border.width,
-        color,
-      );
-    }
-    _ => {}
+  if matches!(side.style, BorderStyle::Dashed | BorderStyle::Dotted) {
+    draw_side_pattern_border(border, paint, side.side, border_box, side.color, side.style);
+    return;
+  }
+  for band in side_bands(&border, side) {
+    draw_side_band(
+      border, paint, side.side, border_box, band.inset, band.width, band.color,
+    );
   }
 }
 

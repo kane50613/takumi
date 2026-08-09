@@ -8,7 +8,10 @@ use takumi_core::{
   error::Result,
   geometry::{ComputedLayout as Layout, NodeId, Point, Size},
   layout::{
-    border::{BorderProperties, BorderSide, PaintedSide, border_dash_pattern},
+    border::{
+      BorderProperties, BorderSide, PaintedSide, border_dash_pattern, inset_size, rect_offset,
+      side_bands,
+    },
     decoration::{ClipBox, OutlineGeometry},
     inline::{InlineBoxItem, VisualInlineBox},
     inline_box::{InlineBoxPaint, resolve_inline_box},
@@ -841,9 +844,21 @@ pub(crate) fn emit_borders(
         emit_side_pattern(border, side, geom, doc)?;
       }
       _ => {
-        let mut polygon = Vec::new();
-        border.append_side_clip_polygon_commands_at(side.side, &mut polygon, size, Point::ZERO);
-        doc.path(&path_data(&polygon, matrix), Rgba(side.color.0), false)?;
+        for band in side_bands(border, side) {
+          let mut strip = *border;
+
+          strip.width = band.width;
+          strip.expand_by(band.inset.map(|value| -value));
+
+          let mut polygon = Vec::new();
+          strip.append_side_clip_polygon_commands_at(
+            side.side,
+            &mut polygon,
+            inset_size(size, band.inset),
+            rect_offset(band.inset),
+          );
+          doc.path(&path_data(&polygon, matrix), Rgba(band.color.0), false)?;
+        }
       }
     }
   }
