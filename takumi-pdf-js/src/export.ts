@@ -16,9 +16,16 @@ declare module "react" {
 }
 
 /** Every class name in a tree, so the renderer can say what its counters draw. */
-function classNames(node: unknown, into: string[] = []): string[] {
+function classNames(node: unknown): string[] {
+  const into: string[] = [];
+
+  collectClassNames(node, into);
+  return into;
+}
+
+function collectClassNames(node: unknown, into: string[]): void {
   if (typeof node !== "object" || node === null) {
-    return into;
+    return;
   }
   const { className, children } = node as { className?: unknown; children?: unknown };
 
@@ -27,10 +34,9 @@ function classNames(node: unknown, into: string[] = []): string[] {
   }
   if (Array.isArray(children)) {
     for (const child of children) {
-      classNames(child, into);
+      collectClassNames(child, into);
     }
   }
-  return into;
 }
 
 /** A document input: a takumi node tree, JSX, or an HTML string. */
@@ -277,7 +283,11 @@ export class PdfRenderer {
           fonts,
           // A band's page counters render characters no node in the tree
           // carries, and which ones depends on the style, so the renderer says.
-          source: [main.node, ...bands, counterCharacters(bands.flatMap(classNames))],
+          source: [
+            main.node,
+            ...bands,
+            counterCharacters(bands.flatMap((band) => classNames(band))),
+          ],
         }),
       images,
       fontFamilies,
