@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, test } from "bun:test";
 import { container, text } from "@takumi-rs/helpers";
 import { PdfRenderer } from "../bundlers/node.mjs";
@@ -43,6 +44,16 @@ test("renders an HTML string with its own stylesheet", async () => {
 });
 
 test("paginates and substitutes footer counters", async () => {
+  // The bundled face is latin only, and `trad-chinese-informal` counts in
+  // Chinese numerals, which no registered font would otherwise cover.
+  await renderer.registerFont(
+    new Uint8Array(
+      readFileSync(
+        new URL("../../assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2", import.meta.url),
+      ),
+    ),
+  );
+
   const rows = container({
     style: { display: "flex", flexDirection: "column", width: "100%" },
     children: Array.from({ length: 60 }, (_, i) => text(`Row ${i + 1}`, { fontSize: 16 })),
