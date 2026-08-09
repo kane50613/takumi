@@ -80,6 +80,16 @@ describe("googleFonts", () => {
     expect(fonts.find((f) => f.name === "Inter latin")!.ranges).toEqual([[0x0, 0xff]]);
   });
 
+  test("ranks each subset by the lowest codepoint it declares", async () => {
+    const fonts = await googleFonts({ families: ["Inter"], fetch: mockInter() });
+    const ranked = [...fonts].sort((a, b) => a.subsetRank - b.subsetRank).map((f) => f.name);
+
+    // Google's Cyrillic and Greek subsets also encode the ASCII space and the Latin
+    // capitals, so `latin` has to be reached first or those codepoints defect to them.
+    expect(ranked[0]).toBe("Inter latin");
+    expect(fonts.find((f) => f.name === "Inter latin")!.subsetRank).toBe(0);
+  });
+
   test("resolves every weight to a keyed loader under one subsetOf", async () => {
     const fetchMock = mock((url: string) =>
       Promise.resolve(

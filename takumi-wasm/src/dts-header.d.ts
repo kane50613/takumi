@@ -174,6 +174,12 @@ export type FontDetails = {
    */
   subsetOf?: string;
   /**
+   * Where this subset sits in its group's fallback order; lowest is tried first, and equal
+   * ranks order by family name. A subset's `cmap` reaches past the range it was cut for, so
+   * the rank is what settles which subset serves a codepoint several of them encode.
+   */
+  subsetRank?: number;
+  /**
    * CSS generic family keyword this font resolves for, so stacks ending in e.g.
    * `monospace` reach it without naming the family.
    */

@@ -17,7 +17,11 @@ use flate2::read::ZlibDecoder;
 use takumi_core::{
   Fonts,
   layout::node::{ImageData, ImageSourceInput, Node, RgbaImage},
-  resources::{font::FontResource, image::ImageSource, image_buffer::ImageBuffer},
+  resources::{
+    font::{FontOverride, FontResource},
+    image::ImageSource,
+    image_buffer::ImageBuffer,
+  },
   style::{
     BreakBetween, Color, ColorInput, Display, FlexDirection, FontSize, Length::*, ObjectFit, Style,
     StyleDeclaration,
@@ -2334,4 +2338,66 @@ fn font_weights() {
     haystack.contains("/Pattern CS"),
     "clip-text background missing from the synthesized bold outline"
   );
+}
+
+/// Registers both test fonts as coverage subsets of one logical family, ranked the way
+/// their declared `unicode-range` would rank them.
+fn ranked_subset_fonts() -> Fonts {
+  let mut fonts = Fonts::default();
+
+  for (path, name, rank) in [
+    (
+      "tests/fonts/noto-sans-tc-caps.subset.ttf",
+      "Grouped cjk",
+      0x4e00,
+    ),
+    (
+      "../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf",
+      "Grouped latin",
+      0,
+    ),
+  ] {
+    let data = fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join(path)).expect("read test font");
+
+    fonts
+      .register(
+        FontResource::new(data)
+          .override_info(FontOverride {
+            family_name: Some(name.into()),
+            ..Default::default()
+          })
+          .subset_of("Grouped")
+          .subset_rank(rank),
+      )
+      .expect("load test font");
+  }
+  fonts
+}
+
+/// A subset whose `cmap` reaches past the range it was cut for must not steal codepoints
+/// from the subset that declares them. `Grouped cjk` also encodes the ASCII space and the
+/// capitals, and sorts first by name, so without the rank it takes those and leaves the
+/// lowercase to `Grouped latin` — one text object per fragment, each repositioned from
+/// scratch. Extractors rebuild words from glyph geometry, and that is the shape they read
+/// wrong.
+#[test]
+fn a_ranked_subset_group_keeps_a_latin_run_whole() {
+  let fonts = ranked_subset_fonts();
+  let doc = r#"<main style="font-family:Grouped;font-size:16px;">
+    <p>Average App Rating</p>
+  </main>"#;
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse the doc"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render the ranked group");
+
+  let shows = content_lines(&pdf)
+    .filter(|line| line.ends_with(b"TJ") || line.ends_with(b"Tj"))
+    .count();
+
+  assert_eq!(shows, 1, "the run was split across {shows} text objects");
 }

@@ -187,6 +187,12 @@ fn font_style_css(style: FontStyle) -> String {
   }
 }
 
+/// The subset families under one logical family, ordered by the rank each declared and
+/// then by name. The shaper walks this order and takes the first subset whose `cmap`
+/// covers a cluster, so the rank is what keeps a codepoint two subsets both encode from
+/// landing in the wrong one.
+pub(crate) type SubsetGroup = BTreeSet<(u32, String)>;
+
 /// The registry of fonts available to a renderer.
 ///
 /// Registration is the only mutation; afterwards the assembled parley context is immutable
@@ -197,13 +203,13 @@ fn font_style_css(style: FontStyle) -> String {
 pub struct Fonts {
   inner: parley::FontContext,
   /// Maps a logical family name (the name authors write in `font-family`) to the
-  /// unique internal names of the subset families registered under it. Populated by
-  /// [`FontResource::subset_of`]; consulted when a render expands a `font-family` into
-  /// its per-coverage subset stack. A `BTreeSet` so the stack is ordered by family name,
-  /// not registration arrival order (callers often register concurrently) — selection
-  /// among subsets that overlap a codepoint stays deterministic. Shared (immutable after
-  /// registration) so a render can read it without borrowing the parley context.
-  groups: Arc<HashMap<String, BTreeSet<String>>>,
+  /// unique internal names of the subset families registered under it, keyed by
+  /// [`FontResource::subset_rank`] then name. Populated by [`FontResource::subset_of`];
+  /// consulted when a render expands a `font-family` into its per-coverage subset stack.
+  /// A `BTreeSet` so the stack never depends on registration arrival order, which callers
+  /// racing concurrent registrations do not control. Shared (immutable after registration)
+  /// so a render can read it without borrowing the parley context.
+  groups: Arc<HashMap<String, SubsetGroup>>,
   /// Every registered family name in registration order. The fallback bucket is built from
   /// this so its per-script priority is deterministic; `fontique`'s `family_names()` iterates
   /// a `HashMap` (hash order), which would otherwise make font selection vary per render.
@@ -235,7 +241,7 @@ impl Default for Fonts {
 #[derive(Clone)]
 pub struct FontsSnapshot {
   context: Rc<RefCell<Fonts>>,
-  pub(crate) groups: Arc<HashMap<String, BTreeSet<String>>>,
+  pub(crate) groups: Arc<HashMap<String, SubsetGroup>>,
 }
 
 impl FontsSnapshot {
@@ -316,7 +322,7 @@ impl Fonts {
             family_ids.extend(
               subsets
                 .iter()
-                .filter_map(|n| cloned.collection.family_id(n)),
+                .filter_map(|(_, name)| cloned.collection.family_id(name)),
             );
           }
           None => family_ids.extend(cloned.collection.family_id(&literal_name)),
@@ -416,6 +422,7 @@ impl Fonts {
       info_override,
       generic_family,
       subset_of,
+      subset_rank,
       last_resort,
     } = font;
 
@@ -459,7 +466,7 @@ impl Fonts {
         Arc::make_mut(&mut self.groups)
           .entry(logical.clone())
           .or_default()
-          .insert(name.clone());
+          .insert((subset_rank, name.clone()));
       }
 
       families.push(RegisteredFamily { name, faces });
@@ -764,6 +771,8 @@ pub struct FontResource<'a> {
   generic_family: Option<GenericFamily>,
   /// Logical family this font is a coverage subset of (see [`FontResource::subset_of`]).
   subset_of: Option<String>,
+  /// Where this subset sits in its group's fallback order (see [`FontResource::subset_rank`]).
+  subset_rank: u32,
   /// Sorts after every normal family in default fallback selection (see
   /// [`FontResource::last_resort`]).
   last_resort: bool,
@@ -777,6 +786,7 @@ impl<'a> FontResource<'a> {
       info_override: None,
       generic_family: None,
       subset_of: None,
+      subset_rank: 0,
       last_resort: false,
     }
   }
@@ -802,11 +812,27 @@ impl<'a> FontResource<'a> {
   /// Subsets sharing a logical family must each register under a UNIQUE family name
   /// (via [`FontResource::override_info`]) so the font system keeps them as distinct
   /// families — same-named faces collapse into one and never fall through on coverage.
-  /// A render then expands `font-family: {logical}` into all its subsets, in
-  /// registration order, letting the shaper pick the subset that covers each cluster.
+  /// A render then expands `font-family: {logical}` into all its subsets, ordered by
+  /// [`FontResource::subset_rank`], letting the shaper pick the first that covers each
+  /// cluster.
   pub fn subset_of(self, logical: impl Into<String>) -> Self {
     Self {
       subset_of: Some(logical.into()),
+      ..self
+    }
+  }
+
+  /// Sets where this subset sits in its group's fallback order. Lowest is tried first;
+  /// subsets sharing a rank order by family name.
+  ///
+  /// Coverage alone does not settle which subset serves a codepoint, because a subset's
+  /// `cmap` is usually wider than the range it was cut for — Google Fonts encodes the
+  /// ASCII space and several Latin capitals in its Cyrillic and Greek subsets. Ranking
+  /// the subsets by the range they declare is what makes the shaper resolve those shared
+  /// codepoints the way the `unicode-range` descriptor would in a browser.
+  pub fn subset_rank(self, rank: u32) -> Self {
+    Self {
+      subset_rank: rank,
       ..self
     }
   }
@@ -992,12 +1018,47 @@ mod tests {
     let subsets = fonts.groups.get("Logical").expect("logical group present");
     assert_eq!(
       subsets,
-      &BTreeSet::from(["Subset A".to_string(), "Subset B".to_string()])
+      &BTreeSet::from([(0, "Subset A".to_string()), (0, "Subset B".to_string())])
     );
 
     let snapshot =
       fonts.snapshot_with_fallbacks(Some(&FontFamily::from_css_str("Logical").unwrap()));
     assert_eq!(snapshot.groups.get("Logical"), Some(subsets));
+  }
+
+  /// The rank a subset declares outranks its family name, so a group whose coverage order
+  /// runs against the alphabet still resolves shared codepoints to the intended subset.
+  #[test]
+  fn subset_rank_orders_the_group_ahead_of_the_family_name() {
+    let mut fonts = Fonts::default();
+    fonts
+      .register(
+        FontResource::new(geist_bytes())
+          .override_info(FontOverride {
+            family_name: Some("Subset A".into()),
+            ..Default::default()
+          })
+          .subset_of("Logical")
+          .subset_rank(1),
+      )
+      .unwrap();
+    fonts
+      .register(
+        FontResource::new(geist_mono_bytes())
+          .override_info(FontOverride {
+            family_name: Some("Subset B".into()),
+            ..Default::default()
+          })
+          .subset_of("Logical")
+          .subset_rank(0),
+      )
+      .unwrap();
+
+    let subsets = fonts.groups.get("Logical").expect("logical group present");
+    assert_eq!(
+      subsets.iter().map(|(_, name)| name).collect::<Vec<_>>(),
+      ["Subset B", "Subset A"]
+    );
   }
 
   #[test]

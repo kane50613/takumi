@@ -53,6 +53,7 @@ fn load_font_internal(
         details.weight.map(|weight| weight as f32),
         details.style.map(Into::into),
         details.subset_of,
+        details.subset_rank,
         details.generic,
       )
       .map_err(map_error)?;

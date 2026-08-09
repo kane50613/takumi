@@ -51,6 +51,7 @@ pub fn build_font_resource<'a>(
   weight: Option<f32>,
   style: Option<FontStyle>,
   subset_of: Option<String>,
+  subset_rank: Option<u32>,
   generic: Option<String>,
 ) -> Result<FontResource<'a>, FontError> {
   let resource = FontResource::new(bytes).override_info(FontOverride {
@@ -61,7 +62,9 @@ pub fn build_font_resource<'a>(
   });
 
   let resource = match subset_of {
-    Some(logical) => resource.subset_of(logical),
+    Some(logical) => resource
+      .subset_of(logical)
+      .subset_rank(subset_rank.unwrap_or_default()),
     None => resource,
   };
 
