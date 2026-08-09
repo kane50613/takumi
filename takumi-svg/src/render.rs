@@ -237,22 +237,12 @@ pub(crate) fn emit_box_chrome(
   let border = BorderProperties::from_context(&node.context, layout.size, layout.border);
   let rounded = !border.is_zero();
 
-  // `background-clip: border-area` fills the border ring by compositing the
-  // background OVER the border color (matching the raster backend, which paints
-  // the border with the background as its paint source), so the background is
-  // emitted after the border rather than before it.
-  let fills = |doc: &mut SvgDocument| {
-    emit_background(node, &border, layout, x, y, doc)?;
-    emit_inset_box_shadows(node, &border, layout, x, y, doc)
-  };
-  let border_area = style.background_clip == BackgroundClip::BorderArea;
-  if !border_area {
-    fills(doc)?;
-  }
+  // `background-clip` only changes the shape the background fills, never when it
+  // paints: Blink runs every clip through the background phase, before the
+  // border. `border-area` fills the border ring and the border draws over it.
+  emit_background(node, &border, layout, x, y, doc)?;
+  emit_inset_box_shadows(node, &border, layout, x, y, doc)?;
   emit_borders(&border, x, y, layout.size, doc)?;
-  if border_area {
-    fills(doc)?;
-  }
 
   // Children, clipped to the (rounded) padding box when overflow is not visible.
   // With border-radius present the raster backend clips both axes to the rounded

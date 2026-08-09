@@ -309,18 +309,13 @@ impl Emitter<'_> {
     self.shadows(&outer, &border, deco_layout, (x, deco_y), surface, false);
     // `background-clip: border-area` paints the fills over the borders,
     // clipped to the border ring; every other clip paints them underneath.
-    let border_area = style.background_clip == BackgroundClip::BorderArea;
-
-    if !border_area {
-      self.emit_background(node, deco_layout, x, deco_y, surface);
-      self.emit_background_layers(node, deco_layout, x, deco_y, surface);
-    }
+    // `background-clip` only changes the shape the background fills, never when
+    // it paints: Blink runs every clip through the background phase, before the
+    // border. `border-area` fills the border ring and the border draws over it.
+    self.emit_background(node, deco_layout, x, deco_y, surface);
+    self.emit_background_layers(node, deco_layout, x, deco_y, surface);
     self.shadows(&inset, &border, deco_layout, (x, deco_y), surface, true);
     self.emit_borders(&border, x, deco_y, deco_size, surface);
-    if border_area {
-      self.emit_background(node, deco_layout, x, deco_y, surface);
-      self.emit_background_layers(node, deco_layout, x, deco_y, surface);
-    }
     // Children and own content clip to the (rounded) padding box when overflow
     // is hidden; without radius a per-axis overflow leaves the visible axis
     // unbounded. Counted on its own: the outline paints outside this clip but
