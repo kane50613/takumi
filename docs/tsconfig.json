@@ -2,7 +2,7 @@
   "include": ["**/*", "**/.server/**/*", "**/.client/**/*", ".source/**/*"],
   "compilerOptions": {
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
-    "types": ["node", "vite/client"],
+    "types": ["node", "vite/client", "bun"],
     "target": "esnext",
     "module": "esnext",
     "moduleResolution": "bundler",

@@ -153,6 +153,7 @@ async function renderRequest(renderer: Renderer, id: number, code: string) {
     ...resources,
   });
   const duration = performance.now() - start;
+  const inspection = output.kind === "pdf" ? await inspectPdf(output.buffer) : undefined;
 
   postMessage(
     {
@@ -165,7 +166,7 @@ async function renderRequest(renderer: Renderer, id: number, code: string) {
         outputKind: output.kind,
         outputFormat: output.format,
         label: geometry.label,
-        inspection: output.kind === "pdf" ? inspectPdf(output.buffer) : undefined,
+        inspection,
       },
     },
     [output.buffer.buffer],

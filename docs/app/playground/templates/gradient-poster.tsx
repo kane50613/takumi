@@ -5,7 +5,7 @@ export default function Poster() {
       style={{ backgroundImage: "conic-gradient(from 210deg, #ff6b6b, #556270, #ffd93d, #ff6b6b)" }}
     >
       <div
-        tw="flex h-[560px] w-[560px] flex-col items-center justify-center rounded-full border border-white/25 bg-white/10 text-white"
+        tw="flex h-[560px] w-[560px] flex-col items-center justify-center rounded-full bg-white/10 text-white"
         style={{ backdropFilter: "blur(12px)" }}
       >
         <span tw="text-[140px] leading-none">🌗</span>

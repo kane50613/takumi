@@ -388,6 +388,10 @@ jobs:
         working-directory: takumi-template
         run: bun test
 
+      # Runs from the root: the playground's PDF reader pulls in nothing else.
+      - name: Test docs playground
+        run: bun test docs/app/playground
+
       - name: Test cloudflare-workers example
         working-directory: example/cloudflare-workers
         run: bun run test
