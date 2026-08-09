@@ -1975,7 +1975,6 @@ dependencies = [
  "serde_json",
  "skrifa 0.43.2",
  "smallvec",
- "svgtypes",
  "takumi-core",
  "tiny-skia",
  "typed-builder",

@@ -13,7 +13,6 @@ png.workspace = true
 gif.workspace = true
 color.workspace = true
 tiny-skia.workspace = true
-svgtypes.workspace = true
 typed-builder.workspace = true
 smallvec.workspace = true
 skrifa.workspace = true
