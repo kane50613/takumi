@@ -49,9 +49,18 @@ Passing `viewport` instead of a page size measures the tree as-is. Counter hooks
 
 ## Page counters
 
-Elements with `pageNumber` or `totalPages` receive counter text. This matches Chromium's print header and footer template contract.
+Text and container nodes classed `pageNumber` or `totalPages` receive counter text. The counter replaces what the node holds, so an empty `<span />` is enough. Chromium's print templates use the same two names.
 
-Add a CSS `@counter-style` name to the class list. It formats the number:
+| Class        | Value                               |
+| ------------ | ----------------------------------- |
+| `pageNumber` | The current page, counting from 1   |
+| `totalPages` | The number of pages in the document |
+
+A node carrying both classes gets the page number.
+
+## Counter styles
+
+Add a CSS `@counter-style` name next to the hook class. It formats the number. The first supported name wins. Unsupported names are ignored, and a hook without one counts in `decimal`.
 
 ```tsx twoslash
 import type { ReactNode } from "react";
@@ -69,12 +78,53 @@ const pdf = await render(report, {
 });
 ```
 
-| Counter style                               | Example       |
-| ------------------------------------------- | ------------- |
-| `decimal` (default)                         | `12`          |
-| `decimal-leading-zero`                      | `07`          |
-| `lower-roman` / `upper-roman`               | `xii` / `XII` |
-| `cjk-decimal`                               | `一二`        |
-| `trad-chinese-informal` / `cjk-ideographic` | `十二`        |
+### Numbers and numerals
+
+| Style                   | Page 7 | Page 12 |
+| ----------------------- | ------ | ------- |
+| `decimal` (default)     | 7      | 12      |
+| `decimal-leading-zero`  | 07     | 12      |
+| `lower-roman`           | vii    | xii     |
+| `upper-roman`           | VII    | XII     |
+| `cjk-decimal`           | 七     | 一二    |
+| `trad-chinese-informal` | 七     | 十二    |
+| `cjk-ideographic`       | 七     | 十二    |
+
+Blink defines `cjk-ideographic` as an extension of `trad-chinese-informal`, and this renderer follows it. Both read out numbers up to 9999. Past that they fall back to `cjk-decimal`, so page 10000 formats as `一零零零零`.
+
+### Alphabets
+
+These styles count the way a spreadsheet names its columns. The letter after `z` is `aa`.
+
+| Style                        | Page 12 |
+| ---------------------------- | ------- |
+| `lower-alpha`, `lower-latin` | l       |
+| `upper-alpha`, `upper-latin` | L       |
+| `lower-greek`                | μ       |
+| `hiragana`                   | し      |
+| `katakana`                   | シ      |
+
+### Other digits
+
+These styles write the decimal number in another script's digits.
+
+| Style          | Page 12 | Style       | Page 12 |
+| -------------- | ------- | ----------- | ------- |
+| `arabic-indic` | ١٢      | `mongolian` | ᠑᠒      |
+| `bengali`      | ১২      | `myanmar`   | ၁၂      |
+| `cambodian`    | ១២      | `oriya`     | ୧୨      |
+| `devanagari`   | १२      | `persian`   | ۱۲      |
+| `gujarati`     | ૧૨      | `tamil`     | ௧௨      |
+| `gurmukhi`     | ੧੨      | `telugu`    | ౧౨      |
+| `kannada`      | ೧೨      | `thai`      | ๑๒      |
+| `khmer`        | ១២      | `tibetan`   | ༡༢      |
+| `lao`          | ໑໒      | `urdu`      | ۱۲      |
+| `malayalam`    | ൧൨      |             |         |
+
+`khmer` and `cambodian` share their digits, as do `persian` and `urdu`.
+
+A registered font has to cover the digits of the style you pick. Latin fonts rarely carry Thai or Tibetan numerals, so pair a script style with a font that has the glyphs.
+
+## Band height
 
 Band height is measured once with three-digit counters. Reaching 100 pages does not shift the layout between pages.
