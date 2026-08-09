@@ -6,8 +6,4 @@ packages:
 
 ### Paint a border ring from one place
 
-`paint_border` fills a ring, fills two for a `double` border, or strokes the centerline for a uniform `dashed` or `dotted` one, driving whichever backend supplied the device. It returns whether it painted, so a backend only walks the sides itself when the border needs per-side work.
-
-`PaintDevice` gains `stroke_shape`, with a default that does nothing for a backend without a stroker.
-
-A fully transparent border no longer reaches the output. `BorderProperties::painted_sides` lists the sides that do paint, so a backend that walks them one by one skips the clip group entirely when none of them will.
+`paint_border` fills a border ring, two for `double`, or strokes a uniform dashed or dotted one. `PaintDevice` gains `stroke_shape`. A fully transparent border no longer reaches the output.

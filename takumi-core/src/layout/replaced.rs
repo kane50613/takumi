@@ -20,11 +20,15 @@ pub struct ReplacedPlacement {
 }
 
 impl ReplacedPlacement {
-  /// Whether the content reaches past its box and needs clipping to it. Half a
-  /// pixel of slack keeps a `cover` that lands on the box from opening a clip
-  /// nothing would show through.
+  /// Whether the content reaches past its box and needs clipping to it. A
+  /// percentage past 100% pushes content that fits out of the box, so the test
+  /// is on the placed edges, not the size alone. Half a pixel of slack keeps a
+  /// `cover` that lands on the box from opening a clip nothing shows through.
   pub fn overflows(&self, content: Size<f32>) -> bool {
-    self.size.width > content.width + 0.5 || self.size.height > content.height + 0.5
+    self.offset.x < -0.5
+      || self.offset.y < -0.5
+      || self.offset.x + self.size.width > content.width + 0.5
+      || self.offset.y + self.size.height > content.height + 0.5
   }
 }
 
@@ -73,9 +77,11 @@ pub fn place_replaced(
 
 #[cfg(test)]
 mod tests {
+  use super::ReplacedPlacement;
   use crate::{
     Fonts,
     context::RenderContext,
+    geometry::{Point, Size},
     style::{Length, PositionComponent, PositionKeywordX, SizingContext},
     viewport::Viewport,
   };
@@ -117,6 +123,30 @@ mod tests {
     assert_eq!(
       axis(PositionComponent::Length(Length::Percentage(150.0)), 120.0),
       180.0
+    );
+  }
+
+  #[test]
+  fn content_pushed_past_its_box_asks_to_be_clipped() {
+    let placement = ReplacedPlacement {
+      size: Size {
+        width: 40.0,
+        height: 40.0,
+      },
+      offset: Point { x: 90.0, y: 0.0 },
+    };
+    let content = Size {
+      width: 100.0,
+      height: 100.0,
+    };
+
+    assert!(placement.overflows(content));
+    assert!(
+      !ReplacedPlacement {
+        offset: Point { x: 30.0, y: 30.0 },
+        ..placement
+      }
+      .overflows(content)
     );
   }
 }

@@ -2148,9 +2148,9 @@ pub(crate) fn scale_text_fit_x(
 pub struct PositionedGlyph {
   /// Glyph id in the run's font.
   pub id: u32,
-  /// Run-local horizontal position.
+  /// Horizontal position from the line origin, the run's own offset included.
   pub x: f32,
-  /// Run-local vertical position.
+  /// Vertical position from the line origin, the run's baseline included.
   pub y: f32,
 }
 
@@ -2220,9 +2220,11 @@ fn glyph_cluster_ranges(
 /// `parley::GlyphRun`. Owns everything both backends need to paint a run; carries
 /// no borrow into the parley layout.
 pub struct ShapedRun {
-  /// The run's glyphs, in run-local coordinates.
+  /// The run's glyphs, positioned from the line origin.
   pub glyphs: Vec<PositionedGlyph>,
-  /// Horizontal offset of the run's start from the line origin.
+  /// Horizontal offset of the run's start from the line origin. A glyph's `x`
+  /// already carries it; this is for placing what the glyphs do not, such as a
+  /// decoration spanning the run.
   pub offset: f32,
   /// Baseline position within the line.
   pub baseline: f32,

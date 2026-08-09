@@ -12,4 +12,4 @@ packages:
 
 ### Place replaced content from one place
 
-`takumi_core::layout::replaced` sizes an image for its content box and places it. Each backend had worked out `object-fit` and `object-position` for itself, down to two byte-identical copies of the same position helper and a third spelling it out keyword by keyword.
+`object-fit` and `object-position` place replaced content from one place. An `object-position` past 100% now clips to the content box.
