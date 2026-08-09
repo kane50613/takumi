@@ -10,8 +10,6 @@ use takumi_core::{
   },
 };
 
-use crate::paint::position_axis;
-
 /// The value for one layer: CSS cycles the shorter list over the layers.
 pub(crate) fn cycled<T: Copy + Default>(values: &[T], index: usize) -> T {
   if values.is_empty() {
@@ -123,7 +121,7 @@ fn axis(
       step: area.max(1.0),
     };
   }
-  let anchor = position_axis(position, context, area - tile);
+  let anchor = position.resolve(context, area - tile);
   let once = Axis {
     tile,
     origin: anchor,
@@ -141,7 +139,7 @@ fn axis(
       let count = (area / tile).round().max(1.0);
       let rounded = area / count;
       // The position still applies, against the rescaled tile.
-      let anchor = position_axis(position, context, area - rounded);
+      let anchor = position.resolve(context, area - rounded);
 
       Axis {
         tile: rounded,

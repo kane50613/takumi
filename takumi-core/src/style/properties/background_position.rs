@@ -3,6 +3,7 @@ use std::fmt;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use super::background_image::parse_comma_list;
+use crate::context::RenderContext;
 use crate::style::{
   Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, ListInterpolationStrategy,
   MakeComputed, ParseResult, SizingContext, SpacePair, ToCss, tw::TailwindPropertyParser,
@@ -40,6 +41,18 @@ pub enum PositionComponent {
   KeywordY(PositionKeywordY),
   /// An absolute length value.
   Length(Length),
+}
+
+impl PositionComponent {
+  /// Where this component lands in `available` space. A keyword is a share of
+  /// that space, so `center` sits halfway; `auto` behaves the same, since a
+  /// position with nothing to say centres.
+  pub fn resolve(self, context: &RenderContext, available: f32) -> f32 {
+    match Length::from(self) {
+      Length::Auto => available * 0.5,
+      length => length.to_px(&context.sizing, available),
+    }
+  }
 }
 
 impl MakeComputed for PositionComponent {

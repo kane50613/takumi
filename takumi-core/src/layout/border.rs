@@ -935,7 +935,7 @@ pub fn inset_size(size: Size<f32>, inset: Rect<f32>) -> Size<f32> {
 }
 
 /// Per-side `lhs - rhs`, clamped to zero.
-pub fn subtract_rect(lhs: Rect<f32>, rhs: Rect<f32>) -> Rect<f32> {
+pub(crate) fn subtract_rect(lhs: Rect<f32>, rhs: Rect<f32>) -> Rect<f32> {
   Rect {
     top: (lhs.top - rhs.top).max(0.0),
     right: (lhs.right - rhs.right).max(0.0),
@@ -1101,7 +1101,7 @@ fn select_best_dash_gap(length: f32, dash: f32, gap: f32, closed: bool) -> f32 {
 }
 
 /// Lightens or darkens a side color for `inset`/`outset` 3D border shading.
-pub fn shade_3d_border_color(color: Color, side: BorderSide, style: BorderStyle) -> Color {
+pub(crate) fn shade_3d_border_color(color: Color, side: BorderSide, style: BorderStyle) -> Color {
   let lighten = match style {
     BorderStyle::Outset => matches!(side, BorderSide::Top | BorderSide::Left),
     BorderStyle::Inset => matches!(side, BorderSide::Right | BorderSide::Bottom),

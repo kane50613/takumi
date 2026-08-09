@@ -3,35 +3,12 @@ use takumi_core::geometry::{ComputedLayout as Layout, Point, Size};
 use crate::{
   BorderProperties, Canvas, RenderContext, Result, SamplingOptions, pixmap_ref_from_buffer,
   resources::image::{ImageSource, RenderedImage},
-  style::{
-    Affine, BlendMode, ObjectFit, PositionComponent, PositionKeywordX, PositionKeywordY,
-    SizingContext,
-  },
+  style::{Affine, BlendMode, ObjectFit},
 };
 
 pub(crate) struct PreparedImage {
   image: RenderedImage,
   logical_to_source: Affine,
-}
-
-fn resolve_object_position_axis(
-  component: PositionComponent,
-  sizing: &SizingContext,
-  available_space: f32,
-) -> f32 {
-  match component {
-    PositionComponent::KeywordX(keyword) => match keyword {
-      PositionKeywordX::Left => 0.0,
-      PositionKeywordX::Center => available_space * 0.5,
-      PositionKeywordX::Right => available_space,
-    },
-    PositionComponent::KeywordY(keyword) => match keyword {
-      PositionKeywordY::Top => 0.0,
-      PositionKeywordY::Center => available_space * 0.5,
-      PositionKeywordY::Bottom => available_space,
-    },
-    PositionComponent::Length(length) => length.to_px(sizing, available_space),
-  }
 }
 
 /// Process an image according to the specified object-fit style.
@@ -97,8 +74,8 @@ pub(crate) fn process_image_for_object_fit(
       let available_x = content_box.width - new_width;
       let available_y = content_box.height - new_height;
 
-      let offset_x = resolve_object_position_axis(object_position.x, &context.sizing, available_x);
-      let offset_y = resolve_object_position_axis(object_position.y, &context.sizing, available_y);
+      let offset_x = object_position.x.resolve(context, available_x);
+      let offset_y = object_position.y.resolve(context, available_y);
 
       Ok((
         PreparedImage {
@@ -131,10 +108,8 @@ pub(crate) fn process_image_for_object_fit(
       let available_crop_x = new_width - content_box.width;
       let available_crop_y = new_height - content_box.height;
 
-      let crop_x =
-        resolve_object_position_axis(object_position.x, &context.sizing, available_crop_x);
-      let crop_y =
-        resolve_object_position_axis(object_position.y, &context.sizing, available_crop_y);
+      let crop_x = object_position.x.resolve(context, available_crop_x);
+      let crop_y = object_position.y.resolve(context, available_crop_y);
 
       Ok((
         PreparedImage {
@@ -181,8 +156,8 @@ pub(crate) fn process_image_for_object_fit(
       let available_x = content_box.width - new_width;
       let available_y = content_box.height - new_height;
 
-      let offset_x = resolve_object_position_axis(object_position.x, &context.sizing, available_x);
-      let offset_y = resolve_object_position_axis(object_position.y, &context.sizing, available_y);
+      let offset_x = object_position.x.resolve(context, available_x);
+      let offset_y = object_position.y.resolve(context, available_y);
 
       Ok((
         PreparedImage {
@@ -205,10 +180,8 @@ pub(crate) fn process_image_for_object_fit(
         let available_x = (content_box.width - image_width).max(0.0);
         let available_y = (content_box.height - image_height).max(0.0);
 
-        let offset_x =
-          resolve_object_position_axis(object_position.x, &context.sizing, available_x);
-        let offset_y =
-          resolve_object_position_axis(object_position.y, &context.sizing, available_y);
+        let offset_x = object_position.x.resolve(context, available_x);
+        let offset_y = object_position.y.resolve(context, available_y);
 
         return Ok((
           PreparedImage {
@@ -230,24 +203,18 @@ pub(crate) fn process_image_for_object_fit(
       let available_crop_x = (image_width - content_box.width).max(0.0);
       let available_crop_y = (image_height - content_box.height).max(0.0);
 
-      let crop_x =
-        resolve_object_position_axis(object_position.x, &context.sizing, available_crop_x);
-      let crop_y =
-        resolve_object_position_axis(object_position.y, &context.sizing, available_crop_y);
+      let crop_x = object_position.x.resolve(context, available_crop_x);
+      let crop_y = object_position.y.resolve(context, available_crop_y);
 
       let crop_width = content_box.width.min(image_width);
       let crop_height = content_box.height.min(image_height);
 
-      let offset_x = resolve_object_position_axis(
-        object_position.x,
-        &context.sizing,
-        (content_box.width - crop_width).max(0.0),
-      );
-      let offset_y = resolve_object_position_axis(
-        object_position.y,
-        &context.sizing,
-        (content_box.height - crop_height).max(0.0),
-      );
+      let offset_x = object_position
+        .x
+        .resolve(context, (content_box.width - crop_width).max(0.0));
+      let offset_y = object_position
+        .y
+        .resolve(context, (content_box.height - crop_height).max(0.0));
 
       Ok((
         PreparedImage {
@@ -329,51 +296,4 @@ pub(crate) fn draw_image(
   }
 
   Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-  use super::resolve_object_position_axis;
-  use crate::{
-    style::{Length, PositionComponent, PositionKeywordX, SizingContext},
-    viewport::Viewport,
-  };
-
-  fn sizing() -> SizingContext {
-    SizingContext::builder()
-      .viewport(Viewport::new((1200, 630)))
-      .font_size(16.0)
-      .line_height(0.0)
-      .build()
-  }
-
-  #[test]
-  fn object_position_keyword_center_uses_half_free_space() {
-    let resolved = resolve_object_position_axis(
-      PositionComponent::KeywordX(PositionKeywordX::Center),
-      &sizing(),
-      120.0,
-    );
-    assert_eq!(resolved, 60.0);
-  }
-
-  #[test]
-  fn object_position_length_is_not_scaled_by_container_size() {
-    let resolved = resolve_object_position_axis(
-      PositionComponent::Length(Length::Px(12.0)),
-      &sizing(),
-      120.0,
-    );
-    assert_eq!(resolved, 12.0);
-  }
-
-  #[test]
-  fn object_position_percentage_supports_out_of_range_values() {
-    let resolved = resolve_object_position_axis(
-      PositionComponent::Length(Length::Percentage(150.0)),
-      &sizing(),
-      120.0,
-    );
-    assert_eq!(resolved, 180.0);
-  }
 }

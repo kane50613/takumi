@@ -404,4 +404,44 @@ mod tests {
   fn a_skip_covering_the_line_leaves_nothing() {
     assert!(remaining_spans(2.0, 8.0, &[(0.0, 10.0)]).is_empty());
   }
+
+  #[test]
+  fn a_curve_is_flattened_before_it_is_measured() {
+    // A circle of radius 5 at the origin, drawn as four cubics. Across a band
+    // hugging its middle it is at its widest, so the span is the diameter.
+    const K: f32 = 5.0 * 0.552_284_7;
+    let paths = vec![
+      PathCommand::MoveTo(point(5.0, 0.0)),
+      PathCommand::CubicTo(point(5.0, K), point(K, 5.0), point(0.0, 5.0)),
+      PathCommand::CubicTo(point(-K, 5.0), point(-5.0, K), point(-5.0, 0.0)),
+      PathCommand::CubicTo(point(-5.0, -K), point(-K, -5.0), point(0.0, -5.0)),
+      PathCommand::CubicTo(point(K, -5.0), point(5.0, -K), point(5.0, 0.0)),
+      PathCommand::Close,
+    ];
+    let spans = text_intercepts(&paths, -0.5, 0.5);
+
+    assert_eq!(spans.len(), 1, "{spans:?}");
+    assert!((spans[0].0 + 5.0).abs() < 0.05, "{spans:?}");
+    assert!((spans[0].1 - 5.0).abs() < 0.05, "{spans:?}");
+  }
+
+  #[test]
+  fn a_counter_is_not_reported_as_ink() {
+    // An `o`: an outer contour with an inner one wound the other way. The band
+    // sees the two strokes, not the hole between them.
+    let mut paths = rect(0.0, -10.0, 10.0, 10.0);
+
+    paths.extend([
+      PathCommand::MoveTo(point(3.0, -10.0)),
+      PathCommand::LineTo(point(3.0, 10.0)),
+      PathCommand::LineTo(point(7.0, 10.0)),
+      PathCommand::LineTo(point(7.0, -10.0)),
+      PathCommand::Close,
+    ]);
+
+    assert_eq!(
+      text_intercepts(&paths, -1.0, 1.0).as_slice(),
+      [(0.0, 3.0), (7.0, 10.0)]
+    );
+  }
 }

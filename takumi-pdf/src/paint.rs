@@ -5,7 +5,7 @@ use takumi_core::resources::image::{ImageSource, RenderedImage};
 use takumi_core::{
   context::RenderContext,
   geometry::{ComputedLayout as Layout, PathCommand},
-  style::{BlendMode, ComputedStyle, Length, Overflow, PositionComponent, ResolvedGradientStop},
+  style::{BlendMode, ComputedStyle, Overflow, ResolvedGradientStop},
 };
 
 #[cfg(feature = "images")]
@@ -86,18 +86,6 @@ pub(crate) fn overflow_clip_rect(
     (y - UNBOUNDED, y + layout.size.height + UNBOUNDED)
   };
   KrillaRect::from_ltrb(left, top, right, bottom).and_then(rect_path)
-}
-
-/// Resolves one `object-position` axis to an offset within `available` space.
-pub(crate) fn position_axis(
-  component: PositionComponent,
-  context: &RenderContext,
-  available: f32,
-) -> f32 {
-  match Length::from(component) {
-    Length::Auto => available * 0.5,
-    length => length.to_px(&context.sizing, available),
-  }
 }
 
 /// Rasterizes an image source into a krilla image. Bitmap sources rasterize at

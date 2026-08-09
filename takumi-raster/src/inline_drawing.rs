@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use skrifa::{FontRef, MetadataProvider};
 use takumi_core::{
-  geometry::{ComputedLayout as Layout, NodeId, PathCommand as Command, Point, Size},
+  geometry::{ComputedLayout as Layout, NodeId, Point, Size},
   layout::{
     inline_box::{InlineBoxPaint, resolve_inline_box},
     intercept::skip_ink_spans,
@@ -17,8 +17,8 @@ use crate::{
   draw_outset_box_shadow,
   layout::inline::{
     BuiltInlineLayout, InlineBoxItem, InlineOutlineRect, InlineRunLayout, PositionedInlineRun,
-    ProcessedInlineSpan, ShapedRun, VisualInlineBox, outline_island_contour, outline_islands,
-    resolve_inline_runs,
+    ProcessedInlineSpan, ShapedRun, VisualInlineBox, glyph_outlines, outline_island_contour,
+    outline_islands, resolve_inline_runs,
   },
   painter::StrokeStyle,
   rasterize_layers,
@@ -91,26 +91,15 @@ fn draw_underline_with_skip_ink(
   let content_offset = options.layout.content_box_offset();
   let run_start_x = content_offset.x + glyph_run.offset;
   let line_top = content_offset.y + options.offset;
-  let outlines: Vec<(Point<f32>, Vec<Command>)> = glyph_run
-    .glyphs
-    .iter()
-    .filter_map(|glyph| {
-      let ResolvedGlyph::Outline(outline) = resolved_glyphs.get(&glyph.id)?.as_ref() else {
-        return None;
-      };
-
-      Some((
-        Point {
-          x: content_offset.x + glyph.x,
-          y: content_offset.y + glyph.y + options.baseline_shift,
-        },
-        outline.paths().to_vec(),
-      ))
-    })
-    .collect();
+  let outlines = glyph_outlines(
+    glyph_run,
+    resolved_glyphs,
+    content_offset,
+    options.baseline_shift,
+  );
 
   for (start_x, end_x) in skip_ink_spans(
-    outlines.iter().map(|(at, paths)| (*at, paths.as_slice())),
+    outlines.iter().copied(),
     run_start_x,
     run_start_x + glyph_run.advance,
     line_top,

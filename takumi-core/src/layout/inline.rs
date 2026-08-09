@@ -2148,9 +2148,9 @@ pub(crate) fn scale_text_fit_x(
 pub struct PositionedGlyph {
   /// Glyph id in the run's font.
   pub id: u32,
-  /// Run-local horizontal position.
+  /// Horizontal position from the line origin, the run's own offset included.
   pub x: f32,
-  /// Run-local vertical position.
+  /// Vertical position from the line origin, the run's baseline included.
   pub y: f32,
 }
 
@@ -2220,9 +2220,11 @@ fn glyph_cluster_ranges(
 /// `parley::GlyphRun`. Owns everything both backends need to paint a run; carries
 /// no borrow into the parley layout.
 pub struct ShapedRun {
-  /// The run's glyphs, in run-local coordinates.
+  /// The run's glyphs, positioned from the line origin.
   pub glyphs: Vec<PositionedGlyph>,
-  /// Horizontal offset of the run's start from the line origin.
+  /// Horizontal offset of the run's start from the line origin. A glyph's `x`
+  /// already carries it; this is for placing what the glyphs do not, such as a
+  /// decoration spanning the run.
   pub offset: f32,
   /// Baseline position within the line.
   pub baseline: f32,
@@ -2637,12 +2639,17 @@ pub struct DecorationRect {
 /// raster geometry in `draw_decoration` (skip-ink is a raster-only refinement and
 /// omitted here). `transform` is the run's border-box transform
 /// ([`PositionedInlineRun::transform`] with an identity base).
-/// Each glyph's outline, placed where the run draws it.
-fn glyph_outlines(
+/// Each glyph's outline, placed at `origin` plus the glyph's own position.
+///
+/// `origin` is whatever puts the glyphs in the same space as the caller's band:
+/// the decoration's coordinates on one axis need not be the layout's on the
+/// other, and only the difference between the two matters.
+pub fn glyph_outlines<'g>(
   glyph_run: &ShapedRun,
-  resolved_glyphs: &HashMap<u32, Arc<ResolvedGlyph>>,
+  resolved_glyphs: &'g HashMap<u32, Arc<ResolvedGlyph>>,
+  origin: Point<f32>,
   baseline_shift: f32,
-) -> Vec<(Point<f32>, Vec<PathCommand>)> {
+) -> Vec<(Point<f32>, &'g [PathCommand])> {
   glyph_run
     .glyphs
     .iter()
@@ -2653,10 +2660,10 @@ fn glyph_outlines(
 
       Some((
         Point {
-          x: glyph.x,
-          y: glyph.y + baseline_shift,
+          x: origin.x + glyph.x,
+          y: origin.y + glyph.y + baseline_shift,
         },
-        outline.paths().to_vec(),
+        outline.paths(),
       ))
     })
     .collect()
@@ -2716,10 +2723,19 @@ pub fn run_decorations(
         .into_iter()
         .collect()
     } else {
-      let outlines = glyph_outlines(glyph_run, resolved_glyphs, baseline_shift);
+      // The band runs from the content box, so the glyphs have to as well.
+      let outlines = glyph_outlines(
+        glyph_run,
+        resolved_glyphs,
+        Point {
+          x: layout.border.left + layout.padding.left,
+          y: 0.0,
+        },
+        baseline_shift,
+      );
 
       skip_ink_spans(
-        outlines.iter().map(|(at, paths)| (*at, paths.as_slice())),
+        outlines.iter().copied(),
         snapped_start_x,
         snapped_start_x + width,
         y_offset,

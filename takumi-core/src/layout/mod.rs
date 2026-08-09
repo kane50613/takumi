@@ -14,5 +14,7 @@ pub mod inline_box;
 pub mod intercept;
 /// Node Tree
 pub mod node;
+/// Where replaced content sits inside its content box.
+pub mod replaced;
 /// Layout tree: render nodes and their computed layout results.
 pub mod tree;

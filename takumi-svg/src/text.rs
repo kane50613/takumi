@@ -14,9 +14,10 @@ use takumi_core::{
   geometry::{ComputedLayout as Layout, Point},
   layout::{
     inline::{
-      InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineOutlineRect, InlineRunLayout,
-      PositionedInlineRun, ProcessedInlineSpan, collect_inline_items, create_inline_layout,
-      outline_island_contour, outline_islands, resolve_inline_runs, run_decorations,
+      DecorationRect, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineOutlineRect,
+      InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan, collect_inline_items,
+      create_inline_layout, outline_island_contour, outline_islands, resolve_inline_runs,
+      run_decorations,
     },
     node::TextData,
     tree::RenderNode,
@@ -182,8 +183,22 @@ fn emit_runs(
     doc.end_group(group)?;
   }
 
-  for run in &runs.runs {
-    emit_run_decorations(doc, run, frame, false)?;
+  let decorations: Vec<Vec<DecorationRect>> = runs
+    .runs
+    .iter()
+    .map(|run| {
+      run_decorations(
+        &run.glyph_run,
+        &run.resolved_glyphs,
+        frame.layout,
+        run.baseline_shift,
+        run.transform(IDENTITY),
+      )
+    })
+    .collect();
+
+  for (run, decorations) in runs.runs.iter().zip(&decorations) {
+    emit_run_decorations(doc, run, decorations, frame, false)?;
   }
 
   if context.style.background_clip == BackgroundClip::Text {
@@ -198,8 +213,8 @@ fn emit_runs(
   // raster backend's painting order.
   emit_inline_outlines(doc, runs, spans, frame.origin_x, frame.origin_y)?;
 
-  for run in &runs.runs {
-    emit_run_decorations(doc, run, frame, true)?;
+  for (run, decorations) in runs.runs.iter().zip(&decorations) {
+    emit_run_decorations(doc, run, decorations, frame, true)?;
   }
   Ok(())
 }
@@ -373,25 +388,18 @@ fn emit_clip_text_mask_glyphs(
 fn emit_run_decorations(
   doc: &mut SvgDocument,
   run: &PositionedInlineRun,
+  decorations: &[DecorationRect],
   frame: TextFrame,
   over: bool,
 ) -> io::Result<()> {
-  let transform = run.transform(IDENTITY);
   let opacity = run.glyph_run.brush.opacity;
   let opacity_group = (opacity < 1.0)
     .then(|| doc.begin_group(IDENTITY, opacity, None, None))
     .transpose()?;
-  let decorations = run_decorations(
-    &run.glyph_run,
-    &run.resolved_glyphs,
-    frame.layout,
-    run.baseline_shift,
-    transform,
-  );
   let mut device = DocumentDevice { doc, error: None };
 
   paint_run_decorations(
-    &decorations,
+    decorations,
     over,
     TextDecorationLines::empty(),
     Point {
