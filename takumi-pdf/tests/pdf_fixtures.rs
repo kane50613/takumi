@@ -804,6 +804,7 @@ fn text_shadow_and_stroke() {
       <div style="text-shadow: 3px 3px 0 #f59e0b;">Sharp shadow</div>
       <div style="text-shadow: 2px 2px 4px rgba(17, 24, 39, 0.5);">Blurred shadow</div>
       <div style="-webkit-text-stroke: 1px #b91c1c; color: #fef3c7;">Stroked text</div>
+      <div style="-webkit-text-stroke: 2px rgba(185, 28, 28, 0.25); color: #fef3c7;">Faded stroke</div>
       <div style="background-image: linear-gradient(90deg, #ff5f6d, #3a1c71); background-clip: text; color: transparent;">Gradient text</div>
     </div>"##;
     let node = from_html(source, FromHtmlOptions::default()).expect("parse text shadow fixture");
@@ -831,6 +832,15 @@ fn text_shadow_and_stroke() {
   assert!(
     contains(b"/Pattern cs"),
     "expected a gradient fill on the clip-text glyphs"
+  );
+  // A stroke colour keeps its alpha: the quarter-opaque outline reaches the
+  // file as a stroking alpha, not as a solid line. The value is the alpha byte
+  // over 255, so it lands a hair off the quarter it was written as.
+  assert!(
+    stroke_alphas(&inflated_text(&pdf))
+      .iter()
+      .any(|alpha| (alpha - 0.25).abs() < 0.01),
+    "translucent text stroke reached the file opaque"
   );
 }
 
@@ -2428,6 +2438,74 @@ fn font_weights() {
     haystack.contains("/Pattern CS"),
     "clip-text background missing from the synthesized bold outline"
   );
+  // The clipped text is transparent, and a colour's alpha lives beside its
+  // paint. A stroke built from the paint alone outlines it in solid black.
+  assert!(
+    stroke_alphas(&haystack).contains(&0.0),
+    "faux bold outlines transparent text opaquely"
+  );
+}
+
+/// A page counter renders in whatever counter style it is given, and a
+/// non-decimal style reaches for characters no latin face carries. The counter
+/// is generated rather than authored, so nothing in the document tells the
+/// caller which font it will need.
+#[test]
+fn counter_style_needs_a_covering_font() {
+  let rows: String = (1..=60)
+    .map(|row| format!(r#"<div style="font-size:16px">Row {row}</div>"#))
+    .collect();
+  let doc = format!(r#"<div style="display:flex;flex-direction:column;width:100%">{rows}</div>"#);
+  let footer = r#"<div style="display:flex;font-size:12px"><span class="totalPages trad-chinese-informal"></span></div>"#;
+  let paged = |fonts: &Fonts| {
+    render(
+      PdfOptions::builder()
+        .node(from_html(&doc, FromHtmlOptions::default()).expect("parse counter doc"))
+        .footer(from_html(footer, FromHtmlOptions::default()).expect("parse counter footer"))
+        .page(PageOptions {
+          width: 400.0,
+          height: 300.0,
+          margin: PageMargins::uniform(24.0),
+        })
+        .fonts(fonts)
+        .build(),
+    )
+  };
+  let latin = {
+    let mut latin = Fonts::default();
+    let data = fs::read(
+      Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf"),
+    )
+    .expect("read latin font");
+
+    latin
+      .register(FontResource::new(data))
+      .expect("load latin font");
+    latin
+  };
+
+  assert!(
+    matches!(paged(&latin), Err(PdfError::MissingGlyphs(_))),
+    "a chinese counter over a latin face should say what it cannot draw"
+  );
+  // The shared set carries a CJK face alongside the latin one.
+  assert!(paged(&fonts()).is_ok(), "a covered chinese counter renders");
+}
+
+/// The stroking alphas a file sets. Read as numbers because `/CA 0` is a prefix
+/// of `/CA 0.25`.
+fn stroke_alphas(haystack: &str) -> Vec<f32> {
+  haystack
+    .match_indices("/CA ")
+    .filter_map(|(at, marker)| {
+      haystack[at + marker.len()..]
+        .split(|character: char| !matches!(character, '0'..='9' | '.'))
+        .next()?
+        .parse()
+        .ok()
+    })
+    .collect()
 }
 
 /// Registers both test fonts as coverage subsets of one logical family, ranked the way
