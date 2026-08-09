@@ -1652,7 +1652,7 @@ fn tagged_standards() {
 fn tagged_inline_block_subtree() {
   let source = r#"<main style="display:flex;flex-direction:column;font-size:14px;color:#141414;">
     <h1>Report</h1>
-    <div>Before <span style="display:inline-block;width:160px;"><h2>Inner heading</h2></span> after</div>
+    <div>Before <span style="display:inline-block;width:160px;"><span style="display:inline-block;"><h2>Inner heading</h2></span></span> after</div>
   </main>"#;
 
   let pdf = run_pdf_fixture("inline-block-tagged", |fonts| {
