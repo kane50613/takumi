@@ -810,6 +810,7 @@ fn text_shadow_and_stroke() {
       <div style="-webkit-text-stroke: 9px #b91c1c;">Same words</div>
       <div style="background-image: linear-gradient(90deg, #ff5f6d, #3a1c71); background-clip: text; color: transparent;">Gradient text</div>
       <div style="background-image: linear-gradient(90deg, #ff5f6d, #3a1c71); background-clip: text; color: transparent; -webkit-text-stroke: 6px transparent;">Ringed text</div>
+      <div style="background-image: url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%228%22 height=%228%22%3E%3Crect width=%228%22 height=%228%22 fill=%22%2316a34a%22/%3E%3C/svg%3E'); background-clip: text; color: transparent;">Image text</div>
     </div>"##;
     let node = from_html(source, FromHtmlOptions::default()).expect("parse text shadow fixture");
 
@@ -847,10 +848,18 @@ fn text_shadow_and_stroke() {
   // A transparent `-webkit-text-stroke` reveals a background-coloured ring, so
   // the background pass widens the glyph coverage by the stroke width.
   assert!(contains(b"6 w"), "expected the widened clip-text coverage");
-  // The clip-text line fills its glyphs with the gradient shading.
+  // The clip-text lines fill their glyphs with the shading and the image, both
+  // of which reach the glyphs as a pattern rather than a colour.
   assert!(
     contains(b"/Pattern cs"),
     "expected a gradient fill on the clip-text glyphs"
+  );
+  // An image layer has no paint of its own. Without a pattern carrying it, the
+  // layer is dropped and the transparent text comes out invisible, taking the
+  // embedded image with it.
+  assert!(
+    find(&pdf, b"/Subtype /Image").is_some() || find(&pdf, b"/Subtype/Image").is_some(),
+    "the image layer left the clip-text glyphs with nothing to fill them"
   );
   // A stroke colour keeps its alpha: the quarter-opaque outline reaches the
   // file as a stroking alpha, not as a solid line. The value is the alpha byte
