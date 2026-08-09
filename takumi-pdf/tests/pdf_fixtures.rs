@@ -1686,6 +1686,62 @@ fn tagged_ua2() {
   );
 }
 
+/// A border decoration is content no reader should announce, so it belongs in
+/// an artifact sequence. A border that paints nothing belongs in no sequence at
+/// all: an empty `BMC`/`EMC` pair is a region with nothing in it.
+#[test]
+fn tagged_borders_are_artifacts() {
+  let doc = r#"<main style="display:flex;flex-direction:column;gap:8px;font-size:14px;color:#141414;">
+    <h1>Borders</h1>
+    <p style="border:3px dashed #b91c1c;padding:4px;">Dashed all round</p>
+    <p style="border-top:4px solid rgba(255,0,0,0);border-left:2px solid rgba(0,0,255,0);padding:4px;">Invisible sides</p>
+  </main>"#;
+  let pdf = run_pdf_fixture("borders-tagged-ua1", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse border doc"))
+      .page(PageOptions::A4)
+      .standard(PdfStandard::A3a)
+      .tagged(Tagging::Ua1)
+      .lang(Some(takumi_core::style::Lang::parse("en").expect("lang")))
+      .metadata(PdfMetadata {
+        title: Some("Borders".into()),
+        creation_date: Some(PdfDate {
+          year: 2026,
+          month: 8,
+          day: 9,
+          hour: 0,
+          minute: 0,
+          second: 0,
+        }),
+        ..Default::default()
+      })
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+  let stroke = haystack
+    .find(" d ")
+    .expect("no dashed stroke in the content stream");
+  let opened = haystack[..stroke]
+    .rfind("/Artifact BMC")
+    .expect("the dashed border opened no artifact");
+
+  assert!(
+    !haystack[opened..stroke].contains("EMC"),
+    "the dashed border strokes outside its artifact"
+  );
+  for region in haystack.split("/Artifact BMC").skip(1) {
+    let region = &region[..region.find("EMC").expect("an artifact was never closed")];
+
+    assert!(
+      region
+        .split_whitespace()
+        .any(|token| matches!(token, "f" | "f*" | "S" | "Do")),
+      "an artifact holds no painted content: {region:?}"
+    );
+  }
+}
+
 /// PDF/UA-2 requires the catalog to declare the document language, so a render
 /// without one fails instead of writing a file that claims conformance.
 #[test]

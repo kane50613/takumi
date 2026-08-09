@@ -28,7 +28,7 @@ use takumi_core::{
   font_style::SizedFontStyle,
   geometry::{ComputedLayout as Layout, NodeId, Point as CorePoint, Size},
   layout::{
-    border::{BorderProperties, BorderSide},
+    border::BorderProperties,
     clip::clip_shape_commands,
     decoration::{ClipBox, OutlineGeometry},
     inline::{BuiltInlineLayout, InlineRunLayout, ProcessedInlineSpan, ShapedRun, run_decorations},
@@ -931,43 +931,20 @@ impl Emitter<'_> {
     ) {
       return;
     }
+    let mut sides = border.painted_sides().peekable();
+
+    if sides.peek().is_none() {
+      return;
+    }
     let artifact = self.start_artifact(surface);
 
     surface.push_clip_path(&ring_path, &FillRule::EvenOdd);
-    for (side, width, color, style) in [
-      (
-        BorderSide::Top,
-        border.width.top,
-        border.color.top,
-        border.style.top,
-      ),
-      (
-        BorderSide::Right,
-        border.width.right,
-        border.color.right,
-        border.style.right,
-      ),
-      (
-        BorderSide::Bottom,
-        border.width.bottom,
-        border.color.bottom,
-        border.style.bottom,
-      ),
-      (
-        BorderSide::Left,
-        border.width.left,
-        border.color.left,
-        border.style.left,
-      ),
-    ] {
-      if width <= 0.0 || color.0[3] == 0 || !style.is_rendered() {
-        continue;
-      }
+    for side in sides {
       let mut polygon = Vec::new();
 
-      border.append_side_clip_polygon_commands_at(side, &mut polygon, size, CorePoint::ZERO);
+      border.append_side_clip_polygon_commands_at(side.side, &mut polygon, size, CorePoint::ZERO);
       if let Some(path) = krilla_path(&polygon, x, y) {
-        surface.set_fill(Some(fill_from_rgba(self.filtered(color), 1.0)));
+        surface.set_fill(Some(fill_from_rgba(self.filtered(side.color), 1.0)));
         surface.draw_path(&path);
       }
     }
@@ -1902,6 +1879,14 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
       None => stroke.color.0,
     };
 
+    if self.artifact {
+      self
+        .surface
+        .start_tagged(ContentTag::Artifact(Artifact::new(
+          ArtifactType::Other,
+          None,
+        )));
+    }
     self.surface.set_fill(None);
     self.surface.set_stroke(Some(Stroke {
       paint: fill_from_rgba(color, 1.0).paint,
@@ -1920,6 +1905,9 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
     self.surface.set_stroke(None);
     if !flat {
       self.surface.pop();
+    }
+    if self.artifact {
+      self.surface.end_tagged();
     }
   }
 }

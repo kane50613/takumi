@@ -8,7 +8,7 @@ use crate::{
 };
 
 /// Border side identifier used by per-side geometry and rasterization.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum BorderSide {
   /// Top side.
   Top,
@@ -18,6 +18,19 @@ pub enum BorderSide {
   Bottom,
   /// Left side.
   Left,
+}
+
+/// One side of a border that paints, with the values needed to draw it.
+#[derive(Debug, Clone, Copy)]
+pub struct PaintedSide {
+  /// Which side this is.
+  pub side: BorderSide,
+  /// The side's width in pixels.
+  pub width: f32,
+  /// The side's resolved colour.
+  pub color: Color,
+  /// The side's line style.
+  pub style: BorderStyle,
 }
 
 /// Represents the properties of a border, including corner radii and drawing metadata.
@@ -122,6 +135,49 @@ impl BorderProperties {
   /// True if a side with this style and width is rendered.
   pub fn is_side_visible(style: BorderStyle, width: f32) -> bool {
     style.is_rendered() && width > 0.0
+  }
+
+  /// The sides that put ink on the page, clockwise from the top. A side is left
+  /// out when it has no width, when its style draws nothing, or when its colour
+  /// is fully transparent. Every backend that walks the sides one by one walks
+  /// this list, so an all-transparent border yields nothing and the caller can
+  /// skip the clip and the marked-content region it would otherwise open.
+  pub fn painted_sides(&self) -> impl Iterator<Item = PaintedSide> {
+    [
+      (
+        BorderSide::Top,
+        self.width.top,
+        self.color.top,
+        self.style.top,
+      ),
+      (
+        BorderSide::Right,
+        self.width.right,
+        self.color.right,
+        self.style.right,
+      ),
+      (
+        BorderSide::Bottom,
+        self.width.bottom,
+        self.color.bottom,
+        self.style.bottom,
+      ),
+      (
+        BorderSide::Left,
+        self.width.left,
+        self.color.left,
+        self.style.left,
+      ),
+    ]
+    .into_iter()
+    .filter_map(|(side, width, color, style)| {
+      (Self::is_side_visible(style, width) && color.0[3] != 0).then_some(PaintedSide {
+        side,
+        width,
+        color,
+        style,
+      })
+    })
   }
 
   /// True if any side is rendered with nonzero width.

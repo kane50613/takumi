@@ -10,4 +10,4 @@ packages:
 
 `PaintDevice` gains `stroke_shape`, with a default that does nothing for a backend without a stroker.
 
-A fully transparent border no longer reaches the output.
+A fully transparent border no longer reaches the output. `BorderProperties::painted_sides` lists the sides that do paint, so a backend that walks them one by one skips the clip group entirely when none of them will.

@@ -9,7 +9,9 @@ use takumi_core::{
   error::Result,
   geometry::{ComputedLayout as Layout, NodeId, Point, Rect, Size},
   layout::{
-    border::{BorderPaint, BorderProperties, BorderSide, border_dash_pattern, border_paint},
+    border::{
+      BorderPaint, BorderProperties, BorderSide, PaintedSide, border_dash_pattern, border_paint,
+    },
     decoration::{ClipBox, OutlineGeometry},
     inline::{InlineBoxItem, VisualInlineBox},
     inline_box::{InlineBoxPaint, resolve_inline_box},
@@ -840,47 +842,25 @@ pub(crate) fn emit_borders(
     return Ok(());
   }
 
+  let mut sides = border.painted_sides().peekable();
+
+  if sides.peek().is_none() {
+    return Ok(());
+  }
+
   // Mixed per-side styles/colors: clip to the ring; fill solid sides as their
   // diagonal-split polygon and stroke dashed/dotted sides along their centerline.
   let clip = doc.clip_path_evenodd(&ring_data)?;
   let group = doc.begin_group(IDENTITY, 1.0, Some(&clip), None)?;
-  for (side, width, color, style) in [
-    (
-      BorderSide::Top,
-      border.width.top,
-      border.color.top,
-      border.style.top,
-    ),
-    (
-      BorderSide::Right,
-      border.width.right,
-      border.color.right,
-      border.style.right,
-    ),
-    (
-      BorderSide::Bottom,
-      border.width.bottom,
-      border.color.bottom,
-      border.style.bottom,
-    ),
-    (
-      BorderSide::Left,
-      border.width.left,
-      border.color.left,
-      border.style.left,
-    ),
-  ] {
-    if width <= 0.0 || color.0[3] == 0 || !style.is_rendered() {
-      continue;
-    }
-    match style {
+  for side in sides {
+    match side.style {
       BorderStyle::Dashed | BorderStyle::Dotted => {
-        emit_side_pattern(border, side, width, color, style, geom, doc)?;
+        emit_side_pattern(border, side, geom, doc)?;
       }
       _ => {
         let mut polygon = Vec::new();
-        border.append_side_clip_polygon_commands_at(side, &mut polygon, size, Point::ZERO);
-        doc.path(&path_data(&polygon, matrix), Rgba(color.0))?;
+        border.append_side_clip_polygon_commands_at(side.side, &mut polygon, size, Point::ZERO);
+        doc.path(&path_data(&polygon, matrix), Rgba(side.color.0))?;
       }
     }
   }
@@ -893,10 +873,7 @@ pub(crate) fn emit_borders(
 /// mirror the uniform stroked path (dashed `3w 2w`, dotted `0 2w` + round caps).
 fn emit_side_pattern(
   border: &BorderProperties,
-  side: BorderSide,
-  width: f32,
-  color: Color,
-  style: BorderStyle,
+  side: PaintedSide,
   geom: BorderGeom,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
@@ -907,7 +884,7 @@ fn emit_side_pattern(
     border.width.bottom / 2.0,
     border.width.left / 2.0,
   );
-  let ((x0, y0), (x1, y1)) = match side {
+  let ((x0, y0), (x1, y1)) = match side.side {
     BorderSide::Top => ((half_left, half_top), (size.width - half_right, half_top)),
     BorderSide::Right => (
       (size.width - half_right, half_top),
@@ -933,8 +910,14 @@ fn emit_side_pattern(
   path.pair(mx1, my1);
   let data = path.into_string();
   let length = ((x1 - x0).powi(2) + (y1 - y0).powi(2)).sqrt();
-  let (dasharray, linecap) = dash_attrs(width, style, length, false);
-  doc.stroke_path(&data, Rgba(color.0), width, dasharray.as_deref(), linecap)
+  let (dasharray, linecap) = dash_attrs(side.width, side.style, length, false);
+  doc.stroke_path(
+    &data,
+    Rgba(side.color.0),
+    side.width,
+    dasharray.as_deref(),
+    linecap,
+  )
 }
 
 /// Emits the CSS `outline` as a ring around the border-box, expanded outward by
