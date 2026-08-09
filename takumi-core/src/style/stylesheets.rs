@@ -1700,6 +1700,23 @@ impl StyleDeclarationBlock {
   pub(crate) fn parse<'i>(name: &str, input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     parse_style_declaration(name, input)
   }
+
+  /// Parses a declaration list, dropping the declarations that fail and keeping the rest.
+  ///
+  /// This is how CSS asks a `style` attribute to be read: an unsupported value invalidates
+  /// its own declaration and nothing else. [`FromStr`] stays strict for callers that want to
+  /// know the input was not fully understood.
+  pub fn parse_loosy(input: &str) -> Self {
+    let mut parser_input = ParserInput::new(input);
+    let mut parser = Parser::new(&mut parser_input);
+    let mut declaration_parser = StyleDeclarationParser;
+    let mut block = Self::default();
+
+    for declarations in RuleBodyParser::new(&mut parser, &mut declaration_parser).flatten() {
+      block.append(declarations);
+    }
+    block
+  }
 }
 
 impl FromStr for StyleDeclarationBlock {
