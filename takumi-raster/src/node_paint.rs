@@ -204,6 +204,25 @@ pub(crate) fn draw_background(
         layout,
       )?;
     }
+    // Filling the border's own shape with the layers is the clip `border-area`
+    // asks for. The border then paints over it, as it does in Blink.
+    BackgroundClip::BorderArea => {
+      let layers = rasterize_layers(
+        collect_background_layers(context, layout)?,
+        layout.size.map(|size| size as u32),
+        context,
+        BorderProperties::default(),
+        Affine::IDENTITY,
+      )?;
+
+      paint_border(
+        border_radius,
+        canvas,
+        layout.size,
+        context.transform,
+        layers.as_ref().map(PaintSource::from),
+      );
+    }
     _ => {}
   }
 
@@ -244,24 +263,12 @@ pub(crate) fn draw_border(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  let clip_image = if context.style.background_clip == BackgroundClip::BorderArea {
-    rasterize_layers(
-      collect_background_layers(context, layout)?,
-      layout.size.map(|x| x as u32),
-      context,
-      BorderProperties::default(),
-      Affine::IDENTITY,
-    )?
-  } else {
-    None
-  };
-
   paint_border(
     BorderProperties::from_context(context, layout.size, layout.border),
     canvas,
     layout.size,
     context.transform,
-    clip_image.as_ref().map(PaintSource::from),
+    None,
   );
 
   Ok(())
