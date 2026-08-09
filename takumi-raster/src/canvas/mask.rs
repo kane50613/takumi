@@ -1,20 +1,16 @@
 use std::{borrow::Cow, sync::Arc};
 
-use takumi_core::geometry::{
-  ComputedLayout as Layout, Point, Rect, Size, transformed_rect_extents,
-};
+use takumi_core::geometry::{ComputedLayout as Layout, Point, Size, transformed_rect_extents};
 use tiny_skia::{
   FillRule as TinyFillRule, IntSize, Mask as TinyMask, PathBuilder as TinyPathBuilder,
   Rect as TinyRect, Transform as TinyTransform,
 };
 
 use crate::{
-  BorderProperties, Command, Fill, PathBuilder, Placement, RenderContext, Result, Style,
-  build_path, create_mask, fast_div_255, parse_svg_path_segments, push_ellipse, scale_commands,
-  style::{
-    Affine, Axis, BasicShape, BorderStyle, Color, ComputedStyle, FillRule, ImageScalingAlgorithm,
-    Overflow, ShapeRadius, Sides, SizingContext, SpacePair,
-  },
+  BorderProperties, Command, Fill, Placement, RenderContext, Result, Style, build_path,
+  create_mask, fast_div_255,
+  layout::clip::clip_shape_commands,
+  style::{Affine, BasicShape, ComputedStyle, FillRule, Overflow},
 };
 
 pub(crate) enum NodeMaskAction {
@@ -560,122 +556,12 @@ impl From<FillRule> for Fill {
   }
 }
 
-fn resolve_radius(
-  radius: ShapeRadius,
-  distance: Size<f32>,
-  sizing: &SizingContext,
-  full: f32,
-) -> f32 {
-  match radius {
-    ShapeRadius::ClosestSide => distance.width.min(distance.height),
-    ShapeRadius::FarthestSide => distance.width.max(distance.height),
-    ShapeRadius::Length(length) => length.to_px(sizing, full),
-  }
-}
-
 pub(crate) fn render_clip_shape_mask(
   shape: &BasicShape,
   context: &RenderContext,
   size: Size<f32>,
 ) -> (Vec<u8>, Placement) {
-  let mut paths = Vec::new();
-
-  match shape {
-    BasicShape::Inset(shape) => {
-      let inset: Rect<f32> = shape
-        .inset
-        .map_axis(|value, axis| {
-          value.to_px(
-            &context.sizing,
-            match axis {
-              Axis::Horizontal => size.width,
-              Axis::Vertical => size.height,
-            },
-          )
-        })
-        .into();
-
-      let border = BorderProperties {
-        width: Rect::ZERO,
-        color: Rect {
-          top: Color::transparent(),
-          right: Color::transparent(),
-          bottom: Color::transparent(),
-          left: Color::transparent(),
-        },
-        radius: shape
-          .border_radius
-          .map(|radius| {
-            Sides(
-              radius
-                .0
-                .map(|corner| SpacePair::from_single(corner.to_px(&context.sizing, size.width))),
-            )
-          })
-          .unwrap_or_default(),
-        image_rendering: ImageScalingAlgorithm::Auto,
-        style: Rect {
-          top: BorderStyle::Solid,
-          right: BorderStyle::Solid,
-          bottom: BorderStyle::Solid,
-          left: BorderStyle::Solid,
-        },
-        shape: Sides::default(),
-      };
-
-      border.append_mask_commands(
-        &mut paths,
-        Size {
-          width: size.width - inset.horizontal(),
-          height: size.height - inset.vertical(),
-        },
-        Point {
-          x: inset.left,
-          y: inset.top,
-        },
-      );
-    }
-    BasicShape::Ellipse(shape) => {
-      let distance = Size {
-        width: shape.position.0.x.to_px(&context.sizing, size.width),
-        height: shape.position.0.y.to_px(&context.sizing, size.height),
-      };
-
-      push_ellipse(
-        &mut paths,
-        (distance.width, distance.height),
-        resolve_radius(shape.radius_x, distance, &context.sizing, size.width),
-        resolve_radius(shape.radius_y, distance, &context.sizing, size.height),
-      );
-    }
-    BasicShape::Polygon(shape) => {
-      if !shape.coordinates.is_empty() {
-        let first = &shape.coordinates[0];
-        let first_x = first.x.to_px(&context.sizing, size.width);
-        let first_y = first.y.to_px(&context.sizing, size.height);
-
-        paths.move_to((first_x, first_y));
-
-        for coord in &shape.coordinates[1..] {
-          let x = coord.x.to_px(&context.sizing, size.width);
-          let y = coord.y.to_px(&context.sizing, size.height);
-          paths.line_to((x, y));
-        }
-
-        paths.close();
-      }
-    }
-    BasicShape::Path(shape) => {
-      // path() coords are CSS px; scale to device space like the to_px shapes.
-      let scale = context.sizing.to_device(1.0);
-      paths.extend(scale_commands(
-        parse_svg_path_segments(shape.path.as_ref()).unwrap_or_default(),
-        scale,
-      ));
-    }
-    _ => {}
-  }
-
+  let paths = clip_shape_commands(shape, context, size).unwrap_or_default();
   render_mask(
     &paths,
     Some(context.transform),
