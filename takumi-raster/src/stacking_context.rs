@@ -1,6 +1,6 @@
 use takumi_core::{
-  context::RenderContext,
   geometry::{ComputedLayout as Layout, NodeId, Point, Size, transformed_rect_extents},
+  layout::decoration::OutlineGeometry,
   scene::{NodePaint, PaintItem, PaintItemKind, SceneBounds, StackingContextNode},
 };
 use tiny_skia::{Pixmap, PixmapMut};
@@ -18,7 +18,7 @@ use crate::{
     },
     tree::{LayoutResults, RenderNode},
   },
-  prepare_node_mask,
+  prepare_node_mask, resolve_outline,
   style::{Affine, BackgroundImage, BlendMode, Filter, SizingContext},
   uninit_buffer,
 };
@@ -131,15 +131,15 @@ enum DeferredNodeRender {
   },
   SkipRendering,
 }
-/// A box's outline, held until everything inside the box has painted.
+
 pub(crate) struct DeferredOutline {
-  context: RenderContext,
-  layout: Layout,
+  outline: OutlineGeometry,
+  transform: Affine,
 }
 
 impl DeferredOutline {
-  fn paint(&self, canvas: &mut Canvas) -> Result<()> {
-    draw_outline(&self.context, canvas, self.layout)
+  fn paint(&self, canvas: &mut Canvas) {
+    draw_outline(&self.outline, self.transform, canvas);
   }
 }
 
@@ -152,18 +152,15 @@ fn finish_node_render(
   filter_bounds: Option<SceneBounds>,
   outlines: Option<&mut Vec<DeferredOutline>>,
 ) -> Result<()> {
-  // CSS 2.1 Appendix E paints the outline last: above the box's own content,
-  // its inline layout, and its children, but still inside the box's filter and
-  // mask. A node whose children are later items in the same bucket hands its
-  // outline to the caller, which paints it once the bucket is done.
-  let deferred = DeferredOutline {
-    context: node.context.clone(),
-    layout,
-  };
+  // CSS 2.1 Appendix E paints the outline last, above the box's children, so a
+  // node whose children follow it in the bucket hands its outline to the caller.
+  if let Some((outline, transform)) = resolve_outline(&node.context, layout) {
+    let deferred = DeferredOutline { outline, transform };
 
-  match outlines {
-    Some(outlines) => outlines.push(deferred),
-    None => deferred.paint(canvas)?,
+    match outlines {
+      Some(outlines) => outlines.push(deferred),
+      None => deferred.paint(canvas),
+    }
   }
 
   if !node.context.style.filter.is_empty() {
@@ -523,8 +520,6 @@ pub(crate) fn paint_context(
   }
 
   let mut deferred_root = None;
-  // A plain node's children are later items in the same bucket, so its outline
-  // waits here rather than painting with the node's own decorations.
   let mut outlines = Vec::new();
 
   if let Some(root_paint) = context.root() {
@@ -557,7 +552,7 @@ pub(crate) fn paint_context(
   }
 
   for outline in &outlines {
-    outline.paint(canvas)?;
+    outline.paint(canvas);
   }
 
   if let Some(DeferredNodeRender::Deferred {

@@ -6,7 +6,7 @@
 
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Point as CorePoint},
-  layout::decoration::ClipBox,
+  layout::decoration::{ClipBox, OutlineGeometry},
   painter::{BoxPainter, FillShape, PaintDevice},
   style::{Color, ImageScalingAlgorithm},
 };
@@ -267,19 +267,20 @@ pub(crate) fn draw_border(
   Ok(())
 }
 
-pub(crate) fn draw_outline(
+/// The outline a box paints, resolved against its layout so nothing but the
+/// geometry has to survive until the box's children are done.
+pub(crate) fn resolve_outline(
   context: &RenderContext,
-  canvas: &mut Canvas,
   layout: Layout,
-) -> Result<()> {
-  let Some(outline) = BoxPainter::new(context, layout).outline() else {
-    return Ok(());
-  };
+) -> Option<(OutlineGeometry, Affine)> {
+  let outline = BoxPainter::new(context, layout).outline()?;
   let transform = Affine::translation(-outline.grow, -outline.grow) * context.transform;
 
-  paint_border(outline.border, canvas, outline.size, transform, None);
+  Some((outline, transform))
+}
 
-  Ok(())
+pub(crate) fn draw_outline(outline: &OutlineGeometry, transform: Affine, canvas: &mut Canvas) {
+  paint_border(outline.border, canvas, outline.size, transform, None);
 }
 
 struct SolidColorLayer<'a> {

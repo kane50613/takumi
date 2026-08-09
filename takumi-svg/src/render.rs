@@ -141,8 +141,6 @@ pub(crate) struct PendingOutline {
 }
 
 impl BoxChrome {
-  /// Hands the outline to a caller that knows when the box's descendants are
-  /// done, so [`close`](Self::close) leaves it alone.
   pub(crate) fn take_outline(&mut self) -> Option<PendingOutline> {
     self.outline.take()
   }

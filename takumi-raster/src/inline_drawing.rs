@@ -21,7 +21,7 @@ use crate::{
   painter::StrokeStyle,
   rasterize_layers,
   render::render_node,
-  render_mask,
+  render_mask, resolve_outline,
   resources::{font::FontError, glyph::ResolvedGlyph},
   style::{
     Affine, BackgroundClip, BlendMode, Color, SizedTextDecorationThickness, TextDecorationLines,
@@ -585,7 +585,10 @@ pub(crate) fn draw_inline_box(
       draw_inset_box_shadow(&context, canvas, layout)?;
       draw_border(&context, canvas, layout)?;
       draw_node_content(source, &context, canvas, layout)?;
-      draw_outline(&context, canvas, layout)
+      if let Some((outline, transform)) = resolve_outline(&context, layout) {
+        draw_outline(&outline, transform, canvas);
+      }
+      Ok(())
     }
   }
 }
