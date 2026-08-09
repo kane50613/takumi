@@ -170,6 +170,7 @@ impl SizedFontStyle<'_> {
     self.color.0.hash(hasher);
     self.text_decoration_color.0.hash(hasher);
     self.text_stroke_color.0.hash(hasher);
+    self.stroke_width.to_bits().hash(hasher);
     for token in &self.font_family.0 {
       match token {
         ExpandedFamilyToken::Named(name) => name.hash(hasher),
