@@ -211,18 +211,18 @@ function dictValue(dict: string, key: string): string | undefined {
   return undefined;
 }
 
+/** A CMap destination is UTF-16BE, so an emoji arrives as the two units of its surrogate pair. */
+function utf16Units(hex: string): number[] {
+  return (hex.match(/.{4}/g) ?? []).map((unit) => Number.parseInt(unit, 16));
+}
+
 /** Reads `beginbfchar` and `beginbfrange`, the two forms Takumi's CMaps use. */
 function parseCMap(cmap: string): Map<number, string> {
-  const utf16 = (hex: string) =>
-    (hex.match(/.{4}/g) ?? [])
-      .map((unit) => String.fromCharCode(Number.parseInt(unit, 16)))
-      .join("");
-
   const codes = new Map<number, string>();
 
   for (const block of cmap.matchAll(/beginbfchar([\s\S]*?)endbfchar/g)) {
     for (const [, code, value] of block[1].matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g)) {
-      codes.set(Number.parseInt(code, 16), utf16(value));
+      codes.set(Number.parseInt(code, 16), String.fromCharCode(...utf16Units(value)));
     }
   }
 
@@ -232,10 +232,15 @@ function parseCMap(cmap: string): Map<number, string> {
 
     for (const [, low, high, value] of entries) {
       const start = Number.parseInt(low, 16);
-      const first = Number.parseInt(value, 16);
+      const units = utf16Units(value);
 
+      if (units.length === 0) continue;
+
+      // A range steps the last unit, which is what keeps a surrogate pair intact.
       for (let code = start; code <= Number.parseInt(high, 16); code += 1) {
-        codes.set(code, String.fromCodePoint(first + code - start));
+        const stepped = units.with(-1, units[units.length - 1] + code - start);
+
+        codes.set(code, String.fromCharCode(...stepped));
       }
     }
   }
@@ -353,17 +358,6 @@ async function readObjects(text: string, bytes: Uint8Array) {
   // Object numbers do not carry page order; `/Kids` does.
   const tree = [...ranges.keys()].find((number) => /\/Type\s*\/Pages\b/.test(source(number) ?? ""));
   const kids = references(source(tree ?? "")?.match(/\/Kids\s*\[([^\]]*)\]/)?.[1]);
-  const pageOf = new Map<string, number[]>();
-
-  kids.forEach((kid, index) => {
-    const contents = source(kid)?.match(/\/Contents\s*(\[[^\]]*\]|\d+\s+0\s+R)/)?.[1];
-
-    // Two pages may share one stream, so a page number appends instead of replacing.
-    for (const number of references(contents)) {
-      pageOf.set(number, [...(pageOf.get(number) ?? []), index + 1]);
-    }
-  });
-
   // Streams are decoded up front because a content stream is only readable
   // through the `/ToUnicode` stream of a font two references away.
   const streams = new Map<string, Uint8Array>();
@@ -376,13 +370,18 @@ async function readObjects(text: string, bytes: Uint8Array) {
     }),
   );
 
+  const pageOf = new Map<string, number[]>();
   const fontsOf = new Map<string, Map<string, Map<number, string>>>();
 
   kids.forEach((kid, index) => {
-    const fonts = pageFonts(source(kid) ?? "", source, streams);
+    const page = source(kid) ?? "";
+    const contents = references(page.match(/\/Contents\s*(\[[^\]]*\]|\d+\s+0\s+R)/)?.[1]);
+    const fonts = pageFonts(page, source, streams);
 
-    for (const number of pageOf.keys()) {
-      if (pageOf.get(number)?.includes(index + 1)) fontsOf.set(number, fonts);
+    // Two pages may share one stream, so a page number appends instead of replacing.
+    for (const number of contents) {
+      pageOf.set(number, [...(pageOf.get(number) ?? []), index + 1]);
+      fontsOf.set(number, fonts);
     }
   });
 

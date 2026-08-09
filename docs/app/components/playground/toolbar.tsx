@@ -18,6 +18,7 @@ import { cn } from "~/lib/utils";
 import { type OutputKind, outputKinds } from "~/playground/schema";
 import { type Template, templates } from "~/playground/templates";
 import { Button } from "../ui/button";
+import { Kbd } from "../ui/kbd";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -174,6 +175,7 @@ export function Toolbar({
         >
           <PlayIcon className="size-3.5" />
           <span className="max-md:hidden">Run</span>
+          <Kbd className="ml-1 bg-current/15 px-1.5 text-[11px] text-current max-md:hidden">⌘↵</Kbd>
         </Button>
         {isStale && !hintDismissed && (
           <div className="absolute top-9 left-0 z-20 w-56 rounded-md border bg-popover p-3 text-xs shadow-md">
