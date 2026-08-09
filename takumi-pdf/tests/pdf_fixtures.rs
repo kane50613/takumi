@@ -1096,6 +1096,36 @@ fn a_clipped_away_line_reaches_no_page() {
   );
 }
 
+/// A transformed box is a single unbreakable piece, and positions inside it are
+/// in its own frame. Reading them as page coordinates cuts the page where
+/// nothing asked for a cut, and leaves a line that neither page will take.
+#[test]
+fn a_transformed_subtree_keeps_its_lines() {
+  let doc = r#"<div style="width:700px">
+    <div style="font-size:20px;height:600px">intro on the first page</div>
+    <div style="transform:rotate(3deg)">
+      <div style="height:120px;font-size:20px">first inside</div>
+      <div style="break-before:page;font-size:20px">second inside</div>
+    </div>
+    <div style="font-size:20px">tail after</div>
+  </div>"#;
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse transform doc"))
+      .page(PageOptions::A4)
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect("render transform doc");
+
+  // Four runs of text, and every one of them reaches a page.
+  assert_eq!(
+    inflated_text(&pdf).matches("Tf").count(),
+    4,
+    "a line inside the transform reached no page"
+  );
+}
+
 /// A single page and an inline subtree both render without a page window, and a
 /// clip inside one still decides what may be emitted. The cut-away line is the
 /// only Chinese on the page, so the face it would need says whether it reached

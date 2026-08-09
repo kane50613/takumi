@@ -77,6 +77,7 @@ impl PreparedTree {
       color_filter: None,
       uncovered,
       document_lang,
+      transformed: false,
       root: &self.root,
       contexts: &self.contexts,
       results: &self.results,

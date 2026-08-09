@@ -125,6 +125,10 @@ pub(crate) struct Emitter<'a> {
   /// its content marked with that language, which is how a reader knows to
   /// switch voices mid-document.
   pub(crate) document_lang: Option<&'a str>,
+  /// Whether the walk sits inside a frame that is not a plain translation.
+  /// Below one, a position is in the frame's own coordinates and says nothing
+  /// about where the page cuts, so the subtree is placed by its bounds alone.
+  pub(crate) transformed: bool,
   /// Characters no registered font covered. Collected rather than raised on the
   /// spot: the surface has open transforms and clips mid-page, and unwinding
   /// past them would leave it unbalanced.
@@ -143,9 +147,10 @@ impl Emitter<'_> {
   /// ascent band, which can poke above the container a forced break cut at) and
   /// half-open, so each line is emitted exactly once.
   fn window_disowns_line(&self, baseline: f32) -> bool {
-    self
-      .line_window
-      .is_some_and(|(y0, y1)| baseline < y0 || baseline >= y1)
+    !self.transformed
+      && self
+        .line_window
+        .is_some_and(|(y0, y1)| baseline < y0 || baseline >= y1)
   }
 
   fn window_excludes_bounds(&self, bounds: Option<takumi_core::scene::SceneBounds>) -> bool {
@@ -189,6 +194,7 @@ impl Emitter<'_> {
     }
 
     let (outer_window, outer_line_window) = (self.window, self.line_window);
+    let outer_transformed = self.transformed;
     let (child_frame, root_state) = match context.root() {
       Some(paint) => self.emit_box(paint, parent, surface)?,
       None => (parent, BoxState::default()),
@@ -222,6 +228,7 @@ impl Emitter<'_> {
     }
     self.finish_box(root_state, surface);
     (self.window, self.line_window) = (outer_window, outer_line_window);
+    self.transformed = outer_transformed;
     self.color_filter = outer_filter;
     Ok(())
   }
@@ -261,6 +268,10 @@ impl Emitter<'_> {
     }
 
     let relative = parent.invert().unwrap_or(Affine::IDENTITY) * paint.transform;
+
+    if !relative.only_translation() {
+      self.transformed = true;
+    }
     let (x, y) = if relative.only_translation() {
       (relative.x, relative.y)
     } else {
@@ -353,7 +364,7 @@ impl Emitter<'_> {
       // A clip keeps content off the page but not out of the text layer, so
       // what it cuts away must never be emitted. Only a translated frame maps
       // the box onto the window's axis.
-      if relative.only_translation() {
+      if relative.only_translation() && !self.transformed {
         let (top, bottom) = (y, y + layout.size.height);
 
         self.window = Some(narrowed(self.window, top, bottom));
@@ -1445,6 +1456,7 @@ impl Emitter<'_> {
       color_filter: self.color_filter.clone(),
       uncovered: self.uncovered,
       document_lang: self.document_lang,
+      transformed: self.transformed,
     };
     let x = origin.0 + subtree.margin_offset.x;
     let y = origin.1 + subtree.margin_offset.y;
@@ -1648,6 +1660,7 @@ impl Emitter<'_> {
       return Ok(());
     };
 
+    let outer_transformed = self.transformed;
     let child_frame = match context.root() {
       Some(paint) => self.collect_box_atoms(paint, parent, atoms, forced)?,
       None => parent,
@@ -1665,6 +1678,7 @@ impl Emitter<'_> {
         }
       }
     }
+    self.transformed = outer_transformed;
     Ok(())
   }
 
@@ -1686,10 +1700,15 @@ impl Emitter<'_> {
     };
 
     let relative = parent.invert().unwrap_or(Affine::IDENTITY) * paint.transform;
+
+    if self.transformed {
+      return Ok(parent * relative);
+    }
     if !relative.only_translation() {
       if let Some(bounds) = paint.paint_bounds {
         atoms.push((bounds.top as f32, bounds.bottom as f32));
       }
+      self.transformed = true;
       return Ok(parent * relative);
     }
     let y = relative.y;
