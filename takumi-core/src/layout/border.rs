@@ -885,6 +885,66 @@ const DOTTED_ENDPOINT_EPSILON: f32 = 1.0e-2;
 /// stroke (non-dash style, or a segment too short to dash). `length` is the side
 /// length (or the ring perimeter when `closed`). Dash/gap adjust by width and
 /// length so the pattern fits the side evenly.
+/// How a border paints as a whole, before any per-side work.
+///
+/// A uniform dashed, dotted, or double border cannot be filled side by side:
+/// the pattern has to run around the whole ring, so it strokes a centerline
+/// instead. Every backend makes this call the same way.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum BorderPaint {
+  /// Stroke the centerline with the dash pattern for `style`.
+  Stroked {
+    /// The uniform colour.
+    color: Color,
+    /// The uniform width.
+    width: f32,
+    /// `Dashed` or `Dotted`.
+    style: BorderStyle,
+  },
+  /// Two concentric rings.
+  Double {
+    /// The uniform colour.
+    color: Color,
+    /// The uniform width.
+    width: f32,
+  },
+  /// One even-odd fill of the whole ring.
+  Ring {
+    /// The uniform colour.
+    color: Color,
+  },
+  /// Each side on its own.
+  Sides,
+}
+
+/// Decides how `border` paints. See [`BorderPaint`].
+pub fn border_paint(border: &BorderProperties) -> BorderPaint {
+  let Some(color) = border.has_uniform_visible_color() else {
+    return BorderPaint::Sides;
+  };
+  let width = border.width.top;
+
+  for style in [BorderStyle::Dashed, BorderStyle::Dotted] {
+    if border.is_uniform_all_sides_style(style) {
+      return BorderPaint::Stroked {
+        color,
+        width,
+        style,
+      };
+    }
+  }
+  if border.is_uniform_all_sides_style(BorderStyle::Double) {
+    return BorderPaint::Double { color, width };
+  }
+
+  BorderPaint::Ring { color }
+}
+
+/// The dash pattern for a stroked `dashed`/`dotted` border or outline side,
+/// shared by every backend: `([dash, gap], round_cap)`, or `None` for a solid
+/// stroke (non-dash style, or a segment too short to dash). `length` is the side
+/// length (or the ring perimeter when `closed`). Dash/gap adjust by width and
+/// length so the pattern fits the side evenly.
 pub fn border_dash_pattern(
   width: f32,
   style: BorderStyle,

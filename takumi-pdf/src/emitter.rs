@@ -10,8 +10,8 @@ use crate::krilla::{
   mask::{Mask, MaskType},
   num::NormalizedF32,
   paint::{
-    Fill, FillRule, LinearGradient as KrillaLinearGradient, Paint, Pattern,
-    RadialGradient as KrillaRadialGradient, SpreadMethod, Stroke, SweepGradient,
+    Fill, FillRule, LineCap, LinearGradient as KrillaLinearGradient, Paint, Pattern,
+    RadialGradient as KrillaRadialGradient, SpreadMethod, Stroke, StrokeDash, SweepGradient,
   },
   surface::Surface,
   tagging::{Artifact, ArtifactType, ContentTag},
@@ -26,9 +26,9 @@ use takumi_core::{
 };
 use takumi_core::{
   font_style::SizedFontStyle,
-  geometry::{ComputedLayout as Layout, NodeId, Point as CorePoint, Size},
+  geometry::{ComputedLayout as Layout, NodeId, Point as CorePoint, Rect as CoreRect, Size},
   layout::{
-    border::{BorderProperties, BorderSide},
+    border::{BorderPaint, BorderProperties, BorderSide, border_dash_pattern, border_paint},
     clip::clip_shape_commands,
     decoration::{ClipBox, OutlineGeometry},
     inline::{BuiltInlineLayout, InlineRunLayout, ProcessedInlineSpan, ShapedRun, run_decorations},
@@ -40,9 +40,9 @@ use takumi_core::{
   scene::{NodePaint, PaintItemKind, StackingContextNode, build_stacking_contexts},
   shadow::SizedShadow,
   style::{
-    Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BlendMode, BoxDecorationBreak,
-    BoxShadow, BreakBetween, BreakInside, Color, FillRule as CoreFillRule, Isolation,
-    ResolvedGradientStop, TextDecorationLines,
+    Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BlendMode, BorderStyle,
+    BoxDecorationBreak, BoxShadow, BreakBetween, BreakInside, Color, FillRule as CoreFillRule,
+    Isolation, ResolvedGradientStop, Sides, TextDecorationLines,
   },
 };
 
@@ -885,6 +885,118 @@ impl Emitter<'_> {
     );
   }
 
+  /// Strokes the border's centerline with its dash pattern, which is how a
+  /// uniform `dashed` or `dotted` border paints: the pattern has to run round
+  /// the whole ring rather than restart on each side.
+  #[allow(clippy::too_many_arguments)]
+  fn emit_stroked_border(
+    &self,
+    border: &BorderProperties,
+    color: Color,
+    width: f32,
+    style: BorderStyle,
+    x: f32,
+    y: f32,
+    size: Size<f32>,
+    surface: &mut Surface,
+  ) {
+    if color.0[3] == 0 || width <= 0.0 {
+      return;
+    }
+    let half = width / 2.0;
+    let mut center = *border;
+
+    center.expand_by(CoreRect {
+      top: -half,
+      right: -half,
+      bottom: -half,
+      left: -half,
+    });
+
+    let center_size = Size {
+      width: (size.width - width).max(0.0),
+      height: (size.height - width).max(0.0),
+    };
+    let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
+
+    center.append_mask_commands(&mut commands, center_size, CorePoint { x: half, y: half });
+    let Some(path) = krilla_path(&commands, x, y) else {
+      return;
+    };
+    let perimeter = center.approximate_rounded_rect_perimeter(center_size);
+    let dash = border_dash_pattern(width, style, perimeter, true);
+    let artifact = self.start_artifact(surface);
+
+    surface.set_fill(None);
+    surface.set_stroke(Some(Stroke {
+      paint: fill_from_rgba(self.filtered(color), 1.0).paint,
+      width,
+      line_cap: match dash {
+        Some((_, true)) => LineCap::Round,
+        _ => LineCap::Butt,
+      },
+      dash: dash.map(|(intervals, _)| StrokeDash {
+        array: intervals.to_vec(),
+        offset: 0.0,
+      }),
+      ..Stroke::default()
+    }));
+    surface.draw_path(&path);
+    surface.set_stroke(None);
+    if artifact {
+      surface.end_tagged();
+    }
+  }
+
+  /// Fills the two rings a uniform `double` border is made of.
+  #[allow(clippy::too_many_arguments)]
+  fn emit_double_border(
+    &self,
+    border: &BorderProperties,
+    color: Color,
+    width: f32,
+    x: f32,
+    y: f32,
+    size: Size<f32>,
+    surface: &mut Surface,
+  ) {
+    if color.0[3] == 0 || width <= 0.0 {
+      return;
+    }
+    let third = width / 3.0;
+    let artifact = self.start_artifact(surface);
+
+    surface.set_fill(Some(Fill {
+      rule: FillRule::EvenOdd,
+      ..fill_from_rgba(self.filtered(color), 1.0)
+    }));
+    for inset in [0.0, third * 2.0] {
+      let mut ring = *border;
+
+      ring.expand_by(CoreRect {
+        top: -inset,
+        right: -inset,
+        bottom: -inset,
+        left: -inset,
+      });
+      ring.width = Sides([third; 4]).into();
+
+      let ring_size = Size {
+        width: (size.width - inset * 2.0).max(0.0),
+        height: (size.height - inset * 2.0).max(0.0),
+      };
+      let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
+
+      ring.append_border_ring_commands(&mut commands, ring_size);
+      if let Some(path) = krilla_path(&commands, x + inset, y + inset) {
+        surface.draw_path(&path);
+      }
+    }
+    if artifact {
+      surface.end_tagged();
+    }
+  }
+
   fn emit_borders(
     &self,
     border: &BorderProperties,
@@ -903,20 +1015,35 @@ impl Emitter<'_> {
       return;
     };
 
-    if let Some(color) = border.has_uniform_visible_color() {
-      if color.0[3] != 0 {
-        let artifact = self.start_artifact(surface);
-
-        surface.set_fill(Some(Fill {
-          rule: FillRule::EvenOdd,
-          ..fill_from_rgba(self.filtered(color), 1.0)
-        }));
-        surface.draw_path(&ring_path);
-        if artifact {
-          surface.end_tagged();
-        }
+    match border_paint(border) {
+      BorderPaint::Stroked {
+        color,
+        width,
+        style,
+      } => {
+        self.emit_stroked_border(border, color, width, style, x, y, size, surface);
+        return;
       }
-      return;
+      BorderPaint::Double { color, width } => {
+        self.emit_double_border(border, color, width, x, y, size, surface);
+        return;
+      }
+      BorderPaint::Ring { color } => {
+        if color.0[3] != 0 {
+          let artifact = self.start_artifact(surface);
+
+          surface.set_fill(Some(Fill {
+            rule: FillRule::EvenOdd,
+            ..fill_from_rgba(self.filtered(color), 1.0)
+          }));
+          surface.draw_path(&ring_path);
+          if artifact {
+            surface.end_tagged();
+          }
+        }
+        return;
+      }
+      BorderPaint::Sides => {}
     }
     let artifact = self.start_artifact(surface);
 

@@ -740,17 +740,17 @@ fn outlines() {
       .fonts(fonts)
       .build()
   });
-  // The solid indigo rings and the dashed red one fill with their outline
-  // colors, inside the deflated content streams.
+  // A solid ring fills; a dashed one strokes its centerline so the dashes
+  // survive. Both carry their outline color into the deflated content streams.
   let content: Vec<Vec<u8>> = content_lines(&pdf).collect();
 
   for needle in [
     &b"0.2627 0.2196 0.7922 rg"[..],
-    &b"0.7255 0.1098 0.1098 rg"[..],
+    &b"0.7255 0.1098 0.1098 RG"[..],
   ] {
     assert!(
       content.iter().any(|line| find(line, needle).is_some()),
-      "expected an outline color fill"
+      "expected an outline color"
     );
   }
 }

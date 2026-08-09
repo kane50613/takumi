@@ -9,7 +9,7 @@ use takumi_core::{
   error::Result,
   geometry::{ComputedLayout as Layout, NodeId, Point, Rect, Size},
   layout::{
-    border::{BorderProperties, BorderSide, border_dash_pattern},
+    border::{BorderPaint, BorderProperties, BorderSide, border_dash_pattern, border_paint},
     decoration::{ClipBox, OutlineGeometry},
     inline::{InlineBoxItem, VisualInlineBox},
     inline_box::{InlineBoxPaint, resolve_inline_box},
@@ -805,18 +805,16 @@ pub(crate) fn emit_borders(
   let matrix = [1.0, 0.0, 0.0, 1.0, x, y];
   let geom = BorderGeom { matrix, size };
 
-  // Uniform dashed/dotted/double borders need stroke-based rendering, not fills.
-  if let Some(color) = border.has_uniform_visible_color() {
-    let width = border.width.top;
-    if border.is_uniform_all_sides_style(BorderStyle::Dashed) {
-      return emit_stroked_border(border, color, width, geom, BorderStyle::Dashed, doc);
-    }
-    if border.is_uniform_all_sides_style(BorderStyle::Dotted) {
-      return emit_stroked_border(border, color, width, geom, BorderStyle::Dotted, doc);
-    }
-    if border.is_uniform_all_sides_style(BorderStyle::Double) {
+  match border_paint(border) {
+    BorderPaint::Stroked {
+      color,
+      width,
+      style,
+    } => return emit_stroked_border(border, color, width, geom, style, doc),
+    BorderPaint::Double { color, width } => {
       return emit_double_border(border, color, width, geom, doc);
     }
+    BorderPaint::Ring { .. } | BorderPaint::Sides => {}
   }
 
   // A visible dashed/dotted side can't be filled solid; route to the per-side
