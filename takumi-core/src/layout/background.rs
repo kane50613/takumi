@@ -141,22 +141,35 @@ fn resolve_axis_tiles(
   }
 }
 
+/// The size of a `background-size` axis left `auto`, taken from the image's
+/// ratio once the other axis is settled.
+///
+/// `round` rescales the axis it applies to, and the `auto` one has to follow,
+/// or the tile stops matching the image's shape.
+pub fn auto_axis_from_intrinsic(
+  auto_axis: AutoBackgroundAxis,
+  intrinsic_ratio: Option<f32>,
+  fixed_size: f32,
+) -> Option<f32> {
+  let ratio = intrinsic_ratio?;
+
+  if ratio == 0.0 {
+    return Some(0.0);
+  }
+
+  Some(match auto_axis {
+    AutoBackgroundAxis::Width => fixed_size * ratio,
+    AutoBackgroundAxis::Height => fixed_size / ratio,
+  })
+}
+
 fn resolve_auto_axis_from_intrinsic(
   auto_axis: AutoBackgroundAxis,
   intrinsic_ratio: Option<f32>,
   fixed_size: u32,
 ) -> Option<u32> {
-  let ratio = intrinsic_ratio?;
-  if ratio == 0.0 {
-    return Some(0);
-  }
-
-  let resolved = match auto_axis {
-    AutoBackgroundAxis::Width => fixed_size as f32 * ratio,
-    AutoBackgroundAxis::Height => fixed_size as f32 / ratio,
-  };
-
-  Some(resolved.round() as u32)
+  auto_axis_from_intrinsic(auto_axis, intrinsic_ratio, fixed_size as f32)
+    .map(|size| size.round() as u32)
 }
 
 /// Resolves a `background-position` length against the free space on an axis.
