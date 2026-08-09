@@ -23,19 +23,17 @@ pub(crate) fn run_glyphs(
   run_text: &str,
   uncovered: &mut String,
 ) -> Vec<PdfGlyph> {
-  let spans = glyph_text_spans(shaped, run_text);
+  let clusters = cluster_spans(shaped, run_text);
 
-  for (glyph, span) in shaped.glyphs.iter().zip(&spans) {
-    if glyph.id != 0 {
-      continue;
-    }
-    for character in run_text.get(span.clone()).unwrap_or_default().chars() {
-      if !uncovered.contains(character) {
-        uncovered.push(character);
-      }
-    }
+  if let Some(clusters) = &clusters {
+    collect_uncovered(shaped, run_text, clusters, uncovered);
   }
 
+  let mut spans = clusters
+    // Alignment unknown: map every glyph to the whole run.
+    .unwrap_or_else(|| vec![0..run_text.len(); shaped.glyphs.len()]);
+
+  merge_overlapping_spans(&mut spans);
   shaped
     .glyphs
     .iter()
@@ -47,6 +45,29 @@ pub(crate) fn run_glyphs(
       range,
     })
     .collect()
+}
+
+/// Adds the characters that came out as `.notdef`.
+///
+/// Reads the shaper's own cluster spans, before they are merged for ToUnicode:
+/// a merged span covers its neighbour's text too, and the fallback span covers
+/// the whole run, either of which would blame characters that shaped fine.
+fn collect_uncovered(
+  shaped: &ShapedRun,
+  run_text: &str,
+  clusters: &[Range<usize>],
+  uncovered: &mut String,
+) {
+  for (glyph, cluster) in shaped.glyphs.iter().zip(clusters) {
+    if glyph.id != 0 {
+      continue;
+    }
+    for character in run_text.get(cluster.clone()).unwrap_or_default().chars() {
+      if !uncovered.contains(character) {
+        uncovered.push(character);
+      }
+    }
+  }
 }
 
 /// The error naming what no font covered, or `None` when everything mapped.
@@ -63,13 +84,18 @@ pub(crate) fn uncovered_error(uncovered: &str) -> Option<PdfError> {
   Some(PdfError::MissingGlyphs(named))
 }
 
-/// Per-glyph byte ranges into `run_text` for ToUnicode, from the shaper's
-/// cluster segmentation (correct for ligatures and complex scripts).
-fn glyph_text_spans(shaped: &ShapedRun, run_text: &str) -> Vec<Range<usize>> {
+/// Per-glyph byte ranges into `run_text`, from the shaper's cluster
+/// segmentation (correct for ligatures and complex scripts). `None` when the
+/// shaper's ranges do not line up with the glyphs, which leaves every glyph's
+/// text unknown rather than wrong.
+fn cluster_spans(shaped: &ShapedRun, run_text: &str) -> Option<Vec<Range<usize>>> {
+  if shaped.cluster_ranges.len() != shaped.glyphs.len() {
+    return None;
+  }
   let base = shaped.text_range.start;
 
-  if shaped.cluster_ranges.len() == shaped.glyphs.len() {
-    let mut spans: Vec<Range<usize>> = shaped
+  Some(
+    shaped
       .cluster_ranges
       .iter()
       .map(|range| {
@@ -78,14 +104,8 @@ fn glyph_text_spans(shaped: &ShapedRun, run_text: &str) -> Vec<Range<usize>> {
 
         if start <= end { start..end } else { 0..0 }
       })
-      .collect();
-
-    merge_overlapping_spans(&mut spans);
-    return spans;
-  }
-
-  // Alignment unknown: map every glyph to the whole run.
-  vec![0..run_text.len(); shaped.glyphs.len()]
+      .collect(),
+  )
 }
 
 /// Gives every glyph whose text overlaps its neighbour's the union of the two.
