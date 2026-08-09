@@ -1097,6 +1097,54 @@ fn blend_opacity_isolation() {
   });
 }
 
+/// PDF/UA-2 asks every link inside a document to name a structure element. A
+/// link can point at anything with an id, including markup that carries no
+/// meaning of its own and would otherwise leave no element to name.
+#[test]
+fn a_link_target_without_meaning_still_gets_an_element() {
+  for target in [
+    r#"<div id="target">plain target div</div>"#,
+    r#"<div id="target"></div>"#,
+  ] {
+    let doc = format!(
+      r##"<div style="width:700px;font-size:20px">
+        <p><a href="#target">jump to target</a></p>
+        <h1>heading for the outline</h1>
+        {target}
+      </div>"##
+    );
+    let pdf = render(
+      PdfOptions::builder()
+        .node(from_html(&doc, FromHtmlOptions::default()).expect("parse anchor doc"))
+        .page(PageOptions::A4)
+        .tagged(Tagging::Ua2)
+        .standard(PdfStandard::A4)
+        .lang(Some(takumi_core::style::Lang::parse("en").expect("lang")))
+        .metadata(PdfMetadata {
+          title: Some("Anchors".into()),
+          creation_date: Some(PdfDate {
+            year: 2026,
+            month: 8,
+            day: 7,
+            hour: 0,
+            minute: 0,
+            second: 0,
+          }),
+          ..Default::default()
+        })
+        .fonts(&fonts())
+        .build(),
+    )
+    .expect("render anchor doc");
+
+    // The destination names this element, so the element has to be in the file.
+    assert!(
+      inflated_text(&pdf).contains("n.0.2"),
+      "the link target left no structure element to name: {target}"
+    );
+  }
+}
+
 /// A clip keeps content off the page, but a PDF clip does not keep it out of
 /// the text layer. Content an ancestor cuts away must never be emitted, or it
 /// stays extractable on whichever page its own geometry happens to land on.

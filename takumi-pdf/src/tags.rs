@@ -160,7 +160,16 @@ fn build_node(
   let identifiers = walk.collector.take(path);
   let mut annotations = walk.collector.take_annotations(path);
 
-  match role(node, walk, nesting) {
+  let mut role = role(node, walk, nesting);
+
+  if role.is_none() && walk.targets.contains(path.as_slice()) {
+    // A destination names a structure element, and PDF/UA-2 asks every link
+    // inside a document to be one. A target that carries no meaning of its own
+    // still has to exist for the link to land on.
+    role = Some(Tag::P.into());
+  }
+
+  match role {
     Some(kind) => {
       flush_paragraph(pending, parent);
       let is_link = matches!(kind, TagKind::Link(_));
@@ -169,7 +178,9 @@ fn build_node(
       let is_figure = matches!(kind, TagKind::Figure(_));
       let mut kind = kind;
 
-      if walk.targets.contains(path.as_slice()) {
+      let is_target = walk.targets.contains(path.as_slice());
+
+      if is_target {
         kind.set_id(Some(tag_id(path)));
       }
       let mut group = TagGroup::new(kind);
@@ -226,8 +237,10 @@ fn build_node(
         }
       }
       // Inline formatting inside a text run leaves its element without any
-      // content of its own; an empty structure element is pure noise.
-      if has_content {
+      // content of its own; an empty structure element is pure noise. An
+      // element a destination names is the exception: dropping it leaves the
+      // link pointing at nothing.
+      if has_content || is_target {
         // An `LI` outside a list is invalid on its own, so it brings a list
         // of its own along.
         if is_list_item && !nesting.in_list {
