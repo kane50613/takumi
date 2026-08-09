@@ -1,3 +1,13 @@
+## takumi-raster@0.4.13
+
+### Place inline content inside its container's transform
+
+A rotated or scaled container drew its inline boxes, its inline images and its outline in the wrong place. Those offsets were applied in device space, after the transform, instead of in the container's own coordinates. A container with a plain translation was never affected.
+
+### Stroke the span that asked for it
+
+`-webkit-text-stroke` was read off the element holding the text, so a `span` setting it for itself came out unstroked, and a nested one turning it off still got the parent's outline. The stroke now travels with the text run, in every backend.
+
 ## takumi-raster@0.4.12
 
 ### Paint a `border-area` background under the border

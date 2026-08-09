@@ -1,6 +1,6 @@
 {
   "name": "@takumi-rs/helpers",
-  "version": "2.6.0",
+  "version": "2.6.1",
   "description": "Convert JSX and HTML to Takumi node trees. Load fonts and emoji.",
   "keywords": [
     "emoji",
