@@ -271,12 +271,14 @@ export class PdfRenderer {
       footer === undefined ? undefined : resolveNode(footer),
     ]);
     const bands = [headerResult?.node, footerResult?.node].filter((band) => band !== undefined);
-    // A band's page counters render characters no node in the tree carries, and
-    // which ones depends on the counter style, so the renderer names them.
-    const counters =
-      bands.length > 0 ? counterCharacters(bands.flatMap((band) => classNames(band))) : "";
     const resources = await this.fonts.resolveResources(
-      fonts && subsetFonts({ fonts, source: [main.node, ...bands, counters] }),
+      fonts &&
+        subsetFonts({
+          fonts,
+          // A band's page counters render characters no node in the tree
+          // carries, and which ones depends on the style, so the renderer says.
+          source: [main.node, ...bands, counterCharacters(bands.flatMap(classNames))],
+        }),
       images,
       fontFamilies,
     );
