@@ -222,8 +222,8 @@ fn emit_context(
   let mut stopped = false;
   // A plain node in a bucket owns no effect groups — anything that would need
   // one makes the node its own context — so its outline can wait for the
-  // descendants that follow it in the bucket. CSS 2.1 Appendix E paints an
-  // outline last; Blink runs the same pass as `kDescendantOutlinesOnly`.
+  // descendants that follow it. Blink runs the same pass as
+  // `kDescendantOutlinesOnly`.
   let mut descendant_outlines = Vec::new();
 
   'buckets: for bucket in ctx.in_paint_order() {
