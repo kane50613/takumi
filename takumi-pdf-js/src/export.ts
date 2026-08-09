@@ -273,10 +273,13 @@ export class PdfRenderer {
   /**
    * Lays out a node tree without rendering and returns its size in CSS px.
    *
-   * With page options the tree lays out at the full page width with unbounded
-   * height, exactly how {@link render} measures a header or footer band
-   * (`pageNumber` / `totalPages` hooks are filled with three-digit counters),
-   * so the height tells you how much margin a band needs.
+   * With page options the tree lays out against the full page width with
+   * unbounded height, exactly how {@link render} measures a header or footer
+   * band (`pageNumber` / `totalPages` hooks are filled with three-digit
+   * counters), so the height tells you how much margin a band needs.
+   *
+   * The returned size is the tree's own, not the space it was laid out
+   * against: a box with `width: 100px` measures 100 wide on any page.
    */
   async measure(node: NodeInput, options: MeasureOptions = {}): Promise<MeasuredSize> {
     const { fonts, images, stylesheets, fontFamilies, ...rest } = options;

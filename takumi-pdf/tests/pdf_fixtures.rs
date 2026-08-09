@@ -2017,6 +2017,41 @@ fn measure_band_at_page_width() {
   assert!(size.height >= 12.0, "band height {}", size.height);
 }
 
+/// Measuring reports the size the tree laid out at, not the size it was laid
+/// out against. A box narrower than the page measures its own width.
+#[test]
+fn measure_reports_content_width() {
+  let fonts = fonts();
+  let node = || {
+    from_html(
+      r#"<div style="border: 1px solid #000; width: 100px; height: 100px;">A</div>"#,
+      FromHtmlOptions::default(),
+    )
+    .expect("parse node")
+  };
+  let at_page = measure(
+    MeasureOptions::builder()
+      .node(node())
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("measure at page");
+
+  assert_eq!((at_page.width, at_page.height), (100.0, 100.0));
+
+  let at_viewport = measure(
+    MeasureOptions::builder()
+      .node(node())
+      .viewport(Viewport::new((600, Some(400))))
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("measure at viewport");
+
+  assert_eq!((at_viewport.width, at_viewport.height), (100.0, 100.0));
+}
+
 /// Without a page, measurement uses the viewport; omitting both is an error.
 #[test]
 fn measure_viewport_and_missing_viewport() {

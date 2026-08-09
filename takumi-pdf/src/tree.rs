@@ -5,7 +5,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 use takumi_core::{
   Fonts,
   context::RenderContext,
-  geometry::NodeId,
+  geometry::{NodeId, Size},
   layout::{
     node::Node,
     tree::{LayoutResults, LayoutTree, RenderNode},
@@ -44,6 +44,25 @@ pub(crate) struct PreparedTree {
 }
 
 impl PreparedTree {
+  /// The size the caller's own node laid out at, which is what `measure`
+  /// reports. [`fill_root`] wraps that node in a page-wide box, so the root's
+  /// size only ever gives the page back.
+  pub(crate) fn content_size(&self) -> Size<f32> {
+    self
+      .results
+      .box_children(NodeId::ROOT)
+      .ok()
+      .and_then(|children| children.first())
+      .and_then(|child| self.results.layout(child.node_id).ok())
+      .map_or(
+        Size {
+          width: self.width,
+          height: self.height,
+        },
+        |layout| layout.size,
+      )
+  }
+
   pub(crate) fn emitter<'a>(
     &'a self,
     fonts: &'a mut FontMap,
