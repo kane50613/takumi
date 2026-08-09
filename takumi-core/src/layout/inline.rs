@@ -2573,6 +2573,10 @@ pub struct DecorationRect {
   pub transform: [f32; 6],
   /// Whether the line paints above glyphs (line-through) vs below (under/overline).
   pub over: bool,
+  /// Which decoration this is, so a backend can single one out. The raster
+  /// backend refines the underline with skip-ink and paints the rest as they
+  /// come.
+  pub line: TextDecorationLines,
 }
 
 /// The active decoration lines for a glyph run, in border-box space. Mirrors the
@@ -2604,7 +2608,7 @@ pub fn run_decorations(
     SizedTextDecorationThickness::Value(value) => value,
     SizedTextDecorationThickness::FromFont => from_font,
   };
-  let mut emit = |y_offset: f32, height: f32, over: bool| {
+  let mut emit = |y_offset: f32, height: f32, over: bool, line: TextDecorationLines| {
     if height <= 0.0 {
       return;
     }
@@ -2615,6 +2619,7 @@ pub fn run_decorations(
       color: brush.decoration_color,
       transform: matrix.to_cols_array(),
       over,
+      line,
     });
   };
   if lines.contains(TextDecorationLines::UNDERLINE) {
@@ -2622,6 +2627,7 @@ pub fn run_decorations(
       baseline + glyph_run.underline_offset_from_baseline(),
       thickness(metrics.underline_size),
       false,
+      TextDecorationLines::UNDERLINE,
     );
   }
   if lines.contains(TextDecorationLines::OVERLINE) {
@@ -2629,6 +2635,7 @@ pub fn run_decorations(
       baseline - metrics.ascent - metrics.underline_offset,
       thickness(metrics.underline_size),
       false,
+      TextDecorationLines::OVERLINE,
     );
   }
   if lines.contains(TextDecorationLines::LINE_THROUGH) {
@@ -2636,6 +2643,7 @@ pub fn run_decorations(
       baseline - metrics.strikethrough_offset,
       thickness(metrics.strikethrough_size),
       true,
+      TextDecorationLines::LINE_THROUGH,
     );
   }
   out

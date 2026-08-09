@@ -10,7 +10,8 @@ use crate::geometry::{ComputedLayout, PathCommand, Point, Size};
 use crate::layout::border::BorderProperties;
 use crate::layout::decoration::ClipBox;
 use crate::layout::decoration::{OutlineGeometry, outline_paint};
-use crate::style::{BackgroundClip, Color, FillRule};
+use crate::layout::inline::DecorationRect;
+use crate::style::{Affine, BackgroundClip, Color, FillRule, TextDecorationLines};
 
 /// A closed shape to fill, in the coordinate space of the box that owns it.
 ///
@@ -71,8 +72,8 @@ impl FillShape {
 /// it. A method takes coordinates in the page's space, so the caller never has
 /// to know how a backend tracks its own transform.
 pub trait PaintDevice {
-  /// Fills `shape`, offset by `origin`, with a single colour.
-  fn fill_shape(&mut self, shape: &FillShape, color: Color, origin: Point<f32>);
+  /// Fills `shape` under `transform`, with a single colour.
+  fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine);
 }
 
 /// One step of painting a box, in the order the steps run.
@@ -154,7 +155,7 @@ impl<'c> BoxPainter<'c> {
       return;
     };
 
-    device.fill_shape(&shape, color, origin);
+    device.fill_shape(&shape, color, Affine::translation(origin.x, origin.y));
   }
 
   /// The outline the box paints, or `None` when it paints none.
@@ -233,5 +234,45 @@ fn background_clip_shape(
       })
     }
     BackgroundClip::Text => None,
+  }
+}
+
+/// Paints the decoration lines of one glyph run: `text-decoration` under, over,
+/// and through the text. `over` selects the lines that paint above the glyphs.
+///
+/// Skip-ink is not applied here. It needs the glyphs rasterized, so the raster
+/// backend refines the underline itself, and it paints the rest with subpixel
+/// coverage this rect fill does not reproduce.
+pub fn paint_run_decorations<D: PaintDevice>(
+  decorations: &[DecorationRect],
+  over: bool,
+  skip: TextDecorationLines,
+  origin: Point<f32>,
+  device: &mut D,
+) {
+  for decoration in decorations
+    .iter()
+    .filter(|line| line.over == over && !skip.contains(line.line))
+  {
+    if decoration.color.0[3] == 0 || decoration.width <= 0.0 || decoration.height <= 0.0 {
+      continue;
+    }
+    let [a, b, c, d, e, f] = decoration.transform;
+
+    device.fill_shape(
+      &FillShape::Rect(Size {
+        width: decoration.width,
+        height: decoration.height,
+      }),
+      decoration.color,
+      Affine {
+        a,
+        b,
+        c,
+        d,
+        x: e + origin.x,
+        y: f + origin.y,
+      },
+    );
   }
 }

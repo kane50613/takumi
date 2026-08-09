@@ -113,7 +113,7 @@ pub(crate) struct CanvasDevice<'c> {
 }
 
 impl PaintDevice for CanvasDevice<'_> {
-  fn fill_shape(&mut self, shape: &FillShape, color: Color, origin: Point<f32>) {
+  fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
     let (border, size, offset) = match shape {
       FillShape::Rect(size) => (BorderProperties::default(), *size, CorePoint::ZERO),
       FillShape::RoundedRect {
@@ -132,7 +132,7 @@ impl PaintDevice for CanvasDevice<'_> {
     self.canvas.overlay_image(
       &BackgroundTile::Color(tile),
       border,
-      self.transform * Affine::translation(origin.x + offset.x, origin.y + offset.y),
+      self.transform * transform * Affine::translation(offset.x, offset.y),
       self.algorithm,
       BlendMode::Normal,
     );

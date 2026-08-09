@@ -42,7 +42,7 @@ use takumi_core::{
   style::{
     Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BlendMode, BoxDecorationBreak,
     BoxShadow, BreakBetween, BreakInside, Color, FillRule as CoreFillRule, Isolation,
-    ResolvedGradientStop,
+    ResolvedGradientStop, TextDecorationLines,
   },
 };
 
@@ -53,8 +53,8 @@ use crate::inline::{InlineMap, build_inline_runs, inline_key, node_inline_items,
 use crate::options::PdfError;
 use crate::pagination::Atom;
 use crate::paint::{
-  draw_decoration, empty_path, expanded_radial_stops, fill_from_rgba, krilla_blend, krilla_path,
-  krilla_stop, krilla_stops, overflow_clip_rect, pop_transforms, rect_path, spread,
+  empty_path, expanded_radial_stops, fill_from_rgba, krilla_blend, krilla_path, krilla_stop,
+  krilla_stops, overflow_clip_rect, pop_transforms, rect_path, spread,
 };
 #[cfg(feature = "images")]
 use crate::paint::{position_axis, rasterized_image};
@@ -62,7 +62,7 @@ use crate::shadow::{emit_inset_shadows, emit_outer_shadows};
 #[cfg(all(feature = "svg", feature = "images"))]
 use crate::svg;
 use crate::tags::TagCollector;
-use takumi_core::painter::{BoxPainter, FillShape, PaintDevice};
+use takumi_core::painter::{BoxPainter, FillShape, PaintDevice, paint_run_decorations};
 
 /// An outline waiting for its box's state to be popped.
 #[derive(Clone)]
@@ -1196,9 +1196,17 @@ impl Emitter<'_> {
         run.transform(Affine::IDENTITY),
       );
 
-      for decoration in decorations.iter().filter(|d| !d.over) {
-        draw_decoration(surface, decoration, x, y, self.color_filter.as_deref());
-      }
+      paint_run_decorations(
+        &decorations,
+        false,
+        TextDecorationLines::empty(),
+        CorePoint { x, y },
+        &mut SurfaceDevice {
+          surface,
+          filter: self.color_filter.as_deref(),
+          artifact: false,
+        },
+      );
       let run_text = built
         .text
         .get(shaped.text_range.clone())
@@ -1257,9 +1265,17 @@ impl Emitter<'_> {
         surface.pop();
       }
       surface.set_stroke(None);
-      for decoration in decorations.iter().filter(|d| d.over) {
-        draw_decoration(surface, decoration, x, y, self.color_filter.as_deref());
-      }
+      paint_run_decorations(
+        &decorations,
+        true,
+        TextDecorationLines::empty(),
+        CorePoint { x, y },
+        &mut SurfaceDevice {
+          surface,
+          filter: self.color_filter.as_deref(),
+          artifact: false,
+        },
+      );
     }
     #[cfg(feature = "images")]
     self.emit_inline_boxes(node, runs, built, layout, x, y, surface);
@@ -1802,16 +1818,32 @@ struct SurfaceDevice<'s, 'a> {
 }
 
 impl PaintDevice for SurfaceDevice<'_, '_> {
-  fn fill_shape(&mut self, shape: &FillShape, color: Color, origin: CorePoint<f32>) {
+  fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
+    // A pure translation folds into the path, which keeps the content stream
+    // free of a `cm` pair for every background fill.
+    let flat = transform.only_translation();
+    let (x, y) = if flat {
+      (transform.x, transform.y)
+    } else {
+      (0.0, 0.0)
+    };
     let path = match shape {
       FillShape::Rect(size) => {
-        KrillaRect::from_xywh(origin.x, origin.y, size.width, size.height).and_then(rect_path)
+        KrillaRect::from_xywh(x, y, size.width, size.height).and_then(rect_path)
       }
-      _ => krilla_path(&shape.to_commands(), origin.x, origin.y),
+      _ => krilla_path(&shape.to_commands(), x, y),
     };
     let Some(path) = path else {
       return;
     };
+
+    if !flat {
+      let cols = transform.to_cols_array();
+
+      self.surface.push_transform(&Transform::from_row(
+        cols[0], cols[1], cols[2], cols[3], cols[4], cols[5],
+      ));
+    }
     let color = match self.filter {
       Some(filter) => filter.apply(color.0),
       None => color.0,
@@ -1833,6 +1865,9 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
       ..fill_from_rgba(color, 1.0)
     }));
     self.surface.draw_path(&path);
+    if !flat {
+      self.surface.pop();
+    }
     if self.artifact {
       self.surface.end_tagged();
     }

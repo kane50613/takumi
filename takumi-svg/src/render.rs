@@ -606,21 +606,20 @@ struct DocumentDevice<'d> {
 }
 
 impl PaintDevice for DocumentDevice<'_> {
-  fn fill_shape(&mut self, shape: &FillShape, color: Color, origin: Point<f32>) {
+  fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
     if self.error.is_some() {
       return;
     }
     let result = match shape {
-      FillShape::Rect(size) => {
-        self
-          .doc
-          .rect(origin.x, origin.y, size.width, size.height, Rgba(color.0))
-      }
+      FillShape::Rect(size) if transform.only_translation() => self.doc.rect(
+        transform.x,
+        transform.y,
+        size.width,
+        size.height,
+        Rgba(color.0),
+      ),
       _ => {
-        let data = path_data(
-          &shape.to_commands(),
-          [1.0, 0.0, 0.0, 1.0, origin.x, origin.y],
-        );
+        let data = path_data(&shape.to_commands(), transform.to_cols_array());
 
         self.doc.fill_path(
           &data,
