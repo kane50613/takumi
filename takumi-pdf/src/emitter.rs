@@ -1225,13 +1225,16 @@ impl Emitter<'_> {
       for background in &text_fills {
         surface.set_fill(Some(background.clone()));
         surface.set_stroke(synthetic_stroke(shaped, background));
+        // Outlined: text extraction keys on the text-showing operator, whatever
+        // the rendering mode, so a second run of glyphs would put the text in
+        // the text layer twice. Paths paint the same pixels and stay out of it.
         surface.draw_glyphs(
           origin,
           &glyphs,
           font.clone(),
           run_text,
           shaped.font_size,
-          false,
+          true,
         );
       }
 
