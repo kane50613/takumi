@@ -78,6 +78,13 @@ jobs:
       - name: Run tests
         run: CARGO_PROFILE_TEST_STRIP="debuginfo" cargo test
 
+      # An extractor is the only thing that can tell whether the words a reader
+      # sees survive the content stream. Poppler is what an indexing pipeline
+      # most often runs, and it rebuilds words from glyph positions rather than
+      # from the tag tree.
+      - name: Install Poppler
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends poppler-utils
+
       # The fixtures claim PDF/A and PDF/UA conformance in their metadata. Only
       # the reference validator can tell whether the claim holds.
       # The download is a rolling "latest", so the checksum pins it: a veraPDF

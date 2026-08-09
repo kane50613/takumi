@@ -10,6 +10,7 @@ use std::{
   fs,
   io::Read,
   path::Path,
+  process::Command,
   sync::Arc,
 };
 
@@ -2334,4 +2335,93 @@ fn font_weights() {
     haystack.contains("/Pattern CS"),
     "clip-text background missing from the synthesized bold outline"
   );
+}
+
+/// The text Poppler reads back out of `pdf`, or `None` where `pdftotext` is not
+/// installed.
+///
+/// Poppler is the extractor an indexing or ATS pipeline is most likely to run,
+/// and it reconstructs words from the content stream rather than from the tag
+/// tree, so it catches a class of mistake the structure tests cannot.
+fn poppler_text(pdf: &[u8], name: &str, mode: &str) -> Option<String> {
+  let path = std::env::temp_dir().join(format!("takumi-{name}-{mode}.pdf"));
+
+  fs::write(&path, pdf).expect("write the pdf to extract");
+
+  let output = Command::new("pdftotext")
+    .args([mode, "-enc", "UTF-8"])
+    .arg(&path)
+    .arg("-")
+    .output()
+    .ok()?;
+
+  let _ = fs::remove_file(&path);
+
+  output
+    .status
+    .success()
+    .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// Words a reader can see have to survive extraction. A glyph run that loses
+/// its spaces still looks right on the page and still passes the conformance
+/// checks, so nothing else here would notice.
+#[test]
+fn poppler_reads_back_the_words() {
+  let fonts = fonts();
+  let doc = r#"<main style="display:flex;flex-direction:column;font-size:16px;">
+    <p>Built a hub-and-spoke architecture. Average App Rating.</p>
+    <p>Full case studies: example.com/projects</p>
+  </main>"#;
+  let pdf = run_pdf_fixture_with("poppler-word-boundaries", &fonts, |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse the doc"))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  });
+
+  for mode in ["-raw", "-layout"] {
+    let Some(text) = poppler_text(&pdf, "word-boundaries", mode) else {
+      eprintln!("pdftotext is not installed; skipping the {mode} check");
+      return;
+    };
+    let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
+
+    for phrase in [
+      "hub-and-spoke architecture",
+      "Average App Rating",
+      "Full case studies",
+    ] {
+      assert!(
+        flat.contains(phrase),
+        "{mode} lost a word boundary in {phrase:?}: {flat}"
+      );
+    }
+  }
+}
+
+/// A bold run loses the space before its next word once Poppler reads it back.
+/// The two variable-font instances the same family produces disagree about how
+/// wide a space is — 196 units at weight 700 against 297 at weight 400 — and the
+/// narrower one falls under what Poppler counts as a gap.
+///
+/// <https://github.com/kane50613/takumi/issues/1176>
+#[test]
+#[ignore = "a bold run's space is too narrow for Poppler to see"]
+fn poppler_reads_back_a_bold_heading() {
+  let fonts = fonts();
+  let doc = r#"<main style="font-size:16px;"><h1>Annual report</h1></main>"#;
+  let pdf = run_pdf_fixture_with("poppler-bold-heading", &fonts, |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse the doc"))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  });
+  let Some(text) = poppler_text(&pdf, "bold-heading", "-raw") else {
+    return;
+  };
+
+  assert!(text.contains("Annual report"), "{text}");
 }
