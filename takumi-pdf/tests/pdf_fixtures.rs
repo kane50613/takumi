@@ -1783,6 +1783,32 @@ fn outline_over_content() {
   );
 }
 
+/// The outline paints after the box's content but still under the box's own
+/// transform, so a rotated box's outline rotates with it.
+#[test]
+fn outline_under_transform() {
+  let doc = r#"<main style="display:flex;font-size:30px;color:#141414;"><div style="display:block;transform:rotate(20deg);outline:6px solid #ff0000;">TEXT</div></main>"#;
+  let pdf = run_pdf_fixture("outline-under-transform", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse outline doc"))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  });
+  // The outline's fill has to sit inside the box's own rotation, so the two
+  // land in the same `q` block.
+  let haystack = inflated_text(&pdf);
+  let block = haystack
+    .split("q ")
+    .find(|block| block.contains("1 0 0 rg"))
+    .expect("no outline fill");
+
+  assert!(
+    block.starts_with("0.7047695 -0.2565151"),
+    "the outline painted outside the box transform"
+  );
+}
+
 /// An inline-level container is laid out by the inline layout, not the paint
 /// list, so it needs a layout pass and a scene of its own to reach the page.
 #[test]

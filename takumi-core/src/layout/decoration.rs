@@ -101,8 +101,6 @@ pub struct OutlineGeometry {
   pub grow: f32,
 }
 
-/// Resolves the outline ring geometry from the element's style. Callers guard
-/// visibility (zero width, transparent color, `none` style) themselves.
 /// The outline a box paints, or `None` when it paints none.
 ///
 /// Matches Blink's `ComputedStyle::HasOutline`: a width that rounds to zero

@@ -6,14 +6,15 @@
 //! PDF writer emits operators. Only the second half belongs to a backend.
 
 use crate::context::RenderContext;
+use crate::geometry::Rect;
 use crate::geometry::{ComputedLayout, PathCommand, Point, Size};
-use crate::layout::border::BorderProperties;
+use crate::layout::border::{BorderPaint, BorderProperties, border_dash_pattern, border_paint};
 use crate::layout::decoration::ClipBox;
 use crate::layout::decoration::{OutlineGeometry, outline_paint};
 use crate::layout::inline::DecorationRect;
 use crate::shadow::SizedShadow;
 use crate::style::BoxShadow;
-use crate::style::{Affine, BackgroundClip, Color, FillRule, TextDecorationLines};
+use crate::style::{Affine, BackgroundClip, Color, FillRule, Sides, TextDecorationLines};
 
 /// A closed shape to fill, in the coordinate space of the box that owns it.
 ///
@@ -76,6 +77,23 @@ impl FillShape {
 pub trait PaintDevice {
   /// Fills `shape` under `transform`, with a single colour.
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine);
+
+  /// Strokes `shape` under `transform`. A rasterizer that has no stroker can
+  /// leave this alone; nothing shared calls it unless the backend opted in
+  /// through [`BoxPainter::paint_border`].
+  fn stroke_shape(&mut self, _shape: &FillShape, _stroke: &StrokeStyle, _transform: Affine) {}
+}
+
+/// How to stroke a shape.
+pub struct StrokeStyle {
+  /// The stroke colour.
+  pub color: Color,
+  /// The stroke width.
+  pub width: f32,
+  /// Dash and gap lengths, when the stroke is dashed or dotted.
+  pub dash: Option<[f32; 2]>,
+  /// Whether the dashes have round caps, which is how `dotted` draws.
+  pub round_cap: bool,
 }
 
 /// A box's `box-shadow` layers, split by where they fall.
@@ -319,4 +337,115 @@ pub fn paint_run_decorations<D: PaintDevice>(
       },
     );
   }
+}
+
+/// Paints a border ring, unless it needs per-side work: a uniform dashed or
+/// dotted border strokes the centerline so the pattern runs round the whole
+/// ring, and a double border fills two rings. Returns whether it painted;
+/// `false` means the caller has to walk the sides itself.
+///
+/// Also paints an `outline`, which is a border ring grown past the box.
+pub fn paint_border<D: PaintDevice>(
+  border: &BorderProperties,
+  size: Size<f32>,
+  origin: Point<f32>,
+  device: &mut D,
+) -> bool {
+  let at = Affine::translation(origin.x, origin.y);
+
+  match border_paint(border) {
+    BorderPaint::Sides => return false,
+    // A transparent ring is a fill nobody sees, and painting it would only
+    // lengthen the output.
+    BorderPaint::Ring { color }
+    | BorderPaint::Double { color, .. }
+    | BorderPaint::Stroked { color, .. }
+      if color.0[3] == 0 => {}
+    BorderPaint::Ring { color } => {
+      let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
+
+      border.append_border_ring_commands(&mut commands, size);
+      device.fill_shape(
+        &FillShape::Path {
+          commands,
+          rule: FillRule::EvenOdd,
+        },
+        color,
+        at,
+      );
+    }
+    BorderPaint::Double { color, width } => {
+      let third = width / 3.0;
+
+      for inset in [0.0, third * 2.0] {
+        let mut ring = *border;
+
+        ring.expand_by(Rect {
+          top: -inset,
+          right: -inset,
+          bottom: -inset,
+          left: -inset,
+        });
+        ring.width = Sides([third; 4]).into();
+
+        let ring_size = Size {
+          width: (size.width - inset * 2.0).max(0.0),
+          height: (size.height - inset * 2.0).max(0.0),
+        };
+        let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
+
+        ring.append_border_ring_commands(&mut commands, ring_size);
+        device.fill_shape(
+          &FillShape::Path {
+            commands,
+            rule: FillRule::EvenOdd,
+          },
+          color,
+          Affine::translation(origin.x + inset, origin.y + inset),
+        );
+      }
+    }
+    BorderPaint::Stroked {
+      color,
+      width,
+      style,
+    } => {
+      let half = width / 2.0;
+      let mut center = *border;
+
+      center.expand_by(Rect {
+        top: -half,
+        right: -half,
+        bottom: -half,
+        left: -half,
+      });
+
+      let center_size = Size {
+        width: (size.width - width).max(0.0),
+        height: (size.height - width).max(0.0),
+      };
+      let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
+
+      center.append_mask_commands(&mut commands, center_size, Point { x: half, y: half });
+
+      let perimeter = center.approximate_rounded_rect_perimeter(center_size);
+      let dash = border_dash_pattern(width, style, perimeter, true);
+
+      device.stroke_shape(
+        &FillShape::Path {
+          commands,
+          rule: FillRule::NonZero,
+        },
+        &StrokeStyle {
+          color,
+          width,
+          dash: dash.map(|(intervals, _)| intervals),
+          round_cap: dash.is_some_and(|(_, round)| round),
+        },
+        at,
+      );
+    }
+  }
+
+  true
 }

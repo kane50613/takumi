@@ -26,9 +26,9 @@ use takumi_core::{
 };
 use takumi_core::{
   font_style::SizedFontStyle,
-  geometry::{ComputedLayout as Layout, NodeId, Point as CorePoint, Rect as CoreRect, Size},
+  geometry::{ComputedLayout as Layout, NodeId, Point as CorePoint, Size},
   layout::{
-    border::{BorderPaint, BorderProperties, BorderSide, border_dash_pattern, border_paint},
+    border::{BorderProperties, BorderSide},
     clip::clip_shape_commands,
     decoration::{ClipBox, OutlineGeometry},
     inline::{BuiltInlineLayout, InlineRunLayout, ProcessedInlineSpan, ShapedRun, run_decorations},
@@ -40,9 +40,9 @@ use takumi_core::{
   scene::{NodePaint, PaintItemKind, StackingContextNode, build_stacking_contexts},
   shadow::SizedShadow,
   style::{
-    Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BlendMode, BorderStyle,
-    BoxDecorationBreak, BreakBetween, BreakInside, Color, FillRule as CoreFillRule, Isolation,
-    ResolvedGradientStop, Sides, TextDecorationLines,
+    Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BlendMode, BoxDecorationBreak,
+    BreakBetween, BreakInside, Color, FillRule as CoreFillRule, Isolation, ResolvedGradientStop,
+    TextDecorationLines,
   },
 };
 
@@ -62,7 +62,21 @@ use crate::shadow::{emit_inset_shadows, emit_outer_shadows};
 #[cfg(all(feature = "svg", feature = "images"))]
 use crate::svg;
 use crate::tags::TagCollector;
-use takumi_core::painter::{BoxPainter, BoxShadows, FillShape, PaintDevice, paint_run_decorations};
+use takumi_core::painter::{
+  BoxPainter, BoxShadows, FillShape, PaintDevice, StrokeStyle, paint_border, paint_run_decorations,
+};
+
+/// What a box left on the surface for its caller to unwind.
+#[derive(Default)]
+pub(crate) struct BoxState {
+  /// Transforms, clips and layers to pop once the box and its children are
+  /// done.
+  pushed: usize,
+  /// The `overflow` clip, popped before the outline so the outline escapes it.
+  overflow_clip: usize,
+  /// The outline, painted between the two pops.
+  outline: Option<PendingOutline>,
+}
 
 /// An outline waiting for its box's state to be popped.
 #[derive(Clone)]
@@ -149,18 +163,17 @@ impl Emitter<'_> {
         ColorFilter::compose(outer_filter.as_deref(), &node.context.style.filter).map(Rc::new);
     }
 
-    let (child_frame, root_pushed, root_outline) = match context.root() {
+    let (child_frame, root_state) = match context.root() {
       Some(paint) => self.emit_box(paint, parent, surface)?,
-      None => (parent, 0, None),
+      None => (parent, BoxState::default()),
     };
 
     for bucket in context.in_paint_order() {
       for item in bucket {
         match &item.kind {
           PaintItemKind::Node(paint) => {
-            let (_, pushed, outline) = self.emit_box(paint, child_frame, surface)?;
-            pop_transforms(surface, pushed);
-            self.paint_outline(outline.as_ref(), surface);
+            let (_, state) = self.emit_box(paint, child_frame, surface)?;
+            self.finish_box(state, surface);
           }
           PaintItemKind::Context(child) => {
             let excluded = self
@@ -174,8 +187,7 @@ impl Emitter<'_> {
         }
       }
     }
-    pop_transforms(surface, root_pushed);
-    self.paint_outline(root_outline.as_ref(), surface);
+    self.finish_box(root_state, surface);
     self.color_filter = outer_filter;
     Ok(())
   }
@@ -187,15 +199,15 @@ impl Emitter<'_> {
     paint: &NodePaint,
     parent: Affine,
     surface: &mut Surface,
-  ) -> Result<(Affine, usize, Option<PendingOutline>), PdfError> {
+  ) -> Result<(Affine, BoxState), PdfError> {
     let Some(node) = self.root.node_at_path(&paint.path) else {
-      return Ok((parent, 0, None));
+      return Ok((parent, BoxState::default()));
     };
     let Ok(layout) = self.results.layout(paint.node_id) else {
-      return Ok((parent, 0, None));
+      return Ok((parent, BoxState::default()));
     };
     if self.window_excludes_bounds(paint.paint_bounds) {
-      return Ok((parent, 0, None));
+      return Ok((parent, BoxState::default()));
     }
 
     let style = &node.context.style;
@@ -308,7 +320,10 @@ impl Emitter<'_> {
     }
     // Children and own content clip to the (rounded) padding box when overflow
     // is hidden; without radius a per-axis overflow leaves the visible axis
-    // unbounded.
+    // unbounded. Counted on its own: the outline paints outside this clip but
+    // inside everything else the box pushed.
+    let mut overflow_clip = 0;
+
     if style.clips_overflow() {
       let clip_border = BorderProperties::from_context(&node.context, layout.size, layout.border);
       let path = if clip_border.is_zero() {
@@ -324,7 +339,7 @@ impl Emitter<'_> {
       };
       if let Some(path) = path {
         surface.push_clip_path(&path, &FillRule::NonZero);
-        pushed += 1;
+        overflow_clip += 1;
       }
     }
 
@@ -351,12 +366,24 @@ impl Emitter<'_> {
 
     Ok((
       frame,
-      pushed,
-      // CSS 2.1 Appendix E paints the outline last. The caller pops this box's
-      // state first, so the outline lands above the content and outside the
-      // box's own overflow clip.
-      self.pending_outline(node, deco_layout, deco_size, x, deco_y),
+      BoxState {
+        pushed,
+        overflow_clip,
+        // CSS 2.1 Appendix E paints the outline last. The caller pops only the
+        // overflow clip first, so the outline lands above the content and
+        // outside that clip, but still under the box's transform, opacity,
+        // mask and blend.
+        outline: self.pending_outline(node, deco_layout, deco_size, x, deco_y),
+      },
     ))
+  }
+
+  /// Finishes a box: leaves its overflow clip, paints the outline above
+  /// everything the box and its children drew, then pops the rest.
+  fn finish_box(&self, state: BoxState, surface: &mut Surface) {
+    pop_transforms(surface, state.overflow_clip);
+    self.paint_outline(state.outline.as_ref(), surface);
+    pop_transforms(surface, state.pushed);
   }
 
   fn emit_background(
@@ -872,118 +899,6 @@ impl Emitter<'_> {
     );
   }
 
-  /// Strokes the border's centerline with its dash pattern, which is how a
-  /// uniform `dashed` or `dotted` border paints: the pattern has to run round
-  /// the whole ring rather than restart on each side.
-  #[allow(clippy::too_many_arguments)]
-  fn emit_stroked_border(
-    &self,
-    border: &BorderProperties,
-    color: Color,
-    width: f32,
-    style: BorderStyle,
-    x: f32,
-    y: f32,
-    size: Size<f32>,
-    surface: &mut Surface,
-  ) {
-    if color.0[3] == 0 || width <= 0.0 {
-      return;
-    }
-    let half = width / 2.0;
-    let mut center = *border;
-
-    center.expand_by(CoreRect {
-      top: -half,
-      right: -half,
-      bottom: -half,
-      left: -half,
-    });
-
-    let center_size = Size {
-      width: (size.width - width).max(0.0),
-      height: (size.height - width).max(0.0),
-    };
-    let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
-
-    center.append_mask_commands(&mut commands, center_size, CorePoint { x: half, y: half });
-    let Some(path) = krilla_path(&commands, x, y) else {
-      return;
-    };
-    let perimeter = center.approximate_rounded_rect_perimeter(center_size);
-    let dash = border_dash_pattern(width, style, perimeter, true);
-    let artifact = self.start_artifact(surface);
-
-    surface.set_fill(None);
-    surface.set_stroke(Some(Stroke {
-      paint: fill_from_rgba(self.filtered(color), 1.0).paint,
-      width,
-      line_cap: match dash {
-        Some((_, true)) => LineCap::Round,
-        _ => LineCap::Butt,
-      },
-      dash: dash.map(|(intervals, _)| StrokeDash {
-        array: intervals.to_vec(),
-        offset: 0.0,
-      }),
-      ..Stroke::default()
-    }));
-    surface.draw_path(&path);
-    surface.set_stroke(None);
-    if artifact {
-      surface.end_tagged();
-    }
-  }
-
-  /// Fills the two rings a uniform `double` border is made of.
-  #[allow(clippy::too_many_arguments)]
-  fn emit_double_border(
-    &self,
-    border: &BorderProperties,
-    color: Color,
-    width: f32,
-    x: f32,
-    y: f32,
-    size: Size<f32>,
-    surface: &mut Surface,
-  ) {
-    if color.0[3] == 0 || width <= 0.0 {
-      return;
-    }
-    let third = width / 3.0;
-    let artifact = self.start_artifact(surface);
-
-    surface.set_fill(Some(Fill {
-      rule: FillRule::EvenOdd,
-      ..fill_from_rgba(self.filtered(color), 1.0)
-    }));
-    for inset in [0.0, third * 2.0] {
-      let mut ring = *border;
-
-      ring.expand_by(CoreRect {
-        top: -inset,
-        right: -inset,
-        bottom: -inset,
-        left: -inset,
-      });
-      ring.width = Sides([third; 4]).into();
-
-      let ring_size = Size {
-        width: (size.width - inset * 2.0).max(0.0),
-        height: (size.height - inset * 2.0).max(0.0),
-      };
-      let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
-
-      ring.append_border_ring_commands(&mut commands, ring_size);
-      if let Some(path) = krilla_path(&commands, x + inset, y + inset) {
-        surface.draw_path(&path);
-      }
-    }
-    if artifact {
-      surface.end_tagged();
-    }
-  }
-
   fn emit_borders(
     &self,
     border: &BorderProperties,
@@ -1002,35 +917,19 @@ impl Emitter<'_> {
       return;
     };
 
-    match border_paint(border) {
-      BorderPaint::Stroked {
-        color,
-        width,
-        style,
-      } => {
-        self.emit_stroked_border(border, color, width, style, x, y, size, surface);
-        return;
-      }
-      BorderPaint::Double { color, width } => {
-        self.emit_double_border(border, color, width, x, y, size, surface);
-        return;
-      }
-      BorderPaint::Ring { color } => {
-        if color.0[3] != 0 {
-          let artifact = self.start_artifact(surface);
-
-          surface.set_fill(Some(Fill {
-            rule: FillRule::EvenOdd,
-            ..fill_from_rgba(self.filtered(color), 1.0)
-          }));
-          surface.draw_path(&ring_path);
-          if artifact {
-            surface.end_tagged();
-          }
-        }
-        return;
-      }
-      BorderPaint::Sides => {}
+    // The device opens its own artifact per fill, so a border that paints
+    // nothing leaves no empty region behind.
+    if paint_border(
+      border,
+      size,
+      CorePoint { x, y },
+      &mut SurfaceDevice {
+        surface,
+        filter: self.color_filter.as_deref(),
+        artifact: self.tags.is_some(),
+      },
+    ) {
+      return;
     }
     let artifact = self.start_artifact(surface);
 
@@ -1974,6 +1873,53 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
     }
     if self.artifact {
       self.surface.end_tagged();
+    }
+  }
+
+  fn stroke_shape(&mut self, shape: &FillShape, stroke: &StrokeStyle, transform: Affine) {
+    if stroke.color.0[3] == 0 || stroke.width <= 0.0 {
+      return;
+    }
+    let flat = transform.only_translation();
+    let (x, y) = if flat {
+      (transform.x, transform.y)
+    } else {
+      (0.0, 0.0)
+    };
+    let Some(path) = krilla_path(&shape.to_commands(), x, y) else {
+      return;
+    };
+
+    if !flat {
+      let cols = transform.to_cols_array();
+
+      self.surface.push_transform(&Transform::from_row(
+        cols[0], cols[1], cols[2], cols[3], cols[4], cols[5],
+      ));
+    }
+    let color = match self.filter {
+      Some(filter) => filter.apply(stroke.color.0),
+      None => stroke.color.0,
+    };
+
+    self.surface.set_fill(None);
+    self.surface.set_stroke(Some(Stroke {
+      paint: fill_from_rgba(color, 1.0).paint,
+      width: stroke.width,
+      line_cap: match stroke.round_cap {
+        true => LineCap::Round,
+        false => LineCap::Butt,
+      },
+      dash: stroke.dash.map(|intervals| StrokeDash {
+        array: intervals.to_vec(),
+        offset: 0.0,
+      }),
+      ..Stroke::default()
+    }));
+    self.surface.draw_path(&path);
+    self.surface.set_stroke(None);
+    if !flat {
+      self.surface.pop();
     }
   }
 }
