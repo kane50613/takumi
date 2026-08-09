@@ -4,14 +4,68 @@ use std::ops::Range;
 
 use takumi_core::layout::inline::ShapedRun;
 
-use crate::krilla::{
-  surface::Location,
-  text::{Glyph, GlyphId},
+use crate::{
+  krilla::{
+    surface::Location,
+    text::{Glyph, GlyphId},
+  },
+  options::PdfError,
 };
+
+/// The run's glyphs, each carrying the source text it maps to.
+///
+/// A character no registered font covers shapes to `.notdef`. It draws nothing
+/// and leaves nothing behind in the text layer, so the page would come out
+/// looking finished with the character quietly gone. Every such character lands
+/// in `uncovered` for the caller to report once the page is done.
+pub(crate) fn run_glyphs(
+  shaped: &ShapedRun,
+  run_text: &str,
+  uncovered: &mut String,
+) -> Vec<PdfGlyph> {
+  let spans = glyph_text_spans(shaped, run_text);
+
+  for (glyph, span) in shaped.glyphs.iter().zip(&spans) {
+    if glyph.id != 0 {
+      continue;
+    }
+    for character in run_text.get(span.clone()).unwrap_or_default().chars() {
+      if !uncovered.contains(character) {
+        uncovered.push(character);
+      }
+    }
+  }
+
+  shaped
+    .glyphs
+    .iter()
+    .zip(spans)
+    .map(|(glyph, range)| PdfGlyph {
+      id: GlyphId::new(glyph.id),
+      x_offset: glyph.x / shaped.font_size,
+      y_offset: -glyph.y / shaped.font_size,
+      range,
+    })
+    .collect()
+}
+
+/// The error naming what no font covered, or `None` when everything mapped.
+pub(crate) fn uncovered_error(uncovered: &str) -> Option<PdfError> {
+  if uncovered.is_empty() {
+    return None;
+  }
+  let named = uncovered
+    .chars()
+    .map(|character| format!("{character} (U+{:04X})", character as u32))
+    .collect::<Vec<_>>()
+    .join(", ");
+
+  Some(PdfError::MissingGlyphs(named))
+}
 
 /// Per-glyph byte ranges into `run_text` for ToUnicode, from the shaper's
 /// cluster segmentation (correct for ligatures and complex scripts).
-pub(crate) fn glyph_text_spans(shaped: &ShapedRun, run_text: &str) -> Vec<Range<usize>> {
+fn glyph_text_spans(shaped: &ShapedRun, run_text: &str) -> Vec<Range<usize>> {
   let base = shaped.text_range.start;
 
   if shaped.cluster_ranges.len() == shaped.glyphs.len() {

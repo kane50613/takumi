@@ -25,6 +25,8 @@ const pdf = await render(doc, {
 
 `fontFamilies` sets the fallback chain for each render. Registered fonts deduplicate across calls that use the same renderer.
 
+There is no system font to fall back on. A character that none of the registered fonts covers would draw nothing and leave nothing in the text layer, so `render` rejects it and names the character and its codepoint. Register a font covering every script the document uses. Watch the Google Fonts subsets in particular: `latin` and `latin-ext` split their coverage, so one file on its own can leave common accented characters out.
+
 ## Images
 
 The renderer never fetches over the network. Pass pre-fetched bytes for each image URL in the document:

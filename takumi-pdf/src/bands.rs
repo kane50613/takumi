@@ -6,6 +6,8 @@ use takumi_core::{
   viewport::Viewport,
 };
 
+use std::cell::RefCell;
+
 use crate::{
   counters::{counter_text, substitute_page_counters},
   emitter::FontMap,
@@ -72,6 +74,7 @@ pub(crate) fn emit_band(
   fonts: &mut FontMap,
   bounds: (f32, f32, f32, f32),
   artifact: bool,
+  uncovered: &RefCell<String>,
   surface: &mut Surface,
 ) -> Result<(), PdfError> {
   let (x, y, width, height) = bounds;
@@ -89,7 +92,7 @@ pub(crate) fn emit_band(
   }
   surface.push_clip_path(&path, &FillRule::NonZero);
   surface.push_transform(&Transform::from_translate(x, y));
-  let mut emitter = band.emitter(fonts, None, None);
+  let mut emitter = band.emitter(fonts, None, None, uncovered);
 
   emitter.emit_context(0, Affine::IDENTITY, surface)?;
   surface.pop();

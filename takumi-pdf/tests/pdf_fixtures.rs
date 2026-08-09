@@ -1313,6 +1313,40 @@ fn invalid_xmp_schema_rejects() {
   assert!(matches!(result, Err(PdfError::InvalidXmpSchema(prefix)) if prefix == "1fx bad"));
 }
 
+/// A character no registered font covers shapes to `.notdef`. It paints nothing
+/// and leaves nothing in the text layer, so the render stops and names it
+/// instead of handing back a page with the character quietly gone.
+#[test]
+fn uncovered_character_stops_the_render() {
+  let latin_only = {
+    let mut fonts = Fonts::default();
+    let data = fs::read(
+      Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf"),
+    )
+    .expect("read test font");
+
+    fonts
+      .register(FontResource::new(data))
+      .expect("load test font");
+    fonts
+  };
+  let render_with = |content: &str| {
+    render(
+      PdfOptions::builder()
+        .node(text(content, 16.0))
+        .viewport(Viewport::new((200, 100)))
+        .fonts(&latin_only)
+        .build(),
+    )
+  };
+
+  assert!(render_with("covered").is_ok());
+  assert!(
+    matches!(render_with("uncovered \u{76F4}"), Err(PdfError::MissingGlyphs(named)) if named == "直 (U+76F4)")
+  );
+}
+
 /// The invoice carries a machine-readable XML attachment under PDF/A-3b:
 /// the file spec, association kind, and name tree all serialize, the
 /// modification date falls back to the metadata creation date, and a custom

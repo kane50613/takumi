@@ -70,9 +70,11 @@ impl PreparedTree {
     fonts: &'a mut FontMap,
     inline: Option<&'a InlineMap<'a>>,
     tags: Option<&'a RefCell<TagCollector>>,
+    uncovered: &'a RefCell<String>,
   ) -> Emitter<'a> {
     Emitter {
       color_filter: None,
+      uncovered,
       root: &self.root,
       contexts: &self.contexts,
       results: &self.results,

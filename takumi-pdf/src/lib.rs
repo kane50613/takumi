@@ -87,6 +87,7 @@ pub use crate::options::{
 use crate::{
   bands::{emit_band, measure_band, prepare_band},
   emitter::FontMap,
+  glyph::uncovered_error,
   inline::{build_inline_map, collect_text_boxes},
   interactive::{add_link_annotations, build_outline, collect_interactive, destination_targets},
   krilla::{
@@ -154,6 +155,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
     lang: options.lang,
   };
   let mut fonts = FontMap::new();
+  let uncovered = RefCell::new(String::new());
   let mut document = {
     let mut builder = ConfigurationBuilder::new();
     let mut validated = false;
@@ -261,7 +263,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       let mut forced = Vec::new();
 
       content
-        .emitter(&mut fonts, Some(&inline_map), None)
+        .emitter(&mut fonts, Some(&inline_map), None, &uncovered)
         .collect_atoms(0, Affine::IDENTITY, &mut atoms, &mut forced)?;
       let starts = page_starts(&mut atoms, &mut forced, content.height, window_height);
       let pages = starts.len();
@@ -302,6 +304,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
             &mut fonts,
             (0.0, BAND_EDGE_PADDING, page.width, header_height),
             tag_collector.is_some(),
+            &uncovered,
             &mut surface,
           )?;
         }
@@ -322,7 +325,12 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
             page.margin.left,
             content_top - y0,
           ));
-          let mut emitter = content.emitter(&mut fonts, Some(&inline_map), tag_collector.as_ref());
+          let mut emitter = content.emitter(
+            &mut fonts,
+            Some(&inline_map),
+            tag_collector.as_ref(),
+            &uncovered,
+          );
 
           emitter.window = Some((y0, y0 + paint_height));
           emitter.line_window = Some((if index == 0 { f32::NEG_INFINITY } else { y0 }, next_start));
@@ -350,6 +358,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
               footer_height,
             ),
             tag_collector.is_some(),
+            &uncovered,
             &mut surface,
           )?;
         }
@@ -398,7 +407,12 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       let mut surface = page.surface();
 
       surface.push_transform(&Transform::from_scale(PT_PER_PX, PT_PER_PX));
-      let mut emitter = content.emitter(&mut fonts, Some(&inline_map), tag_collector.as_ref());
+      let mut emitter = content.emitter(
+        &mut fonts,
+        Some(&inline_map),
+        tag_collector.as_ref(),
+        &uncovered,
+      );
 
       emitter.emit_context(0, Affine::IDENTITY, &mut surface)?;
       surface.pop();
@@ -443,6 +457,10 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         ));
       }
     }
+  }
+
+  if let Some(error) = uncovered_error(&uncovered.borrow()) {
+    return Err(error);
   }
 
   document.finish().map_err(PdfError::Krilla)
