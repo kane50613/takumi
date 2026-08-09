@@ -992,6 +992,15 @@ pub fn border_paint(border: &BorderProperties) -> BorderPaint {
   if border.is_uniform_all_sides_style(BorderStyle::Double) {
     return BorderPaint::Double { color, width };
   }
+  // A dashed or dotted side breaks the ring into segments, so a border that
+  // mixes one in has to be walked side by side even though its colour is
+  // uniform. Filling the ring would quietly paint that side solid.
+  if border
+    .painted_sides()
+    .any(|side| matches!(side.style, BorderStyle::Dashed | BorderStyle::Dotted))
+  {
+    return BorderPaint::Sides;
+  }
 
   BorderPaint::Ring { color }
 }
