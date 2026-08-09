@@ -1,9 +1,7 @@
-use svgtypes::{SimplePathSegment, SimplifyingPathParser};
-use takumi_core::geometry::{PathCommand, Point};
+use takumi_core::geometry::PathCommand;
 use tiny_skia::{
   FillRule as TinyFillRule, LineCap as TinyLineCap, LineJoin as TinyLineJoin, Path as TinyPath,
-  PathBuilder as TinyPathBuilder, PathSegment as TinyPathSegment, Rect as TinyRect,
-  Stroke as TinyStroke, StrokeDash as TinyStrokeDash,
+  PathBuilder as TinyPathBuilder, Stroke as TinyStroke, StrokeDash as TinyStrokeDash,
 };
 
 use crate::style::LineJoin;
@@ -148,62 +146,7 @@ impl Style {
 
 pub(crate) type Command = PathCommand;
 
-fn from_tiny(segment: TinyPathSegment) -> Command {
-  match segment {
-    TinyPathSegment::MoveTo(p) => Command::MoveTo(Point::new(p.x, p.y)),
-    TinyPathSegment::LineTo(p) => Command::LineTo(Point::new(p.x, p.y)),
-    TinyPathSegment::QuadTo(p1, p2) => {
-      Command::QuadTo(Point::new(p1.x, p1.y), Point::new(p2.x, p2.y))
-    }
-    TinyPathSegment::CubicTo(p1, p2, p3) => Command::CubicTo(
-      Point::new(p1.x, p1.y),
-      Point::new(p2.x, p2.y),
-      Point::new(p3.x, p3.y),
-    ),
-    TinyPathSegment::Close => Command::Close,
-  }
-}
-
 pub(crate) use takumi_core::geometry::PathBuilder;
-
-/// Appends an axis-aligned ellipse outline to `commands`.
-pub(crate) fn push_ellipse(
-  commands: &mut Vec<Command>,
-  center: (f32, f32),
-  radius_x: f32,
-  radius_y: f32,
-) {
-  let Some(rect) = TinyRect::from_ltrb(
-    center.0 - radius_x,
-    center.1 - radius_y,
-    center.0 + radius_x,
-    center.1 + radius_y,
-  ) else {
-    return;
-  };
-
-  let mut builder = TinyPathBuilder::new();
-  builder.push_oval(rect);
-  if let Some(path) = builder.finish() {
-    commands.extend(path.segments().map(from_tiny));
-  }
-}
-
-/// Scale a command list's coordinates uniformly (CSS px → device space).
-pub(crate) fn scale_commands(commands: Vec<Command>, scale: f32) -> Vec<Command> {
-  let point = |pt: Point<f32>| Point::new(pt.x * scale, pt.y * scale);
-
-  commands
-    .into_iter()
-    .map(|command| match command {
-      Command::MoveTo(a) => Command::MoveTo(point(a)),
-      Command::LineTo(a) => Command::LineTo(point(a)),
-      Command::QuadTo(a, b) => Command::QuadTo(point(a), point(b)),
-      Command::CubicTo(a, b, c) => Command::CubicTo(point(a), point(b), point(c)),
-      Command::Close => Command::Close,
-    })
-    .collect()
-}
 
 pub(crate) fn build_path(commands: &[Command]) -> Option<TinyPath> {
   let mut builder = TinyPathBuilder::new();
@@ -221,46 +164,6 @@ pub(crate) fn build_path(commands: &[Command]) -> Option<TinyPath> {
   }
 
   builder.finish()
-}
-
-pub(crate) fn parse_svg_path_segments(input: &str) -> Option<Vec<Command>> {
-  let mut commands = Vec::new();
-
-  for segment in SimplifyingPathParser::from(input) {
-    match segment.ok()? {
-      SimplePathSegment::MoveTo { x, y } => {
-        commands.push(Command::MoveTo(Point::new(x as f32, y as f32)));
-      }
-      SimplePathSegment::LineTo { x, y } => {
-        commands.push(Command::LineTo(Point::new(x as f32, y as f32)));
-      }
-      SimplePathSegment::CurveTo {
-        x1,
-        y1,
-        x2,
-        y2,
-        x,
-        y,
-      } => {
-        commands.push(Command::CubicTo(
-          Point::new(x1 as f32, y1 as f32),
-          Point::new(x2 as f32, y2 as f32),
-          Point::new(x as f32, y as f32),
-        ));
-      }
-      SimplePathSegment::Quadratic { x1, y1, x, y } => {
-        commands.push(Command::QuadTo(
-          Point::new(x1 as f32, y1 as f32),
-          Point::new(x as f32, y as f32),
-        ));
-      }
-      SimplePathSegment::ClosePath => {
-        commands.push(Command::Close);
-      }
-    }
-  }
-
-  Some(commands)
 }
 
 #[cfg(test)]
