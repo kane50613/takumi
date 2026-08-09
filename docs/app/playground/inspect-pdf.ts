@@ -1,8 +1,8 @@
 /**
  * Reads back what a rendered PDF actually contains, so the playground can show
- * the structure instead of asking you to trust the render options. Page objects,
- * the outline, file specs and the XMP packet all sit outside object streams, so
- * this needs no PDF parser.
+ * the structure instead of asking you to trust the render options. Objects are
+ * found by scanning for `N 0 obj` rather than through the cross-reference table,
+ * which keeps this to one file and no PDF parser.
  */
 export type PdfInspection = {
   pages: number;
@@ -14,18 +14,20 @@ export type PdfInspection = {
   created?: string;
   bookmarks: Bookmark[];
   attachments: { name: string; description?: string }[];
-  streams: PdfPageStream[];
+  /**
+   * `BT` blocks per page. One shaped run emits one block, so a count far above
+   * the word count means something is cutting runs apart.
+   */
+  textObjects: number[];
+  objects: PdfObject[];
 };
 
-/**
- * A page's decoded content stream. One shaped run emits one `BT` block, so
- * `textObjects` counts far above the word count mean something is cutting runs.
- */
-export type PdfPageStream = { page: number; textObjects: number; operators: string };
+/** One indirect object, with its stream decoded when the bytes read as text. */
+export type PdfObject = { number: string; label: string; dict: string; body?: string };
 
 type Bookmark = { title: string; depth: number };
 
-const STREAM_LIMIT = 64 * 1024;
+const BODY_LIMIT = 64 * 1024;
 
 /**
  * One char per byte. `TextDecoder("latin1")` is windows-1252 by spec, which
@@ -138,14 +140,14 @@ async function readStream(
   text: string,
   bytes: Uint8Array,
   [start, end]: [number, number],
-): Promise<string> {
-  const body = text.slice(start, end);
-  const keyword = body.indexOf("stream");
-  const close = body.lastIndexOf("endstream");
+): Promise<Uint8Array | undefined> {
+  const object = text.slice(start, end);
+  const keyword = object.indexOf("stream");
+  const close = object.lastIndexOf("endstream");
 
-  if (keyword === -1 || close === -1) return "";
+  if (keyword === -1 || close === -1) return undefined;
 
-  const from = start + keyword + (body.startsWith("\r\n", keyword + 6) ? 8 : 7);
+  const from = start + keyword + (object.startsWith("\r\n", keyword + 6) ? 8 : 7);
   let to = start + close;
 
   while (to > from && (bytes[to - 1] === 0x0a || bytes[to - 1] === 0x0d)) to -= 1;
@@ -153,48 +155,103 @@ async function readStream(
   const raw = bytes.subarray(from, to);
 
   try {
-    return printable(/\/FlateDecode/.test(body.slice(0, keyword)) ? await inflate(raw) : raw);
+    return /\/FlateDecode/.test(object.slice(0, keyword)) ? await inflate(raw) : raw;
   } catch {
-    return "";
+    return undefined;
   }
 }
 
-/** Walks `/Pages` → `/Kids` → `/Contents`. Object numbers do not carry page order; `/Kids` does. */
-async function readPageStreams(text: string, bytes: Uint8Array): Promise<PdfPageStream[]> {
+function clamp(value: string): string {
+  return value.length > BODY_LIMIT ? `${value.slice(0, BODY_LIMIT)}\n… truncated` : value;
+}
+
+/** Font programs and images escape into several chars per byte, which is not worth reading. */
+function readable(data: Uint8Array): string | undefined {
+  const escaped = printable(data);
+
+  return escaped.length > data.length * 2 ? undefined : escaped;
+}
+
+/** Objects packed into an `/ObjStm`, which the file never lists at the top level. */
+function expandObjectStream(dict: string, data: Uint8Array): PdfObject[] {
+  const first = Number(dict.match(/\/First\s+(\d+)/)?.[1]);
+  const count = Number(dict.match(/\/N\s+(\d+)/)?.[1]);
+
+  if (!Number.isInteger(first) || !Number.isInteger(count)) return [];
+
+  const text = bytesToChars(data);
+  const header = text.slice(0, first).trim().split(/\s+/).map(Number);
+
+  return Array.from({ length: count }, (_, index) => {
+    const start = first + header[index * 2 + 1];
+    const next = header[index * 2 + 3];
+    const source = text.slice(start, next === undefined ? text.length : first + next).trim();
+
+    return {
+      number: String(header[index * 2]),
+      label: source.match(/\/(?:Sub)?Type\s*\/(\w+)/)?.[1] ?? "",
+      dict: source,
+    };
+  });
+}
+
+/** Every object the file declares, in file order, with `/ObjStm` contents unpacked in place. */
+async function readObjects(text: string, bytes: Uint8Array) {
   const ranges = objectRanges(text);
-  const body = (number: string) => {
+  const source = (number: string) => {
     const range = ranges.get(number);
     return range && text.slice(...range);
   };
 
-  const tree = [...ranges.keys()].find((number) => /\/Type\s*\/Pages\b/.test(body(number) ?? ""));
-  const kids = references(body(tree ?? "")?.match(/\/Kids\s*\[([^\]]*)\]/)?.[1]);
+  // Object numbers do not carry page order; `/Kids` does.
+  const tree = [...ranges.keys()].find((number) => /\/Type\s*\/Pages\b/.test(source(number) ?? ""));
+  const kids = references(source(tree ?? "")?.match(/\/Kids\s*\[([^\]]*)\]/)?.[1]);
+  const pageOf = new Map<string, number>();
 
-  return Promise.all(
-    kids.map(async (kid, index) => {
-      const contents = references(body(kid)?.match(/\/Contents\s*(\[[^\]]*\]|\d+\s+0\s+R)/)?.[1]);
-      const decoded = await Promise.all(
-        contents.map((number) => {
-          const range = ranges.get(number);
-          return range ? readStream(text, bytes, range) : "";
-        }),
-      );
-      const operators = decoded.join("\n");
+  kids.forEach((kid, index) => {
+    const contents = source(kid)?.match(/\/Contents\s*(\[[^\]]*\]|\d+\s+0\s+R)/)?.[1];
 
-      return {
-        page: index + 1,
-        textObjects: operators.match(/\bBT\b/g)?.length ?? 0,
-        operators:
-          operators.length > STREAM_LIMIT
-            ? `${operators.slice(0, STREAM_LIMIT)}\n… truncated`
-            : operators,
-      };
+    for (const number of references(contents)) pageOf.set(number, index + 1);
+  });
+
+  const textObjects = kids.map(() => 0);
+  const objects = await Promise.all(
+    [...ranges].map(async ([number, range]) => {
+      const raw = text.slice(...range);
+      const keyword = raw.indexOf("stream");
+      const dict = (keyword === -1 ? raw : raw.slice(0, keyword)).trim();
+      const stream = await readStream(text, bytes, range);
+      const body = stream && readable(stream);
+      const page = pageOf.get(number);
+
+      if (page && body) textObjects[page - 1] += body.match(/\bBT\b/g)?.length ?? 0;
+
+      const packed =
+        stream && /\/Type\s*\/ObjStm\b/.test(dict) ? expandObjectStream(dict, stream) : [];
+
+      return [
+        {
+          number,
+          label: page
+            ? `content stream, page ${page}`
+            : (raw.match(/\/(?:Sub)?Type\s*\/(\w+)/)?.[1] ?? ""),
+          dict,
+          body:
+            packed.length > 0
+              ? undefined
+              : stream && (body === undefined ? `${stream.length} bytes, not text` : clamp(body)),
+        },
+        ...packed,
+      ];
     }),
   );
+
+  return { objects: objects.flat(), textObjects };
 }
 
 export async function inspectPdf(bytes: Uint8Array): Promise<PdfInspection> {
   const text = bytesToChars(bytes);
+  const { objects: indirect, textObjects } = await readObjects(text, bytes);
   const objects = text.split("endobj");
   const xmp = text.match(/<x:xmpmeta[\s\S]*?<\/x:xmpmeta>/)?.[0] ?? "";
   const xmpValue = (tag: string) => xmp.match(new RegExp(`<${tag}>([^<]*)<`))?.[1];
@@ -222,6 +279,7 @@ export async function inspectPdf(bytes: Uint8Array): Promise<PdfInspection> {
       .filter((object) => object.includes("/Filespec"))
       .map((object) => ({ name: entry(object, "F") ?? "", description: entry(object, "Desc") }))
       .filter((attachment) => attachment.name),
-    streams: await readPageStreams(text, bytes),
+    textObjects,
+    objects: indirect,
   };
 }

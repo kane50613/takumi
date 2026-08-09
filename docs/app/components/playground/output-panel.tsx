@@ -2,15 +2,15 @@ import { Loader2Icon } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "~/lib/utils";
-import type { PdfInspection, PdfPageStream } from "~/playground/inspect-pdf";
+import type { PdfInspection, PdfObject } from "~/playground/inspect-pdf";
 import type { RenderError, RenderSuccess } from "./use-render-worker";
 
-export type PdfView = "preview" | "document" | "stream";
+export type PdfView = "preview" | "document" | "objects";
 
 export const PDF_VIEWS: { id: PdfView; label: string }[] = [
   { id: "preview", label: "Preview" },
   { id: "document", label: "Document" },
-  { id: "stream", label: "Stream" },
+  { id: "objects", label: "Objects" },
 ];
 
 export type Zoom = "fit" | "actual";
@@ -63,6 +63,7 @@ function DocumentPanel({ inspection }: { inspection: PdfInspection }) {
       </Field>
       <Field label="Tagged">{inspection.tagged ? "yes" : "no"}</Field>
       <Field label="Pages">{inspection.pages}</Field>
+      <Field label="Text objects">{inspection.textObjects.join(" · ")}</Field>
       {inspection.title && <Field label="Title">{inspection.title}</Field>}
       {inspection.authors && <Field label="Authors">{inspection.authors.join(", ")}</Field>}
       {inspection.created && <Field label="Created">{inspection.created}</Field>}
@@ -99,28 +100,21 @@ function DocumentPanel({ inspection }: { inspection: PdfInspection }) {
   );
 }
 
-/**
- * The decoded page content streams. One shaped run emits one `BT` block, so the
- * count beside each page is where a font switch splitting words shows up first.
- */
-function StreamPanel({ streams }: { streams: PdfPageStream[] }) {
-  if (streams.length === 0) {
-    return (
-      <div className="flex h-full items-center justify-center bg-muted/20 font-mono text-xs text-muted-foreground">
-        no readable content stream
-      </div>
-    );
-  }
-
+/** The file as written: every object's dictionary, and the streams that read as text. */
+function ObjectsPanel({ objects }: { objects: PdfObject[] }) {
   return (
     <div className="h-full overflow-auto bg-muted/20 px-4 py-3 font-mono text-xs">
-      {streams.map((stream) => (
-        <div key={stream.page} className="mb-4 last:mb-0">
-          <div className="mb-1 text-muted-foreground">
-            page {stream.page} · {stream.textObjects} text objects
-          </div>
-          <pre className="whitespace-pre-wrap break-all">{stream.operators}</pre>
-        </div>
+      {objects.map((object) => (
+        <details key={object.number} className="border-b py-1.5 last:border-b-0">
+          <summary className="cursor-pointer select-none">
+            {object.number} 0 obj
+            {object.label && <span className="text-muted-foreground"> · {object.label}</span>}
+          </summary>
+          <pre className="mt-1 whitespace-pre-wrap break-all text-muted-foreground">
+            {object.dict}
+          </pre>
+          {object.body && <pre className="mt-1 whitespace-pre-wrap break-all">{object.body}</pre>}
+        </details>
       ))}
     </div>
   );
@@ -173,7 +167,7 @@ export function OutputPanel({
   // is the point of the format.
   if (lastSuccess?.outputKind === "pdf" && lastSuccess.inspection) {
     if (pdfView === "document") return <DocumentPanel inspection={lastSuccess.inspection} />;
-    if (pdfView === "stream") return <StreamPanel streams={lastSuccess.inspection.streams} />;
+    if (pdfView === "objects") return <ObjectsPanel objects={lastSuccess.inspection.objects} />;
   }
 
   const output =
