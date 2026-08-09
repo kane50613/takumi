@@ -1,7 +1,4 @@
-use std::{
-  borrow::Cow,
-  collections::{BTreeSet, HashMap},
-};
+use std::{borrow::Cow, collections::HashMap};
 
 use parley::{
   FontFamily as ParleyFontFamily, FontFamilyName, FontFeatures, FontVariations, GenericFamily,
@@ -14,6 +11,7 @@ use crate::{
   geometry::Size,
   layout::inline::InlineBrush,
   painter::StrokeStyle,
+  resources::font::SubsetGroup,
   shadow::SizedShadow,
   style::{
     BorderStyle, Color, ComputedStyle, Display, FontFamily, FontSynthesis, Lang, Length,
@@ -54,8 +52,8 @@ impl ExpandedFontFamily {
   }
 
   /// Expands `family` against the registered subset `groups`: a name that's a subset group
-  /// becomes its registered subset families (in order); other names pass through unchanged.
-  fn expand(family: &FontFamily, groups: &HashMap<String, BTreeSet<String>>) -> Self {
+  /// becomes its registered subset families, ranked; other names pass through unchanged.
+  fn expand(family: &FontFamily, groups: &HashMap<String, SubsetGroup>) -> Self {
     let mut tokens = Vec::new();
     for name in family.names() {
       match name {
@@ -64,7 +62,7 @@ impl ExpandedFontFamily {
             tokens.extend(
               subsets
                 .iter()
-                .map(|s| ExpandedFamilyToken::Named(s.clone())),
+                .map(|(_, name)| ExpandedFamilyToken::Named(name.clone())),
             );
           }
           None => tokens.push(ExpandedFamilyToken::Named(name.into_owned())),
@@ -393,11 +391,11 @@ impl<'s> SizedFontStyle<'s> {
 // not in this file; the one testable seam owned by this module is `ExpandedFontFamily::expand`.
 #[cfg(test)]
 mod tests {
-  use std::collections::{BTreeSet, HashMap};
+  use std::collections::HashMap;
 
   use parley::{FontFamilyName, GenericFamily};
 
-  use super::{ExpandedFontFamily, SizedFontStyle};
+  use super::{ExpandedFontFamily, SizedFontStyle, SubsetGroup};
   use crate::{
     Fonts,
     context::RenderContext,
@@ -431,19 +429,19 @@ mod tests {
   }
 
   #[test]
-  fn logical_subset_group_expands_to_its_registered_subsets_in_order() {
+  fn logical_subset_group_expands_to_its_registered_subsets_in_rank_order() {
     let family = FontFamily::from_css_str("Logical").unwrap();
     let mut groups = HashMap::new();
     groups.insert(
       "Logical".to_string(),
-      BTreeSet::from(["Subset A".to_string(), "Subset B".to_string()]),
+      SubsetGroup::from([(1, "Subset A".to_string()), (0, "Subset B".to_string())]),
     );
 
     let expanded = ExpandedFontFamily::expand(&family, &groups);
 
     assert_eq!(
       names(&expanded),
-      vec!["Subset A".to_string(), "Subset B".to_string()]
+      vec!["Subset B".to_string(), "Subset A".to_string()]
     );
   }
 

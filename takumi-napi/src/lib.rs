@@ -92,6 +92,8 @@ pub(crate) struct FontInput {
   pub style: Option<FontStyleInput>,
   /// Logical family this font is a coverage subset of; expands at render time.
   pub subset_of: Option<String>,
+  /// Where this subset sits in its group's fallback order; lowest is tried first.
+  pub subset_rank: Option<u32>,
   /// CSS generic family keyword (e.g. `monospace`) this font resolves for.
   pub generic: Option<String>,
 }
@@ -174,6 +176,7 @@ pub(crate) fn resolve_font_resource<'a>(
     font.weight.map(|weight| weight as f32),
     font.style.map(|style| style.0),
     font.subset_of.clone(),
+    font.subset_rank,
     font.generic.clone(),
   )
   .map_err(map_error)?

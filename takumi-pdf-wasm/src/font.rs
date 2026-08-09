@@ -13,6 +13,7 @@ pub(crate) struct FontDetails {
   pub(crate) weight: Option<f64>,
   pub(crate) style: Option<FontStyle>,
   pub(crate) subset_of: Option<String>,
+  pub(crate) subset_rank: Option<u32>,
   pub(crate) generic: Option<String>,
 }
 

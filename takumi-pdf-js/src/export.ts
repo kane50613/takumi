@@ -2,7 +2,7 @@ import { fromHtml } from "@takumi-rs/helpers/html";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 import type { FontLoader, ImagesInput, RegisteredFamilyLike } from "@takumi-rs/helpers/renderer";
 import { FontRegistry } from "@takumi-rs/helpers/renderer";
-import type { Node, ReactElementLike } from "@takumi-rs/helpers";
+import { type Node, type ReactElementLike, subsetFonts } from "@takumi-rs/helpers";
 import type { ReactNode } from "react";
 import { PdfRenderer as PdfRendererInternal } from "../pkg/takumi_pdf_wasm";
 
@@ -14,6 +14,9 @@ declare module "react" {
     tw?: string;
   }
 }
+
+/** Every character a page counter can produce, so subsetting keeps the fonts a band needs. */
+const COUNTER_DIGITS = "0123456789";
 
 /** A document input: a takumi node tree, JSX, or an HTML string. */
 export type NodeInput = Node | ReactNode | ReactElementLike | string;
@@ -247,12 +250,22 @@ export class PdfRenderer {
   /** Renders a node tree, JSX, or an HTML string to PDF bytes. See {@link RenderOptions}. */
   async render(node: NodeInput, options: RenderOptions = {}): Promise<Uint8Array> {
     const { fonts, images, header, footer, stylesheets, fontFamilies, ...rest } = options;
-    const [main, headerResult, footerResult, resources] = await Promise.all([
+    const [main, headerResult, footerResult] = await Promise.all([
       resolveNode(node),
       header === undefined ? undefined : resolveNode(header),
       footer === undefined ? undefined : resolveNode(footer),
-      this.fonts.resolveResources(fonts, images, fontFamilies),
     ]);
+    const bands = [headerResult?.node, footerResult?.node].filter((band) => band !== undefined);
+    const resources = await this.fonts.resolveResources(
+      fonts &&
+        subsetFonts({
+          fonts,
+          // A band's page counters render digits no node in the tree carries.
+          source: bands.length > 0 ? [main.node, ...bands, COUNTER_DIGITS] : main.node,
+        }),
+      images,
+      fontFamilies,
+    );
     const sheets = [
       ...(stylesheets ?? []),
       ...main.stylesheets,
@@ -283,10 +296,13 @@ export class PdfRenderer {
    */
   async measure(node: NodeInput, options: MeasureOptions = {}): Promise<MeasuredSize> {
     const { fonts, images, stylesheets, fontFamilies, ...rest } = options;
-    const [main, resources] = await Promise.all([
-      resolveNode(node),
-      this.fonts.resolveResources(fonts, images, fontFamilies),
-    ]);
+    const main = await resolveNode(node);
+    // The tree measured may itself be a band, so its counters are always in play.
+    const resources = await this.fonts.resolveResources(
+      fonts && subsetFonts({ fonts, source: [main.node, COUNTER_DIGITS] }),
+      images,
+      fontFamilies,
+    );
     const sheets = [...(stylesheets ?? []), ...main.stylesheets];
 
     return this.inner.measure(main.node, {

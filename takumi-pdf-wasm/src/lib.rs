@@ -111,6 +111,7 @@ impl PdfRenderer {
           details.weight.map(|weight| weight as f32),
           details.style.map(|style| style.0),
           details.subset_of,
+          details.subset_rank,
           details.generic,
         )
         .map_err(map_error)?;

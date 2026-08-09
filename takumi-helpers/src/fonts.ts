@@ -191,6 +191,8 @@ export type FontSubset = {
   name: string;
   /** Logical family authors reference in `font-family`; expands to every loaded subset. */
   subsetOf: string;
+  /** Position in the group's fallback order, from the lowest codepoint the subset declares. */
+  subsetRank: number;
   /** Stable dedup key (`"{name}:{weight}:{style}:{range}"`), independent of the rotating woff2 URL. */
   key: string;
   weight?: number;
@@ -214,6 +216,7 @@ function toSubset(
   return {
     name,
     subsetOf: face.family,
+    subsetRank: subsetRank(face.ranges),
     // Stable coverage identity, not the woff2 URL Google may rotate, so the renderer dedups
     // across calls yet never merges two subsets that cover different ranges.
     key: `${name}:${face.weight ?? ""}:${face.style ?? ""}:${range}:${generic ?? ""}`,
@@ -226,6 +229,18 @@ function toSubset(
         readBodyLimited(r, options.maxBytes ?? defaultMaxFetchBytes),
       ),
   };
+}
+
+/**
+ * Fallback order within a `subsetOf` group. Coverage alone cannot settle it: Google's Cyrillic
+ * and Greek subsets also encode the ASCII space and several Latin capitals, so a shaper that
+ * takes the first font whose `cmap` covers a cluster tears Latin words apart. Ranking by the
+ * lowest codepoint a subset declares puts `latin` (U+0000) first, which is the order a browser
+ * reaches through `unicode-range`. A subset declaring no range covers everything, so it goes
+ * last and catches whatever the ranged ones miss.
+ */
+function subsetRank(ranges: [number, number][]): number {
+  return ranges.length === 0 ? 0xffffffff : Math.min(...ranges.map(([lo]) => lo));
 }
 
 /** Parse `U+0460-052F, U+20B4, U+30??` into inclusive `[lo, hi]` codepoint ranges. */
@@ -325,8 +340,14 @@ function mergeVariableFaces(faces: SubsetFace[]): SubsetFace[] {
   return merged;
 }
 
+/**
+ * A codepoint source: content trees, plus loose strings for text a backend injects that no
+ * node carries, such as the digits a PDF page counter fills in.
+ */
+export type CodepointSource = string | Node | (string | Node)[];
+
 /** Collect every codepoint the content will render. */
-export function collectCodepoints(source: string | Node | Node[]): Set<number> {
+export function collectCodepoints(source: CodepointSource): Set<number> {
   const codepoints = new Set<number>();
 
   const add = (text: string) => {
@@ -334,17 +355,17 @@ export function collectCodepoints(source: string | Node | Node[]): Set<number> {
       codepoints.add(ch.codePointAt(0) as number);
     }
   };
-  const walk = (node: Node) => {
-    if (node.type === "text") {
+  const walk = (node: string | Node) => {
+    if (typeof node === "string") {
+      add(node);
+    } else if (node.type === "text") {
       add(node.text);
     } else if (node.type === "container") {
       node.children?.forEach(walk);
     }
   };
 
-  if (typeof source === "string") {
-    add(source);
-  } else if (Array.isArray(source)) {
+  if (Array.isArray(source)) {
     source.forEach(walk);
   } else {
     walk(source);
@@ -374,13 +395,7 @@ function rangesCover(ranges: [number, number][], codepoints: Set<number>): boole
  * `text=` subset) always stay. Runs without network, so a renderer can apply it to the final
  * node tree. Works on any descriptor carrying `ranges`; entries without it are kept.
  */
-export function subsetFonts<T>({
-  fonts,
-  source,
-}: {
-  fonts: T[];
-  source: string | Node | Node[];
-}): T[] {
+export function subsetFonts<T>({ fonts, source }: { fonts: T[]; source: CodepointSource }): T[] {
   const codepoints = collectCodepoints(source);
 
   return fonts.filter((font) =>
