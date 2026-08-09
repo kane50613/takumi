@@ -118,6 +118,10 @@ pub(crate) struct Emitter<'a> {
   /// Records a marked-content identifier per source node while drawing, for
   /// the structure tree built after emission.
   pub(crate) tags: Option<&'a RefCell<TagCollector>>,
+  /// Path from the document root to this emitter's own root. Empty for the
+  /// document; an inline box's subtree emitter carries the box's path, so the
+  /// nodes it tags land where the structure tree walk looks for them.
+  pub(crate) tag_prefix: Vec<usize>,
   /// Color transform from the `filter` properties of the enclosing stacking
   /// contexts, applied to every color this subtree paints.
   pub(crate) color_filter: Option<Rc<ColorFilter>>,
@@ -394,7 +398,9 @@ impl Emitter<'_> {
         let identifier = surface.start_tagged(self.content_tag(node));
 
         if let Some(tags) = self.tags {
-          tags.borrow_mut().record(&paint.path, identifier);
+          tags
+            .borrow_mut()
+            .record(&self.tag_path(&paint.path), identifier);
         }
       }
     }
@@ -1349,10 +1355,14 @@ impl Emitter<'_> {
       };
       let node = item.render_node;
 
+      // A container box runs its own emitter, which tags every node it walks.
+      // A replaced one paints here, so it takes one region for the whole box.
+      let box_tagged = self.tags.is_some() && matches!(paint, InlineBoxPaint::Replaced { .. });
+
       if owner_tagged {
         surface.end_tagged();
       }
-      if self.tags.is_some() {
+      if box_tagged {
         self.start_tagged_node(node, surface);
       }
       // The box never reaches `emit_box`, so the state that would paint it
@@ -1376,13 +1386,15 @@ impl Emitter<'_> {
           node,
           layout: box_layout,
         } => self.emit_inline_replaced(node, box_layout, origin, surface),
-        InlineBoxPaint::Container(subtree) => self.emit_inline_subtree(subtree, origin, surface),
+        InlineBoxPaint::Container(subtree) => {
+          self.emit_inline_subtree(subtree, node, origin, surface)
+        }
       }
       self.color_filter = outer_filter;
       if faded {
         surface.pop();
       }
-      if self.tags.is_some() {
+      if box_tagged {
         surface.end_tagged();
       }
       if owner_tagged {
@@ -1428,6 +1440,7 @@ impl Emitter<'_> {
   fn emit_inline_subtree(
     &mut self,
     subtree: Box<InlineSubtree>,
+    node: &RenderNode,
     origin: (f32, f32),
     surface: &mut Surface,
   ) {
@@ -1443,6 +1456,13 @@ impl Emitter<'_> {
     ) else {
       return;
     };
+    // The subtree root is a clone of `node`, so the box's own path is the
+    // prefix that puts the subtree's nodes back on the document tree.
+    let mut box_path = Vec::new();
+    let tags = self
+      .tags
+      .filter(|_| node_path(self.root, node, &mut box_path));
+    let tag_prefix = self.tag_path(&box_path);
     let mut emitter = Emitter {
       root: &subtree.root,
       contexts: &contexts,
@@ -1451,7 +1471,8 @@ impl Emitter<'_> {
       inline: None,
       window: None,
       line_window: None,
-      tags: None,
+      tags,
+      tag_prefix,
       color_filter: self.color_filter.clone(),
       uncovered: self.uncovered,
       document_lang: self.document_lang,
@@ -1481,8 +1502,19 @@ impl Emitter<'_> {
     if let Some(tags) = self.tags
       && node_path(self.root, node, &mut path)
     {
-      tags.borrow_mut().record(&path, identifier);
+      tags.borrow_mut().record(&self.tag_path(&path), identifier);
     }
+  }
+
+  /// The document-rooted path of a node this emitter reached at `path`.
+  fn tag_path(&self, path: &[usize]) -> Vec<usize> {
+    if self.tag_prefix.is_empty() {
+      return path.to_vec();
+    }
+    let mut full = self.tag_prefix.clone();
+
+    full.extend_from_slice(path);
+    full
   }
 
   /// The fills a `background-clip: text` box paints through its glyphs:
