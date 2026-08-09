@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, test } from "bun:test";
 import { container, text } from "@takumi-rs/helpers";
 import { PdfRenderer } from "../bundlers/node.mjs";
@@ -60,6 +61,42 @@ test("paginates and substitutes footer counters", async () => {
       ],
     }),
   });
+
+  expect(pageCount(pdf)).toBeGreaterThan(1);
+});
+
+test("keeps a face the page counter needs but the document never uses", async () => {
+  // `fonts` are filtered by whether their range covers the render, and a
+  // chinese counter is the only thing on the page outside latin.
+  const pdf = await renderer.render(
+    container({
+      style: { display: "flex", flexDirection: "column", width: "100%" },
+      children: Array.from({ length: 60 }, (_, i) => text(`Row ${i + 1}`, { fontSize: 16 })),
+    }),
+    {
+      size: { width: 400, height: 300 },
+      margin: 24,
+      fonts: [
+        {
+          name: "Counter CJK",
+          ranges: [[0x4e00, 0x9fff]],
+          data: () =>
+            new Uint8Array(
+              readFileSync(
+                new URL(
+                  "../../assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2",
+                  import.meta.url,
+                ),
+              ),
+            ),
+        },
+      ],
+      footer: container({
+        style: { display: "flex", fontSize: 12 },
+        children: [container({ className: "totalPages trad-chinese-informal" })],
+      }),
+    },
+  );
 
   expect(pageCount(pdf)).toBeGreaterThan(1);
 });

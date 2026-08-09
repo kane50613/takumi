@@ -2,25 +2,114 @@
 
 use takumi_core::layout::node::{Node, NodeKind};
 
-const COUNTER_STYLES: [&str; 7] = [
+/// Styles that write a decimal number in another script's digits, zero first.
+const DIGIT_STYLES: [(&str, [char; 10]); 20] = [
+  ("cjk-decimal", CHINESE_DIGITS),
+  (
+    "arabic-indic",
+    ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'],
+  ),
+  (
+    "bengali",
+    ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'],
+  ),
+  (
+    "cambodian",
+    ['០', '១', '២', '៣', '៤', '៥', '៦', '៧', '៨', '៩'],
+  ),
+  ("khmer", ['០', '១', '២', '៣', '៤', '៥', '៦', '៧', '៨', '៩']),
+  (
+    "devanagari",
+    ['०', '१', '२', '३', '४', '५', '६', '७', '८', '९'],
+  ),
+  (
+    "gujarati",
+    ['૦', '૧', '૨', '૩', '૪', '૫', '૬', '૭', '૮', '૯'],
+  ),
+  (
+    "gurmukhi",
+    ['੦', '੧', '੨', '੩', '੪', '੫', '੬', '੭', '੮', '੯'],
+  ),
+  (
+    "kannada",
+    ['೦', '೧', '೨', '೩', '೪', '೫', '೬', '೭', '೮', '೯'],
+  ),
+  ("lao", ['໐', '໑', '໒', '໓', '໔', '໕', '໖', '໗', '໘', '໙']),
+  (
+    "malayalam",
+    ['൦', '൧', '൨', '൩', '൪', '൫', '൬', '൭', '൮', '൯'],
+  ),
+  (
+    "mongolian",
+    ['᠐', '᠑', '᠒', '᠓', '᠔', '᠕', '᠖', '᠗', '᠘', '᠙'],
+  ),
+  (
+    "myanmar",
+    ['၀', '၁', '၂', '၃', '၄', '၅', '၆', '၇', '၈', '၉'],
+  ),
+  ("oriya", ['୦', '୧', '୨', '୩', '୪', '୫', '୬', '୭', '୮', '୯']),
+  (
+    "persian",
+    ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'],
+  ),
+  ("urdu", ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹']),
+  ("tamil", ['௦', '௧', '௨', '௩', '௪', '௫', '௬', '௭', '௮', '௯']),
+  ("telugu", ['౦', '౧', '౨', '౩', '౪', '౫', '౬', '౭', '౮', '౯']),
+  ("thai", ['๐', '๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙']),
+  (
+    "tibetan",
+    ['༠', '༡', '༢', '༣', '༤', '༥', '༦', '༧', '༨', '༩'],
+  ),
+];
+
+/// Styles that count through an alphabet: a, b, ..., z, aa, ab, and so on.
+const ALPHABET_STYLES: [(&str, &str); 7] = [
+  ("lower-alpha", "abcdefghijklmnopqrstuvwxyz"),
+  ("lower-latin", "abcdefghijklmnopqrstuvwxyz"),
+  ("upper-alpha", "ABCDEFGHIJKLMNOPQRSTUVWXYZ"),
+  ("upper-latin", "ABCDEFGHIJKLMNOPQRSTUVWXYZ"),
+  ("lower-greek", "αβγδεζηθικλμνξοπρστυφχψω"),
+  (
+    "hiragana",
+    "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわゐゑをん",
+  ),
+  (
+    "katakana",
+    "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヰヱヲン",
+  ),
+];
+
+const OTHER_STYLES: [&str; 5] = [
   "decimal",
   "decimal-leading-zero",
   "lower-roman",
   "upper-roman",
-  "cjk-decimal",
   "trad-chinese-informal",
-  "cjk-ideographic",
 ];
+
+/// Whether a class names a counter style this renderer knows.
+fn is_counter_style(name: &str) -> bool {
+  name == "cjk-ideographic"
+    || OTHER_STYLES.contains(&name)
+    || DIGIT_STYLES.iter().any(|(style, _)| *style == name)
+    || ALPHABET_STYLES.iter().any(|(style, _)| *style == name)
+}
 
 /// Formats a page counter in a CSS `@counter-style` named style. Unknown
 /// styles fall back to `decimal`.
 fn format_counter(value: usize, style: &str) -> String {
-  match style {
-    "cjk-decimal" => value
+  if let Some((_, digits)) = DIGIT_STYLES.iter().find(|(name, _)| *name == style) {
+    return value
       .to_string()
       .bytes()
-      .map(|digit| CHINESE_DIGITS[usize::from(digit - b'0')])
-      .collect(),
+      .map(|digit| digits[usize::from(digit - b'0')])
+      .collect();
+  }
+  if let Some((_, alphabet)) = ALPHABET_STYLES.iter().find(|(name, _)| *name == style) {
+    return alphabetic(value, alphabet);
+  }
+
+  match style {
     // Blink defines cjk-ideographic as `extends trad-chinese-informal`.
     "trad-chinese-informal" | "cjk-ideographic" => chinese_informal(value),
     "lower-roman" => roman(value).to_ascii_lowercase(),
@@ -28,6 +117,26 @@ fn format_counter(value: usize, style: &str) -> String {
     "decimal-leading-zero" => format!("{value:02}"),
     _ => value.to_string(),
   }
+}
+
+/// Counts through `alphabet` the way a spreadsheet names its columns, where the
+/// last letter carries no zero and so `z` is followed by `aa`.
+fn alphabetic(value: usize, alphabet: &str) -> String {
+  let letters: Vec<char> = alphabet.chars().collect();
+
+  if value == 0 || letters.is_empty() {
+    return value.to_string();
+  }
+  let mut remaining = value;
+  let mut out = Vec::new();
+
+  while remaining > 0 {
+    remaining -= 1;
+    out.push(letters[remaining % letters.len()]);
+    remaining /= letters.len();
+  }
+  out.reverse();
+  out.into_iter().collect()
 }
 
 const CHINESE_DIGITS: [char; 10] = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
@@ -119,7 +228,7 @@ pub(crate) fn counter_text(node: &Node, page: usize, pages: usize) -> Option<Str
   };
   let style = classes
     .split_whitespace()
-    .find(|class| COUNTER_STYLES.contains(class))
+    .find(|class| is_counter_style(class))
     .unwrap_or("decimal");
 
   Some(format_counter(value, style))
@@ -140,5 +249,37 @@ pub(crate) fn substitute_page_counters(node: &mut Node, page: usize, pages: usiz
     for child in children {
       substitute_page_counters(child, page, pages);
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn digit_styles_spell_the_number_in_their_own_script() {
+    assert_eq!(format_counter(2026, "devanagari"), "२०२६");
+    assert_eq!(format_counter(2026, "thai"), "๒๐๒๖");
+    assert_eq!(format_counter(2026, "arabic-indic"), "٢٠٢٦");
+    // `khmer` and `urdu` are the same digits under another name.
+    assert_eq!(format_counter(7, "khmer"), format_counter(7, "cambodian"));
+    assert_eq!(format_counter(7, "urdu"), format_counter(7, "persian"));
+  }
+
+  #[test]
+  fn alphabet_styles_carry_past_their_last_letter() {
+    assert_eq!(format_counter(1, "lower-alpha"), "a");
+    assert_eq!(format_counter(26, "lower-alpha"), "z");
+    assert_eq!(format_counter(27, "lower-alpha"), "aa");
+    assert_eq!(format_counter(28, "upper-latin"), "AB");
+    assert_eq!(format_counter(1, "lower-greek"), "α");
+    assert_eq!(format_counter(1, "katakana"), "ア");
+  }
+
+  #[test]
+  fn unknown_styles_count_in_decimal() {
+    assert_eq!(format_counter(42, "no-such-style"), "42");
+    assert!(!is_counter_style("no-such-style"));
+    assert!(is_counter_style("tibetan"));
   }
 }

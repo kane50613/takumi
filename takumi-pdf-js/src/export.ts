@@ -15,8 +15,39 @@ declare module "react" {
   }
 }
 
-/** Every character a page counter can produce, so subsetting keeps the fonts a band needs. */
+/** What a page counter renders in the style every band gets by default. */
 const COUNTER_DIGITS = "0123456789";
+
+/** The class hooks a page counter is requested through. */
+const COUNTER_HOOKS = ["pageNumber", "totalPages"];
+
+/**
+ * Whether a tree asks for a page counter in a style other than decimal.
+ *
+ * A face is kept only when its `unicode-range` covers something the render asks
+ * for, and a counter's characters appear nowhere in the document. Which
+ * characters a style reaches for is the renderer's to know, so rather than
+ * keeping a copy of that here, a non-decimal counter keeps every face.
+ */
+function usesNonDecimalCounter(node: unknown): boolean {
+  if (typeof node !== "object" || node === null) {
+    return false;
+  }
+  const { className, children } = node as { className?: unknown; children?: unknown };
+
+  if (typeof className === "string") {
+    const classes = className.split(/\s+/);
+
+    if (
+      classes.some((name) => COUNTER_HOOKS.includes(name)) &&
+      classes.some((name) => name !== "decimal" && name.includes("-"))
+    ) {
+      return true;
+    }
+  }
+
+  return Array.isArray(children) && children.some(usesNonDecimalCounter);
+}
 
 /** A document input: a takumi node tree, JSX, or an HTML string. */
 export type NodeInput = Node | ReactNode | ReactElementLike | string;
@@ -256,13 +287,16 @@ export class PdfRenderer {
       footer === undefined ? undefined : resolveNode(footer),
     ]);
     const bands = [headerResult?.node, footerResult?.node].filter((band) => band !== undefined);
+    const keepEveryFace = bands.some(usesNonDecimalCounter);
     const resources = await this.fonts.resolveResources(
       fonts &&
-        subsetFonts({
-          fonts,
-          // A band's page counters render digits no node in the tree carries.
-          source: bands.length > 0 ? [main.node, ...bands, COUNTER_DIGITS] : main.node,
-        }),
+        (keepEveryFace
+          ? fonts
+          : subsetFonts({
+              fonts,
+              // A band's page counters render digits no node in the tree carries.
+              source: bands.length > 0 ? [main.node, ...bands, COUNTER_DIGITS] : main.node,
+            })),
       images,
       fontFamilies,
     );
