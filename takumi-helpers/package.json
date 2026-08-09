@@ -1,6 +1,6 @@
 {
   "name": "@takumi-rs/helpers",
-  "version": "2.5.11",
+  "version": "2.6.0",
   "description": "Utility helpers for converting JSX/HTML to Takumi node trees, loading fonts, and processing emoji.",
   "keywords": [
     "css",

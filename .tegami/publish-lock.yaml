@@ -1,91 +1,243 @@
 core:changelogs:
-  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n### Render the weight the text asked for\n\nA variable font is embedded at the coordinates the run was shaped at, so `font-weight` and `font-stretch` reach the page instead of the font's default instance. A face with no bold or oblique of its own gets the same synthesized ones the raster renderer applies.\n"
-    filename: pdf-font-weights.md
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  \"@takumi-rs/helpers\":\n    type: minor\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-pdf:\n    type: patch\n---\n\n### Route shared codepoints to the subset that declares them\n\nA Google Fonts subset encodes more than the `unicode-range` it was cut for, and the Cyrillic and Greek ones also carry the ASCII space and the Latin capitals. Selection took the first subset whose glyphs covered a character, in family-name order, so those codepoints left the Latin subset and every word split into separate runs. Subsets now rank by the range they declare, lowest first.\n"
+    filename: subset-fallback-rank.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n### Render HTML strings\n\n`render()`, `measure()`, and the header and footer options accept HTML strings, the same input format as `takumi-js`. A `<style>` tag applies only to that render.\n"
-    filename: pdf-html-input.md
+  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n### Validate against PDF/UA-2\n\n`tagged: \"ua2\"` writes PDF/UA-2, which pairs with PDF/A-4 and needs a document language.\n"
+    filename: pdf-ua2.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n### Draw inline images and containers\n\nAn `<img>` inside a paragraph now draws, and carries its `alt` into the structure tree.\n"
+    filename: pdf-inline-images.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n### Follow a rounded axis with the `auto` one\n\n`background-size` with one `auto` axis kept the size it was first given when `background-repeat: round` rescaled the other. The tile stopped matching the image's shape. It now follows, as it already did in the raster and SVG backends.\n"
+    filename: pdf-auto-axis-round.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-svg:\n    type: patch\n  takumi-pdf:\n    type: patch\n  takumi-raster:\n    type: patch\n---\n\n### Place replaced content from one place\n\n`object-fit` and `object-position` place replaced content from one place. An `object-position` past 100% now clips to the content box.\n"
+    filename: place-replaced-once.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n### Ask a background layer once whether it paints\n\n`BackgroundImage::paints` replaces the three spellings each backend had for the same question.\n\nPDF used to treat a `url()` layer as unpaintable when built without the `images` feature, which skipped the whole background-image pass rather than that one layer.\n"
+    filename: core-layer-paints.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-svg:\n    type: patch\n  takumi-pdf:\n    type: patch\n  takumi-raster:\n    type: patch\n---\n\n### Skip the ink an underline runs through, in every backend\n\n`text-decoration-skip-ink` breaks an underline where the glyph outlines cross it, in every backend. A gap inside a letter stays a gap.\n"
+    filename: skip-ink-geometry.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n### Report the measured tree's own width\n\n`measure` handed back the width it laid the tree out against, so a box with `width: 100px` measured 793 on an A4 page. It now reports the size the tree itself took.\n"
+    filename: measure-content-size.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n### Paint text decorations from one place\n\n`paint_run_decorations` paints a run's underline, overline and line-through for every backend.\n"
+    filename: paint-run-decorations.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n### Tag `<figure>` as a Figure\n\nA `<figure>` becomes a `Figure` carrying its image's `alt`. The `<figcaption>` inside becomes a `Caption` child of it. Captions used to reach the document root, which no standard allows.\n"
+    filename: pdf-figure-caption.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-pdf:\n    type: patch\n---\n\n### Resolve inline boxes once, for every backend\n\n`resolve_inline_box` places an inline box's replaced content or nested subtree, shared by the SVG and PDF backends.\n"
+    filename: core-inline-box.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-svg:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n### Shade a 3D border in every backend\n\n`inset`, `outset`, `groove` and `ridge` borders now shade their sides in the SVG and PDF backends, as the raster backend already did.\n"
+    filename: three-d-border-shading.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n### Correct the PDF 2.0 structure namespace\n\nA tagged PDF/A-4 document now names its structure namespace `http://iso.org/pdf2/ssn`, the identifier ISO 32000-2 defines. The old one matched no known namespace, so PDF/UA-2 validators rejected every structure element in the file.\n"
+    filename: pdf2-structure-namespace.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi-svg:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n### Paint the outline above the content\n\nAn `outline` painted under the box's own text and images, so a negative `outline-offset` disappeared behind them. CSS 2.1 Appendix E paints the outline last, and every backend now does.\n"
+    filename: paint-order-outline.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n### Draw dashed, dotted and double borders in PDF\n\n`dashed`, `dotted` and `double` borders and outlines now draw in PDF instead of falling back to solid.\n"
+    filename: pdf-border-styles.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-svg:\n    type: patch\n  takumi-raster:\n    type: patch\n---\n\n### Paint a `border-area` background under the border\n\nA `background-clip: border-area` fill painted over the border, or replaced its colour, depending on the backend. It now paints under it.\n"
+    filename: border-area-under-border.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-raster:\n    type: patch\n---\n\n### Paint an outline above the text it wraps\n\nA box with a negative `outline-offset` drew its own text over the outline ring. The outline now paints after everything inside the box, matching the SVG and PDF backends.\n"
+    filename: raster-outline-after-inline.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-raster:\n    type: patch\n---\n\n### Rotate hue from the same matrix everywhere\n\n`takumi_core::filter::ColorMatrix` turns a colour-transforming `filter` function into the matrix Filter Effects defines for it. The raster backend had written the `hue-rotate` coefficients out a second time and rounded the angle to whole degrees first, so `hue-rotate(45.5deg)` rotated by 45.\n"
+    filename: color-matrix-core.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-raster:\n    type: patch\n---\n\n### Stack text shadows the way a browser does\n\nThe raster backend painted `text-shadow` in list order, putting the last one on top. CSS puts the first one there, so a stack of glows came out inverted. `SizedFontStyle::painted_text_shadows` walks them back to front for every backend, and drops the ones nobody sees.\n"
+    filename: text-shadow-order.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-raster:\n    type: patch\n---\n\n### Resolve a `clip-path` shape from one place\n\nThe raster backend resolved `inset()`, `ellipse()`, `polygon()` and `path()` itself. An `ellipse()` took its keyword radii across both axes, so a non-square box got the wrong ones, and a percentage corner radius in `inset()` measured against the width on both axes.\n"
+    filename: clip-shape-once.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-svg:\n    type: patch\n  takumi-raster:\n    type: patch\n---\n\n### Paint an outline above the box's children\n\nA box with a negative `outline-offset` drew its outline under its own children, so a ring dragged inside the box disappeared behind them. The outline now paints after everything the box contains.\n"
+    filename: outline-above-descendants.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-svg:\n    type: patch\n---\n\n### Paint a background colour from one place\n\n`PaintDevice` and `FillShape` let shared painting code drive a rasterizer, an SVG writer or a PDF writer.\n"
+    filename: core-paint-device.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-svg:\n    type: patch\n---\n\n### Draw every border ring from the shared painter\n\nThe SVG backend draws its borders through the shared painter. A `double` border fills two rings instead of stroking two centerlines.\n"
+    filename: svg-border-through-core.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-svg:\n    type: patch\n---\n\n### Emit a text decoration as one rect\n\nA text decoration emits as one positioned `<rect>` instead of a `<rect>` inside a `<g transform>`.\n"
+    filename: svg-decorations-through-core.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-html:\n    type: patch\n---\n\n### Keep the rest of a `style` attribute when one declaration fails\n\nA value this crate cannot read, such as `width: fit-content`, discarded every other declaration in the same `style` attribute. It now invalidates only itself, which is the recovery CSS asks for and what a `<style>` sheet already did.\n"
+    filename: inline-style-error-recovery.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n### Decide an inline outline's stroke once\n\n`SizedFontStyle::outline_stroke` says whether a `<span>`'s `outline` paints and how to dash it. Five items in `takumi_core::layout::inline` no longer leave the crate.\n"
+    filename: inline-outline-stroke.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n### Build an inline layout request from the box it fills\n\n`InlineLayoutRequest::in_content_box` and `in_available_space` build a request from the box it fills.\n"
+    filename: inline-layout-request-ctor.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n### Animate colours in sRGB\n\nAn animated or transitioned colour now interpolates in sRGB with premultiplied alpha, the space CSS Color 4 gives legacy colours, instead of Oklab. Midpoints between distant hues shift to match a browser.\n"
+    filename: legacy-color-interpolation.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n### Paint a border ring from one place\n\n`paint_border` fills a border ring, two for `double`, or strokes a uniform dashed or dotted one. `PaintDevice` gains `stroke_shape`. A fully transparent border no longer reaches the output.\n"
+    filename: core-paint-border.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n### Resolve background layers once, for every backend\n\n`takumi_core::layout::background` works out how many tiles a `background-image` layer paints and where each one goes. The raster and SVG backends each carried a copy of that arithmetic. Rasterizing a tile stays with the backend that draws pixels.\n"
+    filename: core-background-layers.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n### Decide a box's paint in one place\n\n`BoxPainter` decides what a box paints — its background shape, colour, shadows and outline — for every backend.\n"
+    filename: core-box-painter.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n### Collect a box's shadows once\n\n`BoxPainter::shadows` resolves `box-shadow` and splits it into the layers inside the box and the ones outside, so a backend no longer walks the list itself.\n\nA fully transparent shadow is dropped. Two backends used to keep it and paint nothing.\n"
+    filename: core-box-shadows.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - id: npm:takumi-js
-    updated: false
-  - id: npm:takumi-template
-    updated: false
-  - id: npm:@takumi-rs/wasm
-    updated: false
-  - id: npm:@takumi-rs/helpers
-    updated: false
   - id: npm:@takumi-rs/image-response
-    updated: false
+    updated: true
   - changelogIds:
-      - pdf-font-weights.md
-      - pdf-html-input.md
+      - subset-fallback-rank.md
+    id: npm:@takumi-rs/wasm
+    updated: true
+  - changelogIds:
+      - subset-fallback-rank.md
+    id: npm:@takumi-rs/helpers
+    updated: true
+  - changelogIds:
+      - pdf-ua2.md
+      - pdf-inline-images.md
+      - pdf-auto-axis-round.md
+      - subset-fallback-rank.md
+      - place-replaced-once.md
+      - core-layer-paints.md
+      - skip-ink-geometry.md
+      - measure-content-size.md
+      - paint-run-decorations.md
+      - pdf-figure-caption.md
+      - core-inline-box.md
+      - three-d-border-shading.md
+      - pdf2-structure-namespace.md
+      - paint-order-outline.md
+      - pdf-border-styles.md
     id: npm:takumi-pdf
+    updated: true
+  - changelogIds:
+      - subset-fallback-rank.md
+    id: npm:@takumi-rs/core
+    updated: true
+  - id: npm:takumi-js
     updated: true
   - id: npm:docs
     updated: false
-  - id: npm:@takumi-rs/core
+  - id: npm:takumi-template
+    updated: false
+  - id: npm:example-cloudflare-workers
     updated: false
   - id: npm:example-satori-html
     updated: false
+  - id: npm:waku-ssr
+    updated: false
+  - id: npm:example-css-library-integration
+    updated: false
   - id: npm:svelte
     updated: false
-  - id: npm:pdf-bench
-    updated: false
   - id: npm:example-e-invoice
+    updated: false
+  - id: npm:ffplay
+    updated: false
+  - id: npm:example-generate-invoice
     updated: false
   - id: npm:example-nextjs
     updated: false
   - id: npm:example-liquid-glass
     updated: false
-  - id: npm:ffmpeg-keyframe-animation
-    updated: false
-  - id: npm:example-css-library-integration
-    updated: false
   - id: npm:example-tanstack-start
     updated: false
-  - id: npm:ffplay
-    updated: false
-  - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:example-generate-invoice
-    updated: false
-  - id: npm:waku-ssr
+  - id: npm:ffmpeg-keyframe-animation
     updated: false
   - id: npm:example-twitter-images
     updated: false
+  - id: npm:pdf-bench
+    updated: false
+  - changelogIds:
+      - border-area-under-border.md
+      - raster-outline-after-inline.md
+      - place-replaced-once.md
+      - skip-ink-geometry.md
+      - color-matrix-core.md
+      - text-shadow-order.md
+      - clip-shape-once.md
+      - outline-above-descendants.md
+    id: cargo:takumi-raster
+    updated: true
+  - changelogIds:
+      - core-paint-device.md
+      - border-area-under-border.md
+      - svg-border-through-core.md
+      - place-replaced-once.md
+      - svg-decorations-through-core.md
+      - skip-ink-geometry.md
+      - three-d-border-shading.md
+      - paint-order-outline.md
+      - outline-above-descendants.md
+    id: cargo:takumi-svg
+    updated: true
+  - changelogIds:
+      - inline-style-error-recovery.md
+    id: cargo:takumi-html
+    updated: true
+  - changelogIds:
+      - inline-outline-stroke.md
+      - inline-layout-request-ctor.md
+      - legacy-color-interpolation.md
+      - core-paint-border.md
+      - core-paint-device.md
+      - subset-fallback-rank.md
+      - svg-border-through-core.md
+      - place-replaced-once.md
+      - core-layer-paints.md
+      - core-background-layers.md
+      - core-box-painter.md
+      - skip-ink-geometry.md
+      - paint-run-decorations.md
+      - color-matrix-core.md
+      - core-box-shadows.md
+      - text-shadow-order.md
+      - core-inline-box.md
+      - three-d-border-shading.md
+      - inline-style-error-recovery.md
+      - paint-order-outline.md
+      - pdf-border-styles.md
+    id: cargo:takumi-core
+    updated: true
   - id: cargo:takumi
-    updated: false
-  - id: cargo:takumi-core
-    updated: false
-  - id: cargo:takumi-raster
-    updated: false
-  - id: cargo:takumi-html
-    updated: false
-  - id: cargo:takumi-svg
-    updated: false
+    updated: true
 npm:packages:
   - id: npm:takumi
-  - id: npm:takumi-js
-  - id: npm:takumi-template
+  - id: npm:@takumi-rs/image-response
   - id: npm:@takumi-rs/wasm
   - id: npm:@takumi-rs/helpers
-  - id: npm:@takumi-rs/image-response
   - id: npm:takumi-pdf
-  - id: npm:docs
   - id: npm:@takumi-rs/core
+  - id: npm:takumi-js
+  - id: npm:docs
+  - id: npm:takumi-template
+  - id: npm:example-cloudflare-workers
   - id: npm:example-satori-html
+  - id: npm:waku-ssr
+  - id: npm:example-css-library-integration
   - id: npm:svelte
-  - id: npm:pdf-bench
   - id: npm:example-e-invoice
+  - id: npm:ffplay
+  - id: npm:example-generate-invoice
   - id: npm:example-nextjs
   - id: npm:example-liquid-glass
-  - id: npm:ffmpeg-keyframe-animation
-  - id: npm:example-css-library-integration
   - id: npm:example-tanstack-start
-  - id: npm:ffplay
-  - id: npm:example-cloudflare-workers
-  - id: npm:example-generate-invoice
-  - id: npm:waku-ssr
+  - id: npm:ffmpeg-keyframe-animation
   - id: npm:example-twitter-images
+  - id: npm:pdf-bench

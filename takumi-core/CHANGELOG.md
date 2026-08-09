@@ -1,3 +1,93 @@
+## takumi-core@0.17.0
+
+### Decide an inline outline's stroke once
+
+`SizedFontStyle::outline_stroke` says whether a `<span>`'s `outline` paints and how to dash it. Five items in `takumi_core::layout::inline` no longer leave the crate.
+
+### Build an inline layout request from the box it fills
+
+`InlineLayoutRequest::in_content_box` and `in_available_space` build a request from the box it fills.
+
+### Animate colours in sRGB
+
+An animated or transitioned colour now interpolates in sRGB with premultiplied alpha, the space CSS Color 4 gives legacy colours, instead of Oklab. Midpoints between distant hues shift to match a browser.
+
+### Paint a border ring from one place
+
+`paint_border` fills a border ring, two for `double`, or strokes a uniform dashed or dotted one. `PaintDevice` gains `stroke_shape`. A fully transparent border no longer reaches the output.
+
+### Paint a background colour from one place
+
+`PaintDevice` and `FillShape` let shared painting code drive a rasterizer, an SVG writer or a PDF writer.
+
+### Route shared codepoints to the subset that declares them
+
+A Google Fonts subset encodes more than the `unicode-range` it was cut for, and the Cyrillic and Greek ones also carry the ASCII space and the Latin capitals. Selection took the first subset whose glyphs covered a character, in family-name order, so those codepoints left the Latin subset and every word split into separate runs. Subsets now rank by the range they declare, lowest first.
+
+### Draw every border ring from the shared painter
+
+The SVG backend draws its borders through the shared painter. A `double` border fills two rings instead of stroking two centerlines.
+
+### Place replaced content from one place
+
+`object-fit` and `object-position` place replaced content from one place. An `object-position` past 100% now clips to the content box.
+
+### Ask a background layer once whether it paints
+
+`BackgroundImage::paints` replaces the three spellings each backend had for the same question.
+
+PDF used to treat a `url()` layer as unpaintable when built without the `images` feature, which skipped the whole background-image pass rather than that one layer.
+
+### Resolve background layers once, for every backend
+
+`takumi_core::layout::background` works out how many tiles a `background-image` layer paints and where each one goes. The raster and SVG backends each carried a copy of that arithmetic. Rasterizing a tile stays with the backend that draws pixels.
+
+### Decide a box's paint in one place
+
+`BoxPainter` decides what a box paints — its background shape, colour, shadows and outline — for every backend.
+
+### Skip the ink an underline runs through, in every backend
+
+`text-decoration-skip-ink` breaks an underline where the glyph outlines cross it, in every backend. A gap inside a letter stays a gap.
+
+### Paint text decorations from one place
+
+`paint_run_decorations` paints a run's underline, overline and line-through for every backend.
+
+### Rotate hue from the same matrix everywhere
+
+`takumi_core::filter::ColorMatrix` turns a colour-transforming `filter` function into the matrix Filter Effects defines for it. The raster backend had written the `hue-rotate` coefficients out a second time and rounded the angle to whole degrees first, so `hue-rotate(45.5deg)` rotated by 45.
+
+### Collect a box's shadows once
+
+`BoxPainter::shadows` resolves `box-shadow` and splits it into the layers inside the box and the ones outside, so a backend no longer walks the list itself.
+
+A fully transparent shadow is dropped. Two backends used to keep it and paint nothing.
+
+### Stack text shadows the way a browser does
+
+The raster backend painted `text-shadow` in list order, putting the last one on top. CSS puts the first one there, so a stack of glows came out inverted. `SizedFontStyle::painted_text_shadows` walks them back to front for every backend, and drops the ones nobody sees.
+
+### Resolve inline boxes once, for every backend
+
+`resolve_inline_box` places an inline box's replaced content or nested subtree, shared by the SVG and PDF backends.
+
+### Shade a 3D border in every backend
+
+`inset`, `outset`, `groove` and `ridge` borders now shade their sides in the SVG and PDF backends, as the raster backend already did.
+
+### Keep the rest of a `style` attribute when one declaration fails
+
+A value this crate cannot read, such as `width: fit-content`, discarded every other declaration in the same `style` attribute. It now invalidates only itself, which is the recovery CSS asks for and what a `<style>` sheet already did.
+
+### Paint the outline above the content
+
+An `outline` painted under the box's own text and images, so a negative `outline-offset` disappeared behind them. CSS 2.1 Appendix E paints the outline last, and every backend now does.
+
+### Draw dashed, dotted and double borders in PDF
+
+`dashed`, `dotted` and `double` borders and outlines now draw in PDF instead of falling back to solid.
+
 ## takumi-core@0.16.0
 
 ### Clip elements with `clip-path`
