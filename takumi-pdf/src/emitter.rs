@@ -1260,8 +1260,14 @@ impl Emitter<'_> {
       // `-webkit-text-stroke` strokes the glyph outlines around the fill, and
       // takes the run's own width over the faux bold one.
       surface.set_stroke(if stroke {
+        let stroke_fill = fill_from_rgba(
+          self.filtered(font_style.text_stroke_color),
+          shaped.brush.opacity,
+        );
+
         Some(Stroke {
-          paint: fill_from_rgba(self.filtered(font_style.text_stroke_color), 1.0).paint,
+          paint: stroke_fill.paint,
+          opacity: stroke_fill.opacity,
           width: font_style.stroke_width,
           ..Stroke::default()
         })
@@ -1955,6 +1961,9 @@ fn decorative_image(node: &RenderNode) -> bool {
 fn synthetic_stroke(shaped: &ShapedRun, fill: &Fill) -> Option<Stroke> {
   Some(Stroke {
     paint: fill.paint.clone(),
+    // A colour's alpha lives in the fill's opacity, not its paint, so a stroke
+    // built from the paint alone comes out fully opaque.
+    opacity: fill.opacity,
     width: shaped.synthetic_bold?,
     ..Stroke::default()
   })

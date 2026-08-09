@@ -2380,6 +2380,12 @@ fn font_weights() {
     haystack.contains("/Pattern CS"),
     "clip-text background missing from the synthesized bold outline"
   );
+  // The clipped text is transparent, and a colour's alpha lives beside its
+  // paint. A stroke built from the paint alone outlines it in solid black.
+  assert!(
+    haystack.contains("/CA 0"),
+    "faux bold outlines transparent text opaquely"
+  );
 }
 
 /// Registers both test fonts as coverage subsets of one logical family, ranked the way
