@@ -13,8 +13,8 @@ use takumi_core::{
 
 use super::{
   BackgroundTile, BorderProperties, Canvas, ColorTile, Fill, PaintSource, RenderContext,
-  SizedFontStyle, SizedShadow, TileLayer, background_image_layers, collect_background_layers,
-  draw_image, draw_inset_shadow_to_canvas, draw_outset_shadow, inline_drawing::draw_inline_layout,
+  SizedFontStyle, TileLayer, background_image_layers, collect_background_layers, draw_image,
+  draw_inset_shadow_to_canvas, draw_outset_shadow, inline_drawing::draw_inline_layout,
   paint_border, rasterize_layers,
 };
 use crate::{
@@ -34,29 +34,15 @@ pub(crate) fn draw_outset_box_shadow(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  let Some(box_shadow) = context.style.box_shadow.as_ref() else {
-    return Ok(());
-  };
+  let painter = BoxPainter::new(context, layout);
+  let element_border_radius = *painter.border();
 
-  let element_border_radius = BorderProperties::from_context(context, layout.size, layout.border);
-
-  for shadow in box_shadow.iter() {
-    if shadow.inset {
-      continue;
-    }
-
+  for shadow in painter.shadows().outer {
     let mut paths = Vec::new();
     let mut element_paths = Vec::new();
-
-    let resolved_spread_radius = shadow
-      .spread_radius
-      .to_px(&context.sizing, layout.size.width);
-
+    let resolved_spread_radius = shadow.spread_radius;
     let (border_radius, spread_size) =
       element_border_radius.outset_shadow_box(layout.size, resolved_spread_radius);
-
-    let shadow =
-      SizedShadow::from_box_shadow(*shadow, &context.sizing, context.current_color, layout.size);
 
     border_radius.append_mask_commands(
       &mut paths,
@@ -87,16 +73,11 @@ pub(crate) fn draw_inset_box_shadow(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  if let Some(box_shadow) = context.style.box_shadow.as_ref() {
-    let border_radius = BorderProperties::from_context(context, layout.size, layout.border);
+  {
+    let painter = BoxPainter::new(context, layout);
+    let border_radius = *painter.border();
 
-    for shadow in box_shadow.iter() {
-      if !shadow.inset {
-        continue;
-      }
-
-      let shadow =
-        SizedShadow::from_box_shadow(*shadow, &context.sizing, context.current_color, layout.size);
+    for shadow in painter.shadows().inset {
       draw_inset_shadow_to_canvas(&shadow, context.transform, border_radius, canvas, layout)?;
     }
   }

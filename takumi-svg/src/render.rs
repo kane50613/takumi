@@ -18,7 +18,6 @@ use takumi_core::{
   },
   resources::image::ImageSource,
   scene::build_stacking_contexts,
-  shadow::SizedShadow,
   style::{
     Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BasicShape, BlendMode, BorderStyle,
     Color, ComputedStyle, FillRule, FontFamily, Isolation, Lang, Overflow, ShapeRadius, Sides,
@@ -1099,18 +1098,8 @@ pub(crate) fn emit_box_shadows(
   h: f32,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
-  let Some(shadows) = node.context.style.box_shadow.as_ref() else {
-    return Ok(());
-  };
-  let cc = node.context.current_color;
-  for shadow in shadows.iter() {
-    if shadow.inset {
-      continue;
-    }
-    let resolved = SizedShadow::from_box_shadow(*shadow, &node.context.sizing, cc, layout.size);
-    if resolved.color.0[3] == 0 {
-      continue;
-    }
+  for resolved in BoxPainter::new(&node.context, layout).shadows().outer {
+    {}
 
     // Shadow shape = the element's rounded border-box, radii expanded by the
     // spread (shared core geometry with the raster backend).
@@ -1148,23 +1137,12 @@ pub(crate) fn emit_inset_box_shadows(
   y: f32,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
-  let Some(shadows) = node.context.style.box_shadow.as_ref() else {
-    return Ok(());
-  };
   let size = layout.size;
   if size.width <= 0.0 || size.height <= 0.0 {
     return Ok(());
   }
-  let cc = node.context.current_color;
   let outer = border_box_path_data(border, size, x, y);
-  for shadow in shadows.iter() {
-    if !shadow.inset {
-      continue;
-    }
-    let resolved = SizedShadow::from_box_shadow(*shadow, &node.context.sizing, cc, size);
-    if resolved.color.0[3] == 0 {
-      continue;
-    }
+  for resolved in BoxPainter::new(&node.context, layout).shadows().inset {
     let fill = Rgba(resolved.color.0);
 
     // The shadow fills the border box minus the hole it leaves uncovered (shared

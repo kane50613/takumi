@@ -41,8 +41,8 @@ use takumi_core::{
   shadow::SizedShadow,
   style::{
     Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BlendMode, BorderStyle,
-    BoxDecorationBreak, BoxShadow, BreakBetween, BreakInside, Color, FillRule as CoreFillRule,
-    Isolation, ResolvedGradientStop, Sides, TextDecorationLines,
+    BoxDecorationBreak, BreakBetween, BreakInside, Color, FillRule as CoreFillRule, Isolation,
+    ResolvedGradientStop, Sides, TextDecorationLines,
   },
 };
 
@@ -62,7 +62,7 @@ use crate::shadow::{emit_inset_shadows, emit_outer_shadows};
 #[cfg(all(feature = "svg", feature = "images"))]
 use crate::svg;
 use crate::tags::TagCollector;
-use takumi_core::painter::{BoxPainter, FillShape, PaintDevice, paint_run_decorations};
+use takumi_core::painter::{BoxPainter, BoxShadows, FillShape, PaintDevice, paint_run_decorations};
 
 /// An outline waiting for its box's state to be popped.
 #[derive(Clone)]
@@ -282,7 +282,9 @@ impl Emitter<'_> {
         pushed += 1;
       }
     }
-    let (inset, outer) = self.sized_shadows(node, deco_size);
+    let shadows =
+      self.filtered_shadows(BoxPainter::fragment(&node.context, layout, deco_size).shadows());
+    let (inset, outer) = (shadows.inset, shadows.outer);
 
     let deco_layout = Layout {
       size: deco_size,
@@ -717,32 +719,17 @@ impl Emitter<'_> {
   /// A node's shadows resolved against its box, split into inset and outer.
   /// The shadow color goes through the subtree's `filter` like every other
   /// color the element paints.
-  fn sized_shadows(
-    &self,
-    node: &RenderNode,
-    size: Size<f32>,
-  ) -> (Vec<SizedShadow>, Vec<SizedShadow>) {
-    let Some(shadows) = node.context.style.box_shadow.as_deref() else {
-      return (Vec::new(), Vec::new());
-    };
-    let resolve = |shadow: &BoxShadow| {
-      let sized = SizedShadow::from_box_shadow(
-        *shadow,
-        &node.context.sizing,
-        node.context.current_color,
-        size,
-      );
-
-      SizedShadow {
-        color: Color(self.filtered(sized.color)),
-        ..sized
-      }
+  /// Applies this subtree's `filter` to each shadow colour.
+  fn filtered_shadows(&self, shadows: BoxShadows) -> BoxShadows {
+    let recolor = |shadow: SizedShadow| SizedShadow {
+      color: Color(self.filtered(shadow.color)),
+      ..shadow
     };
 
-    (
-      shadows.iter().filter(|s| s.inset).map(resolve).collect(),
-      shadows.iter().filter(|s| !s.inset).map(resolve).collect(),
-    )
+    BoxShadows {
+      inset: shadows.inset.into_iter().map(recolor).collect(),
+      outer: shadows.outer.into_iter().map(recolor).collect(),
+    }
   }
 
   /// Builds the soft mask for `mask-image`, drawing its layers into their own
@@ -1493,7 +1480,8 @@ impl Emitter<'_> {
   ) {
     let (x, y) = origin;
     let border = BorderProperties::from_context(&node.context, layout.size, layout.border);
-    let (inset, outer) = self.sized_shadows(node, layout.size);
+    let shadows = self.filtered_shadows(BoxPainter::new(&node.context, layout).shadows());
+    let (inset, outer) = (shadows.inset, shadows.outer);
 
     self.shadows(&outer, &border, layout, (x, y), surface, false);
     self.emit_background(node, layout, x, y, surface);

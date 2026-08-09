@@ -11,6 +11,8 @@ use crate::layout::border::BorderProperties;
 use crate::layout::decoration::ClipBox;
 use crate::layout::decoration::{OutlineGeometry, outline_paint};
 use crate::layout::inline::DecorationRect;
+use crate::shadow::SizedShadow;
+use crate::style::BoxShadow;
 use crate::style::{Affine, BackgroundClip, Color, FillRule, TextDecorationLines};
 
 /// A closed shape to fill, in the coordinate space of the box that owns it.
@@ -74,6 +76,15 @@ impl FillShape {
 pub trait PaintDevice {
   /// Fills `shape` under `transform`, with a single colour.
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine);
+}
+
+/// A box's `box-shadow` layers, split by where they fall.
+#[derive(Default, Clone)]
+pub struct BoxShadows {
+  /// Shadows inside the box.
+  pub inset: Vec<SizedShadow>,
+  /// Shadows outside it.
+  pub outer: Vec<SizedShadow>,
 }
 
 /// One step of painting a box, in the order the steps run.
@@ -156,6 +167,39 @@ impl<'c> BoxPainter<'c> {
     };
 
     device.fill_shape(&shape, color, Affine::translation(origin.x, origin.y));
+  }
+
+  /// The box's `box-shadow` layers, resolved and split into the ones that fall
+  /// inside the box and the ones outside it. A fully transparent shadow is
+  /// dropped: it paints nothing anywhere.
+  pub fn shadows(&self) -> BoxShadows {
+    let Some(shadows) = self.context.style.box_shadow.as_deref() else {
+      return BoxShadows::default();
+    };
+    let resolve = |shadow: &BoxShadow| {
+      SizedShadow::from_box_shadow(
+        *shadow,
+        &self.context.sizing,
+        self.context.current_color,
+        self.layout.size,
+      )
+    };
+    let visible = |shadow: &SizedShadow| shadow.color.0[3] != 0;
+
+    BoxShadows {
+      inset: shadows
+        .iter()
+        .filter(|shadow| shadow.inset)
+        .map(resolve)
+        .filter(visible)
+        .collect(),
+      outer: shadows
+        .iter()
+        .filter(|shadow| !shadow.inset)
+        .map(resolve)
+        .filter(visible)
+        .collect(),
+    }
   }
 
   /// The outline the box paints, or `None` when it paints none.
