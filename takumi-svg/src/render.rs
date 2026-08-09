@@ -387,7 +387,7 @@ pub(crate) fn emit_mask_group(
   let Some(images) = style.mask_image.as_deref() else {
     return Ok(None);
   };
-  if images.is_empty() || images.iter().all(|i| matches!(i, BackgroundImage::None)) {
+  if !images.iter().any(BackgroundImage::paints) {
     return Ok(None);
   }
   if width <= 0.0 || height <= 0.0 {

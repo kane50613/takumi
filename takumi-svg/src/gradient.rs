@@ -101,7 +101,7 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
     let last_repeat = repeats.last().copied().unwrap_or_default();
 
     for (index, image) in images.iter().enumerate().rev() {
-      if matches!(image, BackgroundImage::None) {
+      if !image.paints() {
         continue;
       }
       let size = sizes.get(index).copied().unwrap_or(last_size);

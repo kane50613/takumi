@@ -396,7 +396,7 @@ impl Emitter<'_> {
     let Some(images) = style.background_image.as_deref() else {
       return;
     };
-    if !images.iter().any(paintable_layer) {
+    if !images.iter().any(BackgroundImage::paints) {
       return;
     }
     let Some(shape) = BoxPainter::new(&node.context, layout).background_clip_shape() else {
@@ -748,7 +748,7 @@ impl Emitter<'_> {
   ) -> Option<Mask> {
     let images = node.context.style.mask_image.as_deref()?;
 
-    if !images.iter().any(paintable_layer) {
+    if !images.iter().any(BackgroundImage::paints) {
       return None;
     }
     let filter = self.color_filter.take();
@@ -1845,19 +1845,6 @@ impl Emitter<'_> {
   }
 }
 
-/// Whether the node draws own content (text or an image), i.e. whether a
-/// tagged content sequence around it would be non-empty.
-/// Whether a background or mask layer draws anything in this build: gradients
-/// always, `url()` images only with the `images` feature.
-fn paintable_layer(image: &BackgroundImage) -> bool {
-  match image {
-    BackgroundImage::Linear(_) | BackgroundImage::Radial(_) | BackgroundImage::Conic(_) => true,
-    #[cfg(feature = "images")]
-    BackgroundImage::Url(_) => true,
-    _ => false,
-  }
-}
-
 /// Intrinsic sizing of a `url()` layer, which `background-size` resolves
 /// against. Gradients have none.
 #[cfg(feature = "images")]
@@ -1908,6 +1895,8 @@ fn background_origin_area(origin: BackgroundOrigin, layout: Layout) -> (CorePoin
   }
 }
 
+/// Whether the node draws own content (text or an image), i.e. whether a
+/// tagged content sequence around it would be non-empty.
 fn has_own_content(node: &RenderNode) -> bool {
   if node.should_create_inline_layout() {
     return true;
