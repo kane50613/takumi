@@ -45,8 +45,11 @@ test("renders an HTML string with its own stylesheet", async () => {
 
 test("paginates and substitutes footer counters", async () => {
   // The bundled face is latin only, and `trad-chinese-informal` counts in
-  // Chinese numerals, which no registered font would otherwise cover.
-  await renderer.registerFont(
+  // Chinese numerals. The face registered for it stays on a renderer of its
+  // own so the other tests keep the bundled set.
+  const counting = new PdfRenderer();
+
+  await counting.registerFont(
     new Uint8Array(
       readFileSync(
         new URL("../../assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2", import.meta.url),
@@ -58,7 +61,7 @@ test("paginates and substitutes footer counters", async () => {
     style: { display: "flex", flexDirection: "column", width: "100%" },
     children: Array.from({ length: 60 }, (_, i) => text(`Row ${i + 1}`, { fontSize: 16 })),
   });
-  const pdf = await renderer.render(rows, {
+  const pdf = await counting.render(rows, {
     size: { width: 400, height: 300 },
     margin: 24,
     footer: container({
