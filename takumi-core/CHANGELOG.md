@@ -1,3 +1,21 @@
+## takumi-core@0.18.0
+
+### Map a cluster's glyphs to its source text once
+
+In Devanagari and other scripts that attach marks to a base letter, the base and its mark form separate clusters over the same source text. Every glyph claimed that whole range, so `मोटा` came out of the PDF text layer as `ममोटटा`. Overlapping glyphs now share one range and one `/ActualText`, and every glyph gets a codepoint mapping so a viewer without `/ActualText` support does not read a raw glyph index.
+
+### Key text layout on the stroke width
+
+Two passages of the same words in the same font shared one shaped layout, so a `-webkit-text-stroke` width set on the second was drawn at the first one's width.
+
+### Widen a clipped background by the text stroke
+
+A transparent `-webkit-text-stroke` reveals a ring of the background painted through the glyphs. In PDF that ring was missing: the background pass widened the coverage by the faux bold alone, so the output disagreed with the image and SVG backends.
+
+### Stroke the span that asked for it
+
+`-webkit-text-stroke` was read off the element holding the text, so a `span` setting it for itself came out unstroked, and a nested one turning it off still got the parent's outline. The stroke now travels with the text run, in every backend.
+
 ## takumi-core@0.17.0
 
 ### Decide an inline outline's stroke once
