@@ -25,7 +25,7 @@ use crate::{
   IDENTITY, SvgDocument,
   render::{
     BoxChrome, border_box_path_data, emit_box_chrome, emit_clip_path_group, emit_mask_group,
-    emit_own_content,
+    emit_own_content, paint_outline,
   },
 };
 
@@ -220,6 +220,12 @@ fn emit_context(
   };
 
   let mut stopped = false;
+  // A plain node in a bucket owns no effect groups — anything that would need
+  // one makes the node its own context — so its outline can wait for the
+  // descendants that follow it in the bucket. CSS 2.1 Appendix E paints an
+  // outline last; Blink runs the same pass as `kDescendantOutlinesOnly`.
+  let mut descendant_outlines = Vec::new();
+
   'buckets: for bucket in ctx.in_paint_order() {
     for item in bucket {
       match &item.kind {
@@ -228,9 +234,10 @@ fn emit_context(
             stopped = true;
             break 'buckets;
           }
-          if let Some((chrome, _)) =
+          if let Some((mut chrome, _)) =
             emit_box(root, contexts, np, child_frame, results, doc, stop_at)?
           {
+            descendant_outlines.extend(chrome.take_outline());
             chrome.close(doc)?;
           }
         }
@@ -244,6 +251,9 @@ fn emit_context(
     }
   }
 
+  for pending in &descendant_outlines {
+    paint_outline(pending, doc)?;
+  }
   if let Some(chrome) = chrome {
     chrome.close(doc)?;
   }

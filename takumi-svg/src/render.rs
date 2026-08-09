@@ -134,13 +134,19 @@ pub(crate) struct BoxChrome {
 }
 
 /// An outline waiting for its box's content to finish.
-struct PendingOutline {
+pub(crate) struct PendingOutline {
   outline: OutlineGeometry,
   x: f32,
   y: f32,
 }
 
 impl BoxChrome {
+  /// Hands the outline to a caller that knows when the box's descendants are
+  /// done, so [`close`](Self::close) leaves it alone.
+  pub(crate) fn take_outline(&mut self) -> Option<PendingOutline> {
+    self.outline.take()
+  }
+
   /// Closes the box's groups innermost first, painting the outline once the
   /// content group is closed so it lands above the content and outside its
   /// overflow clip.
@@ -943,7 +949,7 @@ fn pending_outline(
   })
 }
 
-fn paint_outline(pending: &PendingOutline, doc: &mut SvgDocument) -> io::Result<()> {
+pub(crate) fn paint_outline(pending: &PendingOutline, doc: &mut SvgDocument) -> io::Result<()> {
   emit_borders(
     &pending.outline.border,
     pending.x - pending.outline.grow,

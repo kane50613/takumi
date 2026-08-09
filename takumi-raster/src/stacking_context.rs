@@ -1,4 +1,5 @@
 use takumi_core::{
+  context::RenderContext,
   geometry::{
     AvailableSpace, ComputedLayout as Layout, NodeId, Point, Size, transformed_rect_extents,
   },
@@ -132,6 +133,18 @@ enum DeferredNodeRender {
   },
   SkipRendering,
 }
+/// A box's outline, held until everything inside the box has painted.
+pub(crate) struct DeferredOutline {
+  context: RenderContext,
+  layout: Layout,
+}
+
+impl DeferredOutline {
+  fn paint(&self, canvas: &mut Canvas) -> Result<()> {
+    draw_outline(&self.context, canvas, self.layout)
+  }
+}
+
 fn finish_node_render(
   node: &mut RenderNode,
   canvas: &mut Canvas,
@@ -139,11 +152,21 @@ fn finish_node_render(
   has_constraint: bool,
   isolated_canvas: Option<CanvasSubcanvas>,
   filter_bounds: Option<SceneBounds>,
+  outlines: Option<&mut Vec<DeferredOutline>>,
 ) -> Result<()> {
   // CSS 2.1 Appendix E paints the outline last: above the box's own content,
   // its inline layout, and its children, but still inside the box's filter and
-  // mask.
-  draw_outline(&node.context, canvas, layout)?;
+  // mask. A node whose children are later items in the same bucket hands its
+  // outline to the caller, which paints it once the bucket is done.
+  let deferred = DeferredOutline {
+    context: node.context.clone(),
+    layout,
+  };
+
+  match outlines {
+    Some(outlines) => outlines.push(deferred),
+    None => deferred.paint(canvas)?,
+  }
 
   if !node.context.style.filter.is_empty() {
     let viewport = canvas.viewport();
@@ -284,6 +307,7 @@ fn begin_node_render(
   node_paint: &NodePaint,
   defer_finish: bool,
   isolation_bounds_hint: Option<SceneBounds>,
+  outlines: &mut Vec<DeferredOutline>,
 ) -> Result<Option<DeferredNodeRender>> {
   let Some(current) = root.node_at_path_mut(&node_paint.path) else {
     return Err(Error::InvalidLayoutNode(node_paint.node_id.into()));
@@ -396,6 +420,7 @@ fn begin_node_render(
       has_constraint,
       isolated_canvas,
       node_paint.paint_bounds,
+      Some(outlines),
     )?;
   } else if !defer_finish {
     finish_node_render(
@@ -405,6 +430,7 @@ fn begin_node_render(
       has_constraint,
       isolated_canvas,
       node_paint.paint_bounds,
+      Some(outlines),
     )?;
   } else {
     return Ok(Some(DeferredNodeRender::Deferred {
@@ -424,8 +450,17 @@ fn paint_single_node(
   layout_results: &LayoutResults,
   canvas: &mut Canvas,
   node_paint: &NodePaint,
+  outlines: &mut Vec<DeferredOutline>,
 ) -> Result<()> {
-  match begin_node_render(root, layout_results, canvas, node_paint, false, None)? {
+  match begin_node_render(
+    root,
+    layout_results,
+    canvas,
+    node_paint,
+    false,
+    None,
+    outlines,
+  )? {
     Some(DeferredNodeRender::SkipRendering) | None => {}
     Some(DeferredNodeRender::Deferred {
       path,
@@ -444,6 +479,7 @@ fn paint_single_node(
         has_constraint,
         isolated_canvas,
         filter_bounds,
+        None,
       )?;
     }
   }
@@ -456,11 +492,12 @@ fn paint_bucket(
   layout_results: &LayoutResults,
   canvas: &mut Canvas,
   items: &[PaintItem],
+  outlines: &mut Vec<DeferredOutline>,
 ) -> Result<()> {
   for item in items {
     match &item.kind {
       PaintItemKind::Node(node_paint) => {
-        paint_single_node(root, layout_results, canvas, node_paint)?;
+        paint_single_node(root, layout_results, canvas, node_paint, outlines)?;
       }
       PaintItemKind::Context(context_id) => {
         paint_context(root, contexts, layout_results, canvas, *context_id)?;
@@ -488,6 +525,10 @@ pub(crate) fn paint_context(
   }
 
   let mut deferred_root = None;
+  // A plain node's children are later items in the same bucket, so its outline
+  // waits here rather than painting with the node's own decorations.
+  let mut outlines = Vec::new();
+
   if let Some(root_paint) = context.root() {
     match begin_node_render(
       root,
@@ -496,6 +537,7 @@ pub(crate) fn paint_context(
       root_paint,
       true,
       context.paint_bounds(),
+      &mut outlines,
     )? {
       Some(DeferredNodeRender::SkipRendering) => return Ok(()),
       Some(deferred_root_render @ DeferredNodeRender::Deferred { .. }) => {
@@ -506,7 +548,18 @@ pub(crate) fn paint_context(
   }
 
   for bucket in context.in_paint_order() {
-    paint_bucket(root, contexts, layout_results, canvas, bucket)?;
+    paint_bucket(
+      root,
+      contexts,
+      layout_results,
+      canvas,
+      bucket,
+      &mut outlines,
+    )?;
+  }
+
+  for outline in &outlines {
+    outline.paint(canvas)?;
   }
 
   if let Some(DeferredNodeRender::Deferred {
@@ -528,6 +581,7 @@ pub(crate) fn paint_context(
       has_constraint,
       isolated_canvas,
       context.paint_bounds().or(filter_bounds),
+      None,
     )?;
   }
 
