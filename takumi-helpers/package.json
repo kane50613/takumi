@@ -1,15 +1,15 @@
 {
   "name": "@takumi-rs/helpers",
   "version": "2.6.0",
-  "description": "Utility helpers for converting JSX/HTML to Takumi node trees, loading fonts, and processing emoji.",
+  "description": "Convert JSX and HTML to Takumi node trees. Load fonts and emoji.",
   "keywords": [
-    "css",
     "emoji",
+    "fonts",
+    "google-fonts",
     "html",
-    "image",
     "jsx",
     "react",
-    "rendering"
+    "tailwind"
   ],
   "homepage": "https://takumi.kane.tw/docs/helpers#parsing-templates",
   "bugs": {

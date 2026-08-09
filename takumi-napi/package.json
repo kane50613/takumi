@@ -1,16 +1,15 @@
 {
   "name": "@takumi-rs/core",
   "version": "2.6.0",
-  "description": "Native Node.js bindings for the Takumi Rust image rendering engine.",
+  "description": "Render OG images from Takumi node trees with native Node.js bindings. No headless browser.",
   "keywords": [
     "css",
     "image",
-    "jsx",
+    "image-generation",
     "napi",
     "nodejs",
     "og-image",
-    "react",
-    "rendering"
+    "rust"
   ],
   "homepage": "https://takumi.kane.tw/docs/integration",
   "bugs": {

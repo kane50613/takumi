@@ -3,9 +3,9 @@
 
 # takumi-js
 
-**Render JSX to SVG or images. Drop-in next/og replacement.**
+**Render OG images from JSX, HTML, and CSS. No headless browser.**
 
-OG cards, banners, and lightweight animations from one Rust engine, no headless browser required.
+Render PNG, WebP, SVG, or animations. The package provides an `ImageResponse` API compatible with `next/og`.
 
 [Documentation](https://takumi.kane.tw/docs/) · [Playground](https://takumi.kane.tw/playground)
 
@@ -34,6 +34,14 @@ const image = await render(
 
 await writeFile("./output.png", image);
 ```
+
+## Coming from something else
+
+| You are using             | What changes                                                                                                                                                                                                |
+| :------------------------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `satori`                  | Replace `satori()` with `renderSvg()`, or call `render()` for encoded image bytes. [Compare the renderers](https://takumi.kane.tw/docs/comparison-to-satori).                                               |
+| `next/og`                 | Swap the `ImageResponse` import. Existing Satori-compatible templates keep their explicit Flexbox styles. [Read the migration guide](https://takumi.kane.tw/docs/comparison-to-satori#migrate-from-nextog). |
+| Puppeteer for screenshots | Pass a JSX or HTML tree to `render()`. Scripts do not run, and Takumi supports less CSS than Chrome.                                                                                                        |
 
 ## Runtime detection
 

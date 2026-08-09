@@ -1,14 +1,19 @@
 {
   "name": "takumi-pdf",
   "version": "0.5.0",
-  "description": "HTML/JSX to paged, selectable-text PDF, powered by takumi. WebAssembly, no Chromium.",
+  "description": "Render paged PDFs from JSX, HTML, and CSS. No headless browser.",
   "keywords": [
+    "chromium-free",
+    "cjk",
     "css",
+    "html-to-pdf",
     "invoice",
     "jsx",
     "pdf",
+    "pdf-generation",
     "react",
-    "rendering",
+    "receipt",
+    "tailwind",
     "webassembly"
   ],
   "homepage": "https://takumi.kane.tw/docs/",
