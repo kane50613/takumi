@@ -206,12 +206,15 @@ async function readObjects(text: string, bytes: Uint8Array) {
   // Object numbers do not carry page order; `/Kids` does.
   const tree = [...ranges.keys()].find((number) => /\/Type\s*\/Pages\b/.test(source(number) ?? ""));
   const kids = references(source(tree ?? "")?.match(/\/Kids\s*\[([^\]]*)\]/)?.[1]);
-  const pageOf = new Map<string, number>();
+  const pageOf = new Map<string, number[]>();
 
   kids.forEach((kid, index) => {
     const contents = source(kid)?.match(/\/Contents\s*(\[[^\]]*\]|\d+\s+0\s+R)/)?.[1];
 
-    for (const number of references(contents)) pageOf.set(number, index + 1);
+    // Two pages may share one stream, so a page number appends instead of replacing.
+    for (const number of references(contents)) {
+      pageOf.set(number, [...(pageOf.get(number) ?? []), index + 1]);
+    }
   });
 
   const textObjects = kids.map(() => 0);
@@ -222,9 +225,13 @@ async function readObjects(text: string, bytes: Uint8Array) {
       const dict = (keyword === -1 ? raw : raw.slice(0, keyword)).trim();
       const stream = await readStream(text, bytes, range);
       const body = stream && readable(stream);
-      const page = pageOf.get(number);
+      const pages = pageOf.get(number);
 
-      if (page && body) textObjects[page - 1] += body.match(/\bBT\b/g)?.length ?? 0;
+      if (pages && body) {
+        const count = body.match(/\bBT\b/g)?.length ?? 0;
+
+        for (const page of pages) textObjects[page - 1] += count;
+      }
 
       const packed =
         stream && /\/Type\s*\/ObjStm\b/.test(dict) ? expandObjectStream(dict, stream) : [];
@@ -232,8 +239,8 @@ async function readObjects(text: string, bytes: Uint8Array) {
       return [
         {
           number,
-          label: page
-            ? `content stream, page ${page}`
+          label: pages
+            ? `content stream, page${pages.length > 1 ? "s" : ""} ${pages.join(", ")}`
             : (raw.match(/\/(?:Sub)?Type\s*\/(\w+)/)?.[1] ?? ""),
           dict,
           body:
