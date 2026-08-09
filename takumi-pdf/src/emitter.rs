@@ -1215,7 +1215,7 @@ impl Emitter<'_> {
         surface,
       );
     }
-    let text_fills = self.text_clip_fills(node, layout, x, y);
+    let text_fills = self.text_clip_fills(node, layout, x, y, surface);
 
     for run in &runs.runs {
       let shaped = &run.glyph_run;
@@ -1517,10 +1517,46 @@ impl Emitter<'_> {
     full
   }
 
+  /// One image layer drawn into a pattern, so glyphs can be filled with it.
+  fn image_pattern(
+    &self,
+    image: &BackgroundImage,
+    node: &RenderNode,
+    tile: Size<f32>,
+    at: (f32, f32),
+    surface: &mut Surface,
+  ) -> Option<Paint> {
+    let stream = {
+      let mut builder = surface.stream_builder();
+      let mut inner = builder.surface();
+
+      self.background_layer(image, node, tile, 0.0, 0.0, &mut inner);
+      inner.finish();
+      builder.finish()
+    };
+
+    (tile.width > 0.0 && tile.height > 0.0).then(|| {
+      Pattern {
+        stream,
+        transform: Transform::from_translate(at.0, at.1),
+        width: tile.width,
+        height: tile.height,
+      }
+      .into()
+    })
+  }
+
   /// The fills a `background-clip: text` box paints through its glyphs:
   /// the background color, then each gradient layer bottom-up, anchored to the
   /// box the way the box background would be. Empty for every other clip.
-  fn text_clip_fills(&self, node: &RenderNode, layout: Layout, x: f32, y: f32) -> Vec<Fill> {
+  fn text_clip_fills(
+    &self,
+    node: &RenderNode,
+    layout: Layout,
+    x: f32,
+    y: f32,
+    surface: &mut Surface,
+  ) -> Vec<Fill> {
     let style = &node.context.style;
 
     if style.background_clip != BackgroundClip::Text {
@@ -1552,13 +1588,19 @@ impl Emitter<'_> {
       );
       // ponytail: one tile per layer; a repeating gradient behind text would
       // need a pattern paint here.
-      let Some(paint) = self.gradient_paint(
-        image,
-        node,
-        placement.tile,
+      let (tile_x, tile_y) = (
         x + origin_offset.x + placement.origin.0,
         y + origin_offset.y + placement.origin.1,
-      ) else {
+      );
+      // An image layer has no paint of its own, so it draws into a pattern the
+      // glyphs can be filled with, the way a tiled background already does.
+      let paint = match image {
+        BackgroundImage::Url(_) => {
+          self.image_pattern(image, node, placement.tile, (tile_x, tile_y), surface)
+        }
+        _ => self.gradient_paint(image, node, placement.tile, tile_x, tile_y),
+      };
+      let Some(paint) = paint else {
         continue;
       };
 
