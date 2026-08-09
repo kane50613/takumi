@@ -1,6 +1,6 @@
 ---
 title: Links, outline & metadata
-description: Clickable hyperlinks, bookmarks, and document properties.
+description: Clickable hyperlinks, a table of contents, bookmarks, and document properties.
 icon: Link
 ---
 
@@ -34,6 +34,39 @@ const pdf = await render(
 ```
 
 Clicking it moves to the page holding that element. A fragment matching no element is dropped, so the reader never gets a link that goes nowhere. Other schemes are dropped too: they have no meaning inside a standalone document.
+
+## Table of contents
+
+A node classed `targetPageNumber` prints the page its link points at. The link is the nearest enclosing element carrying an `href`, usually the `<a>` around the entry, so one piece of markup gives an entry that is both clickable and numbered:
+
+```tsx twoslash
+import { render } from "takumi-pdf";
+
+const pdf = await render(
+  <div>
+    <a href="#results" tw="flex items-baseline gap-2">
+      <span>Results</span>
+      <span tw="flex-1 border-b border-dotted border-gray-400" />
+      <span className="targetPageNumber" tw="w-8 shrink-0 text-right" />
+    </a>
+    <h1 id="results" style={{ breakBefore: "page" }}>
+      Results
+    </h1>
+  </div>,
+);
+```
+
+The stretched span draws the dot leader. Counter styles work here too, so `targetPageNumber upper-roman` prints `IV`. See [Counter styles](/docs/pdf/headers-and-footers#counter-styles) for the full list.
+
+A fragment naming no element prints nothing. This follows the rule links already use.
+
+### Why the fixed width
+
+A page number exists only after pagination. Takumi paginates, fills the numbers in, and lays the document out again. A number that widens its line can move a page break, and the moved break can renumber the entry. The render repeats this up to three times, then keeps what it has.
+
+A number that cannot widen its line settles on the second pass. That is what `w-8 shrink-0 text-right` does above. Reserve enough width for the highest page number the document reaches.
+
+Headers and footers are laid out per page, outside this loop. A `targetPageNumber` in a band renders nothing.
 
 ## Outline
 

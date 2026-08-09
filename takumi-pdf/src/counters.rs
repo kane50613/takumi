@@ -2,6 +2,8 @@
 
 use takumi_core::layout::node::{Node, NodeKind};
 
+use crate::interactive::percent_decode;
+
 /// Styles that write a decimal number in another script's digits, zero first.
 const DIGIT_STYLES: [(&str, [char; 10]); 20] = [
   ("cjk-decimal", CHINESE_DIGITS),
@@ -81,6 +83,11 @@ const ALPHABET_STYLES: [(&str, &str); 7] = [
 
 /// The class hooks a page counter is requested through.
 const COUNTER_HOOKS: [&str; 2] = ["pageNumber", "totalPages"];
+
+/// The class hook a cross-reference to another element's page is requested
+/// through. Chromium has no counterpart, so the name follows the CSS
+/// `target-counter(attr(href), page)` this stands in for.
+const TARGET_HOOK: &str = "targetPageNumber";
 
 const OTHER_STYLES: [&str; 5] = [
   "decimal",
@@ -240,7 +247,7 @@ pub fn counter_characters<'c>(classes: impl IntoIterator<Item = &'c str>) -> Str
   let mut characters = String::new();
 
   for class in classes {
-    if COUNTER_HOOKS.contains(&class) {
+    if COUNTER_HOOKS.contains(&class) || class == TARGET_HOOK {
       hooked = true;
       continue;
     }
@@ -281,6 +288,78 @@ pub(crate) fn counter_text(node: &Node, page: usize, pages: usize) -> Option<Str
     .unwrap_or("decimal");
 
   Some(format_counter(value, style))
+}
+
+/// The page a `targetPageNumber` node asks for, formatted. The target is the
+/// fragment of the nearest enclosing `href`, which is the same node a link
+/// annotation reads. A fragment naming no element renders empty, like a link
+/// annotation that finds no destination.
+fn target_counter_text(
+  node: &Node,
+  href: Option<&str>,
+  page_of: &impl Fn(&str) -> Option<usize>,
+) -> Option<String> {
+  let classes = node.class_name()?;
+
+  if !classes.split_whitespace().any(|class| class == TARGET_HOOK) {
+    return None;
+  }
+  let style = classes
+    .split_whitespace()
+    .find(|class| is_counter_style(class))
+    .unwrap_or("decimal");
+  let page = href
+    .and_then(|href| href.strip_prefix('#'))
+    .filter(|fragment| !fragment.is_empty())
+    .and_then(|fragment| page_of(&percent_decode(fragment)));
+
+  Some(page.map_or_else(String::new, |page| format_counter(page, style)))
+}
+
+/// Whether a tree asks for any target page counter. Only such a tree pays for
+/// the extra pagination passes that resolve one.
+pub(crate) fn has_target_counters(node: &Node) -> bool {
+  let hooked = node
+    .class_name()
+    .is_some_and(|classes| classes.split_whitespace().any(|class| class == TARGET_HOOK));
+
+  if hooked {
+    return true;
+  }
+  match &node.kind {
+    NodeKind::Container { children } => children.iter().any(has_target_counters),
+    _ => false,
+  }
+}
+
+/// Fills `targetPageNumber` hooks with the page their target sits on, and
+/// collects what it wrote so a caller can see whether the numbers moved.
+pub(crate) fn substitute_target_counters(
+  node: &mut Node,
+  href: Option<&str>,
+  page_of: &impl Fn(&str) -> Option<usize>,
+  written: &mut Vec<String>,
+) {
+  let own = node.href().map(str::to_owned);
+  let href = own.as_deref().or(href);
+
+  if let Some(text) = target_counter_text(node, href, page_of) {
+    written.push(text.clone());
+    match &mut node.kind {
+      NodeKind::Text(data) => data.text = text,
+      // An unresolved target empties the node rather than holding empty text,
+      // which would still reach the page as a structure element.
+      NodeKind::Container { children } if text.is_empty() => children.clear(),
+      NodeKind::Container { children } => *children = vec![Node::text(text)],
+      _ => {}
+    }
+    return;
+  }
+  if let NodeKind::Container { children } = &mut node.kind {
+    for child in children {
+      substitute_target_counters(child, href, page_of, written);
+    }
+  }
 }
 
 /// Fills `pageNumber` / `totalPages` class hooks with the formatted counter,

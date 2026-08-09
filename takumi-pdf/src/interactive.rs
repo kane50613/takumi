@@ -233,7 +233,7 @@ fn heading_ancestor<'t>(
 
 /// Decodes the percent escapes an `id` fragment carries in a URL, so
 /// `#section%201` finds the element with `id="section 1"`.
-fn percent_decode(fragment: &str) -> String {
+pub(crate) fn percent_decode(fragment: &str) -> String {
   let mut decoded = Vec::with_capacity(fragment.len());
   let bytes = fragment.as_bytes();
   let mut index = 0;

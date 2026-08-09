@@ -9,7 +9,7 @@ use takumi_core::{
 use std::cell::RefCell;
 
 use crate::{
-  counters::{counter_text, substitute_page_counters},
+  counters::{counter_text, substitute_page_counters, substitute_target_counters},
   emitter::FontMap,
   krilla::{
     geom::{Rect as KrillaRect, Transform},
@@ -65,6 +65,10 @@ pub(crate) fn prepare_band(
   let mut node = template.clone();
 
   substitute_page_counters(&mut node, page, pages);
+  // A band lays out per page, after the pass that resolves target counters, so
+  // its hooks name no page. They empty like any other unresolved target instead
+  // of leaving the placeholder the template put there.
+  substitute_target_counters(&mut node, None, &|_: &str| None, &mut Vec::new());
   prepare_tree(inputs, node, viewport)
 }
 

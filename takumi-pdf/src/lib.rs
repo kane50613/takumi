@@ -102,7 +102,7 @@ use crate::{
     paint::FillRule,
   },
   options::{BAND_EDGE_PADDING, PT_PER_PX, build_metadata, krilla_datetime, validate_xmp_schemas},
-  pagination::{MAX_PAGES, page_starts},
+  pagination::{MAX_PAGES, page_starts, resolve_target_counters},
   paint::rect_path,
   tags::{TagCollector, build_tag_tree, tag_id},
   tree::{TreeInputs, prepare_tree},
@@ -259,7 +259,19 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         .map_or(0.0, |band| band.measured.height);
       let window_height = content_height;
 
-      let content = prepare_tree(&inputs, options.node, content_viewport)?;
+      let mut node = options.node;
+
+      resolve_target_counters(
+        &mut node,
+        &inputs,
+        &mut fonts,
+        &uncovered,
+        document_lang,
+        content_viewport,
+        window_height,
+      )?;
+
+      let content = prepare_tree(&inputs, node, content_viewport)?;
       let text_boxes = collect_text_boxes(&content);
       let inline_map = build_inline_map(&text_boxes)?;
       let mut atoms = Vec::new();
