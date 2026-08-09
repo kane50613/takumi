@@ -1,16 +1,11 @@
 //! Collection of link, heading and anchor targets, and emission of link
 //! annotations and the outline.
 
-use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
-
-use crate::krilla::{
-  action::{Action, LinkAction},
-  annotation::{Annotation, LinkAnnotation, Target},
-  destination::{Destination, XyzDestination},
-  geom::Rect as KrillaRect,
-  outline::{Outline, OutlineNode},
+use std::{
+  cell::RefCell,
+  collections::{HashMap, HashSet},
 };
+
 use takumi_core::{
   font_style::SizedFontStyle,
   geometry::{
@@ -27,11 +22,19 @@ use takumi_core::{
   style::Affine,
 };
 
-use crate::krilla::page::Page;
-use crate::options::PT_PER_PX;
-use crate::tags::TagCollector;
-use crate::tags::text_content;
-use crate::tree::PreparedTree;
+use crate::{
+  krilla::{
+    action::{Action, LinkAction},
+    annotation::{Annotation, LinkAnnotation, Target},
+    destination::{Destination, XyzDestination},
+    geom::Rect as KrillaRect,
+    outline::{Outline, OutlineNode},
+    page::Page,
+  },
+  options::PT_PER_PX,
+  tags::{TagCollector, text_content},
+  tree::PreparedTree,
+};
 
 /// A hyperlink box in content coordinates.
 pub(crate) struct LinkTarget {

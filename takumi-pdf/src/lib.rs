@@ -75,37 +75,34 @@ mod krilla;
 )]
 mod subsetter;
 
-use crate::krilla::{
-  Document, SerializeSettings,
-  configure::ConfigurationBuilder,
-  destination::XyzDestination,
-  embed::{EmbeddedFile, MimeType},
-  geom::{Point, Rect as KrillaRect, Size as KrillaSize, Transform},
-  page::PageSettings,
-  paint::FillRule,
-};
 use takumi_core::{
   style::{Affine, Lang},
   viewport::Viewport,
 };
 
-use crate::bands::{emit_band, measure_band, prepare_band};
-use crate::emitter::FontMap;
-use crate::inline::{build_inline_map, collect_text_boxes};
-use crate::interactive::{
-  add_link_annotations, build_outline, collect_interactive, destination_targets,
-};
-use crate::options::{
-  BAND_EDGE_PADDING, PT_PER_PX, build_metadata, krilla_datetime, validate_xmp_schemas,
-};
-use crate::pagination::page_starts;
-use crate::paint::rect_path;
-use crate::tags::{TagCollector, build_tag_tree, tag_id};
-use crate::tree::{TreeInputs, prepare_tree};
-
 pub use crate::options::{
   Attachment, AttachmentRelationship, MeasureOptions, MeasuredSize, PageMargins, PageOptions,
   PdfDate, PdfError, PdfMetadata, PdfOptions, PdfStandard, Tagging, XmpProperty, XmpSchema,
+};
+use crate::{
+  bands::{emit_band, measure_band, prepare_band},
+  emitter::FontMap,
+  inline::{build_inline_map, collect_text_boxes},
+  interactive::{add_link_annotations, build_outline, collect_interactive, destination_targets},
+  krilla::{
+    Document, SerializeSettings,
+    configure::ConfigurationBuilder,
+    destination::XyzDestination,
+    embed::{EmbeddedFile, MimeType},
+    geom::{Point, Rect as KrillaRect, Size as KrillaSize, Transform},
+    page::PageSettings,
+    paint::FillRule,
+  },
+  options::{BAND_EDGE_PADDING, PT_PER_PX, build_metadata, krilla_datetime, validate_xmp_schemas},
+  pagination::page_starts,
+  paint::rect_path,
+  tags::{TagCollector, build_tag_tree, tag_id},
+  tree::{TreeInputs, prepare_tree},
 };
 
 /// Lays out a node tree without rendering and returns its size.

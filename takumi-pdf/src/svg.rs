@@ -8,19 +8,21 @@ use takumi_core::{
   },
 };
 
-use crate::krilla::image::Image as KrillaImage;
-use crate::krilla::{
-  color::rgb,
-  geom::{Path as KrillaPath, Size as KrillaSize, Transform},
-  mask::{Mask, MaskType},
-  num::NormalizedF32,
-  paint::{
-    Fill, FillRule, LineCap, LineJoin, LinearGradient, Paint, Pattern, RadialGradient,
-    SpreadMethod, Stop, Stroke, StrokeDash,
+use crate::{
+  krilla::{
+    color::rgb,
+    geom::{Path as KrillaPath, Size as KrillaSize, Transform},
+    image::Image as KrillaImage,
+    mask::{Mask, MaskType},
+    num::NormalizedF32,
+    paint::{
+      Fill, FillRule, LineCap, LineJoin, LinearGradient, Paint, Pattern, RadialGradient,
+      SpreadMethod, Stop, Stroke, StrokeDash,
+    },
+    surface::Surface,
   },
-  surface::Surface,
+  paint::{krilla_blend, krilla_path},
 };
-use crate::paint::{krilla_blend, krilla_path};
 
 /// Draws `ops` onto `surface` in the current coordinate space and resets the
 /// fill/stroke state afterwards.

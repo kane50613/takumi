@@ -3,21 +3,6 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[cfg(feature = "images")]
-use crate::krilla::geom::Size as KrillaSize;
-use crate::krilla::{
-  Data,
-  geom::{Point, Rect as KrillaRect, Transform},
-  mask::{Mask, MaskType},
-  num::NormalizedF32,
-  paint::{
-    Fill, FillRule, LineCap, LinearGradient as KrillaLinearGradient, Paint, Pattern,
-    RadialGradient as KrillaRadialGradient, SpreadMethod, Stroke, StrokeDash, SweepGradient,
-  },
-  surface::Surface,
-  tagging::{Artifact, ArtifactType, ContentTag},
-  text::{Font, GlyphId, Tag},
-};
-#[cfg(feature = "images")]
 use takumi_core::{
   context::RenderContext,
   layout::node::{ImageData, resolve_image},
@@ -37,6 +22,10 @@ use takumi_core::{
     tree::{LayoutResults, RenderNode},
   },
   paint::{ConicGradientTile, LinearGradientTile, RadialGradientTile, resolve_stops_along_axis},
+  painter::{
+    BoxPainter, BoxShadows, FillShape, PaintDevice, StrokeStyle, paint_border,
+    paint_run_decorations,
+  },
   scene::{NodePaint, PaintItemKind, StackingContextNode, build_stacking_contexts},
   shadow::SizedShadow,
   style::{
@@ -46,24 +35,38 @@ use takumi_core::{
   },
 };
 
-use crate::background::{Placement, cycled, place};
-use crate::filter::ColorFilter;
-use crate::glyph::{PdfGlyph, glyph_text_spans};
-use crate::inline::{InlineMap, build_inline_runs, inline_key, node_inline_items, text_line_atoms};
-use crate::options::PdfError;
-use crate::pagination::Atom;
-use crate::paint::{
-  empty_path, expanded_radial_stops, fill_from_rgba, krilla_blend, krilla_path, krilla_stop,
-  krilla_stops, overflow_clip_rect, pop_transforms, rect_path, spread,
-};
+#[cfg(feature = "images")]
+use crate::krilla::geom::Size as KrillaSize;
 #[cfg(feature = "images")]
 use crate::paint::{position_axis, rasterized_image};
-use crate::shadow::{emit_inset_shadows, emit_outer_shadows};
 #[cfg(all(feature = "svg", feature = "images"))]
 use crate::svg;
-use crate::tags::TagCollector;
-use takumi_core::painter::{
-  BoxPainter, BoxShadows, FillShape, PaintDevice, StrokeStyle, paint_border, paint_run_decorations,
+use crate::{
+  background::{Placement, cycled, place},
+  filter::ColorFilter,
+  glyph::{PdfGlyph, glyph_text_spans},
+  inline::{InlineMap, build_inline_runs, inline_key, node_inline_items, text_line_atoms},
+  krilla::{
+    Data,
+    geom::{Point, Rect as KrillaRect, Transform},
+    mask::{Mask, MaskType},
+    num::NormalizedF32,
+    paint::{
+      Fill, FillRule, LineCap, LinearGradient as KrillaLinearGradient, Paint, Pattern,
+      RadialGradient as KrillaRadialGradient, SpreadMethod, Stroke, StrokeDash, SweepGradient,
+    },
+    surface::Surface,
+    tagging::{Artifact, ArtifactType, ContentTag},
+    text::{Font, GlyphId, Tag},
+  },
+  options::PdfError,
+  pagination::Atom,
+  paint::{
+    empty_path, expanded_radial_stops, fill_from_rgba, krilla_blend, krilla_path, krilla_stop,
+    krilla_stops, overflow_clip_rect, pop_transforms, rect_path, spread,
+  },
+  shadow::{emit_inset_shadows, emit_outer_shadows},
+  tags::TagCollector,
 };
 
 /// What a box left on the surface for its caller to unwind.

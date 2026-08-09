@@ -14,7 +14,6 @@ use std::{
 };
 
 use flate2::read::ZlibDecoder;
-
 use takumi_core::{
   Fonts,
   layout::node::{ImageData, ImageSourceInput, Node, RgbaImage},

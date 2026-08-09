@@ -3,12 +3,6 @@
 
 use std::{collections::HashMap, sync::Arc};
 
-use crate::krilla::{
-  configure::{Accessibility, Archival},
-  embed::AssociationKind,
-  error::KrillaError,
-  metadata::{DateTime, Metadata},
-};
 use takumi_core::{
   Fonts,
   error::Error as TakumiError,
@@ -18,6 +12,13 @@ use takumi_core::{
   viewport::Viewport,
 };
 use typed_builder::TypedBuilder;
+
+use crate::krilla::{
+  configure::{Accessibility, Archival},
+  embed::AssociationKind,
+  error::KrillaError,
+  metadata::{DateTime, Metadata},
+};
 
 /// Errors from [`crate::render`].
 #[derive(Debug)]

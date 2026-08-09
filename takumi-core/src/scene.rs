@@ -5,7 +5,6 @@
 use std::collections::HashMap;
 
 use parley::{InlineBoxKind, PositionedLayoutItem};
-
 use skrifa::FontRef;
 
 use crate::{
@@ -636,8 +635,7 @@ fn merge_bounds(left: Option<SceneBounds>, right: Option<SceneBounds>) -> Option
 #[cfg(test)]
 mod tests {
   use super::{SceneBounds, bounds_for_rect, merge_bounds};
-  use crate::geometry::Size;
-  use crate::style::Affine;
+  use crate::{geometry::Size, style::Affine};
 
   #[test]
   fn zero_sized_rect_produces_empty_bounds() {

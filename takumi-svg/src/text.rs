@@ -22,7 +22,7 @@ use takumi_core::{
     node::TextData,
     tree::RenderNode,
   },
-  painter::{inline_outline_stroke, paint_run_decorations},
+  painter::paint_run_decorations,
   resources::{glyph::ResolvedGlyph, image::to_data_url},
   style::{BackgroundClip, LineJoin, TextDecorationLines},
 };
@@ -250,7 +250,7 @@ fn emit_outline_island(
   };
   // The device skips a transparent stroke, but an inline outline never reaches
   // one, so the emptiness is checked here instead.
-  let Some(stroke) = inline_outline_stroke(style).filter(|s| s.color.0[3] != 0) else {
+  let Some(stroke) = style.outline_stroke().filter(|s| s.color.0[3] != 0) else {
     return Ok(());
   };
   let width = stroke.width;

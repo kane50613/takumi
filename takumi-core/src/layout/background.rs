@@ -7,16 +7,18 @@
 
 use smallvec::{SmallVec, smallvec};
 
-use crate::context::RenderContext;
-use crate::geometry::{ComputedLayout as Layout, Point, Size};
-use crate::layout::node::resolve_image;
-use crate::paint::{
-  collect_repeat_tile_positions, collect_spaced_tile_positions, collect_stretched_tile_positions,
-};
-use crate::style::{
-  AutoBackgroundAxis, BackgroundImage, BackgroundOrigin, BackgroundRepeat, BackgroundRepeatStyle,
-  BackgroundSize, BlendMode, IntrinsicSizing, Length, PositionComponent, PositionKeywordX,
-  PositionKeywordY, PositionValue, SizingContext,
+use crate::{
+  context::RenderContext,
+  geometry::{ComputedLayout as Layout, Point, Size},
+  layout::node::resolve_image,
+  paint::{
+    collect_repeat_tile_positions, collect_spaced_tile_positions, collect_stretched_tile_positions,
+  },
+  style::{
+    AutoBackgroundAxis, BackgroundImage, BackgroundOrigin, BackgroundRepeat, BackgroundRepeatStyle,
+    BackgroundSize, BlendMode, IntrinsicSizing, Length, PositionComponent, PositionKeywordX,
+    PositionKeywordY, PositionValue, SizingContext,
+  },
 };
 
 /// Where one background layer's tiles land, in border-box coordinates.

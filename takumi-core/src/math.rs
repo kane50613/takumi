@@ -13,7 +13,7 @@
 /// `atan(t)/2π` over one octant, max error ~2.7e-5 turn), both deterministic
 /// and cheaper than a libm `atan2` per pixel.
 #[inline(always)]
-pub fn xy_to_unit_angle(x: f32, y: f32) -> f32 {
+pub(crate) fn xy_to_unit_angle(x: f32, y: f32) -> f32 {
   let x_abs = x.abs();
   let y_abs = y.abs();
   let max = x_abs.max(y_abs);

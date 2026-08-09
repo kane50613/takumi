@@ -1,7 +1,8 @@
 use serde_json::{from_value, json};
-use takumi::prelude::{Length::*, *};
-
-use takumi::render;
+use takumi::{
+  prelude::{Length::*, *},
+  render,
+};
 
 use crate::test_utils::{CONTEXT, run_fixture_test};
 

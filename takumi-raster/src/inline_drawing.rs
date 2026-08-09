@@ -1,8 +1,10 @@
 use std::{collections::HashMap, sync::Arc};
 
 use skrifa::{FontRef, MetadataProvider};
-use takumi_core::geometry::{ComputedLayout as Layout, NodeId, Point, Size};
-use takumi_core::layout::inline_box::{InlineBoxPaint, resolve_inline_box};
+use takumi_core::{
+  geometry::{ComputedLayout as Layout, NodeId, Point, Size},
+  layout::inline_box::{InlineBoxPaint, resolve_inline_box},
+};
 
 use crate::{
   BorderProperties, Canvas, Cap, DashPattern, DecorationSegmentParams, PaintSource, Placement,
@@ -16,7 +18,7 @@ use crate::{
     resolve_inline_runs,
   },
   mask_index_from_coord,
-  painter::{StrokeStyle, inline_outline_stroke},
+  painter::StrokeStyle,
   rasterize_layers,
   render::render_node,
   render_mask,
@@ -409,7 +411,7 @@ fn draw_outline_island(
     return Ok(());
   };
 
-  let Some(stroke) = inline_outline_stroke(style) else {
+  let Some(stroke) = style.outline_stroke() else {
     return Ok(());
   };
   let opacity = style.parent.opacity.0;

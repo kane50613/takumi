@@ -13,6 +13,7 @@ use crate::{
   context::RenderContext,
   geometry::Size,
   layout::inline::InlineBrush,
+  painter::StrokeStyle,
   shadow::SizedShadow,
   style::{
     BorderStyle, Color, ComputedStyle, Display, FontFamily, FontSynthesis, Lang, Length,
@@ -115,12 +116,43 @@ pub struct SizedFontStyle<'s> {
 }
 
 impl SizedFontStyle<'_> {
+  /// The stroke this inline box's `outline` runs along its island contour, or
+  /// `None` when it paints none.
+  ///
+  /// An inline outline is a single stroked contour, so `double` and the 3D
+  /// bevels paint nothing: they need more than one pass to draw. The dash
+  /// lengths are the ratios the raster backend has always stroked, kept here so
+  /// the vector backends do not restate them.
+  pub fn outline_stroke(&self) -> Option<StrokeStyle> {
+    let width = self.outline_width;
+
+    if width <= 0.0 || !self.outline_style.is_rendered() {
+      return None;
+    }
+    let (dash, round_cap) = match self.outline_style {
+      BorderStyle::Dotted => (Some([0.0, width * 2.0]), true),
+      BorderStyle::Dashed => (Some([width * 3.0, width * 2.0]), false),
+      BorderStyle::Double
+      | BorderStyle::Groove
+      | BorderStyle::Ridge
+      | BorderStyle::Inset
+      | BorderStyle::Outset => return None,
+      _ => (None, false),
+    };
+
+    Some(StrokeStyle {
+      color: self.outline_color,
+      width,
+      dash,
+      round_cap,
+    })
+  }
+
   /// Hashes every input the `TextStyle` conversion below reads, so shaped
   /// text-only layouts can be cached by content. Keep in sync with
   /// `From<&SizedFontStyle> for TextStyle`.
   pub(crate) fn hash_shaping_inputs(&self, hasher: &mut impl core::hash::Hasher) {
-    use core::hash::Hash;
-    use core::mem::discriminant;
+    use core::{hash::Hash, mem::discriminant};
 
     self.sizing.font_size.to_bits().hash(hasher);
     self.letter_spacing.to_bits().hash(hasher);

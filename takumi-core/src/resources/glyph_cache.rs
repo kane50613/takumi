@@ -89,7 +89,7 @@ fn get_or_insert(
 /// The resolved outline or bitmap for `key`, resolving on a miss. Concurrent
 /// misses for the same key resolve once. `resolve` returning `None` caches
 /// nothing and a later call retries.
-pub fn resolved_glyph(
+pub(crate) fn resolved_glyph(
   key: u64,
   resolve: impl Fn() -> Option<ResolvedGlyph>,
 ) -> Option<Arc<ResolvedGlyph>> {

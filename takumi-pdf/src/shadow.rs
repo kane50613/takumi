@@ -12,11 +12,13 @@ use takumi_core::{
   style::Color,
 };
 
-use crate::krilla::{
-  paint::{Fill, FillRule},
-  surface::Surface,
+use crate::{
+  krilla::{
+    paint::{Fill, FillRule},
+    surface::Surface,
+  },
+  paint::{fill_from_rgba, krilla_path},
 };
-use crate::paint::{fill_from_rgba, krilla_path};
 
 /// Bands used to fake one blurred edge. Eight is enough that the steps read as
 /// a gradient at the blur radii interfaces actually use.
@@ -191,10 +193,9 @@ fn fill(commands: &[PathCommand], color: Color, alpha: f32, at: (f32, f32), surf
 
 #[cfg(test)]
 mod tests {
-  use super::coverage;
-
-  use super::bands;
   use takumi_core::{shadow::SizedShadow, style::Color};
+
+  use super::{bands, coverage};
 
   #[test]
   fn a_blurred_shadow_has_an_opaque_core() {

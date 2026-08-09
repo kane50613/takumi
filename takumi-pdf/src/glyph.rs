@@ -2,10 +2,12 @@
 
 use std::ops::Range;
 
-use crate::krilla::text::{Glyph, GlyphId};
 use takumi_core::layout::inline::ShapedRun;
 
-use crate::krilla::surface::Location;
+use crate::krilla::{
+  surface::Location,
+  text::{Glyph, GlyphId},
+};
 
 /// Per-glyph byte ranges into `run_text` for ToUnicode, from the shaper's
 /// cluster segmentation (correct for ligatures and complex scripts).

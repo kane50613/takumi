@@ -35,7 +35,11 @@ use quick_xml::{
   events::{BytesEnd, BytesStart, BytesText, Event},
 };
 pub use render::{SvgOptions, render};
-use takumi_core::style::FilterReference;
+use takumi_core::{
+  geometry::Size,
+  shadow::SizedShadow,
+  style::{Affine, Color, Filter, FilterReference, LUMA_WEIGHTS, SEPIA_WEIGHTS, SizingContext},
+};
 
 /// Straight-alpha RGBA color.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,12 +64,6 @@ impl Rgba {
     self.0[3] as f32 / 255.0
   }
 }
-
-use takumi_core::{
-  geometry::Size,
-  shadow::SizedShadow,
-  style::{Affine, Color, Filter, LUMA_WEIGHTS, SEPIA_WEIGHTS, SizingContext},
-};
 
 pub(crate) const IDENTITY: Affine = Affine::IDENTITY;
 

@@ -183,8 +183,9 @@ impl ColorMatrix {
 
 #[cfg(test)]
 mod tests {
-  use super::ColorFilter;
   use takumi_core::style::{Angle, Filter, PercentageNumber};
+
+  use super::ColorFilter;
 
   #[test]
   fn each_function_clamps_before_the_next_one_runs() {

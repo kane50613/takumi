@@ -17,9 +17,7 @@ use takumi_core::{
   scene::{NodePaint, PaintItemKind},
 };
 
-use crate::options::PdfError;
-use crate::pagination::Atom;
-use crate::tree::PreparedTree;
+use crate::{options::PdfError, pagination::Atom, tree::PreparedTree};
 
 /// A text box's inline layout, built once per render and reused by atom
 /// collection and every page's emission.

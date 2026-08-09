@@ -19,10 +19,12 @@ use takumi_core::{
   viewport::Viewport,
 };
 
-use crate::emitter::{Emitter, FontMap};
-use crate::inline::InlineMap;
-use crate::options::PdfError;
-use crate::tags::TagCollector;
+use crate::{
+  emitter::{Emitter, FontMap},
+  inline::InlineMap,
+  options::PdfError,
+  tags::TagCollector,
+};
 
 /// Shared inputs for laying out an independent node tree: the main content or
 /// a header/footer band.
