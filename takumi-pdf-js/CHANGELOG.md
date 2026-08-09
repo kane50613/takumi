@@ -1,3 +1,67 @@
+## takumi-pdf@0.5.0
+
+### Validate against PDF/UA-2
+
+`tagged: "ua2"` writes PDF/UA-2, which pairs with PDF/A-4 and needs a document language.
+
+### Draw inline images and containers
+
+An `<img>` inside a paragraph now draws, and carries its `alt` into the structure tree.
+
+### Follow a rounded axis with the `auto` one
+
+`background-size` with one `auto` axis kept the size it was first given when `background-repeat: round` rescaled the other. The tile stopped matching the image's shape. It now follows, as it already did in the raster and SVG backends.
+
+### Route shared codepoints to the subset that declares them
+
+A Google Fonts subset encodes more than the `unicode-range` it was cut for, and the Cyrillic and Greek ones also carry the ASCII space and the Latin capitals. Selection took the first subset whose glyphs covered a character, in family-name order, so those codepoints left the Latin subset and every word split into separate runs. Subsets now rank by the range they declare, lowest first.
+
+### Place replaced content from one place
+
+`object-fit` and `object-position` place replaced content from one place. An `object-position` past 100% now clips to the content box.
+
+### Ask a background layer once whether it paints
+
+`BackgroundImage::paints` replaces the three spellings each backend had for the same question.
+
+PDF used to treat a `url()` layer as unpaintable when built without the `images` feature, which skipped the whole background-image pass rather than that one layer.
+
+### Skip the ink an underline runs through, in every backend
+
+`text-decoration-skip-ink` breaks an underline where the glyph outlines cross it, in every backend. A gap inside a letter stays a gap.
+
+### Report the measured tree's own width
+
+`measure` handed back the width it laid the tree out against, so a box with `width: 100px` measured 793 on an A4 page. It now reports the size the tree itself took.
+
+### Paint text decorations from one place
+
+`paint_run_decorations` paints a run's underline, overline and line-through for every backend.
+
+### Tag `<figure>` as a Figure
+
+A `<figure>` becomes a `Figure` carrying its image's `alt`. The `<figcaption>` inside becomes a `Caption` child of it. Captions used to reach the document root, which no standard allows.
+
+### Resolve inline boxes once, for every backend
+
+`resolve_inline_box` places an inline box's replaced content or nested subtree, shared by the SVG and PDF backends.
+
+### Shade a 3D border in every backend
+
+`inset`, `outset`, `groove` and `ridge` borders now shade their sides in the SVG and PDF backends, as the raster backend already did.
+
+### Correct the PDF 2.0 structure namespace
+
+A tagged PDF/A-4 document now names its structure namespace `http://iso.org/pdf2/ssn`, the identifier ISO 32000-2 defines. The old one matched no known namespace, so PDF/UA-2 validators rejected every structure element in the file.
+
+### Paint the outline above the content
+
+An `outline` painted under the box's own text and images, so a negative `outline-offset` disappeared behind them. CSS 2.1 Appendix E paints the outline last, and every backend now does.
+
+### Draw dashed, dotted and double borders in PDF
+
+`dashed`, `dotted` and `double` borders and outlines now draw in PDF instead of falling back to solid.
+
 ## takumi-pdf@0.4.2
 
 ### Render the weight the text asked for

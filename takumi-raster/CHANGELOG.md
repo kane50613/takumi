@@ -1,3 +1,37 @@
+## takumi-raster@0.4.12
+
+### Paint a `border-area` background under the border
+
+A `background-clip: border-area` fill painted over the border, or replaced its colour, depending on the backend. It now paints under it.
+
+### Paint an outline above the text it wraps
+
+A box with a negative `outline-offset` drew its own text over the outline ring. The outline now paints after everything inside the box, matching the SVG and PDF backends.
+
+### Place replaced content from one place
+
+`object-fit` and `object-position` place replaced content from one place. An `object-position` past 100% now clips to the content box.
+
+### Skip the ink an underline runs through, in every backend
+
+`text-decoration-skip-ink` breaks an underline where the glyph outlines cross it, in every backend. A gap inside a letter stays a gap.
+
+### Rotate hue from the same matrix everywhere
+
+`takumi_core::filter::ColorMatrix` turns a colour-transforming `filter` function into the matrix Filter Effects defines for it. The raster backend had written the `hue-rotate` coefficients out a second time and rounded the angle to whole degrees first, so `hue-rotate(45.5deg)` rotated by 45.
+
+### Stack text shadows the way a browser does
+
+The raster backend painted `text-shadow` in list order, putting the last one on top. CSS puts the first one there, so a stack of glows came out inverted. `SizedFontStyle::painted_text_shadows` walks them back to front for every backend, and drops the ones nobody sees.
+
+### Resolve a `clip-path` shape from one place
+
+The raster backend resolved `inset()`, `ellipse()`, `polygon()` and `path()` itself. An `ellipse()` took its keyword radii across both axes, so a non-square box got the wrong ones, and a percentage corner radius in `inset()` measured against the width on both axes.
+
+### Paint an outline above the box's children
+
+A box with a negative `outline-offset` drew its outline under its own children, so a ring dragged inside the box disappeared behind them. The outline now paints after everything the box contains.
+
 ## takumi-raster@0.4.11
 
 ### Bound allocations and loops driven by untrusted input

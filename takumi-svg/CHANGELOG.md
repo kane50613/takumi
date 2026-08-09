@@ -1,3 +1,41 @@
+## takumi-svg@0.3.11
+
+### Paint a background colour from one place
+
+`PaintDevice` and `FillShape` let shared painting code drive a rasterizer, an SVG writer or a PDF writer.
+
+### Paint a `border-area` background under the border
+
+A `background-clip: border-area` fill painted over the border, or replaced its colour, depending on the backend. It now paints under it.
+
+### Draw every border ring from the shared painter
+
+The SVG backend draws its borders through the shared painter. A `double` border fills two rings instead of stroking two centerlines.
+
+### Place replaced content from one place
+
+`object-fit` and `object-position` place replaced content from one place. An `object-position` past 100% now clips to the content box.
+
+### Emit a text decoration as one rect
+
+A text decoration emits as one positioned `<rect>` instead of a `<rect>` inside a `<g transform>`.
+
+### Skip the ink an underline runs through, in every backend
+
+`text-decoration-skip-ink` breaks an underline where the glyph outlines cross it, in every backend. A gap inside a letter stays a gap.
+
+### Shade a 3D border in every backend
+
+`inset`, `outset`, `groove` and `ridge` borders now shade their sides in the SVG and PDF backends, as the raster backend already did.
+
+### Paint the outline above the content
+
+An `outline` painted under the box's own text and images, so a negative `outline-offset` disappeared behind them. CSS 2.1 Appendix E paints the outline last, and every backend now does.
+
+### Paint an outline above the box's children
+
+A box with a negative `outline-offset` drew its outline under its own children, so a ring dragged inside the box disappeared behind them. The outline now paints after everything the box contains.
+
 ## takumi-svg@0.3.6
 
 ### Fill side border corners in vector backends
