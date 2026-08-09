@@ -217,6 +217,131 @@ fn paged_breaks() {
   });
 }
 
+/// A table of contents whose entries carry `targetPageNumber` hooks. Each
+/// section is forced onto its own page, so the entries have to read 2, 3 and 4.
+fn toc_document(cells: [&str; 3]) -> String {
+  let entry = |id: &str, title: &str, cell: &str| {
+    format!(
+      r##"<a href="#{id}" style="display: flex; column-gap: 4px;"><span>{title}</span>{cell}</a>"##
+    )
+  };
+  let section = |id: &str, title: &str| {
+    format!(
+      r##"<div id="{id}" style="display: flex; flex-direction: column; break-before: page; font-size: 18px;">{title}</div>"##
+    )
+  };
+
+  format!(
+    r##"<div style="display: flex; flex-direction: column; width: 100%; font-size: 14px; color: #141414;">
+      <div style="display: flex; flex-direction: column;">{}{}{}</div>
+      {}{}{}
+    </div>"##,
+    entry("alpha", "Alpha", cells[0]),
+    entry("beta", "Beta", cells[1]),
+    entry("gamma", "Gamma", cells[2]),
+    section("alpha", "Alpha"),
+    section("beta", "Beta"),
+    section("gamma", "Gamma"),
+  )
+}
+
+fn toc_options<'f>(source: &str, fonts: &'f Fonts) -> PdfOptions<'f> {
+  PdfOptions::builder()
+    .node(from_html(source, FromHtmlOptions::default()).expect("parse toc fixture"))
+    .page(PageOptions {
+      width: 320.0,
+      height: 240.0,
+      margin: PageMargins::uniform(24.0),
+    })
+    .fonts(fonts)
+    .build()
+}
+
+#[test]
+fn paged_target_counters() {
+  let hooked = toc_document([
+    r#"<span class="targetPageNumber"></span>"#,
+    r#"<span class="targetPageNumber"></span>"#,
+    r#"<span class="targetPageNumber upper-roman"></span>"#,
+  ]);
+  let pdf = run_pdf_fixture("paged-target-counters", |fonts| toc_options(&hooked, fonts));
+  // Numbering the entries by hand has to render the same document, which pins
+  // the resolved pages to 2, 3 and 4 without decoding a subset font.
+  let numbered = toc_document(["<span>2</span>", "<span>3</span>", "<span>IV</span>"]);
+  let expected = render(toc_options(&numbered, &fonts())).expect("render numbered toc");
+
+  assert_eq!(
+    pdf, expected,
+    "target counters did not resolve to 2, 3 and 4"
+  );
+}
+
+/// Entries whose title all but fills the row, so a number wraps each of them
+/// onto a second line. Filling the counters therefore doubles the contents
+/// page, which pushes every section one page further along and renumbers the
+/// counters that caused it.
+fn wrapping_toc_document(cells: [&str; 8]) -> String {
+  let entry = |index: usize, cell: &str| {
+    format!(
+      r##"<a href="#s{index}" style="display: flex; flex-wrap: wrap; width: 100%;"><span style="width: 268px;">Section {index}</span>{cell}</a>"##
+    )
+  };
+  let section = |index: usize| {
+    format!(
+      r##"<div id="s{index}" style="display: flex; break-before: page; font-size: 18px;">Section {index}</div>"##
+    )
+  };
+  let entries: String = cells
+    .iter()
+    .enumerate()
+    .map(|(index, cell)| entry(index + 1, cell))
+    .collect();
+  let sections: String = (1..=cells.len()).map(section).collect();
+
+  format!(
+    r##"<div style="display: flex; flex-direction: column; width: 100%; font-size: 14px; color: #141414;">{entries}{sections}</div>"##
+  )
+}
+
+#[test]
+fn target_counters_settle_after_they_move_their_own_page() {
+  let hooked = wrapping_toc_document([r#"<span class="targetPageNumber"></span>"#; 8]);
+  let pdf = render(toc_options(&hooked, &fonts())).expect("render wrapping toc");
+  // The first pass numbers a contents page one line per entry, which puts the
+  // sections on pages 2 to 9. Those numbers wrap the entries, and the second
+  // pass has to renumber them from the taller contents page.
+  let numbered = wrapping_toc_document([
+    "<span>3</span>",
+    "<span>4</span>",
+    "<span>5</span>",
+    "<span>6</span>",
+    "<span>7</span>",
+    "<span>8</span>",
+    "<span>9</span>",
+    "<span>10</span>",
+  ]);
+  let expected = render(toc_options(&numbered, &fonts())).expect("render numbered wrapping toc");
+
+  assert_eq!(pdf, expected, "target counters did not settle after rewrap");
+}
+
+#[test]
+fn target_counter_without_a_target_renders_empty() {
+  let dangling = toc_document([r#"<span class="targetPageNumber"></span>"#; 3])
+    .replace("#alpha", "#missing")
+    .replace("#beta", "#missing-too");
+  let pdf = render(toc_options(&dangling, &fonts())).expect("render dangling toc");
+  let blank = toc_document(["<span></span>", "<span></span>", "<span>4</span>"])
+    .replace("#alpha", "#missing")
+    .replace("#beta", "#missing-too");
+  let expected = render(toc_options(&blank, &fonts())).expect("render blank toc");
+
+  assert_eq!(
+    pdf, expected,
+    "a fragment naming no element must render empty"
+  );
+}
+
 fn checker_pixels() -> Vec<u8> {
   let mut pixels = Vec::with_capacity(8 * 8 * 4);
 

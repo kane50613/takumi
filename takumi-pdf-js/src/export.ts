@@ -281,12 +281,12 @@ export class PdfRenderer {
       fonts &&
         subsetFonts({
           fonts,
-          // A band's page counters render characters no node in the tree
-          // carries, and which ones depends on the style, so the renderer says.
+          // A page counter renders characters no node in the tree carries, and
+          // which ones depends on the style, so the renderer says.
           source: [
             main.node,
             ...bands,
-            counterCharacters(bands.flatMap((band) => classNames(band))),
+            counterCharacters([main.node, ...bands].flatMap((tree) => classNames(tree))),
           ],
         }),
       images,

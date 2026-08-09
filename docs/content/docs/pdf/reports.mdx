@@ -48,7 +48,25 @@ const pdf = await render(report, {
 });
 ```
 
-A table of contents with working links is `<a href="#section-id">` plus a matching `id`. See [Links, outline & metadata](/docs/pdf/links-and-outline).
+A table of contents is the same chapters as links, with the page each one starts on. `targetPageNumber` fills the page in:
+
+```tsx twoslash
+declare const chapters: { id: string; title: string }[];
+// ---cut---
+import "takumi-pdf";
+
+<nav tw="flex flex-col gap-1 text-sm">
+  {chapters.map((chapter) => (
+    <a key={chapter.id} href={`#${chapter.id}`} tw="flex items-baseline gap-2">
+      <span>{chapter.title}</span>
+      <span tw="flex-1 border-b border-dotted border-gray-300" />
+      <span className="targetPageNumber" tw="w-8 shrink-0 text-right" />
+    </a>
+  ))}
+</nav>;
+```
+
+Each entry stays clickable, so the contents page works on screen as well as in print. Give the number a fixed width, or a two-digit page can rewrap the entry and renumber it. See [Table of contents](/docs/pdf/links-and-outline#table-of-contents).
 
 ## Running bands
 
