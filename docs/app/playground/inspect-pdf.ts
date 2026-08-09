@@ -14,9 +14,18 @@ export type PdfInspection = {
   created?: string;
   bookmarks: Bookmark[];
   attachments: { name: string; description?: string }[];
+  streams: PdfPageStream[];
 };
 
+/**
+ * A page's decoded content stream. One shaped run emits one `BT` block, so
+ * `textObjects` counts far above the word count mean something is cutting runs.
+ */
+export type PdfPageStream = { page: number; textObjects: number; operators: string };
+
 type Bookmark = { title: string; depth: number };
+
+const STREAM_LIMIT = 64 * 1024;
 
 /**
  * One char per byte. `TextDecoder("latin1")` is windows-1252 by spec, which
@@ -94,7 +103,97 @@ function readBookmarks(objects: string[]): Bookmark[] {
   return bookmarks.filter((bookmark) => bookmark.title);
 }
 
-export function inspectPdf(bytes: Uint8Array): PdfInspection {
+/** Every indirect object's body, keyed by number. One char per byte, so the offsets index both. */
+function objectRanges(text: string): Map<string, [number, number]> {
+  const ranges = new Map<string, [number, number]>();
+
+  for (const match of text.matchAll(/(\d+)\s+0\s+obj/g)) {
+    const start = match.index + match[0].length;
+    const end = text.indexOf("endobj", start);
+
+    ranges.set(match[1], [start, end === -1 ? text.length : end]);
+  }
+
+  return ranges;
+}
+
+function references(value: string | undefined): string[] {
+  return [...(value ?? "").matchAll(/(\d+)\s+0\s+R/g)].map((match) => match[1]);
+}
+
+function printable(data: Uint8Array): string {
+  return bytesToChars(data).replace(
+    /[^\n\x20-\x7e]/g,
+    (char) => `\\x${char.charCodeAt(0).toString(16).padStart(2, "0")}`,
+  );
+}
+
+async function inflate(data: Uint8Array): Promise<Uint8Array> {
+  const stream = new Blob([data.slice()]).stream().pipeThrough(new DecompressionStream("deflate"));
+
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+async function readStream(
+  text: string,
+  bytes: Uint8Array,
+  [start, end]: [number, number],
+): Promise<string> {
+  const body = text.slice(start, end);
+  const keyword = body.indexOf("stream");
+  const close = body.lastIndexOf("endstream");
+
+  if (keyword === -1 || close === -1) return "";
+
+  const from = start + keyword + (body.startsWith("\r\n", keyword + 6) ? 8 : 7);
+  let to = start + close;
+
+  while (to > from && (bytes[to - 1] === 0x0a || bytes[to - 1] === 0x0d)) to -= 1;
+
+  const raw = bytes.subarray(from, to);
+
+  try {
+    return printable(/\/FlateDecode/.test(body.slice(0, keyword)) ? await inflate(raw) : raw);
+  } catch {
+    return "";
+  }
+}
+
+/** Walks `/Pages` → `/Kids` → `/Contents`. Object numbers do not carry page order; `/Kids` does. */
+async function readPageStreams(text: string, bytes: Uint8Array): Promise<PdfPageStream[]> {
+  const ranges = objectRanges(text);
+  const body = (number: string) => {
+    const range = ranges.get(number);
+    return range && text.slice(...range);
+  };
+
+  const tree = [...ranges.keys()].find((number) => /\/Type\s*\/Pages\b/.test(body(number) ?? ""));
+  const kids = references(body(tree ?? "")?.match(/\/Kids\s*\[([^\]]*)\]/)?.[1]);
+
+  return Promise.all(
+    kids.map(async (kid, index) => {
+      const contents = references(body(kid)?.match(/\/Contents\s*(\[[^\]]*\]|\d+\s+0\s+R)/)?.[1]);
+      const decoded = await Promise.all(
+        contents.map((number) => {
+          const range = ranges.get(number);
+          return range ? readStream(text, bytes, range) : "";
+        }),
+      );
+      const operators = decoded.join("\n");
+
+      return {
+        page: index + 1,
+        textObjects: operators.match(/\bBT\b/g)?.length ?? 0,
+        operators:
+          operators.length > STREAM_LIMIT
+            ? `${operators.slice(0, STREAM_LIMIT)}\n… truncated`
+            : operators,
+      };
+    }),
+  );
+}
+
+export async function inspectPdf(bytes: Uint8Array): Promise<PdfInspection> {
   const text = bytesToChars(bytes);
   const objects = text.split("endobj");
   const xmp = text.match(/<x:xmpmeta[\s\S]*?<\/x:xmpmeta>/)?.[0] ?? "";
@@ -123,5 +222,6 @@ export function inspectPdf(bytes: Uint8Array): PdfInspection {
       .filter((object) => object.includes("/Filespec"))
       .map((object) => ({ name: entry(object, "F") ?? "", description: entry(object, "Desc") }))
       .filter((attachment) => attachment.name),
+    streams: await readPageStreams(text, bytes),
   };
 }

@@ -2,14 +2,15 @@ import { Loader2Icon } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "~/lib/utils";
-import type { PdfInspection } from "~/playground/inspect-pdf";
+import type { PdfInspection, PdfPageStream } from "~/playground/inspect-pdf";
 import type { RenderError, RenderSuccess } from "./use-render-worker";
 
-export type PdfView = "preview" | "document";
+export type PdfView = "preview" | "document" | "stream";
 
 export const PDF_VIEWS: { id: PdfView; label: string }[] = [
   { id: "preview", label: "Preview" },
   { id: "document", label: "Document" },
+  { id: "stream", label: "Stream" },
 ];
 
 export type Zoom = "fit" | "actual";
@@ -98,6 +99,33 @@ function DocumentPanel({ inspection }: { inspection: PdfInspection }) {
   );
 }
 
+/**
+ * The decoded page content streams. One shaped run emits one `BT` block, so the
+ * count beside each page is where a font switch splitting words shows up first.
+ */
+function StreamPanel({ streams }: { streams: PdfPageStream[] }) {
+  if (streams.length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center bg-muted/20 font-mono text-xs text-muted-foreground">
+        no readable content stream
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full overflow-auto bg-muted/20 px-4 py-3 font-mono text-xs">
+      {streams.map((stream) => (
+        <div key={stream.page} className="mb-4 last:mb-0">
+          <div className="mb-1 text-muted-foreground">
+            page {stream.page} · {stream.textObjects} text objects
+          </div>
+          <pre className="whitespace-pre-wrap break-all">{stream.operators}</pre>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function PdfPreview({ url, dimmed }: { url: string | undefined; dimmed: boolean }) {
   if (!url) return null;
 
@@ -143,8 +171,9 @@ export function OutputPanel({
 
   // The browser's own PDF viewer brings paging, zoom and text selection, which
   // is the point of the format.
-  if (lastSuccess?.outputKind === "pdf" && pdfView === "document" && lastSuccess.inspection) {
-    return <DocumentPanel inspection={lastSuccess.inspection} />;
+  if (lastSuccess?.outputKind === "pdf" && lastSuccess.inspection) {
+    if (pdfView === "document") return <DocumentPanel inspection={lastSuccess.inspection} />;
+    if (pdfView === "stream") return <StreamPanel streams={lastSuccess.inspection.streams} />;
   }
 
   const output =
