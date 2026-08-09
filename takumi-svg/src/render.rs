@@ -2,14 +2,15 @@
 
 use std::{collections::HashMap, io, rc::Rc, sync::Arc};
 
+use takumi_core::painter::{BoxPainter, FillShape, PaintDevice, StrokeStyle, paint_border};
 use takumi_core::{
   Fonts,
   context::RenderContext,
   error::Result,
-  geometry::{ComputedLayout as Layout, NodeId, Point, Rect, Size},
+  geometry::{ComputedLayout as Layout, NodeId, Point, Size},
   layout::{
-    border::{BorderProperties, BorderSide, border_dash_pattern},
-    decoration::{ClipBox, outline_geometry},
+    border::{BorderProperties, BorderSide, PaintedSide, border_dash_pattern},
+    decoration::{ClipBox, OutlineGeometry},
     inline::{InlineBoxItem, VisualInlineBox},
     inline_box::{InlineBoxPaint, resolve_inline_box},
     node::{ImageData, Node, NodeKind},
@@ -17,11 +18,10 @@ use takumi_core::{
   },
   resources::image::ImageSource,
   scene::build_stacking_contexts,
-  shadow::SizedShadow,
   style::{
     Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BasicShape, BlendMode, BorderStyle,
-    Color, ComputedStyle, FillRule, FontFamily, Isolation, Lang, Length, Overflow, ShapeRadius,
-    Sides, SizingContext, SpacePair, StyleSheet, ToCss,
+    Color, ComputedStyle, FillRule, FontFamily, Isolation, Lang, Overflow, ShapeRadius, Sides,
+    SizingContext, SpacePair, StyleSheet, ToCss,
   },
   viewport::Viewport,
 };
@@ -121,6 +121,9 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
 /// Open group tokens from [`emit_box_chrome`], to be closed (innermost first:
 /// `child_group`, `outer`, then `blend`) after the box content.
 pub(crate) struct BoxChrome {
+  /// The outline, painted when the box closes. CSS 2.1 Appendix E puts it
+  /// above the box's own content, so it cannot go with the other decorations.
+  outline: Option<PendingOutline>,
   blend: Option<crate::GroupToken>,
   isolate: Option<crate::GroupToken>,
   mask: Option<crate::GroupToken>,
@@ -130,10 +133,25 @@ pub(crate) struct BoxChrome {
   child_group: Option<crate::GroupToken>,
 }
 
+/// An outline waiting for its box's content to finish.
+struct PendingOutline {
+  outline: OutlineGeometry,
+  x: f32,
+  y: f32,
+}
+
 impl BoxChrome {
-  /// Closes the box's groups innermost first.
+  /// Closes the box's groups innermost first, painting the outline once the
+  /// content group is closed so it lands above the content and outside its
+  /// overflow clip.
   pub(crate) fn close(self, doc: &mut SvgDocument) -> io::Result<()> {
-    let groups = [self.child_group, self.clip_group, self.outer];
+    if let Some(group) = self.child_group {
+      doc.end_group(group)?;
+    }
+    if let Some(pending) = self.outline {
+      paint_outline(&pending, doc)?;
+    }
+    let groups = [self.clip_group, self.outer];
     for group in groups.into_iter().flatten() {
       doc.end_group(group)?;
     }
@@ -232,8 +250,6 @@ pub(crate) fn emit_box_chrome(
     fills(doc)?;
   }
 
-  emit_outline(node, layout.size, x, y, doc)?;
-
   // Children, clipped to the (rounded) padding box when overflow is not visible.
   // With border-radius present the raster backend clips both axes to the rounded
   // padding box regardless of the per-axis overflow values, so the rounded path is
@@ -254,6 +270,7 @@ pub(crate) fn emit_box_chrome(
     .transpose()?;
 
   Ok(BoxChrome {
+    outline: pending_outline(node, layout, layout.size, x, y),
     blend,
     isolate,
     mask,
@@ -315,6 +332,19 @@ pub(crate) fn emit_background(
     return Ok(());
   }
 
+  // The colour fill carries the clip shape itself, so it goes outside the
+  // group. Only the image layers need the clip.
+  if background.0[3] != 0 {
+    let mut device = DocumentDevice { doc, error: None };
+
+    BoxPainter::new(&node.context, layout).background_color(Point { x, y }, &mut device);
+    if let Some(error) = device.error {
+      return Err(error);
+    }
+  }
+  if !has_bg_image {
+    return Ok(());
+  }
   let bg_clip = background_clip_path(style.background_clip, border, layout, x, y)
     .map(|(data, even_odd)| {
       if even_odd {
@@ -328,9 +358,6 @@ pub(crate) fn emit_background(
     .as_deref()
     .map(|clip| doc.begin_group(IDENTITY, 1.0, Some(clip), None))
     .transpose()?;
-  if background.0[3] != 0 {
-    doc.rect(x, y, width, height, Rgba(background.0))?;
-  }
   if let Some(images) = style.background_image.as_deref() {
     LayerEmitter::new(&node.context, doc).background_images(
       images,
@@ -360,7 +387,7 @@ pub(crate) fn emit_mask_group(
   let Some(images) = style.mask_image.as_deref() else {
     return Ok(None);
   };
-  if images.is_empty() || images.iter().all(|i| matches!(i, BackgroundImage::None)) {
+  if !images.iter().any(BackgroundImage::paints) {
     return Ok(None);
   }
   if width <= 0.0 || height <= 0.0 {
@@ -571,6 +598,62 @@ pub(crate) fn overflow_clip_rect_data(
 /// `background-clip`, or `None` when no clip is needed (an unrounded
 /// `border-box`, which the full border-box rect already covers). Mirrors the
 /// raster backend's `draw_background` clip regions.
+/// The SVG document as a [`PaintDevice`].
+pub(crate) struct DocumentDevice<'d> {
+  pub(crate) doc: &'d mut SvgDocument,
+  pub(crate) error: Option<io::Error>,
+}
+
+impl PaintDevice for DocumentDevice<'_> {
+  fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
+    if self.error.is_some() {
+      return;
+    }
+    let result = match shape {
+      FillShape::Rect(size) if transform.only_translation() => self.doc.rect(
+        transform.x,
+        transform.y,
+        size.width,
+        size.height,
+        Rgba(color.0),
+      ),
+      _ => {
+        let data = path_data(&shape.to_commands(), transform.to_cols_array());
+
+        self.doc.path(
+          &data,
+          Rgba(color.0),
+          matches!(shape.rule(), takumi_core::style::FillRule::EvenOdd),
+        )
+      }
+    };
+
+    if let Err(error) = result {
+      self.error = Some(error);
+    }
+  }
+
+  fn stroke_shape(&mut self, shape: &FillShape, stroke: &StrokeStyle, transform: Affine) {
+    if self.error.is_some() {
+      return;
+    }
+    let data = path_data(&shape.to_commands(), transform.to_cols_array());
+    let dash = stroke
+      .dash
+      .map(|[dash, gap]| format!("{} {}", Num(dash), Num(gap)));
+
+    if let Err(error) = self.doc.stroke_path(
+      &data,
+      Rgba(stroke.color.0),
+      stroke.width,
+      dash.as_deref(),
+      stroke.round_cap.then_some("round"),
+    ) {
+      self.error = Some(error);
+    }
+  }
+}
+
 fn background_clip_path(
   clip: BackgroundClip,
   border: &BorderProperties,
@@ -740,86 +823,34 @@ pub(crate) fn emit_borders(
 
   let matrix = [1.0, 0.0, 0.0, 1.0, x, y];
   let geom = BorderGeom { matrix, size };
+  let mut device = DocumentDevice { doc, error: None };
 
-  // Uniform dashed/dotted/double borders need stroke-based rendering, not fills.
-  if let Some(color) = border.has_uniform_visible_color() {
-    let width = border.width.top;
-    if border.is_uniform_all_sides_style(BorderStyle::Dashed) {
-      return emit_stroked_border(border, color, width, geom, BorderStyle::Dashed, doc);
-    }
-    if border.is_uniform_all_sides_style(BorderStyle::Dotted) {
-      return emit_stroked_border(border, color, width, geom, BorderStyle::Dotted, doc);
-    }
-    if border.is_uniform_all_sides_style(BorderStyle::Double) {
-      return emit_double_border(border, color, width, geom, doc);
-    }
+  if paint_border(border, size, Point { x, y }, &mut device) {
+    return device.error.map_or(Ok(()), Err);
   }
 
-  // A visible dashed/dotted side can't be filled solid; route to the per-side
-  // path that strokes each such side individually (the uniform all-sides-dashed/
-  // dotted fast path above already handled the uniform case).
-  let has_pattern_side = [
-    (border.width.top, border.style.top),
-    (border.width.right, border.style.right),
-    (border.width.bottom, border.style.bottom),
-    (border.width.left, border.style.left),
-  ]
-  .into_iter()
-  .any(|(width, style)| width > 0.0 && matches!(style, BorderStyle::Dashed | BorderStyle::Dotted));
+  let mut sides = border.painted_sides().peekable();
 
-  let mut ring = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
-  border.append_border_ring_commands(&mut ring, size);
-  let ring_data = path_data(&ring, matrix);
-
-  // Single color across every drawn side, all solid-fillable → one ring fill.
-  if !has_pattern_side && let Some(color) = border.has_uniform_visible_color() {
-    if color.0[3] != 0 {
-      return doc.path_evenodd(&ring_data, Rgba(color.0));
-    }
+  if sides.peek().is_none() {
     return Ok(());
   }
+  let mut ring = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
+
+  border.append_border_ring_commands(&mut ring, size);
 
   // Mixed per-side styles/colors: clip to the ring; fill solid sides as their
   // diagonal-split polygon and stroke dashed/dotted sides along their centerline.
-  let clip = doc.clip_path_evenodd(&ring_data)?;
+  let clip = doc.clip_path_evenodd(&path_data(&ring, matrix))?;
   let group = doc.begin_group(IDENTITY, 1.0, Some(&clip), None)?;
-  for (side, width, color, style) in [
-    (
-      BorderSide::Top,
-      border.width.top,
-      border.color.top,
-      border.style.top,
-    ),
-    (
-      BorderSide::Right,
-      border.width.right,
-      border.color.right,
-      border.style.right,
-    ),
-    (
-      BorderSide::Bottom,
-      border.width.bottom,
-      border.color.bottom,
-      border.style.bottom,
-    ),
-    (
-      BorderSide::Left,
-      border.width.left,
-      border.color.left,
-      border.style.left,
-    ),
-  ] {
-    if width <= 0.0 || color.0[3] == 0 || !style.is_rendered() {
-      continue;
-    }
-    match style {
+  for side in sides {
+    match side.style {
       BorderStyle::Dashed | BorderStyle::Dotted => {
-        emit_side_pattern(border, side, width, color, style, geom, doc)?;
+        emit_side_pattern(border, side, geom, doc)?;
       }
       _ => {
         let mut polygon = Vec::new();
-        border.append_side_clip_polygon_commands_at(side, &mut polygon, size, Point::ZERO);
-        doc.path(&path_data(&polygon, matrix), Rgba(color.0))?;
+        border.append_side_clip_polygon_commands_at(side.side, &mut polygon, size, Point::ZERO);
+        doc.path(&path_data(&polygon, matrix), Rgba(side.color.0), false)?;
       }
     }
   }
@@ -832,10 +863,7 @@ pub(crate) fn emit_borders(
 /// mirror the uniform stroked path (dashed `3w 2w`, dotted `0 2w` + round caps).
 fn emit_side_pattern(
   border: &BorderProperties,
-  side: BorderSide,
-  width: f32,
-  color: Color,
-  style: BorderStyle,
+  side: PaintedSide,
   geom: BorderGeom,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
@@ -846,7 +874,7 @@ fn emit_side_pattern(
     border.width.bottom / 2.0,
     border.width.left / 2.0,
   );
-  let ((x0, y0), (x1, y1)) = match side {
+  let ((x0, y0), (x1, y1)) = match side.side {
     BorderSide::Top => ((half_left, half_top), (size.width - half_right, half_top)),
     BorderSide::Right => (
       (size.width - half_right, half_top),
@@ -872,8 +900,14 @@ fn emit_side_pattern(
   path.pair(mx1, my1);
   let data = path.into_string();
   let length = ((x1 - x0).powi(2) + (y1 - y0).powi(2)).sqrt();
-  let (dasharray, linecap) = dash_attrs(width, style, length, false);
-  doc.stroke_path(&data, Rgba(color.0), width, dasharray.as_deref(), linecap)
+  let (dasharray, linecap) = dash_attrs(side.width, side.style, length, false);
+  doc.stroke_path(
+    &data,
+    Rgba(side.color.0),
+    side.width,
+    dasharray.as_deref(),
+    linecap,
+  )
 }
 
 /// Emits the CSS `outline` as a ring around the border-box, expanded outward by
@@ -882,87 +916,41 @@ fn emit_side_pattern(
 /// `BorderProperties` (outline width/color/style on all four sides, radii from the
 /// element) drawn on an expanded box, so all border styles (solid/dashed/dotted/
 /// double, and the 3D approximations) are reused from [`emit_borders`].
-pub(crate) fn emit_outline(
+/// The outline a box will paint once its content is done, or `None` when it
+/// paints none. A transparent outline is an element nobody sees, so it is
+/// skipped to keep the document smaller.
+fn pending_outline(
   node: &RenderNode,
+  layout: Layout,
   size: Size<f32>,
   x: f32,
   y: f32,
-  doc: &mut SvgDocument,
-) -> io::Result<()> {
-  let style = &node.context.style;
-  if !style.outline_style.is_rendered() {
-    return Ok(());
-  }
-  let sizing = &node.context.sizing;
-  let width = Length::from(style.outline_width)
-    .to_px(sizing, size.width)
-    .max(0.0);
-  if width <= 0.0 {
-    return Ok(());
-  }
-  let color = style.outline_color.resolve(node.context.current_color);
+) -> Option<PendingOutline> {
+  let color = node
+    .context
+    .style
+    .outline_color
+    .resolve(node.context.current_color);
+
   if color.0[3] == 0 {
-    return Ok(());
+    return None;
   }
-  let outline = outline_geometry(&node.context, size);
+
+  Some(PendingOutline {
+    outline: BoxPainter::fragment(&node.context, layout, size).outline()?,
+    x,
+    y,
+  })
+}
+
+fn paint_outline(pending: &PendingOutline, doc: &mut SvgDocument) -> io::Result<()> {
   emit_borders(
-    &outline.border,
-    x - outline.grow,
-    y - outline.grow,
-    outline.size,
+    &pending.outline.border,
+    pending.x - pending.outline.grow,
+    pending.y - pending.outline.grow,
+    pending.outline.size,
     doc,
   )
-}
-
-/// Builds the centerline rounded-rect path (border box inset by `inset` on each
-/// side, radii shrunk by `inset`) for stroking dashed/dotted/ring borders.
-fn centerline_path(border: &BorderProperties, inset: f32, geom: BorderGeom) -> String {
-  let BorderGeom { matrix, size } = geom;
-  let mut shrunk = *border;
-  shrunk.expand_by(Rect {
-    top: -inset,
-    right: -inset,
-    bottom: -inset,
-    left: -inset,
-  });
-  let inner = Size {
-    width: (size.width - 2.0 * inset).max(0.0),
-    height: (size.height - 2.0 * inset).max(0.0),
-  };
-  let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
-  shrunk.append_mask_commands(&mut commands, inner, Point { x: inset, y: inset });
-  path_data(&commands, matrix)
-}
-
-/// Strokes a uniform dashed/dotted border along the border-box centerline.
-fn emit_stroked_border(
-  border: &BorderProperties,
-  color: Color,
-  width: f32,
-  geom: BorderGeom,
-  style: BorderStyle,
-  doc: &mut SvgDocument,
-) -> io::Result<()> {
-  if color.0[3] == 0 || width <= 0.0 {
-    return Ok(());
-  }
-  let size = geom.size;
-  let data = centerline_path(border, width / 2.0, geom);
-  let half = width / 2.0;
-  let mut center = *border;
-  center.expand_by(Rect {
-    top: -half,
-    right: -half,
-    bottom: -half,
-    left: -half,
-  });
-  let center_size = Size {
-    width: (size.width - width).max(0.0),
-    height: (size.height - width).max(0.0),
-  };
-  let perimeter = center.approximate_rounded_rect_perimeter(center_size);
-  let (dasharray, linecap) = dash_attrs(width, style, perimeter, true);
-  doc.stroke_path(&data, Rgba(color.0), width, dasharray.as_deref(), linecap)
 }
 
 /// SVG `stroke-dasharray`/`stroke-linecap` for a `dashed`/`dotted` border or
@@ -981,27 +969,6 @@ fn dash_attrs(
     ),
     None => (None, None),
   }
-}
-
-/// Approximates a uniform `double` border as two thin rings (outer third + inner
-/// third of the border width).
-fn emit_double_border(
-  border: &BorderProperties,
-  color: Color,
-  width: f32,
-  geom: BorderGeom,
-  doc: &mut SvgDocument,
-) -> io::Result<()> {
-  if color.0[3] == 0 || width <= 0.0 {
-    return Ok(());
-  }
-  let third = width / 3.0;
-  // Outer ring centered at third/2 from the outer edge.
-  let outer = centerline_path(border, third / 2.0, geom);
-  doc.stroke_path(&outer, Rgba(color.0), third, None, None)?;
-  // Inner ring centered at width - third/2 from the outer edge.
-  let inner = centerline_path(border, width - third / 2.0, geom);
-  doc.stroke_path(&inner, Rgba(color.0), third, None, None)
 }
 
 /// Runs `emit` inside a Gaussian-blur group when `blur_radius` is positive (the
@@ -1032,18 +999,8 @@ pub(crate) fn emit_box_shadows(
   h: f32,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
-  let Some(shadows) = node.context.style.box_shadow.as_ref() else {
-    return Ok(());
-  };
-  let cc = node.context.current_color;
-  for shadow in shadows.iter() {
-    if shadow.inset {
-      continue;
-    }
-    let resolved = SizedShadow::from_box_shadow(*shadow, &node.context.sizing, cc, layout.size);
-    if resolved.color.0[3] == 0 {
-      continue;
-    }
+  for resolved in BoxPainter::new(&node.context, layout).shadows().outer {
+    {}
 
     // Shadow shape = the element's rounded border-box, radii expanded by the
     // spread (shared core geometry with the raster backend).
@@ -1064,7 +1021,9 @@ pub(crate) fn emit_box_shadows(
     let fill = Rgba(resolved.color.0);
     let data = border_box_path_data(&shadow, spread_size, sx, sy);
 
-    emit_with_blur(doc, resolved.blur_radius, |doc| doc.path(&data, fill))?;
+    emit_with_blur(doc, resolved.blur_radius, |doc| {
+      doc.path(&data, fill, false)
+    })?;
   }
   Ok(())
 }
@@ -1081,23 +1040,12 @@ pub(crate) fn emit_inset_box_shadows(
   y: f32,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
-  let Some(shadows) = node.context.style.box_shadow.as_ref() else {
-    return Ok(());
-  };
   let size = layout.size;
   if size.width <= 0.0 || size.height <= 0.0 {
     return Ok(());
   }
-  let cc = node.context.current_color;
   let outer = border_box_path_data(border, size, x, y);
-  for shadow in shadows.iter() {
-    if !shadow.inset {
-      continue;
-    }
-    let resolved = SizedShadow::from_box_shadow(*shadow, &node.context.sizing, cc, size);
-    if resolved.color.0[3] == 0 {
-      continue;
-    }
+  for resolved in BoxPainter::new(&node.context, layout).shadows().inset {
     let fill = Rgba(resolved.color.0);
 
     // The shadow fills the border box minus the hole it leaves uncovered (shared
@@ -1117,9 +1065,7 @@ pub(crate) fn emit_inset_box_shadows(
     // rounded border box so the blur stays inside the element.
     let clip = doc.clip_path(&outer)?;
     let clip_group = doc.begin_group(IDENTITY, 1.0, Some(&clip), None)?;
-    emit_with_blur(doc, resolved.blur_radius, |doc| {
-      doc.path_evenodd(&ring, fill)
-    })?;
+    emit_with_blur(doc, resolved.blur_radius, |doc| doc.path(&ring, fill, true))?;
     doc.end_group(clip_group)?;
   }
   Ok(())

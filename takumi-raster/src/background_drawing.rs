@@ -495,6 +495,32 @@ pub(crate) fn create_mask(
   )
 }
 
+/// The `background-image` layers only. The colour underneath them is painted
+/// through [`crate::node_paint::CanvasDevice`], so a caller that paints it
+/// itself asks for this instead of [`collect_background_layers`].
+pub(crate) fn background_image_layers(
+  context: &RenderContext,
+  layout: Layout,
+) -> Result<TileLayers> {
+  let border_box = layout.size;
+  let origin = background_origin_box(context.style.background_origin, layout);
+
+  resolve_tile_layers(ResolveBackgroundLayersInput {
+    images: context.style.background_image.as_deref().unwrap_or(&[]),
+    positions: &context.style.background_position,
+    sizes: &context.style.background_size,
+    repeats: &context.style.background_repeat,
+    blend_modes: &context.style.background_blend_mode,
+    context,
+    area: origin.size.map(|x| x.max(0.0) as u32),
+    paint: border_box.map(|x| x as u32),
+    origin_offset: Point {
+      x: origin.offset.x as i32,
+      y: origin.offset.y as i32,
+    },
+  })
+}
+
 pub(crate) fn collect_background_layers(
   context: &RenderContext,
   layout: Layout,

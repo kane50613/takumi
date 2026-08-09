@@ -563,6 +563,53 @@ fn test_style_outline_with_text() {
   run_fixture_test(container, "style_outline_with_text");
 }
 
+#[test]
+fn test_style_outline_over_children_and_text() {
+  // CSS 2.1 Appendix E paints the outline after everything the box holds. A
+  // negative `outline-offset` drags the ring inward until it crosses the line of
+  // text, so a backend that paints the outline early buries it under the glyphs.
+  let card = |offset: f32, text: &str| {
+    Node::container([Node::text(text.to_string()).with_style(
+      Style::default()
+        .with(StyleDeclaration::font_size(Px(48.0).into()))
+        .with(StyleDeclaration::color(ColorInput::Value(Color([
+          15, 23, 42, 255,
+        ])))),
+    )])
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::width(Px(420.0)))
+        .with(StyleDeclaration::background_color(ColorInput::Value(
+          Color([226, 232, 240, 255]),
+        )))
+        .with_padding(Sides([Px(24.0); 4]))
+        .with(StyleDeclaration::outline_width(Px(10.0).into()))
+        .with(StyleDeclaration::outline_color(ColorInput::Value(Color([
+          220, 38, 38, 255,
+        ]))))
+        .with(StyleDeclaration::outline_offset(Px(offset)))
+        .with(StyleDeclaration::outline_style(BorderStyle::Solid)),
+    )
+  };
+
+  let container = Node::container([card(-50.0, "Ring over text"), card(-64.0, "Deeper ring")])
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(ColorInput::Value(
+          Color([15, 23, 42, 255]),
+        )))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with_gap(SpacePair::from_single(Px(32.0).into())),
+    );
+
+  run_fixture_test(container, "style_outline_over_children_and_text");
+}
+
 fn label_text(label: &str) -> Node {
   Node::text(label.to_string()).with_style(
     Style::default()

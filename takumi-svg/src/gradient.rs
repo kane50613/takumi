@@ -101,7 +101,7 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
     let last_repeat = repeats.last().copied().unwrap_or_default();
 
     for (index, image) in images.iter().enumerate().rev() {
-      if matches!(image, BackgroundImage::None) {
+      if !image.paints() {
         continue;
       }
       let size = sizes.get(index).copied().unwrap_or(last_size);
@@ -374,7 +374,7 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
       wedge.pair(x0, y0);
       wedge.pair(x1, y1);
       wedge.close();
-      self.doc.path(&wedge.into_string(), fill)?;
+      self.doc.path(&wedge.into_string(), fill, false)?;
     }
     self.doc.end_group(group)
   }

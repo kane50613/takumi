@@ -740,17 +740,17 @@ fn outlines() {
       .fonts(fonts)
       .build()
   });
-  // The solid indigo rings and the dashed red one fill with their outline
-  // colors, inside the deflated content streams.
+  // A solid ring fills; a dashed one strokes its centerline so the dashes
+  // survive. Both carry their outline color into the deflated content streams.
   let content: Vec<Vec<u8>> = content_lines(&pdf).collect();
 
   for needle in [
     &b"0.2627 0.2196 0.7922 rg"[..],
-    &b"0.7255 0.1098 0.1098 rg"[..],
+    &b"0.7255 0.1098 0.1098 RG"[..],
   ] {
     assert!(
       content.iter().any(|line| find(line, needle).is_some()),
-      "expected an outline color fill"
+      "expected an outline color"
     );
   }
 }
@@ -1686,6 +1686,62 @@ fn tagged_ua2() {
   );
 }
 
+/// A border decoration is content no reader should announce, so it belongs in
+/// an artifact sequence. A border that paints nothing belongs in no sequence at
+/// all: an empty `BMC`/`EMC` pair is a region with nothing in it.
+#[test]
+fn tagged_borders_are_artifacts() {
+  let doc = r#"<main style="display:flex;flex-direction:column;gap:8px;font-size:14px;color:#141414;">
+    <h1>Borders</h1>
+    <p style="border:3px dashed #b91c1c;padding:4px;">Dashed all round</p>
+    <p style="border-top:4px solid rgba(255,0,0,0);border-left:2px solid rgba(0,0,255,0);padding:4px;">Invisible sides</p>
+  </main>"#;
+  let pdf = run_pdf_fixture("borders-tagged-ua1", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse border doc"))
+      .page(PageOptions::A4)
+      .standard(PdfStandard::A3a)
+      .tagged(Tagging::Ua1)
+      .lang(Some(takumi_core::style::Lang::parse("en").expect("lang")))
+      .metadata(PdfMetadata {
+        title: Some("Borders".into()),
+        creation_date: Some(PdfDate {
+          year: 2026,
+          month: 8,
+          day: 9,
+          hour: 0,
+          minute: 0,
+          second: 0,
+        }),
+        ..Default::default()
+      })
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+  let stroke = haystack
+    .find(" d ")
+    .expect("no dashed stroke in the content stream");
+  let opened = haystack[..stroke]
+    .rfind("/Artifact BMC")
+    .expect("the dashed border opened no artifact");
+
+  assert!(
+    !haystack[opened..stroke].contains("EMC"),
+    "the dashed border strokes outside its artifact"
+  );
+  for region in haystack.split("/Artifact BMC").skip(1) {
+    let region = &region[..region.find("EMC").expect("an artifact was never closed")];
+
+    assert!(
+      region
+        .split_whitespace()
+        .any(|token| matches!(token, "f" | "f*" | "S" | "Do")),
+      "an artifact holds no painted content: {region:?}"
+    );
+  }
+}
+
 /// PDF/UA-2 requires the catalog to declare the document language, so a render
 /// without one fails instead of writing a file that claims conformance.
 #[test]
@@ -1758,6 +1814,54 @@ fn inline_images() {
   assert!(
     haystack.contains("/ca 0.5"),
     "an inline image ignored its opacity"
+  );
+}
+
+/// CSS 2.1 Appendix E paints the outline last, so a negative `outline-offset`
+/// draws over the box's own text instead of under it.
+#[test]
+fn outline_over_content() {
+  let doc = r#"<main style="display:flex;font-size:40px;color:#141414;"><div style="display:block;outline:8px solid #ff0000;outline-offset:-8px;background-color:#ffffff;">TEXT</div></main>"#;
+  let pdf = run_pdf_fixture("outline-over-content", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse outline doc"))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+  let outline = haystack.find("1 0 0 rg").expect("no outline fill");
+  let glyphs = haystack.find("Tj").or_else(|| haystack.find("TJ"));
+
+  assert!(
+    glyphs.is_some_and(|glyphs| outline > glyphs),
+    "the outline painted under the text"
+  );
+}
+
+/// The outline paints after the box's content but still under the box's own
+/// transform, so a rotated box's outline rotates with it.
+#[test]
+fn outline_under_transform() {
+  let doc = r#"<main style="display:flex;font-size:30px;color:#141414;"><div style="display:block;transform:rotate(20deg);outline:6px solid #ff0000;">TEXT</div></main>"#;
+  let pdf = run_pdf_fixture("outline-under-transform", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse outline doc"))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  });
+  // The outline's fill has to sit inside the box's own rotation, so the two
+  // land in the same `q` block.
+  let haystack = inflated_text(&pdf);
+  let block = haystack
+    .split("q ")
+    .find(|block| block.contains("1 0 0 rg"))
+    .expect("no outline fill");
+
+  assert!(
+    block.starts_with("0.7047695 -0.2565151"),
+    "the outline painted outside the box transform"
   );
 }
 

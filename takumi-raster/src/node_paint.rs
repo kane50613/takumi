@@ -5,14 +5,17 @@
 //! tiny-skia, and the SVG backend emits the same geometry as vector paths.
 
 use takumi_core::{
-  geometry::{AvailableSpace, ComputedLayout as Layout, Point, Size},
-  layout::decoration::{ClipBox, outline_geometry},
+  geometry::{AvailableSpace, ComputedLayout as Layout, Point, Point as CorePoint, Size},
+  layout::decoration::ClipBox,
+  painter::{BoxPainter, FillShape, PaintDevice},
+  style::{Color, ImageScalingAlgorithm},
 };
 
 use super::{
-  BackgroundTile, BorderProperties, Canvas, Fill, PaintSource, RenderContext, SizedFontStyle,
-  SizedShadow, TileLayer, collect_background_layers, draw_image, draw_inset_shadow_to_canvas,
-  draw_outset_shadow, inline_drawing::draw_inline_layout, paint_border, rasterize_layers,
+  BackgroundTile, BorderProperties, Canvas, ColorTile, Fill, PaintSource, RenderContext,
+  SizedFontStyle, TileLayer, background_image_layers, collect_background_layers, draw_image,
+  draw_inset_shadow_to_canvas, draw_outset_shadow, inline_drawing::draw_inline_layout,
+  paint_border, rasterize_layers,
 };
 use crate::{
   Result,
@@ -31,29 +34,15 @@ pub(crate) fn draw_outset_box_shadow(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  let Some(box_shadow) = context.style.box_shadow.as_ref() else {
-    return Ok(());
-  };
+  let painter = BoxPainter::new(context, layout);
+  let element_border_radius = *painter.border();
 
-  let element_border_radius = BorderProperties::from_context(context, layout.size, layout.border);
-
-  for shadow in box_shadow.iter() {
-    if shadow.inset {
-      continue;
-    }
-
+  for shadow in painter.shadows().outer {
     let mut paths = Vec::new();
     let mut element_paths = Vec::new();
-
-    let resolved_spread_radius = shadow
-      .spread_radius
-      .to_px(&context.sizing, layout.size.width);
-
+    let resolved_spread_radius = shadow.spread_radius;
     let (border_radius, spread_size) =
       element_border_radius.outset_shadow_box(layout.size, resolved_spread_radius);
-
-    let shadow =
-      SizedShadow::from_box_shadow(*shadow, &context.sizing, context.current_color, layout.size);
 
     border_radius.append_mask_commands(
       &mut paths,
@@ -84,20 +73,51 @@ pub(crate) fn draw_inset_box_shadow(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  if let Some(box_shadow) = context.style.box_shadow.as_ref() {
-    let border_radius = BorderProperties::from_context(context, layout.size, layout.border);
+  {
+    let painter = BoxPainter::new(context, layout);
+    let border_radius = *painter.border();
 
-    for shadow in box_shadow.iter() {
-      if !shadow.inset {
-        continue;
-      }
-
-      let shadow =
-        SizedShadow::from_box_shadow(*shadow, &context.sizing, context.current_color, layout.size);
+    for shadow in painter.shadows().inset {
       draw_inset_shadow_to_canvas(&shadow, context.transform, border_radius, canvas, layout)?;
     }
   }
   Ok(())
+}
+
+/// The canvas as a [`PaintDevice`]. A rounded rectangle composites through the
+/// same border machinery the tile path uses, so nothing rasterizes a path that
+/// did not before.
+pub(crate) struct CanvasDevice<'c> {
+  pub(crate) canvas: &'c mut Canvas,
+  pub(crate) transform: Affine,
+  pub(crate) algorithm: ImageScalingAlgorithm,
+}
+
+impl PaintDevice for CanvasDevice<'_> {
+  fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
+    let (border, size, offset) = match shape {
+      FillShape::Rect(size) => (BorderProperties::default(), *size, CorePoint::ZERO),
+      FillShape::RoundedRect {
+        border,
+        size,
+        offset,
+      } => (*border, *size, *offset),
+      // A path that is not a rectangle never reaches a background colour.
+      FillShape::Path { .. } => return,
+    };
+    if size.width <= 0.0 || size.height <= 0.0 {
+      return;
+    }
+    let tile = ColorTile::new(color, size.width as u32, size.height as u32);
+
+    self.canvas.overlay_image(
+      &BackgroundTile::Color(tile),
+      border,
+      self.transform * transform * Affine::translation(offset.x, offset.y),
+      self.algorithm,
+      BlendMode::Normal,
+    );
+  }
 }
 
 pub(crate) fn draw_background(
@@ -106,10 +126,17 @@ pub(crate) fn draw_background(
   layout: Layout,
 ) -> Result<()> {
   let border_radius = BorderProperties::from_context(context, layout.size, layout.border);
+  let mut device = CanvasDevice {
+    canvas,
+    transform: context.transform,
+    algorithm: context.style.image_rendering,
+  };
+
+  BoxPainter::new(context, layout).background_color(Point { x: 0.0, y: 0.0 }, &mut device);
 
   match context.style.background_clip {
     BackgroundClip::BorderBox => {
-      let layers = collect_background_layers(context, layout)?;
+      let layers = background_image_layers(context, layout)?;
 
       if border_radius.is_zero() {
         for tile in layers {
@@ -194,7 +221,7 @@ fn draw_clipped_background(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  let layers = collect_background_layers(context, layout)?;
+  let layers = background_image_layers(context, layout)?;
 
   if let Some(tile) = rasterize_layers(
     layers,
@@ -248,7 +275,9 @@ pub(crate) fn draw_outline(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  let outline = outline_geometry(context, layout.size);
+  let Some(outline) = BoxPainter::new(context, layout).outline() else {
+    return Ok(());
+  };
   let transform = Affine::translation(-outline.grow, -outline.grow) * context.transform;
 
   paint_border(outline.border, canvas, outline.size, transform, None);

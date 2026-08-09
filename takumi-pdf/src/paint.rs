@@ -6,7 +6,7 @@ use crate::krilla::image::Image as KrillaImage;
 use crate::krilla::{
   blend::BlendMode as KrillaBlendMode,
   color::rgb,
-  geom::{Path as KrillaPath, PathBuilder, Rect as KrillaRect, Transform},
+  geom::{Path as KrillaPath, PathBuilder, Rect as KrillaRect},
   num::NormalizedF32,
   paint::{Fill, FillRule, SpreadMethod, Stop},
   surface::Surface,
@@ -16,7 +16,6 @@ use takumi_core::resources::image::{ImageSource, RenderedImage};
 use takumi_core::{
   context::RenderContext,
   geometry::{ComputedLayout as Layout, PathCommand},
-  layout::inline::DecorationRect,
   style::{BlendMode, ComputedStyle, Length, Overflow, PositionComponent, ResolvedGradientStop},
 };
 
@@ -84,35 +83,6 @@ pub(crate) fn overflow_clip_rect(
     (y - UNBOUNDED, y + layout.size.height + UNBOUNDED)
   };
   KrillaRect::from_ltrb(left, top, right, bottom).and_then(rect_path)
-}
-
-/// Fills one decoration rect under its border-box transform offset by `(x, y)`.
-pub(crate) fn draw_decoration(
-  surface: &mut Surface,
-  decoration: &DecorationRect,
-  x: f32,
-  y: f32,
-  filter: Option<&ColorFilter>,
-) {
-  if decoration.color.0[3] == 0 || decoration.width <= 0.0 || decoration.height <= 0.0 {
-    return;
-  }
-  let Some(path) =
-    KrillaRect::from_xywh(0.0, 0.0, decoration.width, decoration.height).and_then(rect_path)
-  else {
-    return;
-  };
-  let [a, b, c, d, e, f] = decoration.transform;
-
-  surface.push_transform(&Transform::from_row(a, b, c, d, e + x, f + y));
-  let color = match filter {
-    Some(filter) => filter.apply(decoration.color.0),
-    None => decoration.color.0,
-  };
-
-  surface.set_fill(Some(fill_from_rgba(color, 1.0)));
-  surface.draw_path(&path);
-  surface.pop();
 }
 
 /// Resolves one `object-position` axis to an offset within `available` space.

@@ -1,14 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#fff"/>
-  <g transform="matrix(1 0 0 1 40 99.02)">
-    <rect x="0" y="0" width="254" height="4" fill="#00f"/>
-  </g>
-  <g transform="matrix(1 0 0 1 943 99.02)">
-    <rect x="0" y="0" width="111" height="2.4" fill="#f00"/>
-  </g>
-  <g transform="matrix(1 0 0 1 40 175.8)">
-    <rect x="0" y="0" width="211" height="2.4" fill="#f00"/>
-  </g>
+  <rect x="40" y="99.02" width="254" height="4" fill="#00f"/>
+  <rect x="943" y="99.02" width="111" height="2.4" fill="#f00"/>
+  <rect x="40" y="175.8" width="211" height="2.4" fill="#f00"/>
   <g fill="#000">
     <use href="#g0" x="40" y="94.22"/>
     <use href="#g1" x="73.74" y="94.22"/>
@@ -37,9 +31,7 @@
     <use href="#g9" x="196.1" y="171"/>
     <use href="#g1" x="223.41" y="171"/>
   </g>
-  <g transform="matrix(1 0 0 1 40 78.956)">
-    <rect x="0" y="0" width="254" height="4" fill="#00f"/>
-  </g>
+  <rect x="40" y="78.956" width="254" height="4" fill="#00f"/>
   <rect x="293.104" y="45.38" width="126" height="63" fill="#f00" fill-opacity=".502"/>
   <g fill="#000">
     <use href="#g4" x="293.1" y="93.38"/>

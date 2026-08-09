@@ -1,8 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="392" fill="#f0f0f0"/>
-  <g transform="matrix(1 0 0 1 382 92.8)">
-    <rect x="0" y="0" width="436" height="2.4" fill="#f00"/>
-  </g>
+  <rect x="382" y="92.8" width="436" height="2.4" fill="#f00"/>
   <g fill="#000">
     <use href="#g0" x="382.32" y="88"/>
     <use href="#g1" x="408.29" y="88"/>
@@ -23,9 +21,7 @@
     <use href="#g9" x="763.44" y="88"/>
     <use href="#g11" x="790.75" y="88"/>
   </g>
-  <g transform="matrix(1 0 0 1 325 175.8)">
-    <rect x="0" y="0" width="550" height="2.4" fill="#f00"/>
-  </g>
+  <rect x="325" y="175.8" width="550" height="2.4" fill="#f00"/>
   <g fill="#000">
     <use href="#g15" x="325.61" y="171"/>
     <use href="#g12" x="343.13" y="171"/>
@@ -51,9 +47,7 @@
     <use href="#g9" x="820.15" y="171"/>
     <use href="#g11" x="847.46" y="171"/>
   </g>
-  <g transform="matrix(1 0 0 1 368 264.892)">
-    <rect x="0" y="0" width="464" height="2.4" fill="#f00"/>
-  </g>
+  <rect x="368" y="264.892" width="464" height="2.4" fill="#f00"/>
   <g fill="#000">
     <use href="#g1" x="368.59" y="254"/>
     <use href="#g9" x="396.19" y="254"/>
@@ -75,9 +69,7 @@
     <use href="#g9" x="777.17" y="254"/>
     <use href="#g11" x="804.48" y="254"/>
   </g>
-  <g transform="matrix(1 0 0 1 334 347.892)">
-    <rect x="0" y="0" width="532" height="2.4" fill="#f00"/>
-  </g>
+  <rect x="334" y="347.892" width="532" height="2.4" fill="#f00"/>
   <g fill="#000">
     <use href="#g14" x="334.73" y="337"/>
     <use href="#g9" x="346.73" y="337"/>

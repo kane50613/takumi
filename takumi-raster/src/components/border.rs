@@ -1,7 +1,7 @@
 use takumi_core::{
   geometry::{Point, Rect, Size},
   layout::border::{
-    BorderProperties, BorderSide, border_dash_pattern, inset_size, rect_offset,
+    BorderProperties, BorderSide, PaintedSide, border_dash_pattern, inset_size, rect_offset,
     shade_3d_border_color, subtract_rect,
   },
 };
@@ -50,36 +50,8 @@ pub(crate) fn paint_border(
   let mut border = properties;
   border.width = properties.visible_side_widths();
 
-  for (side, style, width, color) in [
-    (
-      BorderSide::Top,
-      border.style.top,
-      border.width.top,
-      border.color.top,
-    ),
-    (
-      BorderSide::Right,
-      border.style.right,
-      border.width.right,
-      border.color.right,
-    ),
-    (
-      BorderSide::Bottom,
-      border.style.bottom,
-      border.width.bottom,
-      border.color.bottom,
-    ),
-    (
-      BorderSide::Left,
-      border.style.left,
-      border.width.left,
-      border.color.left,
-    ),
-  ] {
-    if !BorderProperties::is_side_visible(style, width) {
-      continue;
-    }
-    draw_visible_side(border, &mut paint, side, border_box, style, color);
+  for side in border.painted_sides() {
+    draw_visible_side(border, &mut paint, side, border_box);
   }
 }
 
@@ -152,11 +124,13 @@ fn draw_uniform_fast_path(
 fn draw_visible_side(
   border: BorderProperties,
   paint: &mut SidePaintContext<'_, '_>,
-  side: BorderSide,
+  side: PaintedSide,
   border_box: Size<f32>,
-  style: BorderStyle,
-  color: Color,
 ) {
+  let PaintedSide {
+    side, style, color, ..
+  } = side;
+
   match style {
     BorderStyle::Dashed | BorderStyle::Dotted => {
       draw_side_pattern_border(border, paint, side, border_box, color, style);

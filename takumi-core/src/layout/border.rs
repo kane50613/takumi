@@ -8,7 +8,7 @@ use crate::{
 };
 
 /// Border side identifier used by per-side geometry and rasterization.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum BorderSide {
   /// Top side.
   Top,
@@ -18,6 +18,19 @@ pub enum BorderSide {
   Bottom,
   /// Left side.
   Left,
+}
+
+/// One side of a border that paints, with the values needed to draw it.
+#[derive(Debug, Clone, Copy)]
+pub struct PaintedSide {
+  /// Which side this is.
+  pub side: BorderSide,
+  /// The side's width in pixels.
+  pub width: f32,
+  /// The side's resolved colour.
+  pub color: Color,
+  /// The side's line style.
+  pub style: BorderStyle,
 }
 
 /// Represents the properties of a border, including corner radii and drawing metadata.
@@ -122,6 +135,49 @@ impl BorderProperties {
   /// True if a side with this style and width is rendered.
   pub fn is_side_visible(style: BorderStyle, width: f32) -> bool {
     style.is_rendered() && width > 0.0
+  }
+
+  /// The sides that put ink on the page, clockwise from the top. A side is left
+  /// out when it has no width, when its style draws nothing, or when its colour
+  /// is fully transparent. Every backend that walks the sides one by one walks
+  /// this list, so an all-transparent border yields nothing and the caller can
+  /// skip the clip and the marked-content region it would otherwise open.
+  pub fn painted_sides(&self) -> impl Iterator<Item = PaintedSide> {
+    [
+      (
+        BorderSide::Top,
+        self.width.top,
+        self.color.top,
+        self.style.top,
+      ),
+      (
+        BorderSide::Right,
+        self.width.right,
+        self.color.right,
+        self.style.right,
+      ),
+      (
+        BorderSide::Bottom,
+        self.width.bottom,
+        self.color.bottom,
+        self.style.bottom,
+      ),
+      (
+        BorderSide::Left,
+        self.width.left,
+        self.color.left,
+        self.style.left,
+      ),
+    ]
+    .into_iter()
+    .filter_map(|(side, width, color, style)| {
+      (Self::is_side_visible(style, width) && color.0[3] != 0).then_some(PaintedSide {
+        side,
+        width,
+        color,
+        style,
+      })
+    })
   }
 
   /// True if any side is rendered with nonzero width.
@@ -882,6 +938,75 @@ const DOTTED_ENDPOINT_EPSILON: f32 = 1.0e-2;
 
 /// The dash pattern for a stroked `dashed`/`dotted` border or outline side,
 /// shared by both backends: `([dash, gap], round_cap)`, or `None` for a solid
+/// stroke (non-dash style, or a segment too short to dash). `length` is the side
+/// length (or the ring perimeter when `closed`). Dash/gap adjust by width and
+/// length so the pattern fits the side evenly.
+/// How a border paints as a whole, before any per-side work.
+///
+/// A uniform dashed, dotted, or double border cannot be filled side by side:
+/// the pattern has to run around the whole ring, so it strokes a centerline
+/// instead. Every backend makes this call the same way.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum BorderPaint {
+  /// Stroke the centerline with the dash pattern for `style`.
+  Stroked {
+    /// The uniform colour.
+    color: Color,
+    /// The uniform width.
+    width: f32,
+    /// `Dashed` or `Dotted`.
+    style: BorderStyle,
+  },
+  /// Two concentric rings.
+  Double {
+    /// The uniform colour.
+    color: Color,
+    /// The uniform width.
+    width: f32,
+  },
+  /// One even-odd fill of the whole ring.
+  Ring {
+    /// The uniform colour.
+    color: Color,
+  },
+  /// Each side on its own.
+  Sides,
+}
+
+/// Decides how `border` paints. See [`BorderPaint`].
+pub fn border_paint(border: &BorderProperties) -> BorderPaint {
+  let Some(color) = border.has_uniform_visible_color() else {
+    return BorderPaint::Sides;
+  };
+  let width = border.width.top;
+
+  for style in [BorderStyle::Dashed, BorderStyle::Dotted] {
+    if border.is_uniform_all_sides_style(style) {
+      return BorderPaint::Stroked {
+        color,
+        width,
+        style,
+      };
+    }
+  }
+  if border.is_uniform_all_sides_style(BorderStyle::Double) {
+    return BorderPaint::Double { color, width };
+  }
+  // A dashed or dotted side breaks the ring into segments, so a border that
+  // mixes one in has to be walked side by side even though its colour is
+  // uniform. Filling the ring would quietly paint that side solid.
+  if border
+    .painted_sides()
+    .any(|side| matches!(side.style, BorderStyle::Dashed | BorderStyle::Dotted))
+  {
+    return BorderPaint::Sides;
+  }
+
+  BorderPaint::Ring { color }
+}
+
+/// The dash pattern for a stroked `dashed`/`dotted` border or outline side,
+/// shared by every backend: `([dash, gap], round_cap)`, or `None` for a solid
 /// stroke (non-dash style, or a segment too short to dash). `length` is the side
 /// length (or the ring perimeter when `closed`). Dash/gap adjust by width and
 /// length so the pattern fits the side evenly.

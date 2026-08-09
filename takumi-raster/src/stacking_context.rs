@@ -125,6 +125,7 @@ struct OverlapRegion {
 enum DeferredNodeRender {
   Deferred {
     path: Vec<usize>,
+    layout: Layout,
     has_constraint: bool,
     isolated_canvas: Option<CanvasSubcanvas>,
     filter_bounds: Option<SceneBounds>,
@@ -134,10 +135,16 @@ enum DeferredNodeRender {
 fn finish_node_render(
   node: &mut RenderNode,
   canvas: &mut Canvas,
+  layout: Layout,
   has_constraint: bool,
   isolated_canvas: Option<CanvasSubcanvas>,
   filter_bounds: Option<SceneBounds>,
 ) -> Result<()> {
+  // CSS 2.1 Appendix E paints the outline last: above the box's own content,
+  // its inline layout, and its children, but still inside the box's filter and
+  // mask.
+  draw_outline(&node.context, canvas, layout)?;
+
   if !node.context.style.filter.is_empty() {
     let viewport = canvas.viewport();
     let filter_padding = filter_padding(
@@ -385,6 +392,7 @@ fn begin_node_render(
     finish_node_render(
       current,
       canvas,
+      layout,
       has_constraint,
       isolated_canvas,
       node_paint.paint_bounds,
@@ -393,6 +401,7 @@ fn begin_node_render(
     finish_node_render(
       current,
       canvas,
+      layout,
       has_constraint,
       isolated_canvas,
       node_paint.paint_bounds,
@@ -400,6 +409,7 @@ fn begin_node_render(
   } else {
     return Ok(Some(DeferredNodeRender::Deferred {
       path: node_paint.path.clone(),
+      layout,
       has_constraint,
       isolated_canvas,
       filter_bounds: node_paint.paint_bounds,
@@ -419,6 +429,7 @@ fn paint_single_node(
     Some(DeferredNodeRender::SkipRendering) | None => {}
     Some(DeferredNodeRender::Deferred {
       path,
+      layout,
       has_constraint,
       isolated_canvas,
       filter_bounds,
@@ -429,6 +440,7 @@ fn paint_single_node(
       finish_node_render(
         current,
         canvas,
+        layout,
         has_constraint,
         isolated_canvas,
         filter_bounds,
@@ -499,6 +511,7 @@ pub(crate) fn paint_context(
 
   if let Some(DeferredNodeRender::Deferred {
     path,
+    layout,
     has_constraint,
     isolated_canvas,
     filter_bounds,
@@ -511,6 +524,7 @@ pub(crate) fn paint_context(
     finish_node_render(
       current,
       canvas,
+      layout,
       has_constraint,
       isolated_canvas,
       context.paint_bounds().or(filter_bounds),
@@ -617,7 +631,6 @@ fn draw_render_node_shell(node: &RenderNode, canvas: &mut Canvas, layout: Layout
   draw_background(&node.context, canvas, layout)?;
   draw_inset_box_shadow(&node.context, canvas, layout)?;
   draw_border(&node.context, canvas, layout)?;
-  draw_outline(&node.context, canvas, layout)?;
   Ok(())
 }
 

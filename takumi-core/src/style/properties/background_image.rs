@@ -24,6 +24,14 @@ pub enum BackgroundImage {
   Url(Arc<str>),
 }
 
+impl BackgroundImage {
+  /// Whether the layer has anything to paint. `none` is a placeholder that
+  /// keeps the other `background-*` lists aligned, so it paints nothing.
+  pub fn paints(&self) -> bool {
+    !matches!(self, Self::None)
+  }
+}
+
 impl MakeComputed for BackgroundImage {
   fn make_computed(&mut self, sizing: &SizingContext) {
     match self {

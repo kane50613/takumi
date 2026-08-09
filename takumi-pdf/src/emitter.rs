@@ -10,8 +10,8 @@ use crate::krilla::{
   mask::{Mask, MaskType},
   num::NormalizedF32,
   paint::{
-    Fill, FillRule, LinearGradient as KrillaLinearGradient, Paint, Pattern,
-    RadialGradient as KrillaRadialGradient, SpreadMethod, Stroke, SweepGradient,
+    Fill, FillRule, LineCap, LinearGradient as KrillaLinearGradient, Paint, Pattern,
+    RadialGradient as KrillaRadialGradient, SpreadMethod, Stroke, StrokeDash, SweepGradient,
   },
   surface::Surface,
   tagging::{Artifact, ArtifactType, ContentTag},
@@ -28,9 +28,9 @@ use takumi_core::{
   font_style::SizedFontStyle,
   geometry::{ComputedLayout as Layout, NodeId, Point as CorePoint, Size},
   layout::{
-    border::{BorderProperties, BorderSide},
+    border::BorderProperties,
     clip::clip_shape_commands,
-    decoration::{ClipBox, outline_geometry},
+    decoration::{ClipBox, OutlineGeometry},
     inline::{BuiltInlineLayout, InlineRunLayout, ProcessedInlineSpan, ShapedRun, run_decorations},
     inline_box::{InlineBoxPaint, InlineSubtree, resolve_inline_box},
     node::NodeKind,
@@ -41,8 +41,8 @@ use takumi_core::{
   shadow::SizedShadow,
   style::{
     Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BlendMode, BoxDecorationBreak,
-    BoxShadow, BreakBetween, BreakInside, Color, FillRule as CoreFillRule, Isolation, Length,
-    ResolvedGradientStop,
+    BreakBetween, BreakInside, Color, FillRule as CoreFillRule, Isolation, ResolvedGradientStop,
+    TextDecorationLines,
   },
 };
 
@@ -53,8 +53,8 @@ use crate::inline::{InlineMap, build_inline_runs, inline_key, node_inline_items,
 use crate::options::PdfError;
 use crate::pagination::Atom;
 use crate::paint::{
-  draw_decoration, empty_path, expanded_radial_stops, fill_from_rgba, krilla_blend, krilla_path,
-  krilla_stop, krilla_stops, overflow_clip_rect, pop_transforms, rect_path, spread,
+  empty_path, expanded_radial_stops, fill_from_rgba, krilla_blend, krilla_path, krilla_stop,
+  krilla_stops, overflow_clip_rect, pop_transforms, rect_path, spread,
 };
 #[cfg(feature = "images")]
 use crate::paint::{position_axis, rasterized_image};
@@ -62,6 +62,29 @@ use crate::shadow::{emit_inset_shadows, emit_outer_shadows};
 #[cfg(all(feature = "svg", feature = "images"))]
 use crate::svg;
 use crate::tags::TagCollector;
+use takumi_core::painter::{
+  BoxPainter, BoxShadows, FillShape, PaintDevice, StrokeStyle, paint_border, paint_run_decorations,
+};
+
+/// What a box left on the surface for its caller to unwind.
+#[derive(Default)]
+pub(crate) struct BoxState {
+  /// Transforms, clips and layers to pop once the box and its children are
+  /// done.
+  pushed: usize,
+  /// The `overflow` clip, popped before the outline so the outline escapes it.
+  overflow_clip: usize,
+  /// The outline, painted between the two pops.
+  outline: Option<PendingOutline>,
+}
+
+/// An outline waiting for its box's state to be popped.
+#[derive(Clone)]
+pub(crate) struct PendingOutline {
+  outline: OutlineGeometry,
+  x: f32,
+  y: f32,
+}
 
 /// Blob identity, collection index, and the variation coordinates the run was
 /// shaped at. One blob instanced at two weights is two embedded fonts, so the
@@ -140,17 +163,17 @@ impl Emitter<'_> {
         ColorFilter::compose(outer_filter.as_deref(), &node.context.style.filter).map(Rc::new);
     }
 
-    let (child_frame, root_pushed) = match context.root() {
+    let (child_frame, root_state) = match context.root() {
       Some(paint) => self.emit_box(paint, parent, surface)?,
-      None => (parent, 0),
+      None => (parent, BoxState::default()),
     };
 
     for bucket in context.in_paint_order() {
       for item in bucket {
         match &item.kind {
           PaintItemKind::Node(paint) => {
-            let (_, pushed) = self.emit_box(paint, child_frame, surface)?;
-            pop_transforms(surface, pushed);
+            let (_, state) = self.emit_box(paint, child_frame, surface)?;
+            self.finish_box(state, surface);
           }
           PaintItemKind::Context(child) => {
             let excluded = self
@@ -164,7 +187,7 @@ impl Emitter<'_> {
         }
       }
     }
-    pop_transforms(surface, root_pushed);
+    self.finish_box(root_state, surface);
     self.color_filter = outer_filter;
     Ok(())
   }
@@ -176,15 +199,15 @@ impl Emitter<'_> {
     paint: &NodePaint,
     parent: Affine,
     surface: &mut Surface,
-  ) -> Result<(Affine, usize), PdfError> {
+  ) -> Result<(Affine, BoxState), PdfError> {
     let Some(node) = self.root.node_at_path(&paint.path) else {
-      return Ok((parent, 0));
+      return Ok((parent, BoxState::default()));
     };
     let Ok(layout) = self.results.layout(paint.node_id) else {
-      return Ok((parent, 0));
+      return Ok((parent, BoxState::default()));
     };
     if self.window_excludes_bounds(paint.paint_bounds) {
-      return Ok((parent, 0));
+      return Ok((parent, BoxState::default()));
     }
 
     let style = &node.context.style;
@@ -271,7 +294,9 @@ impl Emitter<'_> {
         pushed += 1;
       }
     }
-    let (inset, outer) = self.sized_shadows(node, deco_size);
+    let shadows =
+      self.filtered_shadows(BoxPainter::fragment(&node.context, layout, deco_size).shadows());
+    let (inset, outer) = (shadows.inset, shadows.outer);
 
     let deco_layout = Layout {
       size: deco_size,
@@ -284,20 +309,21 @@ impl Emitter<'_> {
     let border_area = style.background_clip == BackgroundClip::BorderArea;
 
     if !border_area {
-      self.emit_background(node, &border, deco_layout, x, deco_y, surface);
-      self.emit_background_layers(node, &border, deco_layout, x, deco_y, surface);
+      self.emit_background(node, deco_layout, x, deco_y, surface);
+      self.emit_background_layers(node, deco_layout, x, deco_y, surface);
     }
     self.shadows(&inset, &border, deco_layout, (x, deco_y), surface, true);
     self.emit_borders(&border, x, deco_y, deco_size, surface);
     if border_area {
-      self.emit_background(node, &border, deco_layout, x, deco_y, surface);
-      self.emit_background_layers(node, &border, deco_layout, x, deco_y, surface);
+      self.emit_background(node, deco_layout, x, deco_y, surface);
+      self.emit_background_layers(node, deco_layout, x, deco_y, surface);
     }
-    self.emit_outline(node, deco_size, x, deco_y, surface);
-
     // Children and own content clip to the (rounded) padding box when overflow
     // is hidden; without radius a per-axis overflow leaves the visible axis
-    // unbounded.
+    // unbounded. Counted on its own: the outline paints outside this clip but
+    // inside everything else the box pushed.
+    let mut overflow_clip = 0;
+
     if style.clips_overflow() {
       let clip_border = BorderProperties::from_context(&node.context, layout.size, layout.border);
       let path = if clip_border.is_zero() {
@@ -313,7 +339,7 @@ impl Emitter<'_> {
       };
       if let Some(path) = path {
         surface.push_clip_path(&path, &FillRule::NonZero);
-        pushed += 1;
+        overflow_clip += 1;
       }
     }
 
@@ -337,44 +363,46 @@ impl Emitter<'_> {
     if tagged {
       surface.end_tagged();
     }
-    Ok((frame, pushed))
+
+    Ok((
+      frame,
+      BoxState {
+        pushed,
+        overflow_clip,
+        // CSS 2.1 Appendix E paints the outline last. The caller pops only the
+        // overflow clip first, so the outline lands above the content and
+        // outside that clip, but still under the box's transform, opacity,
+        // mask and blend.
+        outline: self.pending_outline(node, deco_layout, deco_size, x, deco_y),
+      },
+    ))
+  }
+
+  /// Finishes a box: leaves its overflow clip, paints the outline above
+  /// everything the box and its children drew, then pops the rest.
+  fn finish_box(&self, state: BoxState, surface: &mut Surface) {
+    pop_transforms(surface, state.overflow_clip);
+    self.paint_outline(state.outline.as_ref(), surface);
+    pop_transforms(surface, state.pushed);
   }
 
   fn emit_background(
     &self,
     node: &RenderNode,
-    border: &BorderProperties,
     layout: Layout,
     x: f32,
     y: f32,
     surface: &mut Surface,
   ) {
-    let color = node
-      .context
-      .style
-      .background_color
-      .resolve(node.context.current_color);
-    if color.0[3] == 0 {
-      return;
-    }
-    let Some((commands, rule)) = background_clip_commands(&node.context.style, border, layout)
-    else {
-      return;
-    };
-    let Some(path) = krilla_path(&commands, x, y) else {
-      return;
+    let mut device = SurfaceDevice {
+      surface,
+      filter: self.color_filter.as_deref(),
+      // An artifact opens only once something actually paints, because marked
+      // content does not nest and an empty region would still have to close.
+      artifact: self.tags.is_some(),
     };
 
-    let artifact = self.start_artifact(surface);
-
-    surface.set_fill(Some(Fill {
-      rule,
-      ..fill_from_rgba(self.filtered(color), 1.0)
-    }));
-    surface.draw_path(&path);
-    if artifact {
-      surface.end_tagged();
-    }
+    BoxPainter::new(&node.context, layout).background_color(CorePoint { x, y }, &mut device);
   }
 
   /// Paints `background-image` layers, bottom layer first, clipped to the
@@ -385,7 +413,6 @@ impl Emitter<'_> {
   fn emit_background_layers(
     &self,
     node: &RenderNode,
-    border: &BorderProperties,
     layout: Layout,
     x: f32,
     y: f32,
@@ -396,14 +423,24 @@ impl Emitter<'_> {
     let Some(images) = style.background_image.as_deref() else {
       return;
     };
-    if !images.iter().any(paintable_layer) {
+    if !images.iter().any(BackgroundImage::paints) {
       return;
     }
-    let Some((commands, rule)) = background_clip_commands(style, border, layout) else {
+    let Some(shape) = BoxPainter::new(&node.context, layout).background_clip_shape() else {
       return;
     };
-    let Some(clip) = krilla_path(&commands, x, y) else {
+    let clip = match &shape {
+      FillShape::Rect(size) => {
+        KrillaRect::from_xywh(x, y, size.width, size.height).and_then(rect_path)
+      }
+      _ => krilla_path(&shape.to_commands(), x, y),
+    };
+    let Some(clip) = clip else {
       return;
+    };
+    let rule = match shape.rule() {
+      CoreFillRule::EvenOdd => FillRule::EvenOdd,
+      _ => FillRule::NonZero,
     };
     let (origin_offset, area) = background_origin_area(style.background_origin, layout);
     let artifact = self.start_artifact(surface);
@@ -709,32 +746,17 @@ impl Emitter<'_> {
   /// A node's shadows resolved against its box, split into inset and outer.
   /// The shadow color goes through the subtree's `filter` like every other
   /// color the element paints.
-  fn sized_shadows(
-    &self,
-    node: &RenderNode,
-    size: Size<f32>,
-  ) -> (Vec<SizedShadow>, Vec<SizedShadow>) {
-    let Some(shadows) = node.context.style.box_shadow.as_deref() else {
-      return (Vec::new(), Vec::new());
-    };
-    let resolve = |shadow: &BoxShadow| {
-      let sized = SizedShadow::from_box_shadow(
-        *shadow,
-        &node.context.sizing,
-        node.context.current_color,
-        size,
-      );
-
-      SizedShadow {
-        color: Color(self.filtered(sized.color)),
-        ..sized
-      }
+  /// Applies this subtree's `filter` to each shadow colour.
+  fn filtered_shadows(&self, shadows: BoxShadows) -> BoxShadows {
+    let recolor = |shadow: SizedShadow| SizedShadow {
+      color: Color(self.filtered(shadow.color)),
+      ..shadow
     };
 
-    (
-      shadows.iter().filter(|s| s.inset).map(resolve).collect(),
-      shadows.iter().filter(|s| !s.inset).map(resolve).collect(),
-    )
+    BoxShadows {
+      inset: shadows.inset.into_iter().map(recolor).collect(),
+      outer: shadows.outer.into_iter().map(recolor).collect(),
+    }
   }
 
   /// Builds the soft mask for `mask-image`, drawing its layers into their own
@@ -753,7 +775,7 @@ impl Emitter<'_> {
   ) -> Option<Mask> {
     let images = node.context.style.mask_image.as_deref()?;
 
-    if !images.iter().any(paintable_layer) {
+    if !images.iter().any(BackgroundImage::paints) {
       return None;
     }
     let filter = self.color_filter.take();
@@ -834,33 +856,45 @@ impl Emitter<'_> {
   /// Draws the CSS `outline` as a ring around the border box, expanded outward
   /// by `outline-offset + outline-width`. It does not affect layout and reuses
   /// the border machinery, like the other backends.
-  fn emit_outline(
+  /// The outline the box will paint once its own state is popped, or `None`
+  /// when it paints none. A transparent outline is a fill nobody sees, so it
+  /// is skipped to keep the content stream shorter.
+  fn pending_outline(
     &self,
     node: &RenderNode,
+    layout: Layout,
     size: Size<f32>,
     x: f32,
     y: f32,
-    surface: &mut Surface,
-  ) {
-    let style = &node.context.style;
-
-    if !style.outline_style.is_rendered() {
-      return;
+  ) -> Option<PendingOutline> {
+    if node
+      .context
+      .style
+      .outline_color
+      .resolve(node.context.current_color)
+      .0[3]
+      == 0
+    {
+      return None;
     }
-    let width = Length::from(style.outline_width)
-      .to_px(&node.context.sizing, size.width)
-      .max(0.0);
 
-    if width <= 0.0 || style.outline_color.resolve(node.context.current_color).0[3] == 0 {
+    Some(PendingOutline {
+      outline: BoxPainter::fragment(&node.context, layout, size).outline()?,
+      x,
+      y,
+    })
+  }
+
+  fn paint_outline(&self, pending: Option<&PendingOutline>, surface: &mut Surface) {
+    let Some(pending) = pending else {
       return;
-    }
-    let outline = outline_geometry(&node.context, size);
+    };
 
     self.emit_borders(
-      &outline.border,
-      x - outline.grow,
-      y - outline.grow,
-      outline.size,
+      &pending.outline.border,
+      pending.x - pending.outline.grow,
+      pending.y - pending.outline.grow,
+      pending.outline.size,
       surface,
     );
   }
@@ -883,58 +917,34 @@ impl Emitter<'_> {
       return;
     };
 
-    if let Some(color) = border.has_uniform_visible_color() {
-      if color.0[3] != 0 {
-        let artifact = self.start_artifact(surface);
+    // The device opens its own artifact per fill, so a border that paints
+    // nothing leaves no empty region behind.
+    if paint_border(
+      border,
+      size,
+      CorePoint { x, y },
+      &mut SurfaceDevice {
+        surface,
+        filter: self.color_filter.as_deref(),
+        artifact: self.tags.is_some(),
+      },
+    ) {
+      return;
+    }
+    let mut sides = border.painted_sides().peekable();
 
-        surface.set_fill(Some(Fill {
-          rule: FillRule::EvenOdd,
-          ..fill_from_rgba(self.filtered(color), 1.0)
-        }));
-        surface.draw_path(&ring_path);
-        if artifact {
-          surface.end_tagged();
-        }
-      }
+    if sides.peek().is_none() {
       return;
     }
     let artifact = self.start_artifact(surface);
 
     surface.push_clip_path(&ring_path, &FillRule::EvenOdd);
-    for (side, width, color, style) in [
-      (
-        BorderSide::Top,
-        border.width.top,
-        border.color.top,
-        border.style.top,
-      ),
-      (
-        BorderSide::Right,
-        border.width.right,
-        border.color.right,
-        border.style.right,
-      ),
-      (
-        BorderSide::Bottom,
-        border.width.bottom,
-        border.color.bottom,
-        border.style.bottom,
-      ),
-      (
-        BorderSide::Left,
-        border.width.left,
-        border.color.left,
-        border.style.left,
-      ),
-    ] {
-      if width <= 0.0 || color.0[3] == 0 || !style.is_rendered() {
-        continue;
-      }
+    for side in sides {
       let mut polygon = Vec::new();
 
-      border.append_side_clip_polygon_commands_at(side, &mut polygon, size, CorePoint::ZERO);
+      border.append_side_clip_polygon_commands_at(side.side, &mut polygon, size, CorePoint::ZERO);
       if let Some(path) = krilla_path(&polygon, x, y) {
-        surface.set_fill(Some(fill_from_rgba(self.filtered(color), 1.0)));
+        surface.set_fill(Some(fill_from_rgba(self.filtered(side.color), 1.0)));
         surface.draw_path(&path);
       }
     }
@@ -1176,9 +1186,17 @@ impl Emitter<'_> {
         run.transform(Affine::IDENTITY),
       );
 
-      for decoration in decorations.iter().filter(|d| !d.over) {
-        draw_decoration(surface, decoration, x, y, self.color_filter.as_deref());
-      }
+      paint_run_decorations(
+        &decorations,
+        false,
+        TextDecorationLines::empty(),
+        CorePoint { x, y },
+        &mut SurfaceDevice {
+          surface,
+          filter: self.color_filter.as_deref(),
+          artifact: false,
+        },
+      );
       let run_text = built
         .text
         .get(shaped.text_range.clone())
@@ -1237,9 +1255,17 @@ impl Emitter<'_> {
         surface.pop();
       }
       surface.set_stroke(None);
-      for decoration in decorations.iter().filter(|d| d.over) {
-        draw_decoration(surface, decoration, x, y, self.color_filter.as_deref());
-      }
+      paint_run_decorations(
+        &decorations,
+        true,
+        TextDecorationLines::empty(),
+        CorePoint { x, y },
+        &mut SurfaceDevice {
+          surface,
+          filter: self.color_filter.as_deref(),
+          artifact: false,
+        },
+      );
     }
     #[cfg(feature = "images")]
     self.emit_inline_boxes(node, runs, built, layout, x, y, surface);
@@ -1330,18 +1356,24 @@ impl Emitter<'_> {
   ) {
     let (x, y) = origin;
     let border = BorderProperties::from_context(&node.context, layout.size, layout.border);
-    let (inset, outer) = self.sized_shadows(node, layout.size);
+    let shadows = self.filtered_shadows(BoxPainter::new(&node.context, layout).shadows());
+    let (inset, outer) = (shadows.inset, shadows.outer);
 
     self.shadows(&outer, &border, layout, (x, y), surface, false);
-    self.emit_background(node, &border, layout, x, y, surface);
-    self.emit_background_layers(node, &border, layout, x, y, surface);
+    self.emit_background(node, layout, x, y, surface);
+    self.emit_background_layers(node, layout, x, y, surface);
     self.shadows(&inset, &border, layout, (x, y), surface, true);
     self.emit_borders(&border, x, y, layout.size, surface);
 
     if let Some(NodeKind::Image(image)) = node.node.as_ref().map(|source| &source.kind) {
       self.emit_image(image, &node.context, layout, x, y, surface);
     }
-    self.emit_outline(node, layout.size, x, y, surface);
+    self.paint_outline(
+      self
+        .pending_outline(node, layout, layout.size, x, y)
+        .as_ref(),
+      surface,
+    );
   }
 
   /// Paints an inline-level container from the scene it carries. The box is not
@@ -1689,19 +1721,6 @@ impl Emitter<'_> {
   }
 }
 
-/// Whether the node draws own content (text or an image), i.e. whether a
-/// tagged content sequence around it would be non-empty.
-/// Whether a background or mask layer draws anything in this build: gradients
-/// always, `url()` images only with the `images` feature.
-fn paintable_layer(image: &BackgroundImage) -> bool {
-  match image {
-    BackgroundImage::Linear(_) | BackgroundImage::Radial(_) | BackgroundImage::Conic(_) => true,
-    #[cfg(feature = "images")]
-    BackgroundImage::Url(_) => true,
-    _ => false,
-  }
-}
-
 /// Intrinsic sizing of a `url()` layer, which `background-size` resolves
 /// against. Gradients have none.
 #[cfg(feature = "images")]
@@ -1723,47 +1742,6 @@ fn layer_intrinsic(
   _context: &takumi_core::context::RenderContext,
 ) -> Option<takumi_core::style::IntrinsicSizing> {
   None
-}
-
-/// The rounded region a background paints into, per `background-clip`, as path
-/// commands in box-local coordinates with the fill rule to clip by. `None`
-/// means the box paints no background at all: `text` moves the fill onto the
-/// glyphs.
-fn background_clip_commands(
-  style: &takumi_core::style::ComputedStyle,
-  border: &BorderProperties,
-  layout: Layout,
-) -> Option<(Vec<takumi_core::geometry::PathCommand>, FillRule)> {
-  let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
-
-  match style.background_clip {
-    BackgroundClip::BorderBox => {
-      border.append_mask_commands(&mut commands, layout.size, CorePoint::ZERO);
-      Some((commands, FillRule::NonZero))
-    }
-    BackgroundClip::PaddingBox => {
-      let clip = ClipBox::padding_box(*border, layout);
-
-      clip
-        .border
-        .append_mask_commands(&mut commands, clip.size, clip.offset);
-      Some((commands, FillRule::NonZero))
-    }
-    BackgroundClip::ContentBox => {
-      let clip = ClipBox::content_box(*border, layout);
-
-      clip
-        .border
-        .append_mask_commands(&mut commands, clip.size, clip.offset);
-      Some((commands, FillRule::NonZero))
-    }
-    BackgroundClip::BorderArea => {
-      border.append_border_ring_commands(&mut commands, layout.size);
-      Some((commands, FillRule::EvenOdd))
-    }
-    // `text` moves the fill onto the glyphs; the box itself paints nothing.
-    _ => None,
-  }
 }
 
 /// The positioning area `background-size` and `-position` resolve against,
@@ -1793,6 +1771,8 @@ fn background_origin_area(origin: BackgroundOrigin, layout: Layout) -> (CorePoin
   }
 }
 
+/// Whether the node draws own content (text or an image), i.e. whether a
+/// tagged content sequence around it would be non-empty.
 fn has_own_content(node: &RenderNode) -> bool {
   if node.should_create_inline_layout() {
     return true;
@@ -1805,6 +1785,130 @@ fn has_own_content(node: &RenderNode) -> bool {
     #[cfg(feature = "images")]
     Some(NodeKind::Image(_)) => true,
     _ => false,
+  }
+}
+
+/// The PDF surface as a [`PaintDevice`], so the shared painting code can drive
+/// it without knowing about krilla.
+struct SurfaceDevice<'s, 'a> {
+  surface: &'s mut Surface<'a>,
+  filter: Option<&'s ColorFilter>,
+  /// Whether painted content needs an artifact region around it.
+  artifact: bool,
+}
+
+impl PaintDevice for SurfaceDevice<'_, '_> {
+  fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine) {
+    // A pure translation folds into the path, which keeps the content stream
+    // free of a `cm` pair for every background fill.
+    let flat = transform.only_translation();
+    let (x, y) = if flat {
+      (transform.x, transform.y)
+    } else {
+      (0.0, 0.0)
+    };
+    let path = match shape {
+      FillShape::Rect(size) => {
+        KrillaRect::from_xywh(x, y, size.width, size.height).and_then(rect_path)
+      }
+      _ => krilla_path(&shape.to_commands(), x, y),
+    };
+    let Some(path) = path else {
+      return;
+    };
+
+    if !flat {
+      let cols = transform.to_cols_array();
+
+      self.surface.push_transform(&Transform::from_row(
+        cols[0], cols[1], cols[2], cols[3], cols[4], cols[5],
+      ));
+    }
+    let color = match self.filter {
+      Some(filter) => filter.apply(color.0),
+      None => color.0,
+    };
+
+    if self.artifact {
+      self
+        .surface
+        .start_tagged(ContentTag::Artifact(Artifact::new(
+          ArtifactType::Other,
+          None,
+        )));
+    }
+    self.surface.set_fill(Some(Fill {
+      rule: match shape.rule() {
+        CoreFillRule::EvenOdd => FillRule::EvenOdd,
+        _ => FillRule::NonZero,
+      },
+      ..fill_from_rgba(color, 1.0)
+    }));
+    self.surface.draw_path(&path);
+    if !flat {
+      self.surface.pop();
+    }
+    if self.artifact {
+      self.surface.end_tagged();
+    }
+  }
+
+  fn stroke_shape(&mut self, shape: &FillShape, stroke: &StrokeStyle, transform: Affine) {
+    if stroke.color.0[3] == 0 || stroke.width <= 0.0 {
+      return;
+    }
+    let flat = transform.only_translation();
+    let (x, y) = if flat {
+      (transform.x, transform.y)
+    } else {
+      (0.0, 0.0)
+    };
+    let Some(path) = krilla_path(&shape.to_commands(), x, y) else {
+      return;
+    };
+
+    if !flat {
+      let cols = transform.to_cols_array();
+
+      self.surface.push_transform(&Transform::from_row(
+        cols[0], cols[1], cols[2], cols[3], cols[4], cols[5],
+      ));
+    }
+    let color = match self.filter {
+      Some(filter) => filter.apply(stroke.color.0),
+      None => stroke.color.0,
+    };
+
+    if self.artifact {
+      self
+        .surface
+        .start_tagged(ContentTag::Artifact(Artifact::new(
+          ArtifactType::Other,
+          None,
+        )));
+    }
+    self.surface.set_fill(None);
+    self.surface.set_stroke(Some(Stroke {
+      paint: fill_from_rgba(color, 1.0).paint,
+      width: stroke.width,
+      line_cap: match stroke.round_cap {
+        true => LineCap::Round,
+        false => LineCap::Butt,
+      },
+      dash: stroke.dash.map(|intervals| StrokeDash {
+        array: intervals.to_vec(),
+        offset: 0.0,
+      }),
+      ..Stroke::default()
+    }));
+    self.surface.draw_path(&path);
+    self.surface.set_stroke(None);
+    if !flat {
+      self.surface.pop();
+    }
+    if self.artifact {
+      self.surface.end_tagged();
+    }
   }
 }
 

@@ -201,20 +201,17 @@ impl SvgDocument {
   }
 
   /// Appends a solid-fill path from SVG path data (`d`).
-  pub(crate) fn path(&mut self, data: &str, fill: Rgba) -> io::Result<()> {
+  /// Fills a path, with the even-odd rule for ring shapes.
+  /// Appends a filled path. `even_odd` picks the even-odd fill rule, which ring
+  /// shapes need: an outer subpath with an inner subpath punched out.
+  pub(crate) fn path(&mut self, data: &str, fill: Rgba, even_odd: bool) -> io::Result<()> {
     let mut attrs: Vec<(&str, Cow<'_, str>)> =
       vec![("d", data.into()), ("fill", fill.hex().into())];
-    push_opacity(&mut attrs, "fill-opacity", fill.opacity());
-    self.empty("path", &attrs)
-  }
 
-  /// Appends a filled path using the even-odd fill rule (for ring shapes such as
-  /// rounded borders: an outer subpath with an inner subpath punched out).
-  pub(crate) fn path_evenodd(&mut self, data: &str, fill: Rgba) -> io::Result<()> {
-    let mut attrs: Vec<(&str, Cow<'_, str>)> =
-      vec![("d", data.into()), ("fill", fill.hex().into())];
     push_opacity(&mut attrs, "fill-opacity", fill.opacity());
-    attrs.push(("fill-rule", "evenodd".into()));
+    if even_odd {
+      attrs.push(("fill-rule", "evenodd".into()));
+    }
     self.empty("path", &attrs)
   }
 
@@ -1119,7 +1116,7 @@ mod tests {
       )
       .unwrap();
     assert_eq!(fill, "url(#lg0)");
-    doc.path("M0 0 H10 V10 H0 Z", RED).unwrap();
+    doc.path("M0 0 H10 V10 H0 Z", RED, false).unwrap();
     let svg = doc.render().unwrap();
     assert!(svg.contains(r#"<linearGradient id="lg0""#));
     assert!(svg.contains(r#"<stop offset="0""#));
@@ -1185,7 +1182,7 @@ mod tests {
   fn text_emits_glyph_path() {
     let mut doc = SvgDocument::new(10.0, 10.0).unwrap();
     doc
-      .path("M1 9 L2 1 L3 9 M1.5 5 H2.5", Rgba([0, 0, 0, 255]))
+      .path("M1 9 L2 1 L3 9 M1.5 5 H2.5", Rgba([0, 0, 0, 255]), false)
       .unwrap();
     assert!(
       doc
