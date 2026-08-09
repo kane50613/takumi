@@ -388,9 +388,11 @@ pub(crate) fn draw_inline_box(
         &subtree.results,
         NodeId::ROOT,
         canvas,
-        Affine::translation(origin.x, origin.y)
-          * transform
-          * Affine::translation(subtree.margin_offset.x, subtree.margin_offset.y),
+        transform
+          * Affine::translation(
+            origin.x + subtree.margin_offset.x,
+            origin.y + subtree.margin_offset.y,
+          ),
         Size {
           width: Some(subtree.size.width),
           height: Some(subtree.size.height),
@@ -402,7 +404,7 @@ pub(crate) fn draw_inline_box(
         return Ok(());
       };
       let mut context = node.context.clone();
-      context.transform = Affine::translation(origin.x, origin.y) * transform;
+      context.transform = transform * Affine::translation(origin.x, origin.y);
 
       draw_outset_box_shadow(&context, canvas, layout)?;
       draw_background(&context, canvas, layout)?;

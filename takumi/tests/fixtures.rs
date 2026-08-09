@@ -8,6 +8,8 @@ pub mod color_artifacts;
 pub mod deep_nesting;
 #[path = "fixtures/inline.rs"]
 pub mod inline;
+#[path = "fixtures/inline_box_transform.rs"]
+pub mod inline_box_transform;
 #[path = "fixtures/inline_vertical_align.rs"]
 pub mod inline_vertical_align;
 #[path = "fixtures/lang.rs"]

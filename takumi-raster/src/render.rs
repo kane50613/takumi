@@ -264,7 +264,7 @@ fn collect_measure_result(
           }));
           children.extend(measured_boxes.into_iter().map(|inline_box| {
             let inline_transform =
-              Affine::translation(inline_box.x, inline_box.y) * local_transform;
+              local_transform * Affine::translation(inline_box.x, inline_box.y);
             MeasuredNode {
               width: inline_box.width,
               height: inline_box.height,

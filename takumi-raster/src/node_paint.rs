@@ -281,7 +281,7 @@ pub(crate) fn resolve_outline(
   layout: Layout,
 ) -> Option<(OutlineGeometry, Affine)> {
   let outline = BoxPainter::new(context, layout).outline()?;
-  let transform = Affine::translation(-outline.grow, -outline.grow) * context.transform;
+  let transform = context.transform * Affine::translation(-outline.grow, -outline.grow);
 
   Some((outline, transform))
 }
