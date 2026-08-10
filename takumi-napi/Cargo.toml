@@ -20,7 +20,7 @@ path = "../takumi-bindings-common"
 [dependencies.takumi-core]
 path = "../takumi-core"
 default-features = false
-features = ["woff2", "woff", "svg"]
+features = ["woff2", "woff", "svg", "image-decoding"]
 
 [dependencies.takumi-raster]
 path = "../takumi-raster"
