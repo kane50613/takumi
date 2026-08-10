@@ -380,6 +380,14 @@ async function processReactElement(
     };
   }
 
+  if (isHtmlElement(element, "head")) {
+    const children = await collectChildren(element, options);
+    return {
+      nodes: [],
+      stylesheets: children.stylesheets,
+    };
+  }
+
   if (typeof element.type !== "string" || isHtmlVoidElement(element.type)) {
     return emptyTraversalResult();
   }

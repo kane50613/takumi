@@ -32,6 +32,7 @@ impl<'i> FromCss<'i> for TextDecorationLines {
     let first_location = input.current_source_location();
     let first_ident = input.expect_ident()?;
     match_ignore_ascii_case! {first_ident,
+      "none" => return Ok(lines),
       "underline" => lines |= TextDecorationLines::UNDERLINE,
       "line-through" => lines |= TextDecorationLines::LINE_THROUGH,
       "overline" => lines |= TextDecorationLines::OVERLINE,
@@ -376,6 +377,7 @@ impl<'i> FromCss<'i> for TextDecoration {
   }
 
   const VALID_TOKENS: &'static [CssToken] = &[
+    CssToken::Keyword("none"),
     CssToken::Keyword("underline"),
     CssToken::Keyword("line-through"),
     CssToken::Keyword("overline"),
@@ -391,6 +393,18 @@ impl<'i> FromCss<'i> for TextDecoration {
 mod tests {
   use super::*;
   use crate::style::properties::Color;
+
+  #[test]
+  fn test_parse_text_decoration_none() {
+    assert_eq!(
+      TextDecoration::from_css_str("none"),
+      Ok(TextDecoration::builder().build())
+    );
+    assert_eq!(
+      TextDecorationLines::from_css_str("none"),
+      Ok(TextDecorationLines::empty())
+    );
+  }
 
   #[test]
   fn test_parse_text_decoration_underline() {

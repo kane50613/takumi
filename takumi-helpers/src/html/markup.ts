@@ -11,6 +11,7 @@ import { extractAttributes, getPresets } from "../jsx/metadata";
 import type { FromJsxOptions } from "../jsx";
 import type { defaultStylePresets } from "../jsx/style-presets";
 import { isHtmlVoidElement } from "../jsx/utils";
+import { decodeHtmlEntities } from "./entities";
 
 export interface FromStaticMarkupOptions extends FromJsxOptions {}
 
@@ -57,7 +58,7 @@ function buildStaticNodes(
   }
 
   if (node.type === TEXT_NODE) {
-    const value = node.value ?? "";
+    const value = decodeHtmlEntities(node.value ?? "");
     if (value) {
       nodes.push(
         text({
@@ -92,6 +93,15 @@ function buildStaticNodes(
 
     if (content) {
       stylesheets.push(content);
+    }
+    return;
+  }
+
+  if (element.name === "head") {
+    const discardedNodes: Node[] = [];
+
+    for (const child of element.children) {
+      buildStaticNodes(child, presets, tailwindClassesProperty, discardedNodes, stylesheets);
     }
     return;
   }
@@ -160,7 +170,7 @@ function buildStaticNodes(
   if (onlyTextChildren && textContent) {
     nodes.push(
       text({
-        text: textContent,
+        text: decodeHtmlEntities(textContent),
         ...metadata,
       }),
     );
@@ -218,48 +228,6 @@ function decodeAttributeMap(attributes: Record<string, string>): Record<string, 
 
   return decodedAttributes;
 }
-
-function decodeHtmlEntities(value: string): string {
-  if (!value.includes("&")) {
-    return value;
-  }
-
-  return value.replace(
-    /&(?:#(\d+)|#x([\da-fA-F]+)|([a-zA-Z][\w-]+));/g,
-    (match, dec, hex, named) => {
-      if (dec) {
-        return decodeCodePoint(Number(dec)) ?? match;
-      }
-
-      if (hex) {
-        return decodeCodePoint(Number.parseInt(hex, 16)) ?? match;
-      }
-
-      return namedHtmlEntities[named] ?? match;
-    },
-  );
-}
-
-function decodeCodePoint(codePoint: number): string | undefined {
-  if (!Number.isInteger(codePoint) || codePoint < 0 || codePoint > 0x10ffff) {
-    return;
-  }
-
-  try {
-    return String.fromCodePoint(codePoint);
-  } catch {
-    return;
-  }
-}
-
-const namedHtmlEntities: Record<string, string> = {
-  amp: "&",
-  apos: "'",
-  gt: ">",
-  lt: "<",
-  nbsp: "\u00a0",
-  quot: '"',
-};
 
 function parseInlineStyle(styleText: string): CSSProperties | undefined {
   const style: Record<string, string> = {};
