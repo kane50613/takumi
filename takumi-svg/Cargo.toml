@@ -1,6 +1,6 @@
 [package]
 name = "takumi-svg"
-version = "0.3.13"
+version = "0.3.14"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Vector SVG output backend for takumi. Emits real SVG (paths, gradients, filters) rather than embedding a rasterized bitmap."
@@ -15,7 +15,7 @@ typed-builder.workspace = true
 
 [dependencies.takumi-core]
 path = "../takumi-core"
-version = "0.18.1"
+version = "0.19.0"
 
 [lints]
 workspace = true
