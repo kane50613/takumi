@@ -61,7 +61,6 @@ impl<'i> FromCss<'i> for TextDecorationLines {
   }
 
   const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("none"),
     CssToken::Keyword("underline"),
     CssToken::Keyword("line-through"),
     CssToken::Keyword("overline"),

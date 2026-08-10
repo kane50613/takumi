@@ -272,13 +272,17 @@ export function decodeHtmlEntities(value: string): string {
         return decodeCodePoint(Number.parseInt(hex, 16)) ?? match;
       }
 
-      return namedHtmlEntities[named] ?? match;
+      return Object.hasOwn(namedHtmlEntities, named) ? namedHtmlEntities[named] : match;
     },
   );
 }
 
 function decodeCodePoint(codePoint: number): string | undefined {
   if (!Number.isInteger(codePoint) || codePoint < 0 || codePoint > 0x10ffff) {
+    return;
+  }
+
+  if (codePoint >= 0xd800 && codePoint <= 0xdfff) {
     return;
   }
 

@@ -43,6 +43,18 @@ describe("fromHtml", () => {
 
     expect((node as TextNode).text).toBe("&notarealentity; &");
   });
+
+  test("does not resolve Object.prototype members as entities", () => {
+    const { node } = fromHtml("<div>&constructor; &hasOwnProperty;</div>");
+
+    expect((node as TextNode).text).toBe("&constructor; &hasOwnProperty;");
+  });
+
+  test("leaves surrogate code point references untouched", () => {
+    const { node } = fromHtml("<div>&#xd800;&#57343;</div>");
+
+    expect((node as TextNode).text).toBe("&#xd800;&#57343;");
+  });
 });
 
 describe("fromJsx", () => {
