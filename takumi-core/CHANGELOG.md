@@ -1,3 +1,9 @@
+## takumi-core@0.18.1
+
+### Replace the unmaintained `paste` with `pastey`
+
+`paste` has been unmaintained since 2024, and `cargo audit` reports RUSTSEC-2024-0436 for it. `pastey` is a maintained fork with the same macro surface, so the generated code is unchanged.
+
 ## takumi-core@0.18.0
 
 ### Map a cluster's glyphs to its source text once

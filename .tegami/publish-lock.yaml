@@ -1,151 +1,87 @@
 core:changelogs:
-  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n### Tag the structure inside an inline-block\n\nAn inline-block lays out in a subtree of its own, and that subtree drew without tagging anything. A heading or a list nested inside one never became a structure element, and its text was folded into the paragraph around the box. The subtree now tags its nodes where the document tree expects them.\n"
-    filename: pdf-inline-subtree-tags.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n### Print the page a link points at\n\nA node classed `targetPageNumber` now renders the page number of the element the nearest enclosing `href` points at, which is what a table of contents needs. Counter styles apply the same way they do on `pageNumber`, and a fragment naming no element renders nothing.\n\nPage numbers only exist once the document is paginated, so a document using the hook is paginated again with the numbers in place, up to three times, until they stop moving.\n"
-    filename: pdf-target-page-numbers.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n### Fill text clipped to its background with an image\n\n`background-clip: text` could paint a colour or a gradient through the glyphs, but not an image. The layer was dropped, and since the idiom pairs the clip with a transparent colour, the text came out invisible. An image layer now draws into a pattern the glyphs are filled with.\n"
-    filename: pdf-clip-text-image.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n### Reject a character no registered font covers\n\nA character outside every registered font shaped to `.notdef`. It painted nothing and left nothing in the text layer, so the page looked finished with the character quietly gone. Rendering now fails with `MissingGlyphs`, naming each character and its codepoint.\n"
-    filename: pdf-uncovered-characters.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n### Map a cluster's glyphs to its source text once\n\nIn Devanagari and other scripts that attach marks to a base letter, the base and its mark form separate clusters over the same source text. Every glyph claimed that whole range, so `मोटा` came out of the PDF text layer as `ममोटटा`. Overlapping glyphs now share one range and one `/ActualText`, and every glyph gets a codepoint mapping so a viewer without `/ActualText` support does not read a raw glyph index.\n"
-    filename: pdf-cluster-tounicode.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n### Key text layout on the stroke width\n\nTwo passages of the same words in the same font shared one shaped layout, so a `-webkit-text-stroke` width set on the second was drawn at the first one's width.\n\n### Widen a clipped background by the text stroke\n\nA transparent `-webkit-text-stroke` reveals a ring of the background painted through the glyphs. In PDF that ring was missing: the background pass widened the coverage by the faux bold alone, so the output disagreed with the image and SVG backends.\n"
-    filename: text-stroke-followups.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n### Let a stroke be as transparent as what it outlines\n\nFaux bold outlines a glyph in the colour it fills, and `-webkit-text-stroke` outlines it in its own. Both took the colour without its alpha, so translucent text came out ringed in solid colour. Text under `background-clip: text` is transparent by design, which made this a black outline around every gradient-filled glyph.\n"
-    filename: pdf-stroke-opacity.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n### Keep a clipped background out of the text layer\n\n`background-clip: text` drew the run twice, once to fill the background through the glyphs and once for the text itself. Both landed in the text layer, so extraction, search and copy returned the text doubled. The background pass now paints the glyph outlines, which cover the same pixels without adding a second run of text.\n"
-    filename: pdf-text-clip-background.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n### Keep clipped-away content off every page\n\nContent an `overflow` clip cut away still reached the file when it sat far enough down the page to land on a later one. A clip keeps it off the page, but not out of the text layer, so a redacted or collapsed section came back out of any tool that reads text: search, copy, an accessibility reader.\n"
-    filename: pdf-clipped-content-leak.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n### Declare a passage written in another language\n\nA `lang` attribute reached shaping and line breaking but never the output, so a document carrying Arabic or Hindi inside an English page declared only the document language. A screen reader read every passage in the document voice. Content whose language differs from the document's is now marked with that language.\n"
-    filename: pdf-lang-changes.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-raster:\n    type: patch\n  takumi-svg:\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n### Stroke the span that asked for it\n\n`-webkit-text-stroke` was read off the element holding the text, so a `span` setting it for itself came out unstroked, and a nested one turning it off still got the parent's outline. The stroke now travels with the text run, in every backend.\n"
-    filename: inline-text-stroke.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n### Stop counting pages at twenty thousand\n\nContent tall enough to cut into millions of pages walked the whole document once per page, with nothing to stop it. A render taking untrusted markup could be handed a document whose only purpose was to spend the renderer's memory. Rendering now fails with `TooManyPages` rather than trying.\n"
-    filename: pdf-page-count-limit.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n### Give a link target something to point at under PDF/UA-2\n\nA link to `#some-id` names a structure element, and PDF/UA-2 requires every link inside a document to do so. Markup with nothing to say for itself, a plain `div` holding an id, left no element behind, so the link named one that was never written and the file failed validation while the render reported success.\n"
-    filename: pdf-ua2-link-destination.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n### Count pages in more scripts\n\nPage counters knew seven `@counter-style` names. They now know the digits of eighteen more scripts, from Devanagari and Thai to Tamil and Tibetan, and count through five alphabets including Latin letters, Greek, hiragana and katakana.\n\nA face registered through `fonts` is kept only when its range covers something the page asks for, and a counter's characters appear nowhere in the document. A counter in a style other than decimal now keeps every registered face, so the one it needs survives.\n"
-    filename: pdf-counter-styles.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-raster:\n    type: patch\n---\n\n### Place inline content inside its container's transform\n\nA rotated or scaled container drew its inline boxes, its inline images and its outline in the wrong place. Those offsets were applied in device space, after the transform, instead of in the container's own coordinates. A container with a plain translation was never affected.\n"
-    filename: inline-box-transform-order.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n### Replace the unmaintained `paste` with `pastey`\n\n`paste` has been unmaintained since 2024, and `cargo audit` reports RUSTSEC-2024-0436 for it. `pastey` is a maintained fork with the same macro surface, so the generated code is unchanged.\n"
+    filename: replace-paste-with-pastey.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - id: npm:takumi-template
-    updated: false
+  - id: npm:takumi-js
+    updated: true
   - id: npm:docs
     updated: false
-  - id: npm:@takumi-rs/core
+  - id: npm:takumi-pdf
     updated: true
-  - changelogIds:
-      - pdf-inline-subtree-tags.md
-      - pdf-target-page-numbers.md
-      - pdf-clip-text-image.md
-      - pdf-uncovered-characters.md
-      - pdf-cluster-tounicode.md
-      - text-stroke-followups.md
-      - pdf-stroke-opacity.md
-      - pdf-text-clip-background.md
-      - pdf-clipped-content-leak.md
-      - pdf-lang-changes.md
-      - inline-text-stroke.md
-      - pdf-page-count-limit.md
-      - pdf-ua2-link-destination.md
-      - pdf-counter-styles.md
-    id: npm:takumi-pdf
-    updated: true
-  - id: npm:@takumi-rs/wasm
-    updated: true
+  - id: npm:takumi-template
+    updated: false
   - id: npm:@takumi-rs/helpers
     updated: true
   - id: npm:@takumi-rs/image-response
     updated: true
-  - id: npm:takumi-js
+  - id: npm:@takumi-rs/core
     updated: true
-  - id: npm:ffmpeg-keyframe-animation
-    updated: false
-  - id: npm:ffplay
-    updated: false
-  - id: npm:waku-ssr
-    updated: false
-  - id: npm:example-tanstack-start
-    updated: false
-  - id: npm:example-satori-html
-    updated: false
-  - id: npm:example-liquid-glass
+  - id: npm:@takumi-rs/wasm
+    updated: true
+  - id: npm:example-css-library-integration
     updated: false
   - id: npm:example-nextjs
     updated: false
-  - id: npm:example-twitter-images
+  - id: npm:ffplay
+    updated: false
+  - id: npm:example-generate-invoice
+    updated: false
+  - id: npm:example-satori-html
     updated: false
   - id: npm:svelte
     updated: false
-  - id: npm:example-css-library-integration
-    updated: false
-  - id: npm:example-cloudflare-workers
+  - id: npm:example-tanstack-start
     updated: false
   - id: npm:example-e-invoice
     updated: false
   - id: npm:pdf-bench
     updated: false
-  - id: npm:example-generate-invoice
+  - id: npm:example-liquid-glass
+    updated: false
+  - id: npm:waku-ssr
+    updated: false
+  - id: npm:example-cloudflare-workers
+    updated: false
+  - id: npm:ffmpeg-keyframe-animation
+    updated: false
+  - id: npm:example-twitter-images
     updated: false
   - changelogIds:
-      - inline-box-transform-order.md
-      - inline-text-stroke.md
-    id: cargo:takumi-raster
-    updated: true
-  - changelogIds:
-      - pdf-cluster-tounicode.md
-      - text-stroke-followups.md
-      - inline-text-stroke.md
+      - replace-paste-with-pastey.md
     id: cargo:takumi-core
-    updated: true
-  - id: cargo:takumi
     updated: true
   - id: cargo:takumi-html
     updated: true
-  - changelogIds:
-      - inline-text-stroke.md
-    id: cargo:takumi-svg
+  - id: cargo:takumi-svg
+    updated: true
+  - id: cargo:takumi
+    updated: true
+  - id: cargo:takumi-raster
     updated: true
 npm:packages:
   - id: npm:takumi
-  - id: npm:takumi-template
+  - id: npm:takumi-js
   - id: npm:docs
-  - id: npm:@takumi-rs/core
   - id: npm:takumi-pdf
-  - id: npm:@takumi-rs/wasm
+  - id: npm:takumi-template
   - id: npm:@takumi-rs/helpers
   - id: npm:@takumi-rs/image-response
-  - id: npm:takumi-js
-  - id: npm:ffmpeg-keyframe-animation
-  - id: npm:ffplay
-  - id: npm:waku-ssr
-  - id: npm:example-tanstack-start
-  - id: npm:example-satori-html
-  - id: npm:example-liquid-glass
-  - id: npm:example-nextjs
-  - id: npm:example-twitter-images
-  - id: npm:svelte
+  - id: npm:@takumi-rs/core
+  - id: npm:@takumi-rs/wasm
   - id: npm:example-css-library-integration
-  - id: npm:example-cloudflare-workers
+  - id: npm:example-nextjs
+  - id: npm:ffplay
+  - id: npm:example-generate-invoice
+  - id: npm:example-satori-html
+  - id: npm:svelte
+  - id: npm:example-tanstack-start
   - id: npm:example-e-invoice
   - id: npm:pdf-bench
-  - id: npm:example-generate-invoice
+  - id: npm:example-liquid-glass
+  - id: npm:waku-ssr
+  - id: npm:example-cloudflare-workers
+  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-twitter-images
