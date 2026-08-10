@@ -725,15 +725,15 @@ pub(crate) fn decode_gif_frames(
 mod tests {
   use super::*;
 
-  #[test]
   #[cfg(feature = "webp")]
+  #[test]
   fn check_pixel_budget_accepts_budget_edge() {
     assert!(check_pixel_budget(MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION).is_ok());
     assert!(check_pixel_budget(1, 1).is_ok());
   }
 
-  #[test]
   #[cfg(feature = "webp")]
+  #[test]
   fn check_pixel_budget_rejects_oversized() {
     assert!(check_pixel_budget(MAX_IMAGE_DIMENSION + 1, MAX_IMAGE_DIMENSION + 1).is_err());
     assert!(check_pixel_budget(100_000, 100_000).is_err());
@@ -799,7 +799,7 @@ mod tests {
     assert_streamed_matches_full(bytes, full.width() / 3, full.height() / 3);
   }
 
-  #[cfg(not(target_arch = "wasm32"))]
+  #[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
   fn encode_test_webp(width: u32, height: u32) -> Vec<u8> {
     let mut rgba = Vec::with_capacity(width as usize * height as usize * 4);
     for y in 0..height {
@@ -830,7 +830,7 @@ mod tests {
     }
   }
 
-  #[cfg(not(target_arch = "wasm32"))]
+  #[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
   #[test]
   fn webp_scaled_decode_approximates_full_decode() {
     let bytes = encode_test_webp(40, 30);
@@ -853,7 +853,7 @@ mod tests {
     );
   }
 
-  #[cfg(not(target_arch = "wasm32"))]
+  #[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
   #[test]
   fn webp_scaled_decode_skips_upscale() {
     let bytes = encode_test_webp(40, 30);
@@ -862,10 +862,12 @@ mod tests {
     assert_eq!(unscaled.data(), decode_image(&bytes).unwrap().data());
   }
 
+  #[cfg(feature = "gif")]
   fn rgba_patch(width: u16, height: u16, rgba: [u8; 4]) -> Vec<u8> {
     rgba.repeat(width as usize * height as usize)
   }
 
+  #[cfg(feature = "gif")]
   fn test_frame(
     width: u16,
     height: u16,
@@ -882,6 +884,7 @@ mod tests {
     frame
   }
 
+  #[cfg(feature = "gif")]
   fn encode_test_gif(width: u16, height: u16, frames: &[gif::Frame<'static>]) -> Vec<u8> {
     let mut bytes = Vec::new();
     let mut encoder = gif::Encoder::new(&mut bytes, width, height, &[]).unwrap();
@@ -892,6 +895,7 @@ mod tests {
     bytes
   }
 
+  #[cfg(feature = "gif")]
   fn reference_frames(bytes: &[u8]) -> Vec<(Vec<u8>, u32)> {
     use image::AnimationDecoder;
 
@@ -911,6 +915,7 @@ mod tests {
       .collect()
   }
 
+  #[cfg(feature = "gif")]
   fn our_frames(bytes: &[u8], skip: usize) -> Vec<(Vec<u8>, u32)> {
     let mut frames = Vec::new();
     let ended = decode_gif_frames(bytes, skip, None, None, |frame| {
@@ -921,12 +926,14 @@ mod tests {
     frames
   }
 
+  #[cfg(feature = "gif")]
   fn assert_matches_reference(bytes: &[u8]) {
     let reference = reference_frames(bytes);
     assert_eq!(our_frames(bytes, 0), reference);
     assert_eq!(our_frames(bytes, 1), reference[1..]);
   }
 
+  #[cfg(feature = "gif")]
   #[test]
   fn gif_compositing_matches_image_crate_for_keep_disposal() {
     let bytes = encode_test_gif(
@@ -962,6 +969,7 @@ mod tests {
     assert_matches_reference(&bytes);
   }
 
+  #[cfg(feature = "gif")]
   #[test]
   fn gif_compositing_matches_image_crate_for_transparent_patches() {
     let mut patch = rgba_patch(2, 2, [0, 255, 0, 255]);
@@ -985,6 +993,7 @@ mod tests {
     assert_matches_reference(&bytes);
   }
 
+  #[cfg(feature = "gif")]
   #[test]
   fn gif_compositing_matches_image_crate_for_background_disposal() {
     let bytes = encode_test_gif(
@@ -1020,6 +1029,7 @@ mod tests {
     assert_matches_reference(&bytes);
   }
 
+  #[cfg(feature = "gif")]
   #[test]
   fn gif_compositing_matches_image_crate_for_previous_disposal() {
     let bytes = encode_test_gif(
@@ -1055,6 +1065,7 @@ mod tests {
     assert_matches_reference(&bytes);
   }
 
+  #[cfg(feature = "gif")]
   #[test]
   fn gif_compositing_matches_image_crate_for_interlaced_frames() {
     let mut striped = Vec::new();
@@ -1083,6 +1094,7 @@ mod tests {
     assert_matches_reference(&bytes);
   }
 
+  #[cfg(feature = "gif")]
   #[test]
   fn gif_zero_delay_clamps_to_one_ms_like_image_crate() {
     let bytes = encode_test_gif(
@@ -1111,6 +1123,7 @@ mod tests {
     assert!(our_frames(&bytes, 0).iter().all(|(_, ms)| *ms == 1));
   }
 
+  #[cfg(feature = "gif")]
   #[test]
   fn gif_limit_stops_before_decoding_later_frames() {
     let bytes = encode_test_gif(
