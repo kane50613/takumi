@@ -1,28 +1,28 @@
-#[cfg(feature = "image-decoding")]
+#[cfg(feature = "gif")]
 use std::mem::take;
 use std::{
   io::{Cursor, Error as IoError, ErrorKind},
   sync::Arc,
 };
 
-#[cfg(feature = "image-decoding")]
+#[cfg(feature = "gif")]
 use gif::{ColorOutput, DecodeOptions, Decoder as GifDecoder, DisposalMethod};
-#[cfg(feature = "image-decoding")]
+#[cfg(feature = "jpeg")]
 use image::codecs::jpeg::JpegDecoder;
 use image::{
   DynamicImage, ImageDecoder, ImageError, ImageFormat, ImageResult, Limits, RgbaImage,
   codecs::png::PngDecoder,
   error::{DecodingError, ImageFormatHint, UnsupportedError, UnsupportedErrorKind},
 };
-#[cfg(all(target_arch = "wasm32", feature = "image-decoding"))]
+#[cfg(all(target_arch = "wasm32", feature = "webp"))]
 use image_webp::WebPDecoder;
-#[cfg(all(not(target_arch = "wasm32"), feature = "image-decoding"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
 use libwebp_sys::{
   VP8StatusCode, WEBP_CSP_MODE, WebPDecode, WebPDecoderConfig, WebPGetInfo, WebPRGBABuffer,
 };
 use png::{BitDepth, ColorType, Decoder as PngRowDecoder, Transformations};
 
-#[cfg(feature = "image-decoding")]
+#[cfg(feature = "gif")]
 use crate::geometry::Rect;
 use crate::{
   resources::{
@@ -40,14 +40,14 @@ const JPEG_SIGNATURE: [u8; 3] = [0xFF, 0xD8, 0xFF];
 const MAX_IMAGE_DIMENSION: u32 = 8192;
 /// Decoded images above this pixel count are rejected (RGBA cost = 4x).
 /// 8192 x 8192 — far above any sane OG-image asset, far below OOM territory.
-#[cfg(feature = "image-decoding")]
+#[cfg(any(feature = "gif", feature = "webp"))]
 const MAX_IMAGE_PIXELS: u64 = MAX_IMAGE_DIMENSION as u64 * MAX_IMAGE_DIMENSION as u64;
 /// Total pixels across all GIF frames (frame budget for animations).
-#[cfg(feature = "image-decoding")]
+#[cfg(feature = "gif")]
 const MAX_GIF_TOTAL_PIXELS: u64 = 4 * MAX_IMAGE_PIXELS;
 
 /// Rejects decoded images whose pixel count exceeds [`MAX_IMAGE_PIXELS`].
-#[cfg(feature = "image-decoding")]
+#[cfg(feature = "webp")]
 fn check_pixel_budget(width: u32, height: u32) -> ImageResult<()> {
   if width as u64 * height as u64 > MAX_IMAGE_PIXELS {
     return Err(pixel_budget_error(width, height));
@@ -56,7 +56,7 @@ fn check_pixel_budget(width: u32, height: u32) -> ImageResult<()> {
   Ok(())
 }
 
-#[cfg(feature = "image-decoding")]
+#[cfg(any(feature = "gif", feature = "webp"))]
 fn pixel_budget_error(width: u32, height: u32) -> ImageError {
   ImageError::Decoding(DecodingError::new(
     ImageFormatHint::Unknown,
@@ -138,9 +138,8 @@ pub(crate) fn decode_png(bytes: &[u8]) -> ImageResult<ImageBuffer> {
   decode_with_image_crate(PngDecoder::new(Cursor::new(bytes))?, ImageFormat::Png)
 }
 
-/// The error every decode entry point returns for formats compiled out by
-/// disabling the `image-decoding` feature.
-#[cfg(not(feature = "image-decoding"))]
+/// The error a decode entry point returns for a format whose feature is off.
+#[cfg(not(all(feature = "jpeg", feature = "webp", feature = "gif")))]
 fn format_compiled_out_error() -> ImageError {
   ImageError::Unsupported(UnsupportedError::from_format_and_kind(
     ImageFormatHint::Unknown,
@@ -148,22 +147,22 @@ fn format_compiled_out_error() -> ImageError {
   ))
 }
 
-#[cfg(feature = "image-decoding")]
+#[cfg(feature = "jpeg")]
 fn decode_jpeg(bytes: &[u8]) -> ImageResult<ImageBuffer> {
   decode_with_image_crate(JpegDecoder::new(Cursor::new(bytes))?, ImageFormat::Jpeg)
 }
 
-#[cfg(not(feature = "image-decoding"))]
+#[cfg(not(feature = "jpeg"))]
 fn decode_jpeg(_bytes: &[u8]) -> ImageResult<ImageBuffer> {
   Err(format_compiled_out_error())
 }
 
-#[cfg(feature = "image-decoding")]
+#[cfg(feature = "jpeg")]
 fn jpeg_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
   JpegDecoder::new(Cursor::new(bytes)).map(|d| d.dimensions())
 }
 
-#[cfg(not(feature = "image-decoding"))]
+#[cfg(not(feature = "jpeg"))]
 fn jpeg_dimensions(_bytes: &[u8]) -> ImageResult<(u32, u32)> {
   Err(format_compiled_out_error())
 }
@@ -284,12 +283,12 @@ fn decode_png_scaled(
   Some(resampler.finish().ok_or_else(invalid_buffer_error))
 }
 
-#[cfg(feature = "image-decoding")]
+#[cfg(feature = "gif")]
 fn gif_decode_error(error: gif::DecodingError) -> ImageError {
   ImageError::Decoding(DecodingError::new(ImageFormat::Gif.into(), error))
 }
 
-#[cfg(feature = "image-decoding")]
+#[cfg(feature = "gif")]
 fn gif_decoder(bytes: &[u8]) -> ImageResult<GifDecoder<Cursor<&[u8]>>> {
   let mut options = DecodeOptions::new();
   options.set_color_output(ColorOutput::RGBA);
@@ -306,7 +305,7 @@ fn gif_decoder(bytes: &[u8]) -> ImageResult<GifDecoder<Cursor<&[u8]>>> {
 }
 
 /// GIF logical screen dimensions from the header; decodes no frame.
-#[cfg(feature = "image-decoding")]
+#[cfg(feature = "gif")]
 pub(crate) fn gif_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
   let decoder = gif_decoder(bytes)?;
   Ok((decoder.width() as u32, decoder.height() as u32))
@@ -315,7 +314,7 @@ pub(crate) fn gif_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
 /// Per-frame delays in milliseconds, in stream order (first frame included),
 /// without decoding any pixels. Uses the same `delay * 10` (min 1ms) rule as
 /// [`decode_gif_frames`], so the durations line up with decoded frames.
-#[cfg(feature = "image-decoding")]
+#[cfg(feature = "gif")]
 pub(crate) fn gif_frame_durations(bytes: &[u8]) -> ImageResult<Box<[u32]>> {
   let mut options = DecodeOptions::new();
   options.skip_frame_decoding(true);
@@ -348,7 +347,7 @@ pub(crate) fn gif_frame_durations(bytes: &[u8]) -> ImageResult<Box<[u32]>> {
 
 /// Rows and columns of the rect that fall inside the canvas, plus the rect's
 /// unclamped pixel stride.
-#[cfg(feature = "image-decoding")]
+#[cfg(feature = "gif")]
 fn clamped_span(rect: Rect<u32>, canvas_width: u32, canvas_height: u32) -> (u32, usize, usize) {
   let rows = rect.bottom.min(canvas_height).saturating_sub(rect.top);
   let cols = rect.right.min(canvas_width).saturating_sub(rect.left) as usize;
@@ -358,7 +357,7 @@ fn clamped_span(rect: Rect<u32>, canvas_width: u32, canvas_height: u32) -> (u32,
 
 /// Overwrites the canvas rect with the frame's non-transparent pixels
 /// (straight-alpha RGBA; GIF alpha is 0 or 255).
-#[cfg(feature = "image-decoding")]
+#[cfg(feature = "gif")]
 fn blit_frame(canvas: &mut [u8], canvas_size: (u32, u32), rect: Rect<u32>, pixels: &[u8]) {
   let (rows, cols, stride) = clamped_span(rect, canvas_size.0, canvas_size.1);
   for row in 0..rows {
@@ -374,7 +373,7 @@ fn blit_frame(canvas: &mut [u8], canvas_size: (u32, u32), rect: Rect<u32>, pixel
   }
 }
 
-#[cfg(feature = "image-decoding")]
+#[cfg(feature = "gif")]
 fn clear_rect(canvas: &mut [u8], canvas_size: (u32, u32), rect: Rect<u32>) {
   let (rows, cols, _) = clamped_span(rect, canvas_size.0, canvas_size.1);
   for row in 0..rows {
@@ -395,7 +394,7 @@ fn clear_rect(canvas: &mut [u8], canvas_size: (u32, u32), rect: Rect<u32>) {
 /// Compositing matches the `image` crate (and browsers): frames blend over a
 /// transparent canvas, `Keep` persists the composited result, `Background`
 /// clears the frame rect, `Previous` restores the pre-frame canvas.
-#[cfg(feature = "image-decoding")]
+#[cfg(feature = "gif")]
 pub(crate) fn decode_gif_frames(
   bytes: &[u8],
   skip: usize,
@@ -517,13 +516,13 @@ pub(crate) fn decode_gif_frames(
   Ok(true)
 }
 
-#[cfg(all(target_arch = "wasm32", feature = "image-decoding"))]
+#[cfg(all(target_arch = "wasm32", feature = "webp"))]
 fn webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
   let decoder = WebPDecoder::new(Cursor::new(bytes)).map_err(webp_decode_error)?;
   Ok(decoder.dimensions())
 }
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "image-decoding"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
 fn webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
   use crate::error::WebPError;
 
@@ -541,7 +540,7 @@ fn webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
   Ok((width as u32, height as u32))
 }
 
-#[cfg(all(target_arch = "wasm32", feature = "image-decoding"))]
+#[cfg(all(target_arch = "wasm32", feature = "webp"))]
 fn decode_webp(bytes: &[u8]) -> ImageResult<ImageBuffer> {
   let mut decoder = WebPDecoder::new(Cursor::new(bytes)).map_err(webp_decode_error)?;
   let (width, height) = decoder.dimensions();
@@ -569,7 +568,7 @@ fn decode_webp(bytes: &[u8]) -> ImageResult<ImageBuffer> {
     .and_then(|image| rgba_to_buffer(image, ImageFormat::WebP))
 }
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "image-decoding"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
 fn decode_webp(bytes: &[u8]) -> ImageResult<ImageBuffer> {
   let (width, height) = webp_dimensions(bytes)?;
 
@@ -582,7 +581,7 @@ fn decode_webp(bytes: &[u8]) -> ImageResult<ImageBuffer> {
 /// needs no downscale, or has a target libwebp can't take; the caller decodes
 /// fully. libwebp's rescaler is not CatmullRom/Lanczos, so pixels differ
 /// slightly from full-decode + resample.
-#[cfg(all(not(target_arch = "wasm32"), feature = "image-decoding"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
 fn decode_webp_scaled(bytes: &[u8], width: u32, height: u32) -> Option<ImageResult<ImageBuffer>> {
   if !matches!(detect_image_format(bytes), Some(DetectedImageFormat::WebP)) {
     return None;
@@ -607,7 +606,7 @@ fn decode_webp_scaled(bytes: &[u8], width: u32, height: u32) -> Option<ImageResu
 
 /// Decodes into a caller-owned buffer sized `width` x `height`; with `scale`,
 /// libwebp rescales to those dimensions, otherwise they must be the native ones.
-#[cfg(all(not(target_arch = "wasm32"), feature = "image-decoding"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
 fn decode_webp_into(
   bytes: &[u8],
   width: u32,
@@ -682,17 +681,17 @@ fn webp_decode_error(error: impl Into<Box<dyn std::error::Error + Send + Sync>>)
   ImageError::Decoding(DecodingError::new(ImageFormat::WebP.into(), error))
 }
 
-#[cfg(not(feature = "image-decoding"))]
+#[cfg(not(feature = "webp"))]
 fn webp_dimensions(_bytes: &[u8]) -> ImageResult<(u32, u32)> {
   Err(format_compiled_out_error())
 }
 
-#[cfg(not(feature = "image-decoding"))]
+#[cfg(not(feature = "webp"))]
 fn decode_webp(_bytes: &[u8]) -> ImageResult<ImageBuffer> {
   Err(format_compiled_out_error())
 }
 
-#[cfg(all(not(target_arch = "wasm32"), not(feature = "image-decoding")))]
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "webp")))]
 fn decode_webp_scaled(
   _bytes: &[u8],
   _width: u32,
@@ -701,17 +700,17 @@ fn decode_webp_scaled(
   None
 }
 
-#[cfg(not(feature = "image-decoding"))]
+#[cfg(not(feature = "gif"))]
 pub(crate) fn gif_dimensions(_bytes: &[u8]) -> ImageResult<(u32, u32)> {
   Err(format_compiled_out_error())
 }
 
-#[cfg(not(feature = "image-decoding"))]
+#[cfg(not(feature = "gif"))]
 pub(crate) fn gif_frame_durations(_bytes: &[u8]) -> ImageResult<Box<[u32]>> {
   Err(format_compiled_out_error())
 }
 
-#[cfg(not(feature = "image-decoding"))]
+#[cfg(not(feature = "gif"))]
 pub(crate) fn decode_gif_frames(
   _bytes: &[u8],
   _skip: usize,
@@ -726,12 +725,14 @@ pub(crate) fn decode_gif_frames(
 mod tests {
   use super::*;
 
+  #[cfg(feature = "webp")]
   #[test]
   fn check_pixel_budget_accepts_budget_edge() {
     assert!(check_pixel_budget(MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION).is_ok());
     assert!(check_pixel_budget(1, 1).is_ok());
   }
 
+  #[cfg(feature = "webp")]
   #[test]
   fn check_pixel_budget_rejects_oversized() {
     assert!(check_pixel_budget(MAX_IMAGE_DIMENSION + 1, MAX_IMAGE_DIMENSION + 1).is_err());
@@ -798,7 +799,7 @@ mod tests {
     assert_streamed_matches_full(bytes, full.width() / 3, full.height() / 3);
   }
 
-  #[cfg(not(target_arch = "wasm32"))]
+  #[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
   fn encode_test_webp(width: u32, height: u32) -> Vec<u8> {
     let mut rgba = Vec::with_capacity(width as usize * height as usize * 4);
     for y in 0..height {
@@ -829,7 +830,7 @@ mod tests {
     }
   }
 
-  #[cfg(not(target_arch = "wasm32"))]
+  #[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
   #[test]
   fn webp_scaled_decode_approximates_full_decode() {
     let bytes = encode_test_webp(40, 30);
@@ -852,7 +853,7 @@ mod tests {
     );
   }
 
-  #[cfg(not(target_arch = "wasm32"))]
+  #[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
   #[test]
   fn webp_scaled_decode_skips_upscale() {
     let bytes = encode_test_webp(40, 30);
@@ -861,10 +862,12 @@ mod tests {
     assert_eq!(unscaled.data(), decode_image(&bytes).unwrap().data());
   }
 
+  #[cfg(feature = "gif")]
   fn rgba_patch(width: u16, height: u16, rgba: [u8; 4]) -> Vec<u8> {
     rgba.repeat(width as usize * height as usize)
   }
 
+  #[cfg(feature = "gif")]
   fn test_frame(
     width: u16,
     height: u16,
@@ -881,6 +884,7 @@ mod tests {
     frame
   }
 
+  #[cfg(feature = "gif")]
   fn encode_test_gif(width: u16, height: u16, frames: &[gif::Frame<'static>]) -> Vec<u8> {
     let mut bytes = Vec::new();
     let mut encoder = gif::Encoder::new(&mut bytes, width, height, &[]).unwrap();
@@ -891,6 +895,7 @@ mod tests {
     bytes
   }
 
+  #[cfg(feature = "gif")]
   fn reference_frames(bytes: &[u8]) -> Vec<(Vec<u8>, u32)> {
     use image::AnimationDecoder;
 
@@ -910,6 +915,7 @@ mod tests {
       .collect()
   }
 
+  #[cfg(feature = "gif")]
   fn our_frames(bytes: &[u8], skip: usize) -> Vec<(Vec<u8>, u32)> {
     let mut frames = Vec::new();
     let ended = decode_gif_frames(bytes, skip, None, None, |frame| {
@@ -920,12 +926,14 @@ mod tests {
     frames
   }
 
+  #[cfg(feature = "gif")]
   fn assert_matches_reference(bytes: &[u8]) {
     let reference = reference_frames(bytes);
     assert_eq!(our_frames(bytes, 0), reference);
     assert_eq!(our_frames(bytes, 1), reference[1..]);
   }
 
+  #[cfg(feature = "gif")]
   #[test]
   fn gif_compositing_matches_image_crate_for_keep_disposal() {
     let bytes = encode_test_gif(
@@ -961,6 +969,7 @@ mod tests {
     assert_matches_reference(&bytes);
   }
 
+  #[cfg(feature = "gif")]
   #[test]
   fn gif_compositing_matches_image_crate_for_transparent_patches() {
     let mut patch = rgba_patch(2, 2, [0, 255, 0, 255]);
@@ -984,6 +993,7 @@ mod tests {
     assert_matches_reference(&bytes);
   }
 
+  #[cfg(feature = "gif")]
   #[test]
   fn gif_compositing_matches_image_crate_for_background_disposal() {
     let bytes = encode_test_gif(
@@ -1019,6 +1029,7 @@ mod tests {
     assert_matches_reference(&bytes);
   }
 
+  #[cfg(feature = "gif")]
   #[test]
   fn gif_compositing_matches_image_crate_for_previous_disposal() {
     let bytes = encode_test_gif(
@@ -1054,6 +1065,7 @@ mod tests {
     assert_matches_reference(&bytes);
   }
 
+  #[cfg(feature = "gif")]
   #[test]
   fn gif_compositing_matches_image_crate_for_interlaced_frames() {
     let mut striped = Vec::new();
@@ -1082,6 +1094,7 @@ mod tests {
     assert_matches_reference(&bytes);
   }
 
+  #[cfg(feature = "gif")]
   #[test]
   fn gif_zero_delay_clamps_to_one_ms_like_image_crate() {
     let bytes = encode_test_gif(
@@ -1110,6 +1123,7 @@ mod tests {
     assert!(our_frames(&bytes, 0).iter().all(|(_, ms)| *ms == 1));
   }
 
+  #[cfg(feature = "gif")]
   #[test]
   fn gif_limit_stops_before_decoding_later_frames() {
     let bytes = encode_test_gif(

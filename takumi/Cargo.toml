@@ -36,7 +36,7 @@ default-features = false
 optional = true
 
 [features]
-default = ["raster-backend", "woff2", "woff", "svg-source", "rayon"]
+default = ["raster-backend", "woff2", "woff", "svg-source", "image-decoding", "rayon"]
 raster-backend = ["dep:takumi-raster"]
 # Expose the backend crates wholesale under `takumi::unstable`. Everything behind
 # this flag is implementation surface with no semver guarantee.
@@ -45,6 +45,10 @@ svg-source = ["takumi-core/svg", "takumi-raster?/svg"]
 svg-backend = ["dep:takumi-svg"]
 woff2 = ["takumi-core/woff2"]
 woff = ["takumi-core/woff"]
+image-decoding = ["jpeg", "webp", "gif"]
+jpeg = ["takumi-core/jpeg"]
+webp = ["takumi-core/webp"]
+gif = ["takumi-core/gif"]
 rayon = ["takumi-raster?/rayon"]
 from-html = ["dep:takumi-html"]
 

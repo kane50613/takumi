@@ -1274,10 +1274,12 @@ mod tests {
     }
   }
 
+  #[cfg(feature = "gif")]
   const GIF_COLORS: [[u8; 4]; 3] = [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]];
 
   /// Encodes one 4x4 solid frame per `(color index, delay ms)` pair. Delays
   /// must be multiples of 10 (GIF stores centiseconds).
+  #[cfg(feature = "gif")]
   fn encoded_gif(frames: &[(usize, u32)]) -> Vec<u8> {
     use image::{Delay, Frame, codecs::gif::GifEncoder};
 
@@ -1299,6 +1301,7 @@ mod tests {
     bytes
   }
 
+  #[cfg(feature = "gif")]
   fn gif_source(frames: &[(usize, u32)]) -> GifSource {
     let Ok(ImageSource::Gif(gif)) = ImageSource::from_bytes(&encoded_gif(frames)) else {
       unreachable!("valid gif");
@@ -1306,6 +1309,7 @@ mod tests {
     gif
   }
 
+  #[cfg(feature = "gif")]
   fn expected_frame_index(durations: &[u32], time_ms: u64) -> usize {
     let total: u64 = durations.iter().map(|d| *d as u64).sum();
     if total == 0 {
@@ -1450,12 +1454,14 @@ mod tests {
     assert_matches!(result, Err(ImageError::InvalidPixmapSize));
   }
 
+  #[cfg(feature = "gif")]
   #[test]
   fn gif_source_rejects_undecodable_stream() {
     let result = ImageSource::from_bytes(b"GIF89a\x01\x02\x03");
     assert_matches!(result, Err(_));
   }
 
+  #[cfg(feature = "gif")]
   #[test]
   fn gif_source_frame_selection_matches_expected_indices() {
     let durations = [10, 20, 30];
@@ -1468,6 +1474,7 @@ mod tests {
     }
   }
 
+  #[cfg(feature = "gif")]
   #[test]
   fn gif_source_zero_delay_clamps_to_one_ms() {
     let gif = gif_source(&[(0, 0), (1, 0)]);
@@ -1477,6 +1484,7 @@ mod tests {
     assert_eq!(gif.frame_at_time(2).pixel(2, 2), GIF_COLORS[0]);
   }
 
+  #[cfg(feature = "gif")]
   #[test]
   fn gif_later_frame_decodes_at_draw_size() {
     let gif = gif_source(&[(0, 10), (1, 10), (2, 10)]);
@@ -1491,6 +1499,7 @@ mod tests {
     assert_eq!((larger.width(), larger.height()), (4, 4));
   }
 
+  #[cfg(feature = "gif")]
   #[test]
   fn gif_first_frame_stays_native() {
     let gif = gif_source(&[(0, 10), (1, 10)]);
@@ -1499,6 +1508,7 @@ mod tests {
     assert_eq!((first.width(), first.height()), (4, 4));
   }
 
+  #[cfg(feature = "gif")]
   #[test]
   fn gif_scaled_frame_matches_resized_native() {
     use crate::resources::image_resampler::resample_premultiplied;
@@ -1519,6 +1529,7 @@ mod tests {
     assert_eq!(scaled.data(), expected.data());
   }
 
+  #[cfg(feature = "gif")]
   #[test]
   fn gif_dimensions_come_from_header() {
     let gif = gif_source(&[(0, 10), (1, 10)]);

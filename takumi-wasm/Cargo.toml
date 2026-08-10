@@ -24,7 +24,7 @@ features = ["rc"]
 [dependencies.takumi-core]
 path = "../takumi-core"
 default-features = false
-features = ["woff2", "svg"]
+features = ["woff2", "svg", "image-decoding"]
 
 [dependencies.takumi-raster]
 path = "../takumi-raster"
