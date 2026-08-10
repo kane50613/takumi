@@ -100,14 +100,10 @@ optional = true
 
 [features]
 default = ["woff2", "woff", "svg", "image-decoding"]
-image-decoding = [
-  "dep:gif",
-  "dep:image-webp",
-  "dep:libwebp-sys",
-  "image/jpeg",
-  "image/webp",
-  "image/gif",
-]
+image-decoding = ["jpeg", "webp", "gif"]
+jpeg = ["image/jpeg"]
+webp = ["dep:image-webp", "dep:libwebp-sys", "image/webp"]
+gif = ["dep:gif", "image/gif"]
 svg = [
   "dep:roxmltree",
   "dep:svgtypes",

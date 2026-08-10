@@ -44,8 +44,9 @@
 //! - `svg-backend`: vector SVG output backend (`render_svg`).
 //! - `woff2`: WOFF2 font support.
 //! - `woff`: WOFF font support.
-//! - `image-decoding` (default): JPEG, WebP and GIF image sources. PNG and ICO are
-//!   always decoded.
+//! - `image-decoding` (default): `jpeg`, `webp` and `gif` together.
+//! - `jpeg`, `webp`, `gif`: one image source format each. PNG and ICO are always
+//!   decoded.
 //! - `rayon`: parallelism in the raster backend; needs `raster-backend`.
 //! - `unstable`: re-export the backend crates with no semver guarantee.
 
