@@ -1,14 +1,4 @@
----
-packages:
-  takumi:
-    type: minor
-  takumi-core:
-    type: minor
-  "@takumi-rs/core":
-    type: patch
-  "@takumi-rs/wasm":
-    type: patch
----
+## takumi
 
 ### Restore JPEG, WebP and GIF decoding
 

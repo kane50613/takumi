@@ -1,87 +1,95 @@
 core:changelogs:
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n### Replace the unmaintained `paste` with `pastey`\n\n`paste` has been unmaintained since 2024, and `cargo audit` reports RUSTSEC-2024-0436 for it. `pastey` is a maintained fork with the same macro surface, so the generated code is unchanged.\n"
-    filename: replace-paste-with-pastey.md
+  - content: "---\npackages:\n  takumi:\n    type: minor\n  takumi-core:\n    type: minor\n  \"@takumi-rs/core\":\n    type: patch\n  \"@takumi-rs/wasm\":\n    type: patch\n---\n\n### Restore JPEG, WebP and GIF decoding\n\n`takumi` disables `takumi-core`'s default features and never re-enables image decoding, so every build decoded PNG and ICO only. A WebP source failed with `The image format could not be determined`. `image-decoding` is now a `takumi` feature as well, on by default, and it splits into `jpeg`, `webp` and `gif` for a build that wants one format and not the others. The napi and wasm bindings turn it on too.\n"
+    filename: expose-image-decoding.md
     v: 0.0.0
 core:packages:
-  - id: npm:takumi
+  - changelogIds:
+      - expose-image-decoding.md
+    id: npm:takumi
     updated: false
-  - id: npm:takumi-js
+  - changelogIds:
+      - expose-image-decoding.md
+    id: npm:@takumi-rs/wasm
     updated: true
-  - id: npm:docs
-    updated: false
-  - id: npm:takumi-pdf
+  - changelogIds:
+      - expose-image-decoding.md
+    id: npm:@takumi-rs/core
     updated: true
   - id: npm:takumi-template
     updated: false
-  - id: npm:@takumi-rs/helpers
+  - id: npm:takumi-js
     updated: true
   - id: npm:@takumi-rs/image-response
     updated: true
-  - id: npm:@takumi-rs/core
+  - id: npm:@takumi-rs/helpers
     updated: true
-  - id: npm:@takumi-rs/wasm
+  - id: npm:takumi-pdf
     updated: true
-  - id: npm:example-css-library-integration
-    updated: false
-  - id: npm:example-nextjs
-    updated: false
-  - id: npm:ffplay
-    updated: false
-  - id: npm:example-generate-invoice
-    updated: false
-  - id: npm:example-satori-html
-    updated: false
-  - id: npm:svelte
-    updated: false
-  - id: npm:example-tanstack-start
-    updated: false
-  - id: npm:example-e-invoice
+  - id: npm:docs
     updated: false
   - id: npm:pdf-bench
     updated: false
-  - id: npm:example-liquid-glass
+  - id: npm:example-generate-invoice
     updated: false
   - id: npm:waku-ssr
     updated: false
   - id: npm:example-cloudflare-workers
     updated: false
+  - id: npm:example-css-library-integration
+    updated: false
+  - id: npm:ffplay
+    updated: false
+  - id: npm:example-e-invoice
+    updated: false
   - id: npm:ffmpeg-keyframe-animation
+    updated: false
+  - id: npm:example-nextjs
+    updated: false
+  - id: npm:example-satori-html
+    updated: false
+  - id: npm:example-tanstack-start
     updated: false
   - id: npm:example-twitter-images
     updated: false
-  - changelogIds:
-      - replace-paste-with-pastey.md
-    id: cargo:takumi-core
+  - id: npm:svelte
+    updated: false
+  - id: npm:example-liquid-glass
+    updated: false
+  - id: cargo:takumi-raster
     updated: true
   - id: cargo:takumi-html
     updated: true
+  - changelogIds:
+      - expose-image-decoding.md
+    id: cargo:takumi-core
+    updated: true
+  - changelogIds:
+      - expose-image-decoding.md
+    id: cargo:takumi
+    updated: true
   - id: cargo:takumi-svg
-    updated: true
-  - id: cargo:takumi
-    updated: true
-  - id: cargo:takumi-raster
     updated: true
 npm:packages:
   - id: npm:takumi
-  - id: npm:takumi-js
-  - id: npm:docs
-  - id: npm:takumi-pdf
-  - id: npm:takumi-template
-  - id: npm:@takumi-rs/helpers
-  - id: npm:@takumi-rs/image-response
-  - id: npm:@takumi-rs/core
   - id: npm:@takumi-rs/wasm
-  - id: npm:example-css-library-integration
-  - id: npm:example-nextjs
-  - id: npm:ffplay
-  - id: npm:example-generate-invoice
-  - id: npm:example-satori-html
-  - id: npm:svelte
-  - id: npm:example-tanstack-start
-  - id: npm:example-e-invoice
+  - id: npm:@takumi-rs/core
+  - id: npm:takumi-template
+  - id: npm:takumi-js
+  - id: npm:@takumi-rs/image-response
+  - id: npm:@takumi-rs/helpers
+  - id: npm:takumi-pdf
+  - id: npm:docs
   - id: npm:pdf-bench
-  - id: npm:example-liquid-glass
+  - id: npm:example-generate-invoice
   - id: npm:waku-ssr
   - id: npm:example-cloudflare-workers
+  - id: npm:example-css-library-integration
+  - id: npm:ffplay
+  - id: npm:example-e-invoice
   - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-nextjs
+  - id: npm:example-satori-html
+  - id: npm:example-tanstack-start
   - id: npm:example-twitter-images
+  - id: npm:svelte
+  - id: npm:example-liquid-glass
