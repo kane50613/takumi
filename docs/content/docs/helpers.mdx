@@ -29,6 +29,8 @@ The `props` argument holds the node's own fields. [Node types](/docs/reference#n
 
 Length and color shorthands return CSS strings. `vw`/`vh` are viewport width/height, `em`/`rem` are font-relative sizes, `fr` is a grid fraction. See the [MDN CSS values reference](https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Values_and_Units).
 
+`rem` resolves against the viewport's font size, which defaults to 16px. A `fontSize` on the outermost node does not change it, so text scales without moving every `rem` length in the tree. Trees parsed from a full HTML document are the exception: their outermost node is the `<html>` element, and its font size is the `rem` basis.
+
 | Helper                 | Output             |
 | :--------------------- | :----------------- |
 | `percentage(50)`       | `50%`              |
