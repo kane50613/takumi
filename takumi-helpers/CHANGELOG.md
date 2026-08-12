@@ -1,3 +1,9 @@
+## @takumi-rs/helpers@2.7.2
+
+### Follow Unicode emoji presentation in `extractEmojis`
+
+`extractEmojis` replaced every pictograph with a CDN image, so `‼` and `▶` came back as color emoji. Pictographs that default to text presentation now stay text, `U+FE0F` forces the emoji image, and `U+FE0E` forces the text glyph.
+
 ## @takumi-rs/helpers@2.7.1
 
 ### Collect `<head>` styles and decode character references in `fromHtml`
