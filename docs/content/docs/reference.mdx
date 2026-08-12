@@ -103,6 +103,16 @@ Displays a rasterized image or SVG. Adds:
   }}
 />
 
+## Units
+
+Font-relative units resolve the way they do in a browser. `em` and `lh` follow the element's own font size and line height, except on `fontSize` itself, where `em` follows the parent.
+
+`rem` and `rlh` follow the root, and a node tree has no `<html>` element to be one. They resolve against the viewport's font size, which is 16px. In Rust, `Viewport::with_font_size` changes it; the JS render options do not expose it yet.
+
+A `fontSize` on the outermost node changes its text and nothing else. It does not move the `rem` lengths below it, so `text-2xl` on a root container leaves the Tailwind spacing scale where it is.
+
+The exception is a tree whose outermost node is an `<html>` element, which CSS does make the root. The JS `fromHtml` keeps that element when it parses a full document, so `<html style="font-size: 62.5%">` sets the `rem` basis for everything under it. The Rust `from_html` parses fragments and never returns an `<html>` node, so trees from it always follow the viewport.
+
 ## Style Properties
 
 Properties use their camelCase names. Longhands are listed in parentheses. `Supported` means the property follows its CSS spec; a value cell instead lists the accepted keywords.

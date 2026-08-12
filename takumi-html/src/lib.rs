@@ -237,6 +237,11 @@ impl Default for FromHtmlOptions {
 /// corresponding node styling and metadata; `<style>` blocks and other void
 /// elements are dropped. A single root element is returned as-is; multiple
 /// roots are wrapped in a full-size container.
+///
+/// The source is parsed as a fragment, so a full document's `<html>` and
+/// `<body>` wrappers are dropped along with the styles on them. No tree from
+/// here is rooted at an `<html>` element, and `rem` in one always resolves
+/// against [`takumi_core::viewport::Viewport::font_size`].
 pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlError> {
   let tw_property = options.tailwind_property.as_deref().unwrap_or("tw");
 
