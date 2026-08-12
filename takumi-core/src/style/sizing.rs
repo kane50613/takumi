@@ -15,15 +15,17 @@ pub struct SizingContext {
   /// The font size in pixels.
   #[builder(default = viewport.to_device(viewport.font_size))]
   pub font_size: f32,
-  /// Computed `font-size` of the root element in device pixels. `None` before
-  /// the root has been resolved; readers should fall back to `viewport.font_size`.
+  /// Computed `font-size` of the document root in device pixels, set only when
+  /// the tree is a parsed document whose outermost node is an `<html>` element.
+  /// A tree built in code is content rather than a document, so it leaves this
+  /// `None` and `rem` resolves against the viewport.
   /// <https://www.w3.org/TR/css-values-4/#rem>
   #[builder(default)]
   pub root_font_size: Option<f32>,
   /// Pixel basis for the `lh` unit.
   #[builder(default = viewport.to_device(viewport.font_size))]
   pub line_height: f32,
-  /// Pixel basis for the `rlh` unit; `None` before root is resolved.
+  /// Pixel basis for the `rlh` unit, set alongside [`Self::root_font_size`].
   #[builder(default)]
   pub root_line_height: Option<f32>,
   /// The calc arena shared by the current layout tree.
@@ -77,7 +79,9 @@ impl SizingContext {
 
   /// Device-pixel basis for the `rlh` unit.
   pub(crate) fn root_line_height_basis(&self) -> f32 {
-    self.root_line_height.unwrap_or(self.line_height)
+    self
+      .root_line_height
+      .unwrap_or(self.to_device(self.viewport.font_size))
   }
 
   /// Sets the nearest query container size (content box), in device pixels.

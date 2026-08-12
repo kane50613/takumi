@@ -290,14 +290,9 @@ fn pseudo_computed_style(
     .to_px(&parent_context.sizing, normal_basis);
   let sizing = parent_context.sizing.with_font_metrics(
     font_size,
-    Some(parent_context.sizing.root_font_size.unwrap_or(font_size)),
+    parent_context.sizing.root_font_size,
     line_height,
-    Some(
-      parent_context
-        .sizing
-        .root_line_height
-        .unwrap_or(line_height),
-    ),
+    parent_context.sizing.root_line_height,
   );
   let current_color = style.color.resolve(parent_context.current_color);
   style.make_computed(&sizing);
@@ -1204,9 +1199,15 @@ impl RenderNode {
 
       let mut style = style_layers.inherit_with_lang(&inherited_parent, lang);
 
-      // On the root element, `parent_root_font_size` is `None` so `rem` inside
-      // its own `font-size` falls back to `viewport.font_size`, per CSS Values 4
-      // §6.1. Descendants see `Some(root_font_size)`.
+      // A tree built in code is content, not a document: `rem` resolves against
+      // the viewport, so a `font-size` on the outermost node styles text without
+      // rescaling every `rem` length below it. A parsed document is the
+      // exception, since its outermost node is the `<html>` element that CSS
+      // does make the `rem` basis.
+      let is_document_root = node_index == 0
+        && node
+          .tag_name()
+          .is_some_and(|tag| tag.eq_ignore_ascii_case("html"));
       let parent_root_font_size = parent_context.sizing.root_font_size;
       let parent_root_line_height = parent_context.sizing.root_line_height;
 
@@ -1256,9 +1257,9 @@ impl RenderNode {
         .to_px(&parent_context.sizing, normal_basis);
       let sizing = parent_context.sizing.with_font_metrics(
         font_size,
-        Some(parent_root_font_size.unwrap_or(font_size)),
+        parent_root_font_size.or_else(|| is_document_root.then_some(font_size)),
         line_height,
-        Some(parent_root_line_height.unwrap_or(line_height)),
+        parent_root_line_height.or_else(|| is_document_root.then_some(line_height)),
       );
       let current_color = style.color.resolve(parent_context.current_color);
       style.make_computed(&sizing);
@@ -2429,5 +2430,48 @@ mod tests {
     let children = tree.children.as_deref().expect("block children");
     assert_eq!(children[0].context.style.width, Length::Px(10.0));
     assert_eq!(children[1].context.style.width, Length::Px(20.0));
+  }
+
+  #[test]
+  fn rem_follows_the_document_root_only_when_the_tree_is_a_document() {
+    use std::sync::Arc;
+
+    use crate::{
+      context::RenderContext,
+      layout::{node::Node, tree::RenderNode},
+      resources::font::Fonts,
+      style::{SizingContext, StyleSheet},
+      viewport::Viewport,
+    };
+
+    fn child_width(root: Node) -> f32 {
+      let stylesheet = StyleSheet::parse("#root { font-size: 32px } #child { width: 1rem }")
+        .expect("stylesheet parses");
+      let fonts = Fonts::default();
+      let context = RenderContext::builder()
+        .fonts(fonts.snapshot())
+        .sizing(
+          SizingContext::builder()
+            .viewport(Viewport::default())
+            .build(),
+        )
+        .stylesheet(Arc::new(stylesheet))
+        .build();
+
+      let tree = RenderNode::from_node(&context, root);
+      let children = tree.children.as_deref().expect("children");
+
+      let child = &children[0];
+
+      child.context.style.width.to_px(&child.context.sizing, 0.0)
+    }
+
+    let content = Node::container([Node::container([]).with_id("child")]).with_id("root");
+    assert_eq!(child_width(content), 16.0);
+
+    let document = Node::container([Node::container([]).with_id("child")])
+      .with_id("root")
+      .with_tag_name("html");
+    assert_eq!(child_width(document), 32.0);
   }
 }

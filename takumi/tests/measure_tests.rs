@@ -1352,10 +1352,15 @@ fn test_measure_lh_resolves_against_explicit_line_height() {
 }
 
 #[test]
-fn test_measure_rlh_resolves_against_root_computed_line_height() {
-  let viewport = create_measure_viewport();
+fn test_measure_rlh_resolves_against_the_document_root_line_height() {
+  fn measure_inner_height(root: Node) -> f32 {
+    let result = measure(root, create_measure_viewport());
 
-  let result = measure(
+    assert_eq!(result.children.len(), 1);
+    result.children[0].height
+  }
+
+  fn tree() -> Node {
     Node::container([Node::container([]).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
@@ -1367,22 +1372,26 @@ fn test_measure_rlh_resolves_against_root_computed_line_height() {
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::line_height(LineHeight::Length(Px(48.0)))),
-    ),
-    viewport,
-  );
+    )
+  }
 
-  assert_eq!(result.children.len(), 1);
-  assert_close(result.children[0].height, 48.0);
+  assert_close(measure_inner_height(tree()), 16.0);
+  assert_close(measure_inner_height(tree().with_tag_name("html")), 48.0);
 }
 
 #[test]
-fn test_measure_rem_resolves_against_root_computed_font_size() {
-  // CSS Values 4 §6.1: `rem` is the computed value of `font-size` on the root
-  // element. Setting font-size on the root should change what `1rem` means for
-  // descendants, regardless of the viewport's default font size.
-  let viewport = create_measure_viewport();
+fn test_measure_rem_resolves_against_the_document_root_font_size() {
+  // CSS Values 4 §6.1: `rem` is the computed `font-size` of the root element.
+  // A tree built in code is content rather than a document, so `rem` follows the
+  // viewport; a tree parsed from a document is rooted at a real `<html>`.
+  fn measure_inner_width(root: Node) -> f32 {
+    let result = measure(root, create_measure_viewport());
 
-  let result = measure(
+    assert_eq!(result.children.len(), 1);
+    result.children[0].width
+  }
+
+  fn tree() -> Node {
     Node::container([Node::container([]).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
@@ -1393,14 +1402,11 @@ fn test_measure_rem_resolves_against_root_computed_font_size() {
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::font_size(Px(22.0).into())),
-    ),
-    viewport,
-  );
+    )
+  }
 
-  assert_eq!(result.children.len(), 1);
-  let inner = &result.children[0];
-  assert_close(inner.width, 22.0);
-  assert_close(inner.height, 22.0);
+  assert_close(measure_inner_width(tree()), 16.0);
+  assert_close(measure_inner_width(tree().with_tag_name("html")), 22.0);
 }
 
 #[test]

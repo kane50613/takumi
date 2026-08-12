@@ -816,10 +816,10 @@ mod tests {
   }
 
   #[test]
-  fn rlh_falls_back_to_element_line_height_when_root_unresolved() {
+  fn rlh_falls_back_to_viewport_font_size_without_document_root() {
     let mut sizing = sizing();
     sizing.root_line_height = None;
-    assert_near(Length::Rlh(1.0).to_px(&sizing, 0.0), 30.0);
+    assert_near(Length::Rlh(1.0).to_px(&sizing, 0.0), 32.0);
   }
 
   #[test]

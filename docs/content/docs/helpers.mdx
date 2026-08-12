@@ -29,6 +29,8 @@ The `props` argument holds the node's own fields. [Node types](/docs/reference#n
 
 Length and color shorthands return CSS strings. `vw`/`vh` are viewport width/height, `em`/`rem` are font-relative sizes, `fr` is a grid fraction. See the [MDN CSS values reference](https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Values_and_Units).
 
+`rem` resolves against the viewport, not the outermost node. [Units](/docs/reference#units) covers what each font-relative unit follows.
+
 | Helper                 | Output             |
 | :--------------------- | :----------------- |
 | `percentage(50)`       | `50%`              |

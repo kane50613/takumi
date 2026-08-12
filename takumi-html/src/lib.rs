@@ -21,7 +21,7 @@ use std::{
 };
 
 use html5ever::{
-  ParseOpts, QualName, local_name, ns, parse_fragment,
+  ParseOpts, QualName, local_name, ns, parse_document, parse_fragment,
   serialize::{SerializeOpts, TraversalScope, serialize},
   tendril::TendrilSink,
 };
@@ -237,36 +237,89 @@ impl Default for FromHtmlOptions {
 /// corresponding node styling and metadata; `<style>` blocks and other void
 /// elements are dropped. A single root element is returned as-is; multiple
 /// roots are wrapped in a full-size container.
+///
+/// A source that starts with an `<html>` element is parsed as a document, so
+/// the tree keeps that element as its root along with `<head>` and `<body>`.
+/// Anything else is parsed as a fragment and gains no wrappers of its own.
 pub fn from_html(source: &str, options: FromHtmlOptions) -> Result<Node, HtmlError> {
   let tw_property = options.tailwind_property.as_deref().unwrap_or("tw");
 
-  let context = QualName::new(None, ns!(html), local_name!("body"));
-  let dom = parse_fragment(
-    RcDom::default(),
-    ParseOpts::default(),
-    context,
-    vec![],
-    false,
-  )
-  .one(source);
-
-  // `parse_fragment` wraps the roots in a synthetic context element, the
-  // document's only child.
   let mut nodes = Vec::new();
-  if let Some(context) = dom.document.children.borrow().first() {
-    for child in context.children.borrow().iter() {
-      build_nodes(
-        child,
-        &options.presets,
-        tw_property,
-        options.max_depth,
-        0,
-        &mut nodes,
-      )?;
+  let build = |handle: &Handle, nodes: &mut Vec<Node>| {
+    build_nodes(
+      handle,
+      &options.presets,
+      tw_property,
+      options.max_depth,
+      0,
+      nodes,
+    )
+  };
+
+  if starts_with_html_element(source) {
+    let dom = parse_document(RcDom::default(), ParseOpts::default()).one(source);
+
+    build(&dom.document, &mut nodes)?;
+  } else {
+    let context = QualName::new(None, ns!(html), local_name!("body"));
+    let dom = parse_fragment(
+      RcDom::default(),
+      ParseOpts::default(),
+      context,
+      vec![],
+      false,
+    )
+    .one(source);
+
+    // `parse_fragment` wraps the roots in a synthetic context element, the
+    // document's only child.
+    if let Some(context) = dom.document.children.borrow().first() {
+      for child in context.children.borrow().iter() {
+        build(child, &mut nodes)?;
+      }
     }
   }
 
   Ok(collapse(nodes))
+}
+
+/// Whether the source opens with an `<html>` tag, ignoring leading whitespace,
+/// a doctype, and comments.
+///
+/// Document parsing invents `<html>`, `<head>` and `<body>` for a source that
+/// has none, which would wrap every fragment in boxes its author never wrote.
+fn starts_with_html_element(source: &str) -> bool {
+  let mut rest = source.trim_start();
+
+  loop {
+    let lowered = rest.get(..9).map(str::to_ascii_lowercase);
+
+    if lowered
+      .as_deref()
+      .is_some_and(|s| s.starts_with("<!doctype"))
+    {
+      let Some((_, after)) = rest.split_once('>') else {
+        return false;
+      };
+      rest = after.trim_start();
+      continue;
+    }
+
+    if rest.starts_with("<!--") {
+      let Some((_, after)) = rest.split_once("-->") else {
+        return false;
+      };
+      rest = after.trim_start();
+      continue;
+    }
+
+    return rest
+      .split_at_checked("<html".len())
+      .filter(|(prefix, _)| prefix.eq_ignore_ascii_case("<html"))
+      .is_some_and(|(_, after)| {
+        after.starts_with(['>', '/']) || after.starts_with(char::is_whitespace)
+      });
+  }
 }
 
 /// Adds [`Node::from_html`](FromHtml::from_html) when this crate is in scope.
@@ -577,6 +630,39 @@ mod tests {
         "preset `{tag}` produced no declarations",
       );
     }
+  }
+
+  #[test]
+  fn a_document_keeps_its_html_root() {
+    let node = parse(
+      r#"<!doctype html><html style="font-size:62.5%"><head><title>t</title></head><body><div>hi</div></body></html>"#,
+    );
+
+    assert_eq!(node.tag_name(), Some("html"));
+    assert!(node.to_html().contains("font-size: 62.5%"));
+
+    assert!(node.to_html().contains("<body"));
+  }
+
+  #[test]
+  fn a_fragment_gains_no_wrappers() {
+    assert_eq!(parse("<div>hi</div>").tag_name(), Some("div"));
+    assert_eq!(parse("<body><div>hi</div></body>").tag_name(), Some("div"));
+    assert_eq!(parse("text <html> in content").tag_name(), None);
+  }
+
+  /// Tag names are ASCII case-insensitive, so a document is a document however
+  /// its author spelled the root.
+  #[test]
+  fn a_document_root_is_matched_case_insensitively() {
+    assert_eq!(
+      parse("<Html><body>hi</body></Html>").tag_name(),
+      Some("html")
+    );
+    assert_eq!(
+      parse("<HTML><body>hi</body></HTML>").tag_name(),
+      Some("html")
+    );
   }
 
   #[test]
