@@ -111,7 +111,7 @@ Font-relative units resolve the way they do in a browser. `em` and `lh` follow t
 
 A `fontSize` on the outermost node changes its text and nothing else. It does not move the `rem` lengths below it, so `text-2xl` on a root container leaves the Tailwind spacing scale where it is.
 
-The exception is a tree whose outermost node is an `<html>` element, which CSS does make the root. The JS `fromHtml` keeps that element when it parses a full document, so `<html style="font-size: 62.5%">` sets the `rem` basis for everything under it. The Rust `from_html` parses fragments and never returns an `<html>` node, so trees from it always follow the viewport.
+The exception is a tree whose outermost node is an `<html>` element, which CSS does make the root. `fromHtml` keeps that element when the source is a full document, so `<html style="font-size: 62.5%">` sets the `rem` basis for everything under it.
 
 ## Style Properties
 
