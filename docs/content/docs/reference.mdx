@@ -109,7 +109,7 @@ Font-relative units resolve the way they do in a browser. `em` and `lh` follow t
 
 `rem` and `rlh` follow the root, and a node tree has no `<html>` element to be one. They resolve against the viewport's font size, which is 16px. In Rust, `Viewport::with_font_size` changes it; the JS render options do not expose it yet.
 
-A `fontSize` on the outermost node changes its text and nothing else. It does not move the `rem` lengths below it, so `text-2xl` on a root container leaves the Tailwind spacing scale where it is.
+A `fontSize` on the outermost node does not rescale the `rem` and `rlh` lengths below it, so `text-2xl` on a root container leaves the Tailwind spacing scale where it is. Descendants still inherit that font size, and their `em` and `lh` lengths follow it.
 
 The exception is a tree whose outermost node is an `<html>` element, which CSS does make the root. `fromHtml` keeps that element when the source is a full document, so `<html style="font-size: 62.5%">` sets the `rem` basis for everything under it.
 

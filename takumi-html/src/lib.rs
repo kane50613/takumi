@@ -314,9 +314,9 @@ fn starts_with_html_element(source: &str) -> bool {
     }
 
     return rest
-      .strip_prefix("<html")
-      .or_else(|| rest.strip_prefix("<HTML"))
-      .is_some_and(|after| {
+      .split_at_checked("<html".len())
+      .filter(|(prefix, _)| prefix.eq_ignore_ascii_case("<html"))
+      .is_some_and(|(_, after)| {
         after.starts_with(['>', '/']) || after.starts_with(char::is_whitespace)
       });
   }
@@ -649,6 +649,20 @@ mod tests {
     assert_eq!(parse("<div>hi</div>").tag_name(), Some("div"));
     assert_eq!(parse("<body><div>hi</div></body>").tag_name(), Some("div"));
     assert_eq!(parse("text <html> in content").tag_name(), None);
+  }
+
+  /// Tag names are ASCII case-insensitive, so a document is a document however
+  /// its author spelled the root.
+  #[test]
+  fn a_document_root_is_matched_case_insensitively() {
+    assert_eq!(
+      parse("<Html><body>hi</body></Html>").tag_name(),
+      Some("html")
+    );
+    assert_eq!(
+      parse("<HTML><body>hi</body></HTML>").tag_name(),
+      Some("html")
+    );
   }
 
   #[test]
