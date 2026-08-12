@@ -2,7 +2,7 @@ use image::Rgba;
 use tiny_skia::{PixmapRef, PremultipliedColorU8};
 
 use crate::{
-  BackgroundTile, ColorTile,
+  BackgroundTile, ColorTile, SampledBitmapView,
   blend::{premultiplied_from_pixel, premultiply_rgba},
   canvas::{composite_premultiplied_over, scratch::uninit_buffer},
   style::{Color, ImageScalingAlgorithm},
@@ -81,6 +81,16 @@ impl<'a> PaintSource<'a> {
     match self {
       Self::Pixmap(source) => Some(source),
       Self::BackgroundTile(BackgroundTile::Pixmap(source)) => Some(source.as_ref().as_ref()),
+      // A bitmap background drawn at its own size already is its source pixmap.
+      Self::BackgroundTile(tile) => tile.sampled_bitmap_view()?.identity_source(),
+      _ => None,
+    }
+  }
+
+  /// The hoisted sampling state when this source is a bitmap background tile.
+  pub(crate) fn sampled_bitmap_view(self) -> Option<SampledBitmapView<'a>> {
+    match self {
+      Self::BackgroundTile(tile) => tile.sampled_bitmap_view(),
       _ => None,
     }
   }
@@ -104,9 +114,14 @@ impl<'a> PaintSource<'a> {
     let width = self.width();
     let height = self.height();
     let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(dst);
+    let sampled = self.sampled_bitmap_view();
     for y in 0..height {
       for x in 0..width {
-        pixels[(y * width + x) as usize] = premultiplied_from_pixel(self.get_pixel(x, y));
+        let pixel = match sampled {
+          Some(view) => view.sample(x, y),
+          None => self.get_pixel(x, y),
+        };
+        pixels[(y * width + x) as usize] = premultiplied_from_pixel(pixel);
       }
     }
   }
