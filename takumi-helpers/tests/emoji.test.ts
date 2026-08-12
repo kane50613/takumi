@@ -195,6 +195,44 @@ describe("emoji", () => {
       }
     });
 
+    it("should keep text-presentation pictographs as text", () => {
+      for (const content of ["‼", "\u{1F17F}", "▶", "😀︎", "1︎⃣"]) {
+        const node = text(content);
+        expect(extractEmojis(node, "twemoji")).toEqual(node);
+      }
+    });
+
+    it("should extract pictographs forced to emoji presentation", () => {
+      const cases = [
+        { content: "‼️", code: "203c" },
+        { content: "\u{1F17F}️", code: "1f17f" },
+        { content: "☝\u{1F3FD}", code: "261d-1f3fd" },
+        { content: "❤‍🔥", code: "2764-200d-1f525" },
+        { content: "🇺", code: "1f1fa" },
+      ];
+
+      for (const { content, code } of cases) {
+        const result = extractEmojis(text(content), "twemoji");
+
+        expect(result).toEqual(
+          container({
+            children: [
+              image({
+                src: `https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/${code}.svg`,
+                style: {
+                  display: "inline-block",
+                  width: "1em",
+                  height: "1em",
+                  margin: "0 0.05em 0 0.1em",
+                  verticalAlign: "-0.1em",
+                },
+              }),
+            ],
+          }),
+        );
+      }
+    });
+
     it("should preserve metadata when wrapping in container", () => {
       const props = {
         text: "😀",
