@@ -206,6 +206,7 @@ describe("emoji", () => {
       const cases = [
         { content: "‼️", code: "203c" },
         { content: "\u{1F17F}️", code: "1f17f" },
+        { content: "▶️", code: "25b6" },
         { content: "☝\u{1F3FD}", code: "261d-1f3fd" },
         { content: "❤‍🔥", code: "2764-200d-1f525" },
         { content: "🇺", code: "1f1fa" },
