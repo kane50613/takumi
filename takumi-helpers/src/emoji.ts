@@ -5,8 +5,12 @@ export type EmojiType = "twemoji" | "blobmoji" | "noto" | "openmoji" | "fluent" 
 
 const UFE0Fg = /\uFE0F/g;
 const U200D = String.fromCharCode(0x200d);
-const EXTENDED_PICTOGRAPHIC_REGEX = /\p{Extended_Pictographic}/u;
-const REGIONAL_INDICATOR_PAIR_REGEX = /^(?:\p{Regional_Indicator}){2}$/u;
+const TEXT_VARIATION_SELECTOR = "\uFE0E";
+const EMOJI_VARIATION_SELECTOR = "\uFE0F";
+const EXTENDED_PICTOGRAPHIC_REGEX = /^\p{Extended_Pictographic}/u;
+const EMOJI_PRESENTATION_REGEX = /^\p{Emoji_Presentation}/u;
+const EMOJI_MODIFIER_SEQUENCE_REGEX = /^\p{Emoji_Modifier_Base}\p{Emoji_Modifier}/u;
+const REGIONAL_INDICATOR_REGEX = /^(?:\p{Regional_Indicator}){1,2}$/u;
 const KEYCAP_EMOJI_REGEX = /^[#*0-9]\uFE0F?\u20E3$/u;
 
 function getIconCode(char: string) {
@@ -40,11 +44,22 @@ function getSegments(text: string) {
   return Array.from(segmenter.segment(text));
 }
 
+// https://github.com/google/emoji-segmenter/blob/master/emoji_presentation_scanner.rl
 function isEmojiSegment(segment: string): boolean {
+  if (segment.includes(TEXT_VARIATION_SELECTOR)) {
+    return false;
+  }
+
+  if (REGIONAL_INDICATOR_REGEX.test(segment) || KEYCAP_EMOJI_REGEX.test(segment)) {
+    return true;
+  }
+
   return (
-    EXTENDED_PICTOGRAPHIC_REGEX.test(segment) ||
-    REGIONAL_INDICATOR_PAIR_REGEX.test(segment) ||
-    KEYCAP_EMOJI_REGEX.test(segment)
+    EXTENDED_PICTOGRAPHIC_REGEX.test(segment) &&
+    (segment.includes(EMOJI_VARIATION_SELECTOR) ||
+      segment.includes(U200D) ||
+      EMOJI_PRESENTATION_REGEX.test(segment) ||
+      EMOJI_MODIFIER_SEQUENCE_REGEX.test(segment))
   );
 }
 

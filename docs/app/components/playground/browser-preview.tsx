@@ -37,9 +37,11 @@ function loadCompiler() {
 // Noto Sans superfamily across scripts. Set font-family on :host directly —
 // without Preflight nothing reads the font vars, so text would inherit the docs
 // page's font. Override every font var since the render has no serif/mono of
-// its own.
+// its own. `color` is pinned to the engine's initial value: inherited properties
+// cross the shadow boundary, so the docs theme would otherwise paint the pane's
+// text white in dark mode.
 const FONT_FAMILY = `${FONT_FAMILIES.map((name) => `"${name}"`).join(", ")}, ui-sans-serif, system-ui, sans-serif`;
-const HOST_CSS = `:host{font-family:${FONT_FAMILY};--font-sans:${FONT_FAMILY};--font-serif:${FONT_FAMILY};--font-mono:${FONT_FAMILY};--default-font-family:${FONT_FAMILY};--default-mono-font-family:${FONT_FAMILY}}`;
+const HOST_CSS = `:host{color:#000;font-family:${FONT_FAMILY};--font-sans:${FONT_FAMILY};--font-serif:${FONT_FAMILY};--font-mono:${FONT_FAMILY};--default-font-family:${FONT_FAMILY};--default-mono-font-family:${FONT_FAMILY}}`;
 
 // @font-face in a shadow root is ignored by Chrome, so load the same Google Font
 // subsets the worker uses at document level; the `css2` sheet subsets on demand.

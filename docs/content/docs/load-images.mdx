@@ -189,6 +189,8 @@ export function GET() {
 }
 ```
 
+`extractEmojis` follows the Unicode presentation rules. A pictograph that defaults to text presentation, such as `‼` or `▶`, stays text and renders with your fonts. Add `U+FE0F` after it to force the emoji image, or `U+FE0E` after an emoji to keep the text glyph.
+
 #### Manual extraction
 
 `ImageResponse` calls the `extractEmojis` helper for you. The helper splits emoji from text into image nodes pointing at a CDN. Run the steps yourself to fetch emoji bytes alongside other images.
