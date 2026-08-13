@@ -1012,9 +1012,8 @@ pub(crate) fn border_paint(border: &BorderProperties) -> BorderPaint {
   if !border.visible_sides_match(BorderStyle::Solid) {
     return BorderPaint::Sides;
   }
-  // A zero-width side leaves the inner and outer contours sharing that edge, and
-  // a rasterizer that antialiases each edge on its own leaks a hairline where
-  // the two should cancel. Sides carry no coincident edges.
+  // A zero-width side leaves the ring's two contours sharing an edge, which
+  // antialiasing leaks a hairline through. Sides share no edges.
   if [
     border.width.top,
     border.width.right,
