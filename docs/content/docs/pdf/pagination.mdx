@@ -42,7 +42,7 @@ const pdf = await render(
 );
 ```
 
-Both properties inherit. When a paragraph is too short to satisfy both minimums, the orphans win, as in Chromium. A break that cannot keep the orphans moves the whole paragraph to the next page.
+Both properties inherit. When a paragraph is too short to satisfy both minimums, the orphans win, as in Chromium. A break that cannot keep the orphans moves the whole paragraph to the next page. A minimum that cannot fit the current page at all is dropped for that page, like `break-inside: avoid` on an oversized box.
 
 ## Split decorations
 
