@@ -35,6 +35,7 @@ Takumi is a Rust rendering engine for markup and CSS. It handles layout, text sh
 ### PDF
 
 - **Page breaks** honor `break-before: page`, `break-after: page`, and `break-inside: avoid`.
+- **Widows and orphans** default to 2, so a page break never strands a lone line.
 - **Headers and footers** repeat on every page. Counters speak CSS counter styles, `trad-chinese-informal` included.
 - **Text** stays selectable and searchable. Fonts embed as subsets.
 - **Links** and metadata carry into the output. `outline: true` builds bookmarks from headings.

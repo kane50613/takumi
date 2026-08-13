@@ -1,7 +1,15 @@
-//! CSS fragmentation properties: `break-before`, `break-after`, `break-inside`.
-//! Only the paged backend consumes them; other backends ignore them.
+//! CSS fragmentation properties: `break-before`, `break-after`, `break-inside`,
+//! `widows`, `orphans`. Only the paged backend consumes them; other backends
+//! ignore them.
 
-use crate::style::declare_enum_from_css_impl;
+use std::fmt;
+
+use cssparser::{BasicParseErrorKind, Parser};
+
+use crate::style::{
+  Animatable, Color, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, SizingContext,
+  ToCss, declare_enum_from_css_impl, lerp,
+};
 
 /// A forced-break value for `break-before` / `break-after`.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -36,6 +44,65 @@ declare_enum_from_css_impl!(
   "auto" => BreakInside::Auto,
   "avoid" => BreakInside::Avoid
 );
+
+/// A `widows` / `orphans` value: the fewest lines of a block a page break may
+/// leave on either side, per CSS 2 §13.3.2.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MinLines(u32);
+
+impl Default for MinLines {
+  fn default() -> Self {
+    Self(2)
+  }
+}
+
+impl MinLines {
+  /// The minimum line count as a usize for solver arithmetic.
+  pub fn get(&self) -> usize {
+    self.0 as usize
+  }
+}
+
+impl From<u32> for MinLines {
+  fn from(lines: u32) -> Self {
+    Self(lines.max(1))
+  }
+}
+
+impl MakeComputed for MinLines {}
+
+impl Animatable for MinLines {
+  fn interpolate(
+    &mut self,
+    from: &Self,
+    to: &Self,
+    progress: f32,
+    _sizing: &SizingContext,
+    _current_color: Color,
+  ) {
+    self.0 = lerp(from.0 as f32, to.0 as f32, progress).round() as u32;
+  }
+}
+
+impl<'i> FromCss<'i> for MinLines {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    let value = input.expect_integer()?;
+
+    if value < 1 {
+      return Err(input.new_error(BasicParseErrorKind::QualifiedRuleInvalid));
+    }
+
+    Ok(Self(value as u32))
+  }
+
+  const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::Number)];
+}
+
+impl ToCss for MinLines {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    write!(dest, "{}", self.0)
+  }
+}
 
 /// A `box-decoration-break` value, deciding how box decorations paint across
 /// page fragments.
@@ -78,6 +145,23 @@ mod tests {
       BoxDecorationBreak::from_css_str("clone"),
       Ok(BoxDecorationBreak::Clone)
     );
+  }
+
+  #[test]
+  fn parses_min_lines() {
+    assert_eq!(MinLines::from_css_str("1"), Ok(MinLines(1)));
+    assert_eq!(MinLines::from_css_str("3"), Ok(MinLines(3)));
+    assert!(MinLines::from_css_str("0").is_err());
+    assert!(MinLines::from_css_str("-2").is_err());
+    assert!(MinLines::from_css_str("2.5").is_err());
+    assert!(MinLines::from_css_str("auto").is_err());
+  }
+
+  #[test]
+  fn min_lines_from_clamps() {
+    assert_eq!(MinLines::from(0), MinLines(1));
+    assert_eq!(MinLines::from(4), MinLines(4));
+    assert_eq!(MinLines::default(), MinLines(2));
   }
 
   #[test]

@@ -60,7 +60,7 @@ use crate::{
     text::{Font, Tag},
   },
   options::PdfError,
-  pagination::Atom,
+  pagination::{Atom, Paragraph},
   paint::{
     empty_path, expanded_radial_stops, fill_from_rgba, krilla_blend, krilla_path, krilla_stop,
     krilla_stops, overflow_clip_rect, pop_transforms, rect_path, spread,
@@ -1718,6 +1718,27 @@ impl Emitter<'_> {
   }
 }
 
+/// Records `lines` as one [`Paragraph`] under the box's `widows` / `orphans`
+/// minimums. A box the cut can never sit inside — one line, or minimums of one
+/// on both sides — adds nothing.
+fn push_paragraph(node: &RenderNode, lines: &[Atom], paragraphs: &mut Vec<Paragraph>) {
+  let style = &node.context.style;
+  let before = style.orphans.get();
+  let after = style.widows.get();
+
+  if lines.len() < 2 || (before <= 1 && after <= 1) {
+    return;
+  }
+  let mut lines = lines.to_vec();
+
+  lines.sort_by(|a, b| a.0.total_cmp(&b.0));
+  paragraphs.push(Paragraph {
+    lines,
+    before,
+    after,
+  });
+}
+
 impl Emitter<'_> {
   /// Mirrors [`Self::emit_context`] but records unsplittable vertical extents
   /// instead of painting.
@@ -1727,13 +1748,14 @@ impl Emitter<'_> {
     parent: Affine,
     atoms: &mut Vec<Atom>,
     forced: &mut Vec<f32>,
+    paragraphs: &mut Vec<Paragraph>,
   ) -> Result<(), PdfError> {
     let Some(context) = self.contexts.get(id) else {
       return Ok(());
     };
 
     let child_frame = match context.root() {
-      Some(paint) => self.collect_box_atoms(paint, parent, atoms, forced)?,
+      Some(paint) => self.collect_box_atoms(paint, parent, atoms, forced, paragraphs)?,
       None => parent,
     };
 
@@ -1741,10 +1763,10 @@ impl Emitter<'_> {
       for item in bucket {
         match &item.kind {
           PaintItemKind::Node(paint) => {
-            self.collect_box_atoms(paint, child_frame, atoms, forced)?;
+            self.collect_box_atoms(paint, child_frame, atoms, forced, paragraphs)?;
           }
           PaintItemKind::Context(child) => {
-            self.collect_atoms(*child, child_frame, atoms, forced)?;
+            self.collect_atoms(*child, child_frame, atoms, forced, paragraphs)?;
           }
         }
       }
@@ -1761,6 +1783,7 @@ impl Emitter<'_> {
     parent: Affine,
     atoms: &mut Vec<Atom>,
     forced: &mut Vec<f32>,
+    paragraphs: &mut Vec<Paragraph>,
   ) -> Result<Affine, PdfError> {
     let Some(node) = self.root.node_at_path(&paint.path) else {
       return Ok(parent);
@@ -1790,11 +1813,11 @@ impl Emitter<'_> {
     }
 
     if node.should_create_inline_layout() {
-      self.collect_text_atoms(node, layout, y, atoms)?;
+      self.collect_text_atoms(node, layout, y, atoms, paragraphs)?;
     } else if !node.has_anonymous_text_item_child() {
       match node.node.as_ref().map(|n| &n.kind) {
         Some(NodeKind::Text(_)) => {
-          self.collect_text_atoms(node, layout, y, atoms)?;
+          self.collect_text_atoms(node, layout, y, atoms, paragraphs)?;
         }
         Some(NodeKind::Image(_)) => {
           atoms.push((y, y + layout.size.height));
@@ -1806,15 +1829,21 @@ impl Emitter<'_> {
   }
 
   /// One atom per text line: the union of each run's ascent-to-descent band.
+  /// The box's lines also form one [`Paragraph`] carrying its `widows` /
+  /// `orphans` minimums for the cut solver.
   fn collect_text_atoms(
     &mut self,
     node: &RenderNode,
     layout: Layout,
     y: f32,
     atoms: &mut Vec<Atom>,
+    paragraphs: &mut Vec<Paragraph>,
   ) -> Result<(), PdfError> {
+    let start = atoms.len();
+
     if let Some(prepared) = self.inline.and_then(|map| map.get(&inline_key(node))) {
       text_line_atoms(&prepared.runs, layout, y, atoms);
+      push_paragraph(node, &atoms[start..], paragraphs);
       return Ok(());
     }
     let context = &node.context;
@@ -1827,6 +1856,7 @@ impl Emitter<'_> {
     };
 
     text_line_atoms(&runs, layout, y, atoms);
+    push_paragraph(node, &atoms[start..], paragraphs);
     Ok(())
   }
 }

@@ -63,7 +63,8 @@ const pdf = await render(
 | `render={({ pageNumber, totalPages })}` | `pageNumber` and `totalPages` classes |
 | the `break` prop                        | `break-before: page`                  |
 | `wrap={false}`                          | `break-inside: avoid`                 |
-| `orphans`, `widows`, `minPresenceAhead` | not supported                         |
+| `orphans`, `widows`                     | the same CSS properties               |
+| `minPresenceAhead`                      | not supported                         |
 | `Font.registerHyphenationCallback`      | not supported                         |
 | `Font.registerEmojiSource`              | `extractEmojis`, then `prepareImages` |
 | `<PDFViewer>`, `<PDFDownloadLink>`      | not supported: render on the server   |

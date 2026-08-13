@@ -28,6 +28,22 @@ const pdf = await render(
 
 A `break-inside: avoid` box taller than the page window cannot fit on a page. It stops participating in cut avoidance. Browsers apply the same rule.
 
+## Widows and orphans
+
+A cut through a paragraph keeps at least `orphans` lines at the bottom of the page and `widows` lines at the top of the next. Both default to 2, like Chromium. Set them to 1 to allow lone lines:
+
+```tsx twoslash
+import { render } from "takumi-pdf";
+
+const pdf = await render(
+  <article style={{ widows: 3, orphans: 3 }}>
+    A long report body wraps into many lines across the page boundary.
+  </article>,
+);
+```
+
+Both properties inherit. When a paragraph is too short to satisfy both minimums, the orphans win, as in Chromium. A break that cannot keep the orphans moves the whole paragraph to the next page.
+
 ## Split decorations
 
 A box that crosses a page break slices its border and background by default. Set `box-decoration-break: clone` to give each fragment complete decorations:
