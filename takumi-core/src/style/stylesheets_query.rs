@@ -76,7 +76,7 @@ impl ComputedStyle {
   /// also for `absolute` ones. Blink resolves this as `ComputeIsFixedContainer`
   /// (`layout_object.cc`); the conditions takumi has properties for are a
   /// transform-related property and a non-initial `filter` / `backdrop-filter`.
-  pub(crate) fn contains_fixed_descendants(&self) -> bool {
+  pub fn contains_fixed_descendants(&self) -> bool {
     self.transform.as_ref().is_some_and(|t| !t.0.is_empty())
       || self.offset_path.is_some()
       || self.rotate.is_some()
