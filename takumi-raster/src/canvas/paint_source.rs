@@ -15,8 +15,6 @@ pub(crate) struct SamplingFootprint {
 }
 
 impl SamplingFootprint {
-  pub(crate) const PIXEL: Self = Self { x: 1.0, y: 1.0 };
-
   pub(crate) fn new(x: f32, y: f32) -> Self {
     Self {
       x: x.max(0.0),
@@ -77,20 +75,34 @@ impl<'a> PaintSource<'a> {
     }
   }
 
-  pub(crate) fn as_pixmap_ref(self) -> Option<PixmapRef<'a>> {
-    match self {
-      Self::Pixmap(source) => Some(source),
-      Self::BackgroundTile(BackgroundTile::Pixmap(source)) => Some(source.as_ref().as_ref()),
-      // A bitmap background drawn at its own size already is its source pixmap.
-      Self::BackgroundTile(tile) => tile.sampled_bitmap_view()?.identity_source(),
-      _ => None,
+  /// Normalizes this source into the form pixel loops sample from, resolving
+  /// everything that does not depend on the pixel exactly once. Tiles that
+  /// already are a pixmap (including a bitmap drawn at its own size) come back
+  /// as [`PaintSource::Pixmap`], and a scaled bitmap comes back as its hoisted
+  /// [`SampledBitmapView`]. Every loop that reads more than one pixel must
+  /// resolve first instead of sampling `self` directly.
+  pub(crate) fn resolve(self) -> ResolvedSource<'a> {
+    let Self::BackgroundTile(tile) = self else {
+      return ResolvedSource::Direct(self);
+    };
+
+    match tile {
+      BackgroundTile::Pixmap(source) => {
+        ResolvedSource::Direct(Self::Pixmap(source.as_ref().as_ref()))
+      }
+      _ => match tile.sampled_bitmap_view() {
+        Some(view) => match view.identity_source() {
+          Some(source) => ResolvedSource::Direct(Self::Pixmap(source)),
+          None => ResolvedSource::Bitmap(view),
+        },
+        None => ResolvedSource::Direct(self),
+      },
     }
   }
 
-  /// The hoisted sampling state when this source is a bitmap background tile.
-  pub(crate) fn sampled_bitmap_view(self) -> Option<SampledBitmapView<'a>> {
-    match self {
-      Self::BackgroundTile(tile) => tile.sampled_bitmap_view(),
+  pub(crate) fn as_pixmap_ref(self) -> Option<PixmapRef<'a>> {
+    match self.resolve() {
+      ResolvedSource::Direct(Self::Pixmap(source)) => Some(source),
       _ => None,
     }
   }
@@ -106,7 +118,8 @@ impl<'a> PaintSource<'a> {
   }
 
   fn write_premultiplied(self, dst: &mut [u8]) {
-    if let Some(source) = self.as_pixmap_ref() {
+    let resolved = self.resolve();
+    if let ResolvedSource::Direct(Self::Pixmap(source)) = resolved {
       dst.copy_from_slice(bytemuck::cast_slice(source.pixels()));
       return;
     }
@@ -114,14 +127,9 @@ impl<'a> PaintSource<'a> {
     let width = self.width();
     let height = self.height();
     let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(dst);
-    let sampled = self.sampled_bitmap_view();
     for y in 0..height {
       for x in 0..width {
-        let pixel = match sampled {
-          Some(view) => view.sample(x, y),
-          None => self.get_pixel(x, y),
-        };
-        pixels[(y * width + x) as usize] = premultiplied_from_pixel(pixel);
+        pixels[(y * width + x) as usize] = premultiplied_from_pixel(resolved.get_pixel(x, y));
       }
     }
   }
@@ -142,6 +150,44 @@ impl<'a> PaintSource<'a> {
 
   pub(crate) fn supports_rounded_fill_fast_path(self) -> bool {
     matches!(self, Self::Pixmap(_))
+  }
+}
+
+/// A [`PaintSource`] after [`PaintSource::resolve`]: the form the interpolators
+/// and pixel loops read from. Keeping them off the raw source is what
+/// guarantees per-pixel work never re-derives sampling state.
+#[derive(Clone, Copy)]
+pub(crate) enum ResolvedSource<'a> {
+  Direct(PaintSource<'a>),
+  Bitmap(SampledBitmapView<'a>),
+}
+
+impl ResolvedSource<'_> {
+  pub(crate) fn width(self) -> u32 {
+    match self {
+      Self::Direct(source) => source.width(),
+      Self::Bitmap(view) => view.size().width,
+    }
+  }
+
+  pub(crate) fn height(self) -> u32 {
+    match self {
+      Self::Direct(source) => source.height(),
+      Self::Bitmap(view) => view.size().height,
+    }
+  }
+
+  pub(crate) fn get_pixel(self, x: u32, y: u32) -> PremultipliedColorU8 {
+    match self {
+      Self::Direct(source) => source.get_pixel(x, y),
+      Self::Bitmap(view) => view.sample(x, y),
+    }
+  }
+}
+
+impl<'a> From<PixmapRef<'a>> for ResolvedSource<'a> {
+  fn from(value: PixmapRef<'a>) -> Self {
+    Self::Direct(PaintSource::Pixmap(value))
   }
 }
 
@@ -205,7 +251,7 @@ pub(super) fn apply_mask_color_mode(src: [u8; 4], color_mode: MaskCompositeColor
 
 #[inline(always)]
 pub(super) fn sample_paint_source(
-  source: PaintSource<'_>,
+  source: ResolvedSource<'_>,
   algorithm: ImageScalingAlgorithm,
   x: f32,
   y: f32,
@@ -215,7 +261,7 @@ pub(super) fn sample_paint_source(
 }
 
 pub(crate) fn interpolate_with_footprint(
-  image: PaintSource<'_>,
+  image: ResolvedSource<'_>,
   algorithm: ImageScalingAlgorithm,
   x: f32,
   y: f32,
@@ -233,11 +279,7 @@ pub(crate) fn interpolate_with_footprint(
 }
 
 #[inline(always)]
-pub(crate) fn interpolate_nearest(
-  image: PaintSource<'_>,
-  x: f32,
-  y: f32,
-) -> Option<PremultipliedColorU8> {
+fn interpolate_nearest(image: ResolvedSource<'_>, x: f32, y: f32) -> Option<PremultipliedColorU8> {
   let w = image.width();
   let h = image.height();
   if w == 0 || h == 0 {
@@ -253,11 +295,7 @@ pub(crate) fn interpolate_nearest(
 }
 
 #[inline(always)]
-pub(crate) fn interpolate_bilinear(
-  image: PaintSource<'_>,
-  x: f32,
-  y: f32,
-) -> Option<PremultipliedColorU8> {
+fn interpolate_bilinear(image: ResolvedSource<'_>, x: f32, y: f32) -> Option<PremultipliedColorU8> {
   let w = image.width();
   let h = image.height();
   if w == 0 || h == 0 {
@@ -320,7 +358,7 @@ pub(crate) fn interpolate_bilinear(
 }
 
 fn interpolate_box(
-  image: PaintSource<'_>,
+  image: ResolvedSource<'_>,
   x: f32,
   y: f32,
   footprint: SamplingFootprint,
@@ -402,7 +440,7 @@ fn interpolate_box(
 mod tests {
   use tiny_skia::{Pixmap, PremultipliedColorU8};
 
-  use super::{PaintSource, SamplingFootprint, interpolate_with_footprint};
+  use super::{SamplingFootprint, interpolate_with_footprint};
   use crate::style::ImageScalingAlgorithm;
 
   #[test]
@@ -415,7 +453,7 @@ mod tests {
     }
 
     let sample = interpolate_with_footprint(
-      PaintSource::from(pixmap.as_ref()),
+      pixmap.as_ref().into(),
       ImageScalingAlgorithm::Auto,
       4.0,
       0.5,

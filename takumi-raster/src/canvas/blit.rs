@@ -6,11 +6,11 @@ use takumi_core::geometry::{Point, Size};
 use tiny_skia::{PixmapMut, PremultipliedColorU8};
 
 use super::{
-  DrawTarget, MaskSamplingOptions, MaskView, OverlayOptions, PaintSource, SamplingFootprint,
-  SamplingOptions, composite,
+  DrawTarget, MaskSamplingOptions, MaskView, OverlayOptions, PaintSource, SamplingOptions,
+  composite,
   composite::sampling_footprint,
   mask::MaskRow,
-  paint_source::{MaskCompositeColor, sample_paint_source},
+  paint_source::{MaskCompositeColor, ResolvedSource, sample_paint_source},
   skia::{
     FillColorOptions, ImagePathFillOptions, try_draw_image_with_tiny_skia,
     try_fill_color_with_tiny_skia, try_fill_image_path_with_tiny_skia,
@@ -121,6 +121,7 @@ fn blit_sampled_paint_source_translation(
 
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
   let footprint = sampling_footprint(sampling.logical_to_source);
+  let resolved = source.resolve();
   for dest_y in bounds.y_min..bounds.y_max {
     let mask_row = combined_mask.map(|view| view.row(dest_y, bounds.x_min));
     if mask_row.is_some_and(|row| row.is_empty()) {
@@ -133,7 +134,7 @@ fn blit_sampled_paint_source_translation(
       .transform_point((bounds.x_min - bounds.offset_x) as f32 + 0.5, src_y + 0.5);
     let dst_row = dest_y as usize * canvas_width as usize;
     for (i, dest_x) in (bounds.x_min..bounds.x_max).enumerate() {
-      let src = sample_paint_source(source, sampling.algorithm, sample_x, sample_y, footprint)
+      let src = sample_paint_source(resolved, sampling.algorithm, sample_x, sample_y, footprint)
         .unwrap_or([0, 0, 0, 0]);
       sample_x += sampling.logical_to_source.a;
       sample_y += sampling.logical_to_source.b;
@@ -190,13 +191,6 @@ fn blit_paint_source_translation(
   mode: BlendMode,
   combined_mask: Option<MaskView<'_>>,
 ) {
-  // Sampling a bitmap background drawn at its own size returns the source pixel
-  // unchanged, so hand the pixmap straight to the copy path below.
-  let source = source
-    .sampled_bitmap_view()
-    .and_then(|view| view.identity_source())
-    .map_or(source, PaintSource::Pixmap);
-
   if let Some(color) = source.premultiplied_constant() {
     blit_solid_translation(
       pixmap,
@@ -223,8 +217,8 @@ fn blit_paint_source_translation(
   };
 
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-  match source {
-    PaintSource::Pixmap(source) => {
+  match source.resolve() {
+    ResolvedSource::Direct(PaintSource::Pixmap(source)) => {
       let source_pixels = source.pixels();
       let source_width = source.width();
       if mode == BlendMode::Normal && combined_mask.is_none() {
@@ -266,27 +260,11 @@ fn blit_paint_source_translation(
         }
       }
     }
-    // A bitmap tile samples through a view resolved once here. The generic
-    // sampler below reads the same texels, but rebuilds that view per pixel.
-    _ => match source.sampled_bitmap_view() {
-      Some(view) => {
-        blit_rows_from_sampler(pixels, canvas_width, bounds, mode, combined_mask, |x, y| {
-          premultiplied_from_pixel(view.sample(x, y))
-        });
-      }
-      None => {
-        blit_rows_from_sampler(pixels, canvas_width, bounds, mode, combined_mask, |x, y| {
-          sample_paint_source(
-            source,
-            ImageScalingAlgorithm::Pixelated,
-            x as f32,
-            y as f32,
-            SamplingFootprint::PIXEL,
-          )
-          .unwrap_or([0; 4])
-        });
-      }
-    },
+    resolved => {
+      blit_rows_from_sampler(pixels, canvas_width, bounds, mode, combined_mask, |x, y| {
+        premultiplied_from_pixel(resolved.get_pixel(x, y))
+      });
+    }
   }
 }
 
