@@ -19,21 +19,23 @@ Takumi renders images in Node.js, Cloudflare Workers, browsers, and Rust applica
 
 ## Features
 
-Takumi is a Rust rendering engine for markup and CSS. It handles layout, text shaping, compositing, and encoding without launching a browser.
+Takumi is a Rust rendering engine for markup and CSS. It handles layout, text shaping, compositing, and encoding without launching a browser. One component tree renders as an image, an animation, or a paged PDF.
 
 ### Images
 
+- **`text-fit`** grows or shrinks a headline to fill its line box, no measuring loop.
+- **Animations** sample the tree across time. `@keyframes` and `animate-spin` become WebP, APNG, GIF, or video frames.
+- **Stylesheets** apply as written, with complex selectors, `var()`, `calc()`, and media queries.
 - **CSS Grid**, block, inline, and float handle layout.
-- Complex selectors work, including `::before`, `::after`, `:is()`, and `:where()`.
+- **`lang`** picks each language's own Han glyphs for the same code points.
+- **Text on a path** follows `offset-path`. `background-clip: text` and conic gradients paint it.
 - Masks, `clip-path`, `backdrop-filter`, and blend modes composite the way browsers do.
-- `background-clip: text` and conic gradients work.
-- **RTL**, CJK, and emoji shape correctly.
 - **Tailwind v4** utilities apply directly, arbitrary values included.
 
 ### PDF
 
 - **Page breaks** honor `break-before: page`, `break-after: page`, and `break-inside: avoid`.
-- **Headers and footers** repeat on every page, with page counters.
+- **Headers and footers** repeat on every page. Counters speak CSS counter styles, `trad-chinese-informal` included.
 - **Text** stays selectable and searchable. Fonts embed as subsets.
 - **Links** and metadata carry into the output. `outline: true` builds bookmarks from headings.
 - **Attachments** embed files, including Factur-X e-invoice XML.
