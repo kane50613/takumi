@@ -17,6 +17,38 @@ Takumi renders images in Node.js, Cloudflare Workers, browsers, and Rust applica
 
 </div>
 
+## Features
+
+Takumi is a Rust rendering engine for markup and CSS. It handles layout, text shaping, compositing, and encoding without launching a browser. One component tree renders as an image, an animation, or a paged PDF.
+
+### Images
+
+- **`text-fit`** grows or shrinks a headline to fill its line box, no measuring loop.
+- **Animations** sample the tree across time. `@keyframes` and `animate-spin` become WebP, APNG, GIF, or video frames.
+- **Stylesheets** apply as written, with complex selectors, `var()`, `calc()`, and media queries.
+- **CSS Grid**, block, inline, and float handle layout.
+- **`lang`** picks each language's own Han glyphs for the same code points.
+- **Text on a path** follows `offset-path`. `background-clip: text` and conic gradients paint it.
+- Masks, `clip-path`, `backdrop-filter`, and blend modes composite the way browsers do.
+- **Tailwind v4** utilities apply directly, arbitrary values included.
+
+### PDF
+
+- **Page breaks** honor `break-before: page`, `break-after: page`, and `break-inside: avoid`.
+- **Headers and footers** repeat on every page. Counters speak CSS counter styles, `trad-chinese-informal` included.
+- **Text** stays selectable and searchable. Fonts embed as subsets.
+- **Links** and metadata carry into the output. `outline: true` builds bookmarks from headings.
+- **Attachments** embed files, including Factur-X e-invoice XML.
+- **Tagged PDF** is on by default. PDF/A-2, A-3, A-4, and PDF/UA-1 pass veraPDF.
+- **Arabic**, bidi text, CJK, and emoji shape correctly.
+- **1.5 MB** of gzip wasm fits the Cloudflare Workers free plan.
+
+### Runtimes
+
+- **Node.js and Bun** load a native binding, prebuilt for macOS, Linux (glibc and musl), and Windows on x64 and ARM64.
+- **Cloudflare Workers** and browsers load the WebAssembly build.
+- **Rust** applications embed the `takumi` crate.
+
 ## Quick Start
 
 ```bash
@@ -41,8 +73,6 @@ await writeFile("./output.png", image);
 ```
 
 ### PDF
-
-The PDF package writes multiple pages with selectable text and embedded subset fonts. It supports page breaks plus repeating headers and footers.
 
 ```tsx
 import { render } from "takumi-pdf";
@@ -69,27 +99,6 @@ await writeFile("invoice.pdf", pdf);
 | Puppeteer or Playwright for PDFs | Replace `page.pdf()` with `render()`. You must preload remote assets, and Takumi supports less CSS than Chrome. [Read the migration guide](https://takumi.kane.tw/docs/pdf/from-puppeteer).                 |
 | `@react-pdf/renderer`            | Replace `Document`, `View`, and `Text` with HTML elements and CSS. Browser viewers and some text controls have no equivalent. [Read the migration guide](https://takumi.kane.tw/docs/pdf/from-react-pdf).   |
 | `pdfkit`                         | Use JSX or HTML instead of positioning each line. Keep `pdfkit` when you need low-level drawing control.                                                                                                    |
-
-## Why Takumi
-
-Takumi is a Rust rendering engine for markup and CSS. It handles layout, text shaping, compositing, and encoding without launching a browser.
-
-The image packages select a backend for each runtime:
-
-- Node.js and Bun load the native binding.
-- Cloudflare Workers and browsers load the WebAssembly build.
-- Rust applications embed the `takumi` crate.
-
-Prebuilt binaries ship for macOS, Linux (glibc and musl), and Windows, on x64 and ARM64.
-
-The image renderer supports these CSS features:
-
-- CSS Grid, block, inline, float
-- `::before`, `::after`, `:is()`, `:where()`
-- masks, `clip-path`, `backdrop-filter`, blend modes
-- `background-clip: text`, conic gradients
-- RTL text, CJK, and emoji
-- Tailwind v4 utilities, including arbitrary values
 
 ## More Output
 
@@ -217,6 +226,7 @@ The benchmark uses an 80-line invoice with two pages and a page-number footer. W
 | Deploy needs                  | 1.5 MB gzip wasm                            | pure JS                                               | Chrome install (hundreds of MB) |
 | Template language             | JSX, HTML, node trees with CSS and Tailwind | its own primitives (`<View>`, `<Text>`, `StyleSheet`) | HTML with full CSS              |
 | Selectable text, subset fonts | yes                                         | yes                                                   | yes                             |
+| Arabic and bidi text          | yes                                         | shaping only, manual direction                        | yes                             |
 | Runs on edge runtimes         | yes (Cloudflare Workers)                    | no (Node)                                             | no                              |
 
 Chrome has the most complete CSS support of the three. Takumi's PDF output does not support `filter: blur()`, `drop-shadow()`, or `backdrop-filter`. Use Puppeteer when you need to reproduce a complex web page pixel for pixel. See the [PDF comparison](https://takumi.kane.tw/docs/pdf/comparison) for install sizes and more caveats.
@@ -241,11 +251,9 @@ Takumi converts any template into a **node tree** with three node kinds: `contai
 3. **Compositing**: stacking contexts, blend modes, filters, transforms, SVG via [resvg](https://github.com/linebender/resvg)
 4. **Output**: PNG, JPEG, WebP, ICO for statics; GIF, APNG, WebP for animations; paged PDF; raw RGBA frames for video pipelines
 
-The input contract is a node tree, so any template system that serializes to HTML or JSON can feed it: React, Svelte, Vue, plain strings, or your own serializer in any language.
-
-A **time axis** threads through the pipeline: the renderer takes a timestamp, so a PNG is the tree at `t=0` and a GIF is the same tree sampled across `t`. CSS `@keyframes`, the `animation` shorthand, and Tailwind animation utilities (`animate-spin`, `animate-bounce`, arbitrary values) all resolve at render time.
-
-Takumi uses the same layout for two vector backends. `renderSvg()` (Rust `render_svg`, behind the `svg-backend` feature) writes an `<svg>` document from shapes and glyph outlines. `takumi-pdf` writes paged PDF from the same primitives. Use `renderSvg()` when you need Satori-style SVG output.
+- Any template system that serializes to HTML or JSON can feed the node tree: React, Svelte, Vue, plain strings, or your own serializer in any language.
+- A time axis threads through the pipeline. A PNG is the tree at `t=0`. A GIF samples the same tree across `t`. CSS `@keyframes`, the `animation` shorthand, and Tailwind animation utilities resolve at render time.
+- The same layout drives two vector backends: `renderSvg()` for Satori-style SVG, `takumi-pdf` for paged PDF.
 
 ```mermaid
 flowchart LR
