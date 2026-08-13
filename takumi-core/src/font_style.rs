@@ -14,7 +14,7 @@ use crate::{
   resources::font::{FontClasses, SubsetGroup},
   shadow::SizedShadow,
   style::{
-    BorderStyle, Color, ComputedStyle, Display, FontFamily, FontSynthesis, Lang, Length,
+    BorderStyle, Color, ComputedStyle, Display, FontFamily, FontSynthesis, Lang,
     SizedTextDecorationThickness, SizingContext, VerticalAlign, WordBreak,
   },
 };
@@ -474,7 +474,9 @@ impl<'s> SizedFontStyle<'s> {
       // own border-box (see `draw_outline`), so only a real inline box strokes its
       // text fragments. https://www.w3.org/TR/css-ui-4/#outline
       outline_width: if style.display == Display::Inline {
-        Length::from(style.outline_width)
+        style
+          .outline_width
+          .to_used_length(&context.sizing)
           .to_px(&context.sizing, 0.0)
           .max(0.0)
       } else {

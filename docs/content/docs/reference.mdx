@@ -173,6 +173,10 @@ Properties use their camelCase names. Longhands are listed in parentheses. `Supp
 | `outlineColor`                                                                                                                        | Supported                                                                                     |
 | `outlineOffset`                                                                                                                       | Supported                                                                                     |
 
+`borderWidth` and `outlineWidth` round to whole pixels, like browsers do. A width
+under `1px` becomes `1px`, so hairlines always draw. Any other width rounds down,
+so `1.5px` draws as `1px`.
+
 ### Flexbox
 
 | Property                                        | Values                           |

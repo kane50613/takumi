@@ -9,7 +9,7 @@ use crate::{
   context::RenderContext,
   geometry::{ComputedLayout as Layout, Point, Rect, Size},
   layout::border::BorderProperties,
-  style::{Length, Sides},
+  style::Sides,
 };
 
 /// A rounded-rect clip region: its corner geometry (radii after any inset or
@@ -111,7 +111,9 @@ pub struct OutlineGeometry {
 /// Each backend used to guard this differently, and one of them not at all.
 pub(crate) fn outline_paint(context: &RenderContext, size: Size<f32>) -> Option<OutlineGeometry> {
   let style = &context.style;
-  let width = Length::from(style.outline_width)
+  let width = style
+    .outline_width
+    .to_used_length(&context.sizing)
     .to_px(&context.sizing, size.width)
     .max(0.0);
 
@@ -125,7 +127,9 @@ pub(crate) fn outline_paint(context: &RenderContext, size: Size<f32>) -> Option<
 /// Says nothing about whether the outline paints; see [`outline_paint`].
 pub(crate) fn outline_geometry(context: &RenderContext, size: Size<f32>) -> OutlineGeometry {
   let style = &context.style;
-  let width = Length::from(style.outline_width)
+  let width = style
+    .outline_width
+    .to_used_length(&context.sizing)
     .to_px(&context.sizing, size.width)
     .max(0.0);
   let offset = style.outline_offset.to_px(&context.sizing, size.width);

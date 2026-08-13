@@ -305,7 +305,11 @@ impl ComputedStyle {
         bottom: self.border_bottom_width,
         left: self.border_left_width,
       }
-      .map(|border| Length::from(border).resolve_to_length_percentage(sizing)),
+      .map(|border| {
+        border
+          .to_used_length(sizing)
+          .resolve_to_length_percentage(sizing)
+      }),
       padding: Rect {
         top: self.padding_top,
         right: self.padding_right,

@@ -87,6 +87,23 @@ impl<'i> FromCss<'i> for LineWidth {
   ];
 }
 
+impl LineWidth {
+  /// The used width, rounded down to a whole CSS pixel with anything thinner
+  /// than 1px promoted to 1px.
+  ///
+  /// Blink resolves as `ClampLineWidth`: `width > 0 && width < 1 ? 1 :
+  /// floor(width)`, applied to `border-*-width` and `outline-width`.
+  pub(crate) fn to_used_length(self, sizing: &SizingContext) -> Length {
+    let css_px = sizing.to_css(Length::from(self).to_px(sizing, 0.0));
+
+    Length::Px(if css_px > 0.0 && css_px < 1.0 {
+      1.0
+    } else {
+      css_px.floor().max(0.0)
+    })
+  }
+}
+
 impl MakeComputed for LineWidth {
   fn make_computed(&mut self, sizing: &SizingContext) {
     if let Self::Length(length) = self {
@@ -199,7 +216,33 @@ impl MakeComputed for Border {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::style::{Color, FromCssStr};
+  use crate::{
+    style::{Color, FromCssStr},
+    viewport::Viewport,
+  };
+
+  #[test]
+  fn test_used_line_width_rounds_down_and_keeps_hairlines() {
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((100, Some(100))))
+      .build();
+    let used = |css: &str| {
+      LineWidth::from_css_str(css)
+        .unwrap()
+        .to_used_length(&sizing)
+        .to_px(&sizing, 0.0)
+    };
+
+    assert_eq!(used("0"), 0.0);
+    assert_eq!(used("0.3px"), 1.0);
+    assert_eq!(used("0.75px"), 1.0);
+    assert_eq!(used("1px"), 1.0);
+    assert_eq!(used("1.5px"), 1.0);
+    assert_eq!(used("2.5px"), 2.0);
+    assert_eq!(used("thin"), 1.0);
+    assert_eq!(used("medium"), 3.0);
+    assert_eq!(used("thick"), 5.0);
+  }
 
   #[test]
   fn test_parse_border_style_solid() {
