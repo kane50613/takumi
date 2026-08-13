@@ -1718,9 +1718,7 @@ impl Emitter<'_> {
   }
 }
 
-/// Records `lines` as one [`Paragraph`] under the box's `widows` / `orphans`
-/// minimums. A box the cut can never sit inside — one line, or minimums of one
-/// on both sides — adds nothing.
+/// Records the box's lines as a [`Paragraph`] for the widow/orphan solver.
 fn push_paragraph(node: &RenderNode, lines: &[Atom], paragraphs: &mut Vec<Paragraph>) {
   let style = &node.context.style;
   let before = style.orphans.get();
@@ -1829,8 +1827,7 @@ impl Emitter<'_> {
   }
 
   /// One atom per text line: the union of each run's ascent-to-descent band.
-  /// The box's lines also form one [`Paragraph`] carrying its `widows` /
-  /// `orphans` minimums for the cut solver.
+  /// The lines also form one [`Paragraph`] for the widow/orphan solver.
   fn collect_text_atoms(
     &mut self,
     node: &RenderNode,

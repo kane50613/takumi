@@ -21,8 +21,7 @@ use crate::{
 pub(crate) type Atom = (f32, f32);
 
 /// One text box's lines in content coordinates, with its `widows` / `orphans`
-/// minimums. The solver keeps at least `orphans` lines before a cut through
-/// the box and at least `widows` lines after it.
+/// minimums.
 pub(crate) struct Paragraph {
   /// Line extents sorted top-down.
   pub lines: Vec<Atom>,
@@ -189,14 +188,11 @@ pub(crate) fn page_starts(
 
 /// Where a cut through `paragraph` must move up to honor its minimums, or
 /// `cut` unchanged. A proposal at or above `floor` (the top of the current
-/// page) cannot be honored on this page, so the constraint is dropped for the
-/// paragraph instead — matching browsers, which drop `widows` / `orphans`
-/// they cannot satisfy rather than overflow the fragmentainer.
+/// page) drops the constraint instead, like browsers do.
 fn widow_orphan_cut(paragraph: &Paragraph, cut: f32, floor: f32) -> f32 {
   let lines = &paragraph.lines;
-  // The atom pass already moved the cut off every line's interior, so lines
-  // partition cleanly around it. The half-point tolerance absorbs the cut
-  // sitting exactly on a line edge.
+  // The atom pass keeps the cut off line interiors; the half point absorbs a
+  // cut sitting exactly on a line edge.
   let before = lines.partition_point(|(_, bottom)| *bottom <= cut + 0.5);
 
   if before == 0 || before >= lines.len() {
@@ -205,12 +201,10 @@ fn widow_orphan_cut(paragraph: &Paragraph, cut: f32, floor: f32) -> f32 {
   let after = lines.len() - before;
 
   let proposed = if before < paragraph.before {
-    // Too few lines to leave behind: break before the whole box instead.
     lines[0].0
   } else if after < paragraph.after {
-    // Blink resolves the conflict as `max(line_count - widows, orphans)`:
-    // the cut backs up to feed the widows, but never past the orphans floor.
-    // A floor at or above the current cut accepts the widow violation.
+    // Blink's resolution: `max(line_count - widows, orphans)`. The orphans
+    // floor wins; a floor at the current cut accepts the widow violation.
     let line_number = (lines.len() - paragraph.after).max(paragraph.before);
 
     if line_number >= before {
