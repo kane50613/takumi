@@ -16,8 +16,9 @@
 //! them is cut in half. Each page re-walks the scene through a vertical
 //! window (clip + translate). Every text line lands on exactly one page.
 //!
-//! Pagination honors `break-before: page`, `break-after: page`, and
-//! `break-inside: avoid`. Header and footer bands repeat in the page margin
+//! Pagination honors `break-before: page`, `break-after: page`,
+//! `break-inside: avoid`, and the `widows` / `orphans` minimums (default 2,
+//! like Chromium). Header and footer bands repeat in the page margin
 //! areas, like Chromium's print templates. Nodes classed `pageNumber` /
 //! `totalPages` receive the page counters.
 //!
@@ -276,6 +277,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       let inline_map = build_inline_map(&text_boxes)?;
       let mut atoms = Vec::new();
       let mut forced = Vec::new();
+      let mut paragraphs = Vec::new();
 
       content
         .emitter(
@@ -285,8 +287,20 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           &uncovered,
           document_lang,
         )
-        .collect_atoms(0, Affine::IDENTITY, &mut atoms, &mut forced)?;
-      let starts = page_starts(&mut atoms, &mut forced, content.height, window_height);
+        .collect_atoms(
+          0,
+          Affine::IDENTITY,
+          &mut atoms,
+          &mut forced,
+          &mut paragraphs,
+        )?;
+      let starts = page_starts(
+        &mut atoms,
+        &mut forced,
+        &paragraphs,
+        content.height,
+        window_height,
+      );
 
       if starts.len() >= MAX_PAGES {
         return Err(PdfError::TooManyPages(starts.len()));
@@ -498,10 +512,11 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::pagination::Atom;
 
   #[test]
   fn content_taller_than_a_render_allows_stops_counting() {
-    let starts = page_starts(&mut [], &mut Vec::new(), 2_000_000.0, 10.0);
+    let starts = page_starts(&mut [], &mut Vec::new(), &[], 2_000_000.0, 10.0);
 
     assert_eq!(starts.len(), MAX_PAGES, "the page count runs unbounded");
   }
@@ -509,7 +524,7 @@ mod tests {
   #[test]
   fn page_starts_without_atoms_cuts_at_window() {
     assert_eq!(
-      page_starts(&mut [], &mut Vec::new(), 250.0, 100.0),
+      page_starts(&mut [], &mut Vec::new(), &[], 250.0, 100.0),
       vec![0.0, 100.0, 200.0]
     );
   }
@@ -519,7 +534,7 @@ mod tests {
     let mut atoms = [(90.0, 110.0)];
 
     assert_eq!(
-      page_starts(&mut atoms, &mut Vec::new(), 250.0, 100.0),
+      page_starts(&mut atoms, &mut Vec::new(), &[], 250.0, 100.0),
       vec![0.0, 90.0, 190.0]
     );
   }
@@ -529,8 +544,91 @@ mod tests {
     let mut atoms = [(0.0, 300.0)];
 
     assert_eq!(
-      page_starts(&mut atoms, &mut Vec::new(), 300.0, 100.0),
+      page_starts(&mut atoms, &mut Vec::new(), &[], 300.0, 100.0),
       vec![0.0, 100.0, 200.0]
+    );
+  }
+
+  /// Six 10pt lines from y=50: the window cut at 100 would leave a lone line
+  /// on the next page, so the solver moves it up to keep two.
+  #[test]
+  fn page_starts_keeps_widows_together() {
+    let lines: Vec<Atom> = (0..6)
+      .map(|i| (50.0 + i as f32 * 10.0, 60.0 + i as f32 * 10.0))
+      .collect();
+    let mut atoms = lines.clone();
+    let paragraphs = [pagination::Paragraph {
+      lines,
+      before: 2,
+      after: 2,
+    }];
+
+    assert_eq!(
+      page_starts(&mut atoms, &mut Vec::new(), &paragraphs, 110.0, 100.0),
+      vec![0.0, 90.0],
+      "the cut moves from 100 to 90 so two lines reach the next page"
+    );
+  }
+
+  /// The cut at 100 would strand one line at the bottom of the page, so the
+  /// whole paragraph moves over.
+  #[test]
+  fn page_starts_keeps_orphans_together() {
+    let lines: Vec<Atom> = (0..4)
+      .map(|i| (90.0 + i as f32 * 10.0, 100.0 + i as f32 * 10.0))
+      .collect();
+    let mut atoms = lines.clone();
+    let paragraphs = [pagination::Paragraph {
+      lines,
+      before: 2,
+      after: 2,
+    }];
+
+    assert_eq!(
+      page_starts(&mut atoms, &mut Vec::new(), &paragraphs, 140.0, 100.0),
+      vec![0.0, 90.0],
+      "one line before the cut violates orphans, so the paragraph starts the next page"
+    );
+  }
+
+  /// Three lines with 2/2 minimums cannot satisfy both sides. Blink keeps the
+  /// orphans and accepts the widow violation, and so does the solver.
+  #[test]
+  fn page_starts_prefers_orphans_over_widows() {
+    let lines: Vec<Atom> = (0..3)
+      .map(|i| (80.0 + i as f32 * 10.0, 90.0 + i as f32 * 10.0))
+      .collect();
+    let mut atoms = lines.clone();
+    let paragraphs = [pagination::Paragraph {
+      lines,
+      before: 2,
+      after: 2,
+    }];
+
+    assert_eq!(
+      page_starts(&mut atoms, &mut Vec::new(), &paragraphs, 110.0, 100.0),
+      vec![0.0, 100.0],
+      "backing up past the orphans floor is worse than a lone widow"
+    );
+  }
+
+  /// Minimums that cannot fit the current page are dropped rather than looping.
+  #[test]
+  fn page_starts_drops_unsatisfiable_minimums() {
+    let lines: Vec<Atom> = (0..30)
+      .map(|i| (i as f32 * 10.0, 10.0 + i as f32 * 10.0))
+      .collect();
+    let mut atoms = lines.clone();
+    let paragraphs = [pagination::Paragraph {
+      lines,
+      before: 20,
+      after: 20,
+    }];
+
+    assert_eq!(
+      page_starts(&mut atoms, &mut Vec::new(), &paragraphs, 300.0, 100.0),
+      vec![0.0, 100.0, 200.0],
+      "a paragraph that can never satisfy 20/20 still paginates at the window"
     );
   }
 
@@ -539,7 +637,7 @@ mod tests {
     let mut forced = vec![40.0, 150.0];
 
     assert_eq!(
-      page_starts(&mut [], &mut forced, 250.0, 100.0),
+      page_starts(&mut [], &mut forced, &[], 250.0, 100.0),
       vec![0.0, 40.0, 140.0, 150.0]
     );
   }

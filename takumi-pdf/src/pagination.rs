@@ -20,6 +20,27 @@ use crate::{
 /// sort and bisect them.
 pub(crate) type Atom = (f32, f32);
 
+/// One text box's lines in content coordinates, with its `widows` / `orphans`
+/// minimums.
+pub(crate) struct Paragraph {
+  /// Line extents sorted top-down.
+  pub lines: Vec<Atom>,
+  /// Fewest lines a cut may leave at the bottom of a page (`orphans`).
+  pub before: usize,
+  /// Fewest lines a cut may push to the top of the next page (`widows`).
+  pub after: usize,
+}
+
+impl Paragraph {
+  fn top(&self) -> f32 {
+    self.lines.first().map_or(0.0, |line| line.0)
+  }
+
+  fn bottom(&self) -> f32 {
+    self.lines.last().map_or(0.0, |line| line.1)
+  }
+}
+
 /// Page start offsets for slicing `total` height into windows of `window`
 /// height. Each cut moves up to the top of any atom straddling it, repeated
 /// until no atom straddles (a raised cut can land inside another atom). An
@@ -60,12 +81,25 @@ pub(crate) fn resolve_target_counters(
     let inline_map = build_inline_map(&text_boxes)?;
     let mut atoms = Vec::new();
     let mut forced = Vec::new();
+    let mut paragraphs = Vec::new();
 
     content
       .emitter(fonts, Some(&inline_map), None, uncovered, document_lang)
-      .collect_atoms(0, Affine::IDENTITY, &mut atoms, &mut forced)?;
+      .collect_atoms(
+        0,
+        Affine::IDENTITY,
+        &mut atoms,
+        &mut forced,
+        &mut paragraphs,
+      )?;
 
-    let starts = page_starts(&mut atoms, &mut forced, content.height, window_height);
+    let starts = page_starts(
+      &mut atoms,
+      &mut forced,
+      &paragraphs,
+      content.height,
+      window_height,
+    );
 
     if starts.len() >= MAX_PAGES {
       break;
@@ -91,6 +125,7 @@ pub(crate) fn resolve_target_counters(
 pub(crate) fn page_starts(
   atoms: &mut [Atom],
   forced: &mut Vec<f32>,
+  paragraphs: &[Paragraph],
   total: f32,
   window: f32,
 ) -> Vec<f32> {
@@ -98,6 +133,19 @@ pub(crate) fn page_starts(
   forced.retain(|cut| *cut > 1.0 && *cut < total - 1.0);
   forced.sort_by(f32::total_cmp);
 
+  // The prefix max of bottoms lets the back-scan stop early even when a
+  // paragraph spans several pages.
+  let mut by_top: Vec<&Paragraph> = paragraphs.iter().collect();
+
+  by_top.sort_by(|a, b| a.top().total_cmp(&b.top()));
+
+  let mut prefix_max_bottom = Vec::with_capacity(by_top.len());
+  let mut running = f32::MIN;
+
+  for paragraph in &by_top {
+    running = running.max(paragraph.bottom());
+    prefix_max_bottom.push(running);
+  }
   let mut starts = vec![0.0_f32];
   let mut y0 = 0.0_f32;
 
@@ -132,6 +180,15 @@ pub(crate) fn page_starts(
         }
       }
 
+      let straddling = by_top.partition_point(|paragraph| paragraph.top() < pushed_up);
+
+      for i in (0..straddling).rev() {
+        if prefix_max_bottom[i] <= pushed_up {
+          break;
+        }
+        pushed_up = pushed_up.min(widow_orphan_cut(by_top[i], pushed_up, y0 + 1.0));
+      }
+
       if pushed_up >= cut {
         break;
       }
@@ -155,4 +212,39 @@ pub(crate) fn page_starts(
     }
   }
   starts
+}
+
+/// Where a cut through `paragraph` must move up to honor its minimums, or
+/// `cut` unchanged. A proposal at or above `floor` (the top of the current
+/// page) drops the constraint instead, like browsers do.
+fn widow_orphan_cut(paragraph: &Paragraph, cut: f32, floor: f32) -> f32 {
+  let lines = &paragraph.lines;
+  // The atom pass keeps the cut off line interiors; the half point absorbs a
+  // cut sitting exactly on a line edge.
+  let before = lines.partition_point(|(_, bottom)| *bottom <= cut + 0.5);
+
+  if before == 0 || before >= lines.len() {
+    return cut;
+  }
+  let after = lines.len() - before;
+
+  let proposed = if before < paragraph.before {
+    lines[0].0
+  } else if after < paragraph.after {
+    // Blink's resolution: `max(line_count - widows, orphans)`. The orphans
+    // floor wins; a floor at the current cut accepts the widow violation.
+    let line_number = (lines.len() - paragraph.after).max(paragraph.before);
+
+    if line_number >= before {
+      return cut;
+    }
+    lines[line_number].0
+  } else {
+    return cut;
+  };
+
+  if proposed <= floor {
+    return cut;
+  }
+  cut.min(proposed)
 }

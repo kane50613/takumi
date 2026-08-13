@@ -23,8 +23,8 @@ use takumi_core::{
     image_buffer::ImageBuffer,
   },
   style::{
-    BreakBetween, Color, ColorInput, Display, FlexDirection, FontSize, Length::*, ObjectFit, Style,
-    StyleDeclaration,
+    BreakBetween, Color, ColorInput, Display, FlexDirection, FontSize, Length::*, LineHeight,
+    ObjectFit, Style, StyleDeclaration,
   },
   viewport::Viewport,
 };
@@ -186,6 +186,79 @@ fn paged_footer_counters() {
       .fonts(fonts)
       .build()
   });
+}
+
+/// Guards `widows` / `orphans`: the default 2/2 minimums must move a line
+/// across the page cut that minimums of 1/1 leave in place.
+#[test]
+fn paged_widow_orphan_control() {
+  use takumi_core::style::MinLines;
+
+  let fonts = fonts();
+  let document = |relaxed: bool| {
+    let rows: Vec<Node> = (1..=12).map(|i| text(&format!("Row {i}"), 16.0)).collect();
+    let paragraph = Node::text(
+      "The closing paragraph runs long enough to wrap into several lines \
+       and straddle the page boundary, which is exactly where the widow \
+       and orphan minimums earn their keep in a paginated report."
+        .to_string(),
+    )
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::color(ColorInput::Value(Color([
+          20, 20, 20, 255,
+        ]))))
+        .with(StyleDeclaration::font_size(FontSize::Length(Px(16.0))))
+        // Air between the line bands, so the widow move is distinguishable
+        // from the atom pass cascading through touching lines.
+        .with(StyleDeclaration::line_height(LineHeight::Unitless(1.8))),
+    );
+    let mut children = rows;
+
+    children.push(paragraph);
+    let root = column(children);
+
+    if relaxed {
+      // Inherited minimums of one restore the unconstrained cut.
+      root.with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Flex))
+          .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+          .with(StyleDeclaration::width(Percentage(100.0)))
+          .with(StyleDeclaration::widows(MinLines::from(1)))
+          .with(StyleDeclaration::orphans(MinLines::from(1))),
+      )
+    } else {
+      root
+    }
+  };
+  fn page() -> PageOptions {
+    PageOptions {
+      width: 400.0,
+      height: 300.0,
+      margin: PageMargins::uniform(20.0),
+    }
+  }
+  let strict = run_pdf_fixture_with("paged-widows-orphans", &fonts, |fonts| {
+    PdfOptions::builder()
+      .node(document(false))
+      .page(page())
+      .fonts(fonts)
+      .build()
+  });
+  let relaxed = render(
+    PdfOptions::builder()
+      .node(document(true))
+      .page(page())
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render relaxed variant");
+
+  assert_ne!(
+    strict, relaxed,
+    "default widow/orphan minimums did not move any line across the cut"
+  );
 }
 
 #[test]
