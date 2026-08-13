@@ -3045,3 +3045,38 @@ fn an_undecodable_image_stops_the_render() {
     "unexpected error: {error:?}"
   );
 }
+
+/// A `fixed` box the initial containing block holds repeats on every page, laid
+/// out against the page area rather than the content column: a watermark, which
+/// is what the property is for in print.
+#[test]
+fn a_fixed_box_repeats_on_every_page() {
+  let doc = r#"<main>
+      <div style="position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;">
+        <span style="font-size: 48px;">DRAFT</span>
+      </div>
+      <p style="height: 900px;">first</p>
+      <p style="height: 900px;">second</p>
+    </main>"#;
+  let pdf = run_pdf_fixture("fixed-repeats-per-page", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse the doc"))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  assert_eq!(
+    haystack.matches("/Count 2").count(),
+    1,
+    "expected a two-page document"
+  );
+  assert_eq!(
+    content_lines(&pdf)
+      .filter(|line| line.ends_with(b"TJ") || line.ends_with(b"Tj"))
+      .count(),
+    4,
+    "expected the watermark on both pages, next to each page's own text"
+  );
+}

@@ -64,3 +64,31 @@ const pdf = await render(
   </section>,
 );
 ```
+
+## Watermarks
+
+A `position: fixed` box repeats on every page, laid out against the page area rather than the flowing content:
+
+```tsx twoslash
+import { render } from "takumi-pdf";
+
+const pdf = await render(
+  <main>
+    <div
+      // [!code highlight]
+      style={{
+        position: "fixed",
+        inset: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <span style={{ fontSize: 96, color: "rgba(0,0,0,0.08)" }}>DRAFT</span>
+    </div>
+    <p>Long content that continues on the next page.</p>
+  </main>,
+);
+```
+
+`inset: 0` covers the whole page area, so the box centers per page. A `fixed` box inside a transformed or filtered ancestor belongs to that ancestor instead, and paginates with it.

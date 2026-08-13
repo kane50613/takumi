@@ -13,8 +13,8 @@ use takumi_core::{
   resources::image::ImageSource,
   scene::{StackingContextNode, build_stacking_contexts},
   style::{
-    Affine, ComputedStyle, Display, FlexDirection, FontFamily, Lang, Length, SizingContext, Style,
-    StyleDeclaration, StyleSheet,
+    Affine, ComputedStyle, Display, FlexDirection, FontFamily, Lang, Length, Position,
+    SizingContext, Style, StyleDeclaration, StyleSheet,
   },
   viewport::Viewport,
 };
@@ -112,7 +112,14 @@ pub(crate) fn prepare_tree(
   viewport: Viewport,
 ) -> Result<PreparedTree, PdfError> {
   let node = fill_root(node, viewport);
-  let context = RenderContext::builder()
+  let context = tree_context(inputs, viewport);
+  let root = RenderNode::from_node(&context, node);
+
+  lay_out(root, viewport)
+}
+
+fn tree_context(inputs: &TreeInputs<'_>, viewport: Viewport) -> RenderContext {
+  RenderContext::builder()
     .fonts(
       inputs
         .fonts
@@ -126,9 +133,56 @@ pub(crate) fn prepare_tree(
       font_family: inputs.font_families.clone().unwrap_or_default(),
       ..Default::default()
     }))
-    .build();
+    .build()
+}
 
-  let root = RenderNode::from_node(&context, node);
+/// The tree, plus the `fixed` subtrees attached to the initial containing
+/// block. Those repeat on every page, so they lay out against the page area
+/// instead of the content column.
+pub(crate) fn prepare_paged_tree(
+  inputs: &TreeInputs<'_>,
+  node: Node,
+  viewport: Viewport,
+  page_area: Viewport,
+) -> Result<(PreparedTree, Vec<PreparedTree>), PdfError> {
+  let node = fill_root(node, viewport);
+  let context = tree_context(inputs, viewport);
+  let mut root = RenderNode::from_node(&context, node);
+  let repeated = take_repeating_fixed(&mut root);
+  let content = lay_out(root, viewport)?;
+  let repeated = repeated
+    .into_iter()
+    .map(|node| lay_out(node, page_area))
+    .collect::<Result<Vec<_>, _>>()?;
+
+  Ok((content, repeated))
+}
+
+/// Removes the `fixed` boxes the initial containing block holds. A box that
+/// establishes a containing block of its own keeps its `fixed` descendants,
+/// which stay in the flow and paginate with it.
+fn take_repeating_fixed(node: &mut RenderNode) -> Vec<RenderNode> {
+  let Some(children) = node.children.take() else {
+    return Vec::new();
+  };
+  let mut repeating = Vec::new();
+  let mut kept = Vec::with_capacity(children.len());
+
+  for mut child in children.into_vec() {
+    if child.context.style.position == Position::Fixed {
+      repeating.push(child);
+      continue;
+    }
+    if !child.context.style.contains_fixed_descendants() {
+      repeating.append(&mut take_repeating_fixed(&mut child));
+    }
+    kept.push(child);
+  }
+  node.children = Some(kept.into_boxed_slice());
+  repeating
+}
+
+fn lay_out(root: RenderNode, viewport: Viewport) -> Result<PreparedTree, PdfError> {
   let mut tree = LayoutTree::from_render_node(&root);
 
   tree.compute_layout(viewport.into());
