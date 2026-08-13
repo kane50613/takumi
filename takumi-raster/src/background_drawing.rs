@@ -17,11 +17,10 @@ use crate::{
   BorderProperties, DrawTarget, OverlayOptions, PaintSource, RenderContext, Result,
   SamplingFootprint, color_to_premultiplied, interpolate_with_footprint,
   layout::node::resolve_image,
-  overlay_gradient_tile, overlay_image, overlay_linear_gradient_tile, overlay_radial_gradient_tile,
-  pixmap_from_buffer, pixmap_ref_from_buffer,
+  overlay_image, pixmap_from_buffer, pixmap_ref_from_buffer,
   resources::{image::ImageSource, image_buffer::ImageBuffer},
   style::*,
-  uninit_buffer,
+  try_overlay_gradient_tile, uninit_buffer,
 };
 
 pub(crate) struct TileLayer {
@@ -93,44 +92,18 @@ pub(crate) fn rasterize_layers(
         if border.is_zero()
           && layer_transform.only_translation()
           && layer.blend_mode == BlendMode::Normal
+          && try_overlay_gradient_tile(
+            &mut pixmap,
+            &layer.tile,
+            Point {
+              x: layer_transform.x,
+              y: layer_transform.y,
+            },
+            layer.blend_mode,
+            None,
+          )
         {
-          let translation = Point {
-            x: layer_transform.x,
-            y: layer_transform.y,
-          };
-          match &layer.tile {
-            BackgroundTile::Linear(linear_gradient) => {
-              overlay_linear_gradient_tile(
-                &mut pixmap,
-                linear_gradient,
-                translation,
-                layer.blend_mode,
-                None,
-              );
-              continue;
-            }
-            BackgroundTile::Radial(radial_gradient) => {
-              overlay_radial_gradient_tile(
-                &mut pixmap,
-                radial_gradient,
-                translation,
-                layer.blend_mode,
-                None,
-              );
-              continue;
-            }
-            BackgroundTile::Conic(conic_gradient) => {
-              overlay_gradient_tile(
-                &mut pixmap,
-                conic_gradient,
-                translation,
-                layer.blend_mode,
-                None,
-              );
-              continue;
-            }
-            _ => {}
-          }
+          continue;
         }
 
         overlay_image(

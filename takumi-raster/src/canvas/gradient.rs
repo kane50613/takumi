@@ -11,9 +11,35 @@ use tiny_skia::PixmapMut;
 
 use super::{
   MaskView,
-  blit::{apply_mask_row, compute_overlay_bounds_for_canvas},
+  blit::{blit_rows_from_sampler, compute_overlay_bounds_for_canvas},
 };
-use crate::{blend::*, style::BlendMode};
+use crate::{BackgroundTile, blend::*, style::BlendMode};
+
+/// Overlays a gradient-shaped [`BackgroundTile`] at a plain translation,
+/// reporting whether the tile was one. Non-gradient tiles are left for the
+/// caller's generic overlay path.
+pub(crate) fn try_overlay_gradient_tile(
+  pixmap: &mut PixmapMut<'_>,
+  tile: &BackgroundTile,
+  offset: Point<f32>,
+  mode: BlendMode,
+  combined_mask: Option<MaskView<'_>>,
+) -> bool {
+  match tile {
+    BackgroundTile::Linear(gradient) => {
+      overlay_linear_gradient_tile(pixmap, gradient, offset, mode, combined_mask)
+    }
+    BackgroundTile::Radial(gradient) => {
+      overlay_radial_gradient_tile(pixmap, gradient, offset, mode, combined_mask)
+    }
+    BackgroundTile::Conic(gradient) => {
+      overlay_gradient_tile(pixmap, gradient, offset, mode, combined_mask)
+    }
+    _ => return false,
+  }
+
+  true
+}
 
 pub(crate) fn overlay_gradient_tile<T>(
   pixmap: &mut PixmapMut<'_>,
@@ -54,28 +80,9 @@ pub(crate) fn overlay_gradient_tile<T>(
   };
 
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-  for dest_y in bounds.y_min..bounds.y_max {
-    let mask_row = combined_mask.map(|view| view.row(dest_y, bounds.x_min));
-    if mask_row.is_some_and(|row| row.is_empty()) {
-      continue;
-    }
-
-    let src_y = (dest_y - bounds.offset_y) as u32;
-    let dst_row = dest_y as usize * bottom_width as usize;
-    for (i, dest_x) in (bounds.x_min..bounds.x_max).enumerate() {
-      let src_x = (dest_x - bounds.offset_x) as u32;
-      let src = premultiplied_from_pixel(gradient.sample_pixel(src_x, src_y));
-      if src[3] == 0 {
-        continue;
-      }
-
-      let Some(src) = apply_mask_row(src, mask_row, i) else {
-        continue;
-      };
-
-      blend_premultiplied_pixel(&mut pixels[dst_row + dest_x as usize], src, mode);
-    }
-  }
+  blit_rows_from_sampler(pixels, bottom_width, bounds, mode, combined_mask, |x, y| {
+    premultiplied_from_pixel(gradient.sample_pixel(x, y))
+  });
 }
 
 fn try_overlay_linear_gradient_tile_fast_normal_unconstrained(

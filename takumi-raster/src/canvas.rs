@@ -16,9 +16,7 @@ use std::{borrow::Cow, mem::replace, sync::Arc};
 pub(crate) use blit::{
   composite_mask_source_to_pixmap, overlay_image, overlay_sampled_paint_source,
 };
-pub(crate) use gradient::{
-  overlay_gradient_tile, overlay_linear_gradient_tile, overlay_radial_gradient_tile,
-};
+pub(crate) use gradient::try_overlay_gradient_tile;
 use image::{
   ImageError, Rgba, RgbaImage,
   error::{ParameterError, ParameterErrorKind},
@@ -399,38 +397,14 @@ impl Canvas {
       y: translation.y - self.origin.y as f32,
     };
 
-    self.with_overlay_state(|target| match tile {
-      BackgroundTile::Linear(gradient) => {
-        overlay_linear_gradient_tile(
-          target.pixmap,
-          gradient,
-          localized_translation,
-          mode,
-          target.combined_mask,
-        );
-        true
-      }
-      BackgroundTile::Radial(gradient) => {
-        overlay_radial_gradient_tile(
-          target.pixmap,
-          gradient,
-          localized_translation,
-          mode,
-          target.combined_mask,
-        );
-        true
-      }
-      BackgroundTile::Conic(gradient) => {
-        overlay_gradient_tile(
-          target.pixmap,
-          gradient,
-          localized_translation,
-          mode,
-          target.combined_mask,
-        );
-        true
-      }
-      _ => false,
+    self.with_overlay_state(|target| {
+      try_overlay_gradient_tile(
+        target.pixmap,
+        tile,
+        localized_translation,
+        mode,
+        target.combined_mask,
+      )
     })
   }
 
