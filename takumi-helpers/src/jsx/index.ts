@@ -225,33 +225,19 @@ function tryHandleComponentWrapper(
   element: ReactElementLike,
   options: ResolvedFromJsxOptions,
 ): Promise<FromJsxTraversalResult> | undefined {
-  if (typeof element.type !== "object" || element.type === null) return;
-
-  if (isReactForwardRef(element.type) && "render" in element.type) {
-    const forwardRefType = element.type as {
-      render: (props: unknown, ref: unknown) => ReactNode;
-    };
-    return renderFunctionComponent(
-      (props) => forwardRefType.render(props, null),
-      element.props,
-      options,
-    );
+  if (isReactForwardRef(element.type)) {
+    const { render } = element.type;
+    return renderFunctionComponent((props) => render(props, null), element.props, options);
   }
 
-  if (isReactMemo(element.type) && "type" in element.type) {
-    const memoType = element.type as { type: unknown };
-    const innerType = memoType.type;
+  if (isReactMemo(element.type)) {
+    const innerType = element.type.type;
 
     if (isFunctionComponent(innerType)) {
       return renderFunctionComponent(innerType, element.props, options);
     }
 
-    const cloned: ReactElementLike = {
-      ...element,
-      type: innerType as ReactElementLike["type"],
-    } as ReactElementLike;
-
-    return processReactElement(cloned, options);
+    return processReactElement({ ...element, type: innerType }, options);
   }
 }
 

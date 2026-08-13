@@ -31,12 +31,21 @@ const REACT_FORWARD_REF_TYPE = Symbol.for("react.forward_ref");
 const REACT_MEMO_TYPE = Symbol.for("react.memo");
 const REACT_FRAGMENT_TYPE = Symbol.for("react.fragment");
 
-export function isReactForwardRef(element: ReactElementLike): boolean {
-  return element.$$typeof === REACT_FORWARD_REF_TYPE;
+type ForwardRefComponent = { render: (props: unknown, ref: unknown) => ReactNode };
+type MemoComponent = { type: ReactElementLike["type"] };
+
+function hasReactMarker(type: unknown, marker: symbol): type is { $$typeof: symbol } {
+  return (
+    typeof type === "object" && type !== null && "$$typeof" in type && type.$$typeof === marker
+  );
 }
 
-export function isReactMemo(element: ReactElementLike): boolean {
-  return element.$$typeof === REACT_MEMO_TYPE;
+export function isReactForwardRef(type: unknown): type is ForwardRefComponent {
+  return hasReactMarker(type, REACT_FORWARD_REF_TYPE) && "render" in type;
+}
+
+export function isReactMemo(type: unknown): type is MemoComponent {
+  return hasReactMarker(type, REACT_MEMO_TYPE) && "type" in type;
 }
 
 export function isReactFragment(element: ReactElementLike): boolean {
