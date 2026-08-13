@@ -1,3 +1,13 @@
+## takumi-core@0.21.0
+
+### Honor emoji variation selectors in font selection
+
+When emoji render from registered fonts (`emoji: "from-font"`), a codepoint followed by `U+FE0F` now picks a registered color font and one followed by `U+FE0E` a registered monochrome font. `font-family` order does not affect either. Bare codepoints keep following the stack, matching browsers.
+
+### Honor `widows` and `orphans` at page breaks
+
+A cut through a paragraph keeps at least `orphans` lines at the bottom of the page and `widows` lines at the top of the next. Both are inherited CSS properties and default to 2, the Chromium print default. Set both to 1 to disable the limits. Minimums the page cannot fit are dropped for that page.
+
 ## takumi-core@0.20.0
 
 ### Resolve `rem` against the viewport instead of the outermost node
