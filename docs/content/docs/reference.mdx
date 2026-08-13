@@ -171,10 +171,10 @@ Properties use their camelCase names. Longhands are listed in parentheses. `Supp
 | `outlineWidth`                                                                                                                        | `thin`, `medium`, `thick`, `<length>` <sup>1</sup>                                            |
 | `outlineStyle`                                                                                                                        | `none`, `hidden`, `solid`, `dashed`, `dotted`, `double`, `groove`, `ridge`, `inset`, `outset` |
 | `outlineColor`                                                                                                                        | Supported                                                                                     |
-| `outlineOffset`                                                                                                                       | Supported                                                                                     |
+| `outlineOffset`                                                                                                                       | Supported <sup>1</sup>                                                                        |
 
-<sup>1</sup> Widths round to whole pixels, like browsers do. A width under `1px` becomes `1px`.
-Anything else rounds down, so `1.5px` draws as `1px`.
+<sup>1</sup> These snap to whole device pixels, like browsers do. Anything thinner than one device
+pixel draws as one. The rest rounds toward zero, so `1.5px` draws as `1px`.
 
 ### Flexbox
 

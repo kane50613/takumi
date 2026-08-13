@@ -61,6 +61,21 @@ fn is_near_zero(value: f32) -> bool {
   value.abs() <= CALC_ZERO_EPSILON
 }
 
+/// CSS Values 4 [snap a length as a border width]: a whole number of device
+/// pixels stays put, anything thinner rounds away from zero to one, and the
+/// rest rounds toward zero.
+///
+/// [snap a length as a border width]: https://drafts.csswg.org/css-values-4/#snap-a-length-as-a-border-width
+pub(crate) fn snap_as_border_width(device_px: f32) -> f32 {
+  let truncated = device_px.trunc();
+
+  if truncated == 0.0 && device_px != 0.0 {
+    return device_px.signum();
+  }
+
+  truncated
+}
+
 fn clamp_px_for_integer_cast(value: f32) -> f32 {
   if value.is_nan() {
     return 0.0;
@@ -499,6 +514,11 @@ impl Length {
     };
 
     clamp_px_for_integer_cast(value)
+  }
+
+  /// Resolves to device pixels, then snaps the result as a border width.
+  pub(crate) fn to_border_px(self, sizing: &SizingContext, percentage_full_px: f32) -> f32 {
+    snap_as_border_width(self.to_px(sizing, percentage_full_px))
   }
 
   /// Resolves to a taffy `LengthPercentageAuto`.

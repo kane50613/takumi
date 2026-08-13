@@ -1,6 +1,6 @@
 use std::{borrow::Cow, marker::PhantomData};
 
-use taffy::{Line, Rect, Size};
+use taffy::{LengthPercentage, Line, Rect, Size};
 
 use super::ComputedStyle;
 use crate::{
@@ -305,11 +305,7 @@ impl ComputedStyle {
         bottom: self.border_bottom_width,
         left: self.border_left_width,
       }
-      .map(|border| {
-        border
-          .to_used_length(sizing)
-          .resolve_to_length_percentage(sizing)
-      }),
+      .map(|border| LengthPercentage::length(border.to_used_px(sizing))),
       padding: Rect {
         top: self.padding_top,
         right: self.padding_right,

@@ -88,19 +88,9 @@ impl<'i> FromCss<'i> for LineWidth {
 }
 
 impl LineWidth {
-  /// The used width, rounded down to a whole CSS pixel with anything thinner
-  /// than 1px promoted to 1px.
-  ///
-  /// Blink resolves as `ClampLineWidth`: `width > 0 && width < 1 ? 1 :
-  /// floor(width)`, applied to `border-*-width` and `outline-width`.
-  pub(crate) fn to_used_length(self, sizing: &SizingContext) -> Length {
-    let css_px = sizing.to_css(Length::from(self).to_px(sizing, 0.0));
-
-    Length::Px(if css_px > 0.0 && css_px < 1.0 {
-      1.0
-    } else {
-      css_px.floor().max(0.0)
-    })
+  /// The used width in device pixels, snapped as a border width.
+  pub(crate) fn to_used_px(self, sizing: &SizingContext) -> f32 {
+    Length::from(self).to_border_px(sizing, 0.0)
   }
 }
 
@@ -221,39 +211,30 @@ mod tests {
     viewport::Viewport,
   };
 
+  fn used_px(css: &str, dpr: f32) -> f32 {
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((100, Some(100))).with_device_pixel_ratio(dpr))
+      .build();
+
+    LineWidth::from_css_str(css).unwrap().to_used_px(&sizing)
+  }
+
   #[test]
-  fn test_used_line_width_rounds_in_css_pixels_at_any_scale() {
-    let used = |css: &str, dpr: f32| {
-      let sizing = SizingContext::builder()
-        .viewport(Viewport::new((100, Some(100))).with_device_pixel_ratio(dpr))
-        .build();
-
-      LineWidth::from_css_str(css)
-        .unwrap()
-        .to_used_length(&sizing)
-        .to_px(&sizing, 0.0)
-    };
-
-    // Rounding happens in CSS pixels, so a scaled hairline stays one CSS pixel
-    // wide rather than rounding to one device pixel.
-    assert_eq!(used("0.3px", 2.0), 2.0);
-    assert_eq!(used("1.5px", 2.0), 2.0);
-    assert_eq!(used("2.5px", 2.0), 4.0);
-    assert_eq!(used("0.3px", 0.5), 0.5);
-    assert_eq!(used("2.5px", 0.5), 1.0);
+  fn test_used_line_width_snaps_to_device_pixels() {
+    // A width that already lands on whole device pixels stays put, so the
+    // half-pixel hairline stays a hairline once the scale makes it whole.
+    assert_eq!(used_px("0.5px", 2.0), 1.0);
+    assert_eq!(used_px("0.25px", 4.0), 1.0);
+    // Thinner than one device pixel still rounds up to one.
+    assert_eq!(used_px("0.2px", 2.0), 1.0);
+    // Thicker rounds toward zero in device pixels, not CSS pixels.
+    assert_eq!(used_px("1.75px", 2.0), 3.0);
+    assert_eq!(used_px("2.5px", 0.5), 1.0);
   }
 
   #[test]
   fn test_used_line_width_rounds_down_and_keeps_hairlines() {
-    let sizing = SizingContext::builder()
-      .viewport(Viewport::new((100, Some(100))))
-      .build();
-    let used = |css: &str| {
-      LineWidth::from_css_str(css)
-        .unwrap()
-        .to_used_length(&sizing)
-        .to_px(&sizing, 0.0)
-    };
+    let used = |css: &str| used_px(css, 1.0);
 
     assert_eq!(used("0"), 0.0);
     assert_eq!(used("0.3px"), 1.0);
