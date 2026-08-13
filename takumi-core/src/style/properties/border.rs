@@ -222,6 +222,28 @@ mod tests {
   };
 
   #[test]
+  fn test_used_line_width_rounds_in_css_pixels_at_any_scale() {
+    let used = |css: &str, dpr: f32| {
+      let sizing = SizingContext::builder()
+        .viewport(Viewport::new((100, Some(100))).with_device_pixel_ratio(dpr))
+        .build();
+
+      LineWidth::from_css_str(css)
+        .unwrap()
+        .to_used_length(&sizing)
+        .to_px(&sizing, 0.0)
+    };
+
+    // Rounding happens in CSS pixels, so a scaled hairline stays one CSS pixel
+    // wide rather than rounding to one device pixel.
+    assert_eq!(used("0.3px", 2.0), 2.0);
+    assert_eq!(used("1.5px", 2.0), 2.0);
+    assert_eq!(used("2.5px", 2.0), 4.0);
+    assert_eq!(used("0.3px", 0.5), 0.5);
+    assert_eq!(used("2.5px", 0.5), 1.0);
+  }
+
+  #[test]
   fn test_used_line_width_rounds_down_and_keeps_hairlines() {
     let sizing = SizingContext::builder()
       .viewport(Viewport::new((100, Some(100))))
