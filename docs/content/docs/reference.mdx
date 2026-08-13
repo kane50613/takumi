@@ -163,15 +163,18 @@ Properties use their camelCase names. Longhands are listed in parentheses. `Supp
 
 | Property                                                                                                                              | Values                                                                                        |
 | :------------------------------------------------------------------------------------------------------------------------------------ | :-------------------------------------------------------------------------------------------- |
-| `borderWidth` (`borderTopWidth`, `borderRightWidth`, `borderBottomWidth`, `borderLeftWidth`, `borderInlineWidth`, `borderBlockWidth`) | `thin`, `medium`, `thick`, `<length>`                                                         |
+| `borderWidth` (`borderTopWidth`, `borderRightWidth`, `borderBottomWidth`, `borderLeftWidth`, `borderInlineWidth`, `borderBlockWidth`) | `thin`, `medium`, `thick`, `<length>` <sup>1</sup>                                            |
 | `borderStyle`                                                                                                                         | `none`, `hidden`, `solid`, `dashed`, `dotted`, `double`, `groove`, `ridge`, `inset`, `outset` |
 | `borderColor`                                                                                                                         | Supported                                                                                     |
 | `borderRadius` (`borderTopLeftRadius`, `borderTopRightRadius`, `borderBottomRightRadius`, `borderBottomLeftRadius`)                   | Supported                                                                                     |
 | `cornerShape` (`cornerTopLeftShape`, `cornerTopRightShape`, `cornerBottomRightShape`, `cornerBottomLeftShape`)                        | `round`, `squircle`, `bevel`, `scoop`, `notch`, `square`, `superellipse(<number>)`            |
-| `outlineWidth`                                                                                                                        | `thin`, `medium`, `thick`, `<length>`                                                         |
+| `outlineWidth`                                                                                                                        | `thin`, `medium`, `thick`, `<length>` <sup>1</sup>                                            |
 | `outlineStyle`                                                                                                                        | `none`, `hidden`, `solid`, `dashed`, `dotted`, `double`, `groove`, `ridge`, `inset`, `outset` |
 | `outlineColor`                                                                                                                        | Supported                                                                                     |
-| `outlineOffset`                                                                                                                       | Supported                                                                                     |
+| `outlineOffset`                                                                                                                       | Supported <sup>1</sup>                                                                        |
+
+<sup>1</sup> These snap to whole device pixels, like browsers do. Anything thinner than one device
+pixel draws as one. The rest rounds toward zero, so `1.5px` draws as `1px`.
 
 ### Flexbox
 

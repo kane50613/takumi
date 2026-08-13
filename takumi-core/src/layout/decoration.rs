@@ -9,7 +9,7 @@ use crate::{
   context::RenderContext,
   geometry::{ComputedLayout as Layout, Point, Rect, Size},
   layout::border::BorderProperties,
-  style::{Length, Sides},
+  style::Sides,
 };
 
 /// A rounded-rect clip region: its corner geometry (radii after any inset or
@@ -111,9 +111,7 @@ pub struct OutlineGeometry {
 /// Each backend used to guard this differently, and one of them not at all.
 pub(crate) fn outline_paint(context: &RenderContext, size: Size<f32>) -> Option<OutlineGeometry> {
   let style = &context.style;
-  let width = Length::from(style.outline_width)
-    .to_px(&context.sizing, size.width)
-    .max(0.0);
+  let width = style.outline_width.to_used_px(&context.sizing).max(0.0);
 
   if width <= 0.0 || !style.outline_style.is_rendered() {
     return None;
@@ -125,10 +123,10 @@ pub(crate) fn outline_paint(context: &RenderContext, size: Size<f32>) -> Option<
 /// Says nothing about whether the outline paints; see [`outline_paint`].
 pub(crate) fn outline_geometry(context: &RenderContext, size: Size<f32>) -> OutlineGeometry {
   let style = &context.style;
-  let width = Length::from(style.outline_width)
-    .to_px(&context.sizing, size.width)
-    .max(0.0);
-  let offset = style.outline_offset.to_px(&context.sizing, size.width);
+  let width = style.outline_width.to_used_px(&context.sizing).max(0.0);
+  let offset = style
+    .outline_offset
+    .to_border_px(&context.sizing, size.width);
   // CSS: the outline shape must not shrink below `2 * outline-width` in either
   // dimension, so a large negative `outline-offset` can't invert the ring.
   let min_grow = (2.0 * width - size.width)

@@ -87,6 +87,13 @@ impl<'i> FromCss<'i> for LineWidth {
   ];
 }
 
+impl LineWidth {
+  /// The used width in device pixels, snapped as a border width.
+  pub(crate) fn to_used_px(self, sizing: &SizingContext) -> f32 {
+    Length::from(self).to_border_px(sizing, 0.0)
+  }
+}
+
 impl MakeComputed for LineWidth {
   fn make_computed(&mut self, sizing: &SizingContext) {
     if let Self::Length(length) = self {
@@ -199,7 +206,46 @@ impl MakeComputed for Border {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::style::{Color, FromCssStr};
+  use crate::{
+    style::{Color, FromCssStr},
+    viewport::Viewport,
+  };
+
+  fn used_px(css: &str, dpr: f32) -> f32 {
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((100, Some(100))).with_device_pixel_ratio(dpr))
+      .build();
+
+    LineWidth::from_css_str(css).unwrap().to_used_px(&sizing)
+  }
+
+  #[test]
+  fn test_used_line_width_snaps_to_device_pixels() {
+    // A width that already lands on whole device pixels stays put, so the
+    // half-pixel hairline stays a hairline once the scale makes it whole.
+    assert_eq!(used_px("0.5px", 2.0), 1.0);
+    assert_eq!(used_px("0.25px", 4.0), 1.0);
+    // Thinner than one device pixel still rounds up to one.
+    assert_eq!(used_px("0.2px", 2.0), 1.0);
+    // Thicker rounds toward zero in device pixels, not CSS pixels.
+    assert_eq!(used_px("1.75px", 2.0), 3.0);
+    assert_eq!(used_px("2.5px", 0.5), 1.0);
+  }
+
+  #[test]
+  fn test_used_line_width_rounds_down_and_keeps_hairlines() {
+    let used = |css: &str| used_px(css, 1.0);
+
+    assert_eq!(used("0"), 0.0);
+    assert_eq!(used("0.3px"), 1.0);
+    assert_eq!(used("0.75px"), 1.0);
+    assert_eq!(used("1px"), 1.0);
+    assert_eq!(used("1.5px"), 1.0);
+    assert_eq!(used("2.5px"), 2.0);
+    assert_eq!(used("thin"), 1.0);
+    assert_eq!(used("medium"), 3.0);
+    assert_eq!(used("thick"), 5.0);
+  }
 
   #[test]
   fn test_parse_border_style_solid() {
