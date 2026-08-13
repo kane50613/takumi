@@ -84,7 +84,7 @@ export const showcaseProjects: Project[] = [
     height: 630,
   },
   {
-    image: "https://www.motion-gpu.dev/docs/og",
+    image: "https://www.motion-gpu.dev/docs/og/index",
     url: "https://www.motion-gpu.dev/",
     width: 1200,
     height: 630,
