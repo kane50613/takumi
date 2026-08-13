@@ -1293,6 +1293,113 @@ fn text_font_synthesis_weight_emoji() {
   run_fixture_test(container, "text_font_synthesis_weight_emoji");
 }
 
+/// Variation selectors pick the font by presentation, not by stack order:
+/// `U+FE0F` reaches the color font and `U+FE0E` the text font from either
+/// order, while bare codepoints keep following the stack like browsers do.
+#[test]
+fn text_emoji_variation_selector() {
+  fn label(text: &str) -> Node {
+    let Ok(family) = FontFamily::from_css_str("Geist") else {
+      unreachable!()
+    };
+
+    Node::text(text).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::font_size(Px(28.0).into()))
+        .with(StyleDeclaration::font_family(family))
+        .with(StyleDeclaration::color(ColorInput::Value(Color([
+          90, 90, 90, 255,
+        ])))),
+    )
+  }
+
+  fn cell(child: Node) -> Node {
+    Node::container(vec![child]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::width(Px(150.0)))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center)),
+    )
+  }
+
+  let rows: Vec<Node> = [
+    ("Noto Sans TC, Twemoji Mozilla", "text font first"),
+    ("Twemoji Mozilla, Noto Sans TC", "emoji font first"),
+  ]
+  .iter()
+  .map(|(stack, order)| {
+    let Ok(family) = FontFamily::from_css_str(stack) else {
+      unreachable!()
+    };
+
+    let glyphs = [
+      "\u{203C}",
+      "\u{203C}\u{FE0F}",
+      "\u{203C}\u{FE0E}",
+      "\u{6F22}",
+    ]
+    .into_iter()
+    .map(|glyph| {
+      cell(
+        Node::text(glyph).with_style(
+          Style::default()
+            .with(StyleDeclaration::display(Display::Flex))
+            .with(StyleDeclaration::font_size(Px(96.0).into()))
+            .with(StyleDeclaration::font_family(family.clone())),
+        ),
+      )
+    });
+    let annotation = Node::container(vec![label(stack), label(order)]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+        .with_gap(SpacePair::from_single(Px(8.0).into())),
+    );
+
+    Node::container(glyphs.chain([annotation]).collect::<Vec<_>>()).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with_gap(SpacePair::from_single(Px(24.0).into())),
+    )
+  })
+  .collect();
+
+  let header = Node::container(
+    ["bare", "U+FE0F", "U+FE0E", "CJK"]
+      .into_iter()
+      .map(|column| cell(label(column)))
+      .chain([label("font-family")])
+      .collect::<Vec<_>>(),
+  )
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::align_items(AlignItems::Center))
+      .with_gap(SpacePair::from_single(Px(24.0).into())),
+  );
+
+  let mut nodes = vec![header];
+  nodes.extend(rows);
+
+  let container = Node::container(nodes.into_boxed_slice()).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([240, 240, 240, 255]),
+      )))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+      .with(StyleDeclaration::justify_content(JustifyContent::Center))
+      .with_padding(Sides([Px(48.0); 4]))
+      .with_gap(SpacePair::from_single(Px(24.0).into())),
+  );
+
+  run_fixture_test(container, "text_emoji_variation_selector");
+}
+
 #[test]
 fn text_chinese_ellipsis() {
   let text = "日本利用壓電磁磚將腳步轉化為電能。這些瓷磚捕捉來自你腳步的動能。當你行走時，你的重量和動作會對瓷磚產生壓力。磁磚會輕微彎曲，從而產生機械應力。磁磚內部的壓電材料將這種應力轉化為電能。每一步都會產生少量電荷，而數百萬步結合在一起就能產生足夠的電力來驅動 LED燈、數位顯示器和感測器。在像澀谷車站這樣繁忙的地方，每天大約有240萬個腳步為此系統作出貢獻。這些電能可以被儲存或立即使用，從而減少對傳統電賴，並支持永續的城市基礎設施。這種方法將日常運動轉化為實用的再生能源。";
