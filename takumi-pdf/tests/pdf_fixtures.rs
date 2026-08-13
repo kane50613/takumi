@@ -3087,12 +3087,60 @@ fn a_fixed_box_repeats_on_every_page() {
     "expected the fixed link to be clickable on both pages"
   );
 
-  let corners = content_lines(&pdf)
-    .filter(|line| find(line, b"30 20 40 40 re").is_some())
-    .count();
+  // Every fixed box paints under one page-space transform, so the operands are
+  // page-area pixels: the corner box at its own insets, the watermark centered.
+  let corners: Vec<[f32; 4]> = content_lines(&pdf)
+    .filter_map(|line| operands(&line, "re"))
+    .filter(|rect| rect.len() == 4)
+    .map(|rect| [rect[0], rect[1], rect[2], rect[3]])
+    .filter(|rect| rect[2] == 40.0 && rect[3] == 40.0)
+    .collect();
 
   assert_eq!(
-    corners, 2,
+    corners,
+    [[30.0, 20.0, 40.0, 40.0]; 2],
     "expected the offset box at its own insets on both pages"
   );
+
+  let watermarks: Vec<(f32, f32)> = content_lines(&pdf)
+    .filter(|line| find(line, b"/f0 48 Tf").is_some())
+    .filter_map(|line| operands(&line, "Tm"))
+    .filter(|matrix| matrix.len() == 6)
+    .map(|matrix| (matrix[4], matrix[5]))
+    .collect();
+
+  assert_eq!(watermarks.len(), 2, "expected a watermark on both pages");
+  assert_eq!(
+    watermarks[0], watermarks[1],
+    "expected the watermark at the same place on both pages"
+  );
+
+  let (_, baseline) = watermarks[0];
+  let footer = content_lines(&pdf)
+    .filter_map(|line| operands(&line, "Tm"))
+    .filter(|matrix| matrix.len() == 6)
+    .map(|matrix| matrix[5])
+    .fold(0.0_f32, f32::max);
+
+  assert!(
+    baseline > 100.0 && baseline < footer - 100.0,
+    "expected the watermark centered in the page area, not pinned to an edge: {baseline} of {footer}"
+  );
+}
+
+/// The numbers preceding a content-stream operator, as the operator's operands.
+fn operands(line: &[u8], operator: &str) -> Option<Vec<f32>> {
+  let text = std::str::from_utf8(line).ok()?;
+  let (before, _) = text.rsplit_once(&format!(" {operator}"))?;
+
+  Some(
+    before
+      .split_whitespace()
+      .rev()
+      .map_while(|token| token.parse::<f32>().ok())
+      .collect::<Vec<_>>()
+      .into_iter()
+      .rev()
+      .collect(),
+  )
 }
