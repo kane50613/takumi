@@ -227,3 +227,23 @@ test("rejects an invalid attachment modificationDate", async () => {
     }),
   ).rejects.toThrow("modificationDate");
 });
+
+test("embeds JPEG and WebP image bytes", async () => {
+  const image = (name: string) =>
+    new Uint8Array(readFileSync(new URL(`../../takumi-pdf/tests/images/${name}`, import.meta.url)));
+  const jpeg = image("checker.jpg");
+  const pdf = await renderer.render(
+    `<div style="display:flex"><img src="jpeg" style="width:32px;height:32px" /><img src="webp" style="width:32px;height:32px" /></div>`,
+    {
+      viewport: { width: 120, height: 48 },
+      images: [
+        { src: "jpeg", data: jpeg },
+        { src: "webp", data: image("checker.webp") },
+      ],
+    },
+  );
+  const bytes = decoder.decode(pdf);
+
+  expect(bytes).toContain("/DCTDecode");
+  expect(bytes).toContain(decoder.decode(jpeg));
+});

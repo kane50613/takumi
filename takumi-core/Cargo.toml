@@ -14,6 +14,7 @@ ignored = ["serde_bytes"]
 
 [dependencies]
 png.workspace = true
+imagesize.workspace = true
 data-url.workspace = true
 color.workspace = true
 serde_bytes.workspace = true

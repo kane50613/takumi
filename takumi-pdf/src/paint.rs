@@ -8,8 +8,6 @@ use takumi_core::{
   style::{BlendMode, ComputedStyle, Overflow, ResolvedGradientStop},
 };
 
-#[cfg(feature = "images")]
-use crate::krilla::image::Image as KrillaImage;
 use crate::{
   filter::ColorFilter,
   krilla::{
@@ -21,6 +19,8 @@ use crate::{
     surface::Surface,
   },
 };
+#[cfg(feature = "images")]
+use crate::{krilla::image::Image as KrillaImage, raster::embedded_image};
 
 /// A degenerate path, for a clip that must hide everything: an empty region is
 /// what CSS asks for when a shape resolves to no area.
@@ -88,8 +88,37 @@ pub(crate) fn overflow_clip_rect(
   KrillaRect::from_ltrb(left, top, right, bottom).and_then(rect_path)
 }
 
-/// Rasterizes an image source into a krilla image. Bitmap sources rasterize at
-/// their intrinsic size; SVG sources at twice the target size for print density.
+/// Undoes the premultiplication takumi-core renders with: PDF image streams
+/// carry straight alpha.
+#[cfg(feature = "images")]
+fn unpremultiply(data: &mut [u8]) {
+  for pixel in data.chunks_exact_mut(4) {
+    let alpha = pixel[3];
+    if alpha != 0 && alpha != 255 {
+      let alpha16 = u16::from(alpha);
+      pixel[0] = ((u16::from(pixel[0]) * 255 + alpha16 / 2) / alpha16).min(255) as u8;
+      pixel[1] = ((u16::from(pixel[1]) * 255 + alpha16 / 2) / alpha16).min(255) as u8;
+      pixel[2] = ((u16::from(pixel[2]) * 255 + alpha16 / 2) / alpha16).min(255) as u8;
+    }
+  }
+}
+
+#[cfg(feature = "images")]
+fn encoded_bytes(source: &ImageSource) -> Option<&[u8]> {
+  match source {
+    ImageSource::Encoded(encoded) => Some(encoded.bytes()),
+    _ => None,
+  }
+}
+
+/// Rasterizes an image source into a krilla image. Encoded bytes pass through
+/// undecoded unless a filter has to run over the pixels; bitmap sources
+/// rasterize at their intrinsic size; SVG sources at twice the target size for
+/// print density.
+///
+/// ponytail: a filter over JPEG or WebP bytes needs pixels, and this build has
+/// no decoder for either: the image draws nothing. Forwarding
+/// `takumi-core/image-decoding` covers it, at 72 KB of wasm.
 #[cfg(feature = "images")]
 pub(crate) fn rasterized_image(
   source: &ImageSource,
@@ -97,6 +126,13 @@ pub(crate) fn rasterized_image(
   target: (f32, f32),
   filter: Option<&ColorFilter>,
 ) -> Option<KrillaImage> {
+  if filter.is_none()
+    && let Some(bytes) = encoded_bytes(source)
+    && let Some(image) = embedded_image(bytes)
+  {
+    return Some(image);
+  }
+
   let (width, height) = match source {
     ImageSource::Bitmap(bitmap) => (bitmap.width(), bitmap.height()),
     ImageSource::Gif(gif) => gif.dimensions(),
@@ -120,15 +156,7 @@ pub(crate) fn rasterized_image(
   };
   let mut data = buffer.data().to_vec();
 
-  for pixel in data.chunks_exact_mut(4) {
-    let alpha = pixel[3];
-    if alpha != 0 && alpha != 255 {
-      let alpha16 = u16::from(alpha);
-      pixel[0] = ((u16::from(pixel[0]) * 255 + alpha16 / 2) / alpha16).min(255) as u8;
-      pixel[1] = ((u16::from(pixel[1]) * 255 + alpha16 / 2) / alpha16).min(255) as u8;
-      pixel[2] = ((u16::from(pixel[2]) * 255 + alpha16 / 2) / alpha16).min(255) as u8;
-    }
-  }
+  unpremultiply(&mut data);
   if let Some(filter) = filter {
     for pixel in data.chunks_exact_mut(4) {
       pixel.copy_from_slice(&filter.apply([pixel[0], pixel[1], pixel[2], pixel[3]]));

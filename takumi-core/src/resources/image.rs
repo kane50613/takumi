@@ -500,8 +500,16 @@ impl ImageSource {
       return Ok(ImageSource::Gif(GifSource::from_bytes(bytes)?));
     }
 
-    let buffer = decode_image(bytes).map_err(ImageError::decode)?;
-    Ok(ImageSource::Bitmap(Arc::new(buffer)))
+    match decode_image(bytes) {
+      Ok(buffer) => Ok(ImageSource::Bitmap(Arc::new(buffer))),
+      #[cfg(all(feature = "jpeg", feature = "webp"))]
+      Err(error) => Err(ImageError::decode(error)),
+      #[cfg(not(all(feature = "jpeg", feature = "webp")))]
+      Err(error) => match bitmap_dimensions(bytes) {
+        Some(Ok(_)) => Self::from_bytes_lazy(bytes, 0, Weak::new()),
+        _ => Err(ImageError::decode(error)),
+      },
+    }
   }
 
   /// [`from_bytes`](Self::from_bytes), but bitmaps stay encoded and decode at

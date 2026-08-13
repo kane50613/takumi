@@ -19,7 +19,7 @@ use takumi_core::{
   layout::node::{ImageData, ImageSourceInput, Node, RgbaImage},
   resources::{
     font::{FontOverride, FontResource},
-    image::ImageSource,
+    image::{ImageCacheMode, ImageSource, ResourceCache},
     image_buffer::ImageBuffer,
   },
   style::{
@@ -2942,4 +2942,52 @@ fn a_ranked_subset_group_keeps_a_latin_run_whole() {
     .count();
 
   assert_eq!(shows, 1, "the run was split across {shows} text objects");
+}
+
+/// Encoded bitmaps reach the PDF as the bytes they came in as: a JPEG embeds
+/// as a `DCTDecode` stream instead of being decoded and re-encoded from RGBA,
+/// and a WebP decodes inside krilla rather than in takumi-core.
+#[test]
+fn encoded_bitmaps_embed_their_own_bytes() {
+  const JPEG: &[u8] = include_bytes!("images/checker.jpg");
+  const WEBP: &[u8] = include_bytes!("images/checker.webp");
+
+  let cache = ResourceCache::new(1 << 20);
+  let images: HashMap<Arc<str>, ImageSource> = [("jpeg", JPEG), ("webp", WEBP)]
+    .into_iter()
+    .map(|(name, bytes)| {
+      let source = cache
+        .get_or_decode(bytes, ImageCacheMode::Auto)
+        .expect("decode test image");
+
+      (name.into(), source)
+    })
+    .collect();
+  let source = r##"<div style="display: flex; column-gap: 8px; padding: 8px;">
+      <img src="jpeg" style="width: 32px; height: 32px;" />
+      <img src="webp" style="width: 32px; height: 32px;" />
+    </div>"##;
+  let pdf = run_pdf_fixture("encoded-bitmaps", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse the fixture"))
+      .viewport(Viewport::new((120, 48)))
+      .images(images.clone())
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  assert_eq!(
+    haystack.matches("/Subtype/Image").count(),
+    2,
+    "expected an image XObject per source"
+  );
+  assert!(
+    haystack.contains("/DCTDecode"),
+    "expected the JPEG to embed as a JPEG stream"
+  );
+  assert!(
+    find(&pdf, JPEG).is_some(),
+    "expected the original JPEG bytes in the PDF"
+  );
 }

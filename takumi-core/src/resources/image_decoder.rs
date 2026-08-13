@@ -147,6 +147,21 @@ fn format_compiled_out_error() -> ImageError {
   ))
 }
 
+/// Dimensions read from the format header alone, for a format whose decoder is
+/// compiled out: layout needs the intrinsic size, and a vector backend embeds
+/// the original bytes without ever decoding them.
+#[cfg(not(all(feature = "jpeg", feature = "webp")))]
+fn header_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
+  let size = imagesize::blob_size(bytes).map_err(|error| {
+    ImageError::Decoding(DecodingError::new(
+      ImageFormatHint::Unknown,
+      IoError::new(ErrorKind::InvalidData, error.to_string()),
+    ))
+  })?;
+
+  Ok((size.width as u32, size.height as u32))
+}
+
 #[cfg(feature = "jpeg")]
 fn decode_jpeg(bytes: &[u8]) -> ImageResult<ImageBuffer> {
   decode_with_image_crate(JpegDecoder::new(Cursor::new(bytes))?, ImageFormat::Jpeg)
@@ -163,8 +178,8 @@ fn jpeg_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
 }
 
 #[cfg(not(feature = "jpeg"))]
-fn jpeg_dimensions(_bytes: &[u8]) -> ImageResult<(u32, u32)> {
-  Err(format_compiled_out_error())
+fn jpeg_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
+  header_dimensions(bytes)
 }
 
 /// Bitmap dimensions from the format header; decodes no pixels. `None` for
@@ -682,8 +697,8 @@ fn webp_decode_error(error: impl Into<Box<dyn std::error::Error + Send + Sync>>)
 }
 
 #[cfg(not(feature = "webp"))]
-fn webp_dimensions(_bytes: &[u8]) -> ImageResult<(u32, u32)> {
-  Err(format_compiled_out_error())
+fn webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
+  header_dimensions(bytes)
 }
 
 #[cfg(not(feature = "webp"))]

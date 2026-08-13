@@ -51,6 +51,8 @@ mod interactive;
 mod options;
 mod pagination;
 mod paint;
+#[cfg(feature = "images")]
+mod raster;
 mod shadow;
 #[cfg(all(feature = "svg", feature = "images"))]
 mod svg;
