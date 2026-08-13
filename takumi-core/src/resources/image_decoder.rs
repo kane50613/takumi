@@ -56,7 +56,11 @@ fn check_pixel_budget(width: u32, height: u32) -> ImageResult<()> {
   Ok(())
 }
 
-#[cfg(any(feature = "gif", feature = "webp"))]
+#[cfg(any(
+  feature = "gif",
+  feature = "webp",
+  not(all(feature = "jpeg", feature = "webp"))
+))]
 fn pixel_budget_error(width: u32, height: u32) -> ImageError {
   ImageError::Decoding(DecodingError::new(
     ImageFormatHint::Unknown,
@@ -172,8 +176,13 @@ fn header_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
       IoError::new(ErrorKind::InvalidData, error.to_string()),
     ))
   })?;
+  let (width, height) = (size.width as u32, size.height as u32);
 
-  Ok((size.width as u32, size.height as u32))
+  if width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION {
+    return Err(pixel_budget_error(width, height));
+  }
+
+  Ok((width, height))
 }
 
 #[cfg(feature = "jpeg")]

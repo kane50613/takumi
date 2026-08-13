@@ -6,8 +6,7 @@ use takumi_core::{layout::node::Node, style::Affine, viewport::Viewport};
 
 use crate::{
   counters::{has_target_counters, substitute_target_counters},
-  emitter::FontMap,
-  emitter::RenderIssues,
+  emitter::{FontMap, RenderIssues},
   inline::{build_inline_map, collect_text_boxes},
   interactive::collect_interactive,
   options::PdfError,

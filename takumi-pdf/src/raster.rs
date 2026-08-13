@@ -4,15 +4,14 @@
 use crate::krilla::image::Image as KrillaImage;
 
 pub(crate) fn embedded_image(bytes: &[u8]) -> Option<KrillaImage> {
-  let data = bytes.to_vec().into();
-  let image = match bytes {
-    [0x89, b'P', b'N', b'G', ..] => KrillaImage::from_png(data, false),
-    [0xFF, 0xD8, 0xFF, ..] => KrillaImage::from_jpeg(data, false),
-    _ if is_webp(bytes) => KrillaImage::from_webp(data, false),
+  let embed = match bytes {
+    [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, ..] => KrillaImage::from_png,
+    [0xFF, 0xD8, 0xFF, ..] => KrillaImage::from_jpeg,
+    _ if is_webp(bytes) => KrillaImage::from_webp,
     _ => return None,
   };
 
-  image.ok()
+  embed(bytes.to_vec().into(), false).ok()
 }
 
 fn is_webp(bytes: &[u8]) -> bool {

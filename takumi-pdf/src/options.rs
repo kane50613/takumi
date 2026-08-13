@@ -47,7 +47,7 @@ pub enum PdfError {
   TooManyPages(usize),
   /// A `filter` function a PDF cannot express, named as a stylesheet writes
   /// it. It would silently drop the effect, so the render stops instead.
-  UnsupportedFilter(&'static str),
+  UnsupportedFilter(String),
   /// An image arrived as bytes this build cannot turn into pixels. It would
   /// leave a hole where the page expects a picture, so the render stops.
   UndrawableImage(String),

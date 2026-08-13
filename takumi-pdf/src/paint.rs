@@ -1,7 +1,7 @@
 //! Path, gradient, decoration and image helpers translating takumi paint into krilla.
 
 #[cfg(feature = "images")]
-use takumi_core::resources::image::{ImageSource, RenderedImage};
+use takumi_core::resources::image::{ImageError, ImageSource, RenderedImage};
 use takumi_core::{
   context::RenderContext,
   geometry::{ComputedLayout as Layout, PathCommand},
@@ -89,7 +89,8 @@ pub(crate) fn overflow_clip_rect(
 }
 
 /// Undoes the premultiplication takumi-core renders with: PDF image streams
-/// carry straight alpha.
+/// carry straight alpha. Only the paths that go through core reach this;
+/// embedded bytes never become premultiplied samples in the first place.
 #[cfg(feature = "images")]
 fn unpremultiply(data: &mut [u8]) {
   for pixel in data.chunks_exact_mut(4) {
@@ -108,6 +109,17 @@ fn encoded_bytes(source: &ImageSource) -> Option<&[u8]> {
   match source {
     ImageSource::Encoded(encoded) => Some(encoded.bytes()),
     _ => None,
+  }
+}
+
+/// A filter is the reason an image that would have embedded as bytes needs
+/// pixels at all, so the message says so before the decoder's own words.
+#[cfg(feature = "images")]
+fn undrawable_reason(filtered: bool, error: &ImageError) -> String {
+  if filtered {
+    format!("a filter needs the image's pixels: {error}")
+  } else {
+    error.to_string()
   }
 }
 
@@ -149,12 +161,7 @@ pub(crate) fn rasterized_image(
   }
   let rendered = source
     .render_for_layout(width, height, context.style.image_rendering, 0)
-    .map_err(|error| match encoded_bytes(source) {
-      Some(_) if filter.is_some() => {
-        "a filter needs the image's pixels, and this build decodes only PNG".to_string()
-      }
-      _ => error.to_string(),
-    })?;
+    .map_err(|error| undrawable_reason(filter.is_some(), &error))?;
   let buffer = match &rendered {
     RenderedImage::Rasterized(buffer) => buffer.as_ref(),
     RenderedImage::Sampled { source, .. } => source.as_ref(),

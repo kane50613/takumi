@@ -3008,7 +3008,7 @@ fn an_unsupported_filter_stops_the_render() {
   .expect_err("blur() should stop the render");
 
   assert!(
-    matches!(error, PdfError::UnsupportedFilter("blur()")),
+    matches!(&error, PdfError::UnsupportedFilter(filter) if filter == "blur(4px)"),
     "unexpected error: {error:?}"
   );
 }
@@ -3029,7 +3029,7 @@ fn an_undecodable_image_stops_the_render() {
   let cache = ResourceCache::new(1 << 20);
   let source = cache
     .get_or_decode(&bytes, ImageCacheMode::Auto)
-    .expect("a jpeg header still parses");
+    .expect("the png header still parses");
   let doc = r#"<img src="broken" style="filter: grayscale(1); width: 32px; height: 32px;" />"#;
   let error = render(
     PdfOptions::builder()

@@ -507,9 +507,10 @@ impl ImageSource {
       #[cfg(all(feature = "jpeg", feature = "webp"))]
       Err(error) => Err(ImageError::decode(error)),
       #[cfg(not(all(feature = "jpeg", feature = "webp")))]
-      Err(_) if decoder_compiled_out(bytes) => Self::from_bytes_lazy(bytes, 0, Weak::new()),
-      #[cfg(not(all(feature = "jpeg", feature = "webp")))]
-      Err(error) => Err(ImageError::decode(error)),
+      Err(error) => match bitmap_dimensions(bytes).filter(|_| decoder_compiled_out(bytes)) {
+        Some(Ok(dimensions)) => Ok(Self::encoded(bytes, dimensions, 0, Weak::new())),
+        _ => Err(ImageError::decode(error)),
+      },
     }
   }
 
@@ -538,16 +539,27 @@ impl ImageSource {
     }
 
     match bitmap_dimensions(bytes) {
-      Some(Ok((width, height))) => Ok(ImageSource::Encoded(Arc::new(EncodedBitmap {
-        bytes: bytes.into(),
-        width,
-        height,
-        hash,
-        cache,
-      }))),
+      Some(Ok((width, height))) => Ok(Self::encoded(bytes, (width, height), hash, cache)),
       Some(Err(error)) => Err(ImageError::decode(error)),
       None => Self::from_bytes(bytes),
     }
+  }
+
+  /// A bitmap kept in the bytes it arrived in, decoded at the size it is drawn
+  /// or embedded undecoded by a vector backend.
+  fn encoded(
+    bytes: &[u8],
+    (width, height): (u32, u32),
+    hash: u64,
+    cache: Weak<SharedResourceCache>,
+  ) -> Self {
+    ImageSource::Encoded(Arc::new(EncodedBitmap {
+      bytes: bytes.into(),
+      width,
+      height,
+      hash,
+      cache,
+    }))
   }
 
   /// Prepare image data for layout rendering.

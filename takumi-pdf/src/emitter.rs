@@ -36,7 +36,7 @@ use takumi_core::{
 };
 
 #[cfg(feature = "images")]
-use crate::krilla::geom::Size as KrillaSize;
+use crate::krilla::{geom::Size as KrillaSize, image::Image as KrillaImage};
 #[cfg(feature = "images")]
 use crate::paint::rasterized_image;
 #[cfg(all(feature = "svg", feature = "images"))]
@@ -147,12 +147,11 @@ fn image_label(src: &ImageSourceInput) -> &str {
 /// Failures a page collects while emitting, raised once the surface is closed.
 #[derive(Default)]
 pub(crate) struct RenderIssues {
-  /// Characters no registered font covered.
+  /// Characters no registered font covered, gathered so one error names them
+  /// all.
   pub(crate) uncovered: String,
-  /// The first image that arrived as bytes this build cannot turn into pixels.
-  pub(crate) undrawable: Option<String>,
-  /// The first `filter` function the PDF backend cannot express.
-  pub(crate) unsupported_filter: Option<&'static str>,
+  /// The first failure that is worth a page on its own.
+  pub(crate) failure: Option<PdfError>,
 }
 
 impl Emitter<'_> {
@@ -164,11 +163,7 @@ impl Emitter<'_> {
     filters: &[Filter],
   ) -> Option<Rc<ColorFilter>> {
     if let Some(unsupported) = unsupported_filter(filters) {
-      self
-        .issues
-        .borrow_mut()
-        .unsupported_filter
-        .get_or_insert(unsupported);
+      self.fail(PdfError::UnsupportedFilter(unsupported));
     }
 
     ColorFilter::compose(outer, filters).map(Rc::new)
@@ -180,18 +175,24 @@ impl Emitter<'_> {
   fn drawable(
     &self,
     label: &str,
-    image: Result<Option<crate::krilla::image::Image>, String>,
-  ) -> Option<crate::krilla::image::Image> {
+    image: Result<Option<KrillaImage>, String>,
+  ) -> Option<KrillaImage> {
     match image {
       Ok(image) => image,
       Err(reason) => {
-        let mut issues = self.issues.borrow_mut();
-
-        issues
-          .undrawable
-          .get_or_insert(format!("{label}: {reason}"));
+        self.fail(PdfError::UndrawableImage(format!("{label}: {reason}")));
         None
       }
+    }
+  }
+
+  /// Keeps the first failure. A later one is almost always the same cause
+  /// repeated on another page.
+  fn fail(&self, error: PdfError) {
+    let mut issues = self.issues.borrow_mut();
+
+    if issues.failure.is_none() {
+      issues.failure = Some(error);
     }
   }
 

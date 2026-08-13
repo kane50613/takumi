@@ -10,8 +10,7 @@ use std::cell::RefCell;
 
 use crate::{
   counters::{counter_text, substitute_page_counters, substitute_target_counters},
-  emitter::FontMap,
-  emitter::RenderIssues,
+  emitter::{FontMap, RenderIssues},
   krilla::{
     geom::{Rect as KrillaRect, Transform},
     paint::FillRule,

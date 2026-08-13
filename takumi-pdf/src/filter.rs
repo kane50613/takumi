@@ -9,7 +9,7 @@
 
 use takumi_core::{
   filter::ColorMatrix,
-  style::{Color, Filter},
+  style::{Color, Filter, ToCss},
 };
 
 /// The filter list as written, applied in order. CSS clamps each function's
@@ -20,16 +20,14 @@ pub(crate) struct ColorFilter {
   functions: Vec<ColorMatrix>,
 }
 
-/// The first filter function in the list that a PDF cannot express, named as a
-/// stylesheet writes it.
-pub(crate) fn unsupported_filter(filters: &[Filter]) -> Option<&'static str> {
-  filters.iter().find_map(|filter| match filter {
-    Filter::Blur(_) => Some("blur()"),
-    Filter::DropShadow(_) => Some("drop-shadow()"),
-    #[cfg(feature = "svg")]
-    Filter::Reference(_) => Some("url()"),
-    _ => None,
-  })
+/// The first filter function that does not fold into a color matrix, written
+/// back as CSS. Those are the ones a vector backend has to rasterize, which is
+/// what this backend does not do.
+pub(crate) fn unsupported_filter(filters: &[Filter]) -> Option<String> {
+  filters
+    .iter()
+    .find(|filter| ColorMatrix::from_filter(filter).is_none())
+    .map(ToCss::to_css_string)
 }
 
 impl ColorFilter {

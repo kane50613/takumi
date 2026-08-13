@@ -500,15 +500,12 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
     }
   }
 
-  let issues = issues.borrow();
+  let issues = issues.into_inner();
 
-  if let Some(filter) = issues.unsupported_filter {
-    return Err(PdfError::UnsupportedFilter(filter));
-  }
-  if let Some(undrawable) = &issues.undrawable {
-    return Err(PdfError::UndrawableImage(undrawable.clone()));
-  }
-  if let Some(error) = uncovered_error(&issues.uncovered) {
+  if let Some(error) = issues
+    .failure
+    .or_else(|| uncovered_error(&issues.uncovered))
+  {
     return Err(error);
   }
 
