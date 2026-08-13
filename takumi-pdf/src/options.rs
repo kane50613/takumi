@@ -9,6 +9,7 @@ use takumi_core::{
   layout::node::Node,
   resources::{font::FontError, image::ImageSource},
   style::{FontFamily, Lang, StyleSheet},
+  units::{ONE_IN_PX, ONE_MM_IN_PX, ONE_PT_IN_PX},
   viewport::Viewport,
 };
 use typed_builder::TypedBuilder;
@@ -421,36 +422,25 @@ pub struct PageOptions {
 /// CSS px (96 dpi) to PDF pt (72 dpi). Layout runs in px; page geometry,
 /// annotations, and destinations are written in pt so pages print at their
 /// physical size.
-pub(crate) const PT_PER_PX: f32 = 72.0 / 96.0;
+pub(crate) const PT_PER_PX: f32 = 1.0 / ONE_PT_IN_PX;
 
-/// 20px, which is Chromium's 15pt inset at 96 dpi: its print template page
-/// insets bands 15pt from the paper edge
+/// Chromium's print template page insets bands 15pt from the paper edge
 /// (`#header { padding-top: 15pt }`, `#footer { padding-bottom: 15pt }` in
 /// components/printing/resources/print_header_footer_template_page.html).
-pub(crate) const BAND_EDGE_PADDING: f32 = 20.0;
-
-/// Millimeters to CSS px (96 dpi).
-const fn mm(value: f32) -> f32 {
-  value / 25.4 * 96.0
-}
-
-/// Inches to CSS px (96 dpi).
-const fn inches(value: f32) -> f32 {
-  value * 96.0
-}
+pub(crate) const BAND_EDGE_PADDING: f32 = 15.0 * ONE_PT_IN_PX;
 
 /// Presets are portrait with a half-inch margin; chain
 /// [`landscape`](Self::landscape) and [`with_margin`](Self::with_margin) to
 /// adjust, or fill the fields directly for any other size.
 // ponytail: A4 + LETTER only; add other @page keywords when someone asks.
 impl PageOptions {
-  const DEFAULT_MARGIN: f32 = 48.0;
+  const DEFAULT_MARGIN: f32 = 0.5 * ONE_IN_PX;
 
   /// ISO A4: 210 × 297 mm.
-  pub const A4: Self = Self::preset(mm(210.0), mm(297.0));
+  pub const A4: Self = Self::preset(210.0 * ONE_MM_IN_PX, 297.0 * ONE_MM_IN_PX);
 
   /// US Letter: 8.5 × 11 in.
-  pub const LETTER: Self = Self::preset(inches(8.5), inches(11.0));
+  pub const LETTER: Self = Self::preset(8.5 * ONE_IN_PX, 11.0 * ONE_IN_PX);
 
   const fn preset(width: f32, height: f32) -> Self {
     Self {
