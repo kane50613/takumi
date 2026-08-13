@@ -67,15 +67,17 @@ const pdf = await render(
 
 ## Watermarks
 
-A `position: fixed` box repeats on every page, laid out against the page area rather than the flowing content:
+`position: fixed` paints a box on every page.
+The box lays out against the page area.
+It stays outside the content column.
 
 ```tsx twoslash
 import { render } from "takumi-pdf";
 
 const pdf = await render(
   <main>
+    {/* Centers the watermark inside each page area. */}
     <div
-      // [!code highlight]
       style={{
         position: "fixed",
         inset: 0,
@@ -91,4 +93,5 @@ const pdf = await render(
 );
 ```
 
-`inset: 0` covers the whole page area, so the box centers per page. A `fixed` box inside a transformed or filtered ancestor belongs to that ancestor instead, and paginates with it.
+A transformed or filtered ancestor captures a fixed descendant.
+That descendant stays in flow and paginates with its ancestor.

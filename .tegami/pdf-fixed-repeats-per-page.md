@@ -4,6 +4,6 @@ packages:
     type: minor
 ---
 
-### Repeat a fixed box on every page
+### Repeat fixed boxes on every page
 
-`position: fixed` laid out against the whole content column, so a watermark appeared once and was cut off with the first page. A fixed box the page holds now lays out against the page area and paints on every page.
+Fixed boxes outside transformed or filtered ancestors now lay out against the page area and paint on every page. Watermarks no longer stop at the first page.
