@@ -45,11 +45,23 @@
     ".": {
       "bun": {
         "types": "./bundlers/node.d.ts",
-        "default": "./bundlers/node.mjs"
+        "default": "./bundlers/bun.mjs"
       },
       "workerd": {
         "types": "./bundlers/node.d.ts",
         "default": "./bundlers/workerd.mjs"
+      },
+      "edge-light": {
+        "types": "./bundlers/node.d.ts",
+        "default": "./bundlers/next.mjs"
+      },
+      "unwasm": {
+        "types": "./bundlers/node.d.ts",
+        "default": "./bundlers/next.mjs"
+      },
+      "module": {
+        "types": "./bundlers/node.d.ts",
+        "default": "./bundlers/vite.mjs"
       },
       "node": {
         "require": {
@@ -62,8 +74,8 @@
         }
       },
       "default": {
-        "types": "./dist/export.d.mts",
-        "default": "./dist/export.mjs"
+        "types": "./bundlers/node.d.ts",
+        "default": "./bundlers/vite.mjs"
       }
     },
     "./no-init": {
