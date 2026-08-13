@@ -152,7 +152,7 @@ fn blit_sampled_paint_source_translation(
 
 /// Walks the destination region row by row, pulling each pixel from `sample`
 /// in source-local coordinates.
-fn blit_rows_from_sampler(
+pub(super) fn blit_rows_from_sampler(
   pixels: &mut [[u8; 4]],
   canvas_width: u32,
   bounds: OverlayBounds,
