@@ -45,6 +45,12 @@ pub enum PdfError {
   InvalidXmpSchema(String),
   /// The content would cut into more pages than one render may produce.
   TooManyPages(usize),
+  /// A `filter` function a PDF cannot express, named as a stylesheet writes
+  /// it. It would silently drop the effect, so the render stops instead.
+  UnsupportedFilter(String),
+  /// An image arrived as bytes this build cannot turn into pixels. It would
+  /// leave a hole where the page expects a picture, so the render stops.
+  UndrawableImage(String),
   /// No registered font covers these characters. They would draw nothing and
   /// leave no trace in the text layer, so the render stops instead.
   MissingGlyphs(String),

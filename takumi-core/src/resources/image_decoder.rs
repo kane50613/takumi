@@ -56,7 +56,11 @@ fn check_pixel_budget(width: u32, height: u32) -> ImageResult<()> {
   Ok(())
 }
 
-#[cfg(any(feature = "gif", feature = "webp"))]
+#[cfg(any(
+  feature = "gif",
+  feature = "webp",
+  not(all(feature = "jpeg", feature = "webp"))
+))]
 fn pixel_budget_error(width: u32, height: u32) -> ImageError {
   ImageError::Decoding(DecodingError::new(
     ImageFormatHint::Unknown,
@@ -147,6 +151,37 @@ fn format_compiled_out_error() -> ImageError {
   ))
 }
 
+/// Whether these bytes are a format this build has no decoder for.
+#[cfg(not(all(feature = "jpeg", feature = "webp")))]
+pub(crate) fn decoder_compiled_out(bytes: &[u8]) -> bool {
+  match detect_image_format(bytes) {
+    #[cfg(not(feature = "jpeg"))]
+    Some(DetectedImageFormat::Jpeg) => true,
+    #[cfg(not(feature = "webp"))]
+    Some(DetectedImageFormat::WebP) => true,
+    _ => false,
+  }
+}
+
+/// Dimensions from the format header, for a format whose decoder is compiled
+/// out.
+#[cfg(not(all(feature = "jpeg", feature = "webp")))]
+fn header_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
+  let size = imagesize::blob_size(bytes).map_err(|error| {
+    ImageError::Decoding(DecodingError::new(
+      ImageFormatHint::Unknown,
+      IoError::new(ErrorKind::InvalidData, error.to_string()),
+    ))
+  })?;
+  let (width, height) = (size.width as u32, size.height as u32);
+
+  if width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION {
+    return Err(pixel_budget_error(width, height));
+  }
+
+  Ok((width, height))
+}
+
 #[cfg(feature = "jpeg")]
 fn decode_jpeg(bytes: &[u8]) -> ImageResult<ImageBuffer> {
   decode_with_image_crate(JpegDecoder::new(Cursor::new(bytes))?, ImageFormat::Jpeg)
@@ -163,8 +198,8 @@ fn jpeg_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
 }
 
 #[cfg(not(feature = "jpeg"))]
-fn jpeg_dimensions(_bytes: &[u8]) -> ImageResult<(u32, u32)> {
-  Err(format_compiled_out_error())
+fn jpeg_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
+  header_dimensions(bytes)
 }
 
 /// Bitmap dimensions from the format header; decodes no pixels. `None` for
@@ -682,8 +717,8 @@ fn webp_decode_error(error: impl Into<Box<dyn std::error::Error + Send + Sync>>)
 }
 
 #[cfg(not(feature = "webp"))]
-fn webp_dimensions(_bytes: &[u8]) -> ImageResult<(u32, u32)> {
-  Err(format_compiled_out_error())
+fn webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
+  header_dimensions(bytes)
 }
 
 #[cfg(not(feature = "webp"))]

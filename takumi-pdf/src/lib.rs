@@ -34,7 +34,8 @@
 //! - `clip-path`, `mask-image`, and the color `filter` primitives
 //! - opacity, blend modes, overflow clipping, and affine transforms
 //!
-//! Not yet: `filter: blur()` / `drop-shadow()`, `backdrop-filter`.
+//! `filter: blur()` and `drop-shadow()` have no PDF equivalent. [`render`]
+//! stops and names the function.
 
 use std::{cell::RefCell, rc::Rc};
 
@@ -51,6 +52,8 @@ mod interactive;
 mod options;
 mod pagination;
 mod paint;
+#[cfg(feature = "images")]
+mod raster;
 mod shadow;
 #[cfg(all(feature = "svg", feature = "images"))]
 mod svg;
@@ -89,7 +92,7 @@ pub use crate::options::{
 };
 use crate::{
   bands::{emit_band, measure_band, prepare_band},
-  emitter::FontMap,
+  emitter::{FontMap, RenderIssues},
   glyph::uncovered_error,
   inline::{build_inline_map, collect_text_boxes},
   interactive::{add_link_annotations, build_outline, collect_interactive, destination_targets},
@@ -158,7 +161,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
     lang: options.lang,
   };
   let mut fonts = FontMap::new();
-  let uncovered = RefCell::new(String::new());
+  let issues = RefCell::new(RenderIssues::default());
   let document_lang = inputs.lang.as_ref().map(Lang::as_str);
   let mut document = {
     let mut builder = ConfigurationBuilder::new();
@@ -266,7 +269,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         &mut node,
         &inputs,
         &mut fonts,
-        &uncovered,
+        &issues,
         document_lang,
         content_viewport,
         window_height,
@@ -280,13 +283,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       let mut paragraphs = Vec::new();
 
       content
-        .emitter(
-          &mut fonts,
-          Some(&inline_map),
-          None,
-          &uncovered,
-          document_lang,
-        )
+        .emitter(&mut fonts, Some(&inline_map), None, &issues, document_lang)
         .collect_atoms(
           0,
           Affine::IDENTITY,
@@ -343,7 +340,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
             &mut fonts,
             (0.0, BAND_EDGE_PADDING, page.width, header_height),
             tag_collector.is_some(),
-            &uncovered,
+            &issues,
             document_lang,
             &mut surface,
           )?;
@@ -369,7 +366,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
             &mut fonts,
             Some(&inline_map),
             tag_collector.as_ref(),
-            &uncovered,
+            &issues,
             document_lang,
           );
 
@@ -399,7 +396,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
               footer_height,
             ),
             tag_collector.is_some(),
-            &uncovered,
+            &issues,
             document_lang,
             &mut surface,
           )?;
@@ -453,7 +450,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         &mut fonts,
         Some(&inline_map),
         tag_collector.as_ref(),
-        &uncovered,
+        &issues,
         document_lang,
       );
 
@@ -502,7 +499,12 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
     }
   }
 
-  if let Some(error) = uncovered_error(&uncovered.borrow()) {
+  let issues = issues.into_inner();
+
+  if let Some(error) = issues
+    .failure
+    .or_else(|| uncovered_error(&issues.uncovered))
+  {
     return Err(error);
   }
 

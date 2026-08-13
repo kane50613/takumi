@@ -227,3 +227,44 @@ test("rejects an invalid attachment modificationDate", async () => {
     }),
   ).rejects.toThrow("modificationDate");
 });
+
+test("embeds JPEG and WebP image bytes", async () => {
+  const image = (name: string) =>
+    new Uint8Array(readFileSync(new URL(`../../takumi-pdf/tests/images/${name}`, import.meta.url)));
+  const jpeg = image("checker.jpg");
+  const pdf = await renderer.render(
+    `<div style="display:flex"><img src="jpeg" style="width:32px;height:32px" /><img src="webp" style="width:32px;height:32px" /></div>`,
+    {
+      viewport: { width: 120, height: 48 },
+      images: [
+        { src: "jpeg", data: jpeg },
+        { src: "webp", data: image("checker.webp") },
+      ],
+    },
+  );
+  const bytes = decoder.decode(pdf);
+
+  expect(bytes).toContain("/DCTDecode");
+  expect(bytes).toContain(decoder.decode(jpeg));
+});
+
+test("rejects a filter it cannot apply to a JPEG", async () => {
+  const jpeg = new Uint8Array(
+    readFileSync(new URL("../../takumi-pdf/tests/images/checker.jpg", import.meta.url)),
+  );
+
+  await expect(
+    renderer.render(`<img src="photo" style="filter:grayscale(1);width:32px;height:32px" />`, {
+      viewport: { width: 48, height: 48 },
+      images: [{ src: "photo", data: jpeg }],
+    }),
+  ).rejects.toThrow("UndrawableImage");
+});
+
+test("rejects a filter a PDF cannot express", async () => {
+  await expect(
+    renderer.render(`<div style="filter:blur(4px);width:40px;height:40px;background:#000"></div>`, {
+      viewport: { width: 80, height: 80 },
+    }),
+  ).rejects.toThrow("UnsupportedFilter");
+});

@@ -19,7 +19,7 @@ use takumi_core::{
   layout::node::{ImageData, ImageSourceInput, Node, RgbaImage},
   resources::{
     font::{FontOverride, FontResource},
-    image::ImageSource,
+    image::{ImageCacheMode, ImageSource, ResourceCache},
     image_buffer::ImageBuffer,
   },
   style::{
@@ -2942,4 +2942,106 @@ fn a_ranked_subset_group_keeps_a_latin_run_whole() {
     .count();
 
   assert_eq!(shows, 1, "the run was split across {shows} text objects");
+}
+
+/// Encoded bitmaps reach the PDF as the bytes they came in as: a JPEG embeds
+/// as a `DCTDecode` stream rather than a re-encode of its pixels.
+#[test]
+fn encoded_bitmaps_embed_their_own_bytes() {
+  const JPEG: &[u8] = include_bytes!("images/checker.jpg");
+  const WEBP: &[u8] = include_bytes!("images/checker.webp");
+
+  let cache = ResourceCache::new(1 << 20);
+  let images: HashMap<Arc<str>, ImageSource> = [("jpeg", JPEG), ("webp", WEBP)]
+    .into_iter()
+    .map(|(name, bytes)| {
+      let source = cache
+        .get_or_decode(bytes, ImageCacheMode::Auto)
+        .expect("decode test image");
+
+      (name.into(), source)
+    })
+    .collect();
+  let source = r##"<div style="display: flex; column-gap: 8px; padding: 8px;">
+      <img src="jpeg" style="width: 32px; height: 32px;" />
+      <img src="webp" style="width: 32px; height: 32px;" />
+    </div>"##;
+  let pdf = run_pdf_fixture("encoded-bitmaps", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse the fixture"))
+      .viewport(Viewport::new((120, 48)))
+      .images(images.clone())
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  assert_eq!(
+    haystack.matches("/Subtype/Image").count(),
+    2,
+    "expected an image XObject per source"
+  );
+  assert!(
+    haystack.contains("/DCTDecode"),
+    "expected the JPEG to embed as a JPEG stream"
+  );
+  assert!(
+    find(&pdf, JPEG).is_some(),
+    "expected the original JPEG bytes in the PDF"
+  );
+}
+
+/// `blur()` has no PDF equivalent. Dropping it would print a page that quietly
+/// disagrees with the stylesheet, so the render stops and names the function.
+#[test]
+fn an_unsupported_filter_stops_the_render() {
+  let doc =
+    r#"<div style="filter: blur(4px); width: 40px; height: 40px; background: #000;"></div>"#;
+  let error = render(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse the doc"))
+      .viewport(Viewport::new((80, 80)))
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect_err("blur() should stop the render");
+
+  assert!(
+    matches!(&error, PdfError::UnsupportedFilter(filter) if filter == "blur(4px)"),
+    "unexpected error: {error:?}"
+  );
+}
+
+/// An image whose bytes will not decode leaves a hole where the page expects a
+/// picture. The render stops and names the source.
+#[test]
+fn an_undecodable_image_stops_the_render() {
+  let mut bytes = ImageBuffer::from_rgba_bytes(vec![255; 8 * 8 * 4], 8, 8)
+    .expect("an 8x8 buffer")
+    .encode_png()
+    .expect("encode the png");
+  // The IHDR still reports 8x8; the compressed pixels no longer inflate.
+  let idat = find(&bytes, b"IDAT").expect("an IDAT chunk") + 8;
+
+  bytes[idat..].fill(0);
+
+  let cache = ResourceCache::new(1 << 20);
+  let source = cache
+    .get_or_decode(&bytes, ImageCacheMode::Auto)
+    .expect("the png header still parses");
+  let doc = r#"<img src="broken" style="filter: grayscale(1); width: 32px; height: 32px;" />"#;
+  let error = render(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse the doc"))
+      .viewport(Viewport::new((48, 48)))
+      .images(HashMap::from([("broken".into(), source)]))
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect_err("a broken image should stop the render");
+
+  assert!(
+    matches!(&error, PdfError::UndrawableImage(reason) if reason.starts_with("broken:")),
+    "unexpected error: {error:?}"
+  );
 }

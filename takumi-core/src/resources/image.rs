@@ -19,6 +19,8 @@ use thiserror::Error;
 use tiny_skia::Pixmap;
 use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 
+#[cfg(not(all(feature = "jpeg", feature = "webp")))]
+use crate::resources::image_decoder::decoder_compiled_out;
 #[cfg(feature = "svg")]
 use crate::resvg::{
   apply_filters_to_layer, render as render_svg_tree,
@@ -500,8 +502,16 @@ impl ImageSource {
       return Ok(ImageSource::Gif(GifSource::from_bytes(bytes)?));
     }
 
-    let buffer = decode_image(bytes).map_err(ImageError::decode)?;
-    Ok(ImageSource::Bitmap(Arc::new(buffer)))
+    match decode_image(bytes) {
+      Ok(buffer) => Ok(ImageSource::Bitmap(Arc::new(buffer))),
+      #[cfg(all(feature = "jpeg", feature = "webp"))]
+      Err(error) => Err(ImageError::decode(error)),
+      #[cfg(not(all(feature = "jpeg", feature = "webp")))]
+      Err(error) => match bitmap_dimensions(bytes).filter(|_| decoder_compiled_out(bytes)) {
+        Some(Ok(dimensions)) => Ok(Self::encoded(bytes, dimensions, 0, Weak::new())),
+        _ => Err(ImageError::decode(error)),
+      },
+    }
   }
 
   /// [`from_bytes`](Self::from_bytes), but bitmaps stay encoded and decode at
@@ -529,16 +539,26 @@ impl ImageSource {
     }
 
     match bitmap_dimensions(bytes) {
-      Some(Ok((width, height))) => Ok(ImageSource::Encoded(Arc::new(EncodedBitmap {
-        bytes: bytes.into(),
-        width,
-        height,
-        hash,
-        cache,
-      }))),
+      Some(Ok((width, height))) => Ok(Self::encoded(bytes, (width, height), hash, cache)),
       Some(Err(error)) => Err(ImageError::decode(error)),
       None => Self::from_bytes(bytes),
     }
+  }
+
+  /// A bitmap kept in the bytes it arrived in.
+  fn encoded(
+    bytes: &[u8],
+    (width, height): (u32, u32),
+    hash: u64,
+    cache: Weak<SharedResourceCache>,
+  ) -> Self {
+    ImageSource::Encoded(Arc::new(EncodedBitmap {
+      bytes: bytes.into(),
+      width,
+      height,
+      hash,
+      cache,
+    }))
   }
 
   /// Prepare image data for layout rendering.
@@ -1046,6 +1066,18 @@ mod resource_cache_tests {
   /// PNG bytes that decode to a tiny bitmap (cacheable).
   fn png_bytes() -> Vec<u8> {
     ImageBuffer::new(2, 2).unwrap().encode_png().unwrap()
+  }
+
+  /// A PNG whose header parses but whose pixels do not fails at load. Only a
+  /// format this build has no decoder for is allowed to stay encoded.
+  #[test]
+  fn a_corrupt_png_fails_to_load() {
+    let mut bytes = png_bytes();
+    let tail = bytes.len() - 16;
+
+    bytes[tail..].fill(0);
+
+    assert!(ImageSource::from_bytes(&bytes).is_err());
   }
 
   #[test]

@@ -1,15 +1,13 @@
 //! Path, gradient, decoration and image helpers translating takumi paint into krilla.
 
 #[cfg(feature = "images")]
-use takumi_core::resources::image::{ImageSource, RenderedImage};
+use takumi_core::resources::image::{ImageError, ImageSource, RenderedImage};
 use takumi_core::{
   context::RenderContext,
   geometry::{ComputedLayout as Layout, PathCommand},
   style::{BlendMode, ComputedStyle, Overflow, ResolvedGradientStop},
 };
 
-#[cfg(feature = "images")]
-use crate::krilla::image::Image as KrillaImage;
 use crate::{
   filter::ColorFilter,
   krilla::{
@@ -21,6 +19,8 @@ use crate::{
     surface::Surface,
   },
 };
+#[cfg(feature = "images")]
+use crate::{krilla::image::Image as KrillaImage, raster::embedded_image};
 
 /// A degenerate path, for a clip that must hide everything: an empty region is
 /// what CSS asks for when a shape resolves to no area.
@@ -88,38 +88,11 @@ pub(crate) fn overflow_clip_rect(
   KrillaRect::from_ltrb(left, top, right, bottom).and_then(rect_path)
 }
 
-/// Rasterizes an image source into a krilla image. Bitmap sources rasterize at
-/// their intrinsic size; SVG sources at twice the target size for print density.
+/// Undoes the premultiplication takumi-core renders with: PDF image streams
+/// carry straight alpha. Only the paths that go through core reach this;
+/// embedded bytes never become premultiplied samples in the first place.
 #[cfg(feature = "images")]
-pub(crate) fn rasterized_image(
-  source: &ImageSource,
-  context: &RenderContext,
-  target: (f32, f32),
-  filter: Option<&ColorFilter>,
-) -> Option<KrillaImage> {
-  let (width, height) = match source {
-    ImageSource::Bitmap(bitmap) => (bitmap.width(), bitmap.height()),
-    ImageSource::Gif(gif) => gif.dimensions(),
-    ImageSource::Encoded(encoded) => encoded.dimensions(),
-    #[cfg(feature = "svg")]
-    ImageSource::Svg(_) => (
-      (target.0 * 2.0).ceil() as u32,
-      (target.1 * 2.0).ceil() as u32,
-    ),
-    _ => return None,
-  };
-  if width == 0 || height == 0 {
-    return None;
-  }
-  let rendered = source
-    .render_for_layout(width, height, context.style.image_rendering, 0)
-    .ok()?;
-  let buffer = match &rendered {
-    RenderedImage::Rasterized(buffer) => buffer.as_ref(),
-    RenderedImage::Sampled { source, .. } => source.as_ref(),
-  };
-  let mut data = buffer.data().to_vec();
-
+fn unpremultiply(data: &mut [u8]) {
   for pixel in data.chunks_exact_mut(4) {
     let alpha = pixel[3];
     if alpha != 0 && alpha != 255 {
@@ -129,16 +102,81 @@ pub(crate) fn rasterized_image(
       pixel[2] = ((u16::from(pixel[2]) * 255 + alpha16 / 2) / alpha16).min(255) as u8;
     }
   }
+}
+
+#[cfg(feature = "images")]
+fn encoded_bytes(source: &ImageSource) -> Option<&[u8]> {
+  match source {
+    ImageSource::Encoded(encoded) => Some(encoded.bytes()),
+    _ => None,
+  }
+}
+
+/// Why an image that had bytes could not be drawn.
+#[cfg(feature = "images")]
+fn undrawable_reason(filtered: bool, error: &ImageError) -> String {
+  if filtered {
+    format!("a filter needs the image's pixels: {error}")
+  } else {
+    error.to_string()
+  }
+}
+
+/// Rasterizes an image source into a krilla image. Encoded bytes pass through
+/// undecoded unless a filter has to run over the pixels; bitmap sources
+/// rasterize at their intrinsic size; SVG sources at twice the target size for
+/// print density.
+///
+/// `Ok(None)` is a source with nothing to draw, `Err` one that should have
+/// drawn and could not.
+#[cfg(feature = "images")]
+pub(crate) fn rasterized_image(
+  source: &ImageSource,
+  context: &RenderContext,
+  target: (f32, f32),
+  filter: Option<&ColorFilter>,
+) -> Result<Option<KrillaImage>, String> {
+  if filter.is_none()
+    && let Some(bytes) = encoded_bytes(source)
+    && let Some(image) = embedded_image(bytes)
+  {
+    return Ok(Some(image));
+  }
+
+  let (width, height) = match source {
+    ImageSource::Bitmap(bitmap) => (bitmap.width(), bitmap.height()),
+    ImageSource::Gif(gif) => gif.dimensions(),
+    ImageSource::Encoded(encoded) => encoded.dimensions(),
+    #[cfg(feature = "svg")]
+    ImageSource::Svg(_) => (
+      (target.0 * 2.0).ceil() as u32,
+      (target.1 * 2.0).ceil() as u32,
+    ),
+    _ => return Ok(None),
+  };
+  if width == 0 || height == 0 {
+    return Ok(None);
+  }
+  let rendered = source
+    .render_for_layout(width, height, context.style.image_rendering, 0)
+    .map_err(|error| undrawable_reason(filter.is_some(), &error))?;
+  let buffer = match &rendered {
+    RenderedImage::Rasterized(buffer) => buffer.as_ref(),
+    RenderedImage::Sampled { source, .. } => source.as_ref(),
+  };
+  let mut data = buffer.data().to_vec();
+
+  unpremultiply(&mut data);
   if let Some(filter) = filter {
     for pixel in data.chunks_exact_mut(4) {
       pixel.copy_from_slice(&filter.apply([pixel[0], pixel[1], pixel[2], pixel[3]]));
     }
   }
-  Some(KrillaImage::from_rgba8(
+  Ok(Some(KrillaImage::from_rgba8(
     data,
     buffer.width(),
     buffer.height(),
-  ))
+  )))
 }
 
 pub(crate) const fn spread(repeating: bool) -> SpreadMethod {

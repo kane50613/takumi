@@ -9,7 +9,7 @@
 
 use takumi_core::{
   filter::ColorMatrix,
-  style::{Color, Filter},
+  style::{Color, Filter, ToCss},
 };
 
 /// The filter list as written, applied in order. CSS clamps each function's
@@ -18,6 +18,15 @@ use takumi_core::{
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ColorFilter {
   functions: Vec<ColorMatrix>,
+}
+
+/// The first filter function that does not fold into a color matrix, written
+/// back as CSS.
+pub(crate) fn unsupported_filter(filters: &[Filter]) -> Option<String> {
+  filters
+    .iter()
+    .find(|filter| ColorMatrix::from_filter(filter).is_none())
+    .map(ToCss::to_css_string)
 }
 
 impl ColorFilter {
