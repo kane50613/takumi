@@ -17,7 +17,7 @@ async function processUrl() {
     }
 
     const basename = path.slice(path.lastIndexOf("/") + 1);
-    const candidates = [`./${basename}`, `../client${path}`, `../../client${path}`];
+    const candidates = [`./${basename}`, `.${path}`, `../client${path}`, `../../client${path}`];
 
     let lastError;
     for (const candidate of candidates) {
