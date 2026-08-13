@@ -4,6 +4,6 @@ packages:
     type: patch
 ---
 
-### Let a transform or filter capture the boxes it contains
+### Capture fixed and absolute descendants with transforms and filters
 
-`position: fixed` resolved against the viewport no matter what it sat inside, and `position: absolute` only looked for a positioned ancestor. A `transform`, `translate`, `rotate`, `scale`, `offset-path`, `filter` or `backdrop-filter` now makes a box the containing block for both, the way browsers do.
+Transforms, transform properties, offset paths, filters, and backdrop filters now capture fixed and absolute descendants. Those descendants position against that ancestor, matching Blink.
