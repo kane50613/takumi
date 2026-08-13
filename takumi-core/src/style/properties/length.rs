@@ -11,12 +11,10 @@ use crate::style::{
   unexpected_token,
 };
 
-pub(crate) const ONE_CM_IN_PX: f32 = 96.0 / 2.54;
-pub(crate) const ONE_MM_IN_PX: f32 = ONE_CM_IN_PX / 10.0;
-pub(crate) const ONE_Q_IN_PX: f32 = ONE_CM_IN_PX / 40.0;
-pub(crate) const ONE_IN_PX: f32 = 2.54 * ONE_CM_IN_PX;
-pub(crate) const ONE_PT_IN_PX: f32 = ONE_IN_PX / 72.0;
-pub(crate) const ONE_PC_IN_PX: f32 = ONE_IN_PX / 6.0;
+pub(crate) use crate::units::{
+  ONE_CM_IN_PX, ONE_IN_PX, ONE_MM_IN_PX, ONE_PC_IN_PX, ONE_PT_IN_PX, ONE_Q_IN_PX,
+};
+
 const CALC_ZERO_EPSILON: f32 = 1e-6;
 const SAFE_INT_MIN_PX: f32 = i32::MIN as f32;
 const SAFE_INT_MAX_PX: f32 = i32::MAX as f32;

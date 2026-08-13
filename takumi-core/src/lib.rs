@@ -37,6 +37,7 @@ pub mod resources;
 pub mod scene;
 /// CSS value types, parsing, and the cascade.
 pub mod style;
+pub mod units;
 /// Viewport dimensions and device-pixel-ratio resolution.
 pub mod viewport;
 
