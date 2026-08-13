@@ -3055,6 +3055,7 @@ fn a_fixed_box_repeats_on_every_page() {
       <div style="position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;">
         <span style="font-size: 48px;">DRAFT</span>
       </div>
+      <div style="position: fixed; top: 20px; left: 30px; width: 40px; height: 40px; background: #000;"></div>
       <p style="height: 900px;">first</p>
       <p style="height: 900px;">second</p>
     </main>"#;
@@ -3078,5 +3079,14 @@ fn a_fixed_box_repeats_on_every_page() {
       .count(),
     4,
     "expected the watermark on both pages, next to each page's own text"
+  );
+
+  let corners = content_lines(&pdf)
+    .filter(|line| find(line, b"30 20 40 40 re").is_some())
+    .count();
+
+  assert_eq!(
+    corners, 2,
+    "expected the offset box at its own insets on both pages"
   );
 }

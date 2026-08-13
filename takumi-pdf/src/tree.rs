@@ -150,9 +150,10 @@ pub(crate) fn prepare_paged_tree(
   let mut root = RenderNode::from_node(&context, node);
   let repeated = take_repeating_fixed(&mut root);
   let content = lay_out(root, viewport)?;
+  let page_context = tree_context(inputs, page_area);
   let repeated = repeated
     .into_iter()
-    .map(|node| lay_out(node, page_area))
+    .map(|node| lay_out(page_root(&page_context, node), page_area))
     .collect::<Result<Vec<_>, _>>()?;
 
   Ok((content, repeated))
@@ -180,6 +181,21 @@ fn take_repeating_fixed(node: &mut RenderNode) -> Vec<RenderNode> {
   }
   node.children = Some(kept.into_boxed_slice());
   repeating
+}
+
+/// The page area a repeated box positions against. Taffy gives a layout root
+/// the origin, so the box has to be a child of one to see its own insets.
+fn page_root(context: &RenderContext, child: RenderNode) -> RenderNode {
+  let area = Node::container([]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::width(Length::Percentage(100.0)))
+      .with(StyleDeclaration::height(Length::Percentage(100.0))),
+  );
+  let mut root = RenderNode::from_node(context, area);
+
+  root.children = Some(Box::new([child]));
+  root
 }
 
 fn lay_out(root: RenderNode, viewport: Viewport) -> Result<PreparedTree, PdfError> {
