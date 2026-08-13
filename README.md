@@ -17,6 +17,36 @@ Takumi renders images in Node.js, Cloudflare Workers, browsers, and Rust applica
 
 </div>
 
+## Features
+
+Takumi is a Rust rendering engine for markup and CSS. It handles layout, text shaping, compositing, and encoding without launching a browser.
+
+### Images
+
+- **CSS Grid**, block, inline, and float handle layout.
+- Complex selectors work, including `::before`, `::after`, `:is()`, and `:where()`.
+- Masks, `clip-path`, `backdrop-filter`, and blend modes composite the way browsers do.
+- `background-clip: text` and conic gradients work.
+- **RTL**, CJK, and emoji shape correctly.
+- **Tailwind v4** utilities apply directly, arbitrary values included.
+
+### PDF
+
+- **Page breaks** honor `break-before: page`, `break-after: page`, and `break-inside: avoid`.
+- **Headers and footers** repeat on every page, with page counters.
+- **Text** stays selectable and searchable. Fonts embed as subsets.
+- **Links** and metadata carry into the output. `outline: true` builds bookmarks from headings.
+- **Attachments** embed files, including Factur-X e-invoice XML.
+- **Tagged PDF** is on by default. PDF/A-2, A-3, A-4, and PDF/UA-1 pass veraPDF.
+- **Arabic**, bidi text, CJK, and emoji shape correctly.
+- **1.5 MB** of gzip wasm fits the Cloudflare Workers free plan.
+
+### Runtimes
+
+- **Node.js and Bun** load a native binding, prebuilt for macOS, Linux (glibc and musl), and Windows on x64 and ARM64.
+- **Cloudflare Workers** and browsers load the WebAssembly build.
+- **Rust** applications embed the `takumi` crate.
+
 ## Quick Start
 
 ```bash
@@ -42,15 +72,6 @@ await writeFile("./output.png", image);
 
 ### PDF
 
-- **Page breaks** honor `break-before: page`, `break-after: page`, and `break-inside: avoid`.
-- **Headers and footers** repeat on every page, with page counters.
-- **Text** stays selectable and searchable. Fonts embed as subsets.
-- **Links** and metadata carry into the output. `outline: true` builds bookmarks from headings.
-- **Attachments** embed files, including Factur-X e-invoice XML.
-- **Tagged PDF** is on by default. PDF/A-2, A-3, A-4, and PDF/UA-1 pass veraPDF.
-- **Arabic**, bidi text, CJK, and emoji shape correctly.
-- **1.5 MB** of gzip wasm fits the Cloudflare Workers free plan.
-
 ```tsx
 import { render } from "takumi-pdf";
 import { writeFile } from "node:fs/promises";
@@ -66,23 +87,6 @@ const pdf = await render(<Invoice data={data} />, {
 
 await writeFile("invoice.pdf", pdf);
 ```
-
-## Features
-
-Takumi is a Rust rendering engine for markup and CSS. It handles layout, text shaping, compositing, and encoding without launching a browser.
-
-- **CSS Grid**, block, inline, and float handle layout.
-- Complex selectors work, including `::before`, `::after`, `:is()`, and `:where()`.
-- Masks, `clip-path`, `backdrop-filter`, and blend modes composite the way browsers do.
-- `background-clip: text` and conic gradients work.
-- **RTL**, CJK, and emoji shape correctly.
-- **Tailwind v4** utilities apply directly, arbitrary values included.
-
-Each runtime gets its own backend:
-
-- **Node.js and Bun** load a native binding, prebuilt for macOS, Linux (glibc and musl), and Windows on x64 and ARM64.
-- **Cloudflare Workers** and browsers load the WebAssembly build.
-- **Rust** applications embed the `takumi` crate.
 
 ## Coming From Something Else
 
