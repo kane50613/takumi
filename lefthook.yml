@@ -7,9 +7,10 @@ pre-commit:
     - run: |
         set -eu
         cargo metadata --format-version 1 --no-deps \
-          | jq -r '.packages[] | select(.publish != []) | select(any(.targets[]; .kind | index("lib"))) | .manifest_path | rtrimstr("/Cargo.toml")' \
-          | while read -r dir; do
-              (cd "$dir" && cargo rdme --force && git add README.md) || exit 1
+          | jq -r '.packages[] | select(.publish != []) | select(any(.targets[]; .kind | index("lib"))) | [.name, (.manifest_path | rtrimstr("/Cargo.toml"))] | @tsv' \
+          | while IFS=$(printf '\t') read -r name dir; do
+              cargo rdme --force --workspace-project "$name" --readme-path "$dir/README.md" || exit 1
+              git add "$dir/README.md"
             done
 
     - run: bun run lint:fix

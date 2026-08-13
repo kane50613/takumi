@@ -31,6 +31,16 @@ pub(crate) struct Paragraph {
   pub after: usize,
 }
 
+impl Paragraph {
+  fn top(&self) -> f32 {
+    self.lines.first().map_or(0.0, |line| line.0)
+  }
+
+  fn bottom(&self) -> f32 {
+    self.lines.last().map_or(0.0, |line| line.1)
+  }
+}
+
 /// Page start offsets for slicing `total` height into windows of `window`
 /// height. Each cut moves up to the top of any atom straddling it, repeated
 /// until no atom straddles (a raised cut can land inside another atom). An
@@ -123,6 +133,19 @@ pub(crate) fn page_starts(
   forced.retain(|cut| *cut > 1.0 && *cut < total - 1.0);
   forced.sort_by(f32::total_cmp);
 
+  // The prefix max of bottoms lets the back-scan stop early even when a
+  // paragraph spans several pages.
+  let mut by_top: Vec<&Paragraph> = paragraphs.iter().collect();
+
+  by_top.sort_by(|a, b| a.top().total_cmp(&b.top()));
+
+  let mut prefix_max_bottom = Vec::with_capacity(by_top.len());
+  let mut running = f32::MIN;
+
+  for paragraph in &by_top {
+    running = running.max(paragraph.bottom());
+    prefix_max_bottom.push(running);
+  }
   let mut starts = vec![0.0_f32];
   let mut y0 = 0.0_f32;
 
@@ -157,8 +180,13 @@ pub(crate) fn page_starts(
         }
       }
 
-      for paragraph in paragraphs {
-        pushed_up = pushed_up.min(widow_orphan_cut(paragraph, pushed_up, y0 + 1.0));
+      let straddling = by_top.partition_point(|paragraph| paragraph.top() < pushed_up);
+
+      for i in (0..straddling).rev() {
+        if prefix_max_bottom[i] <= pushed_up {
+          break;
+        }
+        pushed_up = pushed_up.min(widow_orphan_cut(by_top[i], pushed_up, y0 + 1.0));
       }
 
       if pushed_up >= cut {
