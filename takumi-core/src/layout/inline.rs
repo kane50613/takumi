@@ -570,7 +570,13 @@ fn measure_ellipsis_width(
   ellipsis_char: &str,
 ) -> f32 {
   let (mut ellipsis_layout, _) = context.tree_builder(ellipsis_style.into(), |builder| {
-    builder.push_text(ellipsis_char);
+    push_presentation_text(
+      builder,
+      ellipsis_style,
+      None,
+      ellipsis_char,
+      &context.fonts.classes,
+    );
   });
   ellipsis_layout.break_all_lines(None);
   ellipsis_layout
@@ -1337,6 +1343,35 @@ pub(crate) fn measure_inline_layout(
   }
 }
 
+/// Pushes `text` under `style`, giving each variation-selector segment a
+/// presentation-reordered font stack.
+fn push_presentation_text(
+  builder: &mut TreeBuilder<'_, InlineBrush>,
+  style: &SizedFontStyle,
+  span_id: Option<u64>,
+  text: &str,
+  classes: &FontClasses,
+) {
+  builder.push_style_span(text_style_with_span_id(style, span_id));
+  if contains_variation_selector(text) {
+    for (range, presentation) in presentation_segments(text) {
+      match presentation {
+        Some(presentation) => {
+          let mut segment_style = text_style_with_span_id(style, span_id);
+          segment_style.font_family = style.font_family.with_presentation(presentation, classes);
+          builder.push_style_span(segment_style);
+          builder.push_text(&text[range]);
+          builder.pop_style_span();
+        }
+        None => builder.push_text(&text[range]),
+      }
+    }
+  } else {
+    builder.push_text(text);
+  }
+  builder.pop_style_span();
+}
+
 fn push_spans_into_builder(
   builder: &mut TreeBuilder<'_, InlineBrush>,
   spans: &[ProcessedInlineSpan<'_>],
@@ -1350,25 +1385,7 @@ fn push_spans_into_builder(
         style,
         ..
       } => {
-        builder.push_style_span(text_style_with_span_id(style, Some(*span_id)));
-        if contains_variation_selector(text) {
-          for (range, presentation) in presentation_segments(text) {
-            match presentation {
-              Some(presentation) => {
-                let mut segment_style = text_style_with_span_id(style, Some(*span_id));
-                segment_style.font_family =
-                  style.font_family.with_presentation(presentation, classes);
-                builder.push_style_span(segment_style);
-                builder.push_text(&text[range]);
-                builder.pop_style_span();
-              }
-              None => builder.push_text(&text[range]),
-            }
-          }
-        } else {
-          builder.push_text(text);
-        }
-        builder.pop_style_span();
+        push_presentation_text(builder, style, Some(*span_id), text, classes);
       }
       ProcessedInlineSpan::Box(item) => {
         builder.push_inline_box(item.inline_box.clone());
@@ -2973,9 +2990,13 @@ fn make_ellipsis_layout<'c>(
 
   let (mut final_layout, _) = context.tree_builder(root_style.into(), |builder| {
     push_spans_into_builder(builder, spans, &context.fonts.classes);
-    builder.push_style_span(text_style_with_span_id(ellipsis_style, None));
-    builder.push_text(ellipsis_char);
-    builder.pop_style_span();
+    push_presentation_text(
+      builder,
+      ellipsis_style,
+      None,
+      ellipsis_char,
+      &context.fonts.classes,
+    );
   });
 
   apply_text_indent(&mut final_layout, root_style, max_width);

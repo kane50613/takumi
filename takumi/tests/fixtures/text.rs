@@ -1314,6 +1314,15 @@ fn text_emoji_variation_selector() {
     )
   }
 
+  fn cell(child: Node) -> Node {
+    Node::container(vec![child]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::width(Px(150.0)))
+        .with(StyleDeclaration::justify_content(JustifyContent::Center)),
+    )
+  }
+
   let rows: Vec<Node> = [
     ("Noto Sans TC, Twemoji Mozilla", "text font first"),
     ("Twemoji Mozilla, Noto Sans TC", "emoji font first"),
@@ -1324,13 +1333,23 @@ fn text_emoji_variation_selector() {
       unreachable!()
     };
 
-    let glyphs = Node::text("‼ ‼\u{FE0F} ‼\u{FE0E} 一").with_style(
-      Style::default()
-        .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::font_size(Px(96.0).into()))
-        .with(StyleDeclaration::font_family(family))
-        .with(StyleDeclaration::width(Px(480.0).into())),
-    );
+    let glyphs = [
+      "\u{203C}",
+      "\u{203C}\u{FE0F}",
+      "\u{203C}\u{FE0E}",
+      "\u{6F22}",
+    ]
+    .into_iter()
+    .map(|glyph| {
+      cell(
+        Node::text(glyph).with_style(
+          Style::default()
+            .with(StyleDeclaration::display(Display::Flex))
+            .with(StyleDeclaration::font_size(Px(96.0).into()))
+            .with(StyleDeclaration::font_family(family.clone())),
+        ),
+      )
+    });
     let annotation = Node::container(vec![label(stack), label(order)]).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
@@ -1338,27 +1357,27 @@ fn text_emoji_variation_selector() {
         .with_gap(SpacePair::from_single(Px(8.0).into())),
     );
 
-    Node::container(vec![glyphs, annotation]).with_style(
+    Node::container(glyphs.chain([annotation]).collect::<Vec<_>>()).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::align_items(AlignItems::Center))
-        .with_gap(SpacePair::from_single(Px(40.0).into())),
+        .with_gap(SpacePair::from_single(Px(24.0).into())),
     )
   })
   .collect();
 
-  let header = Node::container(vec![
-    Node::container(vec![label("bare · U+FE0F · U+FE0E · CJK")]).with_style(
-      Style::default()
-        .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::width(Px(480.0).into())),
-    ),
-    label("font-family"),
-  ])
+  let header = Node::container(
+    ["bare", "U+FE0F", "U+FE0E", "CJK"]
+      .into_iter()
+      .map(|column| cell(label(column)))
+      .chain([label("font-family")])
+      .collect::<Vec<_>>(),
+  )
   .with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with_gap(SpacePair::from_single(Px(40.0).into())),
+      .with(StyleDeclaration::align_items(AlignItems::Center))
+      .with_gap(SpacePair::from_single(Px(24.0).into())),
   );
 
   let mut nodes = vec![header];

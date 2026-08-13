@@ -6,4 +6,4 @@ packages:
 
 ### Honor emoji variation selectors in font selection
 
-A codepoint followed by `U+FE0F` now renders from a color font. One followed by `U+FE0E` renders from a monochrome font. `font-family` order does not affect either. Bare codepoints keep following the stack, matching browsers.
+When emoji render from registered fonts (`emoji: "from-font"`), a codepoint followed by `U+FE0F` now picks a registered color font and one followed by `U+FE0E` a registered monochrome font. `font-family` order does not affect either. Bare codepoints keep following the stack, matching browsers.
