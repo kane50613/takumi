@@ -163,19 +163,18 @@ Properties use their camelCase names. Longhands are listed in parentheses. `Supp
 
 | Property                                                                                                                              | Values                                                                                        |
 | :------------------------------------------------------------------------------------------------------------------------------------ | :-------------------------------------------------------------------------------------------- |
-| `borderWidth` (`borderTopWidth`, `borderRightWidth`, `borderBottomWidth`, `borderLeftWidth`, `borderInlineWidth`, `borderBlockWidth`) | `thin`, `medium`, `thick`, `<length>`                                                         |
+| `borderWidth` (`borderTopWidth`, `borderRightWidth`, `borderBottomWidth`, `borderLeftWidth`, `borderInlineWidth`, `borderBlockWidth`) | `thin`, `medium`, `thick`, `<length>` <sup>1</sup>                                            |
 | `borderStyle`                                                                                                                         | `none`, `hidden`, `solid`, `dashed`, `dotted`, `double`, `groove`, `ridge`, `inset`, `outset` |
 | `borderColor`                                                                                                                         | Supported                                                                                     |
 | `borderRadius` (`borderTopLeftRadius`, `borderTopRightRadius`, `borderBottomRightRadius`, `borderBottomLeftRadius`)                   | Supported                                                                                     |
 | `cornerShape` (`cornerTopLeftShape`, `cornerTopRightShape`, `cornerBottomRightShape`, `cornerBottomLeftShape`)                        | `round`, `squircle`, `bevel`, `scoop`, `notch`, `square`, `superellipse(<number>)`            |
-| `outlineWidth`                                                                                                                        | `thin`, `medium`, `thick`, `<length>`                                                         |
+| `outlineWidth`                                                                                                                        | `thin`, `medium`, `thick`, `<length>` <sup>1</sup>                                            |
 | `outlineStyle`                                                                                                                        | `none`, `hidden`, `solid`, `dashed`, `dotted`, `double`, `groove`, `ridge`, `inset`, `outset` |
 | `outlineColor`                                                                                                                        | Supported                                                                                     |
 | `outlineOffset`                                                                                                                       | Supported                                                                                     |
 
-`borderWidth` and `outlineWidth` round to whole pixels, like browsers do. A width
-under `1px` becomes `1px`, so hairlines always draw. Any other width rounds down,
-so `1.5px` draws as `1px`.
+<sup>1</sup> Widths round to whole pixels, like browsers do. A width under `1px` becomes `1px`, so
+hairlines always draw. Any other width rounds down, so `1.5px` draws as `1px`.
 
 ### Flexbox
 
