@@ -224,6 +224,11 @@ impl<'a> SampledBitmapView<'a> {
     })
   }
 
+  /// The size the tile is drawn at.
+  pub(crate) fn size(&self) -> Size<u32> {
+    self.logical_size
+  }
+
   /// The source pixmap when the tile is drawn at exactly the source's size, so
   /// destination pixel `(x, y)` is source pixel `(x, y)`.
   ///
@@ -243,7 +248,7 @@ impl<'a> SampledBitmapView<'a> {
   #[inline]
   pub(crate) fn sample(&self, x: u32, y: u32) -> PremultipliedColorU8 {
     interpolate_with_footprint(
-      PaintSource::from(self.source),
+      self.source.into(),
       self.algorithm,
       (x as f32 + 0.5) * self.source.width() as f32 / self.logical_size.width.max(1) as f32,
       (y as f32 + 0.5) * self.source.height() as f32 / self.logical_size.height.max(1) as f32,

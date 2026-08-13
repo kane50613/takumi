@@ -316,6 +316,7 @@ fn source_general(
   } = region;
   let footprint = sampling_footprint(options.sampling.canvas_to_source);
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
+  let resolved = source.resolve();
 
   for dest_y in bounds.y_min..bounds.y_max {
     let combined_row = options
@@ -338,7 +339,7 @@ fn source_general(
         None
       } else {
         sample_paint_source(
-          source,
+          resolved,
           options.sampling.algorithm,
           sample_x,
           sample_y,
