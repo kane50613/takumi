@@ -277,6 +277,10 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
 
       let page_area = Viewport::new((content_width as u32, content_height as u32));
       let (content, repeated) = prepare_paged_tree(&inputs, node, content_viewport, page_area)?;
+      let repeated_links: Vec<_> = repeated
+        .iter()
+        .flat_map(|tree| collect_interactive(tree).links)
+        .collect();
       let text_boxes = collect_text_boxes(&content);
       let inline_map = build_inline_map(&text_boxes)?;
       let mut atoms = Vec::new();
@@ -421,6 +425,21 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           &mut pdf_page,
           &interactive.links,
           (y0, y0 + paint_height),
+          (page.margin.left, content_top),
+          tag_collector.as_ref(),
+          |id| {
+            interactive
+              .anchors
+              .get(id)
+              .map(|anchor| destination(anchor.top, &anchor.path))
+          },
+        );
+        // A repeated box sits at the same place on every page, so its links are
+        // added per page against the page area rather than the content window.
+        add_link_annotations(
+          &mut pdf_page,
+          &repeated_links,
+          (0.0, window_height),
           (page.margin.left, content_top),
           tag_collector.as_ref(),
           |id| {

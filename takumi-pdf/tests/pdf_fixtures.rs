@@ -3056,6 +3056,7 @@ fn a_fixed_box_repeats_on_every_page() {
         <span style="font-size: 48px;">DRAFT</span>
       </div>
       <div style="position: fixed; top: 20px; left: 30px; width: 40px; height: 40px; background: #000;"></div>
+      <a href="https://takumi.kane.tw" style="position: fixed; bottom: 10px; left: 10px;">source</a>
       <p style="height: 900px;">first</p>
       <p style="height: 900px;">second</p>
     </main>"#;
@@ -3077,8 +3078,13 @@ fn a_fixed_box_repeats_on_every_page() {
     content_lines(&pdf)
       .filter(|line| line.ends_with(b"TJ") || line.ends_with(b"Tj"))
       .count(),
-    4,
-    "expected the watermark on both pages, next to each page's own text"
+    6,
+    "expected both fixed boxes on both pages, next to each page's own text"
+  );
+  assert_eq!(
+    haystack.matches("/Subtype/Link").count(),
+    2,
+    "expected the fixed link to be clickable on both pages"
   );
 
   let corners = content_lines(&pdf)
