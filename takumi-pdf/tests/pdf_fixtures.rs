@@ -2991,3 +2991,58 @@ fn encoded_bitmaps_embed_their_own_bytes() {
     "expected the original JPEG bytes in the PDF"
   );
 }
+
+/// `blur()` has no PDF equivalent. Dropping it would print a page that quietly
+/// disagrees with the stylesheet, so the render stops and names the function.
+#[test]
+fn an_unsupported_filter_stops_the_render() {
+  let doc =
+    r#"<div style="filter: blur(4px); width: 40px; height: 40px; background: #000;"></div>"#;
+  let error = render(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse the doc"))
+      .viewport(Viewport::new((80, 80)))
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect_err("blur() should stop the render");
+
+  assert!(
+    matches!(error, PdfError::UnsupportedFilter("blur()")),
+    "unexpected error: {error:?}"
+  );
+}
+
+/// An image whose bytes will not decode leaves a hole where the page expects a
+/// picture. The render stops and names the source.
+#[test]
+fn an_undecodable_image_stops_the_render() {
+  let mut bytes = ImageBuffer::from_rgba_bytes(vec![255; 8 * 8 * 4], 8, 8)
+    .expect("an 8x8 buffer")
+    .encode_png()
+    .expect("encode the png");
+  // The IHDR still reports 8x8; the compressed pixels no longer inflate.
+  let idat = find(&bytes, b"IDAT").expect("an IDAT chunk") + 8;
+
+  bytes[idat..].fill(0);
+
+  let cache = ResourceCache::new(1 << 20);
+  let source = cache
+    .get_or_decode(&bytes, ImageCacheMode::Auto)
+    .expect("a jpeg header still parses");
+  let doc = r#"<img src="broken" style="filter: grayscale(1); width: 32px; height: 32px;" />"#;
+  let error = render(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse the doc"))
+      .viewport(Viewport::new((48, 48)))
+      .images(HashMap::from([("broken".into(), source)]))
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect_err("a broken image should stop the render");
+
+  assert!(
+    matches!(&error, PdfError::UndrawableImage(reason) if reason.starts_with("broken:")),
+    "unexpected error: {error:?}"
+  );
+}

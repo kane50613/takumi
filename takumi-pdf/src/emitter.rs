@@ -5,7 +5,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 #[cfg(feature = "images")]
 use takumi_core::{
   context::RenderContext,
-  layout::node::{ImageData, resolve_image},
+  layout::node::{ImageData, ImageSourceInput, resolve_image},
   resources::image::ImageSource,
 };
 use takumi_core::{
@@ -30,7 +30,7 @@ use takumi_core::{
   shadow::SizedShadow,
   style::{
     Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BlendMode, BoxDecorationBreak,
-    BreakBetween, BreakInside, Color, FillRule as CoreFillRule, Isolation, Lang,
+    BreakBetween, BreakInside, Color, FillRule as CoreFillRule, Filter, Isolation, Lang,
     ResolvedGradientStop, TextDecorationLines,
   },
 };
@@ -43,7 +43,7 @@ use crate::paint::rasterized_image;
 use crate::svg;
 use crate::{
   background::{Placement, cycled, place},
-  filter::ColorFilter,
+  filter::{ColorFilter, unsupported_filter},
   glyph::run_glyphs,
   inline::{InlineMap, build_inline_runs, inline_key, node_inline_items, text_line_atoms},
   krilla::{
@@ -129,13 +129,72 @@ pub(crate) struct Emitter<'a> {
   /// its content marked with that language, which is how a reader knows to
   /// switch voices mid-document.
   pub(crate) document_lang: Option<&'a str>,
-  /// Characters no registered font covered. Collected rather than raised on the
-  /// spot: the surface has open transforms and clips mid-page, and unwinding
-  /// past them would leave it unbalanced.
-  pub(crate) uncovered: &'a RefCell<String>,
+  /// What the page could not draw. Collected rather than raised on the spot:
+  /// the surface has open transforms and clips mid-page, and unwinding past
+  /// them would leave it unbalanced.
+  pub(crate) issues: &'a RefCell<RenderIssues>,
+}
+
+/// Names an image in an error: its URL, or that it came in as raw bytes.
+#[cfg(feature = "images")]
+fn image_label(src: &ImageSourceInput) -> &str {
+  match src {
+    ImageSourceInput::Url(url) => url,
+    _ => "inline image bytes",
+  }
+}
+
+/// Failures a page collects while emitting, raised once the surface is closed.
+#[derive(Default)]
+pub(crate) struct RenderIssues {
+  /// Characters no registered font covered.
+  pub(crate) uncovered: String,
+  /// The first image that arrived as bytes this build cannot turn into pixels.
+  pub(crate) undrawable: Option<String>,
+  /// The first `filter` function the PDF backend cannot express.
+  pub(crate) unsupported_filter: Option<&'static str>,
 }
 
 impl Emitter<'_> {
+  /// Composes the filter chain, keeping the first function a PDF cannot
+  /// express for the caller to raise once the page is closed.
+  fn composed_filter(
+    &self,
+    outer: Option<&ColorFilter>,
+    filters: &[Filter],
+  ) -> Option<Rc<ColorFilter>> {
+    if let Some(unsupported) = unsupported_filter(filters) {
+      self
+        .issues
+        .borrow_mut()
+        .unsupported_filter
+        .get_or_insert(unsupported);
+    }
+
+    ColorFilter::compose(outer, filters).map(Rc::new)
+  }
+
+  /// Keeps the first undrawable image for the caller to raise once the page is
+  /// closed, and leaves the space empty in the meantime.
+  #[cfg(feature = "images")]
+  fn drawable(
+    &self,
+    label: &str,
+    image: Result<Option<crate::krilla::image::Image>, String>,
+  ) -> Option<crate::krilla::image::Image> {
+    match image {
+      Ok(image) => image,
+      Err(reason) => {
+        let mut issues = self.issues.borrow_mut();
+
+        issues
+          .undrawable
+          .get_or_insert(format!("{label}: {reason}"));
+        None
+      }
+    }
+  }
+
   fn window_excludes(&self, top: f32, bottom: f32) -> bool {
     self
       .window
@@ -188,8 +247,7 @@ impl Emitter<'_> {
       .root()
       .and_then(|paint| self.root.node_at_path(&paint.path))
     {
-      self.color_filter =
-        ColorFilter::compose(outer_filter.as_deref(), &node.context.style.filter).map(Rc::new);
+      self.color_filter = self.composed_filter(outer_filter.as_deref(), &node.context.style.filter);
     }
 
     let (outer_window, outer_line_window) = (self.window, self.line_window);
@@ -594,9 +652,10 @@ impl Emitter<'_> {
       let Ok(source) = resolve_image(url, &node.context) else {
         return;
       };
-      let Some(krilla_image) =
-        rasterized_image(&source, &node.context, (w, h), self.color_filter.as_deref())
-      else {
+      let Some(krilla_image) = self.drawable(
+        url,
+        rasterized_image(&source, &node.context, (w, h), self.color_filter.as_deref()),
+      ) else {
         return;
       };
       let Some(target) = KrillaSize::from_wh(w, h) else {
@@ -1041,8 +1100,6 @@ impl Emitter<'_> {
   /// `object-position`. SVG sources draw as vector ops; everything else
   /// rasterizes at its intrinsic size and embeds once per distinct pixel data
   /// (krilla dedups by content hash).
-  // ponytail: pixels upload as un-premultiplied RGBA8, so JPEG bytes re-encode
-  // as flate; add DCT passthrough when PDF size from photos matters.
   fn emit_image(
     &self,
     image: &ImageData,
@@ -1101,7 +1158,10 @@ impl Emitter<'_> {
     let vector: Option<((), f32, f32)> = None;
 
     let krilla_image = if vector.is_none() {
-      match rasterized_image(&source, context, (dw, dh), self.color_filter.as_deref()) {
+      match self.drawable(
+        image_label(&image.src),
+        rasterized_image(&source, context, (dw, dh), self.color_filter.as_deref()),
+      ) {
         Some(image) => Some(image),
         None => return,
       }
@@ -1255,7 +1315,7 @@ impl Emitter<'_> {
         .text
         .get(shaped.text_range.clone())
         .unwrap_or_default();
-      let glyphs = run_glyphs(shaped, run_text, &mut self.uncovered.borrow_mut());
+      let glyphs = run_glyphs(shaped, run_text, &mut self.issues.borrow_mut().uncovered);
 
       let color = shaped.brush.color;
       let fill = fill_from_rgba(self.filtered(color), shaped.brush.opacity);
@@ -1376,8 +1436,7 @@ impl Emitter<'_> {
           .push_opacity(NormalizedF32::new(opacity.clamp(0.0, 1.0)).unwrap_or(NormalizedF32::ONE));
       }
       let outer_filter = self.color_filter.clone();
-      self.color_filter =
-        ColorFilter::compose(outer_filter.as_deref(), &node.context.style.filter).map(Rc::new);
+      self.color_filter = self.composed_filter(outer_filter.as_deref(), &node.context.style.filter);
 
       let origin = (x + offset.x, y + offset.y);
 
@@ -1474,7 +1533,7 @@ impl Emitter<'_> {
       tags,
       tag_prefix,
       color_filter: self.color_filter.clone(),
-      uncovered: self.uncovered,
+      issues: self.issues,
       document_lang: self.document_lang,
     };
     let x = origin.0 + subtree.margin_offset.x;
@@ -1645,7 +1704,7 @@ impl Emitter<'_> {
         .text
         .get(shaped.text_range.clone())
         .unwrap_or_default();
-      let glyphs = run_glyphs(shaped, run_text, &mut self.uncovered.borrow_mut());
+      let glyphs = run_glyphs(shaped, run_text, &mut self.issues.borrow_mut().uncovered);
 
       let color = color.unwrap_or(shaped.brush.color);
 

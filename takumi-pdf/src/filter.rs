@@ -20,6 +20,18 @@ pub(crate) struct ColorFilter {
   functions: Vec<ColorMatrix>,
 }
 
+/// The first filter function in the list that a PDF cannot express, named as a
+/// stylesheet writes it.
+pub(crate) fn unsupported_filter(filters: &[Filter]) -> Option<&'static str> {
+  filters.iter().find_map(|filter| match filter {
+    Filter::Blur(_) => Some("blur()"),
+    Filter::DropShadow(_) => Some("drop-shadow()"),
+    #[cfg(feature = "svg")]
+    Filter::Reference(_) => Some("url()"),
+    _ => None,
+  })
+}
+
 impl ColorFilter {
   /// Prepends a filter list to whatever the ancestors already apply: CSS
   /// filters the element first and the ancestor's group afterwards, and the

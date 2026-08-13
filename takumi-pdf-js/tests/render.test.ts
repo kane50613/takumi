@@ -247,3 +247,24 @@ test("embeds JPEG and WebP image bytes", async () => {
   expect(bytes).toContain("/DCTDecode");
   expect(bytes).toContain(decoder.decode(jpeg));
 });
+
+test("rejects a filter it cannot apply to a JPEG", async () => {
+  const jpeg = new Uint8Array(
+    readFileSync(new URL("../../takumi-pdf/tests/images/checker.jpg", import.meta.url)),
+  );
+
+  await expect(
+    renderer.render(`<img src="photo" style="filter:grayscale(1);width:32px;height:32px" />`, {
+      viewport: { width: 48, height: 48 },
+      images: [{ src: "photo", data: jpeg }],
+    }),
+  ).rejects.toThrow("UndrawableImage");
+});
+
+test("rejects a filter a PDF cannot express", async () => {
+  await expect(
+    renderer.render(`<div style="filter:blur(4px);width:40px;height:40px;background:#000"></div>`, {
+      viewport: { width: 80, height: 80 },
+    }),
+  ).rejects.toThrow("UnsupportedFilter");
+});

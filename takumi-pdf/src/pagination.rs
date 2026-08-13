@@ -7,6 +7,7 @@ use takumi_core::{layout::node::Node, style::Affine, viewport::Viewport};
 use crate::{
   counters::{has_target_counters, substitute_target_counters},
   emitter::FontMap,
+  emitter::RenderIssues,
   inline::{build_inline_map, collect_text_boxes},
   interactive::collect_interactive,
   options::PdfError,
@@ -65,7 +66,7 @@ pub(crate) fn resolve_target_counters(
   node: &mut Node,
   inputs: &TreeInputs<'_>,
   fonts: &mut FontMap,
-  uncovered: &RefCell<String>,
+  issues: &RefCell<RenderIssues>,
   document_lang: Option<&str>,
   viewport: Viewport,
   window_height: f32,
@@ -84,7 +85,7 @@ pub(crate) fn resolve_target_counters(
     let mut paragraphs = Vec::new();
 
     content
-      .emitter(fonts, Some(&inline_map), None, uncovered, document_lang)
+      .emitter(fonts, Some(&inline_map), None, issues, document_lang)
       .collect_atoms(
         0,
         Affine::IDENTITY,

@@ -116,21 +116,21 @@ fn encoded_bytes(source: &ImageSource) -> Option<&[u8]> {
 /// rasterize at their intrinsic size; SVG sources at twice the target size for
 /// print density.
 ///
-/// ponytail: a filter over JPEG or WebP bytes needs pixels, and this build has
-/// no decoder for either: the image draws nothing. Forwarding
-/// `takumi-core/image-decoding` covers it, at 72 KB of wasm.
+/// `Ok(None)` is a source with nothing to draw. `Err` is a source that should
+/// have drawn and could not, and names why: a build that decodes only PNG has
+/// no pixels to run a filter over.
 #[cfg(feature = "images")]
 pub(crate) fn rasterized_image(
   source: &ImageSource,
   context: &RenderContext,
   target: (f32, f32),
   filter: Option<&ColorFilter>,
-) -> Option<KrillaImage> {
+) -> Result<Option<KrillaImage>, String> {
   if filter.is_none()
     && let Some(bytes) = encoded_bytes(source)
     && let Some(image) = embedded_image(bytes)
   {
-    return Some(image);
+    return Ok(Some(image));
   }
 
   let (width, height) = match source {
@@ -142,14 +142,19 @@ pub(crate) fn rasterized_image(
       (target.0 * 2.0).ceil() as u32,
       (target.1 * 2.0).ceil() as u32,
     ),
-    _ => return None,
+    _ => return Ok(None),
   };
   if width == 0 || height == 0 {
-    return None;
+    return Ok(None);
   }
   let rendered = source
     .render_for_layout(width, height, context.style.image_rendering, 0)
-    .ok()?;
+    .map_err(|error| match encoded_bytes(source) {
+      Some(_) if filter.is_some() => {
+        "a filter needs the image's pixels, and this build decodes only PNG".to_string()
+      }
+      _ => error.to_string(),
+    })?;
   let buffer = match &rendered {
     RenderedImage::Rasterized(buffer) => buffer.as_ref(),
     RenderedImage::Sampled { source, .. } => source.as_ref(),
@@ -162,11 +167,11 @@ pub(crate) fn rasterized_image(
       pixel.copy_from_slice(&filter.apply([pixel[0], pixel[1], pixel[2], pixel[3]]));
     }
   }
-  Some(KrillaImage::from_rgba8(
+  Ok(Some(KrillaImage::from_rgba8(
     data,
     buffer.width(),
     buffer.height(),
-  ))
+  )))
 }
 
 pub(crate) const fn spread(repeating: bool) -> SpreadMethod {

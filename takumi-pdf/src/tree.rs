@@ -20,7 +20,7 @@ use takumi_core::{
 };
 
 use crate::{
-  emitter::{Emitter, FontMap},
+  emitter::{Emitter, FontMap, RenderIssues},
   inline::InlineMap,
   options::PdfError,
   tags::TagCollector,
@@ -70,12 +70,12 @@ impl PreparedTree {
     fonts: &'a mut FontMap,
     inline: Option<&'a InlineMap<'a>>,
     tags: Option<&'a RefCell<TagCollector>>,
-    uncovered: &'a RefCell<String>,
+    issues: &'a RefCell<RenderIssues>,
     document_lang: Option<&'a str>,
   ) -> Emitter<'a> {
     Emitter {
       color_filter: None,
-      uncovered,
+      issues,
       document_lang,
       root: &self.root,
       contexts: &self.contexts,
