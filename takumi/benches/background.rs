@@ -1,7 +1,7 @@
 //! Background-image rasterization at the size of a full-height sidebar panel.
 //!
 //! A bitmap drawn 1:1 as a background should cost about what the same bitmap
-//! costs as an `<image>` node, so both are measured against an empty panel.
+//! costs as an `<image>` node, so the latter is measured as the baseline.
 
 use std::{collections::HashMap, hint::black_box, sync::Arc};
 
@@ -104,9 +104,6 @@ fn bench_background(c: &mut Criterion) {
 
   let mut group = c.benchmark_group("background");
 
-  group.bench_function("no_image", |b| {
-    b.iter(|| render_node(&fonts, black_box(panel(base_style())), &no_images))
-  });
   group.bench_function("image_node", |b| {
     b.iter(|| render_node(&fonts, black_box(image_node(source.clone())), &no_images))
   });
@@ -115,15 +112,6 @@ fn bench_background(c: &mut Criterion) {
       render_node(
         &fonts,
         black_box(panel(background_style(ImageScalingAlgorithm::Auto))),
-        &images,
-      )
-    })
-  });
-  group.bench_function("one_to_one_pixelated", |b| {
-    b.iter(|| {
-      render_node(
-        &fonts,
-        black_box(panel(background_style(ImageScalingAlgorithm::Pixelated))),
         &images,
       )
     })

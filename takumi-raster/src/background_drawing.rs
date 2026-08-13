@@ -191,15 +191,14 @@ impl ColorTile {
 }
 
 /// Everything about sampling a [`BackgroundTile::SampledBitmap`] that does not
-/// depend on the pixel being sampled: the source view, the sizes the mapping
+/// depend on the pixel being sampled: the source view, the size the mapping
 /// divides by, and the footprint. Resolved once per tile, not per pixel.
 #[derive(Clone, Copy)]
 pub(crate) struct SampledBitmapView<'a> {
   source: PixmapRef<'a>,
   algorithm: ImageScalingAlgorithm,
-  /// The source's own size, and the size the tile is drawn at. Equal sizes are
-  /// the identity mapping.
-  source_size: Size<u32>,
+  /// The size the tile is drawn at. When it equals the source's own size the
+  /// mapping is the identity.
   logical_size: Size<u32>,
   footprint: SamplingFootprint,
 }
@@ -211,20 +210,16 @@ impl<'a> SampledBitmapView<'a> {
     height: u32,
     algorithm: ImageScalingAlgorithm,
   ) -> Option<Self> {
-    let source_size = Size {
-      width: source.width(),
-      height: source.height(),
-    };
+    let source = pixmap_ref_from_buffer(source)?;
     let logical_size = Size { width, height };
 
     Some(Self {
-      source: pixmap_ref_from_buffer(source)?,
+      source,
       algorithm,
-      source_size,
       logical_size,
       footprint: SamplingFootprint::new(
-        source_size.width.max(1) as f32 / logical_size.width.max(1) as f32,
-        source_size.height.max(1) as f32 / logical_size.height.max(1) as f32,
+        source.width() as f32 / logical_size.width.max(1) as f32,
+        source.height() as f32 / logical_size.height.max(1) as f32,
       ),
     })
   }
@@ -237,7 +232,9 @@ impl<'a> SampledBitmapView<'a> {
   /// interpolation weight, and a one-pixel footprint never minifies. So the
   /// scaling algorithm can be ignored and the pixels copied as they are.
   pub(crate) fn identity_source(&self) -> Option<PixmapRef<'a>> {
-    (self.source_size == self.logical_size).then_some(self.source)
+    (self.source.width() == self.logical_size.width
+      && self.source.height() == self.logical_size.height)
+      .then_some(self.source)
   }
 
   /// Keep the `(x + 0.5) * source / logical` form, casts included. Folding the
@@ -248,10 +245,8 @@ impl<'a> SampledBitmapView<'a> {
     interpolate_with_footprint(
       PaintSource::from(self.source),
       self.algorithm,
-      (x as f32 + 0.5) * self.source_size.width.max(1) as f32
-        / self.logical_size.width.max(1) as f32,
-      (y as f32 + 0.5) * self.source_size.height.max(1) as f32
-        / self.logical_size.height.max(1) as f32,
+      (x as f32 + 0.5) * self.source.width() as f32 / self.logical_size.width.max(1) as f32,
+      (y as f32 + 0.5) * self.source.height() as f32 / self.logical_size.height.max(1) as f32,
       self.footprint,
     )
     .unwrap_or(PremultipliedColorU8::TRANSPARENT)
@@ -269,11 +264,8 @@ impl<'a> SampledBitmapView<'a> {
     }
 
     let stride = dst.len() * 4;
-    let Some(row) = source
-      .data()
-      .get(y as usize * stride..)
-      .and_then(|rest| rest.get(..stride))
-    else {
+    let start = y as usize * stride;
+    let Some(row) = source.data().get(start..start + stride) else {
       return false;
     };
 
