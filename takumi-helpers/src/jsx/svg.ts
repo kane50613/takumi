@@ -1,5 +1,12 @@
 import type { ComponentProps, ReactElement } from "react";
-import { camelToKebab, isFunctionComponent, isValidElement, type ReactElementLike } from "./utils";
+import {
+  camelToKebab,
+  isFunctionComponent,
+  isReactForwardRef,
+  isReactMemo,
+  isValidElement,
+  type ReactElementLike,
+} from "./utils";
 
 function isTextNode(node: unknown): node is string | number {
   return typeof node === "string" || typeof node === "number";
@@ -166,8 +173,21 @@ const serializeElementNode = (
     return;
   }
 
-  // Handle symbols (like React fragments) - they can't be serialized as HTML/SVG tags
-  if (typeof obj.type === "symbol") return;
+  // Fragments and other symbol types have no tag of their own; emit their children in place.
+  if (typeof obj.type === "symbol") {
+    serializeNode(props.children, parts, false);
+    return;
+  }
+
+  if (isReactForwardRef(obj.type)) {
+    serializeNode(obj.type.render(obj.props, null), parts, false);
+    return;
+  }
+
+  if (isReactMemo(obj.type)) {
+    serializeElementNode({ ...obj, type: obj.type.type }, parts, injectSvgXmlns);
+    return;
+  }
 
   // Only string types can be used as HTML/SVG tag names
   if (typeof obj.type !== "string") return;

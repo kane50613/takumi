@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { forwardRef, memo, StrictMode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { serializeSvg } from "../../src/jsx/svg";
@@ -45,6 +46,51 @@ test("serializeSvg preserves style objects and converts camelCase style keys", (
   const component = (
     <svg xmlns="http://www.w3.org/2000/svg">
       <rect style={{ strokeWidth: 2, strokeDasharray: "4 2" }} />
+    </svg>
+  );
+
+  const expected = renderToStaticMarkup(component);
+  const actual = serializeSvg(component);
+
+  expect(actual).toBe(expected);
+});
+
+test("serializeSvg emits fragment children, including from components", () => {
+  const Bars = () => (
+    <>
+      <rect x="0" width="10" height="10" />
+      <rect x="20" width="10" height="10" />
+    </>
+  );
+
+  const component = (
+    <svg xmlns="http://www.w3.org/2000/svg">
+      <>
+        <circle cx="5" cy="5" r="5" />
+      </>
+      <Bars />
+      <StrictMode>
+        <rect x="40" />
+      </StrictMode>
+    </svg>
+  );
+
+  const expected = renderToStaticMarkup(component);
+  const actual = serializeSvg(component);
+
+  expect(actual).toBe(expected);
+});
+
+test("serializeSvg renders memo and forwardRef children", () => {
+  const Memoized = memo(() => <rect x="0" width="10" height="10" />);
+  const Forwarded = forwardRef<SVGCircleElement>((_props, ref) => (
+    <circle ref={ref} cx="5" cy="5" r="5" />
+  ));
+
+  const component = (
+    <svg xmlns="http://www.w3.org/2000/svg">
+      <Memoized />
+      <Forwarded />
     </svg>
   );
 
