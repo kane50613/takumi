@@ -204,10 +204,12 @@ pub(crate) struct FontClasses {
 }
 
 /// Blink keys the same decision on COLR/CBDT/sbix via `ColorTableLookup`.
+const COLOR_TABLES: [Tag; 3] = [Tag::new(b"COLR"), Tag::new(b"CBDT"), Tag::new(b"sbix")];
+
 fn has_color_table(font: &FontRef) -> bool {
-  [b"COLR", b"CBDT", b"sbix"]
+  COLOR_TABLES
     .iter()
-    .any(|tag| font.table_data(Tag::new(tag)).is_some())
+    .any(|tag| font.table_data(*tag).is_some())
 }
 
 /// The registry of fonts available to a renderer.
