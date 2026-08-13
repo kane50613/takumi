@@ -352,6 +352,18 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         }
 
         let content_top = page.margin.top;
+
+        for fixed in repeated.iter().filter(|tree| tree.paints_below()) {
+          emit_band(
+            fixed,
+            &mut fonts,
+            (page.margin.left, content_top, content_width, window_height),
+            tag_collector.is_some(),
+            &issues,
+            document_lang,
+            &mut surface,
+          )?;
+        }
         // Paint stops at the next cut: the region between a raised cut and the
         // page's full height belongs to the next page and stays blank, exactly
         // like browser print fragmentation.
@@ -382,7 +394,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           surface.pop();
         }
 
-        for fixed in &repeated {
+        for fixed in repeated.iter().filter(|tree| !tree.paints_below()) {
           emit_band(
             fixed,
             &mut fonts,
@@ -436,12 +448,14 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         );
         // A repeated box sits at the same place on every page, so its links are
         // added per page against the page area rather than the content window.
+        // The box itself is an artifact, and its paths do not exist in the tag
+        // tree, so the annotations stay out of the structure too.
         add_link_annotations(
           &mut pdf_page,
           &repeated_links,
           (0.0, window_height),
           (page.margin.left, content_top),
-          tag_collector.as_ref(),
+          None,
           |id| {
             interactive
               .anchors

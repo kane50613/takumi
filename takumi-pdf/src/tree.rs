@@ -14,7 +14,7 @@ use takumi_core::{
   scene::{StackingContextNode, build_stacking_contexts},
   style::{
     Affine, ComputedStyle, Display, FlexDirection, FontFamily, Lang, Length, Position,
-    SizingContext, Style, StyleDeclaration, StyleSheet,
+    SizingContext, Style, StyleDeclaration, StyleSheet, ZIndex,
   },
   viewport::Viewport,
 };
@@ -62,6 +62,19 @@ impl PreparedTree {
           height: self.height,
         },
         |layout| layout.size,
+      )
+  }
+
+  /// Whether a repeated box paints under the content, which is what a negative
+  /// `z-index` asks for.
+  pub(crate) fn paints_below(&self) -> bool {
+    self
+      .root
+      .children
+      .as_deref()
+      .and_then(<[RenderNode]>::first)
+      .is_some_and(
+        |child| matches!(child.context.style.z_index, ZIndex::Integer(index) if index < 0),
       )
   }
 
@@ -159,6 +172,10 @@ pub(crate) fn prepare_paged_tree(
   Ok((content, repeated))
 }
 
+// ponytail: a repeated box with no insets paints at the page area's origin.
+// Blink keeps the box's hypothetical static position instead
+// (`out_of_flow_layout_part.cc`), which needs the offset the box had in the
+// flow it was taken out of.
 /// Removes the `fixed` boxes the initial containing block holds. A box that
 /// establishes a containing block of its own keeps its `fixed` descendants,
 /// which stay in the flow and paginate with it.

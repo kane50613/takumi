@@ -3048,7 +3048,8 @@ fn an_undecodable_image_stops_the_render() {
 
 /// A `fixed` box the initial containing block holds repeats on every page, laid
 /// out against the page area rather than the content column: a watermark, which
-/// is what the property is for in print.
+/// is what the property is for in print. Tagging is on, so the run also covers
+/// a repeated link against the tag tree, which only knows the content.
 #[test]
 fn a_fixed_box_repeats_on_every_page() {
   let doc = r#"<main>
@@ -3057,6 +3058,7 @@ fn a_fixed_box_repeats_on_every_page() {
       </div>
       <div style="position: fixed; top: 20px; left: 30px; width: 40px; height: 40px; background: #000;"></div>
       <a href="https://takumi.kane.tw" style="position: fixed; bottom: 10px; left: 10px;">source</a>
+      <div style="position: fixed; top: 200px; left: 200px; width: 50px; height: 50px; z-index: -1; background: #eee;"></div>
       <p style="height: 900px;">first</p>
       <p style="height: 900px;">second</p>
     </main>"#;
@@ -3064,6 +3066,7 @@ fn a_fixed_box_repeats_on_every_page() {
     PdfOptions::builder()
       .node(from_html(doc, FromHtmlOptions::default()).expect("parse the doc"))
       .page(PageOptions::A4)
+      .tagged(Tagging::On)
       .fonts(fonts)
       .build()
   });
@@ -3100,6 +3103,21 @@ fn a_fixed_box_repeats_on_every_page() {
     corners,
     [[30.0, 20.0, 40.0, 40.0]; 2],
     "expected the offset box at its own insets on both pages"
+  );
+
+  let lines: Vec<Vec<u8>> = content_lines(&pdf).collect();
+  let under = lines
+    .iter()
+    .position(|line| find(line, b"200 200 50 50 re").is_some())
+    .expect("the z-index: -1 box");
+  let first_text = lines
+    .iter()
+    .position(|line| line.ends_with(b"TJ") || line.ends_with(b"Tj"))
+    .expect("some text");
+
+  assert!(
+    under < first_text,
+    "expected a negative z-index box to paint under the content"
   );
 
   let watermarks: Vec<(f32, f32)> = content_lines(&pdf)
