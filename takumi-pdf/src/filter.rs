@@ -21,8 +21,7 @@ pub(crate) struct ColorFilter {
 }
 
 /// The first filter function that does not fold into a color matrix, written
-/// back as CSS. Those are the ones a vector backend has to rasterize, which is
-/// what this backend does not do.
+/// back as CSS.
 pub(crate) fn unsupported_filter(filters: &[Filter]) -> Option<String> {
   filters
     .iter()

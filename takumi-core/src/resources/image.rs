@@ -545,8 +545,7 @@ impl ImageSource {
     }
   }
 
-  /// A bitmap kept in the bytes it arrived in, decoded at the size it is drawn
-  /// or embedded undecoded by a vector backend.
+  /// A bitmap kept in the bytes it arrived in.
   fn encoded(
     bytes: &[u8],
     (width, height): (u32, u32),

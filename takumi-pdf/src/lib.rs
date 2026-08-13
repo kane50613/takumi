@@ -34,9 +34,8 @@
 //! - `clip-path`, `mask-image`, and the color `filter` primitives
 //! - opacity, blend modes, overflow clipping, and affine transforms
 //!
-//! `filter: blur()` and `drop-shadow()` have no PDF equivalent. Rather than
-//! print a page that disagrees with the stylesheet, [`render`] stops and names
-//! the function.
+//! `filter: blur()` and `drop-shadow()` have no PDF equivalent. [`render`]
+//! stops and names the function.
 
 use std::{cell::RefCell, rc::Rc};
 

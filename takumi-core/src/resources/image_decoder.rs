@@ -151,9 +151,7 @@ fn format_compiled_out_error() -> ImageError {
   ))
 }
 
-/// Whether these bytes are a format this build cannot decode. Those keep their
-/// bytes for a backend that embeds them undecoded; anything else that fails to
-/// decode is corrupt, and stays an error.
+/// Whether these bytes are a format this build has no decoder for.
 #[cfg(not(all(feature = "jpeg", feature = "webp")))]
 pub(crate) fn decoder_compiled_out(bytes: &[u8]) -> bool {
   match detect_image_format(bytes) {
@@ -165,9 +163,8 @@ pub(crate) fn decoder_compiled_out(bytes: &[u8]) -> bool {
   }
 }
 
-/// Dimensions read from the format header alone, for a format whose decoder is
-/// compiled out: layout needs the intrinsic size, and a vector backend embeds
-/// the original bytes without ever decoding them.
+/// Dimensions from the format header, for a format whose decoder is compiled
+/// out.
 #[cfg(not(all(feature = "jpeg", feature = "webp")))]
 fn header_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
   let size = imagesize::blob_size(bytes).map_err(|error| {

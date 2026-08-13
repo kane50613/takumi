@@ -147,16 +147,15 @@ fn image_label(src: &ImageSourceInput) -> &str {
 /// Failures a page collects while emitting, raised once the surface is closed.
 #[derive(Default)]
 pub(crate) struct RenderIssues {
-  /// Characters no registered font covered, gathered so one error names them
-  /// all.
+  /// Characters no registered font covered.
   pub(crate) uncovered: String,
-  /// The first failure that is worth a page on its own.
+  /// The first failure worth stopping for.
   pub(crate) failure: Option<PdfError>,
 }
 
 impl Emitter<'_> {
-  /// Composes the filter chain, keeping the first function a PDF cannot
-  /// express for the caller to raise once the page is closed.
+  /// The filter chain as colors, keeping the first function a PDF cannot
+  /// express.
   fn composed_filter(
     &self,
     outer: Option<&ColorFilter>,
@@ -169,8 +168,7 @@ impl Emitter<'_> {
     ColorFilter::compose(outer, filters).map(Rc::new)
   }
 
-  /// Keeps the first undrawable image for the caller to raise once the page is
-  /// closed, and leaves the space empty in the meantime.
+  /// The image to draw, or nothing and a kept failure.
   #[cfg(feature = "images")]
   fn drawable(
     &self,
@@ -186,8 +184,6 @@ impl Emitter<'_> {
     }
   }
 
-  /// Keeps the first failure. A later one is almost always the same cause
-  /// repeated on another page.
   fn fail(&self, error: PdfError) {
     let mut issues = self.issues.borrow_mut();
 

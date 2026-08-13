@@ -112,8 +112,7 @@ fn encoded_bytes(source: &ImageSource) -> Option<&[u8]> {
   }
 }
 
-/// A filter is the reason an image that would have embedded as bytes needs
-/// pixels at all, so the message says so before the decoder's own words.
+/// Why an image that had bytes could not be drawn.
 #[cfg(feature = "images")]
 fn undrawable_reason(filtered: bool, error: &ImageError) -> String {
   if filtered {
@@ -128,9 +127,8 @@ fn undrawable_reason(filtered: bool, error: &ImageError) -> String {
 /// rasterize at their intrinsic size; SVG sources at twice the target size for
 /// print density.
 ///
-/// `Ok(None)` is a source with nothing to draw. `Err` is a source that should
-/// have drawn and could not, and names why: a build that decodes only PNG has
-/// no pixels to run a filter over.
+/// `Ok(None)` is a source with nothing to draw, `Err` one that should have
+/// drawn and could not.
 #[cfg(feature = "images")]
 pub(crate) fn rasterized_image(
   source: &ImageSource,

@@ -2945,8 +2945,7 @@ fn a_ranked_subset_group_keeps_a_latin_run_whole() {
 }
 
 /// Encoded bitmaps reach the PDF as the bytes they came in as: a JPEG embeds
-/// as a `DCTDecode` stream instead of being decoded and re-encoded from RGBA,
-/// and a WebP decodes inside krilla rather than in takumi-core.
+/// as a `DCTDecode` stream rather than a re-encode of its pixels.
 #[test]
 fn encoded_bitmaps_embed_their_own_bytes() {
   const JPEG: &[u8] = include_bytes!("images/checker.jpg");

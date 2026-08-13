@@ -1,5 +1,5 @@
-//! Encoded raster bytes go into the PDF as they came in. The decoders live in
-//! the vendored krilla, and a JPEG is embedded without being decoded at all.
+//! Encoded raster bytes go into the PDF as they came in, decoded by the
+//! vendored krilla or, for a JPEG, not decoded at all.
 
 use crate::krilla::image::Image as KrillaImage;
 
