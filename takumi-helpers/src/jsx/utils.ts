@@ -41,7 +41,11 @@ function hasReactMarker(type: unknown, marker: symbol): type is { $$typeof: symb
 }
 
 export function isReactForwardRef(type: unknown): type is ForwardRefComponent {
-  return hasReactMarker(type, REACT_FORWARD_REF_TYPE) && "render" in type;
+  return (
+    hasReactMarker(type, REACT_FORWARD_REF_TYPE) &&
+    "render" in type &&
+    typeof type.render === "function"
+  );
 }
 
 export function isReactMemo(type: unknown): type is MemoComponent {
