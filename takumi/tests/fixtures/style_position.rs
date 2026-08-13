@@ -529,3 +529,88 @@ fn test_style_nested_hoisting_fixed_cb() {
   );
   run_fixture_test(root, "style_nested_hoisting_fixed_cb");
 }
+
+// A transform makes a box the containing block for its `fixed` descendants,
+// even when the box is not positioned. The purple square resolves against the
+// translated grey box, so it lands at (60, 60) rather than the canvas corner.
+#[test]
+fn test_style_fixed_captured_by_transform() {
+  let fixed = Node::container([]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::position(Position::Fixed))
+      .with(StyleDeclaration::width(Px(80.0)))
+      .with(StyleDeclaration::height(Px(80.0)))
+      .with(StyleDeclaration::top(Px(10.0)))
+      .with(StyleDeclaration::left(Px(10.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([160, 0, 200, 255]),
+      ))),
+  );
+  let transformed = Node::container([fixed]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::width(Px(200.0)))
+      .with(StyleDeclaration::height(Px(200.0)))
+      .with(StyleDeclaration::transform(Some(
+        Transforms::from_css_str("translate(50px, 50px)").unwrap(),
+      )))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([220, 220, 220, 255]),
+      ))),
+  );
+  let root = Node::container([transformed]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::white(),
+      ))),
+  );
+  run_fixture_test(root, "style_fixed_captured_by_transform");
+}
+
+// The same rule reaches `absolute`: a filtered static ancestor is its
+// containing block, so the red square resolves against the filtered box rather
+// than the relative one wrapping it.
+#[test]
+fn test_style_absolute_captured_by_filter() {
+  let absolute = Node::container([]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::position(Position::Absolute))
+      .with(StyleDeclaration::width(Px(80.0)))
+      .with(StyleDeclaration::height(Px(80.0)))
+      .with(StyleDeclaration::top(Px(10.0)))
+      .with(StyleDeclaration::left(Px(10.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([220, 0, 0, 255]),
+      ))),
+  );
+  let filtered = Node::container([absolute]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::width(Px(200.0)))
+      .with(StyleDeclaration::height(Px(200.0)))
+      .with(StyleDeclaration::margin_top(Px(60.0)))
+      .with(StyleDeclaration::margin_left(Px(60.0)))
+      .with(StyleDeclaration::filter(
+        Filters::from_css_str("grayscale(1)").unwrap(),
+      ))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([220, 220, 220, 255]),
+      ))),
+  );
+  let root = Node::container([filtered]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Block))
+      .with(StyleDeclaration::position(Position::Relative))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::white(),
+      ))),
+  );
+  run_fixture_test(root, "style_absolute_captured_by_filter");
+}
