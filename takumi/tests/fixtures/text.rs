@@ -1298,24 +1298,71 @@ fn text_font_synthesis_weight_emoji() {
 /// order, while bare codepoints keep following the stack like browsers do.
 #[test]
 fn text_emoji_variation_selector() {
-  let nodes: Vec<Node> = [
-    "Noto Sans TC, Twemoji Mozilla",
-    "Twemoji Mozilla, Noto Sans TC",
+  fn label(text: &str) -> Node {
+    let Ok(family) = FontFamily::from_css_str("Geist") else {
+      unreachable!()
+    };
+
+    Node::text(text).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::font_size(Px(28.0).into()))
+        .with(StyleDeclaration::font_family(family))
+        .with(StyleDeclaration::color(ColorInput::Value(Color([
+          90, 90, 90, 255,
+        ])))),
+    )
+  }
+
+  let rows: Vec<Node> = [
+    ("Noto Sans TC, Twemoji Mozilla", "text font first"),
+    ("Twemoji Mozilla, Noto Sans TC", "emoji font first"),
   ]
   .iter()
-  .map(|stack| {
+  .map(|(stack, order)| {
     let Ok(family) = FontFamily::from_css_str(stack) else {
       unreachable!()
     };
 
-    Node::text("‼ ‼\u{FE0F} ‼\u{FE0E} 一").with_style(
+    let glyphs = Node::text("‼ ‼\u{FE0F} ‼\u{FE0E} 一").with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::font_size(Px(96.0).into()))
-        .with(StyleDeclaration::font_family(family)),
+        .with(StyleDeclaration::font_family(family))
+        .with(StyleDeclaration::width(Px(480.0).into())),
+    );
+    let annotation = Node::container(vec![label(stack), label(order)]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+        .with_gap(SpacePair::from_single(Px(8.0).into())),
+    );
+
+    Node::container(vec![glyphs, annotation]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::align_items(AlignItems::Center))
+        .with_gap(SpacePair::from_single(Px(40.0).into())),
     )
   })
   .collect();
+
+  let header = Node::container(vec![
+    Node::container(vec![label("bare · U+FE0F · U+FE0E · CJK")]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::width(Px(480.0).into())),
+    ),
+    label("font-family"),
+  ])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with_gap(SpacePair::from_single(Px(40.0).into())),
+  );
+
+  let mut nodes = vec![header];
+  nodes.extend(rows);
 
   let container = Node::container(nodes.into_boxed_slice()).with_style(
     Style::default()
@@ -1324,9 +1371,11 @@ fn text_emoji_variation_selector() {
         Color([240, 240, 240, 255]),
       )))
       .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
-      .with_padding(Sides([Px(20.0); 4]))
-      .with_gap(SpacePair::from_single(Px(12.0).into())),
+      .with(StyleDeclaration::justify_content(JustifyContent::Center))
+      .with_padding(Sides([Px(48.0); 4]))
+      .with_gap(SpacePair::from_single(Px(24.0).into())),
   );
 
   run_fixture_test(container, "text_emoji_variation_selector");
