@@ -47,7 +47,7 @@ const pdf = await render(doc, {
 
 SVG image sources embed as vector paths and gradients, so logos stay sharp at any zoom. Subtrees that vectors cannot express (filters, embedded bitmaps) rasterize at 2× their placed size. Raster sources embed once for each distinct pixel data.
 
-PNG, JPEG and WebP bytes all embed. A JPEG goes in as the JPEG you passed, so the PDF carries the compression the file already had. GIF is not supported here.
+PNG, JPEG and WebP bytes all embed. A JPEG goes in as the JPEG you passed, so the PDF carries the compression the file already had. GIF bytes are rejected: no decoder for them ships in this build.
 
 A CSS `filter` needs pixels to work on, and this build decodes only PNG. An image under a filter that came in as JPEG or WebP is skipped.
 

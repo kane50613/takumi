@@ -19,6 +19,8 @@ use thiserror::Error;
 use tiny_skia::Pixmap;
 use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 
+#[cfg(not(all(feature = "jpeg", feature = "webp")))]
+use crate::resources::image_decoder::decoder_compiled_out;
 #[cfg(feature = "svg")]
 use crate::resvg::{
   apply_filters_to_layer, render as render_svg_tree,
@@ -505,10 +507,9 @@ impl ImageSource {
       #[cfg(all(feature = "jpeg", feature = "webp"))]
       Err(error) => Err(ImageError::decode(error)),
       #[cfg(not(all(feature = "jpeg", feature = "webp")))]
-      Err(error) => match bitmap_dimensions(bytes) {
-        Some(Ok(_)) => Self::from_bytes_lazy(bytes, 0, Weak::new()),
-        _ => Err(ImageError::decode(error)),
-      },
+      Err(_) if decoder_compiled_out(bytes) => Self::from_bytes_lazy(bytes, 0, Weak::new()),
+      #[cfg(not(all(feature = "jpeg", feature = "webp")))]
+      Err(error) => Err(ImageError::decode(error)),
     }
   }
 
@@ -1054,6 +1055,18 @@ mod resource_cache_tests {
   /// PNG bytes that decode to a tiny bitmap (cacheable).
   fn png_bytes() -> Vec<u8> {
     ImageBuffer::new(2, 2).unwrap().encode_png().unwrap()
+  }
+
+  /// A PNG whose header parses but whose pixels do not fails at load. Only a
+  /// format this build has no decoder for is allowed to stay encoded.
+  #[test]
+  fn a_corrupt_png_fails_to_load() {
+    let mut bytes = png_bytes();
+    let tail = bytes.len() - 16;
+
+    bytes[tail..].fill(0);
+
+    assert!(ImageSource::from_bytes(&bytes).is_err());
   }
 
   #[test]
