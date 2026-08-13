@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, ops::Range};
 
 use parley::{
   FontFamily as ParleyFontFamily, FontFamilyName, FontFeatures, FontVariations, GenericFamily,
@@ -11,7 +11,7 @@ use crate::{
   geometry::Size,
   layout::inline::InlineBrush,
   painter::StrokeStyle,
-  resources::font::SubsetGroup,
+  resources::font::{FontClasses, SubsetGroup},
   shadow::SizedShadow,
   style::{
     BorderStyle, Color, ComputedStyle, Display, FontFamily, FontSynthesis, Lang, Length,
@@ -51,6 +51,51 @@ impl ExpandedFontFamily {
     ParleyFontFamily::List(self.iter().collect())
   }
 
+  /// Reorders the stack for a variation-selector segment: families whose glyphs match the
+  /// requested presentation come first (authored order preserved), then every registered
+  /// family of the matching class, then the rest of the authored stack as the base-glyph
+  /// fallback. Blink reaches the same order by rejecting presentation-mismatched fonts
+  /// during the first fallback pass and rerunning it without the selector.
+  pub(crate) fn with_presentation<'a>(
+    &self,
+    presentation: Presentation,
+    classes: &FontClasses,
+  ) -> ParleyFontFamily<'a> {
+    let matches = |token: &ExpandedFamilyToken| {
+      let is_color = match token {
+        ExpandedFamilyToken::Named(name) => classes.color.contains(name),
+        ExpandedFamilyToken::Generic(generic) => *generic == GenericFamily::Emoji,
+      };
+
+      is_color == (presentation == Presentation::Emoji)
+    };
+    let owned = |token: &ExpandedFamilyToken| match token {
+      ExpandedFamilyToken::Named(name) => FontFamilyName::Named(Cow::Owned(name.clone())),
+      ExpandedFamilyToken::Generic(generic) => FontFamilyName::Generic(*generic),
+    };
+    let registered = match presentation {
+      Presentation::Emoji => &classes.color_order,
+      Presentation::Text => &classes.mono_order,
+    };
+
+    let mut names: Vec<FontFamilyName<'a>> = Vec::with_capacity(self.0.len());
+    names.extend(self.0.iter().filter(|token| matches(token)).map(owned));
+    names.extend(
+      registered
+        .iter()
+        .filter(|name| {
+          !self
+            .0
+            .iter()
+            .any(|token| matches!(token, ExpandedFamilyToken::Named(authored) if authored == *name))
+        })
+        .map(|name| FontFamilyName::Named(Cow::Owned(name.clone()))),
+    );
+    names.extend(self.0.iter().filter(|token| !matches(token)).map(owned));
+
+    ParleyFontFamily::List(Cow::Owned(names))
+  }
+
   /// Expands `family` against the registered subset `groups`: a name that's a subset group
   /// becomes its registered subset families, ranked; other names pass through unchanged.
   fn expand(family: &FontFamily, groups: &HashMap<String, SubsetGroup>) -> Self {
@@ -78,6 +123,77 @@ impl RenderContext {
   pub(crate) fn expand_font_family(&self, family: &FontFamily) -> ExpandedFontFamily {
     ExpandedFontFamily::expand(family, &self.fonts.groups)
   }
+}
+
+/// The glyph presentation a variation selector requests.
+/// <https://unicode.org/reports/tr51/#Presentation_Style>
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Presentation {
+  /// `U+FE0F`: color emoji glyph.
+  Emoji,
+  /// `U+FE0E`: monochrome text glyph.
+  Text,
+}
+
+const VS15: char = '\u{FE0E}';
+const VS16: char = '\u{FE0F}';
+const ZWJ: char = '\u{200D}';
+const KEYCAP: char = '\u{20E3}';
+
+pub(crate) fn contains_variation_selector(text: &str) -> bool {
+  text.contains([VS15, VS16])
+}
+
+fn continues_emoji_sequence(ch: char) -> bool {
+  matches!(ch, VS15 | VS16 | KEYCAP | '\u{1F3FB}'..='\u{1F3FF}')
+}
+
+/// Splits `text` into maximal segments of one requested presentation, `None` where no
+/// variation selector expresses one. A selector claims its whole emoji sequence (ZWJ
+/// chain, keycap, skin tones) so the sequence shapes inside a single style span.
+pub(crate) fn presentation_segments(text: &str) -> Vec<(Range<usize>, Option<Presentation>)> {
+  let chars: Vec<(usize, char)> = text.char_indices().collect();
+  let mut segments: Vec<(Range<usize>, Option<Presentation>)> = Vec::new();
+  let mut push = |range: Range<usize>, presentation| {
+    match segments.last_mut() {
+      Some((last, existing)) if *existing == presentation => last.end = range.end,
+      _ => segments.push((range, presentation)),
+    };
+  };
+
+  let mut index = 0;
+  while index < chars.len() {
+    let start = chars[index].0;
+    let mut presentation = None;
+    let mut end = index + 1;
+
+    loop {
+      while let Some(&(_, ch)) = chars
+        .get(end)
+        .filter(|(_, ch)| continues_emoji_sequence(*ch))
+      {
+        match ch {
+          VS16 => presentation = presentation.or(Some(Presentation::Emoji)),
+          VS15 => presentation = presentation.or(Some(Presentation::Text)),
+          _ => {}
+        }
+        end += 1;
+      }
+
+      if chars.get(end).is_some_and(|(_, ch)| *ch == ZWJ) && end + 1 < chars.len() {
+        end += 2;
+      } else {
+        break;
+      }
+    }
+
+    let end_byte = chars.get(end).map_or(text.len(), |(byte, _)| *byte);
+
+    push(start..end_byte, presentation);
+    index = end;
+  }
+
+  segments
 }
 
 /// Sized font style with computed font size and line height.
@@ -393,11 +509,14 @@ impl<'s> SizedFontStyle<'s> {
 // not in this file; the one testable seam owned by this module is `ExpandedFontFamily::expand`.
 #[cfg(test)]
 mod tests {
-  use std::collections::HashMap;
+  use std::collections::{HashMap, HashSet};
 
   use parley::{FontFamilyName, GenericFamily};
 
-  use super::{ExpandedFontFamily, SizedFontStyle, SubsetGroup};
+  use super::{
+    ExpandedFontFamily, FontClasses, Presentation, SizedFontStyle, SubsetGroup,
+    presentation_segments,
+  };
   use crate::{
     Fonts,
     context::RenderContext,
@@ -457,6 +576,129 @@ mod tests {
       expanded.iter().next(),
       Some(FontFamilyName::Generic(GenericFamily::Monospace))
     ));
+  }
+
+  fn segments(text: &str) -> Vec<(&str, Option<Presentation>)> {
+    presentation_segments(text)
+      .into_iter()
+      .map(|(range, presentation)| (&text[range], presentation))
+      .collect()
+  }
+
+  #[test]
+  fn text_without_selectors_is_one_neutral_segment() {
+    assert_eq!(segments("hello 👍"), vec![("hello 👍", None)]);
+  }
+
+  #[test]
+  fn a_selector_claims_its_base_and_leaves_the_rest() {
+    assert_eq!(
+      segments("‼ ‼\u{FE0F}!"),
+      vec![
+        ("‼ ", None),
+        ("‼\u{FE0F}", Some(Presentation::Emoji)),
+        ("!", None),
+      ]
+    );
+  }
+
+  #[test]
+  fn vs15_requests_text_presentation() {
+    assert_eq!(
+      segments("a‼\u{FE0E}b"),
+      vec![
+        ("a", None),
+        ("‼\u{FE0E}", Some(Presentation::Text)),
+        ("b", None),
+      ]
+    );
+  }
+
+  #[test]
+  fn keycap_and_zwj_sequences_stay_whole() {
+    assert_eq!(
+      segments("1\u{FE0F}\u{20E3}"),
+      vec![("1\u{FE0F}\u{20E3}", Some(Presentation::Emoji))]
+    );
+    assert_eq!(
+      segments("❤\u{FE0F}\u{200D}🔥!"),
+      vec![
+        ("❤\u{FE0F}\u{200D}🔥", Some(Presentation::Emoji)),
+        ("!", None),
+      ]
+    );
+  }
+
+  #[test]
+  fn a_selector_later_in_a_zwj_chain_claims_the_whole_chain() {
+    assert_eq!(
+      segments("👁\u{200D}🗨\u{FE0F}"),
+      vec![("👁\u{200D}🗨\u{FE0F}", Some(Presentation::Emoji))]
+    );
+  }
+
+  #[test]
+  fn adjacent_segments_with_the_same_presentation_merge() {
+    assert_eq!(
+      segments("‼\u{FE0F}ℹ\u{FE0F}"),
+      vec![("‼\u{FE0F}ℹ\u{FE0F}", Some(Presentation::Emoji))]
+    );
+  }
+
+  fn classes() -> FontClasses {
+    FontClasses {
+      color: HashSet::from(["Emoji Font".to_string(), "Other Emoji".to_string()]),
+      color_order: vec!["Emoji Font".to_string(), "Other Emoji".to_string()],
+      mono_order: vec!["Text Font".to_string(), "Other Text".to_string()],
+    }
+  }
+
+  fn family_names(family: parley::FontFamily<'_>) -> Vec<String> {
+    let parley::FontFamily::List(names) = family else {
+      panic!("expected a list");
+    };
+    names
+      .iter()
+      .map(|name| match name {
+        FontFamilyName::Named(name) => name.to_string(),
+        FontFamilyName::Generic(generic) => format!("{generic:?}"),
+      })
+      .collect()
+  }
+
+  #[test]
+  fn emoji_presentation_puts_color_families_first() {
+    let family = FontFamily::from_css_str("Text Font, Emoji Font").unwrap();
+    let expanded = ExpandedFontFamily::expand(&family, &HashMap::new());
+
+    assert_eq!(
+      family_names(expanded.with_presentation(Presentation::Emoji, &classes())),
+      vec!["Emoji Font", "Other Emoji", "Text Font"]
+    );
+  }
+
+  #[test]
+  fn text_presentation_puts_mono_families_first() {
+    let family = FontFamily::from_css_str("Emoji Font, Text Font").unwrap();
+    let expanded = ExpandedFontFamily::expand(&family, &HashMap::new());
+
+    assert_eq!(
+      family_names(expanded.with_presentation(Presentation::Text, &classes())),
+      vec!["Text Font", "Other Text", "Emoji Font"]
+    );
+  }
+
+  #[test]
+  fn registered_class_families_slot_between_authored_classes() {
+    let family = FontFamily::from_css_str("Text Font").unwrap();
+    let expanded = ExpandedFontFamily::expand(&family, &HashMap::new());
+
+    // No authored color font: the registered ones still outrank the mismatched
+    // authored family, like Blink's fallback-priority font stage.
+    assert_eq!(
+      family_names(expanded.with_presentation(Presentation::Emoji, &classes())),
+      vec!["Emoji Font", "Other Emoji", "Text Font"]
+    );
   }
 
   fn outline(style: BorderStyle, width: f32) -> Option<StrokeStyle> {

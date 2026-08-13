@@ -1,7 +1,7 @@
 use std::{
   borrow::Cow,
   cell::RefCell,
-  collections::{BTreeSet, HashMap, hash_map::Entry},
+  collections::{BTreeSet, HashMap, HashSet, hash_map::Entry},
   fmt::{self, Debug, Formatter},
   iter::once,
   rc::Rc,
@@ -193,6 +193,23 @@ fn font_style_css(style: FontStyle) -> String {
 /// landing in the wrong one.
 pub(crate) type SubsetGroup = BTreeSet<(u32, String)>;
 
+/// Registered families split by whether they carry color glyph tables, so a
+/// variation-selector segment can put the presentation-matching class first.
+pub(crate) struct FontClasses {
+  pub(crate) color: HashSet<String>,
+  /// Color families in registration order.
+  pub(crate) color_order: Vec<String>,
+  /// Monochrome families in registration order.
+  pub(crate) mono_order: Vec<String>,
+}
+
+/// Blink keys the same decision on COLR/CBDT/sbix via `ColorTableLookup`.
+fn has_color_table(font: &FontRef) -> bool {
+  [b"COLR", b"CBDT", b"sbix"]
+    .iter()
+    .any(|tag| font.table_data(Tag::new(tag)).is_some())
+}
+
 /// The registry of fonts available to a renderer.
 ///
 /// Registration is the only mutation; afterwards the assembled parley context is immutable
@@ -217,6 +234,8 @@ pub struct Fonts {
   /// Families registered via [`FontResource::last_resort`], appended after `order` in the
   /// fallback bucket regardless of registration arrival.
   last_resort_order: Vec<String>,
+  /// Families with at least one face carrying a color glyph table.
+  color_names: HashSet<String>,
 }
 
 impl Default for Fonts {
@@ -232,6 +251,7 @@ impl Default for Fonts {
       groups: Arc::new(HashMap::new()),
       order: Vec::new(),
       last_resort_order: Vec::new(),
+      color_names: HashSet::new(),
     }
   }
 }
@@ -242,6 +262,7 @@ impl Default for Fonts {
 pub struct FontsSnapshot {
   context: Rc<RefCell<Fonts>>,
   pub(crate) groups: Arc<HashMap<String, SubsetGroup>>,
+  pub(crate) classes: Arc<FontClasses>,
 }
 
 impl FontsSnapshot {
@@ -353,14 +374,26 @@ impl Fonts {
       );
     }
 
+    let (color_order, mono_order) = self
+      .order
+      .iter()
+      .cloned()
+      .partition(|name| self.color_names.contains(name));
+
     FontsSnapshot {
       context: Rc::new(RefCell::new(Self {
         inner: cloned,
         groups: self.groups.clone(),
         order: self.order.clone(),
         last_resort_order: self.last_resort_order.clone(),
+        color_names: self.color_names.clone(),
       })),
       groups: self.groups.clone(),
+      classes: Arc::new(FontClasses {
+        color: self.color_names.clone(),
+        color_order,
+        mono_order,
+      }),
     }
   }
 
@@ -432,10 +465,16 @@ impl Fonts {
       .as_ref()
       .zip(axes.as_deref())
       .map(|(info, axes)| info.to_parley(axes));
-    let registered_fonts = self.inner.collection.register_fonts(blob, info_override);
+    let registered_fonts = self
+      .inner
+      .collection
+      .register_fonts(blob.clone(), info_override);
 
     let mut families = Vec::with_capacity(registered_fonts.len());
     for (family, faces) in registered_fonts {
+      let is_color = faces.iter().any(|face| {
+        FontRef::from_index(blob.data(), face.index()).is_ok_and(|font| has_color_table(&font))
+      });
       let faces = faces
         .iter()
         .map(|face| RegisteredFace {
@@ -460,6 +499,10 @@ impl Fonts {
 
       if !order.contains(&name) {
         order.push(name.clone());
+      }
+
+      if is_color {
+        self.color_names.insert(name.clone());
       }
 
       if let Some(logical) = &subset_of {

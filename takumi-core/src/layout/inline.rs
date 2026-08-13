@@ -9,11 +9,11 @@ use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
   context::RenderContext,
-  font_style::SizedFontStyle,
+  font_style::{SizedFontStyle, contains_variation_selector, presentation_segments},
   geometry::{AvailableSpace, ComputedLayout, PathBuilder, PathCommand, Point, Rect, Size},
   layout::{intercept::skip_ink_spans, node::Node, tree::RenderNode},
   resources::{
-    font::{FontError, run_synthesis, run_variations},
+    font::{FontClasses, FontError, run_synthesis, run_variations},
     glyph::{ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},
   },
   style::{
@@ -1340,6 +1340,7 @@ pub(crate) fn measure_inline_layout(
 fn push_spans_into_builder(
   builder: &mut TreeBuilder<'_, InlineBrush>,
   spans: &[ProcessedInlineSpan<'_>],
+  classes: &FontClasses,
 ) {
   for span in spans {
     match span {
@@ -1350,7 +1351,23 @@ fn push_spans_into_builder(
         ..
       } => {
         builder.push_style_span(text_style_with_span_id(style, Some(*span_id)));
-        builder.push_text(text);
+        if contains_variation_selector(text) {
+          for (range, presentation) in presentation_segments(text) {
+            match presentation {
+              Some(presentation) => {
+                let mut segment_style = text_style_with_span_id(style, Some(*span_id));
+                segment_style.font_family =
+                  style.font_family.with_presentation(presentation, classes);
+                builder.push_style_span(segment_style);
+                builder.push_text(&text[range]);
+                builder.pop_style_span();
+              }
+              None => builder.push_text(&text[range]),
+            }
+          }
+        } else {
+          builder.push_text(text);
+        }
         builder.pop_style_span();
       }
       ProcessedInlineSpan::Box(item) => {
@@ -1525,7 +1542,7 @@ fn build_inline_layout_tree<'c>(
     Some(cached) => cached,
     None => {
       let (layout, text) = context.tree_builder(style.into(), |builder| {
-        push_spans_into_builder(builder, &spans)
+        push_spans_into_builder(builder, &spans, &context.fonts.classes)
       });
 
       if let Some(key) = cache_key {
@@ -2955,7 +2972,7 @@ fn make_ellipsis_layout<'c>(
   let ellipsis_style = tail_text_span(spans).map_or(root_style, |(style, _)| style);
 
   let (mut final_layout, _) = context.tree_builder(root_style.into(), |builder| {
-    push_spans_into_builder(builder, spans);
+    push_spans_into_builder(builder, spans, &context.fonts.classes);
     builder.push_style_span(text_style_with_span_id(ellipsis_style, None));
     builder.push_text(ellipsis_char);
     builder.pop_style_span();

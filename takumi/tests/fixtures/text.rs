@@ -1293,6 +1293,45 @@ fn text_font_synthesis_weight_emoji() {
   run_fixture_test(container, "text_font_synthesis_weight_emoji");
 }
 
+/// Variation selectors pick the font by presentation, not by stack order:
+/// `U+FE0F` reaches the color font and `U+FE0E` the text font from either
+/// order, while bare codepoints keep following the stack like browsers do.
+#[test]
+fn text_emoji_variation_selector() {
+  let nodes: Vec<Node> = [
+    "Noto Sans TC, Twemoji Mozilla",
+    "Twemoji Mozilla, Noto Sans TC",
+  ]
+  .iter()
+  .map(|stack| {
+    let Ok(family) = FontFamily::from_css_str(stack) else {
+      unreachable!()
+    };
+
+    Node::text("‼ ‼\u{FE0F} ‼\u{FE0E} 一").with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::font_size(Px(96.0).into()))
+        .with(StyleDeclaration::font_family(family)),
+    )
+  })
+  .collect();
+
+  let container = Node::container(nodes.into_boxed_slice()).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([240, 240, 240, 255]),
+      )))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+      .with_padding(Sides([Px(20.0); 4]))
+      .with_gap(SpacePair::from_single(Px(12.0).into())),
+  );
+
+  run_fixture_test(container, "text_emoji_variation_selector");
+}
+
 #[test]
 fn text_chinese_ellipsis() {
   let text = "日本利用壓電磁磚將腳步轉化為電能。這些瓷磚捕捉來自你腳步的動能。當你行走時，你的重量和動作會對瓷磚產生壓力。磁磚會輕微彎曲，從而產生機械應力。磁磚內部的壓電材料將這種應力轉化為電能。每一步都會產生少量電荷，而數百萬步結合在一起就能產生足夠的電力來驅動 LED燈、數位顯示器和感測器。在像澀谷車站這樣繁忙的地方，每天大約有240萬個腳步為此系統作出貢獻。這些電能可以被儲存或立即使用，從而減少對傳統電賴，並支持永續的城市基礎設施。這種方法將日常運動轉化為實用的再生能源。";

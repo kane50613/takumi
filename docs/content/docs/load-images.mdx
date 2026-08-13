@@ -223,3 +223,5 @@ Two steps:
 
 - Register the font through [`fonts`](/docs/typography-and-fonts).
 - Set `emoji: "from-font"`.
+
+Variation selectors override font order. A codepoint followed by `U+FE0F` renders as a color emoji even when a text font appears earlier in the stack. A codepoint followed by `U+FE0E` renders as a monochrome glyph even when a color font appears first. Bare codepoints follow stack order, as in browsers.
