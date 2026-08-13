@@ -43,6 +43,33 @@ test("renders an HTML string with its own stylesheet", async () => {
   expect(pageCount(pdf)).toBe(1);
 });
 
+// One red pixel per raster format, inline so the suite carries no binary
+// fixtures. Each is `sharp({ create: { width: 1, height: 1, channels: 4,
+// background: "#dc3c3c" } }).toFormat(format)`.
+const pixels = {
+  png: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWO4Y2PzHwAFoAJUkZ/O4AAAAABJRU5ErkJggg==",
+  jpeg: "/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAABQf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCIAAVt/9k=",
+  webp: "UklGRjoAAABXRUJQVlA4IC4AAACQAQCdASoBAAEAAUAmJaACdLoAA5gA/urUf/cdgbrxb/9zgf92T/+2T/1IAAAA",
+  gif: "R0lGODlhAQABAIAAAExpcdw8PCH5BAUAAAAALAAAAAABAAEAAAICTAEAOw==",
+};
+
+// The decoders are takumi-core features that `raster-images` forwards, and this
+// build compiles takumi-core's defaults out: a format missing from that forward
+// fails the whole render rather than dropping the image.
+test.each(Object.entries(pixels))("embeds pre-fetched %s bytes", async (format, base64) => {
+  const src = `https://example.test/pixel.${format}`;
+  const pdf = await renderer.render(`<img src="${src}" style="width: 64px">`, {
+    viewport: { width: 80, height: 80 },
+    images: [{ src, data: new Uint8Array(Buffer.from(base64, "base64")) }],
+  });
+  const bytes = decoder.decode(pdf);
+
+  expect(bytes).toContain("/Subtype/Image");
+  // The XObject carries the decoded pixel, not a placeholder.
+  expect(bytes).toContain("/Width 1");
+  expect(bytes).toContain("/Height 1");
+});
+
 test("paginates and substitutes footer counters", async () => {
   // The bundled face is latin only, and `trad-chinese-informal` counts in
   // Chinese numerals. The face registered for it stays on a renderer of its
