@@ -203,13 +203,17 @@ pub(crate) struct FontClasses {
   pub(crate) mono_order: Vec<String>,
 }
 
-/// Blink keys the same decision on COLR/CBDT/sbix via `ColorTableLookup`.
-const COLOR_TABLES: [Tag; 3] = [Tag::new(b"COLR"), Tag::new(b"CBDT"), Tag::new(b"sbix")];
+const SBIX: Tag = Tag::new(b"sbix");
+const COLR: Tag = Tag::new(b"COLR");
+const CPAL: Tag = Tag::new(b"CPAL");
+const CBDT: Tag = Tag::new(b"CBDT");
+const CBLC: Tag = Tag::new(b"CBLC");
 
+/// Color tables in the pairs Blink's `ColorTableLookup` accepts.
 fn has_color_table(font: &FontRef) -> bool {
-  COLOR_TABLES
-    .iter()
-    .any(|tag| font.table_data(*tag).is_some())
+  font.table_data(SBIX).is_some()
+    || (font.table_data(COLR).is_some() && font.table_data(CPAL).is_some())
+    || (font.table_data(CBDT).is_some() && font.table_data(CBLC).is_some())
 }
 
 /// The registry of fonts available to a renderer.
