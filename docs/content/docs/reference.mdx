@@ -241,6 +241,17 @@ Properties use their camelCase names. Longhands are listed in parentheses. `Supp
 | `animationFillMode`       | Supported                                                                                                     |
 | `animationPlayState`      | Supported                                                                                                     |
 
+### Fragmentation
+
+Consumed by [paged PDF output](/docs/pdf/pagination). Other backends ignore them.
+
+| Property                    | Values           |
+| :-------------------------- | :--------------- |
+| `breakBefore`, `breakAfter` | `auto`, `page`   |
+| `breakInside`               | `auto`, `avoid`  |
+| `boxDecorationBreak`        | `slice`, `clone` |
+| `widows`, `orphans`         | `<integer>`      |
+
 ### Typography
 
 | Property                                                                                                                       | Values                                                                                       |
