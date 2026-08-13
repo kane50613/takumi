@@ -76,6 +76,10 @@ workspace = true
 all-features = true
 
 [[bench]]
+name = "background"
+harness = false
+
+[[bench]]
 name = "canvas"
 harness = false
 

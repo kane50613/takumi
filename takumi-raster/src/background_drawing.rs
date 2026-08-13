@@ -9,7 +9,7 @@ use takumi_core::{
   },
   paint::{ConicGradientTile, GradientOverlayTile, LinearGradientTile, RadialGradientTile},
 };
-use tiny_skia::{IntSize, Pixmap, PixmapMut, PremultipliedColorU8};
+use tiny_skia::{IntSize, Pixmap, PixmapMut, PixmapRef, PremultipliedColorU8};
 
 #[cfg(feature = "svg")]
 use crate::resources::image::RenderedImage;
@@ -190,6 +190,90 @@ impl ColorTile {
   }
 }
 
+/// Everything about sampling a [`BackgroundTile::SampledBitmap`] that does not
+/// depend on the pixel being sampled: the source view, the size the mapping
+/// divides by, and the footprint. Resolved once per tile, not per pixel.
+#[derive(Clone, Copy)]
+pub(crate) struct SampledBitmapView<'a> {
+  source: PixmapRef<'a>,
+  algorithm: ImageScalingAlgorithm,
+  /// The size the tile is drawn at. When it equals the source's own size the
+  /// mapping is the identity.
+  logical_size: Size<u32>,
+  footprint: SamplingFootprint,
+}
+
+impl<'a> SampledBitmapView<'a> {
+  fn new(
+    source: &'a ImageBuffer,
+    width: u32,
+    height: u32,
+    algorithm: ImageScalingAlgorithm,
+  ) -> Option<Self> {
+    let source = pixmap_ref_from_buffer(source)?;
+    let logical_size = Size { width, height };
+
+    Some(Self {
+      source,
+      algorithm,
+      logical_size,
+      footprint: SamplingFootprint::new(
+        source.width() as f32 / logical_size.width.max(1) as f32,
+        source.height() as f32 / logical_size.height.max(1) as f32,
+      ),
+    })
+  }
+
+  /// The source pixmap when the tile is drawn at exactly the source's size, so
+  /// destination pixel `(x, y)` is source pixel `(x, y)`.
+  ///
+  /// Every sampler agrees there. The sample lands on `x + 0.5`, which nearest
+  /// floors back to `x` and bilinear resolves to the same texel at zero
+  /// interpolation weight, and a one-pixel footprint never minifies. So the
+  /// scaling algorithm can be ignored and the pixels copied as they are.
+  pub(crate) fn identity_source(&self) -> Option<PixmapRef<'a>> {
+    (self.source.width() == self.logical_size.width
+      && self.source.height() == self.logical_size.height)
+      .then_some(self.source)
+  }
+
+  /// Keep the `(x + 0.5) * source / logical` form, casts included. Folding the
+  /// division into a precomputed scale rounds differently and shifts which texel
+  /// a minified sample lands on.
+  #[inline]
+  pub(crate) fn sample(&self, x: u32, y: u32) -> PremultipliedColorU8 {
+    interpolate_with_footprint(
+      PaintSource::from(self.source),
+      self.algorithm,
+      (x as f32 + 0.5) * self.source.width() as f32 / self.logical_size.width.max(1) as f32,
+      (y as f32 + 0.5) * self.source.height() as f32 / self.logical_size.height.max(1) as f32,
+      self.footprint,
+    )
+    .unwrap_or(PremultipliedColorU8::TRANSPARENT)
+  }
+
+  /// Copies source row `y` into `dst` when the tile is drawn 1:1, reporting
+  /// whether it did. A mismatched width would misalign the row offsets, so it
+  /// falls back to sampling.
+  fn try_copy_row(&self, y: u32, dst: &mut [[u8; 4]]) -> bool {
+    let Some(source) = self.identity_source() else {
+      return false;
+    };
+    if source.width() as usize != dst.len() {
+      return false;
+    }
+
+    let stride = dst.len() * 4;
+    let start = y as usize * stride;
+    let Some(row) = source.data().get(start..start + stride) else {
+      return false;
+    };
+
+    dst.copy_from_slice(bytemuck::cast_slice(row));
+    true
+  }
+}
+
 pub(crate) enum BackgroundTile {
   Linear(LinearGradientTile),
   Radial(RadialGradientTile),
@@ -237,33 +321,27 @@ impl BackgroundTile {
       Self::Radial(t) => t.sample_pixel(x, y),
       Self::Conic(t) => t.sample_pixel(x, y),
       Self::Pixmap(t) => PaintSource::from(t.as_ref()).get_pixel(x, y),
-      Self::SampledBitmap {
-        source,
-        width,
-        height,
-        algo,
-      } => {
-        let logical_width = (*width).max(1);
-        let logical_height = (*height).max(1);
-        let source_width = source.width().max(1);
-        let source_height = source.height().max(1);
-
-        let mapped_x = (x as f32 + 0.5) * source_width as f32 / logical_width as f32;
-        let mapped_y = (y as f32 + 0.5) * source_height as f32 / logical_height as f32;
-        let footprint = SamplingFootprint::new(
-          source_width as f32 / logical_width as f32,
-          source_height as f32 / logical_height as f32,
-        );
-
-        let Some(pixmap_ref) = pixmap_ref_from_buffer(source.as_ref()) else {
-          return PremultipliedColorU8::TRANSPARENT;
-        };
-        let source = PaintSource::from(pixmap_ref);
-        interpolate_with_footprint(source, *algo, mapped_x, mapped_y, footprint)
-          .unwrap_or(PremultipliedColorU8::TRANSPARENT)
-      }
+      Self::SampledBitmap { .. } => self
+        .sampled_bitmap_view()
+        .map_or(PremultipliedColorU8::TRANSPARENT, |view| view.sample(x, y)),
       Self::Color(t) => t.get_pixel(x, y),
     }
+  }
+
+  /// The hoisted sampling state for a [`Self::SampledBitmap`], so a caller that
+  /// walks many pixels resolves the source once instead of per pixel.
+  pub(crate) fn sampled_bitmap_view(&self) -> Option<SampledBitmapView<'_>> {
+    let Self::SampledBitmap {
+      source,
+      width,
+      height,
+      algo,
+    } = self
+    else {
+      return None;
+    };
+
+    SampledBitmapView::new(source.as_ref(), *width, *height, *algo)
   }
 
   pub(crate) fn rasterize_row(&self, y: u32, width: u32, dst: &mut [u8]) {
@@ -292,8 +370,17 @@ impl BackgroundTile {
         }
       }
       Self::SampledBitmap { .. } => {
+        let Some(view) = self.sampled_bitmap_view() else {
+          pixels.fill([0; 4]);
+          return;
+        };
+
+        if view.try_copy_row(y, pixels) {
+          return;
+        }
+
         for (x, chunk) in pixels.iter_mut().enumerate() {
-          let p = self.get_pixel(x as u32, y);
+          let p = view.sample(x as u32, y);
           *chunk = [p.red(), p.green(), p.blue(), p.alpha()];
         }
       }
@@ -568,4 +655,104 @@ pub(crate) fn collect_background_layers(
   }
 
   Ok(layers)
+}
+
+#[cfg(test)]
+mod tests {
+  use std::{collections::HashMap, sync::Arc};
+
+  use super::*;
+  use crate::{
+    Fonts, RenderOptions,
+    layout::node::Node,
+    render,
+    resources::image::ImageSource,
+    style::{
+      BackgroundImages, BackgroundRepeats, BackgroundSizes, FromCssStr, ImageScalingAlgorithm,
+      Length::Percentage, Style, StyleDeclaration,
+    },
+    viewport::Viewport,
+  };
+
+  const BITMAP_URL: &str = "test://bitmap";
+
+  /// Opaque so the premultiplied round-trip through the canvas is lossless and
+  /// the rendered bytes can be compared against the source directly.
+  fn opaque_source(width: u32, height: u32) -> (Vec<u8>, ImageSource) {
+    let mut data = Vec::with_capacity((width as usize) * (height as usize) * 4);
+    for y in 0..height {
+      for x in 0..width {
+        data.extend_from_slice(&[
+          (x * 7 % 256) as u8,
+          (y * 11 % 256) as u8,
+          ((x + y) * 13 % 256) as u8,
+          u8::MAX,
+        ]);
+      }
+    }
+
+    let source = ImageBuffer::from_rgba_bytes(data.clone(), width, height)
+      .map(ImageSource::from)
+      .expect("source buffer dimensions");
+    (data, source)
+  }
+
+  fn render_background(
+    source: ImageSource,
+    viewport: (u32, u32),
+    algorithm: ImageScalingAlgorithm,
+  ) -> Vec<u8> {
+    let fonts = Fonts::default();
+    let node = Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_image(Some(
+          BackgroundImages::from_css_str(&format!("url({BITMAP_URL})")).expect("background url"),
+        )))
+        .with(StyleDeclaration::background_size(
+          BackgroundSizes::from_css_str("100% 100%").expect("background size"),
+        ))
+        .with(StyleDeclaration::background_repeat(
+          BackgroundRepeats::from_css_str("no-repeat").expect("background repeat"),
+        ))
+        .with(StyleDeclaration::image_rendering(algorithm)),
+    );
+
+    let options = RenderOptions::builder()
+      .fonts(&fonts)
+      .viewport(Viewport::new(viewport))
+      .node(node)
+      .images(HashMap::from([(Arc::from(BITMAP_URL), source)]))
+      .build();
+
+    render(options).expect("render background").into_raw()
+  }
+
+  /// A background drawn at the source's own size is a copy of the source, so
+  /// every `image-rendering` value has to agree with it and with each other.
+  #[test]
+  fn one_to_one_background_copies_the_source_for_every_algorithm() {
+    let (expected, source) = opaque_source(64, 48);
+
+    let auto = render_background(source.clone(), (64, 48), ImageScalingAlgorithm::Auto);
+    let smooth = render_background(source.clone(), (64, 48), ImageScalingAlgorithm::Smooth);
+    let pixelated = render_background(source, (64, 48), ImageScalingAlgorithm::Pixelated);
+
+    assert_eq!(auto, expected);
+    assert_eq!(smooth, expected);
+    assert_eq!(pixelated, expected);
+  }
+
+  /// The fast path must not swallow `image-rendering` for a genuinely scaled
+  /// background: nearest and the smooth samplers disagree there.
+  #[test]
+  fn scaled_background_still_honours_image_rendering() {
+    let (_, source) = opaque_source(64, 48);
+
+    let auto = render_background(source.clone(), (32, 24), ImageScalingAlgorithm::Auto);
+    let pixelated = render_background(source, (32, 24), ImageScalingAlgorithm::Pixelated);
+
+    assert_ne!(auto, pixelated);
+  }
 }
