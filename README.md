@@ -32,7 +32,7 @@ Takumi is a Rust rendering engine for markup and CSS. It handles layout, text sh
 - **Text on a path** follows `offset-path`. `background-clip: text` and conic gradients paint it.
 - Masks, `clip-path`, `backdrop-filter`, and blend modes composite the way browsers do.
 - **SVG filters** run through `filter: url(...)`, `feTurbulence` and `feDisplacementMap` included.
-- **`corner-shape`** curves corners as `squircle`, `bevel`, `scoop`, `notch`, or `superellipse(n)`.
+- **`corner-shape`** swaps round corners for `squircle`, `bevel`, `scoop`, `notch`, or `superellipse(n)`.
 - **Tailwind v4** utilities apply directly, arbitrary values included.
 
 ### PDF
