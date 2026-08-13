@@ -1,6 +1,6 @@
 [package]
 name = "takumi-raster"
-version = "0.4.17"
+version = "0.4.18"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Raster (tiny-skia) painting backend for takumi."
@@ -34,7 +34,7 @@ features = ["aarch64_simd", "avx512_simd"]
 
 [dependencies.takumi-core]
 path = "../takumi-core"
-version = "0.20.0"
+version = "0.21.0"
 default-features = false
 
 [dependencies.serde]

@@ -1,97 +1,98 @@
 core:changelogs:
-  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n### Follow Unicode emoji presentation in `extractEmojis`\n\n`extractEmojis` replaced every pictograph with a CDN image, so `‼` and `▶` came back as color emoji. Pictographs that default to text presentation now stay text, `U+FE0F` forces the emoji image, and `U+FE0E` forces the text glyph.\n"
-    filename: emoji-presentation.md
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n### Honor `widows` and `orphans` at page breaks\n\nA cut through a paragraph keeps at least `orphans` lines at the bottom of the page and `widows` lines at the top of the next. Both are inherited CSS properties and default to 2, the Chromium print default. Set both to 1 to disable the limits. Minimums the page cannot fit are dropped for that page.\n"
+    filename: pdf-widows-orphans.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-html:\n    type: minor\n---\n\n### Keep the `<html>` root when parsing a document\n\nA source starting with `<html>` is parsed as a document, so the tree keeps that element along with `<body>` and the styles on both. It used to be parsed as a fragment, which dropped the wrappers. Anything else is still a fragment and gains no wrappers of its own.\n"
-    filename: html-document-root.md
+  - content: "---\npackages:\n  takumi-raster:\n    type: patch\n---\n\n### Stop rebuilding the sampler for every background-image pixel\n\nSampling a bitmap background rebuilt the source dimensions, the sampling footprint and a length-checked `PixmapRef` for every pixel. That state is resolved once per tile now. A background drawn at the bitmap's own size is composited as the source pixmap instead of being resampled. Output is unchanged.\n"
+    filename: background-image-sampling-hoist.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n### Resolve `rem` against the viewport instead of the outermost node\n\n`rem` used the computed `font-size` of the tree's outermost node, so a `text-2xl` there silently scaled every `rem` length below it, including the whole Tailwind spacing scale. `rem` and `rlh` now resolve against the viewport's font size. A tree rooted at an `<html>` element keeps the old basis, since CSS makes that element the root; the JS `fromHtml` returns one for a full document.\n"
-    filename: rem-resolves-against-viewport.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n### Honor emoji variation selectors in font selection\n\nWhen emoji render from registered fonts (`emoji: \"from-font\"`), a codepoint followed by `U+FE0F` now picks a registered color font and one followed by `U+FE0E` a registered monochrome font. `font-family` order does not affect either. Bare codepoints keep following the stack, matching browsers.\n"
+    filename: emoji-variation-selector-font-selection.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - id: npm:@takumi-rs/wasm
-    updated: true
-  - id: npm:@takumi-rs/core
-    updated: true
-  - changelogIds:
-      - emoji-presentation.md
-    id: npm:@takumi-rs/helpers
-    updated: true
-  - id: npm:takumi-pdf
-    updated: true
   - id: npm:docs
+    updated: false
+  - id: npm:takumi-template
     updated: false
   - id: npm:@takumi-rs/image-response
     updated: true
+  - changelogIds:
+      - pdf-widows-orphans.md
+    id: npm:takumi-pdf
+    updated: true
+  - id: npm:@takumi-rs/core
+    updated: true
+  - id: npm:@takumi-rs/wasm
+    updated: true
   - id: npm:takumi-js
     updated: true
-  - id: npm:takumi-template
+  - id: npm:@takumi-rs/helpers
+    updated: true
+  - id: npm:ffmpeg-keyframe-animation
     updated: false
   - id: npm:ffplay
     updated: false
-  - id: npm:example-e-invoice
-    updated: false
-  - id: npm:waku-ssr
+  - id: npm:pdf-bench
     updated: false
   - id: npm:example-generate-invoice
     updated: false
-  - id: npm:svelte
+  - id: npm:example-css-library-integration
+    updated: false
+  - id: npm:waku-ssr
     updated: false
   - id: npm:example-twitter-images
     updated: false
-  - id: npm:example-liquid-glass
-    updated: false
-  - id: npm:example-satori-html
-    updated: false
   - id: npm:example-tanstack-start
     updated: false
-  - id: npm:pdf-bench
-    updated: false
-  - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:ffmpeg-keyframe-animation
-    updated: false
-  - id: npm:example-css-library-integration
+  - id: npm:example-e-invoice
     updated: false
   - id: npm:example-nextjs
     updated: false
+  - id: npm:example-satori-html
+    updated: false
+  - id: npm:example-liquid-glass
+    updated: false
+  - id: npm:example-cloudflare-workers
+    updated: false
+  - id: npm:svelte
+    updated: false
   - id: cargo:takumi-svg
     updated: true
+  - id: cargo:takumi-html
+    updated: true
   - changelogIds:
-      - html-document-root.md
-    id: cargo:takumi-html
+      - background-image-sampling-hoist.md
+    id: cargo:takumi-raster
     updated: true
   - id: cargo:takumi
     updated: true
   - changelogIds:
-      - rem-resolves-against-viewport.md
+      - emoji-variation-selector-font-selection.md
+      - pdf-widows-orphans.md
     id: cargo:takumi-core
-    updated: true
-  - id: cargo:takumi-raster
     updated: true
 npm:packages:
   - id: npm:takumi
-  - id: npm:@takumi-rs/wasm
-  - id: npm:@takumi-rs/core
-  - id: npm:@takumi-rs/helpers
-  - id: npm:takumi-pdf
   - id: npm:docs
-  - id: npm:@takumi-rs/image-response
-  - id: npm:takumi-js
   - id: npm:takumi-template
-  - id: npm:ffplay
-  - id: npm:example-e-invoice
-  - id: npm:waku-ssr
-  - id: npm:example-generate-invoice
-  - id: npm:svelte
-  - id: npm:example-twitter-images
-  - id: npm:example-liquid-glass
-  - id: npm:example-satori-html
-  - id: npm:example-tanstack-start
-  - id: npm:pdf-bench
-  - id: npm:example-cloudflare-workers
+  - id: npm:@takumi-rs/image-response
+  - id: npm:takumi-pdf
+  - id: npm:@takumi-rs/core
+  - id: npm:@takumi-rs/wasm
+  - id: npm:takumi-js
+  - id: npm:@takumi-rs/helpers
   - id: npm:ffmpeg-keyframe-animation
+  - id: npm:ffplay
+  - id: npm:pdf-bench
+  - id: npm:example-generate-invoice
   - id: npm:example-css-library-integration
+  - id: npm:waku-ssr
+  - id: npm:example-twitter-images
+  - id: npm:example-tanstack-start
+  - id: npm:example-e-invoice
   - id: npm:example-nextjs
+  - id: npm:example-satori-html
+  - id: npm:example-liquid-glass
+  - id: npm:example-cloudflare-workers
+  - id: npm:svelte
