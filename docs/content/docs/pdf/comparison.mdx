@@ -20,6 +20,7 @@ Environment: Apple M1 Pro, macOS 15.7.4, Bun 1.3.14, Chrome 151.
 | Deploy needs                  | 1.5 MB gzip wasm                            | pure JS                                               | Chrome install (hundreds of MB) |
 | Template language             | JSX, HTML, node trees with CSS and Tailwind | its own primitives (`<View>`, `<Text>`, `StyleSheet`) | HTML with full CSS              |
 | Selectable text, subset fonts | yes                                         | yes                                                   | yes                             |
+| Arabic and bidi text          | yes                                         | shaping only, manual direction                        | yes                             |
 | Runs on edge runtimes         | yes (Cloudflare Workers)                    | no (Node)                                             | no                              |
 
 ## Bundle and install size
@@ -39,10 +40,12 @@ pdf-lib, pdfkit, and jspdf are drawing primitives. You position each text line y
 
 takumi-pdf's wasm binary is the largest single JS download. It is also the whole engine. `node_modules` has 45 files.
 
+Cloudflare Workers caps a free-plan bundle at 3 MB after compression. The 1.52 MB wasm leaves half of that for application code.
+
 Reading the numbers honestly:
 
 - Chrome's cold start includes launching a browser process. It varies with machine state. Its memory spans several processes. A single-process measurement misses this. Chrome performs well after warming. It has the most complete CSS support of the three.
-- react-pdf embeds the same Inter subsets as the other two. Subsetting on every render is most of its warm cost; the standard 14 PDF fonts avoid it. Documents use react-pdf's component set. Existing HTML, JSX, and Tailwind markup cannot be reused.
+- react-pdf embeds the same Inter subsets as the other two. Subsetting on every render is most of its warm cost; the standard 14 PDF fonts avoid it. Documents use react-pdf's component set. Existing HTML, JSX, and Tailwind markup cannot be reused. It shapes Arabic, but paragraph direction is manual, and our Arabic sample dropped its first letter.
 - takumi-pdf reuses OG-image components unchanged. Its CSS coverage is narrower than Chromium's. PDF output does not support `filter: blur()`, `drop-shadow()`, or `backdrop-filter`. A blurred `box-shadow` is approximated with bands, and a blurred `text-shadow` draws sharp. Tagged output is on by default and adds about 4 KB to this invoice, down from 10 KB before the structure tree moved into an object stream. `tagged: false` removes it.
 
 Rule of thumb: use Puppeteer to reproduce a complex web page pixel-perfectly. Any renderer suits documents written from scratch for PDF work. Use takumi-pdf to reuse Takumi image components. It suits edge runtimes. It also offers lower per-document latency.

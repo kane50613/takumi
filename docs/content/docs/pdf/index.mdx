@@ -5,7 +5,17 @@ index: true
 icon: BookOpen
 ---
 
-`takumi-pdf` renders the same JSX, Tailwind classes, and node trees as image output. It writes a paged vector PDF instead: selectable text, embedded subset fonts, page breaks, and repeating headers and footers. It ships as a WebAssembly module. It runs on Node.js, Bun, and Cloudflare Workers without Chromium.
+`takumi-pdf` renders the same JSX, Tailwind classes, and node trees as image output. It writes a paged vector PDF instead. It ships as a WebAssembly module. It runs on Node.js, Bun, and Cloudflare Workers without Chromium.
+
+- **Page breaks** honor `break-before: page`, `break-after: page`, and `break-inside: avoid`.
+- **[Headers and footers](/docs/pdf/headers-and-footers)** repeat on every page, with page counters.
+- **Text** stays selectable and searchable. Fonts embed as subsets.
+- **[Links](/docs/pdf/links-and-outline)** and metadata carry into the output. `outline: true` builds bookmarks from headings.
+- **[Attachments](/docs/pdf/attachments)** embed files, including Factur-X e-invoice XML.
+- **Tagged PDF** is on by default. [PDF/A-2, A-3, A-4, and PDF/UA-1](/docs/pdf/pdf-a) pass veraPDF.
+- **Arabic**, bidi text, CJK, Devanagari, and emoji shape correctly.
+- **Gradients**, `box-shadow`, transforms, and color filters stay vector, conic gradients included.
+- **1.5 MB** of gzip wasm fits the Cloudflare Workers free plan.
 
 ```npm
 npm i takumi-pdf
