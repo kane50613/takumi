@@ -40,7 +40,7 @@ pdf-lib, pdfkit, and jspdf are drawing primitives. You position each text line y
 
 takumi-pdf's wasm binary is the largest single JS download. It is also the whole engine. `node_modules` has 45 files.
 
-Cloudflare Workers caps a free-plan bundle at 3 MB after compression. The 1.52 MB wasm leaves half of that for application code.
+Cloudflare Workers caps a free-plan bundle at 3 MB after compression. The 1.52 MB wasm and the 10 KB JS wrapper leave half of that for application code.
 
 Reading the numbers honestly:
 
