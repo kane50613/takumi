@@ -49,49 +49,76 @@ const clauses = [
   },
 ];
 
-export default function Watermark() {
-  // No background on the root: a negative z-index paints under the content, and
-  // a root background would cover it.
-  return (
-    <div tw="flex w-full flex-col text-[#111827]">
-      {/*
-        A fixed box the page holds repeats on every page, laid out against the
-        page area. The negative z-index keeps it under the text, and the rotate
-        on the box itself does not change what it is positioned against.
-      */}
-      <div
-        tw="fixed inset-0 flex items-center justify-center"
-        style={{ zIndex: -1, transform: "rotate(-30deg)" }}
-      >
-        <span
-          tw="w-full text-center text-[8vw] font-bold tracking-[0.14em]"
-          style={{ color: "rgba(17,24,39,0.14)" }}
-        >
-          CONFIDENTIAL
-        </span>
-      </div>
+const parties = ["Kiln Studio Ltd.", "Aomori Systems K.K."];
 
+function Watermark({ label }: { label: string }) {
+  return (
+    <div
+      tw="fixed inset-0 flex items-center justify-center"
+      style={{ zIndex: -1, transform: "rotate(-30deg)" }}
+    >
+      <span
+        tw="w-full text-center text-[8vw] font-bold tracking-[0.14em]"
+        style={{ color: "rgba(17,24,39,0.14)" }}
+      >
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function Heading() {
+  return (
+    <div tw="flex flex-col">
       <h1 tw="mt-0 mb-1 text-2xl font-bold">Mutual non-disclosure agreement</h1>
       <span tw="text-xs text-[#6b7280]">
-        Between Kiln Studio Ltd. and Aomori Systems K.K. · 2026-08-14
+        Between {parties[0]} and {parties[1]} · 2026-08-14
       </span>
+    </div>
+  );
+}
 
+function Clause({ title, body }: { title: string; body: string }) {
+  return (
+    <div tw="mt-6 flex flex-col break-inside-avoid">
+      <h2 tw="m-0 text-base font-semibold">{title}</h2>
+      <p tw="mt-2 mb-0 text-sm leading-6 text-[#374151]">{body}</p>
+    </div>
+  );
+}
+
+function Signature({ party }: { party: string }) {
+  return (
+    <div tw="flex w-[45%] flex-col border-t border-[#9ca3af] pt-2 text-xs">
+      <span tw="font-semibold">{party}</span>
+      <span tw="text-[#6b7280]">Name, title, date</span>
+    </div>
+  );
+}
+
+function Footer() {
+  return (
+    <div tw="flex w-full justify-between px-14 pb-5 text-[10px] text-[#9ca3af]">
+      <span>Confidential · draft for review</span>
+      <span>
+        <span className="pageNumber" /> / <span className="totalPages" />
+      </span>
+    </div>
+  );
+}
+
+export default function Agreement() {
+  return (
+    <div tw="flex w-full flex-col text-[#111827]">
+      <Watermark label="CONFIDENTIAL" />
+      <Heading />
       {clauses.map((clause) => (
-        <div key={clause.title} tw="mt-6 flex flex-col break-inside-avoid">
-          <h2 tw="m-0 text-base font-semibold">{clause.title}</h2>
-          <p tw="mt-2 mb-0 text-sm leading-6 text-[#374151]">{clause.body}</p>
-        </div>
+        <Clause key={clause.title} title={clause.title} body={clause.body} />
       ))}
-
       <div tw="mt-12 flex justify-between">
-        <div tw="flex w-[45%] flex-col border-t border-[#9ca3af] pt-2 text-xs">
-          <span tw="font-semibold">Kiln Studio Ltd.</span>
-          <span tw="text-[#6b7280]">Name, title, date</span>
-        </div>
-        <div tw="flex w-[45%] flex-col border-t border-[#9ca3af] pt-2 text-xs">
-          <span tw="font-semibold">Aomori Systems K.K.</span>
-          <span tw="text-[#6b7280]">Name, title, date</span>
-        </div>
+        {parties.map((party) => (
+          <Signature key={party} party={party} />
+        ))}
       </div>
     </div>
   );
@@ -101,14 +128,7 @@ export const options: PlaygroundOptions = {
   pdf: {
     size: "a4",
     margin: { top: 64, right: 56, bottom: 64, left: 56 },
-    footer: (
-      <div tw="flex w-full justify-between px-14 pb-5 text-[10px] text-[#9ca3af]">
-        <span>Confidential · draft for review</span>
-        <span>
-          <span className="pageNumber" /> / <span className="totalPages" />
-        </span>
-      </div>
-    ),
+    footer: <Footer />,
     outline: true,
     metadata: { title: "Mutual non-disclosure agreement", creationDate: "2026-08-14" },
   },
