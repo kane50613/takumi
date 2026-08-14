@@ -71,7 +71,7 @@ export type PageSize = PageSizeName | Dimensions;
  */
 export type PageMarginSide = number | "auto";
 
-/** A page margin: one value for all sides, or per-side values (missing sides are zero). */
+/** A page margin: one value for all sides, or per-side values (a side left out is `auto`). */
 export type PageMargin =
   | PageMarginSide
   | {
