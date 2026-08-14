@@ -290,6 +290,32 @@ fn paged_breaks() {
   });
 }
 
+/// The anonymous box a text child lays out in used to copy `break-after` from
+/// its parent, cutting a second time at the parent's content edge and leaving
+/// the padding below it on a page of its own.
+#[test]
+fn break_after_a_padded_box_cuts_once() {
+  let fonts = fonts();
+  let source = r#"<div style="display: flex; flex-direction: column;">
+    <div style="display: flex; padding-bottom: 64px; break-after: page;">One</div>
+    <div style="display: flex;">Two</div>
+  </div>"#;
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse the doc"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render the doc");
+
+  assert_eq!(
+    String::from_utf8_lossy(&pdf).matches("/Count 2").count(),
+    1,
+    "expected the break to cut once"
+  );
+}
+
 /// A table of contents whose entries carry `targetPageNumber` hooks. Each
 /// section is forced onto its own page, so the entries have to read 2, 3 and 4.
 fn toc_document(cells: [&str; 3]) -> String {
