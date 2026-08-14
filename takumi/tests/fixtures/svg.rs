@@ -58,6 +58,29 @@ fn test_svg_attr_size_in_absolute_flex_container() {
   run_fixture_test(node, "svg_attr_size_in_absolute_flex_container");
 }
 
+// https://github.com/kane50613/takumi/issues/1058
+#[test]
+fn test_svg_current_color_inherits_host_color() {
+  let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="96" height="96"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 17V3m-6 8l6 6l6-6m1 10H5"/></svg>"#;
+
+  let node: Node = Node::container([Node::image(svg).with_tag_name("svg")]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::justify_content(JustifyContent::Center))
+      .with(StyleDeclaration::align_items(AlignItems::Center))
+      .with(StyleDeclaration::color(ColorInput::Value(Color([
+        239, 68, 68, 255,
+      ]))))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::white(),
+      ))),
+  );
+
+  run_fixture_test(node, "svg_current_color_inherits_host_color");
+}
+
 #[test]
 fn test_twemoji_svg() {
   // https://github.com/nuxt-modules/og-image/blob/0209474b99e1ffa8a9010df359f170563024056f/src/runtime/server/og-image/core/transforms/emojis/fetch.ts#L54

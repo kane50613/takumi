@@ -187,10 +187,7 @@ fn convert_paint(
       .and_then(|(_, s)| s)
       .map(|s| (s.paint, s.context_element)),
     svgtypes::Paint::CurrentColor => {
-      let svg_color: svgtypes::Color = node
-        .find_attribute(AId::Color)
-        .unwrap_or_else(svgtypes::Color::black);
-      let (color, alpha) = svg_color.split_alpha();
+      let (color, alpha) = converter::resolve_current_color(node, state).split_alpha();
       *opacity = alpha;
       Some((Paint::Color(color), None))
     }
@@ -211,7 +208,7 @@ fn convert_paint(
               // See SVG spec 7.11 for details.
 
               if !has_bbox && paint.units() == Units::ObjectBoundingBox {
-                from_fallback(node, fallback, opacity).map(|p| (p, None))
+                from_fallback(node, fallback, state, opacity).map(|p| (p, None))
               } else {
                 Some((paint, None))
               }
@@ -220,14 +217,14 @@ fn convert_paint(
               *opacity = so;
               Some((Paint::Color(color), None))
             }
-            None => from_fallback(node, fallback, opacity).map(|p| (p, None)),
+            None => from_fallback(node, fallback, state, opacity).map(|p| (p, None)),
           }
         } else {
           log::warn!("'{}' cannot be used to {} a shape.", tag_name, aid);
-          from_fallback(node, fallback, opacity).map(|p| (p, None))
+          from_fallback(node, fallback, state, opacity).map(|p| (p, None))
         }
       } else {
-        from_fallback(node, fallback, opacity).map(|p| (p, None))
+        from_fallback(node, fallback, state, opacity).map(|p| (p, None))
       }
     }
   }
@@ -236,15 +233,13 @@ fn convert_paint(
 fn from_fallback(
   node: SvgNode,
   fallback: Option<svgtypes::PaintFallback>,
+  state: &converter::State,
   opacity: &mut Opacity,
 ) -> Option<Paint> {
   match fallback? {
     svgtypes::PaintFallback::None => None,
     svgtypes::PaintFallback::CurrentColor => {
-      let svg_color: svgtypes::Color = node
-        .find_attribute(AId::Color)
-        .unwrap_or_else(svgtypes::Color::black);
-      let (color, alpha) = svg_color.split_alpha();
+      let (color, alpha) = converter::resolve_current_color(node, state).split_alpha();
       *opacity = alpha;
       Some(Paint::Color(color))
     }

@@ -48,7 +48,7 @@ pub(crate) fn convert(
 fn convert_linear(node: SvgNode, state: &converter::State) -> Option<ServerOrColor> {
   let id = NonEmptyString::new(node.element_id().to_string())?;
 
-  let stops = convert_stops(find_gradient_with_stops(node)?);
+  let stops = convert_stops(find_gradient_with_stops(node)?, state);
   if stops.len() < 2 {
     return stops_to_color(&stops);
   }
@@ -85,7 +85,7 @@ fn convert_linear(node: SvgNode, state: &converter::State) -> Option<ServerOrCol
 fn convert_radial(node: SvgNode, state: &converter::State) -> Option<ServerOrColor> {
   let id = NonEmptyString::new(node.element_id().to_string())?;
 
-  let stops = convert_stops(find_gradient_with_stops(node)?);
+  let stops = convert_stops(find_gradient_with_stops(node)?, state);
   if stops.len() < 2 {
     return stops_to_color(&stops);
   }
@@ -274,7 +274,7 @@ fn find_pattern_with_children<'a, 'input: 'a>(
   None
 }
 
-fn convert_stops(grad: SvgNode) -> Vec<Stop> {
+fn convert_stops(grad: SvgNode, state: &converter::State) -> Vec<Stop> {
   let mut stops = Vec::new();
 
   {
@@ -296,9 +296,7 @@ fn convert_stops(grad: SvgNode) -> Vec<Stop> {
       let offset = crate::resvg::usvg::f32_bound(0.0, offset as f32, 1.0);
 
       let (color, opacity) = match stop.attribute(AId::StopColor) {
-        Some("currentColor") => stop
-          .find_attribute(AId::Color)
-          .unwrap_or_else(svgtypes::Color::black),
+        Some("currentColor") => converter::resolve_current_color(stop, state),
         Some(value) => {
           if let Ok(c) = svgtypes::Color::from_str(value) {
             c

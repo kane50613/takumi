@@ -208,16 +208,23 @@ The sections below cover the subtler cases.
 
 ### `currentColor` in SVG images is no longer tinted by the host color
 
+<Callout type="info">
+  Since v2.6, `currentColor` inherits the host `color` again. The lookup matches an inline `<svg>`
+  in a browser: a `color` attribute inside the SVG wins, then the host `color`, then black. Icons
+  that stroke with `currentColor`, such as [Lucide](https://lucide.dev/), pick up the surrounding
+  text color without markup rewriting.
+</Callout>
+
 In v1, an SVG supplied as an image (`Node::image`, `background-image: url(...)`, or `mask-image`) had its `currentColor` rewritten to the host element's `color` before rendering. v2 removes this.
 
-An SVG referenced as an image is an isolated document. It does not inherit `color` from the host, the same rule browsers, [satori](https://github.com/vercel/satori), and `@vercel/og` follow. Its `currentColor` now resolves to the SVG's own default (black) instead of the surrounding text color. This also makes the raster and vector (SVG) backends agree, and lets the raster backend reuse its cached parse instead of reparsing the SVG on every render.
+~~An SVG referenced as an image is an isolated document. It does not inherit `color` from the host, the same rule browsers, [satori](https://github.com/vercel/satori), and `@vercel/og` follow. Its `currentColor` now resolves to the SVG's own default (black) instead of the surrounding text color. This also makes the raster and vector (SVG) backends agree, and lets the raster backend reuse its cached parse instead of reparsing the SVG on every render.~~
 
 `currentColor` for Takumi's own properties (text `color`, `border-color`, `box-shadow`, `outline`, `text-decoration-color`) is unchanged. Only the contents of SVG images are affected.
 
-If you relied on the old behavior to tint an icon, set the color in the SVG markup before passing it in:
+~~If you relied on the old behavior to tint an icon, set the color in the SVG markup before passing it in:~~
 
 ```ts
-const tinted = icon.replace(/currentColor/g, "#3b82f6"); // [!code ++]
+const tinted = icon.replace(/currentColor/g, "#3b82f6"); // [!code --]
 ```
 
 ### `position`
@@ -344,12 +351,17 @@ let measured = measure_layout(options)?; // [!code --]
 let measured = measure(options)?; // [!code ++]
 ```
 
-`render_for_layout` drops `current_color` because SVG `currentColor` is no longer resolved against the host:
+~~`render_for_layout` drops `current_color` because SVG `currentColor` is no longer resolved against the host:~~
 
 ```rust
 image.render_for_layout(width, height, image_rendering, time_ms, current_color)?; // [!code --]
 image.render_for_layout(width, height, image_rendering, time_ms)?; // [!code ++]
 ```
+
+<Callout type="info">
+  v2.6 restores `current_color` as the `currentColor` inheritance fallback. The v1 call shape works
+  again.
+</Callout>
 
 ### `Length` and `ColorInput` drop their default-flavor type parameter
 

@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use super::ImageRefMut;
+use super::RGBA8;
 use crate::resvg::usvg::filter::MorphologyOperator;
-use rgb::RGBA8;
 
 /// Applies a morphology filter.
 ///

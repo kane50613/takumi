@@ -1868,7 +1868,6 @@ dependencies = [
  "png",
  "precomputed-hash",
  "quick_cache",
- "rgb",
  "roxmltree 0.21.1",
  "selectors",
  "serde",

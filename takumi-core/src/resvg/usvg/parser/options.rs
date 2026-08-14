@@ -79,6 +79,18 @@ pub struct Options<'a> {
   /// A CSS stylesheet that should be injected into the SVG. Can be used to overwrite
   /// certain attributes.
   pub style_sheet: Option<String>,
+
+  /// `currentColor` fallback for when no `color` attribute is set on the
+  /// element or its ancestors, mirroring how an inline SVG inherits `color`
+  /// from its host document.
+  ///
+  /// Default: `None` (resolves to black)
+  pub current_color: Option<svgtypes::Color>,
+
+  /// Set by the parser when a `currentColor` fell through to the
+  /// [`current_color`](Self::current_color) fallback, meaning the rendered
+  /// tree depends on the host color.
+  pub current_color_used: std::sync::atomic::AtomicBool,
 }
 
 impl Default for Options<'_> {
@@ -96,6 +108,8 @@ impl Default for Options<'_> {
       default_size: Size::from_wh(100.0, 100.0).unwrap(),
       image_href_resolver: ImageHrefResolver::default(),
       style_sheet: None,
+      current_color: None,
+      current_color_used: std::sync::atomic::AtomicBool::new(false),
     }
   }
 }

@@ -158,7 +158,13 @@ pub(crate) fn rasterized_image(
     return Ok(None);
   }
   let rendered = source
-    .render_for_layout(width, height, context.style.image_rendering, 0)
+    .render_for_layout(
+      width,
+      height,
+      context.style.image_rendering,
+      0,
+      context.current_color,
+    )
     .map_err(|error| undrawable_reason(filter.is_some(), &error))?;
   let buffer = match &rendered {
     RenderedImage::Rasterized(buffer) => buffer.as_ref(),

@@ -346,10 +346,10 @@ fn collect_children(
       EId::FeDisplacementMap => convert_displacement_map(child, scale, &primitives),
       EId::FeTurbulence => convert_turbulence(child),
       EId::FeDiffuseLighting => {
-        convert_diffuse_lighting(child, &primitives).unwrap_or_else(create_dummy_primitive)
+        convert_diffuse_lighting(child, &primitives, state).unwrap_or_else(create_dummy_primitive)
       }
       EId::FeSpecularLighting => {
-        convert_specular_lighting(child, &primitives).unwrap_or_else(create_dummy_primitive)
+        convert_specular_lighting(child, &primitives, state).unwrap_or_else(create_dummy_primitive)
       }
       tag_name => {
         log::warn!("'{}' is not a valid filter primitive. Skipped.", tag_name);
@@ -882,18 +882,26 @@ fn convert_image_inner(
   Some(Kind::Image(Image { root }))
 }
 
-fn convert_diffuse_lighting(fe: SvgNode, primitives: &[Primitive]) -> Option<Kind> {
+fn convert_diffuse_lighting(
+  fe: SvgNode,
+  primitives: &[Primitive],
+  state: &converter::State,
+) -> Option<Kind> {
   let light_source = convert_light_source(fe)?;
   Some(Kind::DiffuseLighting(DiffuseLighting {
     input: resolve_input(fe, AId::In, primitives),
     surface_scale: fe.attribute(AId::SurfaceScale).unwrap_or(1.0),
     diffuse_constant: fe.attribute(AId::DiffuseConstant).unwrap_or(1.0),
-    lighting_color: convert_lighting_color(fe),
+    lighting_color: convert_lighting_color(fe, state),
     light_source,
   }))
 }
 
-fn convert_specular_lighting(fe: SvgNode, primitives: &[Primitive]) -> Option<Kind> {
+fn convert_specular_lighting(
+  fe: SvgNode,
+  primitives: &[Primitive],
+  state: &converter::State,
+) -> Option<Kind> {
   let light_source = convert_light_source(fe)?;
 
   let specular_exponent = fe.attribute(AId::SpecularExponent).unwrap_or(1.0);
@@ -909,20 +917,18 @@ fn convert_specular_lighting(fe: SvgNode, primitives: &[Primitive]) -> Option<Ki
     surface_scale: fe.attribute(AId::SurfaceScale).unwrap_or(1.0),
     specular_constant: fe.attribute(AId::SpecularConstant).unwrap_or(1.0),
     specular_exponent,
-    lighting_color: convert_lighting_color(fe),
+    lighting_color: convert_lighting_color(fe, state),
     light_source,
   }))
 }
 
 #[inline(never)]
-fn convert_lighting_color(node: SvgNode) -> Color {
+fn convert_lighting_color(node: SvgNode, state: &converter::State) -> Color {
   // Color's alpha doesn't affect lighting-color. Simply skip it.
   match node.attribute(AId::LightingColor) {
+    // Yes, a missing `currentColor` resolves to black and not white.
     Some("currentColor") => {
-      node
-        .find_attribute(AId::Color)
-        // Yes, a missing `currentColor` resolves to black and not white.
-        .unwrap_or(svgtypes::Color::black())
+      converter::resolve_current_color(node, state)
         .split_alpha()
         .0
     }
@@ -1265,11 +1271,7 @@ fn convert_drop_shadow_function(
   .unwrap_or(PositiveF32::ZERO);
 
   let (color, opacity) = color
-    .unwrap_or_else(|| {
-      node
-        .find_attribute(AId::Color)
-        .unwrap_or_else(svgtypes::Color::black)
-    })
+    .unwrap_or_else(|| converter::resolve_current_color(node, state))
     .split_alpha();
 
   Kind::DropShadow(DropShadow {
