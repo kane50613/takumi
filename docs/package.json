@@ -40,6 +40,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@shikijs/transformers": "^4.4.3",
     "@tailwindcss/vite": "^4.3.3",
     "@takumi-rs/core": "workspace:*",
     "@takumi-rs/helpers": "workspace:*",
