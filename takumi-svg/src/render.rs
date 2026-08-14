@@ -1036,10 +1036,11 @@ pub(crate) fn emit_box_shadows(
   Ok(())
 }
 
-/// Emits inset `box-shadow`s as a blurred ring inside the element's rounded border
-/// box. Mirrors the raster backend's `draw_inset_shadow`: the shadow color fills
-/// the border box minus an inner rounded-rect (shrunk by the spread, shifted by
-/// the offset), blurred and clipped to the rounded border box.
+/// Emits inset `box-shadow`s as a blurred ring inside the element's rounded
+/// padding box. Mirrors the PDF backend's `emit_inset_shadows`: the shadow
+/// color fills the padding box minus an inner rounded-rect (shrunk by the
+/// spread, shifted by the offset), blurred and clipped to the rounded padding
+/// box.
 pub(crate) fn emit_inset_box_shadows(
   node: &RenderNode,
   border: &BorderProperties,
@@ -1048,29 +1049,32 @@ pub(crate) fn emit_inset_box_shadows(
   y: f32,
   doc: &mut SvgDocument,
 ) -> io::Result<()> {
-  let size = layout.size;
-  if size.width <= 0.0 || size.height <= 0.0 {
+  if layout.size.width <= 0.0 || layout.size.height <= 0.0 {
     return Ok(());
   }
-  let outer = border_box_path_data(border, size, x, y);
+  let padding = ClipBox::padding_box(*border, layout);
+  let outer = clip_box_path_data(padding, x, y);
   for resolved in BoxPainter::new(&node.context, layout).shadows().inset {
     let fill = Rgba(resolved.color.0);
 
-    // The shadow fills the border box minus the hole it leaves uncovered (shared
-    // core geometry with the raster backend), drawn even-odd.
+    // The shadow fills the padding box minus the hole it leaves uncovered
+    // (shared core geometry with the raster backend), drawn even-odd.
     let hole = ClipBox::inset_shadow_hole(
-      *border,
-      size,
+      padding.border,
+      padding.size,
       resolved.spread_radius,
       Point {
         x: resolved.offset_x,
         y: resolved.offset_y,
       },
     );
-    let ring = format!("{outer}{}", clip_box_path_data(hole, x, y));
+    let ring = format!(
+      "{outer}{}",
+      clip_box_path_data(hole, x + padding.offset.x, y + padding.offset.y)
+    );
 
-    // Border box minus the hole, drawn even-odd, blurred, and clipped to the
-    // rounded border box so the blur stays inside the element.
+    // Padding box minus the hole, drawn even-odd, blurred, and clipped to the
+    // rounded padding box so the blur stays inside the element.
     let clip = doc.clip_path(&outer)?;
     let clip_group = doc.begin_group(IDENTITY, 1.0, Some(&clip), None)?;
     emit_with_blur(doc, resolved.blur_radius, |doc| doc.path(&ring, fill, true))?;

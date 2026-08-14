@@ -145,10 +145,27 @@ pub(crate) fn draw_inset_shadow(
   let height = border_box.height as u32;
   let [red, green, blue, alpha] = shadow.color.0;
   let mut shadow_alpha = vec![alpha; (width * height) as usize];
+  let shadow_placement = Placement {
+    left: 0,
+    top: 0,
+    width,
+    height,
+  };
+
+  let mut padding = border;
+  padding.inset_by_border_width();
+  let padding_offset = Point {
+    x: border.width.left,
+    y: border.width.top,
+  };
+  let padding_size = Size {
+    width: (border_box.width - border.width.left - border.width.right).max(0.0),
+    height: (border_box.height - border.width.top - border.width.bottom).max(0.0),
+  };
 
   let hole = ClipBox::inset_shadow_hole(
-    border,
-    border_box,
+    padding,
+    padding_size,
     shadow.spread_radius,
     Point {
       x: shadow.offset_x,
@@ -157,19 +174,18 @@ pub(crate) fn draw_inset_shadow(
   );
 
   let mut paths = Vec::new();
-  hole
-    .border
-    .append_mask_commands(&mut paths, hole.size, hole.offset);
+  hole.border.append_mask_commands(
+    &mut paths,
+    hole.size,
+    Point {
+      x: padding_offset.x + hole.offset.x,
+      y: padding_offset.y + hole.offset.y,
+    },
+  );
 
   let (mask, placement) = render_mask(&paths, None, Some(Fill::NonZero.into()));
 
   if !mask.is_empty() {
-    let shadow_placement = Placement {
-      left: 0,
-      top: 0,
-      width,
-      height,
-    };
     attenuate_alpha_by_mask(&mut shadow_alpha, shadow_placement, &mask, placement);
   }
 
@@ -182,6 +198,19 @@ pub(crate) fn draw_inset_shadow(
     shadow.blur_radius,
     BlurType::Shadow,
   )?;
+
+  let mut clip_paths = Vec::new();
+  border.append_mask_commands(&mut clip_paths, border_box, Point::ZERO);
+  padding.append_mask_commands(&mut clip_paths, padding_size, padding_offset);
+  let (clip_mask, clip_placement) = render_mask(&clip_paths, None, Some(Fill::EvenOdd.into()));
+  if !clip_mask.is_empty() {
+    attenuate_alpha_by_mask(
+      &mut shadow_alpha,
+      shadow_placement,
+      &clip_mask,
+      clip_placement,
+    );
+  }
 
   let mut data = uninit_buffer((width * height * 4) as usize);
   for (pixel, &alpha) in bytemuck::cast_slice_mut::<u8, [u8; 4]>(&mut data)
