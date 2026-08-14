@@ -40,6 +40,7 @@ const pdf = await render(
     <span>Invoice</span>
     <span>INV-0042</span>
   </div>,
+  // [!code highlight]
   { size: "a4", margin: 48, fonts: await googleFonts(["Inter"]) },
 );
 ```
@@ -88,6 +89,7 @@ declare const report: ReactNode;
 import { render } from "takumi-pdf";
 
 const pdf = await render(report, {
+  // [!code highlight]
   footer: (
     <div tw="flex w-full justify-center text-[10px] text-gray-500">
       Page <span className="pageNumber" /> of <span className="totalPages" />

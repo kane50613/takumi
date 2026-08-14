@@ -35,6 +35,7 @@ import { writeFile } from "node:fs/promises";
 const pdf = await render(<Invoice data={data} />, {
   // A4 portrait with a 48px margin is the default
   size: "a4",
+  // [!code highlight]
   fonts: await googleFonts(["Inter"]),
   footer: (
     <div tw="flex w-full justify-center text-[10px] text-gray-500">
@@ -53,6 +54,7 @@ HTML strings use the same parser as `takumi-js`. A `<style>` tag in the string a
 ```ts twoslash
 import { render } from "takumi-pdf";
 
+// [!code highlight:4]
 const pdf = await render(`
   <style>.total { font-weight: 700 }</style>
   <div><span class="total">Total: $1,290</span></div>
@@ -70,6 +72,7 @@ declare const report: ReactNode;
 import { render } from "takumi-pdf";
 
 const pdf = await render(report, {
+  // [!code highlight:3]
   size: "letter", // "a4", "letter", or { width, height } in CSS px at 96 dpi
   landscape: true,
   margin: { top: 48, right: 32, bottom: 48, left: 32 },
@@ -94,6 +97,7 @@ declare const doc: ReactNode;
 // ---cut---
 import { PdfRenderer } from "takumi-pdf";
 
+// [!code highlight:2]
 const renderer = new PdfRenderer();
 await renderer.registerFont("https://example.com/Inter-Regular.woff2");
 

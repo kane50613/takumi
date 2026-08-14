@@ -18,6 +18,7 @@ import { render } from "takumi-pdf";
 import { googleFonts } from "@takumi-rs/helpers";
 
 const pdf = await render(doc, {
+  // [!code highlight:2]
   fonts: [...(await googleFonts(["Inter"])), { name: "Brand Sans", weight: 700, data: fontBytes }],
   fontFamilies: ["Brand Sans", "Inter", "sans-serif"],
 });
@@ -41,6 +42,7 @@ import { render } from "takumi-pdf";
 const logoBytes = new Uint8Array(await (await fetch(logoUrl)).arrayBuffer());
 
 const pdf = await render(doc, {
+  // [!code highlight]
   images: [{ src: logoUrl, data: logoBytes }],
 });
 ```

@@ -13,6 +13,7 @@ declare const report: ReactNode;
 import { render } from "takumi-pdf";
 
 const pdf = await render(report, {
+  // [!code highlight]
   footer: (
     <div tw="flex w-full justify-center text-[10px] text-gray-500">
       Page <span className="pageNumber" /> of <span className="totalPages" />
@@ -36,9 +37,11 @@ const footer = (
     Page <span className="pageNumber" /> of <span className="totalPages" />
   </div>
 );
+// [!code highlight]
 const { height } = await measure(footer, { size: "a4" });
 const pdf = await render(report, {
   footer,
+  // [!code highlight]
   margin: { top: 48, bottom: Math.max(48, height + 20) },
 });
 ```
@@ -71,6 +74,7 @@ import { render } from "takumi-pdf";
 const pdf = await render(report, {
   footer: (
     <div style={{ fontSize: 12 }}>
+      {/* [!code highlight:2] */}
       第 <span className="pageNumber trad-chinese-informal" /> 頁,共{" "}
       <span className="totalPages trad-chinese-informal" /> 頁
     </div>

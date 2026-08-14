@@ -13,6 +13,7 @@ import { render } from "takumi-pdf";
 
 const pdf = await render(
   <article>
+    {/* [!code highlight:2] */}
     <h1 style={{ breakBefore: "page" }}>Chapter two</h1>
     <section style={{ breakInside: "avoid" }}>Keep this together.</section>
   </article>,
@@ -36,6 +37,7 @@ A cut through a paragraph keeps at least `orphans` lines at the bottom of the pa
 import { render } from "takumi-pdf";
 
 const pdf = await render(
+  // [!code highlight]
   <article style={{ widows: 3, orphans: 3 }}>
     A long report body wraps into many lines across the page boundary.
   </article>,

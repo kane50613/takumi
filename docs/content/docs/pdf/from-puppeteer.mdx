@@ -37,6 +37,7 @@ import { googleFonts } from "@takumi-rs/helpers";
 import { fromHtml } from "@takumi-rs/helpers/html";
 import { render } from "takumi-pdf";
 
+// [!code highlight]
 const { node, stylesheets } = fromHtml(html);
 
 const pdf = await render(node, {
@@ -90,6 +91,7 @@ import { fromHtml } from "@takumi-rs/helpers/html";
 import { render } from "takumi-pdf";
 
 const { node, stylesheets } = fromHtml(html);
+// [!code highlight]
 const images = await prepareImages({ node });
 
 const pdf = await render(node, { images, stylesheets });

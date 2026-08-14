@@ -13,6 +13,7 @@ import { render } from "takumi-pdf";
 
 const pdf = await render(
   <p>
+    {/* [!code highlight] */}
     Pay online at <a href="https://example.com/pay/1042">example.com/pay/1042</a>.
   </p>,
 );
@@ -27,6 +28,7 @@ import { render } from "takumi-pdf";
 
 const pdf = await render(
   <div>
+    {/* [!code highlight:2] */}
     <a href="#appendix">Jump to the appendix</a>
     <h1 id="appendix">Appendix</h1>
   </div>,
@@ -47,6 +49,7 @@ const pdf = await render(
     <a href="#results" tw="flex items-baseline gap-2">
       <span>Results</span>
       <span tw="flex-1 border-b border-dotted border-gray-400" />
+      {/* [!code highlight] */}
       <span className="targetPageNumber" tw="w-8 shrink-0 text-right" />
     </a>
     <h1 id="results" style={{ breakBefore: "page" }}>
@@ -78,6 +81,7 @@ declare const report: ReactNode;
 // ---cut---
 import { render } from "takumi-pdf";
 
+// [!code highlight]
 const pdf = await render(report, { outline: true });
 ```
 
@@ -95,6 +99,7 @@ import { render } from "takumi-pdf";
 
 const pdf = await render(report, {
   lang: "en",
+  // [!code highlight]
   metadata: {
     title: "Annual report 2026",
     description: "Consolidated results for fiscal year 2026",

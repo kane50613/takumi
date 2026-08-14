@@ -14,6 +14,7 @@ declare const xml: string;
 import { render } from "takumi-pdf";
 
 const pdf = await render(invoice, {
+  // [!code highlight]
   attachments: [
     {
       name: "factur-x.xml",
@@ -50,6 +51,7 @@ declare const xml: string;
 import { render } from "takumi-pdf";
 
 const pdf = await render(invoice, {
+  // [!code highlight]
   pdfa: "3b",
   metadata: { title: "Invoice 1042", creationDate: "2026-08-06" },
   attachments: [
