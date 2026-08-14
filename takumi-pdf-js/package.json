@@ -1,6 +1,6 @@
 {
   "name": "takumi-pdf",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "description": "Render paged PDFs from JSX, HTML, and CSS. No headless browser.",
   "keywords": [
     "chromium-free",

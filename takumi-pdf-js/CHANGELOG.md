@@ -1,3 +1,17 @@
+## takumi-pdf@0.10.0
+
+### Start a page at the margin Chromium prints at
+
+The default margin was 48px, a number with no source behind it. It is now the 1cm Chromium uses for `kDefaultMargins`, and an axis shorter than an inch keeps no margin at all, the way Chromium drops it rather than leave the page with nothing to print on. Pass `margin` to keep the old geometry.
+
+### Close the gap between two boxes on a fractional parent
+
+A box's position snapped to the pixel grid against its parent while its size snapped against the page. A parent sitting on a fraction, such as a container padded in points, pushed the two apart and left a hairline of background between boxes that should meet.
+
+### Cut once at a forced break
+
+The anonymous box a text child lays out in copied `break-before` and `break-after` from its parent. A padded box carrying `break-after: page` cut twice, once at its content edge and once at its border edge, and the padding between them landed on a blank page of its own.
+
 ## takumi-pdf@0.9.1
 
 ### Default an omitted margin side to `auto`

@@ -1,6 +1,6 @@
 [package]
 name = "takumi-raster"
-version = "0.4.20"
+version = "0.4.21"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Raster (tiny-skia) painting backend for takumi."
