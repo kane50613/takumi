@@ -1,138 +1,89 @@
 core:changelogs:
-  - content: "---\npackages:\n  \"@takumi-rs/wasm\":\n    type: patch\n---\n\n### Find the WASM asset when Vite emits it beside the server bundle\n\nA plain `vite build --ssr` with `ssrEmitAssets` writes the asset to `assets/` under the same `outDir` as the server chunk. The SSR read looked next to the chunk and in a framework's `client/` directory, missed both, and threw `Unable to locate Takumi WASM asset for SSR`.\n"
-    filename: wasm-vite-ssr-asset-path.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n### Render fragment, memo and forwardRef children inside `<svg>`\n\nInline SVG silently dropped any child it could not map to a tag name. Fragments, `memo` and `forwardRef` components now serialize the same way React does.\n"
-    filename: svg-fragment-children.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-html:\n    type: minor\n  \"@takumi-rs/helpers\":\n    type: minor\n---\n\n### Draw list markers for `<ol>` and `<ul>`\n\nList items rendered with no bullet or number. A `display: list-item` box now generates a marker: `list-style-type`, `list-style-position` and `list-style-image` pick what it draws and where it sits, and `<ol start>` and `<li value>` set the count.\n"
-    filename: list-markers.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n### Repeat fixed boxes on every page\n\nFixed boxes outside transformed or filtered ancestors now lay out against the page area and paint on every page. Watermarks no longer stop at the first page.\n"
-    filename: pdf-fixed-repeats-per-page.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n### Reject a page that would print wrong\n\nAn image whose bytes will not decode used to leave a hole, and `filter: blur()` or `drop-shadow()` used to be dropped without a word. Both now stop the render and name what went wrong, the way an uncovered character already did.\n"
-    filename: pdf-loud-image-and-filter-errors.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n### Set the paper color\n\n`backgroundColor` takes a CSS color and paints it under everything on every page, margins included. A watermark with a negative `z-index` sits above it, so the paper no longer has to come from a box in the tree.\n"
-    filename: pdf-page-background-color.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n### Pick the WASM entry from the bundler's export condition\n\nBundling `takumi-pdf` broke initialization, because every environment resolved to the Node entry and that entry locates the binary from `import.meta.url`. Vite, Next, workerd and Bun now each get an entry that finds the binary where that bundler puts it.\n"
-    filename: pdf-bundler-conditions.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n  takumi-pdf:\n    type: minor\n---\n\n### Embed JPEG and WebP images\n\n`images` took bytes in any raster format, but only PNG reached the page: a JPEG or a WebP failed the whole render. Both embed now, and a JPEG keeps its own compression instead of being decoded and re-encoded.\n"
-    filename: pdf-encoded-image-passthrough.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n### Stop drawing a hairline on borderless sides\n\nA border on only some sides drew faint lines along the sides that had none, in PDF and in SVG. Those sides now draw nothing.\n"
-    filename: border-zero-width-hairline.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n### Capture fixed and absolute descendants with transforms and filters\n\nTransforms, transform properties, offset paths, filters, and backdrop filters now capture fixed and absolute descendants. Those descendants position against that ancestor, matching Blink.\n"
-    filename: fixed-containing-block.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n### Add `units` for the absolute length constants\n\n`takumi_core::units` exports the CSS absolute units in 96 dpi pixels, so page geometry and CSS lengths resolve through one set of constants instead of each crate rederiving them.\n"
-    filename: core-units-module.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n### Snap border and outline widths to whole device pixels\n\n`border-*-width`, `outline-width` and `outline-offset` now follow the CSS `snap a length as a border width` rule. Anything thinner than one device pixel draws as one, so a hairline stops fading in and out with its position. The rest rounds toward zero, so `1.5px` draws as `1px`.\n"
-    filename: line-width-clamp.md
+  - content: "---\npackages:\n  \"@takumi-rs/wasm\":\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n### Ship without skrifa's hinting interpreter\n\nEvery draw is unhinted, but skrifa's TrueType hinting interpreter and autohinter survived dead-code elimination through runtime branches. A patched skrifa gates them behind a `hinting` feature, cutting ~240KB from the wasm binaries with identical rendering.\n"
+    filename: skrifa-no-hinting.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
   - changelogIds:
-      - wasm-vite-ssr-asset-path.md
+      - skrifa-no-hinting.md
     id: npm:@takumi-rs/wasm
-    updated: true
-  - id: npm:@takumi-rs/image-response
-    updated: true
-  - changelogIds:
-      - svg-fragment-children.md
-      - list-markers.md
-    id: npm:@takumi-rs/helpers
     updated: true
   - id: npm:takumi-template
     updated: false
-  - changelogIds:
-      - pdf-fixed-repeats-per-page.md
-      - pdf-loud-image-and-filter-errors.md
-      - pdf-page-background-color.md
-      - pdf-bundler-conditions.md
-      - pdf-encoded-image-passthrough.md
-    id: npm:takumi-pdf
-    updated: true
-  - id: npm:takumi-js
-    updated: true
-  - id: npm:@takumi-rs/core
+  - id: npm:@takumi-rs/helpers
     updated: true
   - id: npm:docs
     updated: false
-  - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:example-satori-html
+  - id: npm:@takumi-rs/core
+    updated: true
+  - id: npm:@takumi-rs/image-response
+    updated: true
+  - id: npm:takumi-js
+    updated: true
+  - changelogIds:
+      - skrifa-no-hinting.md
+    id: npm:takumi-pdf
+    updated: true
+  - id: npm:waku-ssr
     updated: false
   - id: npm:example-twitter-images
     updated: false
-  - id: npm:example-tanstack-start
-    updated: false
-  - id: npm:waku-ssr
-    updated: false
-  - id: npm:example-css-library-integration
-    updated: false
   - id: npm:ffmpeg-keyframe-animation
     updated: false
-  - id: npm:svelte
-    updated: false
-  - id: npm:pdf-bench
+  - id: npm:example-tanstack-start
     updated: false
   - id: npm:example-e-invoice
     updated: false
+  - id: npm:example-nextjs
+    updated: false
+  - id: npm:example-cloudflare-workers
+    updated: false
   - id: npm:example-generate-invoice
     updated: false
-  - id: npm:example-nextjs
+  - id: npm:example-satori-html
+    updated: false
+  - id: npm:svelte
     updated: false
   - id: npm:ffplay
     updated: false
+  - id: npm:example-css-library-integration
+    updated: false
+  - id: npm:pdf-bench
+    updated: false
   - id: npm:example-liquid-glass
     updated: false
-  - id: cargo:takumi
-    updated: true
-  - id: cargo:takumi-svg
-    updated: true
-  - changelogIds:
-      - list-markers.md
-    id: cargo:takumi-html
-    updated: true
-  - changelogIds:
-      - border-zero-width-hairline.md
-      - fixed-containing-block.md
-      - core-units-module.md
-      - pdf-encoded-image-passthrough.md
-      - list-markers.md
-      - line-width-clamp.md
-    id: cargo:takumi-core
-    updated: true
+  - id: cargo:takumi-html
+    updated: false
+  - id: cargo:takumi-core
+    updated: false
   - id: cargo:takumi-raster
+    updated: false
+  - id: cargo:takumi-svg
+    updated: false
+  - id: cargo:takumi
     updated: true
 npm:packages:
   - id: npm:takumi
   - id: npm:@takumi-rs/wasm
-  - id: npm:@takumi-rs/image-response
-  - id: npm:@takumi-rs/helpers
   - id: npm:takumi-template
-  - id: npm:takumi-pdf
-  - id: npm:takumi-js
-  - id: npm:@takumi-rs/core
+  - id: npm:@takumi-rs/helpers
   - id: npm:docs
-  - id: npm:example-cloudflare-workers
-  - id: npm:example-satori-html
-  - id: npm:example-twitter-images
-  - id: npm:example-tanstack-start
+  - id: npm:@takumi-rs/core
+  - id: npm:@takumi-rs/image-response
+  - id: npm:takumi-js
+  - id: npm:takumi-pdf
   - id: npm:waku-ssr
-  - id: npm:example-css-library-integration
+  - id: npm:example-twitter-images
   - id: npm:ffmpeg-keyframe-animation
-  - id: npm:svelte
-  - id: npm:pdf-bench
+  - id: npm:example-tanstack-start
   - id: npm:example-e-invoice
-  - id: npm:example-generate-invoice
   - id: npm:example-nextjs
+  - id: npm:example-cloudflare-workers
+  - id: npm:example-generate-invoice
+  - id: npm:example-satori-html
+  - id: npm:svelte
   - id: npm:ffplay
+  - id: npm:example-css-library-integration
+  - id: npm:pdf-bench
   - id: npm:example-liquid-glass

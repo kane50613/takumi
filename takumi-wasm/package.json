@@ -1,6 +1,6 @@
 {
   "name": "@takumi-rs/wasm",
-  "version": "2.8.0",
+  "version": "2.8.1",
   "description": "Render OG images from Takumi node trees with WebAssembly. No headless browser.",
   "keywords": [
     "cloudflare-workers",
