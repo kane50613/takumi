@@ -72,7 +72,7 @@ export default function Report() {
 export const options: PlaygroundOptions = {
   pdf: {
     size: "a4",
-    margin: { top: "auto", right: 56, bottom: "auto", left: 56 },
+    margin: { right: 56, left: 56 },
     header: (
       <div tw="flex w-full flex-col px-14 pt-6">
         <div tw="flex w-full items-end justify-between">
