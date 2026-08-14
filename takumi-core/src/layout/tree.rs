@@ -912,6 +912,9 @@ impl RenderNode {
     context.style.rotate = None;
     context.style.scale = Default::default();
     context.style.translate = Default::default();
+    context.style.break_before = Default::default();
+    context.style.break_after = Default::default();
+    context.style.break_inside = Default::default();
     context
   }
 
