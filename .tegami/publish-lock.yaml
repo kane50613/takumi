@@ -1,100 +1,89 @@
 core:changelogs:
-  - content: "---\npackages:\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-js:\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n### Load the wasm binary in a browser bundle\n\nVite, webpack and Turbopack set the same export conditions for a browser build. All three resolved the Vite entry, whose `?url` import only works in Vite. Each package now exports `wasm-url`, which resolves the binary through `new URL(specifier, import.meta.url)`, the call Vite, webpack and Turbopack rewrite to the asset they emit. Pair it with `takumi-pdf/no-init`, or with the new `takumi-js/wasm/no-init`, which keeps the auto-init entry out of the bundle.\n"
-    filename: wasm-url-export.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/wasm\":\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n### Pick the Node entry when webpack targets Node\n\nA webpack build for Node resolved the Vite entry, because both environments set the `module` condition and it is listed first. The build then failed on that entry's `?url` import, which only Vite reads. A `webpack` condition now routes webpack's Node target to the Node entry, and every other bundler keeps the entry it already resolved.\n"
-    filename: webpack-node-condition.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n### Render from a Next.js route without configuring the bundler\n\nTurbopack bundles a server route's imports, and it resolved `takumi-pdf` to the Vite entry, whose `?url` import only Vite reads. The build failed unless the package was listed in `serverExternalPackages`. `takumi-pdf/next` hands Turbopack the binary in the form it emits, on the Node runtime and the Edge runtime alike.\n"
-    filename: pdf-next-entry.md
+  - content: "---\npackages:\n  \"@takumi-rs/wasm\":\n    type: patch\n  takumi-pdf:\n    type: patch\n---\n\n### Ship without skrifa's hinting interpreter\n\nEvery draw is unhinted, but skrifa's TrueType hinting interpreter and autohinter survived dead-code elimination through runtime branches. A patched skrifa gates them behind a `hinting` feature, cutting ~240KB from the wasm binaries with identical rendering.\n"
+    filename: skrifa-no-hinting.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - id: npm:@takumi-rs/image-response
-    updated: true
-  - id: npm:docs
-    updated: false
-  - id: npm:@takumi-rs/helpers
-    updated: true
   - changelogIds:
-      - wasm-url-export.md
-    id: npm:takumi-js
+      - skrifa-no-hinting.md
+    id: npm:@takumi-rs/wasm
     updated: true
   - id: npm:takumi-template
     updated: false
-  - changelogIds:
-      - wasm-url-export.md
-      - webpack-node-condition.md
-    id: npm:@takumi-rs/wasm
+  - id: npm:@takumi-rs/helpers
     updated: true
+  - id: npm:docs
+    updated: false
   - id: npm:@takumi-rs/core
     updated: true
+  - id: npm:@takumi-rs/image-response
+    updated: true
+  - id: npm:takumi-js
+    updated: true
   - changelogIds:
-      - pdf-next-entry.md
-      - wasm-url-export.md
-      - webpack-node-condition.md
+      - skrifa-no-hinting.md
     id: npm:takumi-pdf
     updated: true
-  - id: npm:example-generate-invoice
-    updated: false
-  - id: npm:svelte
-    updated: false
-  - id: npm:example-liquid-glass
+  - id: npm:waku-ssr
     updated: false
   - id: npm:example-twitter-images
     updated: false
-  - id: npm:waku-ssr
-    updated: false
-  - id: npm:ffplay
-    updated: false
-  - id: npm:pdf-bench
-    updated: false
-  - id: npm:example-nextjs
-    updated: false
   - id: npm:ffmpeg-keyframe-animation
-    updated: false
-  - id: npm:example-css-library-integration
-    updated: false
-  - id: npm:example-satori-html
-    updated: false
-  - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:example-e-invoice
     updated: false
   - id: npm:example-tanstack-start
     updated: false
-  - id: cargo:takumi-core
+  - id: npm:example-e-invoice
     updated: false
-  - id: cargo:takumi
-    updated: true
+  - id: npm:example-nextjs
+    updated: false
+  - id: npm:example-cloudflare-workers
+    updated: false
+  - id: npm:example-generate-invoice
+    updated: false
+  - id: npm:example-satori-html
+    updated: false
+  - id: npm:svelte
+    updated: false
+  - id: npm:ffplay
+    updated: false
+  - id: npm:example-css-library-integration
+    updated: false
+  - id: npm:pdf-bench
+    updated: false
+  - id: npm:example-liquid-glass
+    updated: false
   - id: cargo:takumi-html
+    updated: false
+  - id: cargo:takumi-core
     updated: false
   - id: cargo:takumi-raster
     updated: false
   - id: cargo:takumi-svg
     updated: false
+  - id: cargo:takumi
+    updated: true
 npm:packages:
   - id: npm:takumi
-  - id: npm:@takumi-rs/image-response
-  - id: npm:docs
-  - id: npm:@takumi-rs/helpers
-  - id: npm:takumi-js
-  - id: npm:takumi-template
   - id: npm:@takumi-rs/wasm
+  - id: npm:takumi-template
+  - id: npm:@takumi-rs/helpers
+  - id: npm:docs
   - id: npm:@takumi-rs/core
+  - id: npm:@takumi-rs/image-response
+  - id: npm:takumi-js
   - id: npm:takumi-pdf
-  - id: npm:example-generate-invoice
-  - id: npm:svelte
-  - id: npm:example-liquid-glass
-  - id: npm:example-twitter-images
   - id: npm:waku-ssr
-  - id: npm:ffplay
-  - id: npm:pdf-bench
-  - id: npm:example-nextjs
+  - id: npm:example-twitter-images
   - id: npm:ffmpeg-keyframe-animation
-  - id: npm:example-css-library-integration
-  - id: npm:example-satori-html
-  - id: npm:example-cloudflare-workers
-  - id: npm:example-e-invoice
   - id: npm:example-tanstack-start
+  - id: npm:example-e-invoice
+  - id: npm:example-nextjs
+  - id: npm:example-cloudflare-workers
+  - id: npm:example-generate-invoice
+  - id: npm:example-satori-html
+  - id: npm:svelte
+  - id: npm:ffplay
+  - id: npm:example-css-library-integration
+  - id: npm:pdf-bench
+  - id: npm:example-liquid-glass
