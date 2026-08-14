@@ -23,7 +23,7 @@ use wasm_bindgen::prelude::*;
 
 use crate::{
   font::Font,
-  options::{PdfRenderOptions, decode_images, resolve_geometry},
+  options::{PdfRenderOptions, decode_images, page_background, resolve_geometry},
 };
 
 pub(crate) fn map_error(error: impl core::fmt::Debug) -> js_sys::Error {
@@ -166,6 +166,7 @@ impl PdfRenderer {
       stylesheet: stylesheet(&self.resource_cache, options.stylesheets, Vec::new()),
       images,
       page,
+      background_color: page_background(options.background_color.as_deref())?,
       header: options.header,
       footer: options.footer,
       font_families: options.font_families.map(FontFamily::from_names),

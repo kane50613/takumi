@@ -8,6 +8,7 @@ use serde_bytes::ByteBuf;
 use takumi_core::{
   layout::node::Node,
   resources::image::{ImageCacheMode, ImageSource as DecodedImage, ResourceCache},
+  style::{Color, ColorInput, FromCssStr},
   viewport::Viewport,
 };
 use takumi_pdf::{PageMargins, PageOptions};
@@ -107,6 +108,18 @@ fn resolve_page(
   Ok(page)
 }
 
+/// The paper color, parsed from a CSS color.
+pub(crate) fn page_background(color: Option<&str>) -> Result<Option<Color>, js_sys::Error> {
+  color
+    .map(|color| match ColorInput::from_css_str(color) {
+      Ok(ColorInput::Value(color)) => Ok(color),
+      _ => Err(js_sys::Error::new(&format!(
+        "backgroundColor is not a color: {color}"
+      ))),
+    })
+    .transpose()
+}
+
 /// Options for rendering a PDF.
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -121,6 +134,8 @@ pub(crate) struct PdfRenderOptions {
   landscape: Option<bool>,
   /// Page margin in CSS px: one number or per-side values.
   margin: Option<MarginInput>,
+  /// Paper color as a CSS color, painted under everything on every page.
+  pub(crate) background_color: Option<String>,
   /// Band repeated at the top of every page. Nodes classed `pageNumber` /
   /// `totalPages` receive the counters, optionally formatted by a
   /// supported `@counter-style` name in the same class list.

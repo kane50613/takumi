@@ -243,6 +243,11 @@ export type RenderOptions = (PagedOptions | ViewportOptions) &
     metadata?: PdfMetadata;
     /** Generates a PDF outline (bookmarks) from `h1`–`h6` headings. */
     outline?: boolean;
+    /**
+     * The paper color as a CSS color, painted under everything on every page.
+     * Unset leaves the page empty, so a viewer shows its own white.
+     */
+    backgroundColor?: string;
   };
 
 function isNode(value: NodeInput): value is Node {

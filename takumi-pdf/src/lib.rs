@@ -82,7 +82,7 @@ mod krilla;
 mod subsetter;
 
 use takumi_core::{
-  style::{Affine, Lang},
+  style::{Affine, Color, Lang},
   viewport::Viewport,
 };
 
@@ -104,10 +104,11 @@ use crate::{
     geom::{Point, Rect as KrillaRect, Size as KrillaSize, Transform},
     page::PageSettings,
     paint::FillRule,
+    surface::Surface,
   },
   options::{BAND_EDGE_PADDING, PT_PER_PX, build_metadata, krilla_datetime, validate_xmp_schemas},
   pagination::{MAX_PAGES, page_starts, resolve_target_counters},
-  paint::rect_path,
+  paint::{fill_from_rgba, rect_path},
   tags::{TagCollector, build_tag_tree, tag_id},
   tree::{TreeInputs, prepare_paged_tree, prepare_tree},
 };
@@ -148,6 +149,21 @@ pub fn measure(options: MeasureOptions<'_>) -> Result<MeasuredSize, PdfError> {
     width: size.width,
     height: size.height,
   })
+}
+
+/// Fills the page box before the page draws anything else. An unset color
+/// leaves the page empty rather than painting white, like Chromium's print
+/// path.
+fn paint_page_background(color: Option<Color>, size: (f32, f32), surface: &mut Surface) {
+  let Some(color) = color else {
+    return;
+  };
+  let Some(path) = KrillaRect::from_xywh(0.0, 0.0, size.0, size.1).and_then(rect_path) else {
+    return;
+  };
+
+  surface.set_fill(Some(fill_from_rgba(color.0, 1.0)));
+  surface.draw_path(&path);
 }
 
 /// Renders a node tree to a PDF: single-page at the viewport size, or paged
@@ -331,6 +347,11 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         let mut surface = pdf_page.surface();
 
         surface.push_transform(&Transform::from_scale(PT_PER_PX, PT_PER_PX));
+        paint_page_background(
+          options.background_color,
+          (page.width, page.height),
+          &mut surface,
+        );
         if let (Some(band), Some(template)) = (&header_band, &options.header) {
           let prepared;
           let tree = if band.dynamic {
@@ -492,6 +513,12 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       let mut surface = page.surface();
 
       surface.push_transform(&Transform::from_scale(PT_PER_PX, PT_PER_PX));
+      paint_page_background(
+        options.background_color,
+        (content.width, content.height),
+        &mut surface,
+      );
+
       let mut emitter = content.emitter(
         &mut fonts,
         Some(&inline_map),

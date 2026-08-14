@@ -3162,3 +3162,41 @@ fn operands(line: &[u8], operator: &str) -> Option<Vec<f32>> {
       .collect(),
   )
 }
+
+/// The paper sits under everything, including a box the content would
+/// otherwise cover: paper, then the negative `z-index` watermark, then the
+/// text.
+#[test]
+fn the_paper_paints_under_a_repeated_box() {
+  let doc = r#"<main>
+      <div style="position: fixed; top: 100px; left: 100px; width: 60px; height: 60px; z-index: -1; background: #123456;"></div>
+      <p style="height: 900px;">first</p>
+      <p style="height: 900px;">second</p>
+    </main>"#;
+  let pdf = run_pdf_fixture("page-background", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse the doc"))
+      .page(PageOptions::A4)
+      .background_color(Color([239, 231, 213, 255]))
+      .fonts(fonts)
+      .build()
+  });
+  let lines: Vec<Vec<u8>> = content_lines(&pdf).collect();
+  let paper = lines
+    .iter()
+    .position(|line| find(line, b"0.9373 0.9059 0.8353 rg").is_some())
+    .expect("the paper fill");
+  let watermark = lines
+    .iter()
+    .position(|line| find(line, b"100 100 60 60 re").is_some())
+    .expect("the repeated box");
+  let text = lines
+    .iter()
+    .position(|line| line.ends_with(b"TJ") || line.ends_with(b"Tj"))
+    .expect("some text");
+
+  assert!(
+    paper < watermark && watermark < text,
+    "expected paper, then the box, then the text: {paper} {watermark} {text}"
+  );
+}
