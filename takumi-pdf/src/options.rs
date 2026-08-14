@@ -450,9 +450,12 @@ pub enum PageMargin {
 }
 
 impl PageMargin {
-  fn resolve(self, band_height: Option<f32>) -> f32 {
+  /// `axis` is the paper's length along the side's own axis: a page narrower
+  /// or shorter than an inch keeps nothing back for a margin there.
+  fn resolve(self, axis: f32, band_height: Option<f32>) -> f32 {
     match self {
       Self::Px(value) => value,
+      Self::Auto if axis <= ONE_IN_PX => 0.0,
       Self::Auto => band_height.map_or(PageOptions::DEFAULT_MARGIN, |height| {
         (height + BAND_EDGE_PADDING).max(PageOptions::DEFAULT_MARGIN)
       }),
@@ -494,12 +497,19 @@ impl PageMargins {
   }
 
   /// Margins with every [`PageMargin::Auto`] replaced by the band it sits under.
-  pub(crate) fn resolve(self, header: Option<f32>, footer: Option<f32>) -> Rect<f32> {
+  pub(crate) fn resolve(
+    self,
+    size: (f32, f32),
+    header: Option<f32>,
+    footer: Option<f32>,
+  ) -> Rect<f32> {
+    let (width, height) = size;
+
     Rect {
-      top: self.top.resolve(header),
-      right: self.right.resolve(None),
-      bottom: self.bottom.resolve(footer),
-      left: self.left.resolve(None),
+      top: self.top.resolve(height, header),
+      right: self.right.resolve(width, None),
+      bottom: self.bottom.resolve(height, footer),
+      left: self.left.resolve(width, None),
     }
   }
 }
@@ -526,14 +536,15 @@ pub(crate) const PT_PER_PX: f32 = 1.0 / ONE_PT_IN_PX;
 /// components/printing/resources/print_header_footer_template_page.html).
 pub(crate) const BAND_EDGE_PADDING: f32 = 15.0 * ONE_PT_IN_PX;
 
-/// Presets are portrait with a half-inch margin; chain
+/// Presets are portrait with the default margin; chain
 /// [`landscape`](Self::landscape) and [`with_margin`](Self::with_margin) to
 /// adjust, or fill the fields directly for any other size.
 /// The sizes are the page keywords CSS Paged Media defines, portrait as that
 /// module writes them.
 impl PageOptions {
-  /// Half an inch, the margin a page starts with.
-  pub const DEFAULT_MARGIN: f32 = 0.5 * ONE_IN_PX;
+  /// The margin a page starts with, the centimeter Chromium prints at
+  /// (`printing/print_settings.cc`, `MarginType::kDefaultMargins`).
+  pub const DEFAULT_MARGIN: f32 = 10.0 * ONE_MM_IN_PX;
 
   /// ISO A3: 297 × 420 mm.
   pub const A3: Self = Self::preset(297.0 * ONE_MM_IN_PX, 420.0 * ONE_MM_IN_PX);

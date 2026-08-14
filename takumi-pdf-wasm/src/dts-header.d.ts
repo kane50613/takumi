@@ -71,7 +71,7 @@ export type PageSize = PageSizeName | Dimensions;
 
 /**
  * One side of a page margin: a length in CSS px, or `"auto"` to fit the band
- * that draws on that side. `"auto"` never goes below the default 48, and the
+ * that draws on that side. `"auto"` never goes below the 1cm a page starts with, and the
  * left and right sides hold no band, so they land on it.
  */
 export type PageMarginSide = number | "auto";
