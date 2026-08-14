@@ -8,7 +8,7 @@ use takumi_core::{
   error::Error as TakumiError,
   layout::node::Node,
   resources::{font::FontError, image::ImageSource},
-  style::{FontFamily, Lang, StyleSheet},
+  style::{Color, FontFamily, Lang, StyleSheet},
   units::{ONE_IN_PX, ONE_MM_IN_PX, ONE_PT_IN_PX},
   viewport::Viewport,
 };
@@ -168,6 +168,11 @@ pub struct PdfOptions<'g> {
   /// Paged output; `None` renders a single page at the viewport size.
   #[builder(default, setter(strip_option))]
   pub page: Option<PageOptions>,
+  /// The paper color, painted under everything on every page, margins
+  /// included. Unset leaves the page empty, like Chromium's print path, so a
+  /// viewer shows its own white and the file carries no extra rectangle.
+  #[builder(default, setter(strip_option))]
+  pub background_color: Option<Color>,
   /// Band repeated at the top of every page. Nodes classed `pageNumber` /
   /// `totalPages` receive the counters, optionally formatted by a
   /// supported `@counter-style` name in the same class list (e.g. `cjk-decimal`). The

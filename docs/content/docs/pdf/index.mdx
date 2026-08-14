@@ -76,13 +76,18 @@ const pdf = await render(report, {
 });
 ```
 
-| Option      | Type                                           | Default | Description                                                  |
-| ----------- | ---------------------------------------------- | ------- | ------------------------------------------------------------ |
-| `size`      | `"a4"`, `"letter"`, or `{ width, height }`     | `"a4"`  | Page size in CSS px at 96 dpi. Presets ignore case.          |
-| `landscape` | `boolean`                                      | `false` | Swaps page width and height, including explicit sizes.       |
-| `margin`    | `number` or `{ top?, right?, bottom?, left? }` | `48`    | A number applies to all sides. Missing object sides are `0`. |
+| Option            | Type                                           | Default | Description                                                  |
+| ----------------- | ---------------------------------------------- | ------- | ------------------------------------------------------------ |
+| `size`            | `"a4"`, `"letter"`, or `{ width, height }`     | `"a4"`  | Page size in CSS px at 96 dpi. Presets ignore case.          |
+| `landscape`       | `boolean`                                      | `false` | Swaps page width and height, including explicit sizes.       |
+| `margin`          | `number` or `{ top?, right?, bottom?, left? }` | `48`    | A number applies to all sides. Missing object sides are `0`. |
+| `backgroundColor` | CSS color                                      | unset   | The paper, painted under everything on every page.           |
 
-`@page` CSS rules are not supported. Use these options to set the page geometry.
+These options are the structured form of `@page`, which takumi does not parse as CSS.
+`size` and `margin` map to the descriptors of the same name, `header` and `footer` to its margin boxes.
+
+Leave `backgroundColor` unset for white paper.
+A viewer draws white by default, and the file stays free of a full-page rectangle.
 
 ## Reuse a renderer
 
