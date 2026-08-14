@@ -731,6 +731,29 @@ mod tests {
     let letter = PageOptions::LETTER;
 
     assert_eq!((letter.width, letter.height), (816.0, 1056.0));
+    assert_eq!(
+      (PageOptions::LEGAL.width, PageOptions::LEGAL.height),
+      (816.0, 1344.0)
+    );
+    assert_eq!(
+      (PageOptions::LEDGER.width, PageOptions::LEDGER.height),
+      (1056.0, 1632.0)
+    );
+
+    for page in [
+      PageOptions::A3,
+      PageOptions::A4,
+      PageOptions::A5,
+      PageOptions::B4,
+      PageOptions::B5,
+      PageOptions::JIS_B4,
+      PageOptions::JIS_B5,
+      PageOptions::LEDGER,
+      PageOptions::LEGAL,
+      PageOptions::LETTER,
+    ] {
+      assert!(page.width < page.height, "presets are portrait");
+    }
 
     let landscape = PageOptions::A4.landscape();
 

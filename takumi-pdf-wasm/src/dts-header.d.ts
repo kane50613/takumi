@@ -54,7 +54,20 @@ export type Dimensions = { width: number; height: number };
 export type ViewportInput = { width: number; height?: number };
 
 /** A page size: a preset name (case-insensitive) or explicit dimensions. */
-export type PageSize = "a4" | "letter" | Dimensions;
+export type PageSizeName =
+  | "a3"
+  | "a4"
+  | "a5"
+  | "b4"
+  | "b5"
+  | "jis-b4"
+  | "jis-b5"
+  | "ledger"
+  | "legal"
+  | "letter";
+
+/** A page size: a preset name or explicit {@link Dimensions}. */
+export type PageSize = PageSizeName | Dimensions;
 
 /**
  * One side of a page margin: a length in CSS px, or `"auto"` to fit the band
