@@ -61,7 +61,7 @@ Run workspace package tests (pick what you changed):
 (cd takumi-napi && bun test --silent)
 (cd takumi-wasm && bun test --silent)
 (cd takumi-js && bun test --silent)
-(cd takumi-template && bun test --silent)
+(cd docs && bun test tests --silent)
 ```
 
 Or run every package's suite at once:

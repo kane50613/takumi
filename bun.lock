@@ -72,7 +72,6 @@
       "dependencies": {
         "react": "catalog:",
         "takumi-js": "workspace:*",
-        "takumi-template": "workspace:*",
       },
       "devDependencies": {
         "@types/react": "catalog:",
@@ -363,17 +362,6 @@
       "optionalPeers": [
         "react",
       ],
-    },
-    "takumi-template": {
-      "name": "takumi-template",
-      "dependencies": {
-        "react": "catalog:",
-      },
-      "devDependencies": {
-        "@types/bun": "catalog:",
-        "@types/react": "catalog:",
-        "takumi-js": "workspace:*",
-      },
     },
     "takumi-wasm": {
       "name": "@takumi-rs/wasm",
@@ -2444,8 +2432,6 @@
     "takumi-js": ["takumi-js@workspace:takumi-js"],
 
     "takumi-pdf": ["takumi-pdf@workspace:takumi-pdf-js"],
-
-    "takumi-template": ["takumi-template@workspace:takumi-template"],
 
     "tapable": ["tapable@2.3.3", "", {}, "sha512-uxc/zpqFg6x7C8vOE7lh6Lbda8eEL9zmVm/PLeTPBRhh1xCgdWaQ+J1CUieGpIfm2HdtsUpRv+HshiasBMcc6A=="],
 
