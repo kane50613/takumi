@@ -270,6 +270,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         .map(|template| measure_band(&inputs, template, band_viewport))
         .transpose()?;
       let margin = page.margin.resolve(
+        (page.width, page.height),
         band_height(header_band.as_ref()),
         band_height(footer_band.as_ref()),
       );
@@ -590,8 +591,12 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
 
 #[cfg(test)]
 mod tests {
+  use takumi_core::units::ONE_IN_PX;
+
   use super::*;
   use crate::pagination::Atom;
+
+  const A4: (f32, f32) = (PageOptions::A4.width, PageOptions::A4.height);
 
   #[test]
   fn content_taller_than_a_render_allows_stops_counting() {
@@ -757,7 +762,7 @@ mod tests {
       PageOptions::A4
         .with_margin(0.0)
         .margin
-        .resolve(None, None)
+        .resolve(A4, None, None)
         .top,
       0.0
     );
@@ -768,28 +773,50 @@ mod tests {
     let margins = PageOptions::A4.margin;
 
     assert_eq!(
-      margins.resolve(None, None).top,
+      margins.resolve(A4, None, None).top,
       PageOptions::DEFAULT_MARGIN,
       "a side with no band sits at the default"
     );
     assert_eq!(
-      margins.resolve(Some(4.0), None).top,
+      margins.resolve(A4, Some(4.0), None).top,
       PageOptions::DEFAULT_MARGIN,
       "a band that fits inside the default does not shrink the page"
     );
     assert_eq!(
-      margins.resolve(Some(80.0), None).top,
+      margins.resolve(A4, Some(80.0), None).top,
       80.0 + BAND_EDGE_PADDING,
       "a taller band takes its height plus the inset it draws at"
     );
     assert_eq!(
-      margins.resolve(None, Some(80.0)).bottom,
+      margins.resolve(A4, None, Some(80.0)).bottom,
       80.0 + BAND_EDGE_PADDING
     );
     assert_eq!(
-      margins.resolve(None, Some(80.0)).left,
+      margins.resolve(A4, None, Some(80.0)).left,
       PageOptions::DEFAULT_MARGIN,
       "the sides hold no band"
+    );
+  }
+
+  /// Chromium drops the default margin on an axis that does not clear an inch
+  /// rather than leave the page with nothing to print on. Its test is
+  /// `axis > one inch`, so an axis of exactly an inch keeps no margin either.
+  #[test]
+  fn a_page_under_an_inch_keeps_no_margin_on_that_axis() {
+    for width in [ONE_IN_PX, ONE_IN_PX - 1.0] {
+      let margins = PageMargins::AUTO.resolve((width, 4.0 * ONE_IN_PX), None, None);
+
+      assert_eq!(margins.left, 0.0, "width of {width}");
+      assert_eq!(margins.right, 0.0, "width of {width}");
+      assert_eq!(margins.top, PageOptions::DEFAULT_MARGIN);
+      assert_eq!(margins.bottom, PageOptions::DEFAULT_MARGIN);
+    }
+    assert_eq!(
+      PageMargins::AUTO
+        .resolve((ONE_IN_PX + 1.0, 4.0 * ONE_IN_PX), None, None)
+        .left,
+      PageOptions::DEFAULT_MARGIN,
+      "an axis past the inch keeps its margin"
     );
   }
 }
