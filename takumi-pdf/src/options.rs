@@ -56,6 +56,49 @@ pub enum PdfError {
   MissingGlyphs(String),
 }
 
+impl std::fmt::Display for PdfError {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      Self::Render(error) => write!(f, "{error}"),
+      Self::Font(error) => write!(f, "Font error: {error}"),
+      Self::Krilla(error) => write!(f, "Writing the PDF failed: {error}"),
+      Self::InvalidPageSize => f.write_str("Page size must be finite and larger than zero"),
+      Self::MissingViewport => {
+        f.write_str("Single-page output needs a viewport. Pass `viewport` or `size`.")
+      }
+      Self::InvalidStandard => f.write_str("The requested archival standard is not available"),
+      Self::InvalidMimeType(mime) => {
+        write!(f, "Attachment mime type is not a type/subtype pair: {mime}")
+      }
+      Self::DuplicateAttachment(name) => write!(f, "Two attachments are named {name}"),
+      Self::InvalidXmpSchema(schema) => write!(f, "XMP schema cannot be written as XML: {schema}"),
+      Self::TooManyPages(pages) => write!(
+        f,
+        "The content spans more than {pages} pages. Give it a height that resolves."
+      ),
+      Self::UnsupportedFilter(filter) => {
+        write!(f, "A PDF cannot draw filter: {filter}")
+      }
+      Self::UndrawableImage(reason) => write!(f, "Image could not be decoded: {reason}"),
+      Self::MissingGlyphs(characters) => write!(
+        f,
+        "No registered font covers {characters}. Register one that does."
+      ),
+    }
+  }
+}
+
+impl std::error::Error for PdfError {
+  fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+    match self {
+      Self::Render(error) => Some(error),
+      Self::Font(error) => Some(error),
+      Self::Krilla(error) => Some(error),
+      _ => None,
+    }
+  }
+}
+
 impl From<TakumiError> for PdfError {
   fn from(error: TakumiError) -> Self {
     Self::Render(error)
@@ -522,4 +565,25 @@ pub struct MeasuredSize {
   pub width: f32,
   /// The laid-out content height.
   pub height: f32,
+}
+
+#[cfg(test)]
+mod tests {
+  use super::PdfError;
+
+  #[test]
+  fn error_messages_read_as_sentences() {
+    assert_eq!(
+      PdfError::MissingGlyphs("क (U+0915)".into()).to_string(),
+      "No registered font covers क (U+0915). Register one that does."
+    );
+    assert_eq!(
+      PdfError::UnsupportedFilter("blur(2px)".into()).to_string(),
+      "A PDF cannot draw filter: blur(2px)"
+    );
+    assert_eq!(
+      PdfError::TooManyPages(20_000).to_string(),
+      "The content spans more than 20000 pages. Give it a height that resolves."
+    );
+  }
 }
