@@ -7,7 +7,7 @@ use taffy::{
   NodeId as TaffyNodeId, RequestedAxis, RoundTree, RunMode, Size as TaffySize, SizingMode, Style,
   TraversePartialTree, TraverseTree, compute_block_layout, compute_cached_layout,
   compute_flexbox_layout, compute_grid_layout, compute_hidden_layout, compute_leaf_layout,
-  compute_root_layout, round_layout,
+  compute_root_layout,
 };
 
 use crate::{
@@ -470,7 +470,7 @@ impl<'r> LayoutTree<'r> {
       root_node_id,
       available_space.map(AvailableSpace::into_taffy).into_taffy(),
     );
-    round_layout(self, root_node_id);
+    snap_layout(self, root_node_id, 0.0, 0.0);
   }
 
   /// Consumes the tree into immutable per-node layout results.
@@ -865,6 +865,38 @@ impl LayoutGridContainer for LayoutTree<'_> {
 
   fn get_grid_child_style(&self, child_node_id: TaffyNodeId) -> Self::GridItemStyle<'_> {
     self.get_core_container_style(child_node_id)
+  }
+}
+
+/// Snaps every box to whole pixels, both edges in absolute space so a box
+/// always meets the one beside it. taffy's `round_layout` documents the same
+/// rule but rounds a location against its parent, which parts two siblings by a
+/// pixel whenever their parent sits on a fraction.
+/// Blink snaps the same way, against the absolute offset's fraction
+/// (`SnapSizeToPixel`, platform/geometry/layout_unit.h).
+fn snap_layout(tree: &mut LayoutTree<'_>, node_id: TaffyNodeId, parent_x: f32, parent_y: f32) {
+  let unrounded = tree.get_unrounded_layout(node_id);
+  let mut layout = unrounded;
+  let x = parent_x + unrounded.location.x;
+  let y = parent_y + unrounded.location.y;
+
+  layout.location.x = x.round() - parent_x.round();
+  layout.location.y = y.round() - parent_y.round();
+  layout.size.width = (x + unrounded.size.width).round() - x.round();
+  layout.size.height = (y + unrounded.size.height).round() - y.round();
+  layout.padding.left = (x + unrounded.padding.left).round() - x.round();
+  layout.padding.right = (x + unrounded.size.width).round()
+    - (x + unrounded.size.width - unrounded.padding.right).round();
+  layout.padding.top = (y + unrounded.padding.top).round() - y.round();
+  layout.padding.bottom = (y + unrounded.size.height).round()
+    - (y + unrounded.size.height - unrounded.padding.bottom).round();
+
+  tree.set_final_layout(node_id, &layout);
+
+  for index in 0..tree.child_count(node_id) {
+    let child = tree.get_child_id(node_id, index);
+
+    snap_layout(tree, child, x, y);
   }
 }
 
