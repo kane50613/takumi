@@ -89,8 +89,9 @@ const pdf = await render(report, {
 These options are the structured form of `@page`, which takumi does not parse as CSS.
 `size` and `margin` map to the descriptors of the same name, `header` and `footer` to its margin boxes.
 
-A margin left at `"auto"` takes the space its band needs, and never less than 48.
-Without a band on that side it is 48, which is where a page starts.
+A margin left at `"auto"` takes the space its band needs: the band's measured
+height plus the 20px it is inset from the paper edge, and never less than 48.
+Without a band on that side it stays at 48, which is where a page starts.
 
 Leave `backgroundColor` unset for white paper.
 A viewer draws white by default, and the file stays free of a full-page rectangle.
