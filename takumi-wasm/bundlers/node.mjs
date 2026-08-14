@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import * as wasm from "../dist/export.mjs";
+import wasmUrl from "./wasm-url.mjs";
 
-const wasmBytes = readFileSync(new URL("../pkg/takumi_wasm_bg.wasm", import.meta.url));
+const wasmBytes = readFileSync(wasmUrl);
 
 wasm.initSync({ module: wasmBytes });
 

@@ -43,7 +43,8 @@ await init({ module_or_path: wasmUrl });
 ```
 
 `takumi-js/wasm-url` resolves the binary with `new URL(specifier, import.meta.url)`.
-Vite, webpack, Turbopack, and Rollup all understand that syntax.
+Vite, webpack, and Turbopack rewrite that call to the asset they emit.
+Server code should keep `takumi-js/wasm`, which locates the binary for the runtime it lands on.
 
 `@takumi-rs/wasm` and `takumi-pdf` export `wasm-url` too.
 

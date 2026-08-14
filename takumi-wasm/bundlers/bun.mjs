@@ -1,7 +1,7 @@
 import * as wasm from "../dist/export.mjs";
-import wasmPath from "../pkg/takumi_wasm_bg.wasm";
+import wasmUrl from "./wasm-url.mjs";
 
-const wasmBytes = await Bun.file(new URL(wasmPath, import.meta.url)).arrayBuffer();
+const wasmBytes = await Bun.file(wasmUrl).arrayBuffer();
 
 wasm.initSync({ module: wasmBytes });
 

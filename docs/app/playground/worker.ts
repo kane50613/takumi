@@ -3,7 +3,7 @@ import { extractEmojis } from "takumi-js/helpers/emoji";
 import { fromJsx } from "takumi-js/helpers/jsx";
 import type { FetchedImage, Node } from "takumi-js/helpers";
 import wasm, { init, Renderer } from "takumi-js/wasm";
-import pdfWasm from "takumi-pdf/takumi_pdf_wasm_bg.wasm?url";
+import pdfWasm from "takumi-pdf/wasm-url";
 // `no-init` over the entry that instantiates the module: the worker has the
 // asset URL already, and that entry needs top-level await, which an iife worker
 // bundle cannot have.
