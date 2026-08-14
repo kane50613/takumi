@@ -1,3 +1,9 @@
+## @takumi-rs/wasm@2.8.1
+
+### Ship without skrifa's hinting interpreter
+
+Every draw is unhinted, but skrifa's TrueType hinting interpreter and autohinter survived dead-code elimination through runtime branches. A patched skrifa gates them behind a `hinting` feature, cutting ~240KB from the wasm binaries with identical rendering.
+
 ## @takumi-rs/wasm@2.8.0
 
 ### Find the WASM asset when Vite emits it beside the server bundle
