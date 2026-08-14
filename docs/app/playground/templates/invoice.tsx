@@ -75,8 +75,6 @@ export default function Invoice() {
   );
 }
 
-// The same numbers in the form an accounting system can parse. Real e-invoices
-// use the full Factur-X schema.
 const invoiceXml = `<?xml version="1.0" encoding="UTF-8"?>
 <Invoice>
   <ID>INV-2043</ID>
@@ -89,8 +87,6 @@ export const options: PlaygroundOptions = {
   pdf: {
     size: "a4",
     margin: 56,
-    // PDF/A-3b archives the document and lets it carry the XML. The render
-    // fails if the output does not conform.
     pdfa: "3b",
     attachments: [
       {

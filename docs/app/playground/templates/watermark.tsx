@@ -51,6 +51,32 @@ const clauses = [
 
 const parties = ["Kiln Studio Ltd.", "Aomori Systems K.K."];
 
+const TILE_ROWS = 7;
+const TILE_COLUMNS = 4;
+
+function TiledWatermark({ label }: { label: string }) {
+  return (
+    <div
+      tw="fixed inset-0 flex flex-col justify-around"
+      style={{ zIndex: -1, transform: "rotate(-30deg) scale(1.45)" }}
+    >
+      {Array.from({ length: TILE_ROWS }, (_, row) => (
+        <div key={row} tw="flex justify-around">
+          {Array.from({ length: TILE_COLUMNS }, (_, column) => (
+            <span
+              key={column}
+              tw="text-[12px] font-semibold tracking-[0.3em]"
+              style={{ color: "rgba(17,24,39,0.06)" }}
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Watermark({ label }: { label: string }) {
   return (
     <div
@@ -58,8 +84,8 @@ function Watermark({ label }: { label: string }) {
       style={{ zIndex: -1, transform: "rotate(-30deg)" }}
     >
       <span
-        tw="w-full text-center text-[8vw] font-bold tracking-[0.14em]"
-        style={{ color: "rgba(17,24,39,0.14)" }}
+        tw="w-full text-center text-[7vw] font-bold tracking-[0.14em]"
+        style={{ color: "rgba(17,24,39,0.1)" }}
       >
         {label}
       </span>
@@ -110,6 +136,7 @@ function Footer() {
 export default function Agreement() {
   return (
     <div tw="flex w-full flex-col text-[#111827]">
+      <TiledWatermark label="CONFIDENTIAL" />
       <Watermark label="CONFIDENTIAL" />
       <Heading />
       {clauses.map((clause) => (

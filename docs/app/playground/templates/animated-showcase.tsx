@@ -23,8 +23,6 @@ export default function AnimatedShowcase() {
             animationDuration: `${DURATION_MS}ms`,
             animationDelay: `${word.delay}ms`,
             animationIterationCount: "infinite",
-            // Without this the delayed words sit at their base colour until
-            // their turn comes, which reads as a flash of dark text.
             animationFillMode: "backwards",
             animationTimingFunction: "cubic-bezier(0.65, 0, 0.35, 1)",
           }}

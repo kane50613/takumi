@@ -53,6 +53,7 @@
     "portless": "^0.15.4",
     "prettier": "^3.9.6",
     "takumi-pdf": "workspace:*",
+    "typescript": "catalog:",
     "vite": "catalog:"
   }
 }

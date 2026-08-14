@@ -1308,6 +1308,48 @@ fn paged_header_footer() {
   });
 }
 
+/// Bands taller than the default margin, with every side left at `auto`. The
+/// page has to give them room, so the body starts below the header on every
+/// page rather than under it.
+#[test]
+fn auto_margin_bands() {
+  run_pdf_fixture("auto-margin-bands", |fonts| {
+    let rows: String = (1..=24)
+      .map(|i| format!(r#"<div style="font-size: 12px;">Row {i}</div>"#))
+      .collect();
+    let source = format!(
+      r#"<div style="display: flex; flex-direction: column; width: 100%; row-gap: 4px;">{rows}</div>"#
+    );
+    let band = |label: &str, lines: usize| {
+      let body: String = (1..=lines)
+        .map(|line| format!(r#"<div style="font-size: 11px;">{label} line {line}</div>"#))
+        .collect();
+      from_html(
+        &format!(
+          r#"<div style="display: flex; flex-direction: column; width: 100%; row-gap: 2px; padding: 6px 12px; background-color: #f5f5f4;">
+            {body}
+            <div style="display: flex; column-gap: 3px; font-size: 11px;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>
+          </div>"#
+        ),
+        FromHtmlOptions::default(),
+      )
+      .expect("parse auto margin band")
+    };
+
+    PdfOptions::builder()
+      .node(from_html(&source, FromHtmlOptions::default()).expect("parse auto margin fixture"))
+      .page(PageOptions {
+        width: 400.0,
+        height: 320.0,
+        ..PageOptions::A4
+      })
+      .header(band("Header", 3))
+      .footer(band("Footer", 2))
+      .fonts(fonts)
+      .build()
+  });
+}
+
 /// Blend modes, nested opacity, and isolation on overlapping circles.
 #[test]
 fn blend_opacity_isolation() {

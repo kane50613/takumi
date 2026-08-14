@@ -22,11 +22,11 @@ const sections = [
   },
 ];
 
-const weeks = Array.from({ length: 13 }, (_, index) => ({
+const weeks = Array.from({ length: 84 }, (_, index) => ({
   week: `W${String(index + 1).padStart(2, "0")}`,
-  median: 41 - index,
-  p95: 96 - index * 2,
-  size: 78 - index * 1.2,
+  median: 41 - (index % 13),
+  p95: 96 - (index % 13) * 2,
+  size: 78 - (index % 13) * 1.2,
 }));
 
 export default function Report() {
@@ -72,20 +72,29 @@ export default function Report() {
 export const options: PlaygroundOptions = {
   pdf: {
     size: "a4",
-    margin: { top: 72, right: 56, bottom: 72, left: 56 },
+    margin: { right: 56, left: 56 },
     header: (
-      <div tw="flex w-full justify-between px-14 pt-6 text-[10px] text-[#9ca3af]">
-        <span>Rendering report</span>
-        <span>Q1 2026</span>
+      <div tw="flex w-full flex-col px-14 pt-6">
+        <div tw="flex w-full items-end justify-between">
+          <span tw="text-lg font-semibold text-[#1f2430]">匠 Werkstatt</span>
+          <span tw="text-[10px] text-[#9ca3af]">Rendering report · Q1 2026</span>
+        </div>
+        <div tw="mt-3 flex h-[3px] w-full bg-[#1f2430]" />
+        <span tw="mt-2 text-[10px] text-[#9ca3af]">Prepared for the platform team</span>
       </div>
     ),
     footer: (
-      <div tw="flex w-full justify-center pb-6 text-[10px] text-[#9ca3af]">
-        第 <span className="pageNumber trad-chinese-informal" /> 頁,共{" "}
-        <span className="totalPages trad-chinese-informal" /> 頁
+      <div tw="flex w-full flex-col items-center pb-6">
+        <div tw="mb-2 flex h-[1px] w-[420px] bg-[#e5e7eb]" />
+        <span tw="text-[10px] text-[#9ca3af]">
+          匠 Werkstatt · Kawagoe, Saitama · werkstatt.example
+        </span>
+        <span tw="mt-1 text-[10px] text-[#9ca3af]">
+          第 <span className="pageNumber trad-chinese-informal" /> 頁,共{" "}
+          <span className="totalPages trad-chinese-informal" /> 頁
+        </span>
       </div>
     ),
-    // Turns the h1/h2 headings into PDF bookmarks, in whichever script they use.
     outline: true,
     metadata: { title: "Rendering report — Q1 2026", creationDate: "2026-04-02" },
   },
