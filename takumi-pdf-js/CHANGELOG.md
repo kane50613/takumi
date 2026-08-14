@@ -1,3 +1,29 @@
+## takumi-pdf@0.9.0
+
+### Take every page-size keyword CSS defines
+
+`size` knew `"a4"` and `"letter"`, so a receipt on A5 or a US legal contract meant working out the millimetres. It now takes all ten page-size keywords CSS Paged Media defines, ISO and JIS sheets alongside the US ones.
+
+### Load the wasm binary in a browser bundle
+
+Vite, webpack and Turbopack set the same export conditions for a browser build. All three resolved the Vite entry, whose `?url` import only works in Vite. Each package now exports `wasm-url`, which resolves the binary through `new URL(specifier, import.meta.url)`, the call Vite, webpack and Turbopack rewrite to the asset they emit. Pair it with `takumi-pdf/no-init`, or with the new `takumi-js/wasm/no-init`, which keeps the auto-init entry out of the bundle.
+
+### Pick the Node entry when webpack targets Node
+
+A webpack build for Node resolved the Vite entry, because both environments set the `module` condition and it is listed first. The build then failed on that entry's `?url` import, which only Vite reads. A `webpack` condition now routes webpack's Node target to the Node entry, and every other bundler keeps the entry it already resolved.
+
+### Say what a failed render needs
+
+A failed render threw the error's Rust shape, such as `MissingGlyphs("क (U+0915)")` or `DecodeError(Unsupported(UnsupportedError { format: Unknown }))`. Every error now reads as a sentence that names the fix, and the ones wrapping another error carry its message instead of its debug form.
+
+### Size the page margin to its band
+
+A band draws inside the page margin, and a margin shorter than the band left content running underneath it. `margin` now takes `"auto"` on any side and starts there, growing to the space that side's band needs and never dropping below the 48 it began at.
+
+### Render from a Next.js route without configuring the bundler
+
+Turbopack bundles a server route's imports, and it resolved `takumi-pdf` to the Vite entry, whose `?url` import only Vite reads. The build failed unless the package was listed in `serverExternalPackages`. `takumi-pdf/next` hands Turbopack the binary in the form it emits, on the Node runtime and the Edge runtime alike.
+
 ## takumi-pdf@0.8.1
 
 ### Ship without skrifa's hinting interpreter
