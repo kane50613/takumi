@@ -6,8 +6,7 @@ const isWhitespaceOnlyText = (node: Node): boolean =>
   "text" in node && typeof node.text === "string" && node.text.trim() === "";
 
 export function fromHtml(html: string) {
-  const { nodes: parsed, stylesheets } = fromStaticMarkup(html);
-  const nodes = [...parsed];
+  const { nodes, stylesheets } = fromStaticMarkup(html);
 
   while (nodes[0] && isWhitespaceOnlyText(nodes[0])) {
     nodes.shift();
