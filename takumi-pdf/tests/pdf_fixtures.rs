@@ -3045,3 +3045,120 @@ fn an_undecodable_image_stops_the_render() {
     "unexpected error: {error:?}"
   );
 }
+
+/// A `fixed` box the initial containing block holds repeats on every page, laid
+/// out against the page area rather than the content column: a watermark, which
+/// is what the property is for in print. Tagging is on, so the run also covers
+/// a repeated link against the tag tree, which only knows the content.
+#[test]
+fn a_fixed_box_repeats_on_every_page() {
+  let doc = r#"<main>
+      <div style="position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;">
+        <span style="font-size: 48px;">DRAFT</span>
+      </div>
+      <div style="position: fixed; top: 20px; left: 30px; width: 40px; height: 40px; background: #000;"></div>
+      <a href="https://takumi.kane.tw" style="position: fixed; bottom: 10px; left: 10px;">source</a>
+      <div style="position: fixed; top: 200px; left: 200px; width: 50px; height: 50px; z-index: -1; background: #eee;"></div>
+      <p style="height: 900px;">first</p>
+      <p style="height: 900px;">second</p>
+    </main>"#;
+  let pdf = run_pdf_fixture("fixed-repeats-per-page", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse the doc"))
+      .page(PageOptions::A4)
+      .tagged(Tagging::On)
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  assert_eq!(
+    haystack.matches("/Count 2").count(),
+    1,
+    "expected a two-page document"
+  );
+  assert_eq!(
+    content_lines(&pdf)
+      .filter(|line| line.ends_with(b"TJ") || line.ends_with(b"Tj"))
+      .count(),
+    6,
+    "expected both fixed boxes on both pages, next to each page's own text"
+  );
+  assert_eq!(
+    haystack.matches("/Subtype/Link").count(),
+    2,
+    "expected the fixed link to be clickable on both pages"
+  );
+
+  // Every fixed box paints under one page-space transform, so the operands are
+  // page-area pixels: the corner box at its own insets, the watermark centered.
+  let corners: Vec<[f32; 4]> = content_lines(&pdf)
+    .filter_map(|line| operands(&line, "re"))
+    .filter(|rect| rect.len() == 4)
+    .map(|rect| [rect[0], rect[1], rect[2], rect[3]])
+    .filter(|rect| rect[2] == 40.0 && rect[3] == 40.0)
+    .collect();
+
+  assert_eq!(
+    corners,
+    [[30.0, 20.0, 40.0, 40.0]; 2],
+    "expected the offset box at its own insets on both pages"
+  );
+
+  let lines: Vec<Vec<u8>> = content_lines(&pdf).collect();
+  let under = lines
+    .iter()
+    .position(|line| find(line, b"200 200 50 50 re").is_some())
+    .expect("the z-index: -1 box");
+  let first_text = lines
+    .iter()
+    .position(|line| line.ends_with(b"TJ") || line.ends_with(b"Tj"))
+    .expect("some text");
+
+  assert!(
+    under < first_text,
+    "expected a negative z-index box to paint under the content"
+  );
+
+  let watermarks: Vec<(f32, f32)> = content_lines(&pdf)
+    .filter(|line| find(line, b"/f0 48 Tf").is_some())
+    .filter_map(|line| operands(&line, "Tm"))
+    .filter(|matrix| matrix.len() == 6)
+    .map(|matrix| (matrix[4], matrix[5]))
+    .collect();
+
+  assert_eq!(watermarks.len(), 2, "expected a watermark on both pages");
+  assert_eq!(
+    watermarks[0], watermarks[1],
+    "expected the watermark at the same place on both pages"
+  );
+
+  let (_, baseline) = watermarks[0];
+  let footer = content_lines(&pdf)
+    .filter_map(|line| operands(&line, "Tm"))
+    .filter(|matrix| matrix.len() == 6)
+    .map(|matrix| matrix[5])
+    .fold(0.0_f32, f32::max);
+
+  assert!(
+    baseline > 100.0 && baseline < footer - 100.0,
+    "expected the watermark centered in the page area, not pinned to an edge: {baseline} of {footer}"
+  );
+}
+
+/// The numbers preceding a content-stream operator, as the operator's operands.
+fn operands(line: &[u8], operator: &str) -> Option<Vec<f32>> {
+  let text = std::str::from_utf8(line).ok()?;
+  let (before, _) = text.rsplit_once(&format!(" {operator}"))?;
+
+  Some(
+    before
+      .split_whitespace()
+      .rev()
+      .map_while(|token| token.parse::<f32>().ok())
+      .collect::<Vec<_>>()
+      .into_iter()
+      .rev()
+      .collect(),
+  )
+}

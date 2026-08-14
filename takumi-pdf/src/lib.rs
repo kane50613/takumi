@@ -109,7 +109,7 @@ use crate::{
   pagination::{MAX_PAGES, page_starts, resolve_target_counters},
   paint::rect_path,
   tags::{TagCollector, build_tag_tree, tag_id},
-  tree::{TreeInputs, prepare_tree},
+  tree::{TreeInputs, prepare_paged_tree, prepare_tree},
 };
 
 /// Lays out a node tree without rendering and returns its size.
@@ -275,7 +275,12 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         window_height,
       )?;
 
-      let content = prepare_tree(&inputs, node, content_viewport)?;
+      let page_area = Viewport::new((content_width as u32, content_height as u32));
+      let (content, repeated) = prepare_paged_tree(&inputs, node, content_viewport, page_area)?;
+      let repeated_links: Vec<_> = repeated
+        .iter()
+        .flat_map(|tree| collect_interactive(tree).links)
+        .collect();
       let text_boxes = collect_text_boxes(&content);
       let inline_map = build_inline_map(&text_boxes)?;
       let mut atoms = Vec::new();
@@ -347,6 +352,18 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         }
 
         let content_top = page.margin.top;
+
+        for fixed in repeated.iter().filter(|tree| tree.paints_below()) {
+          emit_band(
+            fixed,
+            &mut fonts,
+            (page.margin.left, content_top, content_width, window_height),
+            tag_collector.is_some(),
+            &issues,
+            document_lang,
+            &mut surface,
+          )?;
+        }
         // Paint stops at the next cut: the region between a raised cut and the
         // page's full height belongs to the next page and stays blank, exactly
         // like browser print fragmentation.
@@ -375,6 +392,18 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           emitter.emit_context(0, Affine::IDENTITY, &mut surface)?;
           surface.pop();
           surface.pop();
+        }
+
+        for fixed in repeated.iter().filter(|tree| !tree.paints_below()) {
+          emit_band(
+            fixed,
+            &mut fonts,
+            (page.margin.left, content_top, content_width, window_height),
+            tag_collector.is_some(),
+            &issues,
+            document_lang,
+            &mut surface,
+          )?;
         }
 
         if let (Some(band), Some(template)) = (&footer_band, &options.footer) {
@@ -410,6 +439,23 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           (y0, y0 + paint_height),
           (page.margin.left, content_top),
           tag_collector.as_ref(),
+          |id| {
+            interactive
+              .anchors
+              .get(id)
+              .map(|anchor| destination(anchor.top, &anchor.path))
+          },
+        );
+        // A repeated box sits at the same place on every page, so its links are
+        // added per page against the page area rather than the content window.
+        // The box itself is an artifact, and its paths do not exist in the tag
+        // tree, so the annotations stay out of the structure too.
+        add_link_annotations(
+          &mut pdf_page,
+          &repeated_links,
+          (0.0, window_height),
+          (page.margin.left, content_top),
+          None,
           |id| {
             interactive
               .anchors

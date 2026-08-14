@@ -66,3 +66,37 @@ const pdf = await render(
   </section>,
 );
 ```
+
+## Watermarks
+
+`position: fixed` paints a box on every page.
+The box lays out against the page area.
+It stays outside the content column.
+
+```tsx twoslash
+import { render } from "takumi-pdf";
+
+const pdf = await render(
+  <main>
+    {/* Centers the watermark inside each page area. */}
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <span style={{ fontSize: 96, color: "rgba(0,0,0,0.08)" }}>DRAFT</span>
+    </div>
+    <p>Long content that continues on the next page.</p>
+  </main>,
+);
+```
+
+A transformed or filtered ancestor captures a fixed descendant.
+That descendant stays in flow and paginates with its ancestor.
+
+A negative `z-index` paints the box under the content.
+Leave the root without a background, or the background covers the box.
