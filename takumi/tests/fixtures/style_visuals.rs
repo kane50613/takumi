@@ -332,6 +332,49 @@ fn test_style_box_shadow_inset() {
   run_fixture_test(container, "style_box_shadow_inset");
 }
 
+/// A spread wider than the border has to clear the border and still show, which
+/// only holds while the shadow is placed against the padding box.
+#[test]
+fn test_style_box_shadow_inset_with_border() {
+  let container = Node::container([Node::container([]).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Px(240.0)))
+      .with(StyleDeclaration::height(Px(160.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::white(),
+      )))
+      .with_border_radius(BorderRadius(Sides([SpacePair::from_single(Px(16.0)); 4])))
+      .with_border_width(Sides([Px(18.0).into(); 4]))
+      .with_border_style(Sides([BorderStyle::Solid; 4]))
+      .with_border_color(Sides([ColorInput::Value(Color([120, 140, 200, 255])); 4]))
+      .with(StyleDeclaration::box_shadow(Some(
+        vec![
+          BoxShadow::builder()
+            .color(ColorInput::Value(Color([0, 0, 0, 153])))
+            .offset_x(Px(0.0))
+            .offset_y(Px(0.0))
+            .blur_radius(Px(0.0))
+            .spread_radius(Px(30.0))
+            .inset(true)
+            .build(),
+        ]
+        .into_boxed_slice(),
+      ))),
+  )])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([230, 230, 230, 255]),
+      ))),
+  );
+
+  run_fixture_test(container, "style_box_shadow_inset_with_border");
+}
+
 #[test]
 fn test_style_position() {
   let container = Node::container([Node::container([]).with_style(
