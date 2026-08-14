@@ -59,6 +59,22 @@
         "types": "./bundlers/node.d.ts",
         "default": "./bundlers/next.mjs"
       },
+      "webpack": {
+        "node": {
+          "require": {
+            "types": "./bundlers/node.d.cts",
+            "default": "./bundlers/node.cjs"
+          },
+          "default": {
+            "types": "./bundlers/node.d.ts",
+            "default": "./bundlers/node.mjs"
+          }
+        },
+        "default": {
+          "types": "./bundlers/node.d.ts",
+          "default": "./bundlers/vite.mjs"
+        }
+      },
       "module": {
         "types": "./bundlers/node.d.ts",
         "default": "./bundlers/vite.mjs"
