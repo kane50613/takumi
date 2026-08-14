@@ -1,3 +1,25 @@
+## takumi-pdf@0.8.0
+
+### Repeat fixed boxes on every page
+
+Fixed boxes outside transformed or filtered ancestors now lay out against the page area and paint on every page. Watermarks no longer stop at the first page.
+
+### Reject a page that would print wrong
+
+An image whose bytes will not decode used to leave a hole, and `filter: blur()` or `drop-shadow()` used to be dropped without a word. Both now stop the render and name what went wrong, the way an uncovered character already did.
+
+### Set the paper color
+
+`backgroundColor` takes a CSS color and paints it under everything on every page, margins included. A watermark with a negative `z-index` sits above it, so the paper no longer has to come from a box in the tree.
+
+### Pick the WASM entry from the bundler's export condition
+
+Bundling `takumi-pdf` broke initialization, because every environment resolved to the Node entry and that entry locates the binary from `import.meta.url`. Vite, Next, workerd and Bun now each get an entry that finds the binary where that bundler puts it.
+
+### Embed JPEG and WebP images
+
+`images` took bytes in any raster format, but only PNG reached the page: a JPEG or a WebP failed the whole render. Both embed now, and a JPEG keeps its own compression instead of being decoded and re-encoded.
+
 ## takumi-pdf@0.7.0
 
 ### Honor `widows` and `orphans` at page breaks

@@ -1,3 +1,29 @@
+## takumi-core@0.22.0
+
+### Stop drawing a hairline on borderless sides
+
+A border on only some sides drew faint lines along the sides that had none, in PDF and in SVG. Those sides now draw nothing.
+
+### Capture fixed and absolute descendants with transforms and filters
+
+Transforms, transform properties, offset paths, filters, and backdrop filters now capture fixed and absolute descendants. Those descendants position against that ancestor, matching Blink.
+
+### Add `units` for the absolute length constants
+
+`takumi_core::units` exports the CSS absolute units in 96 dpi pixels, so page geometry and CSS lengths resolve through one set of constants instead of each crate rederiving them.
+
+### Embed JPEG and WebP images
+
+`images` took bytes in any raster format, but only PNG reached the page: a JPEG or a WebP failed the whole render. Both embed now, and a JPEG keeps its own compression instead of being decoded and re-encoded.
+
+### Draw list markers for `<ol>` and `<ul>`
+
+List items rendered with no bullet or number. A `display: list-item` box now generates a marker: `list-style-type`, `list-style-position` and `list-style-image` pick what it draws and where it sits, and `<ol start>` and `<li value>` set the count.
+
+### Snap border and outline widths to whole device pixels
+
+`border-*-width`, `outline-width` and `outline-offset` now follow the CSS `snap a length as a border width` rule. Anything thinner than one device pixel draws as one, so a hairline stops fading in and out with its position. The rest rounds toward zero, so `1.5px` draws as `1px`.
+
 ## takumi-core@0.21.0
 
 ### Honor emoji variation selectors in font selection
