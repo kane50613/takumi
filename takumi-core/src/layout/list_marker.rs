@@ -145,11 +145,11 @@ impl ListCounter {
 }
 
 /// Blink counts list items within their enclosing list, so a wrapper element
-/// inside one keeps counting rather than starting over. A tree built in code
-/// has no list elements to enclose anything, so there every parent counts its
-/// own items.
+/// inside one keeps counting rather than starting over. A list element is the
+/// one signal for where a list begins; a tree built in code carries no tags, so
+/// there every parent counts the items it holds.
 pub(super) fn owns_list_counter(node: &Node, inside_list: bool) -> bool {
-  !inside_list || is_list_element(node) || node.attribute("start").is_some()
+  !inside_list || is_list_element(node)
 }
 
 pub(super) fn is_list_element(node: &Node) -> bool {
@@ -161,14 +161,12 @@ pub(super) fn is_list_element(node: &Node) -> bool {
   })
 }
 
+/// What a `reversed` list counts down from. Every child that renders is an item
+/// here, which is what list markup gives a list.
 fn list_item_count(children: &[Node]) -> i32 {
   children
     .iter()
-    .filter(|child| {
-      child
-        .tag_name()
-        .is_some_and(|tag| tag.eq_ignore_ascii_case("li"))
-    })
+    .filter(|child| !child.is_whitespace_only_text())
     .count()
     .try_into()
     .unwrap_or(i32::MAX)
@@ -307,6 +305,32 @@ mod tests {
     .with_attributes(attributes(&[("start", "3")]));
 
     assert_eq!(markers(list, LIST_CSS), ["3. ", "9. ", "10. "]);
+  }
+
+  /// A tree built in code has no `li` elements to count.
+  #[test]
+  fn an_untagged_reversed_list_counts_its_items() {
+    let list = Node::container([item([]), item([]), item([])])
+      .with_class_name("list")
+      .with_attributes(attributes(&[("reversed", "")]));
+
+    assert_eq!(markers(list, LIST_CSS), ["3. ", "2. ", "1. "]);
+  }
+
+  /// A wrapper is not a list, so its `start` leaves the enclosing count alone.
+  #[test]
+  fn a_wrapper_start_attribute_does_not_restart_the_count() {
+    let list = Node::container([
+      item([]),
+      Node::container([item([])])
+        .with_class_name("block")
+        .with_attributes(attributes(&[("start", "9")])),
+    ])
+    .with_class_name("list")
+    .with_tag_name("ol");
+    let css = format!("{LIST_CSS} .block {{ display: block }}");
+
+    assert_eq!(markers(list, &css), ["1. ", "2. "]);
   }
 
   /// `<ol reversed>` counts down from the number of items.

@@ -389,6 +389,9 @@ pub fn collect_inline_items<'n>(root: &'n RenderNode) -> Vec<InlineItem<'n>> {
 /// The whitespace CSS collapses, matching [`crate::layout::node::Node::is_whitespace_only_text`].
 const COLLAPSIBLE_WHITESPACE: [char; 5] = [' ', '\t', '\n', '\r', '\u{c}'];
 
+/// The subset `white-space-collapse: preserve-breaks` still collapses.
+const HORIZONTAL_WHITESPACE: [char; 3] = [' ', '\t', '\u{c}'];
+
 /// A marker holds the start of the line, so the whitespace that a line start
 /// would have collapsed is collapsed against the marker instead.
 fn trim_leading_whitespace(item: &mut InlineItem<'_>) {
@@ -396,11 +399,14 @@ fn trim_leading_whitespace(item: &mut InlineItem<'_>) {
     return;
   };
 
-  if context.style.white_space_collapse != WhiteSpaceCollapse::Collapse {
-    return;
-  }
+  // `preserve-breaks` keeps its newlines but still collapses spaces and tabs.
+  let collapsible: &[char] = match context.style.white_space_collapse {
+    WhiteSpaceCollapse::Collapse => &COLLAPSIBLE_WHITESPACE,
+    WhiteSpaceCollapse::PreserveBreaks => &HORIZONTAL_WHITESPACE,
+    WhiteSpaceCollapse::Preserve | WhiteSpaceCollapse::PreserveSpaces => return,
+  };
 
-  let trimmed = text.trim_start_matches(COLLAPSIBLE_WHITESPACE);
+  let trimmed = text.trim_start_matches(collapsible);
   if trimmed.len() != text.len() {
     *text = Cow::Owned(trimmed.to_owned());
   }
