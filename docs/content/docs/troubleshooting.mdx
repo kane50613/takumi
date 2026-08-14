@@ -1,91 +1,95 @@
 ---
 title: Troubleshooting
-description: Common issues and solutions when using Takumi.
+description: Every error Takumi prints, what to do about it, and why it happens.
 icon: Bug
 ---
 
-## General Issues
+Each heading below is the text an error prints.
+Search this page for the line your build or your server printed.
 
-### Layout is not correct
+## Pick the right entry
 
-Set the `drawDebugBorder` option to outline every node.
+Most build failures are a target reading the wrong entry. Start here.
 
-```tsx
-import { ImageResponse } from "takumi-js/response";
+| Target                                 | Import                                             |
+| -------------------------------------- | -------------------------------------------------- |
+| Node.js, Bun, Deno, Cloudflare Workers | `takumi-pdf` / `takumi-js`                         |
+| A Next.js route, either runtime        | `takumi-pdf/next`                                  |
+| A browser or web worker bundle         | `takumi-pdf/no-init` plus `takumi-pdf/wasm-url`    |
+| A browser bundle, image output         | `takumi-js/wasm/no-init` plus `takumi-js/wasm-url` |
 
-export function GET() {
-  return new ImageResponse(<></>, {
-    width: 100,
-    height: 100,
-    drawDebugBorder: true,
-    // ...
-  });
-}
-```
+The default entry reads the export conditions your bundler sets.
+It covers every server runtime with no configuration.
 
-If the issue persists, file an issue on [our GitHub repository](https://github.com/kane50613/takumi/issues).
-
-## Browser Issues
+## Bundler errors
 
 ### Export default doesn't exist in target module
 
-`takumi-js/wasm` picks its wasm loader from the export conditions the bundler sets.
-Vite, webpack, and Turbopack set the same conditions for a browser build.
-All three land on the Vite entry, and its `?url` import only works in Vite.
-
-Load the binary yourself instead:
+Load the binary yourself:
 
 ```ts
-import wasmUrl from "takumi-js/wasm-url";
-import { init, Renderer } from "takumi-js/wasm/no-init";
+import init, { render } from "takumi-pdf/no-init";
+import wasmUrl from "takumi-pdf/wasm-url";
 
 await init({ module_or_path: wasmUrl });
 ```
 
-`takumi-js/wasm-url` resolves the binary with `new URL(specifier, import.meta.url)`.
-Vite, webpack, and Turbopack rewrite that call to the asset they emit.
-Server code should keep `takumi-js/wasm`, which locates the binary for the runtime it lands on.
+`takumi-js` takes the same pair: `takumi-js/wasm/no-init` and `takumi-js/wasm-url`.
 
-On Turbopack, drop any `turbopack.rules` entry mapping `*.wasm` to `type: "wasm"`.
-That rule makes Turbopack instantiate the binary and look for wasm-bindgen glue the
-package does not ship.
+Your browser bundle resolved the Vite entry. Vite, webpack, and Turbopack set the
+same conditions for a browser build, and that entry loads the binary through a
+`?url` import only Vite reads.
 
-`@takumi-rs/wasm` and `takumi-pdf` export `wasm-url` too.
+### non-ecmascript placeable asset
 
-## Node.js Issues
+Keep `@takumi-rs/core` out of the bundle:
+
+```ts title="next.config.ts"
+const config: NextConfig = {
+  serverExternalPackages: ["@takumi-rs/core"], // [!code ++]
+};
+```
+
+The package holds a native `.node` addon, which no bundler can inline.
+`takumi-pdf` needs no entry here, because it is WebAssembly only.
+
+### Cannot find module '@takumi-rs/core-42dc295dcb05a7ef'
+
+Add the `serverExternalPackages` entry above, then delete `.next` and start again.
+
+This is the same native addon in dev mode. Turbopack rewrote the specifier to an
+internal id, which Node cannot resolve at runtime.
 
 ### Cannot find native binding
 
-`@takumi-rs/core` loads a platform-specific native package. This error means the package for the current platform is missing.
+`@takumi-rs/core` loads a platform-specific native package, and the one for the
+current platform is missing. Two things cause that.
 
 #### Hoist the native package
 
-If you are using a package manager with virtual store such as `pnpm` or `yarn`, allow it to hoist the native binary. The following examples are for pnpm; after updating the configuration, re-run `pnpm i`.
+A package manager with a virtual store, such as pnpm or Yarn, has to be told to
+hoist the native binary. Re-run `pnpm i` after the change.
 
 ```yaml title="pnpm-workspace.yaml"
 publicHoistPattern:
   - "@takumi-rs/core-*"
 ```
 
-With pnpm versions earlier than 10.5.0, add the equivalent setting to `.npmrc` instead:
+With pnpm older than 10.5.0, put the equivalent setting in `.npmrc` instead:
 
 ```text title=".npmrc"
 public-hoist-pattern[]=@takumi-rs/core-*
 ```
 
-For other package managers, refer to their docs for hoist config instructions.
+#### Install the package for your deploy target
 
-#### Install the native package for your deploy target
-
-Package managers only install the native package matching the machine that runs the install. Installing on one platform and deploying to another (for example installing on macOS and deploying to a Linux server) leaves the target's native package missing.
-
-Install the package for the deploy target explicitly:
+Package managers install the native package for the machine running the install,
+so installing on macOS and deploying to Linux leaves the target's package missing.
+Install it explicitly:
 
 ```npm
 npm install @takumi-rs/core-linux-x64-gnu
 ```
-
-Pick the package matching the target platform:
 
 | Target                   | Package                            |
 | ------------------------ | ---------------------------------- |
@@ -98,6 +102,133 @@ Pick the package matching the target platform:
 | Windows x64              | `@takumi-rs/core-win32-x64-msvc`   |
 | Windows arm64            | `@takumi-rs/core-win32-arm64-msvc` |
 
+### Module not found: Can't resolve './takumi_pdf_wasm_bg.js'
+
+On Turbopack, drop the rule that asks for this:
+
+```ts title="next.config.ts"
+const config: NextConfig = {
+  turbopack: {
+    rules: { "*.wasm": { type: "wasm" } }, // [!code --]
+  },
+};
+```
+
+On webpack or Rspack with `target: "node"`, upgrade instead:
+
+```npm
+npm install takumi-pdf@latest @takumi-rs/wasm@latest
+```
+
+The rule asks the bundler to instantiate the binary, which sends it looking for
+wasm-bindgen glue the package does not ship: the glue is compiled into `dist`,
+and `pkg` holds the binary alone.
+
+### Module parse failed: Unexpected character '\0'
+
+Upgrade, then build again:
+
+```npm
+npm install takumi-pdf@latest @takumi-rs/wasm@latest
+```
+
+Rspack parsed the binary as JavaScript, for the same reason as above.
+
+### ENOENT: no such file or directory, open '.../pkg/takumi_pdf_wasm_bg.wasm'
+
+Mark the package external for that build:
+
+```js title="esbuild"
+esbuild.build({ external: ["takumi-pdf"] });
+```
+
+esbuild, Rollup, and Bun's bundler flatten the Node entry into one file and leave
+its `new URL(specifier, import.meta.url)` call alone, so the path lands next to
+the output instead of inside `node_modules`. Vite, webpack, and Turbopack rewrite
+that call and copy the binary, so they need nothing.
+
+### Unable to locate Takumi WASM asset for SSR
+
+Keep the package external for SSR:
+
+```ts title="vite.config.ts"
+export default { ssr: { external: ["takumi-pdf"] } };
+```
+
+Vite writes the client asset and the server chunk to different directories, and
+the entry searches the usual layouts for it. External skips the search entirely.
+If your framework has to bundle it,
+[open an issue](https://github.com/kane50613/takumi/issues) with the output layout.
+
+## Render errors
+
+### MissingGlyphs("क (U+0915), ो (U+094B), र (U+0930)")
+
+Register a font covering the characters the error names:
+
+```ts
+import { googleFonts } from "@takumi-rs/helpers";
+import { render } from "takumi-pdf";
+
+const pdf = await render(document, {
+  fonts: await googleFonts(["Noto Sans Devanagari"]),
+});
+```
+
+No registered font covers them today. They would draw nothing and leave nothing
+in the text layer, so the render stops rather than shipping a page with holes.
+
+### UnsupportedFilter("blur(2px)")
+
+Drop the filter, or rasterize that subtree yourself and place it as an `<img>`.
+
+PDF has no blur operator, so `blur()` and `drop-shadow()` cannot be drawn.
+Dropping them quietly would ship a page that disagrees with the image output.
+
+### DecodeError(Unsupported(UnsupportedError ...))
+
+```text
+DecodeError(Unsupported(UnsupportedError { format: Unknown, kind: Format(Unknown) }))
+```
+
+Re-encode the image as PNG, JPEG, or WebP.
+
+Those three embed directly. GIF has no decoder in this build. A CSS `filter`
+needs pixels to work on and only PNG decodes for that path, so an image under a
+filter raises this too when it arrived as JPEG or WebP.
+
+### TooManyPages(20000)
+
+Give the tree a height that resolves. A percentage height inside a paged render
+has nothing to resolve against, so the content grows until the page cap stops it.
+
+## Node.js
+
 ### TypeError: fetch failed
 
-Node.js fetch (via [undici](https://github.com/nodejs/undici)) can drop the socket while loading a remote `img` URL ([#349](https://github.com/kane50613/takumi/issues/349)). Pass the image as a base64 data URL so Takumi skips the fetch.
+Pass the image as a base64 data URL, which skips the fetch.
+
+Node's fetch, through [undici](https://github.com/nodejs/undici), can drop the
+socket while loading a remote `img` URL
+([#349](https://github.com/kane50613/takumi/issues/349)).
+
+## Layout
+
+### The layout is not what I expected
+
+Set `drawDebugBorder` to outline every node:
+
+```tsx
+import { ImageResponse } from "takumi-js/response";
+
+export function GET() {
+  return new ImageResponse(<></>, {
+    width: 100,
+    height: 100,
+    drawDebugBorder: true,
+  });
+}
+```
+
+If the outlines look right and the render still does not,
+[file an issue](https://github.com/kane50613/takumi/issues).
