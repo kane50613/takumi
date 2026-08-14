@@ -117,6 +117,8 @@ pub struct RenderNode {
   pub(crate) layout_style_override: Option<Style>,
   /// Text for an anonymous inline-text wrapper.
   pub anonymous_text_content: Option<String>,
+  /// Generated marker box, emitted before this box's own inline content.
+  pub(crate) marker: Option<Box<RenderNode>>,
   pub(crate) force_inline_layout: bool,
 }
 
@@ -916,6 +918,7 @@ impl RenderNode {
         ..Style::default()
       }),
       anonymous_text_content: Some(text),
+      marker: None,
       force_inline_layout: true,
     }
   }
@@ -930,6 +933,7 @@ impl RenderNode {
         ..Style::default()
       }),
       anonymous_text_content: None,
+      marker: None,
       force_inline_layout: false,
     }
   }
@@ -955,6 +959,7 @@ impl RenderNode {
           ..Style::default()
         }),
         anonymous_text_content: None,
+        marker: None,
         force_inline_layout: false,
       },
       gradient => {
@@ -974,6 +979,7 @@ impl RenderNode {
             ..Style::default()
           }),
           anonymous_text_content: None,
+          marker: None,
           force_inline_layout: false,
         }
       }
@@ -1063,49 +1069,39 @@ impl RenderNode {
       children: Some(children),
       layout_style_override: None,
       anonymous_text_content: None,
+      marker: None,
       force_inline_layout: false,
     })
   }
 
-  /// A block box whose first in-flow content is the line an outside marker
-  /// belongs on. A list item is excluded: its own marker already holds the
-  /// start of that line.
-  fn can_host_marker(&self) -> bool {
-    if self.context.style.display != Display::Block || self.context.style.float != Float::None {
-      return false;
-    }
-
-    if self.node.as_ref().is_some_and(Node::is_text) {
-      return true;
-    }
-
-    self
+  /// The block box the marker travels into when this box has no line of its
+  /// own. A list item is left alone: its own marker holds that line already.
+  fn marker_host_child(&mut self) -> Option<&mut RenderNode> {
+    let child = self
       .children
-      .as_deref()
-      .and_then(|children| children.iter().find(|child| !child.is_out_of_flow()))
-      .is_some_and(|first| {
-        first.participates_in_inflow_inline_formatting_context() || first.can_host_marker()
-      })
+      .as_deref_mut()?
+      .iter_mut()
+      .find(|child| !child.is_out_of_flow())?;
+
+    child.hosts_marker_line().then_some(child)
   }
 
-  /// The host's children, with any folded text handed back as a child so the
-  /// marker can precede it.
-  fn take_marker_host_children(&mut self) -> Vec<RenderNode> {
-    let mut children = Vec::from(self.children.take().unwrap_or_default());
-
-    if let Some(text) = self.node.as_mut().and_then(Node::take_text) {
-      children.insert(0, Self::generated_sibling_text(&self.context, text));
-    }
-
-    children
+  fn hosts_marker_line(&self) -> bool {
+    self.context.style.display == Display::Block
+      && self.context.style.float == Float::None
+      && self.leads_to_a_line()
   }
 
-  fn text_content_mut(&mut self) -> Option<&mut String> {
-    if let Some(text) = self.anonymous_text_content.as_mut() {
-      return Some(text);
-    }
-
-    self.node.as_mut().and_then(Node::text_mut)
+  /// Whether this box, or the block chain below it, ends in a line the marker
+  /// can share.
+  fn leads_to_a_line(&self) -> bool {
+    self.should_create_inline_layout()
+      || self.children.is_none()
+      || self
+        .children
+        .as_deref()
+        .and_then(|children| children.iter().find(|child| !child.is_out_of_flow()))
+        .is_some_and(RenderNode::hosts_marker_line)
   }
 
   fn is_anonymous_text_item(&self) -> bool {
@@ -1362,16 +1358,17 @@ impl RenderNode {
       let pseudo_after = element_matched
         .and_then(|m| m.after())
         .and_then(|m| RenderNode::from_pseudo_match(&context, &node, m));
+      let pseudo_before_present = pseudo_before.is_some();
 
-      let leads_with_generated_content = marker_ordinal.is_some() || pseudo_before.is_some();
-      let has_generated_children = leads_with_generated_content || pseudo_after.is_some();
+      let has_generated_children =
+        marker_ordinal.is_some() || pseudo_before.is_some() || pseudo_after.is_some();
       let mut rendered_children = Vec::with_capacity(children.len() + 3);
       rendered_children.extend(pseudo_before);
 
       // The inline collector emits an element's own text before any child, so
       // an element that folded its text has to hand it back as a child for the
       // generated content to come first.
-      if leads_with_generated_content && let Some(text) = node.take_text() {
+      if pseudo_before_present && let Some(text) = node.take_text() {
         rendered_children.push(RenderNode::generated_sibling_text(&context, text));
       }
 
@@ -1414,6 +1411,7 @@ impl RenderNode {
           children: None,
           layout_style_override: None,
           anonymous_text_content: None,
+          marker: None,
           force_inline_layout: false,
         };
       };
@@ -1438,6 +1436,7 @@ impl RenderNode {
           children: None,
           layout_style_override: None,
           anonymous_text_content: None,
+          marker: None,
           force_inline_layout: false,
         };
       };
@@ -1458,7 +1457,8 @@ impl RenderNode {
         None
       };
 
-      let render_node = if let Some(mut children) = children {
+      let marker_ordinal = finished.marker_ordinal;
+      let mut render_node = if let Some(mut children) = children {
         if finished.context.style.display.should_blockify_children() {
           // CSS Flexbox L1 §4 / Grid L1 §6: collapsible whitespace-only text
           // between items is not rendered; every remaining child blockifies.
@@ -1474,6 +1474,7 @@ impl RenderNode {
             children: Some(children.into_boxed_slice()),
             layout_style_override: None,
             anonymous_text_content: None,
+            marker: None,
             force_inline_layout: false,
           }
         } else {
@@ -1481,20 +1482,11 @@ impl RenderNode {
           // whitespace-only text renders only after an in-flow inline-level
           // sibling, and leading whitespace only inside an inline parent
           // (#711, #992).
-          let mut collapsed = drop_collapsible_boundary_whitespace(
+          children = drop_collapsible_boundary_whitespace(
             Vec::from(children),
             finished.context.style.display.is_inline(),
-          );
-
-          // Prepended after the collapse so the marker does not keep the
-          // item's leading whitespace alive.
-          if let Some(ordinal) = finished.marker_ordinal
-            && let Some(marker) = list_marker(&finished.context, ordinal)
-          {
-            insert_marker(&mut collapsed, marker);
-          }
-
-          children = collapsed.into_boxed_slice();
+          )
+          .into_boxed_slice();
 
           // https://github.com/kane50613/takumi/issues/738: out-of-flow boxes
           // must not be swept into an anonymous block box.
@@ -1525,6 +1517,7 @@ impl RenderNode {
               children: Some(children),
               layout_style_override: None,
               anonymous_text_content: None,
+              marker: None,
               force_inline_layout: false,
             }
           } else {
@@ -1550,6 +1543,7 @@ impl RenderNode {
               children: Some(final_children.into_boxed_slice()),
               layout_style_override: None,
               anonymous_text_content: None,
+              marker: None,
               force_inline_layout: false,
             }
           }
@@ -1575,6 +1569,7 @@ impl RenderNode {
             children: Some([anonymous_text_item].into()),
             layout_style_override: None,
             anonymous_text_content: None,
+            marker: None,
             force_inline_layout: false,
           }
         } else {
@@ -1584,10 +1579,17 @@ impl RenderNode {
             children: None,
             layout_style_override: None,
             anonymous_text_content: None,
+            marker: None,
             force_inline_layout: false,
           }
         }
       };
+
+      if let Some(ordinal) = marker_ordinal
+        && let Some(marker) = list_marker(&render_node.context, ordinal)
+      {
+        attach_marker(&mut render_node, marker);
+      }
 
       if let Some(parent) = stack.last_mut() {
         parent.rendered_children.push(render_node);
@@ -2034,42 +2036,43 @@ fn flush_inline_group(
   ));
 }
 
-/// The whitespace CSS collapses, matching [`Node::is_whitespace_only_text`].
-const COLLAPSIBLE_WHITESPACE: [char; 5] = [' ', '\t', '\n', '\r', '\u{c}'];
-
-/// Blink positions an outside marker against the item's first line box, so a
-/// marker whose siblings are all block-level moves into the block that holds
-/// that line. An inside marker is the item's own content and stays put.
-fn insert_marker(children: &mut Vec<RenderNode>, marker: RenderNode) {
-  let host = (marker.context.style.list_style_position == ListStylePosition::Outside)
-    .then(|| children.iter_mut().find(|child| !child.is_out_of_flow()))
-    .flatten()
-    .filter(|child| child.can_host_marker());
-
-  if let Some(host) = host {
-    let mut hosted = host.take_marker_host_children();
-    insert_marker(&mut hosted, marker);
-    host.children = Some(hosted.into_boxed_slice());
+/// Blink positions an outside marker against the item's first line box, so the
+/// marker goes on the box that establishes that line, however deep it sits. An
+/// inside marker is the item's own content and stays on the item.
+fn attach_marker(node: &mut RenderNode, marker: RenderNode) {
+  if node.should_create_inline_layout() {
+    node.marker = Some(Box::new(marker));
     return;
   }
 
-  place_marker(children, marker);
-}
-
-/// A marker holds the start of the line, so whitespace that the line start
-/// would have collapsed is trimmed against the marker instead.
-fn place_marker(children: &mut Vec<RenderNode>, marker: RenderNode) {
-  if let Some(first) = children
-    .iter_mut()
-    .find(|child| !child.is_out_of_flow() && child.context.style.float == Float::None)
-    && first.context.style.white_space_collapse == WhiteSpaceCollapse::Collapse
-    && let Some(text) = first.text_content_mut()
+  if marker.context.style.list_style_position == ListStylePosition::Outside
+    && let Some(block) = node.marker_host_child()
   {
-    let leading = text.len() - text.trim_start_matches(COLLAPSIBLE_WHITESPACE).len();
-    text.drain(..leading);
+    attach_marker(block, marker);
+    return;
   }
 
-  children.insert(0, marker);
+  let has_block_content = node.children.as_deref().is_some_and(|children| {
+    children
+      .iter()
+      .any(|child| !child.participates_in_inline_formatting_context())
+  });
+
+  if !has_block_content {
+    // Text of its own, or nothing at all: the marker shares that line.
+    node.force_inline_layout = true;
+    node.marker = Some(Box::new(marker));
+    return;
+  }
+
+  // Block-level content the marker may not join, so it gets a line of its own.
+  let mut line = RenderNode::anonymous_block_container(&node.context, Vec::new());
+  line.force_inline_layout = true;
+  line.marker = Some(Box::new(marker));
+
+  let mut children = Vec::from(node.children.take().unwrap_or_default());
+  children.insert(0, line);
+  node.children = Some(children.into_boxed_slice());
 }
 
 // Mirrors Blink's Text::TextLayoutObjectIsNeeded, minus the ends-with-space

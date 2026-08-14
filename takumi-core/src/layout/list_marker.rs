@@ -56,6 +56,7 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
     children: Some(Box::new([content])),
     layout_style_override: None,
     anonymous_text_content: None,
+    marker: None,
     force_inline_layout: false,
   })
 }
@@ -229,12 +230,29 @@ mod tests {
     collected
   }
 
+  /// Every marker in the tree, in document order.
+  fn collect_markers(node: &RenderNode, collected: &mut Vec<String>) {
+    if let Some(marker) = &node.marker {
+      collected.extend(text_runs(marker));
+    }
+
+    for child in node.children.iter().flat_map(|children| children.iter()) {
+      collect_markers(child, collected);
+    }
+  }
+
   fn markers(root: Node, css: &str) -> Vec<String> {
-    text_runs(&render_tree(root, css))
+    let mut collected = Vec::new();
+    collect_markers(&render_tree(root, css), &mut collected);
+    collected
   }
 
   fn first_child(node: &RenderNode) -> &RenderNode {
     &node.children.as_deref().expect("children")[0]
+  }
+
+  fn marker_of(node: &RenderNode) -> &RenderNode {
+    node.marker.as_deref().expect("marker")
   }
 
   fn item(children: impl Into<Vec<Node>>) -> Node {
@@ -343,7 +361,7 @@ mod tests {
     let paragraph = first_child(first_child(first_child(&tree)));
 
     assert_eq!(
-      text_runs(paragraph),
+      text_runs(marker_of(paragraph)),
       ["1. "],
       "the marker did not reach the paragraph"
     );
@@ -365,37 +383,48 @@ mod tests {
       Node::container([Node::text("line 1").with_class_name("item")]).with_class_name("list");
 
     let tree = render_tree(list, LIST_CSS);
-    let children = first_child(&tree)
-      .children
-      .as_deref()
-      .expect("marker and text");
+    let item = first_child(&tree);
 
-    assert_eq!(text_runs(&children[0]), ["1. "]);
-    assert_eq!(text_runs(&children[1]), ["line 1"]);
+    assert_eq!(text_runs(marker_of(item)), ["1. "]);
+    assert!(
+      matches!(
+        item.node.as_ref().map(|node| &node.kind),
+        Some(NodeKind::Text(text)) if text.text == "line 1"
+      ),
+      "the item's own text was moved instead of staying put"
+    );
+  }
+
+  fn block_only_item(css: &str) -> RenderNode {
+    let list = Node::container([item([
+      Node::container([Node::text("hello")]).with_class_name("block")
+    ])])
+    .with_class_name("list");
+
+    render_tree(list, css)
   }
 
   /// Blink puts an outside marker on the item's first line, which for
   /// block-level content lives inside the first block.
   #[test]
   fn a_block_only_item_hosts_the_marker_in_its_first_block() {
-    let list = Node::container([item([
-      Node::container([Node::text("hello")]).with_class_name("block")
-    ])])
-    .with_class_name("list");
-    let css = format!("{LIST_CSS} .block {{ display: block }}");
+    let tree = block_only_item(&format!("{LIST_CSS} .block {{ display: block }}"));
+    let block = first_child(first_child(&tree));
 
-    let tree = render_tree(list, &css);
-    let block = &tree.children.as_deref().expect("items")[0]
-      .children
-      .as_deref()
-      .expect("block child")[0];
-    let block_children = block.children.as_deref().expect("marker and text");
+    assert_eq!(text_runs(marker_of(block)), ["1. "]);
+  }
 
-    assert_eq!(text_runs(&block_children[0]), ["1. "]);
-    assert!(matches!(
-      block_children[1].node.as_ref().map(|node| &node.kind),
-      Some(NodeKind::Text(text)) if text.text == "hello"
+  /// An inside marker is the item's own content, so it keeps its place before
+  /// the block instead of joining that block's line.
+  #[test]
+  fn an_inside_marker_stays_outside_the_block_child() {
+    let tree = block_only_item(&format!(
+      "{LIST_CSS} .block {{ display: block }} .item {{ list-style-position: inside }}"
     ));
+    let item = first_child(&tree);
+
+    assert!(item.marker.is_none(), "the marker joined the block's line");
+    assert_eq!(text_runs(marker_of(first_child(item))), ["1. "]);
   }
 
   /// css-lists-3 §3.1: an unavailable image leaves the counter style to draw.
@@ -418,7 +447,7 @@ mod tests {
     let css = css.as_str();
 
     let tree = render_tree(list, css);
-    let marker_image = first_child(first_child(first_child(&tree)));
+    let marker_image = first_child(marker_of(first_child(&tree)));
 
     assert!(marker_image.anonymous_text_content.is_none());
     assert!(matches!(
@@ -434,7 +463,7 @@ mod tests {
     let css = ".list { list-style-image: radial-gradient(red, blue) }                .item { display: list-item; font-size: 20px }";
 
     let tree = render_tree(list, css);
-    let marker_image = first_child(first_child(first_child(&tree)));
+    let marker_image = first_child(marker_of(first_child(&tree)));
     let size = marker_image
       .layout_style_override
       .as_ref()

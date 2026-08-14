@@ -391,17 +391,6 @@ impl Node {
     container_children_ref(&self.kind)
   }
 
-  pub(crate) fn is_text(&self) -> bool {
-    matches!(self.kind, NodeKind::Text(_))
-  }
-
-  pub(crate) fn text_mut(&mut self) -> Option<&mut String> {
-    match &mut self.kind {
-      NodeKind::Text(data) => Some(&mut data.text),
-      _ => None,
-    }
-  }
-
   /// Takes the node's own text, leaving an empty container behind.
   pub(crate) fn take_text(&mut self) -> Option<String> {
     let NodeKind::Text(data) = &mut self.kind else {
