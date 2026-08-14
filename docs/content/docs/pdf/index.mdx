@@ -117,6 +117,16 @@ Registered fonts deduplicate across calls. Rendering many documents pays the fon
 The module fits the Workers free-tier size limit.
 Import `takumi-pdf/no-init` to instantiate the wasm yourself.
 
+### Next.js
+
+Import `takumi-pdf/next` from a route handler. It hands the binary to Turbopack in the form
+Turbopack emits, on the Node runtime and the Edge runtime alike, so the package needs no
+`serverExternalPackages` entry.
+
+```ts
+import { render } from "takumi-pdf/next";
+```
+
 ### In the browser
 
 The default entry picks its loader from the export conditions the bundler sets.
