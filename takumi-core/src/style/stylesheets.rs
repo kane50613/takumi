@@ -1196,6 +1196,9 @@ define_style! {
     visibility: Visibility where inherit = true,
     vertical_align: VerticalAlign,
     content: ContentValue,
+    list_style_type: ListStyleType where inherit = true,
+    list_style_position: ListStylePosition where inherit = true,
+    list_style_image: ListStyleImage where inherit = true,
   }
   transient_longhands {
     margin_inline_start: Length = Length::zero() => (margin_left, margin_right),
@@ -1204,6 +1207,11 @@ define_style! {
     padding_inline_end: Length = Length::zero() => (padding_right, padding_left),
   }
   shorthands {
+    list_style: ListStyleShorthand => [ListStyleType, ListStylePosition, ListStyleImage] |value, target| {
+      target.push(StyleDeclaration::list_style_type(value.style_type));
+      target.push(StyleDeclaration::list_style_position(value.position));
+      target.push(StyleDeclaration::list_style_image(value.image));
+    },
     offset: OffsetShorthand => [OffsetPosition, OffsetPath, OffsetDistance, OffsetRotate, OffsetAnchor] |value, target| {
       target.push(StyleDeclaration::offset_position(value.position));
       target.push(StyleDeclaration::offset_path(value.path));
@@ -1686,6 +1694,9 @@ impl StyleDeclarationBlock {
           StyleDeclaration::BackgroundImage(Some(images))
           | StyleDeclaration::MaskImage(Some(images)) => {
             Box::new(images.iter().filter_map(background_image_url))
+          }
+          StyleDeclaration::ListStyleImage(image) => {
+            Box::new(image.image().and_then(background_image_url).into_iter())
           }
           StyleDeclaration::Content(ContentValue::Items(items)) => {
             Box::new(items.iter().filter_map(|item| match item {

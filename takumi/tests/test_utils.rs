@@ -1,6 +1,6 @@
 use std::{
   borrow::Cow,
-  collections::HashMap,
+  collections::{BTreeMap, HashMap},
   fs::{File, create_dir_all, write},
   io::Read,
   path::{Path, PathBuf},
@@ -137,6 +137,14 @@ pub static TEST_IMAGES: LazyLock<HashMap<Arc<str>, ImageSource>> = LazyLock::new
 /// Keeps the decode cache alive so lazily decoded sources keep their sized
 /// entries across renders.
 static CACHE: OnceLock<ResourceCache> = OnceLock::new();
+
+#[allow(dead_code)]
+pub fn attrs(pairs: &[(&str, &str)]) -> BTreeMap<Box<str>, Box<str>> {
+  pairs
+    .iter()
+    .map(|(key, value)| ((*key).into(), (*value).into()))
+    .collect()
+}
 
 #[allow(dead_code)]
 pub fn run_fixture_test(node: Node, fixture_name: &str) {

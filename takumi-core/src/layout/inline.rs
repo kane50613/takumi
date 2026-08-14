@@ -20,7 +20,7 @@ use crate::{
     Affine, BoxSizing, Color, Float, FontSynthesis, Lang, Length, ResolvedVerticalAlign,
     SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk, TextFitMode,
     TextFitTarget, TextOverflow, TextUnderlinePosition, TextWrapMode, TextWrapStyle, VerticalAlign,
-    VerticalAlignKeyword,
+    VerticalAlignKeyword, WhiteSpaceCollapse,
   },
   text_processing::{
     MaxHeight, RebreakOptions, apply_text_transform, apply_white_space_collapse,
@@ -386,6 +386,32 @@ pub fn collect_inline_items<'n>(root: &'n RenderNode) -> Vec<InlineItem<'n>> {
   items
 }
 
+/// The whitespace CSS collapses, matching [`crate::layout::node::Node::is_whitespace_only_text`].
+const COLLAPSIBLE_WHITESPACE: [char; 5] = [' ', '\t', '\n', '\r', '\u{c}'];
+
+/// The subset `white-space-collapse: preserve-breaks` still collapses.
+const HORIZONTAL_WHITESPACE: [char; 3] = [' ', '\t', '\u{c}'];
+
+/// A marker holds the start of the line, so the whitespace that a line start
+/// would have collapsed is collapsed against the marker instead.
+fn trim_leading_whitespace(item: &mut InlineItem<'_>) {
+  let InlineItem::Text { text, context, .. } = item else {
+    return;
+  };
+
+  // `preserve-breaks` keeps its newlines but still collapses spaces and tabs.
+  let collapsible: &[char] = match context.style.white_space_collapse {
+    WhiteSpaceCollapse::Collapse => &COLLAPSIBLE_WHITESPACE,
+    WhiteSpaceCollapse::PreserveBreaks => &HORIZONTAL_WHITESPACE,
+    WhiteSpaceCollapse::Preserve | WhiteSpaceCollapse::PreserveSpaces => return,
+  };
+
+  let trimmed = text.trim_start_matches(collapsible);
+  if trimmed.len() != text.len() {
+    *text = Cow::Owned(trimmed.to_owned());
+  }
+}
+
 fn collect_inline_items_impl<'n>(
   node: &'n RenderNode,
   depth: usize,
@@ -402,6 +428,14 @@ fn collect_inline_items_impl<'n>(
     .and_then(Node::href)
     .map(Arc::<str>::from);
   let link = anchor.as_ref().or(link);
+
+  if let Some(marker) = node.marker.as_deref() {
+    items.push(InlineItem::RenderNode {
+      render_node: marker,
+    });
+  }
+
+  let content_start = items.len();
 
   if let Some(text) = node.anonymous_text_content.as_deref() {
     items.push(InlineItem::Text {
@@ -426,6 +460,12 @@ fn collect_inline_items_impl<'n>(
     for child in children {
       collect_inline_items_impl(child, depth + 1, link, items);
     }
+  }
+
+  if node.marker.is_some()
+    && let Some(first) = items.get_mut(content_start)
+  {
+    trim_leading_whitespace(first);
   }
 }
 

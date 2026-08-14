@@ -20,14 +20,15 @@ use crate::{
       InlineContentKind, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
       collect_inline_items, create_inline_constraint, create_inline_layout, measure_inline_layout,
     },
+    list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
     node::{Node, NodeStyleLayers},
   },
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
   style::{
     BackgroundImage, BackgroundImages, BlendMode, BoxSizing, Color, ComputedStyle, ContentItem,
-    ContentValue, Display, Filters, Float, Isolation, Length, LineHeight, PercentageNumber,
-    Position, SizingContext, Style as NodeStyle, StyleDeclaration, StyleSheet, TextWrapMode,
-    WhiteSpaceCollapse, apply_stylesheet_animations,
+    ContentValue, Display, Filters, Float, Isolation, Length, LineHeight, ListStylePosition,
+    PercentageNumber, Position, SizingContext, Style as NodeStyle, StyleDeclaration, StyleSheet,
+    TextWrapMode, WhiteSpaceCollapse, apply_stylesheet_animations,
   },
   viewport::Viewport,
 };
@@ -116,6 +117,8 @@ pub struct RenderNode {
   pub(crate) layout_style_override: Option<Style>,
   /// Text for an anonymous inline-text wrapper.
   pub anonymous_text_content: Option<String>,
+  /// Generated marker box, emitted before this box's own inline content.
+  pub(crate) marker: Option<Box<RenderNode>>,
   pub(crate) force_inline_layout: bool,
 }
 
@@ -265,7 +268,7 @@ fn registered_custom_property_parent_style<'a>(
   Cow::Owned(adjusted_parent)
 }
 
-fn pseudo_computed_style(
+pub(super) fn pseudo_computed_style(
   parent_context: &RenderContext,
   pseudo_matched: &MatchedDeclarationsView<'_>,
 ) -> (ComputedStyle, SizingContext, Color) {
@@ -912,9 +915,11 @@ impl RenderNode {
     context
   }
 
-  fn anonymous_text_item(parent_context: &RenderContext, text: String) -> Self {
-    let context = Self::anonymous_box_context(parent_context);
+  pub(super) fn anonymous_text_item(parent_context: &RenderContext, text: String) -> Self {
+    Self::text_item(Self::anonymous_box_context(parent_context), text)
+  }
 
+  fn text_item(context: RenderContext, text: String) -> Self {
     Self {
       context,
       node: None,
@@ -924,6 +929,7 @@ impl RenderNode {
         ..Style::default()
       }),
       anonymous_text_content: Some(text),
+      marker: None,
       force_inline_layout: true,
     }
   }
@@ -938,11 +944,15 @@ impl RenderNode {
         ..Style::default()
       }),
       anonymous_text_content: None,
+      marker: None,
       force_inline_layout: false,
     }
   }
 
-  fn anonymous_image_item(parent_context: &RenderContext, image: BackgroundImage) -> Self {
+  pub(super) fn anonymous_image_item(
+    parent_context: &RenderContext,
+    image: BackgroundImage,
+  ) -> Self {
     // Cap image content to the parent pseudo's box so explicit `width` / `height`
     // on the pseudo wins over intrinsic / default sizing.
     let max_size = TaffySize {
@@ -960,6 +970,7 @@ impl RenderNode {
           ..Style::default()
         }),
         anonymous_text_content: None,
+        marker: None,
         force_inline_layout: false,
       },
       gradient => {
@@ -979,10 +990,33 @@ impl RenderNode {
             ..Style::default()
           }),
           anonymous_text_content: None,
+          marker: None,
           force_inline_layout: false,
         }
       }
     }
+  }
+
+  /// An element's own text, moved into a child so generated content can precede
+  /// it. Text decorations do not inherit, so they are propagated the way CSS
+  /// propagates them to an anonymous descendant.
+  fn generated_sibling_text(parent_context: &RenderContext, text: String) -> Self {
+    let (mut style, sizing, current_color) =
+      pseudo_computed_style(parent_context, &MatchedDeclarationsView::default());
+    let parent_style = &parent_context.style;
+
+    style
+      .text_decoration_line
+      .clone_from(&parent_style.text_decoration_line);
+    style.text_decoration_style = parent_style.text_decoration_style;
+    style
+      .text_decoration_color
+      .clone_from(&parent_style.text_decoration_color);
+    style.text_decoration_thickness = parent_style.text_decoration_thickness;
+
+    let context = RenderContext::from_parent(parent_context, style, sizing, current_color);
+
+    Self::text_item(context, text)
   }
 
   fn pseudo_content_child(
@@ -1046,8 +1080,39 @@ impl RenderNode {
       children: Some(children),
       layout_style_override: None,
       anonymous_text_content: None,
+      marker: None,
       force_inline_layout: false,
     })
+  }
+
+  /// The block box the marker travels into when this box has no line of its
+  /// own. A list item is left alone: its own marker holds that line already.
+  fn marker_host_child(&mut self) -> Option<&mut RenderNode> {
+    let child = self
+      .children
+      .as_deref_mut()?
+      .iter_mut()
+      .find(|child| !child.is_out_of_flow())?;
+
+    child.hosts_marker_line().then_some(child)
+  }
+
+  fn hosts_marker_line(&self) -> bool {
+    self.context.style.display == Display::Block
+      && self.context.style.float == Float::None
+      && self.leads_to_a_line()
+  }
+
+  /// Whether this box, or the block chain below it, ends in a line the marker
+  /// can share.
+  fn leads_to_a_line(&self) -> bool {
+    self.should_create_inline_layout()
+      || self.children.is_none()
+      || self
+        .children
+        .as_deref()
+        .and_then(|children| children.iter().find(|child| !child.is_out_of_flow()))
+        .is_some_and(RenderNode::hosts_marker_line)
   }
 
   fn is_anonymous_text_item(&self) -> bool {
@@ -1133,7 +1198,7 @@ impl RenderNode {
     self.force_inline_layout
       || (matches!(
         self.context.style.display,
-        Display::Block | Display::InlineBlock
+        Display::Block | Display::InlineBlock | Display::ListItem
       ) && self.children.as_ref().is_some_and(|children| {
         children
           .iter()
@@ -1172,6 +1237,10 @@ impl RenderNode {
       pending_children: IntoIter<Node>,
       rendered_children: Vec<RenderNode>,
       pseudo_after: Option<RenderNode>,
+      list_counter: ListCounter,
+      marker_ordinal: Option<i32>,
+      inside_list: bool,
+      owns_list_counter: bool,
     }
 
     fn next_preorder_index(preorder_cursor: &mut usize) -> usize {
@@ -1282,6 +1351,8 @@ impl RenderNode {
       mut node: Node,
       matched_declarations: &[NodeMatchedDeclarations<'_>],
       preorder_cursor: &mut usize,
+      counter: &mut ListCounter,
+      inside_list: bool,
     ) -> PendingRenderNode {
       let node_index = next_preorder_index(preorder_cursor);
       let (style, sizing, current_color) =
@@ -1290,35 +1361,57 @@ impl RenderNode {
       let context = RenderContext::from_parent(parent_context, style, sizing, current_color);
 
       let element_matched = matched_declarations.get(node_index);
+      let marker_ordinal =
+        (context.style.display == Display::ListItem).then(|| counter.take(&node));
       let pseudo_before = element_matched
         .and_then(|m| m.before())
         .and_then(|m| RenderNode::from_pseudo_match(&context, &node, m));
       let pseudo_after = element_matched
         .and_then(|m| m.after())
         .and_then(|m| RenderNode::from_pseudo_match(&context, &node, m));
+      let pseudo_before_present = pseudo_before.is_some();
 
-      let has_pseudo = pseudo_before.is_some() || pseudo_after.is_some();
-      let mut rendered_children = Vec::with_capacity(children.len() + 2);
-      if let Some(before) = pseudo_before {
-        rendered_children.push(before);
+      let has_generated_children =
+        marker_ordinal.is_some() || pseudo_before.is_some() || pseudo_after.is_some();
+      let mut rendered_children = Vec::with_capacity(children.len() + 3);
+      rendered_children.extend(pseudo_before);
+
+      // The inline collector emits an element's own text before any child, so
+      // an element that folded its text has to hand it back as a child for the
+      // generated content to come first.
+      if pseudo_before_present && let Some(text) = node.take_text() {
+        rendered_children.push(RenderNode::generated_sibling_text(&context, text));
       }
 
+      let owns_list_counter = owns_list_counter(&node, inside_list);
+
       PendingRenderNode {
+        children_is_some: children_is_some || has_generated_children,
+        list_counter: if owns_list_counter {
+          ListCounter::new(&node, &children)
+        } else {
+          *counter
+        },
+        inside_list: inside_list || is_list_element(&node),
+        owns_list_counter,
         context,
         node,
-        children_is_some: children_is_some || has_pseudo,
         rendered_children,
         pending_children: children.into_iter(),
         pseudo_after,
+        marker_ordinal,
       }
     }
 
     let mut preorder_cursor = 0;
+    let mut root_counter = ListCounter::new(&root, &[]);
     let mut stack = vec![build_pending_node(
       parent_context,
       root,
       matched_declarations,
       &mut preorder_cursor,
+      &mut root_counter,
+      false,
     )];
 
     loop {
@@ -1329,6 +1422,7 @@ impl RenderNode {
           children: None,
           layout_style_override: None,
           anonymous_text_content: None,
+          marker: None,
           force_inline_layout: false,
         };
       };
@@ -1339,6 +1433,8 @@ impl RenderNode {
           child,
           matched_declarations,
           &mut preorder_cursor,
+          &mut current.list_counter,
+          current.inside_list,
         );
         stack.push(child_pending);
         continue;
@@ -1351,9 +1447,16 @@ impl RenderNode {
           children: None,
           layout_style_override: None,
           anonymous_text_content: None,
+          marker: None,
           force_inline_layout: false,
         };
       };
+
+      if !finished.owns_list_counter
+        && let Some(parent) = stack.last_mut()
+      {
+        parent.list_counter = finished.list_counter;
+      }
 
       if let Some(after) = finished.pseudo_after.take() {
         finished.rendered_children.push(after);
@@ -1365,7 +1468,8 @@ impl RenderNode {
         None
       };
 
-      let render_node = if let Some(mut children) = children {
+      let marker_ordinal = finished.marker_ordinal;
+      let mut render_node = if let Some(mut children) = children {
         if finished.context.style.display.should_blockify_children() {
           // CSS Flexbox L1 §4 / Grid L1 §6: collapsible whitespace-only text
           // between items is not rendered; every remaining child blockifies.
@@ -1381,6 +1485,7 @@ impl RenderNode {
             children: Some(children.into_boxed_slice()),
             layout_style_override: None,
             anonymous_text_content: None,
+            marker: None,
             force_inline_layout: false,
           }
         } else {
@@ -1423,6 +1528,7 @@ impl RenderNode {
               children: Some(children),
               layout_style_override: None,
               anonymous_text_content: None,
+              marker: None,
               force_inline_layout: false,
             }
           } else {
@@ -1448,6 +1554,7 @@ impl RenderNode {
               children: Some(final_children.into_boxed_slice()),
               layout_style_override: None,
               anonymous_text_content: None,
+              marker: None,
               force_inline_layout: false,
             }
           }
@@ -1473,6 +1580,7 @@ impl RenderNode {
             children: Some([anonymous_text_item].into()),
             layout_style_override: None,
             anonymous_text_content: None,
+            marker: None,
             force_inline_layout: false,
           }
         } else {
@@ -1482,10 +1590,17 @@ impl RenderNode {
             children: None,
             layout_style_override: None,
             anonymous_text_content: None,
+            marker: None,
             force_inline_layout: false,
           }
         }
       };
+
+      if let Some(ordinal) = marker_ordinal
+        && let Some(marker) = list_marker(&render_node.context, ordinal)
+      {
+        attach_marker(&mut render_node, marker);
+      }
 
       if let Some(parent) = stack.last_mut() {
         parent.rendered_children.push(render_node);
@@ -1930,6 +2045,45 @@ fn flush_inline_group(
     parent_render_context,
     take(inline_group),
   ));
+}
+
+/// Blink positions an outside marker against the item's first line box, so the
+/// marker goes on the box that establishes that line, however deep it sits. An
+/// inside marker is the item's own content and stays on the item.
+fn attach_marker(node: &mut RenderNode, marker: RenderNode) {
+  if node.should_create_inline_layout() {
+    node.marker = Some(Box::new(marker));
+    return;
+  }
+
+  if marker.context.style.list_style_position == ListStylePosition::Outside
+    && let Some(block) = node.marker_host_child()
+  {
+    attach_marker(block, marker);
+    return;
+  }
+
+  let has_block_content = node.children.as_deref().is_some_and(|children| {
+    children
+      .iter()
+      .any(|child| !child.participates_in_inline_formatting_context())
+  });
+
+  if !has_block_content {
+    // Text of its own, or nothing at all: the marker shares that line.
+    node.force_inline_layout = true;
+    node.marker = Some(Box::new(marker));
+    return;
+  }
+
+  // Block-level content the marker may not join, so it gets a line of its own.
+  let mut line = RenderNode::anonymous_block_container(&node.context, Vec::new());
+  line.force_inline_layout = true;
+  line.marker = Some(Box::new(marker));
+
+  let mut children = Vec::from(node.children.take().unwrap_or_default());
+  children.insert(0, line);
+  node.children = Some(children.into_boxed_slice());
 }
 
 // Mirrors Blink's Text::TextLayoutObjectIsNeeded, minus the ends-with-space
