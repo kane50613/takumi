@@ -28,10 +28,12 @@ const footer = (
 );
 
 const fonts = await googleFonts(["Inter"]);
+// [!code highlight]
 const { height } = await measure(footer, { size: "a4", fonts });
 
 const pdf = await render(<InvoiceDocument data={invoice} />, {
   size: "a4",
+  // [!code highlight]
   margin: { top: 48, bottom: height + 32, left: 48, right: 48 },
   footer,
   fonts,
@@ -45,6 +47,7 @@ declare const item: { description: string; amount: string };
 // ---cut---
 import "takumi-pdf";
 
+// [!code highlight]
 <div tw="flex break-inside-avoid gap-3 pt-3 text-xs">
   <span tw="flex-1">{item.description}</span>
   <span tw="w-[100px] text-right">{item.amount}</span>

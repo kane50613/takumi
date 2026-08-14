@@ -15,8 +15,10 @@ import { render } from "takumi-pdf";
 
 const pdf = await render(
   <article>
+    {/* [!code highlight] */}
     <section style={{ breakBefore: "page" }}>
       <h1>Results</h1>
+      {/* [!code highlight] */}
       <figure style={{ breakInside: "avoid" }}>
         <img src="chart.svg" alt="Revenue by quarter" />
         <figcaption>Revenue by quarter</figcaption>
@@ -26,7 +28,7 @@ const pdf = await render(
 );
 ```
 
-Takumi has no `orphans` or `widows` control. A heading can land alone at the foot of a page. Wrapping the heading and its first paragraph in a `break-inside: avoid` box prevents that.
+`widows` and `orphans` keep a paragraph from splitting into lone lines, but they do not tie a heading to the text under it. Wrap the heading and its first paragraph in a `break-inside: avoid` box for that.
 
 See [Pagination](/docs/pdf/pagination) for the full set of break properties.
 
@@ -60,6 +62,7 @@ import "takumi-pdf";
     <a key={chapter.id} href={`#${chapter.id}`} tw="flex items-baseline gap-2">
       <span>{chapter.title}</span>
       <span tw="flex-1 border-b border-dotted border-gray-300" />
+      {/* [!code highlight] */}
       <span className="targetPageNumber" tw="w-8 shrink-0 text-right" />
     </a>
   ))}
@@ -79,12 +82,14 @@ declare const report: ReactNode;
 import { render } from "takumi-pdf";
 
 const pdf = await render(report, {
+  // [!code highlight]
   header: (
     <div tw="flex w-full justify-between px-12 text-[10px] text-gray-500">
       <span>Annual report 2026</span>
       <span>Acme Inc.</span>
     </div>
   ),
+  // [!code highlight]
   footer: (
     <div tw="flex w-full justify-center text-[10px] text-gray-500">
       <span className="pageNumber" /> / <span className="totalPages" />
@@ -111,6 +116,7 @@ declare function HeaderRow(): ReactNode;
 import "takumi-pdf";
 
 <div tw="flex flex-col">
+  {/* [!code highlight] */}
   {chunk(rows, 24).map((group, index) => (
     <div key={index} tw="flex break-inside-avoid flex-col">
       <HeaderRow />
@@ -140,6 +146,7 @@ declare function save(id: string, pdf: Uint8Array): Promise<void>;
 import { PdfRenderer } from "takumi-pdf";
 import { googleFonts } from "@takumi-rs/helpers";
 
+// [!code highlight]
 const renderer = new PdfRenderer();
 const fonts = await googleFonts(["Inter"]);
 

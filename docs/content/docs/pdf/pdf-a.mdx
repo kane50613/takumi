@@ -13,6 +13,7 @@ declare const invoice: ReactNode;
 import { render } from "takumi-pdf";
 
 const pdf = await render(invoice, {
+  // [!code highlight]
   pdfa: "3b",
 });
 ```
@@ -55,6 +56,7 @@ declare const report: ReactNode;
 import { render } from "takumi-pdf";
 
 const pdf = await render(report, {
+  // [!code highlight:2]
   pdfa: "2a",
   tagged: "ua1",
   lang: "en",
@@ -96,6 +98,7 @@ declare const report: ReactNode;
 import { render } from "takumi-pdf";
 
 const pdf = await render(report, {
+  // [!code highlight:2]
   pdfa: "4",
   tagged: "ua2",
   lang: "en",

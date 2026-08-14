@@ -10,6 +10,7 @@ icon: File
 import { render } from "takumi-pdf";
 
 const pdf = await render(<div style={{ width: "100%", height: "100%" }}>Certificate</div>, {
+  // [!code highlight]
   viewport: { width: 1123, height: 794 }, // A4 landscape in px
 });
 ```
@@ -24,6 +25,7 @@ declare const receipt: ReactNode;
 // ---cut---
 import { render } from "takumi-pdf";
 
+// [!code highlight]
 const pdf = await render(receipt, { viewport: { width: 302 } }); // 80mm at 96 dpi
 ```
 

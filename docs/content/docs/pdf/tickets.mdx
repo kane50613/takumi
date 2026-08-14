@@ -22,6 +22,7 @@ const pdf = await render(
     <img src="qr.svg" alt="Tracking code" tw="h-40 w-40 self-center" />
     <span tw="text-xs text-gray-500">1Z 999 AA1 0123 4567</span>
   </div>,
+  // [!code highlight]
   { viewport: { width: 384, height: 576 }, images: [{ src: "qr.svg", data: qrSvg }] },
 );
 ```
@@ -48,6 +49,7 @@ declare const receipt: ReactNode;
 // ---cut---
 import { render } from "takumi-pdf";
 
+// [!code highlight]
 const pdf = await render(receipt, { viewport: { width: 302 } }); // 80mm at 96 dpi
 ```
 
@@ -65,6 +67,7 @@ import { render } from "takumi-pdf";
 const pdf = await render(
   <div
     tw="flex h-full w-full flex-col items-center justify-center"
+    // [!code highlight]
     style={{ backgroundImage: "linear-gradient(135deg, #eef2ff, #ffffff)" }}
   >
     <span tw="text-sm tracking-[0.3em] text-indigo-500">CERTIFICATE OF COMPLETION</span>
