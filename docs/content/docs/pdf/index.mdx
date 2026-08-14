@@ -138,3 +138,7 @@ The module has no top-level `await`, so it also works in a worker bundled as an 
 
 Server code should keep the default entry. A Vite SSR build leaves the URL pointing at the
 server chunk, where the asset never lands.
+
+On Turbopack, drop any `turbopack.rules` entry mapping `*.wasm` to `type: "wasm"`.
+That rule makes Turbopack instantiate the binary and look for wasm-bindgen glue the
+package does not ship.

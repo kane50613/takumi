@@ -46,6 +46,10 @@ await init({ module_or_path: wasmUrl });
 Vite, webpack, and Turbopack rewrite that call to the asset they emit.
 Server code should keep `takumi-js/wasm`, which locates the binary for the runtime it lands on.
 
+On Turbopack, drop any `turbopack.rules` entry mapping `*.wasm` to `type: "wasm"`.
+That rule makes Turbopack instantiate the binary and look for wasm-bindgen glue the
+package does not ship.
+
 `@takumi-rs/wasm` and `takumi-pdf` export `wasm-url` too.
 
 ## Node.js Issues
