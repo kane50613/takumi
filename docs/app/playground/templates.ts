@@ -6,6 +6,7 @@ import multilingual from "./templates/multilingual?raw";
 import receipt from "./templates/receipt?raw";
 import report from "./templates/report?raw";
 import twitterProfileCard from "./templates/twitter-profile-card?raw";
+import watermark from "./templates/watermark?raw";
 import welcome from "./templates/welcome?raw";
 import type { OutputKind } from "./schema";
 
@@ -66,6 +67,13 @@ export const templates: Template[] = [
     description: "Bilingual A4 page in PDF/A-3b, with the invoice XML attached",
     kind: "pdf",
     code: invoice,
+  },
+  {
+    id: "watermark",
+    name: "Watermark",
+    description: "A fixed box under the text, repeated on every page",
+    kind: "pdf",
+    code: watermark,
   },
   {
     id: "report",
