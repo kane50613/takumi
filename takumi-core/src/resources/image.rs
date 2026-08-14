@@ -456,11 +456,15 @@ impl SvgSource {
     };
     let document = Document::parse_with_options(src, options).map_err(ImageError::svg_parse)?;
 
-    let tree =
-      Tree::from_xmltree(&document, &svg_parse_options()).map_err(ImageError::svg_parse)?;
+    let options = svg_parse_options();
+    let tree = Tree::from_xmltree(&document, &options).map_err(ImageError::svg_parse)?;
     let intrinsic = svg_intrinsic_sizing(document.root_element(), tree.size());
-    let uses_current_color =
-      src.contains("currentColor") && document.root_element().attribute("color").is_none();
+    // Set during parsing whenever a `currentColor` finds no `color` attribute
+    // on its ancestors, so it also catches entity-encoded values a source-text
+    // scan would miss.
+    let uses_current_color = options
+      .current_color_used
+      .load(std::sync::atomic::Ordering::Relaxed);
 
     Ok(SvgSource {
       source: Box::from(src),
@@ -1478,6 +1482,26 @@ mod tests {
   #[test]
   fn svg_current_color_resolves_to_host_color() -> Result<(), ImageError> {
     let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="0" y="0" width="4" height="4" fill="currentColor"/></svg>"#;
+    let image = ImageSource::from_bytes(svg.as_bytes())?;
+
+    let rendered = image.render_for_layout(
+      4,
+      4,
+      ImageScalingAlgorithm::Auto,
+      0,
+      Color([255, 0, 0, 255]),
+    )?;
+
+    assert_eq!(premul_at(&rendered, 2, 2), [255, 0, 0, 255]);
+    Ok(())
+  }
+
+  // The dependency on the host color is detected on decoded attribute values,
+  // so an entity-encoded `currentColor` inherits too.
+  #[cfg(feature = "svg")]
+  #[test]
+  fn svg_entity_encoded_current_color_resolves_to_host_color() -> Result<(), ImageError> {
+    let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="0" y="0" width="4" height="4" fill="current&#67;olor"/></svg>"#;
     let image = ImageSource::from_bytes(svg.as_bytes())?;
 
     let rendered = image.render_for_layout(

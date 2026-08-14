@@ -268,12 +268,22 @@ impl SvgColorExt for svgtypes::Color {
 }
 
 /// Resolves `currentColor` for `node`: the nearest `color` attribute, then
-/// `Options::current_color`, then black.
+/// `Options::current_color`, then black. Falling through to the option marks
+/// `Options::current_color_used`.
 pub(crate) fn resolve_current_color(node: SvgNode, state: &State) -> svgtypes::Color {
-  node
-    .find_attribute(AId::Color)
-    .or(state.opt.current_color)
-    .unwrap_or_else(svgtypes::Color::black)
+  match node.find_attribute(AId::Color) {
+    Some(color) => color,
+    None => {
+      state
+        .opt
+        .current_color_used
+        .store(true, std::sync::atomic::Ordering::Relaxed);
+      state
+        .opt
+        .current_color
+        .unwrap_or_else(svgtypes::Color::black)
+    }
+  }
 }
 
 /// Converts an input `Document` into a `Tree`.

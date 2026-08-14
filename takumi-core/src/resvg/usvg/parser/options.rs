@@ -86,6 +86,11 @@ pub struct Options<'a> {
   ///
   /// Default: `None` (resolves to black)
   pub current_color: Option<svgtypes::Color>,
+
+  /// Set by the parser when a `currentColor` fell through to the
+  /// [`current_color`](Self::current_color) fallback, meaning the rendered
+  /// tree depends on the host color.
+  pub current_color_used: std::sync::atomic::AtomicBool,
 }
 
 impl Default for Options<'_> {
@@ -104,6 +109,7 @@ impl Default for Options<'_> {
       image_href_resolver: ImageHrefResolver::default(),
       style_sheet: None,
       current_color: None,
+      current_color_used: std::sync::atomic::AtomicBool::new(false),
     }
   }
 }
