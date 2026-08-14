@@ -1848,7 +1848,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-core"
-version = "0.22.0"
+version = "0.23.0"
 dependencies = [
  "bitflags",
  "bytemuck",
@@ -1890,7 +1890,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-html"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "html5ever",
  "markup5ever_rcdom",
@@ -1961,7 +1961,7 @@ dependencies = [
 
 [[package]]
 name = "takumi-raster"
-version = "0.4.19"
+version = "0.4.20"
 dependencies = [
  "bytemuck",
  "color",
