@@ -6,6 +6,7 @@ use std::{collections::HashMap, sync::Arc};
 use takumi_core::{
   Fonts,
   error::Error as TakumiError,
+  geometry::Rect,
   layout::node::Node,
   resources::{font::FontError, image::ImageSource},
   style::{Color, FontFamily, Lang, StyleSheet},
@@ -492,23 +493,14 @@ impl PageMargins {
   }
 
   /// Margins with every [`PageMargin::Auto`] replaced by the band it sits under.
-  pub(crate) fn resolve(self, header: Option<f32>, footer: Option<f32>) -> ResolvedMargins {
-    ResolvedMargins {
+  pub(crate) fn resolve(self, header: Option<f32>, footer: Option<f32>) -> Rect<f32> {
+    Rect {
       top: self.top.resolve(header),
       right: self.right.resolve(None),
       bottom: self.bottom.resolve(footer),
       left: self.left.resolve(None),
     }
   }
-}
-
-/// Page margins in px, with no side left to resolve.
-#[derive(Clone, Copy)]
-pub(crate) struct ResolvedMargins {
-  pub(crate) top: f32,
-  pub(crate) right: f32,
-  pub(crate) bottom: f32,
-  pub(crate) left: f32,
 }
 
 /// Paged output geometry: fixed page size with margins. Content lays out at
@@ -572,10 +564,10 @@ impl PageOptions {
     }
   }
 
-  pub(crate) const fn content_size(&self, margin: ResolvedMargins) -> (f32, f32) {
+  pub(crate) fn content_size(&self, margin: Rect<f32>) -> (f32, f32) {
     (
-      self.width - margin.left - margin.right,
-      self.height - margin.top - margin.bottom,
+      self.width - margin.horizontal(),
+      self.height - margin.vertical(),
     )
   }
 }
