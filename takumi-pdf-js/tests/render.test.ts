@@ -147,6 +147,21 @@ test("accepts case-insensitive presets and per-side margins", async () => {
   expect(pageCount(pdf)).toBe(1);
 });
 
+test("a side left out of the margin object is auto", async () => {
+  const rows = container({
+    style: { display: "flex", flexDirection: "column", width: "100%" },
+    children: Array.from({ length: 40 }, (_, i) => text(`Row ${i + 1}`, { fontSize: 16 })),
+  });
+  const size = { width: 400, height: 300 } as const;
+  const auto = await renderer.render(rows, { size, margin: { left: 0 } });
+  const zero = await renderer.render(rows, {
+    size,
+    margin: { top: 0, right: 0, bottom: 0, left: 0 },
+  });
+
+  expect(pageCount(auto)).toBeGreaterThan(pageCount(zero));
+});
+
 test("rejects an unknown size keyword", () => {
   expect(renderer.render(doc, { size: "tabloid" as "a4" })).rejects.toThrow("unknown page size");
 });

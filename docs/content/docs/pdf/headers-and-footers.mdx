@@ -44,10 +44,11 @@ const pdf = await render(report, {
 
 An `"auto"` side comes out at the band height plus the 20px bands are inset from
 the paper edge, and never below the default 48. A short band leaves the page
-looking as it did before. Set a side to a number to size it yourself:
+looking as it did before. Set a side to a number to size it yourself, and leave
+out the sides you are happy with:
 
 ```ts
-margin: { top: 96, bottom: "auto" }
+const margin = { top: 96 };
 ```
 
 Left and right hold no band. `"auto"` there is the default 48.

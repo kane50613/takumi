@@ -79,12 +79,12 @@ const pdf = await render(report, {
 });
 ```
 
-| Option            | Type                                                      | Default  | Description                                                        |
-| ----------------- | --------------------------------------------------------- | -------- | ------------------------------------------------------------------ |
-| `size`            | a page keyword or `{ width, height }`                     | `"a4"`   | Page size in CSS px at 96 dpi. Keywords ignore case.               |
-| `landscape`       | `boolean`                                                 | `false`  | Swaps page width and height, including explicit sizes.             |
-| `margin`          | `number`, `"auto"`, or `{ top?, right?, bottom?, left? }` | `"auto"` | `"auto"` fits the band on that side. Missing object sides are `0`. |
-| `backgroundColor` | CSS color                                                 | unset    | Fills the page box, margins included, under everything.            |
+| Option            | Type                                                      | Default  | Description                                                                             |
+| ----------------- | --------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------- |
+| `size`            | a page keyword or `{ width, height }`                     | `"a4"`   | Page size in CSS px at 96 dpi. Keywords ignore case.                                    |
+| `landscape`       | `boolean`                                                 | `false`  | Swaps page width and height, including explicit sizes.                                  |
+| `margin`          | `number`, `"auto"`, or `{ top?, right?, bottom?, left? }` | `"auto"` | `"auto"` fits the band on that side, and a side left out of the object is `"auto"` too. |
+| `backgroundColor` | CSS color                                                 | unset    | Fills the page box, margins included, under everything.                                 |
 
 `size` takes the page keywords CSS Paged Media defines, portrait as that module writes them:
 

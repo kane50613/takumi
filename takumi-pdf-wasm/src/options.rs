@@ -50,8 +50,8 @@ enum SizeInput {
   Dimensions(Dimensions),
 }
 
-/// A page margin: one value for all sides, or per-side values (missing sides
-/// are zero).
+/// A page margin: one value for all sides, or per-side values (a side left out
+/// is `auto`).
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum MarginInput {
@@ -89,9 +89,8 @@ impl SideInput {
   }
 }
 
-/// A side the caller left out sits flush with the paper edge.
 fn side_margin(side: &Option<SideInput>) -> PageMargin {
-  side.as_ref().map_or(PageMargin::Px(0.0), SideInput::margin)
+  side.as_ref().map_or(PageMargin::Auto, SideInput::margin)
 }
 
 fn resolve_page(
