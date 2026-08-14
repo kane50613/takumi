@@ -6,6 +6,7 @@ use std::{collections::HashMap, sync::Arc};
 use takumi_core::{
   Fonts,
   error::Error as TakumiError,
+  geometry::Rect,
   layout::node::Node,
   resources::{font::FontError, image::ImageSource},
   style::{Color, FontFamily, Lang, StyleSheet},
@@ -436,27 +437,68 @@ pub(crate) fn krilla_datetime(date: PdfDate) -> DateTime {
     .utc_offset_hour(0)
 }
 
-/// Per-side page margins in px.
+/// A page margin.
+#[derive(Clone, Copy)]
+pub enum PageMargin {
+  /// A length in px.
+  Px(f32),
+  /// The space the band on that side takes: its measured height plus the inset
+  /// it draws at, never below [`PageOptions::DEFAULT_MARGIN`]. Left and right
+  /// hold no band, so they take the default. Every side starts here.
+  Auto,
+}
+
+impl PageMargin {
+  fn resolve(self, band_height: Option<f32>) -> f32 {
+    match self {
+      Self::Px(value) => value,
+      Self::Auto => band_height.map_or(PageOptions::DEFAULT_MARGIN, |height| {
+        (height + BAND_EDGE_PADDING).max(PageOptions::DEFAULT_MARGIN)
+      }),
+    }
+  }
+}
+
+/// Per-side page margins. The header band draws in the top margin and the
+/// footer band in the bottom.
 #[derive(Clone, Copy)]
 pub struct PageMargins {
-  /// Top margin.
-  pub top: f32,
+  /// Top margin, where the header band draws.
+  pub top: PageMargin,
   /// Right margin.
-  pub right: f32,
-  /// Bottom margin.
-  pub bottom: f32,
+  pub right: PageMargin,
+  /// Bottom margin, where the footer band draws.
+  pub bottom: PageMargin,
   /// Left margin.
-  pub left: f32,
+  pub left: PageMargin,
 }
 
 impl PageMargins {
+  /// Every side sized to the band that draws in it.
+  pub const AUTO: Self = Self {
+    top: PageMargin::Auto,
+    right: PageMargin::Auto,
+    bottom: PageMargin::Auto,
+    left: PageMargin::Auto,
+  };
+
   /// The same margin on all four sides.
   pub const fn uniform(value: f32) -> Self {
     Self {
-      top: value,
-      right: value,
-      bottom: value,
-      left: value,
+      top: PageMargin::Px(value),
+      right: PageMargin::Px(value),
+      bottom: PageMargin::Px(value),
+      left: PageMargin::Px(value),
+    }
+  }
+
+  /// Margins with every [`PageMargin::Auto`] replaced by the band it sits under.
+  pub(crate) fn resolve(self, header: Option<f32>, footer: Option<f32>) -> Rect<f32> {
+    Rect {
+      top: self.top.resolve(header),
+      right: self.right.resolve(None),
+      bottom: self.bottom.resolve(footer),
+      left: self.left.resolve(None),
     }
   }
 }
@@ -488,7 +530,8 @@ pub(crate) const BAND_EDGE_PADDING: f32 = 15.0 * ONE_PT_IN_PX;
 /// adjust, or fill the fields directly for any other size.
 // ponytail: A4 + LETTER only; add other @page keywords when someone asks.
 impl PageOptions {
-  const DEFAULT_MARGIN: f32 = 0.5 * ONE_IN_PX;
+  /// Half an inch, the margin a page starts with.
+  pub const DEFAULT_MARGIN: f32 = 0.5 * ONE_IN_PX;
 
   /// ISO A4: 210 × 297 mm.
   pub const A4: Self = Self::preset(210.0 * ONE_MM_IN_PX, 297.0 * ONE_MM_IN_PX);
@@ -500,7 +543,7 @@ impl PageOptions {
     Self {
       width,
       height,
-      margin: PageMargins::uniform(Self::DEFAULT_MARGIN),
+      margin: PageMargins::AUTO,
     }
   }
 
@@ -521,10 +564,10 @@ impl PageOptions {
     }
   }
 
-  pub(crate) const fn content_size(&self) -> (f32, f32) {
+  pub(crate) fn content_size(&self, margin: Rect<f32>) -> (f32, f32) {
     (
-      self.width - self.margin.left - self.margin.right,
-      self.height - self.margin.top - self.margin.bottom,
+      self.width - margin.horizontal(),
+      self.height - margin.vertical(),
     )
   }
 }
