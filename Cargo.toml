@@ -238,3 +238,12 @@ opt-level = "z"
 opt-level = "z"
 
 
+# skrifa's TrueType hinting interpreter and autohinter are dead code for us
+# (every draw is unhinted) but survive dead-code elimination through runtime
+# branches, costing ~240KB of wasm. The fork gates them behind an upstreamable
+# `hinting` cargo feature; drop the patch once it lands in a skrifa release.
+# https://github.com/googlefonts/fontations/issues/892
+[patch.crates-io]
+skrifa = { git = "https://github.com/kane50613/fontations", rev = "3a3cc7904d9b8207939b089e63ea7fba88663b22" }
+read-fonts = { git = "https://github.com/kane50613/fontations", rev = "3a3cc7904d9b8207939b089e63ea7fba88663b22" }
+font-types = { git = "https://github.com/kane50613/fontations", rev = "3a3cc7904d9b8207939b089e63ea7fba88663b22" }
