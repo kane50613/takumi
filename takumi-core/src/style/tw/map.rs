@@ -35,6 +35,9 @@ macro_rules! property_parsers {
 
 property_parsers! {
   ObjectFit(ObjectFit) => ObjectFit,
+  ListStyleType(ListStyleType) => ListStyleType,
+  ListStylePosition(ListStylePosition) => ListStylePosition,
+  ListStyleImage(ListStyleImage) => ListStyleImage,
   ObjectPosition(PositionValue) => PositionValue,
   BgPosition(PositionValue) => PositionValue,
   TransformOrigin(PositionValue) => PositionValue,
@@ -85,6 +88,11 @@ property_parsers! {
 
 /// Maps a utility prefix to the parsers tried against its suffix.
 pub(crate) static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
+  "list" => &[
+    PropertyParser::ListStyleType(TailwindProperty::ListStyleType),
+    PropertyParser::ListStylePosition(TailwindProperty::ListStylePosition),
+  ],
+  "list-image" => &[PropertyParser::ListStyleImage(TailwindProperty::ListStyleImage)],
   "object" => &[
     PropertyParser::ObjectFit(TailwindProperty::ObjectFit),
     PropertyParser::ObjectPosition(TailwindProperty::ObjectPosition),
@@ -339,11 +347,6 @@ pub(crate) static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! 
   "grid" => TailwindProperty::Display(Display::Grid),
   "hidden" => TailwindProperty::Display(Display::None),
   "list-item" => TailwindProperty::Display(Display::ListItem),
-  "list-none" => TailwindProperty::ListStyleType(ListStyleType::None),
-  "list-disc" => TailwindProperty::ListStyleType(ListStyleType::Disc),
-  "list-decimal" => TailwindProperty::ListStyleType(ListStyleType::Decimal),
-  "list-inside" => TailwindProperty::ListStylePosition(ListStylePosition::Inside),
-  "list-outside" => TailwindProperty::ListStylePosition(ListStylePosition::Outside),
   "bg-repeat" => TailwindProperty::BackgroundRepeat(BackgroundRepeat::repeat()),
   "bg-no-repeat" => TailwindProperty::BackgroundRepeat(BackgroundRepeat::no_repeat()),
   "bg-space" | "bg-repeat-space" => TailwindProperty::BackgroundRepeat(BackgroundRepeat::space()),

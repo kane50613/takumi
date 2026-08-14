@@ -1074,3 +1074,51 @@ fn test_border_width_implies_solid_and_per_side_color() {
     ColorInput::Value(Color([43, 127, 255, 255]))
   );
 }
+
+/// Mirrors the utilities documented at https://tailwindcss.com/docs/list-style-type
+#[test]
+fn test_parse_list_utilities() {
+  for (token, expected) in [
+    ("list-item", TailwindProperty::Display(Display::ListItem)),
+    (
+      "list-disc",
+      TailwindProperty::ListStyleType(ListStyleType::Disc),
+    ),
+    (
+      "list-decimal",
+      TailwindProperty::ListStyleType(ListStyleType::Decimal),
+    ),
+    (
+      "list-none",
+      TailwindProperty::ListStyleType(ListStyleType::None),
+    ),
+    (
+      "list-[upper-roman]",
+      TailwindProperty::ListStyleType(ListStyleType::UpperRoman),
+    ),
+    (
+      "list-inside",
+      TailwindProperty::ListStylePosition(ListStylePosition::Inside),
+    ),
+    (
+      "list-outside",
+      TailwindProperty::ListStylePosition(ListStylePosition::Outside),
+    ),
+    (
+      "list-image-none",
+      TailwindProperty::ListStyleImage(ListStyleImage::default()),
+    ),
+  ] {
+    assert_eq!(
+      TailwindProperty::parse(token),
+      Some(expected),
+      "failed for {token}"
+    );
+  }
+
+  assert_matches!(
+    TailwindProperty::parse("list-image-[url(marker.png)]"),
+    Some(TailwindProperty::ListStyleImage(image))
+      if matches!(image.image(), Some(BackgroundImage::Url(url)) if &**url == "marker.png")
+  );
+}

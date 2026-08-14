@@ -160,6 +160,9 @@ pub(crate) fn next_is_comma<'i>(input: &mut Parser<'i, '_>) -> bool {
 
 // These parse Tailwind tokens straight through their `FromCss` value parser.
 impl TailwindPropertyParser for ObjectFit {}
+impl TailwindPropertyParser for ListStyleType {}
+impl TailwindPropertyParser for ListStylePosition {}
+impl TailwindPropertyParser for ListStyleImage {}
 impl TailwindPropertyParser for TextAlign {}
 impl TailwindPropertyParser for LineJoin {}
 impl TailwindPropertyParser for AlignItems {}

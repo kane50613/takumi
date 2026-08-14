@@ -324,6 +324,8 @@ pub(crate) enum TailwindProperty {
   ListStyleType(ListStyleType),
   /// `list-style-position` property.
   ListStylePosition(ListStylePosition),
+  /// `list-style-image` property.
+  ListStyleImage(ListStyleImage),
   /// `object-position` property.
   ObjectPosition(PositionValue),
   /// `object-fit` property.
@@ -948,6 +950,9 @@ impl TailwindProperty {
       }
       TailwindProperty::ListStylePosition(position) => {
         push_decl!(builder, important, list_style_position(position));
+      }
+      TailwindProperty::ListStyleImage(image) => {
+        push_decl!(builder, important, list_style_image(image));
       }
       TailwindProperty::OverflowX(overflow) => push_decl!(builder, important, overflow_x(overflow)),
       TailwindProperty::OverflowY(overflow) => push_decl!(builder, important, overflow_y(overflow)),
