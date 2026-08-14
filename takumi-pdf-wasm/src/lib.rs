@@ -26,8 +26,8 @@ use crate::{
   options::{PdfRenderOptions, decode_images, page_background, resolve_geometry},
 };
 
-pub(crate) fn map_error(error: impl core::fmt::Debug) -> js_sys::Error {
-  js_sys::Error::new(&format!("{error:?}"))
+pub(crate) fn map_error(error: impl core::fmt::Display) -> js_sys::Error {
+  js_sys::Error::new(&error.to_string())
 }
 
 #[wasm_bindgen(typescript_custom_section)]
