@@ -21,6 +21,7 @@ pub(crate) mod skrifa {
   use skrifa::outline::{DrawSettings, OutlinePen};
   use skrifa::prelude::Size;
   use skrifa::{FontRef, GlyphId, MetadataProvider};
+  use takumi_core::resources::glyph::ErasedPen;
   use write_fonts::tables::glyf::SimpleGlyph;
   use write_fonts::{FontWrite, TableWriter, dump_table};
 
@@ -63,7 +64,7 @@ pub(crate) mod skrifa {
         outline_glyph
           .draw(
             DrawSettings::unhinted(Size::unscaled(), &self.location),
-            &mut outline_builder,
+            &mut ErasedPen(&mut outline_builder),
           )
           .ok()?;
       }

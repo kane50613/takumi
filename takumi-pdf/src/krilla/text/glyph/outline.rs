@@ -1,4 +1,5 @@
 use skrifa::outline::{DrawSettings, OutlinePen};
+use takumi_core::resources::glyph::ErasedPen;
 
 use crate::krilla::geom::Path;
 use crate::krilla::geom::Transform;
@@ -14,7 +15,7 @@ pub(crate) fn glyph_path(font: Font, glyph: GlyphId) -> Option<tiny_skia_path::P
     outline_glyph
       .draw(
         DrawSettings::unhinted(skrifa::instance::Size::unscaled(), font.location_ref()),
-        &mut outline_builder,
+        &mut ErasedPen(&mut outline_builder),
       )
       .ok()?;
   }
