@@ -3,7 +3,7 @@ use taffy::{Dimension, LengthPercentageAuto, Size as TaffySize};
 use crate::{
   context::RenderContext,
   layout::{
-    node::Node,
+    node::{Node, resolve_image},
     tree::{RenderNode, pseudo_computed_style},
   },
   matching::MatchedDeclarationsView,
@@ -38,8 +38,8 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
   }
 
   let context = RenderContext::from_parent(item_context, style, sizing, current_color);
-  let mut content = match item_context.style.list_style_image.image() {
-    Some(image) => marker_image(&context, image.clone(), is_rtl),
+  let mut content = match available_marker_image(item_context) {
+    Some(image) => marker_image(&context, image, is_rtl),
     None => {
       let text = item_context.style.list_style_type.marker_text(ordinal)?;
       RenderNode::anonymous_text_item(&context, text)
@@ -58,6 +58,20 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
     anonymous_text_content: None,
     force_inline_layout: false,
   })
+}
+
+/// css-lists-3 §3.1: an image that is not available leaves the counter style to
+/// draw the marker.
+fn available_marker_image(item_context: &RenderContext) -> Option<BackgroundImage> {
+  let image = item_context.style.list_style_image.image()?;
+
+  if let BackgroundImage::Url(url) = image
+    && resolve_image(url, item_context).is_err()
+  {
+    return None;
+  }
+
+  Some(image.clone())
 }
 
 /// A marker image keeps its natural size; one without falls back to half the
@@ -95,6 +109,40 @@ fn marker_image(context: &RenderContext, mut image: BackgroundImage, is_rtl: boo
   item
 }
 
+/// The running count a list hands to its items, honoring `start`, `value` and
+/// `reversed`.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct ListCounter {
+  next: i32,
+  step: i32,
+}
+
+impl ListCounter {
+  /// A `reversed` list counts down from its item count unless `start` says otherwise.
+  pub(super) fn new(node: &Node, children: &[Node]) -> Self {
+    let reversed = node.attribute("reversed").is_some();
+    let start = attribute_number(node, "start").unwrap_or_else(|| {
+      if reversed {
+        list_item_count(children)
+      } else {
+        1
+      }
+    });
+
+    Self {
+      next: start,
+      step: if reversed { -1 } else { 1 },
+    }
+  }
+
+  /// The item's own `value` attribute, else the list's running count.
+  pub(super) fn take(&mut self, node: &Node) -> i32 {
+    let ordinal = attribute_number(node, "value").unwrap_or(self.next);
+    self.next = ordinal.saturating_add(self.step);
+    ordinal
+  }
+}
+
 /// Blink counts list items within their enclosing list, so a wrapper element
 /// inside one keeps counting rather than starting over. A tree built in code
 /// has no list elements to enclose anything, so there every parent counts its
@@ -112,15 +160,17 @@ pub(super) fn is_list_element(node: &Node) -> bool {
   })
 }
 
-/// The item's own `value` attribute, else the list's running count.
-pub(super) fn list_item_ordinal(node: &Node, next_ordinal: &mut i32) -> i32 {
-  let ordinal = attribute_number(node, "value").unwrap_or(*next_ordinal);
-  *next_ordinal = ordinal.saturating_add(1);
-  ordinal
-}
-
-pub(super) fn first_list_item_ordinal(node: &Node) -> i32 {
-  attribute_number(node, "start").unwrap_or(1)
+fn list_item_count(children: &[Node]) -> i32 {
+  children
+    .iter()
+    .filter(|child| {
+      child
+        .tag_name()
+        .is_some_and(|tag| tag.eq_ignore_ascii_case("li"))
+    })
+    .count()
+    .try_into()
+    .unwrap_or(i32::MAX)
 }
 
 fn attribute_number(node: &Node, name: &str) -> Option<i32> {
@@ -193,6 +243,9 @@ mod tests {
 
   const LIST_CSS: &str = ".list { list-style-type: decimal } .item { display: list-item }";
 
+  /// A 1x1 PNG, so the marker image resolves without a registered resource.
+  const PIXEL_DATA_URI: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
   #[test]
   fn items_are_numbered_in_document_order() {
     let list = Node::container([item([]), item([]), item([])]).with_class_name("list");
@@ -236,6 +289,64 @@ mod tests {
     .with_attributes(attributes(&[("start", "3")]));
 
     assert_eq!(markers(list, LIST_CSS), ["3. ", "9. ", "10. "]);
+  }
+
+  /// `<ol reversed>` counts down from the number of items.
+  #[test]
+  fn a_reversed_list_counts_down() {
+    let items = || {
+      [
+        Node::container([])
+          .with_class_name("item")
+          .with_tag_name("li"),
+        Node::container([])
+          .with_class_name("item")
+          .with_tag_name("li"),
+        Node::container([])
+          .with_class_name("item")
+          .with_tag_name("li"),
+      ]
+    };
+    let list = || {
+      Node::container(items())
+        .with_class_name("list")
+        .with_tag_name("ol")
+    };
+
+    assert_eq!(
+      markers(
+        list().with_attributes(attributes(&[("reversed", "")])),
+        LIST_CSS
+      ),
+      ["3. ", "2. ", "1. "]
+    );
+    assert_eq!(
+      markers(
+        list().with_attributes(attributes(&[("reversed", ""), ("start", "5")])),
+        LIST_CSS
+      ),
+      ["5. ", "4. ", "3. "]
+    );
+  }
+
+  /// A block chain leads to the item's first line, wherever that line sits.
+  #[test]
+  fn a_nested_block_chain_hosts_the_marker() {
+    let paragraph = Node::container([Node::text("hello")]).with_class_name("block");
+    let list = Node::container([item(
+      [Node::container([paragraph]).with_class_name("block")],
+    )])
+    .with_class_name("list");
+    let css = format!("{LIST_CSS} .block {{ display: block }}");
+
+    let tree = render_tree(list, &css);
+    let paragraph = first_child(first_child(first_child(&tree)));
+
+    assert_eq!(
+      text_runs(paragraph),
+      ["1. "],
+      "the marker did not reach the paragraph"
+    );
   }
 
   #[test]
@@ -287,12 +398,24 @@ mod tests {
     ));
   }
 
+  /// css-lists-3 §3.1: an unavailable image leaves the counter style to draw.
+  #[test]
+  fn an_unavailable_marker_image_falls_back_to_the_counter() {
+    let list = Node::container([item([])]).with_class_name("list");
+    let css = format!("{LIST_CSS} .list {{ list-style-image: url(missing.png) }}");
+
+    assert_eq!(markers(list, &css), ["1. "]);
+  }
+
   /// An image marker replaces the counter style, even when that style is `none`.
   #[test]
   fn a_marker_image_becomes_an_image_child() {
     let list = Node::container([item([])]).with_class_name("list");
-    let css =
-      ".list { list-style: none url(bullet.png) } .item { display: list-item; font-size: 20px }";
+    let css = format!(
+      ".list {{ list-style: none url({PIXEL_DATA_URI}) }} \
+       .item {{ display: list-item; font-size: 20px }}"
+    );
+    let css = css.as_str();
 
     let tree = render_tree(list, css);
     let marker_image = first_child(first_child(first_child(&tree)));

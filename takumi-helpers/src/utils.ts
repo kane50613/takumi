@@ -125,7 +125,10 @@ function collectCssUrls(value: unknown, urls: Set<string>) {
   }
 }
 
-/** Every remote image URL a node tree references: `<img src>`, `backgroundImage`, `maskImage`. */
+/**
+ * Every remote image URL a node tree references: `<img src>`, `backgroundImage`, `maskImage`,
+ * `listStyleImage`.
+ */
 function extractImageUrls(node: Node): string[] {
   const urls = new Set<string>();
 
@@ -137,6 +140,7 @@ function extractImageUrls(node: Node): string[] {
 
       collectCssUrls(style.backgroundImage, urls);
       collectCssUrls(style.maskImage, urls);
+      collectCssUrls(style.listStyleImage, urls);
     };
 
     collectStyleUrls(current.style);

@@ -20,9 +20,7 @@ use crate::{
       InlineContentKind, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
       collect_inline_items, create_inline_constraint, create_inline_layout, measure_inline_layout,
     },
-    list_marker::{
-      first_list_item_ordinal, is_list_element, list_item_ordinal, list_marker, owns_list_counter,
-    },
+    list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
     node::{Node, NodeStyleLayers},
   },
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
@@ -1069,18 +1067,25 @@ impl RenderNode {
     })
   }
 
-  /// A block box holding the line an outside marker belongs on. A list item is
-  /// excluded: its own marker already holds the start of that line.
+  /// A block box whose first in-flow content is the line an outside marker
+  /// belongs on. A list item is excluded: its own marker already holds the
+  /// start of that line.
   fn can_host_marker(&self) -> bool {
-    self.context.style.display == Display::Block
-      && self.context.style.float == Float::None
-      && (self.node.as_ref().is_some_and(Node::is_text)
-        || self.children.as_deref().is_some_and(|children| {
-          children
-            .iter()
-            .find(|child| !child.is_out_of_flow())
-            .is_some_and(RenderNode::participates_in_inflow_inline_formatting_context)
-        }))
+    if self.context.style.display != Display::Block || self.context.style.float != Float::None {
+      return false;
+    }
+
+    if self.node.as_ref().is_some_and(Node::is_text) {
+      return true;
+    }
+
+    self
+      .children
+      .as_deref()
+      .and_then(|children| children.iter().find(|child| !child.is_out_of_flow()))
+      .is_some_and(|first| {
+        first.participates_in_inflow_inline_formatting_context() || first.can_host_marker()
+      })
   }
 
   /// The host's children, with any folded text handed back as a child so the
@@ -1225,7 +1230,7 @@ impl RenderNode {
       pending_children: IntoIter<Node>,
       rendered_children: Vec<RenderNode>,
       pseudo_after: Option<RenderNode>,
-      next_list_item_ordinal: i32,
+      list_counter: ListCounter,
       marker_ordinal: Option<i32>,
       inside_list: bool,
       owns_list_counter: bool,
@@ -1339,7 +1344,7 @@ impl RenderNode {
       mut node: Node,
       matched_declarations: &[NodeMatchedDeclarations<'_>],
       preorder_cursor: &mut usize,
-      next_ordinal: &mut i32,
+      counter: &mut ListCounter,
       inside_list: bool,
     ) -> PendingRenderNode {
       let node_index = next_preorder_index(preorder_cursor);
@@ -1349,8 +1354,8 @@ impl RenderNode {
       let context = RenderContext::from_parent(parent_context, style, sizing, current_color);
 
       let element_matched = matched_declarations.get(node_index);
-      let marker_ordinal = (context.style.display == Display::ListItem)
-        .then(|| list_item_ordinal(&node, next_ordinal));
+      let marker_ordinal =
+        (context.style.display == Display::ListItem).then(|| counter.take(&node));
       let pseudo_before = element_matched
         .and_then(|m| m.before())
         .and_then(|m| RenderNode::from_pseudo_match(&context, &node, m));
@@ -1374,10 +1379,10 @@ impl RenderNode {
 
       PendingRenderNode {
         children_is_some: children_is_some || has_generated_children,
-        next_list_item_ordinal: if owns_list_counter {
-          first_list_item_ordinal(&node)
+        list_counter: if owns_list_counter {
+          ListCounter::new(&node, &children)
         } else {
-          *next_ordinal
+          *counter
         },
         inside_list: inside_list || is_list_element(&node),
         owns_list_counter,
@@ -1391,13 +1396,13 @@ impl RenderNode {
     }
 
     let mut preorder_cursor = 0;
-    let mut root_ordinal = 1;
+    let mut root_counter = ListCounter::new(&root, &[]);
     let mut stack = vec![build_pending_node(
       parent_context,
       root,
       matched_declarations,
       &mut preorder_cursor,
-      &mut root_ordinal,
+      &mut root_counter,
       false,
     )];
 
@@ -1419,7 +1424,7 @@ impl RenderNode {
           child,
           matched_declarations,
           &mut preorder_cursor,
-          &mut current.next_list_item_ordinal,
+          &mut current.list_counter,
           current.inside_list,
         );
         stack.push(child_pending);
@@ -1440,7 +1445,7 @@ impl RenderNode {
       if !finished.owns_list_counter
         && let Some(parent) = stack.last_mut()
       {
-        parent.next_list_item_ordinal = finished.next_list_item_ordinal;
+        parent.list_counter = finished.list_counter;
       }
 
       if let Some(after) = finished.pseudo_after.take() {
@@ -2043,7 +2048,7 @@ fn insert_marker(children: &mut Vec<RenderNode>, marker: RenderNode) {
 
   if let Some(host) = host {
     let mut hosted = host.take_marker_host_children();
-    place_marker(&mut hosted, marker);
+    insert_marker(&mut hosted, marker);
     host.children = Some(hosted.into_boxed_slice());
     return;
   }

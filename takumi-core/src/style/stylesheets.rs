@@ -1695,6 +1695,9 @@ impl StyleDeclarationBlock {
           | StyleDeclaration::MaskImage(Some(images)) => {
             Box::new(images.iter().filter_map(background_image_url))
           }
+          StyleDeclaration::ListStyleImage(image) => {
+            Box::new(image.image().and_then(background_image_url).into_iter())
+          }
           StyleDeclaration::Content(ContentValue::Items(items)) => {
             Box::new(items.iter().filter_map(|item| match item {
               ContentItem::Image(image) => background_image_url(image.as_ref()),
