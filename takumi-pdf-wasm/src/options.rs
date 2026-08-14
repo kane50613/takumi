@@ -65,28 +65,27 @@ enum MarginInput {
 }
 
 /// One side: a length in px, or `"auto"` for the space that side's band takes.
+/// serde requires every untagged variant to come last, so the keyword leads.
 #[derive(Deserialize)]
-#[serde(untagged)]
 enum SideInput {
+  #[serde(rename = "auto")]
+  Auto,
+  #[serde(untagged)]
   Px(f32),
-  Named(String),
 }
 
 impl SideInput {
-  fn margin(&self) -> Result<PageMargin, js_sys::Error> {
+  fn margin(&self) -> PageMargin {
     match self {
-      Self::Px(value) => Ok(PageMargin::Px(*value)),
-      Self::Named(name) if name.eq_ignore_ascii_case("auto") => Ok(PageMargin::Auto),
-      Self::Named(other) => Err(js_sys::Error::new(&format!("unknown margin: {other}"))),
+      Self::Auto => PageMargin::Auto,
+      Self::Px(value) => PageMargin::Px(*value),
     }
   }
 }
 
 /// A side the caller left out sits flush with the paper edge.
-fn side_margin(side: &Option<SideInput>) -> Result<PageMargin, js_sys::Error> {
-  side
-    .as_ref()
-    .map_or(Ok(PageMargin::Px(0.0)), SideInput::margin)
+fn side_margin(side: &Option<SideInput>) -> PageMargin {
+  side.as_ref().map_or(PageMargin::Px(0.0), SideInput::margin)
 }
 
 fn resolve_page(
@@ -116,7 +115,7 @@ fn resolve_page(
   match margin {
     None => {}
     Some(MarginInput::Uniform(value)) => {
-      let side = value.margin()?;
+      let side = value.margin();
 
       page.margin = PageMargins {
         top: side,
@@ -132,10 +131,10 @@ fn resolve_page(
       left,
     }) => {
       page.margin = PageMargins {
-        top: side_margin(top)?,
-        right: side_margin(right)?,
-        bottom: side_margin(bottom)?,
-        left: side_margin(left)?,
+        top: side_margin(top),
+        right: side_margin(right),
+        bottom: side_margin(bottom),
+        left: side_margin(left),
       };
     }
   }
