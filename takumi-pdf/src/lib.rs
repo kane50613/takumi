@@ -798,15 +798,25 @@ mod tests {
     );
   }
 
-  /// Chromium drops the default margin on an axis shorter than an inch rather
-  /// than leave the page with nothing to print on.
+  /// Chromium drops the default margin on an axis that does not clear an inch
+  /// rather than leave the page with nothing to print on. Its test is
+  /// `axis > one inch`, so an axis of exactly an inch keeps no margin either.
   #[test]
   fn a_page_under_an_inch_keeps_no_margin_on_that_axis() {
-    let margins = PageMargins::AUTO.resolve((ONE_IN_PX, 4.0 * ONE_IN_PX), None, None);
+    for width in [ONE_IN_PX, ONE_IN_PX - 1.0] {
+      let margins = PageMargins::AUTO.resolve((width, 4.0 * ONE_IN_PX), None, None);
 
-    assert_eq!(margins.left, 0.0);
-    assert_eq!(margins.right, 0.0);
-    assert_eq!(margins.top, PageOptions::DEFAULT_MARGIN);
-    assert_eq!(margins.bottom, PageOptions::DEFAULT_MARGIN);
+      assert_eq!(margins.left, 0.0, "width of {width}");
+      assert_eq!(margins.right, 0.0, "width of {width}");
+      assert_eq!(margins.top, PageOptions::DEFAULT_MARGIN);
+      assert_eq!(margins.bottom, PageOptions::DEFAULT_MARGIN);
+    }
+    assert_eq!(
+      PageMargins::AUTO
+        .resolve((ONE_IN_PX + 1.0, 4.0 * ONE_IN_PX), None, None)
+        .left,
+      PageOptions::DEFAULT_MARGIN,
+      "an axis past the inch keeps its margin"
+    );
   }
 }

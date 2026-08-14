@@ -33,7 +33,7 @@ import { googleFonts } from "@takumi-rs/helpers";
 import { writeFile } from "node:fs/promises";
 
 const pdf = await render(<Invoice data={data} />, {
-  // A4 portrait with a 1cm margin is the default
+  // A4 portrait with a 37.8px margin is the default
   size: "a4",
   // [!code highlight]
   fonts: await googleFonts(["Inter"]),
@@ -103,8 +103,8 @@ These options are the structured form of `@page`, which takumi does not parse as
 
 A margin left at `"auto"` takes the space its band needs: the band's measured
 height plus the 20px it is inset from the paper edge, and never less than the
-1cm a page starts with. Without a band on that side it stays at that 1cm, the
-margin Chromium prints at.
+37.8px a page starts with. Without a band on that side it stays at 37.8px, the
+1cm Chromium prints at.
 
 Leave `backgroundColor` unset for white paper.
 A viewer draws white by default, and the file stays free of a full-page rectangle.
