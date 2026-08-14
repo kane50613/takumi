@@ -1,6 +1,6 @@
 [package]
 name = "takumi-svg"
-version = "0.3.18"
+version = "0.3.19"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Vector SVG output backend for takumi. Emits real SVG (paths, gradients, filters) rather than embedding a rasterized bitmap."
