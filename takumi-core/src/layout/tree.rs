@@ -307,6 +307,7 @@ fn push_layout_node<'r>(
   struct PendingNode<'r> {
     node_id: TaffyNodeId,
     position: Position,
+    contains_fixed: bool,
     next_child_index: usize,
     children: Option<&'r [RenderNode]>,
     taffy_child_ids: Vec<TaffyNodeId>,
@@ -327,6 +328,7 @@ fn push_layout_node<'r>(
       render_node.children.as_deref()
     };
     let position = render_node.context.style.position;
+    let contains_fixed = render_node.context.style.contains_fixed_descendants();
 
     render_nodes.push(render_node);
 
@@ -353,6 +355,7 @@ fn push_layout_node<'r>(
     PendingNode {
       node_id,
       position,
+      contains_fixed,
       next_child_index: 0,
       children,
       taffy_child_ids: Vec::with_capacity(capacity),
@@ -362,14 +365,16 @@ fn push_layout_node<'r>(
 
   // Out-of-flow nodes are re-parented (hoisted) in the taffy tree so taffy's
   // direct-parent positioning resolves against the correct CSS containing
-  // block: nearest CB ancestor for `absolute`, the root for `fixed`. The box
-  // (render) tree is preserved separately for painting.
+  // block: the nearest ancestor that establishes one. The box (render) tree is
+  // preserved separately for painting.
   let mut cb_stack: Vec<TaffyNodeId> = Vec::new();
+  let mut fixed_cb_stack: Vec<TaffyNodeId> = Vec::new();
   let mut hoisted: HashMap<TaffyNodeId, Vec<TaffyNodeId>> = HashMap::new();
 
   let root = push_node_state(nodes, render_nodes, render_root);
   let root_id = root.node_id;
   cb_stack.push(root_id);
+  fixed_cb_stack.push(root_id);
   let mut stack = vec![root];
 
   while let Some(current) = stack.last_mut() {
@@ -378,8 +383,11 @@ fn push_layout_node<'r>(
     {
       current.next_child_index += 1;
       let pending = push_node_state(nodes, render_nodes, child);
-      if pending.position.is_positioned() {
+      if pending.position.is_positioned() || pending.contains_fixed {
         cb_stack.push(pending.node_id);
+      }
+      if pending.contains_fixed {
+        fixed_cb_stack.push(pending.node_id);
       }
       stack.push(pending);
       continue;
@@ -398,15 +406,18 @@ fn push_layout_node<'r>(
     nodes[idx].children = taffy_children.into_boxed_slice();
     nodes[idx].box_children = finished.box_children.into_boxed_slice();
 
-    if finished.position.is_positioned() {
+    if finished.position.is_positioned() || finished.contains_fixed {
       cb_stack.pop();
+    }
+    if finished.contains_fixed {
+      fixed_cb_stack.pop();
     }
 
     if let Some(parent) = stack.last_mut() {
       let render_index = parent.next_child_index - 1;
       let cb = match finished.position {
         Position::Absolute => Some(*cb_stack.last().unwrap_or(&root_id)),
-        Position::Fixed => Some(root_id),
+        Position::Fixed => Some(*fixed_cb_stack.last().unwrap_or(&root_id)),
         _ => None,
       };
       // Only re-parent when the containing block differs from the structural

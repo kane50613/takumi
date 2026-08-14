@@ -72,6 +72,20 @@ impl ComputedStyle {
       || self.needs_offscreen_compositing()
   }
 
+  /// Whether the box is a containing block for `fixed` descendants, and so
+  /// also for `absolute` ones. Blink resolves this as `ComputeIsFixedContainer`
+  /// (`layout_object.cc`); the conditions takumi has properties for are a
+  /// transform-related property and a non-initial `filter` / `backdrop-filter`.
+  pub fn contains_fixed_descendants(&self) -> bool {
+    self.transform.as_ref().is_some_and(|t| !t.0.is_empty())
+      || self.offset_path.is_some()
+      || self.rotate.is_some()
+      || self.translate != SpacePair::default()
+      || self.scale != SpacePair::default()
+      || !self.filter.is_empty()
+      || !self.backdrop_filter.is_empty()
+  }
+
   /// Whether the element must render to an offscreen layer before compositing.
   pub fn needs_offscreen_compositing(&self) -> bool {
     self.isolation == Isolation::Isolate
