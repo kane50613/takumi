@@ -64,21 +64,27 @@ enum MarginInput {
   },
 }
 
-/// One side: a length in px, or `"auto"` for the space that side's band takes.
-/// serde requires every untagged variant to come last, so the keyword leads.
+/// One side: a length in px, or a keyword for a size the renderer works out.
 #[derive(Deserialize)]
+#[serde(untagged)]
 enum SideInput {
-  #[serde(rename = "auto")]
-  Auto,
-  #[serde(untagged)]
   Px(f32),
+  Keyword(MarginKeyword),
+}
+
+/// A margin the renderer sizes itself.
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum MarginKeyword {
+  /// The space the band on that side takes.
+  Auto,
 }
 
 impl SideInput {
   fn margin(&self) -> PageMargin {
     match self {
-      Self::Auto => PageMargin::Auto,
       Self::Px(value) => PageMargin::Px(*value),
+      Self::Keyword(MarginKeyword::Auto) => PageMargin::Auto,
     }
   }
 }
