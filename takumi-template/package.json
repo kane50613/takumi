@@ -8,12 +8,16 @@
     "url": "https://kane.tw"
   },
   "type": "module",
+  "scripts": {
+    "registry:build": "mkdir -p ../docs/public/r/image && shadcn build --output ../docs/public/r"
+  },
   "dependencies": {
     "react": "catalog:"
   },
   "devDependencies": {
     "@types/bun": "catalog:",
     "@types/react": "catalog:",
+    "shadcn": "^3.5.0",
     "takumi-js": "workspace:*"
   }
 }

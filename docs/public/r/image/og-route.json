@@ -1,0 +1,17 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "image/og-route",
+  "title": "Open Graph Route",
+  "description": "A Next.js route that answers /og with a rendered card. Reads the title from the query string and falls back to a default.",
+  "dependencies": ["takumi-js"],
+  "registryDependencies": ["https://takumi.kane.tw/r/image/blog-post.json"],
+  "files": [
+    {
+      "path": "src/blocks/og-route/route.tsx",
+      "content": "import { ImageResponse } from \"takumi-js/response\";\n\nimport BlogPostTemplate from \"@/components/takumi/image/blog-post\";\n\nexport function GET(request: Request) {\n  const { searchParams } = new URL(request.url);\n\n  return new ImageResponse(\n    <BlogPostTemplate\n      author={searchParams.get(\"author\") ?? \"Takumi\"}\n      category={searchParams.get(\"category\") ?? \"Engineering\"}\n      date={searchParams.get(\"date\") ?? \"Today\"}\n      title={searchParams.get(\"title\") ?? \"Hello from Takumi\"}\n    />,\n    { width: 1200, height: 630 },\n  );\n}\n",
+      "type": "registry:page",
+      "target": "app/og/route.tsx"
+    }
+  ],
+  "type": "registry:block"
+}

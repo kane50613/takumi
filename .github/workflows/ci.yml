@@ -942,7 +942,15 @@ jobs:
           path: takumi-pdf-js
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile --filter ./docs
+        run: bun install --frozen-lockfile --filter ./docs --filter ./takumi-template
+
+      # The registry ships as static JSON under docs/public/r, so a template
+      # edited without rebuilding would serve the old file.
+      - name: Check the registry is built from the templates
+        working-directory: takumi-template
+        run: |
+          bun run registry:build
+          git diff --exit-code ../docs/public/r
 
       # `vercel build` strips types without checking them, so the playground's
       # own use of the render options is only checked here.

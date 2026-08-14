@@ -1,0 +1,120 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry.json",
+  "name": "takumi",
+  "homepage": "https://takumi.kane.tw",
+  "items": [
+    {
+      "name": "image/blog-post",
+      "type": "registry:ui",
+      "title": "Blog Post Template",
+      "description": "An open graph card for an article, with a category pill, an oversized title, and an author byline.",
+      "dependencies": ["takumi-js"],
+      "files": [
+        {
+          "path": "src/templates/blog-post-template.tsx",
+          "type": "registry:ui",
+          "target": "@components/takumi/image/blog-post.tsx"
+        }
+      ]
+    },
+    {
+      "name": "image/changelog",
+      "type": "registry:ui",
+      "title": "Changelog Template",
+      "description": "An open graph card for a release, with the version, the date, and a summary of what shipped.",
+      "dependencies": ["takumi-js"],
+      "files": [
+        {
+          "path": "src/templates/changelog-template.tsx",
+          "type": "registry:ui",
+          "target": "@components/takumi/image/changelog.tsx"
+        }
+      ]
+    },
+    {
+      "name": "image/docs",
+      "type": "registry:ui",
+      "title": "Docs Template",
+      "description": "An open graph card for a documentation page, tinted by a colour you pass and headed by the site's icon.",
+      "dependencies": ["takumi-js"],
+      "files": [
+        {
+          "path": "src/templates/docs-template.tsx",
+          "type": "registry:ui",
+          "target": "@components/takumi/image/docs.tsx"
+        }
+      ]
+    },
+    {
+      "name": "image/event",
+      "type": "registry:ui",
+      "title": "Event Template",
+      "description": "An open graph card for a talk or a conference, with the title above a when, where, and host footer.",
+      "dependencies": ["takumi-js"],
+      "files": [
+        {
+          "path": "src/templates/event-template.tsx",
+          "type": "registry:ui",
+          "target": "@components/takumi/image/event.tsx"
+        }
+      ]
+    },
+    {
+      "name": "image/product-card",
+      "type": "registry:ui",
+      "title": "Product Card Template",
+      "description": "An open graph card for a product, with its image, name, price, and a line of copy.",
+      "dependencies": ["takumi-js"],
+      "files": [
+        {
+          "path": "src/templates/product-card-template.tsx",
+          "type": "registry:ui",
+          "target": "@components/takumi/image/product-card.tsx"
+        }
+      ]
+    },
+    {
+      "name": "image/quote",
+      "type": "registry:ui",
+      "title": "Quote Template",
+      "description": "A high-contrast open graph card for a quote, attributed to a person and a company.",
+      "dependencies": ["takumi-js"],
+      "files": [
+        {
+          "path": "src/templates/quote-template.tsx",
+          "type": "registry:ui",
+          "target": "@components/takumi/image/quote.tsx"
+        }
+      ]
+    },
+    {
+      "name": "image/repository",
+      "type": "registry:ui",
+      "title": "Repository Template",
+      "description": "An open graph card for a repository, with its slug, description, and star, fork, and language counts.",
+      "dependencies": ["takumi-js"],
+      "files": [
+        {
+          "path": "src/templates/repository-template.tsx",
+          "type": "registry:ui",
+          "target": "@components/takumi/image/repository.tsx"
+        }
+      ]
+    },
+    {
+      "name": "image/og-route",
+      "type": "registry:block",
+      "title": "Open Graph Route",
+      "description": "A Next.js route that answers /og with a rendered card. Reads the title from the query string and falls back to a default.",
+      "dependencies": ["takumi-js"],
+      "registryDependencies": ["https://takumi.kane.tw/r/image/blog-post.json"],
+      "files": [
+        {
+          "path": "src/blocks/og-route/route.tsx",
+          "type": "registry:page",
+          "target": "app/og/route.tsx"
+        }
+      ]
+    }
+  ]
+}
