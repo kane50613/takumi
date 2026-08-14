@@ -168,8 +168,8 @@ pub struct PdfOptions<'g> {
   /// Paged output; `None` renders a single page at the viewport size.
   #[builder(default, setter(strip_option))]
   pub page: Option<PageOptions>,
-  /// The paper color, painted under everything on every page, margins
-  /// included. Unset leaves the page empty, like Chromium's print path, so a
+  /// Fills the page box, margins included, before the page draws anything
+  /// else. Unset leaves the page empty, like Chromium's print path, so a
   /// viewer shows its own white and the file carries no extra rectangle.
   #[builder(default, setter(strip_option))]
   pub background_color: Option<Color>,

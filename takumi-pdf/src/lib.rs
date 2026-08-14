@@ -151,8 +151,9 @@ pub fn measure(options: MeasureOptions<'_>) -> Result<MeasuredSize, PdfError> {
   })
 }
 
-/// The paper, under everything the page draws. An unset color leaves the page
-/// empty rather than painting white, like Chromium's print path.
+/// Fills the page box before the page draws anything else. An unset color
+/// leaves the page empty rather than painting white, like Chromium's print
+/// path.
 fn paint_page_background(color: Option<Color>, size: (f32, f32), surface: &mut Surface) {
   let Some(color) = color else {
     return;
