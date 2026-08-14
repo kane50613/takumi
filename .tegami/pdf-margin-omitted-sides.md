@@ -1,7 +1,7 @@
 ---
 packages:
   takumi-pdf:
-    type: minor
+    type: patch
 ---
 
 ### Default an omitted margin side to `auto`
