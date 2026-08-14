@@ -1,3 +1,13 @@
+## @takumi-rs/helpers@2.8.0
+
+### Render fragment, memo and forwardRef children inside `<svg>`
+
+Inline SVG silently dropped any child it could not map to a tag name. Fragments, `memo` and `forwardRef` components now serialize the same way React does.
+
+### Draw list markers for `<ol>` and `<ul>`
+
+List items rendered with no bullet or number. A `display: list-item` box now generates a marker: `list-style-type`, `list-style-position` and `list-style-image` pick what it draws and where it sits, and `<ol start>` and `<li value>` set the count.
+
 ## @takumi-rs/helpers@2.7.2
 
 ### Follow Unicode emoji presentation in `extractEmojis`
