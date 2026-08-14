@@ -267,6 +267,15 @@ impl SvgColorExt for svgtypes::Color {
   }
 }
 
+/// Resolves `currentColor` for `node`: the nearest `color` attribute, then
+/// `Options::current_color`, then black.
+pub(crate) fn resolve_current_color(node: SvgNode, state: &State) -> svgtypes::Color {
+  node
+    .find_attribute(AId::Color)
+    .or(state.opt.current_color)
+    .unwrap_or_else(svgtypes::Color::black)
+}
+
 /// Converts an input `Document` into a `Tree`.
 ///
 /// # Errors

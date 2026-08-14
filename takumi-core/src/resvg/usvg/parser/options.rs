@@ -79,6 +79,13 @@ pub struct Options<'a> {
   /// A CSS stylesheet that should be injected into the SVG. Can be used to overwrite
   /// certain attributes.
   pub style_sheet: Option<String>,
+
+  /// `currentColor` fallback for when no `color` attribute is set on the
+  /// element or its ancestors, mirroring how an inline SVG inherits `color`
+  /// from its host document.
+  ///
+  /// Default: `None` (resolves to black)
+  pub current_color: Option<svgtypes::Color>,
 }
 
 impl Default for Options<'_> {
@@ -96,6 +103,7 @@ impl Default for Options<'_> {
       default_size: Size::from_wh(100.0, 100.0).unwrap(),
       image_href_resolver: ImageHrefResolver::default(),
       style_sheet: None,
+      current_color: None,
     }
   }
 }

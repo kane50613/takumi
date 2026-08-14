@@ -4,6 +4,7 @@
 //! including loading states, error handling, and image processing operations.
 
 #[cfg(feature = "svg")]
+use std::borrow::Cow;
 use std::str::{FromStr, from_utf8};
 use std::sync::{Arc, OnceLock, Weak};
 
@@ -39,7 +40,7 @@ use crate::{
       gif_dimensions, gif_frame_durations, is_gif,
     },
   },
-  style::{ImageScalingAlgorithm, IntrinsicSizing, SizingContext, StyleSheet},
+  style::{Color, ImageScalingAlgorithm, IntrinsicSizing, SizingContext, StyleSheet},
 };
 
 const MAX_RASTER_PIXELS: u64 = 16 << 20;
@@ -74,6 +75,9 @@ pub struct SvgSource {
   source: Box<str>,
   /// Parsed SVG tree used for size and initial metadata.
   pub(crate) tree: crate::resvg::usvg::Tree,
+  /// Whether rendering depends on the host `color`: the markup references
+  /// `currentColor` and the root element sets no `color` of its own.
+  uses_current_color: bool,
   /// Intrinsic dimensions (non-percentage `width`/`height`) and `viewBox`
   /// aspect ratio, for CSS `background-size`/`mask-size` resolution.
   intrinsic: SvgIntrinsic,
@@ -95,12 +99,65 @@ impl SvgSource {
     &self.source
   }
 
+  /// Markup for embedding in a vector backend, with the host `color` injected
+  /// as a root presentation attribute when `currentColor` depends on it.
+  pub fn source_with_current_color(&self, current_color: Color) -> Cow<'_, str> {
+    if !self.uses_current_color {
+      return Cow::Borrowed(&self.source);
+    }
+
+    let Some(tag_start) = self.source.find("<svg") else {
+      return Cow::Borrowed(&self.source);
+    };
+
+    let insert_at = tag_start + "<svg".len();
+
+    if !matches!(
+      self.source[insert_at..].chars().next(),
+      Some(c) if c == '>' || c == '/' || c.is_whitespace()
+    ) {
+      return Cow::Borrowed(&self.source);
+    }
+
+    let [red, green, blue, alpha] = current_color.0;
+    let mut markup = String::with_capacity(self.source.len() + 32);
+
+    markup.push_str(&self.source[..insert_at]);
+    markup.push_str(&format!(
+      " color=\"#{red:02x}{green:02x}{blue:02x}{alpha:02x}\""
+    ));
+    markup.push_str(&self.source[insert_at..]);
+    Cow::Owned(markup)
+  }
+
   /// Flattens the SVG into backend-agnostic vector drawing ops in SVG canvas
   /// coordinates. `raster_scale` is the device-pixels-per-user-unit factor
   /// used when a subtree (filters, embedded bitmaps) has to fall back to
   /// rasterization.
-  pub fn vector_ops(&self, raster_scale: f32) -> Vec<SvgOp> {
-    crate::svg_vector::flatten(&self.tree, raster_scale)
+  pub fn vector_ops(&self, raster_scale: f32, current_color: Color) -> Vec<SvgOp> {
+    match self.tree_with_current_color(current_color) {
+      Some(tree) => crate::svg_vector::flatten(&tree, raster_scale),
+      None => crate::svg_vector::flatten(&self.tree, raster_scale),
+    }
+  }
+
+  /// Re-parses the markup with `current_color` as the `currentColor` fallback.
+  /// `None` when rendering does not depend on the host color.
+  fn tree_with_current_color(&self, current_color: Color) -> Option<crate::resvg::usvg::Tree> {
+    if !self.uses_current_color {
+      return None;
+    }
+
+    let parsing = ParsingOptions {
+      allow_dtd: true,
+      ..Default::default()
+    };
+    let document = Document::parse_with_options(&self.source, parsing).ok()?;
+    let [red, green, blue, alpha] = current_color.0;
+    let mut options = svg_parse_options();
+
+    options.current_color = Some(svgtypes::Color::new_rgba(red, green, blue, alpha));
+    Tree::from_xmltree(&document, &options).ok()
   }
 }
 
@@ -402,17 +459,25 @@ impl SvgSource {
     let tree =
       Tree::from_xmltree(&document, &svg_parse_options()).map_err(ImageError::svg_parse)?;
     let intrinsic = svg_intrinsic_sizing(document.root_element(), tree.size());
+    let uses_current_color =
+      src.contains("currentColor") && document.root_element().attribute("color").is_none();
 
     Ok(SvgSource {
       source: Box::from(src),
       tree,
+      uses_current_color,
       intrinsic,
       hash,
       cache,
     })
   }
 
-  fn rasterize(&self, width: u32, height: u32) -> Result<Arc<ImageBuffer>, ImageError> {
+  fn rasterize(
+    &self,
+    width: u32,
+    height: u32,
+    current_color: Color,
+  ) -> Result<Arc<ImageBuffer>, ImageError> {
     if !within_raster_pixel_budget(width, height) {
       return Err(ImageError::InvalidPixmapSize);
     }
@@ -423,8 +488,10 @@ impl SvgSource {
     let sx = width as f32 / original_size.width();
     let sy = height as f32 / original_size.height();
 
+    let recolored = self.tree_with_current_color(current_color);
+
     render_svg_tree(
-      &self.tree,
+      recolored.as_ref().unwrap_or(&self.tree),
       Transform::from_scale(sx, sy),
       &mut pixmap.as_mut(),
     );
@@ -439,23 +506,29 @@ impl SvgSource {
     width: u32,
     height: u32,
     image_rendering: ImageScalingAlgorithm,
+    current_color: Color,
   ) -> Result<Arc<ImageBuffer>, ImageError> {
     let Some(cache) = self.cache.upgrade() else {
-      return self.rasterize(width, height);
+      return self.rasterize(width, height, current_color);
     };
 
-    let key = ResourceCacheKey::sized(self.hash, width, height, image_rendering);
+    let hash = if self.uses_current_color {
+      self.hash ^ xxh3_64(&current_color.0)
+    } else {
+      self.hash
+    };
+    let key = ResourceCacheKey::sized(hash, width, height, image_rendering);
 
     match cache.get_value_or_guard(&key, None) {
       GuardResult::Value(CacheEntry::Sized(buffer)) => Ok(buffer),
-      GuardResult::Value(_) => self.rasterize(width, height),
+      GuardResult::Value(_) => self.rasterize(width, height, current_color),
       GuardResult::Guard(guard) => {
-        let buffer = self.rasterize(width, height)?;
+        let buffer = self.rasterize(width, height, current_color)?;
         let _ = guard.insert(CacheEntry::Sized(buffer.clone()));
         Ok(buffer)
       }
       // `None` timeout never times out.
-      GuardResult::Timeout => self.rasterize(width, height),
+      GuardResult::Timeout => self.rasterize(width, height, current_color),
     }
   }
 }
@@ -571,6 +644,7 @@ impl ImageSource {
     height: u32,
     image_rendering: ImageScalingAlgorithm,
     time_ms: u64,
+    current_color: Color,
   ) -> Result<RenderedImage, ImageError> {
     match self {
       ImageSource::Bitmap(bitmap) => Ok(RenderedImage::Sampled {
@@ -609,6 +683,7 @@ impl ImageSource {
         width,
         height,
         image_rendering,
+        current_color,
       )?)),
     }
   }
@@ -1060,7 +1135,7 @@ mod resource_cache_tests {
   };
   use crate::{
     resources::{image::ImageSource, image_buffer::ImageBuffer},
-    style::ImageScalingAlgorithm,
+    style::{Color, ImageScalingAlgorithm},
   };
 
   /// PNG bytes that decode to a tiny bitmap (cacheable).
@@ -1109,7 +1184,13 @@ mod resource_cache_tests {
     height: u32,
   ) -> (std::sync::Arc<ImageBuffer>, (f32, f32)) {
     match source
-      .render_for_layout(width, height, ImageScalingAlgorithm::Auto, 0)
+      .render_for_layout(
+        width,
+        height,
+        ImageScalingAlgorithm::Auto,
+        0,
+        Color::black(),
+      )
       .unwrap()
     {
       RenderedImage::Sampled {
@@ -1196,7 +1277,13 @@ mod resource_cache_tests {
   #[cfg(feature = "svg")]
   fn rendered_raster(source: &ImageSource, width: u32, height: u32) -> std::sync::Arc<ImageBuffer> {
     match source
-      .render_for_layout(width, height, ImageScalingAlgorithm::Auto, 0)
+      .render_for_layout(
+        width,
+        height,
+        ImageScalingAlgorithm::Auto,
+        0,
+        Color::black(),
+      )
       .unwrap()
     {
       RenderedImage::Rasterized(buffer) => buffer,
@@ -1380,22 +1467,69 @@ mod tests {
     let image = ImageSource::from_bytes(svg.as_bytes())?;
 
     assert!(matches!(image, ImageSource::Svg(_)));
-    let rendered = image.render_for_layout(4, 4, ImageScalingAlgorithm::Auto, 0)?;
+    let rendered = image.render_for_layout(4, 4, ImageScalingAlgorithm::Auto, 0, Color::black())?;
     assert_eq!(premul_at(&rendered, 2, 2), [255, 0, 0, 255]);
     Ok(())
   }
 
-  // `currentColor` in an SVG loaded as an image is not resolved against the host
-  // color (matching browsers/satori); it renders as the SVG's own default, black.
+  // `currentColor` resolves against the host color, like an inline SVG
+  // inheriting `color` from its parent element.
   #[cfg(feature = "svg")]
   #[test]
-  fn svg_current_color_is_not_host_resolved() -> Result<(), ImageError> {
+  fn svg_current_color_resolves_to_host_color() -> Result<(), ImageError> {
     let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="0" y="0" width="4" height="4" fill="currentColor"/></svg>"#;
     let image = ImageSource::from_bytes(svg.as_bytes())?;
 
-    let rendered = image.render_for_layout(4, 4, ImageScalingAlgorithm::Auto, 0)?;
+    let rendered = image.render_for_layout(
+      4,
+      4,
+      ImageScalingAlgorithm::Auto,
+      0,
+      Color([255, 0, 0, 255]),
+    )?;
 
-    assert_eq!(premul_at(&rendered, 2, 2), [0, 0, 0, 255]);
+    assert_eq!(premul_at(&rendered, 2, 2), [255, 0, 0, 255]);
+    Ok(())
+  }
+
+  // A `color` attribute on the root wins over the host color, so the host
+  // never overrides what the SVG defines itself.
+  #[cfg(feature = "svg")]
+  #[test]
+  fn svg_own_color_attribute_beats_host_color() -> Result<(), ImageError> {
+    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" color="#00ff00"><rect x="0" y="0" width="4" height="4" fill="currentColor"/></svg>"##;
+    let image = ImageSource::from_bytes(svg.as_bytes())?;
+
+    let rendered = image.render_for_layout(
+      4,
+      4,
+      ImageScalingAlgorithm::Auto,
+      0,
+      Color([255, 0, 0, 255]),
+    )?;
+
+    assert_eq!(premul_at(&rendered, 2, 2), [0, 255, 0, 255]);
+    Ok(())
+  }
+
+  // The markup a vector backend embeds carries the host color as a root
+  // presentation attribute, so a standalone viewer resolves it identically.
+  #[cfg(feature = "svg")]
+  #[test]
+  fn svg_source_with_current_color_injects_root_attribute() -> Result<(), ImageError> {
+    let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="currentColor"/></svg>"#;
+    let source: SvgSource = svg.parse()?;
+
+    let injected = source.source_with_current_color(Color([255, 0, 0, 255]));
+    assert!(injected.starts_with(r##"<svg color="#ff0000ff""##));
+
+    let plain = r##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="#ff0000"/></svg>"##;
+    let source: SvgSource = plain.parse()?;
+
+    assert!(matches!(
+      source.source_with_current_color(Color([255, 0, 0, 255])),
+      Cow::Borrowed(_)
+    ));
     Ok(())
   }
 
@@ -1406,7 +1540,8 @@ mod tests {
   fn svg_text_nodes_are_ignored_not_stripped() -> Result<(), ImageError> {
     fn rendered_data(svg: &str) -> Result<Vec<u8>, ImageError> {
       let image: ImageSource = SvgSource::from_str(svg)?.into();
-      let rendered = image.render_for_layout(8, 8, ImageScalingAlgorithm::Auto, 0)?;
+      let rendered =
+        image.render_for_layout(8, 8, ImageScalingAlgorithm::Auto, 0, Color::black())?;
       let RenderedImage::Rasterized(pixmap) = rendered else {
         unreachable!("svg renders to a rasterized pixmap");
       };
@@ -1440,7 +1575,7 @@ mod tests {
     let buffer = ImageBuffer::from_rgba_bytes(bitmap.into_raw(), 2, 2).unwrap();
     let image = ImageSource::from(buffer);
 
-    let rendered = image.render_for_layout(2, 2, ImageScalingAlgorithm::Auto, 0)?;
+    let rendered = image.render_for_layout(2, 2, ImageScalingAlgorithm::Auto, 0, Color::black())?;
 
     assert!(matches!(rendered, RenderedImage::Sampled { .. }));
     Ok(())
@@ -1456,7 +1591,8 @@ mod tests {
     let buffer = ImageBuffer::from_rgba_bytes(bitmap.into_raw(), 2, 2).unwrap();
     let image = ImageSource::from(buffer);
 
-    let rendered = image.render_for_layout(4, 4, ImageScalingAlgorithm::Pixelated, 0)?;
+    let rendered =
+      image.render_for_layout(4, 4, ImageScalingAlgorithm::Pixelated, 0, Color::black())?;
     let RenderedImage::Sampled {
       width,
       height,
@@ -1481,7 +1617,8 @@ mod tests {
       .unwrap()
       .into();
 
-    let result = source.render_for_layout(4097, 4096, ImageScalingAlgorithm::Auto, 0);
+    let result =
+      source.render_for_layout(4097, 4096, ImageScalingAlgorithm::Auto, 0, Color::black());
 
     assert_matches!(result, Err(ImageError::InvalidPixmapSize));
   }
@@ -1586,7 +1723,7 @@ mod tests {
       path.display()
     );
     let source = svg.parse::<SvgSource>().unwrap();
-    let rasterized = source.rasterize(8, 8).unwrap();
+    let rasterized = source.rasterize(8, 8, Color::black()).unwrap();
 
     std::fs::remove_file(&path).ok();
 

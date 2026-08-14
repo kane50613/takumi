@@ -51,6 +51,7 @@ pub(crate) fn process_image_for_object_fit(
           content_box.height as u32,
           context.style.image_rendering,
           context.time_ms,
+          context.current_color,
         )?,
         logical_to_source: if content_box.width == 0.0 || content_box.height == 0.0 {
           Affine::IDENTITY
@@ -84,6 +85,7 @@ pub(crate) fn process_image_for_object_fit(
             new_height as u32,
             context.style.image_rendering,
             context.time_ms,
+            context.current_color,
           )?,
           logical_to_source: if new_width == 0.0 || new_height == 0.0 {
             Affine::IDENTITY
@@ -118,6 +120,7 @@ pub(crate) fn process_image_for_object_fit(
             content_box.height as u32,
             context.style.image_rendering,
             context.time_ms,
+            context.current_color,
           )?,
           logical_to_source: if new_width == 0.0 || new_height == 0.0 {
             Affine::IDENTITY
@@ -143,6 +146,7 @@ pub(crate) fn process_image_for_object_fit(
           new_height as u32,
           context.style.image_rendering,
           context.time_ms,
+          context.current_color,
         )?
       } else {
         image.render_for_layout(
@@ -150,6 +154,7 @@ pub(crate) fn process_image_for_object_fit(
           image_height as u32,
           context.style.image_rendering,
           context.time_ms,
+          context.current_color,
         )?
       };
 
@@ -190,6 +195,7 @@ pub(crate) fn process_image_for_object_fit(
               image_height as u32,
               context.style.image_rendering,
               context.time_ms,
+              context.current_color,
             )?,
             logical_to_source: source_to_intrinsic,
           },
@@ -223,6 +229,7 @@ pub(crate) fn process_image_for_object_fit(
             crop_height as u32,
             context.style.image_rendering,
             context.time_ms,
+            context.current_color,
           )?,
           logical_to_source: source_to_intrinsic * Affine::translation(crop_x, crop_y),
         },

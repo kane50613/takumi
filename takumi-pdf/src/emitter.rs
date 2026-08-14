@@ -1147,7 +1147,11 @@ impl Emitter<'_> {
       // Fallback rasters (filters, embedded bitmaps) keep the old 2x density.
       let raster_scale = 2.0 * (dw / svg_width).max(dh / svg_height);
 
-      Some((svg.vector_ops(raster_scale), svg_width, svg_height))
+      Some((
+        svg.vector_ops(raster_scale, context.current_color),
+        svg_width,
+        svg_height,
+      ))
     } else {
       None
     };

@@ -26,7 +26,7 @@ pub(crate) const PRESERVE_ASPECT_NONE: &str = "none";
 pub(crate) fn data_url_for_url(url: &str, context: &RenderContext) -> Option<String> {
   resolve_image(url, context)
     .ok()
-    .and_then(|s| loaded_data_url(&s))
+    .and_then(|s| loaded_data_url(&s, context))
 }
 
 /// Emits an image node's content into the given content-box rectangle.
@@ -81,16 +81,26 @@ fn intrinsic_size(src: &ImageSourceInput, context: &RenderContext) -> Option<(f3
 
 fn data_url(src: &ImageSourceInput, context: &RenderContext) -> Option<String> {
   match src {
-    // Embed the original encoded bytes losslessly.
-    ImageSourceInput::Buffer(bytes) => Some(to_data_url(sniff_mime(bytes), bytes)),
-    ImageSourceInput::Loaded(source) => loaded_data_url(source),
+    // Embed the original encoded bytes losslessly. SVG markup resolves into a
+    // parsed source first so the host `color` can reach `currentColor`.
+    ImageSourceInput::Buffer(bytes) => match sniff_mime(bytes) {
+      "image/svg+xml" => src
+        .resolve(context)
+        .ok()
+        .and_then(|s| loaded_data_url(&s, context)),
+      mime => Some(to_data_url(mime, bytes)),
+    },
+    ImageSourceInput::Loaded(source) => loaded_data_url(source, context),
     // Only resolvable when the render supplied a resource map (usually empty).
-    ImageSourceInput::Url(_) => src.resolve(context).ok().and_then(|s| loaded_data_url(&s)),
+    ImageSourceInput::Url(_) => src
+      .resolve(context)
+      .ok()
+      .and_then(|s| loaded_data_url(&s, context)),
     _ => None,
   }
 }
 
-fn loaded_data_url(source: &ImageSource) -> Option<String> {
+fn loaded_data_url(source: &ImageSource, context: &RenderContext) -> Option<String> {
   match source {
     ImageSource::Bitmap(buffer) => buffer
       .encode_png()
@@ -105,7 +115,12 @@ fn loaded_data_url(source: &ImageSource) -> Option<String> {
         .encode_png()
         .map(|png| to_data_url("image/png", &png))
     }
-    ImageSource::Svg(svg) => Some(to_data_url("image/svg+xml", svg.source().as_bytes())),
+    ImageSource::Svg(svg) => Some(to_data_url(
+      "image/svg+xml",
+      svg
+        .source_with_current_color(context.current_color)
+        .as_bytes(),
+    )),
     _ => None,
   }
 }
