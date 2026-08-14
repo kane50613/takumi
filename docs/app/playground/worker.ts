@@ -12,10 +12,49 @@ import type * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { evaluateCodeExports, renderReact } from "./evaluate";
 import { FONT_FAMILIES } from "./fonts";
-import { type OutputGeometry, outputGeometry } from "./geometry";
 import { inspectPdf } from "./inspect-pdf";
 import { keyframesToCss } from "./preview-css";
 import { messageSchema, type OutputKind, type RenderMessageInput } from "./schema";
+
+const DEFAULT_IMAGE_SIZE = { width: 1200, height: 630 };
+
+type PdfOptions = NonNullable<PlaygroundOptions["pdf"]>;
+
+/**
+ * What the browser preview pane and the status bar need: the box to lay the
+ * HTML out in, and a name for it. PDF output has no preview pane, so it carries
+ * a name alone.
+ */
+type OutputGeometry = {
+  width: number;
+  height?: number;
+  /** CSS `padding` shorthand mirroring the PDF page margin. */
+  padding?: string;
+  label: string;
+};
+
+function pdfLabel(pdf: PdfOptions): string {
+  if (pdf.viewport) {
+    const { width, height } = pdf.viewport;
+
+    return `${width} × ${height ?? "auto"}`;
+  }
+
+  const name =
+    typeof pdf.size === "object"
+      ? `${Math.round(pdf.size.width)} × ${Math.round(pdf.size.height)}`
+      : (pdf.size ?? "a4").toUpperCase();
+
+  return pdf.landscape ? `${name} landscape` : name;
+}
+
+function outputGeometry(options: PlaygroundOptions): OutputGeometry {
+  if (options.pdf) return { width: 0, label: pdfLabel(options.pdf) };
+
+  const { width = DEFAULT_IMAGE_SIZE.width, height = DEFAULT_IMAGE_SIZE.height } = options;
+
+  return { width, height, label: `${width} × ${height}` };
+}
 
 const fetchCache = new Map<string, Promise<ArrayBuffer>>();
 
@@ -128,17 +167,21 @@ async function renderRequest(renderer: Renderer, id: number, code: string) {
   const effectiveStylesheets = options.stylesheets ?? stylesheets;
   const geometry = outputGeometry(options);
 
-  postMessage({
-    type: "preview-result",
-    id,
-    html: renderToStaticMarkup(element),
-    width: geometry.width,
-    height: geometry.height,
-    padding: geometry.padding,
-    cssContents: options.keyframes
-      ? [...effectiveStylesheets, keyframesToCss(options.keyframes)]
-      : effectiveStylesheets,
-  });
+  // A PDF renders pages, which a single HTML flow cannot stand in for, so the
+  // playground gives the whole pane to the viewer instead.
+  if (!options.pdf) {
+    postMessage({
+      type: "preview-result",
+      id,
+      html: renderToStaticMarkup(element),
+      width: geometry.width,
+      height: geometry.height,
+      padding: geometry.padding,
+      cssContents: options.keyframes
+        ? [...effectiveStylesheets, keyframesToCss(options.keyframes)]
+        : effectiveStylesheets,
+    });
+  }
 
   const emojified = extractEmojis(node, options.emoji ?? "twemoji");
   const resources = await loadResources(emojified, effectiveStylesheets);

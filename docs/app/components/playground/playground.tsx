@@ -164,7 +164,7 @@ export default function Playground() {
   );
   const splitPreview = (
     <ResizablePanelGroup orientation="vertical">
-      <ResizablePanel defaultSize={50} minSize={20}>
+      <ResizablePanel defaultSize={outputKind === "pdf" ? 100 : 50} minSize={20}>
         <LabeledPane
           label={outputKind === "pdf" ? "Takumi PDF" : "Takumi"}
           icon={AxeIcon}
@@ -204,12 +204,16 @@ export default function Playground() {
           {takumiPane}
         </LabeledPane>
       </ResizablePanel>
-      <ResizableHandle withHandle className="hover:bg-primary/50 transition-colors" />
-      <ResizablePanel defaultSize={50} minSize={20}>
-        <LabeledPane label="Browser" icon={GlobeIcon}>
-          {browserPane}
-        </LabeledPane>
-      </ResizablePanel>
+      {outputKind !== "pdf" && (
+        <>
+          <ResizableHandle withHandle className="hover:bg-primary/50 transition-colors" />
+          <ResizablePanel defaultSize={50} minSize={20}>
+            <LabeledPane label="Browser" icon={GlobeIcon}>
+              {browserPane}
+            </LabeledPane>
+          </ResizablePanel>
+        </>
+      )}
     </ResizablePanelGroup>
   );
 

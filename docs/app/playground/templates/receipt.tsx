@@ -35,8 +35,6 @@ export default function Receipt() {
 }
 
 export const options: PlaygroundOptions = {
-  // A viewport without a height gives one page sized to the content, like a
-  // thermal receipt roll.
   pdf: {
     viewport: { width: 320 },
     metadata: { title: "窯咖啡 · 訂單 A-1182", creationDate: "2026-03-01" },
