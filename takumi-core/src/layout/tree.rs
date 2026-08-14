@@ -20,14 +20,15 @@ use crate::{
       InlineContentKind, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
       collect_inline_items, create_inline_constraint, create_inline_layout, measure_inline_layout,
     },
+    list_marker::{first_list_item_ordinal, list_item_ordinal, list_marker},
     node::{Node, NodeStyleLayers},
   },
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
   style::{
     BackgroundImage, BackgroundImages, BlendMode, BoxSizing, Color, ComputedStyle, ContentItem,
-    ContentValue, Display, Filters, Float, Isolation, Length, LineHeight, PercentageNumber,
-    Position, SizingContext, Style as NodeStyle, StyleDeclaration, StyleSheet, TextWrapMode,
-    WhiteSpaceCollapse, apply_stylesheet_animations,
+    ContentValue, Display, Filters, Float, Isolation, Length, LineHeight, ListStylePosition,
+    PercentageNumber, Position, SizingContext, Style as NodeStyle, StyleDeclaration, StyleSheet,
+    TextWrapMode, WhiteSpaceCollapse, apply_stylesheet_animations,
   },
   viewport::Viewport,
 };
@@ -265,7 +266,7 @@ fn registered_custom_property_parent_style<'a>(
   Cow::Owned(adjusted_parent)
 }
 
-fn pseudo_computed_style(
+pub(super) fn pseudo_computed_style(
   parent_context: &RenderContext,
   pseudo_matched: &MatchedDeclarationsView<'_>,
 ) -> (ComputedStyle, SizingContext, Color) {
@@ -901,9 +902,11 @@ impl RenderNode {
     context
   }
 
-  fn anonymous_text_item(parent_context: &RenderContext, text: String) -> Self {
-    let context = Self::anonymous_box_context(parent_context);
+  pub(super) fn anonymous_text_item(parent_context: &RenderContext, text: String) -> Self {
+    Self::text_item(Self::anonymous_box_context(parent_context), text)
+  }
 
+  fn text_item(context: RenderContext, text: String) -> Self {
     Self {
       context,
       node: None,
@@ -931,7 +934,10 @@ impl RenderNode {
     }
   }
 
-  fn anonymous_image_item(parent_context: &RenderContext, image: BackgroundImage) -> Self {
+  pub(super) fn anonymous_image_item(
+    parent_context: &RenderContext,
+    image: BackgroundImage,
+  ) -> Self {
     // Cap image content to the parent pseudo's box so explicit `width` / `height`
     // on the pseudo wins over intrinsic / default sizing.
     let max_size = TaffySize {
@@ -972,6 +978,28 @@ impl RenderNode {
         }
       }
     }
+  }
+
+  /// An element's own text, moved into a child so generated content can precede
+  /// it. Text decorations do not inherit, so they are propagated the way CSS
+  /// propagates them to an anonymous descendant.
+  fn generated_sibling_text(parent_context: &RenderContext, text: String) -> Self {
+    let (mut style, sizing, current_color) =
+      pseudo_computed_style(parent_context, &MatchedDeclarationsView::default());
+    let parent_style = &parent_context.style;
+
+    style
+      .text_decoration_line
+      .clone_from(&parent_style.text_decoration_line);
+    style.text_decoration_style = parent_style.text_decoration_style;
+    style
+      .text_decoration_color
+      .clone_from(&parent_style.text_decoration_color);
+    style.text_decoration_thickness = parent_style.text_decoration_thickness;
+
+    let context = RenderContext::from_parent(parent_context, style, sizing, current_color);
+
+    Self::text_item(context, text)
   }
 
   fn pseudo_content_child(
@@ -1037,6 +1065,40 @@ impl RenderNode {
       anonymous_text_content: None,
       force_inline_layout: false,
     })
+  }
+
+  /// A block box holding the line an outside marker belongs on. A list item is
+  /// excluded: its own marker already holds the start of that line.
+  fn can_host_marker(&self) -> bool {
+    self.context.style.display == Display::Block
+      && self.context.style.float == Float::None
+      && (self.node.as_ref().is_some_and(Node::has_text)
+        || self.children.as_deref().is_some_and(|children| {
+          children
+            .iter()
+            .find(|child| !child.is_out_of_flow())
+            .is_some_and(RenderNode::participates_in_inflow_inline_formatting_context)
+        }))
+  }
+
+  /// The host's children, with any folded text handed back as a child so the
+  /// marker can precede it.
+  fn take_marker_host_children(&mut self) -> Vec<RenderNode> {
+    let mut children = Vec::from(self.children.take().unwrap_or_default());
+
+    if let Some(text) = self.node.as_mut().and_then(Node::take_text) {
+      children.insert(0, Self::generated_sibling_text(&self.context, text));
+    }
+
+    children
+  }
+
+  fn text_content_mut(&mut self) -> Option<&mut String> {
+    if let Some(text) = self.anonymous_text_content.as_mut() {
+      return Some(text);
+    }
+
+    self.node.as_mut().and_then(Node::text_mut)
   }
 
   fn is_anonymous_text_item(&self) -> bool {
@@ -1122,7 +1184,7 @@ impl RenderNode {
     self.force_inline_layout
       || (matches!(
         self.context.style.display,
-        Display::Block | Display::InlineBlock
+        Display::Block | Display::InlineBlock | Display::ListItem
       ) && self.children.as_ref().is_some_and(|children| {
         children
           .iter()
@@ -1161,6 +1223,8 @@ impl RenderNode {
       pending_children: IntoIter<Node>,
       rendered_children: Vec<RenderNode>,
       pseudo_after: Option<RenderNode>,
+      next_list_item_ordinal: i32,
+      marker_ordinal: Option<i32>,
     }
 
     fn next_preorder_index(preorder_cursor: &mut usize) -> usize {
@@ -1271,6 +1335,7 @@ impl RenderNode {
       mut node: Node,
       matched_declarations: &[NodeMatchedDeclarations<'_>],
       preorder_cursor: &mut usize,
+      next_ordinal: &mut i32,
     ) -> PendingRenderNode {
       let node_index = next_preorder_index(preorder_cursor);
       let (style, sizing, current_color) =
@@ -1279,6 +1344,8 @@ impl RenderNode {
       let context = RenderContext::from_parent(parent_context, style, sizing, current_color);
 
       let element_matched = matched_declarations.get(node_index);
+      let marker_ordinal = (context.style.display == Display::ListItem)
+        .then(|| list_item_ordinal(&node, next_ordinal));
       let pseudo_before = element_matched
         .and_then(|m| m.before())
         .and_then(|m| RenderNode::from_pseudo_match(&context, &node, m));
@@ -1286,28 +1353,38 @@ impl RenderNode {
         .and_then(|m| m.after())
         .and_then(|m| RenderNode::from_pseudo_match(&context, &node, m));
 
-      let has_pseudo = pseudo_before.is_some() || pseudo_after.is_some();
-      let mut rendered_children = Vec::with_capacity(children.len() + 2);
-      if let Some(before) = pseudo_before {
-        rendered_children.push(before);
+      let leads_with_generated_content = marker_ordinal.is_some() || pseudo_before.is_some();
+      let has_generated_children = leads_with_generated_content || pseudo_after.is_some();
+      let mut rendered_children = Vec::with_capacity(children.len() + 3);
+      rendered_children.extend(pseudo_before);
+
+      // The inline collector emits an element's own text before any child, so
+      // an element that folded its text has to hand it back as a child for the
+      // generated content to come first.
+      if leads_with_generated_content && let Some(text) = node.take_text() {
+        rendered_children.push(RenderNode::generated_sibling_text(&context, text));
       }
 
       PendingRenderNode {
+        children_is_some: children_is_some || has_generated_children,
+        next_list_item_ordinal: first_list_item_ordinal(&node),
         context,
         node,
-        children_is_some: children_is_some || has_pseudo,
         rendered_children,
         pending_children: children.into_iter(),
         pseudo_after,
+        marker_ordinal,
       }
     }
 
     let mut preorder_cursor = 0;
+    let mut root_ordinal = 1;
     let mut stack = vec![build_pending_node(
       parent_context,
       root,
       matched_declarations,
       &mut preorder_cursor,
+      &mut root_ordinal,
     )];
 
     loop {
@@ -1328,6 +1405,7 @@ impl RenderNode {
           child,
           matched_declarations,
           &mut preorder_cursor,
+          &mut current.next_list_item_ordinal,
         );
         stack.push(child_pending);
         continue;
@@ -1377,11 +1455,20 @@ impl RenderNode {
           // whitespace-only text renders only after an in-flow inline-level
           // sibling, and leading whitespace only inside an inline parent
           // (#711, #992).
-          children = drop_collapsible_boundary_whitespace(
+          let mut collapsed = drop_collapsible_boundary_whitespace(
             Vec::from(children),
             finished.context.style.display.is_inline(),
-          )
-          .into_boxed_slice();
+          );
+
+          // Prepended after the collapse so the marker does not keep the
+          // item's leading whitespace alive.
+          if let Some(ordinal) = finished.marker_ordinal
+            && let Some(marker) = list_marker(&finished.context, ordinal)
+          {
+            insert_marker(&mut collapsed, marker);
+          }
+
+          children = collapsed.into_boxed_slice();
 
           // https://github.com/kane50613/takumi/issues/738: out-of-flow boxes
           // must not be swept into an anonymous block box.
@@ -1919,6 +2006,44 @@ fn flush_inline_group(
     parent_render_context,
     take(inline_group),
   ));
+}
+
+/// The whitespace CSS collapses, matching [`Node::is_whitespace_only_text`].
+const COLLAPSIBLE_WHITESPACE: [char; 5] = [' ', '\t', '\n', '\r', '\u{c}'];
+
+/// Blink positions an outside marker against the item's first line box, so a
+/// marker whose siblings are all block-level moves into the block that holds
+/// that line. An inside marker is the item's own content and stays put.
+fn insert_marker(children: &mut Vec<RenderNode>, marker: RenderNode) {
+  let host = (marker.context.style.list_style_position == ListStylePosition::Outside)
+    .then(|| children.iter_mut().find(|child| !child.is_out_of_flow()))
+    .flatten()
+    .filter(|child| child.can_host_marker());
+
+  if let Some(host) = host {
+    let mut hosted = host.take_marker_host_children();
+    place_marker(&mut hosted, marker);
+    host.children = Some(hosted.into_boxed_slice());
+    return;
+  }
+
+  place_marker(children, marker);
+}
+
+/// A marker holds the start of the line, so whitespace that the line start
+/// would have collapsed is trimmed against the marker instead.
+fn place_marker(children: &mut Vec<RenderNode>, marker: RenderNode) {
+  if let Some(first) = children
+    .iter_mut()
+    .find(|child| !child.is_out_of_flow() && child.context.style.float == Float::None)
+    && first.context.style.white_space_collapse == WhiteSpaceCollapse::Collapse
+    && let Some(text) = first.text_content_mut()
+  {
+    let leading = text.len() - text.trim_start_matches(COLLAPSIBLE_WHITESPACE).len();
+    text.drain(..leading);
+  }
+
+  children.insert(0, marker);
 }
 
 // Mirrors Blink's Text::TextLayoutObjectIsNeeded, minus the ends-with-space

@@ -106,23 +106,26 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
   ul: {
     marginTop: "1em",
     marginBottom: "1em",
-    paddingLeft: 40,
+    paddingInlineStart: 40,
     display: "block",
+    listStyleType: "disc",
   },
   ol: {
     marginTop: "1em",
     marginBottom: "1em",
-    paddingLeft: 40,
+    paddingInlineStart: 40,
     display: "block",
+    listStyleType: "decimal",
   },
   menu: {
     marginTop: "1em",
     marginBottom: "1em",
-    paddingLeft: 40,
+    paddingInlineStart: 40,
     display: "block",
+    listStyleType: "disc",
   },
   li: {
-    display: "block",
+    display: "list-item",
   },
   dl: {
     marginTop: "1em",

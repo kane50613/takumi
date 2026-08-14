@@ -1,0 +1,293 @@
+use taffy::{Dimension, LengthPercentageAuto, Size as TaffySize};
+
+use crate::{
+  context::RenderContext,
+  layout::{
+    node::Node,
+    tree::{RenderNode, pseudo_computed_style},
+  },
+  matching::MatchedDeclarationsView,
+  style::{
+    BackgroundImage, Direction, Display, JustifyContent, Length, ListStylePosition, MakeComputed,
+    TextWrapMode, WhiteSpaceCollapse,
+  },
+};
+
+/// Blink's gap between a marker image and the item's content.
+const MARKER_IMAGE_GAP_PX: f32 = 7.0;
+
+/// The marker box of a `display: list-item` box, per css-lists-3 §3.
+pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<RenderNode> {
+  let is_rtl = item_context.style.direction == Direction::Rtl;
+  let (mut style, sizing, current_color) =
+    pseudo_computed_style(item_context, &MatchedDeclarationsView::default());
+
+  style.white_space_collapse = WhiteSpaceCollapse::Preserve;
+  style.text_wrap_mode = TextWrapMode::NoWrap;
+  style.display = Display::InlineFlex;
+  style.justify_content = if is_rtl {
+    JustifyContent::Start
+  } else {
+    JustifyContent::End
+  };
+
+  // An outside marker hangs at the item's content edge without taking width:
+  // a zero-width flex box ends its overflowing content there.
+  if item_context.style.list_style_position == ListStylePosition::Outside {
+    style.width = Length::zero();
+  }
+
+  let context = RenderContext::from_parent(item_context, style, sizing, current_color);
+  let mut content = match item_context.style.list_style_image.image() {
+    Some(image) => marker_image(&context, image.clone(), is_rtl),
+    None => {
+      let text = item_context.style.list_style_type.marker_text(ordinal)?;
+      RenderNode::anonymous_text_item(&context, text)
+    }
+  };
+
+  if let Some(layout_style) = &mut content.layout_style_override {
+    layout_style.flex_shrink = 0.0;
+  }
+
+  Some(RenderNode {
+    context,
+    node: Some(Node::container([])),
+    children: Some(Box::new([content])),
+    layout_style_override: None,
+    anonymous_text_content: None,
+    force_inline_layout: false,
+  })
+}
+
+/// A marker image keeps its natural size; one without falls back to half the
+/// font size, as Blink does with half the ascent.
+fn marker_image(context: &RenderContext, mut image: BackgroundImage, is_rtl: bool) -> RenderNode {
+  let has_natural_size = matches!(image, BackgroundImage::Url(_));
+
+  // Inheriting the image shares it, so its lengths resolve here rather than
+  // once per node that inherited it.
+  image.make_computed(&context.sizing);
+
+  let mut item = RenderNode::anonymous_image_item(context, image);
+
+  if let Some(layout_style) = &mut item.layout_style_override {
+    layout_style.max_size = TaffySize::auto();
+
+    // A margin on the image keeps the marker box itself zero-width.
+    let gap = LengthPercentageAuto::length(MARKER_IMAGE_GAP_PX);
+    if is_rtl {
+      layout_style.margin.left = gap;
+    } else {
+      layout_style.margin.right = gap;
+    }
+
+    if !has_natural_size {
+      let side = Dimension::length(context.sizing.font_size / 2.0);
+      layout_style.size = TaffySize {
+        width: side,
+        height: side,
+      };
+    }
+  }
+
+  item
+}
+
+/// The item's own `value` attribute, else the list's running count.
+pub(super) fn list_item_ordinal(node: &Node, next_ordinal: &mut i32) -> i32 {
+  let ordinal = attribute_number(node, "value").unwrap_or(*next_ordinal);
+  *next_ordinal = ordinal.saturating_add(1);
+  ordinal
+}
+
+pub(super) fn first_list_item_ordinal(node: &Node) -> i32 {
+  attribute_number(node, "start").unwrap_or(1)
+}
+
+fn attribute_number(node: &Node, name: &str) -> Option<i32> {
+  node
+    .attribute(name)
+    .and_then(|value| value.trim().parse::<i32>().ok())
+}
+
+#[cfg(test)]
+mod tests {
+  use std::{collections::BTreeMap, sync::Arc};
+
+  use taffy::Dimension;
+
+  use crate::{
+    context::RenderContext,
+    layout::{
+      node::{Node, NodeKind},
+      tree::RenderNode,
+    },
+    resources::font::Fonts,
+    style::{SizingContext, StyleSheet},
+    viewport::Viewport,
+  };
+
+  fn attributes(pairs: &[(&str, &str)]) -> BTreeMap<Box<str>, Box<str>> {
+    pairs
+      .iter()
+      .map(|(name, value)| ((*name).into(), (*value).into()))
+      .collect()
+  }
+
+  fn render_tree(root: Node, css: &str) -> RenderNode {
+    let stylesheet = StyleSheet::parse(css).expect("stylesheet parses");
+    let fonts = Fonts::default();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::default())
+          .build(),
+      )
+      .stylesheet(Arc::new(stylesheet))
+      .build();
+
+    RenderNode::from_node(&context, root)
+  }
+
+  fn text_runs(node: &RenderNode) -> Vec<String> {
+    let mut collected: Vec<String> = node.anonymous_text_content.clone().into_iter().collect();
+
+    for child in node.children.iter().flat_map(|children| children.iter()) {
+      collected.extend(text_runs(child));
+    }
+
+    collected
+  }
+
+  fn markers(root: Node, css: &str) -> Vec<String> {
+    text_runs(&render_tree(root, css))
+  }
+
+  fn first_child(node: &RenderNode) -> &RenderNode {
+    &node.children.as_deref().expect("children")[0]
+  }
+
+  fn item(children: impl Into<Vec<Node>>) -> Node {
+    Node::container(children).with_class_name("item")
+  }
+
+  const LIST_CSS: &str = ".list { list-style-type: decimal } .item { display: list-item }";
+
+  #[test]
+  fn items_are_numbered_in_document_order() {
+    let list = Node::container([item([]), item([]), item([])]).with_class_name("list");
+
+    assert_eq!(markers(list, LIST_CSS), ["1. ", "2. ", "3. "]);
+  }
+
+  #[test]
+  fn a_nested_list_restarts_at_one() {
+    let list = Node::container([
+      item([]),
+      item([Node::container([item([]), item([])]).with_class_name("list")]),
+    ])
+    .with_class_name("list");
+
+    assert_eq!(markers(list, LIST_CSS), ["1. ", "2. ", "1. ", "2. "]);
+  }
+
+  #[test]
+  fn start_and_value_attributes_move_the_count() {
+    let list = Node::container([
+      item([]),
+      item([]).with_attributes(attributes(&[("value", "9")])),
+      item([]),
+    ])
+    .with_class_name("list")
+    .with_attributes(attributes(&[("start", "3")]));
+
+    assert_eq!(markers(list, LIST_CSS), ["3. ", "9. ", "10. "]);
+  }
+
+  #[test]
+  fn a_none_counter_style_generates_no_marker() {
+    let list = Node::container([item([])]).with_class_name("list");
+    let css = ".list { list-style-type: none } .item { display: list-item }";
+
+    assert!(markers(list, css).is_empty());
+  }
+
+  /// A text list item folds its text into the item node, and the marker still
+  /// has to come first.
+  #[test]
+  fn a_folded_text_item_keeps_the_marker_first() {
+    let list =
+      Node::container([Node::text("line 1").with_class_name("item")]).with_class_name("list");
+
+    let tree = render_tree(list, LIST_CSS);
+    let children = first_child(&tree)
+      .children
+      .as_deref()
+      .expect("marker and text");
+
+    assert_eq!(text_runs(&children[0]), ["1. "]);
+    assert_eq!(text_runs(&children[1]), ["line 1"]);
+  }
+
+  /// Blink puts an outside marker on the item's first line, which for
+  /// block-level content lives inside the first block.
+  #[test]
+  fn a_block_only_item_hosts_the_marker_in_its_first_block() {
+    let list = Node::container([item([
+      Node::container([Node::text("hello")]).with_class_name("block")
+    ])])
+    .with_class_name("list");
+    let css = format!("{LIST_CSS} .block {{ display: block }}");
+
+    let tree = render_tree(list, &css);
+    let block = &tree.children.as_deref().expect("items")[0]
+      .children
+      .as_deref()
+      .expect("block child")[0];
+    let block_children = block.children.as_deref().expect("marker and text");
+
+    assert_eq!(text_runs(&block_children[0]), ["1. "]);
+    assert!(matches!(
+      block_children[1].node.as_ref().map(|node| &node.kind),
+      Some(NodeKind::Text(text)) if text.text == "hello"
+    ));
+  }
+
+  /// An image marker replaces the counter style, even when that style is `none`.
+  #[test]
+  fn a_marker_image_becomes_an_image_child() {
+    let list = Node::container([item([])]).with_class_name("list");
+    let css =
+      ".list { list-style: none url(bullet.png) } .item { display: list-item; font-size: 20px }";
+
+    let tree = render_tree(list, css);
+    let marker_image = first_child(first_child(first_child(&tree)));
+
+    assert!(marker_image.anonymous_text_content.is_none());
+    assert!(matches!(
+      marker_image.node.as_ref().map(|node| &node.kind),
+      Some(NodeKind::Image(_))
+    ));
+  }
+
+  /// A gradient has no natural size, so the marker falls back to half the font size.
+  #[test]
+  fn a_gradient_marker_image_takes_half_the_font_size() {
+    let list = Node::container([item([])]).with_class_name("list");
+    let css = ".list { list-style-image: radial-gradient(red, blue) }                .item { display: list-item; font-size: 20px }";
+
+    let tree = render_tree(list, css);
+    let marker_image = first_child(first_child(first_child(&tree)));
+    let size = marker_image
+      .layout_style_override
+      .as_ref()
+      .expect("layout style")
+      .size;
+
+    assert_eq!(size.width, Dimension::length(10.0));
+    assert_eq!(size.height, Dimension::length(10.0));
+    assert!(marker_image.context.style.background_image.is_some());
+  }
+}

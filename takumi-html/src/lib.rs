@@ -76,17 +76,17 @@ const DEFAULT_PRESETS: &[(&str, &str)] = &[
   ),
   (
     "ul",
-    "margin-top:1em;margin-bottom:1em;padding-left:40px;display:block",
+    "margin-top:1em;margin-bottom:1em;padding-inline-start:40px;display:block;list-style-type:disc",
   ),
   (
     "ol",
-    "margin-top:1em;margin-bottom:1em;padding-left:40px;display:block",
+    "margin-top:1em;margin-bottom:1em;padding-inline-start:40px;display:block;list-style-type:decimal",
   ),
   (
     "menu",
-    "margin-top:1em;margin-bottom:1em;padding-left:40px;display:block",
+    "margin-top:1em;margin-bottom:1em;padding-inline-start:40px;display:block;list-style-type:disc",
   ),
-  ("li", "display:block"),
+  ("li", "display:list-item"),
   ("dl", "margin-top:1em;margin-bottom:1em;display:block"),
   ("dt", "display:block"),
   ("dd", "margin-left:40px;display:block"),
@@ -628,6 +628,27 @@ mod tests {
       assert!(
         !style.declarations.is_empty(),
         "preset `{tag}` produced no declarations",
+      );
+    }
+  }
+
+  /// A list needs the counter style on the list and `display: list-item` on the
+  /// item for the renderer to draw a marker.
+  #[test]
+  fn list_presets_carry_the_marker_styles() {
+    for (tag, expected) in [
+      ("ol", "list-style-type:decimal"),
+      ("ul", "list-style-type:disc"),
+      ("li", "display:list-item"),
+    ] {
+      let (_, css) = DEFAULT_PRESETS
+        .iter()
+        .find(|(name, _)| *name == tag)
+        .expect("preset present");
+
+      assert!(
+        css.contains(expected),
+        "preset `{tag}` is missing `{expected}`"
       );
     }
   }

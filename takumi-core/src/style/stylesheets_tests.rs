@@ -84,6 +84,22 @@ fn test_deserialize_numeric_opacity_preserves_fraction() -> Result<(), serde_jso
   Ok(())
 }
 
+/// The JSX presets ship these as a camel-case style object.
+#[test]
+fn test_deserialize_list_style_properties() -> Result<(), serde_json::Error> {
+  let style = from_value::<Style>(json!({
+    "display": "list-item",
+    "listStyleType": "decimal",
+    "listStylePosition": "inside",
+  }))?;
+  let computed = style.inherit(&ComputedStyle::default());
+
+  assert_eq!(computed.display, Display::ListItem);
+  assert_eq!(computed.list_style_type, ListStyleType::Decimal);
+  assert_eq!(computed.list_style_position, ListStylePosition::Inside);
+  Ok(())
+}
+
 #[test]
 fn test_deserialize_skips_null_declarations() -> Result<(), serde_json::Error> {
   let style = from_value::<Style>(json!({ "color": null, "opacity": 0.3 }))?;

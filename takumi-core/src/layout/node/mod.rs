@@ -4,6 +4,7 @@ mod text;
 
 use std::{
   collections::BTreeMap,
+  mem::take,
   sync::{Arc, Weak},
 };
 
@@ -388,6 +389,30 @@ impl Node {
 
   pub(crate) fn children_ref(&self) -> Option<&[Node]> {
     container_children_ref(&self.kind)
+  }
+
+  pub(crate) fn has_text(&self) -> bool {
+    matches!(self.kind, NodeKind::Text(_))
+  }
+
+  pub(crate) fn text_mut(&mut self) -> Option<&mut String> {
+    match &mut self.kind {
+      NodeKind::Text(data) => Some(&mut data.text),
+      _ => None,
+    }
+  }
+
+  /// Takes the node's own text, leaving an empty container behind.
+  pub(crate) fn take_text(&mut self) -> Option<String> {
+    let NodeKind::Text(data) = &mut self.kind else {
+      return None;
+    };
+    let text = take(&mut data.text);
+    self.kind = NodeKind::Container {
+      children: Vec::new(),
+    };
+
+    Some(text)
   }
 
   pub(crate) fn take_children(&mut self) -> Option<Box<[Node]>> {

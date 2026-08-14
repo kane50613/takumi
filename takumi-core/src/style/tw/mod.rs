@@ -320,6 +320,10 @@ pub(crate) enum TailwindProperty {
   ShadowColor(ColorInput),
   /// `display` property.
   Display(Display),
+  /// `list-style-type` property.
+  ListStyleType(ListStyleType),
+  /// `list-style-position` property.
+  ListStylePosition(ListStylePosition),
   /// `object-position` property.
   ObjectPosition(PositionValue),
   /// `object-fit` property.
@@ -938,6 +942,12 @@ impl TailwindProperty {
       TailwindProperty::ShadowColor(color) => builder.set_shadow_color(color, important),
       TailwindProperty::Display(display) => {
         push_decl!(builder, important, display(display));
+      }
+      TailwindProperty::ListStyleType(style_type) => {
+        push_decl!(builder, important, list_style_type(style_type));
+      }
+      TailwindProperty::ListStylePosition(position) => {
+        push_decl!(builder, important, list_style_position(position));
       }
       TailwindProperty::OverflowX(overflow) => push_decl!(builder, important, overflow_x(overflow)),
       TailwindProperty::OverflowY(overflow) => push_decl!(builder, important, overflow_y(overflow)),

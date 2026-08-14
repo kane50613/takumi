@@ -1,17 +1,8 @@
-use std::collections::BTreeMap;
-
 use takumi::prelude::*;
 
 use crate::test_utils::{
-  CONTEXT, TEST_IMAGES, create_test_viewport, run_fixture_test_with_options,
+  CONTEXT, TEST_IMAGES, attrs, create_test_viewport, run_fixture_test_with_options,
 };
-
-fn attrs(pairs: &[(&str, &str)]) -> BTreeMap<Box<str>, Box<str>> {
-  pairs
-    .iter()
-    .map(|(k, v)| ((*k).into(), (*v).into()))
-    .collect()
-}
 
 fn cell(class: &str, label: &str, seed: &str) -> Node {
   Node::container([

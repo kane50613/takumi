@@ -43,6 +43,7 @@ mod length;
 mod line_clamp;
 mod line_height;
 pub(crate) mod linear_gradient;
+mod list_style;
 mod max_size;
 mod offset_path;
 mod order;
@@ -118,6 +119,7 @@ pub use linear_gradient::{
   Angle, GradientKeywordDirection, GradientStop, HorizontalKeyword, LinearGradient,
   LinearGradientDirection, ResolvedGradientStop, StopPosition, VerticalKeyword,
 };
+pub use list_style::*;
 pub use max_size::*;
 pub use offset_path::*;
 pub use order::*;
@@ -875,6 +877,8 @@ pub enum Display {
   Block,
   /// The element generates an inline-level block container
   InlineBlock,
+  /// The element creates a block container that also generates a list marker
+  ListItem,
 }
 
 declare_enum_from_css_impl!(
@@ -886,7 +890,8 @@ declare_enum_from_css_impl!(
   "inline-grid" => Display::InlineGrid,
   "inline" => Display::Inline,
   "block" => Display::Block,
-  "inline-block" => Display::InlineBlock
+  "inline-block" => Display::InlineBlock,
+  "list-item" => Display::ListItem
 );
 
 impl Display {
@@ -933,7 +938,9 @@ impl Display {
     match self {
       Display::Flex | Display::InlineFlex => taffy::Display::Flex,
       Display::Grid | Display::InlineGrid => taffy::Display::Grid,
-      Display::Block | Display::InlineBlock | Display::Inline => taffy::Display::Block,
+      Display::Block | Display::InlineBlock | Display::Inline | Display::ListItem => {
+        taffy::Display::Block
+      }
       Display::None => taffy::Display::None,
     }
   }
