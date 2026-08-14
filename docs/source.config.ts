@@ -1,3 +1,4 @@
+import { transformerMetaHighlight } from "@shikijs/transformers";
 import {
   defaultStringifier,
   rehypeCodeDefaultOptions,
@@ -59,6 +60,7 @@ export default defineConfig({
       langs: ["ts", "tsx", "js", "svelte", "astro"],
       transformers: [
         ...(rehypeCodeDefaultOptions.transformers ?? []),
+        transformerMetaHighlight(),
         transformerTwoslash({
           twoslashOptions: {
             compilerOptions: {
