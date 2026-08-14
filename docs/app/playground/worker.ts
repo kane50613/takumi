@@ -40,7 +40,10 @@ let renderer: Renderer | undefined;
 let pdfRenderer: Promise<PdfRenderer> | undefined;
 
 function loadPdfRenderer() {
-  pdfRenderer ??= import("takumi-pdf").then(async ({ default: initPdf, PdfRenderer }) => {
+  // `no-init` skips the bundler entry that instantiates the module for you: the
+  // worker already has the asset URL, and that entry needs top-level await,
+  // which an iife worker bundle cannot have.
+  pdfRenderer ??= import("takumi-pdf/no-init").then(async ({ default: initPdf, PdfRenderer }) => {
     await initPdf({ module_or_path: pdfWasm });
     return new PdfRenderer();
   });
