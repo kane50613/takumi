@@ -102,6 +102,16 @@
       "types": "./pkg/takumi_wasm_bg.wasm.d.ts",
       "default": "./pkg/takumi_wasm_bg.wasm"
     },
+    "./wasm-url": {
+      "import": {
+        "types": "./bundlers/wasm-url.d.ts",
+        "default": "./bundlers/wasm-url.mjs"
+      },
+      "require": {
+        "types": "./bundlers/wasm-url.d.cts",
+        "default": "./bundlers/wasm-url.cjs"
+      }
+    },
     "./next": {
       "types": "./bundlers/wasm-module.d.ts",
       "default": "./bundlers/next.mjs"

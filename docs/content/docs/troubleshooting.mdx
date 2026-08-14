@@ -25,6 +25,28 @@ export function GET() {
 
 If the issue persists, file an issue on [our GitHub repository](https://github.com/kane50613/takumi/issues).
 
+## Browser Issues
+
+### Export default doesn't exist in target module
+
+`takumi-js/wasm` picks its wasm loader from the export conditions the bundler sets.
+Vite, webpack, and Turbopack set the same conditions for a browser build.
+All three land on the Vite entry, and its `?url` import only works in Vite.
+
+Load the binary yourself instead:
+
+```ts
+import wasmUrl from "takumi-js/wasm-url";
+import { init, Renderer } from "takumi-js/wasm/no-init";
+
+await init({ module_or_path: wasmUrl });
+```
+
+`takumi-js/wasm-url` resolves the binary with `new URL(specifier, import.meta.url)`.
+Vite, webpack, Turbopack, and Rollup all understand that syntax.
+
+`@takumi-rs/wasm` and `takumi-pdf` export `wasm-url` too.
+
 ## Node.js Issues
 
 ### Cannot find native binding

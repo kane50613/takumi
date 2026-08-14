@@ -110,3 +110,28 @@ const pdf = await renderer.render(doc);
 ```
 
 Registered fonts deduplicate across calls. Rendering many documents pays the font cost once.
+
+## Runtimes
+
+`takumi-pdf` ships as WebAssembly. It runs on Node.js, Bun, and Cloudflare Workers.
+The module fits the Workers free-tier size limit.
+Import `takumi-pdf/no-init` to instantiate the wasm yourself.
+
+### In the browser
+
+The default entry picks its loader from the export conditions the bundler sets.
+Vite, webpack, and Turbopack set the same conditions for a browser build.
+All three land on the Vite entry, and its `?url` import only works in Vite.
+
+Load the binary yourself instead:
+
+```ts
+import init, { render } from "takumi-pdf/no-init";
+import wasmUrl from "takumi-pdf/wasm-url";
+
+await init({ module_or_path: wasmUrl });
+```
+
+`takumi-pdf/wasm-url` resolves the binary with `new URL(specifier, import.meta.url)`.
+Vite, webpack, Turbopack, and Rollup all understand that syntax.
+The module has no top-level `await`, so it also works in a worker bundled as an IIFE.

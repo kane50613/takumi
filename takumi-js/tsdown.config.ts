@@ -6,6 +6,7 @@ export default defineConfig({
     response: "src/response/index.ts",
     node: "src/node/index.ts",
     wasm: "src/wasm/index.ts",
+    "wasm/no-init": "src/wasm/no-init.ts",
     "backend/node": "src/backend/node.ts",
     "backend/wasm": "src/backend/wasm.ts",
     "helpers/index": "src/helpers/index.ts",
