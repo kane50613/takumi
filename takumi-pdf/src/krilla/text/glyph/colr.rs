@@ -336,7 +336,7 @@ impl ColorPainter for ColrBuilder {
 
     let Ok(_) = outline_glyph.draw(
       DrawSettings::unhinted(skrifa::instance::Size::unscaled(), self.font.location_ref()),
-      &mut glyph_builder,
+      &mut takumi_core::resources::glyph::ErasedPen(&mut glyph_builder),
     ) else {
       self.error = true;
       return;
