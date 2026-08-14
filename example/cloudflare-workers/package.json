@@ -11,8 +11,7 @@
   },
   "dependencies": {
     "react": "catalog:",
-    "takumi-js": "workspace:*",
-    "takumi-template": "workspace:*"
+    "takumi-js": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "catalog:",
