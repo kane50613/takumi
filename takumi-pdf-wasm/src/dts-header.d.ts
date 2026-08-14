@@ -56,8 +56,22 @@ export type ViewportInput = { width: number; height?: number };
 /** A page size: a preset name (case-insensitive) or explicit dimensions. */
 export type PageSize = "a4" | "letter" | Dimensions;
 
-/** A page margin in CSS px: one number for all sides, or per-side values (missing sides are zero). */
-export type PageMargin = number | { top?: number; right?: number; bottom?: number; left?: number };
+/**
+ * One side of a page margin: a length in CSS px, or `"auto"` to fit the band
+ * that draws on that side. `"auto"` never goes below the default 48, and the
+ * left and right sides hold no band, so they land on it.
+ */
+export type PageMarginSide = number | "auto";
+
+/** A page margin: one value for all sides, or per-side values (missing sides are zero). */
+export type PageMargin =
+  | PageMarginSide
+  | {
+      top?: PageMarginSide;
+      right?: PageMarginSide;
+      bottom?: PageMarginSide;
+      left?: PageMarginSide;
+    };
 
 export type PdfMetadata = {
   title?: string;
@@ -107,7 +121,7 @@ export type PdfRenderOptions = {
   size?: PageSize;
   /** Swaps the page's width and height, including explicit sizes. */
   landscape?: boolean;
-  /** Page margin in CSS px. Defaults to a uniform 48 (half an inch). */
+  /** Page margin. Defaults to `"auto"` on every side. */
   margin?: PageMargin;
   /**
    * Band repeated at the top of every page. Nodes classed `pageNumber` /

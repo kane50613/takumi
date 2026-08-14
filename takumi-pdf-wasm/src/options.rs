@@ -11,7 +11,7 @@ use takumi_core::{
   style::{Color, ColorInput, FromCssStr},
   viewport::Viewport,
 };
-use takumi_pdf::{PageMargins, PageOptions};
+use takumi_pdf::{PageMargin, PageMargins, PageOptions};
 
 use crate::{
   map_error,
@@ -50,18 +50,46 @@ enum SizeInput {
   Dimensions(Dimensions),
 }
 
-/// A page margin: one number for all sides, or per-side values (missing
-/// sides are zero).
+/// A page margin: one value for all sides, or per-side values (missing sides
+/// are zero).
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum MarginInput {
-  Uniform(f32),
+  Uniform(SideInput),
   Sides {
-    top: Option<f32>,
-    right: Option<f32>,
-    bottom: Option<f32>,
-    left: Option<f32>,
+    top: Option<SideInput>,
+    right: Option<SideInput>,
+    bottom: Option<SideInput>,
+    left: Option<SideInput>,
   },
+}
+
+/// One side: a length in px, or `"auto"` for the space that side's band takes.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum SideInput {
+  Px(f32),
+  Auto(AutoKeyword),
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum AutoKeyword {
+  Auto,
+}
+
+impl SideInput {
+  fn margin(&self) -> PageMargin {
+    match self {
+      Self::Px(value) => PageMargin::Px(*value),
+      Self::Auto(AutoKeyword::Auto) => PageMargin::Auto,
+    }
+  }
+}
+
+/// A side the caller left out sits flush with the paper edge.
+fn side_margin(side: &Option<SideInput>) -> PageMargin {
+  side.as_ref().map_or(PageMargin::Px(0.0), SideInput::margin)
 }
 
 fn resolve_page(
@@ -90,7 +118,16 @@ fn resolve_page(
   }
   match margin {
     None => {}
-    Some(MarginInput::Uniform(value)) => page.margin = PageMargins::uniform(*value),
+    Some(MarginInput::Uniform(value)) => {
+      let side = value.margin();
+
+      page.margin = PageMargins {
+        top: side,
+        right: side,
+        bottom: side,
+        left: side,
+      };
+    }
     Some(MarginInput::Sides {
       top,
       right,
@@ -98,10 +135,10 @@ fn resolve_page(
       left,
     }) => {
       page.margin = PageMargins {
-        top: top.unwrap_or(0.0),
-        right: right.unwrap_or(0.0),
-        bottom: bottom.unwrap_or(0.0),
-        left: left.unwrap_or(0.0),
+        top: side_margin(top),
+        right: side_margin(right),
+        bottom: side_margin(bottom),
+        left: side_margin(left),
       };
     }
   }

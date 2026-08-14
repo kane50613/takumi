@@ -87,11 +87,12 @@ use takumi_core::{
 };
 
 pub use crate::options::{
-  Attachment, AttachmentRelationship, MeasureOptions, MeasuredSize, PageMargins, PageOptions,
-  PdfDate, PdfError, PdfMetadata, PdfOptions, PdfStandard, Tagging, XmpProperty, XmpSchema,
+  Attachment, AttachmentRelationship, MeasureOptions, MeasuredSize, PageMargin, PageMargins,
+  PageOptions, PdfDate, PdfError, PdfMetadata, PdfOptions, PdfStandard, Tagging, XmpProperty,
+  XmpSchema,
 };
 use crate::{
-  bands::{emit_band, measure_band, prepare_band},
+  bands::{MeasuredBand, emit_band, measure_band, prepare_band},
   emitter::{FontMap, RenderIssues},
   glyph::uncovered_error,
   inline::{build_inline_map, collect_text_boxes},
@@ -112,6 +113,11 @@ use crate::{
   tags::{TagCollector, build_tag_tree, tag_id},
   tree::{TreeInputs, prepare_paged_tree, prepare_tree},
 };
+
+/// The height a measured band came out at, or nothing when the side has none.
+fn band_height(band: Option<&MeasuredBand>) -> Option<f32> {
+  band.map(|band| band.measured.height)
+}
 
 /// Lays out a node tree without rendering and returns its size.
 ///
@@ -242,20 +248,12 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
     Some(page) => {
       let page_size = KrillaSize::from_wh(page.width * PT_PER_PX, page.height * PT_PER_PX)
         .ok_or(PdfError::InvalidPageSize)?;
-      let (content_width, content_height) = page.content_size();
-      if !(content_width.is_finite()
-        && content_height.is_finite()
-        && content_width > 0.0
-        && content_height > 0.0)
-      {
-        return Err(PdfError::InvalidPageSize);
-      }
       // Bands lay out at full page width and draw inside the margin areas,
       // like Chromium's print header and footer templates. The content window
       // is always the full margin box; a band taller than its margin overlaps
-      // content, exactly as in Chromium.
+      // content, exactly as in Chromium. They are measured first so an `auto`
+      // margin can take the height they came out at.
       let band_viewport = Viewport::new((page.width as u32, None));
-      let content_viewport = Viewport::new((content_width as u32, None));
 
       // Band heights are measured once with three-digit counters; per-page
       // emission clips to the measured band, so a wrap caused by a wider real
@@ -271,12 +269,21 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         .as_ref()
         .map(|template| measure_band(&inputs, template, band_viewport))
         .transpose()?;
-      let header_height = header_band
-        .as_ref()
-        .map_or(0.0, |band| band.measured.height);
-      let footer_height = footer_band
-        .as_ref()
-        .map_or(0.0, |band| band.measured.height);
+      let margin = page.margin.resolve(
+        band_height(header_band.as_ref()),
+        band_height(footer_band.as_ref()),
+      );
+      let (content_width, content_height) = page.content_size(margin);
+      if !(content_width.is_finite()
+        && content_height.is_finite()
+        && content_width > 0.0
+        && content_height > 0.0)
+      {
+        return Err(PdfError::InvalidPageSize);
+      }
+      let content_viewport = Viewport::new((content_width as u32, None));
+      let header_height = band_height(header_band.as_ref()).unwrap_or(0.0);
+      let footer_height = band_height(footer_band.as_ref()).unwrap_or(0.0);
       let window_height = content_height;
 
       let mut node = options.node;
@@ -330,10 +337,10 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         let index = starts
           .partition_point(|start| *start <= top)
           .saturating_sub(1);
-        let y = page.margin.top + (top - starts[index]).max(0.0);
+        let y = margin.top + (top - starts[index]).max(0.0);
         let dest = XyzDestination::new(
           index,
-          Point::from_xy(page.margin.left * PT_PER_PX, y * PT_PER_PX),
+          Point::from_xy(margin.left * PT_PER_PX, y * PT_PER_PX),
         );
 
         match structural {
@@ -372,13 +379,13 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           )?;
         }
 
-        let content_top = page.margin.top;
+        let content_top = margin.top;
 
         for fixed in repeated.iter().filter(|tree| tree.paints_below()) {
           emit_band(
             fixed,
             &mut fonts,
-            (page.margin.left, content_top, content_width, window_height),
+            (margin.left, content_top, content_width, window_height),
             tag_collector.is_some(),
             &issues,
             document_lang,
@@ -392,14 +399,11 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         let paint_height = (next_start - y0).min(window_height);
 
         if let Some(path) =
-          KrillaRect::from_xywh(page.margin.left, content_top, content_width, paint_height)
+          KrillaRect::from_xywh(margin.left, content_top, content_width, paint_height)
             .and_then(rect_path)
         {
           surface.push_clip_path(&path, &FillRule::NonZero);
-          surface.push_transform(&Transform::from_translate(
-            page.margin.left,
-            content_top - y0,
-          ));
+          surface.push_transform(&Transform::from_translate(margin.left, content_top - y0));
           let mut emitter = content.emitter(
             &mut fonts,
             Some(&inline_map),
@@ -419,7 +423,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           emit_band(
             fixed,
             &mut fonts,
-            (page.margin.left, content_top, content_width, window_height),
+            (margin.left, content_top, content_width, window_height),
             tag_collector.is_some(),
             &issues,
             document_lang,
@@ -458,7 +462,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           &mut pdf_page,
           &interactive.links,
           (y0, y0 + paint_height),
-          (page.margin.left, content_top),
+          (margin.left, content_top),
           tag_collector.as_ref(),
           |id| {
             interactive
@@ -475,7 +479,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           &mut pdf_page,
           &repeated_links,
           (0.0, window_height),
-          (page.margin.left, content_top),
+          (margin.left, content_top),
           None,
           |id| {
             interactive
@@ -732,6 +736,43 @@ mod tests {
 
     assert_eq!(landscape.width, a4.height);
     assert_eq!(landscape.height, a4.width);
-    assert_eq!(PageOptions::A4.with_margin(0.0).margin.top, 0.0);
+    assert_eq!(
+      PageOptions::A4
+        .with_margin(0.0)
+        .margin
+        .resolve(None, None)
+        .top,
+      0.0
+    );
+  }
+
+  #[test]
+  fn auto_margin_takes_the_band_it_holds() {
+    let margins = PageOptions::A4.margin;
+
+    assert_eq!(
+      margins.resolve(None, None).top,
+      PageOptions::DEFAULT_MARGIN,
+      "a side with no band sits at the default"
+    );
+    assert_eq!(
+      margins.resolve(Some(4.0), None).top,
+      PageOptions::DEFAULT_MARGIN,
+      "a band that fits inside the default does not shrink the page"
+    );
+    assert_eq!(
+      margins.resolve(Some(80.0), None).top,
+      80.0 + BAND_EDGE_PADDING,
+      "a taller band takes its height plus the inset it draws at"
+    );
+    assert_eq!(
+      margins.resolve(None, Some(80.0)).bottom,
+      80.0 + BAND_EDGE_PADDING
+    );
+    assert_eq!(
+      margins.resolve(None, Some(80.0)).left,
+      PageOptions::DEFAULT_MARGIN,
+      "the sides hold no band"
+    );
   }
 }

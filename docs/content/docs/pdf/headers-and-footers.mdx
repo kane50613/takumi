@@ -24,29 +24,44 @@ const pdf = await render(report, {
 
 ## Sizing the margin
 
-Band height depends on layout, so it is hard to guess ahead of time. `measure` lays out a tree the same way `render` measures a band: full page width, counter hooks filled with three-digit numbers. Use the height to pick a margin:
+A band draws in the page margin, so the margin has to be tall enough to hold it.
+`margin` defaults to `"auto"`, which measures the band and takes the space it needs.
 
 ```tsx twoslash
 import type { ReactNode } from "react";
 declare const report: ReactNode;
 // ---cut---
-import { measure, render } from "takumi-pdf";
+import { render } from "takumi-pdf";
 
-const footer = (
-  <div tw="flex w-full justify-center text-[10px] text-gray-500">
-    Page <span className="pageNumber" /> of <span className="totalPages" />
-  </div>
-);
-// [!code highlight]
-const { height } = await measure(footer, { size: "a4" });
 const pdf = await render(report, {
-  footer,
-  // [!code highlight]
-  margin: { top: 48, bottom: Math.max(48, height + 20) },
+  footer: (
+    <div tw="flex w-full justify-center text-[10px] text-gray-500">
+      Page <span className="pageNumber" /> of <span className="totalPages" />
+    </div>
+  ),
 });
 ```
 
-Bands sit 20px in from the paper edge, so leave that on top of the measured height.
+`"auto"` never drops below the default 48, so a short band leaves the page looking
+as it did before. Set a side to a number to size it yourself:
+
+```ts
+margin: { top: 96, bottom: "auto" }
+```
+
+Left and right hold no band. `"auto"` there is the default 48.
+
+To place content against the band yourself, `measure` lays out a tree the way
+`render` measures a band: full page width, counter hooks filled with three-digit
+numbers.
+
+```tsx twoslash
+declare const footer: import("react").ReactNode;
+// ---cut---
+import { measure } from "takumi-pdf";
+
+const { height } = await measure(footer, { size: "a4" });
+```
 
 Passing `viewport` instead of a page size measures the tree as-is. Counter hooks stay empty.
 
