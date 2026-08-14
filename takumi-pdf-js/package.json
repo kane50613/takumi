@@ -94,6 +94,10 @@
         "default": "./bundlers/vite.mjs"
       }
     },
+    "./next": {
+      "types": "./bundlers/node.d.ts",
+      "default": "./bundlers/next.mjs"
+    },
     "./no-init": {
       "import": {
         "types": "./dist/export.d.mts",
