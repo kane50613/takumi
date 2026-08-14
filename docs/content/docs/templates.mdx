@@ -48,7 +48,12 @@ export function GET(request: Request) {
   const { searchParams } = new URL(request.url);
 
   return new ImageResponse(
-    <BlogPostTemplate title={searchParams.get("title") ?? "Hello from Takumi"} ... />,
+    <BlogPostTemplate
+      author={searchParams.get("author") ?? "Takumi"}
+      category={searchParams.get("category") ?? "Engineering"}
+      date={searchParams.get("date") ?? "Today"}
+      title={searchParams.get("title") ?? "Hello from Takumi"}
+    />,
     { width: 1200, height: 630 },
   );
 }
@@ -62,14 +67,17 @@ export const metadata = {
 };
 ```
 
-The CLI writes the route only into a project it recognizes as Next.js. Elsewhere
-it installs the card and leaves the route to you.
+The import above assumes the `@/` alias. The CLI rewrites it to whatever
+`components.json` names, so a project on `~/` gets `~/components/takumi/image/blog-post`.
+
+The route lands only in a project the CLI recognizes as Next.js. Elsewhere it
+installs the card and leaves the route to you.
 
 ## Blog Post Template
 
 A blog post card with a large title and a subtitle.
 
-![Blog Post Template](/templates/previews/blog-post-template.svg)
+![Blog Post Template](/templates/previews/blog-post.svg)
 
 ```npm
 npx shadcn@latest add @takumi/image/blog-post
@@ -79,7 +87,7 @@ npx shadcn@latest add @takumi/image/blog-post
 
 A documentation card for guides and API pages.
 
-![Docs Template](/templates/previews/docs-template.svg)
+![Docs Template](/templates/previews/docs.svg)
 
 ```npm
 npx shadcn@latest add @takumi/image/docs
@@ -89,7 +97,7 @@ npx shadcn@latest add @takumi/image/docs
 
 A product card with an image, name, and price.
 
-![Product Card Template](/templates/previews/product-card-template.svg)
+![Product Card Template](/templates/previews/product-card.svg)
 
 ```npm
 npx shadcn@latest add @takumi/image/product-card
@@ -99,7 +107,7 @@ npx shadcn@latest add @takumi/image/product-card
 
 An editorial card for talks, webinars, and conferences, with an oversized title and a clear when/where/host footer.
 
-![Event Template](/templates/previews/event-template.svg)
+![Event Template](/templates/previews/event.svg)
 
 ```npm
 npx shadcn@latest add @takumi/image/event
@@ -109,7 +117,7 @@ npx shadcn@latest add @takumi/image/event
 
 A high-contrast quote and testimonial card with author and company attribution.
 
-![Quote Template](/templates/previews/quote-template.svg)
+![Quote Template](/templates/previews/quote.svg)
 
 ```npm
 npx shadcn@latest add @takumi/image/quote
@@ -119,7 +127,7 @@ npx shadcn@latest add @takumi/image/quote
 
 A developer-native card for open-source repositories, featuring the repo slug, description, and star, fork, and language stats.
 
-![Repository Template](/templates/previews/repository-template.svg)
+![Repository Template](/templates/previews/repository.svg)
 
 ```npm
 npx shadcn@latest add @takumi/image/repository
@@ -129,7 +137,7 @@ npx shadcn@latest add @takumi/image/repository
 
 A release card with the version, the date, and a summary of what shipped.
 
-![Changelog Template](/templates/previews/changelog-template.svg)
+![Changelog Template](/templates/previews/changelog.svg)
 
 ```npm
 npx shadcn@latest add @takumi/image/changelog

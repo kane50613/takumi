@@ -1,5 +1,8 @@
 {
   "include": ["**/*", "**/.server/**/*", "**/.client/**/*", ".source/**/*"],
+  // Registry sources ship to other projects, where the CLI rewrites their
+  // imports to that project's alias. They never resolve here.
+  "exclude": ["app/registry/image/og-route.tsx"],
   "compilerOptions": {
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
     "types": ["node", "vite/client", "bun"],
