@@ -162,7 +162,7 @@ If your framework has to bundle it,
 
 ## Render errors
 
-### MissingGlyphs("क (U+0915), ो (U+094B), र (U+0930)")
+### No registered font covers क (U+0915)
 
 Register a font covering the characters the error names:
 
@@ -175,21 +175,17 @@ const pdf = await render(document, {
 });
 ```
 
-No registered font covers them today. They would draw nothing and leave nothing
-in the text layer, so the render stops rather than shipping a page with holes.
+Those characters would draw nothing and leave nothing in the text layer, so the
+render stops rather than shipping a page with holes.
 
-### UnsupportedFilter("blur(2px)")
+### A PDF cannot draw filter: blur(2px)
 
 Drop the filter, or rasterize that subtree yourself and place it as an `<img>`.
 
 PDF has no blur operator, so `blur()` and `drop-shadow()` cannot be drawn.
 Dropping them quietly would ship a page that disagrees with the image output.
 
-### DecodeError(Unsupported(UnsupportedError ...))
-
-```text
-DecodeError(Unsupported(UnsupportedError { format: Unknown, kind: Format(Unknown) }))
-```
+### An error occurred while decoding the image data
 
 Re-encode the image as PNG, JPEG, or WebP.
 
@@ -197,7 +193,7 @@ Those three embed directly. GIF has no decoder in this build. A CSS `filter`
 needs pixels to work on and only PNG decodes for that path, so an image under a
 filter raises this too when it arrived as JPEG or WebP.
 
-### TooManyPages(20000)
+### The content spans more than 20000 pages
 
 Give the tree a height that resolves. A percentage height inside a paged render
 has nothing to resolve against, so the content grows until the page cap stops it.
