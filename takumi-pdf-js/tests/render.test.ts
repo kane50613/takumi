@@ -210,14 +210,14 @@ test("rejects duplicate attachment names", async () => {
   const attachment = { name: "dup.txt", data: "x" };
 
   await expect(renderer.render(doc, { attachments: [attachment, attachment] })).rejects.toThrow(
-    "DuplicateAttachment",
+    "Two attachments are named dup.txt",
   );
 });
 
 test("rejects an invalid attachment mime type", async () => {
   await expect(
     renderer.render(doc, { attachments: [{ name: "a.txt", data: "x", mimeType: "nope" }] }),
-  ).rejects.toThrow("InvalidMimeType");
+  ).rejects.toThrow("Attachment mime type is not a type/subtype pair: nope");
 });
 
 test("rejects an invalid attachment modificationDate", async () => {
@@ -258,7 +258,7 @@ test("rejects a filter it cannot apply to a JPEG", async () => {
       viewport: { width: 48, height: 48 },
       images: [{ src: "photo", data: jpeg }],
     }),
-  ).rejects.toThrow("UndrawableImage");
+  ).rejects.toThrow("Image could not be decoded");
 });
 
 test("rejects a filter a PDF cannot express", async () => {
@@ -266,5 +266,5 @@ test("rejects a filter a PDF cannot express", async () => {
     renderer.render(`<div style="filter:blur(4px);width:40px;height:40px;background:#000"></div>`, {
       viewport: { width: 80, height: 80 },
     }),
-  ).rejects.toThrow("UnsupportedFilter");
+  ).rejects.toThrow("A PDF cannot draw filter: blur(4px)");
 });
