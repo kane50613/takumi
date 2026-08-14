@@ -4,8 +4,33 @@
 use std::rc::Rc;
 
 use crate::resvg::usvg::{ApproxEqUlps, ApproxZeroUlps};
-use rgb::{FromSlice, RGBA8};
 use tiny_skia::IntRect;
+
+/// A non-premultiplied RGBA pixel, layout-compatible with pixmap bytes.
+#[repr(C)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct RGBA8 {
+  pub r: u8,
+  pub g: u8,
+  pub b: u8,
+  pub a: u8,
+}
+
+/// Reinterprets raw pixmap bytes as RGBA pixels.
+pub(crate) trait FromSlice {
+  fn as_rgba(&self) -> &[RGBA8];
+  fn as_rgba_mut(&mut self) -> &mut [RGBA8];
+}
+
+impl FromSlice for [u8] {
+  fn as_rgba(&self) -> &[RGBA8] {
+    bytemuck::cast_slice(self)
+  }
+
+  fn as_rgba_mut(&mut self) -> &mut [RGBA8] {
+    bytemuck::cast_slice_mut(self)
+  }
+}
 
 mod box_blur;
 mod color_matrix;

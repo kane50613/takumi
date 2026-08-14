@@ -1,9 +1,9 @@
 // Copyright 2020 the Resvg Authors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use super::RGBA8;
 use super::{ImageRefMut, f32_bound};
 use crate::resvg::usvg::filter::ColorMatrixKind as ColorMatrix;
-use rgb::RGBA8;
 
 /// Applies a color matrix filter.
 ///

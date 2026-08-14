@@ -7,7 +7,6 @@ use std::str::FromStr;
 
 #[rustfmt::skip] mod names;
 mod parse;
-mod text;
 
 use tiny_skia_path::Transform;
 
@@ -187,7 +186,6 @@ pub(crate) enum NodeKind {
     tag_name: EId,
     attributes: ShortRange,
   },
-  Text(String),
 }
 
 struct NodeData {
@@ -245,12 +243,6 @@ impl<'a, 'input: 'a> SvgNode<'a, 'input> {
   #[inline]
   pub fn is_element(&self) -> bool {
     matches!(self.d.kind, NodeKind::Element { .. })
-  }
-
-  /// Checks if the current node is a text.
-  #[inline]
-  pub fn is_text(&self) -> bool {
-    matches!(self.d.kind, NodeKind::Text(_))
   }
 
   /// Returns node's document.
@@ -390,24 +382,6 @@ impl<'a, 'input: 'a> SvgNode<'a, 'input> {
     }
   }
 
-  /// Returns node's text data.
-  ///
-  /// For text nodes returns its content. For elements returns the first child node text.
-  #[inline]
-  pub fn text(&self) -> &'a str {
-    match self.d.kind {
-      NodeKind::Element { .. } => match self.first_child() {
-        Some(child) if child.is_text() => match self.doc.nodes[child.id.get_usize()].kind {
-          NodeKind::Text(ref text) => text,
-          _ => "",
-        },
-        _ => "",
-      },
-      NodeKind::Text(ref text) => text,
-      _ => "",
-    }
-  }
-
   /// Returns a parent node.
   #[inline]
   pub fn parent(&self) -> Option<Self> {
@@ -506,7 +480,6 @@ impl std::fmt::Debug for SvgNode<'_, '_> {
           self.attributes()
         )
       }
-      NodeKind::Text(ref text) => write!(f, "Text({:?})", text),
     }
   }
 }

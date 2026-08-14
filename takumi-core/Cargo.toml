@@ -49,11 +49,11 @@ optional = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies.bytemuck]
 workspace = true
-features = ["wasm_simd"]
+features = ["wasm_simd", "derive"]
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies.bytemuck]
 workspace = true
-features = ["aarch64_simd", "avx512_simd"]
+features = ["aarch64_simd", "avx512_simd", "derive"]
 
 [dependencies.serde]
 workspace = true
@@ -87,10 +87,6 @@ optional = true
 workspace = true
 optional = true
 
-[dependencies.rgb]
-workspace = true
-optional = true
-
 [dependencies.tiny-skia-path]
 workspace = true
 optional = true
@@ -112,7 +108,6 @@ svg = [
   "dep:siphasher",
   "dep:strict-num",
   "dep:log",
-  "dep:rgb",
   "dep:tiny-skia-path",
 ]
 woff2 = ["dep:wuff", "wuff/brotli"]

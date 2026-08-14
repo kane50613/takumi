@@ -1,10 +1,10 @@
 // Copyright 2020 the Resvg Authors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use super::RGBA8;
 use super::{ImageRef, ImageRefMut, f32_bound};
 use crate::resvg::usvg::filter::{DiffuseLighting, LightSource, SpecularLighting};
 use crate::resvg::usvg::{ApproxEqUlps, ApproxZeroUlps, Color};
-use rgb::RGBA8;
 
 const FACTOR_1_2: f32 = 1.0 / 2.0;
 const FACTOR_1_3: f32 = 1.0 / 3.0;

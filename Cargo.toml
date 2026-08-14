@@ -78,10 +78,6 @@ features = ["std", "simd"]
 version = "0.7"
 default-features = false
 
-[workspace.dependencies.rgb]
-version = "0.8"
-features = ["bytemuck"]
-
 [workspace.dependencies.png]
 version = "0.18"
 features = ["zlib-rs"]
