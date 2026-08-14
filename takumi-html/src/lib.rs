@@ -351,9 +351,9 @@ fn collapse(mut nodes: Vec<Node>) -> Node {
   match nodes.len() {
     0 => Node::container([]),
     1 => nodes.pop().unwrap_or_default(),
-    _ => {
-      Node::container(nodes).with_style(Style::from(parse_declarations("width:100%;height:100%")))
-    }
+    _ => Node::container(nodes).with_style(Style::from(parse_declarations(
+      "display:block;width:100%;height:100%",
+    ))),
   }
 }
 
