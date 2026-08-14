@@ -20,7 +20,9 @@ use crate::{
       InlineContentKind, InlineLayoutMode, InlineLayoutRequest, InlineMeasureOptions,
       collect_inline_items, create_inline_constraint, create_inline_layout, measure_inline_layout,
     },
-    list_marker::{first_list_item_ordinal, list_item_ordinal, list_marker},
+    list_marker::{
+      first_list_item_ordinal, is_list_element, list_item_ordinal, list_marker, owns_list_counter,
+    },
     node::{Node, NodeStyleLayers},
   },
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
@@ -1072,7 +1074,7 @@ impl RenderNode {
   fn can_host_marker(&self) -> bool {
     self.context.style.display == Display::Block
       && self.context.style.float == Float::None
-      && (self.node.as_ref().is_some_and(Node::has_text)
+      && (self.node.as_ref().is_some_and(Node::is_text)
         || self.children.as_deref().is_some_and(|children| {
           children
             .iter()
@@ -1225,6 +1227,8 @@ impl RenderNode {
       pseudo_after: Option<RenderNode>,
       next_list_item_ordinal: i32,
       marker_ordinal: Option<i32>,
+      inside_list: bool,
+      owns_list_counter: bool,
     }
 
     fn next_preorder_index(preorder_cursor: &mut usize) -> usize {
@@ -1336,6 +1340,7 @@ impl RenderNode {
       matched_declarations: &[NodeMatchedDeclarations<'_>],
       preorder_cursor: &mut usize,
       next_ordinal: &mut i32,
+      inside_list: bool,
     ) -> PendingRenderNode {
       let node_index = next_preorder_index(preorder_cursor);
       let (style, sizing, current_color) =
@@ -1365,9 +1370,17 @@ impl RenderNode {
         rendered_children.push(RenderNode::generated_sibling_text(&context, text));
       }
 
+      let owns_list_counter = owns_list_counter(&node, inside_list);
+
       PendingRenderNode {
         children_is_some: children_is_some || has_generated_children,
-        next_list_item_ordinal: first_list_item_ordinal(&node),
+        next_list_item_ordinal: if owns_list_counter {
+          first_list_item_ordinal(&node)
+        } else {
+          *next_ordinal
+        },
+        inside_list: inside_list || is_list_element(&node),
+        owns_list_counter,
         context,
         node,
         rendered_children,
@@ -1385,6 +1398,7 @@ impl RenderNode {
       matched_declarations,
       &mut preorder_cursor,
       &mut root_ordinal,
+      false,
     )];
 
     loop {
@@ -1406,6 +1420,7 @@ impl RenderNode {
           matched_declarations,
           &mut preorder_cursor,
           &mut current.next_list_item_ordinal,
+          current.inside_list,
         );
         stack.push(child_pending);
         continue;
@@ -1421,6 +1436,12 @@ impl RenderNode {
           force_inline_layout: false,
         };
       };
+
+      if !finished.owns_list_counter
+        && let Some(parent) = stack.last_mut()
+      {
+        parent.next_list_item_ordinal = finished.next_list_item_ordinal;
+      }
 
       if let Some(after) = finished.pseudo_after.take() {
         finished.rendered_children.push(after);

@@ -240,7 +240,7 @@ impl<'i> FromCss<'i> for ListStyleType {
     }
   }
 
-  const VALID_TOKENS: &'static [CssToken] = LIST_STYLE_TYPE_TOKENS;
+  const VALID_TOKENS: &'static [CssToken] = &LIST_STYLE_TOKENS;
 }
 
 impl ToCss for ListStyleType {
@@ -260,6 +260,15 @@ impl ToCss for ListStyleType {
     }
   }
 }
+
+const LIST_STYLE_TOKEN_LISTS: &[&[CssToken]] = &[
+  LIST_STYLE_TYPE_TOKENS,
+  ListStylePosition::VALID_TOKENS,
+  BackgroundImage::VALID_TOKENS,
+];
+
+const LIST_STYLE_TOKENS: [CssToken; CssToken::merged_len(LIST_STYLE_TOKEN_LISTS)] =
+  CssToken::merge_lists(LIST_STYLE_TOKEN_LISTS);
 
 impl<'i> FromCss<'i> for ListStyleShorthand {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {

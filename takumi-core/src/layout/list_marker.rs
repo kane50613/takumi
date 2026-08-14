@@ -75,7 +75,8 @@ fn marker_image(context: &RenderContext, mut image: BackgroundImage, is_rtl: boo
     layout_style.max_size = TaffySize::auto();
 
     // A margin on the image keeps the marker box itself zero-width.
-    let gap = LengthPercentageAuto::length(MARKER_IMAGE_GAP_PX);
+    let gap =
+      LengthPercentageAuto::length(Length::Px(MARKER_IMAGE_GAP_PX).to_px(&context.sizing, 0.0));
     if is_rtl {
       layout_style.margin.left = gap;
     } else {
@@ -92,6 +93,23 @@ fn marker_image(context: &RenderContext, mut image: BackgroundImage, is_rtl: boo
   }
 
   item
+}
+
+/// Blink counts list items within their enclosing list, so a wrapper element
+/// inside one keeps counting rather than starting over. A tree built in code
+/// has no list elements to enclose anything, so there every parent counts its
+/// own items.
+pub(super) fn owns_list_counter(node: &Node, inside_list: bool) -> bool {
+  !inside_list || is_list_element(node) || node.attribute("start").is_some()
+}
+
+pub(super) fn is_list_element(node: &Node) -> bool {
+  node.tag_name().is_some_and(|tag| {
+    tag.eq_ignore_ascii_case("ol")
+      || tag.eq_ignore_ascii_case("ul")
+      || tag.eq_ignore_ascii_case("menu")
+      || tag.eq_ignore_ascii_case("dir")
+  })
 }
 
 /// The item's own `value` attribute, else the list's running count.
@@ -191,6 +209,20 @@ mod tests {
     .with_class_name("list");
 
     assert_eq!(markers(list, LIST_CSS), ["1. ", "2. ", "1. ", "2. "]);
+  }
+
+  /// A list element encloses its items, so a wrapper inside one keeps counting.
+  #[test]
+  fn a_wrapper_element_does_not_restart_the_count() {
+    let list = Node::container([
+      item([]),
+      Node::container([item([]), item([])]).with_class_name("block"),
+    ])
+    .with_class_name("list")
+    .with_tag_name("ol");
+    let css = format!("{LIST_CSS} .block {{ display: block }}");
+
+    assert_eq!(markers(list, &css), ["1. ", "2. ", "3. "]);
   }
 
   #[test]

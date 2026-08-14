@@ -391,7 +391,7 @@ impl Node {
     container_children_ref(&self.kind)
   }
 
-  pub(crate) fn has_text(&self) -> bool {
+  pub(crate) fn is_text(&self) -> bool {
     matches!(self.kind, NodeKind::Text(_))
   }
 
@@ -407,6 +407,11 @@ impl Node {
     let NodeKind::Text(data) = &mut self.kind else {
       return None;
     };
+
+    if data.text.is_empty() {
+      return None;
+    }
+
     let text = take(&mut data.text);
     self.kind = NodeKind::Container {
       children: Vec::new(),
