@@ -3,8 +3,11 @@ import { extractEmojis } from "takumi-js/helpers/emoji";
 import { fromJsx } from "takumi-js/helpers/jsx";
 import type { FetchedImage, Node } from "takumi-js/helpers";
 import wasm, { init, Renderer } from "takumi-js/wasm";
-import type { PdfRenderer } from "takumi-pdf";
 import pdfWasm from "takumi-pdf/takumi_pdf_wasm_bg.wasm?url";
+// `no-init` over the entry that instantiates the module: the worker has the
+// asset URL already, and that entry needs top-level await, which an iife worker
+// bundle cannot have.
+import initPdf, { PdfRenderer } from "takumi-pdf/no-init";
 import type * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { evaluateCodeExports, renderReact } from "./evaluate";
@@ -35,15 +38,11 @@ let renderer: Renderer | undefined;
   postMessage({ type: "ready" });
 })();
 
-// The PDF engine is a second wasm module, so it only loads once a template asks
-// for one.
+// The wasm module is fetched the first time a template asks for a PDF.
 let pdfRenderer: Promise<PdfRenderer> | undefined;
 
 function loadPdfRenderer() {
-  pdfRenderer ??= import("takumi-pdf").then(async ({ default: initPdf, PdfRenderer }) => {
-    await initPdf({ module_or_path: pdfWasm });
-    return new PdfRenderer();
-  });
+  pdfRenderer ??= initPdf({ module_or_path: pdfWasm }).then(() => new PdfRenderer());
 
   return pdfRenderer;
 }
