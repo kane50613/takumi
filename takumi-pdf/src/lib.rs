@@ -723,37 +723,31 @@ mod tests {
 
   #[test]
   fn presets_match_css_page_keywords() {
-    let a4 = PageOptions::A4;
-
-    assert!((a4.width - 793.7).abs() < 0.1);
-    assert!((a4.height - 1122.5).abs() < 0.1);
-
-    let letter = PageOptions::LETTER;
-
-    assert_eq!((letter.width, letter.height), (816.0, 1056.0));
-    assert_eq!(
-      (PageOptions::LEGAL.width, PageOptions::LEGAL.height),
-      (816.0, 1344.0)
-    );
-    assert_eq!(
-      (PageOptions::LEDGER.width, PageOptions::LEDGER.height),
-      (1056.0, 1632.0)
-    );
-
-    for page in [
-      PageOptions::A3,
-      PageOptions::A4,
-      PageOptions::A5,
-      PageOptions::B4,
-      PageOptions::B5,
-      PageOptions::JIS_B4,
-      PageOptions::JIS_B5,
-      PageOptions::LEDGER,
-      PageOptions::LEGAL,
-      PageOptions::LETTER,
+    // px at 96 dpi, from the millimetres and inches CSS Paged Media lists.
+    for (page, width, height) in [
+      (PageOptions::A3, 1122.52, 1587.40),
+      (PageOptions::A4, 793.70, 1122.52),
+      (PageOptions::A5, 559.37, 793.70),
+      (PageOptions::B4, 944.88, 1334.17),
+      (PageOptions::B5, 665.20, 944.88),
+      (PageOptions::JIS_B4, 971.34, 1375.75),
+      (PageOptions::JIS_B5, 687.87, 971.34),
+      (PageOptions::LEDGER, 1056.0, 1632.0),
+      (PageOptions::LEGAL, 816.0, 1344.0),
+      (PageOptions::LETTER, 816.0, 1056.0),
     ] {
+      assert!(
+        (page.width - width).abs() < 0.1,
+        "width of {width}x{height}"
+      );
+      assert!(
+        (page.height - height).abs() < 0.1,
+        "height of {width}x{height}"
+      );
       assert!(page.width < page.height, "presets are portrait");
     }
+
+    let a4 = PageOptions::A4;
 
     let landscape = PageOptions::A4.landscape();
 
