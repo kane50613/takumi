@@ -528,13 +528,38 @@ pub(crate) const BAND_EDGE_PADDING: f32 = 15.0 * ONE_PT_IN_PX;
 /// Presets are portrait with a half-inch margin; chain
 /// [`landscape`](Self::landscape) and [`with_margin`](Self::with_margin) to
 /// adjust, or fill the fields directly for any other size.
-// ponytail: A4 + LETTER only; add other @page keywords when someone asks.
+/// The sizes are the page keywords CSS Paged Media defines, portrait as that
+/// module writes them.
 impl PageOptions {
   /// Half an inch, the margin a page starts with.
   pub const DEFAULT_MARGIN: f32 = 0.5 * ONE_IN_PX;
 
+  /// ISO A3: 297 × 420 mm.
+  pub const A3: Self = Self::preset(297.0 * ONE_MM_IN_PX, 420.0 * ONE_MM_IN_PX);
+
   /// ISO A4: 210 × 297 mm.
   pub const A4: Self = Self::preset(210.0 * ONE_MM_IN_PX, 297.0 * ONE_MM_IN_PX);
+
+  /// ISO A5: 148 × 210 mm.
+  pub const A5: Self = Self::preset(148.0 * ONE_MM_IN_PX, 210.0 * ONE_MM_IN_PX);
+
+  /// ISO B4: 250 × 353 mm.
+  pub const B4: Self = Self::preset(250.0 * ONE_MM_IN_PX, 353.0 * ONE_MM_IN_PX);
+
+  /// ISO B5: 176 × 250 mm.
+  pub const B5: Self = Self::preset(176.0 * ONE_MM_IN_PX, 250.0 * ONE_MM_IN_PX);
+
+  /// JIS B4: 257 × 364 mm.
+  pub const JIS_B4: Self = Self::preset(257.0 * ONE_MM_IN_PX, 364.0 * ONE_MM_IN_PX);
+
+  /// JIS B5: 182 × 257 mm.
+  pub const JIS_B5: Self = Self::preset(182.0 * ONE_MM_IN_PX, 257.0 * ONE_MM_IN_PX);
+
+  /// US Ledger: 11 × 17 in.
+  pub const LEDGER: Self = Self::preset(11.0 * ONE_IN_PX, 17.0 * ONE_IN_PX);
+
+  /// US Legal: 8.5 × 14 in.
+  pub const LEGAL: Self = Self::preset(8.5 * ONE_IN_PX, 14.0 * ONE_IN_PX);
 
   /// US Letter: 8.5 × 11 in.
   pub const LETTER: Self = Self::preset(8.5 * ONE_IN_PX, 11.0 * ONE_IN_PX);

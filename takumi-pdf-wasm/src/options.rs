@@ -107,7 +107,15 @@ fn resolve_page(
       ..PageOptions::A4
     },
     Some(SizeInput::Named(name)) => match name.to_ascii_lowercase().as_str() {
+      "a3" => PageOptions::A3,
       "a4" => PageOptions::A4,
+      "a5" => PageOptions::A5,
+      "b4" => PageOptions::B4,
+      "b5" => PageOptions::B5,
+      "jis-b4" => PageOptions::JIS_B4,
+      "jis-b5" => PageOptions::JIS_B5,
+      "ledger" => PageOptions::LEDGER,
+      "legal" => PageOptions::LEGAL,
       "letter" => PageOptions::LETTER,
       other => {
         return Err(js_sys::Error::new(&format!("unknown page size: {other}")));

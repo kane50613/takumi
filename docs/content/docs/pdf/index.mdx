@@ -73,7 +73,7 @@ import { render } from "takumi-pdf";
 
 const pdf = await render(report, {
   // [!code highlight:3]
-  size: "letter", // "a4", "letter", or { width, height } in CSS px at 96 dpi
+  size: "letter", // a page keyword, or { width, height } in CSS px at 96 dpi
   landscape: true,
   margin: { top: 48, right: 32, bottom: 48, left: 32 },
 });
@@ -81,10 +81,22 @@ const pdf = await render(report, {
 
 | Option            | Type                                                      | Default  | Description                                                        |
 | ----------------- | --------------------------------------------------------- | -------- | ------------------------------------------------------------------ |
-| `size`            | `"a4"`, `"letter"`, or `{ width, height }`                | `"a4"`   | Page size in CSS px at 96 dpi. Presets ignore case.                |
+| `size`            | a page keyword or `{ width, height }`                     | `"a4"`   | Page size in CSS px at 96 dpi. Keywords ignore case.               |
 | `landscape`       | `boolean`                                                 | `false`  | Swaps page width and height, including explicit sizes.             |
 | `margin`          | `number`, `"auto"`, or `{ top?, right?, bottom?, left? }` | `"auto"` | `"auto"` fits the band on that side. Missing object sides are `0`. |
 | `backgroundColor` | CSS color                                                 | unset    | Fills the page box, margins included, under everything.            |
+
+`size` takes the page keywords CSS Paged Media defines, portrait as that module writes them:
+
+| Keyword | Size         | Keyword    | Size         |
+| ------- | ------------ | ---------- | ------------ |
+| `"a3"`  | 297 × 420 mm | `"jis-b4"` | 257 × 364 mm |
+| `"a4"`  | 210 × 297 mm | `"jis-b5"` | 182 × 257 mm |
+| `"a5"`  | 148 × 210 mm | `"ledger"` | 11 × 17 in   |
+| `"b4"`  | 250 × 353 mm | `"legal"`  | 8.5 × 14 in  |
+| `"b5"`  | 176 × 250 mm | `"letter"` | 8.5 × 11 in  |
+
+Set `landscape` to turn any of them, or pass `{ width, height }` for a size with no keyword.
 
 These options are the structured form of `@page`, which takumi does not parse as CSS.
 `size` and `margin` map to the descriptors of the same name, `header` and `footer` to its margin boxes.
