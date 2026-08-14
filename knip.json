@@ -36,7 +36,8 @@
       "ignoreUnresolved": ["../index"]
     },
     "takumi-template": {
-      "entry": ["tests/**/*.test.{ts,tsx}"]
+      "entry": ["tests/**/*.test.{ts,tsx}"],
+      "ignore": ["src/blocks/**"]
     },
     "takumi-wasm": {
       "entry": ["tests/**/*.test.{ts,tsx}"],
