@@ -74,7 +74,7 @@ export const options: PlaygroundOptions = {
     size: "a4",
     margin: { right: 56, left: 56 },
     header: (
-      <div tw="flex w-full flex-col px-14 pt-6">
+      <div tw="flex w-full flex-col px-14 py-6">
         <div tw="flex w-full items-end justify-between">
           <span tw="text-lg font-semibold text-[#1f2430]">匠 Werkstatt</span>
           <span tw="text-[10px] text-[#9ca3af]">Rendering report · Q1 2026</span>
