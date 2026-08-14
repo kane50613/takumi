@@ -7,9 +7,6 @@ const isWhitespaceOnlyText = (node: Node): boolean =>
 
 export function fromHtml(html: string) {
   const { nodes: parsed, stylesheets } = fromStaticMarkup(html);
-  // A template literal leaves whitespace around the markup, which parses into
-  // text roots. Dropping them keeps a newline-wrapped element a single root,
-  // the way `from_html` does in the Rust crate (kane50613/takumi#1283).
   const nodes = [...parsed];
 
   while (nodes[0] && isWhitespaceOnlyText(nodes[0])) {
@@ -36,6 +33,7 @@ export function fromHtml(html: string) {
   return {
     node: container({
       style: {
+        display: "block",
         width: percentage(100),
         height: percentage(100),
       },
