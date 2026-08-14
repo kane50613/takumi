@@ -438,13 +438,14 @@ pub(crate) fn krilla_datetime(date: PdfDate) -> DateTime {
 }
 
 /// A page margin.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub enum PageMargin {
   /// A length in px.
   Px(f32),
   /// The space the band on that side takes: its measured height plus the inset
   /// it draws at, never below [`PageOptions::DEFAULT_MARGIN`]. Left and right
   /// hold no band, so they take the default. Every side starts here.
+  #[default]
   Auto,
 }
 
@@ -461,7 +462,7 @@ impl PageMargin {
 
 /// Per-side page margins. The header band draws in the top margin and the
 /// footer band in the bottom.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct PageMargins {
   /// Top margin, where the header band draws.
   pub top: PageMargin,
@@ -474,7 +475,7 @@ pub struct PageMargins {
 }
 
 impl PageMargins {
-  /// Every side sized to the band that draws in it.
+  /// [`Default`] in a const context.
   pub const AUTO: Self = Self {
     top: PageMargin::Auto,
     right: PageMargin::Auto,

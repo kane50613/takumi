@@ -90,7 +90,7 @@ impl SideInput {
 }
 
 fn side_margin(side: &Option<SideInput>) -> PageMargin {
-  side.as_ref().map_or(PageMargin::Auto, SideInput::margin)
+  side.as_ref().map(SideInput::margin).unwrap_or_default()
 }
 
 fn resolve_page(
