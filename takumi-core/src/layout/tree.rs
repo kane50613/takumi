@@ -872,7 +872,8 @@ impl LayoutGridContainer for LayoutTree<'_> {
 /// always meets the one beside it. taffy's `round_layout` documents the same
 /// rule but rounds a location against its parent, which parts two siblings by a
 /// pixel whenever their parent sits on a fraction.
-/// Yoga rounds the absolute edges: facebook/yoga@aa5b296.
+/// Blink snaps the same way, against the absolute offset's fraction
+/// (`SnapSizeToPixel`, platform/geometry/layout_unit.h).
 fn snap_layout(tree: &mut LayoutTree<'_>, node_id: TaffyNodeId, parent_x: f32, parent_y: f32) {
   let unrounded = tree.get_unrounded_layout(node_id);
   let mut layout = unrounded;
