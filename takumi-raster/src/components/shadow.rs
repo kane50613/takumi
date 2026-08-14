@@ -117,7 +117,7 @@ pub(crate) fn draw_inset_shadow_to_canvas(
   canvas: &mut Canvas,
   layout: Layout,
 ) -> Result<()> {
-  let (data, width, height) = draw_inset_shadow(shadow, border_radius, layout.size)?;
+  let (data, width, height) = draw_inset_shadow(shadow, border_radius, layout)?;
 
   if let Some(source) = PixmapRef::from_bytes(&data, width, height) {
     canvas.overlay_sampled_pixmap(
@@ -139,8 +139,9 @@ pub(crate) fn draw_inset_shadow_to_canvas(
 pub(crate) fn draw_inset_shadow(
   shadow: &SizedShadow,
   border: BorderProperties,
-  border_box: Size<f32>,
+  layout: Layout,
 ) -> Result<(Vec<u8>, u32, u32)> {
+  let border_box = layout.size;
   let width = border_box.width as u32;
   let height = border_box.height as u32;
   let [red, green, blue, alpha] = shadow.color.0;
@@ -151,21 +152,11 @@ pub(crate) fn draw_inset_shadow(
     width,
     height,
   };
-
-  let mut padding = border;
-  padding.inset_by_border_width();
-  let padding_offset = Point {
-    x: border.width.left,
-    y: border.width.top,
-  };
-  let padding_size = Size {
-    width: (border_box.width - border.width.left - border.width.right).max(0.0),
-    height: (border_box.height - border.width.top - border.width.bottom).max(0.0),
-  };
+  let padding = ClipBox::padding_box(border, layout);
 
   let hole = ClipBox::inset_shadow_hole(
-    padding,
-    padding_size,
+    padding.border,
+    padding.size,
     shadow.spread_radius,
     Point {
       x: shadow.offset_x,
@@ -178,8 +169,8 @@ pub(crate) fn draw_inset_shadow(
     &mut paths,
     hole.size,
     Point {
-      x: padding_offset.x + hole.offset.x,
-      y: padding_offset.y + hole.offset.y,
+      x: padding.offset.x + hole.offset.x,
+      y: padding.offset.y + hole.offset.y,
     },
   );
 
@@ -201,7 +192,9 @@ pub(crate) fn draw_inset_shadow(
 
   let mut clip_paths = Vec::new();
   border.append_mask_commands(&mut clip_paths, border_box, Point::ZERO);
-  padding.append_mask_commands(&mut clip_paths, padding_size, padding_offset);
+  padding
+    .border
+    .append_mask_commands(&mut clip_paths, padding.size, padding.offset);
   let (clip_mask, clip_placement) = render_mask(&clip_paths, None, Some(Fill::EvenOdd.into()));
   if !clip_mask.is_empty() {
     attenuate_alpha_by_mask(
