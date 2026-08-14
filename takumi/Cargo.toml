@@ -14,12 +14,12 @@ autobenches = false
 
 [dependencies.takumi-core]
 path = "../takumi-core"
-version = "0.22.0"
+version = "0.23.0"
 default-features = false
 
 [dependencies.takumi-raster]
 path = "../takumi-raster"
-version = "0.4.19"
+version = "0.4.20"
 default-features = false
 optional = true
 
@@ -31,7 +31,7 @@ optional = true
 
 [dependencies.takumi-html]
 path = "../takumi-html"
-version = "0.3.0"
+version = "0.3.1"
 default-features = false
 optional = true
 
