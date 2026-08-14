@@ -33,7 +33,8 @@
     "directory": "takumi-js"
   },
   "files": [
-    "dist"
+    "dist",
+    "bundlers"
   ],
   "type": "module",
   "sideEffects": false,
@@ -163,6 +164,26 @@
       "require": {
         "types": "./dist/wasm.d.cts",
         "default": "./dist/wasm.cjs"
+      }
+    },
+    "./wasm/no-init": {
+      "import": {
+        "types": "./dist/wasm/no-init.d.mts",
+        "default": "./dist/wasm/no-init.mjs"
+      },
+      "require": {
+        "types": "./dist/wasm/no-init.d.cts",
+        "default": "./dist/wasm/no-init.cjs"
+      }
+    },
+    "./wasm-url": {
+      "import": {
+        "types": "./bundlers/wasm-url.d.ts",
+        "default": "./bundlers/wasm-url.mjs"
+      },
+      "require": {
+        "types": "./bundlers/wasm-url.d.cts",
+        "default": "./bundlers/wasm-url.cjs"
       }
     },
     "./helpers": {

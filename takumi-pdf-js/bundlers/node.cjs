@@ -1,9 +1,8 @@
 const wasm = require("../dist/export.cjs");
 const { readFileSync } = require("node:fs");
-const { join } = require("node:path");
+const wasmUrl = require("./wasm-url.cjs");
 
-const wasmPath = join(__dirname, "../pkg/takumi_pdf_wasm_bg.wasm");
-const wasmBytes = readFileSync(wasmPath);
+const wasmBytes = readFileSync(wasmUrl);
 
 wasm.initSync({ module: wasmBytes });
 
