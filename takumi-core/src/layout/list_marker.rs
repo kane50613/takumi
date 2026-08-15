@@ -8,13 +8,14 @@ use crate::{
   },
   matching::MatchedDeclarationsView,
   style::{
-    BackgroundImage, Direction, Display, JustifyContent, Length, ListStylePosition, MakeComputed,
-    TextWrapMode, WhiteSpaceCollapse,
+    BackgroundImage, Direction, Display, JustifyContent, Length, ListStylePosition, ListStyleType,
+    MakeComputed, TextWrapMode, WhiteSpaceCollapse,
   },
 };
 
-/// Blink's gap between a marker image and the item's content.
-const MARKER_IMAGE_GAP_PX: f32 = 7.0;
+/// Blink's gap between a symbolic or image marker and the item's content.
+/// Alphanumeric markers separate with their `. ` suffix instead.
+const MARKER_GAP_PX: f32 = 7.0;
 
 /// The marker box of a `display: list-item` box, per css-lists-3 §3.
 pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<RenderNode> {
@@ -41,8 +42,23 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
   let mut content = match available_marker_image(item_context) {
     Some(image) => marker_image(&context, image, is_rtl),
     None => {
-      let text = item_context.style.list_style_type.marker_text(ordinal)?;
-      RenderNode::anonymous_text_item(&context, text)
+      let style_type = &item_context.style.list_style_type;
+      let text = style_type.marker_text(ordinal)?;
+
+      // Blink separates a bullet from the item with the fixed gap rather than
+      // the suffix space: a solid mid-height symbol needs more room than the
+      // white space a `1. ` already carries.
+      if matches!(
+        style_type,
+        ListStyleType::Disc | ListStyleType::Circle | ListStyleType::Square
+      ) {
+        let mut item = RenderNode::anonymous_text_item(&context, text.trim_end().to_owned());
+
+        apply_marker_gap(&mut item, &context, is_rtl);
+        item
+      } else {
+        RenderNode::anonymous_text_item(&context, text)
+      }
     }
   };
 
@@ -65,6 +81,21 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
 /// replaces its counter style as the marker.
 pub fn has_marker_image(item_context: &RenderContext) -> bool {
   available_marker_image(item_context).is_some()
+}
+
+/// Separates the marker from the item's content with [`MARKER_GAP_PX`]. A
+/// margin on the content keeps the marker box itself zero-width.
+fn apply_marker_gap(item: &mut RenderNode, context: &RenderContext, is_rtl: bool) {
+  let Some(layout_style) = &mut item.layout_style_override else {
+    return;
+  };
+  let gap = LengthPercentageAuto::length(Length::Px(MARKER_GAP_PX).to_px(&context.sizing, 0.0));
+
+  if is_rtl {
+    layout_style.margin.left = gap;
+  } else {
+    layout_style.margin.right = gap;
+  }
 }
 
 /// css-lists-3 §3.1: an image that is not available leaves the counter style to
@@ -92,17 +123,9 @@ fn marker_image(context: &RenderContext, mut image: BackgroundImage, is_rtl: boo
 
   let mut item = RenderNode::anonymous_image_item(context, image);
 
+  apply_marker_gap(&mut item, context, is_rtl);
   if let Some(layout_style) = &mut item.layout_style_override {
     layout_style.max_size = TaffySize::auto();
-
-    // A margin on the image keeps the marker box itself zero-width.
-    let gap =
-      LengthPercentageAuto::length(Length::Px(MARKER_IMAGE_GAP_PX).to_px(&context.sizing, 0.0));
-    if is_rtl {
-      layout_style.margin.left = gap;
-    } else {
-      layout_style.margin.right = gap;
-    }
 
     if !has_natural_size {
       let side = Dimension::length(context.sizing.font_size / 2.0);
