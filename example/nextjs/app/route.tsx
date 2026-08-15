@@ -1,6 +1,6 @@
 import { ImageResponse } from "takumi-js/response";
 import { Axe } from "lucide-react";
-import DocsTemplate from "../../../takumi-template/src/templates/docs-template";
+import DocsTemplate from "../../../docs/app/registry/image/docs";
 
 export const runtime = "nodejs";
 

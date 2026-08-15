@@ -103,6 +103,7 @@ export async function fromJsx(
     node = container({
       children: nodes,
       style: {
+        display: "block",
         width: percentage(100),
         height: percentage(100),
       },

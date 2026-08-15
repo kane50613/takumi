@@ -2,7 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 import { Globe2 } from "lucide-react";
 import { bench, run, summary } from "mitata";
-import DocsTemplate from "../../../takumi-template/src/templates/docs-template";
+import DocsTemplate from "../../../docs/app/registry/image/docs";
 import { Renderer } from "../../src/export";
 
 function createNode(progress = 0) {

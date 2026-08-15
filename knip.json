@@ -12,7 +12,8 @@
         "waku.config.ts",
         "source.config.ts",
         "press.config.tsx",
-        "app/playground/worker.ts"
+        "app/playground/worker.ts",
+        "tests/**/*.test.{ts,tsx}"
       ],
       "ignore": ["public/**", "app/playground/templates/**", "src/app.css"],
       "ignoreDependencies": [
@@ -21,7 +22,8 @@
         "@takumi-rs/wasm",
         "takumi-pdf",
         "twoslash"
-      ]
+      ],
+      "ignoreUnresolved": ["@/components/takumi/image/blog-post"]
     },
     "takumi-helpers": {
       "entry": ["tests/**/*.test.{ts,tsx}"],
@@ -34,9 +36,6 @@
     "takumi-napi": {
       "entry": ["tests/**/*.test.{ts,tsx}"],
       "ignoreUnresolved": ["../index"]
-    },
-    "takumi-template": {
-      "entry": ["tests/**/*.test.{ts,tsx}"]
     },
     "takumi-wasm": {
       "entry": ["tests/**/*.test.{ts,tsx}"],

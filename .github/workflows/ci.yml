@@ -375,7 +375,7 @@ jobs:
         run: >
           bun install --frozen-lockfile
           --filter ./takumi-js
-          --filter ./takumi-template
+          --filter ./docs
           --filter ./example/cloudflare-workers
           --filter ./example/tanstack-start
           --filter ./example/waku-ssr
@@ -384,9 +384,10 @@ jobs:
         working-directory: takumi-js
         run: bun test
 
-      - name: Test template
-        working-directory: takumi-template
-        run: bun test
+      # Renders every registry card and writes the previews the docs embed.
+      - name: Test registry previews
+        working-directory: docs
+        run: bun test tests/registry-previews.test.tsx
 
       # Runs from the root: the playground's PDF reader pulls in nothing else.
       - name: Test docs playground

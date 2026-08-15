@@ -8,7 +8,6 @@
     "takumi-wasm",
     "takumi-image-response",
     "takumi-pdf-js",
-    "takumi-template",
     "docs",
     "example/*"
   ],

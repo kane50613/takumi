@@ -4,76 +4,141 @@ description: A collection of ready-to-use templates for Takumi.
 icon: LayoutTemplate
 ---
 
-Takumi ships ready-made templates. Use one as a starting point, or as-is.
+Takumi ships ready-made open graph cards. Use one as a starting point, or as-is.
+The [shadcn CLI](https://ui.shadcn.com/docs/cli) copies a template into your
+project and installs `takumi-js` alongside it.
 
-Install with the [shadcn CLI](https://ui.shadcn.com/docs/cli), or [download from the latest commit](https://github.com/kane50613/takumi/tree/master/takumi-template/src/templates).
+```npm
+npx shadcn@latest add https://takumi.kane.tw/r/image/blog-post.json
+```
+
+Register the namespace in `components.json` to reach the same items by name:
+
+```json title="components.json"
+{
+  "registries": {
+    "@takumi": "https://takumi.kane.tw/r/{name}.json"
+  }
+}
+```
+
+```npm
+npx shadcn@latest add @takumi/image/blog-post
+```
+
+Items are grouped by what they render. Everything here is under `image`, and a
+card lands in `components/takumi/image/`.
+
+## A route that answers with an image
+
+`image/og-route` is a Next.js route handler plus the card it renders. Adding it
+leaves you with a working `/og` endpoint that takes its title from the query
+string.
+
+```npm
+npx shadcn@latest add @takumi/image/og-route
+```
+
+```tsx title="app/og/route.tsx"
+import { ImageResponse } from "takumi-js/response";
+
+import BlogPostTemplate from "@/components/takumi/image/blog-post";
+
+export function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+
+  return new ImageResponse(
+    <BlogPostTemplate
+      author={searchParams.get("author") ?? "Takumi"}
+      category={searchParams.get("category") ?? "Engineering"}
+      date={searchParams.get("date") ?? "Today"}
+      title={searchParams.get("title") ?? "Hello from Takumi"}
+    />,
+    { width: 1200, height: 630 },
+  );
+}
+```
+
+Point a page's metadata at it and every article gets its own card:
+
+```tsx title="app/blog/[slug]/page.tsx"
+export const metadata = {
+  openGraph: { images: [`/og?title=${encodeURIComponent(title)}`] },
+};
+```
+
+The import above assumes the `@/` alias. The CLI rewrites it to whatever
+`components.json` names, so a project on `~/` gets `~/components/takumi/image/blog-post`.
+
+The route lands only in a project the CLI recognizes as Next.js. Elsewhere it
+installs the card and leaves the route to you.
 
 ## Blog Post Template
 
 A blog post card with a large title and a subtitle.
 
-![Blog Post Template](/templates/previews/blog-post-template.svg)
+![Blog Post Template](/templates/previews/blog-post.svg)
 
 ```npm
-npx shadcn@latest add https://takumi.kane.tw/templates/registry/blog-post-template.json
+npx shadcn@latest add @takumi/image/blog-post
 ```
 
 ## Docs Template
 
 A documentation card for guides and API pages.
 
-![Docs Template](/templates/previews/docs-template.svg)
+![Docs Template](/templates/previews/docs.svg)
 
 ```npm
-npx shadcn@latest add https://takumi.kane.tw/templates/registry/docs-template.json
+npx shadcn@latest add @takumi/image/docs
 ```
 
 ## Product Card Template
 
 A product card with an image, name, and price.
 
-![Product Card Template](/templates/previews/product-card-template.svg)
+![Product Card Template](/templates/previews/product-card.svg)
 
 ```npm
-npx shadcn@latest add https://takumi.kane.tw/templates/registry/product-card-template.json
+npx shadcn@latest add @takumi/image/product-card
 ```
 
 ## Event Template
 
 An editorial card for talks, webinars, and conferences, with an oversized title and a clear when/where/host footer.
 
-![Event Template](/templates/previews/event-template.svg)
+![Event Template](/templates/previews/event.svg)
 
 ```npm
-npx shadcn@latest add https://takumi.kane.tw/templates/registry/event-template.json
+npx shadcn@latest add @takumi/image/event
 ```
 
 ## Quote Template
 
 A high-contrast quote and testimonial card with author and company attribution.
 
-![Quote Template](/templates/previews/quote-template.svg)
+![Quote Template](/templates/previews/quote.svg)
 
 ```npm
-npx shadcn@latest add https://takumi.kane.tw/templates/registry/quote-template.json
+npx shadcn@latest add @takumi/image/quote
 ```
 
 ## Repository Template
 
 A developer-native card for open-source repositories, featuring the repo slug, description, and star, fork, and language stats.
 
-![Repository Template](/templates/previews/repository-template.svg)
+![Repository Template](/templates/previews/repository.svg)
 
 ```npm
-npx shadcn@latest add https://takumi.kane.tw/templates/registry/repository-template.json
+npx shadcn@latest add @takumi/image/repository
 ```
 
 ## Changelog Template
 
-A release announcement card with a version badge, headline, and tagged highlights of what shipped.
+A release card with the version, the date, and a summary of what shipped.
 
-![Changelog Template](/templates/previews/changelog-template.svg)
+![Changelog Template](/templates/previews/changelog.svg)
 
 ```npm
-npx shadcn@latest add https://takumi.kane.tw/templates/registry/changelog-template.json
+npx shadcn@latest add @takumi/image/changelog
 ```

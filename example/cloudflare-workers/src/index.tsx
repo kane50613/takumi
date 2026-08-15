@@ -1,5 +1,5 @@
 import { ImageResponse } from "takumi-js/response";
-import DocsTemplate from "takumi-template/src/templates/docs-template";
+import DocsTemplate from "../../../docs/app/registry/image/docs";
 
 // Shared across requests: dedupes concurrent fetches of the same URL and reuses the bytes.
 const imageCache = new Map<string, Promise<ArrayBuffer>>();

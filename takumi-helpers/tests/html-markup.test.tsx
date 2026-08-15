@@ -50,6 +50,15 @@ describe("fromHtml", () => {
     expect((node as TextNode).text).toBe("&constructor; &hasOwnProperty;");
   });
 
+  // A template literal leaves whitespace around the markup, which arrives as
+  // text siblings. An inline root keeps their line box and pushes the content
+  // down the page: kane50613/takumi#1283.
+  test("keeps a newline-wrapped element a single root", () => {
+    const markup = `<div style="width:100%;height:100%"></div>`;
+
+    expect(fromHtml(`\n  ${markup}\n`).node).toEqual(fromHtml(markup).node);
+  });
+
   test("leaves surrogate code point references untouched", () => {
     const { node } = fromHtml("<div>&#xd800;&#57343;</div>");
 
