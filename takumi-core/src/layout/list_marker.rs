@@ -61,6 +61,12 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
   })
 }
 
+/// Whether the item's `list-style-image` yields an available image, which
+/// replaces its counter style as the marker.
+pub fn has_marker_image(item_context: &RenderContext) -> bool {
+  available_marker_image(item_context).is_some()
+}
+
 /// css-lists-3 §3.1: an image that is not available leaves the counter style to
 /// draw the marker.
 fn available_marker_image(item_context: &RenderContext) -> Option<BackgroundImage> {

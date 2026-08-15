@@ -24,7 +24,7 @@ use takumi_core::{
   },
   style::{
     BreakBetween, Color, ColorInput, Display, FlexDirection, FontSize, Length::*, LineHeight,
-    ObjectFit, Style, StyleDeclaration,
+    ListStyleType, ObjectFit, Style, StyleDeclaration,
   },
   viewport::Viewport,
 };
@@ -929,6 +929,13 @@ fn even_odd_clip_operators(pdf: &[u8]) -> usize {
 fn clip_operators(pdf: &[u8]) -> usize {
   content_lines(pdf)
     .filter(|line| line.ends_with(b"W"))
+    .count()
+}
+
+/// Counts text-show operators across the page content streams.
+fn text_show_operators(pdf: &[u8]) -> usize {
+  content_lines(pdf)
+    .filter(|line| line.ends_with(b"TJ") || line.ends_with(b"Tj"))
     .count()
 }
 
@@ -1945,6 +1952,214 @@ fn attachments() {
   );
 }
 
+/// A marker belongs to the page containing its line baseline, so a list item
+/// continuing across pages does not repeat the marker in later content streams.
+#[test]
+fn list_marker_pagination() {
+  let doc = r#"<ol style="font-size:16px;line-height:20px;margin:0;">
+    <li>one<br>two<br>three<br>four<br>five<br>six<br>seven<br>eight</li>
+  </ol>"#;
+  let fonts = fonts();
+  let page = PageOptions {
+    width: 240.0,
+    height: 75.0,
+    margin: PageMargins::uniform(0.0),
+  };
+  let pdf = run_pdf_fixture_with("list-marker-pagination", &fonts, |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse list doc"))
+      .page(page)
+      .tagged(Tagging::Off)
+      .fonts(fonts)
+      .build()
+  });
+  let without_marker = render(
+    PdfOptions::builder()
+      .node(
+        from_html(
+          &doc.replace("font-size:16px", "list-style:none;font-size:16px"),
+          FromHtmlOptions::default(),
+        )
+        .expect("parse markerless list doc"),
+      )
+      .page(page)
+      .tagged(Tagging::Off)
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render markerless list");
+
+  assert_eq!(
+    text_show_operators(&pdf),
+    text_show_operators(&without_marker) + 1,
+    "the ordered marker was repeated across pages"
+  );
+}
+
+/// A non-marker in-flow inline box also belongs to the page that owns its
+/// line, so a paragraph continuing across pages paints the box once instead
+/// of on every page.
+#[test]
+fn inline_box_pagination() {
+  let doc = r#"<p style="font-size:16px;line-height:20px;margin:0;">one<br><span style="display:inline-block">boxed</span><br>three<br>four<br>five<br>six<br>seven<br>eight</p>"#;
+  let fonts = fonts();
+  let page = PageOptions {
+    width: 240.0,
+    height: 75.0,
+    margin: PageMargins::uniform(0.0),
+  };
+  let build = |source: &str| {
+    render(
+      PdfOptions::builder()
+        .node(from_html(source, FromHtmlOptions::default()).expect("parse paragraph doc"))
+        .page(page)
+        .tagged(Tagging::Off)
+        .fonts(&fonts)
+        .build(),
+    )
+    .expect("render paragraph doc")
+  };
+  let boxed = build(doc);
+  let plain = build(&doc.replace(
+    r#"<span style="display:inline-block">boxed</span>"#,
+    "boxed",
+  ));
+
+  assert_eq!(
+    text_show_operators(&boxed),
+    text_show_operators(&plain),
+    "the inline box was repeated across pages"
+  );
+}
+
+/// The tag tree matches tags exactly, so an uppercase `LI` earns no `LI`
+/// element. Its generated marker still has to reach the structure tree as
+/// leading content instead of failing the whole render.
+#[test]
+fn an_uppercase_list_item_renders_tagged() {
+  let item = Node::text("Loud item".to_string())
+    .with_tag_name("LI")
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::ListItem))
+        .with(StyleDeclaration::list_style_type(ListStyleType::Decimal)),
+    );
+  let list = Node::container(vec![item]).with_tag_name("OL");
+  let pdf = render(
+    PdfOptions::builder()
+      .node(list)
+      .page(PageOptions {
+        width: 240.0,
+        height: 120.0,
+        margin: PageMargins::uniform(0.0),
+      })
+      .tagged(Tagging::On)
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect("render uppercase list item tagged");
+
+  let haystack = inflated_text(&pdf);
+
+  assert!(
+    !haystack.contains("/S/LI"),
+    "an uppercase tag unexpectedly earned an LI element"
+  );
+}
+
+/// A programmatic `display: list-item` box has no `LI` element to hold an
+/// `Lbl`, so its marker label joins the node's own content — and reads before
+/// it, matching the painted order.
+#[test]
+fn a_programmatic_list_item_reads_its_marker_first() {
+  let doc =
+    r#"<div style="display:list-item;list-style-type:decimal;font-size:16px;">item text</div>"#;
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions {
+        width: 240.0,
+        height: 120.0,
+        margin: PageMargins::uniform(0.0),
+      })
+      .tagged(Tagging::On)
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect("render");
+  let haystack = inflated_text(&pdf);
+
+  // The item's text paints first and takes MCID 0; the marker follows as
+  // MCID 1. The paragraph element still has to read the marker first.
+  assert!(
+    haystack.contains("/K[1 0"),
+    "the marker does not read before the item's content"
+  );
+}
+
+/// A float's band is one atom: a page cut may not slice through it, so a
+/// float crossing the would-be cut pushes the cut past its bottom edge.
+#[test]
+fn a_page_cut_does_not_slice_a_float() {
+  let fonts = fonts();
+  let window = |height: u32| {
+    let doc = format!(
+      r#"<p style="font-size:16px;line-height:20px;margin:0;"><span style="float:right;width:40px;height:{height}px;background:#f00;"></span>one<br>two<br>three<br>four<br>five<br>six</p>"#
+    );
+    let pdf = render(
+      PdfOptions::builder()
+        .node(from_html(&doc, FromHtmlOptions::default()).expect("parse float doc"))
+        .page(PageOptions {
+          width: 240.0,
+          height: 75.0,
+          margin: PageMargins::uniform(0.0),
+        })
+        .tagged(Tagging::Off)
+        .fonts(&fonts)
+        .build(),
+    )
+    .expect("render float doc");
+
+    first_page_window(&pdf)
+  };
+  // 65px in page units; a float this tall spans the cut a short one permits.
+  let float_bottom = 65.0 * 0.75;
+
+  assert!(
+    window(10) < float_bottom,
+    "the short-float cut no longer lands where a tall float would sit"
+  );
+  assert!(
+    window(65) >= float_bottom,
+    "the page cut sliced through the float"
+  );
+}
+
+/// The height of the first page's window clip: how much of the document the
+/// first page shows, i.e. where the first page cut landed.
+fn first_page_window(pdf: &[u8]) -> f32 {
+  let lines: Vec<Vec<u8>> = content_lines(pdf).collect();
+
+  for pair in lines.windows(2) {
+    if !pair[0].ends_with(b" re") || !pair[1].starts_with(b"W") {
+      continue;
+    }
+    // The clip line reads `x y width height re`: the height sits second from
+    // the end.
+    let text = String::from_utf8_lossy(&pair[0]);
+    let height = text
+      .split_whitespace()
+      .rev()
+      .nth(1)
+      .and_then(|token| token.parse::<f32>().ok());
+
+    if let Some(height) = height {
+      return height.abs();
+    }
+  }
+  panic!("no page window clip found");
+}
+
 /// The report renders tagged under PDF/UA-1 and PDF/A-2a: heading structure,
 /// link alt text, document language, title and date all satisfy the
 /// validators, and the structure tree serializes.
@@ -1987,6 +2202,9 @@ fn tagged_standards() {
     <p>Steps with <strong>bold</strong> and <code>code</code>:</p>
     <ul><li>First item</li><li>Second item</li></ul>
     <ol><li>Ordered one</li><li>Ordered two</li></ol>
+    <ol><li style="list-style-type:upper-roman">Mixed roman</li><li>Mixed decimal</li></ol>
+    <ol style="list-style-type:upper-roman;list-style-image:url(missing-marker.png)"><li>Fallback roman</li></ol>
+    <ul><li style="display:flex">Unmarked styled item</li></ul>
   </main>"#;
 
   let list = run_pdf_fixture("list-tagged-ua1", |fonts| {
@@ -2003,12 +2221,19 @@ fn tagged_standards() {
 
   for name in [
     "/S/LI",
+    "/S/Lbl",
     "/S/LBody",
     "/ListNumbering/Disc",
     "/ListNumbering/Decimal",
+    "/ListNumbering/UpperRoman",
+    "/ListNumbering/None",
   ] {
     assert!(haystack.contains(name), "missing {name} structure element");
   }
+  assert_eq!(haystack.matches("/S/Lbl").count(), 7);
+  // The mixed list and the `display:flex` items (which paint no marker) both
+  // resolve to `None` rather than advertising bullets the page never draws.
+  assert_eq!(haystack.matches("/ListNumbering/None").count(), 2);
 
   run_pdf_fixture("report-tagged-a2a", |fonts| {
     PdfOptions::builder()
@@ -2112,6 +2337,7 @@ fn structure_types_pdf20() {
     "/BlockQuote",
     "/L",
     "/LI",
+    "/Lbl",
     "/LBody",
     "/Figure",
     "/Caption",

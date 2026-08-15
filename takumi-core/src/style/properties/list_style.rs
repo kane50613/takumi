@@ -20,7 +20,7 @@ pub enum ListStyleType {
   Disc,
   /// A hollow circle, `◦`.
   Circle,
-  /// A filled square, `■`.
+  /// A filled square, `▪`.
   Square,
   /// Western decimal numbers.
   Decimal,
@@ -170,6 +170,15 @@ fn decimal_leading_zero(ordinal: i32) -> String {
 }
 
 impl ListStyleType {
+  /// Every character `marker_text` can generate across the predefined counter
+  /// styles.
+  ///
+  /// These characters are absent from the source node tree, so callers that
+  /// load fonts by text coverage must include them before rendering list
+  /// markers. `String` markers carry their own text and are not covered here.
+  pub const MARKER_CHARACTERS: &'static str =
+    "\u{2022}\u{25e6}\u{25aa} 0123456789.-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
   /// The marker string for an item at `ordinal`, including the counter style's suffix.
   pub(crate) fn marker_text(&self, ordinal: i32) -> Option<String> {
     let (representation, suffix) = match self {
@@ -177,7 +186,7 @@ impl ListStyleType {
       ListStyleType::String(value) => return Some(value.as_ref().to_owned()),
       ListStyleType::Disc => ("\u{2022}".to_owned(), " "),
       ListStyleType::Circle => ("\u{25e6}".to_owned(), " "),
-      ListStyleType::Square => ("\u{25a0}".to_owned(), " "),
+      ListStyleType::Square => ("\u{25aa}".to_owned(), " "),
       ListStyleType::Decimal => (ordinal.to_string(), ". "),
       ListStyleType::DecimalLeadingZero => (decimal_leading_zero(ordinal), ". "),
       ListStyleType::LowerAlpha => (alphabetic(ordinal, 'a'), ". "),
@@ -396,6 +405,53 @@ mod tests {
       ListStyleType::DecimalLeadingZero.marker_text(-7).as_deref(),
       Some("-7. ")
     );
+  }
+
+  /// Font subsetting loads faces by the characters `MARKER_CHARACTERS`
+  /// promises, so every counter style's output has to stay inside it. The
+  /// match is exhaustive on purpose: a new style fails to compile here until
+  /// it is accounted for.
+  #[test]
+  fn the_character_set_covers_every_counter_style() {
+    let styles = [
+      ListStyleType::None,
+      ListStyleType::Disc,
+      ListStyleType::Circle,
+      ListStyleType::Square,
+      ListStyleType::Decimal,
+      ListStyleType::DecimalLeadingZero,
+      ListStyleType::LowerAlpha,
+      ListStyleType::UpperAlpha,
+      ListStyleType::LowerRoman,
+      ListStyleType::UpperRoman,
+      ListStyleType::String("marker".into()),
+    ];
+
+    for style in styles {
+      // A `String` marker carries its own text; every other style draws from
+      // the shared character set.
+      let covered: &[i32] = match style {
+        ListStyleType::None | ListStyleType::String(_) => &[],
+        ListStyleType::Disc | ListStyleType::Circle | ListStyleType::Square => &[1, 100],
+        ListStyleType::Decimal
+        | ListStyleType::DecimalLeadingZero
+        | ListStyleType::LowerAlpha
+        | ListStyleType::UpperAlpha
+        | ListStyleType::LowerRoman
+        | ListStyleType::UpperRoman => &[i32::MIN, -7, 0, 1, 9, 26, 27, 3999, 4000, i32::MAX],
+      };
+
+      for ordinal in covered {
+        let marker = style.marker_text(*ordinal).expect("marker text");
+
+        for character in marker.chars() {
+          assert!(
+            ListStyleType::MARKER_CHARACTERS.contains(character),
+            "{style:?} at {ordinal} generates {character:?} outside MARKER_CHARACTERS"
+          );
+        }
+      }
+    }
   }
 
   #[test]

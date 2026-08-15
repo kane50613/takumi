@@ -43,7 +43,7 @@ mod background;
 mod bands;
 mod counters;
 
-pub use counters::counter_characters;
+pub use counters::{counter_characters, list_marker_characters};
 mod emitter;
 mod filter;
 mod glyph;

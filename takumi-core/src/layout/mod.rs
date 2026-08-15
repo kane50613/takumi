@@ -14,6 +14,7 @@ pub mod inline_box;
 pub mod intercept;
 /// Generated marker boxes for `display: list-item`.
 mod list_marker;
+pub use list_marker::has_marker_image;
 /// Node Tree
 pub mod node;
 /// Where replaced content sits inside its content box.

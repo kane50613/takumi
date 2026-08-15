@@ -5,7 +5,10 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 #[cfg(feature = "images")]
 use takumi_core::{
   context::RenderContext,
-  layout::node::{ImageData, ImageSourceInput, resolve_image},
+  layout::{
+    node::{ImageData, ImageSourceInput, resolve_image},
+    replaced::place_replaced,
+  },
   resources::image::ImageSource,
 };
 use takumi_core::{
@@ -18,7 +21,6 @@ use takumi_core::{
     inline::{BuiltInlineLayout, InlineRunLayout, ProcessedInlineSpan, ShapedRun, run_decorations},
     inline_box::{InlineBoxPaint, InlineSubtree, resolve_inline_box},
     node::NodeKind,
-    replaced::place_replaced,
     tree::{LayoutResults, RenderNode},
   },
   paint::{ConicGradientTile, LinearGradientTile, RadialGradientTile, resolve_stops_along_axis},
@@ -30,7 +32,7 @@ use takumi_core::{
   shadow::SizedShadow,
   style::{
     Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BlendMode, BoxDecorationBreak,
-    BreakBetween, BreakInside, Color, FillRule as CoreFillRule, Filter, Isolation, Lang,
+    BreakBetween, BreakInside, Color, Display, FillRule as CoreFillRule, Filter, Isolation, Lang,
     ResolvedGradientStop, TextDecorationLines,
   },
 };
@@ -45,7 +47,9 @@ use crate::{
   background::{Placement, cycled, place},
   filter::{ColorFilter, unsupported_filter},
   glyph::run_glyphs,
-  inline::{InlineMap, build_inline_runs, inline_key, node_inline_items, text_line_atoms},
+  inline::{
+    InlineMap, build_inline_runs, inline_box_atoms, inline_key, node_inline_items, text_line_atoms,
+  },
   krilla::{
     Data,
     geom::{Point, Rect as KrillaRect, Transform},
@@ -1380,17 +1384,11 @@ impl Emitter<'_> {
         },
       );
     }
-    #[cfg(feature = "images")]
     self.emit_inline_boxes(node, runs, built, layout, x, y, surface);
     Ok(())
   }
 
-  /// Paints the replaced content of an inline layout's boxes. Glyph runs carry
-  /// the text; an `<img>` between them is a box, and only this pass draws it.
-  ///
-  /// An inline-block subtree needs its own layout pass before it can paint, so
-  /// it is left alone here.
-  #[cfg(feature = "images")]
+  /// Paints the inline layout's replaced boxes and nested container subtrees.
   #[allow(clippy::too_many_arguments)]
   fn emit_inline_boxes(
     &mut self,
@@ -1411,19 +1409,46 @@ impl Emitter<'_> {
       let Some(ProcessedInlineSpan::Box(item)) = built.spans.get(positioned.id as usize) else {
         continue;
       };
+      let node = item.render_node;
+
+      // An in-flow box belongs to the page that owns its line, like the glyph
+      // runs beside it; painting it again on later pages would also tag its
+      // content once per page.
+      if positioned.line_baseline.is_some_and(|baseline| {
+        let absolute = y + layout.content_box_offset().y + baseline;
+        self.window_disowns_line(absolute)
+      }) {
+        continue;
+      }
       let Some((offset, paint)) = resolve_inline_box(positioned, item, layout) else {
         continue;
       };
-      let node = item.render_node;
+      let is_marker = owner
+        .marker()
+        .is_some_and(|marker| std::ptr::eq(marker, node));
+      let marker_target = (self.tags.is_some() && is_marker)
+        .then(|| self.marker_tag_target(owner))
+        .flatten();
+      let marker_tagged = marker_target.is_some();
 
-      // A container box runs its own emitter, which tags every node it walks.
-      // A replaced one paints here, so it takes one region for the whole box.
-      let box_tagged = self.tags.is_some() && matches!(paint, InlineBoxPaint::Replaced { .. });
+      // A regular container runs its own emitter, which tags every source node
+      // it walks. A replaced box paints here — only when the build can paint
+      // it — while a generated marker takes one region for the complete label
+      // subtree.
+      let box_tagged = cfg!(feature = "images")
+        && self.tags.is_some()
+        && matches!(paint, InlineBoxPaint::Replaced { .. });
 
       if owner_tagged {
         surface.end_tagged();
       }
-      if box_tagged {
+      if let Some(path) = marker_target.as_ref() {
+        let identifier = surface.start_tagged(self.content_tag(node));
+
+        if let Some(tags) = self.tags {
+          tags.borrow_mut().record_label(path, identifier);
+        }
+      } else if box_tagged {
         self.start_tagged_node(node, surface);
       }
       // The box never reaches `emit_box`, so the state that would paint it
@@ -1442,10 +1467,13 @@ impl Emitter<'_> {
       let origin = (x + offset.x, y + offset.y);
 
       match paint {
+        #[cfg(feature = "images")]
         InlineBoxPaint::Replaced {
           node,
           layout: box_layout,
         } => self.emit_inline_replaced(node, box_layout, origin, surface),
+        #[cfg(not(feature = "images"))]
+        InlineBoxPaint::Replaced { .. } => {}
         InlineBoxPaint::Container(subtree) => {
           self.emit_inline_subtree(subtree, node, origin, surface)
         }
@@ -1454,7 +1482,7 @@ impl Emitter<'_> {
       if faded {
         surface.pop();
       }
-      if box_tagged {
+      if marker_tagged || box_tagged {
         surface.end_tagged();
       }
       if owner_tagged {
@@ -1496,7 +1524,6 @@ impl Emitter<'_> {
 
   /// Paints an inline-level container from the scene it carries. The box is not
   /// in the paint list, so it needs a stacking context of its own.
-  #[cfg(feature = "images")]
   fn emit_inline_subtree(
     &mut self,
     subtree: Box<InlineSubtree>,
@@ -1504,7 +1531,7 @@ impl Emitter<'_> {
     origin: (f32, f32),
     surface: &mut Surface,
   ) {
-    if subtree.size.width <= 0.0 || subtree.size.height <= 0.0 {
+    if subtree.size.height <= 0.0 {
       return;
     }
     let Ok(contexts) = build_stacking_contexts(
@@ -1547,7 +1574,6 @@ impl Emitter<'_> {
 
   /// Opens a marked-content region for a node the paint list never visited, so
   /// its content still reaches the structure tree.
-  #[cfg(feature = "images")]
   fn start_tagged_node(&self, node: &RenderNode, surface: &mut Surface) {
     if decorative_image(node) {
       surface.start_tagged(ContentTag::Artifact(Artifact::new(
@@ -1575,6 +1601,30 @@ impl Emitter<'_> {
 
     full.extend_from_slice(path);
     full
+  }
+
+  /// Tag target for a generated marker: its nearest `display: list-item`
+  /// ancestor. The tag tree wraps the label in `Lbl` when that node is a
+  /// semantic list item, and reads it before the node's content otherwise.
+  fn marker_tag_target(&self, owner: &RenderNode) -> Option<Vec<usize>> {
+    let mut owner_path = Vec::new();
+
+    if !node_path(self.root, owner, &mut owner_path) {
+      return None;
+    }
+    for length in (0..=owner_path.len()).rev() {
+      let ancestor = &owner_path[..length];
+
+      if self
+        .root
+        .node_at_path(ancestor)
+        .is_some_and(|node| node.context.style.display == Display::ListItem)
+      {
+        return Some(self.tag_path(ancestor));
+      }
+    }
+
+    Some(self.tag_path(&owner_path))
   }
 
   /// One image layer drawn into a pattern, so glyphs can be filled with it.
@@ -1897,23 +1947,30 @@ impl Emitter<'_> {
     paragraphs: &mut Vec<Paragraph>,
   ) -> Result<(), PdfError> {
     let start = atoms.len();
+    let owned_runs;
+    let runs = match self.inline.and_then(|map| map.get(&inline_key(node))) {
+      Some(prepared) => &prepared.runs,
+      None => {
+        let context = &node.context;
+        let Some(items) = node_inline_items(node) else {
+          return Ok(());
+        };
+        let font_style = SizedFontStyle::from_style(&context.style, context);
+        let Some((_, runs)) = build_inline_runs(items, &font_style, context, layout)? else {
+          return Ok(());
+        };
 
-    if let Some(prepared) = self.inline.and_then(|map| map.get(&inline_key(node))) {
-      text_line_atoms(&prepared.runs, layout, y, atoms);
-      push_paragraph(node, &atoms[start..], paragraphs);
-      return Ok(());
-    }
-    let context = &node.context;
-    let Some(items) = node_inline_items(node) else {
-      return Ok(());
-    };
-    let font_style = SizedFontStyle::from_style(&context.style, context);
-    let Some((_, runs)) = build_inline_runs(items, &font_style, context, layout)? else {
-      return Ok(());
+        owned_runs = runs;
+        &owned_runs
+      }
     };
 
-    text_line_atoms(&runs, layout, y, atoms);
-    push_paragraph(node, &atoms[start..], paragraphs);
+    text_line_atoms(runs, layout, y, atoms);
+    // Box bands are indivisible, but they are not text lines: they stay out of
+    // the paragraph slice widow/orphan control counts.
+    let paragraph_end = atoms.len();
+    inline_box_atoms(runs, layout, y, atoms);
+    push_paragraph(node, &atoms[start..paragraph_end], paragraphs);
     Ok(())
   }
 }
@@ -2112,7 +2169,6 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
 /// Fills `path` with the child indices leading from `root` to `target`,
 /// matched by identity. An inline box arrives as a bare node reference, so the
 /// key the tag collector wants has to be recovered from the tree.
-#[cfg(feature = "images")]
 fn node_path(root: &RenderNode, target: &RenderNode, path: &mut Vec<usize>) -> bool {
   if std::ptr::eq(root, target) {
     return true;
