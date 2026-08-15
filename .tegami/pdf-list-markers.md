@@ -3,7 +3,7 @@ packages:
   takumi-pdf:
     type: minor
   takumi-core:
-    type: patch
+    type: minor
 ---
 
 ### Render HTML and CSS list markers in PDF

@@ -7,7 +7,7 @@
 //!
 //! This crate is the facade. The entry-point functions live at the crate root;
 //! the curated, stable types live in [`prelude`]. Glob the prelude, build a node
-//! tree, and call [`render`].
+//! tree, and call [`render`](https://docs.rs/takumi/latest/takumi/fn.render.html).
 //!
 //! # Example
 //!

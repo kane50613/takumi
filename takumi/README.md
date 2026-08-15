@@ -6,7 +6,7 @@ Takumi renders a UI component tree to an image.
 
 This crate is the facade. The entry-point functions live at the crate root;
 the curated, stable types live in [`prelude`](https://docs.rs/takumi/latest/takumi/prelude/). Glob the prelude, build a node
-tree, and call [`render`](https://docs.rs/takumi_raster/latest/takumi_raster/render/fn.render.html).
+tree, and call [`render`](https://docs.rs/takumi/latest/takumi/fn.render.html).
 
 ## Example
 

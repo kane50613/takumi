@@ -70,6 +70,36 @@ function cssStringLiterals(sheet: string): string[] {
   return literals;
 }
 
+/**
+ * Collects marker-capable text from one style layer: the list-style values
+ * themselves, and the quoted string literals of custom properties — the only
+ * shape of theirs that can reach a marker. Returns whether the layer asks for
+ * a marker.
+ */
+function collectStyleLayer(layer: unknown, into: string[]): boolean {
+  if (typeof layer !== "object" || layer === null) return false;
+
+  const values = layer as {
+    display?: unknown;
+    listStyle?: unknown;
+    listStyleType?: unknown;
+  };
+  let hasMarker = values.display === "list-item";
+
+  for (const value of [values.listStyle, values.listStyleType]) {
+    if (typeof value === "string") {
+      into.push(decodeCssEscapes(value));
+      hasMarker = true;
+    }
+  }
+  for (const [property, value] of Object.entries(layer)) {
+    if (property.startsWith("--") && typeof value === "string") {
+      into.push(...cssStringLiterals(value));
+    }
+  }
+  return hasMarker;
+}
+
 function collectListStyleCharacters(node: unknown, into: string[]): boolean {
   if (typeof node !== "object" || node === null) return false;
 
@@ -82,29 +112,11 @@ function collectListStyleCharacters(node: unknown, into: string[]): boolean {
   };
   let hasMarker = typeof tagName === "string" && tagName.toLowerCase() === "li";
 
-  for (const layer of [style, preset]) {
-    if (typeof layer !== "object" || layer === null) continue;
-
-    const values = layer as {
-      display?: unknown;
-      listStyle?: unknown;
-      listStyleType?: unknown;
-    };
-    hasMarker ||= values.display === "list-item";
-    for (const value of [values.listStyle, values.listStyleType]) {
-      if (typeof value === "string") {
-        into.push(decodeCssEscapes(value));
-        hasMarker = true;
-      }
-    }
-    for (const [property, value] of Object.entries(layer)) {
-      if (property.startsWith("--") && typeof value === "string") {
-        into.push(decodeCssEscapes(value));
-      }
-    }
-  }
+  hasMarker = collectStyleLayer(style, into) || hasMarker;
+  hasMarker = collectStyleLayer(preset, into) || hasMarker;
   if (typeof tw === "string") {
-    into.push(decodeCssEscapes(tw));
+    // Class names carry marker text only inside arbitrary-value quotes.
+    into.push(...cssStringLiterals(tw));
     hasMarker ||= tw.includes("list-");
   }
   if (Array.isArray(children)) {
