@@ -390,36 +390,75 @@ pub(crate) fn substitute_page_counters(node: &mut Node, page: usize, pages: usiz
   }
 }
 
-/// Fills the content's hooks with the page their box lays out on, taken from
-/// `page_of` by preorder position. A hook laid out inline has no box of its
-/// own and inherits the page of the nearest ancestor that has one. A hook
-/// inside one of the `repeated` subtrees is left alone: that box numbers itself
-/// per page. Counting walks the tree as it stands, so a hook is written only
-/// after its own subtree has been counted.
-pub(crate) fn substitute_flow_page_counters(
-  node: &mut Node,
-  page_of: &HashMap<usize, usize>,
-  pages: usize,
-  repeated: &[Range<usize>],
-  cursor: &mut usize,
-  inherited: Option<usize>,
-  written: &mut Vec<String>,
-) {
-  let index = *cursor;
-  let page = page_of.get(&index).copied().or(inherited);
+/// The pages a laid-out box spans: where it starts, and the page the flow
+/// continues on after it.
+pub(crate) struct PageSpan {
+  pub(crate) top: usize,
+  pub(crate) after: Option<usize>,
+}
 
-  *cursor += 1;
-  if let NodeKind::Container { children } = &mut node.kind {
-    for child in children {
-      substitute_flow_page_counters(child, page_of, pages, repeated, cursor, page, written);
+/// The state a content-counter walk carries: what the boxes resolved to, and
+/// how far the flow has come.
+pub(crate) struct FlowCounters<'c> {
+  page_of: &'c HashMap<usize, PageSpan>,
+  pages: usize,
+  repeated: &'c [Range<usize>],
+  cursor: usize,
+  preceding: Option<usize>,
+}
+
+impl<'c> FlowCounters<'c> {
+  pub(crate) fn new(
+    page_of: &'c HashMap<usize, PageSpan>,
+    pages: usize,
+    repeated: &'c [Range<usize>],
+  ) -> Self {
+    Self {
+      page_of,
+      pages,
+      repeated,
+      cursor: 0,
+      preceding: None,
     }
   }
-  if let Some(page) = page
-    && !repeated.iter().any(|range| range.contains(&index))
-    && let Some(text) = counter_text(node, page, pages)
-  {
-    written.push(text.clone());
-    write_counter(node, text);
+
+  /// Fills the content's hooks with the page they land on, taken from the boxes
+  /// by preorder position. A hook laid out inline has no box of its own, so it
+  /// takes the later of the box that holds it and the flow that closed before
+  /// it. A hook inside a repeated subtree is left alone: that box numbers itself
+  /// per page. Counting walks the tree as it stands, so a hook is written only
+  /// after its own subtree has been counted.
+  pub(crate) fn substitute(
+    &mut self,
+    node: &mut Node,
+    inherited: Option<usize>,
+    written: &mut Vec<String>,
+  ) {
+    let index = self.cursor;
+    let own = self.page_of.get(&index);
+    let inherit = own.map_or(inherited, |span| Some(span.top));
+
+    self.cursor += 1;
+    if let NodeKind::Container { children } = &mut node.kind {
+      for child in children {
+        self.substitute(child, inherit, written);
+      }
+    }
+    let page = match own {
+      Some(span) => Some(span.top),
+      None => inherit.map(|page| self.preceding.map_or(page, |after| page.max(after))),
+    };
+
+    if let Some(page) = page
+      && !self.repeated.iter().any(|range| range.contains(&index))
+      && let Some(text) = counter_text(node, page, self.pages)
+    {
+      written.push(text.clone());
+      write_counter(node, text);
+    }
+    if let Some(after) = self.page_of.get(&index).and_then(|span| span.after) {
+      self.preceding = Some(after);
+    }
   }
 }
 

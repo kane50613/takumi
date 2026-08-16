@@ -16,7 +16,7 @@ use takumi_core::{
     tree::RenderNode,
   },
   scene::{NodePaint, PaintItemKind},
-  style::Affine,
+  style::{Affine, Position},
 };
 
 use crate::{
@@ -47,10 +47,18 @@ pub(crate) struct Interactive {
   pub(crate) headings: Vec<HeadingTarget>,
   /// Element ids to the box they name, for `href="#id"`.
   pub(crate) anchors: HashMap<Box<str>, AnchorTarget>,
-  /// The top of every box layout gave a position, by the preorder position of
+  /// Where every box layout gave a position sits, by the preorder position of
   /// its source node. A node laid out inline has no box of its own, so it has
-  /// no entry here and inherits its ancestor's page when the counters resolve.
-  pub(crate) boxes: HashMap<usize, f32>,
+  /// no entry here and takes its page from the boxes around it.
+  pub(crate) boxes: HashMap<usize, BoxSpan>,
+}
+
+/// A laid-out box's vertical extent in content coordinates.
+pub(crate) struct BoxSpan {
+  pub(crate) top: f32,
+  /// The bottom the flow continues from, absent for an out-of-flow box, whose
+  /// position says nothing about what comes after it.
+  pub(crate) flow_bottom: Option<f32>,
 }
 
 /// An element carrying an `id`, in content coordinates.
@@ -167,7 +175,15 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
   };
 
   if let Some(index) = node.source_index {
-    collected.boxes.entry(index).or_insert(rect.top());
+    let out_of_flow = matches!(
+      node.context.style.position,
+      Position::Absolute | Position::Fixed
+    );
+
+    collected.boxes.entry(index).or_insert(BoxSpan {
+      top: rect.top(),
+      flow_bottom: (!out_of_flow).then(|| rect.bottom()),
+    });
   }
 
   if let Some(id) = source.id() {

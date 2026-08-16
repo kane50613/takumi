@@ -457,6 +457,37 @@ fn target_counters_settle_after_they_move_their_own_page() {
   assert_eq!(pdf, expected, "target counters did not settle after rewrap");
 }
 
+fn a4_options<'f>(source: &str, fonts: &'f Fonts) -> PdfOptions<'f> {
+  PdfOptions::builder()
+    .node(from_html(source, FromHtmlOptions::default()).expect("parse the doc"))
+    .page(PageOptions::A4)
+    .fonts(fonts)
+    .build()
+}
+
+/// An inline hook has no box of its own. Directly under a tall block it would
+/// take that block's first page, so it takes the page the flow reached instead.
+#[test]
+fn an_inline_page_counter_follows_the_flow_that_precedes_it() {
+  let document = |page: &str| {
+    format!(
+      r#"<main>
+        <div style="height: 1100px;"></div>
+        <span style="font-size: 12px;">{page}</span>
+      </main>"#
+    )
+  };
+  let hooked = document(r#"<span class="pageNumber"></span>"#);
+  let pdf = render(a4_options(&hooked, &fonts())).expect("render the hooked document");
+  let numbered = document("2");
+  let expected = render(a4_options(&numbered, &fonts())).expect("render the numbered document");
+
+  assert_eq!(
+    pdf, expected,
+    "an inline counter under a tall block did not name the page its line sits on"
+  );
+}
+
 /// A page counter that wraps its own line pushes the target one page along, so
 /// the target counter has to be numbered from the layout the page counter left
 /// behind, not the one before it.
@@ -3231,20 +3262,13 @@ fn a_page_counter_in_the_content_names_its_own_page() {
       </main>"#
     )
   };
-  fn options<'f>(source: &str, fonts: &'f Fonts) -> PdfOptions<'f> {
-    PdfOptions::builder()
-      .node(from_html(source, FromHtmlOptions::default()).expect("parse the doc"))
-      .page(PageOptions::A4)
-      .fonts(fonts)
-      .build()
-  }
   let hooked = document(
     r#"<span class="pageNumber"></span>"#,
     r#"<span class="totalPages"></span>"#,
   );
-  let pdf = run_pdf_fixture("content-page-counters", |fonts| options(&hooked, fonts));
+  let pdf = run_pdf_fixture("content-page-counters", |fonts| a4_options(&hooked, fonts));
   let numbered = document("<span>2</span>", "<span>2</span>");
-  let expected = render(options(&numbered, &fonts())).expect("render the numbered document");
+  let expected = render(a4_options(&numbered, &fonts())).expect("render the numbered document");
 
   assert_eq!(
     pdf, expected,

@@ -6,8 +6,7 @@ use takumi_core::{layout::node::Node, style::Affine, viewport::Viewport};
 
 use crate::{
   counters::{
-    has_page_counters, has_target_counters, substitute_flow_page_counters,
-    substitute_target_counters,
+    FlowCounters, PageSpan, has_page_counters, has_target_counters, substitute_target_counters,
   },
   emitter::{FontMap, RenderIssues},
   inline::{build_inline_map, collect_text_boxes},
@@ -132,7 +131,14 @@ fn substitute_counters(node: &mut Node, paginated: &Paginated, written: &mut Vec
     .interactive
     .boxes
     .iter()
-    .filter_map(|(index, top)| Some((index.checked_sub(1)?, page_at(top))))
+    .filter_map(|(index, span)| {
+      let page = PageSpan {
+        top: page_at(&span.top),
+        after: span.flow_bottom.as_ref().map(page_at),
+      };
+
+      Some((index.checked_sub(1)?, page))
+    })
     .collect();
   let repeated: Vec<Range<usize>> = paginated
     .repeated
@@ -145,7 +151,7 @@ fn substitute_counters(node: &mut Node, paginated: &Paginated, written: &mut Vec
     })
     .collect();
 
-  substitute_flow_page_counters(node, &page_of, pages, &repeated, &mut 0, None, written);
+  FlowCounters::new(&page_of, pages, &repeated).substitute(node, None, written);
 
   let anchors = &paginated.interactive.anchors;
   let target_page = |id: &str| anchors.get(id).map(|anchor| page_at(&anchor.top));
