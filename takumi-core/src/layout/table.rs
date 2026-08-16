@@ -8,9 +8,12 @@
 //! its cells on the way out, since striping and header bands live there.
 //!
 //! This is auto table layout approximated by `auto` tracks. It follows Blink
-//! where following is cheap (row group order, cell alignment, `border-spacing`)
-//! and diverges where the grid algorithm cannot express a table: `border-collapse`,
-//! per-cell `vertical-align`, and row borders are not implemented.
+//! where following is cheap (row group order, `border-spacing`) and diverges
+//! where the grid algorithm cannot express a table: `border-collapse`,
+//! `vertical-align`, and row borders are not implemented. A cell's box
+//! stretches to its grid area, so borders and backgrounds cover it, but the
+//! content inside sits at the top — `vertical-align: top` where Blink
+//! defaults to `middle`.
 //!
 //! The width distribution differs too. Blink's `kAboveMax` branch
 //! (`table_layout_utils.cc`) grows each auto column by
@@ -23,8 +26,8 @@
 use crate::{
   layout::tree::RenderNode,
   style::{
-    AlignItems, ColorInput, Display, FromCssStr, Gap, GridPlacement, GridPlacementSpan,
-    GridTemplateComponents, Length, ToCss,
+    ColorInput, Display, FromCssStr, Gap, GridPlacement, GridPlacementSpan, GridTemplateComponents,
+    Length, ToCss,
   },
 };
 
@@ -177,19 +180,17 @@ fn track_count(placements: &[Vec<(usize, u16)>]) -> u16 {
     .clamp(1, u32::from(MAX_COLSPAN)) as u16
 }
 
-/// Turns a cell into a grid item on the given row. The column is auto-placed,
-/// which is what makes `colspan` and a preceding `rowspan` skip covered tracks.
-fn lower_cell(cell: &mut RenderNode, line: i16) {
-  let colspan = span_attribute(cell, "colspan", MAX_COLSPAN);
+/// Turns a cell into a grid item at its resolved position. The column is
+/// explicit rather than auto-placed: taffy's placement cursor does not return
+/// to the row start on a row a `rowspan` reaches into.
+fn lower_cell(cell: &mut RenderNode, line: i16, column: usize, colspan: u16) {
   let rowspan = span_attribute(cell, "rowspan", MAX_ROWSPAN);
 
   cell.context.style.display = Display::Block;
   cell.context.style.grid_row_start = GridPlacement::Line(line);
   cell.context.style.grid_row_end = GridPlacement::Span(GridPlacementSpan::Span(rowspan));
-
-  if colspan > 1 {
-    cell.context.style.grid_column_end = GridPlacement::Span(GridPlacementSpan::Span(colspan));
-  }
+  cell.context.style.grid_column_start = GridPlacement::Line(column as i16 + 1);
+  cell.context.style.grid_column_end = GridPlacement::Span(GridPlacementSpan::Span(colspan));
 }
 
 /// Copies a row's background onto a cell that has none of its own.
@@ -246,15 +247,22 @@ fn lower_table(table: &mut RenderNode) {
     line = line.saturating_add(1);
   }
 
-  for mut row in rows {
+  for (mut row, positions) in rows.into_iter().zip(placements) {
     let cells = row.children.take().map_or_else(Vec::new, Vec::from);
+    let mut positions = positions.into_iter();
 
     for mut cell in cells {
-      if cell.context.style.display == Display::TableCell {
-        inherit_row_background(&row, &mut cell);
-        lower_cell(&mut cell, line);
-        items.push(cell);
+      if cell.context.style.display != Display::TableCell {
+        continue;
       }
+
+      let Some((column, colspan)) = positions.next() else {
+        break;
+      };
+
+      inherit_row_background(&row, &mut cell);
+      lower_cell(&mut cell, line, column, colspan);
+      items.push(cell);
     }
 
     line = line.saturating_add(1);
@@ -272,9 +280,6 @@ fn lower_table(table: &mut RenderNode) {
   // `auto` tracks put free space into the columns rather than between them,
   // which is the shape of Blink's auto table layout.
   style.grid_template_columns = Some(tracks);
-  // Blink's `thead, tbody, tfoot { vertical-align: middle }`, inherited by the
-  // cells. Per-cell `vertical-align` is not honored.
-  style.align_items = AlignItems::Center;
 
   if style.column_gap == Gap::Normal {
     style.column_gap = Gap::Length(Length::Px(DEFAULT_BORDER_SPACING_PX));
