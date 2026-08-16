@@ -4,7 +4,7 @@ description: What the table displays support, where they drift from browsers, an
 icon: Table
 ---
 
-Takumi renders `display: table` by rewriting the table into a grid before layout, so every row shares one set of column tracks. It is a naive approximation, not the CSS table algorithm. This page lists what carries over and where it drifts.
+Takumi renders `display: table` by rewriting the table into a grid before layout, so every row shares one set of column tracks. It is a **naive implementation**, not the CSS table algorithm. This page lists what carries over and where it drifts.
 
 ## What works
 
@@ -48,3 +48,10 @@ The width drift only appears when every column is `auto` and the table is wider 
   Cells keep their box: padding, borders, and backgrounds cover the full grid area, including rows
   spanned by `rowspan`.
 </Callout>
+
+## Upstream table layout
+
+Native CSS table layout for taffy is in progress at
+[DioxusLabs/taffy#1094](https://github.com/DioxusLabs/taffy/pull/1094), with column width and row
+height distribution ported from Blink. Once it lands, Takumi switches to it. That closes the
+column width and `vertical-align` drift, with no change to the properties on this page.
