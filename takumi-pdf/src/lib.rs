@@ -37,7 +37,7 @@
 //! `filter: blur()` and `drop-shadow()` have no PDF equivalent. [`render`]
 //! stops and names the function.
 
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, mem::take, rc::Rc};
 
 mod background;
 mod bands;
@@ -50,6 +50,7 @@ mod glyph;
 mod inline;
 mod interactive;
 mod options;
+mod page;
 mod pagination;
 mod paint;
 #[cfg(feature = "images")]
@@ -92,7 +93,7 @@ pub use crate::options::{
   XmpSchema,
 };
 use crate::{
-  bands::{MeasuredBand, emit_band, measure_band, prepare_band},
+  bands::{RepeatBounds, Repeatable, prepare_band},
   emitter::{FontMap, RenderIssues},
   glyph::uncovered_error,
   inline::{build_inline_map, collect_text_boxes},
@@ -104,20 +105,15 @@ use crate::{
     embed::{EmbeddedFile, MimeType},
     geom::{Point, Rect as KrillaRect, Size as KrillaSize, Transform},
     page::PageSettings,
-    paint::FillRule,
     surface::Surface,
   },
-  options::{BAND_EDGE_PADDING, PT_PER_PX, build_metadata, krilla_datetime, validate_xmp_schemas},
-  pagination::{MAX_PAGES, PageGeometry, Paginated, paginate},
+  options::{PT_PER_PX, build_metadata, krilla_datetime, validate_xmp_schemas},
+  page::{PageComposer, PageFrame},
+  pagination::{MAX_PAGES, paginate},
   paint::{fill_from_rgba, rect_path},
   tags::{TagCollector, build_tag_tree, tag_id},
-  tree::{TreeInputs, prepare_repeated, prepare_tree, tree_context},
+  tree::{TreeInputs, prepare_tree, tree_context},
 };
-
-/// The height a measured band came out at, or nothing when the side has none.
-fn band_height(band: Option<&MeasuredBand>) -> Option<f32> {
-  band.map(|band| band.measured.height)
-}
 
 /// Lays out a node tree without rendering and returns its size.
 ///
@@ -246,302 +242,80 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
   }
   match options.page {
     Some(page) => {
-      let page_size = KrillaSize::from_wh(page.width * PT_PER_PX, page.height * PT_PER_PX)
-        .ok_or(PdfError::InvalidPageSize)?;
       // Bands lay out at full page width and draw inside the margin areas,
-      // like Chromium's print header and footer templates. The content window
-      // is always the full margin box; a band taller than its margin overlaps
-      // content, exactly as in Chromium. They are measured first so an `auto`
-      // margin can take the height they came out at.
+      // like Chromium's print header and footer templates.
       let band_viewport = Viewport::new((page.width as u32, None));
-
-      // Band heights are measured once with three-digit counters; per-page
-      // emission clips to the measured band, so a wrap caused by a wider real
-      // counter cannot move the band box between pages. A band without counter
-      // hooks reuses the measured layout on every page.
-      let header_band = options
+      let header = options
         .header
         .as_ref()
-        .map(|template| measure_band(&inputs, template, band_viewport))
+        .map(|template| Repeatable::band(&inputs, template, band_viewport, RepeatBounds::Header))
         .transpose()?;
-      let footer_band = options
+      let footer = options
         .footer
         .as_ref()
-        .map(|template| measure_band(&inputs, template, band_viewport))
+        .map(|template| Repeatable::band(&inputs, template, band_viewport, RepeatBounds::Footer))
         .transpose()?;
-      let margin = page.margin.resolve(
-        (page.width, page.height),
-        band_height(header_band.as_ref()),
-        band_height(footer_band.as_ref()),
-      );
-      let (content_width, content_height) = page.content_size(margin);
-      if !(content_width.is_finite()
-        && content_height.is_finite()
-        && content_width > 0.0
-        && content_height > 0.0)
-      {
-        return Err(PdfError::InvalidPageSize);
-      }
-      let content_viewport = Viewport::new((content_width as u32, None));
-      let header_height = band_height(header_band.as_ref()).unwrap_or(0.0);
-      let footer_height = band_height(footer_band.as_ref()).unwrap_or(0.0);
-      let window_height = content_height;
-
-      let node = options.node;
-
-      let page_area = Viewport::new((content_width as u32, content_height as u32));
-      let paginated = paginate(
-        node,
+      let frame = PageFrame::resolve(
+        &page,
+        band_viewport,
+        header.as_ref().map(Repeatable::height),
+        footer.as_ref().map(Repeatable::height),
+      )?;
+      let mut paginated = paginate(
+        options.node,
         &inputs,
         &mut fonts,
         &issues,
         document_lang,
-        &PageGeometry {
-          viewport: content_viewport,
-          page_area,
-          window_height,
-        },
+        &frame.geometry(),
       )?;
 
-      let Paginated {
-        content,
-        repeated,
-        starts,
-        interactive,
-        ..
-      } = &paginated;
-
-      if starts.len() >= MAX_PAGES {
-        return Err(PdfError::TooManyPages(starts.len()));
+      if paginated.starts.len() >= MAX_PAGES {
+        return Err(PdfError::TooManyPages(paginated.starts.len()));
       }
-      let page_context = tree_context(&inputs, page_area);
-      // A repeated box without a counter keeps the one layout, so its links are
-      // collected once rather than per page. They stay grouped by box, which is
-      // the order the annotations are added in.
-      let kept_links: Vec<_> = repeated
-        .iter()
-        .map(|repeat| match repeat.template {
-          Some(_) => Vec::new(),
-          None => collect_interactive(&repeat.prepared).links,
-        })
+      let repeatables: Vec<Repeatable> = header
+        .into_iter()
+        .chain(
+          take(&mut paginated.repeated)
+            .into_iter()
+            .map(Repeatable::fixed),
+        )
+        .chain(footer)
         .collect();
-      let text_boxes = collect_text_boxes(&content);
+      let text_boxes = collect_text_boxes(&paginated.content);
       let inline_map = build_inline_map(&text_boxes)?;
-      let pages = starts.len();
-      let structural = options.tagged.names_structure_destinations();
-      let destination = |top: f32, path: &[usize]| {
-        let index = paginated.page_index(top);
-        let y = margin.top + (top - starts[index]).max(0.0);
-        let dest = XyzDestination::new(
-          index,
-          Point::from_xy(margin.left * PT_PER_PX, y * PT_PER_PX),
-        );
-
-        match structural {
-          true => dest.with_structure(tag_id(path)),
-          false => dest,
-        }
+      let mut composer = PageComposer {
+        frame: &frame,
+        paginated: &paginated,
+        inputs: &inputs,
+        page_context: tree_context(&inputs, frame.page_area),
+        inline_map: &inline_map,
+        fonts: &mut fonts,
+        issues: &issues,
+        tag_collector: tag_collector.as_ref(),
+        document_lang,
+        background: options.background_color,
+        structural: options.tagged.names_structure_destinations(),
       };
 
       for slice in paginated.pages() {
-        // A repeated box holding a counter lays out again with this page's
-        // numbers; the rest keep the layout they were prepared with.
-        let renumbered = repeated
-          .iter()
-          .map(|repeat| {
-            repeat
-              .template
-              .as_ref()
-              .map(|template| {
-                prepare_repeated(&page_context, template, slice.index + 1, pages, page_area)
-              })
-              .transpose()
-          })
-          .collect::<Result<Vec<_>, PdfError>>()?;
-        let page_boxes: Vec<_> = repeated
-          .iter()
-          .zip(&renumbered)
-          .map(|(repeat, fresh)| fresh.as_ref().unwrap_or(&repeat.prepared))
-          .collect();
-        let renumbered_links: Vec<_> = renumbered
-          .iter()
-          .map(|fresh| {
-            fresh
-              .as_ref()
-              .map_or_else(Vec::new, |tree| collect_interactive(tree).links)
-          })
-          .collect();
-        let mut pdf_page = document.start_page_with(PageSettings::new(page_size));
-        let mut surface = pdf_page.surface();
-
-        surface.push_transform(&Transform::from_scale(PT_PER_PX, PT_PER_PX));
-        paint_page_background(
-          options.background_color,
-          (page.width, page.height),
-          &mut surface,
-        );
-        if let (Some(band), Some(template)) = (&header_band, &options.header) {
-          let prepared;
-          let tree = if band.dynamic {
-            prepared = prepare_band(&inputs, template, slice.index + 1, pages, band_viewport)?;
-            &prepared
-          } else {
-            &band.measured
-          };
-
-          emit_band(
-            tree,
-            &mut fonts,
-            (0.0, BAND_EDGE_PADDING, page.width, header_height),
-            tag_collector.is_some(),
-            &issues,
-            document_lang,
-            &mut surface,
-          )?;
-        }
-
-        let content_top = margin.top;
-
-        for fixed in page_boxes
-          .iter()
-          .copied()
-          .filter(|tree| tree.paints_below())
-        {
-          emit_band(
-            fixed,
-            &mut fonts,
-            (margin.left, content_top, content_width, window_height),
-            tag_collector.is_some(),
-            &issues,
-            document_lang,
-            &mut surface,
-          )?;
-        }
-        // Paint stops at the next cut: the region between a raised cut and the
-        // page's full height belongs to the next page and stays blank, exactly
-        // like browser print fragmentation.
-        if let Some(path) =
-          KrillaRect::from_xywh(margin.left, content_top, content_width, slice.paint_height)
-            .and_then(rect_path)
-        {
-          surface.push_clip_path(&path, &FillRule::NonZero);
-          surface.push_transform(&Transform::from_translate(
-            margin.left,
-            content_top - slice.start,
-          ));
-          let mut emitter = content.emitter(
-            &mut fonts,
-            Some(&inline_map),
-            tag_collector.as_ref(),
-            &issues,
-            document_lang,
-          );
-
-          emitter.window = Some((slice.start, slice.start + slice.paint_height));
-          emitter.line_window = Some((
-            if slice.index == 0 {
-              f32::NEG_INFINITY
-            } else {
-              slice.start
-            },
-            slice.end,
-          ));
-          emitter.emit_context(0, Affine::IDENTITY, &mut surface)?;
-          surface.pop();
-          surface.pop();
-        }
-
-        for fixed in page_boxes
-          .iter()
-          .copied()
-          .filter(|tree| !tree.paints_below())
-        {
-          emit_band(
-            fixed,
-            &mut fonts,
-            (margin.left, content_top, content_width, window_height),
-            tag_collector.is_some(),
-            &issues,
-            document_lang,
-            &mut surface,
-          )?;
-        }
-
-        if let (Some(band), Some(template)) = (&footer_band, &options.footer) {
-          let prepared;
-          let tree = if band.dynamic {
-            prepared = prepare_band(&inputs, template, slice.index + 1, pages, band_viewport)?;
-            &prepared
-          } else {
-            &band.measured
-          };
-
-          emit_band(
-            tree,
-            &mut fonts,
-            (
-              0.0,
-              page.height - BAND_EDGE_PADDING - footer_height,
-              page.width,
-              footer_height,
-            ),
-            tag_collector.is_some(),
-            &issues,
-            document_lang,
-            &mut surface,
-          )?;
-        }
-
-        surface.pop();
-        surface.finish();
-        add_link_annotations(
-          &mut pdf_page,
-          &interactive.links,
-          (slice.start, slice.start + slice.paint_height),
-          (margin.left, content_top),
-          tag_collector.as_ref(),
-          |id| {
-            interactive
-              .anchors
-              .get(id)
-              .map(|anchor| destination(anchor.top, &anchor.path))
-          },
-        );
-        // A repeated box sits at the same place on every page, so its links are
-        // added per page against the page area rather than the content window.
-        // The box itself is an artifact, and its paths do not exist in the tag
-        // tree, so the annotations stay out of the structure too.
-        add_link_annotations(
-          &mut pdf_page,
-          kept_links
-            .iter()
-            .zip(&renumbered_links)
-            .flat_map(|(kept, fresh)| kept.iter().chain(fresh)),
-          (0.0, window_height),
-          (margin.left, content_top),
-          None,
-          |id| {
-            interactive
-              .anchors
-              .get(id)
-              .map(|anchor| destination(anchor.top, &anchor.path))
-          },
-        );
-        pdf_page.finish();
+        composer.compose(&mut document, &repeatables, &slice)?;
       }
+
+      let interactive = &paginated.interactive;
 
       if (options.outline || options.tagged.requires_outline()) && !interactive.headings.is_empty()
       {
         document.set_outline(build_outline(&interactive.headings, |heading| {
-          destination(heading.top, &heading.path)
+          composer.destination(heading.top, &heading.path)
         }));
       }
       if let Some(collector) = &tag_collector {
         document.set_tag_tree(build_tag_tree(
-          &content.root,
+          &paginated.content.root,
           inputs.lang.as_ref().map(Lang::as_str),
           &mut collector.borrow_mut(),
-          &destination_targets(&interactive),
+          &destination_targets(interactive),
         ));
       }
     }
@@ -632,7 +406,10 @@ mod tests {
   use takumi_core::units::ONE_IN_PX;
 
   use super::*;
-  use crate::pagination::{Atom, page_starts};
+  use crate::{
+    options::BAND_EDGE_PADDING,
+    pagination::{Atom, page_starts},
+  };
 
   const A4: (f32, f32) = (PageOptions::A4.width, PageOptions::A4.height);
 
