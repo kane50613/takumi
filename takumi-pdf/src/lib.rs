@@ -108,7 +108,7 @@ use crate::{
     surface::Surface,
   },
   options::{BAND_EDGE_PADDING, PT_PER_PX, build_metadata, krilla_datetime, validate_xmp_schemas},
-  pagination::{MAX_PAGES, PageGeometry, Paginated, paginate, resolve_target_counters},
+  pagination::{MAX_PAGES, PageGeometry, Paginated, paginate},
   paint::{fill_from_rgba, rect_path},
   tags::{TagCollector, build_tag_tree, tag_id},
   tree::{TreeInputs, prepare_repeated, prepare_tree, tree_context},
@@ -287,17 +287,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       let footer_height = band_height(footer_band.as_ref()).unwrap_or(0.0);
       let window_height = content_height;
 
-      let mut node = options.node;
-
-      resolve_target_counters(
-        &mut node,
-        &inputs,
-        &mut fonts,
-        &issues,
-        document_lang,
-        content_viewport,
-        window_height,
-      )?;
+      let node = options.node;
 
       let page_area = Viewport::new((content_width as u32, content_height as u32));
       let Paginated {

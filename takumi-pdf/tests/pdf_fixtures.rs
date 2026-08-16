@@ -457,6 +457,35 @@ fn target_counters_settle_after_they_move_their_own_page() {
   assert_eq!(pdf, expected, "target counters did not settle after rewrap");
 }
 
+/// A page counter that wraps its own line pushes the target one page along, so
+/// the target counter has to be numbered from the layout the page counter left
+/// behind, not the one before it.
+#[test]
+fn a_page_counter_renumbers_the_target_it_moves() {
+  let document = |page: &str, target: &str| {
+    format!(
+      r##"<div style="display: flex; flex-direction: column; width: 100%; font-size: 14px; color: #141414;">
+        <a href="#target" style="display: flex; column-gap: 4px;">see{target}</a>
+        <div style="display: flex; flex-wrap: wrap; width: 100%;"><span style="width: 268px;">Body</span>{page}</div>
+        <div style="height: 130px;"></div>
+        <div id="target" style="display: flex;">Target</div>
+      </div>"##
+    )
+  };
+  let hooked = document(
+    r#"<span class="pageNumber"></span>"#,
+    r#"<span class="targetPageNumber"></span>"#,
+  );
+  let pdf = render(toc_options(&hooked, &fonts())).expect("render the hooked document");
+  let numbered = document("<span>1</span>", "<span>2</span>");
+  let expected = render(toc_options(&numbered, &fonts())).expect("render the numbered document");
+
+  assert_eq!(
+    pdf, expected,
+    "the target counter did not follow the page the page counter moved it to"
+  );
+}
+
 #[test]
 fn target_counter_in_a_band_drops_its_placeholder() {
   let band = |cell: &str| {

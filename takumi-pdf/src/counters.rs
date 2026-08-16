@@ -1,6 +1,6 @@
 //! `@counter-style` formatting and substitution of the page-counter class hooks.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Range};
 
 use takumi_core::layout::node::{Node, NodeKind};
 
@@ -392,13 +392,15 @@ pub(crate) fn substitute_page_counters(node: &mut Node, page: usize, pages: usiz
 
 /// Fills the content's hooks with the page their box lays out on, taken from
 /// `page_of` by preorder position. A hook laid out inline has no box of its
-/// own and inherits the page of the nearest ancestor that has one. Counting
-/// walks the tree as it stands, so a hook is written only after its own
-/// subtree has been counted.
+/// own and inherits the page of the nearest ancestor that has one. A hook
+/// inside one of the `repeated` subtrees is left alone: that box numbers itself
+/// per page. Counting walks the tree as it stands, so a hook is written only
+/// after its own subtree has been counted.
 pub(crate) fn substitute_flow_page_counters(
   node: &mut Node,
   page_of: &HashMap<usize, usize>,
   pages: usize,
+  repeated: &[Range<usize>],
   cursor: &mut usize,
   inherited: Option<usize>,
   written: &mut Vec<String>,
@@ -409,10 +411,11 @@ pub(crate) fn substitute_flow_page_counters(
   *cursor += 1;
   if let NodeKind::Container { children } = &mut node.kind {
     for child in children {
-      substitute_flow_page_counters(child, page_of, pages, cursor, page, written);
+      substitute_flow_page_counters(child, page_of, pages, repeated, cursor, page, written);
     }
   }
   if let Some(page) = page
+    && !repeated.iter().any(|range| range.contains(&index))
     && let Some(text) = counter_text(node, page, pages)
   {
     written.push(text.clone());

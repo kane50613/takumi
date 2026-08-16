@@ -1,6 +1,6 @@
 //! Layout of an independent node tree: the main content or a header/footer band.
 
-use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
+use std::{cell::RefCell, collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
 use takumi_core::{
   Fonts,
@@ -162,6 +162,21 @@ pub(crate) struct RepeatedBox {
 pub(crate) struct RepeatedTemplate {
   node: Node,
   parent: RenderContext,
+  index: usize,
+}
+
+impl RepeatedTemplate {
+  /// The preorder positions the subtree occupies in the tree it was taken from.
+  pub(crate) fn source_range(&self) -> Range<usize> {
+    self.index..self.index + node_count(&self.node)
+  }
+}
+
+fn node_count(node: &Node) -> usize {
+  match &node.kind {
+    NodeKind::Container { children } => 1 + children.iter().map(node_count).sum::<usize>(),
+    _ => 1,
+  }
 }
 
 /// The tree, plus the `fixed` subtrees attached to the initial containing
@@ -188,11 +203,12 @@ pub(crate) fn prepare_paged_tree(
       let template = source
         .as_ref()
         .zip(node.source_index)
-        .and_then(|(source, index)| node_at_preorder(source, index))
-        .filter(|template| has_page_counters(template))
-        .map(|template| RepeatedTemplate {
+        .and_then(|(source, index)| Some((index, node_at_preorder(source, index)?)))
+        .filter(|(_, template)| has_page_counters(template))
+        .map(|(index, template)| RepeatedTemplate {
           node: template.clone(),
           parent,
+          index,
         });
 
       Ok(RepeatedBox {
