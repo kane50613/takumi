@@ -119,20 +119,59 @@ fn collect_rows(table: &mut RenderNode) -> (Vec<RenderNode>, Vec<RenderNode>, Ve
   (captions, rows, strays)
 }
 
-/// Widest row, counting `colspan`, which is how many tracks the grid needs.
-fn track_count(rows: &[RenderNode]) -> u16 {
-  rows
+/// Each row's cells as `(column, colspan)`, advanced past tracks a preceding
+/// row's `rowspan` still covers — the occupancy grid auto-placement will see.
+fn resolve_columns(rows: &[RenderNode]) -> Vec<Vec<(usize, u16)>> {
+  // Per track, how many more rows a rowspan keeps it covered.
+  let mut covered: Vec<u16> = Vec::new();
+  let mut placements = Vec::with_capacity(rows.len());
+
+  for row in rows {
+    let mut column = 0usize;
+    let mut cells = Vec::new();
+
+    for cell in row.children.as_deref().unwrap_or_default() {
+      if cell.context.style.display != Display::TableCell {
+        continue;
+      }
+
+      while covered.get(column).is_some_and(|rows_left| *rows_left > 0) {
+        column += 1;
+      }
+
+      let colspan = span_attribute(cell, "colspan", MAX_COLSPAN);
+      let rowspan = span_attribute(cell, "rowspan", MAX_ROWSPAN);
+      let end = column + usize::from(colspan);
+
+      if covered.len() < end {
+        covered.resize(end, 0);
+      }
+
+      for track in &mut covered[column..end] {
+        *track = rowspan;
+      }
+
+      cells.push((column, colspan));
+      column = end;
+    }
+
+    placements.push(cells);
+
+    for track in &mut covered {
+      *track = track.saturating_sub(1);
+    }
+  }
+
+  placements
+}
+
+/// Widest row, counting `colspan` and rowspan occupancy, which is how many
+/// tracks the grid needs.
+fn track_count(placements: &[Vec<(usize, u16)>]) -> u16 {
+  placements
     .iter()
-    .map(|row| {
-      row
-        .children
-        .as_deref()
-        .unwrap_or_default()
-        .iter()
-        .filter(|cell| cell.context.style.display == Display::TableCell)
-        .map(|cell| u32::from(span_attribute(cell, "colspan", MAX_COLSPAN)))
-        .sum::<u32>()
-    })
+    .flatten()
+    .map(|(column, colspan)| *column as u32 + u32::from(*colspan))
     .max()
     .unwrap_or(1)
     .clamp(1, u32::from(MAX_COLSPAN)) as u16
@@ -195,8 +234,9 @@ fn lower_full_width(node: &mut RenderNode, line: i16, columns: u16) {
 
 fn lower_table(table: &mut RenderNode) {
   let (captions, rows, strays) = collect_rows(table);
-  let columns = track_count(&rows);
-  let tracks = track_sizes(&rows, columns);
+  let placements = resolve_columns(&rows);
+  let columns = track_count(&placements);
+  let tracks = track_sizes(&rows, &placements, columns);
   let mut items = Vec::new();
   let mut line: i16 = 1;
 
@@ -253,28 +293,30 @@ fn lower_table(table: &mut RenderNode) {
 /// This is Blink's constrained-versus-auto column split, decided from the cell's
 /// specified width the same way, but read off the first row that states one
 /// instead of resolving the whole column.
-fn track_sizes(rows: &[RenderNode], columns: u16) -> GridTemplateComponents {
+fn track_sizes(
+  rows: &[RenderNode],
+  placements: &[Vec<(usize, u16)>],
+  columns: u16,
+) -> GridTemplateComponents {
   let mut tracks = vec![String::from("auto"); usize::from(columns)];
 
-  for row in rows {
-    let mut column = 0usize;
+  for (row, cells) in rows.iter().zip(placements) {
+    let table_cells = row
+      .children
+      .as_deref()
+      .unwrap_or_default()
+      .iter()
+      .filter(|cell| cell.context.style.display == Display::TableCell);
 
-    for cell in row.children.as_deref().unwrap_or_default() {
-      if cell.context.style.display != Display::TableCell {
-        continue;
-      }
-
-      let colspan = usize::from(span_attribute(cell, "colspan", MAX_COLSPAN));
+    for (cell, (column, colspan)) in table_cells.zip(cells) {
       let width = &cell.context.style.width;
 
-      if colspan == 1
+      if *colspan == 1
         && *width != Length::Auto
-        && tracks.get(column).is_some_and(|track| track == "auto")
+        && tracks.get(*column).is_some_and(|track| track == "auto")
       {
-        tracks[column] = width.to_css_string();
+        tracks[*column] = width.to_css_string();
       }
-
-      column += colspan;
     }
   }
 
@@ -491,6 +533,52 @@ mod tests {
     assert_eq!(
       cells[0].context.style.background_color,
       cells[1].context.style.background_color
+    );
+  }
+
+  #[test]
+  fn cells_after_a_rowspan_land_past_the_covered_track() {
+    // Row two's cells sit in tracks 2 and 3; the rowspan holds track 1.
+    let tree = lower(
+      Node::container([
+        row([with_span(cell("a"), "rowspan", "2"), cell("b")]),
+        row([cell("c"), cell("d")]),
+      ])
+      .with_class_name("table"),
+    );
+
+    assert_eq!(
+      tree
+        .context
+        .style
+        .grid_template_columns
+        .as_ref()
+        .expect("template")
+        .to_css_string(),
+      "auto auto auto"
+    );
+  }
+
+  #[test]
+  fn a_width_declared_under_a_rowspan_sizes_the_shifted_column() {
+    let shifted = Node::container([Node::text("w")])
+      .with_class_name("td")
+      .with_id("w")
+      .with_style(Style::default().with(StyleDeclaration::width(Length::Px(220.0))));
+    let tree = lower(
+      Node::container([row([with_span(cell("a"), "rowspan", "2")]), row([shifted])])
+        .with_class_name("table"),
+    );
+
+    assert_eq!(
+      tree
+        .context
+        .style
+        .grid_template_columns
+        .as_ref()
+        .expect("template")
+        .to_css_string(),
+      "auto 220px"
     );
   }
 
