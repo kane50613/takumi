@@ -147,6 +147,17 @@ const DEFAULT_PRESETS: &[(&str, &str)] = &[
   ("sup", "font-size:smaller;vertical-align:super"),
   ("div", "display:block"),
   ("br", "white-space:pre"),
+  ("table", "display:table;box-sizing:border-box"),
+  ("thead", "display:table-header-group"),
+  ("tbody", "display:table-row-group"),
+  ("tfoot", "display:table-footer-group"),
+  ("tr", "display:table-row"),
+  ("td", "display:table-cell;padding:1px"),
+  (
+    "th",
+    "display:table-cell;padding:1px;font-weight:bold;text-align:center",
+  ),
+  ("caption", "display:table-caption;text-align:center"),
 ];
 
 static DEFAULT_STYLE_PRESETS: LazyLock<HashMap<Box<str>, Style>> = LazyLock::new(|| {

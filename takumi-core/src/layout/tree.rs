@@ -1253,6 +1253,8 @@ impl RenderNode {
     );
     let mut tree = Self::from_node_iterative(parent_context, node, &matched_styles);
 
+    crate::layout::table::lower_tables(&mut tree);
+
     if tree.is_inline_level() {
       tree.context.style.display.blockify();
     }
