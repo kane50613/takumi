@@ -42,7 +42,7 @@ Takumi renders `display: table` by rewriting the table into a grid before layout
 | `border-collapse`  | Merges adjacent borders             | Not implemented; borders stay separate |
 | Row borders        | Drawn on the row box                | Dropped; put borders on the cells      |
 
-The width drift only appears when every column is `auto` and the table is wider than its content. **Declare a width on a single-column cell in each column** to keep the columns close to Chrome. A width on a spanning cell does not size a column.
+The width drift appears when the table is wider than its content and the free space splits across two or more `auto` columns, fixed-width neighbors included. **Declare a width on a single-column cell in each column** to keep the columns close to Chrome. A width on a spanning cell does not size a column.
 
 <Callout type="info">
   Cells keep their box: padding, borders, and backgrounds cover the full grid area, including rows
