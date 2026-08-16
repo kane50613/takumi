@@ -132,7 +132,7 @@ pub(crate) fn prepare_tree(
   lay_out(root, viewport)
 }
 
-fn tree_context(inputs: &TreeInputs<'_>, viewport: Viewport) -> RenderContext {
+pub(crate) fn tree_context(inputs: &TreeInputs<'_>, viewport: Viewport) -> RenderContext {
   RenderContext::builder()
     .fonts(
       inputs
@@ -207,7 +207,7 @@ pub(crate) fn prepare_paged_tree(
 
 /// Lays a repeated box out again with the counters a page asks for.
 pub(crate) fn prepare_repeated(
-  inputs: &TreeInputs<'_>,
+  page_context: &RenderContext,
   template: &RepeatedTemplate,
   page: usize,
   pages: usize,
@@ -218,10 +218,7 @@ pub(crate) fn prepare_repeated(
   substitute_page_counters(&mut node, page, pages);
   let child = RenderNode::from_node(&template.parent, node);
 
-  lay_out(
-    page_root(&tree_context(inputs, page_area), child),
-    page_area,
-  )
+  lay_out(page_root(page_context, child), page_area)
 }
 
 /// The node at a preorder position, counted the way the render tree numbers

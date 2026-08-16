@@ -48,8 +48,8 @@ pub(crate) struct Interactive {
   /// Element ids to the box they name, for `href="#id"`.
   pub(crate) anchors: HashMap<Box<str>, AnchorTarget>,
   /// The top of every box layout gave a position, by the preorder position of
-  /// its source node. A node laid out inline has no box of its own, so it takes
-  /// the position of the nearest ancestor that has one.
+  /// its source node. A node laid out inline has no box of its own, so it has
+  /// no entry here and inherits its ancestor's page when the counters resolve.
   pub(crate) boxes: HashMap<usize, f32>,
 }
 
@@ -167,7 +167,7 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
   };
 
   if let Some(index) = node.source_index {
-    collected.boxes.insert(index, rect.top());
+    collected.boxes.entry(index).or_insert(rect.top());
   }
 
   if let Some(id) = source.id() {
@@ -344,9 +344,9 @@ fn collect_inline_links(
 /// Adds this page's slice of every link as annotations. `window` is the page's
 /// content window in content coordinates; `offset` maps content to page
 /// coordinates.
-pub(crate) fn add_link_annotations(
+pub(crate) fn add_link_annotations<'l>(
   page: &mut Page,
-  links: &[LinkTarget],
+  links: impl IntoIterator<Item = &'l LinkTarget>,
   window: (f32, f32),
   offset: (f32, f32),
   tags: Option<&RefCell<TagCollector>>,

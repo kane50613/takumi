@@ -111,7 +111,7 @@ use crate::{
   pagination::{MAX_PAGES, PageGeometry, Paginated, paginate, resolve_target_counters},
   paint::{fill_from_rgba, rect_path},
   tags::{TagCollector, build_tag_tree, tag_id},
-  tree::{TreeInputs, prepare_repeated, prepare_tree},
+  tree::{TreeInputs, prepare_repeated, prepare_tree, tree_context},
 };
 
 /// The height a measured band came out at, or nothing when the side has none.
@@ -321,6 +321,14 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       if starts.len() >= MAX_PAGES {
         return Err(PdfError::TooManyPages(starts.len()));
       }
+      let page_context = tree_context(&inputs, page_area);
+      // A repeated box without a counter keeps the one layout, so its links are
+      // collected once rather than per page.
+      let static_links: Vec<_> = repeated
+        .iter()
+        .filter(|repeat| repeat.template.is_none())
+        .flat_map(|repeat| collect_interactive(&repeat.prepared).links)
+        .collect();
       let text_boxes = collect_text_boxes(&content);
       let inline_map = build_inline_map(&text_boxes)?;
       let pages = starts.len();
@@ -350,7 +358,9 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
             repeat
               .template
               .as_ref()
-              .map(|template| prepare_repeated(&inputs, template, index + 1, pages, page_area))
+              .map(|template| {
+                prepare_repeated(&page_context, template, index + 1, pages, page_area)
+              })
               .transpose()
           })
           .collect::<Result<Vec<_>, PdfError>>()?;
@@ -359,9 +369,9 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           .zip(&refreshed)
           .map(|(repeat, fresh)| fresh.as_ref().unwrap_or(&repeat.prepared))
           .collect();
-        let repeated_links: Vec<_> = page_repeated
+        let refreshed_links: Vec<_> = refreshed
           .iter()
-          .copied()
+          .flatten()
           .flat_map(|tree| collect_interactive(tree).links)
           .collect();
         let mut pdf_page = document.start_page_with(PageSettings::new(page_size));
@@ -499,7 +509,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         // tree, so the annotations stay out of the structure too.
         add_link_annotations(
           &mut pdf_page,
-          &repeated_links,
+          static_links.iter().chain(&refreshed_links),
           (0.0, window_height),
           (margin.left, content_top),
           None,
