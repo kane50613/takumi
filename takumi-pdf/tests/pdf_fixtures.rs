@@ -3147,6 +3147,82 @@ fn an_undecodable_image_stops_the_render() {
   );
 }
 
+/// A `fixed` box repeats on every page, so the page counters it holds count.
+/// The box is the document's only text, which leaves the counters as the only
+/// text operations the pages show.
+#[test]
+fn a_fixed_box_fills_its_page_counters() {
+  let doc = r#"<main>
+      <div style="position: fixed; bottom: 10px; left: 10px; display: flex; column-gap: 4px; font-size: 12px;">
+        <span class="pageNumber"></span><span class="totalPages"></span>
+      </div>
+      <p style="height: 900px;"></p>
+      <p style="height: 900px;"></p>
+    </main>"#;
+  let pdf = run_pdf_fixture("fixed-page-counters", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse the doc"))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  });
+  let shown: Vec<Vec<u8>> = content_lines(&pdf)
+    .filter(|line| line.ends_with(b"TJ") || line.ends_with(b"Tj"))
+    .collect();
+
+  assert_eq!(
+    inflated_text(&pdf).matches("/Count 2").count(),
+    1,
+    "expected a two-page document"
+  );
+  assert_eq!(
+    shown.len(),
+    4,
+    "expected both counters on both pages and nothing else"
+  );
+  assert_ne!(
+    shown[0], shown[2],
+    "expected the page number to change between pages"
+  );
+  assert_eq!(
+    shown[1], shown[3],
+    "expected the total to stay the same on both pages"
+  );
+}
+
+/// A page counter in the content names the page it lands on, which has to
+/// render the document that carries the number written by hand.
+#[test]
+fn a_page_counter_in_the_content_names_its_own_page() {
+  let document = |page: &str, total: &str| {
+    format!(
+      r#"<main>
+        <p style="height: 1100px;"></p>
+        <p style="font-size: 12px;">page {page} of {total}</p>
+      </main>"#
+    )
+  };
+  fn options<'f>(source: &str, fonts: &'f Fonts) -> PdfOptions<'f> {
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse the doc"))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  }
+  let hooked = document(
+    r#"<span class="pageNumber"></span>"#,
+    r#"<span class="totalPages"></span>"#,
+  );
+  let pdf = run_pdf_fixture("content-page-counters", |fonts| options(&hooked, fonts));
+  let numbered = document("<span>2</span>", "<span>2</span>");
+  let expected = render(options(&numbered, &fonts())).expect("render the numbered document");
+
+  assert_eq!(
+    pdf, expected,
+    "content counters did not resolve to page 2 of 2"
+  );
+}
+
 /// A `fixed` box the initial containing block holds repeats on every page, laid
 /// out against the page area rather than the content column: a watermark, which
 /// is what the property is for in print. Tagging is on, so the run also covers

@@ -47,6 +47,10 @@ pub(crate) struct Interactive {
   pub(crate) headings: Vec<HeadingTarget>,
   /// Element ids to the box they name, for `href="#id"`.
   pub(crate) anchors: HashMap<Box<str>, AnchorTarget>,
+  /// The top of every box layout gave a position, by the preorder position of
+  /// its source node. A node laid out inline has no box of its own, so it takes
+  /// the position of the nearest ancestor that has one.
+  pub(crate) boxes: HashMap<usize, f32>,
 }
 
 /// An element carrying an `id`, in content coordinates.
@@ -120,6 +124,7 @@ pub(crate) fn collect_interactive(tree: &PreparedTree) -> Interactive {
     links: Vec::new(),
     headings: Vec::new(),
     anchors: HashMap::new(),
+    boxes: HashMap::new(),
   };
 
   collect_interactive_context(tree, 0, &mut collected);
@@ -160,6 +165,10 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
   let Some(rect) = transformed_rect(paint.transform, (0.0, 0.0), layout.size) else {
     return;
   };
+
+  if let Some(index) = node.source_index {
+    collected.boxes.insert(index, rect.top());
+  }
 
   if let Some(id) = source.id() {
     // The first box wins: a duplicated id is invalid HTML, and the earlier one

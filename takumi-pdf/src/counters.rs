@@ -1,5 +1,7 @@
 //! `@counter-style` formatting and substitution of the page-counter class hooks.
 
+use std::collections::HashMap;
+
 use takumi_core::layout::node::{Node, NodeKind};
 
 use crate::interactive::percent_decode;
@@ -362,21 +364,67 @@ pub(crate) fn substitute_target_counters(
   }
 }
 
+/// Whether a tree holds a page-counter hook. A band or repeated box without one
+/// lays out identically on every page, so it is prepared once and reused.
+pub(crate) fn has_page_counters(node: &Node) -> bool {
+  if counter_text(node, 1, 1).is_some() {
+    return true;
+  }
+  match &node.kind {
+    NodeKind::Container { children } => children.iter().any(has_page_counters),
+    _ => false,
+  }
+}
+
 /// Fills `pageNumber` / `totalPages` class hooks with the formatted counter,
 /// like Chromium assigning `textContent` in its header/footer template.
 pub(crate) fn substitute_page_counters(node: &mut Node, page: usize, pages: usize) {
   if let Some(text) = counter_text(node, page, pages) {
-    match &mut node.kind {
-      NodeKind::Text(data) => data.text = text,
-      NodeKind::Container { children } => *children = vec![Node::text(text)],
-      _ => {}
-    }
+    write_counter(node, text);
     return;
   }
   if let NodeKind::Container { children } = &mut node.kind {
     for child in children {
       substitute_page_counters(child, page, pages);
     }
+  }
+}
+
+/// Fills the content's hooks with the page their box lays out on, taken from
+/// `page_of` by preorder position. A hook laid out inline has no box of its
+/// own and inherits the page of the nearest ancestor that has one. Counting
+/// walks the tree as it stands, so a hook is written only after its own
+/// subtree has been counted.
+pub(crate) fn substitute_flow_page_counters(
+  node: &mut Node,
+  page_of: &HashMap<usize, usize>,
+  pages: usize,
+  cursor: &mut usize,
+  inherited: Option<usize>,
+  written: &mut Vec<String>,
+) {
+  let index = *cursor;
+  let page = page_of.get(&index).copied().or(inherited);
+
+  *cursor += 1;
+  if let NodeKind::Container { children } = &mut node.kind {
+    for child in children {
+      substitute_flow_page_counters(child, page_of, pages, cursor, page, written);
+    }
+  }
+  if let Some(page) = page
+    && let Some(text) = counter_text(node, page, pages)
+  {
+    written.push(text.clone());
+    write_counter(node, text);
+  }
+}
+
+fn write_counter(node: &mut Node, text: String) {
+  match &mut node.kind {
+    NodeKind::Text(data) => data.text = text,
+    NodeKind::Container { children } => *children = vec![Node::text(text)],
+    _ => {}
   }
 }
 

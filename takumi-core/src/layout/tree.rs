@@ -113,6 +113,9 @@ pub struct RenderNode {
   pub context: RenderContext,
   /// Source node, absent for anonymous wrappers.
   pub node: Option<Node>,
+  /// Preorder position of [`node`](Self::node) in the source tree, absent for
+  /// the boxes layout generates.
+  pub source_index: Option<usize>,
   /// Child render nodes.
   pub children: Option<Box<[RenderNode]>>,
   pub(crate) layout_style_override: Option<Style>,
@@ -959,6 +962,7 @@ impl RenderNode {
     Self {
       context,
       node: None,
+      source_index: None,
       children: None,
       layout_style_override: Some(Style {
         display: TaffyDisplay::Block,
@@ -974,6 +978,7 @@ impl RenderNode {
     Self {
       context: Self::anonymous_box_context(parent_context),
       node: None,
+      source_index: None,
       children: Some(children.into_boxed_slice()),
       layout_style_override: Some(Style {
         display: TaffyDisplay::Block,
@@ -1000,6 +1005,7 @@ impl RenderNode {
       BackgroundImage::Url(url) => Self {
         context: Self::anonymous_box_context(parent_context),
         node: Some(Node::image(url)),
+        source_index: None,
         children: None,
         layout_style_override: Some(Style {
           max_size,
@@ -1015,6 +1021,7 @@ impl RenderNode {
         Self {
           context,
           node: Some(Node::container([])),
+          source_index: None,
           children: None,
           // css-images-3 §5.1 default object size when the parent is auto.
           layout_style_override: Some(Style {
@@ -1113,6 +1120,7 @@ impl RenderNode {
     Some(Self {
       context: pseudo_context,
       node: Some(Node::container([])),
+      source_index: None,
       children: Some(children),
       layout_style_override: None,
       anonymous_text_content: None,
@@ -1271,6 +1279,7 @@ impl RenderNode {
     struct PendingRenderNode {
       context: RenderContext,
       node: Node,
+      node_index: usize,
       children_is_some: bool,
       pending_children: IntoIter<Node>,
       rendered_children: Vec<RenderNode>,
@@ -1424,6 +1433,7 @@ impl RenderNode {
       let owns_list_counter = owns_list_counter(&node, inside_list);
 
       PendingRenderNode {
+        node_index,
         children_is_some: children_is_some || has_generated_children,
         list_counter: if owns_list_counter {
           ListCounter::new(&node, &children)
@@ -1457,6 +1467,7 @@ impl RenderNode {
         return RenderNode {
           context: parent_context.clone(),
           node: Some(Node::container([])),
+          source_index: None,
           children: None,
           layout_style_override: None,
           anonymous_text_content: None,
@@ -1482,6 +1493,7 @@ impl RenderNode {
         return RenderNode {
           context: parent_context.clone(),
           node: Some(Node::container([])),
+          source_index: None,
           children: None,
           layout_style_override: None,
           anonymous_text_content: None,
@@ -1520,6 +1532,7 @@ impl RenderNode {
           RenderNode {
             context: finished.context,
             node: Some(finished.node),
+            source_index: Some(finished.node_index),
             children: Some(children.into_boxed_slice()),
             layout_style_override: None,
             anonymous_text_content: None,
@@ -1563,6 +1576,7 @@ impl RenderNode {
             RenderNode {
               context: finished.context,
               node: Some(finished.node),
+              source_index: Some(finished.node_index),
               children: Some(children),
               layout_style_override: None,
               anonymous_text_content: None,
@@ -1589,6 +1603,7 @@ impl RenderNode {
             RenderNode {
               context: finished.context,
               node: Some(finished.node),
+              source_index: Some(finished.node_index),
               children: Some(final_children.into_boxed_slice()),
               layout_style_override: None,
               anonymous_text_content: None,
@@ -1615,6 +1630,7 @@ impl RenderNode {
           RenderNode {
             context: finished.context,
             node: Some(finished.node),
+            source_index: Some(finished.node_index),
             children: Some([anonymous_text_item].into()),
             layout_style_override: None,
             anonymous_text_content: None,
@@ -1625,6 +1641,7 @@ impl RenderNode {
           RenderNode {
             context: finished.context,
             node: Some(finished.node),
+            source_index: Some(finished.node_index),
             children: None,
             layout_style_override: None,
             anonymous_text_content: None,
