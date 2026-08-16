@@ -78,6 +78,8 @@ pub mod style_visuals;
 pub mod stylesheets;
 #[path = "fixtures/svg.rs"]
 pub mod svg;
+#[path = "fixtures/tables.rs"]
+pub mod tables;
 #[path = "fixtures/text.rs"]
 pub mod text;
 #[path = "fixtures/visual_showcase.rs"]

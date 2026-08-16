@@ -188,6 +188,39 @@ fn paged_footer_counters() {
   });
 }
 
+/// A `<table>` from markup: element presets, group reordering, a declared
+/// column width, and rows split across pages.
+#[test]
+fn paged_table() {
+  run_pdf_fixture("paged-table", |fonts| {
+    let rows: String = (1..=30)
+      .map(|i| {
+        format!(
+          "<tr><td>Item {i}</td><td>Description of item {i}</td><td>{}</td></tr>",
+          i * 3
+        )
+      })
+      .collect();
+    let html = format!(
+      r#"<table style="width: 100%; font-size: 12px; color: #141414">
+        <tfoot><tr><td colspan="2">Total</td><td>1395</td></tr></tfoot>
+        <tbody>{rows}</tbody>
+        <thead><tr style="background: #e2e8f0"><th>Name</th><th>Description</th><th style="width: 48px">Qty</th></tr></thead>
+      </table>"#
+    );
+
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse table fixture"))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
 /// Guards `widows` / `orphans`: the default 2/2 minimums must move a line
 /// across the page cut that minimums of 1/1 leave in place.
 #[test]
