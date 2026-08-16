@@ -313,11 +313,14 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       }
       let page_context = tree_context(&inputs, page_area);
       // A repeated box without a counter keeps the one layout, so its links are
-      // collected once rather than per page.
+      // collected once rather than per page. They stay grouped by box, which is
+      // the order the annotations are added in.
       let static_links: Vec<_> = repeated
         .iter()
-        .filter(|repeat| repeat.template.is_none())
-        .flat_map(|repeat| collect_interactive(&repeat.prepared).links)
+        .map(|repeat| match repeat.template {
+          Some(_) => Vec::new(),
+          None => collect_interactive(&repeat.prepared).links,
+        })
         .collect();
       let text_boxes = collect_text_boxes(&content);
       let inline_map = build_inline_map(&text_boxes)?;
@@ -361,8 +364,11 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           .collect();
         let refreshed_links: Vec<_> = refreshed
           .iter()
-          .flatten()
-          .flat_map(|tree| collect_interactive(tree).links)
+          .map(|fresh| {
+            fresh
+              .as_ref()
+              .map_or_else(Vec::new, |tree| collect_interactive(tree).links)
+          })
           .collect();
         let mut pdf_page = document.start_page_with(PageSettings::new(page_size));
         let mut surface = pdf_page.surface();
@@ -499,7 +505,10 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         // tree, so the annotations stay out of the structure too.
         add_link_annotations(
           &mut pdf_page,
-          static_links.iter().chain(&refreshed_links),
+          static_links
+            .iter()
+            .zip(&refreshed_links)
+            .flat_map(|(kept, fresh)| kept.iter().chain(fresh)),
           (0.0, window_height),
           (margin.left, content_top),
           None,

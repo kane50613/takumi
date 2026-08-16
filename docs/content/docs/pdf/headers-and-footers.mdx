@@ -90,7 +90,7 @@ A hook fills wherever it sits. A `fixed` box repeats on every page, so it lays o
 
 A fixed box draws over the content rather than in the margin, so leave it room. `margin` sizes itself to the header and footer alone.
 
-A hook in the page content names the page it lands on, which is what a cover page counting the report's length needs. One laid out inline takes the page of the box that holds it. Content counters lay the document out a second time, since the page a hook sits on is only known once the content is cut into pages, and a document without one pays nothing.
+A hook in the page content names the page it lands on, which is what a cover page counting the report's length needs. One laid out inline has no box of its own, so it takes the page of the box holding it, and a box that spans a page break gives the page it starts on. Content counters lay the document out a second time, since the page a hook sits on is only known once the content is cut into pages, and a document without one pays nothing.
 
 ## Counter styles
 
