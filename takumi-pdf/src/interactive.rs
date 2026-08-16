@@ -175,14 +175,27 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
   };
 
   if let Some(index) = node.source_index {
-    let out_of_flow = matches!(
+    // `transform` moves where a box paints without moving the flow it left
+    // behind, so the flow edge is measured with the box's own transform undone.
+    let in_flow = !matches!(
       node.context.style.position,
       Position::Absolute | Position::Fixed
     );
+    let flow_bottom = in_flow
+      .then(|| {
+        node
+          .context
+          .style
+          .local_transform(layout.size.width, layout.size.height, &node.context.sizing)
+          .invert()
+      })
+      .flatten()
+      .and_then(|undo| transformed_rect(paint.transform * undo, (0.0, 0.0), layout.size))
+      .map(|flow| flow.bottom());
 
     collected.boxes.entry(index).or_insert(BoxSpan {
       top: rect.top(),
-      flow_bottom: (!out_of_flow).then(|| rect.bottom()),
+      flow_bottom,
     });
   }
 

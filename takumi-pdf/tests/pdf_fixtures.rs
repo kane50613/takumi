@@ -477,6 +477,16 @@ fn an_inline_page_counter_follows_the_flow_that_precedes_it() {
       </main>"#
     )
   };
+  // A box that paints elsewhere still leaves its flow behind, so a transform on
+  // the block above the hook must not move the page the hook names.
+  let transformed = |page: &str| {
+    format!(
+      r#"<main>
+        <div style="height: 1100px; transform: translateY(-1100px);"></div>
+        <span style="font-size: 12px;">{page}</span>
+      </main>"#
+    )
+  };
   let hooked = document(r#"<span class="pageNumber"></span>"#);
   let pdf = render(a4_options(&hooked, &fonts())).expect("render the hooked document");
   let numbered = document("2");
@@ -485,6 +495,16 @@ fn an_inline_page_counter_follows_the_flow_that_precedes_it() {
   assert_eq!(
     pdf, expected,
     "an inline counter under a tall block did not name the page its line sits on"
+  );
+
+  let hooked = transformed(r#"<span class="pageNumber"></span>"#);
+  let pdf = render(a4_options(&hooked, &fonts())).expect("render the transformed document");
+  let expected = render(a4_options(&transformed("2"), &fonts()))
+    .expect("render the numbered transformed document");
+
+  assert_eq!(
+    pdf, expected,
+    "a transformed block moved the page the counter after it names"
   );
 }
 
