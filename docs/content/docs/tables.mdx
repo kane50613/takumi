@@ -1,0 +1,50 @@
+---
+title: Tables
+description: What display table supports, how it approximates browsers, and how to keep columns close to Chrome.
+icon: Table
+---
+
+Takumi renders `display: table` by rewriting the table into a grid before layout. Every row shares one set of column tracks, the part of table layout grid can express. It is a naive approximation, not the CSS table algorithm. This page lists what carries over and where it drifts.
+
+## What works
+
+- `<table>`, `<thead>`, `<tbody>`, `<tfoot>`, `<tr>`, `<td>`, `<th>`, and `<caption>` have element presets in HTML and JSX.
+- Header groups render first and footer groups last, whatever the source order.
+- `colspan` and `rowspan` span tracks. Both the HTML attribute and the JSX `colSpan` casing count.
+- `caption` renders above the table, or below it with `caption-side: bottom`.
+- A row's background lands on its cells, so zebra striping and header bands work.
+- `border-spacing` defaults to `2px`. Set `gap` on the table to change it.
+- Paged PDF output splits rows across pages. Column positions stay identical on every page.
+
+```tsx
+<table style={{ width: "100%" }}>
+  <thead>
+    <tr style={{ background: "#e2e8f0" }}>
+      <th>Name</th>
+      <th style={{ width: "80px" }}>Qty</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Wireframe kit</td>
+      <td>3</td>
+    </tr>
+  </tbody>
+</table>
+```
+
+## Where it drifts
+
+| Behavior           | In a browser                        | In Takumi                              |
+| :----------------- | :---------------------------------- | :------------------------------------- |
+| Auto column widths | Grow in proportion to their content | Share free space equally               |
+| `vertical-align`   | Cell content centers by default     | Cell content sits at the top           |
+| `border-collapse`  | Merges adjacent borders             | Not implemented; borders stay separate |
+| Row borders        | Drawn on the row box                | Dropped; put borders on the cells      |
+
+The width drift only appears when every column is `auto` and the table is wider than its content. **Declare a width on one cell per column** and the columns match Chrome closely.
+
+<Callout type="info">
+  Cells keep their box: padding, borders, and backgrounds cover the full grid area, including the
+  rows a `rowspan` reaches into.
+</Callout>
