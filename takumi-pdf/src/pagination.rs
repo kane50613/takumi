@@ -68,6 +68,40 @@ pub(crate) struct Paginated {
   pub(crate) repeated: Vec<RepeatedBox>,
   pub(crate) starts: Vec<f32>,
   pub(crate) interactive: Interactive,
+  window: f32,
+}
+
+/// One page's window into the content column.
+pub(crate) struct PageSlice {
+  /// 0-based; display page numbers are `index + 1`.
+  pub(crate) index: usize,
+  pub(crate) start: f32,
+  /// Where the next page begins. The last page never runs out.
+  pub(crate) end: f32,
+  pub(crate) paint_height: f32,
+}
+
+impl Paginated {
+  /// 0-based index of the page `top` falls on.
+  pub(crate) fn page_index(&self, top: f32) -> usize {
+    self
+      .starts
+      .partition_point(|start| *start <= top)
+      .saturating_sub(1)
+  }
+
+  pub(crate) fn pages(&self) -> impl Iterator<Item = PageSlice> + '_ {
+    self.starts.iter().enumerate().map(|(index, &start)| {
+      let end = self.starts.get(index + 1).copied().unwrap_or(f32::INFINITY);
+
+      PageSlice {
+        index,
+        start,
+        end,
+        paint_height: (end - start).min(self.window),
+      }
+    })
+  }
 }
 
 /// What a pagination pass lays out against: the content column, the page area a
@@ -120,12 +154,7 @@ pub(crate) fn paginate(
 /// so the caller can see whether the numbers moved.
 fn substitute_counters(node: &mut Node, paginated: &Paginated, written: &mut Vec<String>) {
   let pages = paginated.starts.len();
-  let page_at = |top: &f32| {
-    paginated
-      .starts
-      .partition_point(|start| start <= top)
-      .max(1)
-  };
+  let page_at = |top: &f32| paginated.page_index(*top) + 1;
   // `fill_root` wraps the tree in a page-wide box, which takes preorder 0.
   let page_of = paginated
     .interactive
@@ -199,6 +228,7 @@ fn paginate_once(
     repeated,
     starts,
     interactive,
+    window: geometry.window_height,
   })
 }
 

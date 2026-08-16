@@ -290,12 +290,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       let node = options.node;
 
       let page_area = Viewport::new((content_width as u32, content_height as u32));
-      let Paginated {
-        content,
-        repeated,
-        starts,
-        interactive,
-      } = paginate(
+      let paginated = paginate(
         node,
         &inputs,
         &mut fonts,
@@ -307,6 +302,14 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           window_height,
         },
       )?;
+
+      let Paginated {
+        content,
+        repeated,
+        starts,
+        interactive,
+        ..
+      } = &paginated;
 
       if starts.len() >= MAX_PAGES {
         return Err(PdfError::TooManyPages(starts.len()));
@@ -327,9 +330,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       let pages = starts.len();
       let structural = options.tagged.names_structure_destinations();
       let destination = |top: f32, path: &[usize]| {
-        let index = starts
-          .partition_point(|start| *start <= top)
-          .saturating_sub(1);
+        let index = paginated.page_index(top);
         let y = margin.top + (top - starts[index]).max(0.0);
         let dest = XyzDestination::new(
           index,
@@ -342,7 +343,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         }
       };
 
-      for (index, &y0) in starts.iter().enumerate() {
+      for slice in paginated.pages() {
         // A repeated box holding a counter lays out again with this page's
         // numbers; the rest keep the layout they were prepared with.
         let renumbered = repeated
@@ -352,7 +353,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
               .template
               .as_ref()
               .map(|template| {
-                prepare_repeated(&page_context, template, index + 1, pages, page_area)
+                prepare_repeated(&page_context, template, slice.index + 1, pages, page_area)
               })
               .transpose()
           })
@@ -382,7 +383,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         if let (Some(band), Some(template)) = (&header_band, &options.header) {
           let prepared;
           let tree = if band.dynamic {
-            prepared = prepare_band(&inputs, template, index + 1, pages, band_viewport)?;
+            prepared = prepare_band(&inputs, template, slice.index + 1, pages, band_viewport)?;
             &prepared
           } else {
             &band.measured
@@ -419,15 +420,15 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         // Paint stops at the next cut: the region between a raised cut and the
         // page's full height belongs to the next page and stays blank, exactly
         // like browser print fragmentation.
-        let next_start = starts.get(index + 1).copied().unwrap_or(f32::INFINITY);
-        let paint_height = (next_start - y0).min(window_height);
-
         if let Some(path) =
-          KrillaRect::from_xywh(margin.left, content_top, content_width, paint_height)
+          KrillaRect::from_xywh(margin.left, content_top, content_width, slice.paint_height)
             .and_then(rect_path)
         {
           surface.push_clip_path(&path, &FillRule::NonZero);
-          surface.push_transform(&Transform::from_translate(margin.left, content_top - y0));
+          surface.push_transform(&Transform::from_translate(
+            margin.left,
+            content_top - slice.start,
+          ));
           let mut emitter = content.emitter(
             &mut fonts,
             Some(&inline_map),
@@ -436,8 +437,15 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
             document_lang,
           );
 
-          emitter.window = Some((y0, y0 + paint_height));
-          emitter.line_window = Some((if index == 0 { f32::NEG_INFINITY } else { y0 }, next_start));
+          emitter.window = Some((slice.start, slice.start + slice.paint_height));
+          emitter.line_window = Some((
+            if slice.index == 0 {
+              f32::NEG_INFINITY
+            } else {
+              slice.start
+            },
+            slice.end,
+          ));
           emitter.emit_context(0, Affine::IDENTITY, &mut surface)?;
           surface.pop();
           surface.pop();
@@ -462,7 +470,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         if let (Some(band), Some(template)) = (&footer_band, &options.footer) {
           let prepared;
           let tree = if band.dynamic {
-            prepared = prepare_band(&inputs, template, index + 1, pages, band_viewport)?;
+            prepared = prepare_band(&inputs, template, slice.index + 1, pages, band_viewport)?;
             &prepared
           } else {
             &band.measured
@@ -489,7 +497,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         add_link_annotations(
           &mut pdf_page,
           &interactive.links,
-          (y0, y0 + paint_height),
+          (slice.start, slice.start + slice.paint_height),
           (margin.left, content_top),
           tag_collector.as_ref(),
           |id| {
