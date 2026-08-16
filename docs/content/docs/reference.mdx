@@ -125,23 +125,27 @@ Properties use their camelCase names. Longhands are listed in parentheses. `Supp
 
 ### Layout & display
 
-| Property                                            | Values                                                                                                                                        |
-| :-------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------- |
-| `display`                                           | `none`, `flex`, `inline-flex`, `grid`, `inline-grid`, `block`, `inline-block`, `inline`, `list-item`                                          |
-| `position`                                          | `relative`, `absolute`, `static`, `fixed`                                                                                                     |
-| `direction`                                         | Supported                                                                                                                                     |
-| `float`                                             | Supported                                                                                                                                     |
-| `clear`                                             | Supported                                                                                                                                     |
-| `zIndex`                                            | Supported                                                                                                                                     |
-| `order`                                             | Supported                                                                                                                                     |
-| `overflow` (`overflowX`, `overflowY`)               | `visible`, `clip`, `hidden`                                                                                                                   |
-| `objectFit`                                         | Supported                                                                                                                                     |
-| `objectPosition`                                    | Supported                                                                                                                                     |
-| `boxSizing`                                         | Supported                                                                                                                                     |
-| `visibility`                                        | `visible`, `hidden`                                                                                                                           |
-| `content`                                           | Supported                                                                                                                                     |
-| `listStyleType`                                     | `none`, `disc`, `circle`, `square`, `decimal`, `decimal-leading-zero`, `lower-alpha`, `upper-alpha`, `lower-roman`, `upper-roman`, `<string>` |
-| `listStyle` (`listStylePosition`, `listStyleImage`) | Supported                                                                                                                                     |
+| Property                                            | Values                                                                                                                                                                                                                                |
+| :-------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `display`                                           | `none`, `flex`, `inline-flex`, `grid`, `inline-grid`, `block`, `inline-block`, `inline`, `list-item`, `table`, `table-header-group`, `table-row-group`, `table-footer-group`, `table-row`, `table-cell`, `table-caption` <sup>1</sup> |
+| `position`                                          | `relative`, `absolute`, `static`, `fixed`                                                                                                                                                                                             |
+| `direction`                                         | Supported                                                                                                                                                                                                                             |
+| `float`                                             | Supported                                                                                                                                                                                                                             |
+| `clear`                                             | Supported                                                                                                                                                                                                                             |
+| `zIndex`                                            | Supported                                                                                                                                                                                                                             |
+| `order`                                             | Supported                                                                                                                                                                                                                             |
+| `overflow` (`overflowX`, `overflowY`)               | `visible`, `clip`, `hidden`                                                                                                                                                                                                           |
+| `objectFit`                                         | Supported                                                                                                                                                                                                                             |
+| `objectPosition`                                    | Supported                                                                                                                                                                                                                             |
+| `boxSizing`                                         | Supported                                                                                                                                                                                                                             |
+| `visibility`                                        | `visible`, `hidden`                                                                                                                                                                                                                   |
+| `content`                                           | Supported                                                                                                                                                                                                                             |
+| `listStyleType`                                     | `none`, `disc`, `circle`, `square`, `decimal`, `decimal-leading-zero`, `lower-alpha`, `upper-alpha`, `lower-roman`, `upper-roman`, `<string>`                                                                                         |
+| `listStyle` (`listStylePosition`, `listStyleImage`) | Supported                                                                                                                                                                                                                             |
+| `captionSide`                                       | `top`, `bottom` <sup>1</sup>                                                                                                                                                                                                          |
+
+<sup>1</sup> The table display values use a naive grid-based implementation, not the CSS table
+algorithm. See [Tables](/docs/tables) for what carries over and where it drifts.
 
 ### Sizing
 

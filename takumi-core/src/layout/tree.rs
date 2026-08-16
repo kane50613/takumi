@@ -22,6 +22,7 @@ use crate::{
     },
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
     node::{Node, NodeStyleLayers},
+    table::lower_tables,
   },
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
   style::{
@@ -1252,6 +1253,8 @@ impl RenderNode {
       parent_context.sizing.viewport,
     );
     let mut tree = Self::from_node_iterative(parent_context, node, &matched_styles);
+
+    lower_tables(&mut tree);
 
     if tree.is_inline_level() {
       tree.context.style.display.blockify();

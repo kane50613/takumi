@@ -1,0 +1,57 @@
+---
+title: Tables
+description: What the table displays support, where they drift from browsers, and how to keep columns close to Chrome.
+icon: Table
+---
+
+Takumi renders `display: table` by rewriting the table into a grid before layout, so every row shares one set of column tracks. It is a **naive implementation**, not the CSS table algorithm. This page lists what carries over and where it drifts.
+
+## What works
+
+- `<table>`, `<thead>`, `<tbody>`, `<tfoot>`, `<tr>`, `<td>`, `<th>`, and `<caption>` have element presets in HTML and JSX.
+- Header groups render first and footer groups last, whatever the source order.
+- `colspan` and `rowspan` span tracks. The HTML attributes and the JSX `colSpan` / `rowSpan` casings both count.
+- `caption` renders above the table, or below it with `caption-side: bottom`.
+- A row's background is copied to cells that have none of their own, so zebra striping and header bands work. The `border-spacing` gaps stay unpainted.
+- `border-spacing` defaults to `2px`. Set `gap` on the table to change it.
+- Paged PDF output splits rows across pages. Column positions stay identical on every page.
+
+```tsx
+<table style={{ width: "100%" }}>
+  <thead>
+    <tr style={{ background: "#e2e8f0" }}>
+      <th>Name</th>
+      <th style={{ width: "80px" }}>Qty</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Wireframe kit</td>
+      <td>3</td>
+    </tr>
+  </tbody>
+</table>
+```
+
+## Where it drifts
+
+| Behavior           | In a browser                        | In Takumi                              |
+| :----------------- | :---------------------------------- | :------------------------------------- |
+| Auto column widths | Grow in proportion to their content | Share free space equally               |
+| `vertical-align`   | Cell content centers by default     | Cell content sits at the top           |
+| `border-collapse`  | Merges adjacent borders             | Not implemented; borders stay separate |
+| Row borders        | Drawn on the row box                | Dropped; put borders on the cells      |
+
+The width drift appears when the table is wider than its content and the free space splits across two or more `auto` columns, fixed-width neighbors included. **Declare a width on a single-column cell in each column** to keep the columns close to Chrome. A width on a spanning cell does not size a column.
+
+<Callout type="info">
+  Cells keep their box: padding, borders, and backgrounds cover the full grid area, including rows
+  spanned by `rowspan`.
+</Callout>
+
+## Upstream table layout
+
+Native CSS table layout for taffy is in progress at
+[DioxusLabs/taffy#1094](https://github.com/DioxusLabs/taffy/pull/1094), with column width and row
+height distribution ported from Blink. Once it lands, Takumi switches to it. That closes the
+column width and `vertical-align` drift, with no change to the properties on this page.

@@ -290,4 +290,34 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
   div: {
     display: "block",
   },
+  table: {
+    display: "table",
+    boxSizing: "border-box",
+  },
+  thead: {
+    display: "table-header-group",
+  },
+  tbody: {
+    display: "table-row-group",
+  },
+  tfoot: {
+    display: "table-footer-group",
+  },
+  tr: {
+    display: "table-row",
+  },
+  td: {
+    display: "table-cell",
+    padding: 1,
+  },
+  th: {
+    display: "table-cell",
+    padding: 1,
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+  caption: {
+    display: "table-caption",
+    textAlign: "center",
+  },
 };

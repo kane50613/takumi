@@ -533,6 +533,25 @@ declare_enum_from_css_impl!(
   "hidden" => Visibility::Hidden
 );
 
+/// Defines which side of the table a caption renders on.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
+pub enum CaptionSide {
+  /// The caption box renders above the table.
+  #[default]
+  Top,
+  /// The caption box renders below the table.
+  Bottom,
+}
+
+declare_enum_from_css_impl!(
+  CaptionSide,
+  "top" => CaptionSide::Top,
+  "bottom" => CaptionSide::Bottom
+);
+
+impl Animatable for CaptionSide {}
+
 /// Defines how the corners of text strokes are rendered.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub enum LineJoin {
@@ -882,6 +901,20 @@ pub enum Display {
   InlineBlock,
   /// The element creates a block container that also generates a list marker
   ListItem,
+  /// The element generates a table wrapper box
+  Table,
+  /// The element groups rows rendered before every other row group
+  TableHeaderGroup,
+  /// The element groups rows in source order
+  TableRowGroup,
+  /// The element groups rows rendered after every other row group
+  TableFooterGroup,
+  /// The element generates a table row
+  TableRow,
+  /// The element generates a table cell
+  TableCell,
+  /// The element generates a table caption
+  TableCaption,
 }
 
 declare_enum_from_css_impl!(
@@ -894,7 +927,14 @@ declare_enum_from_css_impl!(
   "inline" => Display::Inline,
   "block" => Display::Block,
   "inline-block" => Display::InlineBlock,
-  "list-item" => Display::ListItem
+  "list-item" => Display::ListItem,
+  "table" => Display::Table,
+  "table-header-group" => Display::TableHeaderGroup,
+  "table-row-group" => Display::TableRowGroup,
+  "table-footer-group" => Display::TableFooterGroup,
+  "table-row" => Display::TableRow,
+  "table-cell" => Display::TableCell,
+  "table-caption" => Display::TableCaption
 );
 
 impl Display {
@@ -944,6 +984,16 @@ impl Display {
       Display::Block | Display::InlineBlock | Display::Inline | Display::ListItem => {
         taffy::Display::Block
       }
+      // Lowering replaces every table box that sits in a table, so what is left
+      // here is a table part outside one. Blink wraps those in anonymous table
+      // boxes; block is the approximation.
+      Display::Table
+      | Display::TableHeaderGroup
+      | Display::TableRowGroup
+      | Display::TableFooterGroup
+      | Display::TableRow
+      | Display::TableCell
+      | Display::TableCaption => taffy::Display::Block,
       Display::None => taffy::Display::None,
     }
   }

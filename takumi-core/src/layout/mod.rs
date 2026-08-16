@@ -18,5 +18,7 @@ mod list_marker;
 pub mod node;
 /// Where replaced content sits inside its content box.
 pub mod replaced;
+/// Lowering `display: table` onto the grid layout algorithm.
+mod table;
 /// Layout tree: render nodes and their computed layout results.
 pub mod tree;
