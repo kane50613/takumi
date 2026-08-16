@@ -73,6 +73,7 @@ const CSS: &str = r#"
     font-size: 11px;
     color: rgb(100, 116, 139);
   }
+  .caption-bottom { caption-side: bottom; }
   .stripe { background: rgb(241, 245, 249); }
   .w80 { width: 80px; }
 "#;
@@ -103,6 +104,8 @@ fn group_order_cell() -> Node {
 
 fn declared_width_cell() -> Node {
   let table = Node::container([
+    Node::container([Node::text("caption-side: bottom".to_string())])
+      .with_class_name("caption caption-bottom"),
     tr([
       td("80px column").with_class_name("td w80"),
       td("auto column takes the rest"),

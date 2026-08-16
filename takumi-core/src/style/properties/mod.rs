@@ -533,6 +533,25 @@ declare_enum_from_css_impl!(
   "hidden" => Visibility::Hidden
 );
 
+/// Defines which side of the table a caption renders on.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
+pub enum CaptionSide {
+  /// The caption box renders above the table.
+  #[default]
+  Top,
+  /// The caption box renders below the table.
+  Bottom,
+}
+
+declare_enum_from_css_impl!(
+  CaptionSide,
+  "top" => CaptionSide::Top,
+  "bottom" => CaptionSide::Bottom
+);
+
+impl Animatable for CaptionSide {}
+
 /// Defines how the corners of text strokes are rendered.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub enum LineJoin {

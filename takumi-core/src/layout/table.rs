@@ -26,8 +26,8 @@
 use crate::{
   layout::tree::RenderNode,
   style::{
-    ColorInput, Display, FromCssStr, Gap, GridPlacement, GridPlacementSpan, GridTemplateComponents,
-    Length, ToCss,
+    CaptionSide, ColorInput, Display, FromCssStr, Gap, GridPlacement, GridPlacementSpan,
+    GridTemplateComponents, Length, ToCss,
   },
 };
 
@@ -240,8 +240,11 @@ fn lower_table(table: &mut RenderNode) {
   let tracks = track_sizes(&rows, &placements, columns);
   let mut items = Vec::new();
   let mut line: i16 = 1;
+  let (top_captions, bottom_captions): (Vec<_>, Vec<_>) = captions
+    .into_iter()
+    .partition(|caption| caption.context.style.caption_side == CaptionSide::Top);
 
-  for mut caption in captions {
+  for mut caption in top_captions {
     lower_full_width(&mut caption, line, columns);
     items.push(caption);
     line = line.saturating_add(1);
@@ -271,6 +274,12 @@ fn lower_table(table: &mut RenderNode) {
   for mut stray in strays {
     lower_full_width(&mut stray, line, columns);
     items.push(stray);
+    line = line.saturating_add(1);
+  }
+
+  for mut caption in bottom_captions {
+    lower_full_width(&mut caption, line, columns);
+    items.push(caption);
     line = line.saturating_add(1);
   }
 
@@ -355,6 +364,7 @@ mod tests {
         .tr { display: table-row }
         .td { display: table-cell }
         .caption { display: table-caption }
+        .caption-bottom { display: table-caption; caption-side: bottom }
       ",
     )
     .expect("stylesheet parses");
@@ -456,6 +466,21 @@ mod tests {
       caption.context.style.grid_column_end,
       GridPlacement::Span(GridPlacementSpan::Span(3))
     );
+  }
+
+  #[test]
+  fn a_bottom_caption_trails_the_grid() {
+    let tree = lower(
+      Node::container([
+        Node::container([Node::text("cap")])
+          .with_class_name("caption-bottom")
+          .with_id("cap"),
+        row([cell("a"), cell("b")]),
+      ])
+      .with_class_name("table"),
+    );
+
+    assert_eq!(ids(&tree), ["a", "b", "cap"]);
   }
 
   fn with_span(node: Node, name: &str, value: &str) -> Node {
