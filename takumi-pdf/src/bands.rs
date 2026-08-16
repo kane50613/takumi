@@ -77,20 +77,26 @@ enum RepeatTemplate {
 }
 
 impl Repeatable {
-  /// Measures a band with three-digit counters, recording the template when it
-  /// must re-prepare per page.
+  /// Measures a band with the last page's counters, the widest a decimal
+  /// counter gets, recording the template when it must re-prepare per page.
   pub(crate) fn band(
     inputs: &TreeInputs<'_>,
     template: &Node,
     viewport: Viewport,
     bounds: RepeatBounds,
+    pages: usize,
   ) -> Result<Self, PdfError> {
     Ok(Self {
-      prepared: prepare_band(inputs, template, 999, 999, viewport)?,
+      prepared: prepare_band(inputs, template, pages, pages, viewport)?,
       template: has_page_counters(template).then(|| RepeatTemplate::Band(template.clone())),
       bounds,
       links: Vec::new(),
     })
+  }
+
+  /// Whether the band holds a counter and lays out again per page.
+  pub(crate) fn dynamic(&self) -> bool {
+    self.template.is_some()
   }
 
   /// Wraps a repeated `fixed` box, caching its links when it never re-lays out.

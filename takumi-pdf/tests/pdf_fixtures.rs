@@ -221,6 +221,33 @@ fn paged_table() {
   });
 }
 
+/// A footer narrow enough that three-digit counters wrap it to a second line.
+/// The band re-measures with the real page count, so the `auto` margin
+/// reserves one line, not a wrapped stand-in's two.
+#[test]
+fn band_measures_with_the_real_page_count() {
+  run_pdf_fixture("paged-band-remeasure", |fonts| {
+    let rows = (1..=12).map(|i| text(&format!("Row {i}"), 16.0)).collect();
+
+    PdfOptions::builder()
+      .node(column(rows))
+      .page(PageOptions {
+        width: 320.0,
+        height: 240.0,
+        margin: PageMargins::default(),
+      })
+      .footer(
+        from_html(
+          r#"<div style="width: 90px; font-size: 14px;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>"#,
+          FromHtmlOptions::default(),
+        )
+        .expect("parse footer fixture"),
+      )
+      .fonts(fonts)
+      .build()
+  });
+}
+
 /// Guards `widows` / `orphans`: the default 2/2 minimums must move a line
 /// across the page cut that minimums of 1/1 leave in place.
 #[test]
