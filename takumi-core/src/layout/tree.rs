@@ -113,9 +113,10 @@ pub struct RenderNode {
   pub context: RenderContext,
   /// Source node, absent for anonymous wrappers.
   pub node: Option<Node>,
-  /// Preorder position of [`node`](Self::node) in the source tree, absent for
-  /// the boxes layout generates.
-  pub source_index: Option<usize>,
+  /// Position of [`node`](Self::node) in the source tree, counted in document
+  /// order, absent for the boxes layout generates. Stylesheet matching keys its
+  /// results by the same number.
+  pub source_order: Option<usize>,
   /// Child render nodes.
   pub children: Option<Box<[RenderNode]>>,
   pub(crate) layout_style_override: Option<Style>,
@@ -962,7 +963,7 @@ impl RenderNode {
     Self {
       context,
       node: None,
-      source_index: None,
+      source_order: None,
       children: None,
       layout_style_override: Some(Style {
         display: TaffyDisplay::Block,
@@ -978,7 +979,7 @@ impl RenderNode {
     Self {
       context: Self::anonymous_box_context(parent_context),
       node: None,
-      source_index: None,
+      source_order: None,
       children: Some(children.into_boxed_slice()),
       layout_style_override: Some(Style {
         display: TaffyDisplay::Block,
@@ -1005,7 +1006,7 @@ impl RenderNode {
       BackgroundImage::Url(url) => Self {
         context: Self::anonymous_box_context(parent_context),
         node: Some(Node::image(url)),
-        source_index: None,
+        source_order: None,
         children: None,
         layout_style_override: Some(Style {
           max_size,
@@ -1021,7 +1022,7 @@ impl RenderNode {
         Self {
           context,
           node: Some(Node::container([])),
-          source_index: None,
+          source_order: None,
           children: None,
           // css-images-3 §5.1 default object size when the parent is auto.
           layout_style_override: Some(Style {
@@ -1120,7 +1121,7 @@ impl RenderNode {
     Some(Self {
       context: pseudo_context,
       node: Some(Node::container([])),
-      source_index: None,
+      source_order: None,
       children: Some(children),
       layout_style_override: None,
       anonymous_text_content: None,
@@ -1279,7 +1280,7 @@ impl RenderNode {
     struct PendingRenderNode {
       context: RenderContext,
       node: Node,
-      node_index: usize,
+      source_order: usize,
       children_is_some: bool,
       pending_children: IntoIter<Node>,
       rendered_children: Vec<RenderNode>,
@@ -1290,10 +1291,10 @@ impl RenderNode {
       owns_list_counter: bool,
     }
 
-    fn next_preorder_index(preorder_cursor: &mut usize) -> usize {
-      let node_index = *preorder_cursor;
-      *preorder_cursor += 1;
-      node_index
+    fn next_source_order(source_cursor: &mut usize) -> usize {
+      let source_order = *source_cursor;
+      *source_cursor += 1;
+      source_order
     }
 
     fn take_children_vec(node: &mut Node) -> (bool, Vec<Node>) {
@@ -1306,12 +1307,12 @@ impl RenderNode {
     fn resolve_computed_style(
       parent_context: &RenderContext,
       node: &mut Node,
-      node_index: usize,
+      source_order: usize,
       matched_declarations: &[NodeMatchedDeclarations<'_>],
     ) -> (ComputedStyle, SizingContext, Color) {
       let default_matched = MatchedDeclarationsView::default();
       let matched = matched_declarations
-        .get(node_index)
+        .get(source_order)
         .map(NodeMatchedDeclarations::element)
         .unwrap_or(&default_matched);
       let layers = node.take_style_layers();
@@ -1331,7 +1332,7 @@ impl RenderNode {
       // rescaling every `rem` length below it. A parsed document is the
       // exception, since its outermost node is the `<html>` element that CSS
       // does make the `rem` basis.
-      let is_document_root = node_index == 0
+      let is_document_root = source_order == 0
         && node
           .tag_name()
           .is_some_and(|tag| tag.eq_ignore_ascii_case("html"));
@@ -1397,17 +1398,21 @@ impl RenderNode {
       parent_context: &RenderContext,
       mut node: Node,
       matched_declarations: &[NodeMatchedDeclarations<'_>],
-      preorder_cursor: &mut usize,
+      source_cursor: &mut usize,
       counter: &mut ListCounter,
       inside_list: bool,
     ) -> PendingRenderNode {
-      let node_index = next_preorder_index(preorder_cursor);
-      let (style, sizing, current_color) =
-        resolve_computed_style(parent_context, &mut node, node_index, matched_declarations);
+      let source_order = next_source_order(source_cursor);
+      let (style, sizing, current_color) = resolve_computed_style(
+        parent_context,
+        &mut node,
+        source_order,
+        matched_declarations,
+      );
       let (children_is_some, children) = take_children_vec(&mut node);
       let context = RenderContext::from_parent(parent_context, style, sizing, current_color);
 
-      let element_matched = matched_declarations.get(node_index);
+      let element_matched = matched_declarations.get(source_order);
       let marker_ordinal =
         (context.style.display == Display::ListItem).then(|| counter.take(&node));
       let pseudo_before = element_matched
@@ -1433,7 +1438,7 @@ impl RenderNode {
       let owns_list_counter = owns_list_counter(&node, inside_list);
 
       PendingRenderNode {
-        node_index,
+        source_order,
         children_is_some: children_is_some || has_generated_children,
         list_counter: if owns_list_counter {
           ListCounter::new(&node, &children)
@@ -1451,13 +1456,13 @@ impl RenderNode {
       }
     }
 
-    let mut preorder_cursor = 0;
+    let mut source_cursor = 0;
     let mut root_counter = ListCounter::new(&root, &[]);
     let mut stack = vec![build_pending_node(
       parent_context,
       root,
       matched_declarations,
-      &mut preorder_cursor,
+      &mut source_cursor,
       &mut root_counter,
       false,
     )];
@@ -1467,7 +1472,7 @@ impl RenderNode {
         return RenderNode {
           context: parent_context.clone(),
           node: Some(Node::container([])),
-          source_index: None,
+          source_order: None,
           children: None,
           layout_style_override: None,
           anonymous_text_content: None,
@@ -1481,7 +1486,7 @@ impl RenderNode {
           &current.context,
           child,
           matched_declarations,
-          &mut preorder_cursor,
+          &mut source_cursor,
           &mut current.list_counter,
           current.inside_list,
         );
@@ -1493,7 +1498,7 @@ impl RenderNode {
         return RenderNode {
           context: parent_context.clone(),
           node: Some(Node::container([])),
-          source_index: None,
+          source_order: None,
           children: None,
           layout_style_override: None,
           anonymous_text_content: None,
@@ -1532,7 +1537,7 @@ impl RenderNode {
           RenderNode {
             context: finished.context,
             node: Some(finished.node),
-            source_index: Some(finished.node_index),
+            source_order: Some(finished.source_order),
             children: Some(children.into_boxed_slice()),
             layout_style_override: None,
             anonymous_text_content: None,
@@ -1576,7 +1581,7 @@ impl RenderNode {
             RenderNode {
               context: finished.context,
               node: Some(finished.node),
-              source_index: Some(finished.node_index),
+              source_order: Some(finished.source_order),
               children: Some(children),
               layout_style_override: None,
               anonymous_text_content: None,
@@ -1603,7 +1608,7 @@ impl RenderNode {
             RenderNode {
               context: finished.context,
               node: Some(finished.node),
-              source_index: Some(finished.node_index),
+              source_order: Some(finished.source_order),
               children: Some(final_children.into_boxed_slice()),
               layout_style_override: None,
               anonymous_text_content: None,
@@ -1630,7 +1635,7 @@ impl RenderNode {
           RenderNode {
             context: finished.context,
             node: Some(finished.node),
-            source_index: Some(finished.node_index),
+            source_order: Some(finished.source_order),
             children: Some([anonymous_text_item].into()),
             layout_style_override: None,
             anonymous_text_content: None,
@@ -1641,7 +1646,7 @@ impl RenderNode {
           RenderNode {
             context: finished.context,
             node: Some(finished.node),
-            source_index: Some(finished.node_index),
+            source_order: Some(finished.source_order),
             children: None,
             layout_style_override: None,
             anonymous_text_content: None,

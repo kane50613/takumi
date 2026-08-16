@@ -315,7 +315,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       // A repeated box without a counter keeps the one layout, so its links are
       // collected once rather than per page. They stay grouped by box, which is
       // the order the annotations are added in.
-      let static_links: Vec<_> = repeated
+      let kept_links: Vec<_> = repeated
         .iter()
         .map(|repeat| match repeat.template {
           Some(_) => Vec::new(),
@@ -345,7 +345,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       for (index, &y0) in starts.iter().enumerate() {
         // A repeated box holding a counter lays out again with this page's
         // numbers; the rest keep the layout they were prepared with.
-        let refreshed = repeated
+        let renumbered = repeated
           .iter()
           .map(|repeat| {
             repeat
@@ -357,12 +357,12 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
               .transpose()
           })
           .collect::<Result<Vec<_>, PdfError>>()?;
-        let page_repeated: Vec<_> = repeated
+        let page_boxes: Vec<_> = repeated
           .iter()
-          .zip(&refreshed)
+          .zip(&renumbered)
           .map(|(repeat, fresh)| fresh.as_ref().unwrap_or(&repeat.prepared))
           .collect();
-        let refreshed_links: Vec<_> = refreshed
+        let renumbered_links: Vec<_> = renumbered
           .iter()
           .map(|fresh| {
             fresh
@@ -401,7 +401,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
 
         let content_top = margin.top;
 
-        for fixed in page_repeated
+        for fixed in page_boxes
           .iter()
           .copied()
           .filter(|tree| tree.paints_below())
@@ -443,7 +443,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           surface.pop();
         }
 
-        for fixed in page_repeated
+        for fixed in page_boxes
           .iter()
           .copied()
           .filter(|tree| !tree.paints_below())
@@ -505,9 +505,9 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         // tree, so the annotations stay out of the structure too.
         add_link_annotations(
           &mut pdf_page,
-          static_links
+          kept_links
             .iter()
-            .zip(&refreshed_links)
+            .zip(&renumbered_links)
             .flat_map(|(kept, fresh)| kept.iter().chain(fresh)),
           (0.0, window_height),
           (margin.left, content_top),

@@ -390,26 +390,26 @@ pub(crate) fn substitute_page_counters(node: &mut Node, page: usize, pages: usiz
   }
 }
 
-/// The pages a laid-out box spans: where it starts, and the page the flow
+/// The pages a laid-out box covers: the one it starts on, and the one the flow
 /// continues on after it.
-pub(crate) struct PageSpan {
-  pub(crate) top: usize,
-  pub(crate) after: Option<usize>,
+pub(crate) struct BoxPages {
+  pub(crate) start: usize,
+  pub(crate) next: Option<usize>,
 }
 
 /// The state a content-counter walk carries: what the boxes resolved to, and
 /// how far the flow has come.
 pub(crate) struct FlowCounters<'c> {
-  page_of: &'c HashMap<usize, PageSpan>,
+  page_of: &'c HashMap<usize, BoxPages>,
   pages: usize,
   repeated: &'c [Range<usize>],
   cursor: usize,
-  preceding: Option<usize>,
+  reached: Option<usize>,
 }
 
 impl<'c> FlowCounters<'c> {
   pub(crate) fn new(
-    page_of: &'c HashMap<usize, PageSpan>,
+    page_of: &'c HashMap<usize, BoxPages>,
     pages: usize,
     repeated: &'c [Range<usize>],
   ) -> Self {
@@ -418,7 +418,7 @@ impl<'c> FlowCounters<'c> {
       pages,
       repeated,
       cursor: 0,
-      preceding: None,
+      reached: None,
     }
   }
 
@@ -436,7 +436,7 @@ impl<'c> FlowCounters<'c> {
   ) {
     let index = self.cursor;
     let own = self.page_of.get(&index);
-    let inherit = own.map_or(inherited, |span| Some(span.top));
+    let inherit = own.map_or(inherited, |pages| Some(pages.start));
 
     self.cursor += 1;
     if let NodeKind::Container { children } = &mut node.kind {
@@ -445,8 +445,8 @@ impl<'c> FlowCounters<'c> {
       }
     }
     let page = match own {
-      Some(span) => Some(span.top),
-      None => inherit.map(|page| self.preceding.map_or(page, |after| page.max(after))),
+      Some(pages) => Some(pages.start),
+      None => inherit.map(|page| self.reached.map_or(page, |after| page.max(after))),
     };
 
     if let Some(page) = page
@@ -456,8 +456,8 @@ impl<'c> FlowCounters<'c> {
       written.push(text.clone());
       write_counter(node, text);
     }
-    if let Some(after) = self.page_of.get(&index).and_then(|span| span.after) {
-      self.preceding = Some(after);
+    if let Some(after) = self.page_of.get(&index).and_then(|pages| pages.next) {
+      self.reached = Some(after);
     }
   }
 }

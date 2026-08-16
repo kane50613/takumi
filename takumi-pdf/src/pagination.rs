@@ -6,7 +6,7 @@ use takumi_core::{layout::node::Node, style::Affine, viewport::Viewport};
 
 use crate::{
   counters::{
-    FlowCounters, PageSpan, has_page_counters, has_target_counters, substitute_target_counters,
+    BoxPages, FlowCounters, has_page_counters, has_target_counters, substitute_target_counters,
   },
   emitter::{FontMap, RenderIssues},
   inline::{build_inline_map, collect_text_boxes},
@@ -129,15 +129,15 @@ fn substitute_counters(node: &mut Node, paginated: &Paginated, written: &mut Vec
   // `fill_root` wraps the tree in a page-wide box, which takes preorder 0.
   let page_of = paginated
     .interactive
-    .boxes
+    .extents
     .iter()
-    .filter_map(|(index, span)| {
-      let page = PageSpan {
-        top: page_at(&span.top),
-        after: span.flow_bottom.as_ref().map(page_at),
+    .filter_map(|(order, extent)| {
+      let pages = BoxPages {
+        start: page_at(&extent.top),
+        next: extent.flow_bottom.as_ref().map(page_at),
       };
 
-      Some((index.checked_sub(1)?, page))
+      Some((order.checked_sub(1)?, pages))
     })
     .collect();
   let repeated: Vec<Range<usize>> = paginated
@@ -145,9 +145,9 @@ fn substitute_counters(node: &mut Node, paginated: &Paginated, written: &mut Vec
     .iter()
     .filter_map(|repeat| repeat.template.as_ref())
     .map(|template| {
-      let range = template.source_range();
+      let orders = template.source_orders();
 
-      range.start.saturating_sub(1)..range.end.saturating_sub(1)
+      orders.start.saturating_sub(1)..orders.end.saturating_sub(1)
     })
     .collect();
 

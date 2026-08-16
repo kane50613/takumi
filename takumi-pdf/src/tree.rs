@@ -162,13 +162,13 @@ pub(crate) struct RepeatedBox {
 pub(crate) struct RepeatedTemplate {
   node: Node,
   parent: RenderContext,
-  index: usize,
+  source_order: usize,
 }
 
 impl RepeatedTemplate {
-  /// The preorder positions the subtree occupies in the tree it was taken from.
-  pub(crate) fn source_range(&self) -> Range<usize> {
-    self.index..self.index + node_count(&self.node)
+  /// The source orders the subtree occupies in the tree it was taken from.
+  pub(crate) fn source_orders(&self) -> Range<usize> {
+    self.source_order..self.source_order + node_count(&self.node)
   }
 }
 
@@ -202,13 +202,13 @@ pub(crate) fn prepare_paged_tree(
     .map(|(node, parent)| {
       let template = source
         .as_ref()
-        .zip(node.source_index)
-        .and_then(|(source, index)| Some((index, node_at_preorder(source, index)?)))
+        .zip(node.source_order)
+        .and_then(|(source, index)| Some((index, node_in_source_order(source, index)?)))
         .filter(|(_, template)| has_page_counters(template))
-        .map(|(index, template)| RepeatedTemplate {
+        .map(|(source_order, template)| RepeatedTemplate {
           node: template.clone(),
           parent,
-          index,
+          source_order,
         });
 
       Ok(RepeatedBox {
@@ -237,9 +237,9 @@ pub(crate) fn prepare_repeated(
   lay_out(page_root(page_context, child), page_area)
 }
 
-/// The node at a preorder position, counted the way the render tree numbers
-/// the source tree it is built from.
-fn node_at_preorder(node: &Node, index: usize) -> Option<&Node> {
+/// The node at a source order, counted the way the render tree numbers the
+/// source tree it is built from.
+fn node_in_source_order(node: &Node, index: usize) -> Option<&Node> {
   fn walk<'n>(node: &'n Node, index: usize, cursor: &mut usize) -> Option<&'n Node> {
     if *cursor == index {
       return Some(node);
