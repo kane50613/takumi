@@ -11,6 +11,7 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
   MACOSX_DEPLOYMENT_TARGET: "10.13"
   # Remove file paths to reduce binary size
   RUSTFLAGS: >-
@@ -76,7 +77,7 @@ jobs:
           exit $fail
 
       - name: Run tests
-        run: CARGO_PROFILE_TEST_STRIP="debuginfo" cargo test
+        run: cargo test
 
       # The fixtures claim PDF/A and PDF/UA conformance in their metadata. Only
       # the reference validator can tell whether the claim holds.
