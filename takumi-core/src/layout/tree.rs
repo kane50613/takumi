@@ -147,6 +147,27 @@ pub struct RenderNode {
   pub table_header_lines: Option<(i16, i16)>,
 }
 
+/// Drops the render tree iteratively; recursive drop glue overflows the stack
+/// on deep user trees, same reason `Node` has an iterative `Drop`.
+impl Drop for RenderNode {
+  fn drop(&mut self) {
+    let mut stack: Vec<RenderNode> = Vec::new();
+    let collect = |node: &mut RenderNode, stack: &mut Vec<RenderNode>| {
+      if let Some(children) = node.children.take() {
+        stack.extend(children.into_vec());
+      }
+      if let Some(marker) = node.marker.take() {
+        stack.push(*marker);
+      }
+    };
+
+    collect(self, &mut stack);
+    while let Some(mut node) = stack.pop() {
+      collect(&mut node, &mut stack);
+    }
+  }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct AtomicInlineMetrics {
   pub(crate) size: Size<f32>,
@@ -2203,11 +2224,15 @@ mod tests {
 
   use taffy::NodeId as TaffyNodeId;
 
-  use super::{registered_custom_property_parent_style, sort_children_by_order};
+  use super::{
+    NodeOrigin, RenderNode, registered_custom_property_parent_style, sort_children_by_order,
+  };
   use crate::{
+    context::RenderContext,
+    resources::font::Fonts,
     style::{
-      ComputedStyle, Length, PropertyRule, Style, StyleDeclaration, StyleDeclarationBlock,
-      StyleSheet,
+      ComputedStyle, Length, PropertyRule, SizingContext, Style, StyleDeclaration,
+      StyleDeclarationBlock, StyleSheet,
     },
     viewport::Viewport,
   };
@@ -2216,6 +2241,36 @@ mod tests {
     let result = StyleSheet::parse(css);
     assert!(result.is_ok(), "expected stylesheet to parse: {result:?}");
     result.unwrap_or_default()
+  }
+
+  #[test]
+  fn render_node_drop_is_iterative() {
+    let context = RenderContext::builder()
+      .fonts(Fonts::default().snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::default())
+          .build(),
+      )
+      .build();
+    let leaf = |children: Option<Box<[RenderNode]>>| RenderNode {
+      context: context.clone(),
+      node: None,
+      origin: NodeOrigin::Anonymous,
+      children,
+      layout_style_override: None,
+      anonymous_text_content: None,
+      marker: None,
+      force_inline_layout: false,
+      table_header_lines: None,
+    };
+
+    let mut root = leaf(None);
+    for _ in 0..500_000 {
+      root = leaf(Some(Box::new([root])));
+    }
+
+    drop(root);
   }
 
   #[test]
