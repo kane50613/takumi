@@ -162,7 +162,7 @@ const pdf = await render(
 
 ## Tables
 
-`<table>` markup lays out on shared column tracks, so column x positions stay identical across pages. A `<thead>` paints again at the top of every page its table continues onto, when it is at most a quarter of the page tall.
+`<table>` markup lays out on shared column tracks, so column x positions stay identical across pages. A `<thead>` paints again at the top of every page its table continues onto, when it is at most a quarter of the page tall and no header cell spans into the body.
 
 ```tsx
 const pdf = await render(
