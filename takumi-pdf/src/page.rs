@@ -21,6 +21,7 @@ use crate::{
     page::PageSettings,
     paint::FillRule,
     surface::Surface,
+    tagging::{Artifact, ArtifactType, ContentTag},
   },
   options::{PT_PER_PX, PageOptions, PdfError},
   pagination::{PageGeometry, PageSlice, Paginated},
@@ -115,7 +116,8 @@ impl PageComposer<'_, '_> {
   /// on, at its position inside that page.
   pub(crate) fn destination(&self, top: f32, path: &[usize]) -> XyzDestination {
     let index = self.paginated.page_index(top);
-    let y = self.frame.margin.top + (top - self.paginated.starts[index]).max(0.0);
+    let start = self.paginated.starts[index];
+    let y = self.frame.margin.top + self.paginated.reserved_at(start) + (top - start).max(0.0);
     let dest = XyzDestination::new(
       index,
       Point::from_xy(self.frame.margin.left * PT_PER_PX, y * PT_PER_PX),
@@ -180,7 +182,10 @@ impl PageComposer<'_, '_> {
       &mut pdf_page,
       &self.paginated.interactive.links,
       (slice.start, slice.start + slice.paint_height),
-      (self.frame.margin.left, self.frame.margin.top),
+      (
+        self.frame.margin.left,
+        self.frame.margin.top + slice.reserved,
+      ),
       self.tag_collector,
       |id| {
         self
@@ -231,14 +236,15 @@ impl PageComposer<'_, '_> {
   }
 
   /// Emits the content column through this page's window: clipped to the paint
-  /// height and translated so the slice lands at the content origin.
+  /// height and translated so the slice lands at the content origin, below any
+  /// repeated table headers.
   fn emit_content(&mut self, slice: &PageSlice, surface: &mut Surface) -> Result<(), PdfError> {
     // Paint stops at the next cut: the region between a raised cut and the
     // page's full height belongs to the next page and stays blank, exactly
     // like browser print fragmentation.
     let Some(path) = KrillaRect::from_xywh(
       self.frame.margin.left,
-      self.frame.margin.top,
+      self.frame.margin.top + slice.reserved,
       self.frame.content_width,
       slice.paint_height,
     )
@@ -249,7 +255,7 @@ impl PageComposer<'_, '_> {
     surface.push_clip_path(&path, &FillRule::NonZero);
     surface.push_transform(&Transform::from_translate(
       self.frame.margin.left,
-      self.frame.margin.top - slice.start,
+      self.frame.margin.top + slice.reserved - slice.start,
     ));
     let mut emitter = self.paginated.content.emitter(
       self.fonts,
@@ -271,6 +277,60 @@ impl PageComposer<'_, '_> {
     emitter.emit_context(0, Affine::IDENTITY, surface)?;
     surface.pop();
     surface.pop();
+    if slice.reserved > 0.0 {
+      self.emit_repeated_headers(slice, surface)?;
+    }
+    Ok(())
+  }
+
+  /// Replays each repeating table header band at the top of the window. The
+  /// first occurrence carried the tags, so a replay is an artifact.
+  fn emit_repeated_headers(
+    &mut self,
+    slice: &PageSlice,
+    surface: &mut Surface,
+  ) -> Result<(), PdfError> {
+    let mut offset = self.frame.margin.top;
+
+    for band in &self.paginated.headers {
+      if !band.repeats_at(slice.start) {
+        continue;
+      }
+      let Some(path) = KrillaRect::from_xywh(
+        self.frame.margin.left,
+        offset,
+        self.frame.content_width,
+        band.height(),
+      )
+      .and_then(rect_path) else {
+        continue;
+      };
+
+      surface.start_tagged(ContentTag::Artifact(Artifact::new(
+        ArtifactType::Other,
+        None,
+      )));
+      surface.push_clip_path(&path, &FillRule::NonZero);
+      surface.push_transform(&Transform::from_translate(
+        self.frame.margin.left,
+        offset - band.top,
+      ));
+      let mut emitter = self.paginated.content.emitter(
+        self.fonts,
+        Some(self.inline_map),
+        None,
+        self.issues,
+        self.document_lang,
+      );
+
+      emitter.window = Some((band.top, band.bottom));
+      emitter.line_window = Some((f32::NEG_INFINITY, band.bottom));
+      emitter.emit_context(0, Affine::IDENTITY, surface)?;
+      surface.pop();
+      surface.pop();
+      surface.end_tagged();
+      offset += band.height();
+    }
     Ok(())
   }
 }

@@ -221,6 +221,85 @@ fn paged_table() {
   });
 }
 
+/// css-tables-3 §repeated-headers: every page that starts inside the table's
+/// body paints the header rows again.
+#[test]
+fn a_table_header_repeats_on_every_page() {
+  let fonts = fonts();
+  let table = |thead_style: &str| {
+    let rows: String = (1..=30)
+      .map(|i| format!("<tr><td>Item {i}</td><td>{}</td></tr>", i * 3))
+      .collect();
+    let html = format!(
+      r#"<table style="width: 100%; font-size: 12px; color: #141414">
+        <thead{thead_style}><tr><th>Name</th><th>Qty</th></tr></thead>
+        <tbody>{rows}</tbody>
+      </table>"#
+    );
+
+    render(
+      PdfOptions::builder()
+        .node(from_html(&html, FromHtmlOptions::default()).expect("parse table"))
+        .page(PageOptions {
+          width: 400.0,
+          height: 300.0,
+          margin: PageMargins::uniform(24.0),
+        })
+        .tagged(Tagging::Off)
+        .fonts(&fonts)
+        .build(),
+    )
+    .expect("render table")
+  };
+  let repeating = table("");
+  // A `table-row-group` header is not a header group, so nothing repeats.
+  let plain = table(r#" style="display: table-row-group""#);
+  let pages = String::from_utf8_lossy(&repeating)
+    .matches("/Type/Page/")
+    .count();
+
+  assert!(pages > 1, "the table did not paginate");
+  assert_eq!(
+    text_show_operators(&repeating),
+    text_show_operators(&plain) + 2 * (pages - 1),
+    "each continuation page repeats the two header cells"
+  );
+}
+
+/// A replayed header is an artifact: the occurrence where the table begins
+/// carries the tags, and a second marked occurrence would double the reading
+/// order.
+#[test]
+fn a_repeated_table_header_replays_as_an_artifact() {
+  let rows: String = (1..=30)
+    .map(|i| format!("<tr><td>Item {i}</td><td>{}</td></tr>", i * 3))
+    .collect();
+  let html = format!(
+    r#"<table style="width: 100%; font-size: 12px; color: #141414">
+      <thead><tr><th>Name</th><th>Qty</th></tr></thead>
+      <tbody>{rows}</tbody>
+    </table>"#
+  );
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse table"))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .tagged(Tagging::On)
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect("render tagged table");
+
+  assert!(
+    inflated_text(&pdf).contains("/Artifact"),
+    "the replayed header is not marked as an artifact"
+  );
+}
+
 /// A footer narrow enough that three-digit counters wrap it to a second line.
 /// The band re-measures with the real page count, so the `auto` margin
 /// reserves one line, not a wrapped stand-in's two.
