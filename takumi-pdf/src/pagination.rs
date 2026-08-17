@@ -140,7 +140,8 @@ fn collect_headers_paint(tree: &PreparedTree, paint: &NodePaint, bands: &mut Vec
     return;
   };
   let content_top = table_top + layout.border.top + layout.padding.top;
-  let mut band_bottom = f32::MIN;
+  let mut header_bottom = f32::MIN;
+  let mut body_top = f32::MAX;
 
   for ordered in children.iter() {
     let Some(child) = rows.get(ordered.render_index) else {
@@ -149,14 +150,24 @@ fn collect_headers_paint(tree: &PreparedTree, paint: &NodePaint, bands: &mut Vec
     let GridPlacement::Line(line) = child.context.style.grid_row_start else {
       continue;
     };
-
-    if line < start || line >= end {
+    let Ok(cell) = tree.results.layout(ordered.node_id) else {
       continue;
-    }
-    if let Ok(cell) = tree.results.layout(ordered.node_id) {
-      band_bottom = band_bottom.max(content_top + cell.location.y + cell.size.height);
+    };
+
+    if line >= start && line < end {
+      header_bottom = header_bottom.max(content_top + cell.location.y + cell.size.height);
+    } else if line >= end {
+      body_top = body_top.min(content_top + cell.location.y);
     }
   }
+
+  // The band runs to the first body row, so the `border-spacing` strip between
+  // header and body repeats with it; Blink reserves that spacing the same way.
+  let band_bottom = if body_top < f32::MAX {
+    body_top.max(header_bottom)
+  } else {
+    header_bottom
+  };
 
   if band_bottom > table_top {
     bands.push(HeaderBand {
@@ -348,6 +359,10 @@ fn paginate_once(
     )?;
 
   let headers = collect_repeating_headers(&content, geometry.window_height);
+
+  // A repeating header is monolithic: a cut through it would show a partial
+  // header once and the full band again on the next page.
+  atoms.extend(headers.iter().map(|band| (band.top, band.bottom)));
   let starts = page_starts(
     &mut atoms,
     &mut forced,
