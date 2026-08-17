@@ -67,6 +67,30 @@ const pdf = await render(
 );
 ```
 
+## Repeated table headers
+
+A `<thead>` paints again at the top of every page its table continues onto, following css-tables-3 repeated headers. The band is monolithic: a page break never lands inside it, and the spacing to the first body row repeats with it.
+
+```tsx twoslash
+declare const rows: import("react").ReactNode;
+// ---cut---
+import { render } from "takumi-pdf";
+
+const pdf = await render(
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Qty</th>
+      </tr>
+    </thead>
+    <tbody>{rows}</tbody>
+  </table>,
+);
+```
+
+A header taller than a quarter of the page does not repeat, matching Chromium. A header cell whose `rowspan` reaches into the body suppresses repetition for that table. `<tfoot>` renders once, after the body.
+
 ## Watermarks
 
 `position: fixed` paints a box on every page.

@@ -30,7 +30,7 @@ bun add takumi-pdf
 ```tsx
 import { writeFile } from "node:fs/promises";
 import { googleFonts } from "@takumi-rs/helpers";
-import { render } from "takumi-pdf";
+import { PageNumber, TotalPages, render } from "takumi-pdf";
 
 const pdf = await render(
   <main tw="flex flex-col gap-4">
@@ -45,7 +45,7 @@ const pdf = await render(
     fonts: await googleFonts(["Inter"]),
     footer: (
       <div tw="flex w-full justify-center text-[10px] text-gray-500">
-        Page <span className="pageNumber" /> of <span className="totalPages" />
+        Page <PageNumber /> of <TotalPages />
       </div>
     ),
   },
@@ -74,28 +74,22 @@ const pdf = await render(report, {
 
 ## Headers and footers
 
-Headers and footers repeat on every page. Elements whose class list includes `pageNumber` or `totalPages` receive the counter as text.
+Headers and footers repeat on every page. `<PageNumber />` and `<TotalPages />` place the counters; the `format` prop picks a CSS counter style.
 
 ```tsx
+import { PageNumber, TotalPages } from "takumi-pdf";
+
 const pdf = await render(report, {
   footer: (
     <div style={{ fontSize: 12 }}>
-      Page <span className="pageNumber" /> of <span className="totalPages" />
+      第 <PageNumber format="trad-chinese-informal" /> 頁,共{" "}
+      <TotalPages format="trad-chinese-informal" /> 頁
     </div>
   ),
 });
 ```
 
-Add a CSS counter-style name to the class list to format the number:
-
-```tsx
-footer: (
-  <div style={{ fontSize: 12 }}>
-    第 <span className="pageNumber trad-chinese-informal" /> 頁,共{" "}
-    <span className="totalPages trad-chinese-informal" /> 頁
-  </div>
-),
-```
+The primitives render class hooks, the same `pageNumber` / `totalPages` names Chromium's print templates use, so HTML input writes `<span class="pageNumber"></span>` directly.
 
 | Counter style                               | Example       |
 | ------------------------------------------- | ------------- |
@@ -166,9 +160,27 @@ const pdf = await render(
 | `break-inside: avoid`         | Keeps the element on one page when it fits.             |
 | `box-decoration-break: clone` | Repeats borders and backgrounds on every page fragment. |
 
+## Tables
+
+`<table>` markup lays out on shared column tracks, so column x positions stay identical across pages. A `<thead>` paints again at the top of every page its table continues onto, when it is at most a quarter of the page tall.
+
+```tsx
+const pdf = await render(
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Qty</th>
+      </tr>
+    </thead>
+    <tbody>{rows}</tbody>
+  </table>,
+);
+```
+
 ## Links, outline, and metadata
 
-Anchors with an `href` become clickable link annotations. `outline: true` builds PDF bookmarks from `h1` through `h6` headings. `metadata` fills the document properties:
+Anchors with an `href` become clickable link annotations. `<TargetPageNumber />` prints the page a link's target lands on, which is what a table of contents needs. `outline: true` builds PDF bookmarks from `h1` through `h6` headings. `metadata` fills the document properties:
 
 ```tsx
 const pdf = await render(report, {
@@ -188,7 +200,7 @@ Omit `metadata` to keep output byte-identical across runs.
 
 Output is **tagged by default**: HTML semantics (`h1` through `h6`, `p`, `img` with `alt`, `a`, lists) become a PDF structure tree, like Chromium's print-to-PDF. Set `tagged: "ua1"` to validate against PDF/UA-1, or `tagged: false` to drop the tree when file size matters more than accessibility.
 
-`<table>` markup is not supported, and a table built out of flex rows carries no `Table` structure elements.
+`<table>` markup lays out and paints, but carries no `Table` structure elements yet.
 
 `pdfa` renders archival output. Validation runs during rendering. A document that cannot conform fails with the violated rule instead of writing a broken file. Every level, and PDF/UA-1, passes [veraPDF](https://verapdf.org).
 
