@@ -3,7 +3,77 @@
   <head>
     <meta charset="utf-8" />
     <title>tables</title>
-    <link rel="stylesheet" href="../shared.css" />
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .root {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 16px;
+        width: 100%;
+        height: 100%;
+        background: rgb(243, 244, 246);
+        align-content: flex-start;
+        font-family: "Geist";
+      }
+      .cell {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        width: 282px;
+        height: 190px;
+        background: white;
+        border-radius: 8px;
+        padding: 10px 12px;
+      }
+      .label {
+        font-size: 11px;
+        color: rgb(100, 116, 139);
+        font-family: "Geist Mono";
+      }
+      .table {
+        display: table;
+        width: 100%;
+        font-size: 13px;
+        color: rgb(17, 24, 39);
+      }
+      .thead {
+        display: table-header-group;
+      }
+      .tbody {
+        display: table-row-group;
+      }
+      .tfoot {
+        display: table-footer-group;
+      }
+      .tr {
+        display: table-row;
+      }
+      .td {
+        display: table-cell;
+        padding: 3px 8px;
+        border: 1px solid rgb(203, 213, 225);
+      }
+      .th {
+        background: rgb(226, 232, 240);
+        font-weight: bold;
+      }
+      .caption {
+        display: table-caption;
+        font-size: 11px;
+        color: rgb(100, 116, 139);
+      }
+      .caption-bottom {
+        caption-side: bottom;
+      }
+      .stripe {
+        background: rgb(241, 245, 249);
+      }
+      .w80 {
+        width: 80px;
+      }
+    </style>
   </head>
   <body style="width: 1200px; height: 630px">
     <div class="root">

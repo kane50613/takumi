@@ -5,7 +5,7 @@ use takumi::prelude::*;
 
 use crate::{
   style_filter_reference::filter_url,
-  test_utils::{CONTEXT, TEST_IMAGES, create_test_viewport, run_fixture_test_with_options},
+  test_utils::{CONTEXT, TEST_IMAGES, create_test_viewport, run_fixture_test_with_css},
 };
 
 fn run_showcase(node: Node, css: &str, fixture_name: &str) {
@@ -33,7 +33,7 @@ fn run_showcase(node: Node, css: &str, fixture_name: &str) {
     .stylesheet(StyleSheet::parse(&stylesheet).unwrap().into())
     .build();
 
-  run_fixture_test_with_options(options, fixture_name);
+  run_fixture_test_with_css(options, &stylesheet, fixture_name);
 }
 
 fn stage(children: Vec<Node>) -> Node {

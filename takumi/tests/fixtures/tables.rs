@@ -1,6 +1,6 @@
 use takumi::prelude::*;
 
-use crate::test_utils::{CONTEXT, attrs, create_test_viewport, run_fixture_test_with_options};
+use crate::test_utils::{CONTEXT, attrs, create_test_viewport, run_fixture_test_with_css};
 
 fn cell(label: &str, content: Node) -> Node {
   Node::container([
@@ -143,5 +143,5 @@ fn test_tables() {
     .stylesheet(StyleSheet::parse(CSS).unwrap().into())
     .build();
 
-  run_fixture_test_with_options(options, "tables");
+  run_fixture_test_with_css(options, CSS, "tables");
 }

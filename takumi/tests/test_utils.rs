@@ -161,6 +161,13 @@ pub fn run_fixture_test(node: Node, fixture_name: &str) {
 
 #[allow(dead_code)]
 pub fn run_fixture_test_with_options(options: RenderOptions<'_>, fixture_name: &str) {
+  run_fixture_test_with_css(options, "", fixture_name);
+}
+
+/// Embeds `css` in the repro HTML; `RenderOptions` only carries the parsed
+/// sheet, which cannot serialize back.
+#[allow(dead_code)]
+pub fn run_fixture_test_with_css(options: RenderOptions<'_>, css: &str, fixture_name: &str) {
   let viewport_width = options.viewport().size.width.unwrap_or(1200);
   let viewport_height = options.viewport().size.height.unwrap_or(630);
 
@@ -185,19 +192,24 @@ pub fn run_fixture_test_with_options(options: RenderOptions<'_>, fixture_name: &
     );
   }
 
+  let style_block = if css.is_empty() {
+    String::new()
+  } else {
+    format!("\n  <style>{css}</style>")
+  };
   let html_content = format!(
     r#"<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>{}</title>
-  <link rel="stylesheet" href="../shared.css">
+  <title>{fixture_name}</title>
+  <base href="../../../">
+  <link rel="stylesheet" href="takumi/tests/shared.css">{style_block}
 </head>
-<body style="width: {}px; height: {}px;">
-  {}
+<body style="width: {viewport_width}px; height: {viewport_height}px;">
+  {node_html}
 </body>
-</html>"#,
-    fixture_name, viewport_width, viewport_height, node_html
+</html>"#
   );
 
   write(

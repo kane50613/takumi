@@ -3,7 +3,35 @@
   <head>
     <meta charset="utf-8" />
     <title>stylesheets</title>
-    <link rel="stylesheet" href="../shared.css" />
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .card {
+        width: 560px;
+        height: 260px;
+        background-color: rgb(17, 24, 39);
+        border-radius: 24px;
+        padding: 32px;
+        row-gap: 16px;
+      }
+
+      #hero-card {
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+      }
+
+      section .title {
+        color: rgb(255, 255, 255);
+        font-size: 56px;
+        font-weight: 700;
+        text-align: center;
+      }
+
+      section .subtitle {
+        color: rgb(148, 163, 184);
+        font-size: 24px;
+        text-align: center;
+      }
+    </style>
   </head>
   <body style="width: 1200px; height: 630px">
     <div

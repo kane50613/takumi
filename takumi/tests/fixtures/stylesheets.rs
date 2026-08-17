@@ -1,6 +1,6 @@
 use takumi::prelude::{Length::*, *};
 
-use crate::test_utils::{CONTEXT, create_test_viewport, run_fixture_test_with_options};
+use crate::test_utils::{CONTEXT, create_test_viewport, run_fixture_test_with_css};
 
 #[test]
 fn test_stylesheets() {
@@ -38,46 +38,41 @@ fn test_stylesheets() {
       ))),
   );
 
+  let css = r#"
+    .card {
+      width: 560px;
+      height: 260px;
+      background-color: rgb(17, 24, 39);
+      border-radius: 24px;
+      padding: 32px;
+      row-gap: 16px;
+    }
+
+    #hero-card {
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+    }
+
+    section .title {
+      color: rgb(255, 255, 255);
+      font-size: 56px;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    section .subtitle {
+      color: rgb(148, 163, 184);
+      font-size: 24px;
+      text-align: center;
+    }
+  "#;
   let options = RenderOptions::builder()
     .viewport(create_test_viewport())
     .node(root)
     .fonts(&CONTEXT)
-    .stylesheet(
-      StyleSheet::parse(
-        r#"
-          .card {
-            width: 560px;
-            height: 260px;
-            background-color: rgb(17, 24, 39);
-            border-radius: 24px;
-            padding: 32px;
-            row-gap: 16px;
-          }
-  
-          #hero-card {
-            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
-          }
-  
-          section .title {
-            color: rgb(255, 255, 255);
-            font-size: 56px;
-            font-weight: 700;
-            text-align: center;
-          }
-  
-          section .subtitle {
-            color: rgb(148, 163, 184);
-            font-size: 24px;
-            text-align: center;
-          }
-        "#,
-      )
-      .unwrap()
-      .into(),
-    )
+    .stylesheet(StyleSheet::parse(css).unwrap().into())
     .build();
 
-  run_fixture_test_with_options(options, "stylesheets");
+  run_fixture_test_with_css(options, css, "stylesheets");
 }
 
 #[test]
@@ -106,21 +101,24 @@ fn test_stylesheets_background_multiple_gradients() {
       ))),
   );
 
+  let css = r#"
+    .multi-gradient-card {
+      background: radial-gradient(circle at 80% 20%, #FF3D00 0%, transparent 40%), radial-gradient(circle at 20% 80%, #00E5FF 0%, transparent 40%);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+    }
+  "#;
   let build_options = || {
     RenderOptions::builder()
       .viewport(create_test_viewport())
       .node(root.clone())
       .fonts(&CONTEXT)
-      .stylesheet(StyleSheet::parse(
-        r#"
-          .multi-gradient-card {
-            background: radial-gradient(circle at 80% 20%, #FF3D00 0%, transparent 40%), radial-gradient(circle at 20% 80%, #00E5FF 0%, transparent 40%);
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
-          }
-        "#,
-      )
-      .unwrap().into()).build()
+      .stylesheet(StyleSheet::parse(css).unwrap().into())
+      .build()
   };
 
-  run_fixture_test_with_options(build_options(), "stylesheets_background_multiple_gradients");
+  run_fixture_test_with_css(
+    build_options(),
+    css,
+    "stylesheets_background_multiple_gradients",
+  );
 }

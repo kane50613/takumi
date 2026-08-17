@@ -3,7 +3,81 @@
   <head>
     <meta charset="utf-8" />
     <title>list_markers</title>
-    <link rel="stylesheet" href="../shared.css" />
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .root {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 16px;
+        width: 100%;
+        height: 100%;
+        background: rgb(243, 244, 246);
+        align-content: flex-start;
+        font-family: "Geist";
+      }
+      .cell {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        width: 282px;
+        height: 190px;
+        background: white;
+        border-radius: 8px;
+        padding: 10px 12px;
+      }
+      .label {
+        font-size: 11px;
+        color: rgb(100, 116, 139);
+        font-family: "Geist Mono";
+      }
+      .list {
+        display: block;
+        padding-left: 40px;
+        font-size: 16px;
+        color: rgb(17, 24, 39);
+      }
+      .item {
+        display: list-item;
+      }
+      .decimal {
+        list-style-type: decimal;
+      }
+      .disc {
+        list-style-type: disc;
+      }
+      .circle {
+        list-style-type: circle;
+      }
+      .roman {
+        list-style-type: upper-roman;
+      }
+      .alpha {
+        list-style-type: lower-alpha;
+      }
+      .padded {
+        list-style-type: decimal-leading-zero;
+      }
+      .arrow {
+        list-style-type: "→ ";
+      }
+      .hidden {
+        list-style-type: none;
+      }
+      .inside {
+        list-style-position: inside;
+      }
+      .image {
+        list-style-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAEklEQVR42mOwbvr2Hx9mGBkKAKAwrIFG5bLTAAAAAElFTkSuQmCC);
+      }
+      .nested {
+        padding-left: 24px;
+      }
+      .block {
+        display: block;
+      }
+    </style>
   </head>
   <body style="width: 1200px; height: 630px">
     <div class="root">
