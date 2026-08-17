@@ -1,7 +1,7 @@
 ---
 packages:
   "@takumi-rs/core":
-    type: patch
+    type: minor
 ---
 
 ### Share custom property maps across nodes
