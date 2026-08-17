@@ -1446,7 +1446,7 @@ impl RenderNode {
         source_order,
         children_is_some: children_is_some || has_generated_children,
         list_counter: if owns_list_counter {
-          ListCounter::new(&node, &children)
+          ListCounter::new(&node)
         } else {
           *counter
         },
@@ -1462,7 +1462,7 @@ impl RenderNode {
     }
 
     let mut source_cursor = 0;
-    let mut root_counter = ListCounter::new(&root, &[]);
+    let mut root_counter = ListCounter::new(&root);
     let mut stack = vec![build_pending_node(
       parent_context,
       root,
