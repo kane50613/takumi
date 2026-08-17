@@ -164,8 +164,7 @@ pub fn run_fixture_test_with_options(options: RenderOptions<'_>, fixture_name: &
   run_fixture_test_with_css(options, "", fixture_name);
 }
 
-/// `css` is the raw stylesheet the render applies, embedded in the repro HTML
-/// so a browser shows the same page. `RenderOptions` only carries the parsed
+/// Embeds `css` in the repro HTML; `RenderOptions` only carries the parsed
 /// sheet, which cannot serialize back.
 #[allow(dead_code)]
 pub fn run_fixture_test_with_css(options: RenderOptions<'_>, css: &str, fixture_name: &str) {
@@ -203,14 +202,13 @@ pub fn run_fixture_test_with_css(options: RenderOptions<'_>, css: &str, fixture_
 <html>
 <head>
   <meta charset="utf-8">
-  <title>{}</title>
-  <link rel="stylesheet" href="../shared.css">{}
+  <title>{fixture_name}</title>
+  <link rel="stylesheet" href="../shared.css">{style_block}
 </head>
-<body style="width: {}px; height: {}px;">
-  {}
+<body style="width: {viewport_width}px; height: {viewport_height}px;">
+  {node_html}
 </body>
-</html>"#,
-    fixture_name, style_block, viewport_width, viewport_height, node_html
+</html>"#
   );
 
   write(
