@@ -203,7 +203,8 @@ pub fn run_fixture_test_with_css(options: RenderOptions<'_>, css: &str, fixture_
 <head>
   <meta charset="utf-8">
   <title>{fixture_name}</title>
-  <link rel="stylesheet" href="../shared.css">{style_block}
+  <base href="../../../">
+  <link rel="stylesheet" href="takumi/tests/shared.css">{style_block}
 </head>
 <body style="width: {viewport_width}px; height: {viewport_height}px;">
   {node_html}
