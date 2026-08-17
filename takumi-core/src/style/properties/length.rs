@@ -1024,9 +1024,16 @@ mod tests {
 
   #[test]
   fn infinite_percentage_never_reaches_compact_length() {
-    let compact = Length::Percentage(f32::INFINITY).to_compact_length(&sizing());
+    for (value, expected) in [
+      (f32::INFINITY, SAFE_INT_MAX_PX),
+      (f32::NEG_INFINITY, SAFE_INT_MIN_PX),
+      (f32::NAN, 0.0),
+    ] {
+      let compact = Length::Percentage(value).to_compact_length(&sizing());
 
-    assert!(compact.value().is_finite());
+      assert_eq!(compact.tag(), CompactLength::PERCENT_TAG, "for {value}");
+      assert_eq!(compact.value(), expected, "for {value}");
+    }
   }
 
   #[test]

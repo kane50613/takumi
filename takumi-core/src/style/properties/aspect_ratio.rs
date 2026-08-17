@@ -86,6 +86,11 @@ impl<'i> FromCss<'i> for AspectRatio {
     }
 
     let second_ratio = input.expect_number()?;
+
+    if first_ratio < 0.0 || second_ratio < 0.0 {
+      return Ok(AspectRatio::Auto);
+    }
+
     Ok(AspectRatio::ratio(first_ratio / second_ratio))
   }
 
@@ -114,6 +119,7 @@ mod tests {
     assert_eq!(AspectRatio::from_css_str("0/0"), Ok(AspectRatio::Auto));
     assert_eq!(AspectRatio::from_css_str("0"), Ok(AspectRatio::Auto));
     assert_eq!(AspectRatio::from_css_str("-2"), Ok(AspectRatio::Auto));
+    assert_eq!(AspectRatio::from_css_str("-2/-3"), Ok(AspectRatio::Auto));
   }
 
   #[test]
