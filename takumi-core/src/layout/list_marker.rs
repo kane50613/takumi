@@ -13,8 +13,13 @@ use crate::{
   },
 };
 
-/// Blink's gap between a marker image and the item's content.
-const MARKER_IMAGE_GAP_PX: f32 = 7.0;
+/// Blink's `kCMarkerPaddingPx`: the gap between a marker image or an outside
+/// symbol and the item's content.
+const MARKER_GAP_PX: f32 = 7.0;
+
+/// Blink's `kCUAMarkerMarginEm`: the gap an inside symbol keeps from the
+/// content that follows it on the line.
+const INSIDE_SYMBOL_GAP_EM: f32 = 1.0;
 
 /// The marker box of a `display: list-item` box, per css-lists-3 §3.
 pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<RenderNode> {
@@ -41,8 +46,27 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
   let mut content = match available_marker_image(item_context) {
     Some(image) => marker_image(&context, image, is_rtl),
     None => {
-      let text = item_context.style.list_style_type.marker_text(ordinal)?;
-      RenderNode::anonymous_text_item(&context, text)
+      let style_type = &item_context.style.list_style_type;
+      let text = style_type.marker_text(ordinal)?;
+
+      // Blink lays a symbol marker out as fixed-size geometry with margins
+      // (`InlineMarginsForInside`/`Outside`), not as text: the suffix space
+      // alone leaves the bullet hugging the item. Alphanumeric markers keep
+      // their `. ` suffix as the whole gap, which Blink also does.
+      if style_type.is_symbolic() {
+        let (text, gap) = match item_context.style.list_style_position {
+          ListStylePosition::Inside => {
+            (text.trim_end().to_owned(), Length::Em(INSIDE_SYMBOL_GAP_EM))
+          }
+          ListStylePosition::Outside => (text, Length::Px(MARKER_GAP_PX)),
+        };
+        let mut item = RenderNode::anonymous_text_item(&context, text);
+
+        apply_marker_gap(&mut item, &context, gap, is_rtl);
+        item
+      } else {
+        RenderNode::anonymous_text_item(&context, text)
+      }
     }
   };
 
@@ -84,18 +108,25 @@ fn marker_image(context: &RenderContext, mut image: BackgroundImage, is_rtl: boo
 
   if let Some(layout_style) = &mut item.layout_style_override {
     layout_style.max_size = TaffySize::auto();
-
-    // A margin on the image keeps the marker box itself zero-width.
-    let gap =
-      LengthPercentageAuto::length(Length::Px(MARKER_IMAGE_GAP_PX).to_px(&context.sizing, 0.0));
-    if is_rtl {
-      layout_style.margin.left = gap;
-    } else {
-      layout_style.margin.right = gap;
-    }
   }
+  apply_marker_gap(&mut item, context, Length::Px(MARKER_GAP_PX), is_rtl);
 
   item
+}
+
+/// Separates the marker from the item's content. A margin on the content
+/// keeps the marker box itself zero-width.
+fn apply_marker_gap(item: &mut RenderNode, context: &RenderContext, gap: Length, is_rtl: bool) {
+  let Some(layout_style) = &mut item.layout_style_override else {
+    return;
+  };
+  let gap = LengthPercentageAuto::length(gap.to_px(&context.sizing, 0.0));
+
+  if is_rtl {
+    layout_style.margin.left = gap;
+  } else {
+    layout_style.margin.right = gap;
+  }
 }
 
 /// The running count a list hands to its items, honoring `start` and `value`.
