@@ -126,7 +126,6 @@
   "scripts": {
     "build": "wasm-pack build ../takumi-pdf-wasm --no-pack --release --out-dir ../takumi-pdf-js/pkg --target web && bun build:js",
     "build:js": "tsdown",
-    "build:debug": "wasm-pack build ../takumi-pdf-wasm --no-pack --dev --out-dir ../takumi-pdf-js/pkg --target web && bun build:js",
     "publish-lint": "attw --pack . && publint --strict ."
   },
   "dependencies": {
