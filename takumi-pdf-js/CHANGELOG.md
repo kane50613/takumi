@@ -1,3 +1,9 @@
+## takumi-pdf@0.11.1
+
+### Type `tw` from the primitives entry
+
+Move the `tw` JSX attribute augmentation into `takumi-pdf/primitives`, so importing only the primitives types it too.
+
 ## takumi-pdf@0.11.0
 
 ### Measure a band with the page count the cut produced
