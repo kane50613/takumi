@@ -2,12 +2,7 @@
 
 use std::cell::RefCell;
 
-use takumi_core::{
-  context::RenderContext,
-  geometry::Rect,
-  style::{Affine, Color},
-  viewport::Viewport,
-};
+use takumi_core::{context::RenderContext, geometry::Rect, style::Color, viewport::Viewport};
 
 use crate::{
   bands::{Repeatable, RepeatablePage},
@@ -19,15 +14,14 @@ use crate::{
     destination::XyzDestination,
     geom::{Point, Rect as KrillaRect, Size as KrillaSize, Transform},
     page::PageSettings,
-    paint::FillRule,
     surface::Surface,
-    tagging::{Artifact, ArtifactType, ContentTag},
   },
   options::{PT_PER_PX, PageOptions, PdfError},
   pagination::{PageGeometry, PageSlice, Paginated, header_replays},
   paint::{fill_from_rgba, rect_path},
   tags::{TagCollector, tag_id},
   tree::TreeInputs,
+  window::ContentWindow,
 };
 
 /// Page geometry resolved once: everything derived from [`PageOptions`] and
@@ -276,41 +270,39 @@ impl PageComposer<'_, '_> {
     // Paint stops at the next cut: the region between a raised cut and the
     // page's full height belongs to the next page and stays blank, exactly
     // like browser print fragmentation.
-    let Some(path) = KrillaRect::from_xywh(
-      self.frame.margin.left,
-      self.frame.margin.top + slice.reserved,
-      self.frame.content_width,
-      slice.paint_height,
-    )
-    .and_then(rect_path) else {
-      return Ok(());
-    };
-
-    surface.push_clip_path(&path, &FillRule::NonZero);
-    surface.push_transform(&Transform::from_translate(
-      self.frame.margin.left,
-      self.frame.margin.top + slice.reserved - slice.start,
-    ));
-    let mut emitter = self.paginated.content.emitter(
-      self.fonts,
-      Some(self.inline_map),
-      self.tag_collector,
-      self.issues,
-      self.document_lang,
-    );
-
-    emitter.window = Some((slice.start, slice.start + slice.paint_height));
-    emitter.line_window = Some((
-      if slice.index == 0 {
-        f32::NEG_INFINITY
-      } else {
-        slice.start
-      },
-      slice.end,
-    ));
-    emitter.emit_context(0, Affine::IDENTITY, surface)?;
-    surface.pop();
-    surface.pop();
+    ContentWindow {
+      clip: (
+        self.frame.margin.left,
+        self.frame.margin.top + slice.reserved,
+        self.frame.content_width,
+        slice.paint_height,
+      ),
+      translate: (
+        self.frame.margin.left,
+        self.frame.margin.top + slice.reserved - slice.start,
+      ),
+      window: Some((slice.start, slice.start + slice.paint_height)),
+      x_window: None,
+      line_window: Some((
+        if slice.index == 0 {
+          f32::NEG_INFINITY
+        } else {
+          slice.start
+        },
+        slice.end,
+      )),
+      artifact: false,
+    }
+    .emit(
+      self.paginated.content.emitter(
+        self.fonts,
+        Some(self.inline_map),
+        self.tag_collector,
+        self.issues,
+        self.document_lang,
+      ),
+      surface,
+    )?;
     if slice.reserved > 0.0 {
       self.emit_repeated_headers(slice, surface)?;
     }
@@ -326,41 +318,34 @@ impl PageComposer<'_, '_> {
   ) -> Result<(), PdfError> {
     for (offset, index) in self.replays(slice) {
       let band = &self.paginated.headers[index];
+
       // Clipping to the table keeps content beside it out of the replay.
-      let Some(path) = KrillaRect::from_xywh(
-        self.frame.margin.left + band.left,
-        self.frame.margin.top + offset,
-        band.right - band.left,
-        band.height(),
-      )
-      .and_then(rect_path) else {
-        continue;
-      };
-
-      surface.start_tagged(ContentTag::Artifact(Artifact::new(
-        ArtifactType::Other,
-        None,
-      )));
-      surface.push_clip_path(&path, &FillRule::NonZero);
-      surface.push_transform(&Transform::from_translate(
-        self.frame.margin.left,
-        self.frame.margin.top + offset - band.top,
-      ));
-      let mut emitter = self.paginated.content.emitter(
-        self.fonts,
-        Some(self.inline_map),
-        None,
-        self.issues,
-        self.document_lang,
-      );
-
-      emitter.window = Some((band.top, band.bottom));
-      emitter.x_window = Some((band.left, band.right));
-      emitter.line_window = Some((f32::NEG_INFINITY, band.bottom));
-      emitter.emit_context(0, Affine::IDENTITY, surface)?;
-      surface.pop();
-      surface.pop();
-      surface.end_tagged();
+      ContentWindow {
+        clip: (
+          self.frame.margin.left + band.left,
+          self.frame.margin.top + offset,
+          band.right - band.left,
+          band.height(),
+        ),
+        translate: (
+          self.frame.margin.left,
+          self.frame.margin.top + offset - band.top,
+        ),
+        window: Some((band.top, band.bottom)),
+        x_window: Some((band.left, band.right)),
+        line_window: Some((f32::NEG_INFINITY, band.bottom)),
+        artifact: true,
+      }
+      .emit(
+        self.paginated.content.emitter(
+          self.fonts,
+          Some(self.inline_map),
+          None,
+          self.issues,
+          self.document_lang,
+        ),
+        surface,
+      )?;
     }
     Ok(())
   }

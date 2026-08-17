@@ -3,22 +3,17 @@
 
 use std::cell::RefCell;
 
-use takumi_core::{context::RenderContext, layout::node::Node, style::Affine, viewport::Viewport};
+use takumi_core::{context::RenderContext, layout::node::Node, viewport::Viewport};
 
 use crate::{
   counters::{has_page_counters, substitute_page_counters, substitute_target_counters},
   emitter::{FontMap, RenderIssues},
   interactive::{LinkTarget, collect_interactive},
-  krilla::{
-    geom::{Rect as KrillaRect, Transform},
-    paint::FillRule,
-    surface::Surface,
-    tagging::{Artifact, ArtifactType, ContentTag},
-  },
+  krilla::surface::Surface,
   options::{BAND_EDGE_PADDING, PdfError},
   page::PageFrame,
-  paint::rect_path,
   tree::{PreparedTree, RepeatedBox, RepeatedTemplate, TreeInputs, prepare_repeated, prepare_tree},
+  window::ContentWindow,
 };
 
 /// Where a repeatable draws on the page.
@@ -197,31 +192,21 @@ impl RepeatablePage<'_> {
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
     let (x, y, width, height) = self.repeatable.bounds.rect(frame, self.repeatable.height());
-    let Some(path) = KrillaRect::from_xywh(x, y, width, height).and_then(rect_path) else {
-      return Ok(());
-    };
 
-    if artifact {
-      // `Other` stays valid below PDF 2.0, where the header/footer artifact
-      // subtypes do not exist yet.
-      surface.start_tagged(ContentTag::Artifact(Artifact::new(
-        ArtifactType::Other,
-        None,
-      )));
+    ContentWindow {
+      clip: (x, y, width, height),
+      translate: (x, y),
+      window: None,
+      x_window: None,
+      line_window: None,
+      artifact,
     }
-    surface.push_clip_path(&path, &FillRule::NonZero);
-    surface.push_transform(&Transform::from_translate(x, y));
-    let mut emitter = self
-      .tree()
-      .emitter(fonts, None, None, issues, document_lang);
-
-    emitter.emit_context(0, Affine::IDENTITY, surface)?;
-    surface.pop();
-    surface.pop();
-    if artifact {
-      surface.end_tagged();
-    }
-    Ok(())
+    .emit(
+      self
+        .tree()
+        .emitter(fonts, None, None, issues, document_lang),
+      surface,
+    )
   }
 }
 
