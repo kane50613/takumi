@@ -1,4 +1,4 @@
-use std::{fmt, string::ToString};
+use std::{fmt, string::ToString, sync::Arc};
 
 use cssparser::{Parser, match_ignore_ascii_case};
 use parley::{FontFamilyName, GenericFamily};
@@ -11,7 +11,7 @@ use crate::style::{
 /// Represents a font family for text rendering.
 /// Multi value fallback is supported.
 #[derive(Debug, Clone, PartialEq)]
-pub struct FontFamily(Box<[FontFamilyToken]>);
+pub struct FontFamily(Arc<[FontFamilyToken]>);
 
 impl Default for FontFamily {
   fn default() -> Self {
@@ -41,7 +41,7 @@ impl FontFamily {
       .collect::<Vec<_>>();
     tokens.push(FontFamilyToken::Generic(GenericFamily::SansSerif));
 
-    Self(tokens.into_boxed_slice())
+    Self(tokens.into())
   }
 
   /// The families as parley `FontFamilyName`s, in declaration order.
@@ -53,7 +53,7 @@ impl FontFamily {
   }
 
   pub(crate) fn from_parlance_generic(generic: GenericFamily) -> Self {
-    Self(Box::new([FontFamilyToken::Generic(generic)]))
+    Self(Arc::new([FontFamilyToken::Generic(generic)]))
   }
 }
 
@@ -87,7 +87,7 @@ impl<'i> FromCss<'i> for FontFamily {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let list = input.parse_comma_separated(FontFamilyToken::from_css)?;
 
-    Ok(Self(list.into_boxed_slice()))
+    Ok(Self(list.into()))
   }
 
   const VALID_TOKENS: &'static [CssToken] = FontFamilyToken::VALID_TOKENS;
@@ -148,6 +148,8 @@ impl ToCss for FontFamily {
 
 #[cfg(test)]
 mod tests {
+  use std::sync::Arc;
+
   use parley::GenericFamily;
 
   use super::{FontFamily, FontFamilyToken};
@@ -157,7 +159,7 @@ mod tests {
   fn parses_single_generic_family() {
     assert_eq!(
       FontFamily::from_css_str("serif"),
-      Ok(FontFamily(Box::new([FontFamilyToken::Generic(
+      Ok(FontFamily(Arc::new([FontFamilyToken::Generic(
         GenericFamily::Serif,
       )])))
     );
@@ -167,7 +169,7 @@ mod tests {
   fn parses_fallback_family_list() {
     assert_eq!(
       FontFamily::from_css_str("\"Inter\", Arial, serif"),
-      Ok(FontFamily(Box::new([
+      Ok(FontFamily(Arc::new([
         FontFamilyToken::Owned(String::from("Inter")),
         FontFamilyToken::Owned(String::from("Arial")),
         FontFamilyToken::Generic(GenericFamily::Serif),
@@ -179,7 +181,7 @@ mod tests {
   fn parses_unquoted_multi_word_family_name() {
     assert_eq!(
       FontFamily::from_css_str("Noto Sans TC"),
-      Ok(FontFamily(Box::new([FontFamilyToken::Owned(
+      Ok(FontFamily(Arc::new([FontFamilyToken::Owned(
         "Noto Sans TC".to_string()
       )])))
     );
@@ -189,7 +191,7 @@ mod tests {
   fn from_names_appends_sans_serif_last_resort() {
     assert_eq!(
       FontFamily::from_names(["Geist".to_string(), "Inter".to_string()]),
-      FontFamily(Box::new([
+      FontFamily(Arc::new([
         FontFamilyToken::Owned(String::from("Geist")),
         FontFamilyToken::Owned(String::from("Inter")),
         FontFamilyToken::Generic(GenericFamily::SansSerif),
@@ -201,13 +203,13 @@ mod tests {
   fn parses_tailwind_aliases() {
     assert_eq!(
       FontFamily::parse_tw("sans"),
-      Some(FontFamily(Box::new([FontFamilyToken::Generic(
+      Some(FontFamily(Arc::new([FontFamilyToken::Generic(
         GenericFamily::SansSerif,
       )])))
     );
     assert_eq!(
       FontFamily::parse_tw("mono"),
-      Some(FontFamily(Box::new([FontFamilyToken::Generic(
+      Some(FontFamily(Arc::new([FontFamilyToken::Generic(
         GenericFamily::Monospace,
       )])))
     );

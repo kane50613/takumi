@@ -525,6 +525,34 @@ impl<T: Animatable + Clone> Animatable for Box<[T]> {
   }
 }
 
+impl<T: Animatable + Clone> Animatable for Arc<[T]> {
+  fn missing_value() -> Option<Self> {
+    match T::list_interpolation_strategy() {
+      ListInterpolationStrategy::Discrete => None,
+      ListInterpolationStrategy::RepeatToLcm
+      | ListInterpolationStrategy::PadToLongestWithNeutral => Some(Arc::from([])),
+    }
+  }
+
+  fn interpolate(
+    &mut self,
+    from: &Self,
+    to: &Self,
+    progress: f32,
+    sizing: &SizingContext,
+    current_color: Color,
+  ) {
+    *self =
+      interpolate_list(from, to, progress, sizing, current_color, Vec::into).unwrap_or_else(|| {
+        if progress >= 0.5 {
+          to.clone()
+        } else {
+          from.clone()
+        }
+      });
+  }
+}
+
 impl<T: Animatable + Clone> Animatable for Vec<T> {
   fn missing_value() -> Option<Self> {
     match T::list_interpolation_strategy() {
@@ -696,6 +724,12 @@ fn write_css_list<W: fmt::Write, T: ToCss>(items: &[T], dest: &mut W) -> fmt::Re
 }
 
 impl<T: ToCss> ToCss for Box<[T]> {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    write_css_list(self, dest)
+  }
+}
+
+impl<T: ToCss> ToCss for Arc<[T]> {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     write_css_list(self, dest)
   }

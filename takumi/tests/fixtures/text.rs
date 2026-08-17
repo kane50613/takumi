@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use serde_json::{from_value, json};
 use takumi::{
   prelude::{Length::*, *},
@@ -49,7 +51,7 @@ fn text_typography_variable_width() {
       .with_style(
         Style::default()
           .with(StyleDeclaration::display(Display::Flex))
-          .with(StyleDeclaration::font_variation_settings(Box::new([
+          .with(StyleDeclaration::font_variation_settings(Arc::new([
             FontVariation::new(Tag::new(b"wdth"), *width),
           ]))),
       )
@@ -1723,7 +1725,7 @@ fn test_nowrap_ellipsis_without_break_opportunity() {
   assert_ne!(clipped.as_raw(), ellipsized.as_raw());
 }
 
-fn kerning_row(label: &str, kerning: FontKerning, features: Box<[FontFeature]>) -> Node {
+fn kerning_row(label: &str, kerning: FontKerning, features: Arc<[FontFeature]>) -> Node {
   Node::container([
     Node::text(label.to_string()).with_style(
       Style::default()
@@ -1744,12 +1746,12 @@ fn kerning_row(label: &str, kerning: FontKerning, features: Box<[FontFeature]>) 
 #[test]
 fn text_font_kerning() {
   let container = Node::container([
-    kerning_row("auto", FontKerning::Auto, Box::new([])),
-    kerning_row("none", FontKerning::None, Box::new([])),
+    kerning_row("auto", FontKerning::Auto, Arc::new([])),
+    kerning_row("none", FontKerning::None, Arc::new([])),
     kerning_row(
       "none+fss",
       FontKerning::None,
-      Box::new([FontFeature::new(Tag::new(b"kern"), 1)]),
+      Arc::new([FontFeature::new(Tag::new(b"kern"), 1)]),
     ),
   ])
   .with_style(

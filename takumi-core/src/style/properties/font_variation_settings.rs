@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, sync::Arc};
 
 use cssparser::Parser;
 
@@ -32,7 +32,7 @@ impl FontVariation {
 ///
 /// This allows fine-grained control over variable font characteristics like weight,
 /// width, slant, and other custom axes defined in the font.
-pub(crate) type FontVariationSettings = Box<[FontVariation]>;
+pub(crate) type FontVariationSettings = Arc<[FontVariation]>;
 
 impl MakeComputed for FontVariationSettings {}
 
@@ -42,7 +42,7 @@ impl<'i> FromCss<'i> for FontVariationSettings {
       .try_parse(|input| input.expect_ident_matching("normal"))
       .is_ok()
     {
-      return Ok(Box::new([]));
+      return Ok(Arc::new([]));
     }
 
     let list = input.parse_comma_separated(|input| {
@@ -52,7 +52,7 @@ impl<'i> FromCss<'i> for FontVariationSettings {
       Ok(FontVariation { tag, value })
     })?;
 
-    Ok(list.into_boxed_slice())
+    Ok(list.into())
   }
 
   const VALID_TOKENS: &'static [CssToken] = &[
@@ -78,14 +78,14 @@ mod tests {
   #[test]
   fn test_parse_font_variation_settings() {
     for (css, expected) in [
-      ("normal", Box::new([]) as FontVariationSettings),
+      ("normal", Arc::new([]) as FontVariationSettings),
       (
         "\"wght\" 400",
-        Box::new([FontVariation::new(Tag::new(b"wght"), 400.0)]),
+        Arc::new([FontVariation::new(Tag::new(b"wght"), 400.0)]),
       ),
       (
         "\"wght\" 400, \"slnt\" -10",
-        Box::new([
+        Arc::new([
           FontVariation::new(Tag::new(b"wght"), 400.0),
           FontVariation::new(Tag::new(b"slnt"), -10.0),
         ]),
