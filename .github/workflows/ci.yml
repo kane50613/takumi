@@ -916,7 +916,7 @@ jobs:
     name: Deploy docs
     runs-on: ubuntu-slim
     needs: [pass-test, docs-changed]
-    if: needs.docs-changed.outputs.docs == 'true'
+    if: github.ref == 'refs/heads/master' || needs.docs-changed.outputs.docs == 'true'
     permissions:
       contents: read
       pull-requests: write
