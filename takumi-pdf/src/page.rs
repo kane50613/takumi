@@ -215,6 +215,31 @@ impl PageComposer<'_, '_> {
           .map(|anchor| self.destination(anchor.top, &anchor.path))
       },
     );
+    // A replayed table header is an artifact like a repeated box, so its
+    // links annotate per page and stay out of the structure.
+    let mut offset = self.frame.margin.top;
+
+    for band in &self.paginated.headers {
+      if !band.repeats_at(slice.start) {
+        continue;
+      }
+      add_link_annotations(
+        &mut pdf_page,
+        &self.paginated.interactive.links,
+        (band.top, band.bottom),
+        (self.frame.margin.left, offset),
+        None,
+        |id| {
+          self
+            .paginated
+            .interactive
+            .anchors
+            .get(id)
+            .map(|anchor| self.destination(anchor.top, &anchor.path))
+        },
+      );
+      offset += band.height();
+    }
     pdf_page.finish();
     Ok(())
   }

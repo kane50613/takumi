@@ -266,6 +266,47 @@ fn a_table_header_repeats_on_every_page() {
   );
 }
 
+/// A top caption sits between the table edge and the header rows; only the
+/// header rows repeat.
+#[test]
+fn a_top_caption_does_not_repeat_with_the_header() {
+  let fonts = fonts();
+  let table = |caption: &str| {
+    let rows: String = (1..=30)
+      .map(|i| format!("<tr><td>Item {i}</td><td>{}</td></tr>", i * 3))
+      .collect();
+    let html = format!(
+      r#"<table style="width: 100%; font-size: 12px; color: #141414">
+        {caption}
+        <thead><tr><th>Name</th><th>Qty</th></tr></thead>
+        <tbody>{rows}</tbody>
+      </table>"#
+    );
+
+    render(
+      PdfOptions::builder()
+        .node(from_html(&html, FromHtmlOptions::default()).expect("parse table"))
+        .page(PageOptions {
+          width: 400.0,
+          height: 300.0,
+          margin: PageMargins::uniform(24.0),
+        })
+        .tagged(Tagging::Off)
+        .fonts(&fonts)
+        .build(),
+    )
+    .expect("render table")
+  };
+  let with_caption = table("<caption>Inventory</caption>");
+  let plain = table("");
+
+  assert_eq!(
+    text_show_operators(&with_caption),
+    text_show_operators(&plain) + 1,
+    "the caption repeated with the header"
+  );
+}
+
 /// A replayed header is an artifact: the occurrence where the table begins
 /// carries the tags, and a second marked occurrence would double the reading
 /// order.

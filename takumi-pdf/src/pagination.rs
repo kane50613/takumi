@@ -140,6 +140,7 @@ fn collect_headers_paint(tree: &PreparedTree, paint: &NodePaint, bands: &mut Vec
     return;
   };
   let content_top = table_top + layout.border.top + layout.padding.top;
+  let mut header_top = f32::MAX;
   let mut header_bottom = f32::MIN;
   let mut body_top = f32::MAX;
 
@@ -155,23 +156,25 @@ fn collect_headers_paint(tree: &PreparedTree, paint: &NodePaint, bands: &mut Vec
     };
 
     if line >= start && line < end {
+      header_top = header_top.min(content_top + cell.location.y);
       header_bottom = header_bottom.max(content_top + cell.location.y + cell.size.height);
     } else if line >= end {
       body_top = body_top.min(content_top + cell.location.y);
     }
   }
 
-  // The band runs to the first body row, so the `border-spacing` strip between
-  // header and body repeats with it; Blink reserves that spacing the same way.
+  // The band starts at the header cells, not the table edge: a top caption
+  // sits between the two and must not repeat. It runs to the first body row,
+  // so the `border-spacing` strip repeats with it, as Blink reserves it.
   let band_bottom = if body_top < f32::MAX {
     body_top.max(header_bottom)
   } else {
     header_bottom
   };
 
-  if band_bottom > table_top {
+  if header_top < f32::MAX && band_bottom > header_top {
     bands.push(HeaderBand {
-      top: table_top,
+      top: header_top,
       bottom: band_bottom,
       table_bottom,
     });
