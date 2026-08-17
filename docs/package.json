@@ -46,7 +46,7 @@
     "@takumi-rs/helpers": "workspace:*",
     "@takumi-rs/wasm": "workspace:*",
     "@types/bun": "^1.3.14",
-    "@types/node": "^26.2.0",
+    "@types/node": "catalog:",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "csstype": "^3.2.3",
@@ -54,6 +54,6 @@
     "prettier": "^3.9.6",
     "takumi-pdf": "workspace:*",
     "typescript": "^6.0.3",
-    "vite": "^8.2.1"
+    "vite": "catalog:"
   }
 }

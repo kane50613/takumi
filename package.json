@@ -30,7 +30,7 @@
     "oxlint": "^1.78.0",
     "publint": "^0.3.23",
     "tegami": "^1.4.0",
-    "typescript": "^7.0.2"
+    "typescript": "catalog:"
   },
   "overrides": {
     "@takumi-rs/image-response": "workspace:*",
