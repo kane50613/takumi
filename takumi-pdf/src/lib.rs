@@ -60,6 +60,7 @@ mod shadow;
 mod svg;
 mod tags;
 mod tree;
+mod window;
 
 #[allow(
   dead_code,
