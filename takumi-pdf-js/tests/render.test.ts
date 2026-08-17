@@ -114,37 +114,6 @@ test("keeps a face the page counter needs but the document never uses", async ()
   expect(pageCount(pdf)).toBeGreaterThan(1);
 });
 
-test("keeps a face used only by an escaped custom list marker", async () => {
-  const markers = new PdfRenderer();
-  let loaded = false;
-
-  await markers.render(
-    `<style>:root { --marker: "\\2192 " }</style><style>li { list-style-type: var(--marker) }</style><ul><li>Item</li></ul>`,
-    {
-      viewport: { width: 300, height: 120 },
-      fonts: [
-        {
-          name: "Marker Symbol",
-          ranges: [[0x2192, 0x2192]],
-          data: () => {
-            loaded = true;
-            return new Uint8Array(
-              readFileSync(
-                new URL(
-                  "../../assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2",
-                  import.meta.url,
-                ),
-              ),
-            );
-          },
-        },
-      ],
-    },
-  );
-
-  expect(loaded).toBeTrue();
-});
-
 test("auto-height viewport sizes the page to content", async () => {
   const rows = container({
     style: { display: "flex", flexDirection: "column", width: "100%" },

@@ -1,9 +1,6 @@
 //! `@counter-style` formatting and substitution of the page-counter class hooks.
 
-use takumi_core::{
-  layout::node::{Node, NodeKind},
-  style::ListStyleType,
-};
+use takumi_core::layout::node::{Node, NodeKind};
 
 use crate::interactive::percent_decode;
 
@@ -265,14 +262,6 @@ pub fn counter_characters<'c>(classes: impl IntoIterator<Item = &'c str>) -> Str
   // A hook without a style counts in decimal, and a band can hold both: a
   // plain `pageNumber` beside a `totalPages thai` still needs its own digits.
   style_characters("decimal") + &characters
-}
-
-/// Characters that predefined list markers can generate.
-///
-/// These characters are absent from the source node tree, so callers that load
-/// fonts by text coverage must include them before rendering list markers.
-pub const fn list_marker_characters() -> &'static str {
-  ListStyleType::MARKER_CHARACTERS
 }
 
 /// The counter value a node's class hooks request, if any: `pageNumber` or

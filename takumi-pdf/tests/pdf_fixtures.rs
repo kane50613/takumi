@@ -2202,9 +2202,7 @@ fn tagged_standards() {
     <p>Steps with <strong>bold</strong> and <code>code</code>:</p>
     <ul><li>First item</li><li>Second item</li></ul>
     <ol><li>Ordered one</li><li>Ordered two</li></ol>
-    <ol><li style="list-style-type:upper-roman">Mixed roman</li><li>Mixed decimal</li></ol>
-    <ol style="list-style-type:upper-roman;list-style-image:url(missing-marker.png)"><li>Fallback roman</li></ol>
-    <ul><li style="display:flex">Unmarked styled item</li></ul>
+    <ol style="list-style-type:upper-roman"><li>Roman one</li></ol>
   </main>"#;
 
   let list = run_pdf_fixture("list-tagged-ua1", |fonts| {
@@ -2226,14 +2224,10 @@ fn tagged_standards() {
     "/ListNumbering/Disc",
     "/ListNumbering/Decimal",
     "/ListNumbering/UpperRoman",
-    "/ListNumbering/None",
   ] {
     assert!(haystack.contains(name), "missing {name} structure element");
   }
-  assert_eq!(haystack.matches("/S/Lbl").count(), 7);
-  // The mixed list and the `display:flex` items (which paint no marker) both
-  // resolve to `None` rather than advertising bullets the page never draws.
-  assert_eq!(haystack.matches("/ListNumbering/None").count(), 2);
+  assert_eq!(haystack.matches("/S/Lbl").count(), 5);
 
   run_pdf_fixture("report-tagged-a2a", |fonts| {
     PdfOptions::builder()

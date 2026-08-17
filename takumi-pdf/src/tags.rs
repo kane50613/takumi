@@ -14,7 +14,7 @@ use std::{
 };
 
 use takumi_core::{
-  layout::{has_marker_image, tree::RenderNode},
+  layout::tree::RenderNode,
   style::{Display, FlexDirection, ListStyleType},
 };
 
@@ -406,7 +406,7 @@ fn role(node: &RenderNode, walk: &mut Walk, nesting: Nesting) -> Option<TagKind>
     "blockquote" => Some(Tag::BlockQuote.into()),
     "section" => Some(Tag::Section.into()),
     "article" => Some(Tag::Article.into()),
-    tag if is_list_tag(tag) => Some(Tag::L(resolved_list_numbering(node)).into()),
+    "ul" | "ol" => Some(Tag::L(list_numbering(node)).into()),
     "li" => Some(Tag::LI.into()),
     "strong" | "b" => Some(Tag::Strong.into()),
     "em" | "i" => Some(Tag::Em.into()),
@@ -416,54 +416,10 @@ fn role(node: &RenderNode, walk: &mut Walk, nesting: Nesting) -> Option<TagKind>
   }
 }
 
-/// The list-container elements, matched exactly as `role` matches every tag.
-fn is_list_tag(tag: &str) -> bool {
-  matches!(tag, "ul" | "ol" | "menu" | "dir")
-}
-
-fn resolved_list_numbering(node: &RenderNode) -> ListNumbering {
-  let mut items = Vec::new();
-
-  collect_list_item_numbering(node, &mut items);
-  let Some(first) = items.first().copied() else {
-    return node_list_numbering(node);
-  };
-
-  if items.iter().all(|numbering| *numbering == first) {
-    first
-  } else {
-    ListNumbering::None
-  }
-}
-
-fn collect_list_item_numbering(node: &RenderNode, items: &mut Vec<ListNumbering>) {
-  for child in node.children.iter().flatten() {
-    let tag = child.node.as_ref().and_then(|source| source.tag_name());
-
-    if tag.is_some_and(is_list_tag) {
-      continue;
-    }
-    if tag == Some("li") {
-      // Marker generation requires `display: list-item`; an item styled away
-      // from it paints no marker, so no numbering describes it.
-      items.push(if child.context.style.display == Display::ListItem {
-        node_list_numbering(child)
-      } else {
-        ListNumbering::None
-      });
-      continue;
-    }
-    collect_list_item_numbering(child, items);
-  }
-}
-
-fn node_list_numbering(node: &RenderNode) -> ListNumbering {
-  // An available marker image replaces the counter style as the marker, so no
-  // numbering describes what the page paints.
-  if has_marker_image(&node.context) {
-    return ListNumbering::None;
-  }
-
+/// The numbering the list's own counter style advertises. Items may override
+/// their style or draw a marker image; the container's value stands in for
+/// what the pages usually paint.
+fn list_numbering(node: &RenderNode) -> ListNumbering {
   match &node.context.style.list_style_type {
     ListStyleType::None | ListStyleType::String(_) => ListNumbering::None,
     ListStyleType::Disc => ListNumbering::Disc,

@@ -20,7 +20,7 @@ pub enum ListStyleType {
   Disc,
   /// A hollow circle, `◦`.
   Circle,
-  /// A filled square, `▪`.
+  /// A filled square, `■`.
   Square,
   /// Western decimal numbers.
   Decimal,
@@ -170,15 +170,6 @@ fn decimal_leading_zero(ordinal: i32) -> String {
 }
 
 impl ListStyleType {
-  /// Every character `marker_text` can generate across the predefined counter
-  /// styles.
-  ///
-  /// These characters are absent from the source node tree, so callers that
-  /// load fonts by text coverage must include them before rendering list
-  /// markers. `String` markers carry their own text and are not covered here.
-  pub const MARKER_CHARACTERS: &'static str =
-    "\u{2022}\u{25e6}\u{25aa} 0123456789.-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-
   /// The marker string for an item at `ordinal`, including the counter style's suffix.
   pub(crate) fn marker_text(&self, ordinal: i32) -> Option<String> {
     let (representation, suffix) = match self {
@@ -186,7 +177,7 @@ impl ListStyleType {
       ListStyleType::String(value) => return Some(value.as_ref().to_owned()),
       ListStyleType::Disc => ("\u{2022}".to_owned(), " "),
       ListStyleType::Circle => ("\u{25e6}".to_owned(), " "),
-      ListStyleType::Square => ("\u{25aa}".to_owned(), " "),
+      ListStyleType::Square => ("\u{25a0}".to_owned(), " "),
       ListStyleType::Decimal => (ordinal.to_string(), ". "),
       ListStyleType::DecimalLeadingZero => (decimal_leading_zero(ordinal), ". "),
       ListStyleType::LowerAlpha => (alphabetic(ordinal, 'a'), ". "),
@@ -329,6 +320,12 @@ mod tests {
   use super::*;
   use crate::style::FromCssStr;
 
+  /// Every character `marker_text` can generate across the predefined counter
+  /// styles. Mirrored by `LIST_MARKER_CHARACTERS` in
+  /// `takumi-pdf-js/src/export.ts`, which font subsetting feeds to callers.
+  const MARKER_CHARACTERS: &str =
+    "\u{2022}\u{25e6}\u{25a0} 0123456789.-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
   #[test]
   fn parses_keywords_and_strings() {
     assert_eq!(
@@ -446,7 +443,7 @@ mod tests {
 
         for character in marker.chars() {
           assert!(
-            ListStyleType::MARKER_CHARACTERS.contains(character),
+            MARKER_CHARACTERS.contains(character),
             "{style:?} at {ordinal} generates {character:?} outside MARKER_CHARACTERS"
           );
         }

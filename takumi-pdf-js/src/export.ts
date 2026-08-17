@@ -4,11 +4,7 @@ import type { FontLoader, ImagesInput, RegisteredFamilyLike } from "@takumi-rs/h
 import { FontRegistry } from "@takumi-rs/helpers/renderer";
 import { type Node, type ReactElementLike, subsetFonts } from "@takumi-rs/helpers";
 import type { ReactNode } from "react";
-import {
-  counterCharacters,
-  listMarkerCharacters,
-  PdfRenderer as PdfRendererInternal,
-} from "../pkg/takumi_pdf_wasm";
+import { counterCharacters, PdfRenderer as PdfRendererInternal } from "../pkg/takumi_pdf_wasm";
 
 export { default, initSync } from "../pkg/takumi_pdf_wasm";
 export type { FontLoader, ImagesInput } from "@takumi-rs/helpers/renderer";
@@ -43,105 +39,13 @@ function collectClassNames(node: unknown, into: string[]): void {
   }
 }
 
-/** Decodes CSS escapes so font ranges see the character a marker generates. */
-function decodeCssEscapes(value: string): string {
-  return value.replace(
-    /\\([0-9a-fA-F]{1,6})[ \t\r\n\f]?|\\(.)/gs,
-    (_match, hex: string | undefined, escaped: string | undefined) => {
-      if (hex === undefined) return escaped ?? "";
-
-      const codepoint = Number.parseInt(hex, 16);
-      return codepoint === 0 || codepoint > 0x10ffff ? "\uFFFD" : String.fromCodePoint(codepoint);
-    },
-  );
-}
-
 /**
- * The quoted string literals of a stylesheet — the only sheet text that can
- * become marker characters (via `list-style-type: "…"` or a custom property
- * holding such a string). Feeding whole sheets to subsetting would count
- * selectors and font names as used characters.
+ * Every character the predefined list marker styles can generate. Mirrors
+ * `ListStyleType::MARKER_CHARACTERS` in takumi-core, whose coverage test is
+ * the source of truth. `list-style-type: "…"` strings are not covered here.
  */
-function cssStringLiterals(sheet: string): string[] {
-  const literals: string[] = [];
-  for (const match of sheet.matchAll(/"((?:[^"\\\n]|\\[\s\S])*)"|'((?:[^'\\\n]|\\[\s\S])*)'/g)) {
-    literals.push(decodeCssEscapes(match[1] ?? match[2] ?? ""));
-  }
-  return literals;
-}
-
-/**
- * Collects marker-capable text from one style layer: the list-style values
- * themselves, and the quoted string literals of custom properties — the only
- * shape of theirs that can reach a marker. Returns whether the layer asks for
- * a marker.
- */
-function collectStyleLayer(layer: unknown, into: string[]): boolean {
-  if (typeof layer !== "object" || layer === null) return false;
-
-  const values = layer as {
-    display?: unknown;
-    listStyle?: unknown;
-    listStyleType?: unknown;
-  };
-  let hasMarker = values.display === "list-item";
-
-  for (const value of [values.listStyle, values.listStyleType]) {
-    if (typeof value === "string") {
-      into.push(decodeCssEscapes(value));
-      hasMarker = true;
-    }
-  }
-  for (const [property, value] of Object.entries(layer)) {
-    if (property.startsWith("--") && typeof value === "string") {
-      into.push(...cssStringLiterals(value));
-    }
-  }
-  return hasMarker;
-}
-
-function collectListStyleCharacters(node: unknown, into: string[]): boolean {
-  if (typeof node !== "object" || node === null) return false;
-
-  const { tagName, style, preset, tw, children } = node as {
-    tagName?: unknown;
-    style?: unknown;
-    preset?: unknown;
-    tw?: unknown;
-    children?: unknown;
-  };
-  let hasMarker = typeof tagName === "string" && tagName.toLowerCase() === "li";
-
-  hasMarker = collectStyleLayer(style, into) || hasMarker;
-  hasMarker = collectStyleLayer(preset, into) || hasMarker;
-  if (typeof tw === "string") {
-    // Class names carry marker text only inside arbitrary-value quotes.
-    into.push(...cssStringLiterals(tw));
-    hasMarker ||= tw.includes("list-");
-  }
-  if (Array.isArray(children)) {
-    for (const child of children) {
-      // Call first: the traversal collects characters even when a marker was
-      // already found.
-      hasMarker = collectListStyleCharacters(child, into) || hasMarker;
-    }
-  }
-  return hasMarker;
-}
-
-function listMarkerSources(trees: Node[], stylesheets: string[]): string[] {
-  const characters: string[] = [];
-  let hasMarker = stylesheets.some((sheet) => /list-style|list-item/i.test(sheet));
-
-  for (const tree of trees) {
-    hasMarker = collectListStyleCharacters(tree, characters) || hasMarker;
-  }
-  if (!hasMarker) return [];
-
-  characters.unshift(listMarkerCharacters());
-  characters.push(...stylesheets.flatMap(cssStringLiterals));
-  return characters;
-}
+const LIST_MARKER_CHARACTERS =
+  "•◦■ 0123456789.-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 /** A document input: a takumi node tree, JSX, or an HTML string. */
 export type NodeInput = Node | ReactNode | ReactElementLike | string;
@@ -413,28 +317,28 @@ export class PdfRenderer {
       footer === undefined ? undefined : resolveNode(footer),
     ]);
     const bands = [headerResult?.node, footerResult?.node].filter((band) => band !== undefined);
-    const sheets = [
-      ...(stylesheets ?? []),
-      ...main.stylesheets,
-      ...(headerResult?.stylesheets ?? []),
-      ...(footerResult?.stylesheets ?? []),
-    ];
     const resources = await this.fonts.resolveResources(
       fonts &&
         subsetFonts({
           fonts,
-          // A page counter renders characters no node in the tree carries, and
-          // which ones depends on the style, so the renderer says.
+          // Page counters and list markers render characters no node in the
+          // tree carries, so the renderer says which ones.
           source: [
             main.node,
             ...bands,
-            ...listMarkerSources([main.node, ...bands], sheets),
+            LIST_MARKER_CHARACTERS,
             counterCharacters([main.node, ...bands].flatMap((tree) => classNames(tree))),
           ],
         }),
       images,
       fontFamilies,
     );
+    const sheets = [
+      ...(stylesheets ?? []),
+      ...main.stylesheets,
+      ...(headerResult?.stylesheets ?? []),
+      ...(footerResult?.stylesheets ?? []),
+    ];
 
     return this.inner.render(main.node, {
       ...rest,
@@ -460,21 +364,17 @@ export class PdfRenderer {
   async measure(node: NodeInput, options: MeasureOptions = {}): Promise<MeasuredSize> {
     const { fonts, images, stylesheets, fontFamilies, ...rest } = options;
     const main = await resolveNode(node);
-    const sheets = [...(stylesheets ?? []), ...main.stylesheets];
     // The tree measured may itself be a band, so its counters are always in play.
     const resources = await this.fonts.resolveResources(
       fonts &&
         subsetFonts({
           fonts,
-          source: [
-            main.node,
-            ...listMarkerSources([main.node], sheets),
-            counterCharacters(classNames(main.node)),
-          ],
+          source: [main.node, LIST_MARKER_CHARACTERS, counterCharacters(classNames(main.node))],
         }),
       images,
       fontFamilies,
     );
+    const sheets = [...(stylesheets ?? []), ...main.stylesheets];
 
     return this.inner.measure(main.node, {
       ...rest,
