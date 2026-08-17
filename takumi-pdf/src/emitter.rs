@@ -21,7 +21,7 @@ use takumi_core::{
     inline::{BuiltInlineLayout, InlineRunLayout, ProcessedInlineSpan, ShapedRun, run_decorations},
     inline_box::{InlineBoxPaint, InlineSubtree, resolve_inline_box},
     node::NodeKind,
-    tree::{LayoutResults, RenderNode},
+    tree::{LayoutResults, NodeOrigin, RenderNode},
   },
   paint::{ConicGradientTile, LinearGradientTile, RadialGradientTile, resolve_stops_along_axis},
   painter::{
@@ -1422,10 +1422,7 @@ impl Emitter<'_> {
       let Some((offset, paint)) = resolve_inline_box(positioned, item, layout) else {
         continue;
       };
-      let is_marker = owner
-        .marker()
-        .is_some_and(|marker| std::ptr::eq(marker, node));
-      let marker_target = (self.tags.is_some() && is_marker)
+      let marker_target = (self.tags.is_some() && node.origin == NodeOrigin::Marker)
         .then(|| self.marker_tag_target(owner))
         .flatten();
       let marker_tagged = marker_target.is_some();
@@ -1608,19 +1605,20 @@ impl Emitter<'_> {
     if !node_path(self.root, owner, &mut owner_path) {
       return None;
     }
-    for length in (0..=owner_path.len()).rev() {
-      let ancestor = &owner_path[..length];
+    let mut current = self.root;
+    let mut length = owner_path.len();
 
-      if self
-        .root
-        .node_at_path(ancestor)
-        .is_some_and(|node| node.context.style.display == Display::ListItem)
-      {
-        return Some(self.tag_path(ancestor));
+    for (depth, index) in owner_path.iter().enumerate() {
+      if current.context.style.display == Display::ListItem {
+        length = depth;
       }
+      current = current.children.as_deref()?.get(*index)?;
+    }
+    if current.context.style.display == Display::ListItem {
+      length = owner_path.len();
     }
 
-    Some(self.tag_path(&owner_path))
+    Some(self.tag_path(&owner_path[..length]))
   }
 
   /// One image layer drawn into a pattern, so glyphs can be filled with it.
