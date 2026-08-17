@@ -63,7 +63,7 @@ const CSS: &str = r#"
   .arrow { list-style-type: "→ "; }
   .hidden { list-style-type: none; }
   .inside { list-style-position: inside; }
-  .image { list-style-image: radial-gradient(rgb(59, 130, 246), rgb(37, 99, 235)); }
+  .image { list-style-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAEklEQVR42mOwbvr2Hx9mGBkKAKAwrIFG5bLTAAAAAElFTkSuQmCC); }
   .nested { padding-left: 24px; }
   .block { display: block; }
 "#;
@@ -145,7 +145,7 @@ fn block_content_cell() -> Node {
 
 fn marker_image_cell() -> Node {
   let lists = Node::container([
-    list("image", [item("gradient marker"), item("gradient marker")]),
+    list("image", [item("image marker"), item("image marker")]),
     list("image inside", [item("inside")]),
   ]);
 

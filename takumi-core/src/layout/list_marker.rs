@@ -1,4 +1,4 @@
-use taffy::{Dimension, LengthPercentageAuto, Size as TaffySize};
+use taffy::{LengthPercentageAuto, Size as TaffySize};
 
 use crate::{
   context::RenderContext,
@@ -62,25 +62,20 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
   })
 }
 
-/// css-lists-3 §3.1: an image that is not available leaves the counter style to
-/// draw the marker.
+/// css-lists-3 §3.1: an image that is not available leaves the counter style
+/// to draw the marker. Only URL images qualify.
 fn available_marker_image(item_context: &RenderContext) -> Option<BackgroundImage> {
   let image = item_context.style.list_style_image.image()?;
-
-  if let BackgroundImage::Url(url) = image
-    && resolve_image(url, item_context).is_err()
-  {
+  let BackgroundImage::Url(url) = image else {
     return None;
-  }
+  };
 
+  resolve_image(url, item_context).ok()?;
   Some(image.clone())
 }
 
-/// A marker image keeps its natural size; one without falls back to half the
-/// font size, as Blink does with half the ascent.
+/// A marker image at its natural size.
 fn marker_image(context: &RenderContext, mut image: BackgroundImage, is_rtl: bool) -> RenderNode {
-  let has_natural_size = matches!(image, BackgroundImage::Url(_));
-
   // Inheriting the image shares it, so its lengths resolve here rather than
   // once per node that inherited it.
   image.make_computed(&context.sizing);
@@ -98,49 +93,28 @@ fn marker_image(context: &RenderContext, mut image: BackgroundImage, is_rtl: boo
     } else {
       layout_style.margin.right = gap;
     }
-
-    if !has_natural_size {
-      let side = Dimension::length(context.sizing.font_size / 2.0);
-      layout_style.size = TaffySize {
-        width: side,
-        height: side,
-      };
-    }
   }
 
   item
 }
 
-/// The running count a list hands to its items, honoring `start`, `value` and
-/// `reversed`.
+/// The running count a list hands to its items, honoring `start` and `value`.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct ListCounter {
   next: i32,
-  step: i32,
 }
 
 impl ListCounter {
-  /// A `reversed` list counts down from its item count unless `start` says otherwise.
-  pub(super) fn new(node: &Node, children: &[Node]) -> Self {
-    let reversed = node.attribute("reversed").is_some();
-    let start = attribute_number(node, "start").unwrap_or_else(|| {
-      if reversed {
-        list_item_count(children)
-      } else {
-        1
-      }
-    });
-
+  pub(super) fn new(node: &Node) -> Self {
     Self {
-      next: start,
-      step: if reversed { -1 } else { 1 },
+      next: attribute_number(node, "start").unwrap_or(1),
     }
   }
 
   /// The item's own `value` attribute, else the list's running count.
   pub(super) fn take(&mut self, node: &Node) -> i32 {
     let ordinal = attribute_number(node, "value").unwrap_or(self.next);
-    self.next = ordinal.saturating_add(self.step);
+    self.next = ordinal.saturating_add(1);
     ordinal
   }
 }
@@ -154,23 +128,9 @@ pub(super) fn owns_list_counter(node: &Node, inside_list: bool) -> bool {
 }
 
 pub(super) fn is_list_element(node: &Node) -> bool {
-  node.tag_name().is_some_and(|tag| {
-    tag.eq_ignore_ascii_case("ol")
-      || tag.eq_ignore_ascii_case("ul")
-      || tag.eq_ignore_ascii_case("menu")
-      || tag.eq_ignore_ascii_case("dir")
-  })
-}
-
-/// What a `reversed` list counts down from. Every child that renders is an item
-/// here, which is what list markup gives a list.
-fn list_item_count(children: &[Node]) -> i32 {
-  children
-    .iter()
-    .filter(|child| !child.is_whitespace_only_text())
-    .count()
-    .try_into()
-    .unwrap_or(i32::MAX)
+  node
+    .tag_name()
+    .is_some_and(|tag| tag.eq_ignore_ascii_case("ol") || tag.eq_ignore_ascii_case("ul"))
 }
 
 fn attribute_number(node: &Node, name: &str) -> Option<i32> {
@@ -182,8 +142,6 @@ fn attribute_number(node: &Node, name: &str) -> Option<i32> {
 #[cfg(test)]
 mod tests {
   use std::{collections::BTreeMap, sync::Arc};
-
-  use taffy::Dimension;
 
   use crate::{
     context::RenderContext,
@@ -308,16 +266,6 @@ mod tests {
     assert_eq!(markers(list, LIST_CSS), ["3. ", "9. ", "10. "]);
   }
 
-  /// A tree built in code has no `li` elements to count.
-  #[test]
-  fn an_untagged_reversed_list_counts_its_items() {
-    let list = Node::container([item([]), item([]), item([])])
-      .with_class_name("list")
-      .with_attributes(attributes(&[("reversed", "")]));
-
-    assert_eq!(markers(list, LIST_CSS), ["3. ", "2. ", "1. "]);
-  }
-
   /// A wrapper is not a list, so its `start` leaves the enclosing count alone.
   #[test]
   fn a_wrapper_start_attribute_does_not_restart_the_count() {
@@ -332,44 +280,6 @@ mod tests {
     let css = format!("{LIST_CSS} .block {{ display: block }}");
 
     assert_eq!(markers(list, &css), ["1. ", "2. "]);
-  }
-
-  /// `<ol reversed>` counts down from the number of items.
-  #[test]
-  fn a_reversed_list_counts_down() {
-    let items = || {
-      [
-        Node::container([])
-          .with_class_name("item")
-          .with_tag_name("li"),
-        Node::container([])
-          .with_class_name("item")
-          .with_tag_name("li"),
-        Node::container([])
-          .with_class_name("item")
-          .with_tag_name("li"),
-      ]
-    };
-    let list = || {
-      Node::container(items())
-        .with_class_name("list")
-        .with_tag_name("ol")
-    };
-
-    assert_eq!(
-      markers(
-        list().with_attributes(attributes(&[("reversed", "")])),
-        LIST_CSS
-      ),
-      ["3. ", "2. ", "1. "]
-    );
-    assert_eq!(
-      markers(
-        list().with_attributes(attributes(&[("reversed", ""), ("start", "5")])),
-        LIST_CSS
-      ),
-      ["5. ", "4. ", "3. "]
-    );
   }
 
   /// A block chain leads to the item's first line, wherever that line sits.
@@ -481,22 +391,12 @@ mod tests {
     ));
   }
 
-  /// A gradient has no natural size, so the marker falls back to half the font size.
+  /// A gradient is not an available marker image, so the counter style draws.
   #[test]
-  fn a_gradient_marker_image_takes_half_the_font_size() {
+  fn a_gradient_marker_image_falls_back_to_the_counter() {
     let list = Node::container([item([])]).with_class_name("list");
-    let css = ".list { list-style-image: radial-gradient(red, blue) }                .item { display: list-item; font-size: 20px }";
+    let css = ".list { list-style-image: radial-gradient(red, blue) }                .item { display: list-item; list-style-type: decimal }";
 
-    let tree = render_tree(list, css);
-    let marker_image = first_child(marker_of(first_child(&tree)));
-    let size = marker_image
-      .layout_style_override
-      .as_ref()
-      .expect("layout style")
-      .size;
-
-    assert_eq!(size.width, Dimension::length(10.0));
-    assert_eq!(size.height, Dimension::length(10.0));
-    assert!(marker_image.context.style.background_image.is_some());
+    assert_eq!(markers(list, css), ["1. "]);
   }
 }
