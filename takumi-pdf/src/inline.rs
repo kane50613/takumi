@@ -150,6 +150,23 @@ pub(crate) fn text_line_atoms(
   }
 }
 
+/// Atomic vertical bands occupied by inline boxes: in-flow ones and floats
+/// alike, so a page cut slices through neither.
+pub(crate) fn inline_box_atoms(
+  runs: &InlineRunLayout,
+  layout: Layout,
+  y: f32,
+  atoms: &mut Vec<Atom>,
+) {
+  let content_y = layout.content_box_offset().y;
+
+  for inline_box in &runs.inline_boxes {
+    let top = y + content_y + inline_box.y;
+
+    atoms.push((top, top + inline_box.height));
+  }
+}
+
 /// The inline item list for a lone text node.
 fn single_text_items<'c>(text: &'c TextData, context: &'c RenderContext) -> Vec<InlineItem<'c>> {
   vec![InlineItem::Text {

@@ -320,6 +320,11 @@ mod tests {
   use super::*;
   use crate::style::FromCssStr;
 
+  /// Every character `marker_text` can generate across the predefined counter
+  /// styles. Mirrored by `LIST_MARKER_CHARACTERS` in
+  /// `takumi-helpers/src/fonts.ts`, which font subsetting feeds to callers.
+  const MARKER_CHARACTERS: &str = "\u{2022}\u{25e6}\u{25a0}\u{25aa} 0123456789.-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
   #[test]
   fn parses_keywords_and_strings() {
     assert_eq!(
@@ -396,6 +401,53 @@ mod tests {
       ListStyleType::DecimalLeadingZero.marker_text(-7).as_deref(),
       Some("-7. ")
     );
+  }
+
+  /// Font subsetting loads faces by the characters `MARKER_CHARACTERS`
+  /// promises, so every counter style's output has to stay inside it. The
+  /// match is exhaustive on purpose: a new style fails to compile here until
+  /// it is accounted for.
+  #[test]
+  fn the_character_set_covers_every_counter_style() {
+    let styles = [
+      ListStyleType::None,
+      ListStyleType::Disc,
+      ListStyleType::Circle,
+      ListStyleType::Square,
+      ListStyleType::Decimal,
+      ListStyleType::DecimalLeadingZero,
+      ListStyleType::LowerAlpha,
+      ListStyleType::UpperAlpha,
+      ListStyleType::LowerRoman,
+      ListStyleType::UpperRoman,
+      ListStyleType::String("marker".into()),
+    ];
+
+    for style in styles {
+      // A `String` marker carries its own text; every other style draws from
+      // the shared character set.
+      let covered: &[i32] = match style {
+        ListStyleType::None | ListStyleType::String(_) => &[],
+        ListStyleType::Disc | ListStyleType::Circle | ListStyleType::Square => &[1, 100],
+        ListStyleType::Decimal
+        | ListStyleType::DecimalLeadingZero
+        | ListStyleType::LowerAlpha
+        | ListStyleType::UpperAlpha
+        | ListStyleType::LowerRoman
+        | ListStyleType::UpperRoman => &[i32::MIN, -7, 0, 1, 9, 26, 27, 3999, 4000, i32::MAX],
+      };
+
+      for ordinal in covered {
+        let marker = style.marker_text(*ordinal).expect("marker text");
+
+        for character in marker.chars() {
+          assert!(
+            MARKER_CHARACTERS.contains(character),
+            "{style:?} at {ordinal} generates {character:?} outside MARKER_CHARACTERS"
+          );
+        }
+      }
+    }
   }
 
   #[test]

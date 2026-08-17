@@ -115,11 +115,21 @@ describe("prepareRenderInput resource forwarding", () => {
   test("source drives font subsetting", async () => {
     const { fonts } = registry();
     const resolve = spyOn(fonts, "resolveResources");
-    const font = rangedFont("Fam", [[0x41, 0x5a]]);
+    const font = rangedFont("Fam", [[0x4e00, 0x4e00]]);
 
     await prepareRenderInput(fonts, { fonts: [font] }, textNode("0"));
 
     expect(resolve).toHaveBeenCalledWith([], undefined, undefined);
+  });
+
+  test("a face covering list-marker characters stays without list content", async () => {
+    const { fonts } = registry();
+    const resolve = spyOn(fonts, "resolveResources");
+    const font = rangedFont("Fam", [[0x2022, 0x2022]]);
+
+    await prepareRenderInput(fonts, { fonts: [font] }, textNode("一"));
+
+    expect(resolve).toHaveBeenCalledWith([font], undefined, undefined);
   });
 });
 

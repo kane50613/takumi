@@ -1187,6 +1187,11 @@ impl RenderNode {
       .is_some_and(|children| children.iter().any(RenderNode::is_anonymous_text_item))
   }
 
+  /// The generated marker box attached to this node's first inline formatting context.
+  pub fn marker(&self) -> Option<&RenderNode> {
+    self.marker.as_deref()
+  }
+
   /// Resolves the descendant at `path` (child indices from this node). An empty
   /// path returns `self`.
   pub fn node_at_path(&self, path: &[usize]) -> Option<&RenderNode> {

@@ -15,7 +15,7 @@ use std::{
 
 use takumi_core::{
   layout::tree::RenderNode,
-  style::{Display, FlexDirection},
+  style::{Display, FlexDirection, ListStyleType},
 };
 
 use crate::krilla::tagging::{Identifier, ListNumbering, Tag, TagGroup, TagId, TagKind, TagTree};
@@ -25,6 +25,8 @@ use crate::krilla::tagging::{Identifier, ListNumbering, Tag, TagGroup, TagId, Ta
 #[derive(Default)]
 pub(crate) struct TagCollector {
   identifiers: HashMap<Vec<usize>, Vec<Identifier>>,
+  /// Generated list-label identifiers per source list item.
+  labels: HashMap<Vec<usize>, Vec<Identifier>>,
   /// Link-annotation identifiers per source node, joined into that node's
   /// `Link` element (or wrapped in one) so annotations sit inside the tree.
   annotations: HashMap<Vec<usize>, Vec<Identifier>>,
@@ -34,6 +36,14 @@ impl TagCollector {
   pub(crate) fn record(&mut self, path: &[usize], identifier: Identifier) {
     self
       .identifiers
+      .entry(path.to_vec())
+      .or_default()
+      .push(identifier);
+  }
+
+  pub(crate) fn record_label(&mut self, path: &[usize], identifier: Identifier) {
+    self
+      .labels
       .entry(path.to_vec())
       .or_default()
       .push(identifier);
@@ -49,6 +59,10 @@ impl TagCollector {
 
   fn take(&mut self, path: &[usize]) -> Vec<Identifier> {
     self.identifiers.remove(path).unwrap_or_default()
+  }
+
+  fn take_labels(&mut self, path: &[usize]) -> Vec<Identifier> {
+    self.labels.remove(path).unwrap_or_default()
   }
 
   fn take_annotations(&mut self, path: &[usize]) -> Vec<Identifier> {
@@ -158,6 +172,7 @@ fn build_node(
   nesting: Nesting,
 ) {
   let identifiers = walk.collector.take(path);
+  let labels = walk.collector.take_labels(path);
   let mut annotations = walk.collector.take_annotations(path);
 
   let mut role = role(node, walk, nesting);
@@ -186,14 +201,23 @@ fn build_node(
       let mut group = TagGroup::new(kind);
       let mut children = Vec::new();
       let mut child_pending = Vec::new();
-      let mut has_content = !identifiers.is_empty();
+      let mut has_content = !identifiers.is_empty() || !labels.is_empty();
 
-      // `LI` only admits `Lbl`/`LBody` children, so its whole subtree wraps
-      // in a single body element.
+      // `LI` only admits `Lbl`/`LBody` children, so the marker label and the
+      // item's whole subtree wrap in one of each.
       if is_list_item {
+        if !labels.is_empty() {
+          let mut label = TagGroup::new(Tag::Lbl);
+
+          for identifier in labels {
+            label.push(identifier);
+          }
+          group.push(label);
+        }
         child_pending.extend(identifiers);
       } else {
-        for identifier in identifiers {
+        // A marker paints at the line's start, so its label reads first.
+        for identifier in labels.into_iter().chain(identifiers) {
           group.push(identifier);
         }
       }
@@ -261,7 +285,7 @@ fn build_node(
       if block {
         flush_paragraph(pending, parent);
       }
-      pending.extend(identifiers);
+      pending.extend(labels.into_iter().chain(identifiers));
       build_children(node, path, walk, parent, pending, nesting);
       if block {
         flush_paragraph(pending, parent);
@@ -379,14 +403,30 @@ fn role(node: &RenderNode, walk: &mut Walk, nesting: Nesting) -> Option<TagKind>
     "blockquote" => Some(Tag::BlockQuote.into()),
     "section" => Some(Tag::Section.into()),
     "article" => Some(Tag::Article.into()),
-    "ul" => Some(Tag::L(ListNumbering::Disc).into()),
-    "ol" => Some(Tag::L(ListNumbering::Decimal).into()),
+    "ul" | "ol" => Some(Tag::L(list_numbering(node)).into()),
     "li" => Some(Tag::LI.into()),
     "strong" | "b" => Some(Tag::Strong.into()),
     "em" | "i" => Some(Tag::Em.into()),
     "code" => Some(Tag::Code.into()),
     "figcaption" => Some(Tag::Caption.into()),
     _ => None,
+  }
+}
+
+/// The numbering the list's counter style advertises; per-item overrides and
+/// marker images are not consulted.
+fn list_numbering(node: &RenderNode) -> ListNumbering {
+  match &node.context.style.list_style_type {
+    ListStyleType::None | ListStyleType::String(_) => ListNumbering::None,
+    ListStyleType::Disc => ListNumbering::Disc,
+    ListStyleType::Circle => ListNumbering::Circle,
+    ListStyleType::Square => ListNumbering::Square,
+    ListStyleType::Decimal | ListStyleType::DecimalLeadingZero => ListNumbering::Decimal,
+    ListStyleType::LowerAlpha => ListNumbering::LowerAlpha,
+    ListStyleType::UpperAlpha => ListNumbering::UpperAlpha,
+    ListStyleType::LowerRoman => ListNumbering::LowerRoman,
+    ListStyleType::UpperRoman => ListNumbering::UpperRoman,
+    _ => ListNumbering::None,
   }
 }
 

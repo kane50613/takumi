@@ -2,7 +2,12 @@ import { fromHtml } from "@takumi-rs/helpers/html";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 import type { FontLoader, ImagesInput, RegisteredFamilyLike } from "@takumi-rs/helpers/renderer";
 import { FontRegistry } from "@takumi-rs/helpers/renderer";
-import { type Node, type ReactElementLike, subsetFonts } from "@takumi-rs/helpers";
+import {
+  LIST_MARKER_CHARACTERS,
+  type Node,
+  type ReactElementLike,
+  subsetFonts,
+} from "@takumi-rs/helpers";
 import type { ReactNode } from "react";
 import { counterCharacters, PdfRenderer as PdfRendererInternal } from "../pkg/takumi_pdf_wasm";
 
@@ -313,11 +318,12 @@ export class PdfRenderer {
       fonts &&
         subsetFonts({
           fonts,
-          // A page counter renders characters no node in the tree carries, and
-          // which ones depends on the style, so the renderer says.
+          // Page counters and list markers render characters no node in the
+          // tree carries, so the renderer says which ones.
           source: [
             main.node,
             ...bands,
+            LIST_MARKER_CHARACTERS,
             counterCharacters([main.node, ...bands].flatMap((tree) => classNames(tree))),
           ],
         }),
@@ -360,7 +366,7 @@ export class PdfRenderer {
       fonts &&
         subsetFonts({
           fonts,
-          source: [main.node, counterCharacters(classNames(main.node))],
+          source: [main.node, LIST_MARKER_CHARACTERS, counterCharacters(classNames(main.node))],
         }),
       images,
       fontFamilies,

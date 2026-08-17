@@ -1181,6 +1181,9 @@ pub struct VisualInlineBox {
   pub width: f32,
   /// Box height.
   pub height: f32,
+  /// Baseline of the in-flow line that owns this box, relative to the inline
+  /// formatting context's content-box top edge.
+  pub line_baseline: Option<f32>,
   pub(crate) layout_x: f32,
   pub(crate) layout_advance: f32,
 }
@@ -1195,6 +1198,7 @@ pub(crate) fn resolve_visual_inline_box(
     return None;
   };
 
+  let line_baseline = line_state.map(|state| state.adjusted_metrics.baseline);
   let positioned = if inline_box.kind == InlineBoxKind::InFlow {
     normalize_inline_box(inline_box, line_state?, spans)?
   } else {
@@ -1207,6 +1211,7 @@ pub(crate) fn resolve_visual_inline_box(
     y: positioned.y,
     width: item.paint_width,
     height: item.paint_height,
+    line_baseline,
     layout_x: positioned.x,
     layout_advance: positioned.width,
   })
