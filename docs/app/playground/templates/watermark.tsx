@@ -1,3 +1,5 @@
+import { PageNumber, TotalPages } from "takumi-pdf";
+
 const clauses = [
   {
     title: "1. Confidential information",
@@ -127,7 +129,7 @@ function Footer() {
     <div tw="flex w-full justify-between px-14 pb-5 text-[10px] text-[#9ca3af]">
       <span>Confidential · draft for review</span>
       <span>
-        <span className="pageNumber" /> / <span className="totalPages" />
+        <PageNumber /> / <TotalPages />
       </span>
     </div>
   );

@@ -50,12 +50,12 @@ const pdf = await render(report, {
 });
 ```
 
-A table of contents is the same chapters as links, with the page each one starts on. `targetPageNumber` fills the page in:
+A table of contents is the same chapters as links, with the page each one starts on. `<TargetPageNumber />` fills the page in:
 
 ```tsx twoslash
 declare const chapters: { id: string; title: string }[];
 // ---cut---
-import "takumi-pdf";
+import { TargetPageNumber } from "takumi-pdf";
 
 <nav tw="flex flex-col gap-1 text-sm">
   {chapters.map((chapter) => (
@@ -63,7 +63,7 @@ import "takumi-pdf";
       <span>{chapter.title}</span>
       <span tw="flex-1 border-b border-dotted border-gray-300" />
       {/* [!code highlight] */}
-      <span className="targetPageNumber" tw="w-8 shrink-0 text-right" />
+      <TargetPageNumber tw="w-8 shrink-0 text-right" />
     </a>
   ))}
 </nav>;
@@ -79,7 +79,7 @@ A report header usually names the document and the period. A footer usually carr
 import type { ReactNode } from "react";
 declare const report: ReactNode;
 // ---cut---
-import { render } from "takumi-pdf";
+import { PageNumber, TotalPages, render } from "takumi-pdf";
 
 const pdf = await render(report, {
   // [!code highlight]
@@ -92,7 +92,7 @@ const pdf = await render(report, {
   // [!code highlight]
   footer: (
     <div tw="flex w-full justify-center text-[10px] text-gray-500">
-      <span className="pageNumber" /> / <span className="totalPages" />
+      <PageNumber /> / <TotalPages />
     </div>
   ),
   margin: { top: 64, bottom: 64, left: 48, right: 48 },

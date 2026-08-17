@@ -35,7 +35,7 @@ declare const html: string;
 // takumi-pdf
 import { googleFonts } from "@takumi-rs/helpers";
 import { fromHtml } from "@takumi-rs/helpers/html";
-import { render } from "takumi-pdf";
+import { PageNumber, TotalPages, render } from "takumi-pdf";
 
 // [!code highlight]
 const { node, stylesheets } = fromHtml(html);
@@ -46,7 +46,7 @@ const pdf = await render(node, {
   stylesheets,
   footer: (
     <div tw="flex w-full justify-center text-[10px]">
-      Page <span className="pageNumber" /> of <span className="totalPages" />
+      Page <PageNumber /> of <TotalPages />
     </div>
   ),
   fonts: await googleFonts(["Inter"]),

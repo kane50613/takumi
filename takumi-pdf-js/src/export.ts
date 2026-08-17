@@ -13,6 +13,8 @@ import { counterCharacters, PdfRenderer as PdfRendererInternal } from "../pkg/ta
 
 export { default, initSync } from "../pkg/takumi_pdf_wasm";
 export type { FontLoader, ImagesInput } from "@takumi-rs/helpers/renderer";
+export { PageNumber, TargetPageNumber, TotalPages } from "./primitives";
+export type { CounterProps, CounterStyle } from "./primitives";
 
 declare module "react" {
   interface DOMAttributes<T> {

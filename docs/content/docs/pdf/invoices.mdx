@@ -16,13 +16,13 @@ declare const invoice: { number: string };
 declare function InvoiceDocument(props: { data: typeof invoice }): ReactNode;
 // ---cut---
 import { googleFonts } from "@takumi-rs/helpers";
-import { measure, render } from "takumi-pdf";
+import { PageNumber, TotalPages, measure, render } from "takumi-pdf";
 
 const footer = (
   <div tw="flex w-full justify-between px-12 text-[10px] text-[#6b7280]">
     <span>Invoice {invoice.number}</span>
     <span tw="flex">
-      Page <span className="pageNumber" /> of <span className="totalPages" />
+      Page <PageNumber /> of <TotalPages />
     </span>
   </div>
 );

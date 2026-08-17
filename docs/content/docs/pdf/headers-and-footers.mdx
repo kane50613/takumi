@@ -10,13 +10,13 @@ icon: PanelTop
 import type { ReactNode } from "react";
 declare const report: ReactNode;
 // ---cut---
-import { render } from "takumi-pdf";
+import { PageNumber, TotalPages, render } from "takumi-pdf";
 
 const pdf = await render(report, {
   // [!code highlight]
   footer: (
     <div tw="flex w-full justify-center text-[10px] text-gray-500">
-      Page <span className="pageNumber" /> of <span className="totalPages" />
+      Page <PageNumber /> of <TotalPages />
     </div>
   ),
 });
@@ -31,12 +31,12 @@ A band draws in the page margin, so the margin has to be tall enough to hold it.
 import type { ReactNode } from "react";
 declare const report: ReactNode;
 // ---cut---
-import { render } from "takumi-pdf";
+import { PageNumber, TotalPages, render } from "takumi-pdf";
 
 const pdf = await render(report, {
   footer: (
     <div tw="flex w-full justify-center text-[10px] text-gray-500">
-      Page <span className="pageNumber" /> of <span className="totalPages" />
+      Page <PageNumber /> of <TotalPages />
     </div>
   ),
 });
@@ -69,12 +69,13 @@ Passing `viewport` instead of a page size measures the tree as-is. Counter hooks
 
 ## Page counters
 
-Text and container nodes classed `pageNumber` or `totalPages` receive counter text. The counter replaces what the node holds, so an empty `<span />` is enough. Chromium's print templates use the same two names.
+`<PageNumber />` is the current page, counting from 1. `<TotalPages />` is the number of pages in the document. Both take a `format` prop for a [counter style](#counter-styles), and pass `className`, `style`, and `tw` through.
 
-| Class        | Value                               |
-| ------------ | ----------------------------------- |
-| `pageNumber` | The current page, counting from 1   |
-| `totalPages` | The number of pages in the document |
+The primitives render class hooks. A node classed `pageNumber` or `totalPages` receives the counter text, replacing what it holds, so an empty `<span />` is enough. Chromium's print templates use the same two names, and HTML input uses them directly:
+
+```html
+Page <span class="pageNumber"></span> of <span class="totalPages"></span>
+```
 
 A node carrying both classes gets the page number.
 
@@ -84,7 +85,7 @@ A hook fills wherever it sits. A `fixed` box repeats on every page, so it lays o
 
 ```tsx
 <div style={{ position: "fixed", bottom: 24, left: 24, right: 24 }}>
-  Page <span className="pageNumber" /> of <span className="totalPages" />
+  Page <PageNumber /> of <TotalPages />
 </div>
 ```
 
@@ -94,20 +95,20 @@ A hook in the page content names the page it lands on, which is what a cover pag
 
 ## Counter styles
 
-Add a CSS `@counter-style` name next to the hook class. It formats the number. The first supported name wins. Unsupported names are ignored, and a hook without one counts in `decimal`.
+The `format` prop names a CSS `@counter-style` and formats the number. On a class hook, add the style name next to the hook class. The first supported name wins. Unsupported names are ignored, and a counter without one counts in `decimal`.
 
 ```tsx twoslash
 import type { ReactNode } from "react";
 declare const report: ReactNode;
 // ---cut---
-import { render } from "takumi-pdf";
+import { PageNumber, TotalPages, render } from "takumi-pdf";
 
 const pdf = await render(report, {
   footer: (
     <div style={{ fontSize: 12 }}>
       {/* [!code highlight:2] */}
-      第 <span className="pageNumber trad-chinese-informal" /> 頁,共{" "}
-      <span className="totalPages trad-chinese-informal" /> 頁
+      第 <PageNumber format="trad-chinese-informal" /> 頁,共{" "}
+      <TotalPages format="trad-chinese-informal" /> 頁
     </div>
   ),
 });
