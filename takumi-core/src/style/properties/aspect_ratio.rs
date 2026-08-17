@@ -18,6 +18,17 @@ pub enum AspectRatio {
   Ratio(f32),
 }
 
+impl AspectRatio {
+  /// A degenerate ratio (zero, negative, or non-finite) behaves as `auto`.
+  fn ratio(value: f32) -> Self {
+    if value.is_finite() && value > 0.0 {
+      Self::Ratio(value)
+    } else {
+      Self::Auto
+    }
+  }
+}
+
 impl MakeComputed for AspectRatio {}
 
 impl Animatable for AspectRatio {
@@ -71,11 +82,16 @@ impl<'i> FromCss<'i> for AspectRatio {
     let first_ratio = input.expect_number()?;
 
     if input.try_parse(|input| input.expect_delim('/')).is_err() {
-      return Ok(AspectRatio::Ratio(first_ratio));
+      return Ok(AspectRatio::ratio(first_ratio));
     }
 
     let second_ratio = input.expect_number()?;
-    Ok(AspectRatio::Ratio(first_ratio / second_ratio))
+
+    if first_ratio < 0.0 || second_ratio < 0.0 {
+      return Ok(AspectRatio::Auto);
+    }
+
+    Ok(AspectRatio::ratio(first_ratio / second_ratio))
   }
 
   const VALID_TOKENS: &'static [CssToken] = &[
@@ -96,6 +112,15 @@ impl ToCss for AspectRatio {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn degenerate_ratios_behave_as_auto() {
+    assert_eq!(AspectRatio::from_css_str("1/0"), Ok(AspectRatio::Auto));
+    assert_eq!(AspectRatio::from_css_str("0/0"), Ok(AspectRatio::Auto));
+    assert_eq!(AspectRatio::from_css_str("0"), Ok(AspectRatio::Auto));
+    assert_eq!(AspectRatio::from_css_str("-2"), Ok(AspectRatio::Auto));
+    assert_eq!(AspectRatio::from_css_str("-2/-3"), Ok(AspectRatio::Auto));
+  }
 
   #[test]
   fn parses_auto_keyword() {
