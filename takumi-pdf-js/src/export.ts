@@ -2,7 +2,12 @@ import { fromHtml } from "@takumi-rs/helpers/html";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 import type { FontLoader, ImagesInput, RegisteredFamilyLike } from "@takumi-rs/helpers/renderer";
 import { FontRegistry } from "@takumi-rs/helpers/renderer";
-import { type Node, type ReactElementLike, subsetFonts } from "@takumi-rs/helpers";
+import {
+  LIST_MARKER_CHARACTERS,
+  type Node,
+  type ReactElementLike,
+  subsetFonts,
+} from "@takumi-rs/helpers";
 import type { ReactNode } from "react";
 import { counterCharacters, PdfRenderer as PdfRendererInternal } from "../pkg/takumi_pdf_wasm";
 
@@ -38,14 +43,6 @@ function collectClassNames(node: unknown, into: string[]): void {
     }
   }
 }
-
-/**
- * Every character the predefined list marker styles can generate. Mirrors
- * `ListStyleType::MARKER_CHARACTERS` in takumi-core, whose coverage test is
- * the source of truth. `list-style-type: "…"` strings are not covered here.
- */
-const LIST_MARKER_CHARACTERS =
-  "•◦■ 0123456789.-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 /** A document input: a takumi node tree, JSX, or an HTML string. */
 export type NodeInput = Node | ReactNode | ReactElementLike | string;

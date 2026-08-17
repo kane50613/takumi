@@ -2068,8 +2068,8 @@ fn an_uppercase_list_item_renders_tagged() {
 }
 
 /// A programmatic `display: list-item` box has no `LI` element to hold an
-/// `Lbl`, so its marker label joins the node's own content — and reads before
-/// it, matching the painted order.
+/// `Lbl`, so its marker label joins the node's own content and reads first,
+/// matching the painted order.
 #[test]
 fn a_programmatic_list_item_reads_its_marker_first() {
   let doc =

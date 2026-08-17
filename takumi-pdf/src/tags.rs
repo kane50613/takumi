@@ -203,8 +203,8 @@ fn build_node(
       let mut child_pending = Vec::new();
       let mut has_content = !identifiers.is_empty() || !labels.is_empty();
 
-      // `LI` only admits `Lbl`/`LBody` children. The generated marker belongs
-      // to `Lbl`; authored content and nested structure belong to `LBody`.
+      // `LI` only admits `Lbl`/`LBody` children, so the marker label and the
+      // item's whole subtree wrap in one of each.
       if is_list_item {
         if !labels.is_empty() {
           let mut label = TagGroup::new(Tag::Lbl);
@@ -216,8 +216,7 @@ fn build_node(
         }
         child_pending.extend(identifiers);
       } else {
-        // A marker paints at the line's start, so on a node without an `LI`
-        // role its label still reads before the node's own content.
+        // A marker paints at the line's start, so its label reads first.
         for identifier in labels.into_iter().chain(identifiers) {
           group.push(identifier);
         }
@@ -286,8 +285,6 @@ fn build_node(
       if block {
         flush_paragraph(pending, parent);
       }
-      // A roleless node can still host a generated marker (a programmatic
-      // `display: list-item` box); its label reads before the content.
       pending.extend(labels.into_iter().chain(identifiers));
       build_children(node, path, walk, parent, pending, nesting);
       if block {
@@ -416,9 +413,8 @@ fn role(node: &RenderNode, walk: &mut Walk, nesting: Nesting) -> Option<TagKind>
   }
 }
 
-/// The numbering the list's own counter style advertises. Items may override
-/// their style or draw a marker image; the container's value stands in for
-/// what the pages usually paint.
+/// The numbering the list's counter style advertises; per-item overrides and
+/// marker images are not consulted.
 fn list_numbering(node: &RenderNode) -> ListNumbering {
   match &node.context.style.list_style_type {
     ListStyleType::None | ListStyleType::String(_) => ListNumbering::None,

@@ -1412,8 +1412,7 @@ impl Emitter<'_> {
       let node = item.render_node;
 
       // An in-flow box belongs to the page that owns its line, like the glyph
-      // runs beside it; painting it again on later pages would also tag its
-      // content once per page.
+      // runs beside it.
       if positioned.line_baseline.is_some_and(|baseline| {
         let absolute = y + layout.content_box_offset().y + baseline;
         self.window_disowns_line(absolute)
@@ -1431,10 +1430,8 @@ impl Emitter<'_> {
         .flatten();
       let marker_tagged = marker_target.is_some();
 
-      // A regular container runs its own emitter, which tags every source node
-      // it walks. A replaced box paints here — only when the build can paint
-      // it — while a generated marker takes one region for the complete label
-      // subtree.
+      // A container box runs its own emitter, which tags every node it walks.
+      // A replaced one paints here, so it takes one region for the whole box.
       let box_tagged = cfg!(feature = "images")
         && self.tags.is_some()
         && matches!(paint, InlineBoxPaint::Replaced { .. });
@@ -1604,8 +1601,7 @@ impl Emitter<'_> {
   }
 
   /// Tag target for a generated marker: its nearest `display: list-item`
-  /// ancestor. The tag tree wraps the label in `Lbl` when that node is a
-  /// semantic list item, and reads it before the node's content otherwise.
+  /// ancestor, whose `Lbl` holds the label.
   fn marker_tag_target(&self, owner: &RenderNode) -> Option<Vec<usize>> {
     let mut owner_path = Vec::new();
 
@@ -1966,8 +1962,8 @@ impl Emitter<'_> {
     };
 
     text_line_atoms(runs, layout, y, atoms);
-    // Box bands are indivisible, but they are not text lines: they stay out of
-    // the paragraph slice widow/orphan control counts.
+    // Box bands are indivisible but not text lines, so widow/orphan control
+    // does not count them.
     let paragraph_end = atoms.len();
     inline_box_atoms(runs, layout, y, atoms);
     push_paragraph(node, &atoms[start..paragraph_end], paragraphs);

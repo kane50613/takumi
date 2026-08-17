@@ -346,6 +346,15 @@ function mergeVariableFaces(faces: SubsetFace[]): SubsetFace[] {
  */
 export type CodepointSource = string | Node | (string | Node)[];
 
+/**
+ * Every character the predefined list marker styles can generate. Markers are
+ * generated content no node carries, so subsetting counts these as always
+ * used. Mirrors `MARKER_CHARACTERS` in takumi-core, whose coverage test is the
+ * source of truth. `list-style-type: "…"` strings are not covered.
+ */
+export const LIST_MARKER_CHARACTERS =
+  "•◦■ 0123456789.-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
 /** Collect every codepoint the content will render. */
 export function collectCodepoints(source: CodepointSource): Set<number> {
   const codepoints = new Set<number>();

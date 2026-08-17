@@ -1,4 +1,10 @@
-import { type CodepointSource, fontFromUrl, type GenericFontFamily, subsetFonts } from "./fonts";
+import {
+  type CodepointSource,
+  fontFromUrl,
+  type GenericFontFamily,
+  LIST_MARKER_CHARACTERS,
+  subsetFonts,
+} from "./fonts";
 
 /**
  * Shared wrapper primitives for the `@takumi-rs/core` (napi) and `@takumi-rs/wasm` renderer
@@ -310,7 +316,11 @@ export async function prepareRenderInput<
 
   const resolvedFonts = await fonts;
   const resolved = await registry.resolveResources(
-    resolvedFonts && subsetFonts({ fonts: resolvedFonts, source }),
+    resolvedFonts &&
+      subsetFonts({
+        fonts: resolvedFonts,
+        source: [...(Array.isArray(source) ? source : [source]), LIST_MARKER_CHARACTERS],
+      }),
     images,
     fontFamilies,
   );
