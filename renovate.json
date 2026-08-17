@@ -1,5 +1,21 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended", "group:allNonMajor"],
-  "labels": ["dependencies"]
+  "labels": ["dependencies"],
+  "packageRules": [
+    {
+      "matchManagers": ["cargo"],
+      "matchPackageNames": [
+        "taffy",
+        "parley",
+        "fontique",
+        "skrifa",
+        "read-fonts",
+        "font-types",
+        "write-fonts"
+      ],
+      "enabled": false,
+      "description": "The layout and font stack moves by hand: taffy is pinned by decision, and the fontations family is chained to the hinting-gate fork and parley's semver."
+    }
+  ]
 }
