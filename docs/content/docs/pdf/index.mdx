@@ -28,7 +28,8 @@ import type { ReactNode } from "react";
 declare const data: { total: number };
 declare function Invoice(props: { data: typeof data }): ReactNode;
 // ---cut---
-import { PageNumber, TotalPages, render } from "takumi-pdf";
+import { render } from "takumi-pdf";
+import { PageNumber, TotalPages } from "takumi-pdf/primitives";
 import { googleFonts } from "@takumi-rs/helpers";
 import { writeFile } from "node:fs/promises";
 

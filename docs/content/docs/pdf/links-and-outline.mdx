@@ -42,7 +42,8 @@ Clicking it moves to the page holding that element. A fragment matching no eleme
 `<TargetPageNumber />` prints the page its link points at. The link is the nearest enclosing element carrying an `href`, usually the `<a>` around the entry, so one piece of markup gives an entry that is both clickable and numbered. Pass `href` instead to have it render its own link. Underneath it is the `targetPageNumber` class hook, which HTML input uses directly.
 
 ```tsx twoslash
-import { TargetPageNumber, render } from "takumi-pdf";
+import { render } from "takumi-pdf";
+import { TargetPageNumber } from "takumi-pdf/primitives";
 
 const pdf = await render(
   <div>

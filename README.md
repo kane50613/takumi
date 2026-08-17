@@ -43,7 +43,8 @@ await writeFile("./output.png", image);
 ### PDF
 
 ```tsx
-import { PageNumber, TotalPages, render } from "takumi-pdf";
+import { render } from "takumi-pdf";
+import { PageNumber, TotalPages } from "takumi-pdf/primitives";
 import { writeFile } from "node:fs/promises";
 
 const pdf = await render(<Invoice data={data} />, {
