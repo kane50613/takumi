@@ -1,12 +1,12 @@
 //! Cutting the content column into pages without splitting unsplittable atoms.
 
-use std::{cell::RefCell, ops::Range};
+use std::ops::Range;
 
 use takumi_core::{
   geometry::transformed_rect_extents,
   layout::node::Node,
   scene::NodePaint,
-  style::{Affine, GridPlacement, GridPlacementSpan},
+  style::{GridPlacement, GridPlacementSpan},
   viewport::Viewport,
 };
 
@@ -14,7 +14,6 @@ use crate::{
   counters::{
     BoxPages, FlowCounters, has_page_counters, has_target_counters, substitute_target_counters,
   },
-  emitter::{FontMap, RenderIssues},
   inline::{build_inline_map, collect_text_boxes},
   interactive::{Interactive, collect_interactive},
   options::PdfError,
@@ -301,19 +300,16 @@ pub(crate) struct PageGeometry {
 pub(crate) fn paginate(
   mut node: Node,
   inputs: &TreeInputs<'_>,
-  fonts: &mut FontMap,
-  issues: &RefCell<RenderIssues>,
-  document_lang: Option<&str>,
   geometry: &PageGeometry,
 ) -> Result<Paginated, PdfError> {
   if !has_page_counters(&node) && !has_target_counters(&node) {
-    return paginate_once(node, inputs, fonts, issues, document_lang, geometry);
+    return paginate_once(node, inputs, geometry);
   }
   let mut previous: Vec<String> = Vec::new();
   let mut passes = 0;
 
   loop {
-    let paginated = paginate_once(node.clone(), inputs, fonts, issues, document_lang, geometry)?;
+    let paginated = paginate_once(node.clone(), inputs, geometry)?;
     let pages = paginated.starts.len();
     let mut written = Vec::new();
 
@@ -328,7 +324,7 @@ pub(crate) fn paginate(
     // The numbers are still moving, and this was the last pass allowed. They
     // are laid out once more so the page shows the numbers it was cut with.
     if passes == COUNTER_PASSES {
-      return paginate_once(node, inputs, fonts, issues, document_lang, geometry);
+      return paginate_once(node, inputs, geometry);
     }
   }
 }
@@ -374,9 +370,6 @@ fn substitute_counters(node: &mut Node, paginated: &Paginated, written: &mut Vec
 fn paginate_once(
   node: Node,
   inputs: &TreeInputs<'_>,
-  fonts: &mut FontMap,
-  issues: &RefCell<RenderIssues>,
-  document_lang: Option<&str>,
   geometry: &PageGeometry,
 ) -> Result<Paginated, PdfError> {
   let (content, repeated) =
@@ -388,14 +381,8 @@ fn paginate_once(
   let mut paragraphs = Vec::new();
 
   content
-    .emitter(fonts, Some(&inline_map), None, issues, document_lang)
-    .collect_atoms(
-      0,
-      Affine::IDENTITY,
-      &mut atoms,
-      &mut forced,
-      &mut paragraphs,
-    )?;
+    .atom_collector(Some(&inline_map))
+    .collect(&mut atoms, &mut forced, &mut paragraphs)?;
 
   let headers = collect_repeating_headers(&content, geometry.window_height);
 

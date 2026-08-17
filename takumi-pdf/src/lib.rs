@@ -39,6 +39,7 @@
 
 use std::{cell::RefCell, mem::take, rc::Rc};
 
+mod atoms;
 mod background;
 mod bands;
 mod counters;
@@ -294,14 +295,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       let dynamic = header.as_ref().is_some_and(Repeatable::dynamic)
         || footer.as_ref().is_some_and(Repeatable::dynamic);
       let source = dynamic.then(|| options.node.clone());
-      let mut paginated = paginate(
-        options.node,
-        &inputs,
-        &mut fonts,
-        &issues,
-        document_lang,
-        &frame.geometry(),
-      )?;
+      let mut paginated = paginate(options.node, &inputs, &frame.geometry())?;
 
       if let Some(source) = source {
         const BAND_PASSES: usize = 3;
@@ -319,14 +313,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
             break;
           }
           frame = resolve(header.as_ref(), footer.as_ref())?;
-          paginated = paginate(
-            source.clone(),
-            &inputs,
-            &mut fonts,
-            &issues,
-            document_lang,
-            &frame.geometry(),
-          )?;
+          paginated = paginate(source.clone(), &inputs, &frame.geometry())?;
         }
       }
 

@@ -20,6 +20,7 @@ use takumi_core::{
 };
 
 use crate::{
+  atoms::AtomCollector,
   counters::{has_page_counters, substitute_page_counters},
   emitter::{Emitter, FontMap, RenderIssues},
   inline::InlineMap,
@@ -77,6 +78,19 @@ impl PreparedTree {
       .is_some_and(
         |child| matches!(child.context.style.z_index, ZIndex::Integer(index) if index < 0),
       )
+  }
+
+  /// The scene's atom collector, for pagination.
+  pub(crate) fn atom_collector<'a>(
+    &'a self,
+    inline: Option<&'a InlineMap<'a>>,
+  ) -> AtomCollector<'a> {
+    AtomCollector {
+      root: &self.root,
+      contexts: &self.contexts,
+      results: &self.results,
+      inline,
+    }
   }
 
   /// Visits every node paint of the scene, in paint order.
