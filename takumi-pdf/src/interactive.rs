@@ -174,7 +174,7 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
     return;
   };
 
-  if let Some(index) = node.source_order {
+  if let Some(index) = node.source_order() {
     // `transform` moves where a box paints without moving the flow it left
     // behind, so the flow edge is measured with the box's own transform undone.
     let in_flow = !matches!(

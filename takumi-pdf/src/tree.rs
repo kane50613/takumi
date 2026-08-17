@@ -202,7 +202,7 @@ pub(crate) fn prepare_paged_tree(
     .map(|(node, parent)| {
       let template = source
         .as_ref()
-        .zip(node.source_order)
+        .zip(node.source_order())
         .and_then(|(source, index)| Some((index, node_in_source_order(source, index)?)))
         .filter(|(_, template)| has_page_counters(template))
         .map(|(source_order, template)| RepeatedTemplate {
