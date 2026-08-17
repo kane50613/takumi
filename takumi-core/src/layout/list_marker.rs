@@ -49,10 +49,8 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
       let style_type = &item_context.style.list_style_type;
       let text = style_type.marker_text(ordinal)?;
 
-      // Blink lays a symbol marker out as fixed-size geometry with margins
-      // (`InlineMarginsForInside`/`Outside`), not as text: the suffix space
-      // alone leaves the bullet hugging the item. Alphanumeric markers keep
-      // their `. ` suffix as the whole gap, which Blink also does.
+      // Blink spaces a symbol marker with margins, not its suffix
+      // (`InlineMarginsForInside`/`Outside`).
       if style_type.is_symbolic() {
         let (text, gap) = match item_context.style.list_style_position {
           ListStylePosition::Inside => {
@@ -114,8 +112,7 @@ fn marker_image(context: &RenderContext, mut image: BackgroundImage, is_rtl: boo
   item
 }
 
-/// Separates the marker from the item's content. A margin on the content
-/// keeps the marker box itself zero-width.
+/// A margin on the content keeps the marker box itself zero-width.
 fn apply_marker_gap(item: &mut RenderNode, context: &RenderContext, gap: Length, is_rtl: bool) {
   let Some(layout_style) = &mut item.layout_style_override else {
     return;

@@ -185,9 +185,8 @@ impl ListStyleType {
       ListStyleType::String(value) => return Some(value.as_ref().to_owned()),
       ListStyleType::Disc => ("\u{2022}".to_owned(), " "),
       ListStyleType::Circle => ("\u{25e6}".to_owned(), " "),
-      // Blink paints `square` as a geometric box of `(ascent*2/3 + 1)/2` px
-      // (`RelativeSymbolMarkerRect`); the small-square glyph tracks that
-      // size, where `■` U+25A0 draws near twice as large.
+      // Blink paints `square` at `(ascent*2/3 + 1)/2` px
+      // (`RelativeSymbolMarkerRect`); `▪` tracks that size, `■` does not.
       ListStyleType::Square => ("\u{25aa}".to_owned(), " "),
       ListStyleType::Decimal => (ordinal.to_string(), ". "),
       ListStyleType::DecimalLeadingZero => (decimal_leading_zero(ordinal), ". "),
