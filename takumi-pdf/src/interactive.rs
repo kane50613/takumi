@@ -41,13 +41,6 @@ pub(crate) struct LinkTarget {
   path: Vec<usize>,
 }
 
-impl LinkTarget {
-  /// Whether the link overlaps the horizontal band `left..right`.
-  pub(crate) fn overlaps_horizontally(&self, left: f32, right: f32) -> bool {
-    self.rect.right() > left && self.rect.left() < right
-  }
-}
-
 /// Link, heading and anchor targets collected from one tree.
 pub(crate) struct Interactive {
   pub(crate) links: Vec<LinkTarget>,
@@ -378,27 +371,32 @@ fn collect_inline_links(
 }
 
 /// Adds this page's slice of every link as annotations. `window` is the page's
-/// content window in content coordinates; `offset` maps content to page
-/// coordinates.
+/// content window in content coordinates; `x_window` narrows it horizontally
+/// for a replayed table header; `offset` maps content to page coordinates.
 pub(crate) fn add_link_annotations<'l>(
   page: &mut Page,
   links: impl IntoIterator<Item = &'l LinkTarget>,
   window: (f32, f32),
+  x_window: Option<(f32, f32)>,
   offset: (f32, f32),
   tags: Option<&RefCell<TagCollector>>,
   anchor: impl Fn(&str) -> Option<XyzDestination>,
 ) {
+  let (x0, x1) = x_window.unwrap_or((f32::NEG_INFINITY, f32::INFINITY));
+
   for link in links {
     let top = link.rect.top().max(window.0);
     let bottom = link.rect.bottom().min(window.1);
+    let left = link.rect.left().max(x0);
+    let right = link.rect.right().min(x1);
 
-    if bottom <= top {
+    if bottom <= top || right <= left {
       continue;
     }
     let Some(rect) = KrillaRect::from_ltrb(
-      (link.rect.left() + offset.0) * PT_PER_PX,
+      (left + offset.0) * PT_PER_PX,
       (top - window.0 + offset.1) * PT_PER_PX,
-      (link.rect.right() + offset.0) * PT_PER_PX,
+      (right + offset.0) * PT_PER_PX,
       (bottom - window.0 + offset.1) * PT_PER_PX,
     ) else {
       continue;

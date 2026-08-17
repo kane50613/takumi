@@ -421,6 +421,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         &mut page,
         &interactive.links,
         (0.0, content.height),
+        None,
         (0.0, 0.0),
         tag_collector.as_ref(),
         |id| {

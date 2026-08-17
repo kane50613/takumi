@@ -182,6 +182,7 @@ impl PageComposer<'_, '_> {
       &mut pdf_page,
       &self.paginated.interactive.links,
       (slice.start, slice.start + slice.paint_height),
+      None,
       (
         self.frame.margin.left,
         self.frame.margin.top + slice.reserved,
@@ -204,6 +205,7 @@ impl PageComposer<'_, '_> {
       &mut pdf_page,
       resolved.iter().flat_map(RepeatablePage::links),
       (0.0, self.frame.window_height),
+      None,
       (self.frame.margin.left, self.frame.margin.top),
       None,
       |id| {
@@ -222,13 +224,9 @@ impl PageComposer<'_, '_> {
 
       add_link_annotations(
         &mut pdf_page,
-        self
-          .paginated
-          .interactive
-          .links
-          .iter()
-          .filter(|link| link.overlaps_horizontally(band.left, band.right)),
+        &self.paginated.interactive.links,
         (band.top, band.bottom),
+        Some((band.left, band.right)),
         (self.frame.margin.left, self.frame.margin.top + offset),
         None,
         |id| {
