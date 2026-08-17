@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap, fmt, str::FromStr};
+use std::{borrow::Cow, collections::HashMap, fmt, str::FromStr, sync::Arc};
 
 use cssparser::{Parser, ParserInput, RuleBodyParser, Token, match_ignore_ascii_case};
 use parley::Language;
@@ -624,7 +624,7 @@ macro_rules! define_style {
           for declaration in self.declarations.declarations {
             match declaration {
               StyleDeclaration::CustomProperty(name, value) => {
-                style.custom_properties.insert(name, value);
+                Arc::make_mut(&mut style.custom_properties).insert(name, value);
               }
               declaration => declarations.push(declaration),
             }
@@ -682,9 +682,9 @@ macro_rules! define_style {
       #[derive(Clone, Debug)]
       pub struct ComputedStyle {
         /// Resolved custom property values by name.
-        pub custom_properties: HashMap<String, String>,
+        pub custom_properties: Arc<HashMap<String, String>>,
         /// Registered `@property` rules by name.
-        pub registered_custom_properties: HashMap<String, PropertyRule>,
+        pub registered_custom_properties: Arc<HashMap<String, PropertyRule>>,
         /// Resolved BCP-47 language, inherited from the `lang` attribute. Drives
         /// locale-aware shaping (Han unification, line-breaking). Has no CSS property.
         pub lang: Option<Lang>,
@@ -732,16 +732,8 @@ macro_rules! define_style {
         /// Builds a child computed style inheriting from a parent.
         pub(crate) fn from_parent(parent: &Self) -> Self {
           Self {
-            custom_properties: if parent.custom_properties.is_empty() {
-              HashMap::new()
-            } else {
-              parent.custom_properties.clone()
-            },
-            registered_custom_properties: if parent.registered_custom_properties.is_empty() {
-              HashMap::new()
-            } else {
-              parent.registered_custom_properties.clone()
-            },
+            custom_properties: parent.custom_properties.clone(),
+            registered_custom_properties: parent.registered_custom_properties.clone(),
             lang: parent.lang,
             $($longhand: define_inherited_default!(parent.$longhand, define_style!(@default $($longhand_default)?) $(, $longhand_inherit)?),)*
           }
@@ -914,7 +906,7 @@ macro_rules! define_style {
               }
             }
             Self::CustomProperty(name, value) => {
-              style.custom_properties.insert(name, value);
+              Arc::make_mut(&mut style.custom_properties).insert(name, value);
             }
             Self::Deferred(deferred) => {
               apply_deferred_declaration(style, Some(parent), &deferred);
@@ -949,9 +941,7 @@ macro_rules! define_style {
               CssWideKeyword::Inherit | CssWideKeyword::Unset => {}
             },
             Self::CustomProperty(name, value) => {
-              style
-                .custom_properties
-                .insert(name.to_owned(), value.to_owned());
+              Arc::make_mut(&mut style.custom_properties).insert(name.to_owned(), value.to_owned());
             }
             Self::Deferred(deferred) => apply_deferred_declaration(style, None, deferred),
             $(Self::[<$longhand:camel>](value) => style.$longhand.clone_from(value),)*

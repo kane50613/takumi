@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap, mem::take, vec::IntoIter};
+use std::{borrow::Cow, collections::HashMap, mem::take, sync::Arc, vec::IntoIter};
 
 use parley::fontique::Attributes;
 use taffy::{
@@ -246,6 +246,8 @@ fn registered_custom_property_parent_style<'a>(
   }
 
   let mut adjusted_parent = parent_style.clone();
+  let registered = Arc::make_mut(&mut adjusted_parent.registered_custom_properties);
+  let custom = Arc::make_mut(&mut adjusted_parent.custom_properties);
 
   for sheet in stylesheets {
     for property_rule in sheet.property_rules() {
@@ -257,32 +259,20 @@ fn registered_custom_property_parent_style<'a>(
         continue;
       }
 
-      adjusted_parent
-        .registered_custom_properties
-        .insert(property_rule.name.clone(), property_rule.clone());
+      registered.insert(property_rule.name.clone(), property_rule.clone());
 
       if property_rule.inherits {
         if let Some(parent_value) = parent_style.custom_properties.get(&property_rule.name) {
-          adjusted_parent
-            .custom_properties
-            .insert(property_rule.name.clone(), parent_value.clone());
+          custom.insert(property_rule.name.clone(), parent_value.clone());
         } else if let Some(initial_value) = &property_rule.initial_value {
-          adjusted_parent
-            .custom_properties
-            .insert(property_rule.name.clone(), initial_value.clone());
+          custom.insert(property_rule.name.clone(), initial_value.clone());
         } else {
-          adjusted_parent
-            .custom_properties
-            .remove(&property_rule.name);
+          custom.remove(&property_rule.name);
         }
       } else {
-        adjusted_parent
-          .custom_properties
-          .remove(&property_rule.name);
+        custom.remove(&property_rule.name);
         if let Some(initial_value) = &property_rule.initial_value {
-          adjusted_parent
-            .custom_properties
-            .insert(property_rule.name.clone(), initial_value.clone());
+          custom.insert(property_rule.name.clone(), initial_value.clone());
         }
       }
     }
@@ -2220,7 +2210,7 @@ fn drop_collapsible_boundary_whitespace(
 
 #[cfg(test)]
 mod tests {
-  use std::str::FromStr;
+  use std::{str::FromStr, sync::Arc};
 
   use taffy::NodeId as TaffyNodeId;
 
@@ -2263,9 +2253,7 @@ mod tests {
   #[test]
   fn registered_custom_property_can_disable_inheritance() {
     let mut parent = ComputedStyle::default();
-    parent
-      .custom_properties
-      .insert("--box-size".to_owned(), "50px".to_owned());
+    Arc::make_mut(&mut parent.custom_properties).insert("--box-size".to_owned(), "50px".to_owned());
 
     let stylesheets = [StyleSheet::from(vec![PropertyRule {
       name: "--box-size".to_owned(),
@@ -2286,9 +2274,7 @@ mod tests {
   #[test]
   fn registered_custom_property_preserves_parent_value_when_inheriting() {
     let mut parent = ComputedStyle::default();
-    parent
-      .custom_properties
-      .insert("--box-size".to_owned(), "50px".to_owned());
+    Arc::make_mut(&mut parent.custom_properties).insert("--box-size".to_owned(), "50px".to_owned());
 
     let stylesheets = [StyleSheet::from(vec![PropertyRule {
       name: "--box-size".to_owned(),
@@ -2358,9 +2344,7 @@ mod tests {
   #[test]
   fn registered_custom_property_later_inheriting_rule_restores_parent_value() {
     let mut parent = ComputedStyle::default();
-    parent
-      .custom_properties
-      .insert("--box-size".to_owned(), "50px".to_owned());
+    Arc::make_mut(&mut parent.custom_properties).insert("--box-size".to_owned(), "50px".to_owned());
 
     let stylesheets = [StyleSheet::from(vec![
       PropertyRule {
