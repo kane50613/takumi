@@ -4,7 +4,7 @@ use crate::{
   context::RenderContext,
   layout::{
     node::{Node, resolve_image},
-    tree::{RenderNode, pseudo_computed_style},
+    tree::{NodeOrigin, RenderNode, pseudo_computed_style},
   },
   matching::MatchedDeclarationsView,
   style::{
@@ -53,7 +53,7 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
   Some(RenderNode {
     context,
     node: Some(Node::container([])),
-    source_order: None,
+    origin: NodeOrigin::Marker,
     children: Some(Box::new([content])),
     layout_style_override: None,
     anonymous_text_content: None,

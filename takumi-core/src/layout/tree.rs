@@ -106,6 +106,23 @@ struct LayoutNodeState {
   box_children: Box<[OrderedChild]>,
 }
 
+/// Who created a box: the author's node tree, or a layout-generated construct.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NodeOrigin {
+  /// An authored node, at its document-order position in the source tree.
+  /// Stylesheet matching keys its results by the same number.
+  Authored {
+    /// Position in the source tree, counted in document order.
+    source_order: usize,
+  },
+  /// A generated `::marker` box.
+  Marker,
+  /// A generated `::before`/`::after` box.
+  Pseudo,
+  /// An anonymous box layout invented, such as an inline-text wrapper.
+  Anonymous,
+}
+
 /// A styled node plus its children, ready for layout.
 #[derive(Clone)]
 pub struct RenderNode {
@@ -113,10 +130,8 @@ pub struct RenderNode {
   pub context: RenderContext,
   /// Source node, absent for anonymous wrappers.
   pub node: Option<Node>,
-  /// Position of [`node`](Self::node) in the source tree, counted in document
-  /// order, absent for the boxes layout generates. Stylesheet matching keys its
-  /// results by the same number.
-  pub source_order: Option<usize>,
+  /// Who created this box.
+  pub origin: NodeOrigin,
   /// Child render nodes.
   pub children: Option<Box<[RenderNode]>>,
   pub(crate) layout_style_override: Option<Style>,
@@ -963,7 +978,7 @@ impl RenderNode {
     Self {
       context,
       node: None,
-      source_order: None,
+      origin: NodeOrigin::Anonymous,
       children: None,
       layout_style_override: Some(Style {
         display: TaffyDisplay::Block,
@@ -979,7 +994,7 @@ impl RenderNode {
     Self {
       context: Self::anonymous_box_context(parent_context),
       node: None,
-      source_order: None,
+      origin: NodeOrigin::Anonymous,
       children: Some(children.into_boxed_slice()),
       layout_style_override: Some(Style {
         display: TaffyDisplay::Block,
@@ -1006,7 +1021,7 @@ impl RenderNode {
       BackgroundImage::Url(url) => Self {
         context: Self::anonymous_box_context(parent_context),
         node: Some(Node::image(url)),
-        source_order: None,
+        origin: NodeOrigin::Anonymous,
         children: None,
         layout_style_override: Some(Style {
           max_size,
@@ -1022,7 +1037,7 @@ impl RenderNode {
         Self {
           context,
           node: Some(Node::container([])),
-          source_order: None,
+          origin: NodeOrigin::Anonymous,
           children: None,
           // css-images-3 §5.1 default object size when the parent is auto.
           layout_style_override: Some(Style {
@@ -1121,7 +1136,7 @@ impl RenderNode {
     Some(Self {
       context: pseudo_context,
       node: Some(Node::container([])),
-      source_order: None,
+      origin: NodeOrigin::Pseudo,
       children: Some(children),
       layout_style_override: None,
       anonymous_text_content: None,
@@ -1190,6 +1205,14 @@ impl RenderNode {
   /// The generated marker box attached to this node's first inline formatting context.
   pub fn marker(&self) -> Option<&RenderNode> {
     self.marker.as_deref()
+  }
+
+  /// The authored node's document-order position, absent for generated boxes.
+  pub fn source_order(&self) -> Option<usize> {
+    match self.origin {
+      NodeOrigin::Authored { source_order } => Some(source_order),
+      _ => None,
+    }
   }
 
   /// Resolves the descendant at `path` (child indices from this node). An empty
@@ -1477,7 +1500,7 @@ impl RenderNode {
         return RenderNode {
           context: parent_context.clone(),
           node: Some(Node::container([])),
-          source_order: None,
+          origin: NodeOrigin::Anonymous,
           children: None,
           layout_style_override: None,
           anonymous_text_content: None,
@@ -1503,7 +1526,7 @@ impl RenderNode {
         return RenderNode {
           context: parent_context.clone(),
           node: Some(Node::container([])),
-          source_order: None,
+          origin: NodeOrigin::Anonymous,
           children: None,
           layout_style_override: None,
           anonymous_text_content: None,
@@ -1542,7 +1565,9 @@ impl RenderNode {
           RenderNode {
             context: finished.context,
             node: Some(finished.node),
-            source_order: Some(finished.source_order),
+            origin: NodeOrigin::Authored {
+              source_order: finished.source_order,
+            },
             children: Some(children.into_boxed_slice()),
             layout_style_override: None,
             anonymous_text_content: None,
@@ -1586,7 +1611,9 @@ impl RenderNode {
             RenderNode {
               context: finished.context,
               node: Some(finished.node),
-              source_order: Some(finished.source_order),
+              origin: NodeOrigin::Authored {
+                source_order: finished.source_order,
+              },
               children: Some(children),
               layout_style_override: None,
               anonymous_text_content: None,
@@ -1613,7 +1640,9 @@ impl RenderNode {
             RenderNode {
               context: finished.context,
               node: Some(finished.node),
-              source_order: Some(finished.source_order),
+              origin: NodeOrigin::Authored {
+                source_order: finished.source_order,
+              },
               children: Some(final_children.into_boxed_slice()),
               layout_style_override: None,
               anonymous_text_content: None,
@@ -1640,7 +1669,9 @@ impl RenderNode {
           RenderNode {
             context: finished.context,
             node: Some(finished.node),
-            source_order: Some(finished.source_order),
+            origin: NodeOrigin::Authored {
+              source_order: finished.source_order,
+            },
             children: Some([anonymous_text_item].into()),
             layout_style_override: None,
             anonymous_text_content: None,
@@ -1651,7 +1682,9 @@ impl RenderNode {
           RenderNode {
             context: finished.context,
             node: Some(finished.node),
-            source_order: Some(finished.source_order),
+            origin: NodeOrigin::Authored {
+              source_order: finished.source_order,
+            },
             children: None,
             layout_style_override: None,
             anonymous_text_content: None,
