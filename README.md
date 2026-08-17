@@ -17,42 +17,6 @@ Takumi renders images in Node.js, Cloudflare Workers, browsers, and Rust applica
 
 </div>
 
-## Features
-
-Takumi is a Rust rendering engine for markup and CSS. It handles layout, text shaping, compositing, and encoding without launching a browser. One component tree renders as an image, an animation, or a paged PDF.
-
-### Images
-
-- **`text-fit`** grows or shrinks a headline to fill its line box, no measuring loop.
-- **`text-wrap: balance`** evens multi-line headlines. `pretty` spares the orphan word.
-- **Animations** sample the tree across time. `@keyframes` and `animate-spin` become WebP, APNG, GIF, or video frames.
-- **Stylesheets** apply as written, with complex selectors, `var()`, `calc()`, and media queries.
-- **CSS Grid**, block, inline, and float handle layout.
-- **`lang`** picks each language's own Han glyphs for the same code points.
-- **Text on a path** follows `offset-path`. `background-clip: text` and conic gradients paint it.
-- Masks, `clip-path`, `backdrop-filter`, and blend modes composite the way browsers do.
-- **SVG filters** run through `filter: url(...)`, `feTurbulence` and `feDisplacementMap` included.
-- **`corner-shape`** swaps round corners for `squircle`, `bevel`, `scoop`, `notch`, or `superellipse(n)`.
-- **Tailwind v4** utilities apply directly, arbitrary values included.
-
-### PDF
-
-- **Page breaks** honor `break-before: page`, `break-after: page`, and `break-inside: avoid`.
-- **Widows and orphans** default to 2, keeping lone lines away from page breaks.
-- **Headers and footers** repeat on every page. Counters speak CSS counter styles, `trad-chinese-informal` included.
-- **Text** stays selectable and searchable. Fonts embed as subsets.
-- **Links** and metadata carry into the output. `outline: true` builds bookmarks from headings.
-- **Attachments** embed files, including Factur-X e-invoice XML.
-- **Tagged PDF** is on by default. PDF/A-2, A-3, A-4, and PDF/UA-1 pass veraPDF.
-- **Arabic**, bidi text, CJK, and emoji shape correctly.
-- **1.5 MB** of gzip wasm fits the Cloudflare Workers free plan.
-
-### Runtimes
-
-- **Node.js and Bun** load a native binding, prebuilt for macOS, Linux (glibc and musl), and Windows on x64 and ARM64.
-- **Cloudflare Workers** and browsers load the WebAssembly build.
-- **Rust** applications embed the `takumi` crate.
-
 ## Quick Start
 
 ```bash
@@ -79,20 +43,57 @@ await writeFile("./output.png", image);
 ### PDF
 
 ```tsx
-import { render } from "takumi-pdf";
+import { PageNumber, TotalPages, render } from "takumi-pdf";
 import { writeFile } from "node:fs/promises";
 
 const pdf = await render(<Invoice data={data} />, {
   size: "a4",
   footer: (
     <div tw="flex w-full justify-center text-[10px] text-gray-500">
-      Page <span className="pageNumber" /> of <span className="totalPages" />
+      Page <PageNumber /> of <TotalPages />
     </div>
   ),
 });
 
 await writeFile("invoice.pdf", pdf);
 ```
+
+## Features
+
+Takumi is a Rust rendering engine for markup and CSS. It handles layout, text shaping, compositing, and encoding without launching a browser. One component tree renders as an image, an animation, or a paged PDF.
+
+### Images
+
+- **`text-fit`** grows or shrinks a headline to fill its line box, no measuring loop.
+- **`text-wrap: balance`** evens multi-line headlines. `pretty` spares the orphan word.
+- **Animations** sample the tree across time. `@keyframes` and `animate-spin` become WebP, APNG, GIF, or video frames.
+- **Stylesheets** apply as written, with complex selectors, `var()`, `calc()`, and media queries.
+- **CSS Grid**, block, inline, and float handle layout.
+- **`lang`** picks each language's own Han glyphs for the same code points.
+- **Text on a path** follows `offset-path`. `background-clip: text` and conic gradients paint it.
+- Masks, `clip-path`, `backdrop-filter`, and blend modes composite the way browsers do.
+- **SVG filters** run through `filter: url(...)`, `feTurbulence` and `feDisplacementMap` included.
+- **`corner-shape`** swaps round corners for `squircle`, `bevel`, `scoop`, `notch`, or `superellipse(n)`.
+- **Tailwind v4** utilities apply directly, arbitrary values included.
+
+### PDF
+
+- **Page breaks** honor `break-before: page`, `break-after: page`, and `break-inside: avoid`.
+- **Widows and orphans** default to 2, keeping lone lines away from page breaks.
+- **Headers and footers** repeat on every page. `<PageNumber />` and `<TotalPages />` count in CSS counter styles, `trad-chinese-informal` included.
+- **Tables** share column widths across pages and repeat their `<thead>` on every page.
+- **Text** stays selectable and searchable. Fonts embed as subsets.
+- **Links** and metadata carry into the output. `outline: true` builds bookmarks from headings.
+- **Attachments** embed files, including Factur-X e-invoice XML.
+- **Tagged PDF** is on by default. PDF/A-2, A-3, A-4, and PDF/UA-1 pass veraPDF.
+- **Arabic**, bidi text, CJK, and emoji shape correctly.
+- **1.5 MB** of gzip wasm fits the Cloudflare Workers free plan.
+
+### Runtimes
+
+- **Node.js and Bun** load a native binding, prebuilt for macOS, Linux (glibc and musl), and Windows on x64 and ARM64.
+- **Cloudflare Workers** and browsers load the WebAssembly build.
+- **Rust** applications embed the `takumi` crate.
 
 ## Coming From Something Else
 

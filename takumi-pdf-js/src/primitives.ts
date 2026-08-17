@@ -1,4 +1,4 @@
-import type { ReactElement } from "react";
+import type { CSSProperties, ReactElement } from "react";
 
 /**
  * A `@counter-style` name the page counters can format in, matching the set
@@ -44,7 +44,7 @@ export type CounterProps = {
   /** Counter style the number formats in. Defaults to decimal. */
   format?: CounterStyle;
   className?: string;
-  style?: Record<string, unknown>;
+  style?: CSSProperties;
   tw?: string;
 };
 
