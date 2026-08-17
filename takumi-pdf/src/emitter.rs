@@ -114,6 +114,9 @@ pub(crate) struct Emitter<'a> {
   /// paint wholly outside it is skipped so clipped-away content never reaches
   /// the content stream (or text extraction).
   pub(crate) window: Option<(f32, f32)>,
+  /// Horizontal content window `[left, right)`: a repeated table header
+  /// replays only its own table's column of the scene.
+  pub(crate) x_window: Option<(f32, f32)>,
   /// Text-line ownership window: `[this page's cut, next page's cut)`. Wider
   /// than `window` at the edges (first page reaches up to −∞, last to +∞) and
   /// narrower at the bottom when a cut lands above the page's full height, so
@@ -213,7 +216,12 @@ impl Emitter<'_> {
   }
 
   fn window_excludes_bounds(&self, bounds: Option<takumi_core::scene::SceneBounds>) -> bool {
-    bounds.is_some_and(|b| self.window_excludes(b.top as f32, b.bottom as f32))
+    bounds.is_some_and(|b| {
+      self.window_excludes(b.top as f32, b.bottom as f32)
+        || self
+          .x_window
+          .is_some_and(|(x0, x1)| b.right as f32 <= x0 || b.left as f32 >= x1)
+    })
   }
 
   /// The marked-content tag a node's own content opens.
@@ -1551,6 +1559,7 @@ impl Emitter<'_> {
       fonts: &mut *self.fonts,
       inline: None,
       window: None,
+      x_window: None,
       line_window: None,
       tags,
       tag_prefix,

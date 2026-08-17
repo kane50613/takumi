@@ -6,7 +6,7 @@ use takumi_core::{
   geometry::transformed_rect_extents,
   layout::node::Node,
   scene::{NodePaint, PaintItemKind},
-  style::{Affine, GridPlacement},
+  style::{Affine, GridPlacement, GridPlacementSpan},
   viewport::Viewport,
 };
 
@@ -74,6 +74,10 @@ pub(crate) struct HeaderBand {
   pub(crate) top: f32,
   pub(crate) bottom: f32,
   pub(crate) table_bottom: f32,
+  /// Horizontal extent of the table, which the replay clips to so content
+  /// beside the table does not repeat with it.
+  pub(crate) left: f32,
+  pub(crate) right: f32,
 }
 
 impl HeaderBand {
@@ -84,6 +88,49 @@ impl HeaderBand {
   /// Whether a page starting at `y` shows this header again.
   pub(crate) fn repeats_at(&self, y: f32) -> bool {
     self.bottom <= y + 0.5 && y + 0.5 < self.table_bottom
+  }
+}
+
+/// The bands a page starting at `y` replays, each with the window offset its
+/// strip paints at. Bands whose source ranges overlap vertically sit side by
+/// side, so they share one strip instead of stacking; only bands below one
+/// another (nested continuations) stack.
+pub(crate) fn header_replays(
+  headers: &[HeaderBand],
+  y: f32,
+  window: f32,
+) -> (f32, Vec<(f32, usize)>) {
+  let mut slots = Vec::new();
+  let mut offset = 0.0_f32;
+  let mut strip: Option<(f32, f32)> = None;
+
+  for (index, band) in headers.iter().enumerate() {
+    if !band.repeats_at(y) {
+      continue;
+    }
+    match &mut strip {
+      Some((bottom, height)) if band.top < *bottom => {
+        slots.push((offset, index));
+        *bottom = bottom.max(band.bottom);
+        *height = height.max(band.height());
+      }
+      _ => {
+        if let Some((_, height)) = strip.take() {
+          offset += height;
+        }
+        slots.push((offset, index));
+        strip = Some((band.bottom, band.height()));
+      }
+    }
+  }
+  let reserved = offset + strip.map_or(0.0, |(_, height)| height);
+
+  // A band stack this tall starves the page; the headers stop repeating
+  // rather than squeezing the body out.
+  if reserved > window / 2.0 {
+    (0.0, Vec::new())
+  } else {
+    (reserved, slots)
   }
 }
 
@@ -123,10 +170,22 @@ fn collect_headers_paint(tree: &PreparedTree, paint: &NodePaint, bands: &mut Vec
   let Some((start, end)) = node.table_header_lines else {
     return;
   };
+  // Cell extents are measured in the table's own space, so anything beyond a
+  // translation would disagree with the transformed band; such a table is a
+  // monolithic atom anyway.
+  let transform = paint.transform;
+
+  if (transform.a - 1.0).abs() > 1e-3
+    || (transform.d - 1.0).abs() > 1e-3
+    || transform.b.abs() > 1e-3
+    || transform.c.abs() > 1e-3
+  {
+    return;
+  }
   let Ok(layout) = tree.results.layout(paint.node_id) else {
     return;
   };
-  let Some((_, table_top, _, table_bottom)) = transformed_rect_extents(
+  let Some((table_left, table_top, table_right, table_bottom)) = transformed_rect_extents(
     takumi_core::geometry::Point { x: 0.0, y: 0.0 },
     layout.size,
     paint.transform,
@@ -156,6 +215,16 @@ fn collect_headers_paint(tree: &PreparedTree, paint: &NodePaint, bands: &mut Vec
     };
 
     if line >= start && line < end {
+      // A header cell whose rowspan reaches into the body would replay body
+      // area with the band; such a table does not repeat.
+      let GridPlacement::Span(GridPlacementSpan::Span(rowspan)) = child.context.style.grid_row_end
+      else {
+        return;
+      };
+
+      if line.saturating_add(rowspan as i16) > end {
+        return;
+      }
       header_top = header_top.min(content_top + cell.location.y);
       header_bottom = header_bottom.max(content_top + cell.location.y + cell.size.height);
     } else if line >= end {
@@ -177,24 +246,9 @@ fn collect_headers_paint(tree: &PreparedTree, paint: &NodePaint, bands: &mut Vec
       top: header_top,
       bottom: band_bottom,
       table_bottom,
+      left: table_left,
+      right: table_right,
     });
-  }
-}
-
-/// The window height a header band claims on pages starting at `y`.
-pub(crate) fn reserved_at(headers: &[HeaderBand], y: f32, window: f32) -> f32 {
-  let reserved: f32 = headers
-    .iter()
-    .filter(|band| band.repeats_at(y))
-    .map(HeaderBand::height)
-    .sum();
-
-  // A band stack this tall starves the page; the headers stop repeating
-  // rather than squeezing the body out.
-  if reserved > window / 2.0 {
-    0.0
-  } else {
-    reserved
   }
 }
 
@@ -232,7 +286,7 @@ impl Paginated {
 
   /// Window height repeated headers take on the page starting at `start`.
   pub(crate) fn reserved_at(&self, start: f32) -> f32 {
-    reserved_at(&self.headers, start, self.window)
+    header_replays(&self.headers, start, self.window).0
   }
 
   pub(crate) fn pages(&self) -> impl Iterator<Item = PageSlice> + '_ {
@@ -415,7 +469,7 @@ pub(crate) fn page_starts(
   let mut y0 = 0.0_f32;
 
   loop {
-    let limit = y0 + window - reserved_at(headers, y0, window);
+    let limit = y0 + window - header_replays(headers, y0, window).0;
 
     if let Some(cut) = forced.iter().copied().find(|cut| *cut > y0 + 1.0)
       && cut <= limit
@@ -440,7 +494,9 @@ pub(crate) fn page_starts(
         if top <= cut - window {
           break;
         }
-        if bottom > cut && bottom - top <= window {
+        // An atom moves to the next page only when it fits the capacity that
+        // page actually offers under its repeated headers.
+        if bottom > cut && bottom - top <= window - header_replays(headers, top, window).0 {
           pushed_up = pushed_up.min(top);
         }
       }

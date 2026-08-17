@@ -24,7 +24,7 @@ use crate::{
     tagging::{Artifact, ArtifactType, ContentTag},
   },
   options::{PT_PER_PX, PageOptions, PdfError},
-  pagination::{PageGeometry, PageSlice, Paginated},
+  pagination::{PageGeometry, PageSlice, Paginated, header_replays},
   paint::{fill_from_rgba, rect_path},
   tags::{TagCollector, tag_id},
   tree::TreeInputs,
@@ -217,17 +217,19 @@ impl PageComposer<'_, '_> {
     );
     // A replayed table header is an artifact like a repeated box, so its
     // links annotate per page and stay out of the structure.
-    let mut offset = self.frame.margin.top;
+    for (offset, index) in self.replays(slice) {
+      let band = &self.paginated.headers[index];
 
-    for band in &self.paginated.headers {
-      if !band.repeats_at(slice.start) {
-        continue;
-      }
       add_link_annotations(
         &mut pdf_page,
-        &self.paginated.interactive.links,
+        self
+          .paginated
+          .interactive
+          .links
+          .iter()
+          .filter(|link| link.overlaps_horizontally(band.left, band.right)),
         (band.top, band.bottom),
-        (self.frame.margin.left, offset),
+        (self.frame.margin.left, self.frame.margin.top + offset),
         None,
         |id| {
           self
@@ -238,10 +240,19 @@ impl PageComposer<'_, '_> {
             .map(|anchor| self.destination(anchor.top, &anchor.path))
         },
       );
-      offset += band.height();
     }
     pdf_page.finish();
     Ok(())
+  }
+
+  /// The header bands this page replays, with each band's window offset.
+  fn replays(&self, slice: &PageSlice) -> Vec<(f32, usize)> {
+    header_replays(
+      &self.paginated.headers,
+      slice.start,
+      self.frame.window_height,
+    )
+    .1
   }
 
   /// Fills the page box before anything else draws. An unset color leaves the
@@ -315,16 +326,13 @@ impl PageComposer<'_, '_> {
     slice: &PageSlice,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
-    let mut offset = self.frame.margin.top;
-
-    for band in &self.paginated.headers {
-      if !band.repeats_at(slice.start) {
-        continue;
-      }
+    for (offset, index) in self.replays(slice) {
+      let band = &self.paginated.headers[index];
+      // Clipping to the table keeps content beside it out of the replay.
       let Some(path) = KrillaRect::from_xywh(
-        self.frame.margin.left,
-        offset,
-        self.frame.content_width,
+        self.frame.margin.left + band.left,
+        self.frame.margin.top + offset,
+        band.right - band.left,
         band.height(),
       )
       .and_then(rect_path) else {
@@ -338,7 +346,7 @@ impl PageComposer<'_, '_> {
       surface.push_clip_path(&path, &FillRule::NonZero);
       surface.push_transform(&Transform::from_translate(
         self.frame.margin.left,
-        offset - band.top,
+        self.frame.margin.top + offset - band.top,
       ));
       let mut emitter = self.paginated.content.emitter(
         self.fonts,
@@ -349,12 +357,12 @@ impl PageComposer<'_, '_> {
       );
 
       emitter.window = Some((band.top, band.bottom));
+      emitter.x_window = Some((band.left, band.right));
       emitter.line_window = Some((f32::NEG_INFINITY, band.bottom));
       emitter.emit_context(0, Affine::IDENTITY, surface)?;
       surface.pop();
       surface.pop();
       surface.end_tagged();
-      offset += band.height();
     }
     Ok(())
   }

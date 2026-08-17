@@ -97,6 +97,7 @@ impl PreparedTree {
       fonts,
       inline,
       window: None,
+      x_window: None,
       line_window: None,
       tags,
       tag_prefix: Vec::new(),

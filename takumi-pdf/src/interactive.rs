@@ -41,6 +41,13 @@ pub(crate) struct LinkTarget {
   path: Vec<usize>,
 }
 
+impl LinkTarget {
+  /// Whether the link overlaps the horizontal band `left..right`.
+  pub(crate) fn overlaps_horizontally(&self, left: f32, right: f32) -> bool {
+    self.rect.right() > left && self.rect.left() < right
+  }
+}
+
 /// Link, heading and anchor targets collected from one tree.
 pub(crate) struct Interactive {
   pub(crate) links: Vec<LinkTarget>,

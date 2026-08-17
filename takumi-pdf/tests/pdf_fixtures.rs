@@ -266,6 +266,87 @@ fn a_table_header_repeats_on_every_page() {
   );
 }
 
+/// The replay clips to the table, so content beside it in the header's band
+/// of the page stays on the page it belongs to.
+#[test]
+fn content_beside_a_table_does_not_replay_with_its_header() {
+  let fonts = fonts();
+  let table = |beside: &str| {
+    let rows: String = (1..=30)
+      .map(|i| format!("<tr><td>Item {i}</td><td>{}</td></tr>", i * 3))
+      .collect();
+    let html = format!(
+      r#"<div style="display: flex; font-size: 12px; color: #141414">
+        <table style="width: 280px">
+          <thead><tr><th>Name</th><th>Qty</th></tr></thead>
+          <tbody>{rows}</tbody>
+        </table>
+        {beside}
+      </div>"#
+    );
+
+    render(
+      PdfOptions::builder()
+        .node(from_html(&html, FromHtmlOptions::default()).expect("parse table"))
+        .page(PageOptions {
+          width: 400.0,
+          height: 300.0,
+          margin: PageMargins::uniform(24.0),
+        })
+        .tagged(Tagging::Off)
+        .fonts(&fonts)
+        .build(),
+    )
+    .expect("render table")
+  };
+  let with_sidebar = table("<div>Beside</div>");
+  let plain = table("");
+
+  assert_eq!(
+    text_show_operators(&with_sidebar),
+    text_show_operators(&plain) + 1,
+    "the sidebar replayed with the table header"
+  );
+}
+
+/// A header cell whose rowspan reaches into the body would replay body area
+/// with the band, so such a table does not repeat at all.
+#[test]
+fn a_header_rowspan_into_the_body_suppresses_repetition() {
+  let fonts = fonts();
+  let table = |thead_style: &str| {
+    let rows: String = (1..=30)
+      .map(|i| format!("<tr><td>Item {i}</td><td>{}</td></tr>", i * 3))
+      .collect();
+    let html = format!(
+      r#"<table style="width: 100%; font-size: 12px; color: #141414">
+        <thead{thead_style}><tr><th rowspan="2">Name</th><th>Qty</th></tr></thead>
+        <tbody>{rows}</tbody>
+      </table>"#
+    );
+
+    render(
+      PdfOptions::builder()
+        .node(from_html(&html, FromHtmlOptions::default()).expect("parse table"))
+        .page(PageOptions {
+          width: 400.0,
+          height: 300.0,
+          margin: PageMargins::uniform(24.0),
+        })
+        .tagged(Tagging::Off)
+        .fonts(&fonts)
+        .build(),
+    )
+    .expect("render table")
+  };
+
+  assert_eq!(
+    text_show_operators(&table("")),
+    text_show_operators(&table(r#" style="display: table-row-group""#)),
+    "a cross-group rowspan header still repeated"
+  );
+}
+
 /// A top caption sits between the table edge and the header rows; only the
 /// header rows repeat.
 #[test]
