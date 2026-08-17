@@ -245,22 +245,54 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       // Bands lay out at full page width and draw inside the margin areas,
       // like Chromium's print header and footer templates.
       let band_viewport = Viewport::new((page.width as u32, None));
-      let header = options
-        .header
-        .as_ref()
-        .map(|template| Repeatable::band(&inputs, template, band_viewport, RepeatBounds::Header))
-        .transpose()?;
-      let footer = options
-        .footer
-        .as_ref()
-        .map(|template| Repeatable::band(&inputs, template, band_viewport, RepeatBounds::Footer))
-        .transpose()?;
-      let frame = PageFrame::resolve(
-        &page,
-        band_viewport,
-        header.as_ref().map(Repeatable::height),
-        footer.as_ref().map(Repeatable::height),
-      )?;
+      let bands = |pages: usize| -> Result<(Option<Repeatable>, Option<Repeatable>), PdfError> {
+        let header = options
+          .header
+          .as_ref()
+          .map(|template| {
+            Repeatable::band(
+              &inputs,
+              template,
+              band_viewport,
+              RepeatBounds::Header,
+              pages,
+            )
+          })
+          .transpose()?;
+        let footer = options
+          .footer
+          .as_ref()
+          .map(|template| {
+            Repeatable::band(
+              &inputs,
+              template,
+              band_viewport,
+              RepeatBounds::Footer,
+              pages,
+            )
+          })
+          .transpose()?;
+
+        Ok((header, footer))
+      };
+      let resolve = |header: Option<&Repeatable>, footer: Option<&Repeatable>| {
+        PageFrame::resolve(
+          &page,
+          band_viewport,
+          header.map(Repeatable::height),
+          footer.map(Repeatable::height),
+        )
+      };
+      let (mut header, mut footer) = bands(1)?;
+      let mut frame = resolve(header.as_ref(), footer.as_ref())?;
+      // A band with a counter and the cut list depend on each other: an `auto`
+      // margin takes the band's height, the band lays out with the real page
+      // numbers, and the page count is only known once the content is cut. The
+      // band is re-measured with the count each cut produced until its height
+      // stops moving, like the content counters in `paginate`.
+      let dynamic = header.as_ref().is_some_and(Repeatable::dynamic)
+        || footer.as_ref().is_some_and(Repeatable::dynamic);
+      let source = dynamic.then(|| options.node.clone());
       let mut paginated = paginate(
         options.node,
         &inputs,
@@ -269,6 +301,33 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         document_lang,
         &frame.geometry(),
       )?;
+
+      if let Some(source) = source {
+        const BAND_PASSES: usize = 3;
+
+        for _ in 0..BAND_PASSES {
+          let (next_header, next_footer) = bands(paginated.starts.len())?;
+          let stable = next_header.as_ref().map(Repeatable::height)
+            == header.as_ref().map(Repeatable::height)
+            && next_footer.as_ref().map(Repeatable::height)
+              == footer.as_ref().map(Repeatable::height);
+
+          header = next_header;
+          footer = next_footer;
+          if stable {
+            break;
+          }
+          frame = resolve(header.as_ref(), footer.as_ref())?;
+          paginated = paginate(
+            source.clone(),
+            &inputs,
+            &mut fonts,
+            &issues,
+            document_lang,
+            &frame.geometry(),
+          )?;
+        }
+      }
 
       if paginated.starts.len() >= MAX_PAGES {
         return Err(PdfError::TooManyPages(paginated.starts.len()));
