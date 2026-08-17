@@ -229,10 +229,54 @@ function decodeAttributeMap(attributes: Record<string, string>): Record<string, 
   return decodedAttributes;
 }
 
+/**
+ * Split a `style` attribute on declaration boundaries.
+ *
+ * Only a top-level `;` separates declarations. The character is legal inside a
+ * value: `url(data:image/png;base64,...)` is how markup embeds an image without
+ * a fetch, and a quoted family name such as `font-family: "Foo; Bar"` may carry
+ * one too. Splitting on every `;` truncates the value at the first one and
+ * leaves the remainder as a colon-less fragment that is then discarded.
+ */
+function splitStyleDeclarations(styleText: string): string[] {
+  const declarations: string[] = [];
+  let start = 0;
+  let depth = 0;
+  let quote: string | undefined;
+
+  for (let index = 0; index < styleText.length; index += 1) {
+    const character = styleText[index];
+
+    if (quote !== undefined) {
+      if (character === "\\") {
+        index += 1;
+      } else if (character === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === "(") {
+      depth += 1;
+    } else if (character === ")") {
+      depth = Math.max(0, depth - 1);
+    } else if (character === ";" && depth === 0) {
+      declarations.push(styleText.slice(start, index));
+      start = index + 1;
+    }
+  }
+
+  declarations.push(styleText.slice(start));
+
+  return declarations;
+}
+
 function parseInlineStyle(styleText: string): CSSProperties | undefined {
   const style: Record<string, string> = {};
 
-  for (const declaration of styleText.split(";")) {
+  for (const declaration of splitStyleDeclarations(styleText)) {
     const [property, ...valueParts] = declaration.split(":");
     if (!property || valueParts.length === 0) {
       continue;

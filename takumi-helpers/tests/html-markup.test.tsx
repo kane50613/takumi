@@ -64,6 +64,38 @@ describe("fromHtml", () => {
 
     expect((node as TextNode).text).toBe("&#xd800;&#57343;");
   });
+
+  // A data URL carries its own `;`, and it is the usual way markup embeds an
+  // image without a fetch. Splitting the attribute on every `;` truncated the
+  // value and dropped `base64,...` as an unparsable declaration.
+  test("keeps a data URL intact in an inline style", () => {
+    const { node } = fromHtml(
+      `<div style="background-image:url(data:image/png;base64,iVBORw0KGgo=);color:red">x</div>`,
+    );
+
+    expect(node.style).toEqual({
+      backgroundImage: "url(data:image/png;base64,iVBORw0KGgo=)",
+      color: "red",
+    });
+  });
+
+  test("keeps a quoted semicolon inside a declaration value", () => {
+    const { node } = fromHtml(`<div style="font-family:'Foo; Bar', sans-serif;color:red">x</div>`);
+
+    expect(node.style).toEqual({ fontFamily: "'Foo; Bar', sans-serif", color: "red" });
+  });
+
+  test("still separates ordinary declarations", () => {
+    const { node } = fromHtml(`<div style="color:red;font-size:12px;">x</div>`);
+
+    expect(node.style).toEqual({ color: "red", fontSize: "12px" });
+  });
+
+  test("tolerates an unclosed url() in an inline style", () => {
+    const { node } = fromHtml(`<div style="color:red;background-image:url(">x</div>`);
+
+    expect(node.style).toEqual({ color: "red", backgroundImage: "url(" });
+  });
 });
 
 describe("fromJsx", () => {
