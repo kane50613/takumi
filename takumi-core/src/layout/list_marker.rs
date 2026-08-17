@@ -63,8 +63,7 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
 }
 
 /// css-lists-3 §3.1: an image that is not available leaves the counter style
-/// to draw the marker. Only URL images qualify; a gradient never becomes a
-/// marker here.
+/// to draw the marker. Only URL images qualify.
 fn available_marker_image(item_context: &RenderContext) -> Option<BackgroundImage> {
   let image = item_context.style.list_style_image.image()?;
   let BackgroundImage::Url(url) = image else {
