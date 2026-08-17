@@ -353,7 +353,7 @@ export type CodepointSource = string | Node | (string | Node)[];
  * source of truth. `list-style-type: "…"` strings are not covered.
  */
 export const LIST_MARKER_CHARACTERS =
-  "•◦■ 0123456789.-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  "•◦■▪ 0123456789.-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 /** Collect every codepoint the content will render. */
 export function collectCodepoints(source: CodepointSource): Set<number> {

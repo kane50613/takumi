@@ -323,8 +323,7 @@ mod tests {
   /// Every character `marker_text` can generate across the predefined counter
   /// styles. Mirrored by `LIST_MARKER_CHARACTERS` in
   /// `takumi-helpers/src/fonts.ts`, which font subsetting feeds to callers.
-  const MARKER_CHARACTERS: &str =
-    "\u{2022}\u{25e6}\u{25a0} 0123456789.-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const MARKER_CHARACTERS: &str = "\u{2022}\u{25e6}\u{25a0}\u{25aa} 0123456789.-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
   #[test]
   fn parses_keywords_and_strings() {
