@@ -1,3 +1,25 @@
+## @takumi-rs/core@2.10.0
+
+### Update the font stack
+
+parley 0.11.1, skrifa 0.44, and write-fonts 0.50, with the hinting-gate fork rebased so a single fontations version serves layout and subsetting.
+
+### Lay out tables on the grid algorithm
+
+A `<table>` used to fall back to block layout, so cells stacked instead of forming columns. Table boxes now lower onto a grid whose column tracks are shared by every row. Header groups render first, footer groups last. `colspan` and `rowspan` span tracks, captions render on the side `caption-side` picks, and a row's background lands on its cells. HTML and JSX gain element presets for `table`, `thead`, `tbody`, `tfoot`, `tr`, `td`, `th`, and `caption`.
+
+### Count the pages a repeated box prints on
+
+A page counter filled only inside a `header` or `footer` band. A footer written into the document itself, as a `fixed` box, printed empty hooks, so the numbers had to come from a render option standing beside the document. A repeated box now lays out again for every page it draws on, with that page's numbers, so a component can carry its own footer.
+
+### Match Blink's spacing between a bullet marker and its item
+
+An outside bullet keeps Blink's fixed 7px gap on top of its suffix space, an inside bullet separates with `1em`, and the `square` style draws `▪`, approximating Blink's painted size.
+
+### Drop `reversed`, gradient marker images, and `menu`/`dir` list counting
+
+An `<ol reversed>` now counts up, a gradient `list-style-image` falls back to the counter style, and only `ul`/`ol` scope a list's count.
+
 ## @takumi-rs/core@2.9.2
 
 ### Treat the synthetic HTML root as a block container

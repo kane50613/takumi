@@ -1,3 +1,17 @@
+## @takumi-rs/wasm@2.10.0
+
+### Update the font stack
+
+parley 0.11.1, skrifa 0.44, and write-fonts 0.50, with the hinting-gate fork rebased so a single fontations version serves layout and subsetting.
+
+### Match Blink's spacing between a bullet marker and its item
+
+An outside bullet keeps Blink's fixed 7px gap on top of its suffix space, an inside bullet separates with `1em`, and the `square` style draws `▪`, approximating Blink's painted size.
+
+### Drop `reversed`, gradient marker images, and `menu`/`dir` list counting
+
+An `<ol reversed>` now counts up, a gradient `list-style-image` falls back to the counter style, and only `ul`/`ol` scope a list's count.
+
 ## @takumi-rs/wasm@2.9.0
 
 ### Load the wasm binary in a browser bundle

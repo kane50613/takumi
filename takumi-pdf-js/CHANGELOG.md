@@ -1,3 +1,45 @@
+## takumi-pdf@0.11.0
+
+### Measure a band with the page count the cut produced
+
+A header or footer band was measured once with three-digit stand-in counters, so a counter wider than three digits could wrap and get clipped, and a narrow band reserved margin it never used. The band now re-measures with the real page count until its height settles, up to three passes, the same way content counters already converge.
+
+### Type the bundler entries' default export
+
+`export *` does not forward a default export, so the wasm init default was untyped on every bundler entry.
+
+### Add page counter primitives
+
+`PageNumber`, `TotalPages`, and `TargetPageNumber` components wrap the counter class hooks, with a typed `format` prop for the supported `@counter-style` names.
+
+### Repeat a table's header rows on every page
+
+A `<thead>` paints again at the top of each page its table continues onto, per css-tables-3 repeated headers; a header taller than a quarter of the page does not repeat.
+
+### Update the font stack
+
+parley 0.11.1, skrifa 0.44, and write-fonts 0.50, with the hinting-gate fork rebased so a single fontations version serves layout and subsetting.
+
+### Render HTML and CSS list markers in PDF
+
+Paint generated list markers in PDF output, including nested, paginated, and tagged (`Lbl`) lists. Font subsetting counts the characters the predefined marker styles generate in every backend.
+
+### Count the pages a repeated box prints on
+
+A page counter filled only inside a `header` or `footer` band. A footer written into the document itself, as a `fixed` box, printed empty hooks, so the numbers had to come from a render option standing beside the document. A repeated box now lays out again for every page it draws on, with that page's numbers, so a component can carry its own footer.
+
+### Match Blink's spacing between a bullet marker and its item
+
+An outside bullet keeps Blink's fixed 7px gap on top of its suffix space, an inside bullet separates with `1em`, and the `square` style draws `▪`, approximating Blink's painted size.
+
+### Drop `reversed`, gradient marker images, and `menu`/`dir` list counting
+
+An `<ol reversed>` now counts up, a gradient `list-style-image` falls back to the counter style, and only `ul`/`ol` scope a list's count.
+
+### Fill a page counter in the content
+
+A `pageNumber` or `totalPages` hook outside a band stayed empty, and nothing said why. It now takes the page its box lands on, and a hook laid out inline takes the page of the box that holds it. Numbering the content lays the document out a second time, since the page a hook sits on is only known once the content is cut into pages. A document without such a hook pays nothing.
+
 ## takumi-pdf@0.10.0
 
 ### Start a page at the margin Chromium prints at
