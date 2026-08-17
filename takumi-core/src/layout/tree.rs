@@ -248,8 +248,6 @@ fn registered_custom_property_parent_style<'a>(
   }
 
   let mut adjusted_parent = parent_style.clone();
-  let registered = Arc::make_mut(&mut adjusted_parent.registered_custom_properties);
-  let custom = Arc::make_mut(&mut adjusted_parent.custom_properties);
 
   for sheet in stylesheets {
     for property_rule in sheet.property_rules() {
@@ -260,6 +258,9 @@ fn registered_custom_property_parent_style<'a>(
       {
         continue;
       }
+
+      let registered = Arc::make_mut(&mut adjusted_parent.registered_custom_properties);
+      let custom = Arc::make_mut(&mut adjusted_parent.custom_properties);
 
       registered.insert(property_rule.name.clone(), property_rule.clone());
 

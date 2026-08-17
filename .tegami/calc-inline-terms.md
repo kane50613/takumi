@@ -1,7 +1,7 @@
 ---
 packages:
   "@takumi-rs/core":
-    type: patch
+    type: minor
 ---
 
 ### Store `calc()` as its non-zero terms
