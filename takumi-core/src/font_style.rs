@@ -322,7 +322,7 @@ impl SizedFontStyle<'_> {
       }
     }
     parent.font_stretch.percentage().to_bits().hash(hasher);
-    for variation in &parent.font_variation_settings {
+    for variation in parent.font_variation_settings.iter() {
       variation.tag.hash(hasher);
       variation.value.to_bits().hash(hasher);
     }

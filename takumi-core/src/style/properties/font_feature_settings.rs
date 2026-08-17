@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, sync::Arc};
 
 use cssparser::{Parser, Token};
 
@@ -86,7 +86,7 @@ impl FontFeature {
 ///
 /// This allows enabling/disabling specific typographic features in OpenType fonts
 /// such as ligatures, kerning, small caps, and other advanced typography features.
-pub(crate) type FontFeatureSettings = Box<[FontFeature]>;
+pub(crate) type FontFeatureSettings = Arc<[FontFeature]>;
 
 impl MakeComputed for FontFeatureSettings {}
 
@@ -96,7 +96,7 @@ impl<'i> FromCss<'i> for FontFeatureSettings {
       .try_parse(|input| input.expect_ident_matching("normal"))
       .is_ok()
     {
-      return Ok(Box::new([]));
+      return Ok(Arc::new([]));
     }
 
     let list = input.parse_comma_separated(|input| {
@@ -120,7 +120,7 @@ impl<'i> FromCss<'i> for FontFeatureSettings {
       Ok(FontFeature { tag, value })
     })?;
 
-    Ok(list.into_boxed_slice())
+    Ok(list.into())
   }
 
   const VALID_TOKENS: &'static [CssToken] = &[
