@@ -451,7 +451,7 @@ pub(crate) fn match_stylesheets_view<'a>(
 
   let mut ancestor_bloom_filter = BloomFilter::new();
   let mut ancestor_stack: Vec<usize> = Vec::new();
-  let mut selector_ancestor_hashes_cache: HashMap<usize, AncestorHashes> = HashMap::new();
+  let mut selector_ancestor_hashes_cache: HashMap<(usize, usize), AncestorHashes> = HashMap::new();
 
   let mut element_caches = SelectorCaches::default();
   let mut pseudo_caches = SelectorCaches::default();
@@ -496,7 +496,7 @@ pub(crate) fn match_stylesheets_view<'a>(
       let mut best_before: Option<u32> = None;
       let mut best_after: Option<u32> = None;
 
-      for selector in rule.selectors().slice() {
+      for (selector_index, selector) in rule.selectors().slice().iter().enumerate() {
         let Some(target) = selector_target(selector) else {
           continue;
         };
@@ -504,7 +504,7 @@ pub(crate) fn match_stylesheets_view<'a>(
           continue;
         }
 
-        let selector_key = selector as *const _ as usize;
+        let selector_key = (source_order, selector_index);
         let ancestor_hashes = selector_ancestor_hashes_cache
           .entry(selector_key)
           .or_insert_with(|| AncestorHashes::new(selector, QuirksMode::NoQuirks));

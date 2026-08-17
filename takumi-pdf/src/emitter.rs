@@ -47,7 +47,7 @@ use crate::{
   background::{Placement, cycled, place},
   filter::{ColorFilter, unsupported_filter},
   glyph::run_glyphs,
-  inline::{InlineMap, build_inline_runs, inline_key, node_inline_items},
+  inline::{InlineMap, build_inline_runs, node_inline_items},
   krilla::{
     Data,
     geom::{Point, Rect as KrillaRect, Transform},
@@ -468,7 +468,7 @@ impl Emitter<'_> {
         }
       }
     }
-    self.emit_own_content(node, layout, x, y, surface)?;
+    self.emit_own_content(node, paint.node_id, layout, x, y, surface)?;
     if tagged {
       surface.end_tagged();
     }
@@ -1079,19 +1079,20 @@ impl Emitter<'_> {
   fn emit_own_content(
     &mut self,
     node: &RenderNode,
+    node_id: NodeId,
     layout: Layout,
     x: f32,
     y: f32,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
     if node.should_create_inline_layout() {
-      return self.emit_node_text(node, layout, x, y, surface);
+      return self.emit_node_text(node, node_id, layout, x, y, surface);
     }
     if node.has_anonymous_text_item_child() {
       return Ok(());
     }
     match node.node.as_ref().map(|n| &n.kind) {
-      Some(NodeKind::Text(_)) => self.emit_node_text(node, layout, x, y, surface),
+      Some(NodeKind::Text(_)) => self.emit_node_text(node, node_id, layout, x, y, surface),
       #[cfg(feature = "images")]
       Some(NodeKind::Image(image)) => {
         self.emit_image(image, &node.context, layout, x, y, surface);
@@ -1229,12 +1230,13 @@ impl Emitter<'_> {
   fn emit_node_text(
     &mut self,
     node: &RenderNode,
+    node_id: NodeId,
     layout: Layout,
     x: f32,
     y: f32,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
-    if let Some(prepared) = self.inline.and_then(|map| map.get(&inline_key(node))) {
+    if let Some(prepared) = self.inline.and_then(|map| map.get(&node_id)) {
       let font_style = SizedFontStyle::from_style(&node.context.style, &node.context);
 
       return self.draw_runs(
