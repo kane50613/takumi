@@ -6,6 +6,7 @@ import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
 import { createHighlighterCore } from "shiki/core";
 import { createOnigurumaEngine } from "shiki/engine-oniguruma.mjs";
+import pdfPrimitivesTypings from "../../../node_modules/takumi-pdf/dist/primitives.d.mts?raw";
 import takumiTypings from "../../../node_modules/@takumi-rs/wasm/pkg/takumi_wasm_bg.wasm.d.ts?raw";
 import reactTypings from "../../../node_modules/@types/react/index.d.ts?raw";
 import reactJsxRuntimeTypings from "../../../node_modules/@types/react/jsx-runtime.d.ts?raw";
@@ -137,6 +138,14 @@ export function ComponentEditor({
           {
             content: takumiTypings,
             filePath: "file:///node_modules/@takumi-rs/wasm/index.d.ts",
+          },
+          {
+            content: pdfPrimitivesTypings,
+            filePath: "file:///node_modules/takumi-pdf/index.d.ts",
+          },
+          {
+            content: pdfPrimitivesTypings,
+            filePath: "file:///node_modules/takumi-pdf/primitives.d.ts",
           },
           {
             content: playgroundOptionsTypings,
