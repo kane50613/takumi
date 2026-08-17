@@ -64,6 +64,33 @@ describe("fromHtml", () => {
 
     expect((node as TextNode).text).toBe("&#xd800;&#57343;");
   });
+
+  // The `x` of a hex reference may be either case.
+  test("decodes an upper-case hex reference", () => {
+    const { node } = fromHtml("<div>&#X41;&#Xa9;&#X2764;</div>");
+
+    expect((node as TextNode).text).toBe("A©❤");
+  });
+
+  // The C1 block is the windows-1252 table legacy encoders emit, so `&#153;`
+  // means a trademark sign rather than an invisible control character.
+  test("remaps C1 references to their windows-1252 characters", () => {
+    const { node } = fromHtml("<div>&#153;&#x99;&#128;&#x9F;&#x92;</div>");
+
+    expect((node as TextNode).text).toBe("™™€Ÿ’");
+  });
+
+  test("leaves C1 code points the table does not name", () => {
+    const { node } = fromHtml("<div>&#x81;</div>");
+
+    expect((node as TextNode).text).toBe("");
+  });
+
+  test("decodes a null reference as the replacement character", () => {
+    const { node } = fromHtml("<div>&#0;&#x0;</div>");
+
+    expect((node as TextNode).text).toBe("��");
+  });
 });
 
 describe("fromJsx", () => {

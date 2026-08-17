@@ -256,13 +256,50 @@ const namedHtmlEntities: Record<string, string> = {
   euro: "\u20ac",
 };
 
+// Numeric references the HTML spec remaps rather than decodes literally. The
+// C1 block is the windows-1252 table legacy encoders emit — `&#153;` is meant to
+// be a trademark sign, not an invisible control character — and a null reference
+// becomes the replacement character.
+// https://html.spec.whatwg.org/multipage/parsing.html#numeric-character-reference-end-state
+const remappedCodePoints: Record<number, string> = {
+  0x00: "�",
+  0x80: "€",
+  0x82: "‚",
+  0x83: "ƒ",
+  0x84: "„",
+  0x85: "…",
+  0x86: "†",
+  0x87: "‡",
+  0x88: "ˆ",
+  0x89: "‰",
+  0x8a: "Š",
+  0x8b: "‹",
+  0x8c: "Œ",
+  0x8e: "Ž",
+  0x91: "‘",
+  0x92: "’",
+  0x93: "“",
+  0x94: "”",
+  0x95: "•",
+  0x96: "–",
+  0x97: "—",
+  0x98: "˜",
+  0x99: "™",
+  0x9a: "š",
+  0x9b: "›",
+  0x9c: "œ",
+  0x9e: "ž",
+  0x9f: "Ÿ",
+};
+
 export function decodeHtmlEntities(value: string): string {
   if (!value.includes("&")) {
     return value;
   }
 
   return value.replace(
-    /&(?:#(\d+)|#x([\da-fA-F]+)|([a-zA-Z][\w-]+));/g,
+    // `x` may be either case: `&#X41;` is as valid as `&#x41;`.
+    /&(?:#(\d+)|#[xX]([\da-fA-F]+)|([a-zA-Z][\w-]+));/g,
     (match, dec, hex, named) => {
       if (dec) {
         return decodeCodePoint(Number(dec)) ?? match;
@@ -284,6 +321,11 @@ function decodeCodePoint(codePoint: number): string | undefined {
 
   if (codePoint >= 0xd800 && codePoint <= 0xdfff) {
     return;
+  }
+
+  const remapped = remappedCodePoints[codePoint];
+  if (remapped !== undefined) {
+    return remapped;
   }
 
   try {
