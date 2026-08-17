@@ -427,7 +427,7 @@ impl Length {
   pub(crate) fn to_compact_length(self, sizing: &SizingContext) -> CompactLength {
     match self {
       Length::Auto => CompactLength::auto(),
-      Length::Percentage(value) => CompactLength::percent(value / 100.0),
+      Length::Percentage(value) => CompactLength::percent(clamp_px_for_integer_cast(value / 100.0)),
       Length::Rem(_)
       | Length::Em(_)
       | Length::Lh(_)
@@ -1020,6 +1020,13 @@ mod tests {
         "{css} produced a non-finite CompactLength"
       );
     }
+  }
+
+  #[test]
+  fn infinite_percentage_never_reaches_compact_length() {
+    let compact = Length::Percentage(f32::INFINITY).to_compact_length(&sizing());
+
+    assert!(compact.value().is_finite());
   }
 
   #[test]
