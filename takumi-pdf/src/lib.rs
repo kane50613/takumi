@@ -421,6 +421,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         &mut page,
         &interactive.links,
         (0.0, content.height),
+        None,
         (0.0, 0.0),
         tag_collector.as_ref(),
         |id| {
@@ -474,7 +475,7 @@ mod tests {
 
   #[test]
   fn content_taller_than_a_render_allows_stops_counting() {
-    let starts = page_starts(&mut [], &mut Vec::new(), &[], 2_000_000.0, 10.0);
+    let starts = page_starts(&mut [], &mut Vec::new(), &[], &[], 2_000_000.0, 10.0);
 
     assert_eq!(starts.len(), MAX_PAGES, "the page count runs unbounded");
   }
@@ -482,7 +483,7 @@ mod tests {
   #[test]
   fn page_starts_without_atoms_cuts_at_window() {
     assert_eq!(
-      page_starts(&mut [], &mut Vec::new(), &[], 250.0, 100.0),
+      page_starts(&mut [], &mut Vec::new(), &[], &[], 250.0, 100.0),
       vec![0.0, 100.0, 200.0]
     );
   }
@@ -492,7 +493,7 @@ mod tests {
     let mut atoms = [(90.0, 110.0)];
 
     assert_eq!(
-      page_starts(&mut atoms, &mut Vec::new(), &[], 250.0, 100.0),
+      page_starts(&mut atoms, &mut Vec::new(), &[], &[], 250.0, 100.0),
       vec![0.0, 90.0, 190.0]
     );
   }
@@ -502,7 +503,7 @@ mod tests {
     let mut atoms = [(0.0, 300.0)];
 
     assert_eq!(
-      page_starts(&mut atoms, &mut Vec::new(), &[], 300.0, 100.0),
+      page_starts(&mut atoms, &mut Vec::new(), &[], &[], 300.0, 100.0),
       vec![0.0, 100.0, 200.0]
     );
   }
@@ -522,7 +523,7 @@ mod tests {
     }];
 
     assert_eq!(
-      page_starts(&mut atoms, &mut Vec::new(), &paragraphs, 110.0, 100.0),
+      page_starts(&mut atoms, &mut Vec::new(), &paragraphs, &[], 110.0, 100.0),
       vec![0.0, 90.0],
       "the cut moves from 100 to 90 so two lines reach the next page"
     );
@@ -543,7 +544,7 @@ mod tests {
     }];
 
     assert_eq!(
-      page_starts(&mut atoms, &mut Vec::new(), &paragraphs, 140.0, 100.0),
+      page_starts(&mut atoms, &mut Vec::new(), &paragraphs, &[], 140.0, 100.0),
       vec![0.0, 90.0],
       "one line before the cut violates orphans, so the paragraph starts the next page"
     );
@@ -564,7 +565,7 @@ mod tests {
     }];
 
     assert_eq!(
-      page_starts(&mut atoms, &mut Vec::new(), &paragraphs, 110.0, 100.0),
+      page_starts(&mut atoms, &mut Vec::new(), &paragraphs, &[], 110.0, 100.0),
       vec![0.0, 100.0],
       "backing up past the orphans floor is worse than a lone widow"
     );
@@ -584,7 +585,7 @@ mod tests {
     }];
 
     assert_eq!(
-      page_starts(&mut atoms, &mut Vec::new(), &paragraphs, 300.0, 100.0),
+      page_starts(&mut atoms, &mut Vec::new(), &paragraphs, &[], 300.0, 100.0),
       vec![0.0, 100.0, 200.0],
       "a paragraph that can never satisfy 20/20 still paginates at the window"
     );
@@ -595,7 +596,7 @@ mod tests {
     let mut forced = vec![40.0, 150.0];
 
     assert_eq!(
-      page_starts(&mut [], &mut forced, &[], 250.0, 100.0),
+      page_starts(&mut [], &mut forced, &[], &[], 250.0, 100.0),
       vec![0.0, 40.0, 140.0, 150.0]
     );
   }

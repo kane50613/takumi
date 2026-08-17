@@ -82,12 +82,15 @@ fn group_order(display: Display) -> u8 {
   }
 }
 
-/// The rows of a table, with row groups flattened away and reordered.
+/// The rows of a table, with row groups flattened away and reordered, plus how
+/// many leading rows came from header groups.
 ///
 /// Anything that is neither a row, a row group, nor a caption stays where it is
 /// as a full-width item, which keeps stray content visible instead of dropping
 /// it on the floor. Real anonymous table box fixup is not implemented.
-fn collect_rows(table: &mut RenderNode) -> (Vec<RenderNode>, Vec<RenderNode>, Vec<RenderNode>) {
+fn collect_rows(
+  table: &mut RenderNode,
+) -> (Vec<RenderNode>, Vec<RenderNode>, usize, Vec<RenderNode>) {
   let mut captions = Vec::new();
   let mut groups: Vec<(u8, usize, Vec<RenderNode>)> = Vec::new();
   let mut strays = Vec::new();
@@ -117,9 +120,14 @@ fn collect_rows(table: &mut RenderNode) -> (Vec<RenderNode>, Vec<RenderNode>, Ve
 
   groups.sort_by_key(|(order, index, _)| (*order, *index));
 
+  let header_rows = groups
+    .iter()
+    .filter(|(order, ..)| *order == 0)
+    .map(|(.., rows)| rows.len())
+    .sum();
   let rows = groups.into_iter().flat_map(|(.., rows)| rows).collect();
 
-  (captions, rows, strays)
+  (captions, rows, header_rows, strays)
 }
 
 /// Each row's cells as `(column, colspan)`, advanced past tracks a preceding
@@ -234,7 +242,7 @@ fn lower_full_width(node: &mut RenderNode, line: i16, columns: u16) {
 }
 
 fn lower_table(table: &mut RenderNode) {
-  let (captions, rows, strays) = collect_rows(table);
+  let (captions, rows, header_rows, strays) = collect_rows(table);
   let placements = resolve_columns(&rows);
   let columns = track_count(&placements);
   let tracks = track_sizes(&rows, &placements, columns);
@@ -248,6 +256,13 @@ fn lower_table(table: &mut RenderNode) {
     lower_full_width(&mut caption, line, columns);
     items.push(caption);
     line = line.saturating_add(1);
+  }
+
+  // A header that is the whole table has nothing to repeat over.
+  if header_rows > 0 && header_rows < rows.len() {
+    let start = line;
+
+    table.table_header_lines = Some((start, start.saturating_add(header_rows as i16)));
   }
 
   for (mut row, positions) in rows.into_iter().zip(placements) {

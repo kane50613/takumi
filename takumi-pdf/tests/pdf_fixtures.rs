@@ -221,6 +221,207 @@ fn paged_table() {
   });
 }
 
+/// css-tables-3 §repeated-headers: every page that starts inside the table's
+/// body paints the header rows again.
+#[test]
+fn a_table_header_repeats_on_every_page() {
+  let fonts = fonts();
+  let table = |thead_style: &str| {
+    let rows: String = (1..=30)
+      .map(|i| format!("<tr><td>Item {i}</td><td>{}</td></tr>", i * 3))
+      .collect();
+    let html = format!(
+      r#"<table style="width: 100%; font-size: 12px; color: #141414">
+        <thead{thead_style}><tr><th>Name</th><th>Qty</th></tr></thead>
+        <tbody>{rows}</tbody>
+      </table>"#
+    );
+
+    render(
+      PdfOptions::builder()
+        .node(from_html(&html, FromHtmlOptions::default()).expect("parse table"))
+        .page(PageOptions {
+          width: 400.0,
+          height: 300.0,
+          margin: PageMargins::uniform(24.0),
+        })
+        .tagged(Tagging::Off)
+        .fonts(&fonts)
+        .build(),
+    )
+    .expect("render table")
+  };
+  let repeating = table("");
+  // A `table-row-group` header is not a header group, so nothing repeats.
+  let plain = table(r#" style="display: table-row-group""#);
+  let pages = String::from_utf8_lossy(&repeating)
+    .matches("/Type/Page/")
+    .count();
+
+  assert!(pages > 1, "the table did not paginate");
+  assert_eq!(
+    text_show_operators(&repeating),
+    text_show_operators(&plain) + 2 * (pages - 1),
+    "each continuation page repeats the two header cells"
+  );
+}
+
+/// The replay clips to the table, so content beside it in the header's band
+/// of the page stays on the page it belongs to.
+#[test]
+fn content_beside_a_table_does_not_replay_with_its_header() {
+  let fonts = fonts();
+  let table = |beside: &str| {
+    let rows: String = (1..=30)
+      .map(|i| format!("<tr><td>Item {i}</td><td>{}</td></tr>", i * 3))
+      .collect();
+    let html = format!(
+      r#"<div style="display: flex; font-size: 12px; color: #141414">
+        <table style="width: 280px">
+          <thead><tr><th>Name</th><th>Qty</th></tr></thead>
+          <tbody>{rows}</tbody>
+        </table>
+        {beside}
+      </div>"#
+    );
+
+    render(
+      PdfOptions::builder()
+        .node(from_html(&html, FromHtmlOptions::default()).expect("parse table"))
+        .page(PageOptions {
+          width: 400.0,
+          height: 300.0,
+          margin: PageMargins::uniform(24.0),
+        })
+        .tagged(Tagging::Off)
+        .fonts(&fonts)
+        .build(),
+    )
+    .expect("render table")
+  };
+  let with_sidebar = table("<div>Beside</div>");
+  let plain = table("");
+
+  assert_eq!(
+    text_show_operators(&with_sidebar),
+    text_show_operators(&plain) + 1,
+    "the sidebar replayed with the table header"
+  );
+}
+
+/// A header cell whose rowspan reaches into the body would replay body area
+/// with the band, so such a table does not repeat at all.
+#[test]
+fn a_header_rowspan_into_the_body_suppresses_repetition() {
+  let fonts = fonts();
+  let table = |thead_style: &str| {
+    let rows: String = (1..=30)
+      .map(|i| format!("<tr><td>Item {i}</td><td>{}</td></tr>", i * 3))
+      .collect();
+    let html = format!(
+      r#"<table style="width: 100%; font-size: 12px; color: #141414">
+        <thead{thead_style}><tr><th rowspan="2">Name</th><th>Qty</th></tr></thead>
+        <tbody>{rows}</tbody>
+      </table>"#
+    );
+
+    render(
+      PdfOptions::builder()
+        .node(from_html(&html, FromHtmlOptions::default()).expect("parse table"))
+        .page(PageOptions {
+          width: 400.0,
+          height: 300.0,
+          margin: PageMargins::uniform(24.0),
+        })
+        .tagged(Tagging::Off)
+        .fonts(&fonts)
+        .build(),
+    )
+    .expect("render table")
+  };
+
+  assert_eq!(
+    text_show_operators(&table("")),
+    text_show_operators(&table(r#" style="display: table-row-group""#)),
+    "a cross-group rowspan header still repeated"
+  );
+}
+
+/// A top caption sits between the table edge and the header rows; only the
+/// header rows repeat.
+#[test]
+fn a_top_caption_does_not_repeat_with_the_header() {
+  let fonts = fonts();
+  let table = |caption: &str| {
+    let rows: String = (1..=30)
+      .map(|i| format!("<tr><td>Item {i}</td><td>{}</td></tr>", i * 3))
+      .collect();
+    let html = format!(
+      r#"<table style="width: 100%; font-size: 12px; color: #141414">
+        {caption}
+        <thead><tr><th>Name</th><th>Qty</th></tr></thead>
+        <tbody>{rows}</tbody>
+      </table>"#
+    );
+
+    render(
+      PdfOptions::builder()
+        .node(from_html(&html, FromHtmlOptions::default()).expect("parse table"))
+        .page(PageOptions {
+          width: 400.0,
+          height: 300.0,
+          margin: PageMargins::uniform(24.0),
+        })
+        .tagged(Tagging::Off)
+        .fonts(&fonts)
+        .build(),
+    )
+    .expect("render table")
+  };
+  let with_caption = table("<caption>Inventory</caption>");
+  let plain = table("");
+
+  assert_eq!(
+    text_show_operators(&with_caption),
+    text_show_operators(&plain) + 1,
+    "the caption repeated with the header"
+  );
+}
+
+/// A replayed header is an artifact: the occurrence where the table begins
+/// carries the tags, and a second marked occurrence would double the reading
+/// order.
+#[test]
+fn a_repeated_table_header_replays_as_an_artifact() {
+  let rows: String = (1..=30)
+    .map(|i| format!("<tr><td>Item {i}</td><td>{}</td></tr>", i * 3))
+    .collect();
+  let html = format!(
+    r#"<table style="width: 100%; font-size: 12px; color: #141414">
+      <thead><tr><th>Name</th><th>Qty</th></tr></thead>
+      <tbody>{rows}</tbody>
+    </table>"#
+  );
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse table"))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .tagged(Tagging::On)
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect("render tagged table");
+
+  assert!(
+    inflated_text(&pdf).contains("/Artifact"),
+    "the replayed header is not marked as an artifact"
+  );
+}
+
 /// A footer narrow enough that three-digit counters wrap it to a second line.
 /// The band re-measures with the real page count, so the `auto` margin
 /// reserves one line, not a wrapped stand-in's two.

@@ -81,6 +81,7 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
     anonymous_text_content: None,
     marker: None,
     force_inline_layout: false,
+    table_header_lines: None,
   })
 }
 

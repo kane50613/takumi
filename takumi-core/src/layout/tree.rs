@@ -140,6 +140,9 @@ pub struct RenderNode {
   /// Generated marker box, emitted before this box's own inline content.
   pub(crate) marker: Option<Box<RenderNode>>,
   pub(crate) force_inline_layout: bool,
+  /// Grid lines a lowered table's header rows cover, as `[start, end)`, for
+  /// paged output to repeat per css-tables-3 §repeated-headers.
+  pub table_header_lines: Option<(i16, i16)>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -987,6 +990,7 @@ impl RenderNode {
       anonymous_text_content: Some(text),
       marker: None,
       force_inline_layout: true,
+      table_header_lines: None,
     }
   }
 
@@ -1003,6 +1007,7 @@ impl RenderNode {
       anonymous_text_content: None,
       marker: None,
       force_inline_layout: false,
+      table_header_lines: None,
     }
   }
 
@@ -1030,6 +1035,7 @@ impl RenderNode {
         anonymous_text_content: None,
         marker: None,
         force_inline_layout: false,
+        table_header_lines: None,
       },
       gradient => {
         let mut context = Self::anonymous_box_context(parent_context);
@@ -1051,6 +1057,7 @@ impl RenderNode {
           anonymous_text_content: None,
           marker: None,
           force_inline_layout: false,
+          table_header_lines: None,
         }
       }
     }
@@ -1142,6 +1149,7 @@ impl RenderNode {
       anonymous_text_content: None,
       marker: None,
       force_inline_layout: false,
+      table_header_lines: None,
     })
   }
 
@@ -1501,6 +1509,7 @@ impl RenderNode {
           anonymous_text_content: None,
           marker: None,
           force_inline_layout: false,
+          table_header_lines: None,
         };
       };
 
@@ -1527,6 +1536,7 @@ impl RenderNode {
           anonymous_text_content: None,
           marker: None,
           force_inline_layout: false,
+          table_header_lines: None,
         };
       };
 
@@ -1568,6 +1578,7 @@ impl RenderNode {
             anonymous_text_content: None,
             marker: None,
             force_inline_layout: false,
+            table_header_lines: None,
           }
         } else {
           // Blink's Text::TextLayoutObjectIsNeeded: collapsible
@@ -1614,6 +1625,7 @@ impl RenderNode {
               anonymous_text_content: None,
               marker: None,
               force_inline_layout: false,
+              table_header_lines: None,
             }
           } else {
             let mut final_children = Vec::new();
@@ -1643,6 +1655,7 @@ impl RenderNode {
               anonymous_text_content: None,
               marker: None,
               force_inline_layout: false,
+              table_header_lines: None,
             }
           }
         }
@@ -1672,6 +1685,7 @@ impl RenderNode {
             anonymous_text_content: None,
             marker: None,
             force_inline_layout: false,
+            table_header_lines: None,
           }
         } else {
           RenderNode {
@@ -1685,6 +1699,7 @@ impl RenderNode {
             anonymous_text_content: None,
             marker: None,
             force_inline_layout: false,
+            table_header_lines: None,
           }
         }
       };
