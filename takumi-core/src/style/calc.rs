@@ -94,34 +94,156 @@ pub struct CalcFormula {
   pub(crate) pc: f32,
 }
 
-impl CalcFormula {
-  /// Hashes every coefficient by bit pattern. Keep in sync with the fields
-  /// above.
+/// A `calc(...)` unit with a non-zero coefficient.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum CalcUnit {
+  #[default]
+  Px,
+  Percent,
+  Rem,
+  Em,
+  Lh,
+  Rlh,
+  Vh,
+  Vw,
+  Cqh,
+  Cqw,
+  CqMin,
+  CqMax,
+  VMin,
+  VMax,
+  Cm,
+  Mm,
+  Inch,
+  Q,
+  Pt,
+  Pc,
+}
+
+impl CalcUnit {
+  pub(crate) fn suffix(self) -> &'static str {
+    match self {
+      Self::Px => "px",
+      Self::Percent => "%",
+      Self::Rem => "rem",
+      Self::Em => "em",
+      Self::Lh => "lh",
+      Self::Rlh => "rlh",
+      Self::Vh => "vh",
+      Self::Vw => "vw",
+      Self::Cqh => "cqh",
+      Self::Cqw => "cqw",
+      Self::CqMin => "cqmin",
+      Self::CqMax => "cqmax",
+      Self::VMin => "vmin",
+      Self::VMax => "vmax",
+      Self::Cm => "cm",
+      Self::Mm => "mm",
+      Self::Inch => "in",
+      Self::Q => "q",
+      Self::Pt => "pt",
+      Self::Pc => "pc",
+    }
+  }
+}
+
+/// One `value * unit` term of a compressed `calc(...)` expression.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct CalcTerm {
+  pub(crate) unit: CalcUnit,
+  pub(crate) value: f32,
+}
+
+impl CalcTerm {
+  /// The value as CSS serializes it: percentages store a fraction.
+  pub(crate) fn display_value(self) -> f32 {
+    match self.unit {
+      CalcUnit::Percent => self.value * 100.0,
+      _ => self.value,
+    }
+  }
+}
+
+/// A parsed `calc(...)` expression, compressed to its non-zero terms so it
+/// stays inline in `Length`. Naive versus CSS: an expression mixing more than
+/// [`MAX_CALC_TERMS`] distinct units fails to parse.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct CalcTerms {
+  units: [CalcUnit; MAX_CALC_TERMS],
+  values: [f32; MAX_CALC_TERMS],
+}
+
+/// Distinct units one compressed `calc(...)` expression can carry.
+pub(crate) const MAX_CALC_TERMS: usize = 4;
+
+impl CalcTerms {
+  /// The stored terms; trailing zero-valued slots are padding.
+  pub(crate) fn terms(&self) -> impl Iterator<Item = CalcTerm> {
+    self
+      .units
+      .into_iter()
+      .zip(self.values)
+      .filter(|(_, value)| *value != 0.0)
+      .map(|(unit, value)| CalcTerm { unit, value })
+  }
+
+  pub(crate) fn neg(self) -> Self {
+    Self {
+      units: self.units,
+      values: self.values.map(|value| -value),
+    }
+  }
+
+  /// Collapses the terms into a `px + percent * basis` linear form.
+  pub fn resolve(self, sizing: &SizingContext) -> CalcLinear {
+    let viewport_width = sizing.viewport.size.width.unwrap_or_default() as f32;
+    let viewport_height = sizing.viewport.size.height.unwrap_or_default() as f32;
+    let container_width = sizing.query_container_width();
+    let container_height = sizing.query_container_height();
+    let mut absolute_css = 0.0;
+    let mut px = 0.0;
+    let mut percent = 0.0;
+
+    for (unit, value) in self.units.into_iter().zip(self.values) {
+      match unit {
+        // Absolute units are authored in CSS px and cross the dpr boundary
+        // once; every relative unit already resolves against a device-pixel
+        // basis.
+        CalcUnit::Px => absolute_css += value,
+        CalcUnit::Cm => absolute_css += value * ONE_CM_IN_PX,
+        CalcUnit::Mm => absolute_css += value * ONE_MM_IN_PX,
+        CalcUnit::Inch => absolute_css += value * ONE_IN_PX,
+        CalcUnit::Q => absolute_css += value * ONE_Q_IN_PX,
+        CalcUnit::Pt => absolute_css += value * ONE_PT_IN_PX,
+        CalcUnit::Pc => absolute_css += value * ONE_PC_IN_PX,
+        CalcUnit::Percent => percent += value,
+        CalcUnit::Rem => px += value * sizing.rem_basis(),
+        CalcUnit::Em => px += value * sizing.font_size,
+        CalcUnit::Lh => px += value * sizing.line_height,
+        CalcUnit::Rlh => px += value * sizing.root_line_height_basis(),
+        CalcUnit::Vh => px += value * viewport_height / 100.0,
+        CalcUnit::Vw => px += value * viewport_width / 100.0,
+        CalcUnit::Cqh => px += value * container_height / 100.0,
+        CalcUnit::Cqw => px += value * container_width / 100.0,
+        CalcUnit::CqMin => px += value * container_width.min(container_height) / 100.0,
+        CalcUnit::CqMax => px += value * container_width.max(container_height) / 100.0,
+        CalcUnit::VMin => px += value * viewport_width.min(viewport_height) / 100.0,
+        CalcUnit::VMax => px += value * viewport_width.max(viewport_height) / 100.0,
+      }
+    }
+
+    CalcLinear {
+      px: sizing.to_device(absolute_css) + px,
+      percent,
+    }
+  }
+
+  /// Hashes each term's unit and value by bit pattern.
   pub(crate) fn hash_bits(&self, hasher: &mut impl core::hash::Hasher) {
     use core::hash::Hash;
 
-    for value in [
-      self.px,
-      self.percent,
-      self.rem,
-      self.em,
-      self.lh,
-      self.rlh,
-      self.vh,
-      self.vw,
-      self.cqh,
-      self.cqw,
-      self.cqmin,
-      self.cqmax,
-      self.vmin,
-      self.vmax,
-      self.cm,
-      self.mm,
-      self.inch,
-      self.q,
-      self.pt,
-      self.pc,
-    ] {
+    for (unit, value) in self.units.into_iter().zip(self.values) {
+      (unit as u8).hash(hasher);
       value.to_bits().hash(hasher);
     }
   }
@@ -192,43 +314,46 @@ impl CalcFormula {
 }
 
 impl CalcFormula {
-  /// Collapses the symbolic formula into a `px + percent * basis` linear form.
-  pub fn resolve(self, sizing: &SizingContext) -> CalcLinear {
-    let viewport_width = sizing.viewport.size.width.unwrap_or_default() as f32;
-    let viewport_height = sizing.viewport.size.height.unwrap_or_default() as f32;
-    let viewport_min = viewport_width.min(viewport_height);
-    let viewport_max = viewport_width.max(viewport_height);
-    let container_width = sizing.query_container_width();
-    let container_height = sizing.query_container_height();
-    let container_min = container_width.min(container_height);
-    let container_max = container_width.max(container_height);
+  /// Compresses to the non-zero terms, or `None` when more than
+  /// [`MAX_CALC_TERMS`] distinct units appear.
+  pub(crate) fn compress(self) -> Option<CalcTerms> {
+    let coefficients = [
+      (CalcUnit::Px, self.px),
+      (CalcUnit::Percent, self.percent),
+      (CalcUnit::Rem, self.rem),
+      (CalcUnit::Em, self.em),
+      (CalcUnit::Lh, self.lh),
+      (CalcUnit::Rlh, self.rlh),
+      (CalcUnit::Vh, self.vh),
+      (CalcUnit::Vw, self.vw),
+      (CalcUnit::Cqh, self.cqh),
+      (CalcUnit::Cqw, self.cqw),
+      (CalcUnit::CqMin, self.cqmin),
+      (CalcUnit::CqMax, self.cqmax),
+      (CalcUnit::VMin, self.vmin),
+      (CalcUnit::VMax, self.vmax),
+      (CalcUnit::Cm, self.cm),
+      (CalcUnit::Mm, self.mm),
+      (CalcUnit::Inch, self.inch),
+      (CalcUnit::Q, self.q),
+      (CalcUnit::Pt, self.pt),
+      (CalcUnit::Pc, self.pc),
+    ];
+    let mut terms = CalcTerms::default();
+    let mut count = 0;
 
-    // Absolute units are authored in CSS px and cross the dpr boundary once;
-    // every relative unit already resolves against a device-pixel basis.
-    let absolute_css = self.px
-      + self.cm * ONE_CM_IN_PX
-      + self.mm * ONE_MM_IN_PX
-      + self.inch * ONE_IN_PX
-      + self.q * ONE_Q_IN_PX
-      + self.pt * ONE_PT_IN_PX
-      + self.pc * ONE_PC_IN_PX;
-
-    CalcLinear {
-      px: sizing.to_device(absolute_css)
-        + self.rem * sizing.rem_basis()
-        + self.em * sizing.font_size
-        + self.lh * sizing.line_height
-        + self.rlh * sizing.root_line_height_basis()
-        + self.vh * viewport_height / 100.0
-        + self.vw * viewport_width / 100.0
-        + self.cqh * container_height / 100.0
-        + self.cqw * container_width / 100.0
-        + self.cqmin * container_min / 100.0
-        + self.cqmax * container_max / 100.0
-        + self.vmin * viewport_min / 100.0
-        + self.vmax * viewport_max / 100.0,
-      percent: self.percent,
+    for (unit, value) in coefficients {
+      if value == 0.0 {
+        continue;
+      }
+      if count == MAX_CALC_TERMS {
+        return None;
+      }
+      terms.units[count] = unit;
+      terms.values[count] = value;
+      count += 1;
     }
+    Some(terms)
   }
 }
 

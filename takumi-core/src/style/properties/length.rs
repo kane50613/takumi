@@ -6,7 +6,7 @@ use taffy::{CompactLength, Dimension, LengthPercentage, LengthPercentageAuto};
 use crate::style::{
   AspectRatio, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
   SizingContext, ToCss,
-  calc::{CalcFormula, CalcLinear, CalcValue, parse_calc_sum},
+  calc::{CalcLinear, CalcTerms, CalcValue, parse_calc_sum},
   tw::{TW_VAR_SPACING, TailwindPropertyParser},
   unexpected_token,
 };
@@ -138,7 +138,7 @@ pub enum Length {
   /// Specific pixel value
   Px(f32),
   /// calc(...) expression
-  Calc(CalcFormula),
+  Calc(CalcTerms),
 }
 
 impl Length {
@@ -257,44 +257,22 @@ impl ToCss for Length {
       Self::Pc(v) => write!(dest, "{}pc", v),
       Self::Px(v) => write!(dest, "{}px", v),
       Self::Calc(f) => {
-        let terms: &[(&str, f32)] = &[
-          ("px", f.px),
-          ("%", f.percent * 100.0),
-          ("rem", f.rem),
-          ("em", f.em),
-          ("lh", f.lh),
-          ("rlh", f.rlh),
-          ("vh", f.vh),
-          ("vw", f.vw),
-          ("cqh", f.cqh),
-          ("cqw", f.cqw),
-          ("cqmin", f.cqmin),
-          ("cqmax", f.cqmax),
-          ("vmin", f.vmin),
-          ("vmax", f.vmax),
-          ("cm", f.cm),
-          ("mm", f.mm),
-          ("in", f.inch),
-          ("q", f.q),
-          ("pt", f.pt),
-          ("pc", f.pc),
-        ];
-        if terms.iter().all(|(_, v)| *v == 0.0) {
+        if f.terms().next().is_none() {
           return dest.write_str("0px");
         }
         dest.write_str("calc(")?;
         let mut first = true;
-        for (unit, value) in terms {
-          if *value == 0.0 {
-            continue;
-          }
+        for (unit, value) in f
+          .terms()
+          .map(|term| (term.unit.suffix(), term.display_value()))
+        {
           if first {
-            if *value < 0.0 {
+            if value < 0.0 {
               write!(dest, "-{}{}", -value, unit)?;
             } else {
               write!(dest, "{}{}", value, unit)?;
             }
-          } else if *value < 0.0 {
+          } else if value < 0.0 {
             write!(dest, " - {}{}", -value, unit)?;
           } else {
             write!(dest, " + {}{}", value, unit)?;
@@ -375,9 +353,14 @@ impl<'i> FromCss<'i> for Length {
         _ => Err(unexpected_token!(location, token)),
       },
       Token::Function(function) if function.eq_ignore_ascii_case("calc") => {
+        let token = token.clone();
+
         match input.parse_nested_block(parse_calc_sum)? {
           CalcValue::Number(value) => Ok(Self::Px(value)),
-          CalcValue::Formula(formula) => Ok(Self::Calc(formula)),
+          CalcValue::Formula(formula) => formula
+            .compress()
+            .map(Self::Calc)
+            .ok_or_else(|| unexpected_token!(location, &token)),
         }
       }
       Token::Dimension { value, unit, .. } => length_from_dimension_unit(unit.as_ref(), *value)
@@ -570,7 +553,11 @@ mod tests {
   use std::{assert_matches, rc::Rc};
 
   use super::*;
-  use crate::{geometry::Size, style::calc::CalcArena, viewport::Viewport};
+  use crate::{
+    geometry::Size,
+    style::calc::{CalcArena, CalcFormula},
+    viewport::Viewport,
+  };
 
   fn sizing() -> SizingContext {
     SizingContext {
@@ -594,14 +581,23 @@ mod tests {
   }
 
   #[test]
+  fn parse_calc_more_than_four_units_fails() {
+    assert!(Length::from_css_str("calc(1px + 1em + 1rem + 1vh + 1vw)").is_err());
+  }
+
+  #[test]
   fn parse_calc_mixed_returns_formula() {
     assert_eq!(
       Length::from_css_str("calc(100% - 12px)"),
-      Ok(Length::Calc(CalcFormula {
-        percent: 1.0,
-        px: -12.0,
-        ..Default::default()
-      }))
+      Ok(Length::Calc(
+        CalcFormula {
+          percent: 1.0,
+          px: -12.0,
+          ..Default::default()
+        }
+        .compress()
+        .unwrap()
+      ))
     );
   }
 
@@ -625,11 +621,15 @@ mod tests {
 
   #[test]
   fn negative_calc_keeps_value_sign_consistent() {
-    let value: Length = Length::Calc(CalcFormula {
-      percent: 0.5,
-      px: 10.0,
-      ..Default::default()
-    });
+    let value: Length = Length::Calc(
+      CalcFormula {
+        percent: 0.5,
+        px: 10.0,
+        ..Default::default()
+      }
+      .compress()
+      .unwrap(),
+    );
     let negated = -value;
     let sizing = sizing();
     assert_near(value.to_px(&sizing, 200.0), 120.0);
@@ -638,22 +638,30 @@ mod tests {
 
   #[test]
   fn make_computed_collapses_formula_without_percent_to_px() {
-    let mut value: Length = Length::Calc(CalcFormula {
-      rem: 1.0,
-      px: 5.0,
-      ..Default::default()
-    });
+    let mut value: Length = Length::Calc(
+      CalcFormula {
+        rem: 1.0,
+        px: 5.0,
+        ..Default::default()
+      }
+      .compress()
+      .unwrap(),
+    );
     value.make_computed(&sizing());
     assert_eq!(value, Length::Px(21.0));
   }
 
   #[test]
   fn make_computed_collapsed_px_applies_dpr_only_once_in_to_px() {
-    let mut value: Length = Length::Calc(CalcFormula {
-      rem: 1.0,
-      px: 5.0,
-      ..Default::default()
-    });
+    let mut value: Length = Length::Calc(
+      CalcFormula {
+        rem: 1.0,
+        px: 5.0,
+        ..Default::default()
+      }
+      .compress()
+      .unwrap(),
+    );
     let sizing = sizing();
     value.make_computed(&sizing);
 
@@ -663,39 +671,55 @@ mod tests {
 
   #[test]
   fn make_computed_collapses_formula_with_only_percent_to_percentage() {
-    let mut value: Length = Length::Calc(CalcFormula {
-      percent: 0.5,
-      ..Default::default()
-    });
+    let mut value: Length = Length::Calc(
+      CalcFormula {
+        percent: 0.5,
+        ..Default::default()
+      }
+      .compress()
+      .unwrap(),
+    );
     value.make_computed(&sizing());
     assert_eq!(value, Length::Percentage(50.0));
   }
 
   #[test]
   fn make_computed_keeps_mixed_formula_as_calc() {
-    let mut value: Length = Length::Calc(CalcFormula {
-      percent: 0.5,
-      px: 10.0,
-      ..Default::default()
-    });
-    value.make_computed(&sizing());
-    assert_eq!(
-      value,
-      Length::Calc(CalcFormula {
+    let mut value: Length = Length::Calc(
+      CalcFormula {
         percent: 0.5,
         px: 10.0,
         ..Default::default()
-      })
+      }
+      .compress()
+      .unwrap(),
+    );
+    value.make_computed(&sizing());
+    assert_eq!(
+      value,
+      Length::Calc(
+        CalcFormula {
+          percent: 0.5,
+          px: 10.0,
+          ..Default::default()
+        }
+        .compress()
+        .unwrap()
+      )
     );
   }
 
   #[test]
   fn compact_length_calc_pointer_resolves_through_callback() {
-    let value: Length = Length::Calc(CalcFormula {
-      percent: 0.5,
-      px: 10.0,
-      ..Default::default()
-    });
+    let value: Length = Length::Calc(
+      CalcFormula {
+        percent: 0.5,
+        px: 10.0,
+        ..Default::default()
+      }
+      .compress()
+      .unwrap(),
+    );
     let sizing = sizing();
     let compact = value.to_compact_length(&sizing);
     assert!(compact.is_calc());
@@ -744,10 +768,14 @@ mod tests {
   #[test]
   fn calc_with_rem_does_not_double_apply_dpr_when_root_font_size_set() {
     let sizing = descendant_sizing();
-    let value: Length = Length::Calc(CalcFormula {
-      rem: 1.0,
-      ..Default::default()
-    });
+    let value: Length = Length::Calc(
+      CalcFormula {
+        rem: 1.0,
+        ..Default::default()
+      }
+      .compress()
+      .unwrap(),
+    );
     assert_near(value.to_px(&sizing, 0.0), 32.0);
   }
 
@@ -768,21 +796,29 @@ mod tests {
   #[test]
   fn calc_with_rem_and_px_does_not_double_apply_dpr_when_root_font_size_set() {
     let sizing = descendant_sizing();
-    let value: Length = Length::Calc(CalcFormula {
-      rem: 1.0,
-      px: 5.0,
-      ..Default::default()
-    });
+    let value: Length = Length::Calc(
+      CalcFormula {
+        rem: 1.0,
+        px: 5.0,
+        ..Default::default()
+      }
+      .compress()
+      .unwrap(),
+    );
     assert_near(value.to_px(&sizing, 0.0), 42.0);
   }
 
   #[test]
   fn make_computed_calc_with_rem_collapses_correctly_when_root_font_size_set() {
-    let mut value: Length = Length::Calc(CalcFormula {
-      rem: 1.0,
-      px: 5.0,
-      ..Default::default()
-    });
+    let mut value: Length = Length::Calc(
+      CalcFormula {
+        rem: 1.0,
+        px: 5.0,
+        ..Default::default()
+      }
+      .compress()
+      .unwrap(),
+    );
     let sizing = descendant_sizing();
     value.make_computed(&sizing);
     assert_eq!(value, Length::Px(21.0));
@@ -845,12 +881,16 @@ mod tests {
     let parsed = Length::from_css_str("calc(1lh + 2rlh - 3px)");
     assert_eq!(
       parsed,
-      Ok(Length::Calc(CalcFormula {
-        lh: 1.0,
-        rlh: 2.0,
-        px: -3.0,
-        ..Default::default()
-      }))
+      Ok(Length::Calc(
+        CalcFormula {
+          lh: 1.0,
+          rlh: 2.0,
+          px: -3.0,
+          ..Default::default()
+        }
+        .compress()
+        .unwrap()
+      ))
     );
   }
 
@@ -860,11 +900,15 @@ mod tests {
     let parsed = Length::from_css_str("calc(1lh + 2px)");
     assert_eq!(
       parsed,
-      Ok(Length::Calc(CalcFormula {
-        lh: 1.0,
-        px: 2.0,
-        ..Default::default()
-      }))
+      Ok(Length::Calc(
+        CalcFormula {
+          lh: 1.0,
+          px: 2.0,
+          ..Default::default()
+        }
+        .compress()
+        .unwrap()
+      ))
     );
     if let Ok(value) = parsed {
       assert_near(value.to_px(&sizing, 0.0), 34.0);
@@ -885,12 +929,16 @@ mod tests {
     let parsed = Length::from_css_str("calc(20cqmax + 5px - 2cqb)");
     assert_eq!(
       parsed,
-      Ok(Length::Calc(CalcFormula {
-        cqmax: 20.0,
-        cqh: -2.0,
-        px: 5.0,
-        ..Default::default()
-      }))
+      Ok(Length::Calc(
+        CalcFormula {
+          cqmax: 20.0,
+          cqh: -2.0,
+          px: 5.0,
+          ..Default::default()
+        }
+        .compress()
+        .unwrap()
+      ))
     );
   }
 
