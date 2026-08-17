@@ -78,6 +78,7 @@ const pdf = await render(report, {
 Headers and footers repeat on every page. `<PageNumber />` and `<TotalPages />` place the counters; the `format` prop picks a CSS counter style.
 
 ```tsx
+import { render } from "takumi-pdf";
 import { PageNumber, TotalPages } from "takumi-pdf/primitives";
 
 const pdf = await render(report, {
@@ -124,6 +125,7 @@ Pass a font URL, font bytes, or the `googleFonts` helper. Registered fonts are d
 
 ```tsx
 import { googleFonts } from "@takumi-rs/helpers";
+import { render } from "takumi-pdf";
 
 const pdf = await render(doc, {
   fonts: [...(await googleFonts(["Inter"])), { name: "Brand Sans", weight: 700, data: fontBytes }],
