@@ -111,8 +111,13 @@ test("page counter primitives fill per page and pull their counter face", async 
         props: {
           style: { display: "flex", fontSize: 12 },
           children: [
+            // Direct call and JSX element forms both resolve.
             PageNumber({ format: "trad-chinese-informal" }),
-            TotalPages({ format: "trad-chinese-informal" }),
+            {
+              $$typeof: Symbol.for("react.transitional.element"),
+              type: TotalPages,
+              props: { format: "trad-chinese-informal" },
+            },
           ],
         },
       },

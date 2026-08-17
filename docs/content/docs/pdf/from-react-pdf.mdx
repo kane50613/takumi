@@ -61,7 +61,7 @@ const pdf = await render(
 | `renderToBuffer`                        | `render()` returns a `Uint8Array`     |
 | `renderToStream`, `renderToFile`        | write the returned bytes yourself     |
 | a `fixed` header or footer `<View>`     | the `header` and `footer` options     |
-| `render={({ pageNumber, totalPages })}` | `pageNumber` and `totalPages` classes |
+| `render={({ pageNumber, totalPages })}` | `<PageNumber />` and `<TotalPages />` |
 | the `break` prop                        | `break-before: page`                  |
 | `wrap={false}`                          | `break-inside: avoid`                 |
 | `orphans`, `widows`                     | the same CSS properties               |
@@ -86,13 +86,13 @@ react-pdf repeats a band by marking a `<View>` as `fixed` inside the page. Takum
 import type { ReactNode } from "react";
 declare const report: ReactNode;
 // ---cut---
-import { render } from "takumi-pdf";
+import { PageNumber, TotalPages, render } from "takumi-pdf";
 
 const pdf = await render(report, {
   // [!code highlight]
   footer: (
     <div tw="flex w-full justify-center text-[10px] text-gray-500">
-      Page <span className="pageNumber" /> of <span className="totalPages" />
+      Page <PageNumber /> of <TotalPages />
     </div>
   ),
   margin: { top: 48, bottom: 72 },

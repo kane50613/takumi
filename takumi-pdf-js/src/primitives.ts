@@ -1,4 +1,4 @@
-import type { ReactElementLike } from "@takumi-rs/helpers";
+import type { ReactElement } from "react";
 
 /**
  * A `@counter-style` name the page counters can format in, matching the set
@@ -52,39 +52,45 @@ export type CounterProps = {
 // routes them through `fromJsx` instead of reading them as takumi nodes.
 const ELEMENT = Symbol.for("react.transitional.element");
 
-function counter(hook: string, { format, className, ...rest }: CounterProps): ReactElementLike {
-  return {
-    $$typeof: ELEMENT,
-    type: "span",
-    props: {
-      ...rest,
-      className: [hook, format, className].filter(Boolean).join(" "),
-    },
-  };
+function counter(hook: string, { format, className, ...rest }: CounterProps): ReactElement {
+  return element("span", {
+    ...rest,
+    className: [hook, format, className].filter(Boolean).join(" "),
+  });
+}
+
+function element(type: string, props: Record<string, unknown>): ReactElement {
+  // `$$typeof` joins after construction: the base object matches
+  // `ReactElement` structurally, and the marker routes it through `fromJsx`.
+  return Object.assign({ type, props, key: null }, { $$typeof: ELEMENT });
 }
 
 /**
  * The number of the page this element lands on. Meaningful inside a `header`
  * or `footer` band (or a `position: fixed` box), where it renumbers per page.
  */
-export function PageNumber(props: CounterProps = {}): ReactElementLike {
+export function PageNumber(props: CounterProps = {}): ReactElement {
   return counter("pageNumber", props);
 }
 
 /** The document's total page count. Same placement rules as {@link PageNumber}. */
-export function TotalPages(props: CounterProps = {}): ReactElementLike {
+export function TotalPages(props: CounterProps = {}): ReactElement {
   return counter("totalPages", props);
 }
 
 /**
- * The number of the page `href`'s target element lands on, for cross
- * references like "see page 12". Rendered as a link to the target.
+ * The number of the page a link's target element lands on, for cross
+ * references like "see page 12" and tables of contents. Without `href` it
+ * reads the nearest enclosing `<a>`; with one it renders its own link.
  */
 export function TargetPageNumber({
   href,
   ...props
-}: CounterProps & { href: string }): ReactElementLike {
+}: CounterProps & { href?: string }): ReactElement {
   const span = counter("targetPageNumber", props);
 
-  return { $$typeof: ELEMENT, type: "a", props: { href, children: span } };
+  if (href === undefined) {
+    return span;
+  }
+  return element("a", { href, children: span });
 }

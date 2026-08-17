@@ -6,6 +6,7 @@ const exportOutputs = ["export.mjs", "export.cjs"];
 export default defineConfig({
   entry: {
     export: "src/export.ts",
+    primitives: "src/primitives.ts",
   },
   format: ["esm", "cjs"],
   dts: true,

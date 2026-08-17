@@ -28,7 +28,7 @@ import type { ReactNode } from "react";
 declare const data: { total: number };
 declare function Invoice(props: { data: typeof data }): ReactNode;
 // ---cut---
-import { render } from "takumi-pdf";
+import { PageNumber, TotalPages, render } from "takumi-pdf";
 import { googleFonts } from "@takumi-rs/helpers";
 import { writeFile } from "node:fs/promises";
 
@@ -39,7 +39,7 @@ const pdf = await render(<Invoice data={data} />, {
   fonts: await googleFonts(["Inter"]),
   footer: (
     <div tw="flex w-full justify-center text-[10px] text-gray-500">
-      Page <span className="pageNumber" /> of <span className="totalPages" />
+      Page <PageNumber /> of <TotalPages />
     </div>
   ),
 });

@@ -98,6 +98,16 @@
       "types": "./bundlers/node.d.ts",
       "default": "./bundlers/next.mjs"
     },
+    "./primitives": {
+      "import": {
+        "types": "./dist/primitives.d.mts",
+        "default": "./dist/primitives.mjs"
+      },
+      "require": {
+        "types": "./dist/primitives.d.cts",
+        "default": "./dist/primitives.cjs"
+      }
+    },
     "./no-init": {
       "import": {
         "types": "./dist/export.d.mts",

@@ -1,3 +1,5 @@
+import { PageNumber, TotalPages } from "takumi-pdf";
+
 const sections = [
   {
     title: "Summary",
@@ -90,8 +92,8 @@ export const options: PlaygroundOptions = {
           匠 Werkstatt · Kawagoe, Saitama · werkstatt.example
         </span>
         <span tw="mt-1 text-[10px] text-[#9ca3af]">
-          第 <span className="pageNumber trad-chinese-informal" /> 頁,共{" "}
-          <span className="totalPages trad-chinese-informal" /> 頁
+          第 <PageNumber format="trad-chinese-informal" /> 頁,共{" "}
+          <TotalPages format="trad-chinese-informal" /> 頁
         </span>
       </div>
     ),
