@@ -93,3 +93,34 @@ fn test_style_justify_content() {
 
   run_fixture_test(container, "style_justify_content");
 }
+
+#[test]
+fn test_style_flex_order() {
+  let item = |order: i32, color: Color| {
+    Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::width(Px(50.0)))
+        .with(StyleDeclaration::height(Px(50.0)))
+        .with(StyleDeclaration::order(Order(order)))
+        .with(StyleDeclaration::background_color(ColorInput::Value(color))),
+    )
+  };
+
+  let container = Node::container([
+    item(2, Color([255, 0, 0, 255])),
+    item(-1, Color([0, 255, 0, 255])),
+    item(0, Color([255, 255, 0, 255])),
+  ])
+  .with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color([0, 0, 255, 255]),
+      ))),
+  );
+
+  run_fixture_test(container, "style_flex_order");
+}

@@ -1,4 +1,6 @@
-use std::{borrow::Cow, collections::HashMap, mem::take, sync::Arc, vec::IntoIter};
+use std::{
+  borrow::Cow, collections::HashMap, iter::Copied, mem::take, slice, sync::Arc, vec::IntoIter,
+};
 
 use parley::fontique::Attributes;
 use taffy::{
@@ -419,6 +421,17 @@ fn push_layout_node<'r>(
       taffy_children.extend(extra);
     }
     let idx: usize = fid.into();
+    if matches!(
+      nodes[idx].style.display,
+      TaffyDisplay::Flex | TaffyDisplay::Grid
+    ) {
+      sort_children_by_order(&mut taffy_children, |child_id| {
+        let child_idx: usize = child_id.into();
+        render_nodes
+          .get(child_idx)
+          .map_or(0, |child| child.context.style.order.0)
+      });
+    }
     nodes[idx].children = taffy_children.into_boxed_slice();
     nodes[idx].box_children = finished.box_children.into_boxed_slice();
 
@@ -598,47 +611,30 @@ fn should_strip_flex_intrinsic_stretch_known_dimension(
   }
 }
 
+/// Stable-sorts flex/grid children by `order`, keeping source order for ties.
 fn sort_children_by_order(
-  children: &[TaffyNodeId],
+  children: &mut [TaffyNodeId],
   mut child_order: impl FnMut(TaffyNodeId) -> i32,
-) -> Vec<TaffyNodeId> {
-  let mut ordered = children
-    .iter()
-    .copied()
-    .enumerate()
-    .map(|(source_index, child_id)| (source_index, child_id, child_order(child_id)))
-    .collect::<Vec<_>>();
-  ordered.sort_by(|left, right| left.2.cmp(&right.2).then_with(|| left.0.cmp(&right.0)));
-  ordered
-    .into_iter()
-    .map(|(_, child_id, _)| child_id)
-    .collect()
+) {
+  if children.iter().all(|&child_id| child_order(child_id) == 0) {
+    return;
+  }
+
+  children.sort_by_key(|&child_id| child_order(child_id));
 }
 
 impl TraversePartialTree for LayoutTree<'_> {
   type ChildIter<'a>
-    = IntoIter<TaffyNodeId>
+    = Copied<slice::Iter<'a, TaffyNodeId>>
   where
     Self: 'a;
 
   fn child_ids(&self, parent_node_id: TaffyNodeId) -> Self::ChildIter<'_> {
     let Some(node) = self.get_layout_node_ref(parent_node_id) else {
-      return Vec::new().into_iter();
+      return [].iter().copied();
     };
 
-    let children = if matches!(node.style.display, TaffyDisplay::Flex | TaffyDisplay::Grid) {
-      sort_children_by_order(&node.children, |child_id| {
-        let child_idx: usize = child_id.into();
-        self
-          .render_nodes
-          .get(child_idx)
-          .map_or(0, |child| child.context.style.order.0)
-      })
-    } else {
-      node.children.to_vec()
-    };
-
-    children.into_iter()
+    node.children.iter().copied()
   }
 
   fn child_count(&self, parent_node_id: TaffyNodeId) -> usize {
@@ -653,13 +649,6 @@ impl TraversePartialTree for LayoutTree<'_> {
     let Some(node) = self.get_layout_node_ref(parent_node_id) else {
       return TaffyNodeId::from(0usize);
     };
-
-    if matches!(node.style.display, TaffyDisplay::Flex | TaffyDisplay::Grid) {
-      let mut ordered_children = self.child_ids(parent_node_id);
-      return ordered_children
-        .nth(child_index)
-        .unwrap_or_else(|| TaffyNodeId::from(0usize));
-    }
 
     node.children[child_index]
   }
@@ -2231,17 +2220,17 @@ mod tests {
 
   #[test]
   fn sort_children_by_order_keeps_source_order_for_equal_values() {
-    let children = vec![
+    let mut children = vec![
       TaffyNodeId::from(3usize),
       TaffyNodeId::from(1usize),
       TaffyNodeId::from(2usize),
     ];
-    let sorted = sort_children_by_order(&children, |child_id| match usize::from(child_id) {
+    sort_children_by_order(&mut children, |child_id| match usize::from(child_id) {
       1 => -1,
       _ => 0,
     });
     assert_eq!(
-      sorted,
+      children,
       vec![
         TaffyNodeId::from(1usize),
         TaffyNodeId::from(3usize),
