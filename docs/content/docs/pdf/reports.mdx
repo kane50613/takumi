@@ -55,7 +55,7 @@ A table of contents is the same chapters as links, with the page each one starts
 ```tsx twoslash
 declare const chapters: { id: string; title: string }[];
 // ---cut---
-import { TargetPageNumber } from "takumi-pdf";
+import { TargetPageNumber } from "takumi-pdf/primitives";
 
 <nav tw="flex flex-col gap-1 text-sm">
   {chapters.map((chapter) => (
@@ -79,7 +79,8 @@ A report header usually names the document and the period. A footer usually carr
 import type { ReactNode } from "react";
 declare const report: ReactNode;
 // ---cut---
-import { PageNumber, TotalPages, render } from "takumi-pdf";
+import { render } from "takumi-pdf";
+import { PageNumber, TotalPages } from "takumi-pdf/primitives";
 
 const pdf = await render(report, {
   // [!code highlight]

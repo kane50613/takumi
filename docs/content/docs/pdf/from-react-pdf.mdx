@@ -86,7 +86,8 @@ react-pdf repeats a band by marking a `<View>` as `fixed` inside the page. Takum
 import type { ReactNode } from "react";
 declare const report: ReactNode;
 // ---cut---
-import { PageNumber, TotalPages, render } from "takumi-pdf";
+import { render } from "takumi-pdf";
+import { PageNumber, TotalPages } from "takumi-pdf/primitives";
 
 const pdf = await render(report, {
   // [!code highlight]

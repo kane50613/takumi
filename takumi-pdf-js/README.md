@@ -30,7 +30,8 @@ bun add takumi-pdf
 ```tsx
 import { writeFile } from "node:fs/promises";
 import { googleFonts } from "@takumi-rs/helpers";
-import { PageNumber, TotalPages, render } from "takumi-pdf";
+import { render } from "takumi-pdf";
+import { PageNumber, TotalPages } from "takumi-pdf/primitives";
 
 const pdf = await render(
   <main tw="flex flex-col gap-4">
@@ -77,7 +78,7 @@ const pdf = await render(report, {
 Headers and footers repeat on every page. `<PageNumber />` and `<TotalPages />` place the counters; the `format` prop picks a CSS counter style.
 
 ```tsx
-import { PageNumber, TotalPages } from "takumi-pdf";
+import { PageNumber, TotalPages } from "takumi-pdf/primitives";
 
 const pdf = await render(report, {
   footer: (

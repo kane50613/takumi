@@ -10,7 +10,8 @@ icon: PanelTop
 import type { ReactNode } from "react";
 declare const report: ReactNode;
 // ---cut---
-import { PageNumber, TotalPages, render } from "takumi-pdf";
+import { render } from "takumi-pdf";
+import { PageNumber, TotalPages } from "takumi-pdf/primitives";
 
 const pdf = await render(report, {
   // [!code highlight]
@@ -31,7 +32,8 @@ A band draws in the page margin, so the margin has to be tall enough to hold it.
 import type { ReactNode } from "react";
 declare const report: ReactNode;
 // ---cut---
-import { PageNumber, TotalPages, render } from "takumi-pdf";
+import { render } from "takumi-pdf";
+import { PageNumber, TotalPages } from "takumi-pdf/primitives";
 
 const pdf = await render(report, {
   footer: (
@@ -101,7 +103,8 @@ The `format` prop names a CSS `@counter-style` and formats the number. On a clas
 import type { ReactNode } from "react";
 declare const report: ReactNode;
 // ---cut---
-import { PageNumber, TotalPages, render } from "takumi-pdf";
+import { render } from "takumi-pdf";
+import { PageNumber, TotalPages } from "takumi-pdf/primitives";
 
 const pdf = await render(report, {
   footer: (

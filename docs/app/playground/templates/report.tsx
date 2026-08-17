@@ -1,4 +1,4 @@
-import { PageNumber, TotalPages } from "takumi-pdf";
+import { PageNumber, TotalPages } from "takumi-pdf/primitives";
 
 const sections = [
   {
@@ -24,8 +24,11 @@ const sections = [
   },
 ];
 
-const weeks = Array.from({ length: 84 }, (_, index) => ({
-  week: `W${String(index + 1).padStart(2, "0")}`,
+const days = Array.from({ length: 90 }, (_, index) => ({
+  day: new Date(2026, 0, index + 1).toLocaleDateString("en-US", {
+    month: "short",
+    day: "2-digit",
+  }),
   median: 41 - (index % 13),
   p95: 96 - (index % 13) * 2,
   size: 78 - (index % 13) * 1.2,
@@ -52,21 +55,27 @@ export default function Report() {
         </div>
       ))}
 
-      <h2 tw="mt-8 mb-0 text-lg font-semibold">Weekly measurements</h2>
-      <div tw="mt-3 flex border-b border-[#e5e7eb] pb-2 text-[11px] font-semibold text-[#6b7280]">
-        <span tw="flex-1">Week</span>
-        <span tw="w-[110px] text-right">Median (ms)</span>
-        <span tw="w-[110px] text-right">p95 (ms)</span>
-        <span tw="w-[110px] text-right">Size (KB)</span>
-      </div>
-      {weeks.map((row) => (
-        <div key={row.week} tw="flex break-inside-avoid pt-2 text-xs">
-          <span tw="flex-1">{row.week}</span>
-          <span tw="w-[110px] text-right text-[#374151]">{row.median}</span>
-          <span tw="w-[110px] text-right text-[#374151]">{row.p95}</span>
-          <span tw="w-[110px] text-right text-[#374151]">{row.size.toFixed(1)}</span>
-        </div>
-      ))}
+      <h2 tw="mt-8 mb-0 text-lg font-semibold">Daily measurements</h2>
+      <table tw="mt-3 w-full text-xs">
+        <thead>
+          <tr tw="text-[11px] font-semibold text-[#6b7280]">
+            <th tw="border-b border-[#e5e7eb] pb-2 text-left">Day</th>
+            <th tw="w-[110px] border-b border-[#e5e7eb] pb-2 text-right">Median (ms)</th>
+            <th tw="w-[110px] border-b border-[#e5e7eb] pb-2 text-right">p95 (ms)</th>
+            <th tw="w-[110px] border-b border-[#e5e7eb] pb-2 text-right">Size (KB)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {days.map((row) => (
+            <tr key={row.day}>
+              <td tw="pt-2">{row.day}</td>
+              <td tw="pt-2 text-right text-[#374151]">{row.median}</td>
+              <td tw="pt-2 text-right text-[#374151]">{row.p95}</td>
+              <td tw="pt-2 text-right text-[#374151]">{row.size.toFixed(1)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

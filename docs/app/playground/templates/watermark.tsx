@@ -1,4 +1,4 @@
-import { PageNumber, TotalPages } from "takumi-pdf";
+import { PageNumber, TotalPages } from "takumi-pdf/primitives";
 
 const clauses = [
   {
