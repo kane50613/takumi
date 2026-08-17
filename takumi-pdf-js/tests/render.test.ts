@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "bun:test";
 import { container, text } from "@takumi-rs/helpers";
-import { PdfRenderer } from "../bundlers/node.mjs";
+import { PageNumber, PdfRenderer, TotalPages } from "../bundlers/node.mjs";
 
 const renderer = new PdfRenderer();
 
@@ -76,6 +76,51 @@ test("paginates and substitutes footer counters", async () => {
   });
 
   expect(pageCount(pdf)).toBeGreaterThan(1);
+});
+
+test("page counter primitives fill per page and pull their counter face", async () => {
+  let loaded = false;
+  const pdf = await renderer.render(
+    container({
+      style: { display: "flex", flexDirection: "column", width: "100%" },
+      children: Array.from({ length: 60 }, (_, i) => text(`Row ${i + 1}`, { fontSize: 16 })),
+    }),
+    {
+      size: { width: 400, height: 300 },
+      margin: 24,
+      fonts: [
+        {
+          name: "Primitive CJK",
+          ranges: [[0x4e00, 0x9fff]],
+          data: () => {
+            loaded = true;
+            return new Uint8Array(
+              readFileSync(
+                new URL(
+                  "../../assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2",
+                  import.meta.url,
+                ),
+              ),
+            );
+          },
+        },
+      ],
+      footer: {
+        $$typeof: Symbol.for("react.transitional.element"),
+        type: "div",
+        props: {
+          style: { display: "flex", fontSize: 12 },
+          children: [
+            PageNumber({ format: "trad-chinese-informal" }),
+            TotalPages({ format: "trad-chinese-informal" }),
+          ],
+        },
+      },
+    },
+  );
+
+  expect(pageCount(pdf)).toBeGreaterThan(1);
+  expect(loaded).toBeTrue();
 });
 
 test("keeps a face the page counter needs but the document never uses", async () => {
