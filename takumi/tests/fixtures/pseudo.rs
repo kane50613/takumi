@@ -1,7 +1,7 @@
 use takumi::prelude::*;
 
 use crate::test_utils::{
-  CONTEXT, TEST_IMAGES, attrs, create_test_viewport, run_fixture_test_with_options,
+  CONTEXT, TEST_IMAGES, attrs, create_test_viewport, run_fixture_test_with_css,
 };
 
 fn cell(class: &str, label: &str, seed: &str) -> Node {
@@ -90,18 +90,15 @@ fn test_pseudo_text_attr() {
 
   let root = Node::container(cells).with_class_name("root");
 
+  let css = format!("{SHARED_CSS}{pseudo_css}");
   let options = RenderOptions::builder()
     .viewport(create_test_viewport())
     .node(root)
     .fonts(&CONTEXT)
-    .stylesheet(
-      StyleSheet::parse(&format!("{SHARED_CSS}{pseudo_css}"))
-        .unwrap()
-        .into(),
-    )
+    .stylesheet(StyleSheet::parse(&css).unwrap().into())
     .build();
 
-  run_fixture_test_with_options(options, "pseudo_text_attr");
+  run_fixture_test_with_css(options, &css, "pseudo_text_attr");
 }
 
 #[test]
@@ -150,17 +147,14 @@ fn test_pseudo_display_image() {
 
   let root = Node::container(cells).with_class_name("root");
 
+  let css = format!("{SHARED_CSS}{pseudo_css}");
   let options = RenderOptions::builder()
     .viewport(create_test_viewport())
     .node(root)
     .fonts(&CONTEXT)
     .images(TEST_IMAGES.clone())
-    .stylesheet(
-      StyleSheet::parse(&format!("{SHARED_CSS}{pseudo_css}"))
-        .unwrap()
-        .into(),
-    )
+    .stylesheet(StyleSheet::parse(&css).unwrap().into())
     .build();
 
-  run_fixture_test_with_options(options, "pseudo_display_image");
+  run_fixture_test_with_css(options, &css, "pseudo_display_image");
 }

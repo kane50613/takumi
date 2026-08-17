@@ -161,6 +161,14 @@ pub fn run_fixture_test(node: Node, fixture_name: &str) {
 
 #[allow(dead_code)]
 pub fn run_fixture_test_with_options(options: RenderOptions<'_>, fixture_name: &str) {
+  run_fixture_test_with_css(options, "", fixture_name);
+}
+
+/// `css` is the raw stylesheet the render applies, embedded in the repro HTML
+/// so a browser shows the same page. `RenderOptions` only carries the parsed
+/// sheet, which cannot serialize back.
+#[allow(dead_code)]
+pub fn run_fixture_test_with_css(options: RenderOptions<'_>, css: &str, fixture_name: &str) {
   let viewport_width = options.viewport().size.width.unwrap_or(1200);
   let viewport_height = options.viewport().size.height.unwrap_or(630);
 
@@ -185,19 +193,24 @@ pub fn run_fixture_test_with_options(options: RenderOptions<'_>, fixture_name: &
     );
   }
 
+  let style_block = if css.is_empty() {
+    String::new()
+  } else {
+    format!("\n  <style>{css}</style>")
+  };
   let html_content = format!(
     r#"<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <title>{}</title>
-  <link rel="stylesheet" href="../shared.css">
+  <link rel="stylesheet" href="../shared.css">{}
 </head>
 <body style="width: {}px; height: {}px;">
   {}
 </body>
 </html>"#,
-    fixture_name, viewport_width, viewport_height, node_html
+    fixture_name, style_block, viewport_width, viewport_height, node_html
   );
 
   write(

@@ -1,6 +1,6 @@
 use takumi::prelude::*;
 
-use crate::test_utils::{CONTEXT, attrs, create_test_viewport, run_fixture_test_with_options};
+use crate::test_utils::{CONTEXT, attrs, create_test_viewport, run_fixture_test_with_css};
 
 fn item(text: &str) -> Node {
   Node::container([Node::text(text.to_string())]).with_class_name("item")
@@ -172,5 +172,5 @@ fn test_list_markers() {
     .stylesheet(StyleSheet::parse(CSS).unwrap().into())
     .build();
 
-  run_fixture_test_with_options(options, "list_markers");
+  run_fixture_test_with_css(options, CSS, "list_markers");
 }
