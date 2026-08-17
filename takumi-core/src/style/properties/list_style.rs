@@ -20,7 +20,7 @@ pub enum ListStyleType {
   Disc,
   /// A hollow circle, `◦`.
   Circle,
-  /// A filled square, `■`.
+  /// A filled square, `▪`.
   Square,
   /// Western decimal numbers.
   Decimal,
@@ -170,6 +170,14 @@ fn decimal_leading_zero(ordinal: i32) -> String {
 }
 
 impl ListStyleType {
+  /// Whether this style draws a bullet symbol rather than alphanumeric text.
+  pub(crate) fn is_symbolic(&self) -> bool {
+    matches!(
+      self,
+      ListStyleType::Disc | ListStyleType::Circle | ListStyleType::Square
+    )
+  }
+
   /// The marker string for an item at `ordinal`, including the counter style's suffix.
   pub(crate) fn marker_text(&self, ordinal: i32) -> Option<String> {
     let (representation, suffix) = match self {
@@ -177,7 +185,9 @@ impl ListStyleType {
       ListStyleType::String(value) => return Some(value.as_ref().to_owned()),
       ListStyleType::Disc => ("\u{2022}".to_owned(), " "),
       ListStyleType::Circle => ("\u{25e6}".to_owned(), " "),
-      ListStyleType::Square => ("\u{25a0}".to_owned(), " "),
+      // Blink paints `square` at `(ascent*2/3 + 1)/2` px
+      // (`RelativeSymbolMarkerRect`); `▪` tracks that size, `■` does not.
+      ListStyleType::Square => ("\u{25aa}".to_owned(), " "),
       ListStyleType::Decimal => (ordinal.to_string(), ". "),
       ListStyleType::DecimalLeadingZero => (decimal_leading_zero(ordinal), ". "),
       ListStyleType::LowerAlpha => (alphabetic(ordinal, 'a'), ". "),
