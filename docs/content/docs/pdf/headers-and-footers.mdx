@@ -78,6 +78,20 @@ Text and container nodes classed `pageNumber` or `totalPages` receive counter te
 
 A node carrying both classes gets the page number.
 
+## Counters outside a band
+
+A hook fills wherever it sits. A `fixed` box repeats on every page, so it lays out again for each one and its counters count with it. A component can carry its own footer that way, instead of passing one to `render`.
+
+```tsx
+<div style={{ position: "fixed", bottom: 24, left: 24, right: 24 }}>
+  Page <span className="pageNumber" /> of <span className="totalPages" />
+</div>
+```
+
+A fixed box draws over the content rather than in the margin, so leave it room. `margin` sizes itself to the header and footer alone.
+
+A hook in the page content names the page it lands on, which is what a cover page counting the report's length needs. One laid out inline has no box of its own, so it reads the box that holds it and the flow that closed before it, and takes whichever page is later. Content that paints nowhere, such as a box scaled to zero, closes no flow to read. Content counters lay the document out a second time, since the page a hook sits on is only known once the content is cut into pages, and a document without one pays nothing.
+
 ## Counter styles
 
 Add a CSS `@counter-style` name next to the hook class. It formats the number. The first supported name wins. Unsupported names are ignored, and a hook without one counts in `decimal`.

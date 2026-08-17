@@ -16,7 +16,7 @@ use takumi_core::{
     tree::RenderNode,
   },
   scene::{NodePaint, PaintItemKind},
-  style::Affine,
+  style::{Affine, Position},
 };
 
 use crate::{
@@ -47,6 +47,18 @@ pub(crate) struct Interactive {
   pub(crate) headings: Vec<HeadingTarget>,
   /// Element ids to the box they name, for `href="#id"`.
   pub(crate) anchors: HashMap<Box<str>, AnchorTarget>,
+  /// Where every box layout gave a position sits, by the source order of its
+  /// node. A node laid out inline has no box of its own, so it has no entry
+  /// here and takes its page from the boxes around it.
+  pub(crate) extents: HashMap<usize, BoxExtent>,
+}
+
+/// A laid-out box's vertical extent in content coordinates.
+pub(crate) struct BoxExtent {
+  pub(crate) top: f32,
+  /// The bottom the flow continues from, absent for an out-of-flow box, whose
+  /// position says nothing about what comes after it.
+  pub(crate) flow_bottom: Option<f32>,
 }
 
 /// An element carrying an `id`, in content coordinates.
@@ -120,6 +132,7 @@ pub(crate) fn collect_interactive(tree: &PreparedTree) -> Interactive {
     links: Vec::new(),
     headings: Vec::new(),
     anchors: HashMap::new(),
+    extents: HashMap::new(),
   };
 
   collect_interactive_context(tree, 0, &mut collected);
@@ -160,6 +173,31 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
   let Some(rect) = transformed_rect(paint.transform, (0.0, 0.0), layout.size) else {
     return;
   };
+
+  if let Some(index) = node.source_order {
+    // `transform` moves where a box paints without moving the flow it left
+    // behind, so the flow edge is measured with the box's own transform undone.
+    let in_flow = !matches!(
+      node.context.style.position,
+      Position::Absolute | Position::Fixed
+    );
+    let flow_bottom = in_flow
+      .then(|| {
+        node
+          .context
+          .style
+          .local_transform(layout.size.width, layout.size.height, &node.context.sizing)
+          .invert()
+      })
+      .flatten()
+      .and_then(|undo| transformed_rect(paint.transform * undo, (0.0, 0.0), layout.size))
+      .map(|flow| flow.bottom());
+
+    collected.extents.entry(index).or_insert(BoxExtent {
+      top: rect.top(),
+      flow_bottom,
+    });
+  }
 
   if let Some(id) = source.id() {
     // The first box wins: a duplicated id is invalid HTML, and the earlier one
@@ -335,9 +373,9 @@ fn collect_inline_links(
 /// Adds this page's slice of every link as annotations. `window` is the page's
 /// content window in content coordinates; `offset` maps content to page
 /// coordinates.
-pub(crate) fn add_link_annotations(
+pub(crate) fn add_link_annotations<'l>(
   page: &mut Page,
-  links: &[LinkTarget],
+  links: impl IntoIterator<Item = &'l LinkTarget>,
   window: (f32, f32),
   offset: (f32, f32),
   tags: Option<&RefCell<TagCollector>>,

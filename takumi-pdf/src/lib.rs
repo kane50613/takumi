@@ -108,10 +108,10 @@ use crate::{
     surface::Surface,
   },
   options::{BAND_EDGE_PADDING, PT_PER_PX, build_metadata, krilla_datetime, validate_xmp_schemas},
-  pagination::{MAX_PAGES, page_starts, resolve_target_counters},
+  pagination::{MAX_PAGES, PageGeometry, Paginated, paginate},
   paint::{fill_from_rgba, rect_path},
   tags::{TagCollector, build_tag_tree, tag_id},
-  tree::{TreeInputs, prepare_paged_tree, prepare_tree},
+  tree::{TreeInputs, prepare_repeated, prepare_tree, tree_context},
 };
 
 /// The height a measured band came out at, or nothing when the side has none.
@@ -287,52 +287,44 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       let footer_height = band_height(footer_band.as_ref()).unwrap_or(0.0);
       let window_height = content_height;
 
-      let mut node = options.node;
+      let node = options.node;
 
-      resolve_target_counters(
-        &mut node,
+      let page_area = Viewport::new((content_width as u32, content_height as u32));
+      let Paginated {
+        content,
+        repeated,
+        starts,
+        interactive,
+      } = paginate(
+        node,
         &inputs,
         &mut fonts,
         &issues,
         document_lang,
-        content_viewport,
-        window_height,
+        &PageGeometry {
+          viewport: content_viewport,
+          page_area,
+          window_height,
+        },
       )?;
-
-      let page_area = Viewport::new((content_width as u32, content_height as u32));
-      let (content, repeated) = prepare_paged_tree(&inputs, node, content_viewport, page_area)?;
-      let repeated_links: Vec<_> = repeated
-        .iter()
-        .flat_map(|tree| collect_interactive(tree).links)
-        .collect();
-      let text_boxes = collect_text_boxes(&content);
-      let inline_map = build_inline_map(&text_boxes)?;
-      let mut atoms = Vec::new();
-      let mut forced = Vec::new();
-      let mut paragraphs = Vec::new();
-
-      content
-        .emitter(&mut fonts, Some(&inline_map), None, &issues, document_lang)
-        .collect_atoms(
-          0,
-          Affine::IDENTITY,
-          &mut atoms,
-          &mut forced,
-          &mut paragraphs,
-        )?;
-      let starts = page_starts(
-        &mut atoms,
-        &mut forced,
-        &paragraphs,
-        content.height,
-        window_height,
-      );
 
       if starts.len() >= MAX_PAGES {
         return Err(PdfError::TooManyPages(starts.len()));
       }
+      let page_context = tree_context(&inputs, page_area);
+      // A repeated box without a counter keeps the one layout, so its links are
+      // collected once rather than per page. They stay grouped by box, which is
+      // the order the annotations are added in.
+      let kept_links: Vec<_> = repeated
+        .iter()
+        .map(|repeat| match repeat.template {
+          Some(_) => Vec::new(),
+          None => collect_interactive(&repeat.prepared).links,
+        })
+        .collect();
+      let text_boxes = collect_text_boxes(&content);
+      let inline_map = build_inline_map(&text_boxes)?;
       let pages = starts.len();
-      let interactive = collect_interactive(&content);
       let structural = options.tagged.names_structure_destinations();
       let destination = |top: f32, path: &[usize]| {
         let index = starts
@@ -351,6 +343,33 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       };
 
       for (index, &y0) in starts.iter().enumerate() {
+        // A repeated box holding a counter lays out again with this page's
+        // numbers; the rest keep the layout they were prepared with.
+        let renumbered = repeated
+          .iter()
+          .map(|repeat| {
+            repeat
+              .template
+              .as_ref()
+              .map(|template| {
+                prepare_repeated(&page_context, template, index + 1, pages, page_area)
+              })
+              .transpose()
+          })
+          .collect::<Result<Vec<_>, PdfError>>()?;
+        let page_boxes: Vec<_> = repeated
+          .iter()
+          .zip(&renumbered)
+          .map(|(repeat, fresh)| fresh.as_ref().unwrap_or(&repeat.prepared))
+          .collect();
+        let renumbered_links: Vec<_> = renumbered
+          .iter()
+          .map(|fresh| {
+            fresh
+              .as_ref()
+              .map_or_else(Vec::new, |tree| collect_interactive(tree).links)
+          })
+          .collect();
         let mut pdf_page = document.start_page_with(PageSettings::new(page_size));
         let mut surface = pdf_page.surface();
 
@@ -382,7 +401,11 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
 
         let content_top = margin.top;
 
-        for fixed in repeated.iter().filter(|tree| tree.paints_below()) {
+        for fixed in page_boxes
+          .iter()
+          .copied()
+          .filter(|tree| tree.paints_below())
+        {
           emit_band(
             fixed,
             &mut fonts,
@@ -420,7 +443,11 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           surface.pop();
         }
 
-        for fixed in repeated.iter().filter(|tree| !tree.paints_below()) {
+        for fixed in page_boxes
+          .iter()
+          .copied()
+          .filter(|tree| !tree.paints_below())
+        {
           emit_band(
             fixed,
             &mut fonts,
@@ -478,7 +505,10 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         // tree, so the annotations stay out of the structure too.
         add_link_annotations(
           &mut pdf_page,
-          &repeated_links,
+          kept_links
+            .iter()
+            .zip(&renumbered_links)
+            .flat_map(|(kept, fresh)| kept.iter().chain(fresh)),
           (0.0, window_height),
           (margin.left, content_top),
           None,
@@ -594,7 +624,7 @@ mod tests {
   use takumi_core::units::ONE_IN_PX;
 
   use super::*;
-  use crate::pagination::Atom;
+  use crate::pagination::{Atom, page_starts};
 
   const A4: (f32, f32) = (PageOptions::A4.width, PageOptions::A4.height);
 

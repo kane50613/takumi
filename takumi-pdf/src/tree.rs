@@ -1,13 +1,13 @@
 //! Layout of an independent node tree: the main content or a header/footer band.
 
-use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
+use std::{cell::RefCell, collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
 use takumi_core::{
   Fonts,
   context::RenderContext,
   geometry::{NodeId, Size},
   layout::{
-    node::Node,
+    node::{Node, NodeKind},
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
   resources::image::ImageSource,
@@ -20,6 +20,7 @@ use takumi_core::{
 };
 
 use crate::{
+  counters::{has_page_counters, substitute_page_counters},
   emitter::{Emitter, FontMap, RenderIssues},
   inline::InlineMap,
   options::PdfError,
@@ -131,7 +132,7 @@ pub(crate) fn prepare_tree(
   lay_out(root, viewport)
 }
 
-fn tree_context(inputs: &TreeInputs<'_>, viewport: Viewport) -> RenderContext {
+pub(crate) fn tree_context(inputs: &TreeInputs<'_>, viewport: Viewport) -> RenderContext {
   RenderContext::builder()
     .fonts(
       inputs
@@ -149,6 +150,35 @@ fn tree_context(inputs: &TreeInputs<'_>, viewport: Viewport) -> RenderContext {
     .build()
 }
 
+/// A `fixed` box repeated on every page: its layout, and the subtree it lays
+/// out again from when it holds a page counter.
+pub(crate) struct RepeatedBox {
+  pub(crate) prepared: PreparedTree,
+  pub(crate) template: Option<RepeatedTemplate>,
+}
+
+/// A repeated box's source subtree, with the context its styles resolved
+/// under, so a re-layout inherits what its ancestors gave it.
+pub(crate) struct RepeatedTemplate {
+  node: Node,
+  parent: RenderContext,
+  source_order: usize,
+}
+
+impl RepeatedTemplate {
+  /// The source orders the subtree occupies in the tree it was taken from.
+  pub(crate) fn source_orders(&self) -> Range<usize> {
+    self.source_order..self.source_order + node_count(&self.node)
+  }
+}
+
+fn node_count(node: &Node) -> usize {
+  match &node.kind {
+    NodeKind::Container { children } => 1 + children.iter().map(node_count).sum::<usize>(),
+    _ => 1,
+  }
+}
+
 /// The tree, plus the `fixed` subtrees attached to the initial containing
 /// block. Those repeat on every page, so they lay out against the page area
 /// instead of the content column.
@@ -157,8 +187,11 @@ pub(crate) fn prepare_paged_tree(
   node: Node,
   viewport: Viewport,
   page_area: Viewport,
-) -> Result<(PreparedTree, Vec<PreparedTree>), PdfError> {
+) -> Result<(PreparedTree, Vec<RepeatedBox>), PdfError> {
   let node = fill_root(node, viewport);
+  // A repeated box holding a counter lays out again per page, from the subtree
+  // its preorder position names in the tree it was taken from.
+  let source = has_page_counters(&node).then(|| node.clone());
   let context = tree_context(inputs, viewport);
   let mut root = RenderNode::from_node(&context, node);
   let repeated = take_repeating_fixed(&mut root);
@@ -166,10 +199,60 @@ pub(crate) fn prepare_paged_tree(
   let page_context = tree_context(inputs, page_area);
   let repeated = repeated
     .into_iter()
-    .map(|node| lay_out(page_root(&page_context, node), page_area))
-    .collect::<Result<Vec<_>, _>>()?;
+    .map(|(node, parent)| {
+      let template = source
+        .as_ref()
+        .zip(node.source_order)
+        .and_then(|(source, index)| Some((index, node_in_source_order(source, index)?)))
+        .filter(|(_, template)| has_page_counters(template))
+        .map(|(source_order, template)| RepeatedTemplate {
+          node: template.clone(),
+          parent,
+          source_order,
+        });
+
+      Ok(RepeatedBox {
+        prepared: lay_out(page_root(&page_context, node), page_area)?,
+        template,
+      })
+    })
+    .collect::<Result<Vec<_>, PdfError>>()?;
 
   Ok((content, repeated))
+}
+
+/// Lays a repeated box out again with the counters a page asks for.
+pub(crate) fn prepare_repeated(
+  page_context: &RenderContext,
+  template: &RepeatedTemplate,
+  page: usize,
+  pages: usize,
+  page_area: Viewport,
+) -> Result<PreparedTree, PdfError> {
+  let mut node = template.node.clone();
+
+  substitute_page_counters(&mut node, page, pages);
+  let child = RenderNode::from_node(&template.parent, node);
+
+  lay_out(page_root(page_context, child), page_area)
+}
+
+/// The node at a source order, counted the way the render tree numbers the
+/// source tree it is built from.
+fn node_in_source_order(node: &Node, index: usize) -> Option<&Node> {
+  fn walk<'n>(node: &'n Node, index: usize, cursor: &mut usize) -> Option<&'n Node> {
+    if *cursor == index {
+      return Some(node);
+    }
+    *cursor += 1;
+    let NodeKind::Container { children } = &node.kind else {
+      return None;
+    };
+
+    children.iter().find_map(|child| walk(child, index, cursor))
+  }
+
+  walk(node, index, &mut 0)
 }
 
 // ponytail: a repeated box with no insets paints at the page area's origin.
@@ -179,16 +262,17 @@ pub(crate) fn prepare_paged_tree(
 /// Removes the `fixed` boxes the initial containing block holds. A box that
 /// establishes a containing block of its own keeps its `fixed` descendants,
 /// which stay in the flow and paginate with it.
-fn take_repeating_fixed(node: &mut RenderNode) -> Vec<RenderNode> {
+fn take_repeating_fixed(node: &mut RenderNode) -> Vec<(RenderNode, RenderContext)> {
   let Some(children) = node.children.take() else {
     return Vec::new();
   };
+  let parent = node.context.clone();
   let mut repeating = Vec::new();
   let mut kept = Vec::with_capacity(children.len());
 
   for mut child in children.into_vec() {
     if child.context.style.position == Position::Fixed {
-      repeating.push(child);
+      repeating.push((child, parent.clone()));
       continue;
     }
     if !child.context.style.contains_fixed_descendants() {

@@ -1,5 +1,7 @@
 //! `@counter-style` formatting and substitution of the page-counter class hooks.
 
+use std::{collections::HashMap, ops::Range};
+
 use takumi_core::layout::node::{Node, NodeKind};
 
 use crate::interactive::percent_decode;
@@ -362,21 +364,109 @@ pub(crate) fn substitute_target_counters(
   }
 }
 
+/// Whether a tree holds a page-counter hook. A band or repeated box without one
+/// lays out identically on every page, so it is prepared once and reused.
+pub(crate) fn has_page_counters(node: &Node) -> bool {
+  if counter_text(node, 1, 1).is_some() {
+    return true;
+  }
+  match &node.kind {
+    NodeKind::Container { children } => children.iter().any(has_page_counters),
+    _ => false,
+  }
+}
+
 /// Fills `pageNumber` / `totalPages` class hooks with the formatted counter,
 /// like Chromium assigning `textContent` in its header/footer template.
 pub(crate) fn substitute_page_counters(node: &mut Node, page: usize, pages: usize) {
   if let Some(text) = counter_text(node, page, pages) {
-    match &mut node.kind {
-      NodeKind::Text(data) => data.text = text,
-      NodeKind::Container { children } => *children = vec![Node::text(text)],
-      _ => {}
-    }
+    write_counter(node, text);
     return;
   }
   if let NodeKind::Container { children } = &mut node.kind {
     for child in children {
       substitute_page_counters(child, page, pages);
     }
+  }
+}
+
+/// The pages a laid-out box covers: the one it starts on, and the one the flow
+/// continues on after it.
+pub(crate) struct BoxPages {
+  pub(crate) start: usize,
+  pub(crate) next: Option<usize>,
+}
+
+/// The state a content-counter walk carries: what the boxes resolved to, and
+/// how far the flow has come.
+pub(crate) struct FlowCounters<'c> {
+  page_of: &'c HashMap<usize, BoxPages>,
+  pages: usize,
+  repeated: &'c [Range<usize>],
+  cursor: usize,
+  reached: Option<usize>,
+}
+
+impl<'c> FlowCounters<'c> {
+  pub(crate) fn new(
+    page_of: &'c HashMap<usize, BoxPages>,
+    pages: usize,
+    repeated: &'c [Range<usize>],
+  ) -> Self {
+    Self {
+      page_of,
+      pages,
+      repeated,
+      cursor: 0,
+      reached: None,
+    }
+  }
+
+  /// Fills the content's hooks with the page they land on, taken from the boxes
+  /// by preorder position. A hook laid out inline has no box of its own, so it
+  /// takes the later of the box that holds it and the flow that closed before
+  /// it. A hook inside a repeated subtree is left alone: that box numbers itself
+  /// per page. Counting walks the tree as it stands, so a hook is written only
+  /// after its own subtree has been counted.
+  pub(crate) fn substitute(
+    &mut self,
+    node: &mut Node,
+    inherited: Option<usize>,
+    written: &mut Vec<String>,
+  ) {
+    let index = self.cursor;
+    let own = self.page_of.get(&index);
+    let inherit = own.map_or(inherited, |pages| Some(pages.start));
+
+    self.cursor += 1;
+    if let NodeKind::Container { children } = &mut node.kind {
+      for child in children {
+        self.substitute(child, inherit, written);
+      }
+    }
+    let page = match own {
+      Some(pages) => Some(pages.start),
+      None => inherit.map(|page| self.reached.map_or(page, |after| page.max(after))),
+    };
+
+    if let Some(page) = page
+      && !self.repeated.iter().any(|range| range.contains(&index))
+      && let Some(text) = counter_text(node, page, self.pages)
+    {
+      written.push(text.clone());
+      write_counter(node, text);
+    }
+    if let Some(after) = self.page_of.get(&index).and_then(|pages| pages.next) {
+      self.reached = Some(after);
+    }
+  }
+}
+
+fn write_counter(node: &mut Node, text: String) {
+  match &mut node.kind {
+    NodeKind::Text(data) => data.text = text,
+    NodeKind::Container { children } => *children = vec![Node::text(text)],
+    _ => {}
   }
 }
 

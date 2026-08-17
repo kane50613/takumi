@@ -1,16 +1,18 @@
 //! Cutting the content column into pages without splitting unsplittable atoms.
 
-use std::cell::RefCell;
+use std::{cell::RefCell, ops::Range};
 
 use takumi_core::{layout::node::Node, style::Affine, viewport::Viewport};
 
 use crate::{
-  counters::{has_target_counters, substitute_target_counters},
+  counters::{
+    BoxPages, FlowCounters, has_page_counters, has_target_counters, substitute_target_counters,
+  },
   emitter::{FontMap, RenderIssues},
   inline::{build_inline_map, collect_text_boxes},
-  interactive::collect_interactive,
+  interactive::{Interactive, collect_interactive},
   options::PdfError,
-  tree::{TreeInputs, prepare_tree},
+  tree::{PreparedTree, RepeatedBox, TreeInputs, prepare_paged_tree},
 };
 
 /// Unsplittable vertical extents in content coordinates: text lines, images,
@@ -52,74 +54,152 @@ impl Paragraph {
 /// renderer's memory.
 pub(crate) const MAX_PAGES: usize = 20_000;
 
-/// How many times pagination reruns to settle target page counters. A counter
-/// widens the line it sits on, which can move a cut, which can renumber the
-/// counter. The second pass numbers a laid-out document, the third confirms the
-/// numbers did not move, and a document still moving after that keeps the last
-/// pass's numbers.
-const TARGET_COUNTER_PASSES: usize = 3;
+/// How many times pagination reruns to settle page counters. A counter widens
+/// the line it sits on, which can move a cut, which can renumber the counter.
+/// The second pass numbers a laid-out document, the third confirms the numbers
+/// did not move, and a document still moving after that keeps the last pass's
+/// numbers.
+const COUNTER_PASSES: usize = 3;
 
-/// Fills the tree's `targetPageNumber` hooks by paginating until the numbers
-/// stop moving. A tree without a hook is left alone and pays nothing.
-pub(crate) fn resolve_target_counters(
-  node: &mut Node,
+/// The content laid out and cut into pages, with the `fixed` boxes that repeat
+/// on every page and the interactive targets the pages draw from.
+pub(crate) struct Paginated {
+  pub(crate) content: PreparedTree,
+  pub(crate) repeated: Vec<RepeatedBox>,
+  pub(crate) starts: Vec<f32>,
+  pub(crate) interactive: Interactive,
+}
+
+/// What a pagination pass lays out against: the content column, the page area a
+/// repeated box positions in, and the height one page shows.
+pub(crate) struct PageGeometry {
+  pub(crate) viewport: Viewport,
+  pub(crate) page_area: Viewport,
+  pub(crate) window_height: f32,
+}
+
+/// Lays the content out and cuts it into pages, refilling the counters it holds
+/// until the numbers stop moving. A counter inside a repeated box is left to
+/// that box, which lays out again per page with its own numbers.
+pub(crate) fn paginate(
+  mut node: Node,
   inputs: &TreeInputs<'_>,
   fonts: &mut FontMap,
   issues: &RefCell<RenderIssues>,
   document_lang: Option<&str>,
-  viewport: Viewport,
-  window_height: f32,
-) -> Result<(), PdfError> {
-  if !has_target_counters(node) {
-    return Ok(());
+  geometry: &PageGeometry,
+) -> Result<Paginated, PdfError> {
+  if !has_page_counters(&node) && !has_target_counters(&node) {
+    return paginate_once(node, inputs, fonts, issues, document_lang, geometry);
   }
   let mut previous: Vec<String> = Vec::new();
+  let mut passes = 0;
 
-  for _ in 0..TARGET_COUNTER_PASSES {
-    let content = prepare_tree(inputs, node.clone(), viewport)?;
-    let text_boxes = collect_text_boxes(&content);
-    let inline_map = build_inline_map(&text_boxes)?;
-    let mut atoms = Vec::new();
-    let mut forced = Vec::new();
-    let mut paragraphs = Vec::new();
-
-    content
-      .emitter(fonts, Some(&inline_map), None, issues, document_lang)
-      .collect_atoms(
-        0,
-        Affine::IDENTITY,
-        &mut atoms,
-        &mut forced,
-        &mut paragraphs,
-      )?;
-
-    let starts = page_starts(
-      &mut atoms,
-      &mut forced,
-      &paragraphs,
-      content.height,
-      window_height,
-    );
-
-    if starts.len() >= MAX_PAGES {
-      break;
-    }
-    let anchors = collect_interactive(&content).anchors;
-    let page_of = |id: &str| {
-      anchors
-        .get(id)
-        .map(|anchor| starts.partition_point(|start| *start <= anchor.top).max(1))
-    };
+  loop {
+    let paginated = paginate_once(node.clone(), inputs, fonts, issues, document_lang, geometry)?;
+    let pages = paginated.starts.len();
     let mut written = Vec::new();
 
-    substitute_target_counters(node, None, &page_of, &mut written);
-
+    passes += 1;
+    if pages < MAX_PAGES {
+      substitute_counters(&mut node, &paginated, &mut written);
+    }
     if written == previous {
-      break;
+      return Ok(paginated);
     }
     previous = written;
+    // The numbers are still moving, and this was the last pass allowed. They
+    // are laid out once more so the page shows the numbers it was cut with.
+    if passes == COUNTER_PASSES {
+      return paginate_once(node, inputs, fonts, issues, document_lang, geometry);
+    }
   }
-  Ok(())
+}
+
+/// Fills both kinds of counter from one laid-out pass, collecting what it wrote
+/// so the caller can see whether the numbers moved.
+fn substitute_counters(node: &mut Node, paginated: &Paginated, written: &mut Vec<String>) {
+  let pages = paginated.starts.len();
+  let page_at = |top: &f32| {
+    paginated
+      .starts
+      .partition_point(|start| start <= top)
+      .max(1)
+  };
+  // `fill_root` wraps the tree in a page-wide box, which takes preorder 0.
+  let page_of = paginated
+    .interactive
+    .extents
+    .iter()
+    .filter_map(|(order, extent)| {
+      let pages = BoxPages {
+        start: page_at(&extent.top),
+        next: extent.flow_bottom.as_ref().map(page_at),
+      };
+
+      Some((order.checked_sub(1)?, pages))
+    })
+    .collect();
+  let repeated: Vec<Range<usize>> = paginated
+    .repeated
+    .iter()
+    .filter_map(|repeat| repeat.template.as_ref())
+    .map(|template| {
+      let orders = template.source_orders();
+
+      orders.start.saturating_sub(1)..orders.end.saturating_sub(1)
+    })
+    .collect();
+
+  FlowCounters::new(&page_of, pages, &repeated).substitute(node, None, written);
+
+  let anchors = &paginated.interactive.anchors;
+  let target_page = |id: &str| anchors.get(id).map(|anchor| page_at(&anchor.top));
+
+  substitute_target_counters(node, None, &target_page, written);
+}
+
+fn paginate_once(
+  node: Node,
+  inputs: &TreeInputs<'_>,
+  fonts: &mut FontMap,
+  issues: &RefCell<RenderIssues>,
+  document_lang: Option<&str>,
+  geometry: &PageGeometry,
+) -> Result<Paginated, PdfError> {
+  let (content, repeated) =
+    prepare_paged_tree(inputs, node, geometry.viewport, geometry.page_area)?;
+  let text_boxes = collect_text_boxes(&content);
+  let inline_map = build_inline_map(&text_boxes)?;
+  let mut atoms = Vec::new();
+  let mut forced = Vec::new();
+  let mut paragraphs = Vec::new();
+
+  content
+    .emitter(fonts, Some(&inline_map), None, issues, document_lang)
+    .collect_atoms(
+      0,
+      Affine::IDENTITY,
+      &mut atoms,
+      &mut forced,
+      &mut paragraphs,
+    )?;
+
+  let starts = page_starts(
+    &mut atoms,
+    &mut forced,
+    &paragraphs,
+    content.height,
+    geometry.window_height,
+  );
+  let interactive = collect_interactive(&content);
+
+  Ok(Paginated {
+    content,
+    repeated,
+    starts,
+    interactive,
+  })
 }
 
 pub(crate) fn page_starts(

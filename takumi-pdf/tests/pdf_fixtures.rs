@@ -457,6 +457,86 @@ fn target_counters_settle_after_they_move_their_own_page() {
   assert_eq!(pdf, expected, "target counters did not settle after rewrap");
 }
 
+fn a4_options<'f>(source: &str, fonts: &'f Fonts) -> PdfOptions<'f> {
+  PdfOptions::builder()
+    .node(from_html(source, FromHtmlOptions::default()).expect("parse the doc"))
+    .page(PageOptions::A4)
+    .fonts(fonts)
+    .build()
+}
+
+/// An inline hook has no box of its own. Directly under a tall block it would
+/// take that block's first page, so it takes the page the flow reached instead.
+#[test]
+fn an_inline_page_counter_follows_the_flow_that_precedes_it() {
+  let document = |page: &str| {
+    format!(
+      r#"<main>
+        <div style="height: 1100px;"></div>
+        <span style="font-size: 12px;">{page}</span>
+      </main>"#
+    )
+  };
+  // A box that paints elsewhere still leaves its flow behind, so a transform on
+  // the block above the hook must not move the page the hook names.
+  let transformed = |page: &str| {
+    format!(
+      r#"<main>
+        <div style="height: 1100px; transform: translateY(-1100px);"></div>
+        <span style="font-size: 12px;">{page}</span>
+      </main>"#
+    )
+  };
+  let hooked = document(r#"<span class="pageNumber"></span>"#);
+  let pdf = render(a4_options(&hooked, &fonts())).expect("render the hooked document");
+  let numbered = document("2");
+  let expected = render(a4_options(&numbered, &fonts())).expect("render the numbered document");
+
+  assert_eq!(
+    pdf, expected,
+    "an inline counter under a tall block did not name the page its line sits on"
+  );
+
+  let hooked = transformed(r#"<span class="pageNumber"></span>"#);
+  let pdf = render(a4_options(&hooked, &fonts())).expect("render the transformed document");
+  let expected = render(a4_options(&transformed("2"), &fonts()))
+    .expect("render the numbered transformed document");
+
+  assert_eq!(
+    pdf, expected,
+    "a transformed block moved the page the counter after it names"
+  );
+}
+
+/// A page counter that wraps its own line pushes the target one page along, so
+/// the target counter has to be numbered from the layout the page counter left
+/// behind, not the one before it.
+#[test]
+fn a_page_counter_renumbers_the_target_it_moves() {
+  let document = |page: &str, target: &str| {
+    format!(
+      r##"<div style="display: flex; flex-direction: column; width: 100%; font-size: 14px; color: #141414;">
+        <a href="#target" style="display: flex; column-gap: 4px;">see{target}</a>
+        <div style="display: flex; flex-wrap: wrap; width: 100%;"><span style="width: 268px;">Body</span>{page}</div>
+        <div style="height: 130px;"></div>
+        <div id="target" style="display: flex;">Target</div>
+      </div>"##
+    )
+  };
+  let hooked = document(
+    r#"<span class="pageNumber"></span>"#,
+    r#"<span class="targetPageNumber"></span>"#,
+  );
+  let pdf = render(toc_options(&hooked, &fonts())).expect("render the hooked document");
+  let numbered = document("<span>1</span>", "<span>2</span>");
+  let expected = render(toc_options(&numbered, &fonts())).expect("render the numbered document");
+
+  assert_eq!(
+    pdf, expected,
+    "the target counter did not follow the page the page counter moved it to"
+  );
+}
+
 #[test]
 fn target_counter_in_a_band_drops_its_placeholder() {
   let band = |cell: &str| {
@@ -3144,6 +3224,75 @@ fn an_undecodable_image_stops_the_render() {
   assert!(
     matches!(&error, PdfError::UndrawableImage(reason) if reason.starts_with("broken:")),
     "unexpected error: {error:?}"
+  );
+}
+
+/// A `fixed` box repeats on every page, so the page counters it holds count.
+/// The box is the document's only text, which leaves the counters as the only
+/// text operations the pages show.
+#[test]
+fn a_fixed_box_fills_its_page_counters() {
+  let doc = r#"<main>
+      <div style="position: fixed; bottom: 10px; left: 10px; display: flex; column-gap: 4px; font-size: 12px;">
+        <span class="pageNumber"></span><span class="totalPages"></span>
+      </div>
+      <p style="height: 900px;"></p>
+      <p style="height: 900px;"></p>
+    </main>"#;
+  let pdf = run_pdf_fixture("fixed-page-counters", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse the doc"))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  });
+  let shown: Vec<Vec<u8>> = content_lines(&pdf)
+    .filter(|line| line.ends_with(b"TJ") || line.ends_with(b"Tj"))
+    .collect();
+
+  assert_eq!(
+    inflated_text(&pdf).matches("/Count 2").count(),
+    1,
+    "expected a two-page document"
+  );
+  assert_eq!(
+    shown.len(),
+    4,
+    "expected both counters on both pages and nothing else"
+  );
+  assert_ne!(
+    shown[0], shown[2],
+    "expected the page number to change between pages"
+  );
+  assert_eq!(
+    shown[1], shown[3],
+    "expected the total to stay the same on both pages"
+  );
+}
+
+/// A page counter in the content names the page it lands on, which has to
+/// render the document that carries the number written by hand.
+#[test]
+fn a_page_counter_in_the_content_names_its_own_page() {
+  let document = |page: &str, total: &str| {
+    format!(
+      r#"<main>
+        <p style="height: 1100px;"></p>
+        <p style="font-size: 12px;">page {page} of {total}</p>
+      </main>"#
+    )
+  };
+  let hooked = document(
+    r#"<span class="pageNumber"></span>"#,
+    r#"<span class="totalPages"></span>"#,
+  );
+  let pdf = run_pdf_fixture("content-page-counters", |fonts| a4_options(&hooked, fonts));
+  let numbered = document("<span>2</span>", "<span>2</span>");
+  let expected = render(a4_options(&numbered, &fonts())).expect("render the numbered document");
+
+  assert_eq!(
+    pdf, expected,
+    "content counters did not resolve to page 2 of 2"
   );
 }
 

@@ -1,15 +1,11 @@
 //! Measurement, per-page preparation and emission of the repeated header/footer bands.
 
-use takumi_core::{
-  layout::node::{Node, NodeKind},
-  style::Affine,
-  viewport::Viewport,
-};
+use takumi_core::{layout::node::Node, style::Affine, viewport::Viewport};
 
 use std::cell::RefCell;
 
 use crate::{
-  counters::{counter_text, substitute_page_counters, substitute_target_counters},
+  counters::{has_page_counters, substitute_page_counters, substitute_target_counters},
   emitter::{FontMap, RenderIssues},
   krilla::{
     geom::{Rect as KrillaRect, Transform},
@@ -38,20 +34,8 @@ pub(crate) fn measure_band(
 ) -> Result<MeasuredBand, PdfError> {
   Ok(MeasuredBand {
     measured: prepare_band(inputs, template, 999, 999, viewport)?,
-    dynamic: band_has_counters(template),
+    dynamic: has_page_counters(template),
   })
-}
-
-/// Whether a band template contains any page-counter hook. A band without one
-/// lays out identically on every page, so it is prepared once and reused.
-fn band_has_counters(node: &Node) -> bool {
-  if counter_text(node, 1, 1).is_some() {
-    return true;
-  }
-  match &node.kind {
-    NodeKind::Container { children } => children.iter().any(band_has_counters),
-    _ => false,
-  }
 }
 
 /// Lays out a band template with the given counter values.

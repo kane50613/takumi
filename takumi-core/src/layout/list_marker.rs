@@ -53,6 +53,7 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
   Some(RenderNode {
     context,
     node: Some(Node::container([])),
+    source_order: None,
     children: Some(Box::new([content])),
     layout_style_override: None,
     anonymous_text_content: None,
