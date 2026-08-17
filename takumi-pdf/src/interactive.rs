@@ -15,7 +15,7 @@ use takumi_core::{
     },
     tree::RenderNode,
   },
-  scene::{NodePaint, PaintItemKind},
+  scene::NodePaint,
   style::{Affine, Position},
 };
 
@@ -135,29 +135,9 @@ pub(crate) fn collect_interactive(tree: &PreparedTree) -> Interactive {
     extents: HashMap::new(),
   };
 
-  collect_interactive_context(tree, 0, &mut collected);
+  tree.for_each_paint(|paint| collect_interactive_paint(tree, paint, &mut collected));
   collected.headings.sort_by(|a, b| a.top.total_cmp(&b.top));
   collected
-}
-
-fn collect_interactive_context(tree: &PreparedTree, id: usize, collected: &mut Interactive) {
-  let Some(context) = tree.contexts.get(id) else {
-    return;
-  };
-
-  if let Some(paint) = context.root() {
-    collect_interactive_paint(tree, paint, collected);
-  }
-  for bucket in context.in_paint_order() {
-    for item in bucket {
-      match &item.kind {
-        PaintItemKind::Node(paint) => collect_interactive_paint(tree, paint, collected),
-        PaintItemKind::Context(child) => {
-          collect_interactive_context(tree, *child, collected);
-        }
-      }
-    }
-  }
 }
 
 fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: &mut Interactive) {

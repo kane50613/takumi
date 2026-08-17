@@ -5,7 +5,7 @@ use std::{cell::RefCell, ops::Range};
 use takumi_core::{
   geometry::transformed_rect_extents,
   layout::node::Node,
-  scene::{NodePaint, PaintItemKind},
+  scene::NodePaint,
   style::{Affine, GridPlacement, GridPlacementSpan},
   viewport::Viewport,
 };
@@ -139,28 +139,10 @@ pub(crate) fn header_replays(
 fn collect_repeating_headers(tree: &PreparedTree, window: f32) -> Vec<HeaderBand> {
   let mut bands = Vec::new();
 
-  collect_headers_context(tree, 0, &mut bands);
+  tree.for_each_paint(|paint| collect_headers_paint(tree, paint, &mut bands));
   bands.retain(|band| band.height() > 0.0 && band.height() <= window / 4.0);
   bands.sort_by(|a, b| a.top.total_cmp(&b.top));
   bands
-}
-
-fn collect_headers_context(tree: &PreparedTree, id: usize, bands: &mut Vec<HeaderBand>) {
-  let Some(context) = tree.contexts.get(id) else {
-    return;
-  };
-
-  if let Some(paint) = context.root() {
-    collect_headers_paint(tree, paint, bands);
-  }
-  for bucket in context.in_paint_order() {
-    for item in bucket {
-      match &item.kind {
-        PaintItemKind::Node(paint) => collect_headers_paint(tree, paint, bands),
-        PaintItemKind::Context(child) => collect_headers_context(tree, *child, bands),
-      }
-    }
-  }
 }
 
 fn collect_headers_paint(tree: &PreparedTree, paint: &NodePaint, bands: &mut Vec<HeaderBand>) {

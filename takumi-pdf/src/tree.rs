@@ -11,7 +11,7 @@ use takumi_core::{
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
   resources::image::ImageSource,
-  scene::{StackingContextNode, build_stacking_contexts},
+  scene::{NodePaint, PaintItemKind, StackingContextNode, build_stacking_contexts},
   style::{
     Affine, ComputedStyle, Display, FlexDirection, FontFamily, Lang, Length, Position,
     SizingContext, Style, StyleDeclaration, StyleSheet, ZIndex,
@@ -77,6 +77,29 @@ impl PreparedTree {
       .is_some_and(
         |child| matches!(child.context.style.z_index, ZIndex::Integer(index) if index < 0),
       )
+  }
+
+  /// Visits every node paint of the scene, in paint order.
+  pub(crate) fn for_each_paint(&self, mut visit: impl FnMut(&NodePaint)) {
+    fn walk(tree: &PreparedTree, id: usize, visit: &mut impl FnMut(&NodePaint)) {
+      let Some(context) = tree.contexts.get(id) else {
+        return;
+      };
+
+      if let Some(paint) = context.root() {
+        visit(paint);
+      }
+      for bucket in context.in_paint_order() {
+        for item in bucket {
+          match &item.kind {
+            PaintItemKind::Node(paint) => visit(paint),
+            PaintItemKind::Context(child) => walk(tree, *child, visit),
+          }
+        }
+      }
+    }
+
+    walk(self, 0, &mut visit);
   }
 
   pub(crate) fn emitter<'a>(
