@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use takumi_core::{
   context::RenderContext,
   font_style::SizedFontStyle,
-  geometry::ComputedLayout as Layout,
+  geometry::{ComputedLayout as Layout, NodeId},
   layout::{
     inline::{
       BuiltInlineLayout, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineRunLayout,
@@ -14,7 +14,7 @@ use takumi_core::{
     node::{NodeKind, TextData},
     tree::RenderNode,
   },
-  scene::{NodePaint, PaintItemKind},
+  scene::NodePaint,
 };
 
 use crate::{options::PdfError, pagination::Atom, tree::PreparedTree};
@@ -26,44 +26,23 @@ pub(crate) struct PreparedInline<'c> {
   pub(crate) runs: InlineRunLayout,
 }
 
-/// Inline layouts keyed by the source [`RenderNode`]'s address.
-pub(crate) type InlineMap<'c> = HashMap<usize, PreparedInline<'c>>;
-
-pub(crate) fn inline_key(node: &RenderNode) -> usize {
-  std::ptr::from_ref(node) as usize
-}
+/// Inline layouts keyed by the box's layout [`NodeId`].
+pub(crate) type InlineMap<'c> = HashMap<NodeId, PreparedInline<'c>>;
 
 /// The text-bearing boxes of a prepared tree, with the resolved font style
 /// each inline layout borrows.
 pub(crate) fn collect_text_boxes<'t>(tree: &'t PreparedTree) -> Vec<TextBox<'t>> {
   let mut boxes = Vec::new();
 
-  collect_text_boxes_context(tree, 0, &mut boxes);
+  tree.for_each_paint(|paint| collect_text_boxes_paint(tree, paint, &mut boxes));
   boxes
 }
 
 pub(crate) struct TextBox<'t> {
   node: &'t RenderNode,
+  node_id: NodeId,
   layout: Layout,
   font_style: SizedFontStyle<'t>,
-}
-
-fn collect_text_boxes_context<'t>(tree: &'t PreparedTree, id: usize, boxes: &mut Vec<TextBox<'t>>) {
-  let Some(context) = tree.contexts.get(id) else {
-    return;
-  };
-
-  if let Some(paint) = context.root() {
-    collect_text_boxes_paint(tree, paint, boxes);
-  }
-  for bucket in context.in_paint_order() {
-    for item in bucket {
-      match &item.kind {
-        PaintItemKind::Node(paint) => collect_text_boxes_paint(tree, paint, boxes),
-        PaintItemKind::Context(child) => collect_text_boxes_context(tree, *child, boxes),
-      }
-    }
-  }
 }
 
 fn collect_text_boxes_paint<'t>(
@@ -84,6 +63,7 @@ fn collect_text_boxes_paint<'t>(
   if is_text {
     boxes.push(TextBox {
       node,
+      node_id: paint.node_id,
       layout,
       font_style: SizedFontStyle::from_style(&node.context.style, &node.context),
     });
@@ -110,7 +90,7 @@ pub(crate) fn build_inline_map<'c>(boxes: &'c [TextBox<'c>]) -> Result<InlineMap
       &text_box.node.context,
       text_box.layout,
     )? {
-      map.insert(inline_key(text_box.node), PreparedInline { built, runs });
+      map.insert(text_box.node_id, PreparedInline { built, runs });
     }
   }
   Ok(map)

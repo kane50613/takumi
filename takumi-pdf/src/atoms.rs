@@ -3,7 +3,7 @@
 
 use takumi_core::{
   font_style::SizedFontStyle,
-  geometry::ComputedLayout as Layout,
+  geometry::{ComputedLayout as Layout, NodeId},
   layout::{
     node::NodeKind,
     tree::{LayoutResults, RenderNode},
@@ -13,9 +13,7 @@ use takumi_core::{
 };
 
 use crate::{
-  inline::{
-    InlineMap, build_inline_runs, inline_box_atoms, inline_key, node_inline_items, text_line_atoms,
-  },
+  inline::{InlineMap, build_inline_runs, inline_box_atoms, node_inline_items, text_line_atoms},
   options::PdfError,
   pagination::{Atom, Paragraph},
 };
@@ -131,11 +129,11 @@ impl AtomCollector<'_> {
     }
 
     if node.should_create_inline_layout() {
-      self.text_atoms(node, layout, y, atoms, paragraphs)?;
+      self.text_atoms(node, paint.node_id, layout, y, atoms, paragraphs)?;
     } else if !node.has_anonymous_text_item_child() {
       match node.node.as_ref().map(|n| &n.kind) {
         Some(NodeKind::Text(_)) => {
-          self.text_atoms(node, layout, y, atoms, paragraphs)?;
+          self.text_atoms(node, paint.node_id, layout, y, atoms, paragraphs)?;
         }
         Some(NodeKind::Image(_)) => {
           atoms.push((y, y + layout.size.height));
@@ -151,6 +149,7 @@ impl AtomCollector<'_> {
   fn text_atoms(
     &self,
     node: &RenderNode,
+    node_id: NodeId,
     layout: Layout,
     y: f32,
     atoms: &mut Vec<Atom>,
@@ -158,7 +157,7 @@ impl AtomCollector<'_> {
   ) -> Result<(), PdfError> {
     let start = atoms.len();
     let owned_runs;
-    let runs = match self.inline.and_then(|map| map.get(&inline_key(node))) {
+    let runs = match self.inline.and_then(|map| map.get(&node_id)) {
       Some(prepared) => &prepared.runs,
       None => {
         let context = &node.context;
