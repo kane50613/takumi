@@ -55,7 +55,7 @@ A table of contents is the same chapters as links, with the page each one starts
 ```tsx twoslash
 declare const chapters: { id: string; title: string }[];
 // ---cut---
-import { TargetPageNumber } from "takumi-pdf";
+import { TargetPageNumber } from "takumi-pdf/primitives";
 
 <nav tw="flex flex-col gap-1 text-sm">
   {chapters.map((chapter) => (

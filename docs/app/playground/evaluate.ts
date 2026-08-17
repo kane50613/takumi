@@ -7,7 +7,6 @@ import { optionsSchema } from "./schema";
 /// Modules a template may import. The wasm entry stays out: the playground
 /// renders through its own worker.
 const MODULES: Record<string, unknown> = {
-  "takumi-pdf": primitives,
   "takumi-pdf/primitives": primitives,
 };
 

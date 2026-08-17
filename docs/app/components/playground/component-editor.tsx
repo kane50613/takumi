@@ -141,10 +141,6 @@ export function ComponentEditor({
           },
           {
             content: pdfPrimitivesTypings,
-            filePath: "file:///node_modules/takumi-pdf/index.d.ts",
-          },
-          {
-            content: pdfPrimitivesTypings,
             filePath: "file:///node_modules/takumi-pdf/primitives.d.ts",
           },
           {
