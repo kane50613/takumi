@@ -16,12 +16,6 @@ export type { FontLoader, ImagesInput } from "@takumi-rs/helpers/renderer";
 export { PageNumber, TargetPageNumber, TotalPages } from "./primitives";
 export type { CounterProps, CounterStyle } from "./primitives";
 
-declare module "react" {
-  interface DOMAttributes<T> {
-    tw?: string;
-  }
-}
-
 /** Every class name in a tree, so the renderer can say what its counters draw. */
 function classNames(node: unknown): string[] {
   const into: string[] = [];

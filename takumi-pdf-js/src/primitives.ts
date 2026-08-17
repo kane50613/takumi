@@ -1,5 +1,11 @@
 import type { CSSProperties, ReactElement } from "react";
 
+declare module "react" {
+  interface DOMAttributes<T> {
+    tw?: string;
+  }
+}
+
 /**
  * A `@counter-style` name the page counters can format in, matching the set
  * the renderer's `@counter-style` substitution knows.
