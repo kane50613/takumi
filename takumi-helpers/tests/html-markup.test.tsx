@@ -91,6 +91,15 @@ describe("fromHtml", () => {
     expect(node.style).toEqual({ color: "red", fontSize: "12px" });
   });
 
+  // A backslash escapes the next character in CSS outside a string as well as
+  // inside one, so an escaped `;` is part of the value rather than a boundary.
+  test("keeps an escaped semicolon outside quotes", () => {
+    const backslash = String.fromCharCode(92);
+    const { node } = fromHtml(`<div style="--value:foo${backslash};bar;color:red">x</div>`);
+
+    expect(node.style).toEqual({ "--value": `foo${backslash};bar`, color: "red" });
+  });
+
   test("tolerates an unclosed url() in an inline style", () => {
     const { node } = fromHtml(`<div style="color:red;background-image:url(">x</div>`);
 

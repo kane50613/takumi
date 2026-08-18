@@ -235,22 +235,35 @@ function decodeAttributeMap(attributes: Record<string, string>): Record<string, 
  * Only a top-level `;` separates declarations. The character is legal inside a
  * value: `url(data:image/png;base64,...)` is how markup embeds an image without
  * a fetch, and a quoted family name such as `font-family: "Foo; Bar"` may carry
- * one too. Splitting on every `;` truncates the value at the first one and
- * leaves the remainder as a colon-less fragment that is then discarded.
+ * one too, as may an escaped `\;` outside either. Splitting on every `;`
+ * truncates the value at the first one and leaves the remainder as a
+ * colon-less fragment that is then discarded.
+ *
+ * A backslash escapes the next character in every state, which is how CSS
+ * treats it inside and outside a string alike.
  */
 function splitStyleDeclarations(styleText: string): string[] {
   const declarations: string[] = [];
   let start = 0;
   let depth = 0;
   let quote: string | undefined;
+  let escaped = false;
 
   for (let index = 0; index < styleText.length; index += 1) {
     const character = styleText[index];
 
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (character === "\\") {
+      escaped = true;
+      continue;
+    }
+
     if (quote !== undefined) {
-      if (character === "\\") {
-        index += 1;
-      } else if (character === quote) {
+      if (character === quote) {
         quote = undefined;
       }
       continue;
