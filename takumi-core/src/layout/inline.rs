@@ -17,7 +17,7 @@ use crate::{
     glyph::{ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},
   },
   style::{
-    Affine, BoxSizing, Color, Float, FontSynthesis, Lang, Length, ResolvedVerticalAlign,
+    Affine, BoxSizing, Color, Direction, Float, FontSynthesis, Lang, Length, ResolvedVerticalAlign,
     SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk, TextFitMode,
     TextFitTarget, TextOverflow, TextUnderlinePosition, TextWrapMode, TextWrapStyle, VerticalAlign,
     VerticalAlignKeyword, WhiteSpaceCollapse,
@@ -1439,6 +1439,11 @@ fn push_spans_into_builder(
   }
 }
 
+/// U+200F RIGHT-TO-LEFT MARK. Parley has no base-direction API and infers the
+/// paragraph level from the first strong character, so a `direction: rtl` block
+/// leads with this mark to force the RTL base level.
+const RTL_MARK: &str = "\u{200F}";
+
 fn build_inline_layout_tree<'c>(
   items: &[InlineItem<'c>],
   available_space: Size<AvailableSpace>,
@@ -1452,6 +1457,17 @@ fn build_inline_layout_tree<'c>(
   let mut index_pos = 0;
   let mut previous_collapsible_space = false;
   let mut previous_was_line_break = false;
+
+  if !items.is_empty() && context.style.direction == Direction::Rtl {
+    spans.push(ProcessedInlineSpan::Text {
+      span_id: 0,
+      byte_range: 0..RTL_MARK.len(),
+      text: RTL_MARK.to_owned(),
+      style: Box::new(SizedFontStyle::from_style(&context.style, context)),
+      link: None,
+    });
+    index_pos = RTL_MARK.len();
+  }
 
   for item in items {
     match item {

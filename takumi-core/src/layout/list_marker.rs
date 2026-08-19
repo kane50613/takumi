@@ -30,11 +30,9 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
   style.white_space_collapse = WhiteSpaceCollapse::Preserve;
   style.text_wrap_mode = TextWrapMode::NoWrap;
   style.display = Display::InlineFlex;
-  style.justify_content = if is_rtl {
-    JustifyContent::Start
-  } else {
-    JustifyContent::End
-  };
+  // Taffy resolves `Start`/`End` against `direction`, so flow-relative `End`
+  // hangs the overflowing content outside the item's content edge either way.
+  style.justify_content = JustifyContent::End;
 
   // An outside marker hangs at the item's content edge without taking width:
   // a zero-width flex box ends its overflowing content there.

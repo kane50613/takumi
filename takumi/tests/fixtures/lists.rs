@@ -66,6 +66,7 @@ const CSS: &str = r#"
   .image { list-style-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAEklEQVR42mOwbvr2Hx9mGBkKAKAwrIFG5bLTAAAAAElFTkSuQmCC); }
   .nested { padding-left: 24px; }
   .block { display: block; }
+  .rtl { direction: rtl; padding-left: 0; padding-right: 40px; }
 "#;
 
 fn nested_ordered_cell() -> Node {
@@ -152,6 +153,16 @@ fn marker_image_cell() -> Node {
   cell("list-style-image", lists)
 }
 
+fn rtl_cell() -> Node {
+  let lists = Node::container([
+    list("decimal rtl", [item("سطر 1"), item("سطر 2")]),
+    list("disc rtl", [item("سطر")]),
+    list("decimal rtl inside", [item("سطر")]),
+  ]);
+
+  cell("direction: rtl", lists)
+}
+
 #[test]
 fn test_list_markers() {
   let root = Node::container([
@@ -162,6 +173,7 @@ fn test_list_markers() {
     ordinals_cell(),
     marker_image_cell(),
     block_content_cell(),
+    rtl_cell(),
   ])
   .with_class_name("root");
 
