@@ -216,7 +216,9 @@ impl BuiltInlineLayout<'_> {
         match item {
           PositionedLayoutItem::GlyphRun(glyph_run) => {
             let text = measured_run_text(&self.text, &self.spans, &glyph_run);
-            if text.is_empty() || text == RTL_MARK {
+            if text.is_empty()
+              || (glyph_run.style().brush.is_direction_mark && glyph_run.advance() == 0.0)
+            {
               continue;
             }
 
@@ -496,6 +498,8 @@ pub(crate) struct InlineMeasureOptions {
 pub struct InlineBrush {
   /// Span this run originated from, if any.
   pub source_span_id: Option<u64>,
+  /// Whether this run is the synthetic direction mark, which never paints.
+  pub(crate) is_direction_mark: bool,
   /// Run opacity.
   pub opacity: f32,
   /// Text fill color.
@@ -525,6 +529,7 @@ impl Default for InlineBrush {
   fn default() -> Self {
     Self {
       source_span_id: None,
+      is_direction_mark: false,
       opacity: 1.0,
       color: Color::black(),
       decoration_color: Color::black(),
@@ -1430,9 +1435,16 @@ fn push_spans_into_builder(
         style,
         ..
       } => {
-        let source_span_id = (*span_id != SYNTHETIC_SPAN_ID).then_some(*span_id);
+        if *span_id == SYNTHETIC_SPAN_ID {
+          let mut mark_style = text_style_with_span_id(style, None);
+          mark_style.brush.is_direction_mark = true;
+          builder.push_style_span(mark_style);
+          builder.push_text(text);
+          builder.pop_style_span();
+          continue;
+        }
 
-        push_presentation_text(builder, style, source_span_id, text, classes);
+        push_presentation_text(builder, style, Some(*span_id), text, classes);
       }
       ProcessedInlineSpan::Box(item) => {
         builder.push_inline_box(item.inline_box.clone());
@@ -1442,11 +1454,14 @@ fn push_spans_into_builder(
 }
 
 /// U+200F RIGHT-TO-LEFT MARK. Parley has no base-direction API and infers the
-/// paragraph level from the first strong character, so a `direction: rtl` block
-/// leads with this mark to force the RTL base level.
+/// paragraph level from the first strong character, so every block leads with
+/// the mark matching its `direction` to force that base level.
 const RTL_MARK: &str = "\u{200F}";
 
-/// Span id of the synthetic [`RTL_MARK`] span, which has no source span.
+/// U+200E LEFT-TO-RIGHT MARK, the LTR counterpart of [`RTL_MARK`].
+const LTR_MARK: &str = "\u{200E}";
+
+/// Span id of the synthetic direction-mark span, which has no source span.
 const SYNTHETIC_SPAN_ID: u64 = u64::MAX;
 
 fn build_inline_layout_tree<'c>(
@@ -1463,15 +1478,36 @@ fn build_inline_layout_tree<'c>(
   let mut previous_collapsible_space = false;
   let mut previous_was_line_break = false;
 
-  if !items.is_empty() && context.style.direction == Direction::Rtl {
+  if !items.is_empty() {
+    let mark = if context.style.direction == Direction::Rtl {
+      RTL_MARK
+    } else {
+      LTR_MARK
+    };
+
+    // The mark borrows the first text span's style so it resolves to the same
+    // font and cannot skew the line's metrics, and it must not advance the
+    // line: spacing applies per cluster, so a zero-width glyph would still
+    // widen the paragraph by one letter-spacing.
+    let mark_context = items
+      .iter()
+      .find_map(|item| match item {
+        InlineItem::Text { context, .. } => Some(*context),
+        _ => None,
+      })
+      .unwrap_or(context);
+    let mut mark_style = SizedFontStyle::from_style(&mark_context.style, mark_context);
+    mark_style.letter_spacing = 0.0;
+    mark_style.word_spacing = 0.0;
+
     spans.push(ProcessedInlineSpan::Text {
       span_id: SYNTHETIC_SPAN_ID,
-      byte_range: 0..RTL_MARK.len(),
-      text: RTL_MARK.to_owned(),
-      style: Box::new(SizedFontStyle::from_style(&context.style, context)),
+      byte_range: 0..mark.len(),
+      text: mark.to_owned(),
+      style: Box::new(mark_style),
       link: None,
     });
-    index_pos = RTL_MARK.len();
+    index_pos = mark.len();
   }
 
   for item in items {
@@ -2522,6 +2558,11 @@ pub fn resolve_inline_runs(
     ProcessedInlineSpan::Box(_) => false,
   });
 
+  let first_real_span_id = spans.iter().find_map(|span| match span {
+    ProcessedInlineSpan::Text { span_id, .. } if *span_id != SYNTHETIC_SPAN_ID => Some(*span_id),
+    _ => None,
+  });
+
   let mut runs = Vec::new();
   let mut outline_rects = Vec::new();
   let mut positioned_inline_boxes: HashMap<u64, VisualInlineBox> = HashMap::new();
@@ -2542,6 +2583,18 @@ pub fn resolve_inline_runs(
       match item {
         PositionedLayoutItem::GlyphRun(glyph_run) => {
           let run = glyph_run.run();
+          // A run carrying only the direction mark paints nothing; a run the
+          // mark's cluster merged into (emoji sequences) paints as the first
+          // real span.
+          let mut brush = glyph_run.style().brush;
+          if brush.is_direction_mark {
+            if glyph_run.advance() == 0.0 {
+              continue;
+            }
+            brush.is_direction_mark = false;
+            brush.source_span_id = first_real_span_id;
+          }
+
           let font = FontRef::from_index(run.font().data.as_ref(), run.font().index)
             .map_err(|_| FontError::InvalidFontIndex)?;
           let glyph_ids = glyph_run.positioned_glyphs().map(|glyph| glyph.id);
@@ -2580,7 +2633,7 @@ pub fn resolve_inline_runs(
             offset: glyph_run.offset(),
             baseline: glyph_run.baseline(),
             advance: glyph_run.advance(),
-            brush: glyph_run.style().brush,
+            brush,
             metrics: RunMetrics {
               ascent: metrics.ascent,
               descent: metrics.descent,
@@ -3275,13 +3328,13 @@ mod tests {
     assert!(
       segments
         .iter()
-        .any(|(span_id, _, color)| *span_id == Some(0) && *color == orange),
+        .any(|(span_id, _, color)| *span_id == Some(1) && *color == orange),
       "{segments:#?}"
     );
     assert!(
       segments
         .iter()
-        .any(|(span_id, _, color)| *span_id == Some(2) && *color == blue),
+        .any(|(span_id, _, color)| *span_id == Some(3) && *color == blue),
       "{segments:#?}"
     );
   }
