@@ -1478,7 +1478,15 @@ fn build_inline_layout_tree<'c>(
   let mut previous_collapsible_space = false;
   let mut previous_was_line_break = false;
 
-  if !items.is_empty() {
+  let text_item_context = items.iter().find_map(|item| match item {
+    InlineItem::Text { context, .. } => Some(*context),
+    _ => None,
+  });
+
+  // A text-less LTR paragraph already has the LTR base level, and the mark's
+  // line metrics would inflate its line box.
+  if !items.is_empty() && (text_item_context.is_some() || context.style.direction == Direction::Rtl)
+  {
     let mark = if context.style.direction == Direction::Rtl {
       RTL_MARK
     } else {
@@ -1489,13 +1497,7 @@ fn build_inline_layout_tree<'c>(
     // font and cannot skew the line's metrics, and it must not advance the
     // line: spacing applies per cluster, so a zero-width glyph would still
     // widen the paragraph by one letter-spacing.
-    let mark_context = items
-      .iter()
-      .find_map(|item| match item {
-        InlineItem::Text { context, .. } => Some(*context),
-        _ => None,
-      })
-      .unwrap_or(context);
+    let mark_context = text_item_context.unwrap_or(context);
     let mut mark_style = SizedFontStyle::from_style(&mark_context.style, mark_context);
     mark_style.letter_spacing = 0.0;
     mark_style.word_spacing = 0.0;
