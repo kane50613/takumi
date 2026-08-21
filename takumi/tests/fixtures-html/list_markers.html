@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>list_markers</title>
+  <base href="../../../">
+  <link rel="stylesheet" href="takumi/tests/shared.css">
+  <style>
+  .root {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 16px;
+    width: 100%;
+    height: 100%;
+    background: rgb(243, 244, 246);
+    align-content: flex-start;
+    font-family: "Geist";
+  }
+  .cell {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 282px;
+    height: 190px;
+    background: white;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .label {
+    font-size: 11px;
+    color: rgb(100, 116, 139);
+    font-family: "Geist Mono";
+  }
+  .list {
+    display: block;
+    padding-left: 40px;
+    font-size: 16px;
+    color: rgb(17, 24, 39);
+  }
+  .item {
+    display: list-item;
+  }
+  .decimal { list-style-type: decimal; }
+  .disc { list-style-type: disc; }
+  .circle { list-style-type: circle; }
+  .roman { list-style-type: upper-roman; }
+  .alpha { list-style-type: lower-alpha; }
+  .padded { list-style-type: decimal-leading-zero; }
+  .arrow { list-style-type: "→ "; }
+  .hidden { list-style-type: none; }
+  .inside { list-style-position: inside; }
+  .image { list-style-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAEklEQVR42mOwbvr2Hx9mGBkKAKAwrIFG5bLTAAAAAElFTkSuQmCC); }
+  .nested { padding-left: 24px; }
+  .block { display: block; }
+  .rtl { direction: rtl; padding-left: 0; padding-right: 40px; }
+</style>
+</head>
+<body style="width: 1200px; height: 630px;">
+  <div class="root"><div class="cell"><span class="label">nested ordered lists</span><div class="list decimal"><div class="item"><span>line 1</span></div><div class="item"><span>line 2</span><div class="list decimal nested"><div class="item"><span>inner line 1</span></div><div class="item"><span>inner line 2</span></div></div></div></div></div><div class="cell"><span class="label">bullets</span><div class="list disc"><div class="item"><span>disc</span></div><div class="list circle nested"><div class="item"><span>circle</span></div><div class="item"><span>circle</span></div></div></div></div><div class="cell"><span class="label">counter styles</span><div><div class="list roman"><div class="item"><span>upper roman</span></div><div class="item"><span>upper roman</span></div></div><div class="list alpha"><div class="item"><span>lower alpha</span></div><div class="item"><span>lower alpha</span></div></div><div class="list padded"><div class="item"><span>leading zero</span></div></div><div class="list arrow"><div class="item"><span>string marker</span></div></div><div class="list hidden"><div class="item"><span>none</span></div></div></div></div><div class="cell"><span class="label">list-style-position: inside</span><div><div class="list decimal inside"><div class="item"><span>inside</span></div><div class="item"><span>inside, wrapping</span></div></div><div class="list disc inside"><div class="item"><span>inside</span></div></div></div></div><div class="cell"><span class="label">start / value</span><div><div class="list decimal" start="3"><div class="item"><span>start at 3</span></div><div class="item"><span>4</span></div></div><div class="list decimal"><div class="item"><span>1</span></div><div class="item" value="9"><span>value=9</span></div><div class="item"><span>10</span></div></div></div></div><div class="cell"><span class="label">list-style-image</span><div><div class="list image"><div class="item"><span>image marker</span></div><div class="item"><span>image marker</span></div></div><div class="list image inside"><div class="item"><span>inside</span></div></div></div></div><div class="cell"><span class="label">block-level item content</span><div class="list decimal"><div class="item"><div class="block"><span>block child</span></div></div><div class="item"><span>text child</span></div></div></div><div class="cell"><span class="label">direction: rtl</span><div><div class="list decimal rtl"><div class="item"><span>سطر 1</span></div><div class="item"><span>سطر 2</span></div></div><div class="list disc rtl"><div class="item"><span>سطر</span></div></div><div class="list decimal rtl inside"><div class="item"><span>سطر</span></div></div></div></div></div>
+</body>
+</html>

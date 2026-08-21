@@ -95,22 +95,25 @@ Notes:
 
 ## Fixture Workflow (Rust Rendering)
 
-Takumi fixture tests write snapshots under `takumi/tests/fixtures-generated`.
+Fixture sources are HTML files in `takumi/tests/fixtures-html`. The `html_fixtures` test parses each file and writes its goldens (`.webp`, `.svg`) to `takumi/tests/fixtures-generated`. The same file opens in a browser for a reference render.
 
 When you change rendering/layout behavior:
 
-1. Update or add fixture tests in `takumi/tests/fixtures/*.rs`.
-2. Register new fixture modules in `takumi/tests/fixtures.rs` if you added a new file.
-3. Run:
+1. Add or edit an HTML file in `takumi/tests/fixtures-html`. Put CSS in a `<style>` block. The `<body>` inline width/height set the viewport.
+2. Run:
 
 ```bash
 CARGO_PROFILE_TEST_STRIP=debuginfo cargo test -q
 ```
 
-4. Review updated files in `takumi/tests/fixtures-generated`.
-5. Include intentional fixture updates in your PR.
+3. Review updated files in `takumi/tests/fixtures-generated`. Compare against the HTML opened in a browser.
+4. Include intentional fixture updates in your PR.
 
 CI will fail if generated files change unexpectedly.
+
+Do not format files in `fixtures-html`: whitespace is part of the fixture. `.oxfmtrc.json` ignores the directory.
+
+A few fixtures stay as Rust tests in `takumi/tests/fixtures/*.rs`. They animate, assert on rendered pixels, or use node features HTML cannot express (intrinsic image size hints, inline SVG sources).
 
 ## Changelogs
 
