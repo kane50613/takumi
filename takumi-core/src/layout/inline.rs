@@ -215,7 +215,8 @@ impl BuiltInlineLayout<'_> {
       for item in line.items() {
         match item {
           PositionedLayoutItem::GlyphRun(glyph_run) => {
-            let text = measured_run_text(&self.text, &self.spans, &glyph_run);
+            let span_id = effective_source_span_id(&glyph_run.style().brush, &self.spans);
+            let text = measured_run_text(&self.text, &self.spans, &glyph_run, span_id);
             if text.is_empty()
               || (glyph_run.style().brush.is_direction_mark && glyph_run.advance() == 0.0)
             {
@@ -240,11 +241,9 @@ impl BuiltInlineLayout<'_> {
               height *= setup.state.scale;
             }
 
-            let link = glyph_run.style().brush.source_span_id.and_then(|span_id| {
-              match self.spans.get(span_id as usize) {
-                Some(ProcessedInlineSpan::Text { link, .. }) => link.as_deref(),
-                _ => None,
-              }
+            let link = span_id.and_then(|span_id| match self.spans.get(span_id as usize) {
+              Some(ProcessedInlineSpan::Text { link, .. }) => link.as_deref(),
+              _ => None,
             });
 
             runs.push(MeasuredInlineRun {
@@ -1464,6 +1463,20 @@ const LTR_MARK: &str = "\u{200E}";
 /// Span id of the synthetic direction-mark span, which has no source span.
 const SYNTHETIC_SPAN_ID: u64 = u64::MAX;
 
+/// The span a glyph run's output attributes to: a run the direction mark's
+/// cluster merged into carries the mark's brush, which resolves to the first
+/// real text span.
+fn effective_source_span_id(brush: &InlineBrush, spans: &[ProcessedInlineSpan<'_>]) -> Option<u64> {
+  if !brush.is_direction_mark {
+    return brush.source_span_id;
+  }
+
+  spans.iter().find_map(|span| match span {
+    ProcessedInlineSpan::Text { span_id, .. } if *span_id != SYNTHETIC_SPAN_ID => Some(*span_id),
+    _ => None,
+  })
+}
+
 fn build_inline_layout_tree<'c>(
   items: &[InlineItem<'c>],
   available_space: Size<AvailableSpace>,
@@ -2095,30 +2108,6 @@ fn scale_outline_rect(
   }
 }
 
-fn collect_glyph_run_outline_rect(
-  glyph_run: &GlyphRun<'_, InlineBrush>,
-  layout: ComputedLayout,
-  line_index: usize,
-  line_top: f32,
-  line_height: f32,
-  line_scale: LineScaleState,
-  static_inline_prefix: f32,
-) -> Option<InlineOutlineRect> {
-  let span_id = glyph_run.style().brush.source_span_id?;
-  Some(scale_outline_rect(
-    InlineOutlineRect {
-      span_id,
-      line_index,
-      x: layout.border.left + layout.padding.left + glyph_run.offset(),
-      y: line_top,
-      width: glyph_run.advance(),
-      height: line_height,
-    },
-    line_scale,
-    static_inline_prefix,
-  ))
-}
-
 const OUTLINE_COORD_TOLERANCE: f32 = 1e-3;
 
 fn x_ranges_touch(left: InlineOutlineRect, right: InlineOutlineRect) -> bool {
@@ -2560,11 +2549,6 @@ pub fn resolve_inline_runs(
     ProcessedInlineSpan::Box(_) => false,
   });
 
-  let first_real_span_id = spans.iter().find_map(|span| match span {
-    ProcessedInlineSpan::Text { span_id, .. } if *span_id != SYNTHETIC_SPAN_ID => Some(*span_id),
-    _ => None,
-  });
-
   let mut runs = Vec::new();
   let mut outline_rects = Vec::new();
   let mut positioned_inline_boxes: HashMap<u64, VisualInlineBox> = HashMap::new();
@@ -2593,8 +2577,8 @@ pub fn resolve_inline_runs(
             if glyph_run.advance() == 0.0 {
               continue;
             }
+            brush.source_span_id = effective_source_span_id(&brush, spans);
             brush.is_direction_mark = false;
-            brush.source_span_id = first_real_span_id;
           }
 
           let font = FontRef::from_index(run.font().data.as_ref(), run.font().index)
@@ -2604,19 +2588,23 @@ pub fn resolve_inline_runs(
             .fonts
             .with_context(|fonts| fonts.resolve_glyphs(&glyph_run, font, glyph_ids));
 
-          if need_outline
-            && let Some(outline_rect) = collect_glyph_run_outline_rect(
-              &glyph_run,
-              layout,
-              line_index,
-              layout.border.top + layout.padding.top + glyph_run.baseline() + setup.baseline_shift
-                - setup.resolved_metrics.resolved_ascent,
-              setup.resolved_metrics.resolved_line_height,
+          if need_outline && let Some(span_id) = brush.source_span_id {
+            outline_rects.push(scale_outline_rect(
+              InlineOutlineRect {
+                span_id,
+                line_index,
+                x: layout.border.left + layout.padding.left + glyph_run.offset(),
+                y: layout.border.top
+                  + layout.padding.top
+                  + glyph_run.baseline()
+                  + setup.baseline_shift
+                  - setup.resolved_metrics.resolved_ascent,
+                width: glyph_run.advance(),
+                height: setup.resolved_metrics.resolved_line_height,
+              },
               setup.state,
               static_inline_prefix,
-            )
-          {
-            outline_rects.push(outline_rect);
+            ));
           }
 
           let metrics = run.metrics();
@@ -2744,9 +2732,10 @@ fn measured_run_text<'a>(
   text: &'a str,
   spans: &[ProcessedInlineSpan<'_>],
   glyph_run: &GlyphRun<'_, InlineBrush>,
+  span_id: Option<u64>,
 ) -> &'a str {
   let text_range = glyph_run.run().text_range();
-  let Some(span_id) = glyph_run.style().brush.source_span_id else {
+  let Some(span_id) = span_id else {
     return slice_text_at_char_boundaries(text, text_range);
   };
 
