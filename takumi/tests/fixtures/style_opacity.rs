@@ -25,7 +25,9 @@ fn darkest_pixel_in_range(image: &Bitmap, x_range: std::ops::Range<u32>) -> u8 {
 
   image
     .as_raw()
-    .chunks_exact(4)
+    .as_chunks::<4>()
+    .0
+    .iter()
     .enumerate()
     .filter_map(|(index, pixel)| {
       let x = index as u32 % width;

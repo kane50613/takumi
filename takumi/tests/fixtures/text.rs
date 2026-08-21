@@ -1642,7 +1642,9 @@ fn rightmost_dark_column(image: &Bitmap) -> u32 {
 
   image
     .as_raw()
-    .chunks_exact(4)
+    .as_chunks::<4>()
+    .0
+    .iter()
     .enumerate()
     .filter_map(|(index, pixel)| {
       let dark = pixel[3] > 0 && pixel[0].min(pixel[1]).min(pixel[2]) < 160;

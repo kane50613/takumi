@@ -302,7 +302,12 @@ fn decode_png_scaled(
     match channels {
       4 => rgba_row.copy_from_slice(row.data()),
       _ => {
-        for (rgba, pixel) in rgba_row.chunks_exact_mut(4).zip(row.data().chunks_exact(2)) {
+        for (rgba, pixel) in rgba_row
+          .as_chunks_mut::<4>()
+          .0
+          .iter_mut()
+          .zip(row.data().as_chunks::<2>().0)
+        {
           rgba[0] = pixel[0];
           rgba[1] = pixel[0];
           rgba[2] = pixel[0];

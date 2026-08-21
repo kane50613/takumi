@@ -580,7 +580,7 @@ pub(crate) fn blend_premultiplied_pixel_normal(dst: &mut [u8], src: Premultiplie
 }
 
 pub(crate) fn composite_premultiplied_over_span(dst: &mut [u8], pixels: &[PremultipliedColorU8]) {
-  for (dst_pixel, src_pixel) in dst.chunks_exact_mut(4).zip(pixels) {
+  for (dst_pixel, src_pixel) in dst.as_chunks_mut::<4>().0.iter_mut().zip(pixels) {
     let src_a = src_pixel.alpha();
     let inv_src_a = (u8::MAX - src_a) as u32;
     dst_pixel[0] = src_pixel
@@ -601,7 +601,7 @@ pub(crate) fn fill_repeated_premultiplied_pixel(dst: &mut [u8], pixel: [u8; 4]) 
 }
 
 pub(crate) fn blend_repeated_premultiplied_pixel(dst: &mut [u8], pixel: PremultipliedColorU8) {
-  for dst_pixel in dst.chunks_exact_mut(4) {
+  for dst_pixel in dst.as_chunks_mut::<4>().0 {
     blend_premultiplied_pixel_normal(dst_pixel, pixel);
   }
 }

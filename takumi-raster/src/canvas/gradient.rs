@@ -258,7 +258,7 @@ fn try_overlay_radial_gradient_tile_fast_normal_unconstrained(
       let center_byte_end = center_byte_start + center_pixels * 4;
       let center_row = &mut row[center_byte_start..center_byte_end];
       let mut row_state = gradient.begin_row(active_x_start, src_y, lut_len);
-      for pixel in center_row.chunks_exact_mut(4) {
+      for pixel in center_row.as_chunks_mut::<4>().0 {
         let lut_idx = gradient.next_lut_index(&mut row_state);
         let src = gradient.sample_at(lut_idx);
         blend_premultiplied_pixel_normal(pixel, src);

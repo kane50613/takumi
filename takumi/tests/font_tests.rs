@@ -60,13 +60,18 @@ fn render_devanagari(fonts: &Fonts, family: &str) -> Bitmap {
 }
 
 fn inked_pixels(bitmap: &Bitmap) -> u32 {
-  bitmap.as_raw().chunks_exact(4).filter(|p| p[3] > 0).count() as u32
+  let (pixels, _) = bitmap.as_raw().as_chunks::<4>();
+
+  pixels.iter().filter(|p| p[3] > 0).count() as u32
 }
 
 fn pixel_diff(a: &Bitmap, b: &Bitmap) -> u32 {
-  a.as_raw()
-    .chunks_exact(4)
-    .zip(b.as_raw().chunks_exact(4))
+  let (a_pixels, _) = a.as_raw().as_chunks::<4>();
+  let (b_pixels, _) = b.as_raw().as_chunks::<4>();
+
+  a_pixels
+    .iter()
+    .zip(b_pixels)
     .filter(|(x, y)| x != y)
     .count() as u32
 }

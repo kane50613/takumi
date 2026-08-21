@@ -51,7 +51,9 @@ fn rightmost_ink_column(image: &Bitmap) -> u32 {
 
   image
     .as_raw()
-    .chunks_exact(4)
+    .as_chunks::<4>()
+    .0
+    .iter()
     .enumerate()
     .filter_map(|(index, pixel)| {
       let dark = pixel[3] > 0 && pixel[0].min(pixel[1]).min(pixel[2]) < 160;
@@ -94,7 +96,9 @@ fn bottommost_ink_row(image: &Bitmap) -> u32 {
 
   image
     .as_raw()
-    .chunks_exact(4)
+    .as_chunks::<4>()
+    .0
+    .iter()
     .enumerate()
     .filter_map(|(index, pixel)| {
       let dark = pixel[3] > 0 && pixel[0].min(pixel[1]).min(pixel[2]) < 160;
