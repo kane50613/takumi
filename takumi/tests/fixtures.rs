@@ -4,6 +4,8 @@
 
 mod test_utils;
 
+#[path = "fixtures/animated_webp_source.rs"]
+pub mod animated_webp_source;
 #[path = "fixtures/animation.rs"]
 pub mod animation;
 #[path = "fixtures/deep_nesting.rs"]

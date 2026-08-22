@@ -14,8 +14,8 @@ use image::{
   codecs::png::PngDecoder,
   error::{DecodingError, ImageFormatHint, UnsupportedError, UnsupportedErrorKind},
 };
-#[cfg(all(target_arch = "wasm32", feature = "webp"))]
-use image_webp::WebPDecoder;
+#[cfg(feature = "webp")]
+use image_webp::{DecodingError as WebPDecodingError, WebPDecoder};
 #[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
 use libwebp_sys::{
   VP8StatusCode, WEBP_CSP_MODE, WebPDecode, WebPDecoderConfig, WebPGetInfo, WebPRGBABuffer,
@@ -42,9 +42,13 @@ const MAX_IMAGE_DIMENSION: u32 = 8192;
 /// 8192 x 8192 — far above any sane OG-image asset, far below OOM territory.
 #[cfg(any(feature = "gif", feature = "webp"))]
 const MAX_IMAGE_PIXELS: u64 = MAX_IMAGE_DIMENSION as u64 * MAX_IMAGE_DIMENSION as u64;
-/// Total pixels across all GIF frames (frame budget for animations).
-#[cfg(feature = "gif")]
-const MAX_GIF_TOTAL_PIXELS: u64 = 4 * MAX_IMAGE_PIXELS;
+/// Total pixels across all frames of an animation (frames are canvas-sized).
+#[cfg(any(feature = "gif", feature = "webp"))]
+const MAX_ANIMATION_TOTAL_PIXELS: u64 = 4 * MAX_IMAGE_PIXELS;
+/// Frames past this point are dropped from a timeline. The pixel budget alone
+/// leaves a tiny canvas free to carry an unbounded frame list.
+#[cfg(feature = "webp")]
+const MAX_ANIMATION_FRAMES: usize = 1024;
 
 /// Rejects decoded images whose pixel count exceeds [`MAX_IMAGE_PIXELS`].
 #[cfg(feature = "webp")]
@@ -69,12 +73,6 @@ fn pixel_budget_error(width: u32, height: u32) -> ImageError {
       format!("image dimensions {width}x{height} exceed the decode budget"),
     ),
   ))
-}
-
-#[derive(Debug)]
-pub(crate) struct DecodedGifFrame {
-  pub(crate) buffer: Arc<ImageBuffer>,
-  pub(crate) duration_ms: u32,
 }
 
 pub(crate) fn is_gif(bytes: &[u8]) -> bool {
@@ -371,7 +369,7 @@ pub(crate) fn gif_frame_durations(bytes: &[u8]) -> ImageResult<Box<[u32]>> {
     match decoder.read_next_frame() {
       Ok(Some(frame)) => {
         total_pixels += frame_pixels;
-        if total_pixels > MAX_GIF_TOTAL_PIXELS {
+        if total_pixels > MAX_ANIMATION_TOTAL_PIXELS {
           break;
         }
         durations.push((frame.delay as u32 * 10).max(1));
@@ -424,7 +422,7 @@ fn clear_rect(canvas: &mut [u8], canvas_size: (u32, u32), rect: Rect<u32>) {
 
 /// Decodes GIF frames in stream order, passing each frame past the first
 /// `skip` to `push`, up to `limit` pushed frames. Returns whether the stream
-/// ended. A mid-stream decode error or a blown [`MAX_GIF_TOTAL_PIXELS`] budget
+/// ended. A mid-stream decode error or a blown [`MAX_ANIMATION_TOTAL_PIXELS`] budget
 /// truncates the timeline (reported as ended); only a stream with no decodable
 /// first frame errors.
 ///
@@ -440,7 +438,7 @@ pub(crate) fn decode_gif_frames(
   skip: usize,
   limit: Option<usize>,
   target: Option<(u32, u32, ImageScalingAlgorithm)>,
-  mut push: impl FnMut(DecodedGifFrame),
+  mut push: impl FnMut(Arc<ImageBuffer>),
 ) -> ImageResult<bool> {
   let mut decoder = gif_decoder(bytes)?;
   let (width, height) = (decoder.width() as u32, decoder.height() as u32);
@@ -470,7 +468,7 @@ pub(crate) fn decode_gif_frames(
     index += 1;
 
     total_pixels += width as u64 * height as u64;
-    if total_pixels > MAX_GIF_TOTAL_PIXELS {
+    if total_pixels > MAX_ANIMATION_TOTAL_PIXELS {
       return Ok(true);
     }
 
@@ -481,7 +479,6 @@ pub(crate) fn decode_gif_frames(
       bottom: frame.top as u32 + frame.height as u32,
     };
     let dispose = frame.dispose;
-    let duration_ms = (frame.delay as u32 * 10).max(1);
 
     scratch.resize(decoder.buffer_size(), 0);
     if let Err(error) = decoder.read_into_buffer(&mut scratch) {
@@ -541,11 +538,7 @@ pub(crate) fn decode_gif_frames(
     };
 
     if let Some(buffer) = buffer {
-      let buffer = buffer.ok_or_else(invalid_buffer_error)?;
-      push(DecodedGifFrame {
-        buffer: Arc::new(buffer),
-        duration_ms,
-      });
+      push(Arc::new(buffer.ok_or_else(invalid_buffer_error)?));
       pushed += 1;
       if limit.is_some_and(|limit| pushed >= limit) {
         return Ok(false);
@@ -610,6 +603,10 @@ fn decode_webp(bytes: &[u8]) -> ImageResult<ImageBuffer> {
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
 fn decode_webp(bytes: &[u8]) -> ImageResult<ImageBuffer> {
+  if is_animated_webp(bytes) {
+    return decode_animated_webp_first_frame(bytes);
+  }
+
   let (width, height) = webp_dimensions(bytes)?;
 
   check_pixel_budget(width, height)?;
@@ -623,7 +620,9 @@ fn decode_webp(bytes: &[u8]) -> ImageResult<ImageBuffer> {
 /// slightly from full-decode + resample.
 #[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
 fn decode_webp_scaled(bytes: &[u8], width: u32, height: u32) -> Option<ImageResult<ImageBuffer>> {
-  if !matches!(detect_image_format(bytes), Some(DetectedImageFormat::WebP)) {
+  if !matches!(detect_image_format(bytes), Some(DetectedImageFormat::WebP))
+    || is_animated_webp(bytes)
+  {
     return None;
   }
 
@@ -689,12 +688,181 @@ fn decode_webp_into(
   };
 
   if status != VP8StatusCode::VP8_STATUS_OK {
-    return Err(webp_decode_error(WebPError::EncodeFailed));
+    return Err(webp_decode_error(WebPError::InvalidEncodedData));
   }
 
   RgbaImage::from_raw(width, height, image_data)
     .ok_or_else(invalid_buffer_error)
     .and_then(|image| rgba_to_buffer(image, ImageFormat::WebP))
+}
+
+/// Whether the `VP8X` header sets the animation flag.
+#[cfg(feature = "webp")]
+pub(crate) fn is_animated_webp(bytes: &[u8]) -> bool {
+  webp_chunks(bytes).any(|(id, payload)| {
+    &id == b"VP8X"
+      && payload
+        .first()
+        .is_some_and(|flags| flags & 0b0000_0010 != 0)
+  })
+}
+
+/// Top-level RIFF chunks of a WebP, as `(id, payload)` pairs.
+#[cfg(feature = "webp")]
+fn webp_chunks(bytes: &[u8]) -> impl Iterator<Item = ([u8; 4], &[u8])> {
+  let mut offset = 12;
+  std::iter::from_fn(move || {
+    let header: [u8; 8] = bytes.get(offset..offset + 8)?.try_into().ok()?;
+    let size = u32::from_le_bytes([header[4], header[5], header[6], header[7]]) as usize;
+    let payload = bytes.get(offset + 8..(offset + 8).checked_add(size)?)?;
+    offset = offset + 8 + size + (size & 1);
+    Some(([header[0], header[1], header[2], header[3]], payload))
+  })
+}
+
+#[cfg(feature = "webp")]
+pub(crate) fn animated_webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
+  let decoder = WebPDecoder::new(Cursor::new(bytes)).map_err(webp_decode_error)?;
+  Ok(decoder.dimensions())
+}
+
+/// Per-frame delays in milliseconds, in stream order, read from the `ANMF`
+/// headers without decoding any pixels. Stops on the same frame and pixel
+/// budgets as [`decode_webp_frames`], so a playback time never selects a frame
+/// the decoder drops.
+#[cfg(feature = "webp")]
+pub(crate) fn webp_frame_durations(bytes: &[u8]) -> ImageResult<Box<[u32]>> {
+  let (width, height) = animated_webp_dimensions(bytes)?;
+  let frame_pixels = width as u64 * height as u64;
+  let mut total_pixels = 0_u64;
+  let mut durations = Vec::new();
+
+  for (id, payload) in webp_chunks(bytes) {
+    if &id != b"ANMF" {
+      continue;
+    }
+    if durations.len() >= MAX_ANIMATION_FRAMES {
+      break;
+    }
+
+    total_pixels += frame_pixels;
+    if total_pixels > MAX_ANIMATION_TOTAL_PIXELS {
+      break;
+    }
+
+    let Some(header) = payload.get(12..15) else {
+      break;
+    };
+    durations.push(u32::from_le_bytes([header[0], header[1], header[2], 0]).max(1));
+  }
+
+  Ok(durations.into())
+}
+
+/// Decodes animated WebP frames in stream order, passing each frame past the
+/// first `skip` to `push`, up to `limit` pushed frames. Returns whether the
+/// stream ended. Mid-stream decode errors and a blown budget truncate the
+/// timeline (reported as ended); only a stream with no decodable first frame
+/// errors.
+///
+/// `image-webp` owns the animation canvas, so a read composites onto the frame
+/// before it and hands back the whole canvas.
+#[cfg(feature = "webp")]
+pub(crate) fn decode_webp_frames(
+  bytes: &[u8],
+  skip: usize,
+  limit: Option<usize>,
+  target: Option<(u32, u32, ImageScalingAlgorithm)>,
+  mut push: impl FnMut(Arc<ImageBuffer>),
+) -> ImageResult<bool> {
+  let mut decoder = WebPDecoder::new(Cursor::new(bytes)).map_err(webp_decode_error)?;
+  let (width, height) = decoder.dimensions();
+  check_pixel_budget(width, height)?;
+  let target = target.filter(|&(w, h, _)| w < width || h < height);
+
+  let has_alpha = decoder.has_alpha();
+  let mut canvas = vec![
+    0_u8;
+    decoder
+      .output_buffer_size()
+      .ok_or_else(invalid_buffer_error)?
+  ];
+  let mut total_pixels = 0_u64;
+  let mut pushed = 0_usize;
+
+  for index in 0..MAX_ANIMATION_FRAMES {
+    if limit.is_some_and(|limit| pushed >= limit) {
+      return Ok(false);
+    }
+
+    match decoder.read_frame(&mut canvas) {
+      Ok(_) => {}
+      Err(WebPDecodingError::NoMoreFrames) => break,
+      Err(error) if index == 0 => return Err(webp_decode_error(error)),
+      Err(_) => return Ok(true),
+    }
+
+    total_pixels += width as u64 * height as u64;
+    if total_pixels > MAX_ANIMATION_TOTAL_PIXELS {
+      return Ok(true);
+    }
+
+    if index < skip {
+      continue;
+    }
+
+    push(Arc::new(webp_canvas_to_buffer(
+      &canvas, width, height, has_alpha, target,
+    )?));
+    pushed += 1;
+  }
+
+  Ok(true)
+}
+
+/// The first frame, for the still-image decode paths.
+#[cfg(feature = "webp")]
+fn decode_animated_webp_first_frame(bytes: &[u8]) -> ImageResult<ImageBuffer> {
+  let mut first = None;
+  decode_webp_frames(bytes, 0, Some(1), None, |frame| first = Some(frame))?;
+
+  first
+    .map(Arc::unwrap_or_clone)
+    .ok_or_else(invalid_buffer_error)
+}
+
+/// One composited canvas as a premultiplied buffer, resampled to `target`.
+#[cfg(feature = "webp")]
+fn webp_canvas_to_buffer(
+  canvas: &[u8],
+  width: u32,
+  height: u32,
+  has_alpha: bool,
+  target: Option<(u32, u32, ImageScalingAlgorithm)>,
+) -> ImageResult<ImageBuffer> {
+  let rgba = if has_alpha {
+    canvas.to_vec()
+  } else {
+    let mut rgba = Vec::with_capacity(width as usize * height as usize * 4);
+    for rgb in canvas.as_chunks::<3>().0 {
+      rgba.extend_from_slice(&[rgb[0], rgb[1], rgb[2], u8::MAX]);
+    }
+    rgba
+  };
+
+  let buffer =
+    ImageBuffer::from_rgba_bytes(rgba, width, height).ok_or_else(invalid_buffer_error)?;
+  let Some((target_width, target_height, algorithm)) = target else {
+    return Ok(buffer);
+  };
+
+  resample_premultiplied(
+    buffer.data(),
+    (width, height),
+    (target_width, target_height),
+    algorithm,
+  )
+  .ok_or_else(invalid_buffer_error)
 }
 
 fn rgba_to_buffer(image: RgbaImage, format: ImageFormat) -> ImageResult<ImageBuffer> {
@@ -756,7 +924,7 @@ pub(crate) fn decode_gif_frames(
   _skip: usize,
   _limit: Option<usize>,
   _target: Option<(u32, u32, ImageScalingAlgorithm)>,
-  _push: impl FnMut(DecodedGifFrame),
+  _push: impl FnMut(Arc<ImageBuffer>),
 ) -> ImageResult<bool> {
   Err(format_compiled_out_error())
 }
@@ -957,9 +1125,10 @@ mod tests {
 
   #[cfg(feature = "gif")]
   fn our_frames(bytes: &[u8], skip: usize) -> Vec<(Vec<u8>, u32)> {
+    let durations = gif_frame_durations(bytes).unwrap();
     let mut frames = Vec::new();
-    let ended = decode_gif_frames(bytes, skip, None, None, |frame| {
-      frames.push((frame.buffer.data().to_vec(), frame.duration_ms));
+    let ended = decode_gif_frames(bytes, skip, None, None, |buffer| {
+      frames.push((buffer.data().to_vec(), durations[skip + frames.len()]));
     })
     .unwrap();
     assert!(ended);

@@ -49,6 +49,8 @@ fn render_vector(
 }
 
 mod raster_images {
+  use std::sync::Arc;
+
   use crate::resources::image_buffer::ImageBuffer;
   use crate::resources::image_decoder::{decode_gif_frames, decode_image};
   use crate::resvg::OptionLog;
@@ -82,10 +84,11 @@ mod raster_images {
         decode_gif_frames(data, 0, Some(1), None, |frame| first = Some(frame)).ok()?;
         first
           .and_then(|frame| {
+            let (width, height) = (frame.width(), frame.height());
             pixmap_from_premultiplied(
-              frame.buffer.data().to_vec(),
-              frame.buffer.width(),
-              frame.buffer.height(),
+              Arc::unwrap_or_clone(frame).into_premultiplied_rgba(),
+              width,
+              height,
             )
           })
           .log_none(|| log::warn!("Failed to decode a GIF image."))
