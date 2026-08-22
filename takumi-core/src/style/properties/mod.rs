@@ -632,6 +632,17 @@ pub enum Direction {
   Rtl,
 }
 
+impl Direction {
+  /// The bidi control character forcing this base direction: U+200E LEFT-TO-RIGHT
+  /// MARK or U+200F RIGHT-TO-LEFT MARK.
+  pub(crate) const fn bidi_mark(self) -> &'static str {
+    match self {
+      Self::Ltr => "\u{200E}",
+      Self::Rtl => "\u{200F}",
+    }
+  }
+}
+
 declare_enum_from_css_impl!(
   Direction,
   "ltr" => Direction::Ltr,
