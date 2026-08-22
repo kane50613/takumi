@@ -440,8 +440,32 @@ fn interpolate_box(
 mod tests {
   use tiny_skia::{Pixmap, PremultipliedColorU8};
 
-  use super::{SamplingFootprint, interpolate_with_footprint};
+  use super::{SamplingFootprint, interpolate_bilinear, interpolate_with_footprint};
   use crate::style::ImageScalingAlgorithm;
+
+  /// Sampling takes pixel-centre coordinates: a draw that lands whole-pixel
+  /// must read a texel exactly, not blend two of them.
+  #[test]
+  fn sampling_a_pixel_centre_reads_that_pixel() -> Result<(), &'static str> {
+    let mut pixmap = Pixmap::new(2, 1).ok_or("failed to create pixmap")?;
+    let pixels = pixmap.pixels_mut();
+    pixels[0] = PremultipliedColorU8::from_rgba(0, 0, 0, 255).ok_or("black")?;
+    pixels[1] = PremultipliedColorU8::from_rgba(255, 255, 255, 255).ok_or("white")?;
+
+    let centre = interpolate_bilinear(pixmap.as_ref().into(), 0.5, 0.5).ok_or("sampled")?;
+    assert_eq!(centre.red(), 0, "a pixel centre reads the pixel itself");
+
+    let corner = interpolate_bilinear(pixmap.as_ref().into(), 0.0, 0.5).ok_or("sampled")?;
+    assert_eq!(corner.red(), 0, "clamped at the left edge");
+
+    let between = interpolate_bilinear(pixmap.as_ref().into(), 1.0, 0.5).ok_or("sampled")?;
+    assert!(
+      (between.red() as i16 - 128).abs() <= 1,
+      "halfway between two pixels blends them"
+    );
+
+    Ok(())
+  }
 
   #[test]
   fn minified_sampling_averages_high_frequency_content() -> Result<(), &'static str> {
