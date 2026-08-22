@@ -22,6 +22,10 @@ use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 
 #[cfg(not(all(feature = "jpeg", feature = "webp")))]
 use crate::resources::image_decoder::decoder_compiled_out;
+#[cfg(feature = "webp")]
+use crate::resources::image_decoder::{
+  animated_webp_dimensions, decode_webp_frames, is_animated_webp, webp_frame_durations,
+};
 #[cfg(feature = "svg")]
 use crate::resvg::{
   apply_filters_to_layer, render as render_svg_tree,
@@ -36,8 +40,8 @@ use crate::{
   resources::{
     image_buffer::ImageBuffer,
     image_decoder::{
-      DecodedFrame, bitmap_dimensions, decode_bitmap_scaled, decode_gif_frames, decode_image,
-      gif_dimensions, gif_frame_durations, is_gif,
+      bitmap_dimensions, decode_bitmap_scaled, decode_gif_frames, decode_image, gif_dimensions,
+      gif_frame_durations, is_gif,
     },
   },
   style::{Color, ImageScalingAlgorithm, IntrinsicSizing, SizingContext, StyleSheet},
@@ -180,12 +184,68 @@ pub struct AnimatedSource {
   inner: Arc<AnimatedInner>,
 }
 
+/// Animation container an [`AnimatedSource`] decodes its frames from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AnimatedFormat {
+  Gif,
+  #[cfg(feature = "webp")]
+  WebP,
+}
+
+impl AnimatedFormat {
+  /// The animation container these bytes carry, if they carry one.
+  fn detect(bytes: &[u8]) -> Option<Self> {
+    if is_gif(bytes) {
+      return Some(Self::Gif);
+    }
+
+    #[cfg(feature = "webp")]
+    if is_animated_webp(bytes) {
+      return Some(Self::WebP);
+    }
+
+    None
+  }
+
+  fn dimensions(self, bytes: &[u8]) -> Result<(u32, u32), image::ImageError> {
+    match self {
+      Self::Gif => gif_dimensions(bytes),
+      #[cfg(feature = "webp")]
+      Self::WebP => animated_webp_dimensions(bytes),
+    }
+  }
+
+  fn decode_frames(
+    self,
+    bytes: &[u8],
+    skip: usize,
+    limit: Option<usize>,
+    target: Option<(u32, u32, ImageScalingAlgorithm)>,
+    push: impl FnMut(Arc<ImageBuffer>),
+  ) -> Result<bool, image::ImageError> {
+    match self {
+      Self::Gif => decode_gif_frames(bytes, skip, limit, target, push),
+      #[cfg(feature = "webp")]
+      Self::WebP => decode_webp_frames(bytes, skip, limit, target, push),
+    }
+  }
+
+  /// Per-frame delays in stream order, read without decoding pixels.
+  fn frame_durations(self, bytes: &[u8]) -> Result<Box<[u32]>, image::ImageError> {
+    match self {
+      Self::Gif => gif_frame_durations(bytes),
+      #[cfg(feature = "webp")]
+      Self::WebP => webp_frame_durations(bytes),
+    }
+  }
+}
+
 #[derive(Debug)]
 struct AnimatedInner {
+  format: AnimatedFormat,
   bytes: Box<[u8]>,
   width: u32,
   height: u32,
-  first: DecodedFrame,
   timing: OnceLock<AnimationTiming>,
 }
 
@@ -199,40 +259,46 @@ struct AnimationTiming {
 }
 
 impl AnimatedSource {
-  fn from_bytes(bytes: &[u8]) -> Result<Self, ImageError> {
-    let (width, height) = gif_dimensions(bytes).map_err(ImageError::decode)?;
+  fn from_bytes(format: AnimatedFormat, bytes: &[u8]) -> Result<Self, ImageError> {
+    let (width, height) = format.dimensions(bytes).map_err(ImageError::decode)?;
 
-    let mut first = None;
-    decode_gif_frames(bytes, 0, Some(1), None, |frame| first = Some(frame))
+    // Decoded here only to reject a stream that carries no frame at all; the
+    // pixels are dropped, and every draw decodes the frame it needs.
+    let mut decodable = false;
+    format
+      .decode_frames(bytes, 0, Some(1), None, |_| decodable = true)
       .map_err(ImageError::decode)?;
-    let Some(first) = first else {
-      return Err(ImageError::InvalidGif);
-    };
+    if !decodable {
+      return Err(ImageError::InvalidAnimation);
+    }
 
     Ok(Self {
       inner: Arc::new(AnimatedInner {
+        format,
         bytes: bytes.into(),
         width,
         height,
-        first,
         timing: OnceLock::new(),
       }),
     })
   }
 
-  /// The GIF logical screen dimensions in pixels.
+  /// The animation canvas dimensions in pixels.
   pub fn dimensions(&self) -> (u32, u32) {
     (self.inner.width, self.inner.height)
   }
 
-  /// Per-frame timing, decoded once (pixel-free) and memoized. Falls back to a
+  /// Per-frame timing, read once (pixel-free) and memoized. Falls back to a
   /// single-frame loop if the stream can't be re-read.
   fn timing(&self) -> &AnimationTiming {
     self.inner.timing.get_or_init(|| {
-      let durations = gif_frame_durations(&self.inner.bytes)
+      let durations = self
+        .inner
+        .format
+        .frame_durations(&self.inner.bytes)
         .ok()
         .filter(|durations| !durations.is_empty())
-        .unwrap_or_else(|| Box::from([self.inner.first.duration_ms]));
+        .unwrap_or_else(|| Box::from([1]));
       let total_ms = durations.iter().map(|&duration| duration as u64).sum();
 
       AnimationTiming {
@@ -273,9 +339,7 @@ impl AnimatedSource {
   }
 
   /// Frame shown at the given playback time, looping over total duration,
-  /// decoded to cover a `width` x `height` draw box (never upscaled). The first
-  /// frame is served from the retained copy; any later frame is decoded fresh
-  /// and not retained.
+  /// decoded to cover a `width` x `height` draw box (never upscaled).
   pub fn frame_at_time_covering(
     &self,
     time_ms: u64,
@@ -285,34 +349,48 @@ impl AnimatedSource {
   ) -> Arc<ImageBuffer> {
     let timing = self.timing();
     let index = self.frame_index_at(timing, time_ms);
-    if index == 0 {
-      return self.inner.first.buffer.clone();
-    }
+    let target = cover_target((self.inner.width, self.inner.height), (width, height));
 
-    // ponytail: decode-to-index each call — GIF disposal is stateful, so
-    // reaching frame N replays frames 0..N. O(N) per sample, O(1) retained;
-    // fine for a static render (one sample per GIF). A GIF re-encoded to an
-    // animation samples every frame → O(N²); if that path gets hot, cache a
-    // thread-local resumable decode cursor (canvas + position) keyed by GIF id.
-    let (target_width, target_height) =
-      cover_target((self.inner.width, self.inner.height), (width, height));
+    self
+      .decode_frame(index, target, algorithm)
+      .or_else(|| self.decode_frame(0, target, algorithm))
+      .unwrap_or_else(|| {
+        log::warn!("Failed to decode any frame of an animated image, drawing nothing.");
+        Arc::new(ImageBuffer::transparent_pixel())
+      })
+  }
+
+  /// Decodes a single frame by stream index, resampled to `target`.
+  ///
+  /// ponytail: decode-to-index each call — frame disposal is stateful, so
+  /// reaching frame N replays frames 0..N. O(N) per sample, nothing retained;
+  /// fine for a static render (one sample per animation). An animation
+  /// re-encoded to an animation samples every frame → O(N²); if that path gets
+  /// hot, cache a thread-local resumable decode cursor keyed by source id.
+  fn decode_frame(
+    &self,
+    index: usize,
+    (target_width, target_height): (u32, u32),
+    algorithm: ImageScalingAlgorithm,
+  ) -> Option<Arc<ImageBuffer>> {
     let mut frame = None;
-    let _ = decode_gif_frames(
+    if let Err(error) = self.inner.format.decode_frames(
       &self.inner.bytes,
       index,
       Some(1),
       Some((target_width, target_height, algorithm)),
-      |decoded| frame = Some(decoded.buffer),
-    );
+      |decoded| frame = Some(decoded),
+    ) {
+      log::warn!("Failed to decode frame {index} of an animated image: {error}");
+    }
 
-    frame.unwrap_or_else(|| self.inner.first.buffer.clone())
+    frame
   }
 
-  /// Bytes retained for cache budgeting: the encoded stream plus the single
-  /// decoded first frame. Later frames are decoded on demand and dropped, so
-  /// they never count.
+  /// Bytes retained for cache budgeting: the encoded stream alone. Frames are
+  /// decoded on demand and dropped, so they never count.
   fn decoded_bytes(&self) -> usize {
-    self.inner.first.buffer.data().len() + self.inner.bytes.len()
+    self.inner.bytes.len()
   }
 }
 
@@ -575,8 +653,10 @@ impl ImageSource {
       }
     }
 
-    if is_gif(bytes) {
-      return Ok(ImageSource::Animated(AnimatedSource::from_bytes(bytes)?));
+    if let Some(format) = AnimatedFormat::detect(bytes) {
+      return Ok(ImageSource::Animated(AnimatedSource::from_bytes(
+        format, bytes,
+      )?));
     }
 
     match decode_image(bytes) {
@@ -611,8 +691,10 @@ impl ImageSource {
       }
     }
 
-    if is_gif(bytes) {
-      return Ok(ImageSource::Animated(AnimatedSource::from_bytes(bytes)?));
+    if let Some(format) = AnimatedFormat::detect(bytes) {
+      return Ok(ImageSource::Animated(AnimatedSource::from_bytes(
+        format, bytes,
+      )?));
     }
 
     match bitmap_dimensions(bytes) {
@@ -925,9 +1007,9 @@ pub enum ImageError {
   /// The buffer size does not match the target image size
   #[error("The buffer size does not match the target image size")]
   MismatchedBufferSize,
-  /// GIF decoding produced no frames.
-  #[error("The GIF image does not contain any decodable frames")]
-  InvalidGif,
+  /// An animated image decoded to no frames at all.
+  #[error("The animated image does not contain any decodable frames")]
+  InvalidAnimation,
 }
 
 impl ImageError {
@@ -1397,8 +1479,7 @@ mod tests {
     }
   }
 
-  #[cfg(feature = "gif")]
-  const GIF_COLORS: [[u8; 4]; 3] = [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]];
+  const FRAME_COLORS: [[u8; 4]; 3] = [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]];
 
   /// Encodes one 4x4 solid frame per `(color index, delay ms)` pair. Delays
   /// must be multiples of 10 (GIF stores centiseconds).
@@ -1412,7 +1493,7 @@ mod tests {
     encoder
       .encode_frames(frames.iter().map(|&(color, delay_ms)| {
         Frame::from_parts(
-          RgbaImage::from_pixel(4, 4, Rgba(GIF_COLORS[color])),
+          RgbaImage::from_pixel(4, 4, Rgba(FRAME_COLORS[color])),
           0,
           0,
           Delay::from_numer_denom_ms(delay_ms, 1),
@@ -1424,12 +1505,117 @@ mod tests {
     bytes
   }
 
+  /// Encodes one 4x4 solid frame per `(color index, delay ms)` pair into an
+  /// animated WebP: a `VP8X` canvas with the animation flag, an `ANIM` header,
+  /// then one `ANMF` per frame wrapping a lossless still.
+  #[cfg(feature = "webp")]
+  fn encoded_animated_webp(frames: &[(usize, u32)]) -> Vec<u8> {
+    fn chunk(id: &[u8; 4], payload: &[u8]) -> Vec<u8> {
+      let mut bytes = id.to_vec();
+      bytes.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+      bytes.extend_from_slice(payload);
+      if payload.len() % 2 == 1 {
+        bytes.push(0);
+      }
+      bytes
+    }
+
+    fn still_frame(color: [u8; 4]) -> Vec<u8> {
+      use image_webp::{ColorType, WebPEncoder};
+
+      let pixels: Vec<u8> = color.iter().copied().cycle().take(4 * 4 * 4).collect();
+      let mut bytes = Vec::new();
+      WebPEncoder::new(&mut bytes)
+        .encode(&pixels, 4, 4, ColorType::Rgba8)
+        .unwrap();
+
+      // Keep only the bitstream chunk; the ANMF wraps it in its own container.
+      bytes[12..].to_vec()
+    }
+
+    let mut body = chunk(b"VP8X", &[0b0000_0010, 0, 0, 0, 3, 0, 0, 3, 0, 0]);
+    body.extend_from_slice(&chunk(b"ANIM", &[0, 0, 0, 0, 0, 0]));
+
+    for &(color, duration_ms) in frames {
+      let mut payload = vec![0, 0, 0, 0, 0, 0, 3, 0, 0, 3, 0, 0];
+      // Bit 1 set: replace the canvas rect instead of alpha-blending onto it.
+      payload.extend_from_slice(&duration_ms.to_le_bytes()[..3]);
+      payload.push(0b0000_0010);
+      payload.extend_from_slice(&still_frame(FRAME_COLORS[color]));
+      body.extend_from_slice(&chunk(b"ANMF", &payload));
+    }
+
+    let mut bytes = b"RIFF".to_vec();
+    bytes.extend_from_slice(&((body.len() + 4) as u32).to_le_bytes());
+    bytes.extend_from_slice(b"WEBP");
+    bytes.extend_from_slice(&body);
+
+    bytes
+  }
+
+  #[cfg(feature = "webp")]
+  fn animated_webp_source(frames: &[(usize, u32)]) -> AnimatedSource {
+    let Ok(ImageSource::Animated(animated)) =
+      ImageSource::from_bytes(&encoded_animated_webp(frames))
+    else {
+      unreachable!("valid animated webp");
+    };
+    animated
+  }
+
   #[cfg(feature = "gif")]
   fn gif_source(frames: &[(usize, u32)]) -> AnimatedSource {
     let Ok(ImageSource::Animated(animated)) = ImageSource::from_bytes(&encoded_gif(frames)) else {
       unreachable!("valid gif");
     };
     animated
+  }
+
+  #[cfg(feature = "webp")]
+  #[test]
+  fn animated_webp_walks_its_frame_timeline() {
+    let webp = animated_webp_source(&[(0, 100), (1, 100), (2, 100)]);
+
+    assert_eq!(webp.dimensions(), (4, 4));
+    assert_eq!(webp.frame_at_time(0).pixel(2, 2), FRAME_COLORS[0]);
+    assert_eq!(webp.frame_at_time(150).pixel(2, 2), FRAME_COLORS[1]);
+    assert_eq!(webp.frame_at_time(250).pixel(2, 2), FRAME_COLORS[2]);
+    assert_eq!(webp.frame_at_time(350).pixel(2, 2), FRAME_COLORS[0]);
+  }
+
+  #[cfg(feature = "webp")]
+  #[test]
+  fn animated_webp_frames_cover_the_draw_box() {
+    let webp = animated_webp_source(&[(0, 100), (1, 100)]);
+    let smaller = webp.frame_at_time_covering(150, 2, 2, ImageScalingAlgorithm::Auto);
+
+    assert_eq!((smaller.width(), smaller.height()), (2, 2));
+    assert_eq!(smaller.pixel(1, 1), FRAME_COLORS[1]);
+  }
+
+  /// The SVG backend and the still-image cache both reach WebP through
+  /// `decode_image`, which must not hand animated bytes to libwebp.
+  #[cfg(feature = "webp")]
+  #[test]
+  fn animated_webp_decodes_as_a_still_first_frame() {
+    let bytes = encoded_animated_webp(&[(0, 100), (1, 100)]);
+    let buffer = crate::resources::image_decoder::decode_image(&bytes).unwrap();
+
+    assert_eq!((buffer.width(), buffer.height()), (4, 4));
+    assert_eq!(buffer.pixel(2, 2), FRAME_COLORS[0]);
+  }
+
+  #[cfg(feature = "webp")]
+  #[test]
+  fn still_webp_stays_a_bitmap() {
+    use image_webp::{ColorType, WebPEncoder};
+
+    let mut bytes = Vec::new();
+    WebPEncoder::new(&mut bytes)
+      .encode(&[255, 0, 0, 255].repeat(16), 4, 4, ColorType::Rgba8)
+      .unwrap();
+
+    assert_matches!(ImageSource::from_bytes(&bytes), Ok(ImageSource::Bitmap(_)));
   }
 
   #[cfg(feature = "gif")]
@@ -1662,7 +1848,7 @@ mod tests {
     let samples = [0_u64, 9, 10, 29, 30, 59, 60, 75];
 
     for time_ms in samples {
-      let expected_color = GIF_COLORS[expected_frame_index(&durations, time_ms)];
+      let expected_color = FRAME_COLORS[expected_frame_index(&durations, time_ms)];
       assert_eq!(gif.frame_at_time(time_ms).pixel(2, 2), expected_color);
     }
   }
@@ -1672,9 +1858,9 @@ mod tests {
   fn gif_source_zero_delay_clamps_to_one_ms() {
     let gif = gif_source(&[(0, 0), (1, 0)]);
 
-    assert_eq!(gif.frame_at_time(0).pixel(2, 2), GIF_COLORS[0]);
-    assert_eq!(gif.frame_at_time(1).pixel(2, 2), GIF_COLORS[1]);
-    assert_eq!(gif.frame_at_time(2).pixel(2, 2), GIF_COLORS[0]);
+    assert_eq!(gif.frame_at_time(0).pixel(2, 2), FRAME_COLORS[0]);
+    assert_eq!(gif.frame_at_time(1).pixel(2, 2), FRAME_COLORS[1]);
+    assert_eq!(gif.frame_at_time(2).pixel(2, 2), FRAME_COLORS[0]);
   }
 
   #[cfg(feature = "gif")]
@@ -1694,11 +1880,11 @@ mod tests {
 
   #[cfg(feature = "gif")]
   #[test]
-  fn gif_first_frame_stays_native() {
+  fn first_frame_covers_the_draw_box() {
     let gif = gif_source(&[(0, 10), (1, 10)]);
 
     let first = gif.frame_at_time_covering(0, 2, 2, ImageScalingAlgorithm::Auto);
-    assert_eq!((first.width(), first.height()), (4, 4));
+    assert_eq!((first.width(), first.height()), (2, 2));
   }
 
   #[cfg(feature = "gif")]

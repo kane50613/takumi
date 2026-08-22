@@ -25,6 +25,15 @@ impl ImageBuffer {
     })
   }
 
+  /// A single transparent pixel, for a draw with nothing to show.
+  pub(crate) fn transparent_pixel() -> Self {
+    Self {
+      data: vec![0; 4],
+      width: 1,
+      height: 1,
+    }
+  }
+
   /// Allocates a transparent (all-zero) buffer of the given size.
   #[cfg(test)]
   pub(crate) fn new(width: u32, height: u32) -> Option<Self> {

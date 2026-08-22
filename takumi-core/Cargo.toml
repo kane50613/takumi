@@ -14,6 +14,7 @@ ignored = ["serde_bytes"]
 
 [dependencies]
 png.workspace = true
+log.workspace = true
 imagesize.workspace = true
 data-url.workspace = true
 color.workspace = true
@@ -39,7 +40,7 @@ selectors.workspace = true
 workspace = true
 optional = true
 
-[target.'cfg(target_arch = "wasm32")'.dependencies.image-webp]
+[dependencies.image-webp]
 workspace = true
 optional = true
 
@@ -83,9 +84,6 @@ optional = true
 workspace = true
 optional = true
 
-[dependencies.log]
-workspace = true
-optional = true
 
 [dependencies.tiny-skia-path]
 workspace = true
@@ -107,7 +105,6 @@ svg = [
   "dep:simplecss",
   "dep:siphasher",
   "dep:strict-num",
-  "dep:log",
   "dep:tiny-skia-path",
 ]
 woff2 = ["dep:wuff", "wuff/brotli"]
