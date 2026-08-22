@@ -526,23 +526,8 @@ pub(crate) fn overlay_sampled_paint_source(
   options: OverlayOptions,
   sampling: SamplingOptions,
 ) {
-  let direct_identity_mapping = options.border.is_zero()
-    && sampling.logical_to_source.is_identity()
-    && size.width == source.width()
-    && size.height == source.height();
-
-  if direct_identity_mapping
-    && try_draw_image_with_tiny_skia(
-      target,
-      source,
-      options.transform,
-      options.algorithm,
-      options.mode,
-    )
-  {
-    return;
-  }
-
+  // A whole-pixel translation copies row spans directly. Tiny-skia would take
+  // the same draw through its sampling pipeline, so this is tried first.
   if options.border.is_zero()
     && options.transform.only_translation()
     && options.transform.x.fract() == 0.0
@@ -560,6 +545,23 @@ pub(crate) fn overlay_sampled_paint_source(
       options.mode,
       target.combined_mask,
     );
+    return;
+  }
+
+  let direct_identity_mapping = options.border.is_zero()
+    && sampling.logical_to_source.is_identity()
+    && size.width == source.width()
+    && size.height == source.height();
+
+  if direct_identity_mapping
+    && try_draw_image_with_tiny_skia(
+      target,
+      source,
+      options.transform,
+      options.algorithm,
+      options.mode,
+    )
+  {
     return;
   }
 
