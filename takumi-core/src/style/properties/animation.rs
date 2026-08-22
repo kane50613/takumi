@@ -120,6 +120,10 @@ pub enum StepPosition {
   Start,
   /// Jumps at the end of each step interval.
   End,
+  /// Jumps at both ends, giving one more jump than steps.
+  JumpBoth,
+  /// Jumps at neither end, giving one fewer jump than steps.
+  JumpNone,
 }
 
 impl<'i> FromCss<'i> for AnimationTimingFunction {
@@ -487,8 +491,10 @@ fn parse_step_position<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, StepPo
   };
 
   match_ignore_ascii_case! {ident,
-    "start" => Ok(StepPosition::Start),
-    "end" => Ok(StepPosition::End),
+    "start" | "jump-start" => Ok(StepPosition::Start),
+    "end" | "jump-end" => Ok(StepPosition::End),
+    "jump-both" => Ok(StepPosition::JumpBoth),
+    "jump-none" => Ok(StepPosition::JumpNone),
     _ => Err(unexpected_token!(AnimationTimingFunction, location, token)),
   }
 }
@@ -503,8 +509,16 @@ fn parse_steps_function<'i>(
       return Err(input.new_error(BasicParseErrorKind::QualifiedRuleInvalid));
     }
 
-    input.expect_comma()?;
-    let position = parse_step_position(input)?;
+    let position = if input.try_parse(Parser::expect_comma).is_ok() {
+      parse_step_position(input)?
+    } else {
+      StepPosition::End
+    };
+
+    if position == StepPosition::JumpNone && count < 2 {
+      return Err(input.new_error(BasicParseErrorKind::QualifiedRuleInvalid));
+    }
+
     Ok(AnimationTimingFunction::Steps(count as u32, position))
   })
 }
@@ -586,13 +600,19 @@ fn cubic_bezier_sample(x1: f32, y1: f32, x2: f32, y2: f32, progress: f32) -> f32
 }
 
 fn steps_sample(step_count: u32, position: StepPosition, progress: f32) -> f32 {
-  let step_count = step_count as f32;
+  let steps = step_count as f32;
   let progress = progress.clamp(0.0, 1.0);
 
-  match position {
-    StepPosition::Start => (((progress * step_count).floor() + 1.0).min(step_count)) / step_count,
-    StepPosition::End => ((progress * step_count).floor()) / step_count,
-  }
+  // Jumps differ from steps when both or neither end point is discontinuous.
+  // https://drafts.csswg.org/css-easing-1/#step-easing-functions
+  let (jumps, start_offset) = match position {
+    StepPosition::Start => (steps, 1.0),
+    StepPosition::End => (steps, 0.0),
+    StepPosition::JumpBoth => (steps + 1.0, 1.0),
+    StepPosition::JumpNone => ((steps - 1.0).max(1.0), 0.0),
+  };
+
+  ((progress * steps + start_offset).floor().clamp(0.0, jumps)) / jumps
 }
 
 pub(crate) fn apply_timing_function(function: &AnimationTimingFunction, progress: f32) -> f32 {
@@ -622,6 +642,8 @@ impl ToCss for StepPosition {
     match self {
       Self::Start => dest.write_str("start"),
       Self::End => dest.write_str("end"),
+      Self::JumpBoth => dest.write_str("jump-both"),
+      Self::JumpNone => dest.write_str("jump-none"),
     }
   }
 }
@@ -743,6 +765,66 @@ mod tests {
     assert_eq!(
       AnimationTimingFunction::from_css_str("steps(4, end)"),
       Ok(AnimationTimingFunction::Steps(4, StepPosition::End))
+    );
+    assert_eq!(
+      AnimationTimingFunction::from_css_str("steps(4)"),
+      Ok(AnimationTimingFunction::Steps(4, StepPosition::End))
+    );
+    assert_eq!(
+      AnimationTimingFunction::from_css_str("steps(4, jump-start)"),
+      Ok(AnimationTimingFunction::Steps(4, StepPosition::Start))
+    );
+    assert_eq!(
+      AnimationTimingFunction::from_css_str("steps(4, jump-none)"),
+      Ok(AnimationTimingFunction::Steps(4, StepPosition::JumpNone))
+    );
+    assert_eq!(
+      AnimationTimingFunction::from_css_str("steps(4, jump-both)"),
+      Ok(AnimationTimingFunction::Steps(4, StepPosition::JumpBoth))
+    );
+  }
+
+  #[test]
+  fn reject_single_step_jump_none() {
+    assert!(AnimationTimingFunction::from_css_str("steps(1, jump-none)").is_err());
+  }
+
+  #[test]
+  fn steps_timing_functions_sample_as_staircase() {
+    let sample = |css: &str, progress: f32| {
+      apply_timing_function(
+        &AnimationTimingFunction::from_css_str(css).unwrap(),
+        progress,
+      )
+    };
+
+    for (progress, expected) in [(0.0, 0.0), (0.3, 0.25), (0.6, 0.5), (1.0, 1.0)] {
+      assert_eq!(sample("steps(4, jump-end)", progress), expected);
+    }
+
+    for (progress, expected) in [(0.0, 0.0), (0.3, 1.0 / 3.0), (0.6, 2.0 / 3.0), (1.0, 1.0)] {
+      assert_eq!(sample("steps(4, jump-none)", progress), expected);
+    }
+
+    for (progress, expected) in [(0.0, 0.2), (0.3, 0.4), (0.6, 0.6), (1.0, 1.0)] {
+      assert_eq!(sample("steps(4, jump-both)", progress), expected);
+    }
+
+    for (progress, expected) in [(0.0, 0.25), (0.3, 0.5), (0.6, 0.75), (1.0, 1.0)] {
+      assert_eq!(sample("steps(4, jump-start)", progress), expected);
+    }
+  }
+
+  #[test]
+  fn parse_animation_shorthand_with_steps() {
+    assert_eq!(
+      Animations::from_css_str("fade 1s steps(4, jump-none)"),
+      Ok(Box::from([Animation {
+        duration: AnimationTime::from_milliseconds(1000.0),
+        timing_function: AnimationTimingFunction::Steps(4, StepPosition::JumpNone),
+        name: Some("fade".to_string()),
+        ..Animation::default()
+      }]))
     );
   }
 
