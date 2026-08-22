@@ -1,23 +1,20 @@
 "use client";
 
-import { AxeIcon } from "lucide-react";
 import { lazy, Suspense } from "react";
+import { LoadingScreen } from "./loading-screen";
 
 const ImageEditor = lazy(() => import("~/components/playground/playground"));
 
 export function LazyPlayground() {
   return (
-    <Suspense fallback={<LoadingScreen />}>
+    <Suspense
+      fallback={
+        <div className="relative h-[calc(100dvh-3.5rem)] w-full">
+          <LoadingScreen />
+        </div>
+      }
+    >
       <ImageEditor />
     </Suspense>
-  );
-}
-
-function LoadingScreen() {
-  return (
-    <div className="playground-loading flex h-[calc(100dvh-3.5rem)] w-screen items-center justify-center gap-2.5 font-mono text-sm text-fd-muted-foreground">
-      <AxeIcon className="playground-breathe size-4" />
-      <p className="playground-breathe">loading editor + takumi wasm…</p>
-    </div>
   );
 }

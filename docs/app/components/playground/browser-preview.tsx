@@ -57,15 +57,16 @@ const FRAME_HTML = `<!doctype html>
 <style id="sheet"></style>
 <body><div id="mount"></div>
 <script>
-addEventListener("message", (event) => {
-  if (event.source !== parent || event.data?.type !== "hello") return;
+const mount = document.getElementById("mount");
+const sheet = document.getElementById("sheet");
 
+// Announced on parse and again whenever the page says hello, since either side
+// can be the one that is ready first.
+const announce = () => {
   const channel = new MessageChannel();
   const port = channel.port1;
-  const mount = document.getElementById("mount");
   const reportHeight = () =>
     port.postMessage({ type: "height", value: document.documentElement.scrollHeight });
-
   // Images and fonts land after the paint returns, so the height follows the
   // mount rather than being read once. Watching starts with the first paint,
   // which is what tells the page the frame has something to show.
@@ -73,13 +74,18 @@ addEventListener("message", (event) => {
 
   port.onmessage = (paint) => {
     if (paint.data?.type !== "paint") return;
-    document.getElementById("sheet").textContent = paint.data.css;
+    sheet.textContent = paint.data.css;
     mount.style.cssText = paint.data.mountStyle;
     mount.innerHTML = paint.data.html;
     observer.observe(mount);
   };
   parent.postMessage({ type: "ready" }, "*", [channel.port2]);
+};
+
+addEventListener("message", (event) => {
+  if (event.source === parent && event.data?.type === "hello") announce();
 });
+announce();
 </script>`;
 
 /** Guards against a frame that reports a height big enough to hang the layout. */

@@ -6,6 +6,7 @@ import { cn } from "~/lib/utils";
 import type { Template } from "~/playground/templates";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../ui/resizable";
 import { ComponentEditor } from "./component-editor";
+import { LoadingScreen } from "./loading-screen";
 import { LabeledPane, OutputPanel, PDF_VIEWS, type PdfView, type Zoom } from "./output-panel";
 import { Toolbar, type TabId } from "./toolbar";
 import { DEFAULT_TEMPLATE, useSharedCode } from "./use-shared-code";
@@ -220,7 +221,8 @@ export default function Playground() {
   );
 
   return (
-    <div className="playground-reveal relative flex h-[calc(100dvh-3.5rem)] flex-col bg-background">
+    <div className="relative flex h-[calc(100dvh-3.5rem)] flex-col bg-background">
+      <LoadingScreen done={isReady} />
       <Toolbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -270,7 +272,7 @@ export default function Playground() {
         {!isReady ? (
           <span className="playground-breathe">loading wasm…</span>
         ) : isUnrunShare ? (
-          <span>this code came from a link · read it, then press Run</span>
+          <span>Waiting for Run.</span>
         ) : renderError ? (
           <span className="flex min-w-0 items-center gap-2">
             <span className="shrink-0 text-primary">error</span>
