@@ -54,6 +54,8 @@ from-html = ["dep:takumi-html"]
 
 [dev-dependencies]
 criterion.workspace = true
+image-webp.workspace = true
+png.workspace = true
 parley.workspace = true
 rayon.workspace = true
 resvg.workspace = true
@@ -78,6 +80,10 @@ workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
+
+[[bench]]
+name = "animated_frames"
+harness = false
 
 [[bench]]
 name = "background"

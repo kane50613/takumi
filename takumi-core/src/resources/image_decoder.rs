@@ -47,7 +47,7 @@ const MAX_IMAGE_PIXELS: u64 = MAX_IMAGE_DIMENSION as u64 * MAX_IMAGE_DIMENSION a
 const MAX_ANIMATION_TOTAL_PIXELS: u64 = 4 * MAX_IMAGE_PIXELS;
 /// Frames past this point are dropped from a timeline. The pixel budget alone
 /// leaves a tiny canvas free to carry an unbounded frame list.
-const MAX_ANIMATION_FRAMES: usize = 1024;
+pub(crate) const MAX_ANIMATION_FRAMES: usize = 1024;
 
 /// Rejects decoded images whose pixel count exceeds [`MAX_IMAGE_PIXELS`].
 #[cfg(feature = "webp")]
@@ -695,6 +695,12 @@ fn decode_webp_into(
     .and_then(|image| rgba_to_buffer(image, ImageFormat::WebP))
 }
 
+/// Whether a frame rectangle spans the entire canvas.
+fn covers_canvas(rect: (u32, u32, u32, u32), canvas: (u32, u32)) -> bool {
+  let (x, y, width, height) = rect;
+  x == 0 && y == 0 && width == canvas.0 && height == canvas.1
+}
+
 /// Whether the `VP8X` header sets the animation flag.
 #[cfg(feature = "webp")]
 pub(crate) fn is_animated_webp(bytes: &[u8]) -> bool {
@@ -713,8 +719,9 @@ fn webp_chunks(bytes: &[u8]) -> impl Iterator<Item = ([u8; 4], &[u8])> {
   std::iter::from_fn(move || {
     let header: [u8; 8] = bytes.get(offset..offset + 8)?.try_into().ok()?;
     let size = u32::from_le_bytes([header[4], header[5], header[6], header[7]]) as usize;
-    let payload = bytes.get(offset + 8..(offset + 8).checked_add(size)?)?;
-    offset = offset + 8 + size + (size & 1);
+    let start = offset.checked_add(8)?;
+    let payload = bytes.get(start..start.checked_add(size)?)?;
+    offset = start.checked_add(size)?.checked_add(size & 1)?;
     Some(([header[0], header[1], header[2], header[3]], payload))
   })
 }
@@ -830,6 +837,109 @@ fn decode_animated_webp_first_frame(bytes: &[u8]) -> ImageResult<ImageBuffer> {
     .ok_or_else(invalid_buffer_error)
 }
 
+/// Decodes frame `index` on its own, skipping the frames before it, when the
+/// `ANMF` header shows the frame covers the whole canvas and does not blend
+/// onto what came before. `None` when the frame depends on its predecessors.
+///
+/// Blink reaches individual frames through libwebp's demuxer
+/// (`WebPDemuxGetFrame`); walking the RIFF chunks keeps this available on wasm,
+/// where that demuxer is not.
+#[cfg(feature = "webp")]
+pub(crate) fn decode_webp_frame_alone(
+  bytes: &[u8],
+  index: usize,
+  target: Option<(u32, u32, ImageScalingAlgorithm)>,
+) -> Option<ImageBuffer> {
+  let read_24 = |bytes: &[u8], offset: usize| {
+    Some(u32::from_le_bytes([
+      *bytes.get(offset)?,
+      *bytes.get(offset + 1)?,
+      *bytes.get(offset + 2)?,
+      0,
+    ]))
+  };
+
+  // One walk for both: `VP8X` carries the canvas size, the Nth `ANMF` the frame.
+  let mut canvas = None;
+  let mut payload = None;
+  let mut seen = 0;
+  for (id, chunk) in webp_chunks(bytes) {
+    match &id {
+      b"VP8X" => canvas = Some((read_24(chunk, 4)? + 1, read_24(chunk, 7)? + 1)),
+      b"ANMF" if seen == index => {
+        payload = Some(chunk);
+        break;
+      }
+      b"ANMF" => seen += 1,
+      _ => {}
+    }
+  }
+
+  let (canvas_width, canvas_height) = canvas?;
+  let payload = payload?;
+  let header = payload.get(..16)?;
+  let read_24 = |offset: usize| read_24(header, offset).unwrap_or_default();
+  let rect = (read_24(0), read_24(3), read_24(6) + 1, read_24(9) + 1);
+  // Bit 1 of the frame flags: replace the canvas rect rather than blend onto it.
+  let replaces_canvas = header[15] & 0b0000_0010 != 0;
+  if !covers_canvas(rect, (canvas_width, canvas_height)) || !replaces_canvas {
+    return None;
+  }
+
+  let still = webp_frame_as_still(payload.get(16..)?, canvas_width, canvas_height)?;
+  let frame = decode_webp(&still).ok()?;
+
+  // The `ANMF` rectangle only claims a size; the bitstream is what has one.
+  if frame.width() != canvas_width || frame.height() != canvas_height {
+    return None;
+  }
+
+  fit_to_target(frame, target).ok()
+}
+
+/// Wraps one frame's bitstream in a RIFF container so the still decoder can
+/// read it. A lossy frame carrying a separate `ALPH` chunk needs a `VP8X`
+/// header too, which only the animation container had.
+#[cfg(feature = "webp")]
+fn webp_frame_as_still(bitstream: &[u8], width: u32, height: u32) -> Option<Vec<u8>> {
+  let mut body = Vec::with_capacity(bitstream.len() + 18);
+
+  if bitstream.get(..4)? == b"ALPH" {
+    let (last_width, last_height) = (width.checked_sub(1)?, height.checked_sub(1)?);
+    body.extend_from_slice(b"VP8X");
+    body.extend_from_slice(&10_u32.to_le_bytes());
+    // Alpha flag, then the canvas size as two 24-bit values.
+    body.extend_from_slice(&[0b0001_0000, 0, 0, 0]);
+    body.extend_from_slice(&last_width.to_le_bytes()[..3]);
+    body.extend_from_slice(&last_height.to_le_bytes()[..3]);
+  }
+  body.extend_from_slice(bitstream);
+
+  let mut still = b"RIFF".to_vec();
+  still.extend_from_slice(&((body.len() + 4) as u32).to_le_bytes());
+  still.extend_from_slice(b"WEBP");
+  still.extend_from_slice(&body);
+
+  Some(still)
+}
+
+/// Resamples a full-canvas buffer down to `target`, or hands it back untouched.
+fn fit_to_target(
+  buffer: ImageBuffer,
+  target: Option<(u32, u32, ImageScalingAlgorithm)>,
+) -> ImageResult<ImageBuffer> {
+  let Some((width, height, algorithm)) = target else {
+    return Ok(buffer);
+  };
+  if width >= buffer.width() && height >= buffer.height() {
+    return Ok(buffer);
+  }
+
+  let source = (buffer.width(), buffer.height());
+  resample_premultiplied(buffer.data(), source, (width, height), algorithm)
+    .ok_or_else(invalid_buffer_error)
+}
+
 /// One composited canvas as a premultiplied buffer, resampled to `target`.
 #[cfg(feature = "webp")]
 fn webp_canvas_to_buffer(
@@ -851,17 +961,8 @@ fn webp_canvas_to_buffer(
 
   let buffer =
     ImageBuffer::from_rgba_bytes(rgba, width, height).ok_or_else(invalid_buffer_error)?;
-  let Some((target_width, target_height, algorithm)) = target else {
-    return Ok(buffer);
-  };
 
-  resample_premultiplied(
-    buffer.data(),
-    (width, height),
-    (target_width, target_height),
-    algorithm,
-  )
-  .ok_or_else(invalid_buffer_error)
+  fit_to_target(buffer, target)
 }
 
 /// Whether the PNG carries an `acTL` animation control chunk.
@@ -873,11 +974,11 @@ pub(crate) fn is_apng(bytes: &[u8]) -> bool {
 fn png_chunks(bytes: &[u8]) -> impl Iterator<Item = ([u8; 4], &[u8])> {
   let mut offset = PNG_SIGNATURE.len();
   std::iter::from_fn(move || {
-    let header: [u8; 8] = bytes.get(offset..offset + 8)?.try_into().ok()?;
+    let header: [u8; 8] = bytes.get(offset..offset.checked_add(8)?)?.try_into().ok()?;
     let length = u32::from_be_bytes([header[0], header[1], header[2], header[3]]) as usize;
     let start = offset + 8;
     let data = bytes.get(start..start.checked_add(length)?)?;
-    offset = start + length + 4;
+    offset = start.checked_add(length)?.checked_add(4)?;
     Some(([header[4], header[5], header[6], header[7]], data))
   })
 }
@@ -943,6 +1044,98 @@ fn apng_reader(bytes: &[u8]) -> ImageResult<png::Reader<Cursor<&[u8]>>> {
   }
 
   Ok(reader)
+}
+
+/// Decodes frame `index` on its own, advancing through the earlier frames by
+/// their headers alone, when its `fcTL` shows it covers the whole canvas and
+/// replaces rather than blends. Returns `None` when the frame depends on its
+/// predecessors.
+///
+/// This is the narrow case of Blink's dependency walk in
+/// `ImageDecoder::FindRequiredPreviousFrame`: a full-canvas, non-blending frame
+/// needs no starting state.
+pub(crate) fn decode_apng_frame_alone(
+  bytes: &[u8],
+  index: usize,
+  target: Option<(u32, u32, ImageScalingAlgorithm)>,
+) -> Option<ImageBuffer> {
+  let mut reader = apng_reader(bytes).ok()?;
+  let (canvas_width, canvas_height) = (reader.info().width, reader.info().height);
+  let channels = match reader.output_color_type() {
+    (ColorType::Rgba, BitDepth::Eight) => 4,
+    (ColorType::GrayscaleAlpha, BitDepth::Eight) => 2,
+    _ => return None,
+  };
+
+  // A default image no `fcTL` claims sits outside the animation.
+  if reader.info().frame_control.is_none() {
+    reader.next_frame_info().ok()?;
+  }
+  for _ in 0..index {
+    reader.next_frame_info().ok()?;
+  }
+  let frame = reader.info().frame_control?;
+
+  let rect = (frame.x_offset, frame.y_offset, frame.width, frame.height);
+  if !covers_canvas(rect, (canvas_width, canvas_height)) || frame.blend_op != BlendOp::Source {
+    return None;
+  }
+
+  let mut subframe = vec![0; reader.output_buffer_size()?];
+  reader.next_frame(&mut subframe).ok()?;
+
+  // A full-canvas replacing frame already is the canvas.
+  let mut rgba = match channels {
+    4 => subframe,
+    _ => subframe
+      .as_chunks::<2>()
+      .0
+      .iter()
+      .flat_map(|&[luma, alpha]| [luma, luma, luma, alpha])
+      .collect(),
+  };
+  premultiply_rgba_in_place(&mut rgba);
+
+  let buffer = ImageBuffer::from_premultiplied_rgba(rgba, canvas_width, canvas_height)?;
+
+  fit_to_target(buffer, target).ok()
+}
+
+/// Decodes frame `index` on its own when the GIF's frame headers show it covers
+/// the whole canvas opaquely. Frames before it are advanced past by header,
+/// never decoded.
+#[cfg(feature = "gif")]
+pub(crate) fn decode_gif_frame_alone(
+  bytes: &[u8],
+  index: usize,
+  target: Option<(u32, u32, ImageScalingAlgorithm)>,
+) -> Option<ImageBuffer> {
+  let mut decoder = gif_decoder(bytes).ok()?;
+  let (canvas_width, canvas_height) = (decoder.width() as u32, decoder.height() as u32);
+
+  for _ in 0..index {
+    decoder.next_frame_info().ok()??;
+  }
+
+  let frame = decoder.next_frame_info().ok()??;
+  let rect = (
+    frame.left as u32,
+    frame.top as u32,
+    frame.width as u32,
+    frame.height as u32,
+  );
+  if !covers_canvas(rect, (canvas_width, canvas_height)) || frame.transparent.is_some() {
+    return None;
+  }
+
+  let mut pixels = vec![0; decoder.buffer_size()];
+  decoder.read_into_buffer(&mut pixels).ok()?;
+
+  // GIF alpha is 0 or 255, so an opaque full-canvas frame is already valid
+  // premultiplied RGBA.
+  let buffer = ImageBuffer::from_premultiplied_rgba(pixels, canvas_width, canvas_height)?;
+
+  fit_to_target(buffer, target).ok()
 }
 
 /// Decodes APNG frames in stream order, passing each frame past the first
@@ -1043,7 +1236,6 @@ impl ApngCanvas {
     }
   }
 
-  /// Rows and columns of the frame rect that land inside the canvas.
   fn clamped_span(&self, frame: FrameControl) -> (u32, u32) {
     (
       frame.height.min(self.height.saturating_sub(frame.y_offset)),
@@ -1051,8 +1243,7 @@ impl ApngCanvas {
     )
   }
 
-  /// Draws one subframe at its `fcTL` offset, either overwriting the frame rect
-  /// or alpha-blending onto it.
+  /// Draws one subframe at its `fcTL` offset.
   fn composite(&mut self, frame: FrameControl, subframe: &[u8], channels: usize) {
     if frame.dispose_op == DisposeOp::Previous {
       self.restore.clear();
@@ -1063,6 +1254,14 @@ impl ApngCanvas {
     for row in 0..rows {
       let source_row = row as usize * frame.width as usize * channels;
       let target_row = ((frame.y_offset + row) * self.width + frame.x_offset) as usize * 4;
+
+      // Replacing RGBA is the same bytes on both sides, so the row copies whole.
+      if channels == 4 && frame.blend_op == BlendOp::Source {
+        let span = columns as usize * 4;
+        self.pixels[target_row..target_row + span]
+          .copy_from_slice(&subframe[source_row..source_row + span]);
+        continue;
+      }
 
       for column in 0..columns {
         let source = source_row + column as usize * channels;
@@ -1197,6 +1396,15 @@ pub(crate) fn gif_dimensions(_bytes: &[u8]) -> ImageResult<(u32, u32)> {
 #[cfg(not(feature = "gif"))]
 pub(crate) fn gif_frame_durations(_bytes: &[u8]) -> ImageResult<Box<[u32]>> {
   Err(format_compiled_out_error())
+}
+
+#[cfg(not(feature = "gif"))]
+pub(crate) fn decode_gif_frame_alone(
+  _bytes: &[u8],
+  _index: usize,
+  _target: Option<(u32, u32, ImageScalingAlgorithm)>,
+) -> Option<ImageBuffer> {
+  None
 }
 
 #[cfg(not(feature = "gif"))]
