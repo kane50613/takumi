@@ -1,60 +1,124 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <title>pseudo_text_attr</title>
-  <base href="../../../">
-  <link rel="stylesheet" href="takumi/tests/shared.css">
-  <style>
-  .root {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    padding: 16px;
-    width: 100%;
-    height: 100%;
-    background: rgb(243, 244, 246);
-    align-content: flex-start;
-    font-family: "Geist";
-  }
-  .cell {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    width: 282px;
-    height: 138px;
-    background: white;
-    border-radius: 8px;
-    padding: 10px 12px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  }
-  .label {
-    font-size: 11px;
-    color: rgb(100, 116, 139);
-    font-family: "Geist Mono";
-  }
-  .demo {
-    flex-grow: 1;
-    font-size: 18px;
-    color: rgb(17, 24, 39);
-    display: flex;
-    align-items: center;
-  }
+  <head>
+    <meta charset="utf-8" />
+    <title>pseudo_text_attr</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .root {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 16px;
+        width: 100%;
+        height: 100%;
+        background: rgb(243, 244, 246);
+        align-content: flex-start;
+        font-family: "Geist";
+      }
+      .cell {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        width: 282px;
+        height: 138px;
+        background: white;
+        border-radius: 8px;
+        padding: 10px 12px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+      }
+      .label {
+        font-size: 11px;
+        color: rgb(100, 116, 139);
+        font-family: "Geist Mono";
+      }
+      .demo {
+        flex-grow: 1;
+        font-size: 18px;
+        color: rgb(17, 24, 39);
+        display: flex;
+        align-items: center;
+      }
 
-    .d1::before { content: "★ "; color: rgb(234, 179, 8); }
-    .d2::after  { content: " ✓"; color: rgb(34, 197, 94); }
-    .d3::before { content: "["; color: rgb(59, 130, 246); }
-    .d3::after  { content: "]"; color: rgb(59, 130, 246); }
-    .d4::before { content: "[" "("; color: rgb(99, 102, 241); }
-    .d4::after  { content: ")" "]"; color: rgb(99, 102, 241); }
-    .d5::before { content: attr(data-tag) " — "; color: rgb(244, 63, 94); }
-    .d6::before { content: attr(missing, "FB") " "; color: rgb(168, 85, 247); }
-    .d7::before { content: "#" attr(id) " "; color: rgb(20, 184, 166); }
-    .d8         { color: rgb(234, 88, 12); }
-    .d8::before { content: "★ "; }
-  </style>
-</head>
-<body style="width: 1200px; height: 630px;">
-  <div class="root"><div class="cell"><span class="label">::before &quot;★ &quot;</span><div class="demo d1"><span>Mars</span></div></div><div class="cell"><span class="label">::after &quot; ✓&quot;</span><div class="demo d2"><span>Done</span></div></div><div class="cell"><span class="label">::before + ::after</span><div class="demo d3"><span>Title</span></div></div><div class="cell"><span class="label">content: &quot;[&quot; &quot;(&quot; &quot;)&quot; &quot;]&quot;</span><div class="demo d4"><span>Body</span></div></div><div class="cell"><span class="label">attr(data-tag)</span><div class="demo d5" data-tag="alpha"><span>X</span></div></div><div class="cell"><span class="label">attr(missing, &quot;FB&quot;)</span><div class="demo d6"><span>X</span></div></div><div class="cell"><span class="label">attr(id) + attr(class)</span><div id="hero" class="demo d7"><span>X</span></div></div><div class="cell"><span class="label">inherits color → orange</span><div class="demo d8"><span>X</span></div></div></div>
-</body>
+      .d1::before {
+        content: "★ ";
+        color: rgb(234, 179, 8);
+      }
+      .d2::after {
+        content: " ✓";
+        color: rgb(34, 197, 94);
+      }
+      .d3::before {
+        content: "[";
+        color: rgb(59, 130, 246);
+      }
+      .d3::after {
+        content: "]";
+        color: rgb(59, 130, 246);
+      }
+      .d4::before {
+        content: "[" "(";
+        color: rgb(99, 102, 241);
+      }
+      .d4::after {
+        content: ")" "]";
+        color: rgb(99, 102, 241);
+      }
+      .d5::before {
+        content: attr(data-tag) " — ";
+        color: rgb(244, 63, 94);
+      }
+      .d6::before {
+        content: attr(missing, "FB") " ";
+        color: rgb(168, 85, 247);
+      }
+      .d7::before {
+        content: "#" attr(id) " ";
+        color: rgb(20, 184, 166);
+      }
+      .d8 {
+        color: rgb(234, 88, 12);
+      }
+      .d8::before {
+        content: "★ ";
+      }
+    </style>
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div class="root">
+      <div class="cell">
+        <span class="label">::before &quot;★ &quot;</span>
+        <div class="demo d1"><span>Mars</span></div>
+      </div>
+      <div class="cell">
+        <span class="label">::after &quot; ✓&quot;</span>
+        <div class="demo d2"><span>Done</span></div>
+      </div>
+      <div class="cell">
+        <span class="label">::before + ::after</span>
+        <div class="demo d3"><span>Title</span></div>
+      </div>
+      <div class="cell">
+        <span class="label">content: &quot;[&quot; &quot;(&quot; &quot;)&quot; &quot;]&quot;</span>
+        <div class="demo d4"><span>Body</span></div>
+      </div>
+      <div class="cell">
+        <span class="label">attr(data-tag)</span>
+        <div class="demo d5" data-tag="alpha"><span>X</span></div>
+      </div>
+      <div class="cell">
+        <span class="label">attr(missing, &quot;FB&quot;)</span>
+        <div class="demo d6"><span>X</span></div>
+      </div>
+      <div class="cell">
+        <span class="label">attr(id) + attr(class)</span>
+        <div id="hero" class="demo d7"><span>X</span></div>
+      </div>
+      <div class="cell">
+        <span class="label">inherits color → orange</span>
+        <div class="demo d8"><span>X</span></div>
+      </div>
+    </div>
+  </body>
 </html>

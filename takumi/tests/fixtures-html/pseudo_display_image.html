@@ -1,64 +1,200 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <title>pseudo_display_image</title>
-  <base href="../../../">
-  <link rel="stylesheet" href="takumi/tests/shared.css">
-  <style>
-  .root {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    padding: 16px;
-    width: 100%;
-    height: 100%;
-    background: rgb(243, 244, 246);
-    align-content: flex-start;
-    font-family: "Geist";
-  }
-  .cell {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    width: 282px;
-    height: 138px;
-    background: white;
-    border-radius: 8px;
-    padding: 10px 12px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  }
-  .label {
-    font-size: 11px;
-    color: rgb(100, 116, 139);
-    font-family: "Geist Mono";
-  }
-  .demo {
-    flex-grow: 1;
-    font-size: 18px;
-    color: rgb(17, 24, 39);
-    display: flex;
-    align-items: center;
-  }
+  <head>
+    <meta charset="utf-8" />
+    <title>pseudo_display_image</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .root {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 16px;
+        width: 100%;
+        height: 100%;
+        background: rgb(243, 244, 246);
+        align-content: flex-start;
+        font-family: "Geist";
+      }
+      .cell {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        width: 282px;
+        height: 138px;
+        background: white;
+        border-radius: 8px;
+        padding: 10px 12px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+      }
+      .label {
+        font-size: 11px;
+        color: rgb(100, 116, 139);
+        font-family: "Geist Mono";
+      }
+      .demo {
+        flex-grow: 1;
+        font-size: 18px;
+        color: rgb(17, 24, 39);
+        display: flex;
+        align-items: center;
+      }
 
-    .g1::before { content: "[in]"; background: rgb(254, 226, 226); color: rgb(190, 18, 60); padding: 0 6px; margin-right: 6px; border-radius: 4px; }
-    .g2::before { content: "BLOCK"; display: block; background: rgb(220, 252, 231); color: rgb(21, 128, 61); padding: 2px 8px; margin-bottom: 4px; border-radius: 4px; }
-    .g3::before { content: "IB"; display: inline-block; background: rgb(219, 234, 254); color: rgb(29, 78, 216); padding: 2px 8px; margin-right: 6px; border-radius: 4px; }
-    .g4::before { content: "FLEX"; display: flex; background: rgb(254, 240, 138); color: rgb(133, 77, 14); padding: 2px 8px; margin-bottom: 4px; border-radius: 4px; }
-    .g5::before { content: "★"; display: inline-block; background: rgb(254, 226, 226); border: 2px solid rgb(220, 38, 38); border-radius: 50%; padding: 0 8px; color: rgb(127, 29, 29); margin-right: 8px; }
-    .g5::after  { content: " ◆"; color: rgb(124, 58, 237); }
-    .g6::before { content: linear-gradient(135deg, #ff3b30, #ffcc00); display: block; width: 240px; height: 60px; border-radius: 6px; }
-    .g7::before { content: radial-gradient(circle, #00e5ff, #5856d6); display: block; width: 240px; height: 60px; border-radius: 6px; }
-    .g8::before { content: conic-gradient(from 0deg, red, yellow, green, blue, red); display: block; width: 60px; height: 60px; border-radius: 50%; }
-    .g9::before { content: repeating-linear-gradient(45deg, #f59e0b 0 10px, #1e293b 10px 20px); display: block; width: 240px; height: 60px; border-radius: 6px; }
-    .g10::before { content: url("assets/images/yeecord.png"); display: block; width: 56px; height: 56px; }
-    .g11::before { content: linear-gradient(red, blue) linear-gradient(green, yellow); display: block; width: 240px; height: 60px; }
-    .g12 { width: 96px; height: 96px; object-fit: contain; }
-    .g12::before { content: "X"; color: red; }
-    .g12::after  { content: "Y"; color: red; }
-  </style>
-</head>
-<body style="width: 1200px; height: 630px;">
-  <div class="root"><div class="cell"><span class="label">default (inline)</span><div class="demo g1"><span>main</span></div></div><div class="cell"><span class="label">display: block</span><div class="demo g2"><span>main</span></div></div><div class="cell"><span class="label">display: inline-block</span><div class="demo g3"><span>main</span></div></div><div class="cell"><span class="label">display: flex → block</span><div class="demo g4"><span>main</span></div></div><div class="cell"><span class="label">bg + border + padding</span><div class="demo g5"><span>title</span></div></div><div class="cell"><span class="label">linear-gradient</span><div class="demo g6"><span></span></div></div><div class="cell"><span class="label">radial-gradient</span><div class="demo g7"><span></span></div></div><div class="cell"><span class="label">conic-gradient</span><div class="demo g8"><span></span></div></div><div class="cell"><span class="label">repeating-linear</span><div class="demo g9"><span></span></div></div><div class="cell"><span class="label">url() image</span><div class="demo g10"><span></span></div></div><div class="cell"><span class="label">two gradients in list</span><div class="demo g11"><span></span></div></div><div class="cell"><span class="label">img::before is skipped</span><img class="demo g12" src="assets/images/yeecord.png" /></div></div>
-</body>
+      .g1::before {
+        content: "[in]";
+        background: rgb(254, 226, 226);
+        color: rgb(190, 18, 60);
+        padding: 0 6px;
+        margin-right: 6px;
+        border-radius: 4px;
+      }
+      .g2::before {
+        content: "BLOCK";
+        display: block;
+        background: rgb(220, 252, 231);
+        color: rgb(21, 128, 61);
+        padding: 2px 8px;
+        margin-bottom: 4px;
+        border-radius: 4px;
+      }
+      .g3::before {
+        content: "IB";
+        display: inline-block;
+        background: rgb(219, 234, 254);
+        color: rgb(29, 78, 216);
+        padding: 2px 8px;
+        margin-right: 6px;
+        border-radius: 4px;
+      }
+      .g4::before {
+        content: "FLEX";
+        display: flex;
+        background: rgb(254, 240, 138);
+        color: rgb(133, 77, 14);
+        padding: 2px 8px;
+        margin-bottom: 4px;
+        border-radius: 4px;
+      }
+      .g5::before {
+        content: "★";
+        display: inline-block;
+        background: rgb(254, 226, 226);
+        border: 2px solid rgb(220, 38, 38);
+        border-radius: 50%;
+        padding: 0 8px;
+        color: rgb(127, 29, 29);
+        margin-right: 8px;
+      }
+      .g5::after {
+        content: " ◆";
+        color: rgb(124, 58, 237);
+      }
+      .g6::before {
+        content: linear-gradient(135deg, #ff3b30, #ffcc00);
+        display: block;
+        width: 240px;
+        height: 60px;
+        border-radius: 6px;
+      }
+      .g7::before {
+        content: radial-gradient(circle, #00e5ff, #5856d6);
+        display: block;
+        width: 240px;
+        height: 60px;
+        border-radius: 6px;
+      }
+      .g8::before {
+        content: conic-gradient(from 0deg, red, yellow, green, blue, red);
+        display: block;
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+      }
+      .g9::before {
+        content: repeating-linear-gradient(45deg, #f59e0b 0 10px, #1e293b 10px 20px);
+        display: block;
+        width: 240px;
+        height: 60px;
+        border-radius: 6px;
+      }
+      .g10::before {
+        content: url("assets/images/yeecord.png");
+        display: block;
+        width: 56px;
+        height: 56px;
+      }
+      .g11::before {
+        content: linear-gradient(red, blue) linear-gradient(green, yellow);
+        display: block;
+        width: 240px;
+        height: 60px;
+      }
+      .g12 {
+        width: 96px;
+        height: 96px;
+        object-fit: contain;
+      }
+      .g12::before {
+        content: "X";
+        color: red;
+      }
+      .g12::after {
+        content: "Y";
+        color: red;
+      }
+    </style>
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div class="root">
+      <div class="cell">
+        <span class="label">default (inline)</span>
+        <div class="demo g1"><span>main</span></div>
+      </div>
+      <div class="cell">
+        <span class="label">display: block</span>
+        <div class="demo g2"><span>main</span></div>
+      </div>
+      <div class="cell">
+        <span class="label">display: inline-block</span>
+        <div class="demo g3"><span>main</span></div>
+      </div>
+      <div class="cell">
+        <span class="label">display: flex → block</span>
+        <div class="demo g4"><span>main</span></div>
+      </div>
+      <div class="cell">
+        <span class="label">bg + border + padding</span>
+        <div class="demo g5"><span>title</span></div>
+      </div>
+      <div class="cell">
+        <span class="label">linear-gradient</span>
+        <div class="demo g6"><span></span></div>
+      </div>
+      <div class="cell">
+        <span class="label">radial-gradient</span>
+        <div class="demo g7"><span></span></div>
+      </div>
+      <div class="cell">
+        <span class="label">conic-gradient</span>
+        <div class="demo g8"><span></span></div>
+      </div>
+      <div class="cell">
+        <span class="label">repeating-linear</span>
+        <div class="demo g9"><span></span></div>
+      </div>
+      <div class="cell">
+        <span class="label">url() image</span>
+        <div class="demo g10"><span></span></div>
+      </div>
+      <div class="cell">
+        <span class="label">two gradients in list</span>
+        <div class="demo g11"><span></span></div>
+      </div>
+      <div class="cell">
+        <span class="label">img::before is skipped</span
+        ><img class="demo g12" src="assets/images/yeecord.png" />
+      </div>
+    </div>
+  </body>
 </html>

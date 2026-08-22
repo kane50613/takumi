@@ -1,49 +1,68 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <title>showcase_chrome_text</title>
-  <base href="../../../">
-  <link rel="stylesheet" href="takumi/tests/shared.css">
-  <style>
-    .stage {
-      position: relative;
-      display: flex;
-      width: 100%;
-      height: 100%;
-      align-items: center;
-      justify-content: center;
-      font-family: Geist;
-    }
-    .layer { position: absolute; inset: 0; }
-    
-    .stage {
-      background-color: #0b0617;
-      background-image:
-        repeating-conic-gradient(from 0deg at 50% 130%, rgba(94, 80, 163, 0.35) 0deg 5deg, rgba(11, 6, 23, 0) 5deg 10deg),
-        radial-gradient(ellipse 80% 60% at 50% 0%, rgba(120, 180, 255, 0.25), transparent 70%);
-      flex-direction: column;
-      gap: 8px;
-    }
-    .chrome {
-      font-size: 172px;
-      font-weight: 900;
-      letter-spacing: -6px;
-      background-image: linear-gradient(180deg, #0b1020 0%, #34304b 14%, #c3b9d5 26%, #ffffff 34%, #5a6cae 48%, #ffffff 56%, #e8ecff 84%, #c3b9d5 90%, #211c35 100%);
-      background-clip: text;
-      color: transparent;
-      filter: url(data:image/svg+xml,%3Cfilter%20x%3D%22-20%25%22%20y%3D%22-20%25%22%20width%3D%22140%25%22%20height%3D%22140%25%22%3E%3CfeGaussianBlur%20stdDeviation%3D%221.4%22%20in%3D%22SourceGraphic%22%20result%3D%22blur%22%2F%3E%3CfeSpecularLighting%20surfaceScale%3D%221.6%22%20specularConstant%3D%220.9%22%20specularExponent%3D%2240%22%20lighting-color%3D%22%23ffffff%22%20in%3D%22blur%22%20result%3D%22spec%22%3E%3CfePointLight%20x%3D%22600%22%20y%3D%22-60%22%20z%3D%22900%22%2F%3E%3C%2FfeSpecularLighting%3E%3CfeComposite%20operator%3D%22in%22%20in%3D%22spec%22%20in2%3D%22SourceAlpha%22%20result%3D%22rim%22%2F%3E%3CfeMerge%3E%3CfeMergeNode%20in%3D%22SourceGraphic%22%2F%3E%3CfeMergeNode%20in%3D%22rim%22%2F%3E%3C%2FfeMerge%3E%3C%2Ffilter%3E);
-    }
-    .tagline {
-      font-family: "Geist Mono";
-      font-size: 26px;
-      letter-spacing: 10px;
-      color: rgba(195, 185, 213, 0.8);
-    }
-  
-  </style>
-</head>
-<body style="width: 1200px; height: 630px;">
-  <div class="stage"><span class="chrome">CHROME!</span><span class="tagline">Y2K SPECULAR BEVEL</span></div>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <title>showcase_chrome_text</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .stage {
+        position: relative;
+        display: flex;
+        width: 100%;
+        height: 100%;
+        align-items: center;
+        justify-content: center;
+        font-family: Geist;
+      }
+      .layer {
+        position: absolute;
+        inset: 0;
+      }
+
+      .stage {
+        background-color: #0b0617;
+        background-image:
+          repeating-conic-gradient(
+            from 0deg at 50% 130%,
+            rgba(94, 80, 163, 0.35) 0deg 5deg,
+            rgba(11, 6, 23, 0) 5deg 10deg
+          ),
+          radial-gradient(ellipse 80% 60% at 50% 0%, rgba(120, 180, 255, 0.25), transparent 70%);
+        flex-direction: column;
+        gap: 8px;
+      }
+      .chrome {
+        font-size: 172px;
+        font-weight: 900;
+        letter-spacing: -6px;
+        background-image: linear-gradient(
+          180deg,
+          #0b1020 0%,
+          #34304b 14%,
+          #c3b9d5 26%,
+          #ffffff 34%,
+          #5a6cae 48%,
+          #ffffff 56%,
+          #e8ecff 84%,
+          #c3b9d5 90%,
+          #211c35 100%
+        );
+        background-clip: text;
+        color: transparent;
+        filter: url(data:image/svg+xml,%3Cfilter%20x%3D%22-20%25%22%20y%3D%22-20%25%22%20width%3D%22140%25%22%20height%3D%22140%25%22%3E%3CfeGaussianBlur%20stdDeviation%3D%221.4%22%20in%3D%22SourceGraphic%22%20result%3D%22blur%22%2F%3E%3CfeSpecularLighting%20surfaceScale%3D%221.6%22%20specularConstant%3D%220.9%22%20specularExponent%3D%2240%22%20lighting-color%3D%22%23ffffff%22%20in%3D%22blur%22%20result%3D%22spec%22%3E%3CfePointLight%20x%3D%22600%22%20y%3D%22-60%22%20z%3D%22900%22%2F%3E%3C%2FfeSpecularLighting%3E%3CfeComposite%20operator%3D%22in%22%20in%3D%22spec%22%20in2%3D%22SourceAlpha%22%20result%3D%22rim%22%2F%3E%3CfeMerge%3E%3CfeMergeNode%20in%3D%22SourceGraphic%22%2F%3E%3CfeMergeNode%20in%3D%22rim%22%2F%3E%3C%2FfeMerge%3E%3C%2Ffilter%3E);
+      }
+      .tagline {
+        font-family: "Geist Mono";
+        font-size: 26px;
+        letter-spacing: 10px;
+        color: rgba(195, 185, 213, 0.8);
+      }
+    </style>
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div class="stage">
+      <span class="chrome">CHROME!</span><span class="tagline">Y2K SPECULAR BEVEL</span>
+    </div>
+  </body>
 </html>

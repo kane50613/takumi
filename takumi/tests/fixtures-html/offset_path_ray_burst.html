@@ -1,12 +1,189 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <title>offset_path_ray_burst</title>
-  <base href="../../../">
-  <link rel="stylesheet" href="takumi/tests/shared.css">
-</head>
-<body style="width: 1200px; height: 630px;">
-  <div style="display: flex; position: relative; width: 1200px; height: 630px; background-color: rgb(255, 255, 255);"><div style="display: flex; position: absolute; left: 0px; top: 0px; width: 72px; height: 18px; background-color: rgb(220, 60, 120); offset-path: ray(0deg at 50% 50%); offset-distance: 80%; offset-rotate: auto;"></div><div style="display: flex; position: absolute; left: 0px; top: 0px; width: 72px; height: 18px; background-color: rgb(220, 60, 120); offset-path: ray(30deg at 50% 50%); offset-distance: 80%; offset-rotate: auto;"></div><div style="display: flex; position: absolute; left: 0px; top: 0px; width: 72px; height: 18px; background-color: rgb(220, 60, 120); offset-path: ray(60deg at 50% 50%); offset-distance: 80%; offset-rotate: auto;"></div><div style="display: flex; position: absolute; left: 0px; top: 0px; width: 72px; height: 18px; background-color: rgb(220, 60, 120); offset-path: ray(90deg at 50% 50%); offset-distance: 80%; offset-rotate: auto;"></div><div style="display: flex; position: absolute; left: 0px; top: 0px; width: 72px; height: 18px; background-color: rgb(220, 60, 120); offset-path: ray(120deg at 50% 50%); offset-distance: 80%; offset-rotate: auto;"></div><div style="display: flex; position: absolute; left: 0px; top: 0px; width: 72px; height: 18px; background-color: rgb(220, 60, 120); offset-path: ray(150deg at 50% 50%); offset-distance: 80%; offset-rotate: auto;"></div><div style="display: flex; position: absolute; left: 0px; top: 0px; width: 72px; height: 18px; background-color: rgb(220, 60, 120); offset-path: ray(180deg at 50% 50%); offset-distance: 80%; offset-rotate: auto;"></div><div style="display: flex; position: absolute; left: 0px; top: 0px; width: 72px; height: 18px; background-color: rgb(220, 60, 120); offset-path: ray(210deg at 50% 50%); offset-distance: 80%; offset-rotate: auto;"></div><div style="display: flex; position: absolute; left: 0px; top: 0px; width: 72px; height: 18px; background-color: rgb(220, 60, 120); offset-path: ray(240deg at 50% 50%); offset-distance: 80%; offset-rotate: auto;"></div><div style="display: flex; position: absolute; left: 0px; top: 0px; width: 72px; height: 18px; background-color: rgb(220, 60, 120); offset-path: ray(270deg at 50% 50%); offset-distance: 80%; offset-rotate: auto;"></div><div style="display: flex; position: absolute; left: 0px; top: 0px; width: 72px; height: 18px; background-color: rgb(220, 60, 120); offset-path: ray(300deg at 50% 50%); offset-distance: 80%; offset-rotate: auto;"></div><div style="display: flex; position: absolute; left: 0px; top: 0px; width: 72px; height: 18px; background-color: rgb(220, 60, 120); offset-path: ray(330deg at 50% 50%); offset-distance: 80%; offset-rotate: auto;"></div></div>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <title>offset_path_ray_burst</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div
+      style="
+        display: flex;
+        position: relative;
+        width: 1200px;
+        height: 630px;
+        background-color: rgb(255, 255, 255);
+      "
+    >
+      <div
+        style="
+          display: flex;
+          position: absolute;
+          left: 0px;
+          top: 0px;
+          width: 72px;
+          height: 18px;
+          background-color: rgb(220, 60, 120);
+          offset-path: ray(0deg at 50% 50%);
+          offset-distance: 80%;
+          offset-rotate: auto;
+        "
+      ></div>
+      <div
+        style="
+          display: flex;
+          position: absolute;
+          left: 0px;
+          top: 0px;
+          width: 72px;
+          height: 18px;
+          background-color: rgb(220, 60, 120);
+          offset-path: ray(30deg at 50% 50%);
+          offset-distance: 80%;
+          offset-rotate: auto;
+        "
+      ></div>
+      <div
+        style="
+          display: flex;
+          position: absolute;
+          left: 0px;
+          top: 0px;
+          width: 72px;
+          height: 18px;
+          background-color: rgb(220, 60, 120);
+          offset-path: ray(60deg at 50% 50%);
+          offset-distance: 80%;
+          offset-rotate: auto;
+        "
+      ></div>
+      <div
+        style="
+          display: flex;
+          position: absolute;
+          left: 0px;
+          top: 0px;
+          width: 72px;
+          height: 18px;
+          background-color: rgb(220, 60, 120);
+          offset-path: ray(90deg at 50% 50%);
+          offset-distance: 80%;
+          offset-rotate: auto;
+        "
+      ></div>
+      <div
+        style="
+          display: flex;
+          position: absolute;
+          left: 0px;
+          top: 0px;
+          width: 72px;
+          height: 18px;
+          background-color: rgb(220, 60, 120);
+          offset-path: ray(120deg at 50% 50%);
+          offset-distance: 80%;
+          offset-rotate: auto;
+        "
+      ></div>
+      <div
+        style="
+          display: flex;
+          position: absolute;
+          left: 0px;
+          top: 0px;
+          width: 72px;
+          height: 18px;
+          background-color: rgb(220, 60, 120);
+          offset-path: ray(150deg at 50% 50%);
+          offset-distance: 80%;
+          offset-rotate: auto;
+        "
+      ></div>
+      <div
+        style="
+          display: flex;
+          position: absolute;
+          left: 0px;
+          top: 0px;
+          width: 72px;
+          height: 18px;
+          background-color: rgb(220, 60, 120);
+          offset-path: ray(180deg at 50% 50%);
+          offset-distance: 80%;
+          offset-rotate: auto;
+        "
+      ></div>
+      <div
+        style="
+          display: flex;
+          position: absolute;
+          left: 0px;
+          top: 0px;
+          width: 72px;
+          height: 18px;
+          background-color: rgb(220, 60, 120);
+          offset-path: ray(210deg at 50% 50%);
+          offset-distance: 80%;
+          offset-rotate: auto;
+        "
+      ></div>
+      <div
+        style="
+          display: flex;
+          position: absolute;
+          left: 0px;
+          top: 0px;
+          width: 72px;
+          height: 18px;
+          background-color: rgb(220, 60, 120);
+          offset-path: ray(240deg at 50% 50%);
+          offset-distance: 80%;
+          offset-rotate: auto;
+        "
+      ></div>
+      <div
+        style="
+          display: flex;
+          position: absolute;
+          left: 0px;
+          top: 0px;
+          width: 72px;
+          height: 18px;
+          background-color: rgb(220, 60, 120);
+          offset-path: ray(270deg at 50% 50%);
+          offset-distance: 80%;
+          offset-rotate: auto;
+        "
+      ></div>
+      <div
+        style="
+          display: flex;
+          position: absolute;
+          left: 0px;
+          top: 0px;
+          width: 72px;
+          height: 18px;
+          background-color: rgb(220, 60, 120);
+          offset-path: ray(300deg at 50% 50%);
+          offset-distance: 80%;
+          offset-rotate: auto;
+        "
+      ></div>
+      <div
+        style="
+          display: flex;
+          position: absolute;
+          left: 0px;
+          top: 0px;
+          width: 72px;
+          height: 18px;
+          background-color: rgb(220, 60, 120);
+          offset-path: ray(330deg at 50% 50%);
+          offset-distance: 80%;
+          offset-rotate: auto;
+        "
+      ></div>
+    </div>
+  </body>
 </html>

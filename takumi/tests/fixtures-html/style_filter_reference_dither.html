@@ -1,12 +1,197 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <title>style_filter_reference_dither</title>
-  <base href="../../../">
-  <link rel="stylesheet" href="takumi/tests/shared.css">
-</head>
-<body style="width: 1200px; height: 630px;">
-  <div style="width: 100%; height: 100%; display: grid; grid-template-columns: repeat(2, 1fr); row-gap: 16px; column-gap: 16px; justify-content: center; align-items: center; color: rgb(201, 212, 205); background-color: rgb(11, 13, 12);"><div style="display: flex; flex-direction: column; align-items: center; row-gap: 12px; column-gap: 12px; font-size: 18px;"><div style="width: 260px; height: 180px; display: flex; justify-content: flex-end; background-image: linear-gradient(135deg, rgb(139, 92, 246), rgb(29, 78, 216) 55%, rgb(11, 13, 12));"><div style="width: 88px; height: 88px; margin-top: 18px; margin-right: 18px; margin-bottom: 18px; margin-left: 18px; border-top-left-radius: 44px 44px; border-top-right-radius: 44px 44px; border-bottom-right-radius: 44px 44px; border-bottom-left-radius: 44px 44px; background-color: rgba(241, 245, 249, 0.901961);"></div></div><span style="display: block;">reference</span></div><div style="display: flex; flex-direction: column; align-items: center; row-gap: 12px; column-gap: 12px; font-size: 18px;"><div style="width: 260px; height: 180px; display: flex; justify-content: flex-end; background-image: linear-gradient(135deg, rgb(139, 92, 246), rgb(29, 78, 216) 55%, rgb(11, 13, 12)); filter: url(&quot;data:image/svg+xml,<filter id=%22takumi-filter%22 color-interpolation-filters=%22sRGB%22 x=%220%22 y=%220%22 width=%22100%25%22 height=%22100%25%22><feComponentTransfer><feFuncR type=%22discrete%22 tableValues=%220 0.333 0.667 1%22/><feFuncG type=%22discrete%22 tableValues=%220 0.333 0.667 1%22/><feFuncB type=%22discrete%22 tableValues=%220 0.333 0.667 1%22/></feComponentTransfer></filter>&quot;);"><div style="width: 88px; height: 88px; margin-top: 18px; margin-right: 18px; margin-bottom: 18px; margin-left: 18px; border-top-left-radius: 44px 44px; border-top-right-radius: 44px 44px; border-bottom-right-radius: 44px 44px; border-bottom-left-radius: 44px 44px; background-color: rgba(241, 245, 249, 0.901961);"></div></div><span style="display: block;">posterize 4</span></div><div style="display: flex; flex-direction: column; align-items: center; row-gap: 12px; column-gap: 12px; font-size: 18px;"><div style="width: 260px; height: 180px; display: flex; justify-content: flex-end; background-image: linear-gradient(135deg, rgb(139, 92, 246), rgb(29, 78, 216) 55%, rgb(11, 13, 12)); filter: url(&quot;data:image/svg+xml,<filter id=%22takumi-filter%22 color-interpolation-filters=%22sRGB%22 x=%220%22 y=%220%22 width=%22100%25%22 height=%22100%25%22><feImage href=%22data:image/svg+xml,%253Csvg%2520xmlns%253D%2522http%253A%252F%252Fwww.w3.org%252F2000%252Fsvg%2522%2520width%253D%25224%2522%2520height%253D%25224%2522%253E%253Crect%2520x%253D%25220%2522%2520y%253D%25220%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%25288%252C8%252C8%2529%2522%252F%253E%253Crect%2520x%253D%25221%2522%2520y%253D%25220%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528135%252C135%252C135%2529%2522%252F%253E%253Crect%2520x%253D%25222%2522%2520y%253D%25220%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%252840%252C40%252C40%2529%2522%252F%253E%253Crect%2520x%253D%25223%2522%2520y%253D%25220%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528167%252C167%252C167%2529%2522%252F%253E%253Crect%2520x%253D%25220%2522%2520y%253D%25221%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528199%252C199%252C199%2529%2522%252F%253E%253Crect%2520x%253D%25221%2522%2520y%253D%25221%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%252872%252C72%252C72%2529%2522%252F%253E%253Crect%2520x%253D%25222%2522%2520y%253D%25221%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528231%252C231%252C231%2529%2522%252F%253E%253Crect%2520x%253D%25223%2522%2520y%253D%25221%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528104%252C104%252C104%2529%2522%252F%253E%253Crect%2520x%253D%25220%2522%2520y%253D%25222%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%252856%252C56%252C56%2529%2522%252F%253E%253Crect%2520x%253D%25221%2522%2520y%253D%25222%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528183%252C183%252C183%2529%2522%252F%253E%253Crect%2520x%253D%25222%2522%2520y%253D%25222%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%252824%252C24%252C24%2529%2522%252F%253E%253Crect%2520x%253D%25223%2522%2520y%253D%25222%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528151%252C151%252C151%2529%2522%252F%253E%253Crect%2520x%253D%25220%2522%2520y%253D%25223%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528247%252C247%252C247%2529%2522%252F%253E%253Crect%2520x%253D%25221%2522%2520y%253D%25223%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528120%252C120%252C120%2529%2522%252F%253E%253Crect%2520x%253D%25222%2522%2520y%253D%25223%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528215%252C215%252C215%2529%2522%252F%253E%253Crect%2520x%253D%25223%2522%2520y%253D%25223%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%252888%252C88%252C88%2529%2522%252F%253E%253C%252Fsvg%253E%22 width=%224%22 height=%224%22 result=%22b%22/><feTile in=%22b%22 result=%22tile%22/><feComposite in=%22SourceGraphic%22 in2=%22tile%22 operator=%22arithmetic%22 k2=%221%22 k3=%220.25%22 k4=%22-0.125%22 result=%22noised%22/><feComponentTransfer in=%22noised%22 result=%22quant%22><feFuncR type=%22discrete%22 tableValues=%220 0.333 0.667 1%22/><feFuncG type=%22discrete%22 tableValues=%220 0.333 0.667 1%22/><feFuncB type=%22discrete%22 tableValues=%220 0.333 0.667 1%22/></feComponentTransfer><feComposite in=%22quant%22 in2=%22SourceAlpha%22 operator=%22in%22/></filter>&quot;);"><div style="width: 88px; height: 88px; margin-top: 18px; margin-right: 18px; margin-bottom: 18px; margin-left: 18px; border-top-left-radius: 44px 44px; border-top-right-radius: 44px 44px; border-bottom-right-radius: 44px 44px; border-bottom-left-radius: 44px 44px; background-color: rgba(241, 245, 249, 0.901961);"></div></div><span style="display: block;">dither 4 bayer</span></div><div style="display: flex; flex-direction: column; align-items: center; row-gap: 12px; column-gap: 12px; font-size: 18px;"><div style="width: 260px; height: 180px; display: flex; justify-content: flex-end; background-image: linear-gradient(135deg, rgb(139, 92, 246), rgb(29, 78, 216) 55%, rgb(11, 13, 12)); filter: url(&quot;data:image/svg+xml,<filter id=%22takumi-filter%22 color-interpolation-filters=%22sRGB%22 x=%220%22 y=%220%22 width=%22100%25%22 height=%22100%25%22><feImage href=%22data:image/svg+xml,%253Csvg%2520xmlns%253D%2522http%253A%252F%252Fwww.w3.org%252F2000%252Fsvg%2522%2520width%253D%25224%2522%2520height%253D%25224%2522%253E%253Crect%2520x%253D%25220%2522%2520y%253D%25220%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%25288%252C8%252C8%2529%2522%252F%253E%253Crect%2520x%253D%25221%2522%2520y%253D%25220%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528135%252C135%252C135%2529%2522%252F%253E%253Crect%2520x%253D%25222%2522%2520y%253D%25220%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%252840%252C40%252C40%2529%2522%252F%253E%253Crect%2520x%253D%25223%2522%2520y%253D%25220%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528167%252C167%252C167%2529%2522%252F%253E%253Crect%2520x%253D%25220%2522%2520y%253D%25221%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528199%252C199%252C199%2529%2522%252F%253E%253Crect%2520x%253D%25221%2522%2520y%253D%25221%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%252872%252C72%252C72%2529%2522%252F%253E%253Crect%2520x%253D%25222%2522%2520y%253D%25221%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528231%252C231%252C231%2529%2522%252F%253E%253Crect%2520x%253D%25223%2522%2520y%253D%25221%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528104%252C104%252C104%2529%2522%252F%253E%253Crect%2520x%253D%25220%2522%2520y%253D%25222%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%252856%252C56%252C56%2529%2522%252F%253E%253Crect%2520x%253D%25221%2522%2520y%253D%25222%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528183%252C183%252C183%2529%2522%252F%253E%253Crect%2520x%253D%25222%2522%2520y%253D%25222%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%252824%252C24%252C24%2529%2522%252F%253E%253Crect%2520x%253D%25223%2522%2520y%253D%25222%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528151%252C151%252C151%2529%2522%252F%253E%253Crect%2520x%253D%25220%2522%2520y%253D%25223%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528247%252C247%252C247%2529%2522%252F%253E%253Crect%2520x%253D%25221%2522%2520y%253D%25223%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528120%252C120%252C120%2529%2522%252F%253E%253Crect%2520x%253D%25222%2522%2520y%253D%25223%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528215%252C215%252C215%2529%2522%252F%253E%253Crect%2520x%253D%25223%2522%2520y%253D%25223%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%252888%252C88%252C88%2529%2522%252F%253E%253C%252Fsvg%253E%22 width=%2212%22 height=%2212%22 result=%22b%22/><feTile in=%22b%22 result=%22tile%22/><feComposite in=%22SourceGraphic%22 in2=%22tile%22 operator=%22arithmetic%22 k2=%221%22 k3=%220.25%22 k4=%22-0.125%22 result=%22noised%22/><feComponentTransfer in=%22noised%22 result=%22quant%22><feFuncR type=%22discrete%22 tableValues=%220 0.333 0.667 1%22/><feFuncG type=%22discrete%22 tableValues=%220 0.333 0.667 1%22/><feFuncB type=%22discrete%22 tableValues=%220 0.333 0.667 1%22/></feComponentTransfer><feComposite in=%22quant%22 in2=%22SourceAlpha%22 operator=%22in%22/></filter>&quot;);"><div style="width: 88px; height: 88px; margin-top: 18px; margin-right: 18px; margin-bottom: 18px; margin-left: 18px; border-top-left-radius: 44px 44px; border-top-right-radius: 44px 44px; border-bottom-right-radius: 44px 44px; border-bottom-left-radius: 44px 44px; background-color: rgba(241, 245, 249, 0.901961);"></div></div><span style="display: block;">dither 4 bayer cell 3px</span></div></div>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <title>style_filter_reference_dither</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div
+      style="
+        width: 100%;
+        height: 100%;
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        row-gap: 16px;
+        column-gap: 16px;
+        justify-content: center;
+        align-items: center;
+        color: rgb(201, 212, 205);
+        background-color: rgb(11, 13, 12);
+      "
+    >
+      <div
+        style="
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          row-gap: 12px;
+          column-gap: 12px;
+          font-size: 18px;
+        "
+      >
+        <div
+          style="
+            width: 260px;
+            height: 180px;
+            display: flex;
+            justify-content: flex-end;
+            background-image: linear-gradient(
+              135deg,
+              rgb(139, 92, 246),
+              rgb(29, 78, 216) 55%,
+              rgb(11, 13, 12)
+            );
+          "
+        >
+          <div
+            style="
+              width: 88px;
+              height: 88px;
+              margin-top: 18px;
+              margin-right: 18px;
+              margin-bottom: 18px;
+              margin-left: 18px;
+              border-top-left-radius: 44px 44px;
+              border-top-right-radius: 44px 44px;
+              border-bottom-right-radius: 44px 44px;
+              border-bottom-left-radius: 44px 44px;
+              background-color: rgba(241, 245, 249, 0.901961);
+            "
+          ></div>
+        </div>
+        <span style="display: block">reference</span>
+      </div>
+      <div
+        style="
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          row-gap: 12px;
+          column-gap: 12px;
+          font-size: 18px;
+        "
+      >
+        <div
+          style="
+            width: 260px;
+            height: 180px;
+            display: flex;
+            justify-content: flex-end;
+            background-image: linear-gradient(
+              135deg,
+              rgb(139, 92, 246),
+              rgb(29, 78, 216) 55%,
+              rgb(11, 13, 12)
+            );
+            filter: url(&quot;data:image/svg+xml,<filter id=%22takumi-filter%22 color-interpolation-filters=%22sRGB%22 x=%220%22 y=%220%22 width=%22100%25%22 height=%22100%25%22><feComponentTransfer><feFuncR type=%22discrete%22 tableValues=%220 0.333 0.667 1%22/><feFuncG type=%22discrete%22 tableValues=%220 0.333 0.667 1%22/><feFuncB type=%22discrete%22 tableValues=%220 0.333 0.667 1%22/></feComponentTransfer></filter>&quot;);
+          "
+        >
+          <div
+            style="
+              width: 88px;
+              height: 88px;
+              margin-top: 18px;
+              margin-right: 18px;
+              margin-bottom: 18px;
+              margin-left: 18px;
+              border-top-left-radius: 44px 44px;
+              border-top-right-radius: 44px 44px;
+              border-bottom-right-radius: 44px 44px;
+              border-bottom-left-radius: 44px 44px;
+              background-color: rgba(241, 245, 249, 0.901961);
+            "
+          ></div>
+        </div>
+        <span style="display: block">posterize 4</span>
+      </div>
+      <div
+        style="
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          row-gap: 12px;
+          column-gap: 12px;
+          font-size: 18px;
+        "
+      >
+        <div
+          style="
+            width: 260px;
+            height: 180px;
+            display: flex;
+            justify-content: flex-end;
+            background-image: linear-gradient(
+              135deg,
+              rgb(139, 92, 246),
+              rgb(29, 78, 216) 55%,
+              rgb(11, 13, 12)
+            );
+            filter: url(&quot;data:image/svg+xml,<filter id=%22takumi-filter%22 color-interpolation-filters=%22sRGB%22 x=%220%22 y=%220%22 width=%22100%25%22 height=%22100%25%22><feImage href=%22data:image/svg+xml,%253Csvg%2520xmlns%253D%2522http%253A%252F%252Fwww.w3.org%252F2000%252Fsvg%2522%2520width%253D%25224%2522%2520height%253D%25224%2522%253E%253Crect%2520x%253D%25220%2522%2520y%253D%25220%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%25288%252C8%252C8%2529%2522%252F%253E%253Crect%2520x%253D%25221%2522%2520y%253D%25220%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528135%252C135%252C135%2529%2522%252F%253E%253Crect%2520x%253D%25222%2522%2520y%253D%25220%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%252840%252C40%252C40%2529%2522%252F%253E%253Crect%2520x%253D%25223%2522%2520y%253D%25220%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528167%252C167%252C167%2529%2522%252F%253E%253Crect%2520x%253D%25220%2522%2520y%253D%25221%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528199%252C199%252C199%2529%2522%252F%253E%253Crect%2520x%253D%25221%2522%2520y%253D%25221%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%252872%252C72%252C72%2529%2522%252F%253E%253Crect%2520x%253D%25222%2522%2520y%253D%25221%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528231%252C231%252C231%2529%2522%252F%253E%253Crect%2520x%253D%25223%2522%2520y%253D%25221%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528104%252C104%252C104%2529%2522%252F%253E%253Crect%2520x%253D%25220%2522%2520y%253D%25222%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%252856%252C56%252C56%2529%2522%252F%253E%253Crect%2520x%253D%25221%2522%2520y%253D%25222%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528183%252C183%252C183%2529%2522%252F%253E%253Crect%2520x%253D%25222%2522%2520y%253D%25222%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%252824%252C24%252C24%2529%2522%252F%253E%253Crect%2520x%253D%25223%2522%2520y%253D%25222%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528151%252C151%252C151%2529%2522%252F%253E%253Crect%2520x%253D%25220%2522%2520y%253D%25223%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528247%252C247%252C247%2529%2522%252F%253E%253Crect%2520x%253D%25221%2522%2520y%253D%25223%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528120%252C120%252C120%2529%2522%252F%253E%253Crect%2520x%253D%25222%2522%2520y%253D%25223%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528215%252C215%252C215%2529%2522%252F%253E%253Crect%2520x%253D%25223%2522%2520y%253D%25223%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%252888%252C88%252C88%2529%2522%252F%253E%253C%252Fsvg%253E%22 width=%224%22 height=%224%22 result=%22b%22/><feTile in=%22b%22 result=%22tile%22/><feComposite in=%22SourceGraphic%22 in2=%22tile%22 operator=%22arithmetic%22 k2=%221%22 k3=%220.25%22 k4=%22-0.125%22 result=%22noised%22/><feComponentTransfer in=%22noised%22 result=%22quant%22><feFuncR type=%22discrete%22 tableValues=%220 0.333 0.667 1%22/><feFuncG type=%22discrete%22 tableValues=%220 0.333 0.667 1%22/><feFuncB type=%22discrete%22 tableValues=%220 0.333 0.667 1%22/></feComponentTransfer><feComposite in=%22quant%22 in2=%22SourceAlpha%22 operator=%22in%22/></filter>&quot;);
+          "
+        >
+          <div
+            style="
+              width: 88px;
+              height: 88px;
+              margin-top: 18px;
+              margin-right: 18px;
+              margin-bottom: 18px;
+              margin-left: 18px;
+              border-top-left-radius: 44px 44px;
+              border-top-right-radius: 44px 44px;
+              border-bottom-right-radius: 44px 44px;
+              border-bottom-left-radius: 44px 44px;
+              background-color: rgba(241, 245, 249, 0.901961);
+            "
+          ></div>
+        </div>
+        <span style="display: block">dither 4 bayer</span>
+      </div>
+      <div
+        style="
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          row-gap: 12px;
+          column-gap: 12px;
+          font-size: 18px;
+        "
+      >
+        <div
+          style="
+            width: 260px;
+            height: 180px;
+            display: flex;
+            justify-content: flex-end;
+            background-image: linear-gradient(
+              135deg,
+              rgb(139, 92, 246),
+              rgb(29, 78, 216) 55%,
+              rgb(11, 13, 12)
+            );
+            filter: url(&quot;data:image/svg+xml,<filter id=%22takumi-filter%22 color-interpolation-filters=%22sRGB%22 x=%220%22 y=%220%22 width=%22100%25%22 height=%22100%25%22><feImage href=%22data:image/svg+xml,%253Csvg%2520xmlns%253D%2522http%253A%252F%252Fwww.w3.org%252F2000%252Fsvg%2522%2520width%253D%25224%2522%2520height%253D%25224%2522%253E%253Crect%2520x%253D%25220%2522%2520y%253D%25220%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%25288%252C8%252C8%2529%2522%252F%253E%253Crect%2520x%253D%25221%2522%2520y%253D%25220%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528135%252C135%252C135%2529%2522%252F%253E%253Crect%2520x%253D%25222%2522%2520y%253D%25220%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%252840%252C40%252C40%2529%2522%252F%253E%253Crect%2520x%253D%25223%2522%2520y%253D%25220%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528167%252C167%252C167%2529%2522%252F%253E%253Crect%2520x%253D%25220%2522%2520y%253D%25221%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528199%252C199%252C199%2529%2522%252F%253E%253Crect%2520x%253D%25221%2522%2520y%253D%25221%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%252872%252C72%252C72%2529%2522%252F%253E%253Crect%2520x%253D%25222%2522%2520y%253D%25221%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528231%252C231%252C231%2529%2522%252F%253E%253Crect%2520x%253D%25223%2522%2520y%253D%25221%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528104%252C104%252C104%2529%2522%252F%253E%253Crect%2520x%253D%25220%2522%2520y%253D%25222%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%252856%252C56%252C56%2529%2522%252F%253E%253Crect%2520x%253D%25221%2522%2520y%253D%25222%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528183%252C183%252C183%2529%2522%252F%253E%253Crect%2520x%253D%25222%2522%2520y%253D%25222%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%252824%252C24%252C24%2529%2522%252F%253E%253Crect%2520x%253D%25223%2522%2520y%253D%25222%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528151%252C151%252C151%2529%2522%252F%253E%253Crect%2520x%253D%25220%2522%2520y%253D%25223%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528247%252C247%252C247%2529%2522%252F%253E%253Crect%2520x%253D%25221%2522%2520y%253D%25223%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528120%252C120%252C120%2529%2522%252F%253E%253Crect%2520x%253D%25222%2522%2520y%253D%25223%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%2528215%252C215%252C215%2529%2522%252F%253E%253Crect%2520x%253D%25223%2522%2520y%253D%25223%2522%2520width%253D%25221%2522%2520height%253D%25221%2522%2520fill%253D%2522rgb%252888%252C88%252C88%2529%2522%252F%253E%253C%252Fsvg%253E%22 width=%2212%22 height=%2212%22 result=%22b%22/><feTile in=%22b%22 result=%22tile%22/><feComposite in=%22SourceGraphic%22 in2=%22tile%22 operator=%22arithmetic%22 k2=%221%22 k3=%220.25%22 k4=%22-0.125%22 result=%22noised%22/><feComponentTransfer in=%22noised%22 result=%22quant%22><feFuncR type=%22discrete%22 tableValues=%220 0.333 0.667 1%22/><feFuncG type=%22discrete%22 tableValues=%220 0.333 0.667 1%22/><feFuncB type=%22discrete%22 tableValues=%220 0.333 0.667 1%22/></feComponentTransfer><feComposite in=%22quant%22 in2=%22SourceAlpha%22 operator=%22in%22/></filter>&quot;);
+          "
+        >
+          <div
+            style="
+              width: 88px;
+              height: 88px;
+              margin-top: 18px;
+              margin-right: 18px;
+              margin-bottom: 18px;
+              margin-left: 18px;
+              border-top-left-radius: 44px 44px;
+              border-top-right-radius: 44px 44px;
+              border-bottom-right-radius: 44px 44px;
+              border-bottom-left-radius: 44px 44px;
+              background-color: rgba(241, 245, 249, 0.901961);
+            "
+          ></div>
+        </div>
+        <span style="display: block">dither 4 bayer cell 3px</span>
+      </div>
+    </div>
+  </body>
 </html>

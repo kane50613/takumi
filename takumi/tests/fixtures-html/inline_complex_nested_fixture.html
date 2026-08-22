@@ -1,12 +1,133 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <title>inline_complex_nested_fixture</title>
-  <base href="../../../">
-  <link rel="stylesheet" href="takumi/tests/shared.css">
-</head>
-<body style="width: 1200px; height: 630px;">
-  <div style="display: block; font-size: 24px; line-height: 1.4em; color: rgb(38, 38, 38); background-color: rgb(255, 255, 255); width: 900px; padding-top: 24px; padding-right: 24px; padding-bottom: 24px; padding-left: 24px;"><span style="display: inline;">Inline baseline probe (Aa Bb Cc g j p q y 012345): </span><div style="display: inline-flex; vertical-align: middle; background-color: rgb(231, 241, 250); border-top-width: 2px; border-right-width: 2px; border-bottom-width: 2px; border-left-width: 2px; border-top-style: solid; border-right-style: solid; border-bottom-style: solid; border-left-style: solid; border-top-color: rgb(156, 189, 217); border-right-color: rgb(156, 189, 217); border-bottom-color: rgb(156, 189, 217); border-left-color: rgb(156, 189, 217); border-top-left-radius: 6px 6px; border-top-right-radius: 6px 6px; border-bottom-right-radius: 6px 6px; border-bottom-left-radius: 6px 6px; padding-top: 12px; padding-right: 16px; padding-bottom: 12px; padding-left: 16px; margin-top: 0px; margin-right: 12px; margin-bottom: 0px; margin-left: 12px;"><span style="display: inline; font-weight: 700; color: rgb(10, 34, 57); text-transform: uppercase; font-size: 20px; background-color: rgb(208, 230, 248);">METADATA gyjpq: </span><div style="display: inline-flex; align-items: center; row-gap: 6px; column-gap: 6px; background-color: rgb(80, 138, 184); border-top-left-radius: 999px 999px; border-top-right-radius: 999px 999px; border-bottom-right-radius: 999px 999px; border-bottom-left-radius: 999px 999px; padding-top: 4px; padding-right: 12px; padding-bottom: 4px; padding-left: 12px; vertical-align: baseline;"><span style="display: inline; color: rgb(255, 255, 255); font-size: 16px; font-weight: 600;">Tag</span></div></div><span style="display: inline;">After the badge, this sentence verifies wrapping around inline boxes with mixed glyph heights and descenders (g j p q y). </span><div style="display: inline-block; vertical-align: bottom; width: 180px; background-color: rgb(255, 236, 208); border-top-width: 2px; border-right-width: 2px; border-bottom-width: 2px; border-left-width: 2px; border-top-style: solid; border-right-style: solid; border-bottom-style: solid; border-left-style: solid; border-top-color: rgb(212, 118, 22); border-right-color: rgb(212, 118, 22); border-bottom-color: rgb(212, 118, 22); border-left-color: rgb(212, 118, 22); padding-top: 14px; padding-right: 14px; padding-bottom: 14px; padding-left: 14px; margin-top: 0px; margin-right: 8px; margin-bottom: 0px; margin-left: 8px;"><span style="display: block; font-size: 16px; line-height: 1.2em;">BOTTOM inline-block sample: gyjpq, 12345, and punctuation !? to expose baseline drift.</span></div><span style="display: inline;"> End marker: compare the last line&#x27;s baseline to the first line.</span></div>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <title>inline_complex_nested_fixture</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div
+      style="
+        display: block;
+        font-size: 24px;
+        line-height: 1.4em;
+        color: rgb(38, 38, 38);
+        background-color: rgb(255, 255, 255);
+        width: 900px;
+        padding-top: 24px;
+        padding-right: 24px;
+        padding-bottom: 24px;
+        padding-left: 24px;
+      "
+    >
+      <span style="display: inline">Inline baseline probe (Aa Bb Cc g j p q y 012345): </span>
+      <div
+        style="
+          display: inline-flex;
+          vertical-align: middle;
+          background-color: rgb(231, 241, 250);
+          border-top-width: 2px;
+          border-right-width: 2px;
+          border-bottom-width: 2px;
+          border-left-width: 2px;
+          border-top-style: solid;
+          border-right-style: solid;
+          border-bottom-style: solid;
+          border-left-style: solid;
+          border-top-color: rgb(156, 189, 217);
+          border-right-color: rgb(156, 189, 217);
+          border-bottom-color: rgb(156, 189, 217);
+          border-left-color: rgb(156, 189, 217);
+          border-top-left-radius: 6px 6px;
+          border-top-right-radius: 6px 6px;
+          border-bottom-right-radius: 6px 6px;
+          border-bottom-left-radius: 6px 6px;
+          padding-top: 12px;
+          padding-right: 16px;
+          padding-bottom: 12px;
+          padding-left: 16px;
+          margin-top: 0px;
+          margin-right: 12px;
+          margin-bottom: 0px;
+          margin-left: 12px;
+        "
+      >
+        <span
+          style="
+            display: inline;
+            font-weight: 700;
+            color: rgb(10, 34, 57);
+            text-transform: uppercase;
+            font-size: 20px;
+            background-color: rgb(208, 230, 248);
+          "
+          >METADATA gyjpq:
+        </span>
+        <div
+          style="
+            display: inline-flex;
+            align-items: center;
+            row-gap: 6px;
+            column-gap: 6px;
+            background-color: rgb(80, 138, 184);
+            border-top-left-radius: 999px 999px;
+            border-top-right-radius: 999px 999px;
+            border-bottom-right-radius: 999px 999px;
+            border-bottom-left-radius: 999px 999px;
+            padding-top: 4px;
+            padding-right: 12px;
+            padding-bottom: 4px;
+            padding-left: 12px;
+            vertical-align: baseline;
+          "
+        >
+          <span
+            style="display: inline; color: rgb(255, 255, 255); font-size: 16px; font-weight: 600"
+            >Tag</span
+          >
+        </div>
+      </div>
+      <span style="display: inline"
+        >After the badge, this sentence verifies wrapping around inline boxes with mixed glyph
+        heights and descenders (g j p q y).
+      </span>
+      <div
+        style="
+          display: inline-block;
+          vertical-align: bottom;
+          width: 180px;
+          background-color: rgb(255, 236, 208);
+          border-top-width: 2px;
+          border-right-width: 2px;
+          border-bottom-width: 2px;
+          border-left-width: 2px;
+          border-top-style: solid;
+          border-right-style: solid;
+          border-bottom-style: solid;
+          border-left-style: solid;
+          border-top-color: rgb(212, 118, 22);
+          border-right-color: rgb(212, 118, 22);
+          border-bottom-color: rgb(212, 118, 22);
+          border-left-color: rgb(212, 118, 22);
+          padding-top: 14px;
+          padding-right: 14px;
+          padding-bottom: 14px;
+          padding-left: 14px;
+          margin-top: 0px;
+          margin-right: 8px;
+          margin-bottom: 0px;
+          margin-left: 8px;
+        "
+      >
+        <span style="display: block; font-size: 16px; line-height: 1.2em"
+          >BOTTOM inline-block sample: gyjpq, 12345, and punctuation !? to expose baseline
+          drift.</span
+        >
+      </div>
+      <span style="display: inline">
+        End marker: compare the last line&#x27;s baseline to the first line.</span
+      >
+    </div>
+  </body>
 </html>
