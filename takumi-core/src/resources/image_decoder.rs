@@ -72,7 +72,7 @@ fn pixel_budget_error(width: u32, height: u32) -> ImageError {
 }
 
 #[derive(Debug)]
-pub(crate) struct DecodedGifFrame {
+pub(crate) struct DecodedFrame {
   pub(crate) buffer: Arc<ImageBuffer>,
   pub(crate) duration_ms: u32,
 }
@@ -440,7 +440,7 @@ pub(crate) fn decode_gif_frames(
   skip: usize,
   limit: Option<usize>,
   target: Option<(u32, u32, ImageScalingAlgorithm)>,
-  mut push: impl FnMut(DecodedGifFrame),
+  mut push: impl FnMut(DecodedFrame),
 ) -> ImageResult<bool> {
   let mut decoder = gif_decoder(bytes)?;
   let (width, height) = (decoder.width() as u32, decoder.height() as u32);
@@ -542,7 +542,7 @@ pub(crate) fn decode_gif_frames(
 
     if let Some(buffer) = buffer {
       let buffer = buffer.ok_or_else(invalid_buffer_error)?;
-      push(DecodedGifFrame {
+      push(DecodedFrame {
         buffer: Arc::new(buffer),
         duration_ms,
       });
@@ -756,7 +756,7 @@ pub(crate) fn decode_gif_frames(
   _skip: usize,
   _limit: Option<usize>,
   _target: Option<(u32, u32, ImageScalingAlgorithm)>,
-  _push: impl FnMut(DecodedGifFrame),
+  _push: impl FnMut(DecodedFrame),
 ) -> ImageResult<bool> {
   Err(format_compiled_out_error())
 }

@@ -419,8 +419,8 @@ pub(crate) fn render_tile(
             height: tile_h,
             algo: context.style.image_rendering,
           }),
-          ImageSource::Gif(gif) => Some(BackgroundTile::SampledBitmap {
-            source: gif.frame_at_time_covering(
+          ImageSource::Animated(animated) => Some(BackgroundTile::SampledBitmap {
+            source: animated.frame_at_time_covering(
               context.time_ms,
               tile_w,
               tile_h,

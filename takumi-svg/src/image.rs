@@ -108,9 +108,9 @@ fn loaded_data_url(source: &ImageSource, context: &RenderContext) -> Option<Stri
     ImageSource::Encoded(encoded) => {
       Some(to_data_url(sniff_mime(encoded.bytes()), encoded.bytes()))
     }
-    ImageSource::Gif(gif) => {
-      let (width, height) = gif.dimensions();
-      gif
+    ImageSource::Animated(animated) => {
+      let (width, height) = animated.dimensions();
+      animated
         .frame_at_time_covering(0, width, height, ImageScalingAlgorithm::Auto)
         .encode_png()
         .map(|png| to_data_url("image/png", &png))

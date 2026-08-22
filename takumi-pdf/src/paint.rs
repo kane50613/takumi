@@ -145,7 +145,7 @@ pub(crate) fn rasterized_image(
 
   let (width, height) = match source {
     ImageSource::Bitmap(bitmap) => (bitmap.width(), bitmap.height()),
-    ImageSource::Gif(gif) => gif.dimensions(),
+    ImageSource::Animated(animated) => animated.dimensions(),
     ImageSource::Encoded(encoded) => encoded.dimensions(),
     #[cfg(feature = "svg")]
     ImageSource::Svg(_) => (

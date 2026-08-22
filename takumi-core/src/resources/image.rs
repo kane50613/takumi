@@ -36,7 +36,7 @@ use crate::{
   resources::{
     image_buffer::ImageBuffer,
     image_decoder::{
-      DecodedGifFrame, bitmap_dimensions, decode_bitmap_scaled, decode_gif_frames, decode_image,
+      DecodedFrame, bitmap_dimensions, decode_bitmap_scaled, decode_gif_frames, decode_image,
       gif_dimensions, gif_frame_durations, is_gif,
     },
   },
@@ -61,8 +61,8 @@ pub enum ImageSource {
   Svg(Arc<SvgSource>),
   /// A bitmap image source
   Bitmap(Arc<ImageBuffer>),
-  /// An animated gif source.
-  Gif(GifSource),
+  /// An animated image source.
+  Animated(AnimatedSource),
   /// An encoded bitmap decoded lazily at the size it is drawn at.
   Encoded(Arc<EncodedBitmap>),
 }
@@ -176,29 +176,29 @@ struct SvgIntrinsic {
 /// memory at once. No cache holds decoded frames — retention stays a single
 /// frame, and the byte budget can account for it exactly.
 #[derive(Debug, Clone)]
-pub struct GifSource {
-  inner: Arc<GifInner>,
+pub struct AnimatedSource {
+  inner: Arc<AnimatedInner>,
 }
 
 #[derive(Debug)]
-struct GifInner {
+struct AnimatedInner {
   bytes: Box<[u8]>,
   width: u32,
   height: u32,
-  first: DecodedGifFrame,
-  timing: OnceLock<GifTiming>,
+  first: DecodedFrame,
+  timing: OnceLock<AnimationTiming>,
 }
 
 /// Per-frame timing for the whole animation, decoded once without pixels.
 #[derive(Debug)]
-struct GifTiming {
+struct AnimationTiming {
   /// Millisecond delay of each frame in stream order, first frame included.
   durations: Box<[u32]>,
   /// Duration of the whole loop.
   total_ms: u64,
 }
 
-impl GifSource {
+impl AnimatedSource {
   fn from_bytes(bytes: &[u8]) -> Result<Self, ImageError> {
     let (width, height) = gif_dimensions(bytes).map_err(ImageError::decode)?;
 
@@ -210,7 +210,7 @@ impl GifSource {
     };
 
     Ok(Self {
-      inner: Arc::new(GifInner {
+      inner: Arc::new(AnimatedInner {
         bytes: bytes.into(),
         width,
         height,
@@ -227,7 +227,7 @@ impl GifSource {
 
   /// Per-frame timing, decoded once (pixel-free) and memoized. Falls back to a
   /// single-frame loop if the stream can't be re-read.
-  fn timing(&self) -> &GifTiming {
+  fn timing(&self) -> &AnimationTiming {
     self.inner.timing.get_or_init(|| {
       let durations = gif_frame_durations(&self.inner.bytes)
         .ok()
@@ -235,7 +235,7 @@ impl GifSource {
         .unwrap_or_else(|| Box::from([self.inner.first.duration_ms]));
       let total_ms = durations.iter().map(|&duration| duration as u64).sum();
 
-      GifTiming {
+      AnimationTiming {
         durations,
         total_ms,
       }
@@ -244,7 +244,7 @@ impl GifSource {
 
   /// Stream index of the frame shown at the given playback time, looping over
   /// the total duration.
-  fn frame_index_at(&self, timing: &GifTiming, time_ms: u64) -> usize {
+  fn frame_index_at(&self, timing: &AnimationTiming, time_ms: u64) -> usize {
     if timing.total_ms == 0 || timing.durations.len() <= 1 {
       return 0;
     }
@@ -551,7 +551,7 @@ impl ImageSource {
   pub(crate) fn estimated_bytes(&self) -> usize {
     match self {
       Self::Bitmap(buffer) => buffer.data().len(),
-      Self::Gif(gif) => gif.decoded_bytes(),
+      Self::Animated(animated) => animated.decoded_bytes(),
       Self::Encoded(encoded) => encoded.bytes.len(),
       // Markup plus a parsed-tree estimate; rasterized pixmaps are weighted
       // separately as their own sized entries.
@@ -576,7 +576,7 @@ impl ImageSource {
     }
 
     if is_gif(bytes) {
-      return Ok(ImageSource::Gif(GifSource::from_bytes(bytes)?));
+      return Ok(ImageSource::Animated(AnimatedSource::from_bytes(bytes)?));
     }
 
     match decode_image(bytes) {
@@ -612,7 +612,7 @@ impl ImageSource {
     }
 
     if is_gif(bytes) {
-      return Ok(ImageSource::Gif(GifSource::from_bytes(bytes)?));
+      return Ok(ImageSource::Animated(AnimatedSource::from_bytes(bytes)?));
     }
 
     match bitmap_dimensions(bytes) {
@@ -658,9 +658,9 @@ impl ImageSource {
         algorithm: image_rendering,
         source_scale: (1.0, 1.0),
       }),
-      ImageSource::Gif(gif) => {
-        let source = gif.frame_at_time_covering(time_ms, width, height, image_rendering);
-        let (native_width, native_height) = gif.dimensions();
+      ImageSource::Animated(animated) => {
+        let source = animated.frame_at_time_covering(time_ms, width, height, image_rendering);
+        let (native_width, native_height) = animated.dimensions();
         Ok(RenderedImage::Sampled {
           source_scale: (
             source.width() as f32 / native_width as f32,
@@ -698,8 +698,8 @@ impl ImageSource {
       #[cfg(feature = "svg")]
       ImageSource::Svg(svg) => svg.dimensions(),
       ImageSource::Bitmap(bitmap) => (bitmap.width() as f32, bitmap.height() as f32),
-      ImageSource::Gif(gif) => {
-        let (width, height) = gif.dimensions();
+      ImageSource::Animated(animated) => {
+        let (width, height) = animated.dimensions();
         (width as f32, height as f32)
       }
       ImageSource::Encoded(encoded) => {
@@ -724,8 +724,8 @@ impl ImageSource {
       ImageSource::Bitmap(bitmap) => {
         IntrinsicSizing::from_dimensions(bitmap.width() as f32, bitmap.height() as f32)
       }
-      ImageSource::Gif(gif) => {
-        let (width, height) = gif.dimensions();
+      ImageSource::Animated(animated) => {
+        let (width, height) = animated.dimensions();
         IntrinsicSizing::from_dimensions(width as f32, height as f32)
       }
       ImageSource::Encoded(encoded) => {
@@ -1425,11 +1425,11 @@ mod tests {
   }
 
   #[cfg(feature = "gif")]
-  fn gif_source(frames: &[(usize, u32)]) -> GifSource {
-    let Ok(ImageSource::Gif(gif)) = ImageSource::from_bytes(&encoded_gif(frames)) else {
+  fn gif_source(frames: &[(usize, u32)]) -> AnimatedSource {
+    let Ok(ImageSource::Animated(animated)) = ImageSource::from_bytes(&encoded_gif(frames)) else {
       unreachable!("valid gif");
     };
-    gif
+    animated
   }
 
   #[cfg(feature = "gif")]
