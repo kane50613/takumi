@@ -43,6 +43,79 @@ const MAX_IMAGE_DIMENSION: u32 = 8192;
 /// Decoded images above this pixel count are rejected (RGBA cost = 4x).
 /// 8192 x 8192 — far above any sane OG-image asset, far below OOM territory.
 const MAX_IMAGE_PIXELS: u64 = MAX_IMAGE_DIMENSION as u64 * MAX_IMAGE_DIMENSION as u64;
+/// What a container says about one frame, read without decoding pixels.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct FrameInfo {
+  /// Frame rectangle within the canvas, as `(x, y, width, height)`.
+  pub(crate) rect: (u32, u32, u32, u32),
+  pub(crate) duration_ms: u32,
+  /// Composites onto what is under it rather than replacing it.
+  pub(crate) blends: bool,
+  pub(crate) dispose: Dispose,
+}
+
+/// What the canvas holds once a frame has been shown.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Dispose {
+  /// Leave the frame in place.
+  Keep,
+  /// Clear the frame rectangle.
+  Background,
+  /// Restore what was there before the frame.
+  Previous,
+}
+
+impl FrameInfo {
+  /// A single frame standing in for a stream whose metadata could not be read.
+  pub(crate) fn still() -> Self {
+    Self {
+      rect: (0, 0, u32::MAX, u32::MAX),
+      duration_ms: 1,
+      blends: false,
+      dispose: Dispose::Keep,
+    }
+  }
+
+  fn covers(&self, canvas: (u32, u32)) -> bool {
+    let (x, y, width, height) = self.rect;
+    x == 0 && y == 0 && width == canvas.0 && height == canvas.1
+  }
+}
+
+/// The frame that must be drawn before `index` can be, or `None` when `index`
+/// stands on its own.
+///
+/// Follows `ImageDecoder::FindRequiredPreviousFrame` in Blink.
+pub(crate) fn required_previous_frame(
+  frames: &[FrameInfo],
+  index: usize,
+  canvas: (u32, u32),
+) -> Option<usize> {
+  let frame = frames.get(index)?;
+  if index == 0 || (!frame.blends && frame.covers(canvas)) {
+    return None;
+  }
+
+  // A frame restoring what came before it leaves the canvas as it found it, so
+  // it is not the starting state for anything after it.
+  let mut previous = index - 1;
+  while frames[previous].dispose == Dispose::Previous {
+    previous = previous.checked_sub(1)?;
+  }
+
+  match frames[previous].dispose {
+    Dispose::Keep => Some(previous),
+    Dispose::Background
+      if frames[previous].covers(canvas)
+        || required_previous_frame(frames, previous, canvas).is_none() =>
+    {
+      None
+    }
+    Dispose::Background => Some(previous),
+    Dispose::Previous => None,
+  }
+}
+
 /// Total pixels across all frames of an animation (frames are canvas-sized).
 const MAX_ANIMATION_TOTAL_PIXELS: u64 = 4 * MAX_IMAGE_PIXELS;
 /// Frames past this point are dropped from a timeline. The pixel budget alone
@@ -50,7 +123,6 @@ const MAX_ANIMATION_TOTAL_PIXELS: u64 = 4 * MAX_IMAGE_PIXELS;
 pub(crate) const MAX_ANIMATION_FRAMES: usize = 1024;
 
 /// Rejects decoded images whose pixel count exceeds [`MAX_IMAGE_PIXELS`].
-#[cfg(feature = "webp")]
 fn check_pixel_budget(width: u32, height: u32) -> ImageResult<()> {
   if width as u64 * height as u64 > MAX_IMAGE_PIXELS {
     return Err(pixel_budget_error(width, height));
@@ -352,34 +424,58 @@ pub(crate) fn gif_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
 /// without decoding any pixels. Uses the same `delay * 10` (min 1ms) rule as
 /// [`decode_gif_frames`], so the durations line up with decoded frames.
 #[cfg(feature = "gif")]
-pub(crate) fn gif_frame_durations(bytes: &[u8]) -> ImageResult<Box<[u32]>> {
+pub(crate) fn gif_frame_infos(bytes: &[u8]) -> ImageResult<Box<[FrameInfo]>> {
   let mut options = DecodeOptions::new();
   options.skip_frame_decoding(true);
   let mut decoder = options
     .read_info(Cursor::new(bytes))
     .map_err(gif_decode_error)?;
 
-  // Stop at the same cumulative pixel budget as `decode_gif_frames`, so the
-  // timing covers exactly the frames that are actually decodable.
+  let (width, height) = (decoder.width() as u32, decoder.height() as u32);
+  if width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION {
+    return Err(pixel_budget_error(width, height));
+  }
+
+  // Stop at the same budgets as `decode_gif_frames`, so the timeline covers
+  // exactly the frames that are decodable.
   let frame_pixels = decoder.width() as u64 * decoder.height() as u64;
   let mut total_pixels = 0_u64;
-  let mut durations = Vec::new();
+  let mut frames = Vec::new();
   loop {
+    if frames.len() >= MAX_ANIMATION_FRAMES {
+      break;
+    }
+
     match decoder.read_next_frame() {
       Ok(Some(frame)) => {
         total_pixels += frame_pixels;
         if total_pixels > MAX_ANIMATION_TOTAL_PIXELS {
           break;
         }
-        durations.push((frame.delay as u32 * 10).max(1));
+        frames.push(FrameInfo {
+          rect: (
+            frame.left as u32,
+            frame.top as u32,
+            frame.width as u32,
+            frame.height as u32,
+          ),
+          duration_ms: (frame.delay as u32 * 10).max(1),
+          // A transparent index lets what is under the frame show through.
+          blends: frame.transparent.is_some(),
+          dispose: match frame.dispose {
+            DisposalMethod::Background => Dispose::Background,
+            DisposalMethod::Previous => Dispose::Previous,
+            _ => Dispose::Keep,
+          },
+        });
       }
       Ok(None) => break,
-      Err(error) if durations.is_empty() => return Err(gif_decode_error(error)),
+      Err(error) if frames.is_empty() => return Err(gif_decode_error(error)),
       Err(_) => break,
     }
   }
 
-  Ok(durations.into())
+  Ok(frames.into())
 }
 
 /// Rows and columns of the rect that fall inside the canvas, plus the rect's
@@ -453,6 +549,11 @@ pub(crate) fn decode_gif_frames(
   let mut index = 0_usize;
 
   loop {
+    // The same cap `gif_frame_infos` stops at, so a decoded frame always has a
+    // duration to go with it.
+    if index >= MAX_ANIMATION_FRAMES {
+      return Ok(false);
+    }
     if limit.is_some_and(|limit| pushed >= limit) {
       return Ok(false);
     }
@@ -737,17 +838,17 @@ pub(crate) fn animated_webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> 
 /// budgets as [`decode_webp_frames`], so a playback time never selects a frame
 /// the decoder drops.
 #[cfg(feature = "webp")]
-pub(crate) fn webp_frame_durations(bytes: &[u8]) -> ImageResult<Box<[u32]>> {
+pub(crate) fn webp_frame_infos(bytes: &[u8]) -> ImageResult<Box<[FrameInfo]>> {
   let (width, height) = animated_webp_dimensions(bytes)?;
   let frame_pixels = width as u64 * height as u64;
   let mut total_pixels = 0_u64;
-  let mut durations = Vec::new();
+  let mut frames = Vec::new();
 
   for (id, payload) in webp_chunks(bytes) {
     if &id != b"ANMF" {
       continue;
     }
-    if durations.len() >= MAX_ANIMATION_FRAMES {
+    if frames.len() >= MAX_ANIMATION_FRAMES {
       break;
     }
 
@@ -756,13 +857,32 @@ pub(crate) fn webp_frame_durations(bytes: &[u8]) -> ImageResult<Box<[u32]>> {
       break;
     }
 
-    let Some(header) = payload.get(12..15) else {
+    // `ANMF`: x, y, width, height and duration as 24-bit values, then flags.
+    let Some(header) = payload.get(..16) else {
       break;
     };
-    durations.push(u32::from_le_bytes([header[0], header[1], header[2], 0]).max(1));
+    let read_24 = |offset: usize| {
+      u32::from_le_bytes([header[offset], header[offset + 1], header[offset + 2], 0])
+    };
+
+    frames.push(FrameInfo {
+      rect: (
+        read_24(0) * 2,
+        read_24(3) * 2,
+        read_24(6) + 1,
+        read_24(9) + 1,
+      ),
+      duration_ms: read_24(12).max(1),
+      blends: header[15] & 0b0000_0010 == 0,
+      dispose: if header[15] & 0b0000_0001 == 0 {
+        Dispose::Keep
+      } else {
+        Dispose::Background
+      },
+    });
   }
 
-  Ok(durations.into())
+  Ok(frames.into())
 }
 
 /// Decodes animated WebP frames in stream order, passing each frame past the
@@ -876,25 +996,42 @@ pub(crate) fn decode_webp_frame_alone(
   }
 
   let (canvas_width, canvas_height) = canvas?;
+  check_pixel_budget(canvas_width, canvas_height).ok()?;
   let payload = payload?;
   let header = payload.get(..16)?;
   let read_24 = |offset: usize| read_24(header, offset).unwrap_or_default();
-  let rect = (read_24(0), read_24(3), read_24(6) + 1, read_24(9) + 1);
-  // Bit 1 of the frame flags: replace the canvas rect rather than blend onto it.
-  let replaces_canvas = header[15] & 0b0000_0010 != 0;
-  if !covers_canvas(rect, (canvas_width, canvas_height)) || !replaces_canvas {
-    return None;
-  }
+  let rect = (
+    read_24(0) * 2,
+    read_24(3) * 2,
+    read_24(6) + 1,
+    read_24(9) + 1,
+  );
 
-  let still = webp_frame_as_still(payload.get(16..)?, canvas_width, canvas_height)?;
+  let still = webp_frame_as_still(payload.get(16..)?, rect.2, rect.3)?;
   let frame = decode_webp(&still).ok()?;
 
   // The `ANMF` rectangle only claims a size; the bitstream is what has one.
-  if frame.width() != canvas_width || frame.height() != canvas_height {
+  if frame.width() != rect.2 || frame.height() != rect.3 {
     return None;
   }
 
-  fit_to_target(frame, target).ok()
+  // A frame filling the canvas is the canvas; a smaller one lands on a cleared
+  // canvas, which is what its predecessors would have left behind.
+  let buffer = if covers_canvas(rect, (canvas_width, canvas_height)) {
+    frame
+  } else {
+    let mut canvas = vec![0; canvas_width as usize * canvas_height as usize * 4];
+    let stride = canvas_width as usize * 4;
+    for row in 0..rect.3.min(canvas_height.saturating_sub(rect.1)) {
+      let source = row as usize * rect.2 as usize * 4;
+      let target = (rect.1 + row) as usize * stride + rect.0 as usize * 4;
+      let span = rect.2.min(canvas_width.saturating_sub(rect.0)) as usize * 4;
+      canvas[target..target + span].copy_from_slice(&frame.data()[source..source + span]);
+    }
+    ImageBuffer::from_premultiplied_rgba(canvas, canvas_width, canvas_height)?
+  };
+
+  fit_to_target(buffer, target).ok()
 }
 
 /// Wraps one frame's bitstream in a RIFF container so the still decoder can
@@ -993,17 +1130,17 @@ pub(crate) fn apng_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
 /// chunks without decoding any pixels. Stops on the same frame and pixel
 /// budgets as [`decode_apng_frames`], so a playback time never selects a frame
 /// the decoder drops.
-pub(crate) fn apng_frame_durations(bytes: &[u8]) -> ImageResult<Box<[u32]>> {
+pub(crate) fn apng_frame_infos(bytes: &[u8]) -> ImageResult<Box<[FrameInfo]>> {
   let (width, height) = apng_dimensions(bytes)?;
   let frame_pixels = width as u64 * height as u64;
   let mut total_pixels = 0_u64;
-  let mut durations = Vec::new();
+  let mut frames = Vec::new();
 
   for (id, data) in png_chunks(bytes) {
     if &id != b"fcTL" {
       continue;
     }
-    if durations.len() >= MAX_ANIMATION_FRAMES {
+    if frames.len() >= MAX_ANIMATION_FRAMES {
       break;
     }
 
@@ -1012,16 +1149,36 @@ pub(crate) fn apng_frame_durations(bytes: &[u8]) -> ImageResult<Box<[u32]>> {
       break;
     }
 
-    let Some(delay) = data.get(20..24) else {
+    // `fcTL`: sequence, width, height, x, y, delay numerator, delay
+    // denominator, dispose op, blend op.
+    let Some(control) = data.get(..26) else {
       break;
     };
-    durations.push(apng_delay_ms(
-      u16::from_be_bytes([delay[0], delay[1]]),
-      u16::from_be_bytes([delay[2], delay[3]]),
-    ));
+    let read_32 = |offset: usize| {
+      u32::from_be_bytes([
+        control[offset],
+        control[offset + 1],
+        control[offset + 2],
+        control[offset + 3],
+      ])
+    };
+
+    frames.push(FrameInfo {
+      rect: (read_32(12), read_32(16), read_32(4), read_32(8)),
+      duration_ms: apng_delay_ms(
+        u16::from_be_bytes([control[20], control[21]]),
+        u16::from_be_bytes([control[22], control[23]]),
+      ),
+      blends: control[25] == 1,
+      dispose: match control[24] {
+        1 => Dispose::Background,
+        2 => Dispose::Previous,
+        _ => Dispose::Keep,
+      },
+    });
   }
 
-  Ok(durations.into())
+  Ok(frames.into())
 }
 
 /// An `fcTL` delay fraction in milliseconds. A zero denominator means hundredths
@@ -1076,27 +1233,24 @@ pub(crate) fn decode_apng_frame_alone(
   }
   let frame = reader.info().frame_control?;
 
-  let rect = (frame.x_offset, frame.y_offset, frame.width, frame.height);
-  if !covers_canvas(rect, (canvas_width, canvas_height)) || frame.blend_op != BlendOp::Source {
-    return None;
-  }
-
   let mut subframe = vec![0; reader.output_buffer_size()?];
   reader.next_frame(&mut subframe).ok()?;
 
-  // A full-canvas replacing frame already is the canvas.
-  let mut rgba = match channels {
-    4 => subframe,
-    _ => subframe
-      .as_chunks::<2>()
-      .0
-      .iter()
-      .flat_map(|&[luma, alpha]| [luma, luma, luma, alpha])
-      .collect(),
+  // A full-canvas replacing frame already is the canvas; anything else lands on
+  // a cleared one, which is what its predecessors would have left behind.
+  let buffer = if channels == 4
+    && frame.blend_op == BlendOp::Source
+    && covers_canvas(
+      (frame.x_offset, frame.y_offset, frame.width, frame.height),
+      (canvas_width, canvas_height),
+    ) {
+    premultiply_rgba_in_place(&mut subframe);
+    ImageBuffer::from_premultiplied_rgba(subframe, canvas_width, canvas_height)?
+  } else {
+    let mut canvas = ApngCanvas::new(canvas_width, canvas_height);
+    canvas.composite(frame, &subframe, channels);
+    canvas.to_buffer(None).ok()?
   };
-  premultiply_rgba_in_place(&mut rgba);
-
-  let buffer = ImageBuffer::from_premultiplied_rgba(rgba, canvas_width, canvas_height)?;
 
   fit_to_target(buffer, target).ok()
 }
@@ -1118,22 +1272,29 @@ pub(crate) fn decode_gif_frame_alone(
   }
 
   let frame = decoder.next_frame_info().ok()??;
-  let rect = (
-    frame.left as u32,
-    frame.top as u32,
-    frame.width as u32,
-    frame.height as u32,
-  );
-  if !covers_canvas(rect, (canvas_width, canvas_height)) || frame.transparent.is_some() {
-    return None;
-  }
+  let rect = Rect {
+    left: frame.left as u32,
+    top: frame.top as u32,
+    right: frame.left as u32 + frame.width as u32,
+    bottom: frame.top as u32 + frame.height as u32,
+  };
 
   let mut pixels = vec![0; decoder.buffer_size()];
   decoder.read_into_buffer(&mut pixels).ok()?;
 
-  // GIF alpha is 0 or 255, so an opaque full-canvas frame is already valid
+  // GIF alpha is 0 or 255, so a frame over a cleared canvas is already valid
   // premultiplied RGBA.
-  let buffer = ImageBuffer::from_premultiplied_rgba(pixels, canvas_width, canvas_height)?;
+  let buffer = if rect.left == 0
+    && rect.top == 0
+    && rect.right == canvas_width
+    && rect.bottom == canvas_height
+  {
+    ImageBuffer::from_premultiplied_rgba(pixels, canvas_width, canvas_height)?
+  } else {
+    let mut canvas = vec![0; canvas_width as usize * canvas_height as usize * 4];
+    blit_frame(&mut canvas, (canvas_width, canvas_height), rect, &pixels);
+    ImageBuffer::from_premultiplied_rgba(canvas, canvas_width, canvas_height)?
+  };
 
   fit_to_target(buffer, target).ok()
 }
@@ -1394,7 +1555,7 @@ pub(crate) fn gif_dimensions(_bytes: &[u8]) -> ImageResult<(u32, u32)> {
 }
 
 #[cfg(not(feature = "gif"))]
-pub(crate) fn gif_frame_durations(_bytes: &[u8]) -> ImageResult<Box<[u32]>> {
+pub(crate) fn gif_frame_infos(_bytes: &[u8]) -> ImageResult<Box<[FrameInfo]>> {
   Err(format_compiled_out_error())
 }
 
@@ -1614,10 +1775,13 @@ mod tests {
 
   #[cfg(feature = "gif")]
   fn our_frames(bytes: &[u8], skip: usize) -> Vec<(Vec<u8>, u32)> {
-    let durations = gif_frame_durations(bytes).unwrap();
+    let infos = gif_frame_infos(bytes).unwrap();
     let mut frames = Vec::new();
     let ended = decode_gif_frames(bytes, skip, None, None, |buffer| {
-      frames.push((buffer.data().to_vec(), durations[skip + frames.len()]));
+      frames.push((
+        buffer.data().to_vec(),
+        infos[skip + frames.len()].duration_ms,
+      ));
     })
     .unwrap();
     assert!(ended);

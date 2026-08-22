@@ -25,7 +25,7 @@ use crate::resources::image_decoder::decoder_compiled_out;
 #[cfg(feature = "webp")]
 use crate::resources::image_decoder::{
   animated_webp_dimensions, decode_webp_frame_alone, decode_webp_frames, is_animated_webp,
-  webp_frame_durations,
+  webp_frame_infos,
 };
 #[cfg(feature = "svg")]
 use crate::resvg::{
@@ -41,9 +41,10 @@ use crate::{
   resources::{
     image_buffer::ImageBuffer,
     image_decoder::{
-      MAX_ANIMATION_FRAMES, apng_dimensions, apng_frame_durations, bitmap_dimensions,
+      FrameInfo, MAX_ANIMATION_FRAMES, apng_dimensions, apng_frame_infos, bitmap_dimensions,
       decode_apng_frame_alone, decode_apng_frames, decode_bitmap_scaled, decode_gif_frame_alone,
-      decode_gif_frames, decode_image, gif_dimensions, gif_frame_durations, is_apng, is_gif,
+      decode_gif_frames, decode_image, gif_dimensions, gif_frame_infos, is_apng, is_gif,
+      required_previous_frame,
     },
   },
   style::{Color, ImageScalingAlgorithm, IntrinsicSizing, SizingContext, StyleSheet},
@@ -247,10 +248,6 @@ impl AnimatedFormat {
     index: usize,
     target: (u32, u32, ImageScalingAlgorithm),
   ) -> Option<ImageBuffer> {
-    if index >= MAX_ANIMATION_FRAMES {
-      return None;
-    }
-
     match self {
       Self::Gif => decode_gif_frame_alone(bytes, index, Some(target)),
       Self::Apng => decode_apng_frame_alone(bytes, index, Some(target)),
@@ -259,13 +256,13 @@ impl AnimatedFormat {
     }
   }
 
-  /// Per-frame delays in stream order, read without decoding pixels.
-  fn frame_durations(self, bytes: &[u8]) -> Result<Box<[u32]>, image::ImageError> {
+  /// Per-frame metadata in stream order, read without decoding pixels.
+  fn frame_infos(self, bytes: &[u8]) -> Result<Box<[FrameInfo]>, image::ImageError> {
     match self {
-      Self::Gif => gif_frame_durations(bytes),
-      Self::Apng => apng_frame_durations(bytes),
+      Self::Gif => gif_frame_infos(bytes),
+      Self::Apng => apng_frame_infos(bytes),
       #[cfg(feature = "webp")]
-      Self::WebP => webp_frame_durations(bytes),
+      Self::WebP => webp_frame_infos(bytes),
     }
   }
 }
@@ -279,11 +276,11 @@ struct AnimatedInner {
   timing: OnceLock<AnimationTiming>,
 }
 
-/// Per-frame timing for the whole animation, decoded once without pixels.
+/// Per-frame metadata for the whole animation, read once without pixels.
 #[derive(Debug)]
 struct AnimationTiming {
-  /// Millisecond delay of each frame in stream order, first frame included.
-  durations: Box<[u32]>,
+  /// Every frame in stream order, first frame included.
+  frames: Box<[FrameInfo]>,
   /// Duration of the whole loop.
   total_ms: u64,
 }
@@ -321,39 +318,48 @@ impl AnimatedSource {
   /// single-frame loop if the stream can't be re-read.
   fn timing(&self) -> &AnimationTiming {
     self.inner.timing.get_or_init(|| {
-      let durations = self
+      let frames = self
         .inner
         .format
-        .frame_durations(&self.inner.bytes)
+        .frame_infos(&self.inner.bytes)
         .ok()
-        .filter(|durations| !durations.is_empty())
-        .unwrap_or_else(|| Box::from([1]));
-      let total_ms = durations.iter().map(|&duration| duration as u64).sum();
+        .filter(|frames| !frames.is_empty())
+        .unwrap_or_else(|| Box::from([FrameInfo::still()]));
+      let total_ms = frames.iter().map(|frame| frame.duration_ms as u64).sum();
 
-      AnimationTiming {
-        durations,
-        total_ms,
-      }
+      AnimationTiming { frames, total_ms }
     })
+  }
+
+  /// Whether the frame can be drawn without the frames before it.
+  fn stands_alone(&self, index: usize) -> bool {
+    index > 0
+      && index < MAX_ANIMATION_FRAMES
+      && required_previous_frame(
+        &self.timing().frames,
+        index,
+        (self.inner.width, self.inner.height),
+      )
+      .is_none()
   }
 
   /// Stream index of the frame shown at the given playback time, looping over
   /// the total duration.
   fn frame_index_at(&self, timing: &AnimationTiming, time_ms: u64) -> usize {
-    if timing.total_ms == 0 || timing.durations.len() <= 1 {
+    if timing.total_ms == 0 || timing.frames.len() <= 1 {
       return 0;
     }
 
     let target_time = time_ms % timing.total_ms;
     let mut elapsed_ms = 0_u64;
-    for (index, &duration) in timing.durations.iter().enumerate() {
-      elapsed_ms += duration as u64;
+    for (index, frame) in timing.frames.iter().enumerate() {
+      elapsed_ms += frame.duration_ms as u64;
       if target_time < elapsed_ms {
         return index;
       }
     }
 
-    timing.durations.len() - 1
+    timing.frames.len() - 1
   }
 
   /// Frame shown at the given playback time, looping over total duration.
@@ -398,7 +404,7 @@ impl AnimatedSource {
     (target_width, target_height): (u32, u32),
     algorithm: ImageScalingAlgorithm,
   ) -> Option<Arc<ImageBuffer>> {
-    if index > 0
+    if self.stands_alone(index)
       && let Some(frame) = self.inner.format.decode_frame_alone(
         &self.inner.bytes,
         index,
@@ -1759,11 +1765,42 @@ mod tests {
     writer.write_image_data(&FRAME_COLORS[1].repeat(4)).unwrap();
     writer.finish().unwrap();
 
-    assert!(
-      AnimatedFormat::Apng
-        .decode_frame_alone(&bytes, 1, (4, 4, ImageScalingAlgorithm::Auto))
-        .is_none()
-    );
+    let Ok(ImageSource::Animated(apng)) = ImageSource::from_bytes(&bytes) else {
+      unreachable!("valid apng");
+    };
+
+    assert!(!apng.stands_alone(1));
+  }
+
+  /// The shape most transparent GIFs take: a full-canvas first frame, then
+  /// subframes that each clear back to the background. A frame after such a
+  /// clear starts from a blank canvas, so it needs nothing before it.
+  #[cfg(feature = "gif")]
+  #[test]
+  fn a_frame_after_a_background_dispose_stands_alone() {
+    use image::{Delay, Frame, RgbaImage, codecs::gif::GifEncoder, codecs::gif::Repeat};
+
+    let mut bytes = Vec::new();
+    let mut encoder = GifEncoder::new(&mut bytes);
+    encoder.set_repeat(Repeat::Infinite).unwrap();
+    encoder
+      .encode_frames((0..3).map(|index| {
+        Frame::from_parts(
+          RgbaImage::from_pixel(4, 4, Rgba(FRAME_COLORS[index])),
+          0,
+          0,
+          Delay::from_numer_denom_ms(100, 1),
+        )
+      }))
+      .unwrap();
+    drop(encoder);
+
+    let Ok(ImageSource::Animated(gif)) = ImageSource::from_bytes(&bytes) else {
+      unreachable!("valid gif");
+    };
+
+    assert!(gif.stands_alone(2));
+    assert_eq!(gif.frame_at_time(250).pixel(2, 2), FRAME_COLORS[2]);
   }
 
   #[test]
