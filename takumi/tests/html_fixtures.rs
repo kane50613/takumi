@@ -102,16 +102,22 @@ fn render_fixture(path: &Path, name: &str) -> Result<(), String> {
 
 fn body_viewport(html: &str) -> Result<Viewport, String> {
   let style = section(html, "<body style=\"", "\"").ok_or("no styled <body>")?;
-  let width = section(style, "width: ", "px").ok_or("no body width")?;
-  let height = section(style, "height: ", "px").ok_or("no body height")?;
-  let parse = |value: &str| {
-    value
-      .trim()
-      .parse::<u32>()
-      .map_err(|error| error.to_string())
+  let pixels = |property: &str| {
+    style
+      .split(';')
+      .filter_map(|declaration| declaration.split_once(':'))
+      .find(|(name, _)| name.trim() == property)
+      .ok_or(format!("no body {property}"))
+      .and_then(|(_, value)| {
+        value
+          .trim()
+          .trim_end_matches("px")
+          .parse::<u32>()
+          .map_err(|error| error.to_string())
+      })
   };
 
-  Ok(Viewport::new((parse(width)?, parse(height)?)))
+  Ok(Viewport::new((pixels("width")?, pixels("height")?)))
 }
 
 fn section<'h>(html: &'h str, start: &str, end: &str) -> Option<&'h str> {

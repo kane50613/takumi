@@ -97,6 +97,8 @@ Notes:
 
 Fixture sources are HTML files in `takumi/tests/fixtures-html`. The `html_fixtures` test parses each file and writes its goldens (`.webp`, `.svg`) to `takumi/tests/fixtures-generated`. The same file opens in a browser for a reference render.
 
+The harness reads the inline `<style>` block and the `<body>` size, nothing else. The linked `shared.css` is for the browser: it loads the test fonts and matches what the renderer already applies, such as `box-sizing: border-box` and no body margin.
+
 When you change rendering/layout behavior:
 
 1. Add or edit an HTML file in `takumi/tests/fixtures-html`. Put CSS in a `<style>` block. The `<body>` inline width/height set the viewport.
