@@ -1,6 +1,6 @@
 use takumi::{
   prelude::{Length::*, *},
-  render_animation, write_animated_webp,
+  render_animation, write_animated_png, write_animated_webp,
 };
 
 use crate::test_utils::{CONTEXT, run_animation_fixture_test};
@@ -52,14 +52,12 @@ fn marker_frame(column: usize) -> AnimationFrame {
   frames.pop().expect("one frame")
 }
 
-/// Three frames encoded as an animated WebP, so the fixture needs no binary
-/// asset of its own.
+/// The marker frames encoded as an animated WebP, so the fixture needs no
+/// binary asset of its own.
 fn animated_webp_bytes() -> Vec<u8> {
-  let frames: Vec<AnimationFrame> = (0..3).map(marker_frame).collect();
-
   let mut bytes = Vec::new();
   write_animated_webp(
-    frames.into(),
+    marker_frames().into(),
     &mut bytes,
     AnimatedWebpOptions::builder()
       .lossless(true)
@@ -71,9 +69,26 @@ fn animated_webp_bytes() -> Vec<u8> {
   bytes
 }
 
-fn frames() -> Vec<AnimationFrame> {
+/// The same frames as an APNG.
+fn animated_png_bytes() -> Vec<u8> {
+  let mut bytes = Vec::new();
+  write_animated_png(
+    &marker_frames(),
+    &mut bytes,
+    AnimatedPngOptions::builder().build(),
+  )
+  .expect("animated png");
+
+  bytes
+}
+
+fn marker_frames() -> Vec<AnimationFrame> {
+  (0..3).map(marker_frame).collect()
+}
+
+fn frames(source: Vec<u8>) -> Vec<AnimationFrame> {
   let image = ImageData {
-    src: ImageSourceInput::Buffer(animated_webp_bytes()),
+    src: ImageSourceInput::Buffer(source),
     width: None,
     height: None,
   };
@@ -120,14 +135,25 @@ fn marker_column(frame: &AnimationFrame) -> Option<usize> {
   })
 }
 
-#[test]
-fn animated_webp_image_source() {
-  let frames = frames();
-
+fn assert_marker_walks(frames: &[AnimationFrame]) {
   assert_eq!(marker_column(&frames[0]), Some(0));
   assert_eq!(marker_column(&frames[1]), Some(1));
   assert_eq!(marker_column(&frames[2]), Some(2));
   assert_eq!(marker_column(&frames[3]), Some(0));
+}
 
+#[test]
+fn animated_webp_image_source() {
+  let frames = frames(animated_webp_bytes());
+
+  assert_marker_walks(&frames);
   run_animation_fixture_test(frames, "animated_webp_image_source", DURATION_MS, FPS);
+}
+
+#[test]
+fn animated_png_image_source() {
+  let frames = frames(animated_png_bytes());
+
+  assert_marker_walks(&frames);
+  run_animation_fixture_test(frames, "animated_png_image_source", DURATION_MS, FPS);
 }

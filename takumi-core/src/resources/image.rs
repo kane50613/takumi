@@ -40,8 +40,9 @@ use crate::{
   resources::{
     image_buffer::ImageBuffer,
     image_decoder::{
-      bitmap_dimensions, decode_bitmap_scaled, decode_gif_frames, decode_image, gif_dimensions,
-      gif_frame_durations, is_gif,
+      apng_dimensions, apng_frame_durations, bitmap_dimensions, decode_apng_frames,
+      decode_bitmap_scaled, decode_gif_frames, decode_image, gif_dimensions, gif_frame_durations,
+      is_apng, is_gif,
     },
   },
   style::{Color, ImageScalingAlgorithm, IntrinsicSizing, SizingContext, StyleSheet},
@@ -188,6 +189,7 @@ pub struct AnimatedSource {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AnimatedFormat {
   Gif,
+  Apng,
   #[cfg(feature = "webp")]
   WebP,
 }
@@ -197,6 +199,10 @@ impl AnimatedFormat {
   fn detect(bytes: &[u8]) -> Option<Self> {
     if is_gif(bytes) {
       return Some(Self::Gif);
+    }
+
+    if is_apng(bytes) {
+      return Some(Self::Apng);
     }
 
     #[cfg(feature = "webp")]
@@ -210,6 +216,7 @@ impl AnimatedFormat {
   fn dimensions(self, bytes: &[u8]) -> Result<(u32, u32), image::ImageError> {
     match self {
       Self::Gif => gif_dimensions(bytes),
+      Self::Apng => apng_dimensions(bytes),
       #[cfg(feature = "webp")]
       Self::WebP => animated_webp_dimensions(bytes),
     }
@@ -225,6 +232,7 @@ impl AnimatedFormat {
   ) -> Result<bool, image::ImageError> {
     match self {
       Self::Gif => decode_gif_frames(bytes, skip, limit, target, push),
+      Self::Apng => decode_apng_frames(bytes, skip, limit, target, push),
       #[cfg(feature = "webp")]
       Self::WebP => decode_webp_frames(bytes, skip, limit, target, push),
     }
@@ -234,6 +242,7 @@ impl AnimatedFormat {
   fn frame_durations(self, bytes: &[u8]) -> Result<Box<[u32]>, image::ImageError> {
     match self {
       Self::Gif => gif_frame_durations(bytes),
+      Self::Apng => apng_frame_durations(bytes),
       #[cfg(feature = "webp")]
       Self::WebP => webp_frame_durations(bytes),
     }
@@ -1479,6 +1488,7 @@ mod tests {
     }
   }
 
+  const HALF_TRANSPARENT_BLUE: [u8; 4] = [0, 0, 255, 128];
   const FRAME_COLORS: [[u8; 4]; 3] = [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]];
 
   /// Encodes one 4x4 solid frame per `(color index, delay ms)` pair. Delays
@@ -1503,6 +1513,150 @@ mod tests {
     drop(encoder);
 
     bytes
+  }
+
+  /// Encodes one 4x4 solid frame per `(color index, delay ms)` pair as an APNG
+  /// whose default image is the first frame.
+  fn encoded_apng(frames: &[(usize, u32)]) -> Vec<u8> {
+    use png::{BitDepth, ColorType, Encoder};
+
+    let mut bytes = Vec::new();
+    let mut encoder = Encoder::new(&mut bytes, 4, 4);
+    encoder.set_color(ColorType::Rgba);
+    encoder.set_depth(BitDepth::Eight);
+    encoder.set_animated(frames.len() as u32, 0).unwrap();
+
+    let mut writer = encoder.write_header().unwrap();
+    for &(color, delay_ms) in frames {
+      writer
+        .set_frame_delay(delay_ms.try_into().unwrap(), 1000)
+        .unwrap();
+      writer
+        .write_image_data(&FRAME_COLORS[color].repeat(16))
+        .unwrap();
+    }
+    writer.finish().unwrap();
+
+    bytes
+  }
+
+  fn apng_source(frames: &[(usize, u32)]) -> AnimatedSource {
+    let Ok(ImageSource::Animated(animated)) = ImageSource::from_bytes(&encoded_apng(frames)) else {
+      unreachable!("valid apng");
+    };
+    animated
+  }
+
+  #[test]
+  fn apng_walks_its_frame_timeline() {
+    let apng = apng_source(&[(0, 100), (1, 100), (2, 100)]);
+
+    assert_eq!(apng.dimensions(), (4, 4));
+    assert_eq!(apng.frame_at_time(0).pixel(2, 2), FRAME_COLORS[0]);
+    assert_eq!(apng.frame_at_time(150).pixel(2, 2), FRAME_COLORS[1]);
+    assert_eq!(apng.frame_at_time(250).pixel(2, 2), FRAME_COLORS[2]);
+    assert_eq!(apng.frame_at_time(350).pixel(2, 2), FRAME_COLORS[0]);
+  }
+
+  #[test]
+  fn apng_frames_cover_the_draw_box() {
+    let apng = apng_source(&[(0, 100), (1, 100)]);
+    let smaller = apng.frame_at_time_covering(150, 2, 2, ImageScalingAlgorithm::Auto);
+
+    assert_eq!((smaller.width(), smaller.height()), (2, 2));
+    assert_eq!(smaller.pixel(1, 1), FRAME_COLORS[1]);
+  }
+
+  /// A subframe drawn with `BlendOp::Over` composites onto the frame before it
+  /// instead of replacing the canvas.
+  #[test]
+  fn apng_composites_a_blended_subframe() {
+    use png::{BitDepth, BlendOp, ColorType, DisposeOp, Encoder};
+
+    let mut bytes = Vec::new();
+    let mut encoder = Encoder::new(&mut bytes, 4, 4);
+    encoder.set_color(ColorType::Rgba);
+    encoder.set_depth(BitDepth::Eight);
+    encoder.set_animated(2, 0).unwrap();
+
+    let mut writer = encoder.write_header().unwrap();
+    writer.set_frame_delay(100, 1000).unwrap();
+    writer.set_dispose_op(DisposeOp::None).unwrap();
+    writer
+      .write_image_data(&FRAME_COLORS[0].repeat(16))
+      .unwrap();
+
+    writer.set_frame_delay(100, 1000).unwrap();
+    writer.set_frame_dimension(2, 2).unwrap();
+    writer.set_frame_position(0, 0).unwrap();
+    writer.set_blend_op(BlendOp::Over).unwrap();
+    writer
+      .write_image_data(&HALF_TRANSPARENT_BLUE.repeat(4))
+      .unwrap();
+    writer.finish().unwrap();
+
+    let Ok(ImageSource::Animated(apng)) = ImageSource::from_bytes(&bytes) else {
+      unreachable!("valid apng");
+    };
+
+    // The subframe covers the top-left quadrant, half-blended over the opaque
+    // red beneath it; the rest of the first frame stays put.
+    assert_eq!(apng.frame_at_time(150).pixel(0, 0), [127, 0, 128, 255]);
+    assert_eq!(apng.frame_at_time(150).pixel(3, 3), FRAME_COLORS[0]);
+  }
+
+  /// An APNG whose `IDAT` carries a separate default image: the animation is
+  /// the `fdAT` frames alone.
+  #[test]
+  fn apng_default_image_stays_off_the_timeline() {
+    use png::{BitDepth, ColorType, Encoder};
+
+    let mut bytes = Vec::new();
+    let mut encoder = Encoder::new(&mut bytes, 4, 4);
+    encoder.set_color(ColorType::Rgba);
+    encoder.set_depth(BitDepth::Eight);
+    encoder.set_animated(2, 0).unwrap();
+    encoder.set_sep_def_img(true).unwrap();
+
+    let mut writer = encoder.write_header().unwrap();
+    writer
+      .write_image_data(&FRAME_COLORS[2].repeat(16))
+      .unwrap();
+
+    writer.set_frame_delay(100, 1000).unwrap();
+    writer
+      .write_image_data(&FRAME_COLORS[0].repeat(16))
+      .unwrap();
+    writer.set_frame_delay(100, 1000).unwrap();
+    writer
+      .write_image_data(&FRAME_COLORS[1].repeat(16))
+      .unwrap();
+    writer.finish().unwrap();
+
+    let Ok(ImageSource::Animated(apng)) = ImageSource::from_bytes(&bytes) else {
+      unreachable!("valid apng");
+    };
+
+    assert_eq!(apng.frame_at_time(0).pixel(2, 2), FRAME_COLORS[0]);
+    assert_eq!(apng.frame_at_time(150).pixel(2, 2), FRAME_COLORS[1]);
+    assert_eq!(apng.frame_at_time(250).pixel(2, 2), FRAME_COLORS[0]);
+  }
+
+  #[test]
+  fn still_png_stays_a_bitmap() {
+    use png::{BitDepth, ColorType, Encoder};
+
+    let mut bytes = Vec::new();
+    let mut encoder = Encoder::new(&mut bytes, 4, 4);
+    encoder.set_color(ColorType::Rgba);
+    encoder.set_depth(BitDepth::Eight);
+    let mut writer = encoder.write_header().unwrap();
+    writer
+      .write_image_data(&FRAME_COLORS[0].repeat(16))
+      .unwrap();
+    writer.finish().unwrap();
+
+    assert_matches!(ImageSource::from_bytes(&bytes), Ok(ImageSource::Bitmap(_)));
   }
 
   /// Encodes one 4x4 solid frame per `(color index, delay ms)` pair into an
