@@ -17,7 +17,7 @@ use crate::{
     glyph::{ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},
   },
   style::{
-    Affine, BoxSizing, Color, Float, FontSynthesis, Lang, Length, ResolvedVerticalAlign,
+    Affine, BoxSizing, Color, Direction, Float, FontSynthesis, Lang, Length, ResolvedVerticalAlign,
     SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk, TextFitMode,
     TextFitTarget, TextOverflow, TextUnderlinePosition, TextWrapMode, TextWrapStyle, VerticalAlign,
     VerticalAlignKeyword, WhiteSpaceCollapse,
@@ -216,7 +216,7 @@ impl BuiltInlineLayout<'_> {
         match item {
           PositionedLayoutItem::GlyphRun(glyph_run) => {
             let text = measured_run_text(&self.text, &self.spans, &glyph_run);
-            if text.is_empty() {
+            if text.is_empty() || text == RTL_MARK {
               continue;
             }
 
@@ -1430,7 +1430,9 @@ fn push_spans_into_builder(
         style,
         ..
       } => {
-        push_presentation_text(builder, style, Some(*span_id), text, classes);
+        let source_span_id = (*span_id != SYNTHETIC_SPAN_ID).then_some(*span_id);
+
+        push_presentation_text(builder, style, source_span_id, text, classes);
       }
       ProcessedInlineSpan::Box(item) => {
         builder.push_inline_box(item.inline_box.clone());
@@ -1438,6 +1440,14 @@ fn push_spans_into_builder(
     }
   }
 }
+
+/// U+200F RIGHT-TO-LEFT MARK. Parley has no base-direction API and infers the
+/// paragraph level from the first strong character, so a `direction: rtl` block
+/// leads with this mark to force the RTL base level.
+const RTL_MARK: &str = "\u{200F}";
+
+/// Span id of the synthetic [`RTL_MARK`] span, which has no source span.
+const SYNTHETIC_SPAN_ID: u64 = u64::MAX;
 
 fn build_inline_layout_tree<'c>(
   items: &[InlineItem<'c>],
@@ -1452,6 +1462,17 @@ fn build_inline_layout_tree<'c>(
   let mut index_pos = 0;
   let mut previous_collapsible_space = false;
   let mut previous_was_line_break = false;
+
+  if !items.is_empty() && context.style.direction == Direction::Rtl {
+    spans.push(ProcessedInlineSpan::Text {
+      span_id: SYNTHETIC_SPAN_ID,
+      byte_range: 0..RTL_MARK.len(),
+      text: RTL_MARK.to_owned(),
+      style: Box::new(SizedFontStyle::from_style(&context.style, context)),
+      link: None,
+    });
+    index_pos = RTL_MARK.len();
+  }
 
   for item in items {
     match item {

@@ -77,6 +77,11 @@
       .block {
         display: block;
       }
+      .rtl {
+        direction: rtl;
+        padding-left: 0;
+        padding-right: 40px;
+      }
     </style>
   </head>
   <body style="width: 1200px; height: 630px">
@@ -171,6 +176,21 @@
             <div class="block"><span>block child</span></div>
           </div>
           <div class="item"><span>text child</span></div>
+        </div>
+      </div>
+      <div class="cell">
+        <span class="label">direction: rtl</span>
+        <div>
+          <div class="list decimal rtl">
+            <div class="item"><span>سطر 1</span></div>
+            <div class="item"><span>سطر 2</span></div>
+          </div>
+          <div class="list disc rtl">
+            <div class="item"><span>سطر</span></div>
+          </div>
+          <div class="list decimal rtl inside">
+            <div class="item"><span>سطر</span></div>
+          </div>
         </div>
       </div>
     </div>
