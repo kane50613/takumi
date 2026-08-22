@@ -1803,6 +1803,47 @@ mod tests {
     assert_eq!(gif.frame_at_time(250).pixel(2, 2), FRAME_COLORS[2]);
   }
 
+  /// Rebuilding a subframe as a still PNG has to swap `IHDR` to the frame's own
+  /// size, then place it back at its offset.
+  #[test]
+  fn a_seeked_apng_subframe_matches_replaying_to_it() {
+    use png::{BitDepth, ColorType, DisposeOp, Encoder};
+
+    let mut bytes = Vec::new();
+    let mut encoder = Encoder::new(&mut bytes, 4, 4);
+    encoder.set_color(ColorType::Rgba);
+    encoder.set_depth(BitDepth::Eight);
+    encoder.set_animated(3, 0).unwrap();
+
+    let mut writer = encoder.write_header().unwrap();
+    for (index, color) in FRAME_COLORS.iter().enumerate() {
+      writer.set_frame_delay(100, 1000).unwrap();
+      writer.set_dispose_op(DisposeOp::Background).unwrap();
+      if index > 0 {
+        writer.set_frame_dimension(2, 2).unwrap();
+        writer.set_frame_position(1, 1).unwrap();
+      }
+      let pixels = if index > 0 { 4 } else { 16 };
+      writer.write_image_data(&color.repeat(pixels)).unwrap();
+    }
+    writer.finish().unwrap();
+
+    let Ok(ImageSource::Animated(apng)) = ImageSource::from_bytes(&bytes) else {
+      unreachable!("valid apng");
+    };
+    assert!(apng.stands_alone(2));
+
+    let seeked = AnimatedFormat::Apng
+      .decode_frame_alone(&bytes, 2, (4, 4, ImageScalingAlgorithm::Auto))
+      .expect("seeks");
+    let mut replayed = None;
+    AnimatedFormat::Apng
+      .decode_frames(&bytes, 2, Some(1), None, |frame| replayed = Some(frame))
+      .expect("replays");
+
+    assert_eq!(seeked.data(), replayed.expect("replayed frame").data());
+  }
+
   #[test]
   fn still_png_stays_a_bitmap() {
     use png::{BitDepth, ColorType, Encoder};

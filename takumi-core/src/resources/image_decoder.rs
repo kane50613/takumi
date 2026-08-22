@@ -43,11 +43,13 @@ const MAX_IMAGE_DIMENSION: u32 = 8192;
 /// Decoded images above this pixel count are rejected (RGBA cost = 4x).
 /// 8192 x 8192 — far above any sane OG-image asset, far below OOM territory.
 const MAX_IMAGE_PIXELS: u64 = MAX_IMAGE_DIMENSION as u64 * MAX_IMAGE_DIMENSION as u64;
+/// A frame rectangle within the canvas, as `(x, y, width, height)`.
+pub(crate) type FrameRect = (u32, u32, u32, u32);
+
 /// What a container says about one frame, read without decoding pixels.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct FrameInfo {
-  /// Frame rectangle within the canvas, as `(x, y, width, height)`.
-  pub(crate) rect: (u32, u32, u32, u32),
+  pub(crate) rect: FrameRect,
   pub(crate) duration_ms: u32,
   /// Composites onto what is under it rather than replacing it.
   pub(crate) blends: bool,
@@ -797,7 +799,7 @@ fn decode_webp_into(
 }
 
 /// Whether a frame rectangle spans the entire canvas.
-fn covers_canvas(rect: (u32, u32, u32, u32), canvas: (u32, u32)) -> bool {
+fn covers_canvas(rect: FrameRect, canvas: (u32, u32)) -> bool {
   let (x, y, width, height) = rect;
   x == 0 && y == 0 && width == canvas.0 && height == canvas.1
 }
@@ -1203,6 +1205,90 @@ fn apng_reader(bytes: &[u8]) -> ImageResult<png::Reader<Cursor<&[u8]>>> {
   Ok(reader)
 }
 
+/// Rebuilds frame `index` of an APNG as a standalone PNG, so the still decoder
+/// reads it without the frames before it being inflated.
+///
+/// The APNG spec gives each frame its own complete zlib stream across its
+/// `fdAT` chunks, so the frame's data becomes `IDAT` once the 4-byte sequence
+/// number is dropped.
+fn apng_frame_as_still(bytes: &[u8], index: usize) -> Option<(Vec<u8>, FrameRect)> {
+  let mut header = None;
+  let mut palette = Vec::new();
+  let mut seen = 0;
+  let mut frame = None;
+  let mut data = Vec::new();
+
+  for (id, chunk) in png_chunks(bytes) {
+    match &id {
+      b"IHDR" => header = Some(chunk),
+      // Palette and colour metadata belong to every frame.
+      b"PLTE" | b"tRNS" | b"gAMA" | b"cHRM" | b"sRGB" | b"iCCP" => palette.push((id, chunk)),
+      b"fcTL" => {
+        if frame.is_some() {
+          break;
+        }
+        if seen == index {
+          frame = Some(chunk);
+        }
+        seen += 1;
+      }
+      b"IDAT" if frame.is_some() => data.extend_from_slice(chunk),
+      b"fdAT" if frame.is_some() => data.extend_from_slice(chunk.get(4..)?),
+      _ => {}
+    }
+  }
+
+  let (header, frame) = (header?, frame?);
+  if data.is_empty() {
+    return None;
+  }
+
+  let mut still = PNG_SIGNATURE.to_vec();
+  // The frame's own dimensions replace the canvas ones; the rest of `IHDR`
+  // (bit depth, colour type, compression, filter, interlace) carries over.
+  let mut ihdr = Vec::with_capacity(13);
+  ihdr.extend_from_slice(frame.get(4..12)?);
+  ihdr.extend_from_slice(header.get(8..13)?);
+  push_png_chunk(&mut still, b"IHDR", &ihdr);
+  for (id, chunk) in palette {
+    push_png_chunk(&mut still, &id, chunk);
+  }
+  push_png_chunk(&mut still, b"IDAT", &data);
+  push_png_chunk(&mut still, b"IEND", &[]);
+
+  let read_32 = |offset: usize| {
+    u32::from_be_bytes([
+      frame[offset],
+      frame[offset + 1],
+      frame[offset + 2],
+      frame[offset + 3],
+    ])
+  };
+
+  Some((still, (read_32(12), read_32(16), read_32(4), read_32(8))))
+}
+
+fn push_png_chunk(out: &mut Vec<u8>, id: &[u8; 4], payload: &[u8]) {
+  out.extend_from_slice(&(payload.len() as u32).to_be_bytes());
+  out.extend_from_slice(id);
+  out.extend_from_slice(payload);
+  out.extend_from_slice(&png_crc(id, payload).to_be_bytes());
+}
+
+/// The PNG chunk checksum, computed a bit at a time. Rebuilding one frame runs
+/// this once, so it trades speed for the table a faster form would carry.
+fn png_crc(id: &[u8; 4], payload: &[u8]) -> u32 {
+  let mut crc = u32::MAX;
+  for &byte in id.iter().chain(payload) {
+    crc ^= byte as u32;
+    for _ in 0..8 {
+      crc = (crc >> 1) ^ (0xEDB8_8320 & 0_u32.wrapping_sub(crc & 1));
+    }
+  }
+
+  !crc
+}
+
 /// Decodes frame `index` on its own, advancing through the earlier frames by
 /// their headers alone, when its `fcTL` shows it covers the whole canvas and
 /// replaces rather than blends. Returns `None` when the frame depends on its
@@ -1216,6 +1302,27 @@ pub(crate) fn decode_apng_frame_alone(
   index: usize,
   target: Option<(u32, u32, ImageScalingAlgorithm)>,
 ) -> Option<ImageBuffer> {
+  let (canvas_width, canvas_height) = apng_dimensions(bytes).ok()?;
+  if let Some((still, rect)) = apng_frame_as_still(bytes, index)
+    && let Ok(frame) = decode_png(&still)
+  {
+    let buffer = if frame.width() == canvas_width && frame.height() == canvas_height {
+      frame
+    } else {
+      let mut canvas = vec![0; canvas_width as usize * canvas_height as usize * 4];
+      let stride = canvas_width as usize * 4;
+      for row in 0..rect.3.min(canvas_height.saturating_sub(rect.1)) {
+        let source = row as usize * rect.2 as usize * 4;
+        let target = (rect.1 + row) as usize * stride + rect.0 as usize * 4;
+        let span = rect.2.min(canvas_width.saturating_sub(rect.0)) as usize * 4;
+        canvas[target..target + span].copy_from_slice(&frame.data()[source..source + span]);
+      }
+      ImageBuffer::from_premultiplied_rgba(canvas, canvas_width, canvas_height)?
+    };
+
+    return fit_to_target(buffer, target).ok();
+  }
+
   let mut reader = apng_reader(bytes).ok()?;
   let (canvas_width, canvas_height) = (reader.info().width, reader.info().height);
   let channels = match reader.output_color_type() {
