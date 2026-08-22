@@ -599,7 +599,7 @@ fn cubic_bezier_sample(x1: f32, y1: f32, x2: f32, y2: f32, progress: f32) -> f32
   sample_curve(ay, by, cy, t)
 }
 
-fn steps_sample(step_count: u32, position: StepPosition, progress: f32) -> f32 {
+fn steps_sample(step_count: u32, position: StepPosition, progress: f32, before: bool) -> f32 {
   let steps = step_count as f32;
   let progress = progress.clamp(0.0, 1.0);
 
@@ -612,19 +612,35 @@ fn steps_sample(step_count: u32, position: StepPosition, progress: f32) -> f32 {
     StepPosition::JumpNone => ((steps - 1.0).max(1.0), 0.0),
   };
 
-  ((progress * steps + start_offset).floor().clamp(0.0, jumps)) / jumps
+  let scaled = progress * steps;
+  let mut current_step = (scaled + start_offset).floor();
+  if before && scaled.fract() == 0.0 {
+    current_step -= 1.0;
+  }
+
+  current_step.clamp(0.0, jumps) / jumps
 }
 
-pub(crate) fn apply_timing_function(function: &AnimationTimingFunction, progress: f32) -> f32 {
+/// Samples the easing curve at `progress`. `before` marks a sample taken from
+/// the interval before the animation's active phase, where a step function
+/// sitting exactly on a jump takes the lower step.
+/// https://drafts.csswg.org/css-easing-1/#step-easing-algo
+pub(crate) fn apply_timing_function(
+  function: &AnimationTimingFunction,
+  progress: f32,
+  before: bool,
+) -> f32 {
   match function {
     AnimationTimingFunction::Linear => progress,
     AnimationTimingFunction::Ease => cubic_bezier_sample(0.25, 0.1, 0.25, 1.0, progress),
     AnimationTimingFunction::EaseIn => cubic_bezier_sample(0.42, 0.0, 1.0, 1.0, progress),
     AnimationTimingFunction::EaseOut => cubic_bezier_sample(0.0, 0.0, 0.58, 1.0, progress),
     AnimationTimingFunction::EaseInOut => cubic_bezier_sample(0.42, 0.0, 0.58, 1.0, progress),
-    AnimationTimingFunction::StepStart => steps_sample(1, StepPosition::Start, progress),
-    AnimationTimingFunction::StepEnd => steps_sample(1, StepPosition::End, progress),
-    AnimationTimingFunction::Steps(count, position) => steps_sample(*count, *position, progress),
+    AnimationTimingFunction::StepStart => steps_sample(1, StepPosition::Start, progress, before),
+    AnimationTimingFunction::StepEnd => steps_sample(1, StepPosition::End, progress, before),
+    AnimationTimingFunction::Steps(count, position) => {
+      steps_sample(*count, *position, progress, before)
+    }
     AnimationTimingFunction::CubicBezier(x1, y1, x2, y2) => {
       cubic_bezier_sample(*x1, *y1, *x2, *y2, progress)
     }
@@ -659,10 +675,11 @@ impl ToCss for AnimationTimingFunction {
       Self::StepStart => dest.write_str("step-start"),
       Self::StepEnd => dest.write_str("step-end"),
       Self::Steps(count, position) => {
-        dest.write_str("steps(")?;
-        write!(dest, "{}", count)?;
-        dest.write_str(", ")?;
-        position.to_css(dest)?;
+        write!(dest, "steps({count}")?;
+        if *position != StepPosition::End {
+          dest.write_str(", ")?;
+          position.to_css(dest)?;
+        }
         dest.write_char(')')
       }
       Self::CubicBezier(x1, y1, x2, y2) => write!(dest, "cubic-bezier({x1}, {y1}, {x2}, {y2})"),
@@ -795,6 +812,7 @@ mod tests {
       apply_timing_function(
         &AnimationTimingFunction::from_css_str(css).unwrap(),
         progress,
+        false,
       )
     };
 
@@ -813,6 +831,47 @@ mod tests {
     for (progress, expected) in [(0.0, 0.25), (0.3, 0.5), (0.6, 0.75), (1.0, 1.0)] {
       assert_eq!(sample("steps(4, jump-start)", progress), expected);
     }
+  }
+
+  #[test]
+  fn steps_timing_functions_hold_the_lower_step_before_the_active_phase() {
+    let sample = |css: &str, progress: f32| {
+      apply_timing_function(
+        &AnimationTimingFunction::from_css_str(css).unwrap(),
+        progress,
+        true,
+      )
+    };
+
+    // A backwards-filled delay samples progress 0, which sits on a jump for
+    // every start-anchored position.
+    assert_eq!(sample("steps(4, jump-start)", 0.0), 0.0);
+    assert_eq!(sample("steps(4, jump-both)", 0.0), 0.0);
+    assert_eq!(sample("steps(4, jump-end)", 0.0), 0.0);
+    assert_eq!(sample("step-start", 0.0), 0.0);
+
+    // Reverse playback fills from the far end instead.
+    assert_eq!(sample("steps(4, jump-end)", 1.0), 0.75);
+    assert_eq!(sample("steps(4, jump-start)", 1.0), 1.0);
+
+    // Away from a jump the flag changes nothing.
+    assert_eq!(sample("steps(4, jump-end)", 0.3), 0.25);
+  }
+
+  #[test]
+  fn steps_timing_functions_serialize_without_a_default_position() {
+    let round_trip = |css: &str| {
+      AnimationTimingFunction::from_css_str(css)
+        .unwrap()
+        .to_css_string()
+    };
+
+    assert_eq!(round_trip("steps(4)"), "steps(4)");
+    assert_eq!(round_trip("steps(4, end)"), "steps(4)");
+    assert_eq!(round_trip("steps(4, jump-end)"), "steps(4)");
+    assert_eq!(round_trip("steps(4, jump-start)"), "steps(4, start)");
+    assert_eq!(round_trip("steps(4, jump-none)"), "steps(4, jump-none)");
+    assert_eq!(round_trip("steps(4, jump-both)"), "steps(4, jump-both)");
   }
 
   #[test]
@@ -846,8 +905,8 @@ mod tests {
       return;
     };
 
-    let early = apply_timing_function(&function, 0.2);
-    let late = apply_timing_function(&function, 0.8);
+    let early = apply_timing_function(&function, 0.2, false);
+    let late = apply_timing_function(&function, 0.8, false);
 
     assert!(early < 0.0, "expected negative overshoot, got {early}");
     assert!(late > 1.0, "expected positive overshoot, got {late}");

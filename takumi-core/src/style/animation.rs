@@ -79,7 +79,7 @@ pub(crate) fn apply_stylesheet_animations(
     let timing_function =
       timing_function_at(&base_snapshot.animation_timing_function, animation_index);
 
-    let Some(progress) = sample_animation_progress(
+    let Some(sample) = sample_animation_progress(
       time as f32,
       duration.milliseconds,
       delay.milliseconds,
@@ -91,11 +91,12 @@ pub(crate) fn apply_stylesheet_animations(
     };
 
     let resolved_frames = resolve_keyframes(&keyframes, &base_snapshot);
-    let Some(segment) = sample_keyframe_segment(&resolved_frames, &base_snapshot, progress) else {
+    let Some(segment) = sample_keyframe_segment(&resolved_frames, &base_snapshot, sample.progress)
+    else {
       continue;
     };
 
-    let eased_progress = apply_timing_function(&timing_function, segment.progress);
+    let eased_progress = apply_timing_function(&timing_function, segment.progress, sample.before);
     base_style.apply_interpolated_properties(
       segment.from_style,
       segment.to_style,
@@ -212,6 +213,32 @@ fn keyframe<const N: usize>(offset: f32, declarations: [StyleDeclaration; N]) ->
   }
 }
 
+/// One sampled point on an animation's timeline.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct AnimationSample {
+  /// Progress through the current iteration.
+  progress: f32,
+  /// Whether the sample comes from before the active phase, which the step
+  /// easing functions treat as sitting on the lower step.
+  before: bool,
+}
+
+impl AnimationSample {
+  fn active(progress: f32) -> Self {
+    Self {
+      progress,
+      before: false,
+    }
+  }
+
+  fn before(progress: f32) -> Self {
+    Self {
+      progress,
+      before: true,
+    }
+  }
+}
+
 fn sample_animation_progress(
   time_ms: f32,
   duration_ms: f32,
@@ -219,18 +246,20 @@ fn sample_animation_progress(
   iteration_count: AnimationIterationCount,
   direction: AnimationDirection,
   fill_mode: AnimationFillMode,
-) -> Option<f32> {
+) -> Option<AnimationSample> {
   let active_time = time_ms - delay_ms;
 
   if duration_ms <= 0.0 {
     if active_time < 0.0 {
       return match fill_mode {
-        AnimationFillMode::Backwards | AnimationFillMode::Both => Some(start_progress(direction)),
+        AnimationFillMode::Backwards | AnimationFillMode::Both => {
+          Some(AnimationSample::before(start_progress(direction)))
+        }
         _ => None,
       };
     }
 
-    return Some(end_progress(direction, 0));
+    return Some(AnimationSample::active(end_progress(direction, 0)));
   }
 
   let total_active_duration = match iteration_count {
@@ -240,7 +269,9 @@ fn sample_animation_progress(
 
   if active_time < 0.0 {
     return match fill_mode {
-      AnimationFillMode::Backwards | AnimationFillMode::Both => Some(start_progress(direction)),
+      AnimationFillMode::Backwards | AnimationFillMode::Both => {
+        Some(AnimationSample::before(start_progress(direction)))
+      }
       _ => None,
     };
   }
@@ -261,7 +292,7 @@ fn sample_animation_progress(
             }
           }
         };
-        Some(end_progress)
+        Some(AnimationSample::active(end_progress))
       }
       _ => None,
     };
@@ -275,7 +306,11 @@ fn sample_animation_progress(
     iteration_index = iteration_index.saturating_sub(1);
   }
 
-  Some(apply_direction(progress, direction, iteration_index))
+  Some(AnimationSample::active(apply_direction(
+    progress,
+    direction,
+    iteration_index,
+  )))
 }
 
 fn start_progress(direction: AnimationDirection) -> f32 {
@@ -1071,6 +1106,22 @@ mod tests {
   }
 
   #[test]
+  fn backwards_fill_samples_from_before_the_active_phase() {
+    let sample = sample_animation_progress(
+      0.0,
+      1000.0,
+      500.0,
+      AnimationIterationCount::Number(1.0),
+      AnimationDirection::Normal,
+      AnimationFillMode::Backwards,
+    )
+    .expect("backwards fill applies during the delay");
+
+    assert_eq!(sample.progress, 0.0);
+    assert!(sample.before);
+  }
+
+  #[test]
   fn animation_progress_uses_next_iteration_start_at_boundaries() {
     let progress = sample_animation_progress(
       1000.0,
@@ -1081,7 +1132,7 @@ mod tests {
       AnimationFillMode::Both,
     );
 
-    assert_eq!(progress, Some(1.0));
+    assert_eq!(progress.map(|sample| sample.progress), Some(1.0));
   }
 
   #[test]
@@ -1095,7 +1146,7 @@ mod tests {
       AnimationFillMode::Forwards,
     );
 
-    assert_eq!(progress, Some(0.0));
+    assert_eq!(progress.map(|sample| sample.progress), Some(0.0));
   }
 
   #[test]
@@ -1109,7 +1160,7 @@ mod tests {
       AnimationFillMode::Forwards,
     );
 
-    assert_eq!(progress, Some(0.5));
+    assert_eq!(progress.map(|sample| sample.progress), Some(0.5));
   }
 
   #[test]
@@ -1123,7 +1174,7 @@ mod tests {
       AnimationFillMode::Both,
     );
 
-    assert_eq!(progress, Some(1.0));
+    assert_eq!(progress.map(|sample| sample.progress), Some(1.0));
   }
 
   #[test]
