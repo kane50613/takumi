@@ -238,12 +238,21 @@ self.onmessage = async (event: MessageEvent) => {
 
       break;
     }
-    case "ping": {
-      postMessage({ type: "pong", id: payload.id });
+    case "watchdog": {
+      const [port] = event.ports;
+
+      if (port) {
+        // The evaluated code shares this global but never sees `port`, so it
+        // cannot answer a ping while it holds the event loop.
+        port.onmessage = (ping: MessageEvent) => {
+          if (ping.data?.type === "ping") port.postMessage({ type: "pong", id: ping.data.id });
+        };
+        port.start();
+      }
+
       break;
     }
     case "ready":
-    case "pong":
     case "render-result":
     case "preview-result": {
       throw new Error("Respond message should not be sent from main window.");

@@ -269,7 +269,7 @@ export default function Playground() {
       <div className="flex h-7 shrink-0 items-center gap-3 border-t px-3 font-mono text-[11px] text-muted-foreground">
         {!isReady ? (
           <span>loading wasm…</span>
-        ) : ranCode === undefined ? (
+        ) : isUnrunShare ? (
           <span>this code came from a link · read it, then press Run</span>
         ) : renderError ? (
           <span className="flex min-w-0 items-center gap-2">

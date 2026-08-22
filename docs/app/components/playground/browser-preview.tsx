@@ -46,32 +46,35 @@ html,body{margin:0;height:100%}`;
 // The frame runs the rendered markup, which is the user's to write. `sandbox`
 // without `allow-same-origin` puts it in an opaque origin, so an `onerror`
 // handler smuggled through `dangerouslySetInnerHTML` cannot reach the docs
-// origin. The document loads once and repaints over `postMessage`, so updates
-// do not flash the way a swapped `srcdoc` would.
-// Paints travel over a `MessageChannel` the bootstrap hands out before any
-// markup runs. A frame that navigates itself away takes the port with it, where
-// `postMessage` to `contentWindow` would have followed it to the new document.
+// origin. The document loads once and repaints over a port its bootstrap hands
+// out on the page's `hello`, so updates do not flash the way a swapped `srcdoc`
+// would. The port dies with the document, so a frame that navigates itself away
+// stops receiving paints.
 const FRAME_HTML = `<!doctype html>
 <meta charset="utf-8">
 <link rel="stylesheet" href="${googleFontsCssUrl()}">
 <style id="sheet"></style>
 <body><div id="mount"></div>
 <script>
-const channel = new MessageChannel();
-const port = channel.port1;
-const reportHeight = () =>
-  port.postMessage({ type: "height", value: document.documentElement.scrollHeight });
+addEventListener("message", (event) => {
+  if (event.source !== parent || event.data?.type !== "hello") return;
 
-port.onmessage = (event) => {
-  if (event.data?.type !== "paint") return;
-  document.getElementById("sheet").textContent = event.data.css;
-  const mount = document.getElementById("mount");
-  mount.style.cssText = event.data.mountStyle;
-  mount.innerHTML = event.data.html;
-  reportHeight();
-  document.fonts.ready.then(reportHeight);
-};
-parent.postMessage({ type: "ready" }, "*", [channel.port2]);
+  const channel = new MessageChannel();
+  const port = channel.port1;
+  const reportHeight = () =>
+    port.postMessage({ type: "height", value: document.documentElement.scrollHeight });
+
+  port.onmessage = (paint) => {
+    if (paint.data?.type !== "paint") return;
+    document.getElementById("sheet").textContent = paint.data.css;
+    const mount = document.getElementById("mount");
+    mount.style.cssText = paint.data.mountStyle;
+    mount.innerHTML = paint.data.html;
+    reportHeight();
+    document.fonts.ready.then(reportHeight);
+  };
+  parent.postMessage({ type: "ready" }, "*", [channel.port2]);
+});
 </script>`;
 
 /** Guards against a frame that reports a height big enough to hang the layout. */
@@ -131,6 +134,7 @@ function usePaintFrame(paint: Paint | undefined) {
 
       if (!port) return;
 
+      portRef.current?.close();
       portRef.current = port;
       port.onmessage = onPortMessage;
       port.start();
@@ -206,6 +210,7 @@ export default function BrowserPreview({
       title="Browser preview"
       sandbox="allow-scripts"
       srcDoc={FRAME_HTML}
+      onLoad={() => frameRef.current?.contentWindow?.postMessage({ type: "hello" }, "*")}
       className="border bg-white"
       style={style}
     />

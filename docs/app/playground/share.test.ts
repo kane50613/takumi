@@ -11,6 +11,6 @@ describe("shared snippets", () => {
   it("refuses a snippet that expands past the cap", async () => {
     const bomb = await compressCode("x".repeat(1024 * 1024));
 
-    expect(decompressCode(bomb)).rejects.toThrow(/larger than the playground accepts/);
+    await expect(decompressCode(bomb)).rejects.toThrow(/larger than the playground accepts/);
   });
 });

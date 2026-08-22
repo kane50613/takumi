@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { compressCode, decompressCode } from "~/playground/share";
 import { defaultTemplate, templates } from "~/playground/templates";
 
@@ -21,9 +21,15 @@ function legacyQueryParams() {
 export function useSharedCode() {
   const [code, setCode] = useState<string>();
   const [params, setParams] = useState(hashParams);
+  // The URL loses its `code` parameter once the snippet is on screen, so where
+  // it came from is remembered here instead of read back off the URL.
+  const cameFromLink = useRef(false);
 
   useEffect(() => {
-    const onHashChange = () => setParams(hashParams());
+    const onHashChange = () => {
+      setCode(undefined);
+      setParams(hashParams());
+    };
 
     window.addEventListener("hashchange", onHashChange);
     window.addEventListener("popstate", onHashChange);
@@ -60,6 +66,7 @@ export function useSharedCode() {
         : (templateCode ?? DEFAULT_TEMPLATE.code);
 
       if (!cancelled) {
+        cameFromLink.current = Boolean(codeQuery);
         setCode(initialCode);
       }
     })();
@@ -106,5 +113,5 @@ export function useSharedCode() {
     return () => clearTimeout(timer);
   }, [code, matchedTemplate]);
 
-  return { code, setCode, matchedTemplate, isShared: Boolean(codeQuery) };
+  return { code, setCode, matchedTemplate, isShared: cameFromLink.current };
 }

@@ -33,10 +33,10 @@ const RENDER_TIMEOUT_MS = 15_000;
 /** How long a freed worker gets to answer the ping that follows a result. */
 const LIVENESS_TIMEOUT_MS = 2_000;
 
-/** Bounds what the worker can hand the page to hold, forged or not. */
-const MAX_PREVIEW_BYTES = 4 * 1024 * 1024;
+/** Bounds what the worker can hand the page to hold, forged or not, in UTF-16 code units. */
+const MAX_PREVIEW_LENGTH = 4 * 1024 * 1024;
 
-function previewSize(message: { html: string; cssContents?: string[] }) {
+function previewLength(message: { html: string; cssContents?: string[] }) {
   return (
     message.html.length + (message.cssContents ?? []).reduce((sum, css) => sum + css.length, 0)
   );
@@ -51,9 +51,11 @@ export function useRenderWorker(ranCode: string | undefined) {
   const currentRequestIdRef = useRef(0);
   const workerRef = useRef<Worker | undefined>(undefined);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const watchdogRef = useRef<MessagePort>(undefined);
 
   useEffect(() => {
     const worker = new TakumiWorker();
+    const watchdog = new MessageChannel();
     const restart = () => {
       setRenderError({
         status: "error",
@@ -71,18 +73,14 @@ export function useRenderWorker(ranCode: string | undefined) {
           setIsReady(true);
           break;
         }
-        case "pong": {
-          if (message.id === currentRequestIdRef.current) clearTimeout(timeoutRef.current);
-          break;
-        }
         case "render-request":
-        case "ping": {
+        case "watchdog": {
           throw new Error("request is not possible for response");
         }
         case "preview-result": {
           if (
             message.id === currentRequestIdRef.current &&
-            previewSize(message) <= MAX_PREVIEW_BYTES
+            previewLength(message) <= MAX_PREVIEW_LENGTH
           ) {
             setBrowserPreview({
               html: message.html,
@@ -101,7 +99,7 @@ export function useRenderWorker(ranCode: string | undefined) {
           // A result proves nothing about the worker: the evaluated code shares
           // its realm and can post one before spinning forever. The ping runs
           // on the event loop that code would be holding.
-          worker.postMessage({ type: "ping", id: result.id } satisfies RenderMessageInput);
+          watchdogRef.current?.postMessage({ type: "ping", id: result.id });
           clearTimeout(timeoutRef.current);
           timeoutRef.current = setTimeout(restart, LIVENESS_TIMEOUT_MS);
 
@@ -124,9 +122,22 @@ export function useRenderWorker(ranCode: string | undefined) {
       }
     };
 
+    watchdog.port1.onmessage = (event: MessageEvent) => {
+      const pong = event.data as { type?: string; id?: unknown } | null;
+
+      if (pong?.type === "pong" && pong.id === currentRequestIdRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+    watchdog.port1.start();
+    watchdogRef.current = watchdog.port1;
+    worker.postMessage({ type: "watchdog" } satisfies RenderMessageInput, [watchdog.port2]);
+
     workerRef.current = worker;
 
     return () => {
+      watchdog.port1.close();
+      watchdogRef.current = undefined;
       worker.terminate();
       workerRef.current = undefined;
       setIsReady(false);

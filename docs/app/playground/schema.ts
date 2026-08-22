@@ -64,16 +64,10 @@ const readySchema = z.object({
   type: z.literal("ready"),
 });
 
-// The worker answers on its own event loop, which the evaluated code holds
-// while it spins. A missing `pong` is what tells the page the worker is stuck.
-const pingSchema = z.object({
-  type: z.literal("ping"),
-  id: z.int().check(z.positive(), z.minimum(1)),
-});
-
-const pongSchema = z.object({
-  type: z.literal("pong"),
-  id: z.int().check(z.positive(), z.minimum(1)),
+// Carries the port the watchdog pings over. The port stays out of the worker
+// global, where the evaluated code could answer for it.
+const watchdogSchema = z.object({
+  type: z.literal("watchdog"),
 });
 
 // Posted before the (slower) fetches + WASM render so the browser pane never
@@ -94,8 +88,7 @@ export const messageSchema = z.discriminatedUnion("type", [
   renderRequestSchema,
   renderResultSchema,
   readySchema,
-  pingSchema,
-  pongSchema,
+  watchdogSchema,
   previewResultSchema,
 ]);
 
