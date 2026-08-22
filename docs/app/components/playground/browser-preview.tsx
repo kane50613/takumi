@@ -204,16 +204,19 @@ export default function BrowserPreview({
     };
   }, [html, cssContents, height, padding]);
 
+  // The border lives on the wrapper: an iframe carries a UA border of its own,
+  // which paints a light ring inside the pane.
   const frame = (style: CSSProperties) => (
-    <iframe
-      ref={frameRef}
-      title="Browser preview"
-      sandbox="allow-scripts"
-      srcDoc={FRAME_HTML}
-      onLoad={() => frameRef.current?.contentWindow?.postMessage({ type: "hello" }, "*")}
-      className="border bg-white"
-      style={style}
-    />
+    <div className="border bg-white" style={style}>
+      <iframe
+        ref={frameRef}
+        title="Browser preview"
+        sandbox="allow-scripts"
+        srcDoc={FRAME_HTML}
+        onLoad={() => frameRef.current?.contentWindow?.postMessage({ type: "hello" }, "*")}
+        className="block size-full border-0"
+      />
+    </div>
   );
 
   // Without a height the pane scrolls the flow at page width, since the browser
