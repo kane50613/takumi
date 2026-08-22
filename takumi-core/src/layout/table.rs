@@ -225,10 +225,16 @@ fn is_cell(child: &RenderNode) -> bool {
 /// stretching to the row. The wrapper also keeps the content's own formatting
 /// context: making the cell itself the flex container would turn each inline
 /// run into a separate flex item.
+///
+/// Alignment is safe, matching Blink's `ComputeContentAlignment`
+/// (`block_layout_algorithm_utils.cc`) with `LayoutTableCellAlignmentSafe`:
+/// content taller than the cell starts at the top rather than overflowing both
+/// edges. Blink treats every other keyword as `baseline`, which this lowering
+/// renders as `top`.
 fn align_cell_content(cell: &mut RenderNode) {
   let justify = match cell.context.style.vertical_align {
-    VerticalAlign::Keyword(VerticalAlignKeyword::Middle) => JustifyContent::Center,
-    VerticalAlign::Keyword(VerticalAlignKeyword::Bottom) => JustifyContent::FlexEnd,
+    VerticalAlign::Keyword(VerticalAlignKeyword::Middle) => JustifyContent::SafeCenter,
+    VerticalAlign::Keyword(VerticalAlignKeyword::Bottom) => JustifyContent::SafeFlexEnd,
     _ => return,
   };
   let Some(children) = cell.children.take() else {
@@ -583,7 +589,10 @@ mod tests {
 
     assert_eq!(cell.context.style.display, Display::Flex);
     assert_eq!(cell.context.style.flex_direction, FlexDirection::Column);
-    assert_eq!(cell.context.style.justify_content, JustifyContent::Center);
+    assert_eq!(
+      cell.context.style.justify_content,
+      JustifyContent::SafeCenter
+    );
     assert_eq!(cell.children.as_deref().expect("wrapped content").len(), 1);
   }
 
