@@ -1799,6 +1799,7 @@ dependencies = [
  "rayon",
  "resvg",
  "serde_json",
+ "takumi",
  "takumi-core",
  "takumi-html",
  "takumi-raster",
