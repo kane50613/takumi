@@ -1418,7 +1418,31 @@ pub(crate) fn decode_apng_frames(
   skip: usize,
   limit: Option<usize>,
   target: Option<(u32, u32, ImageScalingAlgorithm)>,
+  push: impl FnMut(Arc<ImageBuffer>),
+) -> ImageResult<bool> {
+  decode_apng_frames_from(bytes, None, skip, limit, target, push, None)
+}
+
+/// The canvas an APNG replay left behind, and the frame it belongs to.
+#[derive(Debug, Default)]
+pub(crate) struct ApngResume {
+  pub(crate) index: usize,
+  pub(crate) canvas: Vec<u8>,
+}
+
+/// [`decode_apng_frames`], resuming from the canvas a frame left behind.
+///
+/// `resume` is `(index, canvas)` where `canvas` is the straight-alpha RGBA the
+/// animation held after frame `index` was disposed of. The frames up to and
+/// including `index` are advanced past by header rather than decoded.
+pub(crate) fn decode_apng_frames_from(
+  bytes: &[u8],
+  resume: Option<(usize, &[u8])>,
+  skip: usize,
+  limit: Option<usize>,
+  target: Option<(u32, u32, ImageScalingAlgorithm)>,
   mut push: impl FnMut(Arc<ImageBuffer>),
+  mut capture: Option<&mut ApngResume>,
 ) -> ImageResult<bool> {
   let mut reader = apng_reader(bytes)?;
   let (width, height) = (reader.info().width, reader.info().height);
@@ -1429,11 +1453,28 @@ pub(crate) fn decode_apng_frames(
     _ => return Err(invalid_buffer_error()),
   };
 
-  let mut canvas = ApngCanvas::new(width, height);
+  let mut canvas = match resume {
+    Some((_, pixels)) => ApngCanvas::resumed(width, height, pixels)?,
+    None => ApngCanvas::new(width, height),
+  };
   let mut subframe = Vec::new();
   let mut total_pixels = 0_u64;
   let mut pushed = 0_usize;
   let mut index = 0_usize;
+
+  // The resume canvas already accounts for every frame up to `resume_index`,
+  // so advance past them by header.
+  let mut resumed = false;
+  if let Some((resume_index, _)) = resume {
+    if reader.info().frame_control.is_none() {
+      reader.next_frame_info().map_err(png_decode_error)?;
+    }
+    for _ in 0..=resume_index {
+      reader.next_frame_info().map_err(png_decode_error)?;
+    }
+    index = resume_index + 1;
+    resumed = true;
+  }
 
   // One read past the cap: an unclaimed default image costs a read without
   // taking a slot on the timeline.
@@ -1445,7 +1486,8 @@ pub(crate) fn decode_apng_frames(
       return Ok(false);
     }
 
-    if read > 0 && reader.next_frame_info().is_err() {
+    // A resumed replay is already positioned on its first frame.
+    if read > 0 && !(resumed && read == 1) && reader.next_frame_info().is_err() {
       break;
     }
 
@@ -1480,6 +1522,16 @@ pub(crate) fn decode_apng_frames(
     }
 
     canvas.dispose(frame);
+
+    // Only the frames that are asked for are worth remembering; copying the
+    // canvas for every frame replayed past would cost more than it saves.
+    if current >= skip
+      && let Some(resume) = capture.as_deref_mut()
+    {
+      resume.index = current;
+      resume.canvas.clear();
+      resume.canvas.extend_from_slice(canvas.pixels());
+    }
   }
 
   Ok(true)
@@ -1495,6 +1547,25 @@ struct ApngCanvas {
 }
 
 impl ApngCanvas {
+  /// A canvas holding what an earlier replay left behind.
+  fn resumed(width: u32, height: u32, pixels: &[u8]) -> ImageResult<Self> {
+    if pixels.len() != width as usize * height as usize * 4 {
+      return Err(invalid_buffer_error());
+    }
+
+    Ok(Self {
+      pixels: pixels.to_vec(),
+      restore: Vec::new(),
+      width,
+      height,
+    })
+  }
+
+  /// The straight-alpha RGBA the canvas currently holds.
+  fn pixels(&self) -> &[u8] {
+    &self.pixels
+  }
+
   fn new(width: u32, height: u32) -> Self {
     Self {
       pixels: vec![0; width as usize * height as usize * 4],

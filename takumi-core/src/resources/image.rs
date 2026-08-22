@@ -6,7 +6,7 @@
 #[cfg(feature = "svg")]
 use std::borrow::Cow;
 use std::str::{FromStr, from_utf8};
-use std::sync::{Arc, OnceLock, Weak};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 use quick_cache::{
   Weighter,
@@ -41,10 +41,10 @@ use crate::{
   resources::{
     image_buffer::ImageBuffer,
     image_decoder::{
-      FrameInfo, MAX_ANIMATION_FRAMES, apng_dimensions, apng_frame_infos, bitmap_dimensions,
-      decode_apng_frame_alone, decode_apng_frames, decode_bitmap_scaled, decode_gif_frame_alone,
-      decode_gif_frames, decode_image, gif_dimensions, gif_frame_infos, is_apng, is_gif,
-      required_previous_frame,
+      ApngResume, FrameInfo, MAX_ANIMATION_FRAMES, apng_dimensions, apng_frame_infos,
+      bitmap_dimensions, decode_apng_frame_alone, decode_apng_frames, decode_apng_frames_from,
+      decode_bitmap_scaled, decode_gif_frame_alone, decode_gif_frames, decode_image,
+      gif_dimensions, gif_frame_infos, is_apng, is_gif, required_previous_frame,
     },
   },
   style::{Color, ImageScalingAlgorithm, IntrinsicSizing, SizingContext, StyleSheet},
@@ -274,6 +274,10 @@ struct AnimatedInner {
   width: u32,
   height: u32,
   timing: OnceLock<AnimationTiming>,
+  /// Where the last replay finished, so the next one forward can carry on from
+  /// there instead of starting over. Empty until a replay actually happens, so
+  /// a source whose frames all stand alone never allocates one.
+  resume: Mutex<ApngResume>,
 }
 
 /// Per-frame metadata for the whole animation, read once without pixels.
@@ -305,6 +309,7 @@ impl AnimatedSource {
         width,
         height,
         timing: OnceLock::new(),
+        resume: Mutex::new(ApngResume::default()),
       }),
     })
   }
@@ -415,17 +420,67 @@ impl AnimatedSource {
     }
 
     let mut frame = None;
-    if let Err(error) = self.inner.format.decode_frames(
-      &self.inner.bytes,
-      index,
-      Some(1),
-      Some((target_width, target_height, algorithm)),
-      |decoded| frame = Some(decoded),
-    ) {
+    let decoded = match self.inner.format {
+      AnimatedFormat::Apng => {
+        self.replay_apng(index, target_width, target_height, algorithm, |f| {
+          frame = Some(f)
+        })
+      }
+      _ => self.inner.format.decode_frames(
+        &self.inner.bytes,
+        index,
+        Some(1),
+        Some((target_width, target_height, algorithm)),
+        |decoded| frame = Some(decoded),
+      ),
+    };
+    if let Err(error) = decoded {
       log::warn!("Failed to decode frame {index} of an animated image: {error}");
     }
 
     frame
+  }
+
+  /// Replays to `index`, starting from the canvas the last replay left when
+  /// that lands before this frame.
+  fn replay_apng(
+    &self,
+    index: usize,
+    width: u32,
+    height: u32,
+    algorithm: ImageScalingAlgorithm,
+    push: impl FnMut(Arc<ImageBuffer>),
+  ) -> Result<bool, image::ImageError> {
+    // Never wait on the lock: a replay in flight is tens of milliseconds of
+    // work, and starting one from scratch beats blocking behind it.
+    let Ok(mut cached) = self.inner.resume.try_lock() else {
+      return self.inner.format.decode_frames(
+        &self.inner.bytes,
+        index,
+        Some(1),
+        Some((width, height, algorithm)),
+        push,
+      );
+    };
+
+    let previous = std::mem::take(&mut *cached);
+    let resume = (!previous.canvas.is_empty() && previous.index < index)
+      .then_some((previous.index, previous.canvas.as_slice()));
+
+    let mut next = ApngResume::default();
+    let ended = decode_apng_frames_from(
+      &self.inner.bytes,
+      resume,
+      index,
+      Some(1),
+      Some((width, height, algorithm)),
+      push,
+      Some(&mut next),
+    );
+
+    *cached = next;
+
+    ended
   }
 
   /// Bytes retained for cache budgeting: decoded frames are never held.
@@ -1842,6 +1897,86 @@ mod tests {
       .expect("replays");
 
     assert_eq!(seeked.data(), replayed.expect("replayed frame").data());
+  }
+
+  /// Resuming a replay from a captured canvas must land on the same pixels as
+  /// replaying the whole timeline, for every resume point.
+  #[test]
+  fn resuming_a_replay_matches_replaying_from_the_start() {
+    use crate::resources::image_decoder::{ApngResume, decode_apng_frames_from};
+    use png::{BitDepth, BlendOp, ColorType, Encoder};
+
+    let mut bytes = Vec::new();
+    let mut encoder = Encoder::new(&mut bytes, 4, 4);
+    encoder.set_color(ColorType::Rgba);
+    encoder.set_depth(BitDepth::Eight);
+    encoder.set_animated(4, 0).unwrap();
+
+    let mut writer = encoder.write_header().unwrap();
+    writer.set_frame_delay(100, 1000).unwrap();
+    writer
+      .write_image_data(&FRAME_COLORS[0].repeat(16))
+      .unwrap();
+    // Half-canvas frames blending onto what came before: no frame stands alone.
+    for index in 1..4 {
+      writer.set_frame_delay(100, 1000).unwrap();
+      writer.set_frame_dimension(2, 2).unwrap();
+      writer.set_frame_position(1, 1).unwrap();
+      writer.set_blend_op(BlendOp::Over).unwrap();
+      writer
+        .write_image_data(&[0, 0, 255, 128].repeat(4))
+        .unwrap();
+      let _ = index;
+    }
+    writer.finish().unwrap();
+
+    for target in 1..4 {
+      let mut expected = None;
+      decode_apng_frames_from(
+        &bytes,
+        None,
+        target,
+        Some(1),
+        None,
+        |f| expected = Some(f),
+        None,
+      )
+      .expect("replays");
+      let expected = expected.expect("a frame");
+
+      for resume_at in 0..target {
+        let mut captured = ApngResume::default();
+        decode_apng_frames_from(
+          &bytes,
+          None,
+          resume_at,
+          Some(1),
+          None,
+          |_| {},
+          Some(&mut captured),
+        )
+        .expect("captures");
+        assert_eq!(captured.index, resume_at);
+
+        let mut resumed = None;
+        decode_apng_frames_from(
+          &bytes,
+          Some((captured.index, &captured.canvas)),
+          target,
+          Some(1),
+          None,
+          |f| resumed = Some(f),
+          None,
+        )
+        .expect("resumes");
+
+        assert_eq!(
+          resumed.expect("a frame").data(),
+          expected.data(),
+          "frame {target} resumed from {resume_at}"
+        );
+      }
+    }
   }
 
   #[test]

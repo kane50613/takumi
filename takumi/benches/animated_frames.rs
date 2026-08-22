@@ -174,9 +174,41 @@ fn bench_last_frame(c: &mut Criterion) {
   group.finish();
 }
 
+/// Walks the whole timeline, one sample per frame, the way rendering an
+/// animation does.
+fn bench_whole_timeline(c: &mut Criterion) {
+  let mut group = c.benchmark_group("animated_timeline");
+
+  for (format, encode) in [
+    ("standalone/apng", encoded_apng as fn(usize) -> Vec<u8>),
+    ("dependent/apng", encoded_dependent_apng),
+  ] {
+    for frames in FRAME_COUNTS {
+      let Ok(ImageSource::Animated(animated)) = ImageSource::from_bytes(&encode(frames)) else {
+        panic!("{format} did not decode as an animated source");
+      };
+
+      group.bench_function(BenchmarkId::new(format, frames), |b| {
+        b.iter(|| {
+          for frame in 0..frames {
+            black_box(animated.frame_at_time_covering(
+              frame as u64 * 100,
+              SIZE,
+              SIZE,
+              ImageScalingAlgorithm::Auto,
+            ));
+          }
+        })
+      });
+    }
+  }
+
+  group.finish();
+}
+
 criterion_group! {
   name = benches;
   config = common::criterion();
-  targets = bench_last_frame
+  targets = bench_last_frame, bench_whole_timeline
 }
 criterion_main!(benches);
