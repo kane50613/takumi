@@ -73,6 +73,22 @@
       .w80 {
         width: 80px;
       }
+      .top {
+        vertical-align: top;
+      }
+      .middle {
+        vertical-align: middle;
+      }
+      .bottom {
+        vertical-align: bottom;
+      }
+      .tall {
+        height: 40px;
+      }
+      .flex-cell {
+        display: flex;
+        align-items: center;
+      }
     </style>
   </head>
   <body style="width: 1200px; height: 630px">
@@ -138,6 +154,27 @@
             <div class="td"><span>a</span></div>
             <div class="td"><span>b</span></div>
             <div class="td"><span>c</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="cell">
+        <span class="label">vertical-align, flex cell</span>
+        <div class="table">
+          <div class="tr">
+            <div class="td top"><span>top</span></div>
+            <div class="td tall"><span>40px tall</span></div>
+          </div>
+          <div class="tr">
+            <div class="td middle"><span>middle</span></div>
+            <div class="td tall"><span>40px tall</span></div>
+          </div>
+          <div class="tr">
+            <div class="td bottom"><span>bottom</span></div>
+            <div class="td tall"><span>40px tall</span></div>
+          </div>
+          <div class="tr">
+            <div class="td flex-cell"><span>flex cell</span></div>
+            <div class="td tall"><span>40px tall</span></div>
           </div>
         </div>
       </div>

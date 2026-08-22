@@ -9,11 +9,14 @@
 //!
 //! This is auto table layout approximated by `auto` tracks. It follows Blink
 //! where following is cheap (row group order, `border-spacing`) and diverges
-//! where the grid algorithm cannot express a table: `border-collapse`,
-//! `vertical-align`, and row borders are not implemented. A cell's box
-//! stretches to its grid area, so borders and backgrounds cover it, but the
-//! content inside sits at the top — `vertical-align: top` where Blink
-//! defaults to `middle`.
+//! where the grid algorithm cannot express a table: `border-collapse` and row
+//! borders are not implemented.
+//!
+//! `vertical-align: middle` and `bottom` on a cell are lowered to a flex
+//! column: the cell box still stretches to its grid area so borders and
+//! backgrounds cover it, and its content moves inside that box. `baseline`
+//! and `top` both leave the content at the top, so a `baseline` cell is only
+//! right when its neighbors share a first-line baseline.
 //!
 //! The width distribution differs too. Blink's `kAboveMax` branch
 //! (`table_layout_utils.cc`) grows each auto column by
@@ -24,10 +27,11 @@
 //! a three- and four-column fixture.
 
 use crate::{
-  layout::tree::RenderNode,
+  layout::{node::NodeKind, tree::RenderNode},
   style::{
-    CaptionSide, ColorInput, Display, FromCssStr, Gap, GridPlacement, GridPlacementSpan,
-    GridTemplateComponents, Length, ToCss,
+    CaptionSide, ColorInput, Display, FlexDirection, FromCssStr, Gap, GridPlacement,
+    GridPlacementSpan, GridTemplateComponents, JustifyContent, Length, ToCss, VerticalAlign,
+    VerticalAlignKeyword,
   },
 };
 
@@ -142,7 +146,7 @@ fn resolve_columns(rows: &[RenderNode]) -> Vec<Vec<(usize, u16)>> {
     let mut cells = Vec::new();
 
     for cell in row.children.as_deref().unwrap_or_default() {
-      if cell.context.style.display != Display::TableCell {
+      if !is_cell(cell) {
         continue;
       }
 
@@ -188,13 +192,63 @@ fn track_count(placements: &[Vec<(usize, u16)>]) -> u16 {
     .clamp(1, u32::from(MAX_COLSPAN)) as u16
 }
 
+/// True for a row child the lowering places as a cell.
+///
+/// Blink wraps a row child that is not a `table-cell` in an anonymous cell, so
+/// a `<td style="display: flex">` is laid out instead of dropped. Only element
+/// children qualify: real anonymous table box fixup, which would also wrap the
+/// text between cells, is not implemented.
+fn is_cell(child: &RenderNode) -> bool {
+  let display = child.context.style.display;
+
+  display == Display::TableCell
+    || (display != Display::None
+      && child
+        .node
+        .as_ref()
+        .is_some_and(|node| !matches!(node.kind, NodeKind::Text(_))))
+}
+
+/// Moves a cell's content down its box for `vertical-align: middle` and
+/// `bottom`.
+///
+/// The cell becomes a flex column holding one anonymous block, so the content
+/// is a single flex item `justify-content` can move while the cell box keeps
+/// stretching to the row. The wrapper also keeps the content's own formatting
+/// context: making the cell itself the flex container would turn each inline
+/// run into a separate flex item.
+fn align_cell_content(cell: &mut RenderNode) {
+  let justify = match cell.context.style.vertical_align {
+    VerticalAlign::Keyword(VerticalAlignKeyword::Middle) => JustifyContent::Center,
+    VerticalAlign::Keyword(VerticalAlignKeyword::Bottom) => JustifyContent::FlexEnd,
+    _ => return,
+  };
+  let Some(children) = cell.children.take() else {
+    return;
+  };
+
+  let content = RenderNode::anonymous_block_container(&cell.context, children.into_vec());
+  let style = &mut cell.context.style;
+
+  style.display = Display::Flex;
+  style.flex_direction = FlexDirection::Column;
+  style.justify_content = justify;
+
+  cell.children = Some(Box::new([content]));
+}
+
 /// Turns a cell into a grid item at its resolved position. The column is
 /// explicit rather than auto-placed: taffy's placement cursor does not return
 /// to the row start on a row a `rowspan` reaches into.
 fn lower_cell(cell: &mut RenderNode, line: i16, column: usize, colspan: u16) {
   let rowspan = span_attribute(cell, "rowspan", MAX_ROWSPAN);
 
-  cell.context.style.display = Display::Block;
+  align_cell_content(cell);
+
+  if cell.context.style.display == Display::TableCell {
+    cell.context.style.display = Display::Block;
+  }
+
   cell.context.style.grid_row_start = GridPlacement::Line(line);
   cell.context.style.grid_row_end = GridPlacement::Span(GridPlacementSpan::Span(rowspan));
   cell.context.style.grid_column_start = GridPlacement::Line(column as i16 + 1);
@@ -270,7 +324,7 @@ fn lower_table(table: &mut RenderNode) {
     let mut positions = positions.into_iter();
 
     for mut cell in cells {
-      if cell.context.style.display != Display::TableCell {
+      if !is_cell(&cell) {
         continue;
       }
 
@@ -335,7 +389,7 @@ fn track_sizes(
       .as_deref()
       .unwrap_or_default()
       .iter()
-      .filter(|cell| cell.context.style.display == Display::TableCell);
+      .filter(|cell| is_cell(cell));
 
     for (cell, (column, colspan)) in table_cells.zip(cells) {
       let width = &cell.context.style.width;
@@ -361,8 +415,8 @@ mod tests {
     layout::{node::Node, tree::RenderNode},
     resources::font::Fonts,
     style::{
-      Color, ColorInput, Display, GridPlacement, GridPlacementSpan, Length, SizingContext, Style,
-      StyleDeclaration, StyleSheet, ToCss,
+      Color, ColorInput, Display, FlexDirection, GridPlacement, GridPlacementSpan, JustifyContent,
+      Length, SizingContext, Style, StyleDeclaration, StyleSheet, ToCss,
     },
     viewport::Viewport,
   };
@@ -380,6 +434,8 @@ mod tests {
         .td { display: table-cell }
         .caption { display: table-caption }
         .caption-bottom { display: table-caption; caption-side: bottom }
+        .middle { display: table-cell; vertical-align: middle }
+        .flex { display: flex }
       ",
     )
     .expect("stylesheet parses");
@@ -496,6 +552,46 @@ mod tests {
     );
 
     assert_eq!(ids(&tree), ["a", "b", "cap"]);
+  }
+
+  #[test]
+  fn a_middle_cell_centers_its_content_in_a_flex_column() {
+    let tree = lower(
+      Node::container([row([
+        Node::container([Node::text("middle")])
+          .with_class_name("middle")
+          .with_id("middle"),
+        cell("tall"),
+      ])])
+      .with_class_name("table"),
+    );
+
+    let cell = &tree.children.as_deref().expect("children")[0];
+
+    assert_eq!(cell.context.style.display, Display::Flex);
+    assert_eq!(cell.context.style.flex_direction, FlexDirection::Column);
+    assert_eq!(cell.context.style.justify_content, JustifyContent::Center);
+    assert_eq!(cell.children.as_deref().expect("wrapped content").len(), 1);
+  }
+
+  #[test]
+  fn a_cell_that_is_not_a_table_cell_keeps_its_display_and_its_track() {
+    let tree = lower(
+      Node::container([row([
+        Node::container([Node::text("flex")])
+          .with_class_name("flex")
+          .with_id("flex"),
+        cell("b"),
+      ])])
+      .with_class_name("table"),
+    );
+
+    assert_eq!(ids(&tree), ["flex", "b"]);
+
+    let cell = &tree.children.as_deref().expect("children")[0];
+
+    assert_eq!(cell.context.style.display, Display::Flex);
+    assert_eq!(cell.context.style.grid_column_start, GridPlacement::Line(1));
   }
 
   fn with_span(node: Node, name: &str, value: &str) -> Node {
