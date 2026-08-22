@@ -8,9 +8,10 @@ import pdfWasm from "takumi-pdf/wasm-url";
 // asset URL already, and that entry needs top-level await, which an iife worker
 // bundle cannot have.
 import initPdf, { PdfRenderer } from "takumi-pdf/no-init";
-import type * as React from "react";
+import type { JSXElementConstructor } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { evaluateCodeExports, renderReact } from "./evaluate";
+import { evaluateCodeExports } from "./evaluate";
+import { renderReact } from "./render-react";
 import { FONT_FAMILIES } from "./fonts";
 import { inspectPdf } from "./inspect-pdf";
 import { keyframesToCss } from "./preview-css";
@@ -162,7 +163,7 @@ async function renderOutput({
 
 async function renderRequest(renderer: Renderer, id: number, code: string) {
   const { default: component, options } = evaluateCodeExports(code, renderReact);
-  const element = renderReact.createElement(component as React.JSXElementConstructor<unknown>);
+  const element = renderReact.createElement(component as JSXElementConstructor<unknown>);
   const { node, stylesheets } = await fromJsx(element);
   const effectiveStylesheets = options.stylesheets ?? stylesheets;
   const geometry = outputGeometry(options);
@@ -233,6 +234,20 @@ self.onmessage = async (event: MessageEvent) => {
             message: error instanceof Error ? error.message : "Unknown error",
           },
         });
+      }
+
+      break;
+    }
+    case "watchdog": {
+      const [port] = event.ports;
+
+      if (port) {
+        // The evaluated code shares this global but never sees `port`, so it
+        // cannot answer a ping while it holds the event loop.
+        port.onmessage = (ping: MessageEvent) => {
+          if (ping.data?.type === "ping") port.postMessage({ type: "pong", id: ping.data.id });
+        };
+        port.start();
       }
 
       break;

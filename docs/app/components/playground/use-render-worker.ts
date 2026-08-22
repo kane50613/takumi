@@ -27,16 +27,43 @@ function mimeType(result: RenderResult & { status: "success" }) {
   return result.outputKind === "pdf" ? "application/pdf" : `image/${result.outputFormat}`;
 }
 
+/** A render that outlives this has hit a loop the worker cannot leave on its own. */
+const RENDER_TIMEOUT_MS = 15_000;
+
+/** How long a freed worker gets to answer the ping that follows a result. */
+const LIVENESS_TIMEOUT_MS = 2_000;
+
+/** Bounds what the worker can hand the page to hold, forged or not, in UTF-16 code units. */
+const MAX_PREVIEW_LENGTH = 4 * 1024 * 1024;
+
+function previewLength(message: { html: string; cssContents?: string[] }) {
+  return (
+    message.html.length + (message.cssContents ?? []).reduce((sum, css) => sum + css.length, 0)
+  );
+}
+
 export function useRenderWorker(ranCode: string | undefined) {
   const [isReady, setIsReady] = useState(false);
   const [lastSuccess, setLastSuccess] = useState<RenderSuccess>();
   const [renderError, setRenderError] = useState<RenderError>();
   const [browserPreview, setBrowserPreview] = useState<BrowserPreviewData>();
+  const [generation, setGeneration] = useState(0);
   const currentRequestIdRef = useRef(0);
   const workerRef = useRef<Worker | undefined>(undefined);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const watchdogRef = useRef<MessagePort>(undefined);
 
   useEffect(() => {
     const worker = new TakumiWorker();
+    const watchdog = new MessageChannel();
+    const restart = () => {
+      setRenderError({
+        status: "error",
+        id: currentRequestIdRef.current,
+        message: "the render never came back, so the worker was restarted",
+      });
+      setGeneration((current) => current + 1);
+    };
 
     worker.onmessage = (event: MessageEvent) => {
       const message = messageSchema.parse(event.data);
@@ -46,11 +73,15 @@ export function useRenderWorker(ranCode: string | undefined) {
           setIsReady(true);
           break;
         }
-        case "render-request": {
+        case "render-request":
+        case "watchdog": {
           throw new Error("request is not possible for response");
         }
         case "preview-result": {
-          if (message.id === currentRequestIdRef.current) {
+          if (
+            message.id === currentRequestIdRef.current &&
+            previewLength(message) <= MAX_PREVIEW_LENGTH
+          ) {
             setBrowserPreview({
               html: message.html,
               width: message.width,
@@ -64,6 +95,13 @@ export function useRenderWorker(ranCode: string | undefined) {
         case "render-result": {
           const { result } = message;
           if (result.id !== currentRequestIdRef.current) break;
+
+          // A result proves nothing about the worker: the evaluated code shares
+          // its realm and can post one before spinning forever. The ping runs
+          // on the event loop that code would be holding.
+          watchdogRef.current?.postMessage({ type: "ping", id: result.id });
+          clearTimeout(timeoutRef.current);
+          timeoutRef.current = setTimeout(restart, LIVENESS_TIMEOUT_MS);
 
           if (result.status === "success") {
             const blob = new Blob([result.outputBuffer as BlobPart], { type: mimeType(result) });
@@ -84,14 +122,27 @@ export function useRenderWorker(ranCode: string | undefined) {
       }
     };
 
+    watchdog.port1.onmessage = (event: MessageEvent) => {
+      const pong = event.data as { type?: string; id?: unknown } | null;
+
+      if (pong?.type === "pong" && pong.id === currentRequestIdRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+    watchdog.port1.start();
+    watchdogRef.current = watchdog.port1;
+    worker.postMessage({ type: "watchdog" } satisfies RenderMessageInput, [watchdog.port2]);
+
     workerRef.current = worker;
 
     return () => {
+      watchdog.port1.close();
+      watchdogRef.current = undefined;
       worker.terminate();
       workerRef.current = undefined;
       setIsReady(false);
     };
-  }, []);
+  }, [generation]);
 
   useEffect(() => {
     if (!isReady || ranCode === undefined) return;
@@ -103,6 +154,17 @@ export function useRenderWorker(ranCode: string | undefined) {
       id: requestId,
       code: ranCode,
     } satisfies RenderMessageInput);
+
+    timeoutRef.current = setTimeout(() => {
+      setRenderError({
+        status: "error",
+        id: requestId,
+        message: `the render ran past ${RENDER_TIMEOUT_MS / 1000}s, so the worker was restarted`,
+      });
+      setGeneration((current) => current + 1);
+    }, RENDER_TIMEOUT_MS);
+
+    return () => clearTimeout(timeoutRef.current);
   }, [isReady, ranCode]);
 
   useEffect(() => {

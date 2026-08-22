@@ -64,6 +64,12 @@ const readySchema = z.object({
   type: z.literal("ready"),
 });
 
+// Carries the port the watchdog pings over. The port stays out of the worker
+// global, where the evaluated code could answer for it.
+const watchdogSchema = z.object({
+  type: z.literal("watchdog"),
+});
+
 // Posted before the (slower) fetches + WASM render so the browser pane never
 // waits on them. `cssContents` is raw CSS (Takumi's effective stylesheets), not URLs.
 const previewResultSchema = z.object({
@@ -82,6 +88,7 @@ export const messageSchema = z.discriminatedUnion("type", [
   renderRequestSchema,
   renderResultSchema,
   readySchema,
+  watchdogSchema,
   previewResultSchema,
 ]);
 

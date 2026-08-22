@@ -6,6 +6,7 @@ import { cn } from "~/lib/utils";
 import type { Template } from "~/playground/templates";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../ui/resizable";
 import { ComponentEditor } from "./component-editor";
+import { LoadingScreen } from "./loading-screen";
 import { LabeledPane, OutputPanel, PDF_VIEWS, type PdfView, type Zoom } from "./output-panel";
 import { Toolbar, type TabId } from "./toolbar";
 import { DEFAULT_TEMPLATE, useSharedCode } from "./use-shared-code";
@@ -36,7 +37,7 @@ function formatStats(result: RenderSuccess) {
 }
 
 export default function Playground() {
-  const { code, setCode, matchedTemplate } = useSharedCode();
+  const { code, setCode, matchedTemplate, isShared } = useSharedCode();
   const [isFormatting, setIsFormatting] = useState(false);
   const [zoom, setZoom] = useState<Zoom>("fit");
   const [pdfView, setPdfView] = useState<PdfView>("preview");
@@ -50,17 +51,19 @@ export default function Playground() {
 
   const selectedTemplateName = matchedTemplate?.name ?? "Custom";
   const outputKind = lastSuccess?.outputKind;
-  const isStale = code !== undefined && ranCode !== undefined && code !== ranCode;
+  const isStale = code !== undefined && code !== ranCode;
+  const isUnrunShare = isShared && ranCode === undefined;
 
   useEffect(() => {
     setHintDismissed(localStorage.getItem(RUN_HINT_KEY) === "seen");
   }, []);
 
   // The first render happens on its own; after that the editor waits for Run,
-  // so a half-typed line never reloads the preview.
+  // so a half-typed line never reloads the preview. Code that arrived in a link
+  // is somebody else's, so it waits for Run too.
   useEffect(() => {
-    if (ranCode === undefined && code !== undefined) setRanCode(code);
-  }, [code, ranCode]);
+    if (ranCode === undefined && code !== undefined && !isShared) setRanCode(code);
+  }, [code, ranCode, isShared]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -218,7 +221,8 @@ export default function Playground() {
   );
 
   return (
-    <div className="flex h-[calc(100dvh-3.5rem)] flex-col bg-background">
+    <div className="relative flex h-[calc(100dvh-3.5rem)] flex-col bg-background">
+      <LoadingScreen done={isReady} />
       <Toolbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -242,6 +246,12 @@ export default function Playground() {
         onDownload={downloadOutput}
       />
 
+      {isUnrunShare && (
+        <div className="shrink-0 border-b bg-muted/40 px-3 py-1.5 font-mono text-[11px] text-muted-foreground">
+          Somebody else wrote this code and sent you the link. Read it before you press Run.
+        </div>
+      )}
+
       <div className="min-h-0 flex-1">
         <div className="hidden h-full md:block">
           <ResizablePanelGroup orientation="horizontal">
@@ -260,7 +270,9 @@ export default function Playground() {
 
       <div className="flex h-7 shrink-0 items-center gap-3 border-t px-3 font-mono text-[11px] text-muted-foreground">
         {!isReady ? (
-          <span>loading wasm…</span>
+          <span className="playground-breathe">loading wasm…</span>
+        ) : isUnrunShare ? (
+          <span>Waiting for Run.</span>
         ) : renderError ? (
           <span className="flex min-w-0 items-center gap-2">
             <span className="shrink-0 text-primary">error</span>
