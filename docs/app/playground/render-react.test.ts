@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { renderReact } from "./evaluate";
+import { renderReact } from "./render-react";
 
 describe("the React a template renders with", () => {
   it("mirrors tw into className for the preview", () => {
