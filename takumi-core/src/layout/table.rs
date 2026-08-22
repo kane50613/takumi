@@ -12,11 +12,12 @@
 //! where the grid algorithm cannot express a table: `border-collapse` and row
 //! borders are not implemented.
 //!
-//! `vertical-align: middle` and `bottom` on a cell are lowered to a flex
-//! column: the cell box still stretches to its grid area so borders and
-//! backgrounds cover it, and its content moves inside that box. `baseline`
-//! and `top` both leave the content at the top, so a `baseline` cell is only
-//! right when its neighbors share a first-line baseline.
+//! Cell alignment follows Blink: `align-content` first, `vertical-align` when
+//! that is `normal`. The cell box always stretches to its grid area so borders
+//! and backgrounds cover it, and the content moves inside that box instead.
+//! `baseline` is naive — the row's cells line up on their block-start border
+//! and padding, not on a measured first baseline, so cells whose first line
+//! uses a different font or line height still drift.
 //!
 //! The width distribution differs too. Blink's `kAboveMax` branch
 //! (`table_layout_utils.cc`) grows each auto column by
@@ -26,13 +27,15 @@
 //! way, and wider tables drift — measured at 15–48pt against headless Chrome on
 //! a three- and four-column fixture.
 
+use taffy::LengthPercentageAuto;
+
 use crate::{
   layout::{
     node::NodeKind,
     tree::{NodeOrigin, RenderNode},
   },
   style::{
-    CaptionSide, ColorInput, Display, FlexDirection, FromCssStr, Gap, GridPlacement,
+    CaptionSide, ColorInput, ComputedStyle, Display, FlexDirection, FromCssStr, Gap, GridPlacement,
     GridPlacementSpan, GridTemplateComponents, JustifyContent, Length, ToCss, VerticalAlign,
     VerticalAlignKeyword,
   },
@@ -217,38 +220,146 @@ fn is_cell(child: &RenderNode) -> bool {
       .is_some_and(|node| !matches!(node.kind, NodeKind::Text(_)))
 }
 
-/// Moves a cell's content down its box for `vertical-align: middle` and
-/// `bottom`.
+/// Where a cell's content sits in its box.
+///
+/// Resolved the way Blink's `ComputeContentAlignment`
+/// (`block_layout_algorithm_utils.cc`) resolves it for a table cell:
+/// `align-content` decides, and only `normal` hands over to `vertical-align`.
+/// Alignment is safe, as Blink's `LayoutTableCellAlignmentSafe` makes it:
+/// content taller than the cell starts at the top instead of overflowing both
+/// edges.
+#[derive(Clone, Copy, PartialEq)]
+enum CellAlignment {
+  Start,
+  Center,
+  End,
+  /// Every keyword outside `top`, `middle`, and `bottom` lands here, where
+  /// Blink aligns the row's cells on their first baselines.
+  Baseline,
+}
+
+impl CellAlignment {
+  fn of(style: &ComputedStyle) -> Self {
+    match style.align_content {
+      JustifyContent::Normal => Self::of_vertical_align(style.vertical_align),
+      // A content distribution falls back to the alignment css-align-3 pairs
+      // it with.
+      JustifyContent::SpaceAround
+      | JustifyContent::SpaceEvenly
+      | JustifyContent::Center
+      | JustifyContent::SafeCenter => Self::Center,
+      JustifyContent::End
+      | JustifyContent::FlexEnd
+      | JustifyContent::SafeEnd
+      | JustifyContent::SafeFlexEnd => Self::End,
+      _ => Self::Start,
+    }
+  }
+
+  fn of_vertical_align(vertical_align: VerticalAlign) -> Self {
+    match vertical_align {
+      VerticalAlign::Keyword(VerticalAlignKeyword::Top) => Self::Start,
+      VerticalAlign::Keyword(VerticalAlignKeyword::Middle) => Self::Center,
+      VerticalAlign::Keyword(VerticalAlignKeyword::Bottom) => Self::End,
+      _ => Self::Baseline,
+    }
+  }
+
+  fn justify_content(self) -> Option<JustifyContent> {
+    match self {
+      Self::Center => Some(JustifyContent::SafeCenter),
+      Self::End => Some(JustifyContent::SafeFlexEnd),
+      Self::Start | Self::Baseline => None,
+    }
+  }
+}
+
+/// Moves a cell's content down its box for the alignments that ask for it.
 ///
 /// The cell becomes a flex column holding one anonymous block, so the content
 /// is a single flex item `justify-content` can move while the cell box keeps
 /// stretching to the row. The wrapper also keeps the content's own formatting
-/// context: making the cell itself the flex container would turn each inline
-/// run into a separate flex item.
+/// context: aligning the cell's children directly would turn every inline run
+/// into a separate box.
+fn wrap_cell_content(cell: &mut RenderNode) -> Option<&mut RenderNode> {
+  let children = cell.children.take()?;
+  let content = RenderNode::anonymous_block_container(&cell.context, children.into_vec());
+
+  cell.children = Some(Box::new([content]));
+  cell.children.as_deref_mut()?.first_mut()
+}
+
+/// Moves a cell's content down its box for the alignments that ask for it.
 ///
-/// Alignment is safe, matching Blink's `ComputeContentAlignment`
-/// (`block_layout_algorithm_utils.cc`) with `LayoutTableCellAlignmentSafe`:
-/// content taller than the cell starts at the top rather than overflowing both
-/// edges. Blink treats every other keyword as `baseline`, which this lowering
-/// renders as `top`.
+/// The cell becomes a flex column so `justify-content` can move the wrapper,
+/// while the cell box itself keeps stretching to the row.
 fn align_cell_content(cell: &mut RenderNode) {
-  let justify = match cell.context.style.vertical_align {
-    VerticalAlign::Keyword(VerticalAlignKeyword::Middle) => JustifyContent::SafeCenter,
-    VerticalAlign::Keyword(VerticalAlignKeyword::Bottom) => JustifyContent::SafeFlexEnd,
-    _ => return,
-  };
-  let Some(children) = cell.children.take() else {
+  let Some(justify) = CellAlignment::of(&cell.context.style).justify_content() else {
     return;
   };
 
-  let content = RenderNode::anonymous_block_container(&cell.context, children.into_vec());
+  if wrap_cell_content(cell).is_none() {
+    return;
+  }
+
   let style = &mut cell.context.style;
 
   style.display = Display::Flex;
   style.flex_direction = FlexDirection::Column;
   style.justify_content = justify;
+}
 
-  cell.children = Some(Box::new([content]));
+/// How far a cell's first line box sits below its border-box top, as far as the
+/// lowering can see: the block-start border and padding.
+///
+/// This is naive. Blink measures the real first baseline, so its offset also
+/// carries the first line's ascent and half-leading, which differ once two
+/// cells in a row use different fonts or line heights.
+fn content_inset_top(cell: &RenderNode) -> f32 {
+  let style = &cell.context.style;
+  let sizing = &cell.context.sizing;
+  let border = if style.border_top_style.is_rendered() {
+    Length::from(style.border_top_width).to_px(sizing, 0.0)
+  } else {
+    0.0
+  };
+
+  border + style.padding_top.to_px(sizing, 0.0)
+}
+
+/// Lines up the first lines of a row's `baseline` cells, the way Blink aligns
+/// their first baselines, by pushing the shallower ones down to the deepest
+/// inset in the row.
+fn align_row_baselines(cells: &mut [RenderNode]) {
+  let baselines: Vec<usize> = cells
+    .iter()
+    .enumerate()
+    .filter(|(_, cell)| CellAlignment::of(&cell.context.style) == CellAlignment::Baseline)
+    .map(|(index, _)| index)
+    .collect();
+
+  if baselines.len() < 2 {
+    return;
+  }
+
+  let deepest = baselines
+    .iter()
+    .map(|&index| content_inset_top(&cells[index]))
+    .fold(0.0, f32::max);
+
+  for index in baselines {
+    let shift = deepest - content_inset_top(&cells[index]);
+
+    if shift <= 0.0 {
+      continue;
+    }
+
+    if let Some(content) = wrap_cell_content(&mut cells[index])
+      && let Some(layout_style) = content.layout_style_override.as_mut()
+    {
+      layout_style.margin.top = LengthPercentageAuto::length(shift);
+    }
+  }
 }
 
 /// Turns a cell into a grid item at its resolved position. The column is
@@ -338,14 +449,13 @@ fn lower_table(table: &mut RenderNode) {
   }
 
   for (mut row, positions) in rows.into_iter().zip(placements) {
-    let cells = row.children.take().map_or_else(Vec::new, Vec::from);
+    let mut cells = row.children.take().map_or_else(Vec::new, Vec::from);
     let mut positions = positions.into_iter();
 
-    for mut cell in cells {
-      if !is_cell(&cell) {
-        continue;
-      }
+    cells.retain(is_cell);
+    align_row_baselines(&mut cells);
 
+    for mut cell in cells {
       let Some((column, colspan)) = positions.next() else {
         break;
       };
@@ -428,6 +538,8 @@ fn track_sizes(
 mod tests {
   use std::sync::Arc;
 
+  use taffy::LengthPercentageAuto;
+
   use crate::{
     context::RenderContext,
     layout::{node::Node, tree::RenderNode},
@@ -453,6 +565,8 @@ mod tests {
         .caption { display: table-caption }
         .caption-bottom { display: table-caption; caption-side: bottom }
         .middle { display: table-cell; vertical-align: middle }
+        .align-content-end { align-content: end }
+        .padded { display: table-cell; padding-top: 10px }
         .flex { display: flex; vertical-align: middle }
         .pseudo-row::before { content: 'x'; display: block }
       ",
@@ -594,6 +708,55 @@ mod tests {
       JustifyContent::SafeCenter
     );
     assert_eq!(cell.children.as_deref().expect("wrapped content").len(), 1);
+  }
+
+  #[test]
+  fn align_content_outranks_vertical_align_on_a_cell() {
+    let tree = lower(
+      Node::container([row([
+        Node::container([Node::text("cell")])
+          .with_class_name("middle align-content-end")
+          .with_id("cell"),
+        cell("tall"),
+      ])])
+      .with_class_name("table"),
+    );
+
+    let cell = &tree.children.as_deref().expect("children")[0];
+
+    assert_eq!(
+      cell.context.style.justify_content,
+      JustifyContent::SafeFlexEnd
+    );
+  }
+
+  #[test]
+  fn a_baseline_cell_drops_to_the_deepest_padding_in_its_row() {
+    let tree = lower(
+      Node::container([row([
+        Node::container([Node::text("padded")])
+          .with_class_name("padded")
+          .with_id("padded"),
+        cell("flush"),
+      ])])
+      .with_class_name("table"),
+    );
+
+    let cells = tree.children.as_deref().expect("children");
+    let margin_top = |cell: &RenderNode| {
+      cell
+        .children
+        .as_deref()
+        .and_then(<[RenderNode]>::first)
+        .and_then(|content| content.layout_style_override.as_ref())
+        .map(|style| style.margin.top)
+    };
+
+    assert_eq!(margin_top(&cells[0]), None);
+    assert_eq!(
+      margin_top(&cells[1]),
+      Some(LengthPercentageAuto::length(10.0))
+    );
   }
 
   #[test]

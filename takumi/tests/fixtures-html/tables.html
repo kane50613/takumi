@@ -22,7 +22,7 @@
         flex-direction: column;
         gap: 6px;
         width: 282px;
-        height: 190px;
+        height: 220px;
         background: white;
         border-radius: 8px;
         padding: 10px 12px;
@@ -88,6 +88,9 @@
       .flex-cell {
         display: flex;
         align-items: center;
+      }
+      .flush {
+        padding: 0 8px;
       }
     </style>
   </head>
@@ -175,6 +178,10 @@
           <div class="tr">
             <div class="td flex-cell"><span>flex cell</span></div>
             <div class="td tall"><span>40px tall</span></div>
+          </div>
+          <div class="tr">
+            <div class="td"><span>baseline</span></div>
+            <div class="td flush"><span>no padding</span></div>
           </div>
         </div>
       </div>
