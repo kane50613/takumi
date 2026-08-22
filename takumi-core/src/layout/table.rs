@@ -1,31 +1,18 @@
 //! Lowering `display: table` onto the grid layout algorithm.
 //!
-//! taffy has no table algorithm, but grid already provides the one thing a
-//! table needs and flex cannot give: a column track shared by every row. So a
-//! table subtree is rewritten into a single grid whose items are the cells,
-//! with the row and row-group boxes dropped — they exist to group, and grid
-//! rows come from the track count instead. A row's background is copied onto
-//! its cells on the way out, since striping and header bands live there.
+//! taffy has no table algorithm. Grid gives every row a shared column track,
+//! which flex cannot. Rows and row groups are dropped, so a row's background
+//! is copied onto its cells. `border-collapse` and row borders are not
+//! implemented.
 //!
-//! This is auto table layout approximated by `auto` tracks. It follows Blink
-//! where following is cheap (row group order, `border-spacing`) and diverges
-//! where the grid algorithm cannot express a table: `border-collapse` and row
-//! borders are not implemented.
+//! Cell alignment mirrors Blink's `ComputeContentAlignment` in
+//! `block_layout_algorithm_utils.cc`. `baseline` is naive: it uses block-start
+//! borders and padding instead of a measured first baseline.
 //!
-//! Cell alignment follows Blink: `align-content` first, `vertical-align` when
-//! that is `normal`. The cell box always stretches to its grid area so borders
-//! and backgrounds cover it, and the content moves inside that box instead.
-//! `baseline` is naive — the row's cells line up on their block-start border
-//! and padding, not on a measured first baseline, so cells whose first line
-//! uses a different font or line height still drift.
-//!
-//! The width distribution differs too. Blink's `kAboveMax` branch
-//! (`table_layout_utils.cc`) grows each auto column by
-//! `excess × max_content_column / Σ max_content`, so the columns end up scaled
-//! in proportion to their content; grid spreads free space equally across
-//! `auto` tracks. Two columns of equal content land on the same pixel either
-//! way, and wider tables drift — measured at 15–48pt against headless Chrome on
-//! a three- and four-column fixture.
+//! Grid distributes free space evenly across `auto` tracks. Blink's
+//! `kAboveMax` in `table_layout_utils.cc` uses max-content proportions. The
+//! measured drift is 15–48pt against headless Chrome on three- and four-column
+//! fixtures.
 
 use taffy::LengthPercentageAuto;
 
@@ -50,7 +37,6 @@ const MAX_COLSPAN: u16 = 1000;
 /// Blink's `kMaxRowSpan`.
 const MAX_ROWSPAN: u16 = 65534;
 
-/// Rewrites every `display: table` box in the tree into a grid.
 pub(crate) fn lower_tables(node: &mut RenderNode) {
   if node.context.style.display == Display::Table {
     lower_table(node);
@@ -63,11 +49,7 @@ pub(crate) fn lower_tables(node: &mut RenderNode) {
   }
 }
 
-/// How many tracks a cell occupies, from `colspan` / `rowspan`.
-///
-/// The name is matched case-insensitively: HTML parsing lowercases attributes,
-/// but JSX hands `colSpan` and `rowSpan` through verbatim. Values are clamped
-/// the way Blink clamps them, which also keeps the track count in range.
+/// Reads a case-insensitive span attribute within Blink's limit.
 fn span_attribute(cell: &RenderNode, name: &str, max: u16) -> u16 {
   cell
     .node
@@ -83,7 +65,6 @@ fn span_attribute(cell: &RenderNode, name: &str, max: u16) -> u16 {
     .map_or(1, |value| value.clamp(1, u32::from(max)) as u16)
 }
 
-/// Row groups render header first and footer last, whatever the source order.
 fn group_order(display: Display) -> u8 {
   match display {
     Display::TableHeaderGroup => 0,
@@ -92,12 +73,7 @@ fn group_order(display: Display) -> u8 {
   }
 }
 
-/// The rows of a table, with row groups flattened away and reordered, plus how
-/// many leading rows came from header groups.
-///
-/// Anything that is neither a row, a row group, nor a caption stays where it is
-/// as a full-width item, which keeps stray content visible instead of dropping
-/// it on the floor. Real anonymous table box fixup is not implemented.
+/// Extracts rows without CSS anonymous table-box fixup.
 fn collect_rows(
   table: &mut RenderNode,
 ) -> (Vec<RenderNode>, Vec<RenderNode>, usize, Vec<RenderNode>) {
@@ -140,10 +116,7 @@ fn collect_rows(
   (captions, rows, header_rows, strays)
 }
 
-/// Each row's cells as `(column, colspan)`, advanced past tracks a preceding
-/// row's `rowspan` still covers — the occupancy grid auto-placement will see.
 fn resolve_columns(rows: &[RenderNode]) -> Vec<Vec<(usize, u16)>> {
-  // Per track, how many more rows a rowspan keeps it covered.
   let mut covered: Vec<u16> = Vec::new();
   let mut placements = Vec::with_capacity(rows.len());
 
@@ -186,8 +159,6 @@ fn resolve_columns(rows: &[RenderNode]) -> Vec<Vec<(usize, u16)>> {
   placements
 }
 
-/// Widest row, counting `colspan` and rowspan occupancy, which is how many
-/// tracks the grid needs.
 fn track_count(placements: &[Vec<(usize, u16)>]) -> u16 {
   placements
     .iter()
@@ -198,13 +169,7 @@ fn track_count(placements: &[Vec<(usize, u16)>]) -> u16 {
     .clamp(1, u32::from(MAX_COLSPAN)) as u16
 }
 
-/// True for a row child the lowering places as a cell.
-///
-/// Blink wraps a row child that is not a `table-cell` in an anonymous cell, so
-/// a `<td style="display: flex">` is laid out instead of dropped. Only authored
-/// elements qualify, which keeps a marker or a `::before` box out of the
-/// tracks: real anonymous table box fixup, which would also wrap the text
-/// between cells, is not implemented.
+/// Recognizes authored cells without CSS anonymous table-box fixup.
 fn is_cell(child: &RenderNode) -> bool {
   let display = child.context.style.display;
 
@@ -220,21 +185,12 @@ fn is_cell(child: &RenderNode) -> bool {
       .is_some_and(|node| !matches!(node.kind, NodeKind::Text(_)))
 }
 
-/// Where a cell's content sits in its box.
-///
-/// Resolved the way Blink's `ComputeContentAlignment`
-/// (`block_layout_algorithm_utils.cc`) resolves it for a table cell:
-/// `align-content` decides, and only `normal` hands over to `vertical-align`.
-/// Alignment is safe, as Blink's `LayoutTableCellAlignmentSafe` makes it:
-/// content taller than the cell starts at the top instead of overflowing both
-/// edges.
+/// Blink table-cell content alignment from `block_layout_algorithm_utils.cc`.
 #[derive(Clone, Copy, PartialEq)]
 enum CellAlignment {
   Start,
   Center,
   End,
-  /// Every keyword outside `top`, `middle`, and `bottom` lands here, where
-  /// Blink aligns the row's cells on their first baselines.
   Baseline,
 }
 
@@ -242,8 +198,6 @@ impl CellAlignment {
   fn of(style: &ComputedStyle) -> Self {
     match style.align_content {
       JustifyContent::Normal => Self::of_vertical_align(style.vertical_align),
-      // A content distribution falls back to the alignment css-align-3 pairs
-      // it with.
       JustifyContent::SpaceAround
       | JustifyContent::SpaceEvenly
       | JustifyContent::Center
@@ -274,13 +228,7 @@ impl CellAlignment {
   }
 }
 
-/// Moves a cell's content down its box for the alignments that ask for it.
-///
-/// The cell becomes a flex column holding one anonymous block, so the content
-/// is a single flex item `justify-content` can move while the cell box keeps
-/// stretching to the row. The wrapper also keeps the content's own formatting
-/// context: aligning the cell's children directly would turn every inline run
-/// into a separate box.
+/// Wraps content to preserve its formatting context during alignment.
 fn wrap_cell_content(cell: &mut RenderNode) -> Option<&mut RenderNode> {
   let children = cell.children.take()?;
   let content = RenderNode::anonymous_block_container(&cell.context, children.into_vec());
@@ -289,10 +237,6 @@ fn wrap_cell_content(cell: &mut RenderNode) -> Option<&mut RenderNode> {
   cell.children.as_deref_mut()?.first_mut()
 }
 
-/// Moves a cell's content down its box for the alignments that ask for it.
-///
-/// The cell becomes a flex column so `justify-content` can move the wrapper,
-/// while the cell box itself keeps stretching to the row.
 fn align_cell_content(cell: &mut RenderNode) {
   let Some(justify) = CellAlignment::of(&cell.context.style).justify_content() else {
     return;
@@ -309,12 +253,9 @@ fn align_cell_content(cell: &mut RenderNode) {
   style.justify_content = justify;
 }
 
-/// How far a cell's first line box sits below its border-box top, as far as the
-/// lowering can see: the block-start border and padding.
-///
-/// This is naive. Blink measures the real first baseline, so its offset also
-/// carries the first line's ascent and half-leading, which differ once two
-/// cells in a row use different fonts or line heights.
+/// Approximates the first-baseline offset as block-start border and padding.
+/// It drops the first line's ascent and half-leading, so cells drift once a
+/// row mixes fonts or line heights.
 fn content_inset_top(cell: &RenderNode) -> f32 {
   let style = &cell.context.style;
   let sizing = &cell.context.sizing;
@@ -327,9 +268,6 @@ fn content_inset_top(cell: &RenderNode) -> f32 {
   border + style.padding_top.to_px(sizing, 0.0)
 }
 
-/// Lines up the first lines of a row's `baseline` cells, the way Blink aligns
-/// their first baselines, by pushing the shallower ones down to the deepest
-/// inset in the row.
 fn align_row_baselines(cells: &mut [RenderNode]) {
   let baselines: Vec<usize> = cells
     .iter()
@@ -362,14 +300,11 @@ fn align_row_baselines(cells: &mut [RenderNode]) {
   }
 }
 
-/// Turns a cell into a grid item at its resolved position. The column is
-/// explicit rather than auto-placed: taffy's placement cursor does not return
-/// to the row start on a row a `rowspan` reaches into.
+/// Places the cell explicitly: taffy's cursor does not return to the row start
+/// on a row a `rowspan` reaches into.
 fn lower_cell(cell: &mut RenderNode, line: i16, column: usize, colspan: u16) {
   let rowspan = span_attribute(cell, "rowspan", MAX_ROWSPAN);
 
-  // `vertical-align` applies to table cells, so a row child that brought its
-  // own display keeps the layout it declared.
   if cell.context.style.display == Display::TableCell {
     align_cell_content(cell);
 
@@ -384,12 +319,7 @@ fn lower_cell(cell: &mut RenderNode, line: i16, column: usize, colspan: u16) {
   cell.context.style.grid_column_end = GridPlacement::Span(GridPlacementSpan::Span(colspan));
 }
 
-/// Copies a row's background onto a cell that has none of its own.
-///
-/// The row box is dropped by the lowering, so its background would go with it —
-/// and zebra striping and header bands are set on the row. Painting it per cell
-/// leaves the `border-spacing` gaps unpainted, where a real table row would
-/// cover them. Row borders are lost outright.
+/// Approximation: row backgrounds leave `border-spacing` gaps unpainted.
 fn inherit_row_background(row: &RenderNode, cell: &mut RenderNode) {
   let row_style = &row.context.style;
 
@@ -415,7 +345,6 @@ fn inherit_row_background(row: &RenderNode, cell: &mut RenderNode) {
   cell_style.background_origin = row_style.background_origin;
 }
 
-/// Spans the full width of one row, like a caption or a stray child.
 fn lower_full_width(node: &mut RenderNode, line: i16, columns: u16) {
   node.context.style.display = Display::Block;
   node.context.style.grid_row_start = GridPlacement::Line(line);
@@ -441,7 +370,6 @@ fn lower_table(table: &mut RenderNode) {
     line = line.saturating_add(1);
   }
 
-  // A header that is the whole table has nothing to repeat over.
   if header_rows > 0 && header_rows < rows.len() {
     let start = line;
 
@@ -483,8 +411,6 @@ fn lower_table(table: &mut RenderNode) {
   let style = &mut table.context.style;
 
   style.display = Display::Grid;
-  // `auto` tracks put free space into the columns rather than between them,
-  // which is the shape of Blink's auto table layout.
   style.grid_template_columns = Some(tracks);
 
   if style.column_gap == Gap::Normal {
@@ -498,12 +424,7 @@ fn lower_table(table: &mut RenderNode) {
   table.children = Some(items.into_boxed_slice());
 }
 
-/// Track sizes for the grid: a column whose first single-column cell declares a
-/// width gets that length, the rest stay `auto`.
-///
-/// This is Blink's constrained-versus-auto column split, decided from the cell's
-/// specified width the same way, but read off the first row that states one
-/// instead of resolving the whole column.
+/// Approximates Blink constrained columns from the first declared cell width.
 fn track_sizes(
   rows: &[RenderNode],
   placements: &[Vec<(usize, u16)>],
