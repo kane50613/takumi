@@ -394,6 +394,7 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
       },
       brush: InlineBrush {
         source_span_id: None,
+        is_direction_mark: false,
         // Inline elements don't establish a stacking context, so we handle opacity here.
         opacity: if style.parent.display == Display::Inline {
           style.parent.opacity.0

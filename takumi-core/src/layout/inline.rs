@@ -129,18 +129,16 @@ fn shape_fingerprint(
 
   style.hash_shaping_inputs(&mut hasher);
   lang.hash(&mut hasher);
-  for span in spans {
-    if let ProcessedInlineSpan::Text {
-      span_id,
-      text,
-      style,
-      ..
-    } = span
-    {
-      span_id.hash(&mut hasher);
-      text.hash(&mut hasher);
-      style.hash_shaping_inputs(&mut hasher);
-    }
+  for (span_id, span) in spans.iter().enumerate() {
+    let (text, style): (&str, _) = match span {
+      ProcessedInlineSpan::DirectionMark { direction, style } => (direction.bidi_mark(), style),
+      ProcessedInlineSpan::Text { text, style, .. } => (text, style),
+      ProcessedInlineSpan::Box(_) => continue,
+    };
+
+    span_id.hash(&mut hasher);
+    text.hash(&mut hasher);
+    style.hash_shaping_inputs(&mut hasher);
   }
   hasher.finish()
 }
@@ -215,8 +213,11 @@ impl BuiltInlineLayout<'_> {
       for item in line.items() {
         match item {
           PositionedLayoutItem::GlyphRun(glyph_run) => {
-            let text = measured_run_text(&self.text, &self.spans, &glyph_run);
-            if text.is_empty() || text == RTL_MARK {
+            let span_id = glyph_run.style().brush.source_span_id;
+            let text = measured_run_text(&self.text, &self.spans, &glyph_run, span_id);
+            if text.is_empty()
+              || (glyph_run.style().brush.is_direction_mark && glyph_run.advance() == 0.0)
+            {
               continue;
             }
 
@@ -238,11 +239,9 @@ impl BuiltInlineLayout<'_> {
               height *= setup.state.scale;
             }
 
-            let link = glyph_run.style().brush.source_span_id.and_then(|span_id| {
-              match self.spans.get(span_id as usize) {
-                Some(ProcessedInlineSpan::Text { link, .. }) => link.as_deref(),
-                _ => None,
-              }
+            let link = span_id.and_then(|span_id| match self.spans.get(span_id as usize) {
+              Some(ProcessedInlineSpan::Text { link, .. }) => link.as_deref(),
+              _ => None,
             });
 
             runs.push(MeasuredInlineRun {
@@ -344,10 +343,16 @@ fn inline_box_kind(render_node: &RenderNode) -> InlineBoxKind {
 
 /// An inline item after text processing, ready for layout.
 pub enum ProcessedInlineSpan<'c> {
+  /// The synthetic direction mark leading the paragraph. It is laid out with
+  /// the text but is not a source span, so nothing attributes output to it.
+  DirectionMark {
+    /// Base direction the mark forces.
+    direction: Direction,
+    /// Resolved font style, borrowed from the first text span.
+    style: Box<SizedFontStyle<'c>>,
+  },
   /// A styled text span.
   Text {
-    /// Identifier of the source span.
-    span_id: u64,
     /// Byte range within the laid-out text.
     byte_range: Range<usize>,
     /// Processed text content.
@@ -496,6 +501,8 @@ pub(crate) struct InlineMeasureOptions {
 pub struct InlineBrush {
   /// Span this run originated from, if any.
   pub source_span_id: Option<u64>,
+  /// Whether this run is the synthetic direction mark, which never paints.
+  pub(crate) is_direction_mark: bool,
   /// Run opacity.
   pub opacity: f32,
   /// Text fill color.
@@ -525,6 +532,7 @@ impl Default for InlineBrush {
   fn default() -> Self {
     Self {
       source_span_id: None,
+      is_direction_mark: false,
       opacity: 1.0,
       color: Color::black(),
       decoration_color: Color::black(),
@@ -584,13 +592,19 @@ fn refresh_text_span_ranges(spans: &mut [ProcessedInlineSpan<'_>]) {
   let mut byte_offset = 0;
 
   for span in spans {
-    if let ProcessedInlineSpan::Text {
-      text, byte_range, ..
-    } = span
-    {
-      let end = byte_offset + text.len();
-      *byte_range = byte_offset..end;
-      byte_offset = end;
+    match span {
+      ProcessedInlineSpan::Text {
+        text, byte_range, ..
+      } => {
+        let end = byte_offset + text.len();
+        *byte_range = byte_offset..end;
+        byte_offset = end;
+      }
+      // The mark occupies bytes in the laid-out text, so it shifts later ranges.
+      ProcessedInlineSpan::DirectionMark { direction, .. } => {
+        byte_offset += direction.bidi_mark().len();
+      }
+      ProcessedInlineSpan::Box(_) => {}
     }
   }
 }
@@ -598,10 +612,14 @@ fn refresh_text_span_ranges(spans: &mut [ProcessedInlineSpan<'_>]) {
 fn tail_text_span<'a, 'c>(
   spans: &'a [ProcessedInlineSpan<'c>],
 ) -> Option<(&'a SizedFontStyle<'c>, u64)> {
-  spans.iter().rev().find_map(|span| match span {
-    ProcessedInlineSpan::Text { span_id, style, .. } => Some((style.as_ref(), *span_id)),
-    ProcessedInlineSpan::Box(_) => None,
-  })
+  spans
+    .iter()
+    .enumerate()
+    .rev()
+    .find_map(|(span_id, span)| match span {
+      ProcessedInlineSpan::Text { style, .. } => Some((style.as_ref(), span_id as u64)),
+      ProcessedInlineSpan::DirectionMark { .. } | ProcessedInlineSpan::Box(_) => None,
+    })
 }
 
 fn measure_ellipsis_width(
@@ -950,7 +968,7 @@ pub(crate) fn resolve_inline_line_metrics(
         InlineBoxKind::CustomOutOfFlow | InlineBoxKind::OutOfFlow
       )
     }
-    ProcessedInlineSpan::Text { .. } => false,
+    ProcessedInlineSpan::DirectionMark { .. } | ProcessedInlineSpan::Text { .. } => false,
   });
 
   for (line_index, line) in inline_layout.lines().enumerate() {
@@ -1278,6 +1296,11 @@ fn truncation_plan<'c>(
 
     for (index, span) in spans.iter().enumerate() {
       match span {
+        // The mark forces the paragraph's base direction, so truncation
+        // shortens the text around it but never cuts it.
+        ProcessedInlineSpan::DirectionMark { direction, .. } => {
+          remaining = remaining.saturating_sub(direction.bidi_mark().len());
+        }
         ProcessedInlineSpan::Text { text, .. } => {
           let len = text.len();
           if remaining <= len {
@@ -1307,14 +1330,10 @@ fn text_span_style_by_id<'a, 'c>(
   spans: &'a [ProcessedInlineSpan<'c>],
   span_id: u64,
 ) -> Option<&'a SizedFontStyle<'c>> {
-  spans.iter().find_map(|span| match span {
-    ProcessedInlineSpan::Text {
-      span_id: current_span_id,
-      style,
-      ..
-    } if *current_span_id == span_id => Some(style.as_ref()),
-    ProcessedInlineSpan::Text { .. } | ProcessedInlineSpan::Box(_) => None,
-  })
+  match spans.get(span_id as usize)? {
+    ProcessedInlineSpan::Text { style, .. } => Some(style.as_ref()),
+    ProcessedInlineSpan::DirectionMark { .. } | ProcessedInlineSpan::Box(_) => None,
+  }
 }
 
 fn truncated_tail_text_span_id<'c>(
@@ -1322,10 +1341,14 @@ fn truncated_tail_text_span_id<'c>(
   span_cut_idx: Option<usize>,
 ) -> Option<u64> {
   span_cut_idx.and_then(|cut_idx| {
-    spans[..cut_idx].iter().rev().find_map(|span| match span {
-      ProcessedInlineSpan::Text { span_id, .. } => Some(*span_id),
-      ProcessedInlineSpan::Box(_) => None,
-    })
+    spans[..cut_idx]
+      .iter()
+      .enumerate()
+      .rev()
+      .find_map(|(span_id, span)| match span {
+        ProcessedInlineSpan::Text { .. } => Some(span_id as u64),
+        ProcessedInlineSpan::DirectionMark { .. } | ProcessedInlineSpan::Box(_) => None,
+      })
   })
 }
 
@@ -1422,17 +1445,17 @@ fn push_spans_into_builder(
   spans: &[ProcessedInlineSpan<'_>],
   classes: &FontClasses,
 ) {
-  for span in spans {
+  for (span_id, span) in spans.iter().enumerate() {
     match span {
-      ProcessedInlineSpan::Text {
-        span_id,
-        text,
-        style,
-        ..
-      } => {
-        let source_span_id = (*span_id != SYNTHETIC_SPAN_ID).then_some(*span_id);
-
-        push_presentation_text(builder, style, source_span_id, text, classes);
+      ProcessedInlineSpan::DirectionMark { direction, style } => {
+        let mut mark_style = text_style_with_span_id(style, first_text_span_id(spans));
+        mark_style.brush.is_direction_mark = true;
+        builder.push_style_span(mark_style);
+        builder.push_text(direction.bidi_mark());
+        builder.pop_style_span();
+      }
+      ProcessedInlineSpan::Text { text, style, .. } => {
+        push_presentation_text(builder, style, Some(span_id as u64), text, classes);
       }
       ProcessedInlineSpan::Box(item) => {
         builder.push_inline_box(item.inline_box.clone());
@@ -1441,13 +1464,14 @@ fn push_spans_into_builder(
   }
 }
 
-/// U+200F RIGHT-TO-LEFT MARK. Parley has no base-direction API and infers the
-/// paragraph level from the first strong character, so a `direction: rtl` block
-/// leads with this mark to force the RTL base level.
-const RTL_MARK: &str = "\u{200F}";
-
-/// Span id of the synthetic [`RTL_MARK`] span, which has no source span.
-const SYNTHETIC_SPAN_ID: u64 = u64::MAX;
+/// The span the direction mark attributes its output to: a run the mark's
+/// cluster merged into (emoji sequences) paints as the first real text span.
+fn first_text_span_id(spans: &[ProcessedInlineSpan<'_>]) -> Option<u64> {
+  spans
+    .iter()
+    .position(|span| matches!(span, ProcessedInlineSpan::Text { .. }))
+    .map(|span_id| span_id as u64)
+}
 
 fn build_inline_layout_tree<'c>(
   items: &[InlineItem<'c>],
@@ -1463,15 +1487,33 @@ fn build_inline_layout_tree<'c>(
   let mut previous_collapsible_space = false;
   let mut previous_was_line_break = false;
 
-  if !items.is_empty() && context.style.direction == Direction::Rtl {
-    spans.push(ProcessedInlineSpan::Text {
-      span_id: SYNTHETIC_SPAN_ID,
-      byte_range: 0..RTL_MARK.len(),
-      text: RTL_MARK.to_owned(),
-      style: Box::new(SizedFontStyle::from_style(&context.style, context)),
-      link: None,
+  let text_item_context = items.iter().find_map(|item| match item {
+    InlineItem::Text { context, .. } => Some(*context),
+    _ => None,
+  });
+
+  // Parley has no base-direction API and infers the paragraph level from the
+  // first strong character, so every block leads with its direction's mark. A
+  // text-less LTR paragraph already has that base level, and the mark's line
+  // metrics would inflate its line box.
+  if !items.is_empty() && (text_item_context.is_some() || context.style.direction == Direction::Rtl)
+  {
+    let direction = context.style.direction;
+
+    // The mark borrows the first text span's style so it resolves to the same
+    // font and cannot skew the line's metrics, and it must not advance the
+    // line: spacing applies per cluster, so a zero-width glyph would still
+    // widen the paragraph by one letter-spacing.
+    let mark_context = text_item_context.unwrap_or(context);
+    let mut mark_style = SizedFontStyle::from_style(&mark_context.style, mark_context);
+    mark_style.letter_spacing = 0.0;
+    mark_style.word_spacing = 0.0;
+
+    spans.push(ProcessedInlineSpan::DirectionMark {
+      direction,
+      style: Box::new(mark_style),
     });
-    index_pos = RTL_MARK.len();
+    index_pos = direction.bidi_mark().len();
   }
 
   for item in items {
@@ -1490,13 +1532,11 @@ fn build_inline_layout_tree<'c>(
           &mut previous_collapsible_space,
           &mut previous_was_line_break,
         );
-        let span_id = spans.len() as u64;
         let start = index_pos;
         let end = start + collapsed.len();
         index_pos = end;
 
         spans.push(ProcessedInlineSpan::Text {
-          span_id,
           byte_range: start..end,
           text: collapsed.into_owned(),
           style: Box::new(span_style),
@@ -1699,7 +1739,7 @@ fn text_fit_is_applicable(
   custom_inline_boxes.is_empty()
     && spans.iter().all(|span| match span {
       ProcessedInlineSpan::Text { style, .. } => !text_span_disables_text_fit(style),
-      ProcessedInlineSpan::Box(_) => true,
+      ProcessedInlineSpan::DirectionMark { .. } | ProcessedInlineSpan::Box(_) => true,
     })
 }
 
@@ -2055,30 +2095,6 @@ fn scale_outline_rect(
     height: rect.height * state.scale,
     ..rect
   }
-}
-
-fn collect_glyph_run_outline_rect(
-  glyph_run: &GlyphRun<'_, InlineBrush>,
-  layout: ComputedLayout,
-  line_index: usize,
-  line_top: f32,
-  line_height: f32,
-  line_scale: LineScaleState,
-  static_inline_prefix: f32,
-) -> Option<InlineOutlineRect> {
-  let span_id = glyph_run.style().brush.source_span_id?;
-  Some(scale_outline_rect(
-    InlineOutlineRect {
-      span_id,
-      line_index,
-      x: layout.border.left + layout.padding.left + glyph_run.offset(),
-      y: line_top,
-      width: glyph_run.advance(),
-      height: line_height,
-    },
-    line_scale,
-    static_inline_prefix,
-  ))
 }
 
 const OUTLINE_COORD_TOLERANCE: f32 = 1e-3;
@@ -2519,7 +2535,7 @@ pub fn resolve_inline_runs(
     ProcessedInlineSpan::Text { style, .. } => {
       style.outline_width > 0.0 && style.outline_style.is_rendered()
     }
-    ProcessedInlineSpan::Box(_) => false,
+    ProcessedInlineSpan::DirectionMark { .. } | ProcessedInlineSpan::Box(_) => false,
   });
 
   let mut runs = Vec::new();
@@ -2542,6 +2558,17 @@ pub fn resolve_inline_runs(
       match item {
         PositionedLayoutItem::GlyphRun(glyph_run) => {
           let run = glyph_run.run();
+          // A run carrying only the direction mark paints nothing; a run the
+          // mark's cluster merged into (emoji sequences) paints as the first
+          // real span.
+          let mut brush = glyph_run.style().brush;
+          if brush.is_direction_mark {
+            if glyph_run.advance() == 0.0 {
+              continue;
+            }
+            brush.is_direction_mark = false;
+          }
+
           let font = FontRef::from_index(run.font().data.as_ref(), run.font().index)
             .map_err(|_| FontError::InvalidFontIndex)?;
           let glyph_ids = glyph_run.positioned_glyphs().map(|glyph| glyph.id);
@@ -2549,19 +2576,23 @@ pub fn resolve_inline_runs(
             .fonts
             .with_context(|fonts| fonts.resolve_glyphs(&glyph_run, font, glyph_ids));
 
-          if need_outline
-            && let Some(outline_rect) = collect_glyph_run_outline_rect(
-              &glyph_run,
-              layout,
-              line_index,
-              layout.border.top + layout.padding.top + glyph_run.baseline() + setup.baseline_shift
-                - setup.resolved_metrics.resolved_ascent,
-              setup.resolved_metrics.resolved_line_height,
+          if need_outline && let Some(span_id) = brush.source_span_id {
+            outline_rects.push(scale_outline_rect(
+              InlineOutlineRect {
+                span_id,
+                line_index,
+                x: layout.border.left + layout.padding.left + glyph_run.offset(),
+                y: layout.border.top
+                  + layout.padding.top
+                  + glyph_run.baseline()
+                  + setup.baseline_shift
+                  - setup.resolved_metrics.resolved_ascent,
+                width: glyph_run.advance(),
+                height: setup.resolved_metrics.resolved_line_height,
+              },
               setup.state,
               static_inline_prefix,
-            )
-          {
-            outline_rects.push(outline_rect);
+            ));
           }
 
           let metrics = run.metrics();
@@ -2580,7 +2611,7 @@ pub fn resolve_inline_runs(
             offset: glyph_run.offset(),
             baseline: glyph_run.baseline(),
             advance: glyph_run.advance(),
-            brush: glyph_run.style().brush,
+            brush,
             metrics: RunMetrics {
               ascent: metrics.ascent,
               descent: metrics.descent,
@@ -2689,9 +2720,10 @@ fn measured_run_text<'a>(
   text: &'a str,
   spans: &[ProcessedInlineSpan<'_>],
   glyph_run: &GlyphRun<'_, InlineBrush>,
+  span_id: Option<u64>,
 ) -> &'a str {
   let text_range = glyph_run.run().text_range();
-  let Some(span_id) = glyph_run.style().brush.source_span_id else {
+  let Some(span_id) = span_id else {
     return slice_text_at_char_boundaries(text, text_range);
   };
 
@@ -3275,13 +3307,13 @@ mod tests {
     assert!(
       segments
         .iter()
-        .any(|(span_id, _, color)| *span_id == Some(0) && *color == orange),
+        .any(|(span_id, _, color)| *span_id == Some(1) && *color == orange),
       "{segments:#?}"
     );
     assert!(
       segments
         .iter()
-        .any(|(span_id, _, color)| *span_id == Some(2) && *color == blue),
+        .any(|(span_id, _, color)| *span_id == Some(3) && *color == blue),
       "{segments:#?}"
     );
   }
