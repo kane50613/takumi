@@ -20,7 +20,9 @@ use image_webp::{DecodingError as WebPDecodingError, WebPDecoder};
 use libwebp_sys::{
   VP8StatusCode, WEBP_CSP_MODE, WebPDecode, WebPDecoderConfig, WebPGetInfo, WebPRGBABuffer,
 };
-use png::{BitDepth, ColorType, Decoder as PngRowDecoder, Transformations};
+use png::{
+  BitDepth, BlendOp, ColorType, Decoder as PngRowDecoder, DisposeOp, FrameControl, Transformations,
+};
 
 #[cfg(feature = "gif")]
 use crate::geometry::Rect;
@@ -40,14 +42,11 @@ const JPEG_SIGNATURE: [u8; 3] = [0xFF, 0xD8, 0xFF];
 const MAX_IMAGE_DIMENSION: u32 = 8192;
 /// Decoded images above this pixel count are rejected (RGBA cost = 4x).
 /// 8192 x 8192 — far above any sane OG-image asset, far below OOM territory.
-#[cfg(any(feature = "gif", feature = "webp"))]
 const MAX_IMAGE_PIXELS: u64 = MAX_IMAGE_DIMENSION as u64 * MAX_IMAGE_DIMENSION as u64;
 /// Total pixels across all frames of an animation (frames are canvas-sized).
-#[cfg(any(feature = "gif", feature = "webp"))]
 const MAX_ANIMATION_TOTAL_PIXELS: u64 = 4 * MAX_IMAGE_PIXELS;
 /// Frames past this point are dropped from a timeline. The pixel budget alone
 /// leaves a tiny canvas free to carry an unbounded frame list.
-#[cfg(feature = "webp")]
 const MAX_ANIMATION_FRAMES: usize = 1024;
 
 /// Rejects decoded images whose pixel count exceeds [`MAX_IMAGE_PIXELS`].
@@ -863,6 +862,288 @@ fn webp_canvas_to_buffer(
     algorithm,
   )
   .ok_or_else(invalid_buffer_error)
+}
+
+/// Whether the PNG carries an `acTL` animation control chunk.
+pub(crate) fn is_apng(bytes: &[u8]) -> bool {
+  bytes.starts_with(&PNG_SIGNATURE) && png_chunks(bytes).any(|(id, _)| &id == b"acTL")
+}
+
+/// Chunks of a PNG stream, as `(type, data)` pairs.
+fn png_chunks(bytes: &[u8]) -> impl Iterator<Item = ([u8; 4], &[u8])> {
+  let mut offset = PNG_SIGNATURE.len();
+  std::iter::from_fn(move || {
+    let header: [u8; 8] = bytes.get(offset..offset + 8)?.try_into().ok()?;
+    let length = u32::from_be_bytes([header[0], header[1], header[2], header[3]]) as usize;
+    let start = offset + 8;
+    let data = bytes.get(start..start.checked_add(length)?)?;
+    offset = start + length + 4;
+    Some(([header[4], header[5], header[6], header[7]], data))
+  })
+}
+
+pub(crate) fn apng_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
+  let reader = apng_reader(bytes)?;
+  let info = reader.info();
+  Ok((info.width, info.height))
+}
+
+/// Per-frame delays in milliseconds, in stream order, read from the `fcTL`
+/// chunks without decoding any pixels. Stops on the same frame and pixel
+/// budgets as [`decode_apng_frames`], so a playback time never selects a frame
+/// the decoder drops.
+pub(crate) fn apng_frame_durations(bytes: &[u8]) -> ImageResult<Box<[u32]>> {
+  let (width, height) = apng_dimensions(bytes)?;
+  let frame_pixels = width as u64 * height as u64;
+  let mut total_pixels = 0_u64;
+  let mut durations = Vec::new();
+
+  for (id, data) in png_chunks(bytes) {
+    if &id != b"fcTL" {
+      continue;
+    }
+    if durations.len() >= MAX_ANIMATION_FRAMES {
+      break;
+    }
+
+    total_pixels += frame_pixels;
+    if total_pixels > MAX_ANIMATION_TOTAL_PIXELS {
+      break;
+    }
+
+    let Some(delay) = data.get(20..24) else {
+      break;
+    };
+    durations.push(apng_delay_ms(
+      u16::from_be_bytes([delay[0], delay[1]]),
+      u16::from_be_bytes([delay[2], delay[3]]),
+    ));
+  }
+
+  Ok(durations.into())
+}
+
+/// An `fcTL` delay fraction in milliseconds. A zero denominator means hundredths
+/// of a second, per the APNG spec.
+fn apng_delay_ms(numerator: u16, denominator: u16) -> u32 {
+  let denominator = if denominator == 0 { 100 } else { denominator };
+  ((numerator as u64 * 1000) / denominator as u64).max(1) as u32
+}
+
+fn apng_reader(bytes: &[u8]) -> ImageResult<png::Reader<Cursor<&[u8]>>> {
+  let mut decoder = PngRowDecoder::new(Cursor::new(bytes));
+  decoder.set_transformations(
+    Transformations::EXPAND | Transformations::STRIP_16 | Transformations::ALPHA,
+  );
+
+  let reader = decoder.read_info().map_err(png_decode_error)?;
+  let info = reader.info();
+  if info.width > MAX_IMAGE_DIMENSION || info.height > MAX_IMAGE_DIMENSION {
+    return Err(pixel_budget_error(info.width, info.height));
+  }
+
+  Ok(reader)
+}
+
+/// Decodes APNG frames in stream order, passing each frame past the first
+/// `skip` to `push`, up to `limit` pushed frames. Returns whether the stream
+/// ended. Mid-stream decode errors and a blown budget truncate the timeline
+/// (reported as ended); only a stream with no decodable first frame errors.
+///
+/// A default image no `fcTL` claims is not part of the animation, so it is
+/// decoded past and never enters the timeline.
+pub(crate) fn decode_apng_frames(
+  bytes: &[u8],
+  skip: usize,
+  limit: Option<usize>,
+  target: Option<(u32, u32, ImageScalingAlgorithm)>,
+  mut push: impl FnMut(Arc<ImageBuffer>),
+) -> ImageResult<bool> {
+  let mut reader = apng_reader(bytes)?;
+  let (width, height) = (reader.info().width, reader.info().height);
+  let target = target.filter(|&(w, h, _)| w < width || h < height);
+  let channels = match reader.output_color_type() {
+    (ColorType::Rgba, BitDepth::Eight) => 4,
+    (ColorType::GrayscaleAlpha, BitDepth::Eight) => 2,
+    _ => return Err(invalid_buffer_error()),
+  };
+
+  let mut canvas = ApngCanvas::new(width, height);
+  let mut subframe = Vec::new();
+  let mut total_pixels = 0_u64;
+  let mut pushed = 0_usize;
+  let mut index = 0_usize;
+
+  // One read past the cap: an unclaimed default image costs a read without
+  // taking a slot on the timeline.
+  for read in 0..=MAX_ANIMATION_FRAMES {
+    if index >= MAX_ANIMATION_FRAMES {
+      return Ok(false);
+    }
+    if limit.is_some_and(|limit| pushed >= limit) {
+      return Ok(false);
+    }
+
+    if read > 0 && reader.next_frame_info().is_err() {
+      break;
+    }
+
+    let Some(size) = reader.output_buffer_size() else {
+      return Ok(read > 0);
+    };
+    subframe.resize(size, 0);
+    if let Err(error) = reader.next_frame(&mut subframe) {
+      if read == 0 {
+        return Err(png_decode_error(error));
+      }
+      return Ok(true);
+    }
+
+    // The default image sits outside the animation unless an `fcTL` claims it.
+    let Some(frame) = reader.info().frame_control else {
+      continue;
+    };
+
+    total_pixels += width as u64 * height as u64;
+    if total_pixels > MAX_ANIMATION_TOTAL_PIXELS {
+      return Ok(true);
+    }
+
+    canvas.composite(frame, &subframe, channels);
+
+    let current = index;
+    index += 1;
+    if current >= skip {
+      push(Arc::new(canvas.to_buffer(target)?));
+      pushed += 1;
+    }
+
+    canvas.dispose(frame);
+  }
+
+  Ok(true)
+}
+
+/// The straight-alpha RGBA canvas an APNG's frames composite onto, plus the
+/// copy `DisposeOp::Previous` restores.
+struct ApngCanvas {
+  pixels: Vec<u8>,
+  restore: Vec<u8>,
+  width: u32,
+  height: u32,
+}
+
+impl ApngCanvas {
+  fn new(width: u32, height: u32) -> Self {
+    Self {
+      pixels: vec![0; width as usize * height as usize * 4],
+      restore: Vec::new(),
+      width,
+      height,
+    }
+  }
+
+  /// Rows and columns of the frame rect that land inside the canvas.
+  fn clamped_span(&self, frame: FrameControl) -> (u32, u32) {
+    (
+      frame.height.min(self.height.saturating_sub(frame.y_offset)),
+      frame.width.min(self.width.saturating_sub(frame.x_offset)),
+    )
+  }
+
+  /// Draws one subframe at its `fcTL` offset, either overwriting the frame rect
+  /// or alpha-blending onto it.
+  fn composite(&mut self, frame: FrameControl, subframe: &[u8], channels: usize) {
+    if frame.dispose_op == DisposeOp::Previous {
+      self.restore.clear();
+      self.restore.extend_from_slice(&self.pixels);
+    }
+
+    let (rows, columns) = self.clamped_span(frame);
+    for row in 0..rows {
+      let source_row = row as usize * frame.width as usize * channels;
+      let target_row = ((frame.y_offset + row) * self.width + frame.x_offset) as usize * 4;
+
+      for column in 0..columns {
+        let source = source_row + column as usize * channels;
+        let pixel = match channels {
+          4 => [
+            subframe[source],
+            subframe[source + 1],
+            subframe[source + 2],
+            subframe[source + 3],
+          ],
+          _ => [
+            subframe[source],
+            subframe[source],
+            subframe[source],
+            subframe[source + 1],
+          ],
+        };
+
+        let target = target_row + column as usize * 4;
+        match frame.blend_op {
+          BlendOp::Source => self.pixels[target..target + 4].copy_from_slice(&pixel),
+          BlendOp::Over => blend_over(&mut self.pixels[target..target + 4], pixel),
+        }
+      }
+    }
+  }
+
+  /// Applies the frame's disposal, readying the canvas for the one after it.
+  fn dispose(&mut self, frame: FrameControl) {
+    match frame.dispose_op {
+      DisposeOp::None => {}
+      DisposeOp::Background => {
+        let (rows, columns) = self.clamped_span(frame);
+        for row in 0..rows {
+          let start = ((frame.y_offset + row) * self.width + frame.x_offset) as usize * 4;
+          self.pixels[start..start + columns as usize * 4].fill(0);
+        }
+      }
+      DisposeOp::Previous => self.pixels.copy_from_slice(&self.restore),
+    }
+  }
+
+  fn to_buffer(
+    &self,
+    target: Option<(u32, u32, ImageScalingAlgorithm)>,
+  ) -> ImageResult<ImageBuffer> {
+    let mut premultiplied = self.pixels.clone();
+    premultiply_rgba_in_place(&mut premultiplied);
+
+    match target {
+      Some((width, height, algorithm)) => resample_premultiplied(
+        &premultiplied,
+        (self.width, self.height),
+        (width, height),
+        algorithm,
+      ),
+      None => ImageBuffer::from_premultiplied_rgba(premultiplied, self.width, self.height),
+    }
+    .ok_or_else(invalid_buffer_error)
+  }
+}
+
+/// Straight-alpha source-over, as the APNG spec defines `BlendOp::Over`.
+fn blend_over(target: &mut [u8], source: [u8; 4]) {
+  if source[3] == u8::MAX {
+    target.copy_from_slice(&source);
+    return;
+  }
+  if source[3] == 0 {
+    return;
+  }
+
+  let source_alpha = source[3] as u32;
+  let target_alpha = target[3] as u32;
+  let out_alpha = source_alpha + target_alpha * (255 - source_alpha) / 255;
+  for channel in 0..3 {
+    let source_part = source[channel] as u32 * source_alpha;
+    let target_part = target[channel] as u32 * target_alpha * (255 - source_alpha) / 255;
+    target[channel] = ((source_part + target_part) / out_alpha) as u8;
+  }
+  target[3] = out_alpha as u8;
 }
 
 fn rgba_to_buffer(image: RgbaImage, format: ImageFormat) -> ImageResult<ImageBuffer> {
