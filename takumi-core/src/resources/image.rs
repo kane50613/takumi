@@ -24,7 +24,8 @@ use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 use crate::resources::image_decoder::decoder_compiled_out;
 #[cfg(feature = "webp")]
 use crate::resources::image_decoder::{
-  animated_webp_dimensions, decode_webp_frames, is_animated_webp, webp_frame_durations,
+  animated_webp_dimensions, decode_webp_frame_alone, decode_webp_frames, is_animated_webp,
+  webp_frame_durations,
 };
 #[cfg(feature = "svg")]
 use crate::resvg::{
@@ -40,9 +41,9 @@ use crate::{
   resources::{
     image_buffer::ImageBuffer,
     image_decoder::{
-      apng_dimensions, apng_frame_durations, bitmap_dimensions, decode_apng_frames,
-      decode_bitmap_scaled, decode_gif_frames, decode_image, gif_dimensions, gif_frame_durations,
-      is_apng, is_gif,
+      MAX_ANIMATION_FRAMES, apng_dimensions, apng_frame_durations, bitmap_dimensions,
+      decode_apng_frame_alone, decode_apng_frames, decode_bitmap_scaled, decode_gif_frame_alone,
+      decode_gif_frames, decode_image, gif_dimensions, gif_frame_durations, is_apng, is_gif,
     },
   },
   style::{Color, ImageScalingAlgorithm, IntrinsicSizing, SizingContext, StyleSheet},
@@ -238,6 +239,26 @@ impl AnimatedFormat {
     }
   }
 
+  /// Decodes one frame without replaying the frames before it. `None` when the
+  /// container shows the frame depends on them.
+  fn decode_frame_alone(
+    self,
+    bytes: &[u8],
+    index: usize,
+    target: (u32, u32, ImageScalingAlgorithm),
+  ) -> Option<ImageBuffer> {
+    if index >= MAX_ANIMATION_FRAMES {
+      return None;
+    }
+
+    match self {
+      Self::Gif => decode_gif_frame_alone(bytes, index, Some(target)),
+      Self::Apng => decode_apng_frame_alone(bytes, index, Some(target)),
+      #[cfg(feature = "webp")]
+      Self::WebP => decode_webp_frame_alone(bytes, index, Some(target)),
+    }
+  }
+
   /// Per-frame delays in stream order, read without decoding pixels.
   fn frame_durations(self, bytes: &[u8]) -> Result<Box<[u32]>, image::ImageError> {
     match self {
@@ -271,8 +292,7 @@ impl AnimatedSource {
   fn from_bytes(format: AnimatedFormat, bytes: &[u8]) -> Result<Self, ImageError> {
     let (width, height) = format.dimensions(bytes).map_err(ImageError::decode)?;
 
-    // Decoded here only to reject a stream that carries no frame at all; the
-    // pixels are dropped, and every draw decodes the frame it needs.
+    // Decoded only to reject a stream carrying no frame at all; the pixels go.
     let mut decodable = false;
     format
       .decode_frames(bytes, 0, Some(1), None, |_| decodable = true)
@@ -369,19 +389,25 @@ impl AnimatedSource {
       })
   }
 
-  /// Decodes a single frame by stream index, resampled to `target`.
-  ///
-  /// ponytail: decode-to-index each call — frame disposal is stateful, so
-  /// reaching frame N replays frames 0..N. O(N) per sample, nothing retained;
-  /// fine for a static render (one sample per animation). An animation
-  /// re-encoded to an animation samples every frame → O(N²); if that path gets
-  /// hot, cache a thread-local resumable decode cursor keyed by source id.
+  /// Decodes a single frame by stream index, resampled to `target`. A frame
+  /// that depends on earlier ones is reached by replaying them, since disposal
+  /// is stateful.
   fn decode_frame(
     &self,
     index: usize,
     (target_width, target_height): (u32, u32),
     algorithm: ImageScalingAlgorithm,
   ) -> Option<Arc<ImageBuffer>> {
+    if index > 0
+      && let Some(frame) = self.inner.format.decode_frame_alone(
+        &self.inner.bytes,
+        index,
+        (target_width, target_height, algorithm),
+      )
+    {
+      return Some(Arc::new(frame));
+    }
+
     let mut frame = None;
     if let Err(error) = self.inner.format.decode_frames(
       &self.inner.bytes,
@@ -396,8 +422,7 @@ impl AnimatedSource {
     frame
   }
 
-  /// Bytes retained for cache budgeting: the encoded stream alone. Frames are
-  /// decoded on demand and dropped, so they never count.
+  /// Bytes retained for cache budgeting: decoded frames are never held.
   fn decoded_bytes(&self) -> usize {
     self.inner.bytes.len()
   }
@@ -1515,8 +1540,7 @@ mod tests {
     bytes
   }
 
-  /// Encodes one 4x4 solid frame per `(color index, delay ms)` pair as an APNG
-  /// whose default image is the first frame.
+  /// One 4x4 solid frame per `(color index, delay ms)` pair, as an APNG.
   fn encoded_apng(frames: &[(usize, u32)]) -> Vec<u8> {
     use png::{BitDepth, ColorType, Encoder};
 
@@ -1567,8 +1591,6 @@ mod tests {
     assert_eq!(smaller.pixel(1, 1), FRAME_COLORS[1]);
   }
 
-  /// A subframe drawn with `BlendOp::Over` composites onto the frame before it
-  /// instead of replacing the canvas.
   #[test]
   fn apng_composites_a_blended_subframe() {
     use png::{BitDepth, BlendOp, ColorType, DisposeOp, Encoder};
@@ -1599,14 +1621,10 @@ mod tests {
       unreachable!("valid apng");
     };
 
-    // The subframe covers the top-left quadrant, half-blended over the opaque
-    // red beneath it; the rest of the first frame stays put.
     assert_eq!(apng.frame_at_time(150).pixel(0, 0), [127, 0, 128, 255]);
     assert_eq!(apng.frame_at_time(150).pixel(3, 3), FRAME_COLORS[0]);
   }
 
-  /// An APNG whose `IDAT` carries a separate default image: the animation is
-  /// the `fdAT` frames alone.
   #[test]
   fn apng_default_image_stays_off_the_timeline() {
     use png::{BitDepth, ColorType, Encoder};
@@ -1643,6 +1661,112 @@ mod tests {
   }
 
   #[test]
+  fn seeking_a_frame_matches_replaying_to_it() {
+    let sources: Vec<(&str, Vec<u8>)> = vec![
+      #[cfg(feature = "gif")]
+      ("gif", encoded_gif(&[(0, 100), (1, 100), (2, 100)])),
+      ("apng", encoded_apng(&[(0, 100), (1, 100), (2, 100)])),
+      #[cfg(feature = "webp")]
+      (
+        "webp",
+        encoded_animated_webp(&[(0, 100), (1, 100), (2, 100)]),
+      ),
+    ];
+
+    for (format, bytes) in sources {
+      let Ok(ImageSource::Animated(source)) = ImageSource::from_bytes(&bytes) else {
+        unreachable!("valid {format}");
+      };
+      let animated_format = source.inner.format;
+
+      for index in 1..3 {
+        let seeked = animated_format
+          .decode_frame_alone(&bytes, index, (4, 4, ImageScalingAlgorithm::Auto))
+          .unwrap_or_else(|| panic!("{format} frame {index} should seek"));
+
+        let mut replayed = None;
+        animated_format
+          .decode_frames(&bytes, index, Some(1), None, |frame| replayed = Some(frame))
+          .expect("replay decodes");
+        let replayed = replayed.expect("replayed frame");
+
+        assert_eq!(
+          seeked.data(),
+          replayed.data(),
+          "{format} frame {index} differs between seek and replay"
+        );
+      }
+    }
+  }
+
+  #[cfg(feature = "webp")]
+  #[test]
+  fn a_webp_frame_lying_about_its_size_declines_to_seek() {
+    let mut bytes = encoded_animated_webp(&[(0, 100), (1, 100)]);
+
+    // 2x2 bitstream under an ANMF header that still claims the 4x4 canvas.
+    let small = {
+      use image_webp::{ColorType, WebPEncoder};
+
+      let mut encoded = Vec::new();
+      WebPEncoder::new(&mut encoded)
+        .encode(&FRAME_COLORS[1].repeat(4), 2, 2, ColorType::Rgba8)
+        .unwrap();
+      encoded[12..].to_vec()
+    };
+
+    let last_anmf = bytes
+      .windows(4)
+      .rposition(|window| window == b"ANMF")
+      .expect("an ANMF chunk");
+    let payload_start = last_anmf + 8;
+    let header: Vec<u8> = bytes[payload_start..payload_start + 16].to_vec();
+
+    bytes.truncate(payload_start);
+    bytes.extend_from_slice(&header);
+    bytes.extend_from_slice(&small);
+    let size = (16 + small.len()) as u32;
+    bytes[last_anmf + 4..last_anmf + 8].copy_from_slice(&size.to_le_bytes());
+    let riff_size = (bytes.len() - 8) as u32;
+    bytes[4..8].copy_from_slice(&riff_size.to_le_bytes());
+
+    assert!(
+      AnimatedFormat::WebP
+        .decode_frame_alone(&bytes, 1, (4, 4, ImageScalingAlgorithm::Auto))
+        .is_none()
+    );
+  }
+
+  #[test]
+  fn a_dependent_frame_declines_to_seek() {
+    use png::{BitDepth, BlendOp, ColorType, Encoder};
+
+    let mut bytes = Vec::new();
+    let mut encoder = Encoder::new(&mut bytes, 4, 4);
+    encoder.set_color(ColorType::Rgba);
+    encoder.set_depth(BitDepth::Eight);
+    encoder.set_animated(2, 0).unwrap();
+
+    let mut writer = encoder.write_header().unwrap();
+    writer.set_frame_delay(100, 1000).unwrap();
+    writer
+      .write_image_data(&FRAME_COLORS[0].repeat(16))
+      .unwrap();
+    writer.set_frame_delay(100, 1000).unwrap();
+    writer.set_frame_dimension(2, 2).unwrap();
+    writer.set_frame_position(0, 0).unwrap();
+    writer.set_blend_op(BlendOp::Over).unwrap();
+    writer.write_image_data(&FRAME_COLORS[1].repeat(4)).unwrap();
+    writer.finish().unwrap();
+
+    assert!(
+      AnimatedFormat::Apng
+        .decode_frame_alone(&bytes, 1, (4, 4, ImageScalingAlgorithm::Auto))
+        .is_none()
+    );
+  }
+
+  #[test]
   fn still_png_stays_a_bitmap() {
     use png::{BitDepth, ColorType, Encoder};
 
@@ -1659,9 +1783,7 @@ mod tests {
     assert_matches!(ImageSource::from_bytes(&bytes), Ok(ImageSource::Bitmap(_)));
   }
 
-  /// Encodes one 4x4 solid frame per `(color index, delay ms)` pair into an
-  /// animated WebP: a `VP8X` canvas with the animation flag, an `ANIM` header,
-  /// then one `ANMF` per frame wrapping a lossless still.
+  /// One 4x4 solid frame per `(color index, delay ms)` pair, as an animated WebP.
   #[cfg(feature = "webp")]
   fn encoded_animated_webp(frames: &[(usize, u32)]) -> Vec<u8> {
     fn chunk(id: &[u8; 4], payload: &[u8]) -> Vec<u8> {
@@ -1747,8 +1869,6 @@ mod tests {
     assert_eq!(smaller.pixel(1, 1), FRAME_COLORS[1]);
   }
 
-  /// The SVG backend and the still-image cache both reach WebP through
-  /// `decode_image`, which must not hand animated bytes to libwebp.
   #[cfg(feature = "webp")]
   #[test]
   fn animated_webp_decodes_as_a_still_first_frame() {

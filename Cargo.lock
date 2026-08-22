@@ -1795,7 +1795,9 @@ version = "2.10.0"
 dependencies = [
  "criterion",
  "image",
+ "image-webp",
  "parley",
+ "png",
  "rayon",
  "resvg",
  "serde_json",
