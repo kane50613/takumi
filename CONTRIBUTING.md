@@ -113,7 +113,7 @@ CI will fail if generated files change unexpectedly.
 
 Do not format files in `fixtures-html`: whitespace is part of the fixture. `.oxfmtrc.json` ignores the directory.
 
-A few fixtures stay as Rust tests in `takumi/tests/fixtures/*.rs`. They animate, assert on rendered pixels, or use node features HTML cannot express (intrinsic image size hints, inline SVG sources).
+A few fixtures stay as Rust tests in `takumi/tests/fixtures/*.rs`. They animate, or assert on rendered pixels and measured layout instead of a golden.
 
 ## Changelogs
 
