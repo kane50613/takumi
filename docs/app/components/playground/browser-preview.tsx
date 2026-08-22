@@ -62,17 +62,21 @@ addEventListener("message", (event) => {
 
   const channel = new MessageChannel();
   const port = channel.port1;
+  const mount = document.getElementById("mount");
   const reportHeight = () =>
     port.postMessage({ type: "height", value: document.documentElement.scrollHeight });
+
+  // Images and fonts land after the paint returns, so the height follows the
+  // mount rather than being read once. Watching starts with the first paint,
+  // which is what tells the page the frame has something to show.
+  const observer = new ResizeObserver(reportHeight);
 
   port.onmessage = (paint) => {
     if (paint.data?.type !== "paint") return;
     document.getElementById("sheet").textContent = paint.data.css;
-    const mount = document.getElementById("mount");
     mount.style.cssText = paint.data.mountStyle;
     mount.innerHTML = paint.data.html;
-    reportHeight();
-    document.fonts.ready.then(reportHeight);
+    observer.observe(mount);
   };
   parent.postMessage({ type: "ready" }, "*", [channel.port2]);
 });
@@ -115,6 +119,9 @@ function usePaintFrame(paint: Paint | undefined) {
   const portRef = useRef<MessagePort>(undefined);
   const pendingRef = useRef<Paint>(undefined);
   const [contentHeight, setContentHeight] = useState<number>();
+  // The frame is blank until its first paint lands, which would flash white
+  // over the pane.
+  const [hasPainted, setHasPainted] = useState(false);
 
   useEffect(() => {
     const onPortMessage = (event: MessageEvent) => {
@@ -124,6 +131,7 @@ function usePaintFrame(paint: Paint | undefined) {
 
       if (message?.type === "height" && Number.isFinite(message.value)) {
         setContentHeight(Math.min(Math.max(Number(message.value), 0), MAX_FRAME_HEIGHT));
+        setHasPainted(true);
       }
     };
 
@@ -158,7 +166,7 @@ function usePaintFrame(paint: Paint | undefined) {
     portRef.current?.postMessage(paint);
   }, [paint]);
 
-  return { frameRef, contentHeight };
+  return { frameRef, contentHeight, hasPainted };
 }
 
 export default function BrowserPreview({
@@ -177,7 +185,7 @@ export default function BrowserPreview({
 }) {
   const { ref, scale } = useFitScale(width, height);
   const [paint, setPaint] = useState<Paint>();
-  const { frameRef, contentHeight } = usePaintFrame(paint);
+  const { frameRef, contentHeight, hasPainted } = usePaintFrame(paint);
 
   useEffect(() => {
     if (!html) return;
@@ -215,7 +223,7 @@ export default function BrowserPreview({
       srcDoc={FRAME_HTML}
       onLoad={() => frameRef.current?.contentWindow?.postMessage({ type: "hello" }, "*")}
       className="block border-0"
-      style={style}
+      style={{ ...style, visibility: hasPainted ? undefined : "hidden" }}
     />
   );
 
