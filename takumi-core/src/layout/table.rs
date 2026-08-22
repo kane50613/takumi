@@ -251,10 +251,14 @@ fn align_cell_content(cell: &mut RenderNode) {
 fn lower_cell(cell: &mut RenderNode, line: i16, column: usize, colspan: u16) {
   let rowspan = span_attribute(cell, "rowspan", MAX_ROWSPAN);
 
-  align_cell_content(cell);
-
+  // `vertical-align` applies to table cells, so a row child that brought its
+  // own display keeps the layout it declared.
   if cell.context.style.display == Display::TableCell {
-    cell.context.style.display = Display::Block;
+    align_cell_content(cell);
+
+    if cell.context.style.display == Display::TableCell {
+      cell.context.style.display = Display::Block;
+    }
   }
 
   cell.context.style.grid_row_start = GridPlacement::Line(line);
@@ -443,7 +447,7 @@ mod tests {
         .caption { display: table-caption }
         .caption-bottom { display: table-caption; caption-side: bottom }
         .middle { display: table-cell; vertical-align: middle }
-        .flex { display: flex }
+        .flex { display: flex; vertical-align: middle }
         .pseudo-row::before { content: 'x'; display: block }
       ",
     )
@@ -600,6 +604,7 @@ mod tests {
     let cell = &tree.children.as_deref().expect("children")[0];
 
     assert_eq!(cell.context.style.display, Display::Flex);
+    assert_eq!(cell.context.style.flex_direction, FlexDirection::Row);
     assert_eq!(cell.context.style.grid_column_start, GridPlacement::Line(1));
   }
 
