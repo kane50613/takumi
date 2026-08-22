@@ -4,6 +4,8 @@ packages:
     type: patch
 ---
 
-### Move table cell content with `vertical-align`
+### Align table cell content with `vertical-align`
 
-`vertical-align: middle` and `bottom` on a table cell now move its content down the cell instead of leaving it at the top. `baseline` still renders as `top`. A row child that is not a `table-cell`, such as a `<td style="display: flex">`, is now laid out in the row instead of dropped.
+`vertical-align: middle` on a table cell now centers its content in the cell, and `bottom` pushes it to the cell's bottom edge. `baseline` still renders as `top`.
+
+A row's element children that are not `table-cell`, such as a `<td style="display: flex">`, are now laid out in the row instead of dropped. Text sitting directly in a row is still dropped: it has no anonymous cell to go into.

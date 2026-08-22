@@ -27,7 +27,10 @@
 //! a three- and four-column fixture.
 
 use crate::{
-  layout::{node::NodeKind, tree::RenderNode},
+  layout::{
+    node::NodeKind,
+    tree::{NodeOrigin, RenderNode},
+  },
   style::{
     CaptionSide, ColorInput, Display, FlexDirection, FromCssStr, Gap, GridPlacement,
     GridPlacementSpan, GridTemplateComponents, JustifyContent, Length, ToCss, VerticalAlign,
@@ -195,18 +198,23 @@ fn track_count(placements: &[Vec<(usize, u16)>]) -> u16 {
 /// True for a row child the lowering places as a cell.
 ///
 /// Blink wraps a row child that is not a `table-cell` in an anonymous cell, so
-/// a `<td style="display: flex">` is laid out instead of dropped. Only element
-/// children qualify: real anonymous table box fixup, which would also wrap the
-/// text between cells, is not implemented.
+/// a `<td style="display: flex">` is laid out instead of dropped. Only authored
+/// elements qualify, which keeps a marker or a `::before` box out of the
+/// tracks: real anonymous table box fixup, which would also wrap the text
+/// between cells, is not implemented.
 fn is_cell(child: &RenderNode) -> bool {
   let display = child.context.style.display;
 
-  display == Display::TableCell
-    || (display != Display::None
-      && child
-        .node
-        .as_ref()
-        .is_some_and(|node| !matches!(node.kind, NodeKind::Text(_))))
+  if display == Display::TableCell {
+    return true;
+  }
+
+  display != Display::None
+    && matches!(child.origin, NodeOrigin::Authored { .. })
+    && child
+      .node
+      .as_ref()
+      .is_some_and(|node| !matches!(node.kind, NodeKind::Text(_)))
 }
 
 /// Moves a cell's content down its box for `vertical-align: middle` and
@@ -436,6 +444,7 @@ mod tests {
         .caption-bottom { display: table-caption; caption-side: bottom }
         .middle { display: table-cell; vertical-align: middle }
         .flex { display: flex }
+        .pseudo-row::before { content: 'x'; display: block }
       ",
     )
     .expect("stylesheet parses");
@@ -592,6 +601,27 @@ mod tests {
 
     assert_eq!(cell.context.style.display, Display::Flex);
     assert_eq!(cell.context.style.grid_column_start, GridPlacement::Line(1));
+  }
+
+  #[test]
+  fn a_rows_generated_box_takes_no_track() {
+    let tree = lower(
+      Node::container([named_row("row", [cell("a"), cell("b")]).with_class_name("tr pseudo-row")])
+        .with_class_name("table"),
+    );
+
+    assert_eq!(ids(&tree), ["a", "b"]);
+
+    let cells = tree.children.as_deref().expect("children");
+
+    assert_eq!(
+      cells[0].context.style.grid_column_start,
+      GridPlacement::Line(1)
+    );
+    assert_eq!(
+      cells[1].context.style.grid_column_start,
+      GridPlacement::Line(2)
+    );
   }
 
   fn with_span(node: Node, name: &str, value: &str) -> Node {
