@@ -220,7 +220,7 @@ export default function Playground() {
   );
 
   return (
-    <div className="flex h-[calc(100dvh-3.5rem)] flex-col bg-background">
+    <div className="playground-reveal relative flex h-[calc(100dvh-3.5rem)] flex-col bg-background">
       <Toolbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -268,7 +268,7 @@ export default function Playground() {
 
       <div className="flex h-7 shrink-0 items-center gap-3 border-t px-3 font-mono text-[11px] text-muted-foreground">
         {!isReady ? (
-          <span>loading wasm…</span>
+          <span className="playground-breathe">loading wasm…</span>
         ) : isUnrunShare ? (
           <span>this code came from a link · read it, then press Run</span>
         ) : renderError ? (

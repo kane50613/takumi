@@ -235,7 +235,9 @@ export function OutputPanel({
     return (
       <div className="flex h-full items-center justify-center gap-2 bg-muted/20 font-mono text-xs text-muted-foreground">
         <Loader2Icon className="size-3.5 animate-spin" />
-        {isReady ? "rendering…" : "loading wasm…"}
+        <span className={isReady ? undefined : "playground-breathe"}>
+          {isReady ? "rendering…" : "loading wasm…"}
+        </span>
       </div>
     );
   }
