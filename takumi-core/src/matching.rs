@@ -586,7 +586,7 @@ fn record_matches<'a>(
     return;
   };
   if !rule.normal_declarations.is_empty() {
-    let normal_layer_order = rule.layer_order.map_or(layer_count, |order| order);
+    let normal_layer_order = rule.layer_order.unwrap_or(layer_count);
     bucket.push(MatchedRule {
       important: false,
       layer_order: normal_layer_order,

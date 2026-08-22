@@ -56,7 +56,7 @@ pub(crate) fn apply_dithering(image: &mut RgbaImage, algorithm: DitheringAlgorit
 fn apply_ordered_bayer(image: &mut RgbaImage) {
   let width = image.width() as usize;
 
-  for (pixel_index, pixel) in image.as_mut().chunks_exact_mut(4).enumerate() {
+  for (pixel_index, pixel) in image.as_mut().as_chunks_mut::<4>().0.iter_mut().enumerate() {
     if pixel[3] == 0 {
       continue;
     }
@@ -77,7 +77,7 @@ fn apply_floyd_steinberg(image: &mut RgbaImage) {
   let mut next_errors = vec![[0.0; 3]; width + 2];
 
   for row in image.as_mut().chunks_exact_mut(width * 4) {
-    for (x, pixel) in row.chunks_exact_mut(4).enumerate() {
+    for (x, pixel) in row.as_chunks_mut::<4>().0.iter_mut().enumerate() {
       if pixel[3] == 0 {
         continue;
       }

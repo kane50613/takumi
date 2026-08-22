@@ -103,7 +103,7 @@ impl ImageBuffer {
 
 /// Converts premultiplied RGBA bytes to straight alpha in place.
 pub(crate) fn unpremultiply_in_place(data: &mut [u8]) {
-  for pixel in data.chunks_exact_mut(4) {
+  for pixel in data.as_chunks_mut::<4>().0 {
     let alpha = pixel[3];
     if alpha != 0 && alpha != 255 {
       let alpha = alpha as u16;
@@ -119,22 +119,22 @@ const ALPHA_MASK_U128: u128 =
 
 #[inline(always)]
 fn has_opaque_alpha(raw: &[u8]) -> bool {
-  let mut chunks = raw.chunks_exact(16);
-  for chunk in chunks.by_ref() {
-    let bytes: [u8; 16] = chunk.try_into().unwrap_or([0; 16]);
-    if u128::from_ne_bytes(bytes) & ALPHA_MASK_U128 != ALPHA_MASK_U128 {
+  let (chunks, remainder) = raw.as_chunks::<16>();
+  for chunk in chunks {
+    if u128::from_ne_bytes(*chunk) & ALPHA_MASK_U128 != ALPHA_MASK_U128 {
       return false;
     }
   }
-  chunks
-    .remainder()
-    .chunks_exact(4)
+  remainder
+    .as_chunks::<4>()
+    .0
+    .iter()
     .all(|pixel| pixel[3] == u8::MAX)
 }
 
 #[inline(always)]
 pub(crate) fn premultiply_rgba_in_place(raw: &mut [u8]) {
-  for pixel in raw.chunks_exact_mut(4) {
+  for pixel in raw.as_chunks_mut::<4>().0 {
     let alpha = pixel[3];
     if alpha == u8::MAX {
       continue;

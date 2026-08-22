@@ -803,9 +803,9 @@ mod tests {
   fn write_image_does_not_apply_dithering() {
     let mut image = RgbaImage::new(8, 8);
 
-    for (index, pixel) in image.as_mut().chunks_exact_mut(4).enumerate() {
+    for (index, pixel) in image.as_mut().as_chunks_mut::<4>().0.iter_mut().enumerate() {
       let value = (index * 3) as u8;
-      pixel.copy_from_slice(&[value, value, value, 255]);
+      *pixel = [value, value, value, 255];
     }
 
     let mut dithered_image = image.clone();

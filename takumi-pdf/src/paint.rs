@@ -93,7 +93,7 @@ pub(crate) fn overflow_clip_rect(
 /// embedded bytes never become premultiplied samples in the first place.
 #[cfg(feature = "images")]
 fn unpremultiply(data: &mut [u8]) {
-  for pixel in data.chunks_exact_mut(4) {
+  for pixel in data.as_chunks_mut::<4>().0 {
     let alpha = pixel[3];
     if alpha != 0 && alpha != 255 {
       let alpha16 = u16::from(alpha);
@@ -174,8 +174,8 @@ pub(crate) fn rasterized_image(
 
   unpremultiply(&mut data);
   if let Some(filter) = filter {
-    for pixel in data.chunks_exact_mut(4) {
-      pixel.copy_from_slice(&filter.apply([pixel[0], pixel[1], pixel[2], pixel[3]]));
+    for pixel in data.as_chunks_mut::<4>().0 {
+      *pixel = filter.apply(*pixel);
     }
   }
   Ok(Some(KrillaImage::from_rgba8(
