@@ -1,33 +1,30 @@
 //! Lowering `display: table` onto the grid layout algorithm.
 //!
-//! taffy has no table algorithm, but grid already provides the one thing a
-//! table needs and flex cannot give: a column track shared by every row. So a
-//! table subtree is rewritten into a single grid whose items are the cells,
-//! with the row and row-group boxes dropped — they exist to group, and grid
-//! rows come from the track count instead. A row's background is copied onto
-//! its cells on the way out, since striping and header bands live there.
+//! taffy has no table algorithm. Grid gives every row a shared column track,
+//! which flex cannot. Rows and row groups are dropped, so a row's background
+//! is copied onto its cells. `border-collapse` and row borders are not
+//! implemented.
 //!
-//! This is auto table layout approximated by `auto` tracks. It follows Blink
-//! where following is cheap (row group order, `border-spacing`) and diverges
-//! where the grid algorithm cannot express a table: `border-collapse`,
-//! `vertical-align`, and row borders are not implemented. A cell's box
-//! stretches to its grid area, so borders and backgrounds cover it, but the
-//! content inside sits at the top — `vertical-align: top` where Blink
-//! defaults to `middle`.
+//! Cell alignment mirrors Blink's `ComputeContentAlignment` in
+//! `block_layout_algorithm_utils.cc`. `baseline` is naive: it uses block-start
+//! borders and padding instead of a measured first baseline.
 //!
-//! The width distribution differs too. Blink's `kAboveMax` branch
-//! (`table_layout_utils.cc`) grows each auto column by
-//! `excess × max_content_column / Σ max_content`, so the columns end up scaled
-//! in proportion to their content; grid spreads free space equally across
-//! `auto` tracks. Two columns of equal content land on the same pixel either
-//! way, and wider tables drift — measured at 15–48pt against headless Chrome on
-//! a three- and four-column fixture.
+//! Grid distributes free space evenly across `auto` tracks. Blink's
+//! `kAboveMax` in `table_layout_utils.cc` uses max-content proportions. The
+//! measured drift is 15–48pt against headless Chrome on three- and four-column
+//! fixtures.
+
+use taffy::LengthPercentageAuto;
 
 use crate::{
-  layout::tree::RenderNode,
+  layout::{
+    node::NodeKind,
+    tree::{NodeOrigin, RenderNode},
+  },
   style::{
-    CaptionSide, ColorInput, Display, FromCssStr, Gap, GridPlacement, GridPlacementSpan,
-    GridTemplateComponents, Length, ToCss,
+    CaptionSide, ColorInput, ComputedStyle, Display, FlexDirection, FromCssStr, Gap, GridPlacement,
+    GridPlacementSpan, GridTemplateComponents, JustifyContent, Length, ToCss, VerticalAlign,
+    VerticalAlignKeyword,
   },
 };
 
@@ -40,7 +37,6 @@ const MAX_COLSPAN: u16 = 1000;
 /// Blink's `kMaxRowSpan`.
 const MAX_ROWSPAN: u16 = 65534;
 
-/// Rewrites every `display: table` box in the tree into a grid.
 pub(crate) fn lower_tables(node: &mut RenderNode) {
   if node.context.style.display == Display::Table {
     lower_table(node);
@@ -53,11 +49,7 @@ pub(crate) fn lower_tables(node: &mut RenderNode) {
   }
 }
 
-/// How many tracks a cell occupies, from `colspan` / `rowspan`.
-///
-/// The name is matched case-insensitively: HTML parsing lowercases attributes,
-/// but JSX hands `colSpan` and `rowSpan` through verbatim. Values are clamped
-/// the way Blink clamps them, which also keeps the track count in range.
+/// Reads a case-insensitive span attribute within Blink's limit.
 fn span_attribute(cell: &RenderNode, name: &str, max: u16) -> u16 {
   cell
     .node
@@ -73,7 +65,6 @@ fn span_attribute(cell: &RenderNode, name: &str, max: u16) -> u16 {
     .map_or(1, |value| value.clamp(1, u32::from(max)) as u16)
 }
 
-/// Row groups render header first and footer last, whatever the source order.
 fn group_order(display: Display) -> u8 {
   match display {
     Display::TableHeaderGroup => 0,
@@ -82,12 +73,7 @@ fn group_order(display: Display) -> u8 {
   }
 }
 
-/// The rows of a table, with row groups flattened away and reordered, plus how
-/// many leading rows came from header groups.
-///
-/// Anything that is neither a row, a row group, nor a caption stays where it is
-/// as a full-width item, which keeps stray content visible instead of dropping
-/// it on the floor. Real anonymous table box fixup is not implemented.
+/// Extracts rows without CSS anonymous table-box fixup.
 fn collect_rows(
   table: &mut RenderNode,
 ) -> (Vec<RenderNode>, Vec<RenderNode>, usize, Vec<RenderNode>) {
@@ -130,10 +116,7 @@ fn collect_rows(
   (captions, rows, header_rows, strays)
 }
 
-/// Each row's cells as `(column, colspan)`, advanced past tracks a preceding
-/// row's `rowspan` still covers — the occupancy grid auto-placement will see.
 fn resolve_columns(rows: &[RenderNode]) -> Vec<Vec<(usize, u16)>> {
-  // Per track, how many more rows a rowspan keeps it covered.
   let mut covered: Vec<u16> = Vec::new();
   let mut placements = Vec::with_capacity(rows.len());
 
@@ -142,7 +125,7 @@ fn resolve_columns(rows: &[RenderNode]) -> Vec<Vec<(usize, u16)>> {
     let mut cells = Vec::new();
 
     for cell in row.children.as_deref().unwrap_or_default() {
-      if cell.context.style.display != Display::TableCell {
+      if !is_cell(cell) {
         continue;
       }
 
@@ -176,8 +159,6 @@ fn resolve_columns(rows: &[RenderNode]) -> Vec<Vec<(usize, u16)>> {
   placements
 }
 
-/// Widest row, counting `colspan` and rowspan occupancy, which is how many
-/// tracks the grid needs.
 fn track_count(placements: &[Vec<(usize, u16)>]) -> u16 {
   placements
     .iter()
@@ -188,25 +169,157 @@ fn track_count(placements: &[Vec<(usize, u16)>]) -> u16 {
     .clamp(1, u32::from(MAX_COLSPAN)) as u16
 }
 
-/// Turns a cell into a grid item at its resolved position. The column is
-/// explicit rather than auto-placed: taffy's placement cursor does not return
-/// to the row start on a row a `rowspan` reaches into.
+/// Recognizes authored cells without CSS anonymous table-box fixup.
+fn is_cell(child: &RenderNode) -> bool {
+  let display = child.context.style.display;
+
+  if display == Display::TableCell {
+    return true;
+  }
+
+  display != Display::None
+    && matches!(child.origin, NodeOrigin::Authored { .. })
+    && child
+      .node
+      .as_ref()
+      .is_some_and(|node| !matches!(node.kind, NodeKind::Text(_)))
+}
+
+/// Blink table-cell content alignment from `block_layout_algorithm_utils.cc`.
+#[derive(Clone, Copy, PartialEq)]
+enum CellAlignment {
+  Start,
+  Center,
+  End,
+  Baseline,
+}
+
+impl CellAlignment {
+  fn of(style: &ComputedStyle) -> Self {
+    match style.align_content {
+      JustifyContent::Normal => Self::of_vertical_align(style.vertical_align),
+      JustifyContent::SpaceAround
+      | JustifyContent::SpaceEvenly
+      | JustifyContent::Center
+      | JustifyContent::SafeCenter => Self::Center,
+      JustifyContent::End
+      | JustifyContent::FlexEnd
+      | JustifyContent::SafeEnd
+      | JustifyContent::SafeFlexEnd => Self::End,
+      _ => Self::Start,
+    }
+  }
+
+  fn of_vertical_align(vertical_align: VerticalAlign) -> Self {
+    match vertical_align {
+      VerticalAlign::Keyword(VerticalAlignKeyword::Top) => Self::Start,
+      VerticalAlign::Keyword(VerticalAlignKeyword::Middle) => Self::Center,
+      VerticalAlign::Keyword(VerticalAlignKeyword::Bottom) => Self::End,
+      _ => Self::Baseline,
+    }
+  }
+
+  fn justify_content(self) -> Option<JustifyContent> {
+    match self {
+      Self::Center => Some(JustifyContent::SafeCenter),
+      Self::End => Some(JustifyContent::SafeFlexEnd),
+      Self::Start | Self::Baseline => None,
+    }
+  }
+}
+
+/// Wraps content to preserve its formatting context during alignment.
+fn wrap_cell_content(cell: &mut RenderNode) -> Option<&mut RenderNode> {
+  let children = cell.children.take()?;
+  let content = RenderNode::anonymous_block_container(&cell.context, children.into_vec());
+
+  cell.children = Some(Box::new([content]));
+  cell.children.as_deref_mut()?.first_mut()
+}
+
+fn align_cell_content(cell: &mut RenderNode) {
+  let Some(justify) = CellAlignment::of(&cell.context.style).justify_content() else {
+    return;
+  };
+
+  if wrap_cell_content(cell).is_none() {
+    return;
+  }
+
+  let style = &mut cell.context.style;
+
+  style.display = Display::Flex;
+  style.flex_direction = FlexDirection::Column;
+  style.justify_content = justify;
+}
+
+/// Approximates the first-baseline offset as block-start border and padding.
+/// It drops the first line's ascent and half-leading, so cells drift once a
+/// row mixes fonts or line heights.
+fn content_inset_top(cell: &RenderNode) -> f32 {
+  let style = &cell.context.style;
+  let sizing = &cell.context.sizing;
+  let border = if style.border_top_style.is_rendered() {
+    Length::from(style.border_top_width).to_px(sizing, 0.0)
+  } else {
+    0.0
+  };
+
+  border + style.padding_top.to_px(sizing, 0.0)
+}
+
+fn align_row_baselines(cells: &mut [RenderNode]) {
+  let baselines: Vec<usize> = cells
+    .iter()
+    .enumerate()
+    .filter(|(_, cell)| CellAlignment::of(&cell.context.style) == CellAlignment::Baseline)
+    .map(|(index, _)| index)
+    .collect();
+
+  if baselines.len() < 2 {
+    return;
+  }
+
+  let deepest = baselines
+    .iter()
+    .map(|&index| content_inset_top(&cells[index]))
+    .fold(0.0, f32::max);
+
+  for index in baselines {
+    let shift = deepest - content_inset_top(&cells[index]);
+
+    if shift <= 0.0 {
+      continue;
+    }
+
+    if let Some(content) = wrap_cell_content(&mut cells[index])
+      && let Some(layout_style) = content.layout_style_override.as_mut()
+    {
+      layout_style.margin.top = LengthPercentageAuto::length(shift);
+    }
+  }
+}
+
+/// Places the cell explicitly: taffy's cursor does not return to the row start
+/// on a row a `rowspan` reaches into.
 fn lower_cell(cell: &mut RenderNode, line: i16, column: usize, colspan: u16) {
   let rowspan = span_attribute(cell, "rowspan", MAX_ROWSPAN);
 
-  cell.context.style.display = Display::Block;
+  if cell.context.style.display == Display::TableCell {
+    align_cell_content(cell);
+
+    if cell.context.style.display == Display::TableCell {
+      cell.context.style.display = Display::Block;
+    }
+  }
+
   cell.context.style.grid_row_start = GridPlacement::Line(line);
   cell.context.style.grid_row_end = GridPlacement::Span(GridPlacementSpan::Span(rowspan));
   cell.context.style.grid_column_start = GridPlacement::Line(column as i16 + 1);
   cell.context.style.grid_column_end = GridPlacement::Span(GridPlacementSpan::Span(colspan));
 }
 
-/// Copies a row's background onto a cell that has none of its own.
-///
-/// The row box is dropped by the lowering, so its background would go with it —
-/// and zebra striping and header bands are set on the row. Painting it per cell
-/// leaves the `border-spacing` gaps unpainted, where a real table row would
-/// cover them. Row borders are lost outright.
+/// Approximation: row backgrounds leave `border-spacing` gaps unpainted.
 fn inherit_row_background(row: &RenderNode, cell: &mut RenderNode) {
   let row_style = &row.context.style;
 
@@ -232,7 +345,6 @@ fn inherit_row_background(row: &RenderNode, cell: &mut RenderNode) {
   cell_style.background_origin = row_style.background_origin;
 }
 
-/// Spans the full width of one row, like a caption or a stray child.
 fn lower_full_width(node: &mut RenderNode, line: i16, columns: u16) {
   node.context.style.display = Display::Block;
   node.context.style.grid_row_start = GridPlacement::Line(line);
@@ -258,7 +370,6 @@ fn lower_table(table: &mut RenderNode) {
     line = line.saturating_add(1);
   }
 
-  // A header that is the whole table has nothing to repeat over.
   if header_rows > 0 && header_rows < rows.len() {
     let start = line;
 
@@ -266,14 +377,13 @@ fn lower_table(table: &mut RenderNode) {
   }
 
   for (mut row, positions) in rows.into_iter().zip(placements) {
-    let cells = row.children.take().map_or_else(Vec::new, Vec::from);
+    let mut cells = row.children.take().map_or_else(Vec::new, Vec::from);
     let mut positions = positions.into_iter();
 
-    for mut cell in cells {
-      if cell.context.style.display != Display::TableCell {
-        continue;
-      }
+    cells.retain(is_cell);
+    align_row_baselines(&mut cells);
 
+    for mut cell in cells {
       let Some((column, colspan)) = positions.next() else {
         break;
       };
@@ -301,8 +411,6 @@ fn lower_table(table: &mut RenderNode) {
   let style = &mut table.context.style;
 
   style.display = Display::Grid;
-  // `auto` tracks put free space into the columns rather than between them,
-  // which is the shape of Blink's auto table layout.
   style.grid_template_columns = Some(tracks);
 
   if style.column_gap == Gap::Normal {
@@ -316,12 +424,7 @@ fn lower_table(table: &mut RenderNode) {
   table.children = Some(items.into_boxed_slice());
 }
 
-/// Track sizes for the grid: a column whose first single-column cell declares a
-/// width gets that length, the rest stay `auto`.
-///
-/// This is Blink's constrained-versus-auto column split, decided from the cell's
-/// specified width the same way, but read off the first row that states one
-/// instead of resolving the whole column.
+/// Approximates Blink constrained columns from the first declared cell width.
 fn track_sizes(
   rows: &[RenderNode],
   placements: &[Vec<(usize, u16)>],
@@ -335,7 +438,7 @@ fn track_sizes(
       .as_deref()
       .unwrap_or_default()
       .iter()
-      .filter(|cell| cell.context.style.display == Display::TableCell);
+      .filter(|cell| is_cell(cell));
 
     for (cell, (column, colspan)) in table_cells.zip(cells) {
       let width = &cell.context.style.width;
@@ -356,13 +459,15 @@ fn track_sizes(
 mod tests {
   use std::sync::Arc;
 
+  use taffy::LengthPercentageAuto;
+
   use crate::{
     context::RenderContext,
     layout::{node::Node, tree::RenderNode},
     resources::font::Fonts,
     style::{
-      Color, ColorInput, Display, GridPlacement, GridPlacementSpan, Length, SizingContext, Style,
-      StyleDeclaration, StyleSheet, ToCss,
+      Color, ColorInput, Display, FlexDirection, GridPlacement, GridPlacementSpan, JustifyContent,
+      Length, SizingContext, Style, StyleDeclaration, StyleSheet, ToCss,
     },
     viewport::Viewport,
   };
@@ -380,6 +485,11 @@ mod tests {
         .td { display: table-cell }
         .caption { display: table-caption }
         .caption-bottom { display: table-caption; caption-side: bottom }
+        .middle { display: table-cell; vertical-align: middle }
+        .align-content-end { align-content: end }
+        .padded { display: table-cell; padding-top: 10px }
+        .flex { display: flex; vertical-align: middle }
+        .pseudo-row::before { content: 'x'; display: block }
       ",
     )
     .expect("stylesheet parses");
@@ -496,6 +606,120 @@ mod tests {
     );
 
     assert_eq!(ids(&tree), ["a", "b", "cap"]);
+  }
+
+  #[test]
+  fn a_middle_cell_centers_its_content_in_a_flex_column() {
+    let tree = lower(
+      Node::container([row([
+        Node::container([Node::text("middle")])
+          .with_class_name("middle")
+          .with_id("middle"),
+        cell("tall"),
+      ])])
+      .with_class_name("table"),
+    );
+
+    let cell = &tree.children.as_deref().expect("children")[0];
+
+    assert_eq!(cell.context.style.display, Display::Flex);
+    assert_eq!(cell.context.style.flex_direction, FlexDirection::Column);
+    assert_eq!(
+      cell.context.style.justify_content,
+      JustifyContent::SafeCenter
+    );
+    assert_eq!(cell.children.as_deref().expect("wrapped content").len(), 1);
+  }
+
+  #[test]
+  fn align_content_outranks_vertical_align_on_a_cell() {
+    let tree = lower(
+      Node::container([row([
+        Node::container([Node::text("cell")])
+          .with_class_name("middle align-content-end")
+          .with_id("cell"),
+        cell("tall"),
+      ])])
+      .with_class_name("table"),
+    );
+
+    let cell = &tree.children.as_deref().expect("children")[0];
+
+    assert_eq!(
+      cell.context.style.justify_content,
+      JustifyContent::SafeFlexEnd
+    );
+  }
+
+  #[test]
+  fn a_baseline_cell_drops_to_the_deepest_padding_in_its_row() {
+    let tree = lower(
+      Node::container([row([
+        Node::container([Node::text("padded")])
+          .with_class_name("padded")
+          .with_id("padded"),
+        cell("flush"),
+      ])])
+      .with_class_name("table"),
+    );
+
+    let cells = tree.children.as_deref().expect("children");
+    let margin_top = |cell: &RenderNode| {
+      cell
+        .children
+        .as_deref()
+        .and_then(<[RenderNode]>::first)
+        .and_then(|content| content.layout_style_override.as_ref())
+        .map(|style| style.margin.top)
+    };
+
+    assert_eq!(margin_top(&cells[0]), None);
+    assert_eq!(
+      margin_top(&cells[1]),
+      Some(LengthPercentageAuto::length(10.0))
+    );
+  }
+
+  #[test]
+  fn a_cell_that_is_not_a_table_cell_keeps_its_display_and_its_track() {
+    let tree = lower(
+      Node::container([row([
+        Node::container([Node::text("flex")])
+          .with_class_name("flex")
+          .with_id("flex"),
+        cell("b"),
+      ])])
+      .with_class_name("table"),
+    );
+
+    assert_eq!(ids(&tree), ["flex", "b"]);
+
+    let cell = &tree.children.as_deref().expect("children")[0];
+
+    assert_eq!(cell.context.style.display, Display::Flex);
+    assert_eq!(cell.context.style.flex_direction, FlexDirection::Row);
+    assert_eq!(cell.context.style.grid_column_start, GridPlacement::Line(1));
+  }
+
+  #[test]
+  fn a_rows_generated_box_takes_no_track() {
+    let tree = lower(
+      Node::container([named_row("row", [cell("a"), cell("b")]).with_class_name("tr pseudo-row")])
+        .with_class_name("table"),
+    );
+
+    assert_eq!(ids(&tree), ["a", "b"]);
+
+    let cells = tree.children.as_deref().expect("children");
+
+    assert_eq!(
+      cells[0].context.style.grid_column_start,
+      GridPlacement::Line(1)
+    );
+    assert_eq!(
+      cells[1].context.style.grid_column_start,
+      GridPlacement::Line(2)
+    );
   }
 
   fn with_span(node: Node, name: &str, value: &str) -> Node {

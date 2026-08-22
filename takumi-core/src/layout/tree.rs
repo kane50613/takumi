@@ -995,7 +995,10 @@ impl RenderNode {
     }
   }
 
-  fn anonymous_block_container(parent_context: &RenderContext, children: Vec<RenderNode>) -> Self {
+  pub(super) fn anonymous_block_container(
+    parent_context: &RenderContext,
+    children: Vec<RenderNode>,
+  ) -> Self {
     Self {
       context: Self::anonymous_box_context(parent_context),
       node: None,

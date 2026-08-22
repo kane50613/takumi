@@ -35,12 +35,12 @@ Takumi renders `display: table` by rewriting the table into a grid before layout
 
 ## Where it drifts
 
-| Behavior           | In a browser                        | In Takumi                              |
-| :----------------- | :---------------------------------- | :------------------------------------- |
-| Auto column widths | Grow in proportion to their content | Share free space equally               |
-| `vertical-align`   | Cell content centers by default     | Cell content sits at the top           |
-| `border-collapse`  | Merges adjacent borders             | Not implemented; borders stay separate |
-| Row borders        | Drawn on the row box                | Dropped; put borders on the cells      |
+| Behavior           | In a browser                                   | In Takumi                                                                        |
+| :----------------- | :--------------------------------------------- | :------------------------------------------------------------------------------- |
+| Auto column widths | Grow in proportion to their content            | Share free space equally                                                         |
+| `vertical-align`   | `baseline` aligns the first baselines of a row | `top`, `middle`, and `bottom` follow the browser. `baseline` falls back to `top` |
+| `border-collapse`  | Merges adjacent borders                        | Not implemented; borders stay separate                                           |
+| Row borders        | Drawn on the row box                           | Dropped; put borders on the cells                                                |
 
 The width drift appears when the table is wider than its content and the free space splits across two or more `auto` columns, fixed-width neighbors included. **Declare a width on a single-column cell in each column** to keep the columns close to Chrome. A width on a spanning cell does not size a column.
 
@@ -54,4 +54,4 @@ The width drift appears when the table is wider than its content and the free sp
 Native CSS table layout for taffy is in progress at
 [DioxusLabs/taffy#1094](https://github.com/DioxusLabs/taffy/pull/1094), with column width and row
 height distribution ported from Blink. Once it lands, Takumi switches to it. That closes the
-column width and `vertical-align` drift, with no change to the properties on this page.
+column width and baseline drift, with no change to the properties on this page.
