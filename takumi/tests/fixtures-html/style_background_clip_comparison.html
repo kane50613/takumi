@@ -1,12 +1,108 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <title>style_background_clip_comparison</title>
-  <base href="../../../">
-  <link rel="stylesheet" href="takumi/tests/shared.css">
-</head>
-<body style="width: 1200px; height: 630px;">
-  <div style="display: flex; width: 100%; height: 100%; background-color: rgb(240, 240, 240); flex-direction: column; row-gap: 20px; column-gap: 20px; padding-top: 20px; padding-right: 20px; padding-bottom: 20px; padding-left: 20px;"><div style="display: flex; width: 100%; height: 80px; background-color: rgb(255, 0, 0); background-clip: border-box; padding-top: 15px; padding-right: 15px; padding-bottom: 15px; padding-left: 15px; border-top-width: 8px; border-right-width: 8px; border-bottom-width: 8px; border-left-width: 8px; border-top-style: solid; border-right-style: solid; border-bottom-style: solid; border-left-style: solid; border-top-color: rgba(0, 0, 0, 0.501961); border-right-color: rgba(0, 0, 0, 0.501961); border-bottom-color: rgba(0, 0, 0, 0.501961); border-left-color: rgba(0, 0, 0, 0.501961);"><span style="display: flex; font-size: 20px; color: rgb(255, 255, 255);">border-box</span></div><div style="display: flex; width: 100%; height: 80px; background-color: rgb(0, 128, 255); background-clip: padding-box; padding-top: 15px; padding-right: 15px; padding-bottom: 15px; padding-left: 15px; border-top-width: 8px; border-right-width: 8px; border-bottom-width: 8px; border-left-width: 8px; border-top-style: solid; border-right-style: solid; border-bottom-style: solid; border-left-style: solid; border-top-color: rgba(0, 0, 0, 0.501961); border-right-color: rgba(0, 0, 0, 0.501961); border-bottom-color: rgba(0, 0, 0, 0.501961); border-left-color: rgba(0, 0, 0, 0.501961);"><span style="display: flex; font-size: 20px; color: rgb(255, 255, 255);">padding-box</span></div><div style="display: flex; width: 100%; height: 80px; background-color: rgb(34, 197, 94); background-clip: content-box; padding-top: 15px; padding-right: 15px; padding-bottom: 15px; padding-left: 15px; border-top-width: 8px; border-right-width: 8px; border-bottom-width: 8px; border-left-width: 8px; border-top-style: solid; border-right-style: solid; border-bottom-style: solid; border-left-style: solid; border-top-color: rgba(0, 0, 0, 0.501961); border-right-color: rgba(0, 0, 0, 0.501961); border-bottom-color: rgba(0, 0, 0, 0.501961); border-left-color: rgba(0, 0, 0, 0.501961);"><span style="display: flex; font-size: 20px; color: rgb(255, 255, 255);">content-box</span></div></div>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <title>style_background_clip_comparison</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div
+      style="
+        display: flex;
+        width: 100%;
+        height: 100%;
+        background-color: rgb(240, 240, 240);
+        flex-direction: column;
+        row-gap: 20px;
+        column-gap: 20px;
+        padding-top: 20px;
+        padding-right: 20px;
+        padding-bottom: 20px;
+        padding-left: 20px;
+      "
+    >
+      <div
+        style="
+          display: flex;
+          width: 100%;
+          height: 80px;
+          background-color: rgb(255, 0, 0);
+          background-clip: border-box;
+          padding-top: 15px;
+          padding-right: 15px;
+          padding-bottom: 15px;
+          padding-left: 15px;
+          border-top-width: 8px;
+          border-right-width: 8px;
+          border-bottom-width: 8px;
+          border-left-width: 8px;
+          border-top-style: solid;
+          border-right-style: solid;
+          border-bottom-style: solid;
+          border-left-style: solid;
+          border-top-color: rgba(0, 0, 0, 0.501961);
+          border-right-color: rgba(0, 0, 0, 0.501961);
+          border-bottom-color: rgba(0, 0, 0, 0.501961);
+          border-left-color: rgba(0, 0, 0, 0.501961);
+        "
+      >
+        <span style="display: flex; font-size: 20px; color: rgb(255, 255, 255)">border-box</span>
+      </div>
+      <div
+        style="
+          display: flex;
+          width: 100%;
+          height: 80px;
+          background-color: rgb(0, 128, 255);
+          background-clip: padding-box;
+          padding-top: 15px;
+          padding-right: 15px;
+          padding-bottom: 15px;
+          padding-left: 15px;
+          border-top-width: 8px;
+          border-right-width: 8px;
+          border-bottom-width: 8px;
+          border-left-width: 8px;
+          border-top-style: solid;
+          border-right-style: solid;
+          border-bottom-style: solid;
+          border-left-style: solid;
+          border-top-color: rgba(0, 0, 0, 0.501961);
+          border-right-color: rgba(0, 0, 0, 0.501961);
+          border-bottom-color: rgba(0, 0, 0, 0.501961);
+          border-left-color: rgba(0, 0, 0, 0.501961);
+        "
+      >
+        <span style="display: flex; font-size: 20px; color: rgb(255, 255, 255)">padding-box</span>
+      </div>
+      <div
+        style="
+          display: flex;
+          width: 100%;
+          height: 80px;
+          background-color: rgb(34, 197, 94);
+          background-clip: content-box;
+          padding-top: 15px;
+          padding-right: 15px;
+          padding-bottom: 15px;
+          padding-left: 15px;
+          border-top-width: 8px;
+          border-right-width: 8px;
+          border-bottom-width: 8px;
+          border-left-width: 8px;
+          border-top-style: solid;
+          border-right-style: solid;
+          border-bottom-style: solid;
+          border-left-style: solid;
+          border-top-color: rgba(0, 0, 0, 0.501961);
+          border-right-color: rgba(0, 0, 0, 0.501961);
+          border-bottom-color: rgba(0, 0, 0, 0.501961);
+          border-left-color: rgba(0, 0, 0, 0.501961);
+        "
+      >
+        <span style="display: flex; font-size: 20px; color: rgb(255, 255, 255)">content-box</span>
+      </div>
+    </div>
+  </body>
 </html>

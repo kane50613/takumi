@@ -1,12 +1,77 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <title>inline_float_wrap</title>
-  <base href="../../../">
-  <link rel="stylesheet" href="takumi/tests/shared.css">
-</head>
-<body style="width: 1200px; height: 630px;">
-  <div style="display: block; width: 920px; background-color: rgb(248, 250, 252); padding-top: 28px; padding-right: 28px; padding-bottom: 28px; padding-left: 28px; font-size: 30px; line-height: 1.25; color: rgb(24, 34, 53);"><img src="assets/images/yeecord.png" style="display: inline; float: left; width: 144px; height: 144px; margin-top: 0px; margin-right: 20px; margin-bottom: 12px; margin-left: 0px; border-top-left-radius: 20px 20px; border-top-right-radius: 20px 20px; border-bottom-right-radius: 20px 20px; border-bottom-left-radius: 20px 20px;" /><div style="display: inline-block; float: right; width: 220px; margin-top: 0px; margin-right: 0px; margin-bottom: 12px; margin-left: 20px; padding-top: 16px; padding-right: 16px; padding-bottom: 16px; padding-left: 16px; background-color: rgb(31, 64, 122); border-top-left-radius: 18px 18px; border-top-right-radius: 18px 18px; border-bottom-right-radius: 18px 18px; border-bottom-left-radius: 18px 18px;"><span style="display: block; font-size: 20px; font-weight: 700; color: rgb(255, 255, 255);">Float Card</span><span style="display: block; font-size: 15px; line-height: 1.35; color: rgb(231, 239, 255);">A floated inline-block container should keep participating in inline layout and push adjacent text away until its bottom edge.</span></div><span style="display: inline;">Parley 0.9 adds caller-controlled line geometry so Takumi can place floats during line breaking instead of merely recording out-of-flow boxes. This fixture checks that the first lines narrow between the left image and the right card, then expand back to the full measure width after both floated boxes end. The text should read naturally, with no overlap and no duplicated boxes in the measured or painted output.</span></div>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <title>inline_float_wrap</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div
+      style="
+        display: block;
+        width: 920px;
+        background-color: rgb(248, 250, 252);
+        padding-top: 28px;
+        padding-right: 28px;
+        padding-bottom: 28px;
+        padding-left: 28px;
+        font-size: 30px;
+        line-height: 1.25;
+        color: rgb(24, 34, 53);
+      "
+    >
+      <img
+        src="assets/images/yeecord.png"
+        style="
+          display: inline;
+          float: left;
+          width: 144px;
+          height: 144px;
+          margin-top: 0px;
+          margin-right: 20px;
+          margin-bottom: 12px;
+          margin-left: 0px;
+          border-top-left-radius: 20px 20px;
+          border-top-right-radius: 20px 20px;
+          border-bottom-right-radius: 20px 20px;
+          border-bottom-left-radius: 20px 20px;
+        "
+      />
+      <div
+        style="
+          display: inline-block;
+          float: right;
+          width: 220px;
+          margin-top: 0px;
+          margin-right: 0px;
+          margin-bottom: 12px;
+          margin-left: 20px;
+          padding-top: 16px;
+          padding-right: 16px;
+          padding-bottom: 16px;
+          padding-left: 16px;
+          background-color: rgb(31, 64, 122);
+          border-top-left-radius: 18px 18px;
+          border-top-right-radius: 18px 18px;
+          border-bottom-right-radius: 18px 18px;
+          border-bottom-left-radius: 18px 18px;
+        "
+      >
+        <span style="display: block; font-size: 20px; font-weight: 700; color: rgb(255, 255, 255)"
+          >Float Card</span
+        ><span style="display: block; font-size: 15px; line-height: 1.35; color: rgb(231, 239, 255)"
+          >A floated inline-block container should keep participating in inline layout and push
+          adjacent text away until its bottom edge.</span
+        >
+      </div>
+      <span style="display: inline"
+        >Parley 0.9 adds caller-controlled line geometry so Takumi can place floats during line
+        breaking instead of merely recording out-of-flow boxes. This fixture checks that the first
+        lines narrow between the left image and the right card, then expand back to the full measure
+        width after both floated boxes end. The text should read naturally, with no overlap and no
+        duplicated boxes in the measured or painted output.</span
+      >
+    </div>
+  </body>
 </html>

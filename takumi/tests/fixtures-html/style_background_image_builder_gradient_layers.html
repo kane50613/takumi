@@ -1,12 +1,37 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <title>style_background_image_builder_gradient_layers</title>
-  <base href="../../../">
-  <link rel="stylesheet" href="takumi/tests/shared.css">
-</head>
-<body style="width: 1200px; height: 630px;">
-  <div style="display: flex; width: 100%; height: 100%; background-image: radial-gradient(circle at left top, rgba(236, 253, 245, 0.901961), rgba(0, 0, 0, 0.000000) 30.000002%), radial-gradient(circle at right bottom, rgba(45, 212, 191, 0.219608), rgba(0, 0, 0, 0.000000) 28%), linear-gradient(135deg, rgb(15, 23, 42) 0%, rgb(19, 78, 74) 38%, rgb(17, 94, 89) 66%, rgb(15, 118, 110) 100%); background-position: center center;"></div>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <title>style_background_image_builder_gradient_layers</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div
+      style="
+        display: flex;
+        width: 100%;
+        height: 100%;
+        background-image:
+          radial-gradient(
+            circle at left top,
+            rgba(236, 253, 245, 0.901961),
+            rgba(0, 0, 0, 0) 30.000002%
+          ),
+          radial-gradient(
+            circle at right bottom,
+            rgba(45, 212, 191, 0.219608),
+            rgba(0, 0, 0, 0) 28%
+          ),
+          linear-gradient(
+            135deg,
+            rgb(15, 23, 42) 0%,
+            rgb(19, 78, 74) 38%,
+            rgb(17, 94, 89) 66%,
+            rgb(15, 118, 110) 100%
+          );
+        background-position: center center;
+      "
+    ></div>
+  </body>
 </html>

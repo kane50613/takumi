@@ -1,12 +1,41 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <title>style_background_image_gradient_color_space_comparison</title>
-  <base href="../../../">
-  <link rel="stylesheet" href="takumi/tests/shared.css">
-</head>
-<body style="width: 1200px; height: 630px;">
-  <div style="display: flex; width: 100%; height: 100%; flex-direction: column;"><div style="display: flex; width: 100%; height: 33.333332%; background-image: linear-gradient(to right in srgb, rgb(255, 0, 0), rgb(0, 0, 255));"></div><div style="display: flex; width: 100%; height: 33.333%; background-image: linear-gradient(to right, rgb(255, 0, 0), rgb(0, 0, 255));"></div><div style="display: flex; width: 100%; height: 33.334%; background-image: linear-gradient(to right in oklch longer hue, rgb(255, 0, 0), rgb(0, 0, 255));"></div></div>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <title>style_background_image_gradient_color_space_comparison</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div style="display: flex; width: 100%; height: 100%; flex-direction: column">
+      <div
+        style="
+          display: flex;
+          width: 100%;
+          height: 33.333332%;
+          background-image: linear-gradient(to right in srgb, rgb(255, 0, 0), rgb(0, 0, 255));
+        "
+      ></div>
+      <div
+        style="
+          display: flex;
+          width: 100%;
+          height: 33.333%;
+          background-image: linear-gradient(to right, rgb(255, 0, 0), rgb(0, 0, 255));
+        "
+      ></div>
+      <div
+        style="
+          display: flex;
+          width: 100%;
+          height: 33.334%;
+          background-image: linear-gradient(
+            to right in oklch longer hue,
+            rgb(255, 0, 0),
+            rgb(0, 0, 255)
+          );
+        "
+      ></div>
+    </div>
+  </body>
 </html>

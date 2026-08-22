@@ -1,12 +1,156 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <title>style_border_non_uniform_patterns</title>
-  <base href="../../../">
-  <link rel="stylesheet" href="takumi/tests/shared.css">
-</head>
-<body style="width: 1200px; height: 630px;">
-  <div style="display: flex; flex-wrap: wrap; row-gap: 20px; column-gap: 20px; padding-top: 32px; padding-right: 32px; padding-bottom: 32px; padding-left: 32px; width: 100%; height: 100%; justify-content: center; background-color: rgb(255, 255, 255);"><div style="display: flex; flex-direction: column; width: 220px; row-gap: 12px; column-gap: 12px; align-items: center;"><div style="display: flex; width: 164px; height: 92px; background-color: rgb(56, 189, 248); border-top-style: dashed; border-right-style: none; border-bottom-style: none; border-left-style: none; border-top-width: 10px; border-right-width: 0px; border-bottom-width: 0px; border-left-width: 0px; border-top-color: rgb(17, 24, 39); border-right-color: rgb(17, 24, 39); border-bottom-color: rgb(17, 24, 39); border-left-color: rgb(17, 24, 39);"></div><span style="color: rgb(31, 41, 55);">dashed top only</span></div><div style="display: flex; flex-direction: column; width: 220px; row-gap: 12px; column-gap: 12px; align-items: center;"><div style="display: flex; width: 164px; height: 92px; background-color: rgb(56, 189, 248); border-top-style: none; border-right-style: none; border-bottom-style: none; border-left-style: dotted; border-top-width: 0px; border-right-width: 0px; border-bottom-width: 0px; border-left-width: 10px; border-top-color: rgb(17, 24, 39); border-right-color: rgb(17, 24, 39); border-bottom-color: rgb(17, 24, 39); border-left-color: rgb(17, 24, 39);"></div><span style="color: rgb(31, 41, 55);">dotted left only</span></div><div style="display: flex; flex-direction: column; width: 220px; row-gap: 12px; column-gap: 12px; align-items: center;"><div style="display: flex; width: 164px; height: 92px; background-color: rgb(56, 189, 248); border-top-style: dashed; border-right-style: dashed; border-bottom-style: dashed; border-left-style: dashed; border-top-width: 10px; border-right-width: 4px; border-bottom-width: 7px; border-left-width: 13px; border-top-color: rgb(17, 24, 39); border-right-color: rgb(17, 24, 39); border-bottom-color: rgb(17, 24, 39); border-left-color: rgb(17, 24, 39);"></div><span style="color: rgb(31, 41, 55);">dashed uneven widths</span></div><div style="display: flex; flex-direction: column; width: 220px; row-gap: 12px; column-gap: 12px; align-items: center;"><div style="display: flex; width: 164px; height: 92px; background-color: rgb(56, 189, 248); border-top-style: dotted; border-right-style: dashed; border-bottom-style: dotted; border-left-style: dashed; border-top-width: 10px; border-right-width: 8px; border-bottom-width: 10px; border-left-width: 8px; border-top-color: rgb(17, 24, 39); border-right-color: rgb(17, 24, 39); border-bottom-color: rgb(17, 24, 39); border-left-color: rgb(17, 24, 39);"></div><span style="color: rgb(31, 41, 55);">mixed dash + dot</span></div></div>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <title>style_border_non_uniform_patterns</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div
+      style="
+        display: flex;
+        flex-wrap: wrap;
+        row-gap: 20px;
+        column-gap: 20px;
+        padding-top: 32px;
+        padding-right: 32px;
+        padding-bottom: 32px;
+        padding-left: 32px;
+        width: 100%;
+        height: 100%;
+        justify-content: center;
+        background-color: rgb(255, 255, 255);
+      "
+    >
+      <div
+        style="
+          display: flex;
+          flex-direction: column;
+          width: 220px;
+          row-gap: 12px;
+          column-gap: 12px;
+          align-items: center;
+        "
+      >
+        <div
+          style="
+            display: flex;
+            width: 164px;
+            height: 92px;
+            background-color: rgb(56, 189, 248);
+            border-top-style: dashed;
+            border-right-style: none;
+            border-bottom-style: none;
+            border-left-style: none;
+            border-top-width: 10px;
+            border-right-width: 0px;
+            border-bottom-width: 0px;
+            border-left-width: 0px;
+            border-top-color: rgb(17, 24, 39);
+            border-right-color: rgb(17, 24, 39);
+            border-bottom-color: rgb(17, 24, 39);
+            border-left-color: rgb(17, 24, 39);
+          "
+        ></div>
+        <span style="color: rgb(31, 41, 55)">dashed top only</span>
+      </div>
+      <div
+        style="
+          display: flex;
+          flex-direction: column;
+          width: 220px;
+          row-gap: 12px;
+          column-gap: 12px;
+          align-items: center;
+        "
+      >
+        <div
+          style="
+            display: flex;
+            width: 164px;
+            height: 92px;
+            background-color: rgb(56, 189, 248);
+            border-top-style: none;
+            border-right-style: none;
+            border-bottom-style: none;
+            border-left-style: dotted;
+            border-top-width: 0px;
+            border-right-width: 0px;
+            border-bottom-width: 0px;
+            border-left-width: 10px;
+            border-top-color: rgb(17, 24, 39);
+            border-right-color: rgb(17, 24, 39);
+            border-bottom-color: rgb(17, 24, 39);
+            border-left-color: rgb(17, 24, 39);
+          "
+        ></div>
+        <span style="color: rgb(31, 41, 55)">dotted left only</span>
+      </div>
+      <div
+        style="
+          display: flex;
+          flex-direction: column;
+          width: 220px;
+          row-gap: 12px;
+          column-gap: 12px;
+          align-items: center;
+        "
+      >
+        <div
+          style="
+            display: flex;
+            width: 164px;
+            height: 92px;
+            background-color: rgb(56, 189, 248);
+            border-top-style: dashed;
+            border-right-style: dashed;
+            border-bottom-style: dashed;
+            border-left-style: dashed;
+            border-top-width: 10px;
+            border-right-width: 4px;
+            border-bottom-width: 7px;
+            border-left-width: 13px;
+            border-top-color: rgb(17, 24, 39);
+            border-right-color: rgb(17, 24, 39);
+            border-bottom-color: rgb(17, 24, 39);
+            border-left-color: rgb(17, 24, 39);
+          "
+        ></div>
+        <span style="color: rgb(31, 41, 55)">dashed uneven widths</span>
+      </div>
+      <div
+        style="
+          display: flex;
+          flex-direction: column;
+          width: 220px;
+          row-gap: 12px;
+          column-gap: 12px;
+          align-items: center;
+        "
+      >
+        <div
+          style="
+            display: flex;
+            width: 164px;
+            height: 92px;
+            background-color: rgb(56, 189, 248);
+            border-top-style: dotted;
+            border-right-style: dashed;
+            border-bottom-style: dotted;
+            border-left-style: dashed;
+            border-top-width: 10px;
+            border-right-width: 8px;
+            border-bottom-width: 10px;
+            border-left-width: 8px;
+            border-top-color: rgb(17, 24, 39);
+            border-right-color: rgb(17, 24, 39);
+            border-bottom-color: rgb(17, 24, 39);
+            border-left-color: rgb(17, 24, 39);
+          "
+        ></div>
+        <span style="color: rgb(31, 41, 55)">mixed dash + dot</span>
+      </div>
+    </div>
+  </body>
 </html>

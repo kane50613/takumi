@@ -1,12 +1,42 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <title>style_overflow_clip_visible_identity_transform</title>
-  <base href="../../../">
-  <link rel="stylesheet" href="takumi/tests/shared.css">
-</head>
-<body style="width: 1200px; height: 630px;">
-  <div style="display: block; width: 100%; height: 100%; background-color: rgb(255, 255, 255);"><div style="display: block; width: 400px; height: 120px; padding-top: 24px; padding-right: 24px; padding-bottom: 24px; padding-left: 24px; border-top-width: 4px; border-right-width: 4px; border-bottom-width: 4px; border-left-width: 4px; border-top-style: solid; border-right-style: solid; border-bottom-style: solid; border-left-style: solid; border-top-color: rgb(0, 0, 0); border-right-color: rgb(0, 0, 0); border-bottom-color: rgb(0, 0, 0); border-left-color: rgb(0, 0, 0); overflow-x: clip; overflow-y: visible;"><span style="display: flex; font-size: 3rem; color: rgb(0, 0, 0);">This is a very long text that should overflow the container vertically.</span></div></div>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <title>style_overflow_clip_visible_identity_transform</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div style="display: block; width: 100%; height: 100%; background-color: rgb(255, 255, 255)">
+      <div
+        style="
+          display: block;
+          width: 400px;
+          height: 120px;
+          padding-top: 24px;
+          padding-right: 24px;
+          padding-bottom: 24px;
+          padding-left: 24px;
+          border-top-width: 4px;
+          border-right-width: 4px;
+          border-bottom-width: 4px;
+          border-left-width: 4px;
+          border-top-style: solid;
+          border-right-style: solid;
+          border-bottom-style: solid;
+          border-left-style: solid;
+          border-top-color: rgb(0, 0, 0);
+          border-right-color: rgb(0, 0, 0);
+          border-bottom-color: rgb(0, 0, 0);
+          border-left-color: rgb(0, 0, 0);
+          overflow-x: clip;
+          overflow-y: visible;
+        "
+      >
+        <span style="display: flex; font-size: 3rem; color: rgb(0, 0, 0)"
+          >This is a very long text that should overflow the container vertically.</span
+        >
+      </div>
+    </div>
+  </body>
 </html>

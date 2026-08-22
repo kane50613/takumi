@@ -1,12 +1,147 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <title>offset_path_along_curve</title>
-  <base href="../../../">
-  <link rel="stylesheet" href="takumi/tests/shared.css">
-</head>
-<body style="width: 1200px; height: 630px;">
-  <div style="display: flex; position: relative; width: 1200px; height: 630px; background-color: rgb(255, 255, 255);"><div style="display: flex; position: absolute; left: 0px; top: 0px; width: 72px; height: 18px; background-color: rgb(40, 90, 220); offset-path: path(&quot;M 80 480 C 360 60, 840 60, 1120 480&quot;); offset-distance: 0%; offset-rotate: auto;"></div><div style="display: flex; position: absolute; left: 0px; top: 0px; width: 72px; height: 18px; background-color: rgb(40, 90, 200); offset-path: path(&quot;M 80 480 C 360 60, 840 60, 1120 480&quot;); offset-distance: 12.5%; offset-rotate: auto;"></div><div style="display: flex; position: absolute; left: 0px; top: 0px; width: 72px; height: 18px; background-color: rgb(40, 90, 180); offset-path: path(&quot;M 80 480 C 360 60, 840 60, 1120 480&quot;); offset-distance: 25%; offset-rotate: auto;"></div><div style="display: flex; position: absolute; left: 0px; top: 0px; width: 72px; height: 18px; background-color: rgb(40, 90, 160); offset-path: path(&quot;M 80 480 C 360 60, 840 60, 1120 480&quot;); offset-distance: 37.5%; offset-rotate: auto;"></div><div style="display: flex; position: absolute; left: 0px; top: 0px; width: 72px; height: 18px; background-color: rgb(40, 90, 140); offset-path: path(&quot;M 80 480 C 360 60, 840 60, 1120 480&quot;); offset-distance: 50%; offset-rotate: auto;"></div><div style="display: flex; position: absolute; left: 0px; top: 0px; width: 72px; height: 18px; background-color: rgb(40, 90, 120); offset-path: path(&quot;M 80 480 C 360 60, 840 60, 1120 480&quot;); offset-distance: 62.5%; offset-rotate: auto;"></div><div style="display: flex; position: absolute; left: 0px; top: 0px; width: 72px; height: 18px; background-color: rgb(40, 90, 100); offset-path: path(&quot;M 80 480 C 360 60, 840 60, 1120 480&quot;); offset-distance: 75%; offset-rotate: auto;"></div><div style="display: flex; position: absolute; left: 0px; top: 0px; width: 72px; height: 18px; background-color: rgb(40, 90, 80); offset-path: path(&quot;M 80 480 C 360 60, 840 60, 1120 480&quot;); offset-distance: 87.5%; offset-rotate: auto;"></div><div style="display: flex; position: absolute; left: 0px; top: 0px; width: 72px; height: 18px; background-color: rgb(40, 90, 60); offset-path: path(&quot;M 80 480 C 360 60, 840 60, 1120 480&quot;); offset-distance: 100%; offset-rotate: auto;"></div></div>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <title>offset_path_along_curve</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div
+      style="
+        display: flex;
+        position: relative;
+        width: 1200px;
+        height: 630px;
+        background-color: rgb(255, 255, 255);
+      "
+    >
+      <div
+        style="
+          display: flex;
+          position: absolute;
+          left: 0px;
+          top: 0px;
+          width: 72px;
+          height: 18px;
+          background-color: rgb(40, 90, 220);
+          offset-path: path(&quot;M 80 480 C 360 60, 840 60, 1120 480&quot;);
+          offset-distance: 0%;
+          offset-rotate: auto;
+        "
+      ></div>
+      <div
+        style="
+          display: flex;
+          position: absolute;
+          left: 0px;
+          top: 0px;
+          width: 72px;
+          height: 18px;
+          background-color: rgb(40, 90, 200);
+          offset-path: path(&quot;M 80 480 C 360 60, 840 60, 1120 480&quot;);
+          offset-distance: 12.5%;
+          offset-rotate: auto;
+        "
+      ></div>
+      <div
+        style="
+          display: flex;
+          position: absolute;
+          left: 0px;
+          top: 0px;
+          width: 72px;
+          height: 18px;
+          background-color: rgb(40, 90, 180);
+          offset-path: path(&quot;M 80 480 C 360 60, 840 60, 1120 480&quot;);
+          offset-distance: 25%;
+          offset-rotate: auto;
+        "
+      ></div>
+      <div
+        style="
+          display: flex;
+          position: absolute;
+          left: 0px;
+          top: 0px;
+          width: 72px;
+          height: 18px;
+          background-color: rgb(40, 90, 160);
+          offset-path: path(&quot;M 80 480 C 360 60, 840 60, 1120 480&quot;);
+          offset-distance: 37.5%;
+          offset-rotate: auto;
+        "
+      ></div>
+      <div
+        style="
+          display: flex;
+          position: absolute;
+          left: 0px;
+          top: 0px;
+          width: 72px;
+          height: 18px;
+          background-color: rgb(40, 90, 140);
+          offset-path: path(&quot;M 80 480 C 360 60, 840 60, 1120 480&quot;);
+          offset-distance: 50%;
+          offset-rotate: auto;
+        "
+      ></div>
+      <div
+        style="
+          display: flex;
+          position: absolute;
+          left: 0px;
+          top: 0px;
+          width: 72px;
+          height: 18px;
+          background-color: rgb(40, 90, 120);
+          offset-path: path(&quot;M 80 480 C 360 60, 840 60, 1120 480&quot;);
+          offset-distance: 62.5%;
+          offset-rotate: auto;
+        "
+      ></div>
+      <div
+        style="
+          display: flex;
+          position: absolute;
+          left: 0px;
+          top: 0px;
+          width: 72px;
+          height: 18px;
+          background-color: rgb(40, 90, 100);
+          offset-path: path(&quot;M 80 480 C 360 60, 840 60, 1120 480&quot;);
+          offset-distance: 75%;
+          offset-rotate: auto;
+        "
+      ></div>
+      <div
+        style="
+          display: flex;
+          position: absolute;
+          left: 0px;
+          top: 0px;
+          width: 72px;
+          height: 18px;
+          background-color: rgb(40, 90, 80);
+          offset-path: path(&quot;M 80 480 C 360 60, 840 60, 1120 480&quot;);
+          offset-distance: 87.5%;
+          offset-rotate: auto;
+        "
+      ></div>
+      <div
+        style="
+          display: flex;
+          position: absolute;
+          left: 0px;
+          top: 0px;
+          width: 72px;
+          height: 18px;
+          background-color: rgb(40, 90, 60);
+          offset-path: path(&quot;M 80 480 C 360 60, 840 60, 1120 480&quot;);
+          offset-distance: 100%;
+          offset-rotate: auto;
+        "
+      ></div>
+    </div>
+  </body>
 </html>

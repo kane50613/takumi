@@ -1,12 +1,109 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <title>style_filter_combined_transform</title>
-  <base href="../../../">
-  <link rel="stylesheet" href="takumi/tests/shared.css">
-</head>
-<body style="width: 1200px; height: 630px;">
-  <div style="display: grid; width: 100%; height: 100%; grid-template-columns: repeat(4, 1fr); row-gap: 16px; column-gap: 16px; justify-content: center; align-items: center; background-color: rgb(255, 255, 255);"><div style="display: flex; flex-direction: column; align-items: center; row-gap: 16px; column-gap: 16px; font-size: 16px;"><img src="assets/images/yeecord.png" style="width: 140px; height: 140px; filter: blur(3px) grayscale(0.5); transform: scale(1.35, 1.35);" /><span style="display: block;">blur(3px) grayscale(50%) scale(1.35)</span></div><div style="display: flex; flex-direction: column; align-items: center; row-gap: 16px; column-gap: 16px; font-size: 16px;"><img src="assets/images/yeecord.png" style="width: 140px; height: 140px; filter: drop-shadow(5px 5px 10px rgb(0, 0, 0)) brightness(1.2); transform: rotate(22deg);" /><span style="display: block;">drop-shadow(5px 5px 10px black) brightness(120%) rotate(22deg)</span></div><div style="display: flex; flex-direction: column; align-items: center; row-gap: 16px; column-gap: 16px; font-size: 16px;"><img src="assets/images/yeecord.png" style="width: 140px; height: 140px; filter: blur(2px) drop-shadow(3px 3px 5px rgb(255, 0, 0)); transform: scale(1.2, 1.2) rotate(342deg);" /><span style="display: block;">blur(2px) drop-shadow(3px 3px 5px red) scale(1.2) rotate(-18deg)</span></div><div style="display: flex; flex-direction: column; align-items: center; row-gap: 16px; column-gap: 16px; font-size: 16px;"><img src="assets/images/yeecord.png" style="width: 140px; height: 140px; filter: saturate(1.5) blur(1px); transform: rotate(12deg) scale(1.1, 1.1);" /><span style="display: block;">saturate(150%) blur(1px) rotate(12deg) scale(1.1)</span></div></div>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <title>style_filter_combined_transform</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div
+      style="
+        display: grid;
+        width: 100%;
+        height: 100%;
+        grid-template-columns: repeat(4, 1fr);
+        row-gap: 16px;
+        column-gap: 16px;
+        justify-content: center;
+        align-items: center;
+        background-color: rgb(255, 255, 255);
+      "
+    >
+      <div
+        style="
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          row-gap: 16px;
+          column-gap: 16px;
+          font-size: 16px;
+        "
+      >
+        <img
+          src="assets/images/yeecord.png"
+          style="
+            width: 140px;
+            height: 140px;
+            filter: blur(3px) grayscale(0.5);
+            transform: scale(1.35, 1.35);
+          "
+        /><span style="display: block">blur(3px) grayscale(50%) scale(1.35)</span>
+      </div>
+      <div
+        style="
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          row-gap: 16px;
+          column-gap: 16px;
+          font-size: 16px;
+        "
+      >
+        <img
+          src="assets/images/yeecord.png"
+          style="
+            width: 140px;
+            height: 140px;
+            filter: drop-shadow(5px 5px 10px rgb(0, 0, 0)) brightness(1.2);
+            transform: rotate(22deg);
+          "
+        /><span style="display: block"
+          >drop-shadow(5px 5px 10px black) brightness(120%) rotate(22deg)</span
+        >
+      </div>
+      <div
+        style="
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          row-gap: 16px;
+          column-gap: 16px;
+          font-size: 16px;
+        "
+      >
+        <img
+          src="assets/images/yeecord.png"
+          style="
+            width: 140px;
+            height: 140px;
+            filter: blur(2px) drop-shadow(3px 3px 5px rgb(255, 0, 0));
+            transform: scale(1.2, 1.2) rotate(342deg);
+          "
+        /><span style="display: block"
+          >blur(2px) drop-shadow(3px 3px 5px red) scale(1.2) rotate(-18deg)</span
+        >
+      </div>
+      <div
+        style="
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          row-gap: 16px;
+          column-gap: 16px;
+          font-size: 16px;
+        "
+      >
+        <img
+          src="assets/images/yeecord.png"
+          style="
+            width: 140px;
+            height: 140px;
+            filter: saturate(1.5) blur(1px);
+            transform: rotate(12deg) scale(1.1, 1.1);
+          "
+        /><span style="display: block">saturate(150%) blur(1px) rotate(12deg) scale(1.1)</span>
+      </div>
+    </div>
+  </body>
 </html>

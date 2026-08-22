@@ -1,12 +1,118 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <title>style_background_origin</title>
-  <base href="../../../">
-  <link rel="stylesheet" href="takumi/tests/shared.css">
-</head>
-<body style="width: 1200px; height: 630px;">
-  <div style="display: flex; flex-direction: column; width: 100%; row-gap: 20px; padding-top: 30px; padding-right: 30px; padding-bottom: 30px; padding-left: 30px; background-color: rgb(255, 255, 255);"><div style="border-top-width: 40px; border-right-width: 40px; border-bottom-width: 40px; border-left-width: 40px; border-top-style: solid; border-right-style: solid; border-bottom-style: solid; border-left-style: solid; border-top-color: rgba(120, 120, 200, 0.470588); border-right-color: rgba(120, 120, 200, 0.470588); border-bottom-color: rgba(120, 120, 200, 0.470588); border-left-color: rgba(120, 120, 200, 0.470588); padding-top: 30px; padding-right: 30px; padding-bottom: 30px; padding-left: 30px; display: flex; width: 280px; height: 160px; background-color: rgb(230, 230, 230); background-image: linear-gradient(rgb(221, 0, 0), rgb(221, 0, 0)); background-size: 70px 70px; background-repeat: no-repeat; background-position: left top; background-origin: border-box;"><span>border-box</span></div><div style="border-top-width: 40px; border-right-width: 40px; border-bottom-width: 40px; border-left-width: 40px; border-top-style: solid; border-right-style: solid; border-bottom-style: solid; border-left-style: solid; border-top-color: rgba(120, 120, 200, 0.470588); border-right-color: rgba(120, 120, 200, 0.470588); border-bottom-color: rgba(120, 120, 200, 0.470588); border-left-color: rgba(120, 120, 200, 0.470588); padding-top: 30px; padding-right: 30px; padding-bottom: 30px; padding-left: 30px; display: flex; width: 280px; height: 160px; background-color: rgb(230, 230, 230); background-image: linear-gradient(rgb(221, 0, 0), rgb(221, 0, 0)); background-size: 70px 70px; background-repeat: no-repeat; background-position: left top; background-origin: padding-box;"><span>padding-box</span></div><div style="border-top-width: 40px; border-right-width: 40px; border-bottom-width: 40px; border-left-width: 40px; border-top-style: solid; border-right-style: solid; border-bottom-style: solid; border-left-style: solid; border-top-color: rgba(120, 120, 200, 0.470588); border-right-color: rgba(120, 120, 200, 0.470588); border-bottom-color: rgba(120, 120, 200, 0.470588); border-left-color: rgba(120, 120, 200, 0.470588); padding-top: 30px; padding-right: 30px; padding-bottom: 30px; padding-left: 30px; display: flex; width: 280px; height: 160px; background-color: rgb(230, 230, 230); background-image: linear-gradient(rgb(221, 0, 0), rgb(221, 0, 0)); background-size: 70px 70px; background-repeat: no-repeat; background-position: left top; background-origin: content-box;"><span>content-box</span></div></div>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <title>style_background_origin</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div
+      style="
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        row-gap: 20px;
+        padding-top: 30px;
+        padding-right: 30px;
+        padding-bottom: 30px;
+        padding-left: 30px;
+        background-color: rgb(255, 255, 255);
+      "
+    >
+      <div
+        style="
+          border-top-width: 40px;
+          border-right-width: 40px;
+          border-bottom-width: 40px;
+          border-left-width: 40px;
+          border-top-style: solid;
+          border-right-style: solid;
+          border-bottom-style: solid;
+          border-left-style: solid;
+          border-top-color: rgba(120, 120, 200, 0.470588);
+          border-right-color: rgba(120, 120, 200, 0.470588);
+          border-bottom-color: rgba(120, 120, 200, 0.470588);
+          border-left-color: rgba(120, 120, 200, 0.470588);
+          padding-top: 30px;
+          padding-right: 30px;
+          padding-bottom: 30px;
+          padding-left: 30px;
+          display: flex;
+          width: 280px;
+          height: 160px;
+          background-color: rgb(230, 230, 230);
+          background-image: linear-gradient(rgb(221, 0, 0), rgb(221, 0, 0));
+          background-size: 70px 70px;
+          background-repeat: no-repeat;
+          background-position: left top;
+          background-origin: border-box;
+        "
+      >
+        <span>border-box</span>
+      </div>
+      <div
+        style="
+          border-top-width: 40px;
+          border-right-width: 40px;
+          border-bottom-width: 40px;
+          border-left-width: 40px;
+          border-top-style: solid;
+          border-right-style: solid;
+          border-bottom-style: solid;
+          border-left-style: solid;
+          border-top-color: rgba(120, 120, 200, 0.470588);
+          border-right-color: rgba(120, 120, 200, 0.470588);
+          border-bottom-color: rgba(120, 120, 200, 0.470588);
+          border-left-color: rgba(120, 120, 200, 0.470588);
+          padding-top: 30px;
+          padding-right: 30px;
+          padding-bottom: 30px;
+          padding-left: 30px;
+          display: flex;
+          width: 280px;
+          height: 160px;
+          background-color: rgb(230, 230, 230);
+          background-image: linear-gradient(rgb(221, 0, 0), rgb(221, 0, 0));
+          background-size: 70px 70px;
+          background-repeat: no-repeat;
+          background-position: left top;
+          background-origin: padding-box;
+        "
+      >
+        <span>padding-box</span>
+      </div>
+      <div
+        style="
+          border-top-width: 40px;
+          border-right-width: 40px;
+          border-bottom-width: 40px;
+          border-left-width: 40px;
+          border-top-style: solid;
+          border-right-style: solid;
+          border-bottom-style: solid;
+          border-left-style: solid;
+          border-top-color: rgba(120, 120, 200, 0.470588);
+          border-right-color: rgba(120, 120, 200, 0.470588);
+          border-bottom-color: rgba(120, 120, 200, 0.470588);
+          border-left-color: rgba(120, 120, 200, 0.470588);
+          padding-top: 30px;
+          padding-right: 30px;
+          padding-bottom: 30px;
+          padding-left: 30px;
+          display: flex;
+          width: 280px;
+          height: 160px;
+          background-color: rgb(230, 230, 230);
+          background-image: linear-gradient(rgb(221, 0, 0), rgb(221, 0, 0));
+          background-size: 70px 70px;
+          background-repeat: no-repeat;
+          background-position: left top;
+          background-origin: content-box;
+        "
+      >
+        <span>content-box</span>
+      </div>
+    </div>
+  </body>
 </html>

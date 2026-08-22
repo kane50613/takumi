@@ -2,6 +2,11 @@
 //! vector goldens. The HTML is the fixture source: add a file, run this test,
 //! eyeball the generated goldens. The same file opens in a browser for a
 //! reference render (it links `shared.css` for the font faces).
+//!
+//! `oxfmt` indents the fixtures. Indenting must not put whitespace between
+//! inline siblings, because that whitespace is content and moves the render, so
+//! a fixture that cannot take it marks its root `<!-- prettier-ignore -->` and
+//! keeps its markup as authored.
 
 mod test_utils;
 
