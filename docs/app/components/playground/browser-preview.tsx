@@ -3,7 +3,7 @@
 import { compile } from "tailwindcss";
 import themeCss from "tailwindcss/theme.css?raw";
 import utilitiesCss from "tailwindcss/utilities.css?raw";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { FONT_FAMILIES, googleFontsCssUrl } from "../../playground/fonts";
 
@@ -95,7 +95,7 @@ function useFitScale(width: number, height: number | undefined) {
   const ref = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     const measure = () =>
