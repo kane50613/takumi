@@ -48,25 +48,30 @@ html,body{margin:0;height:100%}`;
 // handler smuggled through `dangerouslySetInnerHTML` cannot reach the docs
 // origin. The document loads once and repaints over `postMessage`, so updates
 // do not flash the way a swapped `srcdoc` would.
+// Paints travel over a `MessageChannel` the bootstrap hands out before any
+// markup runs. A frame that navigates itself away takes the port with it, where
+// `postMessage` to `contentWindow` would have followed it to the new document.
 const FRAME_HTML = `<!doctype html>
 <meta charset="utf-8">
 <link rel="stylesheet" href="${googleFontsCssUrl()}">
 <style id="sheet"></style>
 <body><div id="mount"></div>
 <script>
+const channel = new MessageChannel();
+const port = channel.port1;
 const reportHeight = () =>
-  parent.postMessage({ type: "height", value: document.documentElement.scrollHeight }, "*");
+  port.postMessage({ type: "height", value: document.documentElement.scrollHeight });
 
-addEventListener("message", (event) => {
-  if (event.source !== parent || event.data?.type !== "paint") return;
+port.onmessage = (event) => {
+  if (event.data?.type !== "paint") return;
   document.getElementById("sheet").textContent = event.data.css;
   const mount = document.getElementById("mount");
   mount.style.cssText = event.data.mountStyle;
   mount.innerHTML = event.data.html;
   reportHeight();
   document.fonts.ready.then(reportHeight);
-});
-parent.postMessage({ type: "ready" }, "*");
+};
+parent.postMessage({ type: "ready" }, "*", [channel.port2]);
 </script>`;
 
 /** Guards against a frame that reports a height big enough to hang the layout. */
@@ -100,44 +105,53 @@ function useFitScale(width: number, height: number | undefined) {
   return { ref, scale };
 }
 
-/** Repaints the frame, holding the last paint until its bootstrap says it is up. */
+/** Repaints the frame, holding the last paint until its bootstrap hands over a port. */
 function usePaintFrame(paint: Paint | undefined) {
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const portRef = useRef<MessagePort>(undefined);
   const pendingRef = useRef<Paint>(undefined);
-  const [isReady, setIsReady] = useState(false);
   const [contentHeight, setContentHeight] = useState<number>();
 
   useEffect(() => {
-    const onMessage = (event: MessageEvent) => {
-      if (event.source !== frameRef.current?.contentWindow) return;
-
-      // The frame runs untrusted markup, so nothing it sends is taken at its
-      // word: a spoofed `ready` costs one repaint, and a height is clamped.
+    const onPortMessage = (event: MessageEvent) => {
+      // The frame paints untrusted markup, so its numbers are clamped rather
+      // than trusted.
       const message = event.data as { type?: string; value?: unknown } | null;
 
-      if (message?.type === "ready") {
-        setIsReady(true);
-        if (pendingRef.current) {
-          frameRef.current?.contentWindow?.postMessage(pendingRef.current, "*");
-        }
-        return;
-      }
-
-      if (message?.type === "height" && typeof message.value === "number") {
-        setContentHeight(Math.min(Math.max(message.value, 0), MAX_FRAME_HEIGHT));
+      if (message?.type === "height" && Number.isFinite(message.value)) {
+        setContentHeight(Math.min(Math.max(Number(message.value), 0), MAX_FRAME_HEIGHT));
       }
     };
 
+    const onMessage = (event: MessageEvent) => {
+      if (event.source !== frameRef.current?.contentWindow) return;
+      if ((event.data as { type?: string } | null)?.type !== "ready") return;
+
+      const [port] = event.ports;
+
+      if (!port) return;
+
+      portRef.current = port;
+      port.onmessage = onPortMessage;
+      port.start();
+      if (pendingRef.current) port.postMessage(pendingRef.current);
+    };
+
     window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
+
+    return () => {
+      window.removeEventListener("message", onMessage);
+      portRef.current?.close();
+      portRef.current = undefined;
+    };
   }, []);
 
   useEffect(() => {
     if (!paint) return;
 
     pendingRef.current = paint;
-    if (isReady) frameRef.current?.contentWindow?.postMessage(paint, "*");
-  }, [paint, isReady]);
+    portRef.current?.postMessage(paint);
+  }, [paint]);
 
   return { frameRef, contentHeight };
 }

@@ -237,7 +237,12 @@ self.onmessage = async (event: MessageEvent) => {
 
       break;
     }
+    case "ping": {
+      postMessage({ type: "pong", id: payload.id });
+      break;
+    }
     case "ready":
+    case "pong":
     case "render-result":
     case "preview-result": {
       throw new Error("Respond message should not be sent from main window.");

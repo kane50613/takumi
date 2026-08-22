@@ -64,6 +64,18 @@ const readySchema = z.object({
   type: z.literal("ready"),
 });
 
+// The worker answers on its own event loop, which the evaluated code holds
+// while it spins. A missing `pong` is what tells the page the worker is stuck.
+const pingSchema = z.object({
+  type: z.literal("ping"),
+  id: z.int().check(z.positive(), z.minimum(1)),
+});
+
+const pongSchema = z.object({
+  type: z.literal("pong"),
+  id: z.int().check(z.positive(), z.minimum(1)),
+});
+
 // Posted before the (slower) fetches + WASM render so the browser pane never
 // waits on them. `cssContents` is raw CSS (Takumi's effective stylesheets), not URLs.
 const previewResultSchema = z.object({
@@ -82,6 +94,8 @@ export const messageSchema = z.discriminatedUnion("type", [
   renderRequestSchema,
   renderResultSchema,
   readySchema,
+  pingSchema,
+  pongSchema,
   previewResultSchema,
 ]);
 

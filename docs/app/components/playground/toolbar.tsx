@@ -29,13 +29,6 @@ import type { Zoom } from "./output-panel";
 
 export type TabId = "code" | "preview";
 
-export type Hint = "edit" | "shared";
-
-const HINTS: Record<Hint, string> = {
-  edit: "The preview waits for you. Hit Run, or press ⌘↵, to render what you just wrote.",
-  shared: "Somebody else wrote this code and sent you the link. Read it before you hit Run.",
-};
-
 const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: "code", label: "Code", icon: Code2Icon },
   { id: "preview", label: "Preview", icon: EyeIcon },
@@ -111,7 +104,7 @@ export function Toolbar({
   isStale,
   isReady,
   onRun,
-  hint,
+  hintDismissed,
   onDismissHint,
   isFormatting,
   onFormat,
@@ -132,7 +125,7 @@ export function Toolbar({
   isStale: boolean;
   isReady: boolean;
   onRun: () => void;
-  hint: Hint | undefined;
+  hintDismissed: boolean;
   onDismissHint: () => void;
   isFormatting: boolean;
   onFormat: () => void;
@@ -184,18 +177,18 @@ export function Toolbar({
           <span className="max-md:hidden">Run</span>
           <Kbd className="ml-1 bg-current/15 px-1.5 text-[11px] text-current max-md:hidden">⌘↵</Kbd>
         </Button>
-        {hint && (
+        {isStale && !hintDismissed && (
           <div className="absolute top-9 left-0 z-20 w-56 rounded-md border bg-popover p-3 text-xs shadow-md">
-            <p className="m-0 text-popover-foreground">{HINTS[hint]}</p>
-            {hint === "edit" && (
-              <button
-                type="button"
-                onClick={onDismissHint}
-                className="mt-2 font-mono text-[11px] text-muted-foreground underline"
-              >
-                Got it
-              </button>
-            )}
+            <p className="m-0 text-popover-foreground">
+              The preview waits for you. Hit Run, or press ⌘↵, to render what you just wrote.
+            </p>
+            <button
+              type="button"
+              onClick={onDismissHint}
+              className="mt-2 font-mono text-[11px] text-muted-foreground underline"
+            >
+              Got it
+            </button>
           </div>
         )}
       </div>

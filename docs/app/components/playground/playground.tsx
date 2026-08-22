@@ -7,7 +7,7 @@ import type { Template } from "~/playground/templates";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../ui/resizable";
 import { ComponentEditor } from "./component-editor";
 import { LabeledPane, OutputPanel, PDF_VIEWS, type PdfView, type Zoom } from "./output-panel";
-import { type Hint, Toolbar, type TabId } from "./toolbar";
+import { Toolbar, type TabId } from "./toolbar";
 import { DEFAULT_TEMPLATE, useSharedCode } from "./use-shared-code";
 import { type RenderSuccess, useRenderWorker } from "./use-render-worker";
 
@@ -51,8 +51,7 @@ export default function Playground() {
   const selectedTemplateName = matchedTemplate?.name ?? "Custom";
   const outputKind = lastSuccess?.outputKind;
   const isStale = code !== undefined && code !== ranCode;
-  const hint: Hint | undefined =
-    isShared && ranCode === undefined ? "shared" : isStale && !hintDismissed ? "edit" : undefined;
+  const isUnrunShare = isShared && ranCode === undefined;
 
   useEffect(() => {
     setHintDismissed(localStorage.getItem(RUN_HINT_KEY) === "seen");
@@ -231,7 +230,7 @@ export default function Playground() {
         isStale={isStale}
         isReady={isReady}
         onRun={run}
-        hint={hint}
+        hintDismissed={hintDismissed}
         onDismissHint={dismissHint}
         isFormatting={isFormatting}
         onFormat={formatCode}
@@ -244,6 +243,12 @@ export default function Playground() {
         hasOutput={Boolean(lastSuccess)}
         onDownload={downloadOutput}
       />
+
+      {isUnrunShare && (
+        <div className="shrink-0 border-b bg-muted/40 px-3 py-1.5 font-mono text-[11px] text-muted-foreground">
+          Somebody else wrote this code and sent you the link. Read it before you press Run.
+        </div>
+      )}
 
       <div className="min-h-0 flex-1">
         <div className="hidden h-full md:block">

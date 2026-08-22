@@ -30,6 +30,18 @@ function mimeType(result: RenderResult & { status: "success" }) {
 /** A render that outlives this has hit a loop the worker cannot leave on its own. */
 const RENDER_TIMEOUT_MS = 15_000;
 
+/** How long a freed worker gets to answer the ping that follows a result. */
+const LIVENESS_TIMEOUT_MS = 2_000;
+
+/** Bounds what the worker can hand the page to hold, forged or not. */
+const MAX_PREVIEW_BYTES = 4 * 1024 * 1024;
+
+function previewSize(message: { html: string; cssContents?: string[] }) {
+  return (
+    message.html.length + (message.cssContents ?? []).reduce((sum, css) => sum + css.length, 0)
+  );
+}
+
 export function useRenderWorker(ranCode: string | undefined) {
   const [isReady, setIsReady] = useState(false);
   const [lastSuccess, setLastSuccess] = useState<RenderSuccess>();
@@ -42,6 +54,14 @@ export function useRenderWorker(ranCode: string | undefined) {
 
   useEffect(() => {
     const worker = new TakumiWorker();
+    const restart = () => {
+      setRenderError({
+        status: "error",
+        id: currentRequestIdRef.current,
+        message: "the render never came back, so the worker was restarted",
+      });
+      setGeneration((current) => current + 1);
+    };
 
     worker.onmessage = (event: MessageEvent) => {
       const message = messageSchema.parse(event.data);
@@ -51,11 +71,19 @@ export function useRenderWorker(ranCode: string | undefined) {
           setIsReady(true);
           break;
         }
-        case "render-request": {
+        case "pong": {
+          if (message.id === currentRequestIdRef.current) clearTimeout(timeoutRef.current);
+          break;
+        }
+        case "render-request":
+        case "ping": {
           throw new Error("request is not possible for response");
         }
         case "preview-result": {
-          if (message.id === currentRequestIdRef.current) {
+          if (
+            message.id === currentRequestIdRef.current &&
+            previewSize(message) <= MAX_PREVIEW_BYTES
+          ) {
             setBrowserPreview({
               html: message.html,
               width: message.width,
@@ -70,7 +98,12 @@ export function useRenderWorker(ranCode: string | undefined) {
           const { result } = message;
           if (result.id !== currentRequestIdRef.current) break;
 
+          // A result proves nothing about the worker: the evaluated code shares
+          // its realm and can post one before spinning forever. The ping runs
+          // on the event loop that code would be holding.
+          worker.postMessage({ type: "ping", id: result.id } satisfies RenderMessageInput);
           clearTimeout(timeoutRef.current);
+          timeoutRef.current = setTimeout(restart, LIVENESS_TIMEOUT_MS);
 
           if (result.status === "success") {
             const blob = new Blob([result.outputBuffer as BlobPart], { type: mimeType(result) });
