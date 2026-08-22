@@ -3,10 +3,9 @@
 //! eyeball the generated goldens. The same file opens in a browser for a
 //! reference render (it links `shared.css` for the font faces).
 //!
-//! `oxfmt` indents the fixtures. Indenting must not put whitespace between
-//! inline siblings, because that whitespace is content and moves the render, so
-//! a fixture that cannot take it marks its root `<!-- prettier-ignore -->` and
-//! keeps its markup as authored.
+//! `oxfmt` indents the fixtures. Whitespace between inline siblings is
+//! content, so a fixture that an indent would move marks its root
+//! `<!-- prettier-ignore -->`.
 
 mod test_utils;
 
