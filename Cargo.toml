@@ -195,12 +195,15 @@ opt-level = "z"
 opt-level = "z"
 [profile.release.package.selectors]
 opt-level = "z"
+# PNG is the exception: an animated source decodes a frame per draw, so these
+# three sit on the per-image path many times over. Size-optimizing them costs
+# 24-33% on APNG frame decoding and saves 1.1KB brotli in the wasm bundle.
 [profile.release.package.png]
-opt-level = "z"
+opt-level = 3
 [profile.release.package.miniz_oxide]
-opt-level = "z"
+opt-level = 3
 [profile.release.package.fdeflate]
-opt-level = "z"
+opt-level = 3
 [profile.release.package.image]
 opt-level = "z"
 [profile.release.package.gif]
