@@ -21,7 +21,7 @@
     "fumadocs-mdx": "^15.2.3",
     "fumadocs-twoslash": "^3.3.0",
     "fumadocs-ui": "npm:@fumadocs/base-ui@^16.14.4",
-    "fumapress": "^0.7.3",
+    "fumapress": "^1.0.0",
     "js-confetti": "^0.13.1",
     "lucide-react": "^1.31.0",
     "next-themes": "^0.4.6",
