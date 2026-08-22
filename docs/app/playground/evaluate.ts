@@ -1,4 +1,5 @@
 import * as React from "react";
+import { createElement, type ElementType, type ReactNode } from "react";
 import { transform } from "sucrase";
 import * as primitives from "takumi-pdf/primitives";
 import * as z from "zod/mini";
@@ -47,11 +48,21 @@ function mirrorTw<P>(props: P): P {
   return { ...props, className: [className ?? klass, tw].filter(Boolean).join(" ") };
 }
 
+// Takumi renders no raw markup, so the prop only ever reached the preview pane,
+// which paints what it is given.
+function dropRawHtml<P>(props: P): P {
+  if (!props || typeof props !== "object" || !("dangerouslySetInnerHTML" in props)) return props;
+
+  const { dangerouslySetInnerHTML: _raw, ...rest } = props as Record<string, unknown>;
+
+  return rest as P;
+}
+
 export const renderReact: typeof React = {
   ...React,
   createElement: ((
-    type: React.ElementType,
+    type: ElementType,
     props: Record<string, unknown> | null,
-    ...children: React.ReactNode[]
-  ) => React.createElement(type, mirrorTw(props), ...children)) as typeof React.createElement,
+    ...children: ReactNode[]
+  ) => createElement(type, dropRawHtml(mirrorTw(props)), ...children)) as typeof createElement,
 };

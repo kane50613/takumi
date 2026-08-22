@@ -27,13 +27,18 @@ function mimeType(result: RenderResult & { status: "success" }) {
   return result.outputKind === "pdf" ? "application/pdf" : `image/${result.outputFormat}`;
 }
 
+/** A render that outlives this has hit a loop the worker cannot leave on its own. */
+const RENDER_TIMEOUT_MS = 15_000;
+
 export function useRenderWorker(ranCode: string | undefined) {
   const [isReady, setIsReady] = useState(false);
   const [lastSuccess, setLastSuccess] = useState<RenderSuccess>();
   const [renderError, setRenderError] = useState<RenderError>();
   const [browserPreview, setBrowserPreview] = useState<BrowserPreviewData>();
+  const [generation, setGeneration] = useState(0);
   const currentRequestIdRef = useRef(0);
   const workerRef = useRef<Worker | undefined>(undefined);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     const worker = new TakumiWorker();
@@ -65,6 +70,8 @@ export function useRenderWorker(ranCode: string | undefined) {
           const { result } = message;
           if (result.id !== currentRequestIdRef.current) break;
 
+          clearTimeout(timeoutRef.current);
+
           if (result.status === "success") {
             const blob = new Blob([result.outputBuffer as BlobPart], { type: mimeType(result) });
             setLastSuccess({
@@ -91,7 +98,7 @@ export function useRenderWorker(ranCode: string | undefined) {
       workerRef.current = undefined;
       setIsReady(false);
     };
-  }, []);
+  }, [generation]);
 
   useEffect(() => {
     if (!isReady || ranCode === undefined) return;
@@ -103,6 +110,17 @@ export function useRenderWorker(ranCode: string | undefined) {
       id: requestId,
       code: ranCode,
     } satisfies RenderMessageInput);
+
+    timeoutRef.current = setTimeout(() => {
+      setRenderError({
+        status: "error",
+        id: requestId,
+        message: `the render ran past ${RENDER_TIMEOUT_MS / 1000}s, so the worker was restarted`,
+      });
+      setGeneration((current) => current + 1);
+    }, RENDER_TIMEOUT_MS);
+
+    return () => clearTimeout(timeoutRef.current);
   }, [isReady, ranCode]);
 
   useEffect(() => {

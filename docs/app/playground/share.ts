@@ -29,13 +29,30 @@ export async function compressCode(code: string) {
   return uint8ToBase64(compressedBytes);
 }
 
+/** A short link can hold a gzip stream that expands past what a tab can edit. */
+const MAX_CODE_BYTES = 512 * 1024;
+
 export async function decompressCode(base64: string) {
-  const compressedBytes = base64ToUint8(base64);
+  const blob = new Blob([base64ToUint8(base64)]);
+  const reader = blob.stream().pipeThrough(new DecompressionStream("gzip")).getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+  let size = 0;
 
-  const blob = new Blob([compressedBytes]);
-  const stream = blob.stream().pipeThrough(new DecompressionStream("gzip"));
+  while (true) {
+    const { done, value } = await reader.read();
 
-  const decompressedText = await new Response(stream).text();
+    if (done) break;
 
-  return decompressedText;
+    size += value.length;
+
+    if (size > MAX_CODE_BYTES) {
+      await reader.cancel();
+      throw new Error("the shared snippet is larger than the playground accepts");
+    }
+
+    text += decoder.decode(value, { stream: true });
+  }
+
+  return text + decoder.decode();
 }

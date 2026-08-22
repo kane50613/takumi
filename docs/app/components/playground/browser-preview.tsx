@@ -3,7 +3,8 @@
 import { compile } from "tailwindcss";
 import themeCss from "tailwindcss/theme.css?raw";
 import utilitiesCss from "tailwindcss/utilities.css?raw";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { FONT_FAMILIES, googleFontsCssUrl } from "../../playground/fonts";
 
 const SOURCES: Record<string, string> = {
@@ -20,7 +21,7 @@ const INPUT = `@layer theme, base, utilities;
 @import "tailwindcss/utilities.css" layer(utilities);`;
 
 // Cache the resolved compiler so a remount (e.g. mobile tab switch) can paint
-// the shadow synchronously instead of flashing through an async load.
+// the frame without flashing through an async load.
 let compiler: { build(candidates: string[]): string } | undefined;
 let compilerPromise: Promise<void> | undefined;
 function loadCompiler() {
@@ -34,26 +35,44 @@ function loadCompiler() {
 }
 
 // Mirror the worker's font stack so the pane routes text to the same faces: one
-// Noto Sans superfamily across scripts. Set font-family on :host directly —
-// without Preflight nothing reads the font vars, so text would inherit the docs
-// page's font. Override every font var since the render has no serif/mono of
-// its own. `color` is pinned to the engine's initial value: inherited properties
-// cross the shadow boundary, so the docs theme would otherwise paint the pane's
-// text white in dark mode.
+// Noto Sans superfamily across scripts. Set the family on `:root` directly —
+// without Preflight nothing reads the font vars, so text would inherit the
+// frame's default. Override every font var since the render has no serif/mono
+// of its own.
 const FONT_FAMILY = `${FONT_FAMILIES.map((name) => `"${name}"`).join(", ")}, ui-sans-serif, system-ui, sans-serif`;
-const HOST_CSS = `:host{color:#000;font-family:${FONT_FAMILY};--font-sans:${FONT_FAMILY};--font-serif:${FONT_FAMILY};--font-mono:${FONT_FAMILY};--default-font-family:${FONT_FAMILY};--default-mono-font-family:${FONT_FAMILY}}`;
+const ROOT_CSS = `:root{color:#000;font-family:${FONT_FAMILY};--font-sans:${FONT_FAMILY};--font-serif:${FONT_FAMILY};--font-mono:${FONT_FAMILY};--default-font-family:${FONT_FAMILY};--default-mono-font-family:${FONT_FAMILY}}
+html,body{margin:0;height:100%}`;
 
-// @font-face in a shadow root is ignored by Chrome, so load the same Google Font
-// subsets the worker uses at document level; the `css2` sheet subsets on demand.
-let fontLoaded = false;
-function loadFont() {
-  if (fontLoaded || typeof document === "undefined") return;
-  fontLoaded = true;
-  const link = document.createElement("link");
-  link.rel = "stylesheet";
-  link.href = googleFontsCssUrl();
-  document.head.append(link);
-}
+// The frame runs the rendered markup, which is the user's to write. `sandbox`
+// without `allow-same-origin` puts it in an opaque origin, so an `onerror`
+// handler smuggled through `dangerouslySetInnerHTML` cannot reach the docs
+// origin. The document loads once and repaints over `postMessage`, so updates
+// do not flash the way a swapped `srcdoc` would.
+const FRAME_HTML = `<!doctype html>
+<meta charset="utf-8">
+<link rel="stylesheet" href="${googleFontsCssUrl()}">
+<style id="sheet"></style>
+<body><div id="mount"></div>
+<script>
+const reportHeight = () =>
+  parent.postMessage({ type: "height", value: document.documentElement.scrollHeight }, "*");
+
+addEventListener("message", (event) => {
+  if (event.source !== parent || event.data?.type !== "paint") return;
+  document.getElementById("sheet").textContent = event.data.css;
+  const mount = document.getElementById("mount");
+  mount.style.cssText = event.data.mountStyle;
+  mount.innerHTML = event.data.html;
+  reportHeight();
+  document.fonts.ready.then(reportHeight);
+});
+parent.postMessage({ type: "ready" }, "*");
+</script>`;
+
+/** Guards against a frame that reports a height big enough to hang the layout. */
+const MAX_FRAME_HEIGHT = 20000;
+
+type Paint = { type: "paint"; css: string; html: string; mountStyle: string };
 
 function extractClasses(html: string) {
   const classes = new Set<string>();
@@ -67,7 +86,7 @@ function useFitScale(width: number, height: number | undefined) {
   const ref = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     const el = ref.current;
     if (!el) return;
     const measure = () =>
@@ -79,6 +98,48 @@ function useFitScale(width: number, height: number | undefined) {
   }, [width, height]);
 
   return { ref, scale };
+}
+
+/** Repaints the frame, holding the last paint until its bootstrap says it is up. */
+function usePaintFrame(paint: Paint | undefined) {
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  const pendingRef = useRef<Paint>(undefined);
+  const [isReady, setIsReady] = useState(false);
+  const [contentHeight, setContentHeight] = useState<number>();
+
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (event.source !== frameRef.current?.contentWindow) return;
+
+      // The frame runs untrusted markup, so nothing it sends is taken at its
+      // word: a spoofed `ready` costs one repaint, and a height is clamped.
+      const message = event.data as { type?: string; value?: unknown } | null;
+
+      if (message?.type === "ready") {
+        setIsReady(true);
+        if (pendingRef.current) {
+          frameRef.current?.contentWindow?.postMessage(pendingRef.current, "*");
+        }
+        return;
+      }
+
+      if (message?.type === "height" && typeof message.value === "number") {
+        setContentHeight(Math.min(Math.max(message.value, 0), MAX_FRAME_HEIGHT));
+      }
+    };
+
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
+
+  useEffect(() => {
+    if (!paint) return;
+
+    pendingRef.current = paint;
+    if (isReady) frameRef.current?.contentWindow?.postMessage(paint, "*");
+  }, [paint, isReady]);
+
+  return { frameRef, contentHeight };
 }
 
 export default function BrowserPreview({
@@ -96,49 +157,45 @@ export default function BrowserPreview({
   cssContents?: string[];
 }) {
   const { ref, scale } = useFitScale(width, height);
-  const hostRef = useRef<HTMLDivElement>(null);
-  const shadowRef = useRef<{ host: HTMLElement; mount: HTMLElement; sheet: CSSStyleSheet }>(
-    undefined,
-  );
+  const [paint, setPaint] = useState<Paint>();
+  const { frameRef, contentHeight } = usePaintFrame(paint);
 
-  useLayoutEffect(() => {
-    const host = hostRef.current;
-    if (!host || !html) return;
+  useEffect(() => {
+    if (!html) return;
 
-    loadFont();
+    let cancelled = false;
+    const build = () => {
+      if (cancelled || !compiler) return;
 
-    // The host element is swapped when the pane switches between fixed-size and
-    // flowing layouts, which leaves the old shadow root behind.
-    if (shadowRef.current?.host !== host) {
-      const root = host.shadowRoot ?? host.attachShadow({ mode: "open" });
-      const sheet = new CSSStyleSheet();
-      root.adoptedStyleSheets = [sheet];
-      const mount = document.createElement("div");
-      root.replaceChildren(mount);
-      shadowRef.current = { host, mount, sheet };
-    }
-
-    const paint = () => {
-      if (!compiler || !shadowRef.current) return;
-      shadowRef.current.sheet.replaceSync(
-        [HOST_CSS, compiler.build(extractClasses(html)), ...(cssContents ?? [])].join("\n\n"),
-      );
-      shadowRef.current.mount.style.cssText = `display:flex;width:100%;height:${height ? "100%" : "auto"};padding:${padding ?? "0"}`;
-      shadowRef.current.mount.innerHTML = html;
+      setPaint({
+        type: "paint",
+        css: [ROOT_CSS, compiler.build(extractClasses(html)), ...(cssContents ?? [])].join("\n\n"),
+        html,
+        mountStyle: `display:flex;width:100%;height:${height ? "100%" : "auto"};padding:${padding ?? "0"}`,
+      });
     };
 
     if (compiler) {
-      paint();
-      return;
+      build();
+    } else {
+      void loadCompiler().then(build);
     }
-    let cancelled = false;
-    loadCompiler().then(() => {
-      if (!cancelled) paint();
-    });
+
     return () => {
       cancelled = true;
     };
   }, [html, cssContents, height, padding]);
+
+  const frame = (style: CSSProperties) => (
+    <iframe
+      ref={frameRef}
+      title="Browser preview"
+      sandbox="allow-scripts"
+      srcDoc={FRAME_HTML}
+      className="border bg-white"
+      style={style}
+    />
+  );
 
   // Without a height the pane scrolls the flow at page width, since the browser
   // cannot paginate the HTML the way the PDF renderer does.
@@ -147,30 +204,29 @@ export default function BrowserPreview({
   if (!height) {
     return (
       <div ref={ref} className="h-full min-w-0 overflow-auto bg-muted/20 py-4">
-        {html && (
-          <div ref={hostRef} className="mx-auto border bg-white" style={{ width, zoom: scale }} />
-        )}
+        {html &&
+          frame({
+            width,
+            height: contentHeight ?? 0,
+            zoom: scale,
+            display: "block",
+            margin: "0 auto",
+          })}
       </div>
     );
   }
 
   return (
     <div ref={ref} className="relative h-full min-w-0 overflow-hidden bg-muted/20">
-      {html && (
-        <div
-          ref={hostRef}
-          className="border"
-          style={{
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            width,
-            height,
-            transform: `translate(-50%, -50%) scale(${scale})`,
-            overflow: "hidden",
-          }}
-        />
-      )}
+      {html &&
+        frame({
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          width,
+          height,
+          transform: `translate(-50%, -50%) scale(${scale})`,
+        })}
     </div>
   );
 }

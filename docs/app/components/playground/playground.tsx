@@ -7,7 +7,7 @@ import type { Template } from "~/playground/templates";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../ui/resizable";
 import { ComponentEditor } from "./component-editor";
 import { LabeledPane, OutputPanel, PDF_VIEWS, type PdfView, type Zoom } from "./output-panel";
-import { Toolbar, type TabId } from "./toolbar";
+import { type Hint, Toolbar, type TabId } from "./toolbar";
 import { DEFAULT_TEMPLATE, useSharedCode } from "./use-shared-code";
 import { type RenderSuccess, useRenderWorker } from "./use-render-worker";
 
@@ -36,7 +36,7 @@ function formatStats(result: RenderSuccess) {
 }
 
 export default function Playground() {
-  const { code, setCode, matchedTemplate } = useSharedCode();
+  const { code, setCode, matchedTemplate, isShared } = useSharedCode();
   const [isFormatting, setIsFormatting] = useState(false);
   const [zoom, setZoom] = useState<Zoom>("fit");
   const [pdfView, setPdfView] = useState<PdfView>("preview");
@@ -50,17 +50,20 @@ export default function Playground() {
 
   const selectedTemplateName = matchedTemplate?.name ?? "Custom";
   const outputKind = lastSuccess?.outputKind;
-  const isStale = code !== undefined && ranCode !== undefined && code !== ranCode;
+  const isStale = code !== undefined && code !== ranCode;
+  const hint: Hint | undefined =
+    isShared && ranCode === undefined ? "shared" : isStale && !hintDismissed ? "edit" : undefined;
 
   useEffect(() => {
     setHintDismissed(localStorage.getItem(RUN_HINT_KEY) === "seen");
   }, []);
 
   // The first render happens on its own; after that the editor waits for Run,
-  // so a half-typed line never reloads the preview.
+  // so a half-typed line never reloads the preview. Code that arrived in a link
+  // is somebody else's, so it waits for Run too.
   useEffect(() => {
-    if (ranCode === undefined && code !== undefined) setRanCode(code);
-  }, [code, ranCode]);
+    if (ranCode === undefined && code !== undefined && !isShared) setRanCode(code);
+  }, [code, ranCode, isShared]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -228,7 +231,7 @@ export default function Playground() {
         isStale={isStale}
         isReady={isReady}
         onRun={run}
-        hintDismissed={hintDismissed}
+        hint={hint}
         onDismissHint={dismissHint}
         isFormatting={isFormatting}
         onFormat={formatCode}
@@ -261,6 +264,8 @@ export default function Playground() {
       <div className="flex h-7 shrink-0 items-center gap-3 border-t px-3 font-mono text-[11px] text-muted-foreground">
         {!isReady ? (
           <span>loading wasm…</span>
+        ) : ranCode === undefined ? (
+          <span>this code came from a link · read it, then press Run</span>
         ) : renderError ? (
           <span className="flex min-w-0 items-center gap-2">
             <span className="shrink-0 text-primary">error</span>

@@ -4,6 +4,7 @@ import { Editor } from "@monaco-editor/react";
 import { shikiToMonaco } from "@shikijs/monaco";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
+import type { ComponentProps } from "react";
 import { createHighlighterCore } from "shiki/core";
 import { createOnigurumaEngine } from "shiki/engine-oniguruma.mjs";
 import pdfPrimitivesTypings from "../../../node_modules/takumi-pdf/dist/primitives.d.mts?raw";
@@ -55,7 +56,7 @@ export function ComponentEditor({
   const { resolvedTheme } = useTheme();
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const editorRef = useRef<
-    Parameters<NonNullable<React.ComponentProps<typeof Editor>["onMount"]>>[0] | null
+    Parameters<NonNullable<ComponentProps<typeof Editor>["onMount"]>>[0] | null
   >(null);
   const isApplyingExternalCodeRef = useRef(false);
   // The command is registered once, so it reads the callback through a ref.
