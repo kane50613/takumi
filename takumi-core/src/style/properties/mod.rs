@@ -571,6 +571,25 @@ declare_enum_from_css_impl!(
 
 impl Animatable for BorderCollapse {}
 
+/// Defines how a table distributes its column widths.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
+pub enum TableLayout {
+  /// Column widths follow the content.
+  #[default]
+  Auto,
+  /// Column widths come from the first row, and the rest share the space.
+  Fixed,
+}
+
+declare_enum_from_css_impl!(
+  TableLayout,
+  "auto" => TableLayout::Auto,
+  "fixed" => TableLayout::Fixed
+);
+
+impl Animatable for TableLayout {}
+
 /// Defines how the corners of text strokes are rendered.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub enum LineJoin {
