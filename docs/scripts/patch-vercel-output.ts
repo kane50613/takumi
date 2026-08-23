@@ -1,11 +1,15 @@
-/// Waku's Vercel adapter writes `.vercel/output/config.json` after `vercel build`, which drops
-/// anything declared in `vercel.json`. The routes this site needs are merged back in here.
-/// https://vercel.com/docs/build-output-api/v3/configuration#routes
+/// Waku's Vercel adapter writes `.vercel/output/config.json` from scratch, so the routes this site
+/// needs are merged in after `vercel build` returns.
+/// https://vercel.com/docs/build-output-api/configuration#routes
 import { readFileSync, writeFileSync } from "node:fs";
+import { normalizeRoutes } from "@vercel/routing-utils";
+import type { HasField, Route } from "@vercel/routing-utils";
 
 const CONFIG_PATH = ".vercel/output/config.json";
 
-const MARKDOWN_ACCEPT = [{ type: "header", key: "accept", value: ".*[Tt]ext/[Mm]arkdown.*" }];
+const MARKDOWN_ACCEPT: HasField = [
+  { type: "header", key: "accept", value: ".*[Tt]ext/[Mm]arkdown.*" },
+];
 
 /// Collapsed to their final target: an agent that follows a chain sees the apex URL, not the hop.
 const REDIRECTS: Record<string, string> = {
@@ -20,7 +24,7 @@ const REDIRECTS: Record<string, string> = {
   "^/docs/integration/rust$": "https://docs.rs/takumi",
 };
 
-const beforeFilesystem = [
+const beforeFilesystem: Route[] = [
   ...Object.entries(REDIRECTS).map(([src, location]) => ({
     src,
     status: 301,
@@ -38,23 +42,36 @@ const beforeFilesystem = [
   },
 ];
 
-const onError = [
-  { handle: "error" },
+const ERROR_PHASE = "error";
+
+const onError: Route[] = [
+  { handle: ERROR_PHASE },
   { src: "^/(?:r|api)(?:/.*)?$", status: 404, dest: "/errors/not-found.json" },
   { src: "^/.*$", has: MARKDOWN_ACCEPT, status: 404, dest: "/404.md" },
   { src: "^/.*$", status: 404, dest: "/404.html" },
 ];
 
-export function withAgentRoutes(routes: unknown[]) {
-  return [...beforeFilesystem, ...routes, ...onError];
+/// A phase may be declared once, and every route after a `handle` belongs to it, so the error
+/// routes are spliced into an existing `error` phase rather than appended blindly.
+export function withAgentRoutes(routes: Route[]): Route[] {
+  const errorPhase = routes.findIndex((route) => "handle" in route && route.handle === ERROR_PHASE);
+  const [existingHandled, existingErrorRoutes] =
+    errorPhase === -1 ? [routes, []] : [routes.slice(0, errorPhase), routes.slice(errorPhase + 1)];
+
+  const merged = [...beforeFilesystem, ...existingHandled, ...onError, ...existingErrorRoutes];
+  const { error } = normalizeRoutes(merged);
+
+  if (error) throw new Error(`${error.message}\n${JSON.stringify(merged, null, 2)}`);
+
+  return merged;
 }
 
 if (import.meta.main) {
-  const config = JSON.parse(readFileSync(CONFIG_PATH, "utf-8")) as { routes?: unknown[] };
+  const config = JSON.parse(readFileSync(CONFIG_PATH, "utf-8")) as { routes?: Route[] };
 
   config.routes = withAgentRoutes(config.routes ?? []);
 
   writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
 
-  console.log(`patched ${CONFIG_PATH} with ${beforeFilesystem.length + onError.length} routes`);
+  console.log(`patched ${CONFIG_PATH}:\n${JSON.stringify(config.routes, null, 2)}`);
 }

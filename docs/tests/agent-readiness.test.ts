@@ -103,6 +103,21 @@ describe("vercel routes", () => {
     expect(errorIndex).toBeGreaterThan(wakuIndex);
   });
 
+  test("joins an error phase that already exists instead of declaring a second one", () => {
+    const merged = withAgentRoutes([
+      { src: "^/assets/(.*)$" },
+      { handle: "filesystem" },
+      { handle: "error" },
+      { src: "^/.*$", status: 404, dest: "/legacy.html" },
+    ]) as typeof routes;
+
+    expect(merged.filter((route) => route.handle === "error")).toHaveLength(1);
+    expect(merged.at(-1)).toMatchObject({ dest: "/legacy.html" });
+    expect(merged.findIndex((route) => route.handle === "filesystem")).toBeLessThan(
+      merged.findIndex((route) => route.handle === "error"),
+    );
+  });
+
   test("varies on Accept so a cache cannot mix the HTML and Markdown variants", () => {
     expect(find((route) => route.headers?.Vary !== undefined).headers?.Vary).toBe(
       "Accept, Accept-Encoding",

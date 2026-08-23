@@ -996,8 +996,16 @@ jobs:
         id: deploy_preview
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         run: |
-          DEPLOYMENT_URL=$(bunx vercel deploy --archive=tgz --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
-          echo "url=$DEPLOYMENT_URL" >> $GITHUB_OUTPUT
+          status=0
+          bunx vercel deploy --archive=tgz --prebuilt --token=${{ secrets.VERCEL_TOKEN }} > url.txt 2> deploy.log || status=$?
+          cat deploy.log >&2
+          # `vercel deploy` reports a failed build as "Unexpected error", so the reason is read back
+          # from the deployment's own logs.
+          if [ "$status" -ne 0 ]; then
+            bunx vercel inspect --logs "$(grep -oE 'https://vercel.com/[^ ]+' deploy.log | head -1)" --token=${{ secrets.VERCEL_TOKEN }} || true
+            exit 1
+          fi
+          echo "url=$(cat url.txt)" >> $GITHUB_OUTPUT
 
       - name: Verify agent endpoints (preview)
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
@@ -1072,8 +1080,14 @@ jobs:
         id: deploy_production
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: |
-          DEPLOYMENT_URL=$(bunx vercel deploy --archive=tgz --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
-          echo "url=$DEPLOYMENT_URL" >> $GITHUB_OUTPUT
+          status=0
+          bunx vercel deploy --archive=tgz --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }} > url.txt 2> deploy.log || status=$?
+          cat deploy.log >&2
+          if [ "$status" -ne 0 ]; then
+            bunx vercel inspect --logs "$(grep -oE 'https://vercel.com/[^ ]+' deploy.log | head -1)" --token=${{ secrets.VERCEL_TOKEN }} || true
+            exit 1
+          fi
+          echo "url=$(cat url.txt)" >> $GITHUB_OUTPUT
 
       - name: Verify agent endpoints (production)
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
