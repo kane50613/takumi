@@ -2,8 +2,7 @@
 //!
 //! taffy has no table algorithm. Grid gives every row a shared column track,
 //! which flex cannot. Rows and row groups are dropped, so a row's background
-//! is copied onto its cells. `border-collapse` and row borders are not
-//! implemented.
+//! and borders are copied onto its cells.
 //!
 //! Cell alignment mirrors Blink's `ComputeContentAlignment` in
 //! `block_layout_algorithm_utils.cc`. `baseline` is naive: it uses block-start

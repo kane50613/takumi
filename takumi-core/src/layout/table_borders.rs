@@ -1,14 +1,11 @@
 //! Collapsing adjacent table borders onto one grid line.
 //!
-//! Naive: the winning border is assigned whole to the cell below or right of
-//! the line, instead of straddling it half in each cell. Uniform borders come
-//! out pixel-exact; against Blink the table's outer edge sits half a border
-//! width inside, and cell content shifts by up to one border width. `double`
-//! junctions paint per cell, so the three strokes do not meet.
-//!
-//! Row groups and columns are dropped before lowering, so only cell, row and
-//! table borders enter the CSS 2.2 section 17.6.2 cascade. Ties resolve
-//! towards the top and left without mirroring under `direction: rtl`.
+//! Naive: every cell still paints its own box, so the winner is drawn whole
+//! inside the cell below or right of the line instead of straddling it. The
+//! table's outer edge lands half a border width inside Blink's, and a
+//! vertical border mitres a one pixel nick out of any wider band it crosses.
+//! Only cell, row and table borders reach the CSS 2.2 section 17.6.2
+//! cascade.
 
 use crate::{
   layout::{
@@ -254,9 +251,8 @@ impl CollapsedBorders {
   }
 }
 
-/// `hidden` on any box kills the line. Otherwise the highest rank wins, and
-/// an exact tie goes to the candidate the caller listed first, which CSS 2.2
-/// section 17.6.2 defines as the box further to the top and left.
+/// `hidden` clears the line. Ties keep the first candidate, so callers list
+/// the top and left box first.
 fn win(candidates: &[BorderEdge]) -> BorderEdge {
   if candidates
     .iter()
