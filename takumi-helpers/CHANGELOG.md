@@ -1,3 +1,13 @@
+## @takumi-rs/helpers@2.11.0
+
+### Keep a `;` inside an inline style value
+
+`fromHtml` and `fromStaticMarkup` split the `style` attribute on every `;`, so a value carrying one of its own lost everything after it. `style="background-image:url(data:image/png;base64,...)"` resolved to `url(data:image/png` and rendered nothing. A quoted `font-family: "Foo; Bar"` was cut the same way. Only a `;` outside `url()` and a quoted string now ends a declaration.
+
+### Decode the numeric character references the HTML spec defines
+
+`&#X41;` stayed literal text because the decoder matched only a lower-case `x`, while the spec accepts either case. A reference in the C1 range now resolves through the windows-1252 table the spec names, so `&#153;` renders as `™` rather than an invisible control character, and `&#0;` becomes the replacement character rather than a raw NUL.
+
 ## @takumi-rs/helpers@2.10.0
 
 ### Lay out tables on the grid algorithm

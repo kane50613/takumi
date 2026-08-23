@@ -1,3 +1,85 @@
+## @takumi-rs/core@2.11.0
+
+### Align table cell content with `vertical-align`
+
+`vertical-align: middle` on a table cell now centers its content in the cell, and `bottom` pushes it to the cell's bottom edge. `baseline` still renders as `top`.
+
+A row's element children that are not `table-cell`, such as a `<td style="display: flex">`, are now laid out in the row instead of dropped. Text sitting directly in a row is still dropped: it has no anonymous cell to go into.
+
+### Start backwards-filled step animations on the first step
+
+An animation with `animation-fill-mode: backwards` or `both` and a positive delay held the second step during the delay when its timing function was `steps(n, jump-start)` or `steps(n, jump-both)`. Samples taken before the active phase now land on the step below the jump, as the CSS easing algorithm requires.
+
+`steps()` also serializes the way the spec asks: `steps(4, end)` and `steps(4, jump-end)` both print as `steps(4)`, since an end position is the default.
+
+### Store `calc()` as its non-zero terms
+
+`Length` shrinks from 84 to 20 bytes, and a computed style from 5.9KB to 2.3KB. A `calc()` expression mixing more than four distinct units now fails to parse.
+
+### Sample background-clip text at pixel centres
+
+Text clipped to a background or mask image sampled that image at pixel corners rather than centres, blending every pixel with its neighbour. The clip is now read exactly where it should be, so a `background-clip: text` fill is half a pixel sharper, and drawing one is about a third faster.
+
+### Animate WebP image sources
+
+An animated WebP used as an image source now plays through its frames, the same way an animated GIF does. Before, decoding one threw `WebP encode failed` and took the whole render down with it. The still-image paths, which the SVG backend and the size cache go through, fall back to the first frame instead of failing.
+
+`ImageSource::Gif` is now `ImageSource::Animated`, and `GifSource` is now `AnimatedSource`, since both carry GIF and WebP animations. `ImageError::InvalidGif` is now `ImageError::InvalidAnimation` for the same reason.
+
+An animated source keeps only its encoded bytes and a frame timing table. It used to hold a decoded full-size copy of the first frame as well, which also meant the first frame ignored the draw box it was scaled into.
+
+### Reuse layout styles across sizing passes
+
+Layout runs several sizing passes over each node, and each pass rebuilt that node's layout style from scratch. Only container query units (`cqw`, `cqh`, `cqmin`, `cqmax`) can change between passes, so a style using none of them is now built once and reused. A deeply nested flex tree lays out about 36% faster.
+
+### Support the full `steps()` step position syntax
+
+`steps()` now accepts `jump-start`, `jump-end`, `jump-none`, and `jump-both`, and the position argument is optional, so `steps(4)` means `steps(4, jump-end)`. Only `start` and `end` parsed before, so a declaration like `steps(4, jump-none)` was dropped as invalid and the animation fell back to `ease`, drawing a smooth curve instead of a staircase.
+
+### Undo premultiplication in integers
+
+Converting the finished canvas back to straight alpha now divides in integers rather than `f64`. Rendering any image is a few percent faster, and pixels land on the same value on every target instead of depending on the platform's float division. Semi-transparent pixels can differ by one from previous output, which is where the float landed a hair under a rounding step.
+
+### Share inherited font lists across nodes
+
+`font-family`, `font-variation-settings`, and `font-feature-settings` lists are now `Arc`-shared, so inheriting them no longer copies the list per node.
+
+### Keep `direction: ltr` blocks left-to-right
+
+Blocks with `direction: ltr` now keep an LTR layout when text starts with an RTL script. The bidi base direction follows `direction`, matching browsers.
+
+### Composite opaque effect layers without resampling them
+
+A blur, shadow or opacity group that is fully opaque and composites normally is copied onto its parent row by row instead of going through the sampling pipeline. Such a drop shadow is about 40% faster to render, such a blur about 30%. A group with partial opacity or a blend mode is unaffected.
+
+### Keep degenerate CSS values out of layout
+
+`aspect-ratio` with a zero, negative, or non-finite ratio (such as `1/0`) now behaves as `auto`, and an infinite percentage length is clamped instead of feeding infinity into layout.
+
+### Draw animated frames without replaying the ones before them
+
+A frame that covers the whole canvas and replaces what is under it does not depend on the frames before it, so it is now decoded on its own. Reaching the last frame of a 300-frame animation drops from 16.6ms to 0.13ms for GIF, 158ms to 0.39ms for APNG, and 97ms to 0.05ms for WebP. Frames that do blend onto their predecessors still replay, as they must.
+
+### Render list markers on the right under `direction: rtl`
+
+A `direction: rtl` list item now places its marker at the right edge and mirrors the counter suffix, matching Chrome. RTL blocks also force the right-to-left base direction instead of inferring it from the first strong character, so their text aligns to the right regardless of content.
+
+### Draw whole-pixel images without resampling them
+
+An image placed at a whole-pixel offset is copied row by row instead of going through the sampling pipeline. Drawing one into a node is about three times faster; clips, shadows and blurs that composite an image get a few percent.
+
+### Share custom property maps across nodes
+
+`ComputedStyle::custom_properties` and `registered_custom_properties` are now `Arc`-shared, so inheriting them no longer copies the maps per node.
+
+### Animate APNG image sources
+
+An animated PNG used as an image source now plays through its frames, the same way an animated GIF or WebP does. Before, only the default image was decoded and the render held that one frame for the whole animation, with nothing to signal the rest had been dropped. Subframes composite through the `fcTL` dispose and blend operations, and a default image that no `fcTL` claims stays out of the timeline.
+
+### Match selectors against the rules that could apply
+
+Stylesheet rules are grouped by what their rightmost selector requires, so a node only runs the matcher against rules naming one of its classes, its id or its tag. Rendering 800 nodes against 800 rules drops from 67ms to 2.5ms; the cost now grows with the rules that could match rather than with the whole stylesheet.
+
 ## @takumi-rs/core@2.10.0
 
 ### Update the font stack
