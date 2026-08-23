@@ -256,13 +256,17 @@ const namedHtmlEntities: Record<string, string> = {
   euro: "\u20ac",
 };
 
+// The windows-1252 characters a C1 numeric reference resolves to, 0x80 to 0x9f.
+// https://html.spec.whatwg.org/multipage/parsing.html#numeric-character-reference-end-state
+const windows1252C1 = "€\u0081‚ƒ„…†‡ˆ‰Š‹Œ\u008dŽ\u008f\u0090‘’“”•–—˜™š›œ\u009džŸ";
+
 export function decodeHtmlEntities(value: string): string {
   if (!value.includes("&")) {
     return value;
   }
 
   return value.replace(
-    /&(?:#(\d+)|#x([\da-fA-F]+)|([a-zA-Z][\w-]+));/g,
+    /&(?:#(\d+)|#[xX]([\da-fA-F]+)|([a-zA-Z][\w-]+));/g,
     (match, dec, hex, named) => {
       if (dec) {
         return decodeCodePoint(Number(dec)) ?? match;
@@ -284,6 +288,14 @@ function decodeCodePoint(codePoint: number): string | undefined {
 
   if (codePoint >= 0xd800 && codePoint <= 0xdfff) {
     return;
+  }
+
+  if (codePoint === 0) {
+    return "\ufffd";
+  }
+
+  if (codePoint >= 0x80 && codePoint <= 0x9f) {
+    return windows1252C1[codePoint - 0x80];
   }
 
   try {
