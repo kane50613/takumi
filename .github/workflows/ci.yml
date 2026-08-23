@@ -990,26 +990,14 @@ jobs:
 
       - name: Build Vercel output (preview)
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        run: bunx vercel build --token=${{ secrets.VERCEL_TOKEN }} && rm -rf .vercel/output/functions && bun docs/scripts/patch-vercel-output.ts
+        run: bunx vercel build --token=${{ secrets.VERCEL_TOKEN }} && bun docs/scripts/patch-vercel-output.ts
 
       - name: Deploy to Vercel (preview)
         id: deploy_preview
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         run: |
-          status=0
-          bunx vercel deploy --archive=tgz --prebuilt --token=${{ secrets.VERCEL_TOKEN }} > url.txt 2> deploy.log || status=$?
-          cat deploy.log >&2
-          # `vercel deploy` reports a failed build as "Unexpected error", so the reason is read back
-          # from the deployment's own logs.
-          if [ "$status" -ne 0 ]; then
-            bunx vercel inspect --logs "$(grep -oE 'https://vercel.com/[^ ]+' deploy.log | head -1)" --token=${{ secrets.VERCEL_TOKEN }} || true
-            exit 1
-          fi
-          echo "url=$(cat url.txt)" >> $GITHUB_OUTPUT
-
-      - name: Verify agent endpoints (preview)
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        run: bun docs/scripts/verify-agent-endpoints.ts ${{ steps.deploy_preview.outputs.url }}
+          DEPLOYMENT_URL=$(bunx vercel deploy --archive=tgz --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          echo "url=$DEPLOYMENT_URL" >> $GITHUB_OUTPUT
 
       - name: Assign alias (preview)
         id: assign_alias
@@ -1074,21 +1062,8 @@ jobs:
 
       - name: Build Vercel output (production)
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        run: bunx vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} && rm -rf .vercel/output/functions && bun docs/scripts/patch-vercel-output.ts
+        run: bunx vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} && bun docs/scripts/patch-vercel-output.ts
 
       - name: Deploy to Vercel (production)
-        id: deploy_production
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        run: |
-          status=0
-          bunx vercel deploy --archive=tgz --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }} > url.txt 2> deploy.log || status=$?
-          cat deploy.log >&2
-          if [ "$status" -ne 0 ]; then
-            bunx vercel inspect --logs "$(grep -oE 'https://vercel.com/[^ ]+' deploy.log | head -1)" --token=${{ secrets.VERCEL_TOKEN }} || true
-            exit 1
-          fi
-          echo "url=$(cat url.txt)" >> $GITHUB_OUTPUT
-
-      - name: Verify agent endpoints (production)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        run: bun docs/scripts/verify-agent-endpoints.ts ${{ steps.deploy_production.outputs.url }}
+        run: bunx vercel deploy --archive=tgz --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}

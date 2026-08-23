@@ -152,11 +152,4 @@ describe("vercel routes", () => {
   test("keeps the HTML 404 as the last resort", () => {
     expect(routes.at(-1)).toMatchObject({ status: 404, dest: "/404.html" });
   });
-
-  test("redirects a retired path straight to its final target", () => {
-    const route = find((route) => route.headers?.Location === "/docs/reference");
-
-    expect(route.status).toBe(301);
-    expect(new RegExp(route.src as string).test("/docs/deep-dives/stylesheets")).toBe(true);
-  });
 });

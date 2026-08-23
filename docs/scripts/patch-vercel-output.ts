@@ -11,25 +11,7 @@ const MARKDOWN_ACCEPT: HasField = [
   { type: "header", key: "accept", value: ".*[Tt]ext/[Mm]arkdown.*" },
 ];
 
-/// Collapsed to their final target: an agent that follows a chain sees the apex URL, not the hop.
-const REDIRECTS: Record<string, string> = {
-  "^/docs/getting-started(?:/.*)?$": "/docs",
-  "^/docs/integrations(?:/.*)?$": "/docs",
-  "^/docs/deep-dives(?:/.*)?$": "/docs/reference",
-  "^/docs/persistent-images$": "/docs/load-images",
-  "^/docs/tailwind-css$": "/docs/styling",
-  "^/docs/quickstart$": "/docs",
-  "^/docs/runtimes$": "/docs",
-  "^/docs/layout-engine$": "/docs",
-  "^/docs/integration/rust$": "https://docs.rs/takumi",
-};
-
 const beforeFilesystem: Route[] = [
-  ...Object.entries(REDIRECTS).map(([src, location]) => ({
-    src,
-    status: 301,
-    headers: { Location: location },
-  })),
   {
     src: "^/(.*)$",
     headers: { Vary: "Accept, Accept-Encoding" },
