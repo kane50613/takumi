@@ -590,6 +590,58 @@ declare_enum_from_css_impl!(
 
 impl Animatable for TableLayout {}
 
+/// A `border-spacing` value: one or two lengths. CSS forbids percentages and
+/// `auto` here, so a declaration carrying either is discarded and the cascade
+/// keeps the previous one. A negative length clamps to zero where it is used.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct BorderSpacing(pub SpacePair<Length>);
+
+impl MakeComputed for BorderSpacing {
+  fn make_computed(&mut self, sizing: &SizingContext) {
+    self.0.make_computed(sizing);
+  }
+}
+
+impl Animatable for BorderSpacing {
+  fn interpolate(
+    &mut self,
+    from: &Self,
+    to: &Self,
+    progress: f32,
+    sizing: &SizingContext,
+    current_color: Color,
+  ) {
+    self
+      .0
+      .interpolate(&from.0, &to.0, progress, sizing, current_color);
+  }
+}
+
+impl<'i> FromCss<'i> for BorderSpacing {
+  const VALID_TOKENS: &'static [CssToken] = SpacePair::<Length>::VALID_TOKENS;
+  const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::OneOrTwoValues;
+
+  fn from_css(input: &mut cssparser::Parser<'i, '_>) -> ParseResult<'i, Self> {
+    let location = input.current_source_location();
+    let pair = SpacePair::<Length>::from_css(input)?;
+
+    if [pair.x, pair.y]
+      .into_iter()
+      .any(|length| matches!(length, Length::Auto | Length::Percentage(_)))
+    {
+      return Err(location.new_unexpected_token_error(cssparser::Token::Delim('%')));
+    }
+
+    Ok(Self(pair))
+  }
+}
+
+impl ToCss for BorderSpacing {
+  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+    self.0.to_css(dest)
+  }
+}
+
 /// Defines how the corners of text strokes are rendered.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub enum LineJoin {
@@ -1276,3 +1328,30 @@ declare_enum_from_css_impl!(
   "inset" => BorderStyle::Inset,
   "outset" => BorderStyle::Outset,
 );
+
+#[cfg(test)]
+mod border_spacing_tests {
+  use crate::style::{BorderSpacing, Length, SpacePair, properties::traits::FromCssStr};
+
+  #[test]
+  fn border_spacing_takes_one_or_two_lengths() {
+    assert_eq!(
+      BorderSpacing::from_css_str("4px"),
+      Ok(BorderSpacing(SpacePair::from_single(Length::Px(4.0))))
+    );
+    assert_eq!(
+      BorderSpacing::from_css_str("4px 8px"),
+      Ok(BorderSpacing(SpacePair::from_pair(
+        Length::Px(4.0),
+        Length::Px(8.0)
+      )))
+    );
+  }
+
+  #[test]
+  fn border_spacing_rejects_what_its_grammar_forbids() {
+    assert!(BorderSpacing::from_css_str("auto").is_err());
+    assert!(BorderSpacing::from_css_str("5%").is_err());
+    assert!(BorderSpacing::from_css_str("4px 5%").is_err());
+  }
+}

@@ -358,14 +358,11 @@ fn lower_table(table: &mut RenderNode) {
   let placements = resolve_columns(&rows);
   let columns = track_count(&placements);
   let collapse = table.context.style.border_collapse == BorderCollapse::Collapse;
-  let spacing = table.context.style.border_spacing;
+  let spacing = table.context.style.border_spacing.0;
   let sizing = table.context.sizing.clone();
-  let tracks = track_sizes(
-    &rows,
-    &placements,
-    columns,
-    table.context.style.table_layout == TableLayout::Fixed,
-  );
+  let fixed = table.context.style.table_layout == TableLayout::Fixed
+    && table.context.style.width != Length::Auto;
+  let tracks = track_sizes(&rows, &placements, columns, fixed);
   let collapsed = collapse.then(|| {
     CollapsedBorders::resolve(
       &table.context.style,
@@ -464,7 +461,7 @@ fn inset_edges(style: &mut ComputedStyle, spacing: SpacePair<Length>, sizing: &S
       return;
     }
 
-    *padding = Length::Px(padding.to_px(sizing, 0.0) + extra.to_px(sizing, 0.0));
+    *padding = Length::Px(padding.to_px(sizing, 0.0) + extra.to_px(sizing, 0.0).max(0.0));
   };
 
   inset(&mut style.padding_top, spacing.y);
@@ -488,9 +485,10 @@ fn clear_border(style: &mut ComputedStyle) {
 
 /// Approximates Blink constrained columns from the first declared cell width.
 /// `table-layout: fixed` reads only the first row and shares the rest of the
-/// space evenly, so column widths stop following the content. A spanning cell
-/// splits its declared width evenly across the tracks it covers; a percentage
-/// width on one is ignored.
+/// space evenly, so column widths stop following the content. CSS 2.2 §17.5.2
+/// only reaches that algorithm when the table's width is not `auto`. A
+/// spanning cell splits its declared width evenly across the tracks it
+/// covers; a percentage width on one is ignored.
 fn track_sizes(
   rows: &[RenderNode],
   placements: &[Vec<(usize, u16)>],
@@ -583,7 +581,8 @@ mod tests {
         .red-border { display: table-cell; border: 1px solid rgb(255, 0, 0) }
         .blue-border { display: table-cell; border: 1px solid rgb(0, 0, 255) }
         .heavy-row { display: table-row; border-bottom: 3px solid rgb(0, 0, 0) }
-        .fixed { display: table; table-layout: fixed }
+        .fixed { display: table; table-layout: fixed; width: 300px }
+        .fixed-auto { display: table; table-layout: fixed }
         .spaced { display: table; border-spacing: 4px 8px }
         .tight { display: table; border-spacing: 0 }
         .w80 { display: table-cell; width: 80px }
@@ -1353,5 +1352,20 @@ mod tests {
     let plain = lower(Node::container([row([cell("a")])]).with_class_name("plain"));
 
     assert_eq!(plain.context.style.padding_left, Length::zero());
+  }
+
+  #[test]
+  fn a_fixed_table_without_a_width_still_follows_its_content() {
+    let table = lower(Node::container([row([cell("a"), cell("b")])]).with_class_name("fixed-auto"));
+
+    assert_eq!(
+      table
+        .context
+        .style
+        .grid_template_columns
+        .as_ref()
+        .map(ToCss::to_css_string),
+      Some(String::from("auto auto"))
+    );
   }
 }
