@@ -231,23 +231,70 @@ function decodeAttributeMap(attributes: Record<string, string>): Record<string, 
 
 function parseInlineStyle(styleText: string): CSSProperties | undefined {
   const style: Record<string, string> = {};
+  let start = 0;
+  let colon = -1;
+  let depth = 0;
 
-  for (const declaration of styleText.split(";")) {
-    const [property, ...valueParts] = declaration.split(":");
-    if (!property || valueParts.length === 0) {
-      continue;
+  const commit = (end: number) => {
+    if (colon < 0) {
+      return;
     }
 
-    const name = property.trim();
-    const value = valueParts.join(":").trim();
-    if (!name || !value) {
-      continue;
-    }
+    const name = styleText.slice(start, colon).trim();
+    const value = styleText.slice(colon + 1, end).trim();
 
-    style[cssPropertyToJsProperty(name)] = value;
+    if (name && value) {
+      style[cssPropertyToJsProperty(name)] = value;
+    }
+  };
+
+  for (let index = 0; index < styleText.length; index += 1) {
+    const character = styleText[index];
+
+    if (character === "\\") {
+      index += 1;
+    } else if (character === '"' || character === "'") {
+      index = skipQuoted(styleText, index);
+    } else if (character === "/" && styleText[index + 1] === "*") {
+      index = skipComment(styleText, index);
+    } else if (character === "(") {
+      depth += 1;
+    } else if (character === ")") {
+      depth = Math.max(0, depth - 1);
+    } else if (depth > 0) {
+      continue;
+    } else if (character === ":" && colon < 0) {
+      colon = index;
+    } else if (character === ";") {
+      commit(index);
+      start = index + 1;
+      colon = -1;
+    }
   }
 
+  commit(styleText.length);
+
   return Object.keys(style).length > 0 ? (style as CSSProperties) : undefined;
+}
+
+function skipQuoted(styleText: string, start: number): number {
+  const quote = styleText[start];
+
+  for (let index = start + 1; index < styleText.length; index += 1) {
+    if (styleText[index] === "\\") {
+      index += 1;
+    } else if (styleText[index] === quote) {
+      return index;
+    }
+  }
+
+  return styleText.length;
+}
+
+function skipComment(styleText: string, start: number): number {
+  const end = styleText.indexOf("*/", start + 2);
+
+  return end < 0 ? styleText.length : end + 1;
 }
 
 function cssPropertyToJsProperty(property: string): string {
