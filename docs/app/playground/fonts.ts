@@ -21,3 +21,6 @@ export function googleFontsCssUrl(): string {
   ).join("&");
   return `https://fonts.googleapis.com/css2?${families}&display=swap`;
 }
+
+/** Latin-only face served from this site, used when the Google Fonts request fails. */
+export const FALLBACK_FONT_URL = "/fonts/Geist.woff2";

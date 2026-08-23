@@ -40,6 +40,8 @@ const renderSuccessSchema = z.object({
   label: z.string(),
   /** What the PDF bytes turned out to contain, for PDF output. */
   inspection: z.optional(z.custom<PdfInspection>()),
+  /** What degraded in this render, shown in the status bar. */
+  notice: z.optional(z.string()),
 });
 
 const renderErrorSchema = z.object({
