@@ -22,7 +22,7 @@
         flex-direction: column;
         gap: 6px;
         width: 282px;
-        height: 220px;
+        height: 150px;
       }
       .label {
         font-size: 11px;
@@ -67,6 +67,39 @@
       }
       .separate {
         border-collapse: separate;
+      }
+      .heavy-column td.lead {
+        border-right: 4px solid rgb(37, 99, 235);
+      }
+      .ranks td {
+        border-width: 2px;
+      }
+      .ranks .dotted {
+        border-style: dotted;
+      }
+      .ranks .dashed {
+        border-style: dashed;
+      }
+      .ranks .solid {
+        border-style: solid;
+      }
+      .ranks .double {
+        border-style: double;
+      }
+      .origins {
+        border: 2px solid rgb(37, 99, 235);
+      }
+      .origins tr.tinted {
+        border-bottom: 2px solid rgb(22, 163, 74);
+      }
+      .origins td.own {
+        border-bottom: 2px solid rgb(220, 38, 38);
+      }
+      .spanning tr.parted {
+        border-bottom: 3px solid rgb(220, 38, 38);
+      }
+      .dropped tr.gone {
+        border-bottom-style: hidden;
       }
     </style>
   </head>
@@ -150,6 +183,74 @@
           <tr>
             <td>left</td>
             <td>right</td>
+          </tr>
+        </table>
+      </div>
+      <div class="cell">
+        <span class="label">a wider column line takes the corner</span>
+        <table class="heavy-column">
+          <tr>
+            <td class="lead">alpha</td>
+            <td>1</td>
+          </tr>
+          <tr>
+            <td class="lead">beta</td>
+            <td>2</td>
+          </tr>
+        </table>
+      </div>
+      <div class="cell">
+        <span class="label">equal widths rank by style</span>
+        <table class="ranks">
+          <tr>
+            <td class="dotted">dotted</td>
+            <td class="dashed">dashed</td>
+          </tr>
+          <tr>
+            <td class="solid">solid</td>
+            <td class="double">double</td>
+          </tr>
+        </table>
+      </div>
+      <div class="cell">
+        <span class="label">equal widths rank cell over row over table</span>
+        <table class="origins">
+          <tr class="tinted">
+            <td class="own">cell wins</td>
+            <td>row wins</td>
+          </tr>
+          <tr>
+            <td>alpha</td>
+            <td>1</td>
+          </tr>
+        </table>
+      </div>
+      <div class="cell">
+        <span class="label">a rowspan reads the row it borders</span>
+        <table class="spanning">
+          <tr>
+            <td rowspan="2">tall</td>
+            <td>alpha</td>
+          </tr>
+          <tr class="parted">
+            <td>beta</td>
+          </tr>
+          <tr>
+            <td>gamma</td>
+            <td>2</td>
+          </tr>
+        </table>
+      </div>
+      <div class="cell">
+        <span class="label">a hidden row border clears the whole line</span>
+        <table class="dropped">
+          <tr class="gone">
+            <td>alpha</td>
+            <td>1</td>
+          </tr>
+          <tr>
+            <td>beta</td>
+            <td>2</td>
           </tr>
         </table>
       </div>
