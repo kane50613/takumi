@@ -163,8 +163,13 @@ lto = true
 panic = "abort"
 codegen-units = 1
 
+# The leaf crate is bindings and orchestration; per-pixel work lives in raster.
+# Every serde-wasm-bindgen monomorph for the node tree is instantiated here, so
+# this is where the bundle pays for them. Full "z" costs 18% of render time,
+# which is not worth the extra 6KB it saves over "s".
 [profile.release.package."takumi-wasm"]
 strip = "debuginfo"
+opt-level = "s"
 
 [profile.release.package."takumi-bindings-common"]
 opt-level = "z"
