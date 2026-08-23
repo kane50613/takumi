@@ -242,6 +242,7 @@ mod tests {
         device_pixel_ratio: 2.0,
       },
       container_size: Size::NONE,
+      container_read: Default::default(),
       font_size: 10.0,
       root_font_size: None,
       line_height: 0.0,

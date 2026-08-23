@@ -203,6 +203,7 @@ mod tests {
     let sizing = SizingContext {
       viewport: Viewport::new((1200, 630)),
       container_size: Size::NONE,
+      container_read: Default::default(),
       font_size: 20.0,
       root_font_size: None,
       line_height: 0.0,
@@ -229,6 +230,7 @@ mod tests {
     let sizing = SizingContext {
       viewport: Viewport::new((1200, 630)),
       container_size: Size::NONE,
+      container_read: Default::default(),
       font_size: 16.0,
       root_font_size: None,
       line_height: 0.0,
@@ -248,6 +250,7 @@ mod tests {
     let sizing = SizingContext {
       viewport,
       container_size: Size::NONE,
+      container_read: Default::default(),
       font_size: root_font_size_device_px,
       root_font_size: Some(root_font_size_device_px),
       line_height: 0.0,

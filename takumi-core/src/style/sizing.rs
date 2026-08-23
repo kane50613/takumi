@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{cell::Cell, rc::Rc};
 
 use typed_builder::TypedBuilder;
 
@@ -12,6 +12,10 @@ pub struct SizingContext {
   /// The nearest query container size (content box) in device pixels.
   #[builder(default, setter(skip))]
   pub(crate) container_size: Size<Option<f32>>,
+  /// Set when a length resolves against the query container, so a caller can
+  /// tell whether its result depends on one.
+  #[builder(default, setter(skip))]
+  pub(crate) container_read: Cell<bool>,
   /// The font size in pixels.
   #[builder(default = viewport.to_device(viewport.font_size))]
   pub font_size: f32,
@@ -91,6 +95,7 @@ impl SizingContext {
 
   /// Query container width in device pixels, falling back to the viewport.
   pub(crate) fn query_container_width(&self) -> f32 {
+    self.container_read.set(true);
     self
       .container_size
       .width
@@ -99,6 +104,7 @@ impl SizingContext {
 
   /// Query container height in device pixels, falling back to the viewport.
   pub(crate) fn query_container_height(&self) -> f32 {
+    self.container_read.set(true);
     self
       .container_size
       .height
