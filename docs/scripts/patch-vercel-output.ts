@@ -40,7 +40,7 @@ const beforeFilesystem = [
 
 const onError = [
   { handle: "error" },
-  { src: "^/(?:r|api)/.*$", status: 404, dest: "/errors/not-found.json" },
+  { src: "^/(?:r|api)(?:/.*)?$", status: 404, dest: "/errors/not-found.json" },
   { src: "^/.*$", has: MARKDOWN_ACCEPT, status: 404, dest: "/404.md" },
   { src: "^/.*$", status: 404, dest: "/404.html" },
 ];

@@ -129,6 +129,8 @@ describe("vercel routes", () => {
 
     expect(route.status).toBe(404);
     expect(new RegExp(route.src as string).test("/r/image/nope.json")).toBe(true);
+    expect(new RegExp(route.src as string).test("/r")).toBe(true);
+    expect(new RegExp(route.src as string).test("/api")).toBe(true);
     expect(new RegExp(route.src as string).test("/docs/nope")).toBe(false);
   });
 

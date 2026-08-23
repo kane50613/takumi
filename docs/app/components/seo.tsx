@@ -22,7 +22,10 @@ export function SiteJsonLd() {
         applicationSubCategory: "Image and PDF rendering engine",
         operatingSystem: "Linux, macOS, Windows, Node.js, Bun, Deno, Cloudflare Workers, browsers",
         softwareRequirements: "Node.js 20+, or any WebAssembly runtime",
-        license: "https://opensource.org/licenses/MIT",
+        license: [
+          "https://opensource.org/licenses/MIT",
+          "https://opensource.org/licenses/Apache-2.0",
+        ],
         codeRepository: REPOSITORY,
         downloadUrl: "https://www.npmjs.com/package/takumi-js",
         image: `${SITE_URL}/logo.svg`,

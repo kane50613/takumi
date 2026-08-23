@@ -999,6 +999,10 @@ jobs:
           DEPLOYMENT_URL=$(bunx vercel deploy --archive=tgz --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
           echo "url=$DEPLOYMENT_URL" >> $GITHUB_OUTPUT
 
+      - name: Verify agent endpoints (preview)
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: bun docs/scripts/verify-agent-endpoints.ts ${{ steps.deploy_preview.outputs.url }}
+
       - name: Assign alias (preview)
         id: assign_alias
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
@@ -1065,5 +1069,12 @@ jobs:
         run: bunx vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} && rm -rf .vercel/output/functions && bun docs/scripts/patch-vercel-output.ts
 
       - name: Deploy to Vercel (production)
+        id: deploy_production
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        run: bunx vercel deploy --archive=tgz --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+        run: |
+          DEPLOYMENT_URL=$(bunx vercel deploy --archive=tgz --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          echo "url=$DEPLOYMENT_URL" >> $GITHUB_OUTPUT
+
+      - name: Verify agent endpoints (production)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: bun docs/scripts/verify-agent-endpoints.ts ${{ steps.deploy_production.outputs.url }}
