@@ -1,161 +1,92 @@
 core:changelogs:
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Align table cell content with `vertical-align`\n\n`vertical-align: middle` on a table cell now centers its content in the cell, and `bottom` pushes it to the cell's bottom edge. `baseline` still renders as `top`.\n\nA row's element children that are not `table-cell`, such as a `<td style=\"display: flex\">`, are now laid out in the row instead of dropped. Text sitting directly in a row is still dropped: it has no anonymous cell to go into.\n"
-    filename: table-cell-vertical-align.md
+  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n---\n\n### Support the legacy `page-break-*` properties\n\nPrint stylesheets written for `page-break-before`, `page-break-after`, and `page-break-inside` had those declarations dropped. They now drive the same pagination as `break-before`, `break-after`, and `break-inside`, and the forced-break keywords `always`, `left`, and `right` are accepted alongside `page`.\n"
+    filename: page-break-aliases.md
     v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Start backwards-filled step animations on the first step\n\nAn animation with `animation-fill-mode: backwards` or `both` and a positive delay held the second step during the delay when its timing function was `steps(n, jump-start)` or `steps(n, jump-both)`. Samples taken before the active phase now land on the step below the jump, as the CSS easing algorithm requires.\n\n`steps()` also serializes the way the spec asks: `steps(4, end)` and `steps(4, jump-end)` both print as `steps(4)`, since an end position is the default.\n"
-    filename: steps-before-flag.md
+  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n---\n\n### Support `table-layout: fixed` and `border-spacing`\n\n`border-spacing` was a hardcoded 2px gap with no way to change it, and `table-layout` did nothing. Column widths now come from the first row under `table-layout: fixed` and the rest of the width is shared evenly, while `border-spacing` sets both the gap between cells and the inset from the table's own edges. On a three-column table measured against headless Chrome, `auto` columns land 67px to 136px away and `fixed` columns land within 2px.\n\n`border-spacing` starts at 0 as CSS defines it, and the HTML and JSX element presets give `<table>` the 2px browsers apply, so a `display: table` box no longer gets a gap it never asked for.\n"
+    filename: table-layout-fixed.md
     v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n---\n\n### Store `calc()` as its non-zero terms\n\n`Length` shrinks from 84 to 20 bytes, and a computed style from 5.9KB to 2.3KB. A `calc()` expression mixing more than four distinct units now fails to parse.\n"
-    filename: calc-inline-terms.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Sample background-clip text at pixel centres\n\nText clipped to a background or mask image sampled that image at pixel corners rather than centres, blending every pixel with its neighbour. The clip is now read exactly where it should be, so a `background-clip: text` fill is half a pixel sharper, and drawing one is about a third faster.\n"
-    filename: clip-text-sampling.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n---\n\n### Animate WebP image sources\n\nAn animated WebP used as an image source now plays through its frames, the same way an animated GIF does. Before, decoding one threw `WebP encode failed` and took the whole render down with it. The still-image paths, which the SVG backend and the size cache go through, fall back to the first frame instead of failing.\n\n`ImageSource::Gif` is now `ImageSource::Animated`, and `GifSource` is now `AnimatedSource`, since both carry GIF and WebP animations. `ImageError::InvalidGif` is now `ImageError::InvalidAnimation` for the same reason.\n\nAn animated source keeps only its encoded bytes and a frame timing table. It used to hold a decoded full-size copy of the first frame as well, which also meant the first frame ignored the draw box it was scaled into.\n"
-    filename: animated-webp-source.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Reuse layout styles across sizing passes\n\nLayout runs several sizing passes over each node, and each pass rebuilt that node's layout style from scratch. Only container query units (`cqw`, `cqh`, `cqmin`, `cqmax`) can change between passes, so a style using none of them is now built once and reused. A deeply nested flex tree lays out about 36% faster.\n"
-    filename: taffy-style-reuse.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Support the full `steps()` step position syntax\n\n`steps()` now accepts `jump-start`, `jump-end`, `jump-none`, and `jump-both`, and the position argument is optional, so `steps(4)` means `steps(4, jump-end)`. Only `start` and `end` parsed before, so a declaration like `steps(4, jump-none)` was dropped as invalid and the animation fell back to `ease`, drawing a smooth curve instead of a staircase.\n"
-    filename: steps-timing-function.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Undo premultiplication in integers\n\nConverting the finished canvas back to straight alpha now divides in integers rather than `f64`. Rendering any image is a few percent faster, and pixels land on the same value on every target instead of depending on the platform's float division. Semi-transparent pixels can differ by one from previous output, which is where the float landed a hair under a rounding step.\n"
-    filename: demultiply.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n---\n\n### Share inherited font lists across nodes\n\n`font-family`, `font-variation-settings`, and `font-feature-settings` lists are now `Arc`-shared, so inheriting them no longer copies the list per node.\n"
-    filename: share-inherited-font-lists.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Keep `direction: ltr` blocks left-to-right\n\nBlocks with `direction: ltr` now keep an LTR layout when text starts with an RTL script. The bidi base direction follows `direction`, matching browsers.\n"
-    filename: ltr-base-direction.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Composite opaque effect layers without resampling them\n\nA blur, shadow or opacity group that is fully opaque and composites normally is copied onto its parent row by row instead of going through the sampling pipeline. Such a drop shadow is about 40% faster to render, such a blur about 30%. A group with partial opacity or a blend mode is unaffected.\n"
-    filename: subcanvas-blit.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Keep degenerate CSS values out of layout\n\n`aspect-ratio` with a zero, negative, or non-finite ratio (such as `1/0`) now behaves as `auto`, and an infinite percentage length is clamped instead of feeding infinity into layout.\n"
-    filename: degenerate-float-css-values.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Draw animated frames without replaying the ones before them\n\nA frame that covers the whole canvas and replaces what is under it does not depend on the frames before it, so it is now decoded on its own. Reaching the last frame of a 300-frame animation drops from 16.6ms to 0.13ms for GIF, 158ms to 0.39ms for APNG, and 97ms to 0.05ms for WebP. Frames that do blend onto their predecessors still replay, as they must.\n"
-    filename: animated-frame-seek.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Render list markers on the right under `direction: rtl`\n\nA `direction: rtl` list item now places its marker at the right edge and mirrors the counter suffix, matching Chrome. RTL blocks also force the right-to-left base direction instead of inferring it from the first strong character, so their text aligns to the right regardless of content.\n"
-    filename: rtl-list-markers.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Draw whole-pixel images without resampling them\n\nAn image placed at a whole-pixel offset is copied row by row instead of going through the sampling pipeline. Drawing one into a node is about three times faster; clips, shadows and blurs that composite an image get a few percent.\n"
-    filename: blit-fast-path.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n---\n\n### Share custom property maps across nodes\n\n`ComputedStyle::custom_properties` and `registered_custom_properties` are now `Arc`-shared, so inheriting them no longer copies the maps per node.\n"
-    filename: share-custom-property-maps.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n---\n\n### Animate APNG image sources\n\nAn animated PNG used as an image source now plays through its frames, the same way an animated GIF or WebP does. Before, only the default image was decoded and the render held that one frame for the whole animation, with nothing to signal the rest had been dropped. Subframes composite through the `fcTL` dispose and blend operations, and a default image that no `fcTL` claims stays out of the timeline.\n"
-    filename: animated-png-source.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Match selectors against the rules that could apply\n\nStylesheet rules are grouped by what their rightmost selector requires, so a node only runs the matcher against rules naming one of its classes, its id or its tag. Rendering 800 nodes against 800 rules drops from 67ms to 2.5ms; the cost now grows with the rules that could match rather than with the whole stylesheet.\n"
-    filename: selector-index.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n### Keep a `;` inside an inline style value\n\n`fromHtml` and `fromStaticMarkup` split the `style` attribute on every `;`, so a value carrying one of its own lost everything after it. `style=\"background-image:url(data:image/png;base64,...)\"` resolved to `url(data:image/png` and rendered nothing. A quoted `font-family: \"Foo; Bar\"` was cut the same way. Only a `;` outside `url()` and a quoted string now ends a declaration.\n"
-    filename: inline-style-semicolon-split.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n### Decode the numeric character references the HTML spec defines\n\n`&#X41;` stayed literal text because the decoder matched only a lower-case `x`, while the spec accepts either case. A reference in the C1 range now resolves through the windows-1252 table the spec names, so `&#153;` renders as `™` rather than an invisible control character, and `&#0;` becomes the replacement character rather than a raw NUL.\n"
-    filename: numeric-character-references.md
+  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n---\n\n### Support `border-collapse: collapse`\n\nNeighbouring cells each painted their own border either side of the `border-spacing` gap. A collapsing table now resolves every shared line once: the wider border wins, `hidden` clears the line, and a row's borders reach its cells the way its background already did.\n"
+    filename: border-collapse.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
   - id: npm:takumi-js
     updated: true
-  - id: npm:@takumi-rs/wasm
-    updated: true
-  - id: npm:@takumi-rs/image-response
-    updated: true
-  - id: npm:takumi-pdf
+  - id: npm:@takumi-rs/helpers
     updated: true
   - id: npm:docs
     updated: false
+  - id: npm:@takumi-rs/wasm
+    updated: true
+  - id: npm:takumi-pdf
+    updated: true
   - changelogIds:
-      - table-cell-vertical-align.md
-      - steps-before-flag.md
-      - calc-inline-terms.md
-      - clip-text-sampling.md
-      - animated-webp-source.md
-      - taffy-style-reuse.md
-      - steps-timing-function.md
-      - demultiply.md
-      - share-inherited-font-lists.md
-      - ltr-base-direction.md
-      - subcanvas-blit.md
-      - degenerate-float-css-values.md
-      - animated-frame-seek.md
-      - rtl-list-markers.md
-      - blit-fast-path.md
-      - share-custom-property-maps.md
-      - animated-png-source.md
-      - selector-index.md
+      - page-break-aliases.md
+      - table-layout-fixed.md
+      - border-collapse.md
     id: npm:@takumi-rs/core
     updated: true
-  - changelogIds:
-      - inline-style-semicolon-split.md
-      - numeric-character-references.md
-    id: npm:@takumi-rs/helpers
+  - id: npm:@takumi-rs/image-response
     updated: true
-  - id: npm:example-generate-invoice
-    updated: false
-  - id: npm:example-twitter-images
-    updated: false
   - id: npm:pdf-bench
+    updated: false
+  - id: npm:ffmpeg-keyframe-animation
+    updated: false
+  - id: npm:example-e-invoice
+    updated: false
+  - id: npm:waku-ssr
+    updated: false
+  - id: npm:example-nextjs
     updated: false
   - id: npm:svelte
     updated: false
   - id: npm:example-cloudflare-workers
     updated: false
-  - id: npm:example-nextjs
+  - id: npm:example-twitter-images
     updated: false
-  - id: npm:example-liquid-glass
-    updated: false
-  - id: npm:ffplay
+  - id: npm:example-generate-invoice
     updated: false
   - id: npm:example-satori-html
     updated: false
-  - id: npm:waku-ssr
-    updated: false
-  - id: npm:example-css-library-integration
-    updated: false
-  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-liquid-glass
     updated: false
   - id: npm:example-tanstack-start
     updated: false
-  - id: npm:example-e-invoice
+  - id: npm:example-css-library-integration
+    updated: false
+  - id: npm:ffplay
+    updated: false
+  - id: cargo:takumi-html
+    updated: false
+  - id: cargo:takumi-svg
     updated: false
   - id: cargo:takumi-raster
     updated: false
   - id: cargo:takumi-core
     updated: false
-  - id: cargo:takumi-svg
-    updated: false
   - id: cargo:takumi
     updated: true
-  - id: cargo:takumi-html
-    updated: false
 npm:packages:
   - id: npm:takumi
   - id: npm:takumi-js
-  - id: npm:@takumi-rs/wasm
-  - id: npm:@takumi-rs/image-response
-  - id: npm:takumi-pdf
-  - id: npm:docs
-  - id: npm:@takumi-rs/core
   - id: npm:@takumi-rs/helpers
-  - id: npm:example-generate-invoice
-  - id: npm:example-twitter-images
+  - id: npm:docs
+  - id: npm:@takumi-rs/wasm
+  - id: npm:takumi-pdf
+  - id: npm:@takumi-rs/core
+  - id: npm:@takumi-rs/image-response
   - id: npm:pdf-bench
+  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-e-invoice
+  - id: npm:waku-ssr
+  - id: npm:example-nextjs
   - id: npm:svelte
   - id: npm:example-cloudflare-workers
-  - id: npm:example-nextjs
-  - id: npm:example-liquid-glass
-  - id: npm:ffplay
+  - id: npm:example-twitter-images
+  - id: npm:example-generate-invoice
   - id: npm:example-satori-html
-  - id: npm:waku-ssr
-  - id: npm:example-css-library-integration
-  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-liquid-glass
   - id: npm:example-tanstack-start
-  - id: npm:example-e-invoice
+  - id: npm:example-css-library-integration
+  - id: npm:ffplay
