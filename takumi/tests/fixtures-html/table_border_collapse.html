@@ -1,0 +1,171 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>table_border_collapse</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .root {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 16px;
+        width: 100%;
+        height: 100%;
+        background: rgb(243, 244, 246);
+        align-content: flex-start;
+        font-family: "Geist";
+      }
+      .cell {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        width: 282px;
+        height: 220px;
+      }
+      .label {
+        font-size: 11px;
+        color: rgb(71, 85, 105);
+      }
+      table {
+        display: table;
+        border-collapse: collapse;
+        background: rgb(255, 255, 255);
+        font-size: 12px;
+      }
+      thead {
+        display: table-header-group;
+      }
+      tbody {
+        display: table-row-group;
+      }
+      tr {
+        display: table-row;
+      }
+      td,
+      th {
+        display: table-cell;
+        border: 1px solid rgb(148, 163, 184);
+        padding: 4px 8px;
+        text-align: left;
+      }
+      th {
+        background: rgb(226, 232, 240);
+      }
+      .heavy th {
+        border-bottom: 3px solid rgb(15, 23, 42);
+      }
+      .hidden-line td.gap {
+        border-right-style: hidden;
+      }
+      .row-border tr.marked {
+        border-top: 2px solid rgb(220, 38, 38);
+      }
+      .outer {
+        border: 4px solid rgb(37, 99, 235);
+      }
+      .separate {
+        border-collapse: separate;
+      }
+    </style>
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div class="root">
+      <div class="cell">
+        <span class="label">uniform 1px lines share one border</span>
+        <table>
+          <thead>
+            <tr>
+              <th>name</th>
+              <th>count</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>alpha</td>
+              <td>1</td>
+            </tr>
+            <tr>
+              <td>beta</td>
+              <td>2</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="cell">
+        <span class="label">wider border wins the shared line</span>
+        <table class="heavy">
+          <thead>
+            <tr>
+              <th>name</th>
+              <th>count</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>alpha</td>
+              <td>1</td>
+            </tr>
+            <tr>
+              <td>beta</td>
+              <td>2</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="cell">
+        <span class="label">hidden clears the line</span>
+        <table class="hidden-line">
+          <tr>
+            <td class="gap">left</td>
+            <td>right</td>
+          </tr>
+          <tr>
+            <td>alpha</td>
+            <td>1</td>
+          </tr>
+        </table>
+      </div>
+      <div class="cell">
+        <span class="label">a row border reaches its cells</span>
+        <table class="row-border">
+          <tr>
+            <td>alpha</td>
+            <td>1</td>
+          </tr>
+          <tr class="marked">
+            <td>beta</td>
+            <td>2</td>
+          </tr>
+        </table>
+      </div>
+      <div class="cell">
+        <span class="label">table border collapses onto the edge cells</span>
+        <table class="outer">
+          <tr>
+            <td colspan="2">spans both columns</td>
+            <td rowspan="2">tall</td>
+          </tr>
+          <tr>
+            <td>left</td>
+            <td>right</td>
+          </tr>
+        </table>
+      </div>
+      <div class="cell">
+        <span class="label">separate keeps border-spacing</span>
+        <table class="separate">
+          <tr>
+            <td>alpha</td>
+            <td>1</td>
+          </tr>
+          <tr>
+            <td>beta</td>
+            <td>2</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+  </body>
+</html>

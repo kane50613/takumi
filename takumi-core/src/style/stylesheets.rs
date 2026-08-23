@@ -1185,6 +1185,7 @@ define_style! {
     mix_blend_mode: BlendMode,
     visibility: Visibility where inherit = true,
     caption_side: CaptionSide where inherit = true,
+    border_collapse: BorderCollapse where inherit = true,
     vertical_align: VerticalAlign,
     content: ContentValue,
     list_style_type: ListStyleType where inherit = true,

@@ -552,6 +552,25 @@ declare_enum_from_css_impl!(
 
 impl Animatable for CaptionSide {}
 
+/// Defines whether adjacent table cell borders collapse onto one grid line.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
+pub enum BorderCollapse {
+  /// Every cell paints its own borders, kept apart by `border-spacing`.
+  #[default]
+  Separate,
+  /// Adjacent borders resolve into a single shared border.
+  Collapse,
+}
+
+declare_enum_from_css_impl!(
+  BorderCollapse,
+  "separate" => BorderCollapse::Separate,
+  "collapse" => BorderCollapse::Collapse
+);
+
+impl Animatable for BorderCollapse {}
+
 /// Defines how the corners of text strokes are rendered.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub enum LineJoin {

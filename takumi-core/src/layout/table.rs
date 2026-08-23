@@ -19,12 +19,13 @@ use taffy::LengthPercentageAuto;
 use crate::{
   layout::{
     node::NodeKind,
+    table_borders::CollapsedBorders,
     tree::{NodeOrigin, RenderNode},
   },
   style::{
-    CaptionSide, ColorInput, ComputedStyle, Display, FlexDirection, FromCssStr, Gap, GridPlacement,
-    GridPlacementSpan, GridTemplateComponents, JustifyContent, Length, ToCss, VerticalAlign,
-    VerticalAlignKeyword,
+    BorderCollapse, BorderStyle, CaptionSide, ColorInput, ComputedStyle, Display, FlexDirection,
+    FromCssStr, Gap, GridPlacement, GridPlacementSpan, GridTemplateComponents, JustifyContent,
+    Length, LineWidth, ToCss, VerticalAlign, VerticalAlignKeyword,
   },
 };
 
@@ -35,7 +36,7 @@ const DEFAULT_BORDER_SPACING_PX: f32 = 2.0;
 const MAX_COLSPAN: u16 = 1000;
 
 /// Blink's `kMaxRowSpan`.
-const MAX_ROWSPAN: u16 = 65534;
+pub(crate) const MAX_ROWSPAN: u16 = 65534;
 
 pub(crate) fn lower_tables(node: &mut RenderNode) {
   if node.context.style.display == Display::Table {
@@ -50,7 +51,7 @@ pub(crate) fn lower_tables(node: &mut RenderNode) {
 }
 
 /// Reads a case-insensitive span attribute within Blink's limit.
-fn span_attribute(cell: &RenderNode, name: &str, max: u16) -> u16 {
+pub(crate) fn span_attribute(cell: &RenderNode, name: &str, max: u16) -> u16 {
   cell
     .node
     .as_ref()
@@ -170,7 +171,7 @@ fn track_count(placements: &[Vec<(usize, u16)>]) -> u16 {
 }
 
 /// Recognizes authored cells without CSS anonymous table-box fixup.
-fn is_cell(child: &RenderNode) -> bool {
+pub(crate) fn is_cell(child: &RenderNode) -> bool {
   let display = child.context.style.display;
 
   if display == Display::TableCell {
@@ -358,6 +359,15 @@ fn lower_table(table: &mut RenderNode) {
   let placements = resolve_columns(&rows);
   let columns = track_count(&placements);
   let tracks = track_sizes(&rows, &placements, columns);
+  let collapse = table.context.style.border_collapse == BorderCollapse::Collapse;
+  let collapsed = collapse.then(|| {
+    CollapsedBorders::resolve(
+      &table.context.style,
+      &rows,
+      &placements,
+      usize::from(columns),
+    )
+  });
   let mut items = Vec::new();
   let mut line: i16 = 1;
   let (top_captions, bottom_captions): (Vec<_>, Vec<_>) = captions
@@ -376,19 +386,24 @@ fn lower_table(table: &mut RenderNode) {
     table.table_header_lines = Some((start, start.saturating_add(header_rows as i16)));
   }
 
-  for (mut row, positions) in rows.into_iter().zip(placements) {
+  for (index, (mut row, positions)) in rows.into_iter().zip(placements).enumerate() {
     let mut cells = row.children.take().map_or_else(Vec::new, Vec::from);
     let mut positions = positions.into_iter();
 
     cells.retain(is_cell);
     align_row_baselines(&mut cells);
 
-    for mut cell in cells {
+    for (cell_index, mut cell) in cells.into_iter().enumerate() {
       let Some((column, colspan)) = positions.next() else {
         break;
       };
 
       inherit_row_background(&row, &mut cell);
+
+      if let Some(collapsed) = collapsed.as_ref() {
+        collapsed.apply(index, cell_index, &mut cell.context.style);
+      }
+
       lower_cell(&mut cell, line, column, colspan);
       items.push(cell);
     }
@@ -413,15 +428,34 @@ fn lower_table(table: &mut RenderNode) {
   style.display = Display::Grid;
   style.grid_template_columns = Some(tracks);
 
-  if style.column_gap == Gap::Normal {
-    style.column_gap = Gap::Length(Length::Px(DEFAULT_BORDER_SPACING_PX));
-  }
+  if collapse {
+    style.column_gap = Gap::Length(Length::zero());
+    style.row_gap = Gap::Length(Length::zero());
+    clear_border(style);
+  } else {
+    if style.column_gap == Gap::Normal {
+      style.column_gap = Gap::Length(Length::Px(DEFAULT_BORDER_SPACING_PX));
+    }
 
-  if style.row_gap == Gap::Normal {
-    style.row_gap = Gap::Length(Length::Px(DEFAULT_BORDER_SPACING_PX));
+    if style.row_gap == Gap::Normal {
+      style.row_gap = Gap::Length(Length::Px(DEFAULT_BORDER_SPACING_PX));
+    }
   }
 
   table.children = Some(items.into_boxed_slice());
+}
+
+/// The collapsed border lives on the edge cells, so the table box stops
+/// painting its own.
+fn clear_border(style: &mut ComputedStyle) {
+  style.border_top_style = BorderStyle::None;
+  style.border_right_style = BorderStyle::None;
+  style.border_bottom_style = BorderStyle::None;
+  style.border_left_style = BorderStyle::None;
+  style.border_top_width = LineWidth::Length(Length::zero());
+  style.border_right_width = LineWidth::Length(Length::zero());
+  style.border_bottom_width = LineWidth::Length(Length::zero());
+  style.border_left_width = LineWidth::Length(Length::zero());
 }
 
 /// Approximates Blink constrained columns from the first declared cell width.
@@ -466,8 +500,9 @@ mod tests {
     layout::{node::Node, tree::RenderNode},
     resources::font::Fonts,
     style::{
-      Color, ColorInput, Display, FlexDirection, GridPlacement, GridPlacementSpan, JustifyContent,
-      Length, SizingContext, Style, StyleDeclaration, StyleSheet, ToCss,
+      BorderStyle, Color, ColorInput, Display, FlexDirection, Gap, GridPlacement,
+      GridPlacementSpan, JustifyContent, Length, SizingContext, Style, StyleDeclaration,
+      StyleSheet, ToCss,
     },
     viewport::Viewport,
   };
@@ -490,6 +525,13 @@ mod tests {
         .padded { display: table-cell; padding-top: 10px }
         .flex { display: flex; vertical-align: middle }
         .pseudo-row::before { content: 'x'; display: block }
+        .collapse { display: table; border-collapse: collapse }
+        .bordered { display: table-cell; border: 1px solid rgb(0, 0, 0) }
+        .heavy-bottom { display: table-cell; border: 1px solid rgb(0, 0, 0); border-bottom-width: 3px }
+        .hidden-right { display: table-cell; border: 1px solid rgb(0, 0, 0); border-right-style: hidden }
+        .marked-row { display: table-row; border-top: 2px solid rgb(255, 0, 0) }
+        .red-border { display: table-cell; border: 1px solid rgb(255, 0, 0) }
+        .blue-border { display: table-cell; border: 1px solid rgb(0, 0, 255) }
       ",
     )
     .expect("stylesheet parses");
@@ -522,6 +564,45 @@ mod tests {
     Node::container(cells.into_iter().collect::<Vec<_>>())
       .with_class_name("tr")
       .with_id(id)
+  }
+
+  fn bordered_cell(id: &str, class_name: &str) -> Node {
+    Node::container([Node::text(id)])
+      .with_class_name(class_name)
+      .with_id(id)
+  }
+
+  /// The resolved border widths of one lowered cell, clockwise from the top.
+  fn borders(table: &RenderNode, id: &str) -> [f32; 4] {
+    let cell = table
+      .children
+      .as_deref()
+      .unwrap_or_default()
+      .iter()
+      .find(|child| {
+        child
+          .node
+          .as_ref()
+          .and_then(|node| node.metadata.id.as_deref())
+          == Some(id)
+      })
+      .expect("lowered cell");
+    let style = &cell.context.style;
+    let sizing = &cell.context.sizing;
+    let width = |line_width, border_style: BorderStyle| {
+      if border_style.is_rendered() {
+        Length::from(line_width).to_px(sizing, 0.0)
+      } else {
+        0.0
+      }
+    };
+
+    [
+      width(style.border_top_width, style.border_top_style),
+      width(style.border_right_width, style.border_right_style),
+      width(style.border_bottom_width, style.border_bottom_style),
+      width(style.border_left_width, style.border_left_style),
+    ]
   }
 
   /// The ids of the grid's items, in the order they will be auto-placed.
@@ -867,6 +948,108 @@ mod tests {
     assert_eq!(
       wide.context.style.grid_column_end,
       GridPlacement::Span(GridPlacementSpan::Span(2))
+    );
+  }
+
+  #[test]
+  fn a_shared_line_carries_one_border_instead_of_two() {
+    let table = lower(
+      Node::container([
+        named_row(
+          "top",
+          [
+            bordered_cell("a", "bordered"),
+            bordered_cell("b", "bordered"),
+          ],
+        ),
+        named_row(
+          "bottom",
+          [
+            bordered_cell("c", "bordered"),
+            bordered_cell("d", "bordered"),
+          ],
+        ),
+      ])
+      .with_class_name("collapse"),
+    );
+
+    assert_eq!(borders(&table, "a"), [1.0, 0.0, 0.0, 1.0]);
+    assert_eq!(borders(&table, "b"), [1.0, 1.0, 0.0, 1.0]);
+    assert_eq!(borders(&table, "c"), [1.0, 0.0, 1.0, 1.0]);
+    assert_eq!(borders(&table, "d"), [1.0, 1.0, 1.0, 1.0]);
+    assert_eq!(table.context.style.column_gap, Gap::Length(Length::zero()));
+  }
+
+  #[test]
+  fn the_wider_border_wins_the_shared_line() {
+    let table = lower(
+      Node::container([
+        named_row("top", [bordered_cell("a", "heavy-bottom")]),
+        named_row("bottom", [bordered_cell("b", "bordered")]),
+      ])
+      .with_class_name("collapse"),
+    );
+
+    assert_eq!(borders(&table, "b")[0], 3.0);
+  }
+
+  #[test]
+  fn a_hidden_border_clears_the_shared_line() {
+    let table = lower(
+      Node::container([named_row(
+        "only",
+        [
+          bordered_cell("a", "hidden-right"),
+          bordered_cell("b", "bordered"),
+        ],
+      )])
+      .with_class_name("collapse"),
+    );
+
+    assert_eq!(borders(&table, "b")[3], 0.0);
+  }
+
+  #[test]
+  fn a_row_border_lands_on_its_cells() {
+    let table = lower(
+      Node::container([
+        named_row("top", [bordered_cell("a", "bordered")]),
+        Node::container([bordered_cell("b", "bordered")])
+          .with_class_name("marked-row")
+          .with_id("marked"),
+      ])
+      .with_class_name("collapse"),
+    );
+
+    assert_eq!(borders(&table, "b")[0], 2.0);
+  }
+
+  #[test]
+  fn an_equal_line_takes_the_colour_of_the_cell_above() {
+    let table = lower(
+      Node::container([
+        named_row("top", [bordered_cell("a", "red-border")]),
+        named_row("bottom", [bordered_cell("b", "blue-border")]),
+      ])
+      .with_class_name("collapse"),
+    );
+    let cell = table
+      .children
+      .as_deref()
+      .unwrap_or_default()
+      .iter()
+      .find(|child| {
+        child
+          .node
+          .as_ref()
+          .and_then(|node| node.metadata.id.as_deref())
+          == Some("b")
+      })
+      .expect("lowered cell");
+
+    assert_eq!(
+      cell.context.style.border_top_color,
+      ColorInput::Value(Color([255, 0, 0, 255]))
     );
   }
 }

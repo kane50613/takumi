@@ -20,5 +20,7 @@ pub mod node;
 pub mod replaced;
 /// Lowering `display: table` onto the grid layout algorithm.
 mod table;
+
+mod table_borders;
 /// Layout tree: render nodes and their computed layout results.
 pub mod tree;
