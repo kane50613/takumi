@@ -24,7 +24,8 @@ use crate::{
   style::{
     BorderCollapse, BorderStyle, CaptionSide, ColorInput, ComputedStyle, Display, FlexDirection,
     FromCssStr, Gap, GridPlacement, GridPlacementSpan, GridTemplateComponents, JustifyContent,
-    Length, LineWidth, TableLayout, ToCss, VerticalAlign, VerticalAlignKeyword,
+    Length, LineWidth, SizingContext, SpacePair, TableLayout, ToCss, VerticalAlign,
+    VerticalAlignKeyword,
   },
 };
 
@@ -358,6 +359,7 @@ fn lower_table(table: &mut RenderNode) {
   let columns = track_count(&placements);
   let collapse = table.context.style.border_collapse == BorderCollapse::Collapse;
   let spacing = table.context.style.border_spacing;
+  let sizing = table.context.sizing.clone();
   let tracks = track_sizes(
     &rows,
     &placements,
@@ -446,9 +448,29 @@ fn lower_table(table: &mut RenderNode) {
     if style.row_gap == Gap::Normal {
       style.row_gap = Gap::Length(spacing.y);
     }
+
+    inset_edges(style, spacing, &sizing);
   }
 
   table.children = Some(items.into_boxed_slice());
+}
+
+/// CSS 2.2 §17.6.1: separate borders space the outer cells from the table's
+/// edges too, which the grid gap alone does not do. Naive: a percentage or
+/// `auto` padding keeps its own value and takes no inset.
+fn inset_edges(style: &mut ComputedStyle, spacing: SpacePair<Length>, sizing: &SizingContext) {
+  let inset = |padding: &mut Length, extra: Length| {
+    if matches!(padding, Length::Percentage(_) | Length::Auto) {
+      return;
+    }
+
+    *padding = Length::Px(padding.to_px(sizing, 0.0) + extra.to_px(sizing, 0.0));
+  };
+
+  inset(&mut style.padding_top, spacing.y);
+  inset(&mut style.padding_bottom, spacing.y);
+  inset(&mut style.padding_left, spacing.x);
+  inset(&mut style.padding_right, spacing.x);
 }
 
 /// The collapsed border lives on the edge cells, so the table box stops
@@ -466,7 +488,9 @@ fn clear_border(style: &mut ComputedStyle) {
 
 /// Approximates Blink constrained columns from the first declared cell width.
 /// `table-layout: fixed` reads only the first row and shares the rest of the
-/// space evenly, so column widths stop following the content.
+/// space evenly, so column widths stop following the content. A spanning cell
+/// splits its declared width evenly across the tracks it covers; a percentage
+/// width on one is ignored.
 fn track_sizes(
   rows: &[RenderNode],
   placements: &[Vec<(usize, u16)>],
@@ -487,13 +511,27 @@ fn track_sizes(
     for (cell, (column, colspan)) in table_cells.zip(cells) {
       let width = &cell.context.style.width;
 
-      if *colspan == 1
-        && *width != Length::Auto
-        && tracks
-          .get(*column)
-          .is_some_and(|track| track == "auto" || track == "1fr")
-      {
-        tracks[*column] = width.to_css_string();
+      if *width == Length::Auto {
+        continue;
+      }
+
+      let free = |track: &String| track == "auto" || track == "1fr";
+
+      if *colspan == 1 {
+        if tracks.get(*column).is_some_and(free) {
+          tracks[*column] = width.to_css_string();
+        }
+      } else if fixed && !matches!(width, Length::Percentage(_)) {
+        let share = width.to_px(&cell.context.sizing, 0.0) / f32::from(*colspan);
+
+        for track in tracks
+          .iter_mut()
+          .take((*column + usize::from(*colspan)).min(usize::from(columns)))
+          .skip(*column)
+          .filter(|track| free(track))
+        {
+          *track = format!("{share}px");
+        }
       }
     }
   }
@@ -549,6 +587,7 @@ mod tests {
         .spaced { display: table; border-spacing: 4px 8px }
         .tight { display: table; border-spacing: 0 }
         .w80 { display: table-cell; width: 80px }
+        .plain { display: table }
         .outset-cell { display: table-cell; border: 2px outset rgb(0, 0, 0) }
         .inset-cell { display: table-cell; border: 2px inset rgb(0, 0, 0) }
         .heavy-under { display: table-cell; border: 1px solid rgb(0, 0, 0); border-bottom-width: 4px }
@@ -1275,5 +1314,44 @@ mod tests {
     let tight = lower(Node::container([row([cell("a"), cell("b")])]).with_class_name("tight"));
 
     assert_eq!(tight.context.style.column_gap, Gap::Length(Length::zero()));
+  }
+
+  #[test]
+  fn a_fixed_span_splits_its_width_across_its_tracks() {
+    let table = lower(
+      Node::container([row([
+        with_span(
+          Node::container([Node::text("wide")])
+            .with_class_name("w80")
+            .with_id("wide"),
+          "colspan",
+          "2",
+        ),
+        cell("c"),
+      ])])
+      .with_class_name("fixed"),
+    );
+
+    assert_eq!(
+      table
+        .context
+        .style
+        .grid_template_columns
+        .as_ref()
+        .map(ToCss::to_css_string),
+      Some(String::from("40px 40px 1fr"))
+    );
+  }
+
+  #[test]
+  fn border_spacing_insets_the_table_edges() {
+    let spaced = lower(Node::container([row([cell("a")])]).with_class_name("spaced"));
+
+    assert_eq!(spaced.context.style.padding_left, Length::Px(4.0));
+    assert_eq!(spaced.context.style.padding_top, Length::Px(8.0));
+
+    let plain = lower(Node::container([row([cell("a")])]).with_class_name("plain"));
+
+    assert_eq!(plain.context.style.padding_left, Length::zero());
   }
 }

@@ -799,26 +799,26 @@
     <use href="#g1" x="743.57" y="347"/>
     <use href="#g38" x="749.83" y="347"/>
   </g>
-  <rect x="600" y="357" width="282" height="54" fill="#fff"/>
-  <path d="M600 357h156v26h-156v-26Zm1 1h154v24h-154v-24Z" fill="#94a3b8" fill-rule="evenodd"/>
+  <rect x="600" y="357" width="282" height="58" fill="#fff"/>
+  <path d="M602 359h154v26h-154v-26Zm1 1h152v24h-152v-24Z" fill="#94a3b8" fill-rule="evenodd"/>
   <g fill="#000">
-    <use href="#g18" x="609" y="373"/>
-    <use href="#g25" x="615.49" y="373"/>
-    <use href="#g26" x="618.65" y="373"/>
-    <use href="#g27" x="625.67" y="373"/>
-    <use href="#g18" x="632.52" y="373"/>
+    <use href="#g18" x="611" y="375"/>
+    <use href="#g25" x="617.49" y="375"/>
+    <use href="#g26" x="620.65" y="375"/>
+    <use href="#g27" x="627.67" y="375"/>
+    <use href="#g18" x="634.52" y="375"/>
   </g>
-  <path d="M758 357h124v26h-124v-26Zm1 1h122v24h-122v-24Z" fill="#94a3b8" fill-rule="evenodd"/>
-  <use href="#g28" x="767" y="373" fill="#000"/>
-  <path d="M600 385h156v26h-156v-26Zm1 1h154v24h-154v-24Z" fill="#94a3b8" fill-rule="evenodd"/>
+  <path d="M758 359h122v26h-122v-26Zm1 1h120v24h-120v-24Z" fill="#94a3b8" fill-rule="evenodd"/>
+  <use href="#g28" x="767" y="375" fill="#000"/>
+  <path d="M602 387h154v26h-154v-26Zm1 1h152v24h-152v-24Z" fill="#94a3b8" fill-rule="evenodd"/>
   <g fill="#000">
-    <use href="#g29" x="609" y="401"/>
-    <use href="#g20" x="616.02" y="401"/>
-    <use href="#g24" x="622.39" y="401"/>
-    <use href="#g18" x="626.98" y="401"/>
+    <use href="#g29" x="611" y="403"/>
+    <use href="#g20" x="618.02" y="403"/>
+    <use href="#g24" x="624.39" y="403"/>
+    <use href="#g18" x="628.98" y="403"/>
   </g>
-  <path d="M758 385h124v26h-124v-26Zm1 1h122v24h-122v-24Z" fill="#94a3b8" fill-rule="evenodd"/>
-  <use href="#g30" x="767" y="401" fill="#000"/>
+  <path d="M758 387h122v26h-122v-26Zm1 1h120v24h-120v-24Z" fill="#94a3b8" fill-rule="evenodd"/>
+  <use href="#g30" x="767" y="403" fill="#000"/>
   <defs>
     <path id="g0" d="M2.8.13q-.88 0-1.41-.58-.52-.6-.52-1.63v-3.75h.93v3.5q0 .85.29 1.25.32.39.94.39.7 0 1.1-.44.39-.45.39-1.23v-3.47h.92v5.83h-.88v-1.44l.14.08q-.17.7-.67 1.09-.48.4-1.23.4Z"/>
     <path id="g1" d="M.88 0v-5.83h.85l.04 1.49-.11-.1q.11-.53.37-.86.28-.32.67-.5.39-.17.85-.17.67 0 1.09.3.44.3.66.81t.22 1.11v3.75h-.93v-3.48q0-.55-.14-.91-.12-.38-.4-.56-.27-.19-.71-.19-.67 0-1.11.42t-.43 1.24v3.48Z"/>

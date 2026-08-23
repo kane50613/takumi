@@ -1187,7 +1187,7 @@ define_style! {
     caption_side: CaptionSide where inherit = true,
     border_collapse: BorderCollapse where inherit = true,
     table_layout: TableLayout,
-    border_spacing: SpacePair<Length> where inherit = true = SpacePair::from_single(Length::Px(2.0)),
+    border_spacing: SpacePair<Length> where inherit = true,
     vertical_align: VerticalAlign,
     content: ContentValue,
     list_style_type: ListStyleType where inherit = true,
