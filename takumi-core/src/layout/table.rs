@@ -1,5 +1,8 @@
 //! Lowering `display: table` onto the grid layout algorithm.
 //!
+//! `gap` does not apply to a table box, so `border-spacing` drives the grid
+//! gaps whether or not one was authored.
+//!
 //! taffy has no table algorithm. Grid gives every row a shared column track,
 //! which flex cannot. Rows and row groups are dropped, so a row's background
 //! and borders are copied onto its cells.
@@ -24,12 +27,10 @@ use crate::{
   style::{
     BorderCollapse, BorderStyle, CaptionSide, ColorInput, ComputedStyle, Display, FlexDirection,
     FromCssStr, Gap, GridPlacement, GridPlacementSpan, GridTemplateComponents, JustifyContent,
-    Length, LineWidth, ToCss, VerticalAlign, VerticalAlignKeyword,
+    Length, LineWidth, SizingContext, SpacePair, TableLayout, ToCss, VerticalAlign,
+    VerticalAlignKeyword,
   },
 };
-
-/// Blink's `table { border-spacing: 2px }`.
-const DEFAULT_BORDER_SPACING_PX: f32 = 2.0;
 
 /// Blink's `kMaxColSpan` (`core/html/table_constants.h`).
 const MAX_COLSPAN: u16 = 1000;
@@ -359,8 +360,12 @@ fn lower_table(table: &mut RenderNode) {
   let (captions, rows, header_rows, strays) = collect_rows(table);
   let placements = resolve_columns(&rows);
   let columns = track_count(&placements);
-  let tracks = track_sizes(&rows, &placements, columns);
   let collapse = table.context.style.border_collapse == BorderCollapse::Collapse;
+  let spacing = table.context.style.border_spacing.0;
+  let sizing = table.context.sizing.clone();
+  let fixed = table.context.style.table_layout == TableLayout::Fixed
+    && table.context.style.width != Length::Auto;
+  let tracks = track_sizes(&rows, &placements, columns, fixed);
   let collapsed = collapse.then(|| {
     CollapsedBorders::resolve(
       &table.context.style,
@@ -436,16 +441,30 @@ fn lower_table(table: &mut RenderNode) {
     style.row_gap = Gap::Length(Length::zero());
     clear_border(style);
   } else {
-    if style.column_gap == Gap::Normal {
-      style.column_gap = Gap::Length(Length::Px(DEFAULT_BORDER_SPACING_PX));
-    }
-
-    if style.row_gap == Gap::Normal {
-      style.row_gap = Gap::Length(Length::Px(DEFAULT_BORDER_SPACING_PX));
-    }
+    style.column_gap = Gap::Length(spacing.x);
+    style.row_gap = Gap::Length(spacing.y);
+    inset_edges(style, spacing, &sizing);
   }
 
   table.children = Some(items.into_boxed_slice());
+}
+
+/// CSS 2.2 §17.6.1: separate borders space the outer cells from the table's
+/// edges too, which the grid gap alone does not do. Naive: a percentage or
+/// `auto` padding keeps its own value and takes no inset.
+fn inset_edges(style: &mut ComputedStyle, spacing: SpacePair<Length>, sizing: &SizingContext) {
+  let inset = |padding: &mut Length, extra: Length| {
+    if matches!(padding, Length::Percentage(_) | Length::Auto) {
+      return;
+    }
+
+    *padding = Length::Px(padding.to_px(sizing, 0.0) + extra.to_px(sizing, 0.0));
+  };
+
+  inset(&mut style.padding_top, spacing.y);
+  inset(&mut style.padding_bottom, spacing.y);
+  inset(&mut style.padding_left, spacing.x);
+  inset(&mut style.padding_right, spacing.x);
 }
 
 /// The collapsed border lives on the edge cells, so the table box stops
@@ -462,14 +481,21 @@ fn clear_border(style: &mut ComputedStyle) {
 }
 
 /// Approximates Blink constrained columns from the first declared cell width.
+/// `table-layout: fixed` reads only the first row and shares the rest of the
+/// space evenly, so column widths stop following the content. CSS 2.2 §17.5.2
+/// only reaches that algorithm when the table's width is not `auto`. A
+/// spanning cell splits its declared width evenly across the tracks it
+/// covers; a percentage width on one is ignored.
 fn track_sizes(
   rows: &[RenderNode],
   placements: &[Vec<(usize, u16)>],
   columns: u16,
+  fixed: bool,
 ) -> GridTemplateComponents {
-  let mut tracks = vec![String::from("auto"); usize::from(columns)];
+  let mut tracks = vec![String::from(if fixed { "1fr" } else { "auto" }); usize::from(columns)];
+  let measured = if fixed { 1 } else { rows.len() };
 
-  for (row, cells) in rows.iter().zip(placements) {
+  for (row, cells) in rows.iter().take(measured).zip(placements) {
     let table_cells = row
       .children
       .as_deref()
@@ -480,11 +506,27 @@ fn track_sizes(
     for (cell, (column, colspan)) in table_cells.zip(cells) {
       let width = &cell.context.style.width;
 
-      if *colspan == 1
-        && *width != Length::Auto
-        && tracks.get(*column).is_some_and(|track| track == "auto")
-      {
-        tracks[*column] = width.to_css_string();
+      if *width == Length::Auto {
+        continue;
+      }
+
+      let free = |track: &String| track == "auto" || track == "1fr";
+
+      if *colspan == 1 {
+        if tracks.get(*column).is_some_and(free) {
+          tracks[*column] = width.to_css_string();
+        }
+      } else if fixed && !matches!(width, Length::Percentage(_)) {
+        let share = width.to_px(&cell.context.sizing, 0.0) / f32::from(*colspan);
+
+        for track in tracks
+          .iter_mut()
+          .take((*column + usize::from(*colspan)).min(usize::from(columns)))
+          .skip(*column)
+          .filter(|track| free(track))
+        {
+          *track = format!("{share}px");
+        }
       }
     }
   }
@@ -536,6 +578,13 @@ mod tests {
         .red-border { display: table-cell; border: 1px solid rgb(255, 0, 0) }
         .blue-border { display: table-cell; border: 1px solid rgb(0, 0, 255) }
         .heavy-row { display: table-row; border-bottom: 3px solid rgb(0, 0, 0) }
+        .fixed { display: table; table-layout: fixed; width: 300px }
+        .fixed-auto { display: table; table-layout: fixed }
+        .spaced { display: table; border-spacing: 4px 8px }
+        .tight { display: table; border-spacing: 0 }
+        .gapped { display: table; border-spacing: 4px 8px; column-gap: 0; row-gap: 0 }
+        .w80 { display: table-cell; width: 80px }
+        .plain { display: table }
         .outset-cell { display: table-cell; border: 2px outset rgb(0, 0, 0) }
         .inset-cell { display: table-cell; border: 2px inset rgb(0, 0, 0) }
         .heavy-under { display: table-cell; border: 1px solid rgb(0, 0, 0); border-bottom-width: 4px }
@@ -1205,5 +1254,126 @@ mod tests {
         .context
         .collapsed_borders
     );
+  }
+
+  #[test]
+  fn a_fixed_table_shares_its_tracks_evenly() {
+    let table =
+      lower(Node::container([row([cell("a"), cell("b"), cell("c")])]).with_class_name("fixed"));
+
+    assert_eq!(
+      table
+        .context
+        .style
+        .grid_template_columns
+        .as_ref()
+        .map(ToCss::to_css_string),
+      Some(String::from("1fr 1fr 1fr"))
+    );
+  }
+
+  #[test]
+  fn a_fixed_table_reads_widths_from_its_first_row_only() {
+    let table = lower(
+      Node::container([
+        row([
+          Node::container([Node::text("wide")])
+            .with_class_name("w80")
+            .with_id("wide"),
+          cell("b"),
+        ]),
+        row([cell("c"), bordered_cell("late", "w80")]),
+      ])
+      .with_class_name("fixed"),
+    );
+
+    assert_eq!(
+      table
+        .context
+        .style
+        .grid_template_columns
+        .as_ref()
+        .map(ToCss::to_css_string),
+      Some(String::from("80px 1fr"))
+    );
+  }
+
+  #[test]
+  fn border_spacing_sizes_both_gaps() {
+    let spaced = lower(Node::container([row([cell("a"), cell("b")])]).with_class_name("spaced"));
+
+    assert_eq!(
+      spaced.context.style.column_gap,
+      Gap::Length(Length::Px(4.0))
+    );
+    assert_eq!(spaced.context.style.row_gap, Gap::Length(Length::Px(8.0)));
+
+    let tight = lower(Node::container([row([cell("a"), cell("b")])]).with_class_name("tight"));
+
+    assert_eq!(tight.context.style.column_gap, Gap::Length(Length::zero()));
+  }
+
+  #[test]
+  fn a_fixed_span_splits_its_width_across_its_tracks() {
+    let table = lower(
+      Node::container([row([
+        with_span(
+          Node::container([Node::text("wide")])
+            .with_class_name("w80")
+            .with_id("wide"),
+          "colspan",
+          "2",
+        ),
+        cell("c"),
+      ])])
+      .with_class_name("fixed"),
+    );
+
+    assert_eq!(
+      table
+        .context
+        .style
+        .grid_template_columns
+        .as_ref()
+        .map(ToCss::to_css_string),
+      Some(String::from("40px 40px 1fr"))
+    );
+  }
+
+  #[test]
+  fn border_spacing_insets_the_table_edges() {
+    let spaced = lower(Node::container([row([cell("a")])]).with_class_name("spaced"));
+
+    assert_eq!(spaced.context.style.padding_left, Length::Px(4.0));
+    assert_eq!(spaced.context.style.padding_top, Length::Px(8.0));
+
+    let plain = lower(Node::container([row([cell("a")])]).with_class_name("plain"));
+
+    assert_eq!(plain.context.style.padding_left, Length::zero());
+  }
+
+  #[test]
+  fn a_fixed_table_without_a_width_still_follows_its_content() {
+    let table = lower(Node::container([row([cell("a"), cell("b")])]).with_class_name("fixed-auto"));
+
+    assert_eq!(
+      table
+        .context
+        .style
+        .grid_template_columns
+        .as_ref()
+        .map(ToCss::to_css_string),
+      Some(String::from("auto auto"))
+    );
+  }
+
+  #[test]
+  fn border_spacing_outranks_an_authored_gap() {
+    let table = lower(Node::container([row([cell("a"), cell("b")])]).with_class_name("gapped"));
+
+    assert_eq!(table.context.style.column_gap, Gap::Length(Length::Px(4.0)));
+    assert_eq!(table.context.style.row_gap, Gap::Length(Length::Px(8.0)));
+    assert_eq!(table.context.style.padding_left, Length::Px(4.0));
+    assert_eq!(table.context.style.padding_top, Length::Px(8.0));
   }
 }

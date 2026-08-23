@@ -1,0 +1,116 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>table_layout</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .root {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 16px;
+        width: 100%;
+        height: 100%;
+        background: rgb(243, 244, 246);
+        font-family: "Geist";
+      }
+      .label {
+        font-size: 11px;
+        color: rgb(71, 85, 105);
+      }
+      table {
+        display: table;
+        width: 560px;
+        background: rgb(255, 255, 255);
+        font-size: 12px;
+      }
+      thead {
+        display: table-header-group;
+      }
+      tbody {
+        display: table-row-group;
+      }
+      tr {
+        display: table-row;
+      }
+      td {
+        display: table-cell;
+        border: 1px solid rgb(148, 163, 184);
+        padding: 4px 8px;
+      }
+      .fixed {
+        table-layout: fixed;
+      }
+      .tight {
+        border-spacing: 0;
+      }
+      .loose {
+        border-spacing: 8px 16px;
+      }
+      .w120 td:first-child {
+        width: 120px;
+      }
+    </style>
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div class="root">
+      <span class="label">table-layout: auto follows the content</span>
+      <table>
+        <tr>
+          <td>a</td>
+          <td>a much longer second column</td>
+          <td>c</td>
+        </tr>
+        <tr>
+          <td>1</td>
+          <td>2</td>
+          <td>3</td>
+        </tr>
+      </table>
+      <span class="label">table-layout: fixed shares the space evenly</span>
+      <table class="fixed">
+        <tr>
+          <td>a</td>
+          <td>a much longer second column</td>
+          <td>c</td>
+        </tr>
+        <tr>
+          <td>1</td>
+          <td>2</td>
+          <td>3</td>
+        </tr>
+      </table>
+      <span class="label">table-layout: fixed keeps a declared first column</span>
+      <table class="fixed w120">
+        <tr>
+          <td>120px</td>
+          <td>the rest splits evenly</td>
+          <td>c</td>
+        </tr>
+      </table>
+      <span class="label">border-spacing: 0 and 8px 16px</span>
+      <table class="tight">
+        <tr>
+          <td>no</td>
+          <td>gap</td>
+        </tr>
+        <tr>
+          <td>at</td>
+          <td>all</td>
+        </tr>
+      </table>
+      <table class="loose">
+        <tr>
+          <td>wide</td>
+          <td>gaps</td>
+        </tr>
+        <tr>
+          <td>both</td>
+          <td>axes</td>
+        </tr>
+      </table>
+    </div>
+  </body>
+</html>

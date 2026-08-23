@@ -299,6 +299,34 @@ impl Length {
     Self::Px(0.0)
   }
 
+  /// Whether the length is authored as a negative value. A `calc()` result is
+  /// not known before it resolves, so it counts as non-negative here.
+  pub(crate) fn is_negative(self) -> bool {
+    match self {
+      Self::Percentage(value)
+      | Self::Rem(value)
+      | Self::Em(value)
+      | Self::Lh(value)
+      | Self::Rlh(value)
+      | Self::Vh(value)
+      | Self::Vw(value)
+      | Self::CqH(value)
+      | Self::CqW(value)
+      | Self::CqMin(value)
+      | Self::CqMax(value)
+      | Self::VMin(value)
+      | Self::VMax(value)
+      | Self::Cm(value)
+      | Self::Mm(value)
+      | Self::In(value)
+      | Self::Q(value)
+      | Self::Pt(value)
+      | Self::Pc(value)
+      | Self::Px(value) => value < 0.0,
+      Self::Auto | Self::Calc(_) => false,
+    }
+  }
+
   /// Negated value, or `None` for non-negatable forms like `auto`.
   pub(crate) fn try_negative(self) -> Option<Self> {
     if matches!(self, Length::Auto) {

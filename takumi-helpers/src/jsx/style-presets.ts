@@ -293,6 +293,7 @@ export const defaultStylePresets: Partial<Record<keyof JSX.IntrinsicElements, CS
   table: {
     display: "table",
     boxSizing: "border-box",
+    borderSpacing: "2px",
   },
   thead: {
     display: "table-header-group",

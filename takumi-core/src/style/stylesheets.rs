@@ -1186,6 +1186,8 @@ define_style! {
     visibility: Visibility where inherit = true,
     caption_side: CaptionSide where inherit = true,
     border_collapse: BorderCollapse where inherit = true,
+    table_layout: TableLayout,
+    border_spacing: BorderSpacing where inherit = true,
     vertical_align: VerticalAlign,
     content: ContentValue,
     list_style_type: ListStyleType where inherit = true,

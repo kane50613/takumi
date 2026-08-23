@@ -571,6 +571,83 @@ declare_enum_from_css_impl!(
 
 impl Animatable for BorderCollapse {}
 
+/// Defines how a table distributes its column widths.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
+pub enum TableLayout {
+  /// Column widths follow the content.
+  #[default]
+  Auto,
+  /// Column widths come from the first row, and the rest share the space.
+  Fixed,
+}
+
+declare_enum_from_css_impl!(
+  TableLayout,
+  "auto" => TableLayout::Auto,
+  "fixed" => TableLayout::Fixed
+);
+
+impl Animatable for TableLayout {}
+
+/// A `border-spacing` value: one or two non-negative lengths. A declaration
+/// carrying a percentage, `auto`, or a negative length is discarded, so the
+/// cascade keeps the previous one.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BorderSpacing(pub SpacePair<Length>);
+
+impl Default for BorderSpacing {
+  fn default() -> Self {
+    Self(SpacePair::from_single(Length::zero()))
+  }
+}
+
+impl MakeComputed for BorderSpacing {
+  fn make_computed(&mut self, sizing: &SizingContext) {
+    self.0.make_computed(sizing);
+  }
+}
+
+impl Animatable for BorderSpacing {
+  fn interpolate(
+    &mut self,
+    from: &Self,
+    to: &Self,
+    progress: f32,
+    sizing: &SizingContext,
+    current_color: Color,
+  ) {
+    self
+      .0
+      .interpolate(&from.0, &to.0, progress, sizing, current_color);
+  }
+}
+
+impl<'i> FromCss<'i> for BorderSpacing {
+  const VALID_TOKENS: &'static [CssToken] = SpacePair::<Length>::VALID_TOKENS;
+  const EXPECT_MESSAGE: CssExpectedMessage = CssExpectedMessage::OneOrTwoValues;
+
+  fn from_css(input: &mut cssparser::Parser<'i, '_>) -> ParseResult<'i, Self> {
+    let location = input.current_source_location();
+    let pair = SpacePair::<Length>::from_css(input)?;
+
+    if [pair.x, pair.y]
+      .into_iter()
+      .any(|length| matches!(length, Length::Auto | Length::Percentage(_)) || length.is_negative())
+    {
+      return Err(location.new_unexpected_token_error(cssparser::Token::Delim('%')));
+    }
+
+    Ok(Self(pair))
+  }
+}
+
+impl ToCss for BorderSpacing {
+  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+    self.0.to_css(dest)
+  }
+}
+
 /// Defines how the corners of text strokes are rendered.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub enum LineJoin {
@@ -1257,3 +1334,40 @@ declare_enum_from_css_impl!(
   "inset" => BorderStyle::Inset,
   "outset" => BorderStyle::Outset,
 );
+
+#[cfg(test)]
+mod border_spacing_tests {
+  use crate::style::{BorderSpacing, Length, SpacePair, properties::traits::FromCssStr};
+
+  #[test]
+  fn border_spacing_takes_one_or_two_lengths() {
+    assert_eq!(
+      BorderSpacing::from_css_str("4px"),
+      Ok(BorderSpacing(SpacePair::from_single(Length::Px(4.0))))
+    );
+    assert_eq!(
+      BorderSpacing::from_css_str("4px 8px"),
+      Ok(BorderSpacing(SpacePair::from_pair(
+        Length::Px(4.0),
+        Length::Px(8.0)
+      )))
+    );
+  }
+
+  #[test]
+  fn border_spacing_rejects_what_its_grammar_forbids() {
+    assert!(BorderSpacing::from_css_str("auto").is_err());
+    assert!(BorderSpacing::from_css_str("5%").is_err());
+    assert!(BorderSpacing::from_css_str("4px 5%").is_err());
+    assert!(BorderSpacing::from_css_str("-4px").is_err());
+    assert!(BorderSpacing::from_css_str("4px -8px").is_err());
+  }
+
+  #[test]
+  fn border_spacing_starts_at_zero() {
+    assert_eq!(
+      BorderSpacing::default(),
+      BorderSpacing(SpacePair::from_single(Length::Px(0.0)))
+    );
+  }
+}
