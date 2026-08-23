@@ -590,11 +590,17 @@ declare_enum_from_css_impl!(
 
 impl Animatable for TableLayout {}
 
-/// A `border-spacing` value: one or two lengths. CSS forbids percentages and
-/// `auto` here, so a declaration carrying either is discarded and the cascade
-/// keeps the previous one. A negative length clamps to zero where it is used.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+/// A `border-spacing` value: one or two non-negative lengths. A declaration
+/// carrying a percentage, `auto`, or a negative length is discarded, so the
+/// cascade keeps the previous one.
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BorderSpacing(pub SpacePair<Length>);
+
+impl Default for BorderSpacing {
+  fn default() -> Self {
+    Self(SpacePair::from_single(Length::zero()))
+  }
+}
 
 impl MakeComputed for BorderSpacing {
   fn make_computed(&mut self, sizing: &SizingContext) {
@@ -627,7 +633,7 @@ impl<'i> FromCss<'i> for BorderSpacing {
 
     if [pair.x, pair.y]
       .into_iter()
-      .any(|length| matches!(length, Length::Auto | Length::Percentage(_)))
+      .any(|length| matches!(length, Length::Auto | Length::Percentage(_)) || length.is_negative())
     {
       return Err(location.new_unexpected_token_error(cssparser::Token::Delim('%')));
     }
@@ -1353,5 +1359,15 @@ mod border_spacing_tests {
     assert!(BorderSpacing::from_css_str("auto").is_err());
     assert!(BorderSpacing::from_css_str("5%").is_err());
     assert!(BorderSpacing::from_css_str("4px 5%").is_err());
+    assert!(BorderSpacing::from_css_str("-4px").is_err());
+    assert!(BorderSpacing::from_css_str("4px -8px").is_err());
+  }
+
+  #[test]
+  fn border_spacing_starts_at_zero() {
+    assert_eq!(
+      BorderSpacing::default(),
+      BorderSpacing(SpacePair::from_single(Length::Px(0.0)))
+    );
   }
 }

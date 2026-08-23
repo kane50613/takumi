@@ -1,5 +1,8 @@
 //! Lowering `display: table` onto the grid layout algorithm.
 //!
+//! `gap` does not apply to a table box, so `border-spacing` drives the grid
+//! gaps whether or not one was authored.
+//!
 //! taffy has no table algorithm. Grid gives every row a shared column track,
 //! which flex cannot. Rows and row groups are dropped, so a row's background
 //! and borders are copied onto its cells.
@@ -438,14 +441,8 @@ fn lower_table(table: &mut RenderNode) {
     style.row_gap = Gap::Length(Length::zero());
     clear_border(style);
   } else {
-    if style.column_gap == Gap::Normal {
-      style.column_gap = Gap::Length(spacing.x);
-    }
-
-    if style.row_gap == Gap::Normal {
-      style.row_gap = Gap::Length(spacing.y);
-    }
-
+    style.column_gap = Gap::Length(spacing.x);
+    style.row_gap = Gap::Length(spacing.y);
     inset_edges(style, spacing, &sizing);
   }
 
@@ -461,7 +458,7 @@ fn inset_edges(style: &mut ComputedStyle, spacing: SpacePair<Length>, sizing: &S
       return;
     }
 
-    *padding = Length::Px(padding.to_px(sizing, 0.0) + extra.to_px(sizing, 0.0).max(0.0));
+    *padding = Length::Px(padding.to_px(sizing, 0.0) + extra.to_px(sizing, 0.0));
   };
 
   inset(&mut style.padding_top, spacing.y);
@@ -585,6 +582,7 @@ mod tests {
         .fixed-auto { display: table; table-layout: fixed }
         .spaced { display: table; border-spacing: 4px 8px }
         .tight { display: table; border-spacing: 0 }
+        .gapped { display: table; border-spacing: 4px 8px; column-gap: 0; row-gap: 0 }
         .w80 { display: table-cell; width: 80px }
         .plain { display: table }
         .outset-cell { display: table-cell; border: 2px outset rgb(0, 0, 0) }
@@ -1367,5 +1365,15 @@ mod tests {
         .map(ToCss::to_css_string),
       Some(String::from("auto auto"))
     );
+  }
+
+  #[test]
+  fn border_spacing_outranks_an_authored_gap() {
+    let table = lower(Node::container([row([cell("a"), cell("b")])]).with_class_name("gapped"));
+
+    assert_eq!(table.context.style.column_gap, Gap::Length(Length::Px(4.0)));
+    assert_eq!(table.context.style.row_gap, Gap::Length(Length::Px(8.0)));
+    assert_eq!(table.context.style.padding_left, Length::Px(4.0));
+    assert_eq!(table.context.style.padding_top, Length::Px(8.0));
   }
 }
