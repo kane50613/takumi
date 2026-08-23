@@ -233,7 +233,7 @@ pub(crate) fn draw_glyph_clip_image(
             inline_offset.x + bitmap.placement.left as f32,
             inline_offset.y - bitmap.placement.top as f32,
           ),
-          sample_bias: Point::ZERO,
+          sample_bias: Point { x: 0.5, y: 0.5 },
           algorithm: ImageScalingAlgorithm::Pixelated,
         },
         BlendMode::Normal,
@@ -263,7 +263,7 @@ pub(crate) fn draw_glyph_clip_image(
 
       let sampling = MaskSamplingOptions {
         canvas_to_source: Affine::translation(inline_offset.x, inline_offset.y) * inverse,
-        sample_bias: Point::ZERO,
+        sample_bias: Point { x: 0.5, y: 0.5 },
         algorithm: style.parent.image_rendering,
       };
 
@@ -404,7 +404,7 @@ fn draw_text_stroke_clip_image(ctx: &mut GlyphPaintCtx<'_, '_>, clip_image: Pain
     MaskCompositeColor::color_over_source(ctx.stroke.1),
     MaskSamplingOptions {
       canvas_to_source: Affine::translation(ctx.inline_offset.x, ctx.inline_offset.y) * inverse,
-      sample_bias: Point::ZERO,
+      sample_bias: Point { x: 0.5, y: 0.5 },
       algorithm: ctx.style.parent.image_rendering,
     },
     BlendMode::Normal,
@@ -437,7 +437,7 @@ fn draw_text_embolden_clip_image(
     MaskCompositeColor::SourceOnly,
     MaskSamplingOptions {
       canvas_to_source: Affine::translation(ctx.inline_offset.x, ctx.inline_offset.y) * inverse,
-      sample_bias: Point::ZERO,
+      sample_bias: Point { x: 0.5, y: 0.5 },
       algorithm: ctx.style.parent.image_rendering,
     },
     BlendMode::Normal,
