@@ -531,6 +531,7 @@ mod tests {
         .marked-row { display: table-row; border-top: 2px solid rgb(255, 0, 0) }
         .red-border { display: table-cell; border: 1px solid rgb(255, 0, 0) }
         .blue-border { display: table-cell; border: 1px solid rgb(0, 0, 255) }
+        .heavy-row { display: table-row; border-bottom: 3px solid rgb(0, 0, 0) }
       ",
     )
     .expect("stylesheet parses");
@@ -1050,5 +1051,33 @@ mod tests {
       cell.context.style.border_top_color,
       ColorInput::Value(Color([255, 0, 0, 255]))
     );
+  }
+
+  #[test]
+  fn a_rowspan_reads_the_row_the_line_actually_borders() {
+    let table = lower(
+      Node::container([
+        named_row(
+          "first",
+          [
+            with_span(bordered_cell("tall", "bordered"), "rowspan", "2"),
+            bordered_cell("a", "bordered"),
+          ],
+        ),
+        Node::container([bordered_cell("b", "bordered")])
+          .with_class_name("heavy-row")
+          .with_id("heavy"),
+        named_row(
+          "third",
+          [
+            bordered_cell("c", "bordered"),
+            bordered_cell("d", "bordered"),
+          ],
+        ),
+      ])
+      .with_class_name("collapse"),
+    );
+
+    assert_eq!(borders(&table, "c")[0], 3.0);
   }
 }

@@ -5,7 +5,8 @@
 //! table's outer edge lands half a border width inside Blink's, and a
 //! vertical border mitres a one pixel nick out of any wider band it crosses.
 //! Only cell, row and table borders reach the CSS 2.2 section 17.6.2
-//! cascade.
+//! cascade, a spanning cell resolves one winner for its whole edge rather
+//! than per grid-line segment, and ties do not mirror under `direction: rtl`.
 
 use crate::{
   layout::{
@@ -168,20 +169,21 @@ impl CollapsedBorders {
         let last_column = column + span >= columns;
         let mut top = Vec::new();
 
-        for track in column..(column + span).min(columns) {
-          let Some(&Some((above_row, above_cell))) = index
-            .checked_sub(1)
-            .and_then(|above| owner.get(above))
-            .and_then(|line| line.get(track))
-          else {
-            continue;
-          };
-          let Some(above) = cells[above_row].get(above_cell) else {
-            continue;
-          };
+        if let Some(above_index) = index.checked_sub(1) {
+          for track in column..(column + span).min(columns) {
+            let Some(&Some((above_row, above_cell))) =
+              owner.get(above_index).and_then(|line| line.get(track))
+            else {
+              continue;
+            };
+            let Some(above) = cells[above_row].get(above_cell) else {
+              continue;
+            };
 
-          top.push(Side::Bottom.of(&above.context.style, sizing, EdgeOrigin::Cell));
-          top.push(Side::Bottom.of(&rows[above_row].context.style, sizing, EdgeOrigin::Row));
+            top.push(Side::Bottom.of(&above.context.style, sizing, EdgeOrigin::Cell));
+          }
+
+          top.push(Side::Bottom.of(&rows[above_index].context.style, sizing, EdgeOrigin::Row));
         }
 
         top.push(Side::Top.of(&cell.context.style, sizing, EdgeOrigin::Cell));
@@ -209,9 +211,11 @@ impl CollapsedBorders {
         }
 
         let bottom = last_row.then(|| {
+          let final_row = &rows[(index + rowspan - 1).min(rows.len() - 1)];
+
           vec![
             Side::Bottom.of(&cell.context.style, sizing, EdgeOrigin::Cell),
-            Side::Bottom.of(&row.context.style, sizing, EdgeOrigin::Row),
+            Side::Bottom.of(&final_row.context.style, sizing, EdgeOrigin::Row),
             Side::Bottom.of(table, sizing, EdgeOrigin::Table),
           ]
         });
