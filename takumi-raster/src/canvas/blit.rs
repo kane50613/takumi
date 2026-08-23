@@ -184,7 +184,7 @@ pub(super) fn blit_rows_from_sampler(
   }
 }
 
-fn blit_paint_source_translation(
+pub(super) fn blit_paint_source_translation(
   pixmap: &mut PixmapMut<'_>,
   source: PaintSource<'_>,
   offset: Point<f32>,

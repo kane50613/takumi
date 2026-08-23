@@ -13,6 +13,7 @@ mod skia;
 
 use std::{borrow::Cow, mem::replace, sync::Arc};
 
+use blit::blit_paint_source_translation;
 pub(crate) use blit::{
   composite_mask_source_to_pixmap, overlay_image, overlay_sampled_paint_source,
 };
@@ -217,6 +218,22 @@ impl Canvas {
 
     let isolated_image = replace(&mut self.image, image);
     self.restore_subcanvas_state(origin, constraint_mask_stack);
+
+    // A fully opaque subcanvas lands whole-pixel over the parent, so it copies
+    // row by row; tiny-skia would take the same draw through its pipeline.
+    if opacity == 1.0 && mode == BlendMode::Normal {
+      blit_paint_source_translation(
+        &mut self.image.as_mut(),
+        PaintSource::Pixmap(isolated_image.as_ref()),
+        Point {
+          x: offset.x as f32,
+          y: offset.y as f32,
+        },
+        mode,
+        None,
+      );
+      return;
+    }
 
     if let Some(blend_mode) = to_tiny_blend_mode(mode) {
       let paint = PixmapPaint {
