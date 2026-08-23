@@ -56,6 +56,7 @@ jobs:
         with:
           binstall: cargo-audit,cargo-llvm-cov,cargo-rdme@1.5.1,cargo-machete
           components: rustfmt,clippy
+          targets: wasm32-unknown-unknown
           stage: test
 
       - name: Check formatting
@@ -66,6 +67,11 @@ jobs:
 
       - name: Run Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
+
+      # The host pass never sees the `target_arch = "wasm32"` half of the
+      # decoders, so it is blind to whatever the published wasm compiles.
+      - name: Run Clippy for wasm
+        run: cargo clippy --target wasm32-unknown-unknown -p takumi-wasm -p takumi-pdf-wasm -- -D warnings
 
       - name: Test README.md is up to date
         run: |
