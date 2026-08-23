@@ -6,9 +6,7 @@ use crate::{
   context::RenderContext,
   geometry::{PathBuilder, PathCommand as Command, Point, Rect, Size},
   layout::corner_shape::{CornerContour, contour_arc_length, corner_contour},
-  style::{
-    BorderCollapse, BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair, Superellipse,
-  },
+  style::{BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair, Superellipse},
 };
 
 /// Border side identifier used by per-side geometry and rasterization.
@@ -149,7 +147,7 @@ impl BorderProperties {
         left: context.style.border_left_style,
       },
       image_rendering: context.style.image_rendering,
-      collapsed: context.style.border_collapse == BorderCollapse::Collapse,
+      collapsed: context.collapsed_borders,
     }
   }
 

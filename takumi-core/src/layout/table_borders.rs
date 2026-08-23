@@ -6,10 +6,6 @@
 //! cell, row and table borders reach the CSS 2.2 section 17.6.2 cascade, and
 //! a spanning cell resolves one winner for its whole edge rather than per
 //! grid-line segment.
-//!
-//! Corners come from `BorderProperties::collapsed`, which every box under a
-//! collapsing table inherits, so a nested box with uneven border widths
-//! squares its corners too.
 
 use crate::{
   layout::{

@@ -302,8 +302,10 @@ fn align_row_baselines(cells: &mut [RenderNode]) {
 
 /// Places the cell explicitly: taffy's cursor does not return to the row start
 /// on a row a `rowspan` reaches into.
-fn lower_cell(cell: &mut RenderNode, line: i16, column: usize, colspan: u16) {
+fn lower_cell(cell: &mut RenderNode, line: i16, column: usize, colspan: u16, collapse: bool) {
   let rowspan = span_attribute(cell, "rowspan", MAX_ROWSPAN);
+
+  cell.context.collapsed_borders = collapse;
 
   if cell.context.style.display == Display::TableCell {
     align_cell_content(cell);
@@ -405,7 +407,7 @@ fn lower_table(table: &mut RenderNode) {
       };
 
       inherit_row_background(&row, &mut cell);
-      lower_cell(&mut cell, line, column, colspan);
+      lower_cell(&mut cell, line, column, colspan, collapse);
       items.push(cell);
     }
 
@@ -1156,6 +1158,52 @@ mod tests {
     assert_eq!(
       margin_top("under-light"),
       Some(LengthPercentageAuto::length(3.0))
+    );
+  }
+
+  #[test]
+  fn only_the_cell_itself_collapses_its_corners() {
+    let table = lower(
+      Node::container([named_row(
+        "only",
+        [Node::container([Node::container([Node::text("x")])
+          .with_class_name("bordered")
+          .with_id("inner")])
+        .with_class_name("bordered")
+        .with_id("cell")],
+      )])
+      .with_class_name("collapse"),
+    );
+
+    fn find<'a>(node: &'a RenderNode, id: &str) -> Option<&'a RenderNode> {
+      if node
+        .node
+        .as_ref()
+        .and_then(|node| node.metadata.id.as_deref())
+        == Some(id)
+      {
+        return Some(node);
+      }
+
+      node
+        .children
+        .as_deref()
+        .unwrap_or_default()
+        .iter()
+        .find_map(|child| find(child, id))
+    }
+
+    assert!(
+      find(&table, "cell")
+        .expect("cell")
+        .context
+        .collapsed_borders
+    );
+    assert!(
+      !find(&table, "inner")
+        .expect("inner box")
+        .context
+        .collapsed_borders
     );
   }
 }
