@@ -197,6 +197,9 @@ fn legacy_alias_property_id(name: &str) -> Option<PropertyId> {
     // `continue` is a Rust keyword; its longhand field is `r#continue`, so the
     // name-derived lookup can't reach it.
     "continue" => Some(PropertyId::Longhand(LonghandId::Continue)),
+    "page_break_before" => Some(PropertyId::Longhand(LonghandId::BreakBefore)),
+    "page_break_after" => Some(PropertyId::Longhand(LonghandId::BreakAfter)),
+    "page_break_inside" => Some(PropertyId::Longhand(LonghandId::BreakInside)),
     _ => None,
   }
 }

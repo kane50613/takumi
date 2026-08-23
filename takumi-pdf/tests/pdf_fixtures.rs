@@ -221,6 +221,38 @@ fn paged_table() {
   });
 }
 
+/// css-break-3 §7: the legacy `page-break-*` names drive the same pagination
+/// as `break-*`.
+#[test]
+fn legacy_page_break_properties_split_the_page() {
+  run_pdf_fixture("legacy-page-break", |fonts| {
+    let filler: String = (1..=8)
+      .map(|i| format!("<p style=\"margin: 0\">line {i}</p>"))
+      .collect();
+    let html = format!(
+      r#"<div style="font-size: 12px; color: #141414">
+        <div style="page-break-after: always">first page</div>
+        <div>{filler}</div>
+        <div style="page-break-inside: avoid; background: #e2e8f0; padding: 8px">
+          <p style="margin: 0">kept together</p>
+          <p style="margin: 0">across the break</p>
+          <p style="margin: 0">by page-break-inside</p>
+        </div>
+      </div>"#
+    );
+
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse legacy page breaks"))
+      .page(PageOptions {
+        width: 300.0,
+        height: 160.0,
+        margin: PageMargins::uniform(20.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
 /// CSS 2.2 §17.6.2: a collapsing table paints one border per shared line, the
 /// wider one takes the intersection, and `hidden` clears the line. The last
 /// table pins the naive edge: a spanning cell resolves one winner for its
