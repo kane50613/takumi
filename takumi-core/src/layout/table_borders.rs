@@ -5,8 +5,8 @@
 //! table's outer edge lands half a border width inside Blink's, and a
 //! vertical border mitres a one pixel nick out of any wider band it crosses.
 //! Only cell, row and table borders reach the CSS 2.2 section 17.6.2
-//! cascade, a spanning cell resolves one winner for its whole edge rather
-//! than per grid-line segment, and ties do not mirror under `direction: rtl`.
+//! cascade, and a spanning cell resolves one winner for its whole edge rather
+//! than per grid-line segment.
 
 use crate::{
   layout::{
@@ -52,10 +52,8 @@ impl BorderEdge {
       BorderStyle::Solid => 7,
       BorderStyle::Dashed => 6,
       BorderStyle::Dotted => 5,
-      BorderStyle::Ridge => 4,
-      BorderStyle::Outset => 3,
-      BorderStyle::Groove => 2,
-      BorderStyle::Inset => 1,
+      BorderStyle::Ridge | BorderStyle::Inset => 4,
+      BorderStyle::Groove | BorderStyle::Outset => 3,
       BorderStyle::None | BorderStyle::Hidden => 0,
     };
 
@@ -98,7 +96,7 @@ impl Side {
 
     BorderEdge {
       width,
-      style: border_style,
+      style: collapsed_style(border_style),
       color,
       px: if border_style.is_rendered() {
         Length::from(width).to_px(sizing, 0.0)
@@ -252,6 +250,16 @@ impl CollapsedBorders {
     {
       side.apply(style, *edge);
     }
+  }
+}
+
+/// css-backgrounds-3 border-style: the collapsing model draws `outset` as
+/// `groove` and `inset` as `ridge`, so both resolve as the style they draw.
+fn collapsed_style(style: BorderStyle) -> BorderStyle {
+  match style {
+    BorderStyle::Outset => BorderStyle::Groove,
+    BorderStyle::Inset => BorderStyle::Ridge,
+    other => other,
   }
 }
 

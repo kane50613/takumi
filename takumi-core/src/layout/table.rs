@@ -390,19 +390,21 @@ fn lower_table(table: &mut RenderNode) {
     let mut positions = positions.into_iter();
 
     cells.retain(is_cell);
+
+    if let Some(collapsed) = collapsed.as_ref() {
+      for (cell_index, cell) in cells.iter_mut().enumerate() {
+        collapsed.apply(index, cell_index, &mut cell.context.style);
+      }
+    }
+
     align_row_baselines(&mut cells);
 
-    for (cell_index, mut cell) in cells.into_iter().enumerate() {
+    for mut cell in cells {
       let Some((column, colspan)) = positions.next() else {
         break;
       };
 
       inherit_row_background(&row, &mut cell);
-
-      if let Some(collapsed) = collapsed.as_ref() {
-        collapsed.apply(index, cell_index, &mut cell.context.style);
-      }
-
       lower_cell(&mut cell, line, column, colspan);
       items.push(cell);
     }
@@ -532,6 +534,9 @@ mod tests {
         .red-border { display: table-cell; border: 1px solid rgb(255, 0, 0) }
         .blue-border { display: table-cell; border: 1px solid rgb(0, 0, 255) }
         .heavy-row { display: table-row; border-bottom: 3px solid rgb(0, 0, 0) }
+        .outset-cell { display: table-cell; border: 2px outset rgb(0, 0, 0) }
+        .inset-cell { display: table-cell; border: 2px inset rgb(0, 0, 0) }
+        .heavy-under { display: table-cell; border: 1px solid rgb(0, 0, 0); border-bottom-width: 4px }
       ",
     )
     .expect("stylesheet parses");
@@ -1079,5 +1084,78 @@ mod tests {
     );
 
     assert_eq!(borders(&table, "c")[0], 3.0);
+  }
+
+  #[test]
+  fn an_inset_border_resolves_as_the_ridge_it_draws() {
+    let table = lower(
+      Node::container([
+        named_row("top", [bordered_cell("a", "outset-cell")]),
+        named_row("bottom", [bordered_cell("b", "inset-cell")]),
+      ])
+      .with_class_name("collapse"),
+    );
+    let cell = table
+      .children
+      .as_deref()
+      .unwrap_or_default()
+      .iter()
+      .find(|child| {
+        child
+          .node
+          .as_ref()
+          .and_then(|node| node.metadata.id.as_deref())
+          == Some("b")
+      })
+      .expect("lowered cell");
+
+    assert_eq!(cell.context.style.border_top_style, BorderStyle::Ridge);
+  }
+
+  #[test]
+  fn a_baseline_row_measures_the_border_it_collapsed_to() {
+    let table = lower(
+      Node::container([
+        named_row(
+          "top",
+          [
+            bordered_cell("heavy", "heavy-under"),
+            bordered_cell("light", "bordered"),
+          ],
+        ),
+        named_row(
+          "bottom",
+          [
+            bordered_cell("under-heavy", "bordered"),
+            bordered_cell("under-light", "bordered"),
+          ],
+        ),
+      ])
+      .with_class_name("collapse"),
+    );
+    let margin_top = |id: &str| {
+      table
+        .children
+        .as_deref()
+        .unwrap_or_default()
+        .iter()
+        .find(|child| {
+          child
+            .node
+            .as_ref()
+            .and_then(|node| node.metadata.id.as_deref())
+            == Some(id)
+        })
+        .and_then(|cell| cell.children.as_deref())
+        .and_then(<[RenderNode]>::first)
+        .and_then(|content| content.layout_style_override.as_ref())
+        .map(|style| style.margin.top)
+    };
+
+    assert_eq!(borders(&table, "under-heavy")[0], 4.0);
+    assert_eq!(
+      margin_top("under-light"),
+      Some(LengthPercentageAuto::length(3.0))
+    );
   }
 }
