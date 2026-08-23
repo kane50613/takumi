@@ -830,14 +830,24 @@ pub(crate) fn emit_borders(
   if sides.peek().is_none() {
     return Ok(());
   }
-  let mut ring = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
-
-  border.append_border_ring_commands(&mut ring, size);
-
   // Mixed per-side styles/colors: clip to the ring; fill solid sides as their
   // diagonal-split polygon and stroke dashed/dotted sides along their centerline.
-  let clip = doc.clip_path_evenodd(&path_data(&ring, matrix))?;
-  let group = doc.begin_group(IDENTITY, 1.0, Some(&clip), None)?;
+  // A collapsed border's sides are squared rectangles already inside the ring,
+  // so the clip only adds an antialiased edge that leaks the background where
+  // two cells meet. Patterned sides still need it to trim their centerlines.
+  let patterned = border
+    .painted_sides()
+    .any(|side| matches!(side.style, BorderStyle::Dashed | BorderStyle::Dotted));
+  let clip = if border.collapsed && !patterned {
+    None
+  } else {
+    let mut ring = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
+
+    border.append_border_ring_commands(&mut ring, size);
+
+    Some(doc.clip_path_evenodd(&path_data(&ring, matrix))?)
+  };
+  let group = doc.begin_group(IDENTITY, 1.0, clip.as_deref(), None)?;
   for side in sides {
     match side.style {
       BorderStyle::Dashed | BorderStyle::Dotted => {

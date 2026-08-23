@@ -1047,8 +1047,15 @@ impl Emitter<'_> {
       return;
     }
     let artifact = self.start_artifact(surface);
+    // A collapsed border's sides are squared rectangles already inside the
+    // ring, and the clip's antialiased edge leaks the page where two cells
+    // meet.
+    let clipped = !border.collapsed;
 
-    surface.push_clip_path(&ring_path, &FillRule::EvenOdd);
+    if clipped {
+      surface.push_clip_path(&ring_path, &FillRule::EvenOdd);
+    }
+
     for side in sides {
       for band in side_bands(border, side) {
         let mut strip = *border;
@@ -1070,7 +1077,10 @@ impl Emitter<'_> {
         }
       }
     }
-    surface.pop();
+    if clipped {
+      surface.pop();
+    }
+
     if artifact {
       surface.end_tagged();
     }
