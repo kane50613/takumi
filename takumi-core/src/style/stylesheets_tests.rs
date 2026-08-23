@@ -856,6 +856,7 @@ fn test_creates_stacking_context_from_z_index_scope() {
   let sizing = SizingContext {
     viewport: Viewport::new((1200, 630)),
     container_size: Size::NONE,
+    container_read: Default::default(),
     font_size: 16.0,
     root_font_size: None,
     line_height: 0.0,
@@ -913,6 +914,7 @@ fn test_offset_path_moves_element_onto_path_and_creates_stacking_context() {
   let sizing = SizingContext {
     viewport: Viewport::new((1200, 630)),
     container_size: Size::NONE,
+    container_read: Default::default(),
     font_size: 16.0,
     root_font_size: None,
     line_height: 0.0,
@@ -952,6 +954,7 @@ fn test_non_identity_transform_detection() {
   let sizing = SizingContext {
     viewport: Viewport::new((1200, 630)),
     container_size: Size::NONE,
+    container_read: Default::default(),
     font_size: 16.0,
     root_font_size: None,
     line_height: 0.0,
@@ -978,6 +981,7 @@ fn test_transform_creates_stacking_context_without_offscreen_compositing() {
   let sizing = SizingContext {
     viewport: Viewport::new((1200, 630)),
     container_size: Size::NONE,
+    container_read: Default::default(),
     font_size: 16.0,
     root_font_size: None,
     line_height: 0.0,
@@ -1018,6 +1022,7 @@ fn test_position_absolute_blockifies_inline_display() {
   let sizing = SizingContext {
     viewport: Viewport::new((1200, 630)),
     container_size: Size::NONE,
+    container_read: Default::default(),
     font_size: 16.0,
     root_font_size: None,
     line_height: 0.0,
@@ -1041,6 +1046,7 @@ fn test_inherited_em_text_lengths_are_computed_once() {
   parent.make_computed(&SizingContext {
     viewport: Viewport::new((1200, 630)),
     container_size: Size::NONE,
+    container_read: Default::default(),
     font_size: 32.0,
     root_font_size: None,
     line_height: 0.0,
@@ -1052,6 +1058,7 @@ fn test_inherited_em_text_lengths_are_computed_once() {
   let inherited_child_sizing = SizingContext {
     viewport: Viewport::new((1200, 630)),
     container_size: Size::NONE,
+    container_read: Default::default(),
     font_size: 32.0,
     root_font_size: None,
     line_height: 0.0,
@@ -1068,6 +1075,7 @@ fn test_inherited_em_text_lengths_are_computed_once() {
   let child_sizing = SizingContext {
     viewport: Viewport::new((1200, 630)),
     container_size: Size::NONE,
+    container_read: Default::default(),
     font_size: 10.0,
     root_font_size: None,
     line_height: 0.0,
@@ -1316,6 +1324,7 @@ fn test_border_radius_calc_infinity_parses_from_stylesheet_declaration() {
   let sizing = SizingContext {
     viewport: Viewport::new((1200, 630)),
     container_size: Size::NONE,
+    container_read: Default::default(),
     font_size: 16.0,
     root_font_size: None,
     line_height: 0.0,

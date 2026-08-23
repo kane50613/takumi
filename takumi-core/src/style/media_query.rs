@@ -115,6 +115,7 @@ impl MediaQueryList {
     let sizing = SizingContext {
       viewport,
       container_size: Size::NONE,
+      container_read: Default::default(),
       font_size: viewport.font_size,
       root_font_size: None,
       line_height: viewport.font_size,

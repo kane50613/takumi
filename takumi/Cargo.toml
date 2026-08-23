@@ -110,6 +110,10 @@ name = "gradient"
 harness = false
 
 [[bench]]
+name = "layout"
+harness = false
+
+[[bench]]
 name = "svg"
 harness = false
 

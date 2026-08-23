@@ -567,6 +567,7 @@ mod tests {
         device_pixel_ratio: 2.0,
       },
       container_size: Size::NONE,
+      container_read: Default::default(),
       font_size: 10.0,
       root_font_size: None,
       line_height: 30.0,
@@ -953,6 +954,35 @@ mod tests {
     assert_near(Length::CqH(50.0).to_px(&sizing, 0.0), 20.0);
     assert_near(Length::CqMin(50.0).to_px(&sizing, 0.0), 20.0);
     assert_near(Length::CqMax(50.0).to_px(&sizing, 0.0), 40.0);
+  }
+
+  /// Resolution reports reading the query container, which is what tells a
+  /// caller the result depends on one. Comparing two resolved values cannot:
+  /// a length clamped against a container agrees across two containers and
+  /// disagrees with a third.
+  #[test]
+  fn resolving_a_container_length_reports_the_read() {
+    let mut sizing = sizing();
+    sizing.container_size = Size {
+      width: Some(80.0),
+      height: Some(40.0),
+    };
+
+    sizing.container_read.set(false);
+    Length::Px(10.0).to_px(&sizing, 0.0);
+    assert!(!sizing.container_read.get(), "a px length reads nothing");
+
+    assert_near(Length::CqW(50.0).to_px(&sizing, 0.0), 40.0);
+    assert!(
+      sizing.container_read.get(),
+      "a cqw length reads the container"
+    );
+
+    // Zero resolves the same against every container, yet still reports the
+    // read: the flag tracks what was consulted, not whether it mattered.
+    sizing.container_read.set(false);
+    assert_near(Length::CqW(0.0).to_px(&sizing, 0.0), 0.0);
+    assert!(sizing.container_read.get());
   }
 
   #[test]

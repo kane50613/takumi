@@ -99,6 +99,9 @@ pub struct LayoutTree<'r> {
 
 struct LayoutNodeState {
   style: Style,
+  /// Whether the style is the same whatever query container it resolves
+  /// against, so taffy's repeated passes can reuse it.
+  container_independent: bool,
   cache: Cache,
   unrounded_layout: Layout,
   final_layout: Layout,
@@ -372,16 +375,25 @@ fn push_layout_node<'r>(
 
     render_nodes.push(render_node);
 
+    let (style, container_independent) = match &render_node.layout_style_override {
+      Some(style) => (style.clone(), true),
+      None => {
+        let sizing = &render_node.context.sizing;
+
+        // Resolution reports whether it read the query container, which is
+        // exact. Comparing two resolved sizes is not: `min(10px, 100cqw)`
+        // agrees across two large containers and disagrees with a small one.
+        sizing.container_read.set(false);
+        let style = render_node.context.style.to_taffy_style(sizing);
+        let independent = !sizing.container_read.get();
+
+        (style, independent)
+      }
+    };
+
     nodes.push(LayoutNodeState {
-      style: render_node
-        .layout_style_override
-        .clone()
-        .unwrap_or_else(|| {
-          render_node
-            .context
-            .style
-            .to_taffy_style(&render_node.context.sizing)
-        }),
+      style,
+      container_independent,
       cache: Cache::new(),
       unrounded_layout: Layout::new(),
       final_layout: Layout::new(),
@@ -564,6 +576,14 @@ impl<'r> LayoutTree<'r> {
     let Some(render_node) = self.render_nodes.get(idx) else {
       return;
     };
+
+    if self
+      .nodes
+      .get(idx)
+      .is_some_and(|node| node.container_independent)
+    {
+      return;
+    }
 
     let style = if let Some(style_override) = &render_node.layout_style_override {
       style_override.clone()
