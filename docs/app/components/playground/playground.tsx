@@ -33,6 +33,8 @@ function formatStats(result: RenderSuccess) {
     `${Math.round(result.duration)} ms`,
   );
 
+  if (result.notice) parts.push(result.notice);
+
   return parts.join(" · ");
 }
 

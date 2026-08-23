@@ -12,7 +12,7 @@ import type { JSXElementConstructor } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { evaluateCodeExports } from "./evaluate";
 import { renderReact } from "./render-react";
-import { FONT_FAMILIES } from "./fonts";
+import { FALLBACK_FONT_URL, FONT_FAMILIES } from "./fonts";
 import { inspectPdf } from "./inspect-pdf";
 import { keyframesToCss } from "./preview-css";
 import { messageSchema, type OutputKind, type RenderMessageInput } from "./schema";
@@ -91,15 +91,20 @@ function loadPdfRenderer() {
 async function loadResources(node: Node, stylesheets: string[]) {
   const [images, fonts] = await Promise.all([
     prepareImages<FetchedImage>({ node, fetchCache }),
-    googleFonts(GOOGLE_FONTS),
+    googleFonts(GOOGLE_FONTS).catch(() => undefined),
   ]);
 
-  return { images, fonts, stylesheets };
+  return {
+    images,
+    fonts: fonts ?? [FALLBACK_FONT_URL],
+    stylesheets,
+    notice: fonts ? undefined : "Google Fonts unreachable · Latin fallback",
+  };
 }
 
 type Resources = Awaited<ReturnType<typeof loadResources>>;
 
-type RenderInput = Resources & {
+type RenderInput = Omit<Resources, "notice"> & {
   renderer: Renderer;
   node: Node;
   options: PlaygroundOptions;
@@ -187,13 +192,14 @@ async function renderRequest(renderer: Renderer, id: number, code: string) {
   const emojified = extractEmojis(node, options.emoji ?? "twemoji");
   const resources = await loadResources(emojified, effectiveStylesheets);
 
+  const { notice, ...renderResources } = resources;
   const start = performance.now();
   const output = await renderOutput({
     renderer,
     node: emojified,
     options,
     geometry,
-    ...resources,
+    ...renderResources,
   });
   const duration = performance.now() - start;
   const inspection = output.kind === "pdf" ? await inspectPdf(output.buffer) : undefined;
@@ -210,6 +216,7 @@ async function renderRequest(renderer: Renderer, id: number, code: string) {
         outputFormat: output.format,
         label: geometry.label,
         inspection,
+        notice,
       },
     },
     [output.buffer.buffer],
