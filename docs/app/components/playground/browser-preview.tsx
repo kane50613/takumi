@@ -126,7 +126,8 @@ function usePaintFrame(paint: Paint | undefined) {
   const pendingRef = useRef<Paint>(undefined);
   const [contentHeight, setContentHeight] = useState<number>();
   // The frame is blank until its first paint lands, which would flash white
-  // over the pane.
+  // over the pane. Delivery is what counts as painted: the frame's own report
+  // rides a port a later announce may already have closed.
   const [hasPainted, setHasPainted] = useState(false);
 
   useEffect(() => {
@@ -137,7 +138,6 @@ function usePaintFrame(paint: Paint | undefined) {
 
       if (message?.type === "height" && Number.isFinite(message.value)) {
         setContentHeight(Math.min(Math.max(Number(message.value), 0), MAX_FRAME_HEIGHT));
-        setHasPainted(true);
       }
     };
 
@@ -153,7 +153,11 @@ function usePaintFrame(paint: Paint | undefined) {
       portRef.current = port;
       port.onmessage = onPortMessage;
       port.start();
-      if (pendingRef.current) port.postMessage(pendingRef.current);
+
+      if (!pendingRef.current) return;
+
+      port.postMessage(pendingRef.current);
+      setHasPainted(true);
     };
 
     window.addEventListener("message", onMessage);
@@ -169,7 +173,11 @@ function usePaintFrame(paint: Paint | undefined) {
     if (!paint) return;
 
     pendingRef.current = paint;
-    portRef.current?.postMessage(paint);
+
+    if (!portRef.current) return;
+
+    portRef.current.postMessage(paint);
+    setHasPainted(true);
   }, [paint]);
 
   return { frameRef, contentHeight, hasPainted };
