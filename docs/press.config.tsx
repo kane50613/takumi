@@ -13,7 +13,7 @@ import { fumadocsMdx } from "fumapress/adapters/mdx";
 import { createDocsLayoutPage } from "fumapress/layouts/docs";
 import { oramaSearchPlugin } from "fumapress/plugins/orama-search";
 import { linkValidationPlugin } from "fumapress/plugins/link-validation";
-import { llmsPlugin } from "fumapress/plugins/llms.txt";
+import { robotsPlugin } from "fumapress/plugins/robots";
 import { sitemapPlugin } from "fumapress/plugins/sitemap";
 import { takumiPlugin } from "fumapress/plugins/takumi";
 import {
@@ -36,7 +36,9 @@ import wasmModule from "takumi-js/wasm";
 import { docs } from "./.source/server";
 import sticker from "./public/sticker.svg?raw";
 import { baseOptions, SITE_URL } from "./app/layout-config";
+import { agentGuidePlugin } from "./app/llms-plugin";
 import { Accordion, Accordions } from "./app/components/accordion";
+import { NotFound } from "./app/components/not-found";
 import { Mermaid } from "./app/components/mdx/mermaid";
 import { TypeTable } from "./app/components/type-table";
 import { Video } from "./app/components/video";
@@ -78,6 +80,9 @@ export default defineConfig({
       rootDir: "docs",
     },
   },
+  renderNotFound() {
+    return <NotFound />;
+  },
   meta: {
     root() {
       return (
@@ -97,18 +102,6 @@ export default defineConfig({
             href="https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400..800;1,400..800&family=Geist+Mono:wght@400&display=swap"
           />
           <Analytics />
-        </>
-      );
-    },
-    page(page) {
-      const url = `${SITE_URL}${page.url}`;
-
-      return (
-        <>
-          {page.data.description && <meta name="description" content={page.data.description} />}
-          <meta property="og:url" content={url} />
-          <meta property="og:image:alt" content={`${page.data.title} — Takumi`} />
-          <link rel="canonical" href={url} />
         </>
       );
     },
@@ -164,7 +157,40 @@ export default defineConfig({
   .plugins(
     oramaSearchPlugin(),
     linkValidationPlugin(),
-    llmsPlugin(),
+    agentGuidePlugin(),
+    // The default page meta renders a bare `<title>`, and React keeps both when a second one is
+    // added, so the whole block is replaced instead of extended.
+    {
+      name: "takumi:page-meta",
+      configure() {
+        this.interceptPageMeta(({ page }) => {
+          const url = `${SITE_URL}${page.url}`;
+
+          return (
+            <>
+              <title>{`${page.data.title} · Takumi`}</title>
+              <meta property="og:title" content={page.data.title} />
+              {page.data.description && (
+                <>
+                  <meta name="description" content={page.data.description} />
+                  <meta property="og:description" content={page.data.description} />
+                </>
+              )}
+              <meta property="og:url" content={url} />
+              <meta property="og:image:alt" content={`${page.data.title} — Takumi`} />
+              <link rel="canonical" href={url} />
+            </>
+          );
+        });
+      },
+    },
+    robotsPlugin({
+      additionalContent: [
+        "# Agent instructions: https://takumi.kane.tw/llms.txt",
+        "# Full documentation: https://takumi.kane.tw/llms-full.txt",
+        "# API specification: https://takumi.kane.tw/openapi.json",
+      ].join("\n"),
+    }),
     sitemapPlugin(),
     takumiPlugin({
       generate(page) {

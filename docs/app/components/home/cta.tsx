@@ -43,6 +43,23 @@ export function CTA({ highlightedHtml }: { highlightedHtml: ThemedHtml }) {
           </p>
           <p>MIT / Apache-2.0</p>
         </div>
+        <nav className="mt-6 flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground">
+          <Link to="/about" className={linkClass}>
+            About
+          </Link>
+          <Link to="/contact" className={linkClass}>
+            Contact
+          </Link>
+          <Link to="/privacy" className={linkClass}>
+            Privacy
+          </Link>
+          <a href="/llms.txt" className={linkClass}>
+            llms.txt
+          </a>
+          <a href="/openapi.json" className={linkClass}>
+            OpenAPI
+          </a>
+        </nav>
       </div>
     </section>
   );

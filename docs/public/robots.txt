@@ -1,6 +1,0 @@
-User-agent: *
-Allow: /
-
-Host: https://takumi.kane.tw
-
-Sitemap: https://takumi.kane.tw/sitemap.xml

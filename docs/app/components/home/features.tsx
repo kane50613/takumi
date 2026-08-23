@@ -56,6 +56,11 @@ export function Features() {
         <p className="mt-12 text-muted-foreground leading-relaxed max-w-150">
           Native on Node. WASM on Workers and browsers. Crate for Rust.
         </p>
+        <p className="mt-4 text-muted-foreground leading-relaxed max-w-150">
+          People ship open graph cards, invoices, receipts, tickets, certificates, and paged PDF
+          reports with it. One template renders to PNG, WebP, AVIF, JPEG, SVG, or PDF. No headless
+          browser to install, keep warm, or pay for.
+        </p>
         <p className="mt-2 font-mono text-xs text-muted-foreground">
           macOS · Linux · Windows · x64 · ARM64
         </p>

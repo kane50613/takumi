@@ -396,6 +396,10 @@ jobs:
         working-directory: docs
         run: bun test tests/registry-previews.test.tsx
 
+      - name: Test docs agent readiness
+        working-directory: docs
+        run: bun test tests/agent-readiness.test.ts
+
       # Runs from the root: the playground's PDF reader pulls in nothing else.
       - name: Test docs playground
         run: bun test docs/app/playground
@@ -986,7 +990,7 @@ jobs:
 
       - name: Build Vercel output (preview)
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        run: bunx vercel build --token=${{ secrets.VERCEL_TOKEN }} && rm -rf .vercel/output/functions
+        run: bunx vercel build --token=${{ secrets.VERCEL_TOKEN }} && rm -rf .vercel/output/functions && bun docs/scripts/patch-vercel-output.ts
 
       - name: Deploy to Vercel (preview)
         id: deploy_preview
@@ -1058,7 +1062,7 @@ jobs:
 
       - name: Build Vercel output (production)
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        run: bunx vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} && rm -rf .vercel/output/functions
+        run: bunx vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} && rm -rf .vercel/output/functions && bun docs/scripts/patch-vercel-output.ts
 
       - name: Deploy to Vercel (production)
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
