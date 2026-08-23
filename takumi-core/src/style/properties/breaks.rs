@@ -11,7 +11,9 @@ use crate::style::{
   ToCss, declare_enum_from_css_impl, lerp,
 };
 
-/// A forced-break value for `break-before` / `break-after`.
+/// A forced-break value for `break-before` / `break-after`. Pagination has no
+/// left and right pages, so the legacy `left` and `right` become a plain page
+/// break.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[non_exhaustive]
 pub enum BreakBetween {
@@ -22,11 +24,41 @@ pub enum BreakBetween {
   Page,
 }
 
-declare_enum_from_css_impl!(
-  BreakBetween,
-  "auto" => BreakBetween::Auto,
-  "page" => BreakBetween::Page
-);
+impl MakeComputed for BreakBetween {}
+
+impl<'i> FromCss<'i> for BreakBetween {
+  const VALID_TOKENS: &'static [CssToken] = &[
+    CssToken::Keyword("auto"),
+    CssToken::Keyword("page"),
+    CssToken::Keyword("always"),
+    CssToken::Keyword("left"),
+    CssToken::Keyword("right"),
+  ];
+
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    let location = input.current_source_location();
+    let token = input.next()?;
+
+    let cssparser::Token::Ident(ident) = token else {
+      return Err(crate::style::unexpected_token!(location, token));
+    };
+
+    cssparser::match_ignore_ascii_case! {&ident,
+      "auto" => Ok(Self::Auto),
+      "page" | "always" | "left" | "right" => Ok(Self::Page),
+      _ => Err(crate::style::unexpected_token!(location, token)),
+    }
+  }
+}
+
+impl ToCss for BreakBetween {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    dest.write_str(match self {
+      Self::Auto => "auto",
+      Self::Page => "page",
+    })
+  }
+}
 
 /// A `break-inside` value.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -133,6 +165,15 @@ mod tests {
     assert_eq!(BreakBetween::from_css_str("auto"), Ok(BreakBetween::Auto));
     assert_eq!(BreakBetween::from_css_str("page"), Ok(BreakBetween::Page));
     assert!(BreakBetween::from_css_str("column").is_err());
+  }
+
+  #[test]
+  fn the_legacy_forced_break_keywords_reach_a_page_break() {
+    for keyword in ["always", "left", "right"] {
+      assert_eq!(BreakBetween::from_css_str(keyword), Ok(BreakBetween::Page));
+    }
+
+    assert!(BreakBetween::from_css_str("avoid").is_err());
   }
 
   #[test]

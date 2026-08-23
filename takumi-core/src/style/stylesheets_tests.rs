@@ -342,6 +342,22 @@ fn max_lines_clamps_only_inside_fragmentation_context() {
 }
 
 #[test]
+fn property_id_accepts_legacy_page_break_aliases() {
+  assert_eq!(
+    PropertyId::from_kebab_case("page-break-before"),
+    PropertyId::Longhand(LonghandId::BreakBefore)
+  );
+  assert_eq!(
+    PropertyId::from_camel_case("pageBreakAfter"),
+    PropertyId::Longhand(LonghandId::BreakAfter)
+  );
+  assert_eq!(
+    PropertyId::from_kebab_case("page-break-inside"),
+    PropertyId::Longhand(LonghandId::BreakInside)
+  );
+}
+
+#[test]
 fn property_id_accepts_legacy_gap_aliases() {
   assert_eq!(
     PropertyId::from_kebab_case("grid-gap"),
