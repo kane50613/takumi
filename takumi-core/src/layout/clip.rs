@@ -69,6 +69,7 @@ pub fn clip_shape_commands(
           left: BorderStyle::Solid,
         },
         shape: Sides::default(),
+        collapsed: false,
       };
 
       border.append_mask_commands(

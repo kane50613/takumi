@@ -6,7 +6,9 @@ use crate::{
   context::RenderContext,
   geometry::{PathBuilder, PathCommand as Command, Point, Rect, Size},
   layout::corner_shape::{CornerContour, contour_arc_length, corner_contour},
-  style::{BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair, Superellipse},
+  style::{
+    BorderCollapse, BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair, Superellipse,
+  },
 };
 
 /// Border side identifier used by per-side geometry and rasterization.
@@ -63,6 +65,9 @@ pub struct BorderProperties {
   pub style: Rect<BorderStyle>,
   /// The image rendering algorithm to use when sampling the image.
   pub image_rendering: ImageScalingAlgorithm,
+  /// Whether the sides square off at the corners instead of mitring, the way
+  /// Blink hands a collapsed table's intersection to one edge.
+  pub collapsed: bool,
 }
 
 impl BorderProperties {
@@ -144,6 +149,7 @@ impl BorderProperties {
         left: context.style.border_left_style,
       },
       image_rendering: context.style.image_rendering,
+      collapsed: context.style.border_collapse == BorderCollapse::Collapse,
     }
   }
 
@@ -336,6 +342,11 @@ impl BorderProperties {
     let inner_top = self.width.top.min(border_box.height);
     let inner_bottom = (border_box.height - self.width.bottom).max(inner_top);
 
+    if self.collapsed {
+      self.append_squared_side_polygon_commands_at(side, path, border_box, offset);
+      return;
+    }
+
     match side {
       BorderSide::Top => {
         path.move_to((offset.x, offset.y));
@@ -366,6 +377,106 @@ impl BorderProperties {
     path.close();
   }
 
+  /// Appends the rectangle one side covers once the wider of the two sides at
+  /// each corner takes the whole intersection. Ties go to the horizontal side,
+  /// so a uniform grid still meets at every corner.
+  fn append_squared_side_polygon_commands_at(
+    &self,
+    side: BorderSide,
+    path: &mut Vec<Command>,
+    border_box: Size<f32>,
+    offset: Point<f32>,
+  ) {
+    let inner_left = self.width.left.min(border_box.width);
+    let inner_right = (border_box.width - self.width.right).max(inner_left);
+    let inner_top = self.width.top.min(border_box.height);
+    let inner_bottom = (border_box.height - self.width.bottom).max(inner_top);
+    let (start, end) = match side {
+      BorderSide::Top => (
+        (
+          if self.width.top >= self.width.left {
+            0.0
+          } else {
+            inner_left
+          },
+          0.0,
+        ),
+        (
+          if self.width.top >= self.width.right {
+            border_box.width
+          } else {
+            inner_right
+          },
+          inner_top,
+        ),
+      ),
+      BorderSide::Bottom => (
+        (
+          if self.width.bottom >= self.width.left {
+            0.0
+          } else {
+            inner_left
+          },
+          inner_bottom,
+        ),
+        (
+          if self.width.bottom >= self.width.right {
+            border_box.width
+          } else {
+            inner_right
+          },
+          border_box.height,
+        ),
+      ),
+      BorderSide::Left => (
+        (
+          0.0,
+          if self.width.left > self.width.top {
+            0.0
+          } else {
+            inner_top
+          },
+        ),
+        (
+          inner_left,
+          if self.width.left > self.width.bottom {
+            border_box.height
+          } else {
+            inner_bottom
+          },
+        ),
+      ),
+      BorderSide::Right => (
+        (
+          inner_right,
+          if self.width.right > self.width.top {
+            0.0
+          } else {
+            inner_top
+          },
+        ),
+        (
+          border_box.width,
+          if self.width.right > self.width.bottom {
+            border_box.height
+          } else {
+            inner_bottom
+          },
+        ),
+      ),
+    };
+
+    if end.0 <= start.0 || end.1 <= start.1 {
+      return;
+    }
+
+    path.move_to((offset.x + start.0, offset.y + start.1));
+    path.line_to((offset.x + end.0, offset.y + start.1));
+    path.line_to((offset.x + end.0, offset.y + end.1));
+    path.line_to((offset.x + start.0, offset.y + end.1));
+    path.close();
+  }
+
   /// Appends a clip polygon for one side that follows the rounded inner contour.
   pub fn append_side_clip_polygon_commands_at(
     &self,
@@ -378,7 +489,7 @@ impl BorderProperties {
       return;
     }
 
-    if self.is_zero() {
+    if self.is_zero() || self.collapsed {
       self.append_side_polygon_commands_at(side, path, border_box, offset);
       return;
     }
@@ -1201,4 +1312,63 @@ pub(crate) fn mix_color(color: Color, target: Color, amount: f32) -> Color {
     (color.0[2] as f32 * inverse + target.0[2] as f32 * amount).round() as u8,
     color.0[3],
   ])
+}
+
+#[cfg(test)]
+mod tests {
+  use crate::{
+    geometry::{PathCommand, Point, Rect, Size},
+    layout::border::{BorderProperties, BorderSide},
+  };
+
+  fn collapsed_border() -> BorderProperties {
+    BorderProperties {
+      width: Rect {
+        top: 4.0,
+        right: 1.0,
+        bottom: 1.0,
+        left: 1.0,
+      },
+      collapsed: true,
+      ..BorderProperties::default()
+    }
+  }
+
+  fn xs(side: BorderSide) -> Vec<Point<f32>> {
+    let mut path = Vec::new();
+
+    collapsed_border().append_side_polygon_commands_at(
+      side,
+      &mut path,
+      Size {
+        width: 100.0,
+        height: 50.0,
+      },
+      Point::ZERO,
+    );
+
+    path
+      .into_iter()
+      .filter_map(|command| match command {
+        PathCommand::MoveTo(point) | PathCommand::LineTo(point) => Some(point),
+        _ => None,
+      })
+      .collect()
+  }
+
+  #[test]
+  fn the_wider_side_takes_the_whole_corner() {
+    let top = xs(BorderSide::Top);
+
+    assert!(top.iter().all(|point| point.x == 0.0 || point.x == 100.0));
+    assert!(top.iter().all(|point| point.y == 0.0 || point.y == 4.0));
+  }
+
+  #[test]
+  fn the_narrower_side_starts_after_it() {
+    let left = xs(BorderSide::Left);
+
+    assert!(left.iter().all(|point| point.x == 0.0 || point.x == 1.0));
+    assert!(left.iter().all(|point| point.y == 4.0 || point.y == 49.0));
+  }
 }

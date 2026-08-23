@@ -13,6 +13,7 @@ pub(crate) fn draw_debug_border(canvas: &mut Canvas, layout: Layout, transform: 
     color: Sides([Color([255, 0, 0, 255]); 4]).into(), // red
     radius: Sides([SpacePair::from_single(0.0); 4]),
     image_rendering: ImageScalingAlgorithm::Auto,
+    collapsed: false,
     style: Sides([BorderStyle::Solid; 4]).into(),
     shape: Sides::default(),
   };
@@ -24,6 +25,7 @@ pub(crate) fn draw_debug_border(canvas: &mut Canvas, layout: Layout, transform: 
     color: Sides([Color([0, 255, 0, 255]); 4]).into(), // green
     radius: Sides([SpacePair::from_single(0.0); 4]),
     image_rendering: ImageScalingAlgorithm::Auto,
+    collapsed: false,
     style: Sides([BorderStyle::Solid; 4]).into(),
     shape: Sides::default(),
   };

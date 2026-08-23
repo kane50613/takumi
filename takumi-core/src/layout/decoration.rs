@@ -142,6 +142,7 @@ pub(crate) fn outline_geometry(context: &RenderContext, size: Size<f32>) -> Outl
     image_rendering: style.image_rendering,
     radius: BorderProperties::resolve_radius_part(context, size),
     shape: BorderProperties::resolve_shape_part(context),
+    collapsed: false,
   };
   border.expand_by(Rect {
     top: grow,
