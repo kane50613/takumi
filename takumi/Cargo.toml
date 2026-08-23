@@ -90,6 +90,10 @@ name = "background"
 harness = false
 
 [[bench]]
+name = "cascade"
+harness = false
+
+[[bench]]
 name = "canvas"
 harness = false
 

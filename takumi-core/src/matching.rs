@@ -11,7 +11,7 @@ use selectors::{
   attr::{CaseSensitivity, NamespaceConstraint},
   bloom::BloomFilter,
   matching::*,
-  parser::{AncestorHashes, Selector},
+  parser::{AncestorHashes, Component, Selector},
 };
 use smallvec::SmallVec;
 
@@ -419,6 +419,111 @@ enum SelectorTarget {
 
 /// Matches every rule in `stylesheet` against the tree rooted at `root`,
 /// returning the declaration blocks that apply to each node in tree order.
+/// What a selector's rightmost compound requires of the element it matches.
+///
+/// A rule whose rightmost compound names an id, class or tag can only match an
+/// element carrying that name, so other nodes skip it without running the
+/// matcher. Anything else, a bare `*` or an attribute selector, has to be
+/// considered for every node.
+enum SelectorKey {
+  Id(String),
+  Class(String),
+  /// Lowercased: tag names match case-insensitively.
+  Tag(String),
+  Any,
+}
+
+fn selector_key(selector: &Selector<SelectorImpl>) -> SelectorKey {
+  let mut key = SelectorKey::Any;
+
+  // `iter` walks the rightmost compound and stops at the first combinator.
+  for component in selector.iter() {
+    match component {
+      Component::ID(id) => return SelectorKey::Id(id.to_string()),
+      Component::Class(class) => key = SelectorKey::Class(class.to_string()),
+      Component::LocalName(name) if matches!(key, SelectorKey::Any) => {
+        key = SelectorKey::Tag(name.lower_name.to_ascii_lowercase());
+      }
+      _ => {}
+    }
+  }
+
+  key
+}
+
+/// Rules grouped by what their rightmost compound requires, so a node visits
+/// only the rules that could match it.
+#[derive(Default)]
+struct RuleIndex {
+  by_id: HashMap<String, Vec<usize>>,
+  by_class: HashMap<String, Vec<usize>>,
+  by_tag: HashMap<String, Vec<usize>>,
+  unindexed: Vec<usize>,
+}
+
+impl RuleIndex {
+  fn build(rules: &[&CssRule]) -> Self {
+    let mut index = Self::default();
+
+    for (order, rule) in rules.iter().enumerate() {
+      let keys: SmallVec<[SelectorKey; 4]> =
+        rule.selectors().slice().iter().map(selector_key).collect();
+
+      // A rule with one unindexable selector has to be visited by every node,
+      // so it goes wholly into the unindexed bucket.
+      if keys.iter().any(|key| matches!(key, SelectorKey::Any)) {
+        index.unindexed.push(order);
+        continue;
+      }
+
+      for key in keys {
+        let bucket = match key {
+          SelectorKey::Id(name) => index.by_id.entry(name),
+          SelectorKey::Class(name) => index.by_class.entry(name),
+          SelectorKey::Tag(name) => index.by_tag.entry(name),
+          SelectorKey::Any => unreachable!("handled above"),
+        }
+        .or_default();
+
+        if bucket.last() != Some(&order) {
+          bucket.push(order);
+        }
+      }
+    }
+
+    index
+  }
+
+  /// Rules that could match `node`, in source order.
+  fn candidates(&self, node: &Node, out: &mut Vec<usize>) {
+    out.clear();
+    out.extend_from_slice(&self.unindexed);
+
+    if let Some(id) = node.metadata.id.as_deref()
+      && let Some(rules) = self.by_id.get(id)
+    {
+      out.extend_from_slice(rules);
+    }
+
+    if let Some(classes) = node.metadata.class_name.as_deref() {
+      for class in classes.split_ascii_whitespace() {
+        if let Some(rules) = self.by_class.get(class) {
+          out.extend_from_slice(rules);
+        }
+      }
+    }
+
+    if let Some(tag) = node.metadata.tag_name.as_deref()
+      && let Some(rules) = self.by_tag.get(&tag.to_ascii_lowercase())
+    {
+      out.extend_from_slice(rules);
+    }
+
+    out.sort_unstable();
+    out.dedup();
+  }
+}
+
 pub(crate) fn match_stylesheets_view<'a>(
   root: &Node,
   stylesheet: &'a StyleSheet,
@@ -452,6 +557,9 @@ pub(crate) fn match_stylesheets_view<'a>(
   let mut ancestor_bloom_filter = BloomFilter::new();
   let mut ancestor_stack: Vec<usize> = Vec::new();
   let mut selector_ancestor_hashes_cache: HashMap<(usize, usize), AncestorHashes> = HashMap::new();
+
+  let index = RuleIndex::build(&flattened_rules);
+  let mut candidates = Vec::new();
 
   let mut element_caches = SelectorCaches::default();
   let mut pseudo_caches = SelectorCaches::default();
@@ -491,7 +599,10 @@ pub(crate) fn match_stylesheets_view<'a>(
       MatchingForInvalidation::No,
     );
 
-    for (source_order, &rule) in flattened_rules.iter().enumerate() {
+    index.candidates(arena.nodes[i].node, &mut candidates);
+
+    for &source_order in &candidates {
+      let rule = flattened_rules[source_order];
       let mut best_element: Option<u32> = None;
       let mut best_before: Option<u32> = None;
       let mut best_after: Option<u32> = None;
