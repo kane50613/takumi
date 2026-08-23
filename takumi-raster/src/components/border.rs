@@ -498,6 +498,7 @@ mod tests {
         left: style,
       },
       image_rendering: ImageScalingAlgorithm::Auto,
+      collapsed: false,
       shape: Sides::default(),
     }
   }

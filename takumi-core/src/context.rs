@@ -30,6 +30,10 @@ pub struct RenderContext {
   /// Whether to draw debug borders.
   #[builder(default = false)]
   pub draw_debug_border: bool,
+  /// Whether this box is a cell of a table that collapses its borders. Set
+  /// during lowering, which is the last place a table cell is still one.
+  #[builder(default = false)]
+  pub collapsed_borders: bool,
   /// The resources fetched externally.
   #[builder(default)]
   pub(crate) images: Rc<HashMap<Arc<str>, ImageSource>>,
@@ -59,6 +63,7 @@ impl RenderContext {
       current_color,
       time_ms: parent.time_ms,
       draw_debug_border: parent.draw_debug_border,
+      collapsed_borders: false,
       images: parent.images.clone(),
       sizing,
       stylesheet: parent.stylesheet.clone(),

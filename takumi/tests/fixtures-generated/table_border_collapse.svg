@@ -33,12 +33,9 @@
   </g>
   <rect x="16" y="37" width="282" height="76" fill="#fff"/>
   <rect x="16" y="37" width="125" height="25" fill="#e2e8f0"/>
-  <clipPath id="cp0">
-    <path d="M16 37h125v25h-125v-25Zm1 1h124v24h-124v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp0)">
-    <path d="M16 37h125v1h-124Z" fill="#94a3b8"/>
-    <path d="M16 62v-25l1 1v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M16 37h125v1h-125Z" fill="#94a3b8"/>
+    <path d="M16 38h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
     <use href="#g17" x="25" y="53"/>
@@ -47,13 +44,10 @@
     <use href="#g20" x="48.8" y="53"/>
   </g>
   <rect x="141" y="37" width="157" height="25" fill="#e2e8f0"/>
-  <clipPath id="cp1">
-    <path d="M141 37h157v25h-157v-25Zm1 1h155v24h-155v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp1)">
-    <path d="M141 37h157l-1 1h-155Z" fill="#94a3b8"/>
-    <path d="M298 37v25h-1v-24Z" fill="#94a3b8"/>
-    <path d="M141 62v-25l1 1v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M141 37h157v1h-157Z" fill="#94a3b8"/>
+    <path d="M297 38h1v24h-1Z" fill="#94a3b8"/>
+    <path d="M141 38h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
     <use href="#g21" x="150" y="53"/>
@@ -62,12 +56,9 @@
     <use href="#g17" x="170.09" y="53"/>
     <use href="#g24" x="176.58" y="53"/>
   </g>
-  <clipPath id="cp2">
-    <path d="M16 62h125v25h-125v-25Zm1 1h124v24h-124v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp2)">
-    <path d="M16 62h125v1h-124Z" fill="#94a3b8"/>
-    <path d="M16 87v-25l1 1v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M16 62h125v1h-125Z" fill="#94a3b8"/>
+    <path d="M16 63h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
     <use href="#g18" x="25" y="78"/>
@@ -76,22 +67,16 @@
     <use href="#g27" x="41.67" y="78"/>
     <use href="#g18" x="48.52" y="78"/>
   </g>
-  <clipPath id="cp3">
-    <path d="M141 62h157v25h-157v-25Zm1 1h155v24h-155v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp3)">
-    <path d="M141 62h157l-1 1h-155Z" fill="#94a3b8"/>
-    <path d="M298 62v25h-1v-24Z" fill="#94a3b8"/>
-    <path d="M141 87v-25l1 1v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M141 62h157v1h-157Z" fill="#94a3b8"/>
+    <path d="M297 63h1v24h-1Z" fill="#94a3b8"/>
+    <path d="M141 63h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <use href="#g28" x="150" y="78" fill="#000"/>
-  <clipPath id="cp4">
-    <path d="M16 87h125v26h-125v-26Zm1 1h124v24h-124v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp4)">
-    <path d="M16 87h125v1h-124Z" fill="#94a3b8"/>
-    <path d="M141 113h-125l1-1h124Z" fill="#94a3b8"/>
-    <path d="M16 113v-26l1 1v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M16 87h125v1h-125Z" fill="#94a3b8"/>
+    <path d="M16 112h125v1h-125Z" fill="#94a3b8"/>
+    <path d="M16 88h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
     <use href="#g29" x="25" y="103"/>
@@ -133,12 +118,9 @@
   </g>
   <rect x="308" y="37" width="282" height="78" fill="#fff"/>
   <rect x="308" y="37" width="125" height="25" fill="#e2e8f0"/>
-  <clipPath id="cp5">
-    <path d="M308 37h125v25h-125v-25Zm1 1h124v24h-124v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp5)">
-    <path d="M308 37h125v1h-124Z" fill="#94a3b8"/>
-    <path d="M308 62v-25l1 1v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M308 37h125v1h-125Z" fill="#94a3b8"/>
+    <path d="M308 38h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
     <use href="#g17" x="317" y="53"/>
@@ -147,13 +129,10 @@
     <use href="#g20" x="340.8" y="53"/>
   </g>
   <rect x="433" y="37" width="157" height="25" fill="#e2e8f0"/>
-  <clipPath id="cp6">
-    <path d="M433 37h157v25h-157v-25Zm1 1h155v24h-155v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp6)">
-    <path d="M433 37h157l-1 1h-155Z" fill="#94a3b8"/>
-    <path d="M590 37v25h-1v-24Z" fill="#94a3b8"/>
-    <path d="M433 62v-25l1 1v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M433 37h157v1h-157Z" fill="#94a3b8"/>
+    <path d="M589 38h1v24h-1Z" fill="#94a3b8"/>
+    <path d="M433 38h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
     <use href="#g21" x="442" y="53"/>
@@ -162,12 +141,9 @@
     <use href="#g17" x="462.09" y="53"/>
     <use href="#g24" x="468.58" y="53"/>
   </g>
-  <clipPath id="cp7">
-    <path d="M308 62h125v27h-125v-27Zm1 3h124v24h-124v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp7)">
-    <path d="M308 62h125v3h-124Z" fill="#0f172a"/>
-    <path d="M308 89v-27l1 3v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M308 62h125v3h-125Z" fill="#0f172a"/>
+    <path d="M308 65h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
     <use href="#g18" x="317" y="80"/>
@@ -176,22 +152,16 @@
     <use href="#g27" x="333.67" y="80"/>
     <use href="#g18" x="340.52" y="80"/>
   </g>
-  <clipPath id="cp8">
-    <path d="M433 62h157v27h-157v-27Zm1 3h155v24h-155v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp8)">
-    <path d="M433 62h157l-1 3h-155Z" fill="#0f172a"/>
-    <path d="M590 62v27h-1v-24Z" fill="#94a3b8"/>
-    <path d="M433 89v-27l1 3v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M433 62h157v3h-157Z" fill="#0f172a"/>
+    <path d="M589 65h1v24h-1Z" fill="#94a3b8"/>
+    <path d="M433 65h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <use href="#g28" x="442" y="80" fill="#000"/>
-  <clipPath id="cp9">
-    <path d="M308 89h125v26h-125v-26Zm1 1h124v24h-124v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp9)">
-    <path d="M308 89h125v1h-124Z" fill="#94a3b8"/>
-    <path d="M433 115h-125l1-1h124Z" fill="#94a3b8"/>
-    <path d="M308 115v-26l1 1v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M308 89h125v1h-125Z" fill="#94a3b8"/>
+    <path d="M308 114h125v1h-125Z" fill="#94a3b8"/>
+    <path d="M308 90h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
     <use href="#g29" x="317" y="105"/>
@@ -223,12 +193,9 @@
     <use href="#g11" x="701.4" y="27"/>
   </g>
   <rect x="600" y="37" width="282" height="51" fill="#fff"/>
-  <clipPath id="cp10">
-    <path d="M600 37h156v25h-156v-25Zm1 1h155v24h-155v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp10)">
-    <path d="M600 37h156v1h-155Z" fill="#94a3b8"/>
-    <path d="M600 62v-25l1 1v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M600 37h156v1h-156Z" fill="#94a3b8"/>
+    <path d="M600 38h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
     <use href="#g25" x="609" y="53"/>
@@ -236,12 +203,9 @@
     <use href="#g34" x="618.5" y="53"/>
     <use href="#g24" x="622.76" y="53"/>
   </g>
-  <clipPath id="cp11">
-    <path d="M756 37h126v25h-126v-25Zm0 1h125v24h-125v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp11)">
-    <path d="M756 37h126l-1 1h-125Z" fill="#94a3b8"/>
-    <path d="M882 37v25h-1v-24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M756 37h126v1h-126Z" fill="#94a3b8"/>
+    <path d="M881 38h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
     <use href="#g35" x="764" y="53"/>
@@ -250,13 +214,10 @@
     <use href="#g27" x="777.94" y="53"/>
     <use href="#g24" x="784.44" y="53"/>
   </g>
-  <clipPath id="cp12">
-    <path d="M600 62h156v26h-156v-26Zm1 1h155v24h-155v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp12)">
-    <path d="M600 62h156v1h-155Z" fill="#94a3b8"/>
-    <path d="M756 88h-156l1-1h155Z" fill="#94a3b8"/>
-    <path d="M600 88v-26l1 1v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M600 62h156v1h-156Z" fill="#94a3b8"/>
+    <path d="M600 87h156v1h-156Z" fill="#94a3b8"/>
+    <path d="M600 63h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
     <use href="#g18" x="609" y="78"/>
@@ -295,12 +256,9 @@
     <use href="#g12" x="1033.28" y="27"/>
   </g>
   <rect x="892" y="37" width="282" height="52" fill="#fff"/>
-  <clipPath id="cp13">
-    <path d="M892 37h156v25h-156v-25Zm1 1h155v24h-155v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp13)">
-    <path d="M892 37h156v1h-155Z" fill="#94a3b8"/>
-    <path d="M892 62v-25l1 1v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M892 37h156v1h-156Z" fill="#94a3b8"/>
+    <path d="M892 38h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
     <use href="#g18" x="901" y="53"/>
@@ -309,22 +267,16 @@
     <use href="#g27" x="917.67" y="53"/>
     <use href="#g18" x="924.52" y="53"/>
   </g>
-  <clipPath id="cp14">
-    <path d="M1048 37h126v25h-126v-25Zm1 1h124v24h-124v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp14)">
-    <path d="M1048 37h126l-1 1h-124Z" fill="#94a3b8"/>
-    <path d="M1174 37v25h-1v-24Z" fill="#94a3b8"/>
-    <path d="M1048 62v-25l1 1v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M1048 37h126v1h-126Z" fill="#94a3b8"/>
+    <path d="M1173 38h1v24h-1Z" fill="#94a3b8"/>
+    <path d="M1048 38h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <use href="#g28" x="1057" y="53" fill="#000"/>
-  <clipPath id="cp15">
-    <path d="M892 62h156v27h-156v-27Zm1 2h155v24h-155v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp15)">
-    <path d="M892 62h156v2h-155Z" fill="#dc2626"/>
-    <path d="M1048 89h-156l1-1h155Z" fill="#94a3b8"/>
-    <path d="M892 89v-27l1 2v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M892 62h156v2h-156Z" fill="#dc2626"/>
+    <path d="M892 88h156v1h-156Z" fill="#94a3b8"/>
+    <path d="M892 64h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
     <use href="#g29" x="901" y="79"/>
@@ -332,14 +284,11 @@
     <use href="#g24" x="914.39" y="79"/>
     <use href="#g18" x="918.98" y="79"/>
   </g>
-  <clipPath id="cp16">
-    <path d="M1048 62h126v27h-126v-27Zm1 2h124v24h-124v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp16)">
-    <path d="M1048 62h126l-1 2h-124Z" fill="#dc2626"/>
-    <path d="M1174 62v27l-1-1v-24Z" fill="#94a3b8"/>
-    <path d="M1174 89h-126l1-1h124Z" fill="#94a3b8"/>
-    <path d="M1048 89v-27l1 2v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M1048 62h126v2h-126Z" fill="#dc2626"/>
+    <path d="M1173 64h1v24h-1Z" fill="#94a3b8"/>
+    <path d="M1048 88h126v1h-126Z" fill="#94a3b8"/>
+    <path d="M1048 64h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <use href="#g30" x="1057" y="79" fill="#000"/>
   <g fill="#475569">
@@ -381,12 +330,9 @@
     <use href="#g12" x="220.93" y="187"/>
   </g>
   <rect x="16" y="197" width="282" height="57" fill="#fff"/>
-  <clipPath id="cp17">
-    <path d="M16 197h215v28h-215v-28Zm4 4h211v24h-211v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp17)">
-    <path d="M16 197h215v4h-211Z" fill="#2563eb"/>
-    <path d="M16 225v-28l4 4v24Z" fill="#2563eb"/>
+  <g>
+    <path d="M16 197h215v4h-215Z" fill="#2563eb"/>
+    <path d="M16 201h4v24h-4Z" fill="#2563eb"/>
   </g>
   <g fill="#000">
     <use href="#g39" x="28" y="216"/>
@@ -406,14 +352,11 @@
     <use href="#g17" x="125.48" y="216"/>
     <use href="#g39" x="132.3" y="216"/>
   </g>
-  <clipPath id="cp18">
-    <path d="M231 197h67v57h-67v-57Zm1 4h62v49h-62v-49Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp18)">
-    <path d="M231 197h67l-4 4h-62Z" fill="#2563eb"/>
-    <path d="M298 197v57l-4-4v-49Z" fill="#2563eb"/>
-    <path d="M298 254h-67l1-4h62Z" fill="#2563eb"/>
-    <path d="M231 254v-57l1 4v49Z" fill="#94a3b8"/>
+  <g>
+    <path d="M231 197h67v4h-67Z" fill="#2563eb"/>
+    <path d="M294 201h4v49h-4Z" fill="#2563eb"/>
+    <path d="M231 250h67v4h-67Z" fill="#2563eb"/>
+    <path d="M231 201h1v49h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
     <use href="#g24" x="240" y="216"/>
@@ -421,13 +364,10 @@
     <use href="#g25" x="251.08" y="216"/>
     <use href="#g25" x="254.16" y="216"/>
   </g>
-  <clipPath id="cp19">
-    <path d="M16 225h109v29h-109v-29Zm4 1h105v24h-105v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp19)">
-    <path d="M16 225h109v1h-105Z" fill="#94a3b8"/>
-    <path d="M125 254h-109l4-4h105Z" fill="#2563eb"/>
-    <path d="M16 254v-29l4 1v24Z" fill="#2563eb"/>
+  <g>
+    <path d="M20 225h105v1h-105Z" fill="#94a3b8"/>
+    <path d="M16 250h109v4h-109Z" fill="#2563eb"/>
+    <path d="M16 225h4v25h-4Z" fill="#2563eb"/>
   </g>
   <g fill="#000">
     <use href="#g25" x="28" y="241"/>
@@ -435,13 +375,10 @@
     <use href="#g34" x="37.5" y="241"/>
     <use href="#g24" x="41.76" y="241"/>
   </g>
-  <clipPath id="cp20">
-    <path d="M125 225h106v29h-106v-29Zm1 1h105v24h-105v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp20)">
-    <path d="M125 225h106v1h-105Z" fill="#94a3b8"/>
-    <path d="M231 254h-106l1-4h105Z" fill="#2563eb"/>
-    <path d="M125 254v-29l1 1v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M125 225h106v1h-106Z" fill="#94a3b8"/>
+    <path d="M125 250h106v4h-106Z" fill="#2563eb"/>
+    <path d="M125 226h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
     <use href="#g35" x="134" y="241"/>
@@ -483,12 +420,9 @@
     <use href="#g5" x="486.44" y="187"/>
   </g>
   <rect x="308" y="197" width="282" height="51" fill="#fff"/>
-  <clipPath id="cp21">
-    <path d="M308 197h155v25h-155v-25Zm1 1h154v24h-154v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp21)">
-    <path d="M308 197h155v1h-154Z" fill="#94a3b8"/>
-    <path d="M308 222v-25l1 1v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M308 197h155v1h-155Z" fill="#94a3b8"/>
+    <path d="M308 198h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
     <use href="#g18" x="317" y="213"/>
@@ -497,22 +431,16 @@
     <use href="#g27" x="333.67" y="213"/>
     <use href="#g18" x="340.52" y="213"/>
   </g>
-  <clipPath id="cp22">
-    <path d="M463 197h127v25h-127v-25Zm4 1h122v24h-122v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp22)">
-    <path d="M463 197h127l-1 1h-122Z" fill="#94a3b8"/>
-    <path d="M590 197v25h-1v-24Z" fill="#94a3b8"/>
-    <path d="M463 222v-25l4 1v24Z" fill="#2563eb"/>
+  <g>
+    <path d="M467 197h123v1h-123Z" fill="#94a3b8"/>
+    <path d="M589 198h1v24h-1Z" fill="#94a3b8"/>
+    <path d="M463 197h4v25h-4Z" fill="#2563eb"/>
   </g>
   <use href="#g28" x="475" y="213" fill="#000"/>
-  <clipPath id="cp23">
-    <path d="M308 222h155v26h-155v-26Zm1 1h154v24h-154v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp23)">
-    <path d="M308 222h155v1h-154Z" fill="#94a3b8"/>
-    <path d="M463 248h-155l1-1h154Z" fill="#94a3b8"/>
-    <path d="M308 248v-26l1 1v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M308 222h155v1h-155Z" fill="#94a3b8"/>
+    <path d="M308 247h155v1h-155Z" fill="#94a3b8"/>
+    <path d="M308 223h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
     <use href="#g29" x="317" y="238"/>
@@ -520,14 +448,11 @@
     <use href="#g24" x="330.39" y="238"/>
     <use href="#g18" x="334.98" y="238"/>
   </g>
-  <clipPath id="cp24">
-    <path d="M463 222h127v26h-127v-26Zm4 1h122v24h-122v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp24)">
-    <path d="M463 222h127l-1 1h-122Z" fill="#94a3b8"/>
-    <path d="M590 222v26l-1-1v-24Z" fill="#94a3b8"/>
-    <path d="M590 248h-127l4-1h122Z" fill="#94a3b8"/>
-    <path d="M463 248v-26l4 1v24Z" fill="#2563eb"/>
+  <g>
+    <path d="M467 222h123v1h-123Z" fill="#94a3b8"/>
+    <path d="M589 223h1v24h-1Z" fill="#94a3b8"/>
+    <path d="M467 247h123v1h-123Z" fill="#94a3b8"/>
+    <path d="M463 222h4v26h-4Z" fill="#2563eb"/>
   </g>
   <use href="#g30" x="475" y="238" fill="#000"/>
   <g fill="#475569">
@@ -555,10 +480,10 @@
     <use href="#g11" x="725.51" y="187"/>
   </g>
   <rect x="600" y="197" width="282" height="54" fill="#fff"/>
-  <clipPath id="cp25">
+  <clipPath id="cp0">
     <path d="M600 197h120v26h-120v-26Zm2 2h118v24h-118v-24Z" clip-rule="evenodd"/>
   </clipPath>
-  <g clip-path="url(#cp25)">
+  <g clip-path="url(#cp0)">
     <path d="M601 198 720 198" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="0 4.024" stroke-linecap="round"/>
     <path d="M601 198 601 223" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="0 3.823" stroke-linecap="round"/>
   </g>
@@ -569,10 +494,10 @@
     <use href="#g20" x="631.66" y="214"/>
     <use href="#g43" x="638.27" y="214"/>
   </g>
-  <clipPath id="cp26">
+  <clipPath id="cp1">
     <path d="M720 197h162v26h-162v-26Zm2 2h158v24h-158v-24Z" clip-rule="evenodd"/>
   </clipPath>
-  <g clip-path="url(#cp26)">
+  <g clip-path="url(#cp1)">
     <path d="M721 198 881 198" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 4.267"/>
     <path d="M881 198 881 223" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 3.5"/>
     <path d="M721 198 721 223" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 3.5"/>
@@ -585,13 +510,10 @@
     <use href="#g20" x="756.51" y="214"/>
     <use href="#g43" x="763.12" y="214"/>
   </g>
-  <clipPath id="cp27">
-    <path d="M600 223h120v28h-120v-28Zm2 2h118v24h-118v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp27)">
-    <path d="M600 223h120v2h-118Z" fill="#94a3b8"/>
-    <path d="M720 251h-120l2-2h118Z" fill="#94a3b8"/>
-    <path d="M600 251v-28l2 2v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M600 223h120v2h-120Z" fill="#94a3b8"/>
+    <path d="M600 249h120v2h-120Z" fill="#94a3b8"/>
+    <path d="M600 225h2v24h-2Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
     <use href="#g39" x="610" y="240"/>
@@ -648,12 +570,9 @@
     <use href="#g11" x="1095.14" y="187"/>
   </g>
   <rect x="892" y="197" width="282" height="54" fill="#fff"/>
-  <clipPath id="cp28">
-    <path d="M892 197h116v26h-116v-26Zm2 2h114v24h-114v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp28)">
-    <path d="M892 197h116v2h-114Z" fill="#2563eb"/>
-    <path d="M892 223v-26l2 2v24Z" fill="#2563eb"/>
+  <g>
+    <path d="M892 197h116v2h-116Z" fill="#2563eb"/>
+    <path d="M892 199h2v24h-2Z" fill="#2563eb"/>
   </g>
   <g fill="#000">
     <use href="#g21" x="902" y="214"/>
@@ -665,13 +584,10 @@
     <use href="#g17" x="937.1" y="214"/>
     <use href="#g39" x="943.93" y="214"/>
   </g>
-  <clipPath id="cp29">
-    <path d="M1008 197h166v26h-166v-26Zm1 2h163v24h-163v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp29)">
-    <path d="M1008 197h166l-2 2h-163Z" fill="#2563eb"/>
-    <path d="M1174 197v26h-2v-24Z" fill="#2563eb"/>
-    <path d="M1008 223v-26l1 2v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M1008 197h166v2h-166Z" fill="#2563eb"/>
+    <path d="M1172 199h2v24h-2Z" fill="#2563eb"/>
+    <path d="M1008 199h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
     <use href="#g35" x="1017" y="214"/>
@@ -682,13 +598,10 @@
     <use href="#g17" x="1053.18" y="214"/>
     <use href="#g39" x="1060.01" y="214"/>
   </g>
-  <clipPath id="cp30">
-    <path d="M892 223h116v28h-116v-28Zm2 2h114v24h-114v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp30)">
-    <path d="M892 223h116v2h-114Z" fill="#dc2626"/>
-    <path d="M1008 251h-116l2-2h114Z" fill="#2563eb"/>
-    <path d="M892 251v-28l2 2v24Z" fill="#2563eb"/>
+  <g>
+    <path d="M892 223h116v2h-116Z" fill="#dc2626"/>
+    <path d="M892 249h116v2h-116Z" fill="#2563eb"/>
+    <path d="M892 225h2v24h-2Z" fill="#2563eb"/>
   </g>
   <g fill="#000">
     <use href="#g18" x="902" y="240"/>
@@ -697,14 +610,11 @@
     <use href="#g27" x="918.67" y="240"/>
     <use href="#g18" x="925.52" y="240"/>
   </g>
-  <clipPath id="cp31">
-    <path d="M1008 223h166v28h-166v-28Zm1 2h163v24h-163v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp31)">
-    <path d="M1008 223h166l-2 2h-163Z" fill="#16a34a"/>
-    <path d="M1174 223v28l-2-2v-24Z" fill="#2563eb"/>
-    <path d="M1174 251h-166l1-2h163Z" fill="#2563eb"/>
-    <path d="M1008 251v-28l1 2v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M1008 223h166v2h-166Z" fill="#16a34a"/>
+    <path d="M1172 225h2v24h-2Z" fill="#2563eb"/>
+    <path d="M1008 249h166v2h-166Z" fill="#2563eb"/>
+    <path d="M1008 225h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <use href="#g28" x="1017" y="240" fill="#000"/>
   <g fill="#475569">
@@ -738,12 +648,9 @@
     <use href="#g12" x="184.21" y="347"/>
   </g>
   <rect x="16" y="357" width="282" height="78" fill="#fff"/>
-  <clipPath id="cp32">
-    <path d="M16 357h161v50h-161v-50Zm1 1h160v49h-160v-49Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp32)">
-    <path d="M16 357h161v1h-160Z" fill="#94a3b8"/>
-    <path d="M16 407v-50l1 1v49Z" fill="#94a3b8"/>
+  <g>
+    <path d="M16 357h161v1h-161Z" fill="#94a3b8"/>
+    <path d="M16 358h1v49h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
     <use href="#g24" x="25" y="373"/>
@@ -751,13 +658,10 @@
     <use href="#g25" x="36.08" y="373"/>
     <use href="#g25" x="39.16" y="373"/>
   </g>
-  <clipPath id="cp33">
-    <path d="M177 357h121v25h-121v-25Zm1 1h119v24h-119v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp33)">
-    <path d="M177 357h121l-1 1h-119Z" fill="#94a3b8"/>
-    <path d="M298 357v25h-1v-24Z" fill="#94a3b8"/>
-    <path d="M177 382v-25l1 1v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M177 357h121v1h-121Z" fill="#94a3b8"/>
+    <path d="M297 358h1v24h-1Z" fill="#94a3b8"/>
+    <path d="M177 358h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
     <use href="#g18" x="186" y="373"/>
@@ -766,13 +670,10 @@
     <use href="#g27" x="202.67" y="373"/>
     <use href="#g18" x="209.52" y="373"/>
   </g>
-  <clipPath id="cp34">
-    <path d="M177 382h121v25h-121v-25Zm1 1h119v24h-119v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp34)">
-    <path d="M177 382h121l-1 1h-119Z" fill="#94a3b8"/>
-    <path d="M298 382v25h-1v-24Z" fill="#94a3b8"/>
-    <path d="M177 407v-25l1 1v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M177 382h121v1h-121Z" fill="#94a3b8"/>
+    <path d="M297 383h1v24h-1Z" fill="#94a3b8"/>
+    <path d="M177 383h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
     <use href="#g29" x="186" y="398"/>
@@ -780,13 +681,10 @@
     <use href="#g24" x="199.39" y="398"/>
     <use href="#g18" x="203.98" y="398"/>
   </g>
-  <clipPath id="cp35">
-    <path d="M16 407h161v28h-161v-28Zm1 3h160v24h-160v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp35)">
-    <path d="M16 407h161v3h-160Z" fill="#dc2626"/>
-    <path d="M177 435h-161l1-1h160Z" fill="#94a3b8"/>
-    <path d="M16 435v-28l1 3v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M16 407h161v3h-161Z" fill="#dc2626"/>
+    <path d="M16 434h161v1h-161Z" fill="#94a3b8"/>
+    <path d="M16 410h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
     <use href="#g37" x="25" y="425"/>
@@ -795,14 +693,11 @@
     <use href="#g19" x="48.98" y="425"/>
     <use href="#g18" x="59.38" y="425"/>
   </g>
-  <clipPath id="cp36">
-    <path d="M177 407h121v28h-121v-28Zm1 3h119v24h-119v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp36)">
-    <path d="M177 407h121l-1 3h-119Z" fill="#dc2626"/>
-    <path d="M298 407v28l-1-1v-24Z" fill="#94a3b8"/>
-    <path d="M298 435h-121l1-1h119Z" fill="#94a3b8"/>
-    <path d="M177 435v-28l1 3v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M177 407h121v3h-121Z" fill="#dc2626"/>
+    <path d="M297 410h1v24h-1Z" fill="#94a3b8"/>
+    <path d="M177 434h121v1h-121Z" fill="#94a3b8"/>
+    <path d="M177 410h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <use href="#g30" x="186" y="425" fill="#000"/>
   <g fill="#475569">
@@ -842,12 +737,9 @@
     <use href="#g11" x="508.7" y="347"/>
   </g>
   <rect x="308" y="357" width="282" height="50" fill="#fff"/>
-  <clipPath id="cp37">
-    <path d="M308 357h156v25h-156v-25Zm1 1h155v24h-155v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp37)">
-    <path d="M308 357h156v1h-155Z" fill="#94a3b8"/>
-    <path d="M308 382v-25l1 1v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M308 357h156v1h-156Z" fill="#94a3b8"/>
+    <path d="M308 358h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
     <use href="#g18" x="317" y="373"/>
@@ -856,21 +748,15 @@
     <use href="#g27" x="333.67" y="373"/>
     <use href="#g18" x="340.52" y="373"/>
   </g>
-  <clipPath id="cp38">
-    <path d="M464 357h126v25h-126v-25Zm1 1h124v24h-124v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp38)">
-    <path d="M464 357h126l-1 1h-124Z" fill="#94a3b8"/>
-    <path d="M590 357v25h-1v-24Z" fill="#94a3b8"/>
-    <path d="M464 382v-25l1 1v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M464 357h126v1h-126Z" fill="#94a3b8"/>
+    <path d="M589 358h1v24h-1Z" fill="#94a3b8"/>
+    <path d="M464 358h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <use href="#g28" x="473" y="373" fill="#000"/>
-  <clipPath id="cp39">
-    <path d="M308 382h156v25h-156v-25Zm1 0h155v24h-155v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp39)">
-    <path d="M464 407h-156l1-1h155Z" fill="#94a3b8"/>
-    <path d="M308 407v-25h1v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M308 406h156v1h-156Z" fill="#94a3b8"/>
+    <path d="M308 382h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
     <use href="#g29" x="317" y="397"/>
@@ -878,13 +764,10 @@
     <use href="#g24" x="330.39" y="397"/>
     <use href="#g18" x="334.98" y="397"/>
   </g>
-  <clipPath id="cp40">
-    <path d="M464 382h126v25h-126v-25Zm1 0h124v24h-124v-24Z" clip-rule="evenodd"/>
-  </clipPath>
-  <g clip-path="url(#cp40)">
-    <path d="M590 382v25l-1-1v-24Z" fill="#94a3b8"/>
-    <path d="M590 407h-126l1-1h124Z" fill="#94a3b8"/>
-    <path d="M464 407v-25h1v24Z" fill="#94a3b8"/>
+  <g>
+    <path d="M589 382h1v24h-1Z" fill="#94a3b8"/>
+    <path d="M464 406h126v1h-126Z" fill="#94a3b8"/>
+    <path d="M464 382h1v24h-1Z" fill="#94a3b8"/>
   </g>
   <use href="#g30" x="473" y="397" fill="#000"/>
   <g fill="#475569">
