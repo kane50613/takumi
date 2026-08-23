@@ -257,12 +257,11 @@ impl Canvas {
   }
 
   pub(crate) fn into_inner(self) -> Result<RgbaImage> {
-    RgbaImage::from_raw(
-      self.image.width(),
-      self.image.height(),
-      self.image.take_demultiplied(),
-    )
-    .ok_or_else(|| {
+    let (width, height) = (self.image.width(), self.image.height());
+    let mut data = self.image.take();
+    demultiply_rgba_in_place(&mut data);
+
+    RgbaImage::from_raw(width, height, data).ok_or_else(|| {
       Error::encode(ImageError::Parameter(ParameterError::from_kind(
         ParameterErrorKind::DimensionMismatch,
       )))
@@ -525,5 +524,64 @@ mod tests {
 
     assert_eq!(painted.dimensions(), (4, 4));
     assert!(painted.as_raw().iter().all(|byte| *byte == 0xff));
+  }
+}
+
+/// Undoes premultiplication in place.
+///
+/// Rounds half away from zero in integer arithmetic. tiny-skia divides in
+/// `f64`, which lands a hair under the halfway point for some values and rounds
+/// them down; integers make the result identical on every target.
+fn demultiply_rgba_in_place(data: &mut [u8]) {
+  for pixel in data.as_chunks_mut::<4>().0 {
+    let alpha = pixel[3] as u32;
+    if alpha == u8::MAX as u32 || alpha == 0 {
+      continue;
+    }
+
+    let divisor = alpha * 2;
+    for channel in &mut pixel[..3] {
+      *channel = ((*channel as u32 * 510 + alpha) / divisor) as u8;
+    }
+  }
+}
+
+#[cfg(test)]
+mod demultiply_tests {
+  use tiny_skia::PremultipliedColorU8;
+
+  use super::demultiply_rgba_in_place;
+
+  /// Integer rounding may differ from tiny-skia's float division, but only
+  /// where the float lands within a rounding step of the true value.
+  #[test]
+  fn stays_within_one_step_of_tiny_skia() {
+    for alpha in 0..=u8::MAX {
+      for channel in 0..=alpha {
+        let mut pixel = [channel, channel, channel, alpha];
+        demultiply_rgba_in_place(&mut pixel);
+
+        let float = PremultipliedColorU8::from_rgba(channel, channel, channel, alpha)
+          .expect("a legal premultiplied colour")
+          .demultiply();
+
+        assert!(
+          pixel[0].abs_diff(float.red()) <= 1,
+          "channel {channel} at alpha {alpha}: {} vs {}",
+          pixel[0],
+          float.red()
+        );
+        assert_eq!(pixel[3], alpha);
+      }
+    }
+  }
+
+  /// The exact halfway case: 11/66 is 42.5, which rounds up.
+  #[test]
+  fn rounds_a_half_step_up() {
+    let mut pixel = [11, 11, 11, 66];
+    demultiply_rgba_in_place(&mut pixel);
+
+    assert_eq!(pixel[0], 43);
   }
 }

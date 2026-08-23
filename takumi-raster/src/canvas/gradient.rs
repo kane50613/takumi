@@ -301,6 +301,7 @@ mod tests {
   use super::*;
   use crate::{
     Canvas, Fonts, RenderContext, Result, blend_pixel,
+    canvas::demultiply_rgba_in_place,
     style::{
       Angle, Color, ColorInterpolationMethod, ConicGradient, FromCssStr, GradientStop, Length,
       LinearGradient, PositionValue, RadialGradient, SizingContext, StopPosition,
@@ -361,8 +362,12 @@ mod tests {
         height: tile.height(),
       },
       |x, y| {
-        let color = tile.sample_pixel(x, y).demultiply();
-        Rgba([color.red(), color.green(), color.blue(), color.alpha()])
+        // The canvas demultiplies on the way out, so the reference has to use
+        // the same rounding or this compares two conversions, not two paths.
+        let color = tile.sample_pixel(x, y);
+        let mut pixel = [color.red(), color.green(), color.blue(), color.alpha()];
+        demultiply_rgba_in_place(&mut pixel);
+        Rgba(pixel)
       },
     );
 
