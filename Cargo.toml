@@ -171,6 +171,9 @@ codegen-units = 1
 strip = "debuginfo"
 opt-level = "s"
 
+[profile.release.package."takumi-pdf-wasm"]
+opt-level = "s"
+
 [profile.release.package."takumi-bindings-common"]
 opt-level = "z"
 
