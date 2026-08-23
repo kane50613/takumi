@@ -692,7 +692,7 @@ fn decode_webp(bytes: &[u8]) -> ImageResult<ImageBuffer> {
   }
 
   let mut rgba = Vec::with_capacity(width as usize * height as usize * 4);
-  for rgb in image_data.chunks_exact(3) {
+  for rgb in image_data.as_chunks::<3>().0 {
     rgba.extend_from_slice(&[rgb[0], rgb[1], rgb[2], u8::MAX]);
   }
 
@@ -947,7 +947,7 @@ pub(crate) fn decode_webp_frames(
 }
 
 /// The first frame, for the still-image decode paths.
-#[cfg(feature = "webp")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "webp"))]
 fn decode_animated_webp_first_frame(bytes: &[u8]) -> ImageResult<ImageBuffer> {
   let mut first = None;
   decode_webp_frames(bytes, 0, Some(1), None, |frame| first = Some(frame))?;
