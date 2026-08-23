@@ -221,6 +221,46 @@ fn paged_table() {
   });
 }
 
+/// CSS 2.2 §17.6.2: a collapsing table paints one border per shared line, the
+/// wider one takes the intersection, and `hidden` clears the line. The last
+/// table pins the naive edge: a spanning cell resolves one winner for its
+/// whole side, so the 4px border under one column reaches both segments.
+#[test]
+fn a_collapsing_table_paints_one_border_per_line() {
+  run_pdf_fixture("collapsed-table", |fonts| {
+    let cell = "border: 1px solid #94a3b8; padding: 4px 8px";
+    let html = format!(
+      r#"<div style="font-size: 12px; color: #141414; display: flex; flex-direction: column; gap: 16px">
+        <table style="border-collapse: collapse">
+          <thead><tr><th style="{cell}; border-bottom-width: 3px; background: #e2e8f0">Name</th><th style="{cell}; border-bottom-width: 3px; background: #e2e8f0">Qty</th></tr></thead>
+          <tbody>
+            <tr><td style="{cell}">alpha</td><td style="{cell}">1</td></tr>
+            <tr style="border-top: 2px solid #dc2626"><td style="{cell}">beta</td><td style="{cell}">2</td></tr>
+          </tbody>
+        </table>
+        <table style="border-collapse: collapse; border: 4px solid #2563eb">
+          <tr><td style="{cell}" colspan="2">spans both columns</td><td style="{cell}" rowspan="2">tall</td></tr>
+          <tr><td style="{cell}">left</td><td style="{cell}; border-right-style: hidden">right</td></tr>
+        </table>
+        <table style="border-collapse: collapse">
+          <tr><td style="{cell}; border-bottom: 4px solid #dc2626">thick</td><td style="{cell}">thin</td></tr>
+          <tr><td style="{cell}" colspan="2">one winner spans both segments</td></tr>
+        </table>
+      </div>"#
+    );
+
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse collapsed table"))
+      .page(PageOptions {
+        width: 300.0,
+        height: 320.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
 /// css-tables-3 §repeated-headers: every page that starts inside the table's
 /// body paints the header rows again.
 #[test]
