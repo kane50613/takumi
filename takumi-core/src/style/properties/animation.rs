@@ -5,8 +5,10 @@ use typed_builder::TypedBuilder;
 
 use crate::style::{
   CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
-  ToCss, declare_enum_from_css_impl, next_is_comma, properties::write_css_string,
-  tw::TailwindPropertyParser, unexpected_token,
+  ToCss, declare_enum_from_css_impl, next_is_comma,
+  properties::write_css_string,
+  tw::{TailwindPropertyParser, Theme},
+  unexpected_token,
 };
 
 /// Implements `FromCss` for a `Box<[T]>` animation list type as a comma-separated list of `$elem`.
@@ -444,7 +446,7 @@ impl TailwindPropertyParser for Animations {
     }
   }
 
-  fn parse_tw_with_arbitrary(token: &str) -> Option<Self> {
+  fn parse_tw_with_arbitrary(token: &str, _theme: &Theme) -> Option<Self> {
     if let Some(value) = token
       .strip_prefix('[')
       .and_then(|value| value.strip_suffix(']'))
@@ -985,7 +987,7 @@ mod tests {
   #[test]
   fn parse_tailwind_animation_arbitrary_value() {
     assert_eq!(
-      Animations::parse_tw_with_arbitrary("[wiggle_1s_ease-in-out_infinite]"),
+      Animations::parse_tw_with_arbitrary("[wiggle_1s_ease-in-out_infinite]", &Theme::default()),
       Some(Box::from([Animation {
         duration: AnimationTime::from_milliseconds(1000.0),
         timing_function: AnimationTimingFunction::EaseInOut,

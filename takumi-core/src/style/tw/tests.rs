@@ -3,10 +3,18 @@ use std::assert_matches;
 use super::*;
 use crate::style::{ComputedStyle, LonghandId, Style, properties::BackgroundImage};
 
+fn parse_property(token: &str) -> Option<TailwindProperty> {
+  TailwindProperty::parse(token, &Theme::default())
+}
+
+fn parse_value(token: &str) -> Option<TailwindValue> {
+  TailwindValue::parse(token, &Theme::default())
+}
+
 #[test]
 fn test_box_sizing() {
   assert_eq!(
-    TailwindProperty::parse("box-border"),
+    parse_property("box-border"),
     Some(TailwindProperty::BoxSizing(BoxSizing::BorderBox))
   );
 }
@@ -14,15 +22,15 @@ fn test_box_sizing() {
 #[test]
 fn test_parse_width() {
   assert_eq!(
-    TailwindProperty::parse("w-64"),
+    parse_property("w-64"),
     Some(TailwindProperty::Width(Length::from_spacing(64.0)))
   );
   assert_eq!(
-    TailwindProperty::parse("h-32"),
+    parse_property("h-32"),
     Some(TailwindProperty::Height(Length::from_spacing(32.0)))
   );
   assert_eq!(
-    TailwindProperty::parse("justify-self-center"),
+    parse_property("justify-self-center"),
     Some(TailwindProperty::JustifySelf(AlignItems::Center))
   );
 }
@@ -30,7 +38,7 @@ fn test_parse_width() {
 #[test]
 fn test_parse_color() {
   assert_eq!(
-    TailwindProperty::parse("text-black/30"),
+    parse_property("text-black/30"),
     Some(TailwindProperty::Color(ColorInput::Value(Color([
       0,
       0,
@@ -61,24 +69,20 @@ fn test_parse_red_500_color_utilities() {
     ),
   ];
   for (input, expected) in cases {
-    assert_eq!(
-      TailwindProperty::parse(input),
-      Some(expected.clone()),
-      "{input}"
-    );
+    assert_eq!(parse_property(input), Some(expected.clone()), "{input}");
   }
 }
 
 #[test]
 fn test_parse_text_decoration_lines() {
   assert_eq!(
-    TailwindProperty::parse("underline"),
+    parse_property("underline"),
     Some(TailwindProperty::TextDecorationLine(
       TextDecorationLines::UNDERLINE
     ))
   );
   assert_eq!(
-    TailwindProperty::parse("no-underline"),
+    parse_property("no-underline"),
     Some(TailwindProperty::TextDecorationLine(
       TextDecorationLines::empty()
     ))
@@ -88,7 +92,7 @@ fn test_parse_text_decoration_lines() {
 #[test]
 fn test_parse_arbitrary_color() {
   assert_eq!(
-    TailwindProperty::parse("text-[rgb(0, 191, 255)]"),
+    parse_property("text-[rgb(0, 191, 255)]"),
     Some(TailwindProperty::Color(ColorInput::Value(Color([
       0, 191, 255, 255
     ]))))
@@ -98,7 +102,7 @@ fn test_parse_arbitrary_color() {
 #[test]
 fn test_parse_arbitrary_mask_image_url() {
   assert_eq!(
-    TailwindProperty::parse("mask-[url('https://example.com/logo.svg')]"),
+    parse_property("mask-[url('https://example.com/logo.svg')]"),
     Some(TailwindProperty::MaskImage(BackgroundImage::Url(
       "https://example.com/logo.svg".into()
     )))
@@ -146,7 +150,7 @@ fn test_decode_arbitrary_value() {
 #[test]
 fn test_extract_arbitrary_value_preserves_url_underscores() {
   assert_eq!(
-    TailwindProperty::parse("mask-[url('https://example.com/my_logo.svg')]"),
+    parse_property("mask-[url('https://example.com/my_logo.svg')]"),
     Some(TailwindProperty::MaskImage(BackgroundImage::Url(
       "https://example.com/my_logo.svg".into()
     )))
@@ -159,7 +163,7 @@ fn test_parse_value_arbitrary_url_with_scheme_colon() {
     TailwindProperty::MaskImage(BackgroundImage::Url("https://example.com/a.svg".into()));
 
   assert_eq!(
-    TailwindValue::parse("mask-[url('https://example.com/a.svg')]"),
+    parse_value("mask-[url('https://example.com/a.svg')]"),
     Some(TailwindValue {
       property: TailwindProperty::MaskImage(BackgroundImage::Url(
         "https://example.com/a.svg".into(),
@@ -170,7 +174,7 @@ fn test_parse_value_arbitrary_url_with_scheme_colon() {
   );
 
   assert_eq!(
-    TailwindValue::parse("md:mask-[url('https://example.com/a.svg')]"),
+    parse_value("md:mask-[url('https://example.com/a.svg')]"),
     Some(TailwindValue {
       property: url_image,
       breakpoint: Some(Breakpoint(Length::Rem(48.0))),
@@ -182,7 +186,7 @@ fn test_parse_value_arbitrary_url_with_scheme_colon() {
 #[test]
 fn test_parse_arbitrary_flex_with_spaces() {
   assert_eq!(
-    TailwindProperty::parse("flex-[3_1_auto]"),
+    parse_property("flex-[3_1_auto]"),
     Some(TailwindProperty::Flex(Flex {
       grow: 3.0,
       shrink: 1.0,
@@ -194,7 +198,7 @@ fn test_parse_arbitrary_flex_with_spaces() {
 #[test]
 fn test_parse_tailwind_animation_preset() {
   assert_matches!(
-    TailwindProperty::parse("animate-spin"),
+    parse_property("animate-spin"),
     Some(TailwindProperty::Animation(animations))
       if animations.as_ref() == [Animation {
         duration: AnimationTime::from_milliseconds(1000.0),
@@ -209,7 +213,7 @@ fn test_parse_tailwind_animation_preset() {
 #[test]
 fn test_parse_tailwind_animation_arbitrary_value() {
   assert_matches!(
-    TailwindProperty::parse("animate-[wiggle_1s_ease-in-out_infinite]"),
+    parse_property("animate-[wiggle_1s_ease-in-out_infinite]"),
     Some(TailwindProperty::Animation(animations))
       if animations.as_ref() == [Animation {
         duration: AnimationTime::from_milliseconds(1000.0),
@@ -224,7 +228,7 @@ fn test_parse_tailwind_animation_arbitrary_value() {
 #[test]
 fn test_parse_negative_margin() {
   assert_eq!(
-    TailwindProperty::parse("-ml-4"),
+    parse_property("-ml-4"),
     Some(TailwindProperty::MarginLeft(Length::from_spacing(-4.0)))
   );
 }
@@ -232,11 +236,11 @@ fn test_parse_negative_margin() {
 #[test]
 fn test_parse_border_radius() {
   assert_eq!(
-    TailwindProperty::parse("rounded-xs"),
+    parse_property("rounded-xs"),
     Some(TailwindProperty::Rounded(TwRounded(Length::Rem(0.125))))
   );
   assert_eq!(
-    TailwindProperty::parse("rounded-full"),
+    parse_property("rounded-full"),
     Some(TailwindProperty::Rounded(TwRounded(Length::Px(9999.0))))
   );
 }
@@ -244,7 +248,7 @@ fn test_parse_border_radius() {
 #[test]
 fn test_parse_font_size_with_arbitrary_line_height() {
   assert_eq!(
-    TailwindProperty::parse("text-base/[12.34]"),
+    parse_property("text-base/[12.34]"),
     Some(TailwindProperty::FontSize(TwFontSize {
       font_size: (Length::Rem(1.0).into()),
       line_height: Some(LineHeight::Unitless(12.34)),
@@ -255,47 +259,47 @@ fn test_parse_font_size_with_arbitrary_line_height() {
 #[test]
 fn test_parse_border_width() {
   assert_eq!(
-    TailwindProperty::parse("border"),
+    parse_property("border"),
     Some(TailwindProperty::BorderDefault)
   );
   assert_eq!(
-    TailwindProperty::parse("border-b"),
+    parse_property("border-b"),
     Some(TailwindProperty::BorderBottomWidth(LineWidth::Length(
       Length::Px(1.0)
     )))
   );
   assert_eq!(
-    TailwindProperty::parse("border-y"),
+    parse_property("border-y"),
     Some(TailwindProperty::BorderYWidth(LineWidth::Length(
       Length::Px(1.0)
     )))
   );
   assert_eq!(
-    TailwindProperty::parse("border-t-2"),
+    parse_property("border-t-2"),
     Some(TailwindProperty::BorderTopWidth(LineWidth::Length(
       Length::Px(2.0)
     )))
   );
   assert_eq!(
-    TailwindProperty::parse("border-x-4"),
+    parse_property("border-x-4"),
     Some(TailwindProperty::BorderXWidth(LineWidth::Length(
       Length::Px(4.0)
     )))
   );
   assert_eq!(
-    TailwindProperty::parse("border-solid"),
+    parse_property("border-solid"),
     Some(TailwindProperty::BorderStyle(BorderStyle::Solid))
   );
   assert_eq!(
-    TailwindProperty::parse("border-dashed"),
+    parse_property("border-dashed"),
     Some(TailwindProperty::BorderStyle(BorderStyle::Dashed))
   );
   assert_eq!(
-    TailwindProperty::parse("border-dotted"),
+    parse_property("border-dotted"),
     Some(TailwindProperty::BorderStyle(BorderStyle::Dotted))
   );
   assert_eq!(
-    TailwindProperty::parse("border-none"),
+    parse_property("border-none"),
     Some(TailwindProperty::BorderStyle(BorderStyle::None))
   );
 }
@@ -303,37 +307,37 @@ fn test_parse_border_width() {
 #[test]
 fn test_parse_outline() {
   assert_eq!(
-    TailwindProperty::parse("outline"),
+    parse_property("outline"),
     Some(TailwindProperty::OutlineDefault)
   );
   assert_eq!(
-    TailwindProperty::parse("outline-2"),
+    parse_property("outline-2"),
     Some(TailwindProperty::OutlineWidth(LineWidth::Length(
       Length::Px(2.0)
     )))
   );
   assert_eq!(
-    TailwindProperty::parse("outline-red-500"),
+    parse_property("outline-red-500"),
     Some(TailwindProperty::OutlineColor(ColorInput::Value(Color([
       251, 44, 54, 255
     ]))))
   );
   assert_eq!(
-    TailwindProperty::parse("outline-solid"),
+    parse_property("outline-solid"),
     Some(TailwindProperty::OutlineStyle(BorderStyle::Solid))
   );
   assert_eq!(
-    TailwindProperty::parse("outline-dashed"),
+    parse_property("outline-dashed"),
     Some(TailwindProperty::OutlineStyle(BorderStyle::Dashed))
   );
   assert_eq!(
-    TailwindProperty::parse("outline-offset-4"),
+    parse_property("outline-offset-4"),
     Some(TailwindProperty::OutlineOffset(LineWidth::Length(
       Length::Px(4.0)
     )))
   );
   assert_eq!(
-    TailwindProperty::parse("outline-none"),
+    parse_property("outline-none"),
     Some(TailwindProperty::OutlineStyle(BorderStyle::None))
   );
 }
@@ -341,7 +345,7 @@ fn test_parse_outline() {
 #[test]
 fn test_parse_col_end() {
   assert_eq!(
-    TailwindProperty::parse("col-end-1"),
+    parse_property("col-end-1"),
     Some(TailwindProperty::GridColumnEnd(GridPlacement::Line(1)))
   );
 }
@@ -349,7 +353,7 @@ fn test_parse_col_end() {
 #[test]
 fn test_grid_column_start_emits_only_start_longhand() {
   let values = TailwindValues::from_str("col-start-2").expect("tailwind values should parse");
-  let declarations = values.into_declaration_block(Viewport::new((100, 100)));
+  let declarations = values.into_declaration_block(Viewport::new((100, 100)), &Theme::default());
 
   assert_eq!(
     declarations.iter().collect::<Vec<_>>(),
@@ -360,7 +364,7 @@ fn test_grid_column_start_emits_only_start_longhand() {
 #[test]
 fn test_grid_row_end_emits_only_end_longhand() {
   let values = TailwindValues::from_str("row-end-3").expect("tailwind values should parse");
-  let declarations = values.into_declaration_block(Viewport::new((100, 100)));
+  let declarations = values.into_declaration_block(Viewport::new((100, 100)), &Theme::default());
 
   assert_eq!(
     declarations.iter().collect::<Vec<_>>(),
@@ -372,7 +376,7 @@ fn test_grid_row_end_emits_only_end_longhand() {
 fn test_grid_longhand_importance_is_tracked_per_side() {
   let values =
     TailwindValues::from_str("col-end-3 !col-start-2").expect("tailwind values should parse");
-  let declarations = values.into_declaration_block(Viewport::new((100, 100)));
+  let declarations = values.into_declaration_block(Viewport::new((100, 100)), &Theme::default());
 
   assert_eq!(
     declarations.iter().collect::<Vec<_>>(),
@@ -409,11 +413,7 @@ fn test_parse_overflow_clip() {
     ),
   ];
   for (input, expected) in cases {
-    assert_eq!(
-      TailwindProperty::parse(input),
-      Some(expected.clone()),
-      "{input}"
-    );
+    assert_eq!(parse_property(input), Some(expected.clone()), "{input}");
   }
 }
 
@@ -503,7 +503,7 @@ fn test_comprehensive_mappings() {
 
   for class in should_parse {
     assert!(
-      TailwindProperty::parse(class).is_some(),
+      parse_property(class).is_some(),
       "Expected '{}' to parse successfully",
       class
     );
@@ -511,7 +511,7 @@ fn test_comprehensive_mappings() {
 
   for class in should_not_parse {
     assert!(
-      TailwindProperty::parse(class).is_none(),
+      parse_property(class).is_none(),
       "Expected '{}' to fail parsing",
       class
     );
@@ -536,7 +536,7 @@ fn test_breakpoint_does_not_match() {
 #[test]
 fn test_value_parsing() {
   assert_eq!(
-    TailwindValue::parse("md:!mt-4"),
+    parse_value("md:!mt-4"),
     Some(TailwindValue {
       property: TailwindProperty::MarginTop(Length::Rem(1.0)),
       breakpoint: Some(Breakpoint(Length::Rem(48.0))),
@@ -550,6 +550,7 @@ fn test_values_sorting() {
   assert_eq!(
     TailwindValues::from_str("md:!mt-4 sm:mt-8 !mt-12 mt-16"),
     Ok(TailwindValues {
+      source: "md:!mt-4 sm:mt-8 !mt-12 mt-16".into(),
       inner: vec![
         // mt-16
         TailwindValue {
@@ -588,8 +589,8 @@ fn test_filters_append() {
     .expect("tailwind values should parse");
   let viewport = Viewport::new((100, 100));
 
-  let style =
-    Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+  let style = Style::from(values.into_declaration_block(viewport, &Theme::default()))
+    .inherit(&ComputedStyle::default());
 
   assert_eq!(
     style.filter,
@@ -607,8 +608,8 @@ fn test_transform_utilities_resolve_to_standard_longhands() {
     .expect("tailwind values should parse");
   let viewport = Viewport::new((100, 100));
 
-  let style =
-    Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+  let style = Style::from(values.into_declaration_block(viewport, &Theme::default()))
+    .inherit(&ComputedStyle::default());
 
   assert_eq!(
     style.translate,
@@ -623,11 +624,11 @@ fn test_transform_utilities_resolve_to_standard_longhands() {
 #[test]
 fn test_parse_blend_mode() {
   assert_eq!(
-    TailwindProperty::parse("mix-blend-multiply"),
+    parse_property("mix-blend-multiply"),
     Some(TailwindProperty::MixBlendMode(BlendMode::Multiply))
   );
   assert_eq!(
-    TailwindProperty::parse("bg-blend-screen"),
+    parse_property("bg-blend-screen"),
     Some(TailwindProperty::BackgroundBlendMode(BlendMode::Screen))
   );
 }
@@ -645,26 +646,26 @@ fn test_parse_vertical_align() {
   ];
   for (input, kw) in keywords {
     assert_eq!(
-      TailwindProperty::parse(input),
+      parse_property(input),
       Some(TailwindProperty::VerticalAlign(VerticalAlign::Keyword(*kw))),
       "{input}"
     );
   }
   // Arbitrary-value lengths
   assert_eq!(
-    TailwindProperty::parse("align-[10px]"),
+    parse_property("align-[10px]"),
     Some(TailwindProperty::VerticalAlign(VerticalAlign::Length(
       Length::Px(10.0)
     )))
   );
   assert_eq!(
-    TailwindProperty::parse("align-[25%]"),
+    parse_property("align-[25%]"),
     Some(TailwindProperty::VerticalAlign(VerticalAlign::Length(
       Length::Percentage(25.0)
     )))
   );
   assert_eq!(
-    TailwindProperty::parse("align-[-0.5em]"),
+    parse_property("align-[-0.5em]"),
     Some(TailwindProperty::VerticalAlign(VerticalAlign::Length(
       Length::Em(-0.5)
     )))
@@ -674,25 +675,25 @@ fn test_parse_vertical_align() {
 #[test]
 fn test_parse_decoration_thickness() {
   assert_eq!(
-    TailwindProperty::parse("decoration-4"),
+    parse_property("decoration-4"),
     Some(TailwindProperty::TextDecorationThickness(
       TextDecorationThickness::Length(Length::Px(4.0))
     ))
   );
   assert_eq!(
-    TailwindProperty::parse("decoration-auto"),
+    parse_property("decoration-auto"),
     Some(TailwindProperty::TextDecorationThickness(
       TextDecorationThickness::Length(Length::Auto)
     ))
   );
   assert_eq!(
-    TailwindProperty::parse("decoration-from-font"),
+    parse_property("decoration-from-font"),
     Some(TailwindProperty::TextDecorationThickness(
       TextDecorationThickness::FromFont
     ))
   );
   assert_eq!(
-    TailwindProperty::parse("decoration-[3px]"),
+    parse_property("decoration-[3px]"),
     Some(TailwindProperty::TextDecorationThickness(
       TextDecorationThickness::Length(Length::Px(3.0))
     ))
@@ -705,8 +706,8 @@ fn test_linear_gradient_apply() {
   let values = TailwindValues::from_str("bg-linear-to-r from-red-500 via-green-500 to-blue-500")
     .expect("tailwind values should parse");
 
-  let style =
-    Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+  let style = Style::from(values.into_declaration_block(viewport, &Theme::default()))
+    .inherit(&ComputedStyle::default());
 
   assert_eq!(
     style.background_image,
@@ -743,8 +744,8 @@ fn test_shadow_color_overrides_shadow_preset_in_any_order() {
   for classes in ["shadow-md shadow-red-500", "shadow-red-500 shadow-md"] {
     let values = TailwindValues::from_str(classes)
       .unwrap_or_else(|_| panic!("tailwind values should parse: {classes}"));
-    let style =
-      Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+    let style = Style::from(values.into_declaration_block(viewport, &Theme::default()))
+      .inherit(&ComputedStyle::default());
 
     assert_eq!(
       style.box_shadow,
@@ -783,8 +784,8 @@ fn test_text_shadow_color_overrides_preset_in_any_order() {
   ] {
     let values = TailwindValues::from_str(classes)
       .unwrap_or_else(|_| panic!("tailwind values should parse: {classes}"));
-    let style =
-      Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+    let style = Style::from(values.into_declaration_block(viewport, &Theme::default()))
+      .inherit(&ComputedStyle::default());
 
     assert_eq!(
       style.text_shadow,
@@ -818,21 +819,21 @@ fn test_text_shadow_color_overrides_preset_in_any_order() {
 #[test]
 fn test_bare_rounded_is_radius_sm() {
   assert_eq!(
-    TailwindProperty::parse("rounded"),
+    parse_property("rounded"),
     Some(TailwindProperty::Rounded(TwRounded(Length::Rem(0.25))))
   );
 }
 
 #[test]
 fn test_negative_color_is_rejected() {
-  assert_eq!(TailwindProperty::parse("-bg-red-500"), None);
-  assert_eq!(TailwindProperty::parse("-text-blue-500"), None);
+  assert_eq!(parse_property("-bg-red-500"), None);
+  assert_eq!(parse_property("-text-blue-500"), None);
 }
 
 #[test]
 fn test_negative_grid_line() {
   assert_eq!(
-    TailwindProperty::parse("-col-start-1"),
+    parse_property("-col-start-1"),
     Some(TailwindProperty::GridColumnStart(GridPlacement::Line(-1)))
   );
 }
@@ -841,8 +842,8 @@ fn test_negative_grid_line() {
 fn test_logical_resolves_to_physical_ltr() {
   let viewport = Viewport::new((100, 100));
   let values = TailwindValues::from_str("ms-4 me-2 ps-3 pe-1").unwrap();
-  let style =
-    Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+  let style = Style::from(values.into_declaration_block(viewport, &Theme::default()))
+    .inherit(&ComputedStyle::default());
   assert_eq!(style.margin_left, Length::from_spacing(4.0));
   assert_eq!(style.margin_right, Length::from_spacing(2.0));
   assert_eq!(style.padding_left, Length::from_spacing(3.0));
@@ -853,13 +854,13 @@ fn test_logical_resolves_to_physical_ltr() {
 fn test_logical_physical_cascade_order_ltr() {
   let viewport = Viewport::new((100, 100));
   let values = TailwindValues::from_str("ms-2 ml-4").unwrap();
-  let style =
-    Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+  let style = Style::from(values.into_declaration_block(viewport, &Theme::default()))
+    .inherit(&ComputedStyle::default());
   assert_eq!(style.margin_left, Length::from_spacing(4.0));
 
   let values = TailwindValues::from_str("ml-4 ms-2").unwrap();
-  let style =
-    Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+  let style = Style::from(values.into_declaration_block(viewport, &Theme::default()))
+    .inherit(&ComputedStyle::default());
   assert_eq!(style.margin_left, Length::from_spacing(2.0));
 }
 
@@ -867,7 +868,7 @@ fn test_logical_physical_cascade_order_ltr() {
 fn test_logical_resolves_to_physical_rtl() {
   let viewport = Viewport::new((100, 100));
   let values = TailwindValues::from_str("ms-4 me-2 ps-3 pe-1").unwrap();
-  let mut block = values.into_declaration_block(viewport);
+  let mut block = values.into_declaration_block(viewport, &Theme::default());
   block.push(StyleDeclaration::direction(Direction::Rtl), false);
   let style = Style::from(block).inherit(&ComputedStyle::default());
   assert_eq!(style.margin_right, Length::from_spacing(4.0));
@@ -880,7 +881,7 @@ fn test_logical_resolves_to_physical_rtl() {
 fn test_logical_resolves_when_direction_declared_after() {
   let viewport = Viewport::new((100, 100));
   let values = TailwindValues::from_str("ms-4").unwrap();
-  let mut block = values.into_declaration_block(viewport);
+  let mut block = values.into_declaration_block(viewport, &Theme::default());
   block.push(StyleDeclaration::direction(Direction::Rtl), false);
   let style = Style::from(block).inherit(&ComputedStyle::default());
   assert_eq!(style.margin_right, Length::from_spacing(4.0));
@@ -891,20 +892,20 @@ fn test_logical_resolves_when_direction_declared_after() {
 fn test_filter_none_clears_previous_filters() {
   let viewport = Viewport::new((100, 100));
   let values = TailwindValues::from_str("blur-sm brightness-150 filter-none").unwrap();
-  let style =
-    Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+  let style = Style::from(values.into_declaration_block(viewport, &Theme::default()))
+    .inherit(&ComputedStyle::default());
   assert_eq!(style.filter, Filters::default());
 
   let values = TailwindValues::from_str("backdrop-blur-sm backdrop-filter-none").unwrap();
-  let style =
-    Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+  let style = Style::from(values.into_declaration_block(viewport, &Theme::default()))
+    .inherit(&ComputedStyle::default());
   assert_eq!(style.backdrop_filter, Filters::default());
 }
 
 #[test]
 fn test_font_numeric_weight() {
   assert_eq!(
-    TailwindProperty::parse("font-700"),
+    parse_property("font-700"),
     Some(TailwindProperty::FontWeight(FontWeight::from(700.0)))
   );
 }
@@ -912,7 +913,7 @@ fn test_font_numeric_weight() {
 #[test]
 fn test_line_clamp_none() {
   assert_eq!(
-    TailwindProperty::parse("line-clamp-none"),
+    parse_property("line-clamp-none"),
     Some(TailwindProperty::LineClamp(LineClamp::default()))
   );
 }
@@ -920,7 +921,7 @@ fn test_line_clamp_none() {
 #[test]
 fn test_bg_auto() {
   assert_eq!(
-    TailwindProperty::parse("bg-auto"),
+    parse_property("bg-auto"),
     Some(TailwindProperty::BackgroundSize(BackgroundSize::Explicit {
       width: Length::Auto,
       height: Length::Auto,
@@ -931,11 +932,11 @@ fn test_bg_auto() {
 #[test]
 fn test_bg_repeat_v4_names() {
   assert_eq!(
-    TailwindProperty::parse("bg-repeat-round"),
+    parse_property("bg-repeat-round"),
     Some(TailwindProperty::BackgroundRepeat(BackgroundRepeat::round()))
   );
   assert_eq!(
-    TailwindProperty::parse("bg-repeat-space"),
+    parse_property("bg-repeat-space"),
     Some(TailwindProperty::BackgroundRepeat(BackgroundRepeat::space()))
   );
 }
@@ -943,7 +944,7 @@ fn test_bg_repeat_v4_names() {
 #[test]
 fn test_grid_cols_none() {
   assert_eq!(
-    TailwindProperty::parse("grid-cols-none"),
+    parse_property("grid-cols-none"),
     Some(TailwindProperty::GridTemplateColumns(TwGridTemplate(
       GridTemplateComponents::default()
     )))
@@ -953,14 +954,14 @@ fn test_grid_cols_none() {
 #[test]
 fn test_col_auto_row_auto() {
   assert_eq!(
-    TailwindProperty::parse("col-auto"),
+    parse_property("col-auto"),
     Some(TailwindProperty::GridColumn(GridLine {
       start: GridPlacement::auto(),
       end: GridPlacement::auto(),
     }))
   );
   assert_eq!(
-    TailwindProperty::parse("row-auto"),
+    parse_property("row-auto"),
     Some(TailwindProperty::GridRow(GridLine {
       start: GridPlacement::auto(),
       end: GridPlacement::auto(),
@@ -972,8 +973,8 @@ fn test_col_auto_row_auto() {
 fn test_shadow_md_is_composite() {
   let viewport = Viewport::new((100, 100));
   let values = TailwindValues::from_str("shadow-md").unwrap();
-  let style =
-    Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+  let style = Style::from(values.into_declaration_block(viewport, &Theme::default()))
+    .inherit(&ComputedStyle::default());
   assert_eq!(style.box_shadow.as_ref().map(|s| s.len()), Some(2));
 }
 
@@ -981,8 +982,8 @@ fn test_shadow_md_is_composite() {
 fn test_text_shadow_sm_is_composite() {
   let viewport = Viewport::new((100, 100));
   let values = TailwindValues::from_str("text-shadow-sm").unwrap();
-  let style =
-    Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+  let style = Style::from(values.into_declaration_block(viewport, &Theme::default()))
+    .inherit(&ComputedStyle::default());
   assert_eq!(style.text_shadow.as_ref().map(|s| s.len()), Some(3));
 }
 
@@ -991,8 +992,8 @@ fn test_shadow_none_overrides_color_in_either_order() {
   let viewport = Viewport::new((100, 100));
   for classes in ["shadow-none shadow-red-500", "shadow-red-500 shadow-none"] {
     let values = TailwindValues::from_str(classes).unwrap();
-    let style =
-      Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+    let style = Style::from(values.into_declaration_block(viewport, &Theme::default()))
+      .inherit(&ComputedStyle::default());
     assert_eq!(style.box_shadow, None, "case: {classes}");
   }
 }
@@ -1000,7 +1001,7 @@ fn test_shadow_none_overrides_color_in_either_order() {
 #[test]
 fn test_bg_conic_standalone() {
   assert_eq!(
-    TailwindProperty::parse("bg-conic"),
+    parse_property("bg-conic"),
     Some(TailwindProperty::BgConicAngle(Angle::zero()))
   );
 }
@@ -1010,8 +1011,8 @@ fn test_gradient_stop_position_is_used_in_apply() {
   let viewport = Viewport::new((100, 100));
   let values =
     TailwindValues::from_str("bg-linear-to-r from-red-500 from-10% to-blue-500 to-80%").unwrap();
-  let style =
-    Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+  let style = Style::from(values.into_declaration_block(viewport, &Theme::default()))
+    .inherit(&ComputedStyle::default());
   let images = style.background_image.as_deref().unwrap();
   let [BackgroundImage::Linear(gradient)] = images else {
     panic!("expected a single linear gradient");
@@ -1040,7 +1041,7 @@ fn test_border_width_implies_solid_and_per_side_color() {
     Style::from(
       TailwindValues::from_str(tw)
         .expect("tailwind values should parse")
-        .into_declaration_block(viewport),
+        .into_declaration_block(viewport, &Theme::default()),
     )
     .inherit(&ComputedStyle::default())
   };
@@ -1060,7 +1061,7 @@ fn test_border_width_implies_solid_and_per_side_color() {
   assert_eq!(dashed.border_top_style, BorderStyle::Dashed);
 
   assert_eq!(
-    TailwindProperty::parse("border-t-blue-500"),
+    parse_property("border-t-blue-500"),
     Some(TailwindProperty::BorderTopColor(ColorInput::Value(Color(
       [43, 127, 255, 255]
     ))))
@@ -1109,16 +1110,107 @@ fn test_parse_list_utilities() {
       TailwindProperty::ListStyleImage(ListStyleImage::default()),
     ),
   ] {
-    assert_eq!(
-      TailwindProperty::parse(token),
-      Some(expected),
-      "failed for {token}"
-    );
+    assert_eq!(parse_property(token), Some(expected), "failed for {token}");
   }
 
   assert_matches!(
-    TailwindProperty::parse("list-image-[url(marker.png)]"),
+    parse_property("list-image-[url(marker.png)]"),
     Some(TailwindProperty::ListStyleImage(image))
       if matches!(image.image(), Some(BackgroundImage::Url(url)) if &**url == "marker.png")
+  );
+}
+
+fn theme(entries: &[(&str, &str)]) -> Theme {
+  let mut theme = Theme::default();
+
+  for (key, value) in entries {
+    theme.insert(key, value);
+  }
+
+  theme
+}
+
+fn themed_declarations(source: &str, theme: &Theme) -> Vec<StyleDeclaration> {
+  TailwindValues::from_str(source)
+    .expect("tailwind values should parse")
+    .into_declaration_block(Viewport::new((100, 100)), theme)
+    .iter()
+    .cloned()
+    .collect()
+}
+
+#[test]
+fn test_theme_color_token_extends_the_palette() {
+  let theme = theme(&[("--color-brand-500", "#5b21b6")]);
+
+  assert_eq!(
+    themed_declarations("bg-brand-500", &theme),
+    vec![StyleDeclaration::background_color(ColorInput::Value(
+      Color::from_rgb(0x5b21b6)
+    ))]
+  );
+}
+
+#[test]
+fn test_theme_color_token_overrides_the_built_in_palette() {
+  let theme = theme(&[("--color-red-500", "#ff0000")]);
+
+  assert_eq!(
+    themed_declarations("text-red-500", &theme),
+    vec![StyleDeclaration::color(ColorInput::Value(Color::from_rgb(
+      0xff0000
+    )))]
+  );
+}
+
+#[test]
+fn test_theme_color_token_keeps_the_opacity_modifier() {
+  let theme = theme(&[("--color-brand-500", "#5b21b6")]);
+
+  assert_eq!(
+    themed_declarations("bg-brand-500/50", &theme),
+    vec![StyleDeclaration::background_color(ColorInput::Value(
+      Color::from_rgb(0x5b21b6).with_opacity(128)
+    ))]
+  );
+}
+
+#[test]
+fn test_theme_spacing_token_extends_the_scale() {
+  let theme = theme(&[("--spacing-gutter", "2.5rem")]);
+
+  assert_eq!(
+    themed_declarations("p-gutter", &theme),
+    vec![
+      StyleDeclaration::padding_top(Length::Rem(2.5)),
+      StyleDeclaration::padding_right(Length::Rem(2.5)),
+      StyleDeclaration::padding_bottom(Length::Rem(2.5)),
+      StyleDeclaration::padding_left(Length::Rem(2.5)),
+    ]
+  );
+}
+
+#[test]
+fn test_theme_removed_token_does_not_fall_back_to_the_built_in() {
+  let theme = theme(&[("--color-red-500", "initial")]);
+
+  assert_eq!(themed_declarations("bg-red-500", &theme), vec![]);
+}
+
+#[test]
+fn test_theme_namespace_reset_clears_every_token() {
+  let theme = theme(&[("--color-brand-500", "#5b21b6"), ("--color-*", "initial")]);
+
+  assert_eq!(
+    themed_declarations("bg-brand-500 bg-red-500", &theme),
+    vec![]
+  );
+}
+
+#[test]
+fn test_empty_theme_keeps_the_built_in_resolution() {
+  assert_eq!(
+    themed_declarations("bg-red-500", &Theme::default()),
+    themed_declarations("bg-red-500", &theme(&[("--spacing-gutter", "2.5rem")]))
   );
 }

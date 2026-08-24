@@ -128,7 +128,7 @@ impl ToCss for LineHeight {
 
 #[cfg(test)]
 mod tests {
-  use crate::style::{FromCssStr, Length, LineHeight, tw::TailwindPropertyParser};
+  use crate::style::{FromCssStr, Length, LineHeight, Theme, tw::TailwindPropertyParser};
 
   #[test]
   fn parses_unitless_calc_expression() {
@@ -157,7 +157,7 @@ mod tests {
   #[test]
   fn tailwind_arbitrary_percentage_is_supported() {
     assert_eq!(
-      LineHeight::parse_tw_with_arbitrary("[90%]"),
+      LineHeight::parse_tw_with_arbitrary("[90%]", &Theme::default()),
       Some(LineHeight::Length(Length::Percentage(90.0)))
     );
   }

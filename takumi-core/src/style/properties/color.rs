@@ -13,6 +13,7 @@ use crate::style::{
   math::fast_div_255, properties::gradient_utils::interpolate_with_color_space,
   tw::TailwindPropertyParser, unexpected_token,
 };
+use crate::style::{Theme, TwNamespace};
 
 fn is_cylindrical_color_space(color_space: ColorSpaceTag) -> bool {
   matches!(
@@ -219,12 +220,27 @@ impl ColorInput {
 }
 
 impl TailwindPropertyParser for ColorInput {
+  const NAMESPACES: &'static [TwNamespace] = &[TwNamespace::Color];
+
   fn parse_tw(token: &str) -> Option<Self> {
     if token.eq_ignore_ascii_case("current") {
       return Some(ColorInput::CurrentColor);
     }
 
     Color::parse_tw(token).map(ColorInput::Value)
+  }
+
+  fn parse_tw_with_arbitrary(token: &str, theme: &Theme) -> Option<Self> {
+    let Some((token, opacity)) = token.split_once('/') else {
+      return Self::parse_tw_themed(token, theme);
+    };
+
+    let opacity = (opacity.parse::<f32>().ok()? * 2.55).round() as u8;
+
+    match Self::parse_tw_themed(token, theme)? {
+      ColorInput::Value(color) => Some(ColorInput::Value(color.with_opacity(opacity))),
+      ColorInput::CurrentColor => Some(ColorInput::CurrentColor),
+    }
   }
 }
 

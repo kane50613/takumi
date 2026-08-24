@@ -3,6 +3,8 @@ mod builder;
 mod map;
 /// Parsers for Tailwind utility-class suffixes.
 mod parser;
+/// Design tokens overriding the built-in utility scales.
+mod theme;
 
 use std::{borrow::Cow, cmp::Ordering, str::FromStr};
 
@@ -10,6 +12,8 @@ use builder::TailwindDeclarationBuilder;
 pub(crate) use builder::TwGradientType;
 use cssparser::match_ignore_ascii_case;
 use serde::{Deserialize, Deserializer, de::Error as DeError};
+pub(crate) use theme::ThemeLookup;
+pub use theme::{Theme, TwNamespace};
 
 use crate::{
   style::{
@@ -26,41 +30,53 @@ use crate::{
 pub(crate) const TW_VAR_SPACING: f32 = 0.25;
 
 /// Represents a collection of tailwind properties.
+///
+/// `inner` holds the built-in resolution, so a render with no theme never
+/// re-parses. `source` is kept because a theme can give meaning to a token the
+/// built-in scales reject, which `inner` cannot represent.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TailwindValues {
+  source: Box<str>,
   inner: Vec<TailwindValue>,
+}
+
+fn parse_values(source: &str, theme: &Theme) -> Vec<TailwindValue> {
+  let mut collected = source
+    .split_whitespace()
+    .filter_map(|token| TailwindValue::parse(token, theme))
+    .collect::<Vec<_>>();
+
+  // sort in reverse order by is important, then has breakpoint, then rest is last.
+  // Stable sort so equal-priority utilities keep source order (later one wins).
+  collected.sort_by(|a, b| {
+    // Not important comes before important
+    if !a.important && b.important {
+      return Ordering::Less;
+    }
+
+    if a.important && !b.important {
+      return Ordering::Greater;
+    }
+
+    // No breakpoint comes before breakpoint
+    match (&a.breakpoint, &b.breakpoint) {
+      (None, Some(_)) => Ordering::Less,
+      (Some(_), None) => Ordering::Greater,
+      _ => Ordering::Equal,
+    }
+  });
+
+  collected
 }
 
 impl FromStr for TailwindValues {
   type Err = String;
 
   fn from_str(s: &str) -> Result<Self, Self::Err> {
-    let mut collected = s
-      .split_whitespace()
-      .filter_map(TailwindValue::parse)
-      .collect::<Vec<_>>();
-
-    // sort in reverse order by is important, then has breakpoint, then rest is last.
-    // Stable sort so equal-priority utilities keep source order (later one wins).
-    collected.sort_by(|a, b| {
-      // Not important comes before important
-      if !a.important && b.important {
-        return Ordering::Less;
-      }
-
-      if a.important && !b.important {
-        return Ordering::Greater;
-      }
-
-      // No breakpoint comes before breakpoint
-      match (&a.breakpoint, &b.breakpoint) {
-        (None, Some(_)) => Ordering::Less,
-        (Some(_), None) => Ordering::Greater,
-        _ => Ordering::Equal,
-      }
-    });
-
-    Ok(TailwindValues { inner: collected })
+    Ok(TailwindValues {
+      source: s.into(),
+      inner: parse_values(s, &Theme::default()),
+    })
   }
 }
 
@@ -75,10 +91,20 @@ impl TailwindValues {
 
   /// Resolves all utilities for the viewport into a declaration block.
   #[inline(never)]
-  pub(crate) fn into_declaration_block(self, viewport: Viewport) -> StyleDeclarationBlock {
+  pub(crate) fn into_declaration_block(
+    self,
+    viewport: Viewport,
+    theme: &Theme,
+  ) -> StyleDeclarationBlock {
     let mut builder = TailwindDeclarationBuilder::default();
 
-    for value in self.inner {
+    let values = if theme.is_empty() {
+      self.inner
+    } else {
+      parse_values(&self.source, theme)
+    };
+
+    for value in values {
       value.apply(&mut builder, viewport);
     }
 
@@ -163,7 +189,7 @@ impl TailwindValue {
   }
 
   /// Parse a tailwind value from a token.
-  pub fn parse(mut token: &str) -> Option<Self> {
+  pub fn parse(mut token: &str, theme: &Theme) -> Option<Self> {
     let mut important = false;
     let mut breakpoint = None;
 
@@ -186,7 +212,7 @@ impl TailwindValue {
     }
 
     Some(TailwindValue {
-      property: TailwindProperty::parse(token)?,
+      property: TailwindProperty::parse(token, theme)?,
       breakpoint,
       important,
     })
@@ -680,13 +706,32 @@ pub(crate) trait TailwindPropertyParser: Sized + for<'i> FromCss<'i> {
     Self::from_css_str(token).ok()
   }
 
-  /// Parse a tailwind property from a token, with support for arbitrary values.
-  fn parse_tw_with_arbitrary(token: &str) -> Option<Self> {
+  /// Theme namespaces this value type reads, tried in order.
+  const NAMESPACES: &'static [TwNamespace] = &[];
+
+  /// Arbitrary value, then theme token, then the built-in scale. A theme token
+  /// is spelled as a CSS value, so it takes the arbitrary-value path rather
+  /// than the utility-suffix grammar.
+  fn parse_tw_themed(token: &str, theme: &Theme) -> Option<Self> {
     if let Some(value) = extract_arbitrary_value(token) {
       return Self::from_css_str(&value).ok();
     }
 
+    for &namespace in Self::NAMESPACES {
+      match theme.lookup(namespace, token) {
+        ThemeLookup::Value(value) => return Self::from_css_str(value).ok(),
+        ThemeLookup::Removed => return None,
+        ThemeLookup::Missing => {}
+      }
+    }
+
     Self::parse_tw(token)
+  }
+
+  /// The entry point utility dispatch calls. Override to handle a modifier the
+  /// suffix carries, such as a color's `/50` opacity.
+  fn parse_tw_with_arbitrary(token: &str, theme: &Theme) -> Option<Self> {
+    Self::parse_tw_themed(token, theme)
   }
 }
 
@@ -743,20 +788,20 @@ impl TailwindProperty {
   }
 
   /// Parse a single tailwind property from a token.
-  pub fn parse(token: &str) -> Option<TailwindProperty> {
+  pub fn parse(token: &str, theme: &Theme) -> Option<TailwindProperty> {
     // Check fixed properties first
     if let Some(property) = FIXED_PROPERTIES.get(token) {
       return Some(property.clone());
     }
 
     if let Some(stripped) = token.strip_prefix('-') {
-      return Self::parse_prefix_suffix(stripped).and_then(Self::try_neg);
+      return Self::parse_prefix_suffix(stripped, theme).and_then(Self::try_neg);
     }
 
-    Self::parse_prefix_suffix(token)
+    Self::parse_prefix_suffix(token, theme)
   }
 
-  fn parse_prefix_suffix(token: &str) -> Option<TailwindProperty> {
+  fn parse_prefix_suffix(token: &str, theme: &Theme) -> Option<TailwindProperty> {
     let bytes = token.as_bytes();
 
     for dash_pos in (0..bytes.len()).rev() {
@@ -771,7 +816,7 @@ impl TailwindProperty {
 
       let suffix = &token[dash_pos + 1..];
       for parser in *parsers {
-        if let Some(property) = parser.parse(suffix) {
+        if let Some(property) = parser.parse(suffix, theme) {
           return Some(property);
         }
       }

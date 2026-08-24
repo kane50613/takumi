@@ -139,6 +139,7 @@ impl ToCss for BackgroundImage {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::style::Theme;
   use crate::style::{
     Angle, Color, ConicGradient, FromCssStr, GradientStop, Length, LinearGradient,
     LinearGradientDirection, PositionValue, RadialGradient, RadialShape, RadialSize, SpacePair,
@@ -156,7 +157,10 @@ mod tests {
   #[test]
   fn test_parse_tailwind_arbitrary_url() {
     assert_eq!(
-      BackgroundImage::parse_tw_with_arbitrary("[url(https://example.com/bg.png)]"),
+      BackgroundImage::parse_tw_with_arbitrary(
+        "[url(https://example.com/bg.png)]",
+        &Theme::default()
+      ),
       Some(BackgroundImage::Url("https://example.com/bg.png".into()))
     );
   }

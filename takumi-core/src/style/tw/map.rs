@@ -1,7 +1,7 @@
 use phf::phf_map;
 
 use crate::style::{
-  tw::{TailwindProperty, TailwindPropertyParser, parser::*},
+  tw::{TailwindProperty, TailwindPropertyParser, Theme, parser::*},
   *,
 };
 
@@ -21,11 +21,11 @@ macro_rules! property_parsers {
 
     impl PropertyParser {
       /// Parses a utility suffix into a property via the wrapped constructor.
-      pub fn parse(&self, suffix: &str) -> Option<TailwindProperty> {
+      pub fn parse(&self, suffix: &str, theme: &Theme) -> Option<TailwindProperty> {
         match self {
-          $(Self::$variant(f) => <$parse>::parse_tw_with_arbitrary(suffix).map(f),)+
+          $(Self::$variant(f) => <$parse>::parse_tw_with_arbitrary(suffix, theme).map(f),)+
           Self::GradientPosition(f) => {
-            TwGradientPosition::parse_tw_with_arbitrary(suffix).map(|p| f(p.0))
+            TwGradientPosition::parse_tw_with_arbitrary(suffix, theme).map(|p| f(p.0))
           }
         }
       }

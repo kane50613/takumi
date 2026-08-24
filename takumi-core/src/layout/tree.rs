@@ -31,7 +31,7 @@ use crate::{
     BackgroundImage, BackgroundImages, BlendMode, BoxSizing, Color, ComputedStyle, ContentItem,
     ContentValue, Display, Filters, Float, Isolation, Length, LineHeight, ListStylePosition,
     PercentageNumber, Position, SizingContext, Style as NodeStyle, StyleDeclaration, StyleSheet,
-    TextWrapMode, WhiteSpaceCollapse, apply_stylesheet_animations,
+    TextWrapMode, Theme, WhiteSpaceCollapse, apply_stylesheet_animations,
   },
   viewport::Viewport,
 };
@@ -243,7 +243,7 @@ fn build_style_layers(
   }
 
   if let Some(author_tw) = node_layers.author_tw {
-    style.append_block(author_tw.into_declaration_block(viewport));
+    style.append_block(author_tw.into_declaration_block(viewport, &Theme::default()));
   }
 
   if let Some(inline) = node_layers.inline {

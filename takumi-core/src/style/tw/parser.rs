@@ -32,7 +32,10 @@ impl TailwindPropertyParser for TwFontSize {
     if let Some((font_size, line_height)) = token.split_once('/') {
       return Some(Self::new(
         TwFontSize::parse_tw(font_size)?.font_size,
-        Some(LineHeight::parse_tw_with_arbitrary(line_height)?),
+        Some(LineHeight::parse_tw_with_arbitrary(
+          line_height,
+          &Theme::default(),
+        )?),
       ));
     }
 
