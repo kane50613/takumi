@@ -233,8 +233,9 @@ fn build_style_layers(
 ) -> (NodeStyle, SmallVec<[StyleDeclarationBlock; 2]>) {
   let mut style = NodeStyle::default();
 
-  // `tw` is a layer below every author rule, so its important half goes last:
-  // the cascade reverses layer order for important declarations.
+  // `tw` is the last declared layer, below unlayered author rules, so its
+  // important half goes last: the cascade reverses layer order for important
+  // declarations.
   let (tw_normal, tw_important) = node_layers
     .author_tw
     .map(|author_tw| {
@@ -252,11 +253,19 @@ fn build_style_layers(
     style.push(StyleDeclaration::direction(dir), false);
   }
 
+  for &declarations in matched_declarations.layered_normal() {
+    for declaration in declarations.iter() {
+      declaration.merge_into_ref(&mut style);
+    }
+  }
+
+  // `tw` is the last declared layer, as Tailwind orders utilities: above every
+  // named `@layer`, below unlayered author rules.
   if let Some(tw_normal) = tw_normal {
     style.append_block(tw_normal);
   }
 
-  for &declarations in matched_declarations.normal() {
+  for &declarations in matched_declarations.unlayered_normal() {
     for declaration in declarations.iter() {
       declaration.merge_into_ref(&mut style);
     }

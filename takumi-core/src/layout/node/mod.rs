@@ -904,7 +904,11 @@ mod matching_tests {
 
   fn computed_width_from_matches(matches: &MatchedDeclarationsView<'_>) -> Length {
     let mut style = Style::default();
-    for &declarations in matches.normal() {
+    for &declarations in matches
+      .layered_normal()
+      .iter()
+      .chain(matches.unlayered_normal())
+    {
       for declaration in declarations.iter() {
         declaration.merge_into_ref(&mut style);
       }
@@ -919,7 +923,11 @@ mod matching_tests {
 
   fn computed_height_from_matches(matches: &MatchedDeclarationsView<'_>) -> Length {
     let mut style = Style::default();
-    for &declarations in matches.normal() {
+    for &declarations in matches
+      .layered_normal()
+      .iter()
+      .chain(matches.unlayered_normal())
+    {
       for declaration in declarations.iter() {
         declaration.merge_into_ref(&mut style);
       }
@@ -1156,8 +1164,12 @@ mod matching_tests {
     // Matched normal: should have width: 10px.
     // Matched important: should have height: 20px.
 
-    assert_eq!(matched[0].element().normal()[0].len(), 1);
-    assert!(matched[0].element().normal()[0].importance.is_empty());
+    assert_eq!(matched[0].element().unlayered_normal()[0].len(), 1);
+    assert!(
+      matched[0].element().unlayered_normal()[0]
+        .importance
+        .is_empty()
+    );
 
     assert_eq!(matched[0].element().important()[0].len(), 1);
     assert!(!matched[0].element().important()[0].importance.is_empty());
@@ -1177,7 +1189,7 @@ mod matching_tests {
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
     assert_eq!(matched.len(), 1);
 
-    assert!(!matched[0].element().normal().is_empty());
+    assert!(!matched[0].element().unlayered_normal().is_empty());
     assert!(matched[0].before().is_some());
     assert!(matched[0].after().is_some());
   }

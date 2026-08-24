@@ -361,12 +361,20 @@ impl Element for ArenaElement<'_> {
 pub(crate) struct MatchedDeclarationsView<'a> {
   normal: SmallVec<[&'a StyleDeclarationBlock; 4]>,
   important: SmallVec<[&'a StyleDeclarationBlock; 4]>,
+  /// Where unlayered blocks begin in `normal`. The `tw` layer slots in here:
+  /// above every named `@layer`, below unlayered rules.
+  unlayered_start: usize,
 }
 
 impl<'a> MatchedDeclarationsView<'a> {
-  /// Matched declaration blocks without `!important`, in cascade order.
-  pub fn normal(&self) -> &[&'a StyleDeclarationBlock] {
-    &self.normal
+  /// Matched blocks without `!important` from named layers, in cascade order.
+  pub fn layered_normal(&self) -> &[&'a StyleDeclarationBlock] {
+    &self.normal[..self.unlayered_start]
+  }
+
+  /// Matched unlayered blocks without `!important`, in cascade order.
+  pub fn unlayered_normal(&self) -> &[&'a StyleDeclarationBlock] {
+    &self.normal[self.unlayered_start..]
   }
 
   /// Matched declaration blocks marked `!important`, in cascade order.
@@ -669,9 +677,13 @@ pub(crate) fn match_stylesheets_view<'a>(
   }
 
   for (i, matched) in per_node.iter_mut().enumerate() {
-    finalize_bucket(&mut matched_element[i], &mut matched.element);
-    matched.before = take_pseudo_bucket(&mut matched_before[i]);
-    matched.after = take_pseudo_bucket(&mut matched_after[i]);
+    finalize_bucket(
+      &mut matched_element[i],
+      stylesheet.layer_count,
+      &mut matched.element,
+    );
+    matched.before = take_pseudo_bucket(&mut matched_before[i], stylesheet.layer_count);
+    matched.after = take_pseudo_bucket(&mut matched_after[i], stylesheet.layer_count);
   }
 
   per_node
@@ -720,6 +732,7 @@ fn record_matches<'a>(
 
 fn finalize_bucket<'a>(
   rules: &mut Vec<MatchedRule<'a>>,
+  layer_count: usize,
   matched: &mut MatchedDeclarationsView<'a>,
 ) {
   rules.sort_by_key(|rule| {
@@ -734,17 +747,23 @@ fn finalize_bucket<'a>(
     if rule.important {
       matched.important.push(rule.declarations);
     } else {
+      if rule.layer_order < layer_count {
+        matched.unlayered_start += 1;
+      }
       matched.normal.push(rule.declarations);
     }
   }
 }
 
-fn take_pseudo_bucket<'a>(rules: &mut Vec<MatchedRule<'a>>) -> Option<MatchedDeclarationsView<'a>> {
+fn take_pseudo_bucket<'a>(
+  rules: &mut Vec<MatchedRule<'a>>,
+  layer_count: usize,
+) -> Option<MatchedDeclarationsView<'a>> {
   if rules.is_empty() {
     return None;
   }
   let mut view = MatchedDeclarationsView::default();
-  finalize_bucket(rules, &mut view);
+  finalize_bucket(rules, layer_count, &mut view);
   Some(view)
 }
 

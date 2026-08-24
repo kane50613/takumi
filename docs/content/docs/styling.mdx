@@ -114,11 +114,21 @@ The `tw` prop runs a built-in parser with no build step. It won't cover every Ta
 - See the [parser mapping](https://github.com/kane50613/takumi/blob/master/takumi-core/src/style/tw/map.rs) for every supported class.
 
 <Callout type="warn">
-  `tw` has no Tailwind Preflight, so elements keep their UA margins. A `<h1>` gets a `0.67em` top
-  margin until you add `mt-0`. `box-sizing` still defaults to `border-box`.
+  `tw` has no Tailwind Preflight by default, so elements keep their UA margins. A `<h1>` gets a
+  `0.67em` top margin until you add `mt-0`. `box-sizing` still defaults to `border-box`.
 </Callout>
 
-**Stylesheet rules override `tw` utilities**, the way unlayered CSS overrides `@layer utilities`. Prefix a utility with `!` to override the stylesheet.
+To reset those defaults, pass Preflight through `stylesheets`, wrapped in a layer so it stays below your utilities:
+
+```tsx
+import preflight from "tailwindcss/preflight.css?inline";
+
+const image = await render(node, {
+  stylesheets: [`@layer base { ${preflight} }`],
+});
+```
+
+**Unlayered stylesheet rules override `tw` utilities**, and rules in a named `@layer` lose to them. That is Tailwind's own order: utilities are the last declared layer. Prefix a utility with `!` to override an unlayered rule.
 
 ```tsx
 <div tw="bg-blue-500 p-4 rounded-lg">

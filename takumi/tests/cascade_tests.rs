@@ -111,3 +111,16 @@ fn tw_reads_theme_tokens_from_the_stylesheet() {
   assert_eq!(result.children[0].width, 160.0);
   assert_eq!(result.children[1].width, 512.0);
 }
+
+/// `tw` is the last declared layer, so preflight wrapped in `@layer base`
+/// resets defaults without beating utilities.
+#[test]
+fn tw_beats_named_layer_rules() {
+  let root = Node::container([tw_block("box", "block w-64")]);
+  let result = measure_with_css(
+    root,
+    r#"@layer base { *, ::after, ::before { box-sizing: border-box; margin: 0; padding: 0; border: 0 solid; } * { width: 50px; } }"#,
+  );
+
+  assert_eq!(result.children[0].width, 256.0);
+}
