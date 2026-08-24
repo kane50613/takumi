@@ -93,6 +93,8 @@ The `tw` prop runs a built-in parser with no build step. It won't cover every Ta
   margin until you add `mt-0`. `box-sizing` still defaults to `border-box`.
 </Callout>
 
+Utilities lose to any rule from `stylesheets`, the way `@layer utilities` loses to unlayered CSS. Mark the utility with `!` to win instead.
+
 ```tsx
 <div tw="bg-blue-500 p-4 rounded-lg">
   <h1 tw="text-white text-2xl font-bold">Hello Tailwind!</h1>

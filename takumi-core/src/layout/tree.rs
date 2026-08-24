@@ -229,6 +229,21 @@ fn build_style_layers(
 ) -> NodeStyle {
   let mut style = NodeStyle::default();
 
+  // `tw` sits in a layer of its own, below every author rule, so a stylesheet
+  // wins over a utility the way an unlayered rule wins over `@layer utilities`.
+  // Its `!important` declarations go last for the same reason: the cascade
+  // reverses layer order for important declarations.
+  let (tw_normal, tw_important) = match node_layers.author_tw {
+    Some(author_tw) => {
+      let (normal, important) = author_tw
+        .into_declaration_block(viewport, theme)
+        .split_importance();
+
+      (Some(normal), Some(important))
+    }
+    None => (None, None),
+  };
+
   if let Some(preset) = node_layers.preset {
     style.merge_from(preset);
   }
@@ -237,14 +252,14 @@ fn build_style_layers(
     style.push(StyleDeclaration::direction(dir), false);
   }
 
+  if let Some(tw_normal) = tw_normal {
+    style.append_block(tw_normal);
+  }
+
   for &declarations in matched_declarations.normal() {
     for declaration in declarations.iter() {
       declaration.merge_into_ref(&mut style);
     }
-  }
-
-  if let Some(author_tw) = node_layers.author_tw {
-    style.append_block(author_tw.into_declaration_block(viewport, theme));
   }
 
   if let Some(inline) = node_layers.inline {
@@ -255,6 +270,10 @@ fn build_style_layers(
     for declaration in declarations.iter() {
       declaration.merge_into_ref(&mut style);
     }
+  }
+
+  if let Some(tw_important) = tw_important {
+    style.append_block(tw_important);
   }
 
   style

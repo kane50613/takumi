@@ -1650,6 +1650,42 @@ impl StyleDeclarationBlock {
     }
   }
 
+  /// Splits into the normal declarations and the `!important` ones, which the
+  /// cascade places at opposite ends: a layer's important declarations beat the
+  /// layers that beat its normal ones.
+  pub(crate) fn split_importance(self) -> (Self, Self) {
+    if self.importance.is_empty() {
+      return (self, Self::default());
+    }
+
+    let mut normal = Self::default();
+    let mut important = Self::default();
+
+    for declaration in self.declarations {
+      let is_important = match &declaration {
+        StyleDeclaration::CustomProperty(name, _) => self
+          .importance
+          .custom_properties
+          .iter()
+          .any(|marked| marked.as_ref() == name.as_str()),
+        _ => declaration
+          .affected_longhands()
+          .iter()
+          .any(|id| self.importance.longhands.contains(&id)),
+      };
+
+      let target = if is_important {
+        &mut important
+      } else {
+        &mut normal
+      };
+
+      target.push(declaration, is_important);
+    }
+
+    (normal, important)
+  }
+
   /// Appends another block's declarations and importance.
   pub(crate) fn append(&mut self, mut other: Self) {
     self.importance.append(&mut other.importance);
