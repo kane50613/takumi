@@ -237,9 +237,13 @@ impl TailwindPropertyParser for ColorInput {
       return Self::from_css_str(&value).ok();
     }
 
-    Self::parse_tw(token.split_once('/').map_or(token, |(color, _)| color))
-      .filter(|color| matches!(color, ColorInput::CurrentColor))
-      .or_else(|| Color::parse_tw(token).map(ColorInput::Value))
+    let base = token.split_once('/').map_or(token, |(color, _)| color);
+
+    if base.eq_ignore_ascii_case("current") {
+      return Some(ColorInput::CurrentColor);
+    }
+
+    Color::parse_tw(token).map(ColorInput::Value)
   }
 }
 

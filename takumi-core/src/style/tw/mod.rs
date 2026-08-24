@@ -597,26 +597,17 @@ pub(crate) enum TailwindProperty {
   ThemeVar(ThemeVar),
 }
 
-/// A utility resolved from custom properties, one per longhand it writes.
+/// A utility resolved from custom properties: one [`TwVarRef`] declaration per
+/// longhand it writes.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ThemeVar {
-  targets: SmallVec<[ThemeVarTarget; 2]>,
-}
-
-/// One longhand of a themed utility: the expression to substitute, and the
-/// built-in value it falls back to while the variable is undefined.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct ThemeVarTarget {
-  name: Arc<str>,
-  expression: Arc<str>,
-  longhand: LonghandId,
-  fallback: Option<StyleDeclaration>,
+  targets: SmallVec<[StyleDeclaration; 2]>,
 }
 
 impl ThemeVar {
-  /// One target per longhand, sharing the variable the prefix reads. `text-lg`
-  /// spells its line height in a companion variable, so one token can set the
-  /// size without dragging the leading with it.
+  /// One declaration per longhand, sharing the variable the prefix reads.
+  /// `text-lg` spells its line height in a companion variable, so one token can
+  /// set the size without dragging the leading with it.
   fn from_builtin(
     name: &Arc<str>,
     expression: &Arc<str>,
@@ -625,7 +616,7 @@ impl ThemeVar {
     let targets = declarations
       .into_iter()
       .map(|declaration| {
-        ThemeVarTarget::new(
+        var_ref(
           name,
           expression,
           declaration.longhand_id(),
@@ -642,33 +633,33 @@ impl ThemeVar {
     self
       .targets
       .iter()
-      .filter_map(|target| target.fallback.clone())
+      .filter_map(|target| match target {
+        StyleDeclaration::VarRef(var_ref) => var_ref.fallback.as_deref().cloned(),
+        _ => None,
+      })
       .collect()
   }
 }
 
-impl ThemeVarTarget {
-  fn new(
-    name: &Arc<str>,
-    expression: &Arc<str>,
-    longhand: LonghandId,
-    fallback: Option<StyleDeclaration>,
-  ) -> Self {
-    match companion_variable(name, longhand) {
-      Some(companion) => Self {
-        expression: format!("var({companion})").into(),
-        name: companion,
-        longhand,
-        fallback,
-      },
-      None => Self {
-        name: name.clone(),
-        expression: expression.clone(),
-        longhand,
-        fallback,
-      },
-    }
-  }
+fn var_ref(
+  name: &Arc<str>,
+  expression: &Arc<str>,
+  longhand: LonghandId,
+  fallback: Option<StyleDeclaration>,
+) -> StyleDeclaration {
+  let (name, expression) = match companion_variable(name, longhand) {
+    Some(companion) => (companion.clone(), format!("var({companion})")),
+    None => (name.clone(), expression.to_string()),
+  };
+
+  StyleDeclaration::VarRef(TwVarRef {
+    name,
+    deferred: DeferredDeclaration {
+      property: PropertyId::Longhand(longhand),
+      specified_value: expression,
+    },
+    fallback: fallback.map(Box::new),
+  })
 }
 
 /// The variable a longhand reads when the token spells it separately from its
@@ -967,7 +958,7 @@ impl TailwindProperty {
 
       // No built-in value, but the prefix still names what the utility writes.
       if let Some(groups) = THEME_TARGETS.get(prefix) {
-        let targets: SmallVec<[ThemeVarTarget; 2]> = groups
+        let targets: SmallVec<[StyleDeclaration; 2]> = groups
           .iter()
           .filter_map(|(namespace, longhands)| {
             let (name, expression) = theme_expression(&[*namespace], suffix, negative)?;
@@ -975,7 +966,7 @@ impl TailwindProperty {
             Some(
               longhands
                 .iter()
-                .map(move |&longhand| ThemeVarTarget::new(&name, &expression, longhand, None)),
+                .map(move |&longhand| var_ref(&name, &expression, longhand, None)),
             )
           })
           .flatten()
@@ -995,17 +986,7 @@ impl TailwindProperty {
     match self {
       TailwindProperty::ThemeVar(theme_var) => {
         for target in theme_var.targets {
-          builder.push(
-            StyleDeclaration::VarRef(TwVarRef {
-              name: target.name,
-              deferred: DeferredDeclaration {
-                property: PropertyId::Longhand(target.longhand),
-                specified_value: target.expression.to_string(),
-              },
-              fallback: target.fallback.map(Box::new),
-            }),
-            important,
-          );
+          builder.push(target, important);
         }
       }
       TailwindProperty::BgLinearAngle(angle) => {
