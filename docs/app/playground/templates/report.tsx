@@ -36,42 +36,44 @@ const days = Array.from({ length: 90 }, (_, index) => ({
 
 export default function Report() {
   return (
-    <div tw="flex w-full flex-col text-[#1f2430]">
+    <div tw="flex w-full flex-col text-ink">
       <h1 tw="m-0 text-3xl font-semibold">Rendering report</h1>
-      <p tw="mt-2 mb-0 text-xs text-[#6b7280]">Q1 2026 · 匠 Werkstatt</p>
+      <p tw="mt-2 mb-0 text-xs text-faint">
+        Q1 2026 · <span tw="text-brand">匠 Werkstatt</span>
+      </p>
 
       {sections.map((section) => (
         <div key={section.title} tw="mt-8 flex flex-col">
-          <h2 lang={section.lang} tw="m-0 text-lg font-semibold">
+          <h2 lang={section.lang} tw="m-0 border-l-4 border-brand pl-3 text-lg font-semibold">
             {section.title}
           </h2>
           <p
             lang={section.lang}
             dir={section.rtl ? "rtl" : undefined}
-            tw="mt-2 mb-0 text-sm leading-6 text-[#374151]"
+            tw="mt-2 mb-0 text-sm leading-6 text-body"
           >
             {section.body}
           </p>
         </div>
       ))}
 
-      <h2 tw="mt-8 mb-0 text-lg font-semibold">Daily measurements</h2>
+      <h2 tw="mt-8 mb-0 border-l-4 border-brand pl-3 text-lg font-semibold">Daily measurements</h2>
       <table tw="mt-3 w-full text-xs">
         <thead>
-          <tr tw="text-[11px] font-semibold text-[#6b7280]">
-            <th tw="border-b border-[#e5e7eb] pb-2 text-left">Day</th>
-            <th tw="w-[110px] border-b border-[#e5e7eb] pb-2 text-right">Median (ms)</th>
-            <th tw="w-[110px] border-b border-[#e5e7eb] pb-2 text-right">p95 (ms)</th>
-            <th tw="w-[110px] border-b border-[#e5e7eb] pb-2 text-right">Size (KB)</th>
+          <tr tw="text-[11px] font-semibold text-faint">
+            <th tw="border-b-2 border-brand/40 pb-2 text-left">Day</th>
+            <th tw="w-[110px] border-b-2 border-brand/40 pb-2 text-right">Median (ms)</th>
+            <th tw="w-[110px] border-b-2 border-brand/40 pb-2 text-right">p95 (ms)</th>
+            <th tw="w-[110px] border-b-2 border-brand/40 pb-2 text-right">Size (KB)</th>
           </tr>
         </thead>
         <tbody>
           {days.map((row) => (
             <tr key={row.day}>
               <td tw="pt-2">{row.day}</td>
-              <td tw="pt-2 text-right text-[#374151]">{row.median}</td>
-              <td tw="pt-2 text-right text-[#374151]">{row.p95}</td>
-              <td tw="pt-2 text-right text-[#374151]">{row.size.toFixed(1)}</td>
+              <td tw="pt-2 text-right text-body">{row.median}</td>
+              <td tw="pt-2 text-right text-body">{row.p95}</td>
+              <td tw="pt-2 text-right text-body">{row.size.toFixed(1)}</td>
             </tr>
           ))}
         </tbody>
@@ -81,26 +83,32 @@ export default function Report() {
 }
 
 export const options: PlaygroundOptions = {
+  // Set on the render, the tokens reach the header and footer bands too.
+  variables: {
+    "--color-brand": "#0d9488",
+    "--color-ink": "#1f2430",
+    "--color-body": "#374151",
+    "--color-faint": "#6b7280",
+    "--color-hairline": "#e5e7eb",
+  },
   pdf: {
     size: "a4",
     margin: { right: 56, left: 56 },
     header: (
       <div tw="flex w-full flex-col px-14 py-6">
         <div tw="flex w-full items-end justify-between">
-          <span tw="text-lg font-semibold text-[#1f2430]">匠 Werkstatt</span>
-          <span tw="text-[10px] text-[#9ca3af]">Rendering report · Q1 2026</span>
+          <span tw="text-lg font-semibold text-ink">匠 Werkstatt</span>
+          <span tw="text-[10px] text-faint">Rendering report · Q1 2026</span>
         </div>
-        <div tw="mt-3 flex h-[3px] w-full bg-[#1f2430]" />
-        <span tw="mt-2 text-[10px] text-[#9ca3af]">Prepared for the platform team</span>
+        <div tw="mt-3 flex h-[3px] w-full bg-brand" />
+        <span tw="mt-2 text-[10px] text-faint">Prepared for the platform team</span>
       </div>
     ),
     footer: (
       <div tw="flex w-full flex-col items-center pb-6">
-        <div tw="mb-2 flex h-[1px] w-[420px] bg-[#e5e7eb]" />
-        <span tw="text-[10px] text-[#9ca3af]">
-          匠 Werkstatt · Kawagoe, Saitama · werkstatt.example
-        </span>
-        <span tw="mt-1 text-[10px] text-[#9ca3af]">
+        <div tw="mb-2 flex h-[1px] w-[420px] bg-hairline" />
+        <span tw="text-[10px] text-faint">匠 Werkstatt · Kawagoe, Saitama · werkstatt.example</span>
+        <span tw="mt-1 text-[10px] text-faint">
           第 <PageNumber format="trad-chinese-informal" /> 頁,共{" "}
           <TotalPages format="trad-chinese-informal" /> 頁
         </span>
