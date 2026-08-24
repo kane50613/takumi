@@ -1292,3 +1292,21 @@ fn test_max_w_prefers_the_container_namespace() {
   assert_eq!(both.max_width, MaxSize::Length(Length::Rem(60.0)));
   assert_eq!(spacing_only.max_width, MaxSize::Length(Length::Rem(1.0)));
 }
+
+/// Numeric `leading-*` multiplies the spacing step, as Tailwind compiles it.
+#[test]
+fn test_numeric_leading_scales_with_spacing() {
+  let values = TailwindValues::from_str("leading-7").expect("tailwind values should parse");
+  let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
+
+  let computed = style.inherit(&root_with(&[("--spacing", "0.5rem")]));
+  let sizing = SizingContext::builder()
+    .viewport(Viewport::new((100, 100)))
+    .build();
+
+  let LineHeight::Length(line_height) = computed.line_height else {
+    panic!("expected a length line height");
+  };
+
+  assert_eq!(line_height.to_px(&sizing, 0.0), 56.0);
+}
