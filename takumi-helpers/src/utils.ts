@@ -168,7 +168,8 @@ function extractImageUrls(node: Node): string[] {
 /**
  * A cache of image fetches keyed by URL. Sharing one across renders deduplicates concurrent
  * requests for the same URL (single-flight) and reuses their bytes. Any object with `Map`-like
- * `get`/`set`/`delete` works, so LRU/TTL policies can be plugged in.
+ * `get`/`set`/`delete` works, so LRU/TTL policies can be plugged in. Cache hits still run the
+ * calling render's `allowUrl` and `maxBytes` against the shared bytes.
  */
 export interface ImageFetchCache {
   get(url: string): Promise<ArrayBuffer> | undefined;
@@ -176,26 +177,62 @@ export interface ImageFetchCache {
   delete(url: string): unknown;
 }
 
+/** Redirect chains of entries fetched under an `allowUrl` policy, keyed by cache promise. */
+const entryHops = new WeakMap<Promise<ArrayBuffer>, string[]>();
+
 /** Fetches a URL's bytes, coalescing concurrent requests for the same URL through `cache`. A
- * rejected fetch is evicted so a later call can retry instead of replaying the failure. */
+ * rejected fetch is evicted so a later call can retry instead of replaying the failure.
+ *
+ * A cache hit re-runs the current call's `allowUrl` and `maxBytes` instead of trusting the
+ * creator's. Entries fetched without `allowUrl` have no recorded redirect chain, so a later
+ * `allowUrl` only checks the entry URL for them. */
 function fetchImageData(
   url: string,
   options: FetchOptions,
   fetchCache?: ImageFetchCache,
 ): Promise<ArrayBuffer> {
+  const maxBytes = options.maxBytes ?? defaultMaxFetchBytes;
+  const { allowUrl } = options;
+
   const cached = fetchCache?.get(url);
   if (cached) {
-    return cached;
+    return cached.then((data) => {
+      if (allowUrl) {
+        const blocked = (entryHops.get(cached) ?? [url]).find((hop) => !allowUrl(hop));
+        if (blocked) {
+          throw new Error(`URL blocked by allowUrl policy: ${blocked}`);
+        }
+      }
+
+      if (data.byteLength > maxBytes) {
+        throw new Error(`Response exceeds ${maxBytes} bytes`);
+      }
+      return data;
+    });
   }
 
-  const promise = fetchOk(url, options)
-    .then((response) => readBodyLimited(response, options.maxBytes ?? defaultMaxFetchBytes))
+  const hops: string[] = [];
+  const fetchOptions: FetchOptions = allowUrl
+    ? {
+        ...options,
+        allowUrl: (checked) => {
+          hops.push(checked);
+          return allowUrl(checked);
+        },
+      }
+    : options;
+
+  const promise = fetchOk(url, fetchOptions)
+    .then((response) => readBodyLimited(response, maxBytes))
     .catch((error) => {
       fetchCache?.delete(url);
       throw error;
     });
 
   fetchCache?.set(url, promise);
+  if (allowUrl) {
+    entryHops.set(promise, hops);
+  }
   return promise;
 }
 

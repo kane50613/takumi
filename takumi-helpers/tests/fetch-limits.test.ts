@@ -153,6 +153,94 @@ describe("allowUrl policy", () => {
   });
 });
 
+describe("shared fetchCache policy enforcement", () => {
+  test("a cache hit re-runs a stricter maxBytes and keeps the entry reusable", async () => {
+    const fetchMock = mock(() => Promise.resolve(new Response(streamOf(new Uint8Array(60)))));
+    const fetchCache = new Map<string, Promise<ArrayBuffer>>();
+    const node = tree("https://example.com/cached.png");
+
+    await prepareImages({ node, fetchCache, fetch: fetchMock, maxBytes: 100 });
+
+    await expect(
+      prepareImages({ node, fetchCache, fetch: fetchMock, maxBytes: 50 }),
+    ).rejects.toThrow(/exceeds 50 bytes/);
+
+    const images = await prepareImages({ node, fetchCache, fetch: fetchMock, maxBytes: 100 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(images.map((image) => image.data.byteLength)).toEqual([60]);
+  });
+
+  test("a cache hit re-runs a stricter allowUrl and keeps the entry reusable", async () => {
+    const payload = new TextEncoder().encode("pixels");
+    const fetchMock = mock(() => Promise.resolve(new Response(streamOf(payload))));
+    const fetchCache = new Map<string, Promise<ArrayBuffer>>();
+    const node = tree("https://allowed.example.com/cached.png");
+
+    await prepareImages({ node, fetchCache, fetch: fetchMock, allowUrl: () => true });
+
+    await expect(
+      prepareImages({ node, fetchCache, fetch: fetchMock, allowUrl: () => false }),
+    ).rejects.toThrow(/blocked by allowUrl/);
+
+    const images = await prepareImages({
+      node,
+      fetchCache,
+      fetch: fetchMock,
+      allowUrl: () => true,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(images.map((image) => new Uint8Array(image.data))).toEqual([payload]);
+  });
+
+  test("a cache hit rechecks every recorded redirect hop", async () => {
+    const fetchMock = mock((url: string) =>
+      Promise.resolve(
+        url === "https://allowed.example.com/a.png"
+          ? new Response(null, {
+              status: 302,
+              headers: { location: "http://169.254.169.254/meta" },
+            })
+          : new Response(new Uint8Array(8)),
+      ),
+    );
+    const fetchCache = new Map<string, Promise<ArrayBuffer>>();
+    const node = tree("https://allowed.example.com/a.png");
+
+    await prepareImages({ node, fetchCache, fetch: fetchMock, allowUrl: () => true });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    await expect(
+      prepareImages({
+        node,
+        fetchCache,
+        fetch: fetchMock,
+        allowUrl: (url) => new URL(url).hostname === "allowed.example.com",
+      }),
+    ).rejects.toThrow(/blocked by allowUrl/);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  test("an entry fetched without allowUrl is still checked against its entry url", async () => {
+    const fetchMock = mock(() => Promise.resolve(new Response(new Uint8Array(8))));
+    const fetchCache = new Map<string, Promise<ArrayBuffer>>();
+    const node = tree("http://169.254.169.254/meta.png");
+
+    await prepareImages({ node, fetchCache, fetch: fetchMock });
+
+    await expect(
+      prepareImages({
+        node,
+        fetchCache,
+        fetch: fetchMock,
+        allowUrl: (url) => new URL(url).hostname === "allowed.example.com",
+      }),
+    ).rejects.toThrow(/blocked by allowUrl/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("default fetch timeout", () => {
   test("fontFromUrl rejects a hanging host within the timeout", async () => {
     const fetchMock = mock(
