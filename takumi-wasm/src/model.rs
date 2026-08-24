@@ -1,6 +1,6 @@
 //! Data models and types for the WebAssembly bindings.
 
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use serde::{Deserialize, Deserializer, de::Error as DeError};
 use serde_bytes::ByteBuf;
@@ -74,6 +74,8 @@ pub struct RenderOptions {
   pub images: Option<Vec<ImageSource>>,
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
+  /// Design tokens for the `tw` prop, keyed by CSS custom property name.
+  pub theme: Option<HashMap<String, String>>,
   /// Structured keyframes to register alongside stylesheets.
   #[serde(default, deserialize_with = "deserialize_optional_keyframes")]
   pub(crate) keyframes: Option<Vec<KeyframesRule>>,
@@ -106,6 +108,8 @@ pub struct SvgRenderOptions {
   pub images: Option<Vec<ImageSource>>,
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
+  /// Design tokens for the `tw` prop, keyed by CSS custom property name.
+  pub theme: Option<HashMap<String, String>>,
   /// Structured keyframes to register alongside stylesheets.
   #[serde(default, deserialize_with = "deserialize_optional_keyframes")]
   pub(crate) keyframes: Option<Vec<KeyframesRule>>,
@@ -136,6 +140,8 @@ pub struct RenderAnimationOptions {
   pub draw_debug_border: Option<bool>,
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
+  /// Design tokens for the `tw` prop, keyed by CSS custom property name.
+  pub theme: Option<HashMap<String, String>>,
   /// Structured keyframes to register alongside stylesheets.
   #[serde(default, deserialize_with = "deserialize_optional_keyframes")]
   pub(crate) keyframes: Option<Vec<KeyframesRule>>,

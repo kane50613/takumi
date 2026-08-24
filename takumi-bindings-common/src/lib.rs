@@ -14,7 +14,7 @@ use takumi_core::{
     font::{FontError, FontOverride, FontResource},
     image::ResourceCache,
   },
-  style::{FontStyle, KeyframesRule, StyleSheet},
+  style::{FontStyle, KeyframesRule, StyleSheet, Theme},
 };
 
 /// Last-resort only: no generic family claim, so `sans-serif` and friends
@@ -74,21 +74,23 @@ pub fn build_font_resource<'a>(
   }
 }
 
-/// The stylesheet for a render: the loose-parsed sheet list with its keyframes.
-/// Parsed sheets are cached by source text in `cache`; per-render keyframes are
-/// grafted onto a copy so the cached parse stays pristine.
+/// The stylesheet for a render: the loose-parsed sheet list with its keyframes
+/// and theme. Parsed sheets are cached by source text in `cache`; per-render
+/// keyframes and theme are grafted onto a copy so the cached parse stays pristine.
 pub fn stylesheet(
   cache: &ResourceCache,
   stylesheets: Option<Vec<String>>,
   keyframes: Vec<KeyframesRule>,
+  theme: Theme,
 ) -> Arc<StyleSheet> {
   let sheet = cache.get_or_parse_stylesheet(stylesheets.unwrap_or_default());
 
-  if keyframes.is_empty() {
+  if keyframes.is_empty() && theme.is_empty() {
     return sheet;
   }
 
   let mut extended = (*sheet).clone();
   extended.extend_keyframes(keyframes);
+  extended.set_theme(theme);
   Arc::new(extended)
 }

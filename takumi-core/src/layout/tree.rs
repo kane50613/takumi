@@ -225,6 +225,7 @@ fn build_style_layers(
   node_layers: NodeStyleLayers,
   matched_declarations: &MatchedDeclarationsView<'_>,
   viewport: Viewport,
+  theme: &Theme,
 ) -> NodeStyle {
   let mut style = NodeStyle::default();
 
@@ -243,7 +244,7 @@ fn build_style_layers(
   }
 
   if let Some(author_tw) = node_layers.author_tw {
-    style.append_block(author_tw.into_declaration_block(viewport, &Theme::default()));
+    style.append_block(author_tw.into_declaration_block(viewport, theme));
   }
 
   if let Some(inline) = node_layers.inline {
@@ -316,6 +317,7 @@ pub(super) fn pseudo_computed_style(
     NodeStyleLayers::default(),
     pseudo_matched,
     parent_context.sizing.viewport,
+    parent_context.stylesheet.theme(),
   );
   let inherited_parent = registered_custom_property_parent_style(
     &parent_context.style,
@@ -1373,7 +1375,12 @@ impl RenderNode {
       let layers = node.take_style_layers();
       let lang = layers.lang;
 
-      let style_layers = build_style_layers(layers, matched, parent_context.sizing.viewport);
+      let style_layers = build_style_layers(
+        layers,
+        matched,
+        parent_context.sizing.viewport,
+        parent_context.stylesheet.theme(),
+      );
       let inherited_parent = registered_custom_property_parent_style(
         &parent_context.style,
         std::slice::from_ref(parent_context.stylesheet.as_ref()),

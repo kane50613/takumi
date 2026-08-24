@@ -16,7 +16,9 @@ pub use crate::style::media_query::MediaQueryList;
 use crate::{
   error::StyleSheetParseError,
   keyframes::parse_keyframe_prelude,
-  style::{KeyframeRule, KeyframesRule, StyleDeclarationBlock, supports::parse_supports_condition},
+  style::{
+    KeyframeRule, KeyframesRule, StyleDeclarationBlock, Theme, supports::parse_supports_condition,
+  },
 };
 
 /// A registered custom property from an `@property` rule.
@@ -1030,6 +1032,8 @@ pub struct StyleSheet {
   pub(crate) property_rules: Vec<PropertyRule>,
   /// Number of distinct cascade layers.
   pub(crate) layer_count: usize,
+  /// Design tokens the `tw` prop resolves against.
+  pub(crate) theme: Theme,
 }
 
 impl From<Vec<KeyframesRule>> for StyleSheet {
@@ -1060,6 +1064,16 @@ impl StyleSheet {
   /// Extends the stylesheet with keyframes.
   pub fn extend_keyframes(&mut self, keyframes: Vec<KeyframesRule>) {
     self.keyframes.extend(keyframes);
+  }
+
+  /// The design tokens utilities resolve against.
+  pub(crate) fn theme(&self) -> &Theme {
+    &self.theme
+  }
+
+  /// Replaces the theme, for tokens supplied per render rather than in CSS.
+  pub fn set_theme(&mut self, theme: Theme) {
+    self.theme = theme;
   }
 
   /// Parses a list of stylesheets.
@@ -1185,6 +1199,7 @@ impl StyleSheet {
       keyframes,
       property_rules,
       layer_count: layer_order.len(),
+      theme: Theme::default(),
     })
   }
 }

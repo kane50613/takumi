@@ -85,7 +85,7 @@ export default defineConfig({
 
 The `tw` prop runs a built-in parser with no build step. It won't cover every Tailwind feature.
 
-- No theme config, but arbitrary values work.
+- Arbitrary values work.
 - See the [parser mapping](https://github.com/kane50613/takumi/blob/master/takumi-core/src/style/tw/map.rs) for every supported class.
 
 <Callout type="warn">
@@ -98,6 +98,23 @@ The `tw` prop runs a built-in parser with no build step. It won't cover every Ta
   <h1 tw="text-white text-2xl font-bold">Hello Tailwind!</h1>
 </div>
 ```
+
+### Theme tokens
+
+Pass a `theme` keyed by CSS custom property name to give the parser your own tokens. `--color-*` reaches every color utility, `--spacing-*` every length utility.
+
+```tsx
+const image = await render(<div tw="bg-brand-500 p-gutter" />, {
+  width: 1200,
+  height: 630,
+  theme: {
+    "--color-brand-500": "#5b21b6",
+    "--spacing-gutter": "2.5rem",
+  },
+});
+```
+
+Naming a built-in token replaces it, so `--color-red-500` changes what `bg-red-500` paints. A value of `initial` removes a token. `--color-*: initial` clears the whole namespace, built-in palette included.
 
 `tw` is a plain prop, so build it dynamically:
 

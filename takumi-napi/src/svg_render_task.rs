@@ -4,7 +4,7 @@ use napi::bindgen_prelude::*;
 use takumi_bindings_common::stylesheet;
 use takumi_core::{
   layout::node::Node,
-  style::{FontFamily, Lang, StyleSheet},
+  style::{FontFamily, Lang, StyleSheet, Theme},
   viewport::Viewport,
 };
 
@@ -38,6 +38,7 @@ impl SvgRenderTask {
       &state.resource_cache,
       options.stylesheets,
       deserialize_keyframes(options.keyframes)?,
+      Theme::from_unordered(options.theme.unwrap_or_default()),
     );
 
     Ok(SvgRenderTask {

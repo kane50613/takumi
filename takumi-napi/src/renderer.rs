@@ -179,6 +179,8 @@ pub struct RenderOptions<'env> {
   pub images: Option<Vec<ImageSource<'env>>>,
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
+  /// Design tokens for the `tw` prop, keyed by CSS custom property name.
+  pub theme: Option<HashMap<String, String>>,
   /// Structured keyframes to register alongside stylesheets.
   #[napi(ts_type = "Keyframes")]
   pub keyframes: Option<Object<'env>>,
@@ -210,6 +212,8 @@ pub struct SvgRenderOptions<'env> {
   pub images: Option<Vec<ImageSource<'env>>>,
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
+  /// Design tokens for the `tw` prop, keyed by CSS custom property name.
+  pub theme: Option<HashMap<String, String>>,
   /// Structured keyframes to register alongside stylesheets.
   #[napi(ts_type = "Keyframes")]
   pub keyframes: Option<Object<'env>>,
@@ -278,6 +282,8 @@ pub struct RenderAnimationOptions<'env> {
   pub images: Option<Vec<ImageSource<'env>>>,
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
+  /// Design tokens for the `tw` prop, keyed by CSS custom property name.
+  pub theme: Option<HashMap<String, String>>,
   /// Structured keyframes to register alongside stylesheets.
   #[napi(ts_type = "Keyframes")]
   pub keyframes: Option<Object<'env>>,

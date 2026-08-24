@@ -4,7 +4,7 @@ use napi::bindgen_prelude::*;
 use takumi_bindings_common::stylesheet;
 use takumi_core::{
   layout::node::Node,
-  style::{FontFamily, KeyframesRule, Lang},
+  style::{FontFamily, KeyframesRule, Lang, Theme},
   viewport::Viewport,
 };
 use takumi_raster::{
@@ -30,6 +30,7 @@ pub struct RenderAnimationTask {
   pub(crate) draw_debug_border: bool,
   pub(crate) stylesheets: Option<Vec<String>>,
   pub(crate) keyframes: Vec<KeyframesRule>,
+  pub(crate) theme: Theme,
   pub(crate) images: HashMap<Arc<str>, (JsBytes, ImageCacheMode)>,
   pub(crate) font_families: Option<FontFamily>,
   pub(crate) lang: Option<Lang>,
@@ -54,6 +55,7 @@ impl RenderAnimationTask {
       images,
       stylesheets,
       keyframes,
+      theme,
       device_pixel_ratio: dpr,
       font_families,
       lang,
@@ -87,6 +89,7 @@ impl RenderAnimationTask {
       draw_debug_border: draw_debug_border.unwrap_or_default(),
       stylesheets,
       keyframes: deserialize_keyframes(keyframes)?,
+      theme: Theme::from_unordered(theme.unwrap_or_default()),
       images: collect_images(env, images)?,
       font_families: font_families.map(FontFamily::from_names),
       lang: parse_lang(lang)?,
@@ -110,6 +113,7 @@ impl Task for RenderAnimationTask {
         &self.state.resource_cache,
         take(&mut self.stylesheets),
         take(&mut self.keyframes),
+        take(&mut self.theme),
       );
       let scene_options = scenes
         .into_iter()

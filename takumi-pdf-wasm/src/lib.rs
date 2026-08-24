@@ -16,7 +16,7 @@ use takumi_core::{
   Fonts,
   layout::node::Node,
   resources::{font::FontResource, image::ResourceCache},
-  style::{FontFamily, Lang},
+  style::{FontFamily, Lang, Theme},
 };
 use takumi_pdf::{Attachment, MeasureOptions, PdfMetadata, PdfOptions, PdfStandard, Tagging};
 use wasm_bindgen::prelude::*;
@@ -163,7 +163,12 @@ impl PdfRenderer {
       viewport,
       fonts: &state,
       node,
-      stylesheet: stylesheet(&self.resource_cache, options.stylesheets, Vec::new()),
+      stylesheet: stylesheet(
+        &self.resource_cache,
+        options.stylesheets,
+        Vec::new(),
+        Theme::from_unordered(options.theme.unwrap_or_default()),
+      ),
       images,
       page,
       background_color: page_background(options.background_color.as_deref())?,
@@ -215,7 +220,12 @@ impl PdfRenderer {
       viewport,
       fonts: &state,
       node,
-      stylesheet: stylesheet(&self.resource_cache, options.stylesheets, Vec::new()),
+      stylesheet: stylesheet(
+        &self.resource_cache,
+        options.stylesheets,
+        Vec::new(),
+        Theme::from_unordered(options.theme.unwrap_or_default()),
+      ),
       images,
       page,
       font_families: options.font_families.map(FontFamily::from_names),

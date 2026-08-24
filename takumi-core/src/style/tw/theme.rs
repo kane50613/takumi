@@ -72,6 +72,24 @@ impl Theme {
     entry.entries.insert(token.into(), value);
   }
 
+  /// Builds a theme from entries whose order carries no meaning, such as a JS
+  /// object. Namespace resets are applied first so they cannot clear a token
+  /// the same batch defines.
+  pub fn from_unordered<I: IntoIterator<Item = (String, String)>>(entries: I) -> Self {
+    let entries = entries.into_iter().collect::<Vec<_>>();
+    let mut theme = Theme::default();
+
+    for (key, value) in entries.iter().filter(|(key, _)| key.ends_with("-*")) {
+      theme.insert(key, value);
+    }
+
+    for (key, value) in entries.iter().filter(|(key, _)| !key.ends_with("-*")) {
+      theme.insert(key, value);
+    }
+
+    theme
+  }
+
   /// Whether no token is defined, which keeps utility parsing on the built-in path.
   pub fn is_empty(&self) -> bool {
     self

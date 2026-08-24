@@ -15,7 +15,7 @@ use takumi_core::{
     font::{FontResource, RegisteredFamily},
     image::{ImageSource as LoadedImageSource, ResourceCache},
   },
-  style::{FontFamily, Lang},
+  style::{FontFamily, Lang, Theme},
   viewport::{DEFAULT_DEVICE_PIXEL_RATIO, Viewport},
 };
 use takumi_raster::{
@@ -82,6 +82,7 @@ fn raster_options<'fonts>(
     resource_cache,
     options.stylesheets,
     options.keyframes.unwrap_or_default(),
+    Theme::from_unordered(options.theme.unwrap_or_default()),
   );
   let lang = parse_lang(options.lang)?;
 
@@ -237,6 +238,7 @@ impl Renderer {
       &self.resource_cache,
       options.stylesheets,
       options.keyframes.unwrap_or_default(),
+      Theme::from_unordered(options.theme.unwrap_or_default()),
     );
     let state = self.read_state()?;
 
@@ -328,6 +330,7 @@ impl Renderer {
       draw_debug_border,
       stylesheets,
       keyframes,
+      theme,
       device_pixel_ratio,
       fps,
       font_families,
@@ -353,6 +356,7 @@ impl Renderer {
       &self.resource_cache,
       stylesheets,
       keyframes.unwrap_or_default(),
+      Theme::from_unordered(theme.unwrap_or_default()),
     );
     let state = self.read_state()?;
     let scene_options = scenes
