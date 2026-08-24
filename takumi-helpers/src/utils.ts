@@ -68,11 +68,26 @@ async function followRedirectsWithPolicy(
   throw new Error(`Too many redirects fetching ${url}`);
 }
 
+/** A body larger than the reader's byte cap. Carries the cap, so cache consumers can tell a
+ * creator's tighter limit from their own without parsing messages. */
+class ResponseTooLargeError extends Error {
+  constructor(
+    readonly limit: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ResponseTooLargeError";
+  }
+}
+
 /** Reads a response body, rejecting once it exceeds `maxBytes` (by content-length or streamed size). */
 export async function readBodyLimited(response: Response, maxBytes: number): Promise<ArrayBuffer> {
   const declared = Number(response.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > maxBytes) {
-    throw new Error(`Response exceeds ${maxBytes} bytes (content-length ${declared})`);
+    throw new ResponseTooLargeError(
+      maxBytes,
+      `Response exceeds ${maxBytes} bytes (content-length ${declared})`,
+    );
   }
 
   const body = response.body;
@@ -92,7 +107,7 @@ export async function readBodyLimited(response: Response, maxBytes: number): Pro
     total += value.byteLength;
     if (total > maxBytes) {
       await reader.cancel().catch(() => {});
-      throw new Error(`Response exceeds ${maxBytes} bytes`);
+      throw new ResponseTooLargeError(maxBytes, `Response exceeds ${maxBytes} bytes`);
     }
     chunks.push(value);
   }
@@ -255,13 +270,13 @@ function fetchImageData(
       },
       (error) => {
         // The shared stream died under its creator's tighter cap; these bytes may still fit
-        // this call. Refetch privately rather than inherit that rejection. Match
-        // readBodyLimited's message, so unrelated failures keep propagating to every consumer.
+        // this call. Refetch privately rather than inherit that rejection. Only the typed
+        // size error qualifies, so unrelated failures keep propagating to every consumer.
         const capped =
           meta !== undefined &&
           meta.maxBytes < maxBytes &&
-          error instanceof Error &&
-          error.message.startsWith(`Response exceeds ${meta.maxBytes} bytes`);
+          error instanceof ResponseTooLargeError &&
+          error.limit === meta.maxBytes;
         return capped ? fetchUncached(url, options, maxBytes) : Promise.reject(error);
       },
     );
