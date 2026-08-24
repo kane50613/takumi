@@ -6,4 +6,4 @@ packages:
 
 ### Enforce fetch policies on shared image cache entries
 
-A shared `fetchCache` hit returned cached bytes without running the calling render's `allowUrl` or `maxBytes`. Cache hits now check both, including every recorded redirect hop. Entries fetched without `allowUrl` have no recorded chain, so a later `allowUrl` only checks their entry URL.
+A shared `fetchCache` hit returned cached bytes without running the calling render's `allowUrl` or `maxBytes`. Cache hits now recheck both. `allowUrl` runs against the entry URL only, not the redirect hops the original fetch followed.

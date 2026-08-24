@@ -194,34 +194,6 @@ describe("shared fetchCache policy enforcement", () => {
     expect(images.map((image) => new Uint8Array(image.data))).toEqual([payload]);
   });
 
-  test("a cache hit rechecks every recorded redirect hop", async () => {
-    const fetchMock = mock((url: string) =>
-      Promise.resolve(
-        url === "https://allowed.example.com/a.png"
-          ? new Response(null, {
-              status: 302,
-              headers: { location: "http://169.254.169.254/meta" },
-            })
-          : new Response(new Uint8Array(8)),
-      ),
-    );
-    const fetchCache = new Map<string, Promise<ArrayBuffer>>();
-    const node = tree("https://allowed.example.com/a.png");
-
-    await prepareImages({ node, fetchCache, fetch: fetchMock, allowUrl: () => true });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-
-    await expect(
-      prepareImages({
-        node,
-        fetchCache,
-        fetch: fetchMock,
-        allowUrl: (url) => new URL(url).hostname === "allowed.example.com",
-      }),
-    ).rejects.toThrow(/blocked by allowUrl/);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-
   test("an entry fetched without allowUrl is still checked against its entry url", async () => {
     const fetchMock = mock(() => Promise.resolve(new Response(new Uint8Array(8))));
     const fetchCache = new Map<string, Promise<ArrayBuffer>>();
