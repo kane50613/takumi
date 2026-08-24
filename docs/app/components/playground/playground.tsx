@@ -164,6 +164,7 @@ export default function Playground() {
         height={browserPreview?.height}
         padding={browserPreview?.padding}
         cssContents={browserPreview?.cssContents}
+        variables={browserPreview?.variables}
       />
     </Suspense>
   );
