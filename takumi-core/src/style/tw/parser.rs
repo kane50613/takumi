@@ -274,8 +274,9 @@ impl TailwindPropertyParser for TwBlur {
   }
 }
 
-/// A gradient stop colour as the expression Tailwind compiles it to: the
-/// `--color-*` variable with the built-in colour as its inline fallback.
+/// A theme-backed colour expression for gradient stops and shadow colours:
+/// `var(--color-*)`, with the built-in colour as the fallback when the token
+/// names one. `current` and `transparent` stay plain keywords.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct TwThemeColor(pub Arc<str>);
 
