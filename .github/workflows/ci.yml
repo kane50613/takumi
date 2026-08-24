@@ -250,8 +250,9 @@ jobs:
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
         with:
-          # pinned: newer nightlies emit --fix-cortex-a53-843419 which zig rejects (cargo-zigbuild#451)
-          toolchain: nightly-2026-06-04
+          # held below nightly-2026-08-06: LLVM 23 (rust#158734) emits 4% more
+          # instructions per function and costs 33KB gzipped in the wasm bundle
+          toolchain: nightly-2026-08-05
           targets: ${{ matrix.settings.target }}
           components: rust-src
           stage: build
@@ -533,7 +534,7 @@ jobs:
         uses: ./.github/actions/setup-rust
         with:
           # pinned to match build-and-test-napi (see comment there)
-          toolchain: nightly-2026-06-04
+          toolchain: nightly-2026-08-05
           targets: wasm32-unknown-unknown
           components: rust-src
           stage: build
@@ -580,7 +581,7 @@ jobs:
         uses: ./.github/actions/setup-rust
         with:
           # pinned to match build-and-test-napi (see comment there)
-          toolchain: nightly-2026-06-04
+          toolchain: nightly-2026-08-05
           targets: wasm32-unknown-unknown
           components: rust-src
           stage: build
