@@ -44,6 +44,34 @@ fn push_gradient_image(builder: &mut TailwindDeclarationBuilder, important: bool
   push_deferred(builder, important, LonghandId::BackgroundImage, image);
 }
 
+/// The filter chains Tailwind compiles, in its fixed order. An unset variable
+/// collapses to nothing through the empty fallback.
+const FILTER_CHAIN: &str = "var(--tw-blur,) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,)";
+const BACKDROP_FILTER_CHAIN: &str = "var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,)";
+
+const TRANSLATE_PAIR: &str = "var(--tw-translate-x, 0px) var(--tw-translate-y, 0px)";
+const SCALE_PAIR: &str = "var(--tw-scale-x, 100%) var(--tw-scale-y, 100%)";
+
+fn push_tw_filter(
+  builder: &mut TailwindDeclarationBuilder,
+  important: bool,
+  backdrop: bool,
+  name: &str,
+  filter: &Filter,
+) {
+  let (prefix, longhand, chain) = match backdrop {
+    false => ("--tw-", LonghandId::Filter, FILTER_CHAIN),
+    true => (
+      "--tw-backdrop-",
+      LonghandId::BackdropFilter,
+      BACKDROP_FILTER_CHAIN,
+    ),
+  };
+
+  push_custom(builder, important, &format!("{prefix}{name}"), &css(filter));
+  push_deferred(builder, important, longhand, chain.to_owned());
+}
+
 /// One shadow layer with its colour behind `var()`, as Tailwind compiles it:
 /// the colour utility overrides through the variable, the layer's own colour
 /// stays as the fallback.
@@ -688,24 +716,31 @@ impl ThemeVar {
   /// One declaration per longhand, sharing the variable the prefix reads.
   /// `text-lg` spells its line height in a companion variable, so one token can
   /// set the size without dragging the leading with it.
+  /// `None` when a declaration has no single longhand to defer (it composes
+  /// through custom properties instead), leaving the utility unthemed.
   fn from_builtin(
     name: &Arc<str>,
     expression: &Arc<str>,
     declarations: impl IntoIterator<Item = StyleDeclaration>,
-  ) -> Self {
-    let targets = declarations
-      .into_iter()
-      .map(|declaration| {
-        var_ref(
-          name,
-          expression,
-          declaration.longhand_id(),
-          Some(declaration),
-        )
-      })
-      .collect();
+  ) -> Option<Self> {
+    let mut targets = SmallVec::new();
 
-    Self { targets }
+    for declaration in declarations {
+      if matches!(
+        declaration,
+        StyleDeclaration::CustomProperty(..)
+          | StyleDeclaration::Deferred(..)
+          | StyleDeclaration::VarRef(..)
+      ) {
+        return None;
+      }
+
+      let longhand = declaration.longhand_id();
+
+      targets.push(var_ref(name, expression, longhand, Some(declaration)));
+    }
+
+    Some(Self { targets })
   }
 
   #[cfg(test)]
@@ -919,18 +954,6 @@ macro_rules! try_neg {
 }
 
 impl TailwindProperty {
-  /// Whether this property merges with sibling utilities in the builder
-  /// (transforms), which a value that resolves at computed time cannot take
-  /// part in.
-  fn merges_in_builder(&self) -> bool {
-    matches!(
-      self,
-      TailwindProperty::Translate(..)
-        | TailwindProperty::TranslateX(..)
-        | TailwindProperty::TranslateY(..)
-    )
-  }
-
   fn try_neg(self) -> Option<Self> {
     try_neg!(self;
       try_negative:
@@ -1015,20 +1038,14 @@ impl TailwindProperty {
           property
         };
 
-        if property.merges_in_builder() {
-          return Some(property);
+        if let Some((name, expression)) = theme_expression(parser.namespaces(), suffix, negative)
+          && let Some(theme_var) =
+            ThemeVar::from_builtin(&name, &expression, property.clone().expand_targets())
+        {
+          return Some(TailwindProperty::ThemeVar(theme_var));
         }
 
-        return Some(
-          match theme_expression(parser.namespaces(), suffix, negative) {
-            Some((name, expression)) => TailwindProperty::ThemeVar(ThemeVar::from_builtin(
-              &name,
-              &expression,
-              property.expand_targets(),
-            )),
-            None => property,
-          },
-        );
+        return Some(property);
       }
 
       // No built-in value, but the prefix still names what the utility writes.
@@ -1546,27 +1563,46 @@ impl TailwindProperty {
         push_decl!(builder, important, line_height(line_height))
       }
       TailwindProperty::Translate(length) => {
-        builder
-          .transform_state
-          .set_translate(SpacePair::from_single(length), important);
+        push_custom(builder, important, "--tw-translate-x", &css(&length));
+        push_custom(builder, important, "--tw-translate-y", &css(&length));
+        push_deferred(
+          builder,
+          important,
+          LonghandId::Translate,
+          TRANSLATE_PAIR.to_owned(),
+        );
       }
       TailwindProperty::TranslateX(length) => {
-        builder.transform_state.translate_mut(important).x = length;
+        push_custom(builder, important, "--tw-translate-x", &css(&length));
+        push_deferred(
+          builder,
+          important,
+          LonghandId::Translate,
+          TRANSLATE_PAIR.to_owned(),
+        );
       }
       TailwindProperty::TranslateY(length) => {
-        builder.transform_state.translate_mut(important).y = length;
+        push_custom(builder, important, "--tw-translate-y", &css(&length));
+        push_deferred(
+          builder,
+          important,
+          LonghandId::Translate,
+          TRANSLATE_PAIR.to_owned(),
+        );
       }
       TailwindProperty::Rotate(angle) => push_decl!(builder, important, rotate(Some(angle))),
       TailwindProperty::Scale(percentage_number) => {
-        builder
-          .transform_state
-          .set_scale(SpacePair::from_single(percentage_number), important);
+        push_custom(builder, important, "--tw-scale-x", &css(&percentage_number));
+        push_custom(builder, important, "--tw-scale-y", &css(&percentage_number));
+        push_deferred(builder, important, LonghandId::Scale, SCALE_PAIR.to_owned());
       }
       TailwindProperty::ScaleX(percentage_number) => {
-        builder.transform_state.scale_mut(important).x = percentage_number;
+        push_custom(builder, important, "--tw-scale-x", &css(&percentage_number));
+        push_deferred(builder, important, LonghandId::Scale, SCALE_PAIR.to_owned());
       }
       TailwindProperty::ScaleY(percentage_number) => {
-        builder.transform_state.scale_mut(important).y = percentage_number;
+        push_custom(builder, important, "--tw-scale-y", &css(&percentage_number));
+        push_deferred(builder, important, LonghandId::Scale, SCALE_PAIR.to_owned());
       }
       TailwindProperty::TransformOrigin(background_position) => {
         push_decl!(builder, important, transform_origin(background_position))
@@ -1679,38 +1715,29 @@ impl TailwindProperty {
         important,
         grid_auto_rows(Some([grid_auto_size].into()))
       ),
-      TailwindProperty::GridColumn(tw_grid_span) => {
-        builder.set_grid_column(tw_grid_span, important)
-      }
-      TailwindProperty::GridRow(tw_grid_span) => builder.set_grid_row(tw_grid_span, important),
+      TailwindProperty::GridColumn(grid_line) => push_decl!(
+        builder,
+        important,
+        grid_column_start(grid_line.start),
+        grid_column_end(grid_line.end)
+      ),
+      TailwindProperty::GridRow(grid_line) => push_decl!(
+        builder,
+        important,
+        grid_row_start(grid_line.start),
+        grid_row_end(grid_line.end)
+      ),
       TailwindProperty::GridColumnStart(tw_grid_placement) => {
-        let start = builder
-          .grid_column
-          .start
-          .get_or_insert_with(GridPlacement::auto);
-        *start = tw_grid_placement;
-        builder.grid_column.start_important = important;
+        push_decl!(builder, important, grid_column_start(tw_grid_placement))
       }
       TailwindProperty::GridColumnEnd(tw_grid_placement) => {
-        let end = builder
-          .grid_column
-          .end
-          .get_or_insert_with(GridPlacement::auto);
-        *end = tw_grid_placement;
-        builder.grid_column.end_important = important;
+        push_decl!(builder, important, grid_column_end(tw_grid_placement))
       }
       TailwindProperty::GridRowStart(tw_grid_placement) => {
-        let start = builder
-          .grid_row
-          .start
-          .get_or_insert_with(GridPlacement::auto);
-        *start = tw_grid_placement;
-        builder.grid_row.start_important = important;
+        push_decl!(builder, important, grid_row_start(tw_grid_placement))
       }
       TailwindProperty::GridRowEnd(tw_grid_placement) => {
-        let end = builder.grid_row.end.get_or_insert_with(GridPlacement::auto);
-        *end = tw_grid_placement;
-        builder.grid_row.end_important = important;
+        push_decl!(builder, important, grid_row_end(tw_grid_placement))
       }
       TailwindProperty::GridTemplateColumns(tw_grid_template) => push_decl!(
         builder,
@@ -1729,79 +1756,192 @@ impl TailwindProperty {
         push_decl!(builder, important, grid_auto_flow(grid_auto_flow))
       }
       TailwindProperty::GridColumnSpan(grid_placement_span) => {
-        builder.set_grid_column(GridLine::span(grid_placement_span), important)
+        let line = GridLine::span(grid_placement_span);
+
+        push_decl!(
+          builder,
+          important,
+          grid_column_start(line.start),
+          grid_column_end(line.end)
+        )
       }
       TailwindProperty::GridRowSpan(grid_placement_span) => {
-        builder.set_grid_row(GridLine::span(grid_placement_span), important)
+        let line = GridLine::span(grid_placement_span);
+
+        push_decl!(
+          builder,
+          important,
+          grid_row_start(line.start),
+          grid_row_end(line.end)
+        )
       }
-      TailwindProperty::Blur(tw_blur) => builder.push_filter(Filter::Blur(tw_blur.0), important),
+      TailwindProperty::Blur(tw_blur) => {
+        push_tw_filter(builder, important, false, "blur", &Filter::Blur(tw_blur.0));
+      }
       TailwindProperty::Brightness(percentage_number) => {
-        builder.push_filter(Filter::Brightness(percentage_number), important)
+        push_tw_filter(
+          builder,
+          important,
+          false,
+          "brightness",
+          &Filter::Brightness(percentage_number),
+        );
       }
       TailwindProperty::Contrast(percentage_number) => {
-        builder.push_filter(Filter::Contrast(percentage_number), important)
+        push_tw_filter(
+          builder,
+          important,
+          false,
+          "contrast",
+          &Filter::Contrast(percentage_number),
+        );
       }
       TailwindProperty::DropShadow(text_shadow) => {
-        builder.push_filter(Filter::DropShadow(text_shadow), important)
+        push_tw_filter(
+          builder,
+          important,
+          false,
+          "drop-shadow",
+          &Filter::DropShadow(text_shadow),
+        );
       }
       TailwindProperty::Grayscale(percentage_number) => {
-        builder.push_filter(Filter::Grayscale(percentage_number), important)
+        push_tw_filter(
+          builder,
+          important,
+          false,
+          "grayscale",
+          &Filter::Grayscale(percentage_number),
+        );
       }
       TailwindProperty::HueRotate(angle) => {
-        builder.push_filter(Filter::HueRotate(angle), important)
+        push_tw_filter(
+          builder,
+          important,
+          false,
+          "hue-rotate",
+          &Filter::HueRotate(angle),
+        );
       }
       TailwindProperty::Invert(percentage_number) => {
-        builder.push_filter(Filter::Invert(percentage_number), important)
+        push_tw_filter(
+          builder,
+          important,
+          false,
+          "invert",
+          &Filter::Invert(percentage_number),
+        );
       }
       TailwindProperty::Saturate(percentage_number) => {
-        builder.push_filter(Filter::Saturate(percentage_number), important)
+        push_tw_filter(
+          builder,
+          important,
+          false,
+          "saturate",
+          &Filter::Saturate(percentage_number),
+        );
       }
       TailwindProperty::Sepia(percentage_number) => {
-        builder.push_filter(Filter::Sepia(percentage_number), important)
+        push_tw_filter(
+          builder,
+          important,
+          false,
+          "sepia",
+          &Filter::Sepia(percentage_number),
+        );
       }
       TailwindProperty::Filter(filters) => {
         if filters.is_empty() {
-          builder.set_filter_reset(important, false);
+          push_deferred(builder, important, LonghandId::Filter, "none".to_owned());
         } else {
-          for filter in filters {
-            builder.push_filter(filter, important);
-          }
+          push_decl!(builder, important, filter(filters));
         }
       }
       TailwindProperty::BackdropBlur(tw_blur) => {
-        builder.push_backdrop_filter(Filter::Blur(tw_blur.0), important)
+        push_tw_filter(builder, important, true, "blur", &Filter::Blur(tw_blur.0));
       }
       TailwindProperty::BackdropBrightness(percentage_number) => {
-        builder.push_backdrop_filter(Filter::Brightness(percentage_number), important)
+        push_tw_filter(
+          builder,
+          important,
+          true,
+          "brightness",
+          &Filter::Brightness(percentage_number),
+        );
       }
       TailwindProperty::BackdropContrast(percentage_number) => {
-        builder.push_backdrop_filter(Filter::Contrast(percentage_number), important)
+        push_tw_filter(
+          builder,
+          important,
+          true,
+          "contrast",
+          &Filter::Contrast(percentage_number),
+        );
       }
       TailwindProperty::BackdropGrayscale(percentage_number) => {
-        builder.push_backdrop_filter(Filter::Grayscale(percentage_number), important)
+        push_tw_filter(
+          builder,
+          important,
+          true,
+          "grayscale",
+          &Filter::Grayscale(percentage_number),
+        );
       }
       TailwindProperty::BackdropHueRotate(angle) => {
-        builder.push_backdrop_filter(Filter::HueRotate(angle), important)
+        push_tw_filter(
+          builder,
+          important,
+          true,
+          "hue-rotate",
+          &Filter::HueRotate(angle),
+        );
       }
       TailwindProperty::BackdropInvert(percentage_number) => {
-        builder.push_backdrop_filter(Filter::Invert(percentage_number), important)
+        push_tw_filter(
+          builder,
+          important,
+          true,
+          "invert",
+          &Filter::Invert(percentage_number),
+        );
       }
       TailwindProperty::BackdropOpacity(percentage_number) => {
-        builder.push_backdrop_filter(Filter::Opacity(percentage_number), important)
+        push_tw_filter(
+          builder,
+          important,
+          true,
+          "opacity",
+          &Filter::Opacity(percentage_number),
+        );
       }
       TailwindProperty::BackdropSaturate(percentage_number) => {
-        builder.push_backdrop_filter(Filter::Saturate(percentage_number), important)
+        push_tw_filter(
+          builder,
+          important,
+          true,
+          "saturate",
+          &Filter::Saturate(percentage_number),
+        );
       }
       TailwindProperty::BackdropSepia(percentage_number) => {
-        builder.push_backdrop_filter(Filter::Sepia(percentage_number), important)
+        push_tw_filter(
+          builder,
+          important,
+          true,
+          "sepia",
+          &Filter::Sepia(percentage_number),
+        );
       }
       TailwindProperty::BackdropFilter(filters) => {
         if filters.is_empty() {
-          builder.set_filter_reset(important, true);
+          push_deferred(
+            builder,
+            important,
+            LonghandId::BackdropFilter,
+            "none".to_owned(),
+          );
         } else {
-          for filter in filters {
-            builder.push_backdrop_filter(filter, important);
-          }
+          push_decl!(builder, important, backdrop_filter(filters));
         }
       }
       TailwindProperty::TextShadow(text_shadow) => {

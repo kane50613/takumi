@@ -395,8 +395,8 @@ fn test_grid_longhand_importance_is_tracked_per_side() {
   assert_eq!(
     declarations.iter().collect::<Vec<_>>(),
     vec![
-      &StyleDeclaration::grid_column_start(GridPlacement::Line(2)),
       &StyleDeclaration::grid_column_end(GridPlacement::Line(3)),
+      &StyleDeclaration::grid_column_start(GridPlacement::Line(2)),
     ]
   );
   assert!(
@@ -1408,4 +1408,36 @@ fn test_shadow_color_reads_theme_variables() {
   for shadow in shadows {
     assert_eq!(shadow.color, ColorInput::Value(Color::from_rgb(0x5b21b6)));
   }
+}
+
+/// Filters compose through `--tw-*` variables in Tailwind's fixed chain
+/// order, whatever order the utilities appear in.
+#[test]
+fn test_filters_compose_through_variables() {
+  let compute = |classes: &str| {
+    let values = TailwindValues::from_str(classes).expect("tailwind values should parse");
+
+    Style::from(values.into_declaration_block(Viewport::new((100, 100))))
+      .inherit(&ComputedStyle::default())
+      .filter
+  };
+
+  let forward = compute("blur-sm brightness-125");
+
+  assert!(matches!(
+    &forward[..],
+    [Filter::Blur(..), Filter::Brightness(..)]
+  ));
+  assert_eq!(forward, compute("brightness-125 blur-sm"));
+}
+
+#[test]
+fn test_translate_composes_through_variables() {
+  let values =
+    TailwindValues::from_str("translate-x-4 -translate-y-2").expect("tailwind values should parse");
+  let computed = Style::from(values.into_declaration_block(Viewport::new((100, 100))))
+    .inherit(&ComputedStyle::default());
+
+  assert_eq!(computed.translate.x, Length::Rem(1.0));
+  assert_eq!(computed.translate.y, Length::Rem(-0.5));
 }
