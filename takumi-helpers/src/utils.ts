@@ -177,19 +177,32 @@ export interface ImageFetchCache {
 }
 
 /** Fetches a URL's bytes, coalescing concurrent requests for the same URL through `cache`. A
- * rejected fetch is evicted so a later call can retry instead of replaying the failure. */
+ * rejected fetch is evicted so a later call can retry instead of replaying the failure. A cache
+ * hit rechecks the caller's `allowUrl` (entry URL only, not redirect hops) and `maxBytes`. */
 function fetchImageData(
   url: string,
   options: FetchOptions,
   fetchCache?: ImageFetchCache,
 ): Promise<ArrayBuffer> {
+  const maxBytes = options.maxBytes ?? defaultMaxFetchBytes;
+  const { allowUrl } = options;
+
   const cached = fetchCache?.get(url);
   if (cached) {
-    return cached;
+    return cached.then((data) => {
+      if (allowUrl && !allowUrl(url)) {
+        throw new Error(`URL blocked by allowUrl policy: ${url}`);
+      }
+
+      if (data.byteLength > maxBytes) {
+        throw new Error(`Response exceeds ${maxBytes} bytes`);
+      }
+      return data;
+    });
   }
 
   const promise = fetchOk(url, options)
-    .then((response) => readBodyLimited(response, options.maxBytes ?? defaultMaxFetchBytes))
+    .then((response) => readBodyLimited(response, maxBytes))
     .catch((error) => {
       fetchCache?.delete(url);
       throw error;
