@@ -137,7 +137,9 @@ pub(crate) static THEME_TARGETS: phf::Map<&str, &[(Namespace, &[LonghandId])]> =
   "left" => &[(Namespace::Spacing, &[LonghandId::Left])],
   "m" => &[(Namespace::Spacing, &[LonghandId::MarginTop, LonghandId::MarginRight, LonghandId::MarginBottom, LonghandId::MarginLeft])],
   "max-h" => &[(Namespace::Spacing, &[LonghandId::MaxHeight])],
-  "max-w" => &[(Namespace::Container, &[LonghandId::MaxWidth]), (Namespace::Spacing, &[LonghandId::MaxWidth])],
+  // Groups apply in order, so when two namespaces fill the same longhand the
+  // one Tailwind prefers goes last.
+  "max-w" => &[(Namespace::Spacing, &[LonghandId::MaxWidth]), (Namespace::Container, &[LonghandId::MaxWidth])],
   "mb" => &[(Namespace::Spacing, &[LonghandId::MarginBottom])],
   "me" => &[(Namespace::Spacing, &[LonghandId::MarginInlineEnd])],
   "min-h" => &[(Namespace::Spacing, &[LonghandId::MinHeight])],

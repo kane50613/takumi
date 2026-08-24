@@ -1256,3 +1256,39 @@ fn test_aspect_keywords_survive_the_move_out_of_the_fixed_table() {
   assert_eq!(square.aspect_ratio, AspectRatio::Ratio(1.0));
   assert_eq!(themed.aspect_ratio, AspectRatio::Ratio(4.0 / 3.0));
 }
+
+/// A custom `--text-*` token spells its line height in the companion variable,
+/// not in the token itself.
+#[test]
+fn test_custom_text_token_line_height_reads_the_companion() {
+  let values = TailwindValues::from_str("text-brand").expect("tailwind values should parse");
+  let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
+
+  let sized = style
+    .clone()
+    .inherit(&root_with(&[("--text-brand", "2rem")]));
+  let leaded = style.inherit(&root_with(&[
+    ("--text-brand", "2rem"),
+    ("--text-brand--line-height", "3rem"),
+  ]));
+
+  assert_eq!(sized.line_height, ComputedStyle::default().line_height);
+  assert_eq!(leaded.line_height, LineHeight::Length(Length::Rem(3.0)));
+}
+
+/// With both namespaces defined, `max-w` takes `--container-*`, the namespace
+/// Tailwind prefers.
+#[test]
+fn test_max_w_prefers_the_container_namespace() {
+  let values = TailwindValues::from_str("max-w-page").expect("tailwind values should parse");
+  let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
+
+  let both = style.clone().inherit(&root_with(&[
+    ("--container-page", "60rem"),
+    ("--spacing-page", "1rem"),
+  ]));
+  let spacing_only = style.inherit(&root_with(&[("--spacing-page", "1rem")]));
+
+  assert_eq!(both.max_width, MaxSize::Length(Length::Rem(60.0)));
+  assert_eq!(spacing_only.max_width, MaxSize::Length(Length::Rem(1.0)));
+}

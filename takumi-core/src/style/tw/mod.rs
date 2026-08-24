@@ -625,22 +625,12 @@ impl ThemeVar {
     let targets = declarations
       .into_iter()
       .map(|declaration| {
-        let longhand = declaration.longhand_id();
-
-        match companion_variable(name, longhand) {
-          Some(companion) => ThemeVarTarget {
-            expression: format!("var({companion})").into(),
-            name: companion,
-            longhand,
-            fallback: Some(declaration),
-          },
-          None => ThemeVarTarget {
-            name: name.clone(),
-            expression: expression.clone(),
-            longhand,
-            fallback: Some(declaration),
-          },
-        }
+        ThemeVarTarget::new(
+          name,
+          expression,
+          declaration.longhand_id(),
+          Some(declaration),
+        )
       })
       .collect();
 
@@ -654,6 +644,30 @@ impl ThemeVar {
       .iter()
       .filter_map(|target| target.fallback.clone())
       .collect()
+  }
+}
+
+impl ThemeVarTarget {
+  fn new(
+    name: &Arc<str>,
+    expression: &Arc<str>,
+    longhand: LonghandId,
+    fallback: Option<StyleDeclaration>,
+  ) -> Self {
+    match companion_variable(name, longhand) {
+      Some(companion) => Self {
+        expression: format!("var({companion})").into(),
+        name: companion,
+        longhand,
+        fallback,
+      },
+      None => Self {
+        name: name.clone(),
+        expression: expression.clone(),
+        longhand,
+        fallback,
+      },
+    }
   }
 }
 
@@ -958,12 +972,11 @@ impl TailwindProperty {
           .filter_map(|(namespace, longhands)| {
             let (name, expression) = theme_expression(&[*namespace], suffix, negative)?;
 
-            Some(longhands.iter().map(move |&longhand| ThemeVarTarget {
-              name: name.clone(),
-              expression: expression.clone(),
-              longhand,
-              fallback: None,
-            }))
+            Some(
+              longhands
+                .iter()
+                .map(move |&longhand| ThemeVarTarget::new(&name, &expression, longhand, None)),
+            )
           })
           .flatten()
           .collect();
