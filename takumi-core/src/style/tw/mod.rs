@@ -41,10 +41,62 @@ fn push_custom(builder: &mut TailwindDeclarationBuilder, important: bool, name: 
 }
 
 fn push_gradient_image(builder: &mut TailwindDeclarationBuilder, important: bool, image: String) {
+  push_deferred(builder, important, LonghandId::BackgroundImage, image);
+}
+
+/// One shadow layer with its colour behind `var()`, as Tailwind compiles it:
+/// the colour utility overrides through the variable, the layer's own colour
+/// stays as the fallback.
+fn shadow_layer_css(
+  prefix: &str,
+  offsets: [&Length; 3],
+  color: &ColorInput,
+  variable: &str,
+) -> String {
+  let mut out = String::from(prefix);
+
+  for length in offsets {
+    out.push_str(&css(length));
+    out.push(' ');
+  }
+
+  out.push_str(&format!("var({variable}, {})", css(color)));
+  out
+}
+
+fn box_shadow_css(shadow: &BoxShadow) -> String {
+  let mut layer = shadow_layer_css(
+    if shadow.inset { "inset " } else { "" },
+    [&shadow.offset_x, &shadow.offset_y, &shadow.blur_radius],
+    &shadow.color,
+    "--tw-shadow-color",
+  );
+
+  let spread = format!("{} ", css(&shadow.spread_radius));
+
+  layer.insert_str(layer.rfind("var(").unwrap_or(0), &spread);
+  layer
+}
+
+fn text_shadow_css(shadow: &TextShadow) -> String {
+  shadow_layer_css(
+    "",
+    [&shadow.offset_x, &shadow.offset_y, &shadow.blur_radius],
+    &shadow.color,
+    "--tw-text-shadow-color",
+  )
+}
+
+fn push_deferred(
+  builder: &mut TailwindDeclarationBuilder,
+  important: bool,
+  longhand: LonghandId,
+  specified_value: String,
+) {
   builder.push(
     StyleDeclaration::Deferred(DeferredDeclaration {
-      property: PropertyId::Longhand(LonghandId::BackgroundImage),
-      specified_value: image,
+      property: PropertyId::Longhand(longhand),
+      specified_value,
     }),
     important,
   );
@@ -349,7 +401,7 @@ pub(crate) enum TailwindProperty {
   /// `box-shadow` property.
   Shadow(BoxShadow),
   /// `box-shadow` color override.
-  ShadowColor(ColorInput),
+  ShadowColor(TwThemeColor),
   /// `display` property.
   Display(Display),
   /// `list-style-type` property.
@@ -585,7 +637,7 @@ pub(crate) enum TailwindProperty {
   /// `text-shadow` property.
   TextShadow(TextShadow),
   /// `text-shadow` color override.
-  TextShadowColor(ColorInput),
+  TextShadowColor(TwThemeColor),
   /// `box-shadow` layer set.
   ShadowList(&'static [BoxShadow]),
   /// `text-shadow` layer set.
@@ -609,11 +661,11 @@ pub(crate) enum TailwindProperty {
   /// `bg-conic` property.
   BgConicAngle(Angle),
   /// `from` property.
-  GradientFrom(TwStopColor),
+  GradientFrom(TwThemeColor),
   /// `to` property.
-  GradientTo(TwStopColor),
+  GradientTo(TwThemeColor),
   /// `via` property.
-  GradientVia(TwStopColor),
+  GradientVia(TwThemeColor),
   /// Gradient `from` stop position.
   GradientFromPosition(Length),
   /// Gradient `via` stop position.
@@ -868,16 +920,14 @@ macro_rules! try_neg {
 
 impl TailwindProperty {
   /// Whether this property merges with sibling utilities in the builder
-  /// (transforms, shadow colour halves), which a value that resolves at
-  /// computed time cannot take part in.
+  /// (transforms), which a value that resolves at computed time cannot take
+  /// part in.
   fn merges_in_builder(&self) -> bool {
     matches!(
       self,
       TailwindProperty::Translate(..)
         | TailwindProperty::TranslateX(..)
         | TailwindProperty::TranslateY(..)
-        | TailwindProperty::ShadowColor(..)
-        | TailwindProperty::TextShadowColor(..)
     )
   }
 
@@ -1192,12 +1242,25 @@ impl TailwindProperty {
       TailwindProperty::MaxHeight(max_height) => {
         push_decl!(builder, important, max_height(max_height.into()))
       }
-      TailwindProperty::Shadow(box_shadow) => builder.set_shadow_layers([box_shadow], important),
-      TailwindProperty::ShadowList(&[]) => builder.reset_shadow(important),
-      TailwindProperty::ShadowList(layers) => {
-        builder.set_shadow_layers(layers.iter().copied(), important)
+      TailwindProperty::Shadow(box_shadow) => {
+        push_deferred(
+          builder,
+          important,
+          LonghandId::BoxShadow,
+          box_shadow_css(&box_shadow),
+        );
       }
-      TailwindProperty::ShadowColor(color) => builder.set_shadow_color(color, important),
+      TailwindProperty::ShadowList(&[]) => {
+        push_deferred(builder, important, LonghandId::BoxShadow, "none".to_owned());
+      }
+      TailwindProperty::ShadowList(layers) => {
+        let layers: Vec<String> = layers.iter().map(box_shadow_css).collect();
+
+        push_deferred(builder, important, LonghandId::BoxShadow, layers.join(", "));
+      }
+      TailwindProperty::ShadowColor(color) => {
+        push_custom(builder, important, "--tw-shadow-color", &color.0);
+      }
       TailwindProperty::Display(display) => {
         push_decl!(builder, important, display(display));
       }
@@ -1742,13 +1805,34 @@ impl TailwindProperty {
         }
       }
       TailwindProperty::TextShadow(text_shadow) => {
-        builder.set_text_shadow_layers([text_shadow], important)
+        push_deferred(
+          builder,
+          important,
+          LonghandId::TextShadow,
+          text_shadow_css(&text_shadow),
+        );
       }
-      TailwindProperty::TextShadowList(&[]) => builder.reset_text_shadow(important),
+      TailwindProperty::TextShadowList(&[]) => {
+        push_deferred(
+          builder,
+          important,
+          LonghandId::TextShadow,
+          "none".to_owned(),
+        );
+      }
       TailwindProperty::TextShadowList(layers) => {
-        builder.set_text_shadow_layers(layers.iter().copied(), important)
+        let layers: Vec<String> = layers.iter().map(text_shadow_css).collect();
+
+        push_deferred(
+          builder,
+          important,
+          LonghandId::TextShadow,
+          layers.join(", "),
+        );
       }
-      TailwindProperty::TextShadowColor(color) => builder.set_text_shadow_color(color, important),
+      TailwindProperty::TextShadowColor(color) => {
+        push_custom(builder, important, "--tw-text-shadow-color", &color.0);
+      }
       TailwindProperty::Visibility(visibility) => {
         push_decl!(builder, important, visibility(visibility))
       }

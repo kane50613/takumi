@@ -4,12 +4,6 @@ use crate::style::*;
 pub(super) struct TailwindDeclarationBuilder {
   pub(super) declarations: StyleDeclarationBlock,
   pub(super) transform_state: TwTransformState,
-  pub(super) shadow: Option<Vec<BoxShadow>>,
-  pub(super) shadow_important: bool,
-  pub(super) shadow_color: Option<ColorInput>,
-  pub(super) text_shadow: Option<Vec<TextShadow>>,
-  pub(super) text_shadow_important: bool,
-  pub(super) text_shadow_color: Option<ColorInput>,
   pub(super) filter: Option<Filters>,
   pub(super) filter_important: bool,
   pub(super) backdrop_filter: Option<Filters>,
@@ -63,72 +57,6 @@ impl TailwindDeclarationBuilder {
     self.declarations.push(declaration, important);
   }
 
-  pub(super) fn set_shadow_layers<I: IntoIterator<Item = BoxShadow>>(
-    &mut self,
-    layers: I,
-    important: bool,
-  ) {
-    let mut shadows: Vec<BoxShadow> = layers.into_iter().collect();
-    if let Some(color) = self.shadow_color {
-      for shadow in &mut shadows {
-        shadow.color = color;
-      }
-    }
-
-    self.shadow = Some(shadows);
-    self.shadow_important = important;
-  }
-
-  pub(super) fn reset_shadow(&mut self, important: bool) {
-    self.shadow = None;
-    self.shadow_color = None;
-    self.shadow_important = important;
-  }
-
-  pub(super) fn reset_text_shadow(&mut self, important: bool) {
-    self.text_shadow = None;
-    self.text_shadow_color = None;
-    self.text_shadow_important = important;
-  }
-
-  pub(super) fn set_shadow_color(&mut self, color: ColorInput, important: bool) {
-    self.shadow_color = Some(color);
-    self.shadow_important = important;
-
-    if let Some(shadows) = self.shadow.as_mut() {
-      for shadow in shadows {
-        shadow.color = color;
-      }
-    }
-  }
-
-  pub(super) fn set_text_shadow_layers<I: IntoIterator<Item = TextShadow>>(
-    &mut self,
-    layers: I,
-    important: bool,
-  ) {
-    let mut shadows: Vec<TextShadow> = layers.into_iter().collect();
-    if let Some(color) = self.text_shadow_color {
-      for shadow in &mut shadows {
-        shadow.color = color;
-      }
-    }
-
-    self.text_shadow = Some(shadows);
-    self.text_shadow_important = important;
-  }
-
-  pub(super) fn set_text_shadow_color(&mut self, color: ColorInput, important: bool) {
-    self.text_shadow_color = Some(color);
-    self.text_shadow_important = important;
-
-    if let Some(shadows) = self.text_shadow.as_mut() {
-      for shadow in shadows {
-        shadow.color = color;
-      }
-    }
-  }
-
   pub(super) fn push_filter(&mut self, filter: Filter, important: bool) {
     self
       .filter
@@ -167,20 +95,6 @@ impl TailwindDeclarationBuilder {
   }
 
   pub(super) fn finish(mut self) -> StyleDeclarationBlock {
-    if let Some(shadows) = self.shadow.take() {
-      self.push(
-        StyleDeclaration::box_shadow(Some(shadows.into_boxed_slice())),
-        self.shadow_important,
-      );
-    }
-
-    if let Some(shadows) = self.text_shadow.take() {
-      self.push(
-        StyleDeclaration::text_shadow(Some(shadows.into_boxed_slice())),
-        self.text_shadow_important,
-      );
-    }
-
     if let Some(filter) = self.filter.take() {
       self.push(StyleDeclaration::filter(filter), self.filter_important);
     }

@@ -85,7 +85,7 @@ property_parsers! {
   TextWrap(TextWrap) => TextWrap,
   ColorCurrent(ColorInput) => ColorInput,
   ColorTransparent(ColorInput) => ColorInput,
-  StopColor(TwStopColor) => TwStopColor,
+  StopColor(TwThemeColor) => TwThemeColor,
   Percentage(PercentageNumber) => PercentageNumber,
   FontFamily(FontFamily) => FontFamily,
   LineClamp(LineClamp) => LineClamp,
@@ -272,7 +272,7 @@ pub(crate) static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
     PropertyParser::BorderWidth(TailwindProperty::OutlineWidth),
   ],
   "shadow" => &[
-    PropertyParser::ColorCurrent(TailwindProperty::ShadowColor),
+    PropertyParser::StopColor(TailwindProperty::ShadowColor),
     PropertyParser::BoxShadow(TailwindProperty::Shadow),
   ],
   "outline-offset" => &[PropertyParser::BorderWidth(TailwindProperty::OutlineOffset)],
@@ -372,7 +372,7 @@ pub(crate) static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
   "backdrop-filter" => &[PropertyParser::Filter(TailwindProperty::BackdropFilter)],
   "drop-shadow" => &[PropertyParser::DropShadow(TailwindProperty::DropShadow)],
   "text-shadow" => &[
-    PropertyParser::ColorCurrent(TailwindProperty::TextShadowColor),
+    PropertyParser::StopColor(TailwindProperty::TextShadowColor),
     PropertyParser::TextShadow(TailwindProperty::TextShadow),
   ],
   "mix-blend" => &[PropertyParser::BlendMode(TailwindProperty::MixBlendMode)],
