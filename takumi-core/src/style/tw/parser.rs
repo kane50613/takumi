@@ -1,4 +1,4 @@
-use std::ops::Neg;
+use std::{ops::Neg, sync::Arc};
 
 use cssparser::{Parser, match_ignore_ascii_case};
 
