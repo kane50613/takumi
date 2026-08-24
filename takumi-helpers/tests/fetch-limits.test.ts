@@ -56,7 +56,7 @@ describe("fetch byte caps", () => {
     expect(images.map((image) => new Uint8Array(image.data))).toEqual([payload]);
   });
 
-  test("a cache hit still respects a stricter maxBytes limit", async () => {
+  test("a stricter maxBytes rejection keeps the shared entry reusable", async () => {
     const payload = new Uint8Array(60);
     const fetchMock = mock(() => Promise.resolve(new Response(streamOf(payload))));
     const fetchCache = new Map<string, Promise<ArrayBuffer>>();
@@ -69,6 +69,11 @@ describe("fetch byte caps", () => {
       prepareImages({ node, fetchCache, fetch: fetchMock, maxBytes: 50 }),
     ).rejects.toThrow(/exceeds 50 bytes/);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const images = await prepareImages({ node, fetchCache, fetch: fetchMock, maxBytes: 100 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(images.map((image) => image.data.byteLength)).toEqual([60]);
   });
 
   test("concurrent cache consumers keep independent maxBytes limits", async () => {
