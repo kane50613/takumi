@@ -248,6 +248,39 @@ describe("allowUrl policy", () => {
     ).rejects.toThrow(/blocked by allowUrl/);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  test("a strict caller does not trust cache created without allowUrl", async () => {
+    const payload = new TextEncoder().encode("pixels");
+    let call = 0;
+    const fetchMock = mock(() => {
+      call += 1;
+      // The first caller has no policy, so its fetch follows the redirect internally and only
+      // the internal host's 200 surfaces. The strict refetch exposes the redirect itself.
+      return Promise.resolve(
+        call === 1
+          ? new Response(streamOf(payload))
+          : new Response(null, {
+              status: 302,
+              headers: { location: "http://169.254.169.254/meta" },
+            }),
+      );
+    });
+    const fetchCache = new Map<string, Promise<ArrayBuffer>>();
+    const node = tree("https://allowed.example.com/a.png");
+
+    await prepareImages({ node, fetchCache, fetch: fetchMock });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await expect(
+      prepareImages({
+        node,
+        fetchCache,
+        fetch: fetchMock,
+        allowUrl: (url) => new URL(url).hostname === "allowed.example.com",
+      }),
+    ).rejects.toThrow(/blocked by allowUrl/);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("default fetch timeout", () => {

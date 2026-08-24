@@ -170,7 +170,8 @@ function extractImageUrls(node: Node): string[] {
  * requests for the same URL (single-flight) and reuses their bytes. Any object with `Map`-like
  * `get`/`set`/`delete` works, so LRU/TTL policies can be plugged in. Each entry remembers the
  * options of the call that created it, so later calls still run their own `allowUrl` and
- * `maxBytes` against the shared bytes.
+ * `maxBytes` against the shared bytes. Entries created without `allowUrl` carry no recorded
+ * chain, so callers with `allowUrl` refetch those instead of trusting them.
  */
 export interface ImageFetchCache {
   get(url: string): Promise<ArrayBuffer> | undefined;
@@ -217,22 +218,29 @@ function fetchUncached(
  * rejected fetch is evicted so a later call can retry instead of replaying the failure.
  *
  * Cached entries serve under the current call's policy, not the creator's: `allowUrl` runs over
- * the recorded redirect chain, `maxBytes` runs over the resolved bytes, and an entry capped
- * tighter than this call allows refetches privately instead of failing this call too. */
+ * the recorded redirect chain, `maxBytes` runs over the resolved bytes, an entry capped tighter
+ * than this call allows refetches privately instead of failing this call too. An entry without
+ * recorded hops — created with no `allowUrl`, pre-seeded by hand, or from another module
+ * instance — is unprovenance, so any caller carrying `allowUrl` refetches it rather than trust
+ * bytes whose origin cannot be rechecked. */
 function fetchImageData(
   url: string,
   options: FetchOptions,
   fetchCache?: ImageFetchCache,
 ): Promise<ArrayBuffer> {
   const maxBytes = options.maxBytes ?? defaultMaxFetchBytes;
+  const { allowUrl } = options;
 
   const cached = fetchCache?.get(url);
   if (cached) {
     const meta = entryMeta.get(cached);
 
-    if (options.allowUrl) {
-      const checked = meta?.hops.length ? meta.hops : [url];
-      const blocked = checked.find((hop) => !options.allowUrl(hop));
+    if (allowUrl && !meta?.hops.length) {
+      return fetchUncached(url, options, maxBytes);
+    }
+
+    if (allowUrl && meta) {
+      const blocked = meta.hops.find((hop) => !allowUrl(hop));
       if (blocked) {
         return Promise.reject(new Error(`URL blocked by allowUrl policy: ${blocked}`));
       }
