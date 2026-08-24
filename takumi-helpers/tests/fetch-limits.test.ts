@@ -55,6 +55,21 @@ describe("fetch byte caps", () => {
 
     expect(images.map((image) => new Uint8Array(image.data))).toEqual([payload]);
   });
+
+  test("a cache hit still respects a stricter maxBytes limit", async () => {
+    const payload = new Uint8Array(60);
+    const fetchMock = mock(() => Promise.resolve(new Response(streamOf(payload))));
+    const fetchCache = new Map<string, Promise<ArrayBuffer>>();
+    const node = tree("https://example.com/cached.png");
+
+    await prepareImages({ node, fetchCache, fetch: fetchMock, maxBytes: 100 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await expect(
+      prepareImages({ node, fetchCache, fetch: fetchMock, maxBytes: 50 }),
+    ).rejects.toThrow(/exceeds 50 bytes/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("allowUrl policy", () => {
@@ -150,6 +165,30 @@ describe("allowUrl policy", () => {
 
     expect(images.map((image) => new Uint8Array(image.data))).toEqual([payload]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("a cache hit still respects a stricter allowUrl policy", async () => {
+    const payload = new TextEncoder().encode("pixels");
+    const fetchMock = mock(() => Promise.resolve(new Response(streamOf(payload))));
+    const fetchCache = new Map<string, Promise<ArrayBuffer>>();
+    const node = tree("https://allowed.example.com/cached.png");
+
+    await prepareImages({ node, fetchCache, fetch: fetchMock, allowUrl: () => true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await expect(
+      prepareImages({ node, fetchCache, fetch: fetchMock, allowUrl: () => false }),
+    ).rejects.toThrow(/blocked by allowUrl/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const images = await prepareImages({
+      node,
+      fetchCache,
+      fetch: fetchMock,
+      allowUrl: () => true,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(images.map((image) => new Uint8Array(image.data))).toEqual([payload]);
   });
 });
 
