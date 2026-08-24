@@ -62,3 +62,52 @@ fn descendant_selector_matches_after_sibling_subtrees() {
   assert_eq!(result.children[1].children[0].width, 150.0);
   assert_eq!(result.children[2].children[0].width, default_width);
 }
+
+fn tw_block(class: &str, tw: &str) -> Node {
+  use std::str::FromStr;
+
+  Node::container([])
+    .with_class_name(class)
+    .with_tw(TailwindValues::from_str(tw).expect("tailwind values should parse"))
+}
+
+#[test]
+fn tw_sits_below_author_rules() {
+  let root = Node::container([tw_block("box", "block w-64")]);
+  let result = measure_with_css(root, r#".box { width: 100px; }"#);
+
+  assert_eq!(result.children[0].width, 100.0);
+}
+
+#[test]
+fn important_tw_beats_author_rules() {
+  let root = Node::container([
+    tw_block("box", "block w-64!"),
+    tw_block("shout", "block w-64!"),
+  ]);
+  let result = measure_with_css(
+    root,
+    r#"
+      .box { width: 100px; }
+      .shout { width: 100px !important; }
+    "#,
+  );
+
+  assert_eq!(result.children[0].width, 256.0);
+  assert_eq!(result.children[1].width, 256.0);
+}
+
+#[test]
+fn tw_reads_theme_tokens_from_the_stylesheet() {
+  let root = Node::container([
+    tw_block("box", "block w-gutter"),
+    tw_block("box", "block w-64"),
+  ]);
+  let result = measure_with_css(
+    root,
+    r#":root { --spacing-gutter: 10rem; --spacing: 0.5rem; }"#,
+  );
+
+  assert_eq!(result.children[0].width, 160.0);
+  assert_eq!(result.children[1].width, 512.0);
+}

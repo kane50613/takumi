@@ -18,7 +18,3 @@ pub mod style_background_image;
 pub mod style_opacity;
 #[path = "fixtures/text.rs"]
 pub mod text;
-#[path = "fixtures/tw_cascade.rs"]
-pub mod tw_cascade;
-#[path = "fixtures/tw_theme.rs"]
-pub mod tw_theme;
