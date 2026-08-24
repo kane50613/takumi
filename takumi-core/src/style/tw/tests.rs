@@ -1214,3 +1214,64 @@ fn test_empty_theme_keeps_the_built_in_resolution() {
     themed_declarations("bg-red-500", &theme(&[("--spacing-gutter", "2.5rem")]))
   );
 }
+
+/// A theme token resolves to the same declarations the equivalent arbitrary
+/// value produces, which is what makes one namespace list enough per value type.
+fn assert_theme_matches_arbitrary(entry: (&str, &str), themed: &str, arbitrary: &str) {
+  assert_eq!(
+    themed_declarations(themed, &theme(&[entry])),
+    themed_declarations(arbitrary, &Theme::default()),
+    "{themed} should resolve like {arbitrary}"
+  );
+}
+
+#[test]
+fn test_theme_namespaces_reach_their_utilities() {
+  assert_theme_matches_arbitrary(("--text-hero", "4rem"), "text-hero", "text-[4rem]");
+  assert_theme_matches_arbitrary(("--font-display", "Inter"), "font-display", "font-[Inter]");
+  assert_theme_matches_arbitrary(("--font-weight-heavy", "850"), "font-heavy", "font-[850]");
+  assert_theme_matches_arbitrary(
+    ("--tracking-airy", "0.2em"),
+    "tracking-airy",
+    "tracking-[0.2em]",
+  );
+  assert_theme_matches_arbitrary(("--leading-cozy", "1.35"), "leading-cozy", "leading-[1.35]");
+  assert_theme_matches_arbitrary(("--radius-card", "12px"), "rounded-card", "rounded-[12px]");
+  assert_theme_matches_arbitrary(("--blur-soft", "3px"), "blur-soft", "blur-[3px]");
+  assert_theme_matches_arbitrary(("--aspect-card", "3/4"), "aspect-card", "aspect-[3/4]");
+  assert_theme_matches_arbitrary(
+    ("--container-prose", "40rem"),
+    "max-w-prose",
+    "max-w-[40rem]",
+  );
+  assert_theme_matches_arbitrary(
+    ("--shadow-card", "0 1px 2px black"),
+    "shadow-card",
+    "shadow-[0_1px_2px_black]",
+  );
+  assert_theme_matches_arbitrary(
+    ("--text-shadow-card", "0 1px 2px black"),
+    "text-shadow-card",
+    "text-shadow-[0_1px_2px_black]",
+  );
+  assert_theme_matches_arbitrary(
+    ("--drop-shadow-card", "0 1px 2px black"),
+    "drop-shadow-card",
+    "drop-shadow-[0_1px_2px_black]",
+  );
+  assert_theme_matches_arbitrary(
+    ("--animate-drift", "drift 2s linear infinite"),
+    "animate-drift",
+    "animate-[drift_2s_linear_infinite]",
+  );
+}
+
+#[test]
+fn test_max_width_prefers_container_over_spacing() {
+  let theme = theme(&[("--container-prose", "40rem"), ("--spacing-prose", "10rem")]);
+
+  assert_eq!(
+    themed_declarations("max-w-prose", &theme),
+    themed_declarations("max-w-[40rem]", &Theme::default())
+  );
+}

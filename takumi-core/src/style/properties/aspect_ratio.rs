@@ -2,6 +2,7 @@ use std::fmt;
 
 use cssparser::Parser;
 
+use crate::style::TwNamespace;
 use crate::style::{
   Animatable, Color, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
   SizingContext, ToCss, lerp, tw::TailwindPropertyParser,
@@ -56,6 +57,8 @@ impl Animatable for AspectRatio {
 }
 
 impl TailwindPropertyParser for AspectRatio {
+  const NAMESPACES: &'static [TwNamespace] = &[TwNamespace::Aspect];
+
   fn parse_tw(token: &str) -> Option<Self> {
     Self::from_css_str(token).ok()
   }

@@ -101,7 +101,7 @@ The `tw` prop runs a built-in parser with no build step. It won't cover every Ta
 
 ### Theme tokens
 
-Pass a `theme` keyed by CSS custom property name to give the parser your own tokens. `--color-*` reaches every color utility, `--spacing-*` every length utility.
+Pass a `theme` keyed by CSS custom property name to give the parser your own tokens. The namespace picks which utilities the token reaches, the same way it does in Tailwind.
 
 ```tsx
 const image = await render(<div tw="bg-brand-500 p-gutter" />, {
@@ -113,6 +113,26 @@ const image = await render(<div tw="bg-brand-500 p-gutter" />, {
   },
 });
 ```
+
+| Namespace         | Utilities                                                         |
+| ----------------- | ----------------------------------------------------------------- |
+| `--color-*`       | every color utility: `bg-*`, `text-*`, `border-*`, gradient stops |
+| `--spacing-*`     | every length utility: `p-*`, `m-*`, `w-*`, `gap-*`                |
+| `--container-*`   | `max-w-*`                                                         |
+| `--text-*`        | font sizes, `text-xl`                                             |
+| `--font-*`        | font families, `font-sans`                                        |
+| `--font-weight-*` | font weights, `font-bold`                                         |
+| `--tracking-*`    | `tracking-*`                                                      |
+| `--leading-*`     | `leading-*`                                                       |
+| `--radius-*`      | `rounded-*`                                                       |
+| `--shadow-*`      | `shadow-*`                                                        |
+| `--drop-shadow-*` | `drop-shadow-*`                                                   |
+| `--text-shadow-*` | `text-shadow-*`                                                   |
+| `--blur-*`        | `blur-*`                                                          |
+| `--aspect-*`      | `aspect-*`                                                        |
+| `--animate-*`     | `animate-*`                                                       |
+
+Tailwind's other namespaces have no utility to reach here: `--breakpoint-*`, `--ease-*`, `--inset-shadow-*`, `--perspective-*`, `--zoom-*`, `--tab-size-*`.
 
 Naming a built-in token replaces it, so `--color-red-500` changes what `bg-red-500` paints. A value of `initial` removes a token. `--color-*: initial` clears the whole namespace, built-in palette included.
 

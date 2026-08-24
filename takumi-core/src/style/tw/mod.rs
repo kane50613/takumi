@@ -712,12 +712,12 @@ pub(crate) trait TailwindPropertyParser: Sized + for<'i> FromCss<'i> {
   /// Arbitrary value, then theme token, then the built-in scale. A theme token
   /// is spelled as a CSS value, so it takes the arbitrary-value path rather
   /// than the utility-suffix grammar.
-  fn parse_tw_themed(token: &str, theme: &Theme) -> Option<Self> {
+  fn parse_tw_themed(token: &str, theme: &Theme, namespaces: &[TwNamespace]) -> Option<Self> {
     if let Some(value) = extract_arbitrary_value(token) {
       return Self::from_css_str(&value).ok();
     }
 
-    for &namespace in Self::NAMESPACES {
+    for &namespace in namespaces {
       match theme.lookup(namespace, token) {
         ThemeLookup::Value(value) => return Self::from_css_str(value).ok(),
         ThemeLookup::Removed => return None,
@@ -728,10 +728,16 @@ pub(crate) trait TailwindPropertyParser: Sized + for<'i> FromCss<'i> {
     Self::parse_tw(token)
   }
 
-  /// The entry point utility dispatch calls. Override to handle a modifier the
-  /// suffix carries, such as a color's `/50` opacity.
-  fn parse_tw_with_arbitrary(token: &str, theme: &Theme) -> Option<Self> {
-    Self::parse_tw_themed(token, theme)
+  /// The entry point utility dispatch calls. `namespaces` is the utility's own
+  /// list, which differs from `NAMESPACES` where one value grammar serves two
+  /// namespaces: `max-w-*` reads `--container-*` where `w-*` reads `--spacing-*`.
+  /// Override to handle a modifier the suffix carries, such as a color's `/50`.
+  fn parse_tw_with_arbitrary(
+    token: &str,
+    theme: &Theme,
+    namespaces: &[TwNamespace],
+  ) -> Option<Self> {
+    Self::parse_tw_themed(token, theme, namespaces)
   }
 }
 

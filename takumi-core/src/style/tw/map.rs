@@ -1,13 +1,24 @@
 use phf::phf_map;
 
 use crate::style::{
-  tw::{TailwindProperty, TailwindPropertyParser, Theme, parser::*},
+  tw::{TailwindProperty, TailwindPropertyParser, Theme, TwNamespace, parser::*},
   *,
 };
 
+/// The namespaces a parser candidate reads: the value type's own list, or the
+/// override an entry spells in brackets.
+macro_rules! parser_namespaces {
+  ($parse:ty) => {
+    <$parse as TailwindPropertyParser>::NAMESPACES
+  };
+  ($parse:ty, $($namespace:expr),+) => {
+    &[$($namespace),+]
+  };
+}
+
 /// Generates the [`PropertyParser`] enum and its `parse()` dispatch from `(Variant, ArgType, ParseType)` triples.
 macro_rules! property_parsers {
-  ($($variant:ident($arg:ty) => $parse:ty),+ $(,)?) => {
+  ($($variant:ident($arg:ty) => $parse:ty $([$($namespace:expr),+ $(,)?])?),+ $(,)?) => {
     /// Maps a parsed argument type to a [`TailwindProperty`] constructor.
     #[derive(Clone, Copy)]
     pub(crate) enum PropertyParser {
@@ -23,9 +34,21 @@ macro_rules! property_parsers {
       /// Parses a utility suffix into a property via the wrapped constructor.
       pub fn parse(&self, suffix: &str, theme: &Theme) -> Option<TailwindProperty> {
         match self {
-          $(Self::$variant(f) => <$parse>::parse_tw_with_arbitrary(suffix, theme).map(f),)+
+          $(
+            Self::$variant(f) => <$parse>::parse_tw_with_arbitrary(
+              suffix,
+              theme,
+              parser_namespaces!($parse $(, $($namespace),+)?),
+            )
+            .map(f),
+          )+
           Self::GradientPosition(f) => {
-            TwGradientPosition::parse_tw_with_arbitrary(suffix, theme).map(|p| f(p.0))
+            TwGradientPosition::parse_tw_with_arbitrary(
+              suffix,
+              theme,
+              TwGradientPosition::NAMESPACES,
+            )
+            .map(|p| f(p.0))
           }
         }
       }
@@ -44,6 +67,7 @@ property_parsers! {
   BgSize(BackgroundSize) => BackgroundSize,
   BgImage(BackgroundImage) => BackgroundImage,
   LengthAuto(Length) => Length,
+  ContainerLength(Length) => Length [TwNamespace::Container, TwNamespace::Spacing],
   LengthZero(Length) => Length,
   FontWeight(FontWeight) => FontWeight,
   Justify(JustifyContent) => JustifyContent,
@@ -77,7 +101,7 @@ property_parsers! {
   Blur(TwBlur) => TwBlur,
   Filter(Filters) => Filters,
   BoxShadow(BoxShadow) => BoxShadow,
-  DropShadow(TextShadow) => TextShadow,
+  DropShadow(TextShadow) => TextShadow [TwNamespace::DropShadow],
   TextShadow(TextShadow) => TextShadow,
   BlendMode(BlendMode) => BlendMode,
   FontStretch(FontStretch) => FontStretch,
@@ -125,7 +149,7 @@ pub(crate) static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
   "h" => &[PropertyParser::LengthAuto(TailwindProperty::Height)],
   "min-w" => &[PropertyParser::LengthAuto(TailwindProperty::MinWidth)],
   "min-h" => &[PropertyParser::LengthAuto(TailwindProperty::MinHeight)],
-  "max-w" => &[PropertyParser::LengthAuto(TailwindProperty::MaxWidth)],
+  "max-w" => &[PropertyParser::ContainerLength(TailwindProperty::MaxWidth)],
   "max-h" => &[PropertyParser::LengthAuto(TailwindProperty::MaxHeight)],
   "size" => &[PropertyParser::LengthAuto(TailwindProperty::Size)],
   "font" => &[

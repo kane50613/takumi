@@ -7,7 +7,7 @@ use crate::style::{
   CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
   ToCss, declare_enum_from_css_impl, next_is_comma,
   properties::write_css_string,
-  tw::{TailwindPropertyParser, Theme},
+  tw::{TailwindPropertyParser, Theme, TwNamespace},
   unexpected_token,
 };
 
@@ -412,6 +412,8 @@ impl<'i> FromCss<'i> for Animations {
 }
 
 impl TailwindPropertyParser for Animations {
+  const NAMESPACES: &'static [TwNamespace] = &[TwNamespace::Animate];
+
   fn parse_tw(token: &str) -> Option<Self> {
     match_ignore_ascii_case! {token,
       "none" => Some(Box::from([Animation::default()])),
@@ -446,7 +448,11 @@ impl TailwindPropertyParser for Animations {
     }
   }
 
-  fn parse_tw_with_arbitrary(token: &str, _theme: &Theme) -> Option<Self> {
+  fn parse_tw_with_arbitrary(
+    token: &str,
+    theme: &Theme,
+    namespaces: &[TwNamespace],
+  ) -> Option<Self> {
     if let Some(value) = token
       .strip_prefix('[')
       .and_then(|value| value.strip_suffix(']'))
@@ -460,7 +466,7 @@ impl TailwindPropertyParser for Animations {
       return Self::from_css_str(&value).ok();
     }
 
-    Self::parse_tw(token)
+    Self::parse_tw_themed(token, theme, namespaces)
   }
 }
 
@@ -987,7 +993,11 @@ mod tests {
   #[test]
   fn parse_tailwind_animation_arbitrary_value() {
     assert_eq!(
-      Animations::parse_tw_with_arbitrary("[wiggle_1s_ease-in-out_infinite]", &Theme::default()),
+      Animations::parse_tw_with_arbitrary(
+        "[wiggle_1s_ease-in-out_infinite]",
+        &Theme::default(),
+        Animations::NAMESPACES,
+      ),
       Some(Box::from([Animation {
         duration: AnimationTime::from_milliseconds(1000.0),
         timing_function: AnimationTimingFunction::EaseInOut,

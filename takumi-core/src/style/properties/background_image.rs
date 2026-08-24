@@ -159,7 +159,8 @@ mod tests {
     assert_eq!(
       BackgroundImage::parse_tw_with_arbitrary(
         "[url(https://example.com/bg.png)]",
-        &Theme::default()
+        &Theme::default(),
+        BackgroundImage::NAMESPACES,
       ),
       Some(BackgroundImage::Url("https://example.com/bg.png".into()))
     );

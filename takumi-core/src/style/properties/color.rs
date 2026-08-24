@@ -230,14 +230,18 @@ impl TailwindPropertyParser for ColorInput {
     Color::parse_tw(token).map(ColorInput::Value)
   }
 
-  fn parse_tw_with_arbitrary(token: &str, theme: &Theme) -> Option<Self> {
+  fn parse_tw_with_arbitrary(
+    token: &str,
+    theme: &Theme,
+    namespaces: &[TwNamespace],
+  ) -> Option<Self> {
     let Some((token, opacity)) = token.split_once('/') else {
-      return Self::parse_tw_themed(token, theme);
+      return Self::parse_tw_themed(token, theme, namespaces);
     };
 
     let opacity = (opacity.parse::<f32>().ok()? * 2.55).round() as u8;
 
-    match Self::parse_tw_themed(token, theme)? {
+    match Self::parse_tw_themed(token, theme, namespaces)? {
       ColorInput::Value(color) => Some(ColorInput::Value(color.with_opacity(opacity))),
       ColorInput::CurrentColor => Some(ColorInput::CurrentColor),
     }

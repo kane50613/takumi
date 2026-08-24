@@ -1,5 +1,6 @@
 use cssparser::{Parser, match_ignore_ascii_case};
 
+use crate::style::TwNamespace;
 use crate::style::{
   CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss,
   parse_calc_number_expression, tw::TailwindPropertyParser,
@@ -25,6 +26,8 @@ impl From<Length> for LineHeight {
 }
 
 impl TailwindPropertyParser for LineHeight {
+  const NAMESPACES: &'static [TwNamespace] = &[TwNamespace::Leading];
+
   fn parse_tw(token: &str) -> Option<Self> {
     match_ignore_ascii_case! {&token,
       "none" => Some(LineHeight::Unitless(1.0)),
@@ -157,7 +160,7 @@ mod tests {
   #[test]
   fn tailwind_arbitrary_percentage_is_supported() {
     assert_eq!(
-      LineHeight::parse_tw_with_arbitrary("[90%]", &Theme::default()),
+      LineHeight::parse_tw_with_arbitrary("[90%]", &Theme::default(), LineHeight::NAMESPACES),
       Some(LineHeight::Length(Length::Percentage(90.0)))
     );
   }

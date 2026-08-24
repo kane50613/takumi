@@ -7,6 +7,32 @@ pub enum TwNamespace {
   Color,
   /// `--spacing-*`
   Spacing,
+  /// `--container-*`
+  Container,
+  /// `--text-*`
+  Text,
+  /// `--font-*`
+  Font,
+  /// `--font-weight-*`
+  FontWeight,
+  /// `--tracking-*`
+  Tracking,
+  /// `--leading-*`
+  Leading,
+  /// `--radius-*`
+  Radius,
+  /// `--shadow-*`
+  Shadow,
+  /// `--drop-shadow-*`
+  DropShadow,
+  /// `--text-shadow-*`
+  TextShadow,
+  /// `--blur-*`
+  Blur,
+  /// `--aspect-*`
+  Aspect,
+  /// `--animate-*`
+  Animate,
 }
 
 impl TwNamespace {
@@ -14,13 +40,42 @@ impl TwNamespace {
     match self {
       TwNamespace::Color => "--color-",
       TwNamespace::Spacing => "--spacing-",
+      TwNamespace::Container => "--container-",
+      TwNamespace::Text => "--text-",
+      TwNamespace::Font => "--font-",
+      TwNamespace::FontWeight => "--font-weight-",
+      TwNamespace::Tracking => "--tracking-",
+      TwNamespace::Leading => "--leading-",
+      TwNamespace::Radius => "--radius-",
+      TwNamespace::Shadow => "--shadow-",
+      TwNamespace::DropShadow => "--drop-shadow-",
+      TwNamespace::TextShadow => "--text-shadow-",
+      TwNamespace::Blur => "--blur-",
+      TwNamespace::Aspect => "--aspect-",
+      TwNamespace::Animate => "--animate-",
     }
   }
 }
 
 /// Namespaces ordered longest-prefix-first, so `--font-weight-bold` never lands
 /// in `--font-*`. Upstream spells the same rule as an explicit ignore list.
-const NAMESPACES: &[TwNamespace] = &[TwNamespace::Spacing, TwNamespace::Color];
+const NAMESPACES: &[TwNamespace] = &[
+  TwNamespace::FontWeight,
+  TwNamespace::TextShadow,
+  TwNamespace::DropShadow,
+  TwNamespace::Container,
+  TwNamespace::Tracking,
+  TwNamespace::Spacing,
+  TwNamespace::Leading,
+  TwNamespace::Animate,
+  TwNamespace::Aspect,
+  TwNamespace::Radius,
+  TwNamespace::Shadow,
+  TwNamespace::Color,
+  TwNamespace::Text,
+  TwNamespace::Font,
+  TwNamespace::Blur,
+];
 
 /// The outcome of a theme lookup, where a removed token must not fall back to
 /// the built-in scale.
@@ -109,5 +164,39 @@ impl Theme {
       None if namespace.reset => ThemeLookup::Removed,
       None => ThemeLookup::Missing,
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::{NAMESPACES, Theme, ThemeLookup, TwNamespace};
+
+  #[test]
+  fn test_namespaces_are_ordered_longest_prefix_first() {
+    let lengths = NAMESPACES
+      .iter()
+      .map(|namespace| namespace.prefix().len())
+      .collect::<Vec<_>>();
+
+    assert!(
+      lengths.windows(2).all(|pair| pair[0] >= pair[1]),
+      "a shorter prefix placed first would swallow a longer one: {lengths:?}"
+    );
+  }
+
+  #[test]
+  fn test_longest_prefix_wins() {
+    let mut theme = Theme::default();
+
+    theme.insert("--font-weight-bold", "700");
+
+    assert!(matches!(
+      theme.lookup(TwNamespace::FontWeight, "bold"),
+      ThemeLookup::Value("700")
+    ));
+    assert!(matches!(
+      theme.lookup(TwNamespace::Font, "weight-bold"),
+      ThemeLookup::Missing
+    ));
   }
 }
