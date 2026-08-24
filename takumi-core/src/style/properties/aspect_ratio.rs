@@ -1,7 +1,8 @@
 use std::fmt;
 
-use cssparser::Parser;
+use cssparser::{Parser, match_ignore_ascii_case};
 
+use crate::style::tw::Namespace;
 use crate::style::{
   Animatable, Color, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
   SizingContext, ToCss, lerp, tw::TailwindPropertyParser,
@@ -56,7 +57,17 @@ impl Animatable for AspectRatio {
 }
 
 impl TailwindPropertyParser for AspectRatio {
+  const NAMESPACES: &'static [Namespace] = &[Namespace::Aspect];
+
+  /// `square` is a static ratio upstream, `video` a theme token whose built-in
+  /// value this stands in for.
   fn parse_tw(token: &str) -> Option<Self> {
+    match_ignore_ascii_case! {token,
+      "square" => return Some(AspectRatio::Ratio(1.0)),
+      "video" => return Some(AspectRatio::Ratio(16.0 / 9.0)),
+      _ => {}
+    }
+
     Self::from_css_str(token).ok()
   }
 }

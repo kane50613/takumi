@@ -175,17 +175,19 @@ fn resolve_var_references_with(
   Some(output)
 }
 
+/// Applies a deferred declaration, reporting whether substitution produced a
+/// value so a caller with a fallback can use it.
 pub(crate) fn apply_deferred_declaration(
   style: &mut ComputedStyle,
   parent: Option<&ComputedStyle>,
   deferred: &DeferredDeclaration,
-) {
+) -> bool {
   let Some(resolved_value) = resolve_var_references(
     &deferred.specified_value,
     &style.custom_properties,
     &mut Vec::new(),
   ) else {
-    return;
+    return false;
   };
 
   let declarations = deferred
@@ -194,7 +196,7 @@ pub(crate) fn apply_deferred_declaration(
     .ok();
 
   let Some(declarations) = declarations else {
-    return;
+    return false;
   };
 
   for declaration in declarations {
@@ -203,4 +205,6 @@ pub(crate) fn apply_deferred_declaration(
       None => declaration.apply_to_computed(style),
     }
   }
+
+  true
 }

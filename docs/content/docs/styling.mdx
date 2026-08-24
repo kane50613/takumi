@@ -45,11 +45,36 @@ A `<style>` tag feeds the same engine and gets extracted from the JSX automatica
 </div>
 ```
 
+### Structured variables
+
+The `variables` option declares CSS custom properties without writing CSS. Each entry becomes one `:root` declaration. The leading `--` is optional.
+
+```tsx twoslash
+import { render } from "takumi-js";
+
+const image = await render(<div className="card">Hello</div>, {
+  width: 1200,
+  height: 630,
+  stylesheets: [`.card { color: var(--brand) }`],
+  variables: { "--brand": "#5b21b6" },
+});
+```
+
+**Every `var()` reads them**, in stylesheets, in `<style>` tags, and in `tw`.
+
+| Competing declaration                | Result                        |
+| ------------------------------------ | ----------------------------- |
+| Equally specific `:root` rule in CSS | `variables` wins              |
+| Declaration on the element           | Element declaration wins      |
+| `!important` declaration             | `!important` declaration wins |
+
+**Values containing `;`, `{`, `}`, `/*` or `!important` are dropped.** They could escape the generated rule.
+
 ## Tailwind
 
 ### Bring your stylesheet
 
-Compile Tailwind with your bundler, then pass the CSS through `stylesheets`. On Vite, import it with the `?inline` query.
+Compile Tailwind with your bundler. Pass the generated CSS through `stylesheets`. With Vite, import it using `?inline`.
 
 ```tsx title="og.tsx"
 import { ImageResponse } from "takumi-js/response";
@@ -85,19 +110,80 @@ export default defineConfig({
 
 The `tw` prop runs a built-in parser with no build step. It won't cover every Tailwind feature.
 
-- No theme config, but arbitrary values work.
+- Arbitrary values work.
 - See the [parser mapping](https://github.com/kane50613/takumi/blob/master/takumi-core/src/style/tw/map.rs) for every supported class.
 
 <Callout type="warn">
-  `tw` has no Tailwind Preflight, so elements keep their UA margins. A `<h1>` gets a `0.67em` top
-  margin until you add `mt-0`. `box-sizing` still defaults to `border-box`.
+  `tw` has no Tailwind Preflight by default, so elements keep their UA margins. A `<h1>` gets a
+  `0.67em` top margin until you add `mt-0`. `box-sizing` still defaults to `border-box`.
 </Callout>
+
+To reset those defaults, pass Preflight through `stylesheets`, wrapped in a layer so it stays below your utilities:
+
+```tsx
+import preflight from "tailwindcss/preflight.css?inline";
+
+const image = await render(node, {
+  stylesheets: [`@layer base { ${preflight} }`],
+});
+```
+
+**Unlayered stylesheet rules override `tw` utilities**, and rules in a named `@layer` lose to them. That is Tailwind's own order: utilities are the last declared layer. Prefix a utility with `!` to override an unlayered rule.
 
 ```tsx
 <div tw="bg-blue-500 p-4 rounded-lg">
   <h1 tw="text-white text-2xl font-bold">Hello Tailwind!</h1>
 </div>
 ```
+
+### Theme tokens
+
+A utility reads a CSS custom property, the way Tailwind compiles it. `bg-red-500` resolves `var(--color-red-500)`, `p-4` resolves `calc(var(--spacing) * 4)`. The built-in scale sits behind them as the fallback.
+
+Declare tokens in a `:root` rule, or pass them as [structured variables](#structured-variables).
+
+```css
+:root {
+  --color-brand-500: #5b21b6;
+  --spacing-gutter: 2.5rem;
+}
+```
+
+```tsx
+<div tw="bg-brand-500 p-gutter" />
+```
+
+Theme tokens follow the CSS cascade. A media query or a selector can override them.
+
+```css
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-brand-500: #a78bfa;
+  }
+}
+```
+
+The namespace picks which utilities a token reaches:
+
+| Namespace                  | Utilities                                                                                                                                   |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--color-*`                | color utilities: `bg-*`, `text-*`, `border-*`, `outline-*`, `decoration-*`                                                                  |
+| `--spacing`, `--spacing-*` | length utilities: `p-*`, `m-*`, `w-*`, `gap-*`, `inset-*`. `p-4` reads `calc(var(--spacing) * 4)`, `p-gutter` reads `var(--spacing-gutter)` |
+| `--container-*`            | `max-w-*`                                                                                                                                   |
+| `--text-*`                 | `--text-xl` sets `text-xl`, `--text-xl--line-height` sets its leading                                                                       |
+| `--font-*`                 | font families, `font-sans`                                                                                                                  |
+| `--font-weight-*`          | font weights, `font-bold`                                                                                                                   |
+| `--tracking-*`             | `tracking-*`                                                                                                                                |
+| `--leading-*`              | `leading-*`                                                                                                                                 |
+| `--radius-*`               | `rounded-*`, including corners and sides                                                                                                    |
+| `--aspect-*`               | `aspect-*`                                                                                                                                  |
+
+Some things behave differently from Tailwind here:
+
+- Gradients, shadows, filters, transforms and animations merge across utilities before the cascade runs, so `--shadow-*`, `--drop-shadow-*`, `--text-shadow-*`, `--blur-*` and `--animate-*` are not read.
+- `--color-red-500: initial` falls back to the built-in red instead of removing `bg-red-500`.
+- A bare `rounded` keeps its built-in value; `rounded-sm` and the rest read the variable.
+- `--spacing` needs a unit. A bare number makes `p-4` compute pixels here, where a browser rejects the declaration.
 
 `tw` is a plain prop, so build it dynamically:
 

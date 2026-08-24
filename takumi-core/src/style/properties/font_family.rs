@@ -3,6 +3,7 @@ use std::{fmt, string::ToString, sync::Arc};
 use cssparser::{Parser, match_ignore_ascii_case};
 use parley::{FontFamilyName, GenericFamily};
 
+use crate::style::tw::Namespace;
 use crate::style::{
   CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, properties::write_css_string,
   tw::TailwindPropertyParser,
@@ -94,6 +95,8 @@ impl<'i> FromCss<'i> for FontFamily {
 }
 
 impl TailwindPropertyParser for FontFamily {
+  const NAMESPACES: &'static [Namespace] = &[Namespace::Font];
+
   fn parse_tw(token: &str) -> Option<Self> {
     match_ignore_ascii_case! {token,
       "sans" => Some(FontFamily::from_parlance_generic(GenericFamily::SansSerif)),

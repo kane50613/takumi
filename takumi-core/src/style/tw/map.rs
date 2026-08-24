@@ -1,13 +1,25 @@
 use phf::phf_map;
 
 use crate::style::{
-  tw::{TailwindProperty, TailwindPropertyParser, parser::*},
+  LonghandId,
+  tw::{Namespace, TailwindProperty, TailwindPropertyParser, parser::*},
   *,
 };
 
+/// The namespaces a parser candidate reads: the value type's own list, or the
+/// override an entry spells in brackets.
+macro_rules! parser_namespaces {
+  ($parse:ty) => {
+    <$parse as TailwindPropertyParser>::NAMESPACES
+  };
+  ($parse:ty, $($namespace:expr),+) => {
+    &[$($namespace),+]
+  };
+}
+
 /// Generates the [`PropertyParser`] enum and its `parse()` dispatch from `(Variant, ArgType, ParseType)` triples.
 macro_rules! property_parsers {
-  ($($variant:ident($arg:ty) => $parse:ty),+ $(,)?) => {
+  ($($variant:ident($arg:ty) => $parse:ty $([$($namespace:expr),+ $(,)?])?),+ $(,)?) => {
     /// Maps a parsed argument type to a [`TailwindProperty`] constructor.
     #[derive(Clone, Copy)]
     pub(crate) enum PropertyParser {
@@ -20,6 +32,14 @@ macro_rules! property_parsers {
     }
 
     impl PropertyParser {
+      /// The theme namespaces this candidate's value type reads.
+      pub fn namespaces(&self) -> &'static [Namespace] {
+        match self {
+          $(Self::$variant(..) => parser_namespaces!($parse $(, $($namespace),+)?),)+
+          Self::GradientPosition(..) => <TwGradientPosition as TailwindPropertyParser>::NAMESPACES,
+        }
+      }
+
       /// Parses a utility suffix into a property via the wrapped constructor.
       pub fn parse(&self, suffix: &str) -> Option<TailwindProperty> {
         match self {
@@ -44,6 +64,7 @@ property_parsers! {
   BgSize(BackgroundSize) => BackgroundSize,
   BgImage(BackgroundImage) => BackgroundImage,
   LengthAuto(Length) => Length,
+  ContainerLength(Length) => Length [Namespace::Container, Namespace::Spacing],
   LengthZero(Length) => Length,
   FontWeight(FontWeight) => FontWeight,
   Justify(JustifyContent) => JustifyContent,
@@ -86,6 +107,76 @@ property_parsers! {
   Animation(Animations) => Animations,
 }
 
+/// What a prefix writes for a token the built-in scales do not know, as the
+/// namespaces it reads paired with the longhands each one fills. `bg-brand-500`
+/// has no built-in value to expand, so this is the only place its target is
+/// written down; a prefix reading two namespaces emits one variable per group,
+/// and the undefined ones leave their longhands unset.
+pub(crate) static THEME_TARGETS: phf::Map<&str, &[(Namespace, &[LonghandId])]> = phf_map! {
+  "aspect" => &[(Namespace::Aspect, &[LonghandId::AspectRatio])],
+  "basis" => &[(Namespace::Spacing, &[LonghandId::FlexBasis])],
+  "bg" => &[(Namespace::Color, &[LonghandId::BackgroundColor])],
+  "border" => &[(Namespace::Color, &[LonghandId::BorderTopColor, LonghandId::BorderRightColor, LonghandId::BorderBottomColor, LonghandId::BorderLeftColor])],
+  "border-b" => &[(Namespace::Color, &[LonghandId::BorderBottomColor])],
+  "border-l" => &[(Namespace::Color, &[LonghandId::BorderLeftColor])],
+  "border-r" => &[(Namespace::Color, &[LonghandId::BorderRightColor])],
+  "border-t" => &[(Namespace::Color, &[LonghandId::BorderTopColor])],
+  "border-x" => &[(Namespace::Color, &[LonghandId::BorderLeftColor, LonghandId::BorderRightColor])],
+  "border-y" => &[(Namespace::Color, &[LonghandId::BorderTopColor, LonghandId::BorderBottomColor])],
+  "bottom" => &[(Namespace::Spacing, &[LonghandId::Bottom])],
+  "decoration" => &[(Namespace::Color, &[LonghandId::TextDecorationColor])],
+  "font" => &[(Namespace::Font, &[LonghandId::FontFamily]), (Namespace::FontWeight, &[LonghandId::FontWeight])],
+  "gap" => &[(Namespace::Spacing, &[LonghandId::ColumnGap, LonghandId::RowGap])],
+  "gap-x" => &[(Namespace::Spacing, &[LonghandId::ColumnGap])],
+  "gap-y" => &[(Namespace::Spacing, &[LonghandId::RowGap])],
+  "h" => &[(Namespace::Spacing, &[LonghandId::Height])],
+  "inset" => &[(Namespace::Spacing, &[LonghandId::Top, LonghandId::Right, LonghandId::Bottom, LonghandId::Left])],
+  "inset-x" => &[(Namespace::Spacing, &[LonghandId::Left, LonghandId::Right])],
+  "inset-y" => &[(Namespace::Spacing, &[LonghandId::Top, LonghandId::Bottom])],
+  "leading" => &[(Namespace::Leading, &[LonghandId::LineHeight])],
+  "left" => &[(Namespace::Spacing, &[LonghandId::Left])],
+  "m" => &[(Namespace::Spacing, &[LonghandId::MarginTop, LonghandId::MarginRight, LonghandId::MarginBottom, LonghandId::MarginLeft])],
+  "max-h" => &[(Namespace::Spacing, &[LonghandId::MaxHeight])],
+  // Groups apply in order, so when two namespaces fill the same longhand the
+  // one Tailwind prefers goes last.
+  "max-w" => &[(Namespace::Spacing, &[LonghandId::MaxWidth]), (Namespace::Container, &[LonghandId::MaxWidth])],
+  "mb" => &[(Namespace::Spacing, &[LonghandId::MarginBottom])],
+  "me" => &[(Namespace::Spacing, &[LonghandId::MarginInlineEnd])],
+  "min-h" => &[(Namespace::Spacing, &[LonghandId::MinHeight])],
+  "min-w" => &[(Namespace::Spacing, &[LonghandId::MinWidth])],
+  "ml" => &[(Namespace::Spacing, &[LonghandId::MarginLeft])],
+  "mr" => &[(Namespace::Spacing, &[LonghandId::MarginRight])],
+  "ms" => &[(Namespace::Spacing, &[LonghandId::MarginInlineStart])],
+  "mt" => &[(Namespace::Spacing, &[LonghandId::MarginTop])],
+  "mx" => &[(Namespace::Spacing, &[LonghandId::MarginLeft, LonghandId::MarginRight])],
+  "my" => &[(Namespace::Spacing, &[LonghandId::MarginTop, LonghandId::MarginBottom])],
+  "outline" => &[(Namespace::Color, &[LonghandId::OutlineColor])],
+  "p" => &[(Namespace::Spacing, &[LonghandId::PaddingTop, LonghandId::PaddingRight, LonghandId::PaddingBottom, LonghandId::PaddingLeft])],
+  "pb" => &[(Namespace::Spacing, &[LonghandId::PaddingBottom])],
+  "pe" => &[(Namespace::Spacing, &[LonghandId::PaddingInlineEnd])],
+  "pl" => &[(Namespace::Spacing, &[LonghandId::PaddingLeft])],
+  "pr" => &[(Namespace::Spacing, &[LonghandId::PaddingRight])],
+  "ps" => &[(Namespace::Spacing, &[LonghandId::PaddingInlineStart])],
+  "pt" => &[(Namespace::Spacing, &[LonghandId::PaddingTop])],
+  "px" => &[(Namespace::Spacing, &[LonghandId::PaddingLeft, LonghandId::PaddingRight])],
+  "py" => &[(Namespace::Spacing, &[LonghandId::PaddingTop, LonghandId::PaddingBottom])],
+  "right" => &[(Namespace::Spacing, &[LonghandId::Right])],
+  "rounded" => &[(Namespace::Radius, &[LonghandId::BorderTopLeftRadius, LonghandId::BorderTopRightRadius, LonghandId::BorderBottomRightRadius, LonghandId::BorderBottomLeftRadius])],
+  "rounded-b" => &[(Namespace::Radius, &[LonghandId::BorderBottomRightRadius, LonghandId::BorderBottomLeftRadius])],
+  "rounded-bl" => &[(Namespace::Radius, &[LonghandId::BorderBottomLeftRadius])],
+  "rounded-br" => &[(Namespace::Radius, &[LonghandId::BorderBottomRightRadius])],
+  "rounded-l" => &[(Namespace::Radius, &[LonghandId::BorderTopLeftRadius, LonghandId::BorderBottomLeftRadius])],
+  "rounded-r" => &[(Namespace::Radius, &[LonghandId::BorderTopRightRadius, LonghandId::BorderBottomRightRadius])],
+  "rounded-t" => &[(Namespace::Radius, &[LonghandId::BorderTopLeftRadius, LonghandId::BorderTopRightRadius])],
+  "rounded-tl" => &[(Namespace::Radius, &[LonghandId::BorderTopLeftRadius])],
+  "rounded-tr" => &[(Namespace::Radius, &[LonghandId::BorderTopRightRadius])],
+  "size" => &[(Namespace::Spacing, &[LonghandId::Width, LonghandId::Height])],
+  "text" => &[(Namespace::Text, &[LonghandId::FontSize, LonghandId::LineHeight]), (Namespace::Color, &[LonghandId::Color])],
+  "top" => &[(Namespace::Spacing, &[LonghandId::Top])],
+  "tracking" => &[(Namespace::Tracking, &[LonghandId::LetterSpacing])],
+  "w" => &[(Namespace::Spacing, &[LonghandId::Width])],
+};
+
 /// Maps a utility prefix to the parsers tried against its suffix.
 pub(crate) static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
   "list" => &[
@@ -125,7 +216,7 @@ pub(crate) static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
   "h" => &[PropertyParser::LengthAuto(TailwindProperty::Height)],
   "min-w" => &[PropertyParser::LengthAuto(TailwindProperty::MinWidth)],
   "min-h" => &[PropertyParser::LengthAuto(TailwindProperty::MinHeight)],
-  "max-w" => &[PropertyParser::LengthAuto(TailwindProperty::MaxWidth)],
+  "max-w" => &[PropertyParser::ContainerLength(TailwindProperty::MaxWidth)],
   "max-h" => &[PropertyParser::LengthAuto(TailwindProperty::MaxHeight)],
   "size" => &[PropertyParser::LengthAuto(TailwindProperty::Size)],
   "font" => &[
@@ -334,6 +425,7 @@ pub(crate) static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! 
   "border-x" => TailwindProperty::BorderXWidth(LineWidth::Length(Length::Px(1.0))),
   "border-y" => TailwindProperty::BorderYWidth(LineWidth::Length(Length::Px(1.0))),
   "outline" => TailwindProperty::OutlineDefault,
+  "rounded" => TailwindProperty::Rounded(TwRounded(Length::Rem(0.25))),
   "box-border" => TailwindProperty::BoxSizing(BoxSizing::BorderBox),
   "box-content" => TailwindProperty::BoxSizing(BoxSizing::ContentBox),
   "inline" => TailwindProperty::Display(Display::Inline),
@@ -351,7 +443,6 @@ pub(crate) static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! 
   "bg-no-repeat" => TailwindProperty::BackgroundRepeat(BackgroundRepeat::no_repeat()),
   "bg-space" | "bg-repeat-space" => TailwindProperty::BackgroundRepeat(BackgroundRepeat::space()),
   "bg-round" | "bg-repeat-round" => TailwindProperty::BackgroundRepeat(BackgroundRepeat::round()),
-  "rounded" => TailwindProperty::Rounded(TwRounded(Length::Rem(0.25))),
   "bg-repeat-x" => TailwindProperty::BackgroundRepeat(BackgroundRepeat(
     BackgroundRepeatStyle::Repeat,
     BackgroundRepeatStyle::NoRepeat,
@@ -361,8 +452,6 @@ pub(crate) static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! 
     BackgroundRepeatStyle::Repeat,
   )),
   "aspect-auto" => TailwindProperty::Aspect(AspectRatio::Auto),
-  "aspect-square" => TailwindProperty::Aspect(AspectRatio::Ratio(1.0)),
-  "aspect-video" => TailwindProperty::Aspect(AspectRatio::Ratio(16.0 / 9.0)),
   "flex-grow" | "grow" => TailwindProperty::FlexGrow(FlexGrow(1.0)),
   "flex-shrink" | "shrink" => TailwindProperty::FlexShrink(FlexGrow(1.0)),
   "flex-row" => TailwindProperty::FlexDirection(FlexDirection::Row),

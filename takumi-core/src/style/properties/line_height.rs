@@ -1,5 +1,6 @@
 use cssparser::{Parser, match_ignore_ascii_case};
 
+use crate::style::tw::Namespace;
 use crate::style::{
   CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss,
   parse_calc_number_expression, tw::TailwindPropertyParser,
@@ -25,6 +26,10 @@ impl From<Length> for LineHeight {
 }
 
 impl TailwindPropertyParser for LineHeight {
+  // Spacing second: `leading-7` multiplies `--spacing`, `leading-tight` reads
+  // `--leading-tight`.
+  const NAMESPACES: &'static [Namespace] = &[Namespace::Leading, Namespace::Spacing];
+
   fn parse_tw(token: &str) -> Option<Self> {
     match_ignore_ascii_case! {&token,
       "none" => Some(LineHeight::Unitless(1.0)),

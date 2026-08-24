@@ -7,6 +7,7 @@ use cssparser::{
   match_ignore_ascii_case,
 };
 
+use crate::style::tw::{Namespace, extract_arbitrary_value};
 use crate::style::{
   Animatable, Color as CurrentColor, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss,
   FromCssStr, MakeComputed, ParseResult, PercentageNumber, SizingContext, ToCss,
@@ -219,8 +220,26 @@ impl ColorInput {
 }
 
 impl TailwindPropertyParser for ColorInput {
+  const NAMESPACES: &'static [Namespace] = &[Namespace::Color];
+
   fn parse_tw(token: &str) -> Option<Self> {
     if token.eq_ignore_ascii_case("current") {
+      return Some(ColorInput::CurrentColor);
+    }
+
+    Color::parse_tw(token).map(ColorInput::Value)
+  }
+
+  /// `Color::parse_tw` already reads the `/50` modifier, so this only carries it
+  /// across the `current` keyword that `Color` has no representation for.
+  fn parse_tw_with_arbitrary(token: &str) -> Option<Self> {
+    if let Some(value) = extract_arbitrary_value(token) {
+      return Self::from_css_str(&value).ok();
+    }
+
+    let base = token.split_once('/').map_or(token, |(color, _)| color);
+
+    if base.eq_ignore_ascii_case("current") {
       return Some(ColorInput::CurrentColor);
     }
 

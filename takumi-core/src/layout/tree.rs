@@ -3,6 +3,7 @@ use std::{
 };
 
 use parley::fontique::Attributes;
+use smallvec::SmallVec;
 use taffy::{
   BlockContext, Cache, CacheTree, Display as TaffyDisplay, Layout, LayoutBlockContainer,
   LayoutFlexboxContainer, LayoutGridContainer, LayoutInput, LayoutOutput, LayoutPartialTree,
@@ -30,8 +31,9 @@ use crate::{
   style::{
     BackgroundImage, BackgroundImages, BlendMode, BoxSizing, Color, ComputedStyle, ContentItem,
     ContentValue, Display, Filters, Float, Isolation, Length, LineHeight, ListStylePosition,
-    PercentageNumber, Position, SizingContext, Style as NodeStyle, StyleDeclaration, StyleSheet,
-    TextWrapMode, WhiteSpaceCollapse, apply_stylesheet_animations,
+    PercentageNumber, Position, SizingContext, Style as NodeStyle, StyleDeclaration,
+    StyleDeclarationBlock, StyleSheet, TextWrapMode, WhiteSpaceCollapse,
+    apply_stylesheet_animations,
   },
   viewport::Viewport,
 };
@@ -221,12 +223,27 @@ fn resolve_normal_line_height(
     .unwrap_or(font_size)
 }
 
+/// The node's style, plus the important declarations that belong to the element
+/// rather than to a stylesheet, which the caller re-applies after sampling an
+/// animation.
 fn build_style_layers(
   node_layers: NodeStyleLayers,
   matched_declarations: &MatchedDeclarationsView<'_>,
   viewport: Viewport,
-) -> NodeStyle {
+) -> (NodeStyle, SmallVec<[StyleDeclarationBlock; 2]>) {
   let mut style = NodeStyle::default();
+
+  // `tw` is the last declared layer, below unlayered author rules, so its
+  // important half goes last: the cascade reverses layer order for important
+  // declarations.
+  let (tw_normal, tw_important) = node_layers
+    .author_tw
+    .map(|author_tw| {
+      author_tw
+        .into_declaration_block(viewport)
+        .split_importance()
+    })
+    .unzip();
 
   if let Some(preset) = node_layers.preset {
     style.merge_from(preset);
@@ -236,18 +253,33 @@ fn build_style_layers(
     style.push(StyleDeclaration::direction(dir), false);
   }
 
-  for &declarations in matched_declarations.normal() {
+  for &declarations in matched_declarations.layered_normal() {
     for declaration in declarations.iter() {
       declaration.merge_into_ref(&mut style);
     }
   }
 
-  if let Some(author_tw) = node_layers.author_tw {
-    style.append_block(author_tw.into_declaration_block(viewport));
+  // `tw` is the last declared layer, as Tailwind orders utilities: above every
+  // named `@layer`, below unlayered author rules.
+  if let Some(tw_normal) = tw_normal {
+    style.append_block(tw_normal);
   }
 
-  if let Some(inline) = node_layers.inline {
-    style.merge_from(inline);
+  for &declarations in matched_declarations.unlayered_normal() {
+    for declaration in declarations.iter() {
+      declaration.merge_into_ref(&mut style);
+    }
+  }
+
+  // An element's own declarations outrank selector-based ones at the same
+  // importance.
+  let (inline_normal, inline_important) = node_layers
+    .inline
+    .map(|inline| StyleDeclarationBlock::from(inline).split_importance())
+    .unzip();
+
+  if let Some(inline_normal) = inline_normal {
+    style.append_block(inline_normal);
   }
 
   for &declarations in matched_declarations.important() {
@@ -256,7 +288,16 @@ fn build_style_layers(
     }
   }
 
-  style
+  let element_important: SmallVec<[StyleDeclarationBlock; 2]> = [tw_important, inline_important]
+    .into_iter()
+    .flatten()
+    .collect();
+
+  for declarations in &element_important {
+    style.append_block(declarations.clone());
+  }
+
+  (style, element_important)
 }
 
 fn registered_custom_property_parent_style<'a>(
@@ -312,7 +353,7 @@ pub(super) fn pseudo_computed_style(
   parent_context: &RenderContext,
   pseudo_matched: &MatchedDeclarationsView<'_>,
 ) -> (ComputedStyle, SizingContext, Color) {
-  let style_layers = build_style_layers(
+  let (style_layers, _) = build_style_layers(
     NodeStyleLayers::default(),
     pseudo_matched,
     parent_context.sizing.viewport,
@@ -1373,7 +1414,8 @@ impl RenderNode {
       let layers = node.take_style_layers();
       let lang = layers.lang;
 
-      let style_layers = build_style_layers(layers, matched, parent_context.sizing.viewport);
+      let (style_layers, element_important) =
+        build_style_layers(layers, matched, parent_context.sizing.viewport);
       let inherited_parent = registered_custom_property_parent_style(
         &parent_context.style,
         std::slice::from_ref(parent_context.stylesheet.as_ref()),
@@ -1426,9 +1468,23 @@ impl RenderNode {
         child_sizing_for_final = Some(child_sizing);
       }
 
-      for &declarations in matched.important() {
-        for declaration in declarations.iter() {
-          declaration.apply_to_computed(&mut style);
+      // Important declarations outrank an animation, and `inherit` among them
+      // needs the parent the first pass resolved against.
+      let important = matched
+        .important()
+        .iter()
+        .map(|declarations| declarations.iter())
+        .chain(
+          element_important
+            .iter()
+            .map(|declarations| declarations.iter()),
+        );
+
+      for declarations in important {
+        for declaration in declarations {
+          declaration
+            .clone()
+            .apply_with_parent(&mut style, &inherited_parent);
         }
       }
 

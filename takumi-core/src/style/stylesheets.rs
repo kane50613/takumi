@@ -45,9 +45,52 @@ macro_rules! define_inherited_default {
 type ParsedDeclarations = SmallVec<[StyleDeclaration; 8]>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct DeferredDeclaration {
-  property: PropertyId,
-  specified_value: String,
+pub(crate) struct DeferredDeclaration {
+  pub(crate) property: PropertyId,
+  pub(crate) specified_value: String,
+}
+
+/// A utility value read from a custom property, with the built-in scale as its
+/// fallback. Tailwind compiles `bg-red-500` to `var(--color-red-500)`.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct TwVarRef {
+  pub(crate) name: Arc<str>,
+  pub(crate) deferred: DeferredDeclaration,
+  pub(crate) fallback: Option<Box<StyleDeclaration>>,
+}
+
+fn deferred_to_css<W: fmt::Write>(deferred: &DeferredDeclaration, dest: &mut W) -> fmt::Result {
+  let name = match deferred.property {
+    PropertyId::Longhand(id) => format!("{:?}", id),
+    PropertyId::Shorthand(id) => format!("{:?}", id),
+    _ => return Ok(()),
+  };
+
+  write!(
+    dest,
+    "{}: {};",
+    to_kebab_case(&name),
+    deferred.specified_value
+  )
+}
+
+impl TwVarRef {
+  fn apply(&self, style: &mut ComputedStyle, parent: Option<&ComputedStyle>) {
+    let defined = style.custom_properties.contains_key(self.name.as_ref());
+
+    if defined && apply_deferred_declaration(style, parent, &self.deferred) {
+      return;
+    }
+
+    let Some(fallback) = &self.fallback else {
+      return;
+    };
+
+    match parent {
+      Some(parent) => fallback.clone().apply_with_parent(style, parent),
+      None => fallback.apply_to_computed(style),
+    }
+  }
 }
 
 /// A resolved BCP-47 language tag (the canonicalized `language[-Script][-REGION]`
@@ -724,6 +767,8 @@ macro_rules! define_style {
         CustomProperty(String, String),
         /// A property value that must be resolved after `var()` substitution.
         Deferred(DeferredDeclaration),
+        /// A theme variable with the built-in utility scale as its fallback.
+        VarRef(TwVarRef),
         /// A CSS-wide keyword targeting a longhand property.
         CssWideKeyword(LonghandId, CssWideKeyword),
       }
@@ -853,7 +898,7 @@ macro_rules! define_style {
           match self {
             $(Self::[<$longhand:camel>](..) => LonghandId::[<$longhand:camel>],)*
             $(Self::[<$transient:camel>](..) => LonghandId::[<$transient:camel>],)*
-            Self::CustomProperty(..) | Self::Deferred(..) => {
+            Self::CustomProperty(..) | Self::Deferred(..) | Self::VarRef(..) => {
               unreachable!("custom and deferred declarations do not map to a single longhand")
             }
             Self::CssWideKeyword(id, _) => *id,
@@ -865,6 +910,7 @@ macro_rules! define_style {
             Self::CssWideKeyword(id, _) => [*id].into_iter().collect(),
             Self::CustomProperty(..) => PropertyMask::default(),
             Self::Deferred(deferred) => deferred.property.target_longhands(),
+            Self::VarRef(var_ref) => var_ref.deferred.property.target_longhands(),
             _ => [self.longhand_id()].into_iter().collect(),
           }
         }
@@ -911,6 +957,7 @@ macro_rules! define_style {
             Self::Deferred(deferred) => {
               apply_deferred_declaration(style, Some(parent), &deferred);
             }
+            Self::VarRef(var_ref) => var_ref.apply(style, Some(parent)),
             $(Self::[<$longhand:camel>](value) => style.$longhand = value,)*
             $(
               Self::[<$transient:camel>](value) => {
@@ -943,7 +990,10 @@ macro_rules! define_style {
             Self::CustomProperty(name, value) => {
               Arc::make_mut(&mut style.custom_properties).insert(name.to_owned(), value.to_owned());
             }
-            Self::Deferred(deferred) => apply_deferred_declaration(style, None, deferred),
+            Self::Deferred(deferred) => {
+              apply_deferred_declaration(style, None, deferred);
+            }
+            Self::VarRef(var_ref) => var_ref.apply(style, None),
             $(Self::[<$longhand:camel>](value) => style.$longhand.clone_from(value),)*
             $(
               Self::[<$transient:camel>](value) => {
@@ -988,14 +1038,8 @@ macro_rules! define_style {
             Self::CustomProperty(name, value) => {
               write!(dest, "{}: {};", name, value)
             }
-            Self::Deferred(deferred) => {
-              let name = match deferred.property {
-                PropertyId::Longhand(id) => format!("{:?}", id),
-                PropertyId::Shorthand(id) => format!("{:?}", id),
-                _ => return Ok(()),
-              };
-              write!(dest, "{}: {};", to_kebab_case(&name), deferred.specified_value)
-            }
+            Self::VarRef(var_ref) => deferred_to_css(&var_ref.deferred, dest),
+            Self::Deferred(deferred) => deferred_to_css(deferred, dest),
             Self::CssWideKeyword(id, keyword) => {
               let name = format!("{:?}", id);
               let keyword_str = match keyword {
@@ -1625,6 +1669,9 @@ where
 pub struct StyleDeclarationBlock {
   /// Ordered declarations in source order.
   pub(crate) declarations: SmallVec<[StyleDeclaration; 8]>,
+  /// Positional against `declarations`, because the mask below unions the block
+  /// and cannot tell `p-2 !p-4` apart once both have marked the same longhand.
+  important: SmallVec<[bool; 8]>,
   /// Properties that were marked with `!important`.
   pub importance: DeclarationImportance,
 }
@@ -1642,6 +1689,7 @@ impl StyleDeclarationBlock {
       self.importance.insert_declaration(&declaration);
     }
     self.declarations.push(declaration);
+    self.important.push(important);
   }
 
   fn append_parsed_declarations(&mut self, declarations: ParsedDeclarations, important: bool) {
@@ -1650,10 +1698,34 @@ impl StyleDeclarationBlock {
     }
   }
 
+  /// Splits the block at the two ends of the cascade: a layer's important
+  /// declarations beat the layers that beat its normal ones.
+  pub(crate) fn split_importance(self) -> (Self, Self) {
+    if self.importance.is_empty() {
+      return (self, Self::default());
+    }
+
+    let mut normal = Self::default();
+    let mut important = Self::default();
+
+    for (declaration, is_important) in self.declarations.into_iter().zip(self.important) {
+      let target = if is_important {
+        &mut important
+      } else {
+        &mut normal
+      };
+
+      target.push(declaration, is_important);
+    }
+
+    (normal, important)
+  }
+
   /// Appends another block's declarations and importance.
   pub(crate) fn append(&mut self, mut other: Self) {
     self.importance.append(&mut other.importance);
     self.declarations.extend(other.declarations);
+    self.important.extend(other.important);
   }
 
   /// Iterates over the declarations in source order.

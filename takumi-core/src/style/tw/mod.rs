@@ -1,20 +1,24 @@
 mod builder;
 /// Utility-prefix to property-parser mapping.
 mod map;
+/// The `--color-*` style prefixes a utility reads its value from.
+mod namespace;
 /// Parsers for Tailwind utility-class suffixes.
 mod parser;
 
-use std::{borrow::Cow, cmp::Ordering, str::FromStr};
+use std::{borrow::Cow, cmp::Ordering, str::FromStr, sync::Arc};
 
 use builder::TailwindDeclarationBuilder;
 pub(crate) use builder::TwGradientType;
 use cssparser::match_ignore_ascii_case;
+pub(crate) use namespace::Namespace;
 use serde::{Deserialize, Deserializer, de::Error as DeError};
+use smallvec::SmallVec;
 
 use crate::{
   style::{
     tw::{
-      map::{FIXED_PROPERTIES, PREFIX_PARSERS},
+      map::{FIXED_PROPERTIES, PREFIX_PARSERS, THEME_TARGETS},
       parser::*,
     },
     *,
@@ -34,8 +38,8 @@ pub struct TailwindValues {
 impl FromStr for TailwindValues {
   type Err = String;
 
-  fn from_str(s: &str) -> Result<Self, Self::Err> {
-    let mut collected = s
+  fn from_str(source: &str) -> Result<Self, Self::Err> {
+    let mut collected = source
       .split_whitespace()
       .filter_map(TailwindValue::parse)
       .collect::<Vec<_>>();
@@ -588,9 +592,133 @@ pub(crate) enum TailwindProperty {
   GradientViaPosition(Length),
   /// Gradient `to` stop position.
   GradientToPosition(Length),
+  /// A theme variable standing in for the built-in value it falls back to.
+  /// Tailwind compiles a utility to `var(--color-red-500)`, not to the colour.
+  ThemeVar(ThemeVar),
 }
 
-fn extract_arbitrary_value(suffix: &str) -> Option<Cow<'_, str>> {
+/// A utility resolved from custom properties: one [`TwVarRef`] declaration per
+/// longhand it writes.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ThemeVar {
+  targets: SmallVec<[StyleDeclaration; 2]>,
+}
+
+impl ThemeVar {
+  /// One declaration per longhand, sharing the variable the prefix reads.
+  /// `text-lg` spells its line height in a companion variable, so one token can
+  /// set the size without dragging the leading with it.
+  fn from_builtin(
+    name: &Arc<str>,
+    expression: &Arc<str>,
+    declarations: impl IntoIterator<Item = StyleDeclaration>,
+  ) -> Self {
+    let targets = declarations
+      .into_iter()
+      .map(|declaration| {
+        var_ref(
+          name,
+          expression,
+          declaration.longhand_id(),
+          Some(declaration),
+        )
+      })
+      .collect();
+
+    Self { targets }
+  }
+
+  #[cfg(test)]
+  pub(crate) fn builtin_declarations(&self) -> Vec<StyleDeclaration> {
+    self
+      .targets
+      .iter()
+      .filter_map(|target| match target {
+        StyleDeclaration::VarRef(var_ref) => var_ref.fallback.as_deref().cloned(),
+        _ => None,
+      })
+      .collect()
+  }
+}
+
+fn var_ref(
+  name: &Arc<str>,
+  expression: &Arc<str>,
+  longhand: LonghandId,
+  fallback: Option<StyleDeclaration>,
+) -> StyleDeclaration {
+  let (name, expression) = match companion_variable(name, longhand) {
+    Some(companion) => (companion.clone(), format!("var({companion})")),
+    None => (name.clone(), expression.to_string()),
+  };
+
+  StyleDeclaration::VarRef(TwVarRef {
+    name,
+    deferred: DeferredDeclaration {
+      property: PropertyId::Longhand(longhand),
+      specified_value: expression,
+    },
+    fallback: fallback.map(Box::new),
+  })
+}
+
+/// The variable a longhand reads when the token spells it separately from its
+/// primary value, as `--text-lg--line-height` does for `--text-lg`.
+fn companion_variable(name: &str, longhand: LonghandId) -> Option<Arc<str>> {
+  (longhand == LonghandId::LineHeight && name.starts_with(Namespace::Text.prefix()))
+    .then(|| format!("{name}--line-height").into())
+}
+
+/// The `var()` expression a utility suffix reads, or `None` when the value is
+/// spelled in the class itself. Numeric spacing multiplies the `--spacing` step
+/// the way Tailwind's own `calc(var(--spacing) * 4)` does.
+fn theme_expression(
+  namespaces: &[Namespace],
+  suffix: &str,
+  negative: bool,
+) -> Option<(Arc<str>, Arc<str>)> {
+  if suffix.starts_with('[') {
+    return None;
+  }
+
+  // `bg-brand-500/50` mixes the variable with transparent, the way Tailwind's
+  // own opacity modifier compiles.
+  if let Some((token, opacity)) = suffix.split_once('/') {
+    let &namespace = namespaces.first()?;
+    let percentage = opacity.parse::<f32>().ok()?;
+
+    if namespace != Namespace::Color || !(0.0..=100.0).contains(&percentage) {
+      return None;
+    }
+
+    let name = format!("{}{token}", namespace.prefix());
+    let expression = format!("color-mix(in oklab, var({name}) {percentage}%, transparent)");
+
+    return Some((name.into(), expression.into()));
+  }
+
+  // `max-w-4` multiplies `--spacing` where `max-w-prose` reads `--container-prose`.
+  if suffix.parse::<f32>().is_ok() && namespaces.contains(&Namespace::Spacing) {
+    let sign = if negative { "-" } else { "" };
+
+    return Some((
+      "--spacing".into(),
+      format!("calc(var(--spacing, {TW_VAR_SPACING}rem) * {sign}{suffix})").into(),
+    ));
+  }
+
+  let &namespace = namespaces.first()?;
+
+  let name = format!("{}{suffix}", namespace.prefix());
+  let expression = match negative {
+    true => format!("calc(var({name}) * -1)"),
+    false => format!("var({name})"),
+  };
+
+  Some((name.into(), expression.into()))
+}
+
+pub(crate) fn extract_arbitrary_value(suffix: &str) -> Option<Cow<'_, str>> {
   let value = suffix.strip_prefix('[')?.strip_suffix(']')?;
   Some(decode_arbitrary_value(value))
 }
@@ -680,6 +808,11 @@ pub(crate) trait TailwindPropertyParser: Sized + for<'i> FromCss<'i> {
     Self::from_css_str(token).ok()
   }
 
+  /// Theme namespaces this value type reads, tried in order. The utility keeps
+  /// the built-in value as the fallback behind `var()`, so this only decides
+  /// which variable name the utility reads.
+  const NAMESPACES: &'static [Namespace] = &[];
+
   /// Parse a tailwind property from a token, with support for arbitrary values.
   fn parse_tw_with_arbitrary(token: &str) -> Option<Self> {
     if let Some(value) = extract_arbitrary_value(token) {
@@ -706,6 +839,23 @@ macro_rules! try_neg {
 }
 
 impl TailwindProperty {
+  /// Whether this property merges with sibling utilities in the builder
+  /// (gradients, transforms, shadow colour halves), which a value that
+  /// resolves at computed time cannot take part in.
+  fn merges_in_builder(&self) -> bool {
+    matches!(
+      self,
+      TailwindProperty::Translate(..)
+        | TailwindProperty::TranslateX(..)
+        | TailwindProperty::TranslateY(..)
+        | TailwindProperty::GradientFrom(..)
+        | TailwindProperty::GradientVia(..)
+        | TailwindProperty::GradientTo(..)
+        | TailwindProperty::ShadowColor(..)
+        | TailwindProperty::TextShadowColor(..)
+    )
+  }
+
   fn try_neg(self) -> Option<Self> {
     try_neg!(self;
       try_negative:
@@ -749,14 +899,23 @@ impl TailwindProperty {
       return Some(property.clone());
     }
 
-    if let Some(stripped) = token.strip_prefix('-') {
-      return Self::parse_prefix_suffix(stripped).and_then(Self::try_neg);
+    match token.strip_prefix('-') {
+      Some(stripped) => Self::parse_prefix_suffix(stripped, true),
+      None => Self::parse_prefix_suffix(token, false),
     }
-
-    Self::parse_prefix_suffix(token)
   }
 
-  fn parse_prefix_suffix(token: &str) -> Option<TailwindProperty> {
+  /// The longhands a property writes, paired with the value each falls back to.
+  /// Expanding it once here keeps the builder out of the per-node apply path.
+  pub(crate) fn expand_targets(self) -> SmallVec<[StyleDeclaration; 2]> {
+    let mut probe = TailwindDeclarationBuilder::default();
+
+    self.apply(&mut probe, false);
+
+    probe.finish().iter().cloned().collect()
+  }
+
+  fn parse_prefix_suffix(token: &str, negative: bool) -> Option<TailwindProperty> {
     let bytes = token.as_bytes();
 
     for dash_pos in (0..bytes.len()).rev() {
@@ -771,8 +930,50 @@ impl TailwindProperty {
 
       let suffix = &token[dash_pos + 1..];
       for parser in *parsers {
-        if let Some(property) = parser.parse(suffix) {
+        let Some(property) = parser.parse(suffix) else {
+          continue;
+        };
+
+        let property = if negative {
+          property.try_neg()?
+        } else {
+          property
+        };
+
+        if property.merges_in_builder() {
           return Some(property);
+        }
+
+        return Some(
+          match theme_expression(parser.namespaces(), suffix, negative) {
+            Some((name, expression)) => TailwindProperty::ThemeVar(ThemeVar::from_builtin(
+              &name,
+              &expression,
+              property.expand_targets(),
+            )),
+            None => property,
+          },
+        );
+      }
+
+      // No built-in value, but the prefix still names what the utility writes.
+      if let Some(groups) = THEME_TARGETS.get(prefix) {
+        let targets: SmallVec<[StyleDeclaration; 2]> = groups
+          .iter()
+          .filter_map(|(namespace, longhands)| {
+            let (name, expression) = theme_expression(&[*namespace], suffix, negative)?;
+
+            Some(
+              longhands
+                .iter()
+                .map(move |&longhand| var_ref(&name, &expression, longhand, None)),
+            )
+          })
+          .flatten()
+          .collect();
+
+        if !targets.is_empty() {
+          return Some(TailwindProperty::ThemeVar(ThemeVar { targets }));
         }
       }
     }
@@ -783,6 +984,11 @@ impl TailwindProperty {
   #[inline(never)]
   fn apply(self, builder: &mut TailwindDeclarationBuilder, important: bool) {
     match self {
+      TailwindProperty::ThemeVar(theme_var) => {
+        for target in theme_var.targets {
+          builder.push(target, important);
+        }
+      }
       TailwindProperty::BgLinearAngle(angle) => {
         builder.gradient_state.gradient_type = TwGradientType::Linear;
         builder.gradient_state.angle = Some(angle);
