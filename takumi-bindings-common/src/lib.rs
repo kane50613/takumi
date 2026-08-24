@@ -77,18 +77,26 @@ pub fn build_font_resource<'a>(
   }
 }
 
-/// Variables as the `:root` rule they stand for. A value carrying `{`, `}`, `;`
-/// or a comment would escape that rule, and `!important` would outrank
-/// declarations it has no business outranking, so those are dropped.
+/// Variables as the `:root` rule they stand for. A name without the `--`
+/// prefix gains it. A value carrying `{`, `}`, `;` or a comment would escape
+/// that rule, and `!important` would outrank declarations it has no business
+/// outranking, so those are dropped.
 fn variables_stylesheet(variables: HashMap<String, String>) -> Option<String> {
   // Sorted, because the sheet cache is keyed by source text.
   let declarations = variables
     .into_iter()
+    .map(|(name, value)| {
+      let name = match name.starts_with("--") {
+        true => name,
+        false => format!("--{name}"),
+      };
+
+      (name, value)
+    })
     .collect::<BTreeMap<_, _>>()
     .into_iter()
     .filter(|(name, value)| {
-      name.starts_with("--")
-        && !name.contains([':', ';', '{', '}'])
+      !name.contains([':', ';', '{', '}'])
         && !value.contains([';', '{', '}'])
         && !value.contains("/*")
         && !value.to_ascii_lowercase().contains("!important")
@@ -164,12 +172,19 @@ mod tests {
       ("--c", "red !important"),
       ("--d", "red !IMPORTANT"),
       ("--e{", "red"),
-      ("colour", "red"),
     ];
 
     for entry in escaping {
       assert_eq!(variables(&[entry]), None, "{entry:?}");
     }
+  }
+
+  #[test]
+  fn test_bare_names_gain_the_prefix() {
+    assert_eq!(
+      variables(&[("color-brand-500", "#5b21b6")]),
+      Some(":root{--color-brand-500:#5b21b6;}".to_owned())
+    );
   }
 
   #[test]
