@@ -76,11 +76,11 @@ fn test_parse_red_500_color_utilities() {
   let cases: &[(&str, TailwindProperty)] = &[
     (
       "shadow-red-500",
-      TailwindProperty::ShadowColor(ColorInput::Value(Color([251, 44, 54, 255]))),
+      TailwindProperty::ShadowColor(TwThemeColor::parse_tw("red-500").expect("palette colour")),
     ),
     (
       "text-shadow-red-500",
-      TailwindProperty::TextShadowColor(ColorInput::Value(Color([251, 44, 54, 255]))),
+      TailwindProperty::TextShadowColor(TwThemeColor::parse_tw("red-500").expect("palette colour")),
     ),
     (
       "decoration-red-500",
@@ -1390,4 +1390,22 @@ fn test_gradient_state_does_not_inherit() {
   // With the parent's stops out of reach, `var(--tw-gradient-stops)` fails to
   // substitute and the child paints no gradient, as a browser would.
   assert_eq!(child.background_image, None);
+}
+
+/// The shadow colour utility overrides every layer through the variable it
+/// sets, and reads the theme like any colour utility.
+#[test]
+fn test_shadow_color_reads_theme_variables() {
+  let values =
+    TailwindValues::from_str("shadow-md shadow-brand-500").expect("tailwind values should parse");
+  let computed = Style::from(values.into_declaration_block(Viewport::new((100, 100))))
+    .inherit(&root_with(&[("--color-brand-500", "#5b21b6")]));
+
+  let shadows = computed.box_shadow.as_deref().expect("shadows");
+
+  assert_eq!(shadows.len(), 2);
+
+  for shadow in shadows {
+    assert_eq!(shadow.color, ColorInput::Value(Color::from_rgb(0x5b21b6)));
+  }
 }
