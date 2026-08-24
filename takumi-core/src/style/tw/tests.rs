@@ -1,4 +1,4 @@
-use std::assert_matches;
+use std::{assert_matches, sync::Arc};
 
 use super::*;
 use crate::style::{ComputedStyle, LonghandId, Style, properties::BackgroundImage};
@@ -1154,7 +1154,7 @@ fn test_parse_list_utilities() {
 /// Stands in for the `:root` rule a stylesheet would supply.
 fn root_with(variables: &[(&str, &str)]) -> ComputedStyle {
   let mut root = ComputedStyle::default();
-  let properties = std::sync::Arc::make_mut(&mut root.custom_properties);
+  let properties = Arc::make_mut(&mut root.custom_properties);
 
   for (name, value) in variables {
     properties.insert((*name).to_owned(), (*value).to_owned());
