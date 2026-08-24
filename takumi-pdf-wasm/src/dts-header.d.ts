@@ -147,6 +147,11 @@ export type PdfRenderOptions = {
   images?: ImageSource[];
   /** CSS stylesheets to apply before layout. */
   stylesheets?: string[];
+  /**
+   * CSS custom properties for `:root`, which utilities and `var()` both read.
+   * A name without the `--` prefix gains it.
+   */
+  variables?: Record<string, string>;
   /** Per-render font stack: ordered family names used as the fallback chain. */
   fontFamilies?: string[];
   /** Default BCP-47 language tag applied to the root. */
@@ -168,7 +173,7 @@ export type MeasureOptions = (
   | { size?: PageSize; landscape?: boolean; viewport?: never }
   | { viewport: ViewportInput; size?: never; landscape?: never }
 ) &
-  Pick<PdfRenderOptions, "images" | "stylesheets" | "fontFamilies" | "lang">;
+  Pick<PdfRenderOptions, "images" | "stylesheets" | "variables" | "fontFamilies" | "lang">;
 
 /** A node tree's laid-out size in CSS px. */
 export type MeasuredSize = { width: number; height: number };
