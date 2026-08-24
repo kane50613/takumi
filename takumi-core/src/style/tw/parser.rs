@@ -277,7 +277,7 @@ impl TailwindPropertyParser for TwBlur {
 /// A gradient stop colour as the expression Tailwind compiles it to: the
 /// `--color-*` variable with the built-in colour as its inline fallback.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct TwStopColor(pub std::sync::Arc<str>);
+pub(crate) struct TwStopColor(pub Arc<str>);
 
 impl<'i> FromCss<'i> for TwStopColor {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
