@@ -249,6 +249,40 @@ describe("allowUrl policy", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  test("an in-flight cache hit rechecks redirects discovered later", async () => {
+    let resolveEntry!: (response: Response) => void;
+    const entryResponse = new Promise<Response>((resolve) => {
+      resolveEntry = resolve;
+    });
+    const fetchMock = mock((url: string) =>
+      url === "https://allowed.example.com/a.png"
+        ? entryResponse
+        : Promise.resolve(new Response(new Uint8Array(8))),
+    );
+    const fetchCache = new Map<string, Promise<ArrayBuffer>>();
+    const node = tree("https://allowed.example.com/a.png");
+
+    const permissive = prepareImages({ node, fetchCache, fetch: fetchMock, allowUrl: () => true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const strict = prepareImages({
+      node,
+      fetchCache,
+      fetch: fetchMock,
+      allowUrl: (url) => new URL(url).hostname === "allowed.example.com",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const strictResult = strict.catch((error) => error);
+    resolveEntry(redirectTo("http://169.254.169.254/meta"));
+
+    expect(await permissive).toHaveLength(1);
+    const strictError = await strictResult;
+    expect(strictError).toBeInstanceOf(Error);
+    expect(strictError.message).toMatch(/blocked by allowUrl/);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   test("a strict caller does not trust cache created without allowUrl", async () => {
     const payload = new TextEncoder().encode("pixels");
     let call = 0;

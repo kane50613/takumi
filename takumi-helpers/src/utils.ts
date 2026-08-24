@@ -239,15 +239,15 @@ function fetchImageData(
       return fetchUncached(url, options, maxBytes);
     }
 
-    if (allowUrl && meta) {
-      const blocked = meta.hops.find((hop) => !allowUrl(hop));
-      if (blocked) {
-        return Promise.reject(new Error(`URL blocked by allowUrl policy: ${blocked}`));
-      }
-    }
-
     return cached.then(
       (data) => {
+        if (allowUrl && meta) {
+          const blocked = meta.hops.find((hop) => !allowUrl(hop));
+          if (blocked) {
+            throw new Error(`URL blocked by allowUrl policy: ${blocked}`);
+          }
+        }
+
         if (data.byteLength > maxBytes) {
           throw new Error(`Response exceeds ${maxBytes} bytes`);
         }
