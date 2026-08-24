@@ -9,7 +9,6 @@ mod parser;
 use std::{borrow::Cow, cmp::Ordering, str::FromStr, sync::Arc};
 
 use builder::TailwindDeclarationBuilder;
-pub(crate) use builder::TwGradientType;
 use cssparser::match_ignore_ascii_case;
 pub(crate) use namespace::Namespace;
 use serde::{Deserialize, Deserializer, de::Error as DeError};
@@ -28,6 +27,35 @@ use crate::{
 
 /// Tailwind v4 `--spacing` (rem per unit). Prefer [`Length::from_spacing`].
 pub(crate) const TW_VAR_SPACING: f32 = 0.25;
+
+/// The stop list Tailwind compiles gradients to, with each variable's
+/// `@property` initial value inlined as its fallback.
+const GRADIENT_STOPS: &str = "var(--tw-gradient-via-stops, var(--tw-gradient-from, transparent) var(--tw-gradient-from-position, 0%), var(--tw-gradient-to, transparent) var(--tw-gradient-to-position, 100%))";
+const GRADIENT_VIA_STOPS: &str = "var(--tw-gradient-from, transparent) var(--tw-gradient-from-position, 0%), var(--tw-gradient-via) var(--tw-gradient-via-position, 50%), var(--tw-gradient-to, transparent) var(--tw-gradient-to-position, 100%)";
+
+fn push_custom(builder: &mut TailwindDeclarationBuilder, important: bool, name: &str, value: &str) {
+  builder.push(
+    StyleDeclaration::CustomProperty(name.to_owned(), value.to_owned()),
+    important,
+  );
+}
+
+fn push_gradient_image(builder: &mut TailwindDeclarationBuilder, important: bool, image: String) {
+  builder.push(
+    StyleDeclaration::Deferred(DeferredDeclaration {
+      property: PropertyId::Longhand(LonghandId::BackgroundImage),
+      specified_value: image,
+    }),
+    important,
+  );
+}
+
+fn css<T: ToCss>(value: &T) -> String {
+  let mut output = String::new();
+
+  let _ = value.to_css(&mut output);
+  output
+}
 
 /// Represents a collection of tailwind properties.
 #[derive(Debug, Clone, PartialEq)]
@@ -581,11 +609,11 @@ pub(crate) enum TailwindProperty {
   /// `bg-conic` property.
   BgConicAngle(Angle),
   /// `from` property.
-  GradientFrom(ColorInput),
+  GradientFrom(TwStopColor),
   /// `to` property.
-  GradientTo(ColorInput),
+  GradientTo(TwStopColor),
   /// `via` property.
-  GradientVia(ColorInput),
+  GradientVia(TwStopColor),
   /// Gradient `from` stop position.
   GradientFromPosition(Length),
   /// Gradient `via` stop position.
@@ -840,17 +868,14 @@ macro_rules! try_neg {
 
 impl TailwindProperty {
   /// Whether this property merges with sibling utilities in the builder
-  /// (gradients, transforms, shadow colour halves), which a value that
-  /// resolves at computed time cannot take part in.
+  /// (transforms, shadow colour halves), which a value that resolves at
+  /// computed time cannot take part in.
   fn merges_in_builder(&self) -> bool {
     matches!(
       self,
       TailwindProperty::Translate(..)
         | TailwindProperty::TranslateX(..)
         | TailwindProperty::TranslateY(..)
-        | TailwindProperty::GradientFrom(..)
-        | TailwindProperty::GradientVia(..)
-        | TailwindProperty::GradientTo(..)
         | TailwindProperty::ShadowColor(..)
         | TailwindProperty::TextShadowColor(..)
     )
@@ -990,42 +1015,67 @@ impl TailwindProperty {
         }
       }
       TailwindProperty::BgLinearAngle(angle) => {
-        builder.gradient_state.gradient_type = TwGradientType::Linear;
-        builder.gradient_state.angle = Some(angle);
-        builder.gradient_state.important = important;
+        push_gradient_image(
+          builder,
+          important,
+          format!("linear-gradient({}deg, var(--tw-gradient-stops))", *angle),
+        );
       }
       TailwindProperty::BgRadial => {
-        builder.gradient_state.gradient_type = TwGradientType::Radial;
-        builder.gradient_state.important = important;
+        push_gradient_image(
+          builder,
+          important,
+          "radial-gradient(var(--tw-gradient-stops))".to_owned(),
+        );
       }
       TailwindProperty::BgConicAngle(angle) => {
-        builder.gradient_state.gradient_type = TwGradientType::Conic;
-        builder.gradient_state.angle = Some(angle);
-        builder.gradient_state.important = important;
+        let image = if *angle == 0.0 {
+          "conic-gradient(var(--tw-gradient-stops))".to_owned()
+        } else {
+          format!(
+            "conic-gradient(from {}deg, var(--tw-gradient-stops))",
+            *angle
+          )
+        };
+
+        push_gradient_image(builder, important, image);
       }
       TailwindProperty::GradientFrom(color) => {
-        builder.gradient_state.from = Some(color);
-        builder.gradient_state.important = important;
+        push_custom(builder, important, "--tw-gradient-from", &color.0);
+        push_custom(builder, important, "--tw-gradient-stops", GRADIENT_STOPS);
       }
       TailwindProperty::GradientTo(color) => {
-        builder.gradient_state.to = Some(color);
-        builder.gradient_state.important = important;
+        push_custom(builder, important, "--tw-gradient-to", &color.0);
+        push_custom(builder, important, "--tw-gradient-stops", GRADIENT_STOPS);
       }
       TailwindProperty::GradientVia(color) => {
-        builder.gradient_state.via = Some(color);
-        builder.gradient_state.important = important;
+        push_custom(builder, important, "--tw-gradient-via", &color.0);
+        push_custom(
+          builder,
+          important,
+          "--tw-gradient-via-stops",
+          GRADIENT_VIA_STOPS,
+        );
+        push_custom(
+          builder,
+          important,
+          "--tw-gradient-stops",
+          "var(--tw-gradient-via-stops)",
+        );
       }
       TailwindProperty::GradientFromPosition(pos) => {
-        builder.gradient_state.from_position = Some(pos);
-        builder.gradient_state.important = important;
+        push_custom(
+          builder,
+          important,
+          "--tw-gradient-from-position",
+          &css(&pos),
+        );
       }
       TailwindProperty::GradientViaPosition(pos) => {
-        builder.gradient_state.via_position = Some(pos);
-        builder.gradient_state.important = important;
+        push_custom(builder, important, "--tw-gradient-via-position", &css(&pos));
       }
       TailwindProperty::GradientToPosition(pos) => {
-        builder.gradient_state.to_position = Some(pos);
-        builder.gradient_state.important = important;
+        push_custom(builder, important, "--tw-gradient-to-position", &css(&pos));
       }
       TailwindProperty::BackgroundClip(background_clip) => {
         push_decl!(builder, important, background_clip(background_clip));

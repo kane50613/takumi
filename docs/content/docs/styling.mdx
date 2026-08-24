@@ -180,7 +180,8 @@ The namespace picks which utilities a token reaches:
 
 Some things behave differently from Tailwind here:
 
-- Gradients, shadows, filters, transforms and animations merge across utilities before the cascade runs, so `--shadow-*`, `--drop-shadow-*`, `--text-shadow-*`, `--blur-*` and `--animate-*` are not read.
+- Shadows, filters, transforms and animations merge across utilities before the cascade runs, so `--shadow-*`, `--drop-shadow-*`, `--text-shadow-*`, `--blur-*` and `--animate-*` are not read. Gradient stops do read `--color-*`: `from-brand-500` works like `bg-brand-500`.
+- A gradient needs `bg-linear-*`, `bg-radial` or `bg-conic`. Stops alone paint nothing, as in Tailwind.
 - `--color-red-500: initial` falls back to the built-in red instead of removing `bg-red-500`.
 - A bare `rounded` keeps its built-in value; `rounded-sm` and the rest read the variable.
 - `--spacing` needs a unit. A bare number makes `p-4` compute pixels here, where a browser rejects the declaration.

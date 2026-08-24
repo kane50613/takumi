@@ -1310,3 +1310,84 @@ fn test_numeric_leading_scales_with_spacing() {
 
   assert_eq!(line_height.to_px(&sizing, 0.0), 56.0);
 }
+
+#[test]
+fn test_gradient_reads_theme_variables() {
+  let values = TailwindValues::from_str("bg-linear-to-r from-brand-500 to-red-500")
+    .expect("tailwind values should parse");
+  let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
+
+  let computed = style.inherit(&root_with(&[
+    ("--color-brand-500", "#5b21b6"),
+    ("--color-red-500", "#00a63e"),
+  ]));
+
+  let images = computed.background_image.as_deref().expect("gradient");
+  let [BackgroundImage::Linear(gradient)] = images else {
+    panic!("expected a single linear gradient");
+  };
+
+  let colors: Vec<ColorInput> = gradient
+    .stops
+    .iter()
+    .map(|stop| match stop {
+      GradientStop::ColorHint { color, .. } => *color,
+      GradientStop::Hint(..) => panic!("expected color stops"),
+    })
+    .collect();
+
+  assert_eq!(
+    colors,
+    vec![
+      ColorInput::Value(Color::from_rgb(0x5b21b6)),
+      ColorInput::Value(Color::from_rgb(0x00a63e)),
+    ]
+  );
+}
+
+/// Stops and the gradient shape compose through custom properties, so utility
+/// order cannot matter.
+#[test]
+fn test_gradient_utility_order_does_not_matter() {
+  let compute = |classes: &str| {
+    let values = TailwindValues::from_str(classes).expect("tailwind values should parse");
+
+    Style::from(values.into_declaration_block(Viewport::new((100, 100))))
+      .inherit(&ComputedStyle::default())
+      .background_image
+  };
+
+  let forward = compute("bg-linear-to-r from-red-500 to-blue-500");
+
+  assert!(forward.is_some());
+  assert_eq!(forward, compute("from-red-500 to-blue-500 bg-linear-to-r"));
+}
+
+/// Stops alone declare no `background-image`, as Tailwind compiles them.
+#[test]
+fn test_stops_without_a_gradient_paint_nothing() {
+  let values =
+    TailwindValues::from_str("from-red-500 to-blue-500").expect("tailwind values should parse");
+  let computed = Style::from(values.into_declaration_block(Viewport::new((100, 100))))
+    .inherit(&ComputedStyle::default());
+
+  assert_eq!(computed.background_image, None);
+}
+
+/// `--tw-*` state is `inherits: false`, so a child gradient starts from its
+/// own stops, not the parent's.
+#[test]
+fn test_gradient_state_does_not_inherit() {
+  let parent_values = TailwindValues::from_str("bg-linear-to-r from-red-500 to-blue-500")
+    .expect("tailwind values should parse");
+  let parent = Style::from(parent_values.into_declaration_block(Viewport::new((100, 100))))
+    .inherit(&ComputedStyle::default());
+
+  let child_values = TailwindValues::from_str("bg-radial").expect("tailwind values should parse");
+  let child =
+    Style::from(child_values.into_declaration_block(Viewport::new((100, 100)))).inherit(&parent);
+
+  // With the parent's stops out of reach, `var(--tw-gradient-stops)` fails to
+  // substitute and the child paints no gradient, as a browser would.
+  assert_eq!(child.background_image, None);
+}
