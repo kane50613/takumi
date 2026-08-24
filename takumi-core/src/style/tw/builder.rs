@@ -1,9 +1,8 @@
-use crate::style::{LinearGradientDirection, *};
+use crate::style::*;
 
 #[derive(Debug, Default)]
 pub(super) struct TailwindDeclarationBuilder {
   pub(super) declarations: StyleDeclarationBlock,
-  pub(super) gradient_state: TwGradientState,
   pub(super) transform_state: TwTransformState,
   pub(super) shadow: Option<Vec<BoxShadow>>,
   pub(super) shadow_important: bool,
@@ -194,7 +193,6 @@ impl TailwindDeclarationBuilder {
     }
 
     self.transform_state.apply(&mut self.declarations);
-    self.gradient_state.apply(&mut self.declarations);
 
     self.grid_column.push_declarations(
       &mut self.declarations,
@@ -293,132 +291,6 @@ impl TwTransformState {
 
     if let Some(scale) = self.scale {
       declarations.push(StyleDeclaration::scale(scale), self.scale_important);
-    }
-  }
-}
-
-/// Accumulated Tailwind gradient utilities pending synthesis into a `background-image`.
-#[derive(Debug, Default)]
-pub(crate) struct TwGradientState {
-  /// Gradient kind (linear, radial, conic).
-  pub gradient_type: TwGradientType,
-  /// Linear/conic angle, if set.
-  pub angle: Option<Angle>,
-  /// Starting color stop.
-  pub from: Option<ColorInput>,
-  /// Ending color stop.
-  pub to: Option<ColorInput>,
-  /// Middle color stop.
-  pub via: Option<ColorInput>,
-  /// Position of the `from` stop.
-  pub from_position: Option<Length>,
-  /// Position of the `via` stop.
-  pub via_position: Option<Length>,
-  /// Position of the `to` stop.
-  pub to_position: Option<Length>,
-  /// Whether the gradient is `!important`.
-  pub important: bool,
-}
-
-/// Gradient kind.
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
-pub(crate) enum TwGradientType {
-  /// Linear gradient.
-  #[default]
-  Linear,
-  /// Radial gradient.
-  Radial,
-  /// Conic gradient.
-  Conic,
-}
-
-impl TwGradientState {
-  /// Synthesizes the accumulated gradient into a `background-image` declaration.
-  pub fn apply(self, declarations: &mut StyleDeclarationBlock) {
-    // Stop positions alone (`from-50%` etc.) must not synthesise a gradient —
-    // a color or angle has to be present.
-    if self.from.is_none() && self.to.is_none() && self.via.is_none() && self.angle.is_none() {
-      return;
-    }
-
-    let angle = self.angle.unwrap_or_else(|| Angle::new(180.0));
-
-    let from_color = self.from.unwrap_or(ColorInput::Value(Color([0, 0, 0, 0])));
-    let to_color = self.to.unwrap_or_else(|| {
-      if let ColorInput::Value(from_c) = from_color {
-        ColorInput::Value(Color([from_c.0[0], from_c.0[1], from_c.0[2], 0]))
-      } else {
-        ColorInput::Value(Color([0, 0, 0, 0]))
-      }
-    });
-
-    let mut stops = Vec::new();
-    stops.push(GradientStop::ColorHint {
-      color: from_color,
-      hint: Some(StopPosition(
-        self.from_position.unwrap_or(Length::Percentage(0.0)),
-      )),
-    });
-
-    if let Some(via_color) = self.via {
-      stops.push(GradientStop::ColorHint {
-        color: via_color,
-        hint: Some(StopPosition(
-          self.via_position.unwrap_or(Length::Percentage(50.0)),
-        )),
-      });
-    }
-
-    stops.push(GradientStop::ColorHint {
-      color: to_color,
-      hint: Some(StopPosition(
-        self.to_position.unwrap_or(Length::Percentage(100.0)),
-      )),
-    });
-
-    match self.gradient_type {
-      TwGradientType::Linear => {
-        let gradient = LinearGradient {
-          repeating: false,
-          direction: LinearGradientDirection::Angle(angle),
-          interpolation: ColorInterpolationMethod::default(),
-          stops: stops.into_boxed_slice(),
-        };
-
-        declarations.push(
-          StyleDeclaration::background_image(Some([BackgroundImage::Linear(gradient)].into())),
-          self.important,
-        );
-      }
-      TwGradientType::Radial => {
-        let gradient = RadialGradient {
-          repeating: false,
-          shape: RadialShape::Ellipse,
-          size: RadialSize::FarthestCorner,
-          center: PositionValue::center(),
-          interpolation: ColorInterpolationMethod::default(),
-          stops: stops.into_boxed_slice(),
-        };
-
-        declarations.push(
-          StyleDeclaration::background_image(Some([BackgroundImage::Radial(gradient)].into())),
-          self.important,
-        );
-      }
-      TwGradientType::Conic => {
-        let gradient = ConicGradient {
-          repeating: false,
-          from_angle: angle,
-          center: PositionValue::center(),
-          interpolation: ColorInterpolationMethod::default(),
-          stops: stops.into_boxed_slice(),
-        };
-
-        declarations.push(
-          StyleDeclaration::background_image(Some([BackgroundImage::Conic(gradient)].into())),
-          self.important,
-        );
-      }
     }
   }
 }

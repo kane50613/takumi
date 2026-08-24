@@ -273,3 +273,69 @@ impl TailwindPropertyParser for TwBlur {
     }
   }
 }
+
+/// A gradient stop colour as the expression Tailwind compiles it to: the
+/// `--color-*` variable with the built-in colour as its inline fallback.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct TwStopColor(pub std::sync::Arc<str>);
+
+impl<'i> FromCss<'i> for TwStopColor {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    let color = ColorInput::from_css(input)?;
+    let mut css = String::new();
+
+    let _ = color.to_css(&mut css);
+    Ok(Self(css.into()))
+  }
+
+  const VALID_TOKENS: &'static [CssToken] = ColorInput::VALID_TOKENS;
+}
+
+impl TailwindPropertyParser for TwStopColor {
+  fn parse_tw(token: &str) -> Option<Self> {
+    let (base, modifier) = match token.split_once('/') {
+      Some((base, modifier)) => (base, Some(modifier)),
+      None => (token, None),
+    };
+
+    let percentage = match modifier {
+      Some(modifier) => {
+        let percentage = modifier.parse::<f32>().ok()?;
+
+        if !(0.0..=100.0).contains(&percentage) {
+          return None;
+        }
+
+        Some(percentage)
+      }
+      None => None,
+    };
+
+    let expression = if base.eq_ignore_ascii_case("current") {
+      "currentcolor".to_owned()
+    } else if base.eq_ignore_ascii_case("transparent") {
+      "transparent".to_owned()
+    } else {
+      if base.is_empty() || !base.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        return None;
+      }
+
+      match Color::parse_tw(base) {
+        Some(color) => {
+          let mut css = String::new();
+
+          let _ = color.to_css(&mut css);
+          format!("var(--color-{base}, {css})")
+        }
+        None => format!("var(--color-{base})"),
+      }
+    };
+
+    Some(Self(match percentage {
+      Some(percentage) => {
+        format!("color-mix(in oklab, {expression} {percentage}%, transparent)").into()
+      }
+      None => expression.into(),
+    }))
+  }
+}

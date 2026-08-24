@@ -50,6 +50,24 @@ pub(crate) struct DeferredDeclaration {
   pub(crate) specified_value: String,
 }
 
+/// `--tw-*` holds per-element composition state (gradient stops), registered
+/// `inherits: false` by Tailwind's own `@property` rules.
+fn inherited_custom_properties(
+  parent: &Arc<HashMap<String, String>>,
+) -> Arc<HashMap<String, String>> {
+  if !parent.keys().any(|name| name.starts_with("--tw-")) {
+    return parent.clone();
+  }
+
+  Arc::new(
+    parent
+      .iter()
+      .filter(|(name, _)| !name.starts_with("--tw-"))
+      .map(|(name, value)| (name.clone(), value.clone()))
+      .collect(),
+  )
+}
+
 /// A utility value read from a custom property, with the built-in scale as its
 /// fallback. Tailwind compiles `bg-red-500` to `var(--color-red-500)`.
 #[derive(Debug, Clone, PartialEq)]
@@ -777,7 +795,7 @@ macro_rules! define_style {
         /// Builds a child computed style inheriting from a parent.
         pub(crate) fn from_parent(parent: &Self) -> Self {
           Self {
-            custom_properties: parent.custom_properties.clone(),
+            custom_properties: inherited_custom_properties(&parent.custom_properties),
             registered_custom_properties: parent.registered_custom_properties.clone(),
             lang: parent.lang,
             $($longhand: define_inherited_default!(parent.$longhand, define_style!(@default $($longhand_default)?) $(, $longhand_inherit)?),)*

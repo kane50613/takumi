@@ -85,6 +85,7 @@ property_parsers! {
   TextWrap(TextWrap) => TextWrap,
   ColorCurrent(ColorInput) => ColorInput,
   ColorTransparent(ColorInput) => ColorInput,
+  StopColor(TwStopColor) => TwStopColor,
   Percentage(PercentageNumber) => PercentageNumber,
   FontFamily(FontFamily) => FontFamily,
   LineClamp(LineClamp) => LineClamp,
@@ -199,16 +200,16 @@ pub(crate) static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
   "bg-linear" => &[PropertyParser::Angle(TailwindProperty::BgLinearAngle)],
   "bg-conic" => &[PropertyParser::Angle(TailwindProperty::BgConicAngle)],
   "from" => &[
-    PropertyParser::ColorCurrent(TailwindProperty::GradientFrom),
     PropertyParser::GradientPosition(TailwindProperty::GradientFromPosition),
+    PropertyParser::StopColor(TailwindProperty::GradientFrom),
   ],
   "to" => &[
-    PropertyParser::ColorCurrent(TailwindProperty::GradientTo),
     PropertyParser::GradientPosition(TailwindProperty::GradientToPosition),
+    PropertyParser::StopColor(TailwindProperty::GradientTo),
   ],
   "via" => &[
-    PropertyParser::ColorCurrent(TailwindProperty::GradientVia),
     PropertyParser::GradientPosition(TailwindProperty::GradientViaPosition),
+    PropertyParser::StopColor(TailwindProperty::GradientVia),
   ],
   "bg-size" => &[PropertyParser::BgSize(TailwindProperty::BackgroundSize)],
   "bg-position" => &[PropertyParser::BgPosition(TailwindProperty::BackgroundPosition)],
