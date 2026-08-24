@@ -70,6 +70,38 @@ describe("fetch byte caps", () => {
     ).rejects.toThrow(/exceeds 50 bytes/);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  test("concurrent cache consumers keep independent maxBytes limits", async () => {
+    const payload = new Uint8Array(60);
+    const fetchMock = mock(() => Promise.resolve(new Response(streamOf(payload))));
+    const fetchCache = new Map<string, Promise<ArrayBuffer>>();
+    const node = tree("https://example.com/shared.png");
+
+    const [strict, loose] = await Promise.allSettled([
+      prepareImages({ node, fetchCache, fetch: fetchMock, maxBytes: 50 }),
+      prepareImages({ node, fetchCache, fetch: fetchMock, maxBytes: 100 }),
+    ]);
+
+    expect(strict.status).toBe("rejected");
+    expect(loose.status).toBe("fulfilled");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    if (loose.status === "fulfilled") {
+      expect(loose.value.map((image) => image.data.byteLength)).toEqual([60]);
+    }
+  });
+
+  test("a looser consumer reuses cached bytes that fit", async () => {
+    const payload = new Uint8Array(40);
+    const fetchMock = mock(() => Promise.resolve(new Response(streamOf(payload))));
+    const fetchCache = new Map<string, Promise<ArrayBuffer>>();
+    const node = tree("https://example.com/small.png");
+
+    await prepareImages({ node, fetchCache, fetch: fetchMock, maxBytes: 50 });
+    const images = await prepareImages({ node, fetchCache, fetch: fetchMock, maxBytes: 100 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(images.map((image) => image.data.byteLength)).toEqual([40]);
+  });
 });
 
 describe("allowUrl policy", () => {
@@ -189,6 +221,32 @@ describe("allowUrl policy", () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(images.map((image) => new Uint8Array(image.data))).toEqual([payload]);
+  });
+
+  test("a cache hit rechecks every recorded redirect hop", async () => {
+    const redirectTo = (location: string) =>
+      new Response(null, { status: 302, headers: { location } });
+
+    const fetchMock = mock((url: string) =>
+      url === "https://allowed.example.com/a.png"
+        ? Promise.resolve(redirectTo("http://169.254.169.254/meta"))
+        : Promise.resolve(new Response(new Uint8Array(8))),
+    );
+    const fetchCache = new Map<string, Promise<ArrayBuffer>>();
+    const node = tree("https://allowed.example.com/a.png");
+
+    await prepareImages({ node, fetchCache, fetch: fetchMock, allowUrl: () => true });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    await expect(
+      prepareImages({
+        node,
+        fetchCache,
+        fetch: fetchMock,
+        allowUrl: (url) => new URL(url).hostname === "allowed.example.com",
+      }),
+    ).rejects.toThrow(/blocked by allowUrl/);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
 

@@ -168,7 +168,9 @@ function extractImageUrls(node: Node): string[] {
 /**
  * A cache of image fetches keyed by URL. Sharing one across renders deduplicates concurrent
  * requests for the same URL (single-flight) and reuses their bytes. Any object with `Map`-like
- * `get`/`set`/`delete` works, so LRU/TTL policies can be plugged in.
+ * `get`/`set`/`delete` works, so LRU/TTL policies can be plugged in. Each entry remembers the
+ * options of the call that created it, so later calls still run their own `allowUrl` and
+ * `maxBytes` against the shared bytes.
  */
 export interface ImageFetchCache {
   get(url: string): Promise<ArrayBuffer> | undefined;
@@ -176,10 +178,47 @@ export interface ImageFetchCache {
   delete(url: string): unknown;
 }
 
+/** Options recorded for entries this module created. Keyed by promise in a WeakMap, so cache
+ * values stay plain promises and the metadata dies with its entry. */
+const entryMeta = new WeakMap<Promise<ArrayBuffer>, { maxBytes: number; hops: string[] }>();
+
+function fetchUncached(
+  url: string,
+  options: FetchOptions,
+  maxBytes: number,
+  fetchCache?: ImageFetchCache,
+): Promise<ArrayBuffer> {
+  const { allowUrl } = options;
+  const hops: string[] = [];
+  // `fetchOk` calls `allowUrl` once per hop, so wrapping it records the full redirect chain.
+  const fetchOptions: FetchOptions = allowUrl
+    ? {
+        ...options,
+        allowUrl: (checked) => {
+          hops.push(checked);
+          return allowUrl(checked);
+        },
+      }
+    : options;
+
+  const promise = fetchOk(url, fetchOptions)
+    .then((response) => readBodyLimited(response, maxBytes))
+    .catch((error) => {
+      fetchCache?.delete(url);
+      throw error;
+    });
+
+  fetchCache?.set(url, promise);
+  entryMeta.set(promise, { maxBytes, hops });
+  return promise;
+}
+
 /** Fetches a URL's bytes, coalescing concurrent requests for the same URL through `cache`. A
- * rejected fetch is evicted so a later call can retry instead of replaying the failure. Cached
- * entries pass the current call's `allowUrl` and `maxBytes` too: a shared cache can hold bytes
- * fetched under another call's options. */
+ * rejected fetch is evicted so a later call can retry instead of replaying the failure.
+ *
+ * Cached entries serve under the current call's policy, not the creator's: `allowUrl` runs over
+ * the recorded redirect chain, `maxBytes` runs over the resolved bytes, and an entry capped
+ * tighter than this call allows refetches privately instead of failing this call too. */
 function fetchImageData(
   url: string,
   options: FetchOptions,
@@ -189,27 +228,38 @@ function fetchImageData(
 
   const cached = fetchCache?.get(url);
   if (cached) {
-    if (options.allowUrl && !options.allowUrl(url)) {
-      return Promise.reject(new Error(`URL blocked by allowUrl policy: ${url}`));
+    const meta = entryMeta.get(cached);
+
+    if (options.allowUrl) {
+      const checked = meta?.hops.length ? meta.hops : [url];
+      const blocked = checked.find((hop) => !options.allowUrl(hop));
+      if (blocked) {
+        return Promise.reject(new Error(`URL blocked by allowUrl policy: ${blocked}`));
+      }
     }
 
-    return cached.then((data) => {
-      if (data.byteLength > maxBytes) {
-        throw new Error(`Response exceeds ${maxBytes} bytes`);
-      }
-      return data;
-    });
+    return cached.then(
+      (data) => {
+        if (data.byteLength > maxBytes) {
+          throw new Error(`Response exceeds ${maxBytes} bytes`);
+        }
+        return data;
+      },
+      (error) => {
+        // The shared stream died under its creator's tighter cap; these bytes may still fit
+        // this call. Refetch privately rather than inherit that rejection. Match
+        // readBodyLimited's message, so unrelated failures keep propagating to every consumer.
+        const capped =
+          meta !== undefined &&
+          meta.maxBytes < maxBytes &&
+          error instanceof Error &&
+          error.message.startsWith(`Response exceeds ${meta.maxBytes} bytes`);
+        return capped ? fetchUncached(url, options, maxBytes) : Promise.reject(error);
+      },
+    );
   }
 
-  const promise = fetchOk(url, options)
-    .then((response) => readBodyLimited(response, maxBytes))
-    .catch((error) => {
-      fetchCache?.delete(url);
-      throw error;
-    });
-
-  fetchCache?.set(url, promise);
-  return promise;
+  return fetchUncached(url, options, maxBytes, fetchCache);
 }
 
 /** A fetched image entry: its source URL and raw bytes. */
