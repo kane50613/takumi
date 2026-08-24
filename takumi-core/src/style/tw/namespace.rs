@@ -1,6 +1,6 @@
 /// A theme namespace, spelled as the CSS custom-property prefix it reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum TwNamespace {
+pub enum Namespace {
   /// `--color-*`
   Color,
   /// `--spacing-*`
@@ -19,38 +19,23 @@ pub enum TwNamespace {
   Leading,
   /// `--radius-*`
   Radius,
-  /// `--shadow-*`
-  Shadow,
-  /// `--drop-shadow-*`
-  DropShadow,
-  /// `--text-shadow-*`
-  TextShadow,
-  /// `--blur-*`
-  Blur,
   /// `--aspect-*`
   Aspect,
-  /// `--animate-*`
-  Animate,
 }
 
-impl TwNamespace {
+impl Namespace {
   pub(crate) const fn prefix(self) -> &'static str {
     match self {
-      TwNamespace::Color => "--color-",
-      TwNamespace::Spacing => "--spacing-",
-      TwNamespace::Container => "--container-",
-      TwNamespace::Text => "--text-",
-      TwNamespace::Font => "--font-",
-      TwNamespace::FontWeight => "--font-weight-",
-      TwNamespace::Tracking => "--tracking-",
-      TwNamespace::Leading => "--leading-",
-      TwNamespace::Radius => "--radius-",
-      TwNamespace::Shadow => "--shadow-",
-      TwNamespace::DropShadow => "--drop-shadow-",
-      TwNamespace::TextShadow => "--text-shadow-",
-      TwNamespace::Blur => "--blur-",
-      TwNamespace::Aspect => "--aspect-",
-      TwNamespace::Animate => "--animate-",
+      Namespace::Color => "--color-",
+      Namespace::Spacing => "--spacing-",
+      Namespace::Container => "--container-",
+      Namespace::Text => "--text-",
+      Namespace::Font => "--font-",
+      Namespace::FontWeight => "--font-weight-",
+      Namespace::Tracking => "--tracking-",
+      Namespace::Leading => "--leading-",
+      Namespace::Radius => "--radius-",
+      Namespace::Aspect => "--aspect-",
     }
   }
 }

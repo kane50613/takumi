@@ -4,7 +4,6 @@ use cssparser::{BasicParseErrorKind, Parser};
 use typed_builder::TypedBuilder;
 
 use super::box_shadow::parse_offsets_blur;
-use crate::style::TwNamespace;
 use crate::style::{
   Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, FromCssStr, Length,
   ListInterpolationStrategy, MakeComputed, ParseResult, SizingContext, ToCss, next_is_comma,
@@ -107,8 +106,6 @@ impl<'i> FromCss<'i> for TextShadow {
 }
 
 impl crate::style::tw::TailwindPropertyParser for TextShadow {
-  const NAMESPACES: &'static [TwNamespace] = &[TwNamespace::TextShadow];
-
   fn parse_tw(token: &str) -> Option<Self> {
     Self::from_css_str(token).ok()
   }

@@ -3,7 +3,6 @@ use std::{borrow::Cow, fmt, fmt::Debug};
 use cssparser::{BasicParseErrorKind, ParseError, Parser};
 use typed_builder::TypedBuilder;
 
-use crate::style::TwNamespace;
 use crate::style::{
   Animatable, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, FromCssStr, Length,
   ListInterpolationStrategy, MakeComputed, ParseResult, SizingContext, ToCss, next_is_comma,
@@ -157,8 +156,6 @@ impl<'i> FromCss<'i> for BoxShadow {
 }
 
 impl crate::style::tw::TailwindPropertyParser for BoxShadow {
-  const NAMESPACES: &'static [TwNamespace] = &[TwNamespace::Shadow];
-
   fn parse_tw(token: &str) -> Option<Self> {
     Self::from_css_str(token).ok()
   }

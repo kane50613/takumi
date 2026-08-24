@@ -7,13 +7,13 @@ use cssparser::{
   match_ignore_ascii_case,
 };
 
+use crate::style::tw::{Namespace, extract_arbitrary_value};
 use crate::style::{
   Animatable, Color as CurrentColor, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss,
   FromCssStr, MakeComputed, ParseResult, PercentageNumber, SizingContext, ToCss,
   math::fast_div_255, properties::gradient_utils::interpolate_with_color_space,
   tw::TailwindPropertyParser, unexpected_token,
 };
-use crate::style::{TwNamespace, tw::extract_arbitrary_value};
 
 fn is_cylindrical_color_space(color_space: ColorSpaceTag) -> bool {
   matches!(
@@ -220,7 +220,7 @@ impl ColorInput {
 }
 
 impl TailwindPropertyParser for ColorInput {
-  const NAMESPACES: &'static [TwNamespace] = &[TwNamespace::Color];
+  const NAMESPACES: &'static [Namespace] = &[Namespace::Color];
 
   fn parse_tw(token: &str) -> Option<Self> {
     if token.eq_ignore_ascii_case("current") {

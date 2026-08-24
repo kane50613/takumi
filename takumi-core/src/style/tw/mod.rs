@@ -11,7 +11,7 @@ use std::{borrow::Cow, cmp::Ordering, str::FromStr, sync::Arc};
 use builder::TailwindDeclarationBuilder;
 pub(crate) use builder::TwGradientType;
 use cssparser::match_ignore_ascii_case;
-pub use namespace::TwNamespace;
+pub(crate) use namespace::Namespace;
 use serde::{Deserialize, Deserializer, de::Error as DeError};
 use smallvec::SmallVec;
 
@@ -657,18 +657,18 @@ impl ThemeVar {
   }
 }
 
-/// The `var()` expression a utility suffix reads, or `None` when the value is
-/// spelled in the class itself. Numeric spacing multiplies the `--spacing` step
-/// the way Tailwind's own `calc(var(--spacing) * 4)` does.
 /// The variable a longhand reads when the token spells it separately from its
 /// primary value, as `--text-lg--line-height` does for `--text-lg`.
 fn companion_variable(name: &str, longhand: LonghandId) -> Option<Arc<str>> {
-  (longhand == LonghandId::LineHeight && name.starts_with(TwNamespace::Text.prefix()))
+  (longhand == LonghandId::LineHeight && name.starts_with(Namespace::Text.prefix()))
     .then(|| format!("{name}--line-height").into())
 }
 
+/// The `var()` expression a utility suffix reads, or `None` when the value is
+/// spelled in the class itself. Numeric spacing multiplies the `--spacing` step
+/// the way Tailwind's own `calc(var(--spacing) * 4)` does.
 fn theme_expression(
-  namespaces: &[TwNamespace],
+  namespaces: &[Namespace],
   suffix: &str,
   negative: bool,
 ) -> Option<(Arc<str>, Arc<str>)> {
@@ -682,7 +682,7 @@ fn theme_expression(
     let &namespace = namespaces.first()?;
     let percentage = opacity.parse::<f32>().ok()?;
 
-    if namespace != TwNamespace::Color || !(0.0..=100.0).contains(&percentage) {
+    if namespace != Namespace::Color || !(0.0..=100.0).contains(&percentage) {
       return None;
     }
 
@@ -693,7 +693,7 @@ fn theme_expression(
   }
 
   // `max-w-4` multiplies `--spacing` where `max-w-prose` reads `--container-prose`.
-  if suffix.parse::<f32>().is_ok() && namespaces.contains(&TwNamespace::Spacing) {
+  if suffix.parse::<f32>().is_ok() && namespaces.contains(&Namespace::Spacing) {
     let sign = if negative { "-" } else { "" };
 
     return Some((
@@ -703,14 +703,6 @@ fn theme_expression(
   }
 
   let &namespace = namespaces.first()?;
-
-  // These merge across utilities in the builder before the cascade runs.
-  if matches!(
-    namespace,
-    TwNamespace::Blur | TwNamespace::Shadow | TwNamespace::DropShadow | TwNamespace::TextShadow
-  ) {
-    return None;
-  }
 
   let name = format!("{}{suffix}", namespace.prefix());
   let expression = match negative {
@@ -814,7 +806,7 @@ pub(crate) trait TailwindPropertyParser: Sized + for<'i> FromCss<'i> {
   /// Theme namespaces this value type reads, tried in order. The utility keeps
   /// the built-in value as the fallback behind `var()`, so this only decides
   /// which variable name the utility reads.
-  const NAMESPACES: &'static [TwNamespace] = &[];
+  const NAMESPACES: &'static [Namespace] = &[];
 
   /// Parse a tailwind property from a token, with support for arbitrary values.
   fn parse_tw_with_arbitrary(token: &str) -> Option<Self> {
@@ -842,74 +834,20 @@ macro_rules! try_neg {
 }
 
 impl TailwindProperty {
-  /// Whether this property writes its longhands directly. Gradients, shadows,
-  /// filters and transforms merge across utilities in the builder, which a
-  /// value that resolves at computed time cannot take part in.
-  fn writes_longhands_directly(&self) -> bool {
+  /// Whether this property merges with sibling utilities in the builder
+  /// (gradients, transforms, shadow colour halves), which a value that
+  /// resolves at computed time cannot take part in.
+  fn merges_in_builder(&self) -> bool {
     matches!(
       self,
-      TailwindProperty::Color(..)
-        | TailwindProperty::BackgroundColor(..)
-        | TailwindProperty::BorderColor(..)
-        | TailwindProperty::BorderTopColor(..)
-        | TailwindProperty::BorderRightColor(..)
-        | TailwindProperty::BorderBottomColor(..)
-        | TailwindProperty::BorderLeftColor(..)
-        | TailwindProperty::BorderXColor(..)
-        | TailwindProperty::BorderYColor(..)
-        | TailwindProperty::OutlineColor(..)
-        | TailwindProperty::TextDecorationColor(..)
-        | TailwindProperty::Width(..)
-        | TailwindProperty::Height(..)
-        | TailwindProperty::Size(..)
-        | TailwindProperty::MinWidth(..)
-        | TailwindProperty::MinHeight(..)
-        | TailwindProperty::MaxWidth(..)
-        | TailwindProperty::MaxHeight(..)
-        | TailwindProperty::FlexBasis(..)
-        | TailwindProperty::Margin(..)
-        | TailwindProperty::MarginX(..)
-        | TailwindProperty::MarginY(..)
-        | TailwindProperty::MarginTop(..)
-        | TailwindProperty::MarginRight(..)
-        | TailwindProperty::MarginBottom(..)
-        | TailwindProperty::MarginLeft(..)
-        | TailwindProperty::Padding(..)
-        | TailwindProperty::PaddingX(..)
-        | TailwindProperty::PaddingY(..)
-        | TailwindProperty::PaddingTop(..)
-        | TailwindProperty::PaddingRight(..)
-        | TailwindProperty::PaddingBottom(..)
-        | TailwindProperty::PaddingLeft(..)
-        | TailwindProperty::Gap(..)
-        | TailwindProperty::GapX(..)
-        | TailwindProperty::GapY(..)
-        | TailwindProperty::Inset(..)
-        | TailwindProperty::InsetX(..)
-        | TailwindProperty::InsetY(..)
-        | TailwindProperty::Top(..)
-        | TailwindProperty::Right(..)
-        | TailwindProperty::Bottom(..)
-        | TailwindProperty::Left(..)
-        | TailwindProperty::FontSize(..)
-        | TailwindProperty::FontFamily(..)
-        | TailwindProperty::FontWeight(..)
-        | TailwindProperty::LetterSpacing(..)
-        | TailwindProperty::LineHeight(..)
-        | TailwindProperty::MarginInlineStart(..)
-        | TailwindProperty::MarginInlineEnd(..)
-        | TailwindProperty::PaddingInlineStart(..)
-        | TailwindProperty::PaddingInlineEnd(..)
-        | TailwindProperty::Rounded(..)
-        | TailwindProperty::RoundedTopLeft(..)
-        | TailwindProperty::RoundedTopRight(..)
-        | TailwindProperty::RoundedBottomRight(..)
-        | TailwindProperty::RoundedBottomLeft(..)
-        | TailwindProperty::RoundedTop(..)
-        | TailwindProperty::RoundedRight(..)
-        | TailwindProperty::RoundedBottom(..)
-        | TailwindProperty::RoundedLeft(..)
-        | TailwindProperty::Aspect(..)
+      TailwindProperty::Translate(..)
+        | TailwindProperty::TranslateX(..)
+        | TailwindProperty::TranslateY(..)
+        | TailwindProperty::GradientFrom(..)
+        | TailwindProperty::GradientVia(..)
+        | TailwindProperty::GradientTo(..)
+        | TailwindProperty::ShadowColor(..)
+        | TailwindProperty::TextShadowColor(..)
     )
   }
 
@@ -997,7 +935,7 @@ impl TailwindProperty {
           property
         };
 
-        if !property.writes_longhands_directly() {
+        if property.merges_in_builder() {
           return Some(property);
         }
 

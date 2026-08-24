@@ -2,7 +2,7 @@ use std::fmt;
 
 use cssparser::{Parser, match_ignore_ascii_case};
 
-use crate::style::TwNamespace;
+use crate::style::tw::Namespace;
 use crate::style::{
   Animatable, Color, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
   SizingContext, ToCss, lerp, tw::TailwindPropertyParser,
@@ -57,7 +57,7 @@ impl Animatable for AspectRatio {
 }
 
 impl TailwindPropertyParser for AspectRatio {
-  const NAMESPACES: &'static [TwNamespace] = &[TwNamespace::Aspect];
+  const NAMESPACES: &'static [Namespace] = &[Namespace::Aspect];
 
   /// `square` is a static ratio upstream, `video` a theme token whose built-in
   /// value this stands in for.

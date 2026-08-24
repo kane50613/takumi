@@ -3,7 +3,7 @@ use std::fmt;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use parley::style::FontWeight as ParleyFontWeight;
 
-use crate::style::TwNamespace;
+use crate::style::tw::Namespace;
 use crate::style::{
   Animatable, Color, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, SizingContext,
   ToCss, lerp, tw::TailwindPropertyParser, unexpected_token,
@@ -94,7 +94,7 @@ impl<'i> FromCss<'i> for FontWeight {
 }
 
 impl TailwindPropertyParser for FontWeight {
-  const NAMESPACES: &'static [TwNamespace] = &[TwNamespace::FontWeight];
+  const NAMESPACES: &'static [Namespace] = &[Namespace::FontWeight];
 
   fn parse_tw(token: &str) -> Option<Self> {
     if let Ok(value) = token.parse::<f32>() {

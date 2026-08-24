@@ -11,7 +11,7 @@ use crate::style::{
   unexpected_token,
 };
 
-use crate::style::TwNamespace;
+use crate::style::tw::Namespace;
 pub(crate) use crate::units::{
   ONE_CM_IN_PX, ONE_IN_PX, ONE_MM_IN_PX, ONE_PC_IN_PX, ONE_PT_IN_PX, ONE_Q_IN_PX,
 };
@@ -184,7 +184,7 @@ impl Length {
 }
 
 impl TailwindPropertyParser for Length {
-  const NAMESPACES: &'static [TwNamespace] = &[TwNamespace::Spacing];
+  const NAMESPACES: &'static [Namespace] = &[Namespace::Spacing];
 
   fn parse_tw(token: &str) -> Option<Self> {
     if let Ok(value) = token.parse::<f32>() {
