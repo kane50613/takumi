@@ -13,6 +13,7 @@ use crate::style::{
   math::fast_div_255, properties::gradient_utils::interpolate_with_color_space,
   tw::TailwindPropertyParser, unexpected_token,
 };
+use crate::style::{TwNamespace, tw::extract_arbitrary_value};
 
 fn is_cylindrical_color_space(color_space: ColorSpaceTag) -> bool {
   matches!(
@@ -219,12 +220,26 @@ impl ColorInput {
 }
 
 impl TailwindPropertyParser for ColorInput {
+  const NAMESPACES: &'static [TwNamespace] = &[TwNamespace::Color];
+
   fn parse_tw(token: &str) -> Option<Self> {
     if token.eq_ignore_ascii_case("current") {
       return Some(ColorInput::CurrentColor);
     }
 
     Color::parse_tw(token).map(ColorInput::Value)
+  }
+
+  /// `Color::parse_tw` already reads the `/50` modifier, so this only carries it
+  /// across the `current` keyword that `Color` has no representation for.
+  fn parse_tw_with_arbitrary(token: &str) -> Option<Self> {
+    if let Some(value) = extract_arbitrary_value(token) {
+      return Self::from_css_str(&value).ok();
+    }
+
+    Self::parse_tw(token.split_once('/').map_or(token, |(color, _)| color))
+      .filter(|color| matches!(color, ColorInput::CurrentColor))
+      .or_else(|| Color::parse_tw(token).map(ColorInput::Value))
   }
 }
 

@@ -234,11 +234,11 @@ impl TailwindDeclarationBuilder {
       let has_width = self
         .declarations
         .iter()
-        .any(|d| d.longhand_id() == width_id);
+        .any(|d| d.affected_longhands().contains(&width_id));
       let has_style = self
         .declarations
         .iter()
-        .any(|d| d.longhand_id() == style_id);
+        .any(|d| d.affected_longhands().contains(&style_id));
       if has_width && !has_style {
         self
           .declarations

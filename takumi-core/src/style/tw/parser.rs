@@ -27,6 +27,8 @@ impl<'i> FromCss<'i> for TwFontSize {
 }
 
 impl TailwindPropertyParser for TwFontSize {
+  const NAMESPACES: &'static [TwNamespace] = &[TwNamespace::Text];
+
   fn parse_tw(token: &str) -> Option<Self> {
     // text-xs/6 => font-size: 0.75rem, line-height: 1.5em
     if let Some((font_size, line_height)) = token.split_once('/') {
@@ -159,6 +161,8 @@ impl Neg for TwLetterSpacing {
 }
 
 impl TailwindPropertyParser for TwLetterSpacing {
+  const NAMESPACES: &'static [TwNamespace] = &[TwNamespace::Tracking];
+
   fn parse_tw(token: &str) -> Option<Self> {
     match_ignore_ascii_case! {token,
       "tighter" => Some(TwLetterSpacing(Length::Em(-0.05))),
@@ -188,6 +192,8 @@ impl<'i> FromCss<'i> for TwRounded {
 }
 
 impl TailwindPropertyParser for TwRounded {
+  const NAMESPACES: &'static [TwNamespace] = &[TwNamespace::Radius];
+
   fn parse_tw(token: &str) -> Option<Self> {
     match_ignore_ascii_case! {token,
       "full" => Some(TwRounded(Length::Px(9999.0))),
@@ -253,6 +259,8 @@ impl<'i> FromCss<'i> for TwBlur {
 }
 
 impl TailwindPropertyParser for TwBlur {
+  const NAMESPACES: &'static [TwNamespace] = &[TwNamespace::Blur];
+
   fn parse_tw(token: &str) -> Option<Self> {
     match_ignore_ascii_case! {token,
       "none" => Some(TwBlur(Length::Px(0.0))),

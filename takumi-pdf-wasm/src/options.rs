@@ -192,6 +192,8 @@ pub(crate) struct PdfRenderOptions {
   pub(crate) images: Option<Vec<ImageSource>>,
   /// CSS stylesheets to apply before layout.
   pub(crate) stylesheets: Option<Vec<String>>,
+  /// CSS custom properties for `:root`, which utilities and `var()` both read.
+  pub(crate) variables: Option<HashMap<String, String>>,
   /// Per-render font stack: ordered family names used as the fallback chain.
   pub(crate) font_families: Option<Vec<String>>,
   /// Default BCP-47 language tag applied to the root.
