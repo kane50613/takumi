@@ -27,7 +27,6 @@ export default function ArticleCover() {
   );
 }
 
-// Swap this block for a teal or amber scale and the whole cover re-skins.
 export const options: PlaygroundOptions = {
   width: 1200,
   height: 630,

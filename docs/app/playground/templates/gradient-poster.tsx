@@ -21,7 +21,6 @@ export default function Poster() {
   );
 }
 
-// The inline `var()` calls read the same tokens tw classes would.
 export const options: PlaygroundOptions = {
   width: 1080,
   height: 1080,

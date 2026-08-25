@@ -34,7 +34,6 @@ export default function Profile() {
   );
 }
 
-// One accent token re-skins the border, the handle and the avatar ring together.
 export const options: PlaygroundOptions = {
   width: 1200,
   height: 630,
