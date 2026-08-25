@@ -71,6 +71,15 @@ The generated rule comes after every stylesheet, so a media query at equal speci
 
 **Values containing `;`, `{`, `}`, `/*` or `!important` are dropped.** They could escape the generated rule.
 
+A nested palette flattens with the `cssVariables` helper. Keys join with `-` into one variable name.
+
+```tsx twoslash
+import { cssVariables } from "takumi-js/helpers";
+
+const flat = cssVariables({ color: { brand: { 500: "#5b21b6" } } });
+// { "--color-brand-500": "#5b21b6" }
+```
+
 ## Tailwind
 
 ### Bring your stylesheet
