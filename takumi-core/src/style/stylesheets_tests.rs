@@ -655,6 +655,35 @@ fn parse_style_declaration_supports_legacy_grid_gap_aliases() {
 }
 
 #[test]
+fn parse_legacy_box_properties_lower_to_flex() {
+  let orient = parse_declarations("-webkit-box-orient", "vertical");
+  assert_eq!(
+    orient.iter().collect::<Vec<_>>(),
+    vec![&StyleDeclaration::flex_direction(FlexDirection::Column)]
+  );
+
+  let inline_axis = parse_declarations("-webkit-box-orient", "inline-axis");
+  assert_eq!(
+    inline_axis.iter().collect::<Vec<_>>(),
+    vec![&StyleDeclaration::flex_direction(FlexDirection::Row)]
+  );
+
+  let pack = parse_declarations("-webkit-box-pack", "justify");
+  assert_eq!(
+    pack.iter().collect::<Vec<_>>(),
+    vec![&StyleDeclaration::justify_content(
+      JustifyContent::SpaceBetween
+    )]
+  );
+
+  let align = parse_declarations("-webkit-box-align", "center");
+  assert_eq!(
+    align.iter().collect::<Vec<_>>(),
+    vec![&StyleDeclaration::align_items(AlignItems::Center)]
+  );
+}
+
+#[test]
 fn parse_style_declaration_expands_border_side_shorthands() {
   let border_top = parse_declarations("border-top", "2px solid red");
   assert_eq!(

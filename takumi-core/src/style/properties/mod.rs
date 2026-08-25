@@ -1027,8 +1027,8 @@ pub enum Display {
 declare_enum_from_css_impl!(
   Display,
   "none" => Display::None,
-  "flex" => Display::Flex,
-  "inline-flex" => Display::InlineFlex,
+  "flex" | "-webkit-box" | "-webkit-flex" => Display::Flex,
+  "inline-flex" | "-webkit-inline-box" | "-webkit-inline-flex" => Display::InlineFlex,
   "grid" => Display::Grid,
   "inline-grid" => Display::InlineGrid,
   "inline" => Display::Inline,
@@ -1041,13 +1041,7 @@ declare_enum_from_css_impl!(
   "table-footer-group" => Display::TableFooterGroup,
   "table-row" => Display::TableRow,
   "table-cell" => Display::TableCell,
-  "table-caption" => Display::TableCaption;
-  aliases {
-    "-webkit-box" => Display::Flex,
-    "-webkit-inline-box" => Display::InlineFlex,
-    "-webkit-flex" => Display::Flex,
-    "-webkit-inline-flex" => Display::InlineFlex,
-  }
+  "table-caption" => Display::TableCaption
 );
 
 impl Display {
@@ -1086,6 +1080,101 @@ impl Display {
   /// Mutate the display to be block level.
   pub(crate) fn blockify(&mut self) {
     *self = self.as_blockified();
+  }
+}
+
+/// Legacy `-webkit-box-orient` axis, lowered to `flex-direction`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub enum BoxOrient {
+  /// `horizontal` or `inline-axis`: children flow as a row.
+  Horizontal,
+  /// `vertical` or `block-axis`: children flow as a column.
+  Vertical,
+}
+
+declare_enum_from_css_impl!(
+  BoxOrient,
+  "horizontal" | "inline-axis" => BoxOrient::Horizontal,
+  "vertical" | "block-axis" => BoxOrient::Vertical
+);
+
+/// Legacy `-webkit-box-pack` main-axis alignment, lowered to `justify-content`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub enum BoxPack {
+  /// `start`: pack children at the main-axis start.
+  Start,
+  /// `end`: pack children at the main-axis end.
+  End,
+  /// `center`: pack children at the main-axis center.
+  Center,
+  /// `justify`: distribute children with space between them.
+  Justify,
+}
+
+declare_enum_from_css_impl!(
+  BoxPack,
+  "start" => BoxPack::Start,
+  "end" => BoxPack::End,
+  "center" => BoxPack::Center,
+  "justify" => BoxPack::Justify
+);
+
+/// Legacy `-webkit-box-align` cross-axis alignment, lowered to `align-items`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub enum BoxAlign {
+  /// `start`: align children at the cross-axis start.
+  Start,
+  /// `end`: align children at the cross-axis end.
+  End,
+  /// `center`: align children at the cross-axis center.
+  Center,
+  /// `baseline`: align children on their text baseline.
+  Baseline,
+  /// `stretch`: stretch children across the cross axis.
+  Stretch,
+}
+
+declare_enum_from_css_impl!(
+  BoxAlign,
+  "start" => BoxAlign::Start,
+  "end" => BoxAlign::End,
+  "center" => BoxAlign::Center,
+  "baseline" => BoxAlign::Baseline,
+  "stretch" => BoxAlign::Stretch
+);
+
+impl From<BoxOrient> for FlexDirection {
+  fn from(orient: BoxOrient) -> Self {
+    match orient {
+      BoxOrient::Horizontal => FlexDirection::Row,
+      BoxOrient::Vertical => FlexDirection::Column,
+    }
+  }
+}
+
+impl From<BoxPack> for JustifyContent {
+  fn from(pack: BoxPack) -> Self {
+    match pack {
+      BoxPack::Start => JustifyContent::FlexStart,
+      BoxPack::End => JustifyContent::FlexEnd,
+      BoxPack::Center => JustifyContent::Center,
+      BoxPack::Justify => JustifyContent::SpaceBetween,
+    }
+  }
+}
+
+impl From<BoxAlign> for AlignItems {
+  fn from(align: BoxAlign) -> Self {
+    match align {
+      BoxAlign::Start => AlignItems::FlexStart,
+      BoxAlign::End => AlignItems::FlexEnd,
+      BoxAlign::Center => AlignItems::Center,
+      BoxAlign::Baseline => AlignItems::Baseline,
+      BoxAlign::Stretch => AlignItems::Stretch,
+    }
   }
 }
 

@@ -1388,6 +1388,15 @@ define_style! {
       target.push(StyleDeclaration::flex_direction(value.direction));
       target.push(StyleDeclaration::flex_wrap(value.wrap));
     },
+    box_orient: BoxOrient => [FlexDirection] |value, target| {
+      target.push(StyleDeclaration::flex_direction(value.into()));
+    },
+    box_pack: BoxPack => [JustifyContent] |value, target| {
+      target.push(StyleDeclaration::justify_content(value.into()));
+    },
+    box_align: BoxAlign => [AlignItems] |value, target| {
+      target.push(StyleDeclaration::align_items(value.into()));
+    },
     flex: Option<Flex> => [FlexGrow, FlexShrink, FlexBasis] |value, target| {
       target.push(StyleDeclaration::flex_grow(
         value.map(|value| FlexGrow(value.grow)),

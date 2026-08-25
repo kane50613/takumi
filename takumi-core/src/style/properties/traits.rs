@@ -803,18 +803,21 @@ macro_rules! impl_from_taffy_enum {
 pub(crate) use impl_from_taffy_enum;
 
 /// Declares a CSS enum parser with automatic value list generation.
+/// The first token in a `|` group is the canonical form; the rest parse as
+/// aliases and serialize back to it.
 macro_rules! declare_enum_from_css_impl {
   (
     $enum_type:ty,
-    $($css_value:expr => $variant:path),* $(,)?
-    $(; aliases { $($alias:expr => $alias_variant:path),* $(,)? })?
+    $($canonical:literal $(| $alias:literal)* => $variant:path),* $(,)?
   ) => {
     impl crate::style::MakeComputed for $enum_type {}
 
     impl<'i> crate::style::FromCss<'i> for $enum_type {
       const VALID_TOKENS: &'static [crate::style::CssToken] = &[
-        $(crate::style::CssToken::Keyword($css_value)),*,
-        $($(crate::style::CssToken::Keyword($alias)),*)?
+        $(
+          crate::style::CssToken::Keyword($canonical)
+          $(, crate::style::CssToken::Keyword($alias))*
+        ),*
       ];
 
       fn from_css(input: &mut cssparser::Parser<'i, '_>) -> crate::style::ParseResult<'i, Self> {
@@ -827,11 +830,8 @@ macro_rules! declare_enum_from_css_impl {
 
         cssparser::match_ignore_ascii_case! {&ident,
           $(
-            $css_value => Ok($variant),
+            $canonical $(| $alias)* => Ok($variant),
           )*
-          $($(
-            $alias => Ok($alias_variant),
-          )*)?
           _ => Err($crate::style::unexpected_token!(location, token)),
         }
       }
@@ -841,7 +841,7 @@ macro_rules! declare_enum_from_css_impl {
       fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
         match self {
           $(
-            $variant => dest.write_str($css_value),
+            $variant => dest.write_str($canonical),
           )*
         }
       }
