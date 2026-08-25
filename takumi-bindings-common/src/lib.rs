@@ -77,11 +77,11 @@ pub fn build_font_resource<'a>(
   }
 }
 
-/// Variables as the `:root` rule they stand for. A name without the `--`
+/// CSS variables as the `:root` rule they stand for. A name without the `--`
 /// prefix gains it. A value carrying `{`, `}`, `;` or a comment would escape
 /// that rule, and `!important` would outrank declarations it has no business
 /// outranking, so those are dropped.
-fn variables_stylesheet(variables: HashMap<String, String>) -> Option<String> {
+fn css_variables_stylesheet(variables: HashMap<String, String>) -> Option<String> {
   // Sorted, because the sheet cache is keyed by source text.
   let declarations = variables
     .into_iter()
@@ -109,18 +109,18 @@ fn variables_stylesheet(variables: HashMap<String, String>) -> Option<String> {
 
 /// The stylesheet for a render: the loose-parsed sheet list with its keyframes.
 /// Parsed sheets are cached by source text in `cache`; per-render keyframes are
-/// grafted onto a copy so the cached parse stays pristine. Variables join the
-/// sheet list last, so an equally specific author `:root` loses to them.
+/// grafted onto a copy so the cached parse stays pristine. CSS variables join
+/// the sheet list last, so an equally specific author `:root` loses to them.
 pub fn stylesheet(
   cache: &ResourceCache,
   stylesheets: Option<Vec<String>>,
   keyframes: Vec<KeyframesRule>,
-  variables: Option<HashMap<String, String>>,
+  css_variables: Option<HashMap<String, String>>,
 ) -> Arc<StyleSheet> {
   let mut sheets = stylesheets.unwrap_or_default();
 
-  if let Some(variables) = variables.and_then(variables_stylesheet) {
-    sheets.push(variables);
+  if let Some(sheet) = css_variables.and_then(css_variables_stylesheet) {
+    sheets.push(sheet);
   }
 
   let sheet = cache.get_or_parse_stylesheet(sheets);
@@ -139,7 +139,7 @@ mod tests {
   use super::*;
 
   fn variables(entries: &[(&str, &str)]) -> Option<String> {
-    variables_stylesheet(
+    css_variables_stylesheet(
       entries
         .iter()
         .map(|(name, value)| ((*name).to_owned(), (*value).to_owned()))

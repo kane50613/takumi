@@ -180,7 +180,7 @@ pub struct RenderOptions<'env> {
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
   /// CSS custom properties for `:root`, which utilities and `var()` both read.
-  pub variables: Option<HashMap<String, String>>,
+  pub css_variables: Option<HashMap<String, String>>,
   /// Structured keyframes to register alongside stylesheets.
   #[napi(ts_type = "Keyframes")]
   pub keyframes: Option<Object<'env>>,
@@ -213,7 +213,7 @@ pub struct SvgRenderOptions<'env> {
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
   /// CSS custom properties for `:root`, which utilities and `var()` both read.
-  pub variables: Option<HashMap<String, String>>,
+  pub css_variables: Option<HashMap<String, String>>,
   /// Structured keyframes to register alongside stylesheets.
   #[napi(ts_type = "Keyframes")]
   pub keyframes: Option<Object<'env>>,
@@ -283,7 +283,7 @@ pub struct RenderAnimationOptions<'env> {
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
   /// CSS custom properties for `:root`, which utilities and `var()` both read.
-  pub variables: Option<HashMap<String, String>>,
+  pub css_variables: Option<HashMap<String, String>>,
   /// Structured keyframes to register alongside stylesheets.
   #[napi(ts_type = "Keyframes")]
   pub keyframes: Option<Object<'env>>,

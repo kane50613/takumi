@@ -77,6 +77,11 @@ export type RenderOptions = {
    */
   stylesheets?: string[];
   /**
+   * CSS custom properties for `:root`, which utilities and `var()` both read.
+   * A name without the `--` prefix gains it.
+   */
+  cssVariables?: Record<string, string>;
+  /**
    * Structured keyframes to register alongside stylesheets.
    */
   keyframes?: Keyframes;
@@ -140,6 +145,11 @@ export type RenderAnimationOptions = {
    * CSS stylesheets to apply before rendering.
    */
   stylesheets?: string[];
+  /**
+   * CSS custom properties for `:root`, which utilities and `var()` both read.
+   * A name without the `--` prefix gains it.
+   */
+  cssVariables?: Record<string, string>;
   /**
    * Structured keyframes to register alongside stylesheets.
    */

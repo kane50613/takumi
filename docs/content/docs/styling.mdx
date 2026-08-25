@@ -45,9 +45,9 @@ A `<style>` tag feeds the same engine and gets extracted from the JSX automatica
 </div>
 ```
 
-### Structured variables
+### CSS variables
 
-The `variables` option declares CSS custom properties without writing CSS. Each entry becomes one `:root` declaration. The leading `--` is optional.
+The `cssVariables` option declares CSS custom properties without writing CSS. Each entry becomes one `:root` declaration. The leading `--` is optional.
 
 ```tsx twoslash
 import { render } from "takumi-js";
@@ -56,17 +56,18 @@ const image = await render(<div className="card">Hello</div>, {
   width: 1200,
   height: 630,
   stylesheets: [`.card { color: var(--brand) }`],
-  variables: { "--brand": "#5b21b6" },
+  cssVariables: { "--brand": "#5b21b6" },
 });
 ```
 
 **Every `var()` reads them**, in stylesheets, in `<style>` tags, and in `tw`.
 
-| Competing declaration                | Result                        |
-| ------------------------------------ | ----------------------------- |
-| Equally specific `:root` rule in CSS | `variables` wins              |
-| Declaration on the element           | Element declaration wins      |
-| `!important` declaration             | `!important` declaration wins |
+| Competing declaration                | Result                   |
+| ------------------------------------ | ------------------------ |
+| Equally specific `:root` rule in CSS | `cssVariables` wins      |
+| Declaration on the element           | Element declaration wins |
+
+The generated rule comes after every stylesheet, so a media query at equal specificity still loses. Override an entry with a more specific selector, such as `:root:root`.
 
 **Values containing `;`, `{`, `}`, `/*` or `!important` are dropped.** They could escape the generated rule.
 
@@ -136,11 +137,11 @@ const image = await render(node, {
 </div>
 ```
 
-### Theme tokens
+### Utilities read CSS variables
 
 A utility reads a CSS custom property, the way Tailwind compiles it. `bg-red-500` resolves `var(--color-red-500)`, `p-4` resolves `calc(var(--spacing) * 4)`. The built-in scale sits behind them as the fallback.
 
-Declare tokens in a `:root` rule, or pass them as [structured variables](#structured-variables).
+Declare tokens in a `:root` rule, or pass them as [the `cssVariables` option](#css-variables).
 
 ```css
 :root {
@@ -153,7 +154,7 @@ Declare tokens in a `:root` rule, or pass them as [structured variables](#struct
 <div tw="bg-brand-500 p-gutter" />
 ```
 
-Theme tokens follow the CSS cascade. A media query or a selector can override them.
+Tokens declared in a stylesheet follow the CSS cascade. A media query or a selector can override them. Tokens passed as `cssVariables` sit after every stylesheet, so overriding one takes a more specific selector.
 
 ```css
 @media (prefers-color-scheme: dark) {

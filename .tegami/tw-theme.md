@@ -8,9 +8,9 @@ packages:
     type: minor
 ---
 
-### Resolve `tw` utilities through theme variables
+### Resolve `tw` utilities through CSS variables
 
-`bg-red-500` now resolves `var(--color-red-500)` and `p-4` resolves `calc(var(--spacing) * 4)`, with the built-in value as the fallback. Define tokens in `:root` or the `variables` option; `--color-brand-500` makes `bg-brand-500` work.
+`bg-red-500` now resolves `var(--color-red-500)` and `p-4` resolves `calc(var(--spacing) * 4)`, with the built-in value as the fallback. Define tokens in `:root` or the `cssVariables` option; `--color-brand-500` makes `bg-brand-500` work.
 
 ### Let stylesheet rules win over `tw` utilities
 
