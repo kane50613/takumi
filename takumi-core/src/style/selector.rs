@@ -1380,6 +1380,9 @@ fn collect_breakpoints(rules: &[CssRule]) -> BreakpointOverrides {
       if let StyleDeclaration::CustomProperty(name, value) = declaration
         && let Some(token) = name.strip_prefix("--breakpoint-")
         && let Ok(width) = Length::from_css_str(value)
+        // Only units `Breakpoint::matches` resolves; anything else would
+        // shadow the built-in width with a dead one.
+        && matches!(width, Length::Rem(_) | Length::Px(_) | Length::Vw(_))
       {
         breakpoints.insert(token.to_owned(), width);
       }
@@ -2476,6 +2479,15 @@ mod tests {
     assert_eq!(sheet.breakpoints.get("md"), Some(&Length::Rem(30.0)));
     assert_eq!(sheet.breakpoints.get("lg"), None);
     assert_eq!(sheet.breakpoints.get("xl"), None);
+  }
+
+  /// A width `Breakpoint::matches` cannot resolve stays out of the overrides,
+  /// so the variant keeps its built-in width instead of never matching.
+  #[test]
+  fn test_breakpoint_with_unresolvable_unit_is_ignored() {
+    let sheet = parse_stylesheet(":root { --breakpoint-md: 48em; }");
+
+    assert_eq!(sheet.breakpoints.get("md"), None);
   }
 
   #[test]
