@@ -8,6 +8,13 @@ test("joins nested keys into one variable name", () => {
   });
 });
 
+test("DEFAULT names the parent scale", () => {
+  expect(cssVariables({ color: { brand: { DEFAULT: "#5b21b6", 300: "#c4b5fd" } } })).toEqual({
+    "--color-brand": "#5b21b6",
+    "--color-brand-300": "#c4b5fd",
+  });
+});
+
 test("stringifies numeric leaves", () => {
   expect(cssVariables({ leading: { tight: 1.25 } })).toEqual({ "--leading-tight": "1.25" });
 });
