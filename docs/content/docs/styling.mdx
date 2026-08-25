@@ -150,7 +150,7 @@ const image = await render(node, {
 
 A utility reads a CSS custom property, the way Tailwind compiles it. `bg-red-500` resolves `var(--color-red-500)`, `p-4` resolves `calc(var(--spacing) * 4)`. The built-in scale sits behind them as the fallback.
 
-Declare tokens in a `:root` rule, or pass them as [the `cssVariables` option](#css-variables).
+Declare tokens in a `:root` rule, in a Tailwind `@theme` block pasted as-is, or pass them as [the `cssVariables` option](#css-variables). `@theme` reads as the `:root` rule it compiles to, `@keyframes` inside it register, and `@theme reference` emits nothing.
 
 ```css
 :root {
@@ -175,18 +175,23 @@ Tokens declared in a stylesheet follow the CSS cascade. A media query or a selec
 
 The namespace picks which utilities a token reaches:
 
-| Namespace                  | Utilities                                                                                                                                   |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--color-*`                | color utilities: `bg-*`, `text-*`, `border-*`, `outline-*`, `decoration-*`                                                                  |
-| `--spacing`, `--spacing-*` | length utilities: `p-*`, `m-*`, `w-*`, `gap-*`, `inset-*`. `p-4` reads `calc(var(--spacing) * 4)`, `p-gutter` reads `var(--spacing-gutter)` |
-| `--container-*`            | `max-w-*`                                                                                                                                   |
-| `--text-*`                 | `--text-xl` sets `text-xl`, `--text-xl--line-height` sets its leading                                                                       |
-| `--font-*`                 | font families, `font-sans`                                                                                                                  |
-| `--font-weight-*`          | font weights, `font-bold`                                                                                                                   |
-| `--tracking-*`             | `tracking-*`                                                                                                                                |
-| `--leading-*`              | `leading-*`                                                                                                                                 |
-| `--radius-*`               | `rounded-*`, including corners and sides                                                                                                    |
-| `--aspect-*`               | `aspect-*`                                                                                                                                  |
+| Namespace                                           | Utilities                                                                                                                                      |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--color-*`                                         | color utilities: `bg-*`, `text-*`, `border-*`, `outline-*`, `decoration-*`                                                                     |
+| `--spacing`, `--spacing-*`                          | length utilities: `p-*`, `m-*`, `w-*`, `gap-*`, `inset-*`. `p-4` reads `calc(var(--spacing) * 4)`, `p-gutter` reads `var(--spacing-gutter)`    |
+| `--container-*`                                     | `max-w-*`                                                                                                                                      |
+| `--text-*`                                          | `--text-xl` sets `text-xl`, `--text-xl--line-height` sets its leading                                                                          |
+| `--font-*`                                          | font families, `font-sans`                                                                                                                     |
+| `--font-weight-*`                                   | font weights, `font-bold`                                                                                                                      |
+| `--tracking-*`                                      | `tracking-*`                                                                                                                                   |
+| `--leading-*`                                       | `leading-*`                                                                                                                                    |
+| `--radius-*`                                        | `rounded-*`, including corners and sides                                                                                                       |
+| `--aspect-*`                                        | `aspect-*`                                                                                                                                     |
+| `--blur-*`                                          | `blur-*` and `backdrop-blur-*` presets                                                                                                         |
+| `--drop-shadow-*`                                   | `drop-shadow-*` presets                                                                                                                        |
+| `--shadow-*`, `--inset-shadow-*`, `--text-shadow-*` | shadow preset shapes. A custom shape carries its own colours, so shadow colour utilities only reach the built-in fallback                      |
+| `--animate-*`                                       | `animate-*`. An unknown token like `animate-wiggle` reads `var(--animate-wiggle)`; pair it with its `@keyframes`                               |
+| `--breakpoint-*`                                    | the `sm:`–`2xl:` variants, and new ones like `3xl:`. Variants gate before the cascade, so only an unconditional `:root` declaration moves them |
 
 Some things behave differently from Tailwind here:
 
