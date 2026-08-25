@@ -752,7 +752,8 @@ fn parse_theme_block<'i, 't>(
   )
   .map_err(|_| input.new_custom_error(StyleSheetParseError::unsupported_nested_at_rule()))?;
 
-  let mut declarations = StyleDeclarationBlock::default();
+  let mut normal_declarations = StyleDeclarationBlock::default();
+  let mut important_declarations = StyleDeclarationBlock::default();
   let mut fragment = StyleSheetFragment::default();
   let mut parser = ThemeBlockParser {
     media_queries,
@@ -761,7 +762,15 @@ fn parse_theme_block<'i, 't>(
 
   for result in RuleBodyParser::new(input, &mut parser) {
     match result {
-      Ok(ThemeBodyItem::Declarations(block)) => declarations.append(*block),
+      Ok(ThemeBodyItem::Declarations(block)) => {
+        let block = *block;
+
+        if block.importance.is_empty() {
+          normal_declarations.append(block);
+        } else {
+          important_declarations.append(block);
+        }
+      }
       Ok(ThemeBodyItem::Keyframes(keyframes)) => fragment.extend(keyframes),
       Err((error, _)) => {
         if lossy {
@@ -772,11 +781,12 @@ fn parse_theme_block<'i, 't>(
     }
   }
 
-  if !declarations.declarations.is_empty() {
+  if !normal_declarations.declarations.is_empty() || !important_declarations.declarations.is_empty()
+  {
     fragment.rules.push(CssRule {
       selectors,
-      normal_declarations: declarations,
-      important_declarations: StyleDeclarationBlock::default(),
+      normal_declarations,
+      important_declarations,
       media_queries: media_queries.to_vec(),
       layer: layer.cloned(),
       layer_order: None,
@@ -2365,6 +2375,16 @@ mod tests {
     let sheet = parse_stylesheet("@theme reference { --color-brand: #ff0000; }");
     assert_eq!(sheet.rules.len(), 1);
     assert_eq!(selector_text(&sheet.rules[0]), ":root");
+  }
+
+  /// A custom property swallows `!important` into its value, so only a
+  /// non-custom declaration exercises the split.
+  #[test]
+  fn test_theme_splits_important_declarations() {
+    let sheet = parse_stylesheet("@theme { --x: 1px; width: 10px !important; }");
+    assert_eq!(sheet.rules.len(), 1);
+    assert_eq!(sheet.rules[0].normal_declarations.declarations.len(), 1);
+    assert_eq!(sheet.rules[0].important_declarations.declarations.len(), 1);
   }
 
   #[test]
