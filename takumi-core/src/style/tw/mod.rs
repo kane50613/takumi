@@ -81,6 +81,24 @@ fn blur_css(blur: &TwBlur) -> String {
   }
 }
 
+/// Expands an `@apply` utility list into the declarations it stands for.
+/// `None` when a token is unknown or carries a variant, which `@apply` rejects.
+pub(crate) fn expand_apply(source: &str) -> Option<StyleDeclarationBlock> {
+  let mut builder = TailwindDeclarationBuilder::default();
+
+  for token in source.split_whitespace() {
+    let value = TailwindValue::parse(token)?;
+
+    if value.breakpoint.is_some() {
+      return None;
+    }
+
+    value.property.apply(&mut builder, value.important);
+  }
+
+  Some(builder.finish())
+}
+
 /// `var(--shadow-md, <built-in layers>)`: the variable overrides the whole
 /// shape, and the fallback keeps its per-layer colour slots. A custom shape
 /// carries its own colours, so `shadow-*` colour utilities only reach the
