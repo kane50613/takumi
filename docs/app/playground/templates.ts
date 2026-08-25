@@ -22,7 +22,7 @@ export const templates: Template[] = [
   {
     id: "welcome",
     name: "Welcome",
-    description: "Edit the code, press Run — the palette lives in options.variables",
+    description: "Edit the code, press Run — the palette lives in options.cssVariables",
     kind: "image",
     code: welcome,
   },

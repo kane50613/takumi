@@ -26,7 +26,7 @@ export const options: PlaygroundOptions = {
   width: 1080,
   height: 1080,
   format: "png",
-  variables: {
+  cssVariables: {
     "--color-dawn": "#ff6b6b",
     "--color-dusk": "#556270",
     "--color-noon": "#ffd93d",

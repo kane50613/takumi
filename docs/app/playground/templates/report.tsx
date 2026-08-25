@@ -84,7 +84,7 @@ export default function Report() {
 
 export const options: PlaygroundOptions = {
   // Set on the render, the tokens reach the header and footer bands too.
-  variables: {
+  cssVariables: {
     "--color-brand": "#0d9488",
     "--color-ink": "#1f2430",
     "--color-body": "#374151",

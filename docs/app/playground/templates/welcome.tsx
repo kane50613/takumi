@@ -17,7 +17,7 @@ export default function Welcome() {
       <h1 tw="m-0 mt-2 text-8xl font-bold leading-none tracking-tighter text-coral">Press Run.</h1>
       <p tw="mt-10 mb-0 text-3xl leading-snug text-faded">
         The exported options decide what comes out: an image, an animation, or a PDF. The colours
-        here come from <span tw="text-honey">options.variables</span> — rename a token and every
+        here come from <span tw="text-honey">options.cssVariables</span> — rename a token and every
         class reading it follows.
       </p>
     </div>
@@ -28,7 +28,7 @@ export const options: PlaygroundOptions = {
   width: 1200,
   height: 630,
   format: "png",
-  variables: {
+  cssVariables: {
     "--color-ink": "#16130f",
     "--color-paper": "#fdfaf4",
     "--color-faded": "#a8a29a",

@@ -39,7 +39,7 @@ export const options: PlaygroundOptions = {
   width: 1200,
   height: 630,
   format: "png",
-  variables: {
+  cssVariables: {
     "--color-accent": "#2dd4bf",
     "--color-surface": "#0f172b",
     "--color-bright": "#f8fafc",
