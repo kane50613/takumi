@@ -20,9 +20,9 @@ const INPUT = `@layer theme, base, utilities;
 @layer base{*,::after,::before,::backdrop,::file-selector-button{box-sizing:border-box;border:0 solid}}
 @import "tailwindcss/utilities.css" layer(utilities);`;
 
-// Mirrors the binding's `variables_stylesheet`: the `--` prefix is optional,
+// Mirrors the binding's `css_variables_stylesheet`: the `--` prefix is optional,
 // and an entry that would escape the `:root` rule is dropped.
-function variableDeclarations(variables: Record<string, string> | undefined) {
+function cssVariableDeclarations(variables: Record<string, string> | undefined) {
   return Object.entries(variables ?? {})
     .map(([name, value]): [string, string] => [name.startsWith("--") ? name : `--${name}`, value])
     .filter(
@@ -211,7 +211,7 @@ export default function BrowserPreview({
   height,
   padding,
   cssContents,
-  variables,
+  cssVariables,
 }: {
   html: string | undefined;
   width?: number;
@@ -219,7 +219,7 @@ export default function BrowserPreview({
   height?: number;
   padding?: string;
   cssContents?: string[];
-  variables?: Record<string, string>;
+  cssVariables?: Record<string, string>;
 }) {
   const { ref, scale } = useFitScale(width, height);
   const [paint, setPaint] = useState<Paint>();
@@ -229,7 +229,7 @@ export default function BrowserPreview({
     if (!html) return;
 
     let cancelled = false;
-    const declarations = variableDeclarations(variables);
+    const declarations = cssVariableDeclarations(cssVariables);
 
     // The unlayered `:root` sheet comes after everything the compiler built, the
     // position the binding gives it, so a variable overriding a builtin token
@@ -253,7 +253,7 @@ export default function BrowserPreview({
     return () => {
       cancelled = true;
     };
-  }, [html, cssContents, variables, height, padding]);
+  }, [html, cssContents, cssVariables, height, padding]);
 
   // `border-0` overrides the border an iframe carries by default, which paints
   // a light ring around the preview.
