@@ -1186,6 +1186,55 @@ fn test_corner_radius_reads_a_css_variable() {
   assert_eq!(computed.border_top_left_radius.x, Length::Px(12.0));
 }
 
+#[test]
+fn test_blur_preset_reads_a_css_variable() {
+  use crate::style::properties::Filter;
+
+  let values =
+    TailwindValues::from_str("blur-md backdrop-blur-md").expect("tailwind values should parse");
+  let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
+
+  let computed = style.inherit(&root_with(&[("--blur-md", "20px")]));
+
+  assert_eq!(computed.filter, vec![Filter::Blur(Length::Px(20.0))]);
+  assert_eq!(
+    computed.backdrop_filter,
+    vec![Filter::Blur(Length::Px(20.0))]
+  );
+}
+
+#[test]
+fn test_blur_preset_falls_back_to_the_builtin_radius() {
+  use crate::style::properties::Filter;
+
+  let values = TailwindValues::from_str("blur-md").expect("tailwind values should parse");
+  let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
+
+  let computed = style.inherit(&ComputedStyle::default());
+
+  assert_eq!(computed.filter, vec![Filter::Blur(Length::Px(12.0))]);
+}
+
+#[test]
+fn test_drop_shadow_preset_reads_a_css_variable() {
+  use crate::style::properties::{Filter, TextShadow};
+
+  let values = TailwindValues::from_str("drop-shadow-md").expect("tailwind values should parse");
+  let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
+
+  let computed = style.inherit(&root_with(&[("--drop-shadow-md", "0 5px 5px #ff0000")]));
+
+  assert_eq!(
+    computed.filter,
+    vec![Filter::DropShadow(TextShadow {
+      offset_x: Length::Px(0.0),
+      offset_y: Length::Px(5.0),
+      blur_radius: Length::Px(5.0),
+      color: ColorInput::Value(Color::from_rgb(0xff0000)),
+    })]
+  );
+}
+
 /// The built-in scale has to stay reachable as a variable, not just as a value
 /// baked into the utility.
 #[test]

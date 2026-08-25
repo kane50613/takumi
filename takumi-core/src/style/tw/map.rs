@@ -99,7 +99,7 @@ property_parsers! {
   Blur(TwBlur) => TwBlur,
   Filter(Filters) => Filters,
   BoxShadow(BoxShadow) => BoxShadow,
-  DropShadow(TextShadow) => TextShadow,
+  DropShadow(TwDropShadow) => TwDropShadow,
   TextShadow(TextShadow) => TextShadow,
   BlendMode(BlendMode) => BlendMode,
   FontStretch(FontStretch) => FontStretch,
@@ -392,6 +392,12 @@ const fn bs(inset: bool, oy: f32, blur: f32, spread: f32, alpha: u8) -> BoxShado
     color: ColorInput::Value(Color([0, 0, 0, alpha])),
   }
 }
+const fn dsp(token: &'static str, shadow: TextShadow) -> TwDropShadow {
+  TwDropShadow {
+    shadow,
+    token: Some(token),
+  }
+}
 const fn ts(oy: f32, blur: f32, alpha: u8) -> TextShadow {
   TextShadow {
     offset_x: Length::Px(0.0),
@@ -515,14 +521,14 @@ pub(crate) static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! 
   "backdrop-grayscale" => TailwindProperty::BackdropGrayscale(PercentageNumber(1.0)),
   "backdrop-invert" => TailwindProperty::BackdropInvert(PercentageNumber(1.0)),
   "backdrop-sepia" => TailwindProperty::BackdropSepia(PercentageNumber(1.0)),
-  "drop-shadow-xs" => TailwindProperty::DropShadow(ts(1.0, 1.0, 13)),
-  "drop-shadow-sm" => TailwindProperty::DropShadow(ts(1.0, 2.0, 38)),
-  "drop-shadow" => TailwindProperty::DropShadow(ts(1.0, 2.0, 26)),
-  "drop-shadow-md" => TailwindProperty::DropShadow(ts(3.0, 3.0, 31)),
-  "drop-shadow-lg" => TailwindProperty::DropShadow(ts(4.0, 4.0, 38)),
-  "drop-shadow-xl" => TailwindProperty::DropShadow(ts(9.0, 7.0, 26)),
-  "drop-shadow-2xl" => TailwindProperty::DropShadow(ts(25.0, 25.0, 38)),
-  "drop-shadow-none" => TailwindProperty::DropShadow(ts(0.0, 0.0, 0)),
+  "drop-shadow-xs" => TailwindProperty::DropShadow(dsp("xs", ts(1.0, 1.0, 13))),
+  "drop-shadow-sm" => TailwindProperty::DropShadow(dsp("sm", ts(1.0, 2.0, 38))),
+  "drop-shadow" => TailwindProperty::DropShadow(dsp("", ts(1.0, 2.0, 26))),
+  "drop-shadow-md" => TailwindProperty::DropShadow(dsp("md", ts(3.0, 3.0, 31))),
+  "drop-shadow-lg" => TailwindProperty::DropShadow(dsp("lg", ts(4.0, 4.0, 38))),
+  "drop-shadow-xl" => TailwindProperty::DropShadow(dsp("xl", ts(9.0, 7.0, 26))),
+  "drop-shadow-2xl" => TailwindProperty::DropShadow(dsp("2xl", ts(25.0, 25.0, 38))),
+  "drop-shadow-none" => TailwindProperty::DropShadow(TwDropShadow { shadow: ts(0.0, 0.0, 0), token: None }),
   // Inset shadows (--inset-shadow-*)
   "inset-shadow-2xs" => TailwindProperty::Shadow(bs(true, 1.0, 0.0, 0.0, 13)),
   "inset-shadow-xs" => TailwindProperty::Shadow(bs(true, 1.0, 1.0, 0.0, 13)),
