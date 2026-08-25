@@ -1089,6 +1089,73 @@ impl Display {
   }
 }
 
+/// Legacy `-webkit-box-orient` axis, lowered to `flex-direction`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub enum BoxOrient {
+  /// `horizontal` or `inline-axis`: children flow as a row.
+  Horizontal,
+  /// `vertical` or `block-axis`: children flow as a column.
+  Vertical,
+}
+
+declare_enum_from_css_impl!(
+  BoxOrient,
+  "horizontal" => BoxOrient::Horizontal,
+  "vertical" => BoxOrient::Vertical;
+  aliases {
+    "inline-axis" => BoxOrient::Horizontal,
+    "block-axis" => BoxOrient::Vertical,
+  }
+);
+
+/// Legacy `-webkit-box-pack` main-axis alignment, lowered to `justify-content`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub enum BoxPack {
+  /// `start`: pack children at the main-axis start.
+  Start,
+  /// `end`: pack children at the main-axis end.
+  End,
+  /// `center`: pack children at the main-axis center.
+  Center,
+  /// `justify`: distribute children with space between them.
+  Justify,
+}
+
+declare_enum_from_css_impl!(
+  BoxPack,
+  "start" => BoxPack::Start,
+  "end" => BoxPack::End,
+  "center" => BoxPack::Center,
+  "justify" => BoxPack::Justify
+);
+
+/// Legacy `-webkit-box-align` cross-axis alignment, lowered to `align-items`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub enum BoxAlign {
+  /// `start`: align children at the cross-axis start.
+  Start,
+  /// `end`: align children at the cross-axis end.
+  End,
+  /// `center`: align children at the cross-axis center.
+  Center,
+  /// `baseline`: align children on their text baseline.
+  Baseline,
+  /// `stretch`: stretch children across the cross axis.
+  Stretch,
+}
+
+declare_enum_from_css_impl!(
+  BoxAlign,
+  "start" => BoxAlign::Start,
+  "end" => BoxAlign::End,
+  "center" => BoxAlign::Center,
+  "baseline" => BoxAlign::Baseline,
+  "stretch" => BoxAlign::Stretch
+);
+
 impl Display {
   pub(crate) fn into_taffy(self) -> taffy::Display {
     match self {
