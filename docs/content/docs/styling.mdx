@@ -6,13 +6,13 @@ icon: Palette
 
 Pick a path by what you already have:
 
-| You have                                   | Use                                                  |
-| ------------------------------------------ | ---------------------------------------------------- |
-| Tailwind classes, compiled by your bundler | [`stylesheets`](#stylesheets) with the generated CSS |
-| Tailwind classes, no build step            | [the `tw` prop](#tailwind-without-a-build-step)      |
-| Plain CSS                                  | [`stylesheets`](#stylesheets) or a `<style>` tag     |
-| Design tokens to theme with                | [`cssVariables` or a `:root` rule](#design-tokens)   |
-| One-off styles on one node                 | [the `style` prop](#inline-styles)                   |
+| You have                                   | Use                                                           |
+| ------------------------------------------ | ------------------------------------------------------------- |
+| Tailwind classes, compiled by your bundler | [`stylesheets`](#stylesheets) with the generated CSS          |
+| Tailwind classes, no build step            | [`className` + a future flag](#tailwind-without-a-build-step) |
+| Plain CSS                                  | [`stylesheets`](#stylesheets) or a `<style>` tag              |
+| Design tokens to theme with                | [`cssVariables` or a `:root` rule](#design-tokens)            |
+| One-off styles on one node                 | [the `style` prop](#inline-styles)                            |
 
 The paths combine. Each section spells out who wins when they collide.
 
@@ -94,31 +94,51 @@ export default defineConfig({
 
 ## Tailwind without a build step
 
-The `tw` prop runs a built-in parser. Arbitrary values work. It won't cover every Tailwind feature; the [parser mapping](https://github.com/kane50613/takumi/blob/master/takumi-core/src/style/tw/map.rs) lists every supported class.
+Turn on [the `classNameUtilities` future flag](/docs/future#classnameutilities) and `className` tokens run through a built-in parser. JSX pasted from an app renders without renaming a prop.
 
-```tsx
-<div tw="bg-blue-500 p-4 rounded-lg">
-  <h1 tw="text-white text-2xl font-bold">Hello Tailwind!</h1>
-</div>
+```tsx twoslash
+import { render } from "takumi-js";
+
+const image = await render(
+  <div className="bg-blue-500 p-4 rounded-lg">
+    <h1 className="text-white text-2xl font-bold">Hello Tailwind!</h1>
+  </div>,
+  {
+    width: 1200,
+    height: 630,
+    future: { classNameUtilities: true },
+  },
+);
 ```
 
-`tw` is a plain prop, so build it dynamically:
+Arbitrary values work. The parser won't cover every Tailwind feature; the [parser mapping](https://github.com/kane50613/takumi/blob/master/takumi-core/src/style/tw/map.rs) lists every supported class.
+
+`className` is a plain prop, so build it dynamically:
 
 ```tsx
 import clsx from "clsx";
 
 const isError = true;
 
-<div tw={clsx("p-4 rounded", isError ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700")}>
+<div
+  className={clsx(
+    "p-4 rounded",
+    isError ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700",
+  )}
+>
   {isError ? "Something went wrong" : "Success!"}
 </div>;
 ```
 
-The [`classNameUtilities` future flag](/docs/future#classnameutilities) feeds `className` tokens to the same parser, so JSX pasted from an app renders without renaming props.
+The `tw` prop feeds the same parser without any flag. It exists for satori compatibility, and it wins a tie against a `className` utility on the same node.
+
+```tsx
+<div tw="bg-blue-500 p-4 rounded-lg">Hello</div>
+```
 
 ### Preflight
 
-`tw` applies no Tailwind Preflight by default, so elements keep their UA margins: a `<h1>` gets a `0.67em` top margin until you add `mt-0`. `box-sizing` still defaults to `border-box`. The same import line a Tailwind stylesheet starts with turns Preflight on. It drops the UA margins, list markers and heading font tweaks.
+The native parser applies no Tailwind Preflight by default, so elements keep their UA margins: a `<h1>` gets a `0.67em` top margin until you add `mt-0`. `box-sizing` still defaults to `border-box`. The same import line a Tailwind stylesheet starts with turns Preflight on. It drops the UA margins, list markers and heading font tweaks.
 
 ```tsx
 const image = await render(node, {
@@ -130,7 +150,7 @@ const image = await render(node, {
 
 Utilities sit in the last declared layer, Tailwind's own order:
 
-| Against a `tw` utility       | Winner           |
+| Against a utility            | Winner           |
 | ---------------------------- | ---------------- |
 | An unlayered stylesheet rule | the rule         |
 | A rule in a named `@layer`   | the utility      |
@@ -162,7 +182,7 @@ A utility reads a CSS custom property, the way Tailwind compiles it: `bg-red-500
 
 ### Declaring tokens
 
-Three equivalent places. All of them feed every `var()`, in stylesheets, in `<style>` tags, and in `tw`.
+Three equivalent places. All of them feed every `var()`, in stylesheets, in `<style>` tags, and in utilities.
 
 A `:root` rule, or a [Tailwind `@theme` block](#at-rules) pasted as-is:
 
@@ -178,10 +198,11 @@ Or the `cssVariables` option, which becomes one `:root` declaration per entry. T
 ```tsx twoslash
 import { render } from "takumi-js";
 
-const image = await render(<div tw="bg-brand-500 p-gutter">Hello</div>, {
+const image = await render(<div className="bg-brand-500 p-gutter">Hello</div>, {
   width: 1200,
   height: 630,
   cssVariables: { "--color-brand-500": "#5b21b6", "--spacing-gutter": "2.5rem" },
+  future: { classNameUtilities: true },
 });
 ```
 
