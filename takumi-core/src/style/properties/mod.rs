@@ -1041,7 +1041,13 @@ declare_enum_from_css_impl!(
   "table-footer-group" => Display::TableFooterGroup,
   "table-row" => Display::TableRow,
   "table-cell" => Display::TableCell,
-  "table-caption" => Display::TableCaption
+  "table-caption" => Display::TableCaption;
+  aliases {
+    "-webkit-box" => Display::Flex,
+    "-webkit-inline-box" => Display::InlineFlex,
+    "-webkit-flex" => Display::Flex,
+    "-webkit-inline-flex" => Display::InlineFlex,
+  }
 );
 
 impl Display {
@@ -1334,6 +1340,25 @@ declare_enum_from_css_impl!(
   "inset" => BorderStyle::Inset,
   "outset" => BorderStyle::Outset,
 );
+
+#[cfg(test)]
+mod display_tests {
+  use crate::style::{Display, FromCssStr};
+
+  #[test]
+  fn legacy_webkit_values_map_to_flex_layout() {
+    assert_eq!(Display::from_css_str("-webkit-box"), Ok(Display::Flex));
+    assert_eq!(Display::from_css_str("-webkit-flex"), Ok(Display::Flex));
+    assert_eq!(
+      Display::from_css_str("-webkit-inline-box"),
+      Ok(Display::InlineFlex)
+    );
+    assert_eq!(
+      Display::from_css_str("-webkit-inline-flex"),
+      Ok(Display::InlineFlex)
+    );
+  }
+}
 
 #[cfg(test)]
 mod border_spacing_tests {
