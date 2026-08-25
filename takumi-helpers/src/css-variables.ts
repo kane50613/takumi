@@ -14,7 +14,10 @@ export function cssVariables(tree: CssVariableTree): Record<string, string> {
 
 function flatten(tree: CssVariableTree, prefix: string, into: Record<string, string>) {
   for (const [key, value] of Object.entries(tree)) {
-    // Tailwind v3 configs spell a scale's bare value as `DEFAULT`.
+    // Tailwind v3 configs spell a scale's bare value as `DEFAULT`. At the root
+    // there is no scale to name, so the entry is dropped.
+    if (key === "DEFAULT" && prefix === "-") continue;
+
     const name = key === "DEFAULT" ? prefix : `${prefix}-${key}`;
 
     if (typeof value === "object") {

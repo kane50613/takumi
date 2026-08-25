@@ -15,6 +15,10 @@ test("DEFAULT names the parent scale", () => {
   });
 });
 
+test("a root-level DEFAULT names nothing and is dropped", () => {
+  expect(cssVariables({ DEFAULT: "#5b21b6" })).toEqual({});
+});
+
 test("stringifies numeric leaves", () => {
   expect(cssVariables({ leading: { tight: 1.25 } })).toEqual({ "--leading-tight": "1.25" });
 });
