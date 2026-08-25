@@ -1027,8 +1027,8 @@ pub enum Display {
 declare_enum_from_css_impl!(
   Display,
   "none" => Display::None,
-  "flex" => Display::Flex,
-  "inline-flex" => Display::InlineFlex,
+  "flex" | "-webkit-box" | "-webkit-flex" => Display::Flex,
+  "inline-flex" | "-webkit-inline-box" | "-webkit-inline-flex" => Display::InlineFlex,
   "grid" => Display::Grid,
   "inline-grid" => Display::InlineGrid,
   "inline" => Display::Inline,
@@ -1041,13 +1041,7 @@ declare_enum_from_css_impl!(
   "table-footer-group" => Display::TableFooterGroup,
   "table-row" => Display::TableRow,
   "table-cell" => Display::TableCell,
-  "table-caption" => Display::TableCaption;
-  aliases {
-    "-webkit-box" => Display::Flex,
-    "-webkit-inline-box" => Display::InlineFlex,
-    "-webkit-flex" => Display::Flex,
-    "-webkit-inline-flex" => Display::InlineFlex,
-  }
+  "table-caption" => Display::TableCaption
 );
 
 impl Display {
@@ -1101,12 +1095,8 @@ pub enum BoxOrient {
 
 declare_enum_from_css_impl!(
   BoxOrient,
-  "horizontal" => BoxOrient::Horizontal,
-  "vertical" => BoxOrient::Vertical;
-  aliases {
-    "inline-axis" => BoxOrient::Horizontal,
-    "block-axis" => BoxOrient::Vertical,
-  }
+  "horizontal" | "inline-axis" => BoxOrient::Horizontal,
+  "vertical" | "block-axis" => BoxOrient::Vertical
 );
 
 /// Legacy `-webkit-box-pack` main-axis alignment, lowered to `justify-content`.
@@ -1155,6 +1145,38 @@ declare_enum_from_css_impl!(
   "baseline" => BoxAlign::Baseline,
   "stretch" => BoxAlign::Stretch
 );
+
+impl From<BoxOrient> for FlexDirection {
+  fn from(orient: BoxOrient) -> Self {
+    match orient {
+      BoxOrient::Horizontal => FlexDirection::Row,
+      BoxOrient::Vertical => FlexDirection::Column,
+    }
+  }
+}
+
+impl From<BoxPack> for JustifyContent {
+  fn from(pack: BoxPack) -> Self {
+    match pack {
+      BoxPack::Start => JustifyContent::FlexStart,
+      BoxPack::End => JustifyContent::FlexEnd,
+      BoxPack::Center => JustifyContent::Center,
+      BoxPack::Justify => JustifyContent::SpaceBetween,
+    }
+  }
+}
+
+impl From<BoxAlign> for AlignItems {
+  fn from(align: BoxAlign) -> Self {
+    match align {
+      BoxAlign::Start => AlignItems::FlexStart,
+      BoxAlign::End => AlignItems::FlexEnd,
+      BoxAlign::Center => AlignItems::Center,
+      BoxAlign::Baseline => AlignItems::Baseline,
+      BoxAlign::Stretch => AlignItems::Stretch,
+    }
+  }
+}
 
 impl Display {
   pub(crate) fn into_taffy(self) -> taffy::Display {

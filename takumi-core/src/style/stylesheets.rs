@@ -1389,27 +1389,13 @@ define_style! {
       target.push(StyleDeclaration::flex_wrap(value.wrap));
     },
     box_orient: BoxOrient => [FlexDirection] |value, target| {
-      target.push(StyleDeclaration::flex_direction(match value {
-        BoxOrient::Horizontal => FlexDirection::Row,
-        BoxOrient::Vertical => FlexDirection::Column,
-      }));
+      target.push(StyleDeclaration::flex_direction(value.into()));
     },
     box_pack: BoxPack => [JustifyContent] |value, target| {
-      target.push(StyleDeclaration::justify_content(match value {
-        BoxPack::Start => JustifyContent::FlexStart,
-        BoxPack::End => JustifyContent::FlexEnd,
-        BoxPack::Center => JustifyContent::Center,
-        BoxPack::Justify => JustifyContent::SpaceBetween,
-      }));
+      target.push(StyleDeclaration::justify_content(value.into()));
     },
     box_align: BoxAlign => [AlignItems] |value, target| {
-      target.push(StyleDeclaration::align_items(match value {
-        BoxAlign::Start => AlignItems::FlexStart,
-        BoxAlign::End => AlignItems::FlexEnd,
-        BoxAlign::Center => AlignItems::Center,
-        BoxAlign::Baseline => AlignItems::Baseline,
-        BoxAlign::Stretch => AlignItems::Stretch,
-      }));
+      target.push(StyleDeclaration::align_items(value.into()));
     },
     flex: Option<Flex> => [FlexGrow, FlexShrink, FlexBasis] |value, target| {
       target.push(StyleDeclaration::flex_grow(
