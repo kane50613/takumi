@@ -1906,23 +1906,35 @@ const PREFLIGHT_RESET: &[LonghandId] = &[
 
 impl Style {
   /// Merges a UA preset; with Preflight on, its cosmetic declarations drop.
+  /// A dropped `list-style-type` becomes `none` rather than the initial
+  /// `disc`, matching Preflight's `ol, ul, menu { list-style: none }`.
   pub(crate) fn merge_preset(&mut self, preset: Style, preflight: bool) {
     if !preflight {
       return self.merge_from(preset);
     }
 
     let block = preset.declarations;
+    let mut reset_list_marker = false;
 
     for (declaration, important) in block.declarations.into_iter().zip(block.important) {
-      if declaration
-        .affected_longhands()
+      let affected = declaration.affected_longhands();
+
+      if affected
         .iter()
         .any(|longhand| PREFLIGHT_RESET.contains(&longhand))
       {
+        reset_list_marker |= affected.contains(&LonghandId::ListStyleType);
         continue;
       }
 
       self.declarations.push(declaration, important);
+    }
+
+    if reset_list_marker {
+      self.declarations.push(
+        StyleDeclaration::list_style_type(ListStyleType::None),
+        false,
+      );
     }
   }
 }
