@@ -283,6 +283,7 @@ struct StyleSheetFragment {
   keyframes: Vec<KeyframesRule>,
   property_rules: Vec<PropertyRule>,
   declared_layers: Vec<LayerPath>,
+  preflight: bool,
 }
 
 impl StyleSheetFragment {
@@ -291,6 +292,7 @@ impl StyleSheetFragment {
     self.keyframes.extend(other.keyframes);
     self.property_rules.extend(other.property_rules);
     self.declared_layers.extend(other.declared_layers);
+    self.preflight |= other.preflight;
   }
 }
 
@@ -549,6 +551,9 @@ enum AtRulePrelude {
   /// cascade at computed time, so `reference` and `inline` collapse into the
   /// emitted rule.
   Theme,
+  /// `@import "tailwindcss"`, which here only turns Preflight on: the built-in
+  /// scales already back every utility and `tw` is already the last layer.
+  TailwindImport,
 }
 
 fn parse_fragment_with_mode<'i, 't>(
@@ -859,6 +864,20 @@ fn parse_at_rule_prelude<'i, 't>(
     return parse_supports_condition(input).map(AtRulePrelude::Supports);
   }
 
+  if name.eq_ignore_ascii_case("import") {
+    let location = input.current_source_location();
+    let target = match input.next()? {
+      Token::QuotedString(value) => value.clone(),
+      token => return Err(location.new_unexpected_token_error(token.clone())),
+    };
+
+    if target.eq_ignore_ascii_case("tailwindcss") && input.is_exhausted() {
+      return Ok(AtRulePrelude::TailwindImport);
+    }
+
+    return Err(input.new_error(BasicParseErrorKind::AtRuleInvalid(name)));
+  }
+
   if name.eq_ignore_ascii_case("theme") {
     while !input.is_exhausted() {
       let location = input.current_source_location();
@@ -1047,7 +1066,7 @@ fn parse_nested_at_rule_block<'i, 't>(
       Ok(StyleSheetFragment::default())
     }
     AtRulePrelude::Theme => parse_theme_block(media_queries, current_layer, lossy, input),
-    AtRulePrelude::Keyframes(_) | AtRulePrelude::Property(_) => {
+    AtRulePrelude::Keyframes(_) | AtRulePrelude::Property(_) | AtRulePrelude::TailwindImport => {
       Err(input.new_custom_error(StyleSheetParseError::unsupported_nested_at_rule()))
     }
   }
@@ -1128,6 +1147,10 @@ impl<'i> AtRuleParser<'i> for RuleParser {
       AtRulePrelude::Theme => {
         parse_theme_block(&[], self.current_layer.as_ref(), self.lossy, input)
       }
+      // `@import "tailwindcss"` ends at its semicolon; a block after it is invalid.
+      AtRulePrelude::TailwindImport => {
+        Err(input.new_custom_error(StyleSheetParseError::unsupported_nested_at_rule()))
+      }
       AtRulePrelude::Media(media_query) => {
         let mut fragment = parse_fragment_with_mode(
           input,
@@ -1187,6 +1210,10 @@ impl<'i> AtRuleParser<'i> for RuleParser {
           .collect(),
         ..StyleSheetFragment::default()
       }),
+      AtRulePrelude::TailwindImport => Ok(StyleSheetFragment {
+        preflight: true,
+        ..StyleSheetFragment::default()
+      }),
       _ => Err(()),
     }
   }
@@ -1206,6 +1233,9 @@ pub struct StyleSheet {
   /// Widths from unconditional `:root` `--breakpoint-*` declarations, which
   /// gate `tw` variants before the cascade runs and so resolve at parse time.
   pub(crate) breakpoints: BreakpointOverrides,
+  /// Whether `@import "tailwindcss"` turned Preflight on, dropping the UA
+  /// preset cosmetics.
+  pub(crate) preflight: bool,
 }
 
 impl From<Vec<KeyframesRule>> for StyleSheet {
@@ -1312,6 +1342,7 @@ impl StyleSheet {
     let mut keyframes = Vec::new();
     let mut property_rules = Vec::new();
     let mut declared_layers = Vec::new();
+    let mut preflight = false;
 
     for fragment in StyleSheetParser::new(&mut parser, &mut rule_parser) {
       match fragment {
@@ -1320,6 +1351,7 @@ impl StyleSheet {
           keyframes.extend(fragment.keyframes);
           property_rules.extend(fragment.property_rules);
           declared_layers.extend(fragment.declared_layers);
+          preflight |= fragment.preflight;
         }
         Err((error, context)) => {
           if lossy {
@@ -1362,6 +1394,7 @@ impl StyleSheet {
       keyframes,
       property_rules,
       layer_count: layer_order.len(),
+      preflight,
     })
   }
 }
@@ -2488,6 +2521,20 @@ mod tests {
     let sheet = parse_stylesheet(":root { --breakpoint-md: 48em; }");
 
     assert_eq!(sheet.breakpoints.get("md"), None);
+  }
+
+  #[test]
+  fn test_tailwind_import_turns_preflight_on() {
+    let sheet = parse_stylesheet(r#"@import "tailwindcss"; .card { width: 100px; }"#);
+    assert!(sheet.preflight);
+    assert_eq!(sheet.rules.len(), 1);
+  }
+
+  #[test]
+  fn test_other_imports_are_dropped() {
+    let sheet = parse_stylesheet_loosy(r#"@import "./app.css"; .card { width: 100px; }"#);
+    assert!(!sheet.preflight);
+    assert_eq!(sheet.rules.len(), 1);
   }
 
   #[test]

@@ -1881,6 +1881,52 @@ impl FromStr for Style {
   }
 }
 
+/// The UA cosmetics Preflight clears: margins, paddings, list markers, and
+/// heading font tweaks. Structural declarations like `display` stay, matching
+/// what Tailwind's Preflight leaves to the UA.
+const PREFLIGHT_RESET: &[LonghandId] = &[
+  LonghandId::MarginTop,
+  LonghandId::MarginRight,
+  LonghandId::MarginBottom,
+  LonghandId::MarginLeft,
+  LonghandId::MarginInlineStart,
+  LonghandId::MarginInlineEnd,
+  LonghandId::PaddingTop,
+  LonghandId::PaddingRight,
+  LonghandId::PaddingBottom,
+  LonghandId::PaddingLeft,
+  LonghandId::PaddingInlineStart,
+  LonghandId::PaddingInlineEnd,
+  LonghandId::ListStyleType,
+  LonghandId::ListStylePosition,
+  LonghandId::ListStyleImage,
+  LonghandId::FontSize,
+  LonghandId::FontWeight,
+];
+
+impl Style {
+  /// Merges a UA preset; with Preflight on, its cosmetic declarations drop.
+  pub(crate) fn merge_preset(&mut self, preset: Style, preflight: bool) {
+    if !preflight {
+      return self.merge_from(preset);
+    }
+
+    let block = preset.declarations;
+
+    for (declaration, important) in block.declarations.into_iter().zip(block.important) {
+      if declaration
+        .affected_longhands()
+        .iter()
+        .any(|longhand| PREFLIGHT_RESET.contains(&longhand))
+      {
+        continue;
+      }
+
+      self.declarations.push(declaration, important);
+    }
+  }
+}
+
 #[cfg(test)]
 #[path = "stylesheets_tests.rs"]
 mod tests;

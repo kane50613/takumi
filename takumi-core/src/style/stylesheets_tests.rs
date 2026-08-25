@@ -1441,3 +1441,21 @@ fn overflow_visible_paired_with_clip_stays_mixed() {
     SpacePair::from_pair(Overflow::Clip, Overflow::Visible)
   );
 }
+
+#[test]
+fn preflight_drops_preset_cosmetics() {
+  let preset = Style::default()
+    .with(StyleDeclaration::margin_top(Length::Em(0.67)))
+    .with(StyleDeclaration::display(Display::Block));
+
+  let mut with_preflight = Style::default();
+  with_preflight.merge_preset(preset.clone(), true);
+  assert_eq!(
+    with_preflight.declarations.declarations.as_slice(),
+    &[StyleDeclaration::display(Display::Block)]
+  );
+
+  let mut without_preflight = Style::default();
+  without_preflight.merge_preset(preset, false);
+  assert_eq!(without_preflight.declarations.declarations.len(), 2);
+}
