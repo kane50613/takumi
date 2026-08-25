@@ -302,6 +302,7 @@ impl std::fmt::Display for CssToken {
 }
 
 /// Defines reusable message templates for CSS parse errors.
+#[derive(Clone, Copy)]
 #[non_exhaustive]
 pub(crate) enum CssExpectedMessage {
   /// Expects a value or the `none` keyword.
