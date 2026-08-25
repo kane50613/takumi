@@ -62,11 +62,12 @@ const image = await render(<div className="card">Hello</div>, {
 
 **Every `var()` reads them**, in stylesheets, in `<style>` tags, and in `tw`.
 
-| Competing declaration                | Result                        |
-| ------------------------------------ | ----------------------------- |
-| Equally specific `:root` rule in CSS | `cssVariables` wins           |
-| Declaration on the element           | Element declaration wins      |
-| `!important` declaration             | `!important` declaration wins |
+| Competing declaration                | Result                   |
+| ------------------------------------ | ------------------------ |
+| Equally specific `:root` rule in CSS | `cssVariables` wins      |
+| Declaration on the element           | Element declaration wins |
+
+The generated rule comes after every stylesheet, so a media query at equal specificity still loses. Override an entry with a more specific selector, such as `:root:root`.
 
 **Values containing `;`, `{`, `}`, `/*` or `!important` are dropped.** They could escape the generated rule.
 
@@ -153,7 +154,7 @@ Declare tokens in a `:root` rule, or pass them as [the `cssVariables` option](#c
 <div tw="bg-brand-500 p-gutter" />
 ```
 
-The variables follow the CSS cascade. A media query or a selector can override them.
+Tokens declared in a stylesheet follow the CSS cascade. A media query or a selector can override them. Tokens passed as `cssVariables` sit after every stylesheet, so overriding one takes a more specific selector.
 
 ```css
 @media (prefers-color-scheme: dark) {
