@@ -1,4 +1,4 @@
-/// A theme namespace, spelled as the CSS custom-property prefix it reads.
+/// A variable namespace, spelled as the CSS custom-property prefix it reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Namespace {
   /// `--color-*`

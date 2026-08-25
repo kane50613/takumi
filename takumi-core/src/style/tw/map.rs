@@ -32,7 +32,7 @@ macro_rules! property_parsers {
     }
 
     impl PropertyParser {
-      /// The theme namespaces this candidate's value type reads.
+      /// The variable namespaces this candidate's value type reads.
       pub fn namespaces(&self) -> &'static [Namespace] {
         match self {
           $(Self::$variant(..) => parser_namespaces!($parse $(, $($namespace),+)?),)+
@@ -85,7 +85,7 @@ property_parsers! {
   TextWrap(TextWrap) => TextWrap,
   ColorCurrent(ColorInput) => ColorInput,
   ColorTransparent(ColorInput) => ColorInput,
-  StopColor(TwThemeColor) => TwThemeColor,
+  StopColor(TwVarColor) => TwVarColor,
   Percentage(PercentageNumber) => PercentageNumber,
   FontFamily(FontFamily) => FontFamily,
   LineClamp(LineClamp) => LineClamp,
@@ -113,7 +113,7 @@ property_parsers! {
 /// has no built-in value to expand, so this is the only place its target is
 /// written down; a prefix reading two namespaces emits one variable per group,
 /// and the undefined ones leave their longhands unset.
-pub(crate) static THEME_TARGETS: phf::Map<&str, &[(Namespace, &[LonghandId])]> = phf_map! {
+pub(crate) static VAR_TARGETS: phf::Map<&str, &[(Namespace, &[LonghandId])]> = phf_map! {
   "aspect" => &[(Namespace::Aspect, &[LonghandId::AspectRatio])],
   "basis" => &[(Namespace::Spacing, &[LonghandId::FlexBasis])],
   "bg" => &[(Namespace::Color, &[LonghandId::BackgroundColor])],

@@ -7,7 +7,7 @@ use crate::style::{ComputedStyle, LonghandId, Style, properties::BackgroundImage
 /// what these assertions are about.
 fn parse_property(token: &str) -> Option<Vec<StyleDeclaration>> {
   Some(match TailwindProperty::parse(token)? {
-    TailwindProperty::ThemeVar(theme_var) => theme_var.builtin_declarations(),
+    TailwindProperty::VarUtility(var_utility) => var_utility.builtin_declarations(),
     property => expand(property),
   })
 }
@@ -26,7 +26,7 @@ fn parse_value(token: &str) -> Option<(Vec<StyleDeclaration>, Option<Breakpoint>
 
   Some((
     match value.property {
-      TailwindProperty::ThemeVar(theme_var) => theme_var.builtin_declarations(),
+      TailwindProperty::VarUtility(var_utility) => var_utility.builtin_declarations(),
       property => expand(property),
     },
     value.breakpoint,
@@ -76,11 +76,11 @@ fn test_parse_red_500_color_utilities() {
   let cases: &[(&str, TailwindProperty)] = &[
     (
       "shadow-red-500",
-      TailwindProperty::ShadowColor(TwThemeColor::parse_tw("red-500").expect("palette colour")),
+      TailwindProperty::ShadowColor(TwVarColor::parse_tw("red-500").expect("palette colour")),
     ),
     (
       "text-shadow-red-500",
-      TailwindProperty::TextShadowColor(TwThemeColor::parse_tw("red-500").expect("palette colour")),
+      TailwindProperty::TextShadowColor(TwVarColor::parse_tw("red-500").expect("palette colour")),
     ),
     (
       "decoration-red-500",
@@ -569,7 +569,7 @@ fn test_values_sorting() {
     .iter()
     .map(|value| {
       let declarations = match &value.property {
-        TailwindProperty::ThemeVar(theme_var) => theme_var.builtin_declarations(),
+        TailwindProperty::VarUtility(var_utility) => var_utility.builtin_declarations(),
         property => expand(property.clone()),
       };
 
@@ -1165,7 +1165,7 @@ fn root_with(variables: &[(&str, &str)]) -> ComputedStyle {
 
 /// Logical sides resolve to a physical one at apply time, after substitution.
 #[test]
-fn test_logical_side_reads_a_theme_variable() {
+fn test_logical_side_reads_a_css_variable() {
   let values =
     TailwindValues::from_str("ms-gutter ps-gutter").expect("tailwind values should parse");
   let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
@@ -1177,7 +1177,7 @@ fn test_logical_side_reads_a_theme_variable() {
 }
 
 #[test]
-fn test_corner_radius_reads_a_theme_variable() {
+fn test_corner_radius_reads_a_css_variable() {
   let values = TailwindValues::from_str("rounded-t-card").expect("tailwind values should parse");
   let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
 
@@ -1250,11 +1250,11 @@ fn test_aspect_keywords_survive_the_move_out_of_the_fixed_table() {
 
   let square = Style::from(square.into_declaration_block(Viewport::new((100, 100))))
     .inherit(&ComputedStyle::default());
-  let themed = Style::from(video.into_declaration_block(Viewport::new((100, 100))))
+  let styled = Style::from(video.into_declaration_block(Viewport::new((100, 100))))
     .inherit(&root_with(&[("--aspect-video", "4/3")]));
 
   assert_eq!(square.aspect_ratio, AspectRatio::Ratio(1.0));
-  assert_eq!(themed.aspect_ratio, AspectRatio::Ratio(4.0 / 3.0));
+  assert_eq!(styled.aspect_ratio, AspectRatio::Ratio(4.0 / 3.0));
 }
 
 /// A custom `--text-*` token spells its line height in the companion variable,
@@ -1312,7 +1312,7 @@ fn test_numeric_leading_scales_with_spacing() {
 }
 
 #[test]
-fn test_gradient_reads_theme_variables() {
+fn test_gradient_reads_css_variables() {
   let values = TailwindValues::from_str("bg-linear-to-r from-brand-500 to-red-500")
     .expect("tailwind values should parse");
   let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
@@ -1393,9 +1393,9 @@ fn test_gradient_state_does_not_inherit() {
 }
 
 /// The shadow colour utility overrides every layer through the variable it
-/// sets, and reads the theme like any colour utility.
+/// sets, and reads its variable like any colour utility.
 #[test]
-fn test_shadow_color_reads_theme_variables() {
+fn test_shadow_color_reads_css_variables() {
   let values =
     TailwindValues::from_str("shadow-md shadow-brand-500").expect("tailwind values should parse");
   let computed = Style::from(values.into_declaration_block(Viewport::new((100, 100))))

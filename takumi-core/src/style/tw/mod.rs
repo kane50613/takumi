@@ -17,7 +17,7 @@ use smallvec::SmallVec;
 use crate::{
   style::{
     tw::{
-      map::{FIXED_PROPERTIES, PREFIX_PARSERS, THEME_TARGETS},
+      map::{FIXED_PROPERTIES, PREFIX_PARSERS, VAR_TARGETS},
       parser::*,
     },
     *,
@@ -429,7 +429,7 @@ pub(crate) enum TailwindProperty {
   /// `box-shadow` property.
   Shadow(BoxShadow),
   /// `box-shadow` color override.
-  ShadowColor(TwThemeColor),
+  ShadowColor(TwVarColor),
   /// `display` property.
   Display(Display),
   /// `list-style-type` property.
@@ -665,7 +665,7 @@ pub(crate) enum TailwindProperty {
   /// `text-shadow` property.
   TextShadow(TextShadow),
   /// `text-shadow` color override.
-  TextShadowColor(TwThemeColor),
+  TextShadowColor(TwVarColor),
   /// `box-shadow` layer set.
   ShadowList(&'static [BoxShadow]),
   /// `text-shadow` layer set.
@@ -689,35 +689,35 @@ pub(crate) enum TailwindProperty {
   /// `bg-conic` property.
   BgConicAngle(Angle),
   /// `from` property.
-  GradientFrom(TwThemeColor),
+  GradientFrom(TwVarColor),
   /// `to` property.
-  GradientTo(TwThemeColor),
+  GradientTo(TwVarColor),
   /// `via` property.
-  GradientVia(TwThemeColor),
+  GradientVia(TwVarColor),
   /// Gradient `from` stop position.
   GradientFromPosition(Length),
   /// Gradient `via` stop position.
   GradientViaPosition(Length),
   /// Gradient `to` stop position.
   GradientToPosition(Length),
-  /// A theme variable standing in for the built-in value it falls back to.
+  /// A CSS variable standing in for the built-in value it falls back to.
   /// Tailwind compiles a utility to `var(--color-red-500)`, not to the colour.
-  ThemeVar(ThemeVar),
+  VarUtility(VarUtility),
 }
 
 /// A utility resolved from custom properties: one [`TwVarRef`] declaration per
 /// longhand it writes.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct ThemeVar {
+pub(crate) struct VarUtility {
   targets: SmallVec<[StyleDeclaration; 2]>,
 }
 
-impl ThemeVar {
+impl VarUtility {
   /// One declaration per longhand, sharing the variable the prefix reads.
   /// `text-lg` spells its line height in a companion variable, so one token can
   /// set the size without dragging the leading with it.
   /// `None` when a declaration has no single longhand to defer (it composes
-  /// through custom properties instead), leaving the utility unthemed.
+  /// through custom properties instead), leaving the utility on its built-in value.
   fn from_builtin(
     name: &Arc<str>,
     expression: &Arc<str>,
@@ -787,7 +787,7 @@ fn companion_variable(name: &str, longhand: LonghandId) -> Option<Arc<str>> {
 /// The `var()` expression a utility suffix reads, or `None` when the value is
 /// spelled in the class itself. Numeric spacing multiplies the `--spacing` step
 /// the way Tailwind's own `calc(var(--spacing) * 4)` does.
-fn theme_expression(
+fn var_expression(
   namespaces: &[Namespace],
   suffix: &str,
   negative: bool,
@@ -923,7 +923,7 @@ pub(crate) trait TailwindPropertyParser: Sized + for<'i> FromCss<'i> {
     Self::from_css_str(token).ok()
   }
 
-  /// Theme namespaces this value type reads, tried in order. The utility keeps
+  /// Variable namespaces this value type reads, tried in order. The utility keeps
   /// the built-in value as the fallback behind `var()`, so this only decides
   /// which variable name the utility reads.
   const NAMESPACES: &'static [Namespace] = &[];
@@ -1038,22 +1038,22 @@ impl TailwindProperty {
           property
         };
 
-        if let Some((name, expression)) = theme_expression(parser.namespaces(), suffix, negative)
-          && let Some(theme_var) =
-            ThemeVar::from_builtin(&name, &expression, property.clone().expand_targets())
+        if let Some((name, expression)) = var_expression(parser.namespaces(), suffix, negative)
+          && let Some(var_utility) =
+            VarUtility::from_builtin(&name, &expression, property.clone().expand_targets())
         {
-          return Some(TailwindProperty::ThemeVar(theme_var));
+          return Some(TailwindProperty::VarUtility(var_utility));
         }
 
         return Some(property);
       }
 
       // No built-in value, but the prefix still names what the utility writes.
-      if let Some(groups) = THEME_TARGETS.get(prefix) {
+      if let Some(groups) = VAR_TARGETS.get(prefix) {
         let targets: SmallVec<[StyleDeclaration; 2]> = groups
           .iter()
           .filter_map(|(namespace, longhands)| {
-            let (name, expression) = theme_expression(&[*namespace], suffix, negative)?;
+            let (name, expression) = var_expression(&[*namespace], suffix, negative)?;
 
             Some(
               longhands
@@ -1065,7 +1065,7 @@ impl TailwindProperty {
           .collect();
 
         if !targets.is_empty() {
-          return Some(TailwindProperty::ThemeVar(ThemeVar { targets }));
+          return Some(TailwindProperty::VarUtility(VarUtility { targets }));
         }
       }
     }
@@ -1076,8 +1076,8 @@ impl TailwindProperty {
   #[inline(never)]
   fn apply(self, builder: &mut TailwindDeclarationBuilder, important: bool) {
     match self {
-      TailwindProperty::ThemeVar(theme_var) => {
-        for target in theme_var.targets {
+      TailwindProperty::VarUtility(var_utility) => {
+        for target in var_utility.targets {
           builder.push(target, important);
         }
       }

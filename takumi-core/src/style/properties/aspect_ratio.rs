@@ -59,7 +59,7 @@ impl Animatable for AspectRatio {
 impl TailwindPropertyParser for AspectRatio {
   const NAMESPACES: &'static [Namespace] = &[Namespace::Aspect];
 
-  /// `square` is a static ratio upstream, `video` a theme token whose built-in
+  /// `square` is a static ratio upstream, `video` a variable token whose built-in
   /// value this stands in for.
   fn parse_tw(token: &str) -> Option<Self> {
     match_ignore_ascii_case! {token,
