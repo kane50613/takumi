@@ -22,7 +22,7 @@ export const templates: Template[] = [
   {
     id: "welcome",
     name: "Welcome",
-    description: "Edit the code, press Run, watch it render",
+    description: "Edit the code, press Run. The palette lives in options.cssVariables",
     kind: "image",
     code: welcome,
   },
@@ -36,14 +36,14 @@ export const templates: Template[] = [
   {
     id: "twitter-profile-card",
     name: "Profile card",
-    description: "Remote avatar, rounded borders, stats row",
+    description: "One accent variable skins the border, handle and avatar ring",
     kind: "image",
     code: twitterProfileCard,
   },
   {
     id: "article-cover",
     name: "Article cover",
-    description: "Blog header with a gradient background and a byline",
+    description: "Blog header with a gradient background, themed by a brand scale",
     kind: "image",
     code: articleCover,
   },

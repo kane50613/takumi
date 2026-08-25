@@ -2,7 +2,10 @@ export default function Poster() {
   return (
     <div
       tw="flex h-full w-full items-center justify-center"
-      style={{ backgroundImage: "conic-gradient(from 210deg, #ff6b6b, #556270, #ffd93d, #ff6b6b)" }}
+      style={{
+        backgroundImage:
+          "conic-gradient(from 210deg, var(--color-dawn), var(--color-dusk), var(--color-noon), var(--color-dawn))",
+      }}
     >
       <div
         tw="flex h-[560px] w-[560px] flex-col items-center justify-center rounded-full bg-white/10 text-white"
@@ -22,4 +25,9 @@ export const options: PlaygroundOptions = {
   width: 1080,
   height: 1080,
   format: "png",
+  cssVariables: {
+    "--color-dawn": "#ff6b6b",
+    "--color-dusk": "#556270",
+    "--color-noon": "#ffd93d",
+  },
 };
