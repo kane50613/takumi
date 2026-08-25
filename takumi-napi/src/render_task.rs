@@ -12,13 +12,14 @@ use takumi_raster::{DitheringAlgorithm, render, write_image};
 use crate::{
   JsBytes, map_error,
   renderer::{
-    ImageCacheMode, OutputFormat, RenderOptions, RendererState, collect_images, decode_images,
-    deserialize_keyframes, device_pixel_ratio, parse_lang,
+    ImageCacheMode, OutputFormat, RenderOptions, RendererState, class_name_utilities,
+    collect_images, decode_images, deserialize_keyframes, device_pixel_ratio, parse_lang,
   },
 };
 
 pub struct RenderTask {
   pub(crate) draw_debug_border: bool,
+  pub(crate) class_name_utilities: bool,
   pub(crate) node: Option<Node>,
   pub(crate) state: Arc<RendererState>,
   pub(crate) viewport: Viewport,
@@ -58,6 +59,7 @@ impl RenderTask {
       dithering: options.dithering.map(Into::into).unwrap_or_default(),
       time_ms: options.time_ms.unwrap_or_default().max(0) as u64,
       draw_debug_border: options.draw_debug_border.unwrap_or_default(),
+      class_name_utilities: class_name_utilities(options.future),
       stylesheet,
       images: collect_images(env, options.images)?,
       font_families: options.font_families.map(FontFamily::from_names),
@@ -91,6 +93,7 @@ impl Task for RenderTask {
         .font_families(take(&mut self.font_families))
         .lang(take(&mut self.lang))
         .draw_debug_border(self.draw_debug_border)
+        .class_name_utilities(self.class_name_utilities)
         .build(),
     )
     .map_err(map_error)?;

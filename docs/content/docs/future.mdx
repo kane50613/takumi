@@ -1,0 +1,35 @@
+---
+title: Future flags
+description: Opt into behavior that becomes the default in the next major.
+icon: FlaskConical
+---
+
+The `future` render option holds opt-in flags for behavior planned as the next major release's default. Enable them now and the upgrade changes nothing.
+
+```tsx
+const image = await render(node, {
+  width: 1200,
+  height: 630,
+  future: { classNameUtilities: true },
+});
+```
+
+## classNameUtilities
+
+`className` tokens use the same parser as [the `tw` prop](/docs/styling#native-parser). JSX pasted from your app renders without a build step.
+
+```tsx twoslash
+import { render } from "takumi-js";
+
+const image = await render(<div className="flex p-4 bg-brand-500">Hello</div>, {
+  width: 1200,
+  height: 630,
+  future: { classNameUtilities: true },
+});
+```
+
+- A token that is not a utility still matches stylesheet selectors.
+- A stylesheet rule and a utility for the same token both apply. [The cascade resolves conflicts as it does for `tw`](/docs/styling#native-parser).
+- `tw` wins a tie against a `className` utility on the same node.
+
+The flag is off by default because a class name can match utility syntax by accident. A plain `hidden` class with no matching rule would hide the node.

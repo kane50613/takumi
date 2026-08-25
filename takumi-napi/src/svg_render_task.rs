@@ -11,13 +11,14 @@ use takumi_core::{
 use crate::{
   JsBytes, map_error,
   renderer::{
-    ImageCacheMode, RendererState, SvgRenderOptions, collect_images, decode_images,
-    deserialize_keyframes, parse_lang,
+    ImageCacheMode, RendererState, SvgRenderOptions, class_name_utilities, collect_images,
+    decode_images, deserialize_keyframes, parse_lang,
   },
 };
 
 pub struct SvgRenderTask {
   pub(crate) node: Option<Node>,
+  pub(crate) class_name_utilities: bool,
   pub(crate) state: Arc<RendererState>,
   pub(crate) viewport: Viewport,
   pub(crate) time_ms: u64,
@@ -43,6 +44,7 @@ impl SvgRenderTask {
 
     Ok(SvgRenderTask {
       node: Some(node),
+      class_name_utilities: class_name_utilities(options.future),
       state,
       viewport: Viewport::new((options.width, options.height)),
       time_ms: options.time_ms.unwrap_or_default().max(0) as u64,
@@ -77,6 +79,7 @@ impl Task for SvgRenderTask {
         .fonts(&fonts)
         .font_families(take(&mut self.font_families))
         .lang(take(&mut self.lang))
+        .class_name_utilities(self.class_name_utilities)
         .build(),
     )
     .map_err(map_error)
