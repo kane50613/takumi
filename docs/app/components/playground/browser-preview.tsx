@@ -20,18 +20,40 @@ const INPUT = `@layer theme, base, utilities;
 @layer base{*,::after,::before,::backdrop,::file-selector-button{box-sizing:border-box;border:0 solid}}
 @import "tailwindcss/utilities.css" layer(utilities);`;
 
-// Cache the resolved compiler so a remount (e.g. mobile tab switch) can paint
-// the frame without flashing through an async load.
-let compiler: { build(candidates: string[]): string } | undefined;
-let compilerPromise: Promise<void> | undefined;
-function loadCompiler() {
-  compilerPromise ??= compile(INPUT, {
-    base: "/",
-    loadStylesheet: async (id, base) => ({ path: id, base, content: SOURCES[id] ?? "" }),
-  }).then((c) => {
-    compiler = c;
-  });
-  return compilerPromise;
+// Mirrors the binding's `css_variables_stylesheet`: the `--` prefix is optional,
+// and an entry that would escape the `:root` rule is dropped.
+function cssVariableDeclarations(variables: Record<string, string> | undefined) {
+  return Object.entries(variables ?? {})
+    .map(([name, value]): [string, string] => [name.startsWith("--") ? name : `--${name}`, value])
+    .filter(
+      ([name, value]) =>
+        !/[:;{}]/.test(name) &&
+        !/[;{}]/.test(value) &&
+        !value.includes("/*") &&
+        !value.toLowerCase().includes("!important"),
+    )
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, value]) => `${name}:${value};`)
+    .join("");
+}
+
+// One compiler per variables set: `@theme` is what lets a custom token like
+// `bg-brand` compile at all. Cached so a remount (e.g. mobile tab switch) can
+// paint the frame without flashing through a fresh compile.
+const compilers = new Map<string, Promise<{ build(candidates: string[]): string }>>();
+function loadCompiler(declarations: string): Promise<{ build(candidates: string[]): string }> {
+  let promise = compilers.get(declarations);
+  if (!promise) {
+    const input = declarations ? `${INPUT}\n@theme{${declarations}}` : INPUT;
+    promise = compile(input, {
+      base: "/",
+      loadStylesheet: async (id, base) => ({ path: id, base, content: SOURCES[id] ?? "" }),
+    });
+    // Variables the theme parser rejects should not blank the preview.
+    if (declarations) promise = promise.catch(() => loadCompiler(""));
+    compilers.set(declarations, promise);
+  }
+  return promise;
 }
 
 // Mirror the worker's font stack so the pane routes text to the same faces: one
@@ -189,6 +211,7 @@ export default function BrowserPreview({
   height,
   padding,
   cssContents,
+  cssVariables,
 }: {
   html: string | undefined;
   width?: number;
@@ -196,6 +219,7 @@ export default function BrowserPreview({
   height?: number;
   padding?: string;
   cssContents?: string[];
+  cssVariables?: Record<string, string>;
 }) {
   const { ref, scale } = useFitScale(width, height);
   const [paint, setPaint] = useState<Paint>();
@@ -205,27 +229,31 @@ export default function BrowserPreview({
     if (!html) return;
 
     let cancelled = false;
-    const build = () => {
-      if (cancelled || !compiler) return;
+    const declarations = cssVariableDeclarations(cssVariables);
+
+    // The unlayered `:root` sheet comes after everything the compiler built, the
+    // position the binding gives it, so a variable overriding a builtin token
+    // (`--color-red-500`) wins in the pane the way it wins in the render.
+    void loadCompiler(declarations).then((compiler) => {
+      if (cancelled) return;
 
       setPaint({
         type: "paint",
-        css: [ROOT_CSS, compiler.build(extractClasses(html)), ...(cssContents ?? [])].join("\n\n"),
+        css: [
+          ROOT_CSS,
+          compiler.build(extractClasses(html)),
+          ...(cssContents ?? []),
+          ...(declarations ? [`:root{${declarations}}`] : []),
+        ].join("\n\n"),
         html,
         mountStyle: `display:flex;width:100%;height:${height ? "100%" : "auto"};padding:${padding ?? "0"}`,
       });
-    };
-
-    if (compiler) {
-      build();
-    } else {
-      void loadCompiler().then(build);
-    }
+    });
 
     return () => {
       cancelled = true;
     };
-  }, [html, cssContents, height, padding]);
+  }, [html, cssContents, cssVariables, height, padding]);
 
   // `border-0` overrides the border an iframe carries by default, which paints
   // a light ring around the preview.

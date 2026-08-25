@@ -131,7 +131,13 @@ async function renderOutput({
     const pdf = await loadPdfRenderer();
 
     return {
-      buffer: await pdf.render(node, { ...options.pdf, stylesheets, images, fonts }),
+      buffer: await pdf.render(node, {
+        cssVariables: options.cssVariables,
+        ...options.pdf,
+        stylesheets,
+        images,
+        fonts,
+      }),
       kind: "pdf",
       format: "pdf",
     };
@@ -150,6 +156,7 @@ async function renderOutput({
         quality: options.quality,
         devicePixelRatio: options.devicePixelRatio,
         keyframes: options.keyframes,
+        cssVariables: options.cssVariables,
         images,
         fonts,
         stylesheets,
@@ -186,6 +193,7 @@ async function renderRequest(renderer: Renderer, id: number, code: string) {
       cssContents: options.keyframes
         ? [...effectiveStylesheets, keyframesToCss(options.keyframes)]
         : effectiveStylesheets,
+      cssVariables: options.cssVariables,
     });
   }
 

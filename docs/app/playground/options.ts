@@ -42,6 +42,10 @@ declare global {
      */
     stylesheets?: string[];
     /**
+     * @description theme cssVariables set on `:root`. `{ "--color-brand": "#7c3aed" }` makes `bg-brand` resolve; the `--` prefix is optional.
+     */
+    cssVariables?: Record<string, string>;
+    /**
      * @description structured keyframes registered alongside the stylesheets.
      */
     keyframes?: Keyframes;
