@@ -1,4 +1,10 @@
-use std::{borrow::Cow, collections::HashMap, fmt, str::FromStr, sync::Arc};
+use std::{
+  borrow::Cow,
+  collections::HashMap,
+  fmt,
+  str::FromStr,
+  sync::{Arc, OnceLock},
+};
 
 use cssparser::{Parser, ParserInput, RuleBodyParser, Token, match_ignore_ascii_case};
 use parley::Language;
@@ -79,17 +85,23 @@ pub(crate) struct TwVarRef {
 
 fn deferred_to_css<W: fmt::Write>(deferred: &DeferredDeclaration, dest: &mut W) -> fmt::Result {
   let name = match deferred.property {
-    PropertyId::Longhand(id) => format!("{:?}", id),
-    PropertyId::Shorthand(id) => format!("{:?}", id),
+    PropertyId::Longhand(id) => id.css_name(),
+    PropertyId::Shorthand(id) => id.css_name(),
     _ => return Ok(()),
   };
 
-  write!(
-    dest,
-    "{}: {};",
-    to_kebab_case(&name),
-    deferred.specified_value
-  )
+  write!(dest, "{}: {};", name, deferred.specified_value)
+}
+
+/// `webkit_text_fill_color` → `-webkit-text-fill-color`.
+fn snake_to_css_name(name: &&str) -> Box<str> {
+  let mut kebab = name.replace("r#", "").replace('_', "-");
+
+  if kebab.starts_with("webkit-") {
+    kebab.insert(0, '-');
+  }
+
+  kebab.into()
 }
 
 impl TwVarRef {
@@ -290,6 +302,20 @@ macro_rules! define_style {
         const fn index(self) -> usize {
           self as usize
         }
+
+        const SNAKE_NAMES: [&'static str; Self::COUNT] = [
+          $(stringify!($longhand),)*
+          $(stringify!($transient),)*
+        ];
+
+        /// The property's CSS name, e.g. `-webkit-text-fill-color`.
+        pub(crate) fn css_name(self) -> &'static str {
+          static NAMES: OnceLock<Box<[Box<str>]>> = OnceLock::new();
+          let names =
+            NAMES.get_or_init(|| LonghandId::SNAKE_NAMES.iter().map(snake_to_css_name).collect());
+
+          &names[self.index()]
+        }
       }
 
       /// Identifies a shorthand property that expands into longhands.
@@ -330,21 +356,13 @@ macro_rules! define_style {
           }
         }
 
+        const EXPECT_INFO: [(CssExpectedMessage, &'static [CssToken]); Self::COUNT] = [
+          $((<$longhand_ty as FromCss>::EXPECT_MESSAGE, <$longhand_ty as FromCss>::VALID_TOKENS),)*
+          $((<$transient_ty as FromCss>::EXPECT_MESSAGE, <$transient_ty as FromCss>::VALID_TOKENS),)*
+        ];
+
         fn expect_info(self) -> (CssExpectedMessage, &'static [CssToken]) {
-          match self {
-            $(
-              Self::[<$longhand:camel>] => (
-                <$longhand_ty as FromCss>::EXPECT_MESSAGE,
-                <$longhand_ty as FromCss>::VALID_TOKENS,
-              ),
-            )*
-            $(
-              Self::[<$transient:camel>] => (
-                <$transient_ty as FromCss>::EXPECT_MESSAGE,
-                <$transient_ty as FromCss>::VALID_TOKENS,
-              ),
-            )*
-          }
+          Self::EXPECT_INFO[self.index()]
         }
       }
 
@@ -365,15 +383,25 @@ macro_rules! define_style {
           }
         }
 
+        const EXPECT_INFO: [(CssExpectedMessage, &'static [CssToken]);
+          [$(Self::[<$shorthand:camel>]),*].len()] = [
+          $((<$shorthand_ty as FromCss>::EXPECT_MESSAGE, <$shorthand_ty as FromCss>::VALID_TOKENS),)*
+        ];
+
         fn expect_info(self) -> (CssExpectedMessage, &'static [CssToken]) {
-          match self {
-            $(
-              Self::[<$shorthand:camel>] => (
-                <$shorthand_ty as FromCss>::EXPECT_MESSAGE,
-                <$shorthand_ty as FromCss>::VALID_TOKENS,
-              ),
-            )*
-          }
+          Self::EXPECT_INFO[self as usize]
+        }
+
+        const SNAKE_NAMES: [&'static str; Self::EXPECT_INFO.len()] =
+          [$(stringify!($shorthand),)*];
+
+        /// The property's CSS name, e.g. `border-radius`.
+        pub(crate) fn css_name(self) -> &'static str {
+          static NAMES: OnceLock<Box<[Box<str>]>> = OnceLock::new();
+          let names =
+            NAMES.get_or_init(|| ShorthandId::SNAKE_NAMES.iter().map(snake_to_css_name).collect());
+
+          &names[self as usize]
         }
       }
 
@@ -1034,11 +1062,7 @@ macro_rules! define_style {
           match self {
             $(
               Self::[<$longhand:camel>](value) => {
-                let name = stringify!($longhand).replace("r#", "").replace("_", "-");
-                if name.starts_with("webkit-") {
-                  dest.write_str("-")?;
-                }
-                dest.write_str(&name)?;
+                dest.write_str(LonghandId::[<$longhand:camel>].css_name())?;
                 dest.write_str(": ")?;
                 value.to_css(dest)?;
                 dest.write_str(";")
@@ -1046,8 +1070,7 @@ macro_rules! define_style {
             )*
             $(
               Self::[<$transient:camel>](value) => {
-                let name = stringify!($transient).replace("_", "-");
-                dest.write_str(&name)?;
+                dest.write_str(LonghandId::[<$transient:camel>].css_name())?;
                 dest.write_str(": ")?;
                 value.to_css(dest)?;
                 dest.write_str(";")
@@ -1059,13 +1082,12 @@ macro_rules! define_style {
             Self::VarRef(var_ref) => deferred_to_css(&var_ref.deferred, dest),
             Self::Deferred(deferred) => deferred_to_css(deferred, dest),
             Self::CssWideKeyword(id, keyword) => {
-              let name = format!("{:?}", id);
               let keyword_str = match keyword {
                 CssWideKeyword::Initial => "initial",
                 CssWideKeyword::Inherit => "inherit",
                 CssWideKeyword::Unset => "unset",
               };
-              write!(dest, "{}: {};", to_kebab_case(&name), keyword_str)
+              write!(dest, "{}: {};", id.css_name(), keyword_str)
             }
           }
         }
@@ -1848,24 +1870,6 @@ impl FromStr for Style {
   fn from_str(input: &str) -> Result<Self, Self::Err> {
     StyleDeclarationBlock::from_str(input).map(Into::into)
   }
-}
-
-pub(crate) fn to_kebab_case(s: &str) -> String {
-  let mut result = String::new();
-  for (i, c) in s.chars().enumerate() {
-    if c.is_uppercase() {
-      if i > 0 {
-        result.push('-');
-      }
-      result.push(c.to_ascii_lowercase());
-    } else {
-      result.push(c);
-    }
-  }
-  if result.starts_with("webkit-") {
-    result.insert(0, '-');
-  }
-  result
 }
 
 #[cfg(test)]
