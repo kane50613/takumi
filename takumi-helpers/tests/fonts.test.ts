@@ -309,7 +309,7 @@ describe("googleFonts", () => {
     const cache = new Map<string, Promise<string>>();
 
     await googleFonts({ families: ["Inter"], fetch: fetchMock, cache });
-    expect(
+    await expect(
       googleFonts({ families: ["Inter"], fetch: fetchMock, cache, allowUrl: () => false }),
     ).rejects.toThrow(/blocked by allowUrl/);
     await googleFonts({ families: ["Inter"], fetch: fetchMock, cache });
@@ -323,7 +323,7 @@ describe("googleFonts", () => {
     const cache = new Map<string, Promise<string>>();
 
     await googleFonts({ families: ["Inter"], fetch: fetchMock, cache });
-    expect(
+    await expect(
       googleFonts({ families: ["Inter"], fetch: fetchMock, cache, maxBytes: 1 }),
     ).rejects.toThrow("Response exceeds 1 bytes");
     await googleFonts({ families: ["Inter"], fetch: fetchMock, cache });
@@ -348,9 +348,10 @@ describe("googleFonts", () => {
     const families = ["Policy Cache Test"];
 
     await googleFonts({ families, fetch: fetchMock });
-    expect(googleFonts({ families, fetch: fetchMock, allowUrl: () => false })).rejects.toThrow(
-      /blocked by allowUrl/,
-    );
+    await expect(
+      googleFonts({ families, fetch: fetchMock, allowUrl: () => false }),
+    ).rejects.toThrow(/blocked by allowUrl/);
+    await expect(googleFonts({ families, fetch: fetchMock })).resolves.toBeDefined();
 
     const cssCalls = fetchMock.mock.calls.filter(([url]) => (url as string).includes("/css2"));
     expect(cssCalls).toHaveLength(1);
