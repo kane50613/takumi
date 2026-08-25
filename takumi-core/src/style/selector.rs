@@ -541,11 +541,11 @@ enum AtRulePrelude {
   Media(MediaQueryList),
   Property(String),
   Supports(bool),
-  /// Tailwind's `@theme`, read as the `:root` rule it compiles to. `emit` is
-  /// false for `@theme reference`, whose variables exist only for the compiler.
-  Theme {
-    emit: bool,
-  },
+  /// Tailwind's `@theme`, read as the `:root` rule it compiles to. Modifiers
+  /// are accepted but read the same way: takumi resolves `var()` through the
+  /// cascade at computed time, so `reference` and `inline` collapse into the
+  /// emitted rule.
+  Theme,
 }
 
 fn parse_fragment_with_mode<'i, 't>(
@@ -655,11 +655,6 @@ fn parse_property_rule<'i, 't>(
   })
 }
 
-/// Consumes a block whose contents are dropped, e.g. `@theme reference`.
-fn skip_block(input: &mut Parser<'_, '_>) {
-  while input.next_including_whitespace_and_comments().is_ok() {}
-}
-
 /// Parses a `@theme` block body: declarations landing on `:root`, plus any
 /// `@keyframes` the theme carries, the way Tailwind's own `theme.css` pairs
 /// `--animate-*` tokens with their keyframes.
@@ -744,17 +739,11 @@ impl<'i> RuleBodyItemParser<'i, ThemeBodyItem, StyleSheetParseError> for ThemeBl
 }
 
 fn parse_theme_block<'i, 't>(
-  emit: bool,
   media_queries: &[MediaQueryList],
   layer: Option<&LayerPath>,
   lossy: bool,
   input: &mut Parser<'i, 't>,
 ) -> Result<StyleSheetFragment, ParseError<'i, StyleSheetParseError>> {
-  if !emit {
-    skip_block(input);
-    return Ok(StyleSheetFragment::default());
-  }
-
   let mut root_input = ParserInput::new(":root");
   let selectors = SelectorList::parse(
     &TakumiSelectorParser,
@@ -858,17 +847,15 @@ fn parse_at_rule_prelude<'i, 't>(
   }
 
   if name.eq_ignore_ascii_case("theme") {
-    let mut emit = true;
     while !input.is_exhausted() {
       let location = input.current_source_location();
       let modifier = input.expect_ident()?.clone();
       match_ignore_ascii_case! {&modifier,
-        "reference" => emit = false,
-        "default" | "static" | "inline" => {},
+        "reference" | "default" | "static" | "inline" => {},
         _ => return Err(location.new_unexpected_token_error(Token::Ident(modifier))),
       }
     }
-    return Ok(AtRulePrelude::Theme { emit });
+    return Ok(AtRulePrelude::Theme);
   }
 
   if name.eq_ignore_ascii_case("property") {
@@ -1046,9 +1033,7 @@ fn parse_nested_at_rule_block<'i, 't>(
       for _ in RuleBodyParser::new(input, &mut parser).flatten() {}
       Ok(StyleSheetFragment::default())
     }
-    AtRulePrelude::Theme { emit } => {
-      parse_theme_block(emit, media_queries, current_layer, lossy, input)
-    }
+    AtRulePrelude::Theme => parse_theme_block(media_queries, current_layer, lossy, input),
     AtRulePrelude::Keyframes(_) | AtRulePrelude::Property(_) => {
       Err(input.new_custom_error(StyleSheetParseError::unsupported_nested_at_rule()))
     }
@@ -1127,8 +1112,8 @@ impl<'i> AtRuleParser<'i> for RuleParser {
         Ok(fragment)
       }
       AtRulePrelude::Keyframes(name) => parse_keyframes_block(name, &[], self.lossy, input),
-      AtRulePrelude::Theme { emit } => {
-        parse_theme_block(emit, &[], self.current_layer.as_ref(), self.lossy, input)
+      AtRulePrelude::Theme => {
+        parse_theme_block(&[], self.current_layer.as_ref(), self.lossy, input)
       }
       AtRulePrelude::Media(media_query) => {
         let mut fragment = parse_fragment_with_mode(
@@ -2372,10 +2357,14 @@ mod tests {
     );
   }
 
+  /// Tailwind inlines a reference token's value into utilities instead of
+  /// emitting `:root`. Here utilities resolve `var()` through the cascade, so
+  /// the token still has to land on `:root` for `bg-brand` to see it.
   #[test]
-  fn test_theme_reference_emits_nothing() {
+  fn test_theme_reference_still_emits_root() {
     let sheet = parse_stylesheet("@theme reference { --color-brand: #ff0000; }");
-    assert!(sheet.rules.is_empty());
+    assert_eq!(sheet.rules.len(), 1);
+    assert_eq!(selector_text(&sheet.rules[0]), ":root");
   }
 
   #[test]
