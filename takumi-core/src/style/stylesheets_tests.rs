@@ -1192,6 +1192,25 @@ fn test_var_inherits_custom_properties_from_parent() {
   assert_eq!(child.width, Length::Px(320.0));
 }
 
+/// The shadcn `@theme inline` pattern: a `:root` token aliases another
+/// variable, a subtree overrides the alias target. Custom properties inherit
+/// as specified text and substitute at the consuming element, so the override
+/// reaches the utility without Tailwind's `inline` compilation.
+#[test]
+fn test_var_chain_resolves_at_consuming_element() {
+  let root = inherited_style_from_pairs(
+    [
+      ("--background", "10px"),
+      ("--panel-width", "var(--background)"),
+    ],
+    &ComputedStyle::default(),
+  );
+  let dark = inherited_style_from_pairs([("--background", "20px")], &root);
+  let child = inherited_style_from_pairs([("width", "var(--panel-width)")], &dark);
+
+  assert_eq!(child.width, Length::Px(20.0));
+}
+
 #[test]
 fn test_var_drops_invalid_declaration_without_fallback() {
   let style = inherited_style_from_pairs([("width", "var(--missing)")], &ComputedStyle::default());
