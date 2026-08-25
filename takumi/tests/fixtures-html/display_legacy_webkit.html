@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+  <head>
+    <link rel="stylesheet" href="../shared.css" />
+  </head>
+  <body style="width: 480px; height: 280px">
+    <div
+      style="
+        display: flex;
+        flex-direction: column;
+        row-gap: 8px;
+        width: 100%;
+        height: 100%;
+        padding: 12px;
+        background-color: rgb(241, 245, 249);
+        font-size: 18px;
+      "
+    >
+      <div
+        style="
+          display: -webkit-box;
+          justify-content: space-between;
+          padding: 12px;
+          background-color: rgb(219, 234, 254);
+        "
+      >
+        <span>box</span><span>flex</span>
+      </div>
+      <div
+        style="
+          display: -webkit-flex;
+          justify-content: space-between;
+          padding: 12px;
+          background-color: rgb(220, 252, 231);
+        "
+      >
+        <span>flex</span><span>flex</span>
+      </div>
+      <div>
+        <span
+          style="
+            display: -webkit-inline-box;
+            column-gap: 24px;
+            padding: 12px;
+            background-color: rgb(254, 249, 195);
+          "
+          ><span>inline box</span><span>flex</span></span
+        >
+      </div>
+      <div>
+        <span
+          style="
+            display: -webkit-inline-flex;
+            column-gap: 24px;
+            padding: 12px;
+            background-color: rgb(255, 228, 230);
+          "
+          ><span>inline flex</span><span>flex</span></span
+        >
+      </div>
+    </div>
+  </body>
+</html>

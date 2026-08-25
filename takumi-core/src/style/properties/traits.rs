@@ -807,12 +807,15 @@ macro_rules! declare_enum_from_css_impl {
   (
     $enum_type:ty,
     $($css_value:expr => $variant:path),* $(,)?
+    $(; aliases { $($alias:expr => $alias_variant:path),* $(,)? })?
   ) => {
     impl crate::style::MakeComputed for $enum_type {}
 
     impl<'i> crate::style::FromCss<'i> for $enum_type {
-      const VALID_TOKENS: &'static [crate::style::CssToken] =
-        &[$(crate::style::CssToken::Keyword($css_value)),*];
+      const VALID_TOKENS: &'static [crate::style::CssToken] = &[
+        $(crate::style::CssToken::Keyword($css_value)),*,
+        $($(crate::style::CssToken::Keyword($alias)),*)?
+      ];
 
       fn from_css(input: &mut cssparser::Parser<'i, '_>) -> crate::style::ParseResult<'i, Self> {
         let location = input.current_source_location();
@@ -826,6 +829,9 @@ macro_rules! declare_enum_from_css_impl {
           $(
             $css_value => Ok($variant),
           )*
+          $($(
+            $alias => Ok($alias_variant),
+          )*)?
           _ => Err($crate::style::unexpected_token!(location, token)),
         }
       }
