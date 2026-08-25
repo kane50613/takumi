@@ -14,7 +14,7 @@ Pick a path by what you already have:
 | Design tokens to theme with                | [`cssVariables` or a `:root` rule](#design-tokens)            |
 | One-off styles on one node                 | [the `style` prop](#inline-styles)                            |
 
-The paths combine. Each section spells out who wins when they collide.
+The paths combine. Each section says who wins when they collide.
 
 ## Inline styles
 
@@ -26,7 +26,7 @@ The `style` prop puts `CSSProperties` on one node. It overrides the tag default 
 
 ## Stylesheets
 
-Pass real CSS through `stylesheets` and match it by `className` or `id`.
+Pass real CSS through `stylesheets`. The engine matches it by `className` or `id`.
 
 ```tsx twoslash
 import { render } from "takumi-js";
@@ -49,7 +49,7 @@ The engine handles:
   never match.
 </Callout>
 
-A `<style>` tag feeds the same engine and gets extracted from the JSX automatically.
+A `<style>` tag feeds the same engine. Takumi extracts it from the JSX for you.
 
 ```tsx
 <div className="card">
@@ -60,7 +60,7 @@ A `<style>` tag feeds the same engine and gets extracted from the JSX automatica
 
 ## Tailwind with your bundler
 
-Compile Tailwind with your bundler and pass the generated CSS through `stylesheets`. Tailwind itself does the compiling, so every directive and class name works; [the engine's CSS support](#stylesheets) still bounds what renders. With Vite, import the stylesheet using `?inline`.
+Compile Tailwind with your bundler, then pass the generated CSS through `stylesheets`. Tailwind does the compiling, so every directive and class name works. What renders is still bounded by [the engine's CSS support](#stylesheets). With Vite, import the stylesheet using `?inline`.
 
 ```tsx title="og.tsx"
 import { ImageResponse } from "takumi-js/response";
@@ -94,7 +94,7 @@ export default defineConfig({
 
 ## Tailwind without a build step
 
-Turn on [the `classNameUtilities` future flag](/docs/future#classnameutilities) and `className` tokens run through a built-in parser. JSX pasted from an app renders without renaming a prop.
+Turn on [the `classNameUtilities` future flag](/docs/future#classnameutilities). `className` tokens then run through a built-in parser. JSX pasted from an app renders without renaming a prop.
 
 ```tsx twoslash
 import { render } from "takumi-js";
@@ -111,7 +111,7 @@ const image = await render(
 );
 ```
 
-Arbitrary values work. The parser won't cover every Tailwind feature; the [parser mapping](https://github.com/kane50613/takumi/blob/master/takumi-core/src/style/tw/map.rs) lists every supported class.
+Arbitrary values work. The parser does not cover every Tailwind feature. The [parser mapping](https://github.com/kane50613/takumi/blob/master/takumi-core/src/style/tw/map.rs) lists every supported class.
 
 `className` is a plain prop, so build it dynamically:
 
@@ -130,7 +130,7 @@ const isError = true;
 </div>;
 ```
 
-The `tw` prop feeds the same parser without any flag. It is a plain prop too, takes the same dynamic expressions, exists for satori compatibility, and wins a tie against a `className` utility on the same node.
+The `tw` prop feeds the same parser without any flag. It exists for satori compatibility. It takes the same dynamic expressions, and it wins a tie against a `className` utility on the same node.
 
 ```tsx
 <div tw="bg-blue-500 p-4 rounded-lg">Hello</div>
@@ -138,7 +138,9 @@ The `tw` prop feeds the same parser without any flag. It is a plain prop too, ta
 
 ### Preflight
 
-The native parser applies no Tailwind Preflight by default, so elements keep their UA margins: a `<h1>` gets a `0.67em` top margin until you add `mt-0`. `box-sizing` still defaults to `border-box`. The same import line a Tailwind stylesheet starts with turns Preflight on. It drops the UA margins, list markers and heading font tweaks.
+The native parser applies no Tailwind Preflight by default, so elements keep their UA margins. A `<h1>` gets a `0.67em` top margin until you add `mt-0`. `box-sizing` still defaults to `border-box`.
+
+The same import line a Tailwind stylesheet starts with turns Preflight on. It drops the UA margins, list markers and heading font tweaks.
 
 ```tsx
 const image = await render(node, {
@@ -156,7 +158,7 @@ Utilities sit in the last declared layer, Tailwind's own order:
 | A rule in a named `@layer`   | the utility      |
 | The `style` prop             | the `style` prop |
 
-Prefix a utility with `!` to flip the result: important declarations reverse the layer order, so a `!` utility beats an unlayered rule and a normal `style` declaration.
+Prefix a utility with `!` to flip the result. Important declarations reverse the layer order, so a `!` utility beats an unlayered rule and a normal `style` declaration.
 
 ### Tailwind at-rules
 
@@ -174,11 +176,11 @@ A Tailwind source stylesheet drops into `stylesheets` unchanged. The engine read
 }
 ```
 
-Other Tailwind directives (`@utility`, `@custom-variant`, `@source`, `@plugin`, `@config`) do not parse. Compile those with Tailwind and use [the bundler path](#tailwind-with-your-bundler).
+Other Tailwind directives do not parse: `@utility`, `@custom-variant`, `@source`, `@plugin` and `@config`. Compile those with Tailwind and use [the bundler path](#tailwind-with-your-bundler).
 
 ## Design tokens
 
-A utility reads a CSS custom property, the way Tailwind compiles it: `bg-red-500` resolves `var(--color-red-500)`, `p-4` resolves `calc(var(--spacing) * 4)`. The built-in scale sits behind them as the fallback, so tokens are optional until you want your own palette.
+A utility reads a CSS custom property, the way Tailwind compiles it. `bg-red-500` resolves `var(--color-red-500)`, and `p-4` resolves `calc(var(--spacing) * 4)`. The built-in scale sits behind them as the fallback, so tokens stay optional until you want your own palette.
 
 ### Declaring tokens
 
@@ -206,7 +208,7 @@ const image = await render(<div className="bg-brand-500 p-gutter">Hello</div>, {
 });
 ```
 
-**`cssVariables` entries whose value contains `;`, `{`, `}`, `/*` or `!important`, or whose name contains `:`, `;`, `{` or `}`, are dropped.** They could escape the generated rule.
+**Takumi drops an entry whose value contains `;`, `{`, `}`, `/*` or `!important`. It also drops an entry whose name contains `:`, `;`, `{` or `}`.** Those entries could escape the generated rule.
 
 A nested palette flattens with the `cssVariables` helper. Keys join with `-` into one variable name.
 
@@ -236,7 +238,7 @@ The namespace picks which utilities a token reaches:
 | `--blur-*`                                          | `blur-*` and `backdrop-blur-*` presets                                                                                                         |
 | `--drop-shadow-*`                                   | `drop-shadow-*` presets                                                                                                                        |
 | `--shadow-*`, `--inset-shadow-*`, `--text-shadow-*` | shadow preset shapes. A custom shape carries its own colours, so shadow colour utilities only reach the built-in fallback                      |
-| `--animate-*`                                       | `animate-*`. An unknown token like `animate-wiggle` reads `var(--animate-wiggle)`; pair it with its `@keyframes`                               |
+| `--animate-*`                                       | `animate-*`. An unknown token like `animate-wiggle` reads `var(--animate-wiggle)`. Pair it with its `@keyframes`                               |
 | `--breakpoint-*`                                    | the `sm:`–`2xl:` variants, and new ones like `3xl:`. Variants gate before the cascade, so only an unconditional `:root` declaration moves them |
 
 ### Overriding tokens
@@ -261,9 +263,9 @@ Tokens passed as `cssVariables` sit in a rule after every stylesheet:
 
 ## Where this differs from Tailwind
 
-- Colours reach gradients and shadows: `from-brand-500` and `shadow-brand-500` read `--color-brand-500` like `bg-brand-500` does.
+- Colours reach gradients and shadows. `from-brand-500` and `shadow-brand-500` read `--color-brand-500` like `bg-brand-500` does.
 - Same as Tailwind, but easy to miss: a gradient needs `bg-linear-*`, `bg-radial` or `bg-conic`. Stops alone paint nothing.
 - `--color-red-500: initial` falls back to the built-in red instead of removing `bg-red-500`.
-- A bare `rounded` keeps its built-in value; `rounded-sm` and the rest read the variable.
+- A bare `rounded` keeps its built-in value. `rounded-sm` and the rest read the variable.
 - `--spacing` needs a unit. A bare number makes `p-4` compute pixels here, where a browser rejects the declaration.
 - An aliased token stays live. `--color-brand: var(--background)` follows a subtree `--background` override. In a browser, `@theme inline` exists to arrange that.
