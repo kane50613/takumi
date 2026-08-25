@@ -1191,6 +1191,54 @@ fn test_corner_radius_reads_a_css_variable() {
 }
 
 #[test]
+fn test_shadow_preset_shape_reads_a_css_variable() {
+  use crate::style::properties::BoxShadow;
+
+  let values = TailwindValues::from_str("shadow-md").expect("tailwind values should parse");
+  let style =
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()));
+
+  let computed = style.inherit(&root_with(&[("--shadow-md", "0 5px 5px #ff0000")]));
+
+  assert_eq!(
+    computed.box_shadow.as_deref(),
+    Some(
+      &[BoxShadow {
+        inset: false,
+        offset_x: Length::Px(0.0),
+        offset_y: Length::Px(5.0),
+        blur_radius: Length::Px(5.0),
+        spread_radius: Length::Px(0.0),
+        color: ColorInput::Value(Color::from_rgb(0xff0000)),
+      }][..]
+    )
+  );
+}
+
+#[test]
+fn test_text_shadow_preset_shape_reads_a_css_variable() {
+  use crate::style::properties::TextShadow;
+
+  let values = TailwindValues::from_str("text-shadow-sm").expect("tailwind values should parse");
+  let style =
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()));
+
+  let computed = style.inherit(&root_with(&[("--text-shadow-sm", "1px 1px 0 #00ff00")]));
+
+  assert_eq!(
+    computed.text_shadow.as_deref(),
+    Some(
+      &[TextShadow {
+        offset_x: Length::Px(1.0),
+        offset_y: Length::Px(1.0),
+        blur_radius: Length::Px(0.0),
+        color: ColorInput::Value(Color::from_rgb(0x00ff00)),
+      }][..]
+    )
+  );
+}
+
+#[test]
 fn test_breakpoint_reads_a_css_variable() {
   let overrides = BreakpointOverrides::from([("md".to_owned(), Length::Px(400.0))]);
   let viewport = Viewport::new((500, 500));

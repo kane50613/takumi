@@ -81,6 +81,16 @@ fn blur_css(blur: &TwBlur) -> String {
   }
 }
 
+/// `var(--shadow-md, <built-in layers>)`: the variable overrides the whole
+/// shape, and the fallback keeps its per-layer colour slots. A custom shape
+/// carries its own colours, so `shadow-*` colour utilities only reach the
+/// fallback.
+fn preset_shadow_css(variable: &str, layers: impl Iterator<Item = String>) -> String {
+  let fallback = layers.collect::<Vec<_>>().join(", ");
+
+  format!("var({variable}, {fallback})")
+}
+
 /// The animation list as the shorthand text a `var()` fallback re-parses.
 fn animation_shorthand_css(animations: &Animations) -> String {
   animations
@@ -746,8 +756,23 @@ pub(crate) enum TailwindProperty {
   TextShadowColor(TwVarColor),
   /// `box-shadow` layer set.
   ShadowList(&'static [BoxShadow]),
+  /// A shadow preset whose shape a `--shadow-*` / `--inset-shadow-*`
+  /// variable overrides wholesale.
+  ShadowPreset {
+    /// The variable holding the override, e.g. `--shadow-md`.
+    variable: &'static str,
+    /// Built-in layers serving as the `var()` fallback.
+    layers: &'static [BoxShadow],
+  },
   /// `text-shadow` layer set.
   TextShadowList(&'static [TextShadow]),
+  /// A text-shadow preset whose shape a `--text-shadow-*` variable overrides.
+  TextShadowPreset {
+    /// The variable holding the override, e.g. `--text-shadow-md`.
+    variable: &'static str,
+    /// Built-in layers serving as the `var()` fallback.
+    layers: &'static [TextShadow],
+  },
   /// `isolation` property.
   Isolation(Isolation),
   /// `mix-blend-mode` property.
@@ -1352,6 +1377,14 @@ impl TailwindProperty {
         let layers: Vec<String> = layers.iter().map(box_shadow_css).collect();
 
         push_deferred(builder, important, LonghandId::BoxShadow, layers.join(", "));
+      }
+      TailwindProperty::ShadowPreset { variable, layers } => {
+        push_deferred(
+          builder,
+          important,
+          LonghandId::BoxShadow,
+          preset_shadow_css(variable, layers.iter().map(box_shadow_css)),
+        );
       }
       TailwindProperty::ShadowColor(color) => {
         push_custom(builder, important, "--tw-shadow-color", &color.0);
@@ -2046,6 +2079,14 @@ impl TailwindProperty {
           important,
           LonghandId::TextShadow,
           layers.join(", "),
+        );
+      }
+      TailwindProperty::TextShadowPreset { variable, layers } => {
+        push_deferred(
+          builder,
+          important,
+          LonghandId::TextShadow,
+          preset_shadow_css(variable, layers.iter().map(text_shadow_css)),
         );
       }
       TailwindProperty::TextShadowColor(color) => {
