@@ -537,6 +537,9 @@ impl<'i> AtRuleParser<'i> for KeyframeRuleParser {
 struct RuleParser {
   current_layer: Option<LayerPath>,
   lossy: bool,
+  /// False inside `@media`, `@layer` and `@supports` blocks, where `@import`
+  /// is invalid and its preflight flag must not escape the gate.
+  top_level: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -1138,6 +1141,7 @@ impl<'i> AtRuleParser<'i> for RuleParser {
           &mut RuleParser {
             current_layer: Some(nested_layer),
             lossy: self.lossy,
+            top_level: false,
           },
         )?;
         fragment.declared_layers.splice(0..0, declared_layers);
@@ -1157,6 +1161,7 @@ impl<'i> AtRuleParser<'i> for RuleParser {
           &mut RuleParser {
             current_layer: self.current_layer.clone(),
             lossy: self.lossy,
+            top_level: false,
           },
         )?;
 
@@ -1177,6 +1182,7 @@ impl<'i> AtRuleParser<'i> for RuleParser {
           let mut parser = RuleParser {
             current_layer: self.current_layer.clone(),
             lossy: self.lossy,
+            top_level: false,
           };
           for _ in StyleSheetParser::new(input, &mut parser) {}
           return Ok(StyleSheetFragment::default());
@@ -1187,6 +1193,7 @@ impl<'i> AtRuleParser<'i> for RuleParser {
           &mut RuleParser {
             current_layer: self.current_layer.clone(),
             lossy: self.lossy,
+            top_level: false,
           },
         )
       }
@@ -1210,10 +1217,16 @@ impl<'i> AtRuleParser<'i> for RuleParser {
           .collect(),
         ..StyleSheetFragment::default()
       }),
-      AtRulePrelude::TailwindImport => Ok(StyleSheetFragment {
-        preflight: true,
-        ..StyleSheetFragment::default()
-      }),
+      AtRulePrelude::TailwindImport => {
+        if !self.top_level {
+          return Err(());
+        }
+
+        Ok(StyleSheetFragment {
+          preflight: true,
+          ..StyleSheetFragment::default()
+        })
+      }
       _ => Err(()),
     }
   }
@@ -1336,6 +1349,7 @@ impl StyleSheet {
     let mut rule_parser = RuleParser {
       current_layer: None,
       lossy,
+      top_level: true,
     };
 
     let mut rules = Vec::new();
@@ -2528,6 +2542,24 @@ mod tests {
     let sheet = parse_stylesheet(r#"@import "tailwindcss"; .card { width: 100px; }"#);
     assert!(sheet.preflight);
     assert_eq!(sheet.rules.len(), 1);
+  }
+
+  /// `@import` is only valid at the top of a stylesheet; a nested one must
+  /// not switch Preflight on past its container's gate.
+  #[test]
+  fn test_nested_tailwind_import_is_rejected() {
+    let nested = [
+      r#"@media (min-width: 1px) { @import "tailwindcss"; }"#,
+      r#"@layer base { @import "tailwindcss"; }"#,
+      r#"@supports (display: flex) { @import "tailwindcss"; }"#,
+    ];
+
+    for css in nested {
+      assert!(StyleSheet::parse(css).is_err(), "{css}");
+
+      let sheet = parse_stylesheet_loosy(css);
+      assert!(!sheet.preflight, "{css}");
+    }
   }
 
   #[test]
