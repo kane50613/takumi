@@ -304,12 +304,53 @@ describe("googleFonts", () => {
     expect(cssCalls).toHaveLength(1);
   });
 
+  test("a CSS cache hit rechecks allowUrl and keeps the entry reusable", async () => {
+    const fetchMock = mockInter();
+    const cache = new Map<string, Promise<string>>();
+
+    await googleFonts({ families: ["Inter"], fetch: fetchMock, cache });
+    expect(
+      googleFonts({ families: ["Inter"], fetch: fetchMock, cache, allowUrl: () => false }),
+    ).rejects.toThrow(/blocked by allowUrl/);
+    await googleFonts({ families: ["Inter"], fetch: fetchMock, cache });
+
+    const cssCalls = fetchMock.mock.calls.filter(([url]) => (url as string).includes("/css2"));
+    expect(cssCalls).toHaveLength(1);
+  });
+
+  test("a CSS cache hit rechecks maxBytes and keeps the entry reusable", async () => {
+    const fetchMock = mockInter();
+    const cache = new Map<string, Promise<string>>();
+
+    await googleFonts({ families: ["Inter"], fetch: fetchMock, cache });
+    expect(
+      googleFonts({ families: ["Inter"], fetch: fetchMock, cache, maxBytes: 1 }),
+    ).rejects.toThrow("Response exceeds 1 bytes");
+    await googleFonts({ families: ["Inter"], fetch: fetchMock, cache });
+
+    const cssCalls = fetchMock.mock.calls.filter(([url]) => (url as string).includes("/css2"));
+    expect(cssCalls).toHaveLength(1);
+  });
+
   test("caches CSS process-wide when no cache is passed", async () => {
     const fetchMock = mockInter();
 
     // A unique family so no other test has warmed the shared default cache for its URL.
     await googleFonts({ families: ["Roboto Flex"], fetch: fetchMock });
     await googleFonts({ families: ["Roboto Flex"], fetch: fetchMock });
+
+    const cssCalls = fetchMock.mock.calls.filter(([url]) => (url as string).includes("/css2"));
+    expect(cssCalls).toHaveLength(1);
+  });
+
+  test("the process-wide CSS cache rechecks allowUrl", async () => {
+    const fetchMock = mockInter();
+    const families = ["Policy Cache Test"];
+
+    await googleFonts({ families, fetch: fetchMock });
+    expect(googleFonts({ families, fetch: fetchMock, allowUrl: () => false })).rejects.toThrow(
+      /blocked by allowUrl/,
+    );
 
     const cssCalls = fetchMock.mock.calls.filter(([url]) => (url as string).includes("/css2"));
     expect(cssCalls).toHaveLength(1);

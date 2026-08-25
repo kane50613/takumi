@@ -72,7 +72,8 @@ export type GoogleFontsOptions = FetchOptions & {
    * Cache for the Google Fonts CSS, keyed by request URL, so the metadata is fetched once across
    * renders (e.g. a playground re-rendering on each edit). Holds the in-flight promise, so
    * concurrent calls share one request; failures evict themselves. Defaults to a process-wide
-   * cache; pass your own `Map` to scope it, or a fresh one per call to opt out.
+   * cache; pass your own `Map` to scope it, or a fresh one per call to opt out. Cache hits recheck
+   * the current caller's `allowUrl` and `maxBytes` policies.
    */
   cache?: Pick<Map<string, Promise<string>>, "get" | "set" | "delete">;
   /**
@@ -163,7 +164,18 @@ function fetchCssCached(url: string, options: GoogleFontsOptions) {
 
   const cached = cache.get(url);
   if (cached) {
-    return cached;
+    return cached.then((css) => {
+      if (options.allowUrl && !options.allowUrl(url)) {
+        throw new Error(`URL blocked by allowUrl policy: ${url}`);
+      }
+
+      const maxBytes = options.maxBytes ?? maxCssBytes;
+      const byteLength = new TextEncoder().encode(css).byteLength;
+      if (byteLength > maxBytes) {
+        throw new Error(`Response exceeds ${maxBytes} bytes`);
+      }
+      return css;
+    });
   }
 
   const pending = fetchCss(url, options);
