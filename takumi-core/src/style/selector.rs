@@ -2594,6 +2594,16 @@ mod tests {
   }
 
   #[test]
+  fn test_apply_treats_comments_as_separators() {
+    let sheet = parse_stylesheet(".card { @apply mt-4 /* note */ p-2; }");
+
+    assert_eq!(sheet.rules.len(), 1);
+    let computed = computed_style_from_declarations(&sheet.rules[0].normal_declarations);
+    assert_eq!(computed.margin_top, Length::Rem(1.0));
+    assert_eq!(computed.padding_top, Length::Rem(0.5));
+  }
+
+  #[test]
   fn test_apply_keeps_the_important_suffix() {
     let sheet = parse_stylesheet(".card { @apply mt-4!; }");
 

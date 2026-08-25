@@ -81,10 +81,60 @@ fn blur_css(blur: &TwBlur) -> String {
   }
 }
 
+/// Blanks `/* … */` runs so comments separate utilities the way whitespace
+/// does. Quoted spans, as arbitrary values carry, pass through untouched.
+fn strip_css_comments(source: &str) -> Cow<'_, str> {
+  if !source.contains("/*") {
+    return Cow::Borrowed(source);
+  }
+
+  let bytes = source.as_bytes();
+  let mut out = String::with_capacity(source.len());
+  let mut segment_start = 0;
+  let mut quote: Option<u8> = None;
+  let mut index = 0;
+
+  while index < bytes.len() {
+    match quote {
+      Some(closing) => {
+        if bytes[index] == b'\\' {
+          index += 2;
+          continue;
+        }
+        if bytes[index] == closing {
+          quote = None;
+        }
+      }
+      None => match bytes[index] {
+        opening @ (b'\'' | b'"') => quote = Some(opening),
+        b'/' if bytes.get(index + 1) == Some(&b'*') => {
+          out.push_str(&source[segment_start..index]);
+          out.push(' ');
+          index += 2;
+          while index < bytes.len()
+            && !(bytes[index] == b'*' && bytes.get(index + 1) == Some(&b'/'))
+          {
+            index += 1;
+          }
+          index += 2;
+          segment_start = index.min(bytes.len());
+          continue;
+        }
+        _ => {}
+      },
+    }
+    index += 1;
+  }
+
+  out.push_str(&source[segment_start..]);
+  Cow::Owned(out)
+}
+
 /// Expands an `@apply` utility list into the declarations it stands for.
 /// `None` when a token is unknown or carries a variant, which `@apply` rejects.
 pub(crate) fn expand_apply(source: &str) -> Option<StyleDeclarationBlock> {
   let mut builder = TailwindDeclarationBuilder::default();
+  let source = strip_css_comments(source);
 
   for token in source.split_whitespace() {
     let value = TailwindValue::parse(token)?;
