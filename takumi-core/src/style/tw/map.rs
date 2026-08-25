@@ -105,7 +105,7 @@ property_parsers! {
   FontStretch(FontStretch) => FontStretch,
   VerticalAlign(VerticalAlign) => VerticalAlign,
   DecorationThickness(TextDecorationThickness) => TextDecorationThickness,
-  Animation(Animations) => Animations,
+  Animation(TwAnimation) => TwAnimation,
 }
 
 /// What a prefix writes for a token the built-in scales do not know, as the

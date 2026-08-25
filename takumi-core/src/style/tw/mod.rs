@@ -81,6 +81,24 @@ fn blur_css(blur: &TwBlur) -> String {
   }
 }
 
+/// The animation list as the shorthand text a `var()` fallback re-parses.
+fn animation_shorthand_css(animations: &Animations) -> String {
+  animations
+    .iter()
+    .filter_map(|animation| {
+      let name = animation.name.as_deref()?;
+
+      Some(format!(
+        "{} {} {} {name}",
+        css(&animation.duration),
+        css(&animation.timing_function),
+        css(&animation.iteration_count),
+      ))
+    })
+    .collect::<Vec<_>>()
+    .join(", ")
+}
+
 /// `drop-shadow(var(--drop-shadow-md, …))` for a preset; the bare `drop-shadow`
 /// utility reads `--drop-shadow` itself.
 fn drop_shadow_css(drop_shadow: &TwDropShadow) -> String {
@@ -706,7 +724,7 @@ pub(crate) enum TailwindProperty {
   /// `vertical-align` property.
   VerticalAlign(VerticalAlign),
   /// `animation` shorthand.
-  Animation(Animations),
+  Animation(TwAnimation),
   /// `bg-linear` property.
   BgLinearAngle(Angle),
   /// `bg-radial` property.
@@ -882,7 +900,7 @@ impl FnKind {
   }
 }
 
-fn is_ident_byte(byte: u8) -> bool {
+pub(crate) fn is_ident_byte(byte: u8) -> bool {
   byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_'
 }
 
@@ -2001,7 +2019,27 @@ impl TailwindProperty {
       TailwindProperty::Visibility(visibility) => {
         push_decl!(builder, important, visibility(visibility))
       }
-      TailwindProperty::Animation(animations) => {
+      TailwindProperty::Animation(tw_animation) => {
+        let TwAnimation { animations, token } = tw_animation;
+
+        if let Some(token) = token {
+          let fallback = animation_shorthand_css(&animations);
+          let specified_value = if fallback.is_empty() {
+            format!("var(--animate-{token})")
+          } else {
+            format!("var(--animate-{token}, {fallback})")
+          };
+
+          builder.push(
+            StyleDeclaration::Deferred(DeferredDeclaration {
+              property: PropertyId::Shorthand(ShorthandId::Animation),
+              specified_value,
+            }),
+            important,
+          );
+          return;
+        }
+
         push_decl!(
           builder,
           important,
