@@ -871,7 +871,7 @@ fn parse_at_rule_prelude<'i, 't>(
       token => return Err(location.new_unexpected_token_error(token.clone())),
     };
 
-    if target.eq_ignore_ascii_case("tailwindcss") && input.is_exhausted() {
+    if &*target == "tailwindcss" && input.is_exhausted() {
       return Ok(AtRulePrelude::TailwindImport);
     }
 
@@ -2532,9 +2532,11 @@ mod tests {
 
   #[test]
   fn test_other_imports_are_dropped() {
-    let sheet = parse_stylesheet_loosy(r#"@import "./app.css"; .card { width: 100px; }"#);
-    assert!(!sheet.preflight);
-    assert_eq!(sheet.rules.len(), 1);
+    for import in [r#"@import "./app.css";"#, r#"@import "TAILWINDCSS";"#] {
+      let sheet = parse_stylesheet_loosy(&format!("{import} .card {{ width: 100px; }}"));
+      assert!(!sheet.preflight, "{import}");
+      assert_eq!(sheet.rules.len(), 1, "{import}");
+    }
   }
 
   #[test]
