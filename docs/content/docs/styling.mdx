@@ -195,7 +195,7 @@ The namespace picks which utilities a token reaches:
 
 Some things behave differently from Tailwind here:
 
-- Filters, transforms and animations merge across utilities before the cascade runs, so `--shadow-*`, `--drop-shadow-*`, `--text-shadow-*`, `--blur-*` and `--animate-*` are not read. Colours do reach gradients and shadows: `from-brand-500` and `shadow-brand-500` read `--color-brand-500` like `bg-brand-500` does.
+- Colours reach gradients and shadows: `from-brand-500` and `shadow-brand-500` read `--color-brand-500` like `bg-brand-500` does.
 - A gradient needs `bg-linear-*`, `bg-radial` or `bg-conic`. Stops alone paint nothing, as in Tailwind.
 - `--color-red-500: initial` falls back to the built-in red instead of removing `bg-red-500`.
 - A bare `rounded` keeps its built-in value; `rounded-sm` and the rest read the variable.

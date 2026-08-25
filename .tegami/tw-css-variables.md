@@ -13,7 +13,8 @@ packages:
 Utilities now read the CSS variables Tailwind compiles them to, with the built-in value as the fallback. Define tokens in `:root` or the `cssVariables` option; `--color-brand-500` makes `bg-brand-500` work.
 
 - Colours: `bg-*`, `text-*`, `border-*`, gradient stops (`from-brand-500`), and shadow colours (`shadow-brand-500` through `--tw-shadow-color`).
-- Lengths: `p-4` reads `calc(var(--spacing) * 4)`, `p-gutter` reads `--spacing-gutter`; same for `max-w-*`, `rounded-*`, `text-*`, `font-*`, `tracking-*`, `leading-*`, `aspect-*`.
+- Lengths: `p-4` reads `calc(var(--spacing) * 4)`, `p-gutter` reads `--spacing-gutter`; same for `max-w-*`, `rounded-*`, `text-*`, `tracking-*`, `leading-*`, `aspect-*`.
+- Fonts: `font-sans` reads `--font-sans`, `font-bold` reads `--font-weight-bold`.
 - Shapes: `blur-md`, `drop-shadow-md`, `shadow-md`, `inset-shadow-sm` and `text-shadow-sm` read their `--blur-*` / `--drop-shadow-*` / `--shadow-*` / `--inset-shadow-*` / `--text-shadow-*` tokens. A custom shadow shape carries its own colours, so shadow colour utilities only reach the built-in fallback.
 - Animations: `animate-spin` reads `var(--animate-spin)`, and an unknown token like `animate-wiggle` reads `var(--animate-wiggle)` alone; pair it with its `@keyframes`.
 - Breakpoints: an unconditional `:root` `--breakpoint-*` declaration re-sizes the `sm:`–`2xl:` variants and defines new ones like `3xl:`. Variants gate before the cascade, so a media query cannot move them.
