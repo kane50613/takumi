@@ -274,13 +274,13 @@ impl TailwindPropertyParser for TwBlur {
   }
 }
 
-/// A theme-backed colour expression for gradient stops and shadow colours:
+/// A variable-backed colour expression for gradient stops and shadow colours:
 /// `var(--color-*)`, with the built-in colour as the fallback when the token
 /// names one. `current` and `transparent` stay plain keywords.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct TwThemeColor(pub Arc<str>);
+pub(crate) struct TwVarColor(pub Arc<str>);
 
-impl<'i> FromCss<'i> for TwThemeColor {
+impl<'i> FromCss<'i> for TwVarColor {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let color = ColorInput::from_css(input)?;
     let mut css = String::new();
@@ -292,7 +292,7 @@ impl<'i> FromCss<'i> for TwThemeColor {
   const VALID_TOKENS: &'static [CssToken] = ColorInput::VALID_TOKENS;
 }
 
-impl TailwindPropertyParser for TwThemeColor {
+impl TailwindPropertyParser for TwVarColor {
   fn parse_tw(token: &str) -> Option<Self> {
     let (base, modifier) = match token.split_once('/') {
       Some((base, modifier)) => (base, Some(modifier)),

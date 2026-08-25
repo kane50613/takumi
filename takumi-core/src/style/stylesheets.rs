@@ -785,7 +785,7 @@ macro_rules! define_style {
         CustomProperty(String, String),
         /// A property value that must be resolved after `var()` substitution.
         Deferred(DeferredDeclaration),
-        /// A theme variable with the built-in utility scale as its fallback.
+        /// A CSS variable with the built-in utility scale as its fallback.
         VarRef(TwVarRef),
         /// A CSS-wide keyword targeting a longhand property.
         CssWideKeyword(LonghandId, CssWideKeyword),
