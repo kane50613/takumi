@@ -16,7 +16,7 @@ const image = await render(node, {
 
 ## classNameUtilities
 
-`className` tokens use the same parser as [the `tw` prop](/docs/styling#native-parser). JSX pasted from your app renders without a build step.
+`className` tokens use the same parser as [the `tw` prop](/docs/styling#tailwind-without-a-build-step). JSX pasted from your app renders without a build step.
 
 ```tsx twoslash
 import { render } from "takumi-js";
@@ -29,7 +29,7 @@ const image = await render(<div className="flex p-4 bg-brand-500">Hello</div>, {
 ```
 
 - A token that is not a utility still matches stylesheet selectors.
-- A stylesheet rule and a utility for the same token both apply. [The cascade resolves conflicts as it does for `tw`](/docs/styling#native-parser).
+- A stylesheet rule and a utility for the same token both apply. [The cascade resolves conflicts as it does for `tw`](/docs/styling#tailwind-without-a-build-step).
 - `tw` wins a tie against a `className` utility on the same node.
 
 The flag is off by default because a class name can match utility syntax by accident. A plain `hidden` class with no matching rule would hide the node.
