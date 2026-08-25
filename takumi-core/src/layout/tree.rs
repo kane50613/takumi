@@ -29,10 +29,10 @@ use crate::{
   },
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
   style::{
-    BackgroundImage, BackgroundImages, BlendMode, BoxSizing, Color, ComputedStyle, ContentItem,
-    ContentValue, Display, Filters, Float, Isolation, Length, LineHeight, ListStylePosition,
-    PercentageNumber, Position, SizingContext, Style as NodeStyle, StyleDeclaration,
-    StyleDeclarationBlock, StyleSheet, TextWrapMode, WhiteSpaceCollapse,
+    BackgroundImage, BackgroundImages, BlendMode, BoxSizing, BreakpointOverrides, Color,
+    ComputedStyle, ContentItem, ContentValue, Display, Filters, Float, Isolation, Length,
+    LineHeight, ListStylePosition, PercentageNumber, Position, SizingContext, Style as NodeStyle,
+    StyleDeclaration, StyleDeclarationBlock, StyleSheet, TextWrapMode, WhiteSpaceCollapse,
     apply_stylesheet_animations,
   },
   viewport::Viewport,
@@ -230,6 +230,7 @@ fn build_style_layers(
   node_layers: NodeStyleLayers,
   matched_declarations: &MatchedDeclarationsView<'_>,
   viewport: Viewport,
+  breakpoints: &BreakpointOverrides,
 ) -> (NodeStyle, SmallVec<[StyleDeclarationBlock; 2]>) {
   let mut style = NodeStyle::default();
 
@@ -240,7 +241,7 @@ fn build_style_layers(
     .author_tw
     .map(|author_tw| {
       author_tw
-        .into_declaration_block(viewport)
+        .into_declaration_block(viewport, breakpoints)
         .split_importance()
     })
     .unzip();
@@ -357,6 +358,7 @@ pub(super) fn pseudo_computed_style(
     NodeStyleLayers::default(),
     pseudo_matched,
     parent_context.sizing.viewport,
+    &parent_context.stylesheet.breakpoints,
   );
   let inherited_parent = registered_custom_property_parent_style(
     &parent_context.style,
@@ -1414,8 +1416,12 @@ impl RenderNode {
       let layers = node.take_style_layers();
       let lang = layers.lang;
 
-      let (style_layers, element_important) =
-        build_style_layers(layers, matched, parent_context.sizing.viewport);
+      let (style_layers, element_important) = build_style_layers(
+        layers,
+        matched,
+        parent_context.sizing.viewport,
+        &parent_context.stylesheet.breakpoints,
+      );
       let inherited_parent = registered_custom_property_parent_style(
         &parent_context.style,
         std::slice::from_ref(parent_context.stylesheet.as_ref()),
