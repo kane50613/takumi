@@ -82,7 +82,7 @@ fn raster_options<'fonts>(
     resource_cache,
     options.stylesheets,
     options.keyframes.unwrap_or_default(),
-    options.variables,
+    options.css_variables,
   );
   let lang = parse_lang(options.lang)?;
 
@@ -238,7 +238,7 @@ impl Renderer {
       &self.resource_cache,
       options.stylesheets,
       options.keyframes.unwrap_or_default(),
-      options.variables,
+      options.css_variables,
     );
     let state = self.read_state()?;
 
@@ -330,7 +330,7 @@ impl Renderer {
       draw_debug_border,
       stylesheets,
       keyframes,
-      variables,
+      css_variables,
       device_pixel_ratio,
       fps,
       font_families,
@@ -356,7 +356,7 @@ impl Renderer {
       &self.resource_cache,
       stylesheets,
       keyframes.unwrap_or_default(),
-      variables,
+      css_variables,
     );
     let state = self.read_state()?;
     let scene_options = scenes

@@ -39,7 +39,7 @@ impl MeasureTask {
       &state.resource_cache,
       options.stylesheets,
       deserialize_keyframes(options.keyframes)?,
-      options.variables,
+      options.css_variables,
     );
 
     Ok(MeasureTask {

@@ -75,7 +75,7 @@ pub struct RenderOptions {
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
   /// CSS custom properties for `:root`, which utilities and `var()` both read.
-  pub variables: Option<HashMap<String, String>>,
+  pub css_variables: Option<HashMap<String, String>>,
   /// Structured keyframes to register alongside stylesheets.
   #[serde(default, deserialize_with = "deserialize_optional_keyframes")]
   pub(crate) keyframes: Option<Vec<KeyframesRule>>,
@@ -109,7 +109,7 @@ pub struct SvgRenderOptions {
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
   /// CSS custom properties for `:root`, which utilities and `var()` both read.
-  pub variables: Option<HashMap<String, String>>,
+  pub css_variables: Option<HashMap<String, String>>,
   /// Structured keyframes to register alongside stylesheets.
   #[serde(default, deserialize_with = "deserialize_optional_keyframes")]
   pub(crate) keyframes: Option<Vec<KeyframesRule>>,
@@ -141,7 +141,7 @@ pub struct RenderAnimationOptions {
   /// CSS stylesheets to apply before rendering.
   pub stylesheets: Option<Vec<String>>,
   /// CSS custom properties for `:root`, which utilities and `var()` both read.
-  pub variables: Option<HashMap<String, String>>,
+  pub css_variables: Option<HashMap<String, String>>,
   /// Structured keyframes to register alongside stylesheets.
   #[serde(default, deserialize_with = "deserialize_optional_keyframes")]
   pub(crate) keyframes: Option<Vec<KeyframesRule>>,

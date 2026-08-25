@@ -137,7 +137,7 @@ export type MeasureOptions = (
   /** CSS stylesheets to apply before layout. */
   stylesheets?: string[];
   /** CSS custom properties for `:root`; the `--` prefix is optional. */
-  variables?: Record<string, string>;
+  cssVariables?: Record<string, string>;
   /** Per-render font stack: ordered family names used as the fallback chain. */
   fontFamilies?: string[];
   /** Default BCP-47 language tag applied to the root. */
@@ -266,7 +266,7 @@ export type RenderOptions = (PagedOptions | ViewportOptions) &
     /** CSS stylesheets to apply before layout. */
     stylesheets?: string[];
     /** CSS custom properties for `:root`; the `--` prefix is optional. */
-    variables?: Record<string, string>;
+    cssVariables?: Record<string, string>;
     /** Per-render font stack: ordered family names used as the fallback chain. */
     fontFamilies?: string[];
     /** Default BCP-47 language tag applied to the root. */

@@ -30,7 +30,7 @@ pub struct RenderAnimationTask {
   pub(crate) draw_debug_border: bool,
   pub(crate) stylesheets: Option<Vec<String>>,
   pub(crate) keyframes: Vec<KeyframesRule>,
-  pub(crate) variables: Option<HashMap<String, String>>,
+  pub(crate) css_variables: Option<HashMap<String, String>>,
   pub(crate) images: HashMap<Arc<str>, (JsBytes, ImageCacheMode)>,
   pub(crate) font_families: Option<FontFamily>,
   pub(crate) lang: Option<Lang>,
@@ -55,7 +55,7 @@ impl RenderAnimationTask {
       images,
       stylesheets,
       keyframes,
-      variables,
+      css_variables,
       device_pixel_ratio: dpr,
       font_families,
       lang,
@@ -89,7 +89,7 @@ impl RenderAnimationTask {
       draw_debug_border: draw_debug_border.unwrap_or_default(),
       stylesheets,
       keyframes: deserialize_keyframes(keyframes)?,
-      variables,
+      css_variables,
       images: collect_images(env, images)?,
       font_families: font_families.map(FontFamily::from_names),
       lang: parse_lang(lang)?,
@@ -113,7 +113,7 @@ impl Task for RenderAnimationTask {
         &self.state.resource_cache,
         take(&mut self.stylesheets),
         take(&mut self.keyframes),
-        take(&mut self.variables),
+        take(&mut self.css_variables),
       );
       let scene_options = scenes
         .into_iter()
