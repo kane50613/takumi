@@ -128,14 +128,32 @@ The `tw` prop runs a built-in parser with no build step. It won't cover every Ta
   `0.67em` top margin until you add `mt-0`. `box-sizing` still defaults to `border-box`.
 </Callout>
 
-To reset those defaults, pass Preflight through `stylesheets`, wrapped in a layer so it stays below your utilities:
+### Tailwind at-rules
+
+The engine parses Tailwind source stylesheets as-is. It reads these directives:
+
+| At-rule                 | Reads as                                                                                               | Rejected                |
+| ----------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------- |
+| `@theme`                | its `:root` rule. Nested `@keyframes` register. Modifiers like `reference` and `inline` change nothing | `prefix()`              |
+| `@import "tailwindcss"` | Preflight: drops the UA margins, list markers and heading font tweaks                                  | any other import target |
+| `@apply`                | the utilities' declarations, expanded in place, `!` suffix included                                    | variants like `md:`     |
+
+Other Tailwind directives (`@utility`, `@custom-variant`, `@source`, `@plugin`, `@config`) do not parse. Compile those with Tailwind, then [bring the stylesheet](#bring-your-stylesheet).
+
+The import line goes through `stylesheets`:
 
 ```tsx
-import preflight from "tailwindcss/preflight.css?inline";
-
 const image = await render(node, {
-  stylesheets: [`@layer base { ${preflight} }`],
+  stylesheets: [`@import "tailwindcss";`],
 });
+```
+
+`@apply` expands inside stylesheet rules:
+
+```css
+.card {
+  @apply mt-4 bg-brand-500;
+}
 ```
 
 **Unlayered stylesheet rules override `tw` utilities**, and rules in a named `@layer` lose to them. That is Tailwind's own order: utilities are the last declared layer. Prefix a utility with `!` to override an unlayered rule.
@@ -150,7 +168,7 @@ const image = await render(node, {
 
 A utility reads a CSS custom property, the way Tailwind compiles it. `bg-red-500` resolves `var(--color-red-500)`, `p-4` resolves `calc(var(--spacing) * 4)`. The built-in scale sits behind them as the fallback.
 
-Declare tokens in a `:root` rule, in a Tailwind `@theme` block pasted as-is, or pass them as [the `cssVariables` option](#css-variables). `@theme` reads as the `:root` rule it compiles to, `@keyframes` inside it register, and `@theme reference` emits nothing.
+Declare tokens in a `:root` rule, in a [Tailwind `@theme` block](#tailwind-at-rules) pasted as-is, or pass them as [the `cssVariables` option](#css-variables).
 
 ```css
 :root {
@@ -200,6 +218,7 @@ Some things behave differently from Tailwind here:
 - `--color-red-500: initial` falls back to the built-in red instead of removing `bg-red-500`.
 - A bare `rounded` keeps its built-in value; `rounded-sm` and the rest read the variable.
 - `--spacing` needs a unit. A bare number makes `p-4` compute pixels here, where a browser rejects the declaration.
+- An aliased token stays live. `--color-brand: var(--background)` follows a subtree `--background` override. In a browser, `@theme inline` exists to arrange that.
 
 `tw` is a plain prop, so build it dynamically:
 

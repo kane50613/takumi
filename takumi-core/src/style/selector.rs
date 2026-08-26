@@ -18,7 +18,7 @@ use crate::{
   keyframes::parse_keyframe_prelude,
   style::{
     BreakpointOverrides, FromCssStr, KeyframeRule, KeyframesRule, Length, StyleDeclaration,
-    StyleDeclarationBlock, supports::parse_supports_condition,
+    StyleDeclarationBlock, expand_apply, supports::parse_supports_condition,
   },
 };
 
@@ -456,6 +456,34 @@ impl<'i> AtRuleParser<'i> for NestedStyleRuleParser<'_> {
     )?;
     Ok(StyleRuleBodyItem::Rules(fragment))
   }
+
+  fn rule_without_block(
+    &mut self,
+    prelude: Self::Prelude,
+    _start: &ParserState,
+  ) -> Result<Self::AtRule, ()> {
+    match prelude {
+      // The expanded declarations become a rule on the parent's selectors, so
+      // a block with declarations before and after the `@apply` keeps its
+      // source order through the flush the nested-rules path already does.
+      AtRulePrelude::Apply(block) => {
+        let (normal_declarations, important_declarations) = block.split_importance();
+
+        Ok(StyleRuleBodyItem::Rules(StyleSheetFragment {
+          rules: vec![CssRule {
+            selectors: self.parent_selectors.clone(),
+            normal_declarations,
+            important_declarations,
+            media_queries: self.media_queries.to_vec(),
+            layer: self.layer.clone(),
+            layer_order: None,
+          }],
+          ..StyleSheetFragment::default()
+        }))
+      }
+      _ => Err(()),
+    }
+  }
 }
 
 impl<'i> RuleBodyItemParser<'i, StyleRuleBodyItem, StyleSheetParseError>
@@ -557,6 +585,8 @@ enum AtRulePrelude {
   /// `@import "tailwindcss"`, which here only turns Preflight on: the built-in
   /// scales already back every utility and `tw` is already the last layer.
   TailwindImport,
+  /// `@apply`, already expanded into the declarations its utilities stand for.
+  Apply(Box<StyleDeclarationBlock>),
 }
 
 fn parse_fragment_with_mode<'i, 't>(
@@ -881,6 +911,15 @@ fn parse_at_rule_prelude<'i, 't>(
     return Err(input.new_error(BasicParseErrorKind::AtRuleInvalid(name)));
   }
 
+  if name.eq_ignore_ascii_case("apply") {
+    let start = input.position();
+    while input.next_including_whitespace_and_comments().is_ok() {}
+    let block = expand_apply(input.slice_from(start))
+      .ok_or_else(|| input.new_custom_error(StyleSheetParseError::invalid_apply_utility()))?;
+
+    return Ok(AtRulePrelude::Apply(Box::new(block)));
+  }
+
   if name.eq_ignore_ascii_case("theme") {
     while !input.is_exhausted() {
       let location = input.current_source_location();
@@ -1069,7 +1108,10 @@ fn parse_nested_at_rule_block<'i, 't>(
       Ok(StyleSheetFragment::default())
     }
     AtRulePrelude::Theme => parse_theme_block(media_queries, current_layer, lossy, input),
-    AtRulePrelude::Keyframes(_) | AtRulePrelude::Property(_) | AtRulePrelude::TailwindImport => {
+    AtRulePrelude::Keyframes(_)
+    | AtRulePrelude::Property(_)
+    | AtRulePrelude::TailwindImport
+    | AtRulePrelude::Apply(_) => {
       Err(input.new_custom_error(StyleSheetParseError::unsupported_nested_at_rule()))
     }
   }
@@ -1151,8 +1193,8 @@ impl<'i> AtRuleParser<'i> for RuleParser {
       AtRulePrelude::Theme => {
         parse_theme_block(&[], self.current_layer.as_ref(), self.lossy, input)
       }
-      // `@import "tailwindcss"` ends at its semicolon; a block after it is invalid.
-      AtRulePrelude::TailwindImport => {
+      // `@import` and `@apply` end at their semicolon; a block after them is invalid.
+      AtRulePrelude::TailwindImport | AtRulePrelude::Apply(_) => {
         Err(input.new_custom_error(StyleSheetParseError::unsupported_nested_at_rule()))
       }
       AtRulePrelude::Media(media_query) => {
@@ -2535,6 +2577,54 @@ mod tests {
     let sheet = parse_stylesheet(":root { --breakpoint-md: 48em; }");
 
     assert_eq!(sheet.breakpoints.get("md"), None);
+  }
+
+  #[test]
+  fn test_apply_expands_utilities_in_place() {
+    let sheet = parse_stylesheet(".card { width: 100px; @apply mt-4; height: 50px; }");
+
+    assert_eq!(sheet.rules.len(), 3);
+    for rule in &sheet.rules {
+      assert_eq!(selector_text(rule), ".card");
+    }
+    assert_eq!(
+      computed_style_from_declarations(&sheet.rules[1].normal_declarations).margin_top,
+      Length::Rem(1.0)
+    );
+  }
+
+  #[test]
+  fn test_apply_treats_comments_as_separators() {
+    let sheet = parse_stylesheet(".card { @apply mt-4 /* note */ p-2; }");
+
+    assert_eq!(sheet.rules.len(), 1);
+    let computed = computed_style_from_declarations(&sheet.rules[0].normal_declarations);
+    assert_eq!(computed.margin_top, Length::Rem(1.0));
+    assert_eq!(computed.padding_top, Length::Rem(0.5));
+  }
+
+  #[test]
+  fn test_apply_keeps_the_important_suffix() {
+    let sheet = parse_stylesheet(".card { @apply mt-4!; }");
+
+    assert_eq!(sheet.rules.len(), 1);
+    assert!(sheet.rules[0].normal_declarations.declarations.is_empty());
+    assert!(
+      !sheet.rules[0]
+        .important_declarations
+        .declarations
+        .is_empty()
+    );
+  }
+
+  #[test]
+  fn test_apply_rejects_variants_and_unknown_utilities() {
+    for css in [
+      ".card { @apply md:mt-4; } .card { width: 100px; }",
+      ".card { @apply not-a-utility-#%; } .card { width: 100px; }",
+    ] {
+      assert_lossy_parse_keeps_single_valid_rule(css);
+    }
   }
 
   #[test]

@@ -233,6 +233,10 @@ pub enum StyleSheetParseErrorKind {
   #[error("@supports cannot mix `and` and `or` without parentheses")]
   SupportsMixedAndOrWithoutParentheses,
 
+  /// `@apply` only takes plain utilities, without variants.
+  #[error("@apply expects plain utilities without variants")]
+  InvalidApplyUtility,
+
   /// `@property` names must be custom properties.
   #[error("@property name must be a custom property")]
   PropertyNameMustBeCustomProperty,
@@ -324,6 +328,11 @@ impl StyleSheetParseError {
   /// Error for an unsupported nested at-rule.
   pub(crate) fn unsupported_nested_at_rule() -> Self {
     Self::new(StyleSheetParseErrorKind::UnsupportedNestedAtRule)
+  }
+
+  /// Error for an `@apply` token that is not a plain utility.
+  pub(crate) fn invalid_apply_utility() -> Self {
+    Self::new(StyleSheetParseErrorKind::InvalidApplyUtility)
   }
 
   fn new(kind: StyleSheetParseErrorKind) -> Self {
