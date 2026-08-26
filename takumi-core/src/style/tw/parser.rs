@@ -243,16 +243,30 @@ impl TailwindPropertyParser for TwGradientPosition {
   }
 }
 
-/// Tailwind `blur-*` radius.
+/// Tailwind `blur-*` radius, themable through `--blur-*`.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct TwBlur(
+pub(crate) struct TwBlur {
   /// Blur radius.
-  pub Length,
-);
+  pub radius: Length,
+  /// Preset backing `var(--blur-<token>, radius)`; `None` for arbitrary values.
+  pub token: Option<&'static str>,
+}
+
+impl TwBlur {
+  const fn preset(token: &'static str, radius: f32) -> Self {
+    Self {
+      radius: Length::Px(radius),
+      token: Some(token),
+    }
+  }
+}
 
 impl<'i> FromCss<'i> for TwBlur {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    Ok(TwBlur(Length::from_css(input)?))
+    Ok(TwBlur {
+      radius: Length::from_css(input)?,
+      token: None,
+    })
   }
 
   const VALID_TOKENS: &'static [CssToken] = Length::VALID_TOKENS;
@@ -261,16 +275,43 @@ impl<'i> FromCss<'i> for TwBlur {
 impl TailwindPropertyParser for TwBlur {
   fn parse_tw(token: &str) -> Option<Self> {
     match_ignore_ascii_case! {token,
-      "none" => Some(TwBlur(Length::Px(0.0))),
-      "xs" => Some(TwBlur(Length::Px(4.0))),
-      "sm" => Some(TwBlur(Length::Px(8.0))),
-      "md" => Some(TwBlur(Length::Px(12.0))),
-      "lg" => Some(TwBlur(Length::Px(16.0))),
-      "xl" => Some(TwBlur(Length::Px(24.0))),
-      "2xl" => Some(TwBlur(Length::Px(40.0))),
-      "3xl" => Some(TwBlur(Length::Px(64.0))),
+      "none" => Some(TwBlur { radius: Length::Px(0.0), token: None }),
+      "xs" => Some(TwBlur::preset("xs", 4.0)),
+      "sm" => Some(TwBlur::preset("sm", 8.0)),
+      "md" => Some(TwBlur::preset("md", 12.0)),
+      "lg" => Some(TwBlur::preset("lg", 16.0)),
+      "xl" => Some(TwBlur::preset("xl", 24.0)),
+      "2xl" => Some(TwBlur::preset("2xl", 40.0)),
+      "3xl" => Some(TwBlur::preset("3xl", 64.0)),
       _ => None,
     }
+  }
+}
+
+/// Tailwind `drop-shadow-*`, themable through `--drop-shadow-*`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct TwDropShadow {
+  /// The shadow the preset falls back to.
+  pub shadow: TextShadow,
+  /// Preset backing `var(--drop-shadow-<token>, shadow)`; `None` for
+  /// arbitrary values and `drop-shadow-none`, empty for bare `drop-shadow`.
+  pub token: Option<&'static str>,
+}
+
+impl<'i> FromCss<'i> for TwDropShadow {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    Ok(TwDropShadow {
+      shadow: TextShadow::from_css(input)?,
+      token: None,
+    })
+  }
+
+  const VALID_TOKENS: &'static [CssToken] = TextShadow::VALID_TOKENS;
+}
+
+impl TailwindPropertyParser for TwDropShadow {
+  fn parse_tw(_token: &str) -> Option<Self> {
+    None
   }
 }
 

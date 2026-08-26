@@ -57,7 +57,7 @@ fn push_tw_filter(
   important: bool,
   backdrop: bool,
   name: &str,
-  filter: &Filter,
+  value: &str,
 ) {
   let (prefix, longhand, chain) = match backdrop {
     false => ("--tw-", LonghandId::Filter, FILTER_CHAIN),
@@ -68,8 +68,33 @@ fn push_tw_filter(
     ),
   };
 
-  push_custom(builder, important, &format!("{prefix}{name}"), &css(filter));
+  push_custom(builder, important, &format!("{prefix}{name}"), value);
   push_deferred(builder, important, longhand, chain.to_owned());
+}
+
+/// `blur(var(--blur-md, 12px))` for a preset, `blur(2px)` for the rest, so a
+/// `--blur-*` variable re-shapes the preset the way Tailwind's theme does.
+fn blur_css(blur: &TwBlur) -> String {
+  match blur.token {
+    Some(token) => format!("blur(var(--blur-{token}, {}))", css(&blur.radius)),
+    None => css(&Filter::Blur(blur.radius)),
+  }
+}
+
+/// `drop-shadow(var(--drop-shadow-md, …))` for a preset; the bare `drop-shadow`
+/// utility reads `--drop-shadow` itself.
+fn drop_shadow_css(drop_shadow: &TwDropShadow) -> String {
+  match drop_shadow.token {
+    Some("") => format!(
+      "drop-shadow(var(--drop-shadow, {}))",
+      css(&drop_shadow.shadow)
+    ),
+    Some(token) => format!(
+      "drop-shadow(var(--drop-shadow-{token}, {}))",
+      css(&drop_shadow.shadow)
+    ),
+    None => css(&Filter::DropShadow(drop_shadow.shadow)),
+  }
 }
 
 /// One shadow layer with its colour behind `var()`, as Tailwind compiles it:
@@ -629,7 +654,7 @@ pub(crate) enum TailwindProperty {
   /// `filter: contrast()` property.
   Contrast(PercentageNumber),
   /// `filter: drop-shadow()` property.
-  DropShadow(TextShadow),
+  DropShadow(TwDropShadow),
   /// `filter: grayscale()` property.
   Grayscale(PercentageNumber),
   /// `filter: hue-rotate()` property.
@@ -1776,7 +1801,7 @@ impl TailwindProperty {
         )
       }
       TailwindProperty::Blur(tw_blur) => {
-        push_tw_filter(builder, important, false, "blur", &Filter::Blur(tw_blur.0));
+        push_tw_filter(builder, important, false, "blur", &blur_css(&tw_blur));
       }
       TailwindProperty::Brightness(percentage_number) => {
         push_tw_filter(
@@ -1784,7 +1809,7 @@ impl TailwindProperty {
           important,
           false,
           "brightness",
-          &Filter::Brightness(percentage_number),
+          &css(&Filter::Brightness(percentage_number)),
         );
       }
       TailwindProperty::Contrast(percentage_number) => {
@@ -1793,16 +1818,16 @@ impl TailwindProperty {
           important,
           false,
           "contrast",
-          &Filter::Contrast(percentage_number),
+          &css(&Filter::Contrast(percentage_number)),
         );
       }
-      TailwindProperty::DropShadow(text_shadow) => {
+      TailwindProperty::DropShadow(drop_shadow) => {
         push_tw_filter(
           builder,
           important,
           false,
           "drop-shadow",
-          &Filter::DropShadow(text_shadow),
+          &drop_shadow_css(&drop_shadow),
         );
       }
       TailwindProperty::Grayscale(percentage_number) => {
@@ -1811,7 +1836,7 @@ impl TailwindProperty {
           important,
           false,
           "grayscale",
-          &Filter::Grayscale(percentage_number),
+          &css(&Filter::Grayscale(percentage_number)),
         );
       }
       TailwindProperty::HueRotate(angle) => {
@@ -1820,7 +1845,7 @@ impl TailwindProperty {
           important,
           false,
           "hue-rotate",
-          &Filter::HueRotate(angle),
+          &css(&Filter::HueRotate(angle)),
         );
       }
       TailwindProperty::Invert(percentage_number) => {
@@ -1829,7 +1854,7 @@ impl TailwindProperty {
           important,
           false,
           "invert",
-          &Filter::Invert(percentage_number),
+          &css(&Filter::Invert(percentage_number)),
         );
       }
       TailwindProperty::Saturate(percentage_number) => {
@@ -1838,7 +1863,7 @@ impl TailwindProperty {
           important,
           false,
           "saturate",
-          &Filter::Saturate(percentage_number),
+          &css(&Filter::Saturate(percentage_number)),
         );
       }
       TailwindProperty::Sepia(percentage_number) => {
@@ -1847,7 +1872,7 @@ impl TailwindProperty {
           important,
           false,
           "sepia",
-          &Filter::Sepia(percentage_number),
+          &css(&Filter::Sepia(percentage_number)),
         );
       }
       TailwindProperty::Filter(filters) => {
@@ -1858,7 +1883,7 @@ impl TailwindProperty {
         }
       }
       TailwindProperty::BackdropBlur(tw_blur) => {
-        push_tw_filter(builder, important, true, "blur", &Filter::Blur(tw_blur.0));
+        push_tw_filter(builder, important, true, "blur", &blur_css(&tw_blur));
       }
       TailwindProperty::BackdropBrightness(percentage_number) => {
         push_tw_filter(
@@ -1866,7 +1891,7 @@ impl TailwindProperty {
           important,
           true,
           "brightness",
-          &Filter::Brightness(percentage_number),
+          &css(&Filter::Brightness(percentage_number)),
         );
       }
       TailwindProperty::BackdropContrast(percentage_number) => {
@@ -1875,7 +1900,7 @@ impl TailwindProperty {
           important,
           true,
           "contrast",
-          &Filter::Contrast(percentage_number),
+          &css(&Filter::Contrast(percentage_number)),
         );
       }
       TailwindProperty::BackdropGrayscale(percentage_number) => {
@@ -1884,7 +1909,7 @@ impl TailwindProperty {
           important,
           true,
           "grayscale",
-          &Filter::Grayscale(percentage_number),
+          &css(&Filter::Grayscale(percentage_number)),
         );
       }
       TailwindProperty::BackdropHueRotate(angle) => {
@@ -1893,7 +1918,7 @@ impl TailwindProperty {
           important,
           true,
           "hue-rotate",
-          &Filter::HueRotate(angle),
+          &css(&Filter::HueRotate(angle)),
         );
       }
       TailwindProperty::BackdropInvert(percentage_number) => {
@@ -1902,7 +1927,7 @@ impl TailwindProperty {
           important,
           true,
           "invert",
-          &Filter::Invert(percentage_number),
+          &css(&Filter::Invert(percentage_number)),
         );
       }
       TailwindProperty::BackdropOpacity(percentage_number) => {
@@ -1911,7 +1936,7 @@ impl TailwindProperty {
           important,
           true,
           "opacity",
-          &Filter::Opacity(percentage_number),
+          &css(&Filter::Opacity(percentage_number)),
         );
       }
       TailwindProperty::BackdropSaturate(percentage_number) => {
@@ -1920,7 +1945,7 @@ impl TailwindProperty {
           important,
           true,
           "saturate",
-          &Filter::Saturate(percentage_number),
+          &css(&Filter::Saturate(percentage_number)),
         );
       }
       TailwindProperty::BackdropSepia(percentage_number) => {
@@ -1929,7 +1954,7 @@ impl TailwindProperty {
           important,
           true,
           "sepia",
-          &Filter::Sepia(percentage_number),
+          &css(&Filter::Sepia(percentage_number)),
         );
       }
       TailwindProperty::BackdropFilter(filters) => {
