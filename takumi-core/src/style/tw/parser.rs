@@ -5,7 +5,7 @@ use cssparser::{Parser, match_ignore_ascii_case};
 use crate::style::{
   CssToken,
   Length::{self, *},
-  tw::TailwindPropertyParser,
+  tw::{TailwindPropertyParser, is_ident_byte},
   *,
 };
 
@@ -312,6 +312,47 @@ impl<'i> FromCss<'i> for TwDropShadow {
 impl TailwindPropertyParser for TwDropShadow {
   fn parse_tw(_token: &str) -> Option<Self> {
     None
+  }
+}
+
+/// Tailwind `animate-*`, themable through `--animate-*`.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct TwAnimation {
+  /// The animation list the preset falls back to; empty for unknown tokens.
+  pub animations: Animations,
+  /// Token backing `var(--animate-<token>, …)`; `None` for arbitrary values
+  /// and `animate-none`.
+  pub token: Option<Arc<str>>,
+}
+
+impl<'i> FromCss<'i> for TwAnimation {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    Ok(TwAnimation {
+      animations: Animations::from_css(input)?,
+      token: None,
+    })
+  }
+
+  const VALID_TOKENS: &'static [CssToken] = Animations::VALID_TOKENS;
+}
+
+impl TailwindPropertyParser for TwAnimation {
+  fn parse_tw(token: &str) -> Option<Self> {
+    if let Some(animations) = Animations::parse_tw(token) {
+      let themed = !token.eq_ignore_ascii_case("none");
+
+      return Some(TwAnimation {
+        animations,
+        token: themed.then(|| token.to_ascii_lowercase().into()),
+      });
+    }
+
+    // An unknown token reads `var(--animate-<token>)` alone: nothing runs
+    // until the variable and its keyframes exist, the way Tailwind pairs them.
+    (!token.is_empty() && token.bytes().all(is_ident_byte)).then(|| TwAnimation {
+      animations: Animations::default(),
+      token: Some(token.into()),
+    })
   }
 }
 

@@ -213,14 +213,15 @@ fn test_parse_arbitrary_flex_with_spaces() {
 fn test_parse_tailwind_animation_preset() {
   assert_matches!(
     TailwindProperty::parse("animate-spin"),
-    Some(TailwindProperty::Animation(animations))
-      if animations.as_ref() == [Animation {
-        duration: AnimationTime::from_milliseconds(1000.0),
-        timing_function: AnimationTimingFunction::Linear,
-        iteration_count: AnimationIterationCount::Infinite,
-        name: Some("spin".to_string()),
-        ..Animation::default()
-      }]
+    Some(TailwindProperty::Animation(tw_animation))
+      if tw_animation.token.as_deref() == Some("spin")
+        && tw_animation.animations.as_ref() == [Animation {
+          duration: AnimationTime::from_milliseconds(1000.0),
+          timing_function: AnimationTimingFunction::Linear,
+          iteration_count: AnimationIterationCount::Infinite,
+          name: Some("spin".to_string()),
+          ..Animation::default()
+        }]
   );
 }
 
@@ -228,14 +229,15 @@ fn test_parse_tailwind_animation_preset() {
 fn test_parse_tailwind_animation_arbitrary_value() {
   assert_matches!(
     TailwindProperty::parse("animate-[wiggle_1s_ease-in-out_infinite]"),
-    Some(TailwindProperty::Animation(animations))
-      if animations.as_ref() == [Animation {
-        duration: AnimationTime::from_milliseconds(1000.0),
-        timing_function: AnimationTimingFunction::EaseInOut,
-        iteration_count: AnimationIterationCount::Infinite,
-        name: Some("wiggle".to_string()),
-        ..Animation::default()
-      }]
+    Some(TailwindProperty::Animation(tw_animation))
+      if tw_animation.token.is_none()
+        && tw_animation.animations.as_ref() == [Animation {
+          duration: AnimationTime::from_milliseconds(1000.0),
+          timing_function: AnimationTimingFunction::EaseInOut,
+          iteration_count: AnimationIterationCount::Infinite,
+          name: Some("wiggle".to_string()),
+          ..Animation::default()
+        }]
   );
 }
 
@@ -1184,6 +1186,58 @@ fn test_corner_radius_reads_a_css_variable() {
   let computed = style.inherit(&root_with(&[("--radius-card", "12px")]));
 
   assert_eq!(computed.border_top_left_radius.x, Length::Px(12.0));
+}
+
+#[test]
+fn test_animate_preset_reads_a_css_variable() {
+  let values = TailwindValues::from_str("animate-spin").expect("tailwind values should parse");
+  let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
+
+  let computed = style.inherit(&root_with(&[("--animate-spin", "wobble 2s ease-in 3")]));
+
+  assert_eq!(
+    computed.animation_name.as_ref(),
+    [Some("wobble".to_string())]
+  );
+  assert_eq!(
+    computed.animation_duration.as_ref(),
+    [AnimationTime::from_milliseconds(2000.0)]
+  );
+}
+
+#[test]
+fn test_animate_preset_falls_back_to_the_builtin_animation() {
+  let values = TailwindValues::from_str("animate-spin").expect("tailwind values should parse");
+  let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
+
+  let computed = style.inherit(&ComputedStyle::default());
+
+  assert_eq!(computed.animation_name.as_ref(), [Some("spin".to_string())]);
+  assert_eq!(
+    computed.animation_duration.as_ref(),
+    [AnimationTime::from_milliseconds(1000.0)]
+  );
+  assert_eq!(
+    computed.animation_iteration_count.as_ref(),
+    [AnimationIterationCount::Infinite]
+  );
+}
+
+#[test]
+fn test_unknown_animate_token_reads_a_css_variable() {
+  let values = TailwindValues::from_str("animate-wiggle").expect("tailwind values should parse");
+  let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
+
+  let themed = style
+    .clone()
+    .inherit(&root_with(&[("--animate-wiggle", "wiggle 1s linear")]));
+  assert_eq!(themed.animation_name.as_ref(), [Some("wiggle".to_string())]);
+
+  let unthemed = style.inherit(&ComputedStyle::default());
+  assert_eq!(
+    unthemed.animation_name,
+    ComputedStyle::default().animation_name
+  );
 }
 
 #[test]
