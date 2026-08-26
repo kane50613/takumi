@@ -44,6 +44,7 @@ const { node, stylesheets } = fromHtml(html);
 const pdf = await render(node, {
   size: "a4",
   margin: { top: 48, bottom: 64, left: 48, right: 48 },
+  // [!code highlight]
   css: stylesheets,
   footer: (
     <div tw="flex w-full justify-center text-[10px]">
@@ -95,7 +96,7 @@ const { node, stylesheets } = fromHtml(html);
 // [!code highlight]
 const images = await prepareImages({ node });
 
-const pdf = await render(node, { images, css: stylesheets });
+const pdf = await render(node, { images, css: stylesheets }); // [!code highlight]
 ```
 
 `prepareImages` walks the tree, fetches every remote `<img>`, `background-image`, and `mask-image` URL, and returns the `images` entries. It takes a `fetchCache` to reuse bytes, an `allowUrl` predicate, and a `timeout`.

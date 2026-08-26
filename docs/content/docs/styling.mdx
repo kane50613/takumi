@@ -34,6 +34,7 @@ import { render } from "takumi-js";
 const image = await render(<div className="card">Hello</div>, {
   width: 1200,
   height: 630,
+  // [!code highlight]
   css: `.card { display: flex; padding: 48px; background: #0f172a; color: white; }`,
 });
 ```
@@ -53,6 +54,7 @@ A `<style>` tag feeds the same engine. Takumi extracts it from the JSX for you.
 
 ```tsx
 <div className="card">
+  {/* [!code highlight] */}
   <style>{`.card { display: flex; padding: 48px; }`}</style>
   Hello
 </div>
@@ -100,6 +102,7 @@ The `tw` prop runs a built-in parser with no build step. It matches [the satori 
 import { render } from "takumi-js";
 
 const image = await render(
+  // [!code highlight:3]
   <div tw="bg-blue-500 p-4 rounded-lg">
     <h1 tw="text-white text-2xl font-bold">Hello Tailwind!</h1>
   </div>,
@@ -129,6 +132,7 @@ The same import line a Tailwind stylesheet starts with turns Preflight on. It dr
 
 ```tsx
 const image = await render(node, {
+  // [!code highlight]
   css: `@import "tailwindcss";`,
 });
 ```
@@ -157,7 +161,7 @@ A Tailwind source stylesheet drops into `css` unchanged. The engine reads these 
 
 ```css
 .card {
-  @apply mt-4 bg-brand-500;
+  @apply mt-4 bg-brand-500; /* [!code highlight] */
 }
 ```
 
@@ -175,6 +179,7 @@ A `:root` rule, or a [Tailwind `@theme` block](#tailwind-at-rules) pasted as-is:
 
 ```css
 :root {
+  /* [!code highlight:2] */
   --color-brand-500: #5b21b6;
   --spacing-gutter: 2.5rem;
 }
@@ -188,6 +193,7 @@ import { render } from "takumi-js";
 const image = await render(<div tw="bg-brand-500 p-gutter">Hello</div>, {
   width: 1200,
   height: 630,
+  // [!code highlight]
   cssVariables: { "--color-brand-500": "#5b21b6", "--spacing-gutter": "2.5rem" },
 });
 ```
