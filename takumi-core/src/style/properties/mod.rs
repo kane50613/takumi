@@ -261,19 +261,6 @@ pub(crate) fn merge_enum_values(values: &[CssToken]) -> String {
   }
 }
 
-/// Write a CSS quoted string, escaping backslashes and double quotes.
-pub(crate) fn write_css_string<W: fmt::Write>(dest: &mut W, s: &str) -> fmt::Result {
-  dest.write_char('"')?;
-  for ch in s.chars() {
-    match ch {
-      '\\' => dest.write_str("\\\\")?,
-      '"' => dest.write_str("\\\"")?,
-      c => dest.write_char(c)?,
-    }
-  }
-  dest.write_char('"')
-}
-
 /// Defines how an image should be resized to fit its container.
 ///
 /// Similar to CSS object-fit property.
@@ -643,7 +630,7 @@ impl<'i> FromCss<'i> for BorderSpacing {
 }
 
 impl ToCss for BorderSpacing {
-  fn to_css<W: std::fmt::Write>(&self, dest: &mut W) -> std::fmt::Result {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     self.0.to_css(dest)
   }
 }

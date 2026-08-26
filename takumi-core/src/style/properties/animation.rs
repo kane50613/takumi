@@ -1,12 +1,11 @@
 use std::{borrow::Cow, fmt, vec::Vec};
 
-use cssparser::{BasicParseErrorKind, Parser, Token, match_ignore_ascii_case};
+use cssparser::{BasicParseErrorKind, Parser, Token, match_ignore_ascii_case, serialize_string};
 use typed_builder::TypedBuilder;
 
 use crate::style::{
   CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
-  ToCss, declare_enum_from_css_impl, next_is_comma, properties::write_css_string,
-  tw::TailwindPropertyParser, unexpected_token,
+  ToCss, declare_enum_from_css_impl, next_is_comma, tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Implements `FromCss` for a `Box<[T]>` animation list type as a comma-separated list of `$elem`.
@@ -703,7 +702,7 @@ impl ToCss for Animation {
         .chars()
         .any(|c| !matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '_' | '-'));
       if needs_quoting {
-        write_css_string(dest, name)?;
+        serialize_string(name, dest)?;
       } else {
         dest.write_str(name)?;
       }

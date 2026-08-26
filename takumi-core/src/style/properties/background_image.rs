@@ -1,11 +1,11 @@
 use std::{fmt, sync::Arc};
 
-use cssparser::{Parser, Token, match_ignore_ascii_case};
+use cssparser::{Parser, Token, match_ignore_ascii_case, serialize_string};
 
 use crate::style::{
   Animatable, ConicGradient, CssDescriptorKind, CssToken, FromCss, LinearGradient,
   ListInterpolationStrategy, MakeComputed, ParseResult, RadialGradient, SizingContext, ToCss,
-  properties::write_css_string, tw::TailwindPropertyParser, unexpected_token,
+  tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Background image variants supported by Takumi.
@@ -130,7 +130,7 @@ impl ToCss for BackgroundImage {
       Self::Conic(conic) => conic.to_css(dest),
       Self::Url(url) => {
         dest.write_str("url(")?;
-        write_css_string(dest, url)?;
+        serialize_string(url, dest)?;
         dest.write_char(')')
       }
     }

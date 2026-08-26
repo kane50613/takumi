@@ -1,10 +1,10 @@
 use std::fmt;
 
-use cssparser::Parser;
+use cssparser::{Parser, serialize_string};
 
 use crate::style::{
   Animatable, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss,
-  declare_enum_from_css_impl, properties::write_css_string, tw::TailwindPropertyParser,
+  declare_enum_from_css_impl, tw::TailwindPropertyParser,
 };
 
 /// `block-ellipsis`: `none | auto | <string>`. Inherited.
@@ -46,7 +46,7 @@ impl ToCss for BlockEllipsis {
     match self {
       Self::None => dest.write_str("none"),
       Self::Auto => dest.write_str("auto"),
-      Self::String(value) => write_css_string(dest, value),
+      Self::String(value) => serialize_string(value, dest),
     }
   }
 }

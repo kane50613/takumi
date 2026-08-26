@@ -1,10 +1,10 @@
 use std::fmt;
 
-use cssparser::{Parser, Token, match_ignore_ascii_case};
+use cssparser::{Parser, Token, match_ignore_ascii_case, serialize_string};
 
 use crate::style::{
   CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult, Sides,
-  SizingContext, SpacePair, ToCss, properties::write_css_string, unexpected_token,
+  SizingContext, SpacePair, ToCss, unexpected_token,
 };
 
 /// Represents the fill rule used for determining the interior of shapes.
@@ -373,7 +373,7 @@ impl ToCss for BasicShape {
           rule.to_css(dest)?;
           dest.write_str(", ")?;
         }
-        write_css_string(dest, &shape.path)?;
+        serialize_string(&shape.path, dest)?;
         dest.write_char(')')
       }
     }
