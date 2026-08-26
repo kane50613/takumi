@@ -912,9 +912,23 @@ fn parse_at_rule_prelude<'i, 't>(
   }
 
   if name.eq_ignore_ascii_case("apply") {
-    let start = input.position();
-    while input.next_including_whitespace_and_comments().is_ok() {}
-    let block = expand_apply(input.slice_from(start))
+    let mut source = String::new();
+    let mut start = input.position();
+    loop {
+      let before = input.position();
+      match input.next_including_whitespace_and_comments() {
+        Ok(Token::Comment(_)) => {
+          source.push_str(input.slice(start..before));
+          source.push(' ');
+          start = input.position();
+        }
+        Ok(_) => {}
+        Err(_) => break,
+      }
+    }
+    source.push_str(input.slice_from(start));
+
+    let block = expand_apply(&source)
       .ok_or_else(|| input.new_custom_error(StyleSheetParseError::invalid_apply_utility()))?;
 
     return Ok(AtRulePrelude::Apply(Box::new(block)));

@@ -1,10 +1,10 @@
 use std::{fmt, sync::Arc};
 
-use cssparser::{Parser, Token, match_ignore_ascii_case};
+use cssparser::{Parser, Token, match_ignore_ascii_case, serialize_string};
 
 use crate::style::{
   Animatable, BackgroundImage, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss,
-  declare_enum_from_css_impl, properties::write_css_string, unexpected_token,
+  declare_enum_from_css_impl, unexpected_token,
 };
 
 /// The counter style a list item's marker is generated from.
@@ -266,7 +266,7 @@ impl ToCss for ListStyleType {
       ListStyleType::UpperAlpha => dest.write_str("upper-alpha"),
       ListStyleType::LowerRoman => dest.write_str("lower-roman"),
       ListStyleType::UpperRoman => dest.write_str("upper-roman"),
-      ListStyleType::String(value) => write_css_string(dest, value),
+      ListStyleType::String(value) => serialize_string(value, dest),
     }
   }
 }

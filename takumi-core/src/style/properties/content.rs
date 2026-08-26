@@ -1,10 +1,10 @@
 use std::{fmt, sync::Arc};
 
-use cssparser::{Parser, Token, match_ignore_ascii_case};
+use cssparser::{Parser, Token, match_ignore_ascii_case, serialize_string};
 
 use crate::style::{
   Animatable, BackgroundImage, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss,
-  properties::write_css_string, tw::TailwindPropertyParser, unexpected_token,
+  tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// CSS `content` property value for `::before` / `::after` pseudo-elements.
@@ -166,7 +166,7 @@ impl ToCss for ContentValue {
 impl ToCss for ContentItem {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
-      ContentItem::Text(value) => write_css_string(dest, value),
+      ContentItem::Text(value) => serialize_string(value, dest),
       ContentItem::Image(image) => image.to_css(dest),
       ContentItem::Attr(attr) => attr.to_css(dest),
     }
@@ -179,7 +179,7 @@ impl ToCss for AttrRef {
     dest.write_str(&self.name)?;
     if !self.fallback.is_empty() {
       dest.write_str(", ")?;
-      write_css_string(dest, &self.fallback)?;
+      serialize_string(&self.fallback, dest)?;
     }
     dest.write_char(')')
   }
@@ -210,6 +210,13 @@ mod tests {
     };
     assert_eq!(items.len(), 1);
     assert_eq!(items[0], ContentItem::Text("hello".into()));
+  }
+
+  #[test]
+  fn round_trips_control_characters() {
+    let parsed = parse("\"a\\a b\"");
+
+    assert_eq!(parse(&parsed.to_css_string()), parsed);
   }
 
   #[test]

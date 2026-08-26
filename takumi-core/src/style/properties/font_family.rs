@@ -1,12 +1,11 @@
 use std::{fmt, string::ToString, sync::Arc};
 
-use cssparser::{Parser, match_ignore_ascii_case};
+use cssparser::{Parser, match_ignore_ascii_case, serialize_string};
 use parley::{FontFamilyName, GenericFamily};
 
 use crate::style::tw::Namespace;
 use crate::style::{
-  CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, properties::write_css_string,
-  tw::TailwindPropertyParser,
+  CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, tw::TailwindPropertyParser,
 };
 
 /// Represents a font family for text rendering.
@@ -116,7 +115,7 @@ impl ToCss for FontFamilyToken {
           || name.contains('\\')
           || name.chars().next().is_some_and(|c| c.is_ascii_digit());
         if needs_quoting {
-          write_css_string(dest, name)
+          serialize_string(name, dest)
         } else {
           dest.write_str(name)
         }
