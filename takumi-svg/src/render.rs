@@ -57,9 +57,6 @@ pub struct SvgOptions<'g> {
   /// Global animation time in milliseconds.
   #[builder(default = 0)]
   pub(crate) time_ms: u64,
-  /// Whether `class` names also parse as Tailwind utilities.
-  #[builder(default = false)]
-  pub(crate) class_name_utilities: bool,
   /// Per-render font fallback chain (family names in order). `None` uses all
   /// registered families in registration order.
   #[builder(default)]
@@ -84,7 +81,6 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
     .images(Rc::new(options.images))
     .stylesheet(options.stylesheet)
     .time_ms(options.time_ms)
-    .class_name_utilities(options.class_name_utilities)
     .style({
       Box::new(ComputedStyle {
         lang: options.lang,

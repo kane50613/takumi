@@ -12,14 +12,13 @@ use takumi_raster::measure;
 use crate::{
   JsBytes, map_error,
   renderer::{
-    ImageCacheMode, MeasuredNode, RenderOptions, RendererState, class_name_utilities,
-    collect_images, decode_images, deserialize_keyframes, device_pixel_ratio, parse_lang,
+    ImageCacheMode, MeasuredNode, RenderOptions, RendererState, collect_images, decode_images,
+    deserialize_keyframes, device_pixel_ratio, parse_lang,
   },
 };
 
 pub struct MeasureTask {
   pub(crate) node: Option<Node>,
-  pub(crate) class_name_utilities: bool,
   pub(crate) state: Arc<RendererState>,
   pub(crate) viewport: Viewport,
   pub(crate) time_ms: u64,
@@ -45,7 +44,6 @@ impl MeasureTask {
 
     Ok(MeasureTask {
       node: Some(node),
-      class_name_utilities: class_name_utilities(options.future),
       state,
       viewport: Viewport::new((options.width, options.height))
         .with_device_pixel_ratio(device_pixel_ratio(options.device_pixel_ratio)),
@@ -80,7 +78,6 @@ impl Task for MeasureTask {
       .fonts(&fonts)
       .font_families(take(&mut self.font_families))
       .lang(take(&mut self.lang))
-      .class_name_utilities(self.class_name_utilities)
       .build();
 
     measure(options).map_err(map_error)

@@ -31,7 +31,7 @@ use crate::{
     BackgroundImage, BackgroundImages, BlendMode, BoxSizing, Color, ComputedStyle, ContentItem,
     ContentValue, Display, Filters, Float, Isolation, Length, LineHeight, ListStylePosition,
     PercentageNumber, Position, SizingContext, Style as NodeStyle, StyleDeclaration,
-    StyleDeclarationBlock, StyleSheet, TailwindValues, TextWrapMode, WhiteSpaceCollapse,
+    StyleDeclarationBlock, StyleSheet, TextWrapMode, WhiteSpaceCollapse,
     apply_stylesheet_animations,
   },
   viewport::Viewport,
@@ -1433,21 +1433,8 @@ impl RenderNode {
         .get(source_order)
         .map(NodeMatchedDeclarations::element)
         .unwrap_or(&default_matched);
-      let mut layers = node.take_style_layers();
+      let layers = node.take_style_layers();
       let lang = layers.lang;
-
-      if parent_context.class_name_utilities
-        && let Some(class_tw) = node
-          .class_name()
-          .and_then(|class_name| class_name.parse::<TailwindValues>().ok())
-        && !class_tw.is_empty()
-      {
-        // The `tw` prop reads as coming after the class list, so it wins ties.
-        layers.author_tw = Some(match layers.author_tw {
-          Some(author_tw) => class_tw.merge(author_tw),
-          None => class_tw,
-        });
-      }
 
       let (style_layers, element_important) = build_style_layers(
         layers,
@@ -2373,41 +2360,6 @@ mod tests {
     let result = StyleSheet::parse(css);
     assert!(result.is_ok(), "expected stylesheet to parse: {result:?}");
     result.unwrap_or_default()
-  }
-
-  fn render_with_class_utilities(node: crate::layout::node::Node, enabled: bool) -> RenderNode {
-    let context = RenderContext::builder()
-      .fonts(Fonts::default().snapshot())
-      .sizing(
-        SizingContext::builder()
-          .viewport(Viewport::default())
-          .build(),
-      )
-      .class_name_utilities(enabled)
-      .build();
-
-    RenderNode::from_node(&context, node)
-  }
-
-  #[test]
-  fn class_names_parse_as_utilities_behind_the_flag() {
-    let node = crate::layout::node::Node::container([]).with_class_name("p-[10px] custom-card");
-
-    let on = render_with_class_utilities(node.clone(), true);
-    assert_eq!(on.context.style.padding_left, Length::Px(10.0));
-
-    let off = render_with_class_utilities(node, false);
-    assert_eq!(off.context.style.padding_left, Length::zero());
-  }
-
-  #[test]
-  fn tw_prop_wins_over_class_name_utilities() {
-    let node = crate::layout::node::Node::container([])
-      .with_class_name("p-[10px]")
-      .with_tw("p-[20px]".parse().expect("tw parses"));
-
-    let rendered = render_with_class_utilities(node, true);
-    assert_eq!(rendered.context.style.padding_left, Length::Px(20.0));
   }
 
   #[test]

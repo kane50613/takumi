@@ -219,55 +219,36 @@ impl FromStr for TailwindValues {
   type Err = String;
 
   fn from_str(source: &str) -> Result<Self, Self::Err> {
-    let collected = source
+    let mut collected = source
       .split_whitespace()
       .filter_map(TailwindValue::parse)
       .collect::<Vec<_>>();
 
-    Ok(TailwindValues::from_sorted(collected))
+    // sort in reverse order by is important, then has breakpoint, then rest is last.
+    // Stable sort so equal-priority utilities keep source order (later one wins).
+    collected.sort_by(|a, b| {
+      // Not important comes before important
+      if !a.important && b.important {
+        return Ordering::Less;
+      }
+
+      if a.important && !b.important {
+        return Ordering::Greater;
+      }
+
+      // No breakpoint comes before breakpoint
+      match (&a.breakpoint, &b.breakpoint) {
+        (None, Some(_)) => Ordering::Less,
+        (Some(_), None) => Ordering::Greater,
+        _ => Ordering::Equal,
+      }
+    });
+
+    Ok(TailwindValues { inner: collected })
   }
-}
-
-// sort in reverse order by is important, then has breakpoint, then rest is last.
-// Stable sort so equal-priority utilities keep source order (later one wins).
-fn sort_by_priority(values: &mut [TailwindValue]) {
-  values.sort_by(|a, b| {
-    // Not important comes before important
-    if !a.important && b.important {
-      return Ordering::Less;
-    }
-
-    if a.important && !b.important {
-      return Ordering::Greater;
-    }
-
-    // No breakpoint comes before breakpoint
-    match (&a.breakpoint, &b.breakpoint) {
-      (None, Some(_)) => Ordering::Less,
-      (Some(_), None) => Ordering::Greater,
-      _ => Ordering::Equal,
-    }
-  });
 }
 
 impl TailwindValues {
-  fn from_sorted(mut values: Vec<TailwindValue>) -> Self {
-    sort_by_priority(&mut values);
-    TailwindValues { inner: values }
-  }
-
-  /// Whether no utility parsed.
-  pub fn is_empty(&self) -> bool {
-    self.inner.is_empty()
-  }
-
-  /// Merges two utility sets; `other`'s utilities win ties, as if its source
-  /// text came after this one's.
-  pub fn merge(mut self, other: Self) -> Self {
-    self.inner.extend(other.inner);
-    Self::from_sorted(self.inner)
-  }
-
   /// Collects resource URLs referenced by active Tailwind utilities for the given viewport.
   pub(crate) fn image_urls(
     &self,
