@@ -4,16 +4,29 @@ description: How CSS reaches a node, what the stylesheet engine supports, and th
 icon: Palette
 ---
 
-Four ways to put CSS on a node:
+Pick a path by what you already have:
 
-- `style` prop: inline `CSSProperties` on one node. Overrides the tag default.
-- `tw` prop: Tailwind classes on one node.
-- `<style>` tags: CSS that travels inside the JSX.
-- `stylesheets` option: full stylesheets matched against `className` and `id`.
+| You have                                   | Use                                                           |
+| ------------------------------------------ | ------------------------------------------------------------- |
+| Tailwind classes, compiled by your bundler | [`stylesheets`](#stylesheets) with the generated CSS          |
+| Tailwind classes, no build step            | [`className` + a future flag](#tailwind-without-a-build-step) |
+| Plain CSS                                  | [`stylesheets`](#stylesheets) or a `<style>` tag              |
+| Design tokens to theme with                | [`cssVariables` or a `:root` rule](#design-tokens)            |
+| One-off styles on one node                 | [the `style` prop](#inline-styles)                            |
+
+The paths combine. Each section says who wins when they collide.
+
+## Inline styles
+
+The `style` prop puts `CSSProperties` on one node. It overrides the tag default and every matching stylesheet rule at the same importance.
+
+```tsx
+<div style={{ display: "flex", padding: 48, background: "#0f172a" }}>Hello</div>
+```
 
 ## Stylesheets
 
-Pass real CSS through `stylesheets` and match it by `className` or `id`.
+Pass real CSS through `stylesheets`. The engine matches it by `className` or `id`.
 
 ```tsx twoslash
 import { render } from "takumi-js";
@@ -27,16 +40,16 @@ const image = await render(<div className="card">Hello</div>, {
 
 The engine handles:
 
-| Selectors             | At-rules                            | Properties                                                                                                                      |
-| --------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| class, id, descendant | `@keyframes`, `@media`, `@supports` | custom properties with `var()`, shorthands, gradients, `box-shadow`, `filter`, `backdrop-filter`, `mix-blend-mode`, `transform` |
+| Selectors             | At-rules                                      | Properties                                                                                                                      |
+| --------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| class, id, descendant | `@keyframes`, `@media`, `@supports`, `@layer` | custom properties with `var()`, shorthands, gradients, `box-shadow`, `filter`, `backdrop-filter`, `mix-blend-mode`, `transform` |
 
 <Callout type="info">
   A render is one static frame, so interactive pseudo-classes like `:hover` and `:focus` parse but
   never match.
 </Callout>
 
-A `<style>` tag feeds the same engine and gets extracted from the JSX automatically.
+A `<style>` tag feeds the same engine. Takumi extracts it from the JSX for you.
 
 ```tsx
 <div className="card">
@@ -45,46 +58,9 @@ A `<style>` tag feeds the same engine and gets extracted from the JSX automatica
 </div>
 ```
 
-### CSS variables
+## Tailwind with your bundler
 
-The `cssVariables` option declares CSS custom properties without writing CSS. Each entry becomes one `:root` declaration. The leading `--` is optional.
-
-```tsx twoslash
-import { render } from "takumi-js";
-
-const image = await render(<div className="card">Hello</div>, {
-  width: 1200,
-  height: 630,
-  stylesheets: [`.card { color: var(--brand) }`],
-  cssVariables: { "--brand": "#5b21b6" },
-});
-```
-
-**Every `var()` reads them**, in stylesheets, in `<style>` tags, and in `tw`.
-
-| Competing declaration                | Result                   |
-| ------------------------------------ | ------------------------ |
-| Equally specific `:root` rule in CSS | `cssVariables` wins      |
-| Declaration on the element           | Element declaration wins |
-
-The generated rule comes after every stylesheet, so a media query at equal specificity still loses. Override an entry with a more specific selector, such as `:root:root`.
-
-**Values containing `;`, `{`, `}`, `/*` or `!important` are dropped.** They could escape the generated rule.
-
-A nested palette flattens with the `cssVariables` helper. Keys join with `-` into one variable name.
-
-```tsx twoslash
-import { cssVariables } from "takumi-js/helpers";
-
-const flat = cssVariables({ color: { brand: { 500: "#5b21b6" } } });
-// { "--color-brand-500": "#5b21b6" }
-```
-
-## Tailwind
-
-### Bring your stylesheet
-
-Compile Tailwind with your bundler. Pass the generated CSS through `stylesheets`. With Vite, import it using `?inline`.
+Compile Tailwind with your bundler, then pass the generated CSS through `stylesheets`. Tailwind does the compiling, so every directive and class name works. What renders is still bounded by [the engine's CSS support](#stylesheets). With Vite, import the stylesheet using `?inline`.
 
 ```tsx title="og.tsx"
 import { ImageResponse } from "takumi-js/response";
@@ -116,33 +92,55 @@ export default defineConfig({
 });
 ```
 
-### Native parser
+## Tailwind without a build step
 
-The `tw` prop runs a built-in parser with no build step. It won't cover every Tailwind feature.
+Turn on [the `classNameUtilities` future flag](/docs/future#classnameutilities). `className` tokens then run through a built-in parser. JSX pasted from an app renders without renaming a prop.
 
-- Arbitrary values work.
-- See the [parser mapping](https://github.com/kane50613/takumi/blob/master/takumi-core/src/style/tw/map.rs) for every supported class.
+```tsx twoslash
+import { render } from "takumi-js";
 
-<Callout type="warn">
-  `tw` has no Tailwind Preflight by default, so elements keep their UA margins. A `<h1>` gets a
-  `0.67em` top margin until you add `mt-0`. `box-sizing` still defaults to `border-box`.
-</Callout>
+const image = await render(
+  <div className="bg-blue-500 p-4 rounded-lg">
+    <h1 className="text-white text-2xl font-bold">Hello Tailwind!</h1>
+  </div>,
+  {
+    width: 1200,
+    height: 630,
+    future: { classNameUtilities: true },
+  },
+);
+```
 
-The [`classNameUtilities` future flag](/docs/future#classnameutilities) feeds `className` tokens to this parser too.
+Arbitrary values work. The parser does not cover every Tailwind feature. The [parser mapping](https://github.com/kane50613/takumi/blob/master/takumi-core/src/style/tw/map.rs) lists every supported class.
 
-### Tailwind at-rules
+`className` is a plain prop, so build it dynamically:
 
-The engine parses Tailwind source stylesheets as-is. It reads these directives:
+```tsx
+import clsx from "clsx";
 
-| At-rule                 | Reads as                                                                                               | Rejected                |
-| ----------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------- |
-| `@theme`                | its `:root` rule. Nested `@keyframes` register. Modifiers like `reference` and `inline` change nothing | `prefix()`              |
-| `@import "tailwindcss"` | Preflight: drops the UA margins, list markers and heading font tweaks                                  | any other import target |
-| `@apply`                | the utilities' declarations, expanded in place, `!` suffix included                                    | variants like `md:`     |
+const isError = true;
 
-Other Tailwind directives (`@utility`, `@custom-variant`, `@source`, `@plugin`, `@config`) do not parse. Compile those with Tailwind, then [bring the stylesheet](#bring-your-stylesheet).
+<div
+  className={clsx(
+    "p-4 rounded",
+    isError ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700",
+  )}
+>
+  {isError ? "Something went wrong" : "Success!"}
+</div>;
+```
 
-The import line goes through `stylesheets`:
+The `tw` prop feeds the same parser without any flag. It exists for satori compatibility. It takes the same dynamic expressions, and it wins a tie against a `className` utility on the same node.
+
+```tsx
+<div tw="bg-blue-500 p-4 rounded-lg">Hello</div>
+```
+
+### Preflight
+
+The native parser applies no Tailwind Preflight by default, so elements keep their UA margins. A `<h1>` gets a `0.67em` top margin until you add `mt-0`. `box-sizing` still defaults to `border-box`.
+
+The same import line a Tailwind stylesheet starts with turns Preflight on. It drops the UA margins, list markers and heading font tweaks.
 
 ```tsx
 const image = await render(node, {
@@ -150,7 +148,27 @@ const image = await render(node, {
 });
 ```
 
-`@apply` expands inside stylesheet rules:
+### Utilities in the cascade
+
+Utilities sit in the last declared layer, Tailwind's own order:
+
+| Against a utility            | Winner           |
+| ---------------------------- | ---------------- |
+| An unlayered stylesheet rule | the rule         |
+| A rule in a named `@layer`   | the utility      |
+| The `style` prop             | the `style` prop |
+
+Prefix a utility with `!` to flip the result. Important declarations reverse the layer order, so a `!` utility beats an unlayered rule and a normal `style` declaration.
+
+### Tailwind at-rules
+
+A Tailwind source stylesheet drops into `stylesheets` unchanged. The engine reads these directives and skips the rest:
+
+| At-rule                 | Reads as                                                                                               | Rejected                |
+| ----------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------- |
+| `@theme`                | its `:root` rule. Nested `@keyframes` register. Modifiers like `reference` and `inline` change nothing | `prefix()`              |
+| `@import "tailwindcss"` | [Preflight](#preflight), at the top level only                                                         | any other import target |
+| `@apply`                | the utilities' declarations, expanded in place, `!` suffix included                                    | variants like `md:`     |
 
 ```css
 .card {
@@ -158,19 +176,17 @@ const image = await render(node, {
 }
 ```
 
-**Unlayered stylesheet rules override `tw` utilities**, and rules in a named `@layer` lose to them. That is Tailwind's own order: utilities are the last declared layer. Prefix a utility with `!` to override an unlayered rule.
+Other Tailwind directives do not parse: `@utility`, `@custom-variant`, `@source`, `@plugin` and `@config`. Compile those with Tailwind and use [the bundler path](#tailwind-with-your-bundler).
 
-```tsx
-<div tw="bg-blue-500 p-4 rounded-lg">
-  <h1 tw="text-white text-2xl font-bold">Hello Tailwind!</h1>
-</div>
-```
+## Design tokens
 
-### Utilities read CSS variables
+A utility reads a CSS custom property, the way Tailwind compiles it. `bg-red-500` resolves `var(--color-red-500)`, and `p-4` resolves `calc(var(--spacing) * 4)`. The built-in scale sits behind them as the fallback, so tokens stay optional until you want your own palette.
 
-A utility reads a CSS custom property, the way Tailwind compiles it. `bg-red-500` resolves `var(--color-red-500)`, `p-4` resolves `calc(var(--spacing) * 4)`. The built-in scale sits behind them as the fallback.
+### Declaring tokens
 
-Declare tokens in a `:root` rule, in a [Tailwind `@theme` block](#tailwind-at-rules) pasted as-is, or pass them as [the `cssVariables` option](#css-variables).
+Three equivalent places. All of them feed every `var()`, in stylesheets, in `<style>` tags, and in utilities.
+
+A `:root` rule, or a [Tailwind `@theme` block](#tailwind-at-rules) pasted as-is:
 
 ```css
 :root {
@@ -179,19 +195,31 @@ Declare tokens in a `:root` rule, in a [Tailwind `@theme` block](#tailwind-at-ru
 }
 ```
 
-```tsx
-<div tw="bg-brand-500 p-gutter" />
+Or the `cssVariables` option, which compiles into a `:root` rule. The leading `--` is optional.
+
+```tsx twoslash
+import { render } from "takumi-js";
+
+const image = await render(<div className="bg-brand-500 p-gutter">Hello</div>, {
+  width: 1200,
+  height: 630,
+  cssVariables: { "--color-brand-500": "#5b21b6", "--spacing-gutter": "2.5rem" },
+  future: { classNameUtilities: true },
+});
 ```
 
-Tokens declared in a stylesheet follow the CSS cascade. A media query or a selector can override them. Tokens passed as `cssVariables` sit after every stylesheet, so overriding one takes a more specific selector.
+**Takumi drops an entry whose value contains `;`, `{`, `}`, `/*` or `!important`. It also drops an entry whose name contains `:`, `;`, `{` or `}`.** Those entries could escape the generated rule.
 
-```css
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-brand-500: #a78bfa;
-  }
-}
+A nested palette flattens with the `cssVariables` helper. Keys join with `-` into one variable name.
+
+```tsx twoslash
+import { cssVariables } from "takumi-js/helpers";
+
+const flat = cssVariables({ color: { brand: { 500: "#5b21b6" } } });
+// { "--color-brand-500": "#5b21b6" }
 ```
+
+### Which utilities read a token
 
 The namespace picks which utilities a token reaches:
 
@@ -210,26 +238,34 @@ The namespace picks which utilities a token reaches:
 | `--blur-*`                                          | `blur-*` and `backdrop-blur-*` presets                                                                                                         |
 | `--drop-shadow-*`                                   | `drop-shadow-*` presets                                                                                                                        |
 | `--shadow-*`, `--inset-shadow-*`, `--text-shadow-*` | shadow preset shapes. A custom shape carries its own colours, so shadow colour utilities only reach the built-in fallback                      |
-| `--animate-*`                                       | `animate-*`. An unknown token like `animate-wiggle` reads `var(--animate-wiggle)`; pair it with its `@keyframes`                               |
+| `--animate-*`                                       | `animate-*`. An unknown token like `animate-wiggle` reads `var(--animate-wiggle)`. Pair it with its `@keyframes`                               |
 | `--breakpoint-*`                                    | the `sm:`–`2xl:` variants, and new ones like `3xl:`. Variants gate before the cascade, so only an unconditional `:root` declaration moves them |
 
-Some things behave differently from Tailwind here:
+### Overriding tokens
 
-- Colours reach gradients and shadows: `from-brand-500` and `shadow-brand-500` read `--color-brand-500` like `bg-brand-500` does.
-- A gradient needs `bg-linear-*`, `bg-radial` or `bg-conic`. Stops alone paint nothing, as in Tailwind.
+Tokens declared in a stylesheet follow the CSS cascade. A media query or a selector can override them:
+
+```css
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-brand-500: #a78bfa;
+  }
+}
+```
+
+Tokens passed as `cssVariables` sit in a rule after every stylesheet:
+
+| Competing declaration                  | Result                   |
+| -------------------------------------- | ------------------------ |
+| Equally specific `:root` rule in CSS   | `cssVariables` wins      |
+| A more specific selector, `:root:root` | the selector wins        |
+| Declaration on the element             | Element declaration wins |
+
+## Where this differs from Tailwind
+
+- Colours reach gradients and shadows. `from-brand-500` and `shadow-brand-500` read `--color-brand-500` like `bg-brand-500` does.
+- Same as Tailwind, but easy to miss: a gradient needs `bg-linear-*`, `bg-radial` or `bg-conic`. Stops alone paint nothing.
 - `--color-red-500: initial` falls back to the built-in red instead of removing `bg-red-500`.
-- A bare `rounded` keeps its built-in value; `rounded-sm` and the rest read the variable.
+- A bare `rounded` keeps its built-in value. `rounded-sm` and the rest read the variable.
 - `--spacing` needs a unit. A bare number makes `p-4` compute pixels here, where a browser rejects the declaration.
 - An aliased token stays live. `--color-brand: var(--background)` follows a subtree `--background` override. In a browser, `@theme inline` exists to arrange that.
-
-`tw` is a plain prop, so build it dynamically:
-
-```tsx
-import clsx from "clsx";
-
-const isError = true;
-
-<div tw={clsx("p-4 rounded", isError ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700")}>
-  {isError ? "Something went wrong" : "Success!"}
-</div>;
-```
