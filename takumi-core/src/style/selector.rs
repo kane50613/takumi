@@ -3,6 +3,7 @@ use std::{
   fmt::{self, Write},
   mem::take,
   ops::Deref,
+  sync::LazyLock,
 };
 
 use cssparser::*;
@@ -1453,16 +1454,16 @@ impl StyleSheet {
     }
 
     if preflight {
-      let mut preflight_sheet = Self::parse_loosy(PREFLIGHT_CSS);
+      static PREFLIGHT_RULES: LazyLock<Vec<CssRule>> =
+        LazyLock::new(|| StyleSheet::parse_loosy(PREFLIGHT_CSS).rules);
+
+      let mut preflight_rules = PREFLIGHT_RULES.clone();
       declared_layers.splice(
         0..0,
-        preflight_sheet
-          .rules
-          .iter()
-          .filter_map(|rule| rule.layer.clone()),
+        preflight_rules.iter().filter_map(|rule| rule.layer.clone()),
       );
-      preflight_sheet.rules.append(&mut rules);
-      rules = preflight_sheet.rules;
+      preflight_rules.append(&mut rules);
+      rules = preflight_rules;
     }
 
     let mut layer_order = HashMap::<LayerPath, usize>::new();
