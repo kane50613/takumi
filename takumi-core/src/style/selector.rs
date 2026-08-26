@@ -1324,16 +1324,32 @@ impl From<Vec<PropertyRule>> for StyleSheet {
   }
 }
 
-/// The subset of Tailwind's Preflight takumi applies, in Tailwind's `base`
-/// layer so every author rule outranks it.
+/// Tailwind's Preflight, minus rules takumi cannot honor: form controls,
+/// `::placeholder`, vendor pseudo-elements, elements that never become a node,
+/// `abbr[title]` (needs an unparsed `text-decoration` style) and `summary`
+/// (`display: list-item` would paint a disc for the disclosure marker).
+/// `:root` stands in for upstream's `html, :host`.
 /// https://github.com/tailwindlabs/tailwindcss/blob/main/packages/tailwindcss/preflight.css
 const PREFLIGHT_CSS: &str = r"
 @layer base {
   *,
   ::before,
   ::after {
+    box-sizing: border-box;
     margin: 0;
     padding: 0;
+    border: 0 solid;
+  }
+
+  :root {
+    line-height: 1.5;
+    tab-size: 4;
+  }
+
+  hr {
+    height: 0;
+    color: inherit;
+    border-top-width: 1px;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -1341,8 +1357,56 @@ const PREFLIGHT_CSS: &str = r"
     font-weight: inherit;
   }
 
+  a {
+    color: inherit;
+    text-decoration: inherit;
+  }
+
+  b, strong {
+    font-weight: bolder;
+  }
+
+  code, kbd, samp, pre {
+    font-size: 1em;
+  }
+
+  small {
+    font-size: 80%;
+  }
+
+  sub, sup {
+    font-size: 75%;
+    line-height: 0;
+    position: relative;
+    vertical-align: baseline;
+  }
+
+  sub {
+    bottom: -0.25em;
+  }
+
+  sup {
+    top: -0.5em;
+  }
+
+  table {
+    text-indent: 0;
+    border-color: inherit;
+    border-collapse: collapse;
+  }
+
   ol, ul, menu {
     list-style: none;
+  }
+
+  img, svg {
+    display: block;
+    vertical-align: middle;
+  }
+
+  img {
+    max-width: 100%;
+    height: auto;
   }
 }
 ";
@@ -2708,6 +2772,21 @@ mod tests {
         })
       })
       .count()
+  }
+
+  /// Pins every Preflight declaration. A property takumi stops supporting is
+  /// dropped silently by both parse modes, so only the count catches it.
+  #[test]
+  fn test_preflight_css_keeps_every_declaration() {
+    let sheet = StyleSheet::parse(PREFLIGHT_CSS).unwrap();
+    let declarations: usize = sheet
+      .rules
+      .iter()
+      .map(|rule| rule.normal_declarations.declarations.len())
+      .sum();
+
+    assert_eq!(sheet.rules.len(), 15);
+    assert_eq!(declarations, 55);
   }
 
   #[test]
