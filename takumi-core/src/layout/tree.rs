@@ -29,10 +29,10 @@ use crate::{
   },
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
   style::{
-    BackgroundImage, BackgroundImages, BlendMode, BoxSizing, BreakpointOverrides, Color,
-    ComputedStyle, ContentItem, ContentValue, Display, Filters, Float, Isolation, Length,
-    LineHeight, ListStylePosition, PercentageNumber, Position, SizingContext, Style as NodeStyle,
-    StyleDeclaration, StyleDeclarationBlock, StyleSheet, TextWrapMode, WhiteSpaceCollapse,
+    BackgroundImage, BackgroundImages, BlendMode, BoxSizing, Color, ComputedStyle, ContentItem,
+    ContentValue, Display, Filters, Float, Isolation, Length, LineHeight, ListStylePosition,
+    PercentageNumber, Position, SizingContext, Style as NodeStyle, StyleDeclaration,
+    StyleDeclarationBlock, StyleSheet, TextWrapMode, WhiteSpaceCollapse,
     apply_stylesheet_animations,
   },
   viewport::Viewport,
@@ -230,7 +230,7 @@ fn build_style_layers(
   node_layers: NodeStyleLayers,
   matched_declarations: &MatchedDeclarationsView<'_>,
   viewport: Viewport,
-  breakpoints: &BreakpointOverrides,
+  stylesheet: &StyleSheet,
 ) -> (NodeStyle, SmallVec<[StyleDeclarationBlock; 2]>) {
   let mut style = NodeStyle::default();
 
@@ -241,13 +241,13 @@ fn build_style_layers(
     .author_tw
     .map(|author_tw| {
       author_tw
-        .into_declaration_block(viewport, breakpoints)
+        .into_declaration_block(viewport, &stylesheet.breakpoints)
         .split_importance()
     })
     .unzip();
 
   if let Some(preset) = node_layers.preset {
-    style.merge_from(preset);
+    style.merge_preset(preset, stylesheet.preflight);
   }
 
   if let Some(dir) = node_layers.dir {
@@ -358,7 +358,7 @@ pub(super) fn pseudo_computed_style(
     NodeStyleLayers::default(),
     pseudo_matched,
     parent_context.sizing.viewport,
-    &parent_context.stylesheet.breakpoints,
+    parent_context.stylesheet.as_ref(),
   );
   let inherited_parent = registered_custom_property_parent_style(
     &parent_context.style,
@@ -1420,7 +1420,7 @@ impl RenderNode {
         layers,
         matched,
         parent_context.sizing.viewport,
-        &parent_context.stylesheet.breakpoints,
+        parent_context.stylesheet.as_ref(),
       );
       let inherited_parent = registered_custom_property_parent_style(
         &parent_context.style,
