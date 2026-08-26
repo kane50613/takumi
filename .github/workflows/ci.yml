@@ -656,24 +656,24 @@ jobs:
     needs: [build-wasm, build-helpers]
     strategy:
       fail-fast: false
+      # The wasm bundle is the same bytes everywhere, so a pull request only
+      # checks that Bun loads it. Master keeps the full host sweep.
+      # arm64 Windows is out for now: it fails too often for no reason.
       matrix:
-        settings:
-          - host: windows-2025
-            target: x86_64-pc-windows-msvc
-          # - host: windows-11-arm # its too easy to fail for no reason on arm64 windows, so skip for now
-          #   target: aarch64-pc-windows-msvc
-          - host: macos-15-intel
-            target: x86_64-apple-darwin
-          - host: macos-15
-            target: aarch64-apple-darwin
-          - host: ubuntu-slim
-            target: x86_64-unknown-linux-gnu
-          - host: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-          - host: ubuntu-24.04-arm
-            target: aarch64-unknown-linux-gnu
-          - host: ubuntu-24.04-arm
-            target: aarch64-unknown-linux-musl
+        settings: >-
+          ${{ github.event_name == 'pull_request'
+          && fromJSON('[
+          {"host": "ubuntu-slim", "target": "x86_64-unknown-linux-gnu"}
+          ]')
+          || fromJSON('[
+          {"host": "windows-2025", "target": "x86_64-pc-windows-msvc"},
+          {"host": "macos-15-intel", "target": "x86_64-apple-darwin"},
+          {"host": "macos-15", "target": "aarch64-apple-darwin"},
+          {"host": "ubuntu-slim", "target": "x86_64-unknown-linux-gnu"},
+          {"host": "ubuntu-latest", "target": "x86_64-unknown-linux-musl"},
+          {"host": "ubuntu-24.04-arm", "target": "aarch64-unknown-linux-gnu"},
+          {"host": "ubuntu-24.04-arm", "target": "aarch64-unknown-linux-musl"}
+          ]') }}
     runs-on: ${{ matrix.settings.host }}
     timeout-minutes: 3
     steps:
