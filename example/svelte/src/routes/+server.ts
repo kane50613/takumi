@@ -14,7 +14,7 @@ export async function GET({ url }: RequestEvent) {
   return new ImageResponse(`${head}${body}`, {
     width: 1200,
     height: 630,
-    stylesheets: [style],
+    css: style,
     fonts: ["https://takumi.kane.tw/fonts/Geist.woff2"],
   });
 }

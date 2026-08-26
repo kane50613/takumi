@@ -186,7 +186,7 @@ async function collectImages(
     : prepared;
 }
 
-function mergeStylesheets(options: PipelineOptions | undefined, extra: string[]): string[] {
+function mergeCss(options: PipelineOptions | undefined, extra: string[]): string[] {
   if (options?.css !== undefined && options?.stylesheets !== undefined) {
     throw new Error("pass either `css` or `stylesheets`, not both");
   }
@@ -237,7 +237,7 @@ export async function render(element: RenderInput, options?: RenderOptions) {
   return renderer.render(node, {
     ...forward,
     images,
-    css: mergeStylesheets(options, stylesheets),
+    css: mergeCss(options, stylesheets),
   });
 }
 
@@ -275,7 +275,7 @@ export async function renderSvg(element: RenderInput, options?: RenderSvgOptions
   return renderer.renderSvg(node, {
     ...forward,
     images,
-    css: mergeStylesheets(options, stylesheets),
+    css: mergeCss(options, stylesheets),
   });
 }
 
@@ -320,7 +320,7 @@ export async function renderAnimation(options: RenderAnimationOptions) {
     scenes.map((scene) => scene.node),
     options,
   );
-  const stylesheets = mergeStylesheets(
+  const css = mergeCss(
     options,
     scenes.flatMap((scene) => scene.stylesheets),
   );
@@ -331,6 +331,6 @@ export async function renderAnimation(options: RenderAnimationOptions) {
     ...forward,
     scenes: scenes.map(({ node, durationMs }) => ({ node, durationMs })),
     images,
-    css: stylesheets,
+    css,
   });
 }

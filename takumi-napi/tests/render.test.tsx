@@ -238,7 +238,7 @@ describe("render", () => {
       width: 1200,
       height: 630,
       format: "png",
-      stylesheets,
+      css: stylesheets,
     });
 
     expect(result).toBeInstanceOf(Buffer);
@@ -254,7 +254,7 @@ describe("render", () => {
         width: 200,
         height: 100,
         timeMs: 500,
-        stylesheets: [
+        css: [
           `
             div {
               width: 100px;
@@ -286,7 +286,7 @@ describe("render", () => {
         width: 200,
         height: 100,
         timeMs: 500,
-        stylesheets: [
+        css: [
           `
             div {
               width: 100px;

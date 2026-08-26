@@ -86,7 +86,7 @@ for (let start = 0; start < frameCount; start += BATCH) {
         height: outHeight,
         devicePixelRatio: dpr,
         format: "raw",
-        stylesheets: [...stylesheets, ...(module.stylesheets ?? [])],
+        css: [...stylesheets, ...(module.stylesheets ?? [])],
         images,
         fonts: fonts.length > 0 ? fonts : undefined,
         fontFamilies: module.fontFamilies?.(ms),
