@@ -407,6 +407,14 @@ const fn ts(oy: f32, blur: f32, alpha: u8) -> TextShadow {
   }
 }
 
+const SHADOW_2XS: [BoxShadow; 1] = [bs(false, 1.0, 0.0, 0.0, 13)];
+const SHADOW_XS: [BoxShadow; 1] = [bs(false, 1.0, 2.0, 0.0, 13)];
+const SHADOW_2XL: [BoxShadow; 1] = [bs(false, 25.0, 50.0, -12.0, 64)];
+const INSET_SHADOW_2XS: [BoxShadow; 1] = [bs(true, 1.0, 0.0, 0.0, 13)];
+const INSET_SHADOW_XS: [BoxShadow; 1] = [bs(true, 1.0, 1.0, 0.0, 13)];
+const INSET_SHADOW_SM: [BoxShadow; 1] = [bs(true, 2.0, 4.0, 0.0, 13)];
+const TEXT_SHADOW_2XS: [TextShadow; 1] = [ts(1.0, 0.0, 38)];
+const TEXT_SHADOW_XS: [TextShadow; 1] = [ts(1.0, 1.0, 51)];
 const SHADOW_SM: [BoxShadow; 2] = [bs(false, 1.0, 3.0, 0.0, 26), bs(false, 1.0, 2.0, -1.0, 26)];
 const SHADOW_MD: [BoxShadow; 2] = [bs(false, 4.0, 6.0, -1.0, 26), bs(false, 2.0, 4.0, -2.0, 26)];
 const SHADOW_LG: [BoxShadow; 2] = [
@@ -507,13 +515,14 @@ pub(crate) static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! 
   "col-end-auto" => TailwindProperty::GridColumnEnd(GridPlacement::Auto),
   "row-start-auto" => TailwindProperty::GridRowStart(GridPlacement::Auto),
   "row-end-auto" => TailwindProperty::GridRowEnd(GridPlacement::Auto),
-  "shadow-2xs" => TailwindProperty::Shadow(bs(false, 1.0, 0.0, 0.0, 13)),
-  "shadow-xs" => TailwindProperty::Shadow(bs(false, 1.0, 2.0, 0.0, 13)),
-  "shadow-sm" | "shadow" => TailwindProperty::ShadowList(&SHADOW_SM),
-  "shadow-md" => TailwindProperty::ShadowList(&SHADOW_MD),
-  "shadow-lg" => TailwindProperty::ShadowList(&SHADOW_LG),
-  "shadow-xl" => TailwindProperty::ShadowList(&SHADOW_XL),
-  "shadow-2xl" => TailwindProperty::Shadow(bs(false, 25.0, 50.0, -12.0, 64)),
+  "shadow-2xs" => TailwindProperty::ShadowPreset { variable: "--shadow-2xs", layers: &SHADOW_2XS },
+  "shadow-xs" => TailwindProperty::ShadowPreset { variable: "--shadow-xs", layers: &SHADOW_XS },
+  "shadow-sm" => TailwindProperty::ShadowPreset { variable: "--shadow-sm", layers: &SHADOW_SM },
+  "shadow" => TailwindProperty::ShadowPreset { variable: "--shadow", layers: &SHADOW_SM },
+  "shadow-md" => TailwindProperty::ShadowPreset { variable: "--shadow-md", layers: &SHADOW_MD },
+  "shadow-lg" => TailwindProperty::ShadowPreset { variable: "--shadow-lg", layers: &SHADOW_LG },
+  "shadow-xl" => TailwindProperty::ShadowPreset { variable: "--shadow-xl", layers: &SHADOW_XL },
+  "shadow-2xl" => TailwindProperty::ShadowPreset { variable: "--shadow-2xl", layers: &SHADOW_2XL },
   "shadow-none" => TailwindProperty::ShadowList(&[]),
   "grayscale" => TailwindProperty::Grayscale(PercentageNumber(1.0)),
   "invert" => TailwindProperty::Invert(PercentageNumber(1.0)),
@@ -530,16 +539,16 @@ pub(crate) static FIXED_PROPERTIES: phf::Map<&str, TailwindProperty> = phf_map! 
   "drop-shadow-2xl" => TailwindProperty::DropShadow(dsp("2xl", ts(25.0, 25.0, 38))),
   "drop-shadow-none" => TailwindProperty::DropShadow(TwDropShadow { shadow: ts(0.0, 0.0, 0), token: None }),
   // Inset shadows (--inset-shadow-*)
-  "inset-shadow-2xs" => TailwindProperty::Shadow(bs(true, 1.0, 0.0, 0.0, 13)),
-  "inset-shadow-xs" => TailwindProperty::Shadow(bs(true, 1.0, 1.0, 0.0, 13)),
-  "inset-shadow-sm" => TailwindProperty::Shadow(bs(true, 2.0, 4.0, 0.0, 13)),
+  "inset-shadow-2xs" => TailwindProperty::ShadowPreset { variable: "--inset-shadow-2xs", layers: &INSET_SHADOW_2XS },
+  "inset-shadow-xs" => TailwindProperty::ShadowPreset { variable: "--inset-shadow-xs", layers: &INSET_SHADOW_XS },
+  "inset-shadow-sm" => TailwindProperty::ShadowPreset { variable: "--inset-shadow-sm", layers: &INSET_SHADOW_SM },
   "inset-shadow-none" => TailwindProperty::ShadowList(&[]),
   // Text shadows (--text-shadow-*)
-  "text-shadow-2xs" => TailwindProperty::TextShadow(ts(1.0, 0.0, 38)),
-  "text-shadow-xs" => TailwindProperty::TextShadow(ts(1.0, 1.0, 51)),
-  "text-shadow-sm" => TailwindProperty::TextShadowList(&TEXT_SHADOW_SM),
-  "text-shadow-md" => TailwindProperty::TextShadowList(&TEXT_SHADOW_MD),
-  "text-shadow-lg" => TailwindProperty::TextShadowList(&TEXT_SHADOW_LG),
+  "text-shadow-2xs" => TailwindProperty::TextShadowPreset { variable: "--text-shadow-2xs", layers: &TEXT_SHADOW_2XS },
+  "text-shadow-xs" => TailwindProperty::TextShadowPreset { variable: "--text-shadow-xs", layers: &TEXT_SHADOW_XS },
+  "text-shadow-sm" => TailwindProperty::TextShadowPreset { variable: "--text-shadow-sm", layers: &TEXT_SHADOW_SM },
+  "text-shadow-md" => TailwindProperty::TextShadowPreset { variable: "--text-shadow-md", layers: &TEXT_SHADOW_MD },
+  "text-shadow-lg" => TailwindProperty::TextShadowPreset { variable: "--text-shadow-lg", layers: &TEXT_SHADOW_LG },
   "text-shadow-none" => TailwindProperty::TextShadowList(&[]),
   "isolate" => TailwindProperty::Isolation(Isolation::Isolate),
   "isolation-auto" => TailwindProperty::Isolation(Isolation::Auto),
