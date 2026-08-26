@@ -541,6 +541,11 @@ enum AtRulePrelude {
   Media(MediaQueryList),
   Property(String),
   Supports(bool),
+  /// Tailwind's `@theme`, read as the `:root` rule it compiles to. Modifiers
+  /// are accepted but read the same way: takumi resolves `var()` through the
+  /// cascade at computed time, so `reference` and `inline` collapse into the
+  /// emitted rule.
+  Theme,
 }
 
 fn parse_fragment_with_mode<'i, 't>(
@@ -650,6 +655,179 @@ fn parse_property_rule<'i, 't>(
   })
 }
 
+/// Parses a `@theme` block body: declarations landing on `:root`, plus any
+/// `@keyframes` the theme carries, the way Tailwind's own `theme.css` pairs
+/// `--animate-*` tokens with their keyframes.
+struct ThemeBlockParser<'a> {
+  media_queries: &'a [MediaQueryList],
+  lossy: bool,
+}
+
+enum ThemeBodyItem {
+  Declarations(Box<StyleDeclarationBlock>),
+  Keyframes(StyleSheetFragment),
+}
+
+impl<'i> DeclarationParser<'i> for ThemeBlockParser<'_> {
+  type Declaration = ThemeBodyItem;
+  type Error = StyleSheetParseError;
+
+  fn parse_value<'t>(
+    &mut self,
+    name: CowRcStr<'i>,
+    input: &mut Parser<'i, 't>,
+    state: &ParserState,
+  ) -> Result<Self::Declaration, ParseError<'i, Self::Error>> {
+    let mut parser = StyleDeclarationParser;
+    parser
+      .parse_value(name, input, state)
+      .map(Box::new)
+      .map(ThemeBodyItem::Declarations)
+  }
+}
+
+impl<'i> AtRuleParser<'i> for ThemeBlockParser<'_> {
+  type Prelude = AtRulePrelude;
+  type AtRule = ThemeBodyItem;
+  type Error = StyleSheetParseError;
+
+  fn parse_prelude<'t>(
+    &mut self,
+    name: CowRcStr<'i>,
+    input: &mut Parser<'i, 't>,
+  ) -> Result<Self::Prelude, ParseError<'i, Self::Error>> {
+    parse_at_rule_prelude(name, input)
+  }
+
+  fn parse_block<'t>(
+    &mut self,
+    prelude: Self::Prelude,
+    _location: &ParserState,
+    input: &mut Parser<'i, 't>,
+  ) -> Result<Self::AtRule, ParseError<'i, Self::Error>> {
+    match prelude {
+      AtRulePrelude::Keyframes(name) => {
+        parse_keyframes_block(name, self.media_queries, self.lossy, input)
+          .map(ThemeBodyItem::Keyframes)
+      }
+      _ => Err(input.new_custom_error(StyleSheetParseError::unsupported_nested_at_rule())),
+    }
+  }
+}
+
+impl<'i> QualifiedRuleParser<'i> for ThemeBlockParser<'_> {
+  type Prelude = ();
+  type QualifiedRule = ThemeBodyItem;
+  type Error = StyleSheetParseError;
+
+  fn parse_prelude<'t>(
+    &mut self,
+    input: &mut Parser<'i, 't>,
+  ) -> Result<Self::Prelude, ParseError<'i, Self::Error>> {
+    Err(input.new_custom_error(StyleSheetParseError::unsupported_nested_at_rule()))
+  }
+}
+
+impl<'i> RuleBodyItemParser<'i, ThemeBodyItem, StyleSheetParseError> for ThemeBlockParser<'_> {
+  fn parse_qualified(&self) -> bool {
+    false
+  }
+
+  fn parse_declarations(&self) -> bool {
+    true
+  }
+}
+
+fn parse_theme_block<'i, 't>(
+  media_queries: &[MediaQueryList],
+  layer: Option<&LayerPath>,
+  lossy: bool,
+  input: &mut Parser<'i, 't>,
+) -> Result<StyleSheetFragment, ParseError<'i, StyleSheetParseError>> {
+  let mut root_input = ParserInput::new(":root");
+  let selectors = SelectorList::parse(
+    &TakumiSelectorParser,
+    &mut Parser::new(&mut root_input),
+    ParseRelative::No,
+  )
+  .map_err(|_| input.new_custom_error(StyleSheetParseError::unsupported_nested_at_rule()))?;
+
+  let mut normal_declarations = StyleDeclarationBlock::default();
+  let mut important_declarations = StyleDeclarationBlock::default();
+  let mut fragment = StyleSheetFragment::default();
+  let mut parser = ThemeBlockParser {
+    media_queries,
+    lossy,
+  };
+
+  for result in RuleBodyParser::new(input, &mut parser) {
+    match result {
+      Ok(ThemeBodyItem::Declarations(block)) => {
+        let block = *block;
+
+        if block.importance.is_empty() {
+          normal_declarations.append(block);
+        } else {
+          important_declarations.append(block);
+        }
+      }
+      Ok(ThemeBodyItem::Keyframes(keyframes)) => fragment.extend(keyframes),
+      Err((error, _)) => {
+        if lossy {
+          continue;
+        }
+        return Err(error);
+      }
+    }
+  }
+
+  if !normal_declarations.declarations.is_empty() || !important_declarations.declarations.is_empty()
+  {
+    fragment.rules.push(CssRule {
+      selectors,
+      normal_declarations,
+      important_declarations,
+      media_queries: media_queries.to_vec(),
+      layer: layer.cloned(),
+      layer_order: None,
+    });
+  }
+
+  Ok(fragment)
+}
+
+fn parse_keyframes_block<'i, 't>(
+  name: String,
+  media_queries: &[MediaQueryList],
+  lossy: bool,
+  input: &mut Parser<'i, 't>,
+) -> Result<StyleSheetFragment, ParseError<'i, StyleSheetParseError>> {
+  let mut parser = KeyframeRuleParser;
+  let mut keyframes = Vec::new();
+  for keyframe in StyleSheetParser::new(input, &mut parser) {
+    match keyframe {
+      Ok(keyframe) => keyframes.push(keyframe),
+      Err((error, _)) => {
+        if lossy {
+          continue;
+        }
+        return Err(error);
+      }
+    }
+  }
+
+  let mut rule = KeyframesRule::builder()
+    .name(name)
+    .keyframes(keyframes)
+    .build();
+  rule.media_queries = media_queries.to_vec();
+
+  Ok(StyleSheetFragment {
+    keyframes: vec![rule],
+    ..StyleSheetFragment::default()
+  })
+}
+
 fn parse_at_rule_prelude<'i, 't>(
   name: CowRcStr<'i>,
   input: &mut Parser<'i, 't>,
@@ -676,6 +854,18 @@ fn parse_at_rule_prelude<'i, 't>(
 
   if name.eq_ignore_ascii_case("supports") {
     return parse_supports_condition(input).map(AtRulePrelude::Supports);
+  }
+
+  if name.eq_ignore_ascii_case("theme") {
+    while !input.is_exhausted() {
+      let location = input.current_source_location();
+      let modifier = input.expect_ident()?.clone();
+      match_ignore_ascii_case! {&modifier,
+        "reference" | "default" | "static" | "inline" => {},
+        _ => return Err(location.new_unexpected_token_error(Token::Ident(modifier))),
+      }
+    }
+    return Ok(AtRulePrelude::Theme);
   }
 
   if name.eq_ignore_ascii_case("property") {
@@ -853,6 +1043,7 @@ fn parse_nested_at_rule_block<'i, 't>(
       for _ in RuleBodyParser::new(input, &mut parser).flatten() {}
       Ok(StyleSheetFragment::default())
     }
+    AtRulePrelude::Theme => parse_theme_block(media_queries, current_layer, lossy, input),
     AtRulePrelude::Keyframes(_) | AtRulePrelude::Property(_) => {
       Err(input.new_custom_error(StyleSheetParseError::unsupported_nested_at_rule()))
     }
@@ -930,30 +1121,9 @@ impl<'i> AtRuleParser<'i> for RuleParser {
         fragment.declared_layers.splice(0..0, declared_layers);
         Ok(fragment)
       }
-      AtRulePrelude::Keyframes(name) => {
-        let mut parser = KeyframeRuleParser;
-        let mut keyframes = Vec::new();
-        for keyframe in StyleSheetParser::new(input, &mut parser) {
-          match keyframe {
-            Ok(keyframe) => keyframes.push(keyframe),
-            Err((error, _)) => {
-              if self.lossy {
-                continue;
-              }
-              return Err(error);
-            }
-          }
-        }
-
-        Ok(StyleSheetFragment {
-          keyframes: vec![
-            KeyframesRule::builder()
-              .name(name)
-              .keyframes(keyframes)
-              .build(),
-          ],
-          ..StyleSheetFragment::default()
-        })
+      AtRulePrelude::Keyframes(name) => parse_keyframes_block(name, &[], self.lossy, input),
+      AtRulePrelude::Theme => {
+        parse_theme_block(&[], self.current_layer.as_ref(), self.lossy, input)
       }
       AtRulePrelude::Media(media_query) => {
         let mut fragment = parse_fragment_with_mode(
@@ -2181,5 +2351,81 @@ mod tests {
     ] {
       assert_lossy_parse_keeps_single_valid_rule(css);
     }
+  }
+
+  #[test]
+  fn test_theme_block_reads_as_root_rule() {
+    let sheet = parse_stylesheet("@theme { --color-brand: #ff0000; }");
+    assert_eq!(sheet.rules.len(), 1);
+    assert_eq!(selector_text(&sheet.rules[0]), ":root");
+    assert_eq!(
+      sheet.rules[0].normal_declarations.declarations.as_slice(),
+      &[StyleDeclaration::CustomProperty(
+        "--color-brand".into(),
+        "#ff0000".into()
+      )]
+    );
+  }
+
+  /// Tailwind inlines a reference token's value into utilities instead of
+  /// emitting `:root`. Here utilities resolve `var()` through the cascade, so
+  /// the token still has to land on `:root` for `bg-brand` to see it.
+  #[test]
+  fn test_theme_reference_still_emits_root() {
+    let sheet = parse_stylesheet("@theme reference { --color-brand: #ff0000; }");
+    assert_eq!(sheet.rules.len(), 1);
+    assert_eq!(selector_text(&sheet.rules[0]), ":root");
+  }
+
+  /// A custom property swallows `!important` into its value, so only a
+  /// non-custom declaration exercises the split.
+  #[test]
+  fn test_theme_splits_important_declarations() {
+    let sheet = parse_stylesheet("@theme { --x: 1px; width: 10px !important; }");
+    assert_eq!(sheet.rules.len(), 1);
+    assert_eq!(sheet.rules[0].normal_declarations.declarations.len(), 1);
+    assert_eq!(sheet.rules[0].important_declarations.declarations.len(), 1);
+  }
+
+  #[test]
+  fn test_theme_compiler_modifiers_are_accepted() {
+    let sheet = parse_stylesheet("@theme default static inline { --x: 1px; }");
+    assert_eq!(sheet.rules.len(), 1);
+  }
+
+  #[test]
+  fn test_theme_prefix_modifier_is_rejected() {
+    assert_lossy_parse_keeps_single_valid_rule(
+      r#"
+        @theme prefix(tw) { --x: 1px; }
+
+        .card { width: 100px; }
+      "#,
+    );
+  }
+
+  #[test]
+  fn test_keyframes_inside_theme() {
+    let sheet = parse_stylesheet(
+      r#"
+        @theme {
+          --animate-wobble: wobble 1s linear infinite;
+          @keyframes wobble {
+            to { width: 10px; }
+          }
+        }
+      "#,
+    );
+    assert_eq!(sheet.keyframes.len(), 1);
+    assert_eq!(sheet.keyframes[0].name, "wobble");
+    assert_eq!(sheet.rules.len(), 1);
+    assert_eq!(selector_text(&sheet.rules[0]), ":root");
+  }
+
+  #[test]
+  fn test_theme_inside_media_is_gated() {
+    let sheet = parse_stylesheet("@media (min-width: 5000px) { @theme { --x: red; } }");
+    assert_eq!(sheet.rules.len(), 1);
+    assert_eq!(sheet.rules[0].media_queries.len(), 1);
   }
 }
