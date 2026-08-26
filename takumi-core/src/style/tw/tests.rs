@@ -193,7 +193,7 @@ fn test_parse_value_arbitrary_url_with_scheme_colon() {
 
   assert_eq!(
     parse_value("md:mask-[url('https://example.com/a.svg')]"),
-    Some((url_image, Some(Breakpoint(Length::Rem(48.0))), false))
+    Some((url_image, Breakpoint::parse("md"), false))
   );
 }
 
@@ -369,7 +369,7 @@ fn test_parse_col_end() {
 #[test]
 fn test_grid_column_start_emits_only_start_longhand() {
   let values = TailwindValues::from_str("col-start-2").expect("tailwind values should parse");
-  let declarations = values.into_declaration_block(Viewport::new((100, 100)));
+  let declarations = values.into_declaration_block(Viewport::new((100, 100)), &Default::default());
 
   assert_eq!(
     declarations.iter().collect::<Vec<_>>(),
@@ -380,7 +380,7 @@ fn test_grid_column_start_emits_only_start_longhand() {
 #[test]
 fn test_grid_row_end_emits_only_end_longhand() {
   let values = TailwindValues::from_str("row-end-3").expect("tailwind values should parse");
-  let declarations = values.into_declaration_block(Viewport::new((100, 100)));
+  let declarations = values.into_declaration_block(Viewport::new((100, 100)), &Default::default());
 
   assert_eq!(
     declarations.iter().collect::<Vec<_>>(),
@@ -392,7 +392,7 @@ fn test_grid_row_end_emits_only_end_longhand() {
 fn test_grid_longhand_importance_is_tracked_per_side() {
   let values =
     TailwindValues::from_str("col-end-3 !col-start-2").expect("tailwind values should parse");
-  let declarations = values.into_declaration_block(Viewport::new((100, 100)));
+  let declarations = values.into_declaration_block(Viewport::new((100, 100)), &Default::default());
 
   assert_eq!(
     declarations.iter().collect::<Vec<_>>(),
@@ -538,7 +538,7 @@ fn test_comprehensive_mappings() {
 fn test_breakpoint_matches() {
   let viewport = Viewport::new((1000, 1000));
 
-  assert!(Breakpoint::parse("sm").is_some_and(|bp| bp.matches(viewport)));
+  assert!(Breakpoint::parse("sm").is_some_and(|bp| bp.matches(viewport, &Default::default())));
 }
 
 #[test]
@@ -546,7 +546,7 @@ fn test_breakpoint_does_not_match() {
   let viewport = Viewport::new((1000, 1000));
 
   // 80 * 16 = 1280 > 1000
-  assert!(Breakpoint::parse("xl").is_some_and(|bp| !bp.matches(viewport)));
+  assert!(Breakpoint::parse("xl").is_some_and(|bp| !bp.matches(viewport, &Default::default())));
 }
 
 #[test]
@@ -555,7 +555,7 @@ fn test_value_parsing() {
     parse_value("md:!mt-4"),
     Some((
       expand(TailwindProperty::MarginTop(Length::Rem(1.0))),
-      Some(Breakpoint(Length::Rem(48.0))),
+      Breakpoint::parse("md"),
       true
     ))
   );
@@ -575,7 +575,7 @@ fn test_values_sorting() {
         property => expand(property.clone()),
       };
 
-      (declarations, value.breakpoint, value.important)
+      (declarations, value.breakpoint.clone(), value.important)
     })
     .collect::<Vec<_>>();
 
@@ -591,7 +591,7 @@ fn test_values_sorting() {
       // sm:mt-8
       (
         expand(TailwindProperty::MarginTop(Length::Rem(2.0))),
-        Some(Breakpoint(Length::Rem(40.0))),
+        Breakpoint::parse("sm"),
         false
       ),
       // !mt-12
@@ -603,7 +603,7 @@ fn test_values_sorting() {
       // md:!mt-4
       (
         expand(TailwindProperty::MarginTop(Length::Rem(1.0))),
-        Some(Breakpoint(Length::Rem(48.0))),
+        Breakpoint::parse("md"),
         true
       ),
     ]
@@ -618,8 +618,8 @@ fn test_filters_append() {
     .expect("tailwind values should parse");
   let viewport = Viewport::new((100, 100));
 
-  let style =
-    Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+  let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
+    .inherit(&ComputedStyle::default());
 
   assert_eq!(
     style.filter,
@@ -637,8 +637,8 @@ fn test_transform_utilities_resolve_to_standard_longhands() {
     .expect("tailwind values should parse");
   let viewport = Viewport::new((100, 100));
 
-  let style =
-    Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+  let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
+    .inherit(&ComputedStyle::default());
 
   assert_eq!(
     style.translate,
@@ -735,8 +735,8 @@ fn test_linear_gradient_apply() {
   let values = TailwindValues::from_str("bg-linear-to-r from-red-500 via-green-500 to-blue-500")
     .expect("tailwind values should parse");
 
-  let style =
-    Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+  let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
+    .inherit(&ComputedStyle::default());
 
   assert_eq!(
     style.background_image,
@@ -773,8 +773,8 @@ fn test_shadow_color_overrides_shadow_preset_in_any_order() {
   for classes in ["shadow-md shadow-red-500", "shadow-red-500 shadow-md"] {
     let values = TailwindValues::from_str(classes)
       .unwrap_or_else(|_| panic!("tailwind values should parse: {classes}"));
-    let style =
-      Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+    let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
+      .inherit(&ComputedStyle::default());
 
     assert_eq!(
       style.box_shadow,
@@ -813,8 +813,8 @@ fn test_text_shadow_color_overrides_preset_in_any_order() {
   ] {
     let values = TailwindValues::from_str(classes)
       .unwrap_or_else(|_| panic!("tailwind values should parse: {classes}"));
-    let style =
-      Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+    let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
+      .inherit(&ComputedStyle::default());
 
     assert_eq!(
       style.text_shadow,
@@ -871,8 +871,8 @@ fn test_negative_grid_line() {
 fn test_logical_resolves_to_physical_ltr() {
   let viewport = Viewport::new((100, 100));
   let values = TailwindValues::from_str("ms-4 me-2 ps-3 pe-1").unwrap();
-  let style =
-    Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+  let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
+    .inherit(&ComputedStyle::default());
   assert_eq!(style.margin_left, Length::from_spacing(4.0));
   assert_eq!(style.margin_right, Length::from_spacing(2.0));
   assert_eq!(style.padding_left, Length::from_spacing(3.0));
@@ -883,13 +883,13 @@ fn test_logical_resolves_to_physical_ltr() {
 fn test_logical_physical_cascade_order_ltr() {
   let viewport = Viewport::new((100, 100));
   let values = TailwindValues::from_str("ms-2 ml-4").unwrap();
-  let style =
-    Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+  let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
+    .inherit(&ComputedStyle::default());
   assert_eq!(style.margin_left, Length::from_spacing(4.0));
 
   let values = TailwindValues::from_str("ml-4 ms-2").unwrap();
-  let style =
-    Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+  let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
+    .inherit(&ComputedStyle::default());
   assert_eq!(style.margin_left, Length::from_spacing(2.0));
 }
 
@@ -897,7 +897,7 @@ fn test_logical_physical_cascade_order_ltr() {
 fn test_logical_resolves_to_physical_rtl() {
   let viewport = Viewport::new((100, 100));
   let values = TailwindValues::from_str("ms-4 me-2 ps-3 pe-1").unwrap();
-  let mut block = values.into_declaration_block(viewport);
+  let mut block = values.into_declaration_block(viewport, &Default::default());
   block.push(StyleDeclaration::direction(Direction::Rtl), false);
   let style = Style::from(block).inherit(&ComputedStyle::default());
   assert_eq!(style.margin_right, Length::from_spacing(4.0));
@@ -910,7 +910,7 @@ fn test_logical_resolves_to_physical_rtl() {
 fn test_logical_resolves_when_direction_declared_after() {
   let viewport = Viewport::new((100, 100));
   let values = TailwindValues::from_str("ms-4").unwrap();
-  let mut block = values.into_declaration_block(viewport);
+  let mut block = values.into_declaration_block(viewport, &Default::default());
   block.push(StyleDeclaration::direction(Direction::Rtl), false);
   let style = Style::from(block).inherit(&ComputedStyle::default());
   assert_eq!(style.margin_right, Length::from_spacing(4.0));
@@ -921,13 +921,13 @@ fn test_logical_resolves_when_direction_declared_after() {
 fn test_filter_none_clears_previous_filters() {
   let viewport = Viewport::new((100, 100));
   let values = TailwindValues::from_str("blur-sm brightness-150 filter-none").unwrap();
-  let style =
-    Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+  let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
+    .inherit(&ComputedStyle::default());
   assert_eq!(style.filter, Filters::default());
 
   let values = TailwindValues::from_str("backdrop-blur-sm backdrop-filter-none").unwrap();
-  let style =
-    Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+  let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
+    .inherit(&ComputedStyle::default());
   assert_eq!(style.backdrop_filter, Filters::default());
 }
 
@@ -1002,8 +1002,8 @@ fn test_col_auto_row_auto() {
 fn test_shadow_md_is_composite() {
   let viewport = Viewport::new((100, 100));
   let values = TailwindValues::from_str("shadow-md").unwrap();
-  let style =
-    Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+  let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
+    .inherit(&ComputedStyle::default());
   assert_eq!(style.box_shadow.as_ref().map(|s| s.len()), Some(2));
 }
 
@@ -1011,8 +1011,8 @@ fn test_shadow_md_is_composite() {
 fn test_text_shadow_sm_is_composite() {
   let viewport = Viewport::new((100, 100));
   let values = TailwindValues::from_str("text-shadow-sm").unwrap();
-  let style =
-    Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+  let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
+    .inherit(&ComputedStyle::default());
   assert_eq!(style.text_shadow.as_ref().map(|s| s.len()), Some(3));
 }
 
@@ -1021,8 +1021,8 @@ fn test_shadow_none_overrides_color_in_either_order() {
   let viewport = Viewport::new((100, 100));
   for classes in ["shadow-none shadow-red-500", "shadow-red-500 shadow-none"] {
     let values = TailwindValues::from_str(classes).unwrap();
-    let style =
-      Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+    let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
+      .inherit(&ComputedStyle::default());
     assert_eq!(style.box_shadow, None, "case: {classes}");
   }
 }
@@ -1040,8 +1040,8 @@ fn test_gradient_stop_position_is_used_in_apply() {
   let viewport = Viewport::new((100, 100));
   let values =
     TailwindValues::from_str("bg-linear-to-r from-red-500 from-10% to-blue-500 to-80%").unwrap();
-  let style =
-    Style::from(values.into_declaration_block(viewport)).inherit(&ComputedStyle::default());
+  let style = Style::from(values.into_declaration_block(viewport, &Default::default()))
+    .inherit(&ComputedStyle::default());
   let images = style.background_image.as_deref().unwrap();
   let [BackgroundImage::Linear(gradient)] = images else {
     panic!("expected a single linear gradient");
@@ -1070,7 +1070,7 @@ fn test_border_width_implies_solid_and_per_side_color() {
     Style::from(
       TailwindValues::from_str(tw)
         .expect("tailwind values should parse")
-        .into_declaration_block(viewport),
+        .into_declaration_block(viewport, &Default::default()),
     )
     .inherit(&ComputedStyle::default())
   };
@@ -1170,7 +1170,8 @@ fn root_with(variables: &[(&str, &str)]) -> ComputedStyle {
 fn test_logical_side_reads_a_css_variable() {
   let values =
     TailwindValues::from_str("ms-gutter ps-gutter").expect("tailwind values should parse");
-  let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
+  let style =
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()));
 
   let computed = style.inherit(&root_with(&[("--spacing-gutter", "3rem")]));
 
@@ -1181,7 +1182,8 @@ fn test_logical_side_reads_a_css_variable() {
 #[test]
 fn test_corner_radius_reads_a_css_variable() {
   let values = TailwindValues::from_str("rounded-t-card").expect("tailwind values should parse");
-  let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
+  let style =
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()));
 
   let computed = style.inherit(&root_with(&[("--radius-card", "12px")]));
 
@@ -1189,9 +1191,49 @@ fn test_corner_radius_reads_a_css_variable() {
 }
 
 #[test]
+fn test_breakpoint_reads_a_css_variable() {
+  let overrides = BreakpointOverrides::from([("md".to_owned(), Length::Px(400.0))]);
+  let viewport = Viewport::new((500, 500));
+  let values = TailwindValues::from_str("md:mt-4").expect("tailwind values should parse");
+
+  // 500px sits below the built-in 48rem, so only the override applies it.
+  let unthemed = Style::from(
+    values
+      .clone()
+      .into_declaration_block(viewport, &Default::default()),
+  )
+  .inherit(&ComputedStyle::default());
+  assert_eq!(unthemed.margin_top, Length::Px(0.0));
+
+  let themed = Style::from(values.into_declaration_block(viewport, &overrides))
+    .inherit(&ComputedStyle::default());
+  assert_eq!(themed.margin_top, Length::Rem(1.0));
+}
+
+#[test]
+fn test_unknown_breakpoint_token_reads_a_css_variable() {
+  let overrides = BreakpointOverrides::from([("3xl".to_owned(), Length::Px(400.0))]);
+  let viewport = Viewport::new((500, 500));
+  let values = TailwindValues::from_str("3xl:mt-4").expect("tailwind values should parse");
+
+  let unthemed = Style::from(
+    values
+      .clone()
+      .into_declaration_block(viewport, &Default::default()),
+  )
+  .inherit(&ComputedStyle::default());
+  assert_eq!(unthemed.margin_top, Length::Px(0.0));
+
+  let themed = Style::from(values.into_declaration_block(viewport, &overrides))
+    .inherit(&ComputedStyle::default());
+  assert_eq!(themed.margin_top, Length::Rem(1.0));
+}
+
+#[test]
 fn test_animate_preset_reads_a_css_variable() {
   let values = TailwindValues::from_str("animate-spin").expect("tailwind values should parse");
-  let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
+  let style =
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()));
 
   let computed = style.inherit(&root_with(&[("--animate-spin", "wobble 2s ease-in 3")]));
 
@@ -1208,7 +1250,8 @@ fn test_animate_preset_reads_a_css_variable() {
 #[test]
 fn test_animate_preset_falls_back_to_the_builtin_animation() {
   let values = TailwindValues::from_str("animate-spin").expect("tailwind values should parse");
-  let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
+  let style =
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()));
 
   let computed = style.inherit(&ComputedStyle::default());
 
@@ -1226,7 +1269,8 @@ fn test_animate_preset_falls_back_to_the_builtin_animation() {
 #[test]
 fn test_unknown_animate_token_reads_a_css_variable() {
   let values = TailwindValues::from_str("animate-wiggle").expect("tailwind values should parse");
-  let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
+  let style =
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()));
 
   let themed = style
     .clone()
@@ -1246,7 +1290,8 @@ fn test_blur_preset_reads_a_css_variable() {
 
   let values =
     TailwindValues::from_str("blur-md backdrop-blur-md").expect("tailwind values should parse");
-  let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
+  let style =
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()));
 
   let computed = style.inherit(&root_with(&[("--blur-md", "20px")]));
 
@@ -1262,7 +1307,8 @@ fn test_blur_preset_falls_back_to_the_builtin_radius() {
   use crate::style::properties::Filter;
 
   let values = TailwindValues::from_str("blur-md").expect("tailwind values should parse");
-  let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
+  let style =
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()));
 
   let computed = style.inherit(&ComputedStyle::default());
 
@@ -1274,7 +1320,8 @@ fn test_drop_shadow_preset_reads_a_css_variable() {
   use crate::style::properties::{Filter, TextShadow};
 
   let values = TailwindValues::from_str("drop-shadow-md").expect("tailwind values should parse");
-  let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
+  let style =
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()));
 
   let computed = style.inherit(&root_with(&[("--drop-shadow-md", "0 5px 5px #ff0000")]));
 
@@ -1294,7 +1341,8 @@ fn test_drop_shadow_preset_reads_a_css_variable() {
 #[test]
 fn test_builtin_token_is_overridable() {
   let values = TailwindValues::from_str("text-red-500").expect("tailwind values should parse");
-  let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
+  let style =
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()));
 
   let computed = style.inherit(&root_with(&[("--color-red-500", "#00a63e")]));
 
@@ -1304,7 +1352,8 @@ fn test_builtin_token_is_overridable() {
 #[test]
 fn test_spacing_step_scales_numeric_utilities() {
   let values = TailwindValues::from_str("ms-4").expect("tailwind values should parse");
-  let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
+  let style =
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()));
 
   let computed = style.inherit(&root_with(&[("--spacing", "0.5rem")]));
   let sizing = SizingContext::builder()
@@ -1320,7 +1369,8 @@ fn test_spacing_step_scales_numeric_utilities() {
 #[test]
 fn test_overloaded_prefix_reads_either_namespace() {
   let values = TailwindValues::from_str("text-brand").expect("tailwind values should parse");
-  let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
+  let style =
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()));
 
   let sized = style
     .clone()
@@ -1336,7 +1386,8 @@ fn test_overloaded_prefix_reads_either_namespace() {
 #[test]
 fn test_opacity_modifier_mixes_the_variable() {
   let values = TailwindValues::from_str("bg-brand-500/50").expect("tailwind values should parse");
-  let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
+  let style =
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()));
 
   let computed = style.inherit(&root_with(&[("--color-brand-500", "#5b21b6")]));
 
@@ -1351,10 +1402,12 @@ fn test_aspect_keywords_survive_the_move_out_of_the_fixed_table() {
   let square = TailwindValues::from_str("aspect-square").expect("tailwind values should parse");
   let video = TailwindValues::from_str("aspect-video").expect("tailwind values should parse");
 
-  let square = Style::from(square.into_declaration_block(Viewport::new((100, 100))))
-    .inherit(&ComputedStyle::default());
-  let styled = Style::from(video.into_declaration_block(Viewport::new((100, 100))))
-    .inherit(&root_with(&[("--aspect-video", "4/3")]));
+  let square =
+    Style::from(square.into_declaration_block(Viewport::new((100, 100)), &Default::default()))
+      .inherit(&ComputedStyle::default());
+  let styled =
+    Style::from(video.into_declaration_block(Viewport::new((100, 100)), &Default::default()))
+      .inherit(&root_with(&[("--aspect-video", "4/3")]));
 
   assert_eq!(square.aspect_ratio, AspectRatio::Ratio(1.0));
   assert_eq!(styled.aspect_ratio, AspectRatio::Ratio(4.0 / 3.0));
@@ -1365,7 +1418,8 @@ fn test_aspect_keywords_survive_the_move_out_of_the_fixed_table() {
 #[test]
 fn test_custom_text_token_line_height_reads_the_companion() {
   let values = TailwindValues::from_str("text-brand").expect("tailwind values should parse");
-  let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
+  let style =
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()));
 
   let sized = style
     .clone()
@@ -1384,7 +1438,8 @@ fn test_custom_text_token_line_height_reads_the_companion() {
 #[test]
 fn test_max_w_prefers_the_container_namespace() {
   let values = TailwindValues::from_str("max-w-page").expect("tailwind values should parse");
-  let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
+  let style =
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()));
 
   let both = style.clone().inherit(&root_with(&[
     ("--container-page", "60rem"),
@@ -1400,7 +1455,8 @@ fn test_max_w_prefers_the_container_namespace() {
 #[test]
 fn test_numeric_leading_scales_with_spacing() {
   let values = TailwindValues::from_str("leading-7").expect("tailwind values should parse");
-  let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
+  let style =
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()));
 
   let computed = style.inherit(&root_with(&[("--spacing", "0.5rem")]));
   let sizing = SizingContext::builder()
@@ -1418,7 +1474,8 @@ fn test_numeric_leading_scales_with_spacing() {
 fn test_gradient_reads_css_variables() {
   let values = TailwindValues::from_str("bg-linear-to-r from-brand-500 to-red-500")
     .expect("tailwind values should parse");
-  let style = Style::from(values.into_declaration_block(Viewport::new((100, 100))));
+  let style =
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()));
 
   let computed = style.inherit(&root_with(&[
     ("--color-brand-500", "#5b21b6"),
@@ -1455,7 +1512,7 @@ fn test_gradient_utility_order_does_not_matter() {
   let compute = |classes: &str| {
     let values = TailwindValues::from_str(classes).expect("tailwind values should parse");
 
-    Style::from(values.into_declaration_block(Viewport::new((100, 100))))
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()))
       .inherit(&ComputedStyle::default())
       .background_image
   };
@@ -1471,8 +1528,9 @@ fn test_gradient_utility_order_does_not_matter() {
 fn test_stops_without_a_gradient_paint_nothing() {
   let values =
     TailwindValues::from_str("from-red-500 to-blue-500").expect("tailwind values should parse");
-  let computed = Style::from(values.into_declaration_block(Viewport::new((100, 100))))
-    .inherit(&ComputedStyle::default());
+  let computed =
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()))
+      .inherit(&ComputedStyle::default());
 
   assert_eq!(computed.background_image, None);
 }
@@ -1483,12 +1541,16 @@ fn test_stops_without_a_gradient_paint_nothing() {
 fn test_gradient_state_does_not_inherit() {
   let parent_values = TailwindValues::from_str("bg-linear-to-r from-red-500 to-blue-500")
     .expect("tailwind values should parse");
-  let parent = Style::from(parent_values.into_declaration_block(Viewport::new((100, 100))))
-    .inherit(&ComputedStyle::default());
+  let parent = Style::from(
+    parent_values.into_declaration_block(Viewport::new((100, 100)), &Default::default()),
+  )
+  .inherit(&ComputedStyle::default());
 
   let child_values = TailwindValues::from_str("bg-radial").expect("tailwind values should parse");
-  let child =
-    Style::from(child_values.into_declaration_block(Viewport::new((100, 100)))).inherit(&parent);
+  let child = Style::from(
+    child_values.into_declaration_block(Viewport::new((100, 100)), &Default::default()),
+  )
+  .inherit(&parent);
 
   // With the parent's stops out of reach, `var(--tw-gradient-stops)` fails to
   // substitute and the child paints no gradient, as a browser would.
@@ -1501,8 +1563,9 @@ fn test_gradient_state_does_not_inherit() {
 fn test_shadow_color_reads_css_variables() {
   let values =
     TailwindValues::from_str("shadow-md shadow-brand-500").expect("tailwind values should parse");
-  let computed = Style::from(values.into_declaration_block(Viewport::new((100, 100))))
-    .inherit(&root_with(&[("--color-brand-500", "#5b21b6")]));
+  let computed =
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()))
+      .inherit(&root_with(&[("--color-brand-500", "#5b21b6")]));
 
   let shadows = computed.box_shadow.as_deref().expect("shadows");
 
@@ -1520,7 +1583,7 @@ fn test_filters_compose_through_variables() {
   let compute = |classes: &str| {
     let values = TailwindValues::from_str(classes).expect("tailwind values should parse");
 
-    Style::from(values.into_declaration_block(Viewport::new((100, 100))))
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()))
       .inherit(&ComputedStyle::default())
       .filter
   };
@@ -1538,8 +1601,9 @@ fn test_filters_compose_through_variables() {
 fn test_translate_composes_through_variables() {
   let values =
     TailwindValues::from_str("translate-x-4 -translate-y-2").expect("tailwind values should parse");
-  let computed = Style::from(values.into_declaration_block(Viewport::new((100, 100))))
-    .inherit(&ComputedStyle::default());
+  let computed =
+    Style::from(values.into_declaration_block(Viewport::new((100, 100)), &Default::default()))
+      .inherit(&ComputedStyle::default());
 
   assert_eq!(computed.translate.x, Length::Rem(1.0));
   assert_eq!(computed.translate.y, Length::Rem(-0.5));

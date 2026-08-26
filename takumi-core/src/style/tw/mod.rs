@@ -6,7 +6,7 @@ mod namespace;
 /// Parsers for Tailwind utility-class suffixes.
 mod parser;
 
-use std::{borrow::Cow, cmp::Ordering, str::FromStr, sync::Arc};
+use std::{borrow::Cow, cmp::Ordering, collections::HashMap, str::FromStr, sync::Arc};
 
 use builder::TailwindDeclarationBuilder;
 use cssparser::match_ignore_ascii_case;
@@ -221,20 +221,30 @@ impl FromStr for TailwindValues {
 
 impl TailwindValues {
   /// Collects resource URLs referenced by active Tailwind utilities for the given viewport.
-  pub(crate) fn image_urls(&self, viewport: Viewport) -> impl Iterator<Item = &str> {
+  pub(crate) fn image_urls(
+    &self,
+    viewport: Viewport,
+    breakpoints: &BreakpointOverrides,
+  ) -> impl Iterator<Item = &str> {
     self
       .inner
       .iter()
-      .filter_map(move |value| value.resource_url(viewport))
+      .filter_map(|value| value.resource_url(viewport, breakpoints))
+      .collect::<Vec<_>>()
+      .into_iter()
   }
 
   /// Resolves all utilities for the viewport into a declaration block.
   #[inline(never)]
-  pub(crate) fn into_declaration_block(self, viewport: Viewport) -> StyleDeclarationBlock {
+  pub(crate) fn into_declaration_block(
+    self,
+    viewport: Viewport,
+    breakpoints: &BreakpointOverrides,
+  ) -> StyleDeclarationBlock {
     let mut builder = TailwindDeclarationBuilder::default();
 
     for value in self.inner {
-      value.apply(&mut builder, viewport);
+      value.apply(&mut builder, viewport, breakpoints);
     }
 
     builder.finish()
@@ -296,9 +306,9 @@ fn split_variant(token: &str) -> Option<(&str, &str)> {
 }
 
 impl TailwindValue {
-  fn resource_url(&self, viewport: Viewport) -> Option<&str> {
-    if let Some(breakpoint) = self.breakpoint
-      && !breakpoint.matches(viewport)
+  fn resource_url(&self, viewport: Viewport, breakpoints: &BreakpointOverrides) -> Option<&str> {
+    if let Some(breakpoint) = &self.breakpoint
+      && !breakpoint.matches(viewport, breakpoints)
     {
       return None;
     }
@@ -307,9 +317,14 @@ impl TailwindValue {
   }
 
   #[inline(never)]
-  fn apply(self, builder: &mut TailwindDeclarationBuilder, viewport: Viewport) {
-    if let Some(breakpoint) = self.breakpoint
-      && !breakpoint.matches(viewport)
+  fn apply(
+    self,
+    builder: &mut TailwindDeclarationBuilder,
+    viewport: Viewport,
+    breakpoints: &BreakpointOverrides,
+  ) {
+    if let Some(breakpoint) = &self.breakpoint
+      && !breakpoint.matches(viewport, breakpoints)
     {
       return;
     }
@@ -348,30 +363,50 @@ impl TailwindValue {
   }
 }
 
+/// Widths a stylesheet's `--breakpoint-*` variables assign, keyed by token.
+pub(crate) type BreakpointOverrides = HashMap<String, Length>;
+
 /// Represents a breakpoint.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct Breakpoint(pub Length);
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Breakpoint {
+  /// Built-in width; `None` for a token only a `--breakpoint-*` variable defines.
+  pub width: Option<Length>,
+  /// The variant token, which a `--breakpoint-<token>` variable re-sizes.
+  pub token: Arc<str>,
+}
 
 impl Breakpoint {
   /// Parse a breakpoint from a token.
   pub fn parse(token: &str) -> Option<Self> {
-    match_ignore_ascii_case! {token,
-      "sm" => Some(Breakpoint(Length::Rem(40.0))),
-      "md" => Some(Breakpoint(Length::Rem(48.0))),
-      "lg" => Some(Breakpoint(Length::Rem(64.0))),
-      "xl" => Some(Breakpoint(Length::Rem(80.0))),
-      "2xl" => Some(Breakpoint(Length::Rem(96.0))),
+    let width = match_ignore_ascii_case! {token,
+      "sm" => Some(Length::Rem(40.0)),
+      "md" => Some(Length::Rem(48.0)),
+      "lg" => Some(Length::Rem(64.0)),
+      "xl" => Some(Length::Rem(80.0)),
+      "2xl" => Some(Length::Rem(96.0)),
       _ => None,
+    };
+
+    if width.is_none() && !(!token.is_empty() && token.bytes().all(is_ident_byte)) {
+      return None;
     }
+
+    Some(Breakpoint {
+      width,
+      token: token.to_ascii_lowercase().into(),
+    })
   }
 
   /// Check if the breakpoint matches the viewport width.
-  pub fn matches(&self, viewport: Viewport) -> bool {
+  pub fn matches(&self, viewport: Viewport, overrides: &BreakpointOverrides) -> bool {
     let Some(viewport_width) = viewport.size.width else {
       return false;
     };
+    let Some(width) = overrides.get(&*self.token).copied().or(self.width) else {
+      return false;
+    };
 
-    let breakpoint_width = match self.0 {
+    let breakpoint_width = match width {
       Length::Rem(value) => viewport.to_device(value * viewport.font_size),
       Length::Px(value) => viewport.to_device(value),
       Length::Vw(value) => (value / 100.0) * viewport_width as f32,

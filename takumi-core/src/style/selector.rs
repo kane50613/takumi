@@ -16,7 +16,10 @@ pub use crate::style::media_query::MediaQueryList;
 use crate::{
   error::StyleSheetParseError,
   keyframes::parse_keyframe_prelude,
-  style::{KeyframeRule, KeyframesRule, StyleDeclarationBlock, supports::parse_supports_condition},
+  style::{
+    BreakpointOverrides, FromCssStr, KeyframeRule, KeyframesRule, Length, StyleDeclaration,
+    StyleDeclarationBlock, supports::parse_supports_condition,
+  },
 };
 
 /// A registered custom property from an `@property` rule.
@@ -1200,6 +1203,9 @@ pub struct StyleSheet {
   pub(crate) property_rules: Vec<PropertyRule>,
   /// Number of distinct cascade layers.
   pub(crate) layer_count: usize,
+  /// Widths from unconditional `:root` `--breakpoint-*` declarations, which
+  /// gate `tw` variants before the cascade runs and so resolve at parse time.
+  pub(crate) breakpoints: BreakpointOverrides,
 }
 
 impl From<Vec<KeyframesRule>> for StyleSheet {
@@ -1351,12 +1357,48 @@ impl StyleSheet {
     });
 
     Ok(Self {
+      breakpoints: collect_breakpoints(&rules),
       rules,
       keyframes,
       property_rules,
       layer_count: layer_order.len(),
     })
   }
+}
+
+/// `--breakpoint-*` widths from unconditional `:root` rules. Variants gate at
+/// parse time, so only statically-known declarations can re-size them.
+fn collect_breakpoints(rules: &[CssRule]) -> BreakpointOverrides {
+  let mut breakpoints = BreakpointOverrides::default();
+
+  for rule in rules {
+    if !rule.media_queries.is_empty() || selector_list_text(&rule.selectors) != ":root" {
+      continue;
+    }
+
+    for declaration in rule.normal_declarations.declarations.iter() {
+      if let StyleDeclaration::CustomProperty(name, value) = declaration
+        && let Some(token) = name.strip_prefix("--breakpoint-")
+        && let Ok(width) = Length::from_css_str(value)
+        // Only units `Breakpoint::matches` resolves; anything else would
+        // shadow the built-in width with a dead one.
+        && matches!(width, Length::Rem(_) | Length::Px(_) | Length::Vw(_))
+      {
+        breakpoints.insert(token.to_owned(), width);
+      }
+    }
+  }
+
+  breakpoints
+}
+
+fn selector_list_text(selectors: &SelectorList<SelectorImpl>) -> String {
+  selectors
+    .slice()
+    .iter()
+    .map(cssparser::ToCss::to_css_string)
+    .collect::<Vec<_>>()
+    .join(", ")
 }
 
 #[cfg(test)]
@@ -2420,6 +2462,32 @@ mod tests {
     assert_eq!(sheet.keyframes[0].name, "wobble");
     assert_eq!(sheet.rules.len(), 1);
     assert_eq!(selector_text(&sheet.rules[0]), ":root");
+  }
+
+  #[test]
+  fn test_breakpoint_variables_are_collected() {
+    let sheet = parse_stylesheet(
+      r#"
+        @theme { --breakpoint-3xl: 120rem; }
+        :root { --breakpoint-md: 30rem; }
+        @media (min-width: 5000px) { :root { --breakpoint-lg: 10rem; } }
+        .card { --breakpoint-xl: 10rem; }
+      "#,
+    );
+
+    assert_eq!(sheet.breakpoints.get("3xl"), Some(&Length::Rem(120.0)));
+    assert_eq!(sheet.breakpoints.get("md"), Some(&Length::Rem(30.0)));
+    assert_eq!(sheet.breakpoints.get("lg"), None);
+    assert_eq!(sheet.breakpoints.get("xl"), None);
+  }
+
+  /// A width `Breakpoint::matches` cannot resolve stays out of the overrides,
+  /// so the variant keeps its built-in width instead of never matching.
+  #[test]
+  fn test_breakpoint_with_unresolvable_unit_is_ignored() {
+    let sheet = parse_stylesheet(":root { --breakpoint-md: 48em; }");
+
+    assert_eq!(sheet.breakpoints.get("md"), None);
   }
 
   #[test]

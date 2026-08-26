@@ -660,7 +660,7 @@ impl Node {
     }
 
     if let Some(author_tw) = self.metadata.tw.as_ref() {
-      urls.extend(author_tw.image_urls(Viewport::default()));
+      urls.extend(author_tw.image_urls(Viewport::default(), &Default::default()));
     }
 
     if let Some(inline) = self.metadata.style.as_ref() {
