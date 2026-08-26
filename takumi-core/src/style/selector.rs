@@ -1473,11 +1473,16 @@ impl StyleSheet {
 /// parse time, so only statically-known declarations can re-size them.
 fn collect_breakpoints(rules: &[CssRule]) -> BreakpointOverrides {
   let mut breakpoints = BreakpointOverrides::default();
+  let mut winners = HashMap::<String, usize>::new();
 
   for rule in rules {
     if !rule.media_queries.is_empty() || selector_list_text(&rule.selectors) != ":root" {
       continue;
     }
+
+    // Unlayered declarations outrank every layer, so they sort above the
+    // highest ordinal rather than below the lowest.
+    let precedence = rule.layer_order.unwrap_or(usize::MAX);
 
     for declaration in rule.normal_declarations.declarations.iter() {
       if let StyleDeclaration::CustomProperty(name, value) = declaration
@@ -1486,7 +1491,9 @@ fn collect_breakpoints(rules: &[CssRule]) -> BreakpointOverrides {
         // Only units `Breakpoint::matches` resolves; anything else would
         // shadow the built-in width with a dead one.
         && matches!(width, Length::Rem(_) | Length::Px(_) | Length::Vw(_))
+        && winners.get(token).is_none_or(|winner| precedence >= *winner)
       {
+        winners.insert(token.to_owned(), precedence);
         breakpoints.insert(token.to_owned(), width);
       }
     }
@@ -2582,6 +2589,21 @@ mod tests {
     assert_eq!(sheet.breakpoints.get("md"), Some(&Length::Rem(30.0)));
     assert_eq!(sheet.breakpoints.get("lg"), None);
     assert_eq!(sheet.breakpoints.get("xl"), None);
+  }
+
+  #[test]
+  fn test_breakpoint_takes_the_winning_cascade_layer() {
+    let sheet = parse_stylesheet(
+      r#"
+        @layer base, theme;
+        :root { --breakpoint-md: 30rem; }
+        @layer theme { :root { --breakpoint-md: 50rem; --breakpoint-lg: 70rem; } }
+        @layer base { :root { --breakpoint-lg: 60rem; } }
+      "#,
+    );
+
+    assert_eq!(sheet.breakpoints.get("md"), Some(&Length::Rem(30.0)));
+    assert_eq!(sheet.breakpoints.get("lg"), Some(&Length::Rem(70.0)));
   }
 
   /// A width `Breakpoint::matches` cannot resolve stays out of the overrides,
