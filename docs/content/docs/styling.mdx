@@ -6,13 +6,13 @@ icon: Palette
 
 Pick a path by what you already have:
 
-| You have                                   | Use                                                  |
-| ------------------------------------------ | ---------------------------------------------------- |
-| Tailwind classes, compiled by your bundler | [`stylesheets`](#stylesheets) with the generated CSS |
-| Tailwind classes, no build step            | [the `tw` prop](#tailwind-without-a-build-step)      |
-| Plain CSS                                  | [`stylesheets`](#stylesheets) or a `<style>` tag     |
-| Design tokens to theme with                | [`cssVariables` or a `:root` rule](#design-tokens)   |
-| One-off styles on one node                 | [the `style` prop](#inline-styles)                   |
+| You have                                   | Use                                                |
+| ------------------------------------------ | -------------------------------------------------- |
+| Tailwind classes, compiled by your bundler | [`css`](#css) with the generated CSS               |
+| Tailwind classes, no build step            | [the `tw` prop](#tailwind-without-a-build-step)    |
+| Plain CSS                                  | [`css`](#css) or a `<style>` tag                   |
+| Design tokens to theme with                | [`cssVariables` or a `:root` rule](#design-tokens) |
+| One-off styles on one node                 | [the `style` prop](#inline-styles)                 |
 
 The paths combine. Each section says who wins when they collide.
 
@@ -24,9 +24,9 @@ The `style` prop puts `CSSProperties` on one node. It overrides the tag default 
 <div style={{ display: "flex", padding: 48, background: "#0f172a" }}>Hello</div>
 ```
 
-## Stylesheets
+## CSS
 
-Pass real CSS through `stylesheets`. The engine matches it by `className` or `id`.
+Pass real CSS through `css`, one string or a list. The engine matches it by `className` or `id`.
 
 ```tsx twoslash
 import { render } from "takumi-js";
@@ -34,7 +34,7 @@ import { render } from "takumi-js";
 const image = await render(<div className="card">Hello</div>, {
   width: 1200,
   height: 630,
-  stylesheets: [`.card { display: flex; padding: 48px; background: #0f172a; color: white; }`],
+  css: `.card { display: flex; padding: 48px; background: #0f172a; color: white; }`,
 });
 ```
 
@@ -60,7 +60,7 @@ A `<style>` tag feeds the same engine. Takumi extracts it from the JSX for you.
 
 ## Tailwind with your bundler
 
-Compile Tailwind with your bundler, then pass the generated CSS through `stylesheets`. Tailwind does the compiling, so every directive and class name works. What renders is still bounded by [the engine's CSS support](#stylesheets). With Vite, import the stylesheet using `?inline`.
+Compile Tailwind with your bundler, then pass the generated CSS through `css`. Tailwind does the compiling, so every directive and class name works. What renders is still bounded by [the engine's CSS support](#css). With Vite, import the stylesheet using `?inline`.
 
 ```tsx title="og.tsx"
 import { ImageResponse } from "takumi-js/response";
@@ -76,7 +76,7 @@ export function GET() {
       width: 1200,
       height: 630,
       // [!code ++]
-      stylesheets: [stylesheet],
+      css: stylesheet,
     },
   );
 }
@@ -129,7 +129,7 @@ The same import line a Tailwind stylesheet starts with turns Preflight on. It dr
 
 ```tsx
 const image = await render(node, {
-  stylesheets: [`@import "tailwindcss";`],
+  css: `@import "tailwindcss";`,
 });
 ```
 
@@ -147,7 +147,7 @@ Prefix a utility with `!` to flip the result. Important declarations reverse the
 
 ### Tailwind at-rules
 
-A Tailwind source stylesheet drops into `stylesheets` unchanged. The engine reads these directives and skips the rest:
+A Tailwind source stylesheet drops into `css` unchanged. The engine reads these directives and skips the rest:
 
 | At-rule                 | Reads as                                                                                               | Rejected                |
 | ----------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------- |
