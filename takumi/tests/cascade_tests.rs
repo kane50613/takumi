@@ -79,8 +79,10 @@ fn tw_sits_below_author_rules() {
   assert_eq!(result.children[0].width, 100.0);
 }
 
+/// `tw` is the last declared layer, so its important half loses to every
+/// important author rule and still beats their normal ones.
 #[test]
-fn important_tw_beats_author_rules() {
+fn important_tw_beats_normal_author_rules() {
   let root = Node::container([
     tw_block("box", "block w-64!"),
     tw_block("shout", "block w-64!"),
@@ -94,7 +96,7 @@ fn important_tw_beats_author_rules() {
   );
 
   assert_eq!(result.children[0].width, 256.0);
-  assert_eq!(result.children[1].width, 256.0);
+  assert_eq!(result.children[1].width, 100.0);
 }
 
 #[test]
@@ -123,4 +125,15 @@ fn tw_beats_named_layer_rules() {
   );
 
   assert_eq!(result.children[0].width, 256.0);
+}
+
+/// A named layer's important half also outranks `tw`, which is declared last.
+#[test]
+fn important_layered_rules_beat_important_tw() {
+  let result = measure_with_css(
+    Node::container([tw_block("box", "block w-64!")]),
+    "@layer base { .box { width: 120px !important; } }",
+  );
+
+  assert_eq!(result.children[0].width, 120.0);
 }
