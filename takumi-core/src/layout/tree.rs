@@ -254,7 +254,7 @@ fn build_style_layers(
     .unzip();
 
   if let Some(preset) = node_layers.preset {
-    style.merge_preset(preset, stylesheet.preflight);
+    style.merge_from(preset);
   }
 
   if let Some(dir) = node_layers.dir {
