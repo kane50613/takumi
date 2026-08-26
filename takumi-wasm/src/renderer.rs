@@ -96,6 +96,7 @@ fn raster_options<'fonts>(
         ),
       )
       .draw_debug_border(options.draw_debug_border.unwrap_or_default())
+      .class_name_utilities(FutureFlags::class_name_utilities(options.future))
       .images(images)
       .stylesheet(stylesheet)
       .time_ms(options.time_ms.unwrap_or_default().max(0) as u64)
@@ -254,6 +255,7 @@ impl Renderer {
         .fonts(&state)
         .font_families(options.font_families.map(FontFamily::from_names))
         .lang(lang)
+        .class_name_utilities(FutureFlags::class_name_utilities(options.future))
         .build(),
     )
     .map_err(map_error)?;
@@ -335,6 +337,7 @@ impl Renderer {
       fps,
       font_families,
       lang,
+      future,
     } = from_value(options.into()).map_err(map_error)?;
 
     let lang = parse_lang(lang)?;
@@ -352,6 +355,7 @@ impl Renderer {
     let viewport = Viewport::new((width, height))
       .with_device_pixel_ratio(device_pixel_ratio.unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO));
     let draw_debug_border = draw_debug_border.unwrap_or_default();
+    let class_name_utilities = FutureFlags::class_name_utilities(future);
     let stylesheet = stylesheet(
       &self.resource_cache,
       stylesheets,
@@ -374,6 +378,7 @@ impl Renderer {
               .font_families(font_families.clone().map(FontFamily::from_names))
               .lang(lang)
               .draw_debug_border(draw_debug_border)
+              .class_name_utilities(class_name_utilities)
               .build(),
           )
           .build()

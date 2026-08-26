@@ -34,6 +34,9 @@ pub struct RenderOptions<'g> {
   /// Whether to draw debug borders.
   #[builder(default = false)]
   pub(crate) draw_debug_border: bool,
+  /// Whether `class` names also parse as Tailwind utilities.
+  #[builder(default = false)]
+  pub(crate) class_name_utilities: bool,
   /// Pre-decoded images keyed by `src`, resolved when a node references that URL.
   #[builder(default)]
   pub(crate) images: HashMap<Arc<str>, ImageSource>,
@@ -152,6 +155,7 @@ pub fn measure<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
     fonts,
     node,
     draw_debug_border,
+    class_name_utilities,
     images,
     stylesheet,
     time_ms,
@@ -167,6 +171,7 @@ pub fn measure<'g>(options: RenderOptions<'g>) -> Result<MeasuredNode> {
     .stylesheet(stylesheet)
     .time_ms(time_ms)
     .draw_debug_border(draw_debug_border)
+    .class_name_utilities(class_name_utilities)
     .style(Box::new(ComputedStyle {
       lang,
       font_family: font_families.unwrap_or_default(),
@@ -388,6 +393,7 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<Bitmap> {
     fonts,
     node,
     draw_debug_border,
+    class_name_utilities,
     images,
     stylesheet,
     time_ms,
@@ -403,6 +409,7 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<Bitmap> {
     .stylesheet(stylesheet)
     .time_ms(time_ms)
     .draw_debug_border(draw_debug_border)
+    .class_name_utilities(class_name_utilities)
     .style(Box::new(ComputedStyle {
       lang,
       font_family: font_families.unwrap_or_default(),
@@ -503,6 +510,7 @@ impl<'a, 'g> PreparedScene<'a, 'g> {
       .stylesheet(self.stylesheet.clone())
       .time_ms(time_ms)
       .draw_debug_border(options.draw_debug_border)
+      .class_name_utilities(options.class_name_utilities)
       .style(Box::new(ComputedStyle {
         lang: options.lang,
         font_family: options.font_families.clone().unwrap_or_default(),

@@ -157,6 +157,20 @@ pub(crate) fn deserialize_keyframes(keyframes: Option<Object>) -> Result<Vec<Cor
   }
 }
 
+/// Opt-in flags for behavior that becomes the default in a future major.
+#[napi(object)]
+#[derive(Default, Clone, Copy)]
+pub struct FutureFlags {
+  /// Parse `className` tokens as Tailwind utilities, the way `tw` does.
+  pub class_name_utilities: Option<bool>,
+}
+
+pub(crate) fn class_name_utilities(future: Option<FutureFlags>) -> bool {
+  future
+    .and_then(|flags| flags.class_name_utilities)
+    .unwrap_or_default()
+}
+
 /// Options for rendering an image.
 #[napi(object)]
 #[derive(Default)]
@@ -196,6 +210,8 @@ pub struct RenderOptions<'env> {
   pub font_families: Option<Vec<String>>,
   /// Default BCP-47 language applied to the root, inherited by nodes without their own lang.
   pub lang: Option<String>,
+  /// Opt-in future behavior flags.
+  pub future: Option<FutureFlags>,
 }
 
 /// Options for rendering a node tree to an SVG document. SVG is a vector
@@ -224,6 +240,8 @@ pub struct SvgRenderOptions<'env> {
   pub font_families: Option<Vec<String>>,
   /// Default BCP-47 language applied to the root, inherited by nodes without their own lang.
   pub lang: Option<String>,
+  /// Opt-in future behavior flags.
+  pub future: Option<FutureFlags>,
 }
 
 #[napi(string_enum)]
@@ -295,6 +313,8 @@ pub struct RenderAnimationOptions<'env> {
   pub font_families: Option<Vec<String>>,
   /// Default BCP-47 language applied to the root, inherited by nodes without their own lang.
   pub lang: Option<String>,
+  /// Opt-in future behavior flags.
+  pub future: Option<FutureFlags>,
 }
 
 /// Output format for animated images.

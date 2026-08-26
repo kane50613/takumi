@@ -15,8 +15,9 @@ use takumi_raster::{
 use crate::{
   JsBytes, deserialize_with_tracing,
   renderer::{
-    AnimationOutputFormat, ImageCacheMode, RenderAnimationOptions, RendererState, collect_images,
-    decode_images, deserialize_keyframes, device_pixel_ratio, parse_lang, webp_lossless,
+    AnimationOutputFormat, ImageCacheMode, RenderAnimationOptions, RendererState,
+    class_name_utilities, collect_images, decode_images, deserialize_keyframes, device_pixel_ratio,
+    parse_lang, webp_lossless,
   },
 };
 
@@ -28,6 +29,7 @@ pub struct RenderAnimationTask {
   pub(crate) quality: Option<u8>,
   pub(crate) lossless: Option<bool>,
   pub(crate) draw_debug_border: bool,
+  pub(crate) class_name_utilities: bool,
   pub(crate) stylesheets: Option<Vec<String>>,
   pub(crate) keyframes: Vec<KeyframesRule>,
   pub(crate) css_variables: Option<HashMap<String, String>>,
@@ -59,6 +61,7 @@ impl RenderAnimationTask {
       device_pixel_ratio: dpr,
       font_families,
       lang,
+      future,
     } = options;
     let scenes = scenes
       .into_iter()
@@ -87,6 +90,7 @@ impl RenderAnimationTask {
       quality,
       lossless,
       draw_debug_border: draw_debug_border.unwrap_or_default(),
+      class_name_utilities: class_name_utilities(future),
       stylesheets,
       keyframes: deserialize_keyframes(keyframes)?,
       css_variables,
@@ -130,6 +134,7 @@ impl Task for RenderAnimationTask {
                 .font_families(self.font_families.clone())
                 .lang(self.lang)
                 .draw_debug_border(self.draw_debug_border)
+                .class_name_utilities(self.class_name_utilities)
                 .build(),
             )
             .build()
