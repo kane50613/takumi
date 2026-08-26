@@ -364,6 +364,10 @@ pub(crate) struct MatchedDeclarationsView<'a> {
   /// Where unlayered blocks begin in `normal`. The `tw` layer slots in here:
   /// above every named `@layer`, below unlayered rules.
   unlayered_start: usize,
+  /// Where named-layer blocks begin in `important`, which reverses layer
+  /// order. The `tw` layer slots in here: above unlayered rules, below every
+  /// named `@layer`.
+  layered_important_start: usize,
 }
 
 impl<'a> MatchedDeclarationsView<'a> {
@@ -378,8 +382,19 @@ impl<'a> MatchedDeclarationsView<'a> {
   }
 
   /// Matched declaration blocks marked `!important`, in cascade order.
+  #[cfg(test)]
   pub(crate) fn important(&self) -> &[&'a StyleDeclarationBlock] {
     &self.important
+  }
+
+  /// Matched unlayered blocks marked `!important`, in cascade order.
+  pub(crate) fn unlayered_important(&self) -> &[&'a StyleDeclarationBlock] {
+    &self.important[..self.layered_important_start]
+  }
+
+  /// Matched blocks marked `!important` from named layers, in cascade order.
+  pub(crate) fn layered_important(&self) -> &[&'a StyleDeclarationBlock] {
+    &self.important[self.layered_important_start..]
   }
 }
 
@@ -745,6 +760,9 @@ fn finalize_bucket<'a>(
   });
   for rule in rules.drain(..) {
     if rule.important {
+      if rule.layer_order == 0 {
+        matched.layered_important_start += 1;
+      }
       matched.important.push(rule.declarations);
     } else {
       if rule.layer_order < layer_count {

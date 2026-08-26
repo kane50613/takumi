@@ -79,10 +79,10 @@ fn tw_sits_below_author_rules() {
   assert_eq!(result.children[0].width, 100.0);
 }
 
-/// `tw` is the last declared layer, so its important half loses to every
-/// important author rule and still beats their normal ones.
+/// Unlayered important rules sort below every layer in the reversed important
+/// order, so `tw` beats them.
 #[test]
-fn important_tw_beats_normal_author_rules() {
+fn important_tw_beats_unlayered_author_rules() {
   let root = Node::container([
     tw_block("box", "block w-64!"),
     tw_block("shout", "block w-64!"),
@@ -96,7 +96,7 @@ fn important_tw_beats_normal_author_rules() {
   );
 
   assert_eq!(result.children[0].width, 256.0);
-  assert_eq!(result.children[1].width, 100.0);
+  assert_eq!(result.children[1].width, 256.0);
 }
 
 #[test]

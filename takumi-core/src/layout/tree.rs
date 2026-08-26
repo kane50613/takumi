@@ -223,7 +223,7 @@ fn resolve_normal_line_height(
 }
 
 /// The element's own important declarations, which straddle the stylesheet's
-/// important half: `tw` is the last declared layer so it goes under, while an
+/// important half: `tw` sits between unlayered and named-layer rules, while an
 /// inline declaration outranks every selector.
 struct ElementImportant {
   tw: Option<StyleDeclarationBlock>,
@@ -290,13 +290,19 @@ fn build_style_layers(
     style.append_block(inline_normal);
   }
 
-  // Important declarations reverse layer order, and `tw` is the last declared
-  // layer, so its important half goes first.
+  // Important declarations reverse layer order, so `tw`, the last declared
+  // layer, sits above unlayered rules and below every named `@layer`.
+  for &declarations in matched_declarations.unlayered_important() {
+    for declaration in declarations.iter() {
+      declaration.merge_into_ref(&mut style);
+    }
+  }
+
   if let Some(tw_important) = &tw_important {
     style.append_block(tw_important.clone());
   }
 
-  for &declarations in matched_declarations.important() {
+  for &declarations in matched_declarations.layered_important() {
     for declaration in declarations.iter() {
       declaration.merge_into_ref(&mut style);
     }
@@ -1503,13 +1509,19 @@ impl RenderNode {
 
       // Important declarations outrank an animation, and `inherit` among them
       // needs the parent the first pass resolved against.
-      let important = element_important
-        .tw
+      let important = matched
+        .unlayered_important()
         .iter()
         .map(|declarations| declarations.iter())
         .chain(
+          element_important
+            .tw
+            .iter()
+            .map(|declarations| declarations.iter()),
+        )
+        .chain(
           matched
-            .important()
+            .layered_important()
             .iter()
             .map(|declarations| declarations.iter()),
         )
