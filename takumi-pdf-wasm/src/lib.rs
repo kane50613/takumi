@@ -165,7 +165,7 @@ impl PdfRenderer {
       node,
       stylesheet: stylesheet(
         &self.resource_cache,
-        options.stylesheets,
+        options.css,
         Vec::new(),
         options.css_variables,
       ),
@@ -222,7 +222,7 @@ impl PdfRenderer {
       node,
       stylesheet: stylesheet(
         &self.resource_cache,
-        options.stylesheets,
+        options.css,
         Vec::new(),
         options.css_variables,
       ),

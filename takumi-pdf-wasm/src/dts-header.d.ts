@@ -145,8 +145,8 @@ export type PdfRenderOptions = {
   footer?: Node;
   /** Pre-fetched images keyed by URL. */
   images?: ImageSource[];
-  /** CSS stylesheets to apply before layout. */
-  stylesheets?: string[];
+  /** CSS to apply before layout. */
+  css?: string[];
   /**
    * CSS custom properties for `:root`, which utilities and `var()` both read.
    * A name without the `--` prefix gains it.
@@ -173,7 +173,7 @@ export type MeasureOptions = (
   | { size?: PageSize; landscape?: boolean; viewport?: never }
   | { viewport: ViewportInput; size?: never; landscape?: never }
 ) &
-  Pick<PdfRenderOptions, "images" | "stylesheets" | "cssVariables" | "fontFamilies" | "lang">;
+  Pick<PdfRenderOptions, "images" | "css" | "cssVariables" | "fontFamilies" | "lang">;
 
 /** A node tree's laid-out size in CSS px. */
 export type MeasuredSize = { width: number; height: number };

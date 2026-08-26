@@ -43,6 +43,23 @@ test("renders an HTML string with its own stylesheet", async () => {
   expect(pageCount(pdf)).toBe(1);
 });
 
+test("css takes one string and rejects the stylesheets alias next to it", async () => {
+  const pdf = await renderer.render(`<div class="title">Hello PDF</div>`, {
+    viewport: { width: 600, height: 300 },
+    css: ".title { font-size: 32px }",
+  });
+
+  expect(decoder.decode(pdf.subarray(0, 5))).toBe("%PDF-");
+
+  expect(
+    renderer.render(`<div>Hello</div>`, {
+      viewport: { width: 600, height: 300 },
+      css: "div {}",
+      stylesheets: ["div {}"],
+    }),
+  ).rejects.toThrow("pass either `css` or `stylesheets`, not both");
+});
+
 test("paginates and substitutes footer counters", async () => {
   // The bundled face is latin only, and `trad-chinese-informal` counts in
   // Chinese numerals. The face registered for it stays on a renderer of its

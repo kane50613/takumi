@@ -134,7 +134,7 @@ async function renderOutput({
       buffer: await pdf.render(node, {
         cssVariables: options.cssVariables,
         ...options.pdf,
-        stylesheets,
+        css: stylesheets,
         images,
         fonts,
       }),
@@ -159,7 +159,7 @@ async function renderOutput({
         cssVariables: options.cssVariables,
         images,
         fonts,
-        stylesheets,
+        css: stylesheets,
       }),
       kind: "animation",
       format,
@@ -167,7 +167,7 @@ async function renderOutput({
   }
 
   return {
-    buffer: await renderer.render(node, { ...options, stylesheets, images, fonts }),
+    buffer: await renderer.render(node, { ...options, css: stylesheets, images, fonts }),
     kind: "image",
     format: options.format ?? "png",
   };

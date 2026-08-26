@@ -73,9 +73,9 @@ export type RenderOptions = {
    */
   images?: ImageSource[];
   /**
-   * CSS stylesheets to apply before rendering.
+   * CSS to apply before rendering.
    */
-  stylesheets?: string[];
+  css?: string[];
   /**
    * CSS custom properties for `:root`, which utilities and `var()` both read.
    * A name without the `--` prefix gains it.
@@ -142,9 +142,9 @@ export type RenderAnimationOptions = {
   images?: ImageSource[];
   drawDebugBorder?: boolean;
   /**
-   * CSS stylesheets to apply before rendering.
+   * CSS to apply before rendering.
    */
-  stylesheets?: string[];
+  css?: string[];
   /**
    * CSS custom properties for `:root`, which utilities and `var()` both read.
    * A name without the `--` prefix gains it.

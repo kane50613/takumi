@@ -134,7 +134,12 @@ export type MeasureOptions = (
   fonts?: FontLoader[];
   /** Pre-fetched images for `src` URLs in the tree. */
   images?: ImagesInput;
-  /** CSS stylesheets to apply before layout. */
+  /** CSS to apply before layout, one string or a list cascading in order. */
+  css?: string | readonly string[];
+  /**
+   * CSS stylesheets to apply before layout.
+   * @deprecated Use `css` instead.
+   */
   stylesheets?: string[];
   /** CSS custom properties for `:root`; the `--` prefix is optional. */
   cssVariables?: Record<string, string>;
@@ -263,7 +268,12 @@ export type RenderOptions = (PagedOptions | ViewportOptions) &
      * `[{ src: "https://…/logo.png", data: bytes }]`.
      */
     images?: ImagesInput;
-    /** CSS stylesheets to apply before layout. */
+    /** CSS to apply before layout, one string or a list cascading in order. */
+    css?: string | readonly string[];
+    /**
+     * CSS stylesheets to apply before layout.
+     * @deprecated Use `css` instead.
+     */
     stylesheets?: string[];
     /** CSS custom properties for `:root`; the `--` prefix is optional. */
     cssVariables?: Record<string, string>;
@@ -284,6 +294,21 @@ export type RenderOptions = (PagedOptions | ViewportOptions) &
 
 function isNode(value: NodeInput): value is Node {
   return typeof value === "object" && value !== null && "type" in value && !("$$typeof" in value);
+}
+
+function ownCss(
+  css: string | readonly string[] | undefined,
+  stylesheets: string[] | undefined,
+): string[] {
+  if (css !== undefined && stylesheets !== undefined) {
+    throw new Error("pass either `css` or `stylesheets`, not both");
+  }
+
+  if (css !== undefined) {
+    return typeof css === "string" ? [css] : [...css];
+  }
+
+  return stylesheets ?? [];
 }
 
 async function resolveNode(input: NodeInput): Promise<{ node: Node; stylesheets: string[] }> {
@@ -307,7 +332,7 @@ export class PdfRenderer {
 
   /** Renders a node tree, JSX, or an HTML string to PDF bytes. See {@link RenderOptions}. */
   async render(node: NodeInput, options: RenderOptions = {}): Promise<Uint8Array> {
-    const { fonts, images, header, footer, stylesheets, fontFamilies, ...rest } = options;
+    const { fonts, images, header, footer, css, stylesheets, fontFamilies, ...rest } = options;
     const [main, headerResult, footerResult] = await Promise.all([
       resolveNode(node),
       header === undefined ? undefined : resolveNode(header),
@@ -331,7 +356,7 @@ export class PdfRenderer {
       fontFamilies,
     );
     const sheets = [
-      ...(stylesheets ?? []),
+      ...ownCss(css, stylesheets),
       ...main.stylesheets,
       ...(headerResult?.stylesheets ?? []),
       ...(footerResult?.stylesheets ?? []),
@@ -341,7 +366,7 @@ export class PdfRenderer {
       ...rest,
       header: headerResult?.node,
       footer: footerResult?.node,
-      stylesheets: sheets.length > 0 ? sheets : undefined,
+      css: sheets.length > 0 ? sheets : undefined,
       images: resources.images,
       fontFamilies: resources.fontFamilies,
     });
@@ -359,7 +384,7 @@ export class PdfRenderer {
    * against: a box with `width: 100px` measures 100 wide on any page.
    */
   async measure(node: NodeInput, options: MeasureOptions = {}): Promise<MeasuredSize> {
-    const { fonts, images, stylesheets, fontFamilies, ...rest } = options;
+    const { fonts, images, css, stylesheets, fontFamilies, ...rest } = options;
     const main = await resolveNode(node);
     // The tree measured may itself be a band, so its counters are always in play.
     const resources = await this.fonts.resolveResources(
@@ -371,11 +396,11 @@ export class PdfRenderer {
       images,
       fontFamilies,
     );
-    const sheets = [...(stylesheets ?? []), ...main.stylesheets];
+    const sheets = [...ownCss(css, stylesheets), ...main.stylesheets];
 
     return this.inner.measure(main.node, {
       ...rest,
-      stylesheets: sheets.length > 0 ? sheets : undefined,
+      css: sheets.length > 0 ? sheets : undefined,
       images: resources.images,
       fontFamilies: resources.fontFamilies,
     });

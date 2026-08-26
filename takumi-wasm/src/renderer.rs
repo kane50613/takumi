@@ -80,7 +80,7 @@ fn raster_options<'fonts>(
 ) -> Result<takumi_raster::RenderOptions<'fonts>, js_sys::Error> {
   let stylesheet = stylesheet(
     resource_cache,
-    options.stylesheets,
+    options.css,
     options.keyframes.unwrap_or_default(),
     options.css_variables,
   );
@@ -236,7 +236,7 @@ impl Renderer {
     let images = self.images_map(options.images.as_deref())?;
     let stylesheet = stylesheet(
       &self.resource_cache,
-      options.stylesheets,
+      options.css,
       options.keyframes.unwrap_or_default(),
       options.css_variables,
     );
@@ -328,7 +328,7 @@ impl Renderer {
       format,
       images,
       draw_debug_border,
-      stylesheets,
+      css,
       keyframes,
       css_variables,
       device_pixel_ratio,
@@ -354,7 +354,7 @@ impl Renderer {
     let draw_debug_border = draw_debug_border.unwrap_or_default();
     let stylesheet = stylesheet(
       &self.resource_cache,
-      stylesheets,
+      css,
       keyframes.unwrap_or_default(),
       css_variables,
     );

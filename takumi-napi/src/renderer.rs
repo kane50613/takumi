@@ -177,8 +177,8 @@ pub struct RenderOptions<'env> {
   pub draw_debug_border: Option<bool>,
   /// Images keyed by `src`, each carrying raw bytes.
   pub images: Option<Vec<ImageSource<'env>>>,
-  /// CSS stylesheets to apply before rendering.
-  pub stylesheets: Option<Vec<String>>,
+  /// CSS to apply before rendering.
+  pub css: Option<Vec<String>>,
   /// CSS custom properties for `:root`, which utilities and `var()` both read.
   pub css_variables: Option<HashMap<String, String>>,
   /// Structured keyframes to register alongside stylesheets.
@@ -210,8 +210,8 @@ pub struct SvgRenderOptions<'env> {
   pub height: Option<u32>,
   /// Images keyed by `src`, each carrying raw bytes.
   pub images: Option<Vec<ImageSource<'env>>>,
-  /// CSS stylesheets to apply before rendering.
-  pub stylesheets: Option<Vec<String>>,
+  /// CSS to apply before rendering.
+  pub css: Option<Vec<String>>,
   /// CSS custom properties for `:root`, which utilities and `var()` both read.
   pub css_variables: Option<HashMap<String, String>>,
   /// Structured keyframes to register alongside stylesheets.
@@ -280,8 +280,8 @@ pub struct RenderAnimationOptions<'env> {
   pub fps: u32,
   /// Images keyed by `src`, each carrying raw bytes.
   pub images: Option<Vec<ImageSource<'env>>>,
-  /// CSS stylesheets to apply before rendering.
-  pub stylesheets: Option<Vec<String>>,
+  /// CSS to apply before rendering.
+  pub css: Option<Vec<String>>,
   /// CSS custom properties for `:root`, which utilities and `var()` both read.
   pub css_variables: Option<HashMap<String, String>>,
   /// Structured keyframes to register alongside stylesheets.

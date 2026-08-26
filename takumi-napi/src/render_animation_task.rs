@@ -28,7 +28,7 @@ pub struct RenderAnimationTask {
   pub(crate) quality: Option<u8>,
   pub(crate) lossless: Option<bool>,
   pub(crate) draw_debug_border: bool,
-  pub(crate) stylesheets: Option<Vec<String>>,
+  pub(crate) css: Option<Vec<String>>,
   pub(crate) keyframes: Vec<KeyframesRule>,
   pub(crate) css_variables: Option<HashMap<String, String>>,
   pub(crate) images: HashMap<Arc<str>, (JsBytes, ImageCacheMode)>,
@@ -53,7 +53,7 @@ impl RenderAnimationTask {
       lossless,
       fps,
       images,
-      stylesheets,
+      css,
       keyframes,
       css_variables,
       device_pixel_ratio: dpr,
@@ -87,7 +87,7 @@ impl RenderAnimationTask {
       quality,
       lossless,
       draw_debug_border: draw_debug_border.unwrap_or_default(),
-      stylesheets,
+      css,
       keyframes: deserialize_keyframes(keyframes)?,
       css_variables,
       images: collect_images(env, images)?,
@@ -111,7 +111,7 @@ impl Task for RenderAnimationTask {
       let initialized_images = decode_images(&self.state.resource_cache, take(&mut self.images))?;
       let stylesheet = stylesheet(
         &self.state.resource_cache,
-        take(&mut self.stylesheets),
+        take(&mut self.css),
         take(&mut self.keyframes),
         take(&mut self.css_variables),
       );

@@ -42,7 +42,7 @@ impl RenderTask {
   ) -> Result<Self> {
     let stylesheet = stylesheet(
       &state.resource_cache,
-      options.stylesheets,
+      options.css,
       deserialize_keyframes(options.keyframes)?,
       options.css_variables,
     );

@@ -61,15 +61,32 @@ type Managed<TInner> =
  */
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
-type InnerRenderOptions = DistributiveOmit<napi.RenderOptions | wasm.RenderOptions, "images">;
+/** The wrapper-level CSS inputs, replacing the backends' `stylesheets` field. */
+type CssOptions = {
+  /** CSS to apply before rendering, one string or a list cascading in order. */
+  css?: string | readonly string[];
+  /**
+   * CSS stylesheets to apply before rendering.
+   * @deprecated Use `css` instead.
+   */
+  stylesheets?: string[];
+};
+
+type InnerRenderOptions = DistributiveOmit<
+  napi.RenderOptions | wasm.RenderOptions,
+  "images" | "css"
+> &
+  CssOptions;
 type InnerSvgRenderOptions = DistributiveOmit<
   napi.SvgRenderOptions | wasm.SvgRenderOptions,
-  "images"
->;
+  "images" | "css"
+> &
+  CssOptions;
 type InnerRenderAnimationOptions = DistributiveOmit<
   napi.RenderAnimationOptions | wasm.RenderAnimationOptions,
-  "images"
->;
+  "images" | "css"
+> &
+  CssOptions;
 
 export type RenderOptions = Managed<InnerRenderOptions>;
 export type RenderSvgOptions = Managed<InnerSvgRenderOptions>;
@@ -90,6 +107,7 @@ export type RenderAnimationOptions = Managed<
 /** The subset of options the shared pipeline reads, across every entry point. */
 type PipelineOptions = Partial<SharedRenderExtras> &
   ManagedRendererOptions & {
+    css?: string | readonly string[];
     stylesheets?: string[];
   };
 
@@ -169,7 +187,18 @@ async function collectImages(
 }
 
 function mergeStylesheets(options: PipelineOptions | undefined, extra: string[]): string[] {
-  return [...(options?.stylesheets ?? []), ...extra];
+  if (options?.css !== undefined && options?.stylesheets !== undefined) {
+    throw new Error("pass either `css` or `stylesheets`, not both");
+  }
+
+  const own =
+    options?.css !== undefined
+      ? typeof options.css === "string"
+        ? [options.css]
+        : options.css
+      : (options?.stylesheets ?? []);
+
+  return [...own, ...extra];
 }
 
 /**
@@ -203,10 +232,12 @@ export async function render(element: RenderInput, options?: RenderOptions) {
   // abort that happened during the async font and image loading before the blocking call.
   options?.signal?.throwIfAborted();
 
+  const { css: _, stylesheets: _alias, ...forward } = options ?? {};
+
   return renderer.render(node, {
-    ...options,
+    ...forward,
     images,
-    stylesheets: mergeStylesheets(options, stylesheets),
+    css: mergeStylesheets(options, stylesheets),
   });
 }
 
@@ -239,10 +270,12 @@ export async function renderSvg(element: RenderInput, options?: RenderSvgOptions
 
   options?.signal?.throwIfAborted();
 
+  const { css: _, stylesheets: _alias, ...forward } = options ?? {};
+
   return renderer.renderSvg(node, {
-    ...options,
+    ...forward,
     images,
-    stylesheets: mergeStylesheets(options, stylesheets),
+    css: mergeStylesheets(options, stylesheets),
   });
 }
 
@@ -273,6 +306,8 @@ export async function renderSvg(element: RenderInput, options?: RenderSvgOptions
 export async function renderAnimation(options: RenderAnimationOptions) {
   options.signal?.throwIfAborted();
 
+  const { css: _, stylesheets: _alias, ...forward } = options;
+
   const renderer = await resolveRenderer(options);
   const scenes = await Promise.all(
     options.scenes.map(async (scene) => {
@@ -293,9 +328,9 @@ export async function renderAnimation(options: RenderAnimationOptions) {
   options.signal?.throwIfAborted();
 
   return renderer.renderAnimation({
-    ...options,
+    ...forward,
     scenes: scenes.map(({ node, durationMs }) => ({ node, durationMs })),
     images,
-    stylesheets,
+    css: stylesheets,
   });
 }
