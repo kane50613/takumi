@@ -1185,6 +1185,14 @@ fn test_var_resolves_custom_property_declared_later_on_same_element() {
 }
 
 #[test]
+fn text_fit_inherits_from_the_parent() {
+  let parent = inherited_style_from_pairs([("text-fit", "shrink")], &ComputedStyle::default());
+  let child = inherited_style_from_pairs([], &parent);
+
+  assert_eq!(child.text_fit.mode, TextFitMode::Shrink);
+}
+
+#[test]
 fn test_var_inherits_custom_properties_from_parent() {
   let parent = inherited_style_from_pairs([("--card-width", "320px")], &ComputedStyle::default());
   let child = inherited_style_from_pairs([("width", "var(--card-width)")], &parent);
