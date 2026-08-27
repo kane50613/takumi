@@ -1399,7 +1399,6 @@ const PREFLIGHT_CSS: &str = r"
     list-style: none;
   }
 
-
   img, svg {
     display: block;
     vertical-align: middle;
