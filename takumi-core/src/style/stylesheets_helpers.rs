@@ -104,15 +104,14 @@ pub(crate) fn parse_css_wide_keyword(css_input: &CssInput<'_>) -> Option<CssWide
 
 pub(crate) fn css_input_parse_error<'de>(
   css_input: CssInput<'de>,
-  source: &str,
   expected: String,
-  error: ParseError<'_, Cow<'_, str>>,
+  failure: CssInputParseFailure,
 ) -> CssInputParseError<'de> {
   match css_input {
     CssInput::Str(value) => CssInputParseError::Value {
       value,
       expected: expected.into(),
-      failure: Some(css_input_parse_failure(source, error)),
+      failure: Some(failure),
     },
     CssInput::Number(number) => CssInputParseError::NumberType {
       number,
@@ -125,7 +124,7 @@ pub(crate) fn css_input_parse_error<'de>(
   }
 }
 
-fn css_input_parse_failure(
+pub(crate) fn css_input_parse_failure(
   source: &str,
   error: ParseError<'_, Cow<'_, str>>,
 ) -> CssInputParseFailure {
@@ -227,7 +226,7 @@ pub(crate) fn normalize_kebab_property_name(name: &str) -> Cow<'_, str> {
     return Cow::Borrowed(name);
   }
 
-  let normalized: String = name
+  let mut normalized: String = name
     .chars()
     .map(|ch| match ch {
       '-' => '_',
@@ -235,7 +234,13 @@ pub(crate) fn normalize_kebab_property_name(name: &str) -> Cow<'_, str> {
     })
     .collect();
 
-  Cow::Owned(normalized.trim_start_matches('_').to_owned())
+  let leading = normalized.len() - normalized.trim_start_matches('_').len();
+
+  if leading > 0 {
+    normalized.drain(..leading);
+  }
+
+  Cow::Owned(normalized)
 }
 
 pub(crate) fn normalize_camel_property_name(name: &str) -> Cow<'_, str> {
@@ -253,7 +258,13 @@ pub(crate) fn normalize_camel_property_name(name: &str) -> Cow<'_, str> {
     }
   }
 
-  Cow::Owned(normalized.trim_start_matches('_').to_owned())
+  let leading = normalized.len() - normalized.trim_start_matches('_').len();
+
+  if leading > 0 {
+    normalized.drain(..leading);
+  }
+
+  Cow::Owned(normalized)
 }
 
 pub(crate) fn contains_var_function(specified_value: &str) -> bool {
