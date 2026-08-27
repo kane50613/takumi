@@ -16,12 +16,12 @@ npm install @takumi-rs/helpers
 
 ### JSX to Node Tree
 
-Convert React-like elements into a serializable node tree + stylesheets.
+Convert React-like elements into a serializable node tree + CSS.
 
 ```tsx
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 
-const { node, stylesheets } = await fromJsx(<div style={{ display: "flex" }}>Hello</div>);
+const { node, css } = await fromJsx(<div style={{ display: "flex" }}>Hello</div>);
 ```
 
 ### HTML to Node Tree
@@ -31,7 +31,7 @@ Parse HTML strings into Takumi nodes.
 ```ts
 import { fromHtml } from "@takumi-rs/helpers/html";
 
-const { node, stylesheets } = await fromHtml("<div style='color: red'>Hello</div>");
+const { node, css } = await fromHtml("<div style='color: red'>Hello</div>");
 ```
 
 ### Emoji Processing

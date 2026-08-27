@@ -176,9 +176,9 @@ async function renderOutput({
 async function renderRequest(renderer: Renderer, id: number, code: string) {
   const { default: component, options } = evaluateCodeExports(code, renderReact);
   const element = renderReact.createElement(component as JSXElementConstructor<unknown>);
-  const { node, stylesheets } = await fromJsx(element);
+  const { node, css: extractedCss } = await fromJsx(element);
   const optionCss = typeof options.css === "string" ? [options.css] : options.css;
-  const effectiveCss = optionCss ?? stylesheets;
+  const effectiveCss = optionCss ?? extractedCss;
   const geometry = outputGeometry(options);
 
   // A PDF renders pages, which a single HTML flow cannot stand in for, so the

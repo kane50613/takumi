@@ -9,7 +9,7 @@ type VideoModule = AssetModule & {
   width: number;
   height: number;
   video: { durationMs: number; fps?: number; dpr?: number };
-  stylesheets?: string[];
+  css?: string[];
   frame?: (ms: number) => ReactNode;
   fontFamilies?: (ms: number) => string[];
   default: () => ReactNode;
@@ -79,14 +79,14 @@ for (let start = 0; start < frameCount; start += BATCH) {
   const buffers = await Promise.all(
     Array.from({ length: Math.min(BATCH, frameCount - start) }, async (_, offset) => {
       const ms = ((start + offset) * 1000) / fps;
-      const { node, stylesheets } = await fromJsx(frameAt(ms));
+      const { node, css } = await fromJsx(frameAt(ms));
 
       return renderer.render(node, {
         width: outWidth,
         height: outHeight,
         devicePixelRatio: dpr,
         format: "raw",
-        css: [...stylesheets, ...(module.stylesheets ?? [])],
+        css: [...css, ...(module.css ?? [])],
         images,
         fonts: fonts.length > 0 ? fonts : undefined,
         fontFamilies: module.fontFamilies?.(ms),

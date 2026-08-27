@@ -78,54 +78,54 @@ bench("createNode", createNode);
 
 summary(() => {
   bench("createNode + render (raw)", async () => {
-    const { node, stylesheets } = await createNode();
+    const { node, css } = await createNode();
     return renderer.render(node, {
       width: 1200,
       height: 630,
       format: "raw",
-      css: stylesheets,
+      css,
     });
   });
 
   bench("createNode + render (png, fdeflate)", async () => {
-    const { node, stylesheets } = await createNode();
+    const { node, css } = await createNode();
     return renderer.render(node, {
       width: 1200,
       height: 630,
       quality: 75,
-      css: stylesheets,
+      css,
     });
   });
 
   bench("createNode + render (png, flate2)", async () => {
-    const { node, stylesheets } = await createNode();
+    const { node, css } = await createNode();
     return renderer.render(node, {
       width: 1200,
       height: 630,
       quality: 100,
-      css: stylesheets,
+      css,
     });
   });
 
   bench("createNode + render (webp 75%)", async () => {
-    const { node, stylesheets } = await createNode();
+    const { node, css } = await createNode();
     return renderer.render(node, {
       width: 1200,
       height: 630,
       format: "webp",
       quality: 75,
-      css: stylesheets,
+      css,
     });
   });
 
   bench("createNode + render (webp 100%)", async () => {
-    const { node, stylesheets } = await createNode();
+    const { node, css } = await createNode();
     return renderer.render(node, {
       width: 1200,
       height: 630,
       format: "webp",
       quality: 100,
-      css: stylesheets,
+      css,
     });
   });
 });
@@ -198,14 +198,14 @@ summary(() => {
   });
 });
 
-const { node, stylesheets } = await createNode();
+const { node, css } = await createNode();
 
 await writeFile(
   "tests/bench/bench.png",
   await renderer.render(node, {
     width: 1200,
     height: 630,
-    css: stylesheets,
+    css,
   }),
 );
 

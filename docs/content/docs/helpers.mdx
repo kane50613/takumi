@@ -41,10 +41,10 @@ Length and color shorthands return CSS strings. `vw`/`vh` are viewport width/hei
 
 ## Parsing templates
 
-| Helper                       | Import                   | Use                                                        |
-| :--------------------------- | :----------------------- | :--------------------------------------------------------- |
-| `fromJsx(element, options?)` | `takumi-js/helpers/jsx`  | Convert JSX or a React element to `{ node, stylesheets }`. |
-| `fromHtml(html)`             | `takumi-js/helpers/html` | Convert an HTML string to `{ node, stylesheets }`.         |
+| Helper                       | Import                   | Use                                                |
+| :--------------------------- | :----------------------- | :------------------------------------------------- |
+| `fromJsx(element, options?)` | `takumi-js/helpers/jsx`  | Convert JSX or a React element to `{ node, css }`. |
+| `fromHtml(html)`             | `takumi-js/helpers/html` | Convert an HTML string to `{ node, css }`.         |
 
 `fromJsx` resolves hooks and context itself: components using `useState`, `useContext`, or `use()` render with server semantics (initial state, no effects), without loading `react-dom`. Preact trees render too, as long as no component calls a Preact hook: those live on Preact's mangled internals, which no dispatcher can stand in for.
 

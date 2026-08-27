@@ -17,7 +17,7 @@ export interface FromStaticMarkupOptions extends FromJsxOptions {}
 
 export interface FromStaticMarkupResult {
   nodes: Node[];
-  stylesheets: string[];
+  css: string[];
 }
 
 /**
@@ -35,12 +35,12 @@ export function fromStaticMarkup(
   options?: FromStaticMarkupOptions,
 ): FromStaticMarkupResult {
   const document = parse(markup) as UltraHtmlDocumentNode;
-  const result: FromStaticMarkupResult = { nodes: [], stylesheets: [] };
+  const result: FromStaticMarkupResult = { nodes: [], css: [] };
   const presets = getPresets(options?.defaultStyles);
   const tailwindClassesProperty = options?.tailwindClassesProperty ?? "tw";
 
   for (const child of document.children) {
-    buildStaticNodes(child, presets, tailwindClassesProperty, result.nodes, result.stylesheets);
+    buildStaticNodes(child, presets, tailwindClassesProperty, result.nodes, result.css);
   }
 
   return result;
@@ -51,7 +51,7 @@ function buildStaticNodes(
   presets: typeof defaultStylePresets | undefined,
   tailwindClassesProperty: string,
   nodes: Node[],
-  stylesheets: string[],
+  css: string[],
 ): void {
   if (node.type === COMMENT_NODE) {
     return;
@@ -72,7 +72,7 @@ function buildStaticNodes(
 
   if (node.type === DOCUMENT_NODE) {
     for (const child of node.children) {
-      buildStaticNodes(child, presets, tailwindClassesProperty, nodes, stylesheets);
+      buildStaticNodes(child, presets, tailwindClassesProperty, nodes, css);
     }
     return;
   }
@@ -92,7 +92,7 @@ function buildStaticNodes(
     }
 
     if (content) {
-      stylesheets.push(content);
+      css.push(content);
     }
     return;
   }
@@ -101,7 +101,7 @@ function buildStaticNodes(
     const discardedNodes: Node[] = [];
 
     for (const child of element.children) {
-      buildStaticNodes(child, presets, tailwindClassesProperty, discardedNodes, stylesheets);
+      buildStaticNodes(child, presets, tailwindClassesProperty, discardedNodes, css);
     }
     return;
   }
@@ -179,7 +179,7 @@ function buildStaticNodes(
 
   const childNodes: Node[] = [];
   for (const child of element.children) {
-    buildStaticNodes(child, presets, tailwindClassesProperty, childNodes, stylesheets);
+    buildStaticNodes(child, presets, tailwindClassesProperty, childNodes, css);
   }
 
   nodes.push(

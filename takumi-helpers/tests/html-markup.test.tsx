@@ -8,13 +8,14 @@ const BODY = `<div class="box">x</div>`;
 
 describe("fromHtml", () => {
   test("collects <style> from a fragment", () => {
-    expect(fromHtml(`${STYLE}${BODY}`).stylesheets).toEqual([".box{background:#2c82c9}"]);
+    expect(fromHtml(`${STYLE}${BODY}`).css).toEqual([".box{background:#2c82c9}"]);
   });
 
   test("collects <style> from <head> in a full document", () => {
-    const { stylesheets } = fromHtml(`<html><head>${STYLE}</head><body>${BODY}</body></html>`);
+    const { css, stylesheets } = fromHtml(`<html><head>${STYLE}</head><body>${BODY}</body></html>`);
 
-    expect(stylesheets).toEqual([".box{background:#2c82c9}"]);
+    expect(css).toEqual([".box{background:#2c82c9}"]);
+    expect(stylesheets).toBe(css);
   });
 
   test("does not render <head> content as nodes", () => {
@@ -134,7 +135,7 @@ describe("fromHtml", () => {
 
 describe("fromJsx", () => {
   test("collects <style> from <head>", async () => {
-    const { stylesheets } = await fromJsx(
+    const { css, stylesheets } = await fromJsx(
       <html>
         <head>
           <style>{".box{background:#2c82c9}"}</style>
@@ -145,6 +146,7 @@ describe("fromJsx", () => {
       </html>,
     );
 
-    expect(stylesheets).toEqual([".box{background:#2c82c9}"]);
+    expect(css).toEqual([".box{background:#2c82c9}"]);
+    expect(stylesheets).toBe(css);
   });
 });

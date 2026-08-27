@@ -2,11 +2,18 @@ import { container, percentage } from "../helpers";
 import { fromStaticMarkup } from "./markup";
 import type { Node } from "../types";
 
+export interface FromHtmlResult {
+  node: Node;
+  css: string[];
+  /** @deprecated Use `css` instead. */
+  stylesheets: string[];
+}
+
 const isWhitespaceOnlyText = (node: Node): boolean =>
   "text" in node && typeof node.text === "string" && node.text.trim() === "";
 
-export function fromHtml(html: string) {
-  const { nodes, stylesheets } = fromStaticMarkup(html);
+export function fromHtml(html: string): FromHtmlResult {
+  const { nodes, css } = fromStaticMarkup(html);
 
   while (nodes[0] && isWhitespaceOnlyText(nodes[0])) {
     nodes.shift();
@@ -15,29 +22,21 @@ export function fromHtml(html: string) {
     nodes.pop();
   }
 
+  let node: Node;
   if (nodes.length === 0) {
-    return {
-      node: container({}),
-      stylesheets,
-    };
-  }
-
-  if (nodes.length === 1 && nodes[0]) {
-    return {
-      node: nodes[0],
-      stylesheets,
-    };
-  }
-
-  return {
-    node: container({
+    node = container({});
+  } else if (nodes.length === 1 && nodes[0]) {
+    node = nodes[0];
+  } else {
+    node = container({
       style: {
         display: "block",
         width: percentage(100),
         height: percentage(100),
       },
       children: nodes,
-    }),
-    stylesheets,
-  };
+    });
+  }
+
+  return { node, css, stylesheets: css };
 }

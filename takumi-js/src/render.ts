@@ -127,7 +127,7 @@ async function transformElement(element: RenderInput, options?: PipelineOptions)
   if (isTakumiNode(element)) {
     return {
       node: element,
-      stylesheets: [],
+      css: [],
     };
   }
 
@@ -150,11 +150,11 @@ async function resolveRenderer(options?: PipelineOptions): Promise<Renderer> {
 
 /** Transforms an input into a node tree and extracts its emojis. */
 async function resolveContent(element: RenderInput, options?: PipelineOptions) {
-  const { node: originalNode, stylesheets } = await transformElement(element, options);
+  const { node: originalNode, css } = await transformElement(element, options);
   const emojiType = options?.emoji ?? "twemoji";
   const node = emojiType !== "from-font" ? extractEmojis(originalNode, emojiType) : originalNode;
 
-  return { node, stylesheets };
+  return { node, css };
 }
 
 /** Resolves the render's `images` option into concrete entries via {@link prepareImages}. */
@@ -237,7 +237,7 @@ export async function render(element: RenderInput, options?: RenderOptions) {
   options?.signal?.throwIfAborted();
 
   const renderer = await resolveRenderer(options);
-  const { node, stylesheets } = await resolveContent(element, options);
+  const { node, css: extractedCss } = await resolveContent(element, options);
   const images = await collectImages(node, options);
 
   // The WASM renderer is synchronous and ignores the signal argument, so honor an
@@ -249,7 +249,7 @@ export async function render(element: RenderInput, options?: RenderOptions) {
   return renderer.render(node, {
     ...forward,
     images,
-    css: mergeCss(options, stylesheets),
+    css: mergeCss(options, extractedCss),
   });
 }
 
@@ -277,7 +277,7 @@ export async function renderSvg(element: RenderInput, options?: RenderSvgOptions
   options?.signal?.throwIfAborted();
 
   const renderer = await resolveRenderer(options);
-  const { node, stylesheets } = await resolveContent(element, options);
+  const { node, css: extractedCss } = await resolveContent(element, options);
   const images = await collectImages(node, options);
 
   options?.signal?.throwIfAborted();
@@ -287,7 +287,7 @@ export async function renderSvg(element: RenderInput, options?: RenderSvgOptions
   return renderer.renderSvg(node, {
     ...forward,
     images,
-    css: mergeCss(options, stylesheets),
+    css: mergeCss(options, extractedCss),
   });
 }
 
@@ -323,8 +323,8 @@ export async function renderAnimation(options: RenderAnimationOptions) {
   const renderer = await resolveRenderer(options);
   const scenes = await Promise.all(
     options.scenes.map(async (scene) => {
-      const { node, stylesheets } = await resolveContent(scene.node, options);
-      return { node, durationMs: scene.durationMs, stylesheets };
+      const { node, css } = await resolveContent(scene.node, options);
+      return { node, durationMs: scene.durationMs, css };
     }),
   );
 
@@ -334,7 +334,7 @@ export async function renderAnimation(options: RenderAnimationOptions) {
   );
   const css = mergeCss(
     options,
-    scenes.flatMap((scene) => scene.stylesheets),
+    scenes.flatMap((scene) => scene.css),
   );
 
   options.signal?.throwIfAborted();

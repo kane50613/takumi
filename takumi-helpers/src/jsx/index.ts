@@ -68,16 +68,18 @@ interface ResolvedFromJsxOptions extends RenderEnv {
 
 export interface FromJsxResult {
   node: Node;
+  css: string[];
+  /** @deprecated Use `css` instead. */
   stylesheets: string[];
 }
 
 interface FromJsxTraversalResult {
   nodes: Node[];
-  stylesheets: string[];
+  css: string[];
 }
 
 function emptyTraversalResult(): FromJsxTraversalResult {
-  return { nodes: [], stylesheets: [] };
+  return { nodes: [], css: [] };
 }
 
 export async function fromJsx(
@@ -112,7 +114,8 @@ export async function fromJsx(
 
   return {
     node,
-    stylesheets: result.stylesheets,
+    css: result.css,
+    stylesheets: result.css,
   };
 }
 
@@ -143,7 +146,7 @@ async function fromJsxInternal(
         preset: options.presets?.span,
       }),
     ],
-    stylesheets: [],
+    css: [],
   };
 }
 
@@ -363,7 +366,7 @@ async function processReactElement(
     const css = collectStyleText(getElementChildren(element));
     return {
       nodes: [],
-      stylesheets: css && css.length > 0 ? [css] : [],
+      css: css && css.length > 0 ? [css] : [],
     };
   }
 
@@ -371,7 +374,7 @@ async function processReactElement(
     const children = await collectChildren(element, options);
     return {
       nodes: [],
-      stylesheets: children.stylesheets,
+      css: children.css,
     };
   }
 
@@ -390,21 +393,21 @@ async function processReactElement(
           ...metadata,
         }),
       ],
-      stylesheets: [],
+      css: [],
     };
   }
 
   if (isHtmlElement(element, "img")) {
     return {
       nodes: [createImageElement(element, options)],
-      stylesheets: [],
+      css: [],
     };
   }
 
   if (isHtmlElement(element, "svg")) {
     return {
       nodes: [createSvgElement(element, options)],
-      stylesheets: [],
+      css: [],
     };
   }
 
@@ -417,7 +420,7 @@ async function processReactElement(
           ...metadata,
         }),
       ],
-      stylesheets: [],
+      css: [],
     };
   }
 
@@ -430,7 +433,7 @@ async function processReactElement(
         ...metadata,
       }),
     ],
-    stylesheets: children.stylesheets,
+    css: children.css,
   };
 }
 
@@ -581,15 +584,15 @@ async function collectIterable(
   await Promise.all(inFlight);
 
   const flattenedNodes: Node[] = [];
-  const flattenedStylesheets: string[] = [];
+  const flattenedCss: string[] = [];
   for (const group of groupedResults) {
     if (!group) continue;
     flattenedNodes.push(...group.nodes);
-    flattenedStylesheets.push(...group.stylesheets);
+    flattenedCss.push(...group.css);
   }
 
   return {
     nodes: flattenedNodes,
-    stylesheets: flattenedStylesheets,
+    css: flattenedCss,
   };
 }

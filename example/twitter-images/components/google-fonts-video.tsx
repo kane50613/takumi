@@ -38,7 +38,7 @@ export const googleFonts: GoogleFontFamily[] = [
 
 export const images = [{ src: "takumi.svg", path: "takumi.svg" }];
 
-export const stylesheets = [
+export const css = [
   `@keyframes slide {
     0% { opacity: 0; transform: translateY(34px) scale(0.99); }
     24% { opacity: 1; transform: translateY(0) scale(1); }

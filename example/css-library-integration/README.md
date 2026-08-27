@@ -1,6 +1,6 @@
 # CSS Library Integration Example
 
-This example compiles Tailwind CSS and UnoCSS in-process and passes the resulting CSS into Takumi's `stylesheets` render option.
+This example compiles Tailwind CSS and UnoCSS in-process and passes the resulting CSS into Takumi's `css` render option.
 
 ![Tailwind CSS output](./output/tailwind-stylesheets.png)
 ![UnoCSS output](./output/unocss-stylesheets.png)

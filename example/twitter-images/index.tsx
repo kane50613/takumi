@@ -48,7 +48,7 @@ async function render(
   // default font stack.
   const renderer = new Renderer();
   const jsxPrepareStart = performance.now();
-  const { node, stylesheets } = await fromJsx(<module.default />);
+  const { node, css } = await fromJsx(<module.default />);
   const [fonts, images] = await Promise.all([loadFonts(module), loadImages(module)]);
   const renderStart = performance.now();
 
@@ -56,7 +56,7 @@ async function render(
     width: module.width * ratio,
     height: module.height * ratio,
     devicePixelRatio: ratio,
-    css: [...stylesheets, ...("stylesheets" in module ? module.stylesheets : [])],
+    css: [...css, ...("css" in module ? module.css : [])],
     drawDebugBorder: process.argv.includes("--debug"),
     images,
     fonts: fonts.length > 0 ? fonts : undefined,
