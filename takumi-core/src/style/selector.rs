@@ -3,6 +3,7 @@ use std::{
   fmt::{self, Write},
   mem::take,
   ops::Deref,
+  sync::LazyLock,
 };
 
 use cssparser::*;
@@ -1302,9 +1303,6 @@ pub struct StyleSheet {
   /// Widths from unconditional `:root` `--breakpoint-*` declarations, which
   /// gate `tw` variants before the cascade runs and so resolve at parse time.
   pub(crate) breakpoints: BreakpointOverrides,
-  /// Whether `@import "tailwindcss"` turned Preflight on, dropping the UA
-  /// preset cosmetics.
-  pub(crate) preflight: bool,
 }
 
 impl From<Vec<KeyframesRule>> for StyleSheet {
@@ -1325,6 +1323,29 @@ impl From<Vec<PropertyRule>> for StyleSheet {
     }
   }
 }
+
+/// The subset of Tailwind's Preflight takumi applies, in Tailwind's `base`
+/// layer so every author rule outranks it.
+/// https://github.com/tailwindlabs/tailwindcss/blob/main/packages/tailwindcss/preflight.css
+const PREFLIGHT_CSS: &str = r"
+@layer base {
+  *,
+  ::before,
+  ::after {
+    margin: 0;
+    padding: 0;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-size: inherit;
+    font-weight: inherit;
+  }
+
+  ol, ul, menu {
+    list-style: none;
+  }
+}
+";
 
 impl StyleSheet {
   /// The `@property` registrations declared by this stylesheet.
@@ -1432,6 +1453,19 @@ impl StyleSheet {
       }
     }
 
+    if preflight {
+      static PREFLIGHT_RULES: LazyLock<Vec<CssRule>> =
+        LazyLock::new(|| StyleSheet::parse_loosy(PREFLIGHT_CSS).rules);
+
+      let mut preflight_rules = PREFLIGHT_RULES.clone();
+      declared_layers.splice(
+        0..0,
+        preflight_rules.iter().filter_map(|rule| rule.layer.clone()),
+      );
+      preflight_rules.append(&mut rules);
+      rules = preflight_rules;
+    }
+
     let mut layer_order = HashMap::<LayerPath, usize>::new();
 
     for layer_name in declared_layers {
@@ -1464,7 +1498,6 @@ impl StyleSheet {
       keyframes,
       property_rules,
       layer_count: layer_order.len(),
-      preflight,
     })
   }
 }
@@ -2663,11 +2696,25 @@ mod tests {
     }
   }
 
+  fn preflight_rule_count(sheet: &StyleSheet) -> usize {
+    sheet
+      .rules
+      .iter()
+      .filter(|rule| {
+        rule.layer.as_ref().is_some_and(|layer| {
+          layer
+            .first()
+            .is_some_and(|name| matches!(name, LayerName::Named(named) if named == "base"))
+        })
+      })
+      .count()
+  }
+
   #[test]
   fn test_tailwind_import_turns_preflight_on() {
     let sheet = parse_stylesheet(r#"@import "tailwindcss"; .card { width: 100px; }"#);
-    assert!(sheet.preflight);
-    assert_eq!(sheet.rules.len(), 1);
+    assert!(preflight_rule_count(&sheet) > 0);
+    assert_eq!(sheet.rules.last().map(selector_text), Some(".card".into()));
   }
 
   /// `@import` is only valid at the top of a stylesheet; a nested one must
@@ -2684,7 +2731,7 @@ mod tests {
       assert!(StyleSheet::parse(css).is_err(), "{css}");
 
       let sheet = parse_stylesheet_loosy(css);
-      assert!(!sheet.preflight, "{css}");
+      assert_eq!(preflight_rule_count(&sheet), 0, "{css}");
     }
   }
 
@@ -2692,7 +2739,7 @@ mod tests {
   fn test_other_imports_are_dropped() {
     for import in [r#"@import "./app.css";"#, r#"@import "TAILWINDCSS";"#] {
       let sheet = parse_stylesheet_loosy(&format!("{import} .card {{ width: 100px; }}"));
-      assert!(!sheet.preflight, "{import}");
+      assert_eq!(preflight_rule_count(&sheet), 0, "{import}");
       assert_eq!(sheet.rules.len(), 1, "{import}");
     }
   }

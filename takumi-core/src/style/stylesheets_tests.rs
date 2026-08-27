@@ -1443,39 +1443,6 @@ fn overflow_visible_paired_with_clip_stays_mixed() {
 }
 
 #[test]
-fn preflight_drops_preset_cosmetics() {
-  let preset = Style::default()
-    .with(StyleDeclaration::margin_top(Length::Em(0.67)))
-    .with(StyleDeclaration::display(Display::Block));
-
-  let mut with_preflight = Style::default();
-  with_preflight.merge_preset(preset.clone(), true);
-  assert_eq!(
-    with_preflight.declarations.declarations.as_slice(),
-    &[StyleDeclaration::display(Display::Block)]
-  );
-
-  let mut without_preflight = Style::default();
-  without_preflight.merge_preset(preset, false);
-  assert_eq!(without_preflight.declarations.declarations.len(), 2);
-}
-
-/// Dropping `ol`'s `decimal` alone would fall back to the initial `disc`;
-/// Preflight removes markers, so the preset entry becomes `none`.
-#[test]
-fn preflight_resets_list_markers_to_none() {
-  let preset = Style::default().with(StyleDeclaration::list_style_type(ListStyleType::Decimal));
-
-  let mut style = Style::default();
-  style.merge_preset(preset, true);
-
-  assert_eq!(
-    style.declarations.declarations.as_slice(),
-    &[StyleDeclaration::list_style_type(ListStyleType::None)]
-  );
-}
-
-#[test]
 fn shorthands_take_css_wide_keywords() {
   let block = StyleDeclarationBlock::from_str("margin: inherit; overflow: initial").unwrap();
 

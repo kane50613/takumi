@@ -137,3 +137,53 @@ fn important_layered_rules_beat_important_tw() {
 
   assert_eq!(result.children[0].width, 120.0);
 }
+
+fn tagged(tag: &str, preset: Style) -> Node {
+  Node::container([block("probe")])
+    .with_tag_name(tag)
+    .with_preset(preset.with(StyleDeclaration::display(Display::Block)))
+}
+
+#[test]
+fn preflight_clears_preset_padding() {
+  let preset = Style::default().with(StyleDeclaration::padding_top(Length::Px(30.0)));
+
+  let without = measure_with_css(Node::container([tagged("h1", preset.clone())]), "");
+  assert_eq!(without.children[0].height, 30.0);
+
+  let with_preflight = measure_with_css(
+    Node::container([tagged("h1", preset)]),
+    r#"@import "tailwindcss";"#,
+  );
+  assert_eq!(with_preflight.children[0].height, 0.0);
+}
+
+/// Preflight resets `font-size` on headings only, so a preset that sizes any
+/// other element still reaches the cascade.
+#[test]
+fn preflight_keeps_preset_font_size_outside_headings() {
+  let preset = Style::default().with(StyleDeclaration::font_size(FontSize::Length(Length::Px(
+    8.0,
+  ))));
+  let css = r#"@import "tailwindcss"; .probe { width: 2em; }"#;
+
+  let paragraph = measure_with_css(Node::container([tagged("p", preset.clone())]), css);
+  assert_eq!(paragraph.children[0].children[0].width, 16.0);
+
+  let heading = measure_with_css(Node::container([tagged("h1", preset)]), css);
+  assert_eq!(heading.children[0].children[0].width, 32.0);
+}
+
+/// Preflight resets heading fonts to `inherit`, not to the initial size.
+#[test]
+fn preflight_inherits_the_parent_font_size_on_headings() {
+  let preset = Style::default().with(StyleDeclaration::font_size(FontSize::Length(Length::Px(
+    8.0,
+  ))));
+  let heading = measure_with_css(
+    Node::container([tagged("h1", preset)]),
+    r#"@import "tailwindcss"; :root { font-size: 20px; } .probe { width: 2em; }"#,
+  );
+
+  assert_eq!(heading.children[0].children[0].width, 40.0);
+}
