@@ -1326,8 +1326,8 @@ impl From<Vec<PropertyRule>> for StyleSheet {
 
 /// Tailwind's Preflight, minus rules takumi cannot honor: form controls,
 /// `::placeholder`, vendor pseudo-elements, elements that never become a node,
-/// `abbr[title]` (needs an unparsed `text-decoration` style) and `summary`
-/// (`display: list-item` would paint a disc for the disclosure marker).
+/// `abbr[title]` (needs `text-decoration-style: dotted`, which is unparsed) and
+/// `summary` (`display: list-item` would draw a marker no bundled font covers).
 /// `:root` stands in for upstream's `html, :host`.
 /// https://github.com/tailwindlabs/tailwindcss/blob/main/packages/tailwindcss/preflight.css
 const PREFLIGHT_CSS: &str = r"

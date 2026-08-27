@@ -34,6 +34,10 @@ pub enum ListStyleType {
   LowerRoman,
   /// Uppercase roman numerals.
   UpperRoman,
+  /// A triangle pointing at the closed disclosure widget's content.
+  DisclosureClosed,
+  /// A triangle pointing down at the open disclosure widget's content.
+  DisclosureOpen,
   /// A literal string used for every item.
   String(Arc<str>),
 }
@@ -174,12 +178,18 @@ impl ListStyleType {
   pub(crate) fn is_symbolic(&self) -> bool {
     matches!(
       self,
-      ListStyleType::Disc | ListStyleType::Circle | ListStyleType::Square
+      ListStyleType::Disc
+        | ListStyleType::Circle
+        | ListStyleType::Square
+        | ListStyleType::DisclosureClosed
+        | ListStyleType::DisclosureOpen
     )
   }
 
-  /// The marker string for an item at `ordinal`, including the counter style's suffix.
-  pub(crate) fn marker_text(&self, ordinal: i32) -> Option<String> {
+  /// The marker string for an item at `ordinal`, including the counter style's
+  /// suffix. `is_rtl` only reaches `disclosure-closed`, whose triangle points
+  /// the way the text runs.
+  pub(crate) fn marker_text(&self, ordinal: i32, is_rtl: bool) -> Option<String> {
     let (representation, suffix) = match self {
       ListStyleType::None => return None,
       ListStyleType::String(value) => return Some(value.as_ref().to_owned()),
@@ -188,6 +198,10 @@ impl ListStyleType {
       // Blink paints `square` at `(ascent*2/3 + 1)/2` px
       // (`RelativeSymbolMarkerRect`); `▪` tracks that size, `■` does not.
       ListStyleType::Square => ("\u{25aa}".to_owned(), " "),
+      // Ref: https://drafts.csswg.org/css-counter-styles-3/#simple-symbolic
+      ListStyleType::DisclosureClosed if is_rtl => ("\u{25c2}".to_owned(), " "),
+      ListStyleType::DisclosureClosed => ("\u{25b8}".to_owned(), " "),
+      ListStyleType::DisclosureOpen => ("\u{25be}".to_owned(), " "),
       ListStyleType::Decimal => (ordinal.to_string(), ". "),
       ListStyleType::DecimalLeadingZero => (decimal_leading_zero(ordinal), ". "),
       ListStyleType::LowerAlpha => (alphabetic(ordinal, 'a'), ". "),
@@ -211,6 +225,8 @@ impl ListStyleType {
       "upper-alpha" | "upper-latin" => Some(ListStyleType::UpperAlpha),
       "lower-roman" => Some(ListStyleType::LowerRoman),
       "upper-roman" => Some(ListStyleType::UpperRoman),
+      "disclosure-closed" => Some(ListStyleType::DisclosureClosed),
+      "disclosure-open" => Some(ListStyleType::DisclosureOpen),
       _ => None,
     }
   }
@@ -266,6 +282,8 @@ impl ToCss for ListStyleType {
       ListStyleType::UpperAlpha => dest.write_str("upper-alpha"),
       ListStyleType::LowerRoman => dest.write_str("lower-roman"),
       ListStyleType::UpperRoman => dest.write_str("upper-roman"),
+      ListStyleType::DisclosureClosed => dest.write_str("disclosure-closed"),
+      ListStyleType::DisclosureOpen => dest.write_str("disclosure-open"),
       ListStyleType::String(value) => serialize_string(value, dest),
     }
   }
@@ -333,7 +351,7 @@ mod tests {
   /// Every character `marker_text` can generate across the predefined counter
   /// styles. Mirrored by `LIST_MARKER_CHARACTERS` in
   /// `takumi-helpers/src/fonts.ts`, which font subsetting feeds to callers.
-  const MARKER_CHARACTERS: &str = "\u{2022}\u{25e6}\u{25a0}\u{25aa} 0123456789.-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const MARKER_CHARACTERS: &str = "\u{2022}\u{25e6}\u{25a0}\u{25aa}\u{25b8}\u{25c2}\u{25be} 0123456789.-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
   #[test]
   fn parses_keywords_and_strings() {
@@ -348,6 +366,14 @@ mod tests {
     assert_eq!(
       ListStyleType::from_css_str("\"-\""),
       Ok(ListStyleType::String("-".into()))
+    );
+    assert_eq!(
+      ListStyleType::from_css_str("disclosure-closed"),
+      Ok(ListStyleType::DisclosureClosed)
+    );
+    assert_eq!(
+      ListStyleType::from_css_str("disclosure-open"),
+      Ok(ListStyleType::DisclosureOpen)
     );
     assert!(ListStyleType::from_css_str("bogus").is_err());
   }
@@ -383,32 +409,62 @@ mod tests {
   #[test]
   fn numbers_the_marker_per_counter_style() {
     assert_eq!(
-      ListStyleType::Decimal.marker_text(3).as_deref(),
+      ListStyleType::Decimal.marker_text(3, false).as_deref(),
       Some("3. ")
     );
     assert_eq!(
-      ListStyleType::DecimalLeadingZero.marker_text(7).as_deref(),
+      ListStyleType::DecimalLeadingZero
+        .marker_text(7, false)
+        .as_deref(),
       Some("07. ")
     );
     assert_eq!(
-      ListStyleType::LowerAlpha.marker_text(28).as_deref(),
+      ListStyleType::LowerAlpha.marker_text(28, false).as_deref(),
       Some("ab. ")
     );
     assert_eq!(
-      ListStyleType::UpperRoman.marker_text(1994).as_deref(),
+      ListStyleType::UpperRoman
+        .marker_text(1994, false)
+        .as_deref(),
       Some("MCMXCIV. ")
     );
     assert_eq!(
-      ListStyleType::Disc.marker_text(1).as_deref(),
+      ListStyleType::DisclosureClosed
+        .marker_text(1, false)
+        .as_deref(),
+      Some("\u{25b8} ")
+    );
+    assert_eq!(
+      ListStyleType::DisclosureClosed
+        .marker_text(1, true)
+        .as_deref(),
+      Some("\u{25c2} ")
+    );
+    assert_eq!(
+      ListStyleType::DisclosureOpen
+        .marker_text(1, false)
+        .as_deref(),
+      Some("\u{25be} ")
+    );
+    assert_eq!(
+      ListStyleType::DisclosureOpen
+        .marker_text(9, true)
+        .as_deref(),
+      Some("\u{25be} ")
+    );
+    assert_eq!(
+      ListStyleType::Disc.marker_text(1, false).as_deref(),
       Some("\u{2022} ")
     );
-    assert_eq!(ListStyleType::None.marker_text(1), None);
+    assert_eq!(ListStyleType::None.marker_text(1, false), None);
   }
 
   #[test]
   fn a_negative_value_spends_its_padding_on_the_sign() {
     assert_eq!(
-      ListStyleType::DecimalLeadingZero.marker_text(-7).as_deref(),
+      ListStyleType::DecimalLeadingZero
+        .marker_text(-7, false)
+        .as_deref(),
       Some("-7. ")
     );
   }
@@ -430,6 +486,8 @@ mod tests {
       ListStyleType::UpperAlpha,
       ListStyleType::LowerRoman,
       ListStyleType::UpperRoman,
+      ListStyleType::DisclosureClosed,
+      ListStyleType::DisclosureOpen,
       ListStyleType::String("marker".into()),
     ];
 
@@ -438,7 +496,11 @@ mod tests {
       // the shared character set.
       let covered: &[i32] = match style {
         ListStyleType::None | ListStyleType::String(_) => &[],
-        ListStyleType::Disc | ListStyleType::Circle | ListStyleType::Square => &[1, 100],
+        ListStyleType::Disc
+        | ListStyleType::Circle
+        | ListStyleType::Square
+        | ListStyleType::DisclosureClosed
+        | ListStyleType::DisclosureOpen => &[1, 100],
         ListStyleType::Decimal
         | ListStyleType::DecimalLeadingZero
         | ListStyleType::LowerAlpha
@@ -448,13 +510,15 @@ mod tests {
       };
 
       for ordinal in covered {
-        let marker = style.marker_text(*ordinal).expect("marker text");
+        for is_rtl in [false, true] {
+          let marker = style.marker_text(*ordinal, is_rtl).expect("marker text");
 
-        for character in marker.chars() {
-          assert!(
-            MARKER_CHARACTERS.contains(character),
-            "{style:?} at {ordinal} generates {character:?} outside MARKER_CHARACTERS"
-          );
+          for character in marker.chars() {
+            assert!(
+              MARKER_CHARACTERS.contains(character),
+              "{style:?} at {ordinal} generates {character:?} outside MARKER_CHARACTERS"
+            );
+          }
         }
       }
     }
@@ -463,11 +527,11 @@ mod tests {
   #[test]
   fn falls_back_to_decimal_outside_the_counter_range() {
     assert_eq!(
-      ListStyleType::LowerAlpha.marker_text(0).as_deref(),
+      ListStyleType::LowerAlpha.marker_text(0, false).as_deref(),
       Some("0. ")
     );
     assert_eq!(
-      ListStyleType::LowerRoman.marker_text(-2).as_deref(),
+      ListStyleType::LowerRoman.marker_text(-2, false).as_deref(),
       Some("-2. ")
     );
   }
