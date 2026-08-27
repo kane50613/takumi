@@ -12,4 +12,4 @@ packages:
 
 ### Rename the `stylesheets` render option to `css`
 
-`css` takes inline CSS as one string or a list. `stylesheets` still works everywhere as a deprecated alias. On `takumi-js` and `takumi-pdf` it warns once and passing both throws; on the bindings `css` wins.
+`css` takes inline CSS as one string or a list. The old `stylesheets` name still works everywhere and warns once on `takumi-js` and `takumi-pdf`.
