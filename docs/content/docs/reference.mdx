@@ -140,9 +140,12 @@ Properties use their camelCase names. Longhands are listed in parentheses. `Supp
 | `boxSizing`                                         | Supported                                                                                                                                                                                                                             |
 | `visibility`                                        | `visible`, `hidden`                                                                                                                                                                                                                   |
 | `content`                                           | Supported                                                                                                                                                                                                                             |
-| `listStyleType`                                     | `none`, `disc`, `circle`, `square`, `decimal`, `decimal-leading-zero`, `lower-alpha`, `upper-alpha`, `lower-roman`, `upper-roman`, `<string>`                                                                                         |
+| `listStyleType`                                     | `none`, `disc`, `circle`, `square`, `decimal`, `decimal-leading-zero`, `lower-alpha`, `lower-latin`, `upper-alpha`, `upper-latin`, `lower-roman`, `upper-roman`, `<string>`                                                           |
 | `listStyle` (`listStylePosition`, `listStyleImage`) | Supported                                                                                                                                                                                                                             |
 | `captionSide`                                       | `top`, `bottom` <sup>1</sup>                                                                                                                                                                                                          |
+| `borderCollapse`                                    | `separate`, `collapse` <sup>1</sup>                                                                                                                                                                                                   |
+| `borderSpacing`                                     | One or two `<length>` <sup>1</sup>                                                                                                                                                                                                    |
+| `tableLayout`                                       | `auto`, `fixed` <sup>1</sup>                                                                                                                                                                                                          |
 
 <sup>1</sup> The table display values use a naive grid-based implementation, not the CSS table
 algorithm. See [Tables](/docs/tables) for what carries over and where it drifts.
@@ -158,22 +161,24 @@ algorithm. See [Tables](/docs/tables) for what carries over and where it drifts.
 
 ### Spacing
 
-| Property                                                                                                  | Values    |
-| :-------------------------------------------------------------------------------------------------------- | :-------- |
-| `padding` (`paddingTop`, `paddingRight`, `paddingBottom`, `paddingLeft`, `paddingInline`, `paddingBlock`) | Supported |
-| `margin` (`marginTop`, `marginRight`, `marginBottom`, `marginLeft`, `marginInline`, `marginBlock`)        | Supported |
-| `inset` (`top`, `right`, `bottom`, `left`, `insetInline`, `insetBlock`)                                   | Supported |
-| `gap` (`columnGap`, `rowGap`)                                                                             | Supported |
+| Property                                                                                                                                            | Values    |
+| :-------------------------------------------------------------------------------------------------------------------------------------------------- | :-------- |
+| `padding` (`paddingTop`, `paddingRight`, `paddingBottom`, `paddingLeft`, `paddingInline`, `paddingInlineStart`, `paddingInlineEnd`, `paddingBlock`) | Supported |
+| `margin` (`marginTop`, `marginRight`, `marginBottom`, `marginLeft`, `marginInline`, `marginInlineStart`, `marginInlineEnd`, `marginBlock`)          | Supported |
+| `inset` (`top`, `right`, `bottom`, `left`, `insetInline`, `insetBlock`)                                                                             | Supported |
+| `gap` (`columnGap`, `rowGap`)                                                                                                                       | Supported |
 
 ### Border & outline
 
 | Property                                                                                                                              | Values                                                                                        |
 | :------------------------------------------------------------------------------------------------------------------------------------ | :-------------------------------------------------------------------------------------------- |
+| `border` (`borderTop`, `borderRight`, `borderBottom`, `borderLeft`)                                                                   | Supported                                                                                     |
 | `borderWidth` (`borderTopWidth`, `borderRightWidth`, `borderBottomWidth`, `borderLeftWidth`, `borderInlineWidth`, `borderBlockWidth`) | `thin`, `medium`, `thick`, `<length>` <sup>1</sup>                                            |
-| `borderStyle`                                                                                                                         | `none`, `hidden`, `solid`, `dashed`, `dotted`, `double`, `groove`, `ridge`, `inset`, `outset` |
-| `borderColor`                                                                                                                         | Supported                                                                                     |
+| `borderStyle` (`borderTopStyle`, `borderRightStyle`, `borderBottomStyle`, `borderLeftStyle`)                                          | `none`, `hidden`, `solid`, `dashed`, `dotted`, `double`, `groove`, `ridge`, `inset`, `outset` |
+| `borderColor` (`borderTopColor`, `borderRightColor`, `borderBottomColor`, `borderLeftColor`)                                          | Supported                                                                                     |
 | `borderRadius` (`borderTopLeftRadius`, `borderTopRightRadius`, `borderBottomRightRadius`, `borderBottomLeftRadius`)                   | Supported                                                                                     |
 | `cornerShape` (`cornerTopLeftShape`, `cornerTopRightShape`, `cornerBottomRightShape`, `cornerBottomLeftShape`)                        | `round`, `squircle`, `bevel`, `scoop`, `notch`, `square`, `superellipse(<number>)`            |
+| `outline` (`outlineWidth`, `outlineStyle`, `outlineColor`)                                                                            | Supported                                                                                     |
 | `outlineWidth`                                                                                                                        | `thin`, `medium`, `thick`, `<length>` <sup>1</sup>                                            |
 | `outlineStyle`                                                                                                                        | `none`, `hidden`, `solid`, `dashed`, `dotted`, `double`, `groove`, `ridge`, `inset`, `outset` |
 | `outlineColor`                                                                                                                        | Supported                                                                                     |
@@ -184,15 +189,16 @@ pixel draws as one. The rest rounds toward zero, so `1.5px` draws as `1px`.
 
 ### Flexbox
 
-| Property                                        | Values                           |
-| :---------------------------------------------- | :------------------------------- |
-| `flex` (`flexBasis`, `flexGrow`, `flexShrink`)  | Supported                        |
-| `flexDirection`                                 | Supported                        |
-| `flexFlow`                                      | Supported                        |
-| `flexWrap`                                      | `nowrap`, `wrap`, `wrap-reverse` |
-| `justifyContent`, `justifyItems`, `justifySelf` | Supported                        |
-| `alignContent`, `alignItems`, `alignSelf`       | Supported                        |
-| `placeContent`, `placeItems`, `placeSelf`       | Supported                        |
+| Property                                             | Values                                                             |
+| :--------------------------------------------------- | :----------------------------------------------------------------- |
+| `flex` (`flexBasis`, `flexGrow`, `flexShrink`)       | Supported                                                          |
+| `flexDirection`                                      | Supported                                                          |
+| `flexFlow`                                           | Supported                                                          |
+| `flexWrap`                                           | `nowrap`, `wrap`, `wrap-reverse`                                   |
+| `justifyContent`, `justifyItems`, `justifySelf`      | Supported                                                          |
+| `alignContent`, `alignItems`, `alignSelf`            | Supported                                                          |
+| `placeContent`, `placeItems`, `placeSelf`            | Supported                                                          |
+| `WebkitBoxOrient`, `WebkitBoxPack`, `WebkitBoxAlign` | Legacy aliases for `flexDirection`, `justifyContent`, `alignItems` |
 
 ### Grid
 
@@ -206,14 +212,15 @@ pixel draws as one. The rest rounds toward zero, so `1.5px` draws as `1px`.
 
 ### Background & mask
 
-| Property                                                   | Values                                                                                                                                                            |
-| :--------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `backgroundImage`                                          | `linear-gradient()`, `radial-gradient()`, `conic-gradient()`, `repeating-linear-gradient()`, `repeating-radial-gradient()`, `repeating-conic-gradient()`, `url()` |
-| `backgroundColor`                                          | Supported                                                                                                                                                         |
-| `backgroundPosition`, `backgroundSize`, `backgroundRepeat` | Supported                                                                                                                                                         |
-| `backgroundClip`, `backgroundBlendMode`                    | Supported                                                                                                                                                         |
-| `backgroundOrigin`                                         | `border-box`, `padding-box`, `content-box`                                                                                                                        |
-| `maskImage`, `maskSize`, `maskPosition`, `maskRepeat`      | Supported                                                                                                                                                         |
+| Property                                                                                                                                              | Values                                                                                                                                                            |
+| :---------------------------------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `background` (`backgroundImage`, `backgroundColor`, `backgroundPosition`, `backgroundSize`, `backgroundRepeat`, `backgroundClip`, `backgroundOrigin`) | Supported                                                                                                                                                         |
+| `backgroundImage`                                                                                                                                     | `linear-gradient()`, `radial-gradient()`, `conic-gradient()`, `repeating-linear-gradient()`, `repeating-radial-gradient()`, `repeating-conic-gradient()`, `url()` |
+| `backgroundColor`                                                                                                                                     | Supported                                                                                                                                                         |
+| `backgroundPosition`, `backgroundSize`, `backgroundRepeat`                                                                                            | Supported                                                                                                                                                         |
+| `backgroundClip`, `backgroundBlendMode`                                                                                                               | Supported                                                                                                                                                         |
+| `backgroundOrigin`                                                                                                                                    | `border-box`, `padding-box`, `content-box`                                                                                                                        |
+| `mask` (`maskImage`, `maskSize`, `maskPosition`, `maskRepeat`)                                                                                        | Supported                                                                                                                                                         |
 
 ### Effects & transform
 
@@ -239,16 +246,10 @@ pixel draws as one. The rest rounds toward zero, so `1.5px` draws as `1px`.
 
 ### Animation
 
-| Property                  | Values                                                                                                        |
-| :------------------------ | :------------------------------------------------------------------------------------------------------------ |
-| `animationName`           | Supported                                                                                                     |
-| `animationDuration`       | Supported                                                                                                     |
-| `animationDelay`          | Supported                                                                                                     |
-| `animationTimingFunction` | `linear`, `ease`, `ease-in`, `ease-out`, `ease-in-out`, `step-start`, `step-end`, `steps()`, `cubic-bezier()` |
-| `animationIterationCount` | Supported                                                                                                     |
-| `animationDirection`      | Supported                                                                                                     |
-| `animationFillMode`       | Supported                                                                                                     |
-| `animationPlayState`      | Supported                                                                                                     |
+| Property                                                                                                                                                         | Values                                                                                                        |
+| :--------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------ |
+| `animation` (`animationName`, `animationDuration`, `animationDelay`, `animationIterationCount`, `animationDirection`, `animationFillMode`, `animationPlayState`) | Supported                                                                                                     |
+| `animationTimingFunction`                                                                                                                                        | `linear`, `ease`, `ease-in`, `ease-out`, `ease-in-out`, `step-start`, `step-end`, `steps()`, `cubic-bezier()` |
 
 ### Fragmentation
 
