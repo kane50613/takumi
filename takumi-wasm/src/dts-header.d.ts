@@ -73,7 +73,11 @@ export type RenderOptions = {
    */
   images?: ImageSource[];
   /**
-   * CSS stylesheets to apply before rendering.
+   * CSS to apply before rendering.
+   */
+  css?: string[];
+  /**
+   * @deprecated Use `css` instead.
    */
   stylesheets?: string[];
   /**
@@ -142,7 +146,11 @@ export type RenderAnimationOptions = {
   images?: ImageSource[];
   drawDebugBorder?: boolean;
   /**
-   * CSS stylesheets to apply before rendering.
+   * CSS to apply before rendering.
+   */
+  css?: string[];
+  /**
+   * @deprecated Use `css` instead.
    */
   stylesheets?: string[];
   /**

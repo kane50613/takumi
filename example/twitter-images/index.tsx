@@ -56,7 +56,7 @@ async function render(
     width: module.width * ratio,
     height: module.height * ratio,
     devicePixelRatio: ratio,
-    stylesheets: [...stylesheets, ...("stylesheets" in module ? module.stylesheets : [])],
+    css: [...stylesheets, ...("stylesheets" in module ? module.stylesheets : [])],
     drawDebugBorder: process.argv.includes("--debug"),
     images,
     fonts: fonts.length > 0 ? fonts : undefined,

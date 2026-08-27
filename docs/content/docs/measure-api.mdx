@@ -14,7 +14,7 @@ const renderer = new Renderer();
 const { node, stylesheets } = await fromJsx(<span tw="text-xl">I'm a text node</span>);
 
 // [!code ++]
-const { width, height } = await renderer.measure(node, { stylesheets });
+const { width, height } = await renderer.measure(node, { css: stylesheets }); // [!code highlight]
 ```
 
 ```tsx twoslash tab="takumi-js/wasm"
@@ -25,7 +25,7 @@ const renderer = new Renderer();
 const { node, stylesheets } = await fromJsx(<span tw="text-xl">I'm a text node</span>);
 
 // [!code ++]
-const { width, height } = await renderer.measure(node, { stylesheets });
+const { width, height } = await renderer.measure(node, { css: stylesheets }); // [!code highlight]
 ```
 
 ## Returned fields

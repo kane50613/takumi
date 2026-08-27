@@ -52,7 +52,7 @@ for (const stylesheet of stylesheets) {
     {
       width,
       height,
-      stylesheets: [stylesheet.css],
+      css: stylesheet.css,
     },
   );
 

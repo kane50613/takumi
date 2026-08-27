@@ -5,10 +5,10 @@ import type { RenderOptions } from "takumi-pdf";
 // the PDF options self-documenting in the editor.
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
-/** PDF options the playground forwards; it supplies fonts, images and stylesheets itself. */
+/** PDF options the playground forwards; it supplies fonts, images and CSS itself. */
 export type PlaygroundPdfOptions = DistributiveOmit<
   RenderOptions,
-  "fonts" | "images" | "stylesheets" | "fontFamilies"
+  "fonts" | "images" | "css" | "fontFamilies"
 >;
 
 declare global {
@@ -38,15 +38,15 @@ declare global {
      */
     devicePixelRatio?: number;
     /**
-     * @description CSS stylesheets applied before rendering.
+     * @description CSS applied before rendering, one string or a list.
      */
-    stylesheets?: string[];
+    css?: string | string[];
     /**
      * @description theme cssVariables set on `:root`. `{ "--color-brand": "#7c3aed" }` makes `bg-brand` resolve; the `--` prefix is optional.
      */
     cssVariables?: Record<string, string>;
     /**
-     * @description structured keyframes registered alongside the stylesheets.
+     * @description structured keyframes registered alongside the CSS.
      */
     keyframes?: Keyframes;
     /**

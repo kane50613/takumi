@@ -83,7 +83,7 @@ summary(() => {
       width: 1200,
       height: 630,
       format: "raw",
-      stylesheets,
+      css: stylesheets,
     });
   });
 
@@ -93,7 +93,7 @@ summary(() => {
       width: 1200,
       height: 630,
       quality: 75,
-      stylesheets,
+      css: stylesheets,
     });
   });
 
@@ -103,7 +103,7 @@ summary(() => {
       width: 1200,
       height: 630,
       quality: 100,
-      stylesheets,
+      css: stylesheets,
     });
   });
 
@@ -114,7 +114,7 @@ summary(() => {
       height: 630,
       format: "webp",
       quality: 75,
-      stylesheets,
+      css: stylesheets,
     });
   });
 
@@ -125,7 +125,7 @@ summary(() => {
       height: 630,
       format: "webp",
       quality: 100,
-      stylesheets,
+      css: stylesheets,
     });
   });
 });
@@ -205,7 +205,7 @@ await writeFile(
   await renderer.render(node, {
     width: 1200,
     height: 630,
-    stylesheets,
+    css: stylesheets,
   }),
 );
 

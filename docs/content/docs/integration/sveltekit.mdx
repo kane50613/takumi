@@ -67,7 +67,8 @@ description: Use Takumi to render your Svelte components on the server.
       return new ImageResponse(`${head}${body}`, {
         width: 1200,
         height: 630,
-        stylesheets: [style],
+        // [!code highlight]
+        css: style,
         fonts: ["https://takumi.kane.tw/fonts/Geist.woff2"],
       });
     }

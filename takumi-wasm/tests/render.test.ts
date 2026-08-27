@@ -259,7 +259,7 @@ describe("renderAsDataUrl", () => {
         width: 200,
         height: 100,
         timeMs: 500,
-        stylesheets: [
+        css: [
           `
             div {
               width: 100px;
@@ -464,7 +464,7 @@ describe("renderAsDataUrl", () => {
         width: 200,
         height: 100,
         timeMs: 500,
-        stylesheets: [
+        css: [
           `
             div {
               width: 100px;

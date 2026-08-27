@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { container, text } from "@takumi-rs/helpers";
 import { PageNumber, PdfRenderer, TotalPages } from "../bundlers/node.mjs";
 
@@ -41,6 +41,35 @@ test("renders an HTML string with its own stylesheet", async () => {
 
   expect(decoder.decode(pdf.subarray(0, 5))).toBe("%PDF-");
   expect(pageCount(pdf)).toBe(1);
+});
+
+test("stylesheets warns once", async () => {
+  const warn = spyOn(console, "warn").mockImplementation(() => {});
+  const options = { viewport: { width: 600, height: 300 }, stylesheets: ["div {}"] };
+
+  await renderer.render(`<div>Hello</div>`, options);
+  await renderer.render(`<div>Hello</div>`, options);
+
+  expect(warn.mock.calls).toHaveLength(1);
+  expect(warn.mock.calls[0]?.[0]).toContain("`stylesheets` option is deprecated");
+  warn.mockRestore();
+});
+
+test("css takes one string and rejects the stylesheets alias next to it", async () => {
+  const pdf = await renderer.render(`<div class="title">Hello PDF</div>`, {
+    viewport: { width: 600, height: 300 },
+    css: ".title { font-size: 32px }",
+  });
+
+  expect(decoder.decode(pdf.subarray(0, 5))).toBe("%PDF-");
+
+  expect(
+    renderer.render(`<div>Hello</div>`, {
+      viewport: { width: 600, height: 300 },
+      css: "div {}",
+      stylesheets: ["div {}"],
+    }),
+  ).rejects.toThrow("pass either `css` or `stylesheets`, not both");
 });
 
 test("paginates and substitutes footer counters", async () => {

@@ -88,7 +88,7 @@ function loadPdfRenderer() {
 }
 
 /** Everything a render needs beyond the tree itself, fetched once per request. */
-async function loadResources(node: Node, stylesheets: string[]) {
+async function loadResources(node: Node, css: string[]) {
   const [images, fonts] = await Promise.all([
     prepareImages<FetchedImage>({ node, fetchCache }),
     googleFonts(GOOGLE_FONTS).catch(() => undefined),
@@ -97,7 +97,7 @@ async function loadResources(node: Node, stylesheets: string[]) {
   return {
     images,
     fonts: fonts ?? [FALLBACK_FONT_URL],
-    stylesheets,
+    css,
     notice: fonts ? undefined : "Google Fonts unreachable · Latin fallback",
   };
 }
@@ -125,7 +125,7 @@ async function renderOutput({
   geometry,
   images,
   fonts,
-  stylesheets,
+  css,
 }: RenderInput): Promise<Output> {
   if (options.pdf) {
     const pdf = await loadPdfRenderer();
@@ -134,7 +134,7 @@ async function renderOutput({
       buffer: await pdf.render(node, {
         cssVariables: options.cssVariables,
         ...options.pdf,
-        stylesheets,
+        css,
         images,
         fonts,
       }),
@@ -159,7 +159,7 @@ async function renderOutput({
         cssVariables: options.cssVariables,
         images,
         fonts,
-        stylesheets,
+        css,
       }),
       kind: "animation",
       format,
@@ -167,7 +167,7 @@ async function renderOutput({
   }
 
   return {
-    buffer: await renderer.render(node, { ...options, stylesheets, images, fonts }),
+    buffer: await renderer.render(node, { ...options, css, images, fonts }),
     kind: "image",
     format: options.format ?? "png",
   };
@@ -177,7 +177,8 @@ async function renderRequest(renderer: Renderer, id: number, code: string) {
   const { default: component, options } = evaluateCodeExports(code, renderReact);
   const element = renderReact.createElement(component as JSXElementConstructor<unknown>);
   const { node, stylesheets } = await fromJsx(element);
-  const effectiveStylesheets = options.stylesheets ?? stylesheets;
+  const optionCss = typeof options.css === "string" ? [options.css] : options.css;
+  const effectiveCss = optionCss ?? stylesheets;
   const geometry = outputGeometry(options);
 
   // A PDF renders pages, which a single HTML flow cannot stand in for, so the
@@ -191,14 +192,14 @@ async function renderRequest(renderer: Renderer, id: number, code: string) {
       height: geometry.height,
       padding: geometry.padding,
       cssContents: options.keyframes
-        ? [...effectiveStylesheets, keyframesToCss(options.keyframes)]
-        : effectiveStylesheets,
+        ? [...effectiveCss, keyframesToCss(options.keyframes)]
+        : effectiveCss,
       cssVariables: options.cssVariables,
     });
   }
 
   const emojified = extractEmojis(node, options.emoji ?? "twemoji");
-  const resources = await loadResources(emojified, effectiveStylesheets);
+  const resources = await loadResources(emojified, effectiveCss);
 
   const { notice, ...renderResources } = resources;
   const start = performance.now();

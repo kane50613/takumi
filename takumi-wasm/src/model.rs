@@ -72,7 +72,9 @@ pub struct RenderOptions {
   pub quality: Option<u8>,
   /// Pre-fetched images to use during rendering.
   pub images: Option<Vec<ImageSource>>,
-  /// CSS stylesheets to apply before rendering.
+  /// CSS to apply before rendering.
+  pub css: Option<Vec<String>>,
+  /// @deprecated Use `css` instead.
   pub stylesheets: Option<Vec<String>>,
   /// CSS custom properties for `:root`, which utilities and `var()` both read.
   pub css_variables: Option<HashMap<String, String>>,
@@ -106,7 +108,9 @@ pub struct SvgRenderOptions {
   pub height: Option<u32>,
   /// Pre-fetched images to use during rendering.
   pub images: Option<Vec<ImageSource>>,
-  /// CSS stylesheets to apply before rendering.
+  /// CSS to apply before rendering.
+  pub css: Option<Vec<String>>,
+  /// @deprecated Use `css` instead.
   pub stylesheets: Option<Vec<String>>,
   /// CSS custom properties for `:root`, which utilities and `var()` both read.
   pub css_variables: Option<HashMap<String, String>>,
@@ -138,7 +142,9 @@ pub struct RenderAnimationOptions {
   pub images: Option<Vec<ImageSource>>,
   /// Whether to draw debug borders around layout elements.
   pub draw_debug_border: Option<bool>,
-  /// CSS stylesheets to apply before rendering.
+  /// CSS to apply before rendering.
+  pub css: Option<Vec<String>>,
+  /// @deprecated Use `css` instead.
   pub stylesheets: Option<Vec<String>>,
   /// CSS custom properties for `:root`, which utilities and `var()` both read.
   pub css_variables: Option<HashMap<String, String>>,

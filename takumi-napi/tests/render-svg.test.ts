@@ -67,7 +67,7 @@ describe("renderSvg", () => {
     const at = (timeMs: number) =>
       renderer.renderSvg(
         { type: "container", tagName: "div" },
-        { width: 220, height: 120, timeMs, stylesheets },
+        { width: 220, height: 120, timeMs, css: stylesheets },
       );
 
     const [start, mid, end] = await Promise.all([at(0), at(500), at(1000)]);
