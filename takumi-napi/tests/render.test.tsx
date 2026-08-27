@@ -283,21 +283,24 @@ describe("render", () => {
     const node = { type: "container", tagName: "div" } as const;
     const sheet = "div { width: 120px; height: 40px; }";
 
-    const viaCss = await renderer.measure(node, { width: 200, height: 100, css: [sheet] });
-    expect(warn.mock.calls).toHaveLength(0);
+    try {
+      const viaCss = await renderer.measure(node, { width: 200, height: 100, css: [sheet] });
+      expect(warn.mock.calls).toHaveLength(0);
 
-    const viaAlias = await renderer.measure(node, {
-      width: 200,
-      height: 100,
-      stylesheets: [sheet],
-    });
-    await renderer.measure(node, { width: 200, height: 100, stylesheets: [sheet] });
+      const viaAlias = await renderer.measure(node, {
+        width: 200,
+        height: 100,
+        stylesheets: [sheet],
+      });
+      await renderer.measure(node, { width: 200, height: 100, stylesheets: [sheet] });
 
-    expect(viaAlias).toEqual(viaCss);
-    expect(viaAlias.width).toBe(120);
-    expect(warn.mock.calls).toHaveLength(1);
-    expect(warn.mock.calls[0]?.[0]).toContain("`stylesheets` option is deprecated");
-    warn.mockRestore();
+      expect(viaAlias).toEqual(viaCss);
+      expect(viaAlias.width).toBe(120);
+      expect(warn.mock.calls).toHaveLength(1);
+      expect(warn.mock.calls[0]?.[0]).toContain("`stylesheets` option is deprecated");
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   test("with structured keyframes in render options", async () => {
