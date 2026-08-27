@@ -187,3 +187,34 @@ fn preflight_inherits_the_parent_font_size_on_headings() {
 
   assert_eq!(heading.children[0].children[0].width, 40.0);
 }
+
+/// Preflight's `[hidden]` rule is important, so it survives a `tw` utility
+/// that is important too.
+#[test]
+fn preflight_hides_the_hidden_attribute() {
+  use std::str::FromStr;
+
+  let hidden = Node::container([])
+    .with_attributes([("hidden".into(), "".into())].into_iter().collect())
+    .with_tw(TailwindValues::from_str("block w-64!").expect("tailwind values should parse"));
+  let result = measure_with_css(Node::container([hidden]), r#"@import "tailwindcss";"#);
+
+  assert_eq!(result.children[0].width, 0.0);
+}
+
+/// `until-found` is the one `hidden` value Preflight leaves visible.
+#[test]
+fn preflight_keeps_hidden_until_found_visible() {
+  use std::str::FromStr;
+
+  let node = Node::container([])
+    .with_attributes(
+      [("hidden".into(), "until-found".into())]
+        .into_iter()
+        .collect(),
+    )
+    .with_tw(TailwindValues::from_str("block w-64!").expect("tailwind values should parse"));
+  let result = measure_with_css(Node::container([node]), r#"@import "tailwindcss";"#);
+
+  assert_eq!(result.children[0].width, 256.0);
+}

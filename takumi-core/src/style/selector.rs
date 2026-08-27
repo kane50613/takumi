@@ -1408,6 +1408,10 @@ const PREFLIGHT_CSS: &str = r"
     max-width: 100%;
     height: auto;
   }
+
+  [hidden]:where(:not([hidden='until-found'])) {
+    display: none !important;
+  }
 }
 ";
 
@@ -2782,11 +2786,13 @@ mod tests {
     let declarations: usize = sheet
       .rules
       .iter()
-      .map(|rule| rule.normal_declarations.declarations.len())
+      .map(|rule| {
+        rule.normal_declarations.declarations.len() + rule.important_declarations.declarations.len()
+      })
       .sum();
 
-    assert_eq!(sheet.rules.len(), 15);
-    assert_eq!(declarations, 55);
+    assert_eq!(sheet.rules.len(), 16);
+    assert_eq!(declarations, 56);
   }
 
   #[test]
