@@ -200,15 +200,6 @@ const image = await render(<div tw="bg-brand-500 p-gutter">Hello</div>, {
 
 **Takumi drops an entry whose value contains `;`, `{`, `}`, `/*` or `!important`. It also drops an entry whose name contains `:`, `;`, `{` or `}`.** Those entries could escape the generated rule.
 
-A nested palette flattens with the `cssVariables` helper. Keys join with `-` into one variable name.
-
-```tsx twoslash
-import { cssVariables } from "takumi-js/helpers";
-
-const flat = cssVariables({ color: { brand: { 500: "#5b21b6" } } });
-// { "--color-brand-500": "#5b21b6" }
-```
-
 ### Which utilities read a token
 
 The namespace picks which utilities a token reaches:

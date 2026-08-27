@@ -1,4 +1,3 @@
-export * from "./css-variables";
 export * from "./fonts";
 export * from "./helpers";
 export * from "./types";
