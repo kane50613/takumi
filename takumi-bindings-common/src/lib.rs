@@ -8,7 +8,10 @@
 
 use std::{
   collections::{BTreeMap, HashMap},
-  sync::Arc,
+  sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+  },
 };
 
 use takumi_core::{
@@ -132,6 +135,23 @@ pub fn stylesheet(
   let mut extended = (*sheet).clone();
   extended.extend_keyframes(keyframes);
   Arc::new(extended)
+}
+
+static STYLESHEETS_WARNED: AtomicBool = AtomicBool::new(false);
+
+/// The CSS for a render, taking the deprecated `stylesheets` alias when `css`
+/// is absent. `warn` reaches the host's console the first time the alias is
+/// used, so a binding caller learns to migrate before the alias is removed.
+pub fn resolve_css(
+  css: Option<Vec<String>>,
+  stylesheets: Option<Vec<String>>,
+  warn: impl FnOnce(&str),
+) -> Option<Vec<String>> {
+  if stylesheets.is_some() && !STYLESHEETS_WARNED.swap(true, Ordering::Relaxed) {
+    warn("takumi: the `stylesheets` option is deprecated, use `css` instead.");
+  }
+
+  css.or(stylesheets)
 }
 
 #[cfg(test)]

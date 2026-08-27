@@ -24,3 +24,13 @@ pub fn map_error<E: Display>(err: E) -> js_sys::Error {
 pub fn set_glyph_cache_max_bytes(bytes: f64) {
   glyph_cache::set_glyph_cache_max_bytes(bytes.max(0.0) as usize);
 }
+
+#[wasm_bindgen]
+extern "C" {
+  #[wasm_bindgen(js_namespace = console, js_name = warn)]
+  fn console_warn_raw(message: &str);
+}
+
+pub(crate) fn console_warn(message: &str) {
+  console_warn_raw(message);
+}

@@ -1,7 +1,7 @@
 use std::{collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
-use takumi_bindings_common::stylesheet;
+use takumi_bindings_common::{resolve_css, stylesheet};
 use takumi_core::{
   layout::node::Node,
   style::{FontFamily, KeyframesRule, Lang},
@@ -88,7 +88,7 @@ impl RenderAnimationTask {
       quality,
       lossless,
       draw_debug_border: draw_debug_border.unwrap_or_default(),
-      css: css.or(stylesheets),
+      css: resolve_css(css, stylesheets, |m| crate::console_warn(env, m)),
       keyframes: deserialize_keyframes(keyframes)?,
       css_variables,
       images: collect_images(env, images)?,

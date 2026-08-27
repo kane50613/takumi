@@ -192,3 +192,18 @@ pub(crate) fn deserialize_with_tracing<T: DeserializeOwned>(value: Object) -> Re
 pub(crate) fn map_error<E: Display>(err: E) -> napi::Error {
   napi::Error::from_reason(err.to_string())
 }
+
+/// Writes to the host's `console.warn`, staying silent if the call fails.
+pub(crate) fn console_warn(env: Env, message: &str) {
+  let Ok(global) = env.get_global() else {
+    return;
+  };
+  let Ok(console) = global.get_named_property::<Object>("console") else {
+    return;
+  };
+  let Ok(warn) = console.get_named_property::<Function<String, Unknown>>("warn") else {
+    return;
+  };
+
+  let _ = warn.call(message.to_owned());
+}

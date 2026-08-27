@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { container, image, text } from "@takumi-rs/helpers";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
@@ -276,17 +276,28 @@ describe("render", () => {
     expect(animated.width).toBe(150);
   });
 
-  test("measures through the deprecated stylesheets alias", async () => {
+  // The deprecation warning fires once per process, so this has to be the
+  // first test that passes `stylesheets`.
+  test("measures through the deprecated stylesheets alias, warning once", async () => {
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
     const node = { type: "container", tagName: "div" } as const;
     const sheet = "div { width: 120px; height: 40px; }";
 
-    const [viaCss, viaAlias] = await Promise.all([
-      renderer.measure(node, { width: 200, height: 100, css: [sheet] }),
-      renderer.measure(node, { width: 200, height: 100, stylesheets: [sheet] }),
-    ]);
+    const viaCss = await renderer.measure(node, { width: 200, height: 100, css: [sheet] });
+    expect(warn.mock.calls).toHaveLength(0);
+
+    const viaAlias = await renderer.measure(node, {
+      width: 200,
+      height: 100,
+      stylesheets: [sheet],
+    });
+    await renderer.measure(node, { width: 200, height: 100, stylesheets: [sheet] });
 
     expect(viaAlias).toEqual(viaCss);
     expect(viaAlias.width).toBe(120);
+    expect(warn.mock.calls).toHaveLength(1);
+    expect(warn.mock.calls[0]?.[0]).toContain("`stylesheets` option is deprecated");
+    warn.mockRestore();
   });
 
   test("with structured keyframes in render options", async () => {

@@ -1,7 +1,7 @@
 use std::{collections::HashMap, mem::take, sync::Arc};
 
 use napi::bindgen_prelude::*;
-use takumi_bindings_common::stylesheet;
+use takumi_bindings_common::{resolve_css, stylesheet};
 use takumi_core::{
   layout::node::Node,
   style::{FontFamily, Lang, StyleSheet},
@@ -36,7 +36,9 @@ impl SvgRenderTask {
   ) -> Result<Self> {
     let stylesheet = stylesheet(
       &state.resource_cache,
-      options.css.or(options.stylesheets),
+      resolve_css(options.css, options.stylesheets, |m| {
+        crate::console_warn(env, m)
+      }),
       deserialize_keyframes(options.keyframes)?,
       options.css_variables,
     );

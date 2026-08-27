@@ -7,7 +7,7 @@ use std::{
 
 use base64::{Engine, prelude::BASE64_STANDARD};
 use serde_wasm_bindgen::{from_value, to_value};
-use takumi_bindings_common::{build_font_resource, default_fonts, stylesheet};
+use takumi_bindings_common::{build_font_resource, default_fonts, resolve_css, stylesheet};
 use takumi_core::{
   Fonts,
   layout::node::Node,
@@ -24,7 +24,10 @@ use takumi_raster::{
 };
 use wasm_bindgen::prelude::*;
 
-use crate::{helper::map_error, model::*};
+use crate::{
+  helper::{console_warn, map_error},
+  model::*,
+};
 
 /// The main renderer for Takumi image rendering engine.
 ///
@@ -80,7 +83,7 @@ fn raster_options<'fonts>(
 ) -> Result<takumi_raster::RenderOptions<'fonts>, js_sys::Error> {
   let stylesheet = stylesheet(
     resource_cache,
-    options.css.or(options.stylesheets),
+    resolve_css(options.css, options.stylesheets, console_warn),
     options.keyframes.unwrap_or_default(),
     options.css_variables,
   );
@@ -236,7 +239,7 @@ impl Renderer {
     let images = self.images_map(options.images.as_deref())?;
     let stylesheet = stylesheet(
       &self.resource_cache,
-      options.css.or(options.stylesheets),
+      resolve_css(options.css, options.stylesheets, console_warn),
       options.keyframes.unwrap_or_default(),
       options.css_variables,
     );
@@ -355,7 +358,7 @@ impl Renderer {
     let draw_debug_border = draw_debug_border.unwrap_or_default();
     let stylesheet = stylesheet(
       &self.resource_cache,
-      css.or(stylesheets),
+      resolve_css(css, stylesheets, console_warn),
       keyframes.unwrap_or_default(),
       css_variables,
     );
