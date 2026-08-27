@@ -276,6 +276,19 @@ describe("render", () => {
     expect(animated.width).toBe(150);
   });
 
+  test("measures through the deprecated stylesheets alias", async () => {
+    const node = { type: "container", tagName: "div" } as const;
+    const sheet = "div { width: 120px; height: 40px; }";
+
+    const [viaCss, viaAlias] = await Promise.all([
+      renderer.measure(node, { width: 200, height: 100, css: [sheet] }),
+      renderer.measure(node, { width: 200, height: 100, stylesheets: [sheet] }),
+    ]);
+
+    expect(viaAlias).toEqual(viaCss);
+    expect(viaAlias.width).toBe(120);
+  });
+
   test("with structured keyframes in render options", async () => {
     const animated = await renderer.measure(
       {

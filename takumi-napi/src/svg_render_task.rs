@@ -36,7 +36,7 @@ impl SvgRenderTask {
   ) -> Result<Self> {
     let stylesheet = stylesheet(
       &state.resource_cache,
-      options.css,
+      options.css.or(options.stylesheets),
       deserialize_keyframes(options.keyframes)?,
       options.css_variables,
     );

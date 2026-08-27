@@ -1,9 +1,9 @@
 ---
 packages:
   "@takumi-rs/core":
-    type: major
+    type: minor
   "@takumi-rs/wasm":
-    type: major
+    type: minor
   "takumi-js":
     type: minor
   "takumi-pdf":
@@ -12,4 +12,4 @@ packages:
 
 ### Rename the `stylesheets` render option to `css`
 
-`css` takes inline CSS as one string or a list. On `takumi-js` and `takumi-pdf`, `stylesheets` stays as a deprecated alias and passing both throws. The `@takumi-rs/core` and `@takumi-rs/wasm` bindings rename the field outright.
+`css` takes inline CSS as one string or a list. `stylesheets` stays as a deprecated alias everywhere; on `takumi-js` and `takumi-pdf` passing both throws, and on the bindings `css` wins.

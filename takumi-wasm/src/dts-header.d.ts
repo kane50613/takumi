@@ -77,6 +77,10 @@ export type RenderOptions = {
    */
   css?: string[];
   /**
+   * @deprecated Use `css` instead.
+   */
+  stylesheets?: string[];
+  /**
    * CSS custom properties for `:root`, which utilities and `var()` both read.
    * A name without the `--` prefix gains it.
    */
@@ -145,6 +149,10 @@ export type RenderAnimationOptions = {
    * CSS to apply before rendering.
    */
   css?: string[];
+  /**
+   * @deprecated Use `css` instead.
+   */
+  stylesheets?: string[];
   /**
    * CSS custom properties for `:root`, which utilities and `var()` both read.
    * A name without the `--` prefix gains it.

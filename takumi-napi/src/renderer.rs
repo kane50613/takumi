@@ -179,6 +179,8 @@ pub struct RenderOptions<'env> {
   pub images: Option<Vec<ImageSource<'env>>>,
   /// CSS to apply before rendering.
   pub css: Option<Vec<String>>,
+  /// @deprecated Use `css` instead.
+  pub stylesheets: Option<Vec<String>>,
   /// CSS custom properties for `:root`, which utilities and `var()` both read.
   pub css_variables: Option<HashMap<String, String>>,
   /// Structured keyframes to register alongside stylesheets.
@@ -212,6 +214,8 @@ pub struct SvgRenderOptions<'env> {
   pub images: Option<Vec<ImageSource<'env>>>,
   /// CSS to apply before rendering.
   pub css: Option<Vec<String>>,
+  /// @deprecated Use `css` instead.
+  pub stylesheets: Option<Vec<String>>,
   /// CSS custom properties for `:root`, which utilities and `var()` both read.
   pub css_variables: Option<HashMap<String, String>>,
   /// Structured keyframes to register alongside stylesheets.
@@ -282,6 +286,8 @@ pub struct RenderAnimationOptions<'env> {
   pub images: Option<Vec<ImageSource<'env>>>,
   /// CSS to apply before rendering.
   pub css: Option<Vec<String>>,
+  /// @deprecated Use `css` instead.
+  pub stylesheets: Option<Vec<String>>,
   /// CSS custom properties for `:root`, which utilities and `var()` both read.
   pub css_variables: Option<HashMap<String, String>>,
   /// Structured keyframes to register alongside stylesheets.
