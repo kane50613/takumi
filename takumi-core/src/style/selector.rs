@@ -1485,6 +1485,7 @@ impl StyleSheet {
     let Ok(stylesheet) = Self::parse_with_mode(css, true) else {
       return Self::default();
     };
+
     stylesheet
   }
 
