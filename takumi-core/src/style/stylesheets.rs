@@ -504,17 +504,35 @@ macro_rules! define_style {
             });
           }
 
-          let source = css_input.to_string();
-          let mut parser_input = ParserInput::new(&source);
-          let mut parser = Parser::new(&mut parser_input);
-          let result = match self {
-            Self::Shorthand(property) => property.parse_declarations(&mut parser),
-            Self::Longhand(property) => property.parse_declarations(&mut parser),
-            Self::Ignored | Self::Custom => unreachable!(),
+          let source: Cow<'_, str> = match &css_input {
+            CssInput::Str(value) => Cow::Borrowed(value.as_ref()),
+            CssInput::Number(number) => Cow::Owned(number.to_string()),
+            CssInput::Unexpected(_) => unreachable!(),
           };
 
-          result
-            .map_err(|error| css_input_parse_error(css_input, &source, self.expected_message(&source), error))
+          let result = {
+            let mut parser_input = ParserInput::new(&source);
+            let mut parser = Parser::new(&mut parser_input);
+
+            match self {
+              Self::Shorthand(property) => property.parse_declarations(&mut parser),
+              Self::Longhand(property) => property.parse_declarations(&mut parser),
+              Self::Ignored | Self::Custom => unreachable!(),
+            }
+          }
+          .map_err(|error| {
+            (
+              self.expected_message(&source),
+              css_input_parse_failure(&source, error),
+            )
+          });
+
+          drop(source);
+
+          match result {
+            Ok(declarations) => Ok(declarations),
+            Err((expected, failure)) => Err(css_input_parse_error(css_input, expected, failure)),
+          }
         }
 
         /// Parse-error "expected ..." text for this property's value type.
