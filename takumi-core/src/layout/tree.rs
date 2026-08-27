@@ -3,7 +3,6 @@ use std::{
 };
 
 use parley::fontique::Attributes;
-use smallvec::SmallVec;
 use taffy::{
   BlockContext, Cache, CacheTree, Display as TaffyDisplay, Layout, LayoutBlockContainer,
   LayoutFlexboxContainer, LayoutGridContainer, LayoutInput, LayoutOutput, LayoutPartialTree,
@@ -223,6 +222,14 @@ fn resolve_normal_line_height(
     .unwrap_or(font_size)
 }
 
+/// The element's own important declarations, which straddle the stylesheet's
+/// important half: `tw` sits between unlayered and named-layer rules, while an
+/// inline declaration outranks every selector.
+struct ElementImportant {
+  tw: Option<StyleDeclarationBlock>,
+  inline: Option<StyleDeclarationBlock>,
+}
+
 /// The node's style, plus the important declarations that belong to the element
 /// rather than to a stylesheet, which the caller re-applies after sampling an
 /// animation.
@@ -231,7 +238,7 @@ fn build_style_layers(
   matched_declarations: &MatchedDeclarationsView<'_>,
   viewport: Viewport,
   stylesheet: &StyleSheet,
-) -> (NodeStyle, SmallVec<[StyleDeclarationBlock; 2]>) {
+) -> (NodeStyle, ElementImportant) {
   let mut style = NodeStyle::default();
 
   // `tw` is the last declared layer, below unlayered author rules, so its
@@ -283,22 +290,35 @@ fn build_style_layers(
     style.append_block(inline_normal);
   }
 
-  for &declarations in matched_declarations.important() {
+  // Important declarations reverse layer order, so `tw`, the last declared
+  // layer, sits above unlayered rules and below every named `@layer`.
+  for &declarations in matched_declarations.unlayered_important() {
     for declaration in declarations.iter() {
       declaration.merge_into_ref(&mut style);
     }
   }
 
-  let element_important: SmallVec<[StyleDeclarationBlock; 2]> = [tw_important, inline_important]
-    .into_iter()
-    .flatten()
-    .collect();
-
-  for declarations in &element_important {
-    style.append_block(declarations.clone());
+  if let Some(tw_important) = &tw_important {
+    style.append_block(tw_important.clone());
   }
 
-  (style, element_important)
+  for &declarations in matched_declarations.layered_important() {
+    for declaration in declarations.iter() {
+      declaration.merge_into_ref(&mut style);
+    }
+  }
+
+  if let Some(inline_important) = &inline_important {
+    style.append_block(inline_important.clone());
+  }
+
+  (
+    style,
+    ElementImportant {
+      tw: tw_important,
+      inline: inline_important,
+    },
+  )
 }
 
 fn registered_custom_property_parent_style<'a>(
@@ -1490,11 +1510,24 @@ impl RenderNode {
       // Important declarations outrank an animation, and `inherit` among them
       // needs the parent the first pass resolved against.
       let important = matched
-        .important()
+        .unlayered_important()
         .iter()
         .map(|declarations| declarations.iter())
         .chain(
           element_important
+            .tw
+            .iter()
+            .map(|declarations| declarations.iter()),
+        )
+        .chain(
+          matched
+            .layered_important()
+            .iter()
+            .map(|declarations| declarations.iter()),
+        )
+        .chain(
+          element_important
+            .inline
             .iter()
             .map(|declarations| declarations.iter()),
         );

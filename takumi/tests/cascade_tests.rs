@@ -79,8 +79,10 @@ fn tw_sits_below_author_rules() {
   assert_eq!(result.children[0].width, 100.0);
 }
 
+/// Unlayered important rules sort below every layer in the reversed important
+/// order, so `tw` beats them.
 #[test]
-fn important_tw_beats_author_rules() {
+fn important_tw_beats_unlayered_author_rules() {
   let root = Node::container([
     tw_block("box", "block w-64!"),
     tw_block("shout", "block w-64!"),
@@ -123,4 +125,15 @@ fn tw_beats_named_layer_rules() {
   );
 
   assert_eq!(result.children[0].width, 256.0);
+}
+
+/// A named layer's important half also outranks `tw`, which is declared last.
+#[test]
+fn important_layered_rules_beat_important_tw() {
+  let result = measure_with_css(
+    Node::container([tw_block("box", "block w-64!")]),
+    "@layer base { .box { width: 120px !important; } }",
+  );
+
+  assert_eq!(result.children[0].width, 120.0);
 }
