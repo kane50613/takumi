@@ -1,3 +1,4 @@
+import { hideStylesheetsAlias, warnStylesheetsDeprecated } from "../deprecation";
 import { container, percentage } from "../helpers";
 import { fromStaticMarkup } from "./markup";
 import type { Node } from "../types";
@@ -38,5 +39,15 @@ export function fromHtml(html: string): FromHtmlResult {
     });
   }
 
-  return { node, css, stylesheets: css };
+  const aliased: FromHtmlResult = {
+    node,
+    css,
+    get stylesheets() {
+      warnStylesheetsDeprecated();
+      return css;
+    },
+  };
+
+  hideStylesheetsAlias(aliased);
+  return aliased;
 }

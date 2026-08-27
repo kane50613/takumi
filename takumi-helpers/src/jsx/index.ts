@@ -4,6 +4,7 @@ import type { Node, NodeMetadata, RgbaImage, ReactElementLike } from "../types";
 import { extractAttributes, getPresets, type HtmlProps } from "./metadata";
 export type { HtmlProps } from "./metadata";
 import { callWithDispatcher, getProperty, readContext, type RenderEnv } from "./dispatcher";
+import { hideStylesheetsAlias, warnStylesheetsDeprecated } from "../deprecation";
 import { defaultStylePresets } from "./style-presets";
 import { serializeSvg } from "./svg";
 import {
@@ -112,11 +113,18 @@ export async function fromJsx(
     });
   }
 
-  return {
+  const css = result.css;
+  const aliased: FromJsxResult = {
     node,
-    css: result.css,
-    stylesheets: result.css,
+    css,
+    get stylesheets() {
+      warnStylesheetsDeprecated();
+      return css;
+    },
   };
+
+  hideStylesheetsAlias(aliased);
+  return aliased;
 }
 
 async function fromJsxInternal(

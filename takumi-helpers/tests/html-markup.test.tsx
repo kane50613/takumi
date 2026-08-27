@@ -1,10 +1,28 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { fromHtml } from "../src/html";
 import { fromJsx } from "../src/jsx";
 import type { TextNode } from "../src/types";
 
 const STYLE = `<style>.box{background:#2c82c9}</style>`;
 const BODY = `<div class="box">x</div>`;
+
+// Runs first: the deprecation warning fires once per process, and every later
+// read of `stylesheets` trips it.
+test("stylesheets warns once and stays out of spreads", () => {
+  const warn = spyOn(console, "warn").mockImplementation(() => {});
+  const result = fromHtml(`${STYLE}${BODY}`);
+
+  expect(Object.keys(result)).not.toContain("stylesheets");
+  expect({ ...result }).not.toHaveProperty("stylesheets");
+  expect(warn.mock.calls).toHaveLength(0);
+
+  expect(result.stylesheets).toBe(result.css);
+  expect(result.stylesheets).toBe(result.css);
+
+  expect(warn.mock.calls).toHaveLength(1);
+  expect(warn.mock.calls[0]?.[0]).toContain("`stylesheets` result field is deprecated");
+  warn.mockRestore();
+});
 
 describe("fromHtml", () => {
   test("collects <style> from a fragment", () => {
