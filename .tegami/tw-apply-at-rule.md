@@ -10,4 +10,4 @@ packages:
 
 ### Expand `@apply` inside stylesheet rules
 
-`.card { @apply mt-4 bg-brand-500; }` now expands through the `tw` parser at the spot it is written, `!` suffix included. Variants like `md:` are rejected; a static render has nothing for them to gate on.
+`.card { @apply mt-4 bg-brand-500; }` now expands through the `tw` parser where it is written, `!` suffix included. Variants like `md:` are rejected. A static render has nothing for them to gate on.
