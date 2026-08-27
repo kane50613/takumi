@@ -6,13 +6,13 @@ icon: Palette
 
 Pick a path by what you already have:
 
-| You have                                   | Use                                                           |
-| ------------------------------------------ | ------------------------------------------------------------- |
-| Tailwind classes, compiled by your bundler | [`stylesheets`](#stylesheets) with the generated CSS          |
-| Tailwind classes, no build step            | [`className` + a future flag](#tailwind-without-a-build-step) |
-| Plain CSS                                  | [`stylesheets`](#stylesheets) or a `<style>` tag              |
-| Design tokens to theme with                | [`cssVariables` or a `:root` rule](#design-tokens)            |
-| One-off styles on one node                 | [the `style` prop](#inline-styles)                            |
+| You have                                   | Use                                                  |
+| ------------------------------------------ | ---------------------------------------------------- |
+| Tailwind classes, compiled by your bundler | [`stylesheets`](#stylesheets) with the generated CSS |
+| Tailwind classes, no build step            | [the `tw` prop](#tailwind-without-a-build-step)      |
+| Plain CSS                                  | [`stylesheets`](#stylesheets) or a `<style>` tag     |
+| Design tokens to theme with                | [`cssVariables` or a `:root` rule](#design-tokens)   |
+| One-off styles on one node                 | [the `style` prop](#inline-styles)                   |
 
 The paths combine. Each section says who wins when they collide.
 
@@ -94,46 +94,31 @@ export default defineConfig({
 
 ## Tailwind without a build step
 
-Turn on [the `classNameUtilities` future flag](/docs/future#classnameutilities). `className` tokens then run through a built-in parser. JSX pasted from an app renders without renaming a prop.
+The `tw` prop runs a built-in parser with no build step. It matches [the satori prop](https://github.com/vercel/satori#tailwind-css), so `next/og` code ports as-is.
 
 ```tsx twoslash
 import { render } from "takumi-js";
 
 const image = await render(
-  <div className="bg-blue-500 p-4 rounded-lg">
-    <h1 className="text-white text-2xl font-bold">Hello Tailwind!</h1>
+  <div tw="bg-blue-500 p-4 rounded-lg">
+    <h1 tw="text-white text-2xl font-bold">Hello Tailwind!</h1>
   </div>,
-  {
-    width: 1200,
-    height: 630,
-    future: { classNameUtilities: true },
-  },
+  { width: 1200, height: 630 },
 );
 ```
 
 Arbitrary values work. The parser does not cover every Tailwind feature. The [parser mapping](https://github.com/kane50613/takumi/blob/master/takumi-core/src/style/tw/map.rs) lists every supported class.
 
-`className` is a plain prop, so build it dynamically:
+`tw` is a plain prop, so build it dynamically:
 
 ```tsx
 import clsx from "clsx";
 
 const isError = true;
 
-<div
-  className={clsx(
-    "p-4 rounded",
-    isError ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700",
-  )}
->
+<div tw={clsx("p-4 rounded", isError ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700")}>
   {isError ? "Something went wrong" : "Success!"}
 </div>;
-```
-
-The `tw` prop feeds the same parser without any flag. It exists for satori compatibility. It takes the same dynamic expressions, and it wins a tie against a `className` utility on the same node.
-
-```tsx
-<div tw="bg-blue-500 p-4 rounded-lg">Hello</div>
 ```
 
 ### Preflight
@@ -200,11 +185,10 @@ Or the `cssVariables` option, which compiles into a `:root` rule. The leading `-
 ```tsx twoslash
 import { render } from "takumi-js";
 
-const image = await render(<div className="bg-brand-500 p-gutter">Hello</div>, {
+const image = await render(<div tw="bg-brand-500 p-gutter">Hello</div>, {
   width: 1200,
   height: 630,
   cssVariables: { "--color-brand-500": "#5b21b6", "--spacing-gutter": "2.5rem" },
-  future: { classNameUtilities: true },
 });
 ```
 

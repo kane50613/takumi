@@ -43,12 +43,6 @@ export type RendererOptions = {
   cacheMaxBytes?: number;
 };
 
-/** Opt-in flags for behavior that becomes the default in a future major. */
-export type FutureFlags = {
-  /** Parse `className` tokens as Tailwind utilities, the way `tw` does. */
-  classNameUtilities?: boolean;
-};
-
 export type RenderOptions = {
   /**
    * The width of the image. If not provided, the width will be automatically calculated based on the content.
@@ -116,8 +110,6 @@ export type RenderOptions = {
   fontFamilies?: string[];
   /** Default BCP-47 language applied to the root, inherited by nodes without their own lang. */
   lang?: string;
-  /** Opt-in future behavior flags. */
-  future?: FutureFlags;
 };
 
 /**
@@ -178,8 +170,6 @@ export type RenderAnimationOptions = {
   fontFamilies?: string[];
   /** Default BCP-47 language applied to the root, inherited by nodes without their own lang. */
   lang?: string;
-  /** Opt-in future behavior flags. */
-  future?: FutureFlags;
 };
 
 export type FontDetails = {

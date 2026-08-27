@@ -58,22 +58,6 @@ pub struct RendererOptions {
   pub cache_max_bytes: Option<u64>,
 }
 
-/// Opt-in flags for behavior that becomes the default in a future major.
-#[derive(Deserialize, Default, Clone, Copy)]
-#[serde(rename_all = "camelCase")]
-pub struct FutureFlags {
-  /// Parse `className` tokens as Tailwind utilities, the way `tw` does.
-  pub class_name_utilities: Option<bool>,
-}
-
-impl FutureFlags {
-  pub(crate) fn class_name_utilities(this: Option<Self>) -> bool {
-    this
-      .and_then(|flags| flags.class_name_utilities)
-      .unwrap_or_default()
-  }
-}
-
 /// Options for rendering an image.
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -108,8 +92,6 @@ pub struct RenderOptions {
   pub font_families: Option<Vec<String>>,
   /// Default BCP-47 language applied to the root, inherited by nodes without their own lang.
   pub lang: Option<String>,
-  /// Opt-in future behavior flags.
-  pub future: Option<FutureFlags>,
 }
 
 /// Options for rendering a node tree to an SVG document. SVG is a vector
@@ -138,8 +120,6 @@ pub struct SvgRenderOptions {
   pub font_families: Option<Vec<String>>,
   /// Default BCP-47 language applied to the root, inherited by nodes without their own lang.
   pub lang: Option<String>,
-  /// Opt-in future behavior flags.
-  pub future: Option<FutureFlags>,
 }
 
 /// Options for rendering an animated image.
@@ -173,8 +153,6 @@ pub struct RenderAnimationOptions {
   pub font_families: Option<Vec<String>>,
   /// Default BCP-47 language applied to the root, inherited by nodes without their own lang.
   pub lang: Option<String>,
-  /// Opt-in future behavior flags.
-  pub future: Option<FutureFlags>,
 }
 
 /// Details for loading a custom font.
