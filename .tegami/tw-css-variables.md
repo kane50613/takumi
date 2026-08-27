@@ -16,4 +16,4 @@ Gradients now match Tailwind on two counts. Stops alone no longer paint without 
 
 ### Let stylesheet rules win over `tw` utilities
 
-Utilities now sit in the last cascade layer, below unlayered CSS and above rules in a named `@layer`. A template that relied on `tw` beating a matching rule needs a fix. Move that rule into a layer, or mark the utility `!`.
+Utilities now sit in the last cascade layer, below unlayered CSS and above rules in a named `@layer`. Important reverses that order. An important utility beats unlayered important CSS but loses to one in a named layer. Inline important declarations stay on top. A template that relied on `tw` beating a matching rule needs a fix. Move that rule into a layer, or mark the utility `!`.
