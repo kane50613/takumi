@@ -4,6 +4,7 @@ import type { Node, NodeMetadata, RgbaImage, ReactElementLike } from "../types";
 import { extractAttributes, getPresets, type HtmlProps } from "./metadata";
 export type { HtmlProps } from "./metadata";
 import { callWithDispatcher, getProperty, readContext, type RenderEnv } from "./dispatcher";
+import { hideStylesheetsAlias, warnStylesheetsDeprecated } from "../deprecation";
 import { defaultStylePresets } from "./style-presets";
 import { serializeSvg } from "./svg";
 import {
@@ -68,16 +69,18 @@ interface ResolvedFromJsxOptions extends RenderEnv {
 
 export interface FromJsxResult {
   node: Node;
+  css: string[];
+  /** @deprecated Use `css` instead. */
   stylesheets: string[];
 }
 
 interface FromJsxTraversalResult {
   nodes: Node[];
-  stylesheets: string[];
+  css: string[];
 }
 
 function emptyTraversalResult(): FromJsxTraversalResult {
-  return { nodes: [], stylesheets: [] };
+  return { nodes: [], css: [] };
 }
 
 export async function fromJsx(
@@ -110,10 +113,18 @@ export async function fromJsx(
     });
   }
 
-  return {
+  const css = result.css;
+  const aliased: FromJsxResult = {
     node,
-    stylesheets: result.stylesheets,
+    css,
+    get stylesheets() {
+      warnStylesheetsDeprecated();
+      return css;
+    },
   };
+
+  hideStylesheetsAlias(aliased);
+  return aliased;
 }
 
 async function fromJsxInternal(
@@ -143,7 +154,7 @@ async function fromJsxInternal(
         preset: options.presets?.span,
       }),
     ],
-    stylesheets: [],
+    css: [],
   };
 }
 
@@ -363,7 +374,7 @@ async function processReactElement(
     const css = collectStyleText(getElementChildren(element));
     return {
       nodes: [],
-      stylesheets: css && css.length > 0 ? [css] : [],
+      css: css && css.length > 0 ? [css] : [],
     };
   }
 
@@ -371,7 +382,7 @@ async function processReactElement(
     const children = await collectChildren(element, options);
     return {
       nodes: [],
-      stylesheets: children.stylesheets,
+      css: children.css,
     };
   }
 
@@ -390,21 +401,21 @@ async function processReactElement(
           ...metadata,
         }),
       ],
-      stylesheets: [],
+      css: [],
     };
   }
 
   if (isHtmlElement(element, "img")) {
     return {
       nodes: [createImageElement(element, options)],
-      stylesheets: [],
+      css: [],
     };
   }
 
   if (isHtmlElement(element, "svg")) {
     return {
       nodes: [createSvgElement(element, options)],
-      stylesheets: [],
+      css: [],
     };
   }
 
@@ -417,7 +428,7 @@ async function processReactElement(
           ...metadata,
         }),
       ],
-      stylesheets: [],
+      css: [],
     };
   }
 
@@ -430,7 +441,7 @@ async function processReactElement(
         ...metadata,
       }),
     ],
-    stylesheets: children.stylesheets,
+    css: children.css,
   };
 }
 
@@ -581,15 +592,15 @@ async function collectIterable(
   await Promise.all(inFlight);
 
   const flattenedNodes: Node[] = [];
-  const flattenedStylesheets: string[] = [];
+  const flattenedCss: string[] = [];
   for (const group of groupedResults) {
     if (!group) continue;
     flattenedNodes.push(...group.nodes);
-    flattenedStylesheets.push(...group.stylesheets);
+    flattenedCss.push(...group.css);
   }
 
   return {
     nodes: flattenedNodes,
-    stylesheets: flattenedStylesheets,
+    css: flattenedCss,
   };
 }

@@ -113,11 +113,11 @@ fn css_variables_stylesheet(variables: HashMap<String, String>) -> Option<String
 /// the sheet list last, so an equally specific author `:root` loses to them.
 pub fn stylesheet(
   cache: &ResourceCache,
-  stylesheets: Option<Vec<String>>,
+  css: Option<Vec<String>>,
   keyframes: Vec<KeyframesRule>,
   css_variables: Option<HashMap<String, String>>,
 ) -> Arc<StyleSheet> {
-  let mut sheets = stylesheets.unwrap_or_default();
+  let mut sheets = css.unwrap_or_default();
 
   if let Some(sheet) = css_variables.and_then(css_variables_stylesheet) {
     sheets.push(sheet);

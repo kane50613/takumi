@@ -39,13 +39,13 @@ import { render } from "takumi-pdf";
 import { PageNumber, TotalPages } from "takumi-pdf/primitives";
 
 // [!code highlight]
-const { node, stylesheets } = fromHtml(html);
+const { node, css } = fromHtml(html);
 
 const pdf = await render(node, {
   size: "a4",
   margin: { top: 48, bottom: 64, left: 48, right: 48 },
   // [!code highlight]
-  css: stylesheets,
+  css,
   footer: (
     <div tw="flex w-full justify-center text-[10px]">
       Page <PageNumber /> of <TotalPages />
@@ -92,11 +92,11 @@ import { prepareImages } from "@takumi-rs/helpers";
 import { fromHtml } from "@takumi-rs/helpers/html";
 import { render } from "takumi-pdf";
 
-const { node, stylesheets } = fromHtml(html);
+const { node, css } = fromHtml(html);
 // [!code highlight]
 const images = await prepareImages({ node });
 
-const pdf = await render(node, { images, css: stylesheets }); // [!code highlight]
+const pdf = await render(node, { images, css }); // [!code highlight]
 ```
 
 `prepareImages` walks the tree, fetches every remote `<img>`, `background-image`, and `mask-image` URL, and returns the `images` entries. It takes a `fetchCache` to reuse bytes, an `allowUrl` predicate, and a `timeout`.

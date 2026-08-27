@@ -85,7 +85,7 @@ export type PageMargin =
 /**
  * Paged output (the default): content flows across pages of `size`, like
  * Puppeteer's `page.pdf()`. The layout canvas has unbounded height, so
- * percentage heights do not resolve. CSS `@page` rules in `stylesheets` are
+ * percentage heights do not resolve. CSS `@page` rules in `css` are
  * not supported — page geometry comes from these options.
  */
 type PagedOptions = {
@@ -323,9 +323,9 @@ function ownCss(
   return stylesheets ?? [];
 }
 
-async function resolveNode(input: NodeInput): Promise<{ node: Node; stylesheets: string[] }> {
+async function resolveNode(input: NodeInput): Promise<{ node: Node; css: string[] }> {
   if (isNode(input)) {
-    return { node: input, stylesheets: [] };
+    return { node: input, css: [] };
   }
 
   if (typeof input === "string") {
@@ -369,9 +369,9 @@ export class PdfRenderer {
     );
     const sheets = [
       ...ownCss(css, stylesheets),
-      ...main.stylesheets,
-      ...(headerResult?.stylesheets ?? []),
-      ...(footerResult?.stylesheets ?? []),
+      ...main.css,
+      ...(headerResult?.css ?? []),
+      ...(footerResult?.css ?? []),
     ];
 
     return this.inner.render(main.node, {
@@ -408,7 +408,7 @@ export class PdfRenderer {
       images,
       fontFamilies,
     );
-    const sheets = [...ownCss(css, stylesheets), ...main.stylesheets];
+    const sheets = [...ownCss(css, stylesheets), ...main.css];
 
     return this.inner.measure(main.node, {
       ...rest,

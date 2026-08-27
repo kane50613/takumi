@@ -856,15 +856,15 @@ describe("fromJsx", () => {
     } satisfies ContainerNode);
   });
 
-  test("extracts style tag contents into stylesheets", async () => {
-    const { node, stylesheets } = await fromJsx(
+  test("extracts style tag contents into css", async () => {
+    const { node, css } = await fromJsx(
       <div>
         <style>{".box { color: red; }"}</style>
         <span>Hello</span>
       </div>,
     );
 
-    expect(stylesheets).toEqual([".box { color: red; }"]);
+    expect(css).toEqual([".box { color: red; }"]);
     expect(node).toEqual({
       type: "container",
       tagName: "div",
@@ -880,10 +880,10 @@ describe("fromJsx", () => {
     } satisfies ContainerNode);
   });
 
-  test("extracts stylesheets from fragments and preserves order", async () => {
+  test("extracts css from fragments and preserves order", async () => {
     const Wrapper = ({ children }: { children: ReactNode }) => <>{children}</>;
 
-    const { node, stylesheets } = await fromJsx(
+    const { node, css } = await fromJsx(
       <div>
         <Wrapper>
           <style>{".a { color: red; }"}</style>
@@ -893,7 +893,7 @@ describe("fromJsx", () => {
       </div>,
     );
 
-    expect(stylesheets).toEqual([".a { color: red; }", ".b { color: blue; }"]);
+    expect(css).toEqual([".a { color: red; }", ".b { color: blue; }"]);
     expect(node).toEqual({
       type: "container",
       tagName: "div",
@@ -910,7 +910,7 @@ describe("fromJsx", () => {
   });
 
   test("ignores boolean children while extracting style text", async () => {
-    const { stylesheets } = await fromJsx(
+    const { css } = await fromJsx(
       <style>
         {"body{"}
         {true}
@@ -918,7 +918,7 @@ describe("fromJsx", () => {
       </style>,
     );
 
-    expect(stylesheets).toEqual(["body{color:red;}"]);
+    expect(css).toEqual(["body{color:red;}"]);
   });
 
   test("parses html dir field on text nodes", async () => {

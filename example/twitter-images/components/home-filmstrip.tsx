@@ -8,7 +8,7 @@ export const height = 480;
 // One frame per timestamp; the docs homepage lays them out as a film strip.
 export const timestamps = [0, 125, 250, 375, 500, 625, 750, 875];
 
-export const stylesheets = [
+export const css = [
   `@keyframes morph {
     from { border-radius: 12%; transform: rotate(0deg) scale(1); }
     50% { border-radius: 50%; transform: rotate(90deg) scale(0.72); }

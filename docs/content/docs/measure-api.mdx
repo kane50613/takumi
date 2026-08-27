@@ -11,10 +11,10 @@ import { Renderer } from "takumi-js/node";
 import { fromJsx } from "takumi-js/helpers/jsx";
 
 const renderer = new Renderer();
-const { node, stylesheets } = await fromJsx(<span tw="text-xl">I'm a text node</span>);
+const { node, css } = await fromJsx(<span tw="text-xl">I'm a text node</span>);
 
 // [!code ++]
-const { width, height } = await renderer.measure(node, { css: stylesheets }); // [!code highlight]
+const { width, height } = await renderer.measure(node, { css }); // [!code highlight]
 ```
 
 ```tsx twoslash tab="takumi-js/wasm"
@@ -22,10 +22,10 @@ import { Renderer } from "takumi-js/wasm";
 import { fromJsx } from "takumi-js/helpers/jsx";
 
 const renderer = new Renderer();
-const { node, stylesheets } = await fromJsx(<span tw="text-xl">I'm a text node</span>);
+const { node, css } = await fromJsx(<span tw="text-xl">I'm a text node</span>);
 
 // [!code ++]
-const { width, height } = await renderer.measure(node, { css: stylesheets }); // [!code highlight]
+const { width, height } = await renderer.measure(node, { css }); // [!code highlight]
 ```
 
 ## Returned fields

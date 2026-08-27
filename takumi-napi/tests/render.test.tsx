@@ -201,7 +201,7 @@ describe("render", () => {
   });
 
   test("does not panic when inline text contains a nested flex span", async () => {
-    const { node, stylesheets } = await fromJsx(
+    const { node, css } = await fromJsx(
       <div
         style={{
           display: "flex",
@@ -238,7 +238,7 @@ describe("render", () => {
       width: 1200,
       height: 630,
       format: "png",
-      css: stylesheets,
+      css,
     });
 
     expect(result).toBeInstanceOf(Buffer);
