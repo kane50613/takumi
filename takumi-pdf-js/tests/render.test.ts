@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { container, text } from "@takumi-rs/helpers";
 import { PageNumber, PdfRenderer, TotalPages } from "../bundlers/node.mjs";
 
@@ -41,6 +41,18 @@ test("renders an HTML string with its own stylesheet", async () => {
 
   expect(decoder.decode(pdf.subarray(0, 5))).toBe("%PDF-");
   expect(pageCount(pdf)).toBe(1);
+});
+
+test("stylesheets warns once", async () => {
+  const warn = spyOn(console, "warn").mockImplementation(() => {});
+  const options = { viewport: { width: 600, height: 300 }, stylesheets: ["div {}"] };
+
+  await renderer.render(`<div>Hello</div>`, options);
+  await renderer.render(`<div>Hello</div>`, options);
+
+  expect(warn.mock.calls).toHaveLength(1);
+  expect(warn.mock.calls[0]?.[0]).toContain("`stylesheets` option is deprecated");
+  warn.mockRestore();
 });
 
 test("css takes one string and rejects the stylesheets alias next to it", async () => {

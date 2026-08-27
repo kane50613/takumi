@@ -186,9 +186,21 @@ async function collectImages(
     : prepared;
 }
 
+let warnedStylesheets = false;
+
+function warnStylesheetsDeprecated(): void {
+  if (warnedStylesheets) return;
+  warnedStylesheets = true;
+  console.warn("takumi: the `stylesheets` option is deprecated, use `css` instead.");
+}
+
 function mergeCss(options: PipelineOptions | undefined, extra: string[]): string[] {
   if (options?.css !== undefined && options?.stylesheets !== undefined) {
     throw new Error("pass either `css` or `stylesheets`, not both");
+  }
+
+  if (options?.stylesheets !== undefined) {
+    warnStylesheetsDeprecated();
   }
 
   const own =

@@ -296,6 +296,14 @@ function isNode(value: NodeInput): value is Node {
   return typeof value === "object" && value !== null && "type" in value && !("$$typeof" in value);
 }
 
+let warnedStylesheets = false;
+
+function warnStylesheetsDeprecated(): void {
+  if (warnedStylesheets) return;
+  warnedStylesheets = true;
+  console.warn("takumi: the `stylesheets` option is deprecated, use `css` instead.");
+}
+
 function ownCss(
   css: string | readonly string[] | undefined,
   stylesheets: string[] | undefined,
@@ -306,6 +314,10 @@ function ownCss(
 
   if (css !== undefined) {
     return typeof css === "string" ? [css] : [...css];
+  }
+
+  if (stylesheets !== undefined) {
+    warnStylesheetsDeprecated();
   }
 
   return stylesheets ?? [];
