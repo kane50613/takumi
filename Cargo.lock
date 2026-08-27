@@ -1791,7 +1791,7 @@ dependencies = [
 
 [[package]]
 name = "takumi"
-version = "2.12.0"
+version = "2.13.0"
 dependencies = [
  "criterion",
  "image",
