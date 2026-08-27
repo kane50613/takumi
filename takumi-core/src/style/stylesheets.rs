@@ -1240,7 +1240,7 @@ define_style! {
     grid_template_rows: Option<GridTemplateComponents>,
     grid_template_areas: Option<GridTemplateAreas>,
     text_overflow: TextOverflow,
-    text_fit: TextFit,
+    text_fit: TextFit where inherit = true,
     text_transform: TextTransform where inherit = true,
     font_style: FontStyle where inherit = true,
     font_stretch: FontStretch where inherit = true,
