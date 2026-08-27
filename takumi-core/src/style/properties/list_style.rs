@@ -1,10 +1,10 @@
 use std::{fmt, sync::Arc};
 
-use cssparser::{Parser, Token, match_ignore_ascii_case, serialize_string};
+use cssparser::{Parser, Token, match_ignore_ascii_case, serialize_identifier, serialize_string};
 
 use crate::style::{
-  Animatable, BackgroundImage, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss,
-  declare_enum_from_css_impl, unexpected_token,
+  Animatable, BackgroundImage, CssSyntaxKind, CssToken, CssWideKeyword, FromCss, FromCssStr,
+  MakeComputed, ParseResult, ToCss, declare_enum_from_css_impl, unexpected_token,
 };
 
 /// The counter style a list item's marker is generated from.
@@ -36,6 +36,11 @@ pub enum ListStyleType {
   UpperRoman,
   /// A literal string used for every item.
   String(Arc<str>),
+  /// A counter style takumi has no definition for, whose markers render as
+  /// `decimal`.
+  ///
+  /// Ref: https://drafts.csswg.org/css-counter-styles-3/#counter-style-name
+  Name(Arc<str>),
 }
 
 /// The image a list item's marker draws instead of its counter style.
@@ -194,6 +199,7 @@ impl ListStyleType {
       ListStyleType::UpperAlpha => (alphabetic(ordinal, 'A'), ". "),
       ListStyleType::LowerRoman => (roman(ordinal, false), ". "),
       ListStyleType::UpperRoman => (roman(ordinal, true), ". "),
+      ListStyleType::Name(_) => (ordinal.to_string(), ". "),
     };
 
     Some(representation + suffix)
@@ -216,6 +222,19 @@ impl ListStyleType {
   }
 }
 
+/// The counter style `ident` names, or `None` when css-values excludes it from
+/// `<custom-ident>`.
+fn counter_style_name(ident: &str) -> Option<ListStyleType> {
+  if CssWideKeyword::from_css_str(ident).is_ok() {
+    return None;
+  }
+
+  match_ignore_ascii_case! {ident,
+    "revert" | "revert-layer" | "default" => None,
+    _ => Some(ListStyleType::Name(ident.into())),
+  }
+}
+
 impl MakeComputed for ListStyleType {}
 
 impl Animatable for ListStyleType {}
@@ -233,6 +252,7 @@ const LIST_STYLE_TYPE_TOKENS: &[CssToken] = &[
   CssToken::Keyword("upper-latin"),
   CssToken::Keyword("lower-roman"),
   CssToken::Keyword("upper-roman"),
+  CssToken::Syntax(CssSyntaxKind::CustomIdent),
   CssToken::Syntax(CssSyntaxKind::String),
 ];
 
@@ -243,9 +263,9 @@ impl<'i> FromCss<'i> for ListStyleType {
 
     match token {
       Token::QuotedString(ref value) => Ok(ListStyleType::String(value.as_ref().into())),
-      Token::Ident(ref ident) => {
-        Self::from_ident(ident).ok_or_else(|| unexpected_token!(Self, location, &token))
-      }
+      Token::Ident(ref ident) => Self::from_ident(ident)
+        .or_else(|| counter_style_name(ident))
+        .ok_or_else(|| unexpected_token!(Self, location, &token)),
       other => Err(unexpected_token!(Self, location, &other)),
     }
   }
@@ -267,6 +287,7 @@ impl ToCss for ListStyleType {
       ListStyleType::LowerRoman => dest.write_str("lower-roman"),
       ListStyleType::UpperRoman => dest.write_str("upper-roman"),
       ListStyleType::String(value) => serialize_string(value, dest),
+      ListStyleType::Name(name) => serialize_identifier(name, dest),
     }
   }
 }
@@ -349,7 +370,30 @@ mod tests {
       ListStyleType::from_css_str("\"-\""),
       Ok(ListStyleType::String("-".into()))
     );
-    assert!(ListStyleType::from_css_str("bogus").is_err());
+    assert_eq!(
+      ListStyleType::from_css_str("georgian"),
+      Ok(ListStyleType::Name("georgian".into()))
+    );
+    assert!(ListStyleType::from_css_str("inherit").is_err());
+    assert!(ListStyleType::from_css_str("default").is_err());
+  }
+
+  #[test]
+  fn numbers_an_unknown_counter_style_as_decimal() {
+    assert_eq!(
+      ListStyleType::Name("georgian".into())
+        .marker_text(4)
+        .as_deref(),
+      ListStyleType::Decimal.marker_text(4).as_deref()
+    );
+    assert_eq!(
+      ListStyleShorthand::from_css_str("georgian inside"),
+      Ok(ListStyleShorthand {
+        style_type: ListStyleType::Name("georgian".into()),
+        position: ListStylePosition::Inside,
+        image: ListStyleImage::default(),
+      })
+    );
   }
 
   #[test]
@@ -431,6 +475,7 @@ mod tests {
       ListStyleType::LowerRoman,
       ListStyleType::UpperRoman,
       ListStyleType::String("marker".into()),
+      ListStyleType::Name("georgian".into()),
     ];
 
     for style in styles {
@@ -444,7 +489,8 @@ mod tests {
         | ListStyleType::LowerAlpha
         | ListStyleType::UpperAlpha
         | ListStyleType::LowerRoman
-        | ListStyleType::UpperRoman => &[i32::MIN, -7, 0, 1, 9, 26, 27, 3999, 4000, i32::MAX],
+        | ListStyleType::UpperRoman
+        | ListStyleType::Name(_) => &[i32::MIN, -7, 0, 1, 9, 26, 27, 3999, 4000, i32::MAX],
       };
 
       for ordinal in covered {

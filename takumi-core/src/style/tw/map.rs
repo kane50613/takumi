@@ -180,9 +180,10 @@ pub(crate) static VAR_TARGETS: phf::Map<&str, &[(Namespace, &[LonghandId])]> = p
 
 /// Maps a utility prefix to the parsers tried against its suffix.
 pub(crate) static PREFIX_PARSERS: phf::Map<&str, &[PropertyParser]> = phf_map! {
+  // `list-style-type` takes any counter style name, so position goes first.
   "list" => &[
-    PropertyParser::ListStyleType(TailwindProperty::ListStyleType),
     PropertyParser::ListStylePosition(TailwindProperty::ListStylePosition),
+    PropertyParser::ListStyleType(TailwindProperty::ListStyleType),
   ],
   "list-image" => &[PropertyParser::ListStyleImage(TailwindProperty::ListStyleImage)],
   "object" => &[
