@@ -456,7 +456,22 @@ macro_rules! define_style {
                 input.slice_from(start).trim().to_owned(),
               )])
             }
-            Self::Shorthand(property) => property.parse_declarations(input),
+            Self::Shorthand(property) => {
+              let state = input.state();
+
+              if let Ok(keyword) = input.try_parse(CssWideKeyword::from_css) {
+                return Ok(
+                  self
+                    .target_longhands()
+                    .iter()
+                    .map(|longhand| StyleDeclaration::CssWideKeyword(longhand, keyword))
+                    .collect(),
+                );
+              }
+
+              input.reset(&state);
+              property.parse_declarations(input)
+            }
             Self::Longhand(property) => property.parse_declarations(input),
           }
         }

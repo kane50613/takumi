@@ -1474,3 +1474,20 @@ fn preflight_resets_list_markers_to_none() {
     &[StyleDeclaration::list_style_type(ListStyleType::None)]
   );
 }
+
+#[test]
+fn shorthands_take_css_wide_keywords() {
+  let block = StyleDeclarationBlock::from_str("margin: inherit; overflow: initial").unwrap();
+
+  assert_eq!(
+    block.declarations.as_slice(),
+    &[
+      StyleDeclaration::CssWideKeyword(LonghandId::MarginTop, CssWideKeyword::Inherit),
+      StyleDeclaration::CssWideKeyword(LonghandId::MarginRight, CssWideKeyword::Inherit),
+      StyleDeclaration::CssWideKeyword(LonghandId::MarginBottom, CssWideKeyword::Inherit),
+      StyleDeclaration::CssWideKeyword(LonghandId::MarginLeft, CssWideKeyword::Inherit),
+      StyleDeclaration::CssWideKeyword(LonghandId::OverflowX, CssWideKeyword::Initial),
+      StyleDeclaration::CssWideKeyword(LonghandId::OverflowY, CssWideKeyword::Initial),
+    ]
+  );
+}
