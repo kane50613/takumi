@@ -292,6 +292,8 @@ describe("render", () => {
         height: 100,
         stylesheets: [sheet],
       });
+      expect(warn.mock.calls).toHaveLength(1);
+
       await renderer.measure(node, { width: 200, height: 100, stylesheets: [sheet] });
 
       expect(viaAlias).toEqual(viaCss);
