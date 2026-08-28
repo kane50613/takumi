@@ -65,13 +65,42 @@ fn run_pdf_fixture(name: &str, build: impl Fn(&Fonts) -> PdfOptions<'_>) -> Vec<
   run_pdf_fixture_with(name, &fonts(), build)
 }
 
+/// Keeps the goldens off the crate version, which the real default producer
+/// carries.
+const FIXTURE_PRODUCER: &str = "takumi-pdf fixture";
+
+fn pin_producer(options: &mut PdfOptions<'_>) {
+  if options.metadata.is_none() && options.standard != PdfStandard::None {
+    return;
+  }
+
+  options
+    .metadata
+    .get_or_insert_default()
+    .producer
+    .get_or_insert_with(|| FIXTURE_PRODUCER.to_string());
+}
+
+/// Renders options the way [`run_pdf_fixture`] does, for the tests that compare
+/// a golden against a second document.
+fn render_pinned(mut options: PdfOptions<'_>) -> Vec<u8> {
+  pin_producer(&mut options);
+  render(options).expect("render pdf")
+}
+
 fn run_pdf_fixture_with(
   name: &str,
   fonts: &Fonts,
   build: impl Fn(&Fonts) -> PdfOptions<'_>,
 ) -> Vec<u8> {
-  let first = render(build(fonts)).expect("render pdf fixture");
-  let second = render(build(fonts)).expect("render pdf fixture again");
+  let mut once = build(fonts);
+  let mut twice = build(fonts);
+
+  pin_producer(&mut once);
+  pin_producer(&mut twice);
+
+  let first = render(once).expect("render pdf fixture");
+  let second = render(twice).expect("render pdf fixture again");
 
   assert_eq!(first, second, "nondeterministic pdf output for {name}");
   assert!(first.starts_with(b"%PDF-"), "not a pdf: {name}");
@@ -700,7 +729,7 @@ fn paged_target_counters() {
   // Numbering the entries by hand has to render the same document, which pins
   // the resolved pages to 2, 3 and 4 without decoding a subset font.
   let numbered = toc_document(["<span>2</span>", "<span>3</span>", "<span>IV</span>"]);
-  let expected = render(toc_options(&numbered, &fonts())).expect("render numbered toc");
+  let expected = render_pinned(toc_options(&numbered, &fonts()));
 
   assert_eq!(
     pdf, expected,
@@ -3085,6 +3114,7 @@ fn report_links_outline() {
         authors: vec!["Takumi".into()],
         keywords: vec!["report".into(), "fixture".into()],
         creator: Some("takumi-pdf fixtures".into()),
+        producer: None,
         creation_date: None,
         xmp: Vec::new(),
       })
@@ -3747,6 +3777,37 @@ fn opaque_pngs_embed_their_own_streams() {
   }
 }
 
+/// The default `/Producer` names takumi and carries the crate version, which
+/// tegami keeps in step with the `takumi-pdf` npm package. The fixture harness
+/// pins its own producer, so this renders outside it.
+#[test]
+fn the_default_producer_carries_the_crate_version() {
+  let doc = r#"<div style="width: 40px; height: 40px; background: #000;"></div>"#;
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse the doc"))
+      .viewport(Viewport::new((80, 80)))
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect("render the doc");
+  let haystack = inflated_text(&pdf);
+
+  assert_eq!(
+    takumi_pdf::DEFAULT_PRODUCER,
+    format!("takumi-pdf {}", env!("CARGO_PKG_VERSION")),
+    "the default producer should name takumi and its version"
+  );
+  assert!(
+    haystack.contains(&format!("/Producer({})", takumi_pdf::DEFAULT_PRODUCER)),
+    "expected the default producer in the info dictionary"
+  );
+  assert!(
+    haystack.contains(&format!("<pdf:Producer>{}", takumi_pdf::DEFAULT_PRODUCER)),
+    "expected the default producer in the XMP packet"
+  );
+}
+
 /// `blur()` has no PDF equivalent. Dropping it would print a page that quietly
 /// disagrees with the stylesheet, so the render stops and names the function.
 #[test]
@@ -3863,7 +3924,7 @@ fn a_page_counter_in_the_content_names_its_own_page() {
   );
   let pdf = run_pdf_fixture("content-page-counters", |fonts| a4_options(&hooked, fonts));
   let numbered = document("<span>2</span>", "<span>2</span>");
-  let expected = render(a4_options(&numbered, &fonts())).expect("render the numbered document");
+  let expected = render_pinned(a4_options(&numbered, &fonts()));
 
   assert_eq!(
     pdf, expected,

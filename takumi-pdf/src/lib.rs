@@ -90,9 +90,9 @@ use takumi_core::{
 };
 
 pub use crate::options::{
-  Attachment, AttachmentRelationship, MeasureOptions, MeasuredSize, PageMargin, PageMargins,
-  PageOptions, PdfDate, PdfError, PdfMetadata, PdfOptions, PdfStandard, Tagging, XmpProperty,
-  XmpSchema,
+  Attachment, AttachmentRelationship, DEFAULT_PRODUCER, MeasureOptions, MeasuredSize, PageMargin,
+  PageMargins, PageOptions, PdfDate, PdfError, PdfMetadata, PdfOptions, PdfStandard, Tagging,
+  XmpProperty, XmpSchema,
 };
 use crate::{
   bands::{RepeatBounds, Repeatable, prepare_band},
@@ -209,12 +209,20 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
   let tag_collector = (options.tagged != Tagging::Off || options.standard.requires_tagging())
     .then(|| RefCell::new(TagCollector::default()));
 
-  if let Some(metadata) = &options.metadata {
+  let empty_metadata = PdfMetadata::default();
+  // An archival standard validates the XMP packet and demands a creation date
+  // the caller may not have, so a document that asked for none keeps none.
+  let metadata = match &options.metadata {
+    Some(metadata) => Some(metadata),
+    None if options.standard == PdfStandard::None => Some(&empty_metadata),
+    None => None,
+  };
+
+  if let Some(metadata) = metadata {
     validate_xmp_schemas(&metadata.xmp)?;
     document.set_metadata(build_metadata(metadata, inputs.lang));
   } else if tag_collector.is_some() && inputs.lang.is_some() {
-    // Tagged standards check the document language even without metadata.
-    document.set_metadata(build_metadata(&PdfMetadata::default(), inputs.lang));
+    document.set_metadata(build_metadata(&empty_metadata, inputs.lang));
   }
 
   let fallback_date = options.metadata.as_ref().and_then(|m| m.creation_date);
