@@ -4,6 +4,7 @@ use std::{
   fs::{File, create_dir_all, write},
   io::Read,
   path::{Path, PathBuf},
+  process::Command,
   sync::{Arc, LazyLock, OnceLock},
 };
 
@@ -167,6 +168,24 @@ pub fn run_fixture_test_with_options(options: RenderOptions<'_>, fixture_name: &
 /// Embeds `css` in the repro HTML; `RenderOptions` only carries the parsed
 /// sheet, which cannot serialize back.
 #[allow(dead_code)]
+/// Runs the repo's formatter over a generated fixture, so a test run leaves the
+/// tree the way `bun lint` wants it. A checkout without `node_modules` skips.
+fn format_generated_html(path: &str) {
+  let binary = if cfg!(windows) { "oxfmt.exe" } else { "oxfmt" };
+  let oxfmt = repo_base_path(&format!("node_modules/.bin/{binary}"));
+
+  if !oxfmt.exists() {
+    return;
+  }
+
+  let status = Command::new(&oxfmt)
+    .arg(path)
+    .status()
+    .unwrap_or_else(|error| panic!("{} should run: {error}", oxfmt.display()));
+
+  assert!(status.success(), "{} rejected {path}", oxfmt.display());
+}
+
 pub fn run_fixture_test_with_css(options: RenderOptions<'_>, css: &str, fixture_name: &str) {
   let viewport_width = options.viewport().size.width.unwrap_or(1200);
   let viewport_height = options.viewport().size.height.unwrap_or(630);
@@ -195,28 +214,27 @@ pub fn run_fixture_test_with_css(options: RenderOptions<'_>, css: &str, fixture_
   let style_block = if css.is_empty() {
     String::new()
   } else {
-    format!("\n  <style>{css}</style>")
+    format!("\n    <style>{css}</style>")
   };
   let html_content = format!(
-    r#"<!DOCTYPE html>
+    r#"<!doctype html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <title>{fixture_name}</title>
-  <base href="../../../">
-  <link rel="stylesheet" href="takumi/tests/shared.css">{style_block}
-</head>
-<body style="width: {viewport_width}px; height: {viewport_height}px;">
-  {node_html}
-</body>
-</html>"#
+  <head>
+    <meta charset="utf-8" />
+    <title>{fixture_name}</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />{style_block}
+  </head>
+  <body style="width: {viewport_width}px; height: {viewport_height}px">
+    {node_html}
+  </body>
+</html>
+"#
   );
 
-  write(
-    format!("tests/fixtures-generated/{fixture_name}.html"),
-    html_content,
-  )
-  .unwrap();
+  let html_path = format!("tests/fixtures-generated/{fixture_name}.html");
+  write(&html_path, html_content).unwrap();
+  format_generated_html(&html_path);
 
   // Emit the vector SVG alongside the raster golden (best-effort: the SVG backend
   // does not cover every paint feature yet, so failures are skipped not fatal).
