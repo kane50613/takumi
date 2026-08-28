@@ -245,6 +245,10 @@ pub struct Fonts {
   /// Lazily built face store for SVG `<text>`; cleared on registration.
   #[cfg(feature = "svg")]
   svg_db: Option<Arc<crate::resvg::usvg::fontdb::Database>>,
+  /// Stamped from a process-wide counter on every registration, so
+  /// font-dependent caches (SVG `<text>` trees, their rasterizations) can
+  /// tell any two registry states apart, including across `Fonts` instances.
+  revision: u64,
 }
 
 impl Default for Fonts {
@@ -263,6 +267,7 @@ impl Default for Fonts {
       color_names: HashSet::new(),
       #[cfg(feature = "svg")]
       svg_db: None,
+      revision: 0,
     }
   }
 }
@@ -287,6 +292,12 @@ impl FontsSnapshot {
   #[cfg(feature = "svg")]
   pub(crate) fn svg_fontdb(&self) -> Arc<crate::resvg::usvg::fontdb::Database> {
     self.with_context(Fonts::svg_fontdb)
+  }
+
+  /// Registration revision of the underlying font registry.
+  #[cfg(feature = "svg")]
+  pub(crate) fn revision(&self) -> u64 {
+    self.with_context(|fonts| fonts.revision)
   }
 }
 
@@ -499,6 +510,7 @@ impl Fonts {
         color_names: self.color_names.clone(),
         #[cfg(feature = "svg")]
         svg_db: self.svg_db.clone(),
+        revision: self.revision,
       })),
       groups: self.groups.clone(),
       classes: Arc::new(FontClasses {
@@ -562,6 +574,15 @@ impl Fonts {
   /// Registers a font, decoding it and skipping fonts already registered in this
   /// context (deduped by content + family name). Returns the families it produced.
   pub fn register(&mut self, font: FontResource) -> Result<Vec<RegisteredFamily>, FontError> {
+    #[cfg(feature = "svg")]
+    {
+      self.svg_db = None;
+    }
+
+    static REVISION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+    self.revision = REVISION.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
     let FontResource {
       source,
       info_override,

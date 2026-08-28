@@ -462,6 +462,12 @@ fn extend_clip_commands(group: &Group, transform: &Transform, commands: &mut Vec
 
         extend_clip_commands(group, &group_transform, commands);
       }
+      Node::Text(text) => {
+        let flattened = text.flattened();
+        let group_transform = transform.pre_concat(flattened.transform());
+
+        extend_clip_commands(flattened, &group_transform, commands);
+      }
       _ => {}
     }
   }
@@ -470,6 +476,9 @@ fn extend_clip_commands(group: &Group, transform: &Transform, commands: &mut Vec
 fn is_simple_clip_path(group: &Group) -> bool {
   group.children().iter().all(|node| match node {
     Node::Group(group) => group.clip_path().is_none() && is_simple_clip_path(group),
+    Node::Text(text) => {
+      text.flattened().clip_path().is_none() && is_simple_clip_path(text.flattened())
+    }
     _ => true,
   })
 }
@@ -485,6 +494,7 @@ fn collect_clip_rules(group: &Group) -> Vec<usvg::FillRule> {
         }
       }
       Node::Group(group) => rules.extend(collect_clip_rules(group)),
+      Node::Text(text) => rules.extend(collect_clip_rules(text.flattened())),
       _ => {}
     }
   }

@@ -94,10 +94,9 @@ pub struct SvgSource {
   intrinsic: SvgIntrinsic,
   /// Whether the markup contains `<text`, so rendering re-parses with fonts.
   has_text: bool,
-  /// Text-capable re-parse of `source`, converted with the first font
-  /// snapshot a render supplies. Fonts registered afterwards do not
-  /// invalidate it.
-  text_tree: std::sync::OnceLock<Option<crate::resvg::usvg::Tree>>,
+  /// Text-capable re-parse of `source`, keyed by the font registry revision
+  /// it was converted with; a registration re-converts on the next render.
+  text_tree: std::sync::Mutex<Option<(u64, Arc<crate::resvg::usvg::Tree>)>>,
   hash: u64,
   cache: Weak<SharedResourceCache>,
 }
@@ -159,7 +158,11 @@ impl SvgSource {
   ) -> Vec<SvgOp> {
     match self.tree_with_current_color(current_color, fonts) {
       Some(tree) => crate::svg_vector::flatten(&tree, raster_scale),
-      None => crate::svg_vector::flatten(self.tree_for_render(fonts), raster_scale),
+      None => {
+        let text_tree = self.text_tree(fonts);
+
+        crate::svg_vector::flatten(text_tree.as_deref().unwrap_or(&self.tree), raster_scale)
+      }
     }
   }
 
@@ -614,34 +617,38 @@ impl SvgSource {
       tree,
       uses_current_color,
       intrinsic,
-      text_tree: std::sync::OnceLock::new(),
+      text_tree: std::sync::Mutex::new(None),
       hash,
       cache,
     })
   }
 
-  /// The parse-time tree, or the text-capable re-parse when the markup holds
-  /// `<text>` and a font snapshot is available.
-  fn tree_for_render(&self, fonts: Option<&FontsSnapshot>) -> &crate::resvg::usvg::Tree {
-    let Some(fonts) = fonts.filter(|_| self.has_text) else {
-      return &self.tree;
+  /// The text-capable re-parse for the snapshot's font revision when the
+  /// markup holds `<text>`, or `None` to use the parse-time tree.
+  fn text_tree(&self, fonts: Option<&FontsSnapshot>) -> Option<Arc<crate::resvg::usvg::Tree>> {
+    let fonts = fonts.filter(|_| self.has_text)?;
+    let revision = fonts.revision();
+    let mut cached = self.text_tree.lock().ok()?;
+
+    if let Some((cached_revision, tree)) = cached.as_ref()
+      && *cached_revision == revision
+    {
+      return Some(tree.clone());
+    }
+
+    let parsing = ParsingOptions {
+      allow_dtd: true,
+      ..Default::default()
     };
+    let document = Document::parse_with_options(&self.source, parsing).ok()?;
+    let mut options = svg_parse_options();
 
-    self
-      .text_tree
-      .get_or_init(|| {
-        let parsing = ParsingOptions {
-          allow_dtd: true,
-          ..Default::default()
-        };
-        let document = Document::parse_with_options(&self.source, parsing).ok()?;
-        let mut options = svg_parse_options();
+    options.fontdb = fonts.svg_fontdb();
 
-        options.fontdb = fonts.svg_fontdb();
-        Tree::from_xmltree(&document, &options).ok()
-      })
-      .as_ref()
-      .unwrap_or(&self.tree)
+    let tree = Arc::new(Tree::from_xmltree(&document, &options).ok()?);
+
+    *cached = Some((revision, tree.clone()));
+    Some(tree)
   }
 
   fn rasterize(
@@ -662,11 +669,13 @@ impl SvgSource {
     let sy = height as f32 / original_size.height();
 
     let recolored = self.tree_with_current_color(current_color, fonts);
+    let text_tree = self.text_tree(fonts);
 
     render_svg_tree(
       recolored
         .as_ref()
-        .unwrap_or_else(|| self.tree_for_render(fonts)),
+        .or(text_tree.as_deref())
+        .unwrap_or(&self.tree),
       Transform::from_scale(sx, sy),
       &mut pixmap.as_mut(),
     );
@@ -688,11 +697,19 @@ impl SvgSource {
       return self.rasterize(width, height, current_color, fonts);
     };
 
-    let hash = if self.uses_current_color {
+    let mut hash = if self.uses_current_color {
       self.hash ^ xxh3_64(&current_color.0)
     } else {
       self.hash
     };
+
+    // Text rasterization depends on which fonts are registered.
+    if self.has_text
+      && let Some(fonts) = fonts
+    {
+      hash ^= xxh3_64(&fonts.revision().to_le_bytes());
+    }
+
     let key = ResourceCacheKey::sized(hash, width, height, image_rendering);
 
     match cache.get_value_or_guard(&key, None) {
