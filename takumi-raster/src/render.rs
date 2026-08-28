@@ -3,8 +3,9 @@ use std::{collections::HashMap, rc::Rc, sync::Arc};
 use serde::Serialize;
 use takumi_core::{
   geometry::{AvailableSpace, ComputedLayout as Layout, NodeId, Size},
+  layout::node::NodeKind,
   scene::build_stacking_contexts,
-  style::{ComputedStyle, Lang},
+  style::{ComputedStyle, Display, Lang},
 };
 use typed_builder::TypedBuilder;
 
@@ -12,7 +13,9 @@ use crate::{
   AnimationFrame, Bitmap, Canvas, DitheringAlgorithm, Error, Fonts, RenderContext, Result,
   SizedFontStyle, apply_dithering,
   layout::{
-    inline::{InlineLayoutMode, InlineLayoutRequest, collect_inline_items, create_inline_layout},
+    inline::{
+      InlineItem, InlineLayoutMode, InlineLayoutRequest, collect_inline_items, create_inline_layout,
+    },
     node::Node,
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
@@ -279,6 +282,41 @@ fn collect_measure_result(
             create_measured_node(layout, local_transform, children, runs),
           );
           continue;
+        }
+
+        // Paint always draws a text node's own text, even when generated
+        // content gave it box children; its runs sit beside those children.
+        if current.context.style.display != Display::None
+          && !current.has_anonymous_text_item_child()
+          && let Some(text) = current.node.as_ref().and_then(|node| match &node.kind {
+            NodeKind::Text(data) => Some(data.text.as_str()),
+            _ => None,
+          })
+        {
+          let font_style = SizedFontStyle::from_style(&current.context.style, &current.context);
+          let built = create_inline_layout(InlineLayoutRequest::in_available_space(
+            vec![InlineItem::Text {
+              text: text.into(),
+              context: &current.context,
+              link: None,
+            }],
+            Size {
+              width: AvailableSpace::Definite(layout.content_box_width()),
+              height: AvailableSpace::Definite(layout.content_box_height()),
+            },
+            Size::NONE,
+            &font_style,
+            &current.context,
+            InlineLayoutMode::Measure,
+          ));
+          let (measured_runs, _) = built.measure_runs(layout);
+          runs.extend(measured_runs.into_iter().map(|run| MeasuredTextRun {
+            text: run.text.to_string(),
+            x: run.x,
+            y: run.y,
+            width: run.width,
+            height: run.height,
+          }));
         }
 
         if current.children.is_none() {

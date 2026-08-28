@@ -396,6 +396,81 @@ fn test_measure_content_box_wraps_inside_its_padding() {
   assert_close(content_box.height, border_box.height);
 }
 
+/// A text node carries its own inline content but has no children, so the
+/// measure traversal used to walk past it without emitting a run.
+#[test]
+fn test_measure_reports_runs_for_a_bare_text_node() {
+  let html = |body: &str| {
+    Node::from_html(
+      &format!(r#"<div style="width:320px; font-size:32px;">{body}</div>"#),
+      FromHtmlOptions::default(),
+    )
+    .expect("parse")
+  };
+  let bare = measure(html("word"), create_measure_viewport());
+  let wrapped = measure(html("<span>word</span>"), create_measure_viewport());
+
+  let bare_runs = measured_text_runs(&bare);
+  let wrapped_runs = measured_text_runs(&wrapped);
+  assert_eq!(bare_runs.len(), wrapped_runs.len());
+  assert_close(bare_runs[0].width, wrapped_runs[0].width);
+  assert_close(bare_runs[0].height, wrapped_runs[0].height);
+}
+
+#[test]
+fn test_measure_skips_a_hidden_text_node() {
+  let out = measure(
+    Node::from_html(
+      r#"<div><div style="display:none">hidden</div><div>shown</div></div>"#,
+      FromHtmlOptions::default(),
+    )
+    .expect("parse"),
+    create_measure_viewport(),
+  );
+
+  fn runs(node: &MeasuredNode) -> Vec<&str> {
+    node
+      .runs
+      .iter()
+      .map(|run| run.text.as_str())
+      .chain(node.children.iter().flat_map(runs))
+      .collect()
+  }
+
+  assert_eq!(runs(&out), ["shown"]);
+}
+
+/// Generated block content turns a text node into a box container, but paint
+/// still draws the authored text, so measure has to report it too.
+#[test]
+fn test_measure_keeps_authored_text_beside_generated_block_content() {
+  let out = takumi::measure(
+    RenderOptions::builder()
+      .viewport(create_measure_viewport())
+      .node(
+        Node::from_html(r#"<div><p>word</p></div>"#, FromHtmlOptions::default()).expect("parse"),
+      )
+      .fonts(&CONTEXT)
+      .images(TEST_IMAGES.clone())
+      .stylesheet(std::sync::Arc::new(
+        StyleSheet::parse_list([r#"p::after { content: "!"; display: block }"#]).expect("css"),
+      ))
+      .build(),
+  )
+  .unwrap();
+
+  fn runs(node: &MeasuredNode) -> Vec<&str> {
+    node
+      .runs
+      .iter()
+      .map(|run| run.text.as_str())
+      .chain(node.children.iter().flat_map(runs))
+      .collect()
+  }
+
+  assert_eq!(runs(&out), ["word", "!"]);
+}
+
 #[test]
 fn test_measure_text_fit_per_line_shrink_scales_run_geometry() {
   let base_style = Style::default()
