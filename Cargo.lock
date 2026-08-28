@@ -1893,6 +1893,7 @@ version = "0.0.0"
 dependencies = [
  "base64",
  "bumpalo",
+ "crc32fast",
  "flate2",
  "float-cmp",
  "gif",

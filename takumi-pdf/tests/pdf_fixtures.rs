@@ -3692,6 +3692,61 @@ fn encoded_bitmaps_embed_their_own_bytes() {
   );
 }
 
+/// A PNG whose rows carry no alpha needs no decode: its IDAT stream is already
+/// deflate with the PNG predictors, which `/DecodeParms` describes. A paletted
+/// source keeps its palette as an `/Indexed` colour space instead of widening
+/// every pixel to RGB.
+#[test]
+fn opaque_pngs_embed_their_own_streams() {
+  const RGB: &[u8] = include_bytes!("images/checker.png");
+  const INDEXED: &[u8] = include_bytes!("images/checker-indexed.png");
+
+  let cache = ResourceCache::new(1 << 20);
+  let images: HashMap<Arc<str>, ImageSource> = [("rgb", RGB), ("indexed", INDEXED)]
+    .into_iter()
+    .map(|(name, bytes)| {
+      let source = cache
+        .get_or_decode(bytes, ImageCacheMode::Auto)
+        .expect("decode test image");
+
+      (name.into(), source)
+    })
+    .collect();
+  let source = r##"<div style="display: flex; column-gap: 8px; padding: 8px;">
+      <img src="rgb" style="width: 32px; height: 32px;" />
+      <img src="indexed" style="width: 32px; height: 32px;" />
+    </div>"##;
+  let pdf = run_pdf_fixture("png-streams", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse the fixture"))
+      .viewport(Viewport::new((120, 48)))
+      .images(images.clone())
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  assert_eq!(
+    haystack.matches("/Predictor 15").count(),
+    2,
+    "expected both PNG streams to keep their row predictors"
+  );
+  assert!(
+    haystack.contains("/Indexed"),
+    "expected the paletted PNG to keep its palette"
+  );
+
+  for (name, bytes) in [("rgb", RGB), ("indexed", INDEXED)] {
+    let idat = find(bytes, b"IDAT").expect("an IDAT chunk") + 8;
+    let end = find(bytes, b"IEND").expect("an IEND chunk") - 8;
+
+    assert!(
+      find(&pdf, &bytes[idat..end]).is_some(),
+      "expected the original {name} IDAT bytes in the PDF"
+    );
+  }
+}
+
 /// `blur()` has no PDF equivalent. Dropping it would print a page that quietly
 /// disagrees with the stylesheet, so the render stops and names the function.
 #[test]

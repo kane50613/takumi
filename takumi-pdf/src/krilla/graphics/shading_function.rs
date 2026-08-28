@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use bumpalo::Bump;
 use pdf_writer::types::{FunctionShadingType, PostScriptOp};
-use pdf_writer::{Chunk, Finish, Ref};
+use pdf_writer::{Chunk, Finish, Name, Ref};
 use tiny_skia_path::Point;
 
 use crate::krilla::chunk_container::ChunkContainer;
@@ -19,7 +19,6 @@ use crate::krilla::resource;
 use crate::krilla::resource::Resourceable;
 use crate::krilla::serialize::{Cacheable, MaybeDeviceColorSpace, SerializeContext};
 use crate::krilla::stream::FilterStreamBuilder;
-use crate::krilla::util::set_colorspace;
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Copy)]
 pub(crate) enum GradientType {
@@ -306,7 +305,7 @@ fn serialize_postscript_shading(
   let mut shading = chunk.function_shading(root_ref);
   shading.shading_type(FunctionShadingType::Function);
 
-  set_colorspace(cs, shading.deref_mut());
+  cs.write(shading.deref_mut().insert(Name(b"ColorSpace")));
 
   // Write the identity matrix, because ghostscript has a bug where
   // it thinks the entry is mandatory.
@@ -334,7 +333,7 @@ fn serialize_axial_radial_shading(
     shading.shading_type(FunctionShadingType::Axial);
   }
 
-  set_colorspace(cs, shading.deref_mut());
+  cs.write(shading.deref_mut().insert(Name(b"ColorSpace")));
 
   shading.anti_alias(radial_axial_gradient.anti_alias);
   shading.function(function_ref);
