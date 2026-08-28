@@ -1168,7 +1168,7 @@ impl Emitter<'_> {
       let raster_scale = 2.0 * (dw / svg_width).max(dh / svg_height);
 
       Some((
-        svg.vector_ops(raster_scale, context.current_color),
+        svg.vector_ops(raster_scale, context.current_color, Some(context.fonts())),
         svg_width,
         svg_height,
       ))

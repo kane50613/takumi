@@ -89,6 +89,18 @@ optional = true
 workspace = true
 optional = true
 
+[dependencies.harfrust]
+workspace = true
+optional = true
+
+[dependencies.icu_properties]
+workspace = true
+optional = true
+
+[dependencies.unicode-bidi]
+workspace = true
+optional = true
+
 [dependencies.wuff]
 workspace = true
 optional = true
@@ -106,12 +118,19 @@ svg = [
   "dep:siphasher",
   "dep:strict-num",
   "dep:tiny-skia-path",
+  "dep:harfrust",
+  "dep:icu_properties",
+  "dep:unicode-bidi",
 ]
 woff2 = ["dep:wuff", "wuff/brotli"]
 woff = ["dep:wuff", "wuff/z"]
 
 [dev-dependencies]
 serde_json.workspace = true
+
+[dev-dependencies.unicode-bidi]
+workspace = true
+features = ["hardcoded-data"]
 
 [lints]
 workspace = true

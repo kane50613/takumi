@@ -55,6 +55,11 @@ pub struct RenderContext {
 }
 
 impl RenderContext {
+  /// The font snapshot this render draws with.
+  pub fn fonts(&self) -> &FontsSnapshot {
+    &self.fonts
+  }
+
   pub(crate) fn from_parent(
     parent: &Self,
     style: ComputedStyle,

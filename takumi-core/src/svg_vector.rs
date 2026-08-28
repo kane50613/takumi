@@ -241,11 +241,22 @@ fn flatten_group(group: &Group, raster_scale: f32, ops: &mut Vec<SvgOp>) {
   }
 }
 
+/// The group a node's children live in: the node itself for groups, the
+/// flattened outlines for text.
+fn subgroup(node: &Node) -> Option<&Group> {
+  match node {
+    Node::Group(group) => Some(group),
+    Node::Text(text) => Some(text.flattened()),
+    _ => None,
+  }
+}
+
 fn flatten_node(node: &Node, raster_scale: f32, ops: &mut Vec<SvgOp>) {
   match node {
     Node::Group(group) => flatten_group(group, raster_scale, ops),
     Node::Path(path) => flatten_path(path, raster_scale, ops),
     Node::Image(image) => flatten_image(image, raster_scale, ops),
+    Node::Text(text) => flatten_group(text.flattened(), raster_scale, ops),
   }
 }
 
@@ -456,20 +467,21 @@ fn extend_clip_commands(group: &Group, transform: &Transform, commands: &mut Vec
           commands.extend(path_commands(&transformed));
         }
       }
-      Node::Group(group) => {
-        let group_transform = transform.pre_concat(group.transform());
+      node => {
+        if let Some(group) = subgroup(node) {
+          let group_transform = transform.pre_concat(group.transform());
 
-        extend_clip_commands(group, &group_transform, commands);
+          extend_clip_commands(group, &group_transform, commands);
+        }
       }
-      _ => {}
     }
   }
 }
 
 fn is_simple_clip_path(group: &Group) -> bool {
-  group.children().iter().all(|node| match node {
-    Node::Group(group) => group.clip_path().is_none() && is_simple_clip_path(group),
-    _ => true,
+  group.children().iter().all(|node| match subgroup(node) {
+    Some(group) => group.clip_path().is_none() && is_simple_clip_path(group),
+    None => true,
   })
 }
 
@@ -483,8 +495,11 @@ fn collect_clip_rules(group: &Group) -> Vec<usvg::FillRule> {
           rules.push(fill.rule());
         }
       }
-      Node::Group(group) => rules.extend(collect_clip_rules(group)),
-      _ => {}
+      node => {
+        if let Some(group) = subgroup(node) {
+          rules.extend(collect_clip_rules(group));
+        }
+      }
     }
   }
   rules

@@ -242,6 +242,13 @@ pub struct Fonts {
   last_resort_order: Vec<String>,
   /// Families with at least one face carrying a color glyph table.
   color_names: HashSet<String>,
+  /// Lazily built face store for SVG `<text>`; cleared on registration.
+  #[cfg(feature = "svg")]
+  svg_db: Option<Arc<crate::resvg::usvg::fontdb::Database>>,
+  /// Stamped from a process-wide counter on every registration, so
+  /// font-dependent caches (SVG `<text>` trees, their rasterizations) can
+  /// tell any two registry states apart, including across `Fonts` instances.
+  revision: u64,
 }
 
 impl Default for Fonts {
@@ -258,6 +265,9 @@ impl Default for Fonts {
       order: Vec::new(),
       last_resort_order: Vec::new(),
       color_names: HashSet::new(),
+      #[cfg(feature = "svg")]
+      svg_db: None,
+      revision: 0,
     }
   }
 }
@@ -276,6 +286,18 @@ impl FontsSnapshot {
   /// borrow is held (layout measures inline boxes before building the parley tree).
   pub(crate) fn with_context<R>(&self, f: impl FnOnce(&mut Fonts) -> R) -> R {
     f(&mut self.context.borrow_mut())
+  }
+
+  /// Face store for SVG `<text>` conversion, built once per snapshot.
+  #[cfg(feature = "svg")]
+  pub(crate) fn svg_fontdb(&self) -> Arc<crate::resvg::usvg::fontdb::Database> {
+    self.with_context(Fonts::svg_fontdb)
+  }
+
+  /// Registration revision of the underlying font registry.
+  #[cfg(feature = "svg")]
+  pub(crate) fn revision(&self) -> u64 {
+    self.with_context(|fonts| fonts.revision)
   }
 }
 
@@ -326,6 +348,99 @@ pub(crate) fn run_variations(run: &GlyphRun<'_, InlineBrush>) -> Vec<([u8; 4], f
 }
 
 impl Fonts {
+  /// Face store for SVG `<text>` conversion, sharing this collection's font
+  /// bytes. Registration order drives fallback priority.
+  #[cfg(feature = "svg")]
+  pub(crate) fn svg_fontdb(&mut self) -> Arc<crate::resvg::usvg::fontdb::Database> {
+    if let Some(database) = &self.svg_db {
+      return database.clone();
+    }
+
+    let database = Arc::new(self.build_svg_fontdb());
+
+    self.svg_db = Some(database.clone());
+    database
+  }
+
+  #[cfg(feature = "svg")]
+  fn build_svg_fontdb(&mut self) -> crate::resvg::usvg::fontdb::Database {
+    use crate::resvg::usvg::fontdb::{Database, Family, Stretch, Style, Weight};
+
+    fn stretch_bucket(width: FontWidth) -> Stretch {
+      match width.ratio() {
+        r if r <= 0.5625 => Stretch::UltraCondensed,
+        r if r <= 0.6875 => Stretch::ExtraCondensed,
+        r if r <= 0.8125 => Stretch::Condensed,
+        r if r < 1.0 => Stretch::SemiCondensed,
+        r if r < 1.125 => Stretch::Normal,
+        r if r < 1.25 => Stretch::SemiExpanded,
+        r if r < 1.5 => Stretch::Expanded,
+        r if r < 2.0 => Stretch::ExtraExpanded,
+        _ => Stretch::UltraExpanded,
+      }
+    }
+
+    let mut database = Database::default();
+    let names: Vec<String> = self
+      .order
+      .iter()
+      .chain(self.last_resort_order.iter())
+      .cloned()
+      .collect();
+
+    for name in names {
+      let Some(family) = self.inner.collection.family_by_name(&name) else {
+        continue;
+      };
+
+      for font in family.fonts().to_vec() {
+        let Some(data) = font.load(Some(&mut self.inner.source_cache)) else {
+          continue;
+        };
+        let style = match font.style() {
+          FontStyle::Normal => Style::Normal,
+          FontStyle::Italic => Style::Italic,
+          FontStyle::Oblique(_) => Style::Oblique,
+        };
+
+        database.push_face(
+          name.clone(),
+          style,
+          Weight(font.weight().value() as u16),
+          stretch_bucket(font.width()),
+          font.has_optical_size_axis(),
+          data,
+          font.index(),
+        );
+      }
+    }
+
+    for (generic, parley_generic) in [
+      (Family::Serif, ParleyGenericFamily::Serif),
+      (Family::SansSerif, ParleyGenericFamily::SansSerif),
+      (Family::Cursive, ParleyGenericFamily::Cursive),
+      (Family::Fantasy, ParleyGenericFamily::Fantasy),
+      (Family::Monospace, ParleyGenericFamily::Monospace),
+    ] {
+      let ids: Vec<_> = self
+        .inner
+        .collection
+        .generic_families(parley_generic)
+        .collect();
+
+      for id in ids {
+        let Some(family) = self.inner.collection.family(id) else {
+          continue;
+        };
+        let name = family.name().to_string();
+
+        database.register_generic(generic, &name);
+      }
+    }
+
+    database
+  }
+
   /// Render-local snapshot with no extra fallbacks.
   pub fn snapshot(&self) -> FontsSnapshot {
     self.snapshot_with_fallbacks(None)
@@ -393,6 +508,9 @@ impl Fonts {
         order: self.order.clone(),
         last_resort_order: self.last_resort_order.clone(),
         color_names: self.color_names.clone(),
+        #[cfg(feature = "svg")]
+        svg_db: self.svg_db.clone(),
+        revision: self.revision,
       })),
       groups: self.groups.clone(),
       classes: Arc::new(FontClasses {
@@ -456,6 +574,15 @@ impl Fonts {
   /// Registers a font, decoding it and skipping fonts already registered in this
   /// context (deduped by content + family name). Returns the families it produced.
   pub fn register(&mut self, font: FontResource) -> Result<Vec<RegisteredFamily>, FontError> {
+    #[cfg(feature = "svg")]
+    {
+      self.svg_db = None;
+    }
+
+    static REVISION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+    self.revision = REVISION.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
     let FontResource {
       source,
       info_override,

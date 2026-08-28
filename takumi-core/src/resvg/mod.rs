@@ -4,8 +4,13 @@
 /*!
 [resvg](https://github.com/linebender/resvg) is an SVG rendering library.
 
-Vendored from resvg 0.48.1 (Apache-2.0 OR MIT), stripped of the `text`,
-`svgz`, `system-fonts`, `memmap-fonts` and `writer` features and the CLI.
+Vendored from resvg 0.48.1 (Apache-2.0 OR MIT), stripped of the `svgz`,
+`system-fonts`, `memmap-fonts` and `writer` features and the CLI.
+
+Text support diverges from upstream: the `fontdb` crate is replaced by a
+fontique-backed face store (`usvg::text::fontdb`), `unicode-script`/
+`unicode-vo` by `icu_properties`, and color glyph formats (COLR, SVG-in-font,
+bitmap) are stripped — glyphs render from outlines only.
 */
 
 #![forbid(unsafe_code)]

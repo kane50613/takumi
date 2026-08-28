@@ -30,6 +30,7 @@ data-url = "0.3"
 flate2 = "1.1"
 float-cmp = "0.9"
 gif = "0.14"
+harfrust = "0.12"
 html5ever = "0.39"
 image-webp = "0.2"
 imagesize = "0.15"
@@ -94,6 +95,16 @@ default-features = false
 version = "3"
 default-features = false
 features = ["napi4", "serde-json"]
+
+[workspace.dependencies.icu_properties]
+version = "2.1.2"
+default-features = false
+features = ["compiled_data"]
+
+[workspace.dependencies.unicode-bidi]
+version = "0.3"
+default-features = false
+features = ["std"]
 
 [workspace.dependencies.parley]
 version = "0.11"
@@ -237,6 +248,8 @@ opt-level = "z"
 # opt-s/z, perf-neutral on the napi bench.
 [profile.release.package.harfrust]
 opt-level = "s"
+[profile.release.package.unicode-bidi]
+opt-level = "z"
 [profile.release.package.taffy]
 opt-level = "z"
 [profile.release.package.parley]

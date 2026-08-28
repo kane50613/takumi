@@ -15,7 +15,7 @@ use takumi::{
 use takumi_core::resources::image::ResourceCache;
 use takumi_svg::{SvgOptions, render as svg_render};
 
-fn repo_base_path(path: &str) -> PathBuf {
+pub fn repo_base_path(path: &str) -> PathBuf {
   Path::new(env!("CARGO_MANIFEST_DIR"))
     .join("../")
     .join(path)

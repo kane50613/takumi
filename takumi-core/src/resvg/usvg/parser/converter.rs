@@ -13,7 +13,10 @@ use super::svgtree::{self, AId, EId, FromValue, SvgNode};
 use super::units::{self, convert_length};
 use super::{Error, Options, marker};
 use crate::resvg::usvg::parser::paint_server::process_paint;
+use crate::resvg::usvg::text::flatten::DatabaseExt;
+use crate::resvg::usvg::text::fontdb::{Database, ID};
 use crate::resvg::usvg::*;
+use crate::resvg::usvg::{FontVariation, GlyphId};
 
 #[derive(Clone)]
 pub struct State<'a> {
@@ -34,6 +37,13 @@ pub struct State<'a> {
 
 #[derive(Clone)]
 pub struct Cache {
+  /// Initialized from [`Options::fontdb`] and then populated over the course
+  /// of conversion.
+  pub fontdb: Arc<Database>,
+
+  cache_outline: HashMap<(ID, GlyphId, Vec<FontVariation>), Option<tiny_skia_path::Path>>,
+  cache_has_opsz: HashMap<ID, bool>,
+
   pub clip_paths: HashMap<String, Arc<ClipPath>>,
   pub masks: HashMap<String, Arc<Mask>>,
   pub filters: HashMap<String, Arc<filter::Filter>>,
@@ -51,8 +61,13 @@ pub struct Cache {
 }
 
 impl Cache {
-  pub(crate) fn new() -> Self {
+  pub(crate) fn new(fontdb: Arc<Database>) -> Self {
     Self {
+      fontdb,
+
+      cache_outline: HashMap::new(),
+      cache_has_opsz: HashMap::new(),
+
       clip_paths: HashMap::new(),
       masks: HashMap::new(),
       filters: HashMap::new(),
@@ -145,6 +160,32 @@ impl Cache {
         return NonEmptyString::new(new_id).unwrap();
       }
     }
+  }
+
+  pub(crate) fn fontdb_outline(
+    &mut self,
+    font: ID,
+    glyph: GlyphId,
+    variations: &[FontVariation],
+  ) -> Option<tiny_skia_path::Path> {
+    let key = (font, glyph, variations.to_vec());
+    match self.cache_outline.get(&key) {
+      Some(cache_hit) => cache_hit.clone(),
+      None => {
+        let lookup = self.fontdb.outline(font, glyph, variations);
+        self.cache_outline.insert(key, lookup.clone());
+        lookup
+      }
+    }
+  }
+
+  pub(crate) fn has_opsz_axis(&mut self, font: ID) -> bool {
+    if let Some(&cached) = self.cache_has_opsz.get(&font) {
+      return cached;
+    }
+    let has_opsz = self.fontdb.has_opsz_axis(font);
+    self.cache_has_opsz.insert(font, has_opsz);
+    has_opsz
   }
 }
 
@@ -320,6 +361,7 @@ pub(crate) fn convert_doc(svg_doc: &svgtree::Document, opt: &Options) -> Result<
     clip_paths: Vec::new(),
     masks: Vec::new(),
     filters: Vec::new(),
+    fontdb: opt.fontdb.clone(),
   };
 
   if !svg.is_visible_element(opt) {
@@ -336,7 +378,7 @@ pub(crate) fn convert_doc(svg_doc: &svgtree::Document, opt: &Options) -> Result<
     opt,
   };
 
-  let mut cache = Cache::new();
+  let mut cache = Cache::new(opt.fontdb.clone());
 
   for node in svg_doc.descendants() {
     if let Some(tag) = node.tag_name() {
@@ -394,6 +436,10 @@ pub(crate) fn convert_doc(svg_doc: &svgtree::Document, opt: &Options) -> Result<
   tree.root.collect_masks(&mut tree.masks);
   tree.root.collect_filters(&mut tree.filters);
   tree.root.calculate_bounding_boxes();
+
+  // The fontdb might have been mutated and we want to apply these changes to
+  // the tree's fontdb.
+  tree.fontdb = cache.fontdb;
 
   if restore_viewbox {
     calculate_svg_bbox(&mut tree);
@@ -584,7 +630,9 @@ fn convert_element_impl(
     EId::Image => {
       super::image::convert(node, state, cache, parent);
     }
-    EId::Text => {}
+    EId::Text => {
+      super::text::convert(node, state, cache, parent);
+    }
     EId::Svg => {
       // Only the outermost `svg` reaches this point; nested `svg` elements are
       // handled earlier in `convert_element`. The root `svg` itself is
@@ -650,7 +698,9 @@ fn convert_clip_path_elements_impl(
         convert_path(node, path, state, cache, parent);
       }
     }
-    EId::Text => {}
+    EId::Text => {
+      super::text::convert(node, state, cache, parent);
+    }
     _ => {
       log::warn!("'{}' is no a valid 'clip-path' child.", tag_name);
     }

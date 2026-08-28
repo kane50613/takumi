@@ -1,7 +1,12 @@
 // Copyright 2018 the Resvg Authors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use crate::resvg::usvg::{ImageHrefResolver, ImageRendering, ShapeRendering, Size, TextRendering};
+use std::sync::Arc;
+
+use crate::resvg::usvg::text::fontdb;
+use crate::resvg::usvg::{
+  FontResolver, ImageHrefResolver, ImageRendering, ShapeRendering, Size, TextRendering,
+};
 
 /// Processing options.
 #[derive(Debug)]
@@ -76,6 +81,19 @@ pub struct Options<'a> {
   /// Default: see type's documentation for details
   pub image_href_resolver: ImageHrefResolver<'a>,
 
+  /// Specifies how fonts should be resolved and loaded.
+  pub font_resolver: FontResolver<'a>,
+
+  /// A database of fonts usable by text.
+  ///
+  /// This is a base database. If a custom `font_resolver` is specified,
+  /// additional fonts can be loaded during parsing. Those will be added to a
+  /// copy of this database. The full database containing all fonts referenced
+  /// in a `Tree` becomes available as [`Tree::fontdb`](crate::resvg::usvg::Tree::fontdb)
+  /// after parsing. If no fonts were loaded dynamically, that database will
+  /// be the same as this one.
+  pub fontdb: Arc<fontdb::Database>,
+
   /// A CSS stylesheet that should be injected into the SVG. Can be used to overwrite
   /// certain attributes.
   pub style_sheet: Option<String>,
@@ -107,6 +125,8 @@ impl Default for Options<'_> {
       image_rendering: ImageRendering::default(),
       default_size: Size::from_wh(100.0, 100.0).unwrap(),
       image_href_resolver: ImageHrefResolver::default(),
+      font_resolver: FontResolver::default(),
+      fontdb: Arc::new(fontdb::Database::default()),
       style_sheet: None,
       current_color: None,
       current_color_used: std::sync::atomic::AtomicBool::new(false),
