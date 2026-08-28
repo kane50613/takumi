@@ -1,3 +1,115 @@
+## @takumi-rs/core@2.13.0
+
+### Resolve `tw` utilities through CSS variables
+
+Utilities now read the CSS variables Tailwind compiles them to, falling back to the built-in value. Define tokens in `:root`. `--color-brand-500` makes `bg-brand-500` work, and spacing, fonts, shadows, animations and breakpoints follow the same rule.
+
+Gradients now match Tailwind on two counts. Stops alone no longer paint without `bg-linear-*`, `bg-radial` or `bg-conic`, and a missing `to` stop fades to `transparent`.
+
+### Let stylesheet rules win over `tw` utilities
+
+Utilities now sit in the last cascade layer, below unlayered CSS and above rules in a named `@layer`. Important reverses that order. An important utility beats unlayered important CSS but loses to one in a named layer. Inline important declarations stay on top. A template that relied on `tw` beating a matching rule needs a fix. Move that rule into a layer, or mark the utility `!`.
+
+### Honor `!important` in inline styles
+
+An inline `!important` declaration now outranks important rules and animations. Both the `style` object and an HTML `style` attribute read the marker.
+
+### Inherit `text-fit` from a parent
+
+`text-fit` now inherits. Descendant text uses the inherited value to calculate its scale.
+
+### Parse `@theme` blocks as `:root` rules
+
+A Tailwind v4 source stylesheet now works in `css` without compiling it first. `@theme` declarations land on `:root`, and `@keyframes` inside the block register. Modifiers like `reference` read the same way. The `prefix()` modifier is not supported.
+
+### Wrap `box-sizing: content-box` text inside its padding
+
+A box with `box-sizing: content-box` and horizontal padding wrapped its text
+against the border box, so the text took fewer lines than it needed and
+overflowed the bottom of the box.
+
+### Cut allocations in style property parsing
+
+Parsing a string-valued property copied the value before handing it to cssparser. Normalizing a kebab-case or camelCase property name allocated a second string just to trim leading underscores. String values now parse in place, and names normalize in one allocation.
+
+### Compose filters and transforms through custom properties
+
+Filter, translate, scale and grid-line utilities now compose through `--tw-*` variables like Tailwind's compiled CSS. Stacked filters follow Tailwind's fixed chain order instead of class order.
+
+### Size `auto` table columns by their content
+
+An all-`auto` table shared its free space evenly, so a one-word column took as
+much room as a paragraph. Each column now grows in proportion to its
+max-content width, the way Blink distributes it, and never below the widest
+word it has to hold. A table narrower than its content still approximates.
+
+### Escape control characters in serialized CSS strings
+
+A quoted string containing a newline left it unescaped. This produced invalid CSS. CSS strings now use cssparser's escaping.
+
+### Write a `css` entry as an object
+
+A `css` entry can be a rule, `{ selector, style, rules }`, or an animation, `{ keyframes, steps }`. Takumi checks the selector and every value before the entry reaches the parser, so a token that comes from application data cannot escape the rule it was written for. The `keyframes` option is deprecated and goes away in v3.
+
+### Turn on Preflight through `@import "tailwindcss"`
+
+The import line at the top of a Tailwind v4 stylesheet now works. Preflight replaces the UA preset. Margins and padding go, lists lose their markers, and `h1` through `h6` drop their font sizing. It also brings the universal border reset, link and table resets, block-level images, and `hidden` on any element. Author rules outrank Preflight, apart from `hidden`, which it marks important. Other `@import` targets stay unsupported.
+
+### Support the `disclosure-open` and `disclosure-closed` counter styles
+
+`list-style-type` now accepts `disclosure-open` and `disclosure-closed`, drawing the triangles CSS Counter Styles defines. `disclosure-closed` points the way the text runs, so it flips under `direction: rtl`. Font subsetting covers all three characters.
+
+### Report text runs for a node that holds text directly
+
+`measure` returned no text runs for `<div>word</div>`, the shape an HTML parse
+produces most often, while `<div><span>word</span></div>` reported them. The
+render was correct either way; only the measurement was missing its geometry.
+
+### Support legacy WebKit box alignment properties
+
+Map `-webkit-box-orient` to `flex-direction`, `-webkit-box-pack` to `justify-content`, and `-webkit-box-align` to `align-items`.
+
+### Stop a box narrower than its padding from panicking
+
+A box whose horizontal padding exceeds its own width left the text a negative
+width to lay out in, which tripped an assertion inside the text layouter and
+crashed the render. The width the text lays out against now stops at zero.
+
+### Write a group of `css` entries as an object
+
+A `css` entry can be `{ media, rules }`, `{ supports, rules }`, or `{ layer, rules }`. A layer without `rules` declares its order alone. Takumi reads each prelude with the grammar its rule takes, so it cannot close the rule and open another.
+
+### Expand `@apply` inside stylesheet rules
+
+`.card { @apply mt-4 bg-brand-500; }` now expands through the `tw` parser where it is written, `!` suffix included. Variants like `md:` are rejected. A static render has nothing for them to gate on.
+
+### Rename the `stylesheets` render option to `css`
+
+`css` takes inline CSS as one string or a list. The old `stylesheets` name still works everywhere and warns once on `takumi-js` and `takumi-pdf`.
+
+### Support legacy WebKit display values
+
+Map `-webkit-box` and `-webkit-flex` to `flex`, and `-webkit-inline-box` and `-webkit-inline-flex` to `inline-flex`.
+
+### Render `<text>` elements in SVG image sources
+
+SVG images with `<text>`, `<tspan>` and `textPath` now draw their text using
+the registered fonts instead of dropping it. Glyphs render from font outlines;
+color emoji glyphs inside SVG text are not supported.
+
+### Accept CSS-wide keywords on shorthand properties
+
+`margin: inherit`, `padding: initial` and `border: unset` were rejected. Only longhands took CSS-wide keywords. A shorthand now expands the keyword across the longhands it targets.
+
+### Reject trailing content in `style` values
+
+A `style` object accepted `width: "55px zzz"`, applied `55px`, and ignored the rest. It now rejects the whole value, the way a stylesheet already drops such a declaration. A substituted `var()` value follows the same rule.
+
+### Take an inline-block's baseline from the lines it actually laid out
+
+An inline-block with horizontal padding re-wrapped its content against the
+border box to find its baseline, so text beside it aligned with the wrong line.
+
 ## @takumi-rs/core@2.12.0
 
 ### Support the legacy `page-break-*` properties
