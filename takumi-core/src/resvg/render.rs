@@ -40,6 +40,9 @@ pub fn render_node(
     crate::resvg::usvg::Node::Image(image) => {
       crate::resvg::image::render(image, transform, pixmap);
     }
+    crate::resvg::usvg::Node::Text(text) => {
+      render_group(text.flattened(), ctx, transform, pixmap);
+    }
   }
 }
 

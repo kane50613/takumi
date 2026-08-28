@@ -246,6 +246,7 @@ fn flatten_node(node: &Node, raster_scale: f32, ops: &mut Vec<SvgOp>) {
     Node::Group(group) => flatten_group(group, raster_scale, ops),
     Node::Path(path) => flatten_path(path, raster_scale, ops),
     Node::Image(image) => flatten_image(image, raster_scale, ops),
+    Node::Text(text) => flatten_group(text.flattened(), raster_scale, ops),
   }
 }
 

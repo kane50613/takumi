@@ -436,6 +436,7 @@ pub(crate) fn render_tile(
             context.style.image_rendering,
             context.time_ms,
             context.current_color,
+            Some(context.fonts()),
           )? {
             RenderedImage::Sampled { source, .. } => Some(BackgroundTile::SampledBitmap {
               source,
@@ -452,6 +453,7 @@ pub(crate) fn render_tile(
             context.style.image_rendering,
             context.time_ms,
             context.current_color,
+            Some(context.fonts()),
           )? {
             RenderedImage::Rasterized(buffer) => {
               pixmap_from_buffer(&buffer).map(|pixmap| BackgroundTile::Pixmap(Arc::new(pixmap)))

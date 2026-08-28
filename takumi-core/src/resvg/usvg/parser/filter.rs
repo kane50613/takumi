@@ -847,6 +847,7 @@ fn convert_image_inner(
             Node::Group(g2) => g2.id.clear(),
             Node::Path(path) => path.id.clear(),
             Node::Image(image) => image.id.clear(),
+            Node::Text(text) => text.id.clear(),
           }
         }
       }

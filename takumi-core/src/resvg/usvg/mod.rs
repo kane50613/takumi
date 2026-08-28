@@ -52,7 +52,9 @@ and can focus just on the rendering part.
 #![warn(missing_copy_implementations)]
 
 mod parser;
+mod text;
 mod tree;
 
 pub use parser::*;
+pub use text::*;
 pub use tree::*;

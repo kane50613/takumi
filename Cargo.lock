@@ -1825,6 +1825,8 @@ dependencies = [
  "cssparser",
  "data-url",
  "gif",
+ "harfrust",
+ "icu_properties",
  "image",
  "image-webp",
  "imagesize",
@@ -1853,7 +1855,9 @@ dependencies = [
  "tiny-skia",
  "tiny-skia-path",
  "typed-builder",
+ "unicode-bidi",
  "wuff",
+ "xmlwriter",
  "xxhash-rust",
 ]
 
