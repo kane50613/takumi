@@ -171,10 +171,19 @@ pub fn run_fixture_test_with_options(options: RenderOptions<'_>, fixture_name: &
 /// Runs the repo's formatter over a generated fixture, so a test run leaves the
 /// tree the way `bun lint` wants it. A checkout without `node_modules` skips.
 fn format_generated_html(path: &str) {
-  let oxfmt = repo_base_path("node_modules/.bin/oxfmt");
-  if oxfmt.exists() {
-    let _ = Command::new(oxfmt).arg(path).status();
+  let binary = if cfg!(windows) { "oxfmt.exe" } else { "oxfmt" };
+  let oxfmt = repo_base_path(&format!("node_modules/.bin/{binary}"));
+
+  if !oxfmt.exists() {
+    return;
   }
+
+  let status = Command::new(&oxfmt)
+    .arg(path)
+    .status()
+    .unwrap_or_else(|error| panic!("{} should run: {error}", oxfmt.display()));
+
+  assert!(status.success(), "{} rejected {path}", oxfmt.display());
 }
 
 pub fn run_fixture_test_with_css(options: RenderOptions<'_>, css: &str, fixture_name: &str) {
