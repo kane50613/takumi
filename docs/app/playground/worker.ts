@@ -175,7 +175,8 @@ async function renderRequest(renderer: Renderer, id: number, code: string) {
   const { default: component, options } = evaluateCodeExports(code, renderReact);
   const element = renderReact.createElement(component as JSXElementConstructor<unknown>);
   const { node, css: extractedCss } = await fromJsx(element);
-  const optionCss = typeof options.css === "string" ? [options.css] : options.css;
+  const optionCss =
+    options.css === undefined || Array.isArray(options.css) ? options.css : [options.css];
   const effectiveCss = optionCss ?? extractedCss;
   // The preview compiles utilities itself, so it needs the tokens as a map
   // rather than as the `:root` rule the renderer reads.

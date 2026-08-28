@@ -196,12 +196,10 @@ const image = await render(<div tw="bg-brand-500 p-gutter">Hello</div>, {
   width: 1200,
   height: 630,
   // [!code highlight]
-  css: [
-    {
-      selector: ":root",
-      style: { "--color-brand-500": "#5b21b6", "--spacing-gutter": "2.5rem" },
-    },
-  ],
+  css: {
+    selector: ":root",
+    style: { "--color-brand-500": "#5b21b6", "--spacing-gutter": "2.5rem" },
+  },
 });
 ```
 

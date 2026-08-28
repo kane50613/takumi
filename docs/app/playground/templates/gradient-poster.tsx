@@ -25,14 +25,12 @@ export const options: PlaygroundOptions = {
   width: 1080,
   height: 1080,
   format: "png",
-  css: [
-    {
-      selector: ":root",
-      style: {
-        "--color-dawn": "#ff6b6b",
-        "--color-dusk": "#556270",
-        "--color-noon": "#ffd93d",
-      },
+  css: {
+    selector: ":root",
+    style: {
+      "--color-dawn": "#ff6b6b",
+      "--color-dusk": "#556270",
+      "--color-noon": "#ffd93d",
     },
-  ],
+  },
 };

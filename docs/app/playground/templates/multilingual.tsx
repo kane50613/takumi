@@ -48,17 +48,15 @@ export const options: PlaygroundOptions = {
   width: 1200,
   height: 630,
   format: "png",
-  css: [
-    {
-      selector: ":root",
-      style: {
-        "--color-canvas": "#0b1020",
-        "--color-subtle": "#94a3b8",
-        "--color-coral": "#fb7185",
-        "--color-honey": "#fbbf24",
-        "--color-mint": "#34d399",
-        "--color-sky": "#38bdf8",
-      },
+  css: {
+    selector: ":root",
+    style: {
+      "--color-canvas": "#0b1020",
+      "--color-subtle": "#94a3b8",
+      "--color-coral": "#fb7185",
+      "--color-honey": "#fbbf24",
+      "--color-mint": "#34d399",
+      "--color-sky": "#38bdf8",
     },
-  ],
+  },
 };
