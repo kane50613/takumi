@@ -13,10 +13,8 @@ export type PlaygroundPdfOptions = DistributiveOmit<
 
 declare global {
   /** A `css` entry: stylesheet text, or a rule written as an object. */
-  // oxlint-disable-next-line no-unused-vars
   type CssEntry = string | { selector: string; style: Record<string, string> };
 
-  // oxlint-disable-next-line no-unused-vars
   type PlaygroundOptions = {
     /**
      * @description width of the render viewport.
