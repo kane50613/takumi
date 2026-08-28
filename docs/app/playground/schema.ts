@@ -1,3 +1,4 @@
+import type { CssInput, Keyframes } from "takumi-js";
 import * as z from "zod/mini";
 import type { PdfInspection } from "./inspect-pdf";
 import type { PlaygroundPdfOptions } from "./options";
@@ -8,7 +9,10 @@ export const optionsSchema = z.object({
   quality: z.optional(z.int().check(z.positive(), z.minimum(1), z.maximum(100))),
   format: z.optional(z.enum(["png", "jpeg", "webp"])),
   devicePixelRatio: z.optional(z.number().check(z.positive(), z.minimum(0.1), z.maximum(10.0))),
-  css: z.optional(z.union([z.string(), z.array(z.string())])),
+  // The renderer validates a rule object; the playground only forwards it.
+  css: z.optional(z.custom<CssInput | CssInput[]>()),
+  /** @deprecated use a `{ keyframes, steps }` entry in `css`. Removed in v3. */
+  keyframes: z.optional(z.custom<Keyframes>()),
   animation: z.optional(
     z.object({
       durationMs: z.int().check(z.positive(), z.minimum(1)),

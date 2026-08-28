@@ -271,7 +271,7 @@ export type RenderOptions = (PagedOptions | ViewportOptions) &
     css?: CssInput | readonly CssInput[];
     /**
      * CSS stylesheets to apply before layout.
-     * @deprecated Use `css` instead.
+     * @deprecated Use `css` instead. Removed in v3.
      */
     stylesheets?: string[];
     /** CSS custom properties for `:root`; the `--` prefix is optional. */

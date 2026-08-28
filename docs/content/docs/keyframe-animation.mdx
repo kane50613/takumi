@@ -7,7 +7,7 @@ icon: Play
 Takumi animates scenes two ways:
 
 - `renderAnimation()` produces an animated `webp`, `apng`, or `gif` directly.
-- `render()` with `timeMs` renders one frame at a time, for structured `keyframes` or external encoders like ffmpeg.
+- `render()` with `timeMs` renders one frame at a time, for an animation written as an object or for external encoders like ffmpeg.
 
 Below is a keyframe animation rendered with ffmpeg + shiki for syntax highlighting:
 
@@ -19,14 +19,15 @@ Below is a keyframe animation rendered with ffmpeg + shiki for syntax highlighti
 
 ## How to define animations
 
-### Structured `keyframes` objects
+### An animation written as an object
 
-Use structured `keyframes` when you render a specific animation frame with `render()` and `timeMs`.
-`render()` is the only API that accepts the `keyframes` option; `renderAnimation()` does not.
+Write the animation as a `css` entry when the values come from application data.
+Takumi checks every value before the entry reaches the parser, so nothing has to
+be concatenated into a string.
 
-A `keyframes` object maps each animation name to a record of selector keys. Accepted selector keys:
+Each step takes an `offset`. Accepted offsets:
 
-| Key      | Position                          |
+| Offset   | Position                          |
 | -------- | --------------------------------- |
 | `from`   | start of the animation            |
 | `to`     | end of the animation              |
@@ -41,21 +42,19 @@ const output = await render(<div tw="animate-[move_1s_ease-in-out_infinite_alter
   height: 100,
   format: "png",
   timeMs: 500,
-  keyframes: {
-    move: {
-      from: {
-        transform: "translateX(0)",
-      },
-      "50%": {
-        transform: "translateX(60px)",
-      },
-      to: {
-        transform: "translateX(120px)",
-      },
-    },
+  css: {
+    keyframes: "move",
+    steps: [
+      { offset: "from", style: { transform: "translateX(0)" } },
+      { offset: "50%", style: { transform: "translateX(60px)" } },
+      { offset: "to", style: { transform: "translateX(120px)" } },
+    ],
   },
 });
 ```
+
+The `keyframes` render option takes the same animation as a nested record. It is
+deprecated and goes away in v3.
 
 ### CSS Stylesheets
 
@@ -138,20 +137,17 @@ The next two examples share this file.
 
 ```tsx twoslash title="scene.tsx"
 // @noErrors
-import type { Keyframes } from "takumi-js";
+import type { AnimationRule } from "takumi-js";
 
-export const keyframes: Keyframes = {
-  move: {
-    from: {
-      transform: "translateX(0)",
-    },
-    to: {
-      transform: "translateX(60px)",
-    },
-  },
+export const move: AnimationRule = {
+  keyframes: "move",
+  steps: [
+    { offset: "from", style: { transform: "translateX(0)" } },
+    { offset: "to", style: { transform: "translateX(60px)" } },
+  ],
 };
 
-// `keyframes` feeds render(); the inline <style> travels with the tree for renderAnimation().
+// `move` feeds render(); the inline <style> travels with the tree for renderAnimation().
 export function Scene() {
   return (
     <div tw="w-full h-full items-center justify-center">
@@ -179,20 +175,20 @@ Use `render()` when you want a single frame at a specific animation time.
 ```tsx twoslash title="render.tsx"
 // @noErrors
 import { render } from "takumi-js";
-import { Scene, keyframes } from "./scene";
+import { Scene, move } from "./scene";
 
 const output = await render(<Scene />, {
   width: 100,
   height: 100,
   format: "png",
-  keyframes,
+  css: move,
   timeMs: 500,
 });
 ```
 
 ### `renderAnimation()`
 
-`renderAnimation()` has no `keyframes` option. Animate the scene with stylesheet keyframes (an inline `<style>`, as in `Scene` above) or Tailwind's animation presets. `scenes` is an array so you can stitch several into one animation, but Takumi does not tween between them.
+`renderAnimation()` does not sample an animation for you. Animate the scene with stylesheet keyframes (an inline `<style>`, as in `Scene` above) or Tailwind's animation presets. `scenes` is an array so you can stitch several into one animation, but Takumi does not tween between them.
 
 ```tsx twoslash title="render.tsx"
 // @noErrors
@@ -218,7 +214,7 @@ Build the scene once, render each frame at a specific `timeMs`, and pipe the raw
 // @noErrors
 import { render } from "takumi-js";
 import { spawn } from "bun";
-import { Scene, keyframes } from "./scene";
+import { Scene, move } from "./scene";
 
 const fps = 30;
 const durationSeconds = 4;
@@ -253,7 +249,7 @@ for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
     width,
     height,
     format: "raw",
-    keyframes,
+    css: move,
     timeMs,
   });
 

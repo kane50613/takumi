@@ -214,20 +214,15 @@ export default function BrowserPreview({
     let cancelled = false;
     const declarations = theme ?? "";
 
-    // The unlayered `:root` sheet comes after everything the compiler built, the
-    // position the binding gives it, so a variable overriding a builtin token
-    // (`--color-red-500`) wins in the pane the way it wins in the render.
+    // `theme` only reaches the compiler: a custom token has to be declared for
+    // `bg-brand` to exist at all. Its value arrives with the rest of the CSS,
+    // which is unlayered and comes last, the position the binding gives it.
     void loadCompiler(declarations).then((compiler) => {
       if (cancelled) return;
 
       setPaint({
         type: "paint",
-        css: [
-          ROOT_CSS,
-          compiler.build(extractClasses(html)),
-          ...(cssContents ?? []),
-          ...(declarations ? [`:root{${declarations}}`] : []),
-        ].join("\n\n"),
+        css: [ROOT_CSS, compiler.build(extractClasses(html)), ...(cssContents ?? [])].join("\n\n"),
         html,
         mountStyle: `display:flex;width:100%;height:${height ? "100%" : "auto"};padding:${padding ?? "0"}`,
       });

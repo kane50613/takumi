@@ -1,4 +1,4 @@
-import type { CssInput } from "takumi-js";
+import type { CssInput, Keyframes } from "takumi-js";
 import type { RenderOptions } from "takumi-pdf";
 
 // `Omit` collapses a union, which would lose the paged/viewport split that makes
@@ -40,6 +40,11 @@ declare global {
      * @description CSS applied before rendering: stylesheet text, or a rule written as an object. A `{ selector: ":root", style: { "--color-brand": "#7c3aed" } }` entry makes `bg-brand` resolve.
      */
     css?: CssInput | CssInput[];
+    /**
+     * @deprecated use a `{ keyframes, steps }` entry in `css`. Removed in v3.
+     * @description structured keyframes registered alongside the CSS.
+     */
+    keyframes?: Keyframes;
     /**
      * @description timeline animation output. When present, the playground renders an animated image instead of a single frame.
      */
