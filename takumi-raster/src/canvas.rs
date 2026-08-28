@@ -549,7 +549,7 @@ mod tests {
 /// Rounds half away from zero in integer arithmetic. tiny-skia divides in
 /// `f64`, which lands a hair under the halfway point for some values and rounds
 /// them down; integers make the result identical on every target.
-fn demultiply_rgba_in_place(data: &mut [u8]) {
+pub(crate) fn demultiply_rgba_in_place(data: &mut [u8]) {
   for pixel in data.as_chunks_mut::<4>().0 {
     let alpha = pixel[3] as u32;
     if alpha == u8::MAX as u32 || alpha == 0 {
