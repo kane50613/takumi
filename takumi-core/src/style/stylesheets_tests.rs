@@ -100,6 +100,55 @@ fn test_deserialize_list_style_properties() -> Result<(), serde_json::Error> {
   Ok(())
 }
 
+/// Declaration counts on the two sides of `split_importance`, for a style
+/// object deserialized the way a node's `style` field is.
+fn importance_split(value: serde_json::Value) -> Result<(usize, usize), serde_json::Error> {
+  let (normal, important) = from_value::<Style>(value)?.declarations.split_importance();
+
+  Ok((normal.declarations.len(), important.declarations.len()))
+}
+
+#[test]
+fn inline_important_marks_the_declaration() -> Result<(), serde_json::Error> {
+  assert_eq!(importance_split(json!({ "width": "55px" }))?, (1, 0));
+  assert_eq!(
+    importance_split(json!({ "width": "55px !important" }))?,
+    (0, 1)
+  );
+  assert_eq!(
+    importance_split(json!({ "width": "55px !IMPORTANT" }))?,
+    (0, 1)
+  );
+  assert_eq!(
+    importance_split(json!({ "--brand": "red !important" }))?,
+    (0, 1)
+  );
+  assert_eq!(
+    importance_split(json!({ "color": "inherit !important" }))?,
+    (0, 1)
+  );
+  assert_eq!(
+    importance_split(json!({ "width": "var(--w) !important" }))?,
+    (0, 1)
+  );
+  Ok(())
+}
+
+/// The bang is a token, so one inside a string belongs to the value.
+#[test]
+fn inline_important_reads_as_a_token() -> Result<(), serde_json::Error> {
+  assert_eq!(
+    importance_split(json!({ "content": "\"!important\"" }))?,
+    (1, 0)
+  );
+  assert_eq!(
+    importance_split(json!({ "content": "\"a\" !important" }))?,
+    (0, 1)
+  );
+  assert_eq!(importance_split(json!({ "width": "55px !nope" }))?, (1, 0));
+  Ok(())
+}
+
 #[test]
 fn test_deserialize_skips_null_declarations() -> Result<(), serde_json::Error> {
   let style = from_value::<Style>(json!({ "color": null, "opacity": 0.3 }))?;

@@ -341,11 +341,8 @@ impl<'i> DeclarationParser<'i> for StyleDeclarationParser {
     _state: &ParserState,
   ) -> Result<Self::Declaration, ParseError<'i, Self::Error>> {
     let mut declarations = StyleDeclarationBlock::parse(&name, input).map_err(ParseError::into)?;
-    let important = input.try_parse(parse_important).is_ok();
-    if important {
-      for declaration in &declarations.declarations {
-        declarations.importance.insert_declaration(declaration);
-      }
+    if input.try_parse(parse_important).is_ok() {
+      declarations.mark_important();
     }
     Ok(declarations)
   }

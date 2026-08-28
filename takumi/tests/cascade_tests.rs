@@ -16,6 +16,14 @@ fn measure_with_css(node: Node, css: &str) -> MeasuredNode {
   .unwrap()
 }
 
+/// A block carrying the `style` object a JS caller would send, so the value
+/// takes the deserializing path rather than the typed builder.
+fn styled_block(class: &str, style: serde_json::Value) -> Node {
+  Node::container([])
+    .with_class_name(class)
+    .with_style(serde_json::from_value(style).expect("style should deserialize"))
+}
+
 fn block(class: &str) -> Node {
   Node::container([])
     .with_class_name(class)
@@ -186,6 +194,50 @@ fn preflight_inherits_the_parent_font_size_on_headings() {
   );
 
   assert_eq!(heading.children[0].children[0].width, 40.0);
+}
+
+/// css-cascade-5 sorts element-attached styles before cascade layers, so an
+/// important inline declaration outranks an important rule in any layer.
+#[test]
+fn important_inline_wins_over_important_rules() {
+  let style = serde_json::json!({ "display": "block", "width": "55px !important" });
+  let unlayered = measure_with_css(
+    Node::container([styled_block("box", style.clone())]),
+    ".box { width: 100px !important; }",
+  );
+  let layered = measure_with_css(
+    Node::container([styled_block("box", style)]),
+    "@layer a { .box { width: 100px !important; } }",
+  );
+
+  assert_eq!(unlayered.children[0].width, 55.0);
+  assert_eq!(layered.children[0].width, 55.0);
+}
+
+/// Important author declarations outrank animations, which outrank normal ones.
+#[test]
+fn important_inline_wins_over_an_animation() {
+  let css = r#"
+    @keyframes grow { from { width: 300px; } to { width: 300px; } }
+    .box { animation: grow 10s; }
+  "#;
+  let normal = measure_with_css(
+    Node::container([styled_block(
+      "box",
+      serde_json::json!({ "display": "block", "width": "55px" }),
+    )]),
+    css,
+  );
+  let important = measure_with_css(
+    Node::container([styled_block(
+      "box",
+      serde_json::json!({ "display": "block", "width": "55px !important" }),
+    )]),
+    css,
+  );
+
+  assert_eq!(normal.children[0].width, 300.0);
+  assert_eq!(important.children[0].width, 55.0);
 }
 
 /// Preflight's `[hidden]` rule is important, so it survives a `tw` utility

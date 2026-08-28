@@ -645,11 +645,13 @@ macro_rules! define_style {
                   continue;
                 }
 
+                let (css_input, important) = split_important(css_input);
+
                 if matches!(property, PropertyId::Custom) {
                   if !matches!(css_input, CssInput::Unexpected(_)) {
                     style.declarations.push(
                       StyleDeclaration::CustomProperty(key.into_owned(), css_input.into_string()),
-                      false,
+                      important,
                     );
                   }
                 } else {
@@ -659,7 +661,7 @@ macro_rules! define_style {
                       property
                         .parse_css_input_declarations(css_input)
                         .map_err(|error| error.into_serde_error(&key, property))?,
-                      false,
+                      important,
                     );
                 }
               }
@@ -1777,6 +1779,14 @@ impl StyleDeclarationBlock {
   fn append_parsed_declarations(&mut self, declarations: ParsedDeclarations, important: bool) {
     for declaration in declarations {
       self.push(declaration, important);
+    }
+  }
+
+  /// Marks every declaration in the block `!important`.
+  pub(crate) fn mark_important(&mut self) {
+    for (declaration, important) in self.declarations.iter().zip(&mut self.important) {
+      self.importance.insert_declaration(declaration);
+      *important = true;
     }
   }
 
