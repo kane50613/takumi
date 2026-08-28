@@ -1476,7 +1476,11 @@ fn shape_text_with_font(
       }
     }
 
-    let bidi_info = unicode_bidi::BidiInfo::new(text, Some(unicode_bidi::Level::ltr()));
+    let bidi_info = unicode_bidi::BidiInfo::new_with_data_source(
+      &super::bidi::IcuBidiData,
+      text,
+      Some(unicode_bidi::Level::ltr()),
+    );
     let paragraph = &bidi_info.paragraphs[0];
     let line = paragraph.range.clone();
 

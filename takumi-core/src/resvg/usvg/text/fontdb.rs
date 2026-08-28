@@ -103,7 +103,7 @@ impl Database {
     data: Blob<u8>,
     index: u32,
   ) -> ID {
-    let key = family.to_lowercase();
+    let key = family.to_ascii_lowercase();
     let existing = self
       .faces
       .iter()
@@ -135,7 +135,7 @@ impl Database {
   }
 
   pub(crate) fn register_generic(&mut self, family: Family<'_>, name: &str) {
-    let Some(bucket) = self.by_family.get(&name.to_lowercase()) else {
+    let Some(bucket) = self.by_family.get(&name.to_ascii_lowercase()) else {
       return;
     };
     let slot = generic_slot(family);
@@ -151,7 +151,7 @@ impl Database {
   pub fn query(&self, query: &Query) -> Option<ID> {
     for family in query.families {
       let candidates = match family {
-        Family::Name(name) => self.by_family.get(&name.to_lowercase()),
+        Family::Name(name) => self.by_family.get(&name.to_ascii_lowercase()),
         generic => Some(&self.generic[generic_slot(*generic)]),
       };
 

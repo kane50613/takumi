@@ -11,6 +11,7 @@ use skrifa::Tag;
 use skrifa::outline::{DrawSettings, OutlinePen};
 use tiny_skia_path::{NonZeroRect, Transform};
 
+use crate::resources::glyph::ErasedPen;
 use crate::resvg::usvg::text::OPSZ;
 use crate::resvg::usvg::*;
 
@@ -196,7 +197,10 @@ impl DatabaseExt for Database {
           .map(|v| (Tag::from_be_bytes(v.tag), v.value)),
       );
       outline
-        .draw(DrawSettings::unhinted(size, &location), &mut builder)
+        .draw(
+          DrawSettings::unhinted(size, &location),
+          &mut ErasedPen(&mut builder),
+        )
         .ok()?;
 
       builder.builder.finish()

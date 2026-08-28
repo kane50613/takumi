@@ -94,9 +94,7 @@ workspace = true
 optional = true
 
 [dependencies.icu_properties]
-version = "2.1.2"
-default-features = false
-features = ["compiled_data"]
+workspace = true
 optional = true
 
 [dependencies.unicode-bidi]
@@ -129,6 +127,10 @@ woff = ["dep:wuff", "wuff/z"]
 
 [dev-dependencies]
 serde_json.workspace = true
+
+[dev-dependencies.unicode-bidi]
+workspace = true
+features = ["hardcoded-data"]
 
 [lints]
 workspace = true
