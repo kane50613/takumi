@@ -214,6 +214,24 @@ fn important_inline_wins_over_important_rules() {
   assert_eq!(layered.children[0].width, 55.0);
 }
 
+/// An HTML `style` attribute reaches the cascade through `parse_loosy`, and a
+/// `var()` value defers rather than parsing, so the marker has to survive the
+/// scan that spots the function.
+#[test]
+fn important_wins_from_a_deferred_inline_value() {
+  let styled = Node::container([])
+    .with_class_name("box")
+    .with_style(Style::from(StyleDeclarationBlock::parse_loosy(
+      "display: block; width: var(--w) !important",
+    )));
+  let result = measure_with_css(
+    Node::container([styled]),
+    ":root { --w: 55px; } .box { width: 100px !important; }",
+  );
+
+  assert_eq!(result.children[0].width, 55.0);
+}
+
 /// Important author declarations outrank animations, which outrank normal ones.
 #[test]
 fn important_inline_wins_over_an_animation() {

@@ -9,7 +9,10 @@ use super::{
 };
 use crate::{
   geometry::Size,
-  style::{CalcArena, ComputedStyle, SizingContext, Style, StyleDeclaration, properties::*},
+  style::{
+    CalcArena, ComputedStyle, DeferredDeclaration, SizingContext, Style, StyleDeclaration,
+    properties::*,
+  },
   viewport::Viewport,
 };
 
@@ -147,6 +150,25 @@ fn inline_important_reads_as_a_token() -> Result<(), serde_json::Error> {
   );
   assert_eq!(importance_split(json!({ "width": "55px !nope" }))?, (1, 0));
   Ok(())
+}
+
+/// A `style` attribute reaches the engine through `parse_loosy`, and a `var()`
+/// value defers instead of parsing, so the marker has to survive the scan that
+/// spots the function.
+#[test]
+fn a_deferred_value_keeps_its_important_marker() {
+  let block = StyleDeclarationBlock::parse_loosy("width: var(--w) !important");
+  assert!(!block.importance.is_empty());
+  assert_eq!(
+    block.declarations.as_slice(),
+    [StyleDeclaration::Deferred(DeferredDeclaration {
+      property: PropertyId::Longhand(LonghandId::Width),
+      specified_value: "var(--w)".to_owned(),
+    })],
+  );
+
+  let normal = StyleDeclarationBlock::parse_loosy("width: var(--w)");
+  assert!(normal.importance.is_empty());
 }
 
 #[test]

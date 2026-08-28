@@ -585,7 +585,7 @@ macro_rules! define_style {
         // would commit before deferral. See #712.
         if !matches!(property, PropertyId::Ignored | PropertyId::Custom) {
           let state = input.state();
-          while input.next_including_whitespace_and_comments().is_ok() {}
+          skip_to_important(input);
           let specified_value = input.slice_from(start).trim();
           if contains_var_function(specified_value) {
             return Ok(StyleDeclarationBlock::from_parsed_declarations(

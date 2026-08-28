@@ -304,6 +304,16 @@ pub(crate) fn contains_var_function(specified_value: &str) -> bool {
   contains_in_parser(&mut parser)
 }
 
+/// Advances to the `!` a trailing `!important` starts with, leaving the marker
+/// itself unread.
+pub(crate) fn skip_to_important(parser: &mut Parser<'_, '_>) {
+  let _ = parser.parse_until_before(Delimiter::Bang, |parser| {
+    while parser.next_including_whitespace_and_comments().is_ok() {}
+
+    Ok::<_, ParseError<'_, ()>>(())
+  });
+}
+
 /// The byte index where a trailing `!important` starts, if the value ends with one.
 fn important_start(value: &str) -> Option<usize> {
   if !value.contains('!') {
@@ -313,15 +323,10 @@ fn important_start(value: &str) -> Option<usize> {
   let mut parser_input = ParserInput::new(value);
   let mut parser = Parser::new(&mut parser_input);
 
-  let end = parser
-    .parse_until_before(Delimiter::Bang, |input| {
-      while input.next().is_ok() {}
+  skip_to_important(&mut parser);
+  let end = parser.position().byte_index();
 
-      Ok::<_, ParseError<'_, ()>>(input.position())
-    })
-    .ok()?;
-
-  (parse_important(&mut parser).is_ok() && parser.is_exhausted()).then(|| end.byte_index())
+  (parse_important(&mut parser).is_ok() && parser.is_exhausted()).then_some(end)
 }
 
 /// Splits a trailing `!important` off a declaration value.
