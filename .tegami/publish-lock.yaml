@@ -1,92 +1,158 @@
 core:changelogs:
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n---\n\n### Support the legacy `page-break-*` properties\n\nPrint stylesheets written for `page-break-before`, `page-break-after`, and `page-break-inside` had those declarations dropped. They now drive the same pagination as `break-before`, `break-after`, and `break-inside`, and the forced-break keywords `always`, `left`, and `right` are accepted alongside `page`.\n"
-    filename: page-break-aliases.md
+  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-js:\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n### Rename the `stylesheets` render option to `css`\n\n`css` takes inline CSS as one string or a list. The old `stylesheets` name still works everywhere and warns once on `takumi-js` and `takumi-pdf`.\n"
+    filename: css-option.md
     v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n---\n\n### Support `table-layout: fixed` and `border-spacing`\n\n`border-spacing` was a hardcoded 2px gap with no way to change it, and `table-layout` did nothing. Column widths now come from the first row under `table-layout: fixed` and the rest of the width is shared evenly, while `border-spacing` sets both the gap between cells and the inset from the table's own edges. On a three-column table measured against headless Chrome, `auto` columns land 67px to 136px away and `fixed` columns land within 2px.\n\n`border-spacing` starts at 0 as CSS defines it, and the HTML and JSX element presets give `<table>` the 2px browsers apply, so a `display: table` box no longer gets a gap it never asked for.\n"
-    filename: table-layout-fixed.md
+  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n### Parse `@theme` blocks as `:root` rules\n\nA Tailwind v4 source stylesheet now works in `css` without compiling it first. `@theme` declarations land on `:root`, and `@keyframes` inside the block register. Modifiers like `reference` read the same way. The `prefix()` modifier is not supported.\n"
+    filename: theme-at-rule.md
     v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n---\n\n### Support `border-collapse: collapse`\n\nNeighbouring cells each painted their own border either side of the `border-spacing` gap. A collapsing table now resolves every shared line once: the wider border wins, `hidden` clears the line, and a row's borders reach its cells the way its background already did.\n"
-    filename: border-collapse.md
+  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n### Turn on Preflight through `@import \"tailwindcss\"`\n\nThe import line at the top of a Tailwind v4 stylesheet now works. Preflight replaces the UA preset. Margins and padding go, lists lose their markers, and `h1` through `h6` drop their font sizing. It also brings the universal border reset, link and table resets, block-level images, and `hidden` on any element. Author rules outrank Preflight, apart from `hidden`, which it marks important. Other `@import` targets stay unsupported.\n"
+    filename: tailwind-import-preflight.md
+    v: 0.0.0
+  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n### Compose filters and transforms through custom properties\n\nFilter, translate, scale and grid-line utilities now compose through `--tw-*` variables like Tailwind's compiled CSS. Stacked filters follow Tailwind's fixed chain order instead of class order.\n"
+    filename: tw-kill-builder.md
+    v: 0.0.0
+  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n### Resolve `tw` utilities through CSS variables\n\nUtilities now read the CSS variables Tailwind compiles them to, falling back to the built-in value. Define tokens in `:root` or through the `cssVariables` option. `--color-brand-500` makes `bg-brand-500` work, and spacing, fonts, shadows, animations and breakpoints follow the same rule.\n\nGradients now match Tailwind on two counts. Stops alone no longer paint without `bg-linear-*`, `bg-radial` or `bg-conic`, and a missing `to` stop fades to `transparent`.\n\n### Let stylesheet rules win over `tw` utilities\n\nUtilities now sit in the last cascade layer, below unlayered CSS and above rules in a named `@layer`. Important reverses that order. An important utility beats unlayered important CSS but loses to one in a named layer. Inline important declarations stay on top. A template that relied on `tw` beating a matching rule needs a fix. Move that rule into a layer, or mark the utility `!`.\n"
+    filename: tw-css-variables.md
+    v: 0.0.0
+  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n### Expand `@apply` inside stylesheet rules\n\n`.card { @apply mt-4 bg-brand-500; }` now expands through the `tw` parser where it is written, `!` suffix included. Variants like `md:` are rejected. A static render has nothing for them to gate on.\n"
+    filename: tw-apply-at-rule.md
+    v: 0.0.0
+  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Accept CSS-wide keywords on shorthand properties\n\n`margin: inherit`, `padding: initial` and `border: unset` were rejected. Only longhands took CSS-wide keywords. A shorthand now expands the keyword across the longhands it targets.\n"
+    filename: shorthand-css-wide-keywords.md
+    v: 0.0.0
+  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/helpers\":\n    type: minor\n---\n\n### Support the `disclosure-open` and `disclosure-closed` counter styles\n\n`list-style-type` now accepts `disclosure-open` and `disclosure-closed`, drawing the triangles CSS Counter Styles defines. `disclosure-closed` points the way the text runs, so it flips under `direction: rtl`. Font subsetting covers all three characters.\n"
+    filename: disclosure-counter-styles.md
+    v: 0.0.0
+  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Escape control characters in serialized CSS strings\n\nA quoted string containing a newline left it unescaped. This produced invalid CSS. CSS strings now use cssparser's escaping.\n"
+    filename: css-string-escaping.md
+    v: 0.0.0
+  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n---\n\n### Support legacy WebKit display values\n\nMap `-webkit-box` and `-webkit-flex` to `flex`, and `-webkit-inline-box` and `-webkit-inline-flex` to `inline-flex`.\n"
+    filename: legacy-webkit-display.md
+    v: 0.0.0
+  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Inherit `text-fit` from a parent\n\n`text-fit` now inherits. Descendant text uses the inherited value to calculate its scale.\n"
+    filename: text-fit-inheritance.md
+    v: 0.0.0
+  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Cut allocations in style property parsing\n\nParsing a string-valued property copied the value before handing it to cssparser. Normalizing a kebab-case or camelCase property name allocated a second string just to trim leading underscores. String values now parse in place, and names normalize in one allocation.\n"
+    filename: style-parse-allocations.md
+    v: 0.0.0
+  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n---\n\n### Support legacy WebKit box alignment properties\n\nMap `-webkit-box-orient` to `flex-direction`, `-webkit-box-pack` to `justify-content`, and `-webkit-box-align` to `align-items`.\n"
+    filename: legacy-box-properties.md
+    v: 0.0.0
+  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n### Enforce fetch policies on shared image cache entries\n\nA shared `fetchCache` hit returned cached bytes without running the calling render's `allowUrl` or `maxBytes`. Cache hits now recheck both. `allowUrl` runs against the entry URL only, not the redirect hops the original fetch followed.\n"
+    filename: fetch-cache-policy.md
+    v: 0.0.0
+  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: minor\n---\n\n### Return `css` from `fromJsx` and `fromHtml`\n\nReading the old `stylesheets` field returns the same array and warns once. It no longer appears in `Object.keys` or a spread of the result.\n"
+    filename: css-result-field.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - id: npm:takumi-js
+  - id: npm:@takumi-rs/image-response
     updated: true
-  - id: npm:@takumi-rs/helpers
+  - changelogIds:
+      - css-option.md
+      - theme-at-rule.md
+      - tailwind-import-preflight.md
+      - tw-kill-builder.md
+      - tw-css-variables.md
+      - tw-apply-at-rule.md
+    id: npm:@takumi-rs/wasm
     updated: true
   - id: npm:docs
     updated: false
-  - id: npm:@takumi-rs/wasm
-    updated: true
-  - id: npm:takumi-pdf
-    updated: true
   - changelogIds:
-      - page-break-aliases.md
-      - table-layout-fixed.md
-      - border-collapse.md
+      - css-option.md
+      - shorthand-css-wide-keywords.md
+      - theme-at-rule.md
+      - tailwind-import-preflight.md
+      - tw-kill-builder.md
+      - disclosure-counter-styles.md
+      - css-string-escaping.md
+      - legacy-webkit-display.md
+      - text-fit-inheritance.md
+      - style-parse-allocations.md
+      - legacy-box-properties.md
+      - tw-css-variables.md
+      - tw-apply-at-rule.md
     id: npm:@takumi-rs/core
     updated: true
-  - id: npm:@takumi-rs/image-response
+  - changelogIds:
+      - css-option.md
+    id: npm:takumi-js
+    updated: true
+  - changelogIds:
+      - css-option.md
+      - theme-at-rule.md
+      - tailwind-import-preflight.md
+      - tw-kill-builder.md
+      - tw-css-variables.md
+      - tw-apply-at-rule.md
+    id: npm:takumi-pdf
+    updated: true
+  - changelogIds:
+      - fetch-cache-policy.md
+      - disclosure-counter-styles.md
+      - css-result-field.md
+    id: npm:@takumi-rs/helpers
     updated: true
   - id: npm:pdf-bench
     updated: false
-  - id: npm:ffmpeg-keyframe-animation
-    updated: false
-  - id: npm:example-e-invoice
-    updated: false
   - id: npm:waku-ssr
-    updated: false
-  - id: npm:example-nextjs
-    updated: false
-  - id: npm:svelte
-    updated: false
-  - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:example-twitter-images
-    updated: false
-  - id: npm:example-generate-invoice
-    updated: false
-  - id: npm:example-satori-html
-    updated: false
-  - id: npm:example-liquid-glass
     updated: false
   - id: npm:example-tanstack-start
     updated: false
+  - id: npm:example-twitter-images
+    updated: false
+  - id: npm:svelte
+    updated: false
+  - id: npm:example-liquid-glass
+    updated: false
+  - id: npm:example-generate-invoice
+    updated: false
+  - id: npm:example-nextjs
+    updated: false
+  - id: npm:ffmpeg-keyframe-animation
+    updated: false
   - id: npm:example-css-library-integration
+    updated: false
+  - id: npm:example-cloudflare-workers
+    updated: false
+  - id: npm:example-satori-html
     updated: false
   - id: npm:ffplay
     updated: false
+  - id: npm:example-e-invoice
+    updated: false
+  - id: cargo:takumi-core
+    updated: false
+  - id: cargo:takumi-raster
+    updated: false
+  - id: cargo:takumi
+    updated: true
   - id: cargo:takumi-html
     updated: false
   - id: cargo:takumi-svg
     updated: false
-  - id: cargo:takumi-raster
-    updated: false
-  - id: cargo:takumi-core
-    updated: false
-  - id: cargo:takumi
-    updated: true
 npm:packages:
   - id: npm:takumi
-  - id: npm:takumi-js
-  - id: npm:@takumi-rs/helpers
-  - id: npm:docs
-  - id: npm:@takumi-rs/wasm
-  - id: npm:takumi-pdf
-  - id: npm:@takumi-rs/core
   - id: npm:@takumi-rs/image-response
+  - id: npm:@takumi-rs/wasm
+  - id: npm:docs
+  - id: npm:@takumi-rs/core
+  - id: npm:takumi-js
+  - id: npm:takumi-pdf
+  - id: npm:@takumi-rs/helpers
   - id: npm:pdf-bench
-  - id: npm:ffmpeg-keyframe-animation
-  - id: npm:example-e-invoice
   - id: npm:waku-ssr
-  - id: npm:example-nextjs
-  - id: npm:svelte
-  - id: npm:example-cloudflare-workers
-  - id: npm:example-twitter-images
-  - id: npm:example-generate-invoice
-  - id: npm:example-satori-html
-  - id: npm:example-liquid-glass
   - id: npm:example-tanstack-start
+  - id: npm:example-twitter-images
+  - id: npm:svelte
+  - id: npm:example-liquid-glass
+  - id: npm:example-generate-invoice
+  - id: npm:example-nextjs
+  - id: npm:ffmpeg-keyframe-animation
   - id: npm:example-css-library-integration
+  - id: npm:example-cloudflare-workers
+  - id: npm:example-satori-html
   - id: npm:ffplay
+  - id: npm:example-e-invoice
