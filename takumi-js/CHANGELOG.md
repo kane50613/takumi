@@ -1,9 +1,3 @@
-## takumi-js@2.13.0
-
-### Rename the `stylesheets` render option to `css`
-
-`css` takes inline CSS as one string or a list. The old `stylesheets` name still works everywhere and warns once on `takumi-js` and `takumi-pdf`.
-
 ## takumi-js@2.9.0
 
 ### Load the wasm binary in a browser bundle
