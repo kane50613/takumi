@@ -144,16 +144,6 @@ impl FontResolver<'_> {
         return id;
       }
 
-      log::warn!(
-        "No match for '{}' font-family.",
-        font
-          .families
-          .iter()
-          .map(ToString::to_string)
-          .collect::<Vec<_>>()
-          .join(", ")
-      );
-
       // Unlike upstream, never drop text over an unmatched family (the parser
       // default is `Times New Roman`, which a takumi renderer rarely has):
       // fall back to the first registered face, like a browser's default font.
@@ -189,7 +179,6 @@ impl FontResolver<'_> {
           continue;
         }
 
-        log::warn!("Fallback from {} to {}.", base_face.family, face.family);
         return Some(face.id);
       }
 
