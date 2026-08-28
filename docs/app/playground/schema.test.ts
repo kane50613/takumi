@@ -29,6 +29,18 @@ test("rejects a value that is not an entry", () => {
   expect(accepts({ style: { color: "red" } })).toBe(false);
 });
 
+/// Only a layer has a statement form; a media or support group without its
+/// entries is a typo, not an empty block.
+/// A style rule nests style rules alone; text belongs in a group or at the top.
+test("rejects text nested in a style rule", () => {
+  expect(accepts({ selector: ".a", rules: ["b{}"] })).toBe(false);
+});
+
+test("rejects a media or supports group without rules", () => {
+  expect(accepts({ media: "print" })).toBe(false);
+  expect(accepts({ supports: "(display: grid)" })).toBe(false);
+});
+
 /// A stripped key would leave a rule the renderer never sees, so a typo has to
 /// fail here rather than render as an empty rule.
 test("rejects an unknown key", () => {

@@ -114,7 +114,6 @@ pub struct MediaRule {
   /// The query the group is gated by.
   pub media: String,
   /// The entries inside the group.
-  #[serde(default)]
   rules: Vec<CssSource>,
 }
 
@@ -125,7 +124,6 @@ pub struct SupportsRule {
   /// The condition the group is gated by.
   pub supports: String,
   /// The entries inside the group.
-  #[serde(default)]
   rules: Vec<CssSource>,
 }
 
@@ -578,6 +576,32 @@ mod tests {
       css(json!({ "layer": "a{}.b" })),
       Err(CssSourceError::Prelude { rule: "@layer", .. })
     ));
+  }
+
+  /// A layer name is dot-separated identifiers alone: no quoted strings, and no
+  /// reserved keywords, which would write CSS that means something else.
+  #[test]
+  fn a_layer_name_takes_identifiers_alone() {
+    assert!(matches!(
+      css(json!({ "layer": "\"base\"" })),
+      Err(CssSourceError::Prelude { rule: "@layer", .. })
+    ));
+    assert!(matches!(
+      css(json!({ "layer": "revert-layer" })),
+      Err(CssSourceError::Prelude { rule: "@layer", .. })
+    ));
+    assert!(matches!(
+      css(json!({ "layer": "base.default" })),
+      Err(CssSourceError::Prelude { rule: "@layer", .. })
+    ));
+  }
+
+  /// Only a layer has a statement form; a media or support group without its
+  /// entries is a typo, not an empty block.
+  #[test]
+  fn a_media_or_supports_group_needs_its_rules() {
+    assert!(from_value::<CssSource>(json!({ "media": "print" })).is_err());
+    assert!(from_value::<CssSource>(json!({ "supports": "(display: grid)" })).is_err());
   }
 
   #[test]

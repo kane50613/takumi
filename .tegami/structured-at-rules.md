@@ -1,5 +1,7 @@
 ---
 packages:
+  "@takumi-rs/helpers":
+    type: minor
   "@takumi-rs/core":
     type: minor
   "@takumi-rs/wasm":
