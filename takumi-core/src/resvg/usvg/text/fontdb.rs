@@ -83,6 +83,10 @@ impl fmt::Debug for FaceInfo {
 
 /// Face store consulted while converting `<text>` elements, mirroring the
 /// `fontdb::Database` surface the vendored layout code uses.
+///
+/// Family names fold case ASCII-only (a deliberate size tradeoff over the
+/// Unicode caseless matching CSS specifies): a non-ASCII name that differs
+/// from its registration only in case misses and falls to the fallback face.
 #[derive(Debug, Default)]
 pub struct Database {
   faces: Vec<FaceInfo>,

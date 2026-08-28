@@ -84,3 +84,21 @@ fn namespace_prefixed_text_is_rendered() {
 
   assert!(has_ink(&raster(&source, &fonts)));
 }
+
+#[test]
+fn empty_and_paragraph_separator_text_do_not_panic() {
+  let cache = ResourceCache::default();
+  let fonts = fonts_with("assets/fonts/geist/Geist[wght].woff2");
+
+  for svg in [
+    r#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><text></text></svg>"#,
+    r#"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="40"><text x="0" y="20" font-size="16">A&#x2029;B</text></svg>"#,
+    r#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><text> </text></svg>"#,
+  ] {
+    let source = cache
+      .get_or_decode(svg.as_bytes(), ImageCacheMode::Auto)
+      .unwrap();
+
+    raster(&source, &fonts);
+  }
+}
