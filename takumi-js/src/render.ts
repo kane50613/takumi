@@ -1,7 +1,12 @@
 import type * as napi from "@takumi-rs/core";
 import type * as wasm from "@takumi-rs/wasm";
 import { extractEmojis, type EmojiType } from "@takumi-rs/helpers/emoji";
-import { prepareImages, type FetchOptions, type ImageFetchCache } from "@takumi-rs/helpers";
+import {
+  prepareImages,
+  type CssInput,
+  type FetchOptions,
+  type ImageFetchCache,
+} from "@takumi-rs/helpers";
 import { fromJsx, type FromJsxOptions } from "@takumi-rs/helpers/jsx";
 import { getImports } from "./import";
 import type { ReactNode } from "react";
@@ -64,10 +69,10 @@ type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K>
 /** The wrapper-level CSS inputs, replacing the backends' `stylesheets` field. */
 type CssOptions = {
   /** CSS to apply before rendering, one string or a list cascading in order. */
-  css?: string | readonly string[];
+  css?: CssInput | readonly CssInput[];
   /**
    * CSS stylesheets to apply before rendering.
-   * @deprecated Use `css` instead.
+   * @deprecated Use `css` instead. Removed in v3.
    */
   stylesheets?: string[];
 };
@@ -107,7 +112,7 @@ export type RenderAnimationOptions = Managed<
 /** The subset of options the shared pipeline reads, across every entry point. */
 type PipelineOptions = Partial<SharedRenderExtras> &
   ManagedRendererOptions & {
-    css?: string | readonly string[];
+    css?: CssInput | readonly CssInput[];
     stylesheets?: string[];
   };
 
@@ -194,7 +199,12 @@ function warnStylesheetsDeprecated(): void {
   console.warn("takumi: the `stylesheets` option is deprecated, use `css` instead.");
 }
 
-function mergeCss(options: PipelineOptions | undefined, extra: string[]): string[] {
+/** Narrows the `css` option, which takes one entry or a list of them. */
+function isCssList(css: CssInput | readonly CssInput[]): css is readonly CssInput[] {
+  return Array.isArray(css);
+}
+
+function mergeCss(options: PipelineOptions | undefined, extra: string[]): CssInput[] {
   if (options?.css !== undefined && options?.stylesheets !== undefined) {
     throw new Error("pass either `css` or `stylesheets`, not both");
   }
@@ -205,9 +215,9 @@ function mergeCss(options: PipelineOptions | undefined, extra: string[]): string
 
   const own =
     options?.css !== undefined
-      ? typeof options.css === "string"
-        ? [options.css]
-        : options.css
+      ? isCssList(options.css)
+        ? options.css
+        : [options.css]
       : (options?.stylesheets ?? []);
 
   return [...own, ...extra];

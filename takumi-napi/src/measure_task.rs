@@ -13,7 +13,7 @@ use crate::{
   JsBytes, map_error,
   renderer::{
     ImageCacheMode, MeasuredNode, RenderOptions, RendererState, collect_images, decode_images,
-    deserialize_keyframes, device_pixel_ratio, parse_lang,
+    deserialize_keyframes, device_pixel_ratio, parse_lang, resolve_css,
   },
 };
 
@@ -37,10 +37,10 @@ impl MeasureTask {
   ) -> Result<Self> {
     let stylesheet = stylesheet(
       &state.resource_cache,
-      options.css.or(options.stylesheets),
+      resolve_css(options.css, options.stylesheets)?,
       deserialize_keyframes(options.keyframes)?,
-      options.css_variables,
-    );
+    )
+    .map_err(map_error)?;
 
     Ok(MeasureTask {
       node: Some(node),

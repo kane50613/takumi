@@ -8,6 +8,7 @@ use std::{
 use base64::{Engine, prelude::BASE64_STANDARD};
 use serde_wasm_bindgen::{from_value, to_value};
 use takumi_bindings_common::{build_font_resource, default_fonts, stylesheet};
+use takumi_core::style::CssSource;
 use takumi_core::{
   Fonts,
   layout::node::Node,
@@ -80,10 +81,10 @@ fn raster_options<'fonts>(
 ) -> Result<takumi_raster::RenderOptions<'fonts>, js_sys::Error> {
   let stylesheet = stylesheet(
     resource_cache,
-    options.css.or(options.stylesheets),
+    resolve_css(options.css, options.stylesheets),
     options.keyframes.unwrap_or_default(),
-    options.css_variables,
-  );
+  )
+  .map_err(map_error)?;
   let lang = parse_lang(options.lang)?;
 
   Ok(
@@ -236,10 +237,10 @@ impl Renderer {
     let images = self.images_map(options.images.as_deref())?;
     let stylesheet = stylesheet(
       &self.resource_cache,
-      options.css.or(options.stylesheets),
+      resolve_css(options.css, options.stylesheets),
       options.keyframes.unwrap_or_default(),
-      options.css_variables,
-    );
+    )
+    .map_err(map_error)?;
     let state = self.read_state()?;
 
     let lang = parse_lang(options.lang)?;
@@ -331,7 +332,6 @@ impl Renderer {
       css,
       stylesheets,
       keyframes,
-      css_variables,
       device_pixel_ratio,
       fps,
       font_families,
@@ -355,10 +355,10 @@ impl Renderer {
     let draw_debug_border = draw_debug_border.unwrap_or_default();
     let stylesheet = stylesheet(
       &self.resource_cache,
-      css.or(stylesheets),
+      resolve_css(css, stylesheets),
       keyframes.unwrap_or_default(),
-      css_variables,
-    );
+    )
+    .map_err(map_error)?;
     let state = self.read_state()?;
     let scene_options = scenes
       .into_iter()
@@ -393,4 +393,13 @@ impl Renderer {
 
     Ok(buffer)
   }
+}
+
+/// The CSS for a render, taking the deprecated `stylesheets` alias when `css`
+/// is absent.
+fn resolve_css(
+  css: Option<Vec<CssSource>>,
+  stylesheets: Option<Vec<String>>,
+) -> Option<Vec<CssSource>> {
+  css.or_else(|| stylesheets.map(|sheets| sheets.into_iter().map(CssSource::Text).collect()))
 }

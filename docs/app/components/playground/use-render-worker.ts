@@ -17,7 +17,7 @@ export type BrowserPreviewData = {
   height?: number;
   padding?: string;
   cssContents?: string[];
-  cssVariables?: Record<string, string>;
+  theme?: string;
 };
 
 function isBlobUrl(url: string | undefined): url is string {
@@ -37,18 +37,11 @@ const LIVENESS_TIMEOUT_MS = 2_000;
 /** Bounds what the worker can hand the page to hold, forged or not, in UTF-16 code units. */
 const MAX_PREVIEW_LENGTH = 4 * 1024 * 1024;
 
-function previewLength(message: {
-  html: string;
-  cssContents?: string[];
-  cssVariables?: Record<string, string>;
-}) {
+function previewLength(message: { html: string; cssContents?: string[]; theme?: string }) {
   return (
     message.html.length +
     (message.cssContents ?? []).reduce((sum, css) => sum + css.length, 0) +
-    Object.entries(message.cssVariables ?? {}).reduce(
-      (sum, [name, value]) => sum + name.length + value.length,
-      0,
-    )
+    (message.theme ?? "").length
   );
 }
 
@@ -98,7 +91,7 @@ export function useRenderWorker(ranCode: string | undefined) {
               height: message.height,
               padding: message.padding,
               cssContents: message.cssContents,
-              cssVariables: message.cssVariables,
+              theme: message.theme,
             });
           }
           break;

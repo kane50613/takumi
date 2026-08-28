@@ -4,7 +4,7 @@ use napi::bindgen_prelude::*;
 use takumi_bindings_common::stylesheet;
 use takumi_core::{
   layout::node::Node,
-  style::{FontFamily, KeyframesRule, Lang},
+  style::{CssSource, FontFamily, KeyframesRule, Lang},
   viewport::Viewport,
 };
 use takumi_raster::{
@@ -13,10 +13,11 @@ use takumi_raster::{
 };
 
 use crate::{
-  JsBytes, deserialize_with_tracing,
+  JsBytes, deserialize_with_tracing, map_error,
   renderer::{
     AnimationOutputFormat, ImageCacheMode, RenderAnimationOptions, RendererState, collect_images,
-    decode_images, deserialize_keyframes, device_pixel_ratio, parse_lang, webp_lossless,
+    decode_images, deserialize_keyframes, device_pixel_ratio, parse_lang, resolve_css,
+    webp_lossless,
   },
 };
 
@@ -28,9 +29,8 @@ pub struct RenderAnimationTask {
   pub(crate) quality: Option<u8>,
   pub(crate) lossless: Option<bool>,
   pub(crate) draw_debug_border: bool,
-  pub(crate) css: Option<Vec<String>>,
+  pub(crate) css: Option<Vec<CssSource>>,
   pub(crate) keyframes: Vec<KeyframesRule>,
-  pub(crate) css_variables: Option<HashMap<String, String>>,
   pub(crate) images: HashMap<Arc<str>, (JsBytes, ImageCacheMode)>,
   pub(crate) font_families: Option<FontFamily>,
   pub(crate) lang: Option<Lang>,
@@ -56,7 +56,6 @@ impl RenderAnimationTask {
       css,
       stylesheets,
       keyframes,
-      css_variables,
       device_pixel_ratio: dpr,
       font_families,
       lang,
@@ -88,9 +87,8 @@ impl RenderAnimationTask {
       quality,
       lossless,
       draw_debug_border: draw_debug_border.unwrap_or_default(),
-      css: css.or(stylesheets),
+      css: resolve_css(css, stylesheets)?,
       keyframes: deserialize_keyframes(keyframes)?,
-      css_variables,
       images: collect_images(env, images)?,
       font_families: font_families.map(FontFamily::from_names),
       lang: parse_lang(lang)?,
@@ -114,8 +112,8 @@ impl Task for RenderAnimationTask {
         &self.state.resource_cache,
         take(&mut self.css),
         take(&mut self.keyframes),
-        take(&mut self.css_variables),
-      );
+      )
+      .map_err(map_error)?;
       let scene_options = scenes
         .into_iter()
         .map(|(node, duration_ms)| {

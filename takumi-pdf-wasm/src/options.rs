@@ -8,7 +8,7 @@ use serde_bytes::ByteBuf;
 use takumi_core::{
   layout::node::Node,
   resources::image::{ImageCacheMode, ImageSource as DecodedImage, ResourceCache},
-  style::{Color, ColorInput, FromCssStr},
+  style::{Color, ColorInput, CssSource, FromCssStr},
   viewport::Viewport,
 };
 use takumi_pdf::{PageMargin, PageMargins, PageOptions};
@@ -190,10 +190,9 @@ pub(crate) struct PdfRenderOptions {
   pub(crate) footer: Option<Node>,
   /// Pre-fetched images keyed by URL.
   pub(crate) images: Option<Vec<ImageSource>>,
-  /// CSS to apply before layout.
-  pub(crate) css: Option<Vec<String>>,
-  /// CSS custom properties for `:root`, which utilities and `var()` both read.
-  pub(crate) css_variables: Option<HashMap<String, String>>,
+  /// CSS to apply before layout: stylesheet text, or a rule written as an
+  /// object.
+  pub(crate) css: Option<Vec<CssSource>>,
   /// Per-render font stack: ordered family names used as the fallback chain.
   pub(crate) font_families: Option<Vec<String>>,
   /// Default BCP-47 language tag applied to the root.

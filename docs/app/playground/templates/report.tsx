@@ -83,12 +83,15 @@ export default function Report() {
 }
 
 export const options: PlaygroundOptions = {
-  cssVariables: {
-    "--color-brand": "#0d9488",
-    "--color-ink": "#1f2430",
-    "--color-body": "#374151",
-    "--color-faint": "#6b7280",
-    "--color-hairline": "#e5e7eb",
+  css: {
+    selector: ":root",
+    style: {
+      "--color-brand": "#0d9488",
+      "--color-ink": "#1f2430",
+      "--color-body": "#374151",
+      "--color-faint": "#6b7280",
+      "--color-hairline": "#e5e7eb",
+    },
   },
   pdf: {
     size: "a4",

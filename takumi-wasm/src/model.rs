@@ -1,6 +1,6 @@
 //! Data models and types for the WebAssembly bindings.
 
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use serde::{Deserialize, Deserializer, de::Error as DeError};
 use serde_bytes::ByteBuf;
@@ -8,7 +8,7 @@ use takumi_core::{
   keyframes::deserialize_optional_keyframes,
   layout::node::Node,
   resources::image::ImageCacheMode,
-  style::{FontStyle as CssFontStyle, FromCssStr, KeyframesRule},
+  style::{CssSource, FontStyle as CssFontStyle, FromCssStr, KeyframesRule},
 };
 use takumi_raster::DitheringAlgorithm;
 use wasm_bindgen::prelude::*;
@@ -72,13 +72,12 @@ pub struct RenderOptions {
   pub quality: Option<u8>,
   /// Pre-fetched images to use during rendering.
   pub images: Option<Vec<ImageSource>>,
-  /// CSS to apply before rendering.
-  pub css: Option<Vec<String>>,
-  /// @deprecated Use `css` instead.
+  /// CSS to apply before rendering: stylesheet text, or a rule written as an
+  /// object.
+  pub css: Option<Vec<CssSource>>,
+  /// @deprecated Use `css` instead. Removed in v3.
   pub stylesheets: Option<Vec<String>>,
-  /// CSS custom properties for `:root`, which utilities and `var()` both read.
-  pub css_variables: Option<HashMap<String, String>>,
-  /// Structured keyframes to register alongside stylesheets.
+  /// @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Removed in v3.
   #[serde(default, deserialize_with = "deserialize_optional_keyframes")]
   pub(crate) keyframes: Option<Vec<KeyframesRule>>,
   /// Whether to draw debug borders around layout elements.
@@ -108,13 +107,12 @@ pub struct SvgRenderOptions {
   pub height: Option<u32>,
   /// Pre-fetched images to use during rendering.
   pub images: Option<Vec<ImageSource>>,
-  /// CSS to apply before rendering.
-  pub css: Option<Vec<String>>,
-  /// @deprecated Use `css` instead.
+  /// CSS to apply before rendering: stylesheet text, or a rule written as an
+  /// object.
+  pub css: Option<Vec<CssSource>>,
+  /// @deprecated Use `css` instead. Removed in v3.
   pub stylesheets: Option<Vec<String>>,
-  /// CSS custom properties for `:root`, which utilities and `var()` both read.
-  pub css_variables: Option<HashMap<String, String>>,
-  /// Structured keyframes to register alongside stylesheets.
+  /// @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Removed in v3.
   #[serde(default, deserialize_with = "deserialize_optional_keyframes")]
   pub(crate) keyframes: Option<Vec<KeyframesRule>>,
   /// The animation timeline time in milliseconds.
@@ -142,13 +140,12 @@ pub struct RenderAnimationOptions {
   pub images: Option<Vec<ImageSource>>,
   /// Whether to draw debug borders around layout elements.
   pub draw_debug_border: Option<bool>,
-  /// CSS to apply before rendering.
-  pub css: Option<Vec<String>>,
-  /// @deprecated Use `css` instead.
+  /// CSS to apply before rendering: stylesheet text, or a rule written as an
+  /// object.
+  pub css: Option<Vec<CssSource>>,
+  /// @deprecated Use `css` instead. Removed in v3.
   pub stylesheets: Option<Vec<String>>,
-  /// CSS custom properties for `:root`, which utilities and `var()` both read.
-  pub css_variables: Option<HashMap<String, String>>,
-  /// Structured keyframes to register alongside stylesheets.
+  /// @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Removed in v3.
   #[serde(default, deserialize_with = "deserialize_optional_keyframes")]
   pub(crate) keyframes: Option<Vec<KeyframesRule>>,
   /// The device pixel ratio for scaling.

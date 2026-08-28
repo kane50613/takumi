@@ -23,6 +23,27 @@ declare module "react" {
 
 export type NodeAttributes = Record<string, string>;
 
+/** A declaration block, with custom properties allowed. */
+export type Declarations = CSSProperties & {
+  [key: `--${string}`]: string | number;
+};
+
+/** A style rule written as an object. */
+export type StyleRule = {
+  selector: string;
+  style?: Declarations;
+  rules?: StyleRule[];
+};
+
+/** An animation written as an object. */
+export type AnimationRule = {
+  keyframes: string;
+  steps: { offset: string; style?: Declarations }[];
+};
+
+/** One entry of the `css` render option: stylesheet text, or a rule object. */
+export type CssInput = string | StyleRule | AnimationRule;
+
 /**
  * A JSX element from any React-shaped runtime; Preact vnodes fit too, so
  * `fromJsx` and the render inputs accept them without casts.

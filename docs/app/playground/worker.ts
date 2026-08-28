@@ -1,6 +1,7 @@
 import { googleFonts, prepareImages } from "takumi-js/helpers";
 import { extractEmojis } from "takumi-js/helpers/emoji";
 import { fromJsx } from "takumi-js/helpers/jsx";
+import type { CssInput } from "takumi-js";
 import type { FetchedImage, Node } from "takumi-js/helpers";
 import wasm, { init, Renderer } from "takumi-js/wasm";
 import pdfWasm from "takumi-pdf/wasm-url";
@@ -14,7 +15,7 @@ import { evaluateCodeExports } from "./evaluate";
 import { renderReact } from "./render-react";
 import { FALLBACK_FONT_URL, FONT_FAMILIES } from "./fonts";
 import { inspectPdf } from "./inspect-pdf";
-import { keyframesToCss } from "./preview-css";
+import { cssEntryToText, keyframesToCss } from "./preview-css";
 import { messageSchema, type OutputKind, type RenderMessageInput } from "./schema";
 
 const DEFAULT_IMAGE_SIZE = { width: 1200, height: 630 };
@@ -88,7 +89,7 @@ function loadPdfRenderer() {
 }
 
 /** Everything a render needs beyond the tree itself, fetched once per request. */
-async function loadResources(node: Node, css: string[]) {
+async function loadResources(node: Node, css: CssInput[]) {
   const [images, fonts] = await Promise.all([
     prepareImages<FetchedImage>({ node, fetchCache }),
     googleFonts(GOOGLE_FONTS).catch(() => undefined),
@@ -132,7 +133,6 @@ async function renderOutput({
 
     return {
       buffer: await pdf.render(node, {
-        cssVariables: options.cssVariables,
         ...options.pdf,
         css,
         images,
@@ -156,7 +156,6 @@ async function renderOutput({
         quality: options.quality,
         devicePixelRatio: options.devicePixelRatio,
         keyframes: options.keyframes,
-        cssVariables: options.cssVariables,
         images,
         fonts,
         css,
@@ -177,8 +176,19 @@ async function renderRequest(renderer: Renderer, id: number, code: string) {
   const { default: component, options } = evaluateCodeExports(code, renderReact);
   const element = renderReact.createElement(component as JSXElementConstructor<unknown>);
   const { node, css: extractedCss } = await fromJsx(element);
-  const optionCss = typeof options.css === "string" ? [options.css] : options.css;
-  const effectiveCss = optionCss ?? extractedCss;
+  const optionCss =
+    options.css === undefined || Array.isArray(options.css) ? options.css : [options.css];
+  const effectiveCss: CssInput[] = optionCss ?? extractedCss;
+  // The pane compiles utilities itself, so it needs the theme as declarations
+  // rather than as the `:root` rule the renderer reads.
+  const theme = effectiveCss
+    .flatMap((entry) =>
+      typeof entry === "object" && "selector" in entry && entry.selector === ":root"
+        ? Object.entries(entry.style ?? {})
+        : [],
+    )
+    .map(([name, value]) => `${name}:${value};`)
+    .join("");
   const geometry = outputGeometry(options);
 
   // A PDF renders pages, which a single HTML flow cannot stand in for, so the
@@ -191,10 +201,11 @@ async function renderRequest(renderer: Renderer, id: number, code: string) {
       width: geometry.width,
       height: geometry.height,
       padding: geometry.padding,
-      cssContents: options.keyframes
-        ? [...effectiveCss, keyframesToCss(options.keyframes)]
-        : effectiveCss,
-      cssVariables: options.cssVariables,
+      cssContents: [
+        ...effectiveCss.map(cssEntryToText),
+        ...(options.keyframes ? [keyframesToCss(options.keyframes)] : []),
+      ],
+      theme,
     });
   }
 

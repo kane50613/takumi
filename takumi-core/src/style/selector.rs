@@ -212,7 +212,7 @@ impl SelectorImplTrait for SelectorImpl {
   type PseudoElement = PseudoElement;
 }
 
-struct TakumiSelectorParser;
+pub(crate) struct TakumiSelectorParser;
 
 impl<'i> selectors::Parser<'i> for TakumiSelectorParser {
   type Impl = SelectorImpl;
