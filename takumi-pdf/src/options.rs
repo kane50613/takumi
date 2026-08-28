@@ -236,6 +236,9 @@ pub struct PdfOptions<'g> {
   /// Document metadata written to the PDF's info dictionary.
   #[builder(default, setter(strip_option))]
   pub metadata: Option<PdfMetadata>,
+  /// Overrides the `/Producer` every document carries.
+  #[builder(default, setter(strip_option))]
+  pub producer: Option<String>,
   /// Generates a PDF outline (bookmarks) from `h1`–`h6` headings.
   #[builder(default)]
   pub outline: bool,

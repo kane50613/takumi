@@ -89,6 +89,9 @@ use takumi_core::{
   viewport::Viewport,
 };
 
+/// Written as `/Producer` and `pdf:Producer` in every document takumi renders.
+pub const PRODUCER: &str = concat!("takumi-pdf ", env!("CARGO_PKG_VERSION"));
+
 pub use crate::options::{
   Attachment, AttachmentRelationship, MeasureOptions, MeasuredSize, PageMargin, PageMargins,
   PageOptions, PdfDate, PdfError, PdfMetadata, PdfOptions, PdfStandard, Tagging, XmpProperty,
@@ -195,15 +198,23 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       builder = builder.with_accessibility_validator(accessibility);
       validated = true;
     }
+    let settings = SerializeSettings {
+      producer: options
+        .producer
+        .clone()
+        .unwrap_or_else(|| PRODUCER.to_string()),
+      ..SerializeSettings::default()
+    };
+
     if validated {
       let configuration = builder.finish().map_err(|_| PdfError::InvalidStandard)?;
 
       Document::new_with(SerializeSettings {
         configuration,
-        ..SerializeSettings::default()
+        ..settings
       })
     } else {
-      Document::new()
+      Document::new_with(settings)
     }
   };
   let tag_collector = (options.tagged != Tagging::Off || options.standard.requires_tagging())

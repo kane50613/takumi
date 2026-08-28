@@ -37,10 +37,18 @@ const groupedPackages = [
   "cargo:takumi",
 ];
 
-const packages: Record<string, PackageOptions<"takumi">> = {};
+// The crate is never published; it carries a version so the `/Producer` it
+// writes matches the npm package a reader installed.
+const pdfPackages = ["npm:takumi-pdf", "cargo:takumi-pdf"];
+
+const packages: Record<string, PackageOptions<"takumi" | "takumi-pdf">> = {};
 
 for (const name of groupedPackages) {
   packages[name] = { group: "takumi" };
+}
+
+for (const name of pdfPackages) {
+  packages[name] = { group: "takumi-pdf" };
 }
 
 // Skip versionless dependents (private examples, docs, templates); only real
@@ -62,6 +70,7 @@ const paper = tegami({
   ],
   groups: {
     takumi: { syncBump: true, syncGitTag: true },
+    "takumi-pdf": { syncBump: true },
   },
   packages,
   npm: { client: "bun", updateLockFile: true, bumpDep },

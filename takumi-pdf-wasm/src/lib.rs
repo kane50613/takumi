@@ -172,6 +172,7 @@ impl PdfRenderer {
       font_families: options.font_families.map(FontFamily::from_names),
       lang,
       metadata: options.metadata.map(PdfMetadata::try_from).transpose()?,
+      producer: None,
       outline: options.outline.unwrap_or(false),
       standard: options.pdfa.map(PdfStandard::from).unwrap_or_default(),
       tagged: options.tagged.map(Tagging::from).unwrap_or_default(),

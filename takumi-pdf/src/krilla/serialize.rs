@@ -113,6 +113,9 @@ pub struct SerializeSettings {
   ///
   /// [`tagging`]: crate::krilla::interchange::tagging
   pub enable_tagging: bool,
+  /// Written as `/Producer` and `pdf:Producer`, whether or not the document
+  /// carries metadata.
+  pub producer: String,
   /// A function that should be used to render SVG glyphs. If you don't need this, yu can
   /// just use the default function which doesn't render them at all. If you do want this, it
   /// is recommended that you use the function provided by the `krilla-svg` crate.
@@ -148,6 +151,7 @@ impl Default for SerializeSettings {
       cmyk_profile: None,
       configuration: Configuration::default(),
       enable_tagging: true,
+      producer: crate::PRODUCER.to_string(),
       render_svg_glyph_fn: |_, _, _, _, _| None,
     }
   }
