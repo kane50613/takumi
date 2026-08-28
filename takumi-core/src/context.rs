@@ -34,6 +34,11 @@ pub struct RenderContext {
   /// during lowering, which is the last place a table cell is still one.
   #[builder(default = false)]
   pub collapsed_borders: bool,
+  /// Whether a min-content measurement reports the widest run it could not
+  /// break instead of the zero width it wrapped against. Table column sizing
+  /// asks for the intrinsic width; every other caller wants the box it fits in.
+  #[builder(default = false)]
+  pub(crate) intrinsic_min_content: bool,
   /// The resources fetched externally.
   #[builder(default)]
   pub(crate) images: Rc<HashMap<Arc<str>, ImageSource>>,
@@ -64,6 +69,7 @@ impl RenderContext {
       time_ms: parent.time_ms,
       draw_debug_border: parent.draw_debug_border,
       collapsed_borders: false,
+      intrinsic_min_content: parent.intrinsic_min_content,
       images: parent.images.clone(),
       sizing,
       stylesheet: parent.stylesheet.clone(),

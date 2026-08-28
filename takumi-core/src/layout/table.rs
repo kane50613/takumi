@@ -493,33 +493,50 @@ fn clear_border(style: &mut ComputedStyle) {
   style.border_left_width = LineWidth::Length(Length::zero());
 }
 
-/// Width a cell subtree takes when nothing constrains it. The cell is lowered
-/// first: `table-cell` establishes no formatting context of its own, so taffy
-/// would lay its inline children out as blocks. Nested tables pay for this
-/// once per level, since each level lays the levels below it out again.
-fn max_content_width(cell: &RenderNode) -> f32 {
+/// Widths a cell subtree takes when nothing constrains it and when everything
+/// does. The cell is lowered first: `table-cell` establishes no formatting
+/// context of its own, so taffy would lay its inline children out as blocks.
+/// Nested tables pay for this once per level, since each level lays the levels
+/// below it out again.
+fn mark_intrinsic(node: &mut RenderNode) {
+  node.context.intrinsic_min_content = true;
+
+  for child in node.children.as_deref_mut().unwrap_or_default() {
+    mark_intrinsic(child);
+  }
+}
+
+fn intrinsic_widths(cell: &RenderNode) -> (f32, f32) {
   let mut cell = cell.clone();
 
   lower_cell(&mut cell, 1, 0, 1, false);
   cell.context.style.display.blockify();
+  mark_intrinsic(&mut cell);
 
-  let mut tree = LayoutTree::from_render_node(&cell);
+  let measure = |width| {
+    let mut tree = LayoutTree::from_render_node(&cell);
 
-  tree.compute_layout(Size {
-    width: AvailableSpace::MaxContent,
-    height: AvailableSpace::MaxContent,
-  });
+    tree.compute_layout(Size {
+      width,
+      height: AvailableSpace::MaxContent,
+    });
 
-  tree
-    .into_results()
-    .layout(NodeId::ROOT)
-    .map_or(0.0, |layout| layout.size.width)
+    tree
+      .into_results()
+      .layout(NodeId::ROOT)
+      .map_or(0.0, |layout| layout.size.width)
+  };
+
+  (
+    measure(AvailableSpace::MinContent),
+    measure(AvailableSpace::MaxContent),
+  )
 }
 
-/// Max-content width per column, Blink's `TableTypes::Column::max_inline_size`.
-struct ColumnMaxContent(Vec<f32>);
+/// Min- and max-content width per column, Blink's `TableTypes::Column`.
+struct ColumnWidths(Vec<(f32, f32)>);
 
-impl ColumnMaxContent {
+impl ColumnWidths {
   /// Naive: a spanning cell spreads its width over the columns it covers in
   /// proportion to their max-content, which is only the `kAboveMax` branch of
   /// Blink's `DistributeColspanCellsToColumns`. Narrower spans land first, as
@@ -531,7 +548,7 @@ impl ColumnMaxContent {
     columns: u16,
     spacing: f32,
   ) -> Self {
-    let mut widths = vec![0.0f32; usize::from(columns)];
+    let mut widths = vec![(0.0f32, 0.0f32); usize::from(columns)];
     let mut spanning = Vec::new();
 
     for (row, cells) in rows.iter().zip(placements) {
@@ -543,9 +560,9 @@ impl ColumnMaxContent {
         .filter(|cell| is_cell(cell));
 
       for (cell, (column, colspan)) in table_cells.zip(cells) {
-        let width = max_content_width(cell);
+        let (min, max) = intrinsic_widths(cell);
 
-        if !width.is_finite() {
+        if !min.is_finite() || !max.is_finite() {
           continue;
         }
 
@@ -553,43 +570,51 @@ impl ColumnMaxContent {
 
         if *colspan == 1 {
           if let Some(track) = widths.get_mut(*column) {
-            *track = track.max(width);
+            track.0 = track.0.max(min);
+            track.1 = track.1.max(max);
           }
         } else if *column < end {
-          spanning.push((*column, end, width));
+          spanning.push((*column, end, min, max));
         }
       }
     }
 
-    spanning.sort_by_key(|(column, end, _)| (end - column, *column));
+    spanning.sort_by_key(|(column, end, ..)| (end - column, *column));
 
-    for (column, end, width) in spanning {
+    for (column, end, min, max) in spanning {
       let covered = &mut widths[column..end];
-      let total: f32 = covered.iter().sum();
       let count = covered.len() as f32;
-      let width = (width - spacing * (count - 1.0)).max(0.0);
+      let inner = spacing * (count - 1.0);
+      let total: f32 = covered.iter().map(|(_, max)| *max).sum();
+      let min = (min - inner).max(0.0);
+      let max = (max - inner).max(0.0);
 
-      for track in covered {
-        let share = if total > 0.0 {
-          width * *track / total
+      for track in covered.iter_mut() {
+        let ratio = if total > 0.0 {
+          track.1 / total
         } else {
-          width / count
+          1.0 / count
         };
 
-        *track = track.max(share);
+        track.0 = track.0.max(min * ratio);
+        track.1 = track.1.max(max * ratio);
       }
     }
 
     Self(widths)
   }
 
-  /// `None` when nothing was measured, which leaves every track `auto`.
+  /// `None` when nothing was measured, which leaves every track `auto`. The
+  /// min-content floor is what keeps a column that is narrower than its share
+  /// from spilling into the next one.
   fn tracks(&self) -> Option<Vec<String>> {
-    self
-      .0
-      .iter()
-      .any(|width| *width > 0.0)
-      .then(|| self.0.iter().map(|width| format!("{width}fr")).collect())
+    self.0.iter().any(|(_, max)| *max > 0.0).then(|| {
+      self
+        .0
+        .iter()
+        .map(|(min, max)| format!("minmax({min}px, {max}fr)"))
+        .collect()
+    })
   }
 }
 
@@ -651,7 +676,7 @@ fn track_sizes(
 
   if !fixed
     && tracks.iter().all(|track| track == "auto")
-    && let Some(measured) = ColumnMaxContent::measure(rows, placements, columns, spacing).tracks()
+    && let Some(measured) = ColumnWidths::measure(rows, placements, columns, spacing).tracks()
   {
     tracks = measured;
   }
