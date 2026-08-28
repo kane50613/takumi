@@ -1,6 +1,6 @@
 {
   "name": "@takumi-rs/image-response",
-  "version": "2.13.0",
+  "version": "2.12.0",
   "description": "Moved into takumi-js. Import `ImageResponse` from `takumi-js/response`.",
   "license": "(MIT OR Apache-2.0)",
   "author": {
