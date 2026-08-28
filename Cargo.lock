@@ -1857,7 +1857,6 @@ dependencies = [
  "typed-builder",
  "unicode-bidi",
  "wuff",
- "xmlwriter",
  "xxhash-rust",
 ]
 

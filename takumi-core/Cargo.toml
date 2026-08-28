@@ -103,10 +103,6 @@ optional = true
 workspace = true
 optional = true
 
-[dependencies.xmlwriter]
-workspace = true
-optional = true
-
 [dependencies.wuff]
 workspace = true
 optional = true
@@ -127,7 +123,6 @@ svg = [
   "dep:harfrust",
   "dep:icu_properties",
   "dep:unicode-bidi",
-  "dep:xmlwriter",
 ]
 woff2 = ["dep:wuff", "wuff/brotli"]
 woff = ["dep:wuff", "wuff/z"]
