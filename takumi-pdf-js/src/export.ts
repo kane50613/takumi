@@ -302,16 +302,21 @@ function warnStylesheetsDeprecated(): void {
   console.warn("takumi: the `stylesheets` option is deprecated, use `css` instead.");
 }
 
+/** Narrows the `css` option, which takes one entry or a list of them. */
+function isCssList(css: CssInput | readonly CssInput[]): css is readonly CssInput[] {
+  return Array.isArray(css);
+}
+
 function ownCss(
-  css: string | readonly string[] | undefined,
+  css: CssInput | readonly CssInput[] | undefined,
   stylesheets: string[] | undefined,
-): string[] {
+): CssInput[] {
   if (css !== undefined && stylesheets !== undefined) {
     throw new Error("pass either `css` or `stylesheets`, not both");
   }
 
   if (css !== undefined) {
-    return typeof css === "string" ? [css] : [...css];
+    return isCssList(css) ? [...css] : [css];
   }
 
   if (stylesheets !== undefined) {

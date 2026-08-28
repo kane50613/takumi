@@ -199,7 +199,12 @@ function warnStylesheetsDeprecated(): void {
   console.warn("takumi: the `stylesheets` option is deprecated, use `css` instead.");
 }
 
-function mergeCss(options: PipelineOptions | undefined, extra: string[]): string[] {
+/** Narrows the `css` option, which takes one entry or a list of them. */
+function isCssList(css: CssInput | readonly CssInput[]): css is readonly CssInput[] {
+  return Array.isArray(css);
+}
+
+function mergeCss(options: PipelineOptions | undefined, extra: string[]): CssInput[] {
   if (options?.css !== undefined && options?.stylesheets !== undefined) {
     throw new Error("pass either `css` or `stylesheets`, not both");
   }
@@ -210,9 +215,9 @@ function mergeCss(options: PipelineOptions | undefined, extra: string[]): string
 
   const own =
     options?.css !== undefined
-      ? typeof options.css === "string"
-        ? [options.css]
-        : options.css
+      ? isCssList(options.css)
+        ? options.css
+        : [options.css]
       : (options?.stylesheets ?? []);
 
   return [...own, ...extra];
