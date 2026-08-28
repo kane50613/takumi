@@ -5,6 +5,7 @@
 
 #[cfg(feature = "svg")]
 use std::borrow::Cow;
+#[cfg(feature = "svg")]
 use std::str::{FromStr, from_utf8};
 use std::sync::{Arc, OnceLock, Weak};
 
@@ -50,8 +51,10 @@ use crate::{
   style::{Color, ImageScalingAlgorithm, IntrinsicSizing, SizingContext, StyleSheet},
 };
 
+#[cfg(feature = "svg")]
 const MAX_RASTER_PIXELS: u64 = 16 << 20;
 
+#[cfg(feature = "svg")]
 fn within_raster_pixel_budget(width: u32, height: u32) -> bool {
   u64::from(width) * u64::from(height) <= MAX_RASTER_PIXELS
 }
@@ -770,7 +773,7 @@ impl ImageSource {
     height: u32,
     image_rendering: ImageScalingAlgorithm,
     time_ms: u64,
-    current_color: Color,
+    #[cfg_attr(not(feature = "svg"), allow(unused_variables))] current_color: Color,
   ) -> Result<RenderedImage, ImageError> {
     match self {
       ImageSource::Bitmap(bitmap) => Ok(RenderedImage::Sampled {

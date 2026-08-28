@@ -123,6 +123,7 @@ const MAX_ANIMATION_TOTAL_PIXELS: u64 = 4 * MAX_IMAGE_PIXELS;
 pub(crate) const MAX_ANIMATION_FRAMES: usize = 1024;
 
 /// Rejects decoded images whose pixel count exceeds [`MAX_IMAGE_PIXELS`].
+#[cfg(feature = "webp")]
 fn check_pixel_budget(width: u32, height: u32) -> ImageResult<()> {
   if width as u64 * height as u64 > MAX_IMAGE_PIXELS {
     return Err(pixel_budget_error(width, height));
@@ -131,11 +132,6 @@ fn check_pixel_budget(width: u32, height: u32) -> ImageResult<()> {
   Ok(())
 }
 
-#[cfg(any(
-  feature = "gif",
-  feature = "webp",
-  not(all(feature = "jpeg", feature = "webp"))
-))]
 fn pixel_budget_error(width: u32, height: u32) -> ImageError {
   ImageError::Decoding(DecodingError::new(
     ImageFormatHint::Unknown,
