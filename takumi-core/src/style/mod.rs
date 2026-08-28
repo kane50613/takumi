@@ -15,7 +15,10 @@ pub(crate) use animation::apply_stylesheet_animations;
 pub use animation::{KeyframeRule, KeyframesRule};
 pub(crate) use calc::{CalcArena, parse_calc_number_expression};
 pub(crate) use css_input::{CssInput, CssNumber, CssUnexpected, CssValueSeed};
-pub use css_source::{AnimationRule, AnimationStep, CssSource, CssSourceError, StyleRule};
+pub use css_source::{
+  AnimationRule, AnimationStep, CssSource, CssSourceError, LayerRule, MediaRule, StyleRule,
+  SupportsRule,
+};
 pub(crate) use math::lerp;
 pub(crate) use properties::unexpected_token;
 pub use properties::*;

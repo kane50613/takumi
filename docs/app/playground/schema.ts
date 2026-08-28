@@ -1,31 +1,49 @@
-import type { CssInput, Keyframes } from "takumi-js";
 import * as z from "zod/mini";
 import type { PdfInspection } from "./inspect-pdf";
 import type { PlaygroundPdfOptions } from "./options";
 
 const declarationsSchema = z.record(z.string(), z.union([z.string(), z.number()]));
 
-/** A rule's own nesting, which the renderer reads as CSS nesting. */
-type StyleRuleShape = {
-  selector: string;
-  style?: Record<string, string | number>;
-  rules?: StyleRuleShape[];
-};
+/**
+ * A `css` entry. Declared here rather than taken from `takumi-js`, whose type
+ * reaches this app through a re-export that resolves to `any`.
+ */
+export type CssEntry =
+  | string
+  | StyleRuleEntry
+  | { keyframes: string; steps: { offset: string; style?: Declarations }[] }
+  | { media: string; rules: CssEntry[] }
+  | { supports: string; rules: CssEntry[] }
+  | { layer: string; rules?: CssEntry[] };
 
-const styleRuleSchema: z.ZodMiniType<StyleRuleShape> = z.lazy(() =>
-  z.object({
+/** A style rule nests style rules alone, as CSS nesting. */
+type StyleRuleEntry = { selector: string; style?: Declarations; rules?: StyleRuleEntry[] };
+
+type Declarations = Record<string, string | number>;
+
+// `strictObject`, so a typo like `declarations` is an error rather than a rule
+// the renderer never sees.
+const styleRuleSchema: z.ZodMiniType<StyleRuleEntry> = z.lazy(() =>
+  z.strictObject({
     selector: z.string(),
     style: z.optional(declarationsSchema),
     rules: z.optional(z.array(styleRuleSchema)),
   }),
 );
 
-const animationRuleSchema = z.object({
-  keyframes: z.string(),
-  steps: z.array(z.object({ offset: z.string(), style: z.optional(declarationsSchema) })),
-});
-
-const cssInputSchema = z.union([z.string(), animationRuleSchema, styleRuleSchema]);
+const cssInputSchema: z.ZodMiniType<CssEntry> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.strictObject({
+      keyframes: z.string(),
+      steps: z.array(z.strictObject({ offset: z.string(), style: z.optional(declarationsSchema) })),
+    }),
+    z.strictObject({ media: z.string(), rules: z.array(cssInputSchema) }),
+    z.strictObject({ supports: z.string(), rules: z.array(cssInputSchema) }),
+    z.strictObject({ layer: z.string(), rules: z.optional(z.array(cssInputSchema)) }),
+    styleRuleSchema,
+  ]),
+);
 
 export const optionsSchema = z.object({
   width: z.optional(z.int().check(z.positive(), z.minimum(1))),
@@ -34,8 +52,6 @@ export const optionsSchema = z.object({
   format: z.optional(z.enum(["png", "jpeg", "webp"])),
   devicePixelRatio: z.optional(z.number().check(z.positive(), z.minimum(0.1), z.maximum(10.0))),
   css: z.optional(z.union([cssInputSchema, z.array(cssInputSchema)])),
-  /** @deprecated use a `{ keyframes, steps }` entry in `css`. Removed in v3. */
-  keyframes: z.optional(z.custom<Keyframes>()),
   animation: z.optional(
     z.object({
       durationMs: z.int().check(z.positive(), z.minimum(1)),

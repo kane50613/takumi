@@ -60,6 +60,33 @@ A `<style>` tag feeds the same engine. Takumi extracts it from the JSX for you.
 </div>
 ```
 
+### Rule objects
+
+A `css` entry can be an object. Object entries keep application data out of
+CSS strings.
+
+| Entry                        | Writes                                                    |
+| ---------------------------- | --------------------------------------------------------- |
+| `{ selector, style, rules }` | a style rule; `rules` nests child rules                   |
+| `{ keyframes, steps }`       | a [`@keyframes` rule](/docs/keyframe-animation)           |
+| `{ media, rules }`           | a `@media` group holding entries of its own               |
+| `{ supports, rules }`        | a `@supports` group                                       |
+| `{ layer, rules }`           | a `@layer` block; without `rules` it declares order alone |
+
+```tsx
+css: [
+  { layer: "theme" },
+  {
+    media: "(prefers-color-scheme: dark)",
+    rules: [{ selector: ".card", style: { background: "#0f172a" } }],
+  },
+];
+```
+
+Takumi parses each prelude with the grammar its rule takes. A prelude that
+does not parse entirely is an error, so it cannot close the rule and open
+another.
+
 ## Tailwind with your bundler
 
 Compile Tailwind with your bundler, then pass the generated CSS through `css`. Tailwind does the compiling, so every directive and class name works. What renders is still bounded by [the engine's CSS support](#css). With Vite, import the stylesheet using `?inline`.

@@ -10,9 +10,12 @@ use serde::{
   de::{MapAccess, Visitor},
 };
 
+use crate::error::StyleSheetParseError;
 use crate::style::{
   CssInput, CssUnexpected, CssValueSeed, PropertyId,
-  selector::{SelectorImpl, TakumiSelectorParser},
+  media_query::MediaQueryList,
+  selector::{SelectorImpl, TakumiSelectorParser, parse_layer_name},
+  supports::parse_supports_condition,
 };
 
 /// A declaration as written. Kept in source order, because a shorthand and the
@@ -104,6 +107,36 @@ pub struct AnimationRule {
   steps: Vec<AnimationStep>,
 }
 
+/// A group of entries gated by a media query.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MediaRule {
+  /// The query the group is gated by.
+  pub media: String,
+  /// The entries inside the group.
+  rules: Vec<CssSource>,
+}
+
+/// A group of entries gated by a support condition.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SupportsRule {
+  /// The condition the group is gated by.
+  pub supports: String,
+  /// The entries inside the group.
+  rules: Vec<CssSource>,
+}
+
+/// A cascade layer, either declaring the layer or filling it.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LayerRule {
+  /// The layer's name.
+  pub layer: String,
+  /// The entries inside the layer. Absent declares the layer's order alone.
+  rules: Option<Vec<CssSource>>,
+}
+
 /// One entry of the `css` render option.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(untagged)]
@@ -114,17 +147,24 @@ pub enum CssSource {
   Rule(StyleRule),
   /// An animation object, validated before it reaches the parser.
   Keyframes(AnimationRule),
+  /// A media group, validated before it reaches the parser.
+  Media(MediaRule),
+  /// A support group, validated before it reaches the parser.
+  Supports(SupportsRule),
+  /// A cascade layer, validated before it reaches the parser.
+  Layer(LayerRule),
 }
 
 /// Why a rule object could not become CSS.
 #[derive(Debug, Clone, PartialEq)]
 pub enum CssSourceError {
-  /// The selector is not a selector list.
-  Selector(String),
-  /// The animation name is not an identifier.
-  KeyframesName(String),
-  /// The step is not `from`, `to`, or a percentage.
-  KeyframeOffset(String),
+  /// A rule's prelude is not what that rule takes.
+  Prelude {
+    /// What the prelude was read as, e.g. `selector` or `@media`.
+    rule: &'static str,
+    /// The prelude as written.
+    value: String,
+  },
   /// A declaration value is not a value for its property.
   Declaration {
     /// The property the value was written for.
@@ -137,9 +177,7 @@ pub enum CssSourceError {
 impl std::fmt::Display for CssSourceError {
   fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
-      Self::Selector(selector) => write!(formatter, "invalid selector {selector:?}"),
-      Self::KeyframesName(name) => write!(formatter, "invalid keyframes name {name:?}"),
-      Self::KeyframeOffset(offset) => write!(formatter, "invalid keyframe offset {offset:?}"),
+      Self::Prelude { rule, value } => write!(formatter, "invalid {rule} {value:?}"),
       Self::Declaration { name, value } => {
         write!(formatter, "invalid value for {name}: {value:?}")
       }
@@ -152,26 +190,101 @@ impl std::error::Error for CssSourceError {}
 impl CssSource {
   /// The CSS this source stands for, with a rule object validated on the way.
   pub fn into_css(self) -> Result<String, CssSourceError> {
+    let mut css = String::new();
+    self.write_css(&mut css)?;
+    Ok(css)
+  }
+
+  fn write_css(&self, css: &mut String) -> Result<(), CssSourceError> {
     match self {
-      Self::Text(text) => Ok(text),
-      Self::Rule(rule) => {
-        let mut css = String::new();
-        rule.write_css(&mut css)?;
-        Ok(css)
+      Self::Text(text) => {
+        css.push_str(text);
+        Ok(())
       }
-      Self::Keyframes(rule) => {
-        let mut css = String::new();
-        rule.write_css(&mut css)?;
-        Ok(css)
-      }
+      Self::Rule(rule) => rule.write_css(css),
+      Self::Keyframes(rule) => rule.write_css(css),
+      Self::Media(rule) => rule.write_css(css),
+      Self::Supports(rule) => rule.write_css(css),
+      Self::Layer(rule) => rule.write_css(css),
     }
+  }
+}
+
+impl MediaRule {
+  fn write_css(&self, css: &mut String) -> Result<(), CssSourceError> {
+    validate_prelude("@media", &self.media, |parser| {
+      MediaQueryList::parse(parser).map(|_| ())
+    })?;
+    write_group(css, "@media ", &self.media, &self.rules)
+  }
+}
+
+impl SupportsRule {
+  fn write_css(&self, css: &mut String) -> Result<(), CssSourceError> {
+    validate_prelude("@supports", &self.supports, |parser| {
+      parse_supports_condition(parser).map(|_| ())
+    })?;
+    write_group(css, "@supports ", &self.supports, &self.rules)
+  }
+}
+
+impl LayerRule {
+  fn write_css(&self, css: &mut String) -> Result<(), CssSourceError> {
+    validate_prelude("@layer", &self.layer, |parser| {
+      parse_layer_name(parser).map(|_| ())
+    })?;
+
+    let Some(rules) = &self.rules else {
+      let _ = write!(css, "@layer {};", self.layer);
+      return Ok(());
+    };
+
+    write_group(css, "@layer ", &self.layer, rules)
+  }
+}
+
+fn write_group(
+  css: &mut String,
+  at_rule: &str,
+  prelude: &str,
+  rules: &[CssSource],
+) -> Result<(), CssSourceError> {
+  let _ = write!(css, "{at_rule}{prelude}{{");
+
+  for entry in rules {
+    entry.write_css(css)?;
+  }
+
+  css.push('}');
+  Ok(())
+}
+
+/// Reads a prelude with the grammar its rule takes, leaving nothing over, so it
+/// cannot close the rule and open another.
+fn validate_prelude(
+  rule: &'static str,
+  prelude: &str,
+  parse: impl for<'i, 't> FnOnce(
+    &mut Parser<'i, 't>,
+  ) -> Result<(), ParseError<'i, StyleSheetParseError>>,
+) -> Result<(), CssSourceError> {
+  let mut parser_input = ParserInput::new(prelude);
+  let mut parser = Parser::new(&mut parser_input);
+
+  match parser.parse_entirely(parse) {
+    Ok(()) => Ok(()),
+    Err(_) => Err(CssSourceError::Prelude {
+      rule,
+      value: prelude.to_owned(),
+    }),
   }
 }
 
 impl AnimationRule {
   fn write_css(&self, css: &mut String) -> Result<(), CssSourceError> {
-    validate_ident(&self.keyframes)
-      .map_err(|_| CssSourceError::KeyframesName(self.keyframes.clone()))?;
+    validate_prelude("@keyframes name", &self.keyframes, |parser| {
+      parser.expect_ident().map(|_| ()).map_err(Into::into)
+    })?;
 
     let _ = write!(css, "@keyframes {}{{", self.keyframes);
 
@@ -219,16 +332,6 @@ fn write_declarations(declarations: &Declarations, css: &mut String) -> Result<(
   Ok(())
 }
 
-fn validate_ident(ident: &str) -> Result<(), ()> {
-  let mut parser_input = ParserInput::new(ident);
-  let mut parser = Parser::new(&mut parser_input);
-
-  parser
-    .parse_entirely(|parser| parser.expect_ident().cloned().map_err(Into::into))
-    .map(|_| ())
-    .map_err(|_: ParseError<'_, ()>| ())
-}
-
 /// A step selector is a comma list of `from`, `to`, or a percentage.
 fn validate_keyframe_offset(offset: &str) -> Result<(), CssSourceError> {
   let mut parser_input = ParserInput::new(offset);
@@ -252,7 +355,10 @@ fn validate_keyframe_offset(offset: &str) -> Result<(), CssSourceError> {
       })
     })
     .map(|_| ())
-    .map_err(|_: ParseError<'_, ()>| CssSourceError::KeyframeOffset(offset.to_owned()))
+    .map_err(|_: ParseError<'_, ()>| CssSourceError::Prelude {
+      rule: "keyframe offset",
+      value: offset.to_owned(),
+    })
 }
 
 /// The CSS spelling of a property name written in camelCase.
@@ -284,7 +390,10 @@ fn validate_selector(selector: &str) -> Result<(), CssSourceError> {
 
   match parsed {
     Ok(_) => Ok(()),
-    Err(_) => Err(CssSourceError::Selector(selector.to_owned())),
+    Err(_) => Err(CssSourceError::Prelude {
+      rule: "selector",
+      value: selector.to_owned(),
+    }),
   }
 }
 
@@ -365,15 +474,24 @@ mod tests {
   fn a_selector_cannot_carry_a_second_rule() {
     assert!(matches!(
       css(json!({ "selector": ".a{color:red}.b" })),
-      Err(CssSourceError::Selector(_))
+      Err(CssSourceError::Prelude {
+        rule: "selector",
+        ..
+      })
     ));
     assert!(matches!(
       css(json!({ "selector": "}" })),
-      Err(CssSourceError::Selector(_))
+      Err(CssSourceError::Prelude {
+        rule: "selector",
+        ..
+      })
     ));
     assert!(matches!(
       css(json!({ "selector": "@media print" })),
-      Err(CssSourceError::Selector(_))
+      Err(CssSourceError::Prelude {
+        rule: "selector",
+        ..
+      })
     ));
   }
 
@@ -399,12 +517,91 @@ mod tests {
   fn a_keyframes_name_and_offset_cannot_carry_a_second_rule() {
     assert!(matches!(
       css(json!({ "keyframes": "a{}.b", "steps": [] })),
-      Err(CssSourceError::KeyframesName(_))
+      Err(CssSourceError::Prelude {
+        rule: "@keyframes name",
+        ..
+      })
     ));
     assert!(matches!(
       css(json!({ "keyframes": "spin", "steps": [{ "offset": "from{}.b" }] })),
-      Err(CssSourceError::KeyframeOffset(_))
+      Err(CssSourceError::Prelude {
+        rule: "keyframe offset",
+        ..
+      })
     ));
+  }
+
+  #[test]
+  fn a_group_wraps_the_entries_it_holds() {
+    assert_eq!(
+      css(json!({
+        "media": "(min-width: 800px)",
+        "rules": [
+          ".a{color:red}",
+          { "selector": ".b", "style": { "width": "1px" } },
+        ],
+      })),
+      Ok("@media (min-width: 800px){.a{color:red}.b{width:1px;}}".into())
+    );
+    assert_eq!(
+      css(json!({ "supports": "(display: grid)", "rules": [{ "selector": ".a" }] })),
+      Ok("@supports (display: grid){.a{}}".into())
+    );
+  }
+
+  /// A layer with no entries declares its order alone.
+  #[test]
+  fn a_layer_writes_a_statement_without_entries() {
+    assert_eq!(css(json!({ "layer": "base" })), Ok("@layer base;".into()));
+    assert_eq!(
+      css(json!({ "layer": "base.reset", "rules": [{ "selector": ".a" }] })),
+      Ok("@layer base.reset{.a{}}".into())
+    );
+  }
+
+  #[test]
+  fn a_group_prelude_cannot_carry_a_second_rule() {
+    assert!(matches!(
+      css(json!({ "media": "print){} .b{color:red}(", "rules": [] })),
+      Err(CssSourceError::Prelude { rule: "@media", .. })
+    ));
+    assert!(matches!(
+      css(json!({ "supports": "(display:grid){} .b", "rules": [] })),
+      Err(CssSourceError::Prelude {
+        rule: "@supports",
+        ..
+      })
+    ));
+    assert!(matches!(
+      css(json!({ "layer": "a{}.b" })),
+      Err(CssSourceError::Prelude { rule: "@layer", .. })
+    ));
+  }
+
+  /// A layer name is dot-separated identifiers alone: no quoted strings, and no
+  /// reserved keywords, which would write CSS that means something else.
+  #[test]
+  fn a_layer_name_takes_identifiers_alone() {
+    assert!(matches!(
+      css(json!({ "layer": "\"base\"" })),
+      Err(CssSourceError::Prelude { rule: "@layer", .. })
+    ));
+    assert!(matches!(
+      css(json!({ "layer": "revert-layer" })),
+      Err(CssSourceError::Prelude { rule: "@layer", .. })
+    ));
+    assert!(matches!(
+      css(json!({ "layer": "base.default" })),
+      Err(CssSourceError::Prelude { rule: "@layer", .. })
+    ));
+  }
+
+  /// Only a layer has a statement form; a media or support group without its
+  /// entries is a typo, not an empty block.
+  #[test]
+  fn a_media_or_supports_group_needs_its_rules() {
+    assert!(from_value::<CssSource>(json!({ "media": "print" })).is_err());
+    assert!(from_value::<CssSource>(json!({ "supports": "(display: grid)" })).is_err());
   }
 
   #[test]

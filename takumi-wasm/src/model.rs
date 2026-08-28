@@ -75,9 +75,9 @@ pub struct RenderOptions {
   /// CSS to apply before rendering: stylesheet text, or a rule written as an
   /// object.
   pub css: Option<Vec<CssSource>>,
-  /// @deprecated Use `css` instead. Removed in v3.
+  /// @deprecated Use `css` instead. Will be removed in v3.
   pub stylesheets: Option<Vec<String>>,
-  /// @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Removed in v3.
+  /// @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Will be removed in v3.
   #[serde(default, deserialize_with = "deserialize_optional_keyframes")]
   pub(crate) keyframes: Option<Vec<KeyframesRule>>,
   /// Whether to draw debug borders around layout elements.
@@ -110,9 +110,9 @@ pub struct SvgRenderOptions {
   /// CSS to apply before rendering: stylesheet text, or a rule written as an
   /// object.
   pub css: Option<Vec<CssSource>>,
-  /// @deprecated Use `css` instead. Removed in v3.
+  /// @deprecated Use `css` instead. Will be removed in v3.
   pub stylesheets: Option<Vec<String>>,
-  /// @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Removed in v3.
+  /// @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Will be removed in v3.
   #[serde(default, deserialize_with = "deserialize_optional_keyframes")]
   pub(crate) keyframes: Option<Vec<KeyframesRule>>,
   /// The animation timeline time in milliseconds.
@@ -143,9 +143,9 @@ pub struct RenderAnimationOptions {
   /// CSS to apply before rendering: stylesheet text, or a rule written as an
   /// object.
   pub css: Option<Vec<CssSource>>,
-  /// @deprecated Use `css` instead. Removed in v3.
+  /// @deprecated Use `css` instead. Will be removed in v3.
   pub stylesheets: Option<Vec<String>>,
-  /// @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Removed in v3.
+  /// @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Will be removed in v3.
   #[serde(default, deserialize_with = "deserialize_optional_keyframes")]
   pub(crate) keyframes: Option<Vec<KeyframesRule>>,
   /// The device pixel ratio for scaling.
