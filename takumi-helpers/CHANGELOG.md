@@ -1,3 +1,21 @@
+## @takumi-rs/helpers@2.13.0
+
+### Support the `disclosure-open` and `disclosure-closed` counter styles
+
+`list-style-type` now accepts `disclosure-open` and `disclosure-closed`, drawing the triangles CSS Counter Styles defines. `disclosure-closed` points the way the text runs, so it flips under `direction: rtl`. Font subsetting covers all three characters.
+
+### Enforce fetch policies on shared image cache entries
+
+A shared `fetchCache` hit returned cached bytes without running the calling render's `allowUrl` or `maxBytes`. Cache hits now recheck both. `allowUrl` runs against the entry URL only, not the redirect hops the original fetch followed.
+
+### Write a group of `css` entries as an object
+
+A `css` entry can be `{ media, rules }`, `{ supports, rules }`, or `{ layer, rules }`. A layer without `rules` declares its order alone. Takumi reads each prelude with the grammar its rule takes, so it cannot close the rule and open another.
+
+### Return `css` from `fromJsx` and `fromHtml`
+
+Reading the old `stylesheets` field returns the same array and warns once. It no longer appears in `Object.keys` or a spread of the result.
+
 ## @takumi-rs/helpers@2.11.0
 
 ### Keep a `;` inside an inline style value

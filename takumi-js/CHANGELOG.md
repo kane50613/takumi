@@ -1,3 +1,23 @@
+## takumi-js@2.13.0
+
+### Write a `css` entry as an object
+
+A `css` entry can be a rule, `{ selector, style, rules }`, or an animation, `{ keyframes, steps }`. Takumi checks the selector and every value before the entry reaches the parser, so a token that comes from application data cannot escape the rule it was written for. The `keyframes` option is deprecated and goes away in v3.
+
+### Write a group of `css` entries as an object
+
+A `css` entry can be `{ media, rules }`, `{ supports, rules }`, or `{ layer, rules }`. A layer without `rules` declares its order alone. Takumi reads each prelude with the grammar its rule takes, so it cannot close the rule and open another.
+
+### Rename the `stylesheets` render option to `css`
+
+`css` takes inline CSS as one string or a list. The old `stylesheets` name still works everywhere and warns once on `takumi-js` and `takumi-pdf`.
+
+### Render `<text>` elements in SVG image sources
+
+SVG images with `<text>`, `<tspan>` and `textPath` now draw their text using
+the registered fonts instead of dropping it. Glyphs render from font outlines;
+color emoji glyphs inside SVG text are not supported.
+
 ## takumi-js@2.9.0
 
 ### Load the wasm binary in a browser bundle
