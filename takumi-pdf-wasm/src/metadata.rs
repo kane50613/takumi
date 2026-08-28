@@ -153,7 +153,6 @@ pub(crate) struct MetadataInput {
   authors: Option<Vec<String>>,
   keywords: Option<Vec<String>>,
   creator: Option<String>,
-  producer: Option<String>,
   /// UTC creation date as `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`.
   creation_date: Option<String>,
   /// Custom XMP schemas written into the packet.
@@ -218,7 +217,6 @@ impl TryFrom<MetadataInput> for PdfMetadata {
       authors: input.authors.unwrap_or_default(),
       keywords: input.keywords.unwrap_or_default(),
       creator: input.creator,
-      producer: input.producer,
       creation_date,
       xmp: input
         .xmp

@@ -89,10 +89,13 @@ use takumi_core::{
   viewport::Viewport,
 };
 
+/// Written as `/Producer` and `pdf:Producer` in every document takumi renders.
+pub const PRODUCER: &str = concat!("takumi-pdf ", env!("CARGO_PKG_VERSION"));
+
 pub use crate::options::{
-  Attachment, AttachmentRelationship, DEFAULT_PRODUCER, MeasureOptions, MeasuredSize, PageMargin,
-  PageMargins, PageOptions, PdfDate, PdfError, PdfMetadata, PdfOptions, PdfStandard, Tagging,
-  XmpProperty, XmpSchema,
+  Attachment, AttachmentRelationship, MeasureOptions, MeasuredSize, PageMargin, PageMargins,
+  PageOptions, PdfDate, PdfError, PdfMetadata, PdfOptions, PdfStandard, Tagging, XmpProperty,
+  XmpSchema,
 };
 use crate::{
   bands::{RepeatBounds, Repeatable, prepare_band},
@@ -195,34 +198,34 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       builder = builder.with_accessibility_validator(accessibility);
       validated = true;
     }
+    let settings = SerializeSettings {
+      producer: options
+        .producer
+        .clone()
+        .unwrap_or_else(|| PRODUCER.to_string()),
+      ..SerializeSettings::default()
+    };
+
     if validated {
       let configuration = builder.finish().map_err(|_| PdfError::InvalidStandard)?;
 
       Document::new_with(SerializeSettings {
         configuration,
-        ..SerializeSettings::default()
+        ..settings
       })
     } else {
-      Document::new()
+      Document::new_with(settings)
     }
   };
   let tag_collector = (options.tagged != Tagging::Off || options.standard.requires_tagging())
     .then(|| RefCell::new(TagCollector::default()));
 
-  let empty_metadata = PdfMetadata::default();
-  // An archival standard validates the XMP packet and demands a creation date
-  // the caller may not have, so a document that asked for none keeps none.
-  let metadata = match &options.metadata {
-    Some(metadata) => Some(metadata),
-    None if options.standard == PdfStandard::None => Some(&empty_metadata),
-    None => None,
-  };
-
-  if let Some(metadata) = metadata {
+  if let Some(metadata) = &options.metadata {
     validate_xmp_schemas(&metadata.xmp)?;
     document.set_metadata(build_metadata(metadata, inputs.lang));
   } else if tag_collector.is_some() && inputs.lang.is_some() {
-    document.set_metadata(build_metadata(&empty_metadata, inputs.lang));
+    // Tagged standards check the document language even without metadata.
+    document.set_metadata(build_metadata(&PdfMetadata::default(), inputs.lang));
   }
 
   let fallback_date = options.metadata.as_ref().and_then(|m| m.creation_date);

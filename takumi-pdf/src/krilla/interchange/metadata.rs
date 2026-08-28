@@ -21,7 +21,6 @@ pub struct Metadata {
   pub(crate) title: Option<String>,
   pub(crate) description: Option<String>,
   pub(crate) creator: Option<String>,
-  pub(crate) producer: Option<String>,
   pub(crate) keywords: Option<Vec<String>>,
   pub(crate) authors: Option<Vec<String>>,
   pub(crate) document_id: Option<String>,
@@ -127,14 +126,6 @@ impl Metadata {
     self
   }
 
-  /// The producer tool of the document.
-  pub fn producer(mut self, producer: String) -> Self {
-    if !producer.is_empty() {
-      self.producer = Some(producer);
-    }
-    self
-  }
-
   /// The authors of the document.
   pub fn authors(mut self, authors: Vec<String>) -> Self {
     if !authors.is_empty() {
@@ -174,16 +165,6 @@ impl Metadata {
   pub fn page_layout(mut self, page_layout: PageLayout) -> Self {
     self.page_layout = Some(page_layout);
     self
-  }
-
-  pub(crate) fn has_document_info(&self) -> bool {
-    self.title.is_some()
-      || self.producer.is_some()
-      || self.keywords.is_some()
-      || self.authors.is_some()
-      || self.creator.is_some()
-      || self.creation_date.is_some()
-      || self.description.is_some()
   }
 
   pub(crate) fn serialize_xmp_metadata(
@@ -241,10 +222,6 @@ impl Metadata {
       xmp.creator_tool(creator);
     }
 
-    if let Some(producer) = &self.producer {
-      xmp.producer(producer);
-    }
-
     if let Some(lang) = &self.language {
       xmp.language([LangId(lang)]);
     }
@@ -298,8 +275,11 @@ impl Metadata {
     }
   }
 
+  /// Writes the info dictionary. The producer lands there whether or not the
+  /// document carries metadata, so every render names its renderer.
   pub(crate) fn serialize_document_info(
-    &self,
+    metadata: Option<&Self>,
+    producer: &str,
     ref_: &mut Ref,
     pdf: &mut Pdf,
     config: Configuration,
@@ -308,44 +288,40 @@ impl Metadata {
       return;
     }
 
-    if self.has_document_info() {
-      let ref_ = ref_.bump();
-      let mut document_info = LazyCell::new(|| pdf.document_info(ref_));
+    let ref_ = ref_.bump();
+    let mut document_info = LazyCell::new(|| pdf.document_info(ref_));
 
-      // ALl of those are deprecated in PDF 2.0 and will only be written
-      // to the XMP metadata.
-      if config.version() < PdfVersion::Pdf20 {
-        if let Some(title) = &self.title {
-          document_info.title(TextStr(title));
-        }
+    // ALl of those are deprecated in PDF 2.0 and will only be written
+    // to the XMP metadata.
+    if config.version() < PdfVersion::Pdf20 {
+      document_info.producer(TextStr(producer));
 
-        if let Some(description) = &self.description {
-          document_info.subject(TextStr(description));
-        }
-
-        if let Some(keywords) = &self.keywords {
-          let joined = keywords.join(", ");
-          document_info.keywords(TextStr(&joined));
-        }
-
-        if let Some(authors) = &self.authors {
-          let joined = authors.join(", ");
-          document_info.author(TextStr(&joined));
-        }
-
-        if let Some(creator) = &self.creator {
-          document_info.creator(TextStr(creator));
-        }
-
-        if let Some(producer) = &self.producer {
-          document_info.producer(TextStr(producer));
-        }
+      if let Some(title) = metadata.and_then(|m| m.title.as_ref()) {
+        document_info.title(TextStr(title));
       }
 
-      if let Some(date_time) = self.creation_date {
-        document_info.modified_date(pdf_date(date_time));
-        document_info.creation_date(pdf_date(date_time));
+      if let Some(description) = metadata.and_then(|m| m.description.as_ref()) {
+        document_info.subject(TextStr(description));
       }
+
+      if let Some(keywords) = metadata.and_then(|m| m.keywords.as_ref()) {
+        let joined = keywords.join(", ");
+        document_info.keywords(TextStr(&joined));
+      }
+
+      if let Some(authors) = metadata.and_then(|m| m.authors.as_ref()) {
+        let joined = authors.join(", ");
+        document_info.author(TextStr(&joined));
+      }
+
+      if let Some(creator) = metadata.and_then(|m| m.creator.as_ref()) {
+        document_info.creator(TextStr(creator));
+      }
+    }
+
+    if let Some(date_time) = metadata.and_then(|m| m.creation_date) {
+      document_info.modified_date(pdf_date(date_time));
+      document_info.creation_date(pdf_date(date_time));
     }
   }
 }

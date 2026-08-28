@@ -172,13 +172,15 @@ impl ChunkContainer {
     }
 
     // Write the PDF document info metadata.
-    if let Some(metadata) = &self.metadata {
-      metadata.serialize_document_info(
-        &mut remapped_ref,
-        &mut pdf,
-        sc.serialize_settings().configuration,
-      );
-    }
+    let producer = sc.serialize_settings().producer.clone();
+
+    Metadata::serialize_document_info(
+      self.metadata.as_ref(),
+      &producer,
+      &mut remapped_ref,
+      &mut pdf,
+      sc.serialize_settings().configuration,
+    );
 
     let instance_id = stable_hash_base64(pdf.as_bytes());
 
@@ -214,6 +216,7 @@ impl ChunkContainer {
 
     write_custom_properties(&mut xmp, custom_schemas);
 
+    xmp.producer(&producer);
     xmp.num_pages(sc.page_infos().len() as u32);
     xmp.format("application/pdf");
     xmp.instance_id(&instance_id);

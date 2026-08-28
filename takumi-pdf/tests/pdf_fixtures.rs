@@ -65,18 +65,11 @@ fn run_pdf_fixture(name: &str, build: impl Fn(&Fonts) -> PdfOptions<'_>) -> Vec<
   run_pdf_fixture_with(name, &fonts(), build)
 }
 
-/// Keeps the goldens off the crate version, which the real default producer
-/// carries.
+/// Keeps the goldens off the crate version the real producer carries.
 const FIXTURE_PRODUCER: &str = "takumi-pdf fixture";
 
 fn pin_producer(options: &mut PdfOptions<'_>) {
-  if options.metadata.is_none() && options.standard != PdfStandard::None {
-    return;
-  }
-
   options
-    .metadata
-    .get_or_insert_default()
     .producer
     .get_or_insert_with(|| FIXTURE_PRODUCER.to_string());
 }
@@ -3114,7 +3107,6 @@ fn report_links_outline() {
         authors: vec!["Takumi".into()],
         keywords: vec!["report".into(), "fixture".into()],
         creator: Some("takumi-pdf fixtures".into()),
-        producer: None,
         creation_date: None,
         xmp: Vec::new(),
       })
@@ -3777,11 +3769,11 @@ fn opaque_pngs_embed_their_own_streams() {
   }
 }
 
-/// The default `/Producer` names takumi and carries the crate version, which
-/// tegami keeps in step with the `takumi-pdf` npm package. The fixture harness
-/// pins its own producer, so this renders outside it.
+/// `/Producer` names takumi and carries the crate version, which tegami keeps
+/// in step with the `takumi-pdf` npm package. The fixture harness pins its own
+/// producer, so this renders outside it.
 #[test]
-fn the_default_producer_carries_the_crate_version() {
+fn the_producer_carries_the_crate_version() {
   let doc = r#"<div style="width: 40px; height: 40px; background: #000;"></div>"#;
   let pdf = render(
     PdfOptions::builder()
@@ -3794,17 +3786,17 @@ fn the_default_producer_carries_the_crate_version() {
   let haystack = inflated_text(&pdf);
 
   assert_eq!(
-    takumi_pdf::DEFAULT_PRODUCER,
+    takumi_pdf::PRODUCER,
     format!("takumi-pdf {}", env!("CARGO_PKG_VERSION")),
-    "the default producer should name takumi and its version"
+    "the producer should name takumi and its version"
   );
   assert!(
-    haystack.contains(&format!("/Producer({})", takumi_pdf::DEFAULT_PRODUCER)),
-    "expected the default producer in the info dictionary"
+    haystack.contains(&format!("/Producer({})", takumi_pdf::PRODUCER)),
+    "expected the producer in the info dictionary"
   );
   assert!(
-    haystack.contains(&format!("<pdf:Producer>{}", takumi_pdf::DEFAULT_PRODUCER)),
-    "expected the default producer in the XMP packet"
+    haystack.contains(&format!("<pdf:Producer>{}", takumi_pdf::PRODUCER)),
+    "expected the producer in the XMP packet"
   );
 }
 

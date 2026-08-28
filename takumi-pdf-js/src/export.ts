@@ -163,8 +163,6 @@ export type PdfMetadata = {
   keywords?: string[];
   /** The tool that created the source document. */
   creator?: string;
-  /** The tool that wrote the PDF. Defaults to takumi and its version. */
-  producer?: string;
   /**
    * UTC creation date, `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`. Tagged archival
    * standards require one; supplying it keeps output deterministic.

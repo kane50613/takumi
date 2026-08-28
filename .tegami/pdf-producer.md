@@ -6,6 +6,6 @@ packages:
 
 ### Name takumi in the PDF's `/Producer`
 
-Rendered PDFs now carry `takumi-pdf` and its version in the info dictionary's
-`/Producer` and in XMP's `pdf:Producer`, which identifies the renderer that
-wrote the file. Set `metadata.producer` to write your own value instead.
+Every rendered PDF now carries `takumi-pdf` and its version in the info
+dictionary's `/Producer` and in XMP's `pdf:Producer`, which identifies the
+renderer that wrote the file. Documents that set no metadata get it too.

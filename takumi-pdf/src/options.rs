@@ -22,9 +22,6 @@ use crate::krilla::{
   metadata::{DateTime, Metadata},
 };
 
-/// Written as `/Producer` and `pdf:Producer` when the caller sets none.
-pub const DEFAULT_PRODUCER: &str = concat!("takumi-pdf ", env!("CARGO_PKG_VERSION"));
-
 /// Errors from [`crate::render`].
 #[derive(Debug)]
 pub enum PdfError {
@@ -239,6 +236,9 @@ pub struct PdfOptions<'g> {
   /// Document metadata written to the PDF's info dictionary.
   #[builder(default, setter(strip_option))]
   pub metadata: Option<PdfMetadata>,
+  /// Overrides the `/Producer` every document carries.
+  #[builder(default, setter(strip_option))]
+  pub producer: Option<String>,
   /// Generates a PDF outline (bookmarks) from `h1`–`h6` headings.
   #[builder(default)]
   pub outline: bool,
@@ -317,8 +317,6 @@ pub struct PdfMetadata {
   pub keywords: Vec<String>,
   /// The tool that created the source document.
   pub creator: Option<String>,
-  /// The tool that wrote the PDF. Defaults to takumi and its version.
-  pub producer: Option<String>,
   /// The document creation date, interpreted as UTC. Tagged archival
   /// standards require one; supplying it keeps output deterministic.
   pub creation_date: Option<PdfDate>,
@@ -420,12 +418,6 @@ pub(crate) fn build_metadata(metadata: &PdfMetadata, lang: Option<Lang>) -> Meta
   if let Some(creator) = &metadata.creator {
     result = result.creator(creator.clone());
   }
-  result = result.producer(
-    metadata
-      .producer
-      .clone()
-      .unwrap_or_else(|| DEFAULT_PRODUCER.to_string()),
-  );
   if let Some(lang) = lang {
     result = result.language(lang.as_str().to_string());
   }
