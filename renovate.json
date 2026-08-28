@@ -2,7 +2,16 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended", "group:allNonMajor"],
   "labels": ["dependencies"],
+  "minimumReleaseAge": "7 days",
+  "description": "minimumReleaseAge does not cover lockfile updates. Cargo resolves through update-lockfile, so a compatible crate can enter Cargo.lock before the window is up.",
   "packageRules": [
+    {
+      "matchManagers": ["cargo"],
+      "matchPackageNames": ["phf", "strict-num", "float-cmp"],
+      "matchUpdateTypes": ["major", "minor"],
+      "enabled": false,
+      "description": "Held at the versions cssparser, selectors and tiny-skia-path resolve to. A newer major lands a second copy of the crate in the tree."
+    },
     {
       "matchManagers": ["cargo"],
       "matchPackageNames": [

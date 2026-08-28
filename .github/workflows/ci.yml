@@ -66,6 +66,19 @@ jobs:
       - name: Check unused dependencies
         run: cargo machete
 
+      # syn 2 and 3 both live in the proc-macro graph and never reach a
+      # binary. Every other duplicate is ours to fix, usually by holding our
+      # requirement at the major an upstream crate already resolves to.
+      - name: Check for duplicate dependency versions
+        run: |
+          tree=$(cargo tree -d --workspace --all-features -e normal --depth 0)
+          dupes=$(printf '%s\n' "$tree" | grep -vE '^(syn v|$)' || true)
+          if [ -n "$dupes" ]; then
+            echo "Duplicate versions in the dependency tree:"
+            echo "$dupes"
+            exit 1
+          fi
+
       - name: Run Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
