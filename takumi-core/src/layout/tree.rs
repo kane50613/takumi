@@ -1957,7 +1957,15 @@ impl RenderNode {
     }
 
     let font_style = SizedFontStyle::from_style(&self.context.style, &self.context);
-    let max_width = size.width.max(0.0);
+    // `size` is the border box, but the content wrapped against the content box.
+    let (max_width, _) = create_inline_constraint(
+      &self.context,
+      available_space,
+      Size {
+        width: Some(size.width.max(0.0)),
+        height: None,
+      },
+    );
     let built = create_inline_layout(InlineLayoutRequest {
       items,
       available_space: Size {
