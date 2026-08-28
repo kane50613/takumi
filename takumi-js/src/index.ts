@@ -34,15 +34,7 @@ export type {
   RenderOptions,
   RenderSvgOptions,
 } from "./render";
-export type {
-  AnimationRule,
-  CssInput,
-  Declarations,
-  LayerRule,
-  MediaRule,
-  StyleRule,
-  SupportsRule,
-} from "@takumi-rs/helpers";
+export type { AnimationRule, CssInput, Declarations, StyleRule } from "@takumi-rs/helpers";
 
 declare module "react" {
   interface DOMAttributes<T> {
