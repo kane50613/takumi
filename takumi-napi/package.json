@@ -61,7 +61,7 @@
     "provenance": true
   },
   "scripts": {
-    "build": "napi build --release --no-const-enum --platform --esm --strip -- --locked",
+    "build": "napi build --release --no-const-enum --platform --esm --strip",
     "build:js": "tsdown",
     "prepublishOnly": "bun artifacts && napi prepublish -t npm --no-gh-release",
     "artifacts": "napi create-npm-dirs && napi artifacts && napi version",
