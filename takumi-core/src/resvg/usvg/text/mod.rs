@@ -145,7 +145,7 @@ impl FontResolver<'_> {
           font
             .families
             .iter()
-            .map(|f| f.to_string())
+            .map(ToString::to_string)
             .collect::<Vec<_>>()
             .join(", ")
         );

@@ -862,7 +862,7 @@ fn convert_baseline_shift(node: SvgNode, state: &converter::State) -> Vec<Baseli
 fn count_chars(node: SvgNode) -> usize {
   node
     .descendants()
-    .filter(|n| n.is_text())
+    .filter(SvgNode::is_text)
     .fold(0, |w, n| w + n.text().chars().count())
 }
 

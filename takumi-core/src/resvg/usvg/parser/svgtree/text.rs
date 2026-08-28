@@ -118,7 +118,7 @@ fn resolve_tref_text(xml: &roxmltree::Document, href: &str) -> Option<String> {
   // for text nodes in element children therefore we will get duplicates.
   let text: String = node
     .descendants()
-    .filter(|n| n.is_text())
+    .filter(roxmltree::Node::is_text)
     .filter_map(|n| n.text())
     .collect();
   if text.is_empty() { None } else { Some(text) }
