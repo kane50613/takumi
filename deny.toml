@@ -1,0 +1,14 @@
+[graph]
+all-features = true
+
+[bans]
+multiple-versions = "deny"
+# syn 1 and 2 both live in the proc-macro graph and never reach a binary.
+skip = [{ crate = "syn" }]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# The hinting-gate fork the font stack is pinned to, by rev.
+allow-git = ["https://github.com/kane50613/fontations"]

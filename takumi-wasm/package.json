@@ -138,9 +138,9 @@
     }
   },
   "scripts": {
-    "build": "wasm-pack build --no-pack --release --out-dir pkg --target web && bun build:js",
+    "build": "wasm-pack build --no-pack --release --out-dir pkg --target web -- --locked && bun build:js",
     "build:js": "tsdown",
-    "build:debug": "wasm-pack build --no-pack --dev --out-dir pkg --target web && bun build:js",
+    "build:debug": "wasm-pack build --no-pack --dev --out-dir pkg --target web -- --locked && bun build:js",
     "publish-lint": "attw --pack . && publint --strict ."
   },
   "dependencies": {

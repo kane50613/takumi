@@ -55,7 +55,7 @@ jobs:
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
         with:
-          binstall: cargo-audit,cargo-llvm-cov,cargo-rdme@1.5.1,cargo-machete
+          binstall: cargo-audit,cargo-deny,cargo-llvm-cov,cargo-rdme@1.5.1,cargo-machete
           components: rustfmt,clippy
           targets: wasm32-unknown-unknown
           stage: test
@@ -66,38 +66,28 @@ jobs:
       - name: Check unused dependencies
         run: cargo machete
 
-      # syn 2 and 3 both live in the proc-macro graph and never reach a
-      # binary. Every other duplicate is ours to fix, usually by holding our
-      # requirement at the major an upstream crate already resolves to.
-      - name: Check for duplicate dependency versions
-        run: |
-          tree=$(cargo tree -d --workspace --all-features -e normal --depth 0)
-          dupes=$(printf '%s\n' "$tree" | grep -vE '^(syn v|$)' || true)
-          if [ -n "$dupes" ]; then
-            echo "Duplicate versions in the dependency tree:"
-            echo "$dupes"
-            exit 1
-          fi
+      - name: Check dependency sources and duplicates
+        run: cargo deny --locked check bans sources
 
       - name: Run Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
 
       # The host pass never sees the `target_arch = "wasm32"` half of the
       # decoders, so it is blind to whatever the published wasm compiles.
       - name: Run Clippy for wasm
-        run: cargo clippy --target wasm32-unknown-unknown -p takumi-wasm -p takumi-pdf-wasm -- -D warnings
+        run: cargo clippy --locked --target wasm32-unknown-unknown -p takumi-wasm -p takumi-pdf-wasm -- -D warnings
 
       - name: Test README.md is up to date
         run: |
           fail=0
           while read -r dir; do
             (cd "$dir" && cargo rdme --check) || fail=1
-          done < <(cargo metadata --format-version 1 --no-deps \
+          done < <(cargo metadata --locked --format-version 1 --no-deps \
             | jq -r '.packages[] | select(.publish != []) | select(any(.targets[]; .kind | index("lib"))) | .manifest_path | rtrimstr("/Cargo.toml")')
           exit $fail
 
       - name: Run tests
-        run: cargo test
+        run: cargo test --locked
 
       # The fixtures claim PDF/A and PDF/UA conformance in their metadata. Only
       # the reference validator can tell whether the claim holds.
@@ -193,12 +183,11 @@ jobs:
           exit 1
 
       - name: Run security audit
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: cargo audit
 
       - name: Test Publish (--dry-run)
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        run: cargo publish --dry-run --workspace
+        run: cargo publish --locked --dry-run --workspace
 
   build-helpers:
     name: Build @takumi-rs/helpers
