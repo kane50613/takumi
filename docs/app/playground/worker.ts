@@ -14,7 +14,7 @@ import { evaluateCodeExports } from "./evaluate";
 import { renderReact } from "./render-react";
 import { FALLBACK_FONT_URL, FONT_FAMILIES } from "./fonts";
 import { inspectPdf } from "./inspect-pdf";
-import { cssEntryToText, keyframesToCss } from "./preview-css";
+import { cssEntryToText } from "./preview-css";
 import { messageSchema, type CssEntry, type OutputKind, type RenderMessageInput } from "./schema";
 
 const DEFAULT_IMAGE_SIZE = { width: 1200, height: 630 };
@@ -154,7 +154,6 @@ async function renderOutput({
         fps,
         quality: options.quality,
         devicePixelRatio: options.devicePixelRatio,
-        keyframes: options.keyframes,
         images,
         fonts,
         css,
@@ -200,10 +199,7 @@ async function renderRequest(renderer: Renderer, id: number, code: string) {
       width: geometry.width,
       height: geometry.height,
       padding: geometry.padding,
-      cssContents: [
-        ...effectiveCss.map(cssEntryToText),
-        ...(options.keyframes ? [keyframesToCss(options.keyframes)] : []),
-      ],
+      cssContents: effectiveCss.map(cssEntryToText),
       theme,
     });
   }

@@ -43,29 +43,3 @@ export function cssEntryToText(entry: CssEntry): string {
 
   return styleRuleToCss(entry);
 }
-
-/**
- * Serializes the animations the deprecated `keyframes` option carries.
- *
- * @deprecated Will be removed in v3, with the option itself.
- */
-export function keyframesToCss(keyframes: NonNullable<PlaygroundOptions["keyframes"]>): string {
-  const rules = Array.isArray(keyframes)
-    ? keyframes.map((rule) => {
-        const body = rule.keyframes
-          .map(
-            (frame) =>
-              `${frame.offsets.map((offset) => `${offset * 100}%`).join(", ")} { ${declarationsToCss(frame.declarations)} }`,
-          )
-          .join(" ");
-        return `@keyframes ${rule.name} { ${body} }`;
-      })
-    : Object.entries(keyframes).map(([name, offsets]) => {
-        const body = Object.entries(offsets)
-          .map(([offset, declarations]) => `${offset} { ${declarationsToCss(declarations)} }`)
-          .join(" ");
-        return `@keyframes ${name} { ${body} }`;
-      });
-
-  return rules.join("\n");
-}
