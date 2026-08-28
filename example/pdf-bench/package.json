@@ -6,8 +6,8 @@
     "bench": "bun bench-takumi.tsx && bun bench-reactpdf.tsx && bun bench-puppeteer.ts"
   },
   "dependencies": {
-    "@react-pdf/renderer": "^4.5.1",
-    "puppeteer-core": "^25.5.0",
+    "@react-pdf/renderer": "^4.6.1",
+    "puppeteer-core": "^25.8.0",
     "react": "catalog:",
     "takumi-pdf": "workspace:*"
   },

@@ -4,7 +4,7 @@
   "type": "module",
   "module": "index.ts",
   "dependencies": {
-    "@icons-pack/react-simple-icons": "^13.13.0",
+    "@icons-pack/react-simple-icons": "^13.15.1",
     "lucide-react": "catalog:",
     "react": "catalog:",
     "takumi-js": "workspace:*"
