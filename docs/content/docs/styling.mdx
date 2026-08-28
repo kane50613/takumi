@@ -6,13 +6,13 @@ icon: Palette
 
 Pick a path by what you already have:
 
-| You have                                   | Use                                                |
-| ------------------------------------------ | -------------------------------------------------- |
-| Tailwind classes, compiled by your bundler | [`css`](#css) with the generated CSS               |
-| Tailwind classes, no build step            | [the `tw` prop](#tailwind-without-a-build-step)    |
-| Plain CSS                                  | [`css`](#css) or a `<style>` tag                   |
-| Design tokens to theme with                | [`cssVariables` or a `:root` rule](#design-tokens) |
-| One-off styles on one node                 | [the `style` prop](#inline-styles)                 |
+| You have                                   | Use                                             |
+| ------------------------------------------ | ----------------------------------------------- |
+| Tailwind classes, compiled by your bundler | [`css`](#css) with the generated CSS            |
+| Tailwind classes, no build step            | [the `tw` prop](#tailwind-without-a-build-step) |
+| Plain CSS                                  | [`css`](#css) or a `<style>` tag                |
+| Design tokens to theme with                | [a `:root` rule](#design-tokens)                |
+| One-off styles on one node                 | [the `style` prop](#inline-styles)              |
 
 The paths combine. Each section says who wins when they collide.
 
@@ -185,7 +185,9 @@ A `:root` rule, or a [Tailwind `@theme` block](#tailwind-at-rules) pasted as-is:
 }
 ```
 
-Or the `cssVariables` option, which compiles into a `:root` rule. The leading `--` is optional.
+Or a rule object in `css`, so a token that comes from application data never
+needs string concatenation. Takumi rejects a value that is not a value for its
+property, so it cannot escape the rule it was written for.
 
 ```tsx twoslash
 import { render } from "takumi-js";
@@ -194,11 +196,14 @@ const image = await render(<div tw="bg-brand-500 p-gutter">Hello</div>, {
   width: 1200,
   height: 630,
   // [!code highlight]
-  cssVariables: { "--color-brand-500": "#5b21b6", "--spacing-gutter": "2.5rem" },
+  css: [
+    {
+      selector: ":root",
+      style: { "--color-brand-500": "#5b21b6", "--spacing-gutter": "2.5rem" },
+    },
+  ],
 });
 ```
-
-**Takumi drops an entry whose value contains `;`, `{`, `}`, `/*` or `!important`. It also drops an entry whose name contains `:`, `;`, `{` or `}`.** Those entries could escape the generated rule.
 
 ### Which utilities read a token
 
@@ -234,12 +239,13 @@ Tokens declared in a stylesheet follow the CSS cascade. A media query or a selec
 }
 ```
 
-Tokens passed as `cssVariables` sit in a rule after every stylesheet:
+A rule object sits where its entry sits in `css`, so the array's order is the
+cascade order:
 
 | Competing declaration                  | Result                   |
 | -------------------------------------- | ------------------------ |
-| Equally specific `:root` rule in CSS   | `cssVariables` wins      |
-| A more specific selector, `:root:root` | the selector wins        |
+| Equally specific `:root` rule earlier  | The later entry wins     |
+| A more specific selector, `:root:root` | The selector wins        |
 | Declaration on the element             | Element declaration wins |
 
 ## Where this differs from Tailwind

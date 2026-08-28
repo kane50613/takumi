@@ -22,6 +22,27 @@ export type KeyframesRuleList = {
 }[];
 export type Keyframes = KeyframesMap | KeyframesRuleList;
 
+/** A declaration block, with custom properties allowed. */
+export type Declarations = Properties & {
+  [key: `--${string}`]: string | number;
+};
+
+/** A style rule written as an object. */
+export type StyleRule = {
+  selector: string;
+  style?: Declarations;
+  rules?: StyleRule[];
+};
+
+/** An animation written as an object. */
+export type AnimationRule = {
+  keyframes: string;
+  steps: { offset: string; style?: Declarations }[];
+};
+
+/** One entry of the `css` render option. */
+export type CssInput = string | StyleRule | AnimationRule;
+
 /** Output format for static images. */
 export type OutputFormat = "png" | "jpeg" | "webp" | "ico" | "raw";
 
@@ -73,20 +94,16 @@ export type RenderOptions = {
    */
   images?: ImageSource[];
   /**
-   * CSS to apply before rendering.
+   * CSS to apply before rendering: stylesheet text, or a rule written as an
+   * object.
    */
-  css?: string[];
+  css?: CssInput[];
   /**
-   * @deprecated Use `css` instead.
+   * @deprecated Use `css` instead. Removed in v3.
    */
   stylesheets?: string[];
   /**
-   * CSS custom properties for `:root`, which utilities and `var()` both read.
-   * A name without the `--` prefix gains it.
-   */
-  cssVariables?: Record<string, string>;
-  /**
-   * Structured keyframes to register alongside stylesheets.
+   * @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Removed in v3.
    */
   keyframes?: Keyframes;
   /**
@@ -146,20 +163,16 @@ export type RenderAnimationOptions = {
   images?: ImageSource[];
   drawDebugBorder?: boolean;
   /**
-   * CSS to apply before rendering.
+   * CSS to apply before rendering: stylesheet text, or a rule written as an
+   * object.
    */
-  css?: string[];
+  css?: CssInput[];
   /**
-   * @deprecated Use `css` instead.
+   * @deprecated Use `css` instead. Removed in v3.
    */
   stylesheets?: string[];
   /**
-   * CSS custom properties for `:root`, which utilities and `var()` both read.
-   * A name without the `--` prefix gains it.
-   */
-  cssVariables?: Record<string, string>;
-  /**
-   * Structured keyframes to register alongside stylesheets.
+   * @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Removed in v3.
    */
   keyframes?: Keyframes;
   /**

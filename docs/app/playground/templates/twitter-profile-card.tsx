@@ -38,11 +38,16 @@ export const options: PlaygroundOptions = {
   width: 1200,
   height: 630,
   format: "png",
-  cssVariables: {
-    "--color-accent": "#2dd4bf",
-    "--color-surface": "#0f172b",
-    "--color-bright": "#f8fafc",
-    "--color-body": "#e2e8f0",
-    "--color-dim": "#90a1b9",
-  },
+  css: [
+    {
+      selector: ":root",
+      style: {
+        "--color-accent": "#2dd4bf",
+        "--color-surface": "#0f172b",
+        "--color-bright": "#f8fafc",
+        "--color-body": "#e2e8f0",
+        "--color-dim": "#90a1b9",
+      },
+    },
+  ],
 };

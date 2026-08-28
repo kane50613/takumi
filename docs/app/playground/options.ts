@@ -1,6 +1,9 @@
 import type { Keyframes } from "takumi-js";
 import type { RenderOptions } from "takumi-pdf";
 
+/** A `css` entry: stylesheet text, or a rule written as an object. */
+export type CssEntry = string | { selector: string; style: Record<string, string> };
+
 // `Omit` collapses a union, which would lose the paged/viewport split that makes
 // the PDF options self-documenting in the editor.
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -38,13 +41,9 @@ declare global {
      */
     devicePixelRatio?: number;
     /**
-     * @description CSS applied before rendering, one string or a list.
+     * @description CSS applied before rendering: stylesheet text, or a rule written as an object. A `{ selector: ":root", style: { "--color-brand": "#7c3aed" } }` entry makes `bg-brand` resolve.
      */
-    css?: string | string[];
-    /**
-     * @description theme cssVariables set on `:root`. `{ "--color-brand": "#7c3aed" }` makes `bg-brand` resolve; the `--` prefix is optional.
-     */
-    cssVariables?: Record<string, string>;
+    css?: CssEntry | CssEntry[];
     /**
      * @description structured keyframes registered alongside the CSS.
      */

@@ -10,7 +10,7 @@ packages:
 
 ### Resolve `tw` utilities through CSS variables
 
-Utilities now read the CSS variables Tailwind compiles them to, falling back to the built-in value. Define tokens in `:root` or through the `cssVariables` option. `--color-brand-500` makes `bg-brand-500` work, and spacing, fonts, shadows, animations and breakpoints follow the same rule.
+Utilities now read the CSS variables Tailwind compiles them to, falling back to the built-in value. Define tokens in `:root`. `--color-brand-500` makes `bg-brand-500` work, and spacing, fonts, shadows, animations and breakpoints follow the same rule.
 
 Gradients now match Tailwind on two counts. Stops alone no longer paint without `bg-linear-*`, `bg-radial` or `bg-conic`, and a missing `to` stop fades to `transparent`.
 

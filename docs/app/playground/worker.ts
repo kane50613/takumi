@@ -87,8 +87,11 @@ function loadPdfRenderer() {
   return pdfRenderer;
 }
 
+/** A `css` entry: stylesheet text, or the palette as a `:root` rule. */
+type CssEntry = string | { selector: string; style: Record<string, string> };
+
 /** Everything a render needs beyond the tree itself, fetched once per request. */
-async function loadResources(node: Node, css: string[]) {
+async function loadResources(node: Node, css: CssEntry[]) {
   const [images, fonts] = await Promise.all([
     prepareImages<FetchedImage>({ node, fetchCache }),
     googleFonts(GOOGLE_FONTS).catch(() => undefined),
@@ -132,7 +135,6 @@ async function renderOutput({
 
     return {
       buffer: await pdf.render(node, {
-        cssVariables: options.cssVariables,
         ...options.pdf,
         css,
         images,
@@ -156,7 +158,6 @@ async function renderOutput({
         quality: options.quality,
         devicePixelRatio: options.devicePixelRatio,
         keyframes: options.keyframes,
-        cssVariables: options.cssVariables,
         images,
         fonts,
         css,
@@ -179,6 +180,14 @@ async function renderRequest(renderer: Renderer, id: number, code: string) {
   const { node, css: extractedCss } = await fromJsx(element);
   const optionCss = typeof options.css === "string" ? [options.css] : options.css;
   const effectiveCss = optionCss ?? extractedCss;
+  // The preview compiles utilities itself, so it needs the tokens as a map
+  // rather than as the `:root` rule the renderer reads.
+  const cssVariables = Object.assign(
+    {},
+    ...effectiveCss.map((entry) =>
+      typeof entry === "object" && entry.selector === ":root" ? entry.style : {},
+    ),
+  );
   const geometry = outputGeometry(options);
 
   // A PDF renders pages, which a single HTML flow cannot stand in for, so the
@@ -191,10 +200,11 @@ async function renderRequest(renderer: Renderer, id: number, code: string) {
       width: geometry.width,
       height: geometry.height,
       padding: geometry.padding,
-      cssContents: options.keyframes
-        ? [...effectiveCss, keyframesToCss(options.keyframes)]
-        : effectiveCss,
-      cssVariables: options.cssVariables,
+      cssContents: [
+        ...effectiveCss.filter((entry): entry is string => typeof entry === "string"),
+        ...(options.keyframes ? [keyframesToCss(options.keyframes)] : []),
+      ],
+      cssVariables,
     });
   }
 

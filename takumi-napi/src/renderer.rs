@@ -6,13 +6,14 @@ use std::{
 use arc_swap::ArcSwap;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
+use serde::Deserialize;
 use takumi_core::{
   Fonts,
   layout::node::Node,
   resources::image::{
     ImageCacheMode as CoreImageCacheMode, ImageSource as LoadedImageSource, ResourceCache,
   },
-  style::{KeyframesRule as CoreKeyframesRule, Lang},
+  style::{CssSource, KeyframesRule as CoreKeyframesRule, Lang},
   viewport::DEFAULT_DEVICE_PIXEL_RATIO,
 };
 use takumi_raster::{
@@ -146,6 +147,23 @@ pub(crate) fn device_pixel_ratio(ratio: Option<f64>) -> f32 {
     .unwrap_or(DEFAULT_DEVICE_PIXEL_RATIO)
 }
 
+/// The CSS for a render, taking the deprecated `stylesheets` alias when `css`
+/// is absent.
+pub(crate) fn resolve_css(
+  css: Option<Object>,
+  stylesheets: Option<Vec<String>>,
+) -> Result<Option<Vec<CssSource>>> {
+  let Some(css) = css else {
+    return Ok(stylesheets.map(|sheets| sheets.into_iter().map(CssSource::Text).collect()));
+  };
+
+  let mut deserializer = De::new(&css);
+
+  Vec::<CssSource>::deserialize(&mut deserializer)
+    .map(Some)
+    .map_err(|error: napi::Error| Error::from_reason(error.to_string()))
+}
+
 pub(crate) fn deserialize_keyframes(keyframes: Option<Object>) -> Result<Vec<CoreKeyframesRule>> {
   match keyframes {
     Some(keyframes) => {
@@ -177,13 +195,13 @@ pub struct RenderOptions<'env> {
   pub draw_debug_border: Option<bool>,
   /// Images keyed by `src`, each carrying raw bytes.
   pub images: Option<Vec<ImageSource<'env>>>,
-  /// CSS to apply before rendering.
-  pub css: Option<Vec<String>>,
-  /// @deprecated Use `css` instead.
+  /// CSS to apply before rendering: stylesheet text, or a rule written as an
+  /// object.
+  #[napi(ts_type = "CssInput[]")]
+  pub css: Option<Object<'env>>,
+  /// @deprecated Use `css` instead. Removed in v3.
   pub stylesheets: Option<Vec<String>>,
-  /// CSS custom properties for `:root`, which utilities and `var()` both read.
-  pub css_variables: Option<HashMap<String, String>>,
-  /// Structured keyframes to register alongside stylesheets.
+  /// @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Removed in v3.
   #[napi(ts_type = "Keyframes")]
   pub keyframes: Option<Object<'env>>,
   /// The device pixel ratio.
@@ -212,13 +230,13 @@ pub struct SvgRenderOptions<'env> {
   pub height: Option<u32>,
   /// Images keyed by `src`, each carrying raw bytes.
   pub images: Option<Vec<ImageSource<'env>>>,
-  /// CSS to apply before rendering.
-  pub css: Option<Vec<String>>,
-  /// @deprecated Use `css` instead.
+  /// CSS to apply before rendering: stylesheet text, or a rule written as an
+  /// object.
+  #[napi(ts_type = "CssInput[]")]
+  pub css: Option<Object<'env>>,
+  /// @deprecated Use `css` instead. Removed in v3.
   pub stylesheets: Option<Vec<String>>,
-  /// CSS custom properties for `:root`, which utilities and `var()` both read.
-  pub css_variables: Option<HashMap<String, String>>,
-  /// Structured keyframes to register alongside stylesheets.
+  /// @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Removed in v3.
   #[napi(ts_type = "Keyframes")]
   pub keyframes: Option<Object<'env>>,
   /// The animation timeline time in milliseconds.
@@ -284,13 +302,13 @@ pub struct RenderAnimationOptions<'env> {
   pub fps: u32,
   /// Images keyed by `src`, each carrying raw bytes.
   pub images: Option<Vec<ImageSource<'env>>>,
-  /// CSS to apply before rendering.
-  pub css: Option<Vec<String>>,
-  /// @deprecated Use `css` instead.
+  /// CSS to apply before rendering: stylesheet text, or a rule written as an
+  /// object.
+  #[napi(ts_type = "CssInput[]")]
+  pub css: Option<Object<'env>>,
+  /// @deprecated Use `css` instead. Removed in v3.
   pub stylesheets: Option<Vec<String>>,
-  /// CSS custom properties for `:root`, which utilities and `var()` both read.
-  pub css_variables: Option<HashMap<String, String>>,
-  /// Structured keyframes to register alongside stylesheets.
+  /// @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Removed in v3.
   #[napi(ts_type = "Keyframes")]
   pub keyframes: Option<Object<'env>>,
   /// The device pixel ratio.

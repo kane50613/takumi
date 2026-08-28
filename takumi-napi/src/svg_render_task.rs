@@ -12,7 +12,7 @@ use crate::{
   JsBytes, map_error,
   renderer::{
     ImageCacheMode, RendererState, SvgRenderOptions, collect_images, decode_images,
-    deserialize_keyframes, parse_lang,
+    deserialize_keyframes, parse_lang, resolve_css,
   },
 };
 
@@ -36,10 +36,10 @@ impl SvgRenderTask {
   ) -> Result<Self> {
     let stylesheet = stylesheet(
       &state.resource_cache,
-      options.css.or(options.stylesheets),
+      resolve_css(options.css, options.stylesheets)?,
       deserialize_keyframes(options.keyframes)?,
-      options.css_variables,
-    );
+    )
+    .map_err(map_error)?;
 
     Ok(SvgRenderTask {
       node: Some(node),

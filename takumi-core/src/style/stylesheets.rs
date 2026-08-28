@@ -476,7 +476,7 @@ macro_rules! define_style {
           }
         }
 
-        fn parse_css_input_declarations<'de>(
+        pub(crate) fn parse_css_input_declarations<'de>(
           self,
           css_input: CssInput<'de>,
         ) -> Result<ParsedDeclarations, CssInputParseError<'de>> {

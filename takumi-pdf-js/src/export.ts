@@ -1,3 +1,4 @@
+import type { CssInput } from "@takumi-rs/wasm";
 import { fromHtml } from "@takumi-rs/helpers/html";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 import type { FontLoader, ImagesInput, RegisteredFamilyLike } from "@takumi-rs/helpers/renderer";
@@ -135,14 +136,12 @@ export type MeasureOptions = (
   /** Pre-fetched images for `src` URLs in the tree. */
   images?: ImagesInput;
   /** CSS to apply before layout, one string or a list cascading in order. */
-  css?: string | readonly string[];
+  css?: CssInput | readonly CssInput[];
   /**
    * CSS stylesheets to apply before layout.
-   * @deprecated Use `css` instead.
+   * @deprecated Use `css` instead. Removed in v3.
    */
   stylesheets?: string[];
-  /** CSS custom properties for `:root`; the `--` prefix is optional. */
-  cssVariables?: Record<string, string>;
   /** Per-render font stack: ordered family names used as the fallback chain. */
   fontFamilies?: string[];
   /** Default BCP-47 language tag applied to the root. */
@@ -269,14 +268,13 @@ export type RenderOptions = (PagedOptions | ViewportOptions) &
      */
     images?: ImagesInput;
     /** CSS to apply before layout, one string or a list cascading in order. */
-    css?: string | readonly string[];
+    css?: CssInput | readonly CssInput[];
     /**
      * CSS stylesheets to apply before layout.
      * @deprecated Use `css` instead.
      */
     stylesheets?: string[];
     /** CSS custom properties for `:root`; the `--` prefix is optional. */
-    cssVariables?: Record<string, string>;
     /** Per-render font stack: ordered family names used as the fallback chain. */
     fontFamilies?: string[];
     /** Default BCP-47 language tag applied to the root. */
