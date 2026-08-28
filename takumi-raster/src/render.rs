@@ -3,6 +3,7 @@ use std::{collections::HashMap, rc::Rc, sync::Arc};
 use serde::Serialize;
 use takumi_core::{
   geometry::{AvailableSpace, ComputedLayout as Layout, NodeId, Size},
+  layout::node::NodeKind,
   scene::build_stacking_contexts,
   style::{ComputedStyle, Lang},
 };
@@ -241,7 +242,15 @@ fn collect_measure_result(
         let mut children = Vec::new();
         let mut runs = Vec::new();
 
-        if current.should_create_inline_layout() {
+        // A text node carries its own inline content but has no children, so
+        // `should_create_inline_layout` says no while it still produces runs.
+        let is_text_leaf = current.children.is_none()
+          && current
+            .node
+            .as_ref()
+            .is_some_and(|node| matches!(node.kind, NodeKind::Text(_)));
+
+        if current.should_create_inline_layout() || is_text_leaf {
           let font_style = SizedFontStyle::from_style(&current.context.style, &current.context);
           let built = create_inline_layout(InlineLayoutRequest::in_available_space(
             collect_inline_items(current),
