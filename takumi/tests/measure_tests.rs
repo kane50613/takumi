@@ -440,6 +440,37 @@ fn test_measure_skips_a_hidden_text_node() {
   assert_eq!(runs(&out), ["shown"]);
 }
 
+/// Generated block content turns a text node into a box container, but paint
+/// still draws the authored text, so measure has to report it too.
+#[test]
+fn test_measure_keeps_authored_text_beside_generated_block_content() {
+  let out = takumi::measure(
+    RenderOptions::builder()
+      .viewport(create_measure_viewport())
+      .node(
+        Node::from_html(r#"<div><p>word</p></div>"#, FromHtmlOptions::default()).expect("parse"),
+      )
+      .fonts(&CONTEXT)
+      .images(TEST_IMAGES.clone())
+      .stylesheet(std::sync::Arc::new(
+        StyleSheet::parse_list([r#"p::after { content: "!"; display: block }"#]).expect("css"),
+      ))
+      .build(),
+  )
+  .unwrap();
+
+  fn runs(node: &MeasuredNode) -> Vec<&str> {
+    node
+      .runs
+      .iter()
+      .map(|run| run.text.as_str())
+      .chain(node.children.iter().flat_map(runs))
+      .collect()
+  }
+
+  assert_eq!(runs(&out), ["word", "!"]);
+}
+
 #[test]
 fn test_measure_text_fit_per_line_shrink_scales_run_geometry() {
   let base_style = Style::default()

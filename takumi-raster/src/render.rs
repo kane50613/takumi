@@ -13,7 +13,9 @@ use crate::{
   AnimationFrame, Bitmap, Canvas, DitheringAlgorithm, Error, Fonts, RenderContext, Result,
   SizedFontStyle, apply_dithering,
   layout::{
-    inline::{InlineLayoutMode, InlineLayoutRequest, collect_inline_items, create_inline_layout},
+    inline::{
+      InlineItem, InlineLayoutMode, InlineLayoutRequest, collect_inline_items, create_inline_layout,
+    },
     node::Node,
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
@@ -242,16 +244,7 @@ fn collect_measure_result(
         let mut children = Vec::new();
         let mut runs = Vec::new();
 
-        // A text node carries its own inline content but has no children, so
-        // `should_create_inline_layout` says no while it still produces runs.
-        let is_text_leaf = current.children.is_none()
-          && current.context.style.display != Display::None
-          && current
-            .node
-            .as_ref()
-            .is_some_and(|node| matches!(node.kind, NodeKind::Text(_)));
-
-        if current.should_create_inline_layout() || is_text_leaf {
+        if current.should_create_inline_layout() {
           let font_style = SizedFontStyle::from_style(&current.context.style, &current.context);
           let built = create_inline_layout(InlineLayoutRequest::in_available_space(
             collect_inline_items(current),
@@ -289,6 +282,41 @@ fn collect_measure_result(
             create_measured_node(layout, local_transform, children, runs),
           );
           continue;
+        }
+
+        // Paint always draws a text node's own text, even when generated
+        // content gave it box children; its runs sit beside those children.
+        if current.context.style.display != Display::None
+          && !current.has_anonymous_text_item_child()
+          && let Some(text) = current.node.as_ref().and_then(|node| match &node.kind {
+            NodeKind::Text(data) => Some(data.text.as_str()),
+            _ => None,
+          })
+        {
+          let font_style = SizedFontStyle::from_style(&current.context.style, &current.context);
+          let built = create_inline_layout(InlineLayoutRequest::in_available_space(
+            vec![InlineItem::Text {
+              text: text.into(),
+              context: &current.context,
+              link: None,
+            }],
+            Size {
+              width: AvailableSpace::Definite(layout.content_box_width()),
+              height: AvailableSpace::Definite(layout.content_box_height()),
+            },
+            Size::NONE,
+            &font_style,
+            &current.context,
+            InlineLayoutMode::Measure,
+          ));
+          let (measured_runs, _) = built.measure_runs(layout);
+          runs.extend(measured_runs.into_iter().map(|run| MeasuredTextRun {
+            text: run.text.to_string(),
+            x: run.x,
+            y: run.y,
+            width: run.width,
+            height: run.height,
+          }));
         }
 
         if current.children.is_none() {
