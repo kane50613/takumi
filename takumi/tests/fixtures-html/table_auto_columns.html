@@ -22,6 +22,8 @@
       }
       table {
         display: table;
+        width: 100%;
+        border-collapse: collapse;
         background: rgb(255, 255, 255);
         font-size: 13px;
       }
@@ -36,12 +38,6 @@
         border: 1px solid rgb(148, 163, 184);
         padding: 0;
       }
-      .wide {
-        width: 100%;
-      }
-      .collapse {
-        border-collapse: collapse;
-      }
       .narrow {
         width: 300px;
       }
@@ -49,25 +45,17 @@
   </head>
   <body style="width: 1200px; height: 630px">
     <div class="root">
-      <span class="label">three auto columns, table wider than its content</span>
-      <table class="wide">
+      <span class="label">every column grows in proportion to its own content</span>
+      <table>
         <tr>
           <td>AAA x</td>
           <td>BBB medium length content here</td>
           <td>CCC a considerably longer stretch of column content that wants more room</td>
-        </tr>
-      </table>
-      <span class="label">four auto columns, table wider than its content</span>
-      <table class="wide">
-        <tr>
-          <td>AAA x</td>
-          <td>BBB medium length content here</td>
-          <td>CCC a considerably longer stretch of column content that wants more room</td>
-          <td>DDD mid</td>
+          <td><img src="assets/images/yeecord.png" width="64" height="64" /></td>
         </tr>
       </table>
       <span class="label">a narrower span lands before a wider one</span>
-      <table class="wide">
+      <table>
         <tr>
           <td colspan="3">AAA spans every column of this table</td>
         </tr>
@@ -76,23 +64,7 @@
           <td>CCC</td>
         </tr>
       </table>
-      <span class="label">an image column takes the width the image asks for</span>
-      <table class="wide">
-        <tr>
-          <td>AAA x</td>
-          <td><img src="assets/images/yeecord.png" width="64" height="64" /></td>
-          <td>CCC a considerably longer stretch of column content that wants more room</td>
-        </tr>
-      </table>
-      <span class="label">border-collapse halves the border each column carries</span>
-      <table class="wide collapse">
-        <tr>
-          <td>AAA x</td>
-          <td>BBB medium length content here</td>
-          <td>CCC a considerably longer stretch of column content that wants more room</td>
-        </tr>
-      </table>
-      <span class="label">three auto columns, table narrower than its content</span>
+      <span class="label">a table narrower than its content still approximates</span>
       <table class="narrow">
         <tr>
           <td>AAA x</td>

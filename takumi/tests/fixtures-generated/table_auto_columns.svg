@@ -2,876 +2,480 @@
   <rect x="0" y="0" width="1200" height="630" fill="#f3f4f6"/>
   <g fill="#475569">
     <use href="#g0" x="16" y="27"/>
-    <use href="#g1" x="20.14" y="27"/>
-    <use href="#g2" x="26.31" y="27"/>
-    <use href="#g3" x="30.04" y="27"/>
-    <use href="#g3" x="36.1" y="27"/>
-    <use href="#g4" x="45.02" y="27"/>
-    <use href="#g5" x="50.97" y="27"/>
-    <use href="#g0" x="56.99" y="27"/>
-    <use href="#g6" x="61.12" y="27"/>
-    <use href="#g7" x="70.18" y="27"/>
-    <use href="#g6" x="76.07" y="27"/>
-    <use href="#g8" x="82.32" y="27"/>
-    <use href="#g5" x="85.15" y="27"/>
-    <use href="#g9" x="91.47" y="27"/>
-    <use href="#g10" x="100.9" y="27"/>
-    <use href="#g11" x="107.16" y="27"/>
-    <use href="#g12" x="112.88" y="27"/>
-    <use href="#g0" x="117.84" y="27"/>
-    <use href="#g4" x="122.04" y="27"/>
-    <use href="#g13" x="128.01" y="27"/>
-    <use href="#g8" x="134.5" y="27"/>
-    <use href="#g3" x="137.37" y="27"/>
-    <use href="#g14" x="146.3" y="27"/>
-    <use href="#g15" x="155.19" y="27"/>
-    <use href="#g16" x="157.77" y="27"/>
-    <use href="#g3" x="164.2" y="27"/>
-    <use href="#g2" x="170.26" y="27"/>
-    <use href="#g0" x="177.18" y="27"/>
-    <use href="#g1" x="181.32" y="27"/>
-    <use href="#g4" x="187.6" y="27"/>
-    <use href="#g10" x="193.62" y="27"/>
-    <use href="#g15" x="202.76" y="27"/>
-    <use href="#g0" x="205" y="27"/>
-    <use href="#g11" x="209.14" y="27"/>
-    <use href="#g7" x="217.61" y="27"/>
-    <use href="#g6" x="223.5" y="27"/>
-    <use href="#g10" x="229.7" y="27"/>
-    <use href="#g0" x="235.65" y="27"/>
-    <use href="#g3" x="239.78" y="27"/>
-    <use href="#g10" x="245.85" y="27"/>
-    <use href="#g0" x="251.8" y="27"/>
+    <use href="#g1" x="21.9" y="27"/>
+    <use href="#g0" x="27.51" y="27"/>
+    <use href="#g2" x="33.57" y="27"/>
+    <use href="#g3" x="37.46" y="27"/>
+    <use href="#g4" x="46.12" y="27"/>
+    <use href="#g5" x="52.01" y="27"/>
+    <use href="#g6" x="58.26" y="27"/>
+    <use href="#g7" x="61.09" y="27"/>
+    <use href="#g8" x="67.41" y="27"/>
+    <use href="#g9" x="76.84" y="27"/>
+    <use href="#g10" x="85.98" y="27"/>
+    <use href="#g2" x="92.52" y="27"/>
+    <use href="#g5" x="96.25" y="27"/>
+    <use href="#g11" x="102.27" y="27"/>
+    <use href="#g12" x="111" y="27"/>
+    <use href="#g13" x="119.47" y="27"/>
+    <use href="#g9" x="122.22" y="27"/>
+    <use href="#g14" x="131.36" y="27"/>
+    <use href="#g2" x="137.79" y="27"/>
+    <use href="#g5" x="141.52" y="27"/>
+    <use href="#g14" x="147.71" y="27"/>
+    <use href="#g5" x="154.15" y="27"/>
+    <use href="#g2" x="160.34" y="27"/>
+    <use href="#g15" x="163.96" y="27"/>
+    <use href="#g13" x="168.1" y="27"/>
+    <use href="#g5" x="170.67" y="27"/>
+    <use href="#g9" x="176.86" y="27"/>
+    <use href="#g15" x="186" y="27"/>
+    <use href="#g5" x="190.14" y="27"/>
+    <use href="#g13" x="199.19" y="27"/>
+    <use href="#g15" x="201.44" y="27"/>
+    <use href="#g12" x="205.57" y="27"/>
+    <use href="#g5" x="214.04" y="27"/>
+    <use href="#g11" x="220.07" y="27"/>
+    <use href="#g9" x="228.82" y="27"/>
+    <use href="#g4" x="237.96" y="27"/>
+    <use href="#g5" x="243.85" y="27"/>
+    <use href="#g9" x="250.05" y="27"/>
+    <use href="#g15" x="256" y="27"/>
+    <use href="#g0" x="260.13" y="27"/>
+    <use href="#g9" x="266.2" y="27"/>
+    <use href="#g15" x="272.15" y="27"/>
   </g>
-  <rect x="16" y="43" width="1168" height="19" fill="#fff"/>
-  <path d="M16 43h66v19h-66v-19Zm1 1h64v17h-64v-17Z" fill="#94a3b8" fill-rule="evenodd"/>
-  <g fill="#000">
-    <use href="#g17" x="17" y="56"/>
-    <use href="#g17" x="25.68" y="56"/>
-    <use href="#g17" x="34.37" y="56"/>
-    <use href="#g18" x="46.3" y="56"/>
-  </g>
-  <path d="M82 43h337v19h-337v-19Zm1 1h335v17h-335v-17Z" fill="#94a3b8" fill-rule="evenodd"/>
-  <g fill="#000">
-    <use href="#g19" x="83" y="56"/>
-    <use href="#g19" x="91.74" y="56"/>
-    <use href="#g19" x="100.47" y="56"/>
-    <use href="#g20" x="112.56" y="56"/>
-    <use href="#g21" x="123.81" y="56"/>
-    <use href="#g22" x="130.97" y="56"/>
-    <use href="#g23" x="138.45" y="56"/>
-    <use href="#g24" x="141.36" y="56"/>
-    <use href="#g20" x="148.83" y="56"/>
-    <use href="#g25" x="163.48" y="56"/>
-    <use href="#g21" x="166.88" y="56"/>
-    <use href="#g26" x="174.04" y="56"/>
-    <use href="#g27" x="181.44" y="56"/>
-    <use href="#g28" x="188.79" y="56"/>
-    <use href="#g29" x="193.68" y="56"/>
-    <use href="#g30" x="204.49" y="56"/>
-    <use href="#g31" x="211.45" y="56"/>
-    <use href="#g26" x="218.77" y="56"/>
-    <use href="#g28" x="225.81" y="56"/>
-    <use href="#g21" x="230.69" y="56"/>
-    <use href="#g26" x="237.86" y="56"/>
-    <use href="#g28" x="244.89" y="56"/>
-    <use href="#g29" x="253.24" y="56"/>
-    <use href="#g21" x="260.63" y="56"/>
-    <use href="#g32" x="267.79" y="56"/>
-    <use href="#g21" x="272.2" y="56"/>
-  </g>
-  <path d="M419 43h765v19h-765v-19Zm1 1h763v17h-763v-17Z" fill="#94a3b8" fill-rule="evenodd"/>
-  <g fill="#000">
-    <use href="#g33" x="420" y="56"/>
-    <use href="#g33" x="429.14" y="56"/>
-    <use href="#g33" x="438.28" y="56"/>
-    <use href="#g34" x="450.67" y="56"/>
-    <use href="#g30" x="461.08" y="56"/>
-    <use href="#g31" x="468.05" y="56"/>
-    <use href="#g26" x="475.37" y="56"/>
-    <use href="#g35" x="482.76" y="56"/>
-    <use href="#g23" x="489.39" y="56"/>
-    <use href="#g22" x="492.44" y="56"/>
-    <use href="#g21" x="500.04" y="56"/>
-    <use href="#g32" x="507.2" y="56"/>
-    <use href="#g34" x="511.61" y="56"/>
-    <use href="#g36" x="518.67" y="56"/>
-    <use href="#g25" x="526.34" y="56"/>
-    <use href="#g37" x="529.5" y="56"/>
-    <use href="#g25" x="539.73" y="56"/>
-    <use href="#g31" x="543.12" y="56"/>
-    <use href="#g26" x="550.44" y="56"/>
-    <use href="#g27" x="557.84" y="56"/>
-    <use href="#g21" x="565.43" y="56"/>
-    <use href="#g32" x="572.59" y="56"/>
-    <use href="#g35" x="580.77" y="56"/>
-    <use href="#g28" x="587.14" y="56"/>
-    <use href="#g32" x="592.3" y="56"/>
-    <use href="#g21" x="596.71" y="56"/>
-    <use href="#g28" x="603.61" y="56"/>
-    <use href="#g30" x="608.5" y="56"/>
-    <use href="#g29" x="615.47" y="56"/>
-    <use href="#g31" x="626.27" y="56"/>
-    <use href="#g38" x="633.33" y="56"/>
-    <use href="#g30" x="641.71" y="56"/>
-    <use href="#g31" x="648.68" y="56"/>
-    <use href="#g25" x="656.07" y="56"/>
-    <use href="#g24" x="659.41" y="56"/>
-    <use href="#g20" x="666.88" y="56"/>
-    <use href="#g26" x="678.02" y="56"/>
-    <use href="#g30" x="688.83" y="56"/>
-    <use href="#g31" x="695.8" y="56"/>
-    <use href="#g26" x="703.11" y="56"/>
-    <use href="#g28" x="710.15" y="56"/>
-    <use href="#g21" x="715.04" y="56"/>
-    <use href="#g26" x="722.2" y="56"/>
-    <use href="#g28" x="729.23" y="56"/>
-    <use href="#g28" x="737.58" y="56"/>
-    <use href="#g29" x="742.47" y="56"/>
-    <use href="#g34" x="749.89" y="56"/>
-    <use href="#g28" x="756.4" y="56"/>
-    <use href="#g39" x="764.75" y="56"/>
-    <use href="#g34" x="775.11" y="56"/>
-    <use href="#g26" x="782.22" y="56"/>
-    <use href="#g28" x="789.25" y="56"/>
-    <use href="#g35" x="794.14" y="56"/>
-    <use href="#g20" x="804.15" y="56"/>
-    <use href="#g31" x="815.39" y="56"/>
-    <use href="#g32" x="822.71" y="56"/>
-    <use href="#g21" x="827.12" y="56"/>
-    <use href="#g32" x="837.66" y="56"/>
-    <use href="#g31" x="842.07" y="56"/>
-    <use href="#g31" x="849.39" y="56"/>
-    <use href="#g20" x="856.71" y="56"/>
-  </g>
-  <g fill="#475569">
-    <use href="#g40" x="16" y="85"/>
-    <use href="#g6" x="19.86" y="85"/>
-    <use href="#g5" x="26.05" y="85"/>
-    <use href="#g2" x="32.38" y="85"/>
-    <use href="#g4" x="39.3" y="85"/>
-    <use href="#g5" x="45.25" y="85"/>
-    <use href="#g0" x="51.27" y="85"/>
-    <use href="#g6" x="55.4" y="85"/>
-    <use href="#g7" x="64.46" y="85"/>
-    <use href="#g6" x="70.35" y="85"/>
-    <use href="#g8" x="76.6" y="85"/>
-    <use href="#g5" x="79.43" y="85"/>
-    <use href="#g9" x="85.75" y="85"/>
-    <use href="#g10" x="95.18" y="85"/>
-    <use href="#g11" x="101.44" y="85"/>
-    <use href="#g12" x="107.16" y="85"/>
-    <use href="#g0" x="112.12" y="85"/>
-    <use href="#g4" x="116.32" y="85"/>
-    <use href="#g13" x="122.29" y="85"/>
-    <use href="#g8" x="128.78" y="85"/>
-    <use href="#g3" x="131.65" y="85"/>
-    <use href="#g14" x="140.58" y="85"/>
-    <use href="#g15" x="149.47" y="85"/>
-    <use href="#g16" x="152.05" y="85"/>
-    <use href="#g3" x="158.48" y="85"/>
-    <use href="#g2" x="164.54" y="85"/>
-    <use href="#g0" x="171.46" y="85"/>
-    <use href="#g1" x="175.6" y="85"/>
-    <use href="#g4" x="181.88" y="85"/>
-    <use href="#g10" x="187.9" y="85"/>
-    <use href="#g15" x="197.04" y="85"/>
-    <use href="#g0" x="199.28" y="85"/>
-    <use href="#g11" x="203.42" y="85"/>
-    <use href="#g7" x="211.89" y="85"/>
-    <use href="#g6" x="217.78" y="85"/>
-    <use href="#g10" x="223.98" y="85"/>
-    <use href="#g0" x="229.93" y="85"/>
-    <use href="#g3" x="234.06" y="85"/>
-    <use href="#g10" x="240.13" y="85"/>
-    <use href="#g0" x="246.08" y="85"/>
-  </g>
-  <rect x="16" y="101" width="1168" height="19" fill="#fff"/>
-  <path d="M16 101h61v19h-61v-19Zm1 1h59v17h-59v-17Z" fill="#94a3b8" fill-rule="evenodd"/>
-  <g fill="#000">
-    <use href="#g17" x="17" y="114"/>
-    <use href="#g17" x="25.68" y="114"/>
-    <use href="#g17" x="34.37" y="114"/>
-    <use href="#g18" x="46.3" y="114"/>
-  </g>
-  <path d="M77 101h313v19h-313v-19Zm1 1h311v17h-311v-17Z" fill="#94a3b8" fill-rule="evenodd"/>
-  <g fill="#000">
-    <use href="#g19" x="78" y="114"/>
-    <use href="#g19" x="86.74" y="114"/>
-    <use href="#g19" x="95.47" y="114"/>
-    <use href="#g20" x="107.56" y="114"/>
-    <use href="#g21" x="118.81" y="114"/>
-    <use href="#g22" x="125.97" y="114"/>
-    <use href="#g23" x="133.45" y="114"/>
-    <use href="#g24" x="136.36" y="114"/>
-    <use href="#g20" x="143.83" y="114"/>
-    <use href="#g25" x="158.48" y="114"/>
-    <use href="#g21" x="161.88" y="114"/>
-    <use href="#g26" x="169.04" y="114"/>
-    <use href="#g27" x="176.44" y="114"/>
-    <use href="#g28" x="183.79" y="114"/>
-    <use href="#g29" x="188.68" y="114"/>
-    <use href="#g30" x="199.49" y="114"/>
-    <use href="#g31" x="206.45" y="114"/>
-    <use href="#g26" x="213.77" y="114"/>
-    <use href="#g28" x="220.81" y="114"/>
-    <use href="#g21" x="225.69" y="114"/>
-    <use href="#g26" x="232.86" y="114"/>
-    <use href="#g28" x="239.89" y="114"/>
-    <use href="#g29" x="248.24" y="114"/>
-    <use href="#g21" x="255.63" y="114"/>
-    <use href="#g32" x="262.79" y="114"/>
-    <use href="#g21" x="267.2" y="114"/>
-  </g>
-  <path d="M390 101h708v19h-708v-19Zm1 1h706v17h-706v-17Z" fill="#94a3b8" fill-rule="evenodd"/>
-  <g fill="#000">
-    <use href="#g33" x="391" y="114"/>
-    <use href="#g33" x="400.14" y="114"/>
-    <use href="#g33" x="409.28" y="114"/>
-    <use href="#g34" x="421.67" y="114"/>
-    <use href="#g30" x="432.08" y="114"/>
-    <use href="#g31" x="439.05" y="114"/>
-    <use href="#g26" x="446.37" y="114"/>
-    <use href="#g35" x="453.76" y="114"/>
-    <use href="#g23" x="460.39" y="114"/>
-    <use href="#g22" x="463.44" y="114"/>
-    <use href="#g21" x="471.04" y="114"/>
-    <use href="#g32" x="478.2" y="114"/>
-    <use href="#g34" x="482.61" y="114"/>
-    <use href="#g36" x="489.67" y="114"/>
-    <use href="#g25" x="497.34" y="114"/>
-    <use href="#g37" x="500.5" y="114"/>
-    <use href="#g25" x="510.73" y="114"/>
-    <use href="#g31" x="514.12" y="114"/>
-    <use href="#g26" x="521.44" y="114"/>
-    <use href="#g27" x="528.84" y="114"/>
-    <use href="#g21" x="536.43" y="114"/>
-    <use href="#g32" x="543.59" y="114"/>
-    <use href="#g35" x="551.77" y="114"/>
-    <use href="#g28" x="558.14" y="114"/>
-    <use href="#g32" x="563.3" y="114"/>
-    <use href="#g21" x="567.71" y="114"/>
-    <use href="#g28" x="574.61" y="114"/>
-    <use href="#g30" x="579.5" y="114"/>
-    <use href="#g29" x="586.47" y="114"/>
-    <use href="#g31" x="597.27" y="114"/>
-    <use href="#g38" x="604.33" y="114"/>
-    <use href="#g30" x="612.71" y="114"/>
-    <use href="#g31" x="619.68" y="114"/>
-    <use href="#g25" x="627.07" y="114"/>
-    <use href="#g24" x="630.41" y="114"/>
-    <use href="#g20" x="637.88" y="114"/>
-    <use href="#g26" x="649.02" y="114"/>
-    <use href="#g30" x="659.83" y="114"/>
-    <use href="#g31" x="666.8" y="114"/>
-    <use href="#g26" x="674.11" y="114"/>
-    <use href="#g28" x="681.15" y="114"/>
-    <use href="#g21" x="686.04" y="114"/>
-    <use href="#g26" x="693.2" y="114"/>
-    <use href="#g28" x="700.23" y="114"/>
-    <use href="#g28" x="708.58" y="114"/>
-    <use href="#g29" x="713.47" y="114"/>
-    <use href="#g34" x="720.89" y="114"/>
-    <use href="#g28" x="727.4" y="114"/>
-    <use href="#g39" x="735.75" y="114"/>
-    <use href="#g34" x="746.11" y="114"/>
-    <use href="#g26" x="753.22" y="114"/>
-    <use href="#g28" x="760.25" y="114"/>
-    <use href="#g35" x="765.14" y="114"/>
-    <use href="#g20" x="775.15" y="114"/>
-    <use href="#g31" x="786.39" y="114"/>
-    <use href="#g32" x="793.71" y="114"/>
-    <use href="#g21" x="798.12" y="114"/>
-    <use href="#g32" x="808.66" y="114"/>
-    <use href="#g31" x="813.07" y="114"/>
-    <use href="#g31" x="820.39" y="114"/>
-    <use href="#g20" x="827.71" y="114"/>
-  </g>
-  <path d="M1098 101h86v19h-86v-19Zm1 1h84v17h-84v-17Z" fill="#94a3b8" fill-rule="evenodd"/>
-  <g fill="#000">
-    <use href="#g41" x="1099" y="114"/>
-    <use href="#g41" x="1108.23" y="114"/>
-    <use href="#g41" x="1117.46" y="114"/>
-    <use href="#g20" x="1129.78" y="114"/>
-    <use href="#g23" x="1141.11" y="114"/>
-    <use href="#g22" x="1144.15" y="114"/>
-  </g>
-  <g fill="#475569">
-    <use href="#g4" x="16" y="143"/>
-    <use href="#g10" x="24.81" y="143"/>
-    <use href="#g4" x="31.09" y="143"/>
-    <use href="#g2" x="37.11" y="143"/>
-    <use href="#g2" x="40.84" y="143"/>
-    <use href="#g6" x="44.57" y="143"/>
-    <use href="#g14" x="50.6" y="143"/>
-    <use href="#g3" x="59.32" y="143"/>
-    <use href="#g2" x="65.38" y="143"/>
-    <use href="#g11" x="72.3" y="143"/>
-    <use href="#g42" x="77.91" y="143"/>
-    <use href="#g4" x="84.5" y="143"/>
-    <use href="#g10" x="90.51" y="143"/>
-    <use href="#g8" x="99.66" y="143"/>
-    <use href="#g4" x="102.59" y="143"/>
-    <use href="#g10" x="108.61" y="143"/>
-    <use href="#g16" x="114.87" y="143"/>
-    <use href="#g11" x="121.3" y="143"/>
-    <use href="#g13" x="129.77" y="143"/>
-    <use href="#g3" x="136.21" y="143"/>
-    <use href="#g40" x="142.05" y="143"/>
-    <use href="#g6" x="145.91" y="143"/>
-    <use href="#g2" x="152.1" y="143"/>
-    <use href="#g3" x="155.83" y="143"/>
-    <use href="#g4" x="164.75" y="143"/>
-    <use href="#g14" x="173.56" y="143"/>
-    <use href="#g15" x="182.46" y="143"/>
-    <use href="#g16" x="185.04" y="143"/>
-    <use href="#g3" x="191.47" y="143"/>
-    <use href="#g2" x="197.53" y="143"/>
-    <use href="#g6" x="204.45" y="143"/>
-    <use href="#g10" x="210.65" y="143"/>
-    <use href="#g3" x="216.9" y="143"/>
-  </g>
-  <rect x="16" y="159" width="1168" height="38" fill="#fff"/>
-  <path d="M16 159h1168v19h-1168v-19Zm1 1h1166v17h-1166v-17Z" fill="#94a3b8" fill-rule="evenodd"/>
-  <g fill="#000">
-    <use href="#g17" x="17" y="172"/>
-    <use href="#g17" x="25.68" y="172"/>
-    <use href="#g17" x="34.37" y="172"/>
-    <use href="#g35" x="46.3" y="172"/>
-    <use href="#g43" x="52.93" y="172"/>
-    <use href="#g34" x="60.72" y="172"/>
-    <use href="#g26" x="67.83" y="172"/>
-    <use href="#g35" x="75.23" y="172"/>
-    <use href="#g21" x="85.24" y="172"/>
-    <use href="#g44" x="92.21" y="172"/>
-    <use href="#g21" x="98.84" y="172"/>
-    <use href="#g32" x="106" y="172"/>
-    <use href="#g37" x="110.6" y="172"/>
-    <use href="#g30" x="120.83" y="172"/>
-    <use href="#g31" x="127.8" y="172"/>
-    <use href="#g25" x="135.18" y="172"/>
-    <use href="#g24" x="138.52" y="172"/>
-    <use href="#g20" x="146" y="172"/>
-    <use href="#g26" x="157.14" y="172"/>
-    <use href="#g31" x="167.94" y="172"/>
-    <use href="#g38" x="175" y="172"/>
-    <use href="#g28" x="183.39" y="172"/>
-    <use href="#g29" x="188.28" y="172"/>
-    <use href="#g23" x="195.75" y="172"/>
-    <use href="#g35" x="198.79" y="172"/>
-    <use href="#g28" x="208.8" y="172"/>
-    <use href="#g34" x="213.77" y="172"/>
-    <use href="#g36" x="220.83" y="172"/>
-    <use href="#g25" x="228.5" y="172"/>
-    <use href="#g21" x="231.89" y="172"/>
-  </g>
-  <path d="M16 178h967v19h-967v-19Zm1 1h965v17h-965v-17Z" fill="#94a3b8" fill-rule="evenodd"/>
-  <g fill="#000">
-    <use href="#g19" x="17" y="191"/>
-    <use href="#g19" x="25.74" y="191"/>
-    <use href="#g19" x="34.47" y="191"/>
-    <use href="#g35" x="46.56" y="191"/>
-    <use href="#g43" x="53.19" y="191"/>
-    <use href="#g34" x="60.98" y="191"/>
-    <use href="#g26" x="68.09" y="191"/>
-    <use href="#g35" x="75.49" y="191"/>
-    <use href="#g28" x="85.5" y="191"/>
-    <use href="#g29" x="90.39" y="191"/>
-    <use href="#g21" x="97.78" y="191"/>
-    <use href="#g45" x="108.33" y="191"/>
-    <use href="#g32" x="116.19" y="191"/>
-    <use href="#g35" x="120.6" y="191"/>
-    <use href="#g28" x="126.97" y="191"/>
-    <use href="#g28" x="135.31" y="191"/>
-    <use href="#g39" x="140.28" y="191"/>
-    <use href="#g31" x="150.59" y="191"/>
-  </g>
-  <path d="M983 178h201v19h-201v-19Zm1 1h199v17h-199v-17Z" fill="#94a3b8" fill-rule="evenodd"/>
-  <g fill="#000">
-    <use href="#g33" x="984" y="191"/>
-    <use href="#g33" x="993.14" y="191"/>
-    <use href="#g33" x="1002.28" y="191"/>
-  </g>
-  <g fill="#475569">
-    <use href="#g4" x="16" y="220"/>
-    <use href="#g10" x="22.02" y="220"/>
-    <use href="#g15" x="31.16" y="220"/>
-    <use href="#g9" x="33.91" y="220"/>
-    <use href="#g4" x="43.45" y="220"/>
-    <use href="#g46" x="49.44" y="220"/>
-    <use href="#g3" x="55.86" y="220"/>
-    <use href="#g7" x="64.79" y="220"/>
-    <use href="#g6" x="70.68" y="220"/>
-    <use href="#g8" x="76.93" y="220"/>
-    <use href="#g5" x="79.76" y="220"/>
-    <use href="#g9" x="86.08" y="220"/>
-    <use href="#g10" x="95.51" y="220"/>
-    <use href="#g0" x="104.65" y="220"/>
-    <use href="#g4" x="108.85" y="220"/>
-    <use href="#g47" x="114.82" y="220"/>
-    <use href="#g3" x="120.76" y="220"/>
-    <use href="#g11" x="126.83" y="220"/>
-    <use href="#g0" x="135.3" y="220"/>
-    <use href="#g1" x="139.43" y="220"/>
-    <use href="#g3" x="145.69" y="220"/>
-    <use href="#g14" x="154.61" y="220"/>
-    <use href="#g15" x="163.51" y="220"/>
-    <use href="#g16" x="166.08" y="220"/>
-    <use href="#g0" x="172.19" y="220"/>
-    <use href="#g1" x="176.33" y="220"/>
-    <use href="#g0" x="185.47" y="220"/>
-    <use href="#g1" x="189.6" y="220"/>
-    <use href="#g3" x="195.86" y="220"/>
-    <use href="#g15" x="204.78" y="220"/>
-    <use href="#g9" x="207.53" y="220"/>
-    <use href="#g4" x="217.07" y="220"/>
-    <use href="#g46" x="223.06" y="220"/>
-    <use href="#g3" x="229.49" y="220"/>
-    <use href="#g4" x="238.41" y="220"/>
-    <use href="#g11" x="244.4" y="220"/>
-    <use href="#g47" x="250.01" y="220"/>
-    <use href="#g11" x="255.95" y="220"/>
-    <use href="#g40" x="264.42" y="220"/>
-    <use href="#g6" x="268.29" y="220"/>
-    <use href="#g2" x="274.48" y="220"/>
-  </g>
-  <rect x="16" y="236" width="1168" height="66" fill="#fff"/>
-  <path d="M16 236h82v66h-82v-66Zm1 1h80v64h-80v-64Z" fill="#94a3b8" fill-rule="evenodd"/>
-  <g fill="#000">
-    <use href="#g17" x="17" y="249"/>
-    <use href="#g17" x="25.68" y="249"/>
-    <use href="#g17" x="34.37" y="249"/>
-    <use href="#g18" x="46.3" y="249"/>
-  </g>
-  <path d="M98 236h138.65v66h-138.65v-66Zm1 1h136.65v64h-136.65v-64Z" fill="#94a3b8" fill-rule="evenodd"/>
-  <image x="99" y="237" width="64" height="64" href="data:image/png;base64,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" preserveAspectRatio="none"/>
-  <path d="M237 236h947v66h-947v-66Zm1 1h945v64h-945v-64Z" fill="#94a3b8" fill-rule="evenodd"/>
-  <g fill="#000">
-    <use href="#g33" x="238" y="249"/>
-    <use href="#g33" x="247.14" y="249"/>
-    <use href="#g33" x="256.28" y="249"/>
-    <use href="#g34" x="268.67" y="249"/>
-    <use href="#g30" x="279.08" y="249"/>
-    <use href="#g31" x="286.05" y="249"/>
-    <use href="#g26" x="293.37" y="249"/>
-    <use href="#g35" x="300.76" y="249"/>
-    <use href="#g23" x="307.39" y="249"/>
-    <use href="#g22" x="310.44" y="249"/>
-    <use href="#g21" x="318.04" y="249"/>
-    <use href="#g32" x="325.2" y="249"/>
-    <use href="#g34" x="329.61" y="249"/>
-    <use href="#g36" x="336.67" y="249"/>
-    <use href="#g25" x="344.34" y="249"/>
-    <use href="#g37" x="347.5" y="249"/>
-    <use href="#g25" x="357.73" y="249"/>
-    <use href="#g31" x="361.12" y="249"/>
-    <use href="#g26" x="368.44" y="249"/>
-    <use href="#g27" x="375.84" y="249"/>
-    <use href="#g21" x="383.43" y="249"/>
-    <use href="#g32" x="390.59" y="249"/>
-    <use href="#g35" x="398.77" y="249"/>
-    <use href="#g28" x="405.14" y="249"/>
-    <use href="#g32" x="410.3" y="249"/>
-    <use href="#g21" x="414.71" y="249"/>
-    <use href="#g28" x="421.61" y="249"/>
-    <use href="#g30" x="426.5" y="249"/>
-    <use href="#g29" x="433.47" y="249"/>
-    <use href="#g31" x="444.27" y="249"/>
-    <use href="#g38" x="451.33" y="249"/>
-    <use href="#g30" x="459.71" y="249"/>
-    <use href="#g31" x="466.68" y="249"/>
-    <use href="#g25" x="474.07" y="249"/>
-    <use href="#g24" x="477.41" y="249"/>
-    <use href="#g20" x="484.88" y="249"/>
-    <use href="#g26" x="496.02" y="249"/>
-    <use href="#g30" x="506.83" y="249"/>
-    <use href="#g31" x="513.8" y="249"/>
-    <use href="#g26" x="521.11" y="249"/>
-    <use href="#g28" x="528.15" y="249"/>
-    <use href="#g21" x="533.03" y="249"/>
-    <use href="#g26" x="540.2" y="249"/>
-    <use href="#g28" x="547.23" y="249"/>
-    <use href="#g28" x="555.58" y="249"/>
-    <use href="#g29" x="560.46" y="249"/>
-    <use href="#g34" x="567.89" y="249"/>
-    <use href="#g28" x="574.4" y="249"/>
-    <use href="#g39" x="582.75" y="249"/>
-    <use href="#g34" x="593.11" y="249"/>
-    <use href="#g26" x="600.22" y="249"/>
-    <use href="#g28" x="607.25" y="249"/>
-    <use href="#g35" x="612.14" y="249"/>
-    <use href="#g20" x="622.15" y="249"/>
-    <use href="#g31" x="633.39" y="249"/>
-    <use href="#g32" x="640.71" y="249"/>
-    <use href="#g21" x="645.12" y="249"/>
-    <use href="#g32" x="655.66" y="249"/>
-    <use href="#g31" x="660.07" y="249"/>
-    <use href="#g31" x="667.39" y="249"/>
-    <use href="#g20" x="674.71" y="249"/>
-  </g>
-  <g fill="#475569">
-    <use href="#g13" x="16" y="325"/>
-    <use href="#g6" x="22.44" y="325"/>
-    <use href="#g2" x="28.63" y="325"/>
-    <use href="#g16" x="32.36" y="325"/>
-    <use href="#g3" x="38.79" y="325"/>
-    <use href="#g2" x="44.85" y="325"/>
-    <use href="#g48" x="48.58" y="325"/>
-    <use href="#g7" x="53.19" y="325"/>
-    <use href="#g6" x="59.09" y="325"/>
-    <use href="#g8" x="65.34" y="325"/>
-    <use href="#g8" x="68.16" y="325"/>
-    <use href="#g4" x="71.1" y="325"/>
-    <use href="#g42" x="77.12" y="325"/>
-    <use href="#g11" x="83.55" y="325"/>
-    <use href="#g3" x="89.16" y="325"/>
-    <use href="#g1" x="98.08" y="325"/>
-    <use href="#g4" x="104.36" y="325"/>
-    <use href="#g8" x="110.31" y="325"/>
-    <use href="#g49" x="112.99" y="325"/>
-    <use href="#g3" x="118.6" y="325"/>
-    <use href="#g11" x="124.66" y="325"/>
-    <use href="#g0" x="133.13" y="325"/>
-    <use href="#g1" x="137.26" y="325"/>
-    <use href="#g3" x="143.52" y="325"/>
-    <use href="#g13" x="152.44" y="325"/>
-    <use href="#g6" x="158.88" y="325"/>
-    <use href="#g2" x="165.07" y="325"/>
-    <use href="#g16" x="168.8" y="325"/>
-    <use href="#g3" x="175.24" y="325"/>
-    <use href="#g2" x="181.3" y="325"/>
-    <use href="#g3" x="188.22" y="325"/>
-    <use href="#g4" x="194.43" y="325"/>
-    <use href="#g7" x="200.43" y="325"/>
-    <use href="#g1" x="206.32" y="325"/>
-    <use href="#g7" x="215.46" y="325"/>
-    <use href="#g6" x="221.36" y="325"/>
-    <use href="#g8" x="227.61" y="325"/>
-    <use href="#g5" x="230.43" y="325"/>
-    <use href="#g9" x="236.76" y="325"/>
-    <use href="#g10" x="246.19" y="325"/>
-    <use href="#g7" x="255.33" y="325"/>
-    <use href="#g4" x="261.38" y="325"/>
-    <use href="#g2" x="267.39" y="325"/>
-    <use href="#g2" x="271.12" y="325"/>
-    <use href="#g15" x="274.96" y="325"/>
-    <use href="#g3" x="277.54" y="325"/>
-    <use href="#g11" x="283.6" y="325"/>
-  </g>
-  <rect x="16" y="341" width="1168" height="19" fill="#fff"/>
+  <rect x="16" y="43" width="1168" height="66" fill="#fff"/>
   <g>
-    <path d="M16 341h66v1h-66Z" fill="#94a3b8"/>
-    <path d="M16 359h66v1h-66Z" fill="#94a3b8"/>
-    <path d="M16 342h1v17h-1Z" fill="#94a3b8"/>
+    <path d="M16 43h60v1h-60Z" fill="#94a3b8"/>
+    <path d="M16 108h60v1h-60Z" fill="#94a3b8"/>
+    <path d="M16 44h1v64h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
-    <use href="#g17" x="17" y="354"/>
-    <use href="#g17" x="25.68" y="354"/>
-    <use href="#g17" x="34.37" y="354"/>
-    <use href="#g18" x="46.3" y="354"/>
+    <use href="#g16" x="17" y="56"/>
+    <use href="#g16" x="25.68" y="56"/>
+    <use href="#g16" x="34.37" y="56"/>
+    <use href="#g17" x="46.3" y="56"/>
   </g>
   <g>
-    <path d="M82 341h337v1h-337Z" fill="#94a3b8"/>
-    <path d="M82 359h337v1h-337Z" fill="#94a3b8"/>
-    <path d="M82 342h1v17h-1Z" fill="#94a3b8"/>
+    <path d="M76 43h308v1h-308Z" fill="#94a3b8"/>
+    <path d="M76 108h308v1h-308Z" fill="#94a3b8"/>
+    <path d="M76 44h1v64h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
-    <use href="#g19" x="83" y="354"/>
-    <use href="#g19" x="91.74" y="354"/>
-    <use href="#g19" x="100.47" y="354"/>
-    <use href="#g20" x="112.56" y="354"/>
-    <use href="#g21" x="123.81" y="354"/>
-    <use href="#g22" x="130.97" y="354"/>
-    <use href="#g23" x="138.45" y="354"/>
-    <use href="#g24" x="141.36" y="354"/>
-    <use href="#g20" x="148.83" y="354"/>
-    <use href="#g25" x="163.48" y="354"/>
-    <use href="#g21" x="166.88" y="354"/>
-    <use href="#g26" x="174.04" y="354"/>
-    <use href="#g27" x="181.44" y="354"/>
-    <use href="#g28" x="188.79" y="354"/>
-    <use href="#g29" x="193.68" y="354"/>
-    <use href="#g30" x="204.49" y="354"/>
-    <use href="#g31" x="211.45" y="354"/>
-    <use href="#g26" x="218.77" y="354"/>
-    <use href="#g28" x="225.81" y="354"/>
-    <use href="#g21" x="230.69" y="354"/>
-    <use href="#g26" x="237.86" y="354"/>
-    <use href="#g28" x="244.89" y="354"/>
-    <use href="#g29" x="253.24" y="354"/>
-    <use href="#g21" x="260.63" y="354"/>
-    <use href="#g32" x="267.79" y="354"/>
-    <use href="#g21" x="272.2" y="354"/>
+    <use href="#g18" x="77" y="56"/>
+    <use href="#g18" x="85.74" y="56"/>
+    <use href="#g18" x="94.47" y="56"/>
+    <use href="#g19" x="106.56" y="56"/>
+    <use href="#g20" x="117.81" y="56"/>
+    <use href="#g21" x="124.97" y="56"/>
+    <use href="#g22" x="132.45" y="56"/>
+    <use href="#g23" x="135.36" y="56"/>
+    <use href="#g19" x="142.83" y="56"/>
+    <use href="#g24" x="157.48" y="56"/>
+    <use href="#g20" x="160.88" y="56"/>
+    <use href="#g25" x="168.04" y="56"/>
+    <use href="#g26" x="175.44" y="56"/>
+    <use href="#g27" x="182.79" y="56"/>
+    <use href="#g28" x="187.68" y="56"/>
+    <use href="#g29" x="198.49" y="56"/>
+    <use href="#g30" x="205.45" y="56"/>
+    <use href="#g25" x="212.77" y="56"/>
+    <use href="#g27" x="219.81" y="56"/>
+    <use href="#g20" x="224.69" y="56"/>
+    <use href="#g25" x="231.86" y="56"/>
+    <use href="#g27" x="238.89" y="56"/>
+    <use href="#g28" x="247.24" y="56"/>
+    <use href="#g20" x="254.63" y="56"/>
+    <use href="#g31" x="261.79" y="56"/>
+    <use href="#g20" x="266.2" y="56"/>
   </g>
-  <path d="M419 341h765v19h-765v-19Zm1 1h763v17h-763v-17Z" fill="#94a3b8" fill-rule="evenodd"/>
+  <g>
+    <path d="M384 43h698v1h-698Z" fill="#94a3b8"/>
+    <path d="M384 108h698v1h-698Z" fill="#94a3b8"/>
+    <path d="M384 44h1v64h-1Z" fill="#94a3b8"/>
+  </g>
   <g fill="#000">
-    <use href="#g33" x="420" y="354"/>
-    <use href="#g33" x="429.14" y="354"/>
-    <use href="#g33" x="438.28" y="354"/>
-    <use href="#g34" x="450.67" y="354"/>
-    <use href="#g30" x="461.08" y="354"/>
-    <use href="#g31" x="468.05" y="354"/>
-    <use href="#g26" x="475.37" y="354"/>
-    <use href="#g35" x="482.76" y="354"/>
-    <use href="#g23" x="489.39" y="354"/>
-    <use href="#g22" x="492.44" y="354"/>
-    <use href="#g21" x="500.04" y="354"/>
-    <use href="#g32" x="507.2" y="354"/>
-    <use href="#g34" x="511.61" y="354"/>
-    <use href="#g36" x="518.67" y="354"/>
-    <use href="#g25" x="526.34" y="354"/>
-    <use href="#g37" x="529.5" y="354"/>
-    <use href="#g25" x="539.73" y="354"/>
-    <use href="#g31" x="543.12" y="354"/>
-    <use href="#g26" x="550.44" y="354"/>
-    <use href="#g27" x="557.84" y="354"/>
-    <use href="#g21" x="565.43" y="354"/>
-    <use href="#g32" x="572.59" y="354"/>
-    <use href="#g35" x="580.77" y="354"/>
-    <use href="#g28" x="587.14" y="354"/>
-    <use href="#g32" x="592.3" y="354"/>
-    <use href="#g21" x="596.71" y="354"/>
-    <use href="#g28" x="603.61" y="354"/>
-    <use href="#g30" x="608.5" y="354"/>
-    <use href="#g29" x="615.47" y="354"/>
-    <use href="#g31" x="626.27" y="354"/>
-    <use href="#g38" x="633.33" y="354"/>
-    <use href="#g30" x="641.71" y="354"/>
-    <use href="#g31" x="648.68" y="354"/>
-    <use href="#g25" x="656.07" y="354"/>
-    <use href="#g24" x="659.41" y="354"/>
-    <use href="#g20" x="666.88" y="354"/>
-    <use href="#g26" x="678.02" y="354"/>
-    <use href="#g30" x="688.83" y="354"/>
-    <use href="#g31" x="695.8" y="354"/>
-    <use href="#g26" x="703.11" y="354"/>
-    <use href="#g28" x="710.15" y="354"/>
-    <use href="#g21" x="715.04" y="354"/>
-    <use href="#g26" x="722.2" y="354"/>
-    <use href="#g28" x="729.23" y="354"/>
-    <use href="#g28" x="737.58" y="354"/>
-    <use href="#g29" x="742.47" y="354"/>
-    <use href="#g34" x="749.89" y="354"/>
-    <use href="#g28" x="756.4" y="354"/>
-    <use href="#g39" x="764.75" y="354"/>
-    <use href="#g34" x="775.11" y="354"/>
-    <use href="#g26" x="782.22" y="354"/>
-    <use href="#g28" x="789.25" y="354"/>
-    <use href="#g35" x="794.14" y="354"/>
-    <use href="#g20" x="804.15" y="354"/>
-    <use href="#g31" x="815.39" y="354"/>
-    <use href="#g32" x="822.71" y="354"/>
-    <use href="#g21" x="827.12" y="354"/>
-    <use href="#g32" x="837.66" y="354"/>
-    <use href="#g31" x="842.07" y="354"/>
-    <use href="#g31" x="849.39" y="354"/>
-    <use href="#g20" x="856.71" y="354"/>
+    <use href="#g32" x="385" y="56"/>
+    <use href="#g32" x="394.14" y="56"/>
+    <use href="#g32" x="403.28" y="56"/>
+    <use href="#g33" x="415.67" y="56"/>
+    <use href="#g29" x="426.08" y="56"/>
+    <use href="#g30" x="433.05" y="56"/>
+    <use href="#g25" x="440.37" y="56"/>
+    <use href="#g34" x="447.76" y="56"/>
+    <use href="#g22" x="454.39" y="56"/>
+    <use href="#g21" x="457.44" y="56"/>
+    <use href="#g20" x="465.04" y="56"/>
+    <use href="#g31" x="472.2" y="56"/>
+    <use href="#g33" x="476.61" y="56"/>
+    <use href="#g35" x="483.67" y="56"/>
+    <use href="#g24" x="491.34" y="56"/>
+    <use href="#g36" x="494.5" y="56"/>
+    <use href="#g24" x="504.73" y="56"/>
+    <use href="#g30" x="508.12" y="56"/>
+    <use href="#g25" x="515.44" y="56"/>
+    <use href="#g26" x="522.84" y="56"/>
+    <use href="#g20" x="530.43" y="56"/>
+    <use href="#g31" x="537.59" y="56"/>
+    <use href="#g34" x="545.77" y="56"/>
+    <use href="#g27" x="552.14" y="56"/>
+    <use href="#g31" x="557.3" y="56"/>
+    <use href="#g20" x="561.71" y="56"/>
+    <use href="#g27" x="568.61" y="56"/>
+    <use href="#g29" x="573.5" y="56"/>
+    <use href="#g28" x="580.47" y="56"/>
+    <use href="#g30" x="591.27" y="56"/>
+    <use href="#g37" x="598.33" y="56"/>
+    <use href="#g29" x="606.71" y="56"/>
+    <use href="#g30" x="613.68" y="56"/>
+    <use href="#g24" x="621.07" y="56"/>
+    <use href="#g23" x="624.41" y="56"/>
+    <use href="#g19" x="631.88" y="56"/>
+    <use href="#g25" x="643.02" y="56"/>
+    <use href="#g29" x="653.83" y="56"/>
+    <use href="#g30" x="660.8" y="56"/>
+    <use href="#g25" x="668.11" y="56"/>
+    <use href="#g27" x="675.15" y="56"/>
+    <use href="#g20" x="680.04" y="56"/>
+    <use href="#g25" x="687.2" y="56"/>
+    <use href="#g27" x="694.23" y="56"/>
+    <use href="#g27" x="702.58" y="56"/>
+    <use href="#g28" x="707.47" y="56"/>
+    <use href="#g33" x="714.89" y="56"/>
+    <use href="#g27" x="721.4" y="56"/>
+    <use href="#g38" x="729.75" y="56"/>
+    <use href="#g33" x="740.11" y="56"/>
+    <use href="#g25" x="747.22" y="56"/>
+    <use href="#g27" x="754.25" y="56"/>
+    <use href="#g34" x="759.14" y="56"/>
+    <use href="#g19" x="769.15" y="56"/>
+    <use href="#g30" x="780.39" y="56"/>
+    <use href="#g31" x="787.71" y="56"/>
+    <use href="#g20" x="792.12" y="56"/>
+    <use href="#g31" x="802.66" y="56"/>
+    <use href="#g30" x="807.07" y="56"/>
+    <use href="#g30" x="814.39" y="56"/>
+    <use href="#g19" x="821.71" y="56"/>
+  </g>
+  <path d="M1082 43h102.1v66h-102.1v-66Zm1 1h100.1v64h-100.1v-64Z" fill="#94a3b8" fill-rule="evenodd"/>
+  <image x="1083" y="44" width="64" height="64" href="data:image/png;base64,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" preserveAspectRatio="none"/>
+  <g fill="#475569">
+    <use href="#g39" x="16" y="132"/>
+    <use href="#g9" x="24.81" y="132"/>
+    <use href="#g39" x="31.09" y="132"/>
+    <use href="#g2" x="37.11" y="132"/>
+    <use href="#g2" x="40.84" y="132"/>
+    <use href="#g5" x="44.57" y="132"/>
+    <use href="#g11" x="50.6" y="132"/>
+    <use href="#g0" x="59.32" y="132"/>
+    <use href="#g2" x="65.38" y="132"/>
+    <use href="#g12" x="72.3" y="132"/>
+    <use href="#g14" x="77.91" y="132"/>
+    <use href="#g39" x="84.5" y="132"/>
+    <use href="#g9" x="90.51" y="132"/>
+    <use href="#g6" x="99.66" y="132"/>
+    <use href="#g39" x="102.59" y="132"/>
+    <use href="#g9" x="108.61" y="132"/>
+    <use href="#g40" x="114.87" y="132"/>
+    <use href="#g12" x="121.3" y="132"/>
+    <use href="#g41" x="129.77" y="132"/>
+    <use href="#g0" x="136.21" y="132"/>
+    <use href="#g42" x="142.05" y="132"/>
+    <use href="#g5" x="145.91" y="132"/>
+    <use href="#g2" x="152.1" y="132"/>
+    <use href="#g0" x="155.83" y="132"/>
+    <use href="#g39" x="164.75" y="132"/>
+    <use href="#g11" x="173.56" y="132"/>
+    <use href="#g13" x="182.46" y="132"/>
+    <use href="#g40" x="185.04" y="132"/>
+    <use href="#g0" x="191.47" y="132"/>
+    <use href="#g2" x="197.53" y="132"/>
+    <use href="#g5" x="204.45" y="132"/>
+    <use href="#g9" x="210.65" y="132"/>
+    <use href="#g0" x="216.9" y="132"/>
+  </g>
+  <rect x="16" y="148" width="1168" height="37" fill="#fff"/>
+  <g>
+    <path d="M16 148h1168v1h-1168Z" fill="#94a3b8"/>
+    <path d="M1183 149h1v17h-1Z" fill="#94a3b8"/>
+    <path d="M16 149h1v17h-1Z" fill="#94a3b8"/>
+  </g>
+  <g fill="#000">
+    <use href="#g16" x="17" y="161"/>
+    <use href="#g16" x="25.68" y="161"/>
+    <use href="#g16" x="34.37" y="161"/>
+    <use href="#g34" x="46.3" y="161"/>
+    <use href="#g43" x="52.93" y="161"/>
+    <use href="#g33" x="60.72" y="161"/>
+    <use href="#g25" x="67.83" y="161"/>
+    <use href="#g34" x="75.23" y="161"/>
+    <use href="#g20" x="85.24" y="161"/>
+    <use href="#g44" x="92.21" y="161"/>
+    <use href="#g20" x="98.84" y="161"/>
+    <use href="#g31" x="106" y="161"/>
+    <use href="#g36" x="110.6" y="161"/>
+    <use href="#g29" x="120.83" y="161"/>
+    <use href="#g30" x="127.8" y="161"/>
+    <use href="#g24" x="135.18" y="161"/>
+    <use href="#g23" x="138.52" y="161"/>
+    <use href="#g19" x="146" y="161"/>
+    <use href="#g25" x="157.14" y="161"/>
+    <use href="#g30" x="167.94" y="161"/>
+    <use href="#g37" x="175" y="161"/>
+    <use href="#g27" x="183.39" y="161"/>
+    <use href="#g28" x="188.28" y="161"/>
+    <use href="#g22" x="195.75" y="161"/>
+    <use href="#g34" x="198.79" y="161"/>
+    <use href="#g27" x="208.8" y="161"/>
+    <use href="#g33" x="213.77" y="161"/>
+    <use href="#g35" x="220.83" y="161"/>
+    <use href="#g24" x="228.5" y="161"/>
+    <use href="#g20" x="231.89" y="161"/>
+  </g>
+  <g>
+    <path d="M16 166h967v1h-967Z" fill="#94a3b8"/>
+    <path d="M16 184h967v1h-967Z" fill="#94a3b8"/>
+    <path d="M16 167h1v17h-1Z" fill="#94a3b8"/>
+  </g>
+  <g fill="#000">
+    <use href="#g18" x="17" y="179"/>
+    <use href="#g18" x="25.74" y="179"/>
+    <use href="#g18" x="34.47" y="179"/>
+    <use href="#g34" x="46.56" y="179"/>
+    <use href="#g43" x="53.19" y="179"/>
+    <use href="#g33" x="60.98" y="179"/>
+    <use href="#g25" x="68.09" y="179"/>
+    <use href="#g34" x="75.49" y="179"/>
+    <use href="#g27" x="85.5" y="179"/>
+    <use href="#g28" x="90.39" y="179"/>
+    <use href="#g20" x="97.78" y="179"/>
+    <use href="#g45" x="108.33" y="179"/>
+    <use href="#g31" x="116.19" y="179"/>
+    <use href="#g34" x="120.6" y="179"/>
+    <use href="#g27" x="126.97" y="179"/>
+    <use href="#g27" x="135.31" y="179"/>
+    <use href="#g38" x="140.28" y="179"/>
+    <use href="#g30" x="150.59" y="179"/>
+  </g>
+  <path d="M983 166h201v19h-201v-19Zm1 1h199v17h-199v-17Z" fill="#94a3b8" fill-rule="evenodd"/>
+  <g fill="#000">
+    <use href="#g32" x="984" y="179"/>
+    <use href="#g32" x="993.14" y="179"/>
+    <use href="#g32" x="1002.28" y="179"/>
   </g>
   <g fill="#475569">
-    <use href="#g0" x="16" y="383"/>
-    <use href="#g1" x="20.14" y="383"/>
-    <use href="#g2" x="26.31" y="383"/>
-    <use href="#g3" x="30.04" y="383"/>
-    <use href="#g3" x="36.1" y="383"/>
-    <use href="#g4" x="45.02" y="383"/>
-    <use href="#g5" x="50.97" y="383"/>
-    <use href="#g0" x="56.99" y="383"/>
-    <use href="#g6" x="61.12" y="383"/>
-    <use href="#g7" x="70.18" y="383"/>
-    <use href="#g6" x="76.07" y="383"/>
-    <use href="#g8" x="82.32" y="383"/>
-    <use href="#g5" x="85.15" y="383"/>
-    <use href="#g9" x="91.47" y="383"/>
-    <use href="#g10" x="100.9" y="383"/>
-    <use href="#g11" x="107.16" y="383"/>
-    <use href="#g12" x="112.88" y="383"/>
-    <use href="#g0" x="117.84" y="383"/>
-    <use href="#g4" x="122.04" y="383"/>
-    <use href="#g13" x="128.01" y="383"/>
-    <use href="#g8" x="134.5" y="383"/>
-    <use href="#g3" x="137.37" y="383"/>
-    <use href="#g10" x="146.3" y="383"/>
-    <use href="#g4" x="152.58" y="383"/>
-    <use href="#g2" x="158.59" y="383"/>
-    <use href="#g2" x="162.32" y="383"/>
-    <use href="#g6" x="166.05" y="383"/>
-    <use href="#g14" x="172.08" y="383"/>
-    <use href="#g3" x="180.8" y="383"/>
-    <use href="#g2" x="186.86" y="383"/>
-    <use href="#g0" x="193.78" y="383"/>
-    <use href="#g1" x="197.92" y="383"/>
-    <use href="#g4" x="204.2" y="383"/>
-    <use href="#g10" x="210.22" y="383"/>
-    <use href="#g15" x="219.36" y="383"/>
-    <use href="#g0" x="221.6" y="383"/>
-    <use href="#g11" x="225.74" y="383"/>
-    <use href="#g7" x="234.21" y="383"/>
-    <use href="#g6" x="240.1" y="383"/>
-    <use href="#g10" x="246.3" y="383"/>
-    <use href="#g0" x="252.25" y="383"/>
-    <use href="#g3" x="256.38" y="383"/>
-    <use href="#g10" x="262.44" y="383"/>
-    <use href="#g0" x="268.4" y="383"/>
+    <use href="#g39" x="16" y="208"/>
+    <use href="#g15" x="24.81" y="208"/>
+    <use href="#g39" x="29.01" y="208"/>
+    <use href="#g41" x="34.99" y="208"/>
+    <use href="#g6" x="41.48" y="208"/>
+    <use href="#g0" x="44.35" y="208"/>
+    <use href="#g9" x="53.27" y="208"/>
+    <use href="#g39" x="59.55" y="208"/>
+    <use href="#g2" x="65.57" y="208"/>
+    <use href="#g2" x="69.3" y="208"/>
+    <use href="#g5" x="73.02" y="208"/>
+    <use href="#g11" x="79.05" y="208"/>
+    <use href="#g0" x="87.78" y="208"/>
+    <use href="#g2" x="93.84" y="208"/>
+    <use href="#g15" x="100.76" y="208"/>
+    <use href="#g46" x="104.89" y="208"/>
+    <use href="#g39" x="111.17" y="208"/>
+    <use href="#g9" x="117.19" y="208"/>
+    <use href="#g13" x="126.33" y="208"/>
+    <use href="#g15" x="128.57" y="208"/>
+    <use href="#g12" x="132.71" y="208"/>
+    <use href="#g4" x="141.18" y="208"/>
+    <use href="#g5" x="147.08" y="208"/>
+    <use href="#g9" x="153.27" y="208"/>
+    <use href="#g15" x="159.22" y="208"/>
+    <use href="#g0" x="163.36" y="208"/>
+    <use href="#g9" x="169.42" y="208"/>
+    <use href="#g15" x="175.37" y="208"/>
+    <use href="#g12" x="182.43" y="208"/>
+    <use href="#g15" x="187.82" y="208"/>
+    <use href="#g13" x="191.96" y="208"/>
+    <use href="#g6" x="194.53" y="208"/>
+    <use href="#g6" x="197.36" y="208"/>
+    <use href="#g39" x="203.04" y="208"/>
+    <use href="#g14" x="209.06" y="208"/>
+    <use href="#g14" x="215.5" y="208"/>
+    <use href="#g2" x="221.93" y="208"/>
+    <use href="#g5" x="225.66" y="208"/>
+    <use href="#g47" x="231.41" y="208"/>
+    <use href="#g13" x="237.3" y="208"/>
+    <use href="#g8" x="240.05" y="208"/>
+    <use href="#g39" x="249.59" y="208"/>
+    <use href="#g15" x="255.1" y="208"/>
+    <use href="#g0" x="259.23" y="208"/>
+    <use href="#g12" x="265.29" y="208"/>
   </g>
-  <rect x="16" y="399" width="300" height="53" fill="#fff"/>
-  <path d="M16 399h17v53h-17v-53Zm1 1h15v51h-15v-51Z" fill="#94a3b8" fill-rule="evenodd"/>
-  <g fill="#000">
-    <use href="#g17" x="17" y="412"/>
-    <use href="#g17" x="25.68" y="412"/>
-    <use href="#g17" x="34.37" y="412"/>
-  </g>
-  <use href="#g18" x="17" y="428.9" fill="#000"/>
-  <path d="M33 399h87v53h-87v-53Zm1 1h85v51h-85v-51Z" fill="#94a3b8" fill-rule="evenodd"/>
-  <g fill="#000">
-    <use href="#g19" x="34" y="412"/>
-    <use href="#g19" x="42.74" y="412"/>
-    <use href="#g19" x="51.47" y="412"/>
-    <use href="#g20" x="63.56" y="412"/>
-    <use href="#g21" x="74.81" y="412"/>
-    <use href="#g22" x="81.97" y="412"/>
-    <use href="#g23" x="89.45" y="412"/>
-    <use href="#g24" x="92.36" y="412"/>
-    <use href="#g20" x="99.83" y="412"/>
+  <rect x="16" y="224" width="300" height="53" fill="#fff"/>
+  <g>
+    <path d="M16 224h17v1h-17Z" fill="#94a3b8"/>
+    <path d="M16 276h17v1h-17Z" fill="#94a3b8"/>
+    <path d="M16 225h1v51h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
-    <use href="#g25" x="34" y="428.9"/>
-    <use href="#g21" x="37.39" y="428.9"/>
-    <use href="#g26" x="44.56" y="428.9"/>
-    <use href="#g27" x="51.95" y="428.9"/>
-    <use href="#g28" x="59.31" y="428.9"/>
-    <use href="#g29" x="64.2" y="428.9"/>
+    <use href="#g16" x="17" y="237"/>
+    <use href="#g16" x="25.68" y="237"/>
+    <use href="#g16" x="34.37" y="237"/>
+  </g>
+  <use href="#g17" x="17" y="253.9" fill="#000"/>
+  <g>
+    <path d="M33 224h87v1h-87Z" fill="#94a3b8"/>
+    <path d="M33 276h87v1h-87Z" fill="#94a3b8"/>
+    <path d="M33 225h1v51h-1Z" fill="#94a3b8"/>
   </g>
   <g fill="#000">
-    <use href="#g30" x="34" y="445.8"/>
-    <use href="#g31" x="40.97" y="445.8"/>
-    <use href="#g26" x="48.29" y="445.8"/>
-    <use href="#g28" x="55.32" y="445.8"/>
-    <use href="#g21" x="60.21" y="445.8"/>
-    <use href="#g26" x="67.37" y="445.8"/>
-    <use href="#g28" x="74.4" y="445.8"/>
-    <use href="#g29" x="82.75" y="445.8"/>
-    <use href="#g21" x="90.15" y="445.8"/>
-    <use href="#g32" x="97.31" y="445.8"/>
-    <use href="#g21" x="101.72" y="445.8"/>
-  </g>
-  <path d="M120 399h196v53h-196v-53Zm1 1h194v51h-194v-51Z" fill="#94a3b8" fill-rule="evenodd"/>
-  <g fill="#000">
-    <use href="#g33" x="121" y="412"/>
-    <use href="#g33" x="130.14" y="412"/>
-    <use href="#g33" x="139.28" y="412"/>
-    <use href="#g34" x="151.67" y="412"/>
-    <use href="#g30" x="162.08" y="412"/>
-    <use href="#g31" x="169.05" y="412"/>
-    <use href="#g26" x="176.37" y="412"/>
-    <use href="#g35" x="183.76" y="412"/>
-    <use href="#g23" x="190.39" y="412"/>
-    <use href="#g22" x="193.44" y="412"/>
-    <use href="#g21" x="201.04" y="412"/>
-    <use href="#g32" x="208.2" y="412"/>
-    <use href="#g34" x="212.61" y="412"/>
-    <use href="#g36" x="219.67" y="412"/>
-    <use href="#g25" x="227.34" y="412"/>
-    <use href="#g37" x="230.5" y="412"/>
-    <use href="#g25" x="240.73" y="412"/>
-    <use href="#g31" x="244.12" y="412"/>
-    <use href="#g26" x="251.44" y="412"/>
-    <use href="#g27" x="258.84" y="412"/>
-    <use href="#g21" x="266.43" y="412"/>
-    <use href="#g32" x="273.59" y="412"/>
+    <use href="#g18" x="34" y="237"/>
+    <use href="#g18" x="42.74" y="237"/>
+    <use href="#g18" x="51.47" y="237"/>
+    <use href="#g19" x="63.56" y="237"/>
+    <use href="#g20" x="74.81" y="237"/>
+    <use href="#g21" x="81.97" y="237"/>
+    <use href="#g22" x="89.45" y="237"/>
+    <use href="#g23" x="92.36" y="237"/>
+    <use href="#g19" x="99.83" y="237"/>
   </g>
   <g fill="#000">
-    <use href="#g35" x="121" y="428.9"/>
-    <use href="#g28" x="127.37" y="428.9"/>
-    <use href="#g32" x="132.53" y="428.9"/>
-    <use href="#g21" x="136.94" y="428.9"/>
-    <use href="#g28" x="143.84" y="428.9"/>
-    <use href="#g30" x="148.73" y="428.9"/>
-    <use href="#g29" x="155.7" y="428.9"/>
-    <use href="#g31" x="166.5" y="428.9"/>
-    <use href="#g38" x="173.56" y="428.9"/>
-    <use href="#g30" x="181.94" y="428.9"/>
-    <use href="#g31" x="188.91" y="428.9"/>
-    <use href="#g25" x="196.3" y="428.9"/>
-    <use href="#g24" x="199.64" y="428.9"/>
-    <use href="#g20" x="207.11" y="428.9"/>
-    <use href="#g26" x="218.25" y="428.9"/>
-    <use href="#g30" x="229.06" y="428.9"/>
-    <use href="#g31" x="236.02" y="428.9"/>
-    <use href="#g26" x="243.34" y="428.9"/>
-    <use href="#g28" x="250.38" y="428.9"/>
-    <use href="#g21" x="255.26" y="428.9"/>
-    <use href="#g26" x="262.43" y="428.9"/>
-    <use href="#g28" x="269.46" y="428.9"/>
-    <use href="#g28" x="277.81" y="428.9"/>
-    <use href="#g29" x="282.69" y="428.9"/>
-    <use href="#g34" x="290.12" y="428.9"/>
-    <use href="#g28" x="296.63" y="428.9"/>
+    <use href="#g24" x="34" y="253.9"/>
+    <use href="#g20" x="37.39" y="253.9"/>
+    <use href="#g25" x="44.56" y="253.9"/>
+    <use href="#g26" x="51.95" y="253.9"/>
+    <use href="#g27" x="59.31" y="253.9"/>
+    <use href="#g28" x="64.2" y="253.9"/>
   </g>
   <g fill="#000">
-    <use href="#g39" x="121" y="445.8"/>
-    <use href="#g34" x="131.36" y="445.8"/>
-    <use href="#g26" x="138.47" y="445.8"/>
-    <use href="#g28" x="145.51" y="445.8"/>
-    <use href="#g35" x="150.39" y="445.8"/>
-    <use href="#g20" x="160.4" y="445.8"/>
-    <use href="#g31" x="171.65" y="445.8"/>
-    <use href="#g32" x="178.97" y="445.8"/>
-    <use href="#g21" x="183.37" y="445.8"/>
-    <use href="#g32" x="193.92" y="445.8"/>
-    <use href="#g31" x="198.32" y="445.8"/>
-    <use href="#g31" x="205.64" y="445.8"/>
-    <use href="#g20" x="212.96" y="445.8"/>
+    <use href="#g29" x="34" y="270.8"/>
+    <use href="#g30" x="40.97" y="270.8"/>
+    <use href="#g25" x="48.29" y="270.8"/>
+    <use href="#g27" x="55.32" y="270.8"/>
+    <use href="#g20" x="60.21" y="270.8"/>
+    <use href="#g25" x="67.37" y="270.8"/>
+    <use href="#g27" x="74.4" y="270.8"/>
+    <use href="#g28" x="82.75" y="270.8"/>
+    <use href="#g20" x="90.15" y="270.8"/>
+    <use href="#g31" x="97.31" y="270.8"/>
+    <use href="#g20" x="101.72" y="270.8"/>
+  </g>
+  <path d="M120 224h196v53h-196v-53Zm1 1h194v51h-194v-51Z" fill="#94a3b8" fill-rule="evenodd"/>
+  <g fill="#000">
+    <use href="#g32" x="121" y="237"/>
+    <use href="#g32" x="130.14" y="237"/>
+    <use href="#g32" x="139.28" y="237"/>
+    <use href="#g33" x="151.67" y="237"/>
+    <use href="#g29" x="162.08" y="237"/>
+    <use href="#g30" x="169.05" y="237"/>
+    <use href="#g25" x="176.37" y="237"/>
+    <use href="#g34" x="183.76" y="237"/>
+    <use href="#g22" x="190.39" y="237"/>
+    <use href="#g21" x="193.44" y="237"/>
+    <use href="#g20" x="201.04" y="237"/>
+    <use href="#g31" x="208.2" y="237"/>
+    <use href="#g33" x="212.61" y="237"/>
+    <use href="#g35" x="219.67" y="237"/>
+    <use href="#g24" x="227.34" y="237"/>
+    <use href="#g36" x="230.5" y="237"/>
+    <use href="#g24" x="240.73" y="237"/>
+    <use href="#g30" x="244.12" y="237"/>
+    <use href="#g25" x="251.44" y="237"/>
+    <use href="#g26" x="258.84" y="237"/>
+    <use href="#g20" x="266.43" y="237"/>
+    <use href="#g31" x="273.59" y="237"/>
+  </g>
+  <g fill="#000">
+    <use href="#g34" x="121" y="253.9"/>
+    <use href="#g27" x="127.37" y="253.9"/>
+    <use href="#g31" x="132.53" y="253.9"/>
+    <use href="#g20" x="136.94" y="253.9"/>
+    <use href="#g27" x="143.84" y="253.9"/>
+    <use href="#g29" x="148.73" y="253.9"/>
+    <use href="#g28" x="155.7" y="253.9"/>
+    <use href="#g30" x="166.5" y="253.9"/>
+    <use href="#g37" x="173.56" y="253.9"/>
+    <use href="#g29" x="181.94" y="253.9"/>
+    <use href="#g30" x="188.91" y="253.9"/>
+    <use href="#g24" x="196.3" y="253.9"/>
+    <use href="#g23" x="199.64" y="253.9"/>
+    <use href="#g19" x="207.11" y="253.9"/>
+    <use href="#g25" x="218.25" y="253.9"/>
+    <use href="#g29" x="229.06" y="253.9"/>
+    <use href="#g30" x="236.02" y="253.9"/>
+    <use href="#g25" x="243.34" y="253.9"/>
+    <use href="#g27" x="250.38" y="253.9"/>
+    <use href="#g20" x="255.26" y="253.9"/>
+    <use href="#g25" x="262.43" y="253.9"/>
+    <use href="#g27" x="269.46" y="253.9"/>
+    <use href="#g27" x="277.81" y="253.9"/>
+    <use href="#g28" x="282.69" y="253.9"/>
+    <use href="#g33" x="290.12" y="253.9"/>
+    <use href="#g27" x="296.63" y="253.9"/>
+  </g>
+  <g fill="#000">
+    <use href="#g38" x="121" y="270.8"/>
+    <use href="#g33" x="131.36" y="270.8"/>
+    <use href="#g25" x="138.47" y="270.8"/>
+    <use href="#g27" x="145.51" y="270.8"/>
+    <use href="#g34" x="150.39" y="270.8"/>
+    <use href="#g19" x="160.4" y="270.8"/>
+    <use href="#g30" x="171.65" y="270.8"/>
+    <use href="#g31" x="178.97" y="270.8"/>
+    <use href="#g20" x="183.37" y="270.8"/>
+    <use href="#g31" x="193.92" y="270.8"/>
+    <use href="#g30" x="198.32" y="270.8"/>
+    <use href="#g30" x="205.64" y="270.8"/>
+    <use href="#g19" x="212.96" y="270.8"/>
   </g>
   <defs>
-    <path id="g0" d="M3.02 0q-.8 0-1.18-.36t-.37-1.14v-5.69h.92v5.67q0 .4.17.55t.55.16h.83v.81Zm-2.41-5.02v-.81h3.33v.81Z"/>
-    <path id="g1" d="M.88 0v-7.81h.92v3.26l-.11-.01q.11-.49.37-.8t.66-.45q.39-.16.84-.16.63 0 1.07.28t.65.78q.24.5.24 1.16v3.75h-.93v-3.48q0-.85-.31-1.25-.3-.41-.92-.41-.7 0-1.14.42-.42.42-.42 1.25v3.47Z"/>
+    <path id="g0" d="M3.16.13q-.83 0-1.43-.36-.59-.38-.92-1.07t-.33-1.62.33-1.6q.33-.68.91-1.06.59-.39 1.39-.39.77 0 1.34.36.58.36.91 1.05.33.67.33 1.65v.29l-4.24-.01q.05.94.49 1.41.45.47 1.22.47.57 0 .93-.27.38-.26.52-.71l.98.07q-.22.79-.87 1.29t-1.56.5Zm-1.71-3.57h3.22q-.06-.86-.48-1.25t-1.08-.39q-.67 0-1.11.42-.42.41-.55 1.22Z"/>
+    <path id="g1" d="M2.36 0l-2.13-5.83h1.02l1.7 4.88 1.69-4.88h1.02l-2.13 5.83Z"/>
     <path id="g2" d="M.88 0v-5.83h.81l.04 1.47-.07-.03q.11-.75.47-1.09t.98-.35h.58v.88h-.57q-.43 0-.73.17-.3.16-.45.47t-.14.79v3.52Z"/>
-    <path id="g3" d="M3.16.13q-.83 0-1.43-.36-.59-.38-.92-1.07t-.33-1.62.33-1.6q.33-.68.91-1.06.59-.39 1.39-.39.77 0 1.34.36.58.36.91 1.05.33.67.33 1.65v.29l-4.24-.01q.05.94.49 1.41.45.47 1.22.47.57 0 .93-.27.38-.26.52-.71l.98.07q-.22.79-.87 1.29t-1.56.5Zm-1.71-3.57h3.22q-.06-.86-.48-1.25t-1.08-.39q-.67 0-1.11.42-.42.41-.55 1.22Z"/>
-    <path id="g4" d="M2.45.13q-.9 0-1.43-.41-.54-.42-.54-1.17t.44-1.17q.44-.44 1.41-.61l2.06-.4q0-.73-.34-1.09t-1.05-.36q-.61 0-.97.27-.34.26-.47.78l-.98-.08q.17-.83.8-1.34t1.62-.52q1.13 0 1.72.64.59.63.59 1.74v2.42q0 .19.07.28.07.08.24.08h.24v.81q-.05.02-.16.02-.09 0-.2 0-.39 0-.64-.13t-.36-.39-.11-.7l.11.01q-.08.38-.38.69-.29.3-.73.47-.44.16-.94.16Zm.1-.82q.58 0 .98-.22.42-.23.64-.61t.22-.87v-.42l-1.89.34q-.59.11-.83.35-.22.21-.22.57 0 .41.28.64.3.22.82.22Z"/>
-    <path id="g5" d="M2.8.13q-.88 0-1.41-.58-.52-.6-.52-1.63v-3.75h.93v3.5q0 .85.29 1.25.32.39.94.39.7 0 1.1-.44.39-.45.39-1.23v-3.47h.92v5.83h-.88v-1.44l.14.08q-.17.7-.67 1.09-.48.4-1.23.4Z"/>
-    <path id="g6" d="M3.16.13q-.8 0-1.41-.36-.61-.38-.94-1.07t-.33-1.62.33-1.61.94-1.06 1.41-.38 1.39.38q.61.37.93 1.06.33.69.33 1.61 0 .94-.33 1.62-.32.69-.93 1.07-.6.36-1.39.36Zm0-.88q.79 0 1.23-.58.45-.58.45-1.59t-.45-1.58q-.44-.58-1.23-.58-.8 0-1.25.58t-.46 1.58q0 1.01.46 1.59.45.58 1.25.58Z"/>
-    <path id="g7" d="M3.16.13q-.82 0-1.43-.36-.59-.38-.92-1.07t-.33-1.62.33-1.6q.33-.68.92-1.06.61-.39 1.43-.39.67 0 1.18.25.53.24.86.69.33.44.43 1.09l-.97.07q-.1-.58-.5-.9-.41-.31-1-.31-.8 0-1.25.58t-.46 1.58q0 1.01.46 1.59.45.58 1.25.58.59 0 1-.33t.5-.98l.97.06q-.1.64-.43 1.13-.32.48-.86.75-.51.25-1.18.25Z"/>
-    <path id="g8" d="M2.03 0q-.51 0-.84-.27-.32-.26-.32-.82v-6.72h.93v6.64q0 .17.09.26t.28.1h.5v.81Z"/>
-    <path id="g9" d="M.88 0v-5.83h.85l.04 1.47-.14-.05q.1-.48.34-.82t.61-.54.81-.2q.75 0 1.23.42t.6 1.18l-.17-.02q.09-.5.32-.84.24-.36.61-.55t.86-.19q.63 0 1.05.27.44.26.66.76.22.49.22 1.19v3.75h-.93v-3.55q0-.79-.31-1.18-.3-.41-.91-.41-.4 0-.71.2t-.47.57q-.16.35-.16.89v3.48h-.92v-3.48q0-.79-.28-1.22-.27-.44-.92-.44-.41 0-.72.2-.3.19-.47.57-.17.37-.17.89v3.48Z"/>
-    <path id="g10" d="M.88 0v-5.83h.85l.04 1.49-.11-.1q.11-.53.37-.86.28-.32.67-.5.39-.17.85-.17.67 0 1.09.3.44.3.66.81t.22 1.11v3.75h-.93v-3.48q0-.55-.14-.91-.12-.38-.4-.56-.27-.19-.71-.19-.67 0-1.11.42t-.43 1.24v3.48Z"/>
-    <path id="g11" d="M3 .13q-.8 0-1.34-.26-.55-.25-.85-.68-.28-.46-.33-1.03l.97-.07q.1.53.44.85.34.31 1.11.31.59 0 .92-.19.33-.2.33-.62 0-.24-.11-.38-.11-.15-.42-.26-.3-.13-.89-.24-.81-.15-1.28-.39-.46-.23-.64-.56-.19-.33-.19-.8 0-.78.58-1.28t1.62-.5q.78 0 1.27.28.48.27.73.71.27.42.31.89l-.96.06q-.02-.27-.18-.5-.14-.25-.42-.39-.28-.16-.76-.16-.63 0-.93.25-.29.24-.29.61 0 .28.11.47.11.17.4.3.3.11.8.2.86.14 1.34.36t.68.55q.2.31.2.78 0 .79-.63 1.25-.62.44-1.59.44Z"/>
-    <path id="g12" d="M.52 1.72l.53-1.72h-.57v-1.25h1.25v1.09l-.67 1.88Z"/>
-    <path id="g13" d="M3.55.13q-.6 0-1.08-.27t-.72-.74l-.03.88h-.85v-7.81h.93v2.79q.23-.36.68-.65.47-.3 1.07-.3.78 0 1.33.38t.87 1.06.31 1.61q0 .94-.31 1.62-.31.69-.88 1.07-.54.36-1.32.36Zm-.05-.88q.73 0 1.16-.58t.43-1.59-.43-1.58-1.14-.58q-.54 0-.93.27-.37.25-.59.73-.2.49-.2 1.16t.2 1.15q.22.49.59.75t.91.27Z"/>
-    <path id="g14" d="M2.05 0l-1.82-5.83h1.02l1.38 4.86 1.37-4.86h1l1.38 4.86 1.37-4.86h1.02l-1.8 5.83h-1.17l-1.3-4.44-1.3 4.44Z"/>
-    <path id="g15" d="M.88 0v-5.83h.92v5.83Zm-.02-6.75v-1.08h.97v1.08Z"/>
-    <path id="g16" d="M2.95.13q-.76 0-1.33-.36-.54-.38-.84-1.07t-.3-1.62.3-1.61.85-1.06 1.32-.38q.58 0 1.07.25.48.25.71.7v-2.79h.94v7.81h-.84l-.03-.88q-.25.47-.75.74-.49.26-1.1.26Zm.19-.88q.52 0 .86-.27.36-.26.55-.75t.18-1.15q0-.67-.18-1.16-.19-.48-.55-.73-.34-.27-.86-.27-.78 0-1.23.58t-.46 1.58q0 1.01.46 1.59.45.58 1.23.58Z"/>
-    <path id="g17" d="M.27 0l3.32-9.23h1.5l3.33 9.23h-1.22l-.92-2.63-3.87.01-.93 2.62Zm2.51-3.72h3.13l-1.57-4.53Z"/>
-    <path id="g18" d="M.61 0l2.53-3.53-2.41-3.36h1.29l1.81 2.59 1.75-2.59h1.3l-2.38 3.37 2.5 3.52h-1.28l-1.89-2.78-1.92 2.78Z"/>
-    <path id="g19" d="M1.2 0v-9.23h3.18q1.62 0 2.43.6.83.6.83 1.88 0 .59-.26 1.06-.26.46-.74.71t-1.14.25l-.02-.08q1.19 0 1.86.64.69.62.69 1.64 0 1.25-.83 1.89-.81.64-2.31.64Zm1.11-1.09h2.58q.95 0 1.45-.39.52-.4.52-1.11 0-.74-.52-1.14-.5-.41-1.45-.41h-2.58Zm0-4.14h2.07q.99 0 1.54-.38t.55-1.08q0-.73-.53-1.09-.52-.36-1.57-.36h-2.06Z"/>
-    <path id="g20" d="M1.05 0v-6.89h1l.03 1.75-.16-.06q.13-.57.41-.97.3-.42.72-.64.43-.24.95-.24.91 0 1.47.5.56.49.7 1.38l-.2-.02q.11-.59.37-1 .28-.42.72-.64.46-.22 1.03-.22.74 0 1.24.32.51.29.76.89.27.57.27 1.4v4.44h-1.09v-4.2q0-.94-.36-1.41t-1.08-.47q-.49 0-.85.24t-.56.67q-.19.42-.19 1.05v4.12h-1.09v-4.13q0-.92-.33-1.43-.31-.52-1.08-.52-.48 0-.84.24t-.56.67-.2 1.05l-.01 4.12Z"/>
-    <path id="g21" d="M3.73.16q-.98 0-1.68-.44-.71-.45-1.1-1.27-.37-.81-.37-1.89 0-1.09.37-1.9.39-.82 1.08-1.25.7-.46 1.64-.46.91 0 1.6.43.68.42 1.06 1.23.39.8.39 1.95v.33h-5q.06 1.11.58 1.67.53.55 1.43.55.68 0 1.11-.31.44-.32.61-.85l1.16.1q-.27.92-1.03 1.51t-1.85.6Zm-2.01-4.22h3.81q-.08-1-.58-1.47t-1.28-.47-1.3.48-.65 1.46Z"/>
-    <path id="g22" d="M3.48.16q-.89 0-1.54-.44-.66-.45-1.02-1.25-.34-.81-.34-1.91t.34-1.9q.36-.82 1.02-1.25.65-.46 1.54-.46.69 0 1.25.3.58.28.88.83v-3.31h1.08v9.23h-.99l-.03-1.05q-.3.57-.87.89-.58.32-1.32.32Zm.22-1.05q.61 0 1.03-.31t.65-.89.23-1.35q0-.81-.24-1.37-.21-.58-.64-.88-.42-.31-1.03-.31-.9 0-1.45.69-.53.67-.53 1.87 0 1.17.53 1.86.55.69 1.45.69Z"/>
-    <path id="g23" d="M1.05 0v-6.89h1.08l-.01 6.89Zm-.03-7.97v-1.28h1.14v1.28Z"/>
-    <path id="g24" d="M3.3.16q-1.02 0-1.64-.69-.61-.7-.61-1.92v-4.44h1.08l-.01 4.14q.01 1 .36 1.47.36.47 1.11.47.82 0 1.29-.52t.46-1.45v-4.11h1.1v6.89h-1.05v-1.7l.17.09q-.2.84-.79 1.31-.58.46-1.47.46Z"/>
-    <path id="g25" d="M2.39 0q-.59 0-.97-.31t-.37-.99v-7.93h1.08l-.01 7.84q.01.2.11.31.13.11.33.11h.6v.97Z"/>
-    <path id="g26" d="M1.05 0v-6.89h1l.03 1.75-.13-.11q.13-.61.46-1 .32-.41.78-.59.47-.21 1-.21.79 0 1.29.36.52.35.77.94.27.59.27 1.31v4.44h-1.1v-4.13q0-.64-.15-1.06-.14-.43-.47-.65-.33-.24-.85-.24-.79 0-1.31.5t-.52 1.46l.01 4.12Z"/>
-    <path id="g27" d="M3.66 2.11q-.75 0-1.35-.25t-1-.7-.54-1.05l1.14-.08q.15.47.54.75.41.28 1.21.28.93 0 1.43-.37t.5-1.13v-1.12q-.25.54-.79.87-.55.33-1.22.33-.88 0-1.56-.42-.68-.44-1.07-1.19-.37-.76-.37-1.73 0-.99.37-1.74t1.05-1.17q.67-.44 1.52-.44.73 0 1.31.35.58.32.81.9v-1.09h1.05v6.42q0 .81-.38 1.39-.36.58-1.03.88t-1.62.31Zm-.04-3.52q.9 0 1.43-.61.53-.62.54-1.68.02-.72-.23-1.24-.24-.51-.69-.78-.45-.28-1.05-.28-.9 0-1.4.63-.5.6-.5 1.67 0 1.06.51 1.68t1.4.61Z"/>
-    <path id="g28" d="M3.56 0q-.93 0-1.39-.42-.44-.44-.44-1.35v-6.73h1.1v6.7q0 .47.2.66.2.17.64.17h.99v.97Zm-2.84-5.92v-.97h3.94v.97Z"/>
-    <path id="g29" d="M1.05 0v-9.23h1.08l-.01 3.85-.12-.01q.13-.58.44-.94t.76-.53q.47-.19 1.02-.19.73 0 1.25.33t.78.92.27 1.36v4.44h-1.1v-4.13q0-.99-.36-1.46-.36-.49-1.08-.49-.84 0-1.36.52-.49.5-.49 1.45l-.01 4.11Z"/>
-    <path id="g30" d="M3.73.16q-.96 0-1.67-.44-.7-.45-1.09-1.27-.39-.81-.39-1.89 0-1.09.39-1.9t1.09-1.25q.71-.46 1.67-.46.8 0 1.41.28.63.29 1 .82.39.53.52 1.29l-1.14.08q-.13-.69-.61-1.05t-1.18-.37q-.95 0-1.48.69-.53.67-.53 1.87t.53 1.88q.53.67 1.48.67.71 0 1.18-.38.48-.39.61-1.17l1.14.08q-.13.77-.52 1.33-.37.56-1 .87-.61.32-1.41.32Z"/>
-    <path id="g31" d="M3.73.16q-.95 0-1.67-.44-.7-.45-1.09-1.27-.39-.81-.39-1.89 0-1.11.39-1.9.39-.82 1.09-1.25.72-.46 1.67-.46t1.66.46q.7.43 1.09 1.25.4.79.4 1.9-.01 1.08-.4 1.89t-1.09 1.27q-.7.44-1.66.44Zm0-1.05q.96 0 1.47-.67.53-.69.53-1.88 0-1.2-.53-1.87-.51-.69-1.47-.69-.95 0-1.48.69-.53.67-.53 1.87t.53 1.88q.53.67 1.48.67Z"/>
-    <path id="g32" d="M1.05 0v-6.89h.95l.05 1.75-.1-.05q.13-.89.57-1.29.43-.41 1.15-.41h.69v1.05h-.67q-.52 0-.86.18-.35.19-.53.57-.17.36-.17.93l-.01 4.16Z"/>
-    <path id="g33" d="M4.73.2q-1.23 0-2.17-.58t-1.47-1.65q-.51-1.08-.51-2.58 0-1.48.51-2.56.53-1.1 1.47-1.67.94-.6 2.17-.6 1.68 0 2.6.85t1.22 2.29l-1.19.08q-.2-.98-.84-1.55-.63-.57-1.79-.57-.89 0-1.56.45-.65.44-1.05 1.28-.37.84-.37 2 0 1.17.38 2.02.39.82 1.04 1.26.67.44 1.56.44 1.21 0 1.86-.63.68-.62.85-1.7l1.18.08q-.17 1-.67 1.75-.48.75-1.29 1.17t-1.93.42Z"/>
-    <path id="g34" d="M2.91.16q-1.08 0-1.71-.49t-.62-1.39q0-.87.51-1.37.52-.52 1.66-.74l2.44-.45q0-.86-.41-1.28-.41-.44-1.23-.44-.72 0-1.14.31t-.57.92l-1.15-.09q.2-.98.94-1.58t1.92-.61q1.33 0 2.03.75t.7 2.07v2.84q0 .23.08.33.09.09.28.09h.28v.97q-.06.02-.19.02-.11.01-.23.01-.47 0-.77-.14-.28-.16-.42-.47-.12-.33-.12-.86l.12.03q-.09.44-.43.8t-.88.56q-.52.21-1.09.21Zm.09-.97q.69 0 1.17-.27.5-.26.75-.72.27-.47.27-1.03v-.5l-2.24.42q-.7.13-.97.39t-.26.71q0 .47.34.73t.94.27Z"/>
-    <path id="g35" d="M3.55.16q-.96 0-1.6-.3t-.98-.83-.39-1.2l1.14-.08q.09.63.5 1 .42.36 1.33.36.7 0 1.08-.22.39-.23.39-.73 0-.28-.13-.46t-.48-.31q-.36-.14-1.07-.28-.96-.17-1.51-.44t-.77-.67-.22-.94q0-.92.68-1.51t1.93-.6q.92 0 1.5.33.58.31.88.83.3.5.36 1.05l-1.14.07q-.03-.31-.21-.59-.15-.3-.5-.47t-.9-.17q-.75 0-1.11.28-.35.28-.35.74 0 .32.14.54t.49.36q.34.13.94.24 1.01.17 1.58.43t.79.64q.24.38.24.93 0 .95-.74 1.48-.73.52-1.87.52Z"/>
-    <path id="g36" d="M4.2.16q-.72 0-1.28-.32t-.86-.89l-.03 1.05h-.98v-9.23h1.08l-.01 3.31q.27-.44.82-.78t1.26-.35q.91 0 1.57.46.67.43 1.03 1.25.36.79.36 1.9 0 1.1-.36 1.91-.36.8-1.03 1.25-.66.44-1.57.44Zm-.06-1.05q.86 0 1.36-.69.52-.69.52-1.86 0-1.2-.52-1.87-.5-.69-1.34-.69-.64 0-1.1.31-.45.3-.7.88-.23.56-.23 1.37-.01.77.23 1.35t.7.89 1.08.31Z"/>
-    <path id="g37" d="M1.34 1.95v-.97h.79q.37 0 .54-.11t.27-.35l.25-.65h-.38l-2.53-6.76h1.2l2.05 5.75 1.97-5.75h1.19l-2.78 7.77q-.21.56-.6.81-.39.26-1.08.26Z"/>
-    <path id="g38" d="M1.72 0v-7.52q0-.76.44-1.23.43-.48 1.37-.48h1.1l-.01.96h-1.01q-.39 0-.59.22t-.21.61v7.44Zm-.94-5.92v-.97h3.75v.97Z"/>
-    <path id="g39" d="M2.42 0l-2.14-6.89h1.2l1.61 5.75 1.64-5.75h1.18l1.64 5.75 1.62-5.75h1.19l-2.13 6.89h-1.39l-1.53-5.23-1.53 5.23Z"/>
-    <path id="g40" d="M1.45 0v-6.36q0-.64.38-1.05t1.15-.4h.94v.81h-.86q-.34 0-.51.19t-.17.51l-.01 6.3Zm-.79-5.02v-.81h3.18v.81Z"/>
-    <path id="g41" d="M1.2 0v-9.23h2.86q2.13 0 3.27 1.2 1.15 1.2 1.15 3.42t-1.12 3.42q-1.13 1.19-3.22 1.19Zm1.11-1.09h1.75q1.63 0 2.44-.88t.81-2.64q0-1.78-.81-2.66t-2.44-.87h-1.75Z"/>
-    <path id="g42" d="M.88 1.66v-7.49h.85l.04 1.25-.14-.06q.21-.66.73-.99t1.19-.34q.86 0 1.4.44.57.42.83 1.12.28.69.28 1.49 0 .81-.28 1.51-.26.69-.83 1.11-.54.43-1.4.43-.46 0-.85-.15t-.67-.42q-.26-.28-.36-.65l.13-.16v2.91Zm2.57-2.41q.77 0 1.21-.56.43-.58.43-1.61 0-1.02-.43-1.58-.44-.58-1.21-.58-.5 0-.87.25-.36.24-.58.72-.2.49-.2 1.19 0 .72.2 1.2t.58.74q.37.23.87.23Z"/>
+    <path id="g3" d="M1.14 1.66v-.82h.66q.31 0 .45-.09.16-.09.23-.31l.21-.55h-.32l-2.14-5.72h1.02l1.73 4.86 1.68-4.86h1.01l-2.37 6.56q-.16.47-.5.69-.33.24-.91.24Z"/>
+    <path id="g4" d="M3.16.13q-.82 0-1.43-.36-.59-.38-.92-1.07t-.33-1.62.33-1.6q.33-.68.92-1.06.61-.39 1.43-.39.67 0 1.18.25.53.24.86.69.33.44.43 1.09l-.97.07q-.1-.58-.5-.9-.41-.31-1-.31-.8 0-1.25.58t-.46 1.58q0 1.01.46 1.59.45.58 1.25.58.59 0 1-.33t.5-.98l.97.06q-.1.64-.43 1.13-.32.48-.86.75-.51.25-1.18.25Z"/>
+    <path id="g5" d="M3.16.13q-.8 0-1.41-.36-.61-.38-.94-1.07t-.33-1.62.33-1.61.94-1.06 1.41-.38 1.39.38q.61.37.93 1.06.33.69.33 1.61 0 .94-.33 1.62-.32.69-.93 1.07-.6.36-1.39.36Zm0-.88q.79 0 1.23-.58.45-.58.45-1.59t-.45-1.58q-.44-.58-1.23-.58-.8 0-1.25.58t-.46 1.58q0 1.01.46 1.59.45.58 1.25.58Z"/>
+    <path id="g6" d="M2.03 0q-.51 0-.84-.27-.32-.26-.32-.82v-6.72h.93v6.64q0 .17.09.26t.28.1h.5v.81Z"/>
+    <path id="g7" d="M2.8.13q-.88 0-1.41-.58-.52-.6-.52-1.63v-3.75h.93v3.5q0 .85.29 1.25.32.39.94.39.7 0 1.1-.44.39-.45.39-1.23v-3.47h.92v5.83h-.88v-1.44l.14.08q-.17.7-.67 1.09-.48.4-1.23.4Z"/>
+    <path id="g8" d="M.88 0v-5.83h.85l.04 1.47-.14-.05q.1-.48.34-.82t.61-.54.81-.2q.75 0 1.23.42t.6 1.18l-.17-.02q.09-.5.32-.84.24-.36.61-.55t.86-.19q.63 0 1.05.27.44.26.66.76.22.49.22 1.19v3.75h-.93v-3.55q0-.79-.31-1.18-.3-.41-.91-.41-.4 0-.71.2t-.47.57q-.16.35-.16.89v3.48h-.92v-3.48q0-.79-.28-1.22-.27-.44-.92-.44-.41 0-.72.2-.3.19-.47.57-.17.37-.17.89v3.48Z"/>
+    <path id="g9" d="M.88 0v-5.83h.85l.04 1.49-.11-.1q.11-.53.37-.86.28-.32.67-.5.39-.17.85-.17.67 0 1.09.3.44.3.66.81t.22 1.11v3.75h-.93v-3.48q0-.55-.14-.91-.12-.38-.4-.56-.27-.19-.71-.19-.67 0-1.11.42t-.43 1.24v3.48Z"/>
+    <path id="g10" d="M3.09 1.78q-.62 0-1.14-.22-.5-.2-.84-.59-.34-.38-.45-.88l.95-.07q.14.4.47.64.34.25 1.01.25.8 0 1.22-.33.42-.31.42-.96v-.93q-.21.45-.68.73-.46.27-1.02.27-.75 0-1.33-.36-.56-.36-.89-1t-.33-1.47.32-1.45q.33-.64.89-1 .56-.38 1.29-.38.61 0 1.1.3.5.28.7.76v-.92h.88v5.44q0 .67-.32 1.16-.31.5-.89.75-.56.26-1.36.26Zm-.03-2.97q.75 0 1.21-.51.45-.53.46-1.44 0-.59-.2-1.03t-.58-.67-.89-.24q-.76 0-1.18.53-.43.52-.43 1.41 0 .91.44 1.44.44.51 1.17.51Z"/>
+    <path id="g11" d="M2.05 0l-1.82-5.83h1.02l1.38 4.86 1.37-4.86h1l1.38 4.86 1.37-4.86h1.02l-1.8 5.83h-1.17l-1.3-4.44-1.3 4.44Z"/>
+    <path id="g12" d="M3 .13q-.8 0-1.34-.26-.55-.25-.85-.68-.28-.46-.33-1.03l.97-.07q.1.53.44.85.34.31 1.11.31.59 0 .92-.19.33-.2.33-.62 0-.24-.11-.38-.11-.15-.42-.26-.3-.13-.89-.24-.81-.15-1.28-.39-.46-.23-.64-.56-.19-.33-.19-.8 0-.78.58-1.28t1.62-.5q.78 0 1.27.28.48.27.73.71.27.42.31.89l-.96.06q-.02-.27-.18-.5-.14-.25-.42-.39-.28-.16-.76-.16-.63 0-.93.25-.29.24-.29.61 0 .28.11.47.11.17.4.3.3.11.8.2.86.14 1.34.36t.68.55q.2.31.2.78 0 .79-.63 1.25-.62.44-1.59.44Z"/>
+    <path id="g13" d="M.88 0v-5.83h.92v5.83Zm-.02-6.75v-1.08h.97v1.08Z"/>
+    <path id="g14" d="M.88 1.66v-7.49h.85l.04 1.25-.14-.06q.21-.66.73-.99t1.19-.34q.86 0 1.4.44.57.42.83 1.12.28.69.28 1.49 0 .81-.28 1.51-.26.69-.83 1.11-.54.43-1.4.43-.46 0-.85-.15t-.67-.42q-.26-.28-.36-.65l.13-.16v2.91Zm2.57-2.41q.77 0 1.21-.56.43-.58.43-1.61 0-1.02-.43-1.58-.44-.58-1.21-.58-.5 0-.87.25-.36.24-.58.72-.2.49-.2 1.19 0 .72.2 1.2t.58.74q.37.23.87.23Z"/>
+    <path id="g15" d="M3.02 0q-.8 0-1.18-.36t-.37-1.14v-5.69h.92v5.67q0 .4.17.55t.55.16h.83v.81Zm-2.41-5.02v-.81h3.33v.81Z"/>
+    <path id="g16" d="M.27 0l3.32-9.23h1.5l3.33 9.23h-1.22l-.92-2.63-3.87.01-.93 2.62Zm2.51-3.72h3.13l-1.57-4.53Z"/>
+    <path id="g17" d="M.61 0l2.53-3.53-2.41-3.36h1.29l1.81 2.59 1.75-2.59h1.3l-2.38 3.37 2.5 3.52h-1.28l-1.89-2.78-1.92 2.78Z"/>
+    <path id="g18" d="M1.2 0v-9.23h3.18q1.62 0 2.43.6.83.6.83 1.88 0 .59-.26 1.06-.26.46-.74.71t-1.14.25l-.02-.08q1.19 0 1.86.64.69.62.69 1.64 0 1.25-.83 1.89-.81.64-2.31.64Zm1.11-1.09h2.58q.95 0 1.45-.39.52-.4.52-1.11 0-.74-.52-1.14-.5-.41-1.45-.41h-2.58Zm0-4.14h2.07q.99 0 1.54-.38t.55-1.08q0-.73-.53-1.09-.52-.36-1.57-.36h-2.06Z"/>
+    <path id="g19" d="M1.05 0v-6.89h1l.03 1.75-.16-.06q.13-.57.41-.97.3-.42.72-.64.43-.24.95-.24.91 0 1.47.5.56.49.7 1.38l-.2-.02q.11-.59.37-1 .28-.42.72-.64.46-.22 1.03-.22.74 0 1.24.32.51.29.76.89.27.57.27 1.4v4.44h-1.09v-4.2q0-.94-.36-1.41t-1.08-.47q-.49 0-.85.24t-.56.67q-.19.42-.19 1.05v4.12h-1.09v-4.13q0-.92-.33-1.43-.31-.52-1.08-.52-.48 0-.84.24t-.56.67-.2 1.05l-.01 4.12Z"/>
+    <path id="g20" d="M3.73.16q-.98 0-1.68-.44-.71-.45-1.1-1.27-.37-.81-.37-1.89 0-1.09.37-1.9.39-.82 1.08-1.25.7-.46 1.64-.46.91 0 1.6.43.68.42 1.06 1.23.39.8.39 1.95v.33h-5q.06 1.11.58 1.67.53.55 1.43.55.68 0 1.11-.31.44-.32.61-.85l1.16.1q-.27.92-1.03 1.51t-1.85.6Zm-2.01-4.22h3.81q-.08-1-.58-1.47t-1.28-.47-1.3.48-.65 1.46Z"/>
+    <path id="g21" d="M3.48.16q-.89 0-1.54-.44-.66-.45-1.02-1.25-.34-.81-.34-1.91t.34-1.9q.36-.82 1.02-1.25.65-.46 1.54-.46.69 0 1.25.3.58.28.88.83v-3.31h1.08v9.23h-.99l-.03-1.05q-.3.57-.87.89-.58.32-1.32.32Zm.22-1.05q.61 0 1.03-.31t.65-.89.23-1.35q0-.81-.24-1.37-.21-.58-.64-.88-.42-.31-1.03-.31-.9 0-1.45.69-.53.67-.53 1.87 0 1.17.53 1.86.55.69 1.45.69Z"/>
+    <path id="g22" d="M1.05 0v-6.89h1.08l-.01 6.89Zm-.03-7.97v-1.28h1.14v1.28Z"/>
+    <path id="g23" d="M3.3.16q-1.02 0-1.64-.69-.61-.7-.61-1.92v-4.44h1.08l-.01 4.14q.01 1 .36 1.47.36.47 1.11.47.82 0 1.29-.52t.46-1.45v-4.11h1.1v6.89h-1.05v-1.7l.17.09q-.2.84-.79 1.31-.58.46-1.47.46Z"/>
+    <path id="g24" d="M2.39 0q-.59 0-.97-.31t-.37-.99v-7.93h1.08l-.01 7.84q.01.2.11.31.13.11.33.11h.6v.97Z"/>
+    <path id="g25" d="M1.05 0v-6.89h1l.03 1.75-.13-.11q.13-.61.46-1 .32-.41.78-.59.47-.21 1-.21.79 0 1.29.36.52.35.77.94.27.59.27 1.31v4.44h-1.1v-4.13q0-.64-.15-1.06-.14-.43-.47-.65-.33-.24-.85-.24-.79 0-1.31.5t-.52 1.46l.01 4.12Z"/>
+    <path id="g26" d="M3.66 2.11q-.75 0-1.35-.25t-1-.7-.54-1.05l1.14-.08q.15.47.54.75.41.28 1.21.28.93 0 1.43-.37t.5-1.13v-1.12q-.25.54-.79.87-.55.33-1.22.33-.88 0-1.56-.42-.68-.44-1.07-1.19-.37-.76-.37-1.73 0-.99.37-1.74t1.05-1.17q.67-.44 1.52-.44.73 0 1.31.35.58.32.81.9v-1.09h1.05v6.42q0 .81-.38 1.39-.36.58-1.03.88t-1.62.31Zm-.04-3.52q.9 0 1.43-.61.53-.62.54-1.68.02-.72-.23-1.24-.24-.51-.69-.78-.45-.28-1.05-.28-.9 0-1.4.63-.5.6-.5 1.67 0 1.06.51 1.68t1.4.61Z"/>
+    <path id="g27" d="M3.56 0q-.93 0-1.39-.42-.44-.44-.44-1.35v-6.73h1.1v6.7q0 .47.2.66.2.17.64.17h.99v.97Zm-2.84-5.92v-.97h3.94v.97Z"/>
+    <path id="g28" d="M1.05 0v-9.23h1.08l-.01 3.85-.12-.01q.13-.58.44-.94t.76-.53q.47-.19 1.02-.19.73 0 1.25.33t.78.92.27 1.36v4.44h-1.1v-4.13q0-.99-.36-1.46-.36-.49-1.08-.49-.84 0-1.36.52-.49.5-.49 1.45l-.01 4.11Z"/>
+    <path id="g29" d="M3.73.16q-.96 0-1.67-.44-.7-.45-1.09-1.27-.39-.81-.39-1.89 0-1.09.39-1.9t1.09-1.25q.71-.46 1.67-.46.8 0 1.41.28.63.29 1 .82.39.53.52 1.29l-1.14.08q-.13-.69-.61-1.05t-1.18-.37q-.95 0-1.48.69-.53.67-.53 1.87t.53 1.88q.53.67 1.48.67.71 0 1.18-.38.48-.39.61-1.17l1.14.08q-.13.77-.52 1.33-.37.56-1 .87-.61.32-1.41.32Z"/>
+    <path id="g30" d="M3.73.16q-.95 0-1.67-.44-.7-.45-1.09-1.27-.39-.81-.39-1.89 0-1.11.39-1.9.39-.82 1.09-1.25.72-.46 1.67-.46t1.66.46q.7.43 1.09 1.25.4.79.4 1.9-.01 1.08-.4 1.89t-1.09 1.27q-.7.44-1.66.44Zm0-1.05q.96 0 1.47-.67.53-.69.53-1.88 0-1.2-.53-1.87-.51-.69-1.47-.69-.95 0-1.48.69-.53.67-.53 1.87t.53 1.88q.53.67 1.48.67Z"/>
+    <path id="g31" d="M1.05 0v-6.89h.95l.05 1.75-.1-.05q.13-.89.57-1.29.43-.41 1.15-.41h.69v1.05h-.67q-.52 0-.86.18-.35.19-.53.57-.17.36-.17.93l-.01 4.16Z"/>
+    <path id="g32" d="M4.73.2q-1.23 0-2.17-.58t-1.47-1.65q-.51-1.08-.51-2.58 0-1.48.51-2.56.53-1.1 1.47-1.67.94-.6 2.17-.6 1.68 0 2.6.85t1.22 2.29l-1.19.08q-.2-.98-.84-1.55-.63-.57-1.79-.57-.89 0-1.56.45-.65.44-1.05 1.28-.37.84-.37 2 0 1.17.38 2.02.39.82 1.04 1.26.67.44 1.56.44 1.21 0 1.86-.63.68-.62.85-1.7l1.18.08q-.17 1-.67 1.75-.48.75-1.29 1.17t-1.93.42Z"/>
+    <path id="g33" d="M2.91.16q-1.08 0-1.71-.49t-.62-1.39q0-.87.51-1.37.52-.52 1.66-.74l2.44-.45q0-.86-.41-1.28-.41-.44-1.23-.44-.72 0-1.14.31t-.57.92l-1.15-.09q.2-.98.94-1.58t1.92-.61q1.33 0 2.03.75t.7 2.07v2.84q0 .23.08.33.09.09.28.09h.28v.97q-.06.02-.19.02-.11.01-.23.01-.47 0-.77-.14-.28-.16-.42-.47-.12-.33-.12-.86l.12.03q-.09.44-.43.8t-.88.56q-.52.21-1.09.21Zm.09-.97q.69 0 1.17-.27.5-.26.75-.72.27-.47.27-1.03v-.5l-2.24.42q-.7.13-.97.39t-.26.71q0 .47.34.73t.94.27Z"/>
+    <path id="g34" d="M3.55.16q-.96 0-1.6-.3t-.98-.83-.39-1.2l1.14-.08q.09.63.5 1 .42.36 1.33.36.7 0 1.08-.22.39-.23.39-.73 0-.28-.13-.46t-.48-.31q-.36-.14-1.07-.28-.96-.17-1.51-.44t-.77-.67-.22-.94q0-.92.68-1.51t1.93-.6q.92 0 1.5.33.58.31.88.83.3.5.36 1.05l-1.14.07q-.03-.31-.21-.59-.15-.3-.5-.47t-.9-.17q-.75 0-1.11.28-.35.28-.35.74 0 .32.14.54t.49.36q.34.13.94.24 1.01.17 1.58.43t.79.64q.24.38.24.93 0 .95-.74 1.48-.73.52-1.87.52Z"/>
+    <path id="g35" d="M4.2.16q-.72 0-1.28-.32t-.86-.89l-.03 1.05h-.98v-9.23h1.08l-.01 3.31q.27-.44.82-.78t1.26-.35q.91 0 1.57.46.67.43 1.03 1.25.36.79.36 1.9 0 1.1-.36 1.91-.36.8-1.03 1.25-.66.44-1.57.44Zm-.06-1.05q.86 0 1.36-.69.52-.69.52-1.86 0-1.2-.52-1.87-.5-.69-1.34-.69-.64 0-1.1.31-.45.3-.7.88-.23.56-.23 1.37-.01.77.23 1.35t.7.89 1.08.31Z"/>
+    <path id="g36" d="M1.34 1.95v-.97h.79q.37 0 .54-.11t.27-.35l.25-.65h-.38l-2.53-6.76h1.2l2.05 5.75 1.97-5.75h1.19l-2.78 7.77q-.21.56-.6.81-.39.26-1.08.26Z"/>
+    <path id="g37" d="M1.72 0v-7.52q0-.76.44-1.23.43-.48 1.37-.48h1.1l-.01.96h-1.01q-.39 0-.59.22t-.21.61v7.44Zm-.94-5.92v-.97h3.75v.97Z"/>
+    <path id="g38" d="M2.42 0l-2.14-6.89h1.2l1.61 5.75 1.64-5.75h1.18l1.64 5.75 1.62-5.75h1.19l-2.13 6.89h-1.39l-1.53-5.23-1.53 5.23Z"/>
+    <path id="g39" d="M2.45.13q-.9 0-1.43-.41-.54-.42-.54-1.17t.44-1.17q.44-.44 1.41-.61l2.06-.4q0-.73-.34-1.09t-1.05-.36q-.61 0-.97.27-.34.26-.47.78l-.98-.08q.17-.83.8-1.34t1.62-.52q1.13 0 1.72.64.59.63.59 1.74v2.42q0 .19.07.28.07.08.24.08h.24v.81q-.05.02-.16.02-.09 0-.2 0-.39 0-.64-.13t-.36-.39-.11-.7l.11.01q-.08.38-.38.69-.29.3-.73.47-.44.16-.94.16Zm.1-.82q.58 0 .98-.22.42-.23.64-.61t.22-.87v-.42l-1.89.34q-.59.11-.83.35-.22.21-.22.57 0 .41.28.64.3.22.82.22Z"/>
+    <path id="g40" d="M2.95.13q-.76 0-1.33-.36-.54-.38-.84-1.07t-.3-1.62.3-1.61.85-1.06 1.32-.38q.58 0 1.07.25.48.25.71.7v-2.79h.94v7.81h-.84l-.03-.88q-.25.47-.75.74-.49.26-1.1.26Zm.19-.88q.52 0 .86-.27.36-.26.55-.75t.18-1.15q0-.67-.18-1.16-.19-.48-.55-.73-.34-.27-.86-.27-.78 0-1.23.58t-.46 1.58q0 1.01.46 1.59.45.58 1.23.58Z"/>
+    <path id="g41" d="M3.55.13q-.6 0-1.08-.27t-.72-.74l-.03.88h-.85v-7.81h.93v2.79q.23-.36.68-.65.47-.3 1.07-.3.78 0 1.33.38t.87 1.06.31 1.61q0 .94-.31 1.62-.31.69-.88 1.07-.54.36-1.32.36Zm-.05-.88q.73 0 1.16-.58t.43-1.59-.43-1.58-1.14-.58q-.54 0-.93.27-.37.25-.59.73-.2.49-.2 1.16t.2 1.15q.22.49.59.75t.91.27Z"/>
+    <path id="g42" d="M1.45 0v-6.36q0-.64.38-1.05t1.15-.4h.94v.81h-.86q-.34 0-.51.19t-.17.51l-.01 6.3Zm-.79-5.02v-.81h3.18v.81Z"/>
     <path id="g43" d="M1.05 1.95v-8.84h1l.03 1.48-.16-.07q.27-.77.86-1.16.61-.41 1.41-.41 1.03 0 1.69.52.65.5.96 1.33.32.81.32 1.76t-.32 1.77q-.31.81-.97 1.33-.65.5-1.68.5-.53 0-1-.18-.46-.18-.78-.51t-.44-.77l.15-.18.01 3.43Zm3.03-2.84q.9 0 1.42-.67t.52-1.88-.52-1.89-1.42-.67q-.6 0-1.03.28-.44.28-.69.86-.23.56-.23 1.42-.01.85.23 1.42t.67.85q.45.28 1.05.28Z"/>
     <path id="g44" d="M2.8 0l-2.52-6.89h1.2l2 5.77 2-5.77h1.21l-2.52 6.89Z"/>
     <path id="g45" d="M1.72 0v-7.52q0-.76.44-1.23.43-.48 1.37-.48h1.1l-.01.96h-1.01q-.39 0-.59.22t-.21.61v7.44Zm-.94-5.92v-.97h3.75v.97Zm4.88 5.92v-6.89h1.07v6.89Zm-.02-7.97v-1.28h1.14v1.28Z"/>
-    <path id="g46" d="M3.09 1.78q-.62 0-1.14-.22-.5-.2-.84-.59-.34-.38-.45-.88l.95-.07q.14.4.47.64.34.25 1.01.25.8 0 1.22-.33.42-.31.42-.96v-.93q-.21.45-.68.73-.46.27-1.02.27-.75 0-1.33-.36-.56-.36-.89-1t-.33-1.47.32-1.45q.33-.64.89-1 .56-.38 1.29-.38.61 0 1.1.3.5.28.7.76v-.92h.88v5.44q0 .67-.32 1.16-.31.5-.89.75-.56.26-1.36.26Zm-.03-2.97q.75 0 1.21-.51.45-.53.46-1.44 0-.59-.2-1.03t-.58-.67-.89-.24q-.76 0-1.18.53-.43.52-.43 1.41 0 .91.44 1.44.44.51 1.17.51Z"/>
-    <path id="g47" d="M.88 0v-7.81h.92v5.12l2.84-3.14h1.24l-2.3 2.47 2.39 3.36h-1.13l-1.89-2.73-1.15 1.21v1.52Z"/>
-    <path id="g48" d="M.48-2.77v-.87h3.65l-.01.87Z"/>
-    <path id="g49" d="M2.36 0l-2.13-5.83h1.02l1.7 4.88 1.69-4.88h1.02l-2.13 5.83Z"/>
+    <path id="g46" d="M.88 0v-7.81h.92v3.26l-.11-.01q.11-.49.37-.8t.66-.45q.39-.16.84-.16.63 0 1.07.28t.65.78q.24.5.24 1.16v3.75h-.93v-3.48q0-.85-.31-1.25-.3-.41-.92-.41-.7 0-1.14.42-.42.42-.42 1.25v3.47Z"/>
+    <path id="g47" d="M.52 0l2.14-2.98-2.04-2.85h1.08l1.53 2.21 1.49-2.21h1.09l-2 2.86 2.11 2.97h-1.08l-1.61-2.36-1.62 2.36Z"/>
   </defs>
 </svg>
