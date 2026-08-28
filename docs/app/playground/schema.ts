@@ -3,14 +3,37 @@ import * as z from "zod/mini";
 import type { PdfInspection } from "./inspect-pdf";
 import type { PlaygroundPdfOptions } from "./options";
 
+const declarationsSchema = z.record(z.string(), z.union([z.string(), z.number()]));
+
+/** A rule's own nesting, which the renderer reads as CSS nesting. */
+type StyleRuleShape = {
+  selector: string;
+  style?: Record<string, string | number>;
+  rules?: StyleRuleShape[];
+};
+
+const styleRuleSchema: z.ZodMiniType<StyleRuleShape> = z.lazy(() =>
+  z.object({
+    selector: z.string(),
+    style: z.optional(declarationsSchema),
+    rules: z.optional(z.array(styleRuleSchema)),
+  }),
+);
+
+const animationRuleSchema = z.object({
+  keyframes: z.string(),
+  steps: z.array(z.object({ offset: z.string(), style: z.optional(declarationsSchema) })),
+});
+
+const cssInputSchema = z.union([z.string(), animationRuleSchema, styleRuleSchema]);
+
 export const optionsSchema = z.object({
   width: z.optional(z.int().check(z.positive(), z.minimum(1))),
   height: z.optional(z.int().check(z.positive(), z.minimum(1))),
   quality: z.optional(z.int().check(z.positive(), z.minimum(1), z.maximum(100))),
   format: z.optional(z.enum(["png", "jpeg", "webp"])),
   devicePixelRatio: z.optional(z.number().check(z.positive(), z.minimum(0.1), z.maximum(10.0))),
-  // The renderer validates a rule object; the playground only forwards it.
-  css: z.optional(z.custom<CssInput | CssInput[]>()),
+  css: z.optional(z.union([cssInputSchema, z.array(cssInputSchema)])),
   /** @deprecated use a `{ keyframes, steps }` entry in `css`. Removed in v3. */
   keyframes: z.optional(z.custom<Keyframes>()),
   animation: z.optional(
