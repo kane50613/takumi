@@ -36,7 +36,8 @@
     "@takumi-rs/image-response": "workspace:*",
     "rolldown-plugin-dts": "0.27.6",
     "takumi-js": "workspace:*",
-    "vite": "8.2.1"
+    "vite": "8.2.1",
+    "waku": "1.0.0-rc.0"
   },
   "catalog": {
     "@types/bun": "^1.4.0",
