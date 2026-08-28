@@ -39,6 +39,9 @@
       .wide {
         width: 100%;
       }
+      .collapse {
+        border-collapse: collapse;
+      }
       .narrow {
         width: 300px;
       }
@@ -78,6 +81,14 @@
         <tr>
           <td>AAA x</td>
           <td><img src="assets/images/yeecord.png" width="64" height="64" /></td>
+          <td>CCC a considerably longer stretch of column content that wants more room</td>
+        </tr>
+      </table>
+      <span class="label">border-collapse halves the border each column carries</span>
+      <table class="wide collapse">
+        <tr>
+          <td>AAA x</td>
+          <td>BBB medium length content here</td>
           <td>CCC a considerably longer stretch of column content that wants more room</td>
         </tr>
       </table>
