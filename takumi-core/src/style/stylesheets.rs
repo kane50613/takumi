@@ -529,11 +529,13 @@ macro_rules! define_style {
             let mut parser_input = ParserInput::new(&source);
             let mut parser = Parser::new(&mut parser_input);
 
-            match self {
-              Self::Shorthand(property) => property.parse_declarations(&mut parser),
-              Self::Longhand(property) => property.parse_declarations(&mut parser),
+            // `parse_entirely`, because a declaration list drops a value with
+            // anything left over and a lone value has no `;` to stop at.
+            parser.parse_entirely(|parser| match self {
+              Self::Shorthand(property) => property.parse_declarations(parser),
+              Self::Longhand(property) => property.parse_declarations(parser),
               Self::Ignored | Self::Custom => unreachable!(),
-            }
+            })
           }
           .map_err(|error| {
             (
