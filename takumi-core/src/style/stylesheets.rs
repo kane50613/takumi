@@ -1757,7 +1757,7 @@ pub struct StyleDeclarationBlock {
   /// and cannot tell `p-2 !p-4` apart once both have marked the same longhand.
   important: SmallVec<[bool; 8]>,
   /// Properties that were marked with `!important`.
-  pub importance: DeclarationImportance,
+  pub(crate) importance: DeclarationImportance,
 }
 
 impl StyleDeclarationBlock {
@@ -1782,7 +1782,8 @@ impl StyleDeclarationBlock {
     }
   }
 
-  /// Marks every declaration in the block `!important`.
+  /// Marks the block `!important`, the way a shorthand hands the marker to
+  /// every longhand it expands into.
   pub(crate) fn mark_important(&mut self) {
     for (declaration, important) in self.declarations.iter().zip(&mut self.important) {
       self.importance.insert_declaration(declaration);
