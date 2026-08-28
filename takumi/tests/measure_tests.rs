@@ -418,6 +418,29 @@ fn test_measure_reports_runs_for_a_bare_text_node() {
 }
 
 #[test]
+fn test_measure_skips_a_hidden_text_node() {
+  let out = measure(
+    Node::from_html(
+      r#"<div><div style="display:none">hidden</div><div>shown</div></div>"#,
+      FromHtmlOptions::default(),
+    )
+    .expect("parse"),
+    create_measure_viewport(),
+  );
+
+  fn runs(node: &MeasuredNode) -> Vec<&str> {
+    node
+      .runs
+      .iter()
+      .map(|run| run.text.as_str())
+      .chain(node.children.iter().flat_map(runs))
+      .collect()
+  }
+
+  assert_eq!(runs(&out), ["shown"]);
+}
+
+#[test]
 fn test_measure_text_fit_per_line_shrink_scales_run_geometry() {
   let base_style = Style::default()
     .with(StyleDeclaration::display(Display::Flex))

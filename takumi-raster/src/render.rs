@@ -5,7 +5,7 @@ use takumi_core::{
   geometry::{AvailableSpace, ComputedLayout as Layout, NodeId, Size},
   layout::node::NodeKind,
   scene::build_stacking_contexts,
-  style::{ComputedStyle, Lang},
+  style::{ComputedStyle, Display, Lang},
 };
 use typed_builder::TypedBuilder;
 
@@ -245,6 +245,7 @@ fn collect_measure_result(
         // A text node carries its own inline content but has no children, so
         // `should_create_inline_layout` says no while it still produces runs.
         let is_text_leaf = current.children.is_none()
+          && current.context.style.display != Display::None
           && current
             .node
             .as_ref()
