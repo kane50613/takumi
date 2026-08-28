@@ -42,19 +42,19 @@ export type AnimationRule = {
 };
 
 /** A group of entries gated by a media query. */
-type MediaRule = {
+export type MediaRule = {
   media: string;
   rules: CssInput[];
 };
 
 /** A group of entries gated by a support condition. */
-type SupportsRule = {
+export type SupportsRule = {
   supports: string;
   rules: CssInput[];
 };
 
 /** A cascade layer. Without `rules` it declares the layer's order alone. */
-type LayerRule = {
+export type LayerRule = {
   layer: string;
   rules?: CssInput[];
 };
