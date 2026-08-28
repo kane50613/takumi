@@ -1361,7 +1361,7 @@ impl RenderNode {
     self.force_inline_layout
       || (matches!(
         self.context.style.display,
-        Display::Block | Display::InlineBlock | Display::ListItem
+        Display::Block | Display::InlineBlock | Display::ListItem | Display::TableCell
       ) && self.children.as_ref().is_some_and(|children| {
         children
           .iter()
@@ -2241,6 +2241,8 @@ impl RenderNode {
           max_width,
           ceil_width,
           parent_font_metrics,
+          clamp_to_max_width: !self.context.intrinsic_min_content
+            || !matches!(available_space.width, AvailableSpace::MinContent),
         },
       );
     }

@@ -1,0 +1,77 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>table_auto_columns</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .root {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 16px;
+        width: 100%;
+        height: 100%;
+        background: rgb(243, 244, 246);
+        font-family: "Geist";
+      }
+      .label {
+        font-size: 15px;
+        color: rgb(71, 85, 105);
+      }
+      table {
+        display: table;
+        width: 100%;
+        border-collapse: collapse;
+        background: rgb(255, 255, 255);
+        font-size: 18px;
+      }
+      tbody {
+        display: table-row-group;
+      }
+      tr {
+        display: table-row;
+      }
+      td {
+        display: table-cell;
+        border: 1px solid rgb(148, 163, 184);
+        padding: 0;
+      }
+      .narrow {
+        width: 300px;
+      }
+    </style>
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div class="root">
+      <span class="label">every column grows in proportion to its own content</span>
+      <table>
+        <tr>
+          <td>AAA x</td>
+          <td>BBB medium length content here</td>
+          <td>CCC a considerably longer stretch of column content that wants more room</td>
+          <td><img src="assets/images/yeecord.png" width="64" height="64" /></td>
+        </tr>
+      </table>
+      <span class="label">a narrower span lands before a wider one</span>
+      <table>
+        <tr>
+          <td colspan="3">AAA spans every column of this table</td>
+        </tr>
+        <tr>
+          <td colspan="2">BBB spans the first two</td>
+          <td>CCC</td>
+        </tr>
+      </table>
+      <span class="label">a table narrower than its content still approximates</span>
+      <table class="narrow">
+        <tr>
+          <td>AAA x</td>
+          <td>BBB medium length content here</td>
+          <td>CCC a considerably longer stretch of column content that wants more room</td>
+        </tr>
+      </table>
+    </div>
+  </body>
+</html>

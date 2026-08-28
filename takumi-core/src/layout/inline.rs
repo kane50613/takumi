@@ -494,6 +494,9 @@ pub(crate) struct InlineMeasureOptions {
   pub(crate) max_width: f32,
   pub(crate) ceil_width: bool,
   pub(crate) parent_font_metrics: Option<ParentFontMetrics>,
+  /// A min-content query wraps at zero and reports the widest run it could not
+  /// break, so the width it wrapped against must not cap the answer.
+  pub(crate) clamp_to_max_width: bool,
 }
 
 #[derive(Clone, PartialEq, Copy, Debug)]
@@ -1380,6 +1383,7 @@ pub(crate) fn measure_inline_layout(
     max_width,
     ceil_width,
     parent_font_metrics,
+    clamp_to_max_width,
   } = options;
   let max_run_width = layout
     .lines()
@@ -1406,7 +1410,11 @@ pub(crate) fn measure_inline_layout(
   };
 
   Size {
-    width: measured_width.min(max_width),
+    width: if clamp_to_max_width {
+      measured_width.min(max_width)
+    } else {
+      measured_width
+    },
     height: total_height.max(custom_box_height).ceil(),
   }
 }
