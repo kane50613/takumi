@@ -495,7 +495,8 @@ fn clear_border(style: &mut ComputedStyle) {
 
 /// Width a cell subtree takes when nothing constrains it. The cell is lowered
 /// first: `table-cell` establishes no formatting context of its own, so taffy
-/// would lay its inline children out as blocks.
+/// would lay its inline children out as blocks. Nested tables pay for this
+/// once per level, since each level lays the levels below it out again.
 fn max_content_width(cell: &RenderNode) -> f32 {
   let mut cell = cell.clone();
 
