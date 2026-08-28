@@ -872,13 +872,12 @@ fn parse_at_rule_prelude<'i, 't>(
   input: &mut Parser<'i, 't>,
 ) -> Result<AtRulePrelude, ParseError<'i, StyleSheetParseError>> {
   if name.eq_ignore_ascii_case("layer") {
-    let mut layer_names = input
-      .try_parse(|input| input.parse_comma_separated(parse_layer_name))
-      .unwrap_or_default();
-    if layer_names.is_empty() {
-      layer_names.push(vec![LayerName::Anonymous]);
+    if input.is_exhausted() {
+      return Ok(AtRulePrelude::Layer(vec![vec![LayerName::Anonymous]]));
     }
-    return Ok(AtRulePrelude::Layer(layer_names));
+    return Ok(AtRulePrelude::Layer(
+      input.parse_comma_separated(parse_layer_name)?,
+    ));
   }
 
   if name.eq_ignore_ascii_case("keyframes") {
@@ -2478,6 +2477,23 @@ mod tests {
       ])
     );
     assert_ne!(sheet.rules[0].layer_order, sheet.rules[1].layer_order);
+  }
+
+  /// An invalid layer name drops its block; it does not fall back to an
+  /// anonymous layer.
+  #[test]
+  fn test_parse_invalid_layer_name_drops_the_block() {
+    for prelude in ["inherit", "\"quoted\"", "base.default"] {
+      let sheet = parse_stylesheet_loosy(&format!(
+        r#"
+          @layer {prelude} {{ .card {{ width: 50px; }} }}
+          .card {{ width: 100px; }}
+        "#
+      ));
+
+      assert_eq!(sheet.rules.len(), 1);
+      assert_eq!(sheet.rules[0].layer, None);
+    }
   }
 
   #[test]
