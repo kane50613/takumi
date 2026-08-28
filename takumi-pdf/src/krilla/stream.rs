@@ -30,6 +30,8 @@ use std::ops::DerefMut;
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
 use pdf_writer::{Array, Dict, Name};
+#[cfg(feature = "raster-images")]
+use pdf_writer::{Finish, Null};
 
 use crate::krilla::SerializeSettings;
 use crate::krilla::chunk_container::ChunkContainer;
@@ -176,29 +178,83 @@ impl StreamFilter {
   }
 }
 
-/// Allows us to keep track of the filters that a stream has and
-/// apply them in an orderly fashion.
-#[derive(Debug, Clone)]
-pub(crate) enum StreamFilters {
-  None,
-  Single(StreamFilter),
-  Multiple(Vec<StreamFilter>),
+/// A stream filter together with the `/DecodeParms` entry it needs.
+#[derive(Debug, Copy, Clone)]
+struct Filter {
+  kind: StreamFilter,
+  #[cfg(feature = "raster-images")]
+  decode_params: Option<DecodeParams>,
 }
 
-impl StreamFilters {
-  pub(crate) fn add(&mut self, stream_filter: StreamFilter) {
-    match self {
-      StreamFilters::None => *self = StreamFilters::Single(stream_filter),
-      StreamFilters::Single(cur) => *self = StreamFilters::Multiple(vec![*cur, stream_filter]),
-      StreamFilters::Multiple(cur) => cur.push(stream_filter),
+impl Filter {
+  fn new(kind: StreamFilter) -> Self {
+    Self {
+      kind,
+      #[cfg(feature = "raster-images")]
+      decode_params: None,
     }
   }
 
-  pub(crate) fn is_binary(&self) -> bool {
+  #[cfg(feature = "raster-images")]
+  fn with_decode_params(mut self, decode_params: DecodeParams) -> Self {
+    self.decode_params = Some(decode_params);
+    self
+  }
+}
+
+#[cfg(feature = "raster-images")]
+#[derive(Debug, Copy, Clone)]
+enum DecodeParams {
+  PngPredictor {
+    colors: i32,
+    bits_per_component: i32,
+    columns: i32,
+  },
+}
+
+#[cfg(feature = "raster-images")]
+impl DecodeParams {
+  fn write(self, mut dict: Dict<'_>) {
+    match self {
+      Self::PngPredictor {
+        colors,
+        bits_per_component,
+        columns,
+      } => {
+        dict.pair(Name(b"Predictor"), 15);
+        dict.pair(Name(b"Colors"), colors);
+        dict.pair(Name(b"BitsPerComponent"), bits_per_component);
+        dict.pair(Name(b"Columns"), columns);
+      }
+    }
+
+    dict.finish();
+  }
+}
+
+/// Allows us to keep track of the filters that a stream has and
+/// apply them in an orderly fashion.
+#[derive(Debug, Clone)]
+enum StreamFilters {
+  None,
+  Single(Filter),
+  Multiple(Vec<Filter>),
+}
+
+impl StreamFilters {
+  fn add(&mut self, filter: Filter) {
+    match self {
+      StreamFilters::None => *self = StreamFilters::Single(filter),
+      StreamFilters::Single(cur) => *self = StreamFilters::Multiple(vec![*cur, filter]),
+      StreamFilters::Multiple(cur) => cur.push(filter),
+    }
+  }
+
+  fn is_binary(&self) -> bool {
     match self {
       StreamFilters::None => false,
-      StreamFilters::Single(s) => s.is_binary(),
-      StreamFilters::Multiple(m) => m.last().unwrap().is_binary(),
+      StreamFilters::Single(filter) => filter.kind.is_binary(),
+      StreamFilters::Multiple(filters) => filters.last().unwrap().kind.is_binary(),
     }
   }
 }
@@ -277,6 +333,28 @@ impl<'a> FilterStreamBuilder<'a> {
     filter_stream
   }
 
+  /// A PNG IDAT stream, already deflated with the PNG row predictors applied.
+  #[cfg(feature = "raster-images")]
+  pub(crate) fn new_from_png_data(
+    content: &'a [u8],
+    colors: i32,
+    bits_per_component: i32,
+    columns: i32,
+  ) -> Self {
+    let mut filter_stream = Self::empty(content);
+    filter_stream
+      .filters
+      .add(
+        Filter::new(StreamFilter::Flate).with_decode_params(DecodeParams::PngPredictor {
+          colors,
+          bits_per_component,
+          columns,
+        }),
+      );
+
+    filter_stream
+  }
+
   pub(crate) fn finish(mut self, serialize_settings: &SerializeSettings) -> FilterStream<'a> {
     if serialize_settings.ascii_compatible
       && !self.content.is_empty()
@@ -294,11 +372,11 @@ impl<'a> FilterStreamBuilder<'a> {
 
   fn add_filter(&mut self, filter: StreamFilter) {
     self.content = Cow::Owned(filter.apply(&self.content));
-    self.filters.add(filter);
+    self.filters.add(Filter::new(filter));
   }
 
   fn add_unapplied_filter(&mut self, filter: StreamFilter) {
-    self.filters.add(filter);
+    self.filters.add(Filter::new(filter));
   }
 }
 
@@ -319,14 +397,35 @@ impl FilterStream<'_> {
     match &self.filters {
       StreamFilters::None => {}
       StreamFilters::Single(filter) => {
-        dict.deref_mut().pair(Name(b"Filter"), filter.to_name());
+        dict
+          .deref_mut()
+          .pair(Name(b"Filter"), filter.kind.to_name());
+
+        #[cfg(feature = "raster-images")]
+        if let Some(params) = filter.decode_params {
+          params.write(dict.deref_mut().insert(Name(b"DecodeParms")).dict());
+        }
       }
       StreamFilters::Multiple(filters) => {
         dict
           .deref_mut()
           .insert(Name(b"Filter"))
           .start::<Array>()
-          .items(filters.iter().map(|f| f.to_name()).rev());
+          .items(filters.iter().rev().map(|filter| filter.kind.to_name()));
+
+        #[cfg(feature = "raster-images")]
+        if filters.iter().any(|filter| filter.decode_params.is_some()) {
+          let mut decode_params = dict.deref_mut().insert(Name(b"DecodeParms")).array();
+
+          for filter in filters.iter().rev() {
+            match filter.decode_params {
+              Some(params) => params.write(decode_params.push().dict()),
+              None => decode_params.push().primitive(Null),
+            }
+          }
+
+          decode_params.finish();
+        }
       }
     }
   }

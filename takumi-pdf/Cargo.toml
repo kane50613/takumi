@@ -10,7 +10,14 @@ publish = false
 [features]
 default = ["images", "svg"]
 images = ["raster-images"]
-raster-images = ["dep:png", "dep:zune-jpeg", "dep:gif", "dep:image-webp", "dep:imagesize"]
+raster-images = [
+  "dep:png",
+  "dep:zune-jpeg",
+  "dep:gif",
+  "dep:image-webp",
+  "dep:imagesize",
+  "dep:crc32fast",
+]
 svg = ["takumi-core/svg"]
 
 [dependencies]
@@ -29,6 +36,10 @@ write-fonts.workspace = true
 tiny-skia-path.workspace = true
 xmp-writer.workspace = true
 yoke.workspace = true
+
+[dependencies.crc32fast]
+workspace = true
+optional = true
 
 [dependencies.gif]
 workspace = true
