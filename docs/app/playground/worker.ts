@@ -87,9 +87,6 @@ function loadPdfRenderer() {
   return pdfRenderer;
 }
 
-/** A `css` entry: stylesheet text, or the palette as a `:root` rule. */
-type CssEntry = string | { selector: string; style: Record<string, string> };
-
 /** Everything a render needs beyond the tree itself, fetched once per request. */
 async function loadResources(node: Node, css: CssEntry[]) {
   const [images, fonts] = await Promise.all([

@@ -1,4 +1,4 @@
-import type { CssInput } from "@takumi-rs/wasm";
+import type { CssInput } from "@takumi-rs/helpers";
 import { fromHtml } from "@takumi-rs/helpers/html";
 import { fromJsx } from "@takumi-rs/helpers/jsx";
 import type { FontLoader, ImagesInput, RegisteredFamilyLike } from "@takumi-rs/helpers/renderer";

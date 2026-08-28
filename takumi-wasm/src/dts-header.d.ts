@@ -1,4 +1,4 @@
-import type { Node } from "@takumi-rs/helpers";
+import type { CssInput, Node } from "@takumi-rs/helpers";
 import type { Properties } from "csstype";
 
 export {
@@ -21,27 +21,7 @@ export type KeyframesRuleList = {
   }[];
 }[];
 export type Keyframes = KeyframesMap | KeyframesRuleList;
-
-/** A declaration block, with custom properties allowed. */
-export type Declarations = Properties & {
-  [key: `--${string}`]: string | number;
-};
-
-/** A style rule written as an object. */
-export type StyleRule = {
-  selector: string;
-  style?: Declarations;
-  rules?: StyleRule[];
-};
-
-/** An animation written as an object. */
-export type AnimationRule = {
-  keyframes: string;
-  steps: { offset: string; style?: Declarations }[];
-};
-
-/** One entry of the `css` render option. */
-export type CssInput = string | StyleRule | AnimationRule;
+export type { CssInput };
 
 /** Output format for static images. */
 export type OutputFormat = "png" | "jpeg" | "webp" | "ico" | "raw";

@@ -1,8 +1,12 @@
 import type * as napi from "@takumi-rs/core";
-import type { CssInput } from "@takumi-rs/wasm";
 import type * as wasm from "@takumi-rs/wasm";
 import { extractEmojis, type EmojiType } from "@takumi-rs/helpers/emoji";
-import { prepareImages, type FetchOptions, type ImageFetchCache } from "@takumi-rs/helpers";
+import {
+  prepareImages,
+  type CssInput,
+  type FetchOptions,
+  type ImageFetchCache,
+} from "@takumi-rs/helpers";
 import { fromJsx, type FromJsxOptions } from "@takumi-rs/helpers/jsx";
 import { getImports } from "./import";
 import type { ReactNode } from "react";

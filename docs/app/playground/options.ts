@@ -1,9 +1,6 @@
 import type { Keyframes } from "takumi-js";
 import type { RenderOptions } from "takumi-pdf";
 
-/** A `css` entry: stylesheet text, or a rule written as an object. */
-export type CssEntry = string | { selector: string; style: Record<string, string> };
-
 // `Omit` collapses a union, which would lose the paged/viewport split that makes
 // the PDF options self-documenting in the editor.
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -15,6 +12,10 @@ export type PlaygroundPdfOptions = DistributiveOmit<
 >;
 
 declare global {
+  /** A `css` entry: stylesheet text, or a rule written as an object. */
+  // oxlint-disable-next-line no-unused-vars
+  type CssEntry = string | { selector: string; style: Record<string, string> };
+
   // oxlint-disable-next-line no-unused-vars
   type PlaygroundOptions = {
     /**
