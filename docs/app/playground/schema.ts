@@ -5,27 +5,39 @@ import type { PlaygroundPdfOptions } from "./options";
 
 const declarationsSchema = z.record(z.string(), z.union([z.string(), z.number()]));
 
-/** A rule's own nesting, which the renderer reads as CSS nesting. */
-type StyleRuleShape = {
-  selector: string;
-  style?: Record<string, string | number>;
-  rules?: StyleRuleShape[];
-};
+/**
+ * A `css` entry. Declared here rather than taken from `takumi-js`, whose type
+ * reaches this app through a re-export that resolves to `any`.
+ */
+export type CssEntry =
+  | string
+  | { selector: string; style?: Declarations; rules?: CssEntry[] }
+  | { keyframes: string; steps: { offset: string; style?: Declarations }[] }
+  | { media: string; rules?: CssEntry[] }
+  | { supports: string; rules?: CssEntry[] }
+  | { layer: string; rules?: CssEntry[] };
 
-const styleRuleSchema: z.ZodMiniType<StyleRuleShape> = z.lazy(() =>
-  z.object({
-    selector: z.string(),
-    style: z.optional(declarationsSchema),
-    rules: z.optional(z.array(styleRuleSchema)),
-  }),
+type Declarations = Record<string, string | number>;
+
+// `strictObject`, so a typo like `declarations` is an error rather than a rule
+// the renderer never sees.
+const cssInputSchema: z.ZodMiniType<CssEntry> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.strictObject({
+      keyframes: z.string(),
+      steps: z.array(z.strictObject({ offset: z.string(), style: z.optional(declarationsSchema) })),
+    }),
+    z.strictObject({ media: z.string(), rules: z.optional(z.array(cssInputSchema)) }),
+    z.strictObject({ supports: z.string(), rules: z.optional(z.array(cssInputSchema)) }),
+    z.strictObject({ layer: z.string(), rules: z.optional(z.array(cssInputSchema)) }),
+    z.strictObject({
+      selector: z.string(),
+      style: z.optional(declarationsSchema),
+      rules: z.optional(z.array(cssInputSchema)),
+    }),
+  ]),
 );
-
-const animationRuleSchema = z.object({
-  keyframes: z.string(),
-  steps: z.array(z.object({ offset: z.string(), style: z.optional(declarationsSchema) })),
-});
-
-const cssInputSchema = z.union([z.string(), animationRuleSchema, styleRuleSchema]);
 
 export const optionsSchema = z.object({
   width: z.optional(z.int().check(z.positive(), z.minimum(1))),

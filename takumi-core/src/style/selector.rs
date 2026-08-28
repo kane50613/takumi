@@ -957,7 +957,7 @@ fn parse_at_rule_prelude<'i, 't>(
   Err(input.new_error(BasicParseErrorKind::AtRuleInvalid(name)))
 }
 
-fn parse_layer_name<'i, 't>(
+pub(crate) fn parse_layer_name<'i, 't>(
   input: &mut Parser<'i, 't>,
 ) -> Result<LayerPath, ParseError<'i, StyleSheetParseError>> {
   let mut segments = Vec::new();

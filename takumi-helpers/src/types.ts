@@ -41,8 +41,26 @@ export type AnimationRule = {
   steps: { offset: string; style?: Declarations }[];
 };
 
+/** A group of entries gated by a media query. */
+export type MediaRule = {
+  media: string;
+  rules?: CssInput[];
+};
+
+/** A group of entries gated by a support condition. */
+export type SupportsRule = {
+  supports: string;
+  rules?: CssInput[];
+};
+
+/** A cascade layer. Without `rules` it declares the layer's order alone. */
+export type LayerRule = {
+  layer: string;
+  rules?: CssInput[];
+};
+
 /** One entry of the `css` render option: stylesheet text, or a rule object. */
-export type CssInput = string | StyleRule | AnimationRule;
+export type CssInput = string | StyleRule | AnimationRule | MediaRule | SupportsRule | LayerRule;
 
 /**
  * A JSX element from any React-shaped runtime; Preact vnodes fit too, so

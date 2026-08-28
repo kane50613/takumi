@@ -1,7 +1,6 @@
 import { googleFonts, prepareImages } from "takumi-js/helpers";
 import { extractEmojis } from "takumi-js/helpers/emoji";
 import { fromJsx } from "takumi-js/helpers/jsx";
-import type { CssInput } from "takumi-js";
 import type { FetchedImage, Node } from "takumi-js/helpers";
 import wasm, { init, Renderer } from "takumi-js/wasm";
 import pdfWasm from "takumi-pdf/wasm-url";
@@ -16,7 +15,7 @@ import { renderReact } from "./render-react";
 import { FALLBACK_FONT_URL, FONT_FAMILIES } from "./fonts";
 import { inspectPdf } from "./inspect-pdf";
 import { cssEntryToText, keyframesToCss } from "./preview-css";
-import { messageSchema, type OutputKind, type RenderMessageInput } from "./schema";
+import { messageSchema, type CssEntry, type OutputKind, type RenderMessageInput } from "./schema";
 
 const DEFAULT_IMAGE_SIZE = { width: 1200, height: 630 };
 
@@ -89,7 +88,7 @@ function loadPdfRenderer() {
 }
 
 /** Everything a render needs beyond the tree itself, fetched once per request. */
-async function loadResources(node: Node, css: CssInput[]) {
+async function loadResources(node: Node, css: CssEntry[]) {
   const [images, fonts] = await Promise.all([
     prepareImages<FetchedImage>({ node, fetchCache }),
     googleFonts(GOOGLE_FONTS).catch(() => undefined),
@@ -178,7 +177,7 @@ async function renderRequest(renderer: Renderer, id: number, code: string) {
   const { node, css: extractedCss } = await fromJsx(element);
   const optionCss =
     options.css === undefined || Array.isArray(options.css) ? options.css : [options.css];
-  const effectiveCss: CssInput[] = optionCss ?? extractedCss;
+  const effectiveCss: CssEntry[] = optionCss ?? extractedCss;
   // The pane compiles utilities itself, so it needs the theme as declarations
   // rather than as the `:root` rule the renderer reads.
   const theme = effectiveCss
