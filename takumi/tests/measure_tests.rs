@@ -353,6 +353,20 @@ fn test_measure_text_fit_per_line_grow_scales_run_geometry() {
   assert!(fit.children[0].height > no_fit.children[0].height);
 }
 
+/// taffy subtracts the content-box inset without a floor, so the available
+/// width reaching the text can be negative. parley asserts on that.
+#[test]
+fn test_measure_padding_wider_than_the_box_does_not_panic() {
+  let node = Node::from_html(
+    r#"<div style="width:40px"><div style="padding:0 60px; font-size:24px">word up</div></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parse");
+  let out = measure(node, create_measure_viewport());
+
+  assert_close(out.width, 40.0);
+}
+
 #[test]
 fn test_measure_text_fit_per_line_shrink_scales_run_geometry() {
   let base_style = Style::default()
