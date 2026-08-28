@@ -111,6 +111,15 @@ fn importance_split(value: serde_json::Value) -> Result<(usize, usize), serde_js
   Ok((normal.declarations.len(), important.declarations.len()))
 }
 
+/// A `style` object is hand-written, so a value the parser cannot read to its
+/// end is an error rather than a truncated declaration.
+#[test]
+fn an_inline_value_parses_entirely() {
+  assert!(from_value::<Style>(json!({ "width": "55px" })).is_ok());
+  assert!(from_value::<Style>(json!({ "width": "55px zzz" })).is_err());
+  assert!(from_value::<Style>(json!({ "width": "55px 99px" })).is_err());
+}
+
 #[test]
 fn inline_important_marks_the_declaration() -> Result<(), serde_json::Error> {
   assert_eq!(importance_split(json!({ "width": "55px" }))?, (1, 0));
@@ -148,7 +157,7 @@ fn inline_important_reads_as_a_token() -> Result<(), serde_json::Error> {
     importance_split(json!({ "content": "\"a\" !important" }))?,
     (0, 1)
   );
-  assert_eq!(importance_split(json!({ "width": "55px !nope" }))?, (1, 0));
+  assert!(from_value::<Style>(json!({ "width": "55px !nope" })).is_err());
   Ok(())
 }
 
@@ -1335,14 +1344,18 @@ fn test_var_rejects_non_custom_property_name() {
   assert_eq!(style.width, Length::default());
 }
 
+/// A substituted value is syntax-checked as a whole, so `24px 10px` is invalid
+/// at computed-value time rather than a `24px` the trailing tokens follow.
+///
+/// Ref: https://drafts.csswg.org/css-variables-1/#invalid-variables
 #[test]
-fn test_var_allows_trailing_tokens_when_property_parser_is_loose() {
+fn test_var_rejects_trailing_tokens_after_substitution() {
   let style = inherited_style_from_pairs(
     [("--size", "24px"), ("width", "var(--size) 10px")],
     &ComputedStyle::default(),
   );
 
-  assert_eq!(style.width, Length::Px(24.0));
+  assert_eq!(style.width, Length::default());
 }
 
 #[test]
