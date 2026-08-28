@@ -1,0 +1,71 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>inline_important</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .root {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        align-content: start;
+        gap: 14px;
+        padding: 20px;
+        width: 100%;
+        height: 100%;
+        background: rgb(243, 244, 246);
+        font-family: "Geist";
+      }
+      .case {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        background: white;
+        border-radius: 8px;
+        padding: 12px 14px;
+      }
+      .css {
+        display: block;
+        font-size: 12px;
+        line-height: 1.5;
+        color: rgb(100, 116, 139);
+        font-family: "Geist Mono";
+        white-space-collapse: preserve-breaks;
+      }
+      .inline {
+        color: rgb(37, 99, 235);
+      }
+      .bar {
+        height: 24px;
+        background: rgb(37, 99, 235);
+        border-radius: 4px;
+        width: 120px !important;
+      }
+      @layer guard {
+        .layered {
+          width: 120px !important;
+        }
+      }
+      .spin {
+        animation: widen 10s;
+      }
+      @keyframes widen {
+        from {
+          width: 120px;
+        }
+        to {
+          width: 120px;
+        }
+      }
+    </style>
+  </head>
+  <body style="width: 1200px; height: 260px">
+    <!-- prettier-ignore -->
+    <div class="root"><div class="case"><span class="css">.bar { width: 120px !important }
+<span class="inline">style="width: 480px !important"</span></span><div class="bar" style="width: 480px !important"></div></div><div class="case"><span class="css">@layer guard { .layered { width: 120px !important } }
+<span class="inline">style="width: 480px !important"</span></span><div class="bar layered" style="width: 480px !important"></div></div><div class="case"><span class="css">@keyframes widen { from, to { width: 120px } }
+<span class="inline">style="width: 480px !important"</span></span><div class="bar spin" style="width: 480px !important"></div></div><div class="case"><span class="css">.bar { width: 120px !important }
+<span class="inline">style="width: 480px"</span></span><div class="bar" style="width: 480px"></div></div></div>
+  </body>
+</html>

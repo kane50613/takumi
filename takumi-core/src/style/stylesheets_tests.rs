@@ -9,7 +9,10 @@ use super::{
 };
 use crate::{
   geometry::Size,
-  style::{CalcArena, ComputedStyle, SizingContext, Style, StyleDeclaration, properties::*},
+  style::{
+    CalcArena, ComputedStyle, DeferredDeclaration, SizingContext, Style, StyleDeclaration,
+    properties::*,
+  },
   viewport::Viewport,
 };
 
@@ -98,6 +101,74 @@ fn test_deserialize_list_style_properties() -> Result<(), serde_json::Error> {
   assert_eq!(computed.list_style_type, ListStyleType::Decimal);
   assert_eq!(computed.list_style_position, ListStylePosition::Inside);
   Ok(())
+}
+
+/// Declaration counts on the two sides of `split_importance`, for a style
+/// object deserialized the way a node's `style` field is.
+fn importance_split(value: serde_json::Value) -> Result<(usize, usize), serde_json::Error> {
+  let (normal, important) = from_value::<Style>(value)?.declarations.split_importance();
+
+  Ok((normal.declarations.len(), important.declarations.len()))
+}
+
+#[test]
+fn inline_important_marks_the_declaration() -> Result<(), serde_json::Error> {
+  assert_eq!(importance_split(json!({ "width": "55px" }))?, (1, 0));
+  assert_eq!(
+    importance_split(json!({ "width": "55px !important" }))?,
+    (0, 1)
+  );
+  assert_eq!(
+    importance_split(json!({ "width": "55px !IMPORTANT" }))?,
+    (0, 1)
+  );
+  assert_eq!(
+    importance_split(json!({ "--brand": "red !important" }))?,
+    (0, 1)
+  );
+  assert_eq!(
+    importance_split(json!({ "color": "inherit !important" }))?,
+    (0, 1)
+  );
+  assert_eq!(
+    importance_split(json!({ "width": "var(--w) !important" }))?,
+    (0, 1)
+  );
+  Ok(())
+}
+
+/// The bang is a token, so one inside a string belongs to the value.
+#[test]
+fn inline_important_reads_as_a_token() -> Result<(), serde_json::Error> {
+  assert_eq!(
+    importance_split(json!({ "content": "\"!important\"" }))?,
+    (1, 0)
+  );
+  assert_eq!(
+    importance_split(json!({ "content": "\"a\" !important" }))?,
+    (0, 1)
+  );
+  assert_eq!(importance_split(json!({ "width": "55px !nope" }))?, (1, 0));
+  Ok(())
+}
+
+/// A `style` attribute reaches the engine through `parse_loosy`, and a `var()`
+/// value defers instead of parsing, so the marker has to survive the scan that
+/// spots the function.
+#[test]
+fn a_deferred_value_keeps_its_important_marker() {
+  let block = StyleDeclarationBlock::parse_loosy("width: var(--w) !important");
+  assert!(!block.importance.is_empty());
+  assert_eq!(
+    block.declarations.as_slice(),
+    [StyleDeclaration::Deferred(DeferredDeclaration {
+      property: PropertyId::Longhand(LonghandId::Width),
+      specified_value: "var(--w)".to_owned(),
+    })],
+  );
+
+  let normal = StyleDeclarationBlock::parse_loosy("width: var(--w)");
+  assert!(normal.importance.is_empty());
 }
 
 #[test]

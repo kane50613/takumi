@@ -585,7 +585,7 @@ macro_rules! define_style {
         // would commit before deferral. See #712.
         if !matches!(property, PropertyId::Ignored | PropertyId::Custom) {
           let state = input.state();
-          while input.next_including_whitespace_and_comments().is_ok() {}
+          skip_to_important(input);
           let specified_value = input.slice_from(start).trim();
           if contains_var_function(specified_value) {
             return Ok(StyleDeclarationBlock::from_parsed_declarations(
@@ -645,11 +645,13 @@ macro_rules! define_style {
                   continue;
                 }
 
+                let (css_input, important) = split_important(css_input);
+
                 if matches!(property, PropertyId::Custom) {
                   if !matches!(css_input, CssInput::Unexpected(_)) {
                     style.declarations.push(
                       StyleDeclaration::CustomProperty(key.into_owned(), css_input.into_string()),
-                      false,
+                      important,
                     );
                   }
                 } else {
@@ -659,7 +661,7 @@ macro_rules! define_style {
                       property
                         .parse_css_input_declarations(css_input)
                         .map_err(|error| error.into_serde_error(&key, property))?,
-                      false,
+                      important,
                     );
                 }
               }
@@ -1777,6 +1779,15 @@ impl StyleDeclarationBlock {
   fn append_parsed_declarations(&mut self, declarations: ParsedDeclarations, important: bool) {
     for declaration in declarations {
       self.push(declaration, important);
+    }
+  }
+
+  /// Marks the block `!important`, the way a shorthand hands the marker to
+  /// every longhand it expands into.
+  pub(crate) fn mark_important(&mut self) {
+    for (declaration, important) in self.declarations.iter().zip(&mut self.important) {
+      self.importance.insert_declaration(declaration);
+      *important = true;
     }
   }
 
