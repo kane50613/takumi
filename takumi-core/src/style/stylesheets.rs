@@ -1757,7 +1757,7 @@ pub struct StyleDeclarationBlock {
   /// and cannot tell `p-2 !p-4` apart once both have marked the same longhand.
   important: SmallVec<[bool; 8]>,
   /// Properties that were marked with `!important`.
-  pub(crate) importance: DeclarationImportance,
+  pub importance: DeclarationImportance,
 }
 
 impl StyleDeclarationBlock {
