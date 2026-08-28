@@ -84,6 +84,8 @@ const previewResultSchema = z.object({
   /** CSS `padding` shorthand mirroring the PDF page margin. */
   padding: z.optional(z.string()),
   cssContents: z.optional(z.array(z.string())),
+  /** `:root` declarations the pane's own Tailwind compiler needs. */
+  theme: z.optional(z.string()),
 });
 
 export const messageSchema = z.discriminatedUnion("type", [

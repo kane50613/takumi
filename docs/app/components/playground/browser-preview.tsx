@@ -20,23 +20,6 @@ const INPUT = `@layer theme, base, utilities;
 @layer base{*,::after,::before,::backdrop,::file-selector-button{box-sizing:border-box;border:0 solid}}
 @import "tailwindcss/utilities.css" layer(utilities);`;
 
-// Mirrors the binding's `css_variables_stylesheet`: the `--` prefix is optional,
-// and an entry that would escape the `:root` rule is dropped.
-function cssVariableDeclarations(variables: Record<string, string> | undefined) {
-  return Object.entries(variables ?? {})
-    .map(([name, value]): [string, string] => [name.startsWith("--") ? name : `--${name}`, value])
-    .filter(
-      ([name, value]) =>
-        !/[:;{}]/.test(name) &&
-        !/[;{}]/.test(value) &&
-        !value.includes("/*") &&
-        !value.toLowerCase().includes("!important"),
-    )
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([name, value]) => `${name}:${value};`)
-    .join("");
-}
-
 // One compiler per variables set: `@theme` is what lets a custom token like
 // `bg-brand` compile at all. Cached so a remount (e.g. mobile tab switch) can
 // paint the frame without flashing through a fresh compile.
@@ -211,7 +194,7 @@ export default function BrowserPreview({
   height,
   padding,
   cssContents,
-  cssVariables,
+  theme,
 }: {
   html: string | undefined;
   width?: number;
@@ -219,7 +202,7 @@ export default function BrowserPreview({
   height?: number;
   padding?: string;
   cssContents?: string[];
-  cssVariables?: Record<string, string>;
+  theme?: string;
 }) {
   const { ref, scale } = useFitScale(width, height);
   const [paint, setPaint] = useState<Paint>();
@@ -229,7 +212,7 @@ export default function BrowserPreview({
     if (!html) return;
 
     let cancelled = false;
-    const declarations = cssVariableDeclarations(cssVariables);
+    const declarations = theme ?? "";
 
     // The unlayered `:root` sheet comes after everything the compiler built, the
     // position the binding gives it, so a variable overriding a builtin token
@@ -253,7 +236,7 @@ export default function BrowserPreview({
     return () => {
       cancelled = true;
     };
-  }, [html, cssContents, cssVariables, height, padding]);
+  }, [html, cssContents, theme, height, padding]);
 
   // `border-0` overrides the border an iframe carries by default, which paints
   // a light ring around the preview.

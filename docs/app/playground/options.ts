@@ -1,4 +1,4 @@
-import type { Keyframes } from "takumi-js";
+import type { CssInput, Keyframes } from "takumi-js";
 import type { RenderOptions } from "takumi-pdf";
 
 // `Omit` collapses a union, which would lose the paged/viewport split that makes
@@ -12,9 +12,6 @@ export type PlaygroundPdfOptions = DistributiveOmit<
 >;
 
 declare global {
-  /** A `css` entry: stylesheet text, or a rule written as an object. */
-  type CssEntry = string | { selector: string; style: Record<string, string> };
-
   type PlaygroundOptions = {
     /**
      * @description width of the render viewport.
@@ -42,7 +39,7 @@ declare global {
     /**
      * @description CSS applied before rendering: stylesheet text, or a rule written as an object. A `{ selector: ":root", style: { "--color-brand": "#7c3aed" } }` entry makes `bg-brand` resolve.
      */
-    css?: CssEntry | CssEntry[];
+    css?: CssInput | CssInput[];
     /**
      * @description structured keyframes registered alongside the CSS.
      */

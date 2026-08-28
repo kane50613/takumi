@@ -1,6 +1,7 @@
 import { googleFonts, prepareImages } from "takumi-js/helpers";
 import { extractEmojis } from "takumi-js/helpers/emoji";
 import { fromJsx } from "takumi-js/helpers/jsx";
+import type { CssInput } from "takumi-js";
 import type { FetchedImage, Node } from "takumi-js/helpers";
 import wasm, { init, Renderer } from "takumi-js/wasm";
 import pdfWasm from "takumi-pdf/wasm-url";
@@ -88,7 +89,7 @@ function loadPdfRenderer() {
 }
 
 /** Everything a render needs beyond the tree itself, fetched once per request. */
-async function loadResources(node: Node, css: CssEntry[]) {
+async function loadResources(node: Node, css: CssInput[]) {
   const [images, fonts] = await Promise.all([
     prepareImages<FetchedImage>({ node, fetchCache }),
     googleFonts(GOOGLE_FONTS).catch(() => undefined),
@@ -178,14 +179,16 @@ async function renderRequest(renderer: Renderer, id: number, code: string) {
   const optionCss =
     options.css === undefined || Array.isArray(options.css) ? options.css : [options.css];
   const effectiveCss = optionCss ?? extractedCss;
-  // The preview compiles utilities itself, so it needs the tokens as a map
+  // The pane compiles utilities itself, so it needs the theme as declarations
   // rather than as the `:root` rule the renderer reads.
-  const cssVariables = Object.assign(
-    {},
-    ...effectiveCss.map((entry) =>
-      typeof entry === "object" && entry.selector === ":root" ? entry.style : {},
-    ),
-  );
+  const theme = effectiveCss
+    .flatMap((entry) =>
+      typeof entry === "object" && "selector" in entry && entry.selector === ":root"
+        ? Object.entries(entry.style ?? {})
+        : [],
+    )
+    .map(([name, value]) => `${name}:${value};`)
+    .join("");
   const geometry = outputGeometry(options);
 
   // A PDF renders pages, which a single HTML flow cannot stand in for, so the
@@ -202,7 +205,7 @@ async function renderRequest(renderer: Renderer, id: number, code: string) {
         ...effectiveCss.filter((entry): entry is string => typeof entry === "string"),
         ...(options.keyframes ? [keyframesToCss(options.keyframes)] : []),
       ],
-      cssVariables,
+      theme,
     });
   }
 
