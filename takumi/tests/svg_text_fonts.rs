@@ -37,7 +37,7 @@ fn raster(source: &ImageSource, fonts: &Fonts) -> Vec<u8> {
     panic!("expected rasterized svg");
   };
 
-  buffer.encode_png().unwrap()
+  buffer.data().to_vec()
 }
 
 #[test]
@@ -57,10 +57,8 @@ fn shared_text_svg_follows_the_font_snapshot() {
   assert_eq!(with_geist, raster(&source, &geist));
 }
 
-fn has_ink(png: &[u8]) -> bool {
-  let decoded = image::load_from_memory(png).unwrap().to_rgba8();
-
-  decoded.pixels().any(|pixel| pixel.0[3] > 0)
+fn has_ink(rgba: &[u8]) -> bool {
+  rgba.as_chunks::<4>().0.iter().any(|pixel| pixel[3] > 0)
 }
 
 #[test]

@@ -12,7 +12,6 @@ use skrifa::outline::{DrawSettings, OutlinePen};
 use tiny_skia_path::{NonZeroRect, Transform};
 
 use crate::resources::glyph::ErasedPen;
-use crate::resvg::usvg::text::OPSZ;
 use crate::resvg::usvg::*;
 
 fn resolve_rendering_mode(text: &Text) -> ShapeRendering {
@@ -208,12 +207,8 @@ impl DatabaseExt for Database {
   }
 
   fn has_opsz_axis(&self, id: ID) -> bool {
-    self
-      .with_face_data(id, |data, face_index| -> Option<bool> {
-        let font = skrifa::FontRef::from_index(data, face_index).ok()?;
-        Some(font.axes().get_by_tag(OPSZ).is_some())
-      })
-      .flatten()
-      .unwrap_or(false)
+    // Diverges from upstream: fontique already knows this at registration
+    // time, so no need to re-parse the face with skrifa.
+    self.face(id).is_some_and(|face| face.has_opsz)
   }
 }

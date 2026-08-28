@@ -166,6 +166,27 @@ impl SvgSource {
     }
   }
 
+  /// Re-parses the markup with `configure` applied to the parse options.
+  fn reparse(
+    &self,
+    fonts: Option<&FontsSnapshot>,
+    configure: impl FnOnce(&mut Options),
+  ) -> Option<crate::resvg::usvg::Tree> {
+    let parsing = ParsingOptions {
+      allow_dtd: true,
+      ..Default::default()
+    };
+    let document = Document::parse_with_options(&self.source, parsing).ok()?;
+    let mut options = svg_parse_options();
+
+    if let Some(fonts) = fonts.filter(|_| self.has_text) {
+      options.fontdb = fonts.svg_fontdb();
+    }
+
+    configure(&mut options);
+    Tree::from_xmltree(&document, &options).ok()
+  }
+
   /// Re-parses the markup with `current_color` as the `currentColor` fallback.
   /// `None` when rendering does not depend on the host color.
   fn tree_with_current_color(
@@ -177,21 +198,11 @@ impl SvgSource {
       return None;
     }
 
-    let parsing = ParsingOptions {
-      allow_dtd: true,
-      ..Default::default()
-    };
-    let document = Document::parse_with_options(&self.source, parsing).ok()?;
     let [red, green, blue, alpha] = current_color.0;
-    let mut options = svg_parse_options();
 
-    options.current_color = Some(svgtypes::Color::new_rgba(red, green, blue, alpha));
-
-    if let Some(fonts) = fonts.filter(|_| self.has_text) {
-      options.fontdb = fonts.svg_fontdb();
-    }
-
-    Tree::from_xmltree(&document, &options).ok()
+    self.reparse(fonts, |options| {
+      options.current_color = Some(svgtypes::Color::new_rgba(red, green, blue, alpha));
+    })
   }
 }
 
@@ -638,16 +649,7 @@ impl SvgSource {
       return Some(tree.clone());
     }
 
-    let parsing = ParsingOptions {
-      allow_dtd: true,
-      ..Default::default()
-    };
-    let document = Document::parse_with_options(&self.source, parsing).ok()?;
-    let mut options = svg_parse_options();
-
-    options.fontdb = fonts.svg_fontdb();
-
-    let tree = Arc::new(Tree::from_xmltree(&document, &options).ok()?);
+    let tree = Arc::new(self.reparse(Some(fonts), |_| {})?);
 
     *cached = Some((revision, tree.clone()));
     Some(tree)
@@ -671,7 +673,7 @@ impl SvgSource {
     let sy = height as f32 / original_size.height();
 
     let recolored = self.tree_with_current_color(current_color, fonts);
-    let text_tree = self.text_tree(fonts);
+    let text_tree = recolored.is_none().then(|| self.text_tree(fonts)).flatten();
 
     render_svg_tree(
       recolored
