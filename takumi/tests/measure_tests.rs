@@ -417,6 +417,29 @@ fn test_measure_reports_runs_for_a_bare_text_node() {
   assert_close(bare_runs[0].height, wrapped_runs[0].height);
 }
 
+/// An inline-block sits on the baseline of its last line box. That baseline was
+/// replayed against the border-box width, so it landed on whichever line the
+/// content would have wrapped to had the padding not been there.
+#[test]
+fn test_measure_inline_block_baseline_follows_its_last_line() {
+  let out = measure(
+    Node::from_html(
+      r#"<div style="font-size:24px">x <span style="display:inline-block; width:160px; padding:0 60px">aaa bbb ccc ddd</span> y</div>"#,
+      FromHtmlOptions::default(),
+    )
+    .expect("parse"),
+    create_measure_viewport(),
+  );
+
+  let run = &measured_text_runs(&out)[0];
+  assert!(
+    run.y + run.height >= out.height - 2.0,
+    "adjacent text at {} should sit on the last line of a {} tall box",
+    run.y,
+    out.height
+  );
+}
+
 #[test]
 fn test_measure_skips_a_hidden_text_node() {
   let out = measure(
