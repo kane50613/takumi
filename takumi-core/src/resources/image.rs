@@ -612,7 +612,9 @@ impl SvgSource {
       .load(std::sync::atomic::Ordering::Relaxed);
 
     Ok(SvgSource {
-      has_text: src.contains("<text"),
+      has_text: document
+        .descendants()
+        .any(|node| node.tag_name().name() == "text"),
       source: Box::from(src),
       tree,
       uses_current_color,

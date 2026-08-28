@@ -56,3 +56,33 @@ fn shared_text_svg_follows_the_font_snapshot() {
   assert_ne!(with_geist, with_mono);
   assert_eq!(with_geist, raster(&source, &geist));
 }
+
+fn has_ink(png: &[u8]) -> bool {
+  let decoded = image::load_from_memory(png).unwrap().to_rgba8();
+
+  decoded.pixels().any(|pixel| pixel.0[3] > 0)
+}
+
+#[test]
+fn text_without_font_family_falls_back_to_a_registered_face() {
+  let cache = ResourceCache::default();
+  let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80"><text x="10" y="55" font-size="48" fill="black">Hgo</text></svg>"#;
+  let source = cache
+    .get_or_decode(svg.as_bytes(), ImageCacheMode::Auto)
+    .unwrap();
+  let fonts = fonts_with("assets/fonts/geist/Geist[wght].woff2");
+
+  assert!(has_ink(&raster(&source, &fonts)));
+}
+
+#[test]
+fn namespace_prefixed_text_is_rendered() {
+  let cache = ResourceCache::default();
+  let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:s="http://www.w3.org/2000/svg" width="200" height="80"><s:text x="10" y="55" font-family="Swap" font-size="48" fill="black">Hgo</s:text></svg>"#;
+  let source = cache
+    .get_or_decode(svg.as_bytes(), ImageCacheMode::Auto)
+    .unwrap();
+  let fonts = fonts_with("assets/fonts/geist/Geist[wght].woff2");
+
+  assert!(has_ink(&raster(&source, &fonts)));
+}

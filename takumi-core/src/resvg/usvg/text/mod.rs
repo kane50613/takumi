@@ -140,19 +140,24 @@ impl FontResolver<'_> {
       };
 
       let id = fontdb.query(&query);
-      if id.is_none() {
-        log::warn!(
-          "No match for '{}' font-family.",
-          font
-            .families
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-            .join(", ")
-        );
+      if id.is_some() {
+        return id;
       }
 
-      id
+      log::warn!(
+        "No match for '{}' font-family.",
+        font
+          .families
+          .iter()
+          .map(ToString::to_string)
+          .collect::<Vec<_>>()
+          .join(", ")
+      );
+
+      // Unlike upstream, never drop text over an unmatched family (the parser
+      // default is `Times New Roman`, which a takumi renderer rarely has):
+      // fall back to the first registered face, like a browser's default font.
+      fontdb.faces().next().map(|face| face.id)
     })
   }
 
