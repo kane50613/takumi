@@ -2932,7 +2932,12 @@ pub(crate) fn create_inline_constraint(
     AvailableSpace::MaxContent => None,
     AvailableSpace::Definite(width) => Some(width),
   };
-  let mut width_constraint = known_width.or(available_width).unwrap_or(f32::INFINITY);
+  // taffy subtracts the content-box inset without a floor, so a box narrower
+  // than its own padding arrives here negative. parley asserts on that.
+  let mut width_constraint = known_width
+    .or(available_width)
+    .unwrap_or(f32::INFINITY)
+    .max(0.0);
 
   if known_width.is_some()
     && context.style.box_sizing == BoxSizing::BorderBox
