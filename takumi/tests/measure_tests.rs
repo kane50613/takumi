@@ -367,6 +367,35 @@ fn test_measure_padding_wider_than_the_box_does_not_panic() {
   assert_close(out.width, 40.0);
 }
 
+/// taffy hands the measure function a border-box width whatever `box-sizing`
+/// says, so a content-box box used to wrap against its border-box width.
+#[test]
+fn test_measure_content_box_wraps_inside_its_padding() {
+  let text = "aa bb cc dd ee ff gg hh";
+  let content_box = measure(
+    Node::from_html(
+      &format!(
+        r#"<div style="display:flex"><div style="box-sizing:content-box; width:100px; padding:0 40px; font-size:24px">{text}</div></div>"#
+      ),
+      FromHtmlOptions::default(),
+    )
+    .expect("parse"),
+    create_measure_viewport(),
+  );
+  let border_box = measure(
+    Node::from_html(
+      &format!(
+        r#"<div style="display:flex"><div style="box-sizing:border-box; width:180px; padding:0 40px; font-size:24px">{text}</div></div>"#
+      ),
+      FromHtmlOptions::default(),
+    )
+    .expect("parse"),
+    create_measure_viewport(),
+  );
+
+  assert_close(content_box.height, border_box.height);
+}
+
 #[test]
 fn test_measure_text_fit_per_line_shrink_scales_run_geometry() {
   let base_style = Style::default()
