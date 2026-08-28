@@ -10,8 +10,9 @@ use tiny_skia::{Mask as TinyMask, PixmapMut};
 
 use crate::{
   BlurFormat, BlurType, BorderProperties, Canvas, Placement, RenderContext, Result, SizedShadow,
-  apply_blur, apply_blur_rgba_bytes, checked_shadow_area, fast_div_255, intersect_alpha_masks,
-  render_mask,
+  apply_blur, apply_blur_rgba_bytes,
+  canvas::demultiply_rgba_in_place,
+  checked_shadow_area, fast_div_255, intersect_alpha_masks, premultiply_rgba_pixel, render_mask,
   style::{
     Affine, Angle, Color, Filter, FilterCategory, LUMA_WEIGHTS, PercentageNumber, SEPIA_WEIGHTS,
     SizingContext, TransferChannel, TransferTable,
@@ -133,6 +134,24 @@ fn prepare_pixel_filters<'a>(filters: &[&'a Filter]) -> SmallVec<[PreparedFilter
   prepared
 }
 
+/// Runs `transform` on the pixel's straight-alpha channels, leaving it
+/// premultiplied again. Filter Effects defines every colour filter on
+/// non-premultiplied colour, and a canvas pixel is premultiplied.
+#[inline(always)]
+fn on_straight_alpha(pixel: &mut [u8; 4], transform: impl FnOnce(&mut [u8; 4])) {
+  let opaque = pixel[3] == u8::MAX;
+
+  if !opaque {
+    demultiply_rgba_in_place(pixel);
+  }
+
+  transform(pixel);
+
+  if !opaque || pixel[3] != u8::MAX {
+    *pixel = premultiply_rgba_pixel(pixel[0], pixel[1], pixel[2], pixel[3]);
+  }
+}
+
 /// Applies batched pixel filters in a single pass over the image
 fn apply_batched_pixel_filters(data: &mut [u8], filters: &[&Filter]) {
   if filters.is_empty() {
@@ -146,23 +165,25 @@ fn apply_batched_pixel_filters(data: &mut [u8], filters: &[&Filter]) {
       continue;
     }
 
-    for p in &prepared {
-      match p {
-        PreparedFilter::Matrix(f) => apply_single_pixel_filter(pixel, f),
-        PreparedFilter::RgbLut(t) => {
-          pixel[0] = t[pixel[0] as usize];
-          pixel[1] = t[pixel[1] as usize];
-          pixel[2] = t[pixel[2] as usize];
-        }
-        PreparedFilter::AlphaLut(t) => {
-          pixel[3] = t[pixel[3] as usize];
+    on_straight_alpha(pixel, |pixel| {
+      for p in &prepared {
+        match p {
+          PreparedFilter::Matrix(f) => apply_single_pixel_filter(pixel, f),
+          PreparedFilter::RgbLut(t) => {
+            pixel[0] = t[pixel[0] as usize];
+            pixel[1] = t[pixel[1] as usize];
+            pixel[2] = t[pixel[2] as usize];
+          }
+          PreparedFilter::AlphaLut(t) => {
+            pixel[3] = t[pixel[3] as usize];
+          }
         }
       }
-    }
+    });
   }
 }
 
-/// Rotates every opaque pixel's hue by `angle`, through the matrix Filter
+/// Rotates every visible pixel's hue by `angle`, through the matrix Filter
 /// Effects defines for it.
 fn apply_hue_rotate_rgba_bytes(data: &mut [u8], angle: Angle) {
   let Some(matrix) = ColorMatrix::from_filter(&Filter::HueRotate(angle)) else {
@@ -173,17 +194,19 @@ fn apply_hue_rotate_rgba_bytes(data: &mut [u8], angle: Angle) {
     if pixel[3] == 0 {
       continue;
     }
-    let channel = |value: u8| f32::from(value) / 255.0;
-    let out = matrix.apply([
-      channel(pixel[0]),
-      channel(pixel[1]),
-      channel(pixel[2]),
-      channel(pixel[3]),
-    ]);
+    on_straight_alpha(pixel, |pixel| {
+      let channel = |value: u8| f32::from(value) / 255.0;
+      let out = matrix.apply([
+        channel(pixel[0]),
+        channel(pixel[1]),
+        channel(pixel[2]),
+        channel(pixel[3]),
+      ]);
 
-    for (slot, value) in pixel.iter_mut().zip(out) {
-      *slot = (value * 255.0).round() as u8;
-    }
+      for (slot, value) in pixel.iter_mut().zip(out) {
+        *slot = (value * 255.0).round() as u8;
+      }
+    });
   }
 }
 
@@ -654,12 +677,37 @@ mod tests {
     apply_filters_to_pixmap(&mut pixmap, &sizing, Color::black(), filters.iter())?;
 
     let pixel = image.get_pixel(0, 0);
-    assert_eq!(pixel.0[0], 135);
-    assert_eq!(pixel.0[1], 75);
-    assert_eq!(pixel.0[2], 15);
-    assert_eq!(pixel.0[3], 127);
+    assert_eq!(pixel.0, [67, 37, 7, 127]);
 
     Ok(())
+  }
+
+  #[test]
+  fn invert_reads_a_semi_transparent_pixel_as_straight_alpha() {
+    let mut pixel = [128, 128, 128, 128];
+
+    apply_batched_pixel_filters(&mut pixel, &[&Filter::Invert(PercentageNumber(1.0))]);
+
+    assert_eq!(pixel, [0, 0, 0, 128]);
+  }
+
+  #[test]
+  fn brightness_keeps_a_semi_transparent_pixel_premultiplied() {
+    let mut pixel = [64, 64, 64, 128];
+
+    apply_batched_pixel_filters(&mut pixel, &[&Filter::Brightness(PercentageNumber(4.0))]);
+
+    assert_eq!(pixel, [128, 128, 128, 128]);
+  }
+
+  #[test]
+  fn hue_rotate_keeps_a_semi_transparent_pixel_premultiplied() {
+    let mut pixel = [128, 0, 0, 128];
+
+    apply_hue_rotate_rgba_bytes(&mut pixel, Angle::new(120.0));
+
+    assert!(pixel[..3].iter().all(|channel| *channel <= pixel[3]));
+    assert_eq!(pixel[3], 128);
   }
 
   #[test]
