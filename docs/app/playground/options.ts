@@ -42,7 +42,7 @@ declare global {
      */
     css?: CssEntry | CssEntry[];
     /**
-     * @deprecated use a `{ keyframes, steps }` entry in `css`. Removed in v3.
+     * @deprecated use a `{ keyframes, steps }` entry in `css`. Will be removed in v3.
      * @description structured keyframes registered alongside the CSS.
      */
     keyframes?: Keyframes;

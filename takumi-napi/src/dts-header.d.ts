@@ -64,7 +64,9 @@ export interface FontDetails {
 
 export type Font = FontDetails | ByteBuf;
 
+/** @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Will be removed in v3. */
 export type KeyframesMap = Record<string, Record<string, Properties>>;
+/** @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Will be removed in v3. */
 export type KeyframesRuleList = {
   name: string;
   keyframes: {
@@ -72,4 +74,5 @@ export type KeyframesRuleList = {
     declarations: Record<string, Properties>;
   }[];
 }[];
+/** @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Will be removed in v3. */
 export type Keyframes = KeyframesMap | KeyframesRuleList;

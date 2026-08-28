@@ -72,7 +72,7 @@ type CssOptions = {
   css?: CssInput | readonly CssInput[];
   /**
    * CSS stylesheets to apply before rendering.
-   * @deprecated Use `css` instead. Removed in v3.
+   * @deprecated Use `css` instead. Will be removed in v3.
    */
   stylesheets?: string[];
 };

@@ -47,7 +47,7 @@ export function cssEntryToText(entry: CssEntry): string {
 /**
  * Serializes the animations the deprecated `keyframes` option carries.
  *
- * @deprecated Removed in v3, with the option itself.
+ * @deprecated Will be removed in v3, with the option itself.
  */
 export function keyframesToCss(keyframes: NonNullable<PlaygroundOptions["keyframes"]>): string {
   const rules = Array.isArray(keyframes)

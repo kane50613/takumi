@@ -199,9 +199,9 @@ pub struct RenderOptions<'env> {
   /// object.
   #[napi(ts_type = "CssInput[]")]
   pub css: Option<Object<'env>>,
-  /// @deprecated Use `css` instead. Removed in v3.
+  /// @deprecated Use `css` instead. Will be removed in v3.
   pub stylesheets: Option<Vec<String>>,
-  /// @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Removed in v3.
+  /// @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Will be removed in v3.
   #[napi(ts_type = "Keyframes")]
   pub keyframes: Option<Object<'env>>,
   /// The device pixel ratio.
@@ -234,9 +234,9 @@ pub struct SvgRenderOptions<'env> {
   /// object.
   #[napi(ts_type = "CssInput[]")]
   pub css: Option<Object<'env>>,
-  /// @deprecated Use `css` instead. Removed in v3.
+  /// @deprecated Use `css` instead. Will be removed in v3.
   pub stylesheets: Option<Vec<String>>,
-  /// @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Removed in v3.
+  /// @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Will be removed in v3.
   #[napi(ts_type = "Keyframes")]
   pub keyframes: Option<Object<'env>>,
   /// The animation timeline time in milliseconds.
@@ -306,9 +306,9 @@ pub struct RenderAnimationOptions<'env> {
   /// object.
   #[napi(ts_type = "CssInput[]")]
   pub css: Option<Object<'env>>,
-  /// @deprecated Use `css` instead. Removed in v3.
+  /// @deprecated Use `css` instead. Will be removed in v3.
   pub stylesheets: Option<Vec<String>>,
-  /// @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Removed in v3.
+  /// @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Will be removed in v3.
   #[napi(ts_type = "Keyframes")]
   pub keyframes: Option<Object<'env>>,
   /// The device pixel ratio.

@@ -12,7 +12,9 @@ export {
 
 export type ByteBuf = Uint8Array | ArrayBuffer | Buffer;
 
+/** @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Will be removed in v3. */
 export type KeyframesMap = Record<string, Record<string, Properties>>;
+/** @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Will be removed in v3. */
 export type KeyframesRuleList = {
   name: string;
   keyframes: {
@@ -20,6 +22,7 @@ export type KeyframesRuleList = {
     declarations: Record<string, Properties>;
   }[];
 }[];
+/** @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Will be removed in v3. */
 export type Keyframes = KeyframesMap | KeyframesRuleList;
 export type { CssInput };
 
@@ -79,11 +82,11 @@ export type RenderOptions = {
    */
   css?: CssInput[];
   /**
-   * @deprecated Use `css` instead. Removed in v3.
+   * @deprecated Use `css` instead. Will be removed in v3.
    */
   stylesheets?: string[];
   /**
-   * @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Removed in v3.
+   * @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Will be removed in v3.
    */
   keyframes?: Keyframes;
   /**
@@ -148,11 +151,11 @@ export type RenderAnimationOptions = {
    */
   css?: CssInput[];
   /**
-   * @deprecated Use `css` instead. Removed in v3.
+   * @deprecated Use `css` instead. Will be removed in v3.
    */
   stylesheets?: string[];
   /**
-   * @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Removed in v3.
+   * @deprecated Use a `{ keyframes, steps }` entry in `css` instead. Will be removed in v3.
    */
   keyframes?: Keyframes;
   /**

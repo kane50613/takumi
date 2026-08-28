@@ -139,7 +139,7 @@ export type MeasureOptions = (
   css?: CssInput | readonly CssInput[];
   /**
    * CSS stylesheets to apply before layout.
-   * @deprecated Use `css` instead. Removed in v3.
+   * @deprecated Use `css` instead. Will be removed in v3.
    */
   stylesheets?: string[];
   /** Per-render font stack: ordered family names used as the fallback chain. */
@@ -271,7 +271,7 @@ export type RenderOptions = (PagedOptions | ViewportOptions) &
     css?: CssInput | readonly CssInput[];
     /**
      * CSS stylesheets to apply before layout.
-     * @deprecated Use `css` instead. Removed in v3.
+     * @deprecated Use `css` instead. Will be removed in v3.
      */
     stylesheets?: string[];
     /** CSS custom properties for `:root`; the `--` prefix is optional. */
