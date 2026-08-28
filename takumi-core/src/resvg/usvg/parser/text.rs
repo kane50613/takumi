@@ -889,18 +889,12 @@ fn count_chars(node: SvgNode) -> usize {
 ///
 /// [SVG 2]: https://www.w3.org/TR/SVG2/text.html#WritingModeProperty
 /// [CSS Writing Modes Level 3]: https://www.w3.org/TR/css-writing-modes-3/#svg-writing-mode-css
-fn convert_writing_mode(text_node: SvgNode) -> WritingMode {
-  if let Some(n) = text_node
-    .ancestors()
-    .find(|n| n.has_attribute(AId::WritingMode))
-  {
-    match n.attribute(AId::WritingMode).unwrap_or("lr-tb") {
-      "tb" | "tb-rl" | "vertical-rl" | "vertical-lr" => WritingMode::TopToBottom,
-      _ => WritingMode::LeftToRight,
-    }
-  } else {
-    WritingMode::LeftToRight
-  }
+fn convert_writing_mode(_text_node: SvgNode) -> WritingMode {
+  // Diverges from upstream: takumi does not support vertical writing modes
+  // anywhere, so `writing-mode` is ignored and text always lays out
+  // horizontally. This also keeps icu's Vertical_Orientation table out of the
+  // binary.
+  WritingMode::LeftToRight
 }
 
 fn path_length(path: &tiny_skia_path::Path) -> f64 {

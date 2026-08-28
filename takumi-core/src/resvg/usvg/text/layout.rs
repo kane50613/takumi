@@ -8,7 +8,7 @@ use std::sync::Arc;
 use super::fontdb::{Database, ID};
 use harfrust::ShapeOptions;
 use icu_properties::CodePointMapData;
-use icu_properties::props::{Script, VerticalOrientation};
+use icu_properties::props::Script;
 use kurbo::{ParamCurve, ParamCurveArclen, ParamCurveDeriv};
 use skrifa::MetadataProvider;
 use skrifa::Tag;
@@ -1046,41 +1046,10 @@ fn apply_length_adjust(chunk: &TextChunk, clusters: &mut [GlyphCluster]) {
 
 /// Rotates clusters according to
 /// [Unicode Vertical_Orientation Property](https://www.unicode.org/reports/tr50/tr50-19.html).
-fn apply_writing_mode(writing_mode: WritingMode, clusters: &mut [GlyphCluster]) {
-  if writing_mode != WritingMode::TopToBottom {
-    return;
-  }
-
-  for cluster in clusters {
-    let orientation = CodePointMapData::<VerticalOrientation>::new().get(cluster.codepoint);
-    if matches!(
-      orientation,
-      VerticalOrientation::Upright | VerticalOrientation::TransformedUpright
-    ) {
-      let mut ts = Transform::default();
-      // Position glyph in the center of vertical axis.
-      ts = ts.pre_translate(0.0, (cluster.ascent + cluster.descent) / 2.0);
-      // Rotate by 90 degrees in the center.
-      ts = ts.pre_rotate_at(
-        -90.0,
-        cluster.width / 2.0,
-        -(cluster.ascent + cluster.descent) / 2.0,
-      );
-
-      cluster.path_transform = ts;
-
-      // Move "baseline" to the middle and make height equal to width.
-      cluster.ascent = cluster.width / 2.0;
-      cluster.descent = -cluster.width / 2.0;
-    } else {
-      // Could not find a spec that explains this,
-      // but this is how other applications are shifting the "rotated" characters
-      // in the top-to-bottom mode.
-      cluster.transform = cluster
-        .transform
-        .pre_translate(0.0, (cluster.ascent + cluster.descent) / 2.0);
-    }
-  }
+fn apply_writing_mode(writing_mode: WritingMode, _clusters: &mut [GlyphCluster]) {
+  // Vertical writing modes are unsupported (the parser never emits
+  // `TopToBottom`), so upstream's Vertical_Orientation rotation is stripped.
+  debug_assert!(writing_mode != WritingMode::TopToBottom);
 }
 
 /// Applies the `letter-spacing` property to a text chunk clusters.
