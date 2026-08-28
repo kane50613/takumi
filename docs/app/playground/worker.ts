@@ -15,7 +15,7 @@ import { evaluateCodeExports } from "./evaluate";
 import { renderReact } from "./render-react";
 import { FALLBACK_FONT_URL, FONT_FAMILIES } from "./fonts";
 import { inspectPdf } from "./inspect-pdf";
-import { keyframesToCss } from "./preview-css";
+import { animationsToCss } from "./preview-css";
 import { messageSchema, type OutputKind, type RenderMessageInput } from "./schema";
 
 const DEFAULT_IMAGE_SIZE = { width: 1200, height: 630 };
@@ -155,7 +155,6 @@ async function renderOutput({
         fps,
         quality: options.quality,
         devicePixelRatio: options.devicePixelRatio,
-        keyframes: options.keyframes,
         images,
         fonts,
         css,
@@ -178,7 +177,7 @@ async function renderRequest(renderer: Renderer, id: number, code: string) {
   const { node, css: extractedCss } = await fromJsx(element);
   const optionCss =
     options.css === undefined || Array.isArray(options.css) ? options.css : [options.css];
-  const effectiveCss = optionCss ?? extractedCss;
+  const effectiveCss: CssInput[] = optionCss ?? extractedCss;
   // The pane compiles utilities itself, so it needs the theme as declarations
   // rather than as the `:root` rule the renderer reads.
   const theme = effectiveCss
@@ -203,8 +202,8 @@ async function renderRequest(renderer: Renderer, id: number, code: string) {
       padding: geometry.padding,
       cssContents: [
         ...effectiveCss.filter((entry): entry is string => typeof entry === "string"),
-        ...(options.keyframes ? [keyframesToCss(options.keyframes)] : []),
-      ],
+        animationsToCss(effectiveCss),
+      ].filter(Boolean),
       theme,
     });
   }

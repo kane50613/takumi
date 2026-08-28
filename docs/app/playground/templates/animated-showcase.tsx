@@ -37,13 +37,14 @@ export default function AnimatedShowcase() {
 export const options: PlaygroundOptions = {
   width: 640,
   height: 360,
-  keyframes: {
-    bob: {
-      "0%": { transform: "translateY(0) scale(1)", color: "#7c2d12" },
-      "35%": { transform: "translateY(-28px) scale(1.15)", color: "#ea580c" },
-      "70%": { transform: "translateY(0) scale(1)", color: "#7c2d12" },
-      "100%": { transform: "translateY(0) scale(1)", color: "#7c2d12" },
-    },
+  css: {
+    keyframes: "bob",
+    steps: [
+      { offset: "0%", style: { transform: "translateY(0) scale(1)", color: "#7c2d12" } },
+      { offset: "35%", style: { transform: "translateY(-28px) scale(1.15)", color: "#ea580c" } },
+      { offset: "70%", style: { transform: "translateY(0) scale(1)", color: "#7c2d12" } },
+      { offset: "100%", style: { transform: "translateY(0) scale(1)", color: "#7c2d12" } },
+    ],
   },
   animation: {
     durationMs: DURATION_MS,

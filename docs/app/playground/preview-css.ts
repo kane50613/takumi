@@ -1,3 +1,5 @@
+import type { AnimationRule, CssInput } from "takumi-js";
+
 function declarationsToCss(declarations: object): string {
   return Object.entries(declarations)
     .map(
@@ -7,27 +9,29 @@ function declarationsToCss(declarations: object): string {
     .join(" ");
 }
 
+function isAnimationRule(entry: CssInput): entry is AnimationRule {
+  return typeof entry === "object" && "keyframes" in entry;
+}
+
 /**
- * Serializes structured keyframes into `@keyframes` rules. The engine takes
- * them as an object; the browser preview pane only understands CSS.
+ * Serializes the animation entries of a `css` list. The engine reads them as
+ * objects; the browser preview pane only understands CSS.
  */
-export function keyframesToCss(keyframes: NonNullable<PlaygroundOptions["keyframes"]>): string {
-  const rules = Array.isArray(keyframes)
-    ? keyframes.map((rule) => {
-        const body = rule.keyframes
-          .map(
-            (frame) =>
-              `${frame.offsets.map((offset) => `${offset * 100}%`).join(", ")} { ${declarationsToCss(frame.declarations)} }`,
-          )
-          .join(" ");
-        return `@keyframes ${rule.name} { ${body} }`;
-      })
-    : Object.entries(keyframes).map(([name, offsets]) => {
-        const body = Object.entries(offsets)
-          .map(([offset, declarations]) => `${offset} { ${declarationsToCss(declarations)} }`)
-          .join(" ");
-        return `@keyframes ${name} { ${body} }`;
-      });
+export function animationsToCss(css: readonly CssInput[]): string {
+  const rules: string[] = [];
+
+  for (const entry of css) {
+    if (!isAnimationRule(entry)) continue;
+
+    const body = entry.steps
+      .map(
+        (step: AnimationRule["steps"][number]) =>
+          `${step.offset} { ${declarationsToCss(step.style ?? {})} }`,
+      )
+      .join(" ");
+
+    rules.push(`@keyframes ${entry.keyframes} { ${body} }`);
+  }
 
   return rules.join("\n");
 }
