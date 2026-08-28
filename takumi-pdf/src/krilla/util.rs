@@ -5,13 +5,10 @@ use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 
 use crate::krilla::geom::Rect;
-use crate::krilla::graphics::color::{DEVICE_CMYK, DEVICE_GRAY, DEVICE_RGB};
 use crate::krilla::graphics::paint::Stroke;
-use crate::krilla::resource::Resource;
-use crate::krilla::serialize::MaybeDeviceColorSpace;
 use base64::Engine;
 pub(crate) use deferred::*;
-use pdf_writer::{Dict, Name};
+use pdf_writer::Name;
 use siphasher::sip128::{Hasher128, SipHasher13};
 use tiny_skia_path::Path;
 
@@ -177,17 +174,6 @@ pub(crate) fn stable_hash128<T: Hash + ?Sized>(value: &T) -> u128 {
   let mut state = StableHasher(SipHasher13::new());
   value.hash(&mut state);
   state.0.finish128().as_u128()
-}
-
-pub(crate) fn set_colorspace(cs: MaybeDeviceColorSpace, target: &mut Dict) {
-  let pdf_cs = target.insert(Name(b"ColorSpace"));
-
-  match cs {
-    MaybeDeviceColorSpace::DeviceGray => pdf_cs.primitive(DEVICE_GRAY.to_pdf_name()),
-    MaybeDeviceColorSpace::DeviceRgb => pdf_cs.primitive(DEVICE_RGB.to_pdf_name()),
-    MaybeDeviceColorSpace::DeviceCMYK => pdf_cs.primitive(DEVICE_CMYK.to_pdf_name()),
-    MaybeDeviceColorSpace::ColorSpace(cs) => pdf_cs.primitive(cs.get_ref()),
-  }
 }
 
 mod deferred {

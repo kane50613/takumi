@@ -28,7 +28,7 @@ use crate::krilla::graphics::color::{cmyk, luma, rgb};
 use crate::krilla::graphics::icc::{GenericICCProfile, ICCBasedColorSpace, ICCProfile};
 use crate::krilla::serialize::SerializeContext;
 use crate::krilla::stream::{FilterStreamBuilder, deflate_encode};
-use crate::krilla::util::{Deferred, NameExt, SipHashable, set_colorspace};
+use crate::krilla::util::{Deferred, NameExt, SipHashable};
 
 /// The number of bits per color component.
 #[derive(Debug, Hash, Eq, PartialEq, Copy, Clone)]
@@ -479,7 +479,7 @@ impl Image {
       if let Some(icc_ref) = icc_ref {
         image_x_object.pair(Name(b"ColorSpace"), icc_ref);
       } else {
-        set_colorspace(cs, image_x_object.deref_mut());
+        cs.write(image_x_object.deref_mut().insert(Name(b"ColorSpace")));
       }
 
       if self.0.interpolate {
