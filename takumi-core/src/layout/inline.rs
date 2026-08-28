@@ -17,7 +17,7 @@ use crate::{
     glyph::{ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},
   },
   style::{
-    Affine, BoxSizing, Color, Direction, Float, FontSynthesis, Lang, Length, ResolvedVerticalAlign,
+    Affine, Color, Direction, Float, FontSynthesis, Lang, Length, ResolvedVerticalAlign,
     SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk, TextFitMode,
     TextFitTarget, TextOverflow, TextUnderlinePosition, TextWrapMode, TextWrapStyle, VerticalAlign,
     VerticalAlignKeyword, WhiteSpaceCollapse,
@@ -2939,10 +2939,9 @@ pub(crate) fn create_inline_constraint(
     .unwrap_or(f32::INFINITY)
     .max(0.0);
 
-  if known_width.is_some()
-    && context.style.box_sizing == BoxSizing::BorderBox
-    && width_constraint.is_finite()
-  {
+  // taffy hands the measure function a border-box width whatever `box-sizing`
+  // says, so the insets always come off.
+  if known_width.is_some() && width_constraint.is_finite() {
     let sizing = &context.sizing;
     let horizontal_insets = context.style.padding_left.to_px(sizing, 0.0)
       + context.style.padding_right.to_px(sizing, 0.0)
