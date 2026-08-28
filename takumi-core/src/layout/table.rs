@@ -11,18 +11,20 @@
 //! `block_layout_algorithm_utils.cc`. `baseline` is naive: it uses block-start
 //! borders and padding instead of a measured first baseline.
 //!
-//! Grid distributes free space evenly across `auto` tracks. Blink's
-//! `kAboveMax` in `table_layout_utils.cc` uses max-content proportions. The
-//! measured drift is 15–48pt against headless Chrome on three- and four-column
-//! fixtures.
+//! An all-`auto` table sizes its columns with `fr` tracks weighted by
+//! max-content, which is Blink's `kAboveMax` in `table_layout_utils.cc` written
+//! as a ratio. A table narrower than its content still drifts: Blink
+//! interpolates between min-content and max-content there, and no track
+//! function expresses that.
 
 use taffy::LengthPercentageAuto;
 
 use crate::{
+  geometry::{AvailableSpace, NodeId, Size},
   layout::{
     node::NodeKind,
     table_borders::CollapsedBorders,
-    tree::{NodeOrigin, RenderNode},
+    tree::{LayoutTree, NodeOrigin, RenderNode},
   },
   style::{
     BorderCollapse, BorderStyle, CaptionSide, ColorInput, ComputedStyle, Display, FlexDirection,
@@ -39,14 +41,14 @@ const MAX_COLSPAN: u16 = 1000;
 pub(crate) const MAX_ROWSPAN: u16 = 65534;
 
 pub(crate) fn lower_tables(node: &mut RenderNode) {
-  if node.context.style.display == Display::Table {
-    lower_table(node);
-  }
-
   if let Some(children) = node.children.as_mut() {
     for child in children {
       lower_tables(child);
     }
+  }
+
+  if node.context.style.display == Display::Table {
+    lower_table(node);
   }
 }
 
@@ -349,7 +351,12 @@ fn inherit_row_background(row: &RenderNode, cell: &mut RenderNode) {
 }
 
 fn lower_full_width(node: &mut RenderNode, line: i16, columns: u16) {
-  node.context.style.display = Display::Block;
+  // A stray that is itself a lowered table keeps its grid; blocking it would
+  // drop the placement its own cells already carry.
+  if node.context.style.display != Display::Grid {
+    node.context.style.display = Display::Block;
+  }
+
   node.context.style.grid_row_start = GridPlacement::Line(line);
   node.context.style.grid_row_end = GridPlacement::Span(GridPlacementSpan::Span(1));
   node.context.style.grid_column_start = GridPlacement::Line(1);
@@ -365,7 +372,13 @@ fn lower_table(table: &mut RenderNode) {
   let sizing = table.context.sizing.clone();
   let fixed = table.context.style.table_layout == TableLayout::Fixed
     && table.context.style.width != Length::Auto;
-  let tracks = track_sizes(&rows, &placements, columns, fixed);
+  let tracks = track_sizes(
+    &rows,
+    &placements,
+    columns,
+    fixed,
+    spacing.x.to_px(&sizing, 0.0),
+  );
   let collapsed = collapse.then(|| {
     CollapsedBorders::resolve(
       &table.context.style,
@@ -480,17 +493,121 @@ fn clear_border(style: &mut ComputedStyle) {
   style.border_left_width = LineWidth::Length(Length::zero());
 }
 
+/// Width a cell subtree takes when nothing constrains it. The cell is lowered
+/// first: `table-cell` establishes no formatting context of its own, so taffy
+/// would lay its inline children out as blocks.
+fn max_content_width(cell: &RenderNode) -> f32 {
+  let mut cell = cell.clone();
+
+  lower_cell(&mut cell, 1, 0, 1, false);
+  cell.context.style.display.blockify();
+
+  let mut tree = LayoutTree::from_render_node(&cell);
+
+  tree.compute_layout(Size {
+    width: AvailableSpace::MaxContent,
+    height: AvailableSpace::MaxContent,
+  });
+
+  tree
+    .into_results()
+    .layout(NodeId::ROOT)
+    .map_or(0.0, |layout| layout.size.width)
+}
+
+/// Max-content width per column, Blink's `TableTypes::Column::max_inline_size`.
+struct ColumnMaxContent(Vec<f32>);
+
+impl ColumnMaxContent {
+  /// Naive: a spanning cell spreads its width over the columns it covers in
+  /// proportion to their max-content, which is only the `kAboveMax` branch of
+  /// Blink's `DistributeColspanCellsToColumns`. Narrower spans land first, as
+  /// Blink sorts them, and the border spacing a span covers comes off the
+  /// width before it is shared.
+  fn measure(
+    rows: &[RenderNode],
+    placements: &[Vec<(usize, u16)>],
+    columns: u16,
+    spacing: f32,
+  ) -> Self {
+    let mut widths = vec![0.0f32; usize::from(columns)];
+    let mut spanning = Vec::new();
+
+    for (row, cells) in rows.iter().zip(placements) {
+      let table_cells = row
+        .children
+        .as_deref()
+        .unwrap_or_default()
+        .iter()
+        .filter(|cell| is_cell(cell));
+
+      for (cell, (column, colspan)) in table_cells.zip(cells) {
+        let width = max_content_width(cell);
+
+        if !width.is_finite() {
+          continue;
+        }
+
+        let end = (column + usize::from(*colspan)).min(usize::from(columns));
+
+        if *colspan == 1 {
+          if let Some(track) = widths.get_mut(*column) {
+            *track = track.max(width);
+          }
+        } else if *column < end {
+          spanning.push((*column, end, width));
+        }
+      }
+    }
+
+    spanning.sort_by_key(|(column, end, _)| (end - column, *column));
+
+    for (column, end, width) in spanning {
+      let covered = &mut widths[column..end];
+      let total: f32 = covered.iter().sum();
+      let count = covered.len() as f32;
+      let width = (width - spacing * (count - 1.0)).max(0.0);
+
+      for track in covered {
+        let share = if total > 0.0 {
+          width * *track / total
+        } else {
+          width / count
+        };
+
+        *track = track.max(share);
+      }
+    }
+
+    Self(widths)
+  }
+
+  /// `None` when nothing was measured, which leaves every track `auto`.
+  fn tracks(&self) -> Option<Vec<String>> {
+    self
+      .0
+      .iter()
+      .any(|width| *width > 0.0)
+      .then(|| self.0.iter().map(|width| format!("{width}fr")).collect())
+  }
+}
+
 /// Approximates Blink constrained columns from the first declared cell width.
 /// `table-layout: fixed` reads only the first row and shares the rest of the
 /// space evenly, so column widths stop following the content. CSS 2.2 §17.5.2
 /// only reaches that algorithm when the table's width is not `auto`. A
 /// spanning cell splits its declared width evenly across the tracks it
 /// covers; a percentage width on one is ignored.
+///
+/// Columns that stay `auto` after that pass become `fr` tracks weighted by
+/// max-content, so free space follows content the way Blink's `kAboveMax`
+/// distributes it.
 fn track_sizes(
   rows: &[RenderNode],
   placements: &[Vec<(usize, u16)>],
   columns: u16,
   fixed: bool,
+  spacing: f32,
 ) -> GridTemplateComponents {
   let mut tracks = vec![String::from(if fixed { "1fr" } else { "auto" }); usize::from(columns)];
   let measured = if fixed { 1 } else { rows.len() };
@@ -529,6 +646,13 @@ fn track_sizes(
         }
       }
     }
+  }
+
+  if !fixed
+    && tracks.iter().all(|track| track == "auto")
+    && let Some(measured) = ColumnMaxContent::measure(rows, placements, columns, spacing).tracks()
+  {
+    tracks = measured;
   }
 
   GridTemplateComponents::from_css_str(&tracks.join(" ")).unwrap_or_default()

@@ -1361,7 +1361,7 @@ impl RenderNode {
     self.force_inline_layout
       || (matches!(
         self.context.style.display,
-        Display::Block | Display::InlineBlock | Display::ListItem
+        Display::Block | Display::InlineBlock | Display::ListItem | Display::TableCell
       ) && self.children.as_ref().is_some_and(|children| {
         children
           .iter()

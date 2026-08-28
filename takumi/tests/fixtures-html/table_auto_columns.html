@@ -1,0 +1,86 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>table_auto_columns</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .root {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 16px;
+        width: 100%;
+        height: 100%;
+        background: rgb(243, 244, 246);
+        font-family: "Geist";
+      }
+      .label {
+        font-size: 11px;
+        color: rgb(71, 85, 105);
+      }
+      table {
+        display: table;
+        background: rgb(255, 255, 255);
+        font-size: 13px;
+      }
+      tbody {
+        display: table-row-group;
+      }
+      tr {
+        display: table-row;
+      }
+      td {
+        display: table-cell;
+        border: 1px solid rgb(148, 163, 184);
+        padding: 0;
+      }
+      .wide {
+        width: 100%;
+      }
+      .narrow {
+        width: 300px;
+      }
+    </style>
+  </head>
+  <body style="width: 1200px; height: 630px">
+    <div class="root">
+      <span class="label">three auto columns, table wider than its content</span>
+      <table class="wide">
+        <tr>
+          <td>AAA x</td>
+          <td>BBB medium length content here</td>
+          <td>CCC a considerably longer stretch of column content that wants more room</td>
+        </tr>
+      </table>
+      <span class="label">four auto columns, table wider than its content</span>
+      <table class="wide">
+        <tr>
+          <td>AAA x</td>
+          <td>BBB medium length content here</td>
+          <td>CCC a considerably longer stretch of column content that wants more room</td>
+          <td>DDD mid</td>
+        </tr>
+      </table>
+      <span class="label">a narrower span lands before a wider one</span>
+      <table class="wide">
+        <tr>
+          <td colspan="3">AAA spans every column of this table</td>
+        </tr>
+        <tr>
+          <td colspan="2">BBB spans the first two</td>
+          <td>CCC</td>
+        </tr>
+      </table>
+      <span class="label">three auto columns, table narrower than its content</span>
+      <table class="narrow">
+        <tr>
+          <td>AAA x</td>
+          <td>BBB medium length content here</td>
+          <td>CCC a considerably longer stretch of column content that wants more room</td>
+        </tr>
+      </table>
+    </div>
+  </body>
+</html>
