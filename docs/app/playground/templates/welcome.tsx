@@ -16,9 +16,7 @@ export default function Welcome() {
       </h1>
       <h1 tw="m-0 mt-2 text-8xl font-bold leading-none tracking-tighter text-coral">Press Run.</h1>
       <p tw="mt-10 mb-0 text-3xl leading-snug text-faded">
-        The exported options decide what comes out: an image, an animation, or a PDF. The colours
-        come from <span tw="text-honey">the css option</span>. Rename a token and every class
-        reading it follows.
+        The <span tw="text-honey">options</span> pick the output: image, animation or PDF.
       </p>
     </div>
   );

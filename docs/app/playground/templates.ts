@@ -5,6 +5,7 @@ import invoice from "./templates/invoice?raw";
 import multilingual from "./templates/multilingual?raw";
 import receipt from "./templates/receipt?raw";
 import report from "./templates/report?raw";
+import themeTokens from "./templates/theme-tokens?raw";
 import twitterProfileCard from "./templates/twitter-profile-card?raw";
 import watermark from "./templates/watermark?raw";
 import welcome from "./templates/welcome?raw";
@@ -22,7 +23,7 @@ export const templates: Template[] = [
   {
     id: "welcome",
     name: "Welcome",
-    description: "Edit the code, press Run. The palette lives in a :root rule in options.css",
+    description: "Edit the code, press Run",
     kind: "image",
     code: welcome,
   },
@@ -46,6 +47,13 @@ export const templates: Template[] = [
     description: "Blog header with a gradient background, themed by a brand scale",
     kind: "image",
     code: articleCover,
+  },
+  {
+    id: "theme-tokens",
+    name: "Theme tokens",
+    description: "A Tailwind @theme block drives the colours, spacing, radius and display size",
+    kind: "image",
+    code: themeTokens,
   },
   {
     id: "gradient-poster",

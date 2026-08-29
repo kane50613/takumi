@@ -180,12 +180,8 @@ async function renderRequest(renderer: Renderer, id: number, code: string) {
   // The pane compiles utilities itself, so it needs the theme as declarations
   // rather than as the `:root` rule the renderer reads.
   const theme = effectiveCss
-    .flatMap((entry) =>
-      typeof entry === "object" && "selector" in entry && entry.selector === ":root"
-        ? Object.entries(entry.style ?? {})
-        : [],
-    )
-    .map(([name, value]) => `${name}:${value};`)
+    .map(cssEntryToText)
+    .flatMap((text) => [...text.matchAll(/:root\s*\{([^{}]*)\}/g)].map(([, body]) => body))
     .join("");
   const geometry = outputGeometry(options);
 
