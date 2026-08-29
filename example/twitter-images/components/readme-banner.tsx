@@ -44,7 +44,7 @@ const SLIDES: ThemedToken[][][] = await Promise.all(
 );
 
 const FEATURES = ["Images", "PDFs", "Animations", "next/og"];
-const LINE_HEIGHT = 28;
+const LINE_HEIGHT = 30;
 const SLIDE_HEIGHT = LINE_HEIGHT * 5;
 const SLIDE_MS = animation.durationMs / SNIPPETS.length;
 
@@ -57,7 +57,7 @@ export const css = [
       justifyContent: "space-between",
       width: "100%",
       height: "100%",
-      padding: "0 3.5rem",
+      padding: "0 3rem 0 3.5rem",
       backgroundColor: "#0d1117",
       fontFamily: "Geist, sans-serif",
     },
@@ -71,10 +71,10 @@ export const css = [
     selector: ".features",
     style: {
       display: "flex",
-      gap: "20px",
-      marginTop: "14px",
+      gap: "22px",
+      marginTop: "16px",
       marginLeft: "4px",
-      fontSize: "15px",
+      fontSize: "16px",
       fontWeight: 500,
       letterSpacing: "-0.005em",
     },
@@ -87,12 +87,12 @@ export const css = [
       animation: `active ${animation.durationMs}ms ease-in-out infinite`,
     },
   },
-  { selector: ".logo", style: { width: "56px", height: "56px" } },
+  { selector: ".logo", style: { width: "64px", height: "64px" } },
   {
     selector: ".wordmark",
     style: {
       marginLeft: "14px",
-      fontSize: "48px",
+      fontSize: "56px",
       fontWeight: 750,
       letterSpacing: "-0.05em",
       color: "#e6edf3",
@@ -103,10 +103,10 @@ export const css = [
     style: {
       display: "flex",
       position: "relative",
-      width: "384px",
+      width: "368px",
       height: `${SLIDE_HEIGHT}px`,
       fontFamily: '"Geist Mono", monospace',
-      fontSize: "15px",
+      fontSize: "16px",
       lineHeight: `${LINE_HEIGHT}px`,
       whiteSpace: "pre",
     },
@@ -127,9 +127,9 @@ export const css = [
   {
     selector: ".caret",
     style: {
-      width: "8px",
-      height: "18px",
-      marginTop: "4px",
+      width: "9px",
+      height: "20px",
+      marginTop: "5px",
       backgroundColor: "#e6edf3",
       animation: "blink 1.25s step-end infinite",
     },
