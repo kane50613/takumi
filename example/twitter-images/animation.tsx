@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import type { ReactNode } from "react";
-import { renderAnimation } from "takumi-js";
+import { renderAnimation, type RenderAnimationOptions } from "takumi-js";
 import { Renderer } from "takumi-js/node";
 import { type AssetModule, loadFonts, loadImages } from "./assets";
 
@@ -15,7 +15,7 @@ type AnimationModule = AssetModule & {
     quality?: number;
     lossless?: boolean;
   };
-  css?: string[];
+  css?: RenderAnimationOptions["css"];
   timeline?: (fps: number) => Array<{ ms: number; durationMs: number }>;
   frame?: (ms: number) => ReactNode;
   default: () => ReactNode;
@@ -41,7 +41,7 @@ const scenes =
   module.timeline?.(fps) ??
   Array.from({ length: Math.round((durationMs * fps) / 1000) }, (_, index) => ({
     ms: index * step,
-    durationMs: Math.round(step),
+    durationMs: Math.round((index + 1) * step) - Math.round(index * step),
   }));
 const frameAt = module.frame ?? (() => <module.default />);
 // A component that animates through `css` keyframes renders once; the engine
