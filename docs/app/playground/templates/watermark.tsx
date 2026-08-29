@@ -10,44 +10,12 @@ const clauses = [
     body: "The receiving party uses the material only to evaluate the transaction described in Schedule A. Any other use, including training a model or benchmarking against a competing product, needs written permission.",
   },
   {
-    title: "3. Named recipients",
-    body: "Disclosure inside the receiving party is limited to employees and advisers who need the material for the permitted use and who are bound by obligations at least as strict as these.",
-  },
-  {
-    title: "4. Return and destruction",
+    title: "3. Return and destruction",
     body: "On written request the receiving party returns or destroys the material within thirty days, and confirms in writing that it did. Backups made in the ordinary course may be kept until they expire.",
   },
   {
-    title: "5. Term",
+    title: "4. Term",
     body: "These obligations run for three years from the last disclosure. Material that qualifies as a trade secret stays protected for as long as it qualifies.",
-  },
-  {
-    title: "6. No licence",
-    body: "Nothing here transfers ownership or grants a licence under any patent, copyright, or trademark. The material is provided as is, with no warranty of accuracy or completeness.",
-  },
-  {
-    title: "7. Governing law",
-    body: "This agreement is governed by the laws of Taiwan. The parties submit to the exclusive jurisdiction of the Taipei District Court.",
-  },
-  {
-    title: "8. Residual knowledge",
-    body: "Nothing prevents a person from using general knowledge, skills, and experience retained in unaided memory. This clause does not license the deliberate memorisation of the material.",
-  },
-  {
-    title: "9. Notices",
-    body: "Notices are given in writing to the addresses in Schedule A, by hand, by courier, or by email with confirmed receipt. A notice takes effect when it arrives.",
-  },
-  {
-    title: "10. Assignment",
-    body: "Neither party assigns this agreement without the other's written consent, except to a successor of substantially the whole of its business, who is bound by the same obligations.",
-  },
-  {
-    title: "11. Remedies",
-    body: "The parties agree that damages alone may not remedy a breach, and that the disclosing party may seek injunctive relief without posting a bond.",
-  },
-  {
-    title: "12. Entire agreement",
-    body: "This document, with Schedule A, is the whole agreement about its subject. It replaces earlier drafts, and it changes only in writing signed by both parties.",
   },
 ];
 
@@ -75,22 +43,6 @@ function TiledWatermark({ label }: { label: string }) {
           ))}
         </div>
       ))}
-    </div>
-  );
-}
-
-function Watermark({ label }: { label: string }) {
-  return (
-    <div
-      tw="fixed inset-0 flex items-center justify-center"
-      style={{ zIndex: -1, transform: "rotate(-30deg)" }}
-    >
-      <span
-        tw="w-full text-center text-[7vw] font-bold tracking-[0.14em]"
-        style={{ color: "rgba(17,24,39,0.1)" }}
-      >
-        {label}
-      </span>
     </div>
   );
 }
@@ -139,7 +91,6 @@ export default function Agreement() {
   return (
     <div tw="flex w-full flex-col text-[#111827]">
       <TiledWatermark label="CONFIDENTIAL" />
-      <Watermark label="CONFIDENTIAL" />
       <Heading />
       {clauses.map((clause) => (
         <Clause key={clause.title} title={clause.title} body={clause.body} />
