@@ -1,4 +1,4 @@
-use crate::{Error, Result, uninit_buffer};
+use crate::{Error, Result, checked_area, uninit_buffer};
 
 const BLUR_DOWNSAMPLE_TARGET_SIGMA: f32 = 6.0;
 const BLUR_DOWNSAMPLE_MIN_DIMENSION: u32 = 128;
@@ -84,7 +84,17 @@ pub(crate) fn apply_blur(format: BlurFormat<'_>, radius: f32, blur_type: BlurTyp
 
   match format {
     BlurFormat::Alpha { data, .. } => {
-      let mut temp_image = uninit_buffer(width as usize * height as usize);
+      let Some(expected) = checked_area(width, height, 1) else {
+        return Ok(());
+      };
+      if data.len() != expected {
+        return Err(Error::InvalidAlphaBufferLength {
+          actual: data.len(),
+          expected,
+        });
+      }
+
+      let mut temp_image = uninit_buffer(expected);
       let temp_data = &mut *temp_image;
 
       for _ in 0..3 {

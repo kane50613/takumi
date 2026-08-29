@@ -30,7 +30,7 @@ use mask::{MaskStackEntry, resolve_mask};
 pub(crate) use paint_source::{
   MaskCompositeColor, PaintSource, SamplingFootprint, interpolate_with_footprint,
 };
-pub(crate) use scratch::uninit_buffer;
+pub(crate) use scratch::{checked_area, uninit_buffer};
 use takumi_core::geometry::{Point, Size};
 use tiny_skia::{
   FilterQuality as TinyFilterQuality, Mask as TinyMask, Pixmap, PixmapMut, PixmapPaint, PixmapRef,

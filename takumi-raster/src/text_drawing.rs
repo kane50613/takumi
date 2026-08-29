@@ -7,7 +7,7 @@ use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
   BorderProperties, Canvas, ColorTile, Command, MaskCompositeColor, MaskSamplingOptions,
-  PaintSource, Placement, Result, SamplingOptions, SizedFontStyle, Stroke,
+  PaintSource, Placement, Result, SamplingOptions, SizedFontStyle, Stroke, checked_area,
   composite_mask_source_to_pixmap, draw_outset_shadow,
   layout::inline::ShapedRun,
   pixmap_ref_from_buffer, render_mask,
@@ -206,13 +206,12 @@ pub(crate) fn draw_glyph_clip_image(
     ResolvedGlyph::Bitmap(bitmap) => {
       transform *= Affine::translation(bitmap.placement.left as f32, -bitmap.placement.top as f32);
 
-      let mask_capacity = (bitmap.placement.width * bitmap.placement.height) as usize;
+      let Some(mask_capacity) = checked_area(bitmap.placement.width, bitmap.placement.height, 1)
+      else {
+        return Ok(());
+      };
       let mut mask = uninit_buffer(mask_capacity);
-      if mask_capacity > 0 {
-        let mask_len = mask.len();
-        let write_len = mask_capacity.min(mask_len);
-        bitmap.write_alpha_mask(&mut mask[..write_len]);
-      }
+      bitmap.write_alpha_mask(&mut mask);
 
       let Some(mut bottom) = Pixmap::new(bitmap.placement.width, bitmap.placement.height) else {
         return Ok(());

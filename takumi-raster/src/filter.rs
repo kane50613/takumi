@@ -12,7 +12,7 @@ use crate::{
   BlurFormat, BlurType, BorderProperties, Canvas, Placement, RenderContext, Result, SizedShadow,
   apply_blur, apply_blur_rgba_bytes,
   canvas::demultiply_rgba_in_place,
-  checked_shadow_area, fast_div_255, intersect_alpha_masks, premultiply_rgba_pixel, render_mask,
+  checked_area, fast_div_255, intersect_alpha_masks, premultiply_rgba_pixel, render_mask,
   style::{
     Affine, Angle, Color, Filter, FilterCategory, LUMA_WEIGHTS, PercentageNumber, SEPIA_WEIGHTS,
     SizingContext, TransferChannel, TransferTable,
@@ -484,7 +484,6 @@ pub(crate) fn apply_backdrop_filter(
   let region_row_bytes = region_width as usize * 4;
   let backdrop_len = region_row_bytes * region_height as usize;
 
-  // Extract the region from the canvas using pooled raw bytes.
   let mut backdrop_raw = uninit_buffer(backdrop_len);
 
   canvas.with_pixmap_ref(|pixmap| {
@@ -589,7 +588,7 @@ fn apply_drop_shadow_filter(pixmap: &mut PixmapMut<'_>, shadow: &SizedShadow) ->
     .height
     .saturating_add(padding.saturating_mul(2));
 
-  let Some(area) = checked_shadow_area(shadow_width, shadow_height) else {
+  let Some(area) = checked_area(shadow_width, shadow_height, 1) else {
     return Ok(());
   };
   let mut shadow_alpha = vec![0; area];

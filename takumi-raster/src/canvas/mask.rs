@@ -8,7 +8,7 @@ use tiny_skia::{
 
 use crate::{
   BorderProperties, Command, Fill, Placement, RenderContext, Result, Style, build_path,
-  create_mask, fast_div_255,
+  checked_area, create_mask, fast_div_255,
   layout::clip::clip_shape_commands,
   style::{Affine, BasicShape, ComputedStyle, FillRule, Overflow},
 };
@@ -50,7 +50,7 @@ pub(crate) fn prepare_node_mask(
   viewport: CanvasViewport,
 ) -> Result<NodeMaskAction> {
   if let Some(clip_path) = &style.clip_path {
-    let (mask, placement) = render_clip_shape_mask(clip_path, context, layout.size);
+    let (mask, placement) = render_clip_shape_mask(clip_path, context, layout.size, viewport.size);
     let end_x = placement.left + placement.width as i32;
     let end_y = placement.top + placement.height as i32;
 
@@ -70,6 +70,10 @@ pub(crate) fn prepare_node_mask(
   };
 
   if let Some(mask) = create_mask(context, layout.size)? {
+    if mask.is_empty() {
+      return Ok(NodeMaskAction::SkipRendering);
+    }
+
     let Some(placement) = transformed_rect_placement(layout.size, transform) else {
       return Ok(NodeMaskAction::SkipRendering);
     };
@@ -560,12 +564,14 @@ pub(crate) fn render_clip_shape_mask(
   shape: &BasicShape,
   context: &RenderContext,
   size: Size<f32>,
+  canvas: Size<u32>,
 ) -> (Vec<u8>, Placement) {
   let paths = clip_shape_commands(shape, context, size).unwrap_or_default();
-  render_mask(
+  render_mask_within(
     &paths,
     Some(context.transform),
     Some(Fill::from(shape.fill_rule().unwrap_or(context.style.clip_rule)).into()),
+    Some(canvas),
   )
 }
 
@@ -573,6 +579,18 @@ pub(crate) fn render_mask(
   paths: &[Command],
   transform: Option<Affine>,
   style: Option<Style>,
+) -> (Vec<u8>, Placement) {
+  render_mask_within(paths, transform, style, None)
+}
+
+/// `canvas` bounds the rasterized area for masks the caller only ever reads
+/// through the canvas. Blink clips the same way in `ClipPathClipper::PaintClipPath`
+/// ("we clip by the cull rect here. Visually, this should be a NOP").
+fn render_mask_within(
+  paths: &[Command],
+  transform: Option<Affine>,
+  style: Option<Style>,
+  canvas: Option<Size<u32>>,
 ) -> (Vec<u8>, Placement) {
   let style = style.unwrap_or_default();
   let Some(mut path) = build_path(paths) else {
@@ -602,21 +620,34 @@ pub(crate) fn render_mask(
   let Some(bounds) = path.compute_tight_bounds() else {
     return (Vec::new(), Placement::default());
   };
-  let left = bounds.left().floor() as i32;
-  let top = bounds.top().floor() as i32;
-  let right = bounds.right().ceil() as i32;
-  let bottom = bounds.bottom().ceil() as i32;
+  let mut left = bounds.left().floor() as i32;
+  let mut top = bounds.top().floor() as i32;
+  let mut right = bounds.right().ceil() as i32;
+  let mut bottom = bounds.bottom().ceil() as i32;
+
+  if let Some(canvas) = canvas {
+    left = left.max(0);
+    top = top.max(0);
+    right = right.min(canvas.width as i32);
+    bottom = bottom.min(canvas.height as i32);
+  }
 
   if right <= left || bottom <= top {
     return (Vec::new(), Placement::default());
   }
 
-  let width = (right - left) as u32;
-  let height = (bottom - top) as u32;
+  let (Some(width), Some(height)) = (
+    right.checked_sub(left).map(|value| value as u32),
+    bottom.checked_sub(top).map(|value| value as u32),
+  ) else {
+    return (Vec::new(), Placement::default());
+  };
   let Some(size) = IntSize::from_wh(width, height) else {
     return (Vec::new(), Placement::default());
   };
-  let buffer_len = (width as usize) * (height as usize);
+  let Some(buffer_len) = checked_area(width, height, 1) else {
+    return (Vec::new(), Placement::default());
+  };
   let buffer = vec![0; buffer_len];
   let Some(mut mask) = TinyMask::from_vec(buffer, size) else {
     return (Vec::new(), Placement::default());

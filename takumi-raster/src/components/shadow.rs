@@ -7,20 +7,11 @@ use tiny_skia::PixmapRef;
 pub(crate) use crate::shadow::SizedShadow;
 use crate::{
   BlurFormat, BlurType, BorderProperties, Canvas, Command, Fill, Placement, Result,
-  SamplingOptions, Style, apply_blur, attenuate_alpha_by_mask, fast_div_255, render_mask,
+  SamplingOptions, Style, apply_blur, attenuate_alpha_by_mask, checked_area, fast_div_255,
+  render_mask,
   style::{Affine, BlendMode, ImageScalingAlgorithm},
   uninit_buffer,
 };
-
-/// Shadow buffers above this pixel count are skipped rather than allocated.
-pub(crate) const MAX_SHADOW_AREA: u64 = 1 << 28; // 256 Mi single-channel bytes
-
-/// Guards shadow buffer sizing against `u32` overflow from huge blur radii.
-#[inline]
-pub(crate) fn checked_shadow_area(width: u32, height: u32) -> Option<usize> {
-  let area = width as u64 * height as u64;
-  (area > 0 && area <= MAX_SHADOW_AREA).then_some(area as usize)
-}
 
 /// Draws the outset mask of the shadow.
 pub(crate) fn draw_outset_shadow(
@@ -50,7 +41,7 @@ pub(crate) fn draw_outset_shadow(
   let total_padding = (blur_padding * 2.0) as u32;
   let shadow_width = placement.width.saturating_add(total_padding);
   let shadow_height = placement.height.saturating_add(total_padding);
-  let Some(area) = checked_shadow_area(shadow_width, shadow_height) else {
+  let Some(area) = checked_area(shadow_width, shadow_height, 1) else {
     return Ok(());
   };
   let mut shadow_alpha = vec![0; area];
@@ -145,7 +136,13 @@ pub(crate) fn draw_inset_shadow(
   let width = border_box.width as u32;
   let height = border_box.height as u32;
   let [red, green, blue, alpha] = shadow.color.0;
-  let mut shadow_alpha = vec![alpha; (width * height) as usize];
+  let (Some(area), Some(rgba_len)) = (
+    checked_area(width, height, 1),
+    checked_area(width, height, 4),
+  ) else {
+    return Ok((Vec::new(), 0, 0));
+  };
+  let mut shadow_alpha = vec![alpha; area];
   let shadow_placement = Placement {
     left: 0,
     top: 0,
@@ -205,7 +202,7 @@ pub(crate) fn draw_inset_shadow(
     );
   }
 
-  let mut data = uninit_buffer((width * height * 4) as usize);
+  let mut data = uninit_buffer(rgba_len);
   for (pixel, &alpha) in bytemuck::cast_slice_mut::<u8, [u8; 4]>(&mut data)
     .iter_mut()
     .zip(&shadow_alpha)
@@ -229,29 +226,4 @@ pub(crate) fn draw_inset_shadow(
   }
 
   Ok((data, width, height))
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  #[test]
-  fn checked_shadow_area_accepts_sane_dimensions() {
-    assert_eq!(checked_shadow_area(1024, 1024), Some(1024 * 1024));
-    assert_eq!(checked_shadow_area(16384, 16384), Some(1 << 28));
-  }
-
-  #[test]
-  fn checked_shadow_area_rejects_zero() {
-    assert_eq!(checked_shadow_area(0, 1024), None);
-    assert_eq!(checked_shadow_area(1024, 0), None);
-  }
-
-  #[test]
-  fn checked_shadow_area_rejects_extreme_blur_radius() {
-    // `box-shadow: 0 0 100000px` on a large node produces ~1.5M px dimensions;
-    // the u32 product would wrap, but the u64 guard rejects it without panic.
-    assert_eq!(checked_shadow_area(1_500_000, 1_500_000), None);
-    assert_eq!(checked_shadow_area(u32::MAX, u32::MAX), None);
-  }
 }

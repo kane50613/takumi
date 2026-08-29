@@ -15,7 +15,7 @@ use tiny_skia::{IntSize, Pixmap, PixmapMut, PixmapRef, PremultipliedColorU8};
 use crate::resources::image::RenderedImage;
 use crate::{
   BorderProperties, DrawTarget, OverlayOptions, PaintSource, RenderContext, Result,
-  SamplingFootprint, color_to_premultiplied, interpolate_with_footprint,
+  SamplingFootprint, checked_area, color_to_premultiplied, interpolate_with_footprint,
   layout::node::resolve_image,
   overlay_image, pixmap_from_buffer, pixmap_ref_from_buffer,
   resources::{image::ImageSource, image_buffer::ImageBuffer},
@@ -52,11 +52,15 @@ fn rasterize_tile(tile: BackgroundTile) -> Result<BackgroundTile> {
   let Some(size) = IntSize::from_wh(width, height) else {
     return Ok(tile);
   };
-  let mut data = uninit_buffer((width * height * 4) as usize);
+  let Some(len) = checked_area(width, height, 4) else {
+    return Ok(tile);
+  };
+  let mut data = uninit_buffer(len);
+  let row_bytes = width as usize * 4;
 
   for y in 0..height {
-    let row_offset = (y * width * 4) as usize;
-    let dst_row = &mut data[row_offset..row_offset + (width * 4) as usize];
+    let row_offset = y as usize * row_bytes;
+    let dst_row = &mut data[row_offset..row_offset + row_bytes];
     tile.rasterize_row(y, width, dst_row);
   }
 
@@ -80,7 +84,10 @@ pub(crate) fn rasterize_layers(
   let Some(pixmap_size) = IntSize::from_wh(size.width, size.height) else {
     return Ok(None);
   };
-  let mut composed = vec![0; (size.width * size.height * 4) as usize];
+  let Some(composed_len) = checked_area(size.width, size.height, 4) else {
+    return Ok(None);
+  };
+  let mut composed = vec![0; composed_len];
   let Some(mut pixmap) = PixmapMut::from_bytes(&mut composed, size.width, size.height) else {
     return Ok(None);
   };
@@ -524,44 +531,52 @@ pub(crate) fn create_mask(
     return Ok(None);
   }
 
-  Ok(
-    rasterize_layers(
-      layers,
-      border_box.map(|x| x as u32),
-      context,
-      BorderProperties::default(),
-      Affine::IDENTITY,
-    )?
-    .map(|tile| {
-      let (w, h) = tile.dimensions();
-      let mut alpha = uninit_buffer((w * h) as usize);
+  // An empty mask hides the node. A mask this size cannot be rasterized, and
+  // dropping it would paint the node unmasked instead.
+  let size = border_box.map(|x| x as u32);
+  let Some(tile) = rasterize_layers(
+    layers,
+    size,
+    context,
+    BorderProperties::default(),
+    Affine::IDENTITY,
+  )?
+  else {
+    return Ok(Some(Vec::new()));
+  };
 
-      if let Some(raw) = tile.as_raw() {
-        let count = alpha.len().min(raw.len() / 4);
-        for i in 0..count {
-          alpha[i] = raw[i * 4 + 3];
-        }
-        for alpha_val in alpha.iter_mut().skip(count) {
-          *alpha_val = 0;
-        }
-      } else {
-        let mut i = 0;
-        for y in 0..h {
-          for x in 0..w {
-            if i < alpha.len() {
-              alpha[i] = tile.get_pixel(x, y).alpha();
-              i += 1;
-            }
+  Ok(Some({
+    let (w, h) = tile.dimensions();
+    let Some(len) = checked_area(w, h, 1) else {
+      return Ok(Some(Vec::new()));
+    };
+    let mut alpha = uninit_buffer(len);
+
+    if let Some(raw) = tile.as_raw() {
+      let count = alpha.len().min(raw.len() / 4);
+      for i in 0..count {
+        alpha[i] = raw[i * 4 + 3];
+      }
+      for alpha_val in alpha.iter_mut().skip(count) {
+        *alpha_val = 0;
+      }
+    } else {
+      let mut i = 0;
+      for y in 0..h {
+        for x in 0..w {
+          if i < alpha.len() {
+            alpha[i] = tile.get_pixel(x, y).alpha();
+            i += 1;
           }
         }
-        for alpha_val in alpha.iter_mut().skip(i) {
-          *alpha_val = 0;
-        }
       }
+      for alpha_val in alpha.iter_mut().skip(i) {
+        *alpha_val = 0;
+      }
+    }
 
-      alpha
-    }),
-  )
+    alpha
+  }))
 }
 
 /// The `background-image` layers only. The colour underneath them is painted
