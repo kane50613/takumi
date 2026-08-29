@@ -1,10 +1,13 @@
 import animatedShowcase from "./templates/animated-showcase?raw";
+import accessible from "./templates/accessible?raw";
 import articleCover from "./templates/article-cover?raw";
 import gradientPoster from "./templates/gradient-poster?raw";
 import invoice from "./templates/invoice?raw";
 import multilingual from "./templates/multilingual?raw";
 import receipt from "./templates/receipt?raw";
 import report from "./templates/report?raw";
+import svgText from "./templates/svg-text?raw";
+import themeTokens from "./templates/theme-tokens?raw";
 import twitterProfileCard from "./templates/twitter-profile-card?raw";
 import watermark from "./templates/watermark?raw";
 import welcome from "./templates/welcome?raw";
@@ -22,7 +25,7 @@ export const templates: Template[] = [
   {
     id: "welcome",
     name: "Welcome",
-    description: "Edit the code, press Run. The palette lives in a :root rule in options.css",
+    description: "Edit the code, press Run",
     kind: "image",
     code: welcome,
   },
@@ -48,6 +51,13 @@ export const templates: Template[] = [
     code: articleCover,
   },
   {
+    id: "theme-tokens",
+    name: "Theme tokens",
+    description: "A Tailwind @theme block drives the colours, spacing, radius and display size",
+    kind: "image",
+    code: themeTokens,
+  },
+  {
     id: "gradient-poster",
     name: "Gradient poster",
     description: "Conic gradient, backdrop blur and a blend mode",
@@ -55,9 +65,16 @@ export const templates: Template[] = [
     code: gradientPoster,
   },
   {
+    id: "svg-text",
+    name: "SVG text",
+    description: "An SVG source whose <text> and textPath draw from the registered fonts",
+    kind: "image",
+    code: svgText,
+  },
+  {
     id: "keyframe-animation",
     name: "Keyframe loop",
-    description: "Staggered Japanese text sampled into an animated WebP",
+    description: "Staggered keyframes sampled into an animated WebP",
     kind: "animation",
     code: animatedShowcase,
   },
@@ -77,10 +94,17 @@ export const templates: Template[] = [
   },
   {
     id: "report",
-    name: "Report",
-    description: "Four scripts across pages, with a counted footer and bookmarks",
+    name: "Paged table",
+    description: "A long table whose header repeats on every page",
     kind: "pdf",
     code: report,
+  },
+  {
+    id: "accessible",
+    name: "Tagged pages",
+    description: "PDF/A-4 with PDF/UA-2 tagging, bookmarks from the headings",
+    kind: "pdf",
+    code: accessible,
   },
   {
     id: "receipt",

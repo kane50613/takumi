@@ -1,10 +1,9 @@
 const DURATION_MS = 3000;
 
 const words = [
-  { text: "動", delay: 0 },
-  { text: "く", delay: 200 },
-  { text: "文", delay: 400 },
-  { text: "字", delay: 600 },
+  { text: "Type", delay: 0 },
+  { text: "that", delay: 200 },
+  { text: "moves", delay: 400 },
 ];
 
 export default function AnimatedShowcase() {
@@ -16,7 +15,6 @@ export default function AnimatedShowcase() {
       {words.map((word) => (
         <span
           key={word.text}
-          lang="ja"
           tw="mx-2 text-7xl font-bold text-orange-950"
           style={{
             animationName: "bob",

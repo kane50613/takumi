@@ -22,7 +22,8 @@ function groupToCss(rules: CssEntry[] | undefined): string {
  * browser preview pane only understands text.
  */
 export function cssEntryToText(entry: CssEntry): string {
-  if (typeof entry === "string") return entry;
+  // The engine reads `@theme` as a `:root` rule; a browser drops the block whole.
+  if (typeof entry === "string") return entry.replace(/@theme[^{]*\{/g, ":root {");
 
   if ("keyframes" in entry) {
     const body = entry.steps
