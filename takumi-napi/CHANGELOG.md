@@ -1,3 +1,13 @@
+## @takumi-rs/core@2.13.1
+
+### Encode only the changed region of each animated WebP frame
+
+Animated WebP frames after the first now carry just the rectangle that changed since the previous frame, stored with the no-blend flag so it replaces the canvas. Animations with a small moving region over a static background come out much smaller and encode faster. Frames that change everywhere are unaffected, and `dispose: true` keeps full-canvas frames.
+
+### Read premultiplied pixels as straight colour in `filter`
+
+A colour filter ran on the canvas's premultiplied pixels as if they held straight colour, so it only landed on the right value where the element was fully opaque. Antialiased edges came out washed out, and `opacity()` left the colour unscaled, so a faded layer went pale instead of translucent.
+
 ## @takumi-rs/core@2.13.0
 
 ### Resolve `tw` utilities through CSS variables
