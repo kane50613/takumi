@@ -2,9 +2,6 @@
   "title": "Documentation for Takumi",
   "root": true,
   "pages": [
-    "--- For LLMs ---",
-    "[Leaf][llms.txt](https://takumi.kane.tw/llms.txt)",
-    "[Brain][llms-full.txt](https://takumi.kane.tw/llms-full.txt)",
     "--- Get started ---",
     "index",
     "integration",
