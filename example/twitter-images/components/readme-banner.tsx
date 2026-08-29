@@ -2,9 +2,9 @@ import { codeToTokens, type ThemedToken } from "shiki";
 
 export const name = "readme-banner";
 
-// GitHub renders README content at 838 CSS px; the banner is designed 1:1 for
-// that width and rendered at dpr 2.
-export const width = 840;
+// GitHub's README column runs around 960 CSS px on wide screens; the banner is
+// designed for that width, rendered at dpr 2, and displayed fluid.
+export const width = 960;
 export const height = 220;
 
 export const images = [{ src: "takumi.svg", path: "takumi.svg" }];

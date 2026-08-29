@@ -1,6 +1,6 @@
 <div align="center">
   <a href="./example/twitter-images/components/readme-banner.tsx">
-    <img src="./example/twitter-images/output/readme-banner.webp" alt="Takumi — images and PDFs from JSX and CSS, no browser. Rendered by Takumi from the JSX shown in the banner." width="838" />
+    <img src="./example/twitter-images/output/readme-banner.webp" alt="Takumi — images and PDFs from JSX and CSS, no browser. Rendered by Takumi from the JSX shown in the banner." />
   </a>
 
 **Render OG images and paged PDFs from JSX, HTML, and CSS. No headless browser.**
