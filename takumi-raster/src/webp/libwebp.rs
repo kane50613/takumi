@@ -8,7 +8,7 @@ use rayon::prelude::*;
 use crate::{
   Result,
   error::{Error, WebPError},
-  webp::U24_MAX,
+  webp::{FramePlacement, FrameRegion, U24_MAX},
   write::{AnimatedWebpOptions, AnimationFrame, Bitmap, Quality},
 };
 
@@ -36,21 +36,27 @@ fn webp_config(lossless: bool, quality: u8, speed: u8) -> Result<WebPConfig> {
   Ok(config)
 }
 
-fn import_rgba_picture(image: &RgbaImage, config: &WebPConfig) -> Result<WebPPicture> {
+fn import_rgba_picture(
+  image: &RgbaImage,
+  region: &FrameRegion,
+  config: &WebPConfig,
+) -> Result<WebPPicture> {
   let mut picture = WebPPicture::new().map_err(|_| WebPError::EncoderSetupFailed)?;
 
-  picture.width = image.width() as i32;
-  picture.height = image.height() as i32;
+  picture.width = region.width as i32;
+  picture.height = region.height as i32;
   // Import() subsamples to YUV420 unless use_argb is set; WebPEncode converts back
   // for VP8L, so a lossless encode would round-trip through chroma subsampling.
   // https://github.com/webmproject/libwebp/blob/main/src/enc/picture_csp_enc.c
   picture.use_argb = config.lossless;
 
+  let stride = image.width() as usize * 4;
+  let region_start = region.y as usize * stride + region.x as usize * 4;
   let import_ok = unsafe {
     WebPPictureImportRGBA(
       &mut picture,
-      image.as_raw().as_ptr(),
-      (image.width() as i32) * 4,
+      image.as_raw()[region_start..].as_ptr(),
+      stride as i32,
     )
   };
 
@@ -71,6 +77,7 @@ struct EncodedFrame {
   encoded: WebPMemoryBuffer,
   payload_range: Range<usize>,
   tag: [u8; 4],
+  placement: FramePlacement,
   duration_ms: u32,
 }
 
@@ -112,10 +119,11 @@ impl Drop for WebPMemoryBuffer {
 
 fn encode_single_frame(
   image: &RgbaImage,
+  placement: FramePlacement,
   duration_ms: u32,
   config: &WebPConfig,
 ) -> Result<EncodedFrame> {
-  let mut picture = import_rgba_picture(image, config)?;
+  let mut picture = import_rgba_picture(image, &placement.region, config)?;
   let mut writer = WebPMemoryBuffer::new();
   picture.writer = Some(WebPMemoryWrite);
   picture.custom_ptr = writer.as_mut_ptr().cast();
@@ -148,6 +156,7 @@ fn encode_single_frame(
     encoded: writer,
     payload_range,
     tag,
+    placement,
     duration_ms,
   })
 }
@@ -203,11 +212,9 @@ fn write_riff_container<W: Write>(
   width: u32,
   height: u32,
   loop_count: u16,
-  blend: bool,
   dispose: bool,
   frames: &[EncodedFrame],
 ) -> Result<()> {
-  let frame_flags: u8 = (u8::from(!blend) << 1) | u8::from(dispose);
   let width_minus_one = width - 1;
   let height_minus_one = height - 1;
 
@@ -253,11 +260,15 @@ fn write_riff_container<W: Write>(
     let anmf_payload_size =
       u32::try_from(anmf_payload_size_usize).map_err(|_| WebPError::ContainerSizeOverflow)?;
 
+    let region = frame.placement.region;
+    let frame_flags: u8 = (u8::from(!frame.placement.blend) << 1) | u8::from(dispose);
+
     destination.write_all(b"ANMF")?;
     destination.write_all(&anmf_payload_size.to_le_bytes())?;
-    destination.write_all(&[0u8; 6])?;
-    write_le24(destination, width_minus_one)?;
-    write_le24(destination, height_minus_one)?;
+    write_le24(destination, region.x / 2)?;
+    write_le24(destination, region.y / 2)?;
+    write_le24(destination, region.width - 1)?;
+    write_le24(destination, region.height - 1)?;
     write_le24(destination, frame.duration_ms.clamp(0, U24_MAX))?;
     destination.write_all(&[frame_flags])?;
     destination.write_all(&frame.tag)?;
@@ -292,7 +303,8 @@ fn write_webp(
   destination: &mut impl Write,
   config: WebPConfig,
 ) -> Result<()> {
-  let mut picture = import_rgba_picture(&image, &config)?;
+  let full_canvas = FrameRegion::full(image.width(), image.height());
+  let mut picture = import_rgba_picture(&image, &full_canvas, &config)?;
   let mut writer = MaybeUninit::<WebPMemoryWriter>::uninit();
   unsafe { WebPMemoryWriterInit(writer.as_mut_ptr()) };
   picture.writer = Some(WebPMemoryWrite);
@@ -325,34 +337,45 @@ fn write_webp(
   Ok(())
 }
 
-fn collect_unique_frames(
-  frames: &[AnimationFrame],
+fn collect_unique_frames<'a>(
+  frames: &'a [AnimationFrame],
   frame_width: u32,
   frame_height: u32,
-) -> Result<Vec<(&RgbaImage, u32)>> {
+  options: &AnimatedWebpOptions,
+) -> Result<Vec<(&'a RgbaImage, FramePlacement, u32)>> {
   let mut unique_frames = Vec::with_capacity(frames.len());
   let mut pending_image = frames[0].image.as_rgba();
+  let mut pending_placement = FramePlacement::first(pending_image, options);
   let mut pending_duration_ms = frames[0].duration_ms.clamp(0, U24_MAX);
 
   for frame in frames.iter().skip(1) {
     if frame.image.width() != frame_width || frame.image.height() != frame_height {
       return Err(WebPError::MixedFrameDimensions.into());
     }
-    if frame.image.as_raw() == pending_image.as_raw() {
+
+    let Some(placement) = FramePlacement::next(
+      pending_image,
+      frame.image.as_rgba(),
+      frame_width,
+      frame_height,
+      options,
+    ) else {
       pending_duration_ms = pending_duration_ms.saturating_add(frame.duration_ms.clamp(0, U24_MAX));
       continue;
-    }
-    unique_frames.push((pending_image, pending_duration_ms));
+    };
+
+    unique_frames.push((pending_image, pending_placement, pending_duration_ms));
     pending_image = frame.image.as_rgba();
+    pending_placement = placement;
     pending_duration_ms = frame.duration_ms.clamp(0, U24_MAX);
   }
 
-  unique_frames.push((pending_image, pending_duration_ms));
+  unique_frames.push((pending_image, pending_placement, pending_duration_ms));
   Ok(unique_frames)
 }
 
 fn encode_frames(
-  unique_frames: &[(&RgbaImage, u32)],
+  unique_frames: &[(&RgbaImage, FramePlacement, u32)],
   config: &WebPConfig,
 ) -> Result<Vec<EncodedFrame>> {
   #[cfg(feature = "rayon")]
@@ -363,13 +386,17 @@ fn encode_frames(
     return unique_frames
       .par_iter()
       .with_min_len(MIN_PARALLEL_FRAMES)
-      .map(|(image, duration_ms)| encode_single_frame(image, *duration_ms, config))
+      .map(|(image, placement, duration_ms)| {
+        encode_single_frame(image, *placement, *duration_ms, config)
+      })
       .collect();
   }
 
   unique_frames
     .iter()
-    .map(|(image, duration_ms)| encode_single_frame(image, *duration_ms, config))
+    .map(|(image, placement, duration_ms)| {
+      encode_single_frame(image, *placement, *duration_ms, config)
+    })
     .collect()
 }
 
@@ -409,8 +436,9 @@ where
   // peak raw-pixel memory stays bounded while frames still encode concurrently.
   let chunk_capacity = frames_per_chunk(frame_width, frame_height);
   let mut encoded = Vec::new();
-  let mut chunk: Vec<(Bitmap, u32)> = Vec::new();
+  let mut chunk: Vec<(Bitmap, FramePlacement, u32)> = Vec::new();
   let mut pending_image = first.image;
+  let mut pending_placement = FramePlacement::first(pending_image.as_rgba(), &options);
   let mut pending_duration_ms = first.duration_ms.clamp(0, U24_MAX);
 
   for frame in frames {
@@ -418,18 +446,27 @@ where
     if frame.image.width() != frame_width || frame.image.height() != frame_height {
       return Err(WebPError::MixedFrameDimensions.into());
     }
-    if frame.image.as_raw() == pending_image.as_raw() {
+
+    let Some(placement) = FramePlacement::next(
+      pending_image.as_rgba(),
+      frame.image.as_rgba(),
+      frame_width,
+      frame_height,
+      &options,
+    ) else {
       pending_duration_ms = pending_duration_ms.saturating_add(frame.duration_ms.clamp(0, U24_MAX));
       continue;
-    }
-    chunk.push((pending_image, pending_duration_ms));
+    };
+
+    chunk.push((pending_image, pending_placement, pending_duration_ms));
     if chunk.len() >= chunk_capacity {
       encode_frame_chunk(&mut chunk, &config, &mut encoded)?;
     }
     pending_image = frame.image;
+    pending_placement = placement;
     pending_duration_ms = frame.duration_ms.clamp(0, U24_MAX);
   }
-  chunk.push((pending_image, pending_duration_ms));
+  chunk.push((pending_image, pending_placement, pending_duration_ms));
   encode_frame_chunk(&mut chunk, &config, &mut encoded)?;
 
   write_riff_container(
@@ -437,7 +474,6 @@ where
     frame_width,
     frame_height,
     options.loop_count.unwrap_or(0),
-    options.blend,
     options.dispose,
     &encoded,
   )
@@ -458,19 +494,23 @@ fn frames_per_chunk(width: u32, height: u32) -> usize {
 /// Encodes a chunk of unique frames (in parallel when `rayon` is enabled), appends
 /// the results in order, and frees the raw frames.
 fn encode_frame_chunk(
-  chunk: &mut Vec<(Bitmap, u32)>,
+  chunk: &mut Vec<(Bitmap, FramePlacement, u32)>,
   config: &WebPConfig,
   encoded: &mut Vec<EncodedFrame>,
 ) -> Result<()> {
   #[cfg(feature = "rayon")]
   let batch = chunk
     .par_iter()
-    .map(|(image, duration_ms)| encode_single_frame(image.as_rgba(), *duration_ms, config))
+    .map(|(image, placement, duration_ms)| {
+      encode_single_frame(image.as_rgba(), *placement, *duration_ms, config)
+    })
     .collect::<Result<Vec<_>>>()?;
   #[cfg(not(feature = "rayon"))]
   let batch = chunk
     .iter()
-    .map(|(image, duration_ms)| encode_single_frame(image.as_rgba(), *duration_ms, config))
+    .map(|(image, placement, duration_ms)| {
+      encode_single_frame(image.as_rgba(), *placement, *duration_ms, config)
+    })
     .collect::<Result<Vec<_>>>()?;
 
   encoded.extend(batch);
@@ -504,7 +544,7 @@ pub fn write_animated_webp<W: Write>(
 
   let speed = options.speed.unwrap_or(1).clamp(0, 6);
   let config = webp_config(options.lossless, options.quality, speed)?;
-  let unique_frames = collect_unique_frames(&frames, frame_width, frame_height)?;
+  let unique_frames = collect_unique_frames(&frames, frame_width, frame_height, &options)?;
   let frame_data = encode_frames(&unique_frames, &config)?;
 
   write_riff_container(
@@ -512,7 +552,6 @@ pub fn write_animated_webp<W: Write>(
     frame_width,
     frame_height,
     options.loop_count.unwrap_or(0),
-    options.blend,
     options.dispose,
     &frame_data,
   )?;
@@ -522,9 +561,12 @@ pub fn write_animated_webp<W: Write>(
 
 #[cfg(test)]
 mod tests {
+  use std::ptr::null_mut;
+
   use image::Rgba;
 
   use super::*;
+  use crate::write::Bitmap;
 
   fn decode_rgba(encoded: &[u8]) -> RgbaImage {
     let mut width = 0;
@@ -574,5 +616,400 @@ mod tests {
 
     let decoded = decode_rgba(&encoded);
     assert_eq!(decoded.dimensions(), image.dimensions());
+  }
+
+  fn decode_animation(encoded: &[u8]) -> Vec<RgbaImage> {
+    let data = WebPData {
+      bytes: encoded.as_ptr(),
+      size: encoded.len(),
+    };
+    let mut options = MaybeUninit::<WebPAnimDecoderOptions>::uninit();
+    assert_ne!(
+      unsafe { WebPAnimDecoderOptionsInit(options.as_mut_ptr()) },
+      0
+    );
+
+    let mut options = unsafe { options.assume_init() };
+    options.color_mode = WEBP_CSP_MODE::MODE_RGBA;
+
+    let decoder = unsafe { WebPAnimDecoderNew(&data, &options) };
+    assert!(!decoder.is_null(), "anim decoder rejected the container");
+
+    let mut info = MaybeUninit::<WebPAnimInfo>::uninit();
+    assert_ne!(
+      unsafe { WebPAnimDecoderGetInfo(decoder, info.as_mut_ptr()) },
+      0
+    );
+
+    let info = unsafe { info.assume_init() };
+    let canvas_bytes = (info.canvas_width * info.canvas_height * 4) as usize;
+    let mut composited = Vec::new();
+
+    while unsafe { WebPAnimDecoderHasMoreFrames(decoder) } != 0 {
+      let mut pixels: *mut u8 = null_mut();
+      let mut timestamp = 0;
+      assert_ne!(
+        unsafe { WebPAnimDecoderGetNext(decoder, &mut pixels, &mut timestamp) },
+        0
+      );
+
+      let raw = unsafe { slice::from_raw_parts(pixels, canvas_bytes) }.to_vec();
+      composited.push(RgbaImage::from_raw(info.canvas_width, info.canvas_height, raw).unwrap());
+    }
+
+    unsafe { WebPAnimDecoderDelete(decoder) };
+    composited
+  }
+
+  fn read_le24(bytes: &[u8]) -> u32 {
+    u32::from_le_bytes([bytes[0], bytes[1], bytes[2], 0])
+  }
+
+  /// (x, y, width, height, flags) of every ANMF chunk in the container.
+  fn anmf_rects(encoded: &[u8]) -> Vec<(u32, u32, u32, u32, u8)> {
+    let mut rects = Vec::new();
+    let mut offset = 12;
+
+    while offset + 8 <= encoded.len() {
+      let tag = &encoded[offset..offset + 4];
+      let len = u32::from_le_bytes(encoded[offset + 4..offset + 8].try_into().unwrap()) as usize;
+
+      if tag == b"ANMF" {
+        let header = &encoded[offset + 8..offset + 24];
+        rects.push((
+          read_le24(&header[0..3]) * 2,
+          read_le24(&header[3..6]) * 2,
+          read_le24(&header[6..9]) + 1,
+          read_le24(&header[9..12]) + 1,
+          header[15],
+        ));
+      }
+
+      offset += 8 + len + (len & 1);
+    }
+
+    rects
+  }
+
+  /// A moving 30x20 box over a static gradient, with a transparent border.
+  fn moving_box_frames() -> Vec<AnimationFrame> {
+    (0..6)
+      .map(|frame_index| {
+        let box_x = 11 + frame_index * 13;
+        let image = RgbaImage::from_fn(120, 80, |x, y| {
+          if x < 4 || y < 4 || x >= 116 || y >= 76 {
+            return Rgba([0, 0, 0, 0]);
+          }
+          if x >= box_x && x < box_x + 30 && (25..45).contains(&y) {
+            return Rgba([255, 40, 40, 200]);
+          }
+          Rgba([(x * 2) as u8, (y * 3) as u8, 90, 255])
+        });
+
+        AnimationFrame::new(Bitmap::from_rgba(image), 40)
+      })
+      .collect()
+  }
+
+  fn frames_visibly_equal(a: &RgbaImage, b: &RgbaImage) -> bool {
+    a.dimensions() == b.dimensions()
+      && a
+        .pixels()
+        .zip(b.pixels())
+        .all(|(a, b)| a == b || (a.0[3] == 0 && b.0[3] == 0))
+  }
+
+  #[test]
+  fn cropped_animation_composites_to_source_frames() {
+    let frames = moving_box_frames();
+    let mut encoded = Vec::new();
+    write_animated_webp(
+      Cow::Borrowed(&frames),
+      &mut encoded,
+      AnimatedWebpOptions::default(),
+    )
+    .unwrap();
+
+    let composited = decode_animation(&encoded);
+    assert_eq!(composited.len(), frames.len());
+
+    for (index, (decoded, source)) in composited.iter().zip(&frames).enumerate() {
+      assert!(
+        frames_visibly_equal(decoded, source.image.as_rgba()),
+        "composited frame {index} deviates from the source frame"
+      );
+    }
+  }
+
+  #[test]
+  fn frames_after_the_first_are_cropped_and_do_not_blend() {
+    let frames = moving_box_frames();
+    let mut encoded = Vec::new();
+    write_animated_webp(
+      Cow::Borrowed(&frames),
+      &mut encoded,
+      AnimatedWebpOptions::default(),
+    )
+    .unwrap();
+
+    let rects = anmf_rects(&encoded);
+    assert_eq!(rects.len(), frames.len());
+    assert_eq!(rects[0], (0, 0, 120, 80, 0));
+
+    for &(x, y, width, height, flags) in &rects[1..] {
+      assert_eq!(x % 2, 0);
+      assert_eq!(y % 2, 0);
+      assert!(
+        width < 120 && height < 80,
+        "expected a cropped frame, got {width}x{height}"
+      );
+      assert_eq!(flags, 0b10, "cropped frames must carry the no-blend flag");
+    }
+  }
+
+  #[test]
+  fn dispose_keeps_full_canvas_frames() {
+    let frames = moving_box_frames();
+    let mut encoded = Vec::new();
+    write_animated_webp(
+      Cow::Borrowed(&frames),
+      &mut encoded,
+      AnimatedWebpOptions::builder().dispose(true).build(),
+    )
+    .unwrap();
+
+    for &(x, y, width, height, flags) in &anmf_rects(&encoded) {
+      assert_eq!((x, y, width, height), (0, 0, 120, 80));
+      assert_eq!(flags, 0b01);
+    }
+  }
+
+  #[test]
+  fn invisible_rgb_changes_under_alpha_zero_merge_frames() {
+    let visible = RgbaImage::from_pixel(16, 16, Rgba([10, 20, 30, 255]));
+    let mut transparent_a = visible.clone();
+    let mut transparent_b = visible.clone();
+    transparent_a.put_pixel(3, 3, Rgba([1, 2, 3, 0]));
+    transparent_b.put_pixel(3, 3, Rgba([9, 9, 9, 0]));
+
+    let frames = vec![
+      AnimationFrame::new(Bitmap::from_rgba(transparent_a), 40),
+      AnimationFrame::new(Bitmap::from_rgba(transparent_b), 40),
+    ];
+    let mut encoded = Vec::new();
+    write_animated_webp(
+      Cow::Borrowed(&frames),
+      &mut encoded,
+      AnimatedWebpOptions::default(),
+    )
+    .unwrap();
+
+    let rects = anmf_rects(&encoded);
+    assert_eq!(rects.len(), 1);
+    assert_eq!(read_le24(&anmf_duration_bytes(&encoded)), 80);
+  }
+
+  fn anmf_duration_bytes(encoded: &[u8]) -> [u8; 3] {
+    let mut offset = 12;
+
+    while offset + 8 <= encoded.len() {
+      let tag = &encoded[offset..offset + 4];
+      let len = u32::from_le_bytes(encoded[offset + 4..offset + 8].try_into().unwrap()) as usize;
+
+      if tag == b"ANMF" {
+        return encoded[offset + 20..offset + 23].try_into().unwrap();
+      }
+
+      offset += 8 + len + (len & 1);
+    }
+
+    unreachable!("no ANMF chunk")
+  }
+
+  /// An opaque variant of the moving box, since the animated container carries
+  /// only the VP8 chunk and lossy alpha would not survive either way.
+  fn opaque_box_frames() -> Vec<AnimationFrame> {
+    (0..6)
+      .map(|frame_index| {
+        let box_x = 11 + frame_index * 13;
+        let image = RgbaImage::from_fn(120, 80, |x, y| {
+          if x >= box_x && x < box_x + 30 && (25..45).contains(&y) {
+            return Rgba([255, 40, 40, 255]);
+          }
+          Rgba([(x * 2) as u8, (y * 3) as u8, 90, 255])
+        });
+
+        AnimationFrame::new(Bitmap::from_rgba(image), 40)
+      })
+      .collect()
+  }
+
+  fn worst_channel_error(composited: &[RgbaImage], frames: &[AnimationFrame]) -> u8 {
+    let mut worst = 0u8;
+
+    for (decoded, source) in composited.iter().zip(frames) {
+      for (decoded_pixel, source_pixel) in decoded.pixels().zip(source.image.as_rgba().pixels()) {
+        for channel in 0..3 {
+          worst = worst.max(decoded_pixel.0[channel].abs_diff(source_pixel.0[channel]));
+        }
+      }
+    }
+
+    worst
+  }
+
+  /// Cropped lossy frames lack the neighbouring pixels a full-canvas encode
+  /// would predict from, so pixels inside the rectangle's edge may deviate from
+  /// the canvas outside it. Bound that deviation against full-frame encoding.
+  #[test]
+  fn lossy_cropped_animation_stays_close_to_full_frame_encoding() {
+    let frames = opaque_box_frames();
+    let lossy = AnimatedWebpOptions::builder().lossless(false).build();
+
+    let mut cropped = Vec::new();
+    write_animated_webp(Cow::Borrowed(&frames), &mut cropped, lossy).unwrap();
+
+    // dispose forces full-canvas frames, reproducing the pre-crop behaviour.
+    let full_frame = AnimatedWebpOptions::builder()
+      .lossless(false)
+      .dispose(true)
+      .build();
+    let mut full = Vec::new();
+    write_animated_webp(Cow::Borrowed(&frames), &mut full, full_frame).unwrap();
+
+    let cropped_worst = worst_channel_error(&decode_animation(&cropped), &frames);
+    let full_worst = worst_channel_error(&decode_animation(&full), &frames);
+    println!("lossy worst channel error: cropped={cropped_worst} full={full_worst}");
+
+    assert!(
+      cropped_worst <= full_worst.saturating_add(24),
+      "lossy crop deviates by {cropped_worst}, full-frame by {full_worst}"
+    );
+  }
+}
+
+#[cfg(test)]
+mod bench {
+  use std::time::{Duration, Instant};
+
+  use image::Rgba;
+
+  use super::*;
+  use crate::write::Bitmap;
+
+  const WIDTH: u32 = 544;
+  const HEIGHT: u32 = 216;
+  const FRAMES: usize = 42;
+
+  fn background(x: u32, y: u32) -> Rgba<u8> {
+    Rgba([
+      ((x * 255) / WIDTH) as u8,
+      ((y * 255) / HEIGHT) as u8,
+      ((x + y) % 256) as u8,
+      255,
+    ])
+  }
+
+  fn sweep_frames() -> Vec<AnimationFrame> {
+    (0..FRAMES)
+      .map(|frame_index| {
+        let band_start = (frame_index as u32) * 12;
+        let image = RgbaImage::from_fn(WIDTH, HEIGHT, |x, y| {
+          let mut pixel = background(x, y);
+
+          if x >= band_start && x < band_start + 60 {
+            pixel.0[0] = pixel.0[0].saturating_add(80);
+            pixel.0[1] = pixel.0[1].saturating_add(80);
+            pixel.0[2] = pixel.0[2].saturating_add(80);
+          }
+
+          pixel
+        });
+
+        AnimationFrame::new(Bitmap::from_rgba(image), 33)
+      })
+      .collect()
+  }
+
+  fn full_change_frames() -> Vec<AnimationFrame> {
+    (0..FRAMES)
+      .map(|frame_index| {
+        let phase = frame_index as u32 * 7;
+        let image = RgbaImage::from_fn(WIDTH, HEIGHT, |x, y| {
+          Rgba([
+            (((x + phase) * 255) / WIDTH) as u8,
+            (((y + phase) * 255) / HEIGHT) as u8,
+            ((x + y + phase) % 256) as u8,
+            255,
+          ])
+        });
+
+        AnimationFrame::new(Bitmap::from_rgba(image), 33)
+      })
+      .collect()
+  }
+
+  fn run(name: &str, frames: &[AnimationFrame], speed: u8, full_frames: bool) {
+    let options = AnimatedWebpOptions::builder()
+      .lossless(true)
+      .speed(Some(speed))
+      .dispose(full_frames)
+      .build();
+
+    let mut out = Vec::new();
+    let mut best = Duration::MAX;
+
+    for _ in 0..3 {
+      out.clear();
+      let start = Instant::now();
+      write_animated_webp(Cow::Borrowed(frames), &mut out, options).unwrap();
+      best = best.min(start.elapsed());
+    }
+
+    let mode = if full_frames { "full" } else { "cropped" };
+    println!("{name} speed={speed} {mode}: {} bytes, {best:?}", out.len());
+  }
+
+  fn run_effort(name: &str, frames: &[AnimationFrame], effort: f32, method: i32) {
+    let mut config = WebPConfig::new_with_preset(WebPPreset::WEBP_PRESET_TEXT, effort).unwrap();
+    config.lossless = 1;
+    config.method = method;
+
+    let options = AnimatedWebpOptions::default();
+    let start = Instant::now();
+    let unique_frames = collect_unique_frames(frames, WIDTH, HEIGHT, &options).unwrap();
+    let encoded = encode_frames(&unique_frames, &config).unwrap();
+    let mut out = Vec::new();
+    write_riff_container(&mut out, WIDTH, HEIGHT, 0, false, &encoded).unwrap();
+    println!(
+      "{name} effort={effort} method={method}: {} bytes, {:?}",
+      out.len(),
+      start.elapsed()
+    );
+  }
+
+  #[test]
+  #[ignore]
+  fn bench_shapes() {
+    let config = webp_config(true, 0, 1).unwrap();
+    println!("preset exact = {}", config.exact);
+
+    let sweep = sweep_frames();
+    let full = full_change_frames();
+
+    for full_frames in [true, false] {
+      run("sweep", &sweep, 1, full_frames);
+      run("full-change", &full, 1, full_frames);
+    }
+
+    for speed in [3, 4, 6] {
+      run("sweep", &sweep, speed, false);
+      run("full-change", &full, speed, false);
+    }
+
+    for effort in [50.0, 75.0, 100.0] {
+      run_effort("sweep", &sweep, effort, 1);
+      run_effort("full-change", &full, effort, 1);
+    }
   }
 }
