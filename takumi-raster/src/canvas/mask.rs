@@ -50,7 +50,7 @@ pub(crate) fn prepare_node_mask(
   viewport: CanvasViewport,
 ) -> Result<NodeMaskAction> {
   if let Some(clip_path) = &style.clip_path {
-    let (mask, placement) = render_clip_shape_mask(clip_path, context, layout.size, viewport.size);
+    let (mask, placement) = render_clip_shape_mask(clip_path, context, layout.size, viewport);
     let end_x = placement.left + placement.width as i32;
     let end_y = placement.top + placement.height as i32;
 
@@ -564,7 +564,7 @@ pub(crate) fn render_clip_shape_mask(
   shape: &BasicShape,
   context: &RenderContext,
   size: Size<f32>,
-  canvas: Size<u32>,
+  canvas: CanvasViewport,
 ) -> (Vec<u8>, Placement) {
   let paths = clip_shape_commands(shape, context, size).unwrap_or_default();
   render_mask_within(
@@ -590,7 +590,7 @@ fn render_mask_within(
   paths: &[Command],
   transform: Option<Affine>,
   style: Option<Style>,
-  canvas: Option<Size<u32>>,
+  canvas: Option<CanvasViewport>,
 ) -> (Vec<u8>, Placement) {
   let style = style.unwrap_or_default();
   let Some(mut path) = build_path(paths) else {
@@ -626,10 +626,10 @@ fn render_mask_within(
   let mut bottom = bounds.bottom().ceil() as i32;
 
   if let Some(canvas) = canvas {
-    left = left.max(0);
-    top = top.max(0);
-    right = right.min(canvas.width as i32);
-    bottom = bottom.min(canvas.height as i32);
+    left = left.max(canvas.origin.x as i32);
+    top = top.max(canvas.origin.y as i32);
+    right = right.min(canvas.right());
+    bottom = bottom.min(canvas.bottom());
   }
 
   if right <= left || bottom <= top {

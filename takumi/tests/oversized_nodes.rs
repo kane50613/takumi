@@ -48,6 +48,31 @@ fn an_oversized_clip_path_clips_nothing() {
   assert_eq!(clipped.as_raw(), plain.as_raw());
 }
 
+/// Nested isolation groups give the inner subcanvas a non-zero viewport
+/// origin, so the clip mask clamp must respect that origin, not `0..size`.
+#[test]
+fn a_clip_path_inside_nested_isolation_groups_still_paints() {
+  let css = ".outer { display: flex; opacity: 0.9; overflow: hidden; width: 160px; height: 160px; margin: 20px; } \
+     .inner { display: flex; opacity: 0.9; overflow: hidden; width: 50px; height: 50px; margin-left: 80px; margin-top: 80px; } \
+     .box { width: 50px; height: 50px; background: red; clip-path: inset(0); }";
+  let image = render(
+    RenderOptions::builder()
+      .viewport(Viewport::new((200, 200)))
+      .node(
+        Node::container([
+          Node::container([Node::container([]).with_class_name("box")]).with_class_name("inner"),
+        ])
+        .with_class_name("outer"),
+      )
+      .stylesheet(StyleSheet::parse_loosy(css).into())
+      .fonts(&CONTEXT)
+      .build(),
+  )
+  .unwrap();
+
+  assert_eq!(opaque_pixels(&image), 2500);
+}
+
 /// A mask too large to rasterize has to hide the node, not paint it unmasked.
 #[test]
 fn an_oversized_mask_hides_the_node() {
