@@ -8,7 +8,7 @@ use tiny_skia::{
 
 use crate::{
   BorderProperties, Command, Fill, Placement, RenderContext, Result, Style, build_path,
-  create_mask, fast_div_255,
+  checked_area, create_mask, fast_div_255,
   layout::clip::clip_shape_commands,
   style::{Affine, BasicShape, ComputedStyle, FillRule, Overflow},
 };
@@ -27,12 +27,40 @@ pub(crate) struct CanvasViewport {
 }
 
 impl CanvasViewport {
+  /// A viewport for coordinates already localized to a buffer's own origin.
+  pub(crate) fn local(size: Size<u32>) -> Self {
+    Self {
+      origin: Point { x: 0, y: 0 },
+      size,
+    }
+  }
+
   pub(crate) fn right(self) -> i32 {
     self.origin.x as i32 + self.size.width as i32
   }
 
   pub(crate) fn bottom(self) -> i32 {
     self.origin.y as i32 + self.size.height as i32
+  }
+
+  /// Grows the viewport for masks whose pixels move before landing on the
+  /// canvas (shadow offset, blur bleed). Margins cap at `2^20` so the `i32`
+  /// edge arithmetic cannot wrap.
+  pub(crate) fn inflate(self, margin_x: f32, margin_y: f32) -> Self {
+    const MAX_MARGIN: f32 = (1 << 20) as f32;
+    let margin_x = margin_x.ceil().clamp(0.0, MAX_MARGIN) as u32;
+    let margin_y = margin_y.ceil().clamp(0.0, MAX_MARGIN) as u32;
+
+    Self {
+      origin: Point {
+        x: self.origin.x.saturating_sub(margin_x),
+        y: self.origin.y.saturating_sub(margin_y),
+      },
+      size: Size {
+        width: self.size.width.saturating_add(margin_x * 2),
+        height: self.size.height.saturating_add(margin_y * 2),
+      },
+    }
   }
 }
 
@@ -50,7 +78,7 @@ pub(crate) fn prepare_node_mask(
   viewport: CanvasViewport,
 ) -> Result<NodeMaskAction> {
   if let Some(clip_path) = &style.clip_path {
-    let (mask, placement) = render_clip_shape_mask(clip_path, context, layout.size);
+    let (mask, placement) = render_clip_shape_mask(clip_path, context, layout.size, viewport);
     let end_x = placement.left + placement.width as i32;
     let end_y = placement.top + placement.height as i32;
 
@@ -70,6 +98,10 @@ pub(crate) fn prepare_node_mask(
   };
 
   if let Some(mask) = create_mask(context, layout.size)? {
+    if mask.is_empty() {
+      return Ok(NodeMaskAction::SkipRendering);
+    }
+
     let Some(placement) = transformed_rect_placement(layout.size, transform) else {
       return Ok(NodeMaskAction::SkipRendering);
     };
@@ -133,7 +165,7 @@ pub(crate) fn prepare_node_mask(
     };
     inner_props.append_mask_commands(&mut paths, padding_box, padding_origin);
 
-    let (mask_data, local_placement) = render_mask(&paths, None, None);
+    let (mask_data, local_placement) = render_mask(&paths, None, None, None);
     if local_placement.width == 0 || local_placement.height == 0 {
       return Ok(NodeMaskAction::SkipRendering);
     }
@@ -560,19 +592,25 @@ pub(crate) fn render_clip_shape_mask(
   shape: &BasicShape,
   context: &RenderContext,
   size: Size<f32>,
+  canvas: CanvasViewport,
 ) -> (Vec<u8>, Placement) {
   let paths = clip_shape_commands(shape, context, size).unwrap_or_default();
   render_mask(
     &paths,
     Some(context.transform),
     Some(Fill::from(shape.fill_rule().unwrap_or(context.style.clip_rule)).into()),
+    Some(canvas),
   )
 }
 
+/// `cull` bounds the rasterized area for masks the caller only ever reads
+/// through the canvas. Blink clips the same way in `ClipPathClipper::PaintClipPath`
+/// ("we clip by the cull rect here. Visually, this should be a NOP").
 pub(crate) fn render_mask(
   paths: &[Command],
   transform: Option<Affine>,
   style: Option<Style>,
+  cull: Option<CanvasViewport>,
 ) -> (Vec<u8>, Placement) {
   let style = style.unwrap_or_default();
   let Some(mut path) = build_path(paths) else {
@@ -602,21 +640,47 @@ pub(crate) fn render_mask(
   let Some(bounds) = path.compute_tight_bounds() else {
     return (Vec::new(), Placement::default());
   };
-  let left = bounds.left().floor() as i32;
-  let top = bounds.top().floor() as i32;
-  let right = bounds.right().ceil() as i32;
-  let bottom = bounds.bottom().ceil() as i32;
+  let mut left = bounds.left().floor() as i32;
+  let mut top = bounds.top().floor() as i32;
+  let mut right = bounds.right().ceil() as i32;
+  let mut bottom = bounds.bottom().ceil() as i32;
+
+  // The cull rect is a protection layer, not an optimization: culling moves the
+  // buffer origin, which shifts anti-aliasing by a float-rounding hair, so it
+  // only engages once the full mask is too large to be worth rasterizing.
+  const CULL_THRESHOLD_PIXELS: u64 = 1 << 24;
+  // The halo keeps the rasterizer's clip edge away from the visible pixels:
+  // clipping a contour exactly on the cull edge shifts the anti-aliasing of
+  // the boundary row.
+  const CULL_HALO: i32 = 8;
+
+  let full_pixels = (right.saturating_sub(left).max(0) as u64)
+    .saturating_mul(bottom.saturating_sub(top).max(0) as u64);
+  if let Some(cull) = cull
+    && full_pixels > CULL_THRESHOLD_PIXELS
+  {
+    left = left.max((cull.origin.x as i32).saturating_sub(CULL_HALO));
+    top = top.max((cull.origin.y as i32).saturating_sub(CULL_HALO));
+    right = right.min(cull.right().saturating_add(CULL_HALO));
+    bottom = bottom.min(cull.bottom().saturating_add(CULL_HALO));
+  }
 
   if right <= left || bottom <= top {
     return (Vec::new(), Placement::default());
   }
 
-  let width = (right - left) as u32;
-  let height = (bottom - top) as u32;
+  let (Some(width), Some(height)) = (
+    right.checked_sub(left).map(|value| value as u32),
+    bottom.checked_sub(top).map(|value| value as u32),
+  ) else {
+    return (Vec::new(), Placement::default());
+  };
   let Some(size) = IntSize::from_wh(width, height) else {
     return (Vec::new(), Placement::default());
   };
-  let buffer_len = (width as usize) * (height as usize);
+  let Some(buffer_len) = checked_area(width, height, 1) else {
+    return (Vec::new(), Placement::default());
+  };
   let buffer = vec![0; buffer_len];
   let Some(mut mask) = TinyMask::from_vec(buffer, size) else {
     return (Vec::new(), Placement::default());

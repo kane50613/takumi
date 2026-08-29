@@ -120,6 +120,15 @@ pub enum Error {
     expected: usize,
   },
 
+  /// Alpha buffer length does not match `width * height`.
+  #[error("Invalid alpha buffer length: expected {expected} bytes, got {actual}")]
+  InvalidAlphaBufferLength {
+    /// Actual alpha byte length in the buffer.
+    actual: usize,
+    /// Expected alpha byte length from dimensions.
+    expected: usize,
+  },
+
   /// Animated encode was requested without any frames.
   #[error("Animation must contain at least one frame")]
   EmptyAnimationFrames,

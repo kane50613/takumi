@@ -71,7 +71,12 @@ fn draw_uniform_fast_path(
     solid.width = border.visible_side_widths();
     let mut paths = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
     solid.append_border_ring_commands(&mut paths, border_box);
-    let (mask, placement) = render_mask(&paths, Some(transform), Some(Fill::EvenOdd.into()));
+    let (mask, placement) = render_mask(
+      &paths,
+      Some(transform),
+      Some(Fill::EvenOdd.into()),
+      Some(canvas.viewport()),
+    );
 
     paint_mask(
       canvas,
@@ -163,7 +168,12 @@ fn draw_uniform_double(
     rect_offset(inset),
   );
 
-  let (mask, placement) = render_mask(&paths, Some(transform), Some(Fill::EvenOdd.into()));
+  let (mask, placement) = render_mask(
+    &paths,
+    Some(transform),
+    Some(Fill::EvenOdd.into()),
+    Some(canvas.viewport()),
+  );
   paint_mask(
     canvas,
     &mask,
@@ -203,7 +213,12 @@ fn draw_uniform_pattern(
 
   let stroke = compute_side_stroke(width, style, perimeter, true);
 
-  let (mask, placement) = render_mask(&paths, Some(transform), Some(Style::Stroke(stroke)));
+  let (mask, placement) = render_mask(
+    &paths,
+    Some(transform),
+    Some(Style::Stroke(stroke)),
+    Some(canvas.viewport()),
+  );
 
   paint_mask(
     canvas,
@@ -242,7 +257,12 @@ fn draw_side_band(
   if band.is_zero() {
     let mut paths = Vec::with_capacity(5);
     band.append_side_polygon_commands_at(side, &mut paths, band_box, offset);
-    let (mask, placement) = render_mask(&paths, Some(paint.transform), Some(Fill::NonZero.into()));
+    let (mask, placement) = render_mask(
+      &paths,
+      Some(paint.transform),
+      Some(Fill::NonZero.into()),
+      Some(paint.canvas.viewport()),
+    );
     paint_mask_with_inverse(
       paint.canvas,
       &mask,
@@ -261,6 +281,7 @@ fn draw_side_band(
     &ring_paths,
     Some(paint.transform),
     Some(Fill::EvenOdd.into()),
+    Some(paint.canvas.viewport()),
   );
 
   if !ring_mask.is_empty() {
@@ -270,6 +291,7 @@ fn draw_side_band(
       &clip_paths,
       Some(paint.transform),
       Some(Fill::NonZero.into()),
+      Some(paint.canvas.viewport()),
     );
 
     if let Some((mask, placement)) =
@@ -311,8 +333,12 @@ fn draw_side_pattern_border(
   }
 
   let stroke = compute_side_stroke(line.width, style, line.end - line.start, false);
-  let (pattern_mask, pattern_placement) =
-    render_mask(&path, Some(paint.transform), Some(Style::Stroke(stroke)));
+  let (pattern_mask, pattern_placement) = render_mask(
+    &path,
+    Some(paint.transform),
+    Some(Style::Stroke(stroke)),
+    Some(paint.canvas.viewport()),
+  );
 
   if !pattern_mask.is_empty() {
     let mut ring_path = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
@@ -321,6 +347,7 @@ fn draw_side_pattern_border(
       &ring_path,
       Some(paint.transform),
       Some(Fill::EvenOdd.into()),
+      Some(paint.canvas.viewport()),
     );
 
     let mut clip_path = Vec::with_capacity(5);
@@ -329,6 +356,7 @@ fn draw_side_pattern_border(
       &clip_path,
       Some(paint.transform),
       Some(Fill::NonZero.into()),
+      Some(paint.canvas.viewport()),
     );
 
     if !ring_mask.is_empty()

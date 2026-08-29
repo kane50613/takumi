@@ -7,7 +7,7 @@ use xxhash_rust::xxh3::Xxh3;
 
 use crate::{
   BorderProperties, Canvas, ColorTile, Command, MaskCompositeColor, MaskSamplingOptions,
-  PaintSource, Placement, Result, SamplingOptions, SizedFontStyle, Stroke,
+  PaintSource, Placement, Result, SamplingOptions, SizedFontStyle, Stroke, checked_area,
   composite_mask_source_to_pixmap, draw_outset_shadow,
   layout::inline::ShapedRun,
   pixmap_ref_from_buffer, render_mask,
@@ -16,7 +16,6 @@ use crate::{
     glyph_cache::glyph_mask,
   },
   style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
-  uninit_buffer,
 };
 
 /// Identifies a mask by everything that changes its pixels: the outline, the
@@ -48,6 +47,7 @@ fn render_bucket_mask(
     paths,
     Some(Affine::translation(offset, 0.0)),
     stroke.map(Into::into),
+    None,
   )
 }
 
@@ -94,7 +94,12 @@ fn draw_mask_with_cache(
     .flatten();
 
   let Some((bucket_x, int_x, int_y)) = bucket else {
-    let (mask, placement) = render_mask(paths, Some(transform), stroke.map(Into::into));
+    let (mask, placement) = render_mask(
+      paths,
+      Some(transform),
+      stroke.map(Into::into),
+      Some(canvas.viewport()),
+    );
     canvas.draw_mask(&mask, placement, color, BlendMode::Normal);
     return;
   };
@@ -206,13 +211,12 @@ pub(crate) fn draw_glyph_clip_image(
     ResolvedGlyph::Bitmap(bitmap) => {
       transform *= Affine::translation(bitmap.placement.left as f32, -bitmap.placement.top as f32);
 
-      let mask_capacity = (bitmap.placement.width * bitmap.placement.height) as usize;
-      let mut mask = uninit_buffer(mask_capacity);
-      if mask_capacity > 0 {
-        let mask_len = mask.len();
-        let write_len = mask_capacity.min(mask_len);
-        bitmap.write_alpha_mask(&mut mask[..write_len]);
-      }
+      let Some(mask_capacity) = checked_area(bitmap.placement.width, bitmap.placement.height, 1)
+      else {
+        return Ok(());
+      };
+      let mut mask = vec![0; mask_capacity];
+      bitmap.write_alpha_mask(&mut mask);
 
       let Some(mut bottom) = Pixmap::new(bitmap.placement.width, bitmap.placement.height) else {
         return Ok(());
@@ -279,7 +283,12 @@ pub(crate) fn draw_glyph_clip_image(
           BlendMode::Normal,
         );
       } else {
-        let (mask, placement) = render_mask(outline.paths(), Some(transform), None);
+        let (mask, placement) = render_mask(
+          outline.paths(),
+          Some(transform),
+          None,
+          Some(canvas.viewport()),
+        );
         canvas.composite_mask_source(
           &mask,
           placement,
@@ -394,8 +403,12 @@ fn draw_text_stroke_clip_image(ctx: &mut GlyphPaintCtx<'_, '_>, clip_image: Pain
   let mut stroke = Stroke::new(ctx.stroke.0 / scale);
   stroke.join = ctx.style.parent.stroke_linejoin.into();
 
-  let (stroke_mask, stroke_placement) =
-    render_mask(ctx.paths, Some(ctx.transform), Some(stroke.into()));
+  let (stroke_mask, stroke_placement) = render_mask(
+    ctx.paths,
+    Some(ctx.transform),
+    Some(stroke.into()),
+    Some(ctx.canvas.viewport()),
+  );
 
   ctx.canvas.composite_mask_source(
     &stroke_mask,
@@ -427,8 +440,12 @@ fn draw_text_embolden_clip_image(
   let mut stroke = Stroke::new(embolden);
   stroke.join = ctx.style.parent.stroke_linejoin.into();
 
-  let (stroke_mask, stroke_placement) =
-    render_mask(ctx.paths, Some(ctx.transform), Some(stroke.into()));
+  let (stroke_mask, stroke_placement) = render_mask(
+    ctx.paths,
+    Some(ctx.transform),
+    Some(stroke.into()),
+    Some(ctx.canvas.viewport()),
+  );
 
   ctx.canvas.composite_mask_source(
     &stroke_mask,
@@ -546,7 +563,8 @@ fn draw_color_outline_image(
       Color([record.red(), record.green(), record.blue(), alpha])
     };
 
-    let (mask, placement) = render_mask(&layer.paths, Some(transform), None);
+    let (mask, placement) =
+      render_mask(&layer.paths, Some(transform), None, Some(canvas.viewport()));
     canvas.draw_mask(&mask, placement, color, BlendMode::Normal);
   }
 }
@@ -564,7 +582,7 @@ mod tests {
       Command::Close,
     ];
 
-    let (untransformed, untransformed_placement) = render_mask(&paths, None, None);
+    let (untransformed, untransformed_placement) = render_mask(&paths, None, None, None);
     let (bucket_zero, bucket_zero_placement) = render_bucket_mask(0, &paths, None);
 
     assert_eq!(untransformed, bucket_zero);

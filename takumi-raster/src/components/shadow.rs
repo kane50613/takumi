@@ -6,21 +6,11 @@ use tiny_skia::PixmapRef;
 
 pub(crate) use crate::shadow::SizedShadow;
 use crate::{
-  BlurFormat, BlurType, BorderProperties, Canvas, Command, Fill, Placement, Result,
-  SamplingOptions, Style, apply_blur, attenuate_alpha_by_mask, fast_div_255, render_mask,
+  BlurFormat, BlurType, BorderProperties, Canvas, CanvasViewport, Command, Fill, Placement, Result,
+  SamplingOptions, Style, apply_blur, attenuate_alpha_by_mask, checked_area, fast_div_255,
+  render_mask,
   style::{Affine, BlendMode, ImageScalingAlgorithm},
-  uninit_buffer,
 };
-
-/// Shadow buffers above this pixel count are skipped rather than allocated.
-pub(crate) const MAX_SHADOW_AREA: u64 = 1 << 28; // 256 Mi single-channel bytes
-
-/// Guards shadow buffer sizing against `u32` overflow from huge blur radii.
-#[inline]
-pub(crate) fn checked_shadow_area(width: u32, height: u32) -> Option<usize> {
-  let area = width as u64 * height as u64;
-  (area > 0 && area <= MAX_SHADOW_AREA).then_some(area as usize)
-}
 
 /// Draws the outset mask of the shadow.
 pub(crate) fn draw_outset_shadow(
@@ -31,7 +21,19 @@ pub(crate) fn draw_outset_shadow(
   style: Style,
   cutout_paths: Option<&[Command]>,
 ) -> Result<()> {
-  let (mask, mut placement) = render_mask(paths, Some(transform), Some(style));
+  let blur_padding = if shadow.blur_radius > 0.0 {
+    shadow.blur_radius * BlurType::Shadow.extent_multiplier()
+  } else {
+    0.0
+  };
+
+  // The mask shifts by the shadow offset and bleeds by the blur extent before
+  // it lands on the canvas, so the cull rect grows by both.
+  let cull = canvas.viewport().inflate(
+    blur_padding + shadow.offset_x.abs(),
+    blur_padding + shadow.offset_y.abs(),
+  );
+  let (mask, mut placement) = render_mask(paths, Some(transform), Some(style), Some(cull));
 
   placement.left += shadow.offset_x as i32;
   placement.top += shadow.offset_y as i32;
@@ -41,16 +43,10 @@ pub(crate) fn draw_outset_shadow(
     return Ok(());
   }
 
-  let blur_padding = if shadow.blur_radius > 0.0 {
-    shadow.blur_radius * BlurType::Shadow.extent_multiplier()
-  } else {
-    0.0
-  };
-
   let total_padding = (blur_padding * 2.0) as u32;
   let shadow_width = placement.width.saturating_add(total_padding);
   let shadow_height = placement.height.saturating_add(total_padding);
-  let Some(area) = checked_shadow_area(shadow_width, shadow_height) else {
+  let Some(area) = checked_area(shadow_width, shadow_height, 1) else {
     return Ok(());
   };
   let mut shadow_alpha = vec![0; area];
@@ -77,8 +73,12 @@ pub(crate) fn draw_outset_shadow(
   let img_origin_y = placement.top as f32 - blur_padding;
 
   if let Some(cutout_paths) = cutout_paths {
-    let (erase_mask, erase_placement) =
-      render_mask(cutout_paths, Some(transform), Some(Fill::NonZero.into()));
+    let (erase_mask, erase_placement) = render_mask(
+      cutout_paths,
+      Some(transform),
+      Some(Fill::NonZero.into()),
+      Some(cull),
+    );
 
     if !erase_mask.is_empty() {
       let shadow_placement = Placement {
@@ -145,7 +145,13 @@ pub(crate) fn draw_inset_shadow(
   let width = border_box.width as u32;
   let height = border_box.height as u32;
   let [red, green, blue, alpha] = shadow.color.0;
-  let mut shadow_alpha = vec![alpha; (width * height) as usize];
+  let (Some(area), Some(rgba_len)) = (
+    checked_area(width, height, 1),
+    checked_area(width, height, 4),
+  ) else {
+    return Ok((Vec::new(), 0, 0));
+  };
+  let mut shadow_alpha = vec![alpha; area];
   let shadow_placement = Placement {
     left: 0,
     top: 0,
@@ -174,7 +180,8 @@ pub(crate) fn draw_inset_shadow(
     },
   );
 
-  let (mask, placement) = render_mask(&paths, None, Some(Fill::NonZero.into()));
+  let box_cull = CanvasViewport::local(Size { width, height });
+  let (mask, placement) = render_mask(&paths, None, Some(Fill::NonZero.into()), Some(box_cull));
 
   if !mask.is_empty() {
     attenuate_alpha_by_mask(&mut shadow_alpha, shadow_placement, &mask, placement);
@@ -195,7 +202,12 @@ pub(crate) fn draw_inset_shadow(
   padding
     .border
     .append_mask_commands(&mut clip_paths, padding.size, padding.offset);
-  let (clip_mask, clip_placement) = render_mask(&clip_paths, None, Some(Fill::EvenOdd.into()));
+  let (clip_mask, clip_placement) = render_mask(
+    &clip_paths,
+    None,
+    Some(Fill::EvenOdd.into()),
+    Some(box_cull),
+  );
   if !clip_mask.is_empty() {
     attenuate_alpha_by_mask(
       &mut shadow_alpha,
@@ -205,7 +217,7 @@ pub(crate) fn draw_inset_shadow(
     );
   }
 
-  let mut data = uninit_buffer((width * height * 4) as usize);
+  let mut data = vec![0; rgba_len];
   for (pixel, &alpha) in bytemuck::cast_slice_mut::<u8, [u8; 4]>(&mut data)
     .iter_mut()
     .zip(&shadow_alpha)
@@ -229,29 +241,4 @@ pub(crate) fn draw_inset_shadow(
   }
 
   Ok((data, width, height))
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  #[test]
-  fn checked_shadow_area_accepts_sane_dimensions() {
-    assert_eq!(checked_shadow_area(1024, 1024), Some(1024 * 1024));
-    assert_eq!(checked_shadow_area(16384, 16384), Some(1 << 28));
-  }
-
-  #[test]
-  fn checked_shadow_area_rejects_zero() {
-    assert_eq!(checked_shadow_area(0, 1024), None);
-    assert_eq!(checked_shadow_area(1024, 0), None);
-  }
-
-  #[test]
-  fn checked_shadow_area_rejects_extreme_blur_radius() {
-    // `box-shadow: 0 0 100000px` on a large node produces ~1.5M px dimensions;
-    // the u32 product would wrap, but the u64 guard rejects it without panic.
-    assert_eq!(checked_shadow_area(1_500_000, 1_500_000), None);
-    assert_eq!(checked_shadow_area(u32::MAX, u32::MAX), None);
-  }
 }

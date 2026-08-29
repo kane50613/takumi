@@ -8,7 +8,6 @@ mod composite;
 mod gradient;
 mod mask;
 mod paint_source;
-mod scratch;
 mod skia;
 
 use std::{borrow::Cow, mem::replace, sync::Arc};
@@ -30,7 +29,6 @@ use mask::{MaskStackEntry, resolve_mask};
 pub(crate) use paint_source::{
   MaskCompositeColor, PaintSource, SamplingFootprint, interpolate_with_footprint,
 };
-pub(crate) use scratch::uninit_buffer;
 use takumi_core::geometry::{Point, Size};
 use tiny_skia::{
   FilterQuality as TinyFilterQuality, Mask as TinyMask, Pixmap, PixmapMut, PixmapPaint, PixmapRef,
@@ -45,6 +43,22 @@ use crate::{
   stacking_context::blend_pixmap_software,
   style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
 };
+
+/// Pixel buffers above this pixel count are refused rather than allocated. At 4
+/// bytes per pixel the largest accepted buffer is 1 GiB, which still fits the
+/// 32-bit `usize` of the wasm target.
+const MAX_BUFFER_PIXELS: u64 = 1 << 28;
+
+/// Byte length of a `width * height` pixel buffer, or `None` when it is empty or
+/// over [`MAX_BUFFER_PIXELS`]. Guards the `u32` products that a huge blur radius
+/// or node size would otherwise wrap.
+#[inline]
+pub(crate) fn checked_area(width: u32, height: u32, bytes_per_pixel: u32) -> Option<usize> {
+  let pixels = u64::from(width).saturating_mul(u64::from(height));
+
+  (pixels > 0 && pixels <= MAX_BUFFER_PIXELS)
+    .then(|| (pixels * u64::from(bytes_per_pixel)) as usize)
+}
 
 const MAX_PIXMAP_PIXELS: u64 = 16 << 20;
 
@@ -93,6 +107,12 @@ impl<'a> DrawTarget<'a, '_> {
   pub(crate) fn resolve_combined_mask(&mut self) -> Option<Cow<'a, TinyMask>> {
     let size = self.size();
     self.combined_mask.and_then(|mask| resolve_mask(mask, size))
+  }
+
+  /// Blit-level coordinates are already localized, so the cull rect is the
+  /// pixmap itself.
+  pub(crate) fn viewport(&self) -> CanvasViewport {
+    CanvasViewport::local(self.size())
   }
 }
 
@@ -516,6 +536,38 @@ impl Canvas {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn checked_area_accepts_sane_dimensions() {
+    assert_eq!(checked_area(1024, 1024, 1), Some(1024 * 1024));
+    assert_eq!(checked_area(1024, 1024, 4), Some(4 * 1024 * 1024));
+    assert_eq!(checked_area(16384, 16384, 1), Some(1 << 28));
+  }
+
+  /// The ceiling counts pixels, so a node far past the canvas budget still
+  /// paints its 4-byte-per-pixel buffers.
+  #[test]
+  fn checked_area_accepts_a_node_larger_than_the_canvas() {
+    assert_eq!(checked_area(9000, 9000, 4), Some(9000 * 9000 * 4));
+    assert_eq!(checked_area(16384, 16384, 4), Some(1 << 30));
+  }
+
+  #[test]
+  fn checked_area_rejects_empty() {
+    assert_eq!(checked_area(0, 1024, 4), None);
+    assert_eq!(checked_area(1024, 0, 4), None);
+  }
+
+  #[test]
+  fn checked_area_rejects_u32_wrapping_products() {
+    // `box-shadow: 0 0 100000px` on a large node produces ~1.5M px dimensions,
+    // and `width: 100000px; height: 100000px` reaches the same range directly.
+    assert_eq!(checked_area(1_500_000, 1_500_000, 1), None);
+    assert_eq!(checked_area(100_000, 100_000, 4), None);
+    assert_eq!(checked_area(u32::MAX, u32::MAX, 4), None);
+    // Wraps to zero in `u32`, to a short buffer the caller would then overrun.
+    assert_eq!(checked_area(1 << 16, 1 << 16, 4), None);
+  }
 
   #[test]
   fn an_invisible_subcanvas_gives_the_parent_pixmap_back() {
