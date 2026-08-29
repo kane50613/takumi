@@ -767,6 +767,45 @@ mod tests {
     }
   }
 
+  /// A full-canvas diff region must still replace rather than honour
+  /// `blend: true`: blending composes the two alphas, the canvas stops matching
+  /// the frame, and every later diff under-covers the real difference.
+  #[test]
+  fn full_canvas_partial_alpha_frames_replace_under_blend() {
+    let frames: Vec<AnimationFrame> = (0..4)
+      .map(|frame_index| {
+        let image = RgbaImage::from_fn(64, 48, |x, y| {
+          Rgba([(x * 3 + frame_index * 40) as u8, (y * 5) as u8, 120, 128])
+        });
+
+        AnimationFrame::new(Bitmap::from_rgba(image), 40)
+      })
+      .collect();
+
+    let mut encoded = Vec::new();
+    write_animated_webp(
+      Cow::Borrowed(&frames),
+      &mut encoded,
+      AnimatedWebpOptions::default(),
+    )
+    .unwrap();
+
+    let composited = decode_animation(&encoded);
+    assert_eq!(composited.len(), frames.len());
+
+    for (index, (decoded, source)) in composited.iter().zip(&frames).enumerate() {
+      let mismatch = decoded
+        .enumerate_pixels()
+        .zip(source.image.as_rgba().enumerate_pixels())
+        .find(|((_, _, a), (_, _, b))| a != b && !(a.0[3] == 0 && b.0[3] == 0));
+
+      assert!(
+        mismatch.is_none(),
+        "composited frame {index} deviates from the source frame: {mismatch:?}"
+      );
+    }
+  }
+
   #[test]
   fn dispose_keeps_full_canvas_frames() {
     let frames = moving_box_frames();
