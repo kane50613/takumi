@@ -1,230 +1,90 @@
 core:changelogs:
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n### Resolve `tw` utilities through CSS variables\n\nUtilities now read the CSS variables Tailwind compiles them to, falling back to the built-in value. Define tokens in `:root`. `--color-brand-500` makes `bg-brand-500` work, and spacing, fonts, shadows, animations and breakpoints follow the same rule.\n\nGradients now match Tailwind on two counts. Stops alone no longer paint without `bg-linear-*`, `bg-radial` or `bg-conic`, and a missing `to` stop fades to `transparent`.\n\n### Let stylesheet rules win over `tw` utilities\n\nUtilities now sit in the last cascade layer, below unlayered CSS and above rules in a named `@layer`. Important reverses that order. An important utility beats unlayered important CSS but loses to one in a named layer. Inline important declarations stay on top. A template that relied on `tw` beating a matching rule needs a fix. Move that rule into a layer, or mark the utility `!`.\n"
-    filename: tw-css-variables.md
+  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Encode only the changed region of each animated WebP frame\n\nAnimated WebP frames after the first now carry just the rectangle that changed since the previous frame, stored with the no-blend flag so it replaces the canvas. Animations with a small moving region over a static background come out much smaller and encode faster. Frames that change everywhere are unaffected, and `dispose: true` keeps full-canvas frames.\n"
+    filename: webp-frame-diffing.md
     v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n### Parse `@theme` blocks as `:root` rules\n\nA Tailwind v4 source stylesheet now works in `css` without compiling it first. `@theme` declarations land on `:root`, and `@keyframes` inside the block register. Modifiers like `reference` read the same way. The `prefix()` modifier is not supported.\n"
-    filename: theme-at-rule.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n### Compose filters and transforms through custom properties\n\nFilter, translate, scale and grid-line utilities now compose through `--tw-*` variables like Tailwind's compiled CSS. Stacked filters follow Tailwind's fixed chain order instead of class order.\n"
-    filename: tw-kill-builder.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-js:\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n### Write a `css` entry as an object\n\nA `css` entry can be a rule, `{ selector, style, rules }`, or an animation, `{ keyframes, steps }`. Takumi checks the selector and every value before the entry reaches the parser, so a token that comes from application data cannot escape the rule it was written for. The `keyframes` option is deprecated and goes away in v3.\n"
-    filename: structured-css.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n### Turn on Preflight through `@import \"tailwindcss\"`\n\nThe import line at the top of a Tailwind v4 stylesheet now works. Preflight replaces the UA preset. Margins and padding go, lists lose their markers, and `h1` through `h6` drop their font sizing. It also brings the universal border reset, link and table resets, block-level images, and `hidden` on any element. Author rules outrank Preflight, apart from `hidden`, which it marks important. Other `@import` targets stay unsupported.\n"
-    filename: tailwind-import-preflight.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: minor\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-js:\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n### Write a group of `css` entries as an object\n\nA `css` entry can be `{ media, rules }`, `{ supports, rules }`, or `{ layer, rules }`. A layer without `rules` declares its order alone. Takumi reads each prelude with the grammar its rule takes, so it cannot close the rule and open another.\n"
-    filename: structured-at-rules.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n### Expand `@apply` inside stylesheet rules\n\n`.card { @apply mt-4 bg-brand-500; }` now expands through the `tw` parser where it is written, `!` suffix included. Variants like `md:` are rejected. A static render has nothing for them to gate on.\n"
-    filename: tw-apply-at-rule.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-js:\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n### Rename the `stylesheets` render option to `css`\n\n`css` takes inline CSS as one string or a list. The old `stylesheets` name still works everywhere and warns once on `takumi-js` and `takumi-pdf`.\n"
-    filename: css-option.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/wasm\":\n    type: minor\n  takumi-js:\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n### Render `<text>` elements in SVG image sources\n\nSVG images with `<text>`, `<tspan>` and `textPath` now draw their text using\nthe registered fonts instead of dropping it. Glyphs render from font outlines;\ncolor emoji glyphs inside SVG text are not supported.\n"
-    filename: svg-text.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Honor `!important` in inline styles\n\nAn inline `!important` declaration now outranks important rules and animations. Both the `style` object and an HTML `style` attribute read the marker.\n"
-    filename: inline-important.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Inherit `text-fit` from a parent\n\n`text-fit` now inherits. Descendant text uses the inherited value to calculate its scale.\n"
-    filename: text-fit-inheritance.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Wrap `box-sizing: content-box` text inside its padding\n\nA box with `box-sizing: content-box` and horizontal padding wrapped its text\nagainst the border box, so the text took fewer lines than it needed and\noverflowed the bottom of the box.\n"
-    filename: content-box-wrap-width.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Cut allocations in style property parsing\n\nParsing a string-valued property copied the value before handing it to cssparser. Normalizing a kebab-case or camelCase property name allocated a second string just to trim leading underscores. String values now parse in place, and names normalize in one allocation.\n"
-    filename: style-parse-allocations.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Size `auto` table columns by their content\n\nAn all-`auto` table shared its free space evenly, so a one-word column took as\nmuch room as a paragraph. Each column now grows in proportion to its\nmax-content width, the way Blink distributes it, and never below the widest\nword it has to hold. A table narrower than its content still approximates.\n"
-    filename: table-auto-column-widths.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Escape control characters in serialized CSS strings\n\nA quoted string containing a newline left it unescaped. This produced invalid CSS. CSS strings now use cssparser's escaping.\n"
-    filename: css-string-escaping.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n  \"@takumi-rs/helpers\":\n    type: minor\n---\n\n### Support the `disclosure-open` and `disclosure-closed` counter styles\n\n`list-style-type` now accepts `disclosure-open` and `disclosure-closed`, drawing the triangles CSS Counter Styles defines. `disclosure-closed` points the way the text runs, so it flips under `direction: rtl`. Font subsetting covers all three characters.\n"
-    filename: disclosure-counter-styles.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Report text runs for a node that holds text directly\n\n`measure` returned no text runs for `<div>word</div>`, the shape an HTML parse\nproduces most often, while `<div><span>word</span></div>` reported them. The\nrender was correct either way; only the measurement was missing its geometry.\n"
-    filename: measure-text-leaf-runs.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n---\n\n### Support legacy WebKit box alignment properties\n\nMap `-webkit-box-orient` to `flex-direction`, `-webkit-box-pack` to `justify-content`, and `-webkit-box-align` to `align-items`.\n"
-    filename: legacy-box-properties.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Stop a box narrower than its padding from panicking\n\nA box whose horizontal padding exceeds its own width left the text a negative\nwidth to lay out in, which tripped an assertion inside the text layouter and\ncrashed the render. The width the text lays out against now stops at zero.\n"
-    filename: negative-inline-width.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n---\n\n### Support legacy WebKit display values\n\nMap `-webkit-box` and `-webkit-flex` to `flex`, and `-webkit-inline-box` and `-webkit-inline-flex` to `inline-flex`.\n"
-    filename: legacy-webkit-display.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Accept CSS-wide keywords on shorthand properties\n\n`margin: inherit`, `padding: initial` and `border: unset` were rejected. Only longhands took CSS-wide keywords. A shorthand now expands the keyword across the longhands it targets.\n"
-    filename: shorthand-css-wide-keywords.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: minor\n---\n\n### Reject trailing content in `style` values\n\nA `style` object accepted `width: \"55px zzz\"`, applied `55px`, and ignored the rest. It now rejects the whole value, the way a stylesheet already drops such a declaration. A substituted `var()` value follows the same rule.\n"
-    filename: strict-inline-values.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Take an inline-block's baseline from the lines it actually laid out\n\nAn inline-block with horizontal padding re-wrapped its content against the\nborder box to find its baseline, so text beside it aligned with the wrong line.\n"
-    filename: inline-block-baseline-width.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n### Name takumi in the PDF's `/Producer`\n\nEvery rendered PDF now carries `takumi-pdf` and its version in the info\ndictionary's `/Producer` and in XMP's `pdf:Producer`, which identifies the\nrenderer that wrote the file. Documents that set no metadata get it too.\n"
-    filename: pdf-producer.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n---\n\n### Embed opaque PNG images without decoding them\n\nA PNG with no alpha channel now goes into the PDF as its own compressed stream\ninstead of being decoded and recompressed. Paletted sources keep their palette\nas an `/Indexed` colour space rather than widening every pixel to RGB.\n"
-    filename: png-native-streams.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n### Enforce fetch policies on shared image cache entries\n\nA shared `fetchCache` hit returned cached bytes without running the calling render's `allowUrl` or `maxBytes`. Cache hits now recheck both. `allowUrl` runs against the entry URL only, not the redirect hops the original fetch followed.\n"
-    filename: fetch-cache-policy.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: minor\n---\n\n### Return `css` from `fromJsx` and `fromHtml`\n\nReading the old `stylesheets` field returns the same array and warns once. It no longer appears in `Object.keys` or a spread of the result.\n"
-    filename: css-result-field.md
+  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Read premultiplied pixels as straight colour in `filter`\n\nA colour filter ran on the canvas's premultiplied pixels as if they held straight colour, so it only landed on the right value where the element was fully opaque. Antialiased edges came out washed out, and `opacity()` left the colour unscaled, so a faded layer went pale instead of translucent.\n"
+    filename: filter-premultiplied.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - changelogIds:
-      - tw-css-variables.md
-      - theme-at-rule.md
-      - tw-kill-builder.md
-      - structured-css.md
-      - tailwind-import-preflight.md
-      - structured-at-rules.md
-      - tw-apply-at-rule.md
-      - css-option.md
-      - svg-text.md
-    id: npm:@takumi-rs/wasm
+  - id: npm:takumi-js
     updated: true
+  - id: npm:docs
+    updated: false
   - changelogIds:
-      - tw-css-variables.md
-      - inline-important.md
-      - text-fit-inheritance.md
-      - theme-at-rule.md
-      - content-box-wrap-width.md
-      - style-parse-allocations.md
-      - tw-kill-builder.md
-      - table-auto-column-widths.md
-      - css-string-escaping.md
-      - structured-css.md
-      - tailwind-import-preflight.md
-      - disclosure-counter-styles.md
-      - measure-text-leaf-runs.md
-      - legacy-box-properties.md
-      - negative-inline-width.md
-      - structured-at-rules.md
-      - tw-apply-at-rule.md
-      - css-option.md
-      - legacy-webkit-display.md
-      - svg-text.md
-      - shorthand-css-wide-keywords.md
-      - strict-inline-values.md
-      - inline-block-baseline-width.md
+      - webp-frame-diffing.md
+      - filter-premultiplied.md
     id: npm:@takumi-rs/core
     updated: true
-  - id: npm:example-twitter-images
-    updated: false
-  - id: npm:ffmpeg-keyframe-animation
-    updated: false
-  - id: npm:pdf-bench
-    updated: false
-  - id: npm:waku-ssr
-    updated: false
-  - id: npm:svelte
-    updated: false
-  - id: npm:example-e-invoice
-    updated: false
-  - id: npm:example-tanstack-start
-    updated: false
+  - id: npm:takumi-pdf
+    updated: true
   - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:example-css-library-integration
     updated: false
   - id: npm:example-nextjs
     updated: false
-  - id: npm:example-generate-invoice
+  - id: npm:example-css-library-integration
+    updated: false
+  - id: npm:@takumi-rs/helpers
+    updated: true
+  - id: npm:pdf-bench
+    updated: false
+  - id: npm:example-twitter-images
+    updated: false
+  - id: npm:svelte
     updated: false
   - id: npm:example-liquid-glass
     updated: false
   - id: npm:example-satori-html
     updated: false
-  - id: npm:ffplay
+  - id: npm:example-generate-invoice
+    updated: false
+  - id: npm:example-e-invoice
+    updated: false
+  - id: npm:waku-ssr
+    updated: false
+  - id: npm:example-tanstack-start
+    updated: false
+  - id: npm:ffmpeg-keyframe-animation
     updated: false
   - id: npm:@takumi-rs/image-response
     updated: true
-  - id: npm:docs
+  - id: npm:ffplay
     updated: false
-  - changelogIds:
-      - structured-css.md
-      - structured-at-rules.md
-      - css-option.md
-      - svg-text.md
-    id: npm:takumi-js
+  - id: npm:@takumi-rs/wasm
     updated: true
-  - changelogIds:
-      - tw-css-variables.md
-      - theme-at-rule.md
-      - pdf-producer.md
-      - tw-kill-builder.md
-      - png-native-streams.md
-      - structured-css.md
-      - tailwind-import-preflight.md
-      - structured-at-rules.md
-      - tw-apply-at-rule.md
-      - css-option.md
-      - svg-text.md
-    id: npm:takumi-pdf
+  - id: cargo:takumi-pdf
     updated: true
-  - changelogIds:
-      - disclosure-counter-styles.md
-      - fetch-cache-policy.md
-      - structured-at-rules.md
-      - css-result-field.md
-    id: npm:@takumi-rs/helpers
-    updated: true
-  - changelogIds:
-      - tw-css-variables.md
-      - theme-at-rule.md
-      - pdf-producer.md
-      - tw-kill-builder.md
-      - png-native-streams.md
-      - structured-css.md
-      - tailwind-import-preflight.md
-      - structured-at-rules.md
-      - tw-apply-at-rule.md
-      - css-option.md
-      - svg-text.md
-    id: cargo:takumi-pdf
-    updated: true
-  - id: cargo:takumi-core
+  - id: cargo:takumi-svg
     updated: false
   - id: cargo:takumi-raster
     updated: false
   - id: cargo:takumi
     updated: true
-  - id: cargo:takumi-svg
+  - id: cargo:takumi-core
     updated: false
   - id: cargo:takumi-html
     updated: false
 npm:packages:
   - id: npm:takumi
-  - id: npm:@takumi-rs/wasm
+  - id: npm:takumi-js
+  - id: npm:docs
   - id: npm:@takumi-rs/core
-  - id: npm:example-twitter-images
-  - id: npm:ffmpeg-keyframe-animation
-  - id: npm:pdf-bench
-  - id: npm:waku-ssr
-  - id: npm:svelte
-  - id: npm:example-e-invoice
-  - id: npm:example-tanstack-start
+  - id: npm:takumi-pdf
   - id: npm:example-cloudflare-workers
-  - id: npm:example-css-library-integration
   - id: npm:example-nextjs
-  - id: npm:example-generate-invoice
+  - id: npm:example-css-library-integration
+  - id: npm:@takumi-rs/helpers
+  - id: npm:pdf-bench
+  - id: npm:example-twitter-images
+  - id: npm:svelte
   - id: npm:example-liquid-glass
   - id: npm:example-satori-html
-  - id: npm:ffplay
+  - id: npm:example-generate-invoice
+  - id: npm:example-e-invoice
+  - id: npm:waku-ssr
+  - id: npm:example-tanstack-start
+  - id: npm:ffmpeg-keyframe-animation
   - id: npm:@takumi-rs/image-response
-  - id: npm:docs
-  - id: npm:takumi-js
-  - id: npm:takumi-pdf
-  - id: npm:@takumi-rs/helpers
+  - id: npm:ffplay
+  - id: npm:@takumi-rs/wasm
