@@ -7,6 +7,7 @@
     "@icons-pack/react-simple-icons": "^13.15.1",
     "lucide-react": "catalog:",
     "react": "catalog:",
+    "shiki": "^4.4.3",
     "takumi-js": "workspace:*"
   },
   "devDependencies": {
