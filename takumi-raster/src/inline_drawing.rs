@@ -269,7 +269,12 @@ fn draw_outline_island_content(
     stroke.cap = Cap::Round;
   }
 
-  let (mask, placement) = render_mask(&path, Some(transform), Some(stroke.into()));
+  let (mask, placement) = render_mask(
+    &path,
+    Some(transform),
+    Some(stroke.into()),
+    Some(canvas.viewport()),
+  );
   canvas.draw_mask(&mask, placement, outline.color, BlendMode::Normal);
 }
 

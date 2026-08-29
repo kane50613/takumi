@@ -6,7 +6,7 @@ use tiny_skia::PixmapRef;
 
 pub(crate) use crate::shadow::SizedShadow;
 use crate::{
-  BlurFormat, BlurType, BorderProperties, Canvas, Command, Fill, Placement, Result,
+  BlurFormat, BlurType, BorderProperties, Canvas, CanvasViewport, Command, Fill, Placement, Result,
   SamplingOptions, Style, apply_blur, attenuate_alpha_by_mask, checked_area, fast_div_255,
   render_mask,
   style::{Affine, BlendMode, ImageScalingAlgorithm},
@@ -21,7 +21,19 @@ pub(crate) fn draw_outset_shadow(
   style: Style,
   cutout_paths: Option<&[Command]>,
 ) -> Result<()> {
-  let (mask, mut placement) = render_mask(paths, Some(transform), Some(style));
+  let blur_padding = if shadow.blur_radius > 0.0 {
+    shadow.blur_radius * BlurType::Shadow.extent_multiplier()
+  } else {
+    0.0
+  };
+
+  // The mask shifts by the shadow offset and bleeds by the blur extent before
+  // it lands on the canvas, so the cull rect grows by both.
+  let cull = canvas.viewport().inflate(
+    blur_padding + shadow.offset_x.abs(),
+    blur_padding + shadow.offset_y.abs(),
+  );
+  let (mask, mut placement) = render_mask(paths, Some(transform), Some(style), Some(cull));
 
   placement.left += shadow.offset_x as i32;
   placement.top += shadow.offset_y as i32;
@@ -30,12 +42,6 @@ pub(crate) fn draw_outset_shadow(
     canvas.draw_mask(&mask, placement, shadow.color, BlendMode::Normal);
     return Ok(());
   }
-
-  let blur_padding = if shadow.blur_radius > 0.0 {
-    shadow.blur_radius * BlurType::Shadow.extent_multiplier()
-  } else {
-    0.0
-  };
 
   let total_padding = (blur_padding * 2.0) as u32;
   let shadow_width = placement.width.saturating_add(total_padding);
@@ -67,8 +73,12 @@ pub(crate) fn draw_outset_shadow(
   let img_origin_y = placement.top as f32 - blur_padding;
 
   if let Some(cutout_paths) = cutout_paths {
-    let (erase_mask, erase_placement) =
-      render_mask(cutout_paths, Some(transform), Some(Fill::NonZero.into()));
+    let (erase_mask, erase_placement) = render_mask(
+      cutout_paths,
+      Some(transform),
+      Some(Fill::NonZero.into()),
+      Some(cull),
+    );
 
     if !erase_mask.is_empty() {
       let shadow_placement = Placement {
@@ -170,7 +180,8 @@ pub(crate) fn draw_inset_shadow(
     },
   );
 
-  let (mask, placement) = render_mask(&paths, None, Some(Fill::NonZero.into()));
+  let box_cull = CanvasViewport::local(Size { width, height });
+  let (mask, placement) = render_mask(&paths, None, Some(Fill::NonZero.into()), Some(box_cull));
 
   if !mask.is_empty() {
     attenuate_alpha_by_mask(&mut shadow_alpha, shadow_placement, &mask, placement);
@@ -191,7 +202,12 @@ pub(crate) fn draw_inset_shadow(
   padding
     .border
     .append_mask_commands(&mut clip_paths, padding.size, padding.offset);
-  let (clip_mask, clip_placement) = render_mask(&clip_paths, None, Some(Fill::EvenOdd.into()));
+  let (clip_mask, clip_placement) = render_mask(
+    &clip_paths,
+    None,
+    Some(Fill::EvenOdd.into()),
+    Some(box_cull),
+  );
   if !clip_mask.is_empty() {
     attenuate_alpha_by_mask(
       &mut shadow_alpha,

@@ -488,7 +488,12 @@ fn composite_bordered_source(
     .border
     .append_mask_commands(&mut paths, size.map(|v| v as f32), Point::ZERO);
 
-  let (mask, placement) = render_mask(&paths, Some(options.transform), None);
+  let (mask, placement) = render_mask(
+    &paths,
+    Some(options.transform),
+    None,
+    Some(target.viewport()),
+  );
   let canvas_to_source =
     if options.transform.is_identity() && placement.left >= 0 && placement.top >= 0 {
       Some(logical_to_source)

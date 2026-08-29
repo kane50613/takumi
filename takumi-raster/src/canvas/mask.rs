@@ -27,12 +27,40 @@ pub(crate) struct CanvasViewport {
 }
 
 impl CanvasViewport {
+  /// A viewport for coordinates already localized to a buffer's own origin.
+  pub(crate) fn local(size: Size<u32>) -> Self {
+    Self {
+      origin: Point { x: 0, y: 0 },
+      size,
+    }
+  }
+
   pub(crate) fn right(self) -> i32 {
     self.origin.x as i32 + self.size.width as i32
   }
 
   pub(crate) fn bottom(self) -> i32 {
     self.origin.y as i32 + self.size.height as i32
+  }
+
+  /// Grows the viewport for masks whose pixels move before landing on the
+  /// canvas (shadow offset, blur bleed). Margins cap at `2^20` so the `i32`
+  /// edge arithmetic cannot wrap.
+  pub(crate) fn inflate(self, margin_x: f32, margin_y: f32) -> Self {
+    const MAX_MARGIN: f32 = (1 << 20) as f32;
+    let margin_x = margin_x.ceil().clamp(0.0, MAX_MARGIN) as u32;
+    let margin_y = margin_y.ceil().clamp(0.0, MAX_MARGIN) as u32;
+
+    Self {
+      origin: Point {
+        x: self.origin.x.saturating_sub(margin_x),
+        y: self.origin.y.saturating_sub(margin_y),
+      },
+      size: Size {
+        width: self.size.width.saturating_add(margin_x * 2),
+        height: self.size.height.saturating_add(margin_y * 2),
+      },
+    }
   }
 }
 
@@ -137,7 +165,7 @@ pub(crate) fn prepare_node_mask(
     };
     inner_props.append_mask_commands(&mut paths, padding_box, padding_origin);
 
-    let (mask_data, local_placement) = render_mask(&paths, None, None);
+    let (mask_data, local_placement) = render_mask(&paths, None, None, None);
     if local_placement.width == 0 || local_placement.height == 0 {
       return Ok(NodeMaskAction::SkipRendering);
     }
@@ -567,7 +595,7 @@ pub(crate) fn render_clip_shape_mask(
   canvas: CanvasViewport,
 ) -> (Vec<u8>, Placement) {
   let paths = clip_shape_commands(shape, context, size).unwrap_or_default();
-  render_mask_within(
+  render_mask(
     &paths,
     Some(context.transform),
     Some(Fill::from(shape.fill_rule().unwrap_or(context.style.clip_rule)).into()),
@@ -575,22 +603,14 @@ pub(crate) fn render_clip_shape_mask(
   )
 }
 
+/// `cull` bounds the rasterized area for masks the caller only ever reads
+/// through the canvas. Blink clips the same way in `ClipPathClipper::PaintClipPath`
+/// ("we clip by the cull rect here. Visually, this should be a NOP").
 pub(crate) fn render_mask(
   paths: &[Command],
   transform: Option<Affine>,
   style: Option<Style>,
-) -> (Vec<u8>, Placement) {
-  render_mask_within(paths, transform, style, None)
-}
-
-/// `canvas` bounds the rasterized area for masks the caller only ever reads
-/// through the canvas. Blink clips the same way in `ClipPathClipper::PaintClipPath`
-/// ("we clip by the cull rect here. Visually, this should be a NOP").
-fn render_mask_within(
-  paths: &[Command],
-  transform: Option<Affine>,
-  style: Option<Style>,
-  canvas: Option<CanvasViewport>,
+  cull: Option<CanvasViewport>,
 ) -> (Vec<u8>, Placement) {
   let style = style.unwrap_or_default();
   let Some(mut path) = build_path(paths) else {
@@ -625,11 +645,24 @@ fn render_mask_within(
   let mut right = bounds.right().ceil() as i32;
   let mut bottom = bounds.bottom().ceil() as i32;
 
-  if let Some(canvas) = canvas {
-    left = left.max(canvas.origin.x as i32);
-    top = top.max(canvas.origin.y as i32);
-    right = right.min(canvas.right());
-    bottom = bottom.min(canvas.bottom());
+  // The cull rect is a protection layer, not an optimization: culling moves the
+  // buffer origin, which shifts anti-aliasing by a float-rounding hair, so it
+  // only engages once the full mask is too large to be worth rasterizing.
+  const CULL_THRESHOLD_PIXELS: u64 = 1 << 24;
+  // The halo keeps the rasterizer's clip edge away from the visible pixels:
+  // clipping a contour exactly on the cull edge shifts the anti-aliasing of
+  // the boundary row.
+  const CULL_HALO: i32 = 8;
+
+  let full_pixels = (right.saturating_sub(left).max(0) as u64)
+    .saturating_mul(bottom.saturating_sub(top).max(0) as u64);
+  if let Some(cull) = cull
+    && full_pixels > CULL_THRESHOLD_PIXELS
+  {
+    left = left.max((cull.origin.x as i32).saturating_sub(CULL_HALO));
+    top = top.max((cull.origin.y as i32).saturating_sub(CULL_HALO));
+    right = right.min(cull.right().saturating_add(CULL_HALO));
+    bottom = bottom.min(cull.bottom().saturating_add(CULL_HALO));
   }
 
   if right <= left || bottom <= top {

@@ -448,7 +448,8 @@ pub(crate) fn apply_backdrop_filter(
   border.append_mask_commands(&mut paths, layout_size, Point::ZERO);
 
   // Render the mask for compositing.
-  let (mut mask_data, mut placement) = render_mask(&paths, Some(transform), None);
+  let (mut mask_data, mut placement) =
+    render_mask(&paths, Some(transform), None, Some(canvas.viewport()));
 
   if placement.width == 0 || placement.height == 0 {
     return Ok(());

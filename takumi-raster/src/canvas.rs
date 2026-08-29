@@ -108,6 +108,12 @@ impl<'a> DrawTarget<'a, '_> {
     let size = self.size();
     self.combined_mask.and_then(|mask| resolve_mask(mask, size))
   }
+
+  /// Blit-level coordinates are already localized, so the cull rect is the
+  /// pixmap itself.
+  pub(crate) fn viewport(&self) -> CanvasViewport {
+    CanvasViewport::local(self.size())
+  }
 }
 
 /// A canvas that can be used to draw images onto.
