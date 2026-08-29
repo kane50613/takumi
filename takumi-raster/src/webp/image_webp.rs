@@ -6,7 +6,7 @@ use image_webp::{ColorType, EncoderParams, WebPEncoder};
 use crate::{
   Result,
   error::{Error, WebPError},
-  webp::{U24_MAX, has_any_alpha_pixel, strip_alpha_channel},
+  webp::{FramePlacement, U24_MAX, has_any_alpha_pixel, strip_alpha_channel},
   write::{AnimatedWebpOptions, AnimationFrame, Bitmap},
 };
 
@@ -160,11 +160,10 @@ pub fn write_animated_webp<W: Write>(
   )
 }
 
-/// A frame's dimensions, duration, and its already-encoded VP8 payload. Small
+/// A frame's placement, duration, and its already-encoded VP8 payload. Small
 /// enough to keep for every frame; the raw pixels are dropped after encoding.
 struct EncodedAnmf {
-  width: u32,
-  height: u32,
+  placement: FramePlacement,
   duration_ms: u32,
   vp8: Vec<u8>,
 }
@@ -210,48 +209,75 @@ where
     Ok(())
   };
 
-  let encode_frame = |image: &Bitmap, duration_ms: u32| -> Result<EncodedAnmf> {
-    let mut buf = Vec::new();
-    let mut encoder = WebPEncoder::new(&mut buf);
-    let mut params = EncoderParams::default();
-    params.use_predictor_transform = true;
-    encoder.set_params(params);
-    encoder
-      .encode(
-        image.as_raw(),
-        image.width(),
-        image.height(),
-        ColorType::Rgba8,
-      )
-      .map_err(|_| WebPError::EncodeFailed)?;
+  let encode_frame =
+    |image: &Bitmap, placement: FramePlacement, duration_ms: u32| -> Result<EncodedAnmf> {
+      let region = placement.region;
+      let cropped;
+      let source = if region.covers(image.as_rgba()) {
+        image.as_rgba()
+      } else {
+        cropped = region.crop(image.as_rgba());
+        &cropped
+      };
 
-    Ok(EncodedAnmf {
-      width: image.width(),
-      height: image.height(),
-      duration_ms,
-      vp8: buf,
-    })
-  };
+      let mut buf = Vec::new();
+      let mut encoder = WebPEncoder::new(&mut buf);
+      let mut params = EncoderParams::default();
+      params.use_predictor_transform = true;
+      encoder.set_params(params);
+      encoder
+        .encode(
+          source.as_raw(),
+          region.width,
+          region.height,
+          ColorType::Rgba8,
+        )
+        .map_err(|_| WebPError::EncodeFailed)?;
+
+      Ok(EncodedAnmf {
+        placement,
+        duration_ms,
+        vp8: buf,
+      })
+    };
 
   // Merge runs of identical frames, matching the native encoder, so a static
   // stretch encodes and stores once.
   validate_frame(&first.image, 0)?;
   let mut anmfs = Vec::new();
   let mut pending_image = first.image;
+  let mut pending_placement = FramePlacement::first(pending_image.as_rgba(), &options);
   let mut pending_duration_ms = first.duration_ms.clamp(0, U24_MAX);
 
   for (offset, frame) in frames.enumerate() {
     let frame = frame?;
     validate_frame(&frame.image, offset + 1)?;
-    if frame.image.as_raw() == pending_image.as_raw() {
+
+    let Some(placement) = FramePlacement::next(
+      pending_image.as_rgba(),
+      frame.image.as_rgba(),
+      canvas_width,
+      canvas_height,
+      &options,
+    ) else {
       pending_duration_ms = pending_duration_ms.saturating_add(frame.duration_ms.clamp(0, U24_MAX));
       continue;
-    }
-    anmfs.push(encode_frame(&pending_image, pending_duration_ms)?);
+    };
+
+    anmfs.push(encode_frame(
+      &pending_image,
+      pending_placement,
+      pending_duration_ms,
+    )?);
     pending_image = frame.image;
+    pending_placement = placement;
     pending_duration_ms = frame.duration_ms.clamp(0, U24_MAX);
   }
-  anmfs.push(encode_frame(&pending_image, pending_duration_ms)?);
+  anmfs.push(encode_frame(
+    &pending_image,
+    pending_placement,
+    pending_duration_ms,
+  )?);
 
   let riff_size = estimate_riff_size(anmfs.iter().map(|anmf| anmf.vp8.as_slice()))?;
 
@@ -275,13 +301,15 @@ where
   destination.write_all(&[0u8; 4])?;
   destination.write_all(&options.loop_count.unwrap_or(0).to_le_bytes())?;
 
-  let blend_flag = if options.blend { 0 } else { 1 };
   let dispose_flag = options.dispose as u8;
-  let frame_flags = (blend_flag << 1) | dispose_flag;
 
   for anmf in anmfs {
-    let w_bytes = (anmf.width - 1).to_le_bytes();
-    let h_bytes = (anmf.height - 1).to_le_bytes();
+    let region = anmf.placement.region;
+    let frame_flags = (u8::from(!anmf.placement.blend) << 1) | dispose_flag;
+    let x_bytes = (region.x / 2).to_le_bytes();
+    let y_bytes = (region.y / 2).to_le_bytes();
+    let w_bytes = (region.width - 1).to_le_bytes();
+    let h_bytes = (region.height - 1).to_le_bytes();
 
     let (start, len) = vp8_payload_coords(&anmf.vp8).ok_or(WebPError::InvalidEncodedData)?;
     let vp8_payload = &anmf.vp8[start..start + len];
@@ -299,7 +327,8 @@ where
     destination.write_all(b"ANMF")?;
     destination.write_all(&anmf_size.to_le_bytes())?;
 
-    destination.write_all(&[0u8; 6])?;
+    destination.write_all(&x_bytes[..3])?;
+    destination.write_all(&y_bytes[..3])?;
     destination.write_all(&w_bytes[..3])?;
     destination.write_all(&h_bytes[..3])?;
     destination.write_all(&anmf.duration_ms.clamp(0, U24_MAX).to_le_bytes()[..3])?;
