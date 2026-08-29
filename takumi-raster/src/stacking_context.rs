@@ -20,7 +20,6 @@ use crate::{
   },
   prepare_node_mask, resolve_outline,
   style::{Affine, BackgroundImage, BlendMode, Filter, SizingContext},
-  uninit_buffer,
 };
 
 fn bounds_intersects_viewport(bounds: SceneBounds, viewport: CanvasViewport) -> bool {
@@ -194,7 +193,7 @@ fn finish_node_render(
     {
       let row_bytes = region.width as usize * 4;
       let region_len = row_bytes * region.height as usize;
-      let mut region_raw = uninit_buffer(region_len);
+      let mut region_raw = vec![0; region_len];
 
       canvas.with_pixmap_ref(|pixmap| {
         let canvas_width = pixmap.width() as usize;

@@ -16,7 +16,6 @@ use crate::{
     glyph_cache::glyph_mask,
   },
   style::{Affine, BlendMode, Color, ImageScalingAlgorithm},
-  uninit_buffer,
 };
 
 /// Identifies a mask by everything that changes its pixels: the outline, the
@@ -210,7 +209,7 @@ pub(crate) fn draw_glyph_clip_image(
       else {
         return Ok(());
       };
-      let mut mask = uninit_buffer(mask_capacity);
+      let mut mask = vec![0; mask_capacity];
       bitmap.write_alpha_mask(&mut mask);
 
       let Some(mut bottom) = Pixmap::new(bitmap.placement.width, bitmap.placement.height) else {

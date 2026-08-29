@@ -1,4 +1,4 @@
-use crate::{Error, Result, checked_area, uninit_buffer};
+use crate::{Error, Result, checked_area};
 
 const BLUR_DOWNSAMPLE_TARGET_SIGMA: f32 = 6.0;
 const BLUR_DOWNSAMPLE_MIN_DIMENSION: u32 = 128;
@@ -94,7 +94,7 @@ pub(crate) fn apply_blur(format: BlurFormat<'_>, radius: f32, blur_type: BlurTyp
         });
       }
 
-      let mut temp_image = uninit_buffer(expected);
+      let mut temp_image = vec![0; expected];
       let temp_data = &mut *temp_image;
 
       for _ in 0..3 {
@@ -152,7 +152,7 @@ fn apply_blur_rgba_bytes_internal(
   };
   let mut col_sums = vec![0u32; pass_params.stride];
 
-  let mut temp = uninit_buffer(expected);
+  let mut temp = vec![0; expected];
   let src_pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(data);
   let temp_pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(&mut temp);
   for _ in 0..3 {
@@ -204,7 +204,7 @@ fn apply_blur_rgba_downsampled(
     .saturating_mul(ds_dims.height as usize)
     .saturating_mul(4);
 
-  let mut downsampled = uninit_buffer(ds_len);
+  let mut downsampled = vec![0; ds_len];
   downsample_rgba_box(data, dims, &mut downsampled, ds_dims, scale);
 
   let scaled_radius = radius / scale as f32;

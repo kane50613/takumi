@@ -10,7 +10,6 @@ use crate::{
   SamplingOptions, Style, apply_blur, attenuate_alpha_by_mask, checked_area, fast_div_255,
   render_mask,
   style::{Affine, BlendMode, ImageScalingAlgorithm},
-  uninit_buffer,
 };
 
 /// Draws the outset mask of the shadow.
@@ -202,7 +201,7 @@ pub(crate) fn draw_inset_shadow(
     );
   }
 
-  let mut data = uninit_buffer(rgba_len);
+  let mut data = vec![0; rgba_len];
   for (pixel, &alpha) in bytemuck::cast_slice_mut::<u8, [u8; 4]>(&mut data)
     .iter_mut()
     .zip(&shadow_alpha)
