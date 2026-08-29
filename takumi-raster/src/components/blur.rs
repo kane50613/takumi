@@ -80,8 +80,6 @@ pub(crate) fn apply_blur(format: BlurFormat<'_>, radius: f32, blur_type: BlurTyp
     return Ok(());
   };
 
-  let mut col_sums = vec![0u32; pass_params.stride];
-
   match format {
     BlurFormat::Alpha { data, .. } => {
       let Some(expected) = checked_area(width, height, 1) else {
@@ -94,6 +92,7 @@ pub(crate) fn apply_blur(format: BlurFormat<'_>, radius: f32, blur_type: BlurTyp
         });
       }
 
+      let mut col_sums = vec![0u32; pass_params.stride];
       let mut temp_image = vec![0; expected];
       let temp_data = &mut *temp_image;
 

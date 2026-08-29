@@ -4,7 +4,7 @@ use tiny_skia::{PixmapRef, PremultipliedColorU8};
 use crate::{
   BackgroundTile, ColorTile, SampledBitmapView,
   blend::{premultiplied_from_pixel, premultiply_rgba},
-  canvas::composite_premultiplied_over,
+  canvas::{checked_area, composite_premultiplied_over},
   style::{Color, ImageScalingAlgorithm},
 };
 
@@ -141,7 +141,7 @@ impl<'a> PaintSource<'a> {
 
     let width = self.width();
     let height = self.height();
-    let source_len = width as usize * height as usize * 4;
+    let source_len = checked_area(width, height, 4)?;
     let mut premultiplied = vec![0; source_len];
     self.write_premultiplied(&mut premultiplied);
 
