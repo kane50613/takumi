@@ -20,7 +20,7 @@ use crate::{
   overlay_image, pixmap_from_buffer, pixmap_ref_from_buffer,
   resources::{image::ImageSource, image_buffer::ImageBuffer},
   style::*,
-  try_overlay_gradient_tile, uninit_buffer,
+  try_overlay_gradient_tile,
 };
 
 pub(crate) struct TileLayer {
@@ -55,7 +55,7 @@ fn rasterize_tile(tile: BackgroundTile) -> Result<BackgroundTile> {
   let Some(len) = checked_area(width, height, 4) else {
     return Ok(tile);
   };
-  let mut data = uninit_buffer(len);
+  let mut data = vec![0; len];
   let row_bytes = width as usize * 4;
 
   for y in 0..height {
@@ -550,7 +550,7 @@ pub(crate) fn create_mask(
     let Some(len) = checked_area(w, h, 1) else {
       return Ok(Some(Vec::new()));
     };
-    let mut alpha = uninit_buffer(len);
+    let mut alpha = vec![0; len];
 
     if let Some(raw) = tile.as_raw() {
       let count = alpha.len().min(raw.len() / 4);

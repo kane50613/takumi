@@ -17,7 +17,6 @@ use crate::{
     Affine, Angle, Color, Filter, FilterCategory, LUMA_WEIGHTS, PercentageNumber, SEPIA_WEIGHTS,
     SizingContext, TransferChannel, TransferTable,
   },
-  uninit_buffer,
 };
 
 /// Calculates the luma of an RGB pixel.
@@ -484,7 +483,7 @@ pub(crate) fn apply_backdrop_filter(
   let region_row_bytes = region_width as usize * 4;
   let backdrop_len = region_row_bytes * region_height as usize;
 
-  let mut backdrop_raw = uninit_buffer(backdrop_len);
+  let mut backdrop_raw = vec![0; backdrop_len];
 
   canvas.with_pixmap_ref(|pixmap| {
     let canvas_width = pixmap.width() as usize;
