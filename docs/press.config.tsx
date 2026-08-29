@@ -11,6 +11,7 @@ import * as Twoslash from "fumadocs-twoslash/ui";
 import { defineConfig } from "fumapress";
 import { fumadocsMdx } from "fumapress/adapters/mdx";
 import { createDocsLayoutPage } from "fumapress/layouts/docs";
+import { createRootLayout } from "fumapress/layouts/root";
 import { oramaSearchPlugin } from "fumapress/plugins/orama-search";
 import { linkValidationPlugin } from "fumapress/plugins/link-validation";
 import { llmsPlugin } from "fumapress/plugins/llms.txt";
@@ -60,8 +61,15 @@ function tabIcon(icon: ReactNode, color: string) {
   );
 }
 
+const rootLayout = createRootLayout({
+  providerProps: {
+    theme: { hotKey: false },
+  },
+});
+
 export default defineConfig({
   mode: "static",
+  renderRoot: rootLayout,
   content: {
     docs: docs.toFumadocsSource({ baseDir: "docs" }),
   },
