@@ -129,6 +129,22 @@ pub enum NodeOrigin {
   Anonymous,
 }
 
+/// What a box was in a source table before lowering flattened the tree, for
+/// backends that rebuild table semantics, such as PDF structure tags.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TablePart {
+  /// The lowered `display: table` box itself.
+  Table,
+  /// A `table-caption` box.
+  Caption,
+  /// A cell from a `table-header-group` row.
+  HeaderCell,
+  /// A cell from a body row.
+  BodyCell,
+  /// A cell from a `table-footer-group` row.
+  FooterCell,
+}
+
 /// A styled node plus its children, ready for layout.
 #[derive(Clone)]
 pub struct RenderNode {
@@ -149,6 +165,8 @@ pub struct RenderNode {
   /// Grid lines a lowered table's header rows cover, as `[start, end)`, for
   /// paged output to repeat per css-tables-3 §repeated-headers.
   pub table_header_lines: Option<(i16, i16)>,
+  /// The role this box had in a source table, kept through table lowering.
+  pub table_part: Option<TablePart>,
 }
 
 /// Drops the render tree iteratively; recursive drop glue overflows the stack
@@ -1075,6 +1093,7 @@ impl RenderNode {
       marker: None,
       force_inline_layout: true,
       table_header_lines: None,
+      table_part: None,
     }
   }
 
@@ -1095,6 +1114,7 @@ impl RenderNode {
       marker: None,
       force_inline_layout: false,
       table_header_lines: None,
+      table_part: None,
     }
   }
 
@@ -1123,6 +1143,7 @@ impl RenderNode {
         marker: None,
         force_inline_layout: false,
         table_header_lines: None,
+        table_part: None,
       },
       gradient => {
         let mut context = Self::anonymous_box_context(parent_context);
@@ -1145,6 +1166,7 @@ impl RenderNode {
           marker: None,
           force_inline_layout: false,
           table_header_lines: None,
+          table_part: None,
         }
       }
     }
@@ -1237,6 +1259,7 @@ impl RenderNode {
       marker: None,
       force_inline_layout: false,
       table_header_lines: None,
+      table_part: None,
     })
   }
 
@@ -1629,6 +1652,7 @@ impl RenderNode {
           marker: None,
           force_inline_layout: false,
           table_header_lines: None,
+          table_part: None,
         };
       };
 
@@ -1656,6 +1680,7 @@ impl RenderNode {
           marker: None,
           force_inline_layout: false,
           table_header_lines: None,
+          table_part: None,
         };
       };
 
@@ -1698,6 +1723,7 @@ impl RenderNode {
             marker: None,
             force_inline_layout: false,
             table_header_lines: None,
+            table_part: None,
           }
         } else {
           // Blink's Text::TextLayoutObjectIsNeeded: collapsible
@@ -1745,6 +1771,7 @@ impl RenderNode {
               marker: None,
               force_inline_layout: false,
               table_header_lines: None,
+              table_part: None,
             }
           } else {
             let mut final_children = Vec::new();
@@ -1775,6 +1802,7 @@ impl RenderNode {
               marker: None,
               force_inline_layout: false,
               table_header_lines: None,
+              table_part: None,
             }
           }
         }
@@ -1805,6 +1833,7 @@ impl RenderNode {
             marker: None,
             force_inline_layout: false,
             table_header_lines: None,
+            table_part: None,
           }
         } else {
           RenderNode {
@@ -1819,6 +1848,7 @@ impl RenderNode {
             marker: None,
             force_inline_layout: false,
             table_header_lines: None,
+            table_part: None,
           }
         }
       };
@@ -2392,6 +2422,7 @@ mod tests {
       marker: None,
       force_inline_layout: false,
       table_header_lines: None,
+      table_part: None,
     };
 
     let mut root = leaf(None);

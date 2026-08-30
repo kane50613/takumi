@@ -510,9 +510,17 @@ fn a_repeated_table_header_replays_as_an_artifact() {
   )
   .expect("render tagged table");
 
+  let haystack = inflated_text(&pdf);
+
   assert!(
-    inflated_text(&pdf).contains("/Artifact"),
+    haystack.contains("/Artifact"),
     "the replayed header is not marked as an artifact"
+  );
+  // ISO 14289-2:2024 §8.2.2: a table spanning pages is one Table element.
+  assert_eq!(
+    haystack.matches("/S/Table").count(),
+    1,
+    "the page-spanning table split into multiple Table elements"
   );
 }
 
@@ -2773,6 +2781,65 @@ fn structure_types_pdf20() {
     "/Link",
   ] {
     assert!(haystack.contains(name), "missing {name} structure element");
+  }
+}
+
+/// A lowered table surfaces as `Table → THead/TBody/TFoot → TR → TH/TD` with
+/// a `Caption`, `Scope` on header cells and `RowSpan`/`ColSpan` on spanning
+/// cells, per ISO 14289-2:2024 §8.2.5.26.
+#[test]
+fn table_structure_tags() {
+  let doc = r##"<div style="width:700px;font-size:14px;color:#141414">
+    <h1>Quarterly totals</h1>
+    <table>
+      <caption>Quarterly totals</caption>
+      <thead><tr><th>Region</th><th>Q1</th><th>Q2</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">North</th><td>10</td><td>20</td></tr>
+        <tr><th scope="row" rowspan="2">South</th><td>30</td><td>40</td></tr>
+        <tr><td colspan="2">subtotal</td></tr>
+      </tbody>
+      <tfoot><tr><td>Total</td><td>40</td><td>60</td></tr></tfoot>
+    </table>
+  </div>"##;
+  let pdf = run_pdf_fixture("table-tagged-ua2", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse table doc"))
+      .page(PageOptions::A4)
+      .standard(PdfStandard::A4)
+      .tagged(Tagging::Ua2)
+      .lang(Some(takumi_core::style::Lang::parse("en").expect("lang")))
+      .metadata(PdfMetadata {
+        title: Some("Quarterly totals".into()),
+        creation_date: Some(PdfDate {
+          year: 2026,
+          month: 8,
+          day: 30,
+          hour: 0,
+          minute: 0,
+          second: 0,
+        }),
+        ..Default::default()
+      })
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  for name in [
+    "/Table",
+    "/THead",
+    "/TBody",
+    "/TFoot",
+    "/TR",
+    "/TH",
+    "/TD",
+    "/Caption",
+    "/Scope",
+    "/RowSpan 2",
+    "/ColSpan 2",
+  ] {
+    assert!(haystack.contains(name), "missing {name} in the table tags");
   }
 }
 

@@ -24,7 +24,7 @@ use crate::{
   layout::{
     node::NodeKind,
     table_borders::CollapsedBorders,
-    tree::{LayoutTree, NodeOrigin, RenderNode},
+    tree::{LayoutTree, NodeOrigin, RenderNode, TablePart},
   },
   style::{
     BorderCollapse, BorderStyle, CaptionSide, ColorInput, ComputedStyle, Display, FlexDirection,
@@ -76,10 +76,18 @@ fn group_order(display: Display) -> u8 {
   }
 }
 
+/// The table's children sorted into their roles, rows flattened in render
+/// order: header rows first, then body, then footer.
+struct TableSlots {
+  captions: Vec<RenderNode>,
+  rows: Vec<RenderNode>,
+  header_rows: usize,
+  footer_rows: usize,
+  strays: Vec<RenderNode>,
+}
+
 /// Extracts rows without CSS anonymous table-box fixup.
-fn collect_rows(
-  table: &mut RenderNode,
-) -> (Vec<RenderNode>, Vec<RenderNode>, usize, Vec<RenderNode>) {
+fn collect_rows(table: &mut RenderNode) -> TableSlots {
   let mut captions = Vec::new();
   let mut groups: Vec<(u8, usize, Vec<RenderNode>)> = Vec::new();
   let mut strays = Vec::new();
@@ -109,14 +117,24 @@ fn collect_rows(
 
   groups.sort_by_key(|(order, index, _)| (*order, *index));
 
-  let header_rows = groups
-    .iter()
-    .filter(|(order, ..)| *order == 0)
-    .map(|(.., rows)| rows.len())
-    .sum();
+  let count = |wanted: u8| {
+    groups
+      .iter()
+      .filter(|(order, ..)| *order == wanted)
+      .map(|(.., rows)| rows.len())
+      .sum()
+  };
+  let header_rows = count(0);
+  let footer_rows = count(2);
   let rows = groups.into_iter().flat_map(|(.., rows)| rows).collect();
 
-  (captions, rows, header_rows, strays)
+  TableSlots {
+    captions,
+    rows,
+    header_rows,
+    footer_rows,
+    strays,
+  }
 }
 
 fn resolve_columns(rows: &[RenderNode]) -> Vec<Vec<(usize, u16)>> {
@@ -364,7 +382,13 @@ fn lower_full_width(node: &mut RenderNode, line: i16, columns: u16) {
 }
 
 fn lower_table(table: &mut RenderNode) {
-  let (captions, rows, header_rows, strays) = collect_rows(table);
+  let TableSlots {
+    captions,
+    rows,
+    header_rows,
+    footer_rows,
+    strays,
+  } = collect_rows(table);
   let placements = resolve_columns(&rows);
   let columns = track_count(&placements);
   let collapse = table.context.style.border_collapse == BorderCollapse::Collapse;
@@ -395,6 +419,7 @@ fn lower_table(table: &mut RenderNode) {
 
   for mut caption in top_captions {
     lower_full_width(&mut caption, line, columns);
+    caption.table_part = Some(TablePart::Caption);
     items.push(caption);
     line = line.saturating_add(1);
   }
@@ -405,7 +430,16 @@ fn lower_table(table: &mut RenderNode) {
     table.table_header_lines = Some((start, start.saturating_add(header_rows as i16)));
   }
 
+  let footer_start = rows.len() - footer_rows;
+
   for (index, (mut row, positions)) in rows.into_iter().zip(placements).enumerate() {
+    let part = if index < header_rows {
+      TablePart::HeaderCell
+    } else if index >= footer_start {
+      TablePart::FooterCell
+    } else {
+      TablePart::BodyCell
+    };
     let mut cells = row.children.take().map_or_else(Vec::new, Vec::from);
     let mut positions = positions.into_iter();
 
@@ -426,6 +460,7 @@ fn lower_table(table: &mut RenderNode) {
 
       inherit_row_background(&row, &mut cell);
       lower_cell(&mut cell, line, column, colspan, collapse);
+      cell.table_part = Some(part);
       items.push(cell);
     }
 
@@ -440,9 +475,12 @@ fn lower_table(table: &mut RenderNode) {
 
   for mut caption in bottom_captions {
     lower_full_width(&mut caption, line, columns);
+    caption.table_part = Some(TablePart::Caption);
     items.push(caption);
     line = line.saturating_add(1);
   }
+
+  table.table_part = Some(TablePart::Table);
 
   let style = &mut table.context.style;
 
