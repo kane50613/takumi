@@ -783,31 +783,35 @@ fn test_measure_text_fit_scales_text_around_inline_atomic_content() {
 }
 
 #[test]
-fn test_measure_text_fit_is_disabled_by_spacing_adjustments() {
+fn test_measure_text_fit_applies_with_spacing_adjustments() {
   let base_style = Style::default()
     .with(StyleDeclaration::display(Display::Flex))
     .with(StyleDeclaration::width(Px(320.0)))
     .with(StyleDeclaration::font_size(Px(34.0).into()))
     .with(StyleDeclaration::line_height(LineHeight::Unitless(1.0)))
-    .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap));
+    .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap))
+    .with(StyleDeclaration::white_space_collapse(
+      WhiteSpaceCollapse::PreserveBreaks,
+    ));
   let cases = [
     base_style
       .clone()
       .with(StyleDeclaration::letter_spacing(Px(2.0))),
     base_style.with(StyleDeclaration::word_spacing(Px(10.0))),
   ];
+  let text = "Short\nA much longer line".to_string();
 
   for style in cases {
     let no_fit = measure(
-      Node::text("Space words".to_string()).with_style(style.clone()),
+      Node::text(text.clone()).with_style(style.clone()),
       create_measure_viewport(),
     );
     let fit = measure(
-      Node::text("Space words".to_string()).with_style(
+      Node::text(text.clone()).with_style(
         style.with(StyleDeclaration::text_fit(
           TextFit::builder()
             .mode(TextFitMode::Grow)
-            .target(TextFitTarget::Consistent)
+            .target(TextFitTarget::PerLineAll)
             .limit(Some(1.8))
             .build(),
         )),
@@ -815,8 +819,47 @@ fn test_measure_text_fit_is_disabled_by_spacing_adjustments() {
       create_measure_viewport(),
     );
 
-    assert_measured_node_same(&fit, &no_fit);
+    let no_fit_runs = measured_text_runs(&no_fit);
+    let fit_runs = measured_text_runs(&fit);
+
+    assert!(fit_runs[0].width > no_fit_runs[0].width);
   }
+}
+
+#[test]
+fn test_measure_text_fit_shrink_applies_with_letter_spacing() {
+  let base_style = Style::default()
+    .with(StyleDeclaration::display(Display::Flex))
+    .with(StyleDeclaration::width(Px(320.0)))
+    .with(StyleDeclaration::font_size(Px(34.0).into()))
+    .with(StyleDeclaration::line_height(LineHeight::Unitless(1.0)))
+    .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap))
+    .with(StyleDeclaration::letter_spacing(Px(4.0)));
+  let text = "This headline is intentionally much too wide".to_string();
+
+  let no_fit = measure(
+    Node::text(text.clone()).with_style(base_style.clone()),
+    create_measure_viewport(),
+  );
+  let fit = measure(
+    Node::text(text).with_style(
+      base_style.with(StyleDeclaration::text_fit(
+        TextFit::builder()
+          .mode(TextFitMode::Shrink)
+          .target(TextFitTarget::Consistent)
+          .limit(Some(0.3))
+          .build(),
+      )),
+    ),
+    create_measure_viewport(),
+  );
+
+  let no_fit_runs = measured_text_runs(&no_fit);
+  let fit_runs = measured_text_runs(&fit);
+
+  assert!(no_fit_runs[0].width > 320.0);
+  assert!(fit_runs[0].width < no_fit_runs[0].width);
+  assert!(fit_runs[0].width <= 320.5);
 }
 
 #[test]

@@ -1736,19 +1736,8 @@ fn clamp_text_fit_scale(style: &SizedFontStyle, scale: f32) -> f32 {
   }
 }
 
-fn text_span_disables_text_fit(style: &SizedFontStyle) -> bool {
-  style.letter_spacing != 0.0 || style.word_spacing != 0.0
-}
-
-fn text_fit_is_applicable(
-  spans: &[ProcessedInlineSpan<'_>],
-  custom_inline_boxes: &[PositionedInlineBox],
-) -> bool {
+fn text_fit_is_applicable(custom_inline_boxes: &[PositionedInlineBox]) -> bool {
   custom_inline_boxes.is_empty()
-    && spans.iter().all(|span| match span {
-      ProcessedInlineSpan::Text { style, .. } => !text_span_disables_text_fit(style),
-      ProcessedInlineSpan::DirectionMark { .. } | ProcessedInlineSpan::Box(_) => true,
-    })
 }
 
 /// Returns `(text_advance, static_advance)` for a line.
@@ -1766,6 +1755,9 @@ fn text_fit_line_advance(line: &Line<'_, InlineBrush>) -> (f32, f32) {
   (text_advance, static_advance)
 }
 
+/// Naive next to Blink's `text_fit_utils.cc`: fixed letter/word-spacing scales
+/// with the glyphs instead of staying constant, though the fitted line width
+/// matches.
 fn text_fit_line_scales(layout: &InlineLayout, max_width: f32, style: &SizedFontStyle) -> Vec<f32> {
   let text_fit = style.parent.text_fit;
   if text_fit.mode == TextFitMode::None || !max_width.is_finite() {
@@ -1957,7 +1949,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
   }
 
   if style.parent.text_fit.mode != TextFitMode::None
-    && text_fit_is_applicable(&built.spans, &built.custom_inline_boxes)
+    && text_fit_is_applicable(&built.custom_inline_boxes)
   {
     built.line_scales = text_fit_line_scales(&built.layout, max_width, style);
   }
