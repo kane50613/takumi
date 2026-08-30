@@ -152,7 +152,7 @@ pub struct BuiltInlineLayout<'c> {
   /// Processed spans backing the layout.
   pub spans: Vec<ProcessedInlineSpan<'c>>,
   /// Out-of-flow inline boxes positioned separately.
-  pub(crate) custom_inline_boxes: Vec<PositionedInlineBox>,
+  pub(crate) positioned_floats: Vec<PositionedInlineBox>,
   /// Per-line text-fit scale factors.
   pub line_scales: Vec<f32>,
 }
@@ -283,7 +283,7 @@ impl BuiltInlineLayout<'_> {
       }
     }
 
-    for positioned_box in &self.custom_inline_boxes {
+    for positioned_box in &self.positioned_floats {
       inline_boxes.push(MeasuredInlineBox {
         x: positioned_box.x,
         y: positioned_box.y,
@@ -1375,7 +1375,7 @@ fn apply_truncation_plan<'c>(
 pub(crate) fn measure_inline_layout(
   layout: &mut InlineLayout,
   spans: &[ProcessedInlineSpan<'_>],
-  custom_inline_boxes: &[PositionedInlineBox],
+  positioned_floats: &[PositionedInlineBox],
   line_scales: &[f32],
   options: InlineMeasureOptions,
 ) -> Size<f32> {
@@ -1394,19 +1394,19 @@ pub(crate) fn measure_inline_layout(
     .last()
     .map(|metrics| metrics.resolved_line_bottom)
     .unwrap_or(0.0);
-  let custom_box_width = custom_inline_boxes
+  let float_box_width = positioned_floats
     .iter()
     .map(|inline_box| inline_box.x + inline_box.width)
     .fold(0.0, f32::max);
-  let custom_box_height = custom_inline_boxes
+  let float_box_height = positioned_floats
     .iter()
     .map(|inline_box| inline_box.y + inline_box.height)
     .fold(0.0, f32::max);
 
   let measured_width = if ceil_width {
-    max_run_width.max(custom_box_width).ceil()
+    max_run_width.max(float_box_width).ceil()
   } else {
-    max_run_width.max(custom_box_width)
+    max_run_width.max(float_box_width)
   };
 
   Size {
@@ -1415,7 +1415,7 @@ pub(crate) fn measure_inline_layout(
     } else {
       measured_width
     },
-    height: total_height.max(custom_box_height).ceil(),
+    height: total_height.max(float_box_height).ceil(),
   }
 }
 
@@ -1689,7 +1689,7 @@ fn build_inline_layout_tree<'c>(
     layout,
     text,
     spans,
-    custom_inline_boxes: Vec::new(),
+    positioned_floats: Vec::new(),
     line_scales: Vec::new(),
   }
 }
@@ -1710,7 +1710,7 @@ fn prepare_inline_layout(
     line_height_hint,
     text_wrap_mode,
     &built.spans,
-    &mut built.custom_inline_boxes,
+    &mut built.positioned_floats,
   );
   (text_wrap_mode, line_height_hint)
 }
@@ -1736,19 +1736,9 @@ fn clamp_text_fit_scale(style: &SizedFontStyle, scale: f32) -> f32 {
   }
 }
 
-fn text_span_disables_text_fit(style: &SizedFontStyle) -> bool {
-  style.letter_spacing != 0.0 || style.word_spacing != 0.0
-}
-
-fn text_fit_is_applicable(
-  spans: &[ProcessedInlineSpan<'_>],
-  custom_inline_boxes: &[PositionedInlineBox],
-) -> bool {
-  custom_inline_boxes.is_empty()
-    && spans.iter().all(|span| match span {
-      ProcessedInlineSpan::Text { style, .. } => !text_span_disables_text_fit(style),
-      ProcessedInlineSpan::DirectionMark { .. } | ProcessedInlineSpan::Box(_) => true,
-    })
+/// Blink's float carve-out from `text_fit_utils.cc`; in-flow inline boxes scale.
+fn text_fit_is_applicable(positioned_floats: &[PositionedInlineBox]) -> bool {
+  positioned_floats.is_empty()
 }
 
 /// Returns `(text_advance, static_advance)` for a line.
@@ -1766,6 +1756,9 @@ fn text_fit_line_advance(line: &Line<'_, InlineBrush>) -> (f32, f32) {
   (text_advance, static_advance)
 }
 
+/// Naive next to Blink's `text_fit_utils.cc`: fixed letter/word-spacing scales
+/// with the glyphs instead of staying constant, though the fitted line width
+/// matches.
 fn text_fit_line_scales(layout: &InlineLayout, max_width: f32, style: &SizedFontStyle) -> Vec<f32> {
   let text_fit = style.parent.text_fit;
   if text_fit.mode == TextFitMode::None || !max_width.is_finite() {
@@ -1882,7 +1875,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
       layout,
       text,
       spans,
-      custom_inline_boxes,
+      positioned_floats,
       ..
     } = &mut built;
 
@@ -1918,7 +1911,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
           max_height,
           style,
           context,
-          custom_inline_boxes,
+          positioned_floats,
         );
       }
     }
@@ -1937,7 +1930,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
         line_count,
         style.sizing.viewport.device_pixel_ratio,
         spans,
-        custom_inline_boxes,
+        positioned_floats,
       );
     }
 
@@ -1951,13 +1944,13 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
           text_wrap_mode,
         },
         spans,
-        custom_inline_boxes,
+        positioned_floats,
       );
     }
   }
 
   if style.parent.text_fit.mode != TextFitMode::None
-    && text_fit_is_applicable(&built.spans, &built.custom_inline_boxes)
+    && text_fit_is_applicable(&built.positioned_floats)
   {
     built.line_scales = text_fit_line_scales(&built.layout, max_width, style);
   }
@@ -2532,7 +2525,7 @@ pub fn resolve_inline_runs(
   let BuiltInlineLayout {
     layout: inline_layout,
     spans,
-    custom_inline_boxes,
+    positioned_floats,
     line_scales,
     ..
   } = built;
@@ -2672,7 +2665,7 @@ pub fn resolve_inline_runs(
     }
   }
 
-  for inline_box in custom_inline_boxes {
+  for inline_box in positioned_floats {
     let Some(inline_box) = resolve_visual_inline_box(inline_box.clone(), None, spans) else {
       continue;
     };
@@ -2979,7 +2972,7 @@ pub(crate) fn break_lines(
   line_height_hint: f32,
   text_wrap_mode: TextWrapMode,
   spans: &[ProcessedInlineSpan<'_>],
-  custom_inline_boxes: &mut Vec<PositionedInlineBox>,
+  positioned_floats: &mut Vec<PositionedInlineBox>,
 ) {
   let inline_boxes = layout.inline_boxes().to_vec();
   let mut float_layout = FloatLayoutState::new(max_width, line_height_hint);
@@ -3030,7 +3023,7 @@ pub(crate) fn break_lines(
         let positioned_float = float_layout.push_float(side, clear, start_y, &inline_box);
         let line_y = float_layout.find_line_y_for_advance(start_y, data.advance);
         float_layout.update_breaker_line(&mut breaker, line_y);
-        custom_inline_boxes.push(positioned_float);
+        positioned_floats.push(positioned_float);
         continue;
       }
     };
@@ -3070,7 +3063,7 @@ fn make_ellipsis_layout<'c>(
   max_height: Option<MaxHeight>,
   root_style: &'c SizedFontStyle,
   context: &RenderContext,
-  custom_inline_boxes: &mut Vec<PositionedInlineBox>,
+  positioned_floats: &mut Vec<PositionedInlineBox>,
 ) {
   let ellipsis_char = root_style.parent.ellipsis_char();
   let checkpoints = collect_truncation_checkpoints(layout);
@@ -3111,7 +3104,7 @@ fn make_ellipsis_layout<'c>(
 
   apply_text_indent(&mut final_layout, root_style, max_width);
   let text_wrap_mode = root_style.parent.resolved_text_wrap_mode();
-  custom_inline_boxes.clear();
+  positioned_floats.clear();
   break_lines(
     &mut final_layout,
     max_width,
@@ -3119,7 +3112,7 @@ fn make_ellipsis_layout<'c>(
     inline_line_height_hint(root_style),
     text_wrap_mode,
     spans,
-    custom_inline_boxes,
+    positioned_floats,
   );
   *layout = final_layout;
 }
