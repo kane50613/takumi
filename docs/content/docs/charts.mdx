@@ -1,0 +1,91 @@
+---
+title: Charts
+description: Render charts from any library that outputs SVG
+icon: ChartColumn
+---
+
+Takumi renders SVG natively: any chart library that outputs an SVG string works, with no browser, DOM, or canvas. The same chart renders to a PNG for an OG image or stays vector in a PDF.
+
+## ECharts
+
+[Apache ECharts](https://echarts.apache.org) has zero-dependency server-side rendering: pass `null` as the container and read the SVG back as a string.
+
+```tsx
+import * as echarts from "echarts";
+
+const chart = echarts.init(null, null, {
+  renderer: "svg",
+  ssr: true,
+  width: 560,
+  height: 360,
+});
+
+chart.setOption({
+  animation: false,
+  xAxis: { type: "category", data: ["Q1", "Q2", "Q3", "Q4"] },
+  yAxis: { type: "value" },
+  series: [{ type: "bar", data: [320, 730, 550, 910] }],
+});
+
+const svg = chart.renderToSVGString();
+chart.dispose();
+```
+
+Set `animation: false`. An animated chart's SVG carries its first keyframe, which renders as an empty or partly drawn chart.
+
+Embed the string straight into the markup:
+
+```tsx
+import { render } from "takumi-pdf";
+
+const pdf = await render(`<div style="display:flex">${svg}</div>`, {
+  page: "a4",
+});
+```
+
+Or pass the SVG bytes through `images` and reference the key in an `<img>`:
+
+```tsx
+const pdf = await render('<img src="revenue-chart" alt="Quarterly revenue" />', {
+  page: "a4",
+  images: { "revenue-chart": new TextEncoder().encode(svg) },
+});
+```
+
+Both embedding forms also work with the raster renderers in `@takumi-rs/core` and `takumi-js`.
+
+## PDF output stays vector
+
+The chart is drawn as PDF paths, not a rasterized picture. Gradients become PDF shadings and dashed lines keep their dash pattern. A page with two full charts is around 20 KB.
+
+Text inside the chart is drawn as outlines. It is visible but not selectable or extractable. In tagged output, give the `<img>` an `alt` so the chart becomes a `Figure` with a description.
+
+## Fonts for chart labels
+
+SVG text renders through the same font registry as everything else. Missing glyphs render as tofu, so CJK labels need a registered CJK font.
+
+One catch with [`googleFonts`](/docs/typography-and-fonts): the renderer subsets fonts against the text in your element tree, and it cannot see text inside an SVG string. Filter the subsets against the label text yourself, then clear `ranges` so the renderer keeps the result:
+
+```tsx
+import { googleFonts, subsetFonts } from "@takumi-rs/helpers";
+
+const labels = ["一月", "二月", "三月", "四月"];
+const all = await googleFonts(["Noto Sans TC"]);
+const fonts = subsetFonts({ fonts: all, source: labels.join("") }).map((font) => ({
+  ...font,
+  ranges: [],
+}));
+```
+
+## Picking a library
+
+Choose a library that produces SVG without a DOM:
+
+| Library            | Server-side SVG                                                |
+| ------------------ | -------------------------------------------------------------- |
+| ECharts            | `ssr: true` + `renderToSVGString()`                            |
+| Vega / Vega-Lite   | `new View(parse(spec), { renderer: "none" })` + `view.toSVG()` |
+| d3-shape, d3-scale | Pure math; build the `<svg>` in JSX from the path strings      |
+| visx               | React SVG primitives through `renderToStaticMarkup`            |
+
+Observable Plot and Recharts need a DOM implementation on the server. Chart.js, uPlot, and lightweight-charts render to canvas only. Prefer a library from the table above.
