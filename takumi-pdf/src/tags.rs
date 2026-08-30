@@ -487,16 +487,18 @@ fn build_table(
   };
 
   // The table box itself has no content slot in the model, so anything
-  // recorded against it rides in a stray row like non-cell children do.
-  if !identifiers.is_empty() {
-    let mut wrap = Vec::new();
-    let mut pending = identifiers;
+  // recorded against it rides in a stray row like non-cell children do. It
+  // waits for the first non-caption child, keeping a top caption first.
+  let mut own_content = identifiers;
 
-    flush_paragraph(&mut pending, &mut wrap);
-    builder.push_stray(wrap);
-  }
   for (index, child) in node.children.iter().flatten().enumerate() {
     path.push(index);
+    if child.table_part != Some(TablePart::Caption) && !own_content.is_empty() {
+      let mut wrap = Vec::new();
+
+      flush_paragraph(&mut own_content, &mut wrap);
+      builder.push_stray(wrap);
+    }
     match child.table_part {
       Some(TablePart::Caption) => {
         if let Some(caption) = build_element(child, path, walk, Tag::Caption.into(), nesting, false)
@@ -529,6 +531,12 @@ fn build_table(
       }
     }
     path.pop();
+  }
+  if !own_content.is_empty() {
+    let mut wrap = Vec::new();
+
+    flush_paragraph(&mut own_content, &mut wrap);
+    builder.push_stray(wrap);
   }
   builder.close_section();
 
