@@ -33,26 +33,20 @@ chart.dispose();
 
 Set `animation: false`. An animated chart's SVG carries its first keyframe, which renders as an empty or partly drawn chart.
 
-Embed the string straight into the markup:
+An `<img>` takes the SVG string directly as its `src`. A chart is one-off content, so nothing needs registering under `images`:
 
 ```tsx
 import { render } from "takumi-js";
 
-const png = await render(`<div style="display:flex">${svg}</div>`, {
-  width: 1200,
-  height: 630,
-});
+const png = await render(
+  <div style={{ display: "flex" }}>
+    <img src={svg} alt="Quarterly revenue" style={{ width: 560, height: 360 }} />
+  </div>,
+  { width: 1200, height: 630 },
+);
 ```
 
-Or pass the SVG bytes through `images` and reference the source in an `<img>`:
-
-```tsx
-const png = await render('<img src="revenue-chart" alt="Quarterly revenue" />', {
-  width: 1200,
-  height: 630,
-  images: [{ src: "revenue-chart", data: new TextEncoder().encode(svg) }],
-});
-```
+An HTML string works too, with the SVG inlined into the markup: ``render(`<div style="display:flex">${svg}</div>`, …)``.
 
 The same SVG stays vector in a PDF. See [Charts in PDF](/docs/pdf/charts).
 
