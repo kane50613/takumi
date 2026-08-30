@@ -783,6 +783,54 @@ fn test_measure_text_fit_scales_text_around_inline_atomic_content() {
 }
 
 #[test]
+fn test_measure_text_fit_shrink_scales_text_around_inline_atomic_content() {
+  let base_style = Style::default()
+    .with(StyleDeclaration::display(Display::Block))
+    .with(StyleDeclaration::width(Px(320.0)))
+    .with(StyleDeclaration::font_size(Px(34.0).into()))
+    .with(StyleDeclaration::line_height(LineHeight::Unitless(1.0)))
+    .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap));
+  let fit_style = base_style.clone().with(StyleDeclaration::text_fit(
+    TextFit::builder()
+      .mode(TextFitMode::Shrink)
+      .target(TextFitTarget::Consistent)
+      .limit(Some(0.3))
+      .build(),
+  ));
+  let node = |style: Style| {
+    Node::container([
+      Node::text("Ship this intentionally long headline ".to_string())
+        .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+      Node::image(("assets/images/yeecord.png", 64.0, 64.0)).with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::InlineBlock))
+          .with(StyleDeclaration::width(Em(1.0)))
+          .with(StyleDeclaration::height(Em(1.0))),
+      ),
+      Node::text(" right now".to_string())
+        .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
+    ])
+    .with_style(style)
+  };
+
+  let no_fit = measure(node(base_style), create_measure_viewport());
+  let fit = measure(node(fit_style), create_measure_viewport());
+
+  let no_fit_runs = measured_text_runs(&no_fit);
+  let fit_runs = measured_text_runs(&fit);
+
+  assert_eq!(no_fit_runs.len(), 2);
+  assert_eq!(fit_runs.len(), 2);
+  assert!(no_fit_runs[0].width + no_fit.children[0].width + no_fit_runs[1].width > 320.0);
+  assert!(fit_runs[0].width < no_fit_runs[0].width);
+  assert!(fit_runs[1].width < no_fit_runs[1].width);
+  // The atomic inline keeps its width; only the text shrinks around it, and
+  // the scaled text plus the fixed box land exactly on the available width.
+  assert_within(fit.children[0].width, no_fit.children[0].width, 0.05);
+  assert_within(fit_runs[0].width + fit.children[0].width, 320.0, 0.5);
+}
+
+#[test]
 fn test_measure_text_fit_applies_with_spacing_adjustments() {
   let base_style = Style::default()
     .with(StyleDeclaration::display(Display::Flex))
