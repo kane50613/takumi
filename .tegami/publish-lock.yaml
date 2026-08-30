@@ -1,88 +1,86 @@
 core:changelogs:
-  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n### Tag tables with PDF structure elements\n\nTagged output maps `<table>` markup to `Table`, `THead`, `TBody`, `TFoot`,\n`TR`, `TH` and `TD` structure elements, with `Caption` for `<caption>`,\n`Scope` on header cells, and `RowSpan`/`ColSpan` on spanning cells. A table\nthat spans pages stays one `Table` element. Screen readers navigate the\ntable by row and column.\n"
-    filename: pdf-table-structure-tags.md
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n### Apply text-fit to text with letter or word spacing\n\n`text-fit` shrink and grow now scale text that sets `letter-spacing` or\n`word-spacing`. Both used to disable the fit silently, so a spaced headline\noverflowed instead of shrinking.\n"
+    filename: text-fit-letter-spacing.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - id: npm:@takumi-rs/wasm
-    updated: false
-  - id: npm:@takumi-rs/helpers
-    updated: false
-  - id: npm:@takumi-rs/image-response
-    updated: false
+  - id: npm:takumi-js
+    updated: true
   - id: npm:@takumi-rs/core
-    updated: false
+    updated: true
+  - id: npm:@takumi-rs/wasm
+    updated: true
+  - id: npm:@takumi-rs/helpers
+    updated: true
   - id: npm:docs
     updated: false
-  - changelogIds:
-      - pdf-table-structure-tags.md
-    id: npm:takumi-pdf
+  - id: npm:takumi-pdf
     updated: true
-  - id: npm:takumi-js
-    updated: false
-  - id: npm:pdf-bench
-    updated: false
-  - id: npm:example-nextjs
-    updated: false
-  - id: npm:example-liquid-glass
-    updated: false
-  - id: npm:example-twitter-images
-    updated: false
-  - id: npm:example-tanstack-start
+  - id: npm:@takumi-rs/image-response
+    updated: true
+  - id: npm:example-generate-invoice
     updated: false
   - id: npm:svelte
     updated: false
-  - id: npm:waku-ssr
-    updated: false
-  - id: npm:example-css-library-integration
-    updated: false
-  - id: npm:example-satori-html
-    updated: false
-  - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:example-generate-invoice
-    updated: false
-  - id: npm:ffplay
-    updated: false
-  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-twitter-images
     updated: false
   - id: npm:example-e-invoice
     updated: false
-  - id: cargo:takumi-raster
+  - id: npm:example-css-library-integration
     updated: false
-  - changelogIds:
-      - pdf-table-structure-tags.md
-    id: cargo:takumi-pdf
-    updated: true
+  - id: npm:ffmpeg-keyframe-animation
+    updated: false
+  - id: npm:pdf-bench
+    updated: false
+  - id: npm:example-tanstack-start
+    updated: false
+  - id: npm:example-cloudflare-workers
+    updated: false
+  - id: npm:example-satori-html
+    updated: false
+  - id: npm:ffplay
+    updated: false
+  - id: npm:example-liquid-glass
+    updated: false
+  - id: npm:waku-ssr
+    updated: false
+  - id: npm:example-nextjs
+    updated: false
   - id: cargo:takumi-html
-    updated: false
-  - id: cargo:takumi-core
-    updated: false
+    updated: true
+  - id: cargo:takumi-pdf
+    updated: true
   - id: cargo:takumi
-    updated: false
+    updated: true
+  - id: cargo:takumi-raster
+    updated: true
   - id: cargo:takumi-svg
-    updated: false
+    updated: true
+  - changelogIds:
+      - text-fit-letter-spacing.md
+    id: cargo:takumi-core
+    updated: true
 npm:packages:
   - id: npm:takumi
+  - id: npm:takumi-js
+  - id: npm:@takumi-rs/core
   - id: npm:@takumi-rs/wasm
   - id: npm:@takumi-rs/helpers
-  - id: npm:@takumi-rs/image-response
-  - id: npm:@takumi-rs/core
   - id: npm:docs
   - id: npm:takumi-pdf
-  - id: npm:takumi-js
-  - id: npm:pdf-bench
-  - id: npm:example-nextjs
-  - id: npm:example-liquid-glass
-  - id: npm:example-twitter-images
-  - id: npm:example-tanstack-start
-  - id: npm:svelte
-  - id: npm:waku-ssr
-  - id: npm:example-css-library-integration
-  - id: npm:example-satori-html
-  - id: npm:example-cloudflare-workers
+  - id: npm:@takumi-rs/image-response
   - id: npm:example-generate-invoice
-  - id: npm:ffplay
-  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:svelte
+  - id: npm:example-twitter-images
   - id: npm:example-e-invoice
+  - id: npm:example-css-library-integration
+  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:pdf-bench
+  - id: npm:example-tanstack-start
+  - id: npm:example-cloudflare-workers
+  - id: npm:example-satori-html
+  - id: npm:ffplay
+  - id: npm:example-liquid-glass
+  - id: npm:waku-ssr
+  - id: npm:example-nextjs
