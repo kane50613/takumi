@@ -16,6 +16,7 @@
     "--- Use cases ---",
     "invoices",
     "reports",
+    "charts",
     "tickets",
     "--- Migration ---",
     "from-puppeteer",

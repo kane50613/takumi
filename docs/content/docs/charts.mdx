@@ -1,0 +1,81 @@
+---
+title: Charts
+description: Render charts from any library that outputs SVG
+icon: ChartColumn
+---
+
+Takumi renders SVG natively: any chart library that outputs an SVG string works, with no browser, DOM, or canvas. The same chart renders to a PNG for an OG image or stays vector in a PDF.
+
+## ECharts
+
+[Apache ECharts](https://echarts.apache.org) has zero-dependency server-side rendering: pass `null` as the container and read the SVG back as a string.
+
+```tsx
+import * as echarts from "echarts";
+
+const chart = echarts.init(null, null, {
+  renderer: "svg",
+  ssr: true,
+  width: 560,
+  height: 360,
+});
+
+chart.setOption({
+  animation: false,
+  xAxis: { type: "category", data: ["Q1", "Q2", "Q3", "Q4"] },
+  yAxis: { type: "value" },
+  series: [{ type: "bar", data: [320, 730, 550, 910] }],
+});
+
+const svg = chart.renderToSVGString();
+chart.dispose();
+```
+
+Set `animation: false`. An animated chart's SVG carries its first keyframe, which renders as an empty or partly drawn chart.
+
+An `<img>` takes the SVG string directly as its `src`. A chart is one-off content, so nothing needs registering under `images`:
+
+```tsx
+import { render } from "takumi-js";
+
+const png = await render(
+  <div style={{ display: "flex" }}>
+    <img src={svg} alt="Quarterly revenue" style={{ width: 560, height: 360 }} />
+  </div>,
+  { width: 1200, height: 630 },
+);
+```
+
+An HTML string works too, with the SVG inlined into the markup: ``render(`<div style="display:flex">${svg}</div>`, …)``.
+
+The same SVG stays vector in a PDF. See [Charts in PDF](/docs/pdf/charts).
+
+## Fonts for chart labels
+
+SVG text renders through the same font registry as everything else. Missing glyphs render as tofu, so CJK labels need a registered CJK font.
+
+One catch with [`googleFonts`](/docs/typography-and-fonts): the renderer subsets fonts against the text in your element tree, and it cannot see text inside an SVG string. Filter the subsets against the label text yourself, then clear `ranges` so the renderer keeps the result:
+
+```tsx
+import { googleFonts, subsetFonts } from "@takumi-rs/helpers";
+
+const labels = ["一月", "二月", "三月", "四月"];
+const all = await googleFonts(["Noto Sans TC"]);
+const fonts = subsetFonts({ fonts: all, source: labels.join("") }).map((font) => ({
+  ...font,
+  ranges: [],
+}));
+```
+
+## Picking a library
+
+Choose a library that produces SVG without a DOM:
+
+| Library            | Server-side SVG                                                |
+| ------------------ | -------------------------------------------------------------- |
+| ECharts            | `ssr: true` + `renderToSVGString()`                            |
+| Vega / Vega-Lite   | `new View(parse(spec), { renderer: "none" })` + `view.toSVG()` |
+| d3-shape, d3-scale | Pure math; build the `<svg>` in JSX from the path strings      |
+| visx               | React SVG primitives through `renderToStaticMarkup`            |
+
+Observable Plot and Recharts need a DOM implementation on the server. Chart.js, uPlot, and lightweight-charts render to canvas only. Prefer a library from the table above.
