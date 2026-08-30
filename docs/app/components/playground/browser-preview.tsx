@@ -82,6 +82,13 @@ const announce = () => {
     sheet.textContent = paint.data.css;
     mount.style.cssText = paint.data.mountStyle;
     mount.innerHTML = paint.data.html;
+    // Takumi treats any source containing "<svg" as inline SVG markup; a
+    // browser needs it wrapped in a data URI.
+    for (const img of mount.querySelectorAll("img")) {
+      const src = img.getAttribute("src") ?? "";
+      if (src.includes("<svg"))
+        img.src = "data:image/svg+xml;utf8," + encodeURIComponent(src);
+    }
     observer.observe(mount);
   };
   parent.postMessage({ type: "ready" }, "*", [channel.port2]);

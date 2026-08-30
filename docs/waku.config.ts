@@ -5,6 +5,11 @@ import { defineConfig } from "waku/config";
 
 export default defineConfig({
   vite: {
+    // The render worker splits lazily-imported template modules (echarts) into
+    // their own chunks, which an iife worker bundle would inline instead.
+    worker: {
+      format: "es",
+    },
     ssr: {
       external: ["typescript", "twoslash", "shiki", "@takumi-rs/core"],
     },

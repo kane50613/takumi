@@ -1,5 +1,6 @@
 import animatedShowcase from "./templates/animated-showcase?raw";
 import accessible from "./templates/accessible?raw";
+import analyticsChart from "./templates/analytics-chart?raw";
 import articleCover from "./templates/article-cover?raw";
 import gradientPoster from "./templates/gradient-poster?raw";
 import invoice from "./templates/invoice?raw";
@@ -72,6 +73,13 @@ export const templates: Template[] = [
     code: svgText,
   },
   {
+    id: "analytics-chart",
+    name: "Analytics chart",
+    description: "An ECharts SVG rendered off-DOM, passed straight to an img src",
+    kind: "image",
+    code: analyticsChart,
+  },
+  {
     id: "keyframe-animation",
     name: "Keyframe loop",
     description: "Staggered keyframes sampled into an animated WebP",
@@ -95,7 +103,7 @@ export const templates: Template[] = [
   {
     id: "report",
     name: "Paged table",
-    description: "A long table whose header repeats on every page",
+    description: "An ECharts line chart above a long table whose header repeats on every page",
     kind: "pdf",
     code: report,
   },

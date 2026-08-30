@@ -5,8 +5,7 @@ import type { FetchedImage, Node } from "takumi-js/helpers";
 import wasm, { init, Renderer } from "takumi-js/wasm";
 import pdfWasm from "takumi-pdf/wasm-url";
 // `no-init` over the entry that instantiates the module: the worker has the
-// asset URL already, and that entry needs top-level await, which an iife worker
-// bundle cannot have.
+// asset URL already, and instantiating up front would defeat the lazy fetch.
 import initPdf, { PdfRenderer } from "takumi-pdf/no-init";
 import type { JSXElementConstructor } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -171,7 +170,7 @@ async function renderOutput({
 }
 
 async function renderRequest(renderer: Renderer, id: number, code: string) {
-  const { default: component, options } = evaluateCodeExports(code, renderReact);
+  const { default: component, options } = await evaluateCodeExports(code, renderReact);
   const element = renderReact.createElement(component as JSXElementConstructor<unknown>);
   const { node, css: extractedCss } = await fromJsx(element);
   const optionCss =

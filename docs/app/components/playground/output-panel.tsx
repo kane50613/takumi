@@ -218,28 +218,44 @@ function PdfPreview({ url, dimmed }: { url: string | undefined; dimmed: boolean 
   );
 }
 
+/** The pane before any output exists: a review prompt for shared code, a progress line otherwise. */
+function IdlePane({ isReady, waitingForRun }: { isReady: boolean; waitingForRun?: boolean }) {
+  if (waitingForRun) {
+    return (
+      <div className="flex h-full items-center justify-center bg-muted/20 font-mono text-xs text-muted-foreground">
+        Read the code, then press Run.
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full items-center justify-center gap-2 bg-muted/20 font-mono text-xs text-muted-foreground">
+      <Loader2Icon className="size-3.5 animate-spin" />
+      <span className={isReady ? undefined : "playground-breathe"}>
+        {isReady ? "rendering…" : "loading wasm…"}
+      </span>
+    </div>
+  );
+}
+
 export function OutputPanel({
   lastSuccess,
   error,
   zoom,
   isReady,
   pdfView,
+  waitingForRun,
 }: {
   lastSuccess: RenderSuccess | undefined;
   error: RenderError | undefined;
   zoom: Zoom;
   isReady: boolean;
   pdfView: PdfView;
+  /** Shared code renders nothing until the reader has pressed Run themselves. */
+  waitingForRun?: boolean;
 }) {
   if (!lastSuccess && !error) {
-    return (
-      <div className="flex h-full items-center justify-center gap-2 bg-muted/20 font-mono text-xs text-muted-foreground">
-        <Loader2Icon className="size-3.5 animate-spin" />
-        <span className={isReady ? undefined : "playground-breathe"}>
-          {isReady ? "rendering…" : "loading wasm…"}
-        </span>
-      </div>
-    );
+    return <IdlePane isReady={isReady} waitingForRun={waitingForRun} />;
   }
 
   // The browser's own PDF viewer brings paging, zoom and text selection, which

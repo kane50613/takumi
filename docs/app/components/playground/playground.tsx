@@ -67,6 +67,12 @@ export default function Playground() {
     if (ranCode === undefined && code !== undefined && !isShared) setRanCode(code);
   }, [code, ranCode, isShared]);
 
+  // A hash change clears the code while the next link decompresses; clearing
+  // what ran with it puts a newly opened share back behind Run.
+  useEffect(() => {
+    if (code === undefined) setRanCode(undefined);
+  }, [code]);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
@@ -154,6 +160,7 @@ export default function Playground() {
       zoom={zoom}
       isReady={isReady}
       pdfView={pdfView}
+      waitingForRun={isUnrunShare}
     />
   );
   const browserPane = (
