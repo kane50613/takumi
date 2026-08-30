@@ -103,7 +103,7 @@ export const templates: Template[] = [
   {
     id: "report",
     name: "Paged table",
-    description: "A long table whose header repeats on every page",
+    description: "An ECharts line chart above a long table whose header repeats on every page",
     kind: "pdf",
     code: report,
   },
