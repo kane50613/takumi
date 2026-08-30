@@ -46,7 +46,6 @@ function chartSvg(height: number, option: object) {
 
   chart.setOption({
     animation: false,
-    textStyle: { fontFamily: "Noto Sans, Geist" },
     grid: { left: 0, right: 0, top: 8, bottom: 0 },
     yAxis: {
       type: "value",
