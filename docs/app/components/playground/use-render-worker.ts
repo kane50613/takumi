@@ -150,8 +150,10 @@ export function useRenderWorker(ranCode: string | undefined) {
 
   useEffect(() => {
     // A cleared editor (a new share decompressing) drops the previous run, so
-    // the pane returns to its idle prompt instead of stale output.
+    // the pane returns to its idle prompt instead of stale output. Bumping the
+    // request id orphans an in-flight result that would paint over it.
     if (ranCode === undefined) {
+      currentRequestIdRef.current += 1;
       setLastSuccess(undefined);
       setRenderError(undefined);
       setBrowserPreview(undefined);
