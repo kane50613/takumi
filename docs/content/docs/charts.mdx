@@ -36,29 +36,25 @@ Set `animation: false`. An animated chart's SVG carries its first keyframe, whic
 Embed the string straight into the markup:
 
 ```tsx
-import { render } from "takumi-pdf";
+import { render } from "takumi-js";
 
-const pdf = await render(`<div style="display:flex">${svg}</div>`, {
-  page: "a4",
+const png = await render(`<div style="display:flex">${svg}</div>`, {
+  width: 1200,
+  height: 630,
 });
 ```
 
-Or pass the SVG bytes through `images` and reference the key in an `<img>`:
+Or pass the SVG bytes through `images` and reference the source in an `<img>`:
 
 ```tsx
-const pdf = await render('<img src="revenue-chart" alt="Quarterly revenue" />', {
-  page: "a4",
-  images: { "revenue-chart": new TextEncoder().encode(svg) },
+const png = await render('<img src="revenue-chart" alt="Quarterly revenue" />', {
+  width: 1200,
+  height: 630,
+  images: [{ src: "revenue-chart", data: new TextEncoder().encode(svg) }],
 });
 ```
 
-Both embedding forms also work with the raster renderers in `@takumi-rs/core` and `takumi-js`.
-
-## PDF output stays vector
-
-The chart is drawn as PDF paths, not a rasterized picture. Gradients become PDF shadings and dashed lines keep their dash pattern. A page with two full charts is around 20 KB.
-
-Text inside the chart is drawn as outlines. It is visible but not selectable or extractable. In tagged output, give the `<img>` an `alt` so the chart becomes a `Figure` with a description.
+The same SVG stays vector in a PDF. See [Charts in PDF](/docs/pdf/charts).
 
 ## Fonts for chart labels
 

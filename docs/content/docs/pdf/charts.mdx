@@ -1,0 +1,32 @@
+---
+title: Charts
+description: Vector charts from SVG-producing libraries
+icon: ChartColumn
+---
+
+A chart embedded as SVG stays vector in the PDF. It is drawn as paths, gradients become PDF shadings, and dashed lines keep their dash pattern. A page with two full charts is around 20 KB.
+
+Generate the SVG with any library that renders without a DOM, like [ECharts in SSR mode](/docs/charts):
+
+```tsx
+import { render } from "takumi-pdf";
+
+const pdf = await render(`<div style="display:flex">${svg}</div>`, {
+  page: "a4",
+});
+```
+
+Or pass the SVG bytes through `images` and reference the key in an `<img>`:
+
+```tsx
+const pdf = await render('<img src="revenue-chart" alt="Quarterly revenue" />', {
+  page: "a4",
+  images: { "revenue-chart": new TextEncoder().encode(svg) },
+});
+```
+
+## Text inside the chart
+
+Axis labels and values are drawn as outlines. They are visible but not selectable or extractable. In tagged output, give the `<img>` an `alt` so the chart becomes a `Figure` with a description.
+
+Labels need a registered font that covers them. See [fonts for chart labels](/docs/charts#fonts-for-chart-labels) for the CJK subsetting catch.
