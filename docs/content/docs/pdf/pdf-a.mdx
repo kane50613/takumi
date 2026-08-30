@@ -88,7 +88,7 @@ Heading levels come from nesting, not the tag name. A document that starts with 
 
 Header cells carry a `Scope` attribute: `Column` inside `thead`, `Row` elsewhere. A `scope` attribute on the cell overrides it. `rowspan` and `colspan` become `RowSpan` and `ColSpan` attributes. A table that spans pages stays one `Table` element. The repeated header band is marked as an artifact.
 
-Tables built from flex rows instead of `<table>` markup get no table elements. Screen readers cannot navigate those by row or column, and the file still passes PDF/UA, because the validator only checks the tags that are there.
+Table elements follow the rendered layout, like the rest of the tree. A `<table>` whose `display` is overridden gets none, and neither does a table built from flex rows. Screen readers cannot navigate those by row or column, and the file still passes PDF/UA, because the validator only checks the tags that are there.
 
 Set `tagged: false` to skip the tree when file size matters more than accessibility.
 
