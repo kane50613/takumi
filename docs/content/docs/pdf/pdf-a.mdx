@@ -69,21 +69,26 @@ const pdf = await render(report, {
 
 The structure tree comes from the HTML semantics:
 
-| HTML                     | PDF                                 |
-| ------------------------ | ----------------------------------- |
-| `h1`–`h6`                | `Hn` with the heading text as title |
-| `p`, bare text           | `P`                                 |
-| `img`                    | `Figure` with the `alt` text        |
-| `img` with `alt=""`      | artifact (decorative, no element)   |
-| `figure`, `figcaption`   | one `Figure` holding a `Caption`    |
-| `a`                      | `Link`, holding the link annotation |
-| `ul`, `ol`, `li`         | `L`, `LI`, `LBody`                  |
-| `strong`, `em`, `code`   | `Strong`, `Em`, `Code`              |
-| page headers and footers | artifacts                           |
+| HTML                      | PDF                                 |
+| ------------------------- | ----------------------------------- |
+| `h1`–`h6`                 | `Hn` with the heading text as title |
+| `p`, bare text            | `P`                                 |
+| `img`                     | `Figure` with the `alt` text        |
+| `img` with `alt=""`       | artifact (decorative, no element)   |
+| `figure`, `figcaption`    | one `Figure` holding a `Caption`    |
+| `a`                       | `Link`, holding the link annotation |
+| `ul`, `ol`, `li`          | `L`, `LI`, `LBody`                  |
+| `strong`, `em`, `code`    | `Strong`, `Em`, `Code`              |
+| `table`, `caption`        | `Table` holding a `Caption`         |
+| `thead`, `tbody`, `tfoot` | `THead`, `TBody`, `TFoot`           |
+| `tr`, `th`, `td`          | `TR`, `TH` with `Scope`, `TD`       |
+| page headers and footers  | artifacts                           |
 
 Heading levels come from nesting, not the tag name. A document that starts with `h2` gets an `H1`. A jump from `h1` to `h4` becomes `H1` then `H2`. PDF/UA rejects a sequence that skips a level or starts below `H1`. HTML written for visual styling does this all the time.
 
-Tables are missing from that list. `<table>` markup is not supported. Flex-row tables omit `Table`, `TR` and `TH` elements. Screen readers cannot navigate them by row or column. The file still passes PDF/UA-1, because the validator only checks the tags that are there.
+Header cells carry a `Scope` attribute: `Column` inside `thead`, `Row` elsewhere. A `scope` attribute on the cell overrides it. `rowspan` and `colspan` become `RowSpan` and `ColSpan` attributes. A table that spans pages stays one `Table` element. The repeated header band is marked as an artifact.
+
+Tables built from flex rows instead of `<table>` markup get no table elements. Screen readers cannot navigate those by row or column, and the file still passes PDF/UA, because the validator only checks the tags that are there.
 
 Set `tagged: false` to skip the tree when file size matters more than accessibility.
 

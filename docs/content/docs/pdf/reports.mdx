@@ -104,35 +104,33 @@ Bands draw in the margin, so the margin has to be tall enough. [Headers & footer
 
 ## Long tables
 
-`<table>` markup is not supported. There is no table layout, so cells stack instead of lining up. Build rows out of flex containers, like the example below.
-
-A header row does not repeat across pages on its own. Split the rows into groups and give each group its own header:
+Use `<table>` markup. Rows split across pages, and column positions stay identical on every page. A `<thead>` repeats at the top of each continuation page:
 
 ```tsx twoslash
-import type { ReactNode } from "react";
 declare const rows: { id: string; label: string; amount: string }[];
-declare function chunk<T>(items: T[], size: number): T[][];
-declare function HeaderRow(): ReactNode;
 // ---cut---
 import "takumi-pdf";
 
-<div tw="flex flex-col">
+<table tw="w-full text-xs">
   {/* [!code highlight] */}
-  {chunk(rows, 24).map((group, index) => (
-    <div key={index} tw="flex break-inside-avoid flex-col">
-      <HeaderRow />
-      {group.map((row) => (
-        <div key={row.id} tw="flex break-inside-avoid gap-3 pt-2 text-xs">
-          <span tw="flex-1">{row.label}</span>
-          <span tw="w-[100px] text-right">{row.amount}</span>
-        </div>
-      ))}
-    </div>
-  ))}
-</div>;
+  <thead>
+    <tr>
+      <th tw="text-left">Item</th>
+      <th tw="text-right">Amount</th>
+    </tr>
+  </thead>
+  <tbody>
+    {rows.map((row) => (
+      <tr key={row.id}>
+        <td>{row.label}</td>
+        <td tw="text-right">{row.amount}</td>
+      </tr>
+    ))}
+  </tbody>
+</table>;
 ```
 
-`break-inside-avoid` moves a group that no longer fits to the next page, header and all. Pick a group size that underfills a page, or the group stops fitting anywhere and splits again.
+Tagged output maps the markup to `Table`, `TR`, `TH` and `TD` structure elements, so screen readers navigate by row and column. See [Tables](/docs/tables) for layout coverage and [PDF/A](/docs/pdf/pdf-a) for the structure tree.
 
 ## Batches
 

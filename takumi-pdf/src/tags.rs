@@ -5,20 +5,23 @@
 //! with a semantic HTML tag become structure elements owning those
 //! identifiers. Containers without a role lift their content to the nearest
 //! tagged ancestor, and bare text under an untagged ancestor wraps in `P` so
-//! no content stays outside the tree.
+//! no content stays outside the tree. Lowered tables rebuild their rows and
+//! row groups from the [`TablePart`] stamps lowering leaves behind.
 
 use std::{
   collections::{HashMap, HashSet},
   mem,
-  num::NonZeroU16,
+  num::{NonZeroU16, NonZeroU32},
 };
 
 use takumi_core::{
-  layout::tree::RenderNode,
-  style::{Display, FlexDirection, ListStyleType},
+  layout::tree::{RenderNode, TablePart},
+  style::{Display, FlexDirection, GridPlacement, GridPlacementSpan, ListStyleType},
 };
 
-use crate::krilla::tagging::{Identifier, ListNumbering, Tag, TagGroup, TagId, TagKind, TagTree};
+use crate::krilla::tagging::{
+  Identifier, ListNumbering, TableHeaderScope, Tag, TagGroup, TagId, TagKind, TagTree,
+};
 
 /// Marked-content identifiers recorded during emission, keyed by the source
 /// node's path from the root.
@@ -171,10 +174,11 @@ fn build_node(
   pending: &mut Vec<Identifier>,
   nesting: Nesting,
 ) {
-  let identifiers = walk.collector.take(path);
-  let labels = walk.collector.take_labels(path);
-  let mut annotations = walk.collector.take_annotations(path);
-
+  if node.table_part == Some(TablePart::Table) {
+    flush_paragraph(pending, parent);
+    build_table(node, path, walk, parent, nesting);
+    return;
+  }
   let mut role = role(node, walk, nesting);
 
   if role.is_none() && walk.targets.contains(path.as_slice()) {
@@ -187,84 +191,9 @@ fn build_node(
   match role {
     Some(kind) => {
       flush_paragraph(pending, parent);
-      let is_link = matches!(kind, TagKind::Link(_));
       let is_list_item = matches!(kind, TagKind::LI(_));
-      let is_list = matches!(kind, TagKind::L(_));
-      let is_figure = matches!(kind, TagKind::Figure(_));
-      let mut kind = kind;
 
-      let is_target = walk.targets.contains(path.as_slice());
-
-      if is_target {
-        kind.set_id(Some(tag_id(path)));
-      }
-      let mut group = TagGroup::new(kind);
-      let mut children = Vec::new();
-      let mut child_pending = Vec::new();
-      let mut has_content = !identifiers.is_empty() || !labels.is_empty();
-
-      // `LI` only admits `Lbl`/`LBody` children, so the marker label and the
-      // item's whole subtree wrap in one of each.
-      if is_list_item {
-        if !labels.is_empty() {
-          let mut label = TagGroup::new(Tag::Lbl);
-
-          for identifier in labels {
-            label.push(identifier);
-          }
-          group.push(label);
-        }
-        child_pending.extend(identifiers);
-      } else {
-        // A marker paints at the line's start, so its label reads first.
-        for identifier in labels.into_iter().chain(identifiers) {
-          group.push(identifier);
-        }
-      }
-      build_children(
-        node,
-        path,
-        walk,
-        &mut children,
-        &mut child_pending,
-        Nesting {
-          in_list: is_list,
-          in_figure: nesting.in_figure || is_figure,
-          ..nesting
-        },
-      );
-      flush_paragraph(&mut child_pending, &mut children);
-      // Wrapped annotations join the element's own children so they read
-      // after the content they decorate, not before the element.
-      if !is_link {
-        push_link_wrappers(mem::take(&mut annotations), &mut children);
-      }
-      has_content |= !children.is_empty();
-      if is_list_item {
-        if !children.is_empty() {
-          let mut body = TagGroup::new(Tag::LBody);
-
-          for child in children {
-            body.push(child);
-          }
-          group.push(body);
-        }
-      } else {
-        for child in children {
-          group.push(child);
-        }
-      }
-      if is_link {
-        has_content |= !annotations.is_empty();
-        for annotation in annotations {
-          group.push(annotation);
-        }
-      }
-      // Inline formatting inside a text run leaves its element without any
-      // content of its own; an empty structure element is pure noise. An
-      // element a destination names is the exception: dropping it leaves the
-      // link pointing at nothing.
-      if has_content || is_target {
+      if let Some(group) = build_element(node, path, walk, kind, nesting, false) {
         // An `LI` outside a list is invalid on its own, so it brings a list
         // of its own along.
         if is_list_item && !nesting.in_list {
@@ -278,6 +207,9 @@ fn build_node(
       }
     }
     None => {
+      let identifiers = walk.collector.take(path);
+      let labels = walk.collector.take_labels(path);
+      let annotations = walk.collector.take_annotations(path);
       // Items of a row-direction flex container read as one visual line, so
       // their block boundaries do not split the paragraph run.
       let block = is_block(node) && !nesting.in_row;
@@ -298,6 +230,318 @@ fn build_node(
       }
     }
   }
+}
+
+/// Builds one structure element: the node's own identifiers, its subtree, and
+/// its wrapped annotations under `kind`. `None` when the element would be
+/// empty and nothing names it, unless `keep_empty` holds it in place — a table
+/// cell with no content still counts toward its row's cell count.
+fn build_element(
+  node: &RenderNode,
+  path: &mut Vec<usize>,
+  walk: &mut Walk,
+  kind: TagKind,
+  nesting: Nesting,
+  keep_empty: bool,
+) -> Option<TagGroup> {
+  let identifiers = walk.collector.take(path);
+  let labels = walk.collector.take_labels(path);
+  let mut annotations = walk.collector.take_annotations(path);
+  let is_link = matches!(kind, TagKind::Link(_));
+  let is_list_item = matches!(kind, TagKind::LI(_));
+  let is_list = matches!(kind, TagKind::L(_));
+  let is_figure = matches!(kind, TagKind::Figure(_));
+  let mut kind = kind;
+
+  let is_target = walk.targets.contains(path.as_slice());
+
+  if is_target {
+    kind.set_id(Some(tag_id(path)));
+  }
+  let mut group = TagGroup::new(kind);
+  let mut children = Vec::new();
+  let mut child_pending = Vec::new();
+  let mut has_content = !identifiers.is_empty() || !labels.is_empty();
+
+  // `LI` only admits `Lbl`/`LBody` children, so the marker label and the
+  // item's whole subtree wrap in one of each.
+  if is_list_item {
+    if !labels.is_empty() {
+      let mut label = TagGroup::new(Tag::Lbl);
+
+      for identifier in labels {
+        label.push(identifier);
+      }
+      group.push(label);
+    }
+    child_pending.extend(identifiers);
+  } else {
+    // A marker paints at the line's start, so its label reads first.
+    for identifier in labels.into_iter().chain(identifiers) {
+      group.push(identifier);
+    }
+  }
+  build_children(
+    node,
+    path,
+    walk,
+    &mut children,
+    &mut child_pending,
+    Nesting {
+      in_list: is_list,
+      in_figure: nesting.in_figure || is_figure,
+      ..nesting
+    },
+  );
+  flush_paragraph(&mut child_pending, &mut children);
+  // Wrapped annotations join the element's own children so they read
+  // after the content they decorate, not before the element.
+  if !is_link {
+    push_link_wrappers(mem::take(&mut annotations), &mut children);
+  }
+  has_content |= !children.is_empty();
+  if is_list_item {
+    if !children.is_empty() {
+      let mut body = TagGroup::new(Tag::LBody);
+
+      for child in children {
+        body.push(child);
+      }
+      group.push(body);
+    }
+  } else {
+    for child in children {
+      group.push(child);
+    }
+  }
+  if is_link {
+    has_content |= !annotations.is_empty();
+    for annotation in annotations {
+      group.push(annotation);
+    }
+  }
+  // Inline formatting inside a text run leaves its element without any
+  // content of its own; an empty structure element is pure noise. An
+  // element a destination names is the exception: dropping it leaves the
+  // link pointing at nothing.
+  (has_content || is_target || keep_empty).then_some(group)
+}
+
+/// Rebuilds `Table → THead/TBody/TFoot → TR → TH/TD` from a lowered table,
+/// whose render tree only has captions and cells left. Rows come back from
+/// each cell's grid line, groups from the [`TablePart`] lowering stamped on
+/// it. A page-spanning table stays one `Table`, as ISO 14289-2:2024 §8.2.2
+/// requires: replayed header bands are artifacts, so only the first
+/// occurrence carries content.
+struct TableBuilder {
+  /// Finished direct children of `Table`: captions, row groups, stray rows.
+  groups: Vec<TagGroup>,
+  /// The open row group and the rows collected for it so far.
+  section: Option<(TablePart, Vec<TagGroup>)>,
+  /// The open row: its grid line and the `TR` collecting its cells.
+  row: Option<(i16, TagGroup)>,
+}
+
+impl TableBuilder {
+  fn close_row(&mut self) {
+    if let Some((_, row)) = self.row.take()
+      && let Some((_, rows)) = self.section.as_mut()
+    {
+      rows.push(row);
+    }
+  }
+
+  fn close_section(&mut self) {
+    self.close_row();
+    if let Some((part, rows)) = self.section.take() {
+      let mut group = TagGroup::new(match part {
+        TablePart::HeaderCell => TagKind::from(Tag::THead),
+        TablePart::FooterCell => Tag::TFoot.into(),
+        _ => Tag::TBody.into(),
+      });
+
+      for row in rows {
+        group.push(row);
+      }
+      self.groups.push(group);
+    }
+  }
+
+  /// The `TR` for `line` in a `part` row group, opening either as needed.
+  fn row(&mut self, part: TablePart, line: i16) -> &mut TagGroup {
+    if self.section.as_ref().is_none_or(|(open, _)| *open != part) {
+      self.close_section();
+      self.section = Some((part, Vec::new()));
+    }
+    if self.row.as_ref().is_some_and(|(open, _)| *open != line) {
+      self.close_row();
+    }
+    &mut self
+      .row
+      .get_or_insert_with(|| (line, TagGroup::new(Tag::TR)))
+      .1
+  }
+
+  /// Content that was never a cell still needs a place inside the table's
+  /// content model, so it rides in a row of its own.
+  fn push_stray(&mut self, children: Vec<TagGroup>) {
+    self.close_section();
+
+    let mut cell = TagGroup::new(Tag::TD);
+
+    for child in children {
+      cell.push(child);
+    }
+    let mut row = TagGroup::new(Tag::TR);
+
+    row.push(cell);
+    self.groups.push(row);
+  }
+
+  fn push_caption(&mut self, caption: TagGroup) {
+    self.close_section();
+    self.groups.push(caption);
+  }
+}
+
+/// The span a lowered cell carries on a grid axis.
+fn placement_span(placement: &GridPlacement) -> Option<NonZeroU32> {
+  match placement {
+    GridPlacement::Span(GridPlacementSpan::Span(span)) if *span > 1 => {
+      NonZeroU32::new((*span).into())
+    }
+    _ => None,
+  }
+}
+
+/// `TH` or `TD` for a lowered cell. The source tag decides when there is one;
+/// a tagless cell in a header row group is still a header. A `TH` takes its
+/// `Scope` from the `scope` attribute, defaulting to `Column` in a header row
+/// group and `Row` elsewhere, per ISO 32000-2 §14.8.4.8.3's algorithm.
+fn cell_kind(cell: &RenderNode, part: TablePart) -> TagKind {
+  let source = cell.node.as_ref();
+  let tag_name = source.and_then(|node| node.tag_name());
+  let row_span = placement_span(&cell.context.style.grid_row_end);
+  let col_span = placement_span(&cell.context.style.grid_column_end);
+  let is_header = match tag_name {
+    Some("th") => true,
+    Some("td") => false,
+    _ => part == TablePart::HeaderCell,
+  };
+
+  if !is_header {
+    return Tag::TD
+      .with_row_span(row_span)
+      .with_col_span(col_span)
+      .into();
+  }
+  let scope = source
+    .and_then(|node| node.scope())
+    .and_then(|scope| match scope.trim() {
+      value if value.eq_ignore_ascii_case("row") || value.eq_ignore_ascii_case("rowgroup") => {
+        Some(TableHeaderScope::Row)
+      }
+      value if value.eq_ignore_ascii_case("col") || value.eq_ignore_ascii_case("colgroup") => {
+        Some(TableHeaderScope::Column)
+      }
+      _ => None,
+    })
+    .unwrap_or(if part == TablePart::HeaderCell {
+      TableHeaderScope::Column
+    } else {
+      TableHeaderScope::Row
+    });
+
+  Tag::TH(scope)
+    .with_row_span(row_span)
+    .with_col_span(col_span)
+    .into()
+}
+
+fn build_table(
+  node: &RenderNode,
+  path: &mut Vec<usize>,
+  walk: &mut Walk,
+  parent: &mut Vec<TagGroup>,
+  nesting: Nesting,
+) {
+  let identifiers = walk.collector.take(path);
+  let annotations = walk.collector.take_annotations(path);
+  let mut kind: TagKind = Tag::Table.into();
+  let is_target = walk.targets.contains(path.as_slice());
+
+  if is_target {
+    kind.set_id(Some(tag_id(path)));
+  }
+  let mut builder = TableBuilder {
+    groups: Vec::new(),
+    section: None,
+    row: None,
+  };
+  // A list or flex row outside the table does not reach into its cells; an
+  // enclosing `Figure` does.
+  let nesting = Nesting {
+    in_row: false,
+    in_list: false,
+    in_figure: nesting.in_figure,
+  };
+
+  // The table box itself has no content slot in the model, so anything
+  // recorded against it rides in a stray row like non-cell children do.
+  if !identifiers.is_empty() {
+    let mut wrap = Vec::new();
+    let mut pending = identifiers;
+
+    flush_paragraph(&mut pending, &mut wrap);
+    builder.push_stray(wrap);
+  }
+  for (index, child) in node.children.iter().flatten().enumerate() {
+    path.push(index);
+    match child.table_part {
+      Some(TablePart::Caption) => {
+        if let Some(caption) = build_element(child, path, walk, Tag::Caption.into(), nesting, false)
+        {
+          builder.push_caption(caption);
+        }
+      }
+      Some(part @ (TablePart::HeaderCell | TablePart::BodyCell | TablePart::FooterCell)) => {
+        let GridPlacement::Line(line) = child.context.style.grid_row_start else {
+          path.pop();
+          continue;
+        };
+        let kind = cell_kind(child, part);
+
+        // An empty cell still holds its place in the row, so the row keeps
+        // the cell count the spec's regularity asks for.
+        if let Some(cell) = build_element(child, path, walk, kind, nesting, true) {
+          builder.row(part, line).push(cell);
+        }
+      }
+      _ => {
+        let mut wrap = Vec::new();
+        let mut pending = Vec::new();
+
+        build_node(child, path, walk, &mut wrap, &mut pending, nesting);
+        flush_paragraph(&mut pending, &mut wrap);
+        if !wrap.is_empty() {
+          builder.push_stray(wrap);
+        }
+      }
+    }
+    path.pop();
+  }
+  builder.close_section();
+
+  let mut table = TagGroup::new(kind);
+  let has_content = !builder.groups.is_empty();
+
+  for group in builder.groups {
+    table.push(group);
+  }
+  if has_content || is_target {
+    parent.push(table);
+  }
+  push_link_wrappers(annotations, parent);
 }
 
 /// Wraps loose link-annotation identifiers (inline anchors have no painted

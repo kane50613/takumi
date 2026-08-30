@@ -700,6 +700,11 @@ impl Node {
     self.attribute("alt")
   }
 
+  /// The element's `scope` attribute, when present.
+  pub fn scope(&self) -> Option<&str> {
+    self.attribute("scope")
+  }
+
   /// `id` and `class` resolve to the structured metadata fields rather than
   /// the `attributes` map.
   pub(crate) fn attribute(&self, name: &str) -> Option<&str> {
