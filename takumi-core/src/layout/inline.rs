@@ -1736,6 +1736,8 @@ fn clamp_text_fit_scale(style: &SizedFontStyle, scale: f32) -> f32 {
   }
 }
 
+/// Floats are the only entries in `custom_inline_boxes`, so this is Blink's
+/// float carve-out from `text_fit_utils.cc`; in-flow inline boxes scale.
 fn text_fit_is_applicable(custom_inline_boxes: &[PositionedInlineBox]) -> bool {
   custom_inline_boxes.is_empty()
 }
