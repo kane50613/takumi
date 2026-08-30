@@ -206,7 +206,7 @@ pub(crate) fn make_balanced_text(
   target_lines: usize,
   device_pixel_ratio: f32,
   spans: &[ProcessedInlineSpan<'_>],
-  custom_inline_boxes: &mut Vec<parley::PositionedInlineBox>,
+  positioned_floats: &mut Vec<parley::PositionedInlineBox>,
 ) -> bool {
   let RebreakOptions {
     max_width,
@@ -232,7 +232,7 @@ pub(crate) fn make_balanced_text(
     iterations += 1;
     let mid = (left + right) / 2.0;
 
-    custom_inline_boxes.clear();
+    positioned_floats.clear();
     break_lines(
       inline_layout,
       mid,
@@ -240,7 +240,7 @@ pub(crate) fn make_balanced_text(
       line_height_hint,
       text_wrap_mode,
       spans,
-      custom_inline_boxes,
+      positioned_floats,
     );
     let lines_at_mid = inline_layout.lines().count();
 
@@ -259,7 +259,7 @@ pub(crate) fn make_balanced_text(
   // No meaningful adjustment if within 1px * DPR of max_width
   if (balanced_width - max_width).abs() < device_pixel_ratio {
     // Reset to original max_width
-    custom_inline_boxes.clear();
+    positioned_floats.clear();
     break_lines(
       inline_layout,
       max_width,
@@ -267,12 +267,12 @@ pub(crate) fn make_balanced_text(
       line_height_hint,
       text_wrap_mode,
       spans,
-      custom_inline_boxes,
+      positioned_floats,
     );
     false
   } else {
     // Apply the balanced width
-    custom_inline_boxes.clear();
+    positioned_floats.clear();
     break_lines(
       inline_layout,
       balanced_width,
@@ -280,7 +280,7 @@ pub(crate) fn make_balanced_text(
       line_height_hint,
       text_wrap_mode,
       spans,
-      custom_inline_boxes,
+      positioned_floats,
     );
     true
   }
@@ -292,7 +292,7 @@ pub(crate) fn make_pretty_text(
   inline_layout: &mut InlineLayout,
   options: RebreakOptions,
   spans: &[ProcessedInlineSpan<'_>],
-  custom_inline_boxes: &mut Vec<parley::PositionedInlineBox>,
+  positioned_floats: &mut Vec<parley::PositionedInlineBox>,
 ) -> bool {
   let RebreakOptions {
     max_width,
@@ -324,7 +324,7 @@ pub(crate) fn make_pretty_text(
 
   // Try reflowing with 90% width to redistribute words
   let adjusted_width = max_width * 0.9;
-  custom_inline_boxes.clear();
+  positioned_floats.clear();
   break_lines(
     inline_layout,
     adjusted_width,
@@ -332,7 +332,7 @@ pub(crate) fn make_pretty_text(
     line_height_hint,
     text_wrap_mode,
     spans,
-    custom_inline_boxes,
+    positioned_floats,
   );
   let adjusted_lines = inline_layout.lines().count();
 
@@ -343,7 +343,7 @@ pub(crate) fn make_pretty_text(
     true
   } else {
     // Reset to original max_width
-    custom_inline_boxes.clear();
+    positioned_floats.clear();
     break_lines(
       inline_layout,
       max_width,
@@ -351,7 +351,7 @@ pub(crate) fn make_pretty_text(
       line_height_hint,
       text_wrap_mode,
       spans,
-      custom_inline_boxes,
+      positioned_floats,
     );
     false
   }

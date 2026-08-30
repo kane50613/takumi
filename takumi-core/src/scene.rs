@@ -570,7 +570,7 @@ fn compute_node_paint_bounds(
     }
   }
 
-  for inline_box in built.custom_inline_boxes {
+  for inline_box in built.positioned_floats {
     bounds = merge_bounds(
       bounds,
       bounds_for_rect(

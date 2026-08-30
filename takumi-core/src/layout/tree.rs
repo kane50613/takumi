@@ -2273,7 +2273,7 @@ impl RenderNode {
       return measure_inline_layout(
         &mut built.layout,
         &built.spans,
-        &built.custom_inline_boxes,
+        &built.positioned_floats,
         &built.line_scales,
         InlineMeasureOptions {
           max_width,
