@@ -224,14 +224,25 @@ export function OutputPanel({
   zoom,
   isReady,
   pdfView,
+  waitingForRun,
 }: {
   lastSuccess: RenderSuccess | undefined;
   error: RenderError | undefined;
   zoom: Zoom;
   isReady: boolean;
   pdfView: PdfView;
+  /** Shared code renders nothing until the reader has pressed Run themselves. */
+  waitingForRun?: boolean;
 }) {
   if (!lastSuccess && !error) {
+    if (waitingForRun) {
+      return (
+        <div className="flex h-full items-center justify-center bg-muted/20 font-mono text-xs text-muted-foreground">
+          Read the code, then press Run.
+        </div>
+      );
+    }
+
     return (
       <div className="flex h-full items-center justify-center gap-2 bg-muted/20 font-mono text-xs text-muted-foreground">
         <Loader2Icon className="size-3.5 animate-spin" />

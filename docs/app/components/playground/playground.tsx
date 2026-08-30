@@ -154,6 +154,7 @@ export default function Playground() {
       zoom={zoom}
       isReady={isReady}
       pdfView={pdfView}
+      waitingForRun={isUnrunShare}
     />
   );
   const browserPane = (

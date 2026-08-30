@@ -7,12 +7,47 @@ import { useEffect, useRef, useState } from "react";
 import type { ComponentProps } from "react";
 import { createHighlighterCore } from "shiki/core";
 import { createOnigurumaEngine } from "shiki/engine-oniguruma.mjs";
-import pdfPrimitivesTypings from "../../../node_modules/takumi-pdf/dist/primitives.d.mts?raw";
-import takumiTypings from "../../../node_modules/@takumi-rs/wasm/pkg/takumi_wasm_bg.wasm.d.ts?raw";
-import reactTypings from "../../../node_modules/@types/react/index.d.ts?raw";
-import reactJsxRuntimeTypings from "../../../node_modules/@types/react/jsx-runtime.d.ts?raw";
-import cssTypings from "../../../node_modules/csstype/index.d.ts?raw";
-import playgroundOptionsTypings from "../../playground/options.ts?raw";
+// Dynamic imports keep the typings out of the playground chunk; they load as
+// their own chunks alongside the editor.
+const [
+  reactTypings,
+  reactJsxRuntimeTypings,
+  cssTypings,
+  takumiTypings,
+  pdfPrimitivesTypings,
+  playgroundOptionsTypings,
+  echartsCoreTypings,
+  echartsChartsTypings,
+  echartsComponentsTypings,
+  echartsRenderersTypings,
+  echartsSharedTypings,
+] = await Promise.all([
+  import("../../../node_modules/@types/react/index.d.ts?raw").then((module) => module.default),
+  import("../../../node_modules/@types/react/jsx-runtime.d.ts?raw").then(
+    (module) => module.default,
+  ),
+  import("../../../node_modules/csstype/index.d.ts?raw").then((module) => module.default),
+  import("../../../node_modules/@takumi-rs/wasm/pkg/takumi_wasm_bg.wasm.d.ts?raw").then(
+    (module) => module.default,
+  ),
+  import("../../../node_modules/takumi-pdf/dist/primitives.d.mts?raw").then(
+    (module) => module.default,
+  ),
+  import("../../playground/options.ts?raw").then((module) => module.default),
+  import("../../../node_modules/echarts/types/dist/core.d.ts?raw").then((module) => module.default),
+  import("../../../node_modules/echarts/types/dist/charts.d.ts?raw").then(
+    (module) => module.default,
+  ),
+  import("../../../node_modules/echarts/types/dist/components.d.ts?raw").then(
+    (module) => module.default,
+  ),
+  import("../../../node_modules/echarts/types/dist/renderers.d.ts?raw").then(
+    (module) => module.default,
+  ),
+  import("../../../node_modules/echarts/types/dist/shared.d.ts?raw").then(
+    (module) => module.default,
+  ),
+]);
 
 function createHighlighter() {
   return createHighlighterCore({
@@ -121,6 +156,10 @@ export function ComponentEditor({
           esModuleInterop: true,
           jsx: monaco.languages.typescript.JsxEmit.ReactJSX,
           typeRoots: ["node_modules/@types"],
+          baseUrl: "file:///",
+          paths: {
+            "echarts/*": ["node_modules/echarts/types/dist/*"],
+          },
         });
 
         monaco.languages.typescript.typescriptDefaults.setExtraLibs([
@@ -147,6 +186,26 @@ export function ComponentEditor({
           {
             content: playgroundOptionsTypings,
             filePath: "file:///options.d.ts",
+          },
+          {
+            content: echartsCoreTypings,
+            filePath: "file:///node_modules/echarts/types/dist/core.d.ts",
+          },
+          {
+            content: echartsChartsTypings,
+            filePath: "file:///node_modules/echarts/types/dist/charts.d.ts",
+          },
+          {
+            content: echartsComponentsTypings,
+            filePath: "file:///node_modules/echarts/types/dist/components.d.ts",
+          },
+          {
+            content: echartsRenderersTypings,
+            filePath: "file:///node_modules/echarts/types/dist/renderers.d.ts",
+          },
+          {
+            content: echartsSharedTypings,
+            filePath: "file:///node_modules/echarts/types/dist/shared.d.ts",
           },
           {
             content: tailwindTypings,
