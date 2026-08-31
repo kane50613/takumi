@@ -16,8 +16,8 @@ use takumi_core::{
     inline::{
       DecorationRect, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineOutlineRect,
       InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan, ShapedRun, collect_inline_items,
-      create_inline_layout, inline_background_fragments, inline_background_path,
-      outline_island_contour, outline_islands, resolve_inline_runs, run_decorations,
+      create_inline_layout, inline_background_path, outline_island_contour, outline_islands,
+      resolve_inline_runs, run_decorations,
     },
     node::TextData,
     tree::RenderNode,
@@ -85,6 +85,7 @@ pub(crate) fn emit_text(
       text: text.text.as_str().into(),
       context,
       link: None,
+      decorations: None,
     }],
     content,
     &font_style,
@@ -158,9 +159,9 @@ fn emit_runs(
   frame: TextFrame,
 ) -> io::Result<()> {
   // Inline-span backgrounds fill under every glyph of the formatting context.
-  for fragment in inline_background_fragments(runs, spans) {
+  for fragment in &runs.background_fragments {
     let data = path_data(
-      &inline_background_path(&fragment),
+      &inline_background_path(fragment),
       [1.0, 0.0, 0.0, 1.0, frame.origin_x, frame.origin_y],
     );
 

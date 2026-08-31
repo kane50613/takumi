@@ -588,17 +588,23 @@ fn compute_node_paint_bounds(
     .spans
     .iter()
     .filter_map(|span| match span {
-      ProcessedInlineSpan::Text { style, .. } => style
-        .inline_background()
-        .map(|background| background.padding),
+      ProcessedInlineSpan::Text { decorations, .. } => decorations.as_ref(),
       _ => None,
     })
-    .fold(0.0_f32, |max, padding| {
+    .fold(0.0_f32, |mut max, chain| {
+      let mut next = Some(chain);
+
+      while let Some(link) = next {
+        let padding = link.decoration.padding;
+
+        max = max
+          .max(padding.top)
+          .max(padding.right)
+          .max(padding.bottom)
+          .max(padding.left);
+        next = link.parent.as_ref();
+      }
       max
-        .max(padding.top)
-        .max(padding.right)
-        .max(padding.bottom)
-        .max(padding.left)
     });
 
   if background_padding > 0.0

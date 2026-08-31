@@ -17,8 +17,8 @@ use crate::{
   draw_outset_box_shadow,
   layout::inline::{
     BuiltInlineLayout, InlineBoxItem, InlineOutlineRect, InlineRunLayout, PositionedInlineRun,
-    ProcessedInlineSpan, ShapedRun, VisualInlineBox, glyph_outlines, inline_background_fragments,
-    inline_background_path, outline_island_contour, outline_islands, resolve_inline_runs,
+    ProcessedInlineSpan, ShapedRun, VisualInlineBox, glyph_outlines, inline_background_path,
+    outline_island_contour, outline_islands, resolve_inline_runs,
   },
   painter::StrokeStyle,
   rasterize_layers,
@@ -439,8 +439,8 @@ pub(crate) fn draw_inline_layout(
   let resolved = resolve_inline_runs(built, context, layout)?;
 
   // Inline-span backgrounds fill under every glyph of the formatting context.
-  for fragment in inline_background_fragments(&resolved, spans) {
-    let path = inline_background_path(&fragment);
+  for fragment in &resolved.background_fragments {
+    let path = inline_background_path(fragment);
     let (mask, placement) = render_mask(
       &path,
       Some(context.transform),

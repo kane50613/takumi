@@ -299,6 +299,7 @@ fn collect_measure_result(
               text: text.into(),
               context: &current.context,
               link: None,
+              decorations: None,
             }],
             Size {
               width: AvailableSpace::Definite(layout.content_box_width()),

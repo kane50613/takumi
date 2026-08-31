@@ -19,8 +19,8 @@ use takumi_core::{
     clip::clip_shape_commands,
     decoration::{ClipBox, OutlineGeometry},
     inline::{
-      BuiltInlineLayout, InlineRunLayout, ProcessedInlineSpan, ShapedRun,
-      inline_background_fragments, inline_background_path, run_decorations,
+      BuiltInlineLayout, InlineRunLayout, ProcessedInlineSpan, ShapedRun, inline_background_path,
+      run_decorations,
     },
     inline_box::{InlineBoxPaint, InlineSubtree, resolve_inline_box},
     node::NodeKind,
@@ -1288,8 +1288,8 @@ impl Emitter<'_> {
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
     // Inline-span backgrounds fill under every glyph of the formatting context.
-    for fragment in inline_background_fragments(runs, &built.spans) {
-      let Some(path) = krilla_path(&inline_background_path(&fragment), x, y) else {
+    for fragment in &runs.background_fragments {
+      let Some(path) = krilla_path(&inline_background_path(fragment), x, y) else {
         continue;
       };
 

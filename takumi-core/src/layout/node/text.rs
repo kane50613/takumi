@@ -102,6 +102,7 @@ pub(crate) fn measure_text_node(
     text: text.text.as_str().into(),
     context,
     link: None,
+    decorations: None,
   };
   let mut built = create_inline_layout(InlineLayoutRequest {
     items: vec![inline_content],

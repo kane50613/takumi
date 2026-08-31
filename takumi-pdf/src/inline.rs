@@ -153,6 +153,7 @@ fn single_text_items<'c>(text: &'c TextData, context: &'c RenderContext) -> Vec<
     text: text.text.as_str().into(),
     context,
     link: None,
+    decorations: None,
   }]
 }
 
