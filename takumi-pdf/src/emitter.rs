@@ -1288,7 +1288,12 @@ impl Emitter<'_> {
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
     // Inline-span backgrounds fill under every glyph of the formatting context.
+    // A fragment paints only on the page that owns its line, like the glyph
+    // pass, so a page cut leaves no background sliver on the neighbor page.
     for fragment in &runs.background_fragments {
+      if self.window_disowns_line(y + fragment.baseline) {
+        continue;
+      }
       let Some(path) = krilla_path(&inline_background_path(fragment), x, y) else {
         continue;
       };

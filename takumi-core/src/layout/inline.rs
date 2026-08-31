@@ -2370,6 +2370,9 @@ pub struct InlineBackgroundFragment {
   pub color: Color,
   /// The span's `opacity`.
   pub opacity: f32,
+  /// Baseline of the owning line in border-box space. Pagination keys page
+  /// ownership on it, so a fragment paints on the page its line lands on.
+  pub baseline: f32,
 }
 
 /// Per-line bounds of one decorated span, unioned over the items it covers.
@@ -2378,6 +2381,7 @@ struct FragmentBounds {
   x1: f32,
   top: f32,
   bottom: f32,
+  baseline: f32,
   has_height: bool,
 }
 
@@ -2424,7 +2428,7 @@ impl DecorationAccumulator {
     line_index: usize,
     x0: f32,
     x1: f32,
-    vertical: Option<(f32, f32)>,
+    vertical: Option<(f32, f32, f32)>,
   ) {
     let mut next = chain;
 
@@ -2442,14 +2446,18 @@ impl DecorationAccumulator {
           x1,
           top: f32::INFINITY,
           bottom: f32::NEG_INFINITY,
+          baseline: 0.0,
           has_height: false,
         });
 
       bounds.x0 = bounds.x0.min(x0);
       bounds.x1 = bounds.x1.max(x1);
-      if let Some((top, bottom)) = vertical {
+      if let Some((top, bottom, baseline)) = vertical {
         bounds.top = bounds.top.min(top);
         bounds.bottom = bounds.bottom.max(bottom);
+        if !bounds.has_height {
+          bounds.baseline = baseline;
+        }
         bounds.has_height = true;
       }
       next = link.parent.as_ref();
@@ -2515,6 +2523,7 @@ impl DecorationAccumulator {
           radii,
           color: decoration.color,
           opacity: decoration.opacity,
+          baseline: bounds.baseline,
         })
       })
       .collect()
@@ -3076,7 +3085,11 @@ pub fn resolve_inline_runs(
               line_index,
               rect.x,
               rect.x + rect.width,
-              Some((rect.y, rect.y + rect.height)),
+              Some((
+                rect.y,
+                rect.y + rect.height,
+                rect.y + above * setup.state.scale,
+              )),
             );
           }
           let glyphs: Vec<PositionedGlyph> = glyph_run
