@@ -109,6 +109,13 @@ export const showcaseProjects: Project[] = [
     height: 630,
   },
   {
+    image: "https://card.astrxl.dev/banner.webp",
+    url: "https://git.astrxl.dev/astral/api",
+    title: "Enka Embed",
+    width: 1359,
+    height: 604,
+  },
+  {
     url: "https://who-to-bother-at.com",
     image: "https://who-to-bother-at.com/og/vercel",
     width: 1200,
