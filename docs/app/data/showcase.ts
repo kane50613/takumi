@@ -96,12 +96,6 @@ export const showcaseProjects: Project[] = [
     height: 630,
   },
   {
-    image: "https://bannx.com/og/default.png",
-    url: "https://bannx.com",
-    width: 1200,
-    height: 630,
-  },
-  {
     image: "https://res.cloudinary.com/alfanjauhari/image/upload/og/works/gcbc.webp",
     url: "https://www.alfanjauhari.com/",
     width: 1200,
