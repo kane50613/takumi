@@ -16,7 +16,7 @@ use crate::{
     page::PageSettings,
     surface::Surface,
   },
-  options::{PT_PER_PX, PageOptions, PdfError},
+  options::{PT_PER_PX, PageOptions, PageSelection, PdfError},
   pagination::{PageGeometry, PageSlice, Paginated, header_replays},
   paint::{fill_from_rgba, rect_path},
   tags::{TagCollector, tag_id},
@@ -103,24 +103,27 @@ pub(crate) struct PageComposer<'c, 'g> {
   pub(crate) background: Option<Color>,
   /// Whether destinations name tag-tree structure elements.
   pub(crate) structural: bool,
+  pub(crate) selection: &'c PageSelection,
 }
 
 impl PageComposer<'_, '_> {
   /// The destination a link or outline entry jumps to: the page `top` falls
-  /// on, at its position inside that page.
-  pub(crate) fn destination(&self, top: f32, path: &[usize]) -> XyzDestination {
+  /// on, at its position inside that page. `None` when the page is dropped by
+  /// [`crate::PdfOptions::page_ranges`].
+  pub(crate) fn destination(&self, top: f32, path: &[usize]) -> Option<XyzDestination> {
     let index = self.paginated.page_index(top);
+    let emitted = self.selection.emitted(index)?;
     let start = self.paginated.starts[index];
     let y = self.frame.margin.top + self.paginated.reserved_at(start) + (top - start).max(0.0);
     let dest = XyzDestination::new(
-      index,
+      emitted,
       Point::from_xy(self.frame.margin.left * PT_PER_PX, y * PT_PER_PX),
     );
 
-    match self.structural {
+    Some(match self.structural {
       true => dest.with_structure(tag_id(path)),
       false => dest,
-    }
+    })
   }
 
   /// Draws one page. `repeatables` are in draw order: the header band, the
@@ -188,7 +191,7 @@ impl PageComposer<'_, '_> {
           .interactive
           .anchors
           .get(id)
-          .map(|anchor| self.destination(anchor.top, &anchor.path))
+          .and_then(|anchor| self.destination(anchor.top, &anchor.path))
       },
     );
     // A repeated box sits at the same place on every page, so its links are
@@ -208,7 +211,7 @@ impl PageComposer<'_, '_> {
           .interactive
           .anchors
           .get(id)
-          .map(|anchor| self.destination(anchor.top, &anchor.path))
+          .and_then(|anchor| self.destination(anchor.top, &anchor.path))
       },
     );
     // A replayed table header is an artifact like a repeated box, so its
@@ -229,7 +232,7 @@ impl PageComposer<'_, '_> {
             .interactive
             .anchors
             .get(id)
-            .map(|anchor| self.destination(anchor.top, &anchor.path))
+            .and_then(|anchor| self.destination(anchor.top, &anchor.path))
         },
       );
     }

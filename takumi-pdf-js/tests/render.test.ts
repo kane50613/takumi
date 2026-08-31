@@ -107,6 +107,28 @@ test("paginates and substitutes footer counters", async () => {
   expect(pageCount(pdf)).toBeGreaterThan(1);
 });
 
+test("pageRanges keeps only the listed pages", async () => {
+  const rows = container({
+    style: { display: "flex", flexDirection: "column", width: "100%" },
+    children: Array.from({ length: 60 }, (_, i) => text(`Row ${i + 1}`, { fontSize: 16 })),
+  });
+  const options = { size: { width: 400, height: 300 }, margin: 24 } as const;
+  const full = await renderer.render(rows, options);
+  const ranged = await renderer.render(rows, { ...options, pageRanges: [1, { from: 3 }] });
+
+  expect(pageCount(full)).toBeGreaterThan(3);
+  expect(pageCount(ranged)).toBe(pageCount(full) - 1);
+  await expect(renderer.render(rows, { ...options, pageRanges: [{ from: 99 }] })).rejects.toThrow(
+    "select none",
+  );
+  await expect(
+    renderer.render(doc, {
+      viewport: { width: 600, height: 300 },
+      pageRanges: [1],
+    } as never),
+  ).rejects.toThrow("mutually exclusive");
+});
+
 test("page counter primitives fill per page and pull their counter face", async () => {
   let loaded = false;
   const pdf = await renderer.render(
@@ -264,8 +286,8 @@ test("measure defaults to paged A4", async () => {
   expect(size.height).toBeGreaterThan(0);
 });
 
-test("rejects viewport combined with paged options", () => {
-  expect(
+test("rejects viewport combined with paged options", async () => {
+  await expect(
     renderer.render(doc, {
       viewport: { width: 600, height: 300 },
       size: "a4",

@@ -11,7 +11,7 @@ use takumi_core::{
   style::{Color, ColorInput, CssSource, FromCssStr},
   viewport::Viewport,
 };
-use takumi_pdf::{PageMargin, PageMargins, PageOptions};
+use takumi_pdf::{PageMargin, PageMargins, PageOptions, PageRange};
 
 use crate::{
   map_error,
@@ -154,6 +154,26 @@ fn resolve_page(
   Ok(page)
 }
 
+/// One entry of `pageRanges`: a 1-based page number, or an inclusive span.
+#[derive(Deserialize, Clone, Copy)]
+#[serde(untagged)]
+pub(crate) enum PageRangeInput {
+  Single(usize),
+  Span {
+    from: Option<usize>,
+    to: Option<usize>,
+  },
+}
+
+impl From<PageRangeInput> for PageRange {
+  fn from(input: PageRangeInput) -> Self {
+    match input {
+      PageRangeInput::Single(page) => PageRange::single(page),
+      PageRangeInput::Span { from, to } => PageRange { from, to },
+    }
+  }
+}
+
 /// The paper color, parsed from a CSS color.
 pub(crate) fn page_background(color: Option<&str>) -> Result<Option<Color>, js_sys::Error> {
   color
@@ -188,6 +208,9 @@ pub(crate) struct PdfRenderOptions {
   pub(crate) header: Option<Node>,
   /// Band repeated at the bottom of every page; same class hooks as `header`.
   pub(crate) footer: Option<Node>,
+  /// The pages the output keeps, 1-based. Page counters keep their full-output
+  /// numbers.
+  pub(crate) page_ranges: Option<Vec<PageRangeInput>>,
   /// Pre-fetched images keyed by URL.
   pub(crate) images: Option<Vec<ImageSource>>,
   /// CSS to apply before layout: stylesheet text, or a rule written as an
@@ -236,11 +259,12 @@ pub(crate) fn resolve_geometry(
     || options.landscape.is_some()
     || options.margin.is_some()
     || options.header.is_some()
-    || options.footer.is_some();
+    || options.footer.is_some()
+    || options.page_ranges.is_some();
 
   match options.viewport {
     Some(_) if paged_field_set => Err(js_sys::Error::new(
-      "viewport is mutually exclusive with the paged options (size, landscape, margin, header, footer)",
+      "viewport is mutually exclusive with the paged options (size, landscape, margin, header, footer, pageRanges)",
     )),
     Some(input) => Ok((
       Some(Viewport::new((

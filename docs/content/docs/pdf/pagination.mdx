@@ -91,6 +91,25 @@ const pdf = await render(
 
 A header taller than a quarter of the page does not repeat, matching Chromium. A header cell whose `rowspan` reaches into the body suppresses repetition for that table. `<tfoot>` renders once, after the body.
 
+## Page ranges
+
+`pageRanges` keeps only the listed pages, like a print dialog. Each entry is a 1-based page number or an inclusive span:
+
+```tsx twoslash
+declare const rows: import("react").ReactNode;
+// ---cut---
+import { render } from "takumi-pdf";
+
+const pdf = await render(<main>{rows}</main>, {
+  // [!code highlight]
+  pageRanges: [1, { from: 4, to: 8 }, { from: 12 }],
+});
+```
+
+An unset `from` starts at the first page. An unset `to` runs to the last. Ranges that keep no page reject the render.
+
+Layout and page counters still run over the whole document. A kept page shows the numbers it would in full output, so page 4 of 12 still reads "Page 4 of 12". Links and outline entries pointing at a dropped page are dropped with it.
+
 ## Watermarks
 
 `position: fixed` paints a box on every page.

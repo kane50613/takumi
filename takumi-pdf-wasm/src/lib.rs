@@ -18,7 +18,9 @@ use takumi_core::{
   resources::{font::FontResource, image::ResourceCache},
   style::{FontFamily, Lang},
 };
-use takumi_pdf::{Attachment, MeasureOptions, PdfMetadata, PdfOptions, PdfStandard, Tagging};
+use takumi_pdf::{
+  Attachment, MeasureOptions, PageRange, PdfMetadata, PdfOptions, PdfStandard, Tagging,
+};
 use wasm_bindgen::prelude::*;
 
 use crate::{
@@ -166,6 +168,9 @@ impl PdfRenderer {
       stylesheet: stylesheet(&self.resource_cache, options.css, Vec::new()).map_err(map_error)?,
       images,
       page,
+      page_ranges: options
+        .page_ranges
+        .map(|ranges| ranges.into_iter().map(PageRange::from).collect()),
       background_color: page_background(options.background_color.as_deref())?,
       header: options.header,
       footer: options.footer,

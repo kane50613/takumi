@@ -55,6 +55,10 @@ pub enum PdfError {
   /// No registered font covers these characters. They would draw nothing and
   /// leave no trace in the text layer, so the render stops instead.
   MissingGlyphs(String),
+  /// A page range names page zero or runs backwards.
+  InvalidPageRange(String),
+  /// The page ranges select none of the document's pages.
+  PageRangesOutOfBounds(usize),
 }
 
 impl std::fmt::Display for PdfError {
@@ -84,6 +88,16 @@ impl std::fmt::Display for PdfError {
       Self::MissingGlyphs(characters) => write!(
         f,
         "No registered font covers {characters}. Register one that does."
+      ),
+      Self::InvalidPageRange(range) => {
+        write!(
+          f,
+          "Page range is invalid: {range}. Pages are numbered from 1."
+        )
+      }
+      Self::PageRangesOutOfBounds(pages) => write!(
+        f,
+        "The page ranges select none of the document's {pages} pages"
       ),
     }
   }
@@ -192,6 +206,100 @@ impl Tagging {
   }
 }
 
+/// A 1-based inclusive span of pages to keep, like one entry of Chromium's
+/// print `pageRanges`. An unset `from` starts at the first page; an unset `to`
+/// runs to the last.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PageRange {
+  /// First page of the span, 1-based. `None` starts at the first page.
+  pub from: Option<usize>,
+  /// Last page of the span, inclusive. `None` runs to the last page.
+  pub to: Option<usize>,
+}
+
+impl PageRange {
+  /// The range keeping only `page`.
+  pub fn single(page: usize) -> Self {
+    Self {
+      from: Some(page),
+      to: Some(page),
+    }
+  }
+
+  fn validate(&self) -> Result<(), PdfError> {
+    let backwards = self.from.zip(self.to).is_some_and(|(from, to)| from > to);
+
+    if self.from == Some(0) || self.to == Some(0) || backwards {
+      return Err(PdfError::InvalidPageRange(format!("{self}")));
+    }
+    Ok(())
+  }
+
+  fn contains(&self, page: usize) -> bool {
+    self.from.unwrap_or(1) <= page && page <= self.to.unwrap_or(usize::MAX)
+  }
+}
+
+impl std::fmt::Display for PageRange {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match (self.from, self.to) {
+      (Some(from), Some(to)) if from == to => write!(f, "{from}"),
+      (from, to) => write!(
+        f,
+        "{}-{}",
+        from.map(|page| page.to_string()).unwrap_or_default(),
+        to.map(|page| page.to_string()).unwrap_or_default()
+      ),
+    }
+  }
+}
+
+/// Which of the document's pages the render keeps, each mapped to its index in
+/// the output.
+pub(crate) struct PageSelection(Vec<Option<usize>>);
+
+impl PageSelection {
+  /// Resolves the ranges against the page count. No ranges keeps every page;
+  /// ranges that keep none are an error, like Chromium's "Page range exceeds
+  /// page count".
+  pub(crate) fn resolve(ranges: Option<&[PageRange]>, pages: usize) -> Result<Self, PdfError> {
+    let Some(ranges) = ranges else {
+      return Ok(Self((0..pages).map(Some).collect()));
+    };
+
+    for range in ranges {
+      range.validate()?;
+    }
+    let mut kept = 0;
+    let map = (0..pages)
+      .map(|index| {
+        ranges
+          .iter()
+          .any(|range| range.contains(index + 1))
+          .then(|| {
+            kept += 1;
+
+            kept - 1
+          })
+      })
+      .collect();
+
+    if kept == 0 {
+      return Err(PdfError::PageRangesOutOfBounds(pages));
+    }
+    Ok(Self(map))
+  }
+
+  pub(crate) fn keeps(&self, index: usize) -> bool {
+    self.emitted(index).is_some()
+  }
+
+  /// The output index of source page `index`, or `None` when it is dropped.
+  pub(crate) fn emitted(&self, index: usize) -> Option<usize> {
+    self.0.get(index).copied().flatten()
+  }
+}
+
 /// Inputs for [`crate::render`], built with [`PdfOptions::builder`].
 #[derive(TypedBuilder)]
 pub struct PdfOptions<'g> {
@@ -212,6 +320,11 @@ pub struct PdfOptions<'g> {
   /// Paged output; `None` renders a single page at the viewport size.
   #[builder(default, setter(strip_option))]
   pub page: Option<PageOptions>,
+  /// The pages the output keeps, 1-based like a print dialog. Layout and page
+  /// counters still run over the whole document, so a kept page shows the
+  /// numbers it would in full output. `None` keeps every page.
+  #[builder(default, setter(strip_option))]
+  pub page_ranges: Option<Vec<PageRange>>,
   /// Fills the page box, margins included, before the page draws anything
   /// else. Unset leaves the page empty, like Chromium's print path, so a
   /// viewer shows its own white and the file carries no extra rectangle.
