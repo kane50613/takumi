@@ -390,12 +390,16 @@ pub enum ProcessedInlineSpan<'c> {
 pub(crate) struct InlineDecoration {
   pub(crate) color: Color,
   pub(crate) padding: Rect<f32>,
-  /// Corner radii in paint order: top-left, top-right, bottom-right,
-  /// bottom-left. The elliptical second radius is ignored.
-  pub(crate) radii: [f32; 4],
+  /// Corner radii as `(x, y)` pairs in paint order: top-left, top-right,
+  /// bottom-right, bottom-left.
+  pub(crate) radii: [(f32, f32); 4],
   pub(crate) opacity: f32,
   /// Whether the span's start edge sits on the right.
   pub(crate) rtl: bool,
+  /// The span's own font size. Runs at this size set the fragment height
+  /// (Blink sizes the box from its own text metrics); other sizes only when
+  /// the span has no text of its own.
+  pub(crate) font_size: f32,
 }
 
 /// One open decorated span in the chain of decorated ancestors around an
@@ -601,7 +605,12 @@ fn inline_span_decoration(node: &RenderNode, depth: usize) -> Option<InlineDecor
     return None;
   }
   let sizing = &node.context.sizing;
-  let radius = |pair: &SpacePair<Length>| pair.x.to_px(sizing, 0.0).max(0.0);
+  let radius = |pair: &SpacePair<Length>| {
+    (
+      pair.x.to_px(sizing, 0.0).max(0.0),
+      pair.y.to_px(sizing, 0.0).max(0.0),
+    )
+  };
 
   Some(InlineDecoration {
     color,
@@ -614,6 +623,7 @@ fn inline_span_decoration(node: &RenderNode, depth: usize) -> Option<InlineDecor
     ],
     opacity: style.opacity.0,
     rtl: style.direction == Direction::Rtl,
+    font_size: sizing.font_size,
   })
 }
 
@@ -2362,10 +2372,10 @@ pub struct InlineBackgroundFragment {
   pub width: f32,
   /// Fragment height.
   pub height: f32,
-  /// Corner radii (top-left, top-right, bottom-right, bottom-left), already
-  /// clamped to the fragment. Wrap-edge corners are square, like
-  /// `box-decoration-break: slice`.
-  pub radii: [f32; 4],
+  /// Corner radii as `(x, y)` pairs (top-left, top-right, bottom-right,
+  /// bottom-left), already clamped to the fragment. Wrap-edge corners are
+  /// square, like `box-decoration-break: slice`.
+  pub radii: [(f32, f32); 4],
   /// Fill color.
   pub color: Color,
   /// The span's `opacity`.
@@ -2383,6 +2393,11 @@ struct FragmentBounds {
   bottom: f32,
   baseline: f32,
   has_height: bool,
+  /// Extent from descendant runs, used when the span has no text of its own.
+  fallback_top: f32,
+  fallback_bottom: f32,
+  fallback_baseline: f32,
+  has_fallback: bool,
 }
 
 /// Accumulates decorated-span coverage per line and resolves it into
@@ -2392,10 +2407,11 @@ struct FragmentBounds {
 /// Naive next to Blink; where it drifts:
 /// - only `background-color` fills; gradients, images, and `border` on a span
 ///   paint nothing
-/// - the fragment height is the union of the covered runs' leaded boxes, so a
-///   larger-font descendant grows the background (Blink keeps the box's own
-///   primary-font height and lets the text overflow)
-/// - the elliptical second radius of a corner is ignored
+/// - the span's own runs are recognized by font size, not by element, so a
+///   same-size fallback font can grow the height where Blink keeps the
+///   primary font's
+/// - a line taller than a page paints its background only on the page owning
+///   the line, while Blink spills monolithic overflow onto the next page
 #[derive(Default)]
 struct DecorationAccumulator {
   ids: HashMap<*const DecorationLink, usize>,
@@ -2425,6 +2441,7 @@ impl DecorationAccumulator {
   fn cover(
     &mut self,
     chain: Option<&Rc<DecorationLink>>,
+    run_font_size: f32,
     line_index: usize,
     x0: f32,
     x1: f32,
@@ -2433,6 +2450,7 @@ impl DecorationAccumulator {
     let mut next = chain;
 
     while let Some(link) = next {
+      let direct = (link.decoration.font_size - run_font_size).abs() < 0.01;
       let id = self.ensure(link);
       let range = &mut self.line_range[id];
 
@@ -2448,17 +2466,33 @@ impl DecorationAccumulator {
           bottom: f32::NEG_INFINITY,
           baseline: 0.0,
           has_height: false,
+          fallback_top: f32::INFINITY,
+          fallback_bottom: f32::NEG_INFINITY,
+          fallback_baseline: 0.0,
+          has_fallback: false,
         });
 
       bounds.x0 = bounds.x0.min(x0);
       bounds.x1 = bounds.x1.max(x1);
+      // Only the span's own runs set its height, like Blink sizing an inline
+      // box fragment from the box's own text metrics; a descendant's extent
+      // is the fallback for a span with no text of its own.
       if let Some((top, bottom, baseline)) = vertical {
-        bounds.top = bounds.top.min(top);
-        bounds.bottom = bounds.bottom.max(bottom);
-        if !bounds.has_height {
-          bounds.baseline = baseline;
+        if direct {
+          bounds.top = bounds.top.min(top);
+          bounds.bottom = bounds.bottom.max(bottom);
+          if !bounds.has_height {
+            bounds.baseline = baseline;
+          }
+          bounds.has_height = true;
+        } else {
+          bounds.fallback_top = bounds.fallback_top.min(top);
+          bounds.fallback_bottom = bounds.fallback_bottom.max(bottom);
+          if !bounds.has_fallback {
+            bounds.fallback_baseline = baseline;
+          }
+          bounds.has_fallback = true;
         }
-        bounds.has_height = true;
       }
       next = link.parent.as_ref();
     }
@@ -2474,14 +2508,22 @@ impl DecorationAccumulator {
         let (id, line_index) = key;
         let bounds = &self.fragments[&key];
 
-        if !bounds.has_height {
+        let (top, bottom, baseline) = if bounds.has_height {
+          (bounds.top, bounds.bottom, bounds.baseline)
+        } else if bounds.has_fallback {
+          (
+            bounds.fallback_top,
+            bounds.fallback_bottom,
+            bounds.fallback_baseline,
+          )
+        } else {
           return None;
-        }
+        };
         let decoration = &self.decorations[id];
         let x = bounds.x0;
-        let y = bounds.top - decoration.padding.top;
+        let y = top - decoration.padding.top;
         let width = bounds.x1 - bounds.x0;
-        let height = bounds.bottom - bounds.top + decoration.padding.vertical();
+        let height = bottom - top + decoration.padding.vertical();
         let (min_line, max_line) = self.line_range[id];
         // The start edge sits on the first line, the end edge on the last;
         // wrap-edge corners stay square, like `box-decoration-break: slice`.
@@ -2491,29 +2533,42 @@ impl DecorationAccumulator {
         } else {
           (has_start, has_end)
         };
-        let clamp = |radius: f32| radius.min(width / 2.0).min(height / 2.0).max(0.0);
-        let radii = [
+        // css-backgrounds-3 corner overlap: one uniform factor shrinks every
+        // radius so adjacent corners never cross.
+        let raw = [
           if has_left {
-            clamp(decoration.radii[0])
+            decoration.radii[0]
           } else {
-            0.0
+            (0.0, 0.0)
           },
           if has_right {
-            clamp(decoration.radii[1])
+            decoration.radii[1]
           } else {
-            0.0
+            (0.0, 0.0)
           },
           if has_right {
-            clamp(decoration.radii[2])
+            decoration.radii[2]
           } else {
-            0.0
+            (0.0, 0.0)
           },
           if has_left {
-            clamp(decoration.radii[3])
+            decoration.radii[3]
           } else {
-            0.0
+            (0.0, 0.0)
           },
         ];
+        let [tl, tr, br, bl] = raw;
+        let factor = [
+          width / (tl.0 + tr.0),
+          width / (bl.0 + br.0),
+          height / (tl.1 + bl.1),
+          height / (tr.1 + br.1),
+        ]
+        .into_iter()
+        .filter(|f| f.is_finite())
+        .fold(1.0_f32, f32::min)
+        .max(0.0);
+        let radii = raw.map(|(rx, ry)| (rx * factor, ry * factor));
 
         (width > 0.0 && height > 0.0).then_some(InlineBackgroundFragment {
           x,
@@ -2523,7 +2578,7 @@ impl DecorationAccumulator {
           radii,
           color: decoration.color,
           opacity: decoration.opacity,
-          baseline: bounds.baseline,
+          baseline,
         })
       })
       .collect()
@@ -2531,7 +2586,7 @@ impl DecorationAccumulator {
 }
 
 /// The rounded-rect contour an [`InlineBackgroundFragment`] fills, with
-/// quarter-circle corners.
+/// quarter-ellipse corners.
 pub fn inline_background_path(fragment: &InlineBackgroundFragment) -> Vec<PathCommand> {
   const KAPPA: f32 = 4.0 / 3.0 * (std::f32::consts::SQRT_2 - 1.0);
 
@@ -2540,12 +2595,18 @@ pub fn inline_background_path(fragment: &InlineBackgroundFragment) -> Vec<PathCo
     y,
     width,
     height,
-    radii: [tl, tr, br, bl],
+    radii,
     ..
   } = *fragment;
   let point = |x, y| Point { x, y };
-
-  if tl <= 0.0 && tr <= 0.0 && br <= 0.0 && bl <= 0.0 {
+  let [tl, tr, br, bl] = radii.map(|(rx, ry)| {
+    if rx > 0.0 && ry > 0.0 {
+      (rx, ry)
+    } else {
+      (0.0, 0.0)
+    }
+  });
+  if [tl, tr, br, bl] == [(0.0, 0.0); 4] {
     return vec![
       PathCommand::MoveTo(point(x, y)),
       PathCommand::LineTo(point(x + width, y)),
@@ -2556,45 +2617,37 @@ pub fn inline_background_path(fragment: &InlineBackgroundFragment) -> Vec<PathCo
   }
   let mut path = Vec::with_capacity(9);
 
-  path.push(PathCommand::MoveTo(point(x + tl, y)));
-  path.push(PathCommand::LineTo(point(x + width - tr, y)));
-  if tr > 0.0 {
-    let k = tr * KAPPA;
-
+  path.push(PathCommand::MoveTo(point(x + tl.0, y)));
+  path.push(PathCommand::LineTo(point(x + width - tr.0, y)));
+  if tr.0 > 0.0 {
     path.push(PathCommand::CubicTo(
-      point(x + width - tr + k, y),
-      point(x + width, y + tr - k),
-      point(x + width, y + tr),
+      point(x + width - tr.0 + tr.0 * KAPPA, y),
+      point(x + width, y + tr.1 - tr.1 * KAPPA),
+      point(x + width, y + tr.1),
     ));
   }
-  path.push(PathCommand::LineTo(point(x + width, y + height - br)));
-  if br > 0.0 {
-    let k = br * KAPPA;
-
+  path.push(PathCommand::LineTo(point(x + width, y + height - br.1)));
+  if br.0 > 0.0 {
     path.push(PathCommand::CubicTo(
-      point(x + width, y + height - br + k),
-      point(x + width - br + k, y + height),
-      point(x + width - br, y + height),
+      point(x + width, y + height - br.1 + br.1 * KAPPA),
+      point(x + width - br.0 + br.0 * KAPPA, y + height),
+      point(x + width - br.0, y + height),
     ));
   }
-  path.push(PathCommand::LineTo(point(x + bl, y + height)));
-  if bl > 0.0 {
-    let k = bl * KAPPA;
-
+  path.push(PathCommand::LineTo(point(x + bl.0, y + height)));
+  if bl.0 > 0.0 {
     path.push(PathCommand::CubicTo(
-      point(x + bl - k, y + height),
-      point(x, y + height - bl + k),
-      point(x, y + height - bl),
+      point(x + bl.0 - bl.0 * KAPPA, y + height),
+      point(x, y + height - bl.1 + bl.1 * KAPPA),
+      point(x, y + height - bl.1),
     ));
   }
-  path.push(PathCommand::LineTo(point(x, y + tl)));
-  if tl > 0.0 {
-    let k = tl * KAPPA;
-
+  path.push(PathCommand::LineTo(point(x, y + tl.1)));
+  if tl.0 > 0.0 {
     path.push(PathCommand::CubicTo(
-      point(x, y + tl - k),
-      point(x + tl - k, y),
-      point(x + tl, y),
+      point(x, y + tl.1 - tl.1 * KAPPA),
+      point(x + tl.0 - tl.0 * KAPPA, y),
+      point(x + tl.0, y),
     ));
   }
   path.push(PathCommand::Close);
@@ -3082,6 +3135,7 @@ pub fn resolve_inline_runs(
 
             decoration_coverage.cover(
               Some(chain),
+              run.font_size(),
               line_index,
               rect.x,
               rect.x + rect.width,
@@ -3165,7 +3219,7 @@ pub fn resolve_inline_runs(
           if chain.is_some() {
             let x0 = layout.border.left + layout.padding.left + inline_box.x;
 
-            decoration_coverage.cover(chain, line_index, x0, x0 + inline_box.width, None);
+            decoration_coverage.cover(chain, f32::NAN, line_index, x0, x0 + inline_box.width, None);
           }
           positioned_inline_boxes.insert(inline_box.id, inline_box);
           static_inline_prefix += inline_box.layout_advance;
@@ -3694,6 +3748,76 @@ mod tests {
       // Not a font: `em_box_descent` falls back to the run metrics instead of OS/2.
       font_data: parley::fontique::Blob::new(Arc::new(Vec::new())),
     }
+  }
+
+  #[test]
+  fn a_descendant_font_does_not_grow_the_span_background() {
+    let fonts = create_test_context();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1200, 630)))
+          .build(),
+      )
+      .build();
+    let node = Node::container([
+      Node::text("Mixed ".to_string()),
+      Node::container([
+        Node::text("small ".to_string()),
+        Node::container([Node::text("BIG".to_string())]).with_style(
+          Style::default()
+            .with(StyleDeclaration::display(Display::Inline))
+            .with(StyleDeclaration::font_size(crate::style::FontSize::Length(
+              crate::style::Length::Px(34.0),
+            ))),
+        ),
+        Node::text(" small".to_string()),
+      ])
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Inline))
+          .with(StyleDeclaration::background_color(ColorInput::Value(
+            Color([255, 237, 213, 255]),
+          ))),
+      ),
+    ])
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::font_size(crate::style::FontSize::Length(
+          crate::style::Length::Px(20.0),
+        ))),
+    );
+    let render_node = RenderNode::from_node(&context, node);
+    let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
+    let built = create_inline_layout(InlineLayoutRequest {
+      items: collect_inline_items(&render_node),
+      available_space: Size {
+        width: AvailableSpace::Definite(1200.0),
+        height: AvailableSpace::Definite(630.0),
+      },
+      max_width: 1200.0,
+      max_height: None,
+      style: &font_style,
+      context: &render_node.context,
+      mode: InlineLayoutMode::Draw,
+      shape_cacheable: false,
+    });
+    let layout = ComputedLayout {
+      location: crate::geometry::Point::ZERO,
+      size: Size::new(1200.0, 630.0),
+      border: crate::geometry::Rect::default(),
+      padding: crate::geometry::Rect::default(),
+    };
+    let runs = resolve_inline_runs(&built, &render_node.context, layout).unwrap();
+
+    let heights: Vec<f32> = runs.background_fragments.iter().map(|f| f.height).collect();
+
+    assert!(
+      heights.iter().all(|h| *h < 40.0),
+      "bg grew to the BIG font: {heights:?}"
+    );
   }
 
   #[test]

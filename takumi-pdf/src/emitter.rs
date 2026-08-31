@@ -19,8 +19,8 @@ use takumi_core::{
     clip::clip_shape_commands,
     decoration::{ClipBox, OutlineGeometry},
     inline::{
-      BuiltInlineLayout, InlineRunLayout, ProcessedInlineSpan, ShapedRun, inline_background_path,
-      run_decorations,
+      BuiltInlineLayout, InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan, ShapedRun,
+      inline_background_path, run_decorations,
     },
     inline_box::{InlineBoxPaint, InlineSubtree, resolve_inline_box},
     node::NodeKind,
@@ -213,6 +213,17 @@ impl Emitter<'_> {
     self
       .line_window
       .is_some_and(|(y0, y1)| baseline < y0 || baseline >= y1)
+  }
+
+  /// Whether the run's line belongs to another page. The one ownership test
+  /// every inline paint pass shares: glyphs, shadows, decorations, boxes and
+  /// background fragments all key on it.
+  fn window_disowns_run(&self, run: &PositionedInlineRun, layout: Layout, y: f32) -> bool {
+    run
+      .glyph_run
+      .glyphs
+      .first()
+      .is_some_and(|glyph| self.window_disowns_line(y + run.glyph_offset(layout).y + glyph.y))
   }
 
   fn window_excludes_bounds(&self, bounds: Option<takumi_core::scene::SceneBounds>) -> bool {
@@ -1328,13 +1339,10 @@ impl Emitter<'_> {
       let Some(font) = self.cached_font(shaped) else {
         continue;
       };
-      let offset = run.glyph_offset(layout);
-      if let Some(glyph) = shaped.glyphs.first() {
-        let baseline = y + offset.y + glyph.y;
-        if self.window_disowns_line(baseline) {
-          continue;
-        }
+      if self.window_disowns_run(run, layout, y) {
+        continue;
       }
+      let offset = run.glyph_offset(layout);
       let decorations = run_decorations(
         shaped,
         &run.resolved_glyphs,
@@ -1777,13 +1785,10 @@ impl Emitter<'_> {
       let Some(font) = self.cached_font(shaped) else {
         continue;
       };
-      let offset = run.glyph_offset(layout);
-      if let Some(glyph) = shaped.glyphs.first() {
-        let baseline = y + offset.y + glyph.y;
-        if self.window_disowns_line(baseline) {
-          continue;
-        }
+      if self.window_disowns_run(run, layout, y) {
+        continue;
       }
+      let offset = run.glyph_offset(layout);
       let run_text = built
         .text
         .get(shaped.text_range.clone())
