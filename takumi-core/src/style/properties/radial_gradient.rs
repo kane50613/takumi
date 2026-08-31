@@ -5,8 +5,9 @@ use tiny_skia::PremultipliedColorU8;
 use typed_builder::TypedBuilder;
 
 use super::gradient_utils::{
-  GradientOverlayTile, adaptive_lut_size_with_visible_samples, build_color_lut_with_interpolation,
-  compute_repeat_setup, gradient_tile_accessors, parse_gradient_stops, resolve_stops_along_axis,
+  GradientLutHiEntry, GradientOverlayTile, adaptive_lut_size_with_visible_samples,
+  build_color_lut_hi_with_interpolation, build_color_lut_with_interpolation, compute_repeat_setup,
+  gradient_tile_accessors, parse_gradient_stops, quantize_dithered, resolve_stops_along_axis,
   write_gradient_css,
 };
 use crate::style::{
@@ -139,6 +140,10 @@ pub struct RadialGradientTile {
   /// Pre-computed color lookup table for fast gradient sampling.
   /// Maps axis-space distance to color.
   pub color_lut: Vec<PremultipliedColorU8>,
+  /// The LUT in premultiplied 8.8 fixed point, read by dithered sampling.
+  pub color_lut_hi: Vec<GradientLutHiEntry>,
+  /// Whether any LUT entry carries a fraction dithering can move.
+  pub lut_dither_active: bool,
 }
 
 /// Per-row sampling state for incremental distance stepping.
@@ -211,6 +216,7 @@ impl RadialGradientTile {
     height: u32,
     sizing: &SizingContext,
     current_color: Color,
+    dither: bool,
   ) -> Self {
     let cx = Length::from(gradient.center.0.x).to_px(sizing, width as f32);
     let cy = Length::from(gradient.center.0.y).to_px(sizing, height as f32);
@@ -329,6 +335,16 @@ impl RadialGradientTile {
       (lut_len - 1) as f32 / lut_axis_length
     };
     let fully_opaque = color_lut.iter().all(|p| p.alpha() == u8::MAX);
+    let (color_lut_hi, lut_dither_active) = if dither {
+      build_color_lut_hi_with_interpolation(
+        &lut_resolved_stops,
+        lut_axis_length,
+        lut_size,
+        gradient.interpolation,
+      )
+    } else {
+      (Vec::new(), false)
+    };
 
     RadialGradientTile {
       width,
@@ -344,7 +360,18 @@ impl RadialGradientTile {
       position_to_lut_scale,
       fully_opaque,
       color_lut,
+      color_lut_hi,
+      lut_dither_active,
     }
+  }
+
+  #[inline(always)]
+  fn pixel_lut_index(&self, x: u32, y: u32) -> usize {
+    let dx = (x as f32 - self.cx) * self.inv_radius_x;
+    let dy = (y as f32 - self.cy) * self.inv_radius_y;
+    let distance_px = (dx * dx + dy * dy).sqrt() * self.radius_scale;
+
+    self.lut_index_for_distance_px_with_len(distance_px, self.color_lut.len())
   }
 }
 
@@ -355,21 +382,20 @@ impl GradientOverlayTile for RadialGradientTile {
 
   #[inline(always)]
   fn sample_pixel(&self, x: u32, y: u32) -> PremultipliedColorU8 {
-    if self.color_lut.is_empty() {
-      return PremultipliedColorU8::TRANSPARENT;
+    match self.color_lut.len() {
+      0 => PremultipliedColorU8::TRANSPARENT,
+      1 => self.color_lut[0],
+      _ => self.color_lut[self.pixel_lut_index(x, y)],
+    }
+  }
+
+  #[inline(always)]
+  fn sample_pixel_dithered(&self, x: u32, y: u32) -> PremultipliedColorU8 {
+    if !self.lut_dither_active {
+      return self.sample_pixel(x, y);
     }
 
-    if self.color_lut.len() == 1 {
-      return self.color_lut[0];
-    }
-
-    let dx = (x as f32 - self.cx) * self.inv_radius_x;
-    let dy = (y as f32 - self.cy) * self.inv_radius_y;
-    let normalized_distance = (dx * dx + dy * dy).sqrt();
-    let distance_px = normalized_distance * self.radius_scale;
-    let lut_idx = self.lut_index_for_distance_px_with_len(distance_px, self.color_lut.len());
-
-    self.color_lut[lut_idx]
+    quantize_dithered(self.color_lut_hi[self.pixel_lut_index(x, y)], x, y)
   }
 
   #[inline(always)]
@@ -836,7 +862,7 @@ mod tests {
     let sizing = SizingContext::builder()
       .viewport(Viewport::new((100, 100)))
       .build();
-    let tile = RadialGradientTile::new(&gradient, 100, 100, &sizing, Color::black());
+    let tile = RadialGradientTile::new(&gradient, 100, 100, &sizing, Color::black(), false);
 
     // Center (50, 50) should be red
     let color_center = tile.sample_pixel(50, 50).demultiply();
@@ -879,7 +905,7 @@ mod tests {
     let sizing = SizingContext::builder()
       .viewport(Viewport::new((40, 40)))
       .build();
-    let tile = RadialGradientTile::new(&gradient, 40, 40, &sizing, Color::black());
+    let tile = RadialGradientTile::new(&gradient, 40, 40, &sizing, Color::black(), false);
 
     assert_eq!(
       [
@@ -920,7 +946,7 @@ mod tests {
     let sizing = SizingContext::builder()
       .viewport(Viewport::new((100, 100)))
       .build();
-    let tile = RadialGradientTile::new(&gradient, 100, 100, &sizing, Color::black());
+    let tile = RadialGradientTile::new(&gradient, 100, 100, &sizing, Color::black(), false);
 
     // dx_left=20, dx_right=80, dy_top=20, dy_bottom=80
     // f_rx = 80, f_ry = 80

@@ -30,6 +30,10 @@ pub struct RenderContext {
   /// Whether to draw debug borders.
   #[builder(default = false)]
   pub draw_debug_border: bool,
+  /// Whether gradient fills dither before quantizing, set from the render's
+  /// `dithering` option.
+  #[builder(default = false)]
+  pub dither_gradients: bool,
   /// Whether this box is a cell of a table that collapses its borders. Set
   /// during lowering, which is the last place a table cell is still one.
   #[builder(default = false)]
@@ -73,6 +77,7 @@ impl RenderContext {
       current_color,
       time_ms: parent.time_ms,
       draw_debug_border: parent.draw_debug_border,
+      dither_gradients: parent.dither_gradients,
       collapsed_borders: false,
       intrinsic_min_content: parent.intrinsic_min_content,
       images: parent.images.clone(),

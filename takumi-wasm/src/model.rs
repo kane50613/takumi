@@ -86,7 +86,7 @@ pub struct RenderOptions {
   pub device_pixel_ratio: Option<f32>,
   /// The animation timeline time in milliseconds.
   pub time_ms: Option<i64>,
-  /// The output dithering algorithm.
+  /// The output dithering algorithm. Also dithers gradient fills before quantizing.
   pub dithering: Option<DitheringAlgorithm>,
   /// Per-render font stack: ordered family names used as the fallback chain.
   /// Defaults to all registered families in registration order.

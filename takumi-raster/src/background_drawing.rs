@@ -402,6 +402,7 @@ pub(crate) fn render_tile(
       tile_h,
       &context.sizing,
       context.current_color,
+      context.dither_gradients,
     ))),
     BackgroundImage::Radial(gradient) => Some(BackgroundTile::Radial(RadialGradientTile::new(
       gradient,
@@ -409,6 +410,7 @@ pub(crate) fn render_tile(
       tile_h,
       &context.sizing,
       context.current_color,
+      context.dither_gradients,
     ))),
     BackgroundImage::Conic(gradient) => Some(BackgroundTile::Conic(ConicGradientTile::new(
       gradient,
@@ -416,6 +418,7 @@ pub(crate) fn render_tile(
       tile_h,
       &context.sizing,
       context.current_color,
+      context.dither_gradients,
     ))),
     BackgroundImage::Url(url) => {
       if let Ok(source) = resolve_image(url, context) {

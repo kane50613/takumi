@@ -46,7 +46,7 @@ pub struct RenderOptions<'g> {
   /// Global animation time in milliseconds.
   #[builder(default = 0)]
   pub(crate) time_ms: u64,
-  /// Output dithering algorithm. Only used by encoding frontends.
+  /// Output dithering algorithm. Also dithers gradient fills before quantizing.
   #[builder(default)]
   pub(crate) dithering: DitheringAlgorithm,
   /// Per-render font fallback chain (family names in order). `None` uses all
@@ -442,6 +442,7 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<Bitmap> {
     .stylesheet(stylesheet)
     .time_ms(time_ms)
     .draw_debug_border(draw_debug_border)
+    .dither_gradients(dithering != DitheringAlgorithm::None)
     .style(Box::new(ComputedStyle {
       lang,
       font_family: font_families.unwrap_or_default(),

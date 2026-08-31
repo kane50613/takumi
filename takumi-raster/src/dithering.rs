@@ -1,5 +1,6 @@
 use image::RgbaImage;
 use serde::{Deserialize, Serialize};
+use takumi_core::paint::DITHER_NOISE_88;
 
 /// Output-stage dithering algorithms for static image exports and raw buffers.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
@@ -14,33 +15,6 @@ pub enum DitheringAlgorithm {
   /// Apply Floyd-Steinberg error diffusion with a reduced virtual color lattice.
   FloydSteinberg,
 }
-
-const BAYER_MATRIX_8X8: [[f32; 8]; 8] = [
-  [
-    -0.5, 0.0, -0.375, 0.125, -0.46875, 0.03125, -0.34375, 0.15625,
-  ],
-  [
-    0.25, -0.25, 0.375, -0.125, 0.28125, -0.21875, 0.40625, -0.09375,
-  ],
-  [
-    -0.3125, 0.1875, -0.4375, 0.0625, -0.28125, 0.21875, -0.40625, 0.09375,
-  ],
-  [
-    0.4375, -0.0625, 0.3125, -0.1875, 0.46875, -0.03125, 0.34375, -0.15625,
-  ],
-  [
-    -0.453125, 0.046875, -0.328125, 0.171875, -0.484375, 0.015625, -0.359375, 0.140625,
-  ],
-  [
-    0.296875, -0.203125, 0.421875, -0.078125, 0.265625, -0.234375, 0.390625, -0.109375,
-  ],
-  [
-    -0.265625, 0.234375, -0.390625, 0.109375, -0.296875, 0.203125, -0.421875, 0.078125,
-  ],
-  [
-    0.484375, -0.015625, 0.359375, -0.140625, 0.453125, -0.046875, 0.328125, -0.171875,
-  ],
-];
 
 const FLOYD_STEINBERG_LEVELS: f32 = 128.0;
 
@@ -63,7 +37,7 @@ fn apply_ordered_bayer(image: &mut RgbaImage) {
 
     let x = pixel_index % width;
     let y = pixel_index / width;
-    let threshold = BAYER_MATRIX_8X8[y & 7][x & 7] + 0.5;
+    let threshold = DITHER_NOISE_88[y & 7][x & 7] as f32 / 256.0 + 0.5;
 
     for channel in &mut pixel[..3] {
       *channel = quantize_with_threshold(*channel as f32, threshold) as u8;

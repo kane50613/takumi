@@ -4,7 +4,7 @@ use takumi_core::{
   geometry::{Point, Size},
   paint::{
     GradientOverlayTile, LinearGradientFastPathKind, LinearGradientTile, RadialGradientTile,
-    overlay_gradient_tile_fast_normal_unconstrained,
+    overlay_gradient_tile_fast_normal_unconstrained, quantize_dithered,
   },
 };
 use tiny_skia::PixmapMut;
@@ -81,7 +81,7 @@ pub(crate) fn overlay_gradient_tile<T>(
 
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
   blit_rows_from_sampler(pixels, bottom_width, bounds, mode, combined_mask, |x, y| {
-    premultiplied_from_pixel(gradient.sample_pixel(x, y))
+    premultiplied_from_pixel(gradient.sample_pixel_dithered(x, y))
   });
 }
 
@@ -117,34 +117,62 @@ fn try_overlay_linear_gradient_tile_fast_normal_unconstrained(
     LinearGradientFastPathKind::Horizontal => {
       let src_x_start = (bounds.x_min - bounds.offset_x) as usize;
       let src_x_end = src_x_start + segment_pixel_count;
-      let src_pixels = &fast_path.axis_samples[src_x_start..src_x_end];
+      let src_y_start = (bounds.y_min - bounds.offset_y) as usize;
+      let width = gradient.width() as usize;
+      let variant = |src_y: usize| {
+        if fast_path.dithered {
+          &fast_path.axis_samples[(src_y & 7) * width..][src_x_start..src_x_end]
+        } else {
+          &fast_path.axis_samples[src_x_start..src_x_end]
+        }
+      };
 
       if fast_path.fully_opaque {
-        let scanline: &[u8] = bytemuck::cast_slice(src_pixels);
-
-        for row in rows.chunks_mut(row_stride) {
+        for (row_offset, row) in rows.chunks_mut(row_stride).enumerate() {
+          let scanline: &[u8] = bytemuck::cast_slice(variant(src_y_start + row_offset));
           row[dest_byte_start..dest_byte_end].copy_from_slice(scanline);
         }
       } else {
-        for row in rows.chunks_mut(row_stride) {
-          composite_premultiplied_over_span(&mut row[dest_byte_start..dest_byte_end], src_pixels);
+        for (row_offset, row) in rows.chunks_mut(row_stride).enumerate() {
+          composite_premultiplied_over_span(
+            &mut row[dest_byte_start..dest_byte_end],
+            variant(src_y_start + row_offset),
+          );
         }
       }
     }
     LinearGradientFastPathKind::Vertical => {
       let src_y_start = (bounds.y_min - bounds.offset_y) as usize;
-      let src_pixels = &fast_path.axis_samples[src_y_start..src_y_start + row_count];
+      let src_x_start = (bounds.x_min - bounds.offset_x) as usize;
 
-      for (row_offset, row) in rows.chunks_mut(row_stride).enumerate() {
-        let row_segment = &mut row[dest_byte_start..dest_byte_end];
-        let pixel = src_pixels[row_offset];
-        if fast_path.fully_opaque {
-          fill_repeated_premultiplied_pixel(
-            row_segment,
-            [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()],
-          );
-        } else {
-          blend_repeated_premultiplied_pixel(row_segment, pixel);
+      if fast_path.dithered {
+        for (row_offset, row) in rows.chunks_mut(row_stride).enumerate() {
+          let src_y = src_y_start + row_offset;
+          let pattern = &fast_path.axis_samples[src_y * 8..src_y * 8 + 8];
+          let row_segment = &mut row[dest_byte_start..dest_byte_end];
+          for (i, dst) in row_segment.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+            let pixel = pattern[(src_x_start + i) & 7];
+            if fast_path.fully_opaque {
+              *dst = [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()];
+            } else {
+              blend_premultiplied_pixel_normal(dst, pixel);
+            }
+          }
+        }
+      } else {
+        let src_pixels = &fast_path.axis_samples[src_y_start..src_y_start + row_count];
+
+        for (row_offset, row) in rows.chunks_mut(row_stride).enumerate() {
+          let row_segment = &mut row[dest_byte_start..dest_byte_end];
+          let pixel = src_pixels[row_offset];
+          if fast_path.fully_opaque {
+            fill_repeated_premultiplied_pixel(
+              row_segment,
+              [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()],
+            );
+          } else {
+            blend_repeated_premultiplied_pixel(row_segment, pixel);
+          }
         }
       }
     }
@@ -258,9 +286,18 @@ fn try_overlay_radial_gradient_tile_fast_normal_unconstrained(
       let center_byte_end = center_byte_start + center_pixels * 4;
       let center_row = &mut row[center_byte_start..center_byte_end];
       let mut row_state = gradient.begin_row(active_x_start, src_y, lut_len);
-      for pixel in center_row.as_chunks_mut::<4>().0 {
+      let dither = gradient.dither_active();
+      for (i, pixel) in center_row.as_chunks_mut::<4>().0.iter_mut().enumerate() {
         let lut_idx = gradient.next_lut_index(&mut row_state);
-        let src = gradient.sample_at(lut_idx);
+        let src = if dither {
+          quantize_dithered(
+            gradient.sample_hi_at(lut_idx),
+            active_x_start + i as u32,
+            src_y,
+          )
+        } else {
+          gradient.sample_at(lut_idx)
+        };
         blend_premultiplied_pixel_normal(pixel, src);
       }
     }
@@ -364,7 +401,7 @@ mod tests {
       |x, y| {
         // The canvas demultiplies on the way out, so the reference has to use
         // the same rounding or this compares two conversions, not two paths.
-        let color = tile.sample_pixel(x, y);
+        let color = tile.sample_pixel_dithered(x, y);
         let mut pixel = [color.red(), color.green(), color.blue(), color.alpha()];
         demultiply_rgba_in_place(&mut pixel);
         Rgba(pixel)
@@ -412,6 +449,7 @@ mod tests {
       16,
       &render_context.sizing,
       render_context.current_color,
+      true,
     );
     assert_gradient_overlay_matches_reference_with(
       &tile,
@@ -473,6 +511,7 @@ mod tests {
         tile_size.height,
         &render_context.sizing,
         render_context.current_color,
+        true,
       );
       assert_gradient_overlay_matches_reference_with(
         &tile,
@@ -505,6 +544,7 @@ mod tests {
       24,
       &render_context.sizing,
       render_context.current_color,
+      true,
     );
     assert_gradient_overlay_matches_reference_with(
       &tile,
@@ -602,6 +642,7 @@ mod tests {
         tile_size.height,
         &render_context.sizing,
         render_context.current_color,
+        true,
       );
       assert_gradient_overlay_matches_reference_with(
         &tile,
@@ -658,6 +699,7 @@ mod tests {
       48,
       &render_context.sizing,
       render_context.current_color,
+      true,
     );
     assert_gradient_overlay_matches_reference(
       &tile,
@@ -688,6 +730,7 @@ mod tests {
       24,
       &render_context.sizing,
       render_context.current_color,
+      true,
     );
     assert_gradient_overlay_matches_reference(
       &tile,

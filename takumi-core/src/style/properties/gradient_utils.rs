@@ -16,6 +16,43 @@ use crate::{
 const MIN_GRADIENT_LUT_SIZE: usize = 2;
 const MAX_GRADIENT_LUT_SIZE: usize = 8193;
 
+/// 8x8 Bayer thresholds in 8.8 fixed point, applied to gradient samples before
+/// quantization. Blink dithers every gradient (`gradient.cc`, "Legacy behavior:
+/// gradients are always dithered"); an integer-exact sample rounds back to
+/// itself, so flat regions and hard stops stay byte-identical.
+#[rustfmt::skip]
+pub const DITHER_NOISE_88: [[i16; 8]; 8] = [
+  [-128,    0,  -96,   32, -120,    8,  -88,   40],
+  [  64,  -64,   96,  -32,   72,  -56,  104,  -24],
+  [ -80,   48, -112,   16,  -72,   56, -104,   24],
+  [ 112,  -16,   80,  -48,  120,   -8,   88,  -40],
+  [-116,   12,  -84,   44, -124,    4,  -92,   36],
+  [  76,  -52,  108,  -20,   68,  -60,  100,  -28],
+  [ -68,   60, -100,   28,  -76,   52, -108,   20],
+  [ 124,   -4,   92,  -36,  116,  -12,   84,  -44],
+];
+
+/// A gradient LUT entry in premultiplied 8.8 fixed point.
+pub type GradientLutHiEntry = [u16; 4];
+
+/// Quantizes an 8.8 sample to 8-bit with the Bayer noise for pixel `(x, y)`.
+///
+/// The bias stays in `[0, 252]`, so no channel can underflow, overflow, or
+/// round past its alpha; the entry's premultiplied ordering survives as-is.
+#[inline(always)]
+pub fn quantize_dithered(entry: GradientLutHiEntry, x: u32, y: u32) -> PremultipliedColorU8 {
+  let bias = (128 + DITHER_NOISE_88[(y & 7) as usize][(x & 7) as usize] as i32) as u32;
+  let channel = |value: u16| ((value as u32 + bias) >> 8) as u8;
+
+  PremultipliedColorU8::from_rgba(
+    channel(entry[0]),
+    channel(entry[1]),
+    channel(entry[2]),
+    channel(entry[3]),
+  )
+  .unwrap_or(PremultipliedColorU8::TRANSPARENT)
+}
+
 #[cfg(test)]
 pub(crate) fn red_blue_stops(
   red_hint: Option<StopPosition>,
@@ -54,6 +91,19 @@ macro_rules! gradient_tile_accessors {
     #[inline(always)]
     fn sample_at(&self, lut_idx: usize) -> PremultipliedColorU8 {
       self.color_lut[lut_idx]
+    }
+
+    #[inline(always)]
+    fn sample_hi_at(
+      &self,
+      lut_idx: usize,
+    ) -> $crate::style::properties::gradient_utils::GradientLutHiEntry {
+      self.color_lut_hi[lut_idx]
+    }
+
+    #[inline(always)]
+    fn dither_active(&self) -> bool {
+      self.lut_dither_active
     }
 
     #[inline(always)]
@@ -332,8 +382,14 @@ pub trait GradientOverlayTile {
   fn lut_len(&self) -> usize;
   /// LUT entry at `lut_idx`.
   fn sample_at(&self, lut_idx: usize) -> PremultipliedColorU8;
+  /// 8.8 LUT entry at `lut_idx`.
+  fn sample_hi_at(&self, lut_idx: usize) -> GradientLutHiEntry;
+  /// Whether any LUT entry carries a fraction dithering can move.
+  fn dither_active(&self) -> bool;
   /// Color at pixel `(x, y)`.
   fn sample_pixel(&self, x: u32, y: u32) -> PremultipliedColorU8;
+  /// Color at pixel `(x, y)` with gradient dithering applied.
+  fn sample_pixel_dithered(&self, x: u32, y: u32) -> PremultipliedColorU8;
   /// Initializes row state at the given row start.
   fn begin_row(&self, src_x_start: u32, src_y: u32, lut_len: usize) -> Self::RowState;
   /// Returns an index in `0..lut_len` where `lut_len` is the value passed to `begin_row`.
@@ -375,24 +431,34 @@ pub fn overlay_gradient_tile_fast_normal_unconstrained<T: GradientOverlayTile>(
   let dest_x_max_usize = dest_x_max as usize;
   let fully_opaque = tile.fully_opaque();
 
+  let dither = tile.dither_active();
+
   for dest_y in dest_y_min..dest_y_max {
     let src_y = (dest_y - offset_y) as u32;
     let src_x_start = (dest_x_min - offset_x) as u32;
     let mut row_state = tile.begin_row(src_x_start, src_y, lut_len);
     let row_start = dest_y as usize * row_pixels;
     let row = &mut pixels[row_start + dest_x_min_usize..row_start + dest_x_max_usize];
+    let sample = |tile: &T, lut_idx: usize, src_x: u32| {
+      if dither {
+        quantize_dithered(tile.sample_hi_at(lut_idx), src_x, src_y)
+      } else {
+        tile.sample_at(lut_idx)
+      }
+    };
 
     if fully_opaque {
-      for dst in row.iter_mut() {
+      for (i, dst) in row.iter_mut().enumerate() {
         let lut_idx = tile.next_lut_index(&mut row_state);
         debug_assert!(lut_idx < lut_len);
-        let pixel = tile.sample_at(lut_idx);
+        let pixel = sample(tile, lut_idx, src_x_start + i as u32);
         *dst = [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()];
       }
     } else {
       const CHUNK: usize = 256;
       let mut buf = [[0u8; 4]; CHUNK];
       let mut remaining = row;
+      let mut src_x = src_x_start;
       while !remaining.is_empty() {
         let n = remaining.len().min(CHUNK);
         let (chunk, rest) = remaining.split_at_mut(n);
@@ -400,7 +466,8 @@ pub fn overlay_gradient_tile_fast_normal_unconstrained<T: GradientOverlayTile>(
         for slot in buf.iter_mut().take(n) {
           let lut_idx = tile.next_lut_index(&mut row_state);
           debug_assert!(lut_idx < lut_len);
-          let pixel = tile.sample_at(lut_idx);
+          let pixel = sample(tile, lut_idx, src_x);
+          src_x += 1;
           *slot = [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()];
         }
         for (dst, &src) in chunk.iter_mut().zip(buf[..n].iter()) {
@@ -617,6 +684,115 @@ pub fn build_color_lut_with_interpolation(
   }
   snap_stop_samples(&mut typed_lut, resolved_stops, axis_length);
   typed_lut
+}
+
+fn color_to_premultiplied_hi(color: Color) -> GradientLutHiEntry {
+  let [r, g, b, a] = color.0;
+  let scale = a as f32 / 255.0 * 256.0;
+
+  [
+    (r as f32 * scale).round() as u16,
+    (g as f32 * scale).round() as u16,
+    (b as f32 * scale).round() as u16,
+    (a as u16) << 8,
+  ]
+}
+
+fn interpolate_hi(
+  left: GradientLutHiEntry,
+  right: GradientLutHiEntry,
+  t: f32,
+) -> GradientLutHiEntry {
+  let mut entry = [0u16; 4];
+  for (slot, (l, r)) in entry.iter_mut().zip(left.iter().zip(right.iter())) {
+    *slot = (*l as f32 * (1.0 - t) + *r as f32 * t).round() as u16;
+  }
+  entry
+}
+
+/// Builds the premultiplied 8.8 LUT dithered sampling reads, plus whether any
+/// entry carries a fraction dithering can move.
+pub fn build_color_lut_hi_with_interpolation(
+  resolved_stops: &[ResolvedGradientStop],
+  axis_length: f32,
+  lut_size: usize,
+  interpolation: ColorInterpolationMethod,
+) -> (Vec<GradientLutHiEntry>, bool) {
+  let color_space = interpolation.color_space;
+  let hue_direction = interpolation.hue_direction;
+  if lut_size == 0 {
+    return (Vec::new(), false);
+  }
+
+  if resolved_stops.len() <= 1 {
+    let color = resolved_stops
+      .first()
+      .map(|s| s.color)
+      .unwrap_or(crate::style::Color::transparent());
+
+    return (vec![color_to_premultiplied_hi(color)], false);
+  }
+
+  let mut left_index = 0usize;
+  let mut right_index = 1usize;
+  let sample_step = if lut_size <= 1 {
+    0.0
+  } else {
+    axis_length / (lut_size - 1) as f32
+  };
+
+  let mut write_sample = |sample_index: usize| -> GradientLutHiEntry {
+    let position_px = sample_index as f32 * sample_step;
+
+    while right_index < resolved_stops.len() && resolved_stops[right_index].position <= position_px
+    {
+      left_index = right_index;
+      right_index += 1;
+    }
+
+    if right_index >= resolved_stops.len() {
+      return color_to_premultiplied_hi(resolved_stops[left_index].color);
+    }
+
+    let left_stop = &resolved_stops[left_index];
+    let right_stop = &resolved_stops[right_index];
+    if left_stop.color == right_stop.color {
+      return color_to_premultiplied_hi(left_stop.color);
+    }
+
+    let t = interpolation_position(left_stop.position, right_stop.position, position_px);
+    if color_space == ColorSpaceTag::Srgb && hue_direction == HueDirection::Shorter {
+      return interpolate_hi(
+        color_to_premultiplied_hi(left_stop.color),
+        color_to_premultiplied_hi(right_stop.color),
+        t,
+      );
+    }
+
+    color_to_premultiplied_hi(interpolate_with_color_space(
+      left_stop.color,
+      right_stop.color,
+      t,
+      color_space,
+      hue_direction,
+    ))
+  };
+
+  let mut lut = vec![[0u16; 4]; lut_size];
+  for (sample_index, entry) in lut.iter_mut().enumerate() {
+    *entry = write_sample(sample_index);
+  }
+
+  let stop_indices = assign_stop_sample_indices(resolved_stops, axis_length, lut.len());
+  for (stop, &sample_index) in resolved_stops.iter().zip(&stop_indices) {
+    lut[sample_index] = color_to_premultiplied_hi(stop.color);
+  }
+
+  let dither_active = lut
+    .iter()
+    .any(|entry| entry.iter().any(|channel| channel & 0xFF != 0));
+
+  (lut, dither_active)
 }
 
 /// Calculates an adaptive LUT size based on the gradient axis length.
