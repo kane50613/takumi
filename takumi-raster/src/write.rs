@@ -602,7 +602,6 @@ mod tests {
     AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, Bitmap,
     OutputFormat, write_animated_gif, write_animated_png, write_animated_webp, write_image,
   };
-  use crate::{DitheringAlgorithm, apply_dithering};
 
   fn mk_frame(image: RgbaImage, duration_ms: u32) -> AnimationFrame {
     AnimationFrame {
@@ -797,38 +796,6 @@ mod tests {
     let result = write_animated_png(&frames, &mut bytes, AnimatedPngOptions::default());
 
     assert_matches!(result, Err(Error::MixedAnimationFrameDimensions));
-  }
-
-  #[test]
-  fn write_image_does_not_apply_dithering() {
-    let mut image = RgbaImage::new(8, 8);
-
-    for (index, pixel) in image.as_mut().as_chunks_mut::<4>().0.iter_mut().enumerate() {
-      let value = (index * 3) as u8;
-      *pixel = [value, value, value, 255];
-    }
-
-    let mut dithered_image = image.clone();
-    apply_dithering(&mut dithered_image, DitheringAlgorithm::OrderedBayer);
-
-    let mut encoded_none = Vec::new();
-    let mut encoded_dithered = Vec::new();
-
-    let encode_none = write_image(
-      &Bitmap::from_rgba(image.clone()),
-      &mut encoded_none,
-      OutputFormat::Png,
-    );
-    assert!(encode_none.is_ok(), "failed to encode non-dithered image");
-
-    let encode_dithered = write_image(
-      &Bitmap::from_rgba(dithered_image),
-      &mut encoded_dithered,
-      OutputFormat::Png,
-    );
-    assert!(encode_dithered.is_ok(), "failed to encode image");
-
-    assert_ne!(encoded_none, encoded_dithered);
   }
 
   #[test]

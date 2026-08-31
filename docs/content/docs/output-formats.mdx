@@ -45,14 +45,13 @@ await render(<OgImage />, { width: 1200, height: 630, devicePixelRatio: 2 });
 
 ## Dithering
 
-`dithering` smooths gradients when colors are quantized during encoding, removing visible banding. It applies to static image exports and `raw` buffers.
+`dithering` adds ordered Bayer noise to gradient fills before they quantize to 8-bit, removing visible banding. It applies to static image exports and `raw` buffers.
 
 - `none` (default)
 - `ordered-bayer`
-- `floyd-steinberg`
 
 ```tsx
-await render(<Gradient />, { width: 1200, height: 630, dithering: "floyd-steinberg" });
+await render(<Gradient />, { width: 1200, height: 630, dithering: "ordered-bayer" });
 ```
 
 ## Animated output
