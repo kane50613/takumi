@@ -118,9 +118,15 @@ test("pageRanges keeps only the listed pages", async () => {
 
   expect(pageCount(full)).toBeGreaterThan(3);
   expect(pageCount(ranged)).toBe(pageCount(full) - 1);
-  expect(renderer.render(rows, { ...options, pageRanges: [{ from: 99 }] })).rejects.toThrow(
+  await expect(renderer.render(rows, { ...options, pageRanges: [{ from: 99 }] })).rejects.toThrow(
     "select none",
   );
+  await expect(
+    renderer.render(doc, {
+      viewport: { width: 600, height: 300 },
+      pageRanges: [1],
+    } as never),
+  ).rejects.toThrow("mutually exclusive");
 });
 
 test("page counter primitives fill per page and pull their counter face", async () => {
@@ -280,8 +286,8 @@ test("measure defaults to paged A4", async () => {
   expect(size.height).toBeGreaterThan(0);
 });
 
-test("rejects viewport combined with paged options", () => {
-  expect(
+test("rejects viewport combined with paged options", async () => {
+  await expect(
     renderer.render(doc, {
       viewport: { width: 600, height: 300 },
       size: "a4",

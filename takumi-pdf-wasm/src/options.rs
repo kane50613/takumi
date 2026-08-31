@@ -259,11 +259,12 @@ pub(crate) fn resolve_geometry(
     || options.landscape.is_some()
     || options.margin.is_some()
     || options.header.is_some()
-    || options.footer.is_some();
+    || options.footer.is_some()
+    || options.page_ranges.is_some();
 
   match options.viewport {
     Some(_) if paged_field_set => Err(js_sys::Error::new(
-      "viewport is mutually exclusive with the paged options (size, landscape, margin, header, footer)",
+      "viewport is mutually exclusive with the paged options (size, landscape, margin, header, footer, pageRanges)",
     )),
     Some(input) => Ok((
       Some(Viewport::new((

@@ -133,7 +133,7 @@ export type Tagged = boolean | "ua1" | "ua2";
 export type PdfRenderOptions = {
   /**
    * Fixed viewport for single-page output. Mutually exclusive with the paged
-   * fields (`size`, `landscape`, `margin`, `header`, `footer`).
+   * fields (`size`, `landscape`, `margin`, `header`, `footer`, `pageRanges`).
    */
   viewport?: ViewportInput;
   /** Page size for paged output. Defaults to A4. */
