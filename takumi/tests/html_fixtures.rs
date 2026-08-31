@@ -3,9 +3,11 @@
 //! eyeball the generated goldens. The same file opens in a browser for a
 //! reference render (it links `shared.css` for the font faces).
 //!
-//! `oxfmt` indents the fixtures. Whitespace between inline siblings is
-//! content, so a fixture that an indent would move marks its root
-//! `<!-- prettier-ignore -->`.
+//! `oxfmt` formats the fixtures under `htmlWhitespaceSensitivity: strict`
+//! (see `.oxfmtrc.json`), so it never adds or removes whitespace between
+//! elements. Whitespace that is itself test content (preserve spans,
+//! tab-size) is written as `&#9;`/`&#10;`/`&#32;` entities, which the
+//! formatter cannot re-wrap.
 
 mod test_utils;
 
