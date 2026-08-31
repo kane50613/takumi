@@ -610,12 +610,17 @@ fn compute_node_paint_bounds(
   if background_padding > 0.0
     && let Some(bounds) = &mut bounds
   {
-    let pad = background_padding.ceil() as usize;
+    // The padding is local CSS px while the bounds are device space; the
+    // linear part of the transform bounds its device-space envelope per axis.
+    let pad_x =
+      (background_padding * (inline_transform.a.abs() + inline_transform.c.abs())).ceil() as usize;
+    let pad_y =
+      (background_padding * (inline_transform.b.abs() + inline_transform.d.abs())).ceil() as usize;
 
-    bounds.left = bounds.left.saturating_sub(pad);
-    bounds.top = bounds.top.saturating_sub(pad);
-    bounds.right += pad;
-    bounds.bottom += pad;
+    bounds.left = bounds.left.saturating_sub(pad_x);
+    bounds.top = bounds.top.saturating_sub(pad_y);
+    bounds.right += pad_x;
+    bounds.bottom += pad_y;
   }
 
   bounds
