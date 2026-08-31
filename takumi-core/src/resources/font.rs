@@ -603,9 +603,7 @@ impl Fonts {
       .collection
       .register_fonts(blob.clone(), info_override);
 
-    // fontique collects families into a HashMap, so its return order is hash order.
-    // Sort by first face index so a multi-family file (e.g. a ttc) always joins
-    // `order` — and thus the fallback bucket — in the file's own face order.
+    // fontique returns families in hash order; keep a multi-family file in face order.
     registered_fonts
       .sort_by_key(|(_, faces)| faces.iter().map(FontInfo::index).min().unwrap_or(u32::MAX));
 
@@ -1182,8 +1180,6 @@ mod tests {
     let mono = load_font(Cow::Owned(geist_mono_bytes()), None).unwrap();
     let ttc = build_ttc(&[geist, mono]);
 
-    // fontique returns a multi-family file's families in HashMap order; without
-    // sorting, this flips between runs (fresh map per registration).
     for _ in 0..32 {
       let mut fonts = Fonts::default();
       let names: Vec<String> = fonts
