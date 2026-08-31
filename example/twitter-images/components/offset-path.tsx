@@ -130,9 +130,8 @@ function samplePath(d: string): [number, number][] {
   return pts;
 }
 
-// Sample, then scale + centre so the logo fills the middle of the frame. The
-// polyline closes with Z so offset-distance wraps instead of clamping, which is
-// what lets a plain infinite keyframe loop the tape seamlessly.
+// Sample, then scale + centre so the logo fills the middle of the frame.
+// Closed with Z so offset-distance wraps instead of clamping.
 function logoPath(d: string, scale: number, tx: number, ty: number) {
   const pts = samplePath(d).map(([x, y]) => [x * scale + tx, y * scale + ty] as [number, number]);
   let len = 0;
@@ -191,9 +190,6 @@ const HEAD_TAPE: Tape = {
   stops: HEAD_STOPS,
 };
 
-// The tapes ride on CSS animation alone: one lap per `lapMs`, each token phase
-// shifted onto the loop by a negative delay, so the shared pipeline's timeMs
-// drives every frame with no per-frame tree rebuild.
 export const css = [
   `@keyframes ride-fwd { from { offset-distance: 0%; } to { offset-distance: 100%; } }`,
   `@keyframes ride-rev { from { offset-distance: 100%; } to { offset-distance: 0%; } }`,
