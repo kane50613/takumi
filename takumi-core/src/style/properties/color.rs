@@ -43,6 +43,28 @@ impl Default for ColorInterpolationMethod {
   }
 }
 
+impl ColorInterpolationMethod {
+  /// Gradient default while every stop is written in a legacy form
+  /// (css-color-4 §12.2, Blink `Gradient::CreateShaderInternal`).
+  pub(crate) const LEGACY: Self = Self {
+    color_space: ColorSpaceTag::Srgb,
+    hue_direction: HueDirection::Shorter,
+  };
+  /// Gradient default once any stop uses a modern color function.
+  pub(crate) const MODERN: Self = Self {
+    color_space: ColorSpaceTag::Oklab,
+    hue_direction: HueDirection::Shorter,
+  };
+
+  pub(crate) const fn gradient_default(has_modern_stop: bool) -> Self {
+    if has_modern_stop {
+      Self::MODERN
+    } else {
+      Self::LEGACY
+    }
+  }
+}
+
 impl<'i> FromCss<'i> for ColorInterpolationMethod {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     input.expect_ident_matching("in")?;
@@ -113,9 +135,6 @@ impl<'i> FromCss<'i> for ColorInterpolationMethod {
 
 impl ToCss for ColorInterpolationMethod {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    if self.color_space == ColorSpaceTag::Oklab && self.hue_direction == HueDirection::Shorter {
-      return Ok(());
-    }
     let space = match self.color_space {
       ColorSpaceTag::Srgb => "srgb",
       ColorSpaceTag::LinearSrgb => "srgb-linear",

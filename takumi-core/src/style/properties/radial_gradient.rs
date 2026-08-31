@@ -6,11 +6,12 @@ use typed_builder::TypedBuilder;
 
 use super::gradient_utils::{
   GradientOverlayTile, adaptive_lut_size_with_visible_samples, build_color_lut_with_interpolation,
-  compute_repeat_setup, gradient_tile_accessors, resolve_stops_along_axis, write_gradient_css,
+  compute_repeat_setup, gradient_tile_accessors, parse_gradient_stops, resolve_stops_along_axis,
+  write_gradient_css,
 };
 use crate::style::{
-  Color, ColorInterpolationMethod, CssDescriptorKind, CssToken, FromCss, GradientStop,
-  GradientStops, Length, MakeComputed, ParseResult, PositionValue, SizingContext, ToCss,
+  Color, ColorInterpolationMethod, CssDescriptorKind, CssToken, FromCss, GradientStop, Length,
+  MakeComputed, ParseResult, PositionValue, SizingContext, StopPosition, ToCss,
   declare_enum_from_css_impl, unexpected_token,
 };
 
@@ -31,7 +32,7 @@ pub struct RadialGradient {
   #[builder(default = PositionValue::center())]
   pub center: PositionValue,
   /// The color interpolation method used between stops.
-  #[builder(default)]
+  #[builder(default = ColorInterpolationMethod::LEGACY)]
   pub interpolation: ColorInterpolationMethod,
   /// Gradient stops
   #[builder(setter(into))]
@@ -414,7 +415,7 @@ impl<'i> FromCss<'i> for RadialGradient {
       let mut shape = RadialShape::Ellipse;
       let mut size = RadialSize::FarthestCorner;
       let mut center = PositionValue::center();
-      let mut interpolation = ColorInterpolationMethod::default();
+      let mut interpolation = None;
 
       loop {
         if let Ok(s) = input.try_parse(RadialShape::from_css) {
@@ -439,7 +440,7 @@ impl<'i> FromCss<'i> for RadialGradient {
         }
 
         if let Ok(parsed_interpolation) = input.try_parse(ColorInterpolationMethod::from_css) {
-          interpolation = parsed_interpolation;
+          interpolation = Some(parsed_interpolation);
           continue;
         }
 
@@ -448,14 +449,14 @@ impl<'i> FromCss<'i> for RadialGradient {
         break;
       }
 
-      let stops = GradientStops::from_css(input)?;
+      let (stops, modern) = parse_gradient_stops(input, StopPosition::from_css)?;
 
       Ok(RadialGradient {
         repeating,
         shape,
         size,
         center,
-        interpolation,
+        interpolation: interpolation.unwrap_or(ColorInterpolationMethod::gradient_default(modern)),
         stops: stops.into_boxed_slice(),
       })
     })
