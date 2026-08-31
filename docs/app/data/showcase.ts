@@ -44,6 +44,13 @@ export const showcaseProjects: Project[] = [
     height: 630,
   },
   {
+    title: "Kawaii Logos",
+    image: "https://kawaiilogos.alfon.dev/opengraph-image",
+    url: "https://kawaiilogos.alfon.dev/",
+    width: 1200,
+    height: 630,
+  },
+  {
     image: "https://raw.githubusercontent.com/pi0/shiki-image/main/test/.snapshot/image.webp",
     url: "https://github.com/pi0/shiki-image",
     width: 1200,
