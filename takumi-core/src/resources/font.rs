@@ -13,8 +13,8 @@ use parley::{
   FontFamilyName, GenericFamily as ParleyGenericFamily, GlyphRun, LayoutContext, TextStyle,
   TreeBuilder,
   fontique::{
-    Attributes, Blob, Collection, CollectionOptions, FallbackKey, FontInfoOverride, FontStyle,
-    FontWeight, FontWidth, QueryFamily, QueryStatus, Script, ScriptExt,
+    Attributes, Blob, Collection, CollectionOptions, FallbackKey, FontInfo, FontInfoOverride,
+    FontStyle, FontWeight, FontWidth, QueryFamily, QueryStatus, Script, ScriptExt,
   },
 };
 use skrifa::{
@@ -598,10 +598,14 @@ impl Fonts {
       .as_ref()
       .zip(axes.as_deref())
       .map(|(info, axes)| info.to_parley(axes));
-    let registered_fonts = self
+    let mut registered_fonts = self
       .inner
       .collection
       .register_fonts(blob.clone(), info_override);
+
+    // fontique returns families in hash order; keep a multi-family file in face order.
+    registered_fonts
+      .sort_by_key(|(_, faces)| faces.iter().map(FontInfo::index).min().unwrap_or(u32::MAX));
 
     let mut families = Vec::with_capacity(registered_fonts.len());
     for (family, faces) in registered_fonts {
@@ -1138,6 +1142,56 @@ mod tests {
 
     assert_eq!(families[0].name, "Shared Geist");
     assert!(!families[0].faces.is_empty());
+  }
+
+  /// Concatenates sfnt fonts into a ttc, rebasing each table directory's offsets.
+  fn build_ttc(fonts: &[Vec<u8>]) -> Vec<u8> {
+    let header_len = 12 + 4 * fonts.len();
+    let mut ttc = Vec::new();
+    ttc.extend_from_slice(b"ttcf");
+    ttc.extend_from_slice(&1u16.to_be_bytes());
+    ttc.extend_from_slice(&0u16.to_be_bytes());
+    ttc.extend_from_slice(&(fonts.len() as u32).to_be_bytes());
+
+    let mut base = header_len as u32;
+    for font in fonts {
+      ttc.extend_from_slice(&base.to_be_bytes());
+      base += font.len() as u32;
+    }
+
+    for font in fonts {
+      let base = ttc.len() as u32;
+      let mut font = font.clone();
+      let table_count = u16::from_be_bytes([font[4], font[5]]) as usize;
+      for entry in 0..table_count {
+        let offset_at = 12 + entry * 16 + 8;
+        let offset = u32::from_be_bytes(font[offset_at..offset_at + 4].try_into().unwrap());
+        font[offset_at..offset_at + 4].copy_from_slice(&(offset + base).to_be_bytes());
+      }
+      ttc.extend_from_slice(&font);
+    }
+
+    ttc
+  }
+
+  #[test]
+  fn multi_family_file_registers_in_face_order() {
+    let geist = load_font(Cow::Owned(geist_bytes()), None).unwrap();
+    let mono = load_font(Cow::Owned(geist_mono_bytes()), None).unwrap();
+    let ttc = build_ttc(&[geist, mono]);
+
+    for _ in 0..32 {
+      let mut fonts = Fonts::default();
+      let names: Vec<String> = fonts
+        .register(FontResource::new(ttc.clone()))
+        .unwrap()
+        .into_iter()
+        .map(|family| family.name)
+        .collect();
+
+      assert_eq!(names, ["Geist", "Geist Mono"]);
+      assert_eq!(fonts.order, names);
+    }
   }
 
   #[test]
