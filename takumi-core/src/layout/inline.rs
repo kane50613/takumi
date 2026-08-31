@@ -2385,19 +2385,66 @@ pub struct InlineBackgroundFragment {
   pub baseline: f32,
 }
 
+/// One tier of a fragment's vertical bounds, unioned over covering items.
+#[derive(Clone, Copy)]
+struct VerticalExtent {
+  top: f32,
+  bottom: f32,
+  baseline: f32,
+  set: bool,
+}
+
+impl VerticalExtent {
+  const EMPTY: Self = Self {
+    top: f32::INFINITY,
+    bottom: f32::NEG_INFINITY,
+    baseline: 0.0,
+    set: false,
+  };
+
+  fn merge(&mut self, top: f32, bottom: f32, baseline: f32) {
+    self.top = self.top.min(top);
+    self.bottom = self.bottom.max(bottom);
+    if !self.set {
+      self.baseline = baseline;
+    }
+    self.set = true;
+  }
+
+  fn get(&self) -> Option<(f32, f32, f32)> {
+    self.set.then_some((self.top, self.bottom, self.baseline))
+  }
+}
+
+/// What a covering item contributes vertically to a span's fragment.
+enum CoverExtent {
+  /// A glyph run's leaded box; sizes the fragment when the run's font size
+  /// matches the span's own.
+  Run {
+    font_size: f32,
+    top: f32,
+    bottom: f32,
+    baseline: f32,
+  },
+  /// The owning line's extent; the last resort for padding-only coverage.
+  Line {
+    top: f32,
+    bottom: f32,
+    baseline: f32,
+  },
+}
+
 /// Per-line bounds of one decorated span, unioned over the items it covers.
 struct FragmentBounds {
   x0: f32,
   x1: f32,
-  top: f32,
-  bottom: f32,
-  baseline: f32,
-  has_height: bool,
-  /// Extent from descendant runs, used when the span has no text of its own.
-  fallback_top: f32,
-  fallback_bottom: f32,
-  fallback_baseline: f32,
-  has_fallback: bool,
+  /// The span's own runs, like Blink sizing an inline box fragment from the
+  /// box's own text metrics.
+  own: VerticalExtent,
+  /// Descendant runs, used when the span has no text of its own.
+  descendant: VerticalExtent,
+  /// The owning line, used when nothing on the fragment carries text.
+  line: VerticalExtent,
 }
 
 /// Accumulates decorated-span coverage per line and resolves it into
@@ -2417,8 +2464,6 @@ struct DecorationAccumulator {
   ids: HashMap<*const DecorationLink, usize>,
   decorations: Vec<InlineDecoration>,
   fragments: HashMap<(usize, usize), FragmentBounds>,
-  /// Per decoration: the lines carrying its start and end edges.
-  line_range: Vec<(usize, usize)>,
 }
 
 impl DecorationAccumulator {
@@ -2434,71 +2479,86 @@ impl DecorationAccumulator {
 
     self.ids.insert(Rc::as_ptr(link), id);
     self.decorations.push(link.decoration);
-    self.line_range.push((usize::MAX, 0));
     id
   }
 
   fn cover(
     &mut self,
     chain: Option<&Rc<DecorationLink>>,
-    run_font_size: f32,
     line_index: usize,
     x0: f32,
     x1: f32,
-    vertical: Option<(f32, f32, f32)>,
+    extent: &CoverExtent,
   ) {
     let mut next = chain;
 
     while let Some(link) = next {
-      let direct = (link.decoration.font_size - run_font_size).abs() < 0.01;
       let id = self.ensure(link);
-      let range = &mut self.line_range[id];
-
-      range.0 = range.0.min(line_index);
-      range.1 = range.1.max(line_index);
       let bounds = self
         .fragments
         .entry((id, line_index))
         .or_insert(FragmentBounds {
           x0,
           x1,
-          top: f32::INFINITY,
-          bottom: f32::NEG_INFINITY,
-          baseline: 0.0,
-          has_height: false,
-          fallback_top: f32::INFINITY,
-          fallback_bottom: f32::NEG_INFINITY,
-          fallback_baseline: 0.0,
-          has_fallback: false,
+          own: VerticalExtent::EMPTY,
+          descendant: VerticalExtent::EMPTY,
+          line: VerticalExtent::EMPTY,
         });
 
       bounds.x0 = bounds.x0.min(x0);
       bounds.x1 = bounds.x1.max(x1);
-      // Only the span's own runs set its height, like Blink sizing an inline
-      // box fragment from the box's own text metrics; a descendant's extent
-      // is the fallback for a span with no text of its own.
-      if let Some((top, bottom, baseline)) = vertical {
-        if direct {
-          bounds.top = bounds.top.min(top);
-          bounds.bottom = bounds.bottom.max(bottom);
-          if !bounds.has_height {
-            bounds.baseline = baseline;
-          }
-          bounds.has_height = true;
-        } else {
-          bounds.fallback_top = bounds.fallback_top.min(top);
-          bounds.fallback_bottom = bounds.fallback_bottom.max(bottom);
-          if !bounds.has_fallback {
-            bounds.fallback_baseline = baseline;
-          }
-          bounds.has_fallback = true;
+      match *extent {
+        CoverExtent::Run {
+          font_size,
+          top,
+          bottom,
+          baseline,
+        } => {
+          let tier = if (link.decoration.font_size - font_size).abs() < 0.01 {
+            &mut bounds.own
+          } else {
+            &mut bounds.descendant
+          };
+
+          tier.merge(top, bottom, baseline);
         }
+        CoverExtent::Line {
+          top,
+          bottom,
+          baseline,
+        } => bounds.line.merge(top, bottom, baseline),
       }
       next = link.parent.as_ref();
     }
   }
 
   fn into_fragments(self) -> Vec<InlineBackgroundFragment> {
+    // A span with any text sizes every fragment from runs; the line-extent
+    // tier only carries a span with no text at all (padding-only), so a
+    // spacer the line breaker strands on its own line stays invisible.
+    let mut has_text = vec![false; self.decorations.len()];
+
+    for ((id, _), bounds) in &self.fragments {
+      has_text[*id] |= bounds.own.set || bounds.descendant.set;
+    }
+    let vertical = |id: usize, bounds: &FragmentBounds| {
+      bounds
+        .own
+        .get()
+        .or_else(|| bounds.descendant.get())
+        .or_else(|| (!has_text[id]).then(|| bounds.line.get()).flatten())
+    };
+    // Slice edges come from the lines that actually paint.
+    let mut line_range = vec![(usize::MAX, 0); self.decorations.len()];
+
+    for ((id, line_index), bounds) in &self.fragments {
+      if vertical(*id, bounds).is_some() {
+        let range = &mut line_range[*id];
+
+        range.0 = range.0.min(*line_index);
+        range.1 = range.1.max(*line_index);
+      }
+    }
     let mut keys: Vec<(usize, usize)> = self.fragments.keys().copied().collect();
 
     keys.sort_unstable();
@@ -2508,23 +2568,13 @@ impl DecorationAccumulator {
         let (id, line_index) = key;
         let bounds = &self.fragments[&key];
 
-        let (top, bottom, baseline) = if bounds.has_height {
-          (bounds.top, bounds.bottom, bounds.baseline)
-        } else if bounds.has_fallback {
-          (
-            bounds.fallback_top,
-            bounds.fallback_bottom,
-            bounds.fallback_baseline,
-          )
-        } else {
-          return None;
-        };
+        let (top, bottom, baseline) = vertical(id, bounds)?;
         let decoration = &self.decorations[id];
         let x = bounds.x0;
         let y = top - decoration.padding.top;
         let width = bounds.x1 - bounds.x0;
         let height = bottom - top + decoration.padding.vertical();
-        let (min_line, max_line) = self.line_range[id];
+        let (min_line, max_line) = line_range[id];
         // The start edge sits on the first line, the end edge on the last;
         // wrap-edge corners stay square, like `box-decoration-break: slice`.
         let (has_start, has_end) = (line_index == min_line, line_index == max_line);
@@ -3135,15 +3185,15 @@ pub fn resolve_inline_runs(
 
             decoration_coverage.cover(
               Some(chain),
-              run.font_size(),
               line_index,
               rect.x,
               rect.x + rect.width,
-              Some((
-                rect.y,
-                rect.y + rect.height,
-                rect.y + above * setup.state.scale,
-              )),
+              &CoverExtent::Run {
+                font_size: run.font_size(),
+                top: rect.y,
+                bottom: rect.y + rect.height,
+                baseline: rect.y + above * setup.state.scale,
+              },
             );
           }
           let glyphs: Vec<PositionedGlyph> = glyph_run
@@ -3208,8 +3258,9 @@ pub fn resolve_inline_runs(
             ..inline_box
           };
           // A spacer or atomic box inside a decorated span stretches the
-          // span's fragment horizontally; only runs set its height, like
-          // Blink's box metrics ignoring atomic descendants.
+          // span's fragment horizontally; runs set its height, like Blink's
+          // box metrics ignoring atomic descendants. The line extent is the
+          // last resort so padding-only coverage still paints.
           let chain = match spans.get(inline_box.id as usize) {
             Some(ProcessedInlineSpan::Box(item)) => item.decorations.as_ref(),
             Some(ProcessedInlineSpan::Spacer { decorations, .. }) => decorations.as_ref(),
@@ -3218,8 +3269,22 @@ pub fn resolve_inline_runs(
 
           if chain.is_some() {
             let x0 = layout.border.left + layout.padding.left + inline_box.x;
+            let origin_y = setup.state.layout_origin.y;
+            let content_top = layout.border.top + layout.padding.top;
+            let line_y =
+              |value: f32| origin_y + (content_top + value - origin_y) * setup.state.scale;
 
-            decoration_coverage.cover(chain, f32::NAN, line_index, x0, x0 + inline_box.width, None);
+            decoration_coverage.cover(
+              chain,
+              line_index,
+              x0,
+              x0 + inline_box.width,
+              &CoverExtent::Line {
+                top: line_y(setup.resolved_metrics.resolved_line_top),
+                bottom: line_y(setup.resolved_metrics.resolved_line_bottom),
+                baseline: line_y(setup.resolved_metrics.resolved_baseline),
+              },
+            );
           }
           positioned_inline_boxes.insert(inline_box.id, inline_box);
           static_inline_prefix += inline_box.layout_advance;
@@ -3814,10 +3879,71 @@ mod tests {
 
     let heights: Vec<f32> = runs.background_fragments.iter().map(|f| f.height).collect();
 
+    assert!(!heights.is_empty(), "no background fragments resolved");
     assert!(
       heights.iter().all(|h| *h < 40.0),
       "bg grew to the BIG font: {heights:?}"
     );
+  }
+
+  #[test]
+  fn a_padding_only_span_paints_a_line_height_background() {
+    let fonts = create_test_context();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1200, 630)))
+          .build(),
+      )
+      .build();
+    let node = Node::container([
+      Node::text("before".to_string()),
+      Node::container([]).with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Inline))
+          .with(StyleDeclaration::padding_left(crate::style::Length::Px(
+            12.0,
+          )))
+          .with(StyleDeclaration::padding_right(crate::style::Length::Px(
+            12.0,
+          )))
+          .with(StyleDeclaration::background_color(ColorInput::Value(
+            Color([255, 0, 0, 255]),
+          ))),
+      ),
+      Node::text("after".to_string()),
+    ])
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
+    let render_node = RenderNode::from_node(&context, node);
+    let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
+    let built = create_inline_layout(InlineLayoutRequest {
+      items: collect_inline_items(&render_node),
+      available_space: Size {
+        width: AvailableSpace::Definite(1200.0),
+        height: AvailableSpace::Definite(630.0),
+      },
+      max_width: 1200.0,
+      max_height: None,
+      style: &font_style,
+      context: &render_node.context,
+      mode: InlineLayoutMode::Draw,
+      shape_cacheable: false,
+    });
+    let layout = ComputedLayout {
+      location: crate::geometry::Point::ZERO,
+      size: Size::new(1200.0, 630.0),
+      border: crate::geometry::Rect::default(),
+      padding: crate::geometry::Rect::default(),
+    };
+    let runs = resolve_inline_runs(&built, &render_node.context, layout).unwrap();
+    let fragment = runs
+      .background_fragments
+      .first()
+      .expect("padding-only span paints a fragment");
+
+    assert!((fragment.width - 24.0).abs() < 0.5, "{}", fragment.width);
+    assert!(fragment.height > 0.0);
   }
 
   #[test]
