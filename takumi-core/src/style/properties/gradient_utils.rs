@@ -1,7 +1,7 @@
 use std::fmt;
 
 use color::{AlphaColor, ColorSpaceTag, DynamicColor, HueDirection, Rgba8, Srgb};
-use cssparser::Parser;
+use cssparser::{Parser, Token};
 use smallvec::SmallVec;
 use tiny_skia::{ColorU8, PremultipliedColorU8};
 
@@ -89,16 +89,33 @@ pub(crate) fn compute_repeat_setup(
   (false, 0.0, 0.0, fallback_axis, resolved_stops)
 }
 
-/// Parses a comma-separated gradient stop list; `color a b` expands to two stops.
+/// Color functions whose presence flips an unspecified gradient interpolation
+/// space from sRGB to Oklab; every other stop syntax is a legacy sRGB form.
+const MODERN_COLOR_FUNCTIONS: [&str; 6] = ["lab", "lch", "oklab", "oklch", "color", "color-mix"];
+
+fn peeks_modern_color_function(input: &mut Parser<'_, '_>) -> bool {
+  let state = input.state();
+  let modern = matches!(input.next(), Ok(Token::Function(name)) if MODERN_COLOR_FUNCTIONS
+      .iter()
+      .any(|function| name.eq_ignore_ascii_case(function)));
+
+  input.reset(&state);
+  modern
+}
+
+/// Parses a comma-separated gradient stop list; `color a b` expands to two
+/// stops. The flag reports whether any stop used a modern color function.
 pub(crate) fn parse_gradient_stops<'i>(
   input: &mut Parser<'i, '_>,
   parse_position: fn(&mut Parser<'i, '_>) -> ParseResult<'i, StopPosition>,
-) -> ParseResult<'i, Vec<GradientStop>> {
+) -> ParseResult<'i, (Vec<GradientStop>, bool)> {
   let mut stops = Vec::new();
+  let mut modern = false;
   loop {
     if let Ok(hint) = input.try_parse(parse_position) {
       stops.push(GradientStop::Hint(hint));
     } else {
+      modern |= peeks_modern_color_function(input);
       let color = ColorInput::from_css(input)?;
       let first_position = input.try_parse(parse_position).ok();
       let second_position = if first_position.is_some() {
@@ -132,7 +149,7 @@ pub(crate) fn parse_gradient_stops<'i>(
     }
   }
 
-  Ok(stops)
+  Ok((stops, modern))
 }
 
 /// Serializes a gradient as `name(<params>, <interpolation>, <stops>)`.
@@ -154,14 +171,18 @@ pub(crate) fn write_gradient_css<W: fmt::Write>(
     has_prelude = true;
   }
 
-  let mut interp_buf = String::new();
-  interpolation.to_css(&mut interp_buf)?;
-  if !interp_buf.is_empty() {
-    if has_prelude {
-      dest.write_char(' ')?;
+  // Stops always serialize in legacy forms, so a reparse infers sRGB; only a
+  // space that differs from that inference needs writing.
+  if *interpolation != ColorInterpolationMethod::for_stop_syntax(false) {
+    let mut interp_buf = String::new();
+    interpolation.to_css(&mut interp_buf)?;
+    if !interp_buf.is_empty() {
+      if has_prelude {
+        dest.write_char(' ')?;
+      }
+      dest.write_str(&interp_buf)?;
+      has_prelude = true;
     }
-    dest.write_str(&interp_buf)?;
-    has_prelude = true;
   }
 
   for (index, stop) in stops.iter().enumerate() {

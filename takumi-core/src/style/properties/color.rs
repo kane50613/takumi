@@ -43,6 +43,22 @@ impl Default for ColorInterpolationMethod {
   }
 }
 
+impl ColorInterpolationMethod {
+  /// Gradient default per css-color-4 §12.2: sRGB while every stop is written in
+  /// a legacy form, Oklab once any stop uses a modern one (Blink
+  /// `Gradient::CreateShaderInternal`).
+  pub(crate) fn for_stop_syntax(modern: bool) -> Self {
+    Self {
+      color_space: if modern {
+        ColorSpaceTag::Oklab
+      } else {
+        ColorSpaceTag::Srgb
+      },
+      hue_direction: HueDirection::Shorter,
+    }
+  }
+}
+
 impl<'i> FromCss<'i> for ColorInterpolationMethod {
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     input.expect_ident_matching("in")?;
@@ -113,9 +129,6 @@ impl<'i> FromCss<'i> for ColorInterpolationMethod {
 
 impl ToCss for ColorInterpolationMethod {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    if self.color_space == ColorSpaceTag::Oklab && self.hue_direction == HueDirection::Shorter {
-      return Ok(());
-    }
     let space = match self.color_space {
       ColorSpaceTag::Srgb => "srgb",
       ColorSpaceTag::LinearSrgb => "srgb-linear",
