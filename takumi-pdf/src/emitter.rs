@@ -18,7 +18,10 @@ use takumi_core::{
     border::{BorderProperties, inset_size, rect_offset, side_bands},
     clip::clip_shape_commands,
     decoration::{ClipBox, OutlineGeometry},
-    inline::{BuiltInlineLayout, InlineRunLayout, ProcessedInlineSpan, ShapedRun, run_decorations},
+    inline::{
+      BuiltInlineLayout, InlineRunLayout, ProcessedInlineSpan, ShapedRun,
+      inline_background_fragments, inline_background_path, run_decorations,
+    },
     inline_box::{InlineBoxPaint, InlineSubtree, resolve_inline_box},
     node::NodeKind,
     tree::{LayoutResults, NodeOrigin, RenderNode},
@@ -1284,6 +1287,19 @@ impl Emitter<'_> {
     font_style: &SizedFontStyle,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
+    // Inline-span backgrounds fill under every glyph of the formatting context.
+    for fragment in inline_background_fragments(runs, &built.spans) {
+      let Some(path) = krilla_path(&inline_background_path(&fragment), x, y) else {
+        continue;
+      };
+
+      surface.set_fill(Some(fill_from_rgba(
+        self.filtered(fragment.color),
+        fragment.opacity,
+      )));
+      surface.draw_path(&path);
+    }
+
     // text-shadow paints below the glyphs, later-listed shadows lowest. PDF
     // has no blur operator, so a blurred text shadow draws sharp.
     for shadow in font_style.painted_text_shadows() {

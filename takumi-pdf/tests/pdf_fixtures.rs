@@ -163,6 +163,30 @@ fn text_ligatures() {
   });
 }
 
+/// An inline `<span>` with a background paints a rounded fragment under its
+/// text, padding included.
+#[test]
+fn inline_span_background() {
+  let pdf = run_pdf_fixture("inline-span-background", |fonts| {
+    let source = r##"<div style="display: flex; flex-direction: column; row-gap: 10px; width: 100%; height: 100%; padding: 12px; background-color: #ffffff; font-size: 18px; color: #141414">
+      <p style="margin: 0">Due <span style="background-color: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 9999px">August 31</span> at noon.</p>
+      <p style="margin: 0; width: 190px">Wraps: <span style="background-color: #dcfce7; padding: 2px 6px; border-radius: 6px">green badge text long enough to wrap</span> done.</p>
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse badge fixture"))
+      .viewport(Viewport::new((420, 200)))
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  assert!(
+    haystack.contains("0.9961 0.8863 0.8863 rg"),
+    "the pill's background color is missing from the content stream"
+  );
+}
+
 #[test]
 fn paged_lines() {
   run_pdf_fixture("paged-lines", |fonts| {

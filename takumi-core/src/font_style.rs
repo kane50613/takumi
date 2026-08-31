@@ -8,7 +8,7 @@ use smallvec::SmallVec;
 
 use crate::{
   context::RenderContext,
-  geometry::Size,
+  geometry::{Rect as GeometryRect, Size},
   layout::inline::InlineBrush,
   painter::StrokeStyle,
   resources::font::{FontClasses, SubsetGroup},
@@ -196,6 +196,20 @@ pub(crate) fn presentation_segments(text: &str) -> Vec<(Range<usize>, Option<Pre
   segments
 }
 
+/// The background an inline span paints along its line fragments.
+#[derive(Clone, Copy)]
+pub struct InlineSpanBackground {
+  /// Resolved fill color.
+  pub color: Color,
+  /// Padding the fragment rect grows by, in px. The horizontal sides also
+  /// reserve advance on the line through spacer boxes.
+  pub padding: GeometryRect<f32>,
+  /// Corner radius in px, taken from `border-top-left-radius`.
+  pub radius: f32,
+  /// The span's `opacity`.
+  pub opacity: f32,
+}
+
 /// Sized font style with computed font size and line height.
 #[derive(Clone)]
 #[non_exhaustive]
@@ -240,6 +254,38 @@ impl SizedFontStyle<'_> {
       .iter()
       .rev()
       .filter(|shadow| shadow.color.0[3] != 0)
+  }
+
+  /// The `background-color` this inline span paints along its line fragments,
+  /// or `None` when it paints none. A non-inline element paints its background
+  /// on its own border-box, so only a real inline box fills its fragments.
+  pub fn inline_background(&self) -> Option<InlineSpanBackground> {
+    if self.parent.display != Display::Inline {
+      return None;
+    }
+    let color = self.parent.background_color.resolve(self.color);
+
+    if color.0[3] == 0 {
+      return None;
+    }
+    let padding = GeometryRect {
+      top: self.parent.padding_top.to_px(&self.sizing, 0.0),
+      right: self.parent.padding_right.to_px(&self.sizing, 0.0),
+      bottom: self.parent.padding_bottom.to_px(&self.sizing, 0.0),
+      left: self.parent.padding_left.to_px(&self.sizing, 0.0),
+    };
+
+    Some(InlineSpanBackground {
+      color,
+      padding,
+      radius: self
+        .parent
+        .border_top_left_radius
+        .x
+        .to_px(&self.sizing, 0.0)
+        .max(0.0),
+      opacity: self.parent.opacity.0,
+    })
   }
 
   /// The stroke this inline box's `outline` runs along its island contour, or

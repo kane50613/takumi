@@ -17,8 +17,8 @@ use crate::{
   draw_outset_box_shadow,
   layout::inline::{
     BuiltInlineLayout, InlineBoxItem, InlineOutlineRect, InlineRunLayout, PositionedInlineRun,
-    ProcessedInlineSpan, ShapedRun, VisualInlineBox, glyph_outlines, outline_island_contour,
-    outline_islands, resolve_inline_runs,
+    ProcessedInlineSpan, ShapedRun, VisualInlineBox, glyph_outlines, inline_background_fragments,
+    inline_background_path, outline_island_contour, outline_islands, resolve_inline_runs,
   },
   painter::StrokeStyle,
   rasterize_layers,
@@ -436,12 +436,29 @@ pub(crate) fn draw_inline_layout(
   font_style: &SizedFontStyle,
 ) -> Result<Vec<VisualInlineBox>> {
   let spans = &built.spans;
+  let resolved = resolve_inline_runs(built, context, layout)?;
+
+  // Inline-span backgrounds fill under every glyph of the formatting context.
+  for fragment in inline_background_fragments(&resolved, spans) {
+    let path = inline_background_path(&fragment);
+    let (mask, placement) = render_mask(
+      &path,
+      Some(context.transform),
+      None,
+      Some(canvas.viewport()),
+    );
+
+    draw_with_inline_opacity(canvas, fragment.opacity, |canvas| {
+      canvas.draw_mask(&mask, placement, fragment.color, BlendMode::Normal);
+      Ok(())
+    })?;
+  }
   let InlineRunLayout {
     runs,
     inline_boxes,
     outline_rects,
     ..
-  } = resolve_inline_runs(built, context, layout)?;
+  } = resolved;
 
   let decoration_mask = runs.iter().fold(TextDecorationLines::empty(), |acc, run| {
     acc | run.glyph_run.brush.decoration_line
