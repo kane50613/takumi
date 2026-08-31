@@ -86,6 +86,12 @@ export type PageMargin =
       left?: PageMarginSide;
     };
 
+/**
+ * A page to keep: a 1-based page number, or an inclusive span. An unset `from`
+ * starts at the first page; an unset `to` runs to the last.
+ */
+export type PageRange = number | { from?: number; to?: number };
+
 export type PdfMetadata = {
   title?: string;
   description?: string;
@@ -143,6 +149,11 @@ export type PdfRenderOptions = {
   header?: Node;
   /** Band repeated at the bottom of every page; same class hooks as `header`. */
   footer?: Node;
+  /**
+   * The pages the output keeps, e.g. `[1, { from: 4, to: 8 }]`. Page counters
+   * keep their full-output numbers.
+   */
+  pageRanges?: PageRange[];
   /** Pre-fetched images keyed by URL. */
   images?: ImageSource[];
   /** CSS to apply before layout. */

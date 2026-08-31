@@ -410,16 +410,18 @@ pub(crate) fn add_link_annotations<'l>(
 }
 
 /// Nests flat headings into an outline tree: a heading adopts the following
-/// deeper headings as children, like an HTML document outline.
+/// deeper headings as children, like an HTML document outline. A heading with
+/// no destination (its page is dropped by page ranges) loses its entry and its
+/// children take its place.
 pub(crate) fn build_outline(
   headings: &[HeadingTarget],
-  destination: impl Fn(&HeadingTarget) -> XyzDestination,
+  destination: impl Fn(&HeadingTarget) -> Option<XyzDestination>,
 ) -> Outline {
   fn take(
     headings: &[HeadingTarget],
     index: &mut usize,
     level: u8,
-    destination: &impl Fn(&HeadingTarget) -> XyzDestination,
+    destination: &impl Fn(&HeadingTarget) -> Option<XyzDestination>,
   ) -> Vec<OutlineNode> {
     let mut nodes = Vec::new();
 
@@ -428,12 +430,19 @@ pub(crate) fn build_outline(
         break;
       }
       *index += 1;
-      let mut node = OutlineNode::new(heading.text.clone(), destination(heading));
+      let children = take(headings, index, heading.level + 1, destination);
 
-      for child in take(headings, index, heading.level + 1, destination) {
-        node.push_child(child);
+      match destination(heading) {
+        Some(dest) => {
+          let mut node = OutlineNode::new(heading.text.clone(), dest);
+
+          for child in children {
+            node.push_child(child);
+          }
+          nodes.push(node);
+        }
+        None => nodes.extend(children),
       }
-      nodes.push(node);
     }
     nodes
   }

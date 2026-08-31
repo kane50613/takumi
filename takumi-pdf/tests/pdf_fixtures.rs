@@ -30,8 +30,8 @@ use takumi_core::{
 };
 use takumi_html::{FromHtmlOptions, from_html};
 use takumi_pdf::{
-  Attachment, AttachmentRelationship, MeasureOptions, PageMargins, PageOptions, PdfDate, PdfError,
-  PdfMetadata, PdfOptions, PdfStandard, Tagging, XmpProperty, XmpSchema, measure, render,
+  Attachment, AttachmentRelationship, MeasureOptions, PageMargins, PageOptions, PageRange, PdfDate,
+  PdfError, PdfMetadata, PdfOptions, PdfStandard, Tagging, XmpProperty, XmpSchema, measure, render,
 };
 
 fn fonts() -> Fonts {
@@ -208,6 +208,125 @@ fn paged_footer_counters() {
       .fonts(fonts)
       .build()
   });
+}
+
+/// `page_ranges` keeps pages 1 and 3 of a three-page report. The footer
+/// counters keep their full-output numbers, so the two pages read
+/// "Page 1 of 3" and "Page 3 of 3".
+#[test]
+fn paged_page_ranges() {
+  fn document<'f>(fonts: &'f Fonts, ranges: Option<Vec<PageRange>>) -> PdfOptions<'f> {
+    let rows = (1..=40).map(|i| text(&format!("Row {i}"), 16.0)).collect();
+    let mut options = PdfOptions::builder()
+      .node(column(rows))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .footer(
+        from_html(
+          r#"<div style="display: flex; column-gap: 3px; font-size: 12px; color: #141414;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>"#,
+          FromHtmlOptions::default(),
+        )
+        .expect("parse footer fixture"),
+      )
+      .fonts(fonts)
+      .build();
+
+    options.page_ranges = ranges;
+    options
+  }
+  let ranged = run_pdf_fixture("paged-page-ranges", |fonts| {
+    document(
+      fonts,
+      Some(vec![
+        PageRange::single(1),
+        PageRange {
+          from: Some(3),
+          to: Some(3),
+        },
+      ]),
+    )
+  });
+  let full = render_pinned(document(&fonts(), None));
+  let pages = |pdf: &[u8]| {
+    let text = String::from_utf8_lossy(pdf);
+
+    text.matches("/Type/Page").count() - text.matches("/Type/Pages").count()
+  };
+
+  assert_eq!(pages(&full), 3, "the full report paginates to three pages");
+  assert_eq!(pages(&ranged), 2, "the ranges keep two of them");
+  assert_ne!(ranged, full);
+}
+
+/// An internal link whose target page is dropped loses its annotation, and an
+/// outline entry on a dropped page loses its node.
+#[test]
+fn page_ranges_drop_destinations_to_dropped_pages() {
+  let fonts = fonts();
+  let source = r##"<div style="display: flex; flex-direction: column; width: 100%; font-size: 14px; color: #141414;">
+    <a href="#alpha" style="display: flex;">see alpha</a>
+    <h1 style="font-size: 18px; margin: 0;">First</h1>
+    <div id="alpha" style="display: flex; break-before: page;"><h1 style="font-size: 18px; margin: 0;">Alpha</h1></div>
+  </div>"##;
+  let document = |ranges: Option<Vec<PageRange>>| {
+    let mut options = PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse the doc"))
+      .page(PageOptions {
+        width: 320.0,
+        height: 240.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .outline(true)
+      .tagged(Tagging::Off)
+      .fonts(&fonts)
+      .build();
+
+    options.page_ranges = ranges;
+    render(options).expect("render the doc")
+  };
+  let full = document(None);
+  let first_only = document(Some(vec![PageRange::single(1)]));
+  let links = |pdf: &[u8]| {
+    String::from_utf8_lossy(pdf)
+      .matches("/Subtype/Link")
+      .count()
+  };
+  let titles = |pdf: &[u8]| String::from_utf8_lossy(pdf).matches("/Title").count();
+
+  assert_eq!(links(&full), 1, "the full render annotates the link");
+  assert_eq!(
+    links(&first_only),
+    0,
+    "a link to a dropped page loses its annotation"
+  );
+  assert_eq!(titles(&full), 2, "the full outline lists both headings");
+  assert_eq!(
+    titles(&first_only),
+    1,
+    "the outline keeps only the heading on a kept page"
+  );
+}
+
+#[test]
+fn page_ranges_selecting_no_page_reject_the_render() {
+  let fonts = fonts();
+  let mut options = PdfOptions::builder()
+    .node(column(vec![text("short", 16.0)]))
+    .page(PageOptions::A4)
+    .fonts(&fonts)
+    .build();
+
+  options.page_ranges = Some(vec![PageRange {
+    from: Some(99),
+    to: None,
+  }]);
+  assert!(matches!(
+    render(options),
+    Err(PdfError::PageRangesOutOfBounds(1))
+  ));
 }
 
 /// A `<table>` from markup: element presets, group reordering, a declared

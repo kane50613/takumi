@@ -107,6 +107,22 @@ test("paginates and substitutes footer counters", async () => {
   expect(pageCount(pdf)).toBeGreaterThan(1);
 });
 
+test("pageRanges keeps only the listed pages", async () => {
+  const rows = container({
+    style: { display: "flex", flexDirection: "column", width: "100%" },
+    children: Array.from({ length: 60 }, (_, i) => text(`Row ${i + 1}`, { fontSize: 16 })),
+  });
+  const options = { size: { width: 400, height: 300 }, margin: 24 } as const;
+  const full = await renderer.render(rows, options);
+  const ranged = await renderer.render(rows, { ...options, pageRanges: [1, { from: 3 }] });
+
+  expect(pageCount(full)).toBeGreaterThan(3);
+  expect(pageCount(ranged)).toBe(pageCount(full) - 1);
+  expect(renderer.render(rows, { ...options, pageRanges: [{ from: 99 }] })).rejects.toThrow(
+    "select none",
+  );
+});
+
 test("page counter primitives fill per page and pull their counter face", async () => {
   let loaded = false;
   const pdf = await renderer.render(

@@ -84,6 +84,12 @@ export type PageMargin =
     };
 
 /**
+ * A page to keep: a 1-based page number, or an inclusive span. An unset `from`
+ * starts at the first page; an unset `to` runs to the last.
+ */
+export type PageRange = number | { from?: number; to?: number };
+
+/**
  * Paged output (the default): content flows across pages of `size`, like
  * Puppeteer's `page.pdf()`. The layout canvas has unbounded height, so
  * percentage heights do not resolve. CSS `@page` rules in `css` are
@@ -106,6 +112,13 @@ type PagedOptions = {
   header?: NodeInput;
   /** Band repeated at the bottom of every page; same class hooks as `header`. */
   footer?: NodeInput;
+  /**
+   * The pages the output keeps, e.g. `[1, { from: 4, to: 8 }]`, like a print
+   * dialog's page ranges. Layout and page counters still run over the whole
+   * document, so a kept page shows the numbers it would in full output.
+   * Ranges that keep no page reject the render.
+   */
+  pageRanges?: PageRange[];
 };
 
 /**
@@ -121,6 +134,7 @@ type ViewportOptions = {
   margin?: never;
   header?: never;
   footer?: never;
+  pageRanges?: never;
 };
 
 /**

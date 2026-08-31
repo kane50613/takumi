@@ -94,8 +94,8 @@ pub const PRODUCER: &str = concat!("takumi-pdf ", env!("CARGO_PKG_VERSION"));
 
 pub use crate::options::{
   Attachment, AttachmentRelationship, MeasureOptions, MeasuredSize, PageMargin, PageMargins,
-  PageOptions, PdfDate, PdfError, PdfMetadata, PdfOptions, PdfStandard, Tagging, XmpProperty,
-  XmpSchema,
+  PageOptions, PageRange, PdfDate, PdfError, PdfMetadata, PdfOptions, PdfStandard, Tagging,
+  XmpProperty, XmpSchema,
 };
 use crate::{
   bands::{RepeatBounds, Repeatable, prepare_band},
@@ -112,7 +112,7 @@ use crate::{
     page::PageSettings,
     surface::Surface,
   },
-  options::{PT_PER_PX, build_metadata, krilla_datetime, validate_xmp_schemas},
+  options::{PT_PER_PX, PageSelection, build_metadata, krilla_datetime, validate_xmp_schemas},
   page::{PageComposer, PageFrame},
   pagination::{MAX_PAGES, paginate},
   paint::{fill_from_rgba, rect_path},
@@ -331,6 +331,8 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       if paginated.starts.len() >= MAX_PAGES {
         return Err(PdfError::TooManyPages(paginated.starts.len()));
       }
+      let selection =
+        PageSelection::resolve(options.page_ranges.as_deref(), paginated.starts.len())?;
       let repeatables: Vec<Repeatable> = header
         .into_iter()
         .chain(
@@ -354,9 +356,13 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         document_lang,
         background: options.background_color,
         structural: options.tagged.names_structure_destinations(),
+        selection: &selection,
       };
 
       for slice in paginated.pages() {
+        if !selection.keeps(slice.index) {
+          continue;
+        }
         composer.compose(&mut document, &repeatables, &slice)?;
       }
 
@@ -378,6 +384,8 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       }
     }
     None => {
+      // A viewport render is one page, so the ranges only have page 1 to keep.
+      PageSelection::resolve(options.page_ranges.as_deref(), 1)?;
       let viewport = options.viewport.ok_or(PdfError::MissingViewport)?;
       let content = prepare_tree(&inputs, options.node, viewport)?;
       let page_size = KrillaSize::from_wh(content.width * PT_PER_PX, content.height * PT_PER_PX)
@@ -410,10 +418,10 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       let destination = |top: f32, path: &[usize]| {
         let dest = XyzDestination::new(0, Point::from_xy(0.0, top.max(0.0) * PT_PER_PX));
 
-        match structural {
+        Some(match structural {
           true => dest.with_structure(tag_id(path)),
           false => dest,
-        }
+        })
       };
 
       add_link_annotations(
@@ -427,7 +435,7 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
           interactive
             .anchors
             .get(id)
-            .map(|anchor| destination(anchor.top, &anchor.path))
+            .and_then(|anchor| destination(anchor.top, &anchor.path))
         },
       );
       page.finish();
@@ -471,6 +479,62 @@ mod tests {
   };
 
   const A4: (f32, f32) = (PageOptions::A4.width, PageOptions::A4.height);
+
+  #[test]
+  fn page_selection_maps_kept_pages_to_output_order() {
+    let ranges = [
+      PageRange::single(1),
+      PageRange {
+        from: Some(3),
+        to: None,
+      },
+    ];
+    let selection = PageSelection::resolve(Some(&ranges), 5).unwrap();
+
+    assert_eq!(
+      (0..5)
+        .map(|index| selection.emitted(index))
+        .collect::<Vec<_>>(),
+      vec![Some(0), None, Some(1), Some(2), Some(3)]
+    );
+    assert!(selection.keeps(0));
+    assert!(!selection.keeps(1));
+  }
+
+  #[test]
+  fn page_selection_without_ranges_keeps_every_page() {
+    let selection = PageSelection::resolve(None, 3).unwrap();
+
+    assert_eq!(selection.emitted(2), Some(2));
+  }
+
+  #[test]
+  fn page_selection_rejects_invalid_and_out_of_bounds_ranges() {
+    assert!(matches!(
+      PageSelection::resolve(
+        Some(&[PageRange {
+          from: Some(4),
+          to: Some(2)
+        }]),
+        5
+      ),
+      Err(PdfError::InvalidPageRange(_))
+    ));
+    assert!(matches!(
+      PageSelection::resolve(Some(&[PageRange::single(0)]), 5),
+      Err(PdfError::InvalidPageRange(_))
+    ));
+    assert!(matches!(
+      PageSelection::resolve(
+        Some(&[PageRange {
+          from: Some(6),
+          to: None
+        }]),
+        5
+      ),
+      Err(PdfError::PageRangesOutOfBounds(5))
+    ));
+  }
 
   #[test]
   fn content_taller_than_a_render_allows_stops_counting() {
