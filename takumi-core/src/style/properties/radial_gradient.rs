@@ -16,6 +16,20 @@ use crate::style::{
   declare_enum_from_css_impl, unexpected_token,
 };
 
+/// Radii of the ellipse with the given width/height ratio passing through
+/// `corner`, as Blink's `EllipseRadius` (css-images-3 §3.3.2: a corner-sized
+/// ellipse keeps the matching side keyword's aspect ratio).
+fn ellipse_radii_through(corner: (f32, f32), aspect_ratio: f32) -> (f32, f32) {
+  if !aspect_ratio.is_finite() || aspect_ratio == 0.0 {
+    return (0.0, 0.0);
+  }
+
+  let (x, y) = corner;
+  let rx = (x * x + y * y * aspect_ratio * aspect_ratio).sqrt();
+
+  (rx, rx / aspect_ratio)
+}
+
 /// Represents a radial gradient.
 #[derive(Debug, Clone, PartialEq, TypedBuilder)]
 #[non_exhaustive]
@@ -241,8 +255,8 @@ impl RadialGradientTile {
         }
       }
       (RadialShape::Ellipse, RadialSize::FarthestCorner) => {
-        // ellipse radii to farthest corner: take farthest side per axis
-        (dx_left.max(dx_right), dy_top.max(dy_bottom))
+        let corner = (dx_left.max(dx_right), dy_top.max(dy_bottom));
+        ellipse_radii_through(corner, dx_left.max(dx_right) / dy_top.max(dy_bottom))
       }
       (RadialShape::Circle, RadialSize::FarthestCorner) => {
         // distance to farthest corner
@@ -274,19 +288,8 @@ impl RadialGradientTile {
         (r, r)
       }
       (RadialShape::Ellipse, RadialSize::ClosestCorner) => {
-        let f_rx = dx_left.max(dx_right);
-        let f_ry = dy_top.max(dy_bottom);
-        let corners = [
-          (dx_left, dy_top),
-          (dx_right, dy_top),
-          (dx_left, dy_bottom),
-          (dx_right, dy_bottom),
-        ];
-        let distances = corners.map(|(dx, dy)| (dx * dx + dy * dy).sqrt());
-        let dist_to_closest_corner = distances.iter().fold(f32::INFINITY, |a, &b| a.min(b));
-        let dist_to_farthest_corner = distances.iter().fold(0.0f32, |a, &b| a.max(b));
-        let ratio = dist_to_closest_corner / dist_to_farthest_corner.max(1e-6);
-        (f_rx * ratio, f_ry * ratio)
+        let corner = (dx_left.min(dx_right), dy_top.min(dy_bottom));
+        ellipse_radii_through(corner, dx_left.min(dx_right) / dy_top.min(dy_bottom))
       }
       (RadialShape::Circle, RadialSize::ClosestCorner) => {
         let candidates = [
@@ -948,13 +951,47 @@ mod tests {
       .build();
     let tile = RadialGradientTile::new(&gradient, 100, 100, &sizing, Color::black(), false);
 
-    // dx_left=20, dx_right=80, dy_top=20, dy_bottom=80
-    // f_rx = 80, f_ry = 80
-    // d_closest = sqrt(20^2 + 20^2)
-    // d_farthest = sqrt(80^2 + 80^2)
-    // ratio = d_closest / d_farthest = 20/80 = 0.25
-    // radius_x = 80 * 0.25 = 20, radius_y = 80 * 0.25 = 20
-    assert!((tile.inv_radius_x - (1.0 / 20.0)).abs() < 1e-3);
-    assert!((tile.inv_radius_y - (1.0 / 20.0)).abs() < 1e-3);
+    // Closest corner (20, 20) with the closest-side aspect ratio 20/20 = 1:
+    // the ellipse through the corner is the circle of radius 20 * sqrt(2).
+    let expected = 20.0 * 2.0_f32.sqrt();
+    assert!((tile.inv_radius_x - expected.recip()).abs() < 1e-3);
+    assert!((tile.inv_radius_y - expected.recip()).abs() < 1e-3);
+  }
+
+  #[test]
+  fn test_radial_gradient_ellipse_farthest_corner_passes_through_corner() {
+    let gradient = RadialGradient::builder()
+      .center(PositionValue(SpacePair::from_pair(
+        Length::Percentage(50.0).into(),
+        Length::Percentage(0.0).into(),
+      )))
+      .stops([
+        GradientStop::ColorHint {
+          color: Color::black().into(),
+          hint: Some(StopPosition(Length::Percentage(0.0))),
+        },
+        GradientStop::ColorHint {
+          color: Color::white().into(),
+          hint: Some(StopPosition(Length::Percentage(100.0))),
+        },
+      ])
+      .build();
+
+    let sizing = SizingContext::builder()
+      .viewport(Viewport::new((1200, 630)))
+      .build();
+    let tile = RadialGradientTile::new(&gradient, 1200, 630, &sizing, Color::black(), false);
+
+    // Farthest corner offset (600, 630), farthest-side aspect 600/630
+    // (Blink `EllipseRadius`): rx = sqrt(600^2 + 630^2 * (600/630)^2) = 600 * sqrt(2).
+    let rx = 600.0 * 2.0_f32.sqrt();
+    let ry = rx * 630.0 / 600.0;
+    assert!((tile.inv_radius_x - rx.recip()).abs() < 1e-6);
+    assert!((tile.inv_radius_y - ry.recip()).abs() < 1e-6);
+
+    // The corner sits on the ellipse: normalized distance 1.
+    let dx = 600.0 * tile.inv_radius_x;
+    let dy = 630.0 * tile.inv_radius_y;
+    assert!(((dx * dx + dy * dy).sqrt() - 1.0_f32).abs() < 1e-3);
   }
 }

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <mask id="mk0" maskUnits="userSpaceOnUse" style="mask-type:alpha">
-    <radialGradient id="rg1" gradientUnits="userSpaceOnUse" cx="1200" cy="630" r="1200" gradientTransform="matrix(1 0 0 .525 0 299.25)">
+    <radialGradient id="rg1" gradientUnits="userSpaceOnUse" cx="1200" cy="630" r="1697.056" gradientTransform="matrix(1 0 0 .525 0 299.25)">
       <stop offset="0" stop-color="#000" stop-opacity="0"/>
       <stop offset=".016" stop-color="#000" stop-opacity=".031"/>
       <stop offset=".032" stop-color="#000" stop-opacity=".063"/>
@@ -67,7 +67,7 @@
       <stop offset="1" stop-color="#000"/>
     </radialGradient>
     <rect x="0" y="0" width="1200" height="630" fill="url(#rg1)"/>
-    <radialGradient id="rg2" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="1200" gradientTransform="matrix(1 0 0 .525 0 0)">
+    <radialGradient id="rg2" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="1697.056" gradientTransform="matrix(1 0 0 .525 0 0)">
       <stop offset="0" stop-color="#000" stop-opacity="0"/>
       <stop offset=".016" stop-color="#000" stop-opacity=".031"/>
       <stop offset=".032" stop-color="#000" stop-opacity=".063"/>

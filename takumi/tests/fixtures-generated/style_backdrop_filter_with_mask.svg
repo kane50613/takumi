@@ -217,7 +217,7 @@
   </clipPath>
   <g clip-path="url(#cp6)">
     <mask id="mk7" maskUnits="userSpaceOnUse" style="mask-type:alpha">
-      <radialGradient id="rg8" gradientUnits="userSpaceOnUse" cx="600" cy="315" r="600" gradientTransform="matrix(1 0 0 .525 0 149.625)">
+      <radialGradient id="rg8" gradientUnits="userSpaceOnUse" cx="600" cy="315" r="848.528" gradientTransform="matrix(1 0 0 .525 0 149.625)">
         <stop offset="0" stop-color="#000" stop-opacity="0"/>
         <stop offset=".016" stop-color="#000" stop-opacity="0"/>
         <stop offset=".032" stop-color="#000" stop-opacity="0"/>
@@ -510,7 +510,7 @@
     </g>
   </g>
   <mask id="mk16" maskUnits="userSpaceOnUse" style="mask-type:alpha">
-    <radialGradient id="rg17" gradientUnits="userSpaceOnUse" cx="600" cy="315" r="600" gradientTransform="matrix(1 0 0 .525 0 149.625)">
+    <radialGradient id="rg17" gradientUnits="userSpaceOnUse" cx="600" cy="315" r="848.528" gradientTransform="matrix(1 0 0 .525 0 149.625)">
       <stop offset="0" stop-color="#000" stop-opacity="0"/>
       <stop offset=".016" stop-color="#000" stop-opacity="0"/>
       <stop offset=".032" stop-color="#000" stop-opacity="0"/>

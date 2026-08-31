@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <mask id="mk0" maskUnits="userSpaceOnUse" style="mask-type:alpha">
-    <radialGradient id="rg1" gradientUnits="userSpaceOnUse" cx="600" cy="315" r="600" gradientTransform="matrix(1 0 0 .525 0 149.625)">
+    <radialGradient id="rg1" gradientUnits="userSpaceOnUse" cx="600" cy="315" r="848.528" gradientTransform="matrix(1 0 0 .525 0 149.625)">
       <stop offset="0" stop-color="#000"/>
       <stop offset=".016" stop-color="#000"/>
       <stop offset=".032" stop-color="#000"/>
