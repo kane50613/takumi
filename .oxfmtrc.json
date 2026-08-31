@@ -1,3 +1,9 @@
 {
-  "$schema": "./node_modules/oxfmt/configuration_schema.json"
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "overrides": [
+    {
+      "files": ["takumi/tests/fixtures-html/**"],
+      "options": { "htmlWhitespaceSensitivity": "strict" }
+    }
+  ]
 }
