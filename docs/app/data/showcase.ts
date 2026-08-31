@@ -109,7 +109,7 @@ export const showcaseProjects: Project[] = [
     height: 630,
   },
   {
-    image: "https://card.astrxl.dev/banner.webp",
+    image: "https://cdn.astrxl.dev/takumi-enka-embed-example.webp",
     url: "https://git.astrxl.dev/astral/api",
     title: "Enka Embed",
     width: 1359,
