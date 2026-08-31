@@ -3458,9 +3458,13 @@ pub fn run_decorations(
   }
   let baseline = glyph_run.baseline + baseline_shift;
   let top = layout.border.top + layout.padding.top;
-  let thickness = |from_font: f32| match brush.decoration_thickness {
-    SizedTextDecorationThickness::Value(value) => value,
-    SizedTextDecorationThickness::FromFont => from_font,
+  // Blink floors every decoration at 1px (`TextDecorationInfo::ResolvedThickness`).
+  let thickness = |from_font: f32| {
+    match brush.decoration_thickness {
+      SizedTextDecorationThickness::Value(value) => value,
+      SizedTextDecorationThickness::FromFont => from_font,
+    }
+    .max(1.0)
   };
   let mut emit =
     |x: f32, span_width: f32, y_offset: f32, height: f32, over: bool, line: TextDecorationLines| {
