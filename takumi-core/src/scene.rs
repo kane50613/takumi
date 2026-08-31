@@ -13,9 +13,9 @@ use crate::{
   geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Size, transformed_rect_extents},
   layout::{
     inline::{
-      InlineContentKind, InlineLayoutMode, InlineLayoutRequest, collect_inline_items,
-      create_inline_layout, resolve_inline_max_height, resolve_visual_inline_box, scale_text_fit_x,
-      text_fit_line_alignment_correction,
+      InlineContentKind, InlineLayoutMode, InlineLayoutRequest, ProcessedInlineSpan,
+      collect_inline_items, create_inline_layout, resolve_inline_max_height,
+      resolve_visual_inline_box, scale_text_fit_x, text_fit_line_alignment_correction,
     },
     node::Node,
     tree::{LayoutResults, RenderNode},
@@ -581,6 +581,46 @@ fn compute_node_paint_bounds(
         Affine::translation(inline_box.x, inline_box.y) * inline_transform,
       ),
     );
+  }
+
+  // An inline-span background grows past the glyph boxes by its padding.
+  let background_padding = built
+    .spans
+    .iter()
+    .filter_map(|span| match span {
+      ProcessedInlineSpan::Text { decorations, .. } => decorations.as_ref(),
+      _ => None,
+    })
+    .fold(0.0_f32, |mut max, chain| {
+      let mut next = Some(chain);
+
+      while let Some(link) = next {
+        let padding = link.decoration.padding;
+
+        max = max
+          .max(padding.top)
+          .max(padding.right)
+          .max(padding.bottom)
+          .max(padding.left);
+        next = link.parent.as_ref();
+      }
+      max
+    });
+
+  if background_padding > 0.0
+    && let Some(bounds) = &mut bounds
+  {
+    // The padding is local CSS px while the bounds are device space; the
+    // linear part of the transform bounds its device-space envelope per axis.
+    let pad_x =
+      (background_padding * (inline_transform.a.abs() + inline_transform.c.abs())).ceil() as usize;
+    let pad_y =
+      (background_padding * (inline_transform.b.abs() + inline_transform.d.abs())).ceil() as usize;
+
+    bounds.left = bounds.left.saturating_sub(pad_x);
+    bounds.top = bounds.top.saturating_sub(pad_y);
+    bounds.right += pad_x;
+    bounds.bottom += pad_y;
   }
 
   bounds

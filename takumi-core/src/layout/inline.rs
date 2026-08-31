@@ -17,10 +17,10 @@ use crate::{
     glyph::{ResolvedColorLayer, ResolvedGlyph, ResolvedOutlineGlyph},
   },
   style::{
-    Affine, Color, Direction, Float, FontSynthesis, Lang, Length, ResolvedVerticalAlign,
-    SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk, TextFitMode,
-    TextFitTarget, TextOverflow, TextUnderlinePosition, TextWrapMode, TextWrapStyle, VerticalAlign,
-    VerticalAlignKeyword, WhiteSpaceCollapse,
+    Affine, Color, Direction, Display, Float, FontSynthesis, Lang, Length, ResolvedVerticalAlign,
+    SizedTextDecorationThickness, SpacePair, TextDecorationLines, TextDecorationSkipInk,
+    TextFitMode, TextFitTarget, TextOverflow, TextUnderlinePosition, TextWrapMode, TextWrapStyle,
+    VerticalAlign, VerticalAlignKeyword, WhiteSpaceCollapse,
   },
   text_processing::{
     MaxHeight, RebreakOptions, apply_text_transform, apply_white_space_collapse,
@@ -133,7 +133,7 @@ fn shape_fingerprint(
     let (text, style): (&str, _) = match span {
       ProcessedInlineSpan::DirectionMark { direction, style } => (direction.bidi_mark(), style),
       ProcessedInlineSpan::Text { text, style, .. } => (text, style),
-      ProcessedInlineSpan::Box(_) => continue,
+      ProcessedInlineSpan::Box(_) | ProcessedInlineSpan::Spacer { .. } => continue,
     };
 
     span_id.hash(&mut hasher);
@@ -272,6 +272,13 @@ impl BuiltInlineLayout<'_> {
             );
             static_inline_prefix += resolved.width;
 
+            // A padding spacer advances the line but is not a measured box.
+            if matches!(
+              self.spans.get(resolved.id as usize),
+              Some(ProcessedInlineSpan::Spacer { .. })
+            ) {
+              continue;
+            }
             inline_boxes.push(MeasuredInlineBox {
               x,
               y: resolved.y,
@@ -309,6 +316,8 @@ pub enum InlineLayoutMode {
 pub struct InlineBoxItem<'c> {
   /// The render node this box wraps.
   pub render_node: &'c RenderNode,
+  /// Innermost enclosing decorated span, if any.
+  pub(crate) decorations: Option<Rc<DecorationLink>>,
   pub(crate) inline_box: InlineBox,
   pub(crate) paint_width: f32,
   pub(crate) paint_height: f32,
@@ -361,9 +370,44 @@ pub enum ProcessedInlineSpan<'c> {
     style: Box<SizedFontStyle<'c>>,
     /// URI of the nearest enclosing anchor's `href`, if any.
     link: Option<Arc<str>>,
+    /// Innermost enclosing decorated span, if any.
+    decorations: Option<Rc<DecorationLink>>,
   },
   /// An inline box.
   Box(InlineBoxItem<'c>),
+  /// A zero-height box reserving an inline span's horizontal padding.
+  Spacer {
+    /// The box the spacer occupies in the layout.
+    inline_box: InlineBox,
+    /// Innermost enclosing decorated span, if any.
+    decorations: Option<Rc<DecorationLink>>,
+  },
+}
+
+/// The box decoration a `display: inline` span paints along its line
+/// fragments, resolved from its computed style.
+#[derive(Clone, Copy)]
+pub(crate) struct InlineDecoration {
+  pub(crate) color: Color,
+  pub(crate) padding: Rect<f32>,
+  /// Corner radii as `(x, y)` pairs in paint order: top-left, top-right,
+  /// bottom-right, bottom-left.
+  pub(crate) radii: [(f32, f32); 4],
+  pub(crate) opacity: f32,
+  /// Whether the span's start edge sits on the right.
+  pub(crate) rtl: bool,
+  /// The span's own font size. Runs at this size set the fragment height
+  /// (Blink sizes the box from its own text metrics); other sizes only when
+  /// the span has no text of its own.
+  pub(crate) font_size: f32,
+}
+
+/// One open decorated span in the chain of decorated ancestors around an
+/// inline item, innermost last. Chains share their tails, so the `Rc` pointer
+/// identifies the span across items.
+pub struct DecorationLink {
+  pub(crate) decoration: InlineDecoration,
+  pub(crate) parent: Option<Rc<DecorationLink>>,
 }
 
 /// A piece of inline content collected from the tree.
@@ -372,6 +416,8 @@ pub enum InlineItem<'c> {
   RenderNode {
     /// The node.
     render_node: &'c RenderNode,
+    /// Innermost enclosing decorated span, if any.
+    decorations: Option<Rc<DecorationLink>>,
   },
   /// A run of text.
   Text {
@@ -381,13 +427,25 @@ pub enum InlineItem<'c> {
     context: &'c RenderContext,
     /// URI of the nearest enclosing anchor's `href`, if any.
     link: Option<Arc<str>>,
+    /// Innermost enclosing decorated span, if any.
+    decorations: Option<Rc<DecorationLink>>,
+  },
+  /// Advance an inline span's horizontal padding reserves at its edge. It
+  /// takes space on the line and paints nothing itself; the span's background
+  /// fragment covers it.
+  Spacer {
+    /// The padding width in px.
+    width: f32,
+    /// Innermost enclosing decorated span (the padded span itself when it is
+    /// decorated), if any.
+    decorations: Option<Rc<DecorationLink>>,
   },
 }
 
 /// Flatten a render node subtree into its inline items.
 pub fn collect_inline_items<'n>(root: &'n RenderNode) -> Vec<InlineItem<'n>> {
   let mut items = Vec::new();
-  collect_inline_items_impl(root, 0, None, &mut items);
+  collect_inline_items_impl(root, 0, None, None, &mut items);
   items
 }
 
@@ -421,10 +479,14 @@ fn collect_inline_items_impl<'n>(
   node: &'n RenderNode,
   depth: usize,
   link: Option<&Arc<str>>,
+  decorations: Option<&Rc<DecorationLink>>,
   items: &mut Vec<InlineItem<'n>>,
 ) {
   if depth > 0 && node.participates_as_inline_box() {
-    items.push(InlineItem::RenderNode { render_node: node });
+    items.push(InlineItem::RenderNode {
+      render_node: node,
+      decorations: decorations.cloned(),
+    });
     return;
   }
   let anchor = node
@@ -433,38 +495,66 @@ fn collect_inline_items_impl<'n>(
     .and_then(Node::href)
     .map(Arc::<str>::from);
   let link = anchor.as_ref().or(link);
+  let own_decoration = inline_span_decoration(node, depth).map(|decoration| {
+    Rc::new(DecorationLink {
+      decoration,
+      parent: decorations.cloned(),
+    })
+  });
+  let decorations = own_decoration.as_ref().or(decorations);
 
   if let Some(marker) = node.marker.as_deref() {
     items.push(InlineItem::RenderNode {
       render_node: marker,
+      decorations: None,
     });
   }
 
   let content_start = items.len();
+  let padding = inline_span_padding(node, depth);
+
+  if padding.left > 0.0 {
+    items.push(InlineItem::Spacer {
+      width: padding.left,
+      decorations: decorations.cloned(),
+    });
+  }
 
   if let Some(text) = node.anonymous_text_content.as_deref() {
     items.push(InlineItem::Text {
       text: Cow::Borrowed(text),
       context: &node.context,
       link: link.cloned(),
+      decorations: decorations.cloned(),
     });
   }
 
   if let Some(inline_content) = node.node.as_ref().and_then(Node::inline_content) {
     match inline_content {
-      InlineContentKind::Box => items.push(InlineItem::RenderNode { render_node: node }),
+      InlineContentKind::Box => items.push(InlineItem::RenderNode {
+        render_node: node,
+        decorations: decorations.cloned(),
+      }),
       InlineContentKind::Text(text) => items.push(InlineItem::Text {
         text,
         context: &node.context,
         link: link.cloned(),
+        decorations: decorations.cloned(),
       }),
     }
   }
 
   if let Some(children) = &node.children {
     for child in children {
-      collect_inline_items_impl(child, depth + 1, link, items);
+      collect_inline_items_impl(child, depth + 1, link, decorations, items);
     }
+  }
+
+  if padding.right > 0.0 {
+    items.push(InlineItem::Spacer {
+      width: padding.right,
+      decorations: decorations.cloned(),
+    });
   }
 
   if node.marker.is_some()
@@ -472,6 +562,69 @@ fn collect_inline_items_impl<'n>(
   {
     trim_leading_whitespace(first);
   }
+}
+
+/// Whether this node is a non-replaced `display: inline` span (the inline
+/// formatting context's root does not count).
+fn is_inline_span(node: &RenderNode, depth: usize) -> bool {
+  depth > 0
+    && node.context.style.display == Display::Inline
+    && !matches!(
+      node.node.as_ref().and_then(Node::inline_content),
+      Some(InlineContentKind::Box)
+    )
+}
+
+/// The horizontal padding an inline span reserves on the line. Zero for the
+/// inline formatting context's root, whose padding is box padding, and for a
+/// replaced inline element, whose padding sizes its own box.
+fn inline_span_padding(node: &RenderNode, depth: usize) -> Rect<f32> {
+  if !is_inline_span(node, depth) {
+    return Rect::default();
+  }
+  let sizing = &node.context.sizing;
+
+  Rect {
+    top: node.context.style.padding_top.to_px(sizing, 0.0),
+    right: node.context.style.padding_right.to_px(sizing, 0.0),
+    bottom: node.context.style.padding_bottom.to_px(sizing, 0.0),
+    left: node.context.style.padding_left.to_px(sizing, 0.0),
+  }
+}
+
+/// The decoration an inline span paints, or `None` when its background is
+/// invisible.
+fn inline_span_decoration(node: &RenderNode, depth: usize) -> Option<InlineDecoration> {
+  if !is_inline_span(node, depth) {
+    return None;
+  }
+  let style = &node.context.style;
+  let color = style.background_color.resolve(node.context.current_color);
+
+  if color.0[3] == 0 {
+    return None;
+  }
+  let sizing = &node.context.sizing;
+  let radius = |pair: &SpacePair<Length>| {
+    (
+      pair.x.to_px(sizing, 0.0).max(0.0),
+      pair.y.to_px(sizing, 0.0).max(0.0),
+    )
+  };
+
+  Some(InlineDecoration {
+    color,
+    padding: inline_span_padding(node, depth),
+    radii: [
+      radius(&style.border_top_left_radius),
+      radius(&style.border_top_right_radius),
+      radius(&style.border_bottom_right_radius),
+      radius(&style.border_bottom_left_radius),
+    ],
+    opacity: style.opacity.0,
+    rtl: style.direction == Direction::Rtl,
+    font_size: sizing.font_size,
+  })
 }
 
 pub(crate) enum InlineContentKind<'c> {
@@ -607,7 +760,7 @@ fn refresh_text_span_ranges(spans: &mut [ProcessedInlineSpan<'_>]) {
       ProcessedInlineSpan::DirectionMark { direction, .. } => {
         byte_offset += direction.bidi_mark().len();
       }
-      ProcessedInlineSpan::Box(_) => {}
+      ProcessedInlineSpan::Box(_) | ProcessedInlineSpan::Spacer { .. } => {}
     }
   }
 }
@@ -621,7 +774,9 @@ fn tail_text_span<'a, 'c>(
     .rev()
     .find_map(|(span_id, span)| match span {
       ProcessedInlineSpan::Text { style, .. } => Some((style.as_ref(), span_id as u64)),
-      ProcessedInlineSpan::DirectionMark { .. } | ProcessedInlineSpan::Box(_) => None,
+      ProcessedInlineSpan::DirectionMark { .. }
+      | ProcessedInlineSpan::Box(_)
+      | ProcessedInlineSpan::Spacer { .. } => None,
     })
 }
 
@@ -971,7 +1126,9 @@ pub(crate) fn resolve_inline_line_metrics(
         InlineBoxKind::CustomOutOfFlow | InlineBoxKind::OutOfFlow
       )
     }
-    ProcessedInlineSpan::DirectionMark { .. } | ProcessedInlineSpan::Text { .. } => false,
+    ProcessedInlineSpan::DirectionMark { .. }
+    | ProcessedInlineSpan::Text { .. }
+    | ProcessedInlineSpan::Spacer { .. } => false,
   });
 
   for (line_index, line) in inline_layout.lines().enumerate() {
@@ -1215,8 +1372,24 @@ pub(crate) fn resolve_visual_inline_box(
   line_state: Option<ResolvedInlineLineState>,
   spans: &[ProcessedInlineSpan<'_>],
 ) -> Option<VisualInlineBox> {
-  let Some(ProcessedInlineSpan::Box(item)) = spans.get(inline_box.id as usize) else {
-    return None;
+  let item = match spans.get(inline_box.id as usize) {
+    Some(ProcessedInlineSpan::Box(item)) => item,
+    // A spacer only advances the line; it keeps its layout position so
+    // text-fit prefix accounting stays exact, and paints nothing (backends
+    // paint boxes by matching `Box`).
+    Some(ProcessedInlineSpan::Spacer { .. }) => {
+      return Some(VisualInlineBox {
+        id: inline_box.id,
+        x: inline_box.x,
+        y: inline_box.y,
+        width: inline_box.width,
+        height: 0.0,
+        line_baseline: line_state.map(|state| state.adjusted_metrics.baseline),
+        layout_x: inline_box.x,
+        layout_advance: inline_box.width,
+      });
+    }
+    _ => return None,
   };
 
   let line_baseline = line_state.map(|state| state.adjusted_metrics.baseline);
@@ -1314,7 +1487,7 @@ fn truncation_plan<'c>(
           }
           remaining -= len;
         }
-        ProcessedInlineSpan::Box(_) => {
+        ProcessedInlineSpan::Box(_) | ProcessedInlineSpan::Spacer { .. } => {
           if remaining == 0 {
             span_cut_idx = index;
             break;
@@ -1335,7 +1508,9 @@ fn text_span_style_by_id<'a, 'c>(
 ) -> Option<&'a SizedFontStyle<'c>> {
   match spans.get(span_id as usize)? {
     ProcessedInlineSpan::Text { style, .. } => Some(style.as_ref()),
-    ProcessedInlineSpan::DirectionMark { .. } | ProcessedInlineSpan::Box(_) => None,
+    ProcessedInlineSpan::DirectionMark { .. }
+    | ProcessedInlineSpan::Box(_)
+    | ProcessedInlineSpan::Spacer { .. } => None,
   }
 }
 
@@ -1350,7 +1525,9 @@ fn truncated_tail_text_span_id<'c>(
       .rev()
       .find_map(|(span_id, span)| match span {
         ProcessedInlineSpan::Text { .. } => Some(span_id as u64),
-        ProcessedInlineSpan::DirectionMark { .. } | ProcessedInlineSpan::Box(_) => None,
+        ProcessedInlineSpan::DirectionMark { .. }
+        | ProcessedInlineSpan::Box(_)
+        | ProcessedInlineSpan::Spacer { .. } => None,
       })
   })
 }
@@ -1468,6 +1645,9 @@ fn push_spans_into_builder(
       ProcessedInlineSpan::Box(item) => {
         builder.push_inline_box(item.inline_box.clone());
       }
+      ProcessedInlineSpan::Spacer { inline_box, .. } => {
+        builder.push_inline_box(inline_box.clone());
+      }
     }
   }
 }
@@ -1530,6 +1710,7 @@ fn build_inline_layout_tree<'c>(
         text,
         context,
         link,
+        decorations,
       } => {
         let span_style = SizedFontStyle::from_style(&context.style, context);
         let transformed = apply_text_transform(text, context.style.text_transform);
@@ -1549,9 +1730,13 @@ fn build_inline_layout_tree<'c>(
           text: collapsed.into_owned(),
           style: Box::new(span_style),
           link: link.clone(),
+          decorations: decorations.clone(),
         });
       }
-      InlineItem::RenderNode { render_node } => {
+      InlineItem::RenderNode {
+        render_node,
+        decorations,
+      } => {
         let context = &render_node.context;
         let vertical_align = context.style.vertical_align.resolve(
           &context.sizing,
@@ -1627,6 +1812,7 @@ fn build_inline_layout_tree<'c>(
 
         spans.push(ProcessedInlineSpan::Box(InlineBoxItem {
           render_node,
+          decorations: decorations.clone(),
           inline_box,
           paint_width,
           paint_height,
@@ -1638,6 +1824,20 @@ fn build_inline_layout_tree<'c>(
         }));
         previous_collapsible_space = false;
         previous_was_line_break = false;
+      }
+      // Whitespace flags stay untouched: the padding must not change how the
+      // text around it collapses.
+      InlineItem::Spacer { width, decorations } => {
+        spans.push(ProcessedInlineSpan::Spacer {
+          inline_box: InlineBox {
+            index: index_pos,
+            id: spans.len() as u64,
+            kind: InlineBoxKind::InFlow,
+            width: *width,
+            height: 0.0,
+          },
+          decorations: decorations.clone(),
+        });
       }
     }
   }
@@ -2120,11 +2320,10 @@ fn expand_outline_rect(rect: InlineOutlineRect, amount: f32) -> Option<InlineOut
   })
 }
 
-/// Merges adjacent per-line outline rects, then groups them into
-/// vertically-continuous islands; each island becomes one stroked contour.
-/// Backend-agnostic; both the raster and vector backends consume the islands.
-pub fn outline_islands(mut outline_rects: Vec<InlineOutlineRect>) -> Vec<Vec<InlineOutlineRect>> {
-  outline_rects.sort_by(|left, right| {
+/// Merges rects that touch on the same span and line into one rect per
+/// contiguous group, sorted by span then line.
+fn merge_inline_rects(mut rects: Vec<InlineOutlineRect>) -> Vec<InlineOutlineRect> {
+  rects.sort_by(|left, right| {
     left
       .span_id
       .cmp(&right.span_id)
@@ -2132,31 +2331,384 @@ pub fn outline_islands(mut outline_rects: Vec<InlineOutlineRect>) -> Vec<Vec<Inl
       .then(left.x.total_cmp(&right.x))
   });
 
-  let mut merged_rects: Vec<InlineOutlineRect> = Vec::with_capacity(outline_rects.len());
-  for outline_rect in outline_rects {
+  let mut merged_rects: Vec<InlineOutlineRect> = Vec::with_capacity(rects.len());
+  for rect in rects {
     let Some(previous_rect) = merged_rects.last_mut() else {
-      merged_rects.push(outline_rect);
+      merged_rects.push(rect);
       continue;
     };
 
-    let same_group = previous_rect.span_id == outline_rect.span_id
-      && previous_rect.line_index == outline_rect.line_index;
-    let touching =
-      outline_rect.x <= previous_rect.x + previous_rect.width + OUTLINE_COORD_TOLERANCE;
-    let same_band = (outline_rect.y - previous_rect.y).abs() <= OUTLINE_COORD_TOLERANCE
-      && (outline_rect.height - previous_rect.height).abs() <= OUTLINE_COORD_TOLERANCE;
+    let same_group =
+      previous_rect.span_id == rect.span_id && previous_rect.line_index == rect.line_index;
+    let touching = rect.x <= previous_rect.x + previous_rect.width + OUTLINE_COORD_TOLERANCE;
+    let same_band = (rect.y - previous_rect.y).abs() <= OUTLINE_COORD_TOLERANCE
+      && (rect.height - previous_rect.height).abs() <= OUTLINE_COORD_TOLERANCE;
 
     if same_group && same_band && touching {
-      let right_edge =
-        (previous_rect.x + previous_rect.width).max(outline_rect.x + outline_rect.width);
-      previous_rect.x = previous_rect.x.min(outline_rect.x);
-      previous_rect.y = previous_rect.y.min(outline_rect.y);
+      let right_edge = (previous_rect.x + previous_rect.width).max(rect.x + rect.width);
+      previous_rect.x = previous_rect.x.min(rect.x);
+      previous_rect.y = previous_rect.y.min(rect.y);
       previous_rect.width = right_edge - previous_rect.x;
-      previous_rect.height = previous_rect.height.max(outline_rect.height);
+      previous_rect.height = previous_rect.height.max(rect.height);
     } else {
-      merged_rects.push(outline_rect);
+      merged_rects.push(rect);
     }
   }
+  merged_rects
+}
+
+/// A resolved inline background fragment: one rounded rect a decorated span
+/// fills on one line, in border-box space, in paint order (outer spans first).
+/// The naive drifts from Blink are listed on `DecorationAccumulator`'s doc in
+/// this module's source.
+#[derive(Clone, Copy)]
+#[non_exhaustive]
+pub struct InlineBackgroundFragment {
+  /// Left edge.
+  pub x: f32,
+  /// Top edge.
+  pub y: f32,
+  /// Fragment width.
+  pub width: f32,
+  /// Fragment height.
+  pub height: f32,
+  /// Corner radii as `(x, y)` pairs (top-left, top-right, bottom-right,
+  /// bottom-left), already clamped to the fragment. Wrap-edge corners are
+  /// square, like `box-decoration-break: slice`.
+  pub radii: [(f32, f32); 4],
+  /// Fill color.
+  pub color: Color,
+  /// The span's `opacity`.
+  pub opacity: f32,
+  /// Baseline of the owning line in border-box space. Pagination keys page
+  /// ownership on it, so a fragment paints on the page its line lands on.
+  pub baseline: f32,
+}
+
+/// One tier of a fragment's vertical bounds, unioned over covering items.
+#[derive(Clone, Copy)]
+struct VerticalExtent {
+  top: f32,
+  bottom: f32,
+  baseline: f32,
+  set: bool,
+}
+
+impl VerticalExtent {
+  const EMPTY: Self = Self {
+    top: f32::INFINITY,
+    bottom: f32::NEG_INFINITY,
+    baseline: 0.0,
+    set: false,
+  };
+
+  fn merge(&mut self, top: f32, bottom: f32, baseline: f32) {
+    self.top = self.top.min(top);
+    self.bottom = self.bottom.max(bottom);
+    if !self.set {
+      self.baseline = baseline;
+    }
+    self.set = true;
+  }
+
+  fn get(&self) -> Option<(f32, f32, f32)> {
+    self.set.then_some((self.top, self.bottom, self.baseline))
+  }
+}
+
+/// What a covering item contributes vertically to a span's fragment.
+enum CoverExtent {
+  /// A glyph run's leaded box; sizes the fragment when the run's font size
+  /// matches the span's own.
+  Run {
+    font_size: f32,
+    top: f32,
+    bottom: f32,
+    baseline: f32,
+  },
+  /// The owning line's extent; the last resort for padding-only coverage.
+  Line {
+    top: f32,
+    bottom: f32,
+    baseline: f32,
+  },
+}
+
+/// Per-line bounds of one decorated span, unioned over the items it covers.
+struct FragmentBounds {
+  x0: f32,
+  x1: f32,
+  /// The span's own runs, like Blink sizing an inline box fragment from the
+  /// box's own text metrics.
+  own: VerticalExtent,
+  /// Descendant runs, used when the span has no text of its own.
+  descendant: VerticalExtent,
+  /// The owning line, used when nothing on the fragment carries text.
+  line: VerticalExtent,
+}
+
+/// Accumulates decorated-span coverage per line and resolves it into
+/// [`InlineBackgroundFragment`]s, mirroring Blink's per-line inline box
+/// fragments (`InlineBoxFragmentPainterBase::PaintBackgroundBorderShadow`).
+///
+/// Naive next to Blink; where it drifts:
+/// - only `background-color` fills; gradients, images, and `border` on a span
+///   paint nothing
+/// - the span's own runs are recognized by font size, not by element, so a
+///   same-size fallback font can grow the height where Blink keeps the
+///   primary font's
+/// - a line taller than a page paints its background only on the page owning
+///   the line, while Blink spills monolithic overflow onto the next page
+#[derive(Default)]
+struct DecorationAccumulator {
+  ids: HashMap<*const DecorationLink, usize>,
+  decorations: Vec<InlineDecoration>,
+  fragments: HashMap<(usize, usize), FragmentBounds>,
+}
+
+impl DecorationAccumulator {
+  /// The id for `link`, assigning parents first so outer spans paint first.
+  fn ensure(&mut self, link: &Rc<DecorationLink>) -> usize {
+    if let Some(id) = self.ids.get(&Rc::as_ptr(link)) {
+      return *id;
+    }
+    if let Some(parent) = &link.parent {
+      self.ensure(parent);
+    }
+    let id = self.decorations.len();
+
+    self.ids.insert(Rc::as_ptr(link), id);
+    self.decorations.push(link.decoration);
+    id
+  }
+
+  fn cover(
+    &mut self,
+    chain: Option<&Rc<DecorationLink>>,
+    line_index: usize,
+    x0: f32,
+    x1: f32,
+    extent: &CoverExtent,
+  ) {
+    let mut next = chain;
+
+    while let Some(link) = next {
+      let id = self.ensure(link);
+      let bounds = self
+        .fragments
+        .entry((id, line_index))
+        .or_insert(FragmentBounds {
+          x0,
+          x1,
+          own: VerticalExtent::EMPTY,
+          descendant: VerticalExtent::EMPTY,
+          line: VerticalExtent::EMPTY,
+        });
+
+      bounds.x0 = bounds.x0.min(x0);
+      bounds.x1 = bounds.x1.max(x1);
+      match *extent {
+        CoverExtent::Run {
+          font_size,
+          top,
+          bottom,
+          baseline,
+        } => {
+          let tier = if (link.decoration.font_size - font_size).abs() < 0.01 {
+            &mut bounds.own
+          } else {
+            &mut bounds.descendant
+          };
+
+          tier.merge(top, bottom, baseline);
+        }
+        CoverExtent::Line {
+          top,
+          bottom,
+          baseline,
+        } => bounds.line.merge(top, bottom, baseline),
+      }
+      next = link.parent.as_ref();
+    }
+  }
+
+  fn into_fragments(self) -> Vec<InlineBackgroundFragment> {
+    // A span with any text sizes every fragment from runs; the line-extent
+    // tier only carries a span with no text at all (padding-only), so a
+    // spacer the line breaker strands on its own line stays invisible.
+    let mut has_text = vec![false; self.decorations.len()];
+
+    for ((id, _), bounds) in &self.fragments {
+      has_text[*id] |= bounds.own.set || bounds.descendant.set;
+    }
+    let vertical = |id: usize, bounds: &FragmentBounds| {
+      bounds
+        .own
+        .get()
+        .or_else(|| bounds.descendant.get())
+        .or_else(|| (!has_text[id]).then(|| bounds.line.get()).flatten())
+    };
+    // Slice edges come from the lines that actually paint.
+    let mut line_range = vec![(usize::MAX, 0); self.decorations.len()];
+
+    for ((id, line_index), bounds) in &self.fragments {
+      if vertical(*id, bounds).is_some() {
+        let range = &mut line_range[*id];
+
+        range.0 = range.0.min(*line_index);
+        range.1 = range.1.max(*line_index);
+      }
+    }
+    let mut keys: Vec<(usize, usize)> = self.fragments.keys().copied().collect();
+
+    keys.sort_unstable();
+    keys
+      .into_iter()
+      .filter_map(|key| {
+        let (id, line_index) = key;
+        let bounds = &self.fragments[&key];
+
+        let (top, bottom, baseline) = vertical(id, bounds)?;
+        let decoration = &self.decorations[id];
+        let x = bounds.x0;
+        let y = top - decoration.padding.top;
+        let width = bounds.x1 - bounds.x0;
+        let height = bottom - top + decoration.padding.vertical();
+        let (min_line, max_line) = line_range[id];
+        // The start edge sits on the first line, the end edge on the last;
+        // wrap-edge corners stay square, like `box-decoration-break: slice`.
+        let (has_start, has_end) = (line_index == min_line, line_index == max_line);
+        let (has_left, has_right) = if decoration.rtl {
+          (has_end, has_start)
+        } else {
+          (has_start, has_end)
+        };
+        // css-backgrounds-3 corner overlap: one uniform factor shrinks every
+        // radius so adjacent corners never cross.
+        let raw = [
+          if has_left {
+            decoration.radii[0]
+          } else {
+            (0.0, 0.0)
+          },
+          if has_right {
+            decoration.radii[1]
+          } else {
+            (0.0, 0.0)
+          },
+          if has_right {
+            decoration.radii[2]
+          } else {
+            (0.0, 0.0)
+          },
+          if has_left {
+            decoration.radii[3]
+          } else {
+            (0.0, 0.0)
+          },
+        ];
+        let [tl, tr, br, bl] = raw;
+        let factor = [
+          width / (tl.0 + tr.0),
+          width / (bl.0 + br.0),
+          height / (tl.1 + bl.1),
+          height / (tr.1 + br.1),
+        ]
+        .into_iter()
+        .filter(|f| f.is_finite())
+        .fold(1.0_f32, f32::min)
+        .max(0.0);
+        let radii = raw.map(|(rx, ry)| (rx * factor, ry * factor));
+
+        (width > 0.0 && height > 0.0).then_some(InlineBackgroundFragment {
+          x,
+          y,
+          width,
+          height,
+          radii,
+          color: decoration.color,
+          opacity: decoration.opacity,
+          baseline,
+        })
+      })
+      .collect()
+  }
+}
+
+/// The rounded-rect contour an [`InlineBackgroundFragment`] fills, with
+/// quarter-ellipse corners.
+pub fn inline_background_path(fragment: &InlineBackgroundFragment) -> Vec<PathCommand> {
+  const KAPPA: f32 = 4.0 / 3.0 * (std::f32::consts::SQRT_2 - 1.0);
+
+  let InlineBackgroundFragment {
+    x,
+    y,
+    width,
+    height,
+    radii,
+    ..
+  } = *fragment;
+  let point = |x, y| Point { x, y };
+  let [tl, tr, br, bl] = radii.map(|(rx, ry)| {
+    if rx > 0.0 && ry > 0.0 {
+      (rx, ry)
+    } else {
+      (0.0, 0.0)
+    }
+  });
+  if [tl, tr, br, bl] == [(0.0, 0.0); 4] {
+    return vec![
+      PathCommand::MoveTo(point(x, y)),
+      PathCommand::LineTo(point(x + width, y)),
+      PathCommand::LineTo(point(x + width, y + height)),
+      PathCommand::LineTo(point(x, y + height)),
+      PathCommand::Close,
+    ];
+  }
+  let mut path = Vec::with_capacity(9);
+
+  path.push(PathCommand::MoveTo(point(x + tl.0, y)));
+  path.push(PathCommand::LineTo(point(x + width - tr.0, y)));
+  if tr.0 > 0.0 {
+    path.push(PathCommand::CubicTo(
+      point(x + width - tr.0 + tr.0 * KAPPA, y),
+      point(x + width, y + tr.1 - tr.1 * KAPPA),
+      point(x + width, y + tr.1),
+    ));
+  }
+  path.push(PathCommand::LineTo(point(x + width, y + height - br.1)));
+  if br.0 > 0.0 {
+    path.push(PathCommand::CubicTo(
+      point(x + width, y + height - br.1 + br.1 * KAPPA),
+      point(x + width - br.0 + br.0 * KAPPA, y + height),
+      point(x + width - br.0, y + height),
+    ));
+  }
+  path.push(PathCommand::LineTo(point(x + bl.0, y + height)));
+  if bl.0 > 0.0 {
+    path.push(PathCommand::CubicTo(
+      point(x + bl.0 - bl.0 * KAPPA, y + height),
+      point(x, y + height - bl.1 + bl.1 * KAPPA),
+      point(x, y + height - bl.1),
+    ));
+  }
+  path.push(PathCommand::LineTo(point(x, y + tl.1)));
+  if tl.0 > 0.0 {
+    path.push(PathCommand::CubicTo(
+      point(x, y + tl.1 - tl.1 * KAPPA),
+      point(x + tl.0 - tl.0 * KAPPA, y),
+      point(x + tl.0, y),
+    ));
+  }
+  path.push(PathCommand::Close);
+  path
+}
+
+/// Merges adjacent per-line outline rects, then groups them into
+/// vertically-continuous islands; each island becomes one stroked contour.
+/// Backend-agnostic; both the raster and vector backends consume the islands.
+pub fn outline_islands(outline_rects: Vec<InlineOutlineRect>) -> Vec<Vec<InlineOutlineRect>> {
+  let merged_rects = merge_inline_rects(outline_rects);
 
   let mut line_rect_counts = HashMap::new();
   for outline_rect in &merged_rects {
@@ -2512,6 +3064,8 @@ pub struct InlineRunLayout {
   pub inline_boxes: Vec<VisualInlineBox>,
   /// Text-outline rects (unmerged), in collection order.
   pub outline_rects: Vec<InlineOutlineRect>,
+  /// Inline-span background fragments, in paint order (outer spans first).
+  pub background_fragments: Vec<InlineBackgroundFragment>,
 }
 
 /// Walks `built` once, resolving every glyph run, inline box, and outline rect
@@ -2536,11 +3090,14 @@ pub fn resolve_inline_runs(
     ProcessedInlineSpan::Text { style, .. } => {
       style.outline_width > 0.0 && style.outline_style.is_rendered()
     }
-    ProcessedInlineSpan::DirectionMark { .. } | ProcessedInlineSpan::Box(_) => false,
+    ProcessedInlineSpan::DirectionMark { .. }
+    | ProcessedInlineSpan::Box(_)
+    | ProcessedInlineSpan::Spacer { .. } => false,
   });
 
   let mut runs = Vec::new();
   let mut outline_rects = Vec::new();
+  let mut decoration_coverage = DecorationAccumulator::default();
   let mut positioned_inline_boxes: HashMap<u64, VisualInlineBox> = HashMap::new();
 
   for (line_index, line) in inline_layout.lines().enumerate() {
@@ -2597,6 +3154,48 @@ pub fn resolve_inline_runs(
           }
 
           let metrics = run.metrics();
+
+          if let Some(span_id) = brush.source_span_id
+            && let Some(ProcessedInlineSpan::Text {
+              decorations: Some(chain),
+              ..
+            }) = spans.get(span_id as usize)
+          {
+            // The run's leaded box, like Blink's inline box fragment
+            // (`InlineBoxState::ComputeTextMetrics` adds the line-height
+            // leading to the font height).
+            let (above, below) =
+              text_line_box_contribution(metrics.line_height, metrics.ascent, metrics.descent);
+            let rect = scale_outline_rect(
+              InlineOutlineRect {
+                span_id,
+                line_index,
+                x: layout.border.left + layout.padding.left + glyph_run.offset(),
+                y: layout.border.top
+                  + layout.padding.top
+                  + glyph_run.baseline()
+                  + setup.baseline_shift
+                  - above,
+                width: glyph_run.advance(),
+                height: above + below,
+              },
+              setup.state,
+              static_inline_prefix,
+            );
+
+            decoration_coverage.cover(
+              Some(chain),
+              line_index,
+              rect.x,
+              rect.x + rect.width,
+              &CoverExtent::Run {
+                font_size: run.font_size(),
+                top: rect.y,
+                bottom: rect.y + rect.height,
+                baseline: rect.y + above * setup.state.scale,
+              },
+            );
+          }
           let glyphs: Vec<PositionedGlyph> = glyph_run
             .positioned_glyphs()
             .map(|g| PositionedGlyph {
@@ -2658,6 +3257,35 @@ pub fn resolve_inline_runs(
             ),
             ..inline_box
           };
+          // A spacer or atomic box inside a decorated span stretches the
+          // span's fragment horizontally; runs set its height, like Blink's
+          // box metrics ignoring atomic descendants. The line extent is the
+          // last resort so padding-only coverage still paints.
+          let chain = match spans.get(inline_box.id as usize) {
+            Some(ProcessedInlineSpan::Box(item)) => item.decorations.as_ref(),
+            Some(ProcessedInlineSpan::Spacer { decorations, .. }) => decorations.as_ref(),
+            _ => None,
+          };
+
+          if chain.is_some() {
+            let x0 = layout.border.left + layout.padding.left + inline_box.x;
+            let origin_y = setup.state.layout_origin.y;
+            let content_top = layout.border.top + layout.padding.top;
+            let line_y =
+              |value: f32| origin_y + (content_top + value - origin_y) * setup.state.scale;
+
+            decoration_coverage.cover(
+              chain,
+              line_index,
+              x0,
+              x0 + inline_box.width,
+              &CoverExtent::Line {
+                top: line_y(setup.resolved_metrics.resolved_line_top),
+                bottom: line_y(setup.resolved_metrics.resolved_line_bottom),
+                baseline: line_y(setup.resolved_metrics.resolved_baseline),
+              },
+            );
+          }
           positioned_inline_boxes.insert(inline_box.id, inline_box);
           static_inline_prefix += inline_box.layout_advance;
         }
@@ -2679,6 +3307,7 @@ pub fn resolve_inline_runs(
     runs,
     inline_boxes,
     outline_rects,
+    background_fragments: decoration_coverage.into_fragments(),
   })
 }
 
@@ -3184,6 +3813,137 @@ mod tests {
       // Not a font: `em_box_descent` falls back to the run metrics instead of OS/2.
       font_data: parley::fontique::Blob::new(Arc::new(Vec::new())),
     }
+  }
+
+  #[test]
+  fn a_descendant_font_does_not_grow_the_span_background() {
+    let fonts = create_test_context();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1200, 630)))
+          .build(),
+      )
+      .build();
+    let node = Node::container([
+      Node::text("Mixed ".to_string()),
+      Node::container([
+        Node::text("small ".to_string()),
+        Node::container([Node::text("BIG".to_string())]).with_style(
+          Style::default()
+            .with(StyleDeclaration::display(Display::Inline))
+            .with(StyleDeclaration::font_size(crate::style::FontSize::Length(
+              crate::style::Length::Px(34.0),
+            ))),
+        ),
+        Node::text(" small".to_string()),
+      ])
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Inline))
+          .with(StyleDeclaration::background_color(ColorInput::Value(
+            Color([255, 237, 213, 255]),
+          ))),
+      ),
+    ])
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::font_size(crate::style::FontSize::Length(
+          crate::style::Length::Px(20.0),
+        ))),
+    );
+    let render_node = RenderNode::from_node(&context, node);
+    let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
+    let built = create_inline_layout(InlineLayoutRequest {
+      items: collect_inline_items(&render_node),
+      available_space: Size {
+        width: AvailableSpace::Definite(1200.0),
+        height: AvailableSpace::Definite(630.0),
+      },
+      max_width: 1200.0,
+      max_height: None,
+      style: &font_style,
+      context: &render_node.context,
+      mode: InlineLayoutMode::Draw,
+      shape_cacheable: false,
+    });
+    let layout = ComputedLayout {
+      location: crate::geometry::Point::ZERO,
+      size: Size::new(1200.0, 630.0),
+      border: crate::geometry::Rect::default(),
+      padding: crate::geometry::Rect::default(),
+    };
+    let runs = resolve_inline_runs(&built, &render_node.context, layout).unwrap();
+
+    let heights: Vec<f32> = runs.background_fragments.iter().map(|f| f.height).collect();
+
+    assert!(!heights.is_empty(), "no background fragments resolved");
+    assert!(
+      heights.iter().all(|h| *h < 40.0),
+      "bg grew to the BIG font: {heights:?}"
+    );
+  }
+
+  #[test]
+  fn a_padding_only_span_paints_a_line_height_background() {
+    let fonts = create_test_context();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1200, 630)))
+          .build(),
+      )
+      .build();
+    let node = Node::container([
+      Node::text("before".to_string()),
+      Node::container([]).with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Inline))
+          .with(StyleDeclaration::padding_left(crate::style::Length::Px(
+            12.0,
+          )))
+          .with(StyleDeclaration::padding_right(crate::style::Length::Px(
+            12.0,
+          )))
+          .with(StyleDeclaration::background_color(ColorInput::Value(
+            Color([255, 0, 0, 255]),
+          ))),
+      ),
+      Node::text("after".to_string()),
+    ])
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
+    let render_node = RenderNode::from_node(&context, node);
+    let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
+    let built = create_inline_layout(InlineLayoutRequest {
+      items: collect_inline_items(&render_node),
+      available_space: Size {
+        width: AvailableSpace::Definite(1200.0),
+        height: AvailableSpace::Definite(630.0),
+      },
+      max_width: 1200.0,
+      max_height: None,
+      style: &font_style,
+      context: &render_node.context,
+      mode: InlineLayoutMode::Draw,
+      shape_cacheable: false,
+    });
+    let layout = ComputedLayout {
+      location: crate::geometry::Point::ZERO,
+      size: Size::new(1200.0, 630.0),
+      border: crate::geometry::Rect::default(),
+      padding: crate::geometry::Rect::default(),
+    };
+    let runs = resolve_inline_runs(&built, &render_node.context, layout).unwrap();
+    let fragment = runs
+      .background_fragments
+      .first()
+      .expect("padding-only span paints a fragment");
+
+    assert!((fragment.width - 24.0).abs() < 0.5, "{}", fragment.width);
+    assert!(fragment.height > 0.0);
   }
 
   #[test]

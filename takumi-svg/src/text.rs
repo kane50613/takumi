@@ -16,8 +16,8 @@ use takumi_core::{
     inline::{
       DecorationRect, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineOutlineRect,
       InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan, ShapedRun, collect_inline_items,
-      create_inline_layout, outline_island_contour, outline_islands, resolve_inline_runs,
-      run_decorations,
+      create_inline_layout, inline_background_path, outline_island_contour, outline_islands,
+      resolve_inline_runs, run_decorations,
     },
     node::TextData,
     tree::RenderNode,
@@ -85,6 +85,7 @@ pub(crate) fn emit_text(
       text: text.text.as_str().into(),
       context,
       link: None,
+      decorations: None,
     }],
     content,
     &font_style,
@@ -157,6 +158,26 @@ fn emit_runs(
   context: &RenderContext,
   frame: TextFrame,
 ) -> io::Result<()> {
+  // Inline-span backgrounds fill under every glyph of the formatting context.
+  for fragment in &runs.background_fragments {
+    let data = path_data(
+      &inline_background_path(fragment),
+      [1.0, 0.0, 0.0, 1.0, frame.origin_x, frame.origin_y],
+    );
+
+    if data.is_empty() {
+      continue;
+    }
+    let group = (fragment.opacity < 1.0)
+      .then(|| doc.begin_group(IDENTITY, fragment.opacity, None, None))
+      .transpose()?;
+
+    doc.path(&data, Rgba(fragment.color.0), false)?;
+    if let Some(group) = group {
+      doc.end_group(group)?;
+    }
+  }
+
   // text-shadow paints below the glyphs; later-listed shadows paint lowest.
   for shadow in font_style.painted_text_shadows() {
     let color = Rgba(shadow.color.0);

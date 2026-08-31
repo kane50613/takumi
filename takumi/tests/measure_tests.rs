@@ -2108,3 +2108,69 @@ fn test_block_container_keeps_absolute_child_next_to_text() {
     "text sibling must still produce a line box"
   );
 }
+
+/// A shrink-to-fit flex box with horizontal padding used to lay its text out
+/// against max-content minus that padding, wrapping a line that fits. The
+/// nowrap variant never wraps, so both heights must agree.
+#[test]
+fn test_padded_flex_text_keeps_one_line() {
+  let badge = |nowrap: bool| {
+    let mut style = Style::default()
+      .with(StyleDeclaration::display(Display::InlineFlex))
+      .with(StyleDeclaration::padding_left(Px(8.0)))
+      .with(StyleDeclaration::padding_right(Px(8.0)))
+      .with(StyleDeclaration::font_size(Px(20.0).into()));
+
+    if nowrap {
+      style = style.with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap));
+    }
+    Node::container([
+      Node::text("Due ".to_string()),
+      Node::container([Node::text("August 31".to_string())]).with_style(style),
+      Node::text(" ok".to_string()),
+    ])
+    .with_style(Style::default().with(StyleDeclaration::display(Display::Block)))
+  };
+  let wrapped = measure(badge(false), create_measure_viewport());
+  let nowrap = measure(badge(true), create_measure_viewport());
+
+  assert_eq!(wrapped.children[0].height, nowrap.children[0].height);
+  assert_eq!(wrapped.children[0].width, nowrap.children[0].width);
+}
+
+/// Horizontal padding on an inline span reserves advance on the line, like
+/// Blink adds the span's edges to the line's inline size.
+#[test]
+fn test_inline_span_padding_reserves_advance() {
+  let paragraph = |padding: f32| {
+    Node::container([
+      Node::text("Due ".to_string()),
+      Node::container([Node::text("today".to_string())]).with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Inline))
+          .with(StyleDeclaration::padding_left(Px(padding)))
+          .with(StyleDeclaration::padding_right(Px(padding)))
+          .with(StyleDeclaration::background_color(ColorInput::Value(
+            Color([254, 226, 226, 255]),
+          ))),
+      ),
+      Node::text(" ok".to_string()),
+    ])
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::font_size(Px(20.0).into())),
+    )
+  };
+  let plain = measure(paragraph(0.0), create_measure_viewport());
+  let padded = measure(paragraph(8.0), create_measure_viewport());
+
+  let line_width = |result: &MeasuredNode| {
+    let runs = measured_text_runs(result);
+
+    runs.last().map(|run| run.x + run.width).unwrap_or_default()
+      - runs.first().map(|run| run.x).unwrap_or_default()
+  };
+
+  assert_within(line_width(&padded), line_width(&plain) + 16.0, 0.5);
+}

@@ -26,7 +26,9 @@
 //!
 //! - backgrounds: color, gradient and url() layers, with `background-size`,
 //!   `-position`, `-repeat`, `-origin`, `-clip` (including `text`) and
-//!   per-layer blend modes
+//!   per-layer blend modes; an inline span fills `background-color` per line
+//!   fragment, `box-decoration-break: slice` style (the drifts are listed on
+//!   [`takumi_core::layout::inline::InlineBackgroundFragment`])
 //! - borders, border-radius, `outline`, and `box-shadow` (blur approximated
 //!   by bands)
 //! - text with decorations, `text-shadow`, and `-webkit-text-stroke`

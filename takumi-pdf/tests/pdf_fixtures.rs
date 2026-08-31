@@ -163,6 +163,30 @@ fn text_ligatures() {
   });
 }
 
+/// An inline `<span>` with a background paints a rounded fragment under its
+/// text, padding included.
+#[test]
+fn inline_span_background() {
+  let pdf = run_pdf_fixture("inline-span-background", |fonts| {
+    let source = r##"<div style="display: flex; flex-direction: column; row-gap: 10px; width: 100%; height: 100%; padding: 12px; background-color: #ffffff; font-size: 18px; color: #141414">
+      <p style="margin: 0">Due <span style="background-color: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 9999px">August 31</span> at noon.</p>
+      <p style="margin: 0; width: 190px">Wraps: <span style="background-color: #dcfce7; padding: 2px 6px; border-radius: 6px">green badge text long enough to wrap</span> done.</p>
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse badge fixture"))
+      .viewport(Viewport::new((420, 200)))
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  assert!(
+    haystack.contains("0.9961 0.8863 0.8863 rg"),
+    "the pill's background color is missing from the content stream"
+  );
+}
+
 #[test]
 fn paged_lines() {
   run_pdf_fixture("paged-lines", |fonts| {
@@ -4262,5 +4286,40 @@ fn the_paper_paints_under_a_repeated_box() {
   assert!(
     paper < watermark && watermark < text,
     "expected paper, then the box, then the text: {paper} {watermark} {text}"
+  );
+}
+
+/// A badge fragment lands in one page's content stream, the page that owns
+/// its line, not re-clipped into every page's.
+#[test]
+fn paged_inline_span_background_paints_once() {
+  let fonts = fonts();
+  // One paragraph spanning several pages, so its node survives the per-page
+  // bounds pruning and the fragment loop itself must skip foreign pages.
+  let words: String =
+    "lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod ".repeat(30);
+  let html = format!(
+    r##"<p style="margin: 0; font-size: 16px; color: #141414">{words}<span style="background-color: #fee2e2; padding: 2px 8px; border-radius: 9999px">soon</span> {words}</p>"##
+  );
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse the doc"))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render the doc");
+  let haystack = inflated_text(&pdf);
+  let pages = haystack.matches("/Type/Page").count() - haystack.matches("/Type/Pages").count();
+
+  assert!(pages > 1, "the document did not paginate");
+  assert_eq!(
+    haystack.matches("0.9961 0.8863 0.8863 rg").count(),
+    1,
+    "the badge fill must be emitted once, on its owning page"
   );
 }

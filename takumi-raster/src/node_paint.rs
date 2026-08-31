@@ -366,6 +366,7 @@ fn draw_text_node_content(
     text: text.text.as_str().into(),
     context,
     link: None,
+    decorations: None,
   };
 
   let built = create_inline_layout(InlineLayoutRequest::in_content_box(
