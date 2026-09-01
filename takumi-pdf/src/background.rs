@@ -41,53 +41,58 @@ struct Axis {
   step: f32,
 }
 
-/// Resolves one layer's placement. An image layer carries its intrinsic
-/// sizing, which `auto`, `cover` and `contain` resolve against; a gradient has
-/// none, so those all resolve to the positioning area.
-pub(crate) fn place(
-  area: Size<f32>,
-  size: BackgroundSize,
-  position: PositionValue,
-  repeat: BackgroundRepeat,
-  intrinsic: Option<IntrinsicSizing>,
-  context: &RenderContext,
-) -> Placement {
-  let (tile, auto) = tile_size(area, size, intrinsic, context);
-  // `round` rescales the axis it applies to. An axis left `auto` follows from
-  // the image's ratio, so it has to resolve after the one it depends on.
-  let (x, y) = match auto {
-    Some((AutoBackgroundAxis::Width, ratio)) => {
-      let y = axis(area.height, tile.height, position.0.y, repeat.1, context);
-      let width =
-        auto_axis_from_intrinsic(AutoBackgroundAxis::Width, ratio, y.tile).unwrap_or(tile.width);
+impl Placement {
+  /// Resolves one layer's placement. An image layer carries its intrinsic
+  /// sizing, which `auto`, `cover` and `contain` resolve against; a gradient has
+  /// none, so those all resolve to the positioning area.
+  pub(crate) fn resolve(
+    area: Size<f32>,
+    size: BackgroundSize,
+    position: PositionValue,
+    repeat: BackgroundRepeat,
+    intrinsic: Option<IntrinsicSizing>,
+    context: &RenderContext,
+  ) -> Placement {
+    let (tile, auto) = tile_size(area, size, intrinsic, context);
+    // `round` rescales the axis it applies to. An axis left `auto` follows from
+    // the image's ratio, so it has to resolve after the one it depends on.
+    let (x, y) = match auto {
+      Some((AutoBackgroundAxis::Width, ratio)) => {
+        let y = Axis::resolve(area.height, tile.height, position.0.y, repeat.1, context);
+        let width =
+          auto_axis_from_intrinsic(AutoBackgroundAxis::Width, ratio, y.tile).unwrap_or(tile.width);
 
-      (axis(area.width, width, position.0.x, repeat.0, context), y)
+        (
+          Axis::resolve(area.width, width, position.0.x, repeat.0, context),
+          y,
+        )
+      }
+      Some((AutoBackgroundAxis::Height, ratio)) => {
+        let x = Axis::resolve(area.width, tile.width, position.0.x, repeat.0, context);
+        let height = auto_axis_from_intrinsic(AutoBackgroundAxis::Height, ratio, x.tile)
+          .unwrap_or(tile.height);
+
+        (
+          x,
+          Axis::resolve(area.height, height, position.0.y, repeat.1, context),
+        )
+      }
+      None => (
+        Axis::resolve(area.width, tile.width, position.0.x, repeat.0, context),
+        Axis::resolve(area.height, tile.height, position.0.y, repeat.1, context),
+      ),
+    };
+
+    Self {
+      tiles: repeat.0 != BackgroundRepeatStyle::NoRepeat
+        || repeat.1 != BackgroundRepeatStyle::NoRepeat,
+      tile: Size {
+        width: x.tile,
+        height: y.tile,
+      },
+      origin: (x.origin, y.origin),
+      step: (x.step, y.step),
     }
-    Some((AutoBackgroundAxis::Height, ratio)) => {
-      let x = axis(area.width, tile.width, position.0.x, repeat.0, context);
-      let height =
-        auto_axis_from_intrinsic(AutoBackgroundAxis::Height, ratio, x.tile).unwrap_or(tile.height);
-
-      (
-        x,
-        axis(area.height, height, position.0.y, repeat.1, context),
-      )
-    }
-    None => (
-      axis(area.width, tile.width, position.0.x, repeat.0, context),
-      axis(area.height, tile.height, position.0.y, repeat.1, context),
-    ),
-  };
-
-  Placement {
-    tiles: repeat.0 != BackgroundRepeatStyle::NoRepeat
-      || repeat.1 != BackgroundRepeatStyle::NoRepeat,
-    tile: Size {
-      width: x.tile,
-      height: y.tile,
-    },
-    origin: (x.origin, y.origin),
-    step: (x.step, y.step),
   }
 }
 
@@ -143,56 +148,58 @@ fn tile_size(
 /// A repeating axis starts one step before the anchor so the tiles also cover
 /// the area's leading edge. `round` rescales the tile to fit a whole number of
 /// them, and `space` keeps the tile but spreads the leftover between tiles.
-fn axis(
-  area: f32,
-  tile: f32,
-  position: PositionComponent,
-  repeat: BackgroundRepeatStyle,
-  context: &RenderContext,
-) -> Axis {
-  if tile <= 0.0 {
-    return Axis {
-      tile,
-      origin: 0.0,
-      step: area.max(1.0),
-    };
-  }
-  let anchor = position.resolve(context, area - tile);
-  let once = Axis {
-    tile,
-    origin: anchor,
-    step: area.max(tile),
-  };
-
-  match repeat {
-    BackgroundRepeatStyle::NoRepeat => once,
-    BackgroundRepeatStyle::Repeat => Axis {
-      tile,
-      origin: anchor - (anchor / tile).ceil() * tile,
-      step: tile,
-    },
-    BackgroundRepeatStyle::Round => {
-      let count = (area / tile).round().max(1.0);
-      let rounded = area / count;
-      // The position still applies, against the rescaled tile.
-      let anchor = position.resolve(context, area - rounded);
-
-      Axis {
-        tile: rounded,
-        origin: anchor - (anchor / rounded).ceil() * rounded,
-        step: rounded,
-      }
-    }
-    BackgroundRepeatStyle::Space => {
-      let count = (area / tile).floor();
-
-      if count < 2.0 {
-        return once;
-      }
-      Axis {
+impl Axis {
+  fn resolve(
+    area: f32,
+    tile: f32,
+    position: PositionComponent,
+    repeat: BackgroundRepeatStyle,
+    context: &RenderContext,
+  ) -> Self {
+    if tile <= 0.0 {
+      return Self {
         tile,
         origin: 0.0,
-        step: tile + (area - count * tile) / (count - 1.0),
+        step: area.max(1.0),
+      };
+    }
+    let anchor = position.resolve(context, area - tile);
+    let once = Self {
+      tile,
+      origin: anchor,
+      step: area.max(tile),
+    };
+
+    match repeat {
+      BackgroundRepeatStyle::NoRepeat => once,
+      BackgroundRepeatStyle::Repeat => Self {
+        tile,
+        origin: anchor - (anchor / tile).ceil() * tile,
+        step: tile,
+      },
+      BackgroundRepeatStyle::Round => {
+        let count = (area / tile).round().max(1.0);
+        let rounded = area / count;
+        // The position still applies, against the rescaled tile.
+        let anchor = position.resolve(context, area - rounded);
+
+        Self {
+          tile: rounded,
+          origin: anchor - (anchor / rounded).ceil() * rounded,
+          step: rounded,
+        }
+      }
+      BackgroundRepeatStyle::Space => {
+        let count = (area / tile).floor();
+
+        if count < 2.0 {
+          return once;
+        }
+        Self {
+          tile,
+          origin: 0.0,
+          step: tile + (area - count * tile) / (count - 1.0),
+        }
       }
     }
   }
@@ -211,7 +218,7 @@ mod tests {
     viewport::Viewport,
   };
 
-  use super::place;
+  use super::Placement;
 
   /// `round` rescales the axis it applies to, and an `auto` axis follows from
   /// the image's ratio rather than keeping the size it was asked for.
@@ -226,7 +233,7 @@ mod tests {
           .build(),
       )
       .build();
-    let placement = place(
+    let placement = Placement::resolve(
       Size {
         width: 1200.0,
         height: 630.0,

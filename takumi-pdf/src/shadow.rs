@@ -39,7 +39,7 @@ pub(crate) fn emit_outer_shadows(
   border.append_mask_commands(&mut element, size, CorePoint::ZERO);
 
   for shadow in shadows.iter().rev() {
-    for band in bands(shadow) {
+    for band in Band::of(shadow) {
       let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
       let (shape, spread_size) = border.outset_shadow_box(size, band.spread);
 
@@ -73,7 +73,7 @@ pub(crate) fn emit_inset_shadows(
   };
 
   for shadow in shadows.iter().rev() {
-    for band in bands(shadow) {
+    for band in Band::of(shadow) {
       let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT * 2);
 
       // The filled region is the padding box minus the hole the shadow casts
@@ -112,39 +112,41 @@ struct Band {
   alpha: f32,
 }
 
-/// A sharp shadow is one band at full alpha. A blurred one is a stack from the
-/// outermost, faintest band inward, with each band's alpha chosen so the fills
-/// composite to the coverage the blur would have had at that distance.
-fn bands(shadow: &SizedShadow) -> Vec<Band> {
-  if shadow.blur_radius <= 0.0 {
-    return vec![Band {
+impl Band {
+  /// A sharp shadow is one band at full alpha. A blurred one is a stack from the
+  /// outermost, faintest band inward, with each band's alpha chosen so the fills
+  /// composite to the coverage the blur would have had at that distance.
+  fn of(shadow: &SizedShadow) -> Vec<Self> {
+    if shadow.blur_radius <= 0.0 {
+      return vec![Band {
+        spread: shadow.spread_radius,
+        alpha: 1.0,
+      }];
+    }
+    // The shifted, unblurred shape is fully opaque; the blur only fades outward
+    // from its edge, so that core is the last band drawn.
+    let mut bands = Vec::with_capacity(BLUR_BANDS + 1);
+    let mut covered = 0.0;
+
+    for index in 0..BLUR_BANDS {
+      // Walk inward: the outermost band sits a full blur radius out and is the
+      // faintest, the innermost sits at the sharp edge and is opaque.
+      let t = (index as f32 + 1.0) / BLUR_BANDS as f32;
+      let target = coverage(1.0 - t);
+      let alpha = ((target - covered) / (1.0 - covered)).clamp(0.0, 1.0);
+
+      covered = target;
+      bands.push(Band {
+        spread: shadow.spread_radius + shadow.blur_radius * (1.0 - t),
+        alpha,
+      });
+    }
+    bands.push(Band {
       spread: shadow.spread_radius,
       alpha: 1.0,
-    }];
-  }
-  // The shifted, unblurred shape is fully opaque; the blur only fades outward
-  // from its edge, so that core is the last band drawn.
-  let mut bands = Vec::with_capacity(BLUR_BANDS + 1);
-  let mut covered = 0.0;
-
-  for index in 0..BLUR_BANDS {
-    // Walk inward: the outermost band sits a full blur radius out and is the
-    // faintest, the innermost sits at the sharp edge and is opaque.
-    let t = (index as f32 + 1.0) / BLUR_BANDS as f32;
-    let target = coverage(1.0 - t);
-    let alpha = ((target - covered) / (1.0 - covered)).clamp(0.0, 1.0);
-
-    covered = target;
-    bands.push(Band {
-      spread: shadow.spread_radius + shadow.blur_radius * (1.0 - t),
-      alpha,
     });
+    bands
   }
-  bands.push(Band {
-    spread: shadow.spread_radius,
-    alpha: 1.0,
-  });
-  bands
 }
 
 /// Coverage a Gaussian blur leaves `distance` blur radii outside the shape.
@@ -195,7 +197,7 @@ fn fill(commands: &[PathCommand], color: Color, alpha: f32, at: (f32, f32), surf
 mod tests {
   use takumi_core::{shadow::SizedShadow, style::Color};
 
-  use super::{bands, coverage};
+  use super::{Band, coverage};
 
   #[test]
   fn a_blurred_shadow_has_an_opaque_core() {
@@ -206,7 +208,7 @@ mod tests {
       spread_radius: 2.0,
       color: Color([0, 0, 0, 255]),
     };
-    let bands = bands(&shadow);
+    let bands = Band::of(&shadow);
     let core = bands.last().expect("a band");
 
     assert_eq!(core.alpha, 1.0);

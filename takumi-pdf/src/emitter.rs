@@ -47,9 +47,9 @@ use crate::paint::rasterized_image;
 #[cfg(all(feature = "svg", feature = "images"))]
 use crate::svg;
 use crate::{
-  background::{Placement, cycled, place},
+  background::{Placement, cycled},
   filter::{ColorFilter, unsupported_filter},
-  glyph::{run_glyphs, uncovered_error},
+  glyph::run_glyphs,
   inline::{InlineMap, build_inline_runs, node_inline_items},
   krilla::{
     Data,
@@ -167,13 +167,22 @@ impl<'a> DocumentState<'a> {
     }
   }
 
-  /// The error the pages left behind, if any.
+  /// The error the pages left behind, if any: what failed outright, else the
+  /// characters no font covered.
   pub(crate) fn into_error(self) -> Option<PdfError> {
     let issues = self.issues.into_inner();
 
-    issues
-      .failure
-      .or_else(|| uncovered_error(&issues.uncovered))
+    if issues.failure.is_some() || issues.uncovered.is_empty() {
+      return issues.failure;
+    }
+    let named = issues
+      .uncovered
+      .chars()
+      .map(|character| format!("{character} (U+{:04X})", character as u32))
+      .collect::<Vec<_>>()
+      .join(", ");
+
+    Some(PdfError::MissingGlyphs(named))
   }
 }
 
@@ -559,7 +568,7 @@ impl Emitter<'_> {
 
     surface.push_clip_path(&clip, &rule);
     for (index, image) in images.iter().enumerate().rev() {
-      let placement = place(
+      let placement = Placement::resolve(
         area,
         cycled(&style.background_size, index),
         cycled(&style.background_position, index),
@@ -901,7 +910,7 @@ impl Emitter<'_> {
       let mut content = builder.surface();
 
       for (index, image) in images.iter().enumerate().rev() {
-        let placement = place(
+        let placement = Placement::resolve(
           size,
           cycled(&style.mask_size, index),
           cycled(&style.mask_position, index),
@@ -1718,7 +1727,7 @@ impl Emitter<'_> {
       .enumerate()
       .rev()
     {
-      let placement = place(
+      let placement = Placement::resolve(
         area,
         cycled(&style.background_size, index),
         cycled(&style.background_position, index),
