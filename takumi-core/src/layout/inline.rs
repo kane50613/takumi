@@ -20,7 +20,7 @@ use crate::{
     Affine, Color, Direction, Display, Float, FontSynthesis, Lang, Length, ResolvedVerticalAlign,
     SizedTextDecorationThickness, SpacePair, TextDecorationLines, TextDecorationSkipInk,
     TextFitMode, TextFitTarget, TextOverflow, TextUnderlinePosition, TextWrapMode, TextWrapStyle,
-    VerticalAlign, VerticalAlignKeyword, WhiteSpaceCollapse,
+    VerticalAlign, VerticalAlignKeyword, WhiteSpaceCollapse, WordBreak,
   },
   text_processing::{
     MaxHeight, RebreakOptions, apply_text_transform, apply_white_space_collapse,
@@ -794,6 +794,21 @@ fn refresh_text_span_ranges(spans: &mut [ProcessedInlineSpan<'_>]) {
   }
 }
 
+/// Chromium's break table encodes `word-break: normal` pairs, and Blink runs
+/// break-all through a separate iterator.
+/// <https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/text/text_break_iterator.cc>
+///
+/// Parley takes the override per builder, so one break-all span costs the
+/// whole paragraph its Chromium breaks.
+fn chromium_line_breaks(spans: &[ProcessedInlineSpan<'_>]) -> bool {
+  !spans.iter().any(|span| {
+    matches!(
+      span,
+      ProcessedInlineSpan::Text { style, .. } if style.parent.word_break == WordBreak::BreakAll
+    )
+  })
+}
+
 fn tail_text_span<'a, 'c>(
   spans: &'a [ProcessedInlineSpan<'c>],
 ) -> Option<(&'a SizedFontStyle<'c>, u64)> {
@@ -814,7 +829,7 @@ fn measure_ellipsis_width(
   ellipsis_style: &SizedFontStyle,
   ellipsis_char: &str,
 ) -> f32 {
-  let (mut ellipsis_layout, _) = context.tree_builder(ellipsis_style.into(), |builder| {
+  let (mut ellipsis_layout, _) = context.tree_builder(ellipsis_style.into(), true, |builder| {
     push_presentation_text(
       builder,
       ellipsis_style,
@@ -1929,9 +1944,10 @@ fn build_inline_layout_tree<'c>(
   let (layout, text) = match cached {
     Some(cached) => cached,
     None => {
-      let (layout, text) = context.tree_builder(style.into(), |builder| {
-        push_spans_into_builder(builder, &spans, &context.fonts.classes)
-      });
+      let (layout, text) =
+        context.tree_builder(style.into(), chromium_line_breaks(&spans), |builder| {
+          push_spans_into_builder(builder, &spans, &context.fonts.classes)
+        });
 
       if let Some(key) = cache_key {
         let stored = seen.then(|| (layout.clone(), text.clone()));
@@ -3798,16 +3814,17 @@ fn make_ellipsis_layout<'c>(
 
   let ellipsis_style = tail_text_span(spans).map_or(root_style, |(style, _)| style);
 
-  let (mut final_layout, _) = context.tree_builder(root_style.into(), |builder| {
-    push_spans_into_builder(builder, spans, &context.fonts.classes);
-    push_presentation_text(
-      builder,
-      ellipsis_style,
-      None,
-      ellipsis_char,
-      &context.fonts.classes,
-    );
-  });
+  let (mut final_layout, _) =
+    context.tree_builder(root_style.into(), chromium_line_breaks(spans), |builder| {
+      push_spans_into_builder(builder, spans, &context.fonts.classes);
+      push_presentation_text(
+        builder,
+        ellipsis_style,
+        None,
+        ellipsis_char,
+        &context.fonts.classes,
+      );
+    });
 
   apply_text_indent(&mut final_layout, root_style, max_width);
   let text_wrap_mode = root_style.parent.resolved_text_wrap_mode();

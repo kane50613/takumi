@@ -10,8 +10,8 @@ use std::{
 };
 
 use parley::{
-  FontFamilyName, GenericFamily as ParleyGenericFamily, GlyphRun, LayoutContext, TextStyle,
-  TreeBuilder,
+  CHROMIUM_LINE_BREAK_OVERRIDE, FontFamilyName, GenericFamily as ParleyGenericFamily, GlyphRun,
+  LayoutContext, TextStyle, TreeBuilder,
   fontique::{
     Attributes, Blob, Collection, CollectionOptions, FallbackKey, FontInfo, FontInfoOverride,
     FontStyle, FontWeight, FontWidth, QueryFamily, QueryStatus, Script, ScriptExt,
@@ -705,11 +705,15 @@ impl RenderContext {
   pub(crate) fn tree_builder(
     &self,
     root_style: TextStyle<'_, '_, InlineBrush>,
+    chromium_line_breaks: bool,
     func: impl FnOnce(&mut TreeBuilder<'_, InlineBrush>),
   ) -> (InlineLayout, String) {
     self.fonts.with_context(|fonts| {
       with_layout_context(|layout| {
         let mut builder = layout.tree_builder(&mut fonts.inner, 1.0, true, &root_style);
+        if chromium_line_breaks {
+          builder.set_line_break_override(Some(CHROMIUM_LINE_BREAK_OVERRIDE));
+        }
         func(&mut builder);
         builder.build()
       })
