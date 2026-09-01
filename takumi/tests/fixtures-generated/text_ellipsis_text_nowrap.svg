@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-  <rect x="0" y="0" width="1200" height="105" fill="#f0f0f0"/>
+  <rect x="0" y="0" width="1200" height="104" fill="#f0f0f0"/>
   <clipPath id="cp0">
-    <path d="M0 0H1200V105H0Z"/>
+    <path d="M0 0H1200V104H0Z"/>
   </clipPath>
   <g clip-path="url(#cp0)">
-    <path d="M20 20h1160v65h-1160v-65Zm1 1h1158v63h-1158v-63Z" fill="#f00" fill-rule="evenodd"/>
+    <path d="M20 20h1160v64h-1160v-64Zm1 1h1158v62h-1158v-62Z" fill="#f00" fill-rule="evenodd"/>
     <g fill="#000">
       <use href="#g0" x="21" y="69"/>
       <use href="#g1" x="46.06" y="69"/>

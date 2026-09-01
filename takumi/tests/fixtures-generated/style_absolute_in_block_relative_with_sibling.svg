@@ -4,9 +4,9 @@
   <rect x="450" y="345" width="100" height="20" fill="#8080ff"/>
   <rect x="450" y="265" width="300" height="21" fill="#000"/>
   <g fill="#fff">
-    <use href="#g0" x="450" y="280"/>
-    <use href="#g1" x="459.49" y="280"/>
-    <use href="#g1" x="470.24" y="280"/>
+    <use href="#g0" x="450" y="281"/>
+    <use href="#g1" x="459.49" y="281"/>
+    <use href="#g1" x="470.24" y="281"/>
   </g>
   <defs>
     <path id="g0" d="M1.47 0v-11.36h7.14v1.34h-5.77v3.66h5.58v1.31h-5.58v3.71h5.89v1.34Z"/>

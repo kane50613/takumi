@@ -681,7 +681,34 @@ pub struct InlineBrush {
   pub stroke_width: f32,
   pub(crate) font_synthesis: FontSynthesis,
   pub(crate) line_height_scales_with_text_fit: bool,
+  /// Used line height in px; `None` falls back to the run metrics.
+  pub(crate) line_height_px: Option<f32>,
+  /// Whether the line height is `normal`, letting fallback-font runs grow the line.
+  pub(crate) line_height_is_normal: bool,
   pub(crate) vertical_align: VerticalAlign,
+}
+
+impl InlineBrush {
+  /// The run's line-box contribution. Parley's run metrics can carry a
+  /// neighboring span's style at run boundaries, so the brush line height wins
+  /// when it is set. Under `line-height: normal` a fallback-font run grows the
+  /// line to its own rounded height, like Blink's
+  /// `InlineBoxState::AccumulateUsedFonts`.
+  fn line_box_contribution(
+    &self,
+    metrics_line_height: f32,
+    ascent: f32,
+    descent: f32,
+  ) -> (f32, f32) {
+    let line_height = self.line_height_px.unwrap_or(metrics_line_height);
+    let (above, below) = text_line_box_contribution(line_height, ascent, descent);
+
+    if self.line_height_is_normal {
+      (above.max(ascent.round()), below.max(descent.round()))
+    } else {
+      (above, below)
+    }
+  }
 }
 
 impl Default for InlineBrush {
@@ -701,6 +728,8 @@ impl Default for InlineBrush {
       stroke_width: 0.0,
       font_synthesis: FontSynthesis::default(),
       line_height_scales_with_text_fit: false,
+      line_height_px: None,
+      line_height_is_normal: false,
       vertical_align: VerticalAlign::default(),
     }
   }
@@ -1173,8 +1202,11 @@ pub(crate) fn resolve_inline_line_metrics(
       match item {
         PositionedLayoutItem::GlyphRun(glyph_run) => {
           let metrics = glyph_run.run().metrics();
-          let (base_above, base_below) =
-            text_line_box_contribution(metrics.line_height, metrics.ascent, metrics.descent);
+          let (base_above, base_below) = glyph_run.style().brush.line_box_contribution(
+            metrics.line_height,
+            metrics.ascent,
+            metrics.descent,
+          );
           if (line_scale - 1.0).abs() <= f32::EPSILON {
             resolved_above = resolved_above.max(base_above);
             resolved_below = resolved_below.max(base_below);
@@ -3202,7 +3234,7 @@ pub fn resolve_inline_runs(
             // (`InlineBoxState::ComputeTextMetrics` adds the line-height
             // leading to the font height).
             let (above, below) =
-              text_line_box_contribution(metrics.line_height, metrics.ascent, metrics.descent);
+              brush.line_box_contribution(metrics.line_height, metrics.ascent, metrics.descent);
             let rect = scale_outline_rect(
               InlineOutlineRect {
                 span_id,
@@ -3864,6 +3896,17 @@ mod tests {
       // Not a font: `em_box_descent` falls back to the run metrics instead of OS/2.
       font_data: parley::fontique::Blob::new(Arc::new(Vec::new())),
     }
+  }
+
+  #[test]
+  fn an_explicit_zero_line_height_beats_the_run_metrics() {
+    let brush = InlineBrush {
+      line_height_px: Some(0.0),
+      ..InlineBrush::default()
+    };
+    let (above, below) = brush.line_box_contribution(20.0, 12.0, 4.0);
+
+    assert_eq!((above, below), (4.0, -4.0));
   }
 
   #[test]

@@ -5,10 +5,10 @@
   </filter>
   <g filter="url(#bl0)">
     <g fill="#ff2d95">
-      <use href="#g0" x="460" y="319"/>
-      <use href="#g1" x="531.14" y="319"/>
-      <use href="#g2" x="591.42" y="319"/>
-      <use href="#g0" x="667.65" y="319"/>
+      <use href="#g0" x="460" y="320"/>
+      <use href="#g1" x="531.14" y="320"/>
+      <use href="#g2" x="591.42" y="320"/>
+      <use href="#g0" x="667.65" y="320"/>
     </g>
   </g>
   <filter id="bl1">
@@ -16,10 +16,10 @@
   </filter>
   <g filter="url(#bl1)">
     <g fill="#ff2d95">
-      <use href="#g0" x="460" y="319"/>
-      <use href="#g1" x="531.14" y="319"/>
-      <use href="#g2" x="591.42" y="319"/>
-      <use href="#g0" x="667.65" y="319"/>
+      <use href="#g0" x="460" y="320"/>
+      <use href="#g1" x="531.14" y="320"/>
+      <use href="#g2" x="591.42" y="320"/>
+      <use href="#g0" x="667.65" y="320"/>
     </g>
   </g>
   <filter id="bl2">
@@ -27,10 +27,10 @@
   </filter>
   <g filter="url(#bl2)">
     <g fill="#ff2d95">
-      <use href="#g0" x="460" y="319"/>
-      <use href="#g1" x="531.14" y="319"/>
-      <use href="#g2" x="591.42" y="319"/>
-      <use href="#g0" x="667.65" y="319"/>
+      <use href="#g0" x="460" y="320"/>
+      <use href="#g1" x="531.14" y="320"/>
+      <use href="#g2" x="591.42" y="320"/>
+      <use href="#g0" x="667.65" y="320"/>
     </g>
   </g>
   <filter id="bl3">
@@ -38,17 +38,17 @@
   </filter>
   <g filter="url(#bl3)">
     <g fill="#fff">
-      <use href="#g0" x="460" y="319"/>
-      <use href="#g1" x="531.14" y="319"/>
-      <use href="#g2" x="591.42" y="319"/>
-      <use href="#g0" x="667.65" y="319"/>
+      <use href="#g0" x="460" y="320"/>
+      <use href="#g1" x="531.14" y="320"/>
+      <use href="#g2" x="591.42" y="320"/>
+      <use href="#g0" x="667.65" y="320"/>
     </g>
   </g>
   <g fill="#fff">
-    <use href="#g0" x="460" y="319"/>
-    <use href="#g1" x="531.14" y="319"/>
-    <use href="#g2" x="591.42" y="319"/>
-    <use href="#g0" x="667.65" y="319"/>
+    <use href="#g0" x="460" y="320"/>
+    <use href="#g1" x="531.14" y="320"/>
+    <use href="#g2" x="591.42" y="320"/>
+    <use href="#g0" x="667.65" y="320"/>
   </g>
   <g>
     <g fill="#0ff" fill-opacity=".702">

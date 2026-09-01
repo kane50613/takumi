@@ -9,13 +9,14 @@ use smallvec::SmallVec;
 use crate::{
   context::RenderContext,
   geometry::Size,
-  layout::inline::InlineBrush,
+  layout::{inline::InlineBrush, tree::resolve_normal_line_height},
   painter::StrokeStyle,
   resources::font::{FontClasses, SubsetGroup},
   shadow::SizedShadow,
   style::{
     BorderStyle, Color, ComputedStyle, Display, FontFamily, FontSynthesis, Lang,
-    SizedTextDecorationThickness, SizingContext, VerticalAlign, WordBreak,
+    LineHeight as CssLineHeight, SizedTextDecorationThickness, SizingContext, VerticalAlign,
+    WordBreak,
   },
 };
 
@@ -107,7 +108,7 @@ impl ExpandedFontFamily {
             tokens.extend(
               subsets
                 .iter()
-                .map(|(_, name)| ExpandedFamilyToken::Named(name.clone())),
+                .map(|(_, _, name)| ExpandedFamilyToken::Named(name.clone())),
             );
           }
           None => tokens.push(ExpandedFamilyToken::Named(name.into_owned())),
@@ -204,6 +205,10 @@ pub struct SizedFontStyle<'s> {
   pub parent: &'s ComputedStyle,
   pub(crate) font_family: ExpandedFontFamily,
   pub(crate) line_height: parley::LineHeight,
+  /// The used line height in pixels, kept on the brush because parley's run
+  /// metrics can carry a neighboring span's style at run boundaries.
+  pub(crate) line_height_px: Option<f32>,
+  pub(crate) line_height_is_normal: bool,
   pub(crate) line_height_scales_with_text_fit: bool,
   /// Text stroke width in pixels.
   pub stroke_width: f32,
@@ -283,6 +288,13 @@ impl SizedFontStyle<'_> {
     self.word_spacing.to_bits().hash(hasher);
     self.text_underline_offset.to_bits().hash(hasher);
     self.line_height_scales_with_text_fit.hash(hasher);
+    self.line_height_is_normal.hash(hasher);
+    discriminant(&self.line_height).hash(hasher);
+    match self.line_height {
+      LineHeight::Absolute(value)
+      | LineHeight::FontSizeRelative(value)
+      | LineHeight::MetricsRelative(value) => value.to_bits().hash(hasher),
+    }
     self.color.0.hash(hasher);
     self.text_decoration_color.0.hash(hasher);
     self.text_stroke_color.0.hash(hasher);
@@ -415,6 +427,8 @@ impl<'s> From<&'s SizedFontStyle<'s>> for TextStyle<'s, 's, InlineBrush> {
           style: style.parent.font_synthesis_style,
         },
         line_height_scales_with_text_fit: style.line_height_scales_with_text_fit,
+        line_height_px: style.line_height_px,
+        line_height_is_normal: style.line_height_is_normal,
         vertical_align: style.parent.vertical_align,
       },
       text_wrap_mode: style.parent.resolved_text_wrap_mode().into_parley(),
@@ -459,13 +473,30 @@ fn resolved_text_shadows(
 impl<'s> SizedFontStyle<'s> {
   /// Resolves a sized font style from a computed style and render context.
   pub fn from_style(style: &'s ComputedStyle, context: &RenderContext) -> Self {
-    let line_height = style.line_height.into_parley(&context.sizing);
+    let line_height_is_normal = matches!(style.line_height, CssLineHeight::Normal);
+    let line_height = if line_height_is_normal {
+      LineHeight::Absolute(resolve_normal_line_height(
+        context,
+        style,
+        context.sizing.font_size,
+      ))
+    } else {
+      style.line_height.into_parley(&context.sizing)
+    };
+
+    let line_height_px = match line_height {
+      LineHeight::Absolute(value) => Some(value),
+      LineHeight::FontSizeRelative(value) => Some(value * context.sizing.font_size),
+      LineHeight::MetricsRelative(_) => None,
+    };
 
     Self {
       sizing: context.sizing.to_owned(),
       parent: style,
       font_family: context.expand_font_family(&style.font_family),
       line_height,
+      line_height_px,
+      line_height_is_normal,
       line_height_scales_with_text_fit: style.line_height.scales_with_text_fit(),
       stroke_width: style
         .webkit_text_stroke_width
@@ -554,7 +585,10 @@ mod tests {
     let mut groups = HashMap::new();
     groups.insert(
       "Logical".to_string(),
-      SubsetGroup::from([(1, "Subset A".to_string()), (0, "Subset B".to_string())]),
+      SubsetGroup::from([
+        (1, 0, "Subset A".to_string()),
+        (0, 1, "Subset B".to_string()),
+      ]),
     );
 
     let expanded = ExpandedFontFamily::expand(&family, &groups);

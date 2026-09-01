@@ -425,28 +425,28 @@
   </g>
   <image x="345" y="254" width="8" height="8" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAEklEQVR42mOwbvr2Hx9mGBkKAKAwrIFG5bLTAAAAAElFTkSuQmCC" preserveAspectRatio="none"/>
   <g fill="#111827">
-    <use href="#g10" x="360" y="285"/>
-    <use href="#g29" x="364" y="285"/>
-    <use href="#g30" x="377.87" y="285"/>
-    <use href="#g35" x="386.59" y="285"/>
-    <use href="#g12" x="395.94" y="285"/>
-    <use href="#g29" x="408.91" y="285"/>
-    <use href="#g30" x="422.78" y="285"/>
-    <use href="#g16" x="431.54" y="285"/>
-    <use href="#g39" x="437.12" y="285"/>
-    <use href="#g12" x="445.76" y="285"/>
-    <use href="#g16" x="454.58" y="285"/>
+    <use href="#g10" x="360" y="286"/>
+    <use href="#g29" x="364" y="286"/>
+    <use href="#g30" x="377.87" y="286"/>
+    <use href="#g35" x="386.59" y="286"/>
+    <use href="#g12" x="395.94" y="286"/>
+    <use href="#g29" x="408.91" y="286"/>
+    <use href="#g30" x="422.78" y="286"/>
+    <use href="#g16" x="431.54" y="286"/>
+    <use href="#g39" x="437.12" y="286"/>
+    <use href="#g12" x="445.76" y="286"/>
+    <use href="#g16" x="454.58" y="286"/>
   </g>
-  <image x="345" y="277" width="8" height="8" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAEklEQVR42mOwbvr2Hx9mGBkKAKAwrIFG5bLTAAAAAElFTkSuQmCC" preserveAspectRatio="none"/>
+  <image x="345" y="278" width="8" height="8" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAEklEQVR42mOwbvr2Hx9mGBkKAKAwrIFG5bLTAAAAAElFTkSuQmCC" preserveAspectRatio="none"/>
   <g fill="#111827">
-    <use href="#g10" x="375" y="308"/>
-    <use href="#g11" x="379" y="308"/>
-    <use href="#g20" x="388.1" y="308"/>
-    <use href="#g10" x="396.26" y="308"/>
-    <use href="#g19" x="400.01" y="308"/>
-    <use href="#g12" x="409.37" y="308"/>
+    <use href="#g10" x="375" y="310"/>
+    <use href="#g11" x="379" y="310"/>
+    <use href="#g20" x="388.1" y="310"/>
+    <use href="#g10" x="396.26" y="310"/>
+    <use href="#g19" x="400.01" y="310"/>
+    <use href="#g12" x="409.37" y="310"/>
   </g>
-  <image x="360" y="300" width="8" height="8" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAEklEQVR42mOwbvr2Hx9mGBkKAKAwrIFG5bLTAAAAAElFTkSuQmCC" preserveAspectRatio="none"/>
+  <image x="360" y="302" width="8" height="8" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAEklEQVR42mOwbvr2Hx9mGBkKAKAwrIFG5bLTAAAAAElFTkSuQmCC" preserveAspectRatio="none"/>
   <path d="M608 216h266c4.42 0 8 3.58 8 8v174c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-174c0-4.42 3.58-8 8-8Z" fill="#fff"/>
   <clipPath id="cp6">
     <path d="M608 216h266c4.42 0 8 3.58 8 8v174c0 4.42-3.58 8-8 8h-266c-4.42 0-8-3.58-8-8v-174c0-4.42 3.58-8 8-8Z"/>
@@ -529,35 +529,35 @@
     <use href="#g3" x="983.2" y="237"/>
     <use href="#g7" x="989.8" y="237"/>
   </g>
-  <use href="#g13" x="1085.97" y="268" fill="#111827"/>
+  <use href="#g13" x="1085.97" y="267" fill="#111827"/>
   <g fill="#111827">
-    <use href="#g57" x="1096.11" y="268"/>
-    <use href="#g58" x="1101.63" y="268"/>
-    <use href="#g59" x="1111.6" y="268"/>
+    <use href="#g57" x="1096.11" y="267"/>
+    <use href="#g58" x="1101.63" y="267"/>
+    <use href="#g59" x="1111.6" y="267"/>
   </g>
-  <use href="#g14" x="1126" y="268" fill="#111827"/>
-  <use href="#g13" x="1129.22" y="268" fill="#111827"/>
-  <use href="#g15" x="1082.21" y="301" fill="#111827"/>
+  <use href="#g14" x="1126" y="267" fill="#111827"/>
+  <use href="#g13" x="1129.22" y="267" fill="#111827"/>
+  <use href="#g15" x="1082.21" y="299" fill="#111827"/>
   <g fill="#111827">
-    <use href="#g57" x="1096.11" y="301"/>
-    <use href="#g58" x="1101.63" y="301"/>
-    <use href="#g59" x="1111.6" y="301"/>
+    <use href="#g57" x="1096.11" y="299"/>
+    <use href="#g58" x="1101.63" y="299"/>
+    <use href="#g59" x="1111.6" y="299"/>
   </g>
-  <use href="#g14" x="1126" y="301" fill="#111827"/>
-  <use href="#g15" x="1129.22" y="301" fill="#111827"/>
+  <use href="#g14" x="1126" y="299" fill="#111827"/>
+  <use href="#g15" x="1129.22" y="299" fill="#111827"/>
   <g fill="#111827">
-    <use href="#g57" x="1096.11" y="334"/>
-    <use href="#g58" x="1101.63" y="334"/>
-    <use href="#g59" x="1111.6" y="334"/>
+    <use href="#g57" x="1096.11" y="331"/>
+    <use href="#g58" x="1101.63" y="331"/>
+    <use href="#g59" x="1111.6" y="331"/>
   </g>
-  <use href="#g22" x="1133" y="334" fill="#111827"/>
+  <use href="#g22" x="1133" y="331" fill="#111827"/>
   <g fill="#111827">
-    <use href="#g57" x="1083.11" y="367"/>
-    <use href="#g58" x="1088.63" y="367"/>
-    <use href="#g59" x="1098.6" y="367"/>
+    <use href="#g57" x="1083.11" y="363"/>
+    <use href="#g58" x="1088.63" y="363"/>
+    <use href="#g59" x="1098.6" y="363"/>
   </g>
-  <use href="#g14" x="1113" y="367" fill="#111827"/>
-  <use href="#g13" x="1116.22" y="367" fill="#111827"/>
+  <use href="#g14" x="1113" y="363" fill="#111827"/>
+  <use href="#g13" x="1116.22" y="363" fill="#111827"/>
   <defs>
     <path id="g0" d="M.92 0v-5.83h.85l.03 1.49-.11-.1q.11-.53.4-.86.3-.32.71-.5.4-.17.86-.17.67 0 1.11.3t.67.81.23 1.11v3.75h-.92v-3.48q0-.82-.33-1.24-.31-.42-.97-.42-.45 0-.81.19t-.58.56q-.22.36-.22.91v3.48Z"/>
     <path id="g1" d="M3.41.13q-.83 0-1.44-.36-.6-.38-.92-1.07-.33-.68-.33-1.62 0-.92.33-1.6t.9-1.06q.6-.39 1.41-.39.75 0 1.33.36.59.36.92 1.05.33.67.33 1.65v.29l-4.25-.01q.06.94.5 1.41.45.47 1.22.47.56 0 .92-.27.37-.26.51-.71l1 .07q-.23.79-.87 1.29t-1.56.5Zm-1.72-3.57h3.23q-.06-.86-.5-1.25-.42-.39-1.06-.39-.67 0-1.11.42-.44.41-.56 1.22Z"/>

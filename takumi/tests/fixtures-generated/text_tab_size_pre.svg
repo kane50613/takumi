@@ -1,13 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="264" height="375" fill="#f0f0f0"/>
   <g fill="#000">
-    <use href="#g0" x="0" y="15"/>
-    <use href="#g1" x="9.36" y="15"/>
-    <use href="#g2" x="17.86" y="15"/>
-    <use href="#g3" x="23.7" y="15"/>
-    <use href="#g4" x="32.35" y="15"/>
-    <use href="#g5" x="41.55" y="15"/>
-    <use href="#g6" x="45.02" y="15"/>
+    <use href="#g0" x="0" y="16"/>
+    <use href="#g1" x="9.36" y="16"/>
+    <use href="#g2" x="17.86" y="16"/>
+    <use href="#g3" x="23.7" y="16"/>
+    <use href="#g4" x="32.35" y="16"/>
+    <use href="#g5" x="41.55" y="16"/>
+    <use href="#g6" x="45.02" y="16"/>
   </g>
   <g fill="#000">
     <use href="#g7" x="0" y="41"/>
@@ -39,16 +39,16 @@
   </g>
   <use href="#g24" x="0" y="119" fill="#000"/>
   <g fill="#000">
-    <use href="#g6" x="0" y="140"/>
-    <use href="#g3" x="6.11" y="140"/>
-    <use href="#g25" x="14.8" y="140"/>
-    <use href="#g26" x="24.32" y="140"/>
-    <use href="#g27" x="31.02" y="140"/>
-    <use href="#g28" x="39.18" y="140"/>
-    <use href="#g29" x="42.93" y="140"/>
-    <use href="#g1" x="51.04" y="140"/>
-    <use href="#g30" x="60.02" y="140"/>
-    <use href="#g31" x="68.77" y="140"/>
+    <use href="#g6" x="0" y="141"/>
+    <use href="#g3" x="6.11" y="141"/>
+    <use href="#g25" x="14.8" y="141"/>
+    <use href="#g26" x="24.32" y="141"/>
+    <use href="#g27" x="31.02" y="141"/>
+    <use href="#g28" x="39.18" y="141"/>
+    <use href="#g29" x="42.93" y="141"/>
+    <use href="#g1" x="51.04" y="141"/>
+    <use href="#g30" x="60.02" y="141"/>
+    <use href="#g31" x="68.77" y="141"/>
   </g>
   <g fill="#000">
     <use href="#g7" x="0" y="166"/>
@@ -80,16 +80,16 @@
   </g>
   <use href="#g24" x="0" y="244" fill="#000"/>
   <g fill="#000">
-    <use href="#g6" x="0" y="265"/>
-    <use href="#g3" x="6.11" y="265"/>
-    <use href="#g25" x="14.8" y="265"/>
-    <use href="#g26" x="24.32" y="265"/>
-    <use href="#g27" x="31.02" y="265"/>
-    <use href="#g28" x="39.18" y="265"/>
-    <use href="#g29" x="42.93" y="265"/>
-    <use href="#g1" x="51.04" y="265"/>
-    <use href="#g30" x="60.02" y="265"/>
-    <use href="#g32" x="68.77" y="265"/>
+    <use href="#g6" x="0" y="266"/>
+    <use href="#g3" x="6.11" y="266"/>
+    <use href="#g25" x="14.8" y="266"/>
+    <use href="#g26" x="24.32" y="266"/>
+    <use href="#g27" x="31.02" y="266"/>
+    <use href="#g28" x="39.18" y="266"/>
+    <use href="#g29" x="42.93" y="266"/>
+    <use href="#g1" x="51.04" y="266"/>
+    <use href="#g30" x="60.02" y="266"/>
+    <use href="#g32" x="68.77" y="266"/>
   </g>
   <g fill="#000">
     <use href="#g7" x="0" y="291"/>

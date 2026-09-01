@@ -21,34 +21,34 @@
     <rect x="0" y="0" width="100" height="100" fill="#0f0"/>
     <path d="M0 0h100v100h-100v-100Zm1 1h98v98h-98v-98Z" fill="#000" fill-rule="evenodd"/>
     <g fill="#000">
-      <use href="#g5" x="1" y="12"/>
-      <use href="#g6" x="5.49" y="12"/>
-      <use href="#g6" x="13.56" y="12"/>
-      <use href="#g7" x="21.52" y="12"/>
-      <use href="#g8" x="28.06" y="12"/>
-      <use href="#g8" x="38.08" y="12"/>
-      <use href="#g5" x="48.1" y="12"/>
-      <use href="#g6" x="52.59" y="12"/>
-      <use href="#g6" x="60.66" y="12"/>
-      <use href="#g7" x="68.62" y="12"/>
-      <use href="#g8" x="75.16" y="12"/>
-      <use href="#g9" x="81.94" y="12"/>
+      <use href="#g5" x="1" y="13"/>
+      <use href="#g6" x="5.49" y="13"/>
+      <use href="#g6" x="13.56" y="13"/>
+      <use href="#g7" x="21.52" y="13"/>
+      <use href="#g8" x="28.06" y="13"/>
+      <use href="#g8" x="38.08" y="13"/>
+      <use href="#g5" x="48.1" y="13"/>
+      <use href="#g6" x="52.59" y="13"/>
+      <use href="#g6" x="60.66" y="13"/>
+      <use href="#g7" x="68.62" y="13"/>
+      <use href="#g8" x="75.16" y="13"/>
+      <use href="#g9" x="81.94" y="13"/>
     </g>
     <g fill="#000">
-      <use href="#g10" x="1" y="27.6"/>
-      <use href="#g11" x="7.12" y="27.6"/>
-      <use href="#g12" x="13.72" y="27.6"/>
-      <use href="#g13" x="20.21" y="27.6"/>
-      <use href="#g14" x="23.34" y="27.6"/>
-      <use href="#g15" x="30.08" y="27.6"/>
-      <use href="#g16" x="33.24" y="27.6"/>
-      <use href="#g17" x="40.67" y="27.6"/>
-      <use href="#g6" x="43.08" y="27.6"/>
-      <use href="#g9" x="51.04" y="27.6"/>
-      <use href="#g16" x="56.45" y="27.6"/>
-      <use href="#g17" x="63.88" y="27.6"/>
-      <use href="#g6" x="66.29" y="27.6"/>
-      <use href="#g18" x="74.25" y="27.6"/>
+      <use href="#g10" x="1" y="29"/>
+      <use href="#g11" x="7.12" y="29"/>
+      <use href="#g12" x="13.72" y="29"/>
+      <use href="#g13" x="20.21" y="29"/>
+      <use href="#g14" x="23.34" y="29"/>
+      <use href="#g15" x="30.08" y="29"/>
+      <use href="#g16" x="33.24" y="29"/>
+      <use href="#g17" x="40.67" y="29"/>
+      <use href="#g6" x="43.08" y="29"/>
+      <use href="#g9" x="51.04" y="29"/>
+      <use href="#g16" x="56.45" y="29"/>
+      <use href="#g17" x="63.88" y="29"/>
+      <use href="#g6" x="66.29" y="29"/>
+      <use href="#g18" x="74.25" y="29"/>
     </g>
   </g>
   <g transform="matrix(.707 .707 -.707 .707 700 -41.421)">
@@ -69,19 +69,19 @@
       <use href="#g19" x="174.64" y="25"/>
     </g>
     <g fill="#fff">
-      <use href="#g20" x="1" y="56.2"/>
-      <use href="#g21" x="9.14" y="56.2"/>
-      <use href="#g22" x="22.17" y="56.2"/>
-      <use href="#g23" x="31.34" y="56.2"/>
-      <use href="#g22" x="43.36" y="56.2"/>
-      <use href="#g24" x="52.38" y="56.2"/>
-      <use href="#g25" x="65.85" y="56.2"/>
-      <use href="#g26" x="71.46" y="56.2"/>
-      <use href="#g27" x="86.22" y="56.2"/>
-      <use href="#g28" x="101.25" y="56.2"/>
-      <use href="#g24" x="115.29" y="56.2"/>
-      <use href="#g29" x="128.51" y="56.2"/>
-      <use href="#g30" x="142.77" y="56.2"/>
+      <use href="#g20" x="1" y="56"/>
+      <use href="#g21" x="9.14" y="56"/>
+      <use href="#g22" x="22.17" y="56"/>
+      <use href="#g23" x="31.34" y="56"/>
+      <use href="#g22" x="43.36" y="56"/>
+      <use href="#g24" x="52.38" y="56"/>
+      <use href="#g25" x="65.85" y="56"/>
+      <use href="#g26" x="71.46" y="56"/>
+      <use href="#g27" x="86.22" y="56"/>
+      <use href="#g28" x="101.25" y="56"/>
+      <use href="#g24" x="115.29" y="56"/>
+      <use href="#g29" x="128.51" y="56"/>
+      <use href="#g30" x="142.77" y="56"/>
     </g>
   </g>
   <defs>

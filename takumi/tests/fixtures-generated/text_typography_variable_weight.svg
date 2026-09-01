@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-  <rect x="0" y="0" width="1200" height="126" fill="#f0f0f0"/>
+  <rect x="0" y="0" width="1200" height="124" fill="#f0f0f0"/>
   <g fill="#000">
     <use href="#g0" x="0" y="48"/>
     <use href="#g1" x="29.04" y="48"/>
@@ -51,9 +51,9 @@
     <use href="#g23" x="1133.66" y="48"/>
   </g>
   <g fill="#000">
-    <use href="#g24" x="0" y="111"/>
-    <use href="#g25" x="31.97" y="111"/>
-    <use href="#g25" x="66.67" y="111"/>
+    <use href="#g24" x="0" y="110"/>
+    <use href="#g25" x="31.97" y="110"/>
+    <use href="#g25" x="66.67" y="110"/>
   </g>
   <defs>
     <path id="g0" d="M18.77 0v-7.39h-17.33v-3.75l17.04-22.94h4.41v22.66h4.24v4.03h-4.24v7.39Zm-12.33-11.42h12.33v-16.33Z"/>

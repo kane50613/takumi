@@ -70,16 +70,16 @@
   <rect x="30" y="30" width="70" height="70" fill="url(#lg0)"/>
   <path d="M30 30h280v160h-280v-160Zm40 40h200v80h-200v-80Z" fill="#7878c8" fill-opacity=".471" fill-rule="evenodd"/>
   <g fill="#000">
-    <use href="#g0" x="100" y="115"/>
-    <use href="#g1" x="109.36" y="115"/>
-    <use href="#g2" x="118.37" y="115"/>
-    <use href="#g3" x="123.79" y="115"/>
-    <use href="#g4" x="133.15" y="115"/>
-    <use href="#g2" x="141.97" y="115"/>
-    <use href="#g5" x="147.39" y="115"/>
-    <use href="#g0" x="154.1" y="115"/>
-    <use href="#g1" x="163.46" y="115"/>
-    <use href="#g6" x="171.82" y="115"/>
+    <use href="#g0" x="100" y="116"/>
+    <use href="#g1" x="109.36" y="116"/>
+    <use href="#g2" x="118.37" y="116"/>
+    <use href="#g3" x="123.79" y="116"/>
+    <use href="#g4" x="133.15" y="116"/>
+    <use href="#g2" x="141.97" y="116"/>
+    <use href="#g5" x="147.39" y="116"/>
+    <use href="#g0" x="154.1" y="116"/>
+    <use href="#g1" x="163.46" y="116"/>
+    <use href="#g6" x="171.82" y="116"/>
   </g>
   <rect x="30" y="210" width="280" height="160" fill="#e6e6e6"/>
   <linearGradient id="lg1" gradientUnits="userSpaceOnUse" x1="105" y1="250" x2="105" y2="320">
@@ -151,17 +151,17 @@
   <rect x="70" y="250" width="70" height="70" fill="url(#lg1)"/>
   <path d="M30 210h280v160h-280v-160Zm40 40h200v80h-200v-80Z" fill="#7878c8" fill-opacity=".471" fill-rule="evenodd"/>
   <g fill="#000">
-    <use href="#g7" x="100" y="295"/>
-    <use href="#g8" x="109.58" y="295"/>
-    <use href="#g3" x="118.3" y="295"/>
-    <use href="#g3" x="127.66" y="295"/>
-    <use href="#g9" x="136.86" y="295"/>
-    <use href="#g10" x="140.86" y="295"/>
-    <use href="#g11" x="149.97" y="295"/>
-    <use href="#g5" x="159.47" y="295"/>
-    <use href="#g0" x="166.18" y="295"/>
-    <use href="#g1" x="175.54" y="295"/>
-    <use href="#g6" x="183.9" y="295"/>
+    <use href="#g7" x="100" y="296"/>
+    <use href="#g8" x="109.58" y="296"/>
+    <use href="#g3" x="118.3" y="296"/>
+    <use href="#g3" x="127.66" y="296"/>
+    <use href="#g9" x="136.86" y="296"/>
+    <use href="#g10" x="140.86" y="296"/>
+    <use href="#g11" x="149.97" y="296"/>
+    <use href="#g5" x="159.47" y="296"/>
+    <use href="#g0" x="166.18" y="296"/>
+    <use href="#g1" x="175.54" y="296"/>
+    <use href="#g6" x="183.9" y="296"/>
   </g>
   <rect x="30" y="390" width="280" height="160" fill="#e6e6e6"/>
   <linearGradient id="lg2" gradientUnits="userSpaceOnUse" x1="135" y1="460" x2="135" y2="530">
@@ -233,17 +233,17 @@
   <rect x="100" y="460" width="70" height="70" fill="url(#lg2)"/>
   <path d="M30 390h280v160h-280v-160Zm40 40h200v80h-200v-80Z" fill="#7878c8" fill-opacity=".471" fill-rule="evenodd"/>
   <g fill="#000">
-    <use href="#g12" x="100" y="475"/>
-    <use href="#g1" x="108.58" y="475"/>
-    <use href="#g10" x="117.58" y="475"/>
-    <use href="#g13" x="126.24" y="475"/>
-    <use href="#g4" x="132.26" y="475"/>
-    <use href="#g10" x="141.07" y="475"/>
-    <use href="#g13" x="149.73" y="475"/>
-    <use href="#g5" x="155.52" y="475"/>
-    <use href="#g0" x="162.22" y="475"/>
-    <use href="#g1" x="171.58" y="475"/>
-    <use href="#g6" x="179.95" y="475"/>
+    <use href="#g12" x="100" y="476"/>
+    <use href="#g1" x="108.58" y="476"/>
+    <use href="#g10" x="117.58" y="476"/>
+    <use href="#g13" x="126.24" y="476"/>
+    <use href="#g4" x="132.26" y="476"/>
+    <use href="#g10" x="141.07" y="476"/>
+    <use href="#g13" x="149.73" y="476"/>
+    <use href="#g5" x="155.52" y="476"/>
+    <use href="#g0" x="162.22" y="476"/>
+    <use href="#g1" x="171.58" y="476"/>
+    <use href="#g6" x="179.95" y="476"/>
   </g>
   <defs>
     <path id="g0" d="M5.17.19q-.89 0-1.58-.39t-1.04-1.08l-.05 1.28h-1.22v-11.36h1.35l-.01 4.06q.32-.53.99-.95t1.56-.42q1.11 0 1.92.55.83.54 1.27 1.54.45.99.45 2.35t-.45 2.36q-.44.98-1.27 1.53-.81.53-1.92.53Zm-.08-1.28q1.07 0 1.69-.85t.63-2.29q0-1.49-.63-2.32-.62-.84-1.66-.84-.78 0-1.34.37t-.86 1.08-.3 1.71q.01.95.3 1.67.3.7.85 1.09.54.38 1.32.38Z"/>
