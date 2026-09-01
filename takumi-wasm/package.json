@@ -95,6 +95,10 @@
           "default": "./bundlers/vite.mjs"
         }
       },
+      "browser": {
+        "types": "./bundlers/vite.d.ts",
+        "default": "./bundlers/browser.mjs"
+      },
       "module": {
         "types": "./bundlers/vite.d.ts",
         "default": "./bundlers/vite.mjs"
@@ -133,8 +137,14 @@
       "default": "./bundlers/next.mjs"
     },
     "./vite": {
-      "types": "./bundlers/vite.d.ts",
-      "default": "./bundlers/vite.mjs"
+      "browser": {
+        "types": "./bundlers/vite.d.ts",
+        "default": "./bundlers/browser.mjs"
+      },
+      "default": {
+        "types": "./bundlers/vite.d.ts",
+        "default": "./bundlers/vite.mjs"
+      }
     }
   },
   "scripts": {
@@ -161,7 +171,7 @@
     }
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20.19"
   },
   "readme": "README.md"
 }

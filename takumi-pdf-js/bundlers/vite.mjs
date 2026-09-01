@@ -5,7 +5,7 @@ import * as wasm from "../dist/export.mjs";
 // importing server chunk, so resolve relative to import.meta.url, not the framework output dir.
 async function resolveWasm() {
   if (typeof process !== "undefined" && process.versions?.node != null) {
-    const { readFile } = await import("node:fs/promises");
+    const { readFile } = process.getBuiltinModule("node:fs/promises");
     const path = decodeURIComponent(url.replace(/[?#].*$/, ""));
 
     // Dev SSR serves an `/@fs/<abs-path>` URL.

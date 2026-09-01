@@ -4,7 +4,7 @@ import url from "../pkg/takumi_wasm_bg.wasm?url";
 // importing server chunk, so resolve relative to import.meta.url, not the framework output dir.
 async function processUrl() {
   if (typeof process !== "undefined" && process.versions?.node != null) {
-    const { readFile } = await import("node:fs/promises");
+    const { readFile } = process.getBuiltinModule("node:fs/promises");
     const path = decodeURIComponent(url.replace(/[?#].*$/, ""));
 
     // Dev SSR serves an `/@fs/<abs-path>` URL.
