@@ -1948,6 +1948,23 @@ mod tests {
   }
 
   #[test]
+  fn test_parse_media_rule_ignores_feature_name_case() {
+    for query in [
+      "(MIN-WIDTH: 600px)",
+      "(Min-Width: 600px)",
+      "(WIDTH >= 600px)",
+    ] {
+      let sheet = parse_stylesheet(&format!("@media {query} {{ .card {{ width: 100px; }} }}"));
+      let Some(media) = sheet.rules[0].media_queries.first() else {
+        unreachable!("expected media queries on parsed rule: {query}");
+      };
+
+      assert!(media.matches(Viewport::new((800, 600))), "{query}");
+      assert!(!media.matches(Viewport::new((400, 600))), "{query}");
+    }
+  }
+
+  #[test]
   fn test_parse_media_rule_with_comma_list() {
     let sheet = parse_stylesheet(
       r#"
@@ -1963,6 +1980,46 @@ mod tests {
     assert!(media.matches(Viewport::new((400, 800))));
     assert!(media.matches(Viewport::new((1280, 800))));
     assert!(!media.matches(Viewport::new((800, 800))));
+  }
+
+  #[test]
+  fn test_parse_media_rule_with_range_syntax() {
+    for (query, matching, non_matching) in [
+      ("(width >= 600px)", (600, 400), (599, 400)),
+      ("(width > 600px)", (601, 400), (600, 400)),
+      ("(width <= 600px)", (600, 400), (601, 400)),
+      ("(width < 600px)", (599, 400), (600, 400)),
+      ("(width = 600px)", (600, 400), (601, 400)),
+      ("(600px <= width)", (600, 400), (599, 400)),
+      ("(600px > width)", (599, 400), (600, 400)),
+      ("(height >= 400px)", (600, 400), (600, 399)),
+      ("(400px < height)", (600, 401), (600, 400)),
+      ("(width >= 40em)", (640, 400), (639, 400)),
+      ("(400px < width <= 700px)", (700, 400), (400, 400)),
+      ("(700px >= width > 400px)", (401, 400), (701, 400)),
+      ("(width>=600px)", (600, 400), (599, 400)),
+      ("(width >= calc(500px + 100px))", (600, 400), (599, 400)),
+      ("(width)", (1, 400), (0, 400)),
+    ] {
+      let sheet = parse_stylesheet(&format!("@media {query} {{ .card {{ width: 100px; }} }}"));
+      let Some(media) = sheet.rules[0].media_queries.first() else {
+        unreachable!("expected media queries on parsed rule: {query}");
+      };
+
+      assert!(
+        media.matches(Viewport::new(matching)),
+        "{query} at {matching:?}"
+      );
+      assert!(
+        !media.matches(Viewport::new(non_matching)),
+        "{query} at {non_matching:?}"
+      );
+    }
+  }
+
+  #[test]
+  fn test_parse_media_rule_rejects_opposing_range_comparisons() {
+    assert!(StyleSheet::parse("@media (400px < width > 700px) { .card { width: 1px; } }").is_err());
   }
 
   #[test]
