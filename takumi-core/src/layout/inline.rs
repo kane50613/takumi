@@ -1034,6 +1034,31 @@ impl FloatLayoutState {
   }
 }
 
+/// Splits a line's trailing-whitespace advance over its trailing glyph runs,
+/// walking back from the line end so a run keeps at most its own advance.
+fn distribute_trailing_whitespace(
+  items: &[PositionedLayoutItem<'_, InlineBrush>],
+  line: &Line<'_, InlineBrush>,
+) -> Vec<f32> {
+  let mut shares = vec![0.0_f32; items.len()];
+  let mut remaining = line.metrics().trailing_whitespace;
+
+  for (index, item) in items.iter().enumerate().rev() {
+    if remaining <= 0.0 {
+      break;
+    }
+    let PositionedLayoutItem::GlyphRun(glyph_run) = item else {
+      break;
+    };
+    let share = remaining.min(glyph_run.advance());
+
+    shares[index] = share;
+    remaining -= share;
+  }
+
+  shares
+}
+
 fn quantized_baseline(line_height: f32, ascent: f32, descent: f32) -> f32 {
   let rounded_ascent = ascent.round();
   let rounded_descent = descent.round();
@@ -3117,9 +3142,7 @@ pub fn resolve_inline_runs(
     let mut static_inline_prefix = 0.0_f32;
 
     let items: Vec<_> = line.items().collect();
-    let last_glyph_run_index = items
-      .iter()
-      .rposition(|item| matches!(item, PositionedLayoutItem::GlyphRun(_)));
+    let run_trailing_whitespace = distribute_trailing_whitespace(&items, &line);
 
     for (item_index, item) in items.into_iter().enumerate() {
       match item {
@@ -3220,11 +3243,10 @@ pub fn resolve_inline_runs(
             offset: glyph_run.offset(),
             baseline: glyph_run.baseline(),
             advance: glyph_run.advance(),
-            trailing_whitespace: if Some(item_index) == last_glyph_run_index {
-              line.metrics().trailing_whitespace
-            } else {
-              0.0
-            },
+            trailing_whitespace: run_trailing_whitespace
+              .get(item_index)
+              .copied()
+              .unwrap_or(0.0),
             brush,
             metrics: RunMetrics {
               ascent: metrics.ascent,
@@ -3832,6 +3854,78 @@ mod tests {
       synthetic_skew: None,
       // Not a font: `em_box_descent` falls back to the run metrics instead of OS/2.
       font_data: parley::fontique::Blob::new(Arc::new(Vec::new())),
+    }
+  }
+
+  #[test]
+  fn trailing_whitespace_share_caps_at_the_run_advance() {
+    let fonts = create_test_context();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1200, 630)))
+          .build(),
+      )
+      .build();
+    let node = Node::container([
+      Node::text("ab ".to_string()),
+      Node::container([Node::text(" ".to_string())]).with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Inline))
+          .with(StyleDeclaration::font_size(crate::style::FontSize::Length(
+            crate::style::Length::Px(40.0),
+          ))),
+      ),
+    ])
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::font_size(crate::style::FontSize::Length(
+          crate::style::Length::Px(20.0),
+        )))
+        .with_white_space(WhiteSpace::pre()),
+    );
+    let render_node = RenderNode::from_node(&context, node);
+    let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
+    let built = create_inline_layout(InlineLayoutRequest {
+      items: collect_inline_items(&render_node),
+      available_space: Size {
+        width: AvailableSpace::Definite(1200.0),
+        height: AvailableSpace::Definite(630.0),
+      },
+      max_width: 1200.0,
+      max_height: None,
+      style: &font_style,
+      context: &render_node.context,
+      mode: InlineLayoutMode::Draw,
+      shape_cacheable: false,
+    });
+    let layout = ComputedLayout {
+      location: crate::geometry::Point::ZERO,
+      size: Size::new(1200.0, 630.0),
+      border: crate::geometry::Rect::default(),
+      padding: crate::geometry::Rect::default(),
+    };
+    let runs = resolve_inline_runs(&built, &render_node.context, layout).unwrap();
+
+    let trailing: Vec<(f32, f32)> = runs
+      .runs
+      .iter()
+      .map(|run| (run.glyph_run.advance, run.glyph_run.trailing_whitespace))
+      .collect();
+
+    // The 40px space run hangs entirely; earlier runs keep what layout kept.
+    let last = trailing.last().unwrap();
+    assert!(
+      (last.1 - last.0).abs() < 0.01,
+      "last run is all whitespace: {trailing:?}"
+    );
+    for (advance, ws) in &trailing {
+      assert!(
+        ws <= advance,
+        "share capped by the run advance: {trailing:?}"
+      );
     }
   }
 
