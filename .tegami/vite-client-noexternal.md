@@ -6,8 +6,10 @@ packages:
     type: patch
 ---
 
-### Build client apps with `noExternal` on the Vite entry
+### Resolve a browser-only entry in client builds
 
-The Vite entry no longer imports `node:fs/promises` with a literal specifier,
-so client builds that bundle dependencies stop failing with
-`Cannot bundle Node.js built-in "node:fs/promises"`.
+Bundlers that resolve the `browser` condition (Vite client, webpack web) now
+get `bundlers/browser.mjs`, which only fetches the `.wasm` asset. Client builds
+with `noExternal` stop failing with `Cannot bundle Node.js built-in "node:fs/promises"`.
+The Vite server entry also hides its `node:fs/promises` import from bundlers
+that skip the `browser` condition.

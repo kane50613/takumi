@@ -75,6 +75,10 @@
           "default": "./bundlers/vite.mjs"
         }
       },
+      "browser": {
+        "types": "./bundlers/node.d.ts",
+        "default": "./bundlers/browser.mjs"
+      },
       "module": {
         "types": "./bundlers/node.d.ts",
         "default": "./bundlers/vite.mjs"
