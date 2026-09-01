@@ -3,8 +3,6 @@ import type { GoogleFontFamily } from "takumi-js/helpers";
 
 export const name = "offset-path";
 
-// 1:1 for Twitter, rendered 1:1 (dpr 1) — offset-path coordinates aren't
-// dpr-scaled in the engine yet, so a supersample would drift the paths.
 export const width = 1200;
 
 export const height = 1200;
@@ -15,7 +13,7 @@ export const googleFonts: GoogleFontFamily[] = [{ name: "Space Grotesk", weight:
 
 export const images = [{ src: "logo", path: "takumi.svg" }];
 
-export const video = { durationMs: 16000, fps: 60 };
+export const video = { durationMs: 16000, fps: 60, dpr: 2 };
 
 type Stops = ReadonlyArray<readonly [number, number, number]>;
 
@@ -133,6 +131,7 @@ function samplePath(d: string): [number, number][] {
 }
 
 // Sample, then scale + centre so the logo fills the middle of the frame.
+// Closed with Z so offset-distance wraps instead of clamping.
 function logoPath(d: string, scale: number, tx: number, ty: number) {
   const pts = samplePath(d).map(([x, y]) => [x * scale + tx, y * scale + ty] as [number, number]);
   let len = 0;
@@ -141,7 +140,8 @@ function logoPath(d: string, scale: number, tx: number, ty: number) {
     const [x1, y1] = pts[k] ?? [0, 0];
     len += Math.hypot(x1 - x0, y1 - y0);
   }
-  const path = `M ${pts.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join(" L ")}`;
+  const path = `M ${pts.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join(" L ")} Z`;
+
   return { d: path, len };
 }
 
@@ -190,7 +190,12 @@ const HEAD_TAPE: Tape = {
   stops: HEAD_STOPS,
 };
 
-function rider(path: string, distance: number, child: ReactNode) {
+export const css = [
+  `@keyframes ride-fwd { from { offset-distance: 0%; } to { offset-distance: 100%; } }`,
+  `@keyframes ride-rev { from { offset-distance: 100%; } to { offset-distance: 0%; } }`,
+];
+
+function rider(tape: Tape, phase: number, child: ReactNode) {
   return (
     <div
       style={{
@@ -198,10 +203,11 @@ function rider(path: string, distance: number, child: ReactNode) {
         left: 0,
         top: 0,
         display: "flex",
-        offsetPath: path,
-        offsetDistance: `${distance}%`,
+        offsetPath: `path('${tape.d}')`,
         offsetRotate: "auto",
         offsetAnchor: "50% 50%",
+        animation: `${tape.dir === 1 ? "ride-fwd" : "ride-rev"} ${tape.lapMs}ms linear infinite`,
+        animationDelay: `${-phase * tape.lapMs}ms`,
       }}
     >
       {child}
@@ -209,13 +215,8 @@ function rider(path: string, distance: number, child: ReactNode) {
   );
 }
 
-function tapeNodes(tape: Tape, ms: number, key: string) {
-  const path = `path('${tape.d}')`;
-  const advance = ((ms / tape.lapMs) * 100 * tape.dir) % 100;
-  const wrap = (v: number) => ((v % 100) + 100) % 100;
-
+function tapeNodes(tape: Tape, key: string) {
   const nodes = tape.toks.map((tok, i) => {
-    const distance = wrap(advance + (i / tape.toks.length) * 100);
     // Continuous gradient along the tape using the logo's own colours.
     const color = gradient(i / (tape.toks.length - 1), tape.stops);
     const child = tok.logo ? (
@@ -237,7 +238,7 @@ function tapeNodes(tape: Tape, ms: number, key: string) {
         {tok.char}
       </span>
     );
-    return rider(path, distance, child);
+    return rider(tape, i / tape.toks.length, child);
   });
 
   return (
@@ -247,7 +248,7 @@ function tapeNodes(tape: Tape, ms: number, key: string) {
   );
 }
 
-export function frame(ms: number) {
+export default function OffsetPath() {
   return (
     <div
       style={{
@@ -260,12 +261,8 @@ export function frame(ms: number) {
         fontFamily: '"Space Grotesk", sans-serif',
       }}
     >
-      {tapeNodes(HANDLE_TAPE, ms, "handle")}
-      {tapeNodes(HEAD_TAPE, ms, "head")}
+      {tapeNodes(HANDLE_TAPE, "handle")}
+      {tapeNodes(HEAD_TAPE, "head")}
     </div>
   );
-}
-
-export default function OffsetPathStill() {
-  return frame(0);
 }
