@@ -4,12 +4,9 @@ use std::ops::Range;
 
 use takumi_core::layout::inline::ShapedRun;
 
-use crate::{
-  krilla::{
-    surface::Location,
-    text::{Glyph, GlyphId},
-  },
-  options::PdfError,
+use crate::krilla::{
+  surface::Location,
+  text::{Glyph, GlyphId},
 };
 
 /// The run's glyphs, each carrying the source text it maps to.
@@ -68,20 +65,6 @@ fn collect_uncovered(
       }
     }
   }
-}
-
-/// The error naming what no font covered, or `None` when everything mapped.
-pub(crate) fn uncovered_error(uncovered: &str) -> Option<PdfError> {
-  if uncovered.is_empty() {
-    return None;
-  }
-  let named = uncovered
-    .chars()
-    .map(|character| format!("{character} (U+{:04X})", character as u32))
-    .collect::<Vec<_>>()
-    .join(", ");
-
-  Some(PdfError::MissingGlyphs(named))
 }
 
 /// Per-glyph byte ranges into `run_text`, from the shaper's cluster

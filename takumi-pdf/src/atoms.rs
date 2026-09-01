@@ -1,6 +1,8 @@
 //! Unsplittable vertical extents and paragraphs collected from the laid-out
 //! scene, which pagination cuts around.
 
+use std::ops::Range;
+
 use takumi_core::{
   font_style::SizedFontStyle,
   geometry::{ComputedLayout as Layout, NodeId},
@@ -18,6 +20,39 @@ use crate::{
   pagination::{Atom, Paragraph},
 };
 
+/// What the cut search works around, in content coordinates.
+#[derive(Default)]
+pub(crate) struct Atoms {
+  /// Unsplittable extents: text lines, images, `break-inside: avoid` boxes and
+  /// transformed subtrees.
+  pub(crate) extents: Vec<Atom>,
+  /// Where `break-before` / `break-after: page` force a cut.
+  pub(crate) forced: Vec<f32>,
+  /// Text boxes with their `widows` / `orphans` minimums.
+  pub(crate) paragraphs: Vec<Paragraph>,
+}
+
+impl Atoms {
+  /// Records the box's lines as a [`Paragraph`] for the widow/orphan solver.
+  fn push_paragraph(&mut self, node: &RenderNode, lines: Range<usize>) {
+    let style = &node.context.style;
+    let before = style.orphans.get();
+    let after = style.widows.get();
+
+    if lines.len() < 2 || (before <= 1 && after <= 1) {
+      return;
+    }
+    let mut lines = self.extents[lines].to_vec();
+
+    lines.sort_by(|a, b| a.0.total_cmp(&b.0));
+    self.paragraphs.push(Paragraph {
+      lines,
+      before,
+      after,
+    });
+  }
+}
+
 /// Walks the scene like the emitter, recording unsplittable vertical extents
 /// instead of painting.
 pub(crate) struct AtomCollector<'a> {
@@ -28,50 +63,20 @@ pub(crate) struct AtomCollector<'a> {
 }
 
 impl AtomCollector<'_> {
-  pub(crate) fn collect(
-    &self,
-    atoms: &mut Vec<Atom>,
-    forced: &mut Vec<f32>,
-    paragraphs: &mut Vec<Paragraph>,
-  ) -> Result<(), PdfError> {
-    self.context_atoms(0, Affine::IDENTITY, atoms, forced, paragraphs)
+  pub(crate) fn collect(&self) -> Result<Atoms, PdfError> {
+    let mut atoms = Atoms::default();
+
+    self.context_atoms(0, Affine::IDENTITY, &mut atoms)?;
+    Ok(atoms)
   }
-}
 
-/// Records the box's lines as a [`Paragraph`] for the widow/orphan solver.
-fn push_paragraph(node: &RenderNode, lines: &[Atom], paragraphs: &mut Vec<Paragraph>) {
-  let style = &node.context.style;
-  let before = style.orphans.get();
-  let after = style.widows.get();
-
-  if lines.len() < 2 || (before <= 1 && after <= 1) {
-    return;
-  }
-  let mut lines = lines.to_vec();
-
-  lines.sort_by(|a, b| a.0.total_cmp(&b.0));
-  paragraphs.push(Paragraph {
-    lines,
-    before,
-    after,
-  });
-}
-
-impl AtomCollector<'_> {
-  fn context_atoms(
-    &self,
-    id: usize,
-    parent: Affine,
-    atoms: &mut Vec<Atom>,
-    forced: &mut Vec<f32>,
-    paragraphs: &mut Vec<Paragraph>,
-  ) -> Result<(), PdfError> {
+  fn context_atoms(&self, id: usize, parent: Affine, atoms: &mut Atoms) -> Result<(), PdfError> {
     let Some(context) = self.contexts.get(id) else {
       return Ok(());
     };
 
     let child_frame = match context.root() {
-      Some(paint) => self.box_atoms(paint, parent, atoms, forced, paragraphs)?,
+      Some(paint) => self.box_atoms(paint, parent, atoms)?,
       None => parent,
     };
 
@@ -79,10 +84,10 @@ impl AtomCollector<'_> {
       for item in bucket {
         match &item.kind {
           PaintItemKind::Node(paint) => {
-            self.box_atoms(paint, child_frame, atoms, forced, paragraphs)?;
+            self.box_atoms(paint, child_frame, atoms)?;
           }
           PaintItemKind::Context(child) => {
-            self.context_atoms(*child, child_frame, atoms, forced, paragraphs)?;
+            self.context_atoms(*child, child_frame, atoms)?;
           }
         }
       }
@@ -97,9 +102,7 @@ impl AtomCollector<'_> {
     &self,
     paint: &NodePaint,
     parent: Affine,
-    atoms: &mut Vec<Atom>,
-    forced: &mut Vec<f32>,
-    paragraphs: &mut Vec<Paragraph>,
+    atoms: &mut Atoms,
   ) -> Result<Affine, PdfError> {
     let Some(node) = self.root.node_at_path(&paint.path) else {
       return Ok(parent);
@@ -111,7 +114,9 @@ impl AtomCollector<'_> {
     let relative = parent.invert().unwrap_or(Affine::IDENTITY) * paint.transform;
     if !relative.only_translation() {
       if let Some(bounds) = paint.paint_bounds {
-        atoms.push((bounds.top as f32, bounds.bottom as f32));
+        atoms
+          .extents
+          .push((bounds.top as f32, bounds.bottom as f32));
       }
       return Ok(parent * relative);
     }
@@ -119,24 +124,24 @@ impl AtomCollector<'_> {
     let style = &node.context.style;
 
     if style.break_before == BreakBetween::Page {
-      forced.push(y);
+      atoms.forced.push(y);
     }
     if style.break_after == BreakBetween::Page {
-      forced.push(y + layout.size.height);
+      atoms.forced.push(y + layout.size.height);
     }
     if style.break_inside == BreakInside::Avoid {
-      atoms.push((y, y + layout.size.height));
+      atoms.extents.push((y, y + layout.size.height));
     }
 
     if node.should_create_inline_layout() {
-      self.text_atoms(node, paint.node_id, layout, y, atoms, paragraphs)?;
+      self.text_atoms(node, paint.node_id, layout, y, atoms)?;
     } else if !node.has_anonymous_text_item_child() {
       match node.node.as_ref().map(|n| &n.kind) {
         Some(NodeKind::Text(_)) => {
-          self.text_atoms(node, paint.node_id, layout, y, atoms, paragraphs)?;
+          self.text_atoms(node, paint.node_id, layout, y, atoms)?;
         }
         Some(NodeKind::Image(_)) => {
-          atoms.push((y, y + layout.size.height));
+          atoms.extents.push((y, y + layout.size.height));
         }
         _ => {}
       }
@@ -152,10 +157,9 @@ impl AtomCollector<'_> {
     node_id: NodeId,
     layout: Layout,
     y: f32,
-    atoms: &mut Vec<Atom>,
-    paragraphs: &mut Vec<Paragraph>,
+    atoms: &mut Atoms,
   ) -> Result<(), PdfError> {
-    let start = atoms.len();
+    let start = atoms.extents.len();
     let owned_runs;
     let runs = match self.inline.and_then(|map| map.get(&node_id)) {
       Some(prepared) => &prepared.runs,
@@ -174,12 +178,12 @@ impl AtomCollector<'_> {
       }
     };
 
-    text_line_atoms(runs, layout, y, atoms);
+    text_line_atoms(runs, layout, y, &mut atoms.extents);
     // Box bands are indivisible but not text lines, so widow/orphan control
     // does not count them.
-    let paragraph_end = atoms.len();
-    inline_box_atoms(runs, layout, y, atoms);
-    push_paragraph(node, &atoms[start..paragraph_end], paragraphs);
+    let paragraph_end = atoms.extents.len();
+    inline_box_atoms(runs, layout, y, &mut atoms.extents);
+    atoms.push_paragraph(node, start..paragraph_end);
     Ok(())
   }
 }

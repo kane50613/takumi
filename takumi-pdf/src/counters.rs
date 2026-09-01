@@ -91,43 +91,74 @@ const COUNTER_HOOKS: [&str; 2] = ["pageNumber", "totalPages"];
 /// `target-counter(attr(href), page)` this stands in for.
 const TARGET_HOOK: &str = "targetPageNumber";
 
-const OTHER_STYLES: [&str; 5] = [
-  "decimal",
-  "decimal-leading-zero",
-  "lower-roman",
-  "upper-roman",
-  "trad-chinese-informal",
-];
-
-/// Whether a class names a counter style this renderer knows.
-fn is_counter_style(name: &str) -> bool {
-  name == "cjk-ideographic"
-    || OTHER_STYLES.contains(&name)
-    || DIGIT_STYLES.iter().any(|(style, _)| *style == name)
-    || ALPHABET_STYLES.iter().any(|(style, _)| *style == name)
+/// A `@counter-style` this renderer formats.
+#[derive(Clone, Copy)]
+enum CounterStyle {
+  Decimal,
+  DecimalLeadingZero,
+  LowerRoman,
+  UpperRoman,
+  /// Reading-style Chinese numerals. Blink defines `cjk-ideographic` as
+  /// `extends trad-chinese-informal`.
+  ChineseInformal,
+  /// A decimal number in another script's digits, zero first.
+  Digits(&'static [char; 10]),
+  /// Counting through an alphabet: a, b, ..., z, aa, ab, and so on.
+  Alphabet(&'static str),
 }
 
-/// Formats a page counter in a CSS `@counter-style` named style. Unknown
-/// styles fall back to `decimal`.
-fn format_counter(value: usize, style: &str) -> String {
-  if let Some((_, digits)) = DIGIT_STYLES.iter().find(|(name, _)| *name == style) {
-    return value
-      .to_string()
-      .bytes()
-      .map(|digit| digits[usize::from(digit - b'0')])
-      .collect();
-  }
-  if let Some((_, alphabet)) = ALPHABET_STYLES.iter().find(|(name, _)| *name == style) {
-    return alphabetic(value, alphabet);
+impl CounterStyle {
+  fn from_name(name: &str) -> Option<Self> {
+    if let Some((_, digits)) = DIGIT_STYLES.iter().find(|(style, _)| *style == name) {
+      return Some(Self::Digits(digits));
+    }
+    if let Some((_, alphabet)) = ALPHABET_STYLES.iter().find(|(style, _)| *style == name) {
+      return Some(Self::Alphabet(alphabet));
+    }
+    match name {
+      "decimal" => Some(Self::Decimal),
+      "decimal-leading-zero" => Some(Self::DecimalLeadingZero),
+      "lower-roman" => Some(Self::LowerRoman),
+      "upper-roman" => Some(Self::UpperRoman),
+      "trad-chinese-informal" | "cjk-ideographic" => Some(Self::ChineseInformal),
+      _ => None,
+    }
   }
 
-  match style {
-    // Blink defines cjk-ideographic as `extends trad-chinese-informal`.
-    "trad-chinese-informal" | "cjk-ideographic" => chinese_informal(value),
-    "lower-roman" => roman(value).to_ascii_lowercase(),
-    "upper-roman" => roman(value),
-    "decimal-leading-zero" => format!("{value:02}"),
-    _ => value.to_string(),
+  /// The style a hook's class list names, `decimal` when none does.
+  fn from_classes(classes: &str) -> Self {
+    classes
+      .split_whitespace()
+      .find_map(Self::from_name)
+      .unwrap_or(Self::Decimal)
+  }
+
+  fn format(self, value: usize) -> String {
+    match self {
+      Self::Digits(digits) => value
+        .to_string()
+        .bytes()
+        .map(|digit| digits[usize::from(digit - b'0')])
+        .collect(),
+      Self::Alphabet(alphabet) => alphabetic(value, alphabet),
+      Self::ChineseInformal => chinese_informal(value),
+      Self::LowerRoman => roman(value).to_ascii_lowercase(),
+      Self::UpperRoman => roman(value),
+      Self::DecimalLeadingZero => format!("{value:02}"),
+      Self::Decimal => value.to_string(),
+    }
+  }
+
+  /// Every character the style can produce.
+  fn characters(self) -> String {
+    match self {
+      Self::Digits(digits) => digits.iter().collect(),
+      Self::Alphabet(alphabet) => alphabet.to_string(),
+      Self::LowerRoman => "ivxlcdm".to_string(),
+      Self::UpperRoman => "IVXLCDM".to_string(),
+      Self::ChineseInformal => CHINESE_DIGITS.iter().collect::<String>() + "十百千",
+      Self::Decimal | Self::DecimalLeadingZero => "0123456789".to_string(),
+    }
   }
 }
 
@@ -157,7 +188,7 @@ const CHINESE_DIGITS: [char; 10] = ['零', '一', '二', '三', '四', '五', '�
 /// values fall back to positional digits.
 fn chinese_informal(value: usize) -> String {
   if value >= 10_000 {
-    return format_counter(value, "cjk-decimal");
+    return CounterStyle::Digits(&CHINESE_DIGITS).format(value);
   }
   if value == 0 {
     return CHINESE_DIGITS[0].to_string();
@@ -220,25 +251,6 @@ fn roman(value: usize) -> String {
   out
 }
 
-/// Every character a counter in `style` can produce.
-fn style_characters(style: &str) -> String {
-  if let Some((_, digits)) = DIGIT_STYLES.iter().find(|(name, _)| *name == style) {
-    return digits.iter().collect();
-  }
-  if let Some((_, alphabet)) = ALPHABET_STYLES.iter().find(|(name, _)| *name == style) {
-    return (*alphabet).to_string();
-  }
-
-  match style {
-    "lower-roman" => "ivxlcdm".to_string(),
-    "upper-roman" => "IVXLCDM".to_string(),
-    "trad-chinese-informal" | "cjk-ideographic" => {
-      CHINESE_DIGITS.iter().collect::<String>() + "十百千"
-    }
-    _ => "0123456789".to_string(),
-  }
-}
-
 /// The characters the page counters named by `classes` can produce, or nothing
 /// when no class asks for a counter.
 ///
@@ -253,8 +265,8 @@ pub fn counter_characters<'c>(classes: impl IntoIterator<Item = &'c str>) -> Str
       hooked = true;
       continue;
     }
-    if is_counter_style(class) {
-      characters.push_str(&style_characters(class));
+    if let Some(style) = CounterStyle::from_name(class) {
+      characters.push_str(&style.characters());
     }
   }
 
@@ -263,7 +275,7 @@ pub fn counter_characters<'c>(classes: impl IntoIterator<Item = &'c str>) -> Str
   }
   // A hook without a style counts in decimal, and a band can hold both: a
   // plain `pageNumber` beside a `totalPages thai` still needs its own digits.
-  style_characters("decimal") + &characters
+  CounterStyle::Decimal.characters() + &characters
 }
 
 /// The counter value a node's class hooks request, if any: `pageNumber` or
@@ -284,12 +296,8 @@ pub(crate) fn counter_text(node: &Node, page: usize, pages: usize) -> Option<Str
   } else {
     return None;
   };
-  let style = classes
-    .split_whitespace()
-    .find(|class| is_counter_style(class))
-    .unwrap_or("decimal");
 
-  Some(format_counter(value, style))
+  Some(CounterStyle::from_classes(classes).format(value))
 }
 
 /// The page a `targetPageNumber` node asks for, formatted. The target is the
@@ -306,16 +314,13 @@ fn target_counter_text(
   if !classes.split_whitespace().any(|class| class == TARGET_HOOK) {
     return None;
   }
-  let style = classes
-    .split_whitespace()
-    .find(|class| is_counter_style(class))
-    .unwrap_or("decimal");
+  let style = CounterStyle::from_classes(classes);
   let page = href
     .and_then(|href| href.strip_prefix('#'))
     .filter(|fragment| !fragment.is_empty())
     .and_then(|fragment| page_of(&percent_decode(fragment)));
 
-  Some(page.map_or_else(String::new, |page| format_counter(page, style)))
+  Some(page.map_or_else(String::new, |page| style.format(page)))
 }
 
 /// Whether a tree asks for any target page counter. Only such a tree pays for
@@ -474,6 +479,10 @@ fn write_counter(node: &mut Node, text: String) {
 mod tests {
   use super::*;
 
+  fn format_counter(value: usize, style: &str) -> String {
+    CounterStyle::from_classes(style).format(value)
+  }
+
   #[test]
   fn digit_styles_spell_the_number_in_their_own_script() {
     assert_eq!(format_counter(2026, "devanagari"), "२०२६");
@@ -511,7 +520,7 @@ mod tests {
   #[test]
   fn unknown_styles_count_in_decimal() {
     assert_eq!(format_counter(42, "no-such-style"), "42");
-    assert!(!is_counter_style("no-such-style"));
-    assert!(is_counter_style("tibetan"));
+    assert!(CounterStyle::from_name("no-such-style").is_none());
+    assert!(CounterStyle::from_name("tibetan").is_some());
   }
 }

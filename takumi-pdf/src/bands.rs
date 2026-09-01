@@ -1,19 +1,26 @@
 //! Trees drawn once per page: header and footer bands, and repeated `fixed`
 //! boxes.
 
-use std::cell::RefCell;
+use std::ops::Range;
 
-use takumi_core::{context::RenderContext, layout::node::Node, viewport::Viewport};
+use takumi_core::{
+  context::RenderContext,
+  layout::{
+    node::{Node, NodeKind},
+    tree::RenderNode,
+  },
+  viewport::Viewport,
+};
 
 use crate::{
-  counters::{has_page_counters, substitute_page_counters, substitute_target_counters},
-  emitter::{FontMap, RenderIssues},
-  interactive::{LinkTarget, collect_interactive},
+  counters::{has_page_counters, substitute_page_counters},
+  emitter::DocumentState,
+  interactive::{Interactive, LinkTarget},
   krilla::surface::Surface,
   options::{BAND_EDGE_PADDING, PdfError},
   page::PageFrame,
-  tree::{PreparedTree, RepeatedBox, RepeatedTemplate, TreeInputs, prepare_repeated, prepare_tree},
-  window::ContentWindow,
+  tree::{PreparedTree, TreeInputs, page_root},
+  window::{ContentWindow, Window},
 };
 
 /// Where a repeatable draws on the page.
@@ -68,7 +75,45 @@ enum RepeatTemplate {
   /// A band re-lays out its option node with the page's counters.
   Band(Node),
   /// A repeated box re-lays out the subtree it was taken from.
-  Fixed(RepeatedTemplate),
+  Fixed(FixedTemplate),
+}
+
+/// A repeated box's source subtree, with the context its styles resolved
+/// under, so a re-layout inherits what its ancestors gave it.
+pub(crate) struct FixedTemplate {
+  pub(crate) node: Node,
+  pub(crate) parent: RenderContext,
+  pub(crate) source_order: usize,
+}
+
+impl FixedTemplate {
+  /// The source orders the subtree occupies in the tree it was taken from.
+  fn source_orders(&self) -> Range<usize> {
+    self.source_order..self.source_order + node_count(&self.node)
+  }
+
+  /// Lays the box out again with the counters a page asks for.
+  fn prepare(
+    &self,
+    page_context: &RenderContext,
+    page: usize,
+    pages: usize,
+    page_area: Viewport,
+  ) -> Result<PreparedTree, PdfError> {
+    let mut node = self.node.clone();
+
+    substitute_page_counters(&mut node, page, pages);
+    let child = RenderNode::from_node(&self.parent, node);
+
+    PreparedTree::lay_out(page_root(page_context, child), page_area)
+  }
+}
+
+fn node_count(node: &Node) -> usize {
+  match &node.kind {
+    NodeKind::Container { children } => 1 + children.iter().map(node_count).sum::<usize>(),
+    _ => 1,
+  }
 }
 
 impl Repeatable {
@@ -82,11 +127,27 @@ impl Repeatable {
     pages: usize,
   ) -> Result<Self, PdfError> {
     Ok(Self {
-      prepared: prepare_band(inputs, template, pages, pages, viewport)?,
+      prepared: inputs.prepare_band(template, pages, pages, viewport)?,
       template: has_page_counters(template).then(|| RepeatTemplate::Band(template.clone())),
       bounds,
       links: Vec::new(),
     })
+  }
+
+  /// Wraps a repeated `fixed` box, caching its links when it never re-lays out.
+  pub(crate) fn fixed(prepared: PreparedTree, template: Option<FixedTemplate>) -> Self {
+    let links = match template {
+      Some(_) => Vec::new(),
+      None => Interactive::collect(&prepared).links,
+    };
+    let below = prepared.paints_below();
+
+    Self {
+      prepared,
+      template: template.map(RepeatTemplate::Fixed),
+      bounds: RepeatBounds::Content { below },
+      links,
+    }
   }
 
   /// Whether the band holds a counter and lays out again per page.
@@ -94,25 +155,18 @@ impl Repeatable {
     self.template.is_some()
   }
 
-  /// Wraps a repeated `fixed` box, caching its links when it never re-lays out.
-  pub(crate) fn fixed(repeat: RepeatedBox) -> Self {
-    let links = match repeat.template {
-      Some(_) => Vec::new(),
-      None => collect_interactive(&repeat.prepared).links,
-    };
-    let below = repeat.prepared.paints_below();
-
-    Self {
-      prepared: repeat.prepared,
-      template: repeat.template.map(RepeatTemplate::Fixed),
-      bounds: RepeatBounds::Content { below },
-      links,
-    }
-  }
-
   /// The height the measured layout came out at.
   pub(crate) fn height(&self) -> f32 {
     self.prepared.height
+  }
+
+  /// The source orders a repeated box's counters live at, which the content
+  /// pass leaves to the box itself.
+  pub(crate) fn source_orders(&self) -> Option<Range<usize>> {
+    match &self.template {
+      Some(RepeatTemplate::Fixed(template)) => Some(template.source_orders()),
+      _ => None,
+    }
   }
 
   /// Resolves the tree this page draws: a fresh layout with the page's
@@ -127,23 +181,15 @@ impl Repeatable {
   ) -> Result<RepeatablePage<'_>, PdfError> {
     let fresh = match &self.template {
       None => None,
-      Some(RepeatTemplate::Band(node)) => Some(prepare_band(
-        inputs,
-        node,
-        page,
-        pages,
-        frame.band_viewport,
-      )?),
-      Some(RepeatTemplate::Fixed(template)) => Some(prepare_repeated(
-        page_context,
-        template,
-        page,
-        pages,
-        frame.page_area,
-      )?),
+      Some(RepeatTemplate::Band(node)) => {
+        Some(inputs.prepare_band(node, page, pages, frame.band_viewport)?)
+      }
+      Some(RepeatTemplate::Fixed(template)) => {
+        Some(template.prepare(page_context, page, pages, frame.page_area)?)
+      }
     };
     let fresh_links = match (&fresh, &self.bounds) {
-      (Some(tree), RepeatBounds::Content { .. }) => collect_interactive(tree).links,
+      (Some(tree), RepeatBounds::Content { .. }) => Interactive::collect(tree).links,
       _ => Vec::new(),
     };
 
@@ -181,14 +227,12 @@ impl RepeatablePage<'_> {
     self.repeatable.links.iter().chain(&self.fresh_links)
   }
 
-  /// Emits the tree clipped to its bounds on the page.
+  /// Emits the tree clipped to its bounds on the page, as an artifact when the
+  /// document is tagged.
   pub(crate) fn emit(
     &self,
     frame: &PageFrame,
-    fonts: &mut FontMap,
-    artifact: bool,
-    issues: &RefCell<RenderIssues>,
-    document_lang: Option<&str>,
+    state: &DocumentState<'_>,
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
     let (x, y, width, height) = self.repeatable.bounds.rect(frame, self.repeatable.height());
@@ -196,34 +240,9 @@ impl RepeatablePage<'_> {
     ContentWindow {
       clip: (x, y, width, height),
       translate: (x, y),
-      window: None,
-      x_window: None,
-      line_window: None,
-      artifact,
+      window: Window::default(),
+      artifact: state.tags.is_some(),
     }
-    .emit(
-      self
-        .tree()
-        .emitter(fonts, None, None, issues, document_lang),
-      surface,
-    )
+    .emit(self.tree().emitter(state, None, false), surface)
   }
-}
-
-/// Lays out a band template with the given counter values.
-pub(crate) fn prepare_band(
-  inputs: &TreeInputs<'_>,
-  template: &Node,
-  page: usize,
-  pages: usize,
-  viewport: Viewport,
-) -> Result<PreparedTree, PdfError> {
-  let mut node = template.clone();
-
-  substitute_page_counters(&mut node, page, pages);
-  // A band lays out per page, after the pass that resolves target counters, so
-  // its hooks name no page. They empty like any other unresolved target instead
-  // of leaving the placeholder the template put there.
-  substitute_target_counters(&mut node, None, &|_: &str| None, &mut Vec::new());
-  prepare_tree(inputs, node, viewport)
 }

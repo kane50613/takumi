@@ -31,6 +31,7 @@ use crate::{
   options::PT_PER_PX,
   tags::{TagCollector, text_content},
   tree::PreparedTree,
+  window::Window,
 };
 
 /// A hyperlink box in content coordinates.
@@ -109,35 +110,32 @@ fn heading_level(tag: &str) -> Option<u8> {
   }
 }
 
-/// The element paths a destination can point at: every anchor and every
-/// heading the outline lists. Their structure elements need an id so a
-/// structure destination can name them.
-pub(crate) fn destination_targets(interactive: &Interactive) -> HashSet<Vec<usize>> {
-  interactive
-    .anchors
-    .values()
-    .map(|anchor| anchor.path.clone())
-    .chain(
-      interactive
-        .headings
-        .iter()
-        .map(|heading| heading.path.clone()),
-    )
-    .collect()
-}
+impl Interactive {
+  /// Collects hyperlinks and headings from the prepared scene, in paint order.
+  pub(crate) fn collect(tree: &PreparedTree) -> Self {
+    let mut collected = Self {
+      links: Vec::new(),
+      headings: Vec::new(),
+      anchors: HashMap::new(),
+      extents: HashMap::new(),
+    };
 
-/// Collects hyperlinks and headings from the prepared scene, in paint order.
-pub(crate) fn collect_interactive(tree: &PreparedTree) -> Interactive {
-  let mut collected = Interactive {
-    links: Vec::new(),
-    headings: Vec::new(),
-    anchors: HashMap::new(),
-    extents: HashMap::new(),
-  };
+    tree.for_each_paint(|paint| collect_interactive_paint(tree, paint, &mut collected));
+    collected.headings.sort_by(|a, b| a.top.total_cmp(&b.top));
+    collected
+  }
 
-  tree.for_each_paint(|paint| collect_interactive_paint(tree, paint, &mut collected));
-  collected.headings.sort_by(|a, b| a.top.total_cmp(&b.top));
-  collected
+  /// The element paths a destination can point at: every anchor and every
+  /// heading the outline lists. Their structure elements need an id so a
+  /// structure destination can name them.
+  pub(crate) fn destination_targets(&self) -> HashSet<Vec<usize>> {
+    self
+      .anchors
+      .values()
+      .map(|anchor| anchor.path.clone())
+      .chain(self.headings.iter().map(|heading| heading.path.clone()))
+      .collect()
+  }
 }
 
 fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: &mut Interactive) {
@@ -351,22 +349,22 @@ fn collect_inline_links(
 }
 
 /// Adds this page's slice of every link as annotations. `window` is the page's
-/// content window in content coordinates; `x_window` narrows it horizontally
-/// for a replayed table header; `offset` maps content to page coordinates.
+/// content window in content coordinates, narrowed horizontally for a
+/// replayed table header; `offset` maps content to page coordinates.
 pub(crate) fn add_link_annotations<'l>(
   page: &mut Page,
   links: impl IntoIterator<Item = &'l LinkTarget>,
-  window: (f32, f32),
-  x_window: Option<(f32, f32)>,
+  window: Window,
   offset: (f32, f32),
   tags: Option<&RefCell<TagCollector>>,
   anchor: impl Fn(&str) -> Option<XyzDestination>,
 ) {
-  let (x0, x1) = x_window.unwrap_or((f32::NEG_INFINITY, f32::INFINITY));
+  let (y0, y1) = window.y.unwrap_or((f32::NEG_INFINITY, f32::INFINITY));
+  let (x0, x1) = window.x.unwrap_or((f32::NEG_INFINITY, f32::INFINITY));
 
   for link in links {
-    let top = link.rect.top().max(window.0);
-    let bottom = link.rect.bottom().min(window.1);
+    let top = link.rect.top().max(y0);
+    let bottom = link.rect.bottom().min(y1);
     let left = link.rect.left().max(x0);
     let right = link.rect.right().min(x1);
 
@@ -375,9 +373,9 @@ pub(crate) fn add_link_annotations<'l>(
     }
     let Some(rect) = KrillaRect::from_ltrb(
       (left + offset.0) * PT_PER_PX,
-      (top - window.0 + offset.1) * PT_PER_PX,
+      (top - y0 + offset.1) * PT_PER_PX,
       (right + offset.0) * PT_PER_PX,
-      (bottom - window.0 + offset.1) * PT_PER_PX,
+      (bottom - y0 + offset.1) * PT_PER_PX,
     ) else {
       continue;
     };
@@ -413,45 +411,47 @@ pub(crate) fn add_link_annotations<'l>(
 /// deeper headings as children, like an HTML document outline. A heading with
 /// no destination (its page is dropped by page ranges) loses its entry and its
 /// children take its place.
-pub(crate) fn build_outline(
-  headings: &[HeadingTarget],
-  destination: impl Fn(&HeadingTarget) -> Option<XyzDestination>,
-) -> Outline {
-  fn take(
-    headings: &[HeadingTarget],
-    index: &mut usize,
-    level: u8,
-    destination: &impl Fn(&HeadingTarget) -> Option<XyzDestination>,
-  ) -> Vec<OutlineNode> {
-    let mut nodes = Vec::new();
+impl Interactive {
+  pub(crate) fn outline(
+    &self,
+    destination: impl Fn(&HeadingTarget) -> Option<XyzDestination>,
+  ) -> Outline {
+    fn take(
+      headings: &[HeadingTarget],
+      index: &mut usize,
+      level: u8,
+      destination: &impl Fn(&HeadingTarget) -> Option<XyzDestination>,
+    ) -> Vec<OutlineNode> {
+      let mut nodes = Vec::new();
 
-    while let Some(heading) = headings.get(*index) {
-      if heading.level < level {
-        break;
-      }
-      *index += 1;
-      let children = take(headings, index, heading.level + 1, destination);
-
-      match destination(heading) {
-        Some(dest) => {
-          let mut node = OutlineNode::new(heading.text.clone(), dest);
-
-          for child in children {
-            node.push_child(child);
-          }
-          nodes.push(node);
+      while let Some(heading) = headings.get(*index) {
+        if heading.level < level {
+          break;
         }
-        None => nodes.extend(children),
+        *index += 1;
+        let children = take(headings, index, heading.level + 1, destination);
+
+        match destination(heading) {
+          Some(dest) => {
+            let mut node = OutlineNode::new(heading.text.clone(), dest);
+
+            for child in children {
+              node.push_child(child);
+            }
+            nodes.push(node);
+          }
+          None => nodes.extend(children),
+        }
       }
+      nodes
     }
-    nodes
-  }
 
-  let mut outline = Outline::new();
-  let mut index = 0;
+    let mut outline = Outline::new();
+    let mut index = 0;
 
-  for node in take(headings, &mut index, 1, &destination) {
-    outline.push_child(node);
+    for node in take(&self.headings, &mut index, 1, &destination) {
+      outline.push_child(node);
+    }
+    outline
   }
-  outline
 }

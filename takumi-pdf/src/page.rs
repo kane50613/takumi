@@ -1,32 +1,33 @@
 //! One page: its resolved geometry, and the emit walk that draws it.
 
-use std::cell::RefCell;
-
 use takumi_core::{
   context::RenderContext,
   geometry::Rect,
+  layout::node::Node,
   style::Color,
   viewport::{MediaTarget, Viewport},
 };
 
+use std::mem::take;
+
 use crate::{
-  bands::{Repeatable, RepeatablePage},
-  emitter::{FontMap, RenderIssues},
-  inline::InlineMap,
+  bands::{RepeatBounds, Repeatable, RepeatablePage},
+  emitter::DocumentState,
+  inline::{InlineMap, TextBox, build_inline_map},
   interactive::add_link_annotations,
   krilla::{
     Document,
     destination::XyzDestination,
-    geom::{Point, Rect as KrillaRect, Size as KrillaSize, Transform},
+    geom::{Point, Size as KrillaSize, Transform},
     page::PageSettings,
     surface::Surface,
   },
-  options::{PT_PER_PX, PageOptions, PageSelection, PdfError},
-  pagination::{PageGeometry, PageSlice, Paginated, header_replays},
-  paint::{fill_from_rgba, rect_path},
-  tags::{TagCollector, tag_id},
+  options::{PT_PER_PX, PageOptions, PageRange, PageSelection, PdfError},
+  pagination::{MAX_PAGES, PageSlice, Paginated},
+  paint::paint_page_background,
+  tags::tag_id,
   tree::TreeInputs,
-  window::ContentWindow,
+  window::{ContentWindow, Window},
 };
 
 /// Page geometry resolved once: everything derived from [`PageOptions`] and
@@ -83,37 +84,32 @@ impl PageFrame {
     })
   }
 
-  /// What a pagination pass lays out against.
-  pub(crate) fn geometry(&self) -> PageGeometry {
-    PageGeometry {
-      viewport: Viewport::new((self.content_width as u32, None))
-        .with_media_target(MediaTarget::Print),
-      page_area: self.page_area,
-      window_height: self.window_height,
-    }
+  /// The content column: content width, unbounded height.
+  pub(crate) fn column(&self) -> Viewport {
+    Viewport::new((self.content_width as u32, None)).with_media_target(MediaTarget::Print)
   }
 }
 
-/// Draws the paginated content one page at a time: background, the repeatables
-/// under the content, the content window, the repeatables over it, then the
-/// link annotations.
-pub(crate) struct PageComposer<'c, 'g> {
-  pub(crate) frame: &'c PageFrame,
-  pub(crate) paginated: &'c Paginated,
-  pub(crate) inputs: &'c TreeInputs<'g>,
-  pub(crate) page_context: RenderContext,
-  pub(crate) inline_map: &'c InlineMap<'c>,
-  pub(crate) fonts: &'c mut FontMap,
-  pub(crate) issues: &'c RefCell<RenderIssues>,
-  pub(crate) tag_collector: Option<&'c RefCell<TagCollector>>,
-  pub(crate) document_lang: Option<&'c str>,
-  pub(crate) background: Option<Color>,
-  /// Whether destinations name tag-tree structure elements.
-  pub(crate) structural: bool,
-  pub(crate) selection: &'c PageSelection,
+/// What a paged render takes from its options besides the content.
+pub(crate) struct PageBands<'o> {
+  pub(crate) header: Option<&'o Node>,
+  pub(crate) footer: Option<&'o Node>,
+  pub(crate) page_ranges: Option<&'o [PageRange]>,
 }
 
-impl PageComposer<'_, '_> {
+/// The paginated document: its geometry, its cut content, and which pages
+/// the render keeps.
+pub(crate) struct PagePlan {
+  pub(crate) frame: PageFrame,
+  pub(crate) paginated: Paginated,
+  pub(crate) selection: PageSelection,
+  /// Whether destinations name tag-tree structure elements.
+  pub(crate) structural: bool,
+  /// In draw order: the header band, the repeated boxes, the footer band.
+  pub(crate) repeatables: Vec<Repeatable>,
+}
+
+impl PagePlan {
   /// The destination a link or outline entry jumps to: the page `top` falls
   /// on, at its position inside that page. `None` when the page is dropped by
   /// [`crate::PdfOptions::page_ranges`].
@@ -133,73 +129,190 @@ impl PageComposer<'_, '_> {
     })
   }
 
+  /// Lays the bands out, resolves the page frame around them, and cuts the
+  /// content into pages.
+  pub(crate) fn solve(
+    inputs: &TreeInputs<'_>,
+    page: PageOptions,
+    bands: PageBands<'_>,
+    node: Node,
+    structural: bool,
+  ) -> Result<Self, PdfError> {
+    // Bands lay out at full page width and draw inside the margin areas,
+    // like Chromium's print header and footer templates.
+    let band_viewport =
+      Viewport::new((page.width as u32, None)).with_media_target(MediaTarget::Print);
+    let measure_bands =
+      |pages: usize| -> Result<(Option<Repeatable>, Option<Repeatable>), PdfError> {
+        let band = |template: Option<&Node>, bounds| {
+          template
+            .map(|template| Repeatable::band(inputs, template, band_viewport, bounds, pages))
+            .transpose()
+        };
+
+        Ok((
+          band(bands.header, RepeatBounds::Header)?,
+          band(bands.footer, RepeatBounds::Footer)?,
+        ))
+      };
+    let resolve = |header: Option<&Repeatable>, footer: Option<&Repeatable>| {
+      PageFrame::resolve(
+        &page,
+        band_viewport,
+        header.map(Repeatable::height),
+        footer.map(Repeatable::height),
+      )
+    };
+    let (mut header, mut footer) = measure_bands(1)?;
+    let mut frame = resolve(header.as_ref(), footer.as_ref())?;
+    // A band with a counter and the cut list depend on each other: an `auto`
+    // margin takes the band's height, the band lays out with the real page
+    // numbers, and the page count is only known once the content is cut. The
+    // band is re-measured with the count each cut produced until its height
+    // stops moving, like the content counters in `Paginated::build`.
+    let dynamic = header.as_ref().is_some_and(Repeatable::dynamic)
+      || footer.as_ref().is_some_and(Repeatable::dynamic);
+    let source = dynamic.then(|| node.clone());
+    let mut paginated = Paginated::build(node, inputs, &frame)?;
+
+    if let Some(source) = source {
+      const BAND_PASSES: usize = 3;
+
+      for _ in 0..BAND_PASSES {
+        let (next_header, next_footer) = measure_bands(paginated.starts.len())?;
+        let stable = next_header.as_ref().map(Repeatable::height)
+          == header.as_ref().map(Repeatable::height)
+          && next_footer.as_ref().map(Repeatable::height)
+            == footer.as_ref().map(Repeatable::height);
+
+        header = next_header;
+        footer = next_footer;
+        if stable {
+          break;
+        }
+        frame = resolve(header.as_ref(), footer.as_ref())?;
+        paginated = Paginated::build(source.clone(), inputs, &frame)?;
+      }
+    }
+
+    if paginated.starts.len() >= MAX_PAGES {
+      return Err(PdfError::TooManyPages(paginated.starts.len()));
+    }
+    let selection = PageSelection::resolve(bands.page_ranges, paginated.starts.len())?;
+    let repeatables = header
+      .into_iter()
+      .chain(take(&mut paginated.repeated))
+      .chain(footer)
+      .collect();
+
+    Ok(Self {
+      frame,
+      paginated,
+      selection,
+      structural,
+      repeatables,
+    })
+  }
+
+  /// Draws every kept page.
+  pub(crate) fn compose(
+    &self,
+    pdf: &mut Document,
+    inputs: &TreeInputs<'_>,
+    state: &DocumentState<'_>,
+    background: Option<Color>,
+  ) -> Result<(), PdfError> {
+    let text_boxes = TextBox::collect(&self.paginated.content);
+    let inline_map = build_inline_map(&text_boxes)?;
+    let composer = PageComposer {
+      plan: self,
+      inputs,
+      page_context: inputs.context(self.frame.page_area),
+      inline_map: &inline_map,
+      state,
+      background,
+    };
+
+    for slice in self.paginated.pages() {
+      if !self.selection.keeps(slice.index) {
+        continue;
+      }
+      composer.compose(pdf, &self.repeatables, &slice)?;
+    }
+    Ok(())
+  }
+
+  /// Where `href="#id"` lands, or `None` when nothing carries that id or its
+  /// page is dropped.
+  pub(crate) fn anchor_destination(&self, id: &str) -> Option<XyzDestination> {
+    let anchor = self.paginated.interactive.anchors.get(id)?;
+
+    self.destination(anchor.top, &anchor.path)
+  }
+}
+
+/// Draws the paginated content one page at a time: background, the repeatables
+/// under the content, the content window, the repeatables over it, then the
+/// link annotations.
+pub(crate) struct PageComposer<'c, 'g> {
+  pub(crate) plan: &'c PagePlan,
+  pub(crate) inputs: &'c TreeInputs<'g>,
+  pub(crate) page_context: RenderContext,
+  pub(crate) inline_map: &'c InlineMap<'c>,
+  pub(crate) state: &'c DocumentState<'c>,
+  pub(crate) background: Option<Color>,
+}
+
+impl PageComposer<'_, '_> {
   /// Draws one page. `repeatables` are in draw order: the header band, the
   /// repeated boxes, the footer band.
   pub(crate) fn compose(
-    &mut self,
-    document: &mut Document,
+    &self,
+    pdf: &mut Document,
     repeatables: &[Repeatable],
     slice: &PageSlice,
   ) -> Result<(), PdfError> {
-    let pages = self.paginated.starts.len();
+    let frame = &self.plan.frame;
+    let paginated = &self.plan.paginated;
+    let pages = paginated.starts.len();
     let resolved = repeatables
       .iter()
       .map(|repeatable| {
         repeatable.for_page(
           self.inputs,
           &self.page_context,
-          self.frame,
+          frame,
           slice.index + 1,
           pages,
         )
       })
       .collect::<Result<Vec<_>, _>>()?;
-    let mut pdf_page = document.start_page_with(PageSettings::new(self.frame.page_size));
+    let mut pdf_page = pdf.start_page_with(PageSettings::new(frame.page_size));
     let mut surface = pdf_page.surface();
 
     surface.push_transform(&Transform::from_scale(PT_PER_PX, PT_PER_PX));
-    self.paint_background(&mut surface);
+    paint_page_background(self.background, frame.size, &mut surface);
     for repeatable in resolved.iter().filter(|page| page.draws_before_content()) {
-      repeatable.emit(
-        self.frame,
-        self.fonts,
-        self.tag_collector.is_some(),
-        self.issues,
-        self.document_lang,
-        &mut surface,
-      )?;
+      repeatable.emit(frame, self.state, &mut surface)?;
     }
     self.emit_content(slice, &mut surface)?;
     for repeatable in resolved.iter().filter(|page| !page.draws_before_content()) {
-      repeatable.emit(
-        self.frame,
-        self.fonts,
-        self.tag_collector.is_some(),
-        self.issues,
-        self.document_lang,
-        &mut surface,
-      )?;
+      repeatable.emit(frame, self.state, &mut surface)?;
     }
     surface.pop();
     surface.finish();
+    let anchor = |id: &str| self.plan.anchor_destination(id);
+
     add_link_annotations(
       &mut pdf_page,
-      &self.paginated.interactive.links,
-      (slice.start, slice.start + slice.paint_height),
-      None,
-      (
-        self.frame.margin.left,
-        self.frame.margin.top + slice.reserved,
-      ),
-      self.tag_collector,
-      |id| {
-        self
-          .paginated
-          .interactive
-          .anchors
-          .get(id)
-          .and_then(|anchor| self.destination(anchor.top, &anchor.path))
+      &paginated.interactive.links,
+      Window {
+        y: Some((slice.start, slice.start + slice.paint_height)),
+        ..Window::default()
       },
+      (frame.margin.left, frame.margin.top + slice.reserved),
+      self.state.tags.as_ref(),
+      anchor,
     );
     // A repeated box sits at the same place on every page, so its links are
     // added per page against the page area rather than the content window.
@@ -208,152 +321,97 @@ impl PageComposer<'_, '_> {
     add_link_annotations(
       &mut pdf_page,
       resolved.iter().flat_map(RepeatablePage::links),
-      (0.0, self.frame.window_height),
-      None,
-      (self.frame.margin.left, self.frame.margin.top),
-      None,
-      |id| {
-        self
-          .paginated
-          .interactive
-          .anchors
-          .get(id)
-          .and_then(|anchor| self.destination(anchor.top, &anchor.path))
+      Window {
+        y: Some((0.0, frame.window_height)),
+        ..Window::default()
       },
+      (frame.margin.left, frame.margin.top),
+      None,
+      anchor,
     );
     // A replayed table header is an artifact like a repeated box, so its
     // links annotate per page and stay out of the structure.
-    for (offset, index) in self.replays(slice) {
-      let band = &self.paginated.headers[index];
+    for &(offset, index) in &slice.replays {
+      let band = &paginated.headers[index];
 
       add_link_annotations(
         &mut pdf_page,
-        &self.paginated.interactive.links,
-        (band.top, band.bottom),
-        Some((band.left, band.right)),
-        (self.frame.margin.left, self.frame.margin.top + offset),
+        &paginated.interactive.links,
+        band.window(),
+        (frame.margin.left, frame.margin.top + offset),
         None,
-        |id| {
-          self
-            .paginated
-            .interactive
-            .anchors
-            .get(id)
-            .and_then(|anchor| self.destination(anchor.top, &anchor.path))
-        },
+        anchor,
       );
     }
     pdf_page.finish();
     Ok(())
   }
 
-  /// The header bands this page replays, with each band's window offset.
-  fn replays(&self, slice: &PageSlice) -> Vec<(f32, usize)> {
-    header_replays(
-      &self.paginated.headers,
-      slice.start,
-      self.frame.window_height,
-    )
-    .1
-  }
-
-  /// Fills the page box before anything else draws. An unset color leaves the
-  /// page empty rather than painting white, like Chromium's print path.
-  fn paint_background(&self, surface: &mut Surface) {
-    let Some(color) = self.background else {
-      return;
-    };
-    let Some(path) =
-      KrillaRect::from_xywh(0.0, 0.0, self.frame.size.0, self.frame.size.1).and_then(rect_path)
-    else {
-      return;
-    };
-
-    surface.set_fill(Some(fill_from_rgba(color.0, 1.0)));
-    surface.draw_path(&path);
-  }
-
   /// Emits the content column through this page's window: clipped to the paint
   /// height and translated so the slice lands at the content origin, below any
   /// repeated table headers.
-  fn emit_content(&mut self, slice: &PageSlice, surface: &mut Surface) -> Result<(), PdfError> {
+  fn emit_content(&self, slice: &PageSlice, surface: &mut Surface) -> Result<(), PdfError> {
+    let frame = &self.plan.frame;
+    let paginated = &self.plan.paginated;
+
     // Paint stops at the next cut: the region between a raised cut and the
     // page's full height belongs to the next page and stays blank, exactly
     // like browser print fragmentation.
     ContentWindow {
       clip: (
-        self.frame.margin.left,
-        self.frame.margin.top + slice.reserved,
-        self.frame.content_width,
+        frame.margin.left,
+        frame.margin.top + slice.reserved,
+        frame.content_width,
         slice.paint_height,
       ),
       translate: (
-        self.frame.margin.left,
-        self.frame.margin.top + slice.reserved - slice.start,
+        frame.margin.left,
+        frame.margin.top + slice.reserved - slice.start,
       ),
-      window: Some((slice.start, slice.start + slice.paint_height)),
-      x_window: None,
-      line_window: Some((
-        if slice.index == 0 {
-          f32::NEG_INFINITY
-        } else {
-          slice.start
-        },
-        slice.end,
-      )),
+      window: Window {
+        y: Some((slice.start, slice.start + slice.paint_height)),
+        x: None,
+        lines: Some((
+          if slice.index == 0 {
+            f32::NEG_INFINITY
+          } else {
+            slice.start
+          },
+          slice.end,
+        )),
+      },
       artifact: false,
     }
     .emit(
-      self.paginated.content.emitter(
-        self.fonts,
-        Some(self.inline_map),
-        self.tag_collector,
-        self.issues,
-        self.document_lang,
-      ),
+      paginated
+        .content
+        .emitter(self.state, Some(self.inline_map), true),
       surface,
     )?;
-    if slice.reserved > 0.0 {
-      self.emit_repeated_headers(slice, surface)?;
-    }
-    Ok(())
-  }
+    // Each repeating table header band replays at the top of the window. The
+    // first occurrence carried the tags, so a replay is an artifact. Clipping
+    // to the table keeps content beside it out of the replay.
+    for &(offset, index) in &slice.replays {
+      let band = &paginated.headers[index];
 
-  /// Replays each repeating table header band at the top of the window. The
-  /// first occurrence carried the tags, so a replay is an artifact.
-  fn emit_repeated_headers(
-    &mut self,
-    slice: &PageSlice,
-    surface: &mut Surface,
-  ) -> Result<(), PdfError> {
-    for (offset, index) in self.replays(slice) {
-      let band = &self.paginated.headers[index];
-
-      // Clipping to the table keeps content beside it out of the replay.
       ContentWindow {
         clip: (
-          self.frame.margin.left + band.left,
-          self.frame.margin.top + offset,
+          frame.margin.left + band.left,
+          frame.margin.top + offset,
           band.right - band.left,
           band.height(),
         ),
-        translate: (
-          self.frame.margin.left,
-          self.frame.margin.top + offset - band.top,
-        ),
-        window: Some((band.top, band.bottom)),
-        x_window: Some((band.left, band.right)),
-        line_window: Some((f32::NEG_INFINITY, band.bottom)),
+        translate: (frame.margin.left, frame.margin.top + offset - band.top),
+        window: Window {
+          lines: Some((f32::NEG_INFINITY, band.bottom)),
+          ..band.window()
+        },
         artifact: true,
       }
       .emit(
-        self.paginated.content.emitter(
-          self.fonts,
-          Some(self.inline_map),
-          None,
-          self.issues,
-          self.document_lang,
-        ),
+        paginated
+          .content
+          .emitter(self.state, Some(self.inline_map), false),
         surface,
       )?;
     }

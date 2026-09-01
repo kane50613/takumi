@@ -47,7 +47,7 @@ use crate::paint::rasterized_image;
 #[cfg(all(feature = "svg", feature = "images"))]
 use crate::svg;
 use crate::{
-  background::{Placement, cycled, place},
+  background::{Placement, cycled},
   filter::{ColorFilter, unsupported_filter},
   glyph::run_glyphs,
   inline::{InlineMap, build_inline_runs, node_inline_items},
@@ -71,6 +71,7 @@ use crate::{
   },
   shadow::{emit_inset_shadows, emit_outer_shadows},
   tags::TagCollector,
+  window::Window,
 };
 
 /// What a box left on the surface for its caller to unwind.
@@ -98,33 +99,22 @@ pub(crate) struct PendingOutline {
 /// coordinates belong in the key.
 pub(crate) type FontKey = (u64, u32, Vec<([u8; 4], u32)>);
 
-/// Scene walker state: the render tree, the stacking-context scene, and a cache
-/// of krilla fonts.
+/// Krilla fonts embedded so far, one per distinct instance.
 pub(crate) type FontMap = HashMap<FontKey, Font>;
 
 pub(crate) struct Emitter<'a> {
   pub(crate) root: &'a RenderNode,
   pub(crate) contexts: &'a [StackingContextNode],
   pub(crate) results: &'a LayoutResults,
-  pub(crate) fonts: &'a mut FontMap,
+  pub(crate) document: &'a DocumentState<'a>,
   /// Pre-built inline layouts for the content tree; band trees build on the
   /// fly.
   pub(crate) inline: Option<&'a InlineMap<'a>>,
-  /// Vertical content window `[top, bottom)` of the page being emitted;
-  /// paint wholly outside it is skipped so clipped-away content never reaches
-  /// the content stream (or text extraction).
-  pub(crate) window: Option<(f32, f32)>,
-  /// Horizontal content window `[left, right)`: a repeated table header
-  /// replays only its own table's column of the scene.
-  pub(crate) x_window: Option<(f32, f32)>,
-  /// Text-line ownership window: `[this page's cut, next page's cut)`. Wider
-  /// than `window` at the edges (first page reaches up to −∞, last to +∞) and
-  /// narrower at the bottom when a cut lands above the page's full height, so
-  /// every line is emitted on exactly one page.
-  pub(crate) line_window: Option<(f32, f32)>,
-  /// Records a marked-content identifier per source node while drawing, for
-  /// the structure tree built after emission.
-  pub(crate) tags: Option<&'a RefCell<TagCollector>>,
+  /// The page window this walk paints through.
+  pub(crate) window: Window,
+  /// Whether this walk records marked content for the structure tree. A
+  /// replayed artifact walks the same document untagged.
+  pub(crate) tagged: bool,
   /// Path from the document root to this emitter's own root. Empty for the
   /// document; an inline box's subtree emitter carries the box's path, so the
   /// nodes it tags land where the structure tree walk looks for them.
@@ -132,14 +122,6 @@ pub(crate) struct Emitter<'a> {
   /// Color transform from the `filter` properties of the enclosing stacking
   /// contexts, applied to every color this subtree paints.
   pub(crate) color_filter: Option<Rc<ColorFilter>>,
-  /// The document's default language. A node declaring a different one has
-  /// its content marked with that language, which is how a reader knows to
-  /// switch voices mid-document.
-  pub(crate) document_lang: Option<&'a str>,
-  /// What the page could not draw. Collected rather than raised on the spot:
-  /// the surface has open transforms and clips mid-page, and unwinding past
-  /// them would leave it unbalanced.
-  pub(crate) issues: &'a RefCell<RenderIssues>,
 }
 
 /// Names an image in an error: its URL, or that it came in as raw bytes.
@@ -158,6 +140,50 @@ pub(crate) struct RenderIssues {
   pub(crate) uncovered: String,
   /// The first failure worth stopping for.
   pub(crate) failure: Option<PdfError>,
+}
+
+/// What every page of one document shares while it is emitted.
+pub(crate) struct DocumentState<'a> {
+  pub(crate) fonts: RefCell<FontMap>,
+  /// Present when the document is tagged.
+  pub(crate) tags: Option<RefCell<TagCollector>>,
+  /// What the pages could not draw. Collected rather than raised on the spot:
+  /// the surface has open transforms and clips mid-page, and unwinding past
+  /// them would leave it unbalanced.
+  pub(crate) issues: RefCell<RenderIssues>,
+  /// The document's default language. A node declaring a different one has
+  /// its content marked with that language, which is how a reader knows to
+  /// switch voices mid-document.
+  pub(crate) lang: Option<&'a str>,
+}
+
+impl<'a> DocumentState<'a> {
+  pub(crate) fn new(tagged: bool, lang: Option<&'a str>) -> Self {
+    Self {
+      fonts: RefCell::new(FontMap::default()),
+      tags: tagged.then(RefCell::default),
+      issues: RefCell::default(),
+      lang,
+    }
+  }
+
+  /// The error the pages left behind, if any: what failed outright, else the
+  /// characters no font covered.
+  pub(crate) fn into_error(self) -> Option<PdfError> {
+    let issues = self.issues.into_inner();
+
+    if issues.failure.is_some() || issues.uncovered.is_empty() {
+      return issues.failure;
+    }
+    let named = issues
+      .uncovered
+      .chars()
+      .map(|character| format!("{character} (U+{:04X})", character as u32))
+      .collect::<Vec<_>>()
+      .join(", ");
+
+    Some(PdfError::MissingGlyphs(named))
+  }
 }
 
 impl Emitter<'_> {
@@ -192,47 +218,27 @@ impl Emitter<'_> {
   }
 
   fn fail(&self, error: PdfError) {
-    let mut issues = self.issues.borrow_mut();
+    let mut issues = self.document.issues.borrow_mut();
 
     if issues.failure.is_none() {
       issues.failure = Some(error);
     }
   }
 
-  fn window_excludes(&self, top: f32, bottom: f32) -> bool {
-    self
-      .window
-      .is_some_and(|(y0, y1)| bottom <= y0 || top >= y1)
-  }
-
-  /// Whether a text line at `baseline` belongs to another page. Ownership is
-  /// keyed on the baseline (always inside the line's own box, unlike the font
-  /// ascent band, which can poke above the container a forced break cut at) and
-  /// half-open, so each line is emitted exactly once.
-  fn window_disowns_line(&self, baseline: f32) -> bool {
-    self
-      .line_window
-      .is_some_and(|(y0, y1)| baseline < y0 || baseline >= y1)
-  }
-
   /// Whether the run's line belongs to another page. The one ownership test
   /// every inline paint pass shares: glyphs, shadows, decorations, boxes and
   /// background fragments all key on it.
   fn window_disowns_run(&self, run: &PositionedInlineRun, layout: Layout, y: f32) -> bool {
-    run
-      .glyph_run
-      .glyphs
-      .first()
-      .is_some_and(|glyph| self.window_disowns_line(y + run.glyph_offset(layout).y + glyph.y))
+    run.glyph_run.glyphs.first().is_some_and(|glyph| {
+      self
+        .window
+        .disowns_line(y + run.glyph_offset(layout).y + glyph.y)
+    })
   }
 
-  fn window_excludes_bounds(&self, bounds: Option<takumi_core::scene::SceneBounds>) -> bool {
-    bounds.is_some_and(|b| {
-      self.window_excludes(b.top as f32, b.bottom as f32)
-        || self
-          .x_window
-          .is_some_and(|(x0, x1)| b.right as f32 <= x0 || b.left as f32 >= x1)
-    })
+  /// The marked-content identifiers this walk records into, if it tags.
+  fn tags(&self) -> Option<&RefCell<TagCollector>> {
+    self.tagged.then_some(self.document.tags.as_ref()?)
   }
 
   /// The marked-content tag a node's own content opens.
@@ -242,7 +248,7 @@ impl Emitter<'_> {
   /// language needs nothing: the catalog already declares it.
   fn content_tag<'t>(&self, node: &'t RenderNode) -> ContentTag<'t> {
     match node.context.style.lang.as_ref().map(Lang::as_str) {
-      Some(lang) if Some(lang) != self.document_lang => {
+      Some(lang) if Some(lang) != self.document.lang => {
         ContentTag::Span(SpanTag::empty().with_lang(Some(lang)))
       }
       _ => ContentTag::Other,
@@ -270,7 +276,7 @@ impl Emitter<'_> {
       self.color_filter = self.composed_filter(outer_filter.as_deref(), &node.context.style.filter);
     }
 
-    let (outer_window, outer_line_window) = (self.window, self.line_window);
+    let outer_window = self.window;
     let (child_frame, root_state) = match context.root() {
       Some(paint) => self.emit_box(paint, parent, surface)?,
       None => (parent, BoxState::default()),
@@ -284,7 +290,7 @@ impl Emitter<'_> {
             // the page's own clip would drop it anyway. A context's root is
             // never skipped this way, because the clip it opens decides what
             // its descendants are allowed to emit.
-            if self.window_excludes_bounds(paint.paint_bounds) {
+            if self.window.excludes_bounds(paint.paint_bounds) {
               continue;
             }
             let (_, state) = self.emit_box(paint, child_frame, surface)?;
@@ -294,7 +300,7 @@ impl Emitter<'_> {
             let excluded = self
               .contexts
               .get(*child)
-              .is_some_and(|ctx| self.window_excludes_bounds(ctx.paint_bounds()));
+              .is_some_and(|ctx| self.window.excludes_bounds(ctx.paint_bounds()));
             if !excluded {
               self.emit_context(*child, child_frame, surface)?;
             }
@@ -303,7 +309,7 @@ impl Emitter<'_> {
       }
     }
     self.finish_box(root_state, surface);
-    (self.window, self.line_window) = (outer_window, outer_line_window);
+    self.window = outer_window;
     self.color_filter = outer_filter;
     Ok(())
   }
@@ -364,7 +370,7 @@ impl Emitter<'_> {
     // reserve layout space). `slice` needs nothing — the page window slices
     // the full-box decorations, which is exactly the sliced rendering.
     let (deco_y, deco_size) = if style.box_decoration_break == BoxDecorationBreak::Clone
-      && let Some((window_top, window_bottom)) = self.window
+      && let Some((window_top, window_bottom)) = self.window.y
     {
       let top = y.max(window_top);
       let bottom = (y + layout.size.height).min(window_bottom);
@@ -436,15 +442,7 @@ impl Emitter<'_> {
       // what it cuts away must never be emitted. Only a translated frame maps
       // the box onto the window's axis.
       if relative.only_translation() {
-        let (top, bottom) = (y, y + layout.size.height);
-
-        if let Some((from, to)) = self.window {
-          self.window = Some((from.max(top), to.min(bottom)));
-        }
-        // A text line is owned by its baseline, against its own window.
-        if let Some((from, to)) = self.line_window {
-          self.line_window = Some((from.max(top), to.min(bottom)));
-        }
+        self.window.narrow(y, y + layout.size.height);
       }
       let clip_border = BorderProperties::from_context(&node.context, layout.size, layout.border);
       let path = if clip_border.is_zero() {
@@ -464,7 +462,7 @@ impl Emitter<'_> {
       }
     }
 
-    let tagged = self.tags.is_some() && has_own_content(node);
+    let tagged = self.tagged && has_own_content(node);
 
     if tagged {
       if decorative_image(node) {
@@ -475,7 +473,7 @@ impl Emitter<'_> {
       } else {
         let identifier = surface.start_tagged(self.content_tag(node));
 
-        if let Some(tags) = self.tags {
+        if let Some(tags) = self.tags() {
           tags
             .borrow_mut()
             .record(&self.tag_path(&paint.path), identifier);
@@ -522,7 +520,7 @@ impl Emitter<'_> {
       filter: self.color_filter.as_deref(),
       // An artifact opens only once something actually paints, because marked
       // content does not nest and an empty region would still have to close.
-      artifact: self.tags.is_some(),
+      artifact: self.tagged,
     };
 
     BoxPainter::new(&node.context, layout).background_color(CorePoint { x, y }, &mut device);
@@ -570,7 +568,7 @@ impl Emitter<'_> {
 
     surface.push_clip_path(&clip, &rule);
     for (index, image) in images.iter().enumerate().rev() {
-      let placement = place(
+      let placement = Placement::resolve(
         area,
         cycled(&style.background_size, index),
         cycled(&style.background_position, index),
@@ -912,7 +910,7 @@ impl Emitter<'_> {
       let mut content = builder.surface();
 
       for (index, image) in images.iter().enumerate().rev() {
-        let placement = place(
+        let placement = Placement::resolve(
           size,
           cycled(&style.mask_size, index),
           cycled(&style.mask_position, index),
@@ -966,7 +964,7 @@ impl Emitter<'_> {
   /// Opens an artifact sequence around a decoration when tagging is on, so it
   /// stays out of the structure tree. Returns whether one was opened.
   fn start_artifact(&self, surface: &mut Surface) -> bool {
-    if self.tags.is_none() {
+    if !self.tagged {
       return false;
     }
     surface.start_tagged(ContentTag::Artifact(Artifact::new(
@@ -1053,7 +1051,7 @@ impl Emitter<'_> {
       &mut SurfaceDevice {
         surface,
         filter: self.color_filter.as_deref(),
-        artifact: self.tags.is_some(),
+        artifact: self.tagged,
       },
     ) {
       return;
@@ -1305,7 +1303,7 @@ impl Emitter<'_> {
     // A fragment paints only on the page that owns its line, like the glyph
     // pass, so a page cut leaves no background sliver on the neighbor page.
     for fragment in &runs.background_fragments {
-      if self.window_disowns_line(y + fragment.baseline) {
+      if self.window.disowns_line(y + fragment.baseline) {
         continue;
       }
       let Some(path) = krilla_path(&inline_background_path(fragment), x, y) else {
@@ -1369,7 +1367,11 @@ impl Emitter<'_> {
         .text
         .get(shaped.text_range.clone())
         .unwrap_or_default();
-      let glyphs = run_glyphs(shaped, run_text, &mut self.issues.borrow_mut().uncovered);
+      let glyphs = run_glyphs(
+        shaped,
+        run_text,
+        &mut self.document.issues.borrow_mut().uncovered,
+      );
 
       let color = shaped.brush.color;
       let fill = fill_from_rgba(self.filtered(color), shaped.brush.opacity);
@@ -1452,7 +1454,7 @@ impl Emitter<'_> {
     // The caller opened a marked-content region for the text around these
     // boxes. Marked content does not nest, so each box closes it, takes a
     // region of its own, and hands it back.
-    let owner_tagged = self.tags.is_some() && has_own_content(owner);
+    let owner_tagged = self.tagged && has_own_content(owner);
 
     for positioned in &runs.inline_boxes {
       let Some(ProcessedInlineSpan::Box(item)) = built.spans.get(positioned.id as usize) else {
@@ -1464,23 +1466,22 @@ impl Emitter<'_> {
       // runs beside it.
       if positioned.line_baseline.is_some_and(|baseline| {
         let absolute = y + layout.content_box_offset().y + baseline;
-        self.window_disowns_line(absolute)
+        self.window.disowns_line(absolute)
       }) {
         continue;
       }
       let Some((offset, paint)) = resolve_inline_box(positioned, item, layout) else {
         continue;
       };
-      let marker_target = (self.tags.is_some() && node.origin == NodeOrigin::Marker)
+      let marker_target = (self.tagged && node.origin == NodeOrigin::Marker)
         .then(|| self.marker_tag_target(owner))
         .flatten();
       let marker_tagged = marker_target.is_some();
 
       // A container box runs its own emitter, which tags every node it walks.
       // A replaced one paints here, so it takes one region for the whole box.
-      let box_tagged = cfg!(feature = "images")
-        && self.tags.is_some()
-        && matches!(paint, InlineBoxPaint::Replaced { .. });
+      let box_tagged =
+        cfg!(feature = "images") && self.tagged && matches!(paint, InlineBoxPaint::Replaced { .. });
 
       if owner_tagged {
         surface.end_tagged();
@@ -1488,7 +1489,7 @@ impl Emitter<'_> {
       if let Some(path) = marker_target.as_ref() {
         let identifier = surface.start_tagged(self.content_tag(node));
 
-        if let Some(tags) = self.tags {
+        if let Some(tags) = self.tags() {
           tags.borrow_mut().record_label(path, identifier);
         }
       } else if box_tagged {
@@ -1589,24 +1590,18 @@ impl Emitter<'_> {
     // The subtree root is a clone of `node`, so the box's own path is the
     // prefix that puts the subtree's nodes back on the document tree.
     let mut box_path = Vec::new();
-    let tags = self
-      .tags
-      .filter(|_| node_path(self.root, node, &mut box_path));
+    let tagged = self.tagged && node_path(self.root, node, &mut box_path);
     let tag_prefix = self.tag_path(&box_path);
     let mut emitter = Emitter {
       root: &subtree.root,
       contexts: &contexts,
       results: &subtree.results,
-      fonts: &mut *self.fonts,
+      document: self.document,
       inline: None,
-      window: None,
-      x_window: None,
-      line_window: None,
-      tags,
+      window: Window::default(),
+      tagged,
       tag_prefix,
       color_filter: self.color_filter.clone(),
-      issues: self.issues,
-      document_lang: self.document_lang,
     };
     let x = origin.0 + subtree.margin_offset.x;
     let y = origin.1 + subtree.margin_offset.y;
@@ -1629,7 +1624,7 @@ impl Emitter<'_> {
     let identifier = surface.start_tagged(self.content_tag(node));
     let mut path = Vec::new();
 
-    if let Some(tags) = self.tags
+    if let Some(tags) = self.tags()
       && node_path(self.root, node, &mut path)
     {
       tags.borrow_mut().record(&self.tag_path(&path), identifier);
@@ -1732,7 +1727,7 @@ impl Emitter<'_> {
       .enumerate()
       .rev()
     {
-      let placement = place(
+      let placement = Placement::resolve(
         area,
         cycled(&style.background_size, index),
         cycled(&style.background_position, index),
@@ -1796,7 +1791,11 @@ impl Emitter<'_> {
         .text
         .get(shaped.text_range.clone())
         .unwrap_or_default();
-      let glyphs = run_glyphs(shaped, run_text, &mut self.issues.borrow_mut().uncovered);
+      let glyphs = run_glyphs(
+        shaped,
+        run_text,
+        &mut self.document.issues.borrow_mut().uncovered,
+      );
 
       let color = color.unwrap_or(shaped.brush.color);
 
@@ -1850,7 +1849,7 @@ impl Emitter<'_> {
         .collect(),
     );
 
-    if let Some(font) = self.fonts.get(&key) {
+    if let Some(font) = self.document.fonts.borrow().get(&key) {
       return Some(font.clone());
     }
     let variations: Vec<(Tag, f32)> = shaped
@@ -1864,7 +1863,7 @@ impl Emitter<'_> {
       &variations,
     )?;
 
-    self.fonts.insert(key, font.clone());
+    self.document.fonts.borrow_mut().insert(key, font.clone());
     Some(font)
   }
 }
