@@ -11,5 +11,5 @@ packages:
 Bundlers that resolve the `browser` condition (Vite client, webpack web) now
 get `bundlers/browser.mjs`, which only fetches the `.wasm` asset. Client builds
 with `noExternal` stop failing with `Cannot bundle Node.js built-in "node:fs/promises"`.
-The Vite server entry also hides its `node:fs/promises` import from bundlers
-that skip the `browser` condition.
+The Vite server entry reads the asset through `process.getBuiltinModule`, so
+no bundler sees a Node import. Both packages now require Node 20.19 or newer.

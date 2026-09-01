@@ -5,9 +5,7 @@ import * as wasm from "../dist/export.mjs";
 // importing server chunk, so resolve relative to import.meta.url, not the framework output dir.
 async function resolveWasm() {
   if (typeof process !== "undefined" && process.versions?.node != null) {
-    // Non-literal specifier keeps client builds with `noExternal` from trying to bundle the builtin.
-    const fsPromises = "node:fs/promises";
-    const { readFile } = await import(/* @vite-ignore */ fsPromises);
+    const { readFile } = process.getBuiltinModule("node:fs/promises");
     const path = decodeURIComponent(url.replace(/[?#].*$/, ""));
 
     // Dev SSR serves an `/@fs/<abs-path>` URL.
