@@ -2902,6 +2902,10 @@ pub struct ShapedRun {
   pub baseline: f32,
   /// Total horizontal advance of the run.
   pub advance: f32,
+  /// Advance of line-end whitespace inside [`Self::advance`]. Decorations do
+  /// not span it (Blink skips hanging whitespace); naive for RTL, where it
+  /// trims the visual right edge instead of the line-start side.
+  pub trailing_whitespace: f32,
   /// Paint attributes carried by the run.
   pub brush: InlineBrush,
   /// Vertical font metrics for the run.
@@ -3112,7 +3116,12 @@ pub fn resolve_inline_runs(
     };
     let mut static_inline_prefix = 0.0_f32;
 
-    for item in line.items() {
+    let items: Vec<_> = line.items().collect();
+    let last_glyph_run_index = items
+      .iter()
+      .rposition(|item| matches!(item, PositionedLayoutItem::GlyphRun(_)));
+
+    for (item_index, item) in items.into_iter().enumerate() {
       match item {
         PositionedLayoutItem::GlyphRun(glyph_run) => {
           let run = glyph_run.run();
@@ -3211,6 +3220,11 @@ pub fn resolve_inline_runs(
             offset: glyph_run.offset(),
             baseline: glyph_run.baseline(),
             advance: glyph_run.advance(),
+            trailing_whitespace: if Some(item_index) == last_glyph_run_index {
+              line.metrics().trailing_whitespace
+            } else {
+              0.0
+            },
             brush,
             metrics: RunMetrics {
               ascent: metrics.ascent,
@@ -3452,7 +3466,8 @@ pub fn run_decorations(
   let metrics = &glyph_run.metrics;
   let start_x = layout.border.left + layout.padding.left + glyph_run.offset;
   let snapped_start_x = start_x.floor();
-  let width = (start_x + glyph_run.advance).ceil() - snapped_start_x;
+  let decorated_advance = glyph_run.advance - glyph_run.trailing_whitespace;
+  let width = (start_x + decorated_advance).ceil() - snapped_start_x;
   if width <= 0.0 {
     return out;
   }
@@ -3794,6 +3809,7 @@ mod tests {
       offset: 0.0,
       baseline: 0.0,
       advance: 0.0,
+      trailing_whitespace: 0.0,
       brush: InlineBrush {
         underline_offset,
         underline_position: position,

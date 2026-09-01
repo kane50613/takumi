@@ -178,7 +178,7 @@
   <rect x="588" y="192" width="568.32" height="154" fill="#f8f8f8"/>
   <path d="M588 192h568.32v154h-568.32v-154Zm1 1h566.32v152h-566.32v-152Z" fill="#b4b4b4" fill-rule="evenodd"/>
   <rect x="597" y="247.2" width="405" height="3" fill="#dc2626"/>
-  <rect x="1045" y="247.2" width="9" height="3" fill="#dc2626"/>
+  <rect x="1045" y="247.2" width="1" height="3" fill="#dc2626"/>
   <rect x="597" y="319.2" width="104" height="3" fill="#dc2626"/>
   <g fill="#000">
     <use href="#g0" x="597" y="244"/>
