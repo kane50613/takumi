@@ -17,6 +17,18 @@ enum MediaType {
   Unsupported(String),
 }
 
+impl MediaType {
+  /// The media type a `<media-type>` ident names.
+  fn from_name(name: CowRcStr<'_>) -> Self {
+    match_ignore_ascii_case! { name.as_ref(),
+      "all" => Self::All,
+      "screen" => Self::Screen,
+      "print" => Self::Print,
+      _ => Self::Unsupported(name.to_string()),
+    }
+  }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MediaFeatureComparison {
   Equal,
@@ -122,11 +134,57 @@ impl MediaFeatureComparison {
   fn is_upper_bound(self) -> bool {
     matches!(self, Self::Max | Self::LessThan)
   }
+
+  fn matches(self, actual: f32, expected: f32, tolerance: f32) -> bool {
+    // <https://drafts.csswg.org/mediaqueries-4/#false-in-the-negative-range>
+    if expected < 0.0 {
+      return matches!(self, Self::Min | MediaFeatureComparison::GreaterThan);
+    }
+
+    match self {
+      Self::Equal => (actual - expected).abs() <= tolerance,
+      Self::Min => actual >= expected - tolerance,
+      Self::Max => actual <= expected + tolerance,
+      Self::GreaterThan => actual > expected,
+      Self::LessThan => actual < expected,
+    }
+  }
 }
 
 impl MediaFeatureValue {
+  /// A `<resolution>` in dots per `px` unit. A `dpcm` value is rounded to two
+  /// decimals, as Blink does; Blink rounds the device pixel ratio the same way
+  /// before comparing, which this does not, so the two disagree when that ratio
+  /// carries more than two decimals.
+  fn parse_resolution<'i>(
+    input: &mut Parser<'i, '_>,
+  ) -> Result<f32, ParseError<'i, StyleSheetParseError>> {
+    const DPCM_PER_DPPX: f32 = 96.0 / 2.54;
+
+    let location = input.current_source_location();
+    let token = input.next()?.clone();
+
+    if let Token::Dimension {
+      value, ref unit, ..
+    } = token
+    {
+      let dppx = match_ignore_ascii_case! { unit.as_ref(),
+        "dppx" | "x" => Some(value),
+        "dpi" => Some(value / 96.0),
+        "dpcm" => Some(((value / DPCM_PER_DPPX) * 100.0).round() / 100.0),
+        _ => None,
+      };
+
+      if let Some(dppx) = dppx {
+        return Ok(dppx);
+      }
+    }
+
+    Err(location.new_unexpected_token_error(token))
+  }
+
   fn parse<'i>(input: &mut Parser<'i, '_>) -> Result<Self, ParseError<'i, StyleSheetParseError>> {
-    if let Ok(resolution) = input.try_parse(parse_resolution) {
+    if let Ok(resolution) = input.try_parse(Self::parse_resolution) {
       return Ok(Self::Resolution(resolution));
     }
 
@@ -164,18 +222,16 @@ impl MediaFeature {
   fn boolean(name: &str) -> Option<Self> {
     let comparison = MediaFeatureComparison::GreaterThan;
 
-    if name.eq_ignore_ascii_case("resolution") {
-      Some(Self::Resolution(comparison, 0.0))
-    } else if name.eq_ignore_ascii_case("aspect-ratio") {
-      Some(Self::AspectRatio(
+    match_ignore_ascii_case! { name,
+      "resolution" => Some(Self::Resolution(comparison, 0.0)),
+      "aspect-ratio" => Some(Self::AspectRatio(
         comparison,
         MediaRatio {
           numerator: 0.0,
           denominator: 1.0,
         },
-      ))
-    } else {
-      Self::new(name, comparison, MediaFeatureValue::Number(0.0))
+      )),
+      _ => Self::new(name, comparison, MediaFeatureValue::Number(0.0)),
     }
   }
 
@@ -186,17 +242,14 @@ impl MediaFeature {
       _ => None,
     };
 
-    if name.eq_ignore_ascii_case("width") {
-      Some(Self::Width(comparison, length?))
-    } else if name.eq_ignore_ascii_case("height") {
-      Some(Self::Height(comparison, length?))
-    } else if name.eq_ignore_ascii_case("resolution") {
-      match value {
+    match_ignore_ascii_case! { name,
+      "width" => Some(Self::Width(comparison, length?)),
+      "height" => Some(Self::Height(comparison, length?)),
+      "resolution" => match value {
         MediaFeatureValue::Resolution(dppx) => Some(Self::Resolution(comparison, dppx)),
         _ => None,
-      }
-    } else if name.eq_ignore_ascii_case("aspect-ratio") {
-      match value {
+      },
+      "aspect-ratio" => match value {
         MediaFeatureValue::Ratio(ratio) => Some(Self::AspectRatio(comparison, ratio)),
         MediaFeatureValue::Number(numerator) => Some(Self::AspectRatio(
           comparison,
@@ -206,40 +259,120 @@ impl MediaFeature {
           },
         )),
         _ => None,
-      }
-    } else {
-      None
+      },
+      _ => None,
     }
+  }
+
+  fn parse<'i, 't>(
+    input: &mut Parser<'i, 't>,
+  ) -> Result<MediaFeature, ParseError<'i, StyleSheetParseError>> {
+    let feature_name = input.expect_ident_cloned()?;
+
+    // Boolean context: the feature name alone matches when its value is non-zero.
+    // <https://drafts.csswg.org/mediaqueries-4/#mq-boolean-context>
+    if input.try_parse(Parser::expect_colon).is_err() {
+      return MediaFeature::boolean(&feature_name)
+        .ok_or_else(|| input.new_custom_error(StyleSheetParseError::unsupported_media_feature()));
+    }
+
+    if feature_name.eq_ignore_ascii_case("orientation") {
+      let orientation = input.expect_ident_cloned()?;
+      return match_ignore_ascii_case! { orientation.as_ref(),
+        "portrait" => Ok(Self::Orientation(MediaOrientation::Portrait)),
+        "landscape" => Ok(Self::Orientation(MediaOrientation::Landscape)),
+        _ => Err(
+          input.new_error(BasicParseErrorKind::UnexpectedToken(Token::Ident(
+            orientation.clone(),
+          ))),
+        ),
+      };
+    }
+
+    let (comparison, name) = match feature_name.split_at_checked("min-".len()) {
+      Some((prefix, name)) if prefix.eq_ignore_ascii_case("min-") => {
+        (MediaFeatureComparison::Min, name)
+      }
+      Some((prefix, name)) if prefix.eq_ignore_ascii_case("max-") => {
+        (MediaFeatureComparison::Max, name)
+      }
+      _ => (MediaFeatureComparison::Equal, &*feature_name),
+    };
+
+    let value = MediaFeatureValue::parse(input)?;
+
+    MediaFeature::new(name, comparison, value)
+      .ok_or_else(|| input.new_custom_error(StyleSheetParseError::unsupported_media_feature()))
+  }
+
+  /// The range context of Media Queries Level 4, such as `(width >= 40em)` and
+  /// `(400px < height <= 700px)`.
+  /// <https://drafts.csswg.org/mediaqueries-4/#mq-range-context>
+  fn parse_range<'i, 't>(
+    input: &mut Parser<'i, 't>,
+  ) -> Result<(MediaFeature, Option<MediaFeature>), ParseError<'i, StyleSheetParseError>> {
+    let feature = |input: &mut Parser<'i, 't>, name: &str, comparison, value| {
+      MediaFeature::new(name, comparison, value)
+        .ok_or_else(|| input.new_custom_error(StyleSheetParseError::unsupported_media_feature()))
+    };
+
+    if let Ok(name) = input.try_parse(Parser::expect_ident_cloned) {
+      let comparison = MediaFeatureComparison::parse(input)?;
+      let value = MediaFeatureValue::parse(input)?;
+
+      return Ok((feature(input, &name, comparison, value)?, None));
+    }
+
+    let lower_value = MediaFeatureValue::parse(input)?;
+    let lower = MediaFeatureComparison::parse(input)?.flipped();
+    let name = input.expect_ident_cloned()?;
+    let lower_feature = feature(input, &name, lower, lower_value)?;
+
+    if input.is_exhausted() {
+      return Ok((lower_feature, None));
+    }
+
+    let upper = MediaFeatureComparison::parse(input)?;
+
+    if lower.is_upper_bound() == upper.is_upper_bound() {
+      return Err(input.new_custom_error(StyleSheetParseError::invalid_reason(
+        "media range comparisons must point the same way",
+      )));
+    }
+
+    let upper_value = MediaFeatureValue::parse(input)?;
+
+    Ok((
+      lower_feature,
+      Some(feature(input, &name, upper, upper_value)?),
+    ))
   }
 
   fn matches(&self, viewport: Viewport, sizing: &SizingContext) -> bool {
     match self {
       Self::Width(comparison, value) => viewport.size.width.is_some_and(|width| {
-        compare_media_feature(
-          *comparison,
+        comparison.matches(
           width as f32,
           value.to_px(sizing, width as f32),
           LAYOUT_UNIT_EPSILON,
         )
       }),
       Self::Height(comparison, value) => viewport.size.height.is_some_and(|height| {
-        compare_media_feature(
-          *comparison,
+        comparison.matches(
           height as f32,
           value.to_px(sizing, height as f32),
           LAYOUT_UNIT_EPSILON,
         )
       }),
       Self::Resolution(comparison, dppx) => {
-        compare_media_feature(*comparison, viewport.effective_dpr(), *dppx, 0.0)
+        comparison.matches(viewport.effective_dpr(), *dppx, 0.0)
       }
       Self::AspectRatio(comparison, ratio) => viewport
         .size
         .width
         .zip(viewport.size.height)
         .is_some_and(|(width, height)| {
-          compare_media_feature(
-            *comparison,
+          comparison.matches(
             width as f32 * ratio.denominator,
             height as f32 * ratio.numerator,
             LAYOUT_UNIT_EPSILON,
@@ -334,7 +467,7 @@ impl MediaCondition {
     }
 
     input.parse_nested_block(|input| {
-      if let Ok((lower, upper)) = input.try_parse(parse_media_feature_range) {
+      if let Ok((lower, upper)) = input.try_parse(MediaFeature::parse_range) {
         let lower = Self::Feature(lower);
 
         return Ok(match upper {
@@ -343,7 +476,7 @@ impl MediaCondition {
         });
       }
 
-      if let Ok(feature) = input.try_parse(parse_media_feature) {
+      if let Ok(feature) = input.try_parse(MediaFeature::parse) {
         return Ok(Self::Feature(feature));
       }
 
@@ -366,6 +499,47 @@ impl MediaCondition {
 }
 
 impl MediaQuery {
+  fn parse<'i, 't>(
+    input: &mut Parser<'i, 't>,
+  ) -> Result<MediaQuery, ParseError<'i, StyleSheetParseError>> {
+    if let Ok(query) = input.try_parse(Self::parse_with_media_type) {
+      return Ok(query);
+    }
+
+    Ok(Self {
+      media_type: MediaType::All,
+      condition: Some(MediaCondition::parse(input)?),
+      negated: false,
+    })
+  }
+
+  /// `[not | only]? <media-type> [and <media-condition-without-or>]?`
+  fn parse_with_media_type<'i, 't>(
+    input: &mut Parser<'i, 't>,
+  ) -> Result<MediaQuery, ParseError<'i, StyleSheetParseError>> {
+    let keyword = input.expect_ident_cloned()?;
+    let mut negated = false;
+    let name = if keyword.eq_ignore_ascii_case("not") {
+      negated = true;
+      input.expect_ident_cloned()?
+    } else if keyword.eq_ignore_ascii_case("only") {
+      input.expect_ident_cloned()?
+    } else {
+      keyword
+    };
+    let condition = input
+      .try_parse(|input| input.expect_ident_matching("and"))
+      .is_ok()
+      .then(|| MediaCondition::parse_without_or(input))
+      .transpose()?;
+
+    Ok(Self {
+      media_type: MediaType::from_name(name),
+      condition,
+      negated,
+    })
+  }
+
   /// The `not all` an unknown or malformed query is replaced by.
   /// <https://drafts.csswg.org/mediaqueries-4/#error-handling>
   fn not_all() -> Self {
@@ -405,16 +579,42 @@ impl MediaQueryList {
     Ok(Self {
       queries: input.parse_comma_separated(|input| {
         let query = input
-          .try_parse(parse_media_query)
+          .try_parse(MediaQuery::parse)
           .ok()
           .filter(|_| input.is_exhausted())
           .unwrap_or_else(MediaQuery::not_all);
 
-        skip_malformed_query(input)?;
+        Self::skip_malformed_query(input)?;
 
         Ok(query)
       })?,
     })
+  }
+
+  /// Consumes what is left of a query that parsed as `not all`. A block or a
+  /// stray closing delimiter means the text was never a prelude, which is how a
+  /// caller assembling CSS from strings catches a rule smuggled into one.
+  fn skip_malformed_query<'i>(
+    input: &mut Parser<'i, '_>,
+  ) -> Result<(), ParseError<'i, StyleSheetParseError>> {
+    loop {
+      let location = input.current_source_location();
+      let Ok(token) = input.next() else {
+        return Ok(());
+      };
+
+      if matches!(
+        token,
+        Token::CurlyBracketBlock
+          | Token::CloseCurlyBracket
+          | Token::CloseParenthesis
+          | Token::CloseSquareBracket
+      ) {
+        let token = token.clone();
+
+        return Err(location.new_unexpected_token_error(token));
+      }
+    }
   }
 
   /// Whether any query matches the viewport; empty lists always match.
@@ -441,226 +641,7 @@ impl MediaQueryList {
   }
 }
 
-/// Consumes what is left of a query that parsed as `not all`. A block or a
-/// stray closing delimiter means the text was never a prelude, which is how a
-/// caller assembling CSS from strings catches a rule smuggled into one.
-fn skip_malformed_query<'i>(
-  input: &mut Parser<'i, '_>,
-) -> Result<(), ParseError<'i, StyleSheetParseError>> {
-  loop {
-    let location = input.current_source_location();
-    let Ok(token) = input.next() else {
-      return Ok(());
-    };
-
-    if matches!(
-      token,
-      Token::CurlyBracketBlock
-        | Token::CloseCurlyBracket
-        | Token::CloseParenthesis
-        | Token::CloseSquareBracket
-    ) {
-      let token = token.clone();
-
-      return Err(location.new_unexpected_token_error(token));
-    }
-  }
-}
-
-/// A `<resolution>` in dots per `px` unit. A `dpcm` value is rounded to two
-/// decimals, as Blink does; Blink rounds the device pixel ratio the same way
-/// before comparing, which this does not, so the two disagree when that ratio
-/// carries more than two decimals.
-fn parse_resolution<'i>(
-  input: &mut Parser<'i, '_>,
-) -> Result<f32, ParseError<'i, StyleSheetParseError>> {
-  const DPCM_PER_DPPX: f32 = 96.0 / 2.54;
-
-  let location = input.current_source_location();
-  let token = input.next()?.clone();
-
-  if let Token::Dimension {
-    value, ref unit, ..
-  } = token
-  {
-    let dppx = match_ignore_ascii_case! { unit.as_ref(),
-      "dppx" | "x" => Some(value),
-      "dpi" => Some(value / 96.0),
-      "dpcm" => Some(((value / DPCM_PER_DPPX) * 100.0).round() / 100.0),
-      _ => None,
-    };
-
-    if let Some(dppx) = dppx {
-      return Ok(dppx);
-    }
-  }
-
-  Err(location.new_unexpected_token_error(token))
-}
-
 /// Blink compares lengths against `LayoutUnit::Epsilon()`, the step of the grid
 /// it rounds layout onto.
 /// <https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/css/media_query_evaluator.cc>
 const LAYOUT_UNIT_EPSILON: f32 = 1.0 / 64.0;
-
-fn compare_media_feature(
-  comparison: MediaFeatureComparison,
-  actual: f32,
-  expected: f32,
-  tolerance: f32,
-) -> bool {
-  // <https://drafts.csswg.org/mediaqueries-4/#false-in-the-negative-range>
-  if expected < 0.0 {
-    return matches!(
-      comparison,
-      MediaFeatureComparison::Min | MediaFeatureComparison::GreaterThan
-    );
-  }
-
-  match comparison {
-    MediaFeatureComparison::Equal => (actual - expected).abs() <= tolerance,
-    MediaFeatureComparison::Min => actual >= expected - tolerance,
-    MediaFeatureComparison::Max => actual <= expected + tolerance,
-    MediaFeatureComparison::GreaterThan => actual > expected,
-    MediaFeatureComparison::LessThan => actual < expected,
-  }
-}
-
-fn parse_media_query<'i, 't>(
-  input: &mut Parser<'i, 't>,
-) -> Result<MediaQuery, ParseError<'i, StyleSheetParseError>> {
-  if let Ok(query) = input.try_parse(parse_media_type_query) {
-    return Ok(query);
-  }
-
-  Ok(MediaQuery {
-    media_type: MediaType::All,
-    condition: Some(MediaCondition::parse(input)?),
-    negated: false,
-  })
-}
-
-/// `[not | only]? <media-type> [and <media-condition-without-or>]?`
-fn parse_media_type_query<'i, 't>(
-  input: &mut Parser<'i, 't>,
-) -> Result<MediaQuery, ParseError<'i, StyleSheetParseError>> {
-  let keyword = input.expect_ident_cloned()?;
-  let mut negated = false;
-  let name = if keyword.eq_ignore_ascii_case("not") {
-    negated = true;
-    input.expect_ident_cloned()?
-  } else if keyword.eq_ignore_ascii_case("only") {
-    input.expect_ident_cloned()?
-  } else {
-    keyword
-  };
-  let condition = input
-    .try_parse(|input| input.expect_ident_matching("and"))
-    .is_ok()
-    .then(|| MediaCondition::parse_without_or(input))
-    .transpose()?;
-
-  Ok(MediaQuery {
-    media_type: parse_media_type(name),
-    condition,
-    negated,
-  })
-}
-
-fn parse_media_type(name: CowRcStr<'_>) -> MediaType {
-  if name.eq_ignore_ascii_case("all") {
-    MediaType::All
-  } else if name.eq_ignore_ascii_case("screen") {
-    MediaType::Screen
-  } else if name.eq_ignore_ascii_case("print") {
-    MediaType::Print
-  } else {
-    MediaType::Unsupported(name.to_string())
-  }
-}
-
-fn parse_media_feature<'i, 't>(
-  input: &mut Parser<'i, 't>,
-) -> Result<MediaFeature, ParseError<'i, StyleSheetParseError>> {
-  let feature_name = input.expect_ident_cloned()?;
-
-  // Boolean context: the feature name alone matches when its value is non-zero.
-  // <https://drafts.csswg.org/mediaqueries-4/#mq-boolean-context>
-  if input.try_parse(Parser::expect_colon).is_err() {
-    return MediaFeature::boolean(&feature_name)
-      .ok_or_else(|| input.new_custom_error(StyleSheetParseError::unsupported_media_feature()));
-  }
-
-  if feature_name.eq_ignore_ascii_case("orientation") {
-    let orientation = input.expect_ident_cloned()?;
-    return if orientation.eq_ignore_ascii_case("portrait") {
-      Ok(MediaFeature::Orientation(MediaOrientation::Portrait))
-    } else if orientation.eq_ignore_ascii_case("landscape") {
-      Ok(MediaFeature::Orientation(MediaOrientation::Landscape))
-    } else {
-      Err(
-        input.new_error(BasicParseErrorKind::UnexpectedToken(Token::Ident(
-          orientation,
-        ))),
-      )
-    };
-  }
-
-  let (comparison, name) = match feature_name.split_at_checked("min-".len()) {
-    Some((prefix, name)) if prefix.eq_ignore_ascii_case("min-") => {
-      (MediaFeatureComparison::Min, name)
-    }
-    Some((prefix, name)) if prefix.eq_ignore_ascii_case("max-") => {
-      (MediaFeatureComparison::Max, name)
-    }
-    _ => (MediaFeatureComparison::Equal, &*feature_name),
-  };
-
-  let value = MediaFeatureValue::parse(input)?;
-
-  MediaFeature::new(name, comparison, value)
-    .ok_or_else(|| input.new_custom_error(StyleSheetParseError::unsupported_media_feature()))
-}
-
-/// The range context of Media Queries Level 4, such as `(width >= 40em)` and
-/// `(400px < height <= 700px)`.
-/// <https://drafts.csswg.org/mediaqueries-4/#mq-range-context>
-fn parse_media_feature_range<'i, 't>(
-  input: &mut Parser<'i, 't>,
-) -> Result<(MediaFeature, Option<MediaFeature>), ParseError<'i, StyleSheetParseError>> {
-  let feature = |input: &mut Parser<'i, 't>, name: &str, comparison, value| {
-    MediaFeature::new(name, comparison, value)
-      .ok_or_else(|| input.new_custom_error(StyleSheetParseError::unsupported_media_feature()))
-  };
-
-  if let Ok(name) = input.try_parse(Parser::expect_ident_cloned) {
-    let comparison = MediaFeatureComparison::parse(input)?;
-    let value = MediaFeatureValue::parse(input)?;
-
-    return Ok((feature(input, &name, comparison, value)?, None));
-  }
-
-  let lower_value = MediaFeatureValue::parse(input)?;
-  let lower = MediaFeatureComparison::parse(input)?.flipped();
-  let name = input.expect_ident_cloned()?;
-  let lower_feature = feature(input, &name, lower, lower_value)?;
-
-  if input.is_exhausted() {
-    return Ok((lower_feature, None));
-  }
-
-  let upper = MediaFeatureComparison::parse(input)?;
-
-  if lower.is_upper_bound() == upper.is_upper_bound() {
-    return Err(input.new_custom_error(StyleSheetParseError::invalid_reason(
-      "media range comparisons must point the same way",
-    )));
-  }
-
-  let upper_value = MediaFeatureValue::parse(input)?;
-
-  Ok((
-    lower_feature,
-    Some(feature(input, &name, upper, upper_value)?),
-  ))
-}
