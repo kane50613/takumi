@@ -1630,7 +1630,7 @@ mod tests {
   use super::*;
   use crate::{
     style::{Color, ColorInput, ComputedStyle, Length, Style, StyleDeclaration},
-    viewport::Viewport,
+    viewport::{MediaTarget, Viewport},
   };
 
   fn computed_style_from_declarations(declarations: &StyleDeclarationBlock) -> ComputedStyle {
@@ -2014,6 +2014,29 @@ mod tests {
         !media.matches(Viewport::new(non_matching)),
         "{query} at {non_matching:?}"
       );
+    }
+  }
+
+  #[test]
+  fn test_parse_media_rule_with_media_types() {
+    let screen = Viewport::new((800, 600));
+    let print = screen.with_media_target(MediaTarget::Print);
+
+    for (prelude, matches_screen, matches_print) in [
+      ("screen", true, false),
+      ("print", false, true),
+      ("all", true, true),
+      ("print and (min-width: 600px)", false, true),
+      ("not print", true, false),
+      ("only screen", true, false),
+    ] {
+      let sheet = parse_stylesheet(&format!("@media {prelude} {{ .card {{ width: 100px; }} }}"));
+      let Some(media) = sheet.rules[0].media_queries.first() else {
+        unreachable!("expected media queries on parsed rule: {prelude}");
+      };
+
+      assert_eq!(media.matches(screen), matches_screen, "{prelude} on screen");
+      assert_eq!(media.matches(print), matches_print, "{prelude} on print");
     }
   }
 

@@ -2,7 +2,12 @@
 
 use std::cell::RefCell;
 
-use takumi_core::{context::RenderContext, geometry::Rect, style::Color, viewport::Viewport};
+use takumi_core::{
+  context::RenderContext,
+  geometry::Rect,
+  style::Color,
+  viewport::{MediaTarget, Viewport},
+};
 
 use crate::{
   bands::{Repeatable, RepeatablePage},
@@ -73,14 +78,16 @@ impl PageFrame {
       content_width,
       window_height: content_height,
       band_viewport,
-      page_area: Viewport::new((content_width as u32, content_height as u32)),
+      page_area: Viewport::new((content_width as u32, content_height as u32))
+        .with_media_target(MediaTarget::Print),
     })
   }
 
   /// What a pagination pass lays out against.
   pub(crate) fn geometry(&self) -> PageGeometry {
     PageGeometry {
-      viewport: Viewport::new((self.content_width as u32, None)),
+      viewport: Viewport::new((self.content_width as u32, None))
+        .with_media_target(MediaTarget::Print),
       page_area: self.page_area,
       window_height: self.window_height,
     }

@@ -6,6 +6,16 @@ pub(crate) const DEFAULT_FONT_SIZE: f32 = 16.0;
 /// The default device pixel ratio.
 pub const DEFAULT_DEVICE_PIXEL_RATIO: f32 = 1.0;
 
+/// What `@media` matches a stylesheet's media type against.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MediaTarget {
+  /// Raster and SVG output.
+  #[default]
+  Screen,
+  /// PDF output.
+  Print,
+}
+
 /// The viewport for the image renderer.
 #[derive(Debug, Clone, Copy)]
 pub struct Viewport {
@@ -16,6 +26,8 @@ pub struct Viewport {
   pub font_size: f32,
   /// The device pixel ratio.
   pub device_pixel_ratio: f32,
+  /// The media type `@media` queries resolve against.
+  pub media_target: MediaTarget,
 }
 
 impl From<Viewport> for Size<AvailableSpace> {
@@ -48,6 +60,7 @@ impl Viewport {
       size: size.into(),
       font_size: DEFAULT_FONT_SIZE,
       device_pixel_ratio: DEFAULT_DEVICE_PIXEL_RATIO,
+      media_target: MediaTarget::Screen,
     }
   }
 
@@ -60,6 +73,12 @@ impl Viewport {
   /// Sets the device pixel ratio.
   pub const fn with_device_pixel_ratio(mut self, device_pixel_ratio: f32) -> Self {
     self.device_pixel_ratio = device_pixel_ratio;
+    self
+  }
+
+  /// Sets the media type `@media` queries resolve against.
+  pub const fn with_media_target(mut self, media_target: MediaTarget) -> Self {
+    self.media_target = media_target;
     self
   }
 
