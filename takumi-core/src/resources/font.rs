@@ -191,7 +191,7 @@ fn font_style_css(style: FontStyle) -> String {
 /// then by name. The shaper walks this order and takes the first subset whose `cmap`
 /// covers a cluster, so the rank is what keeps a codepoint two subsets both encode from
 /// landing in the wrong one.
-pub(crate) type SubsetGroup = BTreeSet<(u32, String)>;
+pub(crate) type SubsetGroup = BTreeSet<(u32, u32, String)>;
 
 /// Registered families split by whether they carry color glyph tables, so a
 /// variation-selector segment can put the presentation-matching class first.
@@ -227,11 +227,11 @@ pub struct Fonts {
   inner: parley::FontContext,
   /// Maps a logical family name (the name authors write in `font-family`) to the
   /// unique internal names of the subset families registered under it, keyed by
-  /// [`FontResource::subset_rank`] then name. Populated by [`FontResource::subset_of`];
+  /// [`FontResource::subset_rank`] then registration order. Populated by [`FontResource::subset_of`];
   /// consulted when a render expands a `font-family` into its per-coverage subset stack.
-  /// A `BTreeSet` so the stack never depends on registration arrival order, which callers
-  /// racing concurrent registrations do not control. Shared (immutable after registration)
-  /// so a render can read it without borrowing the parley context.
+  /// Tied ranks fall back to registration order, so callers whose selection depends on a
+  /// tie must register those subsets in a deterministic order. Shared (immutable after
+  /// registration) so a render can read it without borrowing the parley context.
   groups: Arc<HashMap<String, SubsetGroup>>,
   /// Every registered family name in registration order. The fallback bucket is built from
   /// this so its per-script priority is deterministic; `fontique`'s `family_names()` iterates
@@ -464,7 +464,7 @@ impl Fonts {
             family_ids.extend(
               subsets
                 .iter()
-                .filter_map(|(_, name)| cloned.collection.family_id(name)),
+                .filter_map(|(_, _, name)| cloned.collection.family_id(name)),
             );
           }
           None => family_ids.extend(cloned.collection.family_id(&literal_name)),
@@ -643,10 +643,12 @@ impl Fonts {
       }
 
       if let Some(logical) = &subset_of {
-        Arc::make_mut(&mut self.groups)
+        let group = Arc::make_mut(&mut self.groups)
           .entry(logical.clone())
-          .or_default()
-          .insert((subset_rank, name.clone()));
+          .or_default();
+        let sequence = group.len() as u32;
+
+        group.insert((subset_rank, sequence, name.clone()));
       }
 
       families.push(RegisteredFamily { name, faces });
@@ -682,8 +684,16 @@ impl RenderContext {
         let Ok(font_ref) = FontRef::from_index(font.blob.data(), font.index) else {
           return QueryStatus::Continue;
         };
+        // The primary font must cover the space glyph, as Blink requires of
+        // `PrimaryFont`; a coverage subset without it cannot set the line box.
+        if font_ref.charmap().map(' ').is_none() {
+          return QueryStatus::Continue;
+        }
         let metrics = font_ref.metrics(Size::new(font_size), LocationRef::default());
-        result = Some(metrics.ascent + metrics.descent + metrics.leading);
+        // Blink: normal line height is lround(ascent) + lround(descent) +
+        // lround(line_gap) of the primary font (FontMetrics::SetLineSpacing).
+        result =
+          Some(metrics.ascent.round() + metrics.descent.abs().round() + metrics.leading.round());
         QueryStatus::Stop
       });
 
@@ -1003,7 +1013,7 @@ impl<'a> FontResource<'a> {
   }
 
   /// Sets where this subset sits in its group's fallback order. Lowest is tried first;
-  /// subsets sharing a rank order by family name.
+  /// subsets sharing a rank keep their registration order.
   ///
   /// Coverage alone does not settle which subset serves a codepoint, because a subset's
   /// `cmap` is usually wider than the range it was cut for — Google Fonts encodes the
@@ -1248,7 +1258,10 @@ mod tests {
     let subsets = fonts.groups.get("Logical").expect("logical group present");
     assert_eq!(
       subsets,
-      &BTreeSet::from([(0, "Subset A".to_string()), (0, "Subset B".to_string())])
+      &BTreeSet::from([
+        (0, 0, "Subset A".to_string()),
+        (0, 1, "Subset B".to_string())
+      ])
     );
 
     let snapshot =
@@ -1286,7 +1299,7 @@ mod tests {
 
     let subsets = fonts.groups.get("Logical").expect("logical group present");
     assert_eq!(
-      subsets.iter().map(|(_, name)| name).collect::<Vec<_>>(),
+      subsets.iter().map(|(_, _, name)| name).collect::<Vec<_>>(),
       ["Subset B", "Subset A"]
     );
   }

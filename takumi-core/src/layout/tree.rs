@@ -220,7 +220,7 @@ struct InlineBaselineStrategy {
   fallback: InlineBaselineFallback,
 }
 
-fn resolve_normal_line_height(
+pub(crate) fn resolve_normal_line_height(
   context: &RenderContext,
   style: &ComputedStyle,
   font_size: f32,
@@ -2009,17 +2009,17 @@ impl RenderNode {
       mode: InlineLayoutMode::Measure,
       shape_cacheable: true,
     });
+    let resolved = built.line_metrics();
     let line = if use_last_line {
-      built.layout.lines().last()?
+      resolved.last()?
     } else {
-      built.layout.lines().next()?
+      resolved.first()?
     };
-    let metrics = line.metrics();
     let sizing = &self.context.sizing;
     let margin_top = self.context.style.margin_top.to_px(sizing, 0.0);
     let border_top = Length::from(self.context.style.border_top_width).to_px(sizing, 0.0);
     let padding_top = self.context.style.padding_top.to_px(sizing, 0.0);
-    Some(margin_top + border_top + padding_top + metrics.baseline)
+    Some(margin_top + border_top + padding_top + line.resolved_baseline)
   }
 
   fn layout_first_baseline_offset(

@@ -13,24 +13,24 @@
   <g clip-path="url(#cp1)">
   </g>
   <g fill="#64748b">
-    <use href="#g0" x="28" y="38"/>
-    <use href="#g0" x="34.6" y="38"/>
-    <use href="#g1" x="41.2" y="38"/>
-    <use href="#g2" x="47.8" y="38"/>
-    <use href="#g3" x="54.4" y="38"/>
-    <use href="#g4" x="61" y="38"/>
-    <use href="#g5" x="67.6" y="38"/>
-    <use href="#g2" x="74.2" y="38"/>
-    <use href="#g6" x="87.4" y="38"/>
+    <use href="#g0" x="28" y="39"/>
+    <use href="#g0" x="34.6" y="39"/>
+    <use href="#g1" x="41.2" y="39"/>
+    <use href="#g2" x="47.8" y="39"/>
+    <use href="#g3" x="54.4" y="39"/>
+    <use href="#g4" x="61" y="39"/>
+    <use href="#g5" x="67.6" y="39"/>
+    <use href="#g2" x="74.2" y="39"/>
+    <use href="#g6" x="87.4" y="39"/>
   </g>
-  <use href="#g7" x="94" y="38" fill="#64748b"/>
-  <use href="#g6" x="111.6" y="38" fill="#64748b"/>
+  <use href="#g7" x="94" y="39" fill="#64748b"/>
+  <use href="#g6" x="111.6" y="39" fill="#64748b"/>
   <use href="#g8" x="28" y="104" fill="#eab308"/>
   <g fill="#111827">
-    <use href="#g9" x="51" y="102"/>
-    <use href="#g10" x="66.61" y="102"/>
-    <use href="#g11" x="76.45" y="102"/>
-    <use href="#g12" x="82.55" y="102"/>
+    <use href="#g9" x="51" y="103"/>
+    <use href="#g10" x="66.61" y="103"/>
+    <use href="#g11" x="76.45" y="103"/>
+    <use href="#g12" x="82.55" y="103"/>
   </g>
   <filter id="bl2">
     <feGaussianBlur stdDeviation="1"/>
@@ -45,22 +45,22 @@
   <g clip-path="url(#cp3)">
   </g>
   <g fill="#64748b">
-    <use href="#g0" x="320" y="38"/>
-    <use href="#g0" x="326.6" y="38"/>
-    <use href="#g13" x="333.2" y="38"/>
-    <use href="#g3" x="339.8" y="38"/>
-    <use href="#g14" x="346.4" y="38"/>
-    <use href="#g2" x="353" y="38"/>
-    <use href="#g5" x="359.6" y="38"/>
-    <use href="#g6" x="372.8" y="38"/>
+    <use href="#g0" x="320" y="39"/>
+    <use href="#g0" x="326.6" y="39"/>
+    <use href="#g13" x="333.2" y="39"/>
+    <use href="#g3" x="339.8" y="39"/>
+    <use href="#g14" x="346.4" y="39"/>
+    <use href="#g2" x="353" y="39"/>
+    <use href="#g5" x="359.6" y="39"/>
+    <use href="#g6" x="372.8" y="39"/>
   </g>
-  <use href="#g15" x="386" y="38" fill="#64748b"/>
-  <use href="#g6" x="393.51" y="38" fill="#64748b"/>
+  <use href="#g15" x="386" y="39" fill="#64748b"/>
+  <use href="#g6" x="393.51" y="39" fill="#64748b"/>
   <g fill="#111827">
-    <use href="#g16" x="320" y="102"/>
-    <use href="#g17" x="332.82" y="102"/>
-    <use href="#g18" x="342.95" y="102"/>
-    <use href="#g19" x="353.19" y="102"/>
+    <use href="#g16" x="320" y="103"/>
+    <use href="#g17" x="332.82" y="103"/>
+    <use href="#g18" x="342.95" y="103"/>
+    <use href="#g19" x="353.19" y="103"/>
   </g>
   <use href="#g20" x="368.5" y="104" fill="#22c55e"/>
   <filter id="bl4">

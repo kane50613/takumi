@@ -17,7 +17,7 @@
     <path d="M942.52 350.16q-7.9 0-13.74-3.32t-9.05-9.39q-3.2-6.06-3.2-14.18t3.2-14.13 9-9.37q5.82-3.38 13.63-3.38 7.66 0 13.34 3.36 5.71 3.34 8.8 9.59 3.09 6.24 3.09 14.89v2.93h-36.15q.29 6.07 3.31 9.09 3.03 3 7.98 3 3.68 0 6.15-1.58t3.48-4.72l14.52.85q-2.08 7.73-8.6 12.04-6.5 4.32-15.76 4.32Zm-11.08-31.85h21.43q-.28-5.65-3.14-8.45t-7.37-2.8q-4.47 0-7.41 2.94-2.92 2.94-3.51 8.31Z" fill="#fff" stroke="#fff" stroke-width="4"/>
   </mask>
   <g mask="url(#mk0)">
-    <linearGradient id="lg1" gradientUnits="userSpaceOnUse" x1="229" y1="315.5" x2="972" y2="315.5">
+    <linearGradient id="lg1" gradientUnits="userSpaceOnUse" x1="229" y1="315" x2="972" y2="315">
       <stop offset="0" stop-color="#ff3b30"/>
       <stop offset=".016" stop-color="#ff442d"/>
       <stop offset=".032" stop-color="#ff4d2a"/>
@@ -83,7 +83,7 @@
       <stop offset=".984" stop-color="#5258d9"/>
       <stop offset="1" stop-color="#5856d6"/>
     </linearGradient>
-    <rect x="229" y="253" width="743" height="125" fill="url(#lg1)"/>
+    <rect x="229" y="253" width="743" height="124" fill="url(#lg1)"/>
   </g>
   <g fill="#fff">
     <use href="#g0" x="229" y="349"/>

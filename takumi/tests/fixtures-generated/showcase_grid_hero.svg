@@ -345,25 +345,25 @@
     <stop offset="1" stop-color="#000" stop-opacity="0"/>
   </radialGradient>
   <rect x="0" y="0" width="1200" height="630" fill="url(#rg7)"/>
-  <path d="M366 211h504v245h-504v-245Z" fill="#22c55e"/>
-  <rect x="348" y="193" width="504" height="245" fill="#fdfdf7"/>
-  <path d="M348 193h504v245h-504v-245Zm4 4h496v237h-496v-237Z" fill="#111" fill-rule="evenodd"/>
+  <path d="M366 212h504v243h-504v-243Z" fill="#22c55e"/>
+  <rect x="348" y="194" width="504" height="243" fill="#fdfdf7"/>
+  <path d="M348 194h504v243h-504v-243Zm4 4h496v235h-496v-235Z" fill="#111" fill-rule="evenodd"/>
   <g fill="#16a34a">
-    <use href="#g0" x="408" y="263"/>
-    <use href="#g1" x="429.2" y="263"/>
-    <use href="#g2" x="450.4" y="263"/>
-    <use href="#g3" x="471.6" y="263"/>
-    <use href="#g4" x="492.8" y="263"/>
-    <use href="#g5" x="514" y="263"/>
-    <use href="#g6" x="556.4" y="263"/>
-    <use href="#g7" x="598.8" y="263"/>
-    <use href="#g8" x="620" y="263"/>
-    <use href="#g9" x="641.2" y="263"/>
-    <use href="#g10" x="662.4" y="263"/>
-    <use href="#g11" x="683.6" y="263"/>
-    <use href="#g1" x="704.8" y="263"/>
-    <use href="#g7" x="726" y="263"/>
-    <use href="#g12" x="747.2" y="263"/>
+    <use href="#g0" x="408" y="264"/>
+    <use href="#g1" x="429.2" y="264"/>
+    <use href="#g2" x="450.4" y="264"/>
+    <use href="#g3" x="471.6" y="264"/>
+    <use href="#g4" x="492.8" y="264"/>
+    <use href="#g5" x="514" y="264"/>
+    <use href="#g6" x="556.4" y="264"/>
+    <use href="#g7" x="598.8" y="264"/>
+    <use href="#g8" x="620" y="264"/>
+    <use href="#g9" x="641.2" y="264"/>
+    <use href="#g10" x="662.4" y="264"/>
+    <use href="#g11" x="683.6" y="264"/>
+    <use href="#g1" x="704.8" y="264"/>
+    <use href="#g7" x="726" y="264"/>
+    <use href="#g12" x="747.2" y="264"/>
   </g>
   <g fill="#111">
     <use href="#g13" x="408" y="364"/>

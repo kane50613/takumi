@@ -991,7 +991,7 @@ fn a_page_counter_renumbers_the_target_it_moves() {
       r##"<div style="display: flex; flex-direction: column; width: 100%; font-size: 14px; color: #141414;">
         <a href="#target" style="display: flex; column-gap: 4px;">see{target}</a>
         <div style="display: flex; flex-wrap: wrap; width: 100%;"><span style="width: 268px;">Body</span>{page}</div>
-        <div style="height: 130px;"></div>
+        <div style="height: 136px;"></div>
         <div id="target" style="display: flex;">Target</div>
       </div>"##
     )

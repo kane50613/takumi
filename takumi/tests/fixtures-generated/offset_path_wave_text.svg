@@ -1,45 +1,45 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#fff"/>
-  <g transform="matrix(.686 -.727 .727 .686 70.374 299.11)">
+  <g transform="matrix(.686 -.727 .727 .686 70.737 299.454)">
     <use href="#g0" x="0" y="72" fill="#e94560"/>
   </g>
-  <g transform="matrix(.975 -.221 .221 .975 201.885 202.572)">
+  <g transform="matrix(.975 -.221 .221 .975 201.995 203.06)">
     <g transform="matrix(1 0 0 1 0 0)">
     </g>
     <g transform="matrix(1 0 0 1 0 0)">
       <use href="#g1" x="0" y="72" fill="#f39237"/>
     </g>
   </g>
-  <g transform="matrix(.869 .494 -.494 .869 362.1 221.832)">
+  <g transform="matrix(.869 .494 -.494 .869 361.853 222.266)">
     <use href="#g1" x="0" y="72" fill="#ffca3a"/>
   </g>
-  <g transform="matrix(.838 .546 -.546 .838 470.21 293.209)">
+  <g transform="matrix(.838 .546 -.546 .838 469.937 293.628)">
     <use href="#g2" x="0" y="72" fill="#8ac926"/>
   </g>
-  <g transform="matrix(1 -.01 .01 1 560.563 341.832)">
-    <use href="#g3" x="0" y="72" fill="#1982c4"/>
+  <g transform="matrix(1 -.01 .01 1 560.568 342.332)">
+    <g transform="matrix(1 0 0 1 0 0)">
+    </g>
+    <g transform="matrix(1 0 0 1 0 0)">
+      <use href="#g3" x="0" y="72" fill="#1982c4"/>
+    </g>
   </g>
-  <g transform="matrix(.74 -.673 .673 .74 655.648 311.563)">
+  <g transform="matrix(.74 -.673 .673 .74 655.984 311.933)">
     <use href="#g4" x="0" y="72" fill="#6a4c93"/>
   </g>
-  <g transform="matrix(.731 -.682 .682 .731 748.56 219.118)">
+  <g transform="matrix(.731 -.682 .682 .731 748.901 219.483)">
     <use href="#g5" x="0" y="72" fill="#e94560"/>
   </g>
-  <g transform="matrix(.848 -.53 .53 .848 850.04 133.818)">
+  <g transform="matrix(.848 -.53 .53 .848 850.305 134.242)">
     <use href="#g6" x="0" y="72" fill="#f39237"/>
   </g>
-  <g transform="matrix(.992 .126 -.126 .992 1002.078 75.348)">
+  <g transform="matrix(.992 .126 -.126 .992 1002.014 75.844)">
     <use href="#g7" x="0" y="72" fill="#ffca3a"/>
   </g>
-  <g transform="matrix(.572 .82 -.82 .572 1150.055 157.973)">
+  <g transform="matrix(.572 .82 -.82 .572 1149.644 158.259)">
     <use href="#g4" x="0" y="72" fill="#8ac926"/>
   </g>
-  <g transform="matrix(.365 .931 -.931 .365 1215.709 277.345)">
-    <g transform="matrix(1 0 0 1 0 0)">
-    </g>
-    <g transform="matrix(1 0 0 1 0 0)">
-      <use href="#g8" x="0" y="72" fill="#1982c4"/>
-    </g>
+  <g transform="matrix(.365 .931 -.931 .365 1215.243 277.528)">
+    <use href="#g8" x="0" y="72" fill="#1982c4"/>
   </g>
   <defs>
     <path id="g0" d="M22.27.86q-5.91 0-10.33-2.49-4.41-2.49-6.85-7.03t-2.43-10.64q0-6.12 2.43-10.62 2.44-4.52 6.85-7.02 4.42-2.51 10.33-2.51t10.29 2.51q4.41 2.5 6.85 7.02 2.43 4.5 2.43 10.62 0 6.1-2.43 10.64-2.44 4.54-6.85 7.04-4.39 2.48-10.29 2.48Zm0-8.31q4.04 0 6.25-3.11 2.2-3.11 2.2-8.74 0-5.59-2.2-8.72t-6.25-3.12q-4.05 0-6.27 3.12t-2.22 8.72q0 5.63 2.22 8.74t6.27 3.11Z"/>

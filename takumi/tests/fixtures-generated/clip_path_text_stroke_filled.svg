@@ -1,61 +1,61 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#000"/>
   <clipPath id="cp0">
-    <path d="M73 260h1054v55h-1054v-55Z"/>
+    <path d="M73 260.5h1054v54.5h-1054v-54.5Z"/>
   </clipPath>
   <g clip-path="url(#cp0)">
     <g fill="#fff">
-      <use href="#g0" x="73.24" y="344"/>
-      <use href="#g1" x="123.05" y="344"/>
-      <use href="#g2" x="148.67" y="344"/>
-      <use href="#g3" x="172.78" y="344"/>
-      <use href="#g4" x="226.03" y="344"/>
-      <use href="#g3" x="261.06" y="344"/>
-      <use href="#g5" x="313.98" y="344"/>
-      <use href="#g6" x="360.18" y="344"/>
-      <use href="#g7" x="396.64" y="344"/>
-      <use href="#g8" x="467.11" y="344"/>
-      <use href="#g9" x="536.08" y="344"/>
-      <use href="#g10" x="587.15" y="344"/>
-      <use href="#g11" x="620.83" y="344"/>
-      <use href="#g12" x="669.13" y="344"/>
-      <use href="#g2" x="736.16" y="344"/>
-      <use href="#g13" x="760.27" y="344"/>
-      <use href="#g14" x="830.75" y="344"/>
-      <use href="#g5" x="875.18" y="344"/>
-      <use href="#g11" x="924.41" y="344"/>
-      <use href="#g15" x="977.08" y="344"/>
-      <use href="#g16" x="1028.06" y="344"/>
-      <use href="#g2" x="1103.16" y="344"/>
+      <use href="#g0" x="73.24" y="344.5"/>
+      <use href="#g1" x="123.05" y="344.5"/>
+      <use href="#g2" x="148.67" y="344.5"/>
+      <use href="#g3" x="172.78" y="344.5"/>
+      <use href="#g4" x="226.03" y="344.5"/>
+      <use href="#g3" x="261.06" y="344.5"/>
+      <use href="#g5" x="313.98" y="344.5"/>
+      <use href="#g6" x="360.18" y="344.5"/>
+      <use href="#g7" x="396.64" y="344.5"/>
+      <use href="#g8" x="467.11" y="344.5"/>
+      <use href="#g9" x="536.08" y="344.5"/>
+      <use href="#g10" x="587.15" y="344.5"/>
+      <use href="#g11" x="620.83" y="344.5"/>
+      <use href="#g12" x="669.13" y="344.5"/>
+      <use href="#g2" x="736.16" y="344.5"/>
+      <use href="#g13" x="760.27" y="344.5"/>
+      <use href="#g14" x="830.75" y="344.5"/>
+      <use href="#g5" x="875.18" y="344.5"/>
+      <use href="#g11" x="924.41" y="344.5"/>
+      <use href="#g15" x="977.08" y="344.5"/>
+      <use href="#g16" x="1028.06" y="344.5"/>
+      <use href="#g2" x="1103.16" y="344.5"/>
     </g>
   </g>
   <clipPath id="cp1">
-    <path d="M73 315h1054v55h-1054v-55Z"/>
+    <path d="M73 315h1054v54.5h-1054v-54.5Z"/>
   </clipPath>
   <g clip-path="url(#cp1)">
     <g fill="#000" fill-opacity="0" stroke="#808080" stroke-width="2">
-      <use href="#g0" x="73.24" y="344"/>
-      <use href="#g1" x="123.05" y="344"/>
-      <use href="#g2" x="148.67" y="344"/>
-      <use href="#g3" x="172.78" y="344"/>
-      <use href="#g4" x="226.03" y="344"/>
-      <use href="#g3" x="261.06" y="344"/>
-      <use href="#g5" x="313.98" y="344"/>
-      <use href="#g6" x="360.18" y="344"/>
-      <use href="#g7" x="396.64" y="344"/>
-      <use href="#g8" x="467.11" y="344"/>
-      <use href="#g9" x="536.08" y="344"/>
-      <use href="#g10" x="587.15" y="344"/>
-      <use href="#g11" x="620.83" y="344"/>
-      <use href="#g12" x="669.13" y="344"/>
-      <use href="#g2" x="736.16" y="344"/>
-      <use href="#g13" x="760.27" y="344"/>
-      <use href="#g14" x="830.75" y="344"/>
-      <use href="#g5" x="875.18" y="344"/>
-      <use href="#g11" x="924.41" y="344"/>
-      <use href="#g15" x="977.08" y="344"/>
-      <use href="#g16" x="1028.06" y="344"/>
-      <use href="#g2" x="1103.16" y="344"/>
+      <use href="#g0" x="73.24" y="344.5"/>
+      <use href="#g1" x="123.05" y="344.5"/>
+      <use href="#g2" x="148.67" y="344.5"/>
+      <use href="#g3" x="172.78" y="344.5"/>
+      <use href="#g4" x="226.03" y="344.5"/>
+      <use href="#g3" x="261.06" y="344.5"/>
+      <use href="#g5" x="313.98" y="344.5"/>
+      <use href="#g6" x="360.18" y="344.5"/>
+      <use href="#g7" x="396.64" y="344.5"/>
+      <use href="#g8" x="467.11" y="344.5"/>
+      <use href="#g9" x="536.08" y="344.5"/>
+      <use href="#g10" x="587.15" y="344.5"/>
+      <use href="#g11" x="620.83" y="344.5"/>
+      <use href="#g12" x="669.13" y="344.5"/>
+      <use href="#g2" x="736.16" y="344.5"/>
+      <use href="#g13" x="760.27" y="344.5"/>
+      <use href="#g14" x="830.75" y="344.5"/>
+      <use href="#g5" x="875.18" y="344.5"/>
+      <use href="#g11" x="924.41" y="344.5"/>
+      <use href="#g15" x="977.08" y="344.5"/>
+      <use href="#g16" x="1028.06" y="344.5"/>
+      <use href="#g2" x="1103.16" y="344.5"/>
     </g>
   </g>
   <defs>

@@ -1271,12 +1271,12 @@ fn test_measure_inline_atomic_containers_fixture() {
   assert_eq!(result.children.len(), 1);
 
   let inline_container = &result.children[0];
-  assert_eq!(inline_container.height, 70.0);
+  assert_eq!(inline_container.height, 69.0);
   assert_eq!(inline_container.children.len(), 3);
 
   for child in &inline_container.children {
     assert_eq!(child.transform[5], inline_container.transform[5]);
-    assert_eq!(child.height, 58.0);
+    assert_eq!(child.height, 57.0);
   }
 
   let runs = &inline_container.runs;

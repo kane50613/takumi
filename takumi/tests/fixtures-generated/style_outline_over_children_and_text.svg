@@ -1,21 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#0f172a"/>
-  <rect x="390" y="188" width="420" height="111" fill="#e2e8f0"/>
+  <rect x="390" y="189" width="420" height="110" fill="#e2e8f0"/>
   <g fill="#0f172a">
-    <use href="#g0" x="414" y="260"/>
-    <use href="#g1" x="446.26" y="260"/>
-    <use href="#g2" x="458.26" y="260"/>
-    <use href="#g3" x="485.57" y="260"/>
-    <use href="#g4" x="526.08" y="260"/>
-    <use href="#g5" x="552.38" y="260"/>
-    <use href="#g6" x="576.86" y="260"/>
-    <use href="#g7" x="603.31" y="260"/>
-    <use href="#g8" x="633.5" y="260"/>
-    <use href="#g6" x="651.55" y="260"/>
-    <use href="#g9" x="676.08" y="260"/>
-    <use href="#g8" x="701.62" y="260"/>
+    <use href="#g0" x="414" y="261"/>
+    <use href="#g1" x="446.26" y="261"/>
+    <use href="#g2" x="458.26" y="261"/>
+    <use href="#g3" x="485.57" y="261"/>
+    <use href="#g4" x="526.08" y="261"/>
+    <use href="#g5" x="552.38" y="261"/>
+    <use href="#g6" x="576.86" y="261"/>
+    <use href="#g7" x="603.31" y="261"/>
+    <use href="#g8" x="633.5" y="261"/>
+    <use href="#g6" x="651.55" y="261"/>
+    <use href="#g9" x="676.08" y="261"/>
+    <use href="#g8" x="701.62" y="261"/>
   </g>
-  <rect x="390" y="331" width="420" height="111" fill="#e2e8f0"/>
+  <rect x="390" y="331" width="420" height="110" fill="#e2e8f0"/>
   <g fill="#0f172a">
     <use href="#g10" x="414" y="403"/>
     <use href="#g6" x="448.18" y="403"/>
@@ -28,8 +28,8 @@
     <use href="#g2" x="614.54" y="403"/>
     <use href="#g3" x="641.86" y="403"/>
   </g>
-  <path d="M430 228h340v31h-340v-31Zm10 10h320v11h-320v-11Z" fill="#dc2626" fill-rule="evenodd"/>
-  <path d="M435.5 376.5h329v20h-329v-20Z" fill="#dc2626" fill-rule="evenodd"/>
+  <path d="M430 229h340v30h-340v-30Zm10 10h320v10h-320v-10Z" fill="#dc2626" fill-rule="evenodd"/>
+  <path d="M435 376h330v20h-330v-20Z" fill="#dc2626" fill-rule="evenodd"/>
   <defs>
     <path id="g0" d="M4.42 0v-34.08h12.91q3.59 0 6.19 1.25 2.59 1.25 4 3.58t1.42 5.48q0 2.32-1.08 4.11-1.08 1.8-2.77 2.86-1.67 1.05-3.5 1.16l-.28-.44q3.13 0 4.92 1.44 1.8 1.44 2.08 4.61l.97 10.03h-4.17l-.88-9.59q-.18-2.13-1.51-3.13-1.31-1.01-4.28-1.01h-9.89v13.73Zm4.13-17.77h9.31q3.11 0 4.94-1.57 1.83-1.58 1.83-4.52 0-2.97-1.88-4.58t-5.42-1.61h-8.78Z"/>
     <path id="g1" d="M3.84 0v-25.44h4.04l-.01 25.44Zm-.11-29.42v-4.71l4.24.01v4.7Z"/>

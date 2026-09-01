@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="630" fill="#fff"/>
   <g transform="matrix(-.001 1 -1 -.001 869.016 295.024)">
-    <use href="#g0" x="0" y="45" fill="#e94560"/>
+    <use href="#g0" x="0" y="46" fill="#e94560"/>
   </g>
   <g transform="matrix(-.183 .983 -.983 -.183 835.95 359.138)">
   </g>
@@ -30,7 +30,7 @@
   <g transform="matrix(-.996 .09 -.09 -.996 621.988 554.006)">
   </g>
   <g transform="matrix(-.996 -.09 .09 -.996 595.307 584.696)">
-    <use href="#g0" x="0" y="45" fill="#8ac926"/>
+    <use href="#g0" x="0" y="46" fill="#8ac926"/>
   </g>
   <g transform="matrix(-.962 -.273 .273 -.962 534.283 545.892)">
   </g>
@@ -81,7 +81,7 @@
   <g transform="matrix(.798 -.603 .603 .798 455.441 123.404)">
   </g>
   <g transform="matrix(.895 -.446 .446 .895 462.26 83.031)">
-    <use href="#g0" x="0" y="45" fill="#6a4c93"/>
+    <use href="#g0" x="0" y="46" fill="#6a4c93"/>
   </g>
   <g transform="matrix(.962 -.273 .273 .962 534.283 84.109)">
   </g>
@@ -110,7 +110,7 @@
   <g transform="matrix(.527 .85 -.85 .527 804.139 188.733)">
   </g>
   <g transform="matrix(.361 .932 -.932 .361 843.671 199.165)">
-    <use href="#g0" x="0" y="45" fill="#ffca3a"/>
+    <use href="#g0" x="0" y="46" fill="#ffca3a"/>
   </g>
   <g transform="matrix(.183 .983 -.983 .183 835.95 270.862)">
   </g>
