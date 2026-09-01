@@ -62,10 +62,20 @@ enum MediaFeatureValue {
   Length(Length),
 }
 
+/// A `<media-condition>`.
+/// <https://drafts.csswg.org/mediaqueries-4/#media-condition>
+#[derive(Debug, Clone, PartialEq)]
+enum MediaCondition {
+  Feature(MediaFeature),
+  Not(Box<MediaCondition>),
+  And(Vec<MediaCondition>),
+  Or(Vec<MediaCondition>),
+}
+
 #[derive(Debug, Clone, PartialEq)]
 struct MediaQuery {
   media_type: MediaType,
-  features: Vec<MediaFeature>,
+  condition: Option<MediaCondition>,
   negated: bool,
 }
 
@@ -249,13 +259,119 @@ impl MediaFeature {
   }
 }
 
+impl MediaCondition {
+  fn parse<'i, 't>(
+    input: &mut Parser<'i, 't>,
+  ) -> Result<Self, ParseError<'i, StyleSheetParseError>> {
+    Self::parse_with_or(input, true)
+  }
+
+  /// The `and`-only form a media type takes, which cannot carry a bare `or`.
+  fn parse_without_or<'i, 't>(
+    input: &mut Parser<'i, 't>,
+  ) -> Result<Self, ParseError<'i, StyleSheetParseError>> {
+    Self::parse_with_or(input, false)
+  }
+
+  fn parse_with_or<'i, 't>(
+    input: &mut Parser<'i, 't>,
+    allow_or: bool,
+  ) -> Result<Self, ParseError<'i, StyleSheetParseError>> {
+    if input
+      .try_parse(|input| input.expect_ident_matching("not"))
+      .is_ok()
+    {
+      return Ok(Self::Not(Box::new(Self::parse_in_parens(input)?)));
+    }
+
+    let first = Self::parse_in_parens(input)?;
+
+    if input
+      .try_parse(|input| input.expect_ident_matching("and"))
+      .is_ok()
+    {
+      return Ok(Self::And(Self::parse_operands(input, first, "and")?));
+    }
+
+    if allow_or
+      && input
+        .try_parse(|input| input.expect_ident_matching("or"))
+        .is_ok()
+    {
+      return Ok(Self::Or(Self::parse_operands(input, first, "or")?));
+    }
+
+    Ok(first)
+  }
+
+  /// The operands of a chain whose first keyword the caller has consumed.
+  fn parse_operands<'i, 't>(
+    input: &mut Parser<'i, 't>,
+    first: Self,
+    keyword: &str,
+  ) -> Result<Vec<Self>, ParseError<'i, StyleSheetParseError>> {
+    let mut operands = vec![first, Self::parse_in_parens(input)?];
+
+    while input
+      .try_parse(|input| input.expect_ident_matching(keyword))
+      .is_ok()
+    {
+      operands.push(Self::parse_in_parens(input)?);
+    }
+
+    Ok(operands)
+  }
+
+  /// `( <media-condition> ) | ( <media-feature> )`
+  fn parse_in_parens<'i, 't>(
+    input: &mut Parser<'i, 't>,
+  ) -> Result<Self, ParseError<'i, StyleSheetParseError>> {
+    let location = input.current_source_location();
+    let token = input.next()?.clone();
+
+    if token != Token::ParenthesisBlock {
+      return Err(location.new_unexpected_token_error(token));
+    }
+
+    input.parse_nested_block(|input| {
+      if let Ok((lower, upper)) = input.try_parse(parse_media_feature_range) {
+        let lower = Self::Feature(lower);
+
+        return Ok(match upper {
+          Some(upper) => Self::And(vec![lower, Self::Feature(upper)]),
+          None => lower,
+        });
+      }
+
+      if let Ok(feature) = input.try_parse(parse_media_feature) {
+        return Ok(Self::Feature(feature));
+      }
+
+      Self::parse(input)
+    })
+  }
+
+  fn matches(&self, viewport: Viewport, sizing: &SizingContext) -> bool {
+    match self {
+      Self::Feature(feature) => feature.matches(viewport, sizing),
+      Self::Not(condition) => !condition.matches(viewport, sizing),
+      Self::And(conditions) => conditions
+        .iter()
+        .all(|condition| condition.matches(viewport, sizing)),
+      Self::Or(conditions) => conditions
+        .iter()
+        .any(|condition| condition.matches(viewport, sizing)),
+    }
+  }
+}
+
 impl MediaQuery {
   /// The `not all` an unknown or malformed query is replaced by.
   /// <https://drafts.csswg.org/mediaqueries-4/#error-handling>
   fn not_all() -> Self {
     Self {
       media_type: MediaType::All,
-      features: Vec::new(),
+      condition: None,
       negated: true,
     }
   }
@@ -270,9 +386,9 @@ impl MediaQuery {
 
     let mut is_match = media_type_matches
       && self
-        .features
-        .iter()
-        .all(|feature| feature.matches(viewport, sizing));
+        .condition
+        .as_ref()
+        .is_none_or(|condition| condition.matches(viewport, sizing));
 
     if self.negated {
       is_match = !is_match;
@@ -413,42 +529,40 @@ fn compare_media_feature(
 fn parse_media_query<'i, 't>(
   input: &mut Parser<'i, 't>,
 ) -> Result<MediaQuery, ParseError<'i, StyleSheetParseError>> {
-  let mut negated = false;
-  let mut media_type = MediaType::All;
-  let mut features = Vec::new();
-  let mut has_explicit_media_type = false;
-
-  if let Ok(keyword) = input.try_parse(Parser::expect_ident_cloned) {
-    if keyword.eq_ignore_ascii_case("not") {
-      negated = true;
-    } else if !keyword.eq_ignore_ascii_case("only") {
-      media_type = parse_media_type(keyword);
-      has_explicit_media_type = true;
-    }
-
-    // A `not`/`only` modifier may be followed by an optional media type.
-    if !has_explicit_media_type && let Ok(name) = input.try_parse(Parser::expect_ident_cloned) {
-      media_type = parse_media_type(name);
-      has_explicit_media_type = true;
-    }
-  }
-
-  if input
-    .try_parse(|input| parse_media_feature_block(input, &mut features))
-    .is_ok()
-    || has_explicit_media_type
-  {
-    while input
-      .try_parse(|input| input.expect_ident_matching("and"))
-      .is_ok()
-    {
-      parse_media_feature_block(input, &mut features)?;
-    }
+  if let Ok(query) = input.try_parse(parse_media_type_query) {
+    return Ok(query);
   }
 
   Ok(MediaQuery {
-    media_type,
-    features,
+    media_type: MediaType::All,
+    condition: Some(MediaCondition::parse(input)?),
+    negated: false,
+  })
+}
+
+/// `[not | only]? <media-type> [and <media-condition-without-or>]?`
+fn parse_media_type_query<'i, 't>(
+  input: &mut Parser<'i, 't>,
+) -> Result<MediaQuery, ParseError<'i, StyleSheetParseError>> {
+  let keyword = input.expect_ident_cloned()?;
+  let mut negated = false;
+  let name = if keyword.eq_ignore_ascii_case("not") {
+    negated = true;
+    input.expect_ident_cloned()?
+  } else if keyword.eq_ignore_ascii_case("only") {
+    input.expect_ident_cloned()?
+  } else {
+    keyword
+  };
+  let condition = input
+    .try_parse(|input| input.expect_ident_matching("and"))
+    .is_ok()
+    .then(|| MediaCondition::parse_without_or(input))
+    .transpose()?;
+
+  Ok(MediaQuery {
+    media_type: parse_media_type(name),
+    condition,
     negated,
   })
 }
@@ -462,27 +576,6 @@ fn parse_media_type(name: CowRcStr<'_>) -> MediaType {
     MediaType::Print
   } else {
     MediaType::Unsupported(name.to_string())
-  }
-}
-
-fn parse_media_feature_block<'i, 't>(
-  input: &mut Parser<'i, 't>,
-  features: &mut Vec<MediaFeature>,
-) -> Result<(), ParseError<'i, StyleSheetParseError>> {
-  let location = input.current_source_location();
-  let token = input.next()?;
-  match token {
-    Token::ParenthesisBlock => input.parse_nested_block(|input| {
-      if let Ok((lower, upper)) = input.try_parse(parse_media_feature_range) {
-        features.push(lower);
-        features.extend(upper);
-        return Ok(());
-      }
-
-      features.push(parse_media_feature(input)?);
-      Ok(())
-    }),
-    _ => Err(location.new_unexpected_token_error(token.clone())),
   }
 }
 

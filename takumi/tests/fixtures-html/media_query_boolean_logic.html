@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>media_query_boolean_logic</title>
+    <base href="../../../" />
+    <link rel="stylesheet" href="takumi/tests/shared.css" />
+    <style>
+      .row {
+        display: flex;
+        flex-direction: row;
+        gap: 20px;
+        padding: 20px;
+        background-color: rgb(255, 255, 255);
+        font-size: 28px;
+      }
+      .box {
+        display: flex;
+        width: 240px;
+        height: 120px;
+        align-items: center;
+        justify-content: center;
+        background-color: rgb(200, 200, 200);
+      }
+      @media (min-width: 5000px) or (min-height: 100px) {
+        .either {
+          background-color: rgb(120, 200, 120);
+        }
+      }
+      @media (width > 100px) and ((height < 500px) or (orientation: portrait)) {
+        .nested {
+          background-color: rgb(120, 200, 120);
+        }
+      }
+      @media not (min-width: 100px) {
+        .negated {
+          background-color: rgb(220, 120, 120);
+        }
+      }
+    </style>
+  </head>
+  <body style="width: 800px; height: 200px">
+    <div class="row">
+      <div class="box either">or</div>
+      <div class="box nested">nested</div>
+      <div class="box negated">not</div>
+    </div>
+  </body>
+</html>

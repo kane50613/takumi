@@ -2085,6 +2085,64 @@ mod tests {
   }
 
   #[test]
+  fn test_parse_media_rule_with_boolean_logic() {
+    for (query, matching, non_matching) in [
+      (
+        "(min-width: 600px) or (min-height: 900px)",
+        (400, 1000),
+        (400, 400),
+      ),
+      (
+        "((min-width: 600px) or (min-height: 900px))",
+        (800, 400),
+        (400, 400),
+      ),
+      ("not (min-width: 600px)", (400, 400), (800, 400)),
+      (
+        "(not (min-width: 600px)) or (orientation: portrait)",
+        (400, 800),
+        (800, 400),
+      ),
+      (
+        "(width > 100px) and ((height < 500px) or (orientation: portrait))",
+        (800, 400),
+        (800, 600),
+      ),
+      (
+        "screen and ((min-width: 600px) or (min-height: 900px))",
+        (800, 400),
+        (400, 400),
+      ),
+    ] {
+      let sheet = parse_stylesheet(&format!("@media {query} {{ .card {{ width: 100px; }} }}"));
+      let Some(media) = sheet.rules[0].media_queries.first() else {
+        unreachable!("expected media queries on parsed rule: {query}");
+      };
+
+      assert!(
+        media.matches(Viewport::new(matching)),
+        "{query} at {matching:?}"
+      );
+      assert!(
+        !media.matches(Viewport::new(non_matching)),
+        "{query} at {non_matching:?}"
+      );
+    }
+  }
+
+  #[test]
+  fn test_parse_media_rule_rejects_a_bare_or_after_a_media_type() {
+    let sheet = parse_stylesheet(
+      "@media screen and (min-width: 600px) or (min-width: 1px) { .card { width: 100px; } }",
+    );
+    let Some(media) = sheet.rules[0].media_queries.first() else {
+      unreachable!("expected media queries on parsed rule");
+    };
+
+    assert!(!media.matches(Viewport::new((800, 400))));
+  }
+
+  #[test]
   fn test_parse_media_rule_with_media_types() {
     let screen = Viewport::new((800, 600));
     let print = screen.with_media_target(MediaTarget::Print);
