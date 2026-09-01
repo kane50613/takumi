@@ -65,7 +65,7 @@ impl Paragraph {
     } else if after < self.after {
       // Blink's resolution: `max(line_count - widows, orphans)`. The orphans
       // floor wins; a floor at the current cut accepts the widow violation.
-      let line_number = (lines.len() - self.after).max(self.before);
+      let line_number = lines.len().saturating_sub(self.after).max(self.before);
 
       if line_number >= before {
         return cut;

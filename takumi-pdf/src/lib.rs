@@ -586,6 +586,25 @@ mod tests {
     );
   }
 
+  /// `widows` past the paragraph's line count cannot be honored at all, so
+  /// the cut stays where the window put it.
+  #[test]
+  fn page_starts_ignores_widows_past_the_line_count() {
+    let lines: Vec<Atom> = (0..3)
+      .map(|i| (80.0 + i as f32 * 10.0, 90.0 + i as f32 * 10.0))
+      .collect();
+    let paragraphs = vec![Paragraph {
+      lines: lines.clone(),
+      before: 1,
+      after: 5,
+    }];
+
+    assert_eq!(
+      atoms(&lines, &[], paragraphs).page_starts(&[], 110.0, 100.0),
+      vec![0.0, 100.0]
+    );
+  }
+
   #[test]
   fn page_starts_honors_forced_cuts() {
     assert_eq!(
