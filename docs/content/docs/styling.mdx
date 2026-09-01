@@ -60,6 +60,26 @@ A `<style>` tag feeds the same engine. Takumi extracts it from the JSX for you.
 </div>
 ```
 
+### Media queries
+
+A render has a viewport and an output format, so `@media` reads those:
+
+| Feature                  | Reads                                                               |
+| ------------------------ | ------------------------------------------------------------------- |
+| `width`, `height`        | the viewport size                                                   |
+| `aspect-ratio`           | the viewport ratio, as `16/9` or a number                           |
+| `orientation`            | `portrait` or `landscape`                                           |
+| `resolution`             | the device pixel ratio, in `dppx`, `x`, `dpi`, or `dpcm`            |
+| `screen`, `print`, `all` | the media type: image renders are `screen`, PDF renders are `print` |
+
+`width`, `height`, `aspect-ratio` and `resolution` take the `min-`/`max-`
+prefixes and the range syntax, so `(min-width: 768px)` and
+`(400px < width <= 700px)` both work. Combine queries with `and`, `or`, `not`,
+and parentheses.
+
+Any other feature, `prefers-color-scheme` included, matches nothing. The rest
+of the stylesheet still applies.
+
 ### Rule objects
 
 A `css` entry can be an object. Object entries keep application data out of
@@ -77,15 +97,14 @@ CSS strings.
 css: [
   { layer: "theme" },
   {
-    media: "(prefers-color-scheme: dark)",
-    rules: [{ selector: ".card", style: { background: "#0f172a" } }],
+    media: "print",
+    rules: [{ selector: ".card", style: { background: "#ffffff" } }],
   },
 ];
 ```
 
-Takumi parses each prelude with the grammar its rule takes. A prelude that
-does not parse entirely is an error, so it cannot close the rule and open
-another.
+Takumi parses each prelude with the grammar its rule takes. A prelude
+carrying a block is rejected, so it cannot close the rule and open another.
 
 ## Tailwind with your bundler
 
@@ -257,7 +276,7 @@ The namespace picks which utilities a token reaches:
 Tokens declared in a stylesheet follow the CSS cascade. A media query or a selector can override them:
 
 ```css
-@media (prefers-color-scheme: dark) {
+@media (width >= 1000px) {
   :root {
     --color-brand-500: #a78bfa;
   }
