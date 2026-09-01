@@ -1,86 +1,155 @@
 core:changelogs:
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n### Apply text-fit to text with letter or word spacing\n\n`text-fit` shrink and grow now scale text that sets `letter-spacing` or\n`word-spacing`. Both used to disable the fit silently, so a spaced headline\noverflowed instead of shrinking.\n"
-    filename: text-fit-letter-spacing.md
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n### Apply `@media print` rules to PDF output\n\nPDF renders now match the `print` media type, and image renders match\n`screen`. `Viewport::media_target` picks which one a render resolves against.\n"
+    filename: media-print.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-pdf:\n    type: minor\n---\n\n### Paint inline span backgrounds\n\nA `display: inline` span fills its `background-color` under the text, one\nrounded fragment per line. Horizontal padding reserves space on the line and\nthe fragment grows by it, so badge and pill markup renders instead of\nsilently dropping the background.\n"
+    filename: inline-span-background.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-pdf:\n    type: minor\n---\n\n### Select output pages with pageRanges\n\n`pageRanges` keeps only the listed pages, like a print dialog. Each entry is\na 1-based page number or an inclusive `{ from, to }` span. Layout and page\ncounters still run over the whole document, so a kept page shows the numbers\nit would in full output.\n"
+    filename: pdf-page-ranges.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n  takumi-raster:\n    type: minor\n---\n\n### Dither gradients under the dithering option\n\nWith `dithering` set, gradient fills add ordered Bayer noise before 8-bit\nquantization, as Chrome does, so slow ramps stop banding. The old output pass\nthat reduced every pixel to 128 levels is gone; `floyd-steinberg` is now a\ndeprecated alias of `ordered-bayer`. The default output is unchanged.\n"
+    filename: gradient-dithering.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n### Break lines where Chromium breaks them\n\nSoft wrap opportunities follow Chromium's table instead of plain ICU, so\n`ISBN-2026408` wraps after the hyphen the way a browser wraps it. Text under\n`word-break: break-all` still breaks at every character.\n"
+    filename: chromium-line-breaking.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n### Round normal line heights like browsers\n\n`line-height: normal` resolves from the primary font as\n`round(ascent) + round(descent) + round(line gap)`, as Blink computes it, so\nline stacks match browser pixel positions. Fallback-font runs still grow the\nline to their own rounded height. Subset groups expand in registration order\nwhen ranks tie, so the primary font is the first registered subset.\n"
+    filename: line-height-normal-rounding.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n### Treat layout values a browser reads as equal as equal\n\nText outline fragments, uniform border widths, and the ellipsis overflow check\nall compare against 1/64px now, the step Blink stores layout on. Each used to\ncarry its own tolerance, so the same difference counted three ways.\n"
+    filename: layout-unit-epsilon.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n### Register multi-family font files in face order\n\nA font file carrying several families (a ttc) registers them in face order.\nFallback selection no longer varies between renderers loading the same file.\n"
+    filename: multi-family-font-order.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n### Match browser thickness for text-decoration auto\n\n`text-decoration-thickness: auto` resolves to a tenth of the font size with a\n1px floor, as Blink computes it; `from-font` keeps the font's own metric.\n"
+    filename: decoration-thickness-auto.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n### Interpolate legacy-color gradients in sRGB\n\nA gradient with only legacy color stops (hex, named, non-relative `rgb()`,\n`hsl()`, `hwb()`) interpolates in sRGB, as browsers do. Modern stops keep\nOklab, and Tailwind gradient utilities pin `in oklab`.\n"
+    filename: gradient-srgb-default.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n### Combine media queries with `or` and nested groups\n\n`@media (min-width: 600px) or (min-height: 900px)` and nested groups such as\n`(width > 100px) and ((height < 500px) or (orientation: portrait))` now parse.\n`not` applies inside a group as well.\n"
+    filename: media-query-boolean-logic.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n### Stop decorating line-end whitespace\n\nUnderline, overline, and line-through no longer extend over the collapsed\nwhitespace at a line break, matching browsers for LTR text. RTL is\napproximate: the trim lands on the visual right edge.\n"
+    filename: trailing-space-decoration.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n### Keep parsing a stylesheet past an unknown media query\n\nAn unknown media feature such as `(prefers-color-scheme: dark)` used to fail\nthe whole stylesheet. The query now matches nothing and the rest of the sheet\nstill applies, as the spec requires.\n"
+    filename: media-query-not-all.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n### Size corner-keyword radial gradients like browsers\n\nAn ellipse `radial-gradient` sized `farthest-corner` (the default) or\n`closest-corner` passes through that corner, as browsers do; both keywords\npreviously stopped at the box sides. Side distances are measured absolute,\nso a center outside the box keeps positive radii.\n"
+    filename: radial-corner-radii.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n### Accept media query range syntax\n\n`@media (width >= 768px)` and `@media (400px < height <= 700px)` now parse\nalongside `min-width` and `max-width`. A bare `(width)` matches any non-zero\nviewport width.\n"
+    filename: media-query-range-syntax.md
+    v: 0.0.0
+  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n### Match `resolution` and `aspect-ratio` media queries\n\n`@media (resolution >= 2dppx)` reads the render's device pixel ratio, in\n`dppx`, `x`, `dpi`, or `dpcm`. `@media (aspect-ratio >= 16/9)` reads the\nviewport's ratio. Both take the range syntax and the `min-`/`max-` prefixes.\n"
+    filename: media-query-resolution-aspect-ratio.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - id: npm:takumi-js
-    updated: true
   - id: npm:@takumi-rs/core
+    updated: true
+  - id: npm:docs
+    updated: false
+  - id: npm:@takumi-rs/image-response
+    updated: true
+  - id: npm:takumi-js
     updated: true
   - id: npm:@takumi-rs/wasm
     updated: true
   - id: npm:@takumi-rs/helpers
     updated: true
-  - id: npm:docs
-    updated: false
-  - id: npm:takumi-pdf
+  - changelogIds:
+      - media-print.md
+      - inline-span-background.md
+      - pdf-page-ranges.md
+    id: npm:takumi-pdf
     updated: true
-  - id: npm:@takumi-rs/image-response
-    updated: true
-  - id: npm:example-generate-invoice
-    updated: false
-  - id: npm:svelte
-    updated: false
   - id: npm:example-twitter-images
     updated: false
-  - id: npm:example-e-invoice
-    updated: false
-  - id: npm:example-css-library-integration
-    updated: false
-  - id: npm:ffmpeg-keyframe-animation
-    updated: false
-  - id: npm:pdf-bench
+  - id: npm:example-generate-invoice
     updated: false
   - id: npm:example-tanstack-start
     updated: false
-  - id: npm:example-cloudflare-workers
+  - id: npm:example-e-invoice
+    updated: false
+  - id: npm:pdf-bench
     updated: false
   - id: npm:example-satori-html
     updated: false
-  - id: npm:ffplay
+  - id: npm:waku-ssr
+    updated: false
+  - id: npm:example-css-library-integration
     updated: false
   - id: npm:example-liquid-glass
     updated: false
-  - id: npm:waku-ssr
+  - id: npm:ffplay
+    updated: false
+  - id: npm:ffmpeg-keyframe-animation
+    updated: false
+  - id: npm:example-cloudflare-workers
     updated: false
   - id: npm:example-nextjs
     updated: false
+  - id: npm:svelte
+    updated: false
+  - changelogIds:
+      - media-print.md
+      - inline-span-background.md
+      - pdf-page-ranges.md
+    id: cargo:takumi-pdf
+    updated: true
   - id: cargo:takumi-html
     updated: true
-  - id: cargo:takumi-pdf
+  - changelogIds:
+      - gradient-dithering.md
+    id: cargo:takumi-raster
     updated: true
-  - id: cargo:takumi
-    updated: true
-  - id: cargo:takumi-raster
+  - changelogIds:
+      - chromium-line-breaking.md
+      - media-print.md
+      - line-height-normal-rounding.md
+      - layout-unit-epsilon.md
+      - inline-span-background.md
+      - multi-family-font-order.md
+      - decoration-thickness-auto.md
+      - gradient-srgb-default.md
+      - media-query-boolean-logic.md
+      - trailing-space-decoration.md
+      - media-query-not-all.md
+      - radial-corner-radii.md
+      - media-query-range-syntax.md
+      - gradient-dithering.md
+      - media-query-resolution-aspect-ratio.md
+    id: cargo:takumi-core
     updated: true
   - id: cargo:takumi-svg
     updated: true
-  - changelogIds:
-      - text-fit-letter-spacing.md
-    id: cargo:takumi-core
+  - id: cargo:takumi
     updated: true
 npm:packages:
   - id: npm:takumi
-  - id: npm:takumi-js
   - id: npm:@takumi-rs/core
+  - id: npm:docs
+  - id: npm:@takumi-rs/image-response
+  - id: npm:takumi-js
   - id: npm:@takumi-rs/wasm
   - id: npm:@takumi-rs/helpers
-  - id: npm:docs
   - id: npm:takumi-pdf
-  - id: npm:@takumi-rs/image-response
-  - id: npm:example-generate-invoice
-  - id: npm:svelte
   - id: npm:example-twitter-images
-  - id: npm:example-e-invoice
-  - id: npm:example-css-library-integration
-  - id: npm:ffmpeg-keyframe-animation
-  - id: npm:pdf-bench
+  - id: npm:example-generate-invoice
   - id: npm:example-tanstack-start
-  - id: npm:example-cloudflare-workers
+  - id: npm:example-e-invoice
+  - id: npm:pdf-bench
   - id: npm:example-satori-html
-  - id: npm:ffplay
-  - id: npm:example-liquid-glass
   - id: npm:waku-ssr
+  - id: npm:example-css-library-integration
+  - id: npm:example-liquid-glass
+  - id: npm:ffplay
+  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-cloudflare-workers
   - id: npm:example-nextjs
+  - id: npm:svelte
