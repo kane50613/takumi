@@ -718,7 +718,8 @@ impl Emitter<'_> {
 
     let paint: Paint = match image {
       BackgroundImage::Linear(gradient) => {
-        let tile = LinearGradientTile::new(gradient, w as u32, h as u32, sizing, current_color);
+        let tile =
+          LinearGradientTile::new(gradient, w as u32, h as u32, sizing, current_color, false);
         let resolved = self.filtered_stops(resolve_stops_along_axis(
           &gradient.stops,
           tile.axis_length.max(1e-6),
@@ -759,7 +760,8 @@ impl Emitter<'_> {
         .into()
       }
       BackgroundImage::Radial(gradient) => {
-        let tile = RadialGradientTile::new(gradient, w as u32, h as u32, sizing, current_color);
+        let tile =
+          RadialGradientTile::new(gradient, w as u32, h as u32, sizing, current_color, false);
         let resolved = self.filtered_stops(resolve_stops_along_axis(
           &gradient.stops,
           tile.radius_scale.max(1e-6),
@@ -797,7 +799,8 @@ impl Emitter<'_> {
         .into()
       }
       BackgroundImage::Conic(gradient) => {
-        let tile = ConicGradientTile::new(gradient, w as u32, h as u32, sizing, current_color);
+        let tile =
+          ConicGradientTile::new(gradient, w as u32, h as u32, sizing, current_color, false);
         let lut_len = tile.color_lut.len();
         if lut_len == 0 {
           return None;

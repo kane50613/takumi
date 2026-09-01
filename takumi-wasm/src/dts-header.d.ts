@@ -32,7 +32,12 @@ export type OutputFormat = "png" | "jpeg" | "webp" | "ico" | "raw";
 /** Output format for animated images. */
 export type AnimationOutputFormat = "webp" | "apng" | "gif";
 
-/** The output dithering algorithm. */
+/**
+ * Gradient dithering algorithm.
+ *
+ * `"floyd-steinberg"` is a deprecated alias of `"ordered-bayer"`; it will be
+ * removed in v3.
+ */
 export type DitheringAlgorithm = "none" | "ordered-bayer" | "floyd-steinberg";
 
 /** Cache policy for a decoded image. Defaults to `"auto"`. */
@@ -103,7 +108,7 @@ export type RenderOptions = {
    */
   timeMs?: number;
   /**
-   * The output dithering algorithm.
+   * Dithers gradient fills before they quantize to 8-bit.
    * @default "none"
    */
   dithering?: DitheringAlgorithm;

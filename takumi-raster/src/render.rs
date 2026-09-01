@@ -11,7 +11,7 @@ use typed_builder::TypedBuilder;
 
 use crate::{
   AnimationFrame, Bitmap, Canvas, DitheringAlgorithm, Error, Fonts, RenderContext, Result,
-  SizedFontStyle, apply_dithering,
+  SizedFontStyle,
   layout::{
     inline::{
       InlineItem, InlineLayoutMode, InlineLayoutRequest, collect_inline_items, create_inline_layout,
@@ -46,7 +46,7 @@ pub struct RenderOptions<'g> {
   /// Global animation time in milliseconds.
   #[builder(default = 0)]
   pub(crate) time_ms: u64,
-  /// Output dithering algorithm. Only used by encoding frontends.
+  /// Dithers gradient fills before they quantize to 8-bit.
   #[builder(default)]
   pub(crate) dithering: DitheringAlgorithm,
   /// Per-render font fallback chain (family names in order). `None` uses all
@@ -442,6 +442,7 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<Bitmap> {
     .stylesheet(stylesheet)
     .time_ms(time_ms)
     .draw_debug_border(draw_debug_border)
+    .dither_gradients(dithering != DitheringAlgorithm::None)
     .style(Box::new(ComputedStyle {
       lang,
       font_family: font_families.unwrap_or_default(),
@@ -449,7 +450,7 @@ pub fn render<'g>(options: RenderOptions<'g>) -> Result<Bitmap> {
     }))
     .build();
 
-  render_with_context(render_context, node, viewport, dithering)
+  render_with_context(render_context, node, viewport)
 }
 
 /// Rasterizes `node` under an already-built [`RenderContext`]. The context
@@ -459,7 +460,6 @@ fn render_with_context(
   render_context: RenderContext,
   node: Node,
   viewport: Viewport,
-  dithering: DitheringAlgorithm,
 ) -> Result<Bitmap> {
   let mut root = RenderNode::from_node(&render_context, node);
   let mut tree = LayoutTree::from_render_node(&root);
@@ -499,8 +499,7 @@ fn render_with_context(
     },
   )?;
 
-  let mut image = canvas.into_inner()?;
-  apply_dithering(&mut image, dithering);
+  let image = canvas.into_inner()?;
 
   Ok(Bitmap::from_rgba(image))
 }
@@ -542,6 +541,7 @@ impl<'a, 'g> PreparedScene<'a, 'g> {
       .stylesheet(self.stylesheet.clone())
       .time_ms(time_ms)
       .draw_debug_border(options.draw_debug_border)
+      .dither_gradients(options.dithering != DitheringAlgorithm::None)
       .style(Box::new(ComputedStyle {
         lang: options.lang,
         font_family: options.font_families.clone().unwrap_or_default(),
@@ -549,12 +549,7 @@ impl<'a, 'g> PreparedScene<'a, 'g> {
       }))
       .build();
 
-    render_with_context(
-      render_context,
-      options.node.clone(),
-      options.viewport,
-      options.dithering,
-    )
+    render_with_context(render_context, options.node.clone(), options.viewport)
   }
 }
 
@@ -718,8 +713,8 @@ mod tests {
     measure,
     style::{
       AnimationFillMode, AnimationTime, AnimationTimingFunction, Color, ColorInput, Display,
-      KeyframeRule, KeyframesRule, Length, Length::Px, Position, Style, StyleDeclaration,
-      StyleSheet,
+      FromCssStr, KeyframeRule, KeyframesRule, Length, Length::Px, Position, Style,
+      StyleDeclaration, StyleSheet,
     },
     viewport::Viewport,
   };
@@ -735,6 +730,47 @@ mod tests {
       .duration_ms(duration_ms)
       .options(options)
       .build()
+  }
+
+  #[test]
+  fn animation_frames_dither_gradients_under_the_option() {
+    let fonts = Fonts::default();
+    let scene = |dithering| {
+      let node = Node::container([]).with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Flex))
+          .with(StyleDeclaration::width(Length::Percentage(100.0)))
+          .with(StyleDeclaration::height(Length::Percentage(100.0)))
+          .with(StyleDeclaration::background_image(Some(
+            crate::style::BackgroundImages::from_css_str(
+              "linear-gradient(37deg, #101010, #131313)",
+            )
+            .unwrap(),
+          ))),
+      );
+      let options = RenderOptions::builder()
+        .fonts(&fonts)
+        .viewport(Viewport::new((64, 64)))
+        .dithering(dithering)
+        .node(node)
+        .build();
+
+      vec![
+        SequentialScene::builder()
+          .duration_ms(100)
+          .options(options)
+          .build(),
+      ]
+    };
+
+    let plain = render_animation(&scene(crate::DitheringAlgorithm::None), 10).unwrap();
+    let dithered = render_animation(&scene(crate::DitheringAlgorithm::OrderedBayer), 10).unwrap();
+
+    assert_ne!(
+      plain[0].image.as_raw(),
+      dithered[0].image.as_raw(),
+      "the dithering option must reach animation frames"
+    );
   }
 
   #[test]

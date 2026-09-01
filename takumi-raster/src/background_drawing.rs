@@ -336,9 +336,14 @@ impl BackgroundTile {
     fn rasterize_gradient_row<T: GradientOverlayTile>(t: &T, y: u32, pixels: &mut [[u8; 4]]) {
       let lut_len = t.lut_len();
       let mut row_state = t.begin_row(0, y, lut_len);
-      for chunk in pixels.iter_mut() {
+      let dither = t.dither_active();
+      for (x, chunk) in pixels.iter_mut().enumerate() {
         let lut_idx = t.next_lut_index(&mut row_state);
-        let p = t.sample_at(lut_idx);
+        let p = if dither {
+          t.sample_dithered_at(lut_idx, x as u32, y)
+        } else {
+          t.sample_at(lut_idx)
+        };
         *chunk = [p.red(), p.green(), p.blue(), p.alpha()];
       }
     }
@@ -402,6 +407,7 @@ pub(crate) fn render_tile(
       tile_h,
       &context.sizing,
       context.current_color,
+      context.dither_gradients,
     ))),
     BackgroundImage::Radial(gradient) => Some(BackgroundTile::Radial(RadialGradientTile::new(
       gradient,
@@ -409,6 +415,7 @@ pub(crate) fn render_tile(
       tile_h,
       &context.sizing,
       context.current_color,
+      context.dither_gradients,
     ))),
     BackgroundImage::Conic(gradient) => Some(BackgroundTile::Conic(ConicGradientTile::new(
       gradient,
@@ -416,6 +423,7 @@ pub(crate) fn render_tile(
       tile_h,
       &context.sizing,
       context.current_color,
+      context.dither_gradients,
     ))),
     BackgroundImage::Url(url) => {
       if let Ok(source) = resolve_image(url, context) {
@@ -672,6 +680,49 @@ mod tests {
   };
 
   const BITMAP_URL: &str = "test://bitmap";
+
+  #[test]
+  fn repeated_gradient_tiles_dither_when_active() {
+    use crate::{
+      RenderContext,
+      style::{FromCssStr, LinearGradient, SizingContext},
+    };
+
+    let gradient =
+      LinearGradient::from_css_str("linear-gradient(to right, #101010, #131313)").unwrap();
+    let fonts = Fonts::default();
+    let render_context = RenderContext::builder()
+      .fonts(fonts.snapshot())
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((64, 16)))
+          .build(),
+      )
+      .build();
+    let make_row = |dither: bool| {
+      let tile = BackgroundTile::Linear(LinearGradientTile::new(
+        &gradient,
+        64,
+        16,
+        &render_context.sizing,
+        render_context.current_color,
+        dither,
+      ));
+      let mut rows = Vec::new();
+      for y in [0, 1] {
+        let mut row = vec![0u8; 64 * 4];
+        tile.rasterize_row(y, 64, &mut row);
+        rows.push(row);
+      }
+      rows
+    };
+
+    let plain = make_row(false);
+    assert_eq!(plain[0], plain[1]);
+
+    let dithered = make_row(true);
+    assert_ne!(dithered[0], dithered[1]);
+  }
 
   /// Opaque so the premultiplied round-trip through the canvas is lossless and
   /// the rendered bytes can be compared against the source directly.

@@ -8,9 +8,10 @@ use tiny_skia::PremultipliedColorU8;
 use typed_builder::TypedBuilder;
 
 use super::gradient_utils::{
-  GradientOverlayTile, adaptive_lut_size, adaptive_lut_size_with_visible_samples,
+  GradientLutHiEntry, GradientOverlayTile, adaptive_lut_size,
+  adaptive_lut_size_with_visible_samples, build_color_lut_hi_with_interpolation,
   build_color_lut_with_interpolation, compute_repeat_setup, gradient_tile_accessors,
-  parse_gradient_stops, resolve_stops_along_axis, write_gradient_css,
+  parse_gradient_stops, quantize_dithered, resolve_stops_along_axis, write_gradient_css,
 };
 use crate::style::{
   Animatable, Color, ColorInterpolationMethod, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss,
@@ -70,6 +71,10 @@ pub struct LinearGradientTile {
   /// Pre-computed color lookup table for fast gradient sampling.
   /// Maps normalized position [0.0, 1.0] to color.
   pub color_lut: Vec<PremultipliedColorU8>,
+  /// The LUT in premultiplied 8.8 fixed point, read by dithered sampling.
+  pub(crate) color_lut_hi: Vec<GradientLutHiEntry>,
+  /// Whether any LUT entry carries a fraction dithering can move.
+  pub(crate) lut_dither_active: bool,
   /// Precomputed axis samples for fast horizontal/vertical fills.
   pub axis_aligned_fast_path: Option<LinearGradientFastPathData>,
 }
@@ -92,12 +97,18 @@ pub enum LinearGradientFastPathKind {
 }
 
 /// Owned axis samples for an axis-aligned gradient.
+///
+/// Undithered: one sample per pixel along the axis. Dithered horizontal: eight
+/// scanline variants of `width` samples, one per `y & 7`. Dithered vertical:
+/// one eight-sample `x & 7` pattern per row.
 #[derive(Debug, Clone)]
 pub struct LinearGradientFastPathData {
   /// Fast-path orientation.
   pub kind: LinearGradientFastPathKind,
-  /// One sample per pixel along the axis.
+  /// Axis samples, laid out as documented on the struct.
   pub axis_samples: Box<[PremultipliedColorU8]>,
+  /// Whether the samples carry dither noise (and use the dithered layout).
+  pub dithered: bool,
 }
 
 /// Borrowed view of axis samples for an axis-aligned gradient.
@@ -105,8 +116,10 @@ pub struct LinearGradientFastPathData {
 pub struct LinearGradientFastPath<'a> {
   /// Fast-path orientation.
   pub kind: LinearGradientFastPathKind,
-  /// One sample per pixel along the axis.
+  /// Axis samples, laid out as documented on [`LinearGradientFastPathData`].
   pub axis_samples: &'a [PremultipliedColorU8],
+  /// Whether the samples carry dither noise (and use the dithered layout).
+  pub dithered: bool,
   /// Whether every sample is fully opaque.
   pub fully_opaque: bool,
 }
@@ -151,6 +164,17 @@ impl LinearGradientTile {
     x * self.dir_x + y * self.dir_y + self.projection_bias
   }
 
+  #[inline(always)]
+  fn pixel_lut_index(&self, x: u32, y: u32) -> usize {
+    let projection = self.projection_at(x as f32, y as f32);
+    if self.repeating && self.repeat_period > 1e-6 {
+      let wrapped = (projection - self.repeat_start).rem_euclid(self.repeat_period);
+      ((wrapped * self.position_to_lut_scale).round() as usize).min(self.color_lut.len() - 1)
+    } else {
+      self.lut_index_for_projection_with_len(projection, self.color_lut.len())
+    }
+  }
+
   /// Maps an axis projection to a LUT index for a LUT of `lut_len`.
   #[inline(always)]
   pub(crate) fn lut_index_for_projection_with_len(&self, projection: f32, lut_len: usize) -> usize {
@@ -179,13 +203,23 @@ impl LinearGradientTile {
   }
 
   fn build_axis_samples(&self, kind: LinearGradientFastPathKind) -> Box<[PremultipliedColorU8]> {
-    match kind {
-      LinearGradientFastPathKind::Horizontal => {
+    // An axis-aligned projection ignores the cross axis, so sampling the
+    // dithered variants at small cross coordinates hits every noise phase.
+    match (kind, self.lut_dither_active) {
+      (LinearGradientFastPathKind::Horizontal, false) => {
         (0..self.width).map(|x| self.sample_pixel(x, 0)).collect()
       }
-      LinearGradientFastPathKind::Vertical => {
+      (LinearGradientFastPathKind::Vertical, false) => {
         (0..self.height).map(|y| self.sample_pixel(0, y)).collect()
       }
+      (LinearGradientFastPathKind::Horizontal, true) => (0..8u32)
+        .flat_map(|y| (0..self.width).map(move |x| (x, y)))
+        .map(|(x, y)| self.sample_pixel_dithered(x, y))
+        .collect(),
+      (LinearGradientFastPathKind::Vertical, true) => (0..self.height)
+        .flat_map(|y| (0..8u32).map(move |x| (x, y)))
+        .map(|(x, y)| self.sample_pixel_dithered(x, y))
+        .collect(),
     }
   }
 
@@ -195,6 +229,7 @@ impl LinearGradientTile {
     Some(LinearGradientFastPath {
       kind: fast_path.kind,
       axis_samples: &fast_path.axis_samples,
+      dithered: fast_path.dithered,
       fully_opaque: self.fully_opaque,
     })
   }
@@ -206,6 +241,7 @@ impl LinearGradientTile {
     height: u32,
     sizing: &SizingContext,
     current_color: Color,
+    dither: bool,
   ) -> Self {
     let (dir_x, dir_y) = Self::direction_components(gradient, width, height);
     let axis_aligned_kind = Self::classify_axis_aligned(dir_x, dir_y);
@@ -246,6 +282,13 @@ impl LinearGradientTile {
       lut_size,
       gradient.interpolation,
     );
+    let (color_lut_hi, lut_dither_active) = build_color_lut_hi_with_interpolation(
+      &lut_resolved_stops,
+      lut_axis_length,
+      lut_size,
+      gradient.interpolation,
+      dither,
+    );
     let lut_len = color_lut.len();
     let position_to_lut_scale = if lut_axis_length.abs() <= f32::EPSILON || lut_len <= 1 {
       0.0
@@ -269,6 +312,8 @@ impl LinearGradientTile {
       position_to_lut_scale,
       fully_opaque,
       color_lut,
+      color_lut_hi,
+      lut_dither_active,
       axis_aligned_fast_path: None,
     };
 
@@ -278,6 +323,7 @@ impl LinearGradientTile {
       tile.axis_aligned_fast_path = Some(LinearGradientFastPathData {
         kind,
         axis_samples: tile.build_axis_samples(kind),
+        dithered: tile.lut_dither_active,
       });
     }
 
@@ -292,23 +338,20 @@ impl GradientOverlayTile for LinearGradientTile {
 
   #[inline(always)]
   fn sample_pixel(&self, x: u32, y: u32) -> PremultipliedColorU8 {
-    if self.color_lut.is_empty() {
-      return PremultipliedColorU8::TRANSPARENT;
+    match self.color_lut.len() {
+      0 => PremultipliedColorU8::TRANSPARENT,
+      1 => self.color_lut[0],
+      _ => self.color_lut[self.pixel_lut_index(x, y)],
+    }
+  }
+
+  #[inline(always)]
+  fn sample_pixel_dithered(&self, x: u32, y: u32) -> PremultipliedColorU8 {
+    if !self.lut_dither_active {
+      return self.sample_pixel(x, y);
     }
 
-    if self.color_lut.len() == 1 {
-      return self.color_lut[0];
-    }
-
-    let projection = self.projection_at(x as f32, y as f32);
-    let lut_idx = if self.repeating && self.repeat_period > 1e-6 {
-      let wrapped = (projection - self.repeat_start).rem_euclid(self.repeat_period);
-      ((wrapped * self.position_to_lut_scale).round() as usize).min(self.color_lut.len() - 1)
-    } else {
-      self.lut_index_for_projection_with_len(projection, self.color_lut.len())
-    };
-
-    self.color_lut[lut_idx]
+    quantize_dithered(self.color_lut_hi[self.pixel_lut_index(x, y)], x, y)
   }
 
   #[inline(always)]
@@ -1275,7 +1318,7 @@ mod tests {
     let sizing = SizingContext::builder()
       .viewport(Viewport::new((100, 100)))
       .build();
-    let tile = LinearGradientTile::new(&gradient, 100, 100, &sizing, Color::black());
+    let tile = LinearGradientTile::new(&gradient, 100, 100, &sizing, Color::black(), false);
 
     let color_top = tile.sample_pixel(50, 0).demultiply();
     assert_eq!(color_top, ColorU8::from_rgba(255, 0, 0, 255));
@@ -1307,7 +1350,7 @@ mod tests {
       .viewport(Viewport::new((100, 100)))
       .build();
 
-    let tile = LinearGradientTile::new(&gradient, 100, 100, &sizing, Color::black());
+    let tile = LinearGradientTile::new(&gradient, 100, 100, &sizing, Color::black(), false);
     let color_left = tile.sample_pixel(0, 50).demultiply();
     assert_eq!(color_left, ColorU8::from_rgba(255, 0, 0, 255));
 
@@ -1335,7 +1378,7 @@ mod tests {
     let sizing = SizingContext::builder()
       .viewport(Viewport::new((200, 100)))
       .build();
-    let tile = LinearGradientTile::new(&gradient, 200, 100, &sizing, Color::black());
+    let tile = LinearGradientTile::new(&gradient, 200, 100, &sizing, Color::black(), false);
 
     assert!((tile.dir_x - 0.4472136).abs() < 0.001);
     assert!((tile.dir_y - 0.8944272).abs() < 0.001);
@@ -1358,7 +1401,7 @@ mod tests {
     let sizing = SizingContext::builder()
       .viewport(Viewport::new((100, 100)))
       .build();
-    let tile = LinearGradientTile::new(&gradient, 100, 100, &sizing, Color::black());
+    let tile = LinearGradientTile::new(&gradient, 100, 100, &sizing, Color::black(), false);
     let color = tile.sample_pixel(50, 50).demultiply();
     assert_eq!(color, ColorU8::from_rgba(255, 0, 0, 255));
   }
@@ -1376,7 +1419,7 @@ mod tests {
     let sizing = SizingContext::builder()
       .viewport(Viewport::new((100, 100)))
       .build();
-    let tile = LinearGradientTile::new(&gradient, 100, 100, &sizing, Color::black());
+    let tile = LinearGradientTile::new(&gradient, 100, 100, &sizing, Color::black(), false);
     let color = tile.sample_pixel(50, 50).demultiply();
     assert_eq!(color, ColorU8::from_rgba(0, 0, 0, 0));
   }
@@ -1409,7 +1452,7 @@ mod tests {
     let sizing = SizingContext::builder()
       .viewport(Viewport::new((40, 1)))
       .build();
-    let tile = LinearGradientTile::new(&gradient, 40, 1, &sizing, Color::black());
+    let tile = LinearGradientTile::new(&gradient, 40, 1, &sizing, Color::black(), false);
 
     assert_eq!(
       [
@@ -1435,7 +1478,7 @@ mod tests {
     let sizing = SizingContext::builder()
       .viewport(Viewport::new((40, 40)))
       .build();
-    let tile = LinearGradientTile::new(&gradient, 40, 40, &sizing, Color::black());
+    let tile = LinearGradientTile::new(&gradient, 40, 40, &sizing, Color::black(), false);
 
     // grey at 0,0
     let c0 = tile.sample_pixel(0, 0).demultiply();
@@ -1459,7 +1502,7 @@ mod tests {
     let sizing = SizingContext::builder()
       .viewport(Viewport::new((40, 40)))
       .build();
-    let tile = LinearGradientTile::new(&gradient, 40, 40, &sizing, Color::black());
+    let tile = LinearGradientTile::new(&gradient, 40, 40, &sizing, Color::black(), false);
 
     // color at top-left (0, 0) should be grey (1px hard stop)
     assert_eq!(

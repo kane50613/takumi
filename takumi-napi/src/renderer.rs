@@ -209,7 +209,7 @@ pub struct RenderOptions<'env> {
   pub device_pixel_ratio: Option<f64>,
   /// The animation timeline time in milliseconds.
   pub time_ms: Option<i64>,
-  /// The output dithering algorithm.
+  /// Dithers gradient fills before they quantize to 8-bit.
   pub dithering: Option<DitheringAlgorithm>,
   /// Per-render font stack: ordered family names used as the fallback chain.
   /// Defaults to all registered families in registration order.
@@ -255,10 +255,12 @@ pub enum DitheringAlgorithm {
   None,
   #[napi(value = "ordered-bayer")]
   OrderedBayer,
+  /// @deprecated Alias of `ordered-bayer`. Will be removed in v3.
   #[napi(value = "floyd-steinberg")]
   FloydSteinberg,
 }
 
+#[allow(deprecated)]
 impl From<DitheringAlgorithm> for CoreDitheringAlgorithm {
   fn from(dithering: DitheringAlgorithm) -> Self {
     match dithering {

@@ -244,6 +244,7 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
       h as u32,
       &self.context.sizing,
       self.context.current_color,
+      false,
     );
     let resolved = resolve_stops_along_axis(
       &gradient.stops,
@@ -292,6 +293,7 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
       h as u32,
       &self.context.sizing,
       self.context.current_color,
+      false,
     );
     let resolved = resolve_stops_along_axis(
       &gradient.stops,
@@ -340,6 +342,7 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
       h as u32,
       &self.context.sizing,
       self.context.current_color,
+      false,
     );
     let lut_len = tile.color_lut.len();
     if lut_len == 0 {

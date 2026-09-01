@@ -16,6 +16,43 @@ use crate::{
 const MIN_GRADIENT_LUT_SIZE: usize = 2;
 const MAX_GRADIENT_LUT_SIZE: usize = 8193;
 
+/// 8x8 Bayer thresholds in 8.8 fixed point, applied to gradient samples before
+/// quantization. Blink dithers every gradient (`gradient.cc`, "Legacy behavior:
+/// gradients are always dithered"); an integer-exact sample rounds back to
+/// itself, so flat regions and hard stops stay byte-identical.
+#[rustfmt::skip]
+const DITHER_NOISE_88: [[i16; 8]; 8] = [
+  [-128,    0,  -96,   32, -120,    8,  -88,   40],
+  [  64,  -64,   96,  -32,   72,  -56,  104,  -24],
+  [ -80,   48, -112,   16,  -72,   56, -104,   24],
+  [ 112,  -16,   80,  -48,  120,   -8,   88,  -40],
+  [-116,   12,  -84,   44, -124,    4,  -92,   36],
+  [  76,  -52,  108,  -20,   68,  -60,  100,  -28],
+  [ -68,   60, -100,   28,  -76,   52, -108,   20],
+  [ 124,   -4,   92,  -36,  116,  -12,   84,  -44],
+];
+
+/// A gradient LUT entry in premultiplied 8.8 fixed point.
+pub(crate) type GradientLutHiEntry = [u16; 4];
+
+/// Quantizes an 8.8 sample to 8-bit with the Bayer noise for pixel `(x, y)`.
+///
+/// The bias stays in `[0, 252]`, so no channel can underflow, overflow, or
+/// round past its alpha; the entry's premultiplied ordering survives as-is.
+#[inline(always)]
+pub(crate) fn quantize_dithered(entry: GradientLutHiEntry, x: u32, y: u32) -> PremultipliedColorU8 {
+  let bias = (128 + DITHER_NOISE_88[(y & 7) as usize][(x & 7) as usize] as i32) as u32;
+  let channel = |value: u16| ((value as u32 + bias) >> 8) as u8;
+
+  PremultipliedColorU8::from_rgba(
+    channel(entry[0]),
+    channel(entry[1]),
+    channel(entry[2]),
+    channel(entry[3]),
+  )
+  .unwrap_or(PremultipliedColorU8::TRANSPARENT)
+}
+
 #[cfg(test)]
 pub(crate) fn red_blue_stops(
   red_hint: Option<StopPosition>,
@@ -54,6 +91,16 @@ macro_rules! gradient_tile_accessors {
     #[inline(always)]
     fn sample_at(&self, lut_idx: usize) -> PremultipliedColorU8 {
       self.color_lut[lut_idx]
+    }
+
+    #[inline(always)]
+    fn sample_dithered_at(&self, lut_idx: usize, x: u32, y: u32) -> PremultipliedColorU8 {
+      $crate::style::properties::gradient_utils::quantize_dithered(self.color_lut_hi[lut_idx], x, y)
+    }
+
+    #[inline(always)]
+    fn dither_active(&self) -> bool {
+      self.lut_dither_active
     }
 
     #[inline(always)]
@@ -342,8 +389,20 @@ pub trait GradientOverlayTile {
   fn lut_len(&self) -> usize;
   /// LUT entry at `lut_idx`.
   fn sample_at(&self, lut_idx: usize) -> PremultipliedColorU8;
+  /// Dithered color for LUT entry `lut_idx` painted at `(x, y)`.
+  fn sample_dithered_at(&self, lut_idx: usize, _x: u32, _y: u32) -> PremultipliedColorU8 {
+    self.sample_at(lut_idx)
+  }
+  /// Whether any LUT entry carries a fraction dithering can move.
+  fn dither_active(&self) -> bool {
+    false
+  }
   /// Color at pixel `(x, y)`.
   fn sample_pixel(&self, x: u32, y: u32) -> PremultipliedColorU8;
+  /// Color at pixel `(x, y)` with gradient dithering applied.
+  fn sample_pixel_dithered(&self, x: u32, y: u32) -> PremultipliedColorU8 {
+    self.sample_pixel(x, y)
+  }
   /// Initializes row state at the given row start.
   fn begin_row(&self, src_x_start: u32, src_y: u32, lut_len: usize) -> Self::RowState;
   /// Returns an index in `0..lut_len` where `lut_len` is the value passed to `begin_row`.
@@ -384,6 +443,14 @@ pub fn overlay_gradient_tile_fast_normal_unconstrained<T: GradientOverlayTile>(
   let dest_x_min_usize = dest_x_min as usize;
   let dest_x_max_usize = dest_x_max as usize;
   let fully_opaque = tile.fully_opaque();
+  let dither = tile.dither_active();
+  let sample = |lut_idx: usize, src_x: u32, src_y: u32| {
+    if dither {
+      tile.sample_dithered_at(lut_idx, src_x, src_y)
+    } else {
+      tile.sample_at(lut_idx)
+    }
+  };
 
   for dest_y in dest_y_min..dest_y_max {
     let src_y = (dest_y - offset_y) as u32;
@@ -393,16 +460,17 @@ pub fn overlay_gradient_tile_fast_normal_unconstrained<T: GradientOverlayTile>(
     let row = &mut pixels[row_start + dest_x_min_usize..row_start + dest_x_max_usize];
 
     if fully_opaque {
-      for dst in row.iter_mut() {
+      for (i, dst) in row.iter_mut().enumerate() {
         let lut_idx = tile.next_lut_index(&mut row_state);
         debug_assert!(lut_idx < lut_len);
-        let pixel = tile.sample_at(lut_idx);
+        let pixel = sample(lut_idx, src_x_start + i as u32, src_y);
         *dst = [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()];
       }
     } else {
       const CHUNK: usize = 256;
       let mut buf = [[0u8; 4]; CHUNK];
       let mut remaining = row;
+      let mut src_x = src_x_start;
       while !remaining.is_empty() {
         let n = remaining.len().min(CHUNK);
         let (chunk, rest) = remaining.split_at_mut(n);
@@ -410,7 +478,8 @@ pub fn overlay_gradient_tile_fast_normal_unconstrained<T: GradientOverlayTile>(
         for slot in buf.iter_mut().take(n) {
           let lut_idx = tile.next_lut_index(&mut row_state);
           debug_assert!(lut_idx < lut_len);
-          let pixel = tile.sample_at(lut_idx);
+          let pixel = sample(lut_idx, src_x, src_y);
+          src_x += 1;
           *slot = [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()];
         }
         for (dst, &src) in chunk.iter_mut().zip(buf[..n].iter()) {
@@ -525,21 +594,6 @@ fn assign_stop_sample_indices(
   indices
 }
 
-fn snap_stop_samples(
-  typed_lut: &mut [PremultipliedColorU8],
-  resolved_stops: &[ResolvedGradientStop],
-  axis_length: f32,
-) {
-  if typed_lut.is_empty() || resolved_stops.is_empty() {
-    return;
-  }
-
-  let stop_indices = assign_stop_sample_indices(resolved_stops, axis_length, typed_lut.len());
-  for (stop, &sample_index) in resolved_stops.iter().zip(&stop_indices) {
-    typed_lut[sample_index] = color_to_premultiplied(stop.color);
-  }
-}
-
 #[inline(always)]
 fn interpolation_position(left_position: f32, right_position: f32, sample_position: f32) -> f32 {
   let denominator = right_position - left_position;
@@ -550,28 +604,30 @@ fn interpolation_position(left_position: f32, right_position: f32, sample_positi
   ((sample_position - left_position) / denominator).clamp(0.0, 1.0)
 }
 
-/// Builds a pre-computed high-precision color lookup table for a gradient.
-/// This allows O(1) color sampling instead of O(n) search + interpolation per pixel.
-pub fn build_color_lut_with_interpolation(
+/// Builds a gradient LUT in `T`, sampling stops along the axis and snapping the
+/// stop positions onto exact entries.
+fn build_lut<T: Copy>(
   resolved_stops: &[ResolvedGradientStop],
   axis_length: f32,
   lut_size: usize,
   interpolation: ColorInterpolationMethod,
-) -> Vec<PremultipliedColorU8> {
+  from_color: impl Fn(Color) -> T,
+  interpolate_srgb: impl Fn(T, T, f32) -> T,
+) -> Vec<T> {
   let color_space = interpolation.color_space;
   let hue_direction = interpolation.hue_direction;
   if lut_size == 0 {
     return Vec::new();
   }
 
-  // Fast path: if only one color, fill just 16 bytes
+  // Fast path: if only one color, fill just one entry
   if resolved_stops.len() <= 1 {
     let color = resolved_stops
       .first()
       .map(|s| s.color)
-      .unwrap_or(crate::style::Color::transparent());
+      .unwrap_or(Color::transparent());
 
-    return vec![color_to_premultiplied(color)];
+    return vec![from_color(color)];
   }
 
   let mut left_index = 0usize;
@@ -582,7 +638,7 @@ pub fn build_color_lut_with_interpolation(
     axis_length / (lut_size - 1) as f32
   };
 
-  let mut write_sample = |sample_index: usize| -> PremultipliedColorU8 {
+  let mut write_sample = |sample_index: usize| -> T {
     let position_px = sample_index as f32 * sample_step;
 
     while right_index < resolved_stops.len() && resolved_stops[right_index].position <= position_px
@@ -591,42 +647,109 @@ pub fn build_color_lut_with_interpolation(
       right_index += 1;
     }
 
-    let color = if right_index >= resolved_stops.len() {
-      resolved_stops[left_index].color
-    } else {
-      let left_stop = &resolved_stops[left_index];
-      let right_stop = &resolved_stops[right_index];
-      if left_stop.color == right_stop.color {
-        return color_to_premultiplied(left_stop.color);
-      }
+    if right_index >= resolved_stops.len() {
+      return from_color(resolved_stops[left_index].color);
+    }
 
-      let t = interpolation_position(left_stop.position, right_stop.position, position_px);
-      if color_space == ColorSpaceTag::Srgb && hue_direction == HueDirection::Shorter {
-        return interpolate_rgba_premultiplied(
-          color_to_premultiplied(left_stop.color),
-          color_to_premultiplied(right_stop.color),
-          t,
-        );
-      }
+    let left_stop = &resolved_stops[left_index];
+    let right_stop = &resolved_stops[right_index];
+    if left_stop.color == right_stop.color {
+      return from_color(left_stop.color);
+    }
 
-      interpolate_with_color_space(
-        left_stop.color,
-        right_stop.color,
-        t,
-        color_space,
-        hue_direction,
-      )
-    };
+    let t = interpolation_position(left_stop.position, right_stop.position, position_px);
+    if color_space == ColorSpaceTag::Srgb && hue_direction == HueDirection::Shorter {
+      return interpolate_srgb(from_color(left_stop.color), from_color(right_stop.color), t);
+    }
 
-    color_to_premultiplied(color)
+    from_color(interpolate_with_color_space(
+      left_stop.color,
+      right_stop.color,
+      t,
+      color_space,
+      hue_direction,
+    ))
   };
 
-  let mut typed_lut = vec![PremultipliedColorU8::TRANSPARENT; lut_size];
-  for (sample_index, chunk) in typed_lut.iter_mut().enumerate() {
-    *chunk = write_sample(sample_index);
+  let mut lut: Vec<T> = (0..lut_size).map(&mut write_sample).collect();
+  let stop_indices = assign_stop_sample_indices(resolved_stops, axis_length, lut.len());
+  for (stop, &sample_index) in resolved_stops.iter().zip(&stop_indices) {
+    lut[sample_index] = from_color(stop.color);
   }
-  snap_stop_samples(&mut typed_lut, resolved_stops, axis_length);
-  typed_lut
+
+  lut
+}
+
+/// Builds a pre-computed high-precision color lookup table for a gradient.
+/// This allows O(1) color sampling instead of O(n) search + interpolation per pixel.
+pub fn build_color_lut_with_interpolation(
+  resolved_stops: &[ResolvedGradientStop],
+  axis_length: f32,
+  lut_size: usize,
+  interpolation: ColorInterpolationMethod,
+) -> Vec<PremultipliedColorU8> {
+  build_lut(
+    resolved_stops,
+    axis_length,
+    lut_size,
+    interpolation,
+    color_to_premultiplied,
+    interpolate_rgba_premultiplied,
+  )
+}
+
+fn color_to_premultiplied_hi(color: Color) -> GradientLutHiEntry {
+  let [r, g, b, a] = color.0;
+  let scale = a as f32 / 255.0 * 256.0;
+
+  [
+    (r as f32 * scale).round() as u16,
+    (g as f32 * scale).round() as u16,
+    (b as f32 * scale).round() as u16,
+    (a as u16) << 8,
+  ]
+}
+
+fn interpolate_hi(
+  left: GradientLutHiEntry,
+  right: GradientLutHiEntry,
+  t: f32,
+) -> GradientLutHiEntry {
+  let mut entry = [0u16; 4];
+  for (slot, (l, r)) in entry.iter_mut().zip(left.iter().zip(right.iter())) {
+    *slot = (*l as f32 * (1.0 - t) + *r as f32 * t).round() as u16;
+  }
+  entry
+}
+
+/// Builds the premultiplied 8.8 LUT dithered sampling reads, plus whether any
+/// entry carries a fraction dithering can move. Empty unless `dither`.
+pub(crate) fn build_color_lut_hi_with_interpolation(
+  resolved_stops: &[ResolvedGradientStop],
+  axis_length: f32,
+  lut_size: usize,
+  interpolation: ColorInterpolationMethod,
+  dither: bool,
+) -> (Vec<GradientLutHiEntry>, bool) {
+  if !dither {
+    return (Vec::new(), false);
+  }
+
+  let lut = build_lut(
+    resolved_stops,
+    axis_length,
+    lut_size,
+    interpolation,
+    color_to_premultiplied_hi,
+    interpolate_hi,
+  );
+
+  let dither_active = resolved_stops.len() > 1
+    && lut
+      .iter()
+      .any(|entry| entry.iter().any(|channel| channel & 0xFF != 0));
+
+  (lut, dither_active)
 }
 
 /// Calculates an adaptive LUT size based on the gradient axis length.
@@ -1116,10 +1239,12 @@ mod tests {
   }
 
   #[test]
-  fn snap_stop_samples_survives_more_stops_than_lut() {
+  fn stop_snapping_survives_more_stops_than_lut() {
     let stops = evenly_spaced_stops(9000, 256.0);
-    let mut lut = vec![PremultipliedColorU8::TRANSPARENT; 8193];
-    snap_stop_samples(&mut lut, &stops, 256.0);
+    let lut =
+      build_color_lut_with_interpolation(&stops, 256.0, 8193, ColorInterpolationMethod::default());
+
+    assert_eq!(lut.len(), 8193);
   }
 
   #[test]
