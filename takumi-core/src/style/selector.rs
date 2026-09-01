@@ -1948,6 +1948,23 @@ mod tests {
   }
 
   #[test]
+  fn test_parse_media_rule_ignores_feature_name_case() {
+    for query in [
+      "(MIN-WIDTH: 600px)",
+      "(Min-Width: 600px)",
+      "(WIDTH >= 600px)",
+    ] {
+      let sheet = parse_stylesheet(&format!("@media {query} {{ .card {{ width: 100px; }} }}"));
+      let Some(media) = sheet.rules[0].media_queries.first() else {
+        unreachable!("expected media queries on parsed rule: {query}");
+      };
+
+      assert!(media.matches(Viewport::new((800, 600))), "{query}");
+      assert!(!media.matches(Viewport::new((400, 600))), "{query}");
+    }
+  }
+
+  #[test]
   fn test_parse_media_rule_with_comma_list() {
     let sheet = parse_stylesheet(
       r#"

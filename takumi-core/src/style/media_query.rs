@@ -312,9 +312,11 @@ fn parse_media_feature<'i, 't>(
 
   let length = Length::from_css(input).map_err(ParseError::into)?;
   let name = feature_name
-    .strip_prefix("min-")
-    .or_else(|| feature_name.strip_prefix("max-"))
-    .unwrap_or(&feature_name);
+    .split_at_checked("min-".len())
+    .filter(|(prefix, _)| {
+      prefix.eq_ignore_ascii_case("min-") || prefix.eq_ignore_ascii_case("max-")
+    })
+    .map_or(&*feature_name, |(_, name)| name);
 
   MediaFeature::sized(name, comparison, length)
     .ok_or_else(|| input.new_custom_error(StyleSheetParseError::unsupported_media_feature()))
