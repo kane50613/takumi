@@ -3488,6 +3488,10 @@ pub fn run_decorations(
     return out;
   }
   let metrics = &glyph_run.metrics;
+  // A fully trimmed run must not snap up to a 1px decoration.
+  if glyph_run.decorated_advance() <= 0.0 {
+    return out;
+  }
   let start_x = layout.border.left + layout.padding.left + glyph_run.offset;
   let snapped_start_x = start_x.floor();
   let width = (start_x + glyph_run.decorated_advance()).ceil() - snapped_start_x;
@@ -3860,6 +3864,26 @@ mod tests {
       // Not a font: `em_box_descent` falls back to the run metrics instead of OS/2.
       font_data: parley::fontique::Blob::new(Arc::new(Vec::new())),
     }
+  }
+
+  #[test]
+  fn a_fully_trimmed_run_paints_no_decoration() {
+    let mut run = shaped_run(TextUnderlinePosition::Auto, 0.0);
+    run.brush.decoration_line = TextDecorationLines::UNDERLINE;
+    run.brush.decoration_thickness = SizedTextDecorationThickness::Value(2.0);
+    run.advance = 5.2;
+    run.trailing_whitespace = 5.2;
+    run.offset = 10.4;
+
+    let layout = ComputedLayout {
+      location: crate::geometry::Point::ZERO,
+      size: Size::new(100.0, 100.0),
+      border: crate::geometry::Rect::default(),
+      padding: crate::geometry::Rect::default(),
+    };
+    let decorations = run_decorations(&run, &HashMap::new(), layout, 0.0, Affine::IDENTITY);
+
+    assert_eq!(decorations.len(), 0);
   }
 
   #[test]
