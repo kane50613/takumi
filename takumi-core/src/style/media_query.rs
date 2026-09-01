@@ -114,7 +114,16 @@ impl MediaFeatureValue {
 
     if let Ok(number) = input.try_parse(Parser::expect_number) {
       if input.try_parse(|input| input.expect_delim('/')).is_ok() {
+        let location = input.current_source_location();
         let divisor = input.expect_number()?;
+
+        if divisor <= 0.0 {
+          return Err(location.new_unexpected_token_error(Token::Number {
+            has_sign: divisor < 0.0,
+            value: divisor,
+            int_value: None,
+          }));
+        }
 
         return Ok(Self::Ratio(number / divisor));
       }
@@ -129,6 +138,20 @@ impl MediaFeatureValue {
 }
 
 impl MediaFeature {
+  /// The boolean context, which asks whether the feature's value is non-zero.
+  /// <https://drafts.csswg.org/mediaqueries-4/#mq-boolean-context>
+  fn boolean(name: &str) -> Option<Self> {
+    let comparison = MediaFeatureComparison::GreaterThan;
+
+    if name.eq_ignore_ascii_case("resolution") {
+      Some(Self::Resolution(comparison, 0.0))
+    } else if name.eq_ignore_ascii_case("aspect-ratio") {
+      Some(Self::AspectRatio(comparison, 0.0))
+    } else {
+      Self::new(name, comparison, MediaFeatureValue::Number(0.0))
+    }
+  }
+
   fn new(name: &str, comparison: MediaFeatureComparison, value: MediaFeatureValue) -> Option<Self> {
     let length = match value {
       MediaFeatureValue::Length(length) => Some(length),
@@ -160,24 +183,39 @@ impl MediaFeature {
   fn matches(&self, viewport: Viewport, sizing: &SizingContext) -> bool {
     match self {
       Self::Width(comparison, value) => viewport.size.width.is_some_and(|width| {
-        compare_media_feature(*comparison, width as f32, value.to_px(sizing, width as f32))
+        compare_media_feature(
+          *comparison,
+          width as f32,
+          value.to_px(sizing, width as f32),
+          PIXEL_EQUALITY_TOLERANCE,
+        )
       }),
       Self::Height(comparison, value) => viewport.size.height.is_some_and(|height| {
         compare_media_feature(
           *comparison,
           height as f32,
           value.to_px(sizing, height as f32),
+          PIXEL_EQUALITY_TOLERANCE,
         )
       }),
-      Self::Resolution(comparison, dppx) => {
-        compare_media_feature(*comparison, viewport.effective_dpr(), *dppx)
-      }
+      Self::Resolution(comparison, dppx) => compare_media_feature(
+        *comparison,
+        viewport.effective_dpr(),
+        *dppx,
+        RATIO_EQUALITY_TOLERANCE,
+      ),
       Self::AspectRatio(comparison, ratio) => viewport
         .size
         .width
         .zip(viewport.size.height)
         .is_some_and(|(width, height)| {
-          height > 0 && compare_media_feature(*comparison, width as f32 / height as f32, *ratio)
+          height > 0
+            && compare_media_feature(
+              *comparison,
+              width as f32 / height as f32,
+              *ratio,
+              RATIO_EQUALITY_TOLERANCE,
+            )
         }),
       Self::Orientation(MediaOrientation::Portrait) => viewport
         .size
@@ -323,11 +361,20 @@ fn parse_resolution<'i>(
   Err(location.new_unexpected_token_error(token))
 }
 
-fn compare_media_feature(comparison: MediaFeatureComparison, actual: f32, expected: f32) -> bool {
-  const MEDIA_FEATURE_EQUALITY_TOLERANCE: f32 = 0.5;
+/// Viewport sizes are whole pixels, so an equality query means that pixel.
+const PIXEL_EQUALITY_TOLERANCE: f32 = 0.5;
 
+/// A dimensionless value only has to survive the division that produced it.
+const RATIO_EQUALITY_TOLERANCE: f32 = 1e-5;
+
+fn compare_media_feature(
+  comparison: MediaFeatureComparison,
+  actual: f32,
+  expected: f32,
+  tolerance: f32,
+) -> bool {
   match comparison {
-    MediaFeatureComparison::Equal => (actual - expected).abs() <= MEDIA_FEATURE_EQUALITY_TOLERANCE,
+    MediaFeatureComparison::Equal => (actual - expected).abs() <= tolerance,
     MediaFeatureComparison::Min => actual >= expected,
     MediaFeatureComparison::Max => actual <= expected,
     MediaFeatureComparison::GreaterThan => actual > expected,
@@ -419,12 +466,8 @@ fn parse_media_feature<'i, 't>(
   // Boolean context: the feature name alone matches when its value is non-zero.
   // <https://drafts.csswg.org/mediaqueries-4/#mq-boolean-context>
   if input.try_parse(Parser::expect_colon).is_err() {
-    return MediaFeature::new(
-      &feature_name,
-      MediaFeatureComparison::GreaterThan,
-      MediaFeatureValue::Number(0.0),
-    )
-    .ok_or_else(|| input.new_custom_error(StyleSheetParseError::unsupported_media_feature()));
+    return MediaFeature::boolean(&feature_name)
+      .ok_or_else(|| input.new_custom_error(StyleSheetParseError::unsupported_media_feature()));
   }
 
   if feature_name.eq_ignore_ascii_case("orientation") {

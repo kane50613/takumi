@@ -2028,6 +2028,7 @@ mod tests {
       ("(resolution <= 96dpi)", dpr(1.0), dpr(2.0)),
       ("(2dppx <= resolution)", dpr(2.0), dpr(1.0)),
       ("(resolution: 37.7952756dpcm)", dpr(1.0), dpr(2.0)),
+      ("(resolution: 1dppx)", dpr(1.0), dpr(1.49)),
     ] {
       let sheet = parse_stylesheet(&format!("@media {query} {{ .card {{ width: 100px; }} }}"));
       let Some(media) = sheet.rules[0].media_queries.first() else {
@@ -2038,11 +2039,24 @@ mod tests {
       assert!(!media.matches(non_matching), "{query} should not match");
     }
 
+    let degenerate = parse_stylesheet("@media (aspect-ratio <= 1/0) { .card { width: 100px; } }");
+    assert!(
+      !degenerate.rules[0].media_queries[0].matches(Viewport::new((800, 400))),
+      "a zero divisor is not a ratio"
+    );
+
+    let boolean = parse_stylesheet("@media (resolution) { .card { width: 100px; } }");
+    assert!(
+      boolean.rules[0].media_queries[0].matches(dpr(1.0)),
+      "a render always has a resolution"
+    );
+
     for (query, matching, non_matching) in [
-      ("(aspect-ratio: 2/1)", (800, 400), (800, 600)),
+      ("(aspect-ratio: 2/1)", (800, 400), (900, 400)),
       ("(aspect-ratio >= 16/9)", (1600, 900), (800, 600)),
       ("(aspect-ratio < 1)", (400, 800), (800, 400)),
       ("(1/1 < aspect-ratio <= 2/1)", (800, 400), (900, 400)),
+      ("(aspect-ratio)", (800, 400), (0, 400)),
     ] {
       let sheet = parse_stylesheet(&format!("@media {query} {{ .card {{ width: 100px; }} }}"));
       let Some(media) = sheet.rules[0].media_queries.first() else {
