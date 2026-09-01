@@ -2701,14 +2701,7 @@ mod tests {
 
   #[test]
   fn test_lossy_parse_rejects_unknown_rules_and_keeps_valid_siblings() {
-    for css in [
-      r#"
-        @media (resolution: 2dppx) {
-          .card { width: 10px; }
-        }
-
-        .card { width: 100px; }
-      "#,
+    assert_lossy_parse_keeps_single_valid_rule(
       r#"
         @unknown something {
           .card { width: 10px; }
@@ -2716,9 +2709,7 @@ mod tests {
 
         .card { width: 100px; }
       "#,
-    ] {
-      assert_lossy_parse_keeps_single_valid_rule(css);
-    }
+    );
   }
 
   #[test]

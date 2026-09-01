@@ -170,7 +170,7 @@ impl MediaQueryList {
           .filter(|_| input.is_exhausted())
           .unwrap_or_else(MediaQuery::not_all);
 
-        while input.next().is_ok() {}
+        skip_malformed_query(input)?;
 
         Ok(query)
       })?,
@@ -198,6 +198,32 @@ impl MediaQueryList {
       .queries
       .iter()
       .any(|query| query.matches(viewport, &sizing))
+  }
+}
+
+/// Consumes what is left of a query that parsed as `not all`. A block or a
+/// stray closing delimiter means the text was never a prelude, which is how a
+/// caller assembling CSS from strings catches a rule smuggled into one.
+fn skip_malformed_query<'i>(
+  input: &mut Parser<'i, '_>,
+) -> Result<(), ParseError<'i, StyleSheetParseError>> {
+  loop {
+    let location = input.current_source_location();
+    let Ok(token) = input.next() else {
+      return Ok(());
+    };
+
+    if matches!(
+      token,
+      Token::CurlyBracketBlock
+        | Token::CloseCurlyBracket
+        | Token::CloseParenthesis
+        | Token::CloseSquareBracket
+    ) {
+      let token = token.clone();
+
+      return Err(location.new_unexpected_token_error(token));
+    }
   }
 }
 
