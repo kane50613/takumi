@@ -262,9 +262,12 @@ impl ComputedStyle {
     sizing: &SizingContext,
   ) -> SizedTextDecorationThickness {
     match self.text_decoration_thickness {
-      TextDecorationThickness::Length(Length::Auto) | TextDecorationThickness::FromFont => {
-        SizedTextDecorationThickness::FromFont
+      // Blink `ComputeDecorationThickness`: `auto` is a tenth of the font size,
+      // not the font's own underline metric.
+      TextDecorationThickness::Length(Length::Auto) => {
+        SizedTextDecorationThickness::Value(sizing.font_size / 10.0)
       }
+      TextDecorationThickness::FromFont => SizedTextDecorationThickness::FromFont,
       TextDecorationThickness::Length(thickness) => {
         SizedTextDecorationThickness::Value(thickness.to_px(sizing, sizing.font_size))
       }
