@@ -88,7 +88,7 @@ mod subsetter;
 
 use takumi_core::{
   style::{Affine, Color, Lang},
-  viewport::Viewport,
+  viewport::{MediaTarget, Viewport},
 };
 
 /// Written as `/Producer` and `pdf:Producer` in every document takumi renders.
@@ -146,9 +146,13 @@ pub fn measure(options: MeasureOptions<'_>) -> Result<MeasuredSize, PdfError> {
       &options.node,
       999,
       999,
-      Viewport::new((page.width as u32, None)),
+      Viewport::new((page.width as u32, None)).with_media_target(MediaTarget::Print),
     )?,
-    (None, Some(viewport)) => prepare_tree(&inputs, options.node, viewport)?,
+    (None, Some(viewport)) => prepare_tree(
+      &inputs,
+      options.node,
+      viewport.with_media_target(MediaTarget::Print),
+    )?,
     (None, None) => return Err(PdfError::MissingViewport),
   };
 
@@ -259,7 +263,8 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
     Some(page) => {
       // Bands lay out at full page width and draw inside the margin areas,
       // like Chromium's print header and footer templates.
-      let band_viewport = Viewport::new((page.width as u32, None));
+      let band_viewport =
+        Viewport::new((page.width as u32, None)).with_media_target(MediaTarget::Print);
       let bands = |pages: usize| -> Result<(Option<Repeatable>, Option<Repeatable>), PdfError> {
         let header = options
           .header
@@ -388,7 +393,10 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
     None => {
       // A viewport render is one page, so the ranges only have page 1 to keep.
       PageSelection::resolve(options.page_ranges.as_deref(), 1)?;
-      let viewport = options.viewport.ok_or(PdfError::MissingViewport)?;
+      let viewport = options
+        .viewport
+        .ok_or(PdfError::MissingViewport)?
+        .with_media_target(MediaTarget::Print);
       let content = prepare_tree(&inputs, options.node, viewport)?;
       let page_size = KrillaSize::from_wh(content.width * PT_PER_PX, content.height * PT_PER_PX)
         .ok_or(PdfError::InvalidPageSize)?;

@@ -24,7 +24,7 @@ use takumi_core::{
   },
   style::{
     BreakBetween, Color, ColorInput, Display, FlexDirection, FontSize, Length::*, LineHeight,
-    ListStyleType, ObjectFit, Style, StyleDeclaration,
+    ListStyleType, ObjectFit, Style, StyleDeclaration, StyleSheet,
   },
   viewport::Viewport,
 };
@@ -143,6 +143,55 @@ fn text_basic() {
       .fonts(fonts)
       .build()
   });
+}
+
+#[test]
+fn media_print_applies_to_pdf_output() {
+  const PRINTED: &str = ".card { background-color: rgb(20, 120, 60); }";
+
+  let sheet = |css: &str| Arc::new(StyleSheet::parse(css).expect("parse stylesheet"));
+  let card = || {
+    Node::container([text("Hello print", 32.0)])
+      .with_class_name("card")
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Flex))
+          .with(StyleDeclaration::width(Percentage(100.0)))
+          .with(StyleDeclaration::height(Percentage(100.0))),
+      )
+  };
+  fn options(fonts: &Fonts, node: Node, sheet: Arc<StyleSheet>) -> PdfOptions<'_> {
+    PdfOptions::builder()
+      .node(node)
+      .stylesheet(sheet)
+      .viewport(Viewport::new((600, 300)))
+      .fonts(fonts)
+      .build()
+  }
+
+  let fonts = fonts();
+  let printed = run_pdf_fixture_with("media-print", &fonts, |fonts| {
+    options(
+      fonts,
+      card(),
+      sheet(&format!("@media print {{ {PRINTED} }}")),
+    )
+  });
+
+  assert_eq!(
+    printed,
+    render_pinned(options(&fonts, card(), sheet(PRINTED))),
+    "`@media print` must apply to PDF output"
+  );
+  assert_ne!(
+    printed,
+    render_pinned(options(
+      &fonts,
+      card(),
+      sheet(&format!("@media screen {{ {PRINTED} }}"))
+    )),
+    "`@media screen` must not apply to PDF output"
+  );
 }
 
 #[test]

@@ -6,13 +6,14 @@ use crate::{
   error::StyleSheetParseError,
   geometry::Size,
   style::{CalcArena, FromCss, Length, SizingContext},
-  viewport::Viewport,
+  viewport::{MediaTarget, Viewport},
 };
 
 #[derive(Debug, Clone, PartialEq)]
 enum MediaType {
   All,
   Screen,
+  Print,
   Unsupported(String),
 }
 
@@ -140,7 +141,9 @@ impl MediaQuery {
 
   fn matches(&self, viewport: Viewport, sizing: &SizingContext) -> bool {
     let media_type_matches = match &self.media_type {
-      MediaType::All | MediaType::Screen => true,
+      MediaType::All => true,
+      MediaType::Screen => viewport.media_target == MediaTarget::Screen,
+      MediaType::Print => viewport.media_target == MediaTarget::Print,
       MediaType::Unsupported(_) => false,
     };
 
@@ -287,6 +290,8 @@ fn parse_media_type(name: CowRcStr<'_>) -> MediaType {
     MediaType::All
   } else if name.eq_ignore_ascii_case("screen") {
     MediaType::Screen
+  } else if name.eq_ignore_ascii_case("print") {
+    MediaType::Print
   } else {
     MediaType::Unsupported(name.to_string())
   }
