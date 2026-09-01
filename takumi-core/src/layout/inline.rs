@@ -1034,6 +1034,31 @@ impl FloatLayoutState {
   }
 }
 
+/// Splits a line's trailing-whitespace advance over its trailing glyph runs,
+/// walking back from the line end so a run keeps at most its own advance.
+fn distribute_trailing_whitespace(
+  items: &[PositionedLayoutItem<'_, InlineBrush>],
+  line: &Line<'_, InlineBrush>,
+) -> Vec<f32> {
+  let mut shares = vec![0.0_f32; items.len()];
+  let mut remaining = line.metrics().trailing_whitespace;
+
+  for (index, item) in items.iter().enumerate().rev() {
+    if remaining <= 0.0 {
+      break;
+    }
+    let PositionedLayoutItem::GlyphRun(glyph_run) = item else {
+      break;
+    };
+    let share = remaining.min(glyph_run.advance());
+
+    shares[index] = share;
+    remaining -= share;
+  }
+
+  shares
+}
+
 fn quantized_baseline(line_height: f32, ascent: f32, descent: f32) -> f32 {
   let rounded_ascent = ascent.round();
   let rounded_descent = descent.round();
@@ -2902,6 +2927,10 @@ pub struct ShapedRun {
   pub baseline: f32,
   /// Total horizontal advance of the run.
   pub advance: f32,
+  /// Advance of line-end whitespace inside [`Self::advance`]. Decorations do
+  /// not span it (Blink skips hanging whitespace); naive for RTL, where it
+  /// trims the visual right edge instead of the line-start side.
+  pub trailing_whitespace: f32,
   /// Paint attributes carried by the run.
   pub brush: InlineBrush,
   /// Vertical font metrics for the run.
@@ -2929,6 +2958,11 @@ pub struct ShapedRun {
 }
 
 impl ShapedRun {
+  /// Advance that decorations span: the run without its line-end whitespace.
+  pub fn decorated_advance(&self) -> f32 {
+    self.advance - self.trailing_whitespace
+  }
+
   /// Font bytes for `skrifa::FontRef::from_index`, paired with [`Self::font_index`].
   pub fn font_data(&self) -> &[u8] {
     self.font_data.as_ref()
@@ -3112,7 +3146,10 @@ pub fn resolve_inline_runs(
     };
     let mut static_inline_prefix = 0.0_f32;
 
-    for item in line.items() {
+    let items: Vec<_> = line.items().collect();
+    let run_trailing_whitespace = distribute_trailing_whitespace(&items, &line);
+
+    for (item_index, item) in items.into_iter().enumerate() {
       match item {
         PositionedLayoutItem::GlyphRun(glyph_run) => {
           let run = glyph_run.run();
@@ -3211,6 +3248,7 @@ pub fn resolve_inline_runs(
             offset: glyph_run.offset(),
             baseline: glyph_run.baseline(),
             advance: glyph_run.advance(),
+            trailing_whitespace: run_trailing_whitespace[item_index],
             brush,
             metrics: RunMetrics {
               ascent: metrics.ascent,
@@ -3450,9 +3488,13 @@ pub fn run_decorations(
     return out;
   }
   let metrics = &glyph_run.metrics;
+  // A fully trimmed run must not snap up to a 1px decoration.
+  if glyph_run.decorated_advance() <= 0.0 {
+    return out;
+  }
   let start_x = layout.border.left + layout.padding.left + glyph_run.offset;
   let snapped_start_x = start_x.floor();
-  let width = (start_x + glyph_run.advance).ceil() - snapped_start_x;
+  let width = (start_x + glyph_run.decorated_advance()).ceil() - snapped_start_x;
   if width <= 0.0 {
     return out;
   }
@@ -3759,9 +3801,13 @@ mod tests {
   use crate::{
     Fonts,
     context::RenderContext,
+    geometry::{Point, Rect},
     layout::{node::Node, tree::RenderNode},
     resources::font::{FontOverride, FontResource, GenericFamily},
-    style::{Color, ColorInput, Display, SizingContext, Style, StyleDeclaration, WhiteSpace},
+    style::{
+      Color, ColorInput, Display, FontSize, Length, SizingContext, Style, StyleDeclaration,
+      WhiteSpace,
+    },
     viewport::Viewport,
   };
 
@@ -3794,6 +3840,7 @@ mod tests {
       offset: 0.0,
       baseline: 0.0,
       advance: 0.0,
+      trailing_whitespace: 0.0,
       brush: InlineBrush {
         underline_offset,
         underline_position: position,
@@ -3816,6 +3863,98 @@ mod tests {
       synthetic_skew: None,
       // Not a font: `em_box_descent` falls back to the run metrics instead of OS/2.
       font_data: parley::fontique::Blob::new(Arc::new(Vec::new())),
+    }
+  }
+
+  #[test]
+  fn a_fully_trimmed_run_paints_no_decoration() {
+    let mut run = shaped_run(TextUnderlinePosition::Auto, 0.0);
+    run.brush.decoration_line = TextDecorationLines::UNDERLINE;
+    run.brush.decoration_thickness = SizedTextDecorationThickness::Value(2.0);
+    run.advance = 5.2;
+    run.trailing_whitespace = 5.2;
+    run.offset = 10.4;
+
+    let layout = ComputedLayout {
+      location: crate::geometry::Point::ZERO,
+      size: Size::new(100.0, 100.0),
+      border: crate::geometry::Rect::default(),
+      padding: crate::geometry::Rect::default(),
+    };
+    let decorations = run_decorations(&run, &HashMap::new(), layout, 0.0, Affine::IDENTITY);
+
+    assert_eq!(decorations.len(), 0);
+  }
+
+  #[test]
+  fn trailing_whitespace_share_caps_at_the_run_advance() {
+    let fonts = create_test_context();
+    let context = RenderContext::builder()
+      .fonts(fonts.snapshot_with_fallbacks(None))
+      .sizing(
+        SizingContext::builder()
+          .viewport(Viewport::new((1200, 630)))
+          .build(),
+      )
+      .build();
+    let node = Node::container([
+      Node::text("ab ".to_string()),
+      Node::container([Node::text(" ".to_string())]).with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Inline))
+          .with(StyleDeclaration::font_size(FontSize::Length(Length::Px(
+            40.0,
+          )))),
+      ),
+    ])
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Block))
+        .with(StyleDeclaration::font_size(FontSize::Length(Length::Px(
+          20.0,
+        ))))
+        .with_white_space(WhiteSpace::pre()),
+    );
+    let render_node = RenderNode::from_node(&context, node);
+    let font_style = SizedFontStyle::from_style(&render_node.context.style, &render_node.context);
+    let built = create_inline_layout(InlineLayoutRequest {
+      items: collect_inline_items(&render_node),
+      available_space: Size {
+        width: AvailableSpace::Definite(1200.0),
+        height: AvailableSpace::Definite(630.0),
+      },
+      max_width: 1200.0,
+      max_height: None,
+      style: &font_style,
+      context: &render_node.context,
+      mode: InlineLayoutMode::Draw,
+      shape_cacheable: false,
+    });
+    let layout = ComputedLayout {
+      location: Point::ZERO,
+      size: Size::new(1200.0, 630.0),
+      border: Rect::default(),
+      padding: Rect::default(),
+    };
+    let runs = resolve_inline_runs(&built, &render_node.context, layout).unwrap();
+
+    let trailing: Vec<(f32, f32)> = runs
+      .runs
+      .iter()
+      .map(|run| (run.glyph_run.advance, run.glyph_run.trailing_whitespace))
+      .collect();
+
+    // The 40px space run hangs entirely; earlier runs keep what layout kept.
+    let last = trailing.last().unwrap();
+    assert!(
+      (last.1 - last.0).abs() < 0.01,
+      "last run is all whitespace: {trailing:?}"
+    );
+    for (advance, ws) in &trailing {
+      assert!(
+        ws <= advance,
+        "share capped by the run advance: {trailing:?}"
+      );
     }
   }
 

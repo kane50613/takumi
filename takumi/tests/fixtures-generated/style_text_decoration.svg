@@ -1,8 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect x="0" y="0" width="1200" height="188" fill="#f0f0f0"/>
   <rect x="90" y="79.2" width="1001.828" height="7.2" fill="#f00"/>
-  <rect x="1110.933" y="79.2" width="17.068" height="7.2" fill="#f00"/>
-  <rect x="90" y="6.84" width="1038" height="7.2" fill="#f00"/>
+  <rect x="90" y="6.84" width="1020" height="7.2" fill="#f00"/>
   <rect x="161" y="172.8" width="350.16" height="7.2" fill="#f00"/>
   <rect x="549.749" y="172.8" width="39.879" height="7.2" fill="#f00"/>
   <rect x="608.733" y="172.8" width="430.267" height="7.2" fill="#f00"/>
@@ -63,7 +62,7 @@
     <use href="#g10" x="957.26" y="165.6"/>
     <use href="#g1" x="998.23" y="165.6"/>
   </g>
-  <rect x="90" y="49.104" width="1038" height="7.2" fill="#f00"/>
+  <rect x="90" y="49.104" width="1020" height="7.2" fill="#f00"/>
   <rect x="161" y="142.704" width="878" height="7.2" fill="#f00"/>
   <defs>
     <path id="g0" d="M16.78 0v-45.08h-15.92v-6.04l38.02-.01-.01 6.05h-15.9v45.08Z"/>

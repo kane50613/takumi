@@ -101,7 +101,7 @@ fn draw_underline_with_skip_ink(
   for (start_x, end_x) in skip_ink_spans(
     outlines.iter().copied(),
     run_start_x,
-    run_start_x + glyph_run.advance,
+    run_start_x + glyph_run.decorated_advance(),
     line_top,
     line_top + options.size,
   ) {
