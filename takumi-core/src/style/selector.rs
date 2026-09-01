@@ -2018,6 +2018,49 @@ mod tests {
   }
 
   #[test]
+  fn test_parse_media_rule_with_resolution_and_aspect_ratio() {
+    let dpr = |dpr: f32| Viewport::new((800, 400)).with_device_pixel_ratio(dpr);
+
+    for (query, matching, non_matching) in [
+      ("(resolution: 2dppx)", dpr(2.0), dpr(1.0)),
+      ("(resolution >= 2x)", dpr(3.0), dpr(1.5)),
+      ("(min-resolution: 192dpi)", dpr(2.0), dpr(1.0)),
+      ("(resolution <= 96dpi)", dpr(1.0), dpr(2.0)),
+      ("(2dppx <= resolution)", dpr(2.0), dpr(1.0)),
+      ("(resolution: 37.7952756dpcm)", dpr(1.0), dpr(2.0)),
+    ] {
+      let sheet = parse_stylesheet(&format!("@media {query} {{ .card {{ width: 100px; }} }}"));
+      let Some(media) = sheet.rules[0].media_queries.first() else {
+        unreachable!("expected media queries on parsed rule: {query}");
+      };
+
+      assert!(media.matches(matching), "{query} should match");
+      assert!(!media.matches(non_matching), "{query} should not match");
+    }
+
+    for (query, matching, non_matching) in [
+      ("(aspect-ratio: 2/1)", (800, 400), (800, 600)),
+      ("(aspect-ratio >= 16/9)", (1600, 900), (800, 600)),
+      ("(aspect-ratio < 1)", (400, 800), (800, 400)),
+      ("(1/1 < aspect-ratio <= 2/1)", (800, 400), (900, 400)),
+    ] {
+      let sheet = parse_stylesheet(&format!("@media {query} {{ .card {{ width: 100px; }} }}"));
+      let Some(media) = sheet.rules[0].media_queries.first() else {
+        unreachable!("expected media queries on parsed rule: {query}");
+      };
+
+      assert!(
+        media.matches(Viewport::new(matching)),
+        "{query} at {matching:?}"
+      );
+      assert!(
+        !media.matches(Viewport::new(non_matching)),
+        "{query} at {non_matching:?}"
+      );
+    }
+  }
+
+  #[test]
   fn test_parse_media_rule_with_media_types() {
     let screen = Viewport::new((800, 600));
     let print = screen.with_media_target(MediaTarget::Print);
