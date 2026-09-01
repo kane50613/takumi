@@ -128,6 +128,16 @@ impl MediaFeature {
 }
 
 impl MediaQuery {
+  /// The `not all` an unknown or malformed query is replaced by.
+  /// <https://drafts.csswg.org/mediaqueries-4/#error-handling>
+  fn not_all() -> Self {
+    Self {
+      media_type: MediaType::All,
+      features: Vec::new(),
+      negated: true,
+    }
+  }
+
   fn matches(&self, viewport: Viewport, sizing: &SizingContext) -> bool {
     let media_type_matches = match &self.media_type {
       MediaType::All | MediaType::Screen => true,
@@ -153,7 +163,17 @@ impl MediaQueryList {
     input: &mut Parser<'i, 't>,
   ) -> Result<Self, ParseError<'i, StyleSheetParseError>> {
     Ok(Self {
-      queries: input.parse_comma_separated(parse_media_query)?,
+      queries: input.parse_comma_separated(|input| {
+        let query = input
+          .try_parse(parse_media_query)
+          .ok()
+          .filter(|_| input.is_exhausted())
+          .unwrap_or_else(MediaQuery::not_all);
+
+        while input.next().is_ok() {}
+
+        Ok(query)
+      })?,
     })
   }
 
