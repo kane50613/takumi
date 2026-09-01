@@ -797,6 +797,9 @@ fn refresh_text_span_ranges(spans: &mut [ProcessedInlineSpan<'_>]) {
 /// Chromium's break table encodes `word-break: normal` pairs, and Blink runs
 /// break-all through a separate iterator.
 /// <https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/text/text_break_iterator.cc>
+///
+/// Parley takes the override per builder, so one break-all span costs the
+/// whole paragraph its Chromium breaks.
 fn chromium_line_breaks(spans: &[ProcessedInlineSpan<'_>]) -> bool {
   !spans.iter().any(|span| {
     matches!(
