@@ -37,8 +37,16 @@ enum MediaFeature {
   Width(MediaFeatureComparison, Length),
   Height(MediaFeatureComparison, Length),
   Resolution(MediaFeatureComparison, f32),
-  AspectRatio(MediaFeatureComparison, f32),
+  AspectRatio(MediaFeatureComparison, MediaRatio),
   Orientation(MediaOrientation),
+}
+
+/// A `<ratio>`, kept as written so a comparison can cross-multiply instead of
+/// dividing twice.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct MediaRatio {
+  numerator: f32,
+  denominator: f32,
 }
 
 /// A `<mf-value>`, read before the feature it belongs to is known: the range
@@ -48,7 +56,7 @@ enum MediaFeatureValue {
   /// A resolution in dots per `px` unit.
   Resolution(f32),
   /// A ratio written with its slash.
-  Ratio(f32),
+  Ratio(MediaRatio),
   /// A bare number, a length for `width` and a ratio for `aspect-ratio`.
   Number(f32),
   Length(Length),
@@ -125,7 +133,10 @@ impl MediaFeatureValue {
           }));
         }
 
-        return Ok(Self::Ratio(number / divisor));
+        return Ok(Self::Ratio(MediaRatio {
+          numerator: number,
+          denominator: divisor,
+        }));
       }
 
       return Ok(Self::Number(number));
@@ -146,7 +157,13 @@ impl MediaFeature {
     if name.eq_ignore_ascii_case("resolution") {
       Some(Self::Resolution(comparison, 0.0))
     } else if name.eq_ignore_ascii_case("aspect-ratio") {
-      Some(Self::AspectRatio(comparison, 0.0))
+      Some(Self::AspectRatio(
+        comparison,
+        MediaRatio {
+          numerator: 0.0,
+          denominator: 1.0,
+        },
+      ))
     } else {
       Self::new(name, comparison, MediaFeatureValue::Number(0.0))
     }
@@ -170,9 +187,14 @@ impl MediaFeature {
       }
     } else if name.eq_ignore_ascii_case("aspect-ratio") {
       match value {
-        MediaFeatureValue::Ratio(ratio) | MediaFeatureValue::Number(ratio) => {
-          Some(Self::AspectRatio(comparison, ratio))
-        }
+        MediaFeatureValue::Ratio(ratio) => Some(Self::AspectRatio(comparison, ratio)),
+        MediaFeatureValue::Number(numerator) => Some(Self::AspectRatio(
+          comparison,
+          MediaRatio {
+            numerator,
+            denominator: 1.0,
+          },
+        )),
         _ => None,
       }
     } else {
@@ -187,7 +209,7 @@ impl MediaFeature {
           *comparison,
           width as f32,
           value.to_px(sizing, width as f32),
-          PIXEL_EQUALITY_TOLERANCE,
+          LAYOUT_UNIT_EPSILON,
         )
       }),
       Self::Height(comparison, value) => viewport.size.height.is_some_and(|height| {
@@ -195,27 +217,23 @@ impl MediaFeature {
           *comparison,
           height as f32,
           value.to_px(sizing, height as f32),
-          PIXEL_EQUALITY_TOLERANCE,
+          LAYOUT_UNIT_EPSILON,
         )
       }),
-      Self::Resolution(comparison, dppx) => compare_media_feature(
-        *comparison,
-        viewport.effective_dpr(),
-        *dppx,
-        RATIO_EQUALITY_TOLERANCE,
-      ),
+      Self::Resolution(comparison, dppx) => {
+        compare_media_feature(*comparison, viewport.effective_dpr(), *dppx, 0.0)
+      }
       Self::AspectRatio(comparison, ratio) => viewport
         .size
         .width
         .zip(viewport.size.height)
         .is_some_and(|(width, height)| {
-          height > 0
-            && compare_media_feature(
-              *comparison,
-              width as f32 / height as f32,
-              *ratio,
-              RATIO_EQUALITY_TOLERANCE,
-            )
+          compare_media_feature(
+            *comparison,
+            width as f32 * ratio.denominator,
+            height as f32 * ratio.numerator,
+            LAYOUT_UNIT_EPSILON,
+          )
         }),
       Self::Orientation(MediaOrientation::Portrait) => viewport
         .size
@@ -333,7 +351,10 @@ fn skip_malformed_query<'i>(
   }
 }
 
-/// A `<resolution>` in dots per `px` unit.
+/// A `<resolution>` in dots per `px` unit. A `dpcm` value is rounded to two
+/// decimals, as Blink does; Blink rounds the device pixel ratio the same way
+/// before comparing, which this does not, so the two disagree when that ratio
+/// carries more than two decimals.
 fn parse_resolution<'i>(
   input: &mut Parser<'i, '_>,
 ) -> Result<f32, ParseError<'i, StyleSheetParseError>> {
@@ -349,7 +370,7 @@ fn parse_resolution<'i>(
     let dppx = match_ignore_ascii_case! { unit.as_ref(),
       "dppx" | "x" => Some(value),
       "dpi" => Some(value / 96.0),
-      "dpcm" => Some(value / DPCM_PER_DPPX),
+      "dpcm" => Some(((value / DPCM_PER_DPPX) * 100.0).round() / 100.0),
       _ => None,
     };
 
@@ -361,11 +382,10 @@ fn parse_resolution<'i>(
   Err(location.new_unexpected_token_error(token))
 }
 
-/// Viewport sizes are whole pixels, so an equality query means that pixel.
-const PIXEL_EQUALITY_TOLERANCE: f32 = 0.5;
-
-/// A dimensionless value only has to survive the division that produced it.
-const RATIO_EQUALITY_TOLERANCE: f32 = 1e-5;
+/// Blink compares lengths against `LayoutUnit::Epsilon()`, the step of the grid
+/// it rounds layout onto.
+/// <https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/css/media_query_evaluator.cc>
+const LAYOUT_UNIT_EPSILON: f32 = 1.0 / 64.0;
 
 fn compare_media_feature(
   comparison: MediaFeatureComparison,
@@ -373,10 +393,18 @@ fn compare_media_feature(
   expected: f32,
   tolerance: f32,
 ) -> bool {
+  // <https://drafts.csswg.org/mediaqueries-4/#false-in-the-negative-range>
+  if expected < 0.0 {
+    return matches!(
+      comparison,
+      MediaFeatureComparison::Min | MediaFeatureComparison::GreaterThan
+    );
+  }
+
   match comparison {
     MediaFeatureComparison::Equal => (actual - expected).abs() <= tolerance,
-    MediaFeatureComparison::Min => actual >= expected,
-    MediaFeatureComparison::Max => actual <= expected,
+    MediaFeatureComparison::Min => actual >= expected - tolerance,
+    MediaFeatureComparison::Max => actual <= expected + tolerance,
     MediaFeatureComparison::GreaterThan => actual > expected,
     MediaFeatureComparison::LessThan => actual < expected,
   }
@@ -485,25 +513,17 @@ fn parse_media_feature<'i, 't>(
     };
   }
 
-  let comparison = if feature_name.eq_ignore_ascii_case("min-width")
-    || feature_name.eq_ignore_ascii_case("min-height")
-  {
-    MediaFeatureComparison::Min
-  } else if feature_name.eq_ignore_ascii_case("max-width")
-    || feature_name.eq_ignore_ascii_case("max-height")
-  {
-    MediaFeatureComparison::Max
-  } else {
-    MediaFeatureComparison::Equal
+  let (comparison, name) = match feature_name.split_at_checked("min-".len()) {
+    Some((prefix, name)) if prefix.eq_ignore_ascii_case("min-") => {
+      (MediaFeatureComparison::Min, name)
+    }
+    Some((prefix, name)) if prefix.eq_ignore_ascii_case("max-") => {
+      (MediaFeatureComparison::Max, name)
+    }
+    _ => (MediaFeatureComparison::Equal, &*feature_name),
   };
 
   let value = MediaFeatureValue::parse(input)?;
-  let name = feature_name
-    .split_at_checked("min-".len())
-    .filter(|(prefix, _)| {
-      prefix.eq_ignore_ascii_case("min-") || prefix.eq_ignore_ascii_case("max-")
-    })
-    .map_or(&*feature_name, |(_, name)| name);
 
   MediaFeature::new(name, comparison, value)
     .ok_or_else(|| input.new_custom_error(StyleSheetParseError::unsupported_media_feature()))
