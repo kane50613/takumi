@@ -33,7 +33,7 @@ pub struct ConicGradient {
   #[builder(default = PositionValue::center())]
   pub center: PositionValue,
   /// The color interpolation method used between stops.
-  #[builder(default)]
+  #[builder(default = ColorInterpolationMethod::LEGACY)]
   pub interpolation: ColorInterpolationMethod,
   /// Gradient color stops.
   #[builder(setter(into))]
@@ -318,7 +318,7 @@ impl<'i> FromCss<'i> for ConicGradient {
     input.parse_nested_block(|input| {
       let mut from_angle: Option<Angle> = None;
       let mut center: Option<PositionValue> = None;
-      let mut interpolation = ColorInterpolationMethod::default();
+      let mut interpolation = None;
 
       // Parse optional "from <angle>" and/or "at <position>" before the comma
       loop {
@@ -335,7 +335,7 @@ impl<'i> FromCss<'i> for ConicGradient {
         }
 
         if let Ok(parsed_interpolation) = input.try_parse(ColorInterpolationMethod::from_css) {
-          interpolation = parsed_interpolation;
+          interpolation = Some(parsed_interpolation);
           continue;
         }
 
@@ -344,13 +344,13 @@ impl<'i> FromCss<'i> for ConicGradient {
         break;
       }
 
-      let stops = parse_gradient_stops(input, ConicGradient::parse_stop_position)?;
+      let (stops, modern) = parse_gradient_stops(input, ConicGradient::parse_stop_position)?;
 
       Ok(ConicGradient {
         repeating,
         from_angle: from_angle.unwrap_or(Angle::zero()),
         center: center.unwrap_or_else(PositionValue::center),
-        interpolation,
+        interpolation: interpolation.unwrap_or(ColorInterpolationMethod::gradient_default(modern)),
         stops: stops.into_boxed_slice(),
       })
     })
@@ -458,7 +458,7 @@ mod tests {
           repeating: false,
           from_angle: Angle::zero(),
           center: PositionValue::center(),
-          interpolation: ColorInterpolationMethod::default(),
+          interpolation: ColorInterpolationMethod::LEGACY,
           stops: stops.into(),
         }),
         "input: {input}",
@@ -506,7 +506,7 @@ mod tests {
           Length::Percentage(25.0).into(),
           Length::Percentage(75.0).into()
         )),
-        interpolation: ColorInterpolationMethod::default(),
+        interpolation: ColorInterpolationMethod::LEGACY,
         stops: red_blue_stops(None, None).into(),
       })
     );

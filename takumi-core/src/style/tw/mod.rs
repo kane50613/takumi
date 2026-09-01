@@ -1207,22 +1207,25 @@ impl TailwindProperty {
         push_gradient_image(
           builder,
           important,
-          format!("linear-gradient({}deg, var(--tw-gradient-stops))", *angle),
+          format!(
+            "linear-gradient({}deg in oklab, var(--tw-gradient-stops))",
+            *angle
+          ),
         );
       }
       TailwindProperty::BgRadial => {
         push_gradient_image(
           builder,
           important,
-          "radial-gradient(var(--tw-gradient-stops))".to_owned(),
+          "radial-gradient(in oklab, var(--tw-gradient-stops))".to_owned(),
         );
       }
       TailwindProperty::BgConicAngle(angle) => {
         let image = if *angle == 0.0 {
-          "conic-gradient(var(--tw-gradient-stops))".to_owned()
+          "conic-gradient(in oklab, var(--tw-gradient-stops))".to_owned()
         } else {
           format!(
-            "conic-gradient(from {}deg, var(--tw-gradient-stops))",
+            "conic-gradient(from {}deg in oklab, var(--tw-gradient-stops))",
             *angle
           )
         };

@@ -114,7 +114,6 @@ pub use grid::*;
 pub use length::*;
 pub use line_clamp::*;
 pub use line_height::*;
-pub(crate) use linear_gradient::GradientStops;
 pub use linear_gradient::{
   Angle, GradientKeywordDirection, GradientStop, HorizontalKeyword, LinearGradient,
   LinearGradientDirection, ResolvedGradientStop, StopPosition, VerticalKeyword,

@@ -2,25 +2,25 @@
   <rect x="0" y="0" width="1200" height="630" fill="#000"/>
   <linearGradient id="lg0" gradientUnits="userSpaceOnUse" x1="142.5" y1="772.5" x2="1057.5" y2="-142.5">
     <stop offset="0" stop-color="#ff95ff" stop-opacity=".302"/>
-    <stop offset=".016" stop-color="#ff97ff" stop-opacity=".298"/>
+    <stop offset=".016" stop-color="#ff94ff" stop-opacity=".298"/>
     <stop offset=".032" stop-color="#ff96ff" stop-opacity=".294"/>
     <stop offset=".048" stop-color="#ff96ff" stop-opacity=".286"/>
     <stop offset=".063" stop-color="#ff95ff" stop-opacity=".282"/>
-    <stop offset=".079" stop-color="#ff97ff" stop-opacity=".278"/>
+    <stop offset=".079" stop-color="#ff93ff" stop-opacity=".278"/>
     <stop offset=".095" stop-color="#ff95ff" stop-opacity=".275"/>
     <stop offset=".111" stop-color="#ff96ff" stop-opacity=".267"/>
     <stop offset=".127" stop-color="#ff94ff" stop-opacity=".263"/>
     <stop offset=".143" stop-color="#ff97ff" stop-opacity=".259"/>
     <stop offset=".159" stop-color="#ff95ff" stop-opacity=".255"/>
-    <stop offset=".175" stop-color="#ff97ff" stop-opacity=".251"/>
+    <stop offset=".175" stop-color="#ff93ff" stop-opacity=".251"/>
     <stop offset=".19" stop-color="#ff94ff" stop-opacity=".243"/>
     <stop offset=".206" stop-color="#ff96ff" stop-opacity=".239"/>
     <stop offset=".222" stop-color="#ff95ff" stop-opacity=".235"/>
-    <stop offset=".238" stop-color="#ff97ff" stop-opacity=".231"/>
+    <stop offset=".238" stop-color="#ff93ff" stop-opacity=".231"/>
     <stop offset=".254" stop-color="#ff98ff" stop-opacity=".224"/>
     <stop offset=".27" stop-color="#ff96ff" stop-opacity=".22"/>
     <stop offset=".286" stop-color="#ff94ff" stop-opacity=".216"/>
-    <stop offset=".302" stop-color="#ff97ff" stop-opacity=".212"/>
+    <stop offset=".302" stop-color="#ff92ff" stop-opacity=".212"/>
     <stop offset=".317" stop-color="#ff95ff" stop-opacity=".208"/>
     <stop offset=".333" stop-color="#ff96ff" stop-opacity=".2"/>
     <stop offset=".349" stop-color="#ff94ff" stop-opacity=".196"/>
@@ -30,11 +30,11 @@
     <stop offset=".413" stop-color="#ff93ff" stop-opacity=".176"/>
     <stop offset=".429" stop-color="#ff97ff" stop-opacity=".173"/>
     <stop offset=".444" stop-color="#ff94ff" stop-opacity=".169"/>
-    <stop offset=".46" stop-color="#ff98ff" stop-opacity=".165"/>
+    <stop offset=".46" stop-color="#ff92ff" stop-opacity=".165"/>
     <stop offset=".476" stop-color="#f9f" stop-opacity=".157"/>
     <stop offset=".492" stop-color="#ff96ff" stop-opacity=".153"/>
     <stop offset=".508" stop-color="#ff94ff" stop-opacity=".149"/>
-    <stop offset=".524" stop-color="#ff98ff" stop-opacity=".145"/>
+    <stop offset=".524" stop-color="#ff91ff" stop-opacity=".145"/>
     <stop offset=".54" stop-color="#f9f" stop-opacity=".137"/>
     <stop offset=".556" stop-color="#ff96ff" stop-opacity=".133"/>
     <stop offset=".571" stop-color="#ff93ff" stop-opacity=".129"/>
@@ -48,7 +48,7 @@
     <stop offset=".698" stop-color="#ff9bff" stop-opacity=".09"/>
     <stop offset=".714" stop-color="#ff97ff" stop-opacity=".086"/>
     <stop offset=".73" stop-color="#ff92ff" stop-opacity=".082"/>
-    <stop offset=".746" stop-color="#f9f" stop-opacity=".078"/>
+    <stop offset=".746" stop-color="#ff8cff" stop-opacity=".078"/>
     <stop offset=".762" stop-color="#ff9cff" stop-opacity=".071"/>
     <stop offset=".778" stop-color="#ff96ff" stop-opacity=".067"/>
     <stop offset=".794" stop-color="#ff8fff" stop-opacity=".063"/>

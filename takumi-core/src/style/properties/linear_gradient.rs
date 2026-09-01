@@ -29,7 +29,7 @@ pub struct LinearGradient {
   #[builder(default)]
   pub direction: LinearGradientDirection,
   /// The color interpolation method used between stops.
-  #[builder(default)]
+  #[builder(default = ColorInterpolationMethod::LEGACY)]
   pub interpolation: ColorInterpolationMethod,
   /// The steps of the gradient.
   #[builder(setter(into))]
@@ -371,17 +371,6 @@ impl MakeComputed for GradientStop {
   }
 }
 
-/// A list of gradient color stops, handling CSS double-stop syntax.
-pub(crate) type GradientStops = Vec<GradientStop>;
-
-impl<'i> FromCss<'i> for GradientStops {
-  const VALID_TOKENS: &'static [CssToken] = GradientStop::VALID_TOKENS;
-
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    parse_gradient_stops(input, StopPosition::from_css)
-  }
-}
-
 /// Represents a resolved gradient stop with a position.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -668,7 +657,7 @@ impl<'i> FromCss<'i> for LinearGradient {
 
     input.parse_nested_block(|input| {
       let mut direction = LinearGradientDirection::default();
-      let mut interpolation = ColorInterpolationMethod::default();
+      let mut interpolation = None;
       let mut saw_direction = false;
 
       loop {
@@ -683,7 +672,7 @@ impl<'i> FromCss<'i> for LinearGradient {
         }
 
         if let Ok(parsed_interpolation) = input.try_parse(ColorInterpolationMethod::from_css) {
-          interpolation = parsed_interpolation;
+          interpolation = Some(parsed_interpolation);
           continue;
         }
 
@@ -692,11 +681,13 @@ impl<'i> FromCss<'i> for LinearGradient {
 
       input.try_parse(Parser::expect_comma).ok();
 
+      let (stops, modern) = parse_gradient_stops(input, StopPosition::from_css)?;
+
       Ok(LinearGradient {
         repeating,
         direction,
-        interpolation,
-        stops: GradientStops::from_css(input)?.into_boxed_slice(),
+        interpolation: interpolation.unwrap_or(ColorInterpolationMethod::gradient_default(modern)),
+        stops: stops.into_boxed_slice(),
       })
     })
   }
@@ -856,7 +847,7 @@ mod tests {
           horizontal: Some(HorizontalKeyword::Right),
           vertical: Some(VerticalKeyword::Top),
         }),
-        interpolation: ColorInterpolationMethod::default(),
+        interpolation: ColorInterpolationMethod::LEGACY,
         stops: red_blue_stops(None, None).into(),
       })
     )
@@ -975,7 +966,7 @@ mod tests {
       Ok(LinearGradient {
         repeating: false,
         direction: LinearGradientDirection::Angle(Angle::new(45.0)),
-        interpolation: ColorInterpolationMethod::default(),
+        interpolation: ColorInterpolationMethod::LEGACY,
         stops: red_blue_stops(None, None).into(),
       })
     )
@@ -995,6 +986,14 @@ mod tests {
         stops: red_blue_stops(None, None).into(),
       })
     );
+  }
+
+  #[test]
+  fn relative_color_stops_interpolate_in_oklab() {
+    let gradient =
+      LinearGradient::from_css_str("linear-gradient(rgb(from red r g b), #0000ff)").unwrap();
+
+    assert_eq!(gradient.interpolation.color_space, ColorSpaceTag::Oklab);
   }
 
   #[test]
@@ -1053,7 +1052,7 @@ mod tests {
           horizontal: Some(HorizontalKeyword::Right),
           vertical: None,
         }),
-        interpolation: ColorInterpolationMethod::default(),
+        interpolation: ColorInterpolationMethod::LEGACY,
         stops: red_blue_stops(
           Some(StopPosition(Length::Percentage(0.0))),
           Some(StopPosition(Length::Percentage(100.0))),
@@ -1073,7 +1072,7 @@ mod tests {
           horizontal: Some(HorizontalKeyword::Right),
           vertical: None,
         }),
-        interpolation: ColorInterpolationMethod::default(),
+        interpolation: ColorInterpolationMethod::LEGACY,
         stops: [
           GradientStop::ColorHint {
             color: ColorInput::Value(Color::from_rgb(0xff0000)),
@@ -1103,7 +1102,7 @@ mod tests {
           horizontal: Some(HorizontalKeyword::Right),
           vertical: None,
         }),
-        interpolation: ColorInterpolationMethod::default(),
+        interpolation: ColorInterpolationMethod::LEGACY,
         stops: [
           GradientStop::ColorHint {
             color: ColorInput::Value(Color([255, 0, 0, 255])),
@@ -1130,7 +1129,7 @@ mod tests {
           horizontal: None,
           vertical: Some(VerticalKeyword::Bottom),
         }),
-        interpolation: ColorInterpolationMethod::default(),
+        interpolation: ColorInterpolationMethod::LEGACY,
         stops: [GradientStop::ColorHint {
           color: ColorInput::Value(Color([255, 0, 0, 255])),
           hint: None,
@@ -1148,7 +1147,7 @@ mod tests {
       Ok(LinearGradient {
         repeating: false,
         direction: LinearGradientDirection::default(),
-        interpolation: ColorInterpolationMethod::default(),
+        interpolation: ColorInterpolationMethod::LEGACY,
         stops: [
           GradientStop::ColorHint {
             color: ColorInput::Value(Color::from_rgb(0xff0000)),
@@ -1237,7 +1236,7 @@ mod tests {
       Ok(LinearGradient {
         repeating: false,
         direction: LinearGradientDirection::Angle(Angle::new(45.0)),
-        interpolation: ColorInterpolationMethod::default(),
+        interpolation: ColorInterpolationMethod::LEGACY,
         stops: [
           GradientStop::ColorHint {
             color: Color([255, 0, 0, 255]).into(),
@@ -1264,7 +1263,7 @@ mod tests {
     let gradient = LinearGradient {
       repeating: false,
       direction: LinearGradientDirection::default(),
-      interpolation: ColorInterpolationMethod::default(),
+      interpolation: ColorInterpolationMethod::LEGACY,
       stops: red_blue_stops(
         Some(StopPosition(Length::Percentage(0.0))),
         Some(StopPosition(Length::Percentage(100.0))),
@@ -1287,7 +1286,7 @@ mod tests {
 
     // Test in the middle (should be purple)
     let color_middle = tile.sample_pixel(50, 50).demultiply();
-    assert_eq!(color_middle, ColorU8::from_rgba(140, 83, 162, 255));
+    assert_eq!(color_middle, ColorU8::from_rgba(127, 0, 128, 255));
   }
 
   #[test]
@@ -1295,7 +1294,7 @@ mod tests {
     let gradient = LinearGradient {
       repeating: false,
       direction: LinearGradientDirection::Angle(Angle::new(90.0)),
-      interpolation: ColorInterpolationMethod::default(),
+      interpolation: ColorInterpolationMethod::LEGACY,
       stops: red_blue_stops(
         Some(StopPosition(Length::Percentage(0.0))),
         Some(StopPosition(Length::Percentage(100.0))),
@@ -1325,7 +1324,7 @@ mod tests {
         horizontal: Some(HorizontalKeyword::Right),
         vertical: Some(VerticalKeyword::Bottom),
       }),
-      interpolation: ColorInterpolationMethod::default(),
+      interpolation: ColorInterpolationMethod::LEGACY,
       stops: red_blue_stops(
         Some(StopPosition(Length::Percentage(0.0))),
         Some(StopPosition(Length::Percentage(100.0))),
@@ -1347,7 +1346,7 @@ mod tests {
     let gradient = LinearGradient {
       repeating: false,
       direction: LinearGradientDirection::Angle(Angle::new(0.0)),
-      interpolation: ColorInterpolationMethod::default(),
+      interpolation: ColorInterpolationMethod::LEGACY,
       stops: [GradientStop::ColorHint {
         color: Color([255, 0, 0, 255]).into(), // Red
         hint: None,
@@ -1369,7 +1368,7 @@ mod tests {
     let gradient = LinearGradient {
       repeating: false,
       direction: LinearGradientDirection::Angle(Angle::new(0.0)),
-      interpolation: ColorInterpolationMethod::default(),
+      interpolation: ColorInterpolationMethod::LEGACY,
       stops: [].into(),
     };
 
