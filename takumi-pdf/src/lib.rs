@@ -586,10 +586,10 @@ mod tests {
     );
   }
 
-  /// `widows` past the paragraph's line count cannot be honored at all, so
-  /// the cut stays where the window put it.
+  /// `widows` past the paragraph's line count resolves to the orphans floor,
+  /// like any other unsatisfiable widows value, instead of underflowing.
   #[test]
-  fn page_starts_ignores_widows_past_the_line_count() {
+  fn page_starts_floors_widows_past_the_line_count() {
     let lines: Vec<Atom> = (0..3)
       .map(|i| (80.0 + i as f32 * 10.0, 90.0 + i as f32 * 10.0))
       .collect();
@@ -601,7 +601,7 @@ mod tests {
 
     assert_eq!(
       atoms(&lines, &[], paragraphs).page_starts(&[], 110.0, 100.0),
-      vec![0.0, 100.0]
+      vec![0.0, 90.0]
     );
   }
 
