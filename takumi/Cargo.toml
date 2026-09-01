@@ -1,6 +1,6 @@
 [package]
 name = "takumi"
-version = "2.13.3"
+version = "2.13.4"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Render OG images from HTML, CSS, or component trees. No headless browser."
@@ -14,24 +14,24 @@ autobenches = false
 
 [dependencies.takumi-core]
 path = "../takumi-core"
-version = "0.23.1"
+version = "0.24.0"
 default-features = false
 
 [dependencies.takumi-raster]
 path = "../takumi-raster"
-version = "0.4.22"
+version = "0.5.0"
 default-features = false
 optional = true
 
 [dependencies.takumi-svg]
 path = "../takumi-svg"
-version = "0.3.20"
+version = "0.3.21"
 default-features = false
 optional = true
 
 [dependencies.takumi-html]
 path = "../takumi-html"
-version = "0.3.2"
+version = "0.3.3"
 default-features = false
 optional = true
 

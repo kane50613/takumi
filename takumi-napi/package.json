@@ -1,6 +1,6 @@
 {
   "name": "@takumi-rs/core",
-  "version": "2.13.3",
+  "version": "2.13.4",
   "description": "Render OG images from Takumi node trees with native Node.js bindings. No headless browser.",
   "keywords": [
     "css",

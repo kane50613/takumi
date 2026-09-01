@@ -1,6 +1,6 @@
 [package]
 name = "takumi-pdf"
-version = "0.13.1"
+version = "0.14.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Vector PDF output backend for takumi. Emits selectable, searchable text with embedded subset fonts."

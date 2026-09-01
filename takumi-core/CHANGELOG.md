@@ -1,3 +1,97 @@
+## takumi-core@0.24.0
+
+### Break lines where Chromium breaks them
+
+Soft wrap opportunities follow Chromium's table instead of plain ICU, so
+`ISBN-2026408` wraps after the hyphen the way a browser wraps it. Text under
+`word-break: break-all` still breaks at every character.
+
+### Apply `@media print` rules to PDF output
+
+PDF renders now match the `print` media type, and image renders match
+`screen`. `Viewport::media_target` picks which one a render resolves against.
+
+### Round normal line heights like browsers
+
+`line-height: normal` resolves from the primary font as
+`round(ascent) + round(descent) + round(line gap)`, as Blink computes it, so
+line stacks match browser pixel positions. Fallback-font runs still grow the
+line to their own rounded height. Subset groups expand in registration order
+when ranks tie, so the primary font is the first registered subset.
+
+### Treat layout values a browser reads as equal as equal
+
+Text outline fragments, uniform border widths, and the ellipsis overflow check
+all compare against 1/64px now, the step Blink stores layout on. Each used to
+carry its own tolerance, so the same difference counted three ways.
+
+### Paint inline span backgrounds
+
+A `display: inline` span fills its `background-color` under the text, one
+rounded fragment per line. Horizontal padding reserves space on the line and
+the fragment grows by it, so badge and pill markup renders instead of
+silently dropping the background.
+
+### Register multi-family font files in face order
+
+A font file carrying several families (a ttc) registers them in face order.
+Fallback selection no longer varies between renderers loading the same file.
+
+### Match browser thickness for text-decoration auto
+
+`text-decoration-thickness: auto` resolves to a tenth of the font size with a
+1px floor, as Blink computes it; `from-font` keeps the font's own metric.
+
+### Interpolate legacy-color gradients in sRGB
+
+A gradient with only legacy color stops (hex, named, non-relative `rgb()`,
+`hsl()`, `hwb()`) interpolates in sRGB, as browsers do. Modern stops keep
+Oklab, and Tailwind gradient utilities pin `in oklab`.
+
+### Combine media queries with `or` and nested groups
+
+`@media (min-width: 600px) or (min-height: 900px)` and nested groups such as
+`(width > 100px) and ((height < 500px) or (orientation: portrait))` now parse.
+`not` applies inside a group as well.
+
+### Stop decorating line-end whitespace
+
+Underline, overline, and line-through no longer extend over the collapsed
+whitespace at a line break, matching browsers for LTR text. RTL is
+approximate: the trim lands on the visual right edge.
+
+### Keep parsing a stylesheet past an unknown media query
+
+An unknown media feature such as `(prefers-color-scheme: dark)` used to fail
+the whole stylesheet. The query now matches nothing and the rest of the sheet
+still applies, as the spec requires.
+
+### Size corner-keyword radial gradients like browsers
+
+An ellipse `radial-gradient` sized `farthest-corner` (the default) or
+`closest-corner` passes through that corner, as browsers do; both keywords
+previously stopped at the box sides. Side distances are measured absolute,
+so a center outside the box keeps positive radii.
+
+### Accept media query range syntax
+
+`@media (width >= 768px)` and `@media (400px < height <= 700px)` now parse
+alongside `min-width` and `max-width`. A bare `(width)` matches any non-zero
+viewport width.
+
+### Dither gradients under the dithering option
+
+With `dithering` set, gradient fills add ordered Bayer noise before 8-bit
+quantization, as Chrome does, so slow ramps stop banding. The old output pass
+that reduced every pixel to 128 levels is gone; `floyd-steinberg` is now a
+deprecated alias of `ordered-bayer`. The default output is unchanged.
+
+### Match `resolution` and `aspect-ratio` media queries
+
+`@media (resolution >= 2dppx)` reads the render's device pixel ratio, in
+`dppx`, `x`, `dpi`, or `dpcm`. `@media (aspect-ratio >= 16/9)` reads the
+viewport's ratio. Both take the range syntax and the `min-`/`max-` prefixes.
+
 ## takumi-core@0.23.1
 
 ### Apply text-fit to text with letter or word spacing

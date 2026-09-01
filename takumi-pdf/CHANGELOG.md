@@ -1,3 +1,24 @@
+## takumi-pdf@0.14.0
+
+### Apply `@media print` rules to PDF output
+
+PDF renders now match the `print` media type, and image renders match
+`screen`. `Viewport::media_target` picks which one a render resolves against.
+
+### Paint inline span backgrounds
+
+A `display: inline` span fills its `background-color` under the text, one
+rounded fragment per line. Horizontal padding reserves space on the line and
+the fragment grows by it, so badge and pill markup renders instead of
+silently dropping the background.
+
+### Select output pages with pageRanges
+
+`pageRanges` keeps only the listed pages, like a print dialog. Each entry is
+a 1-based page number or an inclusive `{ from, to }` span. Layout and page
+counters still run over the whole document, so a kept page shows the numbers
+it would in full output.
+
 ## takumi-pdf@0.13.0
 
 ### Tag tables with PDF structure elements
