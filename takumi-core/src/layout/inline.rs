@@ -2958,6 +2958,11 @@ pub struct ShapedRun {
 }
 
 impl ShapedRun {
+  /// Advance that decorations span: the run without its line-end whitespace.
+  pub fn decorated_advance(&self) -> f32 {
+    self.advance - self.trailing_whitespace
+  }
+
   /// Font bytes for `skrifa::FontRef::from_index`, paired with [`Self::font_index`].
   pub fn font_data(&self) -> &[u8] {
     self.font_data.as_ref()
@@ -3243,10 +3248,7 @@ pub fn resolve_inline_runs(
             offset: glyph_run.offset(),
             baseline: glyph_run.baseline(),
             advance: glyph_run.advance(),
-            trailing_whitespace: run_trailing_whitespace
-              .get(item_index)
-              .copied()
-              .unwrap_or(0.0),
+            trailing_whitespace: run_trailing_whitespace[item_index],
             brush,
             metrics: RunMetrics {
               ascent: metrics.ascent,
@@ -3488,8 +3490,7 @@ pub fn run_decorations(
   let metrics = &glyph_run.metrics;
   let start_x = layout.border.left + layout.padding.left + glyph_run.offset;
   let snapped_start_x = start_x.floor();
-  let decorated_advance = glyph_run.advance - glyph_run.trailing_whitespace;
-  let width = (start_x + decorated_advance).ceil() - snapped_start_x;
+  let width = (start_x + glyph_run.decorated_advance()).ceil() - snapped_start_x;
   if width <= 0.0 {
     return out;
   }
@@ -3796,9 +3797,13 @@ mod tests {
   use crate::{
     Fonts,
     context::RenderContext,
+    geometry::{Point, Rect},
     layout::{node::Node, tree::RenderNode},
     resources::font::{FontOverride, FontResource, GenericFamily},
-    style::{Color, ColorInput, Display, SizingContext, Style, StyleDeclaration, WhiteSpace},
+    style::{
+      Color, ColorInput, Display, FontSize, Length, SizingContext, Style, StyleDeclaration,
+      WhiteSpace,
+    },
     viewport::Viewport,
   };
 
@@ -3873,17 +3878,17 @@ mod tests {
       Node::container([Node::text(" ".to_string())]).with_style(
         Style::default()
           .with(StyleDeclaration::display(Display::Inline))
-          .with(StyleDeclaration::font_size(crate::style::FontSize::Length(
-            crate::style::Length::Px(40.0),
-          ))),
+          .with(StyleDeclaration::font_size(FontSize::Length(Length::Px(
+            40.0,
+          )))),
       ),
     ])
     .with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Block))
-        .with(StyleDeclaration::font_size(crate::style::FontSize::Length(
-          crate::style::Length::Px(20.0),
-        )))
+        .with(StyleDeclaration::font_size(FontSize::Length(Length::Px(
+          20.0,
+        ))))
         .with_white_space(WhiteSpace::pre()),
     );
     let render_node = RenderNode::from_node(&context, node);
@@ -3902,10 +3907,10 @@ mod tests {
       shape_cacheable: false,
     });
     let layout = ComputedLayout {
-      location: crate::geometry::Point::ZERO,
+      location: Point::ZERO,
       size: Size::new(1200.0, 630.0),
-      border: crate::geometry::Rect::default(),
-      padding: crate::geometry::Rect::default(),
+      border: Rect::default(),
+      padding: Rect::default(),
     };
     let runs = resolve_inline_runs(&built, &render_node.context, layout).unwrap();
 
