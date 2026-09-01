@@ -128,6 +128,16 @@ impl MediaFeature {
 }
 
 impl MediaQuery {
+  /// The `not all` an unknown or malformed query is replaced by.
+  /// <https://drafts.csswg.org/mediaqueries-4/#error-handling>
+  fn not_all() -> Self {
+    Self {
+      media_type: MediaType::All,
+      features: Vec::new(),
+      negated: true,
+    }
+  }
+
   fn matches(&self, viewport: Viewport, sizing: &SizingContext) -> bool {
     let media_type_matches = match &self.media_type {
       MediaType::All | MediaType::Screen => true,
@@ -153,7 +163,17 @@ impl MediaQueryList {
     input: &mut Parser<'i, 't>,
   ) -> Result<Self, ParseError<'i, StyleSheetParseError>> {
     Ok(Self {
-      queries: input.parse_comma_separated(parse_media_query)?,
+      queries: input.parse_comma_separated(|input| {
+        let query = input
+          .try_parse(parse_media_query)
+          .ok()
+          .filter(|_| input.is_exhausted())
+          .unwrap_or_else(MediaQuery::not_all);
+
+        skip_malformed_query(input)?;
+
+        Ok(query)
+      })?,
     })
   }
 
@@ -178,6 +198,32 @@ impl MediaQueryList {
       .queries
       .iter()
       .any(|query| query.matches(viewport, &sizing))
+  }
+}
+
+/// Consumes what is left of a query that parsed as `not all`. A block or a
+/// stray closing delimiter means the text was never a prelude, which is how a
+/// caller assembling CSS from strings catches a rule smuggled into one.
+fn skip_malformed_query<'i>(
+  input: &mut Parser<'i, '_>,
+) -> Result<(), ParseError<'i, StyleSheetParseError>> {
+  loop {
+    let location = input.current_source_location();
+    let Ok(token) = input.next() else {
+      return Ok(());
+    };
+
+    if matches!(
+      token,
+      Token::CurlyBracketBlock
+        | Token::CloseCurlyBracket
+        | Token::CloseParenthesis
+        | Token::CloseSquareBracket
+    ) {
+      let token = token.clone();
+
+      return Err(location.new_unexpected_token_error(token));
+    }
   }
 }
 

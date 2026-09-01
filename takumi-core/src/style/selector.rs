@@ -2018,8 +2018,38 @@ mod tests {
   }
 
   #[test]
-  fn test_parse_media_rule_rejects_opposing_range_comparisons() {
-    assert!(StyleSheet::parse("@media (400px < width > 700px) { .card { width: 1px; } }").is_err());
+  fn test_parse_media_rule_replaces_malformed_queries_with_not_all() {
+    for prelude in [
+      "(400px < width > 700px)",
+      "(unsupported-feature: 10px)",
+      "not (unsupported-feature: 10px)",
+      "(min-width: 600px) trailing-junk",
+      "braille",
+    ] {
+      let sheet = parse_stylesheet(&format!("@media {prelude} {{ .card {{ width: 100px; }} }}"));
+      let Some(media) = sheet.rules[0].media_queries.first() else {
+        unreachable!("expected media queries on parsed rule: {prelude}");
+      };
+
+      assert!(!media.matches(Viewport::new((800, 600))), "{prelude}");
+    }
+  }
+
+  #[test]
+  fn test_parse_media_rule_keeps_valid_queries_beside_malformed_ones() {
+    let sheet = parse_stylesheet(
+      r#"
+        @media (unsupported-feature: 10px), (min-width: 600px) {
+          .card { width: 100px; }
+        }
+      "#,
+    );
+
+    let Some(media) = sheet.rules[0].media_queries.first() else {
+      unreachable!("expected media queries on parsed rule");
+    };
+    assert!(media.matches(Viewport::new((800, 600))));
+    assert!(!media.matches(Viewport::new((400, 600))));
   }
 
   #[test]
@@ -2671,14 +2701,7 @@ mod tests {
 
   #[test]
   fn test_lossy_parse_rejects_unknown_rules_and_keeps_valid_siblings() {
-    for css in [
-      r#"
-        @media (resolution: 2dppx) {
-          .card { width: 10px; }
-        }
-
-        .card { width: 100px; }
-      "#,
+    assert_lossy_parse_keeps_single_valid_rule(
       r#"
         @unknown something {
           .card { width: 10px; }
@@ -2686,9 +2709,7 @@ mod tests {
 
         .card { width: 100px; }
       "#,
-    ] {
-      assert_lossy_parse_keeps_single_valid_rule(css);
-    }
+    );
   }
 
   #[test]
