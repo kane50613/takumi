@@ -71,10 +71,40 @@ impl TagCollector {
   fn take_annotations(&mut self, path: &[usize]) -> Vec<Identifier> {
     self.annotations.remove(path).unwrap_or_default()
   }
+
+  /// Walks the source tree in logical order and builds the structure tree from
+  /// the recorded identifiers.
+  pub(crate) fn build_tree(
+    &mut self,
+    root: &RenderNode,
+    lang: Option<&str>,
+    targets: &HashSet<Vec<usize>>,
+  ) -> TagTree {
+    let mut tree = TagTree::new().with_lang(lang.map(str::to_string));
+    let mut top = Vec::new();
+    let mut pending = Vec::new();
+    let mut walk = Walk {
+      collector: self,
+      headings: Vec::new(),
+      targets,
+    };
+
+    build_node(
+      root,
+      &mut Vec::new(),
+      &mut walk,
+      &mut top,
+      &mut pending,
+      Nesting::default(),
+    );
+    flush_paragraph(&mut pending, &mut top);
+    for group in top {
+      tree.push(group);
+    }
+    tree
+  }
 }
 
-/// Walks the source tree in logical order and builds the structure tree from
-/// the recorded identifiers.
 /// The id a destination uses to name the structure element built from `path`.
 pub(crate) fn tag_id(path: &[usize]) -> TagId {
   let mut bytes = Vec::with_capacity(path.len() * 3 + 1);
@@ -85,36 +115,6 @@ pub(crate) fn tag_id(path: &[usize]) -> TagId {
     bytes.extend_from_slice(index.to_string().as_bytes());
   }
   TagId::from(bytes)
-}
-
-pub(crate) fn build_tag_tree(
-  root: &RenderNode,
-  lang: Option<&str>,
-  collector: &mut TagCollector,
-  targets: &HashSet<Vec<usize>>,
-) -> TagTree {
-  let mut tree = TagTree::new().with_lang(lang.map(str::to_string));
-  let mut top = Vec::new();
-  let mut pending = Vec::new();
-  let mut walk = Walk {
-    collector,
-    headings: Vec::new(),
-    targets,
-  };
-
-  build_node(
-    root,
-    &mut Vec::new(),
-    &mut walk,
-    &mut top,
-    &mut pending,
-    Nesting::default(),
-  );
-  flush_paragraph(&mut pending, &mut top);
-  for group in top {
-    tree.push(group);
-  }
-  tree
 }
 
 /// Drains a run of bare-content identifiers into a single `P`. Bare content

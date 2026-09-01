@@ -5,7 +5,7 @@ use takumi_core::resources::image::{ImageError, ImageSource, RenderedImage};
 use takumi_core::{
   context::RenderContext,
   geometry::{ComputedLayout as Layout, PathCommand},
-  style::{BlendMode, ComputedStyle, Overflow, ResolvedGradientStop},
+  style::{BlendMode, Color, ComputedStyle, Overflow, ResolvedGradientStop},
 };
 
 use crate::{
@@ -265,6 +265,21 @@ pub(crate) const fn krilla_blend(mode: BlendMode) -> KrillaBlendMode {
     BlendMode::Luminosity => KrillaBlendMode::Luminosity,
     _ => KrillaBlendMode::Normal,
   }
+}
+
+/// Fills the page box before the page draws anything else. An unset color
+/// leaves the page empty rather than painting white, like Chromium's print
+/// path.
+pub(crate) fn paint_page_background(color: Option<Color>, size: (f32, f32), surface: &mut Surface) {
+  let Some(color) = color else {
+    return;
+  };
+  let Some(path) = KrillaRect::from_xywh(0.0, 0.0, size.0, size.1).and_then(rect_path) else {
+    return;
+  };
+
+  surface.set_fill(Some(fill_from_rgba(color.0, 1.0)));
+  surface.draw_path(&path);
 }
 
 pub(crate) fn pop_transforms(surface: &mut Surface, pushed: usize) {

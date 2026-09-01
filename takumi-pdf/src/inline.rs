@@ -29,15 +29,8 @@ pub(crate) struct PreparedInline<'c> {
 /// Inline layouts keyed by the box's layout [`NodeId`].
 pub(crate) type InlineMap<'c> = HashMap<NodeId, PreparedInline<'c>>;
 
-/// The text-bearing boxes of a prepared tree, with the resolved font style
-/// each inline layout borrows.
-pub(crate) fn collect_text_boxes<'t>(tree: &'t PreparedTree) -> Vec<TextBox<'t>> {
-  let mut boxes = Vec::new();
-
-  tree.for_each_paint(|paint| collect_text_boxes_paint(tree, paint, &mut boxes));
-  boxes
-}
-
+/// A text-bearing box of a prepared tree, with the resolved font style its
+/// inline layout borrows.
 pub(crate) struct TextBox<'t> {
   node: &'t RenderNode,
   node_id: NodeId,
@@ -45,28 +38,33 @@ pub(crate) struct TextBox<'t> {
   font_style: SizedFontStyle<'t>,
 }
 
-fn collect_text_boxes_paint<'t>(
-  tree: &'t PreparedTree,
-  paint: &NodePaint,
-  boxes: &mut Vec<TextBox<'t>>,
-) {
-  let Some(node) = tree.root.node_at_path(&paint.path) else {
-    return;
-  };
-  let Ok(layout) = tree.results.layout(paint.node_id) else {
-    return;
-  };
-  let is_text = node.should_create_inline_layout()
-    || (!node.has_anonymous_text_item_child()
-      && matches!(node.node.as_ref().map(|n| &n.kind), Some(NodeKind::Text(_))));
+impl<'t> TextBox<'t> {
+  pub(crate) fn collect(tree: &'t PreparedTree) -> Vec<Self> {
+    let mut boxes = Vec::new();
 
-  if is_text {
-    boxes.push(TextBox {
-      node,
-      node_id: paint.node_id,
-      layout,
-      font_style: SizedFontStyle::from_style(&node.context.style, &node.context),
-    });
+    tree.for_each_paint(|paint| Self::collect_paint(tree, paint, &mut boxes));
+    boxes
+  }
+
+  fn collect_paint(tree: &'t PreparedTree, paint: &NodePaint, boxes: &mut Vec<Self>) {
+    let Some(node) = tree.root.node_at_path(&paint.path) else {
+      return;
+    };
+    let Ok(layout) = tree.results.layout(paint.node_id) else {
+      return;
+    };
+    let is_text = node.should_create_inline_layout()
+      || (!node.has_anonymous_text_item_child()
+        && matches!(node.node.as_ref().map(|n| &n.kind), Some(NodeKind::Text(_))));
+
+    if is_text {
+      boxes.push(Self {
+        node,
+        node_id: paint.node_id,
+        layout,
+        font_style: SizedFontStyle::from_style(&node.context.style, &node.context),
+      });
+    }
   }
 }
 

@@ -39,7 +39,7 @@
 //! `filter: blur()` and `drop-shadow()` have no PDF equivalent. [`render`]
 //! stops and names the function.
 
-use std::{cell::RefCell, mem::take, rc::Rc};
+use std::{mem::take, rc::Rc};
 
 mod atoms;
 mod background;
@@ -87,6 +87,7 @@ mod krilla;
 mod subsetter;
 
 use takumi_core::{
+  layout::tree::RenderNode,
   style::{Affine, Color, Lang},
   viewport::{MediaTarget, Viewport},
 };
@@ -100,26 +101,23 @@ pub use crate::options::{
   XmpProperty, XmpSchema,
 };
 use crate::{
-  bands::{RepeatBounds, Repeatable, prepare_band},
-  emitter::{FontMap, RenderIssues},
-  glyph::uncovered_error,
-  inline::{build_inline_map, collect_text_boxes},
-  interactive::{add_link_annotations, build_outline, collect_interactive, destination_targets},
+  emitter::DocumentState,
+  inline::{TextBox, build_inline_map},
+  interactive::{Interactive, add_link_annotations, build_outline},
   krilla::{
     Document, SerializeSettings,
     configure::ConfigurationBuilder,
     destination::XyzDestination,
     embed::{EmbeddedFile, MimeType},
-    geom::{Point, Rect as KrillaRect, Size as KrillaSize, Transform},
+    geom::{Point, Size as KrillaSize, Transform},
     page::PageSettings,
-    surface::Surface,
   },
   options::{PT_PER_PX, PageSelection, build_metadata, krilla_datetime, validate_xmp_schemas},
-  page::{PageComposer, PageFrame},
-  pagination::{MAX_PAGES, paginate},
-  paint::{fill_from_rgba, rect_path},
-  tags::{TagCollector, build_tag_tree, tag_id},
-  tree::{TreeInputs, prepare_tree, tree_context},
+  page::{PageBands, PagePlan},
+  paint::paint_page_background,
+  tags::tag_id,
+  tree::{PreparedTree, TreeInputs},
+  window::Window,
 };
 
 /// Lays out a node tree without rendering and returns its size.
@@ -141,18 +139,15 @@ pub fn measure(options: MeasureOptions<'_>) -> Result<MeasuredSize, PdfError> {
     lang: options.lang,
   };
   let tree = match (options.page, options.viewport) {
-    (Some(page), _) => prepare_band(
-      &inputs,
+    (Some(page), _) => inputs.prepare_band(
       &options.node,
       999,
       999,
       Viewport::new((page.width as u32, None)).with_media_target(MediaTarget::Print),
     )?,
-    (None, Some(viewport)) => prepare_tree(
-      &inputs,
-      options.node,
-      viewport.with_media_target(MediaTarget::Print),
-    )?,
+    (None, Some(viewport)) => {
+      inputs.prepare(options.node, viewport.with_media_target(MediaTarget::Print))?
+    }
     (None, None) => return Err(PdfError::MissingViewport),
   };
 
@@ -164,24 +159,11 @@ pub fn measure(options: MeasureOptions<'_>) -> Result<MeasuredSize, PdfError> {
   })
 }
 
-/// Fills the page box before the page draws anything else. An unset color
-/// leaves the page empty rather than painting white, like Chromium's print
-/// path.
-fn paint_page_background(color: Option<Color>, size: (f32, f32), surface: &mut Surface) {
-  let Some(color) = color else {
-    return;
-  };
-  let Some(path) = KrillaRect::from_xywh(0.0, 0.0, size.0, size.1).and_then(rect_path) else {
-    return;
-  };
-
-  surface.set_fill(Some(fill_from_rgba(color.0, 1.0)));
-  surface.draw_path(&path);
-}
-
 /// Renders a node tree to a PDF: single-page at the viewport size, or paged
 /// when [`PdfOptions::page`] is set.
-pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
+pub fn render(mut options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
+  let attachments = take(&mut options.attachments);
+  let mut pdf = open_document(&options, attachments)?;
   let inputs = TreeInputs {
     fonts: options.fonts,
     stylesheet: options.stylesheet,
@@ -189,54 +171,113 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
     font_families: options.font_families,
     lang: options.lang,
   };
-  let mut fonts = FontMap::new();
-  let issues = RefCell::new(RenderIssues::default());
-  let document_lang = inputs.lang.as_ref().map(Lang::as_str);
-  let mut document = {
-    let mut builder = ConfigurationBuilder::new();
-    let mut validated = false;
+  let tagged = options.tagged != Tagging::Off || options.standard.requires_tagging();
+  let state = DocumentState::new(tagged, inputs.lang.as_ref().map(Lang::as_str));
+  let structural = options.tagged.names_structure_destinations();
+  let rendered = match options.page {
+    Some(page) => {
+      let bands = PageBands {
+        header: options.header.as_ref(),
+        footer: options.footer.as_ref(),
+        page_ranges: options.page_ranges.as_deref(),
+      };
+      let plan = PagePlan::solve(&inputs, page, bands, options.node, structural)?;
 
-    if let Some(archival) = options.standard.archival() {
-      builder = builder.with_archival_validator(archival);
-      validated = true;
+      plan.compose(&mut pdf, &inputs, &state, options.background_color)?;
+      Rendered::Paged(Box::new(plan))
     }
-    if let Some(accessibility) = options.tagged.accessibility() {
-      builder = builder.with_accessibility_validator(accessibility);
-      validated = true;
-    }
-    let settings = SerializeSettings {
-      producer: options
-        .producer
-        .clone()
-        .unwrap_or_else(|| PRODUCER.to_string()),
-      ..SerializeSettings::default()
-    };
+    None => {
+      // A viewport render is one page, so the ranges only have page 1 to keep.
+      PageSelection::resolve(options.page_ranges.as_deref(), 1)?;
+      let viewport = options
+        .viewport
+        .ok_or(PdfError::MissingViewport)?
+        .with_media_target(MediaTarget::Print);
+      let content = inputs.prepare(options.node, viewport)?;
+      let interactive = compose_single_page(
+        &mut pdf,
+        &content,
+        &state,
+        options.background_color,
+        structural,
+      )?;
 
-    if validated {
-      let configuration = builder.finish().map_err(|_| PdfError::InvalidStandard)?;
-
-      Document::new_with(SerializeSettings {
-        configuration,
-        ..settings
-      })
-    } else {
-      Document::new_with(settings)
+      Rendered::Single(Box::new(SinglePage {
+        content,
+        interactive,
+        structural,
+      }))
     }
   };
-  let tag_collector = (options.tagged != Tagging::Off || options.standard.requires_tagging())
-    .then(|| RefCell::new(TagCollector::default()));
+
+  if (options.outline || options.tagged.requires_outline())
+    && !rendered.interactive().headings.is_empty()
+  {
+    pdf.set_outline(build_outline(&rendered.interactive().headings, |heading| {
+      rendered.destination(heading.top, &heading.path)
+    }));
+  }
+  if let Some(collector) = &state.tags {
+    pdf.set_tag_tree(collector.borrow_mut().build_tree(
+      rendered.root(),
+      state.lang,
+      &rendered.interactive().destination_targets(),
+    ));
+  }
+  if let Some(error) = state.into_error() {
+    return Err(error);
+  }
+
+  pdf.finish().map_err(PdfError::Krilla)
+}
+
+/// A document with its validators, metadata and attachments set, before any
+/// page is drawn.
+fn open_document(
+  options: &PdfOptions<'_>,
+  attachments: Vec<Attachment>,
+) -> Result<Document, PdfError> {
+  let mut builder = ConfigurationBuilder::new();
+  let mut validated = false;
+
+  if let Some(archival) = options.standard.archival() {
+    builder = builder.with_archival_validator(archival);
+    validated = true;
+  }
+  if let Some(accessibility) = options.tagged.accessibility() {
+    builder = builder.with_accessibility_validator(accessibility);
+    validated = true;
+  }
+  let settings = SerializeSettings {
+    producer: options
+      .producer
+      .clone()
+      .unwrap_or_else(|| PRODUCER.to_string()),
+    ..SerializeSettings::default()
+  };
+  let mut document = if validated {
+    let configuration = builder.finish().map_err(|_| PdfError::InvalidStandard)?;
+
+    Document::new_with(SerializeSettings {
+      configuration,
+      ..settings
+    })
+  } else {
+    Document::new_with(settings)
+  };
+  let tagged = options.tagged != Tagging::Off || options.standard.requires_tagging();
 
   if let Some(metadata) = &options.metadata {
     validate_xmp_schemas(&metadata.xmp)?;
-    document.set_metadata(build_metadata(metadata, inputs.lang));
-  } else if tag_collector.is_some() && inputs.lang.is_some() {
+    document.set_metadata(build_metadata(metadata, options.lang));
+  } else if tagged && options.lang.is_some() {
     // Tagged standards check the document language even without metadata.
-    document.set_metadata(build_metadata(&PdfMetadata::default(), inputs.lang));
+    document.set_metadata(build_metadata(&PdfMetadata::default(), options.lang));
   }
 
   let fallback_date = options.metadata.as_ref().and_then(|m| m.creation_date);
 
-  for attachment in options.attachments {
+  for attachment in attachments {
     let mime_type = match attachment.mime_type {
       Some(mime) => Some(MimeType::new(&mime).ok_or(PdfError::InvalidMimeType(mime))?),
       None => None,
@@ -259,223 +300,98 @@ pub fn render(options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       .embed_file(file)
       .ok_or(PdfError::DuplicateAttachment(attachment.name))?;
   }
-  match options.page {
-    Some(page) => {
-      // Bands lay out at full page width and draw inside the margin areas,
-      // like Chromium's print header and footer templates.
-      let band_viewport =
-        Viewport::new((page.width as u32, None)).with_media_target(MediaTarget::Print);
-      let bands = |pages: usize| -> Result<(Option<Repeatable>, Option<Repeatable>), PdfError> {
-        let header = options
-          .header
-          .as_ref()
-          .map(|template| {
-            Repeatable::band(
-              &inputs,
-              template,
-              band_viewport,
-              RepeatBounds::Header,
-              pages,
-            )
-          })
-          .transpose()?;
-        let footer = options
-          .footer
-          .as_ref()
-          .map(|template| {
-            Repeatable::band(
-              &inputs,
-              template,
-              band_viewport,
-              RepeatBounds::Footer,
-              pages,
-            )
-          })
-          .transpose()?;
+  Ok(document)
+}
 
-        Ok((header, footer))
-      };
-      let resolve = |header: Option<&Repeatable>, footer: Option<&Repeatable>| {
-        PageFrame::resolve(
-          &page,
-          band_viewport,
-          header.map(Repeatable::height),
-          footer.map(Repeatable::height),
-        )
-      };
-      let (mut header, mut footer) = bands(1)?;
-      let mut frame = resolve(header.as_ref(), footer.as_ref())?;
-      // A band with a counter and the cut list depend on each other: an `auto`
-      // margin takes the band's height, the band lays out with the real page
-      // numbers, and the page count is only known once the content is cut. The
-      // band is re-measured with the count each cut produced until its height
-      // stops moving, like the content counters in `paginate`.
-      let dynamic = header.as_ref().is_some_and(Repeatable::dynamic)
-        || footer.as_ref().is_some_and(Repeatable::dynamic);
-      let source = dynamic.then(|| options.node.clone());
-      let mut paginated = paginate(options.node, &inputs, &frame.geometry())?;
+/// What the pages were drawn from, which the outline and structure tree read
+/// after them.
+enum Rendered {
+  Paged(Box<PagePlan>),
+  Single(Box<SinglePage>),
+}
 
-      if let Some(source) = source {
-        const BAND_PASSES: usize = 3;
+/// A viewport render: one page at the content's size.
+struct SinglePage {
+  content: PreparedTree,
+  interactive: Interactive,
+  structural: bool,
+}
 
-        for _ in 0..BAND_PASSES {
-          let (next_header, next_footer) = bands(paginated.starts.len())?;
-          let stable = next_header.as_ref().map(Repeatable::height)
-            == header.as_ref().map(Repeatable::height)
-            && next_footer.as_ref().map(Repeatable::height)
-              == footer.as_ref().map(Repeatable::height);
-
-          header = next_header;
-          footer = next_footer;
-          if stable {
-            break;
-          }
-          frame = resolve(header.as_ref(), footer.as_ref())?;
-          paginated = paginate(source.clone(), &inputs, &frame.geometry())?;
-        }
-      }
-
-      if paginated.starts.len() >= MAX_PAGES {
-        return Err(PdfError::TooManyPages(paginated.starts.len()));
-      }
-      let selection =
-        PageSelection::resolve(options.page_ranges.as_deref(), paginated.starts.len())?;
-      let repeatables: Vec<Repeatable> = header
-        .into_iter()
-        .chain(
-          take(&mut paginated.repeated)
-            .into_iter()
-            .map(Repeatable::fixed),
-        )
-        .chain(footer)
-        .collect();
-      let text_boxes = collect_text_boxes(&paginated.content);
-      let inline_map = build_inline_map(&text_boxes)?;
-      let mut composer = PageComposer {
-        frame: &frame,
-        paginated: &paginated,
-        inputs: &inputs,
-        page_context: tree_context(&inputs, frame.page_area),
-        inline_map: &inline_map,
-        fonts: &mut fonts,
-        issues: &issues,
-        tag_collector: tag_collector.as_ref(),
-        document_lang,
-        background: options.background_color,
-        structural: options.tagged.names_structure_destinations(),
-        selection: &selection,
-      };
-
-      for slice in paginated.pages() {
-        if !selection.keeps(slice.index) {
-          continue;
-        }
-        composer.compose(&mut document, &repeatables, &slice)?;
-      }
-
-      let interactive = &paginated.interactive;
-
-      if (options.outline || options.tagged.requires_outline()) && !interactive.headings.is_empty()
-      {
-        document.set_outline(build_outline(&interactive.headings, |heading| {
-          composer.destination(heading.top, &heading.path)
-        }));
-      }
-      if let Some(collector) = &tag_collector {
-        document.set_tag_tree(build_tag_tree(
-          &paginated.content.root,
-          inputs.lang.as_ref().map(Lang::as_str),
-          &mut collector.borrow_mut(),
-          &destination_targets(interactive),
-        ));
-      }
-    }
-    None => {
-      // A viewport render is one page, so the ranges only have page 1 to keep.
-      PageSelection::resolve(options.page_ranges.as_deref(), 1)?;
-      let viewport = options
-        .viewport
-        .ok_or(PdfError::MissingViewport)?
-        .with_media_target(MediaTarget::Print);
-      let content = prepare_tree(&inputs, options.node, viewport)?;
-      let page_size = KrillaSize::from_wh(content.width * PT_PER_PX, content.height * PT_PER_PX)
-        .ok_or(PdfError::InvalidPageSize)?;
-      let text_boxes = collect_text_boxes(&content);
-      let inline_map = build_inline_map(&text_boxes)?;
-      let mut page = document.start_page_with(PageSettings::new(page_size));
-      let mut surface = page.surface();
-
-      surface.push_transform(&Transform::from_scale(PT_PER_PX, PT_PER_PX));
-      paint_page_background(
-        options.background_color,
-        (content.width, content.height),
-        &mut surface,
-      );
-
-      let mut emitter = content.emitter(
-        &mut fonts,
-        Some(&inline_map),
-        tag_collector.as_ref(),
-        &issues,
-        document_lang,
-      );
-
-      emitter.emit_context(0, Affine::IDENTITY, &mut surface)?;
-      surface.pop();
-      surface.finish();
-      let interactive = collect_interactive(&content);
-      let structural = options.tagged.names_structure_destinations();
-      let destination = |top: f32, path: &[usize]| {
-        let dest = XyzDestination::new(0, Point::from_xy(0.0, top.max(0.0) * PT_PER_PX));
-
-        Some(match structural {
-          true => dest.with_structure(tag_id(path)),
-          false => dest,
-        })
-      };
-
-      add_link_annotations(
-        &mut page,
-        &interactive.links,
-        (0.0, content.height),
-        None,
-        (0.0, 0.0),
-        tag_collector.as_ref(),
-        |id| {
-          interactive
-            .anchors
-            .get(id)
-            .and_then(|anchor| destination(anchor.top, &anchor.path))
-        },
-      );
-      page.finish();
-      if (options.outline || options.tagged.requires_outline()) && !interactive.headings.is_empty()
-      {
-        document.set_outline(build_outline(&interactive.headings, |heading| {
-          destination(heading.top, &heading.path)
-        }));
-      }
-      if let Some(collector) = &tag_collector {
-        document.set_tag_tree(build_tag_tree(
-          &content.root,
-          inputs.lang.as_ref().map(Lang::as_str),
-          &mut collector.borrow_mut(),
-          &destination_targets(&interactive),
-        ));
-      }
+impl Rendered {
+  fn root(&self) -> &RenderNode {
+    match self {
+      Self::Paged(plan) => &plan.paginated.content.root,
+      Self::Single(page) => &page.content.root,
     }
   }
 
-  let issues = issues.into_inner();
-
-  if let Some(error) = issues
-    .failure
-    .or_else(|| uncovered_error(&issues.uncovered))
-  {
-    return Err(error);
+  fn interactive(&self) -> &Interactive {
+    match self {
+      Self::Paged(plan) => &plan.paginated.interactive,
+      Self::Single(page) => &page.interactive,
+    }
   }
 
-  document.finish().map_err(PdfError::Krilla)
+  fn destination(&self, top: f32, path: &[usize]) -> Option<XyzDestination> {
+    match self {
+      Self::Paged(plan) => plan.destination(top, path),
+      Self::Single(page) => Some(single_page_destination(top, path, page.structural)),
+    }
+  }
+}
+
+fn single_page_destination(top: f32, path: &[usize], structural: bool) -> XyzDestination {
+  let dest = XyzDestination::new(0, Point::from_xy(0.0, top.max(0.0) * PT_PER_PX));
+
+  match structural {
+    true => dest.with_structure(tag_id(path)),
+    false => dest,
+  }
+}
+
+/// Draws a viewport render's one page and returns its interactive targets.
+fn compose_single_page(
+  pdf: &mut Document,
+  content: &PreparedTree,
+  state: &DocumentState<'_>,
+  background: Option<Color>,
+  structural: bool,
+) -> Result<Interactive, PdfError> {
+  let page_size = KrillaSize::from_wh(content.width * PT_PER_PX, content.height * PT_PER_PX)
+    .ok_or(PdfError::InvalidPageSize)?;
+  let text_boxes = TextBox::collect(content);
+  let inline_map = build_inline_map(&text_boxes)?;
+  let mut page = pdf.start_page_with(PageSettings::new(page_size));
+  let mut surface = page.surface();
+
+  surface.push_transform(&Transform::from_scale(PT_PER_PX, PT_PER_PX));
+  paint_page_background(background, (content.width, content.height), &mut surface);
+
+  let mut emitter = content.emitter(state, Some(&inline_map), true);
+
+  emitter.emit_context(0, Affine::IDENTITY, &mut surface)?;
+  surface.pop();
+  surface.finish();
+  let interactive = Interactive::collect(content);
+
+  add_link_annotations(
+    &mut page,
+    &interactive.links,
+    Window {
+      y: Some((0.0, content.height)),
+      ..Window::default()
+    },
+    (0.0, 0.0),
+    state.tags.as_ref(),
+    |id| {
+      interactive
+        .anchors
+        .get(id)
+        .map(|anchor| single_page_destination(anchor.top, &anchor.path, structural))
+    },
+  );
+  page.finish();
+  Ok(interactive)
 }
 
 #[cfg(test)]
@@ -484,9 +400,18 @@ mod tests {
 
   use super::*;
   use crate::{
+    atoms::Atoms,
     options::BAND_EDGE_PADDING,
-    pagination::{Atom, page_starts},
+    pagination::{Atom, MAX_PAGES, Paragraph, page_starts},
   };
+
+  fn atoms(extents: &[Atom], forced: &[f32], paragraphs: Vec<Paragraph>) -> Atoms {
+    Atoms {
+      extents: extents.to_vec(),
+      forced: forced.to_vec(),
+      paragraphs,
+    }
+  }
 
   const A4: (f32, f32) = (PageOptions::A4.width, PageOptions::A4.height);
 
@@ -548,7 +473,7 @@ mod tests {
 
   #[test]
   fn content_taller_than_a_render_allows_stops_counting() {
-    let starts = page_starts(&mut [], &mut Vec::new(), &[], &[], 2_000_000.0, 10.0);
+    let starts = page_starts(Atoms::default(), &[], 2_000_000.0, 10.0);
 
     assert_eq!(starts.len(), MAX_PAGES, "the page count runs unbounded");
   }
@@ -556,27 +481,23 @@ mod tests {
   #[test]
   fn page_starts_without_atoms_cuts_at_window() {
     assert_eq!(
-      page_starts(&mut [], &mut Vec::new(), &[], &[], 250.0, 100.0),
+      page_starts(Atoms::default(), &[], 250.0, 100.0),
       vec![0.0, 100.0, 200.0]
     );
   }
 
   #[test]
   fn page_starts_pushes_straddling_atom_to_next_page() {
-    let mut atoms = [(90.0, 110.0)];
-
     assert_eq!(
-      page_starts(&mut atoms, &mut Vec::new(), &[], &[], 250.0, 100.0),
+      page_starts(atoms(&[(90.0, 110.0)], &[], Vec::new()), &[], 250.0, 100.0),
       vec![0.0, 90.0, 190.0]
     );
   }
 
   #[test]
   fn page_starts_hard_cuts_atom_taller_than_window() {
-    let mut atoms = [(0.0, 300.0)];
-
     assert_eq!(
-      page_starts(&mut atoms, &mut Vec::new(), &[], &[], 300.0, 100.0),
+      page_starts(atoms(&[(0.0, 300.0)], &[], Vec::new()), &[], 300.0, 100.0),
       vec![0.0, 100.0, 200.0]
     );
   }
@@ -588,15 +509,14 @@ mod tests {
     let lines: Vec<Atom> = (0..6)
       .map(|i| (50.0 + i as f32 * 10.0, 60.0 + i as f32 * 10.0))
       .collect();
-    let mut atoms = lines.clone();
-    let paragraphs = [pagination::Paragraph {
-      lines,
+    let paragraphs = vec![Paragraph {
+      lines: lines.clone(),
       before: 2,
       after: 2,
     }];
 
     assert_eq!(
-      page_starts(&mut atoms, &mut Vec::new(), &paragraphs, &[], 110.0, 100.0),
+      page_starts(atoms(&lines, &[], paragraphs), &[], 110.0, 100.0),
       vec![0.0, 90.0],
       "the cut moves from 100 to 90 so two lines reach the next page"
     );
@@ -609,15 +529,14 @@ mod tests {
     let lines: Vec<Atom> = (0..4)
       .map(|i| (90.0 + i as f32 * 10.0, 100.0 + i as f32 * 10.0))
       .collect();
-    let mut atoms = lines.clone();
-    let paragraphs = [pagination::Paragraph {
-      lines,
+    let paragraphs = vec![Paragraph {
+      lines: lines.clone(),
       before: 2,
       after: 2,
     }];
 
     assert_eq!(
-      page_starts(&mut atoms, &mut Vec::new(), &paragraphs, &[], 140.0, 100.0),
+      page_starts(atoms(&lines, &[], paragraphs), &[], 140.0, 100.0),
       vec![0.0, 90.0],
       "one line before the cut violates orphans, so the paragraph starts the next page"
     );
@@ -630,15 +549,14 @@ mod tests {
     let lines: Vec<Atom> = (0..3)
       .map(|i| (80.0 + i as f32 * 10.0, 90.0 + i as f32 * 10.0))
       .collect();
-    let mut atoms = lines.clone();
-    let paragraphs = [pagination::Paragraph {
-      lines,
+    let paragraphs = vec![Paragraph {
+      lines: lines.clone(),
       before: 2,
       after: 2,
     }];
 
     assert_eq!(
-      page_starts(&mut atoms, &mut Vec::new(), &paragraphs, &[], 110.0, 100.0),
+      page_starts(atoms(&lines, &[], paragraphs), &[], 110.0, 100.0),
       vec![0.0, 100.0],
       "backing up past the orphans floor is worse than a lone widow"
     );
@@ -650,15 +568,14 @@ mod tests {
     let lines: Vec<Atom> = (0..30)
       .map(|i| (i as f32 * 10.0, 10.0 + i as f32 * 10.0))
       .collect();
-    let mut atoms = lines.clone();
-    let paragraphs = [pagination::Paragraph {
-      lines,
+    let paragraphs = vec![Paragraph {
+      lines: lines.clone(),
       before: 20,
       after: 20,
     }];
 
     assert_eq!(
-      page_starts(&mut atoms, &mut Vec::new(), &paragraphs, &[], 300.0, 100.0),
+      page_starts(atoms(&lines, &[], paragraphs), &[], 300.0, 100.0),
       vec![0.0, 100.0, 200.0],
       "a paragraph that can never satisfy 20/20 still paginates at the window"
     );
@@ -666,10 +583,8 @@ mod tests {
 
   #[test]
   fn page_starts_honors_forced_cuts() {
-    let mut forced = vec![40.0, 150.0];
-
     assert_eq!(
-      page_starts(&mut [], &mut forced, &[], &[], 250.0, 100.0),
+      page_starts(atoms(&[], &[40.0, 150.0], Vec::new()), &[], 250.0, 100.0),
       vec![0.0, 40.0, 140.0, 150.0]
     );
   }
