@@ -4,6 +4,12 @@ use std::ops::{Add, Sub};
 
 use crate::style::Affine;
 
+/// The smallest difference between two layout values a browser can tell apart:
+/// Blink stores layout in 1/64px fixed point, so anything closer is one value
+/// there.
+/// <https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/platform/geometry/layout_unit.h>
+pub(crate) const LAYOUT_UNIT_EPSILON: f32 = 1.0 / 64.0;
+
 /// A 2D point.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Point<T> {

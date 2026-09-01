@@ -4,7 +4,7 @@ use smallvec::SmallVec;
 
 use crate::{
   context::RenderContext,
-  geometry::{PathBuilder, PathCommand as Command, Point, Rect, Size},
+  geometry::{LAYOUT_UNIT_EPSILON, PathBuilder, PathCommand as Command, Point, Rect, Size},
   layout::corner_shape::{CornerContour, contour_arc_length, corner_contour},
   style::{BorderStyle, Color, ImageScalingAlgorithm, Sides, SpacePair, Superellipse},
 };
@@ -283,9 +283,9 @@ impl BorderProperties {
   /// True if every side has equal nonzero width and the given style.
   pub fn is_uniform_all_sides_style(&self, style: BorderStyle) -> bool {
     let has_uniform_width = self.width.top > 0.0
-      && (self.width.top - self.width.right).abs() <= f32::EPSILON
-      && (self.width.top - self.width.bottom).abs() <= f32::EPSILON
-      && (self.width.top - self.width.left).abs() <= f32::EPSILON;
+      && (self.width.top - self.width.right).abs() <= LAYOUT_UNIT_EPSILON
+      && (self.width.top - self.width.bottom).abs() <= LAYOUT_UNIT_EPSILON
+      && (self.width.top - self.width.left).abs() <= LAYOUT_UNIT_EPSILON;
 
     has_uniform_width
       && self.style.top == style
