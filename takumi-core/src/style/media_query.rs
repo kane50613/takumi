@@ -4,7 +4,7 @@ use cssparser::*;
 
 use crate::{
   error::StyleSheetParseError,
-  geometry::Size,
+  geometry::{LAYOUT_UNIT_EPSILON, Size},
   style::{CalcArena, FromCss, Length, SizingContext},
   viewport::{MediaTarget, Viewport},
 };
@@ -640,8 +640,3 @@ impl MediaQueryList {
       .any(|query| query.matches(viewport, &sizing))
   }
 }
-
-/// Blink compares lengths against `LayoutUnit::Epsilon()`, the step of the grid
-/// it rounds layout onto.
-/// <https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/css/media_query_evaluator.cc>
-const LAYOUT_UNIT_EPSILON: f32 = 1.0 / 64.0;

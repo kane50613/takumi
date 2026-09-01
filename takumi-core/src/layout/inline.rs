@@ -10,7 +10,10 @@ use xxhash_rust::xxh3::Xxh3;
 use crate::{
   context::RenderContext,
   font_style::{SizedFontStyle, contains_variation_selector, presentation_segments},
-  geometry::{AvailableSpace, ComputedLayout, PathBuilder, PathCommand, Point, Rect, Size},
+  geometry::{
+    AvailableSpace, ComputedLayout, LAYOUT_UNIT_EPSILON, PathBuilder, PathCommand, Point, Rect,
+    Size,
+  },
   layout::{intercept::skip_ink_spans, node::Node, tree::RenderNode},
   resources::{
     font::{FontClasses, FontError, run_synthesis, run_variations},
@@ -2154,12 +2157,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
 
     if style.parent.text_overflow == TextOverflow::Ellipsis {
       // A line's advance is an f32 sum over glyphs, so an exactly-fitting line
-      // can land a hair past max_width and must not sprout an ellipsis. A
-      // quarter pixel sits above that drift and below visible overflow. Blink
-      // avoids the problem class entirely by comparing in 1/64px fixed-point
-      // LayoutUnit.
-      const INLINE_OVERFLOW_TOLERANCE: f32 = 0.25;
-
+      // can land a hair past max_width and must not sprout an ellipsis.
       // Overflow shows up two ways: text truncated past the last committed
       // line, or a line wider than the box because nothing in it could break.
       // Browsers ellipsize the second case too: Blink runs
@@ -2173,7 +2171,7 @@ pub fn create_inline_layout<'c>(request: InlineLayoutRequest<'c>) -> BuiltInline
         let metrics = last_line.metrics();
         last_line.text_range().end < text.len()
           || metrics.inline_min_coord + metrics.advance - metrics.trailing_whitespace
-            > max_width + INLINE_OVERFLOW_TOLERANCE
+            > max_width + LAYOUT_UNIT_EPSILON
       });
 
       if is_overflowing {
@@ -2371,11 +2369,9 @@ fn scale_outline_rect(
   }
 }
 
-const OUTLINE_COORD_TOLERANCE: f32 = 1e-3;
-
 fn x_ranges_touch(left: InlineOutlineRect, right: InlineOutlineRect) -> bool {
-  left.x <= right.x + right.width + OUTLINE_COORD_TOLERANCE
-    && right.x <= left.x + left.width + OUTLINE_COORD_TOLERANCE
+  left.x <= right.x + right.width + LAYOUT_UNIT_EPSILON
+    && right.x <= left.x + left.width + LAYOUT_UNIT_EPSILON
 }
 
 fn expand_outline_rect(rect: InlineOutlineRect, amount: f32) -> Option<InlineOutlineRect> {
@@ -2413,9 +2409,9 @@ fn merge_inline_rects(mut rects: Vec<InlineOutlineRect>) -> Vec<InlineOutlineRec
 
     let same_group =
       previous_rect.span_id == rect.span_id && previous_rect.line_index == rect.line_index;
-    let touching = rect.x <= previous_rect.x + previous_rect.width + OUTLINE_COORD_TOLERANCE;
-    let same_band = (rect.y - previous_rect.y).abs() <= OUTLINE_COORD_TOLERANCE
-      && (rect.height - previous_rect.height).abs() <= OUTLINE_COORD_TOLERANCE;
+    let touching = rect.x <= previous_rect.x + previous_rect.width + LAYOUT_UNIT_EPSILON;
+    let same_band = (rect.y - previous_rect.y).abs() <= LAYOUT_UNIT_EPSILON
+      && (rect.height - previous_rect.height).abs() <= LAYOUT_UNIT_EPSILON;
 
     if same_group && same_band && touching {
       let right_edge = (previous_rect.x + previous_rect.width).max(rect.x + rect.width);
@@ -4307,5 +4303,20 @@ mod tests {
       segments.iter().any(|(_, text, _)| text.contains("before")),
       "{segments:#?}"
     );
+  }
+
+  #[test]
+  fn outline_rects_a_layout_unit_apart_touch() {
+    let rect = |x: f32, width: f32| InlineOutlineRect {
+      span_id: 0,
+      line_index: 0,
+      x,
+      y: 0.0,
+      width,
+      height: 10.0,
+    };
+
+    assert!(x_ranges_touch(rect(0.0, 10.0), rect(10.01, 10.0)));
+    assert!(!x_ranges_touch(rect(0.0, 10.0), rect(10.1, 10.0)));
   }
 }
