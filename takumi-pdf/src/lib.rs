@@ -103,7 +103,7 @@ pub use crate::options::{
 use crate::{
   emitter::DocumentState,
   inline::{TextBox, build_inline_map},
-  interactive::{Interactive, add_link_annotations, build_outline},
+  interactive::{Interactive, add_link_annotations},
   krilla::{
     Document, SerializeSettings,
     configure::ConfigurationBuilder,
@@ -194,28 +194,26 @@ pub fn render(mut options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         .ok_or(PdfError::MissingViewport)?
         .with_media_target(MediaTarget::Print);
       let content = inputs.prepare(options.node, viewport)?;
-      let interactive = compose_single_page(
+      let page = SinglePage::compose(
         &mut pdf,
-        &content,
+        content,
         &state,
         options.background_color,
         structural,
       )?;
 
-      Rendered::Single(Box::new(SinglePage {
-        content,
-        interactive,
-        structural,
-      }))
+      Rendered::Single(Box::new(page))
     }
   };
 
   if (options.outline || options.tagged.requires_outline())
     && !rendered.interactive().headings.is_empty()
   {
-    pdf.set_outline(build_outline(&rendered.interactive().headings, |heading| {
-      rendered.destination(heading.top, &heading.path)
-    }));
+    pdf.set_outline(
+      rendered
+        .interactive()
+        .outline(|heading| rendered.destination(heading.top, &heading.path)),
+    );
   }
   if let Some(collector) = &state.tags {
     pdf.set_tag_tree(collector.borrow_mut().build_tree(
@@ -335,63 +333,70 @@ impl Rendered {
   fn destination(&self, top: f32, path: &[usize]) -> Option<XyzDestination> {
     match self {
       Self::Paged(plan) => plan.destination(top, path),
-      Self::Single(page) => Some(single_page_destination(top, path, page.structural)),
+      Self::Single(page) => Some(page.destination(top, path)),
     }
   }
 }
 
-fn single_page_destination(top: f32, path: &[usize], structural: bool) -> XyzDestination {
-  let dest = XyzDestination::new(0, Point::from_xy(0.0, top.max(0.0) * PT_PER_PX));
+impl SinglePage {
+  /// Draws the one page and collects its interactive targets.
+  fn compose(
+    pdf: &mut Document,
+    content: PreparedTree,
+    state: &DocumentState<'_>,
+    background: Option<Color>,
+    structural: bool,
+  ) -> Result<Self, PdfError> {
+    let page_size = KrillaSize::from_wh(content.width * PT_PER_PX, content.height * PT_PER_PX)
+      .ok_or(PdfError::InvalidPageSize)?;
+    let text_boxes = TextBox::collect(&content);
+    let inline_map = build_inline_map(&text_boxes)?;
+    let mut page = pdf.start_page_with(PageSettings::new(page_size));
+    let mut surface = page.surface();
 
-  match structural {
-    true => dest.with_structure(tag_id(path)),
-    false => dest,
+    surface.push_transform(&Transform::from_scale(PT_PER_PX, PT_PER_PX));
+    paint_page_background(background, (content.width, content.height), &mut surface);
+
+    let mut emitter = content.emitter(state, Some(&inline_map), true);
+
+    emitter.emit_context(0, Affine::IDENTITY, &mut surface)?;
+    surface.pop();
+    surface.finish();
+    let rendered = Self {
+      interactive: Interactive::collect(&content),
+      content,
+      structural,
+    };
+
+    add_link_annotations(
+      &mut page,
+      &rendered.interactive.links,
+      Window {
+        y: Some((0.0, rendered.content.height)),
+        ..Window::default()
+      },
+      (0.0, 0.0),
+      state.tags.as_ref(),
+      |id| {
+        rendered
+          .interactive
+          .anchors
+          .get(id)
+          .map(|anchor| rendered.destination(anchor.top, &anchor.path))
+      },
+    );
+    page.finish();
+    Ok(rendered)
   }
-}
 
-/// Draws a viewport render's one page and returns its interactive targets.
-fn compose_single_page(
-  pdf: &mut Document,
-  content: &PreparedTree,
-  state: &DocumentState<'_>,
-  background: Option<Color>,
-  structural: bool,
-) -> Result<Interactive, PdfError> {
-  let page_size = KrillaSize::from_wh(content.width * PT_PER_PX, content.height * PT_PER_PX)
-    .ok_or(PdfError::InvalidPageSize)?;
-  let text_boxes = TextBox::collect(content);
-  let inline_map = build_inline_map(&text_boxes)?;
-  let mut page = pdf.start_page_with(PageSettings::new(page_size));
-  let mut surface = page.surface();
+  fn destination(&self, top: f32, path: &[usize]) -> XyzDestination {
+    let dest = XyzDestination::new(0, Point::from_xy(0.0, top.max(0.0) * PT_PER_PX));
 
-  surface.push_transform(&Transform::from_scale(PT_PER_PX, PT_PER_PX));
-  paint_page_background(background, (content.width, content.height), &mut surface);
-
-  let mut emitter = content.emitter(state, Some(&inline_map), true);
-
-  emitter.emit_context(0, Affine::IDENTITY, &mut surface)?;
-  surface.pop();
-  surface.finish();
-  let interactive = Interactive::collect(content);
-
-  add_link_annotations(
-    &mut page,
-    &interactive.links,
-    Window {
-      y: Some((0.0, content.height)),
-      ..Window::default()
-    },
-    (0.0, 0.0),
-    state.tags.as_ref(),
-    |id| {
-      interactive
-        .anchors
-        .get(id)
-        .map(|anchor| single_page_destination(anchor.top, &anchor.path, structural))
-    },
-  );
-  page.finish();
-  Ok(interactive)
+    match self.structural {
+      true => dest.with_structure(tag_id(path)),
+      false => dest,
+    }
+  }
 }
 
 #[cfg(test)]
@@ -402,7 +407,7 @@ mod tests {
   use crate::{
     atoms::Atoms,
     options::BAND_EDGE_PADDING,
-    pagination::{Atom, MAX_PAGES, Paragraph, page_starts},
+    pagination::{Atom, MAX_PAGES, Paragraph},
   };
 
   fn atoms(extents: &[Atom], forced: &[f32], paragraphs: Vec<Paragraph>) -> Atoms {
@@ -473,7 +478,7 @@ mod tests {
 
   #[test]
   fn content_taller_than_a_render_allows_stops_counting() {
-    let starts = page_starts(Atoms::default(), &[], 2_000_000.0, 10.0);
+    let starts = Atoms::default().page_starts(&[], 2_000_000.0, 10.0);
 
     assert_eq!(starts.len(), MAX_PAGES, "the page count runs unbounded");
   }
@@ -481,7 +486,7 @@ mod tests {
   #[test]
   fn page_starts_without_atoms_cuts_at_window() {
     assert_eq!(
-      page_starts(Atoms::default(), &[], 250.0, 100.0),
+      Atoms::default().page_starts(&[], 250.0, 100.0),
       vec![0.0, 100.0, 200.0]
     );
   }
@@ -489,7 +494,7 @@ mod tests {
   #[test]
   fn page_starts_pushes_straddling_atom_to_next_page() {
     assert_eq!(
-      page_starts(atoms(&[(90.0, 110.0)], &[], Vec::new()), &[], 250.0, 100.0),
+      atoms(&[(90.0, 110.0)], &[], Vec::new()).page_starts(&[], 250.0, 100.0),
       vec![0.0, 90.0, 190.0]
     );
   }
@@ -497,7 +502,7 @@ mod tests {
   #[test]
   fn page_starts_hard_cuts_atom_taller_than_window() {
     assert_eq!(
-      page_starts(atoms(&[(0.0, 300.0)], &[], Vec::new()), &[], 300.0, 100.0),
+      atoms(&[(0.0, 300.0)], &[], Vec::new()).page_starts(&[], 300.0, 100.0),
       vec![0.0, 100.0, 200.0]
     );
   }
@@ -516,7 +521,7 @@ mod tests {
     }];
 
     assert_eq!(
-      page_starts(atoms(&lines, &[], paragraphs), &[], 110.0, 100.0),
+      atoms(&lines, &[], paragraphs).page_starts(&[], 110.0, 100.0),
       vec![0.0, 90.0],
       "the cut moves from 100 to 90 so two lines reach the next page"
     );
@@ -536,7 +541,7 @@ mod tests {
     }];
 
     assert_eq!(
-      page_starts(atoms(&lines, &[], paragraphs), &[], 140.0, 100.0),
+      atoms(&lines, &[], paragraphs).page_starts(&[], 140.0, 100.0),
       vec![0.0, 90.0],
       "one line before the cut violates orphans, so the paragraph starts the next page"
     );
@@ -556,7 +561,7 @@ mod tests {
     }];
 
     assert_eq!(
-      page_starts(atoms(&lines, &[], paragraphs), &[], 110.0, 100.0),
+      atoms(&lines, &[], paragraphs).page_starts(&[], 110.0, 100.0),
       vec![0.0, 100.0],
       "backing up past the orphans floor is worse than a lone widow"
     );
@@ -575,7 +580,7 @@ mod tests {
     }];
 
     assert_eq!(
-      page_starts(atoms(&lines, &[], paragraphs), &[], 300.0, 100.0),
+      atoms(&lines, &[], paragraphs).page_starts(&[], 300.0, 100.0),
       vec![0.0, 100.0, 200.0],
       "a paragraph that can never satisfy 20/20 still paginates at the window"
     );
@@ -584,7 +589,7 @@ mod tests {
   #[test]
   fn page_starts_honors_forced_cuts() {
     assert_eq!(
-      page_starts(atoms(&[], &[40.0, 150.0], Vec::new()), &[], 250.0, 100.0),
+      atoms(&[], &[40.0, 150.0], Vec::new()).page_starts(&[], 250.0, 100.0),
       vec![0.0, 40.0, 140.0, 150.0]
     );
   }

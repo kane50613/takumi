@@ -341,7 +341,7 @@ impl Paginated {
     atoms
       .extents
       .extend(headers.iter().map(|band| (band.top, band.bottom)));
-    let starts = page_starts(atoms, &headers, content.height, frame.window_height);
+    let starts = atoms.page_starts(&headers, content.height, frame.window_height);
     let interactive = Interactive::collect(&content);
 
     Ok(Self {
@@ -424,101 +424,98 @@ impl Paginated {
 /// atom taller than the window can never fit a page, so it does not push cuts
 /// at all — matching browsers, where `break-inside: avoid` is dropped for
 /// boxes taller than the fragmentainer.
-pub(crate) fn page_starts(
-  mut atoms: Atoms,
-  headers: &[HeaderBand],
-  total: f32,
-  window: f32,
-) -> Vec<f32> {
-  let Atoms {
-    extents,
-    forced,
-    paragraphs,
-  } = &mut atoms;
+impl Atoms {
+  pub(crate) fn page_starts(mut self, headers: &[HeaderBand], total: f32, window: f32) -> Vec<f32> {
+    let Self {
+      extents,
+      forced,
+      paragraphs,
+    } = &mut self;
 
-  extents.sort_by(|a, b| a.0.total_cmp(&b.0));
-  forced.retain(|cut| *cut > 1.0 && *cut < total - 1.0);
-  forced.sort_by(f32::total_cmp);
+    extents.sort_by(|a, b| a.0.total_cmp(&b.0));
+    forced.retain(|cut| *cut > 1.0 && *cut < total - 1.0);
+    forced.sort_by(f32::total_cmp);
 
-  // The prefix max of bottoms lets the back-scan stop early even when a
-  // paragraph spans several pages.
-  let mut by_top: Vec<&Paragraph> = paragraphs.iter().collect();
+    // The prefix max of bottoms lets the back-scan stop early even when a
+    // paragraph spans several pages.
+    let mut by_top: Vec<&Paragraph> = paragraphs.iter().collect();
 
-  by_top.sort_by(|a, b| a.top().total_cmp(&b.top()));
+    by_top.sort_by(|a, b| a.top().total_cmp(&b.top()));
 
-  let mut prefix_max_bottom = Vec::with_capacity(by_top.len());
-  let mut running = f32::MIN;
+    let mut prefix_max_bottom = Vec::with_capacity(by_top.len());
+    let mut running = f32::MIN;
 
-  for paragraph in &by_top {
-    running = running.max(paragraph.bottom());
-    prefix_max_bottom.push(running);
-  }
-  let mut starts = vec![0.0_f32];
-  let mut y0 = 0.0_f32;
-
-  loop {
-    let limit = y0 + window - HeaderBand::replays(headers, y0, window).0;
-
-    if let Some(cut) = forced.iter().copied().find(|cut| *cut > y0 + 1.0)
-      && cut <= limit
-    {
-      starts.push(cut);
-      y0 = cut;
-      continue;
+    for paragraph in &by_top {
+      running = running.max(paragraph.bottom());
+      prefix_max_bottom.push(running);
     }
-    if limit >= total {
-      break;
-    }
-    let mut cut = limit;
+    let mut starts = vec![0.0_f32];
+    let mut y0 = 0.0_f32;
 
     loop {
-      // `extents` is sorted by top, and an atom that fits the window can only
-      // straddle the cut if it starts within one window of it, so the scan
-      // walks back from the cut and stops there instead of reading every atom.
-      let straddling = extents.partition_point(|(top, _)| *top < cut);
-      let mut pushed_up = cut;
+      let limit = y0 + window - HeaderBand::replays(headers, y0, window).0;
 
-      for &(top, bottom) in extents[..straddling].iter().rev() {
-        if top <= cut - window {
-          break;
-        }
-        // An atom moves to the next page only when it fits the capacity that
-        // page actually offers under its repeated headers.
-        if bottom > cut && bottom - top <= window - HeaderBand::replays(headers, top, window).0 {
-          pushed_up = pushed_up.min(top);
-        }
+      if let Some(cut) = forced.iter().copied().find(|cut| *cut > y0 + 1.0)
+        && cut <= limit
+      {
+        starts.push(cut);
+        y0 = cut;
+        continue;
       }
-
-      let straddling = by_top.partition_point(|paragraph| paragraph.top() < pushed_up);
-
-      for i in (0..straddling).rev() {
-        if prefix_max_bottom[i] <= pushed_up {
-          break;
-        }
-        pushed_up = pushed_up.min(by_top[i].cut_for_minimums(pushed_up, y0 + 1.0));
-      }
-
-      if pushed_up >= cut {
+      if limit >= total {
         break;
       }
-      if pushed_up <= y0 + 1.0 {
-        cut = limit;
+      let mut cut = limit;
+
+      loop {
+        // `extents` is sorted by top, and an atom that fits the window can only
+        // straddle the cut if it starts within one window of it, so the scan
+        // walks back from the cut and stops there instead of reading every atom.
+        let straddling = extents.partition_point(|(top, _)| *top < cut);
+        let mut pushed_up = cut;
+
+        for &(top, bottom) in extents[..straddling].iter().rev() {
+          if top <= cut - window {
+            break;
+          }
+          // An atom moves to the next page only when it fits the capacity that
+          // page actually offers under its repeated headers.
+          if bottom > cut && bottom - top <= window - HeaderBand::replays(headers, top, window).0 {
+            pushed_up = pushed_up.min(top);
+          }
+        }
+
+        let straddling = by_top.partition_point(|paragraph| paragraph.top() < pushed_up);
+
+        for i in (0..straddling).rev() {
+          if prefix_max_bottom[i] <= pushed_up {
+            break;
+          }
+          pushed_up = pushed_up.min(by_top[i].cut_for_minimums(pushed_up, y0 + 1.0));
+        }
+
+        if pushed_up >= cut {
+          break;
+        }
+        if pushed_up <= y0 + 1.0 {
+          cut = limit;
+          break;
+        }
+        cut = pushed_up;
+      }
+
+      // The page cap is what bounds this loop; a cut that did not move would
+      // spin forever without it, so refuse that too rather than lean on the cap.
+      if cut <= y0 {
         break;
       }
-      cut = pushed_up;
-    }
+      starts.push(cut);
+      y0 = cut;
 
-    // The page cap is what bounds this loop; a cut that did not move would
-    // spin forever without it, so refuse that too rather than lean on the cap.
-    if cut <= y0 {
-      break;
+      if starts.len() >= MAX_PAGES {
+        break;
+      }
     }
-    starts.push(cut);
-    y0 = cut;
-
-    if starts.len() >= MAX_PAGES {
-      break;
-    }
+    starts
   }
-  starts
 }

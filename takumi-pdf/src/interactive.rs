@@ -411,45 +411,47 @@ pub(crate) fn add_link_annotations<'l>(
 /// deeper headings as children, like an HTML document outline. A heading with
 /// no destination (its page is dropped by page ranges) loses its entry and its
 /// children take its place.
-pub(crate) fn build_outline(
-  headings: &[HeadingTarget],
-  destination: impl Fn(&HeadingTarget) -> Option<XyzDestination>,
-) -> Outline {
-  fn take(
-    headings: &[HeadingTarget],
-    index: &mut usize,
-    level: u8,
-    destination: &impl Fn(&HeadingTarget) -> Option<XyzDestination>,
-  ) -> Vec<OutlineNode> {
-    let mut nodes = Vec::new();
+impl Interactive {
+  pub(crate) fn outline(
+    &self,
+    destination: impl Fn(&HeadingTarget) -> Option<XyzDestination>,
+  ) -> Outline {
+    fn take(
+      headings: &[HeadingTarget],
+      index: &mut usize,
+      level: u8,
+      destination: &impl Fn(&HeadingTarget) -> Option<XyzDestination>,
+    ) -> Vec<OutlineNode> {
+      let mut nodes = Vec::new();
 
-    while let Some(heading) = headings.get(*index) {
-      if heading.level < level {
-        break;
-      }
-      *index += 1;
-      let children = take(headings, index, heading.level + 1, destination);
-
-      match destination(heading) {
-        Some(dest) => {
-          let mut node = OutlineNode::new(heading.text.clone(), dest);
-
-          for child in children {
-            node.push_child(child);
-          }
-          nodes.push(node);
+      while let Some(heading) = headings.get(*index) {
+        if heading.level < level {
+          break;
         }
-        None => nodes.extend(children),
+        *index += 1;
+        let children = take(headings, index, heading.level + 1, destination);
+
+        match destination(heading) {
+          Some(dest) => {
+            let mut node = OutlineNode::new(heading.text.clone(), dest);
+
+            for child in children {
+              node.push_child(child);
+            }
+            nodes.push(node);
+          }
+          None => nodes.extend(children),
+        }
       }
+      nodes
     }
-    nodes
-  }
 
-  let mut outline = Outline::new();
-  let mut index = 0;
+    let mut outline = Outline::new();
+    let mut index = 0;
 
-  for node in take(headings, &mut index, 1, &destination) {
-    outline.push_child(node);
+    for node in take(&self.headings, &mut index, 1, &destination) {
+      outline.push_child(node);
+    }
+    outline
   }
-  outline
 }
