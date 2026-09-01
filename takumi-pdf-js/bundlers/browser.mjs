@@ -1,5 +1,5 @@
-import url from "../pkg/takumi_pdf_wasm_bg.wasm?url";
 import * as wasm from "../dist/export.mjs";
+import url from "./wasm-url.mjs";
 
 wasm.initSync({ module: await fetch(url).then((response) => response.arrayBuffer()) });
 

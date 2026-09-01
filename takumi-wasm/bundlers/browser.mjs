@@ -1,3 +1,3 @@
-import url from "../pkg/takumi_wasm_bg.wasm?url";
+import url from "./wasm-url.mjs";
 
 export default fetch(url).then((response) => response.arrayBuffer());
