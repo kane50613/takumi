@@ -160,7 +160,7 @@
     <stop offset="1" stop-color="#000" stop-opacity=".302"/>
   </linearGradient>
   <rect x="0" y="0" width="1200" height="630" fill="url(#lg4)"/>
-  <radialGradient id="rg5" gradientUnits="userSpaceOnUse" cx="600" cy="315" r="600" gradientTransform="matrix(1 0 0 .525 0 149.625)">
+  <radialGradient id="rg5" gradientUnits="userSpaceOnUse" cx="600" cy="315" r="848.528" gradientTransform="matrix(1 0 0 .525 0 149.625)">
     <stop offset="0" stop-color="#000" stop-opacity="0"/>
     <stop offset=".016" stop-color="#000" stop-opacity="0"/>
     <stop offset=".032" stop-color="#000" stop-opacity="0"/>
