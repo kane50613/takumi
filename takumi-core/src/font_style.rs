@@ -207,7 +207,7 @@ pub struct SizedFontStyle<'s> {
   pub(crate) line_height: parley::LineHeight,
   /// The used line height in pixels, kept on the brush because parley's run
   /// metrics can carry a neighboring span's style at run boundaries.
-  pub(crate) line_height_px: f32,
+  pub(crate) line_height_px: Option<f32>,
   pub(crate) line_height_is_normal: bool,
   pub(crate) line_height_scales_with_text_fit: bool,
   /// Text stroke width in pixels.
@@ -485,9 +485,9 @@ impl<'s> SizedFontStyle<'s> {
     };
 
     let line_height_px = match line_height {
-      LineHeight::Absolute(value) => value,
-      LineHeight::FontSizeRelative(value) => value * context.sizing.font_size,
-      LineHeight::MetricsRelative(_) => 0.0,
+      LineHeight::Absolute(value) => Some(value),
+      LineHeight::FontSizeRelative(value) => Some(value * context.sizing.font_size),
+      LineHeight::MetricsRelative(_) => None,
     };
 
     Self {

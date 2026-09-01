@@ -681,8 +681,8 @@ pub struct InlineBrush {
   pub stroke_width: f32,
   pub(crate) font_synthesis: FontSynthesis,
   pub(crate) line_height_scales_with_text_fit: bool,
-  /// Used line height in px; 0 falls back to the run metrics.
-  pub(crate) line_height_px: f32,
+  /// Used line height in px; `None` falls back to the run metrics.
+  pub(crate) line_height_px: Option<f32>,
   /// Whether the line height is `normal`, letting fallback-font runs grow the line.
   pub(crate) line_height_is_normal: bool,
   pub(crate) vertical_align: VerticalAlign,
@@ -700,11 +700,7 @@ impl InlineBrush {
     ascent: f32,
     descent: f32,
   ) -> (f32, f32) {
-    let line_height = if self.line_height_px > 0.0 {
-      self.line_height_px
-    } else {
-      metrics_line_height
-    };
+    let line_height = self.line_height_px.unwrap_or(metrics_line_height);
     let (above, below) = text_line_box_contribution(line_height, ascent, descent);
 
     if self.line_height_is_normal {
@@ -732,7 +728,7 @@ impl Default for InlineBrush {
       stroke_width: 0.0,
       font_synthesis: FontSynthesis::default(),
       line_height_scales_with_text_fit: false,
-      line_height_px: 0.0,
+      line_height_px: None,
       line_height_is_normal: false,
       vertical_align: VerticalAlign::default(),
     }
@@ -3900,6 +3896,17 @@ mod tests {
       // Not a font: `em_box_descent` falls back to the run metrics instead of OS/2.
       font_data: parley::fontique::Blob::new(Arc::new(Vec::new())),
     }
+  }
+
+  #[test]
+  fn an_explicit_zero_line_height_beats_the_run_metrics() {
+    let brush = InlineBrush {
+      line_height_px: Some(0.0),
+      ..InlineBrush::default()
+    };
+    let (above, below) = brush.line_box_contribution(20.0, 12.0, 4.0);
+
+    assert_eq!((above, below), (4.0, -4.0));
   }
 
   #[test]

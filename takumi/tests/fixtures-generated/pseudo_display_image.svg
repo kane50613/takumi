@@ -275,68 +275,68 @@
   <g clip-path="url(#cp17)">
     <linearGradient id="lg18" gradientUnits="userSpaceOnUse" x1="365" y1="168" x2="515" y2="318">
       <stop offset="0" stop-color="#ff3b30"/>
-      <stop offset=".016" stop-color="#ff3f30"/>
-      <stop offset=".032" stop-color="#ff4230"/>
-      <stop offset=".048" stop-color="#ff4630"/>
-      <stop offset=".063" stop-color="#ff492f"/>
-      <stop offset=".079" stop-color="#ff4c2f"/>
-      <stop offset=".095" stop-color="#ff4f2f"/>
-      <stop offset=".111" stop-color="#ff522f"/>
-      <stop offset=".127" stop-color="#ff552f"/>
-      <stop offset=".143" stop-color="#ff582e"/>
-      <stop offset=".159" stop-color="#ff5b2e"/>
-      <stop offset=".175" stop-color="#ff5d2e"/>
-      <stop offset=".19" stop-color="#ff602e"/>
-      <stop offset=".206" stop-color="#ff632d"/>
-      <stop offset=".222" stop-color="#ff652d"/>
-      <stop offset=".238" stop-color="#ff682d"/>
-      <stop offset=".254" stop-color="#ff6a2d"/>
-      <stop offset=".27" stop-color="#ff6d2c"/>
-      <stop offset=".286" stop-color="#ff6f2c"/>
-      <stop offset=".302" stop-color="#ff712c"/>
-      <stop offset=".317" stop-color="#ff742b"/>
-      <stop offset=".333" stop-color="#ff762b"/>
-      <stop offset=".349" stop-color="#ff782b"/>
-      <stop offset=".365" stop-color="#ff7b2a"/>
-      <stop offset=".381" stop-color="#ff7d2a"/>
-      <stop offset=".397" stop-color="#ff7f2a"/>
-      <stop offset=".413" stop-color="#ff8129"/>
-      <stop offset=".429" stop-color="#ff8429"/>
-      <stop offset=".444" stop-color="#ff8628"/>
-      <stop offset=".46" stop-color="#ff8828"/>
-      <stop offset=".476" stop-color="#ff8a27"/>
-      <stop offset=".492" stop-color="#ff8c27"/>
-      <stop offset=".508" stop-color="#ff8e26"/>
-      <stop offset=".524" stop-color="#ff9026"/>
-      <stop offset=".54" stop-color="#ff9325"/>
-      <stop offset=".556" stop-color="#ff9525"/>
-      <stop offset=".571" stop-color="#ff9724"/>
-      <stop offset=".587" stop-color="#ff9924"/>
-      <stop offset=".603" stop-color="#ff9b23"/>
-      <stop offset=".619" stop-color="#ff9d22"/>
-      <stop offset=".635" stop-color="#ff9f22"/>
-      <stop offset=".651" stop-color="#ffa121"/>
-      <stop offset=".667" stop-color="#ffa320"/>
-      <stop offset=".683" stop-color="#ffa520"/>
-      <stop offset=".698" stop-color="#ffa71f"/>
-      <stop offset=".714" stop-color="#ffa91e"/>
-      <stop offset=".73" stop-color="#ffab1d"/>
-      <stop offset=".746" stop-color="#ffad1c"/>
-      <stop offset=".762" stop-color="#ffaf1b"/>
-      <stop offset=".778" stop-color="#ffb11a"/>
-      <stop offset=".794" stop-color="#ffb319"/>
-      <stop offset=".81" stop-color="#ffb518"/>
-      <stop offset=".825" stop-color="#ffb717"/>
-      <stop offset=".841" stop-color="#ffb915"/>
-      <stop offset=".857" stop-color="#ffbb14"/>
-      <stop offset=".873" stop-color="#ffbd12"/>
-      <stop offset=".889" stop-color="#ffbf11"/>
-      <stop offset=".905" stop-color="#ffc10f"/>
-      <stop offset=".921" stop-color="#ffc20d"/>
-      <stop offset=".937" stop-color="#ffc40b"/>
-      <stop offset=".952" stop-color="#ffc608"/>
-      <stop offset=".968" stop-color="#ffc805"/>
-      <stop offset=".984" stop-color="#ffca03"/>
+      <stop offset=".016" stop-color="#ff3d2f"/>
+      <stop offset=".032" stop-color="#ff402e"/>
+      <stop offset=".048" stop-color="#ff422e"/>
+      <stop offset=".063" stop-color="#ff442d"/>
+      <stop offset=".079" stop-color="#ff472c"/>
+      <stop offset=".095" stop-color="#ff492b"/>
+      <stop offset=".111" stop-color="#ff4b2b"/>
+      <stop offset=".127" stop-color="#ff4d2a"/>
+      <stop offset=".143" stop-color="#ff5029"/>
+      <stop offset=".159" stop-color="#ff5228"/>
+      <stop offset=".175" stop-color="#ff5428"/>
+      <stop offset=".19" stop-color="#ff5727"/>
+      <stop offset=".206" stop-color="#ff5926"/>
+      <stop offset=".222" stop-color="#ff5b25"/>
+      <stop offset=".238" stop-color="#ff5e25"/>
+      <stop offset=".254" stop-color="#ff6024"/>
+      <stop offset=".27" stop-color="#ff6223"/>
+      <stop offset=".286" stop-color="#ff6422"/>
+      <stop offset=".302" stop-color="#ff6722"/>
+      <stop offset=".317" stop-color="#ff6921"/>
+      <stop offset=".333" stop-color="#ff6b20"/>
+      <stop offset=".349" stop-color="#ff6e1f"/>
+      <stop offset=".365" stop-color="#ff701e"/>
+      <stop offset=".381" stop-color="#ff721e"/>
+      <stop offset=".397" stop-color="#ff751d"/>
+      <stop offset=".413" stop-color="#ff771c"/>
+      <stop offset=".429" stop-color="#ff791b"/>
+      <stop offset=".444" stop-color="#ff7b1b"/>
+      <stop offset=".46" stop-color="#ff7e1a"/>
+      <stop offset=".476" stop-color="#ff8019"/>
+      <stop offset=".492" stop-color="#ff8218"/>
+      <stop offset=".508" stop-color="#ff8518"/>
+      <stop offset=".524" stop-color="#ff8717"/>
+      <stop offset=".54" stop-color="#ff8916"/>
+      <stop offset=".556" stop-color="#ff8c15"/>
+      <stop offset=".571" stop-color="#ff8e15"/>
+      <stop offset=".587" stop-color="#ff9014"/>
+      <stop offset=".603" stop-color="#ff9213"/>
+      <stop offset=".619" stop-color="#ff9512"/>
+      <stop offset=".635" stop-color="#ff9712"/>
+      <stop offset=".651" stop-color="#f91"/>
+      <stop offset=".667" stop-color="#ff9c10"/>
+      <stop offset=".683" stop-color="#ff9e0f"/>
+      <stop offset=".698" stop-color="#ffa00e"/>
+      <stop offset=".714" stop-color="#ffa30e"/>
+      <stop offset=".73" stop-color="#ffa50d"/>
+      <stop offset=".746" stop-color="#ffa70c"/>
+      <stop offset=".762" stop-color="#ffa90b"/>
+      <stop offset=".778" stop-color="#ffac0b"/>
+      <stop offset=".794" stop-color="#ffae0a"/>
+      <stop offset=".81" stop-color="#ffb009"/>
+      <stop offset=".825" stop-color="#ffb308"/>
+      <stop offset=".841" stop-color="#ffb508"/>
+      <stop offset=".857" stop-color="#ffb707"/>
+      <stop offset=".873" stop-color="#ffba06"/>
+      <stop offset=".889" stop-color="#ffbc05"/>
+      <stop offset=".905" stop-color="#ffbe05"/>
+      <stop offset=".921" stop-color="#ffc004"/>
+      <stop offset=".937" stop-color="#ffc303"/>
+      <stop offset=".952" stop-color="#ffc502"/>
+      <stop offset=".968" stop-color="#ffc702"/>
+      <stop offset=".984" stop-color="#ffca01"/>
       <stop offset="1" stop-color="#fc0"/>
     </linearGradient>
     <rect x="320" y="213" width="240" height="60" fill="url(#lg18)"/>
@@ -376,68 +376,68 @@
   <g clip-path="url(#cp21)">
     <radialGradient id="rg22" gradientUnits="userSpaceOnUse" cx="732" cy="243" r="123.693">
       <stop offset="0" stop-color="#00e5ff"/>
-      <stop offset=".016" stop-color="#0be3fe"/>
-      <stop offset=".032" stop-color="#13e1fe"/>
-      <stop offset=".048" stop-color="#19defd"/>
-      <stop offset=".063" stop-color="#1edcfd"/>
-      <stop offset=".079" stop-color="#22dafc"/>
-      <stop offset=".095" stop-color="#25d8fc"/>
-      <stop offset=".111" stop-color="#29d6fb"/>
-      <stop offset=".127" stop-color="#2bd3fb"/>
-      <stop offset=".143" stop-color="#2ed1fa"/>
-      <stop offset=".159" stop-color="#30cff9"/>
-      <stop offset=".175" stop-color="#33cdf9"/>
-      <stop offset=".19" stop-color="#35cbf8"/>
-      <stop offset=".206" stop-color="#37c8f8"/>
-      <stop offset=".222" stop-color="#39c6f7"/>
-      <stop offset=".238" stop-color="#3ac4f7"/>
-      <stop offset=".254" stop-color="#3cc2f6"/>
-      <stop offset=".27" stop-color="#3dc0f5"/>
-      <stop offset=".286" stop-color="#3fbdf5"/>
-      <stop offset=".302" stop-color="#40bbf4"/>
-      <stop offset=".317" stop-color="#42b9f4"/>
-      <stop offset=".333" stop-color="#43b7f3"/>
-      <stop offset=".349" stop-color="#44b4f2"/>
-      <stop offset=".365" stop-color="#45b2f2"/>
-      <stop offset=".381" stop-color="#46b0f1"/>
-      <stop offset=".397" stop-color="#47aef0"/>
-      <stop offset=".413" stop-color="#48acf0"/>
-      <stop offset=".429" stop-color="#49a9ef"/>
-      <stop offset=".444" stop-color="#4aa7ef"/>
-      <stop offset=".46" stop-color="#4ba5ee"/>
-      <stop offset=".476" stop-color="#4ca3ed"/>
-      <stop offset=".492" stop-color="#4da1ed"/>
-      <stop offset=".508" stop-color="#4d9eec"/>
-      <stop offset=".524" stop-color="#4e9ceb"/>
-      <stop offset=".54" stop-color="#4f9aeb"/>
-      <stop offset=".556" stop-color="#4f98ea"/>
-      <stop offset=".571" stop-color="#5095e9"/>
-      <stop offset=".587" stop-color="#5193e9"/>
-      <stop offset=".603" stop-color="#5191e8"/>
-      <stop offset=".619" stop-color="#528fe7"/>
-      <stop offset=".635" stop-color="#528ce7"/>
-      <stop offset=".651" stop-color="#538ae6"/>
-      <stop offset=".667" stop-color="#5388e5"/>
-      <stop offset=".683" stop-color="#5486e5"/>
-      <stop offset=".698" stop-color="#5483e4"/>
-      <stop offset=".714" stop-color="#5481e3"/>
-      <stop offset=".73" stop-color="#557fe2"/>
-      <stop offset=".746" stop-color="#557de2"/>
-      <stop offset=".762" stop-color="#557ae1"/>
-      <stop offset=".778" stop-color="#5678e0"/>
-      <stop offset=".794" stop-color="#5676e0"/>
-      <stop offset=".81" stop-color="#5673df"/>
-      <stop offset=".825" stop-color="#5671de"/>
-      <stop offset=".841" stop-color="#576fdd"/>
-      <stop offset=".857" stop-color="#576cdd"/>
-      <stop offset=".873" stop-color="#576adc"/>
-      <stop offset=".889" stop-color="#5767db"/>
-      <stop offset=".905" stop-color="#5765da"/>
-      <stop offset=".921" stop-color="#5863da"/>
-      <stop offset=".937" stop-color="#5860d9"/>
-      <stop offset=".952" stop-color="#585ed8"/>
-      <stop offset=".968" stop-color="#585bd8"/>
-      <stop offset=".984" stop-color="#5859d7"/>
+      <stop offset=".016" stop-color="#01e3fe"/>
+      <stop offset=".032" stop-color="#03e0fe"/>
+      <stop offset=".048" stop-color="#04defd"/>
+      <stop offset=".063" stop-color="#06dcfc"/>
+      <stop offset=".079" stop-color="#07dafc"/>
+      <stop offset=".095" stop-color="#08d7fb"/>
+      <stop offset=".111" stop-color="#0ad5fa"/>
+      <stop offset=".127" stop-color="#0bd3fa"/>
+      <stop offset=".143" stop-color="#0dd1f9"/>
+      <stop offset=".159" stop-color="#0ecef8"/>
+      <stop offset=".175" stop-color="#0fccf8"/>
+      <stop offset=".19" stop-color="#11caf7"/>
+      <stop offset=".206" stop-color="#12c7f7"/>
+      <stop offset=".222" stop-color="#14c5f6"/>
+      <stop offset=".238" stop-color="#15c3f5"/>
+      <stop offset=".254" stop-color="#16c1f5"/>
+      <stop offset=".27" stop-color="#18bef4"/>
+      <stop offset=".286" stop-color="#19bcf3"/>
+      <stop offset=".302" stop-color="#1bbaf3"/>
+      <stop offset=".317" stop-color="#1cb8f2"/>
+      <stop offset=".333" stop-color="#1db5f1"/>
+      <stop offset=".349" stop-color="#1fb3f1"/>
+      <stop offset=".365" stop-color="#20b1f0"/>
+      <stop offset=".381" stop-color="#22afef"/>
+      <stop offset=".397" stop-color="#23acef"/>
+      <stop offset=".413" stop-color="#24aaee"/>
+      <stop offset=".429" stop-color="#26a8ed"/>
+      <stop offset=".444" stop-color="#27a5ed"/>
+      <stop offset=".46" stop-color="#29a3ec"/>
+      <stop offset=".476" stop-color="#2aa1eb"/>
+      <stop offset=".492" stop-color="#2b9feb"/>
+      <stop offset=".508" stop-color="#2d9cea"/>
+      <stop offset=".524" stop-color="#2e9aea"/>
+      <stop offset=".54" stop-color="#2f98e9"/>
+      <stop offset=".556" stop-color="#3196e8"/>
+      <stop offset=".571" stop-color="#3293e8"/>
+      <stop offset=".587" stop-color="#3491e7"/>
+      <stop offset=".603" stop-color="#358fe6"/>
+      <stop offset=".619" stop-color="#368ce6"/>
+      <stop offset=".635" stop-color="#388ae5"/>
+      <stop offset=".651" stop-color="#3988e4"/>
+      <stop offset=".667" stop-color="#3b86e4"/>
+      <stop offset=".683" stop-color="#3c83e3"/>
+      <stop offset=".698" stop-color="#3d81e2"/>
+      <stop offset=".714" stop-color="#3f7fe2"/>
+      <stop offset=".73" stop-color="#407de1"/>
+      <stop offset=".746" stop-color="#427ae0"/>
+      <stop offset=".762" stop-color="#4378e0"/>
+      <stop offset=".778" stop-color="#4476df"/>
+      <stop offset=".794" stop-color="#4674de"/>
+      <stop offset=".81" stop-color="#4771de"/>
+      <stop offset=".825" stop-color="#496fdd"/>
+      <stop offset=".841" stop-color="#4a6ddd"/>
+      <stop offset=".857" stop-color="#4b6adc"/>
+      <stop offset=".873" stop-color="#4d68db"/>
+      <stop offset=".889" stop-color="#4e66db"/>
+      <stop offset=".905" stop-color="#5064da"/>
+      <stop offset=".921" stop-color="#5161d9"/>
+      <stop offset=".937" stop-color="#525fd9"/>
+      <stop offset=".952" stop-color="#545dd8"/>
+      <stop offset=".968" stop-color="#555bd7"/>
+      <stop offset=".984" stop-color="#5758d7"/>
       <stop offset="1" stop-color="#5856d6"/>
     </radialGradient>
     <rect x="612" y="213" width="240" height="60" fill="url(#rg22)"/>
@@ -479,184 +479,184 @@
     </clipPath>
     <g clip-path="url(#cp26)">
       <path d="M934 243 934 200.574 935.481 200.599Z" fill="#f00"/>
-      <path d="M934 243 935.481 200.599 936.96 200.677Z" fill="#ff2000"/>
-      <path d="M934 243 936.96 200.677 938.435 200.806Z" fill="#ff2800"/>
-      <path d="M934 243 938.435 200.806 939.905 200.986Z" fill="#ff3600"/>
-      <path d="M934 243 939.905 200.986 941.367 201.218Z" fill="#ff3c00"/>
-      <path d="M934 243 941.367 201.218 942.821 201.501Z" fill="#ff4600"/>
-      <path d="M934 243 942.821 201.501 944.264 201.834Z" fill="#ff4b00"/>
-      <path d="M934 243 944.264 201.834 945.694 202.217Z" fill="#ff5400"/>
-      <path d="M934 243 945.694 202.217 947.111 202.65Z" fill="#ff5800"/>
-      <path d="M934 243 947.111 202.65 948.511 203.132Z" fill="#ff6000"/>
-      <path d="M934 243 948.511 203.132 949.893 203.663Z" fill="#ff6400"/>
-      <path d="M934 243 949.893 203.663 951.256 204.242Z" fill="#ff6b00"/>
-      <path d="M934 243 951.256 204.242 952.599 204.867Z" fill="#ff6f00"/>
-      <path d="M934 243 952.599 204.867 953.918 205.54Z" fill="#ff7600"/>
-      <path d="M934 243 953.918 205.54 955.213 206.258Z" fill="#ff7900"/>
-      <path d="M934 243 955.213 206.258 956.483 207.02Z" fill="#ff8000"/>
-      <path d="M934 243 956.483 207.02 957.725 207.827Z" fill="#ff8300"/>
-      <path d="M934 243 957.725 207.827 958.938 208.676Z" fill="#ff8900"/>
-      <path d="M934 243 958.938 208.676 960.12 209.568Z" fill="#ff8d00"/>
-      <path d="M934 243 960.12 209.568 961.271 210.499Z" fill="#ff9300"/>
-      <path d="M934 243 961.271 210.499 962.389 211.471Z" fill="#ff9600"/>
-      <path d="M934 243 962.389 211.471 963.472 212.481Z" fill="#ff9c00"/>
-      <path d="M934 243 963.472 212.481 964.519 213.528Z" fill="#ff9f00"/>
-      <path d="M934 243 964.519 213.528 965.529 214.611Z" fill="#ffa200"/>
-      <path d="M934 243 965.529 214.611 966.501 215.729Z" fill="#ffa800"/>
-      <path d="M934 243 966.501 215.729 967.433 216.88Z" fill="#ffab00"/>
-      <path d="M934 243 967.433 216.88 968.324 218.062Z" fill="#ffb100"/>
-      <path d="M934 243 968.324 218.062 969.173 219.275Z" fill="#ffb400"/>
-      <path d="M934 243 969.173 219.275 969.98 220.517Z" fill="#ffba00"/>
-      <path d="M934 243 969.98 220.517 970.742 221.787Z" fill="#ffbc00"/>
-      <path d="M934 243 970.742 221.787 971.46 223.082Z" fill="#ffc200"/>
-      <path d="M934 243 971.46 223.082 972.133 224.401Z" fill="#ffc500"/>
-      <path d="M934 243 972.133 224.401 972.758 225.744Z" fill="#ffcb00"/>
-      <path d="M934 243 972.758 225.744 973.337 227.107Z" fill="#ffce00"/>
-      <path d="M934 243 973.337 227.107 973.868 228.489Z" fill="#ffd300"/>
-      <path d="M934 243 973.868 228.489 974.35 229.89Z" fill="#ffd600"/>
-      <path d="M934 243 974.35 229.89 974.783 231.306Z" fill="#ffdc00"/>
-      <path d="M934 243 974.783 231.306 975.166 232.736Z" fill="#ffde00"/>
-      <path d="M934 243 975.166 232.736 975.499 234.179Z" fill="#ffe400"/>
-      <path d="M934 243 975.499 234.179 975.782 235.633Z" fill="#ffe700"/>
-      <path d="M934 243 975.782 235.633 976.014 237.095Z" fill="#ffec00"/>
-      <path d="M934 243 976.014 237.095 976.194 238.565Z" fill="#ffef00"/>
-      <path d="M934 243 976.194 238.565 976.323 240.04Z" fill="#fff500"/>
-      <path d="M934 243 976.323 240.04 976.401 241.519Z" fill="#fff700"/>
-      <path d="M934 243 976.401 241.519 976.426 243Z" fill="#fffd00"/>
+      <path d="M934 243 935.481 200.599 936.96 200.677Z" fill="#ff0800"/>
+      <path d="M934 243 936.96 200.677 938.435 200.806Z" fill="#ff0b00"/>
+      <path d="M934 243 938.435 200.806 939.905 200.986Z" fill="#ff1300"/>
+      <path d="M934 243 939.905 200.986 941.367 201.218Z" fill="#ff1700"/>
+      <path d="M934 243 941.367 201.218 942.821 201.501Z" fill="#ff1f00"/>
+      <path d="M934 243 942.821 201.501 944.264 201.834Z" fill="#f20"/>
+      <path d="M934 243 944.264 201.834 945.694 202.217Z" fill="#ff2a00"/>
+      <path d="M934 243 945.694 202.217 947.111 202.65Z" fill="#ff2e00"/>
+      <path d="M934 243 947.111 202.65 948.511 203.132Z" fill="#ff3500"/>
+      <path d="M934 243 948.511 203.132 949.893 203.663Z" fill="#ff3900"/>
+      <path d="M934 243 949.893 203.663 951.256 204.242Z" fill="#ff4100"/>
+      <path d="M934 243 951.256 204.242 952.599 204.867Z" fill="#ff4500"/>
+      <path d="M934 243 952.599 204.867 953.918 205.54Z" fill="#ff4c00"/>
+      <path d="M934 243 953.918 205.54 955.213 206.258Z" fill="#ff5000"/>
+      <path d="M934 243 955.213 206.258 956.483 207.02Z" fill="#ff5800"/>
+      <path d="M934 243 956.483 207.02 957.725 207.827Z" fill="#ff5c00"/>
+      <path d="M934 243 957.725 207.827 958.938 208.676Z" fill="#ff6300"/>
+      <path d="M934 243 958.938 208.676 960.12 209.568Z" fill="#ff6700"/>
+      <path d="M934 243 960.12 209.568 961.271 210.499Z" fill="#ff6f00"/>
+      <path d="M934 243 961.271 210.499 962.389 211.471Z" fill="#ff7300"/>
+      <path d="M934 243 962.389 211.471 963.472 212.481Z" fill="#ff7a00"/>
+      <path d="M934 243 963.472 212.481 964.519 213.528Z" fill="#ff7e00"/>
+      <path d="M934 243 964.519 213.528 965.529 214.611Z" fill="#ff8200"/>
+      <path d="M934 243 965.529 214.611 966.501 215.729Z" fill="#ff8a00"/>
+      <path d="M934 243 966.501 215.729 967.433 216.88Z" fill="#ff8d00"/>
+      <path d="M934 243 967.433 216.88 968.324 218.062Z" fill="#ff9500"/>
+      <path d="M934 243 968.324 218.062 969.173 219.275Z" fill="#f90"/>
+      <path d="M934 243 969.173 219.275 969.98 220.517Z" fill="#ffa000"/>
+      <path d="M934 243 969.98 220.517 970.742 221.787Z" fill="#ffa400"/>
+      <path d="M934 243 970.742 221.787 971.46 223.082Z" fill="#ffac00"/>
+      <path d="M934 243 971.46 223.082 972.133 224.401Z" fill="#ffb000"/>
+      <path d="M934 243 972.133 224.401 972.758 225.744Z" fill="#ffb700"/>
+      <path d="M934 243 972.758 225.744 973.337 227.107Z" fill="#fb0"/>
+      <path d="M934 243 973.337 227.107 973.868 228.489Z" fill="#ffc300"/>
+      <path d="M934 243 973.868 228.489 974.35 229.89Z" fill="#ffc700"/>
+      <path d="M934 243 974.35 229.89 974.783 231.306Z" fill="#ffce00"/>
+      <path d="M934 243 974.783 231.306 975.166 232.736Z" fill="#ffd200"/>
+      <path d="M934 243 975.166 232.736 975.499 234.179Z" fill="#ffda00"/>
+      <path d="M934 243 975.499 234.179 975.782 235.633Z" fill="#ffde00"/>
+      <path d="M934 243 975.782 235.633 976.014 237.095Z" fill="#ffe500"/>
+      <path d="M934 243 976.014 237.095 976.194 238.565Z" fill="#ffe900"/>
+      <path d="M934 243 976.194 238.565 976.323 240.04Z" fill="#fff100"/>
+      <path d="M934 243 976.323 240.04 976.401 241.519Z" fill="#fff400"/>
+      <path d="M934 243 976.401 241.519 976.426 243Z" fill="#fffc00"/>
       <path d="M934 243 976.426 243 976.401 244.481Z" fill="#ff0"/>
-      <path d="M934 243 976.401 244.481 976.323 245.96Z" fill="#f8fb00"/>
-      <path d="M934 243 976.323 245.96 976.194 247.435Z" fill="#f4f900"/>
-      <path d="M934 243 976.194 247.435 976.014 248.905Z" fill="#eef500"/>
-      <path d="M934 243 976.014 248.905 975.782 250.367Z" fill="#ebf300"/>
-      <path d="M934 243 975.782 250.367 975.499 251.821Z" fill="#e4ef00"/>
-      <path d="M934 243 975.499 251.821 975.166 253.264Z" fill="#e1ed00"/>
-      <path d="M934 243 975.166 253.264 974.783 254.694Z" fill="#dae900"/>
-      <path d="M934 243 974.783 254.694 974.35 256.11Z" fill="#d7e700"/>
-      <path d="M934 243 974.35 256.11 973.868 257.511Z" fill="#d0e300"/>
-      <path d="M934 243 973.868 257.511 973.337 258.893Z" fill="#cde100"/>
-      <path d="M934 243 973.337 258.893 972.758 260.256Z" fill="#c7dd00"/>
-      <path d="M934 243 972.758 260.256 972.133 261.599Z" fill="#c3dc00"/>
-      <path d="M934 243 972.133 261.599 971.46 262.918Z" fill="#bdd800"/>
-      <path d="M934 243 971.46 262.918 970.742 264.213Z" fill="#bad600"/>
-      <path d="M934 243 970.742 264.213 969.98 265.483Z" fill="#b3d200"/>
-      <path d="M934 243 969.98 265.483 969.173 266.725Z" fill="#b0d000"/>
-      <path d="M934 243 969.173 266.725 968.324 267.938Z" fill="#ac0"/>
-      <path d="M934 243 968.324 267.938 967.432 269.12Z" fill="#a6ca00"/>
-      <path d="M934 243 967.432 269.12 966.501 270.271Z" fill="#a0c600"/>
-      <path d="M934 243 966.501 270.271 965.529 271.389Z" fill="#9dc400"/>
-      <path d="M934 243 965.529 271.389 964.519 272.472Z" fill="#96c100"/>
-      <path d="M934 243 964.519 272.472 963.472 273.519Z" fill="#93bf00"/>
-      <path d="M934 243 963.472 273.519 962.389 274.529Z" fill="#8fbd00"/>
-      <path d="M934 243 962.389 274.529 961.271 275.501Z" fill="#89b900"/>
-      <path d="M934 243 961.271 275.501 960.12 276.432Z" fill="#86b700"/>
-      <path d="M934 243 960.12 276.432 958.938 277.324Z" fill="#7fb300"/>
-      <path d="M934 243 958.938 277.324 957.725 278.173Z" fill="#7cb100"/>
-      <path d="M934 243 957.725 278.173 956.483 278.98Z" fill="#75ae00"/>
-      <path d="M934 243 956.483 278.98 955.213 279.742Z" fill="#72ac00"/>
-      <path d="M934 243 955.213 279.742 953.918 280.46Z" fill="#6ba800"/>
-      <path d="M934 243 953.918 280.46 952.599 281.133Z" fill="#67a600"/>
-      <path d="M934 243 952.599 281.133 951.256 281.758Z" fill="#61a200"/>
-      <path d="M934 243 951.256 281.758 949.893 282.337Z" fill="#5da100"/>
-      <path d="M934 243 949.893 282.337 948.511 282.868Z" fill="#569d00"/>
-      <path d="M934 243 948.511 282.868 947.111 283.35Z" fill="#529b00"/>
-      <path d="M934 243 947.111 283.35 945.694 283.783Z" fill="#4b9700"/>
-      <path d="M934 243 945.694 283.783 944.264 284.166Z" fill="#479500"/>
-      <path d="M934 243 944.264 284.166 942.821 284.499Z" fill="#3f9200"/>
-      <path d="M934 243 942.821 284.499 941.367 284.782Z" fill="#3b9000"/>
-      <path d="M934 243 941.367 284.782 939.905 285.014Z" fill="#328c00"/>
-      <path d="M934 243 939.905 285.014 938.435 285.194Z" fill="#2d8a00"/>
-      <path d="M934 243 938.435 285.194 936.96 285.323Z" fill="#228600"/>
-      <path d="M934 243 936.96 285.323 935.481 285.401Z" fill="#1b8500"/>
-      <path d="M934 243 935.481 285.401 934 285.426Z" fill="#078100"/>
+      <path d="M934 243 976.401 244.481 976.323 245.96Z" fill="#f6fb00"/>
+      <path d="M934 243 976.323 245.96 976.194 247.435Z" fill="#f3f900"/>
+      <path d="M934 243 976.194 247.435 976.014 248.905Z" fill="#ebf500"/>
+      <path d="M934 243 976.014 248.905 975.782 250.367Z" fill="#e7f300"/>
+      <path d="M934 243 975.782 250.367 975.499 251.821Z" fill="#dfef00"/>
+      <path d="M934 243 975.499 251.821 975.166 253.264Z" fill="#dced00"/>
+      <path d="M934 243 975.166 253.264 974.783 254.694Z" fill="#d4ea00"/>
+      <path d="M934 243 974.783 254.694 974.35 256.11Z" fill="#d0e800"/>
+      <path d="M934 243 974.35 256.11 973.868 257.511Z" fill="#c9e400"/>
+      <path d="M934 243 973.868 257.511 973.337 258.893Z" fill="#c5e200"/>
+      <path d="M934 243 973.337 258.893 972.758 260.256Z" fill="#bdde00"/>
+      <path d="M934 243 972.758 260.256 972.133 261.599Z" fill="#b9dc00"/>
+      <path d="M934 243 972.133 261.599 971.46 262.918Z" fill="#b2d800"/>
+      <path d="M934 243 971.46 262.918 970.742 264.213Z" fill="#aed700"/>
+      <path d="M934 243 970.742 264.213 969.98 265.483Z" fill="#a6d300"/>
+      <path d="M934 243 969.98 265.483 969.173 266.725Z" fill="#a2d100"/>
+      <path d="M934 243 969.173 266.725 968.324 267.938Z" fill="#9bcd00"/>
+      <path d="M934 243 968.324 267.938 967.432 269.12Z" fill="#97cb00"/>
+      <path d="M934 243 967.432 269.12 966.501 270.271Z" fill="#8fc700"/>
+      <path d="M934 243 966.501 270.271 965.529 271.389Z" fill="#8bc500"/>
+      <path d="M934 243 965.529 271.389 964.519 272.472Z" fill="#84c200"/>
+      <path d="M934 243 964.519 272.472 963.472 273.519Z" fill="#80c000"/>
+      <path d="M934 243 963.472 273.519 962.389 274.529Z" fill="#7cbe00"/>
+      <path d="M934 243 962.389 274.529 961.271 275.501Z" fill="#75ba00"/>
+      <path d="M934 243 961.271 275.501 960.12 276.432Z" fill="#71b800"/>
+      <path d="M934 243 960.12 276.432 958.938 277.324Z" fill="#69b400"/>
+      <path d="M934 243 958.938 277.324 957.725 278.173Z" fill="#65b200"/>
+      <path d="M934 243 957.725 278.173 956.483 278.98Z" fill="#5eaf00"/>
+      <path d="M934 243 956.483 278.98 955.213 279.742Z" fill="#5aad00"/>
+      <path d="M934 243 955.213 279.742 953.918 280.46Z" fill="#52a900"/>
+      <path d="M934 243 953.918 280.46 952.599 281.133Z" fill="#4ea700"/>
+      <path d="M934 243 952.599 281.133 951.256 281.758Z" fill="#47a300"/>
+      <path d="M934 243 951.256 281.758 949.893 282.337Z" fill="#43a100"/>
+      <path d="M934 243 949.893 282.337 948.511 282.868Z" fill="#3b9d00"/>
+      <path d="M934 243 948.511 282.868 947.111 283.35Z" fill="#379c00"/>
+      <path d="M934 243 947.111 283.35 945.694 283.783Z" fill="#309800"/>
+      <path d="M934 243 945.694 283.783 944.264 284.166Z" fill="#2c9600"/>
+      <path d="M934 243 944.264 284.166 942.821 284.499Z" fill="#249200"/>
+      <path d="M934 243 942.821 284.499 941.367 284.782Z" fill="#209000"/>
+      <path d="M934 243 941.367 284.782 939.905 285.014Z" fill="#198c00"/>
+      <path d="M934 243 939.905 285.014 938.435 285.194Z" fill="#158a00"/>
+      <path d="M934 243 938.435 285.194 936.96 285.323Z" fill="#0d8700"/>
+      <path d="M934 243 936.96 285.323 935.481 285.401Z" fill="#0a8500"/>
+      <path d="M934 243 935.481 285.401 934 285.426Z" fill="#028100"/>
       <path d="M934 243 934 285.426 932.519 285.401Z" fill="#008000"/>
-      <path d="M934 243 932.519 285.401 931.04 285.323Z" fill="#007f21"/>
-      <path d="M934 243 931.04 285.323 929.565 285.194Z" fill="#007f29"/>
-      <path d="M934 243 929.565 285.194 928.095 285.014Z" fill="#007e35"/>
-      <path d="M934 243 928.095 285.014 926.633 284.782Z" fill="#007d3b"/>
-      <path d="M934 243 926.633 284.782 925.179 284.499Z" fill="#007d44"/>
-      <path d="M934 243 925.179 284.499 923.736 284.166Z" fill="#007c49"/>
-      <path d="M934 243 923.736 284.166 922.306 283.783Z" fill="#007b51"/>
-      <path d="M934 243 922.306 283.783 920.89 283.35Z" fill="#007b55"/>
-      <path d="M934 243 920.89 283.35 919.489 282.868Z" fill="#00795d"/>
-      <path d="M934 243 919.489 282.868 918.107 282.337Z" fill="#007960"/>
-      <path d="M934 243 918.107 282.337 916.744 281.758Z" fill="#007868"/>
-      <path d="M934 243 916.744 281.758 915.402 281.133Z" fill="#00776b"/>
-      <path d="M934 243 915.402 281.133 914.082 280.46Z" fill="#007672"/>
-      <path d="M934 243 914.082 280.46 912.787 279.742Z" fill="#007575"/>
-      <path d="M934 243 912.787 279.742 911.517 278.98Z" fill="#00737c"/>
-      <path d="M934 243 911.517 278.98 910.275 278.173Z" fill="#00737f"/>
-      <path d="M934 243 910.275 278.173 909.062 277.324Z" fill="#007186"/>
-      <path d="M934 243 909.062 277.324 907.88 276.432Z" fill="#007089"/>
-      <path d="M934 243 907.88 276.432 906.729 275.501Z" fill="#006e8f"/>
-      <path d="M934 243 906.729 275.501 905.611 274.529Z" fill="#006d92"/>
-      <path d="M934 243 905.611 274.529 904.528 273.519Z" fill="#006b98"/>
-      <path d="M934 243 904.528 273.519 903.481 272.472Z" fill="#006a9c"/>
-      <path d="M934 243 903.481 272.472 902.471 271.389Z" fill="#00699f"/>
-      <path d="M934 243 902.471 271.389 901.5 270.271Z" fill="#0067a5"/>
-      <path d="M934 243 901.5 270.271 900.568 269.12Z" fill="#0066a8"/>
-      <path d="M934 243 900.568 269.12 899.676 267.938Z" fill="#0063ae"/>
-      <path d="M934 243 899.676 267.938 898.827 266.725Z" fill="#0062b1"/>
-      <path d="M934 243 898.827 266.725 898.02 265.483Z" fill="#005fb7"/>
-      <path d="M934 243 898.02 265.483 897.258 264.213Z" fill="#005dba"/>
-      <path d="M934 243 897.258 264.213 896.54 262.918Z" fill="#005ac0"/>
-      <path d="M934 243 896.54 262.918 895.867 261.599Z" fill="#0058c3"/>
-      <path d="M934 243 895.867 261.599 895.242 260.256Z" fill="#0055c9"/>
-      <path d="M934 243 895.242 260.256 894.663 258.893Z" fill="#0053cc"/>
-      <path d="M934 243 894.663 258.893 894.132 257.511Z" fill="#004ed2"/>
-      <path d="M934 243 894.132 257.511 893.65 256.11Z" fill="#004cd5"/>
-      <path d="M934 243 893.65 256.11 893.217 254.694Z" fill="#0047db"/>
-      <path d="M934 243 893.217 254.694 892.834 253.264Z" fill="#0045de"/>
-      <path d="M934 243 892.834 253.264 892.501 251.821Z" fill="#003fe4"/>
-      <path d="M934 243 892.501 251.821 892.218 250.367Z" fill="#003be6"/>
-      <path d="M934 243 892.218 250.367 891.986 248.905Z" fill="#0034ec"/>
-      <path d="M934 243 891.986 248.905 891.806 247.435Z" fill="#002fef"/>
-      <path d="M934 243 891.806 247.435 891.677 245.96Z" fill="#0025f5"/>
-      <path d="M934 243 891.677 245.96 891.599 244.481Z" fill="#001df8"/>
+      <path d="M934 243 932.519 285.401 931.04 285.323Z" fill="#007b0a"/>
+      <path d="M934 243 931.04 285.323 929.565 285.194Z" fill="#00790d"/>
+      <path d="M934 243 929.565 285.194 928.095 285.014Z" fill="#007515"/>
+      <path d="M934 243 928.095 285.014 926.633 284.782Z" fill="#007419"/>
+      <path d="M934 243 926.633 284.782 925.179 284.499Z" fill="#007020"/>
+      <path d="M934 243 925.179 284.499 923.736 284.166Z" fill="#006e24"/>
+      <path d="M934 243 923.736 284.166 922.306 283.783Z" fill="#006a2c"/>
+      <path d="M934 243 922.306 283.783 920.89 283.35Z" fill="#006830"/>
+      <path d="M934 243 920.89 283.35 919.489 282.868Z" fill="#006437"/>
+      <path d="M934 243 919.489 282.868 918.107 282.337Z" fill="#00623b"/>
+      <path d="M934 243 918.107 282.337 916.744 281.758Z" fill="#005e43"/>
+      <path d="M934 243 916.744 281.758 915.402 281.133Z" fill="#005d47"/>
+      <path d="M934 243 915.402 281.133 914.082 280.46Z" fill="#00594e"/>
+      <path d="M934 243 914.082 280.46 912.787 279.742Z" fill="#005752"/>
+      <path d="M934 243 912.787 279.742 911.517 278.98Z" fill="#00535a"/>
+      <path d="M934 243 911.517 278.98 910.275 278.173Z" fill="#00515e"/>
+      <path d="M934 243 910.275 278.173 909.062 277.324Z" fill="#004d65"/>
+      <path d="M934 243 909.062 277.324 907.88 276.432Z" fill="#004b69"/>
+      <path d="M934 243 907.88 276.432 906.729 275.501Z" fill="#004771"/>
+      <path d="M934 243 906.729 275.501 905.611 274.529Z" fill="#004675"/>
+      <path d="M934 243 905.611 274.529 904.528 273.519Z" fill="#00427c"/>
+      <path d="M934 243 904.528 273.519 903.481 272.472Z" fill="#004080"/>
+      <path d="M934 243 903.481 272.472 902.471 271.389Z" fill="#003e84"/>
+      <path d="M934 243 902.471 271.389 901.5 270.271Z" fill="#003a8b"/>
+      <path d="M934 243 901.5 270.271 900.568 269.12Z" fill="#00388f"/>
+      <path d="M934 243 900.568 269.12 899.676 267.938Z" fill="#003497"/>
+      <path d="M934 243 899.676 267.938 898.827 266.725Z" fill="#00329b"/>
+      <path d="M934 243 898.827 266.725 898.02 265.483Z" fill="#002fa2"/>
+      <path d="M934 243 898.02 265.483 897.258 264.213Z" fill="#002da6"/>
+      <path d="M934 243 897.258 264.213 896.54 262.918Z" fill="#0029ae"/>
+      <path d="M934 243 896.54 262.918 895.867 261.599Z" fill="#0027b2"/>
+      <path d="M934 243 895.867 261.599 895.242 260.256Z" fill="#0023b9"/>
+      <path d="M934 243 895.242 260.256 894.663 258.893Z" fill="#0021bd"/>
+      <path d="M934 243 894.663 258.893 894.132 257.511Z" fill="#001dc5"/>
+      <path d="M934 243 894.132 257.511 893.65 256.11Z" fill="#001bc9"/>
+      <path d="M934 243 893.65 256.11 893.217 254.694Z" fill="#0017d0"/>
+      <path d="M934 243 893.217 254.694 892.834 253.264Z" fill="#0016d4"/>
+      <path d="M934 243 892.834 253.264 892.501 251.821Z" fill="#0012dc"/>
+      <path d="M934 243 892.501 251.821 892.218 250.367Z" fill="#0010df"/>
+      <path d="M934 243 892.218 250.367 891.986 248.905Z" fill="#000ce7"/>
+      <path d="M934 243 891.986 248.905 891.806 247.435Z" fill="#000aeb"/>
+      <path d="M934 243 891.806 247.435 891.677 245.96Z" fill="#0006f3"/>
+      <path d="M934 243 891.677 245.96 891.599 244.481Z" fill="#0004f6"/>
       <path d="M934 243 891.599 244.481 891.574 243Z" fill="#00f"/>
-      <path d="M934 243 891.574 243 891.599 241.519Z" fill="#060cfd"/>
-      <path d="M934 243 891.599 241.519 891.677 240.04Z" fill="#151ef8"/>
-      <path d="M934 243 891.677 240.04 891.806 238.565Z" fill="#1a24f5"/>
-      <path d="M934 243 891.806 238.565 891.987 237.095Z" fill="#242def"/>
-      <path d="M934 243 891.987 237.095 892.218 235.633Z" fill="#2931ed"/>
-      <path d="M934 243 892.218 235.633 892.501 234.179Z" fill="#3237e7"/>
-      <path d="M934 243 892.501 234.179 892.834 232.736Z" fill="#3639e5"/>
-      <path d="M934 243 892.834 232.736 893.217 231.306Z" fill="#3e3edf"/>
-      <path d="M934 243 893.217 231.306 893.65 229.89Z" fill="#4240dc"/>
-      <path d="M934 243 893.65 229.89 894.132 228.489Z" fill="#4944d7"/>
-      <path d="M934 243 894.132 228.489 894.663 227.107Z" fill="#4d46d4"/>
-      <path d="M934 243 894.663 227.107 895.242 225.744Z" fill="#5549cf"/>
-      <path d="M934 243 895.242 225.744 895.867 224.401Z" fill="#584acc"/>
-      <path d="M934 243 895.867 224.401 896.54 223.082Z" fill="#604cc6"/>
-      <path d="M934 243 896.54 223.082 897.258 221.787Z" fill="#634dc4"/>
-      <path d="M934 243 897.258 221.787 898.02 220.517Z" fill="#6a4fbe"/>
-      <path d="M934 243 898.02 220.517 898.827 219.275Z" fill="#6e50bb"/>
-      <path d="M934 243 898.827 219.275 899.676 218.062Z" fill="#7551b5"/>
-      <path d="M934 243 899.676 218.062 900.568 216.88Z" fill="#7952b3"/>
-      <path d="M934 243 900.568 216.88 901.5 215.729Z" fill="#8052ad"/>
-      <path d="M934 243 901.5 215.729 902.471 214.611Z" fill="#8353aa"/>
-      <path d="M934 243 902.471 214.611 903.481 213.528Z" fill="#8a53a4"/>
-      <path d="M934 243 903.481 213.528 904.528 212.481Z" fill="#8e53a1"/>
-      <path d="M934 243 904.528 212.481 905.611 211.471Z" fill="#91539e"/>
-      <path d="M934 243 905.611 211.471 906.729 210.499Z" fill="#985398"/>
-      <path d="M934 243 906.729 210.499 907.88 209.568Z" fill="#9c5395"/>
-      <path d="M934 243 907.88 209.568 909.062 208.676Z" fill="#a2528f"/>
-      <path d="M934 243 909.062 208.676 910.275 207.827Z" fill="#a6518c"/>
-      <path d="M934 243 910.275 207.827 911.517 207.02Z" fill="#ad5086"/>
-      <path d="M934 243 911.517 207.02 912.787 206.258Z" fill="#b05082"/>
-      <path d="M934 243 912.787 206.258 914.082 205.54Z" fill="#b74e7c"/>
-      <path d="M934 243 914.082 205.54 915.402 204.867Z" fill="#bb4d79"/>
-      <path d="M934 243 915.402 204.867 916.744 204.242Z" fill="#c14b72"/>
-      <path d="M934 243 916.744 204.242 918.107 203.663Z" fill="#c5496e"/>
-      <path d="M934 243 918.107 203.663 919.489 203.132Z" fill="#cc4667"/>
-      <path d="M934 243 919.489 203.132 920.89 202.65Z" fill="#cf4563"/>
-      <path d="M934 243 920.89 202.65 922.306 202.217Z" fill="#d6415b"/>
-      <path d="M934 243 922.306 202.217 923.736 201.834Z" fill="#d93f57"/>
-      <path d="M934 243 923.736 201.834 925.179 201.501Z" fill="#e03a4e"/>
-      <path d="M934 243 925.179 201.501 926.633 201.218Z" fill="#e43749"/>
-      <path d="M934 243 926.633 201.218 928.095 200.986Z" fill="#ea303f"/>
-      <path d="M934 243 928.095 200.986 929.565 200.806Z" fill="#ee2c39"/>
-      <path d="M934 243 929.565 200.806 931.04 200.677Z" fill="#f5212b"/>
-      <path d="M934 243 931.04 200.677 932.519 200.599Z" fill="#f81a22"/>
+      <path d="M934 243 891.574 243 891.599 241.519Z" fill="#0300fc"/>
+      <path d="M934 243 891.599 241.519 891.677 240.04Z" fill="#0b00f4"/>
+      <path d="M934 243 891.677 240.04 891.806 238.565Z" fill="#0e00f1"/>
+      <path d="M934 243 891.806 238.565 891.987 237.095Z" fill="#1600e9"/>
+      <path d="M934 243 891.987 237.095 892.218 235.633Z" fill="#1a00e5"/>
+      <path d="M934 243 892.218 235.633 892.501 234.179Z" fill="#2100de"/>
+      <path d="M934 243 892.501 234.179 892.834 232.736Z" fill="#2500da"/>
+      <path d="M934 243 892.834 232.736 893.217 231.306Z" fill="#2d00d2"/>
+      <path d="M934 243 893.217 231.306 893.65 229.89Z" fill="#3100ce"/>
+      <path d="M934 243 893.65 229.89 894.132 228.489Z" fill="#3800c7"/>
+      <path d="M934 243 894.132 228.489 894.663 227.107Z" fill="#3c00c3"/>
+      <path d="M934 243 894.663 227.107 895.242 225.744Z" fill="#40b"/>
+      <path d="M934 243 895.242 225.744 895.867 224.401Z" fill="#4800b7"/>
+      <path d="M934 243 895.867 224.401 896.54 223.082Z" fill="#4f00b0"/>
+      <path d="M934 243 896.54 223.082 897.258 221.787Z" fill="#5300ac"/>
+      <path d="M934 243 897.258 221.787 898.02 220.517Z" fill="#5b00a4"/>
+      <path d="M934 243 898.02 220.517 898.827 219.275Z" fill="#5f00a0"/>
+      <path d="M934 243 898.827 219.275 899.676 218.062Z" fill="#609"/>
+      <path d="M934 243 899.676 218.062 900.568 216.88Z" fill="#6a0095"/>
+      <path d="M934 243 900.568 216.88 901.5 215.729Z" fill="#72008d"/>
+      <path d="M934 243 901.5 215.729 902.471 214.611Z" fill="#75008a"/>
+      <path d="M934 243 902.471 214.611 903.481 213.528Z" fill="#7d0082"/>
+      <path d="M934 243 903.481 213.528 904.528 212.481Z" fill="#81007e"/>
+      <path d="M934 243 904.528 212.481 905.611 211.471Z" fill="#85007a"/>
+      <path d="M934 243 905.611 211.471 906.729 210.499Z" fill="#8c0073"/>
+      <path d="M934 243 906.729 210.499 907.88 209.568Z" fill="#90006f"/>
+      <path d="M934 243 907.88 209.568 909.062 208.676Z" fill="#980067"/>
+      <path d="M934 243 909.062 208.676 910.275 207.827Z" fill="#9c0063"/>
+      <path d="M934 243 910.275 207.827 911.517 207.02Z" fill="#a3005c"/>
+      <path d="M934 243 911.517 207.02 912.787 206.258Z" fill="#a70058"/>
+      <path d="M934 243 912.787 206.258 914.082 205.54Z" fill="#af0050"/>
+      <path d="M934 243 914.082 205.54 915.402 204.867Z" fill="#b3004c"/>
+      <path d="M934 243 915.402 204.867 916.744 204.242Z" fill="#ba0045"/>
+      <path d="M934 243 916.744 204.242 918.107 203.663Z" fill="#be0041"/>
+      <path d="M934 243 918.107 203.663 919.489 203.132Z" fill="#c60039"/>
+      <path d="M934 243 919.489 203.132 920.89 202.65Z" fill="#ca0035"/>
+      <path d="M934 243 920.89 202.65 922.306 202.217Z" fill="#d1002e"/>
+      <path d="M934 243 922.306 202.217 923.736 201.834Z" fill="#d5002a"/>
+      <path d="M934 243 923.736 201.834 925.179 201.501Z" fill="#d02"/>
+      <path d="M934 243 925.179 201.501 926.633 201.218Z" fill="#e0001f"/>
+      <path d="M934 243 926.633 201.218 928.095 200.986Z" fill="#e80017"/>
+      <path d="M934 243 928.095 200.986 929.565 200.806Z" fill="#ec0013"/>
+      <path d="M934 243 929.565 200.806 931.04 200.677Z" fill="#f4000b"/>
+      <path d="M934 243 931.04 200.677 932.519 200.599Z" fill="#f70008"/>
       <path d="M934 243 932.519 200.599 934 200.574Z" fill="#f00"/>
     </g>
   </g>
@@ -761,135 +761,135 @@
   </g>
   <linearGradient id="lg35" gradientUnits="userSpaceOnUse" x1="732" y1="361" x2="732" y2="421">
     <stop offset="0" stop-color="#f00"/>
-    <stop offset=".016" stop-color="#fb1116"/>
-    <stop offset=".032" stop-color="#f81b23"/>
-    <stop offset=".048" stop-color="#f4232c"/>
-    <stop offset=".063" stop-color="#f02834"/>
-    <stop offset=".079" stop-color="#ed2d3a"/>
-    <stop offset=".095" stop-color="#e93141"/>
-    <stop offset=".111" stop-color="#e63546"/>
-    <stop offset=".127" stop-color="#e2384b"/>
-    <stop offset=".143" stop-color="#de3b50"/>
-    <stop offset=".159" stop-color="#db3e55"/>
-    <stop offset=".175" stop-color="#d7405a"/>
-    <stop offset=".19" stop-color="#d3425e"/>
-    <stop offset=".206" stop-color="#d04462"/>
-    <stop offset=".222" stop-color="#cc4666"/>
-    <stop offset=".238" stop-color="#c9486a"/>
-    <stop offset=".254" stop-color="#c5496e"/>
-    <stop offset=".27" stop-color="#c14b72"/>
-    <stop offset=".286" stop-color="#be4c75"/>
-    <stop offset=".302" stop-color="#ba4d79"/>
-    <stop offset=".317" stop-color="#b64e7d"/>
-    <stop offset=".333" stop-color="#b34f80"/>
-    <stop offset=".349" stop-color="#af5083"/>
-    <stop offset=".365" stop-color="#ac5187"/>
-    <stop offset=".381" stop-color="#a8518a"/>
-    <stop offset=".397" stop-color="#a4528e"/>
-    <stop offset=".413" stop-color="#a15291"/>
-    <stop offset=".429" stop-color="#9d5394"/>
-    <stop offset=".444" stop-color="#995397"/>
-    <stop offset=".46" stop-color="#96539a"/>
-    <stop offset=".476" stop-color="#92539e"/>
-    <stop offset=".492" stop-color="#8e53a1"/>
-    <stop offset=".508" stop-color="#8b53a4"/>
-    <stop offset=".524" stop-color="#8753a7"/>
-    <stop offset=".54" stop-color="#8353aa"/>
-    <stop offset=".556" stop-color="#7f52ad"/>
-    <stop offset=".571" stop-color="#7c52b0"/>
-    <stop offset=".587" stop-color="#7851b3"/>
-    <stop offset=".603" stop-color="#7451b6"/>
-    <stop offset=".619" stop-color="#7050b9"/>
-    <stop offset=".635" stop-color="#6d4fbc"/>
-    <stop offset=".651" stop-color="#694fbf"/>
-    <stop offset=".667" stop-color="#654ec2"/>
-    <stop offset=".683" stop-color="#614dc5"/>
-    <stop offset=".698" stop-color="#5d4cc8"/>
-    <stop offset=".714" stop-color="#5a4acb"/>
-    <stop offset=".73" stop-color="#5649ce"/>
-    <stop offset=".746" stop-color="#5247d1"/>
-    <stop offset=".762" stop-color="#4e46d4"/>
-    <stop offset=".778" stop-color="#4a44d7"/>
-    <stop offset=".794" stop-color="#4642da"/>
-    <stop offset=".81" stop-color="#4240dc"/>
-    <stop offset=".825" stop-color="#3d3edf"/>
-    <stop offset=".841" stop-color="#393ce2"/>
-    <stop offset=".857" stop-color="#3539e5"/>
-    <stop offset=".873" stop-color="#3036e8"/>
-    <stop offset=".889" stop-color="#2c33eb"/>
-    <stop offset=".905" stop-color="#272fee"/>
-    <stop offset=".921" stop-color="#222bf1"/>
-    <stop offset=".937" stop-color="#1d26f4"/>
-    <stop offset=".952" stop-color="#1721f6"/>
-    <stop offset=".968" stop-color="#111af9"/>
-    <stop offset=".984" stop-color="#0810fc"/>
+    <stop offset=".016" stop-color="#fb0004"/>
+    <stop offset=".032" stop-color="#f70008"/>
+    <stop offset=".048" stop-color="#f3000c"/>
+    <stop offset=".063" stop-color="#ef0010"/>
+    <stop offset=".079" stop-color="#eb0014"/>
+    <stop offset=".095" stop-color="#e70018"/>
+    <stop offset=".111" stop-color="#e3001c"/>
+    <stop offset=".127" stop-color="#df0020"/>
+    <stop offset=".143" stop-color="#db0024"/>
+    <stop offset=".159" stop-color="#d70028"/>
+    <stop offset=".175" stop-color="#d2002d"/>
+    <stop offset=".19" stop-color="#ce0031"/>
+    <stop offset=".206" stop-color="#ca0035"/>
+    <stop offset=".222" stop-color="#c60039"/>
+    <stop offset=".238" stop-color="#c2003d"/>
+    <stop offset=".254" stop-color="#be0041"/>
+    <stop offset=".27" stop-color="#ba0045"/>
+    <stop offset=".286" stop-color="#b60049"/>
+    <stop offset=".302" stop-color="#b2004d"/>
+    <stop offset=".317" stop-color="#ae0051"/>
+    <stop offset=".333" stop-color="#a05"/>
+    <stop offset=".349" stop-color="#a60059"/>
+    <stop offset=".365" stop-color="#a2005d"/>
+    <stop offset=".381" stop-color="#9e0061"/>
+    <stop offset=".397" stop-color="#9a0065"/>
+    <stop offset=".413" stop-color="#960069"/>
+    <stop offset=".429" stop-color="#92006d"/>
+    <stop offset=".444" stop-color="#8e0071"/>
+    <stop offset=".46" stop-color="#8a0075"/>
+    <stop offset=".476" stop-color="#860079"/>
+    <stop offset=".492" stop-color="#82007d"/>
+    <stop offset=".508" stop-color="#7d0082"/>
+    <stop offset=".524" stop-color="#790086"/>
+    <stop offset=".54" stop-color="#75008a"/>
+    <stop offset=".556" stop-color="#71008e"/>
+    <stop offset=".571" stop-color="#6d0092"/>
+    <stop offset=".587" stop-color="#690096"/>
+    <stop offset=".603" stop-color="#65009a"/>
+    <stop offset=".619" stop-color="#61009e"/>
+    <stop offset=".635" stop-color="#5d00a2"/>
+    <stop offset=".651" stop-color="#5900a6"/>
+    <stop offset=".667" stop-color="#50a"/>
+    <stop offset=".683" stop-color="#5100ae"/>
+    <stop offset=".698" stop-color="#4d00b2"/>
+    <stop offset=".714" stop-color="#4900b6"/>
+    <stop offset=".73" stop-color="#4500ba"/>
+    <stop offset=".746" stop-color="#4100be"/>
+    <stop offset=".762" stop-color="#3d00c2"/>
+    <stop offset=".778" stop-color="#3900c6"/>
+    <stop offset=".794" stop-color="#3500ca"/>
+    <stop offset=".81" stop-color="#3100ce"/>
+    <stop offset=".825" stop-color="#2d00d2"/>
+    <stop offset=".841" stop-color="#2800d7"/>
+    <stop offset=".857" stop-color="#2400db"/>
+    <stop offset=".873" stop-color="#2000df"/>
+    <stop offset=".889" stop-color="#1c00e3"/>
+    <stop offset=".905" stop-color="#1800e7"/>
+    <stop offset=".921" stop-color="#1400eb"/>
+    <stop offset=".937" stop-color="#1000ef"/>
+    <stop offset=".952" stop-color="#0c00f3"/>
+    <stop offset=".968" stop-color="#0800f7"/>
+    <stop offset=".984" stop-color="#0400fb"/>
     <stop offset="1" stop-color="#00f"/>
   </linearGradient>
   <rect x="612" y="361" width="240" height="60" fill="url(#lg35)"/>
   <linearGradient id="lg36" gradientUnits="userSpaceOnUse" x1="732" y1="421" x2="732" y2="481">
     <stop offset="0" stop-color="#008000"/>
-    <stop offset=".016" stop-color="#0e8200"/>
-    <stop offset=".032" stop-color="#188400"/>
-    <stop offset=".048" stop-color="#1f8600"/>
-    <stop offset=".063" stop-color="#268800"/>
-    <stop offset=".079" stop-color="#2c8a00"/>
-    <stop offset=".095" stop-color="#318c00"/>
-    <stop offset=".111" stop-color="#368e00"/>
-    <stop offset=".127" stop-color="#3a9000"/>
-    <stop offset=".143" stop-color="#3f9200"/>
-    <stop offset=".159" stop-color="#439400"/>
-    <stop offset=".175" stop-color="#479600"/>
-    <stop offset=".19" stop-color="#4b9800"/>
-    <stop offset=".206" stop-color="#4f9a00"/>
-    <stop offset=".222" stop-color="#539c00"/>
-    <stop offset=".238" stop-color="#579e00"/>
-    <stop offset=".254" stop-color="#5ba000"/>
-    <stop offset=".27" stop-color="#5fa200"/>
-    <stop offset=".286" stop-color="#63a400"/>
-    <stop offset=".302" stop-color="#66a500"/>
-    <stop offset=".317" stop-color="#6aa700"/>
-    <stop offset=".333" stop-color="#6da900"/>
-    <stop offset=".349" stop-color="#71ab00"/>
-    <stop offset=".365" stop-color="#75ad00"/>
-    <stop offset=".381" stop-color="#78af00"/>
-    <stop offset=".397" stop-color="#7cb100"/>
-    <stop offset=".413" stop-color="#7fb300"/>
-    <stop offset=".429" stop-color="#83b500"/>
-    <stop offset=".444" stop-color="#86b700"/>
-    <stop offset=".46" stop-color="#8ab900"/>
-    <stop offset=".476" stop-color="#8dbc00"/>
-    <stop offset=".492" stop-color="#91be00"/>
-    <stop offset=".508" stop-color="#94c000"/>
-    <stop offset=".524" stop-color="#98c200"/>
-    <stop offset=".54" stop-color="#9bc400"/>
-    <stop offset=".556" stop-color="#9ec600"/>
-    <stop offset=".571" stop-color="#a2c800"/>
-    <stop offset=".587" stop-color="#a5ca00"/>
-    <stop offset=".603" stop-color="#a9cc00"/>
-    <stop offset=".619" stop-color="#acce00"/>
-    <stop offset=".635" stop-color="#b0d000"/>
-    <stop offset=".651" stop-color="#b3d200"/>
-    <stop offset=".667" stop-color="#b6d400"/>
-    <stop offset=".683" stop-color="#bad600"/>
-    <stop offset=".698" stop-color="#bdd800"/>
-    <stop offset=".714" stop-color="#c1da00"/>
-    <stop offset=".73" stop-color="#c4dc00"/>
-    <stop offset=".746" stop-color="#c8de00"/>
-    <stop offset=".762" stop-color="#cbe000"/>
-    <stop offset=".778" stop-color="#cfe200"/>
-    <stop offset=".794" stop-color="#d2e400"/>
-    <stop offset=".81" stop-color="#d5e600"/>
-    <stop offset=".825" stop-color="#d9e800"/>
-    <stop offset=".841" stop-color="#dcea00"/>
-    <stop offset=".857" stop-color="#e0ec00"/>
-    <stop offset=".873" stop-color="#e3ee00"/>
-    <stop offset=".889" stop-color="#e7f100"/>
-    <stop offset=".905" stop-color="#eaf300"/>
-    <stop offset=".921" stop-color="#eef500"/>
-    <stop offset=".937" stop-color="#f1f700"/>
-    <stop offset=".952" stop-color="#f5f900"/>
-    <stop offset=".968" stop-color="#f8fb00"/>
-    <stop offset=".984" stop-color="#fcfd00"/>
+    <stop offset=".016" stop-color="#048200"/>
+    <stop offset=".032" stop-color="#088400"/>
+    <stop offset=".048" stop-color="#0c8600"/>
+    <stop offset=".063" stop-color="#108800"/>
+    <stop offset=".079" stop-color="#148a00"/>
+    <stop offset=".095" stop-color="#188c00"/>
+    <stop offset=".111" stop-color="#1c8e00"/>
+    <stop offset=".127" stop-color="#209000"/>
+    <stop offset=".143" stop-color="#249200"/>
+    <stop offset=".159" stop-color="#289400"/>
+    <stop offset=".175" stop-color="#2d9600"/>
+    <stop offset=".19" stop-color="#319800"/>
+    <stop offset=".206" stop-color="#359a00"/>
+    <stop offset=".222" stop-color="#399c00"/>
+    <stop offset=".238" stop-color="#3d9e00"/>
+    <stop offset=".254" stop-color="#41a000"/>
+    <stop offset=".27" stop-color="#45a200"/>
+    <stop offset=".286" stop-color="#49a400"/>
+    <stop offset=".302" stop-color="#4da600"/>
+    <stop offset=".317" stop-color="#51a800"/>
+    <stop offset=".333" stop-color="#5a0"/>
+    <stop offset=".349" stop-color="#59ac00"/>
+    <stop offset=".365" stop-color="#5dae00"/>
+    <stop offset=".381" stop-color="#61b000"/>
+    <stop offset=".397" stop-color="#65b200"/>
+    <stop offset=".413" stop-color="#69b400"/>
+    <stop offset=".429" stop-color="#6db600"/>
+    <stop offset=".444" stop-color="#71b800"/>
+    <stop offset=".46" stop-color="#75ba00"/>
+    <stop offset=".476" stop-color="#79bc00"/>
+    <stop offset=".492" stop-color="#7dbe00"/>
+    <stop offset=".508" stop-color="#82c100"/>
+    <stop offset=".524" stop-color="#86c300"/>
+    <stop offset=".54" stop-color="#8ac500"/>
+    <stop offset=".556" stop-color="#8ec700"/>
+    <stop offset=".571" stop-color="#92c900"/>
+    <stop offset=".587" stop-color="#96cb00"/>
+    <stop offset=".603" stop-color="#9acd00"/>
+    <stop offset=".619" stop-color="#9ecf00"/>
+    <stop offset=".635" stop-color="#a2d100"/>
+    <stop offset=".651" stop-color="#a6d300"/>
+    <stop offset=".667" stop-color="#aad500"/>
+    <stop offset=".683" stop-color="#aed700"/>
+    <stop offset=".698" stop-color="#b2d900"/>
+    <stop offset=".714" stop-color="#b6db00"/>
+    <stop offset=".73" stop-color="#badd00"/>
+    <stop offset=".746" stop-color="#bedf00"/>
+    <stop offset=".762" stop-color="#c2e100"/>
+    <stop offset=".778" stop-color="#c6e300"/>
+    <stop offset=".794" stop-color="#cae500"/>
+    <stop offset=".81" stop-color="#cee700"/>
+    <stop offset=".825" stop-color="#d2e900"/>
+    <stop offset=".841" stop-color="#d7eb00"/>
+    <stop offset=".857" stop-color="#dbed00"/>
+    <stop offset=".873" stop-color="#dfef00"/>
+    <stop offset=".889" stop-color="#e3f100"/>
+    <stop offset=".905" stop-color="#e7f300"/>
+    <stop offset=".921" stop-color="#ebf500"/>
+    <stop offset=".937" stop-color="#eff700"/>
+    <stop offset=".952" stop-color="#f3f900"/>
+    <stop offset=".968" stop-color="#f7fb00"/>
+    <stop offset=".984" stop-color="#fbfd00"/>
     <stop offset="1" stop-color="#ff0"/>
   </linearGradient>
   <rect x="612" y="421" width="240" height="60" fill="url(#lg36)"/>
