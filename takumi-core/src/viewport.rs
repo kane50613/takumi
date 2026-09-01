@@ -84,7 +84,7 @@ impl Viewport {
 
   /// The effective device-pixel ratio, treating a non-positive value as `1.0`.
   #[inline]
-  fn effective_dpr(self) -> f32 {
+  pub(crate) fn effective_dpr(self) -> f32 {
     if self.device_pixel_ratio > 0.0 {
       self.device_pixel_ratio
     } else {
