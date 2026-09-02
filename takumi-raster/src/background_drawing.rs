@@ -405,7 +405,7 @@ pub(crate) fn render_tile(
       tile_h,
       &context.sizing,
       context.current_color,
-      context.dither_gradients,
+      context.dither_gradients(),
     ))),
     BackgroundImage::Radial(gradient) => Some(BackgroundTile::Radial(RadialGradientTile::new(
       gradient,
@@ -413,7 +413,7 @@ pub(crate) fn render_tile(
       tile_h,
       &context.sizing,
       context.current_color,
-      context.dither_gradients,
+      context.dither_gradients(),
     ))),
     BackgroundImage::Conic(gradient) => Some(BackgroundTile::Conic(ConicGradientTile::new(
       gradient,
@@ -421,7 +421,7 @@ pub(crate) fn render_tile(
       tile_h,
       &context.sizing,
       context.current_color,
-      context.dither_gradients,
+      context.dither_gradients(),
     ))),
     BackgroundImage::Url(url) => {
       if let Ok(source) = resolve_image(url, context) {
@@ -434,7 +434,7 @@ pub(crate) fn render_tile(
           }),
           ImageSource::Animated(animated) => Some(BackgroundTile::SampledBitmap {
             source: animated.frame_at_time_covering(
-              context.time_ms,
+              context.time_ms(),
               tile_w,
               tile_h,
               context.style.image_rendering,
@@ -447,7 +447,7 @@ pub(crate) fn render_tile(
             tile_w,
             tile_h,
             context.style.image_rendering,
-            context.time_ms,
+            context.time_ms(),
             context.current_color,
             Some(context.fonts()),
           )? {
@@ -464,7 +464,7 @@ pub(crate) fn render_tile(
             tile_w,
             tile_h,
             context.style.image_rendering,
-            context.time_ms,
+            context.time_ms(),
             context.current_color,
             Some(context.fonts()),
           )? {

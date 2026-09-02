@@ -350,7 +350,7 @@ pub fn resolve_inline_runs(
             .map_err(|_| FontError::InvalidFontIndex)?;
           let glyph_ids = glyph_run.positioned_glyphs().map(|glyph| glyph.id);
           let resolved_glyphs = context
-            .fonts
+            .fonts()
             .with_context(|fonts| fonts.resolve_glyphs(&glyph_run, font, glyph_ids));
 
           if need_outline && let Some(span_id) = brush.source_span_id {

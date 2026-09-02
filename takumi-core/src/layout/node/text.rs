@@ -95,7 +95,7 @@ pub(crate) fn measure_text_node(
     clamp_to_max_width,
   );
 
-  if let Some(size) = context.measure_cache.borrow().get(&key) {
+  if let Some(size) = context.measure_cache().borrow().get(&key) {
     return *size;
   }
   let inline_content: InlineItem<'_> = InlineItem::Text {
@@ -128,6 +128,6 @@ pub(crate) fn measure_text_node(
     },
   );
 
-  context.measure_cache.borrow_mut().insert(key, size);
+  context.measure_cache().borrow_mut().insert(key, size);
   size
 }

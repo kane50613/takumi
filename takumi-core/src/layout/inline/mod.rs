@@ -824,7 +824,7 @@ fn build_inline_layout_tree<'c>(
     })
   });
   let (cached, seen) = match (cache_key, &expected_text) {
-    (Some(key), Some(expected)) => match context.shape_cache.borrow().get(&key) {
+    (Some(key), Some(expected)) => match context.shape_cache().borrow().get(&key) {
       Some(Some((layout, text))) if text == expected => {
         ((Some((layout.clone(), text.clone()))), true)
       }
@@ -838,13 +838,13 @@ fn build_inline_layout_tree<'c>(
     None => {
       let (layout, text) =
         context.tree_builder(style.into(), chromium_line_breaks(&spans), |builder| {
-          push_spans_into_builder(builder, &spans, &context.fonts.classes)
+          push_spans_into_builder(builder, &spans, &context.fonts().classes)
         });
 
       if let Some(key) = cache_key {
         let stored = seen.then(|| (layout.clone(), text.clone()));
 
-        context.shape_cache.borrow_mut().insert(key, stored);
+        context.shape_cache().borrow_mut().insert(key, stored);
       }
       (layout, text)
     }

@@ -673,7 +673,7 @@ impl RenderContext {
     attributes: Attributes,
     font_size: f32,
   ) -> Option<f32> {
-    self.fonts.with_context(|fonts| {
+    self.fonts().with_context(|fonts| {
       let mut query = fonts.inner.collection.query(&mut fonts.inner.source_cache);
       let mut result = None;
 
@@ -708,7 +708,7 @@ impl RenderContext {
     chromium_line_breaks: bool,
     func: impl FnOnce(&mut TreeBuilder<'_, InlineBrush>),
   ) -> (InlineLayout, String) {
-    self.fonts.with_context(|fonts| {
+    self.fonts().with_context(|fonts| {
       with_layout_context(|layout| {
         let mut builder = layout.tree_builder(&mut fonts.inner, 1.0, true, &root_style);
         if chromium_line_breaks {

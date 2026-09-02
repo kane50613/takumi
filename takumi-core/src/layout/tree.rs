@@ -395,11 +395,11 @@ pub(super) fn pseudo_computed_style(
     NodeStyleLayers::default(),
     pseudo_matched,
     parent_context.sizing.viewport,
-    parent_context.stylesheet.as_ref(),
+    parent_context.stylesheet().as_ref(),
   );
   let inherited_parent = registered_custom_property_parent_style(
     &parent_context.style,
-    std::slice::from_ref(parent_context.stylesheet.as_ref()),
+    std::slice::from_ref(parent_context.stylesheet().as_ref()),
     parent_context.sizing.viewport,
   );
   let mut style = style_layers.inherit(&inherited_parent);
@@ -1398,7 +1398,7 @@ impl RenderNode {
   pub fn from_node(parent_context: &RenderContext, node: Node) -> Self {
     let matched_styles = match_stylesheets_view(
       &node,
-      &parent_context.stylesheet,
+      parent_context.stylesheet(),
       parent_context.sizing.viewport,
     );
     let mut tree = Self::from_node_iterative(parent_context, node, &matched_styles);
@@ -1462,11 +1462,11 @@ impl RenderNode {
         layers,
         matched,
         parent_context.sizing.viewport,
-        parent_context.stylesheet.as_ref(),
+        parent_context.stylesheet().as_ref(),
       );
       let inherited_parent = registered_custom_property_parent_style(
         &parent_context.style,
-        std::slice::from_ref(parent_context.stylesheet.as_ref()),
+        std::slice::from_ref(parent_context.stylesheet().as_ref()),
         parent_context.sizing.viewport,
       );
 
@@ -1508,8 +1508,8 @@ impl RenderNode {
         );
         style = apply_stylesheet_animations(
           style,
-          &child_context.stylesheet,
-          child_context.time_ms,
+          child_context.stylesheet(),
+          child_context.time_ms(),
           &child_context.sizing,
           child_context.current_color,
         );

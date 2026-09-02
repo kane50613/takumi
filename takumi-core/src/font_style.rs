@@ -122,7 +122,7 @@ impl ExpandedFontFamily {
 
 impl RenderContext {
   pub(crate) fn expand_font_family(&self, family: &FontFamily) -> ExpandedFontFamily {
-    ExpandedFontFamily::expand(family, &self.fonts.groups)
+    ExpandedFontFamily::expand(family, &self.fonts().groups)
   }
 }
 

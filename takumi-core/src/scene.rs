@@ -494,7 +494,7 @@ fn compute_node_paint_bounds(
           let glyph_ids = glyph_run.positioned_glyphs().map(|glyph| glyph.id);
           let resolved_glyphs = node
             .context
-            .fonts
+            .fonts()
             .with_context(|fonts| fonts.resolve_glyphs(&glyph_run, font, glyph_ids));
 
           for glyph in glyph_run.positioned_glyphs() {
