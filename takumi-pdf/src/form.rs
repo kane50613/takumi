@@ -16,7 +16,7 @@ use crate::{
     page::Page,
   },
   options::{PT_PER_PX, PdfError},
-  tags::raw_text,
+  tags::{raw_text, text_content},
   window::Window,
 };
 
@@ -45,6 +45,7 @@ enum ControlKind {
   Text { multiline: bool, password: bool },
   CheckBox,
   Radio,
+  Choice { multi: bool },
 }
 
 impl ControlKind {
@@ -57,6 +58,11 @@ impl ControlKind {
       return Some(Self::Text {
         multiline: true,
         password: false,
+      });
+    }
+    if tag.eq_ignore_ascii_case("select") {
+      return Some(Self::Choice {
+        multi: source.attribute("multiple").is_some(),
       });
     }
     if !tag.eq_ignore_ascii_case("input") {
@@ -105,6 +111,21 @@ enum FieldKind {
     on: bool,
     export: String,
   },
+  Choice {
+    /// Every option as the value it submits and the text it shows.
+    options: Vec<ChoiceOption>,
+    /// Which options start selected, by their place in `options`.
+    selected: Vec<usize>,
+    /// Whether more than one option can be picked, which also turns the
+    /// drop-down into a list box.
+    multi: bool,
+  },
+}
+
+/// One `<option>`: the value it submits and the text it shows.
+pub(crate) struct ChoiceOption {
+  pub(crate) export: String,
+  pub(crate) display: String,
 }
 
 impl FieldKind {
@@ -120,6 +141,22 @@ impl FieldKind {
         on,
         export: export_value(source),
       },
+      ControlKind::Choice { multi } => {
+        let options = options(node);
+        let mut selected = selected_options(node);
+
+        // A closed drop-down always shows one option, so the first stands in
+        // when the markup names none.
+        if selected.is_empty() && !multi && !options.is_empty() {
+          selected.push(0);
+        }
+
+        Self::Choice {
+          options,
+          selected,
+          multi,
+        }
+      }
       ControlKind::Text {
         multiline,
         password,
@@ -164,7 +201,70 @@ impl FieldKind {
         on: *on,
         export: export.clone(),
       },
+      Self::Choice {
+        options,
+        selected,
+        multi,
+      } => FormField::Choice {
+        options: options
+          .iter()
+          .map(|option| (option.export.clone(), option.display.clone()))
+          .collect(),
+        selected: selected.clone(),
+        multi: *multi,
+      },
     }
+  }
+}
+
+/// Every `<option>` under a `<select>`. Layout moves the source children into
+/// the render tree, so they are read from there.
+fn options(node: &RenderNode) -> Vec<ChoiceOption> {
+  let mut options = Vec::new();
+
+  visit_options(node, &mut |option, _| options.push(option));
+  options
+}
+
+/// The places of the options carrying `selected`.
+fn selected_options(node: &RenderNode) -> Vec<usize> {
+  let mut selected = Vec::new();
+  let mut index = 0;
+
+  visit_options(node, &mut |_, on| {
+    if on {
+      selected.push(index);
+    }
+    index += 1;
+  });
+  selected
+}
+
+fn visit_options(node: &RenderNode, visit: &mut impl FnMut(ChoiceOption, bool)) {
+  for child in node.children.as_deref().unwrap_or_default() {
+    let Some(source) = child.node.as_ref() else {
+      continue;
+    };
+
+    if !source
+      .tag_name()
+      .is_some_and(|tag| tag.eq_ignore_ascii_case("option"))
+    {
+      visit_options(child, visit);
+      continue;
+    }
+    let display = text_content(child);
+
+    visit(
+      ChoiceOption {
+        export: source
+          .attribute("value")
+          .map(str::to_string)
+          .unwrap_or_else(|| display.clone()),
+        display,
+      },
+      source.attribute("selected").is_some(),
+    );
   }
 }
 
