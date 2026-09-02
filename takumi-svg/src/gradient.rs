@@ -18,10 +18,7 @@ use takumi_core::{
   context::RenderContext,
   geometry::{Point, Size},
   layout::background::{BackgroundLayerInput, LayerTileStyle},
-  paint::{
-    ConicGradientTile, LinearGradientTile, RadialGradientTile, build_color_lut_with_interpolation,
-    resolve_stops_along_axis,
-  },
+  paint::{ColorLut, ConicGradientTile, LinearGradientTile, RadialGradientTile},
   style::{
     BackgroundImage, BackgroundRepeat, BackgroundSize, BlendMode, ColorInterpolationMethod,
     ConicGradient, LinearGradient, PositionValue, RadialGradient, ResolvedGradientStop,
@@ -246,7 +243,7 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
       self.context.current_color,
       false,
     );
-    let resolved = resolve_stops_along_axis(
+    let resolved = ResolvedGradientStop::resolve(
       &gradient.stops,
       tile.axis_length.max(1e-6),
       &self.context.sizing,
@@ -295,7 +292,7 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
       self.context.current_color,
       false,
     );
-    let resolved = resolve_stops_along_axis(
+    let resolved = ResolvedGradientStop::resolve(
       &gradient.stops,
       tile.radius_scale.max(1e-6),
       &self.context.sizing,
@@ -344,7 +341,7 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
       self.context.current_color,
       false,
     );
-    let lut_len = tile.color_lut.len();
+    let lut_len = tile.lut.len();
     if lut_len == 0 {
       return Ok(());
     }
@@ -363,7 +360,7 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
       let mid = (a0 + a1) / 2.0;
       let adjusted = (mid - tile.start_rad).rem_euclid(TAU);
       let idx = tile.lut_index_for_adjusted_angle_with_len(adjusted, lut_len);
-      let color = tile.color_lut[idx].demultiply();
+      let color = tile.lut.sample(idx).demultiply();
       let fill = Rgba([color.red(), color.green(), color.blue(), color.alpha()]);
       if fill.0[3] == 0 {
         continue;
@@ -470,12 +467,14 @@ fn lut_svg_stops(
   axis_length: f32,
   interpolation: ColorInterpolationMethod,
 ) -> Vec<GradientStop> {
-  let lut = build_color_lut_with_interpolation(
+  let lut = ColorLut::new(
     resolved,
     axis_length.max(1e-6),
     GRADIENT_LUT_STOPS,
     interpolation,
+    false,
   );
+  let lut = lut.colors();
   if lut.len() <= 1 {
     return svg_stops(resolved, 0.0, axis_length);
   }

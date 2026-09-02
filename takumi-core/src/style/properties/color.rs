@@ -1,18 +1,18 @@
 use std::fmt::{self, Display};
 
-use color::{AlphaColor, ColorSpaceTag, DynamicColor, HueDirection, Srgb, parse_color};
+use color::{AlphaColor, ColorSpaceTag, DynamicColor, HueDirection, Rgba8, Srgb, parse_color};
 use cssparser::{
   Parser, Token,
   color::{parse_hash_color, parse_named_color},
   match_ignore_ascii_case,
 };
+use tiny_skia::{ColorU8, PremultipliedColorU8};
 
 use crate::style::tw::{Namespace, extract_arbitrary_value};
 use crate::style::{
   Animatable, Color as CurrentColor, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss,
   FromCssStr, MakeComputed, ParseResult, PercentageNumber, SizingContext, ToCss,
-  math::fast_div_255, properties::gradient_utils::interpolate_with_color_space,
-  tw::TailwindPropertyParser, unexpected_token,
+  math::fast_div_255, tw::TailwindPropertyParser, unexpected_token,
 };
 
 fn is_cylindrical_color_space(color_space: ColorSpaceTag) -> bool {
@@ -212,8 +212,7 @@ impl Animatable for ColorInput {
       // a legacy sRGB one, and those interpolate in sRGB with premultiplied alpha.
       // Oklab is for colours a legacy space cannot express.
       // https://www.w3.org/TR/css-color-4/#interpolation-space
-      _ => ColorInput::Value(interpolate_with_color_space(
-        from.resolve(current_color),
+      _ => ColorInput::Value(from.resolve(current_color).interpolate(
         to.resolve(current_color),
         progress,
         ColorSpaceTag::Srgb,
@@ -519,6 +518,98 @@ impl Color {
   /// Creates a new white color.
   pub const fn white() -> Self {
     Color([255, 255, 255, 255])
+  }
+
+  /// Premultiplies the straight-alpha colour into a `tiny_skia`
+  /// [`PremultipliedColorU8`].
+  pub(crate) fn premultiplied(self) -> PremultipliedColorU8 {
+    let [r, g, b, a] = self.0;
+    let premul_r = fast_div_255(r as u32 * a as u32);
+    let premul_g = fast_div_255(g as u32 * a as u32);
+    let premul_b = fast_div_255(b as u32 * a as u32);
+
+    PremultipliedColorU8::from_rgba(premul_r, premul_g, premul_b, a)
+      .unwrap_or(PremultipliedColorU8::TRANSPARENT)
+  }
+
+  /// Interpolates toward `other` in sRGB with premultiplied alpha.
+  pub(crate) fn lerp_premultiplied(self, other: Color, t: f32) -> Color {
+    if t <= f32::EPSILON {
+      return self;
+    }
+
+    if t >= 1.0 - f32::EPSILON {
+      return other;
+    }
+
+    let [r1, g1, b1, a1] = self.0;
+    let [r2, g2, b2, a2] = other.0;
+    let premul_1 = [
+      fast_div_255(r1 as u32 * a1 as u32),
+      fast_div_255(g1 as u32 * a1 as u32),
+      fast_div_255(b1 as u32 * a1 as u32),
+      a1,
+    ];
+    let premul_2 = [
+      fast_div_255(r2 as u32 * a2 as u32),
+      fast_div_255(g2 as u32 * a2 as u32),
+      fast_div_255(b2 as u32 * a2 as u32),
+      a2,
+    ];
+
+    let mut result = [0u8; 4];
+    for i in 0..4 {
+      result[i] = (premul_1[i] as f32 * (1.0 - t) + premul_2[i] as f32 * t)
+        .round()
+        .clamp(0.0, 255.0) as u8;
+    }
+
+    let premul = PremultipliedColorU8::from_rgba(
+      result[0].min(result[3]),
+      result[1].min(result[3]),
+      result[2].min(result[3]),
+      result[3],
+    )
+    .unwrap_or(PremultipliedColorU8::TRANSPARENT);
+    let demul: ColorU8 = premul.demultiply();
+    Color([demul.red(), demul.green(), demul.blue(), demul.alpha()])
+  }
+
+  /// Interpolates toward `other` in the given color space and hue direction.
+  pub(crate) fn interpolate(
+    self,
+    other: Color,
+    t: f32,
+    color_space: ColorSpaceTag,
+    hue_direction: HueDirection,
+  ) -> Color {
+    if self == other {
+      return self;
+    }
+
+    if color_space == ColorSpaceTag::Srgb && hue_direction == HueDirection::Shorter {
+      return self.lerp_premultiplied(other, t);
+    }
+
+    if t <= f32::EPSILON {
+      return self;
+    }
+
+    if t >= 1.0 - f32::EPSILON {
+      return other;
+    }
+
+    let dynamic_1 =
+      DynamicColor::from_alpha_color(AlphaColor::<Srgb>::from(Rgba8::from_u8_array(self.0)));
+    let dynamic_2 =
+      DynamicColor::from_alpha_color(AlphaColor::<Srgb>::from(Rgba8::from_u8_array(other.0)));
+
+    let mixed = dynamic_1
+      .interpolate(dynamic_2, color_space, hue_direction)
+      .eval(t);
+    let rgba = mixed.to_alpha_color::<Srgb>().to_rgba8().to_u8_array();
+
+    Color(rgba)
   }
 
   /// Mixes `amount` of `target` into the colour, keeping this alpha.

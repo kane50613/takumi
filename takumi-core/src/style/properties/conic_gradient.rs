@@ -5,17 +5,15 @@ use tiny_skia::PremultipliedColorU8;
 use typed_builder::TypedBuilder;
 
 use super::gradient_utils::{
-  GradientLutHiEntry, GradientOverlayTile, adaptive_lut_size_with_visible_samples,
-  build_color_lut_hi_with_interpolation, build_color_lut_with_interpolation, compute_repeat_setup,
-  gradient_tile_accessors, parse_gradient_stops, quantize_dithered, resolve_stops_along_axis,
+  ColorLut, GradientOverlayTile, LutAxis, gradient_tile_accessors, parse_gradient_stops,
   write_gradient_css,
 };
 use crate::{
   math,
   style::{
     Angle, Color, ColorInterpolationMethod, CssDescriptorKind, CssToken, FromCss, GradientStop,
-    Length, MakeComputed, ParseResult, PositionValue, SizingContext, StopPosition, ToCss,
-    unexpected_token,
+    Length, MakeComputed, ParseResult, PositionValue, ResolvedGradientStop, SizingContext,
+    StopPosition, ToCss, unexpected_token,
   },
 };
 
@@ -75,13 +73,8 @@ pub struct ConicGradientTile {
   pub angle_to_lut_scale: f32,
   /// Whether every LUT entry has alpha = 255.
   pub fully_opaque: bool,
-  /// Pre-computed color lookup table for fast gradient sampling.
-  /// Maps normalized angle [0.0, 1.0] (fraction of full turn) to color.
-  pub color_lut: Vec<PremultipliedColorU8>,
-  /// The LUT in premultiplied 8.8 fixed point, read by dithered sampling.
-  pub(crate) color_lut_hi: Vec<GradientLutHiEntry>,
-  /// Whether any LUT entry carries a fraction dithering can move.
-  pub(crate) lut_dither_active: bool,
+  /// Pre-computed colour samples around the turn.
+  pub lut: ColorLut,
 }
 
 /// Per-row sampling state for incremental angle stepping.
@@ -188,39 +181,21 @@ impl ConicGradientTile {
     let start_turns = start_rad / TAU;
 
     // Resolve stop percentages against one full turn (360deg).
-    let resolved_stops = resolve_stops_along_axis(&gradient.stops, 360.0, sizing, current_color);
-
-    let (repeating, repeat_start_deg, repeat_period_deg, lut_axis_length_deg, lut_resolved_stops) =
-      compute_repeat_setup(gradient.repeating, resolved_stops, 360.0);
-
-    let lut_size = adaptive_lut_size_with_visible_samples(
-      Self::visible_angle_samples(width, height, cx, cy),
-      lut_axis_length_deg,
-      &lut_resolved_stops,
-    );
-    let color_lut = build_color_lut_with_interpolation(
-      &lut_resolved_stops,
-      lut_axis_length_deg,
-      lut_size,
-      gradient.interpolation,
-    );
-    let (color_lut_hi, lut_dither_active) = build_color_lut_hi_with_interpolation(
-      &lut_resolved_stops,
-      lut_axis_length_deg,
-      lut_size,
-      gradient.interpolation,
-      dither,
-    );
-    let lut_len = color_lut.len();
-    let angle_to_lut_scale = if repeating && repeat_period_deg > 1e-6 && lut_len > 1 {
-      (lut_len - 1) as f32 / repeat_period_deg
+    let resolved_stops =
+      ResolvedGradientStop::resolve(&gradient.stops, 360.0, sizing, current_color);
+    let axis = LutAxis::new(gradient.repeating, resolved_stops, 360.0);
+    let lut_size = axis.lut_size_covering(Self::visible_angle_samples(width, height, cx, cy));
+    let lut = axis.lut(lut_size, gradient.interpolation, dither);
+    let lut_len = lut.len();
+    let angle_to_lut_scale = if axis.repeating && axis.repeat_period > 1e-6 && lut_len > 1 {
+      (lut_len - 1) as f32 / axis.repeat_period
     } else if lut_len == 0 {
       0.0
     } else {
       lut_len as f32 / TAU
     };
 
-    let fully_opaque = color_lut.iter().all(|p| p.alpha() == u8::MAX);
+    let fully_opaque = lut.colors().iter().all(|p| p.alpha() == u8::MAX);
 
     ConicGradientTile {
       width,
@@ -230,14 +205,12 @@ impl ConicGradientTile {
       start_rad,
       start_turns,
       turns_to_lut_scale: lut_len as f32,
-      repeating,
-      repeat_start_deg,
-      repeat_period_deg,
+      repeating: axis.repeating,
+      repeat_start_deg: axis.repeat_start,
+      repeat_period_deg: axis.repeat_period,
       angle_to_lut_scale,
       fully_opaque,
-      color_lut,
-      color_lut_hi,
-      lut_dither_active,
+      lut,
     }
   }
 
@@ -250,7 +223,7 @@ impl ConicGradientTile {
     }
 
     let adjusted = self.adjusted_turns(dx, dy);
-    self.lut_index_for_adjusted_turns(adjusted, self.color_lut.len())
+    self.lut_index_for_adjusted_turns(adjusted, self.lut.len())
   }
 }
 
@@ -261,20 +234,20 @@ impl GradientOverlayTile for ConicGradientTile {
 
   #[inline(always)]
   fn sample_pixel(&self, x: u32, y: u32) -> PremultipliedColorU8 {
-    match self.color_lut.len() {
+    match self.lut.len() {
       0 => PremultipliedColorU8::TRANSPARENT,
-      1 => self.color_lut[0],
-      _ => self.color_lut[self.pixel_lut_index(x, y)],
+      1 => self.lut.sample(0),
+      _ => self.lut.sample(self.pixel_lut_index(x, y)),
     }
   }
 
   #[inline(always)]
   fn sample_pixel_dithered(&self, x: u32, y: u32) -> PremultipliedColorU8 {
-    if !self.lut_dither_active {
+    if !self.lut.dither_active() {
       return self.sample_pixel(x, y);
     }
 
-    quantize_dithered(self.color_lut_hi[self.pixel_lut_index(x, y)], x, y)
+    self.lut.sample_dithered(self.pixel_lut_index(x, y), x, y)
   }
 
   #[inline(always)]

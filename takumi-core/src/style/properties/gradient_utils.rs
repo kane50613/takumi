@@ -1,9 +1,9 @@
 use std::fmt;
 
-use color::{AlphaColor, ColorSpaceTag, DynamicColor, HueDirection, Rgba8, Srgb};
+use color::{ColorSpaceTag, HueDirection};
 use cssparser::{Parser, Token};
 use smallvec::SmallVec;
-use tiny_skia::{ColorU8, PremultipliedColorU8};
+use tiny_skia::PremultipliedColorU8;
 
 use crate::{
   geometry::Point,
@@ -34,24 +34,6 @@ const DITHER_NOISE_88: [[i16; 8]; 8] = [
 
 /// A gradient LUT entry in premultiplied 8.8 fixed point.
 pub(crate) type GradientLutHiEntry = [u16; 4];
-
-/// Quantizes an 8.8 sample to 8-bit with the Bayer noise for pixel `(x, y)`.
-///
-/// The bias stays in `[0, 252]`, so no channel can underflow, overflow, or
-/// round past its alpha; the entry's premultiplied ordering survives as-is.
-#[inline(always)]
-pub(crate) fn quantize_dithered(entry: GradientLutHiEntry, x: u32, y: u32) -> PremultipliedColorU8 {
-  let bias = (128 + DITHER_NOISE_88[(y & 7) as usize][(x & 7) as usize] as i32) as u32;
-  let channel = |value: u16| ((value as u32 + bias) >> 8) as u8;
-
-  PremultipliedColorU8::from_rgba(
-    channel(entry[0]),
-    channel(entry[1]),
-    channel(entry[2]),
-    channel(entry[3]),
-  )
-  .unwrap_or(PremultipliedColorU8::TRANSPARENT)
-}
 
 #[cfg(test)]
 pub(crate) fn red_blue_stops(
@@ -85,22 +67,22 @@ macro_rules! gradient_tile_accessors {
 
     #[inline(always)]
     fn lut_len(&self) -> usize {
-      self.color_lut.len()
+      self.lut.len()
     }
 
     #[inline(always)]
     fn sample_at(&self, lut_idx: usize) -> PremultipliedColorU8 {
-      self.color_lut[lut_idx]
+      self.lut.sample(lut_idx)
     }
 
     #[inline(always)]
     fn sample_dithered_at(&self, lut_idx: usize, x: u32, y: u32) -> PremultipliedColorU8 {
-      $crate::style::properties::gradient_utils::quantize_dithered(self.color_lut_hi[lut_idx], x, y)
+      self.lut.sample_dithered(lut_idx, x, y)
     }
 
     #[inline(always)]
     fn dither_active(&self) -> bool {
-      self.lut_dither_active
+      self.lut.dither_active()
     }
 
     #[inline(always)]
@@ -111,30 +93,6 @@ macro_rules! gradient_tile_accessors {
 }
 
 pub(crate) use gradient_tile_accessors;
-
-/// Computes the repeating origin/period and the stops/axis length used to build the LUT.
-pub(crate) fn compute_repeat_setup(
-  repeating: bool,
-  resolved_stops: SmallVec<[ResolvedGradientStop; 4]>,
-  fallback_axis: f32,
-) -> (bool, f32, f32, f32, SmallVec<[ResolvedGradientStop; 4]>) {
-  if repeating && let (Some(first), Some(last)) = (resolved_stops.first(), resolved_stops.last()) {
-    let repeat_start = first.position;
-    let repeat_period = (last.position - first.position).max(0.0);
-    if repeat_period > 1e-6 {
-      let shifted = resolved_stops
-        .iter()
-        .map(|stop| ResolvedGradientStop {
-          color: stop.color,
-          position: stop.position - repeat_start,
-        })
-        .collect();
-      return (true, repeat_start, repeat_period, repeat_period, shifted);
-    }
-  }
-
-  (false, 0.0, 0.0, fallback_axis, resolved_stops)
-}
 
 /// Color functions whose presence flips an unspecified gradient interpolation
 /// space from sRGB to Oklab; every other stop syntax is a legacy sRGB form.
@@ -252,97 +210,6 @@ pub(crate) fn write_gradient_css<W: fmt::Write>(
   dest.write_char(')')
 }
 
-/// Premultiplies a straight-alpha [`Color`] into a `tiny_skia`
-/// [`PremultipliedColorU8`].
-pub(crate) fn color_to_premultiplied(color: Color) -> PremultipliedColorU8 {
-  let [r, g, b, a] = color.0;
-  let premul_r = fast_div_255(r as u32 * a as u32);
-  let premul_g = fast_div_255(g as u32 * a as u32);
-  let premul_b = fast_div_255(b as u32 * a as u32);
-
-  PremultipliedColorU8::from_rgba(premul_r, premul_g, premul_b, a)
-    .unwrap_or(PremultipliedColorU8::TRANSPARENT)
-}
-
-pub(crate) fn interpolate_rgba(c1: Color, c2: Color, t: f32) -> Color {
-  if t <= f32::EPSILON {
-    return c1;
-  }
-
-  if t >= 1.0 - f32::EPSILON {
-    return c2;
-  }
-
-  let [r1, g1, b1, a1] = c1.0;
-  let [r2, g2, b2, a2] = c2.0;
-  let premul_1 = [
-    fast_div_255(r1 as u32 * a1 as u32),
-    fast_div_255(g1 as u32 * a1 as u32),
-    fast_div_255(b1 as u32 * a1 as u32),
-    a1,
-  ];
-  let premul_2 = [
-    fast_div_255(r2 as u32 * a2 as u32),
-    fast_div_255(g2 as u32 * a2 as u32),
-    fast_div_255(b2 as u32 * a2 as u32),
-    a2,
-  ];
-
-  let mut result = [0u8; 4];
-  for i in 0..4 {
-    result[i] = (premul_1[i] as f32 * (1.0 - t) + premul_2[i] as f32 * t)
-      .round()
-      .clamp(0.0, 255.0) as u8;
-  }
-
-  let premul = PremultipliedColorU8::from_rgba(
-    result[0].min(result[3]),
-    result[1].min(result[3]),
-    result[2].min(result[3]),
-    result[3],
-  )
-  .unwrap_or(PremultipliedColorU8::TRANSPARENT);
-  let demul: ColorU8 = premul.demultiply();
-  Color([demul.red(), demul.green(), demul.blue(), demul.alpha()])
-}
-
-/// Interpolates two colors in the given color space and hue direction.
-pub(crate) fn interpolate_with_color_space(
-  c1: Color,
-  c2: Color,
-  t: f32,
-  color_space: ColorSpaceTag,
-  hue_direction: HueDirection,
-) -> Color {
-  if c1 == c2 {
-    return c1;
-  }
-
-  if color_space == ColorSpaceTag::Srgb && hue_direction == HueDirection::Shorter {
-    return interpolate_rgba(c1, c2, t);
-  }
-
-  if t <= f32::EPSILON {
-    return c1;
-  }
-
-  if t >= 1.0 - f32::EPSILON {
-    return c2;
-  }
-
-  let dynamic_1 =
-    DynamicColor::from_alpha_color(AlphaColor::<Srgb>::from(Rgba8::from_u8_array(c1.0)));
-  let dynamic_2 =
-    DynamicColor::from_alpha_color(AlphaColor::<Srgb>::from(Rgba8::from_u8_array(c2.0)));
-
-  let mixed = dynamic_1
-    .interpolate(dynamic_2, color_space, hue_direction)
-    .eval(t);
-  let rgba = mixed.to_alpha_color::<Srgb>().to_rgba8().to_u8_array();
-
-  Color(rgba)
-}
-
 /// Interpolates two premultiplied colors directly in premultiplied RGBA space.
 pub(crate) fn interpolate_rgba_premultiplied(
   c1: PremultipliedColorU8,
@@ -411,84 +278,84 @@ pub trait GradientOverlayTile {
   fn fully_opaque(&self) -> bool {
     false
   }
-}
 
-/// Overlays a gradient tile onto `data` with source-over blending, no clip.
-pub fn overlay_gradient_tile_fast_normal_unconstrained<T: GradientOverlayTile>(
-  data: &mut [u8],
-  bottom_width: u32,
-  bottom_height: u32,
-  tile: &T,
-  offset: Point<f32>,
-) {
-  let Some((offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max)) =
-    compute_overlay_bounds_raw(
-      bottom_width,
-      bottom_height,
-      offset,
-      tile.width(),
-      tile.height(),
-    )
-  else {
-    return;
-  };
+  /// Overlays the tile onto `data` with source-over blending, no clip.
+  fn overlay_unconstrained(
+    &self,
+    data: &mut [u8],
+    bottom_width: u32,
+    bottom_height: u32,
+    offset: Point<f32>,
+  ) {
+    let Some((offset_x, offset_y, dest_x_min, dest_x_max, dest_y_min, dest_y_max)) =
+      compute_overlay_bounds_raw(
+        bottom_width,
+        bottom_height,
+        offset,
+        self.width(),
+        self.height(),
+      )
+    else {
+      return;
+    };
 
-  let lut_len = tile.lut_len();
-  if lut_len == 0 {
-    return;
-  }
-
-  let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(data);
-  let row_pixels = bottom_width as usize;
-  let dest_x_min_usize = dest_x_min as usize;
-  let dest_x_max_usize = dest_x_max as usize;
-  let fully_opaque = tile.fully_opaque();
-  let dither = tile.dither_active();
-  let sample = |lut_idx: usize, src_x: u32, src_y: u32| {
-    if dither {
-      tile.sample_dithered_at(lut_idx, src_x, src_y)
-    } else {
-      tile.sample_at(lut_idx)
+    let lut_len = self.lut_len();
+    if lut_len == 0 {
+      return;
     }
-  };
 
-  for dest_y in dest_y_min..dest_y_max {
-    let src_y = (dest_y - offset_y) as u32;
-    let src_x_start = (dest_x_min - offset_x) as u32;
-    let mut row_state = tile.begin_row(src_x_start, src_y, lut_len);
-    let row_start = dest_y as usize * row_pixels;
-    let row = &mut pixels[row_start + dest_x_min_usize..row_start + dest_x_max_usize];
-
-    if fully_opaque {
-      for (i, dst) in row.iter_mut().enumerate() {
-        let lut_idx = tile.next_lut_index(&mut row_state);
-        debug_assert!(lut_idx < lut_len);
-        let pixel = sample(lut_idx, src_x_start + i as u32, src_y);
-        *dst = [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()];
+    let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(data);
+    let row_pixels = bottom_width as usize;
+    let dest_x_min_usize = dest_x_min as usize;
+    let dest_x_max_usize = dest_x_max as usize;
+    let fully_opaque = self.fully_opaque();
+    let dither = self.dither_active();
+    let sample = |lut_idx: usize, src_x: u32, src_y: u32| {
+      if dither {
+        self.sample_dithered_at(lut_idx, src_x, src_y)
+      } else {
+        self.sample_at(lut_idx)
       }
-    } else {
-      const CHUNK: usize = 256;
-      let mut buf = [[0u8; 4]; CHUNK];
-      let mut remaining = row;
-      let mut src_x = src_x_start;
-      while !remaining.is_empty() {
-        let n = remaining.len().min(CHUNK);
-        let (chunk, rest) = remaining.split_at_mut(n);
-        remaining = rest;
-        for slot in buf.iter_mut().take(n) {
-          let lut_idx = tile.next_lut_index(&mut row_state);
+    };
+
+    for dest_y in dest_y_min..dest_y_max {
+      let src_y = (dest_y - offset_y) as u32;
+      let src_x_start = (dest_x_min - offset_x) as u32;
+      let mut row_state = self.begin_row(src_x_start, src_y, lut_len);
+      let row_start = dest_y as usize * row_pixels;
+      let row = &mut pixels[row_start + dest_x_min_usize..row_start + dest_x_max_usize];
+
+      if fully_opaque {
+        for (i, dst) in row.iter_mut().enumerate() {
+          let lut_idx = self.next_lut_index(&mut row_state);
           debug_assert!(lut_idx < lut_len);
-          let pixel = sample(lut_idx, src_x, src_y);
-          src_x += 1;
-          *slot = [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()];
+          let pixel = sample(lut_idx, src_x_start + i as u32, src_y);
+          *dst = [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()];
         }
-        for (dst, &src) in chunk.iter_mut().zip(buf[..n].iter()) {
-          let src_a = src[3];
-          let inv_src_a = (u8::MAX - src_a) as u32;
-          dst[0] = src[0].saturating_add(fast_div_255(dst[0] as u32 * inv_src_a));
-          dst[1] = src[1].saturating_add(fast_div_255(dst[1] as u32 * inv_src_a));
-          dst[2] = src[2].saturating_add(fast_div_255(dst[2] as u32 * inv_src_a));
-          dst[3] = src_a.saturating_add(fast_div_255(dst[3] as u32 * inv_src_a));
+      } else {
+        const CHUNK: usize = 256;
+        let mut buf = [[0u8; 4]; CHUNK];
+        let mut remaining = row;
+        let mut src_x = src_x_start;
+        while !remaining.is_empty() {
+          let n = remaining.len().min(CHUNK);
+          let (chunk, rest) = remaining.split_at_mut(n);
+          remaining = rest;
+          for slot in buf.iter_mut().take(n) {
+            let lut_idx = self.next_lut_index(&mut row_state);
+            debug_assert!(lut_idx < lut_len);
+            let pixel = sample(lut_idx, src_x, src_y);
+            src_x += 1;
+            *slot = [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()];
+          }
+          for (dst, &src) in chunk.iter_mut().zip(buf[..n].iter()) {
+            let src_a = src[3];
+            let inv_src_a = (u8::MAX - src_a) as u32;
+            dst[0] = src[0].saturating_add(fast_div_255(dst[0] as u32 * inv_src_a));
+            dst[1] = src[1].saturating_add(fast_div_255(dst[1] as u32 * inv_src_a));
+            dst[2] = src[2].saturating_add(fast_div_255(dst[2] as u32 * inv_src_a));
+            dst[3] = src_a.saturating_add(fast_div_255(dst[3] as u32 * inv_src_a));
+          }
         }
       }
     }
@@ -662,13 +529,11 @@ fn build_lut<T: Copy>(
       return interpolate_srgb(from_color(left_stop.color), from_color(right_stop.color), t);
     }
 
-    from_color(interpolate_with_color_space(
-      left_stop.color,
-      right_stop.color,
-      t,
-      color_space,
-      hue_direction,
-    ))
+    from_color(
+      left_stop
+        .color
+        .interpolate(right_stop.color, t, color_space, hue_direction),
+    )
   };
 
   let mut lut: Vec<T> = (0..lut_size).map(&mut write_sample).collect();
@@ -678,24 +543,6 @@ fn build_lut<T: Copy>(
   }
 
   lut
-}
-
-/// Builds a pre-computed high-precision color lookup table for a gradient.
-/// This allows O(1) color sampling instead of O(n) search + interpolation per pixel.
-pub fn build_color_lut_with_interpolation(
-  resolved_stops: &[ResolvedGradientStop],
-  axis_length: f32,
-  lut_size: usize,
-  interpolation: ColorInterpolationMethod,
-) -> Vec<PremultipliedColorU8> {
-  build_lut(
-    resolved_stops,
-    axis_length,
-    lut_size,
-    interpolation,
-    color_to_premultiplied,
-    interpolate_rgba_premultiplied,
-  )
 }
 
 fn color_to_premultiplied_hi(color: Color) -> GradientLutHiEntry {
@@ -722,204 +569,324 @@ fn interpolate_hi(
   entry
 }
 
-/// Builds the premultiplied 8.8 LUT dithered sampling reads, plus whether any
-/// entry carries a fraction dithering can move. Empty unless `dither`.
-pub(crate) fn build_color_lut_hi_with_interpolation(
-  resolved_stops: &[ResolvedGradientStop],
-  axis_length: f32,
-  lut_size: usize,
-  interpolation: ColorInterpolationMethod,
-  dither: bool,
-) -> (Vec<GradientLutHiEntry>, bool) {
-  if !dither {
-    return (Vec::new(), false);
+/// Precomputed gradient samples: 8-bit for plain reads and, when dithering,
+/// premultiplied 8.8 for dithered ones.
+#[derive(Debug, Clone, Default)]
+pub struct ColorLut {
+  colors: Vec<PremultipliedColorU8>,
+  hi: Vec<GradientLutHiEntry>,
+  dither_active: bool,
+}
+
+impl ColorLut {
+  /// Samples `stops` along the axis into `size` entries, snapping stop
+  /// positions onto exact entries. The 8.8 table is built only with `dither`.
+  pub fn new(
+    stops: &[ResolvedGradientStop],
+    axis_length: f32,
+    size: usize,
+    interpolation: ColorInterpolationMethod,
+    dither: bool,
+  ) -> Self {
+    let colors = build_lut(
+      stops,
+      axis_length,
+      size,
+      interpolation,
+      Color::premultiplied,
+      interpolate_rgba_premultiplied,
+    );
+    let hi = if dither {
+      build_lut(
+        stops,
+        axis_length,
+        size,
+        interpolation,
+        color_to_premultiplied_hi,
+        interpolate_hi,
+      )
+    } else {
+      Vec::new()
+    };
+    let dither_active = stops.len() > 1
+      && hi
+        .iter()
+        .any(|entry| entry.iter().any(|channel| channel & 0xFF != 0));
+
+    Self {
+      colors,
+      hi,
+      dither_active,
+    }
   }
 
-  let lut = build_lut(
-    resolved_stops,
-    axis_length,
-    lut_size,
-    interpolation,
-    color_to_premultiplied_hi,
-    interpolate_hi,
-  );
+  /// The 8-bit entries.
+  pub fn colors(&self) -> &[PremultipliedColorU8] {
+    &self.colors
+  }
 
-  let dither_active = resolved_stops.len() > 1
-    && lut
-      .iter()
-      .any(|entry| entry.iter().any(|channel| channel & 0xFF != 0));
+  /// Number of entries.
+  pub fn len(&self) -> usize {
+    self.colors.len()
+  }
 
-  (lut, dither_active)
+  /// Whether the table has no entries.
+  pub fn is_empty(&self) -> bool {
+    self.colors.is_empty()
+  }
+
+  /// Whether any entry carries a fraction dithering can move.
+  pub fn dither_active(&self) -> bool {
+    self.dither_active
+  }
+
+  /// The entry at `index`.
+  #[inline(always)]
+  pub fn sample(&self, index: usize) -> PremultipliedColorU8 {
+    self.colors[index]
+  }
+
+  /// The entry at `index` quantized with the Bayer noise for pixel `(x, y)`.
+  ///
+  /// The bias stays in `[0, 252]`, so no channel can underflow, overflow, or
+  /// round past its alpha; the entry's premultiplied ordering survives as-is.
+  #[inline(always)]
+  pub fn sample_dithered(&self, index: usize, x: u32, y: u32) -> PremultipliedColorU8 {
+    let entry = self.hi[index];
+    let bias = (128 + DITHER_NOISE_88[(y & 7) as usize][(x & 7) as usize] as i32) as u32;
+    let channel = |value: u16| ((value as u32 + bias) >> 8) as u8;
+
+    PremultipliedColorU8::from_rgba(
+      channel(entry[0]),
+      channel(entry[1]),
+      channel(entry[2]),
+      channel(entry[3]),
+    )
+    .unwrap_or(PremultipliedColorU8::TRANSPARENT)
+  }
 }
 
-/// Calculates an adaptive LUT size based on the gradient axis length.
-pub(crate) fn adaptive_lut_size(
-  axis_length: f32,
-  resolved_stops: &[ResolvedGradientStop],
-) -> usize {
-  adaptive_lut_size_with_visible_samples(
-    (axis_length.ceil() as usize)
-      .saturating_add(1)
-      .max(MIN_GRADIENT_LUT_SIZE),
-    axis_length,
-    resolved_stops,
-  )
+/// The stop run a LUT samples. A repeating gradient shifts its stops to start
+/// at zero and samples one period; any other samples the whole axis.
+pub(crate) struct LutAxis {
+  pub(crate) repeating: bool,
+  /// First resolved stop position, the repeating origin.
+  pub(crate) repeat_start: f32,
+  pub(crate) repeat_period: f32,
+  /// The length the LUT covers.
+  pub(crate) length: f32,
+  pub(crate) stops: SmallVec<[ResolvedGradientStop; 4]>,
 }
 
-/// LUT size that covers `visible_samples` and the tightest stop interval.
-pub(crate) fn adaptive_lut_size_with_visible_samples(
-  visible_samples: usize,
-  axis_length: f32,
-  resolved_stops: &[ResolvedGradientStop],
-) -> usize {
-  let visible_samples = visible_samples.max(MIN_GRADIENT_LUT_SIZE);
+impl LutAxis {
+  pub(crate) fn new(
+    repeating: bool,
+    stops: SmallVec<[ResolvedGradientStop; 4]>,
+    axis_length: f32,
+  ) -> Self {
+    if repeating && let (Some(first), Some(last)) = (stops.first(), stops.last()) {
+      let repeat_start = first.position;
+      let repeat_period = (last.position - first.position).max(0.0);
+      if repeat_period > 1e-6 {
+        let shifted = stops
+          .iter()
+          .map(|stop| ResolvedGradientStop {
+            color: stop.color,
+            position: stop.position - repeat_start,
+          })
+          .collect();
+        return Self {
+          repeating: true,
+          repeat_start,
+          repeat_period,
+          length: repeat_period,
+          stops: shifted,
+        };
+      }
+    }
 
-  let min_interval = resolved_stops
-    .windows(2)
-    .map(|stops| stops[1].position - stops[0].position)
-    .filter(|interval| *interval > f32::EPSILON)
-    .fold(f32::INFINITY, f32::min);
+    Self {
+      repeating: false,
+      repeat_start: 0.0,
+      repeat_period: 0.0,
+      length: axis_length,
+      stops,
+    }
+  }
 
-  let segment_aware_size = if min_interval.is_finite() {
-    ((axis_length / min_interval).ceil() as usize)
-      .saturating_add(resolved_stops.len())
-      .saturating_add(1)
-      .max(MIN_GRADIENT_LUT_SIZE)
-  } else {
-    resolved_stops
-      .len()
-      .saturating_add(1)
-      .max(MIN_GRADIENT_LUT_SIZE)
-  };
+  /// A LUT size with one entry per pixel of the axis.
+  pub(crate) fn lut_size(&self) -> usize {
+    self.lut_size_covering(
+      (self.length.ceil() as usize)
+        .saturating_add(1)
+        .max(MIN_GRADIENT_LUT_SIZE),
+    )
+  }
 
-  let size = visible_samples
-    .max(segment_aware_size)
-    .max(resolved_stops.len().saturating_mul(2))
-    .max(MIN_GRADIENT_LUT_SIZE);
-  size.min(MAX_GRADIENT_LUT_SIZE)
+  /// A LUT size that covers `visible_samples` and the tightest stop interval.
+  pub(crate) fn lut_size_covering(&self, visible_samples: usize) -> usize {
+    let visible_samples = visible_samples.max(MIN_GRADIENT_LUT_SIZE);
+
+    let min_interval = self
+      .stops
+      .windows(2)
+      .map(|stops| stops[1].position - stops[0].position)
+      .filter(|interval| *interval > f32::EPSILON)
+      .fold(f32::INFINITY, f32::min);
+
+    let segment_aware_size = if min_interval.is_finite() {
+      ((self.length / min_interval).ceil() as usize)
+        .saturating_add(self.stops.len())
+        .saturating_add(1)
+        .max(MIN_GRADIENT_LUT_SIZE)
+    } else {
+      self
+        .stops
+        .len()
+        .saturating_add(1)
+        .max(MIN_GRADIENT_LUT_SIZE)
+    };
+
+    let size = visible_samples
+      .max(segment_aware_size)
+      .max(self.stops.len().saturating_mul(2))
+      .max(MIN_GRADIENT_LUT_SIZE);
+    size.min(MAX_GRADIENT_LUT_SIZE)
+  }
+
+  pub(crate) fn lut(
+    &self,
+    size: usize,
+    interpolation: ColorInterpolationMethod,
+    dither: bool,
+  ) -> ColorLut {
+    ColorLut::new(&self.stops, self.length, size, interpolation, dither)
+  }
+}
+
+impl ResolvedGradientStop {
+  /// Resolves stop positions to pixels along the axis, filling unspecified ones.
+  pub fn resolve(
+    stops: &[GradientStop],
+    axis_size_px: f32,
+    sizing: &SizingContext,
+    current_color: Color,
+  ) -> SmallVec<[Self; 4]> {
+    let mut resolved: SmallVec<[ResolvedGradientStop; 4]> = SmallVec::new();
+    let mut last_position = 0.0;
+
+    for (i, step) in stops.iter().enumerate() {
+      match step {
+        GradientStop::ColorHint {
+          color,
+          hint: Some(hint),
+        } => {
+          let position = hint.0.to_px(sizing, axis_size_px).max(last_position);
+
+          last_position = position;
+
+          resolved.push(ResolvedGradientStop {
+            color: color.resolve(current_color),
+            position,
+          });
+        }
+        GradientStop::ColorHint { color, hint: None } => {
+          resolved.push(ResolvedGradientStop {
+            color: color.resolve(current_color),
+            position: UNDEFINED_POSITION,
+          });
+        }
+        GradientStop::Hint(hint) => {
+          let Some(before) = resolved.last() else {
+            continue;
+          };
+
+          let Some(after_color) = stops.get(i + 1).and_then(|stop| match stop {
+            GradientStop::ColorHint { color, hint: _ } => Some(color.resolve(current_color)),
+            GradientStop::Hint(_) => None,
+          }) else {
+            continue;
+          };
+
+          let interpolated_color = before.color.lerp_premultiplied(after_color, 0.5);
+
+          let position = hint.0.to_px(sizing, axis_size_px).max(last_position);
+
+          resolved.push(ResolvedGradientStop {
+            color: interpolated_color,
+            position,
+          });
+
+          last_position = position;
+        }
+      }
+    }
+
+    // If there are no color stops, return an empty vector
+    if resolved.is_empty() {
+      return resolved;
+    }
+
+    // if there is only one stop, treat it as pure color image
+    if resolved.len() == 1 {
+      if let Some(first_stop) = resolved.first_mut() {
+        first_stop.position = axis_size_px;
+      }
+
+      return resolved;
+    }
+
+    if let Some(first_stop) = resolved.first_mut()
+      && first_stop.position == UNDEFINED_POSITION
+    {
+      first_stop.position = 0.0;
+    }
+
+    if let Some(last_stop) = resolved.last_mut()
+      && last_stop.position == UNDEFINED_POSITION
+    {
+      last_stop.position = axis_size_px;
+    }
+
+    // Distribute unspecified or non-increasing positions in pixel domain
+    let mut i = 1usize;
+    while i < resolved.len() - 1 {
+      // if the position is defined and valid, skip it
+      if resolved[i].position != UNDEFINED_POSITION {
+        i += 1;
+        continue;
+      }
+
+      let last_defined_position = resolved.get(i - 1).map(|s| s.position).unwrap_or(0.0);
+
+      // try to find next defined position
+      let next_index = resolved
+        .iter()
+        .skip(i + 1)
+        .position(|s| s.position != UNDEFINED_POSITION)
+        .map(|idx| i + 1 + idx)
+        .unwrap_or(resolved.len() - 1);
+
+      let next_position = resolved[next_index].position;
+
+      // number of segments between last defined and next position
+      let segments_count = (next_index - i + 1) as f32;
+      let step_for_each_segment = (next_position - last_defined_position) / segments_count;
+
+      // distribute the step evenly between the stops
+      for j in i..next_index {
+        let offset = (j - i + 1) as f32;
+        resolved[j].position = last_defined_position + step_for_each_segment * offset;
+      }
+
+      i = next_index + 1;
+    }
+
+    resolved
+  }
 }
 
 const UNDEFINED_POSITION: f32 = -1.0;
-
-/// Resolves stop positions to pixels along the axis, filling unspecified ones.
-pub fn resolve_stops_along_axis(
-  stops: &[GradientStop],
-  axis_size_px: f32,
-  sizing: &SizingContext,
-  current_color: Color,
-) -> SmallVec<[ResolvedGradientStop; 4]> {
-  let mut resolved: SmallVec<[ResolvedGradientStop; 4]> = SmallVec::new();
-  let mut last_position = 0.0;
-
-  for (i, step) in stops.iter().enumerate() {
-    match step {
-      GradientStop::ColorHint {
-        color,
-        hint: Some(hint),
-      } => {
-        let position = hint.0.to_px(sizing, axis_size_px).max(last_position);
-
-        last_position = position;
-
-        resolved.push(ResolvedGradientStop {
-          color: color.resolve(current_color),
-          position,
-        });
-      }
-      GradientStop::ColorHint { color, hint: None } => {
-        resolved.push(ResolvedGradientStop {
-          color: color.resolve(current_color),
-          position: UNDEFINED_POSITION,
-        });
-      }
-      GradientStop::Hint(hint) => {
-        let Some(before) = resolved.last() else {
-          continue;
-        };
-
-        let Some(after_color) = stops.get(i + 1).and_then(|stop| match stop {
-          GradientStop::ColorHint { color, hint: _ } => Some(color.resolve(current_color)),
-          GradientStop::Hint(_) => None,
-        }) else {
-          continue;
-        };
-
-        let interpolated_color = interpolate_rgba(before.color, after_color, 0.5);
-
-        let position = hint.0.to_px(sizing, axis_size_px).max(last_position);
-
-        resolved.push(ResolvedGradientStop {
-          color: interpolated_color,
-          position,
-        });
-
-        last_position = position;
-      }
-    }
-  }
-
-  // If there are no color stops, return an empty vector
-  if resolved.is_empty() {
-    return resolved;
-  }
-
-  // if there is only one stop, treat it as pure color image
-  if resolved.len() == 1 {
-    if let Some(first_stop) = resolved.first_mut() {
-      first_stop.position = axis_size_px;
-    }
-
-    return resolved;
-  }
-
-  if let Some(first_stop) = resolved.first_mut()
-    && first_stop.position == UNDEFINED_POSITION
-  {
-    first_stop.position = 0.0;
-  }
-
-  if let Some(last_stop) = resolved.last_mut()
-    && last_stop.position == UNDEFINED_POSITION
-  {
-    last_stop.position = axis_size_px;
-  }
-
-  // Distribute unspecified or non-increasing positions in pixel domain
-  let mut i = 1usize;
-  while i < resolved.len() - 1 {
-    // if the position is defined and valid, skip it
-    if resolved[i].position != UNDEFINED_POSITION {
-      i += 1;
-      continue;
-    }
-
-    let last_defined_position = resolved.get(i - 1).map(|s| s.position).unwrap_or(0.0);
-
-    // try to find next defined position
-    let next_index = resolved
-      .iter()
-      .skip(i + 1)
-      .position(|s| s.position != UNDEFINED_POSITION)
-      .map(|idx| i + 1 + idx)
-      .unwrap_or(resolved.len() - 1);
-
-    let next_position = resolved[next_index].position;
-
-    // number of segments between last defined and next position
-    let segments_count = (next_index - i + 1) as f32;
-    let step_for_each_segment = (next_position - last_defined_position) / segments_count;
-
-    // distribute the step evenly between the stops
-    for j in i..next_index {
-      let offset = (j - i + 1) as f32;
-      resolved[j].position = last_defined_position + step_for_each_segment * offset;
-    }
-
-    i = next_index + 1;
-  }
-
-  resolved
-}
 
 #[cfg(test)]
 mod tests {
@@ -954,7 +921,7 @@ mod tests {
 
     assert!(width.is_some());
 
-    let resolved = resolve_stops_along_axis(
+    let resolved = ResolvedGradientStop::resolve(
       &stops,
       width.unwrap_or_default() as f32,
       &sizing,
@@ -1007,7 +974,7 @@ mod tests {
       .viewport(Viewport::new((40, 40)))
       .build();
 
-    let resolved = resolve_stops_along_axis(
+    let resolved = ResolvedGradientStop::resolve(
       &stops,
       sizing.viewport.size.width.unwrap_or_default() as f32,
       &sizing,
@@ -1051,7 +1018,7 @@ mod tests {
       .viewport(Viewport::new((40, 40)))
       .build();
 
-    let resolved = resolve_stops_along_axis(
+    let resolved = ResolvedGradientStop::resolve(
       &stops,
       sizing.viewport.size.width.unwrap_or_default() as f32,
       &sizing,
@@ -1070,7 +1037,7 @@ mod tests {
     assert_eq!(
       resolved[1],
       ResolvedGradientStop {
-        color: interpolate_rgba(Color([255, 0, 0, 255]), Color([0, 0, 255, 255]), 0.5),
+        color: Color([255, 0, 0, 255]).lerp_premultiplied(Color([0, 0, 255, 255]), 0.5),
         position: sizing.viewport.size.width.unwrap_or_default() as f32 * 0.1,
       },
     );
@@ -1101,7 +1068,7 @@ mod tests {
       },
     ];
 
-    let size = adaptive_lut_size(256.0, &resolved);
+    let size = LutAxis::new(false, resolved.iter().cloned().collect(), 256.0).lut_size();
 
     assert!(size > 1025);
     assert!(size <= MAX_GRADIENT_LUT_SIZE);
@@ -1128,7 +1095,7 @@ mod tests {
       },
     ];
 
-    let lut = build_color_lut_with_interpolation(
+    let lut = ColorLut::new(
       &resolved,
       16.0,
       17,
@@ -1136,10 +1103,13 @@ mod tests {
         color_space: ColorSpaceTag::Srgb,
         hue_direction: HueDirection::Shorter,
       },
-    );
+      false,
+    )
+    .colors()
+    .to_vec();
 
-    assert_eq!(lut[7], color_to_premultiplied(Color([255, 0, 0, 255])));
-    assert_eq!(lut[8], color_to_premultiplied(Color([0, 0, 255, 255])));
+    assert_eq!(lut[7], Color::premultiplied(Color([255, 0, 0, 255])));
+    assert_eq!(lut[8], Color::premultiplied(Color([0, 0, 255, 255])));
   }
 
   #[test]
@@ -1159,8 +1129,8 @@ mod tests {
       },
     ];
 
-    let lut_size = adaptive_lut_size(32.0, &resolved);
-    let lut = build_color_lut_with_interpolation(
+    let lut_size = LutAxis::new(false, resolved.iter().cloned().collect(), 32.0).lut_size();
+    let lut = ColorLut::new(
       &resolved,
       32.0,
       lut_size,
@@ -1168,17 +1138,20 @@ mod tests {
         color_space: ColorSpaceTag::Srgb,
         hue_direction: HueDirection::Shorter,
       },
-    );
+      false,
+    )
+    .colors()
+    .to_vec();
     let stop_indices = assign_stop_sample_indices(&resolved, 32.0, lut.len());
 
     assert!(stop_indices[0] < stop_indices[1]);
     assert_eq!(
       lut[stop_indices[0]],
-      color_to_premultiplied(resolved[0].color)
+      Color::premultiplied(resolved[0].color)
     );
     assert_eq!(
       lut[stop_indices[1]],
-      color_to_premultiplied(resolved[1].color)
+      Color::premultiplied(resolved[1].color)
     );
   }
 
@@ -1195,7 +1168,7 @@ mod tests {
       },
     ];
 
-    let lut = build_color_lut_with_interpolation(
+    let lut = ColorLut::new(
       &resolved,
       10.0,
       33,
@@ -1203,7 +1176,10 @@ mod tests {
         color_space: ColorSpaceTag::Srgb,
         hue_direction: HueDirection::Shorter,
       },
-    );
+      false,
+    )
+    .colors()
+    .to_vec();
 
     for pair in lut.windows(2) {
       assert!(pair[0].red() <= pair[1].red());
@@ -1216,7 +1192,7 @@ mod tests {
 
   #[test]
   fn test_interpolate_rgba_uses_premultiplied_alpha() {
-    let mixed = interpolate_rgba(Color([255, 255, 255, 255]), Color([0, 0, 0, 0]), 0.5);
+    let mixed = Color([255, 255, 255, 255]).lerp_premultiplied(Color([0, 0, 0, 0]), 0.5);
     assert_eq!(mixed, Color([255, 255, 255, 128]));
   }
 
@@ -1241,8 +1217,15 @@ mod tests {
   #[test]
   fn stop_snapping_survives_more_stops_than_lut() {
     let stops = evenly_spaced_stops(9000, 256.0);
-    let lut =
-      build_color_lut_with_interpolation(&stops, 256.0, 8193, ColorInterpolationMethod::default());
+    let lut = ColorLut::new(
+      &stops,
+      256.0,
+      8193,
+      ColorInterpolationMethod::default(),
+      false,
+    )
+    .colors()
+    .to_vec();
 
     assert_eq!(lut.len(), 8193);
   }

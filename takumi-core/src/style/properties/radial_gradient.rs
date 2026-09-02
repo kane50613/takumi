@@ -5,15 +5,13 @@ use tiny_skia::PremultipliedColorU8;
 use typed_builder::TypedBuilder;
 
 use super::gradient_utils::{
-  GradientLutHiEntry, GradientOverlayTile, adaptive_lut_size_with_visible_samples,
-  build_color_lut_hi_with_interpolation, build_color_lut_with_interpolation, compute_repeat_setup,
-  gradient_tile_accessors, parse_gradient_stops, quantize_dithered, resolve_stops_along_axis,
+  ColorLut, GradientOverlayTile, LutAxis, gradient_tile_accessors, parse_gradient_stops,
   write_gradient_css,
 };
 use crate::style::{
   Color, ColorInterpolationMethod, CssDescriptorKind, CssToken, FromCss, GradientStop, Length,
-  MakeComputed, ParseResult, PositionValue, SizingContext, StopPosition, ToCss,
-  declare_enum_from_css_impl, unexpected_token,
+  MakeComputed, ParseResult, PositionValue, ResolvedGradientStop, SizingContext, StopPosition,
+  ToCss, declare_enum_from_css_impl, unexpected_token,
 };
 
 /// Radii of the ellipse through `corner`, as Blink's `EllipseRadius`
@@ -149,13 +147,8 @@ pub struct RadialGradientTile {
   pub position_to_lut_scale: f32,
   /// Whether every LUT entry has alpha = 255.
   pub fully_opaque: bool,
-  /// Pre-computed color lookup table for fast gradient sampling.
-  /// Maps axis-space distance to color.
-  pub color_lut: Vec<PremultipliedColorU8>,
-  /// The LUT in premultiplied 8.8 fixed point, read by dithered sampling.
-  pub(crate) color_lut_hi: Vec<GradientLutHiEntry>,
-  /// Whether any LUT entry carries a fraction dithering can move.
-  pub(crate) lut_dither_active: bool,
+  /// Pre-computed colour samples along the radius.
+  pub lut: ColorLut,
 }
 
 /// Per-row sampling state for incremental distance stepping.
@@ -172,7 +165,7 @@ impl RadialGradientTile {
   /// Color of the outermost LUT entry, used outside the gradient ellipse.
   #[inline(always)]
   pub fn outer_sample(&self) -> Option<PremultipliedColorU8> {
-    self.color_lut.last().copied()
+    self.lut.colors().last().copied()
   }
 
   /// Span of `x` within a row that falls inside the gradient ellipse.
@@ -293,44 +286,24 @@ impl RadialGradientTile {
     };
 
     let radius_scale = radius_x.max(radius_y);
-    let resolved_stops = resolve_stops_along_axis(
+    let resolved_stops = ResolvedGradientStop::resolve(
       &gradient.stops,
       radius_scale.max(1e-6),
       sizing,
       current_color,
     );
-
-    let (repeating, repeat_start, repeat_period, lut_axis_length, lut_resolved_stops) =
-      compute_repeat_setup(gradient.repeating, resolved_stops, radius_scale);
-
-    // Pre-compute color lookup table with adaptive size.
-    let lut_size = adaptive_lut_size_with_visible_samples(
-      (radius_scale.ceil() as usize).saturating_add(1),
-      lut_axis_length,
-      &lut_resolved_stops,
-    );
-    let color_lut = build_color_lut_with_interpolation(
-      &lut_resolved_stops,
-      lut_axis_length,
-      lut_size,
-      gradient.interpolation,
-    );
-    let lut_len = color_lut.len();
+    let axis = LutAxis::new(gradient.repeating, resolved_stops, radius_scale);
+    let lut_size = axis.lut_size_covering((radius_scale.ceil() as usize).saturating_add(1));
+    let lut = axis.lut(lut_size, gradient.interpolation, dither);
+    let lut_len = lut.len();
     let inv_radius_x = radius_x.max(1e-6).recip();
     let inv_radius_y = radius_y.max(1e-6).recip();
-    let position_to_lut_scale = if lut_axis_length.abs() <= f32::EPSILON || lut_len <= 1 {
+    let position_to_lut_scale = if axis.length.abs() <= f32::EPSILON || lut_len <= 1 {
       0.0
     } else {
-      (lut_len - 1) as f32 / lut_axis_length
+      (lut_len - 1) as f32 / axis.length
     };
-    let fully_opaque = color_lut.iter().all(|p| p.alpha() == u8::MAX);
-    let (color_lut_hi, lut_dither_active) = build_color_lut_hi_with_interpolation(
-      &lut_resolved_stops,
-      lut_axis_length,
-      lut_size,
-      gradient.interpolation,
-      dither,
-    );
+    let fully_opaque = lut.colors().iter().all(|p| p.alpha() == u8::MAX);
 
     RadialGradientTile {
       width,
@@ -340,14 +313,12 @@ impl RadialGradientTile {
       inv_radius_x,
       inv_radius_y,
       radius_scale,
-      repeating,
-      repeat_start,
-      repeat_period,
+      repeating: axis.repeating,
+      repeat_start: axis.repeat_start,
+      repeat_period: axis.repeat_period,
       position_to_lut_scale,
       fully_opaque,
-      color_lut,
-      color_lut_hi,
-      lut_dither_active,
+      lut,
     }
   }
 
@@ -357,7 +328,7 @@ impl RadialGradientTile {
     let dy = (y as f32 - self.cy) * self.inv_radius_y;
     let distance_px = (dx * dx + dy * dy).sqrt() * self.radius_scale;
 
-    self.lut_index_for_distance_px_with_len(distance_px, self.color_lut.len())
+    self.lut_index_for_distance_px_with_len(distance_px, self.lut.len())
   }
 }
 
@@ -368,20 +339,20 @@ impl GradientOverlayTile for RadialGradientTile {
 
   #[inline(always)]
   fn sample_pixel(&self, x: u32, y: u32) -> PremultipliedColorU8 {
-    match self.color_lut.len() {
+    match self.lut.len() {
       0 => PremultipliedColorU8::TRANSPARENT,
-      1 => self.color_lut[0],
-      _ => self.color_lut[self.pixel_lut_index(x, y)],
+      1 => self.lut.sample(0),
+      _ => self.lut.sample(self.pixel_lut_index(x, y)),
     }
   }
 
   #[inline(always)]
   fn sample_pixel_dithered(&self, x: u32, y: u32) -> PremultipliedColorU8 {
-    if !self.lut_dither_active {
+    if !self.lut.dither_active() {
       return self.sample_pixel(x, y);
     }
 
-    quantize_dithered(self.color_lut_hi[self.pixel_lut_index(x, y)], x, y)
+    self.lut.sample_dithered(self.pixel_lut_index(x, y), x, y)
   }
 
   #[inline(always)]
@@ -787,7 +758,7 @@ mod tests {
     let sizing = SizingContext::builder()
       .viewport(Viewport::new((200, 100)))
       .build();
-    let resolved = resolve_stops_along_axis(
+    let resolved = ResolvedGradientStop::resolve(
       &gradient.stops,
       sizing.viewport.size.width.unwrap_or_default() as f32,
       &sizing,
@@ -821,7 +792,7 @@ mod tests {
     let sizing = SizingContext::builder()
       .viewport(Viewport::new((200, 100)))
       .build();
-    let resolved = resolve_stops_along_axis(
+    let resolved = ResolvedGradientStop::resolve(
       &gradient.stops,
       sizing.viewport.size.width.unwrap_or_default() as f32,
       &sizing,

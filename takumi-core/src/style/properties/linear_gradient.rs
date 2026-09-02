@@ -8,10 +8,8 @@ use tiny_skia::PremultipliedColorU8;
 use typed_builder::TypedBuilder;
 
 use super::gradient_utils::{
-  GradientLutHiEntry, GradientOverlayTile, adaptive_lut_size,
-  adaptive_lut_size_with_visible_samples, build_color_lut_hi_with_interpolation,
-  build_color_lut_with_interpolation, compute_repeat_setup, gradient_tile_accessors,
-  parse_gradient_stops, quantize_dithered, resolve_stops_along_axis, write_gradient_css,
+  ColorLut, GradientOverlayTile, LutAxis, gradient_tile_accessors, parse_gradient_stops,
+  write_gradient_css,
 };
 use crate::style::{
   Animatable, Color, ColorInterpolationMethod, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss,
@@ -68,13 +66,8 @@ pub struct LinearGradientTile {
   pub position_to_lut_scale: f32,
   /// Whether every sampled pixel in this gradient is fully opaque.
   pub fully_opaque: bool,
-  /// Pre-computed color lookup table for fast gradient sampling.
-  /// Maps normalized position [0.0, 1.0] to color.
-  pub color_lut: Vec<PremultipliedColorU8>,
-  /// The LUT in premultiplied 8.8 fixed point, read by dithered sampling.
-  pub(crate) color_lut_hi: Vec<GradientLutHiEntry>,
-  /// Whether any LUT entry carries a fraction dithering can move.
-  pub(crate) lut_dither_active: bool,
+  /// Pre-computed colour samples along the axis.
+  pub lut: ColorLut,
   /// Precomputed axis samples for fast horizontal/vertical fills.
   pub axis_aligned_fast_path: Option<LinearGradientFastPathData>,
 }
@@ -169,9 +162,9 @@ impl LinearGradientTile {
     let projection = self.projection_at(x as f32, y as f32);
     if self.repeating && self.repeat_period > 1e-6 {
       let wrapped = (projection - self.repeat_start).rem_euclid(self.repeat_period);
-      ((wrapped * self.position_to_lut_scale).round() as usize).min(self.color_lut.len() - 1)
+      ((wrapped * self.position_to_lut_scale).round() as usize).min(self.lut.len() - 1)
     } else {
-      self.lut_index_for_projection_with_len(projection, self.color_lut.len())
+      self.lut_index_for_projection_with_len(projection, self.lut.len())
     }
   }
 
@@ -205,7 +198,7 @@ impl LinearGradientTile {
   fn build_axis_samples(&self, kind: LinearGradientFastPathKind) -> Box<[PremultipliedColorU8]> {
     // An axis-aligned projection ignores the cross axis, so sampling the
     // dithered variants at small cross coordinates hits every noise phase.
-    match (kind, self.lut_dither_active) {
+    match (kind, self.lut.dither_active()) {
       (LinearGradientFastPathKind::Horizontal, false) => {
         (0..self.width).map(|x| self.sample_pixel(x, 0)).collect()
       }
@@ -252,52 +245,26 @@ impl LinearGradientTile {
     let axis_length = 2.0 * max_extent;
     let projection_bias = max_extent - cx * dir_x - cy * dir_y;
 
-    let resolved_stops = resolve_stops_along_axis(
+    let resolved_stops = ResolvedGradientStop::resolve(
       &gradient.stops,
       axis_length.max(1e-6),
       sizing,
       current_color,
     );
-
-    let (repeating, repeat_start, repeat_period, lut_axis_length, lut_resolved_stops) =
-      compute_repeat_setup(gradient.repeating, resolved_stops, axis_length);
-
-    let visible_lut_samples = match axis_aligned_kind {
-      Some(LinearGradientFastPathKind::Horizontal) => width as usize + 1,
-      Some(LinearGradientFastPathKind::Vertical) => height as usize + 1,
-      None => (lut_axis_length.ceil() as usize).saturating_add(1),
+    let axis = LutAxis::new(gradient.repeating, resolved_stops, axis_length);
+    let lut_size = match axis_aligned_kind {
+      Some(LinearGradientFastPathKind::Horizontal) => axis.lut_size_covering(width as usize + 1),
+      Some(LinearGradientFastPathKind::Vertical) => axis.lut_size_covering(height as usize + 1),
+      None => axis.lut_size(),
     };
-    let lut_size = if axis_aligned_kind.is_some() {
-      adaptive_lut_size_with_visible_samples(
-        visible_lut_samples,
-        lut_axis_length,
-        &lut_resolved_stops,
-      )
-    } else {
-      adaptive_lut_size(lut_axis_length, &lut_resolved_stops)
-    };
-    let color_lut = build_color_lut_with_interpolation(
-      &lut_resolved_stops,
-      lut_axis_length,
-      lut_size,
-      gradient.interpolation,
-    );
-    let (color_lut_hi, lut_dither_active) = build_color_lut_hi_with_interpolation(
-      &lut_resolved_stops,
-      lut_axis_length,
-      lut_size,
-      gradient.interpolation,
-      dither,
-    );
-    let lut_len = color_lut.len();
-    let position_to_lut_scale = if lut_axis_length.abs() <= f32::EPSILON || lut_len <= 1 {
+    let lut = axis.lut(lut_size, gradient.interpolation, dither);
+    let lut_len = lut.len();
+    let position_to_lut_scale = if axis.length.abs() <= f32::EPSILON || lut_len <= 1 {
       0.0
     } else {
-      (lut_len - 1) as f32 / lut_axis_length
+      (lut_len - 1) as f32 / axis.length
     };
-    let fully_opaque = lut_resolved_stops
-      .iter()
-      .all(|stop| stop.color.0[3] == u8::MAX);
+    let fully_opaque = axis.stops.iter().all(|stop| stop.color.0[3] == u8::MAX);
 
     let mut tile = LinearGradientTile {
       width,
@@ -305,15 +272,13 @@ impl LinearGradientTile {
       dir_x,
       dir_y,
       axis_length,
-      repeating,
-      repeat_start,
-      repeat_period,
+      repeating: axis.repeating,
+      repeat_start: axis.repeat_start,
+      repeat_period: axis.repeat_period,
       projection_bias,
       position_to_lut_scale,
       fully_opaque,
-      color_lut,
-      color_lut_hi,
-      lut_dither_active,
+      lut,
       axis_aligned_fast_path: None,
     };
 
@@ -323,7 +288,7 @@ impl LinearGradientTile {
       tile.axis_aligned_fast_path = Some(LinearGradientFastPathData {
         kind,
         axis_samples: tile.build_axis_samples(kind),
-        dithered: tile.lut_dither_active,
+        dithered: tile.lut.dither_active(),
       });
     }
 
@@ -338,20 +303,20 @@ impl GradientOverlayTile for LinearGradientTile {
 
   #[inline(always)]
   fn sample_pixel(&self, x: u32, y: u32) -> PremultipliedColorU8 {
-    match self.color_lut.len() {
+    match self.lut.len() {
       0 => PremultipliedColorU8::TRANSPARENT,
-      1 => self.color_lut[0],
-      _ => self.color_lut[self.pixel_lut_index(x, y)],
+      1 => self.lut.sample(0),
+      _ => self.lut.sample(self.pixel_lut_index(x, y)),
     }
   }
 
   #[inline(always)]
   fn sample_pixel_dithered(&self, x: u32, y: u32) -> PremultipliedColorU8 {
-    if !self.lut_dither_active {
+    if !self.lut.dither_active() {
       return self.sample_pixel(x, y);
     }
 
-    quantize_dithered(self.color_lut_hi[self.pixel_lut_index(x, y)], x, y)
+    self.lut.sample_dithered(self.pixel_lut_index(x, y), x, y)
   }
 
   #[inline(always)]
@@ -1552,7 +1517,7 @@ mod tests {
       .viewport(Viewport::new((200, 100)))
       .build();
 
-    let resolved = resolve_stops_along_axis(
+    let resolved = ResolvedGradientStop::resolve(
       &gradient.stops,
       sizing.viewport.size.width.unwrap_or_default() as f32,
       &sizing,
@@ -1583,7 +1548,7 @@ mod tests {
       .viewport(Viewport::new((200, 100)))
       .build();
 
-    let resolved = resolve_stops_along_axis(
+    let resolved = ResolvedGradientStop::resolve(
       &gradient.stops,
       sizing.viewport.size.width.unwrap_or_default() as f32,
       &sizing,
