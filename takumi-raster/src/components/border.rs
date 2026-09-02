@@ -1,9 +1,6 @@
 use takumi_core::{
   geometry::{Point, Rect, Size},
-  layout::border::{
-    BorderProperties, BorderSide, PaintedSide, border_dash_pattern, inset_size, rect_offset,
-    side_bands,
-  },
+  layout::border::{BorderProperties, BorderSide, PaintedSide},
 };
 
 use crate::{
@@ -136,7 +133,7 @@ fn draw_visible_side(
     draw_side_pattern_border(border, paint, side.side, border_box, side.color, side.style);
     return;
   }
-  for band in side_bands(&border, side) {
+  for band in border.side_bands(side) {
     draw_side_band(
       border, paint, side.side, border_box, band.inset, band.width, band.color,
     );
@@ -162,11 +159,7 @@ fn draw_uniform_double(
   let mut inner = border;
   inner.width = stripe_width;
   inner.expand_by(inset.map(|value| -value));
-  inner.append_border_ring_commands_at(
-    &mut paths,
-    inset_size(border_box, inset),
-    rect_offset(inset),
-  );
+  inner.append_border_ring_commands_at(&mut paths, border_box.inset(inset), inset.top_left());
 
   let (mask, placement) = render_mask(
     &paths,
@@ -203,8 +196,8 @@ fn draw_uniform_pattern(
   let mut center_rect = border;
   center_rect.expand_by(half_width.map(|v| -v));
 
-  let center_size = inset_size(border_box, half_width);
-  let center_offset = rect_offset(half_width);
+  let center_size = border_box.inset(half_width);
+  let center_offset = half_width.top_left();
 
   let mut paths = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
   center_rect.append_mask_commands(&mut paths, center_size, center_offset);
@@ -247,11 +240,11 @@ fn draw_side_band(
   let mut band = border;
   band.width = width;
 
-  let band_box = inset_size(border_box, inset);
+  let band_box = border_box.inset(inset);
   if band_box.width <= 0.0 || band_box.height <= 0.0 {
     return;
   }
-  let offset = rect_offset(inset);
+  let offset = inset.top_left();
   band.expand_by(inset.map(|value| -value));
 
   if band.is_zero() {
@@ -380,7 +373,7 @@ fn draw_side_pattern_border(
 
 fn compute_side_stroke(width: f32, style: BorderStyle, length: f32, closed: bool) -> Stroke {
   let mut stroke = Stroke::new(width);
-  if let Some((intervals, round_cap)) = border_dash_pattern(width, style, length, closed) {
+  if let Some((intervals, round_cap)) = style.dash_pattern(width, length, closed) {
     if round_cap {
       stroke.cap = Cap::Round;
     }

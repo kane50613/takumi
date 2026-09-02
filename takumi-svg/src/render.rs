@@ -8,10 +8,7 @@ use takumi_core::{
   error::Result,
   geometry::{ComputedLayout as Layout, NodeId, Point, Size},
   layout::{
-    border::{
-      BorderProperties, BorderSide, PaintedSide, border_dash_pattern, inset_size, rect_offset,
-      side_bands,
-    },
+    border::{BorderProperties, BorderSide, PaintedSide},
     decoration::{ClipBox, OutlineGeometry},
     inline::{InlineBoxItem, VisualInlineBox},
     inline_box::{InlineBoxPaint, resolve_inline_box},
@@ -854,7 +851,7 @@ pub(crate) fn emit_borders(
         emit_side_pattern(border, side, geom, doc)?;
       }
       _ => {
-        for band in side_bands(border, side) {
+        for band in border.side_bands(side) {
           let mut strip = *border;
 
           strip.width = band.width;
@@ -864,8 +861,8 @@ pub(crate) fn emit_borders(
           strip.append_side_clip_polygon_commands_at(
             side.side,
             &mut polygon,
-            inset_size(size, band.inset),
-            rect_offset(band.inset),
+            size.inset(band.inset),
+            band.inset.top_left(),
           );
           doc.path(&path_data(&polygon, matrix), Rgba(band.color.0), false)?;
         }
@@ -972,7 +969,7 @@ pub(crate) fn paint_outline(pending: &PendingOutline, doc: &mut SvgDocument) -> 
 }
 
 /// SVG `stroke-dasharray`/`stroke-linecap` for a `dashed`/`dotted` border or
-/// outline, computed from the shared [`border_dash_pattern`] so the intervals
+/// outline, computed from the shared [`BorderStyle::dash_pattern`] so the intervals
 /// match the raster backend.
 fn dash_attrs(
   width: f32,
@@ -980,7 +977,7 @@ fn dash_attrs(
   length: f32,
   closed: bool,
 ) -> (Option<String>, Option<&'static str>) {
-  match border_dash_pattern(width, style, length, closed) {
+  match style.dash_pattern(width, length, closed) {
     Some(([dash, gap], round_cap)) => (
       Some(format!("{} {}", Num(dash), Num(gap))),
       round_cap.then_some("round"),

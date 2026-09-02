@@ -521,6 +521,19 @@ impl Color {
     Color([255, 255, 255, 255])
   }
 
+  /// Mixes `amount` of `target` into the colour, keeping this alpha.
+  pub(crate) fn mix(self, target: Color, amount: f32) -> Self {
+    let amount = amount.clamp(0.0, 1.0);
+    let inverse = 1.0 - amount;
+
+    Color([
+      (self.0[0] as f32 * inverse + target.0[0] as f32 * amount).round() as u8,
+      (self.0[1] as f32 * inverse + target.0[1] as f32 * amount).round() as u8,
+      (self.0[2] as f32 * inverse + target.0[2] as f32 * amount).round() as u8,
+      self.0[3],
+    ])
+  }
+
   /// Apply opacity to alpha channel
   pub(crate) fn with_opacity(mut self, opacity: u8) -> Self {
     self.0[3] = fast_div_255(self.0[3] as u32 * opacity as u32);
