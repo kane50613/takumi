@@ -299,7 +299,7 @@ pub(crate) fn decode_webp_frames(
 
     match decoder.read_frame(&mut canvas) {
       Ok(_) => {}
-      Err(WebPDecodingError::NoMoreFrames) => break,
+      Err(WebPDecodingError::NoMoreFrames) => return Ok(true),
       Err(error) if index == 0 => return Err(webp_decode_error(error)),
       Err(_) => return Ok(true),
     }
@@ -319,7 +319,7 @@ pub(crate) fn decode_webp_frames(
     pushed += 1;
   }
 
-  Ok(true)
+  Ok(false)
 }
 
 /// The first frame, for the still-image decode paths.
