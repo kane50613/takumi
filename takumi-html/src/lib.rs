@@ -91,6 +91,15 @@ const DEFAULT_PRESETS: &[(&str, &str)] = &[
   ("dt", "display:block"),
   ("dd", "margin-left:40px;display:block"),
   ("form", "display:block"),
+  // https://html.spec.whatwg.org/multipage/rendering.html#form-controls makes
+  // these `inline-block`. A block box gives each control a rectangle of its
+  // own, which a widget annotation needs.
+  ("input", "display:block"),
+  ("textarea", "display:block"),
+  ("select", "display:block"),
+  // A closed `<select>` shows only the selected option; `build_element` lifts
+  // that text out, and the options themselves stay out of the flow.
+  ("option", "display:none"),
   (
     "fieldset",
     "margin-left:2px;margin-right:2px;padding-top:0.35em;padding-right:0.75em;padding-bottom:0.625em;padding-left:0.75em;border-width:2px;display:block",
@@ -489,6 +498,12 @@ fn build_element(
     )?;
   }
 
+  if tag == "select"
+    && let Some(text) = selected_option_text(handle)
+  {
+    children.insert(0, Node::text(text));
+  }
+
   Ok(Some(apply_metadata(
     Node::container(children),
     handle,
@@ -496,6 +511,36 @@ fn build_element(
     presets,
     tw_property,
   )))
+}
+
+/// The text a closed `<select>` shows: the option carrying `selected`, or the
+/// first one. A `multiple` select shows the same single line.
+fn selected_option_text(handle: &Handle) -> Option<String> {
+  let mut options = Vec::new();
+
+  collect_options(handle, &mut options);
+
+  options
+    .iter()
+    .find(|(selected, _)| *selected)
+    .or_else(|| options.first())
+    .map(|(_, text)| text.clone())
+}
+
+fn collect_options(handle: &Handle, out: &mut Vec<(bool, String)>) {
+  for child in handle.children.borrow().iter() {
+    let NodeData::Element { name, .. } = &child.data else {
+      continue;
+    };
+
+    match name.local.as_ref() == "option" {
+      true => out.push((
+        attribute(child, "selected").is_some(),
+        text_only_contents(child).unwrap_or_default(),
+      )),
+      false => collect_options(child, out),
+    }
+  }
 }
 
 /// Concatenated text if every child is a text node, else `None`. Comments are
@@ -804,5 +849,29 @@ mod tests {
   fn void_elements_dropped() {
     let node = parse("<style>.a{color:red}</style><div>x</div>");
     assert!(node.to_html().starts_with("<div"));
+  }
+
+  #[test]
+  fn a_select_shows_its_selected_option() {
+    let html =
+      parse("<select><option>Monthly</option><option selected>Annual</option></select>").to_html();
+
+    assert!(html.contains("Annual"));
+    assert!(html.starts_with("<select"));
+  }
+
+  #[test]
+  fn a_select_without_a_selection_shows_its_first_option() {
+    let html = parse("<select><option>Monthly</option><option>Annual</option></select>").to_html();
+
+    assert!(html.contains("Monthly"));
+  }
+
+  #[test]
+  fn an_option_keeps_its_value_out_of_the_flow() {
+    let html = parse(r#"<select><option value="A">Annual</option></select>"#).to_html();
+
+    assert!(html.contains(r#"value="A""#));
+    assert!(html.contains("display: none"));
   }
 }
