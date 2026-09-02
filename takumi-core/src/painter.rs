@@ -9,7 +9,7 @@ use crate::{
   context::RenderContext,
   geometry::{ComputedLayout, PathCommand, Point, Rect, Size},
   layout::{
-    border::{BorderPaint, BorderProperties, border_dash_pattern, border_paint},
+    border::{BorderPaint, BorderProperties},
     decoration::{ClipBox, OutlineGeometry, outline_paint},
     inline::DecorationRect,
   },
@@ -307,7 +307,7 @@ pub fn paint_border<D: PaintDevice>(
 ) -> bool {
   let at = Affine::translation(origin.x, origin.y);
 
-  match border_paint(border) {
+  match border.paint() {
     BorderPaint::Sides => return false,
     // A transparent ring is a fill nobody sees, and painting it would only
     // lengthen the output.
@@ -383,7 +383,7 @@ pub fn paint_border<D: PaintDevice>(
       center.append_mask_commands(&mut commands, center_size, Point { x: half, y: half });
 
       let perimeter = center.approximate_rounded_rect_perimeter(center_size);
-      let dash = border_dash_pattern(width, style, perimeter, true);
+      let dash = style.dash_pattern(width, perimeter, true);
 
       device.stroke_shape(
         &FillShape::Path {

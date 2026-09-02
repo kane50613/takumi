@@ -15,7 +15,7 @@ use takumi_core::{
   font_style::SizedFontStyle,
   geometry::{ComputedLayout as Layout, NodeId, Point as CorePoint, Size},
   layout::{
-    border::{BorderProperties, inset_size, rect_offset, side_bands},
+    border::BorderProperties,
     clip::clip_shape_commands,
     decoration::{ClipBox, OutlineGeometry},
     inline::{
@@ -1072,7 +1072,7 @@ impl Emitter<'_> {
     }
 
     for side in sides {
-      for band in side_bands(border, side) {
+      for band in border.side_bands(side) {
         let mut strip = *border;
 
         strip.width = band.width;
@@ -1083,8 +1083,8 @@ impl Emitter<'_> {
         strip.append_side_clip_polygon_commands_at(
           side.side,
           &mut polygon,
-          inset_size(size, band.inset),
-          rect_offset(band.inset),
+          size.inset(band.inset),
+          band.inset.top_left(),
         );
         if let Some(path) = krilla_path(&polygon, x, y) {
           surface.set_fill(Some(fill_from_rgba(self.filtered(band.color), 1.0)));

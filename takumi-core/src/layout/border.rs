@@ -502,7 +502,7 @@ impl BorderProperties {
     let inner_right = (outer_right - self.width.right).max(inner_left);
     let inner_bottom = (outer_bottom - self.width.bottom).max(inner_top);
 
-    let inner_size = inset_size(border_box, self.width);
+    let inner_size = border_box.inset(self.width);
     let mut inner_border = *self;
     inner_border.inset_by_border_width();
     let inner_radii = inner_border.scaled_corner_radii(inner_size);
@@ -898,14 +898,6 @@ impl BorderProperties {
   }
 }
 
-/// Top-left corner of a rect as a point.
-pub fn rect_offset(rect: Rect<f32>) -> Point<f32> {
-  Point {
-    x: rect.left,
-    y: rect.top,
-  }
-}
-
 /// The corner point where a side's clip polygon meets the inner contour.
 ///
 /// Convex corners miter along the line from the outer corner through the inner
@@ -945,7 +937,7 @@ fn side_clip_inner_corner(
   line_intersection(outer, inner, chord_x, chord_y).unwrap_or(inner)
 }
 
-pub(crate) fn line_intersection(
+fn line_intersection(
   a0: Point<f32>,
   a1: Point<f32>,
   b0: Point<f32>,
@@ -1022,7 +1014,7 @@ fn corner_arc_length(shape: Superellipse, radius_x: f32, radius_y: f32) -> f32 {
   contour_arc_length(&corner_contour(shape), radius_x, radius_y)
 }
 
-pub(crate) fn approximate_quarter_ellipse_arc_length(radius_x: f32, radius_y: f32) -> f32 {
+fn approximate_quarter_ellipse_arc_length(radius_x: f32, radius_y: f32) -> f32 {
   if radius_x <= 0.0 || radius_y <= 0.0 {
     return 0.0;
   }
@@ -1033,24 +1025,6 @@ pub(crate) fn approximate_quarter_ellipse_arc_length(radius_x: f32, radius_y: f3
   let h = (diff * diff) / (sum * sum);
   let circumference = PI * sum * (1.0 + (3.0 * h) / (10.0 + (4.0 - 3.0 * h).sqrt()));
   circumference / 4.0
-}
-
-/// Shrinks a size by the given inset on each edge, clamped to zero.
-pub fn inset_size(size: Size<f32>, inset: Rect<f32>) -> Size<f32> {
-  Size {
-    width: (size.width - inset.left - inset.right).max(0.0),
-    height: (size.height - inset.top - inset.bottom).max(0.0),
-  }
-}
-
-/// Per-side `lhs - rhs`, clamped to zero.
-pub(crate) fn subtract_rect(lhs: Rect<f32>, rhs: Rect<f32>) -> Rect<f32> {
-  Rect {
-    top: (lhs.top - rhs.top).max(0.0),
-    right: (lhs.right - rhs.right).max(0.0),
-    bottom: (lhs.bottom - rhs.bottom).max(0.0),
-    left: (lhs.left - rhs.left).max(0.0),
-  }
 }
 
 const DASHED_THICK_WIDTH_THRESHOLD: f32 = 3.0;
@@ -1097,74 +1071,73 @@ pub(crate) enum BorderPaint {
   Sides,
 }
 
-/// Decides how `border` paints. See [`BorderPaint`].
-pub(crate) fn border_paint(border: &BorderProperties) -> BorderPaint {
-  let Some(color) = border.has_uniform_visible_color() else {
-    return BorderPaint::Sides;
-  };
-  let width = border.width.top;
+impl BorderProperties {
+  /// Decides how the border paints. See [`BorderPaint`].
+  pub(crate) fn paint(&self) -> BorderPaint {
+    let Some(color) = self.has_uniform_visible_color() else {
+      return BorderPaint::Sides;
+    };
+    let width = self.width.top;
 
-  for style in [BorderStyle::Dashed, BorderStyle::Dotted] {
-    if border.is_uniform_all_sides_style(style) {
-      return BorderPaint::Stroked {
-        color,
-        width,
-        style,
-      };
+    for style in [BorderStyle::Dashed, BorderStyle::Dotted] {
+      if self.is_uniform_all_sides_style(style) {
+        return BorderPaint::Stroked {
+          color,
+          width,
+          style,
+        };
+      }
     }
-  }
-  if border.is_uniform_all_sides_style(BorderStyle::Double) {
-    return BorderPaint::Double { color, width };
-  }
-  // Only a solid side fills as part of one ring: a dashed or dotted side breaks
-  // the ring into segments, and the 3D bevels shade each side differently.
-  if !border.visible_sides_match(BorderStyle::Solid) {
-    return BorderPaint::Sides;
-  }
-  // A zero-width side leaves the ring's two contours sharing an edge, which
-  // antialiasing leaks a hairline through. Sides share no edges.
-  if [
-    border.width.top,
-    border.width.right,
-    border.width.bottom,
-    border.width.left,
-  ]
-  .iter()
-  .any(|width| *width <= 0.0)
-  {
-    return BorderPaint::Sides;
-  }
+    if self.is_uniform_all_sides_style(BorderStyle::Double) {
+      return BorderPaint::Double { color, width };
+    }
+    // Only a solid side fills as part of one ring: a dashed or dotted side breaks
+    // the ring into segments, and the 3D bevels shade each side differently.
+    if !self.visible_sides_match(BorderStyle::Solid) {
+      return BorderPaint::Sides;
+    }
+    // A zero-width side leaves the ring's two contours sharing an edge, which
+    // antialiasing leaks a hairline through. Sides share no edges.
+    if [
+      self.width.top,
+      self.width.right,
+      self.width.bottom,
+      self.width.left,
+    ]
+    .iter()
+    .any(|width| *width <= 0.0)
+    {
+      return BorderPaint::Sides;
+    }
 
-  BorderPaint::Ring { color }
+    BorderPaint::Ring { color }
+  }
 }
 
-/// The dash pattern for a stroked `dashed`/`dotted` border or outline side,
-/// shared by every backend: `([dash, gap], round_cap)`, or `None` for a solid
-/// stroke (non-dash style, or a segment too short to dash). `length` is the side
-/// length (or the ring perimeter when `closed`). Dash/gap adjust by width and
-/// length so the pattern fits the side evenly.
-pub fn border_dash_pattern(
-  width: f32,
-  style: BorderStyle,
-  length: f32,
-  closed: bool,
-) -> Option<([f32; 2], bool)> {
-  if !matches!(style, BorderStyle::Dashed | BorderStyle::Dotted) || width <= 0.0 || length <= 0.0 {
-    return None;
-  }
+impl BorderStyle {
+  /// The dash pattern for a stroked `dashed`/`dotted` border or outline side,
+  /// shared by every backend: `([dash, gap], round_cap)`, or `None` for a solid
+  /// stroke (non-dash style, or a segment too short to dash). `length` is the
+  /// side length (or the ring perimeter when `closed`). Dash/gap adjust by
+  /// width and length so the pattern fits the side evenly.
+  pub fn dash_pattern(self, width: f32, length: f32, closed: bool) -> Option<([f32; 2], bool)> {
+    if !matches!(self, BorderStyle::Dashed | BorderStyle::Dotted) || width <= 0.0 || length <= 0.0 {
+      return None;
+    }
 
-  if style == BorderStyle::Dashed {
-    let (dash, gap) = compute_dashed_intervals(width, length, closed)?;
-    return Some(([dash, gap], false));
-  }
+    if self == BorderStyle::Dashed {
+      let (dash, gap) = compute_dashed_intervals(width, length, closed)?;
+      return Some(([dash, gap], false));
+    }
 
-  let per_dot_length = width * 2.0;
-  let gap = if length < per_dot_length {
-    per_dot_length
-  } else {
-    select_best_dash_gap(length, width, width, closed) + width - DOTTED_ENDPOINT_EPSILON
-  };
-  Some(([0.0, gap], true))
+    let per_dot_length = width * 2.0;
+    let gap = if length < per_dot_length {
+      per_dot_length
+    } else {
+      select_best_dash_gap(length, width, width, closed) + width - DOTTED_ENDPOINT_EPSILON
+    };
+    Some(([0.0, gap], true))
+  }
 }
 
 fn compute_dashed_intervals(width: f32, length: f32, closed: bool) -> Option<(f32, f32)> {
@@ -1222,94 +1195,84 @@ fn select_best_dash_gap(length: f32, dash: f32, gap: f32, closed: bool) -> f32 {
   }
 }
 
-/// Lightens or darkens a side color for `inset`/`outset` 3D border shading.
-pub(crate) fn shade_3d_border_color(color: Color, side: BorderSide, style: BorderStyle) -> Color {
-  let lighten = match style {
-    BorderStyle::Outset => matches!(side, BorderSide::Top | BorderSide::Left),
-    BorderStyle::Inset => matches!(side, BorderSide::Right | BorderSide::Bottom),
-    _ => false,
-  };
+impl PaintedSide {
+  /// The side's colour lightened or darkened for `inset`/`outset` 3D shading.
+  fn shaded(&self, style: BorderStyle) -> Color {
+    let lighten = match style {
+      BorderStyle::Outset => matches!(self.side, BorderSide::Top | BorderSide::Left),
+      BorderStyle::Inset => matches!(self.side, BorderSide::Right | BorderSide::Bottom),
+      _ => false,
+    };
 
-  mix_color(
-    color,
-    if lighten {
-      Color::white()
-    } else {
-      Color::black()
-    },
-    0.35,
-  )
-}
-
-/// The strips a side fills, outermost first.
-///
-/// A dashed or dotted side has none: it strokes a centerline instead. The 3D
-/// bevels shade their strips, which is the only thing that separates them from
-/// a plain `solid` side.
-pub fn side_bands(border: &BorderProperties, side: PaintedSide) -> SmallVec<[SideBand; 2]> {
-  let mut bands = SmallVec::new();
-  let color = side.color;
-  let shaded = |style| shade_3d_border_color(color, side.side, style);
-
-  match side.style {
-    BorderStyle::Dashed | BorderStyle::Dotted => {}
-    BorderStyle::Double => {
-      let width = border.width.map(|value| value / 3.0);
-
-      bands.push(SideBand {
-        inset: Rect::ZERO,
-        width,
-        color,
-      });
-      bands.push(SideBand {
-        inset: border.width.map(|value| value * (2.0 / 3.0)),
-        width,
-        color,
-      });
-    }
-    BorderStyle::Inset | BorderStyle::Outset => bands.push(SideBand {
-      inset: Rect::ZERO,
-      width: border.width,
-      color: shaded(side.style),
-    }),
-    BorderStyle::Groove | BorderStyle::Ridge => {
-      let outer_width = border.width.map(|value| value / 2.0);
-      let (outer, inner) = match side.style {
-        BorderStyle::Groove => (BorderStyle::Inset, BorderStyle::Outset),
-        _ => (BorderStyle::Outset, BorderStyle::Inset),
-      };
-
-      bands.push(SideBand {
-        inset: Rect::ZERO,
-        width: outer_width,
-        color: shaded(outer),
-      });
-      bands.push(SideBand {
-        inset: outer_width,
-        width: subtract_rect(border.width, outer_width),
-        color: shaded(inner),
-      });
-    }
-    _ => bands.push(SideBand {
-      inset: Rect::ZERO,
-      width: border.width,
-      color,
-    }),
+    self.color.mix(
+      if lighten {
+        Color::white()
+      } else {
+        Color::black()
+      },
+      0.35,
+    )
   }
-
-  bands
 }
 
-pub(crate) fn mix_color(color: Color, target: Color, amount: f32) -> Color {
-  let amount = amount.clamp(0.0, 1.0);
-  let inverse = 1.0 - amount;
+impl BorderProperties {
+  /// The strips a side fills, outermost first.
+  ///
+  /// A dashed or dotted side has none: it strokes a centerline instead. The 3D
+  /// bevels shade their strips, which is the only thing that separates them
+  /// from a plain `solid` side.
+  pub fn side_bands(&self, side: PaintedSide) -> SmallVec<[SideBand; 2]> {
+    let mut bands = SmallVec::new();
+    let color = side.color;
 
-  Color([
-    (color.0[0] as f32 * inverse + target.0[0] as f32 * amount).round() as u8,
-    (color.0[1] as f32 * inverse + target.0[1] as f32 * amount).round() as u8,
-    (color.0[2] as f32 * inverse + target.0[2] as f32 * amount).round() as u8,
-    color.0[3],
-  ])
+    match side.style {
+      BorderStyle::Dashed | BorderStyle::Dotted => {}
+      BorderStyle::Double => {
+        let width = self.width.map(|value| value / 3.0);
+
+        bands.push(SideBand {
+          inset: Rect::ZERO,
+          width,
+          color,
+        });
+        bands.push(SideBand {
+          inset: self.width.map(|value| value * (2.0 / 3.0)),
+          width,
+          color,
+        });
+      }
+      BorderStyle::Inset | BorderStyle::Outset => bands.push(SideBand {
+        inset: Rect::ZERO,
+        width: self.width,
+        color: side.shaded(side.style),
+      }),
+      BorderStyle::Groove | BorderStyle::Ridge => {
+        let outer_width = self.width.map(|value| value / 2.0);
+        let (outer, inner) = match side.style {
+          BorderStyle::Groove => (BorderStyle::Inset, BorderStyle::Outset),
+          _ => (BorderStyle::Outset, BorderStyle::Inset),
+        };
+
+        bands.push(SideBand {
+          inset: Rect::ZERO,
+          width: outer_width,
+          color: side.shaded(outer),
+        });
+        bands.push(SideBand {
+          inset: outer_width,
+          width: self.width.saturating_sub(outer_width),
+          color: side.shaded(inner),
+        });
+      }
+      _ => bands.push(SideBand {
+        inset: Rect::ZERO,
+        width: self.width,
+        color,
+      }),
+    }
+
+    bands
+  }
 }
 
 #[cfg(test)]

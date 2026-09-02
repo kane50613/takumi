@@ -88,6 +88,14 @@ impl Size<f32> {
     width: 0.0,
     height: 0.0,
   };
+
+  /// Shrinks by `inset` on each edge, clamped to zero.
+  pub fn inset(self, inset: Rect<f32>) -> Self {
+    Size {
+      width: (self.width - inset.left - inset.right).max(0.0),
+      height: (self.height - inset.top - inset.bottom).max(0.0),
+    }
+  }
 }
 
 impl<U, T: Add<U>> Add<Size<U>> for Size<T> {
@@ -181,6 +189,24 @@ impl Rect<f32> {
     top: 0.0,
     bottom: 0.0,
   };
+
+  /// The top-left corner as a point.
+  pub fn top_left(self) -> Point<f32> {
+    Point {
+      x: self.left,
+      y: self.top,
+    }
+  }
+
+  /// Per-side `self - rhs`, clamped to zero.
+  pub(crate) fn saturating_sub(self, rhs: Self) -> Self {
+    Rect {
+      top: (self.top - rhs.top).max(0.0),
+      right: (self.right - rhs.right).max(0.0),
+      bottom: (self.bottom - rhs.bottom).max(0.0),
+      left: (self.left - rhs.left).max(0.0),
+    }
+  }
 }
 
 impl<T> Size<T> {
