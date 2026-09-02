@@ -1,10 +1,6 @@
 //! The scene walker that emits boxes, text and images onto a krilla surface.
 
-use std::{
-  cell::RefCell,
-  collections::{HashMap, HashSet},
-  rc::Rc,
-};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[cfg(feature = "images")]
 use takumi_core::{
@@ -43,7 +39,7 @@ use takumi_core::{
   },
 };
 
-use crate::form::is_form_control;
+use crate::form::{EmittedField, is_form_control};
 #[cfg(feature = "images")]
 use crate::krilla::{geom::Size as KrillaSize, image::Image as KrillaImage};
 #[cfg(feature = "images")]
@@ -151,7 +147,7 @@ pub(crate) struct DocumentState<'a> {
   /// Whether form controls become fillable fields.
   pub(crate) form: bool,
   /// The `/T` name of every field the drawn pages emitted.
-  pub(crate) field_names: RefCell<Vec<String>>,
+  pub(crate) field_names: RefCell<Vec<EmittedField>>,
 }
 
 impl<'a> DocumentState<'a> {
@@ -196,18 +192,23 @@ impl<'a> DocumentState<'a> {
   /// dropped page takes its fields with it, so the names it held do not
   /// collide.
   fn duplicate_field_name(&self) -> Option<String> {
-    let names = self.field_names.borrow();
-    let mut seen = HashSet::new();
+    let fields = self.field_names.borrow();
+    let mut seen = HashMap::new();
 
-    names
-      .iter()
-      .find(|name| {
-        !seen.insert(name.as_str())
-          || seen
-            .iter()
-            .any(|other| nests(other, name) || nests(name, other))
-      })
-      .cloned()
+    fields.iter().find_map(|field| {
+      let name = field.name.as_str();
+
+      match seen.insert(name, field.shares_name) {
+        // Two fields may share a name only when both of them are buttons of
+        // one radio group.
+        Some(shared) if !shared || !field.shares_name => Some(field.name.clone()),
+        Some(_) => None,
+        None => seen
+          .keys()
+          .any(|other| nests(other, name) || nests(name, other))
+          .then(|| field.name.clone()),
+      }
+    })
   }
 }
 
