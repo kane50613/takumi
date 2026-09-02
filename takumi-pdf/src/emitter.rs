@@ -20,7 +20,6 @@ use takumi_core::{
     decoration::{ClipBox, OutlineGeometry},
     inline::{
       BuiltInlineLayout, InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan, ShapedRun,
-      inline_background_path, run_decorations,
     },
     inline_box::{InlineBoxPaint, InlineSubtree, resolve_inline_box},
     node::NodeKind,
@@ -1275,7 +1274,7 @@ impl Emitter<'_> {
       if self.window.disowns_line(y + fragment.baseline) {
         continue;
       }
-      let Some(path) = krilla_path(&inline_background_path(fragment), x, y) else {
+      let Some(path) = krilla_path(&fragment.path(), x, y) else {
         continue;
       };
 
@@ -1313,8 +1312,7 @@ impl Emitter<'_> {
         continue;
       }
       let offset = run.glyph_offset(layout);
-      let decorations = run_decorations(
-        shaped,
+      let decorations = shaped.decorations(
         &run.resolved_glyphs,
         layout,
         run.baseline_shift,

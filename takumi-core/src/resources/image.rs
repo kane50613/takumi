@@ -3,6 +3,7 @@
 //! This module provides types and utilities for managing image resources,
 //! including loading states, error handling, and image processing operations.
 
+use super::image_decoder::DecodeTarget;
 #[cfg(feature = "svg")]
 use std::borrow::Cow;
 #[cfg(feature = "svg")]
@@ -267,7 +268,7 @@ impl AnimatedFormat {
     bytes: &[u8],
     skip: usize,
     limit: Option<usize>,
-    target: Option<(u32, u32, ImageScalingAlgorithm)>,
+    target: Option<DecodeTarget>,
     push: impl FnMut(Arc<ImageBuffer>),
   ) -> Result<bool, image::ImageError> {
     match self {
@@ -284,7 +285,7 @@ impl AnimatedFormat {
     self,
     bytes: &[u8],
     index: usize,
-    target: (u32, u32, ImageScalingAlgorithm),
+    target: DecodeTarget,
   ) -> Option<ImageBuffer> {
     match self {
       Self::Gif => decode_gif_frame_alone(bytes, index, Some(target)),
@@ -422,11 +423,16 @@ impl AnimatedSource {
   ) -> Arc<ImageBuffer> {
     let timing = self.timing();
     let index = self.frame_index_at(timing, time_ms);
-    let target = cover_target((self.inner.width, self.inner.height), (width, height));
+    let (width, height) = cover_target((self.inner.width, self.inner.height), (width, height));
+    let target = DecodeTarget {
+      width,
+      height,
+      algorithm,
+    };
 
     self
-      .decode_frame(index, target, algorithm)
-      .or_else(|| self.decode_frame(0, target, algorithm))
+      .decode_frame(index, target)
+      .or_else(|| self.decode_frame(0, target))
       .unwrap_or_else(|| {
         log::warn!("Failed to decode any frame of an animated image, drawing nothing.");
         Arc::new(ImageBuffer::transparent_pixel())
@@ -436,30 +442,25 @@ impl AnimatedSource {
   /// Decodes a single frame by stream index, resampled to `target`. A frame
   /// that depends on earlier ones is reached by replaying them, since disposal
   /// is stateful.
-  fn decode_frame(
-    &self,
-    index: usize,
-    (target_width, target_height): (u32, u32),
-    algorithm: ImageScalingAlgorithm,
-  ) -> Option<Arc<ImageBuffer>> {
+  fn decode_frame(&self, index: usize, target: DecodeTarget) -> Option<Arc<ImageBuffer>> {
     if self.stands_alone(index)
-      && let Some(frame) = self.inner.format.decode_frame_alone(
-        &self.inner.bytes,
-        index,
-        (target_width, target_height, algorithm),
-      )
+      && let Some(frame) = self
+        .inner
+        .format
+        .decode_frame_alone(&self.inner.bytes, index, target)
     {
       return Some(Arc::new(frame));
     }
 
     let mut frame = None;
-    if let Err(error) = self.inner.format.decode_frames(
-      &self.inner.bytes,
-      index,
-      Some(1),
-      Some((target_width, target_height, algorithm)),
-      |decoded| frame = Some(decoded),
-    ) {
+    if let Err(error) =
+      self
+        .inner
+        .format
+        .decode_frames(&self.inner.bytes, index, Some(1), Some(target), |decoded| {
+          frame = Some(decoded)
+        })
+    {
       log::warn!("Failed to decode frame {index} of an animated image: {error}");
     }
 
@@ -1766,7 +1767,15 @@ mod tests {
 
       for index in 1..3 {
         let seeked = animated_format
-          .decode_frame_alone(&bytes, index, (4, 4, ImageScalingAlgorithm::Auto))
+          .decode_frame_alone(
+            &bytes,
+            index,
+            DecodeTarget {
+              width: 4,
+              height: 4,
+              algorithm: ImageScalingAlgorithm::Auto,
+            },
+          )
           .unwrap_or_else(|| panic!("{format} frame {index} should seek"));
 
         let mut replayed = None;
@@ -1817,7 +1826,15 @@ mod tests {
 
     assert!(
       AnimatedFormat::WebP
-        .decode_frame_alone(&bytes, 1, (4, 4, ImageScalingAlgorithm::Auto))
+        .decode_frame_alone(
+          &bytes,
+          1,
+          DecodeTarget {
+            width: 4,
+            height: 4,
+            algorithm: ImageScalingAlgorithm::Auto
+          }
+        )
         .is_none()
     );
   }

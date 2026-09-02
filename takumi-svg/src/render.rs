@@ -928,9 +928,13 @@ fn dash_attrs(
   closed: bool,
 ) -> (Option<String>, Option<&'static str>) {
   match style.dash_pattern(width, length, closed) {
-    Some(([dash, gap], round_cap)) => (
-      Some(format!("{} {}", Num(dash), Num(gap))),
-      round_cap.then_some("round"),
+    Some(dash) => (
+      Some(format!(
+        "{} {}",
+        Num(dash.intervals[0]),
+        Num(dash.intervals[1])
+      )),
+      dash.round_cap.then_some("round"),
     ),
     None => (None, None),
   }

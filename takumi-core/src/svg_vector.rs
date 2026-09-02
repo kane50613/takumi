@@ -188,7 +188,7 @@ pub struct SvgGradientStop {
 
 /// Flattens `tree` into vector ops in SVG canvas coordinates.
 pub(crate) fn flatten(tree: &Tree, raster_scale: f32) -> Vec<SvgOp> {
-  Flattener::new(raster_scale).group(tree.root())
+  Flattener::new(raster_scale).flatten(tree.root())
 }
 
 /// One op list being written, at one raster scale.
@@ -213,7 +213,7 @@ impl Flattener {
     nested.ops
   }
 
-  fn group(mut self, group: &Group) -> Vec<SvgOp> {
+  fn flatten(mut self, group: &Group) -> Vec<SvgOp> {
     self.push_group(group);
     self.ops
   }

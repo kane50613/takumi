@@ -1073,14 +1073,17 @@ impl BorderProperties {
 
 impl BorderStyle {
   /// Returns a dash interval and round-cap flag for this style.
-  pub fn dash_pattern(self, width: f32, length: f32, closed: bool) -> Option<([f32; 2], bool)> {
+  pub fn dash_pattern(self, width: f32, length: f32, closed: bool) -> Option<BorderDash> {
     if !matches!(self, BorderStyle::Dashed | BorderStyle::Dotted) || width <= 0.0 || length <= 0.0 {
       return None;
     }
 
     if self == BorderStyle::Dashed {
       let (dash, gap) = compute_dashed_intervals(width, length, closed)?;
-      return Some(([dash, gap], false));
+      return Some(BorderDash {
+        intervals: [dash, gap],
+        round_cap: false,
+      });
     }
 
     let per_dot_length = width * 2.0;
@@ -1089,8 +1092,20 @@ impl BorderStyle {
     } else {
       select_best_dash_gap(length, width, width, closed) + width - DOTTED_ENDPOINT_EPSILON
     };
-    Some(([0.0, gap], true))
+    Some(BorderDash {
+      intervals: [0.0, gap],
+      round_cap: true,
+    })
   }
+}
+
+/// The stroke dash of a `dashed`/`dotted` border or outline side.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BorderDash {
+  /// Dash and gap lengths.
+  pub intervals: [f32; 2],
+  /// Whether dots are drawn with round caps.
+  pub round_cap: bool,
 }
 
 fn compute_dashed_intervals(width: f32, length: f32, closed: bool) -> Option<(f32, f32)> {
@@ -1157,7 +1172,7 @@ impl PaintedSide {
       _ => false,
     };
 
-    self.color.mix(
+    self.color.mix_rgb(
       if lighten {
         Color::white()
       } else {

@@ -282,70 +282,72 @@ impl DecorationAccumulator {
   }
 }
 
-/// The rounded-rect contour an [`InlineBackgroundFragment`] fills, with quarter-ellipse corners.
-pub fn inline_background_path(fragment: &InlineBackgroundFragment) -> Vec<PathCommand> {
-  const KAPPA: f32 = 4.0 / 3.0 * (std::f32::consts::SQRT_2 - 1.0);
+impl InlineBackgroundFragment {
+  /// The rounded-rect contour the fragment fills, with quarter-ellipse corners.
+  pub fn path(&self) -> Vec<PathCommand> {
+    const KAPPA: f32 = 4.0 / 3.0 * (std::f32::consts::SQRT_2 - 1.0);
 
-  let InlineBackgroundFragment {
-    x,
-    y,
-    width,
-    height,
-    radii,
-    ..
-  } = *fragment;
-  let point = |x, y| Point { x, y };
-  let [tl, tr, br, bl] = radii.map(|(rx, ry)| {
-    if rx > 0.0 && ry > 0.0 {
-      (rx, ry)
-    } else {
-      (0.0, 0.0)
+    let InlineBackgroundFragment {
+      x,
+      y,
+      width,
+      height,
+      radii,
+      ..
+    } = *self;
+    let point = |x, y| Point { x, y };
+    let [tl, tr, br, bl] = radii.map(|(rx, ry)| {
+      if rx > 0.0 && ry > 0.0 {
+        (rx, ry)
+      } else {
+        (0.0, 0.0)
+      }
+    });
+    if [tl, tr, br, bl] == [(0.0, 0.0); 4] {
+      return vec![
+        PathCommand::MoveTo(point(x, y)),
+        PathCommand::LineTo(point(x + width, y)),
+        PathCommand::LineTo(point(x + width, y + height)),
+        PathCommand::LineTo(point(x, y + height)),
+        PathCommand::Close,
+      ];
     }
-  });
-  if [tl, tr, br, bl] == [(0.0, 0.0); 4] {
-    return vec![
-      PathCommand::MoveTo(point(x, y)),
-      PathCommand::LineTo(point(x + width, y)),
-      PathCommand::LineTo(point(x + width, y + height)),
-      PathCommand::LineTo(point(x, y + height)),
-      PathCommand::Close,
-    ];
-  }
-  let mut path = Vec::with_capacity(9);
+    let mut path = Vec::with_capacity(9);
 
-  path.push(PathCommand::MoveTo(point(x + tl.0, y)));
-  path.push(PathCommand::LineTo(point(x + width - tr.0, y)));
-  if tr.0 > 0.0 {
-    path.push(PathCommand::CubicTo(
-      point(x + width - tr.0 + tr.0 * KAPPA, y),
-      point(x + width, y + tr.1 - tr.1 * KAPPA),
-      point(x + width, y + tr.1),
-    ));
+    path.push(PathCommand::MoveTo(point(x + tl.0, y)));
+    path.push(PathCommand::LineTo(point(x + width - tr.0, y)));
+    if tr.0 > 0.0 {
+      path.push(PathCommand::CubicTo(
+        point(x + width - tr.0 + tr.0 * KAPPA, y),
+        point(x + width, y + tr.1 - tr.1 * KAPPA),
+        point(x + width, y + tr.1),
+      ));
+    }
+    path.push(PathCommand::LineTo(point(x + width, y + height - br.1)));
+    if br.0 > 0.0 {
+      path.push(PathCommand::CubicTo(
+        point(x + width, y + height - br.1 + br.1 * KAPPA),
+        point(x + width - br.0 + br.0 * KAPPA, y + height),
+        point(x + width - br.0, y + height),
+      ));
+    }
+    path.push(PathCommand::LineTo(point(x + bl.0, y + height)));
+    if bl.0 > 0.0 {
+      path.push(PathCommand::CubicTo(
+        point(x + bl.0 - bl.0 * KAPPA, y + height),
+        point(x, y + height - bl.1 + bl.1 * KAPPA),
+        point(x, y + height - bl.1),
+      ));
+    }
+    path.push(PathCommand::LineTo(point(x, y + tl.1)));
+    if tl.0 > 0.0 {
+      path.push(PathCommand::CubicTo(
+        point(x, y + tl.1 - tl.1 * KAPPA),
+        point(x + tl.0 - tl.0 * KAPPA, y),
+        point(x + tl.0, y),
+      ));
+    }
+    path.push(PathCommand::Close);
+    path
   }
-  path.push(PathCommand::LineTo(point(x + width, y + height - br.1)));
-  if br.0 > 0.0 {
-    path.push(PathCommand::CubicTo(
-      point(x + width, y + height - br.1 + br.1 * KAPPA),
-      point(x + width - br.0 + br.0 * KAPPA, y + height),
-      point(x + width - br.0, y + height),
-    ));
-  }
-  path.push(PathCommand::LineTo(point(x + bl.0, y + height)));
-  if bl.0 > 0.0 {
-    path.push(PathCommand::CubicTo(
-      point(x + bl.0 - bl.0 * KAPPA, y + height),
-      point(x, y + height - bl.1 + bl.1 * KAPPA),
-      point(x, y + height - bl.1),
-    ));
-  }
-  path.push(PathCommand::LineTo(point(x, y + tl.1)));
-  if tl.0 > 0.0 {
-    path.push(PathCommand::CubicTo(
-      point(x, y + tl.1 - tl.1 * KAPPA),
-      point(x + tl.0 - tl.0 * KAPPA, y),
-      point(x + tl.0, y),
-    ));
-  }
-  path.push(PathCommand::Close);
-  path
 }

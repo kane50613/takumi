@@ -1,6 +1,7 @@
 //! WebP stills and animations: libwebp on native targets, `image-webp` on
 //! wasm, and header-only sizing when the decoder is compiled out.
 
+use super::DecodeTarget;
 #[cfg(feature = "webp")]
 use std::{io::Cursor, sync::Arc};
 
@@ -24,8 +25,6 @@ use super::{
 #[cfg(not(feature = "webp"))]
 use super::{format_compiled_out_error, header_dimensions};
 use crate::resources::image_buffer::ImageBuffer;
-#[cfg(feature = "webp")]
-use crate::style::ImageScalingAlgorithm;
 
 #[cfg(all(target_arch = "wasm32", feature = "webp"))]
 pub(super) fn webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
@@ -266,13 +265,13 @@ pub(crate) fn decode_webp_frames(
   bytes: &[u8],
   skip: usize,
   limit: Option<usize>,
-  target: Option<(u32, u32, ImageScalingAlgorithm)>,
+  target: Option<DecodeTarget>,
   mut push: impl FnMut(Arc<ImageBuffer>),
 ) -> ImageResult<bool> {
   let mut decoder = WebPDecoder::new(Cursor::new(bytes)).map_err(webp_decode_error)?;
   let (width, height) = decoder.dimensions();
   check_pixel_budget(width, height)?;
-  let target = target.filter(|&(w, h, _)| w < width || h < height);
+  let target = target.filter(|target| target.shrinks(width, height));
 
   let has_alpha = decoder.has_alpha();
   let mut canvas = vec![
@@ -336,7 +335,7 @@ fn decode_animated_webp_first_frame(bytes: &[u8]) -> ImageResult<ImageBuffer> {
 pub(crate) fn decode_webp_frame_alone(
   bytes: &[u8],
   index: usize,
-  target: Option<(u32, u32, ImageScalingAlgorithm)>,
+  target: Option<DecodeTarget>,
 ) -> Option<ImageBuffer> {
   let read_24 = |bytes: &[u8], offset: usize| {
     Some(u32::from_le_bytes([
@@ -450,7 +449,7 @@ fn webp_canvas_to_buffer(
   width: u32,
   height: u32,
   has_alpha: bool,
-  target: Option<(u32, u32, ImageScalingAlgorithm)>,
+  target: Option<DecodeTarget>,
 ) -> ImageResult<ImageBuffer> {
   let rgba = if has_alpha {
     canvas.to_vec()
@@ -490,6 +489,7 @@ pub(super) fn decode_webp_scaled(
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::style::ImageScalingAlgorithm;
 
   #[cfg(feature = "webp")]
   #[test]

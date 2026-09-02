@@ -373,12 +373,12 @@ fn draw_side_pattern_border(
 
 fn compute_side_stroke(width: f32, style: BorderStyle, length: f32, closed: bool) -> Stroke {
   let mut stroke = Stroke::new(width);
-  if let Some((intervals, round_cap)) = style.dash_pattern(width, length, closed) {
-    if round_cap {
+  if let Some(dash) = style.dash_pattern(width, length, closed) {
+    if dash.round_cap {
       stroke.cap = Cap::Round;
     }
     stroke.dash = Some(DashPattern {
-      intervals,
+      intervals: dash.intervals,
       offset: 0.0,
     });
   }

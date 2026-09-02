@@ -83,16 +83,6 @@ impl CellAlignment {
   }
 }
 
-impl Display {
-  fn table_group_order(self) -> u8 {
-    match self {
-      Display::TableHeaderGroup => 0,
-      Display::TableFooterGroup => 2,
-      _ => 1,
-    }
-  }
-}
-
 /// The table's children sorted into their roles, rows flattened in render order: header rows first,
 /// then body, then footer.
 struct TableSlots {
@@ -104,6 +94,14 @@ struct TableSlots {
 }
 
 impl TableSlots {
+  fn group_order(display: Display) -> u8 {
+    match display {
+      Display::TableHeaderGroup => 0,
+      Display::TableFooterGroup => 2,
+      _ => 1,
+    }
+  }
+
   /// Extracts rows without CSS anonymous table-box fixup.
   fn collect(table: &mut RenderNode) -> Self {
     let mut captions = Vec::new();
@@ -117,7 +115,7 @@ impl TableSlots {
         Display::TableCaption => captions.push(child),
         Display::TableRow => groups.push((1, index, vec![child])),
         Display::TableHeaderGroup | Display::TableRowGroup | Display::TableFooterGroup => {
-          let order = child.context.style.display.table_group_order();
+          let order = Self::group_order(child.context.style.display);
           let rows = child.children.take().map_or_else(Vec::new, Vec::from);
 
           groups.push((

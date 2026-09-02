@@ -1,5 +1,6 @@
 //! PNG stills, streamed downscaling, and APNG timelines.
 
+use super::DecodeTarget;
 use std::{io::Cursor, sync::Arc};
 
 use image::{ImageError, ImageFormat, ImageResult, codecs::png::PngDecoder, error::DecodingError};
@@ -14,7 +15,7 @@ use super::{
 use crate::{
   resources::{
     image_buffer::{ImageBuffer, premultiply_rgba_in_place},
-    image_resampler::{StreamResampler, resample_premultiplied},
+    image_resampler::StreamResampler,
   },
   style::ImageScalingAlgorithm,
 };
@@ -208,7 +209,7 @@ fn apng_reader(bytes: &[u8]) -> ImageResult<png::Reader<Cursor<&[u8]>>> {
 pub(crate) fn decode_apng_frame_alone(
   bytes: &[u8],
   index: usize,
-  target: Option<(u32, u32, ImageScalingAlgorithm)>,
+  target: Option<DecodeTarget>,
 ) -> Option<ImageBuffer> {
   let mut reader = apng_reader(bytes).ok()?;
   let (canvas_width, canvas_height) = (reader.info().width, reader.info().height);
@@ -255,12 +256,12 @@ pub(crate) fn decode_apng_frames(
   bytes: &[u8],
   skip: usize,
   limit: Option<usize>,
-  target: Option<(u32, u32, ImageScalingAlgorithm)>,
+  target: Option<DecodeTarget>,
   mut push: impl FnMut(Arc<ImageBuffer>),
 ) -> ImageResult<bool> {
   let mut reader = apng_reader(bytes)?;
   let (width, height) = (reader.info().width, reader.info().height);
-  let target = target.filter(|&(w, h, _)| w < width || h < height);
+  let target = target.filter(|target| target.shrinks(width, height));
   let channels = match reader.output_color_type() {
     (ColorType::Rgba, BitDepth::Eight) => 4,
     (ColorType::GrayscaleAlpha, BitDepth::Eight) => 2,
@@ -410,20 +411,12 @@ impl ApngCanvas {
     }
   }
 
-  fn to_buffer(
-    &self,
-    target: Option<(u32, u32, ImageScalingAlgorithm)>,
-  ) -> ImageResult<ImageBuffer> {
+  fn to_buffer(&self, target: Option<DecodeTarget>) -> ImageResult<ImageBuffer> {
     let mut premultiplied = self.pixels.clone();
     premultiply_rgba_in_place(&mut premultiplied);
 
     match target {
-      Some((width, height, algorithm)) => resample_premultiplied(
-        &premultiplied,
-        (self.width, self.height),
-        (width, height),
-        algorithm,
-      ),
+      Some(target) => target.resample(&premultiplied, (self.width, self.height)),
       None => ImageBuffer::from_premultiplied_rgba(premultiplied, self.width, self.height),
     }
     .ok_or_else(invalid_buffer_error)
@@ -454,6 +447,7 @@ fn blend_over(target: &mut [u8], source: [u8; 4]) {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::resources::image_resampler::resample_premultiplied;
   use image::RgbaImage;
 
   use crate::resources::image_decoder::{decode_bitmap_scaled, decode_image};

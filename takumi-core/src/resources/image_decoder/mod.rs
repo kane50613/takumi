@@ -286,20 +286,37 @@ pub(super) fn covers_canvas(rect: (u32, u32, u32, u32), canvas: (u32, u32)) -> b
   x == 0 && y == 0 && width == canvas.0 && height == canvas.1
 }
 
+/// The size decoded frames resample down to, and how.
+#[derive(Clone, Copy)]
+pub(crate) struct DecodeTarget {
+  pub(crate) width: u32,
+  pub(crate) height: u32,
+  pub(crate) algorithm: ImageScalingAlgorithm,
+}
+
+impl DecodeTarget {
+  /// Whether a `width` by `height` canvas is larger than the target on either axis.
+  pub(super) fn shrinks(self, width: u32, height: u32) -> bool {
+    self.width < width || self.height < height
+  }
+
+  /// Resamples a premultiplied `source`-sized canvas to the target.
+  pub(super) fn resample(self, data: &[u8], source: (u32, u32)) -> Option<ImageBuffer> {
+    resample_premultiplied(data, source, (self.width, self.height), self.algorithm)
+  }
+}
+
 /// Resamples a full-canvas buffer down to `target`, or hands it back untouched.
 pub(super) fn fit_to_target(
   buffer: ImageBuffer,
-  target: Option<(u32, u32, ImageScalingAlgorithm)>,
+  target: Option<DecodeTarget>,
 ) -> ImageResult<ImageBuffer> {
-  let Some((width, height, algorithm)) = target else {
+  let Some(target) = target.filter(|target| target.shrinks(buffer.width(), buffer.height())) else {
     return Ok(buffer);
   };
-  if width >= buffer.width() && height >= buffer.height() {
-    return Ok(buffer);
-  }
 
-  let source = (buffer.width(), buffer.height());
-  resample_premultiplied(buffer.data(), source, (width, height), algorithm)
+  target
+    .resample(buffer.data(), (buffer.width(), buffer.height()))
     .ok_or_else(invalid_buffer_error)
 }
 

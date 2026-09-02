@@ -1,6 +1,7 @@
 //! GIF sizing and timelines, composited the way browsers and the `image` crate do; stubs when the
 //! decoder is compiled out.
 
+use super::DecodeTarget;
 use std::sync::Arc;
 #[cfg(feature = "gif")]
 use std::{io::Cursor, mem::take};
@@ -20,8 +21,8 @@ use super::{
   invalid_buffer_error, pixel_budget_error,
 };
 #[cfg(feature = "gif")]
-use crate::{geometry::Rect, resources::image_resampler::resample_premultiplied};
-use crate::{resources::image_buffer::ImageBuffer, style::ImageScalingAlgorithm};
+use crate::geometry::Rect;
+use crate::resources::image_buffer::ImageBuffer;
 
 pub(crate) fn is_gif(bytes: &[u8]) -> bool {
   matches!(detect_image_format(bytes), Some(DetectedImageFormat::Gif))
@@ -160,12 +161,12 @@ pub(crate) fn decode_gif_frames(
   bytes: &[u8],
   skip: usize,
   limit: Option<usize>,
-  target: Option<(u32, u32, ImageScalingAlgorithm)>,
+  target: Option<DecodeTarget>,
   mut push: impl FnMut(Arc<ImageBuffer>),
 ) -> ImageResult<bool> {
   let mut decoder = gif_decoder(bytes)?;
   let (width, height) = (decoder.width() as u32, decoder.height() as u32);
-  let target = target.filter(|&(w, h, _)| w < width || h < height);
+  let target = target.filter(|target| target.shrinks(width, height));
 
   // GIF alpha is 0 or 255, so the canvas is valid premultiplied RGBA as-is:
   // blits copy opaque pixels (premultiply is identity) and cleared pixels are
@@ -225,13 +226,8 @@ pub(crate) fn decode_gif_frames(
         blit_frame(&mut canvas, (width, height), rect, &scratch);
         if !keep {
           None
-        } else if let Some((w, h, algorithm)) = target {
-          Some(resample_premultiplied(
-            &canvas,
-            (width, height),
-            (w, h),
-            algorithm,
-          ))
+        } else if let Some(target) = target {
+          Some(target.resample(&canvas, (width, height)))
         } else if last_needed {
           // The canvas is never read again: emit it without cloning.
           Some(ImageBuffer::from_premultiplied_rgba(
@@ -252,9 +248,7 @@ pub(crate) fn decode_gif_frames(
           let mut out = canvas.clone();
           blit_frame(&mut out, (width, height), rect, &scratch);
           match target {
-            Some((w, h, algorithm)) => {
-              resample_premultiplied(&out, (width, height), (w, h), algorithm)
-            }
+            Some(target) => target.resample(&out, (width, height)),
             None => ImageBuffer::from_premultiplied_rgba(out, width, height),
           }
         });
@@ -283,7 +277,7 @@ pub(crate) fn decode_gif_frames(
 pub(crate) fn decode_gif_frame_alone(
   bytes: &[u8],
   index: usize,
-  target: Option<(u32, u32, ImageScalingAlgorithm)>,
+  target: Option<DecodeTarget>,
 ) -> Option<ImageBuffer> {
   let mut decoder = gif_decoder(bytes).ok()?;
   let (canvas_width, canvas_height) = (decoder.width() as u32, decoder.height() as u32);
@@ -334,7 +328,7 @@ pub(crate) fn gif_frame_infos(_bytes: &[u8]) -> ImageResult<Box<[FrameInfo]>> {
 pub(crate) fn decode_gif_frame_alone(
   _bytes: &[u8],
   _index: usize,
-  _target: Option<(u32, u32, ImageScalingAlgorithm)>,
+  _target: Option<DecodeTarget>,
 ) -> Option<ImageBuffer> {
   None
 }
@@ -344,7 +338,7 @@ pub(crate) fn decode_gif_frames(
   _bytes: &[u8],
   _skip: usize,
   _limit: Option<usize>,
-  _target: Option<(u32, u32, ImageScalingAlgorithm)>,
+  _target: Option<DecodeTarget>,
   _push: impl FnMut(Arc<ImageBuffer>),
 ) -> ImageResult<bool> {
   Err(format_compiled_out_error())

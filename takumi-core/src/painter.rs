@@ -363,8 +363,8 @@ pub fn paint_border<D: PaintDevice>(
         &StrokeStyle {
           color,
           width,
-          dash: dash.map(|(intervals, _)| intervals),
-          round_cap: dash.is_some_and(|(_, round)| round),
+          dash: dash.map(|dash| dash.intervals),
+          round_cap: dash.is_some_and(|dash| dash.round_cap),
         },
         at,
       );

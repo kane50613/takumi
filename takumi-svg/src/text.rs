@@ -16,8 +16,7 @@ use takumi_core::{
     inline::{
       DecorationRect, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineOutlineRect,
       InlineRunLayout, PositionedInlineRun, ProcessedInlineSpan, ShapedRun, collect_inline_items,
-      create_inline_layout, inline_background_path, outline_island_contour, outline_islands,
-      resolve_inline_runs, run_decorations,
+      create_inline_layout, outline_island_contour, outline_islands,
     },
     node::TextData,
     tree::RenderNode,
@@ -93,7 +92,7 @@ pub(crate) fn emit_text(
     InlineLayoutMode::Draw,
   ));
 
-  let runs = resolve_inline_runs(&built, context, layout).map_err(font_error)?;
+  let runs = built.resolve_runs(context, layout).map_err(font_error)?;
   emit_runs(
     doc,
     &runs,
@@ -130,7 +129,7 @@ pub(crate) fn emit_inline_content(
     InlineLayoutMode::Draw,
   ));
 
-  let runs = resolve_inline_runs(&built, context, layout).map_err(font_error)?;
+  let runs = built.resolve_runs(context, layout).map_err(font_error)?;
   emit_runs(
     doc,
     &runs,
@@ -161,7 +160,7 @@ fn emit_runs(
   // Inline-span backgrounds fill under every glyph of the formatting context.
   for fragment in &runs.background_fragments {
     let data = path_data(
-      &inline_background_path(fragment),
+      &fragment.path(),
       [1.0, 0.0, 0.0, 1.0, frame.origin_x, frame.origin_y],
     );
 
@@ -198,8 +197,7 @@ fn emit_runs(
     .runs
     .iter()
     .map(|run| {
-      run_decorations(
-        &run.glyph_run,
+      run.glyph_run.decorations(
         &run.resolved_glyphs,
         frame.layout,
         run.baseline_shift,
