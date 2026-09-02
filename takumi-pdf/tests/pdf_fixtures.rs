@@ -4387,6 +4387,12 @@ const FORM_SOURCE: &str = r#"
   <input type="password" name="secret" value="hunter2" disabled aria-label="Secret"
     style="width:160px;height:24px;border:1px solid #999" />
 
+  <label for="plan" style="font-size:11px">Plan</label>
+  <select id="plan" name="plan" style="width:180px;height:26px;border:1px solid #999">
+    <option value="M">Monthly</option>
+    <option value="A" selected>Annual</option>
+  </select>
+
   <label for="terms">Accept</label>
   <input id="terms" type="checkbox" name="terms" value="yes (signed)" checked
     style="width:14px;height:14px;color:#15803d;border:1px solid #999" />
@@ -4432,6 +4438,10 @@ fn form_fields_render_as_widgets() {
     // `disabled` is read-only and stays out of the submission.
     "/Ff 8197",
     "(*******)",
+    // The drop-down submits the export value and draws the label.
+    "/FT/Ch",
+    "/V(A)/DV(A)",
+    "/Opt[[(M)(Monthly)][(A)(Annual)]]",
     // The check box files its on appearance under what it submits, escaped
     // once by the name it is written as.
     "/AS/yes#20#28signed#29",
@@ -4457,8 +4467,8 @@ fn form_fields_render_as_widgets() {
   );
   // One appearance stream per field, and every one of them names the shared
   // face its `/DA` does.
-  assert_eq!(pdf.matches("/Tx BMC").count(), 3);
-  assert_eq!(pdf.matches("/Font<</Helv").count(), 4);
+  assert_eq!(pdf.matches("/Tx BMC").count(), 4);
+  assert_eq!(pdf.matches("/Font<</Helv").count(), 5);
 }
 
 #[test]
@@ -4575,6 +4585,47 @@ fn a_dropped_button_leaves_the_group_numbered_from_zero() {
   assert!(pdf.contains("/Opt[(B)]"));
   assert!(pdf.contains("/V/0"));
   assert!(pdf.contains("/AS/0"));
+}
+
+#[test]
+fn a_multiple_select_holds_every_selected_option() {
+  let fonts = fonts();
+  let source = r#"<div><select name="plan" multiple style="width:180px;height:60px">
+    <option value="M" selected>Monthly</option>
+    <option value="Q">Quarterly</option>
+    <option value="A" selected>Annual</option>
+  </select></div>"#;
+  let bytes = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .build(),
+  );
+  let pdf = String::from_utf8_lossy(&bytes);
+
+  assert!(pdf.contains("/V[(M)(A)]"));
+  assert!(pdf.contains("/DV[(M)(A)]"));
+}
+
+#[test]
+fn a_select_without_a_selection_holds_its_first_option() {
+  let fonts = fonts();
+  let source = r#"<div><select name="plan" style="width:180px;height:26px">
+    <option value="M">Monthly</option>
+    <option value="A">Annual</option>
+  </select></div>"#;
+  let bytes = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .build(),
+  );
+
+  assert!(String::from_utf8_lossy(&bytes).contains("/V(M)"));
 }
 
 #[test]
