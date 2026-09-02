@@ -14,7 +14,7 @@ use crate::{
   bands::{RepeatBounds, Repeatable, RepeatablePage},
   emitter::DocumentState,
   inline::{InlineMap, TextBox, build_inline_map},
-  interactive::add_link_annotations,
+  interactive::{add_field_annotations, add_link_annotations},
   krilla::{
     Document,
     destination::XyzDestination,
@@ -313,6 +313,16 @@ impl PageComposer<'_, '_> {
       (frame.margin.left, frame.margin.top + slice.reserved),
       self.state.tags.as_ref(),
       anchor,
+    );
+    add_field_annotations(
+      &mut pdf_page,
+      &paginated.interactive,
+      Window {
+        y: Some((slice.start, slice.start + slice.paint_height)),
+        ..Window::default()
+      },
+      (frame.margin.left, frame.margin.top + slice.reserved),
+      self.state,
     );
     // A repeated box sits at the same place on every page, so its links are
     // added per page against the page area rather than the content window.

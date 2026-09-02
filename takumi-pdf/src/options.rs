@@ -59,6 +59,9 @@ pub enum PdfError {
   InvalidPageRange(String),
   /// The page ranges select none of the document's pages.
   PageRangesOutOfBounds(usize),
+  /// Two form controls that are not one radio group share a `name`. PDF would
+  /// merge them into a single field showing one value in both places.
+  DuplicateFieldName(String),
 }
 
 impl std::fmt::Display for PdfError {
@@ -88,6 +91,10 @@ impl std::fmt::Display for PdfError {
       Self::MissingGlyphs(characters) => write!(
         f,
         "No registered font covers {characters}. Register one that does."
+      ),
+      Self::DuplicateFieldName(name) => write!(
+        f,
+        "More than one form control is named {name}. Only the buttons of one radio group may share a name."
       ),
       Self::InvalidPageRange(range) => {
         write!(
@@ -364,11 +371,24 @@ pub struct PdfOptions<'g> {
   /// (`A2a`, `A3a`) force it on.
   #[builder(default)]
   pub tagged: Tagging,
+  /// Emits `<input>`, `<textarea>` and `<select>` as fillable AcroForm fields.
+  /// Unset draws them as the static boxes their CSS describes.
+  #[builder(default, setter(strip_option))]
+  pub form: Option<FormOptions>,
   /// Files attached to the document, shown in the viewer's attachment panel.
   /// The PDF/A-3 levels require each to carry a mime type, a description, and
   /// a modification date ([`PdfMetadata::creation_date`] is the fallback).
   #[builder(default)]
   pub attachments: Vec<Attachment>,
+}
+
+/// How the document's fillable fields are emitted.
+#[derive(Debug, Clone, Default)]
+pub struct FormOptions {
+  /// Family embedded whole into the form's default resources, which a viewer
+  /// redraws an edited field with. Defaults to the first registered family.
+  /// Subsetting cannot apply here: what a reader will type is unknown.
+  pub font: Option<String>,
 }
 
 /// A file attached to the document.

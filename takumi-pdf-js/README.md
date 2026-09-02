@@ -226,6 +226,47 @@ const pdf = await render(report, {
 
 Invalid combinations are **TypeScript type errors**. See the [PDF/A docs](https://takumi.kane.tw/docs/pdf/pdf-a) for the structure-tree mapping and required metadata.
 
+## Fillable forms
+
+`form: true` turns `<input>`, `<textarea>` and `<select>` into AcroForm fields a reader can fill in. Left off, the same markup draws as the static boxes its CSS describes, so one template covers both the fillable form and the printed copy.
+
+```tsx
+const pdf = await render(
+  <form>
+    <label htmlFor="name">Full name</label>
+    <input id="name" name="name" defaultValue="Kane" required />
+
+    <input type="checkbox" name="subscribe" defaultChecked />
+    <select name="plan">
+      <option value="A">Annual</option>
+      <option value="M">Monthly</option>
+    </select>
+  </form>,
+  { form: true },
+);
+```
+
+Fields come from the HTML attributes you already write. There is no second set of components.
+
+| HTML                                                                   | PDF                                                       |
+| ---------------------------------------------------------------------- | --------------------------------------------------------- |
+| `name`                                                                 | The field name. Radio buttons sharing one become a group. |
+| `value`, `checked`                                                     | The value the field starts and resets to.                 |
+| `required`, `readonly`, `disabled`                                     | Field flags.                                              |
+| `maxlength`                                                            | The longest value a reader may type.                      |
+| `<textarea>`, `<input type="password">`                                | Multiline and password fields.                            |
+| `<select>` and its `<option value>`                                    | A drop-down and the values it submits.                    |
+| `aria-label`, `<label for>`, `title`, `placeholder`                    | The name a screen reader announces.                       |
+| `color`, `font-size`, `background-color`, `border-color`, `text-align` | How a reader redraws the field after an edit.             |
+
+A control paints through the normal CSS pipeline, so its border, background and radius are whatever the stylesheet says, and the field draws only the value on top. Once a reader edits the value, the reader redraws the field itself from the colors and size in the table above. A rounded corner or a gradient does not survive that redraw.
+
+Two controls may share a `name` only when they are the buttons of one radio group. Anything else fails the render instead of merging into one field that shows the same value twice.
+
+Form controls lay out as block-level boxes.
+
+Values draw with the standard Helvetica face. A prefilled value outside the Latin alphabet does not render yet, and a document that has prefilled values does not pass PDF/UA. A blank form embeds no such font and passes.
+
 ## Attachments
 
 Attach files with `attachments`. They appear in the viewer's attachment panel. Combine with `pdfa: "3b"` for ZUGFeRD and Factur-X electronic invoices:

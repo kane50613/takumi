@@ -7,7 +7,7 @@ use takumi_core::{
   font_style::SizedFontStyle,
   geometry::{ComputedLayout as Layout, NodeId},
   layout::{
-    node::NodeKind,
+    node::{Node, NodeKind},
     tree::{LayoutResults, RenderNode},
   },
   scene::{NodePaint, PaintItemKind, StackingContextNode},
@@ -16,6 +16,7 @@ use takumi_core::{
 
 use crate::{
   inline::{InlineMap, build_inline_runs, inline_box_atoms, node_inline_items, text_line_atoms},
+  interactive::is_form_control,
   options::PdfError,
   pagination::{Atom, Paragraph},
 };
@@ -129,7 +130,15 @@ impl AtomCollector<'_> {
     if style.break_after == BreakBetween::Page {
       atoms.forced.push(y + layout.size.height);
     }
-    if style.break_inside == BreakInside::Avoid {
+    // A control cut in half is not a control: its widget annotation has one
+    // rectangle on one page, so the box it covers cannot straddle a break.
+    let control = node
+      .node
+      .as_ref()
+      .and_then(Node::tag_name)
+      .is_some_and(is_form_control);
+
+    if style.break_inside == BreakInside::Avoid || control {
       atoms.extents.push((y, y + layout.size.height));
     }
 

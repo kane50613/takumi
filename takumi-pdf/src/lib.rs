@@ -96,14 +96,14 @@ use takumi_core::{
 pub const PRODUCER: &str = concat!("takumi-pdf ", env!("CARGO_PKG_VERSION"));
 
 pub use crate::options::{
-  Attachment, AttachmentRelationship, MeasureOptions, MeasuredSize, PageMargin, PageMargins,
-  PageOptions, PageRange, PdfDate, PdfError, PdfMetadata, PdfOptions, PdfStandard, Tagging,
-  XmpProperty, XmpSchema,
+  Attachment, AttachmentRelationship, FormOptions, MeasureOptions, MeasuredSize, PageMargin,
+  PageMargins, PageOptions, PageRange, PdfDate, PdfError, PdfMetadata, PdfOptions, PdfStandard,
+  Tagging, XmpProperty, XmpSchema,
 };
 use crate::{
   emitter::DocumentState,
   inline::{TextBox, build_inline_map},
-  interactive::{Interactive, add_link_annotations},
+  interactive::{Interactive, add_field_annotations, add_link_annotations},
   krilla::{
     Document, SerializeSettings,
     configure::ConfigurationBuilder,
@@ -172,7 +172,11 @@ pub fn render(mut options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
     lang: options.lang,
   };
   let tagged = options.tagged != Tagging::Off || options.standard.requires_tagging();
-  let state = DocumentState::new(tagged, inputs.lang.as_ref().map(Lang::as_str));
+  let state = DocumentState::new(
+    tagged,
+    inputs.lang.as_ref().map(Lang::as_str),
+    options.form.as_ref(),
+  );
   let structural = options.tagged.names_structure_destinations();
   let rendered = match options.page {
     Some(page) => {
@@ -215,11 +219,17 @@ pub fn render(mut options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
         .outline(|heading| rendered.destination(heading.top, &heading.path)),
     );
   }
+  if state.form.is_some()
+    && let Some(name) = rendered.interactive().duplicate_field_names.first()
+  {
+    return Err(PdfError::DuplicateFieldName(name.clone()));
+  }
   if let Some(collector) = &state.tags {
     pdf.set_tag_tree(collector.borrow_mut().build_tree(
       rendered.root(),
       state.lang,
       &rendered.interactive().destination_targets(),
+      state.form.is_some(),
     ));
   }
   if let Some(error) = state.into_error() {
@@ -384,6 +394,16 @@ impl SinglePage {
           .get(id)
           .map(|anchor| rendered.destination(anchor.top, &anchor.path))
       },
+    );
+    add_field_annotations(
+      &mut page,
+      &rendered.interactive,
+      Window {
+        y: Some((0.0, rendered.content.height)),
+        ..Window::default()
+      },
+      (0.0, 0.0),
+      state,
     );
     page.finish();
     Ok(rendered)

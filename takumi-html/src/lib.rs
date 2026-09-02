@@ -91,6 +91,15 @@ const DEFAULT_PRESETS: &[(&str, &str)] = &[
   ("dt", "display:block"),
   ("dd", "margin-left:40px;display:block"),
   ("form", "display:block"),
+  // A control needs a box of its own, which an inline-level box does not get.
+  // Browsers make these `inline-block`; the engine lays inline boxes out
+  // through the text machinery, where nothing owns the control's rectangle.
+  ("input", "display:block"),
+  ("textarea", "display:block"),
+  ("select", "display:block"),
+  // A `<select>` shows its selected option, never the list, so the options
+  // themselves lay out nowhere.
+  ("option", "display:none"),
   (
     "fieldset",
     "margin-left:2px;margin-right:2px;padding-top:0.35em;padding-right:0.75em;padding-bottom:0.625em;padding-left:0.75em;border-width:2px;display:block",

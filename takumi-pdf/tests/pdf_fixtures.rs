@@ -30,8 +30,9 @@ use takumi_core::{
 };
 use takumi_html::{FromHtmlOptions, from_html};
 use takumi_pdf::{
-  Attachment, AttachmentRelationship, MeasureOptions, PageMargins, PageOptions, PageRange, PdfDate,
-  PdfError, PdfMetadata, PdfOptions, PdfStandard, Tagging, XmpProperty, XmpSchema, measure, render,
+  Attachment, AttachmentRelationship, FormOptions, MeasureOptions, PageMargins, PageOptions,
+  PageRange, PdfDate, PdfError, PdfMetadata, PdfOptions, PdfStandard, Tagging, XmpProperty,
+  XmpSchema, measure, render,
 };
 
 fn fonts() -> Fonts {
@@ -4371,4 +4372,118 @@ fn paged_inline_span_background_paints_once() {
     1,
     "the badge fill must be emitted once, on its owning page"
   );
+}
+
+const FORM_SOURCE: &str = r#"
+<div style="display:flex;flex-direction:column;gap:12px;font-size:13px">
+  <label for="name" style="font-size:11px">Full name</label>
+  <input id="name" name="name" value="Kane" required
+    style="width:280px;height:26px;color:#1d4ed8;background-color:#eff6ff;border:1px solid #93c5fd;text-align:right" />
+
+  <label for="notes" style="font-size:11px">Notes</label>
+  <textarea id="notes" name="notes" maxlength="200" value="Two lines of wrapped text in a multiline field."
+    style="width:280px;height:48px;border:1px solid #999"></textarea>
+
+  <label for="secret" style="font-size:11px">Secret</label>
+  <input id="secret" type="password" name="secret" readonly
+    style="width:160px;height:24px;border:1px solid #999" />
+
+  <label for="plan" style="font-size:11px">Plan</label>
+  <select id="plan" name="plan" value="Annual" style="width:180px;height:26px;border:1px solid #999">
+    <option value="M">Monthly</option>
+    <option value="A">Annual</option>
+  </select>
+
+  <label for="terms">Accept</label>
+  <input id="terms" type="checkbox" name="terms" value="yes (signed)" checked
+    style="width:14px;height:14px;color:#15803d;border:1px solid #999" />
+
+  <input type="radio" aria-label="Shipping" name="ship" value="Standard" checked
+    style="width:14px;height:14px;border:1px solid #999" />
+  <input type="radio" aria-label="Shipping" name="ship" value="Express"
+    style="width:14px;height:14px;border:1px solid #999" />
+</div>
+"#;
+
+fn form_options(fonts: &Fonts) -> PdfOptions<'_> {
+  PdfOptions::builder()
+    .node(from_html(FORM_SOURCE, FromHtmlOptions::default()).expect("parse form fixture"))
+    .page(PageOptions::A4.with_margin(36.0))
+    .fonts(fonts)
+    .form(FormOptions::default())
+    .build()
+}
+
+#[test]
+fn form_fields_render_as_widgets() {
+  let fonts = fonts();
+  let bytes = run_pdf_fixture_with("form_fields", &fonts, form_options);
+  let pdf = String::from_utf8_lossy(&bytes);
+
+  for expected in [
+    "/AcroForm",
+    "/Widget",
+    // The radio group owns its buttons, whose states are numbered so an
+    // export value a PDF name cannot carry still round trips.
+    "/Kids",
+    "/Opt",
+    "/MaxLen 200",
+    "/TU",
+    "/DV",
+  ] {
+    assert!(pdf.contains(expected), "form output is missing {expected}");
+  }
+}
+
+#[test]
+fn form_fields_are_absent_without_the_option() {
+  let fonts = fonts();
+  let bytes = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(FORM_SOURCE, FromHtmlOptions::default()).expect("parse form fixture"))
+      .page(PageOptions::A4.with_margin(36.0))
+      .fonts(&fonts)
+      .build(),
+  );
+
+  assert!(!String::from_utf8_lossy(&bytes).contains("/AcroForm"));
+}
+
+#[test]
+fn duplicate_field_names_are_rejected() {
+  let fonts = fonts();
+  let source = r#"<div><input name="who" style="width:80px;height:20px" />
+    <input name="who" style="width:80px;height:20px" /></div>"#;
+  let error = render(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(FormOptions::default())
+      .build(),
+  )
+  .expect_err("duplicate names should fail the render");
+
+  assert!(matches!(error, PdfError::DuplicateFieldName(name) if name == "who"));
+}
+
+#[test]
+fn blank_fields_embed_no_font() {
+  let fonts = fonts();
+  let source = r#"<div><input name="empty" style="width:80px;height:20px" /></div>"#;
+  let bytes = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(FormOptions::default())
+      .build(),
+  );
+
+  let pdf = String::from_utf8_lossy(&bytes);
+
+  // A field with nothing in it draws no text, so it pulls in no standard font
+  // for a validator to reject. The form itself is still there.
+  assert!(!pdf.contains("Helvetica"));
+  assert!(pdf.contains("/AcroForm"));
 }

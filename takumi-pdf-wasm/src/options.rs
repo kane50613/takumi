@@ -11,7 +11,7 @@ use takumi_core::{
   style::{Color, ColorInput, CssSource, FromCssStr},
   viewport::Viewport,
 };
-use takumi_pdf::{PageMargin, PageMargins, PageOptions, PageRange};
+use takumi_pdf::{FormOptions, PageMargin, PageMargins, PageOptions, PageRange};
 
 use crate::{
   map_error,
@@ -232,6 +232,31 @@ pub(crate) struct PdfRenderOptions {
   pub(crate) tagged: Option<TaggedInput>,
   /// Files attached to the document.
   pub(crate) attachments: Option<Vec<AttachmentInput>>,
+  /// Emits `<input>`, `<textarea>` and `<select>` as fillable form fields:
+  /// `false` (default), `true`, or an object naming the font their values
+  /// draw with.
+  pub(crate) form: Option<FormInput>,
+}
+
+/// Whether the document carries fillable fields, and how they are drawn.
+#[derive(Deserialize)]
+#[serde(untagged)]
+pub(crate) enum FormInput {
+  Enabled(bool),
+  Options {
+    #[serde(default)]
+    font: Option<String>,
+  },
+}
+
+impl From<FormInput> for Option<FormOptions> {
+  fn from(input: FormInput) -> Self {
+    match input {
+      FormInput::Enabled(false) => None,
+      FormInput::Enabled(true) => Some(FormOptions::default()),
+      FormInput::Options { font } => Some(FormOptions { font }),
+    }
+  }
 }
 
 pub(crate) fn decode_images(

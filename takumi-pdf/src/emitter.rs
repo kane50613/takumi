@@ -6,7 +6,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use takumi_core::{
   context::RenderContext,
   layout::{
-    node::{ImageData, ImageSourceInput, resolve_image},
+    node::{ImageData, ImageSourceInput, Node, resolve_image},
     replaced::place_replaced,
   },
   resources::image::ImageSource,
@@ -40,8 +40,10 @@ use takumi_core::{
   },
 };
 
+use crate::interactive::is_form_control;
 #[cfg(feature = "images")]
 use crate::krilla::{geom::Size as KrillaSize, image::Image as KrillaImage};
+use crate::options::FormOptions;
 #[cfg(feature = "images")]
 use crate::paint::rasterized_image;
 #[cfg(all(feature = "svg", feature = "images"))]
@@ -155,15 +157,18 @@ pub(crate) struct DocumentState<'a> {
   /// its content marked with that language, which is how a reader knows to
   /// switch voices mid-document.
   pub(crate) lang: Option<&'a str>,
+  /// Present when the document emits fillable fields.
+  pub(crate) form: Option<&'a FormOptions>,
 }
 
 impl<'a> DocumentState<'a> {
-  pub(crate) fn new(tagged: bool, lang: Option<&'a str>) -> Self {
+  pub(crate) fn new(tagged: bool, lang: Option<&'a str>, form: Option<&'a FormOptions>) -> Self {
     Self {
       fonts: RefCell::new(FontMap::default()),
       tags: tagged.then(RefCell::default),
       issues: RefCell::default(),
       lang,
+      form,
     }
   }
 
@@ -465,7 +470,7 @@ impl Emitter<'_> {
     let tagged = self.tagged && has_own_content(node);
 
     if tagged {
-      if decorative_image(node) {
+      if decorative_image(node) || self.inside_form_control(&paint.path) {
         surface.start_tagged(ContentTag::Artifact(Artifact::new(
           ArtifactType::Other,
           None,
@@ -1629,6 +1634,21 @@ impl Emitter<'_> {
     {
       tags.borrow_mut().record(&self.tag_path(&path), identifier);
     }
+  }
+
+  /// Whether this box sits inside a form control. PDF/UA admits one child
+  /// under a `Form` element, the widget annotation, so everything the control
+  /// paints is an artifact.
+  fn inside_form_control(&self, path: &[usize]) -> bool {
+    self.document.form.is_some()
+      && (0..=path.len()).any(|depth| {
+        self
+          .root
+          .node_at_path(&path[..depth])
+          .and_then(|node| node.node.as_ref())
+          .and_then(Node::tag_name)
+          .is_some_and(is_form_control)
+      })
   }
 
   /// The document-rooted path of a node this emitter reached at `path`.

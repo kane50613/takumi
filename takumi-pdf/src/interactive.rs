@@ -13,16 +13,18 @@ use takumi_core::{
     inline::{
       InlineItem, InlineLayoutMode, InlineLayoutRequest, collect_inline_items, create_inline_layout,
     },
+    node::{Node, NodeKind},
     tree::RenderNode,
   },
   scene::NodePaint,
-  style::{Affine, Position},
+  style::{Affine, Color, Position, TextAlign},
 };
 
 use crate::{
+  emitter::DocumentState,
   krilla::{
     action::{Action, LinkAction},
-    annotation::{Annotation, LinkAnnotation, Target},
+    annotation::{Annotation, FormField, LinkAnnotation, Target, WidgetAnnotation, WidgetStyle},
     destination::{Destination, XyzDestination},
     geom::Rect as KrillaRect,
     outline::{Outline, OutlineNode},
@@ -42,9 +44,232 @@ pub(crate) struct LinkTarget {
   path: Vec<usize>,
 }
 
+/// A form field box in content coordinates.
+pub(crate) struct FieldTarget {
+  name: String,
+  rect: KrillaRect,
+  field: FieldKind,
+  style: FieldStyle,
+  /// The accessible name, absent when the element names itself only through a
+  /// `<label for>` that has not been seen yet.
+  described: Option<String>,
+  /// The `id` a `<label for>` would point at.
+  id: Option<String>,
+  /// Source-node path, so the widget can join that node's `Form` element.
+  path: Vec<usize>,
+  /// This button's place among the radio buttons sharing its name.
+  group_index: usize,
+}
+
+/// What kind of control an element asks for, before it is placed on a page.
+enum FieldKind {
+  Text {
+    value: String,
+    multiline: bool,
+    password: bool,
+    max_len: Option<i32>,
+  },
+  CheckBox {
+    on: bool,
+    export: String,
+  },
+  Radio {
+    /// The submitted value, which becomes a group index once every button of
+    /// the group is known.
+    export: String,
+    on: bool,
+  },
+  Choice {
+    value: String,
+    options: Vec<(String, Option<String>)>,
+    /// Whether more than one option can be picked, which also makes the
+    /// control a list box rather than a drop-down.
+    multi: bool,
+  },
+}
+
+/// The CSS a widget is painted with, kept so the field can carry it too.
+struct FieldStyle {
+  color: [f32; 3],
+  font_size: f32,
+  background: Option<[f32; 3]>,
+  /// The border color and the width it is stroked at.
+  border: Option<([f32; 3], f32)>,
+  /// `/Q`: 0 left, 1 center, 2 right.
+  align: i32,
+  read_only: bool,
+  required: bool,
+}
+
+impl FieldStyle {
+  fn to_widget(&self) -> WidgetStyle {
+    WidgetStyle {
+      color: self.color,
+      font_size: self.font_size,
+      background: self.background,
+      border: self.border,
+      align: self.align,
+      read_only: self.read_only,
+      required: self.required,
+    }
+  }
+}
+
+/// The color as PDF's three components, absent when fully transparent.
+fn pdf_color(color: Color) -> Option<[f32; 3]> {
+  let [red, green, blue, alpha] = color.0;
+
+  (alpha > 0).then(|| [red, green, blue].map(|channel| channel as f32 / 255.0))
+}
+
+impl Interactive {
+  /// Numbers each control among the ones sharing its name, which is what
+  /// names a radio button's appearance state, and records the names that more
+  /// than one non-radio control claims.
+  fn resolve_field_names(&mut self) {
+    let mut counts: HashMap<String, usize> = HashMap::new();
+
+    for field in &mut self.fields {
+      let index = counts.entry(field.name.clone()).or_default();
+
+      field.group_index = *index;
+      *index += 1;
+
+      if *index == 2 && !matches!(field.field, FieldKind::Radio { .. }) {
+        self.duplicate_field_names.push(field.name.clone());
+      }
+    }
+  }
+}
+
+/// Whether the tag names a form control, whose widget annotation replaces the
+/// content its box would otherwise contribute.
+pub(crate) fn is_form_control(tag: &str) -> bool {
+  ["input", "textarea", "select"]
+    .iter()
+    .any(|control| tag.eq_ignore_ascii_case(control))
+}
+
+/// Reads the control an element asks for, absent when it is not one.
+fn field_kind(source: &Node, node: &RenderNode) -> Option<FieldKind> {
+  let tag = source.tag_name()?;
+  let max_len = source
+    .attribute("maxlength")
+    .and_then(|value| value.parse().ok());
+
+  if tag.eq_ignore_ascii_case("textarea") {
+    return Some(FieldKind::Text {
+      value: source.attribute("value").unwrap_or_default().to_string(),
+      multiline: true,
+      password: false,
+      max_len,
+    });
+  }
+
+  if tag.eq_ignore_ascii_case("select") {
+    let options = option_labels(node);
+
+    return Some(FieldKind::Choice {
+      value: source
+        .attribute("value")
+        .map(str::to_string)
+        .or_else(|| options.first().map(|(display, _)| display.clone()))
+        .unwrap_or_default(),
+      options,
+      multi: source.attribute("multiple").is_some(),
+    });
+  }
+
+  if !tag.eq_ignore_ascii_case("input") {
+    return None;
+  }
+
+  let value = source.attribute("value").unwrap_or_default().to_string();
+  let checked = source.attribute("checked").is_some();
+
+  let kind = source.attribute("type").unwrap_or("text");
+  // An unnamed value submits as `on`, which is what a browser sends.
+  let export = match value.is_empty() {
+    true => "on".to_string(),
+    false => value.clone(),
+  };
+
+  Some(match kind {
+    kind if kind.eq_ignore_ascii_case("checkbox") => FieldKind::CheckBox {
+      on: checked,
+      export,
+    },
+    kind if kind.eq_ignore_ascii_case("radio") => FieldKind::Radio {
+      export,
+      on: checked,
+    },
+    _ => FieldKind::Text {
+      value,
+      multiline: false,
+      password: kind.eq_ignore_ascii_case("password"),
+      max_len,
+    },
+  })
+}
+
+/// Every `<option>` under a `<select>` as its label and the value it submits.
+/// Layout moves the source children into the render tree, so both are read
+/// from there.
+fn option_labels(node: &RenderNode) -> Vec<(String, Option<String>)> {
+  let mut labels = Vec::new();
+
+  collect_option_labels(node, &mut labels);
+
+  labels
+}
+
+fn collect_option_labels(node: &RenderNode, labels: &mut Vec<(String, Option<String>)>) {
+  for child in node.children.as_deref().unwrap_or_default() {
+    let is_option = child
+      .node
+      .as_ref()
+      .and_then(Node::tag_name)
+      .is_some_and(|tag| tag.eq_ignore_ascii_case("option"));
+
+    match is_option {
+      true => labels.push((
+        option_text(child),
+        child
+          .node
+          .as_ref()
+          .and_then(|node| node.attribute("value"))
+          .map(str::to_string),
+      )),
+      false => collect_option_labels(child, labels),
+    }
+  }
+}
+
+/// Every piece of text under one `<option>`, joined.
+fn option_text(node: &RenderNode) -> String {
+  let mut text = match node.node.as_ref().map(|node| &node.kind) {
+    Some(NodeKind::Text(data)) => data.text.clone(),
+    _ => String::new(),
+  };
+
+  if let Some(content) = &node.anonymous_text_content {
+    text.push_str(content);
+  }
+  for child in node.children.as_deref().unwrap_or_default() {
+    text.push_str(&option_text(child));
+  }
+
+  text
+}
+
 /// Link, heading and anchor targets collected from one tree.
 pub(crate) struct Interactive {
   pub(crate) links: Vec<LinkTarget>,
+  pub(crate) fields: Vec<FieldTarget>,
+  /// `<label for>` text by the id it names, for field tooltips.
+  pub(crate) labels: HashMap<String, String>,
+  /// Names more than one non-radio control claims.
+  pub(crate) duplicate_field_names: Vec<String>,
   pub(crate) headings: Vec<HeadingTarget>,
   /// Element ids to the box they name, for `href="#id"`.
   pub(crate) anchors: HashMap<Box<str>, AnchorTarget>,
@@ -115,12 +340,16 @@ impl Interactive {
   pub(crate) fn collect(tree: &PreparedTree) -> Self {
     let mut collected = Self {
       links: Vec::new(),
+      fields: Vec::new(),
+      labels: HashMap::new(),
+      duplicate_field_names: Vec::new(),
       headings: Vec::new(),
       anchors: HashMap::new(),
       extents: HashMap::new(),
     };
 
     tree.for_each_paint(|paint| collect_interactive_paint(tree, paint, &mut collected));
+    collected.resolve_field_names();
     collected.headings.sort_by(|a, b| a.top.total_cmp(&b.top));
     collected
   }
@@ -174,6 +403,59 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
     collected.extents.entry(index).or_insert(BoxExtent {
       top: rect.top(),
       flow_bottom,
+    });
+  }
+
+  if source
+    .tag_name()
+    .is_some_and(|tag| tag.eq_ignore_ascii_case("label"))
+    && let Some(target) = source.attribute("for")
+  {
+    let text = text_content(node);
+
+    if !text.trim().is_empty() {
+      collected
+        .labels
+        .entry(target.to_string())
+        .or_insert_with(|| text.trim().to_string());
+    }
+  }
+
+  if let Some(field) = field_kind(source, node)
+    && let Some(name) = source
+      .attribute("name")
+      .or_else(|| source.id())
+      .filter(|name| !name.is_empty())
+  {
+    let style = &node.context.style;
+    let color = style.color.resolve(Color([0, 0, 0, 255]));
+
+    collected.fields.push(FieldTarget {
+      name: name.to_string(),
+      rect,
+      field,
+      described: ["aria-label", "title", "placeholder"]
+        .into_iter()
+        .find_map(|attribute| source.attribute(attribute))
+        .map(str::to_string),
+      id: source.id().map(str::to_string),
+      path: paint.path.clone(),
+      group_index: 0,
+      style: FieldStyle {
+        color: pdf_color(color).unwrap_or([0.0, 0.0, 0.0]),
+        font_size: node.context.sizing.font_size * PT_PER_PX,
+        background: pdf_color(style.background_color.resolve(color)),
+        border: pdf_color(style.border_top_color.resolve(color))
+          .filter(|_| layout.border.top > 0.0)
+          .map(|border| (border, layout.border.top * PT_PER_PX)),
+        align: match style.text_align {
+          TextAlign::Center => 1,
+          TextAlign::Right | TextAlign::End => 2,
+          _ => 0,
+        },
+        read_only: source.attribute("readonly").is_some() || source.attribute("disabled").is_some(),
+        required: source.attribute("required").is_some(),
+      },
     });
   }
 
@@ -453,5 +735,100 @@ impl Interactive {
       outline.push_child(node);
     }
     outline
+  }
+}
+
+/// Adds this page's slice of every form field as widget annotations.
+pub(crate) fn add_field_annotations(
+  page: &mut Page,
+  interactive: &Interactive,
+  window: Window,
+  offset: (f32, f32),
+  state: &DocumentState,
+) {
+  if state.form.is_none() {
+    return;
+  }
+  let (y0, y1) = window.y.unwrap_or((f32::NEG_INFINITY, f32::INFINITY));
+
+  for field in &interactive.fields {
+    // A control split down the middle is not a control. The whole box has to
+    // land on this page or it belongs to another one.
+    if field.rect.top() < y0 || field.rect.bottom() > y1 {
+      continue;
+    }
+    let Some(rect) = KrillaRect::from_ltrb(
+      (field.rect.left() + offset.0) * PT_PER_PX,
+      (field.rect.top() - y0 + offset.1) * PT_PER_PX,
+      (field.rect.right() + offset.0) * PT_PER_PX,
+      (field.rect.bottom() - y0 + offset.1) * PT_PER_PX,
+    ) else {
+      continue;
+    };
+    let described = field.described.clone().or_else(|| {
+      field
+        .id
+        .as_ref()
+        .and_then(|id| interactive.labels.get(id))
+        .cloned()
+    });
+    let annotation = Annotation::new_widget(
+      WidgetAnnotation::new(
+        rect,
+        field.name.clone(),
+        field.field.to_form_field(field.group_index),
+        field.style.to_widget(),
+      )
+      .with_description(described.clone())
+      .with_lang(state.lang.map(str::to_string)),
+      // PDF/UA reads a field's name through `/TU`, and krilla asks every
+      // annotation for alt text; the field's own label answers both.
+      Some(described.unwrap_or_else(|| field.name.clone())),
+    );
+
+    match state.tags.as_ref() {
+      Some(tags) => {
+        let identifier = page.add_tagged_annotation(annotation);
+
+        tags.borrow_mut().record_annotation(&field.path, identifier);
+      }
+      None => page.add_annotation(annotation),
+    }
+  }
+}
+
+impl FieldKind {
+  fn to_form_field(&self, index: usize) -> FormField {
+    match self {
+      FieldKind::CheckBox { on, export } => FormField::CheckBox {
+        on: *on,
+        export: export.clone(),
+      },
+      FieldKind::Radio { on, export } => FormField::Radio {
+        index,
+        export: export.clone(),
+        on: *on,
+      },
+      FieldKind::Text {
+        value,
+        multiline,
+        password,
+        max_len,
+      } => FormField::Text {
+        value: value.clone(),
+        multiline: *multiline,
+        password: *password,
+        max_len: *max_len,
+      },
+      FieldKind::Choice {
+        value,
+        options,
+        multi,
+      } => FormField::Choice {
+        value: value.clone(),
+        options: options.clone(),
+        multi: *multi,
+      },
+    }
   }
 }

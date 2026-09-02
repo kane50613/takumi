@@ -5,6 +5,7 @@ use xmp_writer::{RenditionClass, XmpWriter};
 
 use crate::krilla::configure::{PdfVersion, ValidationError};
 use crate::krilla::error::KrillaResult;
+use crate::krilla::interactive::annotation::WidgetAnnotation;
 use crate::krilla::interchange::metadata::{Metadata, write_custom_properties};
 use crate::krilla::metadata::PageLayout;
 use crate::krilla::object_stream::{self, ObjectStream};
@@ -20,6 +21,132 @@ pub(crate) struct ChunkContainer {
   pub(crate) mixed: MixedChunks,
   pub(crate) metadata: Option<Metadata>,
   pub(crate) non_stream: NonStreamChunks,
+  /// Refs of the widget annotations that double as AcroForm field dicts.
+  pub(crate) form_fields: Vec<Ref>,
+  /// The base-14 font the widget appearance streams and `/DR` share.
+  pub(crate) form_font: Option<Ref>,
+  /// Radio groups by field name: the field object every button hangs off.
+  pub(crate) form_radio_groups: Vec<RadioGroup>,
+}
+
+/// A radio group's field object, which owns the buttons of one field name.
+pub(crate) struct RadioGroup {
+  pub(crate) field: Ref,
+  pub(crate) name: String,
+  pub(crate) flags: i32,
+  /// `/TU`, taken from the first button that carries one.
+  pub(crate) description: Option<String>,
+  /// The state name of the selected button, absent when none is.
+  pub(crate) value: Option<String>,
+  pub(crate) kids: Vec<Ref>,
+  /// What each button submits, in the order their states are numbered.
+  pub(crate) options: Vec<String>,
+}
+
+impl ChunkContainer {
+  /// The base-14 face the field appearances draw with, written once.
+  pub(crate) fn form_font(&mut self, sc: &mut SerializeContext) -> Ref {
+    match self.form_font {
+      Some(font) => font,
+      None => {
+        let font = sc.new_ref();
+
+        self
+          .non_stream
+          .annotations
+          .type1_font(font)
+          .base_font(Name(b"Helvetica"))
+          .encoding_predefined(Name(b"WinAnsiEncoding"))
+          .finish();
+        self.form_font = Some(font);
+        font
+      }
+    }
+  }
+
+  /// The field object for `name`, created on its first button.
+  pub(crate) fn radio_group(
+    &mut self,
+    sc: &mut SerializeContext,
+    widget: &WidgetAnnotation,
+    index: usize,
+    export: &str,
+    on: bool,
+    kid: Ref,
+  ) -> Ref {
+    let group = match self
+      .form_radio_groups
+      .iter_mut()
+      .find(|group| group.name == widget.name)
+    {
+      Some(group) => group,
+      None => {
+        let field = sc.new_ref();
+
+        self.form_fields.push(field);
+        self.form_radio_groups.push(RadioGroup {
+          field,
+          name: widget.name.clone(),
+          flags: widget.field.flags(&widget.style),
+          description: widget.description.clone(),
+          value: None,
+          kids: vec![],
+          options: vec![],
+        });
+
+        self
+          .form_radio_groups
+          .last_mut()
+          .expect("just pushed a radio group")
+      }
+    };
+
+    group.kids.push(kid);
+
+    if group.options.len() <= index {
+      group.options.resize(index + 1, String::new());
+    }
+    group.options[index] = export.to_string();
+
+    if on {
+      group.value = Some(index.to_string());
+    }
+
+    group.field
+  }
+
+  /// Writes the field object of every radio group, once its buttons are known.
+  fn write_radio_groups(&mut self) {
+    let chunk = &mut self.non_stream.annotations;
+
+    for group in &self.form_radio_groups {
+      let mut field = chunk.indirect(group.field).dict();
+
+      field.pair(Name(b"FT"), Name(b"Btn"));
+      field.pair(Name(b"T"), TextStr(&group.name));
+      field.pair(Name(b"Ff"), group.flags);
+
+      if let Some(description) = &group.description {
+        field.pair(Name(b"TU"), TextStr(description));
+      }
+      field.pair(
+        Name(b"V"),
+        match &group.value {
+          Some(value) => Name(value.as_bytes()),
+          None => Name(b"Off"),
+        },
+      );
+      field
+        .insert(Name(b"Opt"))
+        .array()
+        .items(group.options.iter().map(|option| TextStr(option)));
+      field
+        .insert(Name(b"Kids"))
+        .array()
+        .items(group.kids.iter().copied());
+      field.finish();
+    }
+  }
 }
 
 pub(crate) struct StreamChunks {
@@ -75,6 +202,9 @@ impl ChunkContainer {
         embedded_pdfs: vec![],
       },
       metadata: None,
+      form_fields: vec![],
+      form_font: None,
+      form_radio_groups: vec![],
       non_stream: NonStreamChunks {
         page_tree: None,
         outline: None,
@@ -115,6 +245,8 @@ impl ChunkContainer {
     // easier down the road.
     //
     // It also allows us to estimate the capacity we will need for the new PDF.
+    self.write_radio_groups();
+
     self.visit(sc, &mut |chunk| {
       for object_ref in chunk.refs() {
         let existing = remapper.insert(object_ref, remapped_ref.bump());
@@ -254,8 +386,27 @@ impl ChunkContainer {
       };
 
       let catalog_ref = remapped_ref.bump();
+      let form_font_ref = self.form_font.map(|font| remapper[&font]);
 
       let mut catalog = pdf.catalog(catalog_ref);
+
+      if !self.form_fields.is_empty() {
+        let mut form = catalog.form();
+
+        form.fields(self.form_fields.iter().map(|field| remapper[field]));
+
+        // The default appearance and its resources exist only once a field
+        // draws text; a blank form needs neither, and carries no unembedded
+        // font because of it.
+        if let Some(font_ref) = form_font_ref {
+          form.default_appearance(Str(b"/Helv 0 Tf 0 g"));
+          form
+            .default_resources()
+            .fonts()
+            .pair(Name(b"Helv"), font_ref);
+        }
+        form.finish();
+      }
 
       if let Some(pt) = &self.non_stream.page_tree {
         catalog.pages(remapper[&pt.0]);

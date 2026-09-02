@@ -272,6 +272,15 @@ type ConformanceOptions =
   | { pdfa: "4"; tagged?: boolean | "ua2"; attachments?: never }
   | { pdfa: "4f"; tagged?: boolean | "ua2"; attachments?: ArchivalAttachment[] };
 
+/** How the document's fillable fields are emitted. */
+export type FormOptions = {
+  /**
+   * Family embedded into the form's default resources, which a viewer redraws
+   * an edited field with. Defaults to the first registered family.
+   */
+  font?: string;
+};
+
 export type RenderOptions = (PagedOptions | ViewportOptions) &
   ConformanceOptions & {
     /** Fonts to register before rendering, deduped across calls. */
@@ -297,6 +306,11 @@ export type RenderOptions = (PagedOptions | ViewportOptions) &
     metadata?: PdfMetadata;
     /** Generates a PDF outline (bookmarks) from `h1`–`h6` headings. */
     outline?: boolean;
+    /**
+     * Emits `<input>`, `<textarea>` and `<select>` as fillable AcroForm
+     * fields. Left unset they draw as the static boxes their CSS describes.
+     */
+    form?: boolean | FormOptions;
     /**
      * The paper color as a CSS color, painted under everything on every page.
      * Unset leaves the page empty, so a viewer shows its own white.
