@@ -8,10 +8,7 @@
 //! grid-line segment.
 
 use crate::{
-  layout::{
-    table::{MAX_ROWSPAN, is_cell, span_attribute},
-    tree::RenderNode,
-  },
+  layout::{table::MAX_ROWSPAN, tree::RenderNode},
   style::{BorderStyle, ColorInput, ComputedStyle, Length, LineWidth, SizingContext},
 };
 
@@ -161,7 +158,7 @@ impl CollapsedBorders {
 
         let sizing = &cell.context.sizing;
         let span = usize::from(colspan);
-        let rowspan = usize::from(span_attribute(cell, "rowspan", MAX_ROWSPAN));
+        let rowspan = usize::from(cell.span_attribute("rowspan", MAX_ROWSPAN));
         let last_row = index + rowspan >= rows.len();
         let last_column = column + span >= columns;
         let mut top = Vec::new();
@@ -294,7 +291,7 @@ fn row_cells(rows: &[RenderNode]) -> Vec<Vec<&RenderNode>> {
         .as_deref()
         .unwrap_or_default()
         .iter()
-        .filter(|cell| is_cell(cell))
+        .filter(|cell| cell.is_cell())
         .collect()
     })
     .collect()
@@ -314,7 +311,7 @@ fn owner_grid(
         break;
       };
 
-      let rowspan = usize::from(span_attribute(cell, "rowspan", MAX_ROWSPAN));
+      let rowspan = usize::from(cell.span_attribute("rowspan", MAX_ROWSPAN));
 
       for line in grid
         .iter_mut()
