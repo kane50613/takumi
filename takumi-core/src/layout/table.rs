@@ -40,172 +40,6 @@ const MAX_COLSPAN: u16 = 1000;
 /// Blink's `kMaxRowSpan`.
 pub(crate) const MAX_ROWSPAN: u16 = 65534;
 
-pub(crate) fn lower_tables(node: &mut RenderNode) {
-  if let Some(children) = node.children.as_mut() {
-    for child in children {
-      lower_tables(child);
-    }
-  }
-
-  if node.context.style.display == Display::Table {
-    lower_table(node);
-  }
-}
-
-/// Reads a case-insensitive span attribute within Blink's limit.
-pub(crate) fn span_attribute(cell: &RenderNode, name: &str, max: u16) -> u16 {
-  cell
-    .node
-    .as_ref()
-    .and_then(|node| node.metadata.attributes.as_ref())
-    .and_then(|attributes| {
-      attributes
-        .iter()
-        .find(|(key, _)| key.eq_ignore_ascii_case(name))
-        .map(|(_, value)| value)
-    })
-    .and_then(|value| value.trim().parse::<u32>().ok())
-    .map_or(1, |value| value.clamp(1, u32::from(max)) as u16)
-}
-
-fn group_order(display: Display) -> u8 {
-  match display {
-    Display::TableHeaderGroup => 0,
-    Display::TableFooterGroup => 2,
-    _ => 1,
-  }
-}
-
-/// The table's children sorted into their roles, rows flattened in render
-/// order: header rows first, then body, then footer.
-struct TableSlots {
-  captions: Vec<RenderNode>,
-  rows: Vec<RenderNode>,
-  header_rows: usize,
-  footer_rows: usize,
-  strays: Vec<RenderNode>,
-}
-
-/// Extracts rows without CSS anonymous table-box fixup.
-fn collect_rows(table: &mut RenderNode) -> TableSlots {
-  let mut captions = Vec::new();
-  let mut groups: Vec<(u8, usize, Vec<RenderNode>)> = Vec::new();
-  let mut strays = Vec::new();
-
-  let children = table.children.take().map_or_else(Vec::new, Vec::from);
-
-  for (index, mut child) in children.into_iter().enumerate() {
-    match child.context.style.display {
-      Display::TableCaption => captions.push(child),
-      Display::TableRow => groups.push((1, index, vec![child])),
-      Display::TableHeaderGroup | Display::TableRowGroup | Display::TableFooterGroup => {
-        let order = group_order(child.context.style.display);
-        let rows = child.children.take().map_or_else(Vec::new, Vec::from);
-
-        groups.push((
-          order,
-          index,
-          rows
-            .into_iter()
-            .filter(|row| row.context.style.display == Display::TableRow)
-            .collect(),
-        ));
-      }
-      _ => strays.push(child),
-    }
-  }
-
-  groups.sort_by_key(|(order, index, _)| (*order, *index));
-
-  let count = |wanted: u8| {
-    groups
-      .iter()
-      .filter(|(order, ..)| *order == wanted)
-      .map(|(.., rows)| rows.len())
-      .sum()
-  };
-  let header_rows = count(0);
-  let footer_rows = count(2);
-  let rows = groups.into_iter().flat_map(|(.., rows)| rows).collect();
-
-  TableSlots {
-    captions,
-    rows,
-    header_rows,
-    footer_rows,
-    strays,
-  }
-}
-
-fn resolve_columns(rows: &[RenderNode]) -> Vec<Vec<(usize, u16)>> {
-  let mut covered: Vec<u16> = Vec::new();
-  let mut placements = Vec::with_capacity(rows.len());
-
-  for row in rows {
-    let mut column = 0usize;
-    let mut cells = Vec::new();
-
-    for cell in row.children.as_deref().unwrap_or_default() {
-      if !is_cell(cell) {
-        continue;
-      }
-
-      while covered.get(column).is_some_and(|rows_left| *rows_left > 0) {
-        column += 1;
-      }
-
-      let colspan = span_attribute(cell, "colspan", MAX_COLSPAN);
-      let rowspan = span_attribute(cell, "rowspan", MAX_ROWSPAN);
-      let end = column + usize::from(colspan);
-
-      if covered.len() < end {
-        covered.resize(end, 0);
-      }
-
-      for track in &mut covered[column..end] {
-        *track = rowspan;
-      }
-
-      cells.push((column, colspan));
-      column = end;
-    }
-
-    placements.push(cells);
-
-    for track in &mut covered {
-      *track = track.saturating_sub(1);
-    }
-  }
-
-  placements
-}
-
-fn track_count(placements: &[Vec<(usize, u16)>]) -> u16 {
-  placements
-    .iter()
-    .flatten()
-    .map(|(column, colspan)| *column as u32 + u32::from(*colspan))
-    .max()
-    .unwrap_or(1)
-    .clamp(1, u32::from(MAX_COLSPAN)) as u16
-}
-
-/// Recognizes authored cells without CSS anonymous table-box fixup.
-pub(crate) fn is_cell(child: &RenderNode) -> bool {
-  let display = child.context.style.display;
-
-  if display == Display::TableCell {
-    return true;
-  }
-
-  display != Display::None
-    && matches!(child.origin, NodeOrigin::Authored { .. })
-    && child
-      .node
-      .as_ref()
-      .is_some_and(|node| !matches!(node.kind, NodeKind::Text(_)))
-}
-
 /// Blink table-cell content alignment from `block_layout_algorithm_utils.cc`.
 #[derive(Clone, Copy, PartialEq)]
 enum CellAlignment {
@@ -249,371 +83,189 @@ impl CellAlignment {
   }
 }
 
-/// Wraps content to preserve its formatting context during alignment.
-fn wrap_cell_content(cell: &mut RenderNode) -> Option<&mut RenderNode> {
-  let children = cell.children.take()?;
-  let content = RenderNode::anonymous_block_container(&cell.context, children.into_vec());
-
-  cell.children = Some(Box::new([content]));
-  cell.children.as_deref_mut()?.first_mut()
-}
-
-fn align_cell_content(cell: &mut RenderNode) {
-  let Some(justify) = CellAlignment::of(&cell.context.style).justify_content() else {
-    return;
-  };
-
-  if wrap_cell_content(cell).is_none() {
-    return;
-  }
-
-  let style = &mut cell.context.style;
-
-  style.display = Display::Flex;
-  style.flex_direction = FlexDirection::Column;
-  style.justify_content = justify;
-}
-
-/// Approximates the first-baseline offset as block-start border and padding.
-/// It drops the first line's ascent and half-leading, so cells drift once a
-/// row mixes fonts or line heights.
-fn content_inset_top(cell: &RenderNode) -> f32 {
-  let style = &cell.context.style;
-  let sizing = &cell.context.sizing;
-  let border = if style.border_top_style.is_rendered() {
-    Length::from(style.border_top_width).to_px(sizing, 0.0)
-  } else {
-    0.0
-  };
-
-  border + style.padding_top.to_px(sizing, 0.0)
-}
-
-fn align_row_baselines(cells: &mut [RenderNode]) {
-  let baselines: Vec<usize> = cells
-    .iter()
-    .enumerate()
-    .filter(|(_, cell)| CellAlignment::of(&cell.context.style) == CellAlignment::Baseline)
-    .map(|(index, _)| index)
-    .collect();
-
-  if baselines.len() < 2 {
-    return;
-  }
-
-  let deepest = baselines
-    .iter()
-    .map(|&index| content_inset_top(&cells[index]))
-    .fold(0.0, f32::max);
-
-  for index in baselines {
-    let shift = deepest - content_inset_top(&cells[index]);
-
-    if shift <= 0.0 {
-      continue;
-    }
-
-    if let Some(content) = wrap_cell_content(&mut cells[index])
-      && let Some(layout_style) = content.layout_style_override.as_mut()
-    {
-      layout_style.margin.top = LengthPercentageAuto::length(shift);
+impl Display {
+  fn table_group_order(self) -> u8 {
+    match self {
+      Display::TableHeaderGroup => 0,
+      Display::TableFooterGroup => 2,
+      _ => 1,
     }
   }
 }
 
-/// Places the cell explicitly: taffy's cursor does not return to the row start
-/// on a row a `rowspan` reaches into.
-fn lower_cell(cell: &mut RenderNode, line: i16, column: usize, colspan: u16, collapse: bool) {
-  let rowspan = span_attribute(cell, "rowspan", MAX_ROWSPAN);
-
-  cell.context.collapsed_borders = collapse;
-
-  if cell.context.style.display == Display::TableCell {
-    align_cell_content(cell);
-
-    if cell.context.style.display == Display::TableCell {
-      cell.context.style.display = Display::Block;
-    }
-  }
-
-  cell.context.style.grid_row_start = GridPlacement::Line(line);
-  cell.context.style.grid_row_end = GridPlacement::Span(GridPlacementSpan::Span(rowspan));
-  cell.context.style.grid_column_start = GridPlacement::Line(column as i16 + 1);
-  cell.context.style.grid_column_end = GridPlacement::Span(GridPlacementSpan::Span(colspan));
+/// The table's children sorted into their roles, rows flattened in render
+/// order: header rows first, then body, then footer.
+struct TableSlots {
+  captions: Vec<RenderNode>,
+  rows: Vec<RenderNode>,
+  header_rows: usize,
+  footer_rows: usize,
+  strays: Vec<RenderNode>,
 }
 
-/// Approximation: row backgrounds leave `border-spacing` gaps unpainted.
-fn inherit_row_background(row: &RenderNode, cell: &mut RenderNode) {
-  let row_style = &row.context.style;
+impl TableSlots {
+  /// Extracts rows without CSS anonymous table-box fixup.
+  fn collect(table: &mut RenderNode) -> Self {
+    let mut captions = Vec::new();
+    let mut groups: Vec<(u8, usize, Vec<RenderNode>)> = Vec::new();
+    let mut strays = Vec::new();
 
-  if row_style.background_color == ColorInput::transparent() && row_style.background_image.is_none()
-  {
-    return;
-  }
+    let children = table.children.take().map_or_else(Vec::new, Vec::from);
 
-  let cell_style = &mut cell.context.style;
+    for (index, mut child) in children.into_iter().enumerate() {
+      match child.context.style.display {
+        Display::TableCaption => captions.push(child),
+        Display::TableRow => groups.push((1, index, vec![child])),
+        Display::TableHeaderGroup | Display::TableRowGroup | Display::TableFooterGroup => {
+          let order = child.context.style.display.table_group_order();
+          let rows = child.children.take().map_or_else(Vec::new, Vec::from);
 
-  if cell_style.background_color != ColorInput::transparent()
-    || cell_style.background_image.is_some()
-  {
-    return;
-  }
-
-  cell_style.background_color = row_style.background_color;
-  cell_style.background_image = row_style.background_image.clone();
-  cell_style.background_position = row_style.background_position.clone();
-  cell_style.background_size = row_style.background_size.clone();
-  cell_style.background_repeat = row_style.background_repeat.clone();
-  cell_style.background_clip = row_style.background_clip;
-  cell_style.background_origin = row_style.background_origin;
-}
-
-fn lower_full_width(node: &mut RenderNode, line: i16, columns: u16) {
-  // A stray that is itself a lowered table keeps its grid; blocking it would
-  // drop the placement its own cells already carry.
-  if node.context.style.display != Display::Grid {
-    node.context.style.display = Display::Block;
-  }
-
-  node.context.style.grid_row_start = GridPlacement::Line(line);
-  node.context.style.grid_row_end = GridPlacement::Span(GridPlacementSpan::Span(1));
-  node.context.style.grid_column_start = GridPlacement::Line(1);
-  node.context.style.grid_column_end = GridPlacement::Span(GridPlacementSpan::Span(columns));
-}
-
-fn lower_table(table: &mut RenderNode) {
-  let TableSlots {
-    captions,
-    rows,
-    header_rows,
-    footer_rows,
-    strays,
-  } = collect_rows(table);
-  let placements = resolve_columns(&rows);
-  let columns = track_count(&placements);
-  let collapse = table.context.style.border_collapse == BorderCollapse::Collapse;
-  let spacing = table.context.style.border_spacing.0;
-  let sizing = table.context.sizing.clone();
-  let fixed = table.context.style.table_layout == TableLayout::Fixed
-    && table.context.style.width != Length::Auto;
-  let tracks = track_sizes(
-    &rows,
-    &placements,
-    columns,
-    fixed,
-    spacing.x.to_px(&sizing, 0.0),
-  );
-  let collapsed = collapse.then(|| {
-    CollapsedBorders::resolve(
-      &table.context.style,
-      &rows,
-      &placements,
-      usize::from(columns),
-    )
-  });
-  let mut items = Vec::new();
-  let mut line: i16 = 1;
-  let (top_captions, bottom_captions): (Vec<_>, Vec<_>) = captions
-    .into_iter()
-    .partition(|caption| caption.context.style.caption_side == CaptionSide::Top);
-
-  for mut caption in top_captions {
-    lower_full_width(&mut caption, line, columns);
-    caption.table_part = Some(TablePart::Caption);
-    items.push(caption);
-    line = line.saturating_add(1);
-  }
-
-  if header_rows > 0 && header_rows < rows.len() {
-    let start = line;
-
-    table.table_header_lines = Some((start, start.saturating_add(header_rows as i16)));
-  }
-
-  let footer_start = rows.len() - footer_rows;
-
-  for (index, (mut row, positions)) in rows.into_iter().zip(placements).enumerate() {
-    let part = if index < header_rows {
-      TablePart::HeaderCell
-    } else if index >= footer_start {
-      TablePart::FooterCell
-    } else {
-      TablePart::BodyCell
-    };
-    let mut cells = row.children.take().map_or_else(Vec::new, Vec::from);
-    let mut positions = positions.into_iter();
-
-    cells.retain(is_cell);
-
-    if let Some(collapsed) = collapsed.as_ref() {
-      for (cell_index, cell) in cells.iter_mut().enumerate() {
-        collapsed.apply(index, cell_index, &mut cell.context.style);
+          groups.push((
+            order,
+            index,
+            rows
+              .into_iter()
+              .filter(|row| row.context.style.display == Display::TableRow)
+              .collect(),
+          ));
+        }
+        _ => strays.push(child),
       }
     }
 
-    align_row_baselines(&mut cells);
+    groups.sort_by_key(|(order, index, _)| (*order, *index));
 
-    for mut cell in cells {
-      let Some((column, colspan)) = positions.next() else {
-        break;
-      };
+    let count = |wanted: u8| {
+      groups
+        .iter()
+        .filter(|(order, ..)| *order == wanted)
+        .map(|(.., rows)| rows.len())
+        .sum()
+    };
+    let header_rows = count(0);
+    let footer_rows = count(2);
+    let rows = groups.into_iter().flat_map(|(.., rows)| rows).collect();
 
-      inherit_row_background(&row, &mut cell);
-      lower_cell(&mut cell, line, column, colspan, collapse);
-      cell.table_part = Some(part);
-      items.push(cell);
+    Self {
+      captions,
+      rows,
+      header_rows,
+      footer_rows,
+      strays,
+    }
+  }
+}
+
+/// Every cell's column track and span, row by row, and the track count they
+/// reach.
+struct TableGrid {
+  placements: Vec<Vec<(usize, u16)>>,
+  columns: u16,
+}
+
+impl TableGrid {
+  /// Places every cell on its column track, honouring the spans above it.
+  fn resolve(rows: &[RenderNode]) -> Self {
+    let mut covered: Vec<u16> = Vec::new();
+    let mut placements = Vec::with_capacity(rows.len());
+
+    for row in rows {
+      let mut column = 0usize;
+      let mut cells = Vec::new();
+
+      for cell in row.children.as_deref().unwrap_or_default() {
+        if !cell.is_cell() {
+          continue;
+        }
+
+        while covered.get(column).is_some_and(|rows_left| *rows_left > 0) {
+          column += 1;
+        }
+
+        let colspan = cell.span_attribute("colspan", MAX_COLSPAN);
+        let rowspan = cell.span_attribute("rowspan", MAX_ROWSPAN);
+        let end = column + usize::from(colspan);
+
+        if covered.len() < end {
+          covered.resize(end, 0);
+        }
+
+        for track in &mut covered[column..end] {
+          *track = rowspan;
+        }
+
+        cells.push((column, colspan));
+        column = end;
+      }
+
+      placements.push(cells);
+
+      for track in &mut covered {
+        *track = track.saturating_sub(1);
+      }
     }
 
-    line = line.saturating_add(1);
-  }
+    let columns = placements
+      .iter()
+      .flatten()
+      .map(|(column, colspan)| *column as u32 + u32::from(*colspan))
+      .max()
+      .unwrap_or(1)
+      .clamp(1, u32::from(MAX_COLSPAN)) as u16;
 
-  for mut stray in strays {
-    lower_full_width(&mut stray, line, columns);
-    items.push(stray);
-    line = line.saturating_add(1);
-  }
-
-  for mut caption in bottom_captions {
-    lower_full_width(&mut caption, line, columns);
-    caption.table_part = Some(TablePart::Caption);
-    items.push(caption);
-    line = line.saturating_add(1);
-  }
-
-  table.table_part = Some(TablePart::Table);
-
-  let style = &mut table.context.style;
-
-  style.display = Display::Grid;
-  style.grid_template_columns = Some(tracks);
-
-  if collapse {
-    style.column_gap = Gap::Length(Length::zero());
-    style.row_gap = Gap::Length(Length::zero());
-    clear_border(style);
-  } else {
-    style.column_gap = Gap::Length(spacing.x);
-    style.row_gap = Gap::Length(spacing.y);
-    inset_edges(style, spacing, &sizing);
-  }
-
-  table.children = Some(items.into_boxed_slice());
-}
-
-/// CSS 2.2 §17.6.1: separate borders space the outer cells from the table's
-/// edges too, which the grid gap alone does not do. Naive: a percentage or
-/// `auto` padding keeps its own value and takes no inset.
-fn inset_edges(style: &mut ComputedStyle, spacing: SpacePair<Length>, sizing: &SizingContext) {
-  let inset = |padding: &mut Length, extra: Length| {
-    if matches!(padding, Length::Percentage(_) | Length::Auto) {
-      return;
+    Self {
+      placements,
+      columns,
     }
-
-    *padding = Length::Px(padding.to_px(sizing, 0.0) + extra.to_px(sizing, 0.0));
-  };
-
-  inset(&mut style.padding_top, spacing.y);
-  inset(&mut style.padding_bottom, spacing.y);
-  inset(&mut style.padding_left, spacing.x);
-  inset(&mut style.padding_right, spacing.x);
-}
-
-/// The collapsed border lives on the edge cells, so the table box stops
-/// painting its own.
-fn clear_border(style: &mut ComputedStyle) {
-  style.border_top_style = BorderStyle::None;
-  style.border_right_style = BorderStyle::None;
-  style.border_bottom_style = BorderStyle::None;
-  style.border_left_style = BorderStyle::None;
-  style.border_top_width = LineWidth::Length(Length::zero());
-  style.border_right_width = LineWidth::Length(Length::zero());
-  style.border_bottom_width = LineWidth::Length(Length::zero());
-  style.border_left_width = LineWidth::Length(Length::zero());
-}
-
-/// Widths a cell subtree takes when nothing constrains it and when everything
-/// does. The cell is lowered first: `table-cell` establishes no formatting
-/// context of its own, so taffy would lay its inline children out as blocks.
-/// Nested tables pay for this once per level, since each level lays the levels
-/// below it out again.
-fn mark_intrinsic(node: &mut RenderNode) {
-  node.context.intrinsic_min_content = true;
-
-  for child in node.children.as_deref_mut().unwrap_or_default() {
-    mark_intrinsic(child);
   }
-}
 
-fn intrinsic_widths(cell: &RenderNode) -> (f32, f32) {
-  let mut cell = cell.clone();
+  /// The cells of the first `rows_taken` rows with their placements.
+  fn placed_cells<'a>(
+    &'a self,
+    rows: &'a [RenderNode],
+    rows_taken: usize,
+  ) -> impl Iterator<Item = (&'a RenderNode, &'a (usize, u16))> {
+    rows
+      .iter()
+      .take(rows_taken)
+      .zip(&self.placements)
+      .flat_map(|(row, cells)| {
+        row
+          .children
+          .as_deref()
+          .unwrap_or_default()
+          .iter()
+          .filter(|cell| cell.is_cell())
+          .zip(cells)
+      })
+  }
 
-  lower_cell(&mut cell, 1, 0, 1, false);
-  cell.context.style.display.blockify();
-  mark_intrinsic(&mut cell);
-
-  let measure = |width| {
-    let mut tree = LayoutTree::from_render_node(&cell);
-
-    tree.compute_layout(Size {
-      width,
-      height: AvailableSpace::MaxContent,
-    });
-
-    tree
-      .into_results()
-      .layout(NodeId::ROOT)
-      .map_or(0.0, |layout| layout.size.width)
-  };
-
-  (
-    measure(AvailableSpace::MinContent),
-    measure(AvailableSpace::MaxContent),
-  )
-}
-
-/// Min- and max-content width per column, Blink's `TableTypes::Column`.
-struct ColumnWidths(Vec<(f32, f32)>);
-
-impl ColumnWidths {
   /// Naive: a spanning cell spreads its width over the columns it covers in
   /// proportion to their max-content, which is only the `kAboveMax` branch of
   /// Blink's `DistributeColspanCellsToColumns`. Narrower spans land first, as
   /// Blink sorts them, and the border spacing a span covers comes off the
   /// width before it is shared.
-  fn measure(
-    rows: &[RenderNode],
-    placements: &[Vec<(usize, u16)>],
-    columns: u16,
-    spacing: f32,
-  ) -> Self {
+  fn column_widths(&self, rows: &[RenderNode], spacing: f32) -> ColumnWidths {
+    let columns = self.columns;
     let mut widths = vec![(0.0f32, 0.0f32); usize::from(columns)];
     let mut spanning = Vec::new();
 
-    for (row, cells) in rows.iter().zip(placements) {
-      let table_cells = row
-        .children
-        .as_deref()
-        .unwrap_or_default()
-        .iter()
-        .filter(|cell| is_cell(cell));
+    for (cell, (column, colspan)) in self.placed_cells(rows, rows.len()) {
+      let (min, max) = cell.intrinsic_widths();
 
-      for (cell, (column, colspan)) in table_cells.zip(cells) {
-        let (min, max) = intrinsic_widths(cell);
+      if !min.is_finite() || !max.is_finite() {
+        continue;
+      }
 
-        if !min.is_finite() || !max.is_finite() {
-          continue;
+      let end = (column + usize::from(*colspan)).min(usize::from(columns));
+
+      if *colspan == 1 {
+        if let Some(track) = widths.get_mut(*column) {
+          track.0 = track.0.max(min);
+          track.1 = track.1.max(max);
         }
-
-        let end = (column + usize::from(*colspan)).min(usize::from(columns));
-
-        if *colspan == 1 {
-          if let Some(track) = widths.get_mut(*column) {
-            track.0 = track.0.max(min);
-            track.1 = track.1.max(max);
-          }
-        } else if *column < end {
-          spanning.push((*column, end, min, max));
-        }
+      } else if *column < end {
+        spanning.push((*column, end, min, max));
       }
     }
 
@@ -639,52 +291,25 @@ impl ColumnWidths {
       }
     }
 
-    Self(widths)
+    ColumnWidths(widths)
   }
 
-  /// `None` when nothing was measured, which leaves every track `auto`. The
-  /// min-content floor is what keeps a column that is narrower than its share
-  /// from spilling into the next one.
-  fn tracks(&self) -> Option<Vec<String>> {
-    self.0.iter().any(|(_, max)| *max > 0.0).then(|| {
-      self
-        .0
-        .iter()
-        .map(|(min, max)| format!("minmax({min}px, {max}fr)"))
-        .collect()
-    })
-  }
-}
+  /// Approximates Blink constrained columns from the first declared cell width.
+  /// `table-layout: fixed` reads only the first row and shares the rest of the
+  /// space evenly, so column widths stop following the content. CSS 2.2 §17.5.2
+  /// only reaches that algorithm when the table's width is not `auto`. A
+  /// spanning cell splits its declared width evenly across the tracks it
+  /// covers; a percentage width on one is ignored.
+  ///
+  /// Columns that stay `auto` after that pass become `fr` tracks weighted by
+  /// max-content, so free space follows content the way Blink's `kAboveMax`
+  /// distributes it.
+  fn track_sizes(&self, rows: &[RenderNode], fixed: bool, spacing: f32) -> GridTemplateComponents {
+    let columns = self.columns;
+    let mut tracks = vec![String::from(if fixed { "1fr" } else { "auto" }); usize::from(columns)];
+    let measured = if fixed { 1 } else { rows.len() };
 
-/// Approximates Blink constrained columns from the first declared cell width.
-/// `table-layout: fixed` reads only the first row and shares the rest of the
-/// space evenly, so column widths stop following the content. CSS 2.2 §17.5.2
-/// only reaches that algorithm when the table's width is not `auto`. A
-/// spanning cell splits its declared width evenly across the tracks it
-/// covers; a percentage width on one is ignored.
-///
-/// Columns that stay `auto` after that pass become `fr` tracks weighted by
-/// max-content, so free space follows content the way Blink's `kAboveMax`
-/// distributes it.
-fn track_sizes(
-  rows: &[RenderNode],
-  placements: &[Vec<(usize, u16)>],
-  columns: u16,
-  fixed: bool,
-  spacing: f32,
-) -> GridTemplateComponents {
-  let mut tracks = vec![String::from(if fixed { "1fr" } else { "auto" }); usize::from(columns)];
-  let measured = if fixed { 1 } else { rows.len() };
-
-  for (row, cells) in rows.iter().take(measured).zip(placements) {
-    let table_cells = row
-      .children
-      .as_deref()
-      .unwrap_or_default()
-      .iter()
-      .filter(|cell| is_cell(cell));
-
-    for (cell, (column, colspan)) in table_cells.zip(cells) {
+    for (cell, (column, colspan)) in self.placed_cells(rows, measured) {
       let width = &cell.context.style.width;
 
       if *width == Length::Auto {
@@ -710,16 +335,400 @@ fn track_sizes(
         }
       }
     }
+
+    if !fixed
+      && tracks.iter().all(|track| track == "auto")
+      && let Some(measured) = self.column_widths(rows, spacing).tracks()
+    {
+      tracks = measured;
+    }
+
+    GridTemplateComponents::from_css_str(&tracks.join(" ")).unwrap_or_default()
+  }
+}
+
+/// Min- and max-content width per column, Blink's `TableTypes::Column`.
+struct ColumnWidths(Vec<(f32, f32)>);
+
+impl ColumnWidths {
+  /// `None` when nothing was measured, which leaves every track `auto`. The
+  /// min-content floor is what keeps a column that is narrower than its share
+  /// from spilling into the next one.
+  fn tracks(&self) -> Option<Vec<String>> {
+    self.0.iter().any(|(_, max)| *max > 0.0).then(|| {
+      self
+        .0
+        .iter()
+        .map(|(min, max)| format!("minmax({min}px, {max}fr)"))
+        .collect()
+    })
+  }
+}
+
+impl RenderNode {
+  pub(crate) fn lower_tables(&mut self) {
+    if let Some(children) = self.children.as_mut() {
+      for child in children {
+        child.lower_tables();
+      }
+    }
+
+    if self.context.style.display == Display::Table {
+      self.lower_table();
+    }
   }
 
-  if !fixed
-    && tracks.iter().all(|track| track == "auto")
-    && let Some(measured) = ColumnWidths::measure(rows, placements, columns, spacing).tracks()
-  {
-    tracks = measured;
+  /// Reads a case-insensitive span attribute within Blink's limit.
+  pub(crate) fn span_attribute(&self, name: &str, max: u16) -> u16 {
+    self
+      .node
+      .as_ref()
+      .and_then(|node| node.metadata.attributes.as_ref())
+      .and_then(|attributes| {
+        attributes
+          .iter()
+          .find(|(key, _)| key.eq_ignore_ascii_case(name))
+          .map(|(_, value)| value)
+      })
+      .and_then(|value| value.trim().parse::<u32>().ok())
+      .map_or(1, |value| value.clamp(1, u32::from(max)) as u16)
   }
 
-  GridTemplateComponents::from_css_str(&tracks.join(" ")).unwrap_or_default()
+  /// Recognizes authored cells without CSS anonymous table-box fixup.
+  pub(crate) fn is_cell(&self) -> bool {
+    let display = self.context.style.display;
+
+    if display == Display::TableCell {
+      return true;
+    }
+
+    display != Display::None
+      && matches!(self.origin, NodeOrigin::Authored { .. })
+      && self
+        .node
+        .as_ref()
+        .is_some_and(|node| !matches!(node.kind, NodeKind::Text(_)))
+  }
+
+  fn lower_table(&mut self) {
+    let TableSlots {
+      captions,
+      rows,
+      header_rows,
+      footer_rows,
+      strays,
+    } = TableSlots::collect(self);
+    let grid = TableGrid::resolve(&rows);
+    let columns = grid.columns;
+    let collapse = self.context.style.border_collapse == BorderCollapse::Collapse;
+    let spacing = self.context.style.border_spacing.0;
+    let sizing = self.context.sizing.clone();
+    let fixed = self.context.style.table_layout == TableLayout::Fixed
+      && self.context.style.width != Length::Auto;
+    let tracks = grid.track_sizes(&rows, fixed, spacing.x.to_px(&sizing, 0.0));
+    let collapsed = collapse.then(|| {
+      CollapsedBorders::resolve(
+        &self.context.style,
+        &rows,
+        &grid.placements,
+        usize::from(columns),
+      )
+    });
+    let placements = grid.placements;
+    let mut items = Vec::new();
+    let mut line: i16 = 1;
+    let (top_captions, bottom_captions): (Vec<_>, Vec<_>) = captions
+      .into_iter()
+      .partition(|caption| caption.context.style.caption_side == CaptionSide::Top);
+
+    for mut caption in top_captions {
+      caption.lower_full_width(line, columns);
+      caption.table_part = Some(TablePart::Caption);
+      items.push(caption);
+      line = line.saturating_add(1);
+    }
+
+    if header_rows > 0 && header_rows < rows.len() {
+      let start = line;
+
+      self.table_header_lines = Some((start, start.saturating_add(header_rows as i16)));
+    }
+
+    let footer_start = rows.len() - footer_rows;
+
+    for (index, (mut row, positions)) in rows.into_iter().zip(placements).enumerate() {
+      let part = if index < header_rows {
+        TablePart::HeaderCell
+      } else if index >= footer_start {
+        TablePart::FooterCell
+      } else {
+        TablePart::BodyCell
+      };
+      let mut cells = row.children.take().map_or_else(Vec::new, Vec::from);
+      let mut positions = positions.into_iter();
+
+      cells.retain(RenderNode::is_cell);
+
+      if let Some(collapsed) = collapsed.as_ref() {
+        for (cell_index, cell) in cells.iter_mut().enumerate() {
+          collapsed.apply(index, cell_index, &mut cell.context.style);
+        }
+      }
+
+      align_row_baselines(&mut cells);
+
+      for mut cell in cells {
+        let Some((column, colspan)) = positions.next() else {
+          break;
+        };
+
+        cell.inherit_row_background(&row);
+        cell.lower_cell(line, column, colspan, collapse);
+        cell.table_part = Some(part);
+        items.push(cell);
+      }
+
+      line = line.saturating_add(1);
+    }
+
+    for mut stray in strays {
+      stray.lower_full_width(line, columns);
+      items.push(stray);
+      line = line.saturating_add(1);
+    }
+
+    for mut caption in bottom_captions {
+      caption.lower_full_width(line, columns);
+      caption.table_part = Some(TablePart::Caption);
+      items.push(caption);
+      line = line.saturating_add(1);
+    }
+
+    self.table_part = Some(TablePart::Table);
+
+    let style = &mut self.context.style;
+
+    style.display = Display::Grid;
+    style.grid_template_columns = Some(tracks);
+
+    if collapse {
+      style.column_gap = Gap::Length(Length::zero());
+      style.row_gap = Gap::Length(Length::zero());
+      style.clear_border();
+    } else {
+      style.column_gap = Gap::Length(spacing.x);
+      style.row_gap = Gap::Length(spacing.y);
+      style.inset_table_edges(spacing, &sizing);
+    }
+
+    self.children = Some(items.into_boxed_slice());
+  }
+
+  /// Places the self explicitly: taffy's cursor does not return to the row start
+  /// on a row a `rowspan` reaches into.
+  fn lower_cell(&mut self, line: i16, column: usize, colspan: u16, collapse: bool) {
+    let rowspan = self.span_attribute("rowspan", MAX_ROWSPAN);
+
+    self.context.collapsed_borders = collapse;
+
+    if self.context.style.display == Display::TableCell {
+      self.align_cell_content();
+
+      if self.context.style.display == Display::TableCell {
+        self.context.style.display = Display::Block;
+      }
+    }
+
+    self.context.style.grid_row_start = GridPlacement::Line(line);
+    self.context.style.grid_row_end = GridPlacement::Span(GridPlacementSpan::Span(rowspan));
+    self.context.style.grid_column_start = GridPlacement::Line(column as i16 + 1);
+    self.context.style.grid_column_end = GridPlacement::Span(GridPlacementSpan::Span(colspan));
+  }
+
+  fn lower_full_width(&mut self, line: i16, columns: u16) {
+    // A stray that is itself a lowered table keeps its grid; blocking it would
+    // drop the placement its own cells already carry.
+    if self.context.style.display != Display::Grid {
+      self.context.style.display = Display::Block;
+    }
+
+    self.context.style.grid_row_start = GridPlacement::Line(line);
+    self.context.style.grid_row_end = GridPlacement::Span(GridPlacementSpan::Span(1));
+    self.context.style.grid_column_start = GridPlacement::Line(1);
+    self.context.style.grid_column_end = GridPlacement::Span(GridPlacementSpan::Span(columns));
+  }
+
+  /// Approximation: row backgrounds leave `border-spacing` gaps unpainted.
+  fn inherit_row_background(&mut self, row: &RenderNode) {
+    let row_style = &row.context.style;
+
+    if row_style.background_color == ColorInput::transparent()
+      && row_style.background_image.is_none()
+    {
+      return;
+    }
+
+    let cell_style = &mut self.context.style;
+
+    if cell_style.background_color != ColorInput::transparent()
+      || cell_style.background_image.is_some()
+    {
+      return;
+    }
+
+    cell_style.background_color = row_style.background_color;
+    cell_style.background_image = row_style.background_image.clone();
+    cell_style.background_position = row_style.background_position.clone();
+    cell_style.background_size = row_style.background_size.clone();
+    cell_style.background_repeat = row_style.background_repeat.clone();
+    cell_style.background_clip = row_style.background_clip;
+    cell_style.background_origin = row_style.background_origin;
+  }
+
+  /// Wraps content to preserve its formatting context during alignment.
+  fn wrap_cell_content(&mut self) -> Option<&mut RenderNode> {
+    let children = self.children.take()?;
+    let content = RenderNode::anonymous_block_container(&self.context, children.into_vec());
+
+    self.children = Some(Box::new([content]));
+    self.children.as_deref_mut()?.first_mut()
+  }
+
+  fn align_cell_content(&mut self) {
+    let Some(justify) = CellAlignment::of(&self.context.style).justify_content() else {
+      return;
+    };
+
+    if self.wrap_cell_content().is_none() {
+      return;
+    }
+
+    let style = &mut self.context.style;
+
+    style.display = Display::Flex;
+    style.flex_direction = FlexDirection::Column;
+    style.justify_content = justify;
+  }
+
+  /// Approximates the first-baseline offset as block-start border and padding.
+  /// It drops the first line's ascent and half-leading, so cells drift once a
+  /// row mixes fonts or line heights.
+  fn content_inset_top(&self) -> f32 {
+    let style = &self.context.style;
+    let sizing = &self.context.sizing;
+    let border = if style.border_top_style.is_rendered() {
+      Length::from(style.border_top_width).to_px(sizing, 0.0)
+    } else {
+      0.0
+    };
+
+    border + style.padding_top.to_px(sizing, 0.0)
+  }
+
+  /// Widths a cell subtree takes when nothing constrains it and when everything
+  /// does. The cell is lowered first: `table-cell` establishes no formatting
+  /// context of its own, so taffy would lay its inline children out as blocks.
+  /// Nested tables pay for this once per level, since each level lays the levels
+  /// below it out again.
+  fn mark_intrinsic(&mut self) {
+    self.context.intrinsic_min_content = true;
+
+    for child in self.children.as_deref_mut().unwrap_or_default() {
+      child.mark_intrinsic();
+    }
+  }
+
+  fn intrinsic_widths(&self) -> (f32, f32) {
+    let mut cell = self.clone();
+
+    cell.lower_cell(1, 0, 1, false);
+    cell.context.style.display.blockify();
+    cell.mark_intrinsic();
+
+    let measure = |width| {
+      let mut tree = LayoutTree::from_render_node(&cell);
+
+      tree.compute_layout(Size {
+        width,
+        height: AvailableSpace::MaxContent,
+      });
+
+      tree
+        .into_results()
+        .layout(NodeId::ROOT)
+        .map_or(0.0, |layout| layout.size.width)
+    };
+
+    (
+      measure(AvailableSpace::MinContent),
+      measure(AvailableSpace::MaxContent),
+    )
+  }
+}
+
+fn align_row_baselines(cells: &mut [RenderNode]) {
+  let baselines: Vec<usize> = cells
+    .iter()
+    .enumerate()
+    .filter(|(_, cell)| CellAlignment::of(&cell.context.style) == CellAlignment::Baseline)
+    .map(|(index, _)| index)
+    .collect();
+
+  if baselines.len() < 2 {
+    return;
+  }
+
+  let deepest = baselines
+    .iter()
+    .map(|&index| cells[index].content_inset_top())
+    .fold(0.0, f32::max);
+
+  for index in baselines {
+    let shift = deepest - cells[index].content_inset_top();
+
+    if shift <= 0.0 {
+      continue;
+    }
+
+    if let Some(content) = cells[index].wrap_cell_content()
+      && let Some(layout_style) = content.layout_style_override.as_mut()
+    {
+      layout_style.margin.top = LengthPercentageAuto::length(shift);
+    }
+  }
+}
+
+impl ComputedStyle {
+  /// CSS 2.2 §17.6.1: separate borders space the outer cells from the table's
+  /// edges too, which the grid gap alone does not do. Naive: a percentage or
+  /// `auto` padding keeps its own value and takes no inset.
+  fn inset_table_edges(&mut self, spacing: SpacePair<Length>, sizing: &SizingContext) {
+    let inset = |padding: &mut Length, extra: Length| {
+      if matches!(padding, Length::Percentage(_) | Length::Auto) {
+        return;
+      }
+
+      *padding = Length::Px(padding.to_px(sizing, 0.0) + extra.to_px(sizing, 0.0));
+    };
+
+    inset(&mut self.padding_top, spacing.y);
+    inset(&mut self.padding_bottom, spacing.y);
+    inset(&mut self.padding_left, spacing.x);
+    inset(&mut self.padding_right, spacing.x);
+  }
+
+  /// The collapsed border lives on the edge cells, so the table box stops
+  /// painting its own.
+  fn clear_border(&mut self) {
+    self.border_top_style = BorderStyle::None;
+    self.border_right_style = BorderStyle::None;
+    self.border_bottom_style = BorderStyle::None;
+    self.border_left_style = BorderStyle::None;
+    self.border_top_width = LineWidth::Length(Length::zero());
+    self.border_right_width = LineWidth::Length(Length::zero());
+    self.border_bottom_width = LineWidth::Length(Length::zero());
+    self.border_left_width = LineWidth::Length(Length::zero());
+  }
 }
 
 #[cfg(test)]
