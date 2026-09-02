@@ -250,7 +250,7 @@ The PDF/A-3 levels require `mimeType`, `description`, and a modification date on
 
 ## Fillable fields
 
-Set `form: true` to make named inputs and textareas editable in a PDF reader.
+Set `form: true` to make named inputs, textareas, and selects editable in a PDF reader.
 
 ```tsx
 const pdf = await render(
@@ -263,6 +263,13 @@ const pdf = await render(
     </label>
 
     <input type="checkbox" name="subscribe" defaultChecked />
+
+    <select name="plan">
+      <option value="M">Monthly</option>
+      <option value="A" selected>
+        Annual
+      </option>
+    </select>
   </form>,
   { form: true },
 );

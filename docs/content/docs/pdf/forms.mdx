@@ -1,0 +1,69 @@
+---
+title: Fillable forms
+description: Turn HTML form controls into AcroForm fields a reader can fill in
+icon: TextCursorInput
+---
+
+`form: true` turns `<input>`, `<textarea>` and `<select>` into AcroForm fields. Left off, the same markup draws as the static boxes its CSS describes, so one template covers both the fillable form and the printed copy.
+
+```tsx twoslash
+import { render } from "takumi-pdf";
+
+const pdf = await render(
+  <form>
+    <label htmlFor="name">Full name</label>
+    <input id="name" name="name" defaultValue="Kane" required />
+
+    <input type="checkbox" name="subscribe" defaultChecked />
+
+    <select name="plan">
+      <option value="M">Monthly</option>
+      <option value="A" selected>
+        Annual
+      </option>
+    </select>
+  </form>,
+  // [!code highlight]
+  { form: true },
+);
+```
+
+## What each attribute becomes
+
+Fields come from the HTML attributes you already write. There is no second set of components.
+
+| HTML                                                                   | PDF                                                       |
+| ---------------------------------------------------------------------- | --------------------------------------------------------- |
+| `name`                                                                 | The field name. Radio buttons sharing one become a group  |
+| `value`, `checked`, `selected`, a `<textarea>`'s text                  | The value the field starts and resets to                  |
+| `required`, `readonly`, `disabled`                                     | Field flags. A disabled field stays out of the submission |
+| `maxlength`                                                            | The longest value a reader may type                       |
+| `<input type="password">`                                              | A password field, drawn masked                            |
+| `<option value>`                                                       | The value the option submits, separate from its label     |
+| `multiple`                                                             | A list box holding more than one selection                |
+| `aria-label`, `aria-labelledby`, `<label>`, `title`, `placeholder`     | The name a screen reader announces                        |
+| `color`, `font-size`, `text-align`                                     | How a reader redraws the value after an edit              |
+
+An `<input>` whose `type` is `submit`, `reset`, `button`, `image`, `file` or `hidden` draws as a plain box and gets no field. A standalone document has nothing to bind their action or file path to.
+
+## How a field is painted
+
+A control paints through the normal CSS pipeline, so its border, background and radius are whatever the stylesheet says. The widget draws only the value on top.
+
+The widget carries no `/MK`, so the appearance a viewer regenerates after an edit stays transparent over the box the page already painted. A rounded corner or a two-tone border survives that redraw. Only the value is drawn again, in the color, size and alignment above.
+
+## Names
+
+Two controls may share a `name` only when they are the buttons of one radio group. Anything else fails the render with `DuplicateFieldName` rather than merging into one field that shows the same value twice.
+
+A page dropped by `pageRanges` takes its fields with it, so the names it held do not collide.
+
+A period delimits the PDF field hierarchy. A name carrying one, such as `user.email`, is written to `/T` with the period replaced; `/TM` keeps the name the form exports under.
+
+## Limits
+
+Field values draw with the standard Helvetica face in WinAnsiEncoding, which no PDF/A or PDF/UA level accepts unembedded. Combining `form` with `pdfa` or `tagged: "ua1"` produces a document a validator rejects.
+
+A character outside WinAnsiEncoding is dropped from the drawn value. `/V` still carries it in full, so the value a reader submits is intact.
+
+A `<select>` draws one line, even when `multiple` holds several selections.
