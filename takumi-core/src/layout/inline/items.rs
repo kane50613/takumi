@@ -41,8 +41,7 @@ pub(super) fn inline_box_kind(render_node: &RenderNode) -> InlineBoxKind {
 
 /// An inline item after text processing, ready for layout.
 pub enum ProcessedInlineSpan<'c> {
-  /// The synthetic direction mark leading the paragraph. It is laid out with
-  /// the text but is not a source span, so nothing attributes output to it.
+  /// The synthetic direction mark leading the paragraph.
   DirectionMark {
     /// Base direction the mark forces.
     direction: Direction,
@@ -119,14 +118,11 @@ pub enum InlineItem<'c> {
     /// Innermost enclosing decorated span, if any.
     decorations: Option<Rc<DecorationLink>>,
   },
-  /// Advance an inline span's horizontal padding reserves at its edge. It
-  /// takes space on the line and paints nothing itself; the span's background
-  /// fragment covers it.
+  /// Advance an inline span's horizontal padding reserves at its edge.
   Spacer {
     /// The padding width in px.
     width: f32,
-    /// Innermost enclosing decorated span (the padded span itself when it is
-    /// decorated), if any.
+    /// Innermost enclosing decorated span (the padded span itself when it is decorated), if any.
     decorations: Option<Rc<DecorationLink>>,
   },
 }
@@ -253,8 +249,8 @@ fn collect_inline_items_impl<'n>(
   }
 }
 
-/// Whether this node is a non-replaced `display: inline` span (the inline
-/// formatting context's root does not count).
+/// Whether this node is a non-replaced `display: inline` span (the inline formatting context's root
+/// does not count).
 fn is_inline_span(node: &RenderNode, depth: usize) -> bool {
   depth > 0
     && node.context.style.display == Display::Inline
@@ -264,9 +260,7 @@ fn is_inline_span(node: &RenderNode, depth: usize) -> bool {
     )
 }
 
-/// The horizontal padding an inline span reserves on the line. Zero for the
-/// inline formatting context's root, whose padding is box padding, and for a
-/// replaced inline element, whose padding sizes its own box.
+/// The horizontal padding an inline span reserves on the line.
 fn inline_span_padding(node: &RenderNode, depth: usize) -> Rect<f32> {
   if !is_inline_span(node, depth) {
     return Rect::default();
@@ -281,8 +275,7 @@ fn inline_span_padding(node: &RenderNode, depth: usize) -> Rect<f32> {
   }
 }
 
-/// The decoration an inline span paints, or `None` when its background is
-/// invisible.
+/// The decoration an inline span paints, or `None` when its background is invisible.
 fn inline_span_decoration(node: &RenderNode, depth: usize) -> Option<InlineDecoration> {
   if !is_inline_span(node, depth) {
     return None;

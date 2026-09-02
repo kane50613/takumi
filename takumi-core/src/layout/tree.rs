@@ -36,9 +36,7 @@ use crate::{
   viewport::Viewport,
 };
 
-/// A render-tree child paired with its layout node id. `hoisted_cb` is set
-/// when the child is out-of-flow and was re-parented to a containing block in
-/// the layout tree; its geometry then resolves against that block.
+/// A render-tree child paired with its layout node id.
 #[derive(Debug, Clone, Copy)]
 pub struct OrderedChild {
   /// Index of the child in its parent's render order.
@@ -115,7 +113,6 @@ struct LayoutNodeState {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NodeOrigin {
   /// An authored node, at its document-order position in the source tree.
-  /// Stylesheet matching keys its results by the same number.
   Authored {
     /// Position in the source tree, counted in document order.
     source_order: usize,
@@ -128,8 +125,7 @@ pub enum NodeOrigin {
   Anonymous,
 }
 
-/// What a box was in a source table before lowering flattened the tree, for
-/// backends that rebuild table semantics, such as PDF structure tags.
+/// A box's source-table role before lowering.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TablePart {
   /// The lowered `display: table` box itself.
@@ -239,17 +235,13 @@ pub(crate) fn resolve_normal_line_height(
     .unwrap_or(font_size)
 }
 
-/// The element's own important declarations, which straddle the stylesheet's
-/// important half: `tw` sits between unlayered and named-layer rules, while an
-/// inline declaration outranks every selector.
+/// An element's own important declarations by cascade tier.
 struct ElementImportant {
   tw: Option<StyleDeclarationBlock>,
   inline: Option<StyleDeclarationBlock>,
 }
 
-/// The node's style, plus the important declarations that belong to the element
-/// rather than to a stylesheet, which the caller re-applies after sampling an
-/// animation.
+/// A node's style and element-owned important declarations.
 fn build_style_layers(
   node_layers: NodeStyleLayers,
   matched_declarations: &MatchedDeclarationsView<'_>,
@@ -395,11 +387,11 @@ pub(super) fn pseudo_computed_style(
     NodeStyleLayers::default(),
     pseudo_matched,
     parent_context.sizing.viewport,
-    parent_context.stylesheet.as_ref(),
+    parent_context.stylesheet().as_ref(),
   );
   let inherited_parent = registered_custom_property_parent_style(
     &parent_context.style,
-    std::slice::from_ref(parent_context.stylesheet.as_ref()),
+    std::slice::from_ref(parent_context.stylesheet().as_ref()),
     parent_context.sizing.viewport,
   );
   let mut style = style_layers.inherit(&inherited_parent);
@@ -1171,9 +1163,7 @@ impl RenderNode {
     }
   }
 
-  /// An element's own text, moved into a child so generated content can precede
-  /// it. Text decorations do not inherit, so they are propagated the way CSS
-  /// propagates them to an anonymous descendant.
+  /// An element's own text, moved into a child so generated content can precede it.
   fn generated_sibling_text(parent_context: &RenderContext, text: String) -> Self {
     let (mut style, sizing, current_color) =
       pseudo_computed_style(parent_context, &MatchedDeclarationsView::default());
@@ -1262,8 +1252,7 @@ impl RenderNode {
     })
   }
 
-  /// The block box the marker travels into when this box has no line of its
-  /// own. A list item is left alone: its own marker holds that line already.
+  /// The block box the marker travels into when this box has no line of its own.
   fn marker_host_child(&mut self) -> Option<&mut RenderNode> {
     let child = self
       .children
@@ -1280,8 +1269,7 @@ impl RenderNode {
       && self.leads_to_a_line()
   }
 
-  /// Whether this box, or the block chain below it, ends in a line the marker
-  /// can share.
+  /// Whether this box, or the block chain below it, ends in a line the marker can share.
   fn leads_to_a_line(&self) -> bool {
     self.should_create_inline_layout()
       || self.children.is_none()
@@ -1327,8 +1315,7 @@ impl RenderNode {
     }
   }
 
-  /// Resolves the descendant at `path` (child indices from this node). An empty
-  /// path returns `self`.
+  /// Resolves the descendant at `path` (child indices from this node).
   pub fn node_at_path(&self, path: &[usize]) -> Option<&RenderNode> {
     let mut current = self;
     for &index in path {
@@ -1398,7 +1385,7 @@ impl RenderNode {
   pub fn from_node(parent_context: &RenderContext, node: Node) -> Self {
     let matched_styles = match_stylesheets_view(
       &node,
-      &parent_context.stylesheet,
+      parent_context.stylesheet(),
       parent_context.sizing.viewport,
     );
     let mut tree = Self::from_node_iterative(parent_context, node, &matched_styles);
@@ -1462,11 +1449,11 @@ impl RenderNode {
         layers,
         matched,
         parent_context.sizing.viewport,
-        parent_context.stylesheet.as_ref(),
+        parent_context.stylesheet().as_ref(),
       );
       let inherited_parent = registered_custom_property_parent_style(
         &parent_context.style,
-        std::slice::from_ref(parent_context.stylesheet.as_ref()),
+        std::slice::from_ref(parent_context.stylesheet().as_ref()),
         parent_context.sizing.viewport,
       );
 
@@ -1508,8 +1495,8 @@ impl RenderNode {
         );
         style = apply_stylesheet_animations(
           style,
-          &child_context.stylesheet,
-          child_context.time_ms,
+          child_context.stylesheet(),
+          child_context.time_ms(),
           &child_context.sizing,
           child_context.current_color,
         );
@@ -2623,7 +2610,7 @@ mod tests {
     let resolved = style.inherit(&adjusted_parent);
     assert_eq!(
       resolved.custom_properties.get("--box-size"),
-      Some(&"red".to_owned()) // syntax validation is skipped, so any value is accepted
+      Some(&"red".to_owned())
     );
   }
 
@@ -2841,7 +2828,7 @@ mod tests {
     let resolved = style.inherit(&adjusted_parent);
     assert_eq!(
       resolved.custom_properties.get("--move"),
-      Some(&"red".to_owned()) // syntax validation is skipped, so any value is accepted
+      Some(&"red".to_owned())
     );
   }
 

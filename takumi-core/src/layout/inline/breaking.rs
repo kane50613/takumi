@@ -10,8 +10,8 @@ use parley::{InlineBoxKind, Line, PositionedInlineBox, PositionedLayoutItem, Yie
 
 use super::{InlineBrush, InlineLayout, floats::FloatLayoutState, items::ProcessedInlineSpan};
 
-/// Splits a line's trailing-whitespace advance over its trailing glyph runs,
-/// walking back from the line end so a run keeps at most its own advance.
+/// Splits a line's trailing-whitespace advance over its trailing glyph runs, walking back from the
+/// line end so a run keeps at most its own advance.
 pub(super) fn distribute_trailing_whitespace(
   items: &[PositionedLayoutItem<'_, InlineBrush>],
   line: &Line<'_, InlineBrush>,
@@ -35,7 +35,8 @@ pub(super) fn distribute_trailing_whitespace(
   shares
 }
 
-/// Resolve the inline layout's max width and optional max height from available space and known dimensions.
+/// Resolve the inline layout's max width and optional max height from available space and known
+/// dimensions.
 pub(crate) fn create_inline_constraint(
   context: &RenderContext,
   available_space: Size<AvailableSpace>,
@@ -73,7 +74,6 @@ pub(crate) fn create_inline_constraint(
     width_constraint = (width_constraint - horizontal_insets).max(0.0);
   }
 
-  // applies a maximum height to reduce unnecessary calculation.
   let max_height = match (
     context.sizing.viewport.size.height,
     context.style.clamp_lines(),

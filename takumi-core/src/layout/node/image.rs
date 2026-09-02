@@ -203,7 +203,7 @@ pub fn resolve_image(src: &str, context: &RenderContext) -> ImageResult {
     return Err(ImageError::SvgParseNotSupported);
   }
 
-  if let Some(img) = context.images.get(src) {
+  if let Some(img) = context.images().get(src) {
     return Ok(img.clone());
   }
 

@@ -36,7 +36,6 @@ pub(super) fn text_fit_is_applicable(positioned_floats: &[PositionedInlineBox]) 
 }
 
 /// Returns `(text_advance, static_advance)` for a line.
-/// `text_advance` excludes trailing whitespace and inline boxes; `static_advance` is inline-box width only.
 fn text_fit_line_advance(line: &Line<'_, InlineBrush>) -> (f32, f32) {
   let metrics = line.metrics();
   let static_advance: f32 = line
@@ -151,8 +150,8 @@ pub(crate) fn text_fit_line_alignment_correction(
   (line_start, aligned_line_start - line_start)
 }
 
-/// Per-line text-fit scaling state: `scale` applied about `layout_origin`, plus
-/// the horizontal `alignment_correction` for a scaled-down line.
+/// Per-line text-fit scaling state: `scale` applied about `layout_origin`, plus the horizontal
+/// `alignment_correction` for a scaled-down line.
 #[derive(Clone, Copy)]
 pub(crate) struct LineScaleState {
   /// Text-fit scale factor for the line.
@@ -174,9 +173,8 @@ pub(crate) fn text_fit_x_correction(
 }
 
 impl LineScaleState {
-  /// Composes the affine transform for a glyph run on this (possibly scaled)
-  /// line: `base * T(x_correction) * scale-about-origin`. Shared by the raster
-  /// walk and the vector producer so the positioning math has a single home.
+  /// Composes the affine transform for a glyph run on this (possibly scaled) line: `base *
+  /// T(x_correction) * scale-about-origin`.
   pub(crate) fn transform(self, base: Affine, static_inline_prefix: f32) -> Affine {
     let x_correction =
       text_fit_x_correction(self.scale, static_inline_prefix, self.alignment_correction);
@@ -188,8 +186,8 @@ impl LineScaleState {
   }
 }
 
-/// Scales an inline box's `x` for a text-fit-scaled line, mirroring the
-/// horizontal correction in [`LineScaleState::transform`].
+/// Scales an inline box's `x` for a text-fit-scaled line, mirroring the horizontal correction in
+/// [`LineScaleState::transform`].
 pub(crate) fn scale_text_fit_x(
   x: f32,
   origin_x: f32,

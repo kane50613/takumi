@@ -75,16 +75,12 @@ pub struct InlineLayoutRequest<'c> {
   pub context: &'c RenderContext,
   /// Measure or draw.
   pub mode: InlineLayoutMode,
-  /// Whether text-only shaping may be served from the per-render shape
-  /// cache, deduplicating repeated measure calls, scene building, and
-  /// drawing of the same content.
+  /// Whether text-only shaping may use the per-render cache.
   pub shape_cacheable: bool,
 }
 
 impl<'c> InlineLayoutRequest<'c> {
-  /// A request that lays `items` into a content box. The available space, the
-  /// wrap width and the height clamp all follow from the box, so a caller only
-  /// says what it is laying out and whether it is measuring.
+  /// A request that lays `items` into a content box.
   pub fn in_content_box(
     items: Vec<InlineItem<'c>>,
     content: Size<f32>,
@@ -214,10 +210,8 @@ impl BuiltInlineLayout<'_> {
     )
   }
 
-  /// Measures each glyph run's text/bounding box and each inline box's
-  /// position/size, with text-fit line scaling applied. Lighter than
-  /// [`resolve_inline_runs`]: no font-context access or glyph outline
-  /// resolution, for the measure-only path. Returned run text borrows `self`.
+  /// Measures each glyph run's text/bounding box and each inline box's position/size, with text-fit
+  /// line scaling applied.
   pub fn measure_runs(
     &self,
     layout: ComputedLayout,
@@ -351,8 +345,8 @@ pub(crate) struct InlineMeasureOptions {
   pub(crate) max_width: f32,
   pub(crate) ceil_width: bool,
   pub(crate) parent_font_metrics: Option<ParentFontMetrics>,
-  /// A min-content query wraps at zero and reports the widest run it could not
-  /// break, so the width it wrapped against must not cap the answer.
+  /// A min-content query wraps at zero and reports the widest run it could not break, so the width
+  /// it wrapped against must not cap the answer.
   pub(crate) clamp_to_max_width: bool,
 }
 
@@ -560,8 +554,8 @@ pub(crate) fn measure_inline_layout(
   }
 }
 
-/// Pushes `text` under `style`, giving each variation-selector segment a
-/// presentation-reordered font stack.
+/// Pushes `text` under `style`, giving each variation-selector segment a presentation-reordered
+/// font stack.
 pub(super) fn push_presentation_text(
   builder: &mut TreeBuilder<'_, InlineBrush>,
   style: &SizedFontStyle,
@@ -616,8 +610,8 @@ pub(super) fn push_spans_into_builder(
   }
 }
 
-/// The span the direction mark attributes its output to: a run the mark's
-/// cluster merged into (emoji sequences) paints as the first real text span.
+/// The span the direction mark attributes its output to: a run the mark's cluster merged into
+/// (emoji sequences) paints as the first real text span.
 fn first_text_span_id(spans: &[ProcessedInlineSpan<'_>]) -> Option<u64> {
   spans
     .iter()
@@ -824,7 +818,7 @@ fn build_inline_layout_tree<'c>(
     })
   });
   let (cached, seen) = match (cache_key, &expected_text) {
-    (Some(key), Some(expected)) => match context.shape_cache.borrow().get(&key) {
+    (Some(key), Some(expected)) => match context.shape_cache().borrow().get(&key) {
       Some(Some((layout, text))) if text == expected => {
         ((Some((layout.clone(), text.clone()))), true)
       }
@@ -838,13 +832,13 @@ fn build_inline_layout_tree<'c>(
     None => {
       let (layout, text) =
         context.tree_builder(style.into(), chromium_line_breaks(&spans), |builder| {
-          push_spans_into_builder(builder, &spans, &context.fonts.classes)
+          push_spans_into_builder(builder, &spans, &context.fonts().classes)
         });
 
       if let Some(key) = cache_key {
         let stored = seen.then(|| (layout.clone(), text.clone()));
 
-        context.shape_cache.borrow_mut().insert(key, stored);
+        context.shape_cache().borrow_mut().insert(key, stored);
       }
       (layout, text)
     }
@@ -998,8 +992,7 @@ pub(crate) fn resolve_inline_max_height(
     })
 }
 
-/// Per-line setup (scale state, baseline shift, resolved metrics) for the inline
-/// painting walk.
+/// Per-line setup (scale state, baseline shift, resolved metrics) for the inline painting walk.
 pub(crate) struct LineSetup {
   /// Text-fit scale state for the line.
   pub(crate) state: LineScaleState,
@@ -1013,7 +1006,6 @@ pub(crate) struct LineSetup {
 
 impl LineSetup {
   /// Resolves a line's scale state, baseline, and metrics for the inline walk.
-  /// Returns `None` when `line_index` is out of range for `line_vertical_metrics`.
   pub(crate) fn new(
     line: &Line<'_, InlineBrush>,
     layout: ComputedLayout,

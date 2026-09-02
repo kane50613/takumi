@@ -93,8 +93,8 @@ impl Display {
   }
 }
 
-/// The table's children sorted into their roles, rows flattened in render
-/// order: header rows first, then body, then footer.
+/// The table's children sorted into their roles, rows flattened in render order: header rows first,
+/// then body, then footer.
 struct TableSlots {
   captions: Vec<RenderNode>,
   rows: Vec<RenderNode>,
@@ -156,8 +156,7 @@ impl TableSlots {
   }
 }
 
-/// Every cell's column track and span, row by row, and the track count they
-/// reach.
+/// Every cell's column track and span, row by row, and the track count they reach.
 struct TableGrid {
   placements: Vec<Vec<(usize, u16)>>,
   columns: u16,
@@ -351,9 +350,7 @@ impl TableGrid {
 struct ColumnWidths(Vec<(f32, f32)>);
 
 impl ColumnWidths {
-  /// `None` when nothing was measured, which leaves every track `auto`. The
-  /// min-content floor is what keeps a column that is narrower than its share
-  /// from spilling into the next one.
+  /// `None` when nothing was measured, which leaves every track `auto`.
   fn tracks(&self) -> Option<Vec<String>> {
     self.0.iter().any(|(_, max)| *max > 0.0).then(|| {
       self
@@ -717,8 +714,7 @@ impl ComputedStyle {
     inset(&mut self.padding_right, spacing.x);
   }
 
-  /// The collapsed border lives on the edge cells, so the table box stops
-  /// painting its own.
+  /// The collapsed border lives on the edge cells, so the table box stops painting its own.
   fn clear_border(&mut self) {
     self.border_top_style = BorderStyle::None;
     self.border_right_style = BorderStyle::None;
@@ -749,8 +745,8 @@ mod tests {
     viewport::Viewport,
   };
 
-  /// Lowers a tree whose displays come from a stylesheet, standing in for the
-  /// element presets the HTML and JSX front ends apply.
+  /// Lowers a tree whose displays come from a stylesheet, standing in for the element presets the
+  /// HTML and JSX front ends apply.
   fn lower(root: Node) -> RenderNode {
     let stylesheet = StyleSheet::parse(
       r"

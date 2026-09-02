@@ -5,9 +5,7 @@ use std::collections::HashMap;
 
 use super::text_fit::{LineScaleState, text_fit_x_correction};
 
-/// A glyph run's text-outline rectangle on a line, in border-box space. The
-/// raster backend merges these into stroked islands; the vector backend emits
-/// them as outline contours. Pure geometry, no backend types.
+/// A glyph run's text-outline rectangle on a line, in border-box space.
 #[derive(Clone, Copy)]
 #[non_exhaustive]
 pub struct InlineOutlineRect {
@@ -67,8 +65,8 @@ fn expand_outline_rect(rect: InlineOutlineRect, amount: f32) -> Option<InlineOut
   })
 }
 
-/// Merges rects that touch on the same span and line into one rect per
-/// contiguous group, sorted by span then line.
+/// Merges rects that touch on the same span and line into one rect per contiguous group, sorted by
+/// span then line.
 fn merge_inline_rects(mut rects: Vec<InlineOutlineRect>) -> Vec<InlineOutlineRect> {
   rects.sort_by(|left, right| {
     left
@@ -104,9 +102,8 @@ fn merge_inline_rects(mut rects: Vec<InlineOutlineRect>) -> Vec<InlineOutlineRec
   merged_rects
 }
 
-/// Merges adjacent per-line outline rects, then groups them into
-/// vertically-continuous islands; each island becomes one stroked contour.
-/// Backend-agnostic; both the raster and vector backends consume the islands.
+/// Merges adjacent per-line outline rects, then groups them into vertically-continuous islands;
+/// each island becomes one stroked contour.
 pub fn outline_islands(outline_rects: Vec<InlineOutlineRect>) -> Vec<Vec<InlineOutlineRect>> {
   let merged_rects = merge_inline_rects(outline_rects);
 
@@ -152,9 +149,8 @@ pub fn outline_islands(outline_rects: Vec<InlineOutlineRect>) -> Vec<Vec<InlineO
   islands
 }
 
-/// Builds the rectilinear contour around one island of outline rects, expanded
-/// by `expansion` (outline-offset plus half the outline width). Pure path
-/// geometry; callers stroke it with their own backend.
+/// Builds the rectilinear contour around one island of outline rects, expanded by `expansion`
+/// (outline-offset plus half the outline width).
 pub fn outline_island_contour(island: &[InlineOutlineRect], expansion: f32) -> Vec<PathCommand> {
   let mut path = Vec::with_capacity(island.len() * 6);
   let mut expanded_rects = island

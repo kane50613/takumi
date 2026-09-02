@@ -401,7 +401,7 @@ fn begin_node_render(
 
   draw_render_node_content(current, canvas, layout)?;
 
-  if current.context.draw_debug_border {
+  if current.context.draw_debug_border() {
     draw_debug_border(canvas, layout, node_paint.transform);
   }
 

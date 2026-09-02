@@ -1,5 +1,4 @@
-//! JPEG stills through the `image` crate, or header-only sizing when the
-//! decoder is compiled out.
+//! JPEG stills through the `image` crate, or header-only sizing when the decoder is compiled out.
 
 #[cfg(feature = "jpeg")]
 use std::io::Cursor;

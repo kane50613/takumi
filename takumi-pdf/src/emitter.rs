@@ -77,8 +77,7 @@ use crate::{
 /// What a box left on the surface for its caller to unwind.
 #[derive(Default)]
 pub(crate) struct BoxState {
-  /// Transforms, clips and layers to pop once the box and its children are
-  /// done.
+  /// Transforms, clips and layers to pop once the box and its children are done.
   pushed: usize,
   /// The `overflow` clip, popped before the outline so the outline escapes it.
   overflow_clip: usize,
@@ -94,9 +93,7 @@ pub(crate) struct PendingOutline {
   y: f32,
 }
 
-/// Blob identity, collection index, and the variation coordinates the run was
-/// shaped at. One blob instanced at two weights is two embedded fonts, so the
-/// coordinates belong in the key.
+/// Blob identity, collection index, and the variation coordinates the run was shaped at.
 pub(crate) type FontKey = (u64, u32, Vec<([u8; 4], u32)>);
 
 /// Krilla fonts embedded so far, one per distinct instance.
@@ -107,20 +104,16 @@ pub(crate) struct Emitter<'a> {
   pub(crate) contexts: &'a [StackingContextNode],
   pub(crate) results: &'a LayoutResults,
   pub(crate) document: &'a DocumentState<'a>,
-  /// Pre-built inline layouts for the content tree; band trees build on the
-  /// fly.
+  /// Pre-built inline layouts for the content tree; band trees build on the fly.
   pub(crate) inline: Option<&'a InlineMap<'a>>,
   /// The page window this walk paints through.
   pub(crate) window: Window,
-  /// Whether this walk records marked content for the structure tree. A
-  /// replayed artifact walks the same document untagged.
+  /// Whether this walk records marked content for the structure tree.
   pub(crate) tagged: bool,
-  /// Path from the document root to this emitter's own root. Empty for the
-  /// document; an inline box's subtree emitter carries the box's path, so the
-  /// nodes it tags land where the structure tree walk looks for them.
+  /// Path from the document root to this emitter's own root.
   pub(crate) tag_prefix: Vec<usize>,
-  /// Color transform from the `filter` properties of the enclosing stacking
-  /// contexts, applied to every color this subtree paints.
+  /// Color transform from the `filter` properties of the enclosing stacking contexts, applied to
+  /// every color this subtree paints.
   pub(crate) color_filter: Option<Rc<ColorFilter>>,
 }
 
@@ -147,13 +140,9 @@ pub(crate) struct DocumentState<'a> {
   pub(crate) fonts: RefCell<FontMap>,
   /// Present when the document is tagged.
   pub(crate) tags: Option<RefCell<TagCollector>>,
-  /// What the pages could not draw. Collected rather than raised on the spot:
-  /// the surface has open transforms and clips mid-page, and unwinding past
-  /// them would leave it unbalanced.
+  /// What the pages could not draw.
   pub(crate) issues: RefCell<RenderIssues>,
-  /// The document's default language. A node declaring a different one has
-  /// its content marked with that language, which is how a reader knows to
-  /// switch voices mid-document.
+  /// The document's default language.
   pub(crate) lang: Option<&'a str>,
 }
 
@@ -167,8 +156,8 @@ impl<'a> DocumentState<'a> {
     }
   }
 
-  /// The error the pages left behind, if any: what failed outright, else the
-  /// characters no font covered.
+  /// The error the pages left behind, if any: what failed outright, else the characters no font
+  /// covered.
   pub(crate) fn into_error(self) -> Option<PdfError> {
     let issues = self.issues.into_inner();
 
@@ -187,8 +176,7 @@ impl<'a> DocumentState<'a> {
 }
 
 impl Emitter<'_> {
-  /// The filter chain as colors, keeping the first function a PDF cannot
-  /// express.
+  /// The filter chain as colors, keeping the first function a PDF cannot express.
   fn composed_filter(
     &self,
     outer: Option<&ColorFilter>,
@@ -225,9 +213,7 @@ impl Emitter<'_> {
     }
   }
 
-  /// Whether the run's line belongs to another page. The one ownership test
-  /// every inline paint pass shares: glyphs, shadows, decorations, boxes and
-  /// background fragments all key on it.
+  /// Whether the run's line belongs to another page.
   fn window_disowns_run(&self, run: &PositionedInlineRun, layout: Layout, y: f32) -> bool {
     run.glyph_run.glyphs.first().is_some_and(|glyph| {
       self
@@ -242,10 +228,6 @@ impl Emitter<'_> {
   }
 
   /// The marked-content tag a node's own content opens.
-  ///
-  /// A node whose language differs from the document's carries it on a `Span`,
-  /// which is how PDF records a language change. Content in the document's own
-  /// language needs nothing: the catalog already declares it.
   fn content_tag<'t>(&self, node: &'t RenderNode) -> ContentTag<'t> {
     match node.context.style.lang.as_ref().map(Lang::as_str) {
       Some(lang) if Some(lang) != self.document.lang => {
@@ -314,8 +296,7 @@ impl Emitter<'_> {
     Ok(())
   }
 
-  /// Emits one node's background and own content. Returns the frame the node's
-  /// children sit in and how many transforms were pushed onto the surface.
+  /// Emits one node's background and own content.
   fn emit_box(
     &mut self,
     paint: &NodePaint,
@@ -606,10 +587,8 @@ impl Emitter<'_> {
     }
   }
 
-  /// Draws one tile into a pattern and fills the layer's area with it, so a
-  /// repeated layer costs one shading instead of one per tile. The filled rect
-  /// covers the paint box at `rect_at`; the first tile hangs off `anchor`,
-  /// which `background-origin` may inset from the paint box.
+  /// Draws one tile into a pattern and fills the layer's area with it, so a repeated layer costs
+  /// one shading instead of one per tile.
   #[allow(clippy::too_many_arguments)]
   fn tiled_layer(
     &self,
@@ -842,8 +821,7 @@ impl Emitter<'_> {
     Some(paint)
   }
 
-  /// Paints one side of a box's shadows inside its own artifact sequence, so
-  /// the fills stay out of the structure tree like the other decorations.
+  /// Paints one side of a box's shadows as an artifact.
   fn shadows(
     &self,
     shadows: &[SizedShadow],
@@ -869,9 +847,6 @@ impl Emitter<'_> {
   }
 
   /// A node's shadows resolved against its box, split into inset and outer.
-  /// The shadow color goes through the subtree's `filter` like every other
-  /// color the element paints.
-  /// Applies this subtree's `filter` to each shadow colour.
   fn filtered_shadows(&self, shadows: BoxShadows) -> BoxShadows {
     let recolor = |shadow: SizedShadow| SizedShadow {
       color: Color(self.filtered(shadow.color)),
@@ -884,13 +859,7 @@ impl Emitter<'_> {
     }
   }
 
-  /// Builds the soft mask for `mask-image`, drawing its layers into their own
-  /// stream. The layers are alpha masks, which is what `mask-mode` resolves to
-  /// for an image source.
-  ///
-  /// The element's own `filter` stays off the mask: it already applies to the
-  /// content the mask covers, and applying it to both would compound, so
-  /// `opacity(0.5)` behind a mask would leave a quarter of the alpha.
+  /// Builds the soft mask for `mask-image`, drawing its layers into their own stream.
   fn mask(
     &mut self,
     node: &RenderNode,
@@ -961,8 +930,8 @@ impl Emitter<'_> {
     resolved
   }
 
-  /// Opens an artifact sequence around a decoration when tagging is on, so it
-  /// stays out of the structure tree. Returns whether one was opened.
+  /// Opens an artifact sequence around a decoration when tagging is on, so it stays out of the
+  /// structure tree.
   fn start_artifact(&self, surface: &mut Surface) -> bool {
     if !self.tagged {
       return false;
@@ -1250,8 +1219,8 @@ impl Emitter<'_> {
     }
   }
 
-  /// Draws a text-bearing box's runs, from the pre-built inline map when the
-  /// node is in it (content tree) or built on the fly (band trees).
+  /// Draws a text-bearing box's runs, from the pre-built inline map when the node is in it (content
+  /// tree) or built on the fly (band trees).
   fn emit_node_text(
     &mut self,
     node: &RenderNode,
@@ -1566,8 +1535,7 @@ impl Emitter<'_> {
     );
   }
 
-  /// Paints an inline-level container from the scene it carries. The box is not
-  /// in the paint list, so it needs a stacking context of its own.
+  /// Paints an inline-level container from the scene it carries.
   fn emit_inline_subtree(
     &mut self,
     subtree: Box<InlineSubtree>,
@@ -1611,8 +1579,8 @@ impl Emitter<'_> {
     surface.pop();
   }
 
-  /// Opens a marked-content region for a node the paint list never visited, so
-  /// its content still reaches the structure tree.
+  /// Opens a marked-content region for a node the paint list never visited, so its content still
+  /// reaches the structure tree.
   fn start_tagged_node(&self, node: &RenderNode, surface: &mut Surface) {
     if decorative_image(node) {
       surface.start_tagged(ContentTag::Artifact(Artifact::new(
@@ -1642,8 +1610,8 @@ impl Emitter<'_> {
     full
   }
 
-  /// Tag target for a generated marker: its nearest `display: list-item`
-  /// ancestor, whose `Lbl` holds the label.
+  /// Tag target for a generated marker: its nearest `display: list-item` ancestor, whose `Lbl`
+  /// holds the label.
   fn marker_tag_target(&self, owner: &RenderNode) -> Option<Vec<usize>> {
     let mut owner_path = Vec::new();
 
@@ -1695,9 +1663,7 @@ impl Emitter<'_> {
     })
   }
 
-  /// The fills a `background-clip: text` box paints through its glyphs:
-  /// the background color, then each gradient layer bottom-up, anchored to the
-  /// box the way the box background would be. Empty for every other clip.
+  /// The fills painted through a `background-clip: text` box's glyphs.
   fn text_clip_fills(
     &self,
     node: &RenderNode,
@@ -1762,8 +1728,8 @@ impl Emitter<'_> {
     fills
   }
 
-  /// Draws every run's glyphs once, in `color` when set, with no decorations:
-  /// the shadow passes under the real text.
+  /// Draws every run's glyphs once, in `color` when set, with no decorations: the shadow passes
+  /// under the real text.
   #[allow(clippy::too_many_arguments)]
   fn glyph_pass(
     &mut self,
@@ -1816,9 +1782,8 @@ impl Emitter<'_> {
     }
   }
 
-  /// Shears the text about its baseline, the faux oblique the raster renderer
-  /// applies to glyph outlines. Surface space runs y down, so the sign flips.
-  /// Returns whether the transform was pushed.
+  /// Shears the text about its baseline, the faux oblique the raster renderer applies to glyph
+  /// outlines.
   fn push_oblique(&self, shaped: &ShapedRun, origin: Point, surface: &mut Surface) -> bool {
     let Some(degrees) = shaped.synthetic_skew else {
       return false;
@@ -1868,8 +1833,7 @@ impl Emitter<'_> {
   }
 }
 
-/// Intrinsic sizing of a `url()` layer, which `background-size` resolves
-/// against. Gradients have none.
+/// Intrinsic sizing of a `url()` layer, which `background-size` resolves against.
 #[cfg(feature = "images")]
 fn layer_intrinsic(
   image: &BackgroundImage,
@@ -1891,8 +1855,7 @@ fn layer_intrinsic(
   None
 }
 
-/// The positioning area `background-size` and `-position` resolve against,
-/// per `background-origin`: an offset into the border box and its size.
+/// The positioning area selected by `background-origin`.
 fn background_origin_area(origin: BackgroundOrigin, layout: Layout) -> (CorePoint<f32>, Size<f32>) {
   let inset = |left: f32, right: f32, top: f32, bottom: f32| {
     (
@@ -1918,8 +1881,8 @@ fn background_origin_area(origin: BackgroundOrigin, layout: Layout) -> (CorePoin
   }
 }
 
-/// Whether the node draws own content (text or an image), i.e. whether a
-/// tagged content sequence around it would be non-empty.
+/// Whether the node draws own content (text or an image), i.e. whether a tagged content sequence
+/// around it would be non-empty.
 fn has_own_content(node: &RenderNode) -> bool {
   if node.should_create_inline_layout() {
     return true;
@@ -2059,9 +2022,7 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
   }
 }
 
-/// Fills `path` with the child indices leading from `root` to `target`,
-/// matched by identity. An inline box arrives as a bare node reference, so the
-/// key the tag collector wants has to be recovered from the tree.
+/// Fills `path` with the child indices leading from `root` to `target`, matched by identity.
 fn node_path(root: &RenderNode, target: &RenderNode, path: &mut Vec<usize>) -> bool {
   if std::ptr::eq(root, target) {
     return true;
@@ -2077,19 +2038,16 @@ fn node_path(root: &RenderNode, target: &RenderNode, path: &mut Vec<usize>) -> b
   false
 }
 
-/// Whether the node is an image explicitly marked decorative (`alt=""`), so
-/// its content is emitted as an artifact instead of a `Figure` element.
+/// Whether the node is an image explicitly marked decorative (`alt=""`), so its content is emitted
+/// as an artifact instead of a `Figure` element.
 fn decorative_image(node: &RenderNode) -> bool {
   node.node.as_ref().is_some_and(|source| {
     source.tag_name().is_some_and(|name| name == "img") && source.alt() == Some("")
   })
 }
 
-/// The stroke that fakes bold for a face with no weight of its own to reach,
-/// at the width the raster renderer emboldens with. Filling and stroking keeps
-/// the run as text, so it stays selectable.
-/// The stroke that widens the glyph coverage a `background-clip: text` fill
-/// paints through: `-webkit-text-stroke`, faux bold, or whichever is wider.
+/// The stroke that fakes bold for a face with no weight of its own to reach, at the width the
+/// raster renderer emboldens with.
 fn background_stroke(shaped: &ShapedRun, fill: &Fill) -> Option<Stroke> {
   let width = shaped
     .synthetic_bold

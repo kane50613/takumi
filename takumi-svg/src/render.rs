@@ -54,12 +54,10 @@ pub struct SvgOptions<'g> {
   /// Global animation time in milliseconds.
   #[builder(default = 0)]
   pub(crate) time_ms: u64,
-  /// Per-render font fallback chain (family names in order). `None` uses all
-  /// registered families in registration order.
+  /// Per-render font fallback chain (family names in order).
   #[builder(default)]
   pub(crate) font_families: Option<FontFamily>,
-  /// Default BCP-47 language tag applied to the root, inherited by nodes without
-  /// their own `lang`. Drives locale-aware shaping and line-breaking.
+  /// Default BCP-47 language tag applied to the root, inherited by nodes without their own `lang`.
   #[builder(default)]
   pub(crate) lang: Option<Lang>,
 }
@@ -145,9 +143,7 @@ impl BoxChrome {
     self.outline.take()
   }
 
-  /// Closes the box's groups innermost first, painting the outline once the
-  /// content group is closed so it lands above the content and outside its
-  /// overflow clip.
+  /// Closes a box's groups and paints its deferred outline.
   pub(crate) fn close(self, doc: &mut SvgDocument) -> io::Result<()> {
     if let Some(group) = self.child_group {
       doc.end_group(group)?;
@@ -170,12 +166,7 @@ impl BoxChrome {
   }
 }
 
-/// Emits a box's shared chrome (the positioning/opacity group, box-shadows,
-/// rounded-clipped background, borders), then opens the overflow-clip child group.
-/// Decorations are drawn at `(x, y)`; `group_transform` is the group the box (and
-/// its children) are emitted under — the node's transform relative to its parent
-/// frame, so nesting composes it. The returned group tokens must be closed by the
-/// caller after emitting the box's content.
+/// Emits a box's shared chrome and opens its child group.
 pub(crate) fn emit_box_chrome(
   node: &RenderNode,
   layout: Layout,
@@ -300,9 +291,8 @@ fn background_origin_frame(origin: BackgroundOrigin, layout: Layout, x: f32, y: 
   }
 }
 
-/// Emits the element's background (color then image layers) clipped to the region
-/// selected by `background-clip`. Mirrors the raster backend's `draw_background`.
-/// `background-clip: text` is suppressed here and painted by the text path.
+/// Emits the element's background (color then image layers) clipped to the region selected by
+/// `background-clip`.
 pub(crate) fn emit_background(
   node: &RenderNode,
   border: &BorderProperties,
@@ -489,8 +479,7 @@ pub(crate) fn emit_clip_path_group(
   Ok(Some(doc.begin_group(IDENTITY, 1.0, Some(&clip), None)?))
 }
 
-/// Resolves a [`ShapeRadius`] to pixels, mirroring the raster backend's
-/// `resolve_radius` (closest/farthest measured from the resolved center).
+/// Resolves a [`ShapeRadius`] to pixels.
 fn resolve_shape_radius(
   radius: ShapeRadius,
   near: f32,
@@ -505,8 +494,7 @@ fn resolve_shape_radius(
   }
 }
 
-/// Absolute SVG path `d` for a [`ClipBox`]'s rounded rectangle, reusing core's
-/// `BorderProperties` geometry (cubic-bezier corners, overlap-scaled radii).
+/// An absolute SVG path for a [`ClipBox`]'s rounded rectangle.
 fn clip_box_path_data(clip: ClipBox, x: f32, y: f32) -> String {
   let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
   clip
@@ -515,9 +503,7 @@ fn clip_box_path_data(clip: ClipBox, x: f32, y: f32) -> String {
   path_data(&commands, [1.0, 0.0, 0.0, 1.0, x, y])
 }
 
-/// Absolute SVG path `d` for a rounded rectangle of `size` with `border`'s
-/// corner geometry. Also used for shadow spread boxes, whose size is not the
-/// border box.
+/// Absolute SVG path `d` for a rounded rectangle of `size` with `border`'s corner geometry.
 pub(crate) fn border_box_path_data(
   border: &BorderProperties,
   size: Size<f32>,
@@ -545,10 +531,7 @@ pub(crate) fn padding_box_path_data(
   clip_box_path_data(ClipBox::padding_box(*border, layout), x, y)
 }
 
-/// Absolute SVG path `d` for the (non-rounded) overflow clip rectangle. Each
-/// clipped axis is bounded to the content box (mirroring the raster backend's
-/// rectangular overflow mask); a `visible` axis is left effectively unbounded so
-/// content overflows there while being clipped on the other axis.
+/// Absolute SVG path `d` for the (non-rounded) overflow clip rectangle.
 pub(crate) fn overflow_clip_rect_data(
   style: &ComputedStyle,
   layout: Layout,
@@ -587,11 +570,7 @@ pub(crate) fn overflow_clip_rect_data(
   path.into_string()
 }
 
-/// Builds the clip path (and even-odd flag) for the background fill area per
-/// `background-clip`, or `None` when no clip is needed (an unrounded
-/// `border-box`, which the full border-box rect already covers). Mirrors the
-/// raster backend's `draw_background` clip regions.
-/// The SVG document as a [`PaintDevice`].
+/// Builds the clip path and fill rule for a `background-clip` area.
 pub(crate) struct DocumentDevice<'d> {
   pub(crate) doc: &'d mut SvgDocument,
   pub(crate) error: Option<io::Error>,
@@ -701,12 +680,8 @@ pub(crate) fn emit_own_content(
   }
 }
 
-/// Recurses into an in-flow inline box (an atomic inline element such as an
-/// inline-block or replaced box) positioned by the inline layout. Mirrors the
-/// raster backend's `draw_inline_box`: lay the child subtree out fresh at the box
-/// size, then emit it at the box's absolute origin. `container_x`/`container_y`
-/// are the container's border-box top-left; the box is offset by the container's
-/// border/padding plus the inline-resolved position.
+/// Recurses into an in-flow inline box (an atomic inline element such as an inline-block or
+/// replaced box) positioned by the inline layout.
 pub(crate) fn emit_inline_box(
   inline_box: &VisualInlineBox,
   item: &InlineBoxItem<'_>,
@@ -754,11 +729,7 @@ pub(crate) fn emit_inline_box(
   }
 }
 
-/// Emits an image node's content into its content box. When the element has a
-/// border-radius, the replaced content is clipped to the rounded **padding box**
-/// (border-box inset by the border widths), mirroring the raster backend's
-/// `draw_image` which masks the image with `BorderProperties::inset_by_border_width`.
-/// `x`/`y` are the element's absolute border-box top-left.
+/// Emits an image node's content into its content box.
 fn emit_image_node(
   image: &ImageData,
   node: &RenderNode,
@@ -788,15 +759,6 @@ fn emit_image_node(
 }
 
 /// Emits the element's borders, reusing takumi-core's `BorderProperties` geometry.
-/// A uniform-color solid border becomes one even-odd "ring" (outer rounded
-/// border-box minus inner rounded padding-box). Mixed per-side colors clip that
-/// ring and fill each side's polygon in its own color (diagonal corner split).
-/// Uniform `dashed`/`dotted`/`double` borders stroke a centerline rounded-rect.
-/// 3D styles (groove/ridge/inset/outset) approximate as a solid fill. `x`/`y` are
-/// the absolute border-box top-left; `size` is the border-box size.
-/// The absolute placement of a border box: the `[1,0,0,1,x,y]` device-space
-/// transform and the border-box size, threaded together through the stroke
-/// emitters.
 #[derive(Clone, Copy)]
 struct BorderGeom {
   matrix: [f32; 6],
@@ -872,10 +834,7 @@ pub(crate) fn emit_borders(
   doc.end_group(group)
 }
 
-/// Strokes one dashed/dotted border side along its centerline. The centerline is
-/// inset by half the side's width and shortened at each end by half the adjacent
-/// side's width (matching the raster backend's per-side stroke). Dash intervals
-/// mirror the uniform stroked path (dashed `3w 2w`, dotted `0 2w` + round caps).
+/// Strokes one dashed/dotted border side along its centerline.
 fn emit_side_pattern(
   border: &BorderProperties,
   side: PaintedSide,
@@ -925,15 +884,8 @@ fn emit_side_pattern(
   )
 }
 
-/// Emits the CSS `outline` as a ring around the border-box, expanded outward by
-/// `outline-offset + outline-width`. `outline` does not affect layout; it follows
-/// the border-radius. Mirrors the raster backend's `draw_outline`: a uniform
-/// `BorderProperties` (outline width/color/style on all four sides, radii from the
-/// element) drawn on an expanded box, so all border styles (solid/dashed/dotted/
-/// double, and the 3D approximations) are reused from [`emit_borders`].
-/// The outline a box will paint once its content is done, or `None` when it
-/// paints none. A transparent outline is an element nobody sees, so it is
-/// skipped to keep the document smaller.
+/// Emits the CSS `outline` as a ring around the border-box, expanded outward by `outline-offset +
+/// outline-width`.
 fn pending_outline(
   node: &RenderNode,
   layout: Layout,
@@ -968,9 +920,7 @@ pub(crate) fn paint_outline(pending: &PendingOutline, doc: &mut SvgDocument) -> 
   )
 }
 
-/// SVG `stroke-dasharray`/`stroke-linecap` for a `dashed`/`dotted` border or
-/// outline, computed from the shared [`BorderStyle::dash_pattern`] so the intervals
-/// match the raster backend.
+/// SVG dash attributes for a border or outline stroke.
 fn dash_attrs(
   width: f32,
   style: BorderStyle,
@@ -986,8 +936,8 @@ fn dash_attrs(
   }
 }
 
-/// Runs `emit` inside a Gaussian-blur group when `blur_radius` is positive (the
-/// CSS shadow blur is `2σ`), or directly otherwise.
+/// Runs `emit` inside a Gaussian-blur group when `blur_radius` is positive (the CSS shadow blur is
+/// `2σ`), or directly otherwise.
 fn emit_with_blur(
   doc: &mut SvgDocument,
   blur_radius: f32,
@@ -1004,7 +954,6 @@ fn emit_with_blur(
 }
 
 /// Emits outset `box-shadow`s behind the element as offset, blurred rects.
-/// Inset shadows are handled by [`emit_inset_box_shadows`].
 pub(crate) fn emit_box_shadows(
   node: &RenderNode,
   layout: Layout,
@@ -1043,11 +992,7 @@ pub(crate) fn emit_box_shadows(
   Ok(())
 }
 
-/// Emits inset `box-shadow`s as a blurred ring inside the element's rounded
-/// padding box. Mirrors the PDF backend's `emit_inset_shadows`: the shadow
-/// color fills the padding box minus an inner rounded-rect (shrunk by the
-/// spread, shifted by the offset), blurred and clipped to the rounded padding
-/// box.
+/// Emits inset `box-shadow`s as a blurred ring inside the element's rounded padding box.
 pub(crate) fn emit_inset_box_shadows(
   node: &RenderNode,
   border: &BorderProperties,

@@ -29,10 +29,7 @@ fn png_decode_error(error: png::DecodingError) -> ImageError {
   ImageError::Decoding(DecodingError::new(ImageFormat::Png.into(), error))
 }
 
-/// Streams a non-interlaced PNG through [`StreamResampler`]. `None` means the
-/// input isn't eligible (not a PNG, interlaced, unsupported layout, or no
-/// downscale) and the caller should decode fully; errors after eligibility are
-/// real decode failures.
+/// Streams an eligible non-interlaced PNG through [`StreamResampler`].
 pub(super) fn decode_png_scaled(
   bytes: &[u8],
   width: u32,
@@ -126,10 +123,8 @@ pub(crate) fn apng_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
   Ok((info.width, info.height))
 }
 
-/// Per-frame delays in milliseconds, in stream order, read from the `fcTL`
-/// chunks without decoding any pixels. Stops on the same frame and pixel
-/// budgets as [`decode_apng_frames`], so a playback time never selects a frame
-/// the decoder drops.
+/// Per-frame delays in milliseconds, in stream order, read from the `fcTL` chunks without decoding
+/// any pixels.
 pub(crate) fn apng_frame_infos(bytes: &[u8]) -> ImageResult<Box<[FrameInfo]>> {
   let (width, height) = apng_dimensions(bytes)?;
   let frame_pixels = width as u64 * height as u64;
@@ -181,8 +176,7 @@ pub(crate) fn apng_frame_infos(bytes: &[u8]) -> ImageResult<Box<[FrameInfo]>> {
   Ok(frames.into())
 }
 
-/// An `fcTL` delay fraction in milliseconds. A zero denominator means hundredths
-/// of a second, per the APNG spec.
+/// An `fcTL` delay fraction in milliseconds.
 fn apng_delay_ms(numerator: u16, denominator: u16) -> u32 {
   let denominator = if denominator == 0 { 100 } else { denominator };
   ((numerator as u64 * 1000) / denominator as u64).max(1) as u32
@@ -255,13 +249,8 @@ pub(crate) fn decode_apng_frame_alone(
   fit_to_target(buffer, target).ok()
 }
 
-/// Decodes APNG frames in stream order, passing each frame past the first
-/// `skip` to `push`, up to `limit` pushed frames. Returns whether the stream
-/// ended. Mid-stream decode errors and a blown budget truncate the timeline
-/// (reported as ended); only a stream with no decodable first frame errors.
-///
-/// A default image no `fcTL` claims is not part of the animation, so it is
-/// decoded past and never enters the timeline.
+/// Decodes APNG frames in stream order, passing each frame past the first `skip` to `push`, up to
+/// `limit` pushed frames.
 pub(crate) fn decode_apng_frames(
   bytes: &[u8],
   skip: usize,
@@ -334,8 +323,8 @@ pub(crate) fn decode_apng_frames(
   Ok(true)
 }
 
-/// The straight-alpha RGBA canvas an APNG's frames composite onto, plus the
-/// copy `DisposeOp::Previous` restores.
+/// The straight-alpha RGBA canvas an APNG's frames composite onto, plus the copy
+/// `DisposeOp::Previous` restores.
 struct ApngCanvas {
   pixels: Vec<u8>,
   restore: Vec<u8>,

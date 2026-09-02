@@ -1,16 +1,4 @@
 //! CSS gradient / background-image → SVG paint emission.
-//!
-//! Linear and radial gradients map onto native `<linearGradient>` /
-//! `<radialGradient>` (stops resolved with the same logic the raster backend
-//! uses, so geometry and stop placement match). Conic gradients have no SVG 1.1
-//! construct, so they are approximated by a fan of solid-color wedge `<path>`s
-//! sampled from the gradient's color LUT and clipped to the tile.
-//!
-//! `background-size`/`background-position`/`background-repeat` are resolved with
-//! the same logic the raster backend uses ([`BackgroundSize::resolve`] and the
-//! tile-position collectors), producing a tile rectangle and a list of tile
-//! origins. A single tile is painted directly; tiling repeats are emitted as an
-//! SVG `<pattern>` filling the box.
 
 use std::{f32::consts::TAU, io};
 
@@ -33,8 +21,7 @@ use crate::{
 
 const CONIC_WEDGES: usize = 180;
 
-/// A resolved background/mask layer: the per-tile rect and the tile origins on
-/// each axis (the cartesian product gives every tile placement).
+/// A resolved background or mask layer.
 struct LayerPlacement {
   tile_w: f32,
   tile_h: f32,
@@ -42,9 +29,7 @@ struct LayerPlacement {
   ys: Vec<f32>,
 }
 
-/// Emits background/mask image layers for one node into an SVG document. Bundles
-/// the render context and output doc so the layer/tile chain threads only the
-/// per-tile [`Frame`] geometry, not the whole `(context, x, y, w, h, doc)` tuple.
+/// Emits background/mask image layers for one node into an SVG document.
 pub(crate) struct LayerEmitter<'a, 'd> {
   context: &'a RenderContext,
   doc: &'d mut SvgDocument,
@@ -55,10 +40,7 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
     Self { context, doc }
   }
 
-  /// Emits every background gradient/image for a node, painted bottom-up (CSS
-  /// lists the topmost layer first, so the slice is walked in reverse).
-  /// `background-size`, `-position`, and `-repeat` are honored per layer (cycling
-  /// the last value when shorter than the image list, matching the raster backend).
+  /// Emits a node's background images in bottom-to-top paint order.
   pub(crate) fn background_images(
     &mut self,
     images: &[BackgroundImage],
@@ -75,12 +57,7 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
     )
   }
 
-  /// Emits a list of background/mask image layers honoring per-layer size/
-  /// position/repeat. Shared by `background-image` and `mask-image`.
-  ///
-  /// `area` is the `background-origin` positioning area; `paint` is the painting
-  /// (border) box that `repeat` tiles fill and overflow is clipped to, so origin
-  /// only shifts placement, not the clip — matching the raster backend.
+  /// Emits a list of background/mask image layers honoring per-layer size/ position/repeat.
   pub(crate) fn image_layers(
     &mut self,
     images: &[BackgroundImage],
@@ -253,7 +230,6 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
       return Ok(());
     }
 
-    // Map an axis position (px from one edge of the gradient line) to a point.
     let max_extent = tile.axis_length / 2.0;
     let (cx, cy) = (x + w / 2.0, y + h / 2.0);
     let point_at = |t: f32| {
@@ -380,8 +356,8 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
   }
 }
 
-/// Returns the uniform step between positions (tile size when there is a single
-/// tile) if the positions are equally spaced, else `None`.
+/// Returns the uniform step between positions (tile size when there is a single tile) if the
+/// positions are equally spaced, else `None`.
 fn is_even_step(positions: &[f32], tile_size: f32) -> Option<f32> {
   match positions {
     [] => None,
@@ -453,15 +429,10 @@ fn svg_stops(stops: &[ResolvedGradientStop], base: f32, span: f32) -> Vec<Gradie
 /// Number of stops sampled from the gradient color LUT for vector emission.
 const GRADIENT_LUT_STOPS: usize = 64;
 
-/// Builds dense SVG gradient stops by sampling takumi's interpolated color LUT,
-/// baking the gradient's interpolation color space (e.g. OKLCH) into evenly-spaced
-/// sRGB stops. SVG only interpolates between stops in sRGB, so sampling the LUT is
-/// how the vector output matches the raster backend for non-sRGB interpolation.
-///
-/// CSS hard stops (two stops at the same position) are a discontinuity the uniform
-/// LUT would smear into a ~1-cell ramp, so a coincident stop pair carrying the
-/// exact before/after colors is injected at each hard-stop offset and the LUT
-/// samples bridging it are dropped to keep the transition sharp.
+/// Builds dense SVG gradient stops by sampling takumi's interpolated color LUT, baking the
+/// gradient's interpolation color space (e.g. OKLCH) into evenly-spaced sRGB stops. SVG only
+/// interpolates between stops in sRGB, so sampling the LUT is how the vector output matches the
+/// raster backend for non-sRGB interpolation.
 fn lut_svg_stops(
   resolved: &[ResolvedGradientStop],
   axis_length: f32,

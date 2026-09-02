@@ -35,7 +35,7 @@ fn measure_ellipsis_width(
       ellipsis_style,
       None,
       ellipsis_char,
-      &context.fonts.classes,
+      &context.fonts().classes,
     );
   });
   ellipsis_layout.break_all_lines(None);
@@ -222,13 +222,13 @@ pub(super) fn make_ellipsis_layout<'c>(
 
   let (mut final_layout, _) =
     context.tree_builder(root_style.into(), chromium_line_breaks(spans), |builder| {
-      push_spans_into_builder(builder, spans, &context.fonts.classes);
+      push_spans_into_builder(builder, spans, &context.fonts().classes);
       push_presentation_text(
         builder,
         ellipsis_style,
         None,
         ellipsis_char,
-        &context.fonts.classes,
+        &context.fonts().classes,
       );
     });
 

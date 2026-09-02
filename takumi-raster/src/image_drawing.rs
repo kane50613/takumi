@@ -12,9 +12,6 @@ pub(crate) struct PreparedImage {
 }
 
 /// Process an image according to the specified object-fit style.
-///
-/// This function handles resizing, cropping, and positioning of images
-/// based on the ObjectFit property, returning the processed image and offset.
 pub(crate) fn process_image_for_object_fit(
   image: &ImageSource,
   context: &RenderContext,
@@ -50,7 +47,7 @@ pub(crate) fn process_image_for_object_fit(
           content_box.width as u32,
           content_box.height as u32,
           context.style.image_rendering,
-          context.time_ms,
+          context.time_ms(),
           context.current_color,
           Some(context.fonts()),
         )?,
@@ -85,7 +82,7 @@ pub(crate) fn process_image_for_object_fit(
             new_width as u32,
             new_height as u32,
             context.style.image_rendering,
-            context.time_ms,
+            context.time_ms(),
             context.current_color,
             Some(context.fonts()),
           )?,
@@ -121,7 +118,7 @@ pub(crate) fn process_image_for_object_fit(
             content_box.width as u32,
             content_box.height as u32,
             context.style.image_rendering,
-            context.time_ms,
+            context.time_ms(),
             context.current_color,
             Some(context.fonts()),
           )?,
@@ -148,7 +145,7 @@ pub(crate) fn process_image_for_object_fit(
           new_width as u32,
           new_height as u32,
           context.style.image_rendering,
-          context.time_ms,
+          context.time_ms(),
           context.current_color,
           Some(context.fonts()),
         )?
@@ -157,7 +154,7 @@ pub(crate) fn process_image_for_object_fit(
           image_width as u32,
           image_height as u32,
           context.style.image_rendering,
-          context.time_ms,
+          context.time_ms(),
           context.current_color,
           Some(context.fonts()),
         )?
@@ -199,7 +196,7 @@ pub(crate) fn process_image_for_object_fit(
               image_width as u32,
               image_height as u32,
               context.style.image_rendering,
-              context.time_ms,
+              context.time_ms(),
               context.current_color,
               Some(context.fonts()),
             )?,
@@ -234,7 +231,7 @@ pub(crate) fn process_image_for_object_fit(
             crop_width as u32,
             crop_height as u32,
             context.style.image_rendering,
-            context.time_ms,
+            context.time_ms(),
             context.current_color,
             Some(context.fonts()),
           )?,
@@ -250,9 +247,6 @@ pub(crate) fn process_image_for_object_fit(
 }
 
 /// Draws an image on the canvas with the specified style and layout.
-///
-/// The image will be resized and positioned according to the object_fit style property.
-/// Border radius will be applied if specified in the style.
 pub(crate) fn draw_image(
   image: &ImageSource,
   context: &RenderContext,

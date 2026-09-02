@@ -90,10 +90,6 @@ pub enum LinearGradientFastPathKind {
 }
 
 /// Owned axis samples for an axis-aligned gradient.
-///
-/// Undithered: one sample per pixel along the axis. Dithered horizontal: eight
-/// scanline variants of `width` samples, one per `y & 7`. Dithered vertical:
-/// one eight-sample `x & 7` pattern per row.
 #[derive(Debug, Clone)]
 pub struct LinearGradientFastPathData {
   /// Fast-path orientation.
@@ -345,7 +341,6 @@ impl GradientOverlayTile for LinearGradientTile {
 }
 
 /// Represents a gradient stop position.
-/// If a percentage or number (0.0-1.0) is provided, it is treated as a percentage.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StopPosition(pub Length);
 
@@ -573,16 +568,16 @@ impl HorizontalKeyword {
   /// Returns the angle in degrees.
   pub(crate) fn degrees(&self) -> f32 {
     match self {
-      HorizontalKeyword::Left => 270.0, // "to left" = 270deg
-      HorizontalKeyword::Right => 90.0, // "to right" = 90deg
+      HorizontalKeyword::Left => 270.0,
+      HorizontalKeyword::Right => 90.0,
     }
   }
 
   /// Returns the mixed angle in degrees.
   pub(crate) fn vertical_mixed_degrees(&self) -> f32 {
     match self {
-      HorizontalKeyword::Left => -45.0, // For diagonals with left
-      HorizontalKeyword::Right => 45.0, // For diagonals with right
+      HorizontalKeyword::Left => -45.0,
+      HorizontalKeyword::Right => 45.0,
     }
   }
 }

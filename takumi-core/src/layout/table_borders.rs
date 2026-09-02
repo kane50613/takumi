@@ -259,8 +259,7 @@ fn collapsed_style(style: BorderStyle) -> BorderStyle {
   }
 }
 
-/// `hidden` clears the line. Ties keep the first candidate, so callers list
-/// the top and left box first.
+/// `hidden` clears the line.
 fn win(candidates: &[BorderEdge]) -> BorderEdge {
   if candidates
     .iter()

@@ -17,9 +17,7 @@ use crate::{
   text_processing::MaxHeight,
 };
 
-/// Hashes every input the measured size depends on beyond the shaping inputs:
-/// the raw text, the width/height constraints, and the break-time style knobs
-/// (`hash_shaping_inputs` covers only what shaping reads).
+/// Hashes the inputs that affect measured size beyond shaping.
 fn measure_cache_key(
   text: &TextData,
   context: &RenderContext,
@@ -95,7 +93,7 @@ pub(crate) fn measure_text_node(
     clamp_to_max_width,
   );
 
-  if let Some(size) = context.measure_cache.borrow().get(&key) {
+  if let Some(size) = context.measure_cache().borrow().get(&key) {
     return *size;
   }
   let inline_content: InlineItem<'_> = InlineItem::Text {
@@ -128,6 +126,6 @@ pub(crate) fn measure_text_node(
     },
   );
 
-  context.measure_cache.borrow_mut().insert(key, size);
+  context.measure_cache().borrow_mut().insert(key, size);
   size
 }

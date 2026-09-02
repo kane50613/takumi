@@ -59,16 +59,16 @@ pub enum FontError {
 #[non_exhaustive]
 pub(crate) enum FontFormat {
   #[cfg(feature = "woff")]
-  /// Web Open Font Format (WOFF) - compressed web font format
+  /// Web Open Font Format (WOFF)
   Woff,
   #[cfg(feature = "woff2")]
-  /// Web Open Font Format 2 (WOFF2) - improved compression web font format
+  /// Web Open Font Format 2 (WOFF2)
   Woff2,
-  /// TrueType Font format - standard desktop font format
+  /// TrueType Font format
   Ttf,
-  /// OpenType Font format - extended font format with advanced typography
+  /// OpenType Font format
   Otf,
-  /// TrueType Collection - multiple fonts in one file
+  /// TrueType Collection
   Ttc,
 }
 
@@ -187,14 +187,11 @@ fn font_style_css(style: FontStyle) -> String {
   }
 }
 
-/// The subset families under one logical family, ordered by the rank each declared and
-/// then by name. The shaper walks this order and takes the first subset whose `cmap`
-/// covers a cluster, so the rank is what keeps a codepoint two subsets both encode from
-/// landing in the wrong one.
+/// The subset families under one logical family, ordered by the rank each declared, then by
+/// registration order and name.
 pub(crate) type SubsetGroup = BTreeSet<(u32, u32, String)>;
 
-/// Registered families split by whether they carry color glyph tables, so a
-/// variation-selector segment can put the presentation-matching class first.
+/// Registered families partitioned by color-glyph support.
 pub(crate) struct FontClasses {
   pub(crate) color: HashSet<String>,
   /// Color families in registration order.
@@ -301,8 +298,7 @@ impl FontsSnapshot {
   }
 }
 
-/// What the matched face still needs to reach the requested style, once variable
-/// axes have been applied: a faux bold stroke, a faux oblique skew, or neither.
+/// Synthetic styling still needed after variable axes are applied.
 pub(crate) struct RunSynthesis {
   /// Stroke width in px for synthetic bold.
   pub embolden: Option<f32>,
@@ -336,7 +332,6 @@ pub(crate) fn run_synthesis(run: &GlyphRun<'_, InlineBrush>) -> RunSynthesis {
 }
 
 /// User-space variation coordinates the run was shaped at, e.g. `[(*b"wght", 700.0)]`.
-/// Fontique writes the requested weight and width here when it instances a variable face.
 pub(crate) fn run_variations(run: &GlyphRun<'_, InlineBrush>) -> Vec<([u8; 4], f32)> {
   run
     .run()
@@ -348,8 +343,7 @@ pub(crate) fn run_variations(run: &GlyphRun<'_, InlineBrush>) -> Vec<([u8; 4], f
 }
 
 impl Fonts {
-  /// Face store for SVG `<text>` conversion, sharing this collection's font
-  /// bytes. Registration order drives fallback priority.
+  /// Face store for SVG `<text>` conversion, sharing this collection's font bytes.
   #[cfg(feature = "svg")]
   pub(crate) fn svg_fontdb(&mut self) -> Arc<crate::resvg::usvg::fontdb::Database> {
     if let Some(database) = &self.svg_db {
@@ -571,8 +565,8 @@ impl Fonts {
     result
   }
 
-  /// Registers a font, decoding it and skipping fonts already registered in this
-  /// context (deduped by content + family name). Returns the families it produced.
+  /// Registers a font, decoding it and skipping fonts already registered in this context (deduped
+  /// by content + family name).
   pub fn register(&mut self, font: FontResource) -> Result<Vec<RegisteredFamily>, FontError> {
     #[cfg(feature = "svg")]
     {
@@ -673,7 +667,7 @@ impl RenderContext {
     attributes: Attributes,
     font_size: f32,
   ) -> Option<f32> {
-    self.fonts.with_context(|fonts| {
+    self.fonts().with_context(|fonts| {
       let mut query = fonts.inner.collection.query(&mut fonts.inner.source_cache);
       let mut result = None;
 
@@ -708,7 +702,7 @@ impl RenderContext {
     chromium_line_breaks: bool,
     func: impl FnOnce(&mut TreeBuilder<'_, InlineBrush>),
   ) -> (InlineLayout, String) {
-    self.fonts.with_context(|fonts| {
+    self.fonts().with_context(|fonts| {
       with_layout_context(|layout| {
         let mut builder = layout.tree_builder(&mut fonts.inner, 1.0, true, &root_style);
         if chromium_line_breaks {
@@ -755,16 +749,13 @@ impl AsRef<[u8]> for FontBytes<'_> {
   }
 }
 
-/// A font source buffer. Construct from raw bytes via `From`, or from bytes the
-/// caller keeps alive elsewhere via [`FontSource::from_shared`]; woff/woff2 are
-/// decompressed internally when the font is registered.
+/// A font source buffer.
 #[derive(Debug)]
 pub struct FontSource<'a> {
   bytes: FontBytes<'a>,
   /// Whether `bytes` is already decompressed (woff/woff2 expanded to raw sfnt).
   is_decoded: bool,
-  /// Blob id to use in place of hashing the decoded bytes, set by
-  /// [`FontSource::from_static`].
+  /// Blob id to use in place of hashing the decoded bytes, set by [`FontSource::from_static`].
   cache_id: Option<u64>,
 }
 
@@ -782,10 +773,7 @@ where
 }
 
 impl<'a> FontSource<'a> {
-  /// Takes shared bytes as they are, so registering the font copies nothing: a
-  /// memory-mapped file stays paged from disk and the process never holds a second
-  /// copy on the heap. Only sfnt (ttf/otf/ttc) is passed through — woff and woff2
-  /// still decompress into a fresh buffer.
+  /// Registers shared font bytes without copying them.
   pub fn from_shared(bytes: Arc<dyn AsRef<[u8]> + Send + Sync>) -> Self {
     Self {
       bytes: FontBytes::Shared(bytes),
@@ -795,13 +783,6 @@ impl<'a> FontSource<'a> {
   }
 
   /// Takes bytes that live as long as the process, `include_bytes!` above all.
-  /// Nothing is copied, and the blob id comes from the address and length rather
-  /// than from the content, so registering a 30 MiB face never reads through it.
-  /// A face embedded in the binary is then paged in one glyph at a time.
-  ///
-  /// The same slice always yields the same id, which is what the glyph caches
-  /// need. Two faces with the same bytes may still land on separate ids, and
-  /// resolve their glyphs separately, if one of them arrives as a `Vec`.
   pub fn from_static(bytes: &'static [u8]) -> Self {
     let mut id = Xxh3::new();
 
@@ -914,9 +895,7 @@ impl FromStr for GenericFamily {
   }
 }
 
-/// Overrides for a registered font's metadata, letting callers rename its
-/// family or pin weight/style/width/axes regardless of what the font file
-/// itself declares.
+/// Metadata overrides for a registered font.
 #[derive(Debug, Default, Clone)]
 pub struct FontOverride {
   /// Family name to register the font under, instead of its embedded name.
@@ -925,11 +904,9 @@ pub struct FontOverride {
   pub weight: Option<f32>,
   /// Font style (slant) to use instead of the embedded one.
   pub style: Option<CssFontStyle>,
-  /// Font width as a percentage (e.g. `100.0` for normal) to use instead of the
-  /// embedded one.
+  /// Font width as a percentage (e.g. `100.0` for normal) to use instead of the embedded one.
   pub width: Option<f32>,
-  /// Default values for named variation axes (four-byte OpenType tags). Axes not
-  /// present in the font are ignored, as are tags that are not valid.
+  /// Default values for named variation axes (four-byte OpenType tags).
   pub axes: Vec<(String, f32)>,
 }
 
@@ -1002,13 +979,6 @@ impl<'a> FontResource<'a> {
   }
 
   /// Marks this font as a coverage subset of the logical family `logical`.
-  ///
-  /// Subsets sharing a logical family must each register under a UNIQUE family name
-  /// (via [`FontResource::override_info`]) so the font system keeps them as distinct
-  /// families — same-named faces collapse into one and never fall through on coverage.
-  /// A render then expands `font-family: {logical}` into all its subsets, ordered by
-  /// [`FontResource::subset_rank`], letting the shaper pick the first that covers each
-  /// cluster.
   pub fn subset_of(self, logical: impl Into<String>) -> Self {
     Self {
       subset_of: Some(logical.into()),
@@ -1016,14 +986,7 @@ impl<'a> FontResource<'a> {
     }
   }
 
-  /// Sets where this subset sits in its group's fallback order. Lowest is tried first;
-  /// subsets sharing a rank keep their registration order.
-  ///
-  /// Coverage alone does not settle which subset serves a codepoint, because a subset's
-  /// `cmap` is usually wider than the range it was cut for — Google Fonts encodes the
-  /// ASCII space and several Latin capitals in its Cyrillic and Greek subsets. Ranking
-  /// the subsets by the range they declare is what makes the shaper resolve those shared
-  /// codepoints the way the `unicode-range` descriptor would in a browser.
+  /// Sets where this subset sits in its group's fallback order.
   pub fn subset_rank(self, rank: u32) -> Self {
     Self {
       subset_rank: rank,
@@ -1031,8 +994,8 @@ impl<'a> FontResource<'a> {
     }
   }
 
-  /// Sorts this font's families after every normal family in default fallback
-  /// selection, so they only serve text no registered font covers.
+  /// Sorts this font's families after every normal family in default fallback selection, so they
+  /// only serve text no registered font covers.
   pub fn last_resort(self) -> Self {
     Self {
       last_resort: true,
@@ -1273,8 +1236,8 @@ mod tests {
     assert_eq!(snapshot.groups.get("Logical"), Some(subsets));
   }
 
-  /// The rank a subset declares outranks its family name, so a group whose coverage order
-  /// runs against the alphabet still resolves shared codepoints to the intended subset.
+  /// The rank a subset declares outranks its family name, so a group whose coverage order runs
+  /// against the alphabet still resolves shared codepoints to the intended subset.
   #[test]
   fn subset_rank_orders_the_group_ahead_of_the_family_name() {
     let mut fonts = Fonts::default();

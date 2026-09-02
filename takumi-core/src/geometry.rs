@@ -275,8 +275,8 @@ impl ComputedLayout {
     }
   }
 
-  /// Offset of the content-box top-left from the border-box top-left, i.e. the
-  /// left/top border plus padding.
+  /// Offset of the content-box top-left from the border-box top-left, i.e. the left/top border plus
+  /// padding.
   pub fn content_box_offset(&self) -> Point<f32> {
     Point::new(
       self.border.left + self.padding.left,
@@ -296,9 +296,7 @@ impl ComputedLayout {
   }
 }
 
-/// Opaque identifier for a node within a computed layout tree. Obtained from
-/// [`crate::layout::tree::LayoutResults::box_children`] and passed back in to
-/// look up a node's layout, children, or paint scene.
+/// Opaque identifier for a node within a computed layout tree.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NodeId(usize);
 
@@ -368,8 +366,7 @@ impl AvailableSpace {
   }
 }
 
-/// One command of a resolved outline path, in device space. Mirrors the classic
-/// move/line/quad/cubic/close vocabulary; coordinates are y-down.
+/// One command of a resolved outline path, in device space.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PathCommand {
   /// Starts a new subpath at the given point.
@@ -384,8 +381,8 @@ pub enum PathCommand {
   Close,
 }
 
-/// Push-style sugar over a [`PathCommand`] list, shared by the geometry and
-/// rasterization path builders.
+/// Push-style sugar over a [`PathCommand`] list, shared by the geometry and rasterization path
+/// builders.
 pub trait PathBuilder {
   /// Starts a new subpath at the given point.
   fn move_to(&mut self, point: (f32, f32));
@@ -419,8 +416,8 @@ impl PathBuilder for Vec<PathCommand> {
   }
 }
 
-/// Transforms a rect's four corners and returns the axis-aligned `(min_x, min_y,
-/// max_x, max_y)` extents, or `None` if any corner is non-finite.
+/// Transforms a rect's four corners and returns the axis-aligned `(min_x, min_y, max_x, max_y)`
+/// extents, or `None` if any corner is non-finite.
 pub fn transformed_rect_extents(
   origin: Point<f32>,
   size: Size<f32>,
@@ -451,8 +448,7 @@ pub fn transformed_rect_extents(
   Some((min_x, min_y, max_x, max_y))
 }
 
-/// Pixel-space placement of a rasterized surface: a glyph mask, a shadow, a
-/// filtered layer.
+/// Pixel-space placement of a rasterized surface: a glyph mask, a shadow, a filtered layer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Placement {
   /// Left offset in pixels.

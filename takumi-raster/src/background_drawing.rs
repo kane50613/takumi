@@ -168,15 +168,12 @@ impl ColorTile {
   }
 }
 
-/// Everything about sampling a [`BackgroundTile::SampledBitmap`] that does not
-/// depend on the pixel being sampled: the source view, the size the mapping
-/// divides by, and the footprint. Resolved once per tile, not per pixel.
+/// Pixel-independent state for sampling a bitmap background tile.
 #[derive(Clone, Copy)]
 pub(crate) struct SampledBitmapView<'a> {
   source: PixmapRef<'a>,
   algorithm: ImageScalingAlgorithm,
-  /// The size the tile is drawn at. When it equals the source's own size the
-  /// mapping is the identity.
+  /// The size the tile is drawn at.
   logical_size: Size<u32>,
   footprint: SamplingFootprint,
 }
@@ -207,22 +204,15 @@ impl<'a> SampledBitmapView<'a> {
     self.logical_size
   }
 
-  /// The source pixmap when the tile is drawn at exactly the source's size, so
-  /// destination pixel `(x, y)` is source pixel `(x, y)`.
-  ///
-  /// Every sampler agrees there. The sample lands on `x + 0.5`, which nearest
-  /// floors back to `x` and bilinear resolves to the same texel at zero
-  /// interpolation weight, and a one-pixel footprint never minifies. So the
-  /// scaling algorithm can be ignored and the pixels copied as they are.
+  /// The source pixmap when the tile is drawn at exactly the source's size, so destination pixel
+  /// `(x, y)` is source pixel `(x, y)`.
   pub(crate) fn identity_source(&self) -> Option<PixmapRef<'a>> {
     (self.source.width() == self.logical_size.width
       && self.source.height() == self.logical_size.height)
       .then_some(self.source)
   }
 
-  /// Keep the `(x + 0.5) * source / logical` form, casts included. Folding the
-  /// division into a precomputed scale rounds differently and shifts which texel
-  /// a minified sample lands on.
+  /// Keep the `(x + 0.5) * source / logical` form, casts included.
   #[inline]
   pub(crate) fn sample(&self, x: u32, y: u32) -> PremultipliedColorU8 {
     interpolate_with_footprint(
@@ -235,9 +225,7 @@ impl<'a> SampledBitmapView<'a> {
     .unwrap_or(PremultipliedColorU8::TRANSPARENT)
   }
 
-  /// Copies source row `y` into `dst` when the tile is drawn 1:1, reporting
-  /// whether it did. A mismatched width would misalign the row offsets, so it
-  /// falls back to sampling.
+  /// Copies source row `y` into `dst` when the tile is drawn 1:1, reporting whether it did.
   fn try_copy_row(&self, y: u32, dst: &mut [[u8; 4]]) -> bool {
     let Some(source) = self.identity_source() else {
       return false;
@@ -311,8 +299,7 @@ impl BackgroundTile {
     }
   }
 
-  /// The hoisted sampling state for a [`Self::SampledBitmap`], so a caller that
-  /// walks many pixels resolves the source once instead of per pixel.
+  /// Hoisted sampling state for a [`Self::SampledBitmap`].
   pub(crate) fn sampled_bitmap_view(&self) -> Option<SampledBitmapView<'_>> {
     let Self::SampledBitmap {
       source,
@@ -405,7 +392,7 @@ pub(crate) fn render_tile(
       tile_h,
       &context.sizing,
       context.current_color,
-      context.dither_gradients,
+      context.dither_gradients(),
     ))),
     BackgroundImage::Radial(gradient) => Some(BackgroundTile::Radial(RadialGradientTile::new(
       gradient,
@@ -413,7 +400,7 @@ pub(crate) fn render_tile(
       tile_h,
       &context.sizing,
       context.current_color,
-      context.dither_gradients,
+      context.dither_gradients(),
     ))),
     BackgroundImage::Conic(gradient) => Some(BackgroundTile::Conic(ConicGradientTile::new(
       gradient,
@@ -421,7 +408,7 @@ pub(crate) fn render_tile(
       tile_h,
       &context.sizing,
       context.current_color,
-      context.dither_gradients,
+      context.dither_gradients(),
     ))),
     BackgroundImage::Url(url) => {
       if let Ok(source) = resolve_image(url, context) {
@@ -434,7 +421,7 @@ pub(crate) fn render_tile(
           }),
           ImageSource::Animated(animated) => Some(BackgroundTile::SampledBitmap {
             source: animated.frame_at_time_covering(
-              context.time_ms,
+              context.time_ms(),
               tile_w,
               tile_h,
               context.style.image_rendering,
@@ -447,7 +434,7 @@ pub(crate) fn render_tile(
             tile_w,
             tile_h,
             context.style.image_rendering,
-            context.time_ms,
+            context.time_ms(),
             context.current_color,
             Some(context.fonts()),
           )? {
@@ -464,7 +451,7 @@ pub(crate) fn render_tile(
             tile_w,
             tile_h,
             context.style.image_rendering,
-            context.time_ms,
+            context.time_ms(),
             context.current_color,
             Some(context.fonts()),
           )? {
@@ -526,7 +513,7 @@ pub(crate) fn create_mask(
     positions: mask_position,
     sizes: mask_size,
     repeats: mask_repeat,
-    blend_modes: &[], // no blending mode for mask
+    blend_modes: &[],
     context,
     area: border_box.map(|x| x as u32),
     paint: border_box.map(|x| x as u32),
@@ -585,9 +572,7 @@ pub(crate) fn create_mask(
   }))
 }
 
-/// The `background-image` layers only. The colour underneath them is painted
-/// through [`crate::node_paint::CanvasDevice`], so a caller that paints it
-/// itself asks for this instead of [`collect_background_layers`].
+/// The `background-image` layers only.
 pub(crate) fn background_image_layers(
   context: &RenderContext,
   layout: Layout,
@@ -722,8 +707,8 @@ mod tests {
     assert_ne!(dithered[0], dithered[1]);
   }
 
-  /// Opaque so the premultiplied round-trip through the canvas is lossless and
-  /// the rendered bytes can be compared against the source directly.
+  /// Opaque so the premultiplied round-trip through the canvas is lossless and the rendered bytes
+  /// can be compared against the source directly.
   fn opaque_source(width: u32, height: u32) -> (Vec<u8>, ImageSource) {
     let mut data = Vec::with_capacity((width as usize) * (height as usize) * 4);
     for y in 0..height {
@@ -775,8 +760,8 @@ mod tests {
     render(options).expect("render background").into_raw()
   }
 
-  /// A background drawn at the source's own size is a copy of the source, so
-  /// every `image-rendering` value has to agree with it and with each other.
+  /// A background drawn at the source's own size is a copy of the source, so every
+  /// `image-rendering` value has to agree with it and with each other.
   #[test]
   fn one_to_one_background_copies_the_source_for_every_algorithm() {
     let (expected, source) = opaque_source(64, 48);
@@ -790,8 +775,8 @@ mod tests {
     assert_eq!(pixelated, expected);
   }
 
-  /// The fast path must not swallow `image-rendering` for a genuinely scaled
-  /// background: nearest and the smooth samplers disagree there.
+  /// The fast path must not swallow `image-rendering` for a genuinely scaled background: nearest
+  /// and the smooth samplers disagree there.
   #[test]
   fn scaled_background_still_honours_image_rendering() {
     let (_, source) = opaque_source(64, 48);

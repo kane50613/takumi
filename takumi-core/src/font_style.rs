@@ -20,10 +20,7 @@ use crate::{
   },
 };
 
-/// A `font-family` after subset-group expansion: each authored family name that names a
-/// subset group (see [`crate::resources::font::FontResource::subset_of`]) is replaced by
-/// its registered subset families, in order, so the shaper's primary chain carries every
-/// coverage variant. Names that are not subset groups pass through unchanged.
+/// A `font-family` stack with registered subset groups expanded.
 #[derive(Clone, Default)]
 pub(crate) struct ExpandedFontFamily(Vec<ExpandedFamilyToken>);
 
@@ -97,8 +94,7 @@ impl ExpandedFontFamily {
     ParleyFontFamily::List(Cow::Owned(names))
   }
 
-  /// Expands `family` against the registered subset `groups`: a name that's a subset group
-  /// becomes its registered subset families, ranked; other names pass through unchanged.
+  /// Expands `family` against registered subset `groups`.
   fn expand(family: &FontFamily, groups: &HashMap<String, SubsetGroup>) -> Self {
     let mut tokens = Vec::new();
     for name in family.names() {
@@ -122,7 +118,7 @@ impl ExpandedFontFamily {
 
 impl RenderContext {
   pub(crate) fn expand_font_family(&self, family: &FontFamily) -> ExpandedFontFamily {
-    ExpandedFontFamily::expand(family, &self.fonts.groups)
+    ExpandedFontFamily::expand(family, &self.fonts().groups)
   }
 }
 
@@ -149,9 +145,8 @@ fn continues_emoji_sequence(ch: char) -> bool {
   matches!(ch, VS15 | VS16 | KEYCAP | '\u{1F3FB}'..='\u{1F3FF}')
 }
 
-/// Splits `text` into maximal segments of one requested presentation, `None` where no
-/// variation selector expresses one. A selector claims its whole emoji sequence (ZWJ
-/// chain, keycap, skin tones) so the sequence shapes inside a single style span.
+/// Splits `text` into maximal segments of one requested presentation, `None` where no variation
+/// selector expresses one.
 pub(crate) fn presentation_segments(text: &str) -> Vec<(Range<usize>, Option<Presentation>)> {
   let chars: Vec<(usize, char)> = text.char_indices().collect();
   let mut segments: Vec<(Range<usize>, Option<Presentation>)> = Vec::new();
@@ -247,13 +242,8 @@ impl SizedFontStyle<'_> {
       .filter(|shadow| shadow.color.0[3] != 0)
   }
 
-  /// The stroke this inline box's `outline` runs along its island contour, or
-  /// `None` when it paints none.
-  ///
-  /// An inline outline is a single stroked contour, so `double` and the 3D
-  /// bevels paint nothing: they need more than one pass to draw. The dash
-  /// lengths are the ratios the raster backend has always stroked, kept here so
-  /// the vector backends do not restate them.
+  /// The stroke this inline box's `outline` runs along its island contour, or `None` when it paints
+  /// none.
   pub fn outline_stroke(&self) -> Option<StrokeStyle> {
     let width = self.outline_width;
 
@@ -277,9 +267,8 @@ impl SizedFontStyle<'_> {
     })
   }
 
-  /// Hashes every input the `TextStyle` conversion below reads, so shaped
-  /// text-only layouts can be cached by content. Keep in sync with
-  /// `From<&SizedFontStyle> for TextStyle`.
+  /// Hashes every input the `TextStyle` conversion below reads, so shaped text-only layouts can be
+  /// cached by content.
   pub(crate) fn hash_shaping_inputs(&self, hasher: &mut impl core::hash::Hasher) {
     use core::{hash::Hash, mem::discriminant};
 

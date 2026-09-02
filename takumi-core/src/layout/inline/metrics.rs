@@ -373,8 +373,8 @@ pub struct VisualInlineBox {
   pub width: f32,
   /// Box height.
   pub height: f32,
-  /// Baseline of the in-flow line that owns this box, relative to the inline
-  /// formatting context's content-box top edge.
+  /// Baseline of the in-flow line that owns this box, relative to the inline formatting context's
+  /// content-box top edge.
   pub line_baseline: Option<f32>,
   pub(crate) layout_x: f32,
   pub(crate) layout_advance: f32,
