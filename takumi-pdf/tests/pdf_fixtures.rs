@@ -4838,3 +4838,23 @@ fn form_inline_accessible_label() {
 
   assert!(String::from_utf8_lossy(&bytes).contains("/TU(Account name)"));
 }
+
+#[test]
+fn a_check_box_submits_on_only_when_it_carries_no_value() {
+  let fonts = fonts();
+  let source = r#"<div><input type="checkbox" name="a" checked style="width:14px;height:14px" />
+    <input type="checkbox" name="b" value="" checked style="width:14px;height:14px" /></div>"#;
+  let bytes = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .build(),
+  );
+  let pdf = String::from_utf8_lossy(&bytes);
+
+  assert!(pdf.contains("/V/on"));
+  // An empty `value` submits empty, which HTML keeps apart from a missing one.
+  assert!(pdf.contains("/V//DV/"));
+}
