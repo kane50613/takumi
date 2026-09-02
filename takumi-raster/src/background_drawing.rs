@@ -4,9 +4,7 @@ use image::Rgba;
 use smallvec::SmallVec;
 use takumi_core::{
   geometry::{ComputedLayout as Layout, Point, Size},
-  layout::background::{
-    ResolveBackgroundLayersInput, background_origin_box, resolve_background_layers,
-  },
+  layout::background::{BackgroundLayersInput, background_origin_box},
   paint::{ConicGradientTile, GradientOverlayTile, LinearGradientTile, RadialGradientTile},
 };
 use tiny_skia::{IntSize, Pixmap, PixmapMut, PixmapRef, PremultipliedColorU8};
@@ -485,12 +483,12 @@ pub(crate) fn render_tile(
 }
 
 /// Resolve tile image, positions along X and Y for a background-like layer.
-pub(crate) fn resolve_tile_layers(input: ResolveBackgroundLayersInput<'_>) -> Result<TileLayers> {
+pub(crate) fn resolve_tile_layers(input: BackgroundLayersInput<'_>) -> Result<TileLayers> {
   let images = input.images;
   let context = input.context;
   let mut layers = Vec::new();
 
-  for (index, geometry) in resolve_background_layers(input) {
+  for (index, geometry) in input.resolve() {
     let Some(image) = images.get(index) else {
       continue;
     };
@@ -523,7 +521,7 @@ pub(crate) fn create_mask(
   let mask_size = context.style.mask_size.as_ref();
   let mask_repeat = context.style.mask_repeat.as_ref();
 
-  let layers = resolve_tile_layers(ResolveBackgroundLayersInput {
+  let layers = resolve_tile_layers(BackgroundLayersInput {
     images: mask_image,
     positions: mask_position,
     sizes: mask_size,
@@ -597,7 +595,7 @@ pub(crate) fn background_image_layers(
   let border_box = layout.size;
   let origin = background_origin_box(context.style.background_origin, layout);
 
-  resolve_tile_layers(ResolveBackgroundLayersInput {
+  resolve_tile_layers(BackgroundLayersInput {
     images: context.style.background_image.as_deref().unwrap_or(&[]),
     positions: &context.style.background_position,
     sizes: &context.style.background_size,
@@ -623,7 +621,7 @@ pub(crate) fn collect_background_layers(
   // repeating layer covers the clip region when origin and clip differ.
   let origin = background_origin_box(context.style.background_origin, layout);
 
-  let mut layers = resolve_tile_layers(ResolveBackgroundLayersInput {
+  let mut layers = resolve_tile_layers(BackgroundLayersInput {
     images: context.style.background_image.as_deref().unwrap_or(&[]),
     positions: &context.style.background_position,
     sizes: &context.style.background_size,
