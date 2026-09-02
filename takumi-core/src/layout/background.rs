@@ -48,8 +48,8 @@ pub struct LayerTileStyle {
   pub blend_mode: BlendMode,
 }
 
-/// Inputs for one layer.
-pub struct ResolveBackgroundLayerInput<'a> {
+/// The areas one background layer resolves against.
+pub struct BackgroundLayerInput<'a> {
   /// `background-origin` positioning area: position and `space`/`round` basis.
   pub area: Size<u32>,
   /// Painting area (border box) that `repeat` tiles across.
@@ -60,8 +60,8 @@ pub struct ResolveBackgroundLayerInput<'a> {
   pub context: &'a RenderContext,
 }
 
-/// Inputs for every layer of a box.
-pub struct ResolveBackgroundLayersInput<'a> {
+/// Every background layer of a box.
+pub struct BackgroundLayersInput<'a> {
   /// `background-image` in CSS order, so the first entry is the topmost layer.
   pub images: &'a [BackgroundImage],
   /// `background-position`, one per layer.
@@ -100,43 +100,45 @@ struct AxisArea {
   offset: i32,
 }
 
-/// Resolves tile origins on one axis, in border-box coordinates.
-fn resolve_axis_tiles(
-  repeat: BackgroundRepeatStyle,
-  pos: PositionValue,
-  tile_size: u32,
-  axis: AxisArea,
-  sizing: &SizingContext,
-  is_x: bool,
-) -> (SmallVec<[i32; 1]>, u32) {
-  let anchor = |tile: u32| {
-    axis.offset
-      + if is_x {
-        resolve_position_component_x(pos, tile, axis.area, sizing)
-      } else {
-        resolve_position_component_y(pos, tile, axis.area, sizing)
+impl AxisArea {
+  /// Resolves tile origins on this axis, in border-box coordinates.
+  fn tiles(
+    &self,
+    repeat: BackgroundRepeatStyle,
+    pos: PositionValue,
+    tile_size: u32,
+    sizing: &SizingContext,
+    is_x: bool,
+  ) -> (SmallVec<[i32; 1]>, u32) {
+    let anchor = |tile: u32| {
+      self.offset
+        + if is_x {
+          resolve_position_component_x(pos, tile, self.area, sizing)
+        } else {
+          resolve_position_component_y(pos, tile, self.area, sizing)
+        }
+    };
+    let shift = |mut positions: SmallVec<[i32; 1]>| {
+      if self.offset != 0 {
+        positions.iter_mut().for_each(|x| *x += self.offset);
       }
-  };
-  let shift = |mut positions: SmallVec<[i32; 1]>| {
-    if axis.offset != 0 {
-      positions.iter_mut().for_each(|x| *x += axis.offset);
-    }
-    positions
-  };
+      positions
+    };
 
-  match repeat {
-    BackgroundRepeatStyle::Repeat => (
-      collect_repeat_tile_positions(axis.paint, tile_size, anchor(tile_size)),
-      tile_size,
-    ),
-    BackgroundRepeatStyle::NoRepeat => (smallvec![anchor(tile_size)], tile_size),
-    BackgroundRepeatStyle::Space => (
-      shift(collect_spaced_tile_positions(axis.area, tile_size)),
-      tile_size,
-    ),
-    BackgroundRepeatStyle::Round => {
-      let (positions, rounded) = collect_stretched_tile_positions(axis.area, tile_size);
-      (shift(positions), rounded)
+    match repeat {
+      BackgroundRepeatStyle::Repeat => (
+        collect_repeat_tile_positions(self.paint, tile_size, anchor(tile_size)),
+        tile_size,
+      ),
+      BackgroundRepeatStyle::NoRepeat => (smallvec![anchor(tile_size)], tile_size),
+      BackgroundRepeatStyle::Space => (
+        shift(collect_spaced_tile_positions(self.area, tile_size)),
+        tile_size,
+      ),
+      BackgroundRepeatStyle::Round => {
+        let (positions, rounded) = collect_stretched_tile_positions(self.area, tile_size);
+        (shift(positions), rounded)
+      }
     }
   }
 }
@@ -264,162 +266,155 @@ pub fn background_origin_box(origin: BackgroundOrigin, layout: Layout) -> Origin
   }
 }
 
-/// Resolves where one layer's tiles land. `None` when the layer paints
-/// nothing, because a tile collapsed to zero on either axis.
-pub fn resolve_background_layer(
-  image: &BackgroundImage,
-  style: LayerTileStyle,
-  input: ResolveBackgroundLayerInput<'_>,
-) -> Option<BackgroundLayerGeometry> {
-  let resolved_size = style.size.resolve(
-    input.area,
-    &input.context.sizing,
-    resolve_intrinsic_size(image, input.context),
-  );
+impl BackgroundLayerInput<'_> {
+  /// Resolves where one layer's tiles land. `None` when the layer paints
+  /// nothing, because a tile collapsed to zero on either axis.
+  pub fn resolve(
+    &self,
+    image: &BackgroundImage,
+    style: LayerTileStyle,
+  ) -> Option<BackgroundLayerGeometry> {
+    let resolved_size = style.size.resolve(
+      self.area,
+      &self.context.sizing,
+      resolve_intrinsic_size(image, self.context),
+    );
 
-  if resolved_size.width == 0 || resolved_size.height == 0 {
-    return None;
-  }
-
-  let axis_x = AxisArea {
-    area: input.area.width,
-    paint: input.paint.width,
-    offset: input.origin_offset.x,
-  };
-  let axis_y = AxisArea {
-    area: input.area.height,
-    paint: input.paint.height,
-    offset: input.origin_offset.y,
-  };
-
-  let (xs, ys, tile_w, tile_h) = match resolved_size.auto_axis {
-    Some(AutoBackgroundAxis::Width) => {
-      let (ys, tile_h) = resolve_axis_tiles(
-        style.repeat.1,
-        style.pos,
-        resolved_size.height,
-        axis_y,
-        &input.context.sizing,
-        false,
-      );
-      let tile_w = if style.repeat.1 == BackgroundRepeatStyle::Round {
-        resolve_auto_axis_from_intrinsic(
-          AutoBackgroundAxis::Width,
-          resolved_size.intrinsic_ratio,
-          tile_h,
-        )
-        .unwrap_or(resolved_size.width)
-      } else {
-        resolved_size.width
-      };
-      let (xs, tile_w) = resolve_axis_tiles(
-        style.repeat.0,
-        style.pos,
-        tile_w,
-        axis_x,
-        &input.context.sizing,
-        true,
-      );
-      (xs, ys, tile_w, tile_h)
+    if resolved_size.width == 0 || resolved_size.height == 0 {
+      return None;
     }
-    Some(AutoBackgroundAxis::Height) => {
-      let (xs, tile_w) = resolve_axis_tiles(
-        style.repeat.0,
-        style.pos,
-        resolved_size.width,
-        axis_x,
-        &input.context.sizing,
-        true,
-      );
-      let tile_h = if style.repeat.0 == BackgroundRepeatStyle::Round {
-        resolve_auto_axis_from_intrinsic(
-          AutoBackgroundAxis::Height,
-          resolved_size.intrinsic_ratio,
-          tile_w,
-        )
-        .unwrap_or(resolved_size.height)
-      } else {
-        resolved_size.height
-      };
-      let (ys, tile_h) = resolve_axis_tiles(
-        style.repeat.1,
-        style.pos,
-        tile_h,
-        axis_y,
-        &input.context.sizing,
-        false,
-      );
-      (xs, ys, tile_w, tile_h)
-    }
-    None => {
-      let (xs, tile_w) = resolve_axis_tiles(
-        style.repeat.0,
-        style.pos,
-        resolved_size.width,
-        axis_x,
-        &input.context.sizing,
-        true,
-      );
-      let (ys, tile_h) = resolve_axis_tiles(
-        style.repeat.1,
-        style.pos,
-        resolved_size.height,
-        axis_y,
-        &input.context.sizing,
-        false,
-      );
-      (xs, ys, tile_w, tile_h)
-    }
-  };
 
-  if xs.is_empty() || ys.is_empty() {
-    return None;
-  }
-
-  Some(BackgroundLayerGeometry {
-    xs,
-    ys,
-    tile_width: tile_w,
-    tile_height: tile_h,
-    blend_mode: style.blend_mode,
-  })
-}
-
-/// Resolves every background layer in painting order: the returned entries go
-/// bottom layer first, which is the reverse of `images`, since CSS puts the
-/// first `background-image` on top. Each entry carries the index it came from.
-pub fn resolve_background_layers(
-  input: ResolveBackgroundLayersInput<'_>,
-) -> Vec<(usize, BackgroundLayerGeometry)> {
-  let last_position = input.positions.last().copied().unwrap_or_default();
-  let last_size = input.sizes.last().copied().unwrap_or_default();
-  let last_repeat = input.repeats.last().copied().unwrap_or_default();
-  let last_blend_mode = input.blend_modes.last().copied().unwrap_or_default();
-
-  let mut results = Vec::new();
-  for (i, image) in input.images.iter().enumerate().rev() {
-    let style = LayerTileStyle {
-      pos: input.positions.get(i).copied().unwrap_or(last_position),
-      size: input.sizes.get(i).copied().unwrap_or(last_size),
-      repeat: input.repeats.get(i).copied().unwrap_or(last_repeat),
-      blend_mode: input.blend_modes.get(i).copied().unwrap_or(last_blend_mode),
+    let axis_x = AxisArea {
+      area: self.area.width,
+      paint: self.paint.width,
+      offset: self.origin_offset.x,
+    };
+    let axis_y = AxisArea {
+      area: self.area.height,
+      paint: self.paint.height,
+      offset: self.origin_offset.y,
     };
 
-    if let Some(geometry) = resolve_background_layer(
-      image,
-      style,
-      ResolveBackgroundLayerInput {
-        area: input.area,
-        paint: input.paint,
-        origin_offset: input.origin_offset,
-        context: input.context,
-      },
-    ) {
-      results.push((i, geometry));
-    }
-  }
+    let (xs, ys, tile_w, tile_h) = match resolved_size.auto_axis {
+      Some(AutoBackgroundAxis::Width) => {
+        let (ys, tile_h) = axis_y.tiles(
+          style.repeat.1,
+          style.pos,
+          resolved_size.height,
+          &self.context.sizing,
+          false,
+        );
+        let tile_w = if style.repeat.1 == BackgroundRepeatStyle::Round {
+          resolve_auto_axis_from_intrinsic(
+            AutoBackgroundAxis::Width,
+            resolved_size.intrinsic_ratio,
+            tile_h,
+          )
+          .unwrap_or(resolved_size.width)
+        } else {
+          resolved_size.width
+        };
+        let (xs, tile_w) = axis_x.tiles(
+          style.repeat.0,
+          style.pos,
+          tile_w,
+          &self.context.sizing,
+          true,
+        );
+        (xs, ys, tile_w, tile_h)
+      }
+      Some(AutoBackgroundAxis::Height) => {
+        let (xs, tile_w) = axis_x.tiles(
+          style.repeat.0,
+          style.pos,
+          resolved_size.width,
+          &self.context.sizing,
+          true,
+        );
+        let tile_h = if style.repeat.0 == BackgroundRepeatStyle::Round {
+          resolve_auto_axis_from_intrinsic(
+            AutoBackgroundAxis::Height,
+            resolved_size.intrinsic_ratio,
+            tile_w,
+          )
+          .unwrap_or(resolved_size.height)
+        } else {
+          resolved_size.height
+        };
+        let (ys, tile_h) = axis_y.tiles(
+          style.repeat.1,
+          style.pos,
+          tile_h,
+          &self.context.sizing,
+          false,
+        );
+        (xs, ys, tile_w, tile_h)
+      }
+      None => {
+        let (xs, tile_w) = axis_x.tiles(
+          style.repeat.0,
+          style.pos,
+          resolved_size.width,
+          &self.context.sizing,
+          true,
+        );
+        let (ys, tile_h) = axis_y.tiles(
+          style.repeat.1,
+          style.pos,
+          resolved_size.height,
+          &self.context.sizing,
+          false,
+        );
+        (xs, ys, tile_w, tile_h)
+      }
+    };
 
-  results
+    if xs.is_empty() || ys.is_empty() {
+      return None;
+    }
+
+    Some(BackgroundLayerGeometry {
+      xs,
+      ys,
+      tile_width: tile_w,
+      tile_height: tile_h,
+      blend_mode: style.blend_mode,
+    })
+  }
+}
+
+impl BackgroundLayersInput<'_> {
+  /// Resolves every layer in painting order: the returned entries go bottom
+  /// layer first, which is the reverse of `images`, since CSS puts the first
+  /// `background-image` on top. Each entry carries the index it came from.
+  pub fn resolve(&self) -> Vec<(usize, BackgroundLayerGeometry)> {
+    let last_position = self.positions.last().copied().unwrap_or_default();
+    let last_size = self.sizes.last().copied().unwrap_or_default();
+    let last_repeat = self.repeats.last().copied().unwrap_or_default();
+    let last_blend_mode = self.blend_modes.last().copied().unwrap_or_default();
+    let layer = BackgroundLayerInput {
+      area: self.area,
+      paint: self.paint,
+      origin_offset: self.origin_offset,
+      context: self.context,
+    };
+
+    let mut results = Vec::new();
+    for (i, image) in self.images.iter().enumerate().rev() {
+      let style = LayerTileStyle {
+        pos: self.positions.get(i).copied().unwrap_or(last_position),
+        size: self.sizes.get(i).copied().unwrap_or(last_size),
+        repeat: self.repeats.get(i).copied().unwrap_or(last_repeat),
+        blend_mode: self.blend_modes.get(i).copied().unwrap_or(last_blend_mode),
+      };
+
+      if let Some(geometry) = layer.resolve(image, style) {
+        results.push((i, geometry));
+      }
+    }
+
+    results
+  }
 }
 
 #[cfg(test)]

@@ -17,7 +17,7 @@ use std::{f32::consts::TAU, io};
 use takumi_core::{
   context::RenderContext,
   geometry::{Point, Size},
-  layout::background::{LayerTileStyle, ResolveBackgroundLayerInput, resolve_background_layer},
+  layout::background::{BackgroundLayerInput, LayerTileStyle},
   paint::{
     ConicGradientTile, LinearGradientTile, RadialGradientTile, build_color_lut_with_interpolation,
     resolve_stops_along_axis,
@@ -409,28 +409,28 @@ fn resolve_placement(
   area: Frame,
   paint: Frame,
 ) -> Option<LayerPlacement> {
-  let geometry = resolve_background_layer(
+  let geometry = BackgroundLayerInput {
+    area: Size {
+      width: area.w.round().max(0.0) as u32,
+      height: area.h.round().max(0.0) as u32,
+    },
+    paint: Size {
+      width: paint.w.round().max(0.0) as u32,
+      height: paint.h.round().max(0.0) as u32,
+    },
+    origin_offset: Point {
+      x: (area.x - paint.x).round() as i32,
+      y: (area.y - paint.y).round() as i32,
+    },
+    context,
+  }
+  .resolve(
     image,
     LayerTileStyle {
       pos: position,
       size,
       repeat,
       blend_mode: BlendMode::Normal,
-    },
-    ResolveBackgroundLayerInput {
-      area: Size {
-        width: area.w.round().max(0.0) as u32,
-        height: area.h.round().max(0.0) as u32,
-      },
-      paint: Size {
-        width: paint.w.round().max(0.0) as u32,
-        height: paint.h.round().max(0.0) as u32,
-      },
-      origin_offset: Point {
-        x: (area.x - paint.x).round() as i32,
-        y: (area.y - paint.y).round() as i32,
-      },
-      context,
     },
   )?;
 
