@@ -6,7 +6,7 @@ use crate::{
   context::RenderContext,
   geometry::{ComputedLayout as Layout, Point, Size},
   layout::node::resolve_image,
-  paint::{
+  style::properties::background_repeat::{
     collect_repeat_tile_positions, collect_spaced_tile_positions, collect_stretched_tile_positions,
   },
   style::{

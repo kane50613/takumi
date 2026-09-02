@@ -92,7 +92,7 @@ pub struct RenderContext {
   /// The style after inheritance.
   pub style: Box<ComputedStyle>,
   /// Whether this box is a cell of a table that collapses its borders.
-  pub collapsed_borders: bool,
+  pub(crate) collapsed_borders: bool,
   /// Whether a min-content measurement reports the widest run it could not break instead of the
   /// zero width it wrapped against.
   pub(crate) intrinsic_min_content: bool,

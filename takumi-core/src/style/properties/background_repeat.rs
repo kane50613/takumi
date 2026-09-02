@@ -11,7 +11,7 @@ use crate::style::{
 
 /// Tile origins along one axis for `background-repeat: repeat`: the first origin
 /// at or before 0, then one per `tile_size` up to `area_size`.
-pub fn collect_repeat_tile_positions(
+pub(crate) fn collect_repeat_tile_positions(
   area_size: u32,
   tile_size: u32,
   origin: i32,
@@ -39,7 +39,7 @@ pub fn collect_repeat_tile_positions(
 
 /// Tile origins for `background-repeat: space`: whole tiles spread to the edges
 /// with equal gaps between them, or a single centered tile when only one fits.
-pub fn collect_spaced_tile_positions(area_size: u32, tile_size: u32) -> SmallVec<[i32; 1]> {
+pub(crate) fn collect_spaced_tile_positions(area_size: u32, tile_size: u32) -> SmallVec<[i32; 1]> {
   if tile_size == 0 {
     return SmallVec::default();
   }
@@ -59,7 +59,7 @@ pub fn collect_spaced_tile_positions(area_size: u32, tile_size: u32) -> SmallVec
 
 /// Tile origins for `background-repeat: round`, with the tile rescaled so a whole
 /// number fit the area. Returns the origins and the rounded tile size.
-pub fn collect_stretched_tile_positions(
+pub(crate) fn collect_stretched_tile_positions(
   area_size: u32,
   tile_size: u32,
 ) -> (SmallVec<[i32; 1]>, u32) {

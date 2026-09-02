@@ -342,7 +342,7 @@ pub enum AvailableSpace {
 
 impl AvailableSpace {
   /// The definite amount of space, or `None` for indefinite space.
-  pub fn into_option(self) -> Option<f32> {
+  pub(crate) fn into_option(self) -> Option<f32> {
     match self {
       Self::Definite(space) => Some(space),
       _ => None,

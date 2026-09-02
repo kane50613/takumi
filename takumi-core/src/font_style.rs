@@ -221,7 +221,7 @@ pub struct SizedFontStyle<'s> {
   /// Outline line style.
   pub outline_style: BorderStyle,
   /// Text stroke color.
-  pub text_stroke_color: Color,
+  pub(crate) text_stroke_color: Color,
   pub(crate) text_decoration_color: Color,
   pub(crate) text_decoration_thickness: SizedTextDecorationThickness,
   pub(crate) text_underline_offset: f32,
