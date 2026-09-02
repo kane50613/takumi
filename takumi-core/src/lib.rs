@@ -64,7 +64,7 @@ pub mod paint {
     filter::compose_transfer_table,
     gradient_utils::{ColorLut, GradientOverlayTile},
     linear_gradient::{LinearGradientFastPathKind, LinearGradientTile},
-    radial_gradient::{RadialGradientRowState, RadialGradientTile},
+    radial_gradient::RadialGradientTile,
   };
 }
 
