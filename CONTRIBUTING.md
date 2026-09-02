@@ -26,6 +26,8 @@ Install these prerequisites:
 
 - Rust 1.91 or newer
 - Bun 1.4
+- The `wasm32-unknown-unknown` target, for the WebAssembly binding: `rustup target add wasm32-unknown-unknown`
+- [`wasm-pack`](https://rustwasm.github.io/wasm-pack/installer/), for building that binding. CI installs the latest release, so no version is pinned.
 
 Install the workspace dependencies:
 
@@ -132,15 +134,15 @@ bun run lint:fix
 
 Run commands for the affected crate or package. A whole-workspace build is slow and is rarely useful twice.
 
-| Change                                | Command                                    |
-| ------------------------------------- | ------------------------------------------ |
-| Umbrella Rust crate or render goldens | `cargo test -p takumi`                     |
-| Rust engine crate                     | `cargo test -p takumi-core`                |
-| Helpers package                       | `(cd takumi-helpers && bun test --silent)` |
-| Native binding package                | `(cd takumi-napi && bun test --silent)`    |
-| WebAssembly binding package           | `(cd takumi-wasm && bun test --silent)`    |
-| JavaScript package                    | `(cd takumi-js && bun test --silent)`      |
-| Docs                                  | `(cd docs && bun run test)`                |
+| Change                                | Command                                               |
+| ------------------------------------- | ----------------------------------------------------- |
+| Umbrella Rust crate or render goldens | `cargo test -p takumi`                                |
+| Rust engine crate                     | `cargo test -p takumi-core`                           |
+| Helpers package                       | `(cd takumi-helpers && bun test --silent)`            |
+| Native binding package                | `(cd takumi-napi && bun test --silent)`               |
+| WebAssembly binding package           | `(cd takumi-wasm && bun test --silent)`               |
+| JavaScript package                    | `(cd takumi-js && bun test --silent)`                 |
+| Docs                                  | `(cd docs && bun test app/playground tests --silent)` |
 
 Run all package tests only when a change crosses package boundaries:
 
@@ -184,9 +186,9 @@ Build only the packages affected by the change:
 
 | Package             | Command                                          |
 | ------------------- | ------------------------------------------------ |
-| Helpers             | `bun --filter ./takumi-helpers run build`        |
-| WebAssembly binding | `bun --filter ./takumi-wasm run build:debug`     |
-| Image response      | `bun --filter ./takumi-image-response run build` |
+| Helpers             | `bun run --filter ./takumi-helpers build`        |
+| WebAssembly binding | `bun run --filter ./takumi-wasm build:debug`     |
+| Image response      | `bun run --filter ./takumi-image-response build` |
 
 The WebAssembly binding build requires `wasm-pack`.
 
@@ -196,8 +198,8 @@ The docs playground reads build output instead of package source.
 
 | Source change                                         | Build command                                |
 | ----------------------------------------------------- | -------------------------------------------- |
-| `takumi-helpers/src`                                  | `bun --filter ./takumi-helpers run build`    |
-| Rust rendering engine used by the WebAssembly binding | `bun --filter ./takumi-wasm run build:debug` |
+| `takumi-helpers/src`                                  | `bun run --filter ./takumi-helpers build`    |
+| Rust rendering engine used by the WebAssembly binding | `bun run --filter ./takumi-wasm build:debug` |
 
 ## Goldens and fixtures
 
@@ -257,7 +259,7 @@ CI fails when test execution changes a generated file that is not included in th
 The full JavaScript benchmark is the gate for a performance change:
 
 ```bash
-bun --filter ./takumi-napi run bench
+bun run --filter ./takumi-napi bench
 ```
 
 Do not use one native micro-benchmark as the gate. Measure a WebAssembly change in WebAssembly. Native results do not carry over.
@@ -271,7 +273,7 @@ Measure binary size through the shipped pipeline:
 For `takumi-wasm`, use:
 
 ```bash
-bun --filter ./takumi-wasm run build
+bun run --filter ./takumi-wasm build
 gzip -9 -c takumi-wasm/pkg/takumi_wasm_bg.wasm | wc -c
 ```
 
