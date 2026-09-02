@@ -34,8 +34,8 @@ use takumi_core::{
   shadow::SizedShadow,
   style::{
     Affine, BackgroundClip, BackgroundImage, BackgroundOrigin, BlendMode, BoxDecorationBreak,
-    Color, Display, FillRule as CoreFillRule, Filter, Isolation, Lang, ResolvedGradientStop,
-    TextDecorationLines,
+    Color, ComputedStyle, Display, FillRule as CoreFillRule, Filter, Isolation, Lang,
+    ResolvedGradientStop, TextDecorationLines,
   },
 };
 
@@ -310,33 +310,12 @@ impl Emitter<'_> {
     };
 
     let style = &node.context.style;
-    let mut pushed = 0;
-
-    if style.mix_blend_mode != BlendMode::Normal {
-      surface.push_blend_mode(krilla_blend(style.mix_blend_mode));
-      pushed += 1;
-    }
-    if style.isolation == Isolation::Isolate {
-      surface.push_isolated();
-      pushed += 1;
-    }
-    let opacity = style.opacity.0;
-
-    if opacity < 1.0 {
-      surface
-        .push_opacity(NormalizedF32::new(opacity.clamp(0.0, 1.0)).unwrap_or(NormalizedF32::ONE));
-      pushed += 1;
-    }
-
+    let mut pushed = push_compositing(style, surface);
     let relative = parent.invert().unwrap_or(Affine::IDENTITY) * paint.transform;
     let (x, y) = if relative.only_translation() {
       (relative.x, relative.y)
     } else {
-      let cols = relative.to_cols_array();
-
-      surface.push_transform(&Transform::from_row(
-        cols[0], cols[1], cols[2], cols[3], cols[4], cols[5],
-      ));
+      push_transform(relative, surface);
       pushed += 1;
       (0.0, 0.0)
     };
@@ -345,37 +324,83 @@ impl Emitter<'_> {
     } else {
       parent * relative
     };
-    // `box-decoration-break: clone`: the fragment of the box on this page
-    // paints its own complete decorations (paint-only; cloned padding does not
-    // reserve layout space). `slice` needs nothing — the page window slices
-    // the full-box decorations, which is exactly the sliced rendering.
-    let (deco_y, deco_size) = if style.box_decoration_break == BoxDecorationBreak::Clone
-      && let Some((window_top, window_bottom)) = self.window.y
-    {
-      let top = y.max(window_top);
-      let bottom = (y + layout.size.height).min(window_bottom);
-
-      (
-        top,
-        Size {
-          width: layout.size.width,
-          height: (bottom - top).max(0.0),
-        },
-      )
-    } else {
-      (y, layout.size)
+    let (deco_y, deco_size) = self.decoration_window(style, y, layout.size);
+    let deco_layout = Layout {
+      size: deco_size,
+      ..layout
     };
     let border = BorderProperties::from_context(&node.context, deco_size, layout.border);
 
-    // A mask covers the element and its descendants, so it is pushed with the
-    // rest of the box's state and popped with it.
+    pushed += self.push_mask_and_clip(node, layout, (x, y), surface);
+    self.emit_decorations(node, &border, deco_layout, (x, deco_y), surface);
+
+    // Children and own content clip to the (rounded) padding box when overflow
+    // is hidden; without radius a per-axis overflow leaves the visible axis
+    // unbounded. Counted on its own: the outline paints outside this clip but
+    // inside everything else the box pushed.
+    let overflow_clip = if style.clips_overflow() {
+      self.push_overflow_clip(node, layout, relative, (x, y), surface)
+    } else {
+      0
+    };
+
+    self.emit_tagged_content(node, paint, layout, (x, y), surface)?;
+
+    Ok((
+      frame,
+      BoxState {
+        pushed,
+        overflow_clip,
+        // CSS 2.1 Appendix E paints the outline last. The caller pops only the
+        // overflow clip first, so the outline lands above the content and
+        // outside that clip, but still under the box's transform, opacity,
+        // mask and blend.
+        outline: self.pending_outline(node, deco_layout, deco_size, x, deco_y),
+      },
+    ))
+  }
+
+  /// `box-decoration-break: clone`: the fragment of the box on this page
+  /// paints its own complete decorations (paint-only; cloned padding does not
+  /// reserve layout space). `slice` needs nothing: the page window slices the
+  /// full-box decorations, which is exactly the sliced rendering.
+  fn decoration_window(&self, style: &ComputedStyle, y: f32, size: Size<f32>) -> (f32, Size<f32>) {
+    if style.box_decoration_break == BoxDecorationBreak::Clone
+      && let Some((window_top, window_bottom)) = self.window.y
+    {
+      let top = y.max(window_top);
+      let bottom = (y + size.height).min(window_bottom);
+
+      return (
+        top,
+        Size {
+          width: size.width,
+          height: (bottom - top).max(0.0),
+        },
+      );
+    }
+
+    (y, size)
+  }
+
+  /// Pushes the box's mask and `clip-path`, returning how many states went on.
+  /// The mask covers the element and its descendants; `clip-path` clips the
+  /// element itself, decorations included, so both go on before any paint.
+  fn push_mask_and_clip(
+    &mut self,
+    node: &RenderNode,
+    layout: Layout,
+    (x, y): (f32, f32),
+    surface: &mut Surface,
+  ) -> usize {
+    let style = &node.context.style;
+    let mut pushed = 0;
+
     if let Some(mask) = self.mask(node, layout.size, (x, y), surface) {
       surface.push_mask(mask);
       pushed += 1;
     }
 
-    // `clip-path` clips the element itself, decorations included, so it goes on
-    // before anything is painted.
     if let Some(shape) = &style.clip_path
       && let Some(commands) = clip_shape_commands(shape, &node.context, layout.size)
     {
@@ -393,55 +418,75 @@ impl Emitter<'_> {
         pushed += 1;
       }
     }
-    let shadows =
-      self.filtered_shadows(BoxPainter::fragment(&node.context, layout, deco_size).shadows());
-    let (inset, outer) = (shadows.inset, shadows.outer);
 
-    let deco_layout = Layout {
-      size: deco_size,
-      ..layout
+    pushed
+  }
+
+  /// Paints shadows, backgrounds, and borders in CSS order.
+  /// `background-clip` picks the shape a background fills, never when it
+  /// paints: the border draws over the ring, as it does in Blink.
+  fn emit_decorations(
+    &self,
+    node: &RenderNode,
+    border: &BorderProperties,
+    layout: Layout,
+    (x, y): (f32, f32),
+    surface: &mut Surface,
+  ) {
+    let shadows =
+      self.filtered_shadows(BoxPainter::fragment(&node.context, layout, layout.size).shadows());
+
+    self.shadows(&shadows.outer, border, layout, (x, y), surface, false);
+    self.emit_background(node, layout, x, y, surface);
+    self.emit_background_layers(node, layout, x, y, surface);
+    self.shadows(&shadows.inset, border, layout, (x, y), surface, true);
+    self.emit_borders(border, x, y, layout.size, surface);
+  }
+
+  /// Clips children and own content to the padding box, returning how many
+  /// states went on. A clip keeps content off the page but not out of the
+  /// text layer, so what it cuts away must never be emitted; only a
+  /// translated frame maps the box onto the window's axis.
+  fn push_overflow_clip(
+    &mut self,
+    node: &RenderNode,
+    layout: Layout,
+    relative: Affine,
+    (x, y): (f32, f32),
+    surface: &mut Surface,
+  ) -> usize {
+    if relative.only_translation() {
+      self.window.narrow(y, y + layout.size.height);
+    }
+    let clip_border = BorderProperties::from_context(&node.context, layout.size, layout.border);
+    let path = if clip_border.is_zero() {
+      overflow_clip_rect(&node.context.style, layout, x, y)
+    } else {
+      let clip = ClipBox::padding_box(clip_border, layout);
+      let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
+
+      clip
+        .border
+        .append_mask_commands(&mut commands, clip.size, clip.offset);
+      krilla_path(&commands, x, y)
+    };
+    let Some(path) = path else {
+      return 0;
     };
 
-    self.shadows(&outer, &border, deco_layout, (x, deco_y), surface, false);
-    // `background-clip: border-area` paints the fills over the borders,
-    // clipped to the border ring; every other clip paints them underneath.
-    // `background-clip` picks the shape a background fills, never when it
-    // paints: the border draws over the ring, as it does in Blink.
-    self.emit_background(node, deco_layout, x, deco_y, surface);
-    self.emit_background_layers(node, deco_layout, x, deco_y, surface);
-    self.shadows(&inset, &border, deco_layout, (x, deco_y), surface, true);
-    self.emit_borders(&border, x, deco_y, deco_size, surface);
-    // Children and own content clip to the (rounded) padding box when overflow
-    // is hidden; without radius a per-axis overflow leaves the visible axis
-    // unbounded. Counted on its own: the outline paints outside this clip but
-    // inside everything else the box pushed.
-    let mut overflow_clip = 0;
+    surface.push_clip_path(&path, &FillRule::NonZero);
+    1
+  }
 
-    if style.clips_overflow() {
-      // A clip keeps content off the page but not out of the text layer, so
-      // what it cuts away must never be emitted. Only a translated frame maps
-      // the box onto the window's axis.
-      if relative.only_translation() {
-        self.window.narrow(y, y + layout.size.height);
-      }
-      let clip_border = BorderProperties::from_context(&node.context, layout.size, layout.border);
-      let path = if clip_border.is_zero() {
-        overflow_clip_rect(style, layout, x, y)
-      } else {
-        let clip = ClipBox::padding_box(clip_border, layout);
-        let mut commands = Vec::with_capacity(BorderProperties::PATH_COMMANDS_AMOUNT);
-
-        clip
-          .border
-          .append_mask_commands(&mut commands, clip.size, clip.offset);
-        krilla_path(&commands, x, y)
-      };
-      if let Some(path) = path {
-        surface.push_clip_path(&path, &FillRule::NonZero);
-        overflow_clip += 1;
-      }
-    }
-
+  /// Emits the box's own content inside its structure tag when tagging is on.
+  fn emit_tagged_content(
+    &mut self,
+    node: &RenderNode,
+    paint: &NodePaint,
+    layout: Layout,
+    (x, y): (f32, f32),
+    surface: &mut Surface,
+  ) -> Result<(), PdfError> {
     let tagged = self.tagged && has_own_content(node);
 
     if tagged {
@@ -465,18 +510,7 @@ impl Emitter<'_> {
       surface.end_tagged();
     }
 
-    Ok((
-      frame,
-      BoxState {
-        pushed,
-        overflow_clip,
-        // CSS 2.1 Appendix E paints the outline last. The caller pops only the
-        // overflow clip first, so the outline lands above the content and
-        // outside that clip, but still under the box's transform, opacity,
-        // mask and blend.
-        outline: self.pending_outline(node, deco_layout, deco_size, x, deco_y),
-      },
-    ))
+    Ok(())
   }
 
   /// Finishes a box: leaves its overflow clip, paints the outline above
@@ -1881,6 +1915,37 @@ fn background_origin_area(origin: BackgroundOrigin, layout: Layout) -> (CorePoin
 
 /// Whether the node draws own content (text or an image), i.e. whether a tagged content sequence
 /// around it would be non-empty.
+/// Pushes the blend mode, isolation, and opacity a box composites with,
+/// returning how many states went on.
+fn push_compositing(style: &ComputedStyle, surface: &mut Surface) -> usize {
+  let mut pushed = 0;
+
+  if style.mix_blend_mode != BlendMode::Normal {
+    surface.push_blend_mode(krilla_blend(style.mix_blend_mode));
+    pushed += 1;
+  }
+  if style.isolation == Isolation::Isolate {
+    surface.push_isolated();
+    pushed += 1;
+  }
+  let opacity = style.opacity.0;
+
+  if opacity < 1.0 {
+    surface.push_opacity(NormalizedF32::new(opacity.clamp(0.0, 1.0)).unwrap_or(NormalizedF32::ONE));
+    pushed += 1;
+  }
+
+  pushed
+}
+
+fn push_transform(relative: Affine, surface: &mut Surface) {
+  let cols = relative.to_cols_array();
+
+  surface.push_transform(&Transform::from_row(
+    cols[0], cols[1], cols[2], cols[3], cols[4], cols[5],
+  ));
+}
+
 fn has_own_content(node: &RenderNode) -> bool {
   if node.should_create_inline_layout() {
     return true;
