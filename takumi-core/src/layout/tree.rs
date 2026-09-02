@@ -1450,220 +1450,9 @@ impl RenderNode {
     root: Node,
     matched_declarations: &[NodeMatchedDeclarations<'_>],
   ) -> Self {
-    struct PendingRenderNode {
-      context: RenderContext,
-      node: Node,
-      source_order: usize,
-      children_is_some: bool,
-      pending_children: IntoIter<Node>,
-      rendered_children: Vec<RenderNode>,
-      pseudo_after: Option<RenderNode>,
-      list_counter: ListCounter,
-      marker_ordinal: Option<i32>,
-      inside_list: bool,
-      owns_list_counter: bool,
-    }
-
-    fn next_source_order(source_cursor: &mut usize) -> usize {
-      let source_order = *source_cursor;
-      *source_cursor += 1;
-      source_order
-    }
-
-    fn take_children_vec(node: &mut Node) -> (bool, Vec<Node>) {
-      let children = node.take_children();
-      let children_is_some = children.is_some();
-      let children = children.map_or_else(Vec::new, <[Node]>::into_vec);
-      (children_is_some, children)
-    }
-
-    fn resolve_computed_style(
-      parent_context: &RenderContext,
-      node: &mut Node,
-      source_order: usize,
-      matched_declarations: &[NodeMatchedDeclarations<'_>],
-    ) -> (ComputedStyle, SizingContext, Color) {
-      let default_matched = MatchedDeclarationsView::default();
-      let matched = matched_declarations
-        .get(source_order)
-        .map(NodeMatchedDeclarations::element)
-        .unwrap_or(&default_matched);
-      let layers = node.take_style_layers();
-      let lang = layers.lang;
-
-      let (style_layers, element_important) = build_style_layers(
-        layers,
-        matched,
-        parent_context.sizing.viewport,
-        parent_context.stylesheet().as_ref(),
-      );
-      let inherited_parent = registered_custom_property_parent_style(
-        &parent_context.style,
-        std::slice::from_ref(parent_context.stylesheet().as_ref()),
-        parent_context.sizing.viewport,
-      );
-
-      let mut style = style_layers.inherit_with_lang(&inherited_parent, lang);
-
-      // A tree built in code is content, not a document: `rem` resolves against
-      // the viewport, so a `font-size` on the outermost node styles text without
-      // rescaling every `rem` length below it. A parsed document is the
-      // exception, since its outermost node is the `<html>` element that CSS
-      // does make the `rem` basis.
-      let is_document_root = source_order == 0
-        && node
-          .tag_name()
-          .is_some_and(|tag| tag.eq_ignore_ascii_case("html"));
-      let parent_root_font_size = parent_context.sizing.root_font_size;
-      let parent_root_line_height = parent_context.sizing.root_line_height;
-
-      let mut child_sizing_for_final: Option<SizingContext> = None;
-      if !style.animation_name.is_empty() {
-        let font_size = style
-          .font_size
-          .to_px(&parent_context.sizing, parent_context.sizing.font_size);
-        let normal_basis = resolve_normal_line_height(parent_context, &style, font_size);
-        let line_height = style
-          .line_height
-          .to_px(&parent_context.sizing, normal_basis);
-        let child_sizing = parent_context.sizing.with_font_metrics(
-          font_size,
-          parent_root_font_size,
-          line_height,
-          parent_root_line_height,
-        );
-        let child_current_color = style.color.resolve(parent_context.current_color);
-        let child_context = RenderContext::from_parent(
-          parent_context,
-          style.clone(),
-          child_sizing.clone(),
-          child_current_color,
-        );
-        style = apply_stylesheet_animations(
-          style,
-          child_context.stylesheet(),
-          child_context.time_ms(),
-          &child_context.sizing,
-          child_context.current_color,
-        );
-        child_sizing_for_final = Some(child_sizing);
-      }
-
-      // Important declarations outrank an animation, and `inherit` among them
-      // needs the parent the first pass resolved against.
-      let important = matched
-        .unlayered_important()
-        .iter()
-        .map(|declarations| declarations.iter())
-        .chain(
-          element_important
-            .tw
-            .iter()
-            .map(|declarations| declarations.iter()),
-        )
-        .chain(
-          matched
-            .layered_important()
-            .iter()
-            .map(|declarations| declarations.iter()),
-        )
-        .chain(
-          element_important
-            .inline
-            .iter()
-            .map(|declarations| declarations.iter()),
-        );
-
-      for declarations in important {
-        for declaration in declarations {
-          declaration
-            .clone()
-            .apply_with_parent(&mut style, &inherited_parent);
-        }
-      }
-
-      let sizing_basis = child_sizing_for_final.unwrap_or_else(|| parent_context.sizing.clone());
-      let font_size = style.font_size.to_px(&sizing_basis, sizing_basis.font_size);
-      let normal_basis = resolve_normal_line_height(parent_context, &style, font_size);
-      let line_height = style
-        .line_height
-        .to_px(&parent_context.sizing, normal_basis);
-      let sizing = parent_context.sizing.with_font_metrics(
-        font_size,
-        parent_root_font_size.or_else(|| is_document_root.then_some(font_size)),
-        line_height,
-        parent_root_line_height.or_else(|| is_document_root.then_some(line_height)),
-      );
-      let current_color = style.color.resolve(parent_context.current_color);
-      style.make_computed(&sizing);
-      (style, sizing, current_color)
-    }
-
-    fn build_pending_node(
-      parent_context: &RenderContext,
-      mut node: Node,
-      matched_declarations: &[NodeMatchedDeclarations<'_>],
-      source_cursor: &mut usize,
-      counter: &mut ListCounter,
-      inside_list: bool,
-    ) -> PendingRenderNode {
-      let source_order = next_source_order(source_cursor);
-      let (style, sizing, current_color) = resolve_computed_style(
-        parent_context,
-        &mut node,
-        source_order,
-        matched_declarations,
-      );
-      let (children_is_some, children) = take_children_vec(&mut node);
-      let context = RenderContext::from_parent(parent_context, style, sizing, current_color);
-
-      let element_matched = matched_declarations.get(source_order);
-      let marker_ordinal =
-        (context.style.display == Display::ListItem).then(|| counter.take(&node));
-      let pseudo_before = element_matched
-        .and_then(|m| m.before())
-        .and_then(|m| RenderNode::from_pseudo_match(&context, &node, m));
-      let pseudo_after = element_matched
-        .and_then(|m| m.after())
-        .and_then(|m| RenderNode::from_pseudo_match(&context, &node, m));
-      let pseudo_before_present = pseudo_before.is_some();
-
-      let has_generated_children =
-        marker_ordinal.is_some() || pseudo_before.is_some() || pseudo_after.is_some();
-      let mut rendered_children = Vec::with_capacity(children.len() + 3);
-      rendered_children.extend(pseudo_before);
-
-      // The inline collector emits an element's own text before any child, so
-      // an element that folded its text has to hand it back as a child for the
-      // generated content to come first.
-      if pseudo_before_present && let Some(text) = node.take_text() {
-        rendered_children.push(RenderNode::generated_sibling_text(&context, text));
-      }
-
-      let owns_list_counter = owns_list_counter(&node, inside_list);
-
-      PendingRenderNode {
-        source_order,
-        children_is_some: children_is_some || has_generated_children,
-        list_counter: if owns_list_counter {
-          ListCounter::new(&node)
-        } else {
-          *counter
-        },
-        inside_list: inside_list || is_list_element(&node),
-        owns_list_counter,
-        context,
-        node,
-        rendered_children,
-        pending_children: children.into_iter(),
-        pseudo_after,
-        marker_ordinal,
-      }
-    }
-
     let mut source_cursor = 0;
     let mut root_counter = ListCounter::new(&root);
-    let mut stack = vec![build_pending_node(
+    let mut stack = vec![PendingRenderNode::build(
       parent_context,
       root,
       matched_declarations,
@@ -1674,22 +1463,11 @@ impl RenderNode {
 
     loop {
       let Some(current) = stack.last_mut() else {
-        return RenderNode {
-          context: parent_context.clone(),
-          node: Some(Node::container([])),
-          origin: NodeOrigin::Anonymous,
-          children: None,
-          layout_style_override: None,
-          anonymous_text_content: None,
-          marker: None,
-          force_inline_layout: false,
-          table_header_lines: None,
-          table_part: None,
-        };
+        return RenderNode::empty(parent_context);
       };
 
       if let Some(child) = current.pending_children.next() {
-        let child_pending = build_pending_node(
+        let child_pending = PendingRenderNode::build(
           &current.context,
           child,
           matched_declarations,
@@ -1701,19 +1479,8 @@ impl RenderNode {
         continue;
       }
 
-      let Some(mut finished) = stack.pop() else {
-        return RenderNode {
-          context: parent_context.clone(),
-          node: Some(Node::container([])),
-          origin: NodeOrigin::Anonymous,
-          children: None,
-          layout_style_override: None,
-          anonymous_text_content: None,
-          marker: None,
-          force_inline_layout: false,
-          table_header_lines: None,
-          table_part: None,
-        };
+      let Some(finished) = stack.pop() else {
+        return RenderNode::empty(parent_context);
       };
 
       if !finished.owns_list_counter
@@ -1722,174 +1489,7 @@ impl RenderNode {
         parent.list_counter = finished.list_counter;
       }
 
-      if let Some(after) = finished.pseudo_after.take() {
-        finished.rendered_children.push(after);
-      }
-
-      let children = if finished.children_is_some {
-        Some(finished.rendered_children.into_boxed_slice())
-      } else {
-        None
-      };
-
-      let marker_ordinal = finished.marker_ordinal;
-      let mut render_node = if let Some(mut children) = children {
-        if finished.context.style.display.should_blockify_children() {
-          // CSS Flexbox L1 §4 / Grid L1 §6: collapsible whitespace-only text
-          // between items is not rendered; every remaining child blockifies.
-          let mut children = Vec::from(children);
-          children.retain(|child| !child.is_collapsible_whitespace_only_text_node());
-          for child in &mut children {
-            child.context.style.display.blockify();
-          }
-
-          RenderNode {
-            context: finished.context,
-            node: Some(finished.node),
-            origin: NodeOrigin::Authored {
-              source_order: finished.source_order,
-            },
-            children: Some(children.into_boxed_slice()),
-            layout_style_override: None,
-            anonymous_text_content: None,
-            marker: None,
-            force_inline_layout: false,
-            table_header_lines: None,
-            table_part: None,
-          }
-        } else {
-          // Blink's Text::TextLayoutObjectIsNeeded: collapsible
-          // whitespace-only text renders only after an in-flow inline-level
-          // sibling, and leading whitespace only inside an inline parent
-          // (#711, #992).
-          children = drop_collapsible_boundary_whitespace(
-            Vec::from(children),
-            finished.context.style.display.is_inline(),
-          )
-          .into_boxed_slice();
-
-          // https://github.com/kane50613/takumi/issues/738: out-of-flow boxes
-          // must not be swept into an anonymous block box.
-          let has_inline = children.iter().any(|child| {
-            child.participates_in_inline_formatting_context() && !child.is_out_of_flow()
-          });
-          let has_block = children
-            .iter()
-            .any(|child| !child.participates_in_inline_formatting_context());
-          let has_out_of_flow = children.iter().any(RenderNode::is_out_of_flow);
-          let parent_is_inline = finished.context.style.display.is_inline();
-          let requires_inline_parent_blockification = parent_is_inline && has_block;
-          // A block parent mixing inline content with out-of-flow children wraps
-          // the inline part so the absolute boxes stay as block-level children.
-          // An inline parent keeps its inline formatting context untouched — an
-          // anonymous block there would be dropped by the surrounding line box.
-          let needs_anonymous_boxes =
-            has_inline && (has_block || (!parent_is_inline && has_out_of_flow));
-
-          if requires_inline_parent_blockification {
-            finished.context.style.display = finished.context.style.display.as_blockified();
-          }
-
-          if !needs_anonymous_boxes {
-            RenderNode {
-              context: finished.context,
-              node: Some(finished.node),
-              origin: NodeOrigin::Authored {
-                source_order: finished.source_order,
-              },
-              children: Some(children),
-              layout_style_override: None,
-              anonymous_text_content: None,
-              marker: None,
-              force_inline_layout: false,
-              table_header_lines: None,
-              table_part: None,
-            }
-          } else {
-            let mut final_children = Vec::new();
-            let mut inline_group = Vec::new();
-
-            for item in children {
-              if item.participates_in_inline_formatting_context() && !item.is_out_of_flow() {
-                inline_group.push(item);
-                continue;
-              }
-
-              flush_inline_group(&mut inline_group, &mut final_children, &finished.context);
-
-              final_children.push(item);
-            }
-
-            flush_inline_group(&mut inline_group, &mut final_children, &finished.context);
-
-            RenderNode {
-              context: finished.context,
-              node: Some(finished.node),
-              origin: NodeOrigin::Authored {
-                source_order: finished.source_order,
-              },
-              children: Some(final_children.into_boxed_slice()),
-              layout_style_override: None,
-              anonymous_text_content: None,
-              marker: None,
-              force_inline_layout: false,
-              table_header_lines: None,
-              table_part: None,
-            }
-          }
-        }
-      } else {
-        let maybe_anonymous_text = if finished.context.style.display.should_blockify_children() {
-          finished
-            .node
-            .inline_content()
-            .and_then(|content| match content {
-              InlineContentKind::Text(text) => Some(text.into_owned()),
-              InlineContentKind::Box => None,
-            })
-        } else {
-          None
-        };
-
-        if let Some(text) = maybe_anonymous_text {
-          let anonymous_text_item = RenderNode::anonymous_text_item(&finished.context, text);
-          RenderNode {
-            context: finished.context,
-            node: Some(finished.node),
-            origin: NodeOrigin::Authored {
-              source_order: finished.source_order,
-            },
-            children: Some([anonymous_text_item].into()),
-            layout_style_override: None,
-            anonymous_text_content: None,
-            marker: None,
-            force_inline_layout: false,
-            table_header_lines: None,
-            table_part: None,
-          }
-        } else {
-          RenderNode {
-            context: finished.context,
-            node: Some(finished.node),
-            origin: NodeOrigin::Authored {
-              source_order: finished.source_order,
-            },
-            children: None,
-            layout_style_override: None,
-            anonymous_text_content: None,
-            marker: None,
-            force_inline_layout: false,
-            table_header_lines: None,
-            table_part: None,
-          }
-        }
-      };
-
-      if let Some(ordinal) = marker_ordinal
-        && let Some(marker) = list_marker(&render_node.context, ordinal)
-      {
-        attach_marker(&mut render_node, marker);
-      }
+      let render_node = finished.finish();
 
       if let Some(parent) = stack.last_mut() {
         parent.rendered_children.push(render_node);
@@ -1897,6 +1497,108 @@ impl RenderNode {
         return render_node;
       }
     }
+  }
+
+  /// An authored node with its resolved context and normalized children.
+  fn authored(
+    context: RenderContext,
+    node: Node,
+    source_order: usize,
+    children: Option<Box<[RenderNode]>>,
+  ) -> Self {
+    RenderNode {
+      context,
+      node: Some(node),
+      origin: NodeOrigin::Authored { source_order },
+      children,
+      layout_style_override: None,
+      anonymous_text_content: None,
+      marker: None,
+      force_inline_layout: false,
+      table_header_lines: None,
+      table_part: None,
+    }
+  }
+
+  fn empty(parent_context: &RenderContext) -> Self {
+    RenderNode {
+      context: parent_context.clone(),
+      node: Some(Node::container([])),
+      origin: NodeOrigin::Anonymous,
+      children: None,
+      layout_style_override: None,
+      anonymous_text_content: None,
+      marker: None,
+      force_inline_layout: false,
+      table_header_lines: None,
+      table_part: None,
+    }
+  }
+
+  /// Blockifies, trims, and wraps `children` the way their parent's display
+  /// requires, blockifying the parent itself when it holds a block.
+  fn normalize_children(
+    context: &mut RenderContext,
+    children: Box<[RenderNode]>,
+  ) -> Box<[RenderNode]> {
+    if context.style.display.should_blockify_children() {
+      // CSS Flexbox L1 §4 / Grid L1 §6: collapsible whitespace-only text
+      // between items is not rendered; every remaining child blockifies.
+      let mut children = Vec::from(children);
+      children.retain(|child| !child.is_collapsible_whitespace_only_text_node());
+      for child in &mut children {
+        child.context.style.display.blockify();
+      }
+
+      return children.into_boxed_slice();
+    }
+
+    // Blink's Text::TextLayoutObjectIsNeeded: collapsible
+    // whitespace-only text renders only after an in-flow inline-level
+    // sibling, and leading whitespace only inside an inline parent
+    // (#711, #992).
+    let children =
+      drop_collapsible_boundary_whitespace(Vec::from(children), context.style.display.is_inline())
+        .into_boxed_slice();
+
+    // https://github.com/kane50613/takumi/issues/738: out-of-flow boxes
+    // must not be swept into an anonymous block box.
+    let has_inline = children
+      .iter()
+      .any(|child| child.participates_in_inline_formatting_context() && !child.is_out_of_flow());
+    let has_block = children
+      .iter()
+      .any(|child| !child.participates_in_inline_formatting_context());
+    let has_out_of_flow = children.iter().any(RenderNode::is_out_of_flow);
+    let parent_is_inline = context.style.display.is_inline();
+
+    if parent_is_inline && has_block {
+      context.style.display = context.style.display.as_blockified();
+    }
+
+    // A block parent mixing inline content with out-of-flow children wraps
+    // the inline part so the absolute boxes stay as block-level children.
+    // An inline parent keeps its inline formatting context untouched — an
+    // anonymous block there would be dropped by the surrounding line box.
+    if !(has_inline && (has_block || (!parent_is_inline && has_out_of_flow))) {
+      return children;
+    }
+
+    let mut final_children = Vec::new();
+    let mut inline_group = Vec::new();
+
+    for item in children {
+      if item.participates_in_inline_formatting_context() && !item.is_out_of_flow() {
+        inline_group.push(item);
+        continue;
+      }
+
+      flush_inline_group(&mut inline_group, &mut final_children, context);
+      final_children.push(item);
+    }
+
+    flush_inline_group(&mut inline_group, &mut final_children, context);
+    final_children.into_boxed_slice()
   }
 
   fn inline_box_margin_box_height(
@@ -2407,6 +2109,256 @@ fn drop_collapsible_boundary_whitespace(
   }
 
   out
+}
+
+/// A node whose context is resolved while its children are still being built.
+struct PendingRenderNode {
+  context: RenderContext,
+  node: Node,
+  source_order: usize,
+  children_is_some: bool,
+  pending_children: IntoIter<Node>,
+  rendered_children: Vec<RenderNode>,
+  pseudo_after: Option<RenderNode>,
+  list_counter: ListCounter,
+  marker_ordinal: Option<i32>,
+  inside_list: bool,
+  owns_list_counter: bool,
+}
+
+impl PendingRenderNode {
+  fn build(
+    parent_context: &RenderContext,
+    mut node: Node,
+    matched_declarations: &[NodeMatchedDeclarations<'_>],
+    source_cursor: &mut usize,
+    counter: &mut ListCounter,
+    inside_list: bool,
+  ) -> Self {
+    let source_order = *source_cursor;
+    *source_cursor += 1;
+    let (style, sizing, current_color) =
+      parent_context.resolve_child_style(&mut node, source_order, matched_declarations);
+    let children = node.take_children();
+    let children_is_some = children.is_some();
+    let children = children.map_or_else(Vec::new, <[Node]>::into_vec);
+    let context = RenderContext::from_parent(parent_context, style, sizing, current_color);
+
+    let element_matched = matched_declarations.get(source_order);
+    let marker_ordinal = (context.style.display == Display::ListItem).then(|| counter.take(&node));
+    let pseudo_before = element_matched
+      .and_then(|m| m.before())
+      .and_then(|m| RenderNode::from_pseudo_match(&context, &node, m));
+    let pseudo_after = element_matched
+      .and_then(|m| m.after())
+      .and_then(|m| RenderNode::from_pseudo_match(&context, &node, m));
+    let pseudo_before_present = pseudo_before.is_some();
+
+    let has_generated_children =
+      marker_ordinal.is_some() || pseudo_before.is_some() || pseudo_after.is_some();
+    let mut rendered_children = Vec::with_capacity(children.len() + 3);
+    rendered_children.extend(pseudo_before);
+
+    // The inline collector emits an element's own text before any child, so
+    // an element that folded its text has to hand it back as a child for the
+    // generated content to come first.
+    if pseudo_before_present && let Some(text) = node.take_text() {
+      rendered_children.push(RenderNode::generated_sibling_text(&context, text));
+    }
+
+    let owns_list_counter = owns_list_counter(&node, inside_list);
+
+    Self {
+      source_order,
+      children_is_some: children_is_some || has_generated_children,
+      list_counter: if owns_list_counter {
+        ListCounter::new(&node)
+      } else {
+        *counter
+      },
+      inside_list: inside_list || is_list_element(&node),
+      owns_list_counter,
+      context,
+      node,
+      rendered_children,
+      pending_children: children.into_iter(),
+      pseudo_after,
+      marker_ordinal,
+    }
+  }
+
+  /// Closes the node once every child is rendered.
+  fn finish(mut self) -> RenderNode {
+    if let Some(after) = self.pseudo_after.take() {
+      self.rendered_children.push(after);
+    }
+
+    let mut context = self.context;
+    let children = if self.children_is_some {
+      Some(RenderNode::normalize_children(
+        &mut context,
+        self.rendered_children.into_boxed_slice(),
+      ))
+    } else {
+      Self::anonymous_text_child(&context, &self.node).map(|child| Box::from([child]))
+    };
+    let mut render_node = RenderNode::authored(context, self.node, self.source_order, children);
+
+    if let Some(ordinal) = self.marker_ordinal
+      && let Some(marker) = list_marker(&render_node.context, ordinal)
+    {
+      attach_marker(&mut render_node, marker);
+    }
+
+    render_node
+  }
+
+  /// The text a childless flex or grid item carries, wrapped as its own child.
+  fn anonymous_text_child(context: &RenderContext, node: &Node) -> Option<RenderNode> {
+    if !context.style.display.should_blockify_children() {
+      return None;
+    }
+
+    let text = node.inline_content().and_then(|content| match content {
+      InlineContentKind::Text(text) => Some(text.into_owned()),
+      InlineContentKind::Box => None,
+    })?;
+
+    Some(RenderNode::anonymous_text_item(context, text))
+  }
+}
+
+impl RenderContext {
+  /// Resolves a child's style and sizing from its matched declarations.
+  fn resolve_child_style(
+    &self,
+    node: &mut Node,
+    source_order: usize,
+    matched_declarations: &[NodeMatchedDeclarations<'_>],
+  ) -> (ComputedStyle, SizingContext, Color) {
+    let default_matched = MatchedDeclarationsView::default();
+    let matched = matched_declarations
+      .get(source_order)
+      .map(NodeMatchedDeclarations::element)
+      .unwrap_or(&default_matched);
+    let layers = node.take_style_layers();
+    let lang = layers.lang;
+
+    let (style_layers, element_important) = build_style_layers(
+      layers,
+      matched,
+      self.sizing.viewport,
+      self.stylesheet().as_ref(),
+    );
+    let inherited_parent = registered_custom_property_parent_style(
+      &self.style,
+      slice::from_ref(self.stylesheet().as_ref()),
+      self.sizing.viewport,
+    );
+
+    let mut style = style_layers.inherit_with_lang(&inherited_parent, lang);
+
+    // A tree built in code is content, not a document: `rem` resolves against
+    // the viewport, so a `font-size` on the outermost node styles text without
+    // rescaling every `rem` length below it. A parsed document is the
+    // exception, since its outermost node is the `<html>` element that CSS
+    // does make the `rem` basis.
+    let is_document_root = source_order == 0
+      && node
+        .tag_name()
+        .is_some_and(|tag| tag.eq_ignore_ascii_case("html"));
+
+    let mut child_sizing_for_final: Option<SizingContext> = None;
+    if !style.animation_name.is_empty() {
+      let (animated, child_sizing) = self.animated_style(style);
+
+      style = animated;
+      child_sizing_for_final = Some(child_sizing);
+    }
+
+    // Important declarations outrank an animation, and `inherit` among them
+    // needs the parent the first pass resolved against.
+    let important = matched
+      .unlayered_important()
+      .iter()
+      .map(|declarations| declarations.iter())
+      .chain(
+        element_important
+          .tw
+          .iter()
+          .map(|declarations| declarations.iter()),
+      )
+      .chain(
+        matched
+          .layered_important()
+          .iter()
+          .map(|declarations| declarations.iter()),
+      )
+      .chain(
+        element_important
+          .inline
+          .iter()
+          .map(|declarations| declarations.iter()),
+      );
+
+    for declarations in important {
+      for declaration in declarations {
+        declaration
+          .clone()
+          .apply_with_parent(&mut style, &inherited_parent);
+      }
+    }
+
+    let sizing_basis = child_sizing_for_final.unwrap_or_else(|| self.sizing.clone());
+    let font_size = style.font_size.to_px(&sizing_basis, sizing_basis.font_size);
+    let normal_basis = resolve_normal_line_height(self, &style, font_size);
+    let line_height = style.line_height.to_px(&self.sizing, normal_basis);
+    let sizing = self.sizing.with_font_metrics(
+      font_size,
+      self
+        .sizing
+        .root_font_size
+        .or_else(|| is_document_root.then_some(font_size)),
+      line_height,
+      self
+        .sizing
+        .root_line_height
+        .or_else(|| is_document_root.then_some(line_height)),
+    );
+    let current_color = style.color.resolve(self.current_color);
+    style.make_computed(&sizing);
+    (style, sizing, current_color)
+  }
+
+  /// Samples the stylesheet animations on `style` at this render's time,
+  /// against the sizing the pre-animation style produces.
+  fn animated_style(&self, style: ComputedStyle) -> (ComputedStyle, SizingContext) {
+    let font_size = style.font_size.to_px(&self.sizing, self.sizing.font_size);
+    let normal_basis = resolve_normal_line_height(self, &style, font_size);
+    let line_height = style.line_height.to_px(&self.sizing, normal_basis);
+    let child_sizing = self.sizing.with_font_metrics(
+      font_size,
+      self.sizing.root_font_size,
+      line_height,
+      self.sizing.root_line_height,
+    );
+    let child_current_color = style.color.resolve(self.current_color);
+    let child_context = RenderContext::from_parent(
+      self,
+      style.clone(),
+      child_sizing.clone(),
+      child_current_color,
+    );
+    let animated = apply_stylesheet_animations(
+      style,
+      child_context.stylesheet(),
+      child_context.time_ms(),
+      &child_context.sizing,
+      child_context.current_color,
+    );
+
+    (animated, child_sizing)
+  }
 }
 
 #[cfg(test)]
