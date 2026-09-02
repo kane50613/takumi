@@ -333,7 +333,9 @@ impl Paginated {
     let (content, repeated) = inputs.prepare_paged(node, frame)?;
     let text_boxes = TextBox::collect(&content);
     let inline_map = build_inline_map(&text_boxes)?;
-    let mut atoms = content.atom_collector(Some(&inline_map)).collect()?;
+    let mut atoms = content
+      .atom_collector(Some(&inline_map), inputs.form)
+      .collect()?;
     let headers = HeaderBand::collect(&content, frame.window_height);
 
     // A repeating header is monolithic: a cut through it would show a partial

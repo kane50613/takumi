@@ -398,3 +398,16 @@ test("rejects a filter a PDF cannot express", async () => {
     }),
   ).rejects.toThrow("A PDF cannot draw filter: blur(4px)");
 });
+
+test("emits fillable fields when the form option is on", async () => {
+  const source = `<div style="display:flex;flex-direction:column">
+    <label for="name">Name</label>
+    <input id="name" name="name" value="Kane" style="width:200px;height:24px;border:1px solid #999" />
+  </div>`;
+  const on = await renderer.render(source, { form: true });
+  const off = await renderer.render(source);
+
+  expect(decoder.decode(on)).toContain("/AcroForm");
+  expect(decoder.decode(on)).toContain("/Widget");
+  expect(decoder.decode(off)).not.toContain("/AcroForm");
+});

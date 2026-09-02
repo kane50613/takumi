@@ -19,6 +19,7 @@ use takumi_core::{
   style::{Display, FlexDirection, GridPlacement, GridPlacementSpan, ListStyleType},
 };
 
+use crate::form::is_form_control;
 use crate::krilla::tagging::{
   Identifier, ListNumbering, TableHeaderScope, Tag, TagGroup, TagId, TagKind, TagTree,
 };
@@ -79,6 +80,7 @@ impl TagCollector {
     root: &RenderNode,
     lang: Option<&str>,
     targets: &HashSet<Vec<usize>>,
+    forms: bool,
   ) -> TagTree {
     let mut tree = TagTree::new().with_lang(lang.map(str::to_string));
     let mut top = Vec::new();
@@ -87,6 +89,7 @@ impl TagCollector {
       collector: self,
       headings: Vec::new(),
       targets,
+      forms,
     };
 
     build_node(
@@ -140,6 +143,9 @@ struct Walk<'c> {
   headings: Vec<u8>,
   /// Paths a destination points at, whose structure elements need an id.
   targets: &'c HashSet<Vec<usize>>,
+  /// Whether form controls become fillable fields, which puts each widget
+  /// inside a `Form` element.
+  forms: bool,
 }
 
 impl Walk<'_> {
@@ -247,7 +253,10 @@ fn build_element(
   let identifiers = walk.collector.take(path);
   let labels = walk.collector.take_labels(path);
   let mut annotations = walk.collector.take_annotations(path);
-  let is_link = matches!(kind, TagKind::Link(_));
+  // A `Link` and a `Form` both own their annotation instead of wrapping it.
+  let is_link = matches!(kind, TagKind::Link(_) | TagKind::Form(_));
+  // PDF/UA admits one child under a `Form`: the widget annotation.
+  let is_form = matches!(kind, TagKind::Form(_));
   let is_list_item = matches!(kind, TagKind::LI(_));
   let is_list = matches!(kind, TagKind::L(_));
   let is_figure = matches!(kind, TagKind::Figure(_));
@@ -281,19 +290,21 @@ fn build_element(
       group.push(identifier);
     }
   }
-  build_children(
-    node,
-    path,
-    walk,
-    &mut children,
-    &mut child_pending,
-    Nesting {
-      in_list: is_list,
-      in_figure: nesting.in_figure || is_figure,
-      ..nesting
-    },
-  );
-  flush_paragraph(&mut child_pending, &mut children);
+  if !is_form {
+    build_children(
+      node,
+      path,
+      walk,
+      &mut children,
+      &mut child_pending,
+      Nesting {
+        in_list: is_list,
+        in_figure: nesting.in_figure || is_figure,
+        ..nesting
+      },
+    );
+    flush_paragraph(&mut child_pending, &mut children);
+  }
   // Wrapped annotations join the element's own children so they read
   // after the content they decorate, not before the element.
   if !is_link {
@@ -652,6 +663,8 @@ fn role(node: &RenderNode, walk: &mut Walk, nesting: Nesting) -> Option<TagKind>
     // `alt=""` marks a decorative image: emitted as an artifact, no element.
     "img" if source.alt() != Some("") => Some(Tag::Figure(source.alt().map(str::to_string)).into()),
     "a" if source.href().is_some() => Some(Tag::Link.into()),
+    // PDF/UA requires every widget annotation to sit inside a `Form`.
+    _ if walk.forms && is_form_control(source) => Some(Tag::Form.into()),
     "blockquote" => Some(Tag::BlockQuote.into()),
     "section" => Some(Tag::Section.into()),
     "article" => Some(Tag::Article.into()),
@@ -685,10 +698,15 @@ fn list_numbering(node: &RenderNode) -> ListNumbering {
 /// The text a node contributes, including the anonymous runs the layout
 /// merges inline children into.
 pub(crate) fn text_content(node: &RenderNode) -> String {
+  raw_text(node).trim().to_string()
+}
+
+/// Every piece of text under `node`, as written.
+pub(crate) fn raw_text(node: &RenderNode) -> String {
   let mut out = String::new();
 
   collect_text(node, &mut out);
-  out.trim().to_string()
+  out
 }
 
 fn collect_text(node: &RenderNode, out: &mut String) {

@@ -1,6 +1,10 @@
 //! The scene walker that emits boxes, text and images onto a krilla surface.
 
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+  cell::RefCell,
+  collections::{HashMap, HashSet},
+  rc::Rc,
+};
 
 #[cfg(feature = "images")]
 use takumi_core::{
@@ -39,6 +43,7 @@ use takumi_core::{
   },
 };
 
+use crate::form::is_form_control;
 #[cfg(feature = "images")]
 use crate::krilla::{geom::Size as KrillaSize, image::Image as KrillaImage};
 #[cfg(feature = "images")]
@@ -143,25 +148,38 @@ pub(crate) struct DocumentState<'a> {
   pub(crate) issues: RefCell<RenderIssues>,
   /// The document's default language.
   pub(crate) lang: Option<&'a str>,
+  /// Whether form controls become fillable fields.
+  pub(crate) form: bool,
+  /// The `/T` name of every field the drawn pages emitted.
+  pub(crate) field_names: RefCell<Vec<String>>,
 }
 
 impl<'a> DocumentState<'a> {
-  pub(crate) fn new(tagged: bool, lang: Option<&'a str>) -> Self {
+  pub(crate) fn new(tagged: bool, lang: Option<&'a str>, form: bool) -> Self {
     Self {
       fonts: RefCell::new(FontMap::default()),
       tags: tagged.then(RefCell::default),
       issues: RefCell::default(),
       lang,
+      form,
+      field_names: RefCell::default(),
     }
   }
 
   /// The error the pages left behind, if any: what failed outright, else the characters no font
   /// covered.
   pub(crate) fn into_error(self) -> Option<PdfError> {
+    let duplicate = self.duplicate_field_name();
     let issues = self.issues.into_inner();
 
-    if issues.failure.is_some() || issues.uncovered.is_empty() {
-      return issues.failure;
+    if let Some(failure) = issues.failure {
+      return Some(failure);
+    }
+    if let Some(name) = duplicate {
+      return Some(PdfError::DuplicateFieldName(name));
+    }
+    if issues.uncovered.is_empty() {
+      return None;
     }
     let named = issues
       .uncovered
@@ -171,6 +189,15 @@ impl<'a> DocumentState<'a> {
       .join(", ");
 
     Some(PdfError::MissingGlyphs(named))
+  }
+
+  /// The first name more than one emitted field claims. A dropped page takes
+  /// its fields with it, so the names it held do not collide.
+  fn duplicate_field_name(&self) -> Option<String> {
+    let names = self.field_names.borrow();
+    let mut seen = HashSet::new();
+
+    names.iter().find(|name| !seen.insert(*name)).cloned()
   }
 }
 
@@ -487,6 +514,11 @@ impl Emitter<'_> {
     (x, y): (f32, f32),
     surface: &mut Surface,
   ) -> Result<(), PdfError> {
+    // The widget annotation draws the field's value, so the page must not draw
+    // it a second time underneath.
+    if self.inside_form_control(&paint.path) {
+      return Ok(());
+    }
     let tagged = self.tagged && has_own_content(node);
 
     if tagged {
@@ -1629,6 +1661,18 @@ impl Emitter<'_> {
     {
       tags.borrow_mut().record(&self.tag_path(&path), identifier);
     }
+  }
+
+  /// Whether this box is a form control or sits inside one.
+  fn inside_form_control(&self, path: &[usize]) -> bool {
+    self.document.form
+      && (0..=path.len()).any(|depth| {
+        self
+          .root
+          .node_at_path(&path[..depth])
+          .and_then(|node| node.node.as_ref())
+          .is_some_and(is_form_control)
+      })
   }
 
   /// The document-rooted path of a node this emitter reached at `path`.
