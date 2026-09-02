@@ -60,18 +60,11 @@ mod svg_vector;
 /// raster and SVG renderers.
 pub mod paint {
   pub use crate::style::properties::{
-    background_repeat::{
-      collect_repeat_tile_positions, collect_spaced_tile_positions,
-      collect_stretched_tile_positions,
-    },
-    conic_gradient::{ConicGradientRowState, ConicGradientTile},
+    conic_gradient::ConicGradientTile,
     filter::compose_transfer_table,
     gradient_utils::{ColorLut, GradientOverlayTile},
-    linear_gradient::{
-      LinearGradientFastPath, LinearGradientFastPathKind, LinearGradientRowState,
-      LinearGradientTile,
-    },
-    radial_gradient::{RadialGradientRowState, RadialGradientTile},
+    linear_gradient::{LinearGradientFastPathKind, LinearGradientTile},
+    radial_gradient::RadialGradientTile,
   };
 }
 

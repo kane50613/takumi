@@ -1345,7 +1345,7 @@ impl RenderNode {
   }
 
   /// True if this node is laid out as an inline-level box (atomic inline or float).
-  pub fn participates_as_inline_box(&self) -> bool {
+  pub(crate) fn participates_as_inline_box(&self) -> bool {
     self.is_inline_atomic_container() || self.context.style.float != Float::None
   }
 

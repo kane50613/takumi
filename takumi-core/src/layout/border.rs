@@ -72,7 +72,7 @@ impl BorderProperties {
   pub const PATH_COMMANDS_AMOUNT: usize = 14;
 
   /// Resolves the border radius from the context and layout.
-  pub fn resolve_radius_part(
+  pub(crate) fn resolve_radius_part(
     context: &RenderContext,
     border_box: Size<f32>,
   ) -> Sides<SpacePair<f32>> {
@@ -150,7 +150,7 @@ impl BorderProperties {
   }
 
   /// True if a side with this style and width is rendered.
-  pub fn is_side_visible(style: BorderStyle, width: f32) -> bool {
+  fn is_side_visible(style: BorderStyle, width: f32) -> bool {
     style.is_rendered() && width > 0.0
   }
 

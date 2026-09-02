@@ -646,7 +646,7 @@ impl ColorLut {
 
   /// The entry at `index` quantized with the Bayer noise for pixel `(x, y)`.
   #[inline(always)]
-  pub fn sample_dithered(&self, index: usize, x: u32, y: u32) -> PremultipliedColorU8 {
+  pub(crate) fn sample_dithered(&self, index: usize, x: u32, y: u32) -> PremultipliedColorU8 {
     let entry = self.hi[index];
     let bias = (128 + DITHER_NOISE_88[(y & 7) as usize][(x & 7) as usize] as i32) as u32;
     let channel = |value: u16| ((value as u32 + bias) >> 8) as u8;
