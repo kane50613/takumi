@@ -303,8 +303,6 @@ pub(crate) fn resolved_line_metrics_for_apply(
 /// Resolved metrics and parent context for a single inline line.
 pub(crate) struct ResolvedInlineLineState {
   pub(crate) adjusted_metrics: LineMetrics,
-  /// Vertical shift applied to the baseline.
-  pub baseline_shift: f32,
   pub(crate) parent_x_height: Option<f32>,
   pub(crate) parent_text_metrics: Option<(f32, f32)>,
 }
@@ -326,7 +324,6 @@ pub(crate) fn resolve_inline_line_states(
     ))
     .map(|(line, resolved)| ResolvedInlineLineState {
       adjusted_metrics: resolved_line_metrics_for_apply(line.metrics(), resolved),
-      baseline_shift: resolved.baseline_shift,
       parent_x_height: effective_parent_x_height_for_line(&line, parent_font_metrics),
       parent_text_metrics: effective_parent_text_metrics_for_line(&line, parent_font_metrics),
     })
@@ -376,8 +373,6 @@ pub struct VisualInlineBox {
   /// Baseline of the in-flow line that owns this box, relative to the inline formatting context's
   /// content-box top edge.
   pub line_baseline: Option<f32>,
-  pub(crate) layout_x: f32,
-  pub(crate) layout_advance: f32,
 }
 
 /// Resolve a positioned inline box into its painted geometry.
@@ -399,8 +394,6 @@ pub(crate) fn resolve_visual_inline_box(
         width: inline_box.width,
         height: 0.0,
         line_baseline: line_state.map(|state| state.adjusted_metrics.baseline),
-        layout_x: inline_box.x,
-        layout_advance: inline_box.width,
       });
     }
     _ => return None,
@@ -420,7 +413,5 @@ pub(crate) fn resolve_visual_inline_box(
     width: item.paint_width,
     height: item.paint_height,
     line_baseline,
-    layout_x: positioned.x,
-    layout_advance: positioned.width,
   })
 }

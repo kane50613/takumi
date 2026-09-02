@@ -14,10 +14,10 @@ use crate::{
   },
 };
 use parley::{
-  IndentOptions, InlineBox, InlineBoxKind, Line, PositionedInlineBox, PositionedLayoutItem,
-  TextStyle, TreeBuilder,
+  GlyphRun, IndentOptions, InlineBox, InlineBoxKind, Line, PositionedInlineBox,
+  PositionedLayoutItem, TextStyle, TreeBuilder,
 };
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, convert::Infallible, rc::Rc};
 use xxhash_rust::xxh3::Xxh3;
 
 mod background;
@@ -42,6 +42,14 @@ pub use self::{
     RunMetrics, ShapedRun,
   },
 };
+use self::{
+  breaking::distribute_trailing_whitespace,
+  items::inline_box_kind,
+  metrics::text_line_box_contribution,
+  runs::measured_run_text,
+  text_fit::{text_fit_is_applicable, text_fit_line_scales},
+  truncation::make_ellipsis_layout,
+};
 pub(crate) use self::{
   breaking::{break_lines, create_inline_constraint},
   items::InlineContentKind,
@@ -50,13 +58,6 @@ pub(crate) use self::{
     resolve_inline_line_metrics, resolve_inline_line_states, resolve_visual_inline_box,
   },
   text_fit::{LineScaleState, scale_text_fit_x, text_fit_line_alignment_correction},
-};
-use self::{
-  items::inline_box_kind,
-  metrics::text_line_box_contribution,
-  runs::measured_run_text,
-  text_fit::{text_fit_is_applicable, text_fit_line_scales},
-  truncation::make_ellipsis_layout,
 };
 
 /// Inputs for building an inline layout.
@@ -216,104 +217,77 @@ impl BuiltInlineLayout<'_> {
     &self,
     layout: ComputedLayout,
   ) -> (Vec<MeasuredInlineRun<'_>>, Vec<MeasuredInlineBox>) {
-    let line_vertical_metrics = self.line_metrics();
-    let line_states = self.line_states();
-
     let mut runs = Vec::new();
     let mut inline_boxes = Vec::new();
 
-    for (line_index, line) in self.layout.lines().enumerate() {
-      let Some(setup) = LineSetup::new(
-        &line,
-        layout,
-        &line_vertical_metrics,
-        &self.line_scales,
-        line_index,
-      ) else {
-        continue;
-      };
+    let Ok(()) = self.walk_items::<Infallible>(layout, |line, item| {
+      let setup = &line.setup;
       let line_scale_origin_y = setup.resolved_metrics.resolved_baseline;
-      let mut static_inline_prefix = 0.0_f32;
 
-      for item in line.items() {
-        match item {
-          PositionedLayoutItem::GlyphRun(glyph_run) => {
-            let span_id = glyph_run.style().brush.source_span_id;
-            let text = measured_run_text(&self.text, &self.spans, &glyph_run, span_id);
-            if text.is_empty()
-              || (glyph_run.style().brush.is_direction_mark && glyph_run.advance() == 0.0)
-            {
-              continue;
-            }
-
-            let metrics = glyph_run.run().metrics();
-            let mut x = glyph_run.offset();
-            let mut y = glyph_run.baseline() + setup.baseline_shift - metrics.ascent;
-            let mut width = glyph_run.advance();
-            let mut height = metrics.ascent + metrics.descent;
-            if (setup.state.scale - 1.0).abs() > f32::EPSILON {
-              x = scale_text_fit_x(
-                x,
-                setup.line_scale_origin_x,
-                setup.state.scale,
-                static_inline_prefix,
-                setup.state.alignment_correction,
-              );
-              y = line_scale_origin_y + (y - line_scale_origin_y) * setup.state.scale;
-              width *= setup.state.scale;
-              height *= setup.state.scale;
-            }
-
-            let link = span_id.and_then(|span_id| match self.spans.get(span_id as usize) {
-              Some(ProcessedInlineSpan::Text { link, .. }) => link.as_deref(),
-              _ => None,
-            });
-
-            runs.push(MeasuredInlineRun {
-              text,
-              x,
-              y,
-              width,
-              height,
-              link,
-            });
+      match item {
+        PlacedItem::Run {
+          glyph_run,
+          static_inline_prefix,
+          ..
+        } => {
+          let span_id = glyph_run.style().brush.source_span_id;
+          let text = measured_run_text(&self.text, &self.spans, &glyph_run, span_id);
+          if text.is_empty()
+            || (glyph_run.style().brush.is_direction_mark && glyph_run.advance() == 0.0)
+          {
+            return Ok(());
           }
-          PositionedLayoutItem::InlineBox(positioned_box) => {
-            if positioned_box.kind != InlineBoxKind::InFlow {
-              continue;
-            }
-            let Some(resolved) =
-              resolve_visual_inline_box(positioned_box, Some(line_states[line_index]), &self.spans)
-            else {
-              continue;
-            };
 
-            let x = scale_text_fit_x(
-              resolved.x,
+          let metrics = glyph_run.run().metrics();
+          let mut x = glyph_run.offset();
+          let mut y = glyph_run.baseline() + setup.baseline_shift - metrics.ascent;
+          let mut width = glyph_run.advance();
+          let mut height = metrics.ascent + metrics.descent;
+          if (setup.state.scale - 1.0).abs() > f32::EPSILON {
+            x = scale_text_fit_x(
+              x,
               setup.line_scale_origin_x,
               setup.state.scale,
               static_inline_prefix,
               setup.state.alignment_correction,
             );
-            static_inline_prefix += resolved.width;
-
-            // A padding spacer advances the line but is not a measured box.
-            if matches!(
-              self.spans.get(resolved.id as usize),
-              Some(ProcessedInlineSpan::Spacer { .. })
-            ) {
-              continue;
-            }
-            inline_boxes.push(MeasuredInlineBox {
-              x,
-              y: resolved.y,
-              width: resolved.width,
-              height: resolved.height,
-            });
+            y = line_scale_origin_y + (y - line_scale_origin_y) * setup.state.scale;
+            width *= setup.state.scale;
+            height *= setup.state.scale;
           }
+
+          let link = span_id.and_then(|span_id| match self.spans.get(span_id as usize) {
+            Some(ProcessedInlineSpan::Text { link, .. }) => link.as_deref(),
+            _ => None,
+          });
+
+          runs.push(MeasuredInlineRun {
+            text,
+            x,
+            y,
+            width,
+            height,
+            link,
+          });
+        }
+        PlacedItem::Box(inline_box) => {
+          // A padding spacer advances the line but is not a measured box.
+          if matches!(
+            self.spans.get(inline_box.id as usize),
+            Some(ProcessedInlineSpan::Spacer { .. })
+          ) {
+            return Ok(());
+          }
+          inline_boxes.push(MeasuredInlineBox {
+            x: inline_box.x,
+            y: inline_box.y,
+            width: inline_box.width,
+            height: inline_box.height,
+          });
         }
       }
-    }
+      Ok(())
+    });
 
     for positioned_box in &self.positioned_floats {
       inline_boxes.push(MeasuredInlineBox {
@@ -1030,6 +1004,96 @@ impl LineSetup {
       line_scale_origin_x,
       resolved_metrics,
     })
+  }
+}
+
+/// A line under an item walk: its index, setup, and resolved state.
+pub(crate) struct WalkedLine {
+  pub(crate) index: usize,
+  pub(crate) setup: LineSetup,
+  pub(crate) state: ResolvedInlineLineState,
+}
+
+/// One item placed on a walked line, with the static advance of the boxes before it.
+pub(crate) enum PlacedItem<'a> {
+  Run {
+    glyph_run: GlyphRun<'a, InlineBrush>,
+    static_inline_prefix: f32,
+    /// The line-end whitespace advance this run carries.
+    trailing_whitespace: f32,
+  },
+  /// An in-flow box, its `x` already scaled for text-fit.
+  Box(VisualInlineBox),
+}
+
+impl BuiltInlineLayout<'_> {
+  /// Visits every glyph run and in-flow box line by line, resolving the line
+  /// state and text-fit prefix each visitor would otherwise track itself.
+  pub(crate) fn walk_items<E>(
+    &self,
+    layout: ComputedLayout,
+    mut visit: impl FnMut(&WalkedLine, PlacedItem<'_>) -> Result<(), E>,
+  ) -> Result<(), E> {
+    let line_vertical_metrics = self.line_metrics();
+    let line_states = self.line_states();
+
+    for (index, line) in self.layout.lines().enumerate() {
+      let Some(setup) = LineSetup::new(
+        &line,
+        layout,
+        &line_vertical_metrics,
+        &self.line_scales,
+        index,
+      ) else {
+        continue;
+      };
+      let walked = WalkedLine {
+        index,
+        setup,
+        state: line_states[index],
+      };
+      let items: Vec<_> = line.items().collect();
+      let trailing_whitespace = distribute_trailing_whitespace(&items, &line);
+      let mut static_inline_prefix = 0.0_f32;
+
+      for (item_index, item) in items.into_iter().enumerate() {
+        match item {
+          PositionedLayoutItem::GlyphRun(glyph_run) => visit(
+            &walked,
+            PlacedItem::Run {
+              glyph_run,
+              static_inline_prefix,
+              trailing_whitespace: trailing_whitespace[item_index],
+            },
+          )?,
+          PositionedLayoutItem::InlineBox(inline_box) => {
+            if inline_box.kind != InlineBoxKind::InFlow {
+              continue;
+            }
+            let Some(resolved) =
+              resolve_visual_inline_box(inline_box, Some(walked.state), &self.spans)
+            else {
+              continue;
+            };
+            let inline_box = VisualInlineBox {
+              x: scale_text_fit_x(
+                resolved.x,
+                walked.setup.line_scale_origin_x,
+                walked.setup.state.scale,
+                static_inline_prefix,
+                walked.setup.state.alignment_correction,
+              ),
+              ..resolved
+            };
+
+            visit(&walked, PlacedItem::Box(inline_box))?;
+            static_inline_prefix += resolved.width;
+          }
+        }
+      }
+    }
+
+    Ok(())
   }
 }
 
