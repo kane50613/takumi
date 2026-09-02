@@ -1549,7 +1549,7 @@ impl Emitter<'_> {
       &subtree.results,
       NodeId::ROOT,
       Affine::IDENTITY,
-      (Some(subtree.size.width), Some(subtree.size.height)),
+      subtree.size.map(Some),
     ) else {
       return;
     };

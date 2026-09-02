@@ -319,10 +319,10 @@ fn begin_node_render(
     return Ok(Some(DeferredNodeRender::SkipRendering));
   }
 
-  current
-    .context
-    .sizing
-    .set_container_size(node_paint.container_size.0, node_paint.container_size.1);
+  current.context.sizing.set_container_size(
+    node_paint.container_size.width,
+    node_paint.container_size.height,
+  );
   current.context.transform = node_paint.transform;
 
   if !current.context.style.backdrop_filter.is_empty() {

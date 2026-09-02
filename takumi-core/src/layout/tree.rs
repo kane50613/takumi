@@ -27,10 +27,10 @@ use crate::{
   },
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
   style::{
-    BackgroundImage, BackgroundImages, BlendMode, BoxSizing, Color, ComputedStyle, ContentItem,
-    ContentValue, Display, Filters, Float, Isolation, Length, LineHeight, ListStylePosition,
-    PercentageNumber, Position, SizingContext, Style as NodeStyle, StyleDeclaration,
-    StyleDeclarationBlock, StyleSheet, TextWrapMode, WhiteSpaceCollapse,
+    Affine, BackgroundImage, BackgroundImages, BlendMode, BoxSizing, Color, ComputedStyle,
+    ContentItem, ContentValue, Display, Filters, Float, Isolation, Length, LineHeight,
+    ListStylePosition, PercentageNumber, Position, SizingContext, Style as NodeStyle,
+    StyleDeclaration, StyleDeclarationBlock, StyleSheet, TextWrapMode, WhiteSpaceCollapse,
     apply_stylesheet_animations,
   },
   viewport::Viewport,
@@ -45,6 +45,52 @@ pub struct OrderedChild {
   pub node_id: NodeId,
   /// Containing block the child was hoisted to, if out-of-flow.
   pub hoisted_cb: Option<NodeId>,
+}
+
+/// Each visited node's device transform and content box, kept so a hoisted
+/// out-of-flow child resolves against its containing block instead of its
+/// box-tree parent.
+#[derive(Default)]
+pub struct ContainingBlocks {
+  transforms: HashMap<NodeId, Affine>,
+  content_boxes: HashMap<NodeId, Size<Option<f32>>>,
+}
+
+impl ContainingBlocks {
+  /// Records the device transform a node was placed with.
+  pub fn record_transform(&mut self, node_id: NodeId, transform: Affine) {
+    self.transforms.insert(node_id, transform);
+  }
+
+  /// Records the content box a node lays its children out in.
+  pub fn record_content_box(&mut self, node_id: NodeId, content_box: Size<Option<f32>>) {
+    self.content_boxes.insert(node_id, content_box);
+  }
+
+  /// The transform and container size `child` resolves against: its containing
+  /// block's when hoisted, otherwise the parent's.
+  pub fn base_for(
+    &self,
+    child: &OrderedChild,
+    parent_transform: Affine,
+    parent_content_box: Size<Option<f32>>,
+  ) -> (Affine, Size<Option<f32>>) {
+    match child.hoisted_cb {
+      Some(cb) => (
+        self
+          .transforms
+          .get(&cb)
+          .copied()
+          .unwrap_or(parent_transform),
+        self
+          .content_boxes
+          .get(&cb)
+          .copied()
+          .unwrap_or(parent_content_box),
+      ),
+      None => (parent_transform, parent_content_box),
+    }
+  }
 }
 
 /// Immutable per-node layout output after computing a tree.

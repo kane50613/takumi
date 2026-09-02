@@ -109,7 +109,10 @@ pub fn render(options: SvgOptions<'_>) -> Result<String> {
     &results,
     root_id,
     IDENTITY,
-    (Some(width), Some(height)),
+    Size {
+      width: Some(width),
+      height: Some(height),
+    },
   )?;
   emit_scene(&root, &contexts, &results, &mut doc)?;
 
@@ -707,7 +710,7 @@ pub(crate) fn emit_inline_box(
         &subtree.results,
         NodeId::ROOT,
         origin,
-        (Some(subtree.size.width), Some(subtree.size.height)),
+        subtree.size.map(Some),
       )
       .map_err(io::Error::other)?;
 

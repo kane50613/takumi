@@ -2,7 +2,7 @@
 //! bounds. Raster and SVG backends consume this instead of each walking the node tree
 //! independently.
 
-use std::{collections::HashMap, convert::Infallible};
+use std::convert::Infallible;
 
 use skrifa::FontRef;
 
@@ -16,7 +16,7 @@ use crate::{
       collect_inline_items, create_inline_layout, resolve_inline_max_height, scale_text_fit_x,
     },
     node::Node,
-    tree::{LayoutResults, RenderNode},
+    tree::{ContainingBlocks, LayoutResults, RenderNode},
   },
   style::{Affine, ComputedStyle, Display, SizingContext},
 };
@@ -30,8 +30,8 @@ pub struct NodePaint {
   pub node_id: NodeId,
   /// Accumulated transform applied when painting.
   pub transform: Affine,
-  /// Containing-block size as `(width, height)`; `None` on an axis is indefinite.
-  pub container_size: (Option<f32>, Option<f32>),
+  /// Containing-block size; `None` on an axis is indefinite.
+  pub container_size: Size<Option<f32>>,
   /// Device-space bounds of the paint output, if any.
   pub paint_bounds: Option<SceneBounds>,
 }
@@ -171,7 +171,7 @@ struct StackingContextBuildVisit {
   path: Vec<usize>,
   node_id: NodeId,
   transform: Affine,
-  container_size: (Option<f32>, Option<f32>),
+  container_size: Size<Option<f32>>,
   context_id: usize,
   parent_display: Option<Display>,
   is_root: bool,
@@ -204,15 +204,11 @@ pub fn build_stacking_contexts(
   layout_results: &LayoutResults,
   node_id: NodeId,
   transform: Affine,
-  container_size: (Option<f32>, Option<f32>),
+  container_size: Size<Option<f32>>,
 ) -> Result<Vec<StackingContextNode>> {
   let mut contexts = vec![StackingContextNode::with_root(None)];
   let mut source_order = 0usize;
-  // Hoisted out-of-flow nodes resolve geometry against their containing block,
-  // not their box-tree parent. Memoize each node's transform and content box so
-  // a hoisted child can use its CB's values as its base.
-  let mut node_transforms: HashMap<NodeId, Affine> = HashMap::new();
-  let mut node_content_box: HashMap<NodeId, (Option<f32>, Option<f32>)> = HashMap::new();
+  let mut containing_blocks = ContainingBlocks::default();
   let mut visits = vec![StackingContextBuildVisit {
     path: Vec::new(),
     node_id,
@@ -242,7 +238,7 @@ pub fn build_stacking_contexts(
     if !current_transform.is_invertible() {
       continue;
     }
-    node_transforms.insert(visit.node_id, current_transform);
+    containing_blocks.record_transform(visit.node_id, current_transform);
 
     let node_paint = NodePaint {
       path: visit.path.clone(),
@@ -309,22 +305,17 @@ pub fn build_stacking_contexts(
     }
 
     let layout_children = layout_results.box_children(visit.node_id)?;
-    let child_container_size = (
-      Some(layout.content_box_width()),
-      Some(layout.content_box_height()),
-    );
-    node_content_box.insert(visit.node_id, child_container_size);
+    let child_container_size = Size {
+      width: Some(layout.content_box_width()),
+      height: Some(layout.content_box_height()),
+    };
+    containing_blocks.record_content_box(visit.node_id, child_container_size);
 
     for child in layout_children.iter().rev() {
       let mut child_path = visit.path.clone();
       child_path.push(child.render_index);
-      let (base_transform, base_container) = match child.hoisted_cb {
-        Some(cb) => (
-          *node_transforms.get(&cb).unwrap_or(&current_transform),
-          *node_content_box.get(&cb).unwrap_or(&child_container_size),
-        ),
-        None => (current_transform, child_container_size),
-      };
+      let (base_transform, base_container) =
+        containing_blocks.base_for(child, current_transform, child_container_size);
       visits.push(StackingContextBuildVisit {
         path: child_path,
         node_id: child.node_id,

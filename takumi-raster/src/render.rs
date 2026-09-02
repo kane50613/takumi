@@ -17,7 +17,7 @@ use crate::{
       InlineItem, InlineLayoutMode, InlineLayoutRequest, collect_inline_items, create_inline_layout,
     },
     node::Node,
-    tree::{LayoutResults, LayoutTree, RenderNode},
+    tree::{ContainingBlocks, LayoutResults, LayoutTree, RenderNode},
   },
   resources::{font::FontsSnapshot, image::ImageSource},
   stacking_context::paint_context,
@@ -210,10 +210,7 @@ fn collect_measure_result(
     container_size,
   })];
   let mut measured_by_node_id: HashMap<usize, MeasuredNode> = HashMap::new();
-  // Hoisted out-of-flow nodes resolve geometry against their containing block.
-  // Memoize each node's transform and content box for hoisted children to base on.
-  let mut node_transforms: HashMap<NodeId, Affine> = HashMap::new();
-  let mut node_content_box: HashMap<NodeId, Size<Option<f32>>> = HashMap::new();
+  let mut containing_blocks = ContainingBlocks::default();
 
   while let Some(visit) = visits.pop() {
     match visit {
@@ -239,7 +236,7 @@ fn collect_measure_result(
           layout.size.height,
           &current.context.sizing,
         );
-        node_transforms.insert(node_id, local_transform);
+        containing_blocks.record_transform(node_id, local_transform);
 
         let mut children = Vec::new();
         let mut runs = Vec::new();
@@ -341,7 +338,7 @@ fn collect_measure_result(
           width: Some(layout.content_box_width()),
           height: Some(layout.content_box_height()),
         };
-        node_content_box.insert(node_id, child_container_size);
+        containing_blocks.record_content_box(node_id, child_container_size);
 
         visits.push(TraversalVisit::Exit(MeasureExit {
           node_id,
@@ -355,13 +352,8 @@ fn collect_measure_result(
         for child in layout_children.iter().rev() {
           let mut child_path = path.clone();
           child_path.push(child.render_index);
-          let (base_transform, base_container) = match child.hoisted_cb {
-            Some(cb) => (
-              *node_transforms.get(&cb).unwrap_or(&local_transform),
-              *node_content_box.get(&cb).unwrap_or(&child_container_size),
-            ),
-            None => (local_transform, child_container_size),
-          };
+          let (base_transform, base_container) =
+            containing_blocks.base_for(child, local_transform, child_container_size);
           visits.push(TraversalVisit::Enter(TraversalEnter {
             path: child_path,
             node_id: child.node_id,
@@ -692,13 +684,7 @@ pub(crate) fn render_node(
   transform: Affine,
   container_size: Size<Option<f32>>,
 ) -> Result<()> {
-  let contexts = build_stacking_contexts(
-    node,
-    layout_results,
-    node_id,
-    transform,
-    (container_size.width, container_size.height),
-  )?;
+  let contexts = build_stacking_contexts(node, layout_results, node_id, transform, container_size)?;
   paint_context(node, &contexts, layout_results, canvas, 0)
 }
 
