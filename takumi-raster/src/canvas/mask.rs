@@ -78,19 +78,7 @@ pub(crate) fn prepare_node_mask(
   viewport: CanvasViewport,
 ) -> Result<NodeMaskAction> {
   if let Some(clip_path) = &style.clip_path {
-    let (mask, placement) = render_clip_shape_mask(clip_path, context, layout.size, viewport);
-    let end_x = placement.left + placement.width as i32;
-    let end_y = placement.top + placement.height as i32;
-
-    if end_x < 0 || end_y < 0 {
-      return Ok(NodeMaskAction::SkipRendering);
-    }
-
-    let Some(mut full_mask) = TinyMask::new(viewport.size.width, viewport.size.height) else {
-      return Ok(NodeMaskAction::SkipRendering);
-    };
-    copy_mask_into_canvas(&mut full_mask, viewport.origin, &mask, placement);
-    return Ok(NodeMaskAction::Shell(full_mask));
+    return Ok(clip_path_mask(clip_path, context, layout, viewport));
   }
 
   let Some(inverse_transform) = transform.invert() else {
@@ -98,40 +86,13 @@ pub(crate) fn prepare_node_mask(
   };
 
   if let Some(mask) = create_mask(context, layout.size)? {
-    if mask.is_empty() {
-      return Ok(NodeMaskAction::SkipRendering);
-    }
-
-    let Some(placement) = transformed_rect_placement(layout.size, transform) else {
-      return Ok(NodeMaskAction::SkipRendering);
-    };
-    let mask_placement = Placement {
-      left: 0,
-      top: 0,
-      width: layout.size.width as u32,
-      height: layout.size.height as u32,
-    };
-    let full_mask = if transform.is_identity() {
-      copy_mask_to_viewport(viewport, &mask, mask_placement)
-    } else {
-      rasterize_constraint_mask(viewport, placement, |x, y| {
-        sample_mask_image_alpha(
-          &mask,
-          Point { x: 0, y: 0 },
-          Point {
-            x: mask_placement.width,
-            y: mask_placement.height,
-          },
-          inverse_transform,
-          x,
-          y,
-        )
-      })
-    };
-    let Some(full_mask) = full_mask else {
-      return Ok(NodeMaskAction::SkipRendering);
-    };
-    return Ok(NodeMaskAction::Shell(full_mask));
+    return Ok(mask_image_mask(
+      &mask,
+      layout,
+      transform,
+      inverse_transform,
+      viewport,
+    ));
   }
 
   let overflow = style.resolve_overflows();
@@ -150,58 +111,158 @@ pub(crate) fn prepare_node_mask(
 
   let border_props = BorderProperties::from_context(context, layout.size, layout.border);
   if !border_props.is_zero() {
-    let padding_box = Size {
-      width: (layout.size.width - layout.border.left - layout.border.right).max(0.0),
-      height: (layout.size.height - layout.border.top - layout.border.bottom).max(0.0),
-    };
-
-    let mut inner_props = border_props;
-    inner_props.inset_by_border_width();
-
-    let mut paths = Vec::with_capacity(10);
-    let padding_origin = Point {
-      x: layout.border.left,
-      y: layout.border.top,
-    };
-    inner_props.append_mask_commands(&mut paths, padding_box, padding_origin);
-
-    let (mask_data, local_placement) = render_mask(&paths, None, None, None);
-    if local_placement.width == 0 || local_placement.height == 0 {
-      return Ok(NodeMaskAction::SkipRendering);
-    }
-
-    let Some(placement) = transformed_local_placement(local_placement, transform) else {
-      return Ok(NodeMaskAction::SkipRendering);
-    };
-
-    let from = Point {
-      x: local_placement.left.max(0) as u32,
-      y: local_placement.top.max(0) as u32,
-    };
-    let to = Point {
-      x: from.x + local_placement.width,
-      y: from.y + local_placement.height,
-    };
-    let full_mask = if transform.is_identity() {
-      copy_mask_to_viewport(viewport, &mask_data, local_placement)
-    } else {
-      rasterize_constraint_mask(viewport, placement, |x, y| {
-        sample_overflow_alpha(
-          from,
-          to,
-          inverse_transform,
-          Some((&mask_data, local_placement.width)),
-          x,
-          y,
-        )
-      })
-    };
-    let Some(full_mask) = full_mask else {
-      return Ok(NodeMaskAction::SkipRendering);
-    };
-    return Ok(NodeMaskAction::Content(full_mask));
+    return Ok(rounded_overflow_mask(
+      border_props,
+      layout,
+      transform,
+      inverse_transform,
+      viewport,
+    ));
   }
 
+  Ok(rect_overflow_mask(
+    layout,
+    transform,
+    inverse_transform,
+    viewport,
+    (clip_x, clip_y),
+  ))
+}
+
+/// The `clip-path` shape as a viewport mask over the box and its descendants.
+fn clip_path_mask(
+  clip_path: &BasicShape,
+  context: &RenderContext,
+  layout: Layout,
+  viewport: CanvasViewport,
+) -> NodeMaskAction {
+  let (mask, placement) = render_clip_shape_mask(clip_path, context, layout.size, viewport);
+  let end_x = placement.left + placement.width as i32;
+  let end_y = placement.top + placement.height as i32;
+
+  if end_x < 0 || end_y < 0 {
+    return NodeMaskAction::SkipRendering;
+  }
+
+  let Some(mut full_mask) = TinyMask::new(viewport.size.width, viewport.size.height) else {
+    return NodeMaskAction::SkipRendering;
+  };
+  copy_mask_into_canvas(&mut full_mask, viewport.origin, &mask, placement);
+  NodeMaskAction::Shell(full_mask)
+}
+
+/// The `mask-image` layers as a viewport mask over the box and its descendants.
+fn mask_image_mask(
+  mask: &[u8],
+  layout: Layout,
+  transform: Affine,
+  inverse_transform: Affine,
+  viewport: CanvasViewport,
+) -> NodeMaskAction {
+  if mask.is_empty() {
+    return NodeMaskAction::SkipRendering;
+  }
+
+  let Some(placement) = transformed_rect_placement(layout.size, transform) else {
+    return NodeMaskAction::SkipRendering;
+  };
+  let mask_placement = Placement {
+    left: 0,
+    top: 0,
+    width: layout.size.width as u32,
+    height: layout.size.height as u32,
+  };
+  let full_mask = if transform.is_identity() {
+    copy_mask_to_viewport(viewport, mask, mask_placement)
+  } else {
+    rasterize_constraint_mask(viewport, placement, |x, y| {
+      sample_mask_image_alpha(
+        mask,
+        Point { x: 0, y: 0 },
+        Point {
+          x: mask_placement.width,
+          y: mask_placement.height,
+        },
+        inverse_transform,
+        x,
+        y,
+      )
+    })
+  };
+  let Some(full_mask) = full_mask else {
+    return NodeMaskAction::SkipRendering;
+  };
+  NodeMaskAction::Shell(full_mask)
+}
+
+/// A rounded padding-box mask for `overflow` clipping under `border-radius`.
+fn rounded_overflow_mask(
+  border_props: BorderProperties,
+  layout: Layout,
+  transform: Affine,
+  inverse_transform: Affine,
+  viewport: CanvasViewport,
+) -> NodeMaskAction {
+  let padding_box = Size {
+    width: (layout.size.width - layout.border.left - layout.border.right).max(0.0),
+    height: (layout.size.height - layout.border.top - layout.border.bottom).max(0.0),
+  };
+
+  let mut inner_props = border_props;
+  inner_props.inset_by_border_width();
+
+  let mut paths = Vec::with_capacity(10);
+  let padding_origin = Point {
+    x: layout.border.left,
+    y: layout.border.top,
+  };
+  inner_props.append_mask_commands(&mut paths, padding_box, padding_origin);
+
+  let (mask_data, local_placement) = render_mask(&paths, None, None, None);
+  if local_placement.width == 0 || local_placement.height == 0 {
+    return NodeMaskAction::SkipRendering;
+  }
+
+  let Some(placement) = transformed_local_placement(local_placement, transform) else {
+    return NodeMaskAction::SkipRendering;
+  };
+
+  let from = Point {
+    x: local_placement.left.max(0) as u32,
+    y: local_placement.top.max(0) as u32,
+  };
+  let to = Point {
+    x: from.x + local_placement.width,
+    y: from.y + local_placement.height,
+  };
+  let full_mask = if transform.is_identity() {
+    copy_mask_to_viewport(viewport, &mask_data, local_placement)
+  } else {
+    rasterize_constraint_mask(viewport, placement, |x, y| {
+      sample_overflow_alpha(
+        from,
+        to,
+        inverse_transform,
+        Some((&mask_data, local_placement.width)),
+        x,
+        y,
+      )
+    })
+  };
+  let Some(full_mask) = full_mask else {
+    return NodeMaskAction::SkipRendering;
+  };
+  NodeMaskAction::Content(full_mask)
+}
+
+/// A rectangular content-box mask for `overflow` clipping on the clipped axes.
+fn rect_overflow_mask(
+  layout: Layout,
+  transform: Affine,
+  inverse_transform: Affine,
+  viewport: CanvasViewport,
+  (clip_x, clip_y): (bool, bool),
+) -> NodeMaskAction {
   let from = Point {
     x: if clip_x {
       (layout.padding.left + layout.border.left) as u32
@@ -233,7 +294,7 @@ pub(crate) fn prepare_node_mask(
     && (to.x == u32::MAX || to.x as i32 >= viewport.right())
     && (to.y == u32::MAX || to.y as i32 >= viewport.bottom())
   {
-    return Ok(NodeMaskAction::None);
+    return NodeMaskAction::None;
   }
 
   if to.x != u32::MAX
@@ -253,12 +314,12 @@ pub(crate) fn prepare_node_mask(
       true,
       TinyTransform::from(localized_transform),
     );
-    return Ok(NodeMaskAction::Content(mask));
+    return NodeMaskAction::Content(mask);
   }
 
   let Some(placement) = overflow_mask_placement(layout.size, transform, viewport, clip_x, clip_y)
   else {
-    return Ok(NodeMaskAction::SkipRendering);
+    return NodeMaskAction::SkipRendering;
   };
   let mask = if transform.is_identity() {
     fill_rect_mask(viewport, from, to)
@@ -268,9 +329,9 @@ pub(crate) fn prepare_node_mask(
     })
   };
   let Some(mask) = mask else {
-    return Ok(NodeMaskAction::SkipRendering);
+    return NodeMaskAction::SkipRendering;
   };
-  Ok(NodeMaskAction::Content(mask))
+  NodeMaskAction::Content(mask)
 }
 
 fn fill_rect_mask(viewport: CanvasViewport, from: Point<u32>, to: Point<u32>) -> Option<TinyMask> {
