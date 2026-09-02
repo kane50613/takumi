@@ -9,18 +9,17 @@ use crate::{
   },
   style::{Affine, Color, TextUnderlinePosition},
 };
-use parley::{GlyphRun, InlineBoxKind, PositionedLayoutItem};
+use parley::GlyphRun;
 use skrifa::{FontRef, MetadataProvider, raw::TableProvider};
 use std::{collections::HashMap, ops::Range, sync::Arc};
 
 use super::{
-  BuiltInlineLayout, InlineBrush, LineSetup,
+  BuiltInlineLayout, InlineBrush, PlacedItem,
   background::{CoverExtent, DecorationAccumulator, InlineBackgroundFragment},
-  breaking::distribute_trailing_whitespace,
   items::ProcessedInlineSpan,
   metrics::{VisualInlineBox, resolve_visual_inline_box},
   outline::{InlineOutlineRect, scale_outline_rect},
-  text_fit::{LineScaleState, scale_text_fit_x},
+  text_fit::LineScaleState,
 };
 
 /// A shaped glyph positioned within its run, in run-local coordinates.
@@ -283,15 +282,10 @@ impl BuiltInlineLayout<'_> {
     layout: ComputedLayout,
   ) -> Result<InlineRunLayout, FontError> {
     let BuiltInlineLayout {
-      layout: inline_layout,
       spans,
       positioned_floats,
-      line_scales,
       ..
     } = self;
-    let line_vertical_metrics = self.line_metrics();
-    let line_states = self.line_states();
-
     let need_outline = spans.iter().any(|span| match span {
       ProcessedInlineSpan::Text { style, .. } => {
         style.outline_width > 0.0 && style.outline_style.is_rendered()
@@ -306,202 +300,175 @@ impl BuiltInlineLayout<'_> {
     let mut decoration_coverage = DecorationAccumulator::default();
     let mut positioned_inline_boxes: HashMap<u64, VisualInlineBox> = HashMap::new();
 
-    for (line_index, line) in inline_layout.lines().enumerate() {
-      let Some(setup) = LineSetup::new(
-        &line,
-        layout,
-        &line_vertical_metrics,
-        line_scales,
-        line_index,
-      ) else {
-        continue;
-      };
-      let mut static_inline_prefix = 0.0_f32;
+    self.walk_items(layout, |line, item| {
+      let setup = &line.setup;
+      let line_index = line.index;
 
-      let items: Vec<_> = line.items().collect();
-      let run_trailing_whitespace = distribute_trailing_whitespace(&items, &line);
-
-      for (item_index, item) in items.into_iter().enumerate() {
-        match item {
-          PositionedLayoutItem::GlyphRun(glyph_run) => {
-            let run = glyph_run.run();
-            // A run carrying only the direction mark paints nothing; a run the
-            // mark's cluster merged into (emoji sequences) paints as the first
-            // real span.
-            let mut brush = glyph_run.style().brush;
-            if brush.is_direction_mark {
-              if glyph_run.advance() == 0.0 {
-                continue;
-              }
-              brush.is_direction_mark = false;
+      match item {
+        PlacedItem::Run {
+          glyph_run,
+          static_inline_prefix,
+          trailing_whitespace,
+        } => {
+          let run = glyph_run.run();
+          // A run carrying only the direction mark paints nothing; a run the
+          // mark's cluster merged into (emoji sequences) paints as the first
+          // real span.
+          let mut brush = glyph_run.style().brush;
+          if brush.is_direction_mark {
+            if glyph_run.advance() == 0.0 {
+              return Ok(());
             }
+            brush.is_direction_mark = false;
+          }
 
-            let font = FontRef::from_index(run.font().data.as_ref(), run.font().index)
-              .map_err(|_| FontError::InvalidFontIndex)?;
-            let glyph_ids = glyph_run.positioned_glyphs().map(|glyph| glyph.id);
-            let resolved_glyphs = context
-              .fonts()
-              .with_context(|fonts| fonts.resolve_glyphs(&glyph_run, font, glyph_ids));
+          let font = FontRef::from_index(run.font().data.as_ref(), run.font().index)
+            .map_err(|_| FontError::InvalidFontIndex)?;
+          let glyph_ids = glyph_run.positioned_glyphs().map(|glyph| glyph.id);
+          let resolved_glyphs = context
+            .fonts()
+            .with_context(|fonts| fonts.resolve_glyphs(&glyph_run, font, glyph_ids));
 
-            if need_outline && let Some(span_id) = brush.source_span_id {
-              outline_rects.push(scale_outline_rect(
-                InlineOutlineRect {
-                  span_id,
-                  line_index,
-                  x: layout.border.left + layout.padding.left + glyph_run.offset(),
-                  y: layout.border.top
-                    + layout.padding.top
-                    + glyph_run.baseline()
-                    + setup.baseline_shift
-                    - setup.resolved_metrics.resolved_ascent,
-                  width: glyph_run.advance(),
-                  height: setup.resolved_metrics.resolved_line_height,
-                },
-                setup.state,
-                static_inline_prefix,
-              ));
-            }
-
-            let metrics = run.metrics();
-
-            if let Some(span_id) = brush.source_span_id
-              && let Some(ProcessedInlineSpan::Text {
-                decorations: Some(chain),
-                ..
-              }) = spans.get(span_id as usize)
-            {
-              // The run's leaded box, like Blink's inline box fragment
-              // (`InlineBoxState::ComputeTextMetrics` adds the line-height
-              // leading to the font height).
-              let (above, below) =
-                brush.line_box_contribution(metrics.line_height, metrics.ascent, metrics.descent);
-              let rect = scale_outline_rect(
-                InlineOutlineRect {
-                  span_id,
-                  line_index,
-                  x: layout.border.left + layout.padding.left + glyph_run.offset(),
-                  y: layout.border.top
-                    + layout.padding.top
-                    + glyph_run.baseline()
-                    + setup.baseline_shift
-                    - above,
-                  width: glyph_run.advance(),
-                  height: above + below,
-                },
-                setup.state,
-                static_inline_prefix,
-              );
-
-              decoration_coverage.cover(
-                Some(chain),
+          if need_outline && let Some(span_id) = brush.source_span_id {
+            outline_rects.push(scale_outline_rect(
+              InlineOutlineRect {
+                span_id,
                 line_index,
-                rect.x,
-                rect.x + rect.width,
-                &CoverExtent::Run {
-                  font_size: run.font_size(),
-                  top: rect.y,
-                  bottom: rect.y + rect.height,
-                  baseline: rect.y + above * setup.state.scale,
-                },
-              );
-            }
-            let glyphs: Vec<PositionedGlyph> = glyph_run
-              .positioned_glyphs()
-              .map(|g| PositionedGlyph {
-                id: g.id,
-                x: g.x,
-                y: g.y,
-              })
-              .collect();
-            let cluster_ranges = glyph_cluster_ranges(&glyph_run, &glyphs);
-            let synthesis = run_synthesis(&glyph_run);
-            let shaped = ShapedRun {
-              glyphs,
-              offset: glyph_run.offset(),
-              baseline: glyph_run.baseline(),
-              advance: glyph_run.advance(),
-              trailing_whitespace: run_trailing_whitespace[item_index],
-              brush,
-              metrics: RunMetrics {
-                ascent: metrics.ascent,
-                descent: metrics.descent,
-                underline_offset: metrics.underline_offset,
-                underline_size: metrics.underline_size,
-                strikethrough_offset: metrics.strikethrough_offset,
-                strikethrough_size: metrics.strikethrough_size,
+                x: layout.border.left + layout.padding.left + glyph_run.offset(),
+                y: layout.border.top
+                  + layout.padding.top
+                  + glyph_run.baseline()
+                  + setup.baseline_shift
+                  - setup.resolved_metrics.resolved_ascent,
+                width: glyph_run.advance(),
+                height: setup.resolved_metrics.resolved_line_height,
               },
-              font_size: run.font_size(),
-              font_index: run.font().index,
-              text_range: run.text_range(),
-              cluster_ranges,
-              variations: run_variations(&glyph_run),
-              synthetic_bold: synthesis.embolden,
-              synthetic_skew: synthesis.skew,
-              font_data: run.font().data.clone(),
-            };
-
-            runs.push(PositionedInlineRun {
-              glyph_run: shaped,
-              resolved_glyphs,
-              line_scale: setup.state,
+              setup.state,
               static_inline_prefix,
-              baseline_shift: setup.baseline_shift,
-            });
+            ));
           }
-          PositionedLayoutItem::InlineBox(inline_box) => {
-            if inline_box.kind != InlineBoxKind::InFlow {
-              continue;
-            }
-            let Some(inline_box) =
-              resolve_visual_inline_box(inline_box, Some(line_states[line_index]), spans)
-            else {
-              continue;
-            };
-            let inline_box = VisualInlineBox {
-              x: scale_text_fit_x(
-                inline_box.layout_x,
-                setup.line_scale_origin_x,
-                setup.state.scale,
-                static_inline_prefix,
-                setup.state.alignment_correction,
-              ),
-              ..inline_box
-            };
-            // A spacer or atomic box inside a decorated span stretches the
-            // span's fragment horizontally; runs set its height, like Blink's
-            // box metrics ignoring atomic descendants. The line extent is the
-            // last resort so padding-only coverage still paints.
-            let chain = match spans.get(inline_box.id as usize) {
-              Some(ProcessedInlineSpan::Box(item)) => item.decorations.as_ref(),
-              Some(ProcessedInlineSpan::Spacer { decorations, .. }) => decorations.as_ref(),
-              _ => None,
-            };
 
-            if chain.is_some() {
-              let x0 = layout.border.left + layout.padding.left + inline_box.x;
-              let origin_y = setup.state.layout_origin.y;
-              let content_top = layout.border.top + layout.padding.top;
-              let line_y =
-                |value: f32| origin_y + (content_top + value - origin_y) * setup.state.scale;
+          let metrics = run.metrics();
 
-              decoration_coverage.cover(
-                chain,
+          if let Some(span_id) = brush.source_span_id
+            && let Some(ProcessedInlineSpan::Text {
+              decorations: Some(chain),
+              ..
+            }) = spans.get(span_id as usize)
+          {
+            // The run's leaded box, like Blink's inline box fragment
+            // (`InlineBoxState::ComputeTextMetrics` adds the line-height
+            // leading to the font height).
+            let (above, below) =
+              brush.line_box_contribution(metrics.line_height, metrics.ascent, metrics.descent);
+            let rect = scale_outline_rect(
+              InlineOutlineRect {
+                span_id,
                 line_index,
-                x0,
-                x0 + inline_box.width,
-                &CoverExtent::Line {
-                  top: line_y(setup.resolved_metrics.resolved_line_top),
-                  bottom: line_y(setup.resolved_metrics.resolved_line_bottom),
-                  baseline: line_y(setup.resolved_metrics.resolved_baseline),
-                },
-              );
-            }
-            positioned_inline_boxes.insert(inline_box.id, inline_box);
-            static_inline_prefix += inline_box.layout_advance;
+                x: layout.border.left + layout.padding.left + glyph_run.offset(),
+                y: layout.border.top
+                  + layout.padding.top
+                  + glyph_run.baseline()
+                  + setup.baseline_shift
+                  - above,
+                width: glyph_run.advance(),
+                height: above + below,
+              },
+              setup.state,
+              static_inline_prefix,
+            );
+
+            decoration_coverage.cover(
+              Some(chain),
+              line_index,
+              rect.x,
+              rect.x + rect.width,
+              &CoverExtent::Run {
+                font_size: run.font_size(),
+                top: rect.y,
+                bottom: rect.y + rect.height,
+                baseline: rect.y + above * setup.state.scale,
+              },
+            );
           }
+          let glyphs: Vec<PositionedGlyph> = glyph_run
+            .positioned_glyphs()
+            .map(|g| PositionedGlyph {
+              id: g.id,
+              x: g.x,
+              y: g.y,
+            })
+            .collect();
+          let cluster_ranges = glyph_cluster_ranges(&glyph_run, &glyphs);
+          let synthesis = run_synthesis(&glyph_run);
+          let shaped = ShapedRun {
+            glyphs,
+            offset: glyph_run.offset(),
+            baseline: glyph_run.baseline(),
+            advance: glyph_run.advance(),
+            trailing_whitespace,
+            brush,
+            metrics: RunMetrics {
+              ascent: metrics.ascent,
+              descent: metrics.descent,
+              underline_offset: metrics.underline_offset,
+              underline_size: metrics.underline_size,
+              strikethrough_offset: metrics.strikethrough_offset,
+              strikethrough_size: metrics.strikethrough_size,
+            },
+            font_size: run.font_size(),
+            font_index: run.font().index,
+            text_range: run.text_range(),
+            cluster_ranges,
+            variations: run_variations(&glyph_run),
+            synthetic_bold: synthesis.embolden,
+            synthetic_skew: synthesis.skew,
+            font_data: run.font().data.clone(),
+          };
+
+          runs.push(PositionedInlineRun {
+            glyph_run: shaped,
+            resolved_glyphs,
+            line_scale: setup.state,
+            static_inline_prefix,
+            baseline_shift: setup.baseline_shift,
+          });
+        }
+        PlacedItem::Box(inline_box) => {
+          // A spacer or atomic box inside a decorated span stretches the
+          // span's fragment horizontally; runs set its height, like Blink's
+          // box metrics ignoring atomic descendants. The line extent is the
+          // last resort so padding-only coverage still paints.
+          let chain = match spans.get(inline_box.id as usize) {
+            Some(ProcessedInlineSpan::Box(item)) => item.decorations.as_ref(),
+            Some(ProcessedInlineSpan::Spacer { decorations, .. }) => decorations.as_ref(),
+            _ => None,
+          };
+
+          if chain.is_some() {
+            let x0 = layout.border.left + layout.padding.left + inline_box.x;
+            let origin_y = setup.state.layout_origin.y;
+            let content_top = layout.border.top + layout.padding.top;
+            let line_y =
+              |value: f32| origin_y + (content_top + value - origin_y) * setup.state.scale;
+
+            decoration_coverage.cover(
+              chain,
+              line_index,
+              x0,
+              x0 + inline_box.width,
+              &CoverExtent::Line {
+                top: line_y(setup.resolved_metrics.resolved_line_top),
+                bottom: line_y(setup.resolved_metrics.resolved_line_bottom),
+                baseline: line_y(setup.resolved_metrics.resolved_baseline),
+              },
+            );
+          }
+          positioned_inline_boxes.insert(inline_box.id, inline_box);
         }
       }
-    }
+      Ok(())
+    })?;
 
     for inline_box in positioned_floats {
       let Some(inline_box) = resolve_visual_inline_box(inline_box.clone(), None, spans) else {

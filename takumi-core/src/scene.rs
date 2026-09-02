@@ -2,9 +2,8 @@
 //! bounds. Raster and SVG backends consume this instead of each walking the node tree
 //! independently.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, convert::Infallible};
 
-use parley::{InlineBoxKind, PositionedLayoutItem};
 use skrifa::FontRef;
 
 use crate::{
@@ -13,9 +12,8 @@ use crate::{
   geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Size, transformed_rect_extents},
   layout::{
     inline::{
-      InlineContentKind, InlineLayoutMode, InlineLayoutRequest, ProcessedInlineSpan,
-      collect_inline_items, create_inline_layout, resolve_inline_max_height,
-      resolve_visual_inline_box, scale_text_fit_x, text_fit_line_alignment_correction,
+      InlineContentKind, InlineLayoutMode, InlineLayoutRequest, PlacedItem, ProcessedInlineSpan,
+      collect_inline_items, create_inline_layout, resolve_inline_max_height, scale_text_fit_x,
     },
     node::Node,
     tree::{LayoutResults, RenderNode},
@@ -428,137 +426,114 @@ fn compute_node_paint_bounds(
     layout.border.left + layout.padding.left,
     layout.border.top + layout.padding.top,
   ) * transform;
-  let line_vertical_metrics = built.line_metrics();
-  let line_states = built.line_states();
-  for (line_index, line) in built.layout.lines().enumerate() {
-    let baseline_shift = line_states[line_index].baseline_shift;
-    let resolved_metrics = line_vertical_metrics[line_index];
-    let line_scale = built.line_scales.get(line_index).copied().unwrap_or(1.0);
-    let (line_scale_origin_x, line_alignment_correction) =
-      text_fit_line_alignment_correction(&line, line_scale, layout.content_box_size().width);
-    let line_scale_origin = Point {
-      x: line_scale_origin_x,
-      y: resolved_metrics.resolved_baseline,
+  let Ok(()) = built.walk_items::<Infallible>(layout, |line, item| {
+    let setup = &line.setup;
+    let line_scale = setup.state.scale;
+    let scaled = |origin: Point<f32>, size: Size<f32>, static_inline_prefix: f32| {
+      if (line_scale - 1.0).abs() <= f32::EPSILON {
+        return (origin, size);
+      }
+      let baseline = setup.resolved_metrics.resolved_baseline;
+
+      (
+        Point {
+          x: scale_text_fit_x(
+            origin.x,
+            setup.line_scale_origin_x,
+            line_scale,
+            static_inline_prefix,
+            setup.state.alignment_correction,
+          ),
+          y: baseline + (origin.y - baseline) * line_scale,
+        },
+        Size {
+          width: size.width * line_scale,
+          height: size.height * line_scale,
+        },
+      )
     };
-    let mut static_inline_prefix = 0.0_f32;
-    for item in line.items() {
-      match item {
-        PositionedLayoutItem::GlyphRun(glyph_run) => {
-          let metrics = glyph_run.run().metrics();
-          let mut glyph_origin = Point {
+
+    match item {
+      PlacedItem::Run {
+        glyph_run,
+        static_inline_prefix,
+        ..
+      } => {
+        let metrics = glyph_run.run().metrics();
+        let (glyph_origin, glyph_size) = scaled(
+          Point {
             x: glyph_run.offset(),
-            y: glyph_run.baseline() + baseline_shift - metrics.ascent,
-          };
-          let mut glyph_size = Size {
+            y: glyph_run.baseline() + setup.baseline_shift - metrics.ascent,
+          },
+          Size {
             width: glyph_run.advance(),
             height: metrics.ascent + metrics.descent,
-          };
-          if (line_scale - 1.0).abs() > f32::EPSILON {
-            glyph_origin = Point {
-              x: scale_text_fit_x(
-                glyph_origin.x,
-                line_scale_origin.x,
-                line_scale,
-                static_inline_prefix,
-                line_alignment_correction,
-              ),
-              y: line_scale_origin.y + (glyph_origin.y - line_scale_origin.y) * line_scale,
-            };
-            glyph_size.width *= line_scale;
-            glyph_size.height *= line_scale;
-          }
-          let glyph_transform =
-            Affine::translation(glyph_origin.x, glyph_origin.y) * inline_transform;
-          bounds = merge_bounds(bounds, bounds_for_rect(glyph_size, glyph_transform));
+          },
+          static_inline_prefix,
+        );
+        let glyph_transform =
+          Affine::translation(glyph_origin.x, glyph_origin.y) * inline_transform;
+        bounds = merge_bounds(bounds, bounds_for_rect(glyph_size, glyph_transform));
 
-          // The metrics box above misses ink outside advance × (ascent+descent):
-          // synthetic-italic skew, faux-bold outset, negative bearings, and
-          // glyphs taller than the font's metrics. Merge per-glyph ink extents
-          // so isolation surfaces sized from these bounds never clip text.
-          let Ok(font) = FontRef::from_index(
-            glyph_run.run().font().data.as_ref(),
-            glyph_run.run().font().index,
-          ) else {
-            continue;
-          };
-          let glyph_ids = glyph_run.positioned_glyphs().map(|glyph| glyph.id);
-          let resolved_glyphs = node
-            .context
-            .fonts()
-            .with_context(|fonts| fonts.resolve_glyphs(&glyph_run, font, glyph_ids));
+        // The metrics box above misses ink outside advance × (ascent+descent):
+        // synthetic-italic skew, faux-bold outset, negative bearings, and
+        // glyphs taller than the font's metrics. Merge per-glyph ink extents
+        // so isolation surfaces sized from these bounds never clip text.
+        let Ok(font) = FontRef::from_index(
+          glyph_run.run().font().data.as_ref(),
+          glyph_run.run().font().index,
+        ) else {
+          return Ok(());
+        };
+        let glyph_ids = glyph_run.positioned_glyphs().map(|glyph| glyph.id);
+        let resolved_glyphs = node
+          .context
+          .fonts()
+          .with_context(|fonts| fonts.resolve_glyphs(&glyph_run, font, glyph_ids));
 
-          for glyph in glyph_run.positioned_glyphs() {
-            let Some((min_x, min_y, max_x, max_y)) = resolved_glyphs
-              .get(&glyph.id)
-              .and_then(|glyph| glyph.ink_extents())
-            else {
-              continue;
-            };
-
-            let mut ink_origin = Point {
-              x: glyph.x + min_x,
-              y: glyph.y + baseline_shift + min_y,
-            };
-            let mut ink_size = Size {
-              width: max_x - min_x,
-              height: max_y - min_y,
-            };
-            if (line_scale - 1.0).abs() > f32::EPSILON {
-              ink_origin = Point {
-                x: scale_text_fit_x(
-                  ink_origin.x,
-                  line_scale_origin.x,
-                  line_scale,
-                  static_inline_prefix,
-                  line_alignment_correction,
-                ),
-                y: line_scale_origin.y + (ink_origin.y - line_scale_origin.y) * line_scale,
-              };
-              ink_size.width *= line_scale;
-              ink_size.height *= line_scale;
-            }
-
-            bounds = merge_bounds(
-              bounds,
-              bounds_for_rect(
-                ink_size,
-                Affine::translation(ink_origin.x, ink_origin.y) * inline_transform,
-              ),
-            );
-          }
-        }
-        PositionedLayoutItem::InlineBox(inline_box) => {
-          if inline_box.kind != InlineBoxKind::InFlow {
-            continue;
-          }
-          let Some(inline_box) =
-            resolve_visual_inline_box(inline_box, Some(line_states[line_index]), &built.spans)
+        for glyph in glyph_run.positioned_glyphs() {
+          let Some((min_x, min_y, max_x, max_y)) = resolved_glyphs
+            .get(&glyph.id)
+            .and_then(|glyph| glyph.ink_extents())
           else {
             continue;
           };
-          let inline_box_x = scale_text_fit_x(
-            inline_box.x,
-            line_scale_origin_x,
-            line_scale,
+          let (ink_origin, ink_size) = scaled(
+            Point {
+              x: glyph.x + min_x,
+              y: glyph.y + setup.baseline_shift + min_y,
+            },
+            Size {
+              width: max_x - min_x,
+              height: max_y - min_y,
+            },
             static_inline_prefix,
-            line_alignment_correction,
           );
-          static_inline_prefix += inline_box.width;
 
           bounds = merge_bounds(
             bounds,
             bounds_for_rect(
-              Size {
-                width: inline_box.width,
-                height: inline_box.height,
-              },
-              Affine::translation(inline_box_x, inline_box.y) * inline_transform,
+              ink_size,
+              Affine::translation(ink_origin.x, ink_origin.y) * inline_transform,
             ),
           );
         }
       }
+      PlacedItem::Box(inline_box) => {
+        bounds = merge_bounds(
+          bounds,
+          bounds_for_rect(
+            Size {
+              width: inline_box.width,
+              height: inline_box.height,
+            },
+            Affine::translation(inline_box.x, inline_box.y) * inline_transform,
+          ),
+        );
+      }
     }
-  }
+    Ok(())
+  });
 
   for inline_box in built.positioned_floats {
     bounds = merge_bounds(
