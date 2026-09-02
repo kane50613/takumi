@@ -430,7 +430,9 @@ fn svg_stops(stops: &[ResolvedGradientStop], base: f32, span: f32) -> Vec<Gradie
 const GRADIENT_LUT_STOPS: usize = 64;
 
 /// Builds dense SVG gradient stops by sampling takumi's interpolated color LUT, baking the
-/// gradient's interpolation color space (e.g.
+/// gradient's interpolation color space (e.g. OKLCH) into evenly-spaced sRGB stops. SVG only
+/// interpolates between stops in sRGB, so sampling the LUT is how the vector output matches the
+/// raster backend for non-sRGB interpolation.
 fn lut_svg_stops(
   resolved: &[ResolvedGradientStop],
   axis_length: f32,

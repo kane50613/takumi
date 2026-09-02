@@ -172,7 +172,7 @@ pub struct RegisteredFace {
   pub weight: f32,
   /// CSS `font-style` value (`normal`, `italic`, or `oblique [<angle>deg]`).
   pub style: String,
-  /// Width as a percentage of normal (e.g.
+  /// Width as a percentage of normal (e.g. `100.0`).
   pub width: f32,
   /// Index of the face within its source collection.
   pub index: u32,
@@ -887,7 +887,7 @@ impl GenericFamily {
 impl FromStr for GenericFamily {
   type Err = FontError;
 
-  /// Parses a CSS generic family keyword (e.g.
+  /// Parses a CSS generic family keyword (e.g. `monospace`, `sans-serif`).
   fn from_str(keyword: &str) -> Result<Self, Self::Err> {
     ParleyGenericFamily::parse(keyword)
       .map(Self)
@@ -904,7 +904,7 @@ pub struct FontOverride {
   pub weight: Option<f32>,
   /// Font style (slant) to use instead of the embedded one.
   pub style: Option<CssFontStyle>,
-  /// Font width as a percentage (e.g.
+  /// Font width as a percentage (e.g. `100.0` for normal) to use instead of the embedded one.
   pub width: Option<f32>,
   /// Default values for named variation axes (four-byte OpenType tags).
   pub axes: Vec<(String, f32)>,

@@ -16,7 +16,7 @@ use crate::{
 pub enum FillShape {
   /// An axis-aligned rectangle at the box origin.
   Rect(Size<f32>),
-  /// A rectangle with the corners `border` gives it.
+  /// A rectangle whose corners come from `border`.
   RoundedRect {
     /// The corner geometry.
     border: BorderProperties,

@@ -162,7 +162,8 @@ pub(crate) struct LineScaleState {
   pub(crate) layout_origin: Point<f32>,
 }
 
-/// Horizontal correction for a text-fit-scaled line: `static_inline_prefix * (1
+/// Horizontal correction for a text-fit-scaled line:
+/// `static_inline_prefix * (1 - scale) + alignment_correction`.
 pub(crate) fn text_fit_x_correction(
   scale: f32,
   static_inline_prefix: f32,

@@ -1000,7 +1000,7 @@ const DASHED_GAP_RATIO_THICK: f32 = 1.0;
 const DASHED_GAP_RATIO_THIN: f32 = 2.0;
 const DOTTED_ENDPOINT_EPSILON: f32 = 1.0e-2;
 
-/// A dash interval and round-cap flag for a stroked border or outline.
+/// How a border paints as a whole, before any per-side work.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum BorderPaint {
   /// Stroke the centerline with the dash pattern for `style`.

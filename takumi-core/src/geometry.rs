@@ -198,7 +198,7 @@ impl Rect<f32> {
     }
   }
 
-  /// Per-side `self
+  /// Per-side `self - rhs`, clamped to zero.
   pub(crate) fn saturating_sub(self, rhs: Self) -> Self {
     Rect {
       top: (self.top - rhs.top).max(0.0),
