@@ -1,0 +1,182 @@
+//! Text decoration rectangles and skip-ink outlines.
+
+use crate::{
+  geometry::{ComputedLayout, PathCommand, Point},
+  layout::intercept::skip_ink_spans,
+  resources::glyph::ResolvedGlyph,
+  style::{
+    Affine, Color, SizedTextDecorationThickness, TextDecorationLines, TextDecorationSkipInk,
+  },
+};
+use std::{collections::HashMap, sync::Arc};
+
+use super::runs::ShapedRun;
+
+/// A text decoration line (underline/overline/line-through) as a fillable rect.
+/// `transform` maps the `(0, 0, width, height)` rect into border-box space.
+pub struct DecorationRect {
+  /// Rect width in pixels (run advance, snapped like the raster path).
+  pub width: f32,
+  /// Rect height in pixels (decoration thickness).
+  pub height: f32,
+  /// Decoration color, already resolved against `current-color`.
+  pub color: Color,
+  /// Affine transform into border-box space (`[a, b, c, d, e, f]`).
+  pub transform: [f32; 6],
+  /// Whether the line paints above glyphs (line-through) vs below (under/overline).
+  pub over: bool,
+  /// Which decoration this is, so a backend can single one out. The raster
+  /// backend refines the underline with skip-ink and paints the rest as they
+  /// come.
+  pub line: TextDecorationLines,
+}
+
+/// The active decoration lines for a glyph run, in border-box space. Mirrors the
+/// raster geometry in `draw_decoration` (skip-ink is a raster-only refinement and
+/// omitted here). `transform` is the run's border-box transform
+/// ([`PositionedInlineRun::transform`] with an identity base).
+/// Each glyph's outline, placed at `origin` plus the glyph's own position.
+///
+/// `origin` is whatever puts the glyphs in the same space as the caller's band:
+/// the decoration's coordinates on one axis need not be the layout's on the
+/// other, and only the difference between the two matters.
+pub fn glyph_outlines<'g>(
+  glyph_run: &ShapedRun,
+  resolved_glyphs: &'g HashMap<u32, Arc<ResolvedGlyph>>,
+  origin: Point<f32>,
+  baseline_shift: f32,
+) -> Vec<(Point<f32>, &'g [PathCommand])> {
+  glyph_run
+    .glyphs
+    .iter()
+    .filter_map(|glyph| {
+      let ResolvedGlyph::Outline(outline) = resolved_glyphs.get(&glyph.id)?.as_ref() else {
+        return None;
+      };
+
+      Some((
+        Point {
+          x: origin.x + glyph.x,
+          y: origin.y + glyph.y + baseline_shift,
+        },
+        outline.paths(),
+      ))
+    })
+    .collect()
+}
+
+/// The rectangles a run's `text-decoration` paints. An underline arrives split
+/// where the glyphs cross it, when `text-decoration-skip-ink` asks for that.
+pub fn run_decorations(
+  glyph_run: &ShapedRun,
+  resolved_glyphs: &HashMap<u32, Arc<ResolvedGlyph>>,
+  layout: ComputedLayout,
+  baseline_shift: f32,
+  transform: Affine,
+) -> Vec<DecorationRect> {
+  let mut out = Vec::new();
+  let brush = &glyph_run.brush;
+  let lines = brush.decoration_line;
+  if lines.is_empty() {
+    return out;
+  }
+  let metrics = &glyph_run.metrics;
+  // A fully trimmed run must not snap up to a 1px decoration.
+  if glyph_run.decorated_advance() <= 0.0 {
+    return out;
+  }
+  let start_x = layout.border.left + layout.padding.left + glyph_run.offset;
+  let snapped_start_x = start_x.floor();
+  let width = (start_x + glyph_run.decorated_advance()).ceil() - snapped_start_x;
+  if width <= 0.0 {
+    return out;
+  }
+  let baseline = glyph_run.baseline + baseline_shift;
+  let top = layout.border.top + layout.padding.top;
+  // Blink floors every decoration at 1px (`TextDecorationInfo::ResolvedThickness`).
+  let thickness = |from_font: f32| {
+    match brush.decoration_thickness {
+      SizedTextDecorationThickness::Value(value) => value,
+      SizedTextDecorationThickness::FromFont => from_font,
+    }
+    .max(1.0)
+  };
+  let mut emit =
+    |x: f32, span_width: f32, y_offset: f32, height: f32, over: bool, line: TextDecorationLines| {
+      if height <= 0.0 || span_width <= 0.0 {
+        return;
+      }
+      let matrix = transform * Affine::translation(x, top + y_offset);
+      out.push(DecorationRect {
+        width: span_width,
+        height,
+        color: brush.decoration_color,
+        transform: matrix.to_cols_array(),
+        over,
+        line,
+      });
+    };
+
+  if lines.contains(TextDecorationLines::UNDERLINE) {
+    let y_offset = baseline + glyph_run.underline_offset_from_baseline();
+    let height = thickness(metrics.underline_size);
+    // `skip-ink` cuts the line where the glyphs cross it. The pieces carry the
+    // same transform, so a backend paints them exactly as it paints one line.
+    let spans = if brush.decoration_skip_ink == TextDecorationSkipInk::None {
+      [(snapped_start_x, snapped_start_x + width)]
+        .into_iter()
+        .collect()
+    } else {
+      // The band runs from the content box, so the glyphs have to as well.
+      let outlines = glyph_outlines(
+        glyph_run,
+        resolved_glyphs,
+        Point {
+          x: layout.border.left + layout.padding.left,
+          y: 0.0,
+        },
+        baseline_shift,
+      );
+
+      skip_ink_spans(
+        outlines.iter().copied(),
+        snapped_start_x,
+        snapped_start_x + width,
+        y_offset,
+        y_offset + height,
+      )
+    };
+
+    for (start, end) in spans {
+      emit(
+        start,
+        end - start,
+        y_offset,
+        height,
+        false,
+        TextDecorationLines::UNDERLINE,
+      );
+    }
+  }
+  if lines.contains(TextDecorationLines::OVERLINE) {
+    emit(
+      snapped_start_x,
+      width,
+      baseline - metrics.ascent - metrics.underline_offset,
+      thickness(metrics.underline_size),
+      false,
+      TextDecorationLines::OVERLINE,
+    );
+  }
+  if lines.contains(TextDecorationLines::LINE_THROUGH) {
+    emit(
+      snapped_start_x,
+      width,
+      baseline - metrics.strikethrough_offset,
+      thickness(metrics.strikethrough_size),
+      true,
+      TextDecorationLines::LINE_THROUGH,
+    );
+  }
+  out
+}
