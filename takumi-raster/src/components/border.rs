@@ -594,8 +594,6 @@ mod tests {
       .into_inner()
       .unwrap_or_else(|error| unreachable!("test canvas should be readable: {error}"));
 
-    // Check top border line (y=2)
-    // It should have some transparent pixels (gaps) and some opaque pixels (dashes)
     let row: Vec<u8> = (0..48).map(|x| image.get_pixel(x, 2).0[3]).collect();
     let has_opaque = row.iter().any(|&a| a > 0);
     let has_transparent = row.iter().skip(8).take(32).any(|&a| a == 0);

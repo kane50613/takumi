@@ -1187,10 +1187,8 @@ mod tests {
 
   #[test]
   fn test_angle_degrees_from_keywords() {
-    // None, None
     assert_eq!(Angle::degrees_from_keywords(None, None), Angle::new(180.0));
 
-    // Some horizontal, None
     assert_eq!(
       Angle::degrees_from_keywords(Some(HorizontalKeyword::Left), None),
       Angle::new(270.0) // "to left" = 270deg
@@ -1200,7 +1198,6 @@ mod tests {
       Angle::new(90.0) // "to right" = 90deg
     );
 
-    // None, Some vertical
     assert_eq!(
       Angle::degrees_from_keywords(None, Some(VerticalKeyword::Top)),
       Angle::new(0.0)
@@ -1210,7 +1207,6 @@ mod tests {
       Angle::new(180.0)
     );
 
-    // Some horizontal, Some vertical
     assert_eq!(
       Angle::degrees_from_keywords(Some(HorizontalKeyword::Left), Some(VerticalKeyword::Top)),
       Angle::new(315.0)
@@ -1274,7 +1270,6 @@ mod tests {
       .into(),
     };
 
-    // Test at the top (should be red)
     let sizing = SizingContext::builder()
       .viewport(Viewport::new((100, 100)))
       .build();
@@ -1283,11 +1278,9 @@ mod tests {
     let color_top = tile.sample_pixel(50, 0).demultiply();
     assert_eq!(color_top, ColorU8::from_rgba(255, 0, 0, 255));
 
-    // Test at the bottom (should be blue)
     let color_bottom = tile.sample_pixel(50, 100).demultiply();
     assert_eq!(color_bottom, ColorU8::from_rgba(0, 0, 255, 255));
 
-    // Test in the middle (should be purple)
     let color_middle = tile.sample_pixel(50, 50).demultiply();
     assert_eq!(color_middle, ColorU8::from_rgba(127, 0, 128, 255));
   }
@@ -1305,7 +1298,6 @@ mod tests {
       .into(),
     };
 
-    // Test at the left (should be red)
     let sizing = SizingContext::builder()
       .viewport(Viewport::new((100, 100)))
       .build();
@@ -1314,7 +1306,6 @@ mod tests {
     let color_left = tile.sample_pixel(0, 50).demultiply();
     assert_eq!(color_left, ColorU8::from_rgba(255, 0, 0, 255));
 
-    // Test at the right (should be blue)
     let color_right = tile.sample_pixel(100, 50).demultiply();
     assert_eq!(color_right, ColorU8::from_rgba(0, 0, 255, 255));
   }
@@ -1357,7 +1348,6 @@ mod tests {
       .into(),
     };
 
-    // Should always return the same color
     let sizing = SizingContext::builder()
       .viewport(Viewport::new((100, 100)))
       .build();
@@ -1375,7 +1365,6 @@ mod tests {
       stops: [].into(),
     };
 
-    // Should return transparent
     let sizing = SizingContext::builder()
       .viewport(Viewport::new((100, 100)))
       .build();
@@ -1440,15 +1429,12 @@ mod tests {
       .build();
     let tile = LinearGradientTile::new(&gradient, 40, 40, &sizing, Color::black(), false);
 
-    // grey at 0,0
     let c0 = tile.sample_pixel(0, 0).demultiply();
     assert_eq!(c0, ColorU8::from_rgba(128, 128, 128, 255));
 
-    // transparent at 1,0
     let c1 = tile.sample_pixel(1, 0).demultiply();
     assert_eq!(c1, ColorU8::from_rgba(0, 0, 0, 0));
 
-    // transparent till the end
     let c2 = tile.sample_pixel(40, 0).demultiply();
     assert_eq!(c2, ColorU8::from_rgba(0, 0, 0, 0));
   }
