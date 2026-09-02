@@ -32,14 +32,14 @@ mod text_fit;
 mod truncation;
 
 pub use self::{
-  background::{InlineBackgroundFragment, inline_background_path},
-  decorations::{DecorationRect, glyph_outlines, run_decorations},
+  background::InlineBackgroundFragment,
+  decorations::DecorationRect,
   items::{DecorationLink, InlineBoxItem, InlineItem, ProcessedInlineSpan, collect_inline_items},
   metrics::VisualInlineBox,
   outline::{InlineOutlineRect, outline_island_contour, outline_islands},
   runs::{
     InlineRunLayout, MeasuredInlineBox, MeasuredInlineRun, PositionedGlyph, PositionedInlineRun,
-    RunMetrics, ShapedRun, resolve_inline_runs,
+    RunMetrics, ShapedRun,
   },
 };
 pub(crate) use self::{
@@ -1134,7 +1134,7 @@ mod tests {
       border: crate::geometry::Rect::default(),
       padding: crate::geometry::Rect::default(),
     };
-    let decorations = run_decorations(&run, &HashMap::new(), layout, 0.0, Affine::IDENTITY);
+    let decorations = run.decorations(&HashMap::new(), layout, 0.0, Affine::IDENTITY);
 
     assert_eq!(decorations.len(), 0);
   }
@@ -1189,7 +1189,7 @@ mod tests {
       border: Rect::default(),
       padding: Rect::default(),
     };
-    let runs = resolve_inline_runs(&built, &render_node.context, layout).unwrap();
+    let runs = built.resolve_runs(&render_node.context, layout).unwrap();
 
     let trailing: Vec<(f32, f32)> = runs
       .runs
@@ -1271,7 +1271,7 @@ mod tests {
       border: crate::geometry::Rect::default(),
       padding: crate::geometry::Rect::default(),
     };
-    let runs = resolve_inline_runs(&built, &render_node.context, layout).unwrap();
+    let runs = built.resolve_runs(&render_node.context, layout).unwrap();
 
     let heights: Vec<f32> = runs.background_fragments.iter().map(|f| f.height).collect();
 
@@ -1332,7 +1332,7 @@ mod tests {
       border: crate::geometry::Rect::default(),
       padding: crate::geometry::Rect::default(),
     };
-    let runs = resolve_inline_runs(&built, &render_node.context, layout).unwrap();
+    let runs = built.resolve_runs(&render_node.context, layout).unwrap();
     let fragment = runs
       .background_fragments
       .first()

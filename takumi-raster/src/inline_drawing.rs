@@ -17,8 +17,7 @@ use crate::{
   draw_outset_box_shadow,
   layout::inline::{
     BuiltInlineLayout, InlineBoxItem, InlineOutlineRect, InlineRunLayout, PositionedInlineRun,
-    ProcessedInlineSpan, ShapedRun, VisualInlineBox, glyph_outlines, inline_background_path,
-    outline_island_contour, outline_islands, resolve_inline_runs,
+    ProcessedInlineSpan, ShapedRun, VisualInlineBox, outline_island_contour, outline_islands,
   },
   painter::StrokeStyle,
   rasterize_layers,
@@ -91,12 +90,7 @@ fn draw_underline_with_skip_ink(
   let content_offset = options.layout.content_box_offset();
   let run_start_x = content_offset.x + glyph_run.offset;
   let line_top = content_offset.y + options.offset;
-  let outlines = glyph_outlines(
-    glyph_run,
-    resolved_glyphs,
-    content_offset,
-    options.baseline_shift,
-  );
+  let outlines = glyph_run.glyph_outlines(resolved_glyphs, content_offset, options.baseline_shift);
 
   for (start_x, end_x) in skip_ink_spans(
     outlines.iter().copied(),
@@ -436,11 +430,11 @@ pub(crate) fn draw_inline_layout(
   font_style: &SizedFontStyle,
 ) -> Result<Vec<VisualInlineBox>> {
   let spans = &built.spans;
-  let resolved = resolve_inline_runs(built, context, layout)?;
+  let resolved = built.resolve_runs(context, layout)?;
 
   // Inline-span backgrounds fill under every glyph of the formatting context.
   for fragment in &resolved.background_fragments {
-    let path = inline_background_path(fragment);
+    let path = fragment.path();
     let (mask, placement) = render_mask(
       &path,
       Some(context.transform),

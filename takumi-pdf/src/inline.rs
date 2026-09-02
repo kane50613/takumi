@@ -9,7 +9,7 @@ use takumi_core::{
   layout::{
     inline::{
       BuiltInlineLayout, InlineItem, InlineLayoutMode, InlineLayoutRequest, InlineRunLayout,
-      collect_inline_items, create_inline_layout, resolve_inline_runs,
+      collect_inline_items, create_inline_layout,
     },
     node::{NodeKind, TextData},
     tree::RenderNode,
@@ -175,7 +175,9 @@ pub(crate) fn build_inline_runs<'c>(
     context,
     InlineLayoutMode::Draw,
   ));
-  let runs = resolve_inline_runs(&built, context, layout).map_err(PdfError::Font)?;
+  let runs = built
+    .resolve_runs(context, layout)
+    .map_err(PdfError::Font)?;
 
   Ok(Some((built, runs)))
 }

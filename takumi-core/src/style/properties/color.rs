@@ -608,7 +608,7 @@ impl Color {
   }
 
   /// Mixes `amount` of `target` into the colour, keeping this alpha.
-  pub(crate) fn mix(self, target: Color, amount: f32) -> Self {
+  pub(crate) fn mix_rgb(self, target: Color, amount: f32) -> Self {
     let amount = amount.clamp(0.0, 1.0);
     let inverse = 1.0 - amount;
 

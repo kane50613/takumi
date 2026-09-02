@@ -89,10 +89,20 @@ fn resolve_intrinsic_size(image: &BackgroundImage, context: &RenderContext) -> I
   source.intrinsic_sizing().scale(&context.sizing)
 }
 
+/// One axis of the positioning and painting areas.
 struct AxisArea {
   area: u32,
   paint: u32,
   offset: i32,
+  /// The `background-position` component on this axis.
+  position: PositionComponent,
+  axis: Axis,
+}
+
+#[derive(Clone, Copy)]
+enum Axis {
+  X,
+  Y,
 }
 
 impl AxisArea {
@@ -100,19 +110,10 @@ impl AxisArea {
   fn tiles(
     &self,
     repeat: BackgroundRepeatStyle,
-    pos: PositionValue,
     tile_size: u32,
     sizing: &SizingContext,
-    is_x: bool,
   ) -> (SmallVec<[i32; 1]>, u32) {
-    let anchor = |tile: u32| {
-      self.offset
-        + if is_x {
-          resolve_position_component_x(pos, tile, self.area, sizing)
-        } else {
-          resolve_position_component_y(pos, tile, self.area, sizing)
-        }
-    };
+    let anchor = |tile: u32| self.offset + self.position_offset(tile, sizing);
     let shift = |mut positions: SmallVec<[i32; 1]>| {
       if self.offset != 0 {
         positions.iter_mut().for_each(|x| *x += self.offset);
@@ -184,40 +185,20 @@ fn calculate_available_space(area_size: u32, tile_size: u32) -> i32 {
     .saturating_sub_unsigned(tile_size)
 }
 
-/// Resolves the x component of a `background-position`.
-fn resolve_position_component_x(
-  comp: PositionValue,
-  tile_w: u32,
-  area_w: u32,
-  sizing: &SizingContext,
-) -> i32 {
-  let available = calculate_available_space(area_w, tile_w);
-  match comp.0.x {
-    PositionComponent::KeywordX(PositionKeywordX::Left) => 0,
-    PositionComponent::KeywordX(PositionKeywordX::Center) => available / 2,
-    PositionComponent::KeywordX(PositionKeywordX::Right) => available,
-    PositionComponent::KeywordY(_) => available / 2,
-    PositionComponent::Length(length) => {
-      resolve_length_to_position_component(length, available, sizing)
-    }
-  }
-}
+impl AxisArea {
+  /// Resolves the `background-position` component against the free space on this axis.
+  fn position_offset(&self, tile: u32, sizing: &SizingContext) -> i32 {
+    let available = calculate_available_space(self.area, tile);
 
-/// Resolves the y component of a `background-position`.
-fn resolve_position_component_y(
-  comp: PositionValue,
-  tile_h: u32,
-  area_h: u32,
-  sizing: &SizingContext,
-) -> i32 {
-  let available = calculate_available_space(area_h, tile_h);
-  match comp.0.y {
-    PositionComponent::KeywordY(PositionKeywordY::Top) => 0,
-    PositionComponent::KeywordY(PositionKeywordY::Center) => available / 2,
-    PositionComponent::KeywordY(PositionKeywordY::Bottom) => available,
-    PositionComponent::KeywordX(_) => available / 2,
-    PositionComponent::Length(length) => {
-      resolve_length_to_position_component(length, available, sizing)
+    match (self.position, self.axis) {
+      (PositionComponent::KeywordX(PositionKeywordX::Left), Axis::X)
+      | (PositionComponent::KeywordY(PositionKeywordY::Top), Axis::Y) => 0,
+      (PositionComponent::KeywordX(PositionKeywordX::Right), Axis::X)
+      | (PositionComponent::KeywordY(PositionKeywordY::Bottom), Axis::Y) => available,
+      (PositionComponent::Length(length), _) => {
+        resolve_length_to_position_component(length, available, sizing)
+      }
+      _ => available / 2,
     }
   }
 }
@@ -278,22 +259,20 @@ impl BackgroundLayerInput<'_> {
       area: self.area.width,
       paint: self.paint.width,
       offset: self.origin_offset.x,
+      position: style.pos.0.x,
+      axis: Axis::X,
     };
     let axis_y = AxisArea {
       area: self.area.height,
       paint: self.paint.height,
       offset: self.origin_offset.y,
+      position: style.pos.0.y,
+      axis: Axis::Y,
     };
 
     let (xs, ys, tile_w, tile_h) = match resolved_size.auto_axis {
       Some(AutoBackgroundAxis::Width) => {
-        let (ys, tile_h) = axis_y.tiles(
-          style.repeat.1,
-          style.pos,
-          resolved_size.height,
-          &self.context.sizing,
-          false,
-        );
+        let (ys, tile_h) = axis_y.tiles(style.repeat.1, resolved_size.height, &self.context.sizing);
         let tile_w = if style.repeat.1 == BackgroundRepeatStyle::Round {
           resolve_auto_axis_from_intrinsic(
             AutoBackgroundAxis::Width,
@@ -304,23 +283,11 @@ impl BackgroundLayerInput<'_> {
         } else {
           resolved_size.width
         };
-        let (xs, tile_w) = axis_x.tiles(
-          style.repeat.0,
-          style.pos,
-          tile_w,
-          &self.context.sizing,
-          true,
-        );
+        let (xs, tile_w) = axis_x.tiles(style.repeat.0, tile_w, &self.context.sizing);
         (xs, ys, tile_w, tile_h)
       }
       Some(AutoBackgroundAxis::Height) => {
-        let (xs, tile_w) = axis_x.tiles(
-          style.repeat.0,
-          style.pos,
-          resolved_size.width,
-          &self.context.sizing,
-          true,
-        );
+        let (xs, tile_w) = axis_x.tiles(style.repeat.0, resolved_size.width, &self.context.sizing);
         let tile_h = if style.repeat.0 == BackgroundRepeatStyle::Round {
           resolve_auto_axis_from_intrinsic(
             AutoBackgroundAxis::Height,
@@ -331,30 +298,12 @@ impl BackgroundLayerInput<'_> {
         } else {
           resolved_size.height
         };
-        let (ys, tile_h) = axis_y.tiles(
-          style.repeat.1,
-          style.pos,
-          tile_h,
-          &self.context.sizing,
-          false,
-        );
+        let (ys, tile_h) = axis_y.tiles(style.repeat.1, tile_h, &self.context.sizing);
         (xs, ys, tile_w, tile_h)
       }
       None => {
-        let (xs, tile_w) = axis_x.tiles(
-          style.repeat.0,
-          style.pos,
-          resolved_size.width,
-          &self.context.sizing,
-          true,
-        );
-        let (ys, tile_h) = axis_y.tiles(
-          style.repeat.1,
-          style.pos,
-          resolved_size.height,
-          &self.context.sizing,
-          false,
-        );
+        let (xs, tile_w) = axis_x.tiles(style.repeat.0, resolved_size.width, &self.context.sizing);
+        let (ys, tile_h) = axis_y.tiles(style.repeat.1, resolved_size.height, &self.context.sizing);
         (xs, ys, tile_w, tile_h)
       }
     };
@@ -407,7 +356,7 @@ impl BackgroundLayersInput<'_> {
 
 #[cfg(test)]
 mod tests {
-  use super::{resolve_position_component_x, resolve_position_component_y};
+  use super::{Axis, AxisArea};
   use crate::{
     style::{
       Length, PositionComponent, PositionKeywordX, PositionKeywordY, PositionValue, SizingContext,
@@ -434,11 +383,25 @@ mod tests {
     ));
 
     assert_eq!(
-      resolve_position_component_x(position, 150, 100, &sizing),
+      AxisArea {
+        area: 100,
+        paint: 100,
+        offset: 0,
+        position: position.0.x,
+        axis: Axis::X
+      }
+      .position_offset(150, &sizing),
       -50
     );
     assert_eq!(
-      resolve_position_component_y(position, 150, 100, &sizing),
+      AxisArea {
+        area: 100,
+        paint: 100,
+        offset: 0,
+        position: position.0.y,
+        axis: Axis::Y
+      }
+      .position_offset(150, &sizing),
       -50
     );
   }
@@ -452,11 +415,25 @@ mod tests {
     ));
 
     assert_eq!(
-      resolve_position_component_x(position, 140, 100, &sizing),
+      AxisArea {
+        area: 100,
+        paint: 100,
+        offset: 0,
+        position: position.0.x,
+        axis: Axis::X
+      }
+      .position_offset(140, &sizing),
       -10
     );
     assert_eq!(
-      resolve_position_component_y(position, 140, 100, &sizing),
+      AxisArea {
+        area: 100,
+        paint: 100,
+        offset: 0,
+        position: position.0.y,
+        axis: Axis::Y
+      }
+      .position_offset(140, &sizing),
       -30
     );
   }
