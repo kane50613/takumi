@@ -187,8 +187,8 @@ fn font_style_css(style: FontStyle) -> String {
   }
 }
 
-/// The subset families under one logical family, ordered by the rank each declared and then by
-/// name.
+/// The subset families under one logical family, ordered by the rank each declared, then by
+/// registration order and name.
 pub(crate) type SubsetGroup = BTreeSet<(u32, u32, String)>;
 
 /// Registered families partitioned by color-glyph support.
@@ -331,7 +331,7 @@ pub(crate) fn run_synthesis(run: &GlyphRun<'_, InlineBrush>) -> RunSynthesis {
   }
 }
 
-/// User-space variation coordinates the run was shaped at, e.g.
+/// User-space variation coordinates the run was shaped at, e.g. `[(*b"wght", 700.0)]`.
 pub(crate) fn run_variations(run: &GlyphRun<'_, InlineBrush>) -> Vec<([u8; 4], f32)> {
   run
     .run()
@@ -900,7 +900,7 @@ impl FromStr for GenericFamily {
 pub struct FontOverride {
   /// Family name to register the font under, instead of its embedded name.
   pub family_name: Option<Arc<str>>,
-  /// Font weight (CSS numeric, e.g.
+  /// Font weight (CSS numeric, e.g. `400.0`) to use instead of the embedded one.
   pub weight: Option<f32>,
   /// Font style (slant) to use instead of the embedded one.
   pub style: Option<CssFontStyle>,
