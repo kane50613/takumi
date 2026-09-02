@@ -4,7 +4,6 @@ use takumi_core::{
   geometry::{Point, Size},
   paint::{
     GradientOverlayTile, LinearGradientFastPathKind, LinearGradientTile, RadialGradientTile,
-    overlay_gradient_tile_fast_normal_unconstrained,
   },
 };
 use tiny_skia::PixmapMut;
@@ -59,13 +58,7 @@ pub(crate) fn overlay_gradient_tile<T>(
 
   if mode == BlendMode::Normal && combined_mask.is_none() {
     let bottom_data: &mut [u8] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-    overlay_gradient_tile_fast_normal_unconstrained(
-      bottom_data,
-      bottom_width,
-      bottom_height,
-      gradient,
-      offset,
-    );
+    gradient.overlay_unconstrained(bottom_data, bottom_width, bottom_height, offset);
     return;
   }
 
@@ -217,13 +210,7 @@ fn overlay_gradient_tile_with_fast_path<T>(
       return;
     }
 
-    overlay_gradient_tile_fast_normal_unconstrained(
-      bottom_data,
-      bottom_width,
-      bottom_height,
-      gradient,
-      offset,
-    );
+    gradient.overlay_unconstrained(bottom_data, bottom_width, bottom_height, offset);
     return;
   }
 

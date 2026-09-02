@@ -26,7 +26,7 @@ use takumi_core::{
     node::NodeKind,
     tree::{LayoutResults, NodeOrigin, RenderNode},
   },
-  paint::{ConicGradientTile, LinearGradientTile, RadialGradientTile, resolve_stops_along_axis},
+  paint::{ConicGradientTile, LinearGradientTile, RadialGradientTile},
   painter::{
     BoxPainter, BoxShadows, FillShape, PaintDevice, StrokeStyle, paint_border,
     paint_run_decorations,
@@ -718,7 +718,7 @@ impl Emitter<'_> {
       BackgroundImage::Linear(gradient) => {
         let tile =
           LinearGradientTile::new(gradient, w as u32, h as u32, sizing, current_color, false);
-        let resolved = self.filtered_stops(resolve_stops_along_axis(
+        let resolved = self.filtered_stops(ResolvedGradientStop::resolve(
           &gradient.stops,
           tile.axis_length.max(1e-6),
           sizing,
@@ -760,7 +760,7 @@ impl Emitter<'_> {
       BackgroundImage::Radial(gradient) => {
         let tile =
           RadialGradientTile::new(gradient, w as u32, h as u32, sizing, current_color, false);
-        let resolved = self.filtered_stops(resolve_stops_along_axis(
+        let resolved = self.filtered_stops(ResolvedGradientStop::resolve(
           &gradient.stops,
           tile.radius_scale.max(1e-6),
           sizing,
@@ -799,7 +799,7 @@ impl Emitter<'_> {
       BackgroundImage::Conic(gradient) => {
         let tile =
           ConicGradientTile::new(gradient, w as u32, h as u32, sizing, current_color, false);
-        let lut_len = tile.color_lut.len();
+        let lut_len = tile.lut.len();
         if lut_len == 0 {
           return None;
         }
@@ -809,7 +809,7 @@ impl Emitter<'_> {
             let t = i as f32 / SWEEP_STOPS as f32;
             let index =
               tile.lut_index_for_adjusted_angle_with_len(t * core::f32::consts::TAU, lut_len);
-            let color = tile.color_lut[index].demultiply();
+            let color = tile.lut.sample(index).demultiply();
 
             krilla_stop(
               t,

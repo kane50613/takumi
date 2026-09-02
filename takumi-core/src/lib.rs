@@ -69,10 +69,7 @@ pub mod paint {
     },
     conic_gradient::{ConicGradientRowState, ConicGradientTile},
     filter::compose_transfer_table,
-    gradient_utils::{
-      GradientOverlayTile, build_color_lut_with_interpolation,
-      overlay_gradient_tile_fast_normal_unconstrained, resolve_stops_along_axis,
-    },
+    gradient_utils::{ColorLut, GradientOverlayTile},
     linear_gradient::{
       LinearGradientFastPath, LinearGradientFastPathKind, LinearGradientRowState,
       LinearGradientTile,
