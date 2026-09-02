@@ -1,3 +1,37 @@
+## takumi-core@0.25.0
+
+### Report a capped WebP animation as unfinished
+
+A WebP stream cut at the frame cap now reports the same unfinished flag as APNG and GIF instead of claiming it ended.
+
+### Rename the background layer inputs
+
+`BackgroundLayerInput::resolve` and `BackgroundLayersInput::resolve` replace the `Resolve*` structs and free functions.
+
+### Drop unused paint re-exports
+
+`takumi_core::paint` no longer re-exports the tile position helpers, the gradient row states, or `LinearGradientFastPath`; a few layout helpers are crate-private now.
+
+### Clip animation frames that start outside the canvas
+
+A GIF or WebP frame whose origin lies beyond the logical screen no longer panics the decoder. The frame is clipped away instead, as browsers do.
+
+### Build gradient tables through ColorLut
+
+Gradient tiles carry one `lut: ColorLut`. `ResolvedGradientStop::resolve` and `ColorLut::new` replace the free functions.
+
+### Move the border helpers onto their types
+
+`side_bands`, `border_dash_pattern`, `inset_size`, and `rect_offset` are now methods on `BorderProperties`, `BorderStyle`, `Size`, and `Rect`.
+
+### Name the values the paint helpers pass around
+
+`BorderStyle::dash_pattern` returns a `BorderDash`. `resolve_inline_runs`, `inline_background_path`, `glyph_outlines`, and `run_decorations` are methods on `BuiltInlineLayout`, `InlineBackgroundFragment`, and `ShapedRun`.
+
+### Read render settings through RenderContext methods
+
+`time_ms`, `draw_debug_border`, and `dither_gradients` are methods now. `RenderContext::builder()` is unchanged.
+
 ## takumi-core@0.24.0
 
 ### Break lines where Chromium breaks them
