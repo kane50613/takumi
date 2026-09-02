@@ -299,7 +299,7 @@ pub(crate) fn decode_webp_frames(
 
     match decoder.read_frame(&mut canvas) {
       Ok(_) => {}
-      Err(WebPDecodingError::NoMoreFrames) => break,
+      Err(WebPDecodingError::NoMoreFrames) => return Ok(true),
       Err(error) if index == 0 => return Err(webp_decode_error(error)),
       Err(_) => return Ok(true),
     }
@@ -319,7 +319,7 @@ pub(crate) fn decode_webp_frames(
     pushed += 1;
   }
 
-  Ok(true)
+  Ok(false)
 }
 
 /// The first frame, for the still-image decode paths.
@@ -396,18 +396,36 @@ pub(crate) fn decode_webp_frame_alone(
   let buffer = if covers_canvas(rect, (canvas_width, canvas_height)) {
     frame
   } else {
-    let mut canvas = vec![0; canvas_width as usize * canvas_height as usize * 4];
-    let stride = canvas_width as usize * 4;
-    for row in 0..rect.3.min(canvas_height.saturating_sub(rect.1)) {
-      let source = row as usize * rect.2 as usize * 4;
-      let target = (rect.1 + row) as usize * stride + rect.0 as usize * 4;
-      let span = rect.2.min(canvas_width.saturating_sub(rect.0)) as usize * 4;
-      canvas[target..target + span].copy_from_slice(&frame.data()[source..source + span]);
-    }
-    ImageBuffer::from_premultiplied_rgba(canvas, canvas_width, canvas_height)?
+    place_on_canvas(&frame, rect, (canvas_width, canvas_height))?
   };
 
   fit_to_target(buffer, target).ok()
+}
+
+/// Copies `frame` onto a cleared canvas at `rect`, clipping the part that
+/// falls outside.
+#[cfg(feature = "webp")]
+fn place_on_canvas(
+  frame: &ImageBuffer,
+  rect: (u32, u32, u32, u32),
+  (canvas_width, canvas_height): (u32, u32),
+) -> Option<ImageBuffer> {
+  let mut canvas = vec![0; canvas_width as usize * canvas_height as usize * 4];
+  let stride = canvas_width as usize * 4;
+  let span = rect.2.min(canvas_width.saturating_sub(rect.0)) as usize * 4;
+  let rows = if span == 0 {
+    0
+  } else {
+    rect.3.min(canvas_height.saturating_sub(rect.1))
+  };
+
+  for row in 0..rows {
+    let source = row as usize * rect.2 as usize * 4;
+    let target = (rect.1 + row) as usize * stride + rect.0 as usize * 4;
+
+    canvas[target..target + span].copy_from_slice(&frame.data()[source..source + span]);
+  }
+  ImageBuffer::from_premultiplied_rgba(canvas, canvas_width, canvas_height)
 }
 
 /// Wraps one frame's bitstream in a RIFF container so the still decoder can
@@ -483,6 +501,15 @@ pub(super) fn decode_webp_scaled(
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[cfg(feature = "webp")]
+  #[test]
+  fn frames_starting_outside_the_canvas_place_nothing() {
+    let frame = ImageBuffer::from_premultiplied_rgba(vec![255; 2 * 2 * 4], 2, 2).unwrap();
+    let placed = place_on_canvas(&frame, (6, 3, 2, 2), (4, 4)).unwrap();
+
+    assert!(placed.data().iter().all(|byte| *byte == 0));
+  }
   use crate::resources::{
     image_decoder::{decode_bitmap_scaled, decode_image},
     image_resampler::resample_premultiplied,

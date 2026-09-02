@@ -117,8 +117,12 @@ pub(crate) fn gif_frame_infos(bytes: &[u8]) -> ImageResult<Box<[FrameInfo]>> {
 /// unclamped pixel stride.
 #[cfg(feature = "gif")]
 fn clamped_span(rect: Rect<u32>, canvas_width: u32, canvas_height: u32) -> (u32, usize, usize) {
-  let rows = rect.bottom.min(canvas_height).saturating_sub(rect.top);
   let cols = rect.right.min(canvas_width).saturating_sub(rect.left) as usize;
+  let rows = if cols == 0 {
+    0
+  } else {
+    rect.bottom.min(canvas_height).saturating_sub(rect.top)
+  };
   let stride = (rect.right - rect.left) as usize;
   (rows, cols, stride)
 }
@@ -362,6 +366,22 @@ pub(crate) fn decode_gif_frames(
 mod tests {
   use super::*;
   use crate::resources::image_decoder::rgba_to_buffer;
+
+  #[cfg(feature = "gif")]
+  #[test]
+  fn frames_starting_outside_the_canvas_clear_nothing() {
+    let mut canvas = vec![255_u8; 4 * 4 * 4];
+    let rect = Rect {
+      left: 6,
+      right: 8,
+      top: 3,
+      bottom: 5,
+    };
+
+    clear_rect(&mut canvas, (4, 4), rect);
+    blit_frame(&mut canvas, (4, 4), rect, &[0; 2 * 2 * 4]);
+    assert!(canvas.iter().all(|byte| *byte == 255));
+  }
 
   #[cfg(feature = "gif")]
   fn rgba_patch(width: u16, height: u16, rgba: [u8; 4]) -> Vec<u8> {
