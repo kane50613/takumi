@@ -81,12 +81,31 @@ impl Annotation {
     page_height: f32,
     page_ref: Ref,
   ) -> KrillaResult<()> {
-    let (slot, appearance) = match &self.annotation_type {
-      AnnotationType::Widget(widget) => (
-        Some(chunk_container.field_slot(sc, &widget.name, root_ref)),
-        Some(widget.write_appearance(sc, chunk_container)),
-      ),
-      AnnotationType::Link(_) => (None, None),
+    let (owner, on_state) = match &self.annotation_type {
+      // A radio group is one field owning every button as a kid, so the
+      // buttons themselves carry no field name.
+      AnnotationType::Widget(widget) => match &widget.field {
+        FormField::Radio { export, on } => {
+          let (group, state) = chunk_container.radio_group(sc, widget, export, *on, root_ref);
+
+          (Some(WidgetOwner::Group(group)), state)
+        }
+        field => (
+          Some(WidgetOwner::Field(chunk_container.field_slot(
+            sc,
+            &widget.name,
+            root_ref,
+          ))),
+          field.on_state(),
+        ),
+      },
+      AnnotationType::Link(_) => (None, String::new()),
+    };
+    let appearance = match &self.annotation_type {
+      AnnotationType::Widget(widget) => {
+        Some(widget.write_appearance(sc, chunk_container, &on_state))
+      }
+      AnnotationType::Link(_) => None,
     };
     let chunk = &mut chunk_container.non_stream.annotations;
     let mut annotation = chunk
@@ -98,11 +117,12 @@ impl Annotation {
       &mut annotation,
       page_height,
       page_ref,
-      slot.as_ref(),
+      owner.as_ref(),
+      &on_state,
     )?;
 
     if let Some(appearance) = appearance {
-      annotation.appearance().normal().stream(appearance);
+      appearance.serialize(&mut annotation);
     }
     let always_print = match &self.annotation_type {
       AnnotationType::Link(link) => link.border.is_none(),
@@ -157,12 +177,13 @@ impl AnnotationType {
     annotation: &mut pdf_writer::writers::Annotation,
     page_height: f32,
     page_ref: Ref,
-    slot: Option<&FieldSlot>,
+    owner: Option<&WidgetOwner>,
+    on_state: &str,
   ) -> KrillaResult<()> {
-    match (self, slot) {
+    match (self, owner) {
       (AnnotationType::Link(link), _) => link.serialize_type(sc, annotation, page_height),
-      (AnnotationType::Widget(widget), Some(slot)) => {
-        widget.serialize_type(annotation, page_height, page_ref, slot);
+      (AnnotationType::Widget(widget), Some(owner)) => {
+        widget.serialize_type(annotation, page_height, page_ref, owner, on_state);
         Ok(())
       }
       (AnnotationType::Widget(_), None) => Ok(()),
@@ -351,10 +372,27 @@ pub enum FormField {
     /// `/MaxLen`.
     max_len: Option<i32>,
   },
+  /// A check box.
+  CheckBox {
+    /// Whether the box is ticked.
+    on: bool,
+    /// The `/AP` state name the ticked box carries, which is also what a
+    /// submitted form sends.
+    export: String,
+  },
+  /// One button of a radio group.
+  Radio {
+    /// Whether this button is the selected one.
+    on: bool,
+    /// What this button submits, written to the group's `/Opt`. The `/AP`
+    /// state name is the button's place in the group instead, so a value a
+    /// PDF name cannot carry still survives.
+    export: String,
+  },
 }
 
 impl FormField {
-  fn flags(&self, style: &WidgetStyle) -> i32 {
+  pub(crate) fn flags(&self, style: &WidgetStyle) -> i32 {
     let mut flags = 0;
 
     if style.read_only {
@@ -366,21 +404,68 @@ impl FormField {
     if style.no_export {
       flags |= 1 << 2;
     }
-    let Self::Text {
-      multiline,
-      password,
-      ..
-    } = self;
-
-    if *multiline {
-      flags |= 1 << 12;
-    }
-    if *password {
-      flags |= 1 << 13;
+    match self {
+      Self::Text {
+        multiline,
+        password,
+        ..
+      } => {
+        if *multiline {
+          flags |= 1 << 12;
+        }
+        if *password {
+          flags |= 1 << 13;
+        }
+      }
+      Self::Radio { .. } => flags |= (1 << 14) | (1 << 15),
+      Self::CheckBox { .. } => {}
     }
 
     flags
   }
+
+  /// The `/AP` state name the field files its "on" appearance under.
+  fn on_state(&self) -> String {
+    match self {
+      Self::CheckBox { export, .. } => export.clone(),
+      Self::Text { .. } | Self::Radio { .. } => String::new(),
+    }
+  }
+}
+
+/// The appearance streams of one widget: a single stream for a text field, or
+/// one per state for a check box and radio button.
+pub(crate) struct WidgetAppearance {
+  on: Ref,
+  off: Option<Ref>,
+  on_state: String,
+}
+
+impl WidgetAppearance {
+  fn serialize(&self, annotation: &mut pdf_writer::writers::Annotation) {
+    let mut appearance = annotation.appearance();
+
+    match self.off {
+      Some(off) => {
+        let mut states = appearance.normal().streams();
+
+        states.pair(Name(self.on_state.as_bytes()), self.on);
+        states.pair(Name(b"Off"), off);
+        states.finish();
+      }
+      None => appearance.normal().stream(self.on),
+    }
+    appearance.finish();
+  }
+}
+
+/// Who writes a widget's field entries.
+pub(crate) enum WidgetOwner {
+  /// The widget is the field itself, at this place in the hierarchy.
+  Field(FieldSlot),
+  /// A radio group holds the field entries; the button only says which state
+  /// it shows.
+  Group(Ref),
 }
 
 /// A form field widget annotation, merged with the field dictionary it names.
@@ -388,10 +473,10 @@ pub struct WidgetAnnotation {
   pub(crate) rect: Rect,
   /// The HTML name, which `/T` spells one period-delimited segment at a time.
   pub(crate) name: String,
-  field: FormField,
-  style: WidgetStyle,
+  pub(crate) field: FormField,
+  pub(crate) style: WidgetStyle,
   /// `/TU`, the name a reader announces the field by.
-  description: Option<String>,
+  pub(crate) description: Option<String>,
   /// `/Lang`, which PDF/UA requires on an annotation carrying text.
   lang: Option<String>,
 }
@@ -432,59 +517,83 @@ impl WidgetAnnotation {
     )
   }
 
-  /// The text the appearance draws. A password field shows one asterisk per
-  /// character, as the control it came from does.
-  fn drawn_value(&self) -> String {
-    let FormField::Text {
-      value, password, ..
-    } = &self.field;
-
-    match password {
-      true => "*".repeat(value.chars().count()),
-      false => value.clone(),
+  pub(crate) fn value_is_encodable(&self) -> bool {
+    match &self.field {
+      FormField::Text { value, password: false, .. } => value.chars().all(|character| {
+        matches!(character, '\t' | '\n' | '\r') || win_ansi_byte(character).is_some()
+      }),
+      _ => true,
     }
   }
 
-  pub(crate) fn value_is_encodable(&self) -> bool {
-    self.drawn_value().chars().all(|character| {
-      matches!(character, '\t' | '\n' | '\r') || win_ansi_byte(character).is_some()
-    })
-  }
-
-  /// Writes this widget's appearance stream, and the shared face it draws
-  /// with.
   fn write_appearance(
     &self,
     sc: &mut SerializeContext,
     chunk_container: &mut ChunkContainer,
-  ) -> Ref {
+    on_state: &str,
+  ) -> WidgetAppearance {
     let width = self.rect.right() - self.rect.left();
     let height = self.rect.bottom() - self.rect.top();
-    let FormField::Text { multiline, .. } = &self.field;
-    let content = text_appearance(
-      &self.drawn_value(),
-      *multiline,
-      width,
-      height,
-      self.style.font_size,
-      &self.style,
-    );
+    let bbox = PdfRect::new(0.0, 0.0, width, height);
+    let size = self.style.font_size;
+    let (content, off) = match &self.field {
+      FormField::Text {
+        value,
+        multiline,
+        password,
+        ..
+      } => {
+        // A password control shows one asterisk per character, so the field
+        // it becomes does too.
+        let drawn = match password {
+          true => "*".repeat(value.chars().count()),
+          false => value.clone(),
+        };
+
+        (
+          text_appearance(&drawn, *multiline, width, height, size, &self.style),
+          None,
+        )
+      }
+      FormField::CheckBox { .. } => (
+        check_mark(width, height, self.style.color),
+        Some(sc.new_ref()),
+      ),
+      FormField::Radio { .. } => (dot(width, height, self.style.color), Some(sc.new_ref())),
+    };
     // The font reference is taken before the stream opens, which borrows the
     // same chunk.
-    let font = chunk_container.form_font(sc);
-    let stream_ref = sc.new_ref();
+    let font = matches!(self.field, FormField::Text { .. }).then(|| chunk_container.form_font(sc));
+
+    if let Some(off) = off {
+      chunk_container
+        .non_stream
+        .annotations
+        .form_xobject(off, b"")
+        .bbox(bbox)
+        .finish();
+    }
+    let on = sc.new_ref();
     let mut stream = chunk_container
       .non_stream
       .annotations
-      .form_xobject(stream_ref, content.as_bytes());
+      .form_xobject(on, content.as_bytes());
 
-    stream.bbox(PdfRect::new(0.0, 0.0, width, height));
-    stream
-      .resources()
-      .fonts()
-      .pair(Name(FORM_FONT.as_bytes()), font);
+    stream.bbox(bbox);
+
+    if let Some(font) = font {
+      stream
+        .resources()
+        .fonts()
+        .pair(Name(FORM_FONT.as_bytes()), font);
+    }
     stream.finish();
-    stream_ref
+
+    WidgetAppearance {
+      on,
+      off,
+      on_state: on_state.to_string(),
+    }
   }
 
   fn serialize_type(
@@ -492,7 +601,8 @@ impl WidgetAnnotation {
     annotation: &mut pdf_writer::writers::Annotation,
     page_height: f32,
     page_ref: Ref,
-    slot: &FieldSlot,
+    owner: &WidgetOwner,
+    on_state: &str,
   ) {
     annotation.subtype(pdf_writer::types::AnnotationType::Widget);
     // A reader looking for a field's page should not have to scan every
@@ -513,31 +623,64 @@ impl WidgetAnnotation {
     if let Some(lang) = &self.lang {
       annotation.pair(Name(b"Lang"), TextStr(lang));
     }
-    if let Some(parent) = slot.parent {
-      annotation.pair(Name(b"Parent"), parent);
+
+    match owner {
+      WidgetOwner::Group(group) => {
+        annotation.pair(Name(b"Parent"), *group);
+      }
+      WidgetOwner::Field(slot) => {
+        if let Some(parent) = slot.parent {
+          annotation.pair(Name(b"Parent"), parent);
+        }
+        annotation.pair(Name(b"T"), TextStr(&slot.partial));
+
+        if let Some(mapping) = &slot.mapping {
+          annotation.pair(Name(b"TM"), TextStr(mapping));
+        }
+        annotation.pair(Name(b"Ff"), self.field.flags(&self.style));
+
+        if let Some(description) = &self.description {
+          annotation.pair(Name(b"TU"), TextStr(description));
+        }
+      }
     }
-    annotation.pair(Name(b"T"), TextStr(&slot.partial));
 
-    if let Some(mapping) = &slot.mapping {
-      annotation.pair(Name(b"TM"), TextStr(mapping));
-    }
-    annotation.pair(Name(b"Ff"), self.field.flags(&self.style));
+    match &self.field {
+      FormField::Text { value, max_len, .. } => {
+        annotation.pair(Name(b"FT"), Name(b"Tx"));
+        annotation.pair(Name(b"DA"), Str(self.default_appearance().as_bytes()));
+        annotation.pair(Name(b"Q"), self.style.align);
+        annotation.pair(Name(b"V"), TextStr(value));
+        // HTML's `value` is what the field resets to, which is also where it
+        // starts.
+        annotation.pair(Name(b"DV"), TextStr(value));
 
-    if let Some(description) = &self.description {
-      annotation.pair(Name(b"TU"), TextStr(description));
-    }
-    let FormField::Text { value, max_len, .. } = &self.field;
+        if let Some(max_len) = max_len {
+          annotation.pair(Name(b"MaxLen"), *max_len);
+        }
+      }
+      FormField::CheckBox { on, .. } => {
+        let state = match on {
+          true => Name(on_state.as_bytes()),
+          false => Name(b"Off"),
+        };
 
-    annotation.pair(Name(b"FT"), Name(b"Tx"));
-    annotation.pair(Name(b"DA"), Str(self.default_appearance().as_bytes()));
-    annotation.pair(Name(b"Q"), self.style.align);
-    annotation.pair(Name(b"V"), TextStr(value));
-    // HTML's `value` is what the field resets to, which is also where it
-    // starts.
-    annotation.pair(Name(b"DV"), TextStr(value));
-
-    if let Some(max_len) = max_len {
-      annotation.pair(Name(b"MaxLen"), *max_len);
+        annotation.pair(Name(b"FT"), Name(b"Btn"));
+        annotation.pair(Name(b"V"), state);
+        annotation.pair(Name(b"DV"), state);
+        annotation.pair(Name(b"AS"), state);
+      }
+      // The group owns `/FT` and `/V`; the button only says which state it
+      // shows.
+      FormField::Radio { on, .. } => {
+        annotation.pair(
+          Name(b"AS"),
+          match on {
+            true => Name(on_state.as_bytes()),
+            false => Name(b"Off"),
+          },
+        );
+      }
     }
   }
 }
@@ -709,4 +852,42 @@ fn win_ansi_byte(character: char) -> Option<u8> {
       .position(|&mapped| mapped == character)
       .map(|index| C1_BYTES[index]),
   }
+}
+
+/// The filled dot a radio button's on state draws.
+fn dot(width: f32, height: f32, color: [f32; 3]) -> String {
+  let [red, green, blue] = color;
+  let (x, y) = (width / 2.0, height / 2.0);
+  let radius = width.min(height) * 0.28;
+  // The handle length that turns four cubics into a circle.
+  let handle = radius * 0.5523;
+
+  format!(
+    "q {red} {green} {blue} rg {right} {y} m {right} {up} {ox} {top} {x} {top} c \
+     {mx} {top} {left} {up} {left} {y} c {left} {down} {mx} {bottom} {x} {bottom} c \
+     {ox} {bottom} {right} {down} {right} {y} c f Q",
+    right = x + radius,
+    left = x - radius,
+    top = y + radius,
+    bottom = y - radius,
+    up = y + handle,
+    down = y - handle,
+    ox = x + handle,
+    mx = x - handle,
+  )
+}
+
+/// The check mark a check box's on state draws.
+fn check_mark(width: f32, height: f32, color: [f32; 3]) -> String {
+  let [red, green, blue] = color;
+
+  format!(
+    "q {red} {green} {blue} RG 1.2 w {} {} m {} {} l {} {} l S Q",
+    width * 0.2,
+    height * 0.5,
+    width * 0.42,
+    height * 0.25,
+    width * 0.8,
+    height * 0.75,
+  )
 }
