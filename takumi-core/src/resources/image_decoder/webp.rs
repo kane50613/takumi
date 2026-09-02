@@ -1,6 +1,7 @@
 //! WebP stills and animations: libwebp on native targets, `image-webp` on
 //! wasm, and header-only sizing when the decoder is compiled out.
 
+#[cfg(feature = "webp")]
 use super::DecodeTarget;
 #[cfg(feature = "webp")]
 use std::{io::Cursor, sync::Arc};
