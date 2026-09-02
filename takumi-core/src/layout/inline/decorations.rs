@@ -13,7 +13,6 @@ use std::{collections::HashMap, sync::Arc};
 use super::runs::ShapedRun;
 
 /// A text decoration line (underline/overline/line-through) as a fillable rect.
-/// `transform` maps the `(0, 0, width, height)` rect into border-box space.
 pub struct DecorationRect {
   /// Rect width in pixels (run advance, snapped like the raster path).
   pub width: f32,
@@ -25,21 +24,11 @@ pub struct DecorationRect {
   pub transform: [f32; 6],
   /// Whether the line paints above glyphs (line-through) vs below (under/overline).
   pub over: bool,
-  /// Which decoration this is, so a backend can single one out. The raster
-  /// backend refines the underline with skip-ink and paints the rest as they
-  /// come.
+  /// Which decoration this is, so a backend can single one out.
   pub line: TextDecorationLines,
 }
 
-/// The active decoration lines for a glyph run, in border-box space. Mirrors the
-/// raster geometry in `draw_decoration` (skip-ink is a raster-only refinement and
-/// omitted here). `transform` is the run's border-box transform
-/// ([`PositionedInlineRun::transform`] with an identity base).
-/// Each glyph's outline, placed at `origin` plus the glyph's own position.
-///
-/// `origin` is whatever puts the glyphs in the same space as the caller's band:
-/// the decoration's coordinates on one axis need not be the layout's on the
-/// other, and only the difference between the two matters.
+/// The active decoration lines for a glyph run, in border-box space.
 pub fn glyph_outlines<'g>(
   glyph_run: &ShapedRun,
   resolved_glyphs: &'g HashMap<u32, Arc<ResolvedGlyph>>,
@@ -65,8 +54,7 @@ pub fn glyph_outlines<'g>(
     .collect()
 }
 
-/// The rectangles a run's `text-decoration` paints. An underline arrives split
-/// where the glyphs cross it, when `text-decoration-skip-ink` asks for that.
+/// The rectangles a run's `text-decoration` paints.
 pub fn run_decorations(
   glyph_run: &ShapedRun,
   resolved_glyphs: &HashMap<u32, Arc<ResolvedGlyph>>,

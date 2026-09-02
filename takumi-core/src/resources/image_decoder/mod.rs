@@ -1,5 +1,5 @@
-//! Bitmap decoding behind one format sniff: still images, animation
-//! timelines, and scaled decodes that never hold a full-size frame.
+//! Bitmap decoding behind one format sniff: still images, animation timelines, and scaled decodes
+//! that never hold a full-size frame.
 
 use std::io::{Cursor, Error as IoError, ErrorKind};
 
@@ -37,12 +37,12 @@ use self::{
   webp::{decode_webp, decode_webp_scaled, webp_dimensions},
 };
 
-/// Maximum decoded image edge length; also the width/height limit fed to the
-/// `image` crate decoders.
+/// Maximum decoded image edge length; also the width/height limit fed to the `image` crate
+/// decoders.
 pub(super) const MAX_IMAGE_DIMENSION: u32 = 8192;
 
-/// Decoded images above this pixel count are rejected (RGBA cost = 4x).
-/// 8192 x 8192 — far above any sane OG-image asset, far below OOM territory.
+/// Decoded images above this pixel count are rejected (RGBA cost = 4x). 8192 x 8192 — far above any
+/// sane OG-image asset, far below OOM territory.
 const MAX_IMAGE_PIXELS: u64 = MAX_IMAGE_DIMENSION as u64 * MAX_IMAGE_DIMENSION as u64;
 
 /// What a container says about one frame, read without decoding pixels.
@@ -121,8 +121,7 @@ pub(crate) fn required_previous_frame(
 /// Total pixels across all frames of an animation (frames are canvas-sized).
 pub(super) const MAX_ANIMATION_TOTAL_PIXELS: u64 = 4 * MAX_IMAGE_PIXELS;
 
-/// Frames past this point are dropped from a timeline. The pixel budget alone
-/// leaves a tiny canvas free to carry an unbounded frame list.
+/// Frames past this point are dropped from a timeline.
 pub(crate) const MAX_ANIMATION_FRAMES: usize = 1024;
 
 /// Rejects decoded images whose pixel count exceeds [`MAX_IMAGE_PIXELS`].
@@ -223,8 +222,7 @@ pub(crate) fn decoder_compiled_out(bytes: &[u8]) -> bool {
   }
 }
 
-/// Dimensions from the format header, for a format whose decoder is compiled
-/// out.
+/// Dimensions from the format header, for a format whose decoder is compiled out.
 #[cfg(not(all(feature = "jpeg", feature = "webp")))]
 pub(super) fn header_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
   let size = imagesize::blob_size(bytes).map_err(|error| {
@@ -242,8 +240,7 @@ pub(super) fn header_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
   Ok((width, height))
 }
 
-/// Bitmap dimensions from the format header; decodes no pixels. `None` for
-/// unsupported or GIF bytes (GIFs carry their own lazy source).
+/// Bitmap dimensions from the format header; decodes no pixels.
 pub(crate) fn bitmap_dimensions(bytes: &[u8]) -> Option<ImageResult<(u32, u32)>> {
   let dimensions = match detect_image_format(bytes)? {
     DetectedImageFormat::Png => PngDecoder::new(Cursor::new(bytes)).map(|d| d.dimensions()),
@@ -255,8 +252,6 @@ pub(crate) fn bitmap_dimensions(bytes: &[u8]) -> Option<ImageResult<(u32, u32)>>
 }
 
 /// Decodes bitmap bytes scaled to cover `width` x `height`, never upscaling.
-/// Non-interlaced PNGs stream row-by-row through the resampler without a
-/// full-size buffer; everything else decodes fully and resizes.
 pub(crate) fn decode_bitmap_scaled(
   bytes: &[u8],
   width: u32,

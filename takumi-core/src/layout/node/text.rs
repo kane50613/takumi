@@ -17,9 +17,7 @@ use crate::{
   text_processing::MaxHeight,
 };
 
-/// Hashes every input the measured size depends on beyond the shaping inputs:
-/// the raw text, the width/height constraints, and the break-time style knobs
-/// (`hash_shaping_inputs` covers only what shaping reads).
+/// Hashes the inputs that affect measured size beyond shaping.
 fn measure_cache_key(
   text: &TextData,
   context: &RenderContext,

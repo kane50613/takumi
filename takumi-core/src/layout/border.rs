@@ -22,9 +22,7 @@ pub enum BorderSide {
   Left,
 }
 
-/// One strip of a border side: where it sits, how thick it is, and what colour
-/// fills it. `solid` and the 3D bevels paint one; `double` and `groove`/`ridge`
-/// paint two.
+/// One strip of a border side: where it sits, how thick it is, and what colour fills it.
 #[derive(Debug, Clone, Copy)]
 pub struct SideBand {
   /// How far in from the border box the strip starts, per side.
@@ -156,11 +154,7 @@ impl BorderProperties {
     style.is_rendered() && width > 0.0
   }
 
-  /// The sides that put ink on the page, clockwise from the top. A side is left
-  /// out when it has no width, when its style draws nothing, or when its colour
-  /// is fully transparent. Every backend that walks the sides one by one walks
-  /// this list, so an all-transparent border yields nothing and the caller can
-  /// skip the clip and the marked-content region it would otherwise open.
+  /// The sides that put ink on the page, clockwise from the top.
   pub fn painted_sides(&self) -> impl Iterator<Item = PaintedSide> {
     [
       (
@@ -375,9 +369,8 @@ impl BorderProperties {
     path.close();
   }
 
-  /// Appends the rectangle one side covers once the wider of the two sides at
-  /// each corner takes the whole intersection. Ties go to the horizontal side,
-  /// so a uniform grid still meets at every corner.
+  /// Appends the rectangle one side covers once the wider of the two sides at each corner takes the
+  /// whole intersection.
   fn append_squared_side_polygon_commands_at(
     &self,
     side: BorderSide,
@@ -607,40 +600,31 @@ impl BorderProperties {
   }
 
   /// Expand or shrink corner radii by the specified amounts.
-  ///
-  /// Each corner's x-radius is adjusted by the corresponding horizontal side (left or right),
-  /// and each corner's y-radius is adjusted by the corresponding vertical side (top or bottom).
-  /// Negative values in `amount` will shrink the radii, and the result is clamped to 0.0.
   pub fn expand_by(&mut self, amount: Rect<f32>) {
     if amount == Rect::ZERO {
       return;
     }
 
-    // top-left
     self.radius.0[0].x = (self.radius.0[0].x + amount.left).max(0.0);
     self.radius.0[0].y = (self.radius.0[0].y + amount.top).max(0.0);
 
-    // top-right
     self.radius.0[1].x = (self.radius.0[1].x + amount.right).max(0.0);
     self.radius.0[1].y = (self.radius.0[1].y + amount.top).max(0.0);
 
-    // bottom-right
     self.radius.0[2].x = (self.radius.0[2].x + amount.right).max(0.0);
     self.radius.0[2].y = (self.radius.0[2].y + amount.bottom).max(0.0);
 
-    // bottom-left
     self.radius.0[3].x = (self.radius.0[3].x + amount.left).max(0.0);
     self.radius.0[3].y = (self.radius.0[3].y + amount.bottom).max(0.0);
   }
 
   /// Shrink radii by the border width to get inner radius path.
-  /// Each side's border width is applied independently to the corresponding radius components.
   pub fn inset_by_border_width(&mut self) {
     self.expand_by(self.width.map(|size| -size))
   }
 
-  /// Outset `box-shadow` shape: a copy with corner radii expanded by `spread` on every side,
-  /// paired with the spread-expanded box size. Shared by the raster and svg backends.
+  /// Outset `box-shadow` shape: a copy with corner radii expanded by `spread` on every side, paired
+  /// with the spread-expanded box size.
   pub fn outset_shadow_box(&self, size: Size<f32>, spread: f32) -> (Self, Size<f32>) {
     let mut expanded = *self;
     expanded.expand_by(Rect {
@@ -710,20 +694,15 @@ impl BorderProperties {
 
     path.reserve_exact(BorderProperties::PATH_COMMANDS_AMOUNT);
 
-    // The magic number for the cubic bezier curve
     const KAPPA: f32 = 4.0 / 3.0 * (SQRT_2 - 1.0);
 
     let radii = self.scaled_corner_radii(border_box);
     let [top_left, top_right, bottom_right, bottom_left] = radii.0;
 
-    // --- Top Edge ---
-    // Start after Top-Left corner
     path.move_to((offset.x + top_left.x, offset.y));
 
-    // Line to start of Top-Right corner
     path.line_to((offset.x + border_box.width - top_right.x, offset.y));
 
-    // --- Top-Right Corner ---
     if top_right.x > 0.0 && top_right.y > 0.0 {
       let SpacePair { x: rx, y: ry } = top_right;
 
@@ -749,13 +728,11 @@ impl BorderProperties {
       path.line_to((offset.x + border_box.width, offset.y));
     }
 
-    // --- Right Edge ---
     path.line_to((
       offset.x + border_box.width,
       offset.y + border_box.height - bottom_right.y,
     ));
 
-    // --- Bottom-Right Corner ---
     if bottom_right.x > 0.0 && bottom_right.y > 0.0 {
       let SpacePair { x: rx, y: ry } = bottom_right;
 
@@ -790,10 +767,8 @@ impl BorderProperties {
       path.line_to((offset.x + border_box.width, offset.y + border_box.height));
     }
 
-    // --- Bottom Edge ---
     path.line_to((offset.x + bottom_left.x, offset.y + border_box.height));
 
-    // --- Bottom-Left Corner ---
     if bottom_left.x > 0.0 && bottom_left.y > 0.0 {
       let SpacePair { x: rx, y: ry } = bottom_left;
 
@@ -819,10 +794,8 @@ impl BorderProperties {
       path.line_to((offset.x, offset.y + border_box.height));
     }
 
-    // --- Left Edge ---
     path.line_to((offset.x, offset.y + top_left.y));
 
-    // --- Top-Left Corner ---
     if top_left.x > 0.0 && top_left.y > 0.0 {
       let SpacePair { x: rx, y: ry } = top_left;
 
@@ -899,13 +872,6 @@ impl BorderProperties {
 }
 
 /// The corner point where a side's clip polygon meets the inner contour.
-///
-/// Convex corners miter along the line from the outer corner through the inner
-/// rect corner to the inner curve's chord. Concave contours reach past that
-/// chord to the corner's center point, so the polygon clips there instead —
-/// otherwise the notch/scoop flank would fall outside every side's clip.
-/// `direction_x`/`direction_y` are `±1.0` pointing from the inner rect corner
-/// toward the box center.
 fn side_clip_inner_corner(
   shape: Superellipse,
   outer: Point<f32>,
@@ -957,8 +923,8 @@ fn line_intersection(
   })
 }
 
-/// Appends a non-`round` corner contour, mapping normalized contour points
-/// through `anchor + p[0] * u + p[1] * v` into pixel space.
+/// Appends a non-`round` corner contour, mapping normalized contour points through `anchor + p[0] *
+/// u + p[1] * v` into pixel space.
 fn append_shaped_corner(
   path: &mut Vec<Command>,
   shape: Superellipse,
@@ -1034,16 +1000,7 @@ const DASHED_GAP_RATIO_THICK: f32 = 1.0;
 const DASHED_GAP_RATIO_THIN: f32 = 2.0;
 const DOTTED_ENDPOINT_EPSILON: f32 = 1.0e-2;
 
-/// The dash pattern for a stroked `dashed`/`dotted` border or outline side,
-/// shared by both backends: `([dash, gap], round_cap)`, or `None` for a solid
-/// stroke (non-dash style, or a segment too short to dash). `length` is the side
-/// length (or the ring perimeter when `closed`). Dash/gap adjust by width and
-/// length so the pattern fits the side evenly.
-/// How a border paints as a whole, before any per-side work.
-///
-/// A uniform dashed, dotted, or double border cannot be filled side by side:
-/// the pattern has to run around the whole ring, so it strokes a centerline
-/// instead. Every backend makes this call the same way.
+/// A dash interval and round-cap flag for a stroked border or outline.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum BorderPaint {
   /// Stroke the centerline with the dash pattern for `style`.
@@ -1072,7 +1029,7 @@ pub(crate) enum BorderPaint {
 }
 
 impl BorderProperties {
-  /// Decides how the border paints. See [`BorderPaint`].
+  /// Decides how the border paints.
   pub(crate) fn paint(&self) -> BorderPaint {
     let Some(color) = self.has_uniform_visible_color() else {
       return BorderPaint::Sides;
@@ -1115,11 +1072,7 @@ impl BorderProperties {
 }
 
 impl BorderStyle {
-  /// The dash pattern for a stroked `dashed`/`dotted` border or outline side,
-  /// shared by every backend: `([dash, gap], round_cap)`, or `None` for a solid
-  /// stroke (non-dash style, or a segment too short to dash). `length` is the
-  /// side length (or the ring perimeter when `closed`). Dash/gap adjust by
-  /// width and length so the pattern fits the side evenly.
+  /// Returns a dash interval and round-cap flag for this style.
   pub fn dash_pattern(self, width: f32, length: f32, closed: bool) -> Option<([f32; 2], bool)> {
     if !matches!(self, BorderStyle::Dashed | BorderStyle::Dotted) || width <= 0.0 || length <= 0.0 {
       return None;
@@ -1217,10 +1170,6 @@ impl PaintedSide {
 
 impl BorderProperties {
   /// The strips a side fills, outermost first.
-  ///
-  /// A dashed or dotted side has none: it strokes a centerline instead. The 3D
-  /// bevels shade their strips, which is the only thing that separates them
-  /// from a plain `solid` side.
   pub fn side_bands(&self, side: PaintedSide) -> SmallVec<[SideBand; 2]> {
     let mut bands = SmallVec::new();
     let color = side.color;

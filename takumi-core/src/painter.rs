@@ -1,9 +1,4 @@
 //! The seam between deciding what to paint and painting it.
-//!
-//! Everything above this seam is the same for every backend: which box a
-//! declaration paints into, what shape that box is, and what colour goes in it.
-//! Below it, a rasterizer writes pixels, an SVG writer emits elements, and a
-//! PDF writer emits operators. Only the second half belongs to a backend.
 
 use crate::{
   context::RenderContext,
@@ -18,15 +13,10 @@ use crate::{
 };
 
 /// A closed shape to fill, in the coordinate space of the box that owns it.
-///
-/// A backend that can express a plain rectangle more cheaply than a path gets
-/// told which it is, the way `GraphicsContext` splits `DrawRect` from
-/// `DrawPath`.
 pub enum FillShape {
   /// An axis-aligned rectangle at the box origin.
   Rect(Size<f32>),
-  /// A rectangle with the corners `border` gives it. A rasterizer composites
-  /// one directly; a vector backend turns it into a path.
+  /// A rectangle with the corners `border` gives it.
   RoundedRect {
     /// The corner geometry.
     border: BorderProperties,
@@ -72,16 +62,12 @@ impl FillShape {
   }
 }
 
-/// What a backend has to be able to do for the shared painting code to drive
-/// it. A method takes coordinates in the page's space, so the caller never has
-/// to know how a backend tracks its own transform.
+/// What a backend has to be able to do for the shared painting code to drive it.
 pub trait PaintDevice {
   /// Fills `shape` under `transform`, with a single colour.
   fn fill_shape(&mut self, shape: &FillShape, color: Color, transform: Affine);
 
-  /// Strokes `shape` under `transform`. A rasterizer that has no stroker can
-  /// leave this alone; nothing shared calls it unless the backend opted in
-  /// through [`BoxPainter::paint_border`].
+  /// Strokes `shape` under `transform`.
   fn stroke_shape(&mut self, _shape: &FillShape, _stroke: &StrokeStyle, _transform: Affine) {}
 }
 
@@ -107,10 +93,6 @@ pub struct BoxShadows {
 }
 
 /// Everything a backend needs to paint one box, decided once.
-///
-/// The decisions live here so a backend never repeats them: which shape a
-/// declaration paints into, whether it paints at all, and with what. A backend
-/// supplies a [`PaintDevice`] and gets pixels, elements, or operators out.
 pub struct BoxPainter<'c> {
   context: &'c RenderContext,
   layout: ComputedLayout,
@@ -127,8 +109,8 @@ impl<'c> BoxPainter<'c> {
     }
   }
 
-  /// Prepares a fragment of the box that paints its own decorations, which is
-  /// what `box-decoration-break: clone` asks for.
+  /// Prepares a fragment of the box that paints its own decorations, which is what
+  /// `box-decoration-break: clone` asks for.
   pub fn fragment(context: &'c RenderContext, layout: ComputedLayout, size: Size<f32>) -> Self {
     Self::new(context, ComputedLayout { size, ..layout })
   }
@@ -138,9 +120,7 @@ impl<'c> BoxPainter<'c> {
     &self.border
   }
 
-  /// The box a background paints into, per `background-clip`. `None` when the
-  /// declaration paints no box at all, which is what `text` does: the fill
-  /// moves onto the glyphs.
+  /// The box a background paints into, per `background-clip`.
   pub fn background_clip_shape(&self) -> Option<FillShape> {
     background_clip_shape(
       self.context.style.background_clip,
@@ -149,8 +129,7 @@ impl<'c> BoxPainter<'c> {
     )
   }
 
-  /// Paints `background-color`. Does nothing when the colour is transparent or
-  /// `background-clip` moves the fill onto the glyphs.
+  /// Paints `background-color`.
   pub fn background_color<D: PaintDevice>(&self, origin: Point<f32>, device: &mut D) {
     let color = self
       .context
@@ -168,9 +147,8 @@ impl<'c> BoxPainter<'c> {
     device.fill_shape(&shape, color, Affine::translation(origin.x, origin.y));
   }
 
-  /// The box's `box-shadow` layers, resolved and split into the ones that fall
-  /// inside the box and the ones outside it. A fully transparent shadow is
-  /// dropped: it paints nothing anywhere.
+  /// The box's `box-shadow` layers, resolved and split into the ones that fall inside the box and
+  /// the ones outside it.
   pub fn shadows(&self) -> BoxShadows {
     let Some(shadows) = self.context.style.box_shadow.as_deref() else {
       return BoxShadows::default();
@@ -253,12 +231,8 @@ fn background_clip_shape(
   }
 }
 
-/// Paints the decoration lines of one glyph run: `text-decoration` under, over,
-/// and through the text. `over` selects the lines that paint above the glyphs.
-///
-/// Skip-ink is not applied here. It needs the glyphs rasterized, so the raster
-/// backend refines the underline itself, and it paints the rest with subpixel
-/// coverage this rect fill does not reproduce.
+/// Paints the decoration lines of one glyph run: `text-decoration` under, over, and through the
+/// text.
 pub fn paint_run_decorations<D: PaintDevice>(
   decorations: &[DecorationRect],
   over: bool,
@@ -293,12 +267,8 @@ pub fn paint_run_decorations<D: PaintDevice>(
   }
 }
 
-/// Paints a border ring, unless it needs per-side work: a uniform dashed or
-/// dotted border strokes the centerline so the pattern runs round the whole
-/// ring, and a double border fills two rings. Returns whether it painted;
-/// `false` means the caller has to walk the sides itself.
-///
-/// Also paints an `outline`, which is a border ring grown past the box.
+/// Paints a border ring, unless it needs per-side work: a uniform dashed or dotted border strokes
+/// the centerline so the pattern runs round the whole ring, and a double border fills two rings.
 pub fn paint_border<D: PaintDevice>(
   border: &BorderProperties,
   size: Size<f32>,

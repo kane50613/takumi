@@ -14,9 +14,8 @@ use super::{
 };
 use crate::{BackgroundTile, blend::*, style::BlendMode};
 
-/// Overlays a gradient-shaped [`BackgroundTile`] at a plain translation,
-/// reporting whether the tile was one. Non-gradient tiles are left for the
-/// caller's generic overlay path.
+/// Overlays a gradient-shaped [`BackgroundTile`] at a plain translation, reporting whether the tile
+/// was one.
 pub(crate) fn try_overlay_gradient_tile(
   pixmap: &mut PixmapMut<'_>,
   tile: &BackgroundTile,

@@ -1,5 +1,5 @@
-//! GIF sizing and timelines, composited the way browsers and the `image`
-//! crate do; stubs when the decoder is compiled out.
+//! GIF sizing and timelines, composited the way browsers and the `image` crate do; stubs when the
+//! decoder is compiled out.
 
 use std::sync::Arc;
 #[cfg(feature = "gif")]
@@ -55,9 +55,8 @@ pub(crate) fn gif_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> {
   Ok((decoder.width() as u32, decoder.height() as u32))
 }
 
-/// Per-frame delays in milliseconds, in stream order (first frame included),
-/// without decoding any pixels. Uses the same `delay * 10` (min 1ms) rule as
-/// [`decode_gif_frames`], so the durations line up with decoded frames.
+/// Per-frame delays in milliseconds, in stream order (first frame included), without decoding any
+/// pixels.
 #[cfg(feature = "gif")]
 pub(crate) fn gif_frame_infos(bytes: &[u8]) -> ImageResult<Box<[FrameInfo]>> {
   let mut options = DecodeOptions::new();
@@ -113,8 +112,8 @@ pub(crate) fn gif_frame_infos(bytes: &[u8]) -> ImageResult<Box<[FrameInfo]>> {
   Ok(frames.into())
 }
 
-/// Rows and columns of the rect that fall inside the canvas, plus the rect's
-/// unclamped pixel stride.
+/// Rows and columns of the rect that fall inside the canvas, plus the rect's unclamped pixel
+/// stride.
 #[cfg(feature = "gif")]
 fn clamped_span(rect: Rect<u32>, canvas_width: u32, canvas_height: u32) -> (u32, usize, usize) {
   let cols = rect.right.min(canvas_width).saturating_sub(rect.left) as usize;
@@ -127,8 +126,8 @@ fn clamped_span(rect: Rect<u32>, canvas_width: u32, canvas_height: u32) -> (u32,
   (rows, cols, stride)
 }
 
-/// Overwrites the canvas rect with the frame's non-transparent pixels
-/// (straight-alpha RGBA; GIF alpha is 0 or 255).
+/// Overwrites the canvas rect with the frame's non-transparent pixels (straight-alpha RGBA; GIF
+/// alpha is 0 or 255).
 #[cfg(feature = "gif")]
 fn blit_frame(canvas: &mut [u8], canvas_size: (u32, u32), rect: Rect<u32>, pixels: &[u8]) {
   let (rows, cols, stride) = clamped_span(rect, canvas_size.0, canvas_size.1);
@@ -154,18 +153,8 @@ fn clear_rect(canvas: &mut [u8], canvas_size: (u32, u32), rect: Rect<u32>) {
   }
 }
 
-/// Decodes GIF frames in stream order, passing each frame past the first
-/// `skip` to `push`, up to `limit` pushed frames. Returns whether the stream
-/// ended. A mid-stream decode error or a blown [`MAX_ANIMATION_TOTAL_PIXELS`] budget
-/// truncates the timeline (reported as ended); only a stream with no decodable
-/// first frame errors.
-///
-/// With `target` set (and smaller than the canvas), pushed frames are resampled
-/// to that size; compositing always happens at canvas size.
-///
-/// Compositing matches the `image` crate (and browsers): frames blend over a
-/// transparent canvas, `Keep` persists the composited result, `Background`
-/// clears the frame rect, `Previous` restores the pre-frame canvas.
+/// Decodes GIF frames in stream order, passing each frame past the first `skip` to `push`, up to
+/// `limit` pushed frames.
 #[cfg(feature = "gif")]
 pub(crate) fn decode_gif_frames(
   bytes: &[u8],
@@ -288,9 +277,8 @@ pub(crate) fn decode_gif_frames(
   Ok(true)
 }
 
-/// Decodes frame `index` on its own when the GIF's frame headers show it covers
-/// the whole canvas opaquely. Frames before it are advanced past by header,
-/// never decoded.
+/// Decodes frame `index` on its own when the GIF's frame headers show it covers the whole canvas
+/// opaquely.
 #[cfg(feature = "gif")]
 pub(crate) fn decode_gif_frame_alone(
   bytes: &[u8],

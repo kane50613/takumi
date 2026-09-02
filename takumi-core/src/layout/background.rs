@@ -1,9 +1,4 @@
 //! Resolving where a background layer's tiles land.
-//!
-//! `background-image`, `-position`, `-size`, `-repeat`, and `-origin` together
-//! decide how many tiles a layer paints and where each one goes. That is the
-//! same arithmetic for every backend; only the painting of a tile differs, so
-//! this module stops at the geometry and leaves the paint to the caller.
 
 use smallvec::{SmallVec, smallvec};
 
@@ -143,11 +138,8 @@ impl AxisArea {
   }
 }
 
-/// The size of a `background-size` axis left `auto`, taken from the image's
-/// ratio once the other axis is settled.
-///
-/// `round` rescales the axis it applies to, and the `auto` one has to follow,
-/// or the tile stops matching the image's shape.
+/// The size of a `background-size` axis left `auto`, taken from the image's ratio once the other
+/// axis is settled.
 pub fn auto_axis_from_intrinsic(
   auto_axis: AutoBackgroundAxis,
   intrinsic_ratio: Option<f32>,
@@ -238,8 +230,7 @@ pub struct OriginBox {
   pub size: Size<f32>,
 }
 
-/// The positioning area `background-origin` selects, and its offset inside
-/// the border box.
+/// The positioning area `background-origin` selects, and its offset inside the border box.
 pub fn background_origin_box(origin: BackgroundOrigin, layout: Layout) -> OriginBox {
   let border = layout.border;
   let padding = layout.padding;
@@ -267,8 +258,7 @@ pub fn background_origin_box(origin: BackgroundOrigin, layout: Layout) -> Origin
 }
 
 impl BackgroundLayerInput<'_> {
-  /// Resolves where one layer's tiles land. `None` when the layer paints
-  /// nothing, because a tile collapsed to zero on either axis.
+  /// Resolves where one layer's tiles land.
   pub fn resolve(
     &self,
     image: &BackgroundImage,
@@ -384,9 +374,7 @@ impl BackgroundLayerInput<'_> {
 }
 
 impl BackgroundLayersInput<'_> {
-  /// Resolves every layer in painting order: the returned entries go bottom
-  /// layer first, which is the reverse of `images`, since CSS puts the first
-  /// `background-image` on top. Each entry carries the index it came from.
+  /// Resolves every layer in bottom-to-top paint order.
   pub fn resolve(&self) -> Vec<(usize, BackgroundLayerGeometry)> {
     let last_position = self.positions.last().copied().unwrap_or_default();
     let last_size = self.sizes.last().copied().unwrap_or_default();

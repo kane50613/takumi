@@ -12,9 +12,6 @@ pub(crate) struct PreparedImage {
 }
 
 /// Process an image according to the specified object-fit style.
-///
-/// This function handles resizing, cropping, and positioning of images
-/// based on the ObjectFit property, returning the processed image and offset.
 pub(crate) fn process_image_for_object_fit(
   image: &ImageSource,
   context: &RenderContext,
@@ -250,9 +247,6 @@ pub(crate) fn process_image_for_object_fit(
 }
 
 /// Draws an image on the canvas with the specified style and layout.
-///
-/// The image will be resized and positioned according to the object_fit style property.
-/// Border radius will be applied if specified in the style.
 pub(crate) fn draw_image(
   image: &ImageSource,
   context: &RenderContext,

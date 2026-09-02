@@ -16,9 +16,6 @@ use crate::{
 };
 
 /// One flattened SVG drawing instruction, in SVG canvas coordinates.
-///
-/// `Push*` ops open a layer that applies to every following op until the
-/// matching [`SvgOp::Pop`].
 #[derive(Debug, Clone)]
 pub enum SvgOp {
   /// Applies an affine transform `(sx, ky, kx, sy, tx, ty)` to nested ops.
@@ -34,8 +31,7 @@ pub enum SvgOp {
   PushBlend(BlendMode),
   /// Applies uniform opacity to nested ops as one isolated group.
   PushOpacity(f32),
-  /// Masks nested ops with the rendering of `ops` (an alpha or luminance
-  /// soft mask).
+  /// Masks nested ops with the rendering of `ops` (an alpha or luminance soft mask).
   PushMask {
     /// Mask content, flattened recursively.
     ops: Vec<SvgOp>,
@@ -44,8 +40,7 @@ pub enum SvgOp {
   },
   /// Closes the innermost open `Push*` layer.
   Pop,
-  /// Fills and/or strokes a path. Paint order follows field order: when both
-  /// are set the fill paints first.
+  /// Fills and/or strokes a path.
   Draw {
     /// Path outline in the current coordinate space.
     path: Vec<PathCommand>,
@@ -54,8 +49,8 @@ pub enum SvgOp {
     /// Stroke paint, if any.
     stroke: Option<SvgStrokeStyle>,
   },
-  /// Draws a pre-rasterized RGBA8 (straight alpha) region: the fallback for
-  /// subtrees vector ops cannot express (filters, embedded bitmaps).
+  /// Draws a pre-rasterized RGBA8 (straight alpha) region: the fallback for subtrees vector ops
+  /// cannot express (filters, embedded bitmaps).
   Raster {
     /// Un-premultiplied RGBA8 pixels.
     rgba: Vec<u8>,
@@ -92,7 +87,7 @@ pub struct SvgStrokeStyle {
   pub miter_limit: f32,
   /// Line cap.
   pub cap: SvgLineCap,
-  /// Line join. Miter-clip degrades to miter.
+  /// Line join.
   pub join: SvgLineJoin,
   /// Dash pattern as `(array, offset)`.
   pub dash: Option<(Vec<f32>, f32)>,
@@ -145,8 +140,7 @@ pub enum SvgPaint {
     /// Shared gradient parameters.
     gradient: SvgGradient,
   },
-  /// Tiling pattern: `ops` draw one `width` x `height` tile placed by
-  /// `transform`.
+  /// Tiling pattern: `ops` draw one `width` x `height` tile placed by `transform`.
   Pattern {
     /// Tile content, flattened recursively.
     ops: Vec<SvgOp>,
@@ -193,9 +187,6 @@ pub struct SvgGradientStop {
 }
 
 /// Flattens `tree` into vector ops in SVG canvas coordinates.
-///
-/// `raster_scale` is the device-pixels-per-user-unit factor used when a
-/// subtree has to fall back to rasterization.
 pub(crate) fn flatten(tree: &Tree, raster_scale: f32) -> Vec<SvgOp> {
   Flattener::new(raster_scale).group(tree.root())
 }
@@ -214,8 +205,7 @@ impl Flattener {
     }
   }
 
-  /// The ops `fill` writes into a fresh list at this scale: a mask, a clip
-  /// mask or a pattern tile.
+  /// The ops `fill` writes into a fresh list at this scale: a mask, a clip mask or a pattern tile.
   fn nested(&self, fill: impl FnOnce(&mut Self)) -> Vec<SvgOp> {
     let mut nested = Self::new(self.raster_scale);
 
@@ -604,8 +594,8 @@ impl Flattener {
   }
 }
 
-/// The group a node's children live in: the node itself for groups, the
-/// flattened outlines for text.
+/// The group a node's children live in: the node itself for groups, the flattened outlines for
+/// text.
 fn subgroup(node: &Node) -> Option<&Group> {
   match node {
     Node::Group(group) => Some(group),

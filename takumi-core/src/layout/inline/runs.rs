@@ -51,11 +51,7 @@ pub struct RunMetrics {
   pub strikethrough_size: f32,
 }
 
-/// Per-glyph cluster text ranges for a [`GlyphRun`], aligned to its positioned
-/// glyphs. A `GlyphRun` is a style-split window into its underlying run, so the
-/// full visual-order cluster expansion is matched against the positioned glyph
-/// ids to find the window offset; the common single-style case starts at zero.
-/// Returns an empty vec when no window matches (alignment unknown).
+/// Per-glyph cluster text ranges for a [`GlyphRun`], aligned to its positioned glyphs.
 fn glyph_cluster_ranges(
   glyph_run: &GlyphRun<'_, InlineBrush>,
   positioned: &[PositionedGlyph],
@@ -196,8 +192,7 @@ impl ShapedRun {
   }
 }
 
-/// One glyph run positioned on its line, carrying everything both backends need
-/// to paint it.
+/// One glyph run positioned on its line, carrying everything both backends need to paint it.
 #[non_exhaustive]
 pub struct PositionedInlineRun {
   /// The shaped glyph run (metrics, brush, positioned glyphs, font).
@@ -213,8 +208,8 @@ pub struct PositionedInlineRun {
 }
 
 impl PositionedInlineRun {
-  /// The run's affine transform composed onto `base` (the element transform for
-  /// raster, identity for vector emission).
+  /// The run's affine transform composed onto `base` (the element transform for raster, identity
+  /// for vector emission).
   pub fn transform(&self, base: Affine) -> Affine {
     self.line_scale.transform(base, self.static_inline_prefix)
   }
@@ -228,9 +223,7 @@ impl PositionedInlineRun {
     }
   }
 
-  /// Resolves a COLR outline glyph's color layers to `(color, paths)` pairs for
-  /// vector emission, applying the run's font palette and `foreground` (current)
-  /// color exactly as the raster backend does. Returns empty for non-color glyphs.
+  /// Resolves a COLR glyph to color and path layers for vector emission.
   pub fn resolve_color_layers<'g>(
     &self,
     outline: &'g ResolvedOutlineGlyph,
@@ -268,10 +261,7 @@ impl PositionedInlineRun {
   }
 }
 
-/// The single inline enumeration shared by both backends: positioned glyph runs
-/// in paint order, positioned inline boxes, and text-outline rects. Built once by
-/// [`resolve_inline_runs`]; the raster backend rasterizes it and the vector
-/// backend emits it; only the painting differs.
+/// A positioned inline paint item shared by the backends.
 #[non_exhaustive]
 pub struct InlineRunLayout {
   /// Glyph runs in line/visual order.
@@ -284,9 +274,8 @@ pub struct InlineRunLayout {
   pub background_fragments: Vec<InlineBackgroundFragment>,
 }
 
-/// Walks `built` once, resolving every glyph run, inline box, and outline rect
-/// into backend-agnostic positioned drawables. This is the one inline-layout
-/// enumeration; backends differ only in how they paint the result.
+/// Walks `built` once, resolving every glyph run, inline box, and outline rect into
+/// backend-agnostic positioned drawables.
 pub fn resolve_inline_runs(
   built: &BuiltInlineLayout<'_>,
   context: &RenderContext,
@@ -531,9 +520,8 @@ pub fn resolve_inline_runs(
   })
 }
 
-/// A measured glyph run: its text (borrowed from the layout) and local bounding
-/// box, with text-fit line scaling applied. The lifetime ties the text back to
-/// the [`BuiltInlineLayout`] it was measured from.
+/// A measured glyph run: its text (borrowed from the layout) and local bounding box, with text-fit
+/// line scaling applied.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MeasuredInlineRun<'a> {
   /// The run's text content, borrowed from the layout.
@@ -550,8 +538,8 @@ pub struct MeasuredInlineRun<'a> {
   pub link: Option<&'a str>,
 }
 
-/// A measured inline box's local bounding box, with text-fit line scaling
-/// applied to in-flow boxes' x position.
+/// A measured inline box's local bounding box, with text-fit line scaling applied to in-flow boxes'
+/// x position.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MeasuredInlineBox {
   /// Left edge, relative to the inline formatting context's origin.
@@ -564,8 +552,7 @@ pub struct MeasuredInlineBox {
   pub height: f32,
 }
 
-/// Extracts the text a glyph run renders, preferring the source span's byte
-/// range (so a run split across spans doesn't bleed into its neighbor).
+/// Extracts the source text rendered by a glyph run.
 pub(super) fn measured_run_text<'a>(
   text: &'a str,
   spans: &[ProcessedInlineSpan<'_>],

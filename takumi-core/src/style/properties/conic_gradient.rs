@@ -92,8 +92,8 @@ impl ConicGradientTile {
     (max_dx.hypot(max_dy) * TAU).ceil() as usize + 1
   }
 
-  /// Adjusted angle at `(dx, dy)` as a fraction of a full turn, measured from
-  /// the gradient's start angle (CSS 0deg = from top, clockwise).
+  /// Adjusted angle at `(dx, dy)` as a fraction of a full turn, measured from the gradient's start
+  /// angle (CSS 0deg = from top, clockwise).
   #[inline(always)]
   fn adjusted_turns(&self, dx: f32, dy: f32) -> f32 {
     let turns = math::xy_to_unit_angle(-dy, dx);
@@ -180,7 +180,6 @@ impl ConicGradientTile {
     let start_rad = gradient.from_angle.to_radians().rem_euclid(TAU);
     let start_turns = start_rad / TAU;
 
-    // Resolve stop percentages against one full turn (360deg).
     let resolved_stops =
       ResolvedGradientStop::resolve(&gradient.stops, 360.0, sizing, current_color);
     let axis = LutAxis::new(gradient.repeating, resolved_stops, 360.0);
@@ -364,7 +363,6 @@ impl ToCss for ConicGradient {
       "conic-gradient"
     };
 
-    // Build "from <angle> at <center>" as a temp buffer
     let mut params_buf = String::new();
     if self.from_angle != Angle::zero() {
       params_buf.push_str("from ");

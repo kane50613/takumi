@@ -23,16 +23,14 @@ pub struct InlineBackgroundFragment {
   pub width: f32,
   /// Fragment height.
   pub height: f32,
-  /// Corner radii as `(x, y)` pairs (top-left, top-right, bottom-right,
-  /// bottom-left), already clamped to the fragment. Wrap-edge corners are
-  /// square, like `box-decoration-break: slice`.
+  /// Corner radii as `(x, y)` pairs (top-left, top-right, bottom-right, bottom-left), already
+  /// clamped to the fragment.
   pub radii: [(f32, f32); 4],
   /// Fill color.
   pub color: Color,
   /// The span's `opacity`.
   pub opacity: f32,
-  /// Baseline of the owning line in border-box space. Pagination keys page
-  /// ownership on it, so a fragment paints on the page its line lands on.
+  /// Baseline of the owning line in border-box space.
   pub baseline: f32,
 }
 
@@ -69,8 +67,7 @@ impl VerticalExtent {
 
 /// What a covering item contributes vertically to a span's fragment.
 pub(super) enum CoverExtent {
-  /// A glyph run's leaded box; sizes the fragment when the run's font size
-  /// matches the span's own.
+  /// A glyph run's leaded box; sizes the fragment when the run's font size matches the span's own.
   Run {
     font_size: f32,
     top: f32,
@@ -199,7 +196,6 @@ impl DecorationAccumulator {
         .or_else(|| bounds.descendant.get())
         .or_else(|| (!has_text[id]).then(|| bounds.line.get()).flatten())
     };
-    // Slice edges come from the lines that actually paint.
     let mut line_range = vec![(usize::MAX, 0); self.decorations.len()];
 
     for ((id, line_index), bounds) in &self.fragments {
@@ -286,8 +282,7 @@ impl DecorationAccumulator {
   }
 }
 
-/// The rounded-rect contour an [`InlineBackgroundFragment`] fills, with
-/// quarter-ellipse corners.
+/// The rounded-rect contour an [`InlineBackgroundFragment`] fills, with quarter-ellipse corners.
 pub fn inline_background_path(fragment: &InlineBackgroundFragment) -> Vec<PathCommand> {
   const KAPPA: f32 = 4.0 / 3.0 * (std::f32::consts::SQRT_2 - 1.0);
 

@@ -87,9 +87,7 @@ pub enum RadialSize {
   /// The gradient end stops at the farthest corner from the center
   #[default]
   FarthestCorner,
-  /// Explicit radii. Percentages resolve against the corresponding axis of the gradient box.
-  ///
-  /// For `circle`, the larger of the two radii is used.
+  /// Explicit radii.
   Explicit {
     /// Horizontal radius.
     radius_x: Length,
@@ -476,7 +474,6 @@ impl ToCss for RadialGradient {
       "radial-gradient"
     };
 
-    // Build shape/size/center as a temp buffer to check if anything is non-default
     let mut shape_size_buf = String::new();
     if self.shape != RadialShape::Ellipse {
       self.shape.to_css(&mut shape_size_buf)?;

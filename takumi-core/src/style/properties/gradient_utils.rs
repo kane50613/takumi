@@ -94,8 +94,8 @@ macro_rules! gradient_tile_accessors {
 
 pub(crate) use gradient_tile_accessors;
 
-/// Color functions whose presence flips an unspecified gradient interpolation
-/// space from sRGB to Oklab; every other stop syntax is a legacy sRGB form.
+/// Color functions whose presence flips an unspecified gradient interpolation space from sRGB to
+/// Oklab; every other stop syntax is a legacy sRGB form.
 const MODERN_COLOR_FUNCTIONS: [&str; 6] = ["lab", "lch", "oklab", "oklch", "color", "color-mix"];
 
 fn peeks_modern_color_function(input: &mut Parser<'_, '_>) -> bool {
@@ -122,8 +122,7 @@ fn peeks_modern_color_function(input: &mut Parser<'_, '_>) -> bool {
   modern
 }
 
-/// Parses a comma-separated gradient stop list; `color a b` expands to two
-/// stops. The flag reports whether any stop used a modern color function.
+/// Parses a comma-separated gradient stop list; `color a b` expands to two stops.
 pub(crate) fn parse_gradient_stops<'i>(
   input: &mut Parser<'i, '_>,
   parse_position: fn(&mut Parser<'i, '_>) -> ParseResult<'i, StopPosition>,
@@ -471,8 +470,8 @@ fn interpolation_position(left_position: f32, right_position: f32, sample_positi
   ((sample_position - left_position) / denominator).clamp(0.0, 1.0)
 }
 
-/// Builds a gradient LUT in `T`, sampling stops along the axis and snapping the
-/// stop positions onto exact entries.
+/// Builds a gradient LUT in `T`, sampling stops along the axis and snapping the stop positions onto
+/// exact entries.
 fn build_lut<T: Copy>(
   resolved_stops: &[ResolvedGradientStop],
   axis_length: f32,
@@ -487,7 +486,6 @@ fn build_lut<T: Copy>(
     return Vec::new();
   }
 
-  // Fast path: if only one color, fill just one entry
   if resolved_stops.len() <= 1 {
     let color = resolved_stops
       .first()
@@ -569,8 +567,8 @@ fn interpolate_hi(
   entry
 }
 
-/// Precomputed gradient samples: 8-bit for plain reads and, when dithering,
-/// premultiplied 8.8 for dithered ones.
+/// Precomputed gradient samples: 8-bit for plain reads and, when dithering, premultiplied 8.8 for
+/// dithered ones.
 #[derive(Debug, Clone, Default)]
 pub struct ColorLut {
   colors: Vec<PremultipliedColorU8>,
@@ -579,8 +577,8 @@ pub struct ColorLut {
 }
 
 impl ColorLut {
-  /// Samples `stops` along the axis into `size` entries, snapping stop
-  /// positions onto exact entries. The 8.8 table is built only with `dither`.
+  /// Samples `stops` along the axis into `size` entries, snapping stop positions onto exact
+  /// entries.
   pub fn new(
     stops: &[ResolvedGradientStop],
     axis_length: f32,
@@ -647,9 +645,6 @@ impl ColorLut {
   }
 
   /// The entry at `index` quantized with the Bayer noise for pixel `(x, y)`.
-  ///
-  /// The bias stays in `[0, 252]`, so no channel can underflow, overflow, or
-  /// round past its alpha; the entry's premultiplied ordering survives as-is.
   #[inline(always)]
   pub fn sample_dithered(&self, index: usize, x: u32, y: u32) -> PremultipliedColorU8 {
     let entry = self.hi[index];
@@ -666,8 +661,7 @@ impl ColorLut {
   }
 }
 
-/// The stop run a LUT samples. A repeating gradient shifts its stops to start
-/// at zero and samples one period; any other samples the whole axis.
+/// The stop run a LUT samples.
 pub(crate) struct LutAxis {
   pub(crate) repeating: bool,
   /// First resolved stop position, the repeating origin.
@@ -948,7 +942,7 @@ mod tests {
       resolved[2],
       ResolvedGradientStop {
         color: Color([0, 0, 255, 255]),
-        position: 20.0, // since 30% (12px) is smaller than the last
+        position: 20.0,
       },
     );
   }

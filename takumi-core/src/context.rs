@@ -78,7 +78,7 @@ impl From<RenderContextInit> for RenderContext {
   }
 }
 
-/// The context for the internal rendering. You should not construct this directly.
+/// The context for the internal rendering.
 #[derive(Clone)]
 #[non_exhaustive]
 pub struct RenderContext {
@@ -91,12 +91,10 @@ pub struct RenderContext {
   pub current_color: Color,
   /// The style after inheritance.
   pub style: Box<ComputedStyle>,
-  /// Whether this box is a cell of a table that collapses its borders. Set
-  /// during lowering, which is the last place a table cell is still one.
+  /// Whether this box is a cell of a table that collapses its borders.
   pub collapsed_borders: bool,
-  /// Whether a min-content measurement reports the widest run it could not
-  /// break instead of the zero width it wrapped against. Table column sizing
-  /// asks for the intrinsic width; every other caller wants the box it fits in.
+  /// Whether a min-content measurement reports the widest run it could not break instead of the
+  /// zero width it wrapped against.
   pub(crate) intrinsic_min_content: bool,
 }
 
@@ -125,8 +123,7 @@ impl RenderContext {
     self.shared.draw_debug_border
   }
 
-  /// Whether gradient fills dither before quantizing, set from the render's
-  /// `dithering` option.
+  /// Whether gradient fills dither before quantizing, set from the render's `dithering` option.
   pub fn dither_gradients(&self) -> bool {
     self.shared.dither_gradients
   }

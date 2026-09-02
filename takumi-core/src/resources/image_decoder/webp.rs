@@ -209,10 +209,8 @@ pub(crate) fn animated_webp_dimensions(bytes: &[u8]) -> ImageResult<(u32, u32)> 
   Ok(decoder.dimensions())
 }
 
-/// Per-frame delays in milliseconds, in stream order, read from the `ANMF`
-/// headers without decoding any pixels. Stops on the same frame and pixel
-/// budgets as [`decode_webp_frames`], so a playback time never selects a frame
-/// the decoder drops.
+/// Per-frame delays in milliseconds, in stream order, read from the `ANMF` headers without decoding
+/// any pixels.
 #[cfg(feature = "webp")]
 pub(crate) fn webp_frame_infos(bytes: &[u8]) -> ImageResult<Box<[FrameInfo]>> {
   let (width, height) = animated_webp_dimensions(bytes)?;
@@ -261,14 +259,8 @@ pub(crate) fn webp_frame_infos(bytes: &[u8]) -> ImageResult<Box<[FrameInfo]>> {
   Ok(frames.into())
 }
 
-/// Decodes animated WebP frames in stream order, passing each frame past the
-/// first `skip` to `push`, up to `limit` pushed frames. Returns whether the
-/// stream ended. Mid-stream decode errors and a blown budget truncate the
-/// timeline (reported as ended); only a stream with no decodable first frame
-/// errors.
-///
-/// `image-webp` owns the animation canvas, so a read composites onto the frame
-/// before it and hands back the whole canvas.
+/// Decodes animated WebP frames in stream order, passing each frame past the first `skip` to
+/// `push`, up to `limit` pushed frames.
 #[cfg(feature = "webp")]
 pub(crate) fn decode_webp_frames(
   bytes: &[u8],
@@ -402,8 +394,7 @@ pub(crate) fn decode_webp_frame_alone(
   fit_to_target(buffer, target).ok()
 }
 
-/// Copies `frame` onto a cleared canvas at `rect`, clipping the part that
-/// falls outside.
+/// Copies `frame` onto a cleared canvas at `rect`, clipping the part that falls outside.
 #[cfg(feature = "webp")]
 fn place_on_canvas(
   frame: &ImageBuffer,
@@ -428,9 +419,7 @@ fn place_on_canvas(
   ImageBuffer::from_premultiplied_rgba(canvas, canvas_width, canvas_height)
 }
 
-/// Wraps one frame's bitstream in a RIFF container so the still decoder can
-/// read it. A lossy frame carrying a separate `ALPH` chunk needs a `VP8X`
-/// header too, which only the animation container had.
+/// Wraps one frame's bitstream in a RIFF container so the still decoder can read it.
 #[cfg(feature = "webp")]
 fn webp_frame_as_still(bitstream: &[u8], width: u32, height: u32) -> Option<Vec<u8>> {
   let mut body = Vec::with_capacity(bitstream.len() + 18);

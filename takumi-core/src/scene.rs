@@ -1,6 +1,6 @@
-//! Backend-agnostic paint scene: the stacking-context tree that decides paint
-//! order, grouping, and bounds. Raster and SVG backends consume this instead of
-//! each walking the node tree independently.
+//! Backend-agnostic paint scene: the stacking-context tree that decides paint order, grouping, and
+//! bounds. Raster and SVG backends consume this instead of each walking the node tree
+//! independently.
 
 use std::collections::HashMap;
 
@@ -23,8 +23,7 @@ use crate::{
   style::{Affine, ComputedStyle, Display, SizingContext},
 };
 
-/// A node's resolved paint inputs: where it sits in the tree, its accumulated
-/// transform, the container it resolves against, and its device-space bounds.
+/// A node's resolved paint inputs.
 #[derive(Clone)]
 pub struct NodePaint {
   /// Child-index path from the root to this node.
@@ -121,10 +120,7 @@ impl StackingBuckets {
   }
 }
 
-/// One stacking context: an optional root node and its descendants bucketed into
-/// CSS paint order. The bucket representation is private; backends read it through
-/// [`root`](Self::root), [`paint_bounds`](Self::paint_bounds), and
-/// [`in_paint_order`](Self::in_paint_order).
+/// One stacking context: an optional root node and its descendants bucketed into CSS paint order.
 pub struct StackingContextNode {
   root: Option<NodePaint>,
   buckets: StackingBuckets,
@@ -142,8 +138,7 @@ impl StackingContextNode {
     self.paint_bounds
   }
 
-  /// The context's paint items grouped by stacking layer in paint order:
-  /// negative `z-index`, then in-flow/`z-auto`, then positive `z-index`.
+  /// Paint items grouped by stacking layer in paint order.
   pub fn in_paint_order(&self) -> [&[PaintItem]; 3] {
     self.buckets.in_paint_order()
   }
@@ -184,10 +179,7 @@ struct StackingContextBuildVisit {
   is_root: bool,
 }
 
-/// The effective paint-order z for a child: its `z-index` when it participates in
-/// the positioned paint bucket, otherwise 0 (non-positioned elements paint in tree
-/// order alongside positioned `z-auto` elements). A stable sort by this key
-/// reproduces CSS stacking order.
+/// A child's effective paint-order z-index.
 pub(crate) fn paint_order_z(style: &ComputedStyle, is_flex_or_grid_item: bool) -> i32 {
   if style.participates_in_positioned_paint_bucket(is_flex_or_grid_item) {
     style.z_index.painting_order_value()
@@ -380,10 +372,8 @@ pub fn build_stacking_contexts(
   Ok(contexts)
 }
 
-/// Ink whose extent this module does not measure (shadows, outlines, text
-/// strokes) forces `None`: bounds must never underestimate paint output.
-/// `filter` is exempt — backends pad its spread themselves and need the tight
-/// pre-filter extent.
+/// Ink whose extent this module does not measure (shadows, outlines, text strokes) forces `None`:
+/// bounds must never underestimate paint output.
 fn style_paints_unmeasured_ink(style: &ComputedStyle, sizing: &SizingContext) -> bool {
   style
     .box_shadow

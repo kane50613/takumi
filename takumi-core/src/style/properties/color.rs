@@ -248,8 +248,8 @@ impl TailwindPropertyParser for ColorInput {
     Color::parse_tw(token).map(ColorInput::Value)
   }
 
-  /// `Color::parse_tw` already reads the `/50` modifier, so this only carries it
-  /// across the `current` keyword that `Color` has no representation for.
+  /// `Color::parse_tw` already reads the `/50` modifier, so this only carries it across the
+  /// `current` keyword that `Color` has no representation for.
   fn parse_tw_with_arbitrary(token: &str) -> Option<Self> {
     if let Some(value) = extract_arbitrary_value(token) {
       return Self::from_css_str(&value).ok();
@@ -266,7 +266,6 @@ impl TailwindPropertyParser for ColorInput {
 }
 
 /// Tailwind v4 palette (OKLCH→sRGB via CSS Color 4 with gamut mapping).
-/// Shades: 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950.
 const SLATE: [u32; 11] = [
   0xf8fafc, 0xf1f5f9, 0xe2e8f0, 0xcad5e2, 0x90a1b9, 0x62748e, 0x45556c, 0x314158, 0x1d293d,
   0x0f172b, 0x020618,
@@ -441,7 +440,6 @@ fn lookup_tailwind_color(color_name: &str, shade: u16) -> Option<u32> {
 
 impl TailwindPropertyParser for Color {
   fn parse_tw(token: &str) -> Option<Self> {
-    // handle opacity text like `text-red-50/30`
     if let Some((color, opacity)) = token.split_once('/') {
       let color = Color::parse_tw(color)?;
       let opacity = (opacity.parse::<f32>().ok()? * 2.55).round() as u8;
@@ -449,7 +447,6 @@ impl TailwindPropertyParser for Color {
       return Some(color.with_opacity(opacity));
     }
 
-    // Handle basic colors first
     match_ignore_ascii_case! {token,
       "transparent" => return Some(Color::transparent()),
       "black" => return Some(Color::black()),
@@ -457,11 +454,9 @@ impl TailwindPropertyParser for Color {
       _ => {}
     }
 
-    // Parse color-shade format (e.g., "red-500")
     let (color_name, shade_str) = token.rsplit_once('-')?;
     let shade: u16 = shade_str.parse().ok()?;
 
-    // Lookup in color table
     lookup_tailwind_color(color_name, shade).map(Color::from_rgb)
   }
 }
@@ -933,7 +928,6 @@ impl<'i> FromCss<'i> for Color {
           .map_err(|_| unexpected_token!(location, token))
       }
       Token::Function(_) => {
-        // Have to clone to persist token, and allow input to be borrowed
         let token = token.clone();
 
         if let Token::Function(function) = &token
@@ -962,12 +956,10 @@ impl<'i> FromCss<'i> for Color {
 
           while input.next().is_ok() {}
 
-          // Slice from the function name till before the closing parenthesis
           let body = input.slice_from(position);
 
           let mut function = body.to_string();
 
-          // Add closing parenthesis
           function.push(')');
 
           parse_color(&function)
