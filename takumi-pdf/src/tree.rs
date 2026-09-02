@@ -154,7 +154,10 @@ impl PreparedTree {
       &results,
       NodeId::ROOT,
       Affine::IDENTITY,
-      (Some(width), Some(height)),
+      Size {
+        width: Some(width),
+        height: Some(height),
+      },
     )?;
 
     Ok(Self {
