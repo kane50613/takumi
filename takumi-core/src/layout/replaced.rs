@@ -32,6 +32,39 @@ impl ReplacedPlacement {
   }
 }
 
+/// The part of placed content that lands inside its box.
+#[derive(Debug, Clone, Copy)]
+pub struct ClippedPlacement {
+  /// Where the visible part draws, relative to the content box.
+  pub origin: Point<f32>,
+  /// How much of the content's top-left the box cuts off, in drawn pixels.
+  pub crop: Point<f32>,
+  /// The visible size.
+  pub size: Size<f32>,
+}
+
+impl ReplacedPlacement {
+  /// Intersects the placed content with the `content` box.
+  pub fn clipped(&self, content: Size<f32>) -> ClippedPlacement {
+    let origin = Point {
+      x: self.offset.x.max(0.0),
+      y: self.offset.y.max(0.0),
+    };
+
+    ClippedPlacement {
+      origin,
+      crop: Point {
+        x: (-self.offset.x).max(0.0),
+        y: (-self.offset.y).max(0.0),
+      },
+      size: Size {
+        width: ((self.offset.x + self.size.width).min(content.width) - origin.x).max(0.0),
+        height: ((self.offset.y + self.size.height).min(content.height) - origin.y).max(0.0),
+      },
+    }
+  }
+}
+
 /// Sizes `intrinsic` content for a `content` box and places it.
 ///
 /// `fill` and a missing intrinsic size both stretch to the box, which is what

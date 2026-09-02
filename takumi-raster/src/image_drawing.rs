@@ -1,9 +1,12 @@
-use takumi_core::geometry::{ComputedLayout as Layout, Point, Size};
+use takumi_core::{
+  geometry::{ComputedLayout as Layout, Point, Size},
+  layout::replaced::place_replaced,
+};
 
 use crate::{
   BorderProperties, Canvas, RenderContext, Result, SamplingOptions, pixmap_ref_from_buffer,
   resources::image::{ImageSource, RenderedImage},
-  style::{Affine, BlendMode, ObjectFit},
+  style::{Affine, BlendMode},
 };
 
 pub(crate) struct PreparedImage {
@@ -11,7 +14,8 @@ pub(crate) struct PreparedImage {
   logical_to_source: Affine,
 }
 
-/// Process an image according to the specified object-fit style.
+/// Sizes and places an image for `object-fit`/`object-position`, rendering
+/// only the part that lands inside the content box.
 pub(crate) fn process_image_for_object_fit(
   image: &ImageSource,
   context: &RenderContext,
@@ -32,218 +36,39 @@ pub(crate) fn process_image_for_object_fit(
     ImageSource::Svg(svg) => svg.dimensions(),
     _ => (image_width, image_height),
   };
-  let source_to_intrinsic = if image_width == 0.0 || image_height == 0.0 {
+  let placement = place_replaced(
+    context,
+    content_box,
+    Size {
+      width: image_width,
+      height: image_height,
+    },
+  );
+  let clipped = placement.clipped(content_box);
+  let rendered = image.render_for_layout(
+    clipped.size.width as u32,
+    clipped.size.height as u32,
+    context.style.image_rendering,
+    context.time_ms(),
+    context.current_color,
+    Some(context.fonts()),
+  )?;
+  let logical_to_source = if placement.size.width == 0.0 || placement.size.height == 0.0 {
     Affine::IDENTITY
   } else {
-    Affine::scale(source_width / image_width, source_height / image_height)
+    Affine::scale(
+      source_width / placement.size.width,
+      source_height / placement.size.height,
+    ) * Affine::translation(clipped.crop.x, clipped.crop.y)
   };
 
-  let object_position = context.style.object_position.0;
-
-  match context.style.object_fit {
-    ObjectFit::Fill => Ok((
-      PreparedImage {
-        image: image.render_for_layout(
-          content_box.width as u32,
-          content_box.height as u32,
-          context.style.image_rendering,
-          context.time_ms(),
-          context.current_color,
-          Some(context.fonts()),
-        )?,
-        logical_to_source: if content_box.width == 0.0 || content_box.height == 0.0 {
-          Affine::IDENTITY
-        } else {
-          Affine::scale(
-            source_width / content_box.width,
-            source_height / content_box.height,
-          )
-        },
-      },
-      Point::ZERO,
-    )),
-    ObjectFit::Contain => {
-      let scale_x = content_box.width / image_width;
-      let scale_y = content_box.height / image_height;
-      let scale = scale_x.min(scale_y);
-
-      let new_width = image_width * scale;
-      let new_height = image_height * scale;
-
-      let available_x = content_box.width - new_width;
-      let available_y = content_box.height - new_height;
-
-      let offset_x = object_position.x.resolve(context, available_x);
-      let offset_y = object_position.y.resolve(context, available_y);
-
-      Ok((
-        PreparedImage {
-          image: image.render_for_layout(
-            new_width as u32,
-            new_height as u32,
-            context.style.image_rendering,
-            context.time_ms(),
-            context.current_color,
-            Some(context.fonts()),
-          )?,
-          logical_to_source: if new_width == 0.0 || new_height == 0.0 {
-            Affine::IDENTITY
-          } else {
-            Affine::scale(source_width / new_width, source_height / new_height)
-          },
-        },
-        Point {
-          x: offset_x,
-          y: offset_y,
-        },
-      ))
-    }
-    ObjectFit::Cover => {
-      let scale_x = content_box.width / image_width;
-      let scale_y = content_box.height / image_height;
-      let scale = scale_x.max(scale_y);
-
-      let new_width = image_width * scale;
-      let new_height = image_height * scale;
-
-      let available_crop_x = new_width - content_box.width;
-      let available_crop_y = new_height - content_box.height;
-
-      let crop_x = object_position.x.resolve(context, available_crop_x);
-      let crop_y = object_position.y.resolve(context, available_crop_y);
-
-      Ok((
-        PreparedImage {
-          image: image.render_for_layout(
-            content_box.width as u32,
-            content_box.height as u32,
-            context.style.image_rendering,
-            context.time_ms(),
-            context.current_color,
-            Some(context.fonts()),
-          )?,
-          logical_to_source: if new_width == 0.0 || new_height == 0.0 {
-            Affine::IDENTITY
-          } else {
-            Affine::scale(source_width / new_width, source_height / new_height)
-              * Affine::translation(crop_x, crop_y)
-          },
-        },
-        Point::ZERO,
-      ))
-    }
-    ObjectFit::ScaleDown => {
-      let scale_x = content_box.width / image_width;
-      let scale_y = content_box.height / image_height;
-      let scale = scale_x.min(scale_y).min(1.0);
-
-      let new_width = image_width * scale;
-      let new_height = image_height * scale;
-
-      let processed_image = if scale < 1.0 {
-        image.render_for_layout(
-          new_width as u32,
-          new_height as u32,
-          context.style.image_rendering,
-          context.time_ms(),
-          context.current_color,
-          Some(context.fonts()),
-        )?
-      } else {
-        image.render_for_layout(
-          image_width as u32,
-          image_height as u32,
-          context.style.image_rendering,
-          context.time_ms(),
-          context.current_color,
-          Some(context.fonts()),
-        )?
-      };
-
-      let available_x = content_box.width - new_width;
-      let available_y = content_box.height - new_height;
-
-      let offset_x = object_position.x.resolve(context, available_x);
-      let offset_y = object_position.y.resolve(context, available_y);
-
-      Ok((
-        PreparedImage {
-          image: processed_image,
-          logical_to_source: if scale < 1.0 && new_width > 0.0 && new_height > 0.0 {
-            Affine::scale(source_width / new_width, source_height / new_height)
-          } else {
-            source_to_intrinsic
-          },
-        },
-        Point {
-          x: offset_x,
-          y: offset_y,
-        },
-      ))
-    }
-    ObjectFit::None => {
-      // If the image is smaller than the content box, we don't need to crop
-      if image_width <= content_box.width && image_height <= content_box.height {
-        let available_x = (content_box.width - image_width).max(0.0);
-        let available_y = (content_box.height - image_height).max(0.0);
-
-        let offset_x = object_position.x.resolve(context, available_x);
-        let offset_y = object_position.y.resolve(context, available_y);
-
-        return Ok((
-          PreparedImage {
-            image: image.render_for_layout(
-              image_width as u32,
-              image_height as u32,
-              context.style.image_rendering,
-              context.time_ms(),
-              context.current_color,
-              Some(context.fonts()),
-            )?,
-            logical_to_source: source_to_intrinsic,
-          },
-          Point {
-            x: offset_x,
-            y: offset_y,
-          },
-        ));
-      }
-
-      let available_crop_x = (image_width - content_box.width).max(0.0);
-      let available_crop_y = (image_height - content_box.height).max(0.0);
-
-      let crop_x = object_position.x.resolve(context, available_crop_x);
-      let crop_y = object_position.y.resolve(context, available_crop_y);
-
-      let crop_width = content_box.width.min(image_width);
-      let crop_height = content_box.height.min(image_height);
-
-      let offset_x = object_position
-        .x
-        .resolve(context, (content_box.width - crop_width).max(0.0));
-      let offset_y = object_position
-        .y
-        .resolve(context, (content_box.height - crop_height).max(0.0));
-
-      Ok((
-        PreparedImage {
-          image: image.render_for_layout(
-            crop_width as u32,
-            crop_height as u32,
-            context.style.image_rendering,
-            context.time_ms(),
-            context.current_color,
-            Some(context.fonts()),
-          )?,
-          logical_to_source: source_to_intrinsic * Affine::translation(crop_x, crop_y),
-        },
-        Point {
-          x: offset_x,
-          y: offset_y,
-        },
-      ))
-    }
-  }
+  Ok((
+    PreparedImage {
+      image: rendered,
+      logical_to_source,
+    },
+    clipped.origin,
+  ))
 }
 
 /// Draws an image on the canvas with the specified style and layout.
