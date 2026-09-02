@@ -5,6 +5,7 @@ use xmp_writer::{RenditionClass, XmpWriter};
 
 use crate::krilla::configure::{PdfVersion, ValidationError};
 use crate::krilla::error::KrillaResult;
+use crate::krilla::interactive::annotation::FORM_FONT;
 use crate::krilla::interchange::metadata::{Metadata, write_custom_properties};
 use crate::krilla::metadata::PageLayout;
 use crate::krilla::object_stream::{self, ObjectStream};
@@ -20,6 +21,33 @@ pub(crate) struct ChunkContainer {
   pub(crate) mixed: MixedChunks,
   pub(crate) metadata: Option<Metadata>,
   pub(crate) non_stream: NonStreamChunks,
+  /// Refs of the widget annotations that double as AcroForm field dicts.
+  pub(crate) form_fields: Vec<Ref>,
+  /// The base-14 face the field appearances and `/DR` share.
+  form_font: Option<Ref>,
+}
+
+impl ChunkContainer {
+  /// The face the field appearances draw with, written on first use. A viewer
+  /// redrawing an edited field reads it from `/DR` by the name `/DA` gives.
+  pub(crate) fn form_font(&mut self, sc: &mut SerializeContext) -> Ref {
+    match self.form_font {
+      Some(font) => font,
+      None => {
+        let font = sc.new_ref();
+
+        self
+          .non_stream
+          .annotations
+          .type1_font(font)
+          .base_font(Name(b"Helvetica"))
+          .encoding_predefined(Name(b"WinAnsiEncoding"))
+          .finish();
+        self.form_font = Some(font);
+        font
+      }
+    }
+  }
 }
 
 pub(crate) struct StreamChunks {
@@ -95,6 +123,8 @@ impl ChunkContainer {
         pages: sc.new_chunk(),
         embedded_files: sc.new_chunk(),
       },
+      form_fields: vec![],
+      form_font: None,
     }
   }
 
@@ -254,8 +284,21 @@ impl ChunkContainer {
       };
 
       let catalog_ref = remapped_ref.bump();
+      let form_font = self.form_font.map(|font| remapper[&font]);
 
       let mut catalog = pdf.catalog(catalog_ref);
+
+      if let Some(font) = form_font {
+        let mut form = catalog.form();
+
+        form.fields(self.form_fields.iter().map(|field| remapper[field]));
+        form.default_appearance(Str(format!("/{FORM_FONT} 0 Tf 0 g").as_bytes()));
+        form
+          .default_resources()
+          .fonts()
+          .pair(Name(FORM_FONT.as_bytes()), font);
+        form.finish();
+      }
 
       if let Some(pt) = &self.non_stream.page_tree {
         catalog.pages(remapper[&pt.0]);

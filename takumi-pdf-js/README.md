@@ -248,6 +248,45 @@ const pdf = await render(invoice, {
 
 The PDF/A-3 levels require `mimeType`, `description`, and a modification date on each attachment. `metadata.creationDate` serves as the date fallback.
 
+## Fillable fields
+
+`form: true` turns `<input>` and `<textarea>` into AcroForm fields a reader can fill in. Left off, the same markup draws as the static boxes its CSS describes, so one template covers both the form and the printed copy.
+
+```tsx
+const pdf = await render(
+  <form>
+    <label htmlFor="name">Full name</label>
+    <input id="name" name="name" defaultValue="Kane" required />
+
+    <label>
+      Notes
+      <textarea name="notes" maxLength={200} />
+    </label>
+  </form>,
+  { form: true },
+);
+```
+
+Fields come from the HTML attributes you already write.
+
+| HTML                                                                   | PDF                                                       |
+| ---------------------------------------------------------------------- | --------------------------------------------------------- |
+| `name`                                                                 | The field name                                            |
+| `value`, a `<textarea>`'s text                                         | The value the field starts and resets to                  |
+| `required`, `readonly`, `disabled`                                     | Field flags. A disabled field stays out of the submission |
+| `maxlength`                                                            | The longest value a reader may type                       |
+| `<input type="password">`                                              | A password field, drawn masked                            |
+| `aria-label`, `aria-labelledby`, `<label>`, `title`, `placeholder`     | The name a screen reader announces                        |
+| `color`, `font-size`, `background-color`, `border-color`, `text-align` | How a reader redraws the field after an edit              |
+
+A control paints through the normal CSS pipeline, so its border, background and radius are whatever the stylesheet says. The widget draws only the value on top. Once a reader edits that value, it redraws the field from the colors and size in the table above, and a rounded corner or a gradient does not survive.
+
+Two controls may not share a `name`. That fails the render rather than merging into one field showing the same value twice.
+
+An `<input>` whose `type` is `submit`, `reset`, `button`, `image`, `file` or `hidden` draws as a plain box and gets no field.
+
+Field values draw with the standard Helvetica face in WinAnsiEncoding, which no PDF/A or PDF/UA level accepts unembedded. A character outside that encoding is dropped from the drawn value; `/V` still carries it in full.
+
 ## Measuring
 
 `measure()` lays out a tree without rendering and returns its size in CSS px. Use it to size a header or footer band before setting `margin`:
