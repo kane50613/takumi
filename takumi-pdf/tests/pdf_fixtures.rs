@@ -4423,8 +4423,8 @@ fn form_fields_render_as_widgets() {
   for expected in [
     "/AcroForm",
     "/Widget",
-    // The radio group owns its buttons, whose states are numbered so an
-    // export value a PDF name cannot carry still round trips.
+    // The radio group owns its buttons, and its `/Opt` carries export values
+    // a PDF name could not.
     "/Kids",
     "/Opt",
     "/MaxLen 200",
@@ -4482,8 +4482,6 @@ fn blank_fields_embed_no_font() {
 
   let pdf = String::from_utf8_lossy(&bytes);
 
-  // A field with nothing in it draws no text, so it pulls in no standard font
-  // for a validator to reject. The form itself is still there.
   assert!(!pdf.contains("Helvetica"));
   assert!(pdf.contains("/AcroForm"));
 }

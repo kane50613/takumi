@@ -50,8 +50,7 @@ pub(crate) struct FieldTarget {
   rect: KrillaRect,
   field: FieldKind,
   style: FieldStyle,
-  /// The accessible name, absent when the element names itself only through a
-  /// `<label for>` that has not been seen yet.
+  /// The accessible name, absent while only a `<label for>` carries it.
   described: Option<String>,
   /// The `id` a `<label for>` would point at.
   id: Option<String>,
@@ -61,7 +60,7 @@ pub(crate) struct FieldTarget {
   group_index: usize,
 }
 
-/// What kind of control an element asks for, before it is placed on a page.
+/// The kind of control an element asks for.
 enum FieldKind {
   Text {
     value: String,
@@ -82,18 +81,17 @@ enum FieldKind {
   Choice {
     value: String,
     options: Vec<(String, Option<String>)>,
-    /// Whether more than one option can be picked, which also makes the
-    /// control a list box rather than a drop-down.
+    /// Whether more than one option can be picked, which also turns the
+    /// drop-down into a list box.
     multi: bool,
   },
 }
 
-/// The CSS a widget is painted with, kept so the field can carry it too.
+/// The CSS a control paints with, which its field carries too.
 struct FieldStyle {
   color: [f32; 3],
   font_size: f32,
   background: Option<[f32; 3]>,
-  /// The border color and the width it is stroked at.
   border: Option<([f32; 3], f32)>,
   /// `/Q`: 0 left, 1 center, 2 right.
   align: i32,
@@ -124,8 +122,7 @@ fn pdf_color(color: Color) -> Option<[f32; 3]> {
 
 impl Interactive {
   /// Numbers each control among the ones sharing its name, which is what
-  /// names a radio button's appearance state, and records the names that more
-  /// than one non-radio control claims.
+  /// names a radio button's appearance state.
   fn resolve_field_names(&mut self) {
     let mut counts: HashMap<String, usize> = HashMap::new();
 
@@ -142,15 +139,13 @@ impl Interactive {
   }
 }
 
-/// Whether the tag names a form control, whose widget annotation replaces the
-/// content its box would otherwise contribute.
+/// Whether the tag names a form control.
 pub(crate) fn is_form_control(tag: &str) -> bool {
   ["input", "textarea", "select"]
     .iter()
     .any(|control| tag.eq_ignore_ascii_case(control))
 }
 
-/// Reads the control an element asks for, absent when it is not one.
 fn field_kind(source: &Node, node: &RenderNode) -> Option<FieldKind> {
   let tag = source.tag_name()?;
   let max_len = source
@@ -752,8 +747,6 @@ pub(crate) fn add_field_annotations(
   let (y0, y1) = window.y.unwrap_or((f32::NEG_INFINITY, f32::INFINITY));
 
   for field in &interactive.fields {
-    // A control split down the middle is not a control. The whole box has to
-    // land on this page or it belongs to another one.
     if field.rect.top() < y0 || field.rect.bottom() > y1 {
       continue;
     }
@@ -781,8 +774,6 @@ pub(crate) fn add_field_annotations(
       )
       .with_description(described.clone())
       .with_lang(state.lang.map(str::to_string)),
-      // PDF/UA reads a field's name through `/TU`, and krilla asks every
-      // annotation for alt text; the field's own label answers both.
       Some(described.unwrap_or_else(|| field.name.clone())),
     );
 

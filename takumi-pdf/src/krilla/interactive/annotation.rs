@@ -748,8 +748,7 @@ fn escape_name(value: &str) -> String {
 }
 
 /// Helvetica's advance widths for the printable ASCII range, in thousandths
-/// of an em, from the face's own metrics. The appearance streams draw with
-/// this face, so their alignment measures with its widths.
+/// of an em, from the face's own metrics.
 const HELVETICA_WIDTHS: [u16; 95] = [
   278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556,
   556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667,
@@ -763,14 +762,7 @@ fn text_width(text: &str, size: f32) -> f32 {
   let thousandths: u32 = text
     .chars()
     .map(|character| match u32::from(character).checked_sub(32) {
-      Some(index) => u32::from(
-        HELVETICA_WIDTHS
-          .get(index as usize)
-          .copied()
-          // A character outside the range cannot be drawn by this face
-          // either; the average advance keeps the estimate honest.
-          .unwrap_or(500),
-      ),
+      Some(index) => u32::from(HELVETICA_WIDTHS.get(index as usize).copied().unwrap_or(500)),
       None => 0,
     })
     .sum();
@@ -778,7 +770,7 @@ fn text_width(text: &str, size: f32) -> f32 {
   thousandths as f32 / 1000.0 * size
 }
 
-/// A `Tj` run per line, laid out inside a widget of this size.
+/// A `Tj` run per line of the value.
 fn draw_value(
   value: &str,
   multiline: bool,

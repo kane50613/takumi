@@ -29,7 +29,6 @@ pub(crate) struct ChunkContainer {
   pub(crate) form_radio_groups: Vec<RadioGroup>,
 }
 
-/// A radio group's field object, which owns the buttons of one field name.
 pub(crate) struct RadioGroup {
   pub(crate) field: Ref,
   pub(crate) name: String,
@@ -44,7 +43,7 @@ pub(crate) struct RadioGroup {
 }
 
 impl ChunkContainer {
-  /// The base-14 face the field appearances draw with, written once.
+  /// The base-14 face the field appearances draw with, written on first use.
   pub(crate) fn form_font(&mut self, sc: &mut SerializeContext) -> Ref {
     match self.form_font {
       Some(font) => font,
@@ -395,9 +394,8 @@ impl ChunkContainer {
 
         form.fields(self.form_fields.iter().map(|field| remapper[field]));
 
-        // The default appearance and its resources exist only once a field
-        // draws text; a blank form needs neither, and carries no unembedded
-        // font because of it.
+        // A blank form needs no default appearance, so it carries no
+        // unembedded font for a validator to reject.
         if let Some(font_ref) = form_font_ref {
           form.default_appearance(Str(b"/Helv 0 Tf 0 g"));
           form

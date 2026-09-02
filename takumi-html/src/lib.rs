@@ -91,14 +91,13 @@ const DEFAULT_PRESETS: &[(&str, &str)] = &[
   ("dt", "display:block"),
   ("dd", "margin-left:40px;display:block"),
   ("form", "display:block"),
-  // A control needs a box of its own, which an inline-level box does not get.
-  // Browsers make these `inline-block`; the engine lays inline boxes out
-  // through the text machinery, where nothing owns the control's rectangle.
+  // https://html.spec.whatwg.org/multipage/rendering.html#form-controls makes
+  // these `inline-block`, and hides a closed `<select>`'s options through the
+  // shadow tree rather than CSS. An inline-level box here has no rectangle of
+  // its own for a widget annotation to cover.
   ("input", "display:block"),
   ("textarea", "display:block"),
   ("select", "display:block"),
-  // A `<select>` shows its selected option, never the list, so the options
-  // themselves lay out nowhere.
   ("option", "display:none"),
   (
     "fieldset",

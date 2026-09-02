@@ -130,8 +130,8 @@ impl AtomCollector<'_> {
     if style.break_after == BreakBetween::Page {
       atoms.forced.push(y + layout.size.height);
     }
-    // A control cut in half is not a control: its widget annotation has one
-    // rectangle on one page, so the box it covers cannot straddle a break.
+    // A widget annotation has one rectangle on one page, so the control it
+    // covers cannot straddle a break.
     let control = node
       .node
       .as_ref()

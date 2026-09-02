@@ -142,7 +142,6 @@ struct Walk<'c> {
   headings: Vec<u8>,
   /// Paths a destination points at, whose structure elements need an id.
   targets: &'c HashSet<Vec<usize>>,
-  /// Whether form controls carry widget annotations to enclose.
   forms: bool,
 }
 
@@ -251,12 +250,9 @@ fn build_element(
   let identifiers = walk.collector.take(path);
   let labels = walk.collector.take_labels(path);
   let mut annotations = walk.collector.take_annotations(path);
-  // A `Link` and a `Form` both own their annotation rather than wrapping it in
-  // an element of its own.
+  // A `Link` and a `Form` both own their annotation instead of wrapping it.
   let is_link = matches!(kind, TagKind::Link(_) | TagKind::Form(_));
-  // PDF/UA admits one child under a `Form`: the widget annotation. The
-  // control's own box is decoration, and its subtree (a `<select>`'s options)
-  // is data the widget already carries.
+  // PDF/UA admits one child under a `Form`: the widget annotation.
   let is_form = matches!(kind, TagKind::Form(_));
   let is_list_item = matches!(kind, TagKind::LI(_));
   let is_list = matches!(kind, TagKind::L(_));

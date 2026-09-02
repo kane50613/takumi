@@ -157,7 +157,6 @@ pub(crate) struct DocumentState<'a> {
   /// its content marked with that language, which is how a reader knows to
   /// switch voices mid-document.
   pub(crate) lang: Option<&'a str>,
-  /// Present when the document emits fillable fields.
   pub(crate) form: Option<&'a FormOptions>,
 }
 
@@ -1636,9 +1635,8 @@ impl Emitter<'_> {
     }
   }
 
-  /// Whether this box sits inside a form control. PDF/UA admits one child
-  /// under a `Form` element, the widget annotation, so everything the control
-  /// paints is an artifact.
+  /// Whether this box sits inside a form control, whose `Form` element admits
+  /// one child: the widget annotation.
   fn inside_form_control(&self, path: &[usize]) -> bool {
     self.document.form.is_some()
       && (0..=path.len()).any(|depth| {
