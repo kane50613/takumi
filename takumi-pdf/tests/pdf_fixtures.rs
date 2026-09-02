@@ -4372,3 +4372,117 @@ fn paged_inline_span_background_paints_once() {
     "the badge fill must be emitted once, on its owning page"
   );
 }
+
+const FORM_SOURCE: &str = r#"
+<div style="display:flex;flex-direction:column;gap:12px;font-size:13px">
+  <label for="name" style="font-size:11px">Full name</label>
+  <input id="name" name="user.name" value="Kane" required
+    style="width:280px;height:26px;color:#1d4ed8;background-color:#eff6ff;border:1px solid #93c5fd;text-align:right" />
+
+  <label style="font-size:11px">Notes
+    <textarea name="notes" maxlength="200"
+      style="width:280px;height:48px;border:1px solid #999">Two lines of wrapped text in a multiline field.</textarea>
+  </label>
+
+  <input type="password" name="secret" value="hunter2" disabled aria-label="Secret"
+    style="width:160px;height:24px;border:1px solid #999" />
+
+  <input type="submit" value="Send" style="width:80px;height:24px" />
+</div>
+"#;
+
+fn form_options(fonts: &Fonts) -> PdfOptions<'_> {
+  PdfOptions::builder()
+    .node(from_html(FORM_SOURCE, FromHtmlOptions::default()).expect("parse form fixture"))
+    .page(PageOptions::A4.with_margin(36.0))
+    .fonts(fonts)
+    .form(true)
+    .build()
+}
+
+#[test]
+fn form_fields_render_as_widgets() {
+  let fonts = fonts();
+  let bytes = run_pdf_fixture_with("form_fields", &fonts, form_options);
+  let pdf = String::from_utf8_lossy(&bytes);
+
+  for expected in [
+    "/AcroForm",
+    "/DR",
+    "/Helv",
+    // A period delimits the field hierarchy, so `/T` cannot carry the HTML
+    // name and `/TM` keeps what the form exports under.
+    "/T(user_name)",
+    "/TM(user.name)",
+    "/FT/Tx",
+    "/MaxLen 200",
+    // The wrapping `<label>` names the textarea, without its own value.
+    "/TU(Notes)",
+    "/V(Two lines of wrapped text in a multiline field.)",
+    // `disabled` is read-only and stays out of the submission.
+    "/Ff 8197",
+    "(*******)",
+  ] {
+    assert!(pdf.contains(expected), "form output is missing {expected}");
+  }
+
+  // A push button carries an action a standalone document cannot bind.
+  assert!(!pdf.contains("(Send)"));
+  // One appearance stream per field, and every one of them names the shared
+  // face its `/DA` does.
+  assert_eq!(pdf.matches("/Tx BMC").count(), 3);
+  assert_eq!(pdf.matches("/Font<</Helv").count(), 4);
+}
+
+#[test]
+fn form_fields_are_absent_without_the_option() {
+  let fonts = fonts();
+  let bytes = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(FORM_SOURCE, FromHtmlOptions::default()).expect("parse form fixture"))
+      .page(PageOptions::A4.with_margin(36.0))
+      .fonts(&fonts)
+      .build(),
+  );
+
+  assert!(!String::from_utf8_lossy(&bytes).contains("/AcroForm"));
+}
+
+#[test]
+fn duplicate_field_names_are_rejected() {
+  let fonts = fonts();
+  let source = r#"<div><input name="who" style="width:80px;height:20px" />
+    <input name="who" style="width:80px;height:20px" /></div>"#;
+  let error = render(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .build(),
+  )
+  .expect_err("duplicate names should fail the render");
+
+  assert!(matches!(error, PdfError::DuplicateFieldName(name) if name == "who"));
+}
+
+#[test]
+fn a_dropped_page_takes_its_duplicate_name_with_it() {
+  let fonts = fonts();
+  let source = r#"<div><input name="who" style="width:80px;height:20px" />
+    <div style="break-before:page"><input name="who" style="width:80px;height:20px" /></div></div>"#;
+  let bytes = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .page_ranges(vec![PageRange::single(1)])
+      .build(),
+  );
+
+  assert_eq!(
+    String::from_utf8_lossy(&bytes).matches("/T(who)").count(),
+    1
+  );
+}

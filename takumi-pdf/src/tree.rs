@@ -38,6 +38,9 @@ pub(crate) struct TreeInputs<'g> {
   pub(crate) images: Rc<HashMap<Arc<str>, ImageSource>>,
   pub(crate) font_families: Option<FontFamily>,
   pub(crate) lang: Option<Lang>,
+  /// Whether form controls become fillable fields, which keeps one off a page
+  /// break.
+  pub(crate) form: bool,
 }
 
 impl TreeInputs<'_> {
@@ -205,12 +208,14 @@ impl PreparedTree {
   pub(crate) fn atom_collector<'a>(
     &'a self,
     inline: Option<&'a InlineMap<'a>>,
+    form: bool,
   ) -> AtomCollector<'a> {
     AtomCollector {
       root: &self.root,
       contexts: &self.contexts,
       results: &self.results,
       inline,
+      form,
     }
   }
 

@@ -20,6 +20,7 @@ use takumi_core::{
 };
 
 use crate::{
+  form::FieldTarget,
   krilla::{
     action::{Action, LinkAction},
     annotation::{Annotation, LinkAnnotation, Target},
@@ -29,7 +30,7 @@ use crate::{
     page::Page,
   },
   options::PT_PER_PX,
-  tags::{TagCollector, text_content},
+  tags::{TagCollector, raw_text, text_content},
   tree::PreparedTree,
   window::Window,
 };
@@ -45,6 +46,9 @@ pub(crate) struct LinkTarget {
 /// Link, heading and anchor targets collected from one tree.
 pub(crate) struct Interactive {
   pub(crate) links: Vec<LinkTarget>,
+  pub(crate) fields: Vec<FieldTarget>,
+  /// `<label for>` text by the id it names.
+  pub(crate) labels: HashMap<String, String>,
   pub(crate) headings: Vec<HeadingTarget>,
   /// Element ids to the box they name, for `href="#id"`.
   pub(crate) anchors: HashMap<Box<str>, AnchorTarget>,
@@ -115,14 +119,36 @@ impl Interactive {
   pub(crate) fn collect(tree: &PreparedTree) -> Self {
     let mut collected = Self {
       links: Vec::new(),
+      fields: Vec::new(),
+      labels: HashMap::new(),
       headings: Vec::new(),
       anchors: HashMap::new(),
       extents: HashMap::new(),
     };
 
     tree.for_each_paint(|paint| collect_interactive_paint(tree, paint, &mut collected));
+    collected.resolve_labelled_by(tree);
     collected.headings.sort_by(|a, b| a.top.total_cmp(&b.top));
     collected
+  }
+
+  /// Replaces every `aria-labelledby` id with the text of the element it
+  /// names, which the walk may only have reached after the field.
+  fn resolve_labelled_by(&mut self, tree: &PreparedTree) {
+    let texts = self
+      .fields
+      .iter()
+      .map(|field| {
+        let anchor = self.anchors.get(field.labelled_by()?)?;
+        let text = text_content(tree.root.node_at_path(&anchor.path)?);
+
+        (!text.is_empty()).then_some(text)
+      })
+      .collect::<Vec<_>>();
+
+    for (field, text) in self.fields.iter_mut().zip(texts) {
+      field.set_labelled_by(text);
+    }
   }
 
   /// The element paths a destination can point at: every anchor and every
@@ -177,6 +203,32 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
     });
   }
 
+  if source
+    .tag_name()
+    .is_some_and(|tag| tag.eq_ignore_ascii_case("label"))
+    && let Some(target) = source.attribute("for")
+  {
+    let text = text_content(node);
+
+    if !text.is_empty() {
+      collected
+        .labels
+        .entry(target.to_string())
+        .or_insert_with(|| text.clone());
+    }
+  }
+
+  if let Some(field) = FieldTarget::of(
+    node,
+    source,
+    layout,
+    rect,
+    &paint.path,
+    wrapping_label(tree, &paint.path),
+  ) {
+    collected.fields.push(field);
+  }
+
   if let Some(id) = source.id() {
     // The first box wins: a duplicated id is invalid HTML, and the earlier one
     // is what a browser would scroll to.
@@ -227,6 +279,41 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
       path,
     });
   }
+}
+
+/// The text of the `<label>` wrapping `path`, without the control's own text,
+/// which HTML leaves out of the name it computes.
+fn wrapping_label(tree: &PreparedTree, path: &[usize]) -> Option<String> {
+  for length in (0..path.len()).rev() {
+    let Some(ancestor) = tree.root.node_at_path(&path[..length]) else {
+      continue;
+    };
+    let labels = ancestor
+      .node
+      .as_ref()
+      .and_then(|source| source.tag_name())
+      .is_some_and(|tag| tag.eq_ignore_ascii_case("label"));
+
+    if !labels {
+      continue;
+    }
+    let mut text = String::new();
+
+    for (index, child) in ancestor
+      .children
+      .as_deref()
+      .unwrap_or_default()
+      .iter()
+      .enumerate()
+    {
+      if index != path[length] {
+        text.push_str(&raw_text(child));
+      }
+    }
+
+    return (!text.trim().is_empty()).then(|| text.trim().to_string());
+  }
+  None
 }
 
 /// The nearest heading at or above `path`, with its own path and level.

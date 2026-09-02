@@ -179,6 +179,7 @@ impl PdfRenderer {
       metadata: options.metadata.map(PdfMetadata::try_from).transpose()?,
       producer: None,
       outline: options.outline.unwrap_or(false),
+      form: options.form.unwrap_or_default(),
       standard: options.pdfa.map(PdfStandard::from).unwrap_or_default(),
       tagged: options.tagged.map(Tagging::from).unwrap_or_default(),
       attachments: options
