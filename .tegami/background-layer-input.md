@@ -4,6 +4,6 @@ packages:
     type: minor
 ---
 
-### Resolve background layers through BackgroundLayerInput
+### Rename the background layer inputs
 
-`ResolveBackgroundLayerInput` and `ResolveBackgroundLayersInput` are now `BackgroundLayerInput` and `BackgroundLayersInput`, each with a `resolve` method that replaces the free functions.
+`BackgroundLayerInput::resolve` and `BackgroundLayersInput::resolve` replace the `Resolve*` structs and free functions.
