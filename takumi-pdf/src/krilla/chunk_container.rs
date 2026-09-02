@@ -5,7 +5,7 @@ use xmp_writer::{RenditionClass, XmpWriter};
 
 use crate::krilla::configure::{PdfVersion, ValidationError};
 use crate::krilla::error::KrillaResult;
-use crate::krilla::interactive::annotation::FORM_FONT;
+use crate::krilla::interactive::annotation::{FORM_FONT, WidgetAnnotation};
 use crate::krilla::interchange::metadata::{Metadata, write_custom_properties};
 use crate::krilla::metadata::PageLayout;
 use crate::krilla::object_stream::{self, ObjectStream};
@@ -27,6 +27,8 @@ pub(crate) struct ChunkContainer {
   form_font: Option<Ref>,
   /// The non-terminal fields dotted names put above their own.
   form_parents: Vec<ParentField>,
+  /// Radio groups by field name: the field object every button hangs off.
+  form_radio_groups: Vec<RadioGroup>,
 }
 
 /// A non-terminal field named by one segment of a dotted HTML name.
@@ -47,6 +49,22 @@ pub(crate) struct FieldSlot {
   pub(crate) partial: String,
   /// `/TM`, the HTML name when the segments do not spell it back.
   pub(crate) mapping: Option<String>,
+}
+
+/// The field object one radio group's buttons share.
+struct RadioGroup {
+  field: Ref,
+  /// The HTML name every button of the group carries.
+  name: String,
+  slot: FieldSlot,
+  flags: i32,
+  /// `/TU`, taken from the first button that carries one.
+  description: Option<String>,
+  /// The state name of the selected button, absent while none is.
+  value: Option<String>,
+  kids: Vec<Ref>,
+  /// What each button submits, in the order its state is numbered.
+  options: Vec<String>,
 }
 
 impl ChunkContainer {
@@ -169,6 +187,106 @@ impl ChunkContainer {
       }
     }
   }
+
+  /// Adds `kid` to the group `widget` names, creating the field object on its
+  /// first button. Returns that field and the `/AP` state name this button
+  /// files its on appearance under.
+  pub(crate) fn radio_group(
+    &mut self,
+    sc: &mut SerializeContext,
+    widget: &WidgetAnnotation,
+    export: &str,
+    on: bool,
+    kid: Ref,
+  ) -> (Ref, String) {
+    let group = match self
+      .form_radio_groups
+      .iter_mut()
+      .find(|group| group.name == widget.name)
+    {
+      Some(group) => group,
+      None => {
+        let field = sc.new_ref();
+        let slot = self.field_slot(sc, &widget.name, field);
+
+        self.form_radio_groups.push(RadioGroup {
+          field,
+          name: widget.name.clone(),
+          slot,
+          flags: 0,
+          description: None,
+          value: None,
+          kids: vec![],
+          options: vec![],
+        });
+
+        self
+          .form_radio_groups
+          .last_mut()
+          .expect("just pushed a radio group")
+      }
+    };
+    // A button dropped with its page is never appended, so the state name
+    // comes from where this one lands rather than where it was collected.
+    let state = group.kids.len().to_string();
+
+    group.kids.push(kid);
+    group.options.push(export.to_string());
+    // One `required` button makes the whole group required, and the group
+    // shows the `/TU` of whichever button carries one.
+    group.flags |= widget.field.flags(&widget.style);
+
+    if group.description.is_none() {
+      group.description = widget.description.clone();
+    }
+    if on {
+      group.value = Some(state.clone());
+    }
+
+    (group.field, state)
+  }
+
+  /// Writes the field object of every radio group, once its buttons are known.
+  fn write_radio_groups(&mut self) {
+    let chunk = &mut self.non_stream.annotations;
+
+    for group in &self.form_radio_groups {
+      let mut field = chunk.indirect(group.field).dict();
+      let value = match &group.value {
+        Some(value) => Name(value.as_bytes()),
+        None => Name(b"Off"),
+      };
+
+      field.pair(Name(b"FT"), Name(b"Btn"));
+
+      if let Some(parent) = group.slot.parent {
+        field.pair(Name(b"Parent"), parent);
+      }
+      field.pair(Name(b"T"), TextStr(&group.slot.partial));
+
+      if let Some(mapping) = &group.slot.mapping {
+        field.pair(Name(b"TM"), TextStr(mapping));
+      }
+      field.pair(Name(b"Ff"), group.flags);
+
+      if let Some(description) = &group.description {
+        field.pair(Name(b"TU"), TextStr(description));
+      }
+      field.pair(Name(b"V"), value);
+      // HTML's `checked` is what the group resets to, which is also where it
+      // starts.
+      field.pair(Name(b"DV"), value);
+      field
+        .insert(Name(b"Opt"))
+        .array()
+        .items(group.options.iter().map(|option| TextStr(option)));
+      field
+        .insert(Name(b"Kids"))
+        .array()
+        .items(group.kids.iter().copied());
+      field.finish();
+    }
+  }
 }
 
 pub(crate) struct StreamChunks {
@@ -247,6 +365,7 @@ impl ChunkContainer {
       form_fields: vec![],
       form_font: None,
       form_parents: vec![],
+      form_radio_groups: vec![],
     }
   }
 
@@ -255,6 +374,7 @@ impl ChunkContainer {
     sc: &mut SerializeContext,
   ) -> KrillaResult<(Pdf, Ref, Option<ObjectStream>)> {
     self.write_parent_fields();
+    self.write_radio_groups();
 
     let mut remapped_ref = Ref::new(1);
     let mut remapper = HashMap::new();
@@ -412,15 +532,20 @@ impl ChunkContainer {
 
       let mut catalog = pdf.catalog(catalog_ref);
 
-      if let Some(font) = form_font {
+      if !self.form_fields.is_empty() {
         let mut form = catalog.form();
 
         form.fields(self.form_fields.iter().map(|field| remapper[field]));
-        form.default_appearance(Str(format!("/{FORM_FONT} 0 Tf 0 g").as_bytes()));
-        form
-          .default_resources()
-          .fonts()
-          .pair(Name(FORM_FONT.as_bytes()), font);
+
+        // A document of buttons draws no text, so it carries no unembedded
+        // face for a validator to reject.
+        if let Some(font) = form_font {
+          form.default_appearance(Str(format!("/{FORM_FONT} 0 Tf 0 g").as_bytes()));
+          form
+            .default_resources()
+            .fonts()
+            .pair(Name(FORM_FONT.as_bytes()), font);
+        }
         form.finish();
       }
 
