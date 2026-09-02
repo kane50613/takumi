@@ -4486,3 +4486,69 @@ fn a_dropped_page_takes_its_duplicate_name_with_it() {
     1
   );
 }
+
+#[test]
+fn a_field_value_draws_in_the_encoding_its_face_reads() {
+  let fonts = fonts();
+  let source =
+    r#"<div><input name="who" value="Café — 王" style="width:200px;height:20px" /></div>"#;
+  let bytes = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .build(),
+  );
+  let pdf = String::from_utf8_lossy(&bytes);
+
+  // `é` and the em dash are WinAnsi, written as octal escapes; the han
+  // character is not, so it leaves the drawn value.
+  assert!(pdf.contains(r"(Caf\351 \227 ) Tj"));
+  // The value the field submits keeps every character, as UTF-16.
+  assert!(pdf.contains("/V<FEFF"));
+}
+
+#[test]
+fn a_negative_maxlength_writes_no_limit() {
+  let fonts = fonts();
+  let source = r#"<div><input name="who" maxlength="-1" style="width:80px;height:20px" /></div>"#;
+  let bytes = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .build(),
+  );
+
+  assert!(!String::from_utf8_lossy(&bytes).contains("/MaxLen"));
+}
+
+#[test]
+fn pagination_moves_only_once_the_form_option_is_on() {
+  let fonts = fonts();
+  let source = r#"<div><div style="height:1090px"></div>
+    <input name="who" style="width:200px;height:60px" />
+    <div style="height:1090px"></div></div>"#;
+  let paged = |form: bool| {
+    render_pinned(
+      PdfOptions::builder()
+        .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+        .page(PageOptions::A4.with_margin(0.0))
+        .fonts(&fonts)
+        .form(form)
+        .build(),
+    )
+  };
+  let pages = |bytes: &[u8]| {
+    String::from_utf8_lossy(bytes)
+      .matches("/Type/Page/")
+      .count()
+  };
+
+  // Split, the control straddles the break and the rest still fits on two
+  // pages. Kept whole, it moves down and pushes the rest onto a third.
+  assert_eq!(pages(&paged(false)), 2);
+  assert_eq!(pages(&paged(true)), 3);
+}
