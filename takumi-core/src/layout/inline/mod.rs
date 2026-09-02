@@ -2,6 +2,7 @@ use crate::{
   context::RenderContext,
   font_style::{SizedFontStyle, contains_variation_selector, presentation_segments},
   geometry::{AvailableSpace, ComputedLayout, LAYOUT_UNIT_EPSILON, Point, Rect, Size},
+  layout::tree::RenderNode,
   resources::font::FontClasses,
   style::{
     Color, Direction, FontSynthesis, Lang, Length, SizedTextDecorationThickness,
@@ -607,33 +608,9 @@ fn build_inline_layout_tree<'c>(
   let mut previous_collapsible_space = false;
   let mut previous_was_line_break = false;
 
-  let text_item_context = items.iter().find_map(|item| match item {
-    InlineItem::Text { context, .. } => Some(*context),
-    _ => None,
-  });
-
-  // Parley has no base-direction API and infers the paragraph level from the
-  // first strong character, so every block leads with its direction's mark. A
-  // text-less LTR paragraph already has that base level, and the mark's line
-  // metrics would inflate its line box.
-  if !items.is_empty() && (text_item_context.is_some() || context.style.direction == Direction::Rtl)
-  {
-    let direction = context.style.direction;
-
-    // The mark borrows the first text span's style so it resolves to the same
-    // font and cannot skew the line's metrics, and it must not advance the
-    // line: spacing applies per cluster, so a zero-width glyph would still
-    // widen the paragraph by one letter-spacing.
-    let mark_context = text_item_context.unwrap_or(context);
-    let mut mark_style = SizedFontStyle::from_style(&mark_context.style, mark_context);
-    mark_style.letter_spacing = 0.0;
-    mark_style.word_spacing = 0.0;
-
-    spans.push(ProcessedInlineSpan::DirectionMark {
-      direction,
-      style: Box::new(mark_style),
-    });
-    index_pos = direction.bidi_mark().len();
+  if let Some(mark) = direction_mark_span(items, context) {
+    index_pos = context.style.direction.bidi_mark().len();
+    spans.push(mark);
   }
 
   for item in items {
@@ -669,91 +646,13 @@ fn build_inline_layout_tree<'c>(
         render_node,
         decorations,
       } => {
-        let context = &render_node.context;
-        let vertical_align = context.style.vertical_align.resolve(
-          &context.sizing,
-          context.sizing.font_size,
-          context.style.line_height,
-        );
-        let margin = Rect {
-          top: context.style.margin_top,
-          right: context.style.margin_right,
-          bottom: context.style.margin_bottom,
-          left: context.style.margin_left,
-        }
-        .map(|length| length.to_px(&context.sizing, 0.0));
-        let padding = Rect {
-          top: context.style.padding_top,
-          right: context.style.padding_right,
-          bottom: context.style.padding_bottom,
-          left: context.style.padding_left,
-        }
-        .map(|length| length.to_px(&context.sizing, 0.0));
-        let border = Rect {
-          top: (
-            context.style.border_top_style,
-            context.style.border_top_width,
-          ),
-          right: (
-            context.style.border_right_style,
-            context.style.border_right_width,
-          ),
-          bottom: (
-            context.style.border_bottom_style,
-            context.style.border_bottom_width,
-          ),
-          left: (
-            context.style.border_left_style,
-            context.style.border_left_width,
-          ),
-        }
-        .map(|(border_style, width)| {
-          if border_style.is_rendered() {
-            Length::from(width).to_px(&context.sizing, 0.0)
-          } else {
-            0.0
-          }
-        });
-
-        let atomic_metrics = render_node
-          .node
-          .as_ref()
-          .map(|_| render_node.measure_inline_box(available_space));
-        let content_size = atomic_metrics.map_or(Size::ZERO, |metrics| metrics.size);
-        let raw_baseline_offset = atomic_metrics.and_then(|metrics| metrics.baseline_offset);
-
-        let paint_width = if render_node.participates_as_inline_box() {
-          content_size.width + margin.horizontal()
-        } else {
-          content_size.width + margin.horizontal() + padding.horizontal() + border.horizontal()
-        };
-        let paint_height = if render_node.participates_as_inline_box() {
-          content_size.height + margin.vertical()
-        } else {
-          content_size.height + margin.vertical() + padding.vertical() + border.vertical()
-        };
-        let inline_box = InlineBox {
-          index: index_pos,
-          id: spans.len() as u64,
-          kind: inline_box_kind(render_node),
-          width: paint_width,
-          height: paint_height,
-        };
-        let baseline_offset =
-          raw_baseline_offset.map(|baseline| baseline.clamp(0.0, inline_box.height));
-
-        spans.push(ProcessedInlineSpan::Box(InlineBoxItem {
+        spans.push(inline_box_span(
           render_node,
-          decorations: decorations.clone(),
-          inline_box,
-          paint_width,
-          paint_height,
-          margin,
-          padding,
-          border,
-          baseline_offset,
-          vertical_align,
-        }));
+          decorations.clone(),
+          available_space,
+          index_pos,
+          spans.len() as u64,
+        ));
         previous_collapsible_space = false;
         previous_was_line_break = false;
       }
@@ -774,14 +673,160 @@ fn build_inline_layout_tree<'c>(
     }
   }
 
-  // Inline boxes bake constraint-dependent measured sizes into the layout, so
-  // only pure-text content is safe to cache across calls.
+  let (layout, text) = shape_spans(context, &spans, style, shape_cacheable);
+
+  BuiltInlineLayout {
+    layout,
+    text,
+    spans,
+    positioned_floats: Vec::new(),
+    line_scales: Vec::new(),
+  }
+}
+
+/// The direction mark a paragraph leads with. Parley has no base-direction
+/// API and infers the paragraph level from the first strong character, so
+/// every block leads with its direction's mark; a text-less LTR paragraph
+/// already has that base level, and the mark's line metrics would inflate its
+/// line box.
+fn direction_mark_span<'c>(
+  items: &[InlineItem<'c>],
+  context: &'c RenderContext,
+) -> Option<ProcessedInlineSpan<'c>> {
+  let text_item_context = items.iter().find_map(|item| match item {
+    InlineItem::Text { context, .. } => Some(*context),
+    _ => None,
+  });
+
+  if items.is_empty() || (text_item_context.is_none() && context.style.direction != Direction::Rtl)
+  {
+    return None;
+  }
+
+  // The mark borrows the first text span's style so it resolves to the same
+  // font and cannot skew the line's metrics, and it must not advance the
+  // line: spacing applies per cluster, so a zero-width glyph would still
+  // widen the paragraph by one letter-spacing.
+  let mark_context = text_item_context.unwrap_or(context);
+  let mut mark_style = SizedFontStyle::from_style(&mark_context.style, mark_context);
+  mark_style.letter_spacing = 0.0;
+  mark_style.word_spacing = 0.0;
+
+  Some(ProcessedInlineSpan::DirectionMark {
+    direction: context.style.direction,
+    style: Box::new(mark_style),
+  })
+}
+
+/// Measures an inline-level node and sizes the box that stands in for it.
+fn inline_box_span<'c>(
+  render_node: &'c RenderNode,
+  decorations: Option<Rc<DecorationLink>>,
+  available_space: Size<AvailableSpace>,
+  index: usize,
+  id: u64,
+) -> ProcessedInlineSpan<'c> {
+  let context = &render_node.context;
+  let vertical_align = context.style.vertical_align.resolve(
+    &context.sizing,
+    context.sizing.font_size,
+    context.style.line_height,
+  );
+  let margin = Rect {
+    top: context.style.margin_top,
+    right: context.style.margin_right,
+    bottom: context.style.margin_bottom,
+    left: context.style.margin_left,
+  }
+  .map(|length| length.to_px(&context.sizing, 0.0));
+  let padding = Rect {
+    top: context.style.padding_top,
+    right: context.style.padding_right,
+    bottom: context.style.padding_bottom,
+    left: context.style.padding_left,
+  }
+  .map(|length| length.to_px(&context.sizing, 0.0));
+  let border = Rect {
+    top: (
+      context.style.border_top_style,
+      context.style.border_top_width,
+    ),
+    right: (
+      context.style.border_right_style,
+      context.style.border_right_width,
+    ),
+    bottom: (
+      context.style.border_bottom_style,
+      context.style.border_bottom_width,
+    ),
+    left: (
+      context.style.border_left_style,
+      context.style.border_left_width,
+    ),
+  }
+  .map(|(border_style, width)| {
+    if border_style.is_rendered() {
+      Length::from(width).to_px(&context.sizing, 0.0)
+    } else {
+      0.0
+    }
+  });
+
+  let atomic_metrics = render_node
+    .node
+    .as_ref()
+    .map(|_| render_node.measure_inline_box(available_space));
+  let content_size = atomic_metrics.map_or(Size::ZERO, |metrics| metrics.size);
+  let raw_baseline_offset = atomic_metrics.and_then(|metrics| metrics.baseline_offset);
+
+  let paint_width = if render_node.participates_as_inline_box() {
+    content_size.width + margin.horizontal()
+  } else {
+    content_size.width + margin.horizontal() + padding.horizontal() + border.horizontal()
+  };
+  let paint_height = if render_node.participates_as_inline_box() {
+    content_size.height + margin.vertical()
+  } else {
+    content_size.height + margin.vertical() + padding.vertical() + border.vertical()
+  };
+  let inline_box = InlineBox {
+    index,
+    id,
+    kind: inline_box_kind(render_node),
+    width: paint_width,
+    height: paint_height,
+  };
+  let baseline_offset = raw_baseline_offset.map(|baseline| baseline.clamp(0.0, inline_box.height));
+
+  ProcessedInlineSpan::Box(InlineBoxItem {
+    render_node,
+    decorations,
+    inline_box,
+    paint_width,
+    paint_height,
+    margin,
+    padding,
+    border,
+    baseline_offset,
+    vertical_align,
+  })
+}
+
+/// Shapes `spans` into a layout, through the render's shape cache when the
+/// content is pure text. Inline boxes bake constraint-dependent measured sizes
+/// into the layout, so only pure-text content is safe to cache across calls.
+fn shape_spans(
+  context: &RenderContext,
+  spans: &[ProcessedInlineSpan<'_>],
+  style: &SizedFontStyle,
+  shape_cacheable: bool,
+) -> (InlineLayout, String) {
   let cacheable = shape_cacheable
     && spans
       .iter()
       .all(|span| matches!(span, ProcessedInlineSpan::Text { .. }));
   let cache_key = cacheable
-    .then(|| shape_fingerprint(&spans, style, context.style.lang.as_ref().map(Lang::as_str)));
+    .then(|| shape_fingerprint(spans, style, context.style.lang.as_ref().map(Lang::as_str)));
   // The stored text double-checks the fingerprint against hash collisions.
   let expected_text = cacheable.then(|| {
     spans.iter().fold(String::new(), |mut joined, span| {
@@ -801,30 +846,20 @@ fn build_inline_layout_tree<'c>(
     },
     _ => (None, false),
   };
-  let (layout, text) = match cached {
-    Some(cached) => cached,
-    None => {
-      let (layout, text) =
-        context.tree_builder(style.into(), chromium_line_breaks(&spans), |builder| {
-          push_spans_into_builder(builder, &spans, &context.fonts().classes)
-        });
-
-      if let Some(key) = cache_key {
-        let stored = seen.then(|| (layout.clone(), text.clone()));
-
-        context.shape_cache().borrow_mut().insert(key, stored);
-      }
-      (layout, text)
-    }
-  };
-
-  BuiltInlineLayout {
-    layout,
-    text,
-    spans,
-    positioned_floats: Vec::new(),
-    line_scales: Vec::new(),
+  if let Some(cached) = cached {
+    return cached;
   }
+
+  let (layout, text) = context.tree_builder(style.into(), chromium_line_breaks(spans), |builder| {
+    push_spans_into_builder(builder, spans, &context.fonts().classes)
+  });
+
+  if let Some(key) = cache_key {
+    let stored = seen.then(|| (layout.clone(), text.clone()));
+
+    context.shape_cache().borrow_mut().insert(key, stored);
+  }
+  (layout, text)
 }
 
 fn prepare_inline_layout(

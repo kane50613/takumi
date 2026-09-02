@@ -1166,9 +1166,6 @@ mod matching_tests {
     let root = Node::container([]).with_class_name("test");
     let matched = match_stylesheets_view(&root, &stylesheet, Viewport::default());
 
-    // Matched normal: should have width: 10px.
-    // Matched important: should have height: 20px.
-
     assert_eq!(matched[0].element().unlayered_normal()[0].len(), 1);
     assert!(
       matched[0].element().unlayered_normal()[0]

@@ -315,15 +315,12 @@ impl<'i> FromCss<'i> for ConicGradient {
       let mut center: Option<PositionValue> = None;
       let mut interpolation = None;
 
-      // Parse optional "from <angle>" and/or "at <position>" before the comma
       loop {
-        // Try "from <angle>"
         if input.try_parse(|i| i.expect_ident_matching("from")).is_ok() {
           from_angle = Some(Angle::from_css(input)?);
           continue;
         }
 
-        // Try "at <position>"
         if input.try_parse(|i| i.expect_ident_matching("at")).is_ok() {
           center = Some(PositionValue::from_css(input)?);
           continue;
@@ -334,7 +331,6 @@ impl<'i> FromCss<'i> for ConicGradient {
           continue;
         }
 
-        // Consume the comma separator if present
         input.try_parse(Parser::expect_comma).ok();
         break;
       }
@@ -520,14 +516,12 @@ mod tests {
       .build();
     let tile = ConicGradientTile::new(&gradient, 100, 100, &sizing, Color::black(), false);
 
-    // Top center (50, 0) should be red (start of gradient)
     let color_top = tile.sample_pixel(50, 0).demultiply();
     assert_eq!(color_top, ColorU8::from_rgba(255, 0, 0, 255));
   }
 
   #[test]
   fn test_conic_gradient_hard_stops() {
-    // Simulate the card cost gradient: 3 colors with hard stops
     let gradient = ConicGradient::builder()
       .stops([
         GradientStop::ColorHint {

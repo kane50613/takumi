@@ -816,12 +816,10 @@ impl ResolvedGradientStop {
       }
     }
 
-    // If there are no color stops, return an empty vector
     if resolved.is_empty() {
       return resolved;
     }
 
-    // if there is only one stop, treat it as pure color image
     if resolved.len() == 1 {
       if let Some(first_stop) = resolved.first_mut() {
         first_stop.position = axis_size_px;
@@ -845,7 +843,6 @@ impl ResolvedGradientStop {
     // Distribute unspecified or non-increasing positions in pixel domain
     let mut i = 1usize;
     while i < resolved.len() - 1 {
-      // if the position is defined and valid, skip it
       if resolved[i].position != UNDEFINED_POSITION {
         i += 1;
         continue;
@@ -853,7 +850,6 @@ impl ResolvedGradientStop {
 
       let last_defined_position = resolved.get(i - 1).map(|s| s.position).unwrap_or(0.0);
 
-      // try to find next defined position
       let next_index = resolved
         .iter()
         .skip(i + 1)
@@ -863,11 +859,9 @@ impl ResolvedGradientStop {
 
       let next_position = resolved[next_index].position;
 
-      // number of segments between last defined and next position
       let segments_count = (next_index - i + 1) as f32;
       let step_for_each_segment = (next_position - last_defined_position) / segments_count;
 
-      // distribute the step evenly between the stops
       for j in i..next_index {
         let offset = (j - i + 1) as f32;
         resolved[j].position = last_defined_position + step_for_each_segment * offset;
@@ -1027,7 +1021,6 @@ mod tests {
       },
     );
 
-    // the mid color between red and blue should be at 10%
     assert_eq!(
       resolved[1],
       ResolvedGradientStop {
