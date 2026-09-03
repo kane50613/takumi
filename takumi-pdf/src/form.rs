@@ -4,7 +4,10 @@
 use std::collections::HashMap;
 
 use takumi_core::{
-  layout::{node::Node, tree::RenderNode},
+  layout::{
+    node::{Node, OptionState},
+    tree::RenderNode,
+  },
   style::{Color, TextAlign},
 };
 
@@ -45,7 +48,7 @@ enum ControlKind {
   Text { multiline: bool, password: bool },
   CheckBox,
   Radio,
-  Choice { multi: bool },
+  Choice { multi: bool, list: bool },
 }
 
 impl ControlKind {
@@ -63,6 +66,7 @@ impl ControlKind {
     if tag.eq_ignore_ascii_case("select") {
       return Some(Self::Choice {
         multi: source.attribute("multiple").is_some(),
+        list: source.is_list_box(),
       });
     }
     if !tag.eq_ignore_ascii_case("input") {
@@ -116,9 +120,11 @@ enum FieldKind {
     options: Vec<ChoiceOption>,
     /// Which options start selected, by their place in `options`.
     selected: Vec<usize>,
-    /// Whether more than one option can be picked, which also turns the
-    /// drop-down into a list box.
+    /// Whether more than one option can be picked.
     multi: bool,
+    /// Whether the options lay out as a list box rather than a closed
+    /// drop-down.
+    list: bool,
   },
 }
 
@@ -141,20 +147,14 @@ impl FieldKind {
         on,
         export: export_value(source),
       },
-      ControlKind::Choice { multi } => {
-        let options = options(node);
-        let mut selected = selected_options(node);
-
-        // A closed drop-down always shows one option, so the first stands in
-        // when the markup names none.
-        if selected.is_empty() && !multi && !options.is_empty() {
-          selected.push(0);
-        }
+      ControlKind::Choice { multi, list } => {
+        let (options, states) = options(node);
 
         Self::Choice {
+          selected: OptionState::chosen(&states, multi, !list),
           options,
-          selected,
           multi,
+          list,
         }
       }
       ControlKind::Text {
@@ -205,6 +205,7 @@ impl FieldKind {
         options,
         selected,
         multi,
+        list,
       } => FormField::Choice {
         options: options
           .iter()
@@ -212,58 +213,49 @@ impl FieldKind {
           .collect(),
         selected: selected.clone(),
         multi: *multi,
+        list: *list,
       },
     }
   }
 }
 
-/// Every `<option>` under a `<select>`. Layout moves the source children into
-/// the render tree, so they are read from there.
-fn options(node: &RenderNode) -> Vec<ChoiceOption> {
+/// Every `<option>` under a `<select>` with its selection state. Layout moves
+/// the source children into the render tree, so they are read from there.
+fn options(node: &RenderNode) -> (Vec<ChoiceOption>, Vec<OptionState>) {
   let mut options = Vec::new();
+  let mut states = Vec::new();
 
-  visit_options(node, &mut |option, _| options.push(option));
-  options
-}
-
-/// The places of the options carrying `selected`.
-fn selected_options(node: &RenderNode) -> Vec<usize> {
-  let mut selected = Vec::new();
-  let mut index = 0;
-
-  visit_options(node, &mut |_, on| {
-    if on {
-      selected.push(index);
-    }
-    index += 1;
+  visit_options(node, &mut |option, state| {
+    options.push(option);
+    states.push(state);
   });
-  selected
+  (options, states)
 }
 
-fn visit_options(node: &RenderNode, visit: &mut impl FnMut(ChoiceOption, bool)) {
+fn visit_options(node: &RenderNode, visit: &mut impl FnMut(ChoiceOption, OptionState)) {
   for child in node.children.as_deref().unwrap_or_default() {
     let Some(source) = child.node.as_ref() else {
       continue;
     };
-
-    if !source
-      .tag_name()
-      .is_some_and(|tag| tag.eq_ignore_ascii_case("option"))
-    {
+    let Some(state) = source.option_state() else {
       visit_options(child, visit);
       continue;
-    }
-    let display = text_content(child);
+    };
+    let text = text_content(child);
+    let display = source
+      .option_label()
+      .map(str::to_string)
+      .unwrap_or_else(|| text.split_whitespace().collect::<Vec<_>>().join(" "));
 
     visit(
       ChoiceOption {
         export: source
           .attribute("value")
           .map(str::to_string)
-          .unwrap_or_else(|| display.clone()),
+          .unwrap_or_else(|| text.clone()),
         display,
       },
-      source.attribute("selected").is_some(),
+      state,
     );
   }
 }

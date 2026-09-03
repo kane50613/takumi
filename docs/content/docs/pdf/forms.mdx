@@ -16,11 +16,9 @@ const pdf = await render(
 
     <input type="checkbox" name="subscribe" defaultChecked />
 
-    <select name="plan">
+    <select name="plan" defaultValue="A">
       <option value="M">Monthly</option>
-      <option value="A" selected>
-        Annual
-      </option>
+      <option value="A">Annual</option>
     </select>
   </form>,
   // [!code highlight]
@@ -30,19 +28,19 @@ const pdf = await render(
 
 ## What each attribute becomes
 
-Fields come from the HTML attributes you already write. There is no second set of components.
+Fields come from the HTML attributes you already write. There is no second set of components. In JSX, `defaultValue`, `defaultChecked` and `htmlFor` mean what they do in React DOM.
 
-| HTML                                                                   | PDF                                                       |
-| ---------------------------------------------------------------------- | --------------------------------------------------------- |
-| `name`                                                                 | The field name. Radio buttons sharing one become a group  |
-| `value`, `checked`, `selected`, a `<textarea>`'s text                  | The value the field starts and resets to                  |
-| `required`, `readonly`, `disabled`                                     | Field flags. A disabled field stays out of the submission |
-| `maxlength`                                                            | The longest value a reader may type                       |
-| `<input type="password">`                                              | A password field, drawn masked                            |
-| `<option value>`                                                       | The value the option submits, separate from its label     |
-| `multiple`                                                             | A list box holding more than one selection                |
-| `aria-label`, `aria-labelledby`, `<label>`, `title`, `placeholder`     | The name a screen reader announces                        |
-| `color`, `font-size`, `text-align`                                     | How a reader redraws the value after an edit              |
+| HTML                                                               | PDF                                                       |
+| ------------------------------------------------------------------ | --------------------------------------------------------- |
+| `name`                                                             | The field name. Radio buttons sharing one become a group  |
+| `value`, `checked`, `selected`, a `<textarea>`'s text              | The value the field starts and resets to                  |
+| `required`, `readonly`, `disabled`                                 | Field flags. A disabled field stays out of the submission |
+| `maxlength`                                                        | The longest value a reader may type                       |
+| `<input type="password">`                                          | A password field, drawn masked                            |
+| `<option value>`, `<option label>`                                 | The value the option submits, separate from its label     |
+| `multiple`, `size`                                                 | A list box; `multiple` holds more than one selection      |
+| `aria-label`, `aria-labelledby`, `<label>`, `title`, `placeholder` | The name a screen reader announces                        |
+| `color`, `font-size`, `text-align`                                 | How a reader redraws the value after an edit              |
 
 An `<input>` whose `type` is `submit`, `reset`, `button`, `image`, `file` or `hidden` draws as a plain box and gets no field. A standalone document has nothing to bind their action or file path to.
 
@@ -58,7 +56,7 @@ Two controls may share a `name` only when they are the buttons of one radio grou
 
 A page dropped by `pageRanges` takes its fields with it, so the names it held do not collide.
 
-A period delimits the PDF field hierarchy. A name carrying one, such as `user.email`, is written to `/T` with the period replaced; `/TM` keeps the name the form exports under.
+A period spells the PDF field hierarchy, as it does in every PDF library: `user.email` is the field `email` under a non-terminal field `user`. A name cannot also be the parent of another, so `user` beside `user.email` fails the render too.
 
 ## Limits
 
@@ -66,4 +64,6 @@ Field values draw with the standard Helvetica face in WinAnsiEncoding, which no 
 
 A character outside WinAnsiEncoding is dropped from the drawn value. `/V` still carries it in full, so the value a reader submits is intact.
 
-A `<select>` draws one line, even when `multiple` holds several selections.
+A list box draws every option as a row. Which rows are selected shows only once a viewer redraws the field.
+
+A control taller than a page keeps its field on the page it starts on, cut at that page's bottom.
