@@ -270,7 +270,7 @@ impl TailwindValues {
     viewport: Viewport,
     breakpoints: &BreakpointOverrides,
   ) -> StyleDeclarationBlock {
-    let mut builder = TailwindDeclarationBuilder::default();
+    let mut builder = TailwindDeclarationBuilder::with_capacity(self.inner.len());
 
     for value in self.inner {
       value.apply(&mut builder, viewport, breakpoints);

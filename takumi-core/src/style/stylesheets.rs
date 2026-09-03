@@ -118,7 +118,7 @@ impl TwVarRef {
     };
 
     match parent {
-      Some(parent) => fallback.clone().apply_with_parent(style, parent),
+      Some(parent) => (**fallback).clone().apply_with_parent(style, parent),
       None => fallback.apply_to_computed(style),
     }
   }
@@ -1812,6 +1812,11 @@ impl StyleDeclarationBlock {
     let mut block = Self::default();
     block.append_parsed_declarations(declarations, important);
     block
+  }
+
+  /// Reserves room for `additional` more declarations.
+  pub(crate) fn reserve(&mut self, additional: usize) {
+    self.declarations.reserve(additional);
   }
 
   /// Appends a declaration and records whether it was important.

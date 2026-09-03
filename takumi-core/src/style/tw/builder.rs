@@ -6,6 +6,16 @@ pub(super) struct TailwindDeclarationBuilder {
 }
 
 impl TailwindDeclarationBuilder {
+  /// A builder sized for a class list that expands to about `utilities`
+  /// declarations, so the block does not grow one push at a time.
+  pub(super) fn with_capacity(utilities: usize) -> Self {
+    let mut declarations = StyleDeclarationBlock::default();
+
+    declarations.reserve(utilities);
+
+    Self { declarations }
+  }
+
   pub(super) fn push(&mut self, declaration: StyleDeclaration, important: bool) {
     self.declarations.push(declaration, important);
   }
