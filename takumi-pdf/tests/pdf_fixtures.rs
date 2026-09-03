@@ -4410,10 +4410,11 @@ fn form_fields_render_as_widgets() {
     "/AcroForm",
     "/DR",
     "/Helv",
-    // A period delimits the field hierarchy, so `/T` cannot carry the HTML
-    // name and `/TM` keeps what the form exports under.
-    "/T(user_name)",
-    "/TM(user.name)",
+    // A period delimits the field hierarchy: `user.name` is the field `name`
+    // under a non-terminal `user`.
+    "/T(user)",
+    "/T(name)",
+    "/Kids[",
     "/FT/Tx",
     "/MaxLen 200",
     // The wrapping `<label>` names the textarea, without its own value.
@@ -4506,7 +4507,142 @@ fn a_field_value_draws_in_the_encoding_its_face_reads() {
   // character is not, so it leaves the drawn value.
   assert!(pdf.contains(r"(Caf\351 \227 ) Tj"));
   // The value the field submits keeps every character, as UTF-16.
-  assert!(pdf.contains("/V<FEFF"));
+  assert!(
+    pdf.contains(
+      "/V<FEFF004300610066 00E9 0020 2014 0020 738B>"
+        .replace(' ', "")
+        .as_str()
+    )
+  );
+}
+
+#[test]
+fn a_dotted_name_spells_a_field_hierarchy() {
+  let fonts = fonts();
+  let source = r#"<div><input name="a.b" style="width:80px;height:20px" />
+    <input name="a_b" style="width:80px;height:20px" /></div>"#;
+  let bytes = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .build(),
+  );
+  let pdf = String::from_utf8_lossy(&bytes);
+
+  for expected in ["/T(a)", "/T(b)", "/T(a_b)", "/Parent"] {
+    assert!(pdf.contains(expected), "hierarchy is missing {expected}");
+  }
+  assert!(!pdf.contains("/TM"));
+}
+
+#[test]
+fn a_name_that_parents_another_is_rejected() {
+  let fonts = fonts();
+  let source = r#"<div><input name="a" style="width:80px;height:20px" />
+    <input name="a.b" style="width:80px;height:20px" /></div>"#;
+  let error = render(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .build(),
+  )
+  .expect_err("a field cannot also be the parent of another");
+
+  assert!(matches!(error, PdfError::DuplicateFieldName(name) if name == "a.b"));
+}
+
+#[test]
+fn a_field_taller_than_the_page_keeps_the_page_it_starts_on() {
+  let fonts = fonts();
+  let source = r#"<div><textarea name="long" style="width:200px;height:2000px"></textarea></div>"#;
+  let bytes = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4.with_margin(0.0))
+      .fonts(&fonts)
+      .form(true)
+      .build(),
+  );
+  let pdf = String::from_utf8_lossy(&bytes);
+
+  assert!(pdf.matches("/Type/Page/").count() > 1);
+  assert_eq!(pdf.matches("/Subtype/Widget").count(), 1);
+}
+
+#[test]
+fn aria_labelledby_joins_every_element_it_names() {
+  let fonts = fonts();
+  let source = r#"<div><div id="first">First</div><div id="last">Last</div>
+    <input name="who" aria-labelledby="first last" style="width:80px;height:20px" /></div>"#;
+  let bytes = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .build(),
+  );
+
+  assert!(String::from_utf8_lossy(&bytes).contains("/TU(First Last)"));
+}
+
+#[test]
+fn a_wrapping_label_keeps_the_text_of_its_nested_elements() {
+  let fonts = fonts();
+  let source =
+    r#"<label><span>Email <input name="email" style="width:80px;height:20px" /></span></label>"#;
+  let bytes = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .build(),
+  );
+
+  assert!(String::from_utf8_lossy(&bytes).contains("/TU(Email)"));
+}
+
+#[test]
+fn a_textarea_keeps_its_line_breaks() {
+  let fonts = fonts();
+  let source = "<div><textarea name=\"notes\" style=\"width:300px;height:80px\">first\n\nsecond</textarea></div>";
+  let bytes = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .build(),
+  );
+  let pdf = String::from_utf8_lossy(&bytes);
+
+  assert!(pdf.contains("(first) Tj"));
+  assert!(pdf.contains("() Tj"));
+  assert!(pdf.contains("(second) Tj"));
+}
+
+#[test]
+fn a_control_on_a_text_line_gets_its_widget() {
+  let fonts = fonts();
+  let source = r#"<p>Name: <input name="who" style="width:80px;height:20px" /> and
+    <span style="display:inline-block"><a href="https://example.com/">a link</a></span></p>"#;
+  let bytes = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .build(),
+  );
+  let pdf = String::from_utf8_lossy(&bytes);
+
+  assert!(pdf.contains("/T(who)"));
+  assert!(pdf.contains("/URI(https://example.com/)"));
 }
 
 #[test]
@@ -4528,8 +4664,10 @@ fn a_negative_maxlength_writes_no_limit() {
 #[test]
 fn pagination_moves_only_once_the_form_option_is_on() {
   let fonts = fonts();
+  // An inline-level box never splits, so the control is made block-level to
+  // give pagination a box it could cut.
   let source = r#"<div><div style="height:1090px"></div>
-    <input name="who" style="width:200px;height:60px" />
+    <input name="who" style="display:block;width:200px;height:60px" />
     <div style="height:1090px"></div></div>"#;
   let paged = |form: bool| {
     render_pinned(

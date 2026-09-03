@@ -146,12 +146,12 @@ struct FieldLabel {
 }
 
 impl FieldLabel {
-  fn of(source: &Node, wrapping: Option<String>) -> Self {
+  fn of(source: &Node) -> Self {
     Self {
       labelled_by: source.attribute("aria-labelledby").map(str::to_string),
       aria_label: source.attribute("aria-label").map(str::to_string),
       id: source.id().map(str::to_string),
-      wrapping,
+      wrapping: None,
       fallback: ["title", "placeholder"]
         .into_iter()
         .find_map(|attribute| source.attribute(attribute))
@@ -238,7 +238,6 @@ impl FieldTarget {
     layout: Layout,
     rect: KrillaRect,
     path: &[usize],
-    wrapping_label: Option<String>,
   ) -> Option<Self> {
     let field = FieldKind::of(source, node)?;
     let name = source
@@ -251,7 +250,7 @@ impl FieldTarget {
       rect,
       field,
       style: FieldStyle::of(node, source, layout),
-      label: FieldLabel::of(source, wrapping_label),
+      label: FieldLabel::of(source),
       path: path.to_vec(),
     })
   }
@@ -266,11 +265,9 @@ impl FieldTarget {
     self.label.labelled_by = text;
   }
 
-  /// `/T`, the partial field name. Periods delimit the field hierarchy, so a
-  /// name carrying one cannot be written as it stands; `/TM` keeps the name
-  /// the form exports under.
-  pub(crate) fn partial_name(&self) -> String {
-    self.name.replace('.', "_")
+  /// Sets the text of the `<label>` wrapping the control.
+  pub(crate) fn set_wrapping_label(&mut self, text: Option<String>) {
+    self.label.wrapping = text;
   }
 
   /// The widget annotation for this field at the box it takes on one page.
@@ -285,7 +282,6 @@ impl FieldTarget {
     Annotation::new_widget(
       WidgetAnnotation::new(
         rect,
-        self.partial_name(),
         self.name.clone(),
         self.field.to_form_field(),
         self.style.to_widget(),
@@ -311,19 +307,22 @@ pub(crate) fn add_field_annotations(
   }
   let (y0, y1) = window.y.unwrap_or((f32::NEG_INFINITY, f32::INFINITY));
 
+  // A control stays off a page break, so the page holding its top holds all
+  // of it. One taller than the page keeps that page too, cut at the bottom
+  // the way the box itself is painted.
   for field in fields {
-    if field.rect.top() < y0 || field.rect.bottom() > y1 {
+    if field.rect.top() < y0 || field.rect.top() >= y1 {
       continue;
     }
     let Some(rect) = KrillaRect::from_ltrb(
       (field.rect.left() + offset.0) * PT_PER_PX,
       (field.rect.top() - y0 + offset.1) * PT_PER_PX,
       (field.rect.right() + offset.0) * PT_PER_PX,
-      (field.rect.bottom() - y0 + offset.1) * PT_PER_PX,
+      (field.rect.bottom().min(y1) - y0 + offset.1) * PT_PER_PX,
     ) else {
       continue;
     };
-    state.field_names.borrow_mut().push(field.partial_name());
+    state.field_names.borrow_mut().push(field.name.clone());
 
     let annotation = field.annotation(rect, labels, state.lang);
 

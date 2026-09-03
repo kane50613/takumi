@@ -281,7 +281,9 @@ Fields come from the HTML attributes you already write.
 
 A control paints through the normal CSS pipeline, so its border, background and radius are whatever the stylesheet says. The widget draws only the value on top. Once a reader edits that value, it redraws the field from the colors and size in the table above, and a rounded corner or a gradient does not survive.
 
-Two controls may not share a `name`. That fails the render rather than merging into one field showing the same value twice.
+Two controls may not share a `name`. That fails the render rather than merging into one field showing the same value twice. A period in a `name` spells the field hierarchy: `user.name` is the field `name` under `user`.
+
+A control taller than a page keeps its field on the page it starts on, cut at that page's bottom.
 
 An `<input>` whose `type` is `submit`, `reset`, `button`, `image`, `file` or `hidden` draws as a plain box and gets no field.
 

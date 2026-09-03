@@ -191,13 +191,23 @@ impl<'a> DocumentState<'a> {
     Some(PdfError::MissingGlyphs(named))
   }
 
-  /// The first name more than one emitted field claims. A dropped page takes
-  /// its fields with it, so the names it held do not collide.
+  /// The first name more than one emitted field claims, counting a name that
+  /// is a parent of another, such as `a` beside `a.b`, as claimed twice. A
+  /// dropped page takes its fields with it, so the names it held do not
+  /// collide.
   fn duplicate_field_name(&self) -> Option<String> {
     let names = self.field_names.borrow();
     let mut seen = HashSet::new();
 
-    names.iter().find(|name| !seen.insert(*name)).cloned()
+    names
+      .iter()
+      .find(|name| {
+        !seen.insert(name.as_str())
+          || seen
+            .iter()
+            .any(|other| nests(other, name) || nests(name, other))
+      })
+      .cloned()
   }
 }
 
@@ -2130,7 +2140,15 @@ impl PaintDevice for SurfaceDevice<'_, '_> {
 }
 
 /// Fills `path` with the child indices leading from `root` to `target`, matched by identity.
-fn node_path(root: &RenderNode, target: &RenderNode, path: &mut Vec<usize>) -> bool {
+/// Whether `name` sits under `parent` in the field hierarchy a period spells.
+fn nests(parent: &str, name: &str) -> bool {
+  name
+    .strip_prefix(parent)
+    .is_some_and(|rest| rest.starts_with('.'))
+}
+
+/// Fills `path` with the way from `root` down to `target`, when it is there.
+pub(crate) fn node_path(root: &RenderNode, target: &RenderNode, path: &mut Vec<usize>) -> bool {
   if std::ptr::eq(root, target) {
     return true;
   }
