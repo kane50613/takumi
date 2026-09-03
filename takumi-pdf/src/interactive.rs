@@ -297,7 +297,7 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
     }
   }
 
-  if let Some(field) = FieldTarget::of(node, source, layout, rect, &paint.path) {
+  if let Some(field) = FieldTarget::of(node, source, rect, &paint.path) {
     collected.fields.push(field);
   }
 
