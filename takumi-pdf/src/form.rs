@@ -4,7 +4,6 @@
 use std::collections::HashMap;
 
 use takumi_core::{
-  geometry::ComputedLayout as Layout,
   layout::{node::Node, tree::RenderNode},
   style::{Color, TextAlign},
 };
@@ -175,8 +174,6 @@ impl FieldLabel {
 struct FieldStyle {
   color: [f32; 3],
   font_size: f32,
-  background: Option<[f32; 3]>,
-  border: Option<([f32; 3], f32)>,
   /// `/Q`: 0 left, 1 center, 2 right.
   align: i32,
   read_only: bool,
@@ -187,17 +184,13 @@ struct FieldStyle {
 }
 
 impl FieldStyle {
-  fn of(node: &RenderNode, source: &Node, layout: Layout) -> Self {
+  fn of(node: &RenderNode, source: &Node) -> Self {
     let style = &node.context.style;
     let color = style.color.resolve(Color([0, 0, 0, 255]));
 
     Self {
       color: pdf_color(color).unwrap_or([0.0, 0.0, 0.0]),
       font_size: node.context.sizing.font_size * PT_PER_PX,
-      background: pdf_color(style.background_color.resolve(color)),
-      border: pdf_color(style.border_top_color.resolve(color))
-        .filter(|_| layout.border.top > 0.0)
-        .map(|border| (border, layout.border.top * PT_PER_PX)),
       align: match style.text_align {
         TextAlign::Center => 1,
         TextAlign::Right | TextAlign::End => 2,
@@ -213,8 +206,6 @@ impl FieldStyle {
     WidgetStyle {
       color: self.color,
       font_size: self.font_size,
-      background: self.background,
-      border: self.border,
       align: self.align,
       read_only: self.read_only || self.disabled,
       required: self.required,
@@ -235,7 +226,6 @@ impl FieldTarget {
   pub(crate) fn of(
     node: &RenderNode,
     source: &Node,
-    layout: Layout,
     rect: KrillaRect,
     path: &[usize],
   ) -> Option<Self> {
@@ -249,7 +239,7 @@ impl FieldTarget {
       name: name.to_string(),
       rect,
       field,
-      style: FieldStyle::of(node, source, layout),
+      style: FieldStyle::of(node, source),
       label: FieldLabel::of(source),
       path: path.to_vec(),
     })

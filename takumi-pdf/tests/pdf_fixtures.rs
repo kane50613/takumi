@@ -4429,6 +4429,10 @@ fn form_fields_render_as_widgets() {
 
   // A push button carries an action a standalone document cannot bind.
   assert!(!pdf.contains("(Send)"));
+  // No `/MK`: the page already paints the box, and an appearance the viewer
+  // regenerates has to stay transparent over it.
+  assert!(!pdf.contains("/MK"));
+  assert_eq!(pdf.matches("/Border[0 0 0]").count(), 3);
   // One appearance stream per field, and every one of them names the shared
   // face its `/DA` does.
   assert_eq!(pdf.matches("/Tx BMC").count(), 3);
