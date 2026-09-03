@@ -269,17 +269,17 @@ const pdf = await render(
 
 Fields come from the HTML attributes you already write.
 
-| HTML                                                                   | PDF                                                       |
-| ---------------------------------------------------------------------- | --------------------------------------------------------- |
-| `name`                                                                 | The field name                                            |
-| `value`, a `<textarea>`'s text                                         | The value the field starts and resets to                  |
-| `required`, `readonly`, `disabled`                                     | Field flags. A disabled field stays out of the submission |
-| `maxlength`                                                            | The longest value a reader may type                       |
-| `<input type="password">`                                              | A password field, drawn masked                            |
-| `aria-label`, `aria-labelledby`, `<label>`, `title`, `placeholder`     | The name a screen reader announces                        |
-| `color`, `font-size`, `background-color`, `border-color`, `text-align` | How a reader redraws the field after an edit              |
+| HTML                                                               | PDF                                                       |
+| ------------------------------------------------------------------ | --------------------------------------------------------- |
+| `name`                                                             | The field name                                            |
+| `value`, a `<textarea>`'s text                                     | The value the field starts and resets to                  |
+| `required`, `readonly`, `disabled`                                 | Field flags. A disabled field stays out of the submission |
+| `maxlength`                                                        | The longest value a reader may type                       |
+| `<input type="password">`                                          | A password field, drawn masked                            |
+| `aria-label`, `aria-labelledby`, `<label>`, `title`, `placeholder` | The name a screen reader announces                        |
+| `color`, `font-size`, `text-align`                                 | How a reader redraws the value after an edit              |
 
-A control paints through the normal CSS pipeline, so its border, background and radius are whatever the stylesheet says. The widget draws only the value on top. Once a reader edits that value, it redraws the field from the colors and size in the table above, and a rounded corner or a gradient does not survive.
+A control paints through the normal CSS pipeline, so its border, background and radius are whatever the stylesheet says. The widget draws only the value on top, and carries no `/MK`, so the appearance a viewer regenerates after an edit stays transparent over the box the page already painted. A rounded corner or a two-tone border survives that redraw; only the value is drawn again, in the color, size and alignment above.
 
 Two controls may not share a `name`. That fails the render rather than merging into one field showing the same value twice. A period in a `name` spells the field hierarchy: `user.name` is the field `name` under `user`.
 

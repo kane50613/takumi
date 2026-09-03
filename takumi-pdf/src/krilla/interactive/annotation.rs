@@ -328,10 +328,6 @@ pub struct WidgetStyle {
   pub color: [f32; 3],
   /// Text size in points.
   pub font_size: f32,
-  /// `/MK /BG`, from `background-color`.
-  pub background: Option<[f32; 3]>,
-  /// `/MK /BC`, from `border-color`.
-  pub border: Option<([f32; 3], f32)>,
   /// `/Q`: 0 left, 1 center, 2 right.
   pub align: i32,
   /// `/Ff` ReadOnly.
@@ -485,24 +481,6 @@ impl WidgetAnnotation {
     stream_ref
   }
 
-  /// Writes the `/MK` appearance characteristics a viewer redraws the field
-  /// from, and the border width they are stroked with.
-  fn serialize_appearance_characteristics(&self, annotation: &mut pdf_writer::writers::Annotation) {
-    let mut characteristics = annotation.appearance_characteristics();
-
-    if let Some([red, green, blue]) = self.style.background {
-      characteristics.background_color_rgb(red, green, blue);
-    }
-    if let Some(([red, green, blue], _)) = self.style.border {
-      characteristics.border_color_rgb(red, green, blue);
-    }
-    characteristics.finish();
-
-    let width = self.style.border.map(|(_, width)| width).unwrap_or(0.0);
-
-    annotation.border(0.0, 0.0, width, None);
-  }
-
   fn serialize_type(
     &self,
     annotation: &mut pdf_writer::writers::Annotation,
@@ -521,7 +499,10 @@ impl WidgetAnnotation {
       .unwrap();
 
     annotation.rect(actual_rect.to_pdf_rect());
-    self.serialize_appearance_characteristics(annotation);
+    // The page already paints the control's border and background. Leaving
+    // `/MK` out keeps a regenerated appearance transparent, so a rounded
+    // corner or a two-tone border survives the redraw.
+    annotation.border(0.0, 0.0, 0.0, None);
 
     if let Some(lang) = &self.lang {
       annotation.pair(Name(b"Lang"), TextStr(lang));
