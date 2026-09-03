@@ -2,6 +2,19 @@ import { text } from "../helpers";
 import type { Node } from "../types";
 import type { StylePresets } from "./style-presets";
 
+const buttonLabels: Record<string, string> = { submit: "Submit", reset: "Reset", button: "" };
+
+/** The text a push button `<input>` shows: its `value`, or the label HTML gives a submit or reset button without one. */
+export function buttonLabel(attributes: Record<string, string> | undefined): string | undefined {
+  const fallback = buttonLabels[attributes?.type?.trim().toLowerCase() ?? ""];
+
+  if (fallback === undefined) {
+    return;
+  }
+
+  return attributes?.value ?? fallback;
+}
+
 /** Whether a `<select>` lays its options out as a list box: `multiple`, or a `size` above one. */
 export function isListBox(attributes: Record<string, string> | undefined): boolean {
   if (!attributes) {

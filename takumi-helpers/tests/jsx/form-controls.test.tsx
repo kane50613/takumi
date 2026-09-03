@@ -103,6 +103,18 @@ describe("form controls", () => {
     } satisfies TextNode);
   });
 
+  test("a push button shows its value", async () => {
+    const { node: send } = await fromJsx(<input type="submit" value="Send" />);
+    const { node: bare } = await fromJsx(<input type="reset" />);
+    const { node: plain } = await fromJsx(<input type="text" value="x" />);
+    const { node: markup } = fromHtml(`<input type="button" value="Go">`);
+
+    expect(textOf(send)).toBe("Send");
+    expect(textOf(bare)).toBe("Reset");
+    expect(plain.type).toBe("container");
+    expect(textOf(markup)).toBe("Go");
+  });
+
   test("markup closes a select the same way", () => {
     const { node } = fromHtml(
       `<select><option label="Annual">A</option><option disabled>Weekly</option></select>`,

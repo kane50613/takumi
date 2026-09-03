@@ -2,7 +2,7 @@ import type { ComponentProps, ReactElement, ReactNode } from "react";
 import { container, image, percentage, text } from "../helpers";
 import type { Declarations, Node, NodeMetadata, RgbaImage, ReactElementLike } from "../types";
 import { extractAttributes, getPresets, presetFor, type HtmlProps } from "./metadata";
-import { closeSelect, isListBox, selectValue } from "./select";
+import { buttonLabel, closeSelect, isListBox, selectValue } from "./controls";
 export type { HtmlProps } from "./metadata";
 import { callWithDispatcher, getProperty, readContext, type RenderEnv } from "./dispatcher";
 import { hideStylesheetsAlias, warnStylesheetsDeprecated } from "../deprecation";
@@ -420,7 +420,10 @@ async function processReactElement(
     };
   }
 
-  const textChildren = tryCollectTextChildren(element) ?? textareaValue(element);
+  const textChildren =
+    tryCollectTextChildren(element) ??
+    textareaValue(element) ??
+    (isHtmlElement(element, "input") ? buttonLabel(metadata.attributes) : undefined);
   if (textChildren !== undefined) {
     return {
       nodes: [

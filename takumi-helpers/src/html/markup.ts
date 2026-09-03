@@ -8,7 +8,7 @@ import { container, image, text } from "../helpers";
 import type { Declarations, Node, NodeMetadata } from "../types";
 import { extractAttributes, getPresets, presetFor } from "../jsx/metadata";
 import type { FromJsxOptions } from "../jsx";
-import { closeSelect, isListBox } from "../jsx/select";
+import { buttonLabel, closeSelect, isListBox } from "../jsx/controls";
 import type { StylePresets } from "../jsx/style-presets";
 import { isHtmlVoidElement } from "../jsx/utils";
 import { decodeHtmlEntities } from "./entities";
@@ -174,6 +174,13 @@ function buildStaticNodes(
         ...metadata,
       }),
     );
+    return;
+  }
+
+  const label = element.name === "input" ? buttonLabel(metadata.attributes) : undefined;
+
+  if (label !== undefined) {
+    nodes.push(text({ text: label, ...metadata }));
     return;
   }
 
