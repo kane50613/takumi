@@ -1750,14 +1750,58 @@ where
   }
 }
 
+/// Which declarations in a block carry `!important`, one bit per position.
+/// Stays unallocated while nothing is important, which is the common block.
+#[derive(Debug, Clone, Default, PartialEq)]
+struct ImportantBits(Vec<u64>);
+
+impl ImportantBits {
+  fn get(&self, index: usize) -> bool {
+    self
+      .0
+      .get(index / 64)
+      .is_some_and(|word| word & (1 << (index % 64)) != 0)
+  }
+
+  fn set(&mut self, index: usize) {
+    let word = index / 64;
+
+    if word >= self.0.len() {
+      self.0.resize(word + 1, 0);
+    }
+
+    self.0[word] |= 1 << (index % 64);
+  }
+
+  fn push(&mut self, index: usize, important: bool) {
+    if important {
+      self.set(index);
+    }
+  }
+
+  fn set_all(&mut self, len: usize) {
+    for index in 0..len {
+      self.set(index);
+    }
+  }
+
+  fn append(&mut self, offset: usize, other: &Self) {
+    for index in 0..other.0.len() * 64 {
+      if other.get(index) {
+        self.set(offset + index);
+      }
+    }
+  }
+}
+
 /// Ordered specified declarations plus the set of important properties.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct StyleDeclarationBlock {
   /// Ordered declarations in source order.
-  pub(crate) declarations: SmallVec<[StyleDeclaration; 8]>,
+  pub(crate) declarations: Vec<StyleDeclaration>,
   /// Positional against `declarations`, because the mask below unions the block
   /// and cannot tell `p-2 !p-4` apart once both have marked the same longhand.
-  important: SmallVec<[bool; 8]>,
+  important: ImportantBits,
   /// Properties that were marked with `!important`.
   pub importance: DeclarationImportance,
 }
@@ -1774,8 +1818,8 @@ impl StyleDeclarationBlock {
     if important {
       self.importance.insert_declaration(&declaration);
     }
+    self.important.push(self.declarations.len(), important);
     self.declarations.push(declaration);
-    self.important.push(important);
   }
 
   fn append_parsed_declarations(&mut self, declarations: ParsedDeclarations, important: bool) {
@@ -1787,10 +1831,10 @@ impl StyleDeclarationBlock {
   /// Marks the block `!important`, the way a shorthand hands the marker to
   /// every longhand it expands into.
   pub(crate) fn mark_important(&mut self) {
-    for (declaration, important) in self.declarations.iter().zip(&mut self.important) {
+    for declaration in &self.declarations {
       self.importance.insert_declaration(declaration);
-      *important = true;
     }
+    self.important.set_all(self.declarations.len());
   }
 
   /// Splits the block at the two ends of the cascade: a layer's important
@@ -1803,7 +1847,10 @@ impl StyleDeclarationBlock {
     let mut normal = Self::default();
     let mut important = Self::default();
 
-    for (declaration, is_important) in self.declarations.into_iter().zip(self.important) {
+    let flags = self.important;
+
+    for (index, declaration) in self.declarations.into_iter().enumerate() {
+      let is_important = flags.get(index);
       let target = if is_important {
         &mut important
       } else {
@@ -1819,8 +1866,10 @@ impl StyleDeclarationBlock {
   /// Appends another block's declarations and importance.
   pub(crate) fn append(&mut self, mut other: Self) {
     self.importance.append(&mut other.importance);
+    self
+      .important
+      .append(self.declarations.len(), &other.important);
     self.declarations.extend(other.declarations);
-    self.important.extend(other.important);
   }
 
   /// Iterates over the declarations in source order.
