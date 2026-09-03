@@ -11,7 +11,7 @@ use core::f32;
 use pdf_writer::types::AnnotationFlags;
 use pdf_writer::{Finish, Name, Rect as PdfRect, Ref, Str, TextStr};
 
-use crate::krilla::chunk_container::ChunkContainer;
+use crate::krilla::chunk_container::{ChunkContainer, FieldSlot};
 use crate::krilla::color::Color;
 use crate::krilla::configure::{PdfVersion, ValidationError};
 use crate::krilla::error::KrillaResult;
@@ -81,21 +81,25 @@ impl Annotation {
     page_height: f32,
     page_ref: Ref,
   ) -> KrillaResult<()> {
-    let appearance = match &self.annotation_type {
-      AnnotationType::Widget(widget) => {
-        chunk_container.form_fields.push(root_ref);
-        Some(widget.write_appearance(sc, chunk_container))
-      }
-      AnnotationType::Link(_) => None,
+    let (slot, appearance) = match &self.annotation_type {
+      AnnotationType::Widget(widget) => (
+        Some(chunk_container.field_slot(sc, &widget.name, root_ref)),
+        Some(widget.write_appearance(sc, chunk_container)),
+      ),
+      AnnotationType::Link(_) => (None, None),
     };
     let chunk = &mut chunk_container.non_stream.annotations;
     let mut annotation = chunk
       .indirect(root_ref)
       .start::<pdf_writer::writers::Annotation>();
 
-    self
-      .annotation_type
-      .serialize_type(sc, &mut annotation, page_height, page_ref)?;
+    self.annotation_type.serialize_type(
+      sc,
+      &mut annotation,
+      page_height,
+      page_ref,
+      slot.as_ref(),
+    )?;
 
     if let Some(appearance) = appearance {
       annotation.appearance().normal().stream(appearance);
@@ -153,13 +157,15 @@ impl AnnotationType {
     annotation: &mut pdf_writer::writers::Annotation,
     page_height: f32,
     page_ref: Ref,
+    slot: Option<&FieldSlot>,
   ) -> KrillaResult<()> {
-    match self {
-      AnnotationType::Link(link) => link.serialize_type(sc, annotation, page_height),
-      AnnotationType::Widget(widget) => {
-        widget.serialize_type(annotation, page_height, page_ref);
+    match (self, slot) {
+      (AnnotationType::Link(link), _) => link.serialize_type(sc, annotation, page_height),
+      (AnnotationType::Widget(widget), Some(slot)) => {
+        widget.serialize_type(annotation, page_height, page_ref, slot);
         Ok(())
       }
+      (AnnotationType::Widget(_), None) => Ok(()),
     }
   }
 }
@@ -384,11 +390,8 @@ impl FormField {
 /// A form field widget annotation, merged with the field dictionary it names.
 pub struct WidgetAnnotation {
   pub(crate) rect: Rect,
-  /// `/T`, the partial field name.
-  name: String,
-  /// `/TM`, the name the form exports under, written when it differs from
-  /// `/T`.
-  export_name: String,
+  /// The HTML name, which `/T` spells one period-delimited segment at a time.
+  pub(crate) name: String,
   field: FormField,
   style: WidgetStyle,
   /// `/TU`, the name a reader announces the field by.
@@ -399,17 +402,10 @@ pub struct WidgetAnnotation {
 
 impl WidgetAnnotation {
   /// Create a new widget annotation for the field named `name`.
-  pub fn new(
-    rect: Rect,
-    name: String,
-    export_name: String,
-    field: FormField,
-    style: WidgetStyle,
-  ) -> Self {
+  pub fn new(rect: Rect, name: String, field: FormField, style: WidgetStyle) -> Self {
     Self {
       rect,
       name,
-      export_name,
       field,
       style,
       description: None,
@@ -512,6 +508,7 @@ impl WidgetAnnotation {
     annotation: &mut pdf_writer::writers::Annotation,
     page_height: f32,
     page_ref: Ref,
+    slot: &FieldSlot,
   ) {
     annotation.subtype(pdf_writer::types::AnnotationType::Widget);
     // A reader looking for a field's page should not have to scan every
@@ -529,10 +526,13 @@ impl WidgetAnnotation {
     if let Some(lang) = &self.lang {
       annotation.pair(Name(b"Lang"), TextStr(lang));
     }
-    annotation.pair(Name(b"T"), TextStr(&self.name));
+    if let Some(parent) = slot.parent {
+      annotation.pair(Name(b"Parent"), parent);
+    }
+    annotation.pair(Name(b"T"), TextStr(&slot.partial));
 
-    if self.export_name != self.name {
-      annotation.pair(Name(b"TM"), TextStr(&self.export_name));
+    if let Some(mapping) = &slot.mapping {
+      annotation.pair(Name(b"TM"), TextStr(mapping));
     }
     annotation.pair(Name(b"Ff"), self.field.flags(&self.style));
 
@@ -641,8 +641,18 @@ fn draw_value(
   content
 }
 
-/// Greedy word wrap at a drawn width.
+/// Greedy word wrap at a drawn width, keeping the line breaks the value
+/// already has.
 fn wrap(value: &str, usable: f32, size: f32) -> Vec<String> {
+  value
+    .lines()
+    .flat_map(|line| wrap_line(line, usable, size))
+    .collect()
+}
+
+/// One source line wrapped at a drawn width; an empty one stays one empty
+/// line.
+fn wrap_line(value: &str, usable: f32, size: f32) -> Vec<String> {
   let mut lines = Vec::new();
   let mut line = String::new();
 
@@ -659,7 +669,7 @@ fn wrap(value: &str, usable: f32, size: f32) -> Vec<String> {
       line = candidate;
     }
   }
-  if !line.is_empty() {
+  if !line.is_empty() || lines.is_empty() {
     lines.push(line);
   }
 

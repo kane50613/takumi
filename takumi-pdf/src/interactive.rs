@@ -11,8 +11,10 @@ use takumi_core::{
   geometry::{ComputedLayout as Layout, Point as CorePoint, Size, transformed_rect_extents},
   layout::{
     inline::{
-      InlineItem, InlineLayoutMode, InlineLayoutRequest, collect_inline_items, create_inline_layout,
+      InlineItem, InlineLayoutMode, InlineLayoutRequest, ProcessedInlineSpan, collect_inline_items,
+      create_inline_layout,
     },
+    inline_box::{InlineBoxPaint, resolve_inline_box},
     tree::RenderNode,
   },
   scene::NodePaint,
@@ -20,6 +22,7 @@ use takumi_core::{
 };
 
 use crate::{
+  emitter::node_path,
   form::FieldTarget,
   krilla::{
     action::{Action, LinkAction},
@@ -117,6 +120,16 @@ fn heading_level(tag: &str) -> Option<u8> {
 impl Interactive {
   /// Collects hyperlinks and headings from the prepared scene, in paint order.
   pub(crate) fn collect(tree: &PreparedTree) -> Self {
+    let mut collected = Self::walk(tree);
+
+    collected.resolve_labels(tree);
+    collected.headings.sort_by(|a, b| a.top.total_cmp(&b.top));
+    collected
+  }
+
+  /// The targets of one tree, before the labels that need the whole tree are
+  /// resolved.
+  fn walk(tree: &PreparedTree) -> Self {
     let mut collected = Self {
       links: Vec::new(),
       fields: Vec::new(),
@@ -127,27 +140,74 @@ impl Interactive {
     };
 
     tree.for_each_paint(|paint| collect_interactive_paint(tree, paint, &mut collected));
-    collected.resolve_labelled_by(tree);
-    collected.headings.sort_by(|a, b| a.top.total_cmp(&b.top));
     collected
   }
 
-  /// Replaces every `aria-labelledby` id with the text of the element it
-  /// names, which the walk may only have reached after the field.
-  fn resolve_labelled_by(&mut self, tree: &PreparedTree) {
+  /// Gives every field the text of the `<label>` wrapping it, and replaces
+  /// each `aria-labelledby` id with the text of the element it names, which
+  /// the walk may only have reached after the field.
+  fn resolve_labels(&mut self, tree: &PreparedTree) {
     let texts = self
       .fields
       .iter()
       .map(|field| {
-        let anchor = self.anchors.get(field.labelled_by()?)?;
-        let text = text_content(tree.root.node_at_path(&anchor.path)?);
+        let named = field
+          .labelled_by()?
+          .split_whitespace()
+          .filter_map(|id| {
+            let anchor = self.anchors.get(id)?;
+            let text = text_content(tree.root.node_at_path(&anchor.path)?);
 
-        (!text.is_empty()).then_some(text)
+            (!text.is_empty()).then_some(text)
+          })
+          .collect::<Vec<_>>()
+          .join(" ");
+
+        (!named.is_empty()).then_some(named)
       })
       .collect::<Vec<_>>();
 
     for (field, text) in self.fields.iter_mut().zip(texts) {
       field.set_labelled_by(text);
+      field.set_wrapping_label(wrapping_label(tree, &field.path));
+    }
+  }
+
+  /// Moves the targets of an inline box's own tree onto the document: rects
+  /// under `transform`, paths under `prefix`.
+  fn adopt(&mut self, inner: Self, transform: Affine, prefix: &[usize]) {
+    let placed = |rect: KrillaRect| {
+      transformed_rect(
+        transform,
+        (rect.left(), rect.top()),
+        Size {
+          width: rect.width(),
+          height: rect.height(),
+        },
+      )
+    };
+    let path = |inner: &[usize]| prefix.iter().chain(inner).copied().collect::<Vec<_>>();
+
+    for mut link in inner.links {
+      let Some(rect) = placed(link.rect) else {
+        continue;
+      };
+
+      link.rect = rect;
+      link.path = path(&link.path);
+      self.links.push(link);
+    }
+    for mut field in inner.fields {
+      let Some(rect) = placed(field.rect) else {
+        continue;
+      };
+
+      field.rect = rect;
+      field.path = path(&field.path);
+      self.fields.push(field);
+    }
+    for (id, text) in inner.labels {
+      self.labels.entry(id).or_insert(text);
     }
   }
 
@@ -171,10 +231,29 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
   let Ok(layout) = tree.results.layout(paint.node_id) else {
     return;
   };
-  let Some(source) = node.node.as_ref() else {
+  let Some(rect) = transformed_rect(paint.transform, (0.0, 0.0), layout.size) else {
     return;
   };
-  let Some(rect) = transformed_rect(paint.transform, (0.0, 0.0), layout.size) else {
+  let source = node.node.as_ref();
+  let href = source
+    .and_then(|source| source.href())
+    .filter(|uri| allowed_link_uri(uri));
+
+  match href {
+    // The whole box is one link; per-run collection would double-annotate it.
+    Some(uri) => collected.links.push(LinkTarget {
+      uri: uri.to_string(),
+      rect,
+      path: paint.path.clone(),
+    }),
+    // An anonymous wrapper around inline content has no source of its own but
+    // still lays out the links and boxes inside it.
+    None if node.should_create_inline_layout() => {
+      collect_inline_targets(tree, node, layout, paint.transform, &paint.path, collected);
+    }
+    None => {}
+  }
+  let Some(source) = source else {
     return;
   };
 
@@ -218,14 +297,7 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
     }
   }
 
-  if let Some(field) = FieldTarget::of(
-    node,
-    source,
-    layout,
-    rect,
-    &paint.path,
-    wrapping_label(tree, &paint.path),
-  ) {
+  if let Some(field) = FieldTarget::of(node, source, layout, rect, &paint.path) {
     collected.fields.push(field);
   }
 
@@ -238,24 +310,6 @@ fn collect_interactive_paint(tree: &PreparedTree, paint: &NodePaint, collected: 
     });
   }
 
-  match source.href().filter(|uri| allowed_link_uri(uri)) {
-    // The whole box is one link; per-run collection would double-annotate it.
-    Some(uri) => collected.links.push(LinkTarget {
-      uri: uri.to_string(),
-      rect,
-      path: paint.path.clone(),
-    }),
-    None if node.should_create_inline_layout() => {
-      collect_inline_links(
-        node,
-        layout,
-        paint.transform,
-        &paint.path,
-        &mut collected.links,
-      );
-    }
-    None => {}
-  }
   // The heading itself paints only when it holds the text directly; markup
   // like `<h1>Plain <strong>bold</strong></h1>` paints the children instead.
   let Some((path, heading, level)) = heading_ancestor(tree, &paint.path) else {
@@ -299,21 +353,32 @@ fn wrapping_label(tree: &PreparedTree, path: &[usize]) -> Option<String> {
     }
     let mut text = String::new();
 
-    for (index, child) in ancestor
-      .children
-      .as_deref()
-      .unwrap_or_default()
-      .iter()
-      .enumerate()
-    {
-      if index != path[length] {
-        text.push_str(&raw_text(child));
-      }
-    }
+    text_around(ancestor, &path[length..], &mut text);
 
     return (!text.trim().is_empty()).then(|| text.trim().to_string());
   }
   None
+}
+
+/// Every piece of text under `node` except the subtree at `skip`.
+fn text_around(node: &RenderNode, skip: &[usize], out: &mut String) {
+  let Some((&next, rest)) = skip.split_first() else {
+    return;
+  };
+
+  for (index, child) in node
+    .children
+    .as_deref()
+    .unwrap_or_default()
+    .iter()
+    .enumerate()
+  {
+    match (index == next, rest.is_empty()) {
+      (true, true) => {}
+      (true, false) => text_around(child, rest, out),
+      (false, _) => out.push_str(&raw_text(child)),
+    }
+  }
 }
 
 /// The nearest heading at or above `path`, with its own path and level.
@@ -380,13 +445,14 @@ fn allowed_link_uri(uri: &str) -> bool {
 }
 
 /// Measures a box's inline layout and records one link box per glyph run that
-/// sits inside an anchor.
-fn collect_inline_links(
+/// sits inside an anchor, and whatever the inline boxes on its lines hold.
+fn collect_inline_targets(
+  tree: &PreparedTree,
   node: &RenderNode,
   layout: Layout,
   transform: Affine,
   path: &[usize],
-  links: &mut Vec<LinkTarget>,
+  collected: &mut Interactive,
 ) {
   let context = &node.context;
   let font_style = SizedFontStyle::from_style(&context.style, context);
@@ -396,11 +462,14 @@ fn collect_inline_links(
     return;
   }
   let items = collect_inline_items(node);
-
-  if !items
+  let has_link = items
     .iter()
-    .any(|item| matches!(item, InlineItem::Text { link: Some(_), .. }))
-  {
+    .any(|item| matches!(item, InlineItem::Text { link: Some(_), .. }));
+  let has_box = items
+    .iter()
+    .any(|item| matches!(item, InlineItem::RenderNode { .. }));
+
+  if !has_link && !has_box {
     return;
   }
   let built = create_inline_layout(InlineLayoutRequest::in_content_box(
@@ -410,28 +479,65 @@ fn collect_inline_links(
     context,
     InlineLayoutMode::Measure,
   ));
-  let (runs, _) = built.measure_runs(layout);
 
-  for run in runs {
-    let Some(uri) = run.link.filter(|uri| allowed_link_uri(uri)) else {
+  if has_link {
+    let (runs, _) = built.measure_runs(layout);
+
+    for run in runs {
+      let Some(uri) = run.link.filter(|uri| allowed_link_uri(uri)) else {
+        continue;
+      };
+      let Some(rect) = transformed_rect(
+        transform,
+        (run.x, run.y),
+        Size {
+          width: run.width,
+          height: run.height,
+        },
+      ) else {
+        continue;
+      };
+
+      collected.links.push(LinkTarget {
+        uri: uri.to_string(),
+        rect,
+        path: path.to_vec(),
+      });
+    }
+  }
+  if !has_box {
+    return;
+  }
+  let Ok(runs) = built.resolve_runs(context, layout) else {
+    return;
+  };
+
+  // An inline-level container is a scene of its own, laid out again at the
+  // size its line gave it, so its targets are collected the way the
+  // document's are and then moved under the box.
+  for positioned in &runs.inline_boxes {
+    let Some(ProcessedInlineSpan::Box(item)) = built.spans.get(positioned.id as usize) else {
       continue;
     };
-    let Some(rect) = transformed_rect(
-      transform,
-      (run.x, run.y),
-      Size {
-        width: run.width,
-        height: run.height,
-      },
-    ) else {
+    let Some((offset, InlineBoxPaint::Container(subtree))) =
+      resolve_inline_box(positioned, item, layout)
+    else {
+      continue;
+    };
+    let mut box_path = Vec::new();
+
+    if !node_path(&tree.root, item.render_node, &mut box_path) {
+      continue;
+    }
+    let origin = Affine::translation(
+      offset.x + subtree.margin_offset.x,
+      offset.y + subtree.margin_offset.y,
+    );
+    let Ok(inner) = PreparedTree::of_inline_box(*subtree) else {
       continue;
     };
 
-    links.push(LinkTarget {
-      uri: uri.to_string(),
-      rect,
-      path: path.to_vec(),
-    });
+    collected.adopt(Interactive::walk(&inner), transform * origin, &box_path);
   }
 }
 
