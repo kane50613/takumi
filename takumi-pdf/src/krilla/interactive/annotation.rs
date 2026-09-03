@@ -395,9 +395,11 @@ pub enum FormField {
     options: Vec<(String, String)>,
     /// Which options start selected, by their place in `options`.
     selected: Vec<usize>,
-    /// Whether more than one option can be selected, which also makes the
-    /// field a list box rather than a drop-down.
+    /// Whether more than one option can be selected.
     multi: bool,
+    /// Whether the options lay out as a list box rather than a closed
+    /// drop-down.
+    list: bool,
   },
 }
 
@@ -428,32 +430,46 @@ impl FormField {
         }
       }
       Self::Radio { .. } => flags |= (1 << 14) | (1 << 15),
-      Self::Choice { multi, .. } => match multi {
-        true => flags |= 1 << 21,
-        false => flags |= 1 << 17,
-      },
+      Self::Choice { multi, list, .. } => {
+        if !*list {
+          flags |= 1 << 17;
+        }
+        if *multi {
+          flags |= 1 << 21;
+        }
+      }
       Self::CheckBox { .. } => {}
     }
 
     flags
   }
 
-  /// The text a choice field's appearance draws: what the selected options
-  /// show, which is not what they submit.
+  /// The text a choice field's appearance draws: every option as a row of a
+  /// list box, or what a drop-down's selected option shows, which is not what
+  /// it submits.
   fn display(&self) -> String {
     let Self::Choice {
-      options, selected, ..
+      options,
+      selected,
+      list,
+      ..
     } = self
     else {
       return String::new();
     };
+    let shown = match list {
+      true => options
+        .iter()
+        .map(|(_, display)| display.as_str())
+        .collect(),
+      false => selected
+        .iter()
+        .filter_map(|&index| options.get(index))
+        .map(|(_, display)| display.as_str())
+        .collect::<Vec<_>>(),
+    };
 
-    selected
-      .iter()
-      .filter_map(|&index| options.get(index))
-      .map(|(_, display)| display.as_str())
-      .collect::<Vec<_>>()
-      .join(", ")
+    shown.join("\n")
   }
 
   /// The `/AP` state name the field files its "on" appearance under.
@@ -592,10 +608,10 @@ impl WidgetAnnotation {
           None,
         )
       }
-      FormField::Choice { .. } => (
+      FormField::Choice { list, .. } => (
         text_appearance(
           &self.field.display(),
-          false,
+          *list,
           width,
           height,
           size,
@@ -744,8 +760,9 @@ impl WidgetAnnotation {
 
         for key in [Name(b"V"), Name(b"DV")] {
           // A list box holding more than one selection writes them as an
-          // array; a drop-down writes the one value it holds.
+          // array; one selection is written as the value it is.
           match exports.as_slice() {
+            [] => {}
             [one] => {
               annotation.pair(key, *one);
             }

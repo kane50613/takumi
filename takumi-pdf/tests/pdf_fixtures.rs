@@ -4610,6 +4610,72 @@ fn a_multiple_select_holds_every_selected_option() {
 }
 
 #[test]
+fn a_single_select_keeps_only_its_last_selected_option() {
+  let fonts = fonts();
+  let source = r#"<div><select name="plan" style="width:180px;height:26px">
+    <option value="M" selected>Monthly</option>
+    <option value="A" selected>Annual</option>
+  </select></div>"#;
+  let bytes = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .build(),
+  );
+  let pdf = String::from_utf8_lossy(&bytes);
+
+  assert!(pdf.contains("/V(A)/DV(A)"));
+  assert!(!pdf.contains("/V["));
+}
+
+#[test]
+fn an_option_label_names_what_the_choice_shows() {
+  let fonts = fonts();
+  let source = r#"<div><select name="plan" style="width:180px;height:26px">
+    <option value="M" label="Monthly plan">M</option>
+  </select></div>"#;
+  let bytes = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .build(),
+  );
+  let pdf = String::from_utf8_lossy(&bytes);
+
+  assert!(pdf.contains("/Opt[[(M)(Monthly plan)]]"));
+  assert!(pdf.contains("(Monthly plan) Tj"));
+}
+
+#[test]
+fn a_sized_select_is_a_list_box_that_starts_empty() {
+  let fonts = fonts();
+  let source = r#"<div><select name="plan" size="3" style="width:180px;height:60px">
+    <option value="M">Monthly</option>
+    <option value="A">Annual</option>
+  </select></div>"#;
+  let bytes = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .build(),
+  );
+  let pdf = String::from_utf8_lossy(&bytes);
+
+  // Neither Combo nor MultiSelect, and nothing selected yet.
+  assert!(pdf.contains("/Ff 0"));
+  assert!(!pdf.contains("/V(") && !pdf.contains("/V["));
+  // Every option draws as a row of the list.
+  assert!(pdf.contains("(Monthly) Tj"));
+  assert!(pdf.contains("(Annual) Tj"));
+}
+
+#[test]
 fn a_select_without_a_selection_holds_its_first_option() {
   let fonts = fonts();
   let source = r#"<div><select name="plan" style="width:180px;height:26px">
