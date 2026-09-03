@@ -264,11 +264,9 @@ const pdf = await render(
 
     <input type="checkbox" name="subscribe" defaultChecked />
 
-    <select name="plan">
+    <select name="plan" defaultValue="A">
       <option value="M">Monthly</option>
-      <option value="A" selected>
-        Annual
-      </option>
+      <option value="A">Annual</option>
     </select>
   </form>,
   { form: true },
