@@ -58,7 +58,7 @@ fn cached_mask(
   bucket_x: u64,
   paths: &[Command],
   stroke: Option<Stroke>,
-) -> (Arc<Vec<u8>>, Placement) {
+) -> (Arc<[u8]>, Placement) {
   glyph_mask(mask_key(glyph_signature, bucket_x, stroke), || {
     render_bucket_mask(bucket_x, paths, stroke)
   })

@@ -172,12 +172,12 @@ impl ResolvedGlyph {
     match self {
       Self::Bitmap(bitmap) => bitmap.image.data().len() + ENTRY_OVERHEAD,
       Self::Outline(ResolvedOutlineGlyph::Plain { paths, .. }) => {
-        paths.len() * size_of::<Command>() + ENTRY_OVERHEAD
+        paths.capacity() * size_of::<Command>() + ENTRY_OVERHEAD
       }
       Self::Outline(ResolvedOutlineGlyph::Color { paths, layers, .. }) => {
-        let layer_commands: usize = layers.iter().map(|layer| layer.paths.len()).sum();
-        (paths.len() + layer_commands) * size_of::<Command>()
-          + layers.len() * size_of::<ResolvedColorLayer>()
+        let layer_commands: usize = layers.iter().map(|layer| layer.paths.capacity()).sum();
+        (paths.capacity() + layer_commands) * size_of::<Command>()
+          + layers.capacity() * size_of::<ResolvedColorLayer>()
           + ENTRY_OVERHEAD
       }
     }
