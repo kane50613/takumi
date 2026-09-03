@@ -1,11 +1,12 @@
 import type { ComponentProps, ReactElement, ReactNode } from "react";
 import { container, image, percentage, text } from "../helpers";
 import type { Declarations, Node, NodeMetadata, RgbaImage, ReactElementLike } from "../types";
-import { extractAttributes, getPresets, type HtmlProps } from "./metadata";
+import { extractAttributes, getPresets, presetFor, type HtmlProps } from "./metadata";
+import { closeSelect, isListBox, selectValue } from "./select";
 export type { HtmlProps } from "./metadata";
 import { callWithDispatcher, getProperty, readContext, type RenderEnv } from "./dispatcher";
 import { hideStylesheetsAlias, warnStylesheetsDeprecated } from "../deprecation";
-import { defaultStylePresets } from "./style-presets";
+import { defaultStylePresets, type StylePresets } from "./style-presets";
 import { serializeSvg } from "./svg";
 import {
   isFunctionComponent,
@@ -52,7 +53,7 @@ export interface FromJsxOptions {
    *
    * If `false` is provided explicitly, no default style presets will be used.
    */
-  defaultStyles?: typeof defaultStylePresets | false;
+  defaultStyles?: StylePresets | false;
   /**
    * The JSX prop name used to pass Tailwind classes.
    *
@@ -62,8 +63,8 @@ export interface FromJsxOptions {
 }
 
 interface ResolvedFromJsxOptions extends RenderEnv {
-  defaultStyles: typeof defaultStylePresets | false;
-  presets?: typeof defaultStylePresets;
+  defaultStyles: StylePresets | false;
+  presets?: StylePresets;
   tailwindClassesProperty: string;
 }
 
@@ -158,7 +159,7 @@ async function fromJsxInternal(
   };
 }
 
-function resolveDefaultStyles(options?: FromJsxOptions): typeof defaultStylePresets | false {
+function resolveDefaultStyles(options?: FromJsxOptions): StylePresets | false {
   if (options && "defaultStyles" in options) {
     return options.defaultStyles ?? defaultStylePresets;
   }
@@ -419,7 +420,7 @@ async function processReactElement(
     };
   }
 
-  const textChildren = tryCollectTextChildren(element);
+  const textChildren = tryCollectTextChildren(element) ?? textareaValue(element);
   if (textChildren !== undefined) {
     return {
       nodes: [
@@ -434,6 +435,14 @@ async function processReactElement(
 
   const children = await collectChildren(element, options);
 
+  if (isHtmlElement(element, "select")) {
+    selectValue(children.nodes, element.props.value ?? element.props.defaultValue);
+
+    if (!isListBox(metadata.attributes)) {
+      children.nodes = closeSelect(children.nodes, options.presets);
+    }
+  }
+
   return {
     nodes: [
       container({
@@ -443,6 +452,19 @@ async function processReactElement(
     ],
     css: children.css,
   };
+}
+
+/** A `<textarea>`'s React `value` or `defaultValue`, which React DOM renders as its text. */
+function textareaValue(element: ReactElementLike): string | undefined {
+  if (!isHtmlElement(element, "textarea")) {
+    return;
+  }
+
+  const value = element.props.value ?? element.props.defaultValue;
+
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value);
+  }
 }
 
 function createImageElement(
@@ -487,12 +509,12 @@ function createSvgElement(
 function extractStyle(
   tagName: string | undefined,
   inlineStyle: HtmlProps["style"],
+  inputType: unknown,
   options: ResolvedFromJsxOptions,
 ): { preset?: Declarations; style?: Declarations } {
-  const presets = options.presets;
   const preset =
-    presets && tagName !== undefined && tagName in presets
-      ? presets[tagName as keyof typeof presets]
+    tagName !== undefined
+      ? presetFor(options.presets, tagName, inputType)
       : undefined;
 
   if (typeof inlineStyle !== "object" || inlineStyle === null) {
@@ -526,7 +548,7 @@ function extractNodeMetadata(
 ): NodeMetadata {
   const htmlProps = element.props as HtmlProps;
   const tagName = typeof element.type === "string" ? element.type : undefined;
-  const { preset, style } = extractStyle(tagName, htmlProps.style, options);
+  const { preset, style } = extractStyle(tagName, htmlProps.style, htmlProps.type, options);
   const tw = extractTw(element, options);
   const attributes = extractAttributes(htmlProps, options.tailwindClassesProperty);
 
