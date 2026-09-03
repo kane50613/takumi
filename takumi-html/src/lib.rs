@@ -527,7 +527,12 @@ fn build_element(
     )));
   }
 
-  if let Some(text) = text_only_contents(handle) {
+  let text = match tag {
+    "input" => button_label(handle),
+    _ => text_only_contents(handle),
+  };
+
+  if let Some(text) = text {
     return Ok(Some(apply_metadata(
       Node::text(text),
       handle,
@@ -620,6 +625,23 @@ fn node_text(node: &Node) -> String {
 
   collect(node, &mut text);
   text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// The text a push button `<input>` shows: its `value`, or the label HTML
+/// gives a `submit` or `reset` button without one.
+fn button_label(handle: &Handle) -> Option<String> {
+  let fallback = match attribute(handle, "type")?
+    .trim()
+    .to_ascii_lowercase()
+    .as_str()
+  {
+    "submit" => "Submit",
+    "reset" => "Reset",
+    "button" => "",
+    _ => return None,
+  };
+
+  Some(attribute(handle, "value").unwrap_or_else(|| fallback.to_string()))
 }
 
 /// Concatenated text if every child is a text node, else `None`. Comments are
@@ -981,6 +1003,17 @@ mod tests {
       assert_eq!(select_text(&html), None);
       assert!(!html.contains("display: none"));
     }
+  }
+
+  #[test]
+  fn a_push_button_shows_its_value() {
+    let send = parse(r#"<input type="submit" value="Send">"#).to_html();
+    let reset = parse(r#"<input type="reset">"#).to_html();
+    let field = parse(r#"<input type="text" value="x">"#).to_html();
+
+    assert!(send.contains(">Send<"));
+    assert!(reset.contains(">Reset<"));
+    assert!(!field.contains(">x<"));
   }
 
   #[test]
