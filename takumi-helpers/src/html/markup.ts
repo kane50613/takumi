@@ -6,9 +6,10 @@ import type {
 } from "ultrahtml";
 import { container, image, text } from "../helpers";
 import type { Declarations, Node, NodeMetadata } from "../types";
-import { extractAttributes, getPresets } from "../jsx/metadata";
+import { extractAttributes, getPresets, presetFor } from "../jsx/metadata";
 import type { FromJsxOptions } from "../jsx";
-import type { defaultStylePresets } from "../jsx/style-presets";
+import { closeSelect, isListBox } from "../jsx/select";
+import type { StylePresets } from "../jsx/style-presets";
 import { isHtmlVoidElement } from "../jsx/utils";
 import { decodeHtmlEntities } from "./entities";
 
@@ -47,7 +48,7 @@ export function fromStaticMarkup(
 
 function buildStaticNodes(
   node: UltraHtmlNode,
-  presets: typeof defaultStylePresets | undefined,
+  presets: StylePresets | undefined,
   tailwindClassesProperty: string,
   nodes: Node[],
   css: string[],
@@ -176,9 +177,13 @@ function buildStaticNodes(
     return;
   }
 
-  const childNodes: Node[] = [];
+  let childNodes: Node[] = [];
   for (const child of element.children) {
     buildStaticNodes(child, presets, tailwindClassesProperty, childNodes, css);
+  }
+
+  if (element.name === "select" && !isListBox(metadata.attributes)) {
+    childNodes = closeSelect(childNodes, presets);
   }
 
   nodes.push(
@@ -191,7 +196,7 @@ function buildStaticNodes(
 
 function extractStaticNodeMetadata(
   node: UltraHtmlElementNode,
-  presets: typeof defaultStylePresets | undefined,
+  presets: StylePresets | undefined,
   tailwindClassesProperty: string,
 ): NodeMetadata {
   const props = node.attributes ? decodeAttributeMap(node.attributes) : {};
@@ -199,8 +204,7 @@ function extractStaticNodeMetadata(
   const attributes = extractAttributes(props, tailwindClassesProperty);
   const tw =
     typeof props[tailwindClassesProperty] === "string" ? props[tailwindClassesProperty] : undefined;
-  const preset =
-    presets && node.name in presets ? presets[node.name as keyof typeof presets] : undefined;
+  const preset = presetFor(presets, node.name, props.type);
 
   return {
     tagName: node.name,

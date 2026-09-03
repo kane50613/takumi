@@ -2,10 +2,19 @@
 packages:
   takumi-html:
     type: minor
+  "@takumi-rs/helpers":
+    type: minor
+  takumi-core:
+    type: minor
 ---
 
-### Give form controls a box of their own
+### Style form controls the way Blink does
 
-`<input>`, `<textarea>` and `<select>` lay out as block-level boxes. A
-`<select>` draws the option carrying `selected`, or its first option, the way a
-closed drop-down does; the options themselves stay out of the flow.
+`<input>`, `<textarea>`, `<select>`, `<button>`, `<option>` and `<optgroup>`
+take their default styles from Blink's stylesheet. An `input[type=…]` preset
+replaces the `input` one for that type. A closed `<select>` shows the option it
+starts on and keeps its option list out of the flow; `multiple` or a `size`
+above one lays the options out as a list box. In JSX, `defaultValue`,
+`defaultChecked` and `htmlFor` reach the node as `value`, `checked` and `for`,
+and a `<select>`'s `value` picks its options. `Node::option_state`,
+`Node::option_label`, `Node::is_list_box` and `OptionState` carry the rules.

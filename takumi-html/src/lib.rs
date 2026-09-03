@@ -16,6 +16,7 @@
 use std::{
   borrow::Cow,
   collections::{BTreeMap, HashMap},
+  mem::take,
   str::FromStr,
   sync::LazyLock,
 };
@@ -27,7 +28,7 @@ use html5ever::{
 };
 use markup5ever_rcdom::{Handle, NodeData, RcDom, SerializableHandle};
 use takumi_core::{
-  layout::node::{ImageData, ImageSourceInput, Node, NodeKind},
+  layout::node::{ImageData, ImageSourceInput, Node, NodeKind, OptionState},
   style::{Direction, FromCssStr, Lang, Style, StyleDeclarationBlock, TailwindValues},
 };
 use typed_builder::TypedBuilder;
@@ -91,15 +92,11 @@ const DEFAULT_PRESETS: &[(&str, &str)] = &[
   ("dt", "display:block"),
   ("dd", "margin-left:40px;display:block"),
   ("form", "display:block"),
-  // https://html.spec.whatwg.org/multipage/rendering.html#form-controls makes
-  // these `inline-block`. A block box gives each control a rectangle of its
-  // own, which a widget annotation needs.
-  ("input", "display:block"),
-  ("textarea", "display:block"),
-  ("select", "display:block"),
-  // A closed `<select>` shows only the selected option; `build_element` lifts
-  // that text out, and the options themselves stay out of the flow.
-  ("option", "display:none"),
+  (
+    "option",
+    "padding-left:2px;padding-right:2px;padding-bottom:1px;white-space:nowrap;min-height:1.2em;display:block",
+  ),
+  ("optgroup", "font-weight:bolder;display:block"),
   (
     "fieldset",
     "margin-left:2px;margin-right:2px;padding-top:0.35em;padding-right:0.75em;padding-bottom:0.625em;padding-left:0.75em;border-width:2px;display:block",
@@ -172,10 +169,55 @@ const DEFAULT_PRESETS: &[(&str, &str)] = &[
   ("caption", "display:table-caption;text-align:center"),
 ];
 
+/// What Blink's html.css gives every `input`, `textarea`, `select` and
+/// `button`: `font: -webkit-small-control` is the default size two points
+/// smaller, and `FieldText` its light-scheme black.
+const CONTROL: &str = "display:inline-block;margin:0;font-size:13.3333px;font-style:normal;font-weight:normal;line-height:normal;color:#000;text-align:start;text-transform:none;text-indent:0";
+
+const BUTTON: &str = "text-align:center;padding:1px 6px;border:2px outset #767676;background-color:#efefef;box-sizing:border-box";
+
+/// Per-control rules layered over [`CONTROL`]. An `input[type=…]` entry
+/// replaces the `input` one for that type.
+const CONTROL_PRESETS: &[(&str, &str)] = &[
+  (
+    "input",
+    "padding:1px 0;border:2px inset #767676;background-color:#fff",
+  ),
+  (
+    "input[type=checkbox]",
+    "margin:3px 3px 3px 4px;box-sizing:border-box",
+  ),
+  (
+    "input[type=radio]",
+    "margin:3px 3px 0 5px;box-sizing:border-box",
+  ),
+  ("input[type=hidden]", "display:none"),
+  ("input[type=file]", ""),
+  ("input[type=image]", ""),
+  ("input[type=button]", BUTTON),
+  ("input[type=submit]", BUTTON),
+  ("input[type=reset]", BUTTON),
+  ("button", BUTTON),
+  (
+    "textarea",
+    "white-space:pre-wrap;overflow-wrap:break-word;font-family:monospace;padding:2px;border:1px solid #767676;background-color:#fff",
+  ),
+  (
+    "select",
+    "box-sizing:border-box;white-space:pre;border:1px solid #767676;background-color:#fff;border-radius:0",
+  ),
+];
+
 static DEFAULT_STYLE_PRESETS: LazyLock<HashMap<Box<str>, Style>> = LazyLock::new(|| {
   DEFAULT_PRESETS
     .iter()
     .map(|&(tag, css)| (tag.into(), Style::from(parse_declarations(css))))
+    .chain(CONTROL_PRESETS.iter().map(|&(tag, css)| {
+      (
+        tag.into(),
+        Style::from(parse_declarations(&format!("{CONTROL};{css}"))),
+      )
+    }))
     .collect()
 });
 
@@ -195,7 +237,8 @@ pub enum HtmlError {
   MaxDepthExceeded(usize),
 }
 
-/// Per-tag default styles applied at the lowest cascade layer.
+/// Per-tag default styles applied at the lowest cascade layer. An
+/// `input[type=…]` key replaces the `input` one for that type.
 ///
 /// [`StylePresets::chromium`] is the built-in table, borrowed from a shared
 /// static at no allocation cost. Supply your own with [`From`]; disable presets
@@ -214,8 +257,16 @@ impl StylePresets {
     Self(Cow::Owned(HashMap::new()))
   }
 
-  fn get(&self, tag: &str) -> Option<&Style> {
-    self.0.get(tag)
+  /// The preset for `tag`, where an `input[type=…]` entry outranks the bare
+  /// tag for that `type`.
+  fn get(&self, tag: &str, kind: Option<&str>) -> Option<&Style> {
+    kind
+      .and_then(|kind| {
+        self
+          .0
+          .get(format!("{tag}[type={}]", kind.trim().to_ascii_lowercase()).as_str())
+      })
+      .or_else(|| self.0.get(tag))
   }
 }
 
@@ -498,49 +549,77 @@ fn build_element(
     )?;
   }
 
-  if tag == "select"
-    && let Some(text) = selected_option_text(handle)
-  {
-    children.insert(0, Node::text(text));
+  let mut node = apply_metadata(Node::container(children), handle, tag, presets, tw_property);
+
+  if tag == "select" && !node.is_list_box() {
+    close_select(&mut node);
   }
 
-  Ok(Some(apply_metadata(
-    Node::container(children),
-    handle,
-    tag,
-    presets,
-    tw_property,
-  )))
+  Ok(Some(node))
 }
 
-/// The text a closed `<select>` shows: the option carrying `selected`, or the
-/// first one. A `multiple` select shows the same single line.
-fn selected_option_text(handle: &Handle) -> Option<String> {
+/// Shows a closed `<select>` the way a drop-down does: the option it starts on
+/// as the select's own text, with the option list itself out of the flow.
+fn close_select(select: &mut Node) {
+  let NodeKind::Container { children } = &mut select.kind else {
+    return;
+  };
   let mut options = Vec::new();
 
-  collect_options(handle, &mut options);
+  collect_options(children, &mut options);
 
-  options
-    .iter()
-    .find(|(selected, _)| *selected)
-    .or_else(|| options.first())
-    .map(|(_, text)| text.clone())
-}
+  let states = options.iter().map(|(state, _)| *state).collect::<Vec<_>>();
+  let shown = OptionState::chosen(&states, false, true)
+    .first()
+    .map(|&index| options[index].1.clone());
 
-fn collect_options(handle: &Handle, out: &mut Vec<(bool, String)>) {
-  for child in handle.children.borrow().iter() {
-    let NodeData::Element { name, .. } = &child.data else {
-      continue;
-    };
-
-    match name.local.as_ref() == "option" {
-      true => out.push((
-        attribute(child, "selected").is_some(),
-        text_only_contents(child).unwrap_or_default(),
-      )),
-      false => collect_options(child, out),
+  for child in children.iter_mut() {
+    if child
+      .tag_name()
+      .is_some_and(|tag| matches!(tag, "option" | "optgroup"))
+    {
+      *child = take(child).with_preset(Style::from(parse_declarations("display:none")));
     }
   }
+  if let Some(text) = shown {
+    children.insert(0, Node::text(text));
+  }
+}
+
+/// Every `<option>` under `nodes` with the label it shows.
+fn collect_options(nodes: &[Node], out: &mut Vec<(OptionState, String)>) {
+  for node in nodes {
+    match node.option_state() {
+      Some(state) => out.push((
+        state,
+        node
+          .option_label()
+          .map(str::to_string)
+          .unwrap_or_else(|| node_text(node)),
+      )),
+      None => {
+        if let NodeKind::Container { children } = &node.kind {
+          collect_options(children, out);
+        }
+      }
+    }
+  }
+}
+
+/// The text under `node` with its whitespace collapsed, as an option label
+/// reads.
+fn node_text(node: &Node) -> String {
+  fn collect(node: &Node, out: &mut String) {
+    match &node.kind {
+      NodeKind::Text(text) => out.push_str(&text.text),
+      NodeKind::Container { children } => children.iter().for_each(|child| collect(child, out)),
+      _ => {}
+    }
+  }
+  let mut text = String::new();
+
+  collect(node, &mut text);
+  text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 /// Concatenated text if every child is a text node, else `None`. Comments are
@@ -568,7 +647,7 @@ fn apply_metadata(
 ) -> Node {
   node = node.with_tag_name(tag);
 
-  if let Some(preset) = presets.get(tag) {
+  if let Some(preset) = presets.get(tag, attribute(handle, "type").as_deref()) {
     node = node.with_preset(preset.clone());
   }
 
@@ -682,8 +761,8 @@ mod tests {
   #[test]
   fn builtin_presets_parse() {
     let presets = StylePresets::default();
-    for (tag, _) in DEFAULT_PRESETS {
-      let style = presets.get(tag).expect("preset present");
+    for (tag, _) in DEFAULT_PRESETS.iter().chain(CONTROL_PRESETS) {
+      let style = presets.get(tag, None).expect("preset present");
       assert!(
         !style.declarations.is_empty(),
         "preset `{tag}` produced no declarations",
@@ -851,27 +930,68 @@ mod tests {
     assert!(node.to_html().starts_with("<div"));
   }
 
+  /// The text a `<select>` shows as its own, ahead of its option list.
+  fn select_text(html: &str) -> Option<&str> {
+    let (_, rest) = html.split_once('>')?;
+
+    rest.strip_prefix("<span>")?.split('<').next()
+  }
+
   #[test]
-  fn a_select_shows_its_selected_option() {
+  fn a_select_shows_the_last_selected_option() {
+    let html = parse(
+      "<select><option selected>Monthly</option><option selected>Annual</option><option>Weekly</option></select>",
+    )
+    .to_html();
+
+    assert_eq!(select_text(&html), Some("Annual"));
+  }
+
+  #[test]
+  fn a_select_without_a_selection_shows_its_first_enabled_option() {
     let html =
-      parse("<select><option>Monthly</option><option selected>Annual</option></select>").to_html();
+      parse("<select><option disabled>Pick</option><option>Monthly</option></select>").to_html();
 
-    assert!(html.contains("Annual"));
-    assert!(html.starts_with("<select"));
+    assert_eq!(select_text(&html), Some("Monthly"));
   }
 
   #[test]
-  fn a_select_without_a_selection_shows_its_first_option() {
-    let html = parse("<select><option>Monthly</option><option>Annual</option></select>").to_html();
+  fn an_option_label_outranks_its_text() {
+    let html = parse(r#"<select><option label="Annual">A</option></select>"#).to_html();
 
-    assert!(html.contains("Monthly"));
+    assert_eq!(select_text(&html), Some("Annual"));
   }
 
   #[test]
-  fn an_option_keeps_its_value_out_of_the_flow() {
+  fn a_closed_select_keeps_its_options_out_of_the_flow() {
     let html = parse(r#"<select><option value="A">Annual</option></select>"#).to_html();
 
     assert!(html.contains(r#"value="A""#));
     assert!(html.contains("display: none"));
+  }
+
+  #[test]
+  fn a_list_box_lays_its_options_out() {
+    for source in [
+      "<select multiple><option>A</option></select>",
+      r#"<select size="3"><option>A</option></select>"#,
+    ] {
+      let html = parse(source).to_html();
+
+      assert_eq!(select_text(&html), None);
+      assert!(!html.contains("display: none"));
+    }
+  }
+
+  #[test]
+  fn an_input_preset_follows_its_type() {
+    let text = parse("<input>").to_html();
+    let check = parse(r#"<input type="Checkbox">"#).to_html();
+    let hidden = parse(r#"<input type="hidden">"#).to_html();
+
+    assert!(text.contains("border-top-width: 2px"));
+    assert!(!check.contains("border-top-width"));
+    assert!(check.contains("margin-left: 4px"));
+    assert!(hidden.contains("display: none"));
   }
 }
