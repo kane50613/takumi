@@ -7,6 +7,7 @@ use takumi_core::{
   context::RenderContext,
   geometry::{NodeId, Size},
   layout::{
+    inline_box::InlineSubtree,
     node::{Node, NodeKind},
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
@@ -169,6 +170,25 @@ impl PreparedTree {
       contexts,
       width,
       height,
+    })
+  }
+
+  /// The scene an inline-level container carries, rooted at the box.
+  pub(crate) fn of_inline_box(subtree: InlineSubtree) -> Result<Self, PdfError> {
+    let contexts = build_stacking_contexts(
+      &subtree.root,
+      &subtree.results,
+      NodeId::ROOT,
+      Affine::IDENTITY,
+      subtree.size.map(Some),
+    )?;
+
+    Ok(Self {
+      root: subtree.root,
+      results: subtree.results,
+      contexts,
+      width: subtree.size.width,
+      height: subtree.size.height,
     })
   }
 
