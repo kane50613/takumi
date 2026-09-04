@@ -14,6 +14,7 @@ use serde::{
   de::{Error as DeError, IgnoredAny},
 };
 use smallvec::{SmallVec, smallvec};
+use thin_vec::ThinVec;
 
 use crate::{
   Error,
@@ -1753,7 +1754,7 @@ where
 /// Which declarations in a block carry `!important`, one bit per position.
 /// Stays unallocated while nothing is important, which is the common block.
 #[derive(Debug, Clone, Default, PartialEq)]
-struct ImportantBits(Vec<u64>);
+struct ImportantBits(ThinVec<u64>);
 
 impl ImportantBits {
   fn get(&self, index: usize) -> bool {
@@ -1798,7 +1799,7 @@ impl ImportantBits {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct StyleDeclarationBlock {
   /// Ordered declarations in source order.
-  pub(crate) declarations: Vec<StyleDeclaration>,
+  pub(crate) declarations: ThinVec<StyleDeclaration>,
   /// Positional against `declarations`, because the mask below unions the block
   /// and cannot tell `p-2 !p-4` apart once both have marked the same longhand.
   important: ImportantBits,

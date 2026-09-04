@@ -35,6 +35,7 @@ pastey.workspace = true
 phf.workspace = true
 precomputed-hash.workspace = true
 selectors.workspace = true
+thin-vec.workspace = true
 
 [dependencies.gif]
 workspace = true

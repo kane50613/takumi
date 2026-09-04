@@ -197,7 +197,7 @@ pub struct RenderNode {
   pub origin: NodeOrigin,
   /// Child render nodes.
   pub children: Option<Box<[RenderNode]>>,
-  pub(crate) layout_style_override: Option<Style>,
+  pub(crate) layout_style_override: Option<Box<Style>>,
   /// Text for an anonymous inline-text wrapper.
   pub anonymous_text_content: Option<String>,
   /// Generated marker box, emitted before this box's own inline content.
@@ -494,7 +494,7 @@ fn push_layout_node<'r>(
     render_nodes.push(render_node);
 
     let (style, container_independent) = match &render_node.layout_style_override {
-      Some(style) => (style.clone(), true),
+      Some(style) => ((**style).clone(), true),
       None => {
         let sizing = &render_node.context.sizing;
 
@@ -704,7 +704,7 @@ impl<'r> LayoutTree<'r> {
     }
 
     let style = if let Some(style_override) = &render_node.layout_style_override {
-      style_override.clone()
+      (**style_override).clone()
     } else {
       let mut sizing = render_node.context.sizing.clone();
       sizing.container_size = Size {
@@ -1122,10 +1122,10 @@ impl RenderNode {
       node: None,
       origin: NodeOrigin::Anonymous,
       children: None,
-      layout_style_override: Some(Style {
+      layout_style_override: Some(Box::new(Style {
         display: TaffyDisplay::Block,
         ..Style::default()
-      }),
+      })),
       anonymous_text_content: Some(text),
       marker: None,
       force_inline_layout: true,
@@ -1143,10 +1143,10 @@ impl RenderNode {
       node: None,
       origin: NodeOrigin::Anonymous,
       children: Some(children.into_boxed_slice()),
-      layout_style_override: Some(Style {
+      layout_style_override: Some(Box::new(Style {
         display: TaffyDisplay::Block,
         ..Style::default()
-      }),
+      })),
       anonymous_text_content: None,
       marker: None,
       force_inline_layout: false,
@@ -1172,10 +1172,10 @@ impl RenderNode {
         node: Some(Node::image(url)),
         origin: NodeOrigin::Anonymous,
         children: None,
-        layout_style_override: Some(Style {
+        layout_style_override: Some(Box::new(Style {
           max_size,
           ..Style::default()
-        }),
+        })),
         anonymous_text_content: None,
         marker: None,
         force_inline_layout: false,
@@ -1191,14 +1191,14 @@ impl RenderNode {
           origin: NodeOrigin::Anonymous,
           children: None,
           // css-images-3 §5.1 default object size when the parent is auto.
-          layout_style_override: Some(Style {
+          layout_style_override: Some(Box::new(Style {
             size: TaffySize {
               width: taffy::Dimension::length(300.0),
               height: taffy::Dimension::length(150.0),
             },
             max_size,
             ..Style::default()
-          }),
+          })),
           anonymous_text_content: None,
           marker: None,
           force_inline_layout: false,
@@ -1879,7 +1879,7 @@ impl RenderNode {
 
     let layout_style = self
       .layout_style_override
-      .as_ref()
+      .as_deref()
       .cloned()
       .unwrap_or_else(|| self.context.style.to_taffy_style(&self.context.sizing));
     let measured_size = node.measure(&self.context, available_space, Size::NONE, &layout_style);
