@@ -725,6 +725,11 @@ macro_rules! define_style {
           self.declarations.append(declarations);
         }
 
+        /// Appends a borrowed declaration block in source order, cloning it.
+        pub(crate) fn append_block_cloned(&mut self, declarations: &StyleDeclarationBlock) {
+          self.declarations.append_cloned(declarations);
+        }
+
         /// Appends one declaration, recording its importance.
         pub fn push(&mut self, declaration: StyleDeclaration, important: bool) {
           self.declarations.push(declaration, important);
@@ -1714,18 +1719,23 @@ impl DeclarationImportance {
   }
 
   /// Merges another importance set, deduping custom properties.
-  pub(crate) fn append(&mut self, other: &mut Self) {
-    self.longhands.append(&mut other.longhands);
+  pub(crate) fn extend_from(&mut self, other: &Self) {
+    self.longhands.union(&other.longhands);
 
-    for name in other.custom_properties.drain(..) {
+    for name in &other.custom_properties {
       if self
         .custom_properties
         .iter()
-        .all(|existing| existing != &name)
+        .all(|existing| existing != name)
       {
-        self.custom_properties.push(name);
+        self.custom_properties.push(name.clone());
       }
     }
+  }
+
+  pub(crate) fn append(&mut self, other: &mut Self) {
+    self.extend_from(other);
+    *other = Self::default();
   }
 
   fn insert_custom_property(&mut self, name: &str) {
@@ -1867,6 +1877,15 @@ impl StyleDeclarationBlock {
     }
 
     (normal, important)
+  }
+
+  /// Appends a borrowed block's declarations and importance, cloning them.
+  pub(crate) fn append_cloned(&mut self, other: &Self) {
+    self.importance.extend_from(&other.importance);
+    self
+      .important
+      .append(self.declarations.len(), &other.important);
+    self.declarations.extend(other.declarations.iter().cloned());
   }
 
   /// Appends another block's declarations and importance.

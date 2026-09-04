@@ -6,13 +6,16 @@ mod namespace;
 /// Parsers for Tailwind utility-class suffixes.
 mod parser;
 
-use std::{borrow::Cow, cmp::Ordering, collections::HashMap, str::FromStr, sync::Arc};
+use std::{
+  borrow::Cow, cell::RefCell, cmp::Ordering, collections::HashMap, rc::Rc, str::FromStr, sync::Arc,
+};
 
 use builder::TailwindDeclarationBuilder;
 use cssparser::match_ignore_ascii_case;
 pub(crate) use namespace::Namespace;
 use serde::{Deserialize, Deserializer, de::Error as DeError};
 use smallvec::SmallVec;
+use xxhash_rust::xxh3::xxh3_64;
 
 use crate::{
   style::{
@@ -209,10 +212,23 @@ fn css<T: ToCss>(value: &T) -> String {
   output
 }
 
+/// A class list's expansion, split at the importance boundary.
+pub(crate) struct TwBlocks {
+  pub(crate) normal: StyleDeclarationBlock,
+  pub(crate) important: StyleDeclarationBlock,
+}
+
+/// Per-render map from a class list to the blocks it expands to. Keyed by the
+/// list's hash and byte length as a cheap collision guard, plus the viewport
+/// width, which is all a breakpoint reads.
+pub(crate) type TwCache = Rc<RefCell<HashMap<(u64, u32, Option<u32>), Rc<TwBlocks>>>>;
+
 /// Represents a collection of tailwind properties.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TailwindValues {
   inner: Vec<TailwindValue>,
+  /// Hash and byte length of the class list this parsed from.
+  fingerprint: (u64, u32),
 }
 
 impl FromStr for TailwindValues {
@@ -244,7 +260,10 @@ impl FromStr for TailwindValues {
       }
     });
 
-    Ok(TailwindValues { inner: collected })
+    Ok(TailwindValues {
+      inner: collected,
+      fingerprint: (xxh3_64(source.as_bytes()), source.len() as u32),
+    })
   }
 }
 
@@ -261,6 +280,30 @@ impl TailwindValues {
       .filter_map(|value| value.resource_url(viewport, breakpoints))
       .collect::<Vec<_>>()
       .into_iter()
+  }
+
+  /// The blocks this class list expands to, resolved once per render.
+  pub(crate) fn declaration_blocks(
+    &self,
+    viewport: Viewport,
+    breakpoints: &BreakpointOverrides,
+    cache: &TwCache,
+  ) -> Rc<TwBlocks> {
+    let key = (self.fingerprint.0, self.fingerprint.1, viewport.size.width);
+
+    if let Some(blocks) = cache.borrow().get(&key) {
+      return blocks.clone();
+    }
+
+    let (normal, important) = self
+      .clone()
+      .into_declaration_block(viewport, breakpoints)
+      .split_importance();
+    let blocks = Rc::new(TwBlocks { normal, important });
+
+    cache.borrow_mut().insert(key, blocks.clone());
+
+    blocks
   }
 
   /// Resolves all utilities for the viewport into a declaration block.

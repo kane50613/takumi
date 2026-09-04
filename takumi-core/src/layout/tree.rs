@@ -1,5 +1,6 @@
 use std::{
-  borrow::Cow, collections::HashMap, iter::Copied, mem::take, slice, sync::Arc, vec::IntoIter,
+  borrow::Cow, collections::HashMap, iter::Copied, mem::take, rc::Rc, slice, sync::Arc,
+  vec::IntoIter,
 };
 
 use parley::fontique::Attributes;
@@ -30,8 +31,8 @@ use crate::{
     Affine, BackgroundImage, BackgroundImages, BlendMode, BoxSizing, Color, ComputedStyle,
     ContentItem, ContentValue, Display, Filters, Float, Isolation, Length, LineHeight,
     ListStylePosition, PercentageNumber, Position, SizingContext, Style as NodeStyle,
-    StyleDeclaration, StyleDeclarationBlock, StyleSheet, TextWrapMode, WhiteSpaceCollapse,
-    apply_stylesheet_animations,
+    StyleDeclaration, StyleDeclarationBlock, StyleSheet, TextWrapMode, TwBlocks, TwCache,
+    WhiteSpaceCollapse, apply_stylesheet_animations,
   },
   viewport::Viewport,
 };
@@ -283,7 +284,7 @@ pub(crate) fn resolve_normal_line_height(
 
 /// An element's own important declarations by cascade tier.
 struct ElementImportant {
-  tw: Option<StyleDeclarationBlock>,
+  tw: Option<Rc<TwBlocks>>,
   inline: Option<StyleDeclarationBlock>,
 }
 
@@ -293,20 +294,16 @@ fn build_style_layers(
   matched_declarations: &MatchedDeclarationsView<'_>,
   viewport: Viewport,
   stylesheet: &StyleSheet,
+  tw_cache: &TwCache,
 ) -> (NodeStyle, ElementImportant) {
   let mut style = NodeStyle::default();
 
   // `tw` is the last declared layer, below unlayered author rules, so its
   // important half goes last: the cascade reverses layer order for important
   // declarations.
-  let (tw_normal, tw_important) = node_layers
+  let tw = node_layers
     .author_tw
-    .map(|author_tw| {
-      author_tw
-        .into_declaration_block(viewport, &stylesheet.breakpoints)
-        .split_importance()
-    })
-    .unzip();
+    .map(|author_tw| author_tw.declaration_blocks(viewport, &stylesheet.breakpoints, tw_cache));
 
   if let Some(preset) = node_layers.preset {
     style.merge_from(preset);
@@ -324,8 +321,8 @@ fn build_style_layers(
 
   // `tw` is the last declared layer, as Tailwind orders utilities: above every
   // named `@layer`, below unlayered author rules.
-  if let Some(tw_normal) = tw_normal {
-    style.append_block(tw_normal);
+  if let Some(tw) = &tw {
+    style.append_block_cloned(&tw.normal);
   }
 
   for &declarations in matched_declarations.unlayered_normal() {
@@ -353,8 +350,8 @@ fn build_style_layers(
     }
   }
 
-  if let Some(tw_important) = &tw_important {
-    style.append_block(tw_important.clone());
+  if let Some(tw) = &tw {
+    style.append_block_cloned(&tw.important);
   }
 
   for &declarations in matched_declarations.layered_important() {
@@ -370,7 +367,7 @@ fn build_style_layers(
   (
     style,
     ElementImportant {
-      tw: tw_important,
+      tw,
       inline: inline_important,
     },
   )
@@ -434,6 +431,7 @@ pub(super) fn pseudo_computed_style(
     pseudo_matched,
     parent_context.sizing.viewport,
     parent_context.stylesheet().as_ref(),
+    parent_context.tw_cache(),
   );
   let inherited_parent = registered_custom_property_parent_style(
     &parent_context.style,
@@ -2249,6 +2247,7 @@ impl RenderContext {
       matched,
       self.sizing.viewport,
       self.stylesheet().as_ref(),
+      self.tw_cache(),
     );
     let inherited_parent = registered_custom_property_parent_style(
       &self.style,
@@ -2286,7 +2285,7 @@ impl RenderContext {
         element_important
           .tw
           .iter()
-          .map(|declarations| declarations.iter()),
+          .map(|blocks| blocks.important.iter()),
       )
       .chain(
         matched

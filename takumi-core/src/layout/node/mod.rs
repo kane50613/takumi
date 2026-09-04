@@ -48,7 +48,7 @@ pub(crate) struct NodeMetadata {
   /// The styling properties for this node.
   pub style: Option<Style>,
   /// The tailwind properties for this node.
-  pub tw: Option<TailwindValues>,
+  pub tw: Option<Arc<TailwindValues>>,
   /// The text direction for this node.
   pub dir: Option<Direction>,
   /// The BCP-47 language tag for this node, equivalent to the `lang` attribute.
@@ -473,7 +473,7 @@ impl Node {
 
   /// Sets the Tailwind-derived style input and returns the updated node.
   pub fn with_tw(mut self, tw: TailwindValues) -> Self {
-    self.metadata.tw = Some(tw);
+    self.metadata.tw = Some(Arc::new(tw));
     self
   }
 
@@ -733,7 +733,7 @@ pub(crate) struct NodeStyleLayers {
   /// UA/default style preset for the element.
   pub(crate) preset: Option<Style>,
   /// Tailwind-derived author style for the element.
-  pub(crate) author_tw: Option<TailwindValues>,
+  pub(crate) author_tw: Option<Arc<TailwindValues>>,
   /// Inline style attached directly to the element.
   pub(crate) inline: Option<Style>,
   pub(crate) dir: Option<Direction>,

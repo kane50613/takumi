@@ -31,10 +31,9 @@ impl PropertyMask {
     (self.words[word_index] & (1usize << bit_index)) != 0
   }
 
-  pub(crate) fn append(&mut self, other: &mut Self) {
-    for (word, other_word) in self.words.iter_mut().zip(other.words.iter_mut()) {
-      *word |= *other_word;
-      *other_word = 0;
+  pub(crate) fn union(&mut self, other: &Self) {
+    for (word, other_word) in self.words.iter_mut().zip(other.words) {
+      *word |= other_word;
     }
   }
 
