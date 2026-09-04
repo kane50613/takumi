@@ -7,12 +7,20 @@ mod namespace;
 mod parser;
 
 use std::{
-  borrow::Cow, cell::RefCell, cmp::Ordering, collections::HashMap, rc::Rc, str::FromStr, sync::Arc,
+  borrow::Cow,
+  cell::RefCell,
+  cmp::Ordering,
+  collections::HashMap,
+  convert::Infallible,
+  rc::Rc,
+  str::FromStr,
+  sync::{Arc, LazyLock},
 };
 
 use builder::TailwindDeclarationBuilder;
 use cssparser::match_ignore_ascii_case;
 pub(crate) use namespace::Namespace;
+use quick_cache::sync::Cache;
 use serde::{Deserialize, Deserializer, de::Error as DeError};
 use smallvec::SmallVec;
 use xxhash_rust::xxh3::xxh3_64;
@@ -231,10 +239,31 @@ pub struct TailwindValues {
   fingerprint: (u64, u32),
 }
 
+/// How many parsed class lists to keep. A list is small and a document reuses
+/// a handful of them; the bound is what keeps a long-lived process flat.
+const PARSED_CACHE_ENTRIES: usize = 2048;
+
+static PARSED: LazyLock<Cache<String, Arc<TailwindValues>>> =
+  LazyLock::new(|| Cache::new(PARSED_CACHE_ENTRIES));
+
 impl FromStr for TailwindValues {
   type Err = String;
 
   fn from_str(source: &str) -> Result<Self, Self::Err> {
+    Ok(Self::parse(source))
+  }
+}
+
+impl TailwindValues {
+  /// The parsed form of `source`, shared with every node carrying the same
+  /// class list. Parsing is pure, so one cache serves every render.
+  pub fn interned(source: &str) -> Arc<Self> {
+    PARSED
+      .get_or_insert_with::<str, Infallible>(source, || Ok(Arc::new(Self::parse(source))))
+      .unwrap_or_else(|never| match never {})
+  }
+
+  fn parse(source: &str) -> Self {
     let mut collected = source
       .split_whitespace()
       .filter_map(TailwindValue::parse)
@@ -260,10 +289,10 @@ impl FromStr for TailwindValues {
       }
     });
 
-    Ok(TailwindValues {
+    TailwindValues {
       inner: collected,
       fingerprint: (xxh3_64(source.as_bytes()), source.len() as u32),
-    })
+    }
   }
 }
 
