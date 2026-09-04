@@ -1656,3 +1656,12 @@ fn test_translate_composes_through_variables() {
   assert_eq!(computed.translate.x, Length::Rem(1.0));
   assert_eq!(computed.translate.y, Length::Rem(-0.5));
 }
+
+#[test]
+fn test_interned_class_list_is_parsed_once() {
+  let first = TailwindValues::interned("flex items-center gap-2");
+  let second = TailwindValues::interned("flex items-center gap-2");
+
+  assert!(std::sync::Arc::ptr_eq(&first, &second));
+  assert_eq!(*first, "flex items-center gap-2".parse().expect("parses"));
+}

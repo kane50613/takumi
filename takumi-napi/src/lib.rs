@@ -24,7 +24,7 @@ use serde::{
 use takumi_bindings_common::build_font_resource;
 use takumi_core::{
   resources::{font::FontResource, glyph_cache},
-  style::{FontStyle, FromCssStr},
+  style::{self, FontStyle, FromCssStr},
 };
 
 /// Sets the byte budget shared by the resolved-glyph and glyph-mask caches;
@@ -40,6 +40,17 @@ use takumi_core::{
 #[napi(js_name = "setGlyphCacheMaxBytes")]
 pub fn set_glyph_cache_max_bytes(bytes: f64) {
   glyph_cache::set_glyph_cache_max_bytes(bytes.max(0.0) as usize);
+}
+
+/// Sets the byte budget for the parsed Tailwind class-list cache; `0` stops
+/// caching. Defaults to 1 MiB.
+///
+/// This cache lives in the module, not in a `Renderer`, so `cacheMaxBytes` does
+/// not cover it. The value is read when the cache is first used, so call this
+/// before the first render.
+#[napi(js_name = "setTailwindCacheMaxBytes")]
+pub fn set_tailwind_cache_max_bytes(bytes: f64) {
+  style::set_tailwind_cache_max_bytes(bytes.max(0.0) as usize);
 }
 
 /// A font family produced by `registerFont`, with the faces it contains.

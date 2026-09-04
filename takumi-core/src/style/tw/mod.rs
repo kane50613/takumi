@@ -14,13 +14,13 @@ use std::{
   convert::Infallible,
   rc::Rc,
   str::FromStr,
-  sync::{Arc, LazyLock},
+  sync::{Arc, LazyLock, atomic},
 };
 
 use builder::TailwindDeclarationBuilder;
 use cssparser::match_ignore_ascii_case;
 pub(crate) use namespace::Namespace;
-use quick_cache::sync::Cache;
+use quick_cache::{Weighter, sync::Cache};
 use serde::{Deserialize, Deserializer, de::Error as DeError};
 use smallvec::SmallVec;
 use xxhash_rust::xxh3::xxh3_64;
@@ -239,12 +239,36 @@ pub struct TailwindValues {
   fingerprint: (u64, u32),
 }
 
-/// How many parsed class lists to keep. A list is small and a document reuses
-/// a handful of them; the bound is what keeps a long-lived process flat.
-const PARSED_CACHE_ENTRIES: usize = 2048;
+const DEFAULT_TAILWIND_CACHE_MAX_BYTES: usize = 1 << 20; // 1 MiB
 
-static PARSED: LazyLock<Cache<String, Arc<TailwindValues>>> =
-  LazyLock::new(|| Cache::new(PARSED_CACHE_ENTRIES));
+/// Bytes charged for an entry's own bookkeeping on top of its payload.
+const ENTRY_OVERHEAD: usize = 64;
+
+static MAX_BYTES: atomic::AtomicUsize = atomic::AtomicUsize::new(DEFAULT_TAILWIND_CACHE_MAX_BYTES);
+
+/// Sets the byte budget for the parsed class-list cache. `0` stops caching.
+/// Takes effect for a cache not yet used; call it before the first render.
+/// Defaults to 1 MiB.
+pub fn set_tailwind_cache_max_bytes(bytes: usize) {
+  MAX_BYTES.store(bytes, atomic::Ordering::Relaxed);
+}
+
+#[derive(Clone)]
+struct ByBytes;
+
+impl Weighter<String, Arc<TailwindValues>> for ByBytes {
+  fn weight(&self, source: &String, values: &Arc<TailwindValues>) -> u64 {
+    (source.len() + values.estimated_bytes() + ENTRY_OVERHEAD).max(1) as u64
+  }
+}
+
+static PARSED: LazyLock<Cache<String, Arc<TailwindValues>, ByBytes>> = LazyLock::new(|| {
+  let max_bytes = MAX_BYTES.load(atomic::Ordering::Relaxed) as u64;
+  // ~256 bytes per parsed list ⇒ an item-count hint for the budget.
+  let estimated_items = (max_bytes / 256).max(1) as usize;
+
+  Cache::with_weighter(estimated_items, max_bytes, ByBytes)
+});
 
 impl FromStr for TailwindValues {
   type Err = String;
@@ -256,11 +280,19 @@ impl FromStr for TailwindValues {
 
 impl TailwindValues {
   /// The parsed form of `source`, shared with every node carrying the same
-  /// class list. Parsing is pure, so one cache serves every render.
+  /// class list. A class list parses to the same utilities everywhere, so one
+  /// cache serves every render; a per-renderer Tailwind config would have to
+  /// join the key.
   pub fn interned(source: &str) -> Arc<Self> {
     PARSED
       .get_or_insert_with::<str, Infallible>(source, || Ok(Arc::new(Self::parse(source))))
       .unwrap_or_else(|never| match never {})
+  }
+
+  /// Approximate retained size in bytes, for cache budgeting. Counts the
+  /// parsed utilities, not the strings they share through an `Arc`.
+  fn estimated_bytes(&self) -> usize {
+    self.inner.capacity() * size_of::<TailwindValue>()
   }
 
   fn parse(source: &str) -> Self {
