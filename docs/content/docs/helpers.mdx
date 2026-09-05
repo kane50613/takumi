@@ -27,6 +27,8 @@ icon: Wrench
 
 The `props` argument holds the node's own fields. [Node types](/docs/reference#node-types) lists them.
 
+Styles, presets, and stylesheet rules share the `Declarations` type. Custom properties such as `"--accent": "red"` accept strings or numbers, including in React's `style` prop.
+
 Length and color shorthands return CSS strings. `vw`/`vh` are viewport width/height, `em`/`rem` are font-relative sizes, `fr` is a grid fraction. See the [MDN CSS values reference](https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Values_and_Units).
 
 `rem` resolves against the viewport, not the outermost node. [Units](/docs/reference#units) covers what each font-relative unit follows.

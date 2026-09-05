@@ -1,6 +1,6 @@
-import type { ComponentProps, CSSProperties, ReactElement, ReactNode } from "react";
+import type { ComponentProps, ReactElement, ReactNode } from "react";
 import { container, image, percentage, text } from "../helpers";
-import type { Node, NodeMetadata, RgbaImage, ReactElementLike } from "../types";
+import type { Declarations, Node, NodeMetadata, RgbaImage, ReactElementLike } from "../types";
 import { extractAttributes, getPresets, type HtmlProps } from "./metadata";
 export type { HtmlProps } from "./metadata";
 import { callWithDispatcher, getProperty, readContext, type RenderEnv } from "./dispatcher";
@@ -485,25 +485,17 @@ function createSvgElement(
 }
 
 function extractStyle(
-  element: ReactElementLike,
+  tagName: string | undefined,
+  inlineStyle: HtmlProps["style"],
   options: ResolvedFromJsxOptions,
-): { preset?: CSSProperties; style?: CSSProperties } {
+): { preset?: Declarations; style?: Declarations } {
   const presets = options.presets;
   const preset =
-    presets && typeof element.type === "string" && element.type in presets
-      ? presets[element.type as keyof typeof presets]
+    presets && tagName !== undefined && tagName in presets
+      ? presets[tagName as keyof typeof presets]
       : undefined;
 
-  const inlineStyle =
-    typeof element.props === "object" &&
-    element.props !== null &&
-    "style" in element.props &&
-    typeof element.props.style === "object" &&
-    element.props.style !== null
-      ? element.props.style
-      : undefined;
-
-  if (!inlineStyle) {
+  if (typeof inlineStyle !== "object" || inlineStyle === null) {
     return { preset };
   }
 
@@ -533,12 +525,13 @@ function extractNodeMetadata(
   options: ResolvedFromJsxOptions,
 ): NodeMetadata {
   const htmlProps = element.props as HtmlProps;
-  const { preset, style } = extractStyle(element, options);
+  const tagName = typeof element.type === "string" ? element.type : undefined;
+  const { preset, style } = extractStyle(tagName, htmlProps.style, options);
   const tw = extractTw(element, options);
   const attributes = extractAttributes(htmlProps, options.tailwindClassesProperty);
 
   return {
-    tagName: typeof element.type === "string" ? element.type : undefined,
+    tagName,
     className: htmlProps.className ?? htmlProps.class,
     id: htmlProps.id,
     dir: htmlProps.dir as NodeMetadata["dir"],

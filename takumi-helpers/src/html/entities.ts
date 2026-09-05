@@ -276,7 +276,7 @@ export function decodeHtmlEntities(value: string): string {
         return decodeCodePoint(Number.parseInt(hex, 16)) ?? match;
       }
 
-      return Object.hasOwn(namedHtmlEntities, named) ? namedHtmlEntities[named] : match;
+      return Object.hasOwn(namedHtmlEntities, named) ? (namedHtmlEntities[named] ?? match) : match;
     },
   );
 }

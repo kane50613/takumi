@@ -18,15 +18,14 @@ export type TextFit =
 declare module "react" {
   interface CSSProperties {
     textFit?: TextFit;
+    [key: `--${string}`]: string | number | undefined;
   }
 }
 
 export type NodeAttributes = Record<string, string>;
 
 /** A declaration block, with custom properties allowed. */
-export type Declarations = CSSProperties & {
-  [key: `--${string}`]: string | number;
-};
+export type Declarations = CSSProperties;
 
 /** A style rule written as an object. */
 export type StyleRule = {
@@ -85,8 +84,8 @@ export type NodeMetadata = {
   lang?: string;
   attributes?: NodeAttributes;
   tw?: string;
-  style?: CSSProperties;
-  preset?: CSSProperties;
+  style?: Declarations;
+  preset?: Declarations;
 };
 
 export type Node = ContainerNode | TextNode | ImageNode;
