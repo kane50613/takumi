@@ -240,7 +240,7 @@ opt-level = "s"
 [profile.release.package.takumi-pdf]
 opt-level = "s"
 [profile.release.package.takumi-pdf-wasm]
-opt-level = "s"
+opt-level = "z"
 [profile.release.package.write-fonts]
 opt-level = "z"
 [profile.release.package.pdf-writer]
