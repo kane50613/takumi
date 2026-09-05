@@ -1,8 +1,10 @@
 ---
 title: Fonts & images
-description: Embed subset fonts and pre-fetched images.
+description: Register document fonts and supply image data before rendering.
 icon: Type
 ---
+
+Supply fonts through `fonts` and image bytes through `images`. Remote document images must be fetched before rendering. Font URL loaders and `googleFonts()` perform their own requests.
 
 ## Fonts
 
@@ -26,11 +28,11 @@ Text stays selectable and searchable. Pass font URLs, raw bytes, or [`googleFont
 
 For offline renders, [bundle font files](/docs/typography-and-fonts#fonts-in-ci-and-offline-renders). Google Fonts requests use the shared [fetch limits and retries](/docs/load-images#fetch-limits).
 
-There is no system font to fall back on. A character that none of the registered fonts covers would draw nothing and leave nothing in the text layer, so `render` rejects it and names the character and its codepoint. Register a font covering every script the document uses. Watch the Google Fonts subsets in particular: `latin` and `latin-ext` split their coverage, so one file on its own can leave common accented characters out.
+The renderer does not use installed system fonts. If no registered font covers a body-text character, the render fails with the character and its codepoint. Register coverage for every script you use. Google Fonts may split accented characters between `latin` and `latin-ext` subsets.
 
 ## Images
 
-The renderer never fetches over the network. Pass pre-fetched bytes for each image URL in the document:
+Pass fetched bytes for each image URL in the document. The PDF renderer does not fetch those URLs:
 
 ```tsx twoslash
 import type { ReactNode } from "react";
@@ -39,7 +41,9 @@ declare const logoUrl: string;
 // ---cut---
 import { render } from "takumi-pdf";
 
-const logoBytes = new Uint8Array(await (await fetch(logoUrl)).arrayBuffer());
+const response = await fetch(logoUrl);
+if (!response.ok) throw new Error(`Logo request failed: ${response.status}`);
+const logoBytes = new Uint8Array(await response.arrayBuffer());
 
 const pdf = await render(doc, {
   // [!code highlight]
@@ -51,4 +55,4 @@ SVG image sources embed as vector paths and gradients, so logos stay sharp at an
 
 PNG, JPEG and WebP bytes all embed. A JPEG goes in as the JPEG you passed, so the PDF carries the compression the file already had. GIF bytes are rejected: no decoder for them ships in this build.
 
-A CSS `filter` needs pixels to work on, and this build decodes only PNG. An image under a filter that arrived as JPEG or WebP has none, so `render` rejects the document and names the image rather than leaving a hole in the page. The same goes for `filter: blur()` and `drop-shadow()`, which a PDF cannot express at all.
+CSS color filters on images require decoded pixels. The PDF build decodes PNG for this path, so filtered JPEG and WebP images are rejected. PDF output also rejects CSS `filter: blur()` and `drop-shadow()`. Prepare those effects in a raster image before rendering.

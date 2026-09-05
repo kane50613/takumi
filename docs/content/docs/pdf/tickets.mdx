@@ -4,7 +4,7 @@ description: One-page output at an exact paper size, or sized to its content.
 icon: Ticket
 ---
 
-Some documents are one page by definition. A ticket, a shipping label, a certificate, a till receipt. `viewport` renders exactly one page and skips pagination entirely. See [Single-page viewport](/docs/pdf/single-page) for how the mode behaves.
+Use `viewport` for a ticket, shipping label, certificate, or receipt. Set both dimensions for fixed paper, or omit the height for a receipt that grows with its content.
 
 ## Labels and tickets
 
@@ -27,7 +27,7 @@ const pdf = await render(
 );
 ```
 
-Generate the QR or barcode as SVG and pass its bytes through `images`. SVG sources embed as vector paths, so the code stays crisp at any zoom and any print resolution.
+Generate the QR code or barcode as SVG and pass its bytes through `images`. Vector paths scale with the page. Check that the printed code has enough physical size and clear space for scanning.
 
 Common sizes in CSS px:
 
@@ -79,8 +79,8 @@ const pdf = await render(
 
 Overflowing content is clipped, exactly like an image render. Size the text to the box, or measure it first.
 
-## What the mode gives up
+## Options and overflow
 
 `viewport` rejects the paged options as type errors. Everything else carries over, including `pdfa` and `attachments`. See [Single-page viewport](/docs/pdf/single-page).
 
-Rendering the same component as a PNG for email or as a PDF for print is a matter of swapping the renderer. The tree, the CSS, and the Tailwind classes stay as they are.
+The same component can also render as a PNG with `takumi-js`. Pass image dimensions to the image renderer instead of PDF page options.

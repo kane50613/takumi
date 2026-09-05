@@ -1,10 +1,10 @@
 ---
 title: Invoices
-description: Paged invoices, and the PDF/A-3 container an EU e-invoice needs.
+description: Render invoice line items and attach structured invoice data.
 icon: Receipt
 ---
 
-An invoice PDF serves two readers. A person reads the layout. A tax authority's software reads structured data attached inside the same file. `takumi-pdf` writes both halves.
+Render line items and totals as a paged document. If your invoice format requires embedded XML, add it as an attachment with the required PDF/A and XMP settings.
 
 ## A plain invoice
 
@@ -41,7 +41,7 @@ const pdf = await render(<InvoiceDocument data={invoice} />, {
 });
 ```
 
-Mark each line row `break-inside: avoid` so a row never straddles a page. The Tailwind class is `break-inside-avoid`:
+Use `break-inside: avoid` to keep a line item together when it fits on a page. In Tailwind, use `break-inside-avoid`:
 
 ```tsx twoslash
 declare const item: { description: string; amount: string };
@@ -55,11 +55,11 @@ import "takumi-pdf";
 </div>;
 ```
 
-Wrap the totals block the same way. It is the part a reader most expects to see whole.
+Apply the same style to the totals block.
 
 ## Electronic invoices
 
-Factur-X and ZUGFeRD are the same file twice: a readable invoice, plus the invoice as XML attached inside it. The standards pin how that file is packaged.
+Factur-X and ZUGFeRD combine a readable PDF invoice with structured XML. Configure the container for the profile you are implementing:
 
 | The standard requires        | The option         |
 | ---------------------------- | ------------------ |
@@ -103,7 +103,7 @@ const pdf = await render(invoice, {
 });
 ```
 
-The renderer validates while it writes. A document that cannot conform fails with the violated rule, instead of producing a file a tax portal rejects.
+The renderer checks PDF conformance while writing. It does not validate invoice XML, tax rules, or acceptance by a receiving system.
 
 Takumi does not build the invoice XML. Use a library for the profile, or emit the elements the profile lists. The [e-invoice example](https://github.com/kane50613/takumi/tree/master/example/e-invoice) writes a MINIMUM profile by hand.
 
@@ -128,8 +128,8 @@ Mustang finds the profile through the `fx:` XMP block. Takumi writes the values 
 
 ## Accessible invoices
 
-Public-sector buyers often require an accessible invoice. `tagged: "ua1"` validates the structure tree against PDF/UA-1 during the render. See [PDF/A](/docs/pdf/pdf-a) for what it needs.
+For PDF/UA-1 output, set `tagged: "ua1"` and supply the required metadata. Review the reading order and table semantics as well. See [PDF/A and PDF/UA](/docs/pdf/pdf-a).
 
 ## Reproducible bytes
 
-A fixed `metadata.creationDate` makes the output byte-identical across runs. The same invoice hashes to the same value, which suits archival storage and golden tests.
+Use a fixed `metadata.creationDate` with the same content, resources, and renderer version when you need reproducible bytes. A new date changes the file even if the invoice looks the same.
