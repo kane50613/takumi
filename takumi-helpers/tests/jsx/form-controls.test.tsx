@@ -119,8 +119,20 @@ describe("form controls", () => {
     const { node } = fromHtml(
       `<select><option label="Annual">A</option><option disabled>Weekly</option></select>`,
     );
-    const [shown] = children(node as ContainerNode);
+    const [shown] = children(node);
 
     expect(textOf(shown)).toBe("Annual");
   });
+});
+
+test("HTML form controls preserve their serialized nodes", () => {
+  const controls = [
+    '<input type="button" value="Go">',
+    '<input type="text" value="Kane">',
+    ...["1.5", "1e1", "+2", "2", " 2 ", "4294967296"].map(
+      (size) => `<select size="${size}"><option>A</option></select>`,
+    ),
+  ];
+
+  expect(controls.map((html) => fromHtml(html).node)).toMatchSnapshot();
 });

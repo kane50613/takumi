@@ -67,7 +67,9 @@ impl Node {
     self.attribute("multiple").is_some()
       || self
         .attribute("size")
-        .and_then(|size| size.trim().parse::<u32>().ok())
+        .map(str::trim)
+        .filter(|size| size.bytes().all(|byte| byte.is_ascii_digit()))
+        .and_then(|size| size.parse::<u32>().ok())
         .is_some_and(|size| size > 1)
   }
 }
