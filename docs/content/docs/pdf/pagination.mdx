@@ -4,7 +4,7 @@ description: Control where pages break with CSS.
 icon: Scissors
 ---
 
-Content lays out once at unbounded height. It then splits into pages. Unsplittable atoms never straddle a cut. These atoms include text lines, images, and transformed subtrees. A cut inside an atom moves to its top. This matches browser print fragmentation.
+Content flows across pages at the width available inside the margins. Use CSS break properties to start chapters, keep related content together, and control how paragraphs split. Percentage heights do not resolve in this mode because the content has no fixed height.
 
 ## Break properties
 
@@ -27,7 +27,7 @@ const pdf = await render(
 | `break-inside: avoid`         | Keeps the element on one page when it fits.             |
 | `box-decoration-break: clone` | Repeats borders and backgrounds on every page fragment. |
 
-A `break-inside: avoid` box taller than the page window cannot fit on a page. It stops participating in cut avoidance. Browsers apply the same rule.
+`break-inside: avoid` applies only when the box fits on a page. An oversized box can still split. Text lines, images, and transformed subtrees are kept together where possible.
 
 ## Widows and orphans
 
@@ -44,7 +44,7 @@ const pdf = await render(
 );
 ```
 
-Both properties inherit. When a paragraph is too short to satisfy both minimums, the orphans win, as in Chromium. A break that cannot keep the orphans moves the whole paragraph to the next page. A minimum that cannot fit the current page at all is dropped for that page, like `break-inside: avoid` on an oversized box.
+Both properties inherit. If a paragraph is too short to satisfy both values, `orphans` takes priority. A paragraph moves to the next page when the current page cannot hold the required lines. A requirement larger than a full page is relaxed.
 
 ## Split decorations
 
@@ -69,7 +69,7 @@ const pdf = await render(
 
 ## Repeated table headers
 
-A `<thead>` paints again at the top of every page its table continues onto, following css-tables-3 repeated headers. The band is monolithic: a page break never lands inside it, and the spacing to the first body row repeats with it.
+Use `<thead>` for column headings that repeat on continuation pages. The header stays together, including its spacing before the first body row.
 
 ```tsx twoslash
 declare const rows: import("react").ReactNode;
@@ -121,7 +121,6 @@ import { render } from "takumi-pdf";
 
 const pdf = await render(
   <main>
-    {/* Centers the watermark inside each page area. */}
     <div
       style={{
         position: "fixed",
@@ -138,9 +137,6 @@ const pdf = await render(
 );
 ```
 
-A transformed or filtered ancestor captures a fixed descendant.
-That descendant stays in flow and paginates with its ancestor.
+Place the fixed box outside transformed or filtered ancestors. Those ancestors contain the box, so it paginates with them instead of repeating independently.
 
-A negative `z-index` paints the box under the content.
-A background on the root covers it, exactly as it does in a browser.
-Set the paper with `backgroundColor` instead, which paints under the box.
+Use a negative `z-index` to place the watermark behind content. Set the page color through `backgroundColor` if the root background would otherwise cover the watermark.

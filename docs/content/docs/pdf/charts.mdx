@@ -1,26 +1,47 @@
 ---
 title: Charts
-description: Vector charts from SVG-producing libraries
+description: Place SVG charts in a PDF and provide accessible descriptions.
 icon: ChartColumn
 ---
 
-A chart embedded as SVG stays vector in the PDF. It is drawn as paths, gradients become PDF shadings, and dashed lines keep their dash pattern. A page with two full charts is around 20 KB.
+Use an SVG chart to preserve vector lines and shapes in PDF. Generate the SVG before rendering the document. See [Charts](/docs/charts#render-an-echarts-chart) for a complete ECharts example.
 
-Generate the SVG with any library that renders without a DOM, like [ECharts in SSR mode](/docs/charts), and hand the string to an `<img>` as its `src`:
+## Add a chart
 
-```tsx
+Pass the SVG string directly to `src`. Set its dimensions in CSS pixels and register the fonts used by its labels.
+
+```tsx twoslash
+declare const svg: string;
+// ---cut---
 import { render } from "takumi-pdf";
+import { googleFonts } from "@takumi-rs/helpers";
 
+const fonts = (await googleFonts(["Inter"])).map((font) => ({ ...font, ranges: [] }));
 const pdf = await render(
-  <div style={{ display: "flex" }}>
-    <img src={svg} alt="Quarterly revenue" style={{ width: 560, height: 360 }} />
-  </div>,
-  { page: "a4" },
+  <figure style={{ margin: 0, breakInside: "avoid" }}>
+    <img
+      src={svg}
+      alt="Quarterly revenue: 320, 730, 550, and 910"
+      style={{ width: 560, height: 360 }}
+    />
+    <figcaption>Revenue by quarter</figcaption>
+  </figure>,
+  { size: "a4", fonts },
 );
 ```
 
-## Text inside the chart
+Replace `svg` with your generated chart. `breakInside: "avoid"` keeps the chart and caption together when they fit on one page. Choose dimensions that fit within the page margins.
 
-Axis labels and values are drawn as outlines. They are visible but not selectable or extractable. In tagged output, give the `<img>` an `alt` so the chart becomes a `Figure` with a description.
+The empty `ranges` array prevents the renderer from discarding font subsets used only inside the SVG. See [Fonts for chart labels](/docs/charts#fonts-for-chart-labels) to load fewer subsets for large font families.
 
-Labels need a registered font that covers them. See [fonts for chart labels](/docs/charts#fonts-for-chart-labels) for the CJK subsetting catch.
+## Vector output and text
+
+SVG paths, supported gradients, and dashed lines remain vector. Embedded bitmaps and SVG effects that require rasterization still use pixels. A PNG chart stays raster even when placed in a PDF.
+
+SVG labels are drawn as outlines. They remain visible but cannot be selected, searched, or extracted as text. Put searchable titles, captions, and data tables in the surrounding JSX.
+
+## Describe the data
+
+Give the chart a meaningful `alt`. Tagged output uses it as the figure description. A label such as “Bar chart” identifies the image but does not explain its data.
+
+For detailed charts, include a table with the underlying values. See [Reports and statements](/docs/pdf/reports#long-tables) for a table that continues across pages.

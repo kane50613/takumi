@@ -1,10 +1,10 @@
 ---
 title: Headers & footers
-description: Repeat bands on every page with page counters.
+description: Add repeating headers, footers, and page numbers.
 icon: PanelTop
 ---
 
-`header` and `footer` accept any node input. They repeat on every page. Bands lay out at full page width and draw in the page margin areas, like Chromium's print templates. Pick a margin at least as tall as the band, or the band overlaps content, exactly as in Chromium.
+Pass JSX, HTML, or a node tree to `header` or `footer`. Each repeats in the page margin. Automatic margins make room for their content.
 
 ```tsx twoslash
 import type { ReactNode } from "react";
@@ -25,39 +25,17 @@ const pdf = await render(report, {
 
 ## Sizing the margin
 
-A band draws in the page margin, so the margin has to be tall enough to hold it.
-`margin` defaults to `"auto"`, which measures the band and takes the space it needs.
+`margin` defaults to `"auto"`. It measures the header and footer at full page width and reserves space above and below the document.
 
-```tsx twoslash
-import type { ReactNode } from "react";
-declare const report: ReactNode;
-// ---cut---
-import { render } from "takumi-pdf";
-import { PageNumber, TotalPages } from "takumi-pdf/primitives";
-
-const pdf = await render(report, {
-  footer: (
-    <div tw="flex w-full justify-center text-[10px] text-gray-500">
-      Page <PageNumber /> of <TotalPages />
-    </div>
-  ),
-});
-```
-
-An `"auto"` side comes out at the band height plus the 20px bands are inset from
-the paper edge, and never below the 37.8px a page starts with. A short band
-leaves the page looking as it did before. Set a side to a number to size it yourself,
-and leave out the sides you are happy with:
+For ordinary page sizes, each automatic top or bottom margin is the larger of 37.8px and the header or footer height plus a 20px inset. Set a numeric margin to override it. Omitted sides remain automatic:
 
 ```ts
 const margin = { top: 96 };
 ```
 
-Left and right hold no band. `"auto"` there is that same 37.8px.
+Automatic left and right margins are 37.8px on ordinary page sizes. A numeric margin that is too small can let the header or footer overlap the body.
 
-To size a margin yourself, `measure` lays out a tree the way `render` measures a
-band: full page width, counter hooks filled with three-digit numbers. Leave the
-20px inset on top of the height it returns.
+To calculate a numeric margin, call `measure()` with the same page size and fonts as the render. It measures at full page width with three-digit page counters. Add the 20px inset to the returned height.
 
 ```tsx twoslash
 declare const footer: import("react").ReactNode;
@@ -83,7 +61,7 @@ A node carrying both classes gets the page number.
 
 ## Counters outside a band
 
-A hook fills wherever it sits. A `fixed` box repeats on every page, so it lays out again for each one and its counters count with it. A component can carry its own footer that way, instead of passing one to `render`.
+Counters also work in document content. Inside a `position: fixed` box, they update on every page:
 
 ```tsx
 <div style={{ position: "fixed", bottom: 24, left: 24, right: 24 }}>
@@ -93,7 +71,7 @@ A hook fills wherever it sits. A `fixed` box repeats on every page, so it lays o
 
 A fixed box draws over the content rather than in the margin, so leave it room. `margin` sizes itself to the header and footer alone.
 
-A hook in the page content names the page it lands on, which is what a cover page counting the report's length needs. One laid out inline has no box of its own, so it reads the box that holds it and the flow that closed before it, and takes whichever page is later. Content that paints nowhere, such as a box scaled to zero, closes no flow to read. Content counters lay the document out a second time, since the page a hook sits on is only known once the content is cut into pages, and a document without one pays nothing.
+In ordinary flow, `<PageNumber />` shows the page containing the counter and `<TotalPages />` shows the document length. These counters require another layout pass because their values depend on pagination. Inline counters use the enclosing box and preceding rendered flow to determine their page.
 
 ## Counter styles
 
@@ -110,7 +88,7 @@ const pdf = await render(report, {
   footer: (
     <div style={{ fontSize: 12 }}>
       {/* [!code highlight:2] */}
-      第 <PageNumber format="trad-chinese-informal" /> 頁,共{" "}
+      第 <PageNumber format="trad-chinese-informal" /> 頁，共{" "}
       <TotalPages format="trad-chinese-informal" /> 頁
     </div>
   ),
@@ -166,4 +144,4 @@ A registered font has to cover the digits of the style you pick. Latin fonts rar
 
 ## Band height
 
-Band height is measured with the real page count, and the document re-paginates until the height settles, up to three passes. A counter that wraps the band at page 100 grows the margin for the whole document, so the layout never shifts between pages.
+The renderer recalculates header and footer height with the actual page count, up to three passes. Automatic margins use that height across the document. Leave enough width for counters to avoid wrapping when the page count grows.

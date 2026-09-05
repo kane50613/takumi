@@ -4,7 +4,7 @@ description: Embed files in the PDF, including PDF/A-3 e-invoice data
 icon: Paperclip
 ---
 
-Attach files with `attachments`. They appear in the viewer's attachment panel:
+Pass files through `attachments` to include source data, supporting documents, or invoice XML. Readers can access them in PDF viewers that expose an attachment panel:
 
 ```tsx twoslash
 import type { ReactNode } from "react";
@@ -29,7 +29,7 @@ const pdf = await render(invoice, {
 
 `data` takes raw bytes as a `Uint8Array`, or a string encoded as UTF-8.
 
-`relationship` states how the file relates to the document. It becomes the PDF/A-3 `AFRelationship`:
+`relationship` describes the attachment's role and is written as `AFRelationship`:
 
 | Value           | Meaning                                          |
 | --------------- | ------------------------------------------------ |
@@ -41,7 +41,7 @@ const pdf = await render(invoice, {
 
 ## Electronic invoices
 
-ZUGFeRD and Factur-X invoices are PDF/A-3 documents with the invoice XML attached. Combine `attachments` with `pdfa`:
+For a Factur-X or ZUGFeRD document, use PDF/A-3 and attach the invoice XML. This example shows the attachment configuration:
 
 ```tsx twoslash
 import type { ReactNode } from "react";
@@ -72,8 +72,8 @@ The PDF/A-3 levels require three fields on each attachment:
 - `description`
 - a modification date: `modificationDate`, or the `metadata.creationDate` fallback
 
-A missing field fails the render with the violated rule.
+The render fails if required attachment metadata is missing.
 
 Invalid combinations are **TypeScript type errors**. The PDF/A-2 levels and `"4"` forbid attachments. Use `"4f"` to attach files to a PDF 2.0 archival document. The PDF/A-3 levels require `mimeType` and `description` on each one.
 
-Full Factur-X conformance also expects its `fx:` XMP extension schema. `metadata.xmp` writes it. See [Invoices](/docs/pdf/invoices).
+This configuration alone does not validate the invoice XML or its profile. Add the profile's XMP metadata and validate the result as described in [Invoices](/docs/pdf/invoices).

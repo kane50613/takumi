@@ -4,7 +4,7 @@ description: Fixed one-page PDFs for certificates, cards, and receipts.
 icon: File
 ---
 
-`viewport` renders one fixed page instead of paged output. It behaves like an image render. Percentage heights resolve against the viewport. It clips overflow.
+Set `viewport` to create a single page for a certificate, card, or receipt. With both dimensions set, percentage heights resolve against the viewport and content outside it is clipped.
 
 ```tsx twoslash
 import { render } from "takumi-pdf";
@@ -17,7 +17,7 @@ const pdf = await render(<div style={{ width: "100%", height: "100%" }}>Certific
 
 ## Content-sized pages
 
-Omit `height` to size the single page to its laid-out content. This works like a thermal receipt. Percentage heights do not resolve in this mode:
+Omit `height` for a page that grows to fit its content, such as a thermal receipt. Use content or explicit lengths to determine element heights. Percentage heights do not resolve in this mode:
 
 ```tsx twoslash
 import type { ReactNode } from "react";
@@ -29,4 +29,4 @@ import { render } from "takumi-pdf";
 const pdf = await render(receipt, { viewport: { width: 302 } }); // 80mm at 96 dpi
 ```
 
-`viewport` cannot be combined with `size`, `landscape`, `margin`, `header`, or `footer`. Those options work only with paged output. Hyperlinks, `outline`, and `metadata` work in both modes.
+`viewport` cannot be combined with `size`, `landscape`, `margin`, `header`, `footer`, or `pageRanges`. Use padding inside the document for whitespace around a single page. Hyperlinks, `outline`, and `metadata` work in both modes.

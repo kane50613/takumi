@@ -1,10 +1,10 @@
 ---
-title: PDF/A
-description: Archival output that validators accept
+title: PDF/A and PDF/UA
+description: Configure archival output, document tags, and accessibility validation.
 icon: Archive
 ---
 
-Render a PDF/A document with `pdfa`.
+Use `pdfa` for archival output and `tagged` for document structure and PDF/UA validation. The selected standard determines which metadata and attachments are allowed.
 
 ```tsx twoslash
 import type { ReactNode } from "react";
@@ -41,11 +41,11 @@ PDF/A-1 is not offered. It prohibits transparency.
 
 Validation runs during rendering. When a document cannot conform, the render fails with the violated rule instead of writing a broken file.
 
-Every level, and PDF/UA-1, passes [veraPDF](https://verapdf.org), the reference validator.
+Validate your generated document with [veraPDF](https://verapdf.org). Internal checks do not replace reviewing reading order, alternative text, or the meaning of your content.
 
 ## Tagged output
 
-`tagged` defaults to `true`. Tagged output mirrors Chromium's print-to-PDF.
+`tagged` defaults to `true`, which writes a structure tree from the document's HTML semantics. This alone does not request PDF/UA validation.
 
 Set `tagged: "ua1"` to also validate against PDF/UA-1:
 
@@ -84,13 +84,13 @@ The structure tree comes from the HTML semantics:
 | `tr`, `th`, `td`          | `TR`, `TH` with `Scope`, `TD`       |
 | page headers and footers  | artifacts                           |
 
-Heading levels come from nesting, not the tag name. A document that starts with `h2` gets an `H1`. A jump from `h1` to `h4` becomes `H1` then `H2`. PDF/UA rejects a sequence that skips a level or starts below `H1`. HTML written for visual styling does this all the time.
+Heading levels are normalized in the structure tree. A document starting with `h2` gets `H1`, and a jump from `h1` to `h4` becomes `H1` followed by `H2`. Use meaningful heading levels in your source even when their visual sizes differ.
 
 Header cells carry a `Scope` attribute: `Column` inside `thead`, `Row` elsewhere. A `scope` attribute on the cell overrides it. `rowspan` and `colspan` become `RowSpan` and `ColSpan` attributes. A table that spans pages stays one `Table` element. The repeated header band is marked as an artifact.
 
 Table elements follow the rendered layout, like the rest of the tree. A `<table>` whose `display` is overridden gets none, and neither does a table built from flex rows. Screen readers cannot navigate those by row or column, and the file still passes PDF/UA, because the validator only checks the tags that are there.
 
-Set `tagged: false` to skip the tree when file size matters more than accessibility.
+Set `tagged: false` only when you do not need a structure tree and the selected standard permits it.
 
 ### PDF/UA-2
 
@@ -116,7 +116,7 @@ const pdf = await render(report, {
 
 Links and outline entries target structure elements, not page positions. Reading order survives when a viewer follows one.
 
-### What combines with what
+### Compatible options
 
 Invalid combinations are TypeScript type errors. PDF/UA-1 uses PDF 1.7. PDF/A-4 and PDF/UA-2 use PDF 2.0. The two generations never mix.
 

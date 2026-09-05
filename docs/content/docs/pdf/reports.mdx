@@ -4,13 +4,15 @@ description: Long documents with chapters, bookmarks, and running bands.
 icon: FileSpreadsheet
 ---
 
-Reports and account statements are long. They break into chapters, repeat a band on every page, and get navigated rather than read straight through.
+Use page breaks for chapters, repeating headers for context, and bookmarks or a table of contents for navigation. The examples below combine these features for reports and account statements.
 
 ## Chapters
 
 `break-before: page` starts a section on a fresh page. `break-inside: avoid` keeps a figure with its caption:
 
 ```tsx twoslash
+declare const chartSvg: string;
+// ---cut---
 import { render } from "takumi-pdf";
 
 const pdf = await render(
@@ -20,7 +22,7 @@ const pdf = await render(
       <h1>Results</h1>
       {/* [!code highlight] */}
       <figure style={{ breakInside: "avoid" }}>
-        <img src="chart.svg" alt="Revenue by quarter" />
+        <img src={chartSvg} alt="Revenue by quarter" style={{ width: 560, height: 360 }} />
         <figcaption>Revenue by quarter</figcaption>
       </figure>
     </section>
@@ -155,8 +157,8 @@ for (const account of accounts) {
 }
 ```
 
-Set `tagged: false` when nobody reads these with assistive technology. It drops the structure tree and the file gets smaller.
+The renderer reuses registered fonts between documents. Keep `tagged` enabled when the output needs a structure tree.
 
 ## Accessibility
 
-Public bodies often have to publish accessible documents. `tagged: "ua1"` validates the structure tree against PDF/UA-1 during the render. It builds on the heading outline above. See [PDF/A](/docs/pdf/pdf-a) for the rest of its inputs.
+Set `tagged: "ua1"` to request PDF/UA-1 validation. Supply the document language and title, then review heading order, tables, and chart descriptions. See [PDF/A and PDF/UA](/docs/pdf/pdf-a).

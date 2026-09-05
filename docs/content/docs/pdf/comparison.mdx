@@ -1,10 +1,10 @@
 ---
 title: Comparison
-description: takumi-pdf against Puppeteer and react-pdf, measured.
+description: Compare renderer behavior and recorded invoice benchmarks.
 icon: Scale
 ---
 
-This comparison benchmarks three JavaScript PDF renderers. The benchmark uses an 80-line invoice. The invoice spans two pages and has a page-number footer.
+This page records a benchmark of an 80-line invoice across three PDF renderers. The numbers apply to the package versions and environment below, not necessarily the current releases.
 
 Each harness uses its engine's native template language. Geometry, columns, and the embedded font (Inter 400/700) are the same in each harness. react-pdf's pt values mirror the other renderers' px values. takumi and Chrome produce the same two-page layout.
 
@@ -38,14 +38,12 @@ These measurements use npm-registry packages and esbuild (`--bundle --minify`, g
 
 pdf-lib, pdfkit, and jspdf are drawing primitives. You position each text line yourself. They are not in the benchmark above.
 
-takumi-pdf's wasm binary is the largest single JS download. It is also the whole engine. `node_modules` has 45 files.
+Measure the complete bundle for your deployment target. These figures exclude application code and should not be used as a current platform size limit.
 
-Cloudflare Workers caps a free-plan bundle at 3 MB after compression. The 1.52 MB wasm and the 10 KB JS wrapper leave half of that for application code.
-
-Reading the numbers honestly:
+## Interpret the results
 
 - Chrome's cold start includes launching a browser process. It varies with machine state. Its memory spans several processes. A single-process measurement misses this. Chrome performs well after warming. It has the most complete CSS support of the three.
 - react-pdf embeds the same Inter subsets as the other two. Subsetting on every render is most of its warm cost; the standard 14 PDF fonts avoid it. Documents use react-pdf's component set. Existing HTML, JSX, and Tailwind markup cannot be reused. It shapes Arabic, but paragraph direction is manual, and our Arabic sample dropped its first letter.
 - takumi-pdf reuses OG-image components unchanged. Its CSS coverage is narrower than Chromium's. PDF output does not support `filter: blur()`, `drop-shadow()`, or `backdrop-filter`. A blurred `box-shadow` is approximated with bands, and a blurred `text-shadow` draws sharp. Tagged output is on by default and adds about 4 KB to this invoice, down from 10 KB before the structure tree moved into an object stream. `tagged: false` removes it.
 
-Rule of thumb: use Puppeteer to reproduce a complex web page pixel-perfectly. Any renderer suits documents written from scratch for PDF work. Use takumi-pdf to reuse Takumi image components. It suits edge runtimes. It also offers lower per-document latency.
+Choose based on your template and runtime. Puppeteer uses browser layout and executes page scripts. react-pdf uses document components. Takumi accepts HTML, JSX, and node trees with its supported CSS subset. Run your own documents through the benchmark before using these timings to estimate workload capacity.

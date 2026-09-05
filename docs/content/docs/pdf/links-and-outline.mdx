@@ -4,6 +4,8 @@ description: Clickable hyperlinks, a table of contents, bookmarks, and document 
 icon: Link
 ---
 
+Add links with `<a href>`, bookmarks with `outline`, and document properties with `metadata`.
+
 ## Hyperlinks
 
 Anchors with an `href` become clickable link annotations. They appear on every page that their box touches:
@@ -35,11 +37,11 @@ const pdf = await render(
 );
 ```
 
-Clicking it moves to the page holding that element. A fragment matching no element is dropped, so the reader never gets a link that goes nowhere. Other schemes are dropped too: they have no meaning inside a standalone document.
+Internal links jump to the target element. Unresolved fragments and unsupported URL schemes are omitted.
 
 ## Table of contents
 
-`<TargetPageNumber />` prints the page its link points at. The link is the nearest enclosing element carrying an `href`, usually the `<a>` around the entry, so one piece of markup gives an entry that is both clickable and numbered. Pass `href` instead to have it render its own link. Underneath it is the `targetPageNumber` class hook, which HTML input uses directly.
+`<TargetPageNumber />` prints the page number of an internal link target. Put it inside an `<a href="#id">`, or pass `href` to the primitive to create its own link. HTML input can use the `targetPageNumber` class on an element inside the link.
 
 ```tsx twoslash
 import { render } from "takumi-pdf";
@@ -64,17 +66,17 @@ The stretched span draws the dot leader. Counter styles work here too, so `forma
 
 A fragment naming no element prints nothing. This follows the rule links already use.
 
-### Why the fixed width
+### Reserve space for page numbers
 
 A page number exists only after pagination. Takumi paginates, fills the numbers in, and lays the document out again. A number that widens its line can move a page break, and the moved break can renumber the entry. The render repeats this up to three times, then keeps what it has.
 
-A number that cannot widen its line settles on the second pass. That is what `w-8 shrink-0 text-right` does above. Reserve enough width for the highest page number the document reaches.
+The example reserves width with `w-8 shrink-0 text-right`. Increase it if your document needs more digits. This prevents page numbers from changing the entry width during layout.
 
 Headers and footers are laid out per page, outside this loop. A `<TargetPageNumber />` in a band renders nothing.
 
 ## Outline
 
-Set `outline: true` to build PDF bookmarks from `h1`–`h6` headings. Deeper headings nest under the previous shallower heading. This matches an HTML document outline:
+Set `outline: true` to build PDF bookmarks from `h1`–`h6`. Deeper headings nest under the previous shallower heading:
 
 ```tsx twoslash
 import type { ReactNode } from "react";
@@ -111,4 +113,4 @@ const pdf = await render(report, {
 });
 ```
 
-All fields are optional. Omitting `metadata` writes no document properties. This keeps output byte-identical across runs for golden testing.
+Metadata fields are optional for ordinary PDF output. [PDF/A and PDF/UA](/docs/pdf/pdf-a) require some fields. Use a fixed `creationDate` when you need reproducible output.

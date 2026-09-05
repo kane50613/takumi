@@ -1,54 +1,45 @@
 ---
-title: Introduction to takumi-pdf
-description: Render JSX to paged, selectable-text PDF with takumi-pdf.
+title: Generate PDFs
+description: Render JSX, HTML, or node trees to PDF with takumi-pdf.
 index: true
 icon: BookOpen
 ---
 
-`takumi-pdf` renders the same JSX, Tailwind classes, and node trees as image output. It writes a paged vector PDF instead. It ships as a WebAssembly module. It runs on Node.js, Bun, and Cloudflare Workers without Chromium.
-
-- **Page breaks** honor `break-before: page`, `break-after: page`, and `break-inside: avoid`.
-- **[Headers and footers](/docs/pdf/headers-and-footers)** repeat on every page, with page counters.
-- **Text** stays selectable and searchable. Fonts embed as subsets.
-- **[Links](/docs/pdf/links-and-outline)** and metadata carry into the output. `outline: true` builds bookmarks from headings.
-- **[Attachments](/docs/pdf/attachments)** embed files, including Factur-X e-invoice XML.
-- **Tagged PDF** is on by default. [PDF/A-2, A-3, A-4, and PDF/UA-1](/docs/pdf/pdf-a) pass veraPDF.
-- **Arabic**, bidi text, CJK, Devanagari, and emoji shape correctly.
-- **Gradients**, `box-shadow`, transforms, and color filters stay vector, conic gradients included.
-- **1.5 MB** of gzip wasm fits the Cloudflare Workers free plan.
+`takumi-pdf` renders JSX, HTML, and node trees to PDF. Use CSS and Tailwind to lay out the document, then save the returned bytes or send them in an HTTP response. The WebAssembly renderer runs without a browser process.
 
 ```npm
-npm i takumi-pdf
+npm i takumi-pdf @takumi-rs/helpers react
 ```
 
 ## Render a document
 
 ```tsx twoslash
-import type { ReactNode } from "react";
-declare const data: { total: number };
-declare function Invoice(props: { data: typeof data }): ReactNode;
-// ---cut---
 import { render } from "takumi-pdf";
 import { PageNumber, TotalPages } from "takumi-pdf/primitives";
 import { googleFonts } from "@takumi-rs/helpers";
 import { writeFile } from "node:fs/promises";
 
-const pdf = await render(<Invoice data={data} />, {
-  // A4 portrait with a 37.8px margin is the default
-  size: "a4",
-  // [!code highlight]
-  fonts: await googleFonts(["Inter"]),
-  footer: (
-    <div tw="flex w-full justify-center text-[10px] text-gray-500">
-      Page <PageNumber /> of <TotalPages />
-    </div>
-  ),
-});
+const pdf = await render(
+  <main>
+    <h1>Invoice 1042</h1>
+    <p>Total: $1,290</p>
+  </main>,
+  {
+    size: "a4",
+    // [!code highlight]
+    fonts: await googleFonts(["Inter"]),
+    footer: (
+      <div tw="flex w-full justify-center text-[10px] text-gray-500">
+        Page <PageNumber /> of <TotalPages />
+      </div>
+    ),
+  },
+);
 
 await writeFile("invoice.pdf", pdf);
 ```
 
-`render()` accepts JSX, HTML strings, or JSON node trees. It returns `Uint8Array` PDF bytes. Content lays out at the page's content width. It flows onto as many pages as needed.
+`render()` returns a `Uint8Array`. By default, it flows content across A4 pages with automatic margins. Body text stays selectable, and registered fonts are embedded as subsets. SVG labels are drawn as outlines.
 
 HTML strings use the same parser as `takumi-js`. A `<style>` tag in the string applies only to that render:
 
@@ -87,7 +78,7 @@ const pdf = await render(report, {
 | `margin`          | `number`, `"auto"`, or `{ top?, right?, bottom?, left? }` | `"auto"` | `"auto"` fits the band on that side, and a side left out of the object is `"auto"` too. |
 | `backgroundColor` | CSS color                                                 | unset    | Fills the page box, margins included, under everything.                                 |
 
-`size` takes the page keywords CSS Paged Media defines, portrait as that module writes them:
+`size` accepts these paper sizes. Each keyword uses portrait orientation:
 
 | Keyword | Size         | Keyword    | Size         |
 | ------- | ------------ | ---------- | ------------ |
@@ -99,20 +90,16 @@ const pdf = await render(report, {
 
 Set `landscape` to turn any of them, or pass `{ width, height }` for a size with no keyword.
 
-These options are the structured form of `@page`, which takumi does not parse as CSS.
-`size` and `margin` map to the descriptors of the same name, `header` and `footer` to its margin boxes.
+Set page geometry through these options. CSS `@page` rules are not parsed.
 
-A margin left at `"auto"` takes the space its band needs: the band's measured
-height plus the 20px it is inset from the paper edge, and never less than the
-37.8px a page starts with. Without a band on that side it stays at 37.8px, the
-1cm Chromium prints at.
+Automatic top and bottom margins fit the header or footer, including its 20px inset from the paper edge. They are at least 37.8px on ordinary page sizes. Without a header or footer, the default is 37.8px (1cm). See [Headers and footers](/docs/pdf/headers-and-footers#sizing-the-margin).
 
 Leave `backgroundColor` unset for white paper.
 A viewer draws white by default, and the file stays free of a full-page rectangle.
 
 ## Reuse a renderer
 
-`render()` keeps one shared renderer alive. Construct `PdfRenderer` directly for applications that manage several font sets:
+`render()` reuses a shared renderer. Create a `PdfRenderer` when you need a separate font registry:
 
 ```tsx twoslash
 import type { ReactNode } from "react";
@@ -122,24 +109,20 @@ import { PdfRenderer } from "takumi-pdf";
 
 // [!code highlight:2]
 const renderer = new PdfRenderer();
-await renderer.registerFont("https://example.com/Inter-Regular.woff2");
+await renderer.registerFont("https://example.com/fonts/Inter-Regular.woff2");
 
 const pdf = await renderer.render(doc);
 ```
 
-Registered fonts deduplicate across calls. Rendering many documents pays the font cost once.
+Registered fonts are deduplicated across calls. Replace the example URL with your font file.
 
 ## Runtimes
 
-`takumi-pdf` ships as WebAssembly. It runs on Node.js, Bun, and Cloudflare Workers.
-The module fits the Workers free-tier size limit.
-Import `takumi-pdf/no-init` to instantiate the wasm yourself.
+Use the default import on Node.js, Bun, and Cloudflare Workers. For manual initialization, import `takumi-pdf/no-init`.
 
 ### Next.js
 
-Import `takumi-pdf/next` from a route handler. It hands the binary to Turbopack in the form
-Turbopack emits, on the Node runtime and the Edge runtime alike, so the package needs no
-`serverExternalPackages` entry.
+Import `takumi-pdf/next` in a Next.js route handler. This entry supports the Node and Edge runtimes without a `serverExternalPackages` entry.
 
 ```ts
 import { render } from "takumi-pdf/next";
@@ -147,11 +130,7 @@ import { render } from "takumi-pdf/next";
 
 ### In the browser
 
-The default entry picks its loader from the export conditions the bundler sets.
-Vite, webpack, and Turbopack set the same conditions for a browser build.
-All three land on the Vite entry, and its `?url` import only works in Vite.
-
-Load the binary yourself instead:
+For browser bundles, initialize the renderer with `takumi-pdf/no-init` and `takumi-pdf/wasm-url`:
 
 ```ts
 import init, { render } from "takumi-pdf/no-init";
@@ -170,3 +149,16 @@ server chunk, where the asset never lands.
 On Turbopack, drop any `turbopack.rules` entry mapping `*.wasm` to `type: "wasm"`.
 That rule makes Turbopack instantiate the binary and look for wasm-bindgen glue the
 package does not ship.
+
+## Choose the next guide
+
+| Task                                           | Guide                                                       |
+| ---------------------------------------------- | ----------------------------------------------------------- |
+| Control page breaks and repeated table headers | [Pagination](/docs/pdf/pagination)                          |
+| Add page numbers                               | [Headers and footers](/docs/pdf/headers-and-footers)        |
+| Load fonts, logos, and photos                  | [Fonts and images](/docs/pdf/fonts-and-images)              |
+| Add links or a table of contents               | [Links, outline, and metadata](/docs/pdf/links-and-outline) |
+| Create a receipt or label                      | [Single-page viewport](/docs/pdf/single-page)               |
+| Generate archival or accessible output         | [PDF/A and PDF/UA](/docs/pdf/pdf-a)                         |
+
+For complete document patterns, see [Invoices](/docs/pdf/invoices), [Reports](/docs/pdf/reports), and [Charts](/docs/pdf/charts).
