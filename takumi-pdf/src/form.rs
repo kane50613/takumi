@@ -19,7 +19,7 @@ use crate::{
     page::Page,
   },
   options::{PT_PER_PX, PdfError},
-  tags::{raw_text, text_content},
+  tags::raw_text,
   window::Window,
 };
 
@@ -241,18 +241,22 @@ fn visit_options(node: &RenderNode, visit: &mut impl FnMut(ChoiceOption, OptionS
       visit_options(child, visit);
       continue;
     };
-    let text = text_content(child);
+    let text = raw_text(child)
+      .split([' ', '\t', '\n', '\r', '\u{000c}'])
+      .filter(|part| !part.is_empty())
+      .collect::<Vec<_>>()
+      .join(" ");
     let display = source
       .option_label()
       .map(str::to_string)
-      .unwrap_or_else(|| text.split_whitespace().collect::<Vec<_>>().join(" "));
+      .unwrap_or_else(|| text.clone());
 
     visit(
       ChoiceOption {
         export: source
           .attribute("value")
           .map(str::to_string)
-          .unwrap_or_else(|| text.clone()),
+          .unwrap_or(text),
         display,
       },
       state,
