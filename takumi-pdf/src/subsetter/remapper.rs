@@ -152,11 +152,11 @@ impl GlyphRemapper {
   /// Create a remapper from an existing set of glyphs. The method
   /// will ensure that the mapping is monotonically increasing.
   pub fn new_from_glyphs_sorted(glyphs: &[u16]) -> Self {
-    let mut sorted = BTreeSet::from_iter(glyphs)
+    let sorted = BTreeSet::from_iter(glyphs)
       .iter()
       .map(|g| **g)
       .collect::<Vec<_>>();
-    sorted.sort();
+
     GlyphRemapper::new_from_glyphs(&sorted)
   }
 

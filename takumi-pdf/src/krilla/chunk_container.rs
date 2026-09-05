@@ -349,7 +349,7 @@ impl ChunkContainer {
           let mut sorted = named_destinations.into_iter().collect::<Vec<_>>();
           // Note that named destinations are guaranteed to be unique,
           // hence just comparing by the name is enough.
-          sorted.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
+          sorted.sort_unstable_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
 
           for (name, (dest_ref, _)) in sorted {
             dest_name_entries.insert(Str(name.as_bytes()), remapper[&dest_ref]);

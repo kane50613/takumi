@@ -276,7 +276,7 @@ fn parse(data: &[u8], index: u32) -> Result<Face<'_>> {
 
 /// Construct a brand-new font.
 fn construct(mut ctx: Context) -> Vec<u8> {
-  ctx.tables.sort_by_key(|&(tag, _)| tag);
+  ctx.tables.sort_unstable_by_key(|&(tag, _)| tag);
 
   let mut w = Writer::new();
   w.write(ctx.flavor);
