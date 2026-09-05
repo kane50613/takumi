@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import type { Node } from "./types";
 import { defaultMaxFetchBytes, fetchOk, type FetchOptions, readBodyLimited } from "./fetch";
+import { FetchDeadline } from "./fetch/deadline";
 
 const cssUrlPattern = /url\(\s*(['"]?)(.*?)\1\s*\)/g;
 
@@ -74,9 +75,6 @@ export interface ImageFetchCache {
   delete(url: string): unknown;
 }
 
-/** Fetches a URL's bytes, coalescing concurrent requests for the same URL through `cache`. A
- * rejected fetch is evicted so a later call can retry instead of replaying the failure. A cache
- * hit rechecks the caller's `allowUrl` (entry URL only, not redirect hops) and `maxBytes`. */
 function fetchImageData(
   url: string,
   options: FetchOptions,
@@ -87,7 +85,7 @@ function fetchImageData(
 
   const cached = fetchCache?.get(url);
   if (cached) {
-    return cached.then((data) => {
+    return new FetchDeadline(options).waitFor(cached).then((data) => {
       if (allowUrl && !allowUrl(url)) {
         throw new Error(`URL blocked by allowUrl policy: ${url}`);
       }
