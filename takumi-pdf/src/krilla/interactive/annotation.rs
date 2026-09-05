@@ -445,6 +445,12 @@ impl WidgetAnnotation {
     }
   }
 
+  pub(crate) fn value_is_encodable(&self) -> bool {
+    self.drawn_value().chars().all(|character| {
+      matches!(character, '\t' | '\n' | '\r') || win_ansi_byte(character).is_some()
+    })
+  }
+
   /// Writes this widget's appearance stream, and the shared face it draws
   /// with.
   fn write_appearance(

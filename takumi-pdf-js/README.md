@@ -250,14 +250,13 @@ The PDF/A-3 levels require `mimeType`, `description`, and a modification date on
 
 ## Fillable fields
 
-`form: true` turns `<input>` and `<textarea>` into AcroForm fields a reader can fill in. Left off, the same markup draws as the static boxes its CSS describes, so one template covers both the form and the printed copy.
+Set `form: true` to make named text inputs and textareas editable in a PDF reader.
 
 ```tsx
 const pdf = await render(
   <form>
     <label htmlFor="name">Full name</label>
     <input id="name" name="name" defaultValue="Kane" required />
-
     <label>
       Notes
       <textarea name="notes" maxLength={200} />
@@ -267,27 +266,23 @@ const pdf = await render(
 );
 ```
 
-Fields come from the HTML attributes you already write.
+| HTML                                                               | Field behavior                                              |
+| ------------------------------------------------------------------ | ----------------------------------------------------------- |
+| `name`                                                             | Field name; `id` is the fallback                            |
+| `value`, textarea text                                             | Initial and reset value                                     |
+| `required`, `readonly`, `disabled`                                 | Required, read-only, and excluded from export when disabled |
+| `maxlength`                                                        | Maximum text length                                         |
+| `type="password"`                                                  | Masked appearance                                           |
+| `aria-labelledby`, `aria-label`, `<label>`, `title`, `placeholder` | Accessible name, in priority order                          |
+| `color`, `font-size`, `text-align`                                 | Text appearance                                             |
 
-| HTML                                                               | PDF                                                       |
-| ------------------------------------------------------------------ | --------------------------------------------------------- |
-| `name`                                                             | The field name                                            |
-| `value`, a `<textarea>`'s text                                     | The value the field starts and resets to                  |
-| `required`, `readonly`, `disabled`                                 | Field flags. A disabled field stays out of the submission |
-| `maxlength`                                                        | The longest value a reader may type                       |
-| `<input type="password">`                                          | A password field, drawn masked                            |
-| `aria-label`, `aria-labelledby`, `<label>`, `title`, `placeholder` | The name a screen reader announces                        |
-| `color`, `font-size`, `text-align`                                 | How a reader redraws the value after an edit              |
+CSS controls the field's border and background. Its widget draws the value. A control taller than one page is clipped on the page where it starts.
 
-A control paints through the normal CSS pipeline, so its border, background and radius are whatever the stylesheet says. The widget draws only the value on top, and carries no `/MK`, so the appearance a viewer regenerates after an edit stays transparent over the box the page already painted. A rounded corner or a two-tone border survives that redraw; only the value is drawn again, in the color, size and alignment above.
+Names must be unique. Periods create a PDF field hierarchy: `user.name` places `name` under `user`. Empty segments such as `user..name` are rejected.
 
-Two controls may not share a `name`. That fails the render rather than merging into one field showing the same value twice. A period in a `name` spells the field hierarchy: `user.name` is the field `name` under `user`.
+Submit, reset, button, image, file, and hidden inputs do not become editable fields. Leaving `form` unset keeps the output static.
 
-A control taller than a page keeps its field on the page it starts on, cut at that page's bottom.
-
-An `<input>` whose `type` is `submit`, `reset`, `button`, `image`, `file` or `hidden` draws as a plain box and gets no field.
-
-Field values draw with the standard Helvetica face in WinAnsiEncoding, which no PDF/A or PDF/UA level accepts unembedded. A character outside that encoding is dropped from the drawn value; `/V` still carries it in full.
+Form text uses Helvetica with WinAnsiEncoding. Values this encoding cannot represent reject the render. Custom form fonts, PDF/A, and PDF/UA are not supported with `form: true`.
 
 ## Measuring
 

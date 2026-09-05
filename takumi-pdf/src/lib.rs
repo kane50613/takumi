@@ -240,6 +240,11 @@ fn open_document(
   options: &PdfOptions<'_>,
   attachments: Vec<Attachment>,
 ) -> Result<Document, PdfError> {
+  if options.form
+    && (options.standard.archival().is_some() || options.tagged.accessibility().is_some())
+  {
+    return Err(PdfError::UnsupportedFormStandard);
+  }
   let mut builder = ConfigurationBuilder::new();
   let mut validated = false;
 

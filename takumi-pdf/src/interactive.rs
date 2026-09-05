@@ -147,6 +147,15 @@ impl Interactive {
   /// each `aria-labelledby` id with the text of the element it names, which
   /// the walk may only have reached after the field.
   fn resolve_labels(&mut self, tree: &PreparedTree) {
+    let mut named_text = HashMap::new();
+    let mut pending = vec![&tree.root];
+
+    while let Some(node) = pending.pop() {
+      if let Some(id) = node.node.as_ref().and_then(|source| source.id()) {
+        named_text.entry(id).or_insert_with(|| text_content(node));
+      }
+      pending.extend(node.children.as_deref().unwrap_or_default().iter().rev());
+    }
     let texts = self
       .fields
       .iter()
@@ -154,12 +163,7 @@ impl Interactive {
         let named = field
           .labelled_by()?
           .split_whitespace()
-          .filter_map(|id| {
-            let anchor = self.anchors.get(id)?;
-            let text = text_content(tree.root.node_at_path(&anchor.path)?);
-
-            (!text.is_empty()).then_some(text)
-          })
+          .filter_map(|id| named_text.get(id).filter(|text| !text.is_empty()).cloned())
           .collect::<Vec<_>>()
           .join(" ");
 
@@ -205,6 +209,11 @@ impl Interactive {
       field.rect = rect;
       field.path = path(&field.path);
       self.fields.push(field);
+    }
+    for (id, mut anchor) in inner.anchors {
+      anchor.path = path(&anchor.path);
+      anchor.top = transform.transform_point(0.0, anchor.top).1;
+      self.anchors.entry(id).or_insert(anchor);
     }
     for (id, text) in inner.labels {
       self.labels.entry(id).or_insert(text);
