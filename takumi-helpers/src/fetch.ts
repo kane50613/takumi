@@ -1,5 +1,7 @@
-const defaultFetchTimeout = 30_000;
+import { FetchDeadline } from "./fetch/deadline";
+
 const maxRedirectHops = 5;
+const redirectStatuses = new Set([301, 302, 303, 307, 308]);
 const maxFetchAttempts = 3;
 const maxRetryDelay = 1000;
 const retryableStatuses = new Set([408, 429, 500, 502, 503, 504]);
@@ -38,14 +40,9 @@ class FetchRequest {
     this.url = url;
     this.allowUrl = options.allowUrl;
     this.fetchImpl = options.fetch ?? globalThis.fetch;
-    const timeout = options.timeout ?? defaultFetchTimeout;
-    const timeoutSignal = timeout <= 0 ? undefined : AbortSignal.timeout(timeout);
-    const signals = [options.signal, options.init?.signal, timeoutSignal].filter(
-      (signal): signal is AbortSignal => signal != null,
-    );
     this.init = {
       ...options.init,
-      signal: signals.length ? AbortSignal.any(signals) : undefined,
+      signal: new FetchDeadline(options, options.init?.signal).signal,
     };
   }
 
@@ -122,20 +119,79 @@ class FetchRequest {
 
   private async followRedirects(allowUrl: (url: string) => boolean): Promise<Response> {
     let current = this.url;
+    let init: RequestInit = {
+      ...this.init,
+      headers: new Headers(this.init.headers),
+      redirect: "manual",
+    };
+
     for (let hop = 0; hop < maxRedirectHops; hop++) {
-      const response = await this.attempt(current, { ...this.init, redirect: "manual" });
+      const response = await this.attempt(current, init);
       const location = response.headers.get("location");
-      if (response.status < 300 || response.status >= 400 || !location) {
+
+      if (!redirectStatuses.has(response.status) || location === null) {
         return response;
       }
 
       await response.body?.cancel().catch(() => {});
-      current = new URL(location, current).toString();
-      if (!allowUrl(current)) {
-        throw new Error(`URL blocked by allowUrl policy: ${current}`);
+      const next = new URL(location, current);
+
+      if (!allowUrl(next.href)) {
+        throw new Error(`URL blocked by allowUrl policy: ${next.href}`);
       }
+      if (
+        (next.protocol !== "https:" && next.protocol !== "http:") ||
+        next.username ||
+        next.password
+      ) {
+        throw new Error(`Invalid redirect URL: ${next.href}`);
+      }
+      init = FetchRequest.redirectInit(init, response.status, current, next);
+      current = next.href;
     }
     throw new Error(`Too many redirects fetching ${this.url}`);
+  }
+
+  // https://fetch.spec.whatwg.org/#http-redirect-fetch
+  private static redirectInit(
+    init: RequestInit,
+    status: number,
+    current: string,
+    next: URL,
+  ): RequestInit {
+    if (status !== 303 && init.body instanceof ReadableStream) {
+      throw new Error("Cannot replay a streamed request body after a redirect");
+    }
+
+    const headers = new Headers(init.headers);
+    const method = init.method?.toUpperCase() ?? "GET";
+    const changeToGet =
+      ((status === 301 || status === 302) && method === "POST") ||
+      (status === 303 && method !== "GET" && method !== "HEAD");
+
+    if (changeToGet) {
+      for (const header of [
+        "content-encoding",
+        "content-language",
+        "content-location",
+        "content-type",
+        "content-length",
+      ]) {
+        headers.delete(header);
+      }
+    }
+    if (new URL(current).origin !== next.origin) {
+      for (const header of ["authorization", "proxy-authorization", "cookie", "cookie2"]) {
+        headers.delete(header);
+      }
+    }
+
+    return {
+      ...init,
+      headers,
+      method: changeToGet ? "GET" : init.method,
+      body: changeToGet ? undefined : init.body,
+    };
   }
 }
 

@@ -91,7 +91,7 @@
     "provenance": true
   },
   "scripts": {
-    "build": "tsdown",
+    "build": "tsdown --config-loader unrun",
     "publish-lint": "attw --pack . && publint --strict ."
   },
   "devDependencies": {
