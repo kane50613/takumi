@@ -16,9 +16,8 @@ export type TextFit =
   | (string & {});
 
 declare module "react" {
-  interface CSSProperties {
+  interface CSSProperties extends Record<`--${string}`, string | number | undefined> {
     textFit?: TextFit;
-    [key: `--${string}`]: string | number | undefined;
   }
 }
 
