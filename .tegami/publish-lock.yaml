@@ -1,132 +1,98 @@
 core:changelogs:
-  - content: "---\npackages:\n  takumi-pdf:\n    type: patch\n  \"@takumi-rs/wasm\":\n    type: patch\n  takumi-js:\n    type: patch\n  \"@takumi-rs/image-response\":\n    type: patch\n---\n\n### Resolve a browser-only entry in client builds\n\nBundlers that resolve the `browser` condition (Vite client, webpack web) now\nget `bundlers/browser.mjs`, which only fetches the `.wasm` asset by `import.meta.url`. Client builds\nwith `noExternal` stop failing with `Cannot bundle Node.js built-in \"node:fs/promises\"`.\nThe Vite server entry reads the asset through `process.getBuiltinModule`, so\nno bundler sees a Node import. These packages, plus `takumi-js` and `@takumi-rs/image-response` on top of them, now require Node 20.19 or newer.\n"
-    filename: vite-client-noexternal.md
+  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n### Retry transient font and image requests\n\nRetry temporary GET and HEAD failures within the existing timeout, including Google Fonts metadata and font file downloads.\n"
+    filename: font-fetch-retries.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-raster:\n    type: patch\n---\n\n### Crop `object-fit: cover` the way the other backends do\n\nA length `object-position` under `cover` or `none` now shifts the image the same direction as the SVG and PDF output. Keyword and percentage positions are unchanged.\n"
-    filename: object-fit-placement.md
+  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n### Keep Google Fonts cache entries within caller limits\n\nBound the default `googleFonts` CSS cache, isolate custom fetch implementations, and honor request policies on repeated calls.\n"
+    filename: font-css-cache.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n### Report a capped WebP animation as unfinished\n\nA WebP stream cut at the frame cap now reports the same unfinished flag as APNG and GIF instead of claiming it ended.\n"
-    filename: webp-frame-cap.md
+  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n### Accept custom properties in node styles\n\nUse `Declarations` consistently for node styles, presets, and style helpers so custom properties typecheck without casts.\n"
+    filename: style-declarations.md
     v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n### Rename the background layer inputs\n\n`BackgroundLayerInput::resolve` and `BackgroundLayersInput::resolve` replace the `Resolve*` structs and free functions.\n"
-    filename: background-layer-input.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n### Drop unused paint re-exports\n\n`takumi_core::paint` no longer re-exports the tile position helpers, the gradient row states, or `LinearGradientFastPath`; a few layout helpers are crate-private now.\n"
-    filename: api-prune.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: patch\n---\n\n### Clip animation frames that start outside the canvas\n\nA GIF or WebP frame whose origin lies beyond the logical screen no longer panics the decoder. The frame is clipped away instead, as browsers do.\n"
-    filename: frame-outside-canvas.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n### Build gradient tables through ColorLut\n\nGradient tiles carry one `lut: ColorLut`. `ResolvedGradientStop::resolve` and `ColorLut::new` replace the free functions.\n"
-    filename: gradient-lut.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n### Move the border helpers onto their types\n\n`side_bands`, `border_dash_pattern`, `inset_size`, and `rect_offset` are now methods on `BorderProperties`, `BorderStyle`, `Size`, and `Rect`.\n"
-    filename: border-methods.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n### Name the values the paint helpers pass around\n\n`BorderStyle::dash_pattern` returns a `BorderDash`. `resolve_inline_runs`, `inline_background_path`, `glyph_outlines`, and `run_decorations` are methods on `BuiltInlineLayout`, `InlineBackgroundFragment`, and `ShapedRun`.\n"
-    filename: named-values.md
-    v: 0.0.0
-  - content: "---\npackages:\n  takumi-core:\n    type: minor\n---\n\n### Read render settings through RenderContext methods\n\n`time_ms`, `draw_debug_border`, and `dither_gradients` are methods now. `RenderContext::builder()` is unchanged.\n"
-    filename: render-context-shared.md
+  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n### Honor request policies across redirects and cache hits\n\nStrip sensitive headers on cross-origin redirects, apply redirect method and body rules, and honor image cache readers' cancellation and timeout without aborting shared downloads.\n"
+    filename: resource-request-policies.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - changelogIds:
-      - vite-client-noexternal.md
-    id: npm:@takumi-rs/wasm
+  - id: npm:takumi-js
     updated: true
-  - id: npm:@takumi-rs/helpers
-    updated: true
-  - id: npm:@takumi-rs/core
-    updated: true
-  - changelogIds:
-      - vite-client-noexternal.md
-    id: npm:@takumi-rs/image-response
-    updated: true
-  - changelogIds:
-      - vite-client-noexternal.md
-    id: npm:takumi-pdf
-    updated: true
-  - changelogIds:
-      - vite-client-noexternal.md
-    id: npm:takumi-js
+  - id: npm:takumi-pdf
     updated: true
   - id: npm:docs
     updated: false
-  - id: npm:example-e-invoice
-    updated: false
-  - id: npm:example-generate-invoice
-    updated: false
-  - id: npm:example-css-library-integration
-    updated: false
-  - id: npm:waku-ssr
-    updated: false
+  - id: npm:@takumi-rs/core
+    updated: true
+  - changelogIds:
+      - font-fetch-retries.md
+      - font-css-cache.md
+      - style-declarations.md
+      - resource-request-policies.md
+    id: npm:@takumi-rs/helpers
+    updated: true
+  - id: npm:@takumi-rs/wasm
+    updated: true
+  - id: npm:@takumi-rs/image-response
+    updated: true
   - id: npm:example-tanstack-start
     updated: false
-  - id: npm:svelte
-    updated: false
-  - id: npm:example-cloudflare-workers
-    updated: false
-  - id: npm:ffplay
+  - id: npm:example-satori-html
     updated: false
   - id: npm:pdf-bench
     updated: false
-  - id: npm:example-twitter-images
+  - id: npm:ffplay
     updated: false
   - id: npm:ffmpeg-keyframe-animation
     updated: false
+  - id: npm:example-generate-invoice
+    updated: false
+  - id: npm:example-twitter-images
+    updated: false
+  - id: npm:example-e-invoice
+    updated: false
+  - id: npm:svelte
+    updated: false
   - id: npm:example-liquid-glass
+    updated: false
+  - id: npm:example-css-library-integration
+    updated: false
+  - id: npm:example-cloudflare-workers
     updated: false
   - id: npm:example-nextjs
     updated: false
-  - id: npm:example-satori-html
+  - id: npm:waku-ssr
+    updated: false
+  - id: cargo:takumi-svg
+    updated: false
+  - id: cargo:takumi-pdf
+    updated: true
+  - id: cargo:takumi-html
+    updated: false
+  - id: cargo:takumi-raster
     updated: false
   - id: cargo:takumi
     updated: true
-  - changelogIds:
-      - object-fit-placement.md
-    id: cargo:takumi-raster
-    updated: true
-  - id: cargo:takumi-svg
-    updated: true
-  - changelogIds:
-      - vite-client-noexternal.md
-    id: cargo:takumi-pdf
-    updated: true
-  - id: cargo:takumi-html
-    updated: true
-  - changelogIds:
-      - webp-frame-cap.md
-      - background-layer-input.md
-      - api-prune.md
-      - frame-outside-canvas.md
-      - gradient-lut.md
-      - border-methods.md
-      - named-values.md
-      - render-context-shared.md
-    id: cargo:takumi-core
-    updated: true
+  - id: cargo:takumi-core
+    updated: false
 npm:packages:
   - id: npm:takumi
-  - id: npm:@takumi-rs/wasm
-  - id: npm:@takumi-rs/helpers
-  - id: npm:@takumi-rs/core
-  - id: npm:@takumi-rs/image-response
-  - id: npm:takumi-pdf
   - id: npm:takumi-js
+  - id: npm:takumi-pdf
   - id: npm:docs
-  - id: npm:example-e-invoice
-  - id: npm:example-generate-invoice
-  - id: npm:example-css-library-integration
-  - id: npm:waku-ssr
+  - id: npm:@takumi-rs/core
+  - id: npm:@takumi-rs/helpers
+  - id: npm:@takumi-rs/wasm
+  - id: npm:@takumi-rs/image-response
   - id: npm:example-tanstack-start
-  - id: npm:svelte
-  - id: npm:example-cloudflare-workers
-  - id: npm:ffplay
-  - id: npm:pdf-bench
-  - id: npm:example-twitter-images
-  - id: npm:ffmpeg-keyframe-animation
-  - id: npm:example-liquid-glass
-  - id: npm:example-nextjs
   - id: npm:example-satori-html
+  - id: npm:pdf-bench
+  - id: npm:ffplay
+  - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-generate-invoice
+  - id: npm:example-twitter-images
+  - id: npm:example-e-invoice
+  - id: npm:svelte
+  - id: npm:example-liquid-glass
+  - id: npm:example-css-library-integration
+  - id: npm:example-cloudflare-workers
+  - id: npm:example-nextjs
+  - id: npm:waku-ssr

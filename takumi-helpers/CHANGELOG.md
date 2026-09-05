@@ -1,3 +1,21 @@
+## @takumi-rs/helpers@2.13.6
+
+### Retry transient font and image requests
+
+Retry temporary GET and HEAD failures within the existing timeout, including Google Fonts metadata and font file downloads.
+
+### Keep Google Fonts cache entries within caller limits
+
+Bound the default `googleFonts` CSS cache, isolate custom fetch implementations, and honor request policies on repeated calls.
+
+### Accept custom properties in node styles
+
+Use `Declarations` consistently for node styles, presets, and style helpers so custom properties typecheck without casts.
+
+### Honor request policies across redirects and cache hits
+
+Strip sensitive headers on cross-origin redirects, apply redirect method and body rules, and honor image cache readers' cancellation and timeout without aborting shared downloads.
+
 ## @takumi-rs/helpers@2.13.0
 
 ### Support the `disclosure-open` and `disclosure-closed` counter styles
