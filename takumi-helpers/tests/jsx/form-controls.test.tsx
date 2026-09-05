@@ -129,10 +129,23 @@ test("HTML form controls preserve their serialized nodes", () => {
   const controls = [
     '<input type="button" value="Go">',
     '<input type="text" value="Kane">',
-    ...["1.5", "1e1", "+2", "2", " 2 ", "4294967296"].map(
+    ...["1.5", "1e1", "+2", "2px", "2.5", "2e1", "\u00a02", "-2", "2", " 2 ", "4294967296"].map(
       (size) => `<select size="${size}"><option>A</option></select>`,
     ),
   ];
 
   expect(controls.map((html) => fromHtml(html).node)).toMatchSnapshot();
+});
+
+test("select values use option text independently of display labels", async () => {
+  const { node } = await fromJsx(
+    <select defaultValue="Monthly plan">
+      <option>Other</option>
+      <option label="Display label">{" \n Monthly\t plan \n "}</option>
+      <option>{"A\u00a0 B"}</option>
+    </select>,
+  );
+
+  expect(textOf(children(node)[0])).toBe("Display label");
+  expect(children(node).map((child) => child.attributes)).toMatchSnapshot();
 });

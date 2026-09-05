@@ -21,12 +21,10 @@ export function isListBox(attributes: Record<string, string> | undefined): boole
     return false;
   }
 
-  const size = attributes.size?.trim() ?? "";
+  const digits = /^[\t\n\f\r ]*\+?([0-9]+)/.exec(attributes.size ?? "");
+  const size = Number(digits?.[1]);
 
-  return (
-    "multiple" in attributes ||
-    (/^[0-9]+$/.test(size) && Number(size) > 1 && Number(size) <= 4294967295)
-  );
+  return "multiple" in attributes || (size > 1 && size <= 4294967295);
 }
 
 /** Every `<option>` under `nodes`, in document order. */
@@ -44,7 +42,7 @@ function collectOptions(nodes: Node[], out: Node[]): void {
 }
 
 function optionValue(option: Node): string {
-  return option.attributes?.value ?? optionLabel(option);
+  return option.attributes?.value ?? optionText(option);
 }
 
 function optionLabel(option: Node): string {
@@ -54,7 +52,14 @@ function optionLabel(option: Node): string {
     return label;
   }
 
-  return nodeText(option).split(/\s+/).filter(Boolean).join(" ");
+  return optionText(option);
+}
+
+function optionText(option: Node): string {
+  return nodeText(option)
+    .split(/[\t\n\f\r ]+/)
+    .filter(Boolean)
+    .join(" ");
 }
 
 function nodeText(node: Node): string {
