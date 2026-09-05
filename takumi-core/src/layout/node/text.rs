@@ -93,39 +93,35 @@ pub(crate) fn measure_text_node(
     clamp_to_max_width,
   );
 
-  if let Some(size) = context.measure_cache().borrow().get(&key) {
-    return *size;
-  }
-  let inline_content: InlineItem<'_> = InlineItem::Text {
-    text: text.text.as_str().into(),
-    context,
-    link: None,
-    decorations: None,
-  };
-  let mut built = create_inline_layout(InlineLayoutRequest {
-    items: vec![inline_content],
-    available_space,
-    max_width,
-    max_height,
-    style: &font_style,
-    context,
-    mode: InlineLayoutMode::Measure,
-    shape_cacheable: true,
-  });
-  let parent_font_metrics = built.parent_font_metrics();
-  let size = measure_inline_layout(
-    &mut built.layout,
-    &built.spans,
-    &built.positioned_floats,
-    &built.line_scales,
-    InlineMeasureOptions {
+  context.inline_cache().get_or_measure(key, || {
+    let inline_content: InlineItem<'_> = InlineItem::Text {
+      text: text.text.as_str().into(),
+      context,
+      link: None,
+      decorations: None,
+    };
+    let mut built = create_inline_layout(InlineLayoutRequest {
+      items: vec![inline_content],
+      available_space,
       max_width,
-      ceil_width: true,
-      parent_font_metrics,
-      clamp_to_max_width,
-    },
-  );
-
-  context.measure_cache().borrow_mut().insert(key, size);
-  size
+      max_height,
+      style: &font_style,
+      context,
+      mode: InlineLayoutMode::Measure,
+      shape_cacheable: true,
+    });
+    let parent_font_metrics = built.parent_font_metrics();
+    measure_inline_layout(
+      &mut built.layout,
+      &built.spans,
+      &built.positioned_floats,
+      &built.line_scales,
+      InlineMeasureOptions {
+        max_width,
+        ceil_width: true,
+        parent_font_metrics,
+        clamp_to_max_width,
+      },
+    )
+  })
 }

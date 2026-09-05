@@ -3,7 +3,7 @@ use std::{collections::HashMap, rc::Rc, sync::Arc};
 use typed_builder::TypedBuilder;
 
 use crate::{
-  layout::inline::{MeasureCache, ShapeCache},
+  layout::inline::{InlineLayoutCache, MeasureCache, ShapeCache},
   resources::{font::FontsSnapshot, image::ImageSource},
   style::{Affine, Color, ComputedStyle, SizingContext, StyleSheet, TwCache},
 };
@@ -13,8 +13,7 @@ struct RenderShared {
   fonts: FontsSnapshot,
   images: Rc<HashMap<Arc<str>, ImageSource>>,
   stylesheet: Arc<StyleSheet>,
-  shape_cache: ShapeCache,
-  measure_cache: MeasureCache,
+  inline_cache: InlineLayoutCache,
   tw_cache: TwCache,
   time_ms: u64,
   draw_debug_border: bool,
@@ -63,8 +62,7 @@ impl From<RenderContextInit> for RenderContext {
         fonts: init.fonts,
         images: init.images,
         stylesheet: init.stylesheet,
-        shape_cache: init.shape_cache,
-        measure_cache: init.measure_cache,
+        inline_cache: InlineLayoutCache::new(init.shape_cache, init.measure_cache),
         tw_cache: TwCache::default(),
         time_ms: init.time_ms,
         draw_debug_border: init.draw_debug_border,
@@ -140,14 +138,8 @@ impl RenderContext {
     &self.shared.stylesheet
   }
 
-  /// Per-render cache of shaped text-only inline layouts.
-  pub(crate) fn shape_cache(&self) -> &ShapeCache {
-    &self.shared.shape_cache
-  }
-
-  /// Per-render cache of measured text-node sizes.
-  pub(crate) fn measure_cache(&self) -> &MeasureCache {
-    &self.shared.measure_cache
+  pub(crate) fn inline_cache(&self) -> &InlineLayoutCache {
+    &self.shared.inline_cache
   }
 
   /// Per-render cache of expanded Tailwind class lists.

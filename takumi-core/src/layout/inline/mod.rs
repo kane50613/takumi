@@ -18,11 +18,12 @@ use parley::{
   GlyphRun, IndentOptions, InlineBox, InlineBoxKind, Line, PositionedInlineBox,
   PositionedLayoutItem, TextStyle, TreeBuilder,
 };
-use std::{cell::RefCell, collections::HashMap, convert::Infallible, rc::Rc};
+use std::{convert::Infallible, rc::Rc};
 use xxhash_rust::xxh3::Xxh3;
 
 mod background;
 mod breaking;
+mod cache;
 mod decorations;
 mod floats;
 mod items;
@@ -60,6 +61,7 @@ pub(crate) use self::{
   },
   text_fit::{LineScaleState, scale_text_fit_x, text_fit_line_alignment_correction},
 };
+pub(crate) use cache::{InlineLayoutCache, MeasureCache, ShapeCache};
 
 /// Inputs for building an inline layout.
 pub struct InlineLayoutRequest<'c> {
@@ -132,18 +134,6 @@ impl<'c> InlineLayoutRequest<'c> {
     }
   }
 }
-
-/// A per-render cache of shaped text-only parley layouts, keyed by a hash of
-/// the span texts and styles. Shaping is width-independent for pure text
-/// (inline boxes bake in measured sizes, so they bypass the cache); line
-/// breaking and alignment run on a clone per call. A layout is stored only
-/// once its fingerprint repeats (`None` marks first sight), so single-use
-/// text costs one map entry, not a retained layout clone.
-pub(crate) type ShapeCache = Rc<RefCell<HashMap<u64, Option<(InlineLayout, String)>>>>;
-
-/// Per-render map from a text node's measure inputs to its measured size.
-/// Keyed by content hash plus text length as a cheap collision guard.
-pub(crate) type MeasureCache = Rc<RefCell<HashMap<(u64, u32), Size<f32>>>>;
 
 /// Hashes everything shaping depends on: each span's processed text and
 /// style, plus the root style and language.
@@ -836,30 +826,13 @@ fn shape_spans(
       joined
     })
   });
-  let (cached, seen) = match (cache_key, &expected_text) {
-    (Some(key), Some(expected)) => match context.shape_cache().borrow().get(&key) {
-      Some(Some((layout, text))) if text == expected => {
-        ((Some((layout.clone(), text.clone()))), true)
-      }
-      Some(_) => (None, true),
-      None => (None, false),
-    },
-    _ => (None, false),
-  };
-  if let Some(cached) = cached {
-    return cached;
-  }
-
-  let (layout, text) = context.tree_builder(style.into(), chromium_line_breaks(spans), |builder| {
-    push_spans_into_builder(builder, spans, &context.fonts().classes)
-  });
-
-  if let Some(key) = cache_key {
-    let stored = seen.then(|| (layout.clone(), text.clone()));
-
-    context.shape_cache().borrow_mut().insert(key, stored);
-  }
-  (layout, text)
+  context
+    .inline_cache()
+    .get_or_shape(cache_key.zip(expected_text.as_deref()), || {
+      context.tree_builder(style.into(), chromium_line_breaks(spans), |builder| {
+        push_spans_into_builder(builder, spans, &context.fonts().classes)
+      })
+    })
 }
 
 fn prepare_inline_layout(
@@ -1135,7 +1108,7 @@ impl BuiltInlineLayout<'_> {
 #[cfg(test)]
 #[allow(clippy::panic, clippy::unwrap_used)]
 mod tests {
-  use std::{fs::File, io::Read, path::Path, sync::Arc};
+  use std::{collections::HashMap, fs::File, io::Read, path::Path, sync::Arc};
 
   use super::{outline::x_ranges_touch, runs::slice_text_at_char_boundaries, *};
   use crate::{
