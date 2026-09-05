@@ -6,8 +6,6 @@ icon: Type
 
 ## Fonts
 
-Text embeds as real glyph runs with subset fonts. It stays selectable, searchable, and copyable. Pass a URL or raw bytes. You can also use the [`googleFonts`](/docs/typography-and-fonts#from-google-fonts) helper:
-
 ```tsx twoslash
 import type { ReactNode } from "react";
 declare const doc: ReactNode;
@@ -24,7 +22,9 @@ const pdf = await render(doc, {
 });
 ```
 
-`fontFamilies` sets the fallback chain for each render. Registered fonts deduplicate across calls that use the same renderer.
+Text stays selectable and searchable. Pass font URLs, raw bytes, or [`googleFonts`](/docs/typography-and-fonts#from-google-fonts) entries. `fontFamilies` sets the fallback chain, and a reused renderer deduplicates registered fonts.
+
+For offline renders, [bundle font files](/docs/typography-and-fonts#fonts-in-ci-and-offline-renders). Google Fonts requests use the shared [fetch limits and retries](/docs/load-images#fetch-limits).
 
 There is no system font to fall back on. A character that none of the registered fonts covers would draw nothing and leave nothing in the text layer, so `render` rejects it and names the character and its codepoint. Register a font covering every script the document uses. Watch the Google Fonts subsets in particular: `latin` and `latin-ext` split their coverage, so one file on its own can leave common accented characters out.
 

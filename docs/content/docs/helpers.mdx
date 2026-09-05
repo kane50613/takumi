@@ -4,7 +4,16 @@ description: Build inputs and load images without the renderer.
 icon: Wrench
 ---
 
-`takumi-js/helpers` re-exports `@takumi-rs/helpers`: functions for building the node tree and loading fonts, images, and emoji. `render` and `ImageResponse` call them for you. Reach for these only when you build inputs by hand.
+```ts twoslash
+import { container, text } from "takumi-js/helpers";
+
+const node = container({
+  style: { padding: 32, backgroundColor: "white" },
+  children: [text("Hello Takumi", { fontSize: 48 })],
+});
+```
+
+`takumi-js/helpers` re-exports `@takumi-rs/helpers`. Use these functions to build nodes or prepare resources yourself. With JSX or HTML, `render` and `ImageResponse` handle conversion and resource loading.
 
 ## Fonts
 
@@ -14,7 +23,7 @@ icon: Wrench
 | `fontFromUrl(url, options?)`     | Turn a font URL into a lazy `fonts` entry. `options` takes the [fetch limits](/docs/load-images#fetch-limits).                                |
 | `subsetFonts({ fonts, source })` | Trim font subsets to the codepoints `source` renders (what `render` does internally).                                                         |
 
-`googleFonts` and `prepareImages` accept the same [fetch limits](/docs/load-images#fetch-limits): `timeout` (default 5 s on every fetch), `maxBytes`, `allowUrl`, and a custom `fetch`.
+`googleFonts`, `fontFromUrl`, and `prepareImages` share [fetch limits and retry behavior](/docs/load-images#fetch-limits).
 
 ## Building nodes
 

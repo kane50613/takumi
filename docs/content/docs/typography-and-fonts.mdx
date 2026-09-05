@@ -4,12 +4,7 @@ description: Load fonts, route scripts across them, and style text.
 icon: Type
 ---
 
-Takumi never reads system fonts. Load every font a render needs, or its glyphs fall back to tofu.
-
-One **last-resort** font ships built in: Geist, Latin glyphs, weights 300 to 800. It only serves text no registered font covers:
-
-- Fonts you load always win.
-- Generic families like `sans-serif` resolve to your fonts, not to it.
+Takumi never reads system fonts. Load fonts covering your text. The built-in Geist covers Latin at weights 300–800 as a last resort. Registered fonts take priority, and generic families such as `sans-serif` resolve to them.
 
 ## Loading fonts
 
@@ -75,8 +70,6 @@ export function GET() {
 
 ### From Google Fonts
 
-`googleFonts` fetches families from Google Fonts in one request and returns `fonts` entries: one lazy loader per coverage subset, downloaded when the renderer first needs it. Reference each family by name in `font-family`. [Subsetting](#subsetting) trims them to the content, so unused weights and scripts download nothing.
-
 ```tsx twoslash
 import { render } from "takumi-js";
 import { googleFonts } from "takumi-js/helpers";
@@ -88,6 +81,8 @@ const image = await render(<div style={{ fontFamily: "Inter" }}>Hello 你好 こ
   fonts: googleFonts(["Inter", "Noto Sans JP", "Noto Sans TC"]),
 });
 ```
+
+`googleFonts` fetches one CSS response for the requested families. Font files load when the renderer needs their coverage subsets. Use the family name in `fontFamily`; [subsetting](#subsetting) selects the files needed for the text.
 
 Pass an object instead of a name to set a family's weight, style, or variable axes:
 
@@ -122,7 +117,16 @@ Each family accepts:
 | `axes`    | `{ tag: value \| "min..max" }`              | Variable axes to load, e.g. `{ opsz: "9..144" }`. A range keeps them live. |
 | `generic` | a CSS generic family keyword                | Every loaded subset claims it, so e.g. `font-mono` resolves to the family. |
 
-Pass an object instead of a list for request-level options:
+Pass an object for request-level options:
+
+```ts twoslash
+import { googleFonts } from "takumi-js/helpers";
+
+const fonts = await googleFonts({
+  families: ["Inter"],
+  timeout: 3000,
+});
+```
 
 | Option     | Accepts                | Effect                                                    |
 | ---------- | ---------------------- | --------------------------------------------------------- |
@@ -133,7 +137,26 @@ Pass an object instead of a list for request-level options:
 
 The default CSS cache shares concurrent requests within each fetch implementation and evicts old entries automatically. Requests with `signal` or `allowUrl` bypass caching so cancellation and redirect checks stay local to the caller. `maxBytes` also applies to cache hits.
 
-Each subset registers under its own internal name; `font-family: Inter` expands across all of them, so each script finds the file that covers it.
+Temporary network failures are retried within the request's timeout. See [fetch limits](/docs/load-images#fetch-limits) for defaults, cancellation, and retry conditions. The timeout applies separately to the CSS request and each font file, not to the whole render.
+
+### Fonts in CI and offline renders
+
+```tsx twoslash
+import { readFile } from "node:fs/promises";
+import { render } from "takumi-js";
+
+const inter = await readFile(new URL("./fonts/Inter.woff2", import.meta.url));
+
+const image = await render(<div style={{ fontFamily: "Inter" }}>Hello</div>, {
+  fonts: [{ name: "Inter", data: inter }],
+});
+```
+
+Bundle font files when a render must work without Google Fonts. Retries can recover a brief outage, but not an unavailable host or a blocked CI network. Keep unit tests on local files or an injected `fetch`, and test the live service separately.
+
+An outer test or route timeout can end the render before the helper's deadline. Set `timeout` below that outer limit, leaving time for layout and encoding.
+
+CJK families can expose many coverage subsets. Takumi filters them by the text's codepoints before downloading, but matching subsets from multiple families or weights may still load together. Request only the families and weights your template needs. A timeout in `await googleFonts(...)` occurs during the CSS request, before these font downloads start.
 
 ### Subsetting
 
