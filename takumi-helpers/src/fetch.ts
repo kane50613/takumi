@@ -47,9 +47,13 @@ class FetchRequest {
   }
 
   async send() {
-    const response = this.allowUrl
-      ? await this.followRedirects(this.allowUrl)
-      : await this.attempt(this.url, this.init);
+    const headers = new Headers(this.init.headers);
+    const hasCredentials = headers.has("authorization") || headers.has("cookie");
+    const follow = this.init.redirect === undefined || this.init.redirect === "follow";
+    const response =
+      this.allowUrl || (hasCredentials && follow)
+        ? await this.followRedirects(this.allowUrl)
+        : await this.attempt(this.url, this.init);
     if (!response.ok) {
       throw new Error(`HTTP ${response.status} ${response.statusText} fetching ${this.url}`);
     }
@@ -57,6 +61,14 @@ class FetchRequest {
   }
 
   private async attempt(url: string, init: RequestInit): Promise<Response> {
+    if (new URL(url).protocol === "http:") {
+      const headers = new Headers(init.headers);
+
+      headers.delete("authorization");
+      headers.delete("cookie");
+      init = { ...init, headers };
+    }
+
     const method = init.method?.toUpperCase() ?? "GET";
     const canRetry = method === "GET" || method === "HEAD";
     for (let attempt = 0; ; attempt++) {
@@ -117,7 +129,7 @@ class FetchRequest {
     });
   }
 
-  private async followRedirects(allowUrl: (url: string) => boolean): Promise<Response> {
+  private async followRedirects(allowUrl: FetchOptions["allowUrl"]): Promise<Response> {
     let current = this.url;
     let init: RequestInit = {
       ...this.init,
@@ -136,7 +148,7 @@ class FetchRequest {
       await response.body?.cancel().catch(() => {});
       const next = new URL(location, current);
 
-      if (!allowUrl(next.href)) {
+      if (allowUrl && !allowUrl(next.href)) {
         throw new Error(`URL blocked by allowUrl policy: ${next.href}`);
       }
       if (

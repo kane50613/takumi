@@ -1,6 +1,64 @@
 import { expect, mock, test } from "bun:test";
 import { fetchOk } from "../src/fetch";
 
+test.each([true, false])("protects HTTP credentials with allowUrl=%s", async (usePolicy) => {
+  for (const protocol of ["http:", "https:"]) {
+    for (const name of ["Authorization", "Cookie"]) {
+      const headers = new Headers({ [name]: "secret", "x-request-id": "kept" });
+      const requests: { url: string; credential: string | null }[] = [];
+      const fetch = mock(async (url: string, init?: RequestInit) => {
+        expect(init?.redirect).toBe("manual");
+        const sent = new Headers(init?.headers);
+
+        expect(sent.get("x-request-id")).toBe("kept");
+        requests.push({ url, credential: sent.get(name) });
+        return requests.length < 3
+          ? new Response(null, {
+              status: 307,
+              headers: { location: requests.length === 1 ? "/same" : "http://example.com/end" },
+            })
+          : new Response("ok");
+      });
+
+      await fetchOk(`${protocol}//example.com/start`, {
+        fetch,
+        allowUrl: usePolicy ? () => true : undefined,
+        init: { headers },
+      });
+      expect(requests).toEqual([
+        {
+          url: `${protocol}//example.com/start`,
+          credential: protocol === "https:" ? "secret" : null,
+        },
+        {
+          url: `${protocol}//example.com/same`,
+          credential: protocol === "https:" ? "secret" : null,
+        },
+        { url: "http://example.com/end", credential: null },
+      ]);
+      expect(headers.get(name)).toBe("secret");
+    }
+  }
+});
+
+test.each(["manual", "error"] satisfies RequestRedirect[])(
+  "preserves explicit redirect mode %s",
+  async (redirect) => {
+    const fetch = mock(async (_url: string, init?: RequestInit) => {
+      expect(init?.redirect).toBe(redirect);
+      expect(new Headers(init?.headers).get("authorization")).toBeNull();
+      expect(new Headers(init?.headers).get("cookie")).toBeNull();
+      return new Response("ok");
+    });
+
+    await fetchOk("http://example.com/start", {
+      fetch,
+      init: { redirect, headers: { Authorization: "secret", Cookie: "secret" } },
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  },
+);
+
 test.each([
   [301, "POST", "GET"],
   [302, "POST", "GET"],
