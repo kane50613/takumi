@@ -113,6 +113,25 @@ Fix the cause of every type error. Do not silence the checker with any of these 
 - `@ts-expect-error`
 - A looser `tsconfig`
 
+### Cache ownership and shared state
+
+Prefer instance-owned mutable state. A shared default needs an explicit lifetime and isolation boundary. Immutable static data does not need an instance owner.
+
+- Keep cache keys, admission, eviction, and failure cleanup with the owner. Group by resource and lifetime, not by storage type.
+- Include every dependency in the key, or keep those dependencies immutable for the cache's lifetime.
+- Bound long-lived retained data. Label approximate size accounting. A cache budget is not a process-memory limit.
+- Release locks and borrows before expensive work or caller callbacks. Share in-flight work only when request policies allow it.
+- Remove failed promises without deleting newer replacements. Test concurrent misses, retries, eviction, and independent owners.
+- Keep cancellation and authorization scoped to the caller. A URL-only key does not establish a shared trust boundary.
+
+### Library design
+
+- Keep internal representations private. Preserve public signatures and import paths during refactors.
+- Add configuration only for a concrete caller need that automatic behavior cannot satisfy.
+- Keep constructors free of hidden network requests. Load resources explicitly or when an operation needs them.
+- Use methods for operations with an owner and functions for stateless transformations. Avoid wrapper types that add no invariant or lifecycle.
+- Measure abstractions on hot paths and check their effect on shipped binary size before adding dependencies.
+
 ## Local validation
 
 ### Formatting and linting
