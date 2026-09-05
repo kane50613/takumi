@@ -65,11 +65,12 @@ impl Node {
   /// showing one option.
   pub fn is_list_box(&self) -> bool {
     self.attribute("multiple").is_some()
-      || self
-        .attribute("size")
-        .map(str::trim)
-        .filter(|size| size.bytes().all(|byte| byte.is_ascii_digit()))
-        .and_then(|size| size.parse::<u32>().ok())
-        .is_some_and(|size| size > 1)
+      || self.attribute("size").is_some_and(|size| {
+        let size = size.trim_start_matches([' ', '\t', '\n', '\r', '\u{000c}']);
+        let size = size.strip_prefix('+').unwrap_or(size);
+        let digits = size.bytes().take_while(u8::is_ascii_digit).count();
+
+        size[..digits].parse::<u32>().is_ok_and(|size| size > 1)
+      })
   }
 }

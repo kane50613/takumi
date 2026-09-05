@@ -624,7 +624,11 @@ fn node_text(node: &Node) -> String {
   let mut text = String::new();
 
   collect(node, &mut text);
-  text.split_whitespace().collect::<Vec<_>>().join(" ")
+  text
+    .split([' ', '\t', '\n', '\r', '\u{000c}'])
+    .filter(|part| !part.is_empty())
+    .collect::<Vec<_>>()
+    .join(" ")
 }
 
 /// The text a push button `<input>` shows: its `value`, or the label HTML
@@ -1034,11 +1038,16 @@ mod select_size_tests {
   use super::{FromHtmlOptions, from_html};
 
   #[test]
-  fn select_size_accepts_only_u32_digits() {
+  fn select_size_follows_html_integer_parsing() {
     for (size, expected) in [
       ("1.5", false),
       ("1e1", false),
-      ("+2", false),
+      ("+2", true),
+      ("2px", true),
+      ("2.5", true),
+      ("2e1", true),
+      ("\u{00a0}2", false),
+      ("-2", false),
       ("2", true),
       (" 2 ", true),
       ("4294967296", false),
