@@ -48,6 +48,7 @@ test("object stylesheet rules match CSS strings in render and measure", async ()
   const viewport = { width: 600, height: 300 };
   const css = [{ selector: ".card", style: { width: 200, height: 100, "--accent": "red" } }];
   const stylesheet = ".card { width: 200px; height: 100px; --accent: red }";
+  expect(await renderer.measure(node, { viewport, css })).toEqual({ width: 200, height: 100 });
   expect(await renderer.measure(node, { viewport, css })).toEqual(
     await renderer.measure(node, { viewport, css: stylesheet }),
   );
