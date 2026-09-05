@@ -575,8 +575,57 @@ impl WidgetAnnotation {
       } => value.chars().all(|character| {
         matches!(character, '\t' | '\n' | '\r') || win_ansi_byte(character).is_some()
       }),
+      FormField::Choice { options, .. } => options.iter().all(|(_, label)| {
+        label.chars().all(|character| {
+          matches!(character, '\t' | '\n' | '\r') || win_ansi_byte(character).is_some()
+        })
+      }),
       _ => true,
     }
+  }
+
+  fn choice_appearance(&self, width: f32, height: f32) -> String {
+    let size = self.style.font_size;
+    let FormField::Choice {
+      options,
+      selected,
+      list: true,
+      ..
+    } = &self.field
+    else {
+      return text_appearance(
+        &self.field.display(),
+        false,
+        width,
+        height,
+        size,
+        &self.style,
+      );
+    };
+    let [red, green, blue] = self.style.color;
+    let row_height = size * 1.2;
+    let mut content = format!("/Tx BMC q 0 0 {width} {height} re W n ");
+
+    for (index, (_, label)) in options.iter().enumerate() {
+      let bottom = height - (index + 1) as f32 * row_height;
+
+      if bottom + row_height <= 0.0 {
+        break;
+      }
+      // https://github.com/Hopding/pdf-lib/blob/master/src/api/form/appearances.ts
+      if selected.contains(&index) {
+        content.push_str(&format!(
+          "0.6 0.75686276 0.85490197 rg 0 {bottom} {width} {row_height} re f "
+        ));
+      }
+      let text = draw_value(label, false, width, row_height, size, self.style.align);
+
+      content.push_str(&format!(
+        "q 1 0 0 1 0 {bottom} cm BT /{FORM_FONT} {size} Tf {red} {green} {blue} rg {text} ET Q "
+      ));
+    }
+    content.push_str("Q EMC");
+    content
   }
 
   fn write_appearance(
@@ -608,17 +657,7 @@ impl WidgetAnnotation {
           None,
         )
       }
-      FormField::Choice { list, .. } => (
-        text_appearance(
-          &self.field.display(),
-          *list,
-          width,
-          height,
-          size,
-          &self.style,
-        ),
-        None,
-      ),
+      FormField::Choice { .. } => (self.choice_appearance(width, height), None),
       FormField::CheckBox { .. } => (
         check_mark(width, height, self.style.color),
         Some(sc.new_ref()),
@@ -789,6 +828,14 @@ impl WidgetAnnotation {
           }
         }
         opt.finish();
+
+        if !selected.is_empty() {
+          annotation.insert(Name(b"I")).array().items(
+            selected
+              .iter()
+              .filter_map(|&index| i32::try_from(index).ok()),
+          );
+        }
       }
       // The group owns `/FT` and `/V`; the button only says which state it
       // shows.

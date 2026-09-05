@@ -250,21 +250,14 @@ The PDF/A-3 levels require `mimeType`, `description`, and a modification date on
 
 ## Fillable fields
 
-Set `form: true` to make named inputs, textareas, and selects editable in a PDF reader.
+Set `form: true` to make inputs, textareas, and selects editable in a PDF reader.
 
 ```tsx
 const pdf = await render(
   <form>
     <label htmlFor="name">Full name</label>
     <input id="name" name="name" defaultValue="Kane" required />
-    <label>
-      Notes
-      <textarea name="notes" maxLength={200} />
-    </label>
-
-    <input type="checkbox" name="subscribe" defaultChecked />
-
-    <select name="plan" defaultValue="A">
+    <select name="plan" defaultValue="A" aria-label="Plan">
       <option value="M">Monthly</option>
       <option value="A">Annual</option>
     </select>
@@ -273,25 +266,11 @@ const pdf = await render(
 );
 ```
 
-| HTML                                                               | Field behavior                                              |
-| ------------------------------------------------------------------ | ----------------------------------------------------------- |
-| `name`                                                             | Field name; `id` is the fallback                            |
-| `value`, textarea text                                             | Initial and reset value                                     |
-| `required`, `readonly`, `disabled`                                 | Required, read-only, and excluded from export when disabled |
-| `maxlength`                                                        | Maximum text length                                         |
-| `type="password"`                                                  | Masked appearance                                           |
-| `aria-labelledby`, `aria-label`, `<label>`, `title`, `placeholder` | Accessible name, in priority order                          |
-| `color`, `font-size`, `text-align`                                 | Text appearance                                             |
+`name` identifies a field, with `id` as a fallback. Radio buttons with the same name form one group. For checkboxes and radio buttons, `value` is the export value and `checked` sets the initial selection. For selects, option values and display labels remain separate. `multiple` or a parsed `size` greater than one creates a list box.
 
-For checkboxes and radio buttons, `value` is the export value. `checked` selects the initial and reset state. Radio buttons with the same `name` form one group. A group must have all its buttons enabled or all disabled; PDF applies these flags to the whole field.
+Form text uses Helvetica with WinAnsiEncoding. Unsupported text, invalid field names, and radio groups with mixed enabled and disabled buttons reject the render. Custom form fonts, PDF/A, and PDF/UA are not supported with `form: true`.
 
-CSS controls the field's border and background. Its widget draws the value. A control taller than one page is clipped on the page where it starts.
-
-Only radio buttons in the same group may share a name. Periods create a PDF field hierarchy: `user.name` places `name` under `user`. Empty segments such as `user..name` are rejected.
-
-Submit, reset, button, image, file, and hidden inputs do not become editable fields. Leaving `form` unset keeps the output static.
-
-Form text uses Helvetica with WinAnsiEncoding. Values this encoding cannot represent reject the render. Custom form fonts, PDF/A, and PDF/UA are not supported with `form: true`.
+See [fillable forms](https://takumi.kane.tw/docs/pdf/forms) for selection rules, field flags, labels, and appearance limits.
 
 ## Measuring
 

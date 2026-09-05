@@ -1,10 +1,10 @@
 ---
 title: Fillable forms
-description: Turn HTML form controls into AcroForm fields a reader can fill in
+description: Create editable PDF fields from HTML and JSX form controls
 icon: TextCursorInput
 ---
 
-`form: true` turns `<input>`, `<textarea>` and `<select>` into AcroForm fields. Left off, the same markup draws as the static boxes its CSS describes, so one template covers both the fillable form and the printed copy.
+Set `form: true` to make inputs, textareas, and selects editable in a PDF reader.
 
 ```tsx twoslash
 import { render } from "takumi-pdf";
@@ -14,56 +14,52 @@ const pdf = await render(
     <label htmlFor="name">Full name</label>
     <input id="name" name="name" defaultValue="Kane" required />
 
-    <input type="checkbox" name="subscribe" defaultChecked />
+    <label>
+      <input type="checkbox" name="subscribe" defaultChecked />
+      Subscribe
+    </label>
 
-    <select name="plan" defaultValue="A">
+    <select name="plan" defaultValue="A" aria-label="Plan">
       <option value="M">Monthly</option>
       <option value="A">Annual</option>
     </select>
   </form>,
-  // [!code highlight]
   { form: true },
 );
 ```
 
-## What each attribute becomes
+Leaving `form` unset keeps the output static. Submit, reset, button, image, file, and hidden inputs do not become editable fields.
 
-Fields come from the HTML attributes you already write. There is no second set of components. In JSX, `defaultValue`, `defaultChecked` and `htmlFor` mean what they do in React DOM.
+## Values and selection
 
-| HTML                                                               | PDF                                                       |
-| ------------------------------------------------------------------ | --------------------------------------------------------- |
-| `name`                                                             | The field name. Radio buttons sharing one become a group  |
-| `value`, `checked`, `selected`, a `<textarea>`'s text              | The value the field starts and resets to                  |
-| `required`, `readonly`, `disabled`                                 | Field flags. A disabled field stays out of the submission |
-| `maxlength`                                                        | The longest value a reader may type                       |
-| `<input type="password">`                                          | A password field, drawn masked                            |
-| `<option value>`, `<option label>`                                 | The value the option submits, separate from its label     |
-| `multiple`, `size`                                                 | A list box; `multiple` holds more than one selection      |
-| `aria-label`, `aria-labelledby`, `<label>`, `title`, `placeholder` | The name a screen reader announces                        |
-| `color`, `font-size`, `text-align`                                 | How a reader redraws the value after an edit              |
+Text fields start with their `value`; textareas use their text content. In JSX, use `defaultValue` for either control. A password field masks its appearance, but its value remains in the PDF. Masking does not protect a secret.
 
-An `<input>` whose `type` is `submit`, `reset`, `button`, `image`, `file` or `hidden` draws as a plain box and gets no field. A standalone document has nothing to bind their action or file path to.
+For checkboxes and radio buttons, `value` is the export value. It defaults to `on` when the attribute is absent. `checked` sets the initial and reset selection; use `defaultChecked` in JSX. Radio buttons with the same `name` form one group.
 
-## How a field is painted
+A select uses each option's `value` for export and its non-empty `label` for display. Without `value`, it exports the option text with HTML whitespace collapsed. Without `label`, that same text is displayed. A label never replaces the export value.
 
-A control paints through the normal CSS pipeline, so its border, background and radius are whatever the stylesheet says. The widget draws only the value on top.
+In HTML, `selected` chooses the initial option. A single select keeps the last selected option. A closed drop-down with no selection uses the first enabled option. In JSX, set the select's `defaultValue` or `value` to the option's export value.
 
-The widget carries no `/MK`, so the appearance a viewer regenerates after an edit stays transparent over the box the page already painted. A rounded corner or a two-tone border survives that redraw. Only the value is drawn again, in the color, size and alignment above.
+`multiple` or a parsed `size` greater than one creates a list box. Only `multiple` allows several selected values. List boxes highlight the selected rows in their initial appearance. The `size` attribute follows HTML integer parsing: `+2` and `2px` both parse as `2`.
 
-## Names
+## Names and labels
 
-Two controls may share a `name` only when they are the buttons of one radio group. Anything else fails the render with `DuplicateFieldName` rather than merging into one field that shows the same value twice.
+A field uses `name`, with `id` as a fallback. Controls without either do not produce a field. Only radio buttons in one group may share a name.
 
-A page dropped by `pageRanges` takes its fields with it, so the names it held do not collide.
+Periods create a PDF field hierarchy: `user.email` places `email` under `user`. Empty segments such as `user..email` are rejected. A field cannot also be a parent, so `user` and `user.email` cannot coexist. These checks apply to fields on retained pages; `pageRanges` removes fields with their pages.
 
-A period spells the PDF field hierarchy, as it does in every PDF library: `user.email` is the field `email` under a non-terminal field `user`. A name cannot also be the parent of another, so `user` beside `user.email` fails the render too.
+Accessible names come from `aria-labelledby`, `aria-label`, an associated `<label>`, `title`, or `placeholder`, in that order. Use `htmlFor` to associate a label in JSX.
 
-## Limits
+## Appearance and field flags
 
-Field values draw with the standard Helvetica face in WinAnsiEncoding, which no PDF/A or PDF/UA level accepts unembedded. Combining `form` with `pdfa` or `tagged: "ua1"` produces a document a validator rejects.
+CSS draws the control's border and background. The PDF widget draws its text or selection marker. `color`, `font-size`, and `text-align` control the text appearance.
 
-A character outside WinAnsiEncoding is dropped from the drawn value. `/V` still carries it in full, so the value a reader submits is intact.
+`required`, `readonly`, and `disabled` set PDF field flags. A disabled field is read-only and excluded from export. A radio group must have all its buttons enabled or all disabled, because PDF applies these flags to the whole field. Mixing enabled and disabled buttons rejects the render.
 
-A list box draws every option as a row. Which rows are selected shows only once a viewer redraws the field.
+`maxlength` limits text entry. A control taller than a page is clipped on the page where it starts.
 
-A control taller than a page keeps its field on the page it starts on, cut at that page's bottom.
+## Current limits
+
+Form text uses Helvetica with WinAnsiEncoding. Text values and option labels outside this encoding reject the render, including labels of unselected options. Custom form fonts are not supported. Export values are stored separately and may contain Unicode.
+
+`form: true` cannot be combined with `pdfa` or validated PDF/UA output. These combinations reject the render because the form font is not embedded. Ordinary tagged output remains available.
