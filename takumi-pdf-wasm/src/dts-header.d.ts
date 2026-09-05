@@ -1,4 +1,4 @@
-import type { Node } from "@takumi-rs/helpers";
+import type { CssInput, Node } from "@takumi-rs/helpers";
 
 export type ByteBuf = Uint8Array | ArrayBuffer | Buffer;
 
@@ -157,7 +157,7 @@ export type PdfRenderOptions = {
   /** Pre-fetched images keyed by URL. */
   images?: ImageSource[];
   /** CSS to apply before layout. */
-  css?: string[];
+  css?: CssInput[];
   /**
    * CSS custom properties for `:root`, which utilities and `var()` both read.
    * A name without the `--` prefix gains it.
