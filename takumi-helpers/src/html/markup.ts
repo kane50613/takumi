@@ -106,7 +106,18 @@ function buildStaticNodes(
     return;
   }
 
+  buildStaticElement(element, presets, tailwindClassesProperty, nodes, css);
+}
+
+function buildStaticElement(
+  element: UltraHtmlElementNode,
+  presets: StylePresets | undefined,
+  tailwindClassesProperty: string,
+  nodes: Node[],
+  css: string[],
+): void {
   const metadata = extractStaticNodeMetadata(element, presets, tailwindClassesProperty);
+
   if (element.name === "br") {
     nodes.push(
       text({
@@ -151,23 +162,9 @@ function buildStaticNodes(
     return;
   }
 
-  let onlyTextChildren = true;
-  let textContent = "";
+  const textContent = staticTextContent(element);
 
-  for (const child of element.children) {
-    if (child.type === COMMENT_NODE) {
-      continue;
-    }
-
-    if (child.type !== TEXT_NODE) {
-      onlyTextChildren = false;
-      break;
-    }
-
-    textContent += child.value ?? "";
-  }
-
-  if (onlyTextChildren && textContent) {
+  if (textContent) {
     nodes.push(
       text({
         text: decodeHtmlEntities(textContent),
@@ -199,6 +196,22 @@ function buildStaticNodes(
       ...metadata,
     }),
   );
+}
+
+function staticTextContent(element: UltraHtmlElementNode): string | undefined {
+  let content = "";
+
+  for (const child of element.children) {
+    if (child.type === COMMENT_NODE) {
+      continue;
+    }
+    if (child.type !== TEXT_NODE) {
+      return;
+    }
+    content += child.value ?? "";
+  }
+
+  return content || undefined;
 }
 
 function extractStaticNodeMetadata(

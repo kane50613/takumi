@@ -391,6 +391,13 @@ async function processReactElement(
     return emptyTraversalResult();
   }
 
+  return processHtmlElement(element, options);
+}
+
+async function processHtmlElement(
+  element: ReactElementLike,
+  options: ResolvedFromJsxOptions,
+): Promise<FromJsxTraversalResult> {
   const metadata = extractNodeMetadata(element, options);
 
   if (isHtmlElement(element, "br")) {
