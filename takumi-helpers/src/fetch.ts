@@ -66,7 +66,7 @@ class FetchRequest {
       init.signal?.throwIfAborted();
       let delay = 100 * 2 ** attempt;
       try {
-        const response = await this.fetchImpl(url, init);
+        const response = await this.fetchImpl.call(undefined, url, init);
         init.signal?.throwIfAborted();
         if (
           !canRetry ||
