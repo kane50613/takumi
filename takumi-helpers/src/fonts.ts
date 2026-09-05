@@ -1,6 +1,12 @@
 import type { GoogleFontShapeFamilies, GoogleFontShapes } from "./google-fonts-catalog";
 import type { Node } from "./types";
-import { defaultMaxFetchBytes, fetchOk, type FetchOptions, readBodyLimited } from "./utils";
+import {
+  defaultMaxFetchBytes,
+  fetchOk,
+  type FetchLike,
+  type FetchOptions,
+  readBodyLimited,
+} from "./utils";
 
 const chromeUserAgent =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -68,12 +74,7 @@ export type GoogleFontsOptions = FetchOptions & {
   families: GoogleFontFamily[];
   /** `font-display` strategy passed through to the CSS request. */
   display?: "auto" | "block" | "swap" | "fallback" | "optional";
-  /**
-   * Cache for the Google Fonts CSS, keyed by request URL, so the metadata is fetched once across
-   * renders (e.g. a playground re-rendering on each edit). Holds the in-flight promise, so
-   * concurrent calls share one request; failures evict themselves. Defaults to a process-wide
-   * cache; pass your own `Map` to scope it, or a fresh one per call to opt out.
-   */
+  /** CSS promise cache; defaults to a bounded cache per fetch implementation. Signals and URL policies bypass caching. */
   cache?: Pick<Map<string, Promise<string>>, "get" | "set" | "delete">;
   /**
    * css2 base URL. Defaults to Google Fonts; point it at an API-compatible mirror like
@@ -84,9 +85,75 @@ export type GoogleFontsOptions = FetchOptions & {
 
 const GOOGLE_FONTS_CSS = "https://fonts.googleapis.com/css2";
 
-// ponytail: shared default so callers who forget `cache` still fetch each URL once. Entries are
-// small (CSS metadata) and self-evict on failure; pass an explicit `cache` for isolation.
-const defaultCssCache = new Map<string, Promise<string>>();
+const maxCachedCssBytes = 1024 * 1024;
+const maxCachedCssEntries = 64;
+
+class FontCssCache {
+  private static readonly byFetch = new WeakMap<FetchLike, FontCssCache>();
+  private readonly entries = new Map<string, { pending: Promise<string>; bytes: number }>();
+  private bytes = 0;
+
+  static forFetch(fetch: FetchLike) {
+    let cache = this.byFetch.get(fetch);
+    if (!cache) {
+      cache = new FontCssCache();
+      this.byFetch.set(fetch, cache);
+    }
+    return cache;
+  }
+
+  get(url: string) {
+    const entry = this.entries.get(url);
+    if (entry) {
+      this.entries.delete(url);
+      this.entries.set(url, entry);
+    }
+    return entry?.pending;
+  }
+
+  set(url: string, pending: Promise<string>) {
+    this.delete(url);
+    const entry = { pending, bytes: url.length * 2 };
+    this.entries.set(url, entry);
+    this.bytes += entry.bytes;
+    this.trim();
+    pending.then(
+      (css) => {
+        if (this.entries.get(url) !== entry) {
+          return;
+        }
+        entry.bytes += css.length * 2;
+        this.bytes += css.length * 2;
+        if (entry.bytes > maxCachedCssBytes) {
+          this.delete(url);
+        }
+        this.trim();
+      },
+      () => {
+        if (this.entries.get(url) === entry) {
+          this.delete(url);
+        }
+      },
+    );
+  }
+
+  delete(url: string) {
+    const entry = this.entries.get(url);
+    if (entry) {
+      this.bytes -= entry.bytes;
+      this.entries.delete(url);
+    }
+  }
+
+  private trim() {
+    for (const url of this.entries.keys()) {
+      if (this.entries.size <= maxCachedCssEntries && this.bytes <= maxCachedCssBytes) {
+        break;
+      }
+      this.delete(url);
+    }
+  }
+}
 
 // Builds a css2 `family=` value, e.g. `Inter:ital,opsz,wght@0,14..32,400`. Takes plain values
 // rather than a GoogleFontFamily so it never relates that ~2000-member union to a parameter, which
@@ -159,16 +226,32 @@ function fetchCss(url: string, options: FetchOptions) {
 }
 
 function fetchCssCached(url: string, options: GoogleFontsOptions) {
-  const cache = options.cache ?? defaultCssCache;
+  options.signal?.throwIfAborted();
+  if (options.signal || options.allowUrl) {
+    return fetchCss(url, options);
+  }
+  const cache = options.cache ?? FontCssCache.forFetch(options.fetch ?? globalThis.fetch);
 
   const cached = cache.get(url);
   if (cached) {
-    return cached;
+    return cached.then((css) => {
+      const maxBytes = options.maxBytes ?? maxCssBytes;
+      if (new TextEncoder().encode(css).byteLength > maxBytes) {
+        throw new Error(`Response exceeds ${maxBytes} bytes`);
+      }
+      return css;
+    });
   }
 
   const pending = fetchCss(url, options);
   cache.set(url, pending);
-  pending.catch(() => cache.delete(url));
+  if (options.cache) {
+    pending.catch(() => {
+      if (cache.get(url) === pending) {
+        cache.delete(url);
+      }
+    });
+  }
 
   return pending;
 }

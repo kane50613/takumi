@@ -325,6 +325,101 @@ describe("googleFonts", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  test("isolates default CSS caches by fetch implementation", async () => {
+    const first = mockInter();
+    const second = mock(() => Promise.resolve(new Response(twoWeightCss)));
+
+    expect(await googleFonts({ families: ["Inter"], fetch: first })).toHaveLength(3);
+    expect(await googleFonts({ families: ["Inter"], fetch: second })).toHaveLength(2);
+    expect(second).toHaveBeenCalledTimes(1);
+  });
+
+  test("evicts old default CSS entries while keeping recent hits", async () => {
+    const fetchMock = mockInter();
+    const load = (weight: number) =>
+      googleFonts({ families: [{ name: "Inter", weight }], fetch: fetchMock });
+
+    for (let weight = 100; weight < 164; weight++) {
+      await load(weight);
+    }
+    await load(100);
+    expect(fetchMock).toHaveBeenCalledTimes(64);
+    await load(164);
+    await load(100);
+    expect(fetchMock).toHaveBeenCalledTimes(65);
+    await load(101);
+    expect(fetchMock).toHaveBeenCalledTimes(66);
+  });
+
+  test("does not retain CSS larger than the default cache budget", async () => {
+    const css = `/*${"x".repeat(600_000)}*/${interCss}`;
+    const fetchMock = mock(() => Promise.resolve(new Response(css)));
+
+    await googleFonts({ families: ["Inter"], fetch: fetchMock });
+    await googleFonts({ families: ["Inter"], fetch: fetchMock });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  test("bounds the combined size of retained CSS", async () => {
+    const css = `/*${"x".repeat(200_000)}*/${interCss}`;
+    const fetchMock = mock(() => Promise.resolve(new Response(css)));
+    for (const weight of [100, 101, 102, 100]) {
+      await googleFonts({ families: [{ name: "Inter", weight }], fetch: fetchMock });
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  test("shares concurrent default requests and retries failures", async () => {
+    const response = Promise.withResolvers<Response>();
+    const fetchMock = mock(() => response.promise);
+    const first = googleFonts({ families: ["Inter"], fetch: fetchMock });
+    const second = googleFonts({ families: ["Inter"], fetch: fetchMock });
+    const settled = Promise.allSettled([first, second]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    response.reject(new Error("Request failed"));
+    expect((await settled).map((result) => result.status)).toEqual(["rejected", "rejected"]);
+
+    fetchMock.mockImplementation(() => Promise.resolve(new Response(interCss)));
+    expect(await googleFonts({ families: ["Inter"], fetch: fetchMock })).toHaveLength(3);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  test("applies each caller's policies after warming the CSS cache", async () => {
+    const fetchMock = mockInter();
+    await googleFonts({ families: ["Inter"], fetch: fetchMock });
+
+    await expect(
+      googleFonts({ families: ["Inter"], fetch: fetchMock, maxBytes: 1 }),
+    ).rejects.toThrow("exceeds 1 bytes");
+    await expect(
+      googleFonts({ families: ["Inter"], fetch: fetchMock, allowUrl: () => false }),
+    ).rejects.toThrow("blocked by allowUrl");
+    await expect(
+      googleFonts({ families: ["Inter"], fetch: fetchMock, signal: AbortSignal.abort() }),
+    ).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("keeps a replacement cache entry when an older request fails", async () => {
+    const response = Promise.withResolvers<Response>();
+    const cache = new Map<string, Promise<string>>();
+    const pending = googleFonts({
+      families: ["Inter"],
+      fetch: () => response.promise,
+      cache,
+    });
+    const [url] = cache.keys();
+    if (!url) {
+      throw new Error("Expected an in-flight cache entry");
+    }
+    const replacement = Promise.resolve(interCss);
+    cache.set(url, replacement);
+    response.reject(new Error("Request failed"));
+
+    await expect(pending).rejects.toThrow("Request failed");
+    expect(cache.get(url)).toBe(replacement);
+  });
+
   test("returns nothing for an empty families list without a request", async () => {
     const fetchMock = mockInter();
 
