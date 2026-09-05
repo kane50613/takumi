@@ -1,0 +1,3 @@
+empty_segment: Field name contains an empty period-separated segment: a..b
+unicode: Field who contains characters outside WinAnsiEncoding. Custom form fonts are not supported.
+archival: Fillable forms do not support PDF/A or PDF/UA because the form font is not embedded

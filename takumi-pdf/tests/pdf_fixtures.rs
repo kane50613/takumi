@@ -4495,8 +4495,7 @@ fn a_dropped_page_takes_its_duplicate_name_with_it() {
 #[test]
 fn a_field_value_draws_in_the_encoding_its_face_reads() {
   let fonts = fonts();
-  let source =
-    r#"<div><input name="who" value="Café — 王" style="width:200px;height:20px" /></div>"#;
+  let source = r#"<div><input name="who" value="Café —" style="width:200px;height:20px" /></div>"#;
   let bytes = render_pinned(
     PdfOptions::builder()
       .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
@@ -4507,13 +4506,10 @@ fn a_field_value_draws_in_the_encoding_its_face_reads() {
   );
   let pdf = String::from_utf8_lossy(&bytes);
 
-  // `é` and the em dash are WinAnsi, written as octal escapes; the han
-  // character is not, so it leaves the drawn value.
-  assert!(pdf.contains(r"(Caf\351 \227 ) Tj"));
-  // The value the field submits keeps every character, as UTF-16.
+  assert!(pdf.contains(r"(Caf\351 \227) Tj"));
   assert!(
     pdf.contains(
-      "/V<FEFF004300610066 00E9 0020 2014 0020 738B>"
+      "/V<FEFF004300610066 00E9 0020 2014>"
         .replace(' ', "")
         .as_str()
     )
@@ -4693,4 +4689,67 @@ fn pagination_moves_only_once_the_form_option_is_on() {
   // pages. Kept whole, it moves down and pushes the rest onto a third.
   assert_eq!(pages(&paged(false)), 2);
   assert_eq!(pages(&paged(true)), 3);
+}
+
+#[test]
+fn form_compatibility_regressions() {
+  let fonts = fonts();
+  let mut outcomes = Vec::new();
+
+  for (name, source, standard) in [
+    (
+      "empty_segment",
+      "<div><input name='a.b' /><input name='a..b' /></div>",
+      PdfStandard::default(),
+    ),
+    (
+      "unicode",
+      "<input name='who' value='東京' />",
+      PdfStandard::default(),
+    ),
+    (
+      "archival",
+      "<input name='who' value='Kane' />",
+      PdfStandard::A2b,
+    ),
+  ] {
+    let result = render(
+      PdfOptions::builder()
+        .node(from_html(source, FromHtmlOptions::default()).unwrap())
+        .page(PageOptions::A4)
+        .fonts(&fonts)
+        .form(true)
+        .standard(standard)
+        .build(),
+    );
+
+    outcomes.push(format!(
+      "{name}: {}",
+      match result {
+        Ok(_) => "ok".to_string(),
+        Err(error) => error.to_string(),
+      }
+    ));
+  }
+
+  let actual = outcomes.join("\n");
+  let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures-generated/form_errors.txt");
+
+  fs::write(path, &actual).unwrap();
+  assert!(
+    actual.contains("empty_segment: Field name contains an empty period-separated segment: a..b")
+  );
+  assert!(actual.contains("unicode: Field who contains characters outside WinAnsiEncoding"));
+  assert!(actual.contains("archival: Fillable forms do not support PDF/A or PDF/UA"));
+}
+
+#[test]
+fn form_inline_accessible_label() {
+  let bytes = run_pdf_fixture("form_inline_label", |fonts| {
+    PdfOptions::builder()
+    .node(from_html("<div><span style='display:inline-block'><span id='caption'>Account name</span><input name='account' aria-labelledby='caption' style='width:160px;height:24px'/></span></div>", FromHtmlOptions::default()).unwrap())
+    .page(PageOptions::A4).fonts(fonts).form(true).build()
+  });
+
+  assert!(String::from_utf8_lossy(&bytes).contains("/TU(Account name)"));
 }

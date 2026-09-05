@@ -297,10 +297,7 @@ export type RenderOptions = (PagedOptions | ViewportOptions) &
     metadata?: PdfMetadata;
     /** Generates a PDF outline (bookmarks) from `h1`–`h6` headings. */
     outline?: boolean;
-    /**
-     * Emits `<input>` and `<textarea>` as fillable AcroForm fields. Off, they
-     * draw as the static boxes their CSS describes.
-     */
+    /** Makes text controls fillable; PDF/A and PDF/UA are unsupported. */
     form?: boolean;
     /**
      * The paper color as a CSS color, painted under everything on every page.

@@ -15,7 +15,7 @@ use crate::{
     geom::Rect as KrillaRect,
     page::Page,
   },
-  options::PT_PER_PX,
+  options::{PT_PER_PX, PdfError},
   tags::raw_text,
   window::Window,
 };
@@ -266,20 +266,29 @@ impl FieldTarget {
     rect: KrillaRect,
     labels: &HashMap<String, String>,
     lang: Option<&str>,
-  ) -> Annotation {
+  ) -> Result<Annotation, PdfError> {
     let described = self.label.resolve(labels);
 
-    Annotation::new_widget(
-      WidgetAnnotation::new(
-        rect,
-        self.name.clone(),
-        self.field.to_form_field(),
-        self.style.to_widget(),
-      )
-      .with_description(described.clone())
-      .with_lang(lang.map(str::to_string)),
-      Some(described.unwrap_or_else(|| self.name.clone())),
+    if self.name.split('.').any(str::is_empty) {
+      return Err(PdfError::InvalidFieldName(self.name.clone()));
+    }
+    let widget = WidgetAnnotation::new(
+      rect,
+      self.name.clone(),
+      self.field.to_form_field(),
+      self.style.to_widget(),
     )
+    .with_description(described.clone())
+    .with_lang(lang.map(str::to_string));
+
+    if !widget.value_is_encodable() {
+      return Err(PdfError::UnsupportedFormValue(self.name.clone()));
+    }
+
+    Ok(Annotation::new_widget(
+      widget,
+      Some(described.unwrap_or_else(|| self.name.clone())),
+    ))
   }
 }
 
@@ -314,7 +323,13 @@ pub(crate) fn add_field_annotations(
     };
     state.field_names.borrow_mut().push(field.name.clone());
 
-    let annotation = field.annotation(rect, labels, state.lang);
+    let annotation = match field.annotation(rect, labels, state.lang) {
+      Ok(annotation) => annotation,
+      Err(error) => {
+        state.issues.borrow_mut().failure.get_or_insert(error);
+        continue;
+      }
+    };
 
     match state.tags.as_ref() {
       Some(tags) => {
