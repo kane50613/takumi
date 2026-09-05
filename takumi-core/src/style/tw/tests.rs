@@ -568,7 +568,6 @@ fn test_values_sorting() {
 
   let order = values
     .inner
-    .values
     .iter()
     .map(|value| {
       let declarations = match &value.property {
@@ -1671,14 +1670,9 @@ fn test_class_list_parsing_shares_storage() {
 }
 
 #[test]
-fn test_expansion_cache_checks_hash_collisions() {
+fn test_expansion_cache_keeps_class_lists_distinct() {
   let first = TailwindValues::parse("w-1");
-  let second = TailwindValues {
-    inner: Arc::new(ParsedTailwindValues {
-      values: vec![TailwindValue::parse("w-2").unwrap()],
-      fingerprint: first.inner.fingerprint,
-    }),
-  };
+  let second = TailwindValues::parse("w-2");
   let viewport = Viewport::new((100, 100));
   let breakpoints = BreakpointOverrides::default();
   let cache = TwCache::default();
@@ -1697,6 +1691,18 @@ fn test_expansion_cache_checks_hash_collisions() {
       .declaration_blocks(viewport, &breakpoints, &cache)
       .normal,
   );
+}
+
+#[test]
+fn test_expansion_cache_retains_its_key() {
+  let values = TailwindValues::parse("w-3");
+  let weak = Arc::downgrade(&values.inner);
+  let cache = TwCache::default();
+  values.declaration_blocks(Viewport::new((100, 100)), &Default::default(), &cache);
+  drop(values);
+  assert!(weak.upgrade().is_some());
+  drop(cache);
+  assert!(weak.upgrade().is_none());
 }
 
 #[test]
