@@ -394,7 +394,7 @@ pub struct PdfOptions<'g> {
   /// (`A2a`, `A3a`) force it on.
   #[builder(default)]
   pub tagged: Tagging,
-  /// Emits text controls as fillable fields; PDF/A and PDF/UA are unsupported.
+  /// Makes supported form controls fillable; PDF/A and PDF/UA are unsupported.
   #[builder(default)]
   pub form: bool,
   /// Files attached to the document, shown in the viewer's attachment panel.
