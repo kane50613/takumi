@@ -5015,3 +5015,43 @@ fn form_mixed_disabled_radio_group() {
   )
   .unwrap();
 }
+
+#[test]
+fn form_choice_browser_values() {
+  let bytes = run_pdf_fixture("form_choice_values", |fonts| {
+    PdfOptions::builder()
+    .node(from_html("<div><select name='text' style='width:160px;height:24px'><option> \n Monthly\t plan \n </option></select><select name='label' style='width:160px;height:24px'><option label='Annual plan'> \n Annual\t billing \n </option></select><select name='nbsp' style='width:160px;height:24px'><option>\u{00a0}Keep\u{00a0} space\u{00a0}</option></select><select name='list' multiple style='width:160px;height:70px'><option selected>Monthly</option><option>Quarterly</option><option selected>Annual</option></select></div>", FromHtmlOptions::default()).unwrap())
+    .page(PageOptions::A4).fonts(fonts).form(true).build()
+  });
+
+  let pdf = String::from_utf8_lossy(&bytes);
+
+  assert!(pdf.contains("/V(Monthly plan)"));
+  assert!(pdf.contains("/Opt[(Monthly plan)]"));
+  assert!(pdf.contains("/Opt[[(Annual billing)(Annual plan)]]"));
+  assert!(pdf.contains("/V["));
+  assert!(pdf.contains("/I[0 2]"));
+  assert_eq!(pdf.matches("0.6 0.75686276 0.85490197 rg").count(), 2);
+}
+
+#[test]
+fn form_choice_rejects_unencodable_labels() {
+  let fonts = fonts();
+  let error = render(
+    PdfOptions::builder()
+      .node(
+        from_html(
+          "<select name='city'><option>London</option><option value='tokyo'>東京</option></select>",
+          FromHtmlOptions::default(),
+        )
+        .unwrap(),
+      )
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .build(),
+  )
+  .unwrap_err();
+
+  assert!(matches!(error, PdfError::UnsupportedFormValue(name) if name == "city"));
+}
