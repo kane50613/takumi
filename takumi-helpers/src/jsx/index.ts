@@ -515,10 +515,7 @@ function extractStyle(
   inputType: unknown,
   options: ResolvedFromJsxOptions,
 ): { preset?: Declarations; style?: Declarations } {
-  const preset =
-    tagName !== undefined
-      ? presetFor(options.presets, tagName, inputType)
-      : undefined;
+  const preset = tagName !== undefined ? presetFor(options.presets, tagName, inputType) : undefined;
 
   if (typeof inlineStyle !== "object" || inlineStyle === null) {
     return { preset };

@@ -21,7 +21,12 @@ export function isListBox(attributes: Record<string, string> | undefined): boole
     return false;
   }
 
-  return "multiple" in attributes || Number(attributes.size) > 1;
+  const size = attributes.size?.trim() ?? "";
+
+  return (
+    "multiple" in attributes ||
+    (/^[0-9]+$/.test(size) && Number(size) > 1 && Number(size) <= 4294967295)
+  );
 }
 
 /** Every `<option>` under `nodes`, in document order. */

@@ -1028,3 +1028,31 @@ mod tests {
     assert!(hidden.contains("display: none"));
   }
 }
+
+#[cfg(test)]
+mod select_size_tests {
+  use super::{FromHtmlOptions, from_html};
+
+  #[test]
+  fn select_size_accepts_only_u32_digits() {
+    for (size, expected) in [
+      ("1.5", false),
+      ("1e1", false),
+      ("+2", false),
+      ("2", true),
+      (" 2 ", true),
+      ("4294967296", false),
+    ] {
+      assert_eq!(
+        from_html(
+          &format!("<select size=\"{size}\"><option>A</option></select>"),
+          FromHtmlOptions::default()
+        )
+        .unwrap()
+        .is_list_box(),
+        expected,
+        "{size}"
+      );
+    }
+  }
+}
