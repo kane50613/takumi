@@ -1,6 +1,6 @@
 {
   "name": "takumi-js",
-  "version": "2.13.6",
+  "version": "2.13.5",
   "description": "Render OG images from JSX, HTML, and CSS. No headless browser.",
   "keywords": [
     "animated-webp",
