@@ -5,7 +5,7 @@ use typed_builder::TypedBuilder;
 use crate::{
   layout::inline::{MeasureCache, ShapeCache},
   resources::{font::FontsSnapshot, image::ImageSource},
-  style::{Affine, Color, ComputedStyle, SizingContext, StyleSheet},
+  style::{Affine, Color, ComputedStyle, SizingContext, StyleSheet, TwCache},
 };
 
 /// What every context of one render shares.
@@ -15,6 +15,7 @@ struct RenderShared {
   stylesheet: Arc<StyleSheet>,
   shape_cache: ShapeCache,
   measure_cache: MeasureCache,
+  tw_cache: TwCache,
   time_ms: u64,
   draw_debug_border: bool,
   dither_gradients: bool,
@@ -64,6 +65,7 @@ impl From<RenderContextInit> for RenderContext {
         stylesheet: init.stylesheet,
         shape_cache: init.shape_cache,
         measure_cache: init.measure_cache,
+        tw_cache: TwCache::default(),
         time_ms: init.time_ms,
         draw_debug_border: init.draw_debug_border,
         dither_gradients: init.dither_gradients,
@@ -146,6 +148,11 @@ impl RenderContext {
   /// Per-render cache of measured text-node sizes.
   pub(crate) fn measure_cache(&self) -> &MeasureCache {
     &self.shared.measure_cache
+  }
+
+  /// Per-render cache of expanded Tailwind class lists.
+  pub(crate) fn tw_cache(&self) -> &TwCache {
+    &self.shared.tw_cache
   }
 
   pub(crate) fn from_parent(

@@ -1851,6 +1851,7 @@ dependencies = [
  "strict-num",
  "svgtypes",
  "taffy",
+ "thin-vec",
  "thiserror",
  "tiny-skia",
  "tiny-skia-path",
@@ -1988,6 +1989,12 @@ checksum = "5fed54709c5b3a53d09bb1c113ea4f5ceafd1e772ddcb0030a82e1d56c087b08"
 dependencies = [
  "new_debug_unreachable",
 ]
+
+[[package]]
+name = "thin-vec"
+version = "0.2.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "79def32ffcd477db1ff26f76dab9e3a91f0bd42a85ca96577089b24623056f9d"
 
 [[package]]
 name = "thiserror"

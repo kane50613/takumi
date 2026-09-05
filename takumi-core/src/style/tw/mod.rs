@@ -6,11 +6,21 @@ mod namespace;
 /// Parsers for Tailwind utility-class suffixes.
 mod parser;
 
-use std::{borrow::Cow, cmp::Ordering, collections::HashMap, str::FromStr, sync::Arc};
+use std::{
+  borrow::Cow,
+  cell::RefCell,
+  cmp::Ordering,
+  collections::HashMap,
+  convert::Infallible,
+  rc::Rc,
+  str::FromStr,
+  sync::{Arc, LazyLock},
+};
 
 use builder::TailwindDeclarationBuilder;
 use cssparser::match_ignore_ascii_case;
 pub(crate) use namespace::Namespace;
+use quick_cache::{Weighter, sync::Cache};
 use serde::{Deserialize, Deserializer, de::Error as DeError};
 use smallvec::SmallVec;
 
@@ -209,16 +219,76 @@ fn css<T: ToCss>(value: &T) -> String {
   output
 }
 
-/// Represents a collection of tailwind properties.
-#[derive(Debug, Clone, PartialEq)]
-pub struct TailwindValues {
-  inner: Vec<TailwindValue>,
+/// A class list's expansion, split at the importance boundary.
+pub(crate) struct TwBlocks {
+  pub(crate) normal: StyleDeclarationBlock,
+  pub(crate) important: StyleDeclarationBlock,
 }
+
+type TwCacheKey = (*const Vec<TailwindValue>, Option<u32>, u32, u32);
+
+const EXPANSION_CACHE_MAX_ENTRIES: usize = 2048;
+
+/// Expanded utilities for one render's immutable stylesheet.
+#[derive(Default)]
+pub(crate) struct TwCache {
+  blocks: RefCell<HashMap<TwCacheKey, (TailwindValues, Rc<TwBlocks>)>>,
+}
+
+/// Represents a collection of tailwind properties.
+#[derive(Debug, Clone)]
+pub struct TailwindValues {
+  inner: Arc<Vec<TailwindValue>>,
+}
+
+const TAILWIND_CACHE_MAX_BYTES: usize = 1 << 20;
+
+/// Bytes charged for an entry's own bookkeeping on top of its payload.
+const ENTRY_OVERHEAD: usize = 64;
+
+#[derive(Clone)]
+struct ByBytes;
+
+impl Weighter<String, TailwindValues> for ByBytes {
+  fn weight(&self, source: &String, values: &TailwindValues) -> u64 {
+    (source.len() + values.estimated_bytes() + ENTRY_OVERHEAD).max(1) as u64
+  }
+}
+
+static PARSED: LazyLock<Cache<String, TailwindValues, ByBytes>> = LazyLock::new(|| {
+  let max_bytes = TAILWIND_CACHE_MAX_BYTES as u64;
+  // ~256 bytes per parsed list ⇒ an item-count hint for the budget.
+  let estimated_items = (max_bytes / 256).max(1) as usize;
+
+  Cache::with_weighter(estimated_items, max_bytes, ByBytes)
+});
 
 impl FromStr for TailwindValues {
   type Err = String;
 
   fn from_str(source: &str) -> Result<Self, Self::Err> {
+    Ok(
+      PARSED
+        .get_or_insert_with::<str, Infallible>(source, || Ok(Self::parse(source)))
+        .unwrap_or_else(|never| match never {}),
+    )
+  }
+}
+
+impl PartialEq for TailwindValues {
+  fn eq(&self, other: &Self) -> bool {
+    Arc::ptr_eq(&self.inner, &other.inner) || self.inner == other.inner
+  }
+}
+
+impl TailwindValues {
+  /// Approximate retained size in bytes, for cache budgeting. Counts the
+  /// parsed utilities, not the strings they share through an `Arc`.
+  fn estimated_bytes(&self) -> usize {
+    self.inner.capacity() * size_of::<TailwindValue>()
+  }
+
+  fn parse(source: &str) -> Self {
     let mut collected = source
       .split_whitespace()
       .filter_map(TailwindValue::parse)
@@ -244,7 +314,9 @@ impl FromStr for TailwindValues {
       }
     });
 
-    Ok(TailwindValues { inner: collected })
+    TailwindValues {
+      inner: Arc::new(collected),
+    }
   }
 }
 
@@ -263,6 +335,39 @@ impl TailwindValues {
       .into_iter()
   }
 
+  /// The blocks this class list expands to, resolved once per render.
+  pub(crate) fn declaration_blocks(
+    &self,
+    viewport: Viewport,
+    breakpoints: &BreakpointOverrides,
+    cache: &TwCache,
+  ) -> Rc<TwBlocks> {
+    let key = (
+      Arc::as_ptr(&self.inner),
+      viewport.size.width,
+      viewport.font_size.to_bits(),
+      viewport.effective_dpr().to_bits(),
+    );
+
+    if let Some((_, blocks)) = cache.blocks.borrow().get(&key) {
+      return blocks.clone();
+    }
+
+    let (normal, important) = self
+      .clone()
+      .into_declaration_block(viewport, breakpoints)
+      .split_importance();
+    let blocks = Rc::new(TwBlocks { normal, important });
+
+    let mut cache = cache.blocks.borrow_mut();
+    if cache.len() < EXPANSION_CACHE_MAX_ENTRIES {
+      // Retaining the parsed values prevents address reuse while the entry is cached.
+      cache.insert(key, (self.clone(), blocks.clone()));
+    }
+
+    blocks
+  }
+
   /// Resolves all utilities for the viewport into a declaration block.
   #[inline(never)]
   pub(crate) fn into_declaration_block(
@@ -270,9 +375,9 @@ impl TailwindValues {
     viewport: Viewport,
     breakpoints: &BreakpointOverrides,
   ) -> StyleDeclarationBlock {
-    let mut builder = TailwindDeclarationBuilder::default();
+    let mut builder = TailwindDeclarationBuilder::with_capacity(self.inner.len());
 
-    for value in self.inner {
+    for value in self.inner.iter().cloned() {
       value.apply(&mut builder, viewport, breakpoints);
     }
 
