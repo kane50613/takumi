@@ -4,11 +4,7 @@ description: Load and cache images, and render emoji.
 icon: Image
 ---
 
-## External Images
-
-Takumi fetches external images in `src` attributes and CSS `background-image` / `mask-image`.
-
-To reuse fetched bytes across renders, pass a `fetchCache`: a `Map<string, Promise<ArrayBuffer>>`, or anything with `Map`-like `get`/`set`/`delete`. It stores the in-flight promise, so concurrent renders needing the same URL share one fetch:
+## External images
 
 ```tsx twoslash
 import { render } from "takumi-js";
@@ -24,18 +20,11 @@ const image = await render(element, {
 });
 ```
 
-A plain `Map` never evicts. If your URLs are high-cardinality (a different image per render), pass a bounded cache such as an LRU, or omit `fetchCache`.
+Takumi fetches remote images referenced by `src`, `background-image`, `mask-image`, and `list-style-image`. An optional `fetchCache` shares downloaded bytes and pending requests across renders. It accepts a `Map` or an object with `get`, `set`, and `delete` methods.
+
+A plain `Map` never evicts. If each render uses a different URL, pass a bounded cache such as an LRU, or omit `fetchCache`.
 
 ## Fetch limits
-
-Every remote fetch (images, fonts, Google Fonts CSS) is bounded. The group form of `images` takes the same options:
-
-| Option     | Default            | Use                                                                                  |
-| :--------- | :----------------- | :----------------------------------------------------------------------------------- |
-| `timeout`  | `5000` (ms)        | Abort a hanging host. `0` or negative disables it.                                   |
-| `maxBytes` | 32 MiB             | Reject a body past this size, by `content-length` or streamed.                       |
-| `allowUrl` | allow all          | Return `false` to block a URL, e.g. an SSRF (server-side request forgery) allowlist. |
-| `fetch`    | `globalThis.fetch` | Custom fetch implementation.                                                         |
 
 ```tsx twoslash
 import { render } from "takumi-js";
@@ -51,9 +40,23 @@ const image = await render(element, {
 });
 ```
 
-`render()` and `ImageResponse` fetch these URLs from your server, so set an `allowUrl` allowlist whenever user input can influence the markup. The policy is checked on every redirect hop (capped at 5), so an allowed URL can't 3xx its way to an internal address. DNS is not inspected; keep a custom `fetch` for a stricter policy such as resolved-address filtering.
+These options apply to Takumi's image fetches, `googleFonts`, and `fontFromUrl`. A custom `data` loader manages its own requests.
 
-## Pre-fetched Images
+| Option     | Default            | Effect                                                                          |
+| :--------- | :----------------- | :------------------------------------------------------------------------------ |
+| `timeout`  | `30000` ms         | Deadline for each request, including retry delays. `0` or negative disables it. |
+| `signal`   | none               | Cancel a request and any pending retry.                                         |
+| `maxBytes` | 32 MiB             | Reject oversized bodies, using `content-length` and streamed bytes.             |
+| `allowUrl` | allow all          | Reject a URL before fetching it, including redirect destinations.               |
+| `fetch`    | `globalThis.fetch` | Supply a custom fetch implementation.                                           |
+
+GET and HEAD requests make up to three attempts for connection errors, transient timeouts, or HTTP `408`, `429`, `500`, `502`, `503`, and `504`. Retries wait 100 ms, then 200 ms. A `Retry-After` header can extend that delay up to one second; a longer value returns the error without retrying. Redirects use the same deadline, with a separate attempt limit per destination.
+
+Caller cancellation and an expired deadline stop retries. Other HTTP errors and failures while reading a response body are not retried. A custom `fetch` must honor the supplied abort signal.
+
+`render()` and `ImageResponse` fetch these URLs from your server. Set `allowUrl` whenever user input can influence the markup. It checks each redirect destination, with at most five hops. DNS is not inspected; use a custom `fetch` for resolved-address filtering.
+
+## Pre-fetched images
 
 Provide images by key so the renderer doesn't have to fetch them itself. Each key can be used in any `src` field or in the `background-image` / `mask-image` CSS properties.
 
@@ -213,7 +216,7 @@ const image = await renderer.render(node, {
 });
 ```
 
-`prepareImages` walks the node tree for remote `<img>`, `backgroundImage`, and `maskImage` URLs, fetches the ones missing from `sources`, and returns `images` entries. Pass a `fetchCache` (a `Map<string, Promise<ArrayBuffer>>`, or anything with `Map`-like `get`/`set`/`delete`) to deduplicate concurrent fetches and reuse bytes across renders.
+`prepareImages` returns image entries for remote URLs missing from `sources`. It accepts the same [fetch cache](#external-images) and [limits](#fetch-limits).
 
 ### COLR / bitmap fonts
 

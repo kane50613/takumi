@@ -1,66 +1,69 @@
 ---
 title: Performance & Optimization
-description: Best practices for building high-performance rendering pipelines with Takumi.
+description: Reuse rendering work and measure before tuning caches.
 icon: Zap
 ---
 
-These practices keep Takumi fast as your node trees grow.
+## Reuse the renderer
 
-## The Renderer
+```tsx twoslash
+import { render } from "takumi-js";
 
-### Reuse the Renderer Instance
+const image = await render(<div tw="p-8 text-4xl">Hello Takumi</div>, {
+  width: 1200,
+  height: 630,
+});
+```
 
-The `Renderer` holds Takumi's caches. Reuse one instance across renders instead of constructing a new one each time.
+`render` and `ImageResponse` reuse a managed renderer. No cache setup is needed. When using `Renderer` directly, create it outside the request handler so registered fonts and decoded resources survive between renders.
 
-[`ImageResponse`](/docs/image-response) manages an internal renderer, or pass your own through the `renderer` option. See [Typography & Fonts](/docs/typography-and-fonts) and [Load Images](/docs/load-images).
+## Know what is cached
 
-### Size the Resource Cache
+| Work                                            | Lifetime              | Configuration                                                      |
+| :---------------------------------------------- | :-------------------- | :----------------------------------------------------------------- |
+| Decoded images, SVG rasters, parsed stylesheets | Renderer              | `cacheMaxBytes`, 16 MiB by default                                 |
+| Glyph outlines and rasterized masks             | Loaded backend module | `setGlyphCacheMaxBytes`, 8 MiB by default                          |
+| Parsed Tailwind classes                         | Loaded backend module | Automatic, bounded internally                                      |
+| Resolved Tailwind declarations                  | Render                | Automatic, separated by viewport width, font size, and pixel ratio |
+| Google Fonts CSS                                | Fetch implementation  | Automatic, bounded internally                                      |
+| Downloaded image bytes                          | Caller-provided cache | Optional `images.fetchCache`                                       |
 
-Decoded images, SVG rasters, and parsed stylesheets share one byte budget, 16 MiB by default. The default suits a single-template server; raise it when many large images stay hot across renders:
+Cache budgets account for retained entries, not total process memory. Fonts, active renders, output buffers, and allocator overhead use memory too. See [image caching](/docs/load-images#decode-caching) and [Google Fonts](/docs/typography-and-fonts#from-google-fonts) for resource-specific behavior.
 
-```ts
+## Measure cold and repeated renders
+
+Measure the first render separately from repeated renders. Font downloads and decoding affect startup; layout, painting, and encoding still happen on a warm renderer.
+
+Use representative text, images, output formats, and concurrent requests. Compare latency and memory before changing a budget. Increasing a cache helps only when it keeps work that later renders reuse.
+
+### Resource cache
+
+```ts twoslash
+import { Renderer } from "takumi-js/node";
+
 const renderer = new Renderer({ cacheMaxBytes: 64 * 1024 * 1024 });
 ```
 
-### Size the Glyph Cache
+Raise the budget when frequently reused images or stylesheets are being evicted. For images used only once, [`cache: "none"`](/docs/load-images#decode-caching) avoids displacing reusable entries. An unbounded `images.fetchCache` is separate from this budget.
 
-Resolved glyph outlines and their rasterized masks share a separate 8 MiB budget. These caches belong to the module rather than to a `Renderer`, so `setGlyphCacheMaxBytes` covers every renderer in the process and has to run before the first render — the budget is read when a cache is first used.
+### Glyph cache
 
-The default suits Latin text. A CJK outline runs a few kilobytes, so 8 MiB holds on the order of a thousand of them, and a page of Chinese re-rasterizes glyphs it just evicted:
-
-```ts
-import { setGlyphCacheMaxBytes } from "@takumi-rs/core";
-
-setGlyphCacheMaxBytes(64 * 1024 * 1024);
-```
-
-`takumi-js` exports it as well. That one records the budget and applies it when the backend loads:
-
-```ts
+```ts twoslash
 import { setGlyphCacheMaxBytes } from "takumi-js";
 
 setGlyphCacheMaxBytes(64 * 1024 * 1024);
 ```
 
-### Preload Frequently Used Images
+Call this before the first render. Outlines and masks share the budget across renderers in the same backend module. Large glyph sets or text sizes can benefit from more space, but benchmark your content first.
 
-Loading images from URLs or bytes during the rendering pass is a bottleneck. Register [Load Images](/docs/load-images) to avoid re-decoding.
+## Keep network requests out of repeated work
 
-### Parallel Rendering
+Bundle fonts for predictable startup without a font service. WOFF2 saves transfer and storage space but needs decompression; TTF avoids that step. A reused renderer decodes a registered file once. See [local fonts and CI](/docs/typography-and-fonts#fonts-in-ci-and-offline-renders).
 
-On the server, prefer `@takumi-rs/core`: it renders across multiple threads, where `@takumi-rs/wasm` is single-threaded.
+For repeated remote images, use a bounded [fetch cache](/docs/load-images#external-images). The renderer's decode cache does not replace a download cache.
 
-## Component Design
+## Reduce painting work
 
-### Stack Filters in a Single Node
+Each filtered node needs an offscreen layer. Put filters on one node when they should apply to the same composed content. Moving filters from children to a parent can change the output, so compare the result.
 
-Each filtered node allocates its own offscreen composition layer, sized to the element (viewport-sized only as a worst case). Stacking filters on one node reuses a single layer.
-
-## Fonts
-
-### Prefer TTF over WOFF2
-
-| Format | Decode cost             | When to use                              |
-| ------ | ----------------------- | ---------------------------------------- |
-| TTF    | Used directly           | Default                                  |
-| WOFF2  | Decompressed before use | File size matters more than decode speed |
+On servers, the native backend supports multithreaded rendering. The Wasm backend is single-threaded. `takumi-js` selects the backend for the environment; use explicit backend imports only when you need to control that choice.
