@@ -128,8 +128,10 @@ Pass an object instead of a list for request-level options:
 | ---------- | ---------------------- | --------------------------------------------------------- |
 | `families` | the list above         | The families to load, in fallback priority order.         |
 | `display`  | a `font-display` value | Maps to CSS `font-display`.                               |
-| `cache`    | a `Map`                | Reuses the metadata CSS across renders.                   |
+| `cache`    | a `Map`                | Overrides the bounded metadata CSS cache.                 |
 | `baseUrl`  | a css2 endpoint        | Point at a mirror such as `https://fonts.bunny.net/css2`. |
+
+The default CSS cache shares concurrent requests within each fetch implementation and evicts old entries automatically. Requests with `signal` or `allowUrl` bypass caching so cancellation and redirect checks stay local to the caller. `maxBytes` also applies to cache hits.
 
 Each subset registers under its own internal name; `font-family: Inter` expands across all of them, so each script finds the file that covers it.
 
