@@ -8,14 +8,6 @@ packages:
     type: minor
 ---
 
-### Style form controls the way Blink does
+### Add browser defaults for form controls
 
-`<input>`, `<textarea>`, `<select>`, `<button>`, `<option>` and `<optgroup>`
-take their default styles from Blink's stylesheet. An `input[type=…]` preset
-replaces the `input` one for that type. A closed `<select>` shows the option it
-starts on and keeps its option list out of the flow; `multiple` or a `size`
-above one lays the options out as a list box. A push button `<input>` shows
-its `value`. In JSX, `defaultValue`,
-`defaultChecked` and `htmlFor` reach the node as `value`, `checked` and `for`,
-and a `<select>`'s `value` picks its options. `Node::option_state`,
-`Node::option_label`, `Node::is_list_box` and `OptionState` carry the rules.
+Inputs, textareas, selects, and buttons receive browser-style default CSS. HTML and JSX share select size parsing and option selection rules. JSX also accepts React's `defaultValue`, `defaultChecked`, and `htmlFor` props.
