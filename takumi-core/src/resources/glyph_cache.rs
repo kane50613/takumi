@@ -33,7 +33,7 @@ pub fn set_glyph_cache_max_bytes(bytes: usize) {
 #[derive(Clone)]
 enum CachedGlyph {
   Resolved(Arc<ResolvedGlyph>),
-  Mask(Arc<[u8]>, Placement),
+  Mask(Arc<Vec<u8>>, Placement),
 }
 
 #[derive(Clone)]
@@ -109,15 +109,17 @@ pub(crate) fn resolved_glyph(
 }
 
 /// The rasterized mask for `key`, rendering on a miss. Concurrent misses for the
-/// same key rasterize once. The mask is stored as a boxed slice, so the cache
-/// retains exactly its length.
-pub fn glyph_mask(key: u64, render: impl Fn() -> (Vec<u8>, Placement)) -> (Arc<[u8]>, Placement) {
+/// same key rasterize once. Charges the capacity the cache retains, not just the
+/// mask length.
+pub fn glyph_mask(
+  key: u64,
+  render: impl Fn() -> (Vec<u8>, Placement),
+) -> (Arc<Vec<u8>>, Placement) {
   let cached = get_or_insert((key, GlyphKind::Mask), || {
     let (mask, placement) = render();
-    let mask: Arc<[u8]> = mask.into();
-    let bytes = mask.len() + ENTRY_OVERHEAD;
+    let bytes = mask.capacity() + ENTRY_OVERHEAD;
 
-    Some((CachedGlyph::Mask(mask, placement), bytes))
+    Some((CachedGlyph::Mask(Arc::new(mask), placement), bytes))
   });
 
   match cached {
@@ -125,7 +127,7 @@ pub fn glyph_mask(key: u64, render: impl Fn() -> (Vec<u8>, Placement)) -> (Arc<[
     _ => {
       let (mask, placement) = render();
 
-      (mask.into(), placement)
+      (Arc::new(mask), placement)
     }
   }
 }

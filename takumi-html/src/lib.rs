@@ -16,6 +16,7 @@
 use std::{
   borrow::Cow,
   collections::{BTreeMap, HashMap},
+  str::FromStr,
   sync::LazyLock,
 };
 
@@ -27,7 +28,7 @@ use html5ever::{
 use markup5ever_rcdom::{Handle, NodeData, RcDom, SerializableHandle};
 use takumi_core::{
   layout::node::{ImageData, ImageSourceInput, Node, NodeKind},
-  style::{Direction, FromCssStr, Lang, Style, StyleDeclarationBlock},
+  style::{Direction, FromCssStr, Lang, Style, StyleDeclarationBlock, TailwindValues},
 };
 use typed_builder::TypedBuilder;
 
@@ -537,8 +538,10 @@ fn apply_metadata(
 
     // Read Tailwind independently of reserved names so it can alias `class`
     // without dropping the class name.
-    if name == tw_property {
-      node = node.with_tw_source(value);
+    if name == tw_property
+      && let Ok(tw) = TailwindValues::from_str(value)
+    {
+      node = node.with_tw(tw);
     }
 
     match name {

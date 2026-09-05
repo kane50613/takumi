@@ -2,7 +2,7 @@
 
 use std::fmt::Display;
 
-use takumi_core::{resources::glyph_cache, style};
+use takumi_core::resources::glyph_cache;
 use wasm_bindgen::prelude::wasm_bindgen;
 
 /// Maps any error to a JavaScript Error object.
@@ -23,15 +23,4 @@ pub fn map_error<E: Display>(err: E) -> js_sys::Error {
 #[wasm_bindgen(js_name = setGlyphCacheMaxBytes)]
 pub fn set_glyph_cache_max_bytes(bytes: f64) {
   glyph_cache::set_glyph_cache_max_bytes(bytes.max(0.0) as usize);
-}
-
-/// Sets the byte budget for the parsed Tailwind class-list cache; `0` stops
-/// caching. Defaults to 1 MiB.
-///
-/// This cache lives in the module, not in a `Renderer`, so `cacheMaxBytes` does
-/// not cover it. The value is read when the cache is first used, so call this
-/// before the first render.
-#[wasm_bindgen(js_name = setTailwindCacheMaxBytes)]
-pub fn set_tailwind_cache_max_bytes(bytes: f64) {
-  style::set_tailwind_cache_max_bytes(bytes.max(0.0) as usize);
 }

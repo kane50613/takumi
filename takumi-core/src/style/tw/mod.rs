@@ -14,7 +14,7 @@ use std::{
   convert::Infallible,
   rc::Rc,
   str::FromStr,
-  sync::{Arc, LazyLock, atomic},
+  sync::{Arc, LazyLock},
 };
 
 use builder::TailwindDeclarationBuilder;
@@ -226,44 +226,43 @@ pub(crate) struct TwBlocks {
   pub(crate) important: StyleDeclarationBlock,
 }
 
-/// Per-render map from a class list to the blocks it expands to. Keyed by the
-/// list's hash and byte length as a cheap collision guard, plus the viewport
-/// width, which is all a breakpoint reads.
-pub(crate) type TwCache = Rc<RefCell<HashMap<(u64, u32, Option<u32>), Rc<TwBlocks>>>>;
+type TwCacheKey = (u64, u32, Option<u32>, u32, u32);
+
+/// Expanded utilities for one render's immutable stylesheet.
+#[derive(Default)]
+pub(crate) struct TwCache {
+  blocks: RefCell<HashMap<TwCacheKey, (TailwindValues, Rc<TwBlocks>)>>,
+}
 
 /// Represents a collection of tailwind properties.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct TailwindValues {
-  inner: Vec<TailwindValue>,
+  inner: Arc<ParsedTailwindValues>,
+}
+
+#[derive(Debug)]
+struct ParsedTailwindValues {
+  values: Vec<TailwindValue>,
   /// Hash and byte length of the class list this parsed from.
   fingerprint: (u64, u32),
 }
 
-const DEFAULT_TAILWIND_CACHE_MAX_BYTES: usize = 1 << 20; // 1 MiB
+const TAILWIND_CACHE_MAX_BYTES: usize = 1 << 20;
 
 /// Bytes charged for an entry's own bookkeeping on top of its payload.
 const ENTRY_OVERHEAD: usize = 64;
 
-static MAX_BYTES: atomic::AtomicUsize = atomic::AtomicUsize::new(DEFAULT_TAILWIND_CACHE_MAX_BYTES);
-
-/// Sets the byte budget for the parsed class-list cache. `0` stops caching.
-/// Takes effect for a cache not yet used; call it before the first render.
-/// Defaults to 1 MiB.
-pub fn set_tailwind_cache_max_bytes(bytes: usize) {
-  MAX_BYTES.store(bytes, atomic::Ordering::Relaxed);
-}
-
 #[derive(Clone)]
 struct ByBytes;
 
-impl Weighter<String, Arc<TailwindValues>> for ByBytes {
-  fn weight(&self, source: &String, values: &Arc<TailwindValues>) -> u64 {
+impl Weighter<String, TailwindValues> for ByBytes {
+  fn weight(&self, source: &String, values: &TailwindValues) -> u64 {
     (source.len() + values.estimated_bytes() + ENTRY_OVERHEAD).max(1) as u64
   }
 }
 
-static PARSED: LazyLock<Cache<String, Arc<TailwindValues>, ByBytes>> = LazyLock::new(|| {
-  let max_bytes = MAX_BYTES.load(atomic::Ordering::Relaxed) as u64;
+static PARSED: LazyLock<Cache<String, TailwindValues, ByBytes>> = LazyLock::new(|| {
+  let max_bytes = TAILWIND_CACHE_MAX_BYTES as u64;
   // ~256 bytes per parsed list ⇒ an item-count hint for the budget.
   let estimated_items = (max_bytes / 256).max(1) as usize;
 
@@ -274,25 +273,25 @@ impl FromStr for TailwindValues {
   type Err = String;
 
   fn from_str(source: &str) -> Result<Self, Self::Err> {
-    Ok(Self::parse(source))
+    Ok(
+      PARSED
+        .get_or_insert_with::<str, Infallible>(source, || Ok(Self::parse(source)))
+        .unwrap_or_else(|never| match never {}),
+    )
+  }
+}
+
+impl PartialEq for TailwindValues {
+  fn eq(&self, other: &Self) -> bool {
+    Arc::ptr_eq(&self.inner, &other.inner) || self.inner.values == other.inner.values
   }
 }
 
 impl TailwindValues {
-  /// The parsed form of `source`, shared with every node carrying the same
-  /// class list. A class list parses to the same utilities everywhere, so one
-  /// cache serves every render; a per-renderer Tailwind config would have to
-  /// join the key.
-  pub fn interned(source: &str) -> Arc<Self> {
-    PARSED
-      .get_or_insert_with::<str, Infallible>(source, || Ok(Arc::new(Self::parse(source))))
-      .unwrap_or_else(|never| match never {})
-  }
-
   /// Approximate retained size in bytes, for cache budgeting. Counts the
   /// parsed utilities, not the strings they share through an `Arc`.
   fn estimated_bytes(&self) -> usize {
-    self.inner.capacity() * size_of::<TailwindValue>()
+    self.inner.values.capacity() * size_of::<TailwindValue>()
   }
 
   fn parse(source: &str) -> Self {
@@ -322,8 +321,10 @@ impl TailwindValues {
     });
 
     TailwindValues {
-      inner: collected,
-      fingerprint: (xxh3_64(source.as_bytes()), source.len() as u32),
+      inner: Arc::new(ParsedTailwindValues {
+        values: collected,
+        fingerprint: (xxh3_64(source.as_bytes()), source.len() as u32),
+      }),
     }
   }
 }
@@ -337,6 +338,7 @@ impl TailwindValues {
   ) -> impl Iterator<Item = &str> {
     self
       .inner
+      .values
       .iter()
       .filter_map(|value| value.resource_url(viewport, breakpoints))
       .collect::<Vec<_>>()
@@ -350,9 +352,17 @@ impl TailwindValues {
     breakpoints: &BreakpointOverrides,
     cache: &TwCache,
   ) -> Rc<TwBlocks> {
-    let key = (self.fingerprint.0, self.fingerprint.1, viewport.size.width);
+    let key = (
+      self.inner.fingerprint.0,
+      self.inner.fingerprint.1,
+      viewport.size.width,
+      viewport.font_size.to_bits(),
+      viewport.effective_dpr().to_bits(),
+    );
 
-    if let Some(blocks) = cache.borrow().get(&key) {
+    if let Some((values, blocks)) = cache.blocks.borrow().get(&key)
+      && values == self
+    {
       return blocks.clone();
     }
 
@@ -362,7 +372,10 @@ impl TailwindValues {
       .split_importance();
     let blocks = Rc::new(TwBlocks { normal, important });
 
-    cache.borrow_mut().insert(key, blocks.clone());
+    cache
+      .blocks
+      .borrow_mut()
+      .insert(key, (self.clone(), blocks.clone()));
 
     blocks
   }
@@ -374,9 +387,9 @@ impl TailwindValues {
     viewport: Viewport,
     breakpoints: &BreakpointOverrides,
   ) -> StyleDeclarationBlock {
-    let mut builder = TailwindDeclarationBuilder::with_capacity(self.inner.len());
+    let mut builder = TailwindDeclarationBuilder::with_capacity(self.inner.values.len());
 
-    for value in self.inner {
+    for value in self.inner.values.iter().cloned() {
       value.apply(&mut builder, viewport, breakpoints);
     }
 

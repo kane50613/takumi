@@ -3,13 +3,12 @@ mod image;
 mod text;
 
 use std::{
-  borrow::Cow,
   collections::BTreeMap,
   mem::take,
   sync::{Arc, Weak},
 };
 
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
 
 pub use self::image::resolve_image;
 use self::{
@@ -32,17 +31,6 @@ use crate::{
   viewport::Viewport,
 };
 
-/// Parses a class list through the shared cache, so nodes that carry the same
-/// classes share one parsed value.
-fn deserialize_tw<'de, D>(deserializer: D) -> Result<Option<Arc<TailwindValues>>, D::Error>
-where
-  D: Deserializer<'de>,
-{
-  let source = Option::<Cow<'de, str>>::deserialize(deserializer)?;
-
-  Ok(source.map(|source| TailwindValues::interned(&source)))
-}
-
 /// Shared metadata stored by every renderable node.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -60,8 +48,7 @@ pub(crate) struct NodeMetadata {
   /// The styling properties for this node.
   pub style: Option<Style>,
   /// The tailwind properties for this node.
-  #[serde(default, deserialize_with = "deserialize_tw")]
-  pub tw: Option<Arc<TailwindValues>>,
+  pub tw: Option<TailwindValues>,
   /// The text direction for this node.
   pub dir: Option<Direction>,
   /// The BCP-47 language tag for this node, equivalent to the `lang` attribute.
@@ -486,14 +473,7 @@ impl Node {
 
   /// Sets the Tailwind-derived style input and returns the updated node.
   pub fn with_tw(mut self, tw: TailwindValues) -> Self {
-    self.metadata.tw = Some(Arc::new(tw));
-    self
-  }
-
-  /// Sets the Tailwind-derived style input from a class list, sharing the
-  /// parsed form with every node that carries the same list.
-  pub fn with_tw_source(mut self, source: &str) -> Self {
-    self.metadata.tw = Some(TailwindValues::interned(source));
+    self.metadata.tw = Some(tw);
     self
   }
 
@@ -753,7 +733,7 @@ pub(crate) struct NodeStyleLayers {
   /// UA/default style preset for the element.
   pub(crate) preset: Option<Style>,
   /// Tailwind-derived author style for the element.
-  pub(crate) author_tw: Option<Arc<TailwindValues>>,
+  pub(crate) author_tw: Option<TailwindValues>,
   /// Inline style attached directly to the element.
   pub(crate) inline: Option<Style>,
   pub(crate) dir: Option<Direction>,

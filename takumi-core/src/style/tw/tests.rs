@@ -568,6 +568,7 @@ fn test_values_sorting() {
 
   let order = values
     .inner
+    .values
     .iter()
     .map(|value| {
       let declarations = match &value.property {
@@ -1658,10 +1659,67 @@ fn test_translate_composes_through_variables() {
 }
 
 #[test]
-fn test_interned_class_list_is_parsed_once() {
-  let first = TailwindValues::interned("flex items-center gap-2");
-  let second = TailwindValues::interned("flex items-center gap-2");
+fn test_class_list_parsing_shares_storage() {
+  let first: TailwindValues = "flex items-center gap-2".parse().unwrap();
+  let second: TailwindValues = "flex items-center gap-2".parse().unwrap();
+  let deserialized: TailwindValues = serde_json::from_str("\"flex items-center gap-2\"").unwrap();
 
-  assert!(std::sync::Arc::ptr_eq(&first, &second));
-  assert_eq!(*first, "flex items-center gap-2".parse().expect("parses"));
+  assert!(Arc::ptr_eq(&first.inner, &second.inner));
+  assert!(Arc::ptr_eq(&first.inner, &deserialized.inner));
+  assert_eq!(first, second);
+  assert_eq!(first, " flex  items-center gap-2 ".parse().unwrap());
+}
+
+#[test]
+fn test_expansion_cache_checks_hash_collisions() {
+  let first = TailwindValues::parse("w-1");
+  let second = TailwindValues {
+    inner: Arc::new(ParsedTailwindValues {
+      values: vec![TailwindValue::parse("w-2").unwrap()],
+      fingerprint: first.inner.fingerprint,
+    }),
+  };
+  let viewport = Viewport::new((100, 100));
+  let breakpoints = BreakpointOverrides::default();
+  let cache = TwCache::default();
+  let first_blocks = first.declaration_blocks(viewport, &breakpoints, &cache);
+  let second_blocks = second.declaration_blocks(viewport, &breakpoints, &cache);
+
+  assert!(!Rc::ptr_eq(&first_blocks, &second_blocks));
+  assert_ne!(first_blocks.normal, second_blocks.normal);
+  assert!(Rc::ptr_eq(
+    &second_blocks,
+    &second.declaration_blocks(viewport, &breakpoints, &cache),
+  ));
+  assert_eq!(
+    first_blocks.normal,
+    first
+      .declaration_blocks(viewport, &breakpoints, &cache)
+      .normal,
+  );
+}
+
+#[test]
+fn test_expansion_cache_tracks_breakpoint_inputs() {
+  let values: TailwindValues = "w-1 sm:w-2".parse().unwrap();
+  let viewport = Viewport::new((800, 100));
+  let cache = TwCache::default();
+  let breakpoints = BreakpointOverrides::default();
+  let active = values.declaration_blocks(viewport, &breakpoints, &cache);
+
+  for inactive_viewport in [
+    Viewport::new((400, 100)),
+    viewport.with_font_size(32.0),
+    viewport.with_device_pixel_ratio(2.0),
+  ] {
+    let inactive = values.declaration_blocks(inactive_viewport, &breakpoints, &cache);
+    assert_ne!(active.normal, inactive.normal);
+  }
+
+  let themed = values.declaration_blocks(
+    viewport,
+    &HashMap::from([("sm".to_owned(), Length::Px(900.0))]),
+    &TwCache::default(),
+  );
+  assert_ne!(active.normal, themed.normal);
 }
