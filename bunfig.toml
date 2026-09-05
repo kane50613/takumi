@@ -1,5 +1,15 @@
 [install]
 # 7 days
 minimumReleaseAge = 604800
-# Pinned to an exact prerelease, so the age gate leaves it nothing to resolve to.
-minimumReleaseAgeExcludes = ["waku"]
+minimumReleaseAgeExcludes = [
+  # Pinned to an exact prerelease, so the age gate leaves it nothing to resolve to.
+  "waku",
+  # The fumadocs release that supports TypeScript 7, plus what it pulls in.
+  # Drop these once the gate no longer blocks them.
+  "@fumadocs/base-ui",
+  "cn",
+  "fumadocs-core",
+  "fumadocs-twoslash",
+  "fumapress",
+  "lucide-react",
+]

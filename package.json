@@ -24,10 +24,10 @@
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
     "@types/bun": "^1.4.0",
-    "knip": "^6.32.2",
-    "lefthook": "^2.1.10",
-    "oxfmt": "^0.64.0",
-    "oxlint": "^1.79.0",
+    "knip": "^6.33.0",
+    "lefthook": "^2.1.12",
+    "oxfmt": "^0.65.0",
+    "oxlint": "^1.80.0",
     "publint": "^0.3.24",
     "tegami": "^1.4.0",
     "typescript": "catalog:"
@@ -36,22 +36,22 @@
     "@takumi-rs/image-response": "workspace:*",
     "rolldown-plugin-dts": "0.27.6",
     "takumi-js": "workspace:*",
-    "vite": "8.2.1",
+    "vite": "8.2.2",
     "waku": "1.0.0-rc.0"
   },
   "catalog": {
     "@types/bun": "^1.4.0",
     "csstype": "^3.2.3",
-    "@types/node": "^26.2.0",
+    "@types/node": "^26.4.0",
     "@types/react": "19.2.18",
-    "@types/react-dom": "^19.2.4",
-    "lucide-react": "^1.33.0",
+    "@types/react-dom": "^19.2.5",
+    "lucide-react": "^1.37.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "tsdown": "0.22.14",
     "unrun": "^0.3.1",
     "typescript": "^7.0.2",
-    "vite": "^8.2.1"
+    "vite": "^8.2.2"
   },
   "trustedDependencies": [
     "webgpu"

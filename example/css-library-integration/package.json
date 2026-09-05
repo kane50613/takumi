@@ -16,6 +16,6 @@
     "@types/react": "catalog:",
     "tailwindcss": "^4.3.3",
     "typescript": "catalog:",
-    "unocss": "^66.8.0"
+    "unocss": "^66.8.1"
   }
 }
