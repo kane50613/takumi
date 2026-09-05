@@ -119,10 +119,10 @@ class FetchRequest {
 
   private async followRedirects(allowUrl: (url: string) => boolean): Promise<Response> {
     let current = this.url;
-    const init = {
+    let init: RequestInit = {
       ...this.init,
       headers: new Headers(this.init.headers),
-      redirect: "manual" as const,
+      redirect: "manual",
     };
 
     for (let hop = 0; hop < maxRedirectHops; hop++) {
@@ -146,36 +146,52 @@ class FetchRequest {
       ) {
         throw new Error(`Invalid redirect URL: ${next.href}`);
       }
-      // https://fetch.spec.whatwg.org/#http-redirect-fetch
-      if (response.status !== 303 && init.body instanceof ReadableStream) {
-        throw new Error("Cannot replay a streamed request body after a redirect");
-      }
-      const method = init.method?.toUpperCase() ?? "GET";
-
-      if (
-        ((response.status === 301 || response.status === 302) && method === "POST") ||
-        (response.status === 303 && method !== "GET" && method !== "HEAD")
-      ) {
-        init.method = "GET";
-        init.body = undefined;
-        for (const header of [
-          "content-encoding",
-          "content-language",
-          "content-location",
-          "content-type",
-          "content-length",
-        ]) {
-          init.headers.delete(header);
-        }
-      }
-      if (new URL(current).origin !== next.origin) {
-        for (const header of ["authorization", "proxy-authorization", "cookie", "cookie2"]) {
-          init.headers.delete(header);
-        }
-      }
+      init = FetchRequest.redirectInit(init, response.status, current, next);
       current = next.href;
     }
     throw new Error(`Too many redirects fetching ${this.url}`);
+  }
+
+  // https://fetch.spec.whatwg.org/#http-redirect-fetch
+  private static redirectInit(
+    init: RequestInit,
+    status: number,
+    current: string,
+    next: URL,
+  ): RequestInit {
+    if (status !== 303 && init.body instanceof ReadableStream) {
+      throw new Error("Cannot replay a streamed request body after a redirect");
+    }
+
+    const headers = new Headers(init.headers);
+    const method = init.method?.toUpperCase() ?? "GET";
+    const changeToGet =
+      ((status === 301 || status === 302) && method === "POST") ||
+      (status === 303 && method !== "GET" && method !== "HEAD");
+
+    if (changeToGet) {
+      for (const header of [
+        "content-encoding",
+        "content-language",
+        "content-location",
+        "content-type",
+        "content-length",
+      ]) {
+        headers.delete(header);
+      }
+    }
+    if (new URL(current).origin !== next.origin) {
+      for (const header of ["authorization", "proxy-authorization", "cookie", "cookie2"]) {
+        headers.delete(header);
+      }
+    }
+
+    return {
+      ...init,
+      headers,
+      method: changeToGet ? "GET" : init.method,
+      body: changeToGet ? undefined : init.body,
+    };
   }
 }
 
