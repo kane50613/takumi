@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, spyOn, test } from "bun:test";
 import { container, text } from "@takumi-rs/helpers";
-import { PageNumber, PdfRenderer, TotalPages } from "../bundlers/node.mjs";
+import { PageNumber, PdfRenderer, TotalPages } from "takumi-pdf";
 
 const renderer = new PdfRenderer();
 
@@ -41,6 +41,19 @@ test("renders an HTML string with its own stylesheet", async () => {
 
   expect(decoder.decode(pdf.subarray(0, 5))).toBe("%PDF-");
   expect(pageCount(pdf)).toBe(1);
+});
+
+test("object stylesheet rules match CSS strings in render and measure", async () => {
+  const node = container({ className: "card", children: [text("Hello PDF")] });
+  const viewport = { width: 600, height: 300 };
+  const css = [{ selector: ".card", style: { width: 200, height: 100, "--accent": "red" } }];
+  const stylesheet = ".card { width: 200px; height: 100px; --accent: red }";
+  expect(await renderer.measure(node, { viewport, css })).toEqual(
+    await renderer.measure(node, { viewport, css: stylesheet }),
+  );
+  expect(await renderer.render(node, { viewport, css })).toEqual(
+    await renderer.render(node, { viewport, css: stylesheet }),
+  );
 });
 
 test("stylesheets warns once", async () => {
