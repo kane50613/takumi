@@ -239,6 +239,8 @@ opt-level = "s"
 # takumi-pdf includes the vendored krilla fork.
 [profile.release.package.takumi-pdf]
 opt-level = "s"
+[profile.release.package.takumi-pdf-wasm]
+opt-level = "s"
 [profile.release.package.write-fonts]
 opt-level = "z"
 [profile.release.package.pdf-writer]
