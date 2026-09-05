@@ -64,8 +64,8 @@ export default defineConfig({
         transformerTwoslash({
           twoslashOptions: {
             compilerOptions: {
-              moduleResolution: 100, // ts.ModuleResolutionKind.Bundler
-              jsx: 1, // ts.JsxEmit.Preserve
+              moduleResolution: "bundler",
+              jsx: "preserve",
               baseUrl: undefined,
               types: ["node"],
             },

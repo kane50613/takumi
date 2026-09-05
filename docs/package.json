@@ -19,13 +19,13 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "echarts": "^6.1.0",
-    "fumadocs-core": "^16.14.5",
-    "fumadocs-mdx": "^15.3.0",
-    "fumadocs-twoslash": "^3.3.0",
-    "fumadocs-ui": "npm:@fumadocs/base-ui@^16.14.5",
-    "fumapress": "^1.0.0",
+    "fumadocs-core": "^16.15.7",
+    "fumadocs-mdx": "^15.4.0",
+    "fumadocs-twoslash": "^4.0.0",
+    "fumadocs-ui": "npm:@fumadocs/base-ui@^16.15.7",
+    "fumapress": "^1.2.0",
     "js-confetti": "^0.13.1",
-    "lucide-react": "^1.33.0",
+    "lucide-react": "^1.37.0",
     "next-themes": "^0.4.6",
     "radix-ui": "^1.6.7",
     "react": "^19.2.8",
@@ -39,7 +39,7 @@
     "takumi-js": "workspace:*",
     "twoslash": "^0.3.9",
     "waku": "1.0.0-rc.0",
-    "zod": "^4.4.3"
+    "zod": "^4.5.2"
   },
   "devDependencies": {
     "@shikijs/transformers": "^4.4.3",
@@ -50,12 +50,12 @@
     "@types/bun": "^1.4.0",
     "@types/node": "catalog:",
     "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.4",
+    "@types/react-dom": "^19.2.5",
     "csstype": "^3.2.3",
-    "portless": "^0.15.5",
+    "portless": "^0.15.6",
     "prettier": "^3.9.6",
     "takumi-pdf": "workspace:*",
-    "typescript": "^6.0.3",
+    "typescript": "catalog:",
     "vite": "catalog:"
   }
 }

@@ -14,8 +14,6 @@ import { createDocsLayoutPage } from "fumapress/layouts/docs";
 import { createRootLayout } from "fumapress/layouts/root";
 import { oramaSearchPlugin } from "fumapress/plugins/orama-search";
 import { linkValidationPlugin } from "fumapress/plugins/link-validation";
-import { llmsPlugin } from "fumapress/plugins/llms.txt";
-import { sitemapPlugin } from "fumapress/plugins/sitemap";
 import { takumiPlugin } from "fumapress/plugins/takumi";
 import {
   ArrowBigRight,
@@ -172,8 +170,6 @@ export default defineConfig({
   .plugins(
     oramaSearchPlugin(),
     linkValidationPlugin(),
-    llmsPlugin(),
-    sitemapPlugin(),
     takumiPlugin({
       generate(page) {
         return {
