@@ -227,6 +227,8 @@ pub(crate) struct TwBlocks {
 
 type TwCacheKey = (*const Vec<TailwindValue>, Option<u32>, u32, u32);
 
+const EXPANSION_CACHE_MAX_ENTRIES: usize = 2048;
+
 /// Expanded utilities for one render's immutable stylesheet.
 #[derive(Default)]
 pub(crate) struct TwCache {
@@ -357,11 +359,11 @@ impl TailwindValues {
       .split_importance();
     let blocks = Rc::new(TwBlocks { normal, important });
 
-    // Retaining the parsed values prevents address reuse while the entry is cached.
-    cache
-      .blocks
-      .borrow_mut()
-      .insert(key, (self.clone(), blocks.clone()));
+    let mut cache = cache.blocks.borrow_mut();
+    if cache.len() < EXPANSION_CACHE_MAX_ENTRIES {
+      // Retaining the parsed values prevents address reuse while the entry is cached.
+      cache.insert(key, (self.clone(), blocks.clone()));
+    }
 
     blocks
   }

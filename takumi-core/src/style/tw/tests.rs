@@ -1706,6 +1706,37 @@ fn test_expansion_cache_retains_its_key() {
 }
 
 #[test]
+fn test_expansion_cache_stops_retaining_unique_lists_when_full() {
+  let cache = TwCache::default();
+  let viewport = Viewport::new((100, 100));
+  let breakpoints = BreakpointOverrides::default();
+  let first = TailwindValues::parse("w-1");
+  let blocks = first.declaration_blocks(viewport, &breakpoints, &cache);
+  for _ in 1..EXPANSION_CACHE_MAX_ENTRIES {
+    TailwindValues::parse("w-1").declaration_blocks(viewport, &breakpoints, &cache);
+  }
+
+  let overflow = TailwindValues::parse("w-2");
+  let weak = Arc::downgrade(&overflow.inner);
+  let expanded = overflow.declaration_blocks(viewport, &breakpoints, &cache);
+  assert_eq!(cache.blocks.borrow().len(), EXPANSION_CACHE_MAX_ENTRIES);
+  assert_eq!(
+    expanded.normal,
+    overflow
+      .clone()
+      .into_declaration_block(viewport, &breakpoints)
+      .split_importance()
+      .0,
+  );
+  drop(overflow);
+  assert!(weak.upgrade().is_none());
+  assert!(Rc::ptr_eq(
+    &blocks,
+    &first.declaration_blocks(viewport, &breakpoints, &cache),
+  ));
+}
+
+#[test]
 fn test_expansion_cache_tracks_breakpoint_inputs() {
   let values: TailwindValues = "w-1 sm:w-2".parse().unwrap();
   let viewport = Viewport::new((800, 100));
