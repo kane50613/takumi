@@ -3,6 +3,9 @@ import type { Node } from "./types";
 
 const defaultFetchTimeout = 30_000;
 const maxRedirectHops = 5;
+const maxFetchAttempts = 3;
+const maxRetryDelay = 1000;
+const retryableStatuses = new Set([408, 429, 500, 502, 503, 504]);
 export const defaultMaxFetchBytes = 32 * 1024 * 1024;
 const cssUrlPattern = /url\(\s*(['"]?)(.*?)\1\s*\)/g;
 
@@ -11,7 +14,7 @@ export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 export type FetchOptions = {
   /** Custom fetch implementation. @default globalThis.fetch */
   fetch?: FetchLike;
-  /** Abort the request after this many milliseconds; `0` or negative disables it. @default 30000 */
+  /** Total request timeout, including retries; `0` or negative disables it. @default 30000 */
   timeout?: number;
   /** Caller abort signal, combined with the timeout. */
   signal?: AbortSignal;
@@ -31,17 +34,81 @@ export async function fetchOk(url: string, options: FetchOptions & { init?: Requ
   const timeout = options.timeout ?? defaultFetchTimeout;
   const timeoutSignal = timeout <= 0 ? undefined : AbortSignal.timeout(timeout);
   const signals = [options.signal, options.init?.signal, timeoutSignal].filter(
-    (s): s is AbortSignal => s !== undefined,
+    (s): s is AbortSignal => s != null,
   );
   const signal = signals.length ? AbortSignal.any(signals) : undefined;
   const init = { ...options.init, signal };
   const response = options.allowUrl
     ? await followRedirectsWithPolicy(url, options.allowUrl, fetchImpl, init)
-    : await fetchImpl(url, init);
+    : await fetchWithRetry(url, fetchImpl, init);
   if (!response.ok) {
     throw new Error(`HTTP ${response.status} ${response.statusText} fetching ${url}`);
   }
   return response;
+}
+
+async function fetchWithRetry(
+  url: string,
+  fetchImpl: FetchLike,
+  init: RequestInit,
+): Promise<Response> {
+  const method = init.method?.toUpperCase() ?? "GET";
+  const canRetry = method === "GET" || method === "HEAD";
+  for (let attempt = 0; ; attempt++) {
+    init.signal?.throwIfAborted();
+    let delay = 100 * 2 ** attempt;
+    try {
+      const response = await fetchImpl(url, init);
+      init.signal?.throwIfAborted();
+      if (
+        !canRetry ||
+        attempt === maxFetchAttempts - 1 ||
+        !retryableStatuses.has(response.status)
+      ) {
+        return response;
+      }
+      const retryAfter = response.headers.get("retry-after");
+      if (retryAfter !== null) {
+        const seconds = Number(retryAfter);
+        const milliseconds = Number.isFinite(seconds)
+          ? seconds * 1000
+          : Date.parse(retryAfter) - Date.now();
+        if (Number.isFinite(milliseconds)) {
+          delay = Math.max(delay, milliseconds);
+        }
+      }
+      if (delay > maxRetryDelay) {
+        return response;
+      }
+      void response.body?.cancel().catch(() => {});
+    } catch (error) {
+      init.signal?.throwIfAborted();
+      if (
+        !canRetry ||
+        attempt === maxFetchAttempts - 1 ||
+        !(error instanceof Error) ||
+        (error.name !== "TypeError" && error.name !== "TimeoutError")
+      ) {
+        throw error;
+      }
+    }
+    await waitForRetry(delay, init.signal);
+  }
+}
+
+function waitForRetry(delay: number, signal?: AbortSignal | null): Promise<void> {
+  signal?.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    }, delay);
+    function abort() {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    }
+    signal?.addEventListener("abort", abort, { once: true });
+  });
 }
 
 /** Follows redirects manually so `allowUrl` is enforced on every hop, not just the first URL. */
@@ -53,7 +120,7 @@ async function followRedirectsWithPolicy(
 ): Promise<Response> {
   let current = url;
   for (let hop = 0; hop < maxRedirectHops; hop++) {
-    const response = await fetchImpl(current, { ...init, redirect: "manual" });
+    const response = await fetchWithRetry(current, fetchImpl, { ...init, redirect: "manual" });
     const location = response.headers.get("location");
     if (response.status < 300 || response.status >= 400 || !location) {
       return response;
