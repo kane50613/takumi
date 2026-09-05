@@ -1,5 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { defineConfig } from "tsdown";
+import { fetchOk } from "./src/utils.ts";
 
 const CATALOG_SOURCE = "https://fonts.google.com/metadata/fonts";
 const CATALOG_FILE = new URL("src/google-fonts-catalog.ts", import.meta.url);
@@ -11,15 +12,8 @@ interface FamilyMetadata {
 }
 
 async function generateCatalog() {
-  const data: { familyMetadataList: FamilyMetadata[] } = await fetch(CATALOG_SOURCE, {
-    signal: AbortSignal.timeout(30_000),
-  })
-    .then((r) => {
-      if (!r.ok) {
-        throw new Error(`${CATALOG_SOURCE} → ${r.status}`);
-      }
-      return r.json();
-    })
+  const data: { familyMetadataList: FamilyMetadata[] } = await fetchOk(CATALOG_SOURCE)
+    .then((r) => r.json())
     .catch((error) => {
       throw error.name === "TimeoutError"
         ? new Error(`${CATALOG_SOURCE} timed out after 30s`)
