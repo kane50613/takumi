@@ -156,6 +156,8 @@ Bundle font files when a render must work without Google Fonts. Retries can reco
 
 An outer test or route timeout can end the render before the helper's deadline. Set `timeout` below that outer limit, leaving time for layout and encoding.
 
+CJK families can expose many coverage subsets. Takumi filters them by the text's codepoints before downloading, but matching subsets from multiple families or weights may still load together. Request only the families and weights your template needs. A timeout in `await googleFonts(...)` occurs during the CSS request, before these font downloads start.
+
 ### Subsetting
 
 `render` registers only the subsets the content draws, so the same `fonts` work for any text and unused ranges never download. The pass runs automatically.

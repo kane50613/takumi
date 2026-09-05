@@ -20,7 +20,7 @@ const image = await render(element, {
 });
 ```
 
-Takumi fetches remote images referenced by `src`, `background-image`, `mask-image`, and `list-style-image`. An optional `fetchCache` shares downloaded bytes and pending requests across renders. It accepts a `Map` or an object with `get`, `set`, and `delete` methods.
+Takumi fetches remote images referenced by `src`, `background-image`, `mask-image`, and `list-style-image`. An optional `fetchCache` shares downloaded bytes and pending requests across renders. Use `Map<string, Promise<ArrayBuffer>>` or an object with the same `get`, `set`, and `delete` contract. Values are promises, not raw buffers.
 
 A plain `Map` never evicts. If each render uses a different URL, pass a bounded cache such as an LRU, or omit `fetchCache`.
 
@@ -54,7 +54,7 @@ GET and HEAD requests make up to three attempts for connection errors, transient
 
 Caller cancellation and an expired deadline stop retries. Other HTTP errors and failures while reading a response body are not retried. A custom `fetch` must honor the supplied abort signal.
 
-`render()` and `ImageResponse` fetch these URLs from your server. Set `allowUrl` whenever user input can influence the markup. It checks each redirect destination, with at most five hops. DNS is not inspected; use a custom `fetch` for resolved-address filtering.
+`render()` and `ImageResponse` fetch these URLs from your server. Set `allowUrl` whenever user input can influence the markup. On a cache miss, it checks each redirect destination, with at most five hops. An image byte-cache hit checks only the entry URL: cached values do not retain redirect history. Do not share `images.fetchCache` across different URL policies or trust boundaries. DNS is not inspected; use a custom `fetch` for resolved-address filtering.
 
 ## Pre-fetched images
 

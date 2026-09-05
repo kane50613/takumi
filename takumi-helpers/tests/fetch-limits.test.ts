@@ -154,6 +154,37 @@ describe("allowUrl policy", () => {
 });
 
 describe("shared fetchCache policy enforcement", () => {
+  test("cached images recheck the entry URL, not the original redirect chain", async () => {
+    const entry = "https://allowed.example.com/image.png";
+    const destination = "https://other.example.com/image.png";
+    const payload = new Uint8Array([1, 2, 3]);
+    const fetchMock = mock((url: string) =>
+      Promise.resolve(
+        url === entry
+          ? new Response(null, { status: 302, headers: { location: destination } })
+          : new Response(payload),
+      ),
+    );
+    const node = tree(entry);
+    const fetchCache = new Map<string, Promise<ArrayBuffer>>();
+    await prepareImages({ node, fetchCache, fetch: fetchMock, allowUrl: () => true });
+    const checked: string[] = [];
+    const allowUrl = (url: string) => {
+      checked.push(url);
+      return url === entry;
+    };
+
+    const images = await prepareImages({ node, fetchCache, fetch: fetchMock, allowUrl });
+    expect(images.map((image) => new Uint8Array(image.data))).toEqual([payload]);
+    expect(checked).toEqual([entry]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    await expect(
+      prepareImages({ node, fetchCache: new Map(), fetch: fetchMock, allowUrl }),
+    ).rejects.toThrow("URL blocked by allowUrl policy");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
   test("a cache hit re-runs a stricter maxBytes and keeps the entry reusable", async () => {
     const fetchMock = mock(() => Promise.resolve(new Response(streamOf(new Uint8Array(60)))));
     const fetchCache = new Map<string, Promise<ArrayBuffer>>();
