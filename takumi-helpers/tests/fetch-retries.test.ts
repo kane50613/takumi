@@ -1,9 +1,19 @@
 import { expect, mock, test } from "bun:test";
 import { fontFromUrl, googleFonts } from "../src/fonts";
-import { fetchOk } from "../src/utils";
+import { fetchOk } from "../src/fetch";
 
 const fontCss =
   "@font-face{font-family:'Inter';font-weight:400;src:url(https://fonts.gstatic.com/inter.woff2);unicode-range:U+0000-00FF}";
+
+test("calls fetch without binding the request owner, including retries", async () => {
+  let attempts = 0;
+  const fetch = function (this: unknown) {
+    expect(this).toBeUndefined();
+    return Promise.resolve(new Response(null, { status: ++attempts === 1 ? 503 : 200 }));
+  };
+  expect((await fetchOk("https://example.com/image.png", { fetch })).status).toBe(200);
+  expect(attempts).toBe(2);
+});
 
 test("recovers from a transient Google Fonts timeout", async () => {
   const fetch = mock()

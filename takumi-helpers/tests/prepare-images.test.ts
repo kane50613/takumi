@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { Node } from "../src/types";
-import { prepareImages } from "../src/utils";
+import { prepareImages } from "../src/images";
 
 const ok = (url: string) => new Response(new TextEncoder().encode(url).buffer);
 
