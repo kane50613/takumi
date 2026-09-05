@@ -297,7 +297,7 @@ export type RenderOptions = (PagedOptions | ViewportOptions) &
     metadata?: PdfMetadata;
     /** Generates a PDF outline (bookmarks) from `h1`–`h6` headings. */
     outline?: boolean;
-    /** Makes text controls fillable; PDF/A and PDF/UA are unsupported. */
+    /** Makes supported form controls fillable; PDF/A and PDF/UA are unsupported. */
     form?: boolean;
     /**
      * The paper color as a CSS color, painted under everything on every page.
