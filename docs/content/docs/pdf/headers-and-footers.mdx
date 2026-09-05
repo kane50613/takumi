@@ -38,11 +38,26 @@ Automatic left and right margins are 37.8px on ordinary page sizes. A numeric ma
 To calculate a numeric margin, call `measure()` with the same page size and fonts as the render. It measures at full page width with three-digit page counters. Add the 20px inset to the returned height.
 
 ```tsx twoslash
-declare const footer: import("react").ReactNode;
+declare const report: import("react").ReactNode;
 // ---cut---
-import { measure } from "takumi-pdf";
+import { googleFonts } from "@takumi-rs/helpers";
+import { measure, render } from "takumi-pdf";
+import { PageNumber, TotalPages } from "takumi-pdf/primitives";
 
-const { height } = await measure(footer, { size: "a4" });
+const fonts = await googleFonts(["Inter"]);
+const footer = (
+  <div style={{ fontFamily: "Inter", fontSize: 10, textAlign: "center" }}>
+    Page <PageNumber /> of <TotalPages />
+  </div>
+);
+
+const { height } = await measure(footer, { size: "a4", fonts });
+const pdf = await render(report, {
+  size: "a4",
+  fonts,
+  footer,
+  margin: { bottom: height + 20 },
+});
 ```
 
 Passing `viewport` instead of a page size measures the tree as-is. Counter hooks stay empty.
@@ -61,7 +76,7 @@ A node carrying both classes gets the page number.
 
 ## Counters outside a band
 
-Counters also work in document content. Inside a `position: fixed` box, they update on every page:
+Counters also work in document content. A `position: fixed` box repeats on every page. Inside it, `<PageNumber />` is evaluated for each page, while `<TotalPages />` shows the document length:
 
 ```tsx
 <div style={{ position: "fixed", bottom: 24, left: 24, right: 24 }}>
