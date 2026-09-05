@@ -1,6 +1,6 @@
 import { expect, mock, test } from "bun:test";
 import { fontFromUrl, googleFonts } from "../src/fonts";
-import { fetchOk } from "../src/utils";
+import { fetchOk } from "../src/fetch";
 
 const fontCss =
   "@font-face{font-family:'Inter';font-weight:400;src:url(https://fonts.gstatic.com/inter.woff2);unicode-range:U+0000-00FF}";

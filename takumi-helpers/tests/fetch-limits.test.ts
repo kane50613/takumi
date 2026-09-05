@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { fontFromUrl } from "../src/fonts";
 import type { Node } from "../src/types";
-import { prepareImages } from "../src/utils";
+import { prepareImages } from "../src/images";
 
 const tree = (...srcs: string[]): Node => ({
   type: "container",

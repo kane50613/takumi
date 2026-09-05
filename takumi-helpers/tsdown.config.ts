@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { defineConfig } from "tsdown";
-import { fetchOk } from "./src/utils.ts";
+import { fetchOk } from "./src/fetch.ts";
 
 const CATALOG_SOURCE = "https://fonts.google.com/metadata/fonts";
 const CATALOG_FILE = new URL("src/google-fonts-catalog.ts", import.meta.url);
