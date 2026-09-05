@@ -1,13 +1,12 @@
-import type { CSSProperties } from "react";
-import type { ContainerNode, ImageNode, Node, NodeMetadata, TextNode } from "./types";
+import type { ContainerNode, Declarations, ImageNode, Node, NodeMetadata, TextNode } from "./types";
 
-function applyStyle(node: Node, style?: CSSProperties) {
+function applyStyle(node: Node, style?: Declarations) {
   if (style && Object.keys(style).length > 0) {
     node.style = style;
   }
 }
 
-function applyPreset(node: Node, preset?: CSSProperties) {
+function applyPreset(node: Node, preset?: Declarations) {
   if (preset && Object.keys(preset).length > 0) {
     node.preset = preset;
   }
@@ -56,10 +55,10 @@ export function container(props: Omit<ContainerNode, "type">): ContainerNode {
   return node;
 }
 
-export function text(text: string, style?: CSSProperties): TextNode;
+export function text(text: string, style?: Declarations): TextNode;
 export function text(props: Omit<TextNode, "type">): TextNode;
 
-export function text(props: Omit<TextNode, "type"> | string, style?: CSSProperties): TextNode {
+export function text(props: Omit<TextNode, "type"> | string, style?: Declarations): TextNode {
   if (typeof props === "string") {
     const node: TextNode = {
       type: "text",
@@ -106,7 +105,7 @@ export function image(props: Omit<ImageNode, "type">): ImageNode {
   return node;
 }
 
-export function style(style: CSSProperties) {
+export function style(style: Declarations) {
   return style;
 }
 

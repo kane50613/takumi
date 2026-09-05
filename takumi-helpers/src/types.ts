@@ -16,7 +16,7 @@ export type TextFit =
   | (string & {});
 
 declare module "react" {
-  interface CSSProperties {
+  interface CSSProperties extends Record<`--${string}`, string | number | undefined> {
     textFit?: TextFit;
   }
 }
@@ -24,9 +24,7 @@ declare module "react" {
 export type NodeAttributes = Record<string, string>;
 
 /** A declaration block, with custom properties allowed. */
-export type Declarations = CSSProperties & {
-  [key: `--${string}`]: string | number;
-};
+export type Declarations = CSSProperties;
 
 /** A style rule written as an object. */
 export type StyleRule = {
@@ -85,8 +83,8 @@ export type NodeMetadata = {
   lang?: string;
   attributes?: NodeAttributes;
   tw?: string;
-  style?: CSSProperties;
-  preset?: CSSProperties;
+  style?: Declarations;
+  preset?: Declarations;
 };
 
 export type Node = ContainerNode | TextNode | ImageNode;

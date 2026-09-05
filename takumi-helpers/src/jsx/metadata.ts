@@ -1,11 +1,11 @@
-import type { CSSProperties } from "react";
+import type { Declarations } from "../types";
 import { defaultStylePresets } from "./style-presets";
 
 export type HtmlProps = {
   className?: string;
   class?: string;
   id?: string;
-  style?: string | CSSProperties;
+  style?: string | Declarations;
   dir?: string;
   lang?: string;
   [key: string]: unknown;

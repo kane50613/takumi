@@ -4,9 +4,8 @@ import type {
   ElementNode as UltraHtmlElementNode,
   Node as UltraHtmlNode,
 } from "ultrahtml";
-import type { CSSProperties } from "react";
 import { container, image, text } from "../helpers";
-import type { Node, NodeMetadata } from "../types";
+import type { Declarations, Node, NodeMetadata } from "../types";
 import { extractAttributes, getPresets } from "../jsx/metadata";
 import type { FromJsxOptions } from "../jsx";
 import type { defaultStylePresets } from "../jsx/style-presets";
@@ -229,7 +228,7 @@ function decodeAttributeMap(attributes: Record<string, string>): Record<string, 
   return decodedAttributes;
 }
 
-function parseInlineStyle(styleText: string): CSSProperties | undefined {
+function parseInlineStyle(styleText: string): Declarations | undefined {
   const style: Record<string, string> = {};
   let start = 0;
   let colon = -1;
@@ -274,7 +273,7 @@ function parseInlineStyle(styleText: string): CSSProperties | undefined {
 
   commit(styleText.length);
 
-  return Object.keys(style).length > 0 ? (style as CSSProperties) : undefined;
+  return Object.keys(style).length > 0 ? style : undefined;
 }
 
 function skipQuoted(styleText: string, start: number): number {
