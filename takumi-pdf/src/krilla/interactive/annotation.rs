@@ -427,6 +427,7 @@ impl FormField {
   /// The `/AP` state name the field files its "on" appearance under.
   fn on_state(&self) -> String {
     match self {
+      Self::CheckBox { export, .. } if export == "Off" => "0".to_string(),
       Self::CheckBox { export, .. } => export.clone(),
       Self::Text { .. } | Self::Radio { .. } => String::new(),
     }
@@ -672,7 +673,7 @@ impl WidgetAnnotation {
           annotation.pair(Name(b"MaxLen"), *max_len);
         }
       }
-      FormField::CheckBox { on, .. } => {
+      FormField::CheckBox { on, export } => {
         let state = match on {
           true => Name(on_state.as_bytes()),
           false => Name(b"Off"),
@@ -682,6 +683,13 @@ impl WidgetAnnotation {
         annotation.pair(Name(b"V"), state);
         annotation.pair(Name(b"DV"), state);
         annotation.pair(Name(b"AS"), state);
+
+        if export == "Off" {
+          annotation
+            .insert(Name(b"Opt"))
+            .array()
+            .item(TextStr(export));
+        }
       }
       // The group owns `/FT` and `/V`; the button only says which state it
       // shows.

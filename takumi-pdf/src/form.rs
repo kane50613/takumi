@@ -25,6 +25,7 @@ pub(crate) struct EmittedField {
   pub(crate) name: String,
   /// Whether this field may share its name with another.
   pub(crate) shares_name: bool,
+  pub(crate) disabled: bool,
 }
 
 /// A form control box in content coordinates.
@@ -376,6 +377,7 @@ pub(crate) fn add_field_annotations(
     state.field_names.borrow_mut().push(EmittedField {
       name: field.name.clone(),
       shares_name: field.field.shares_name(),
+      disabled: field.style.disabled,
     });
 
     let annotation = match field.annotation(rect, labels, state.lang) {

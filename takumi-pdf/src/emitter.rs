@@ -166,6 +166,18 @@ impl<'a> DocumentState<'a> {
   /// covered.
   pub(crate) fn into_error(self) -> Option<PdfError> {
     let duplicate = self.duplicate_field_name();
+    let mut radio_states = HashMap::new();
+    let mixed_radio = self.field_names.borrow().iter().find_map(|field| {
+      if field.shares_name
+        && radio_states
+          .insert(&field.name, field.disabled)
+          .is_some_and(|disabled| disabled != field.disabled)
+      {
+        Some(field.name.clone())
+      } else {
+        None
+      }
+    });
     let issues = self.issues.into_inner();
 
     if let Some(failure) = issues.failure {
@@ -173,6 +185,9 @@ impl<'a> DocumentState<'a> {
     }
     if let Some(name) = duplicate {
       return Some(PdfError::DuplicateFieldName(name));
+    }
+    if let Some(name) = mixed_radio {
+      return Some(PdfError::UnsupportedRadioGroup(name));
     }
     if issues.uncovered.is_empty() {
       return None;

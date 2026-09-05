@@ -1,0 +1,1 @@
+Radio group plan mixes enabled and disabled buttons. PDF applies disabled flags to the whole field.
