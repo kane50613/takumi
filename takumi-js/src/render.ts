@@ -8,12 +8,11 @@ import {
   type ImageFetchCache,
 } from "@takumi-rs/helpers";
 import { fromJsx, type FromJsxOptions } from "@takumi-rs/helpers/jsx";
-import { getImports } from "./import";
+import { defaultRenderer, type Renderer } from "./backend/renderer";
 import type { ReactNode } from "react";
 import type { Node, ReactElementLike } from "@takumi-rs/helpers";
 import { fromHtml } from "@takumi-rs/helpers/html";
 
-type Renderer = napi.Renderer | wasm.Renderer;
 type ImageLoader = napi.ImageLoader | wasm.ImageLoader;
 
 /**
@@ -116,8 +115,6 @@ type PipelineOptions = Partial<SharedRenderExtras> &
     stylesheets?: string[];
   };
 
-let globalRenderer: Renderer | undefined;
-
 export type RenderInput = ReactNode | ReactElementLike | Node | string;
 
 function isTakumiNode(element: unknown): element is Node {
@@ -143,14 +140,13 @@ async function transformElement(element: RenderInput, options?: PipelineOptions)
   return fromJsx(element, options?.jsx);
 }
 
-/** Resolves the renderer to use: a caller-supplied one, or the shared global. */
+/** Resolves a caller-supplied renderer or the default provider. */
 async function resolveRenderer(options?: PipelineOptions): Promise<Renderer> {
   if (options && "renderer" in options && options.renderer) {
     return options.renderer;
   }
 
-  const imports = await getImports(options?.module);
-  return (globalRenderer ??= new imports.Renderer());
+  return defaultRenderer.get(options?.module);
 }
 
 /** Transforms an input into a node tree and extracts its emojis. */
