@@ -4858,3 +4858,43 @@ fn a_check_box_submits_on_only_when_it_carries_no_value() {
   // An empty `value` submits empty, which HTML keeps apart from a missing one.
   assert!(pdf.contains("/V//DV/"));
 }
+
+#[test]
+fn form_reserved_checkbox_state() {
+  let bytes = run_pdf_fixture("form_checkbox_off", |fonts| {
+    PdfOptions::builder()
+      .node(
+        from_html(
+          "<input type='checkbox' name='off' value='Off' checked style='width:20px;height:20px'/>",
+          FromHtmlOptions::default(),
+        )
+        .unwrap(),
+      )
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .form(true)
+      .build()
+  });
+
+  let pdf = String::from_utf8_lossy(&bytes);
+
+  assert!(pdf.contains("/V/0/DV/0/AS/0/Opt[(Off)]"));
+  assert!(pdf.contains("/N<</0 "));
+}
+
+#[test]
+fn form_mixed_disabled_radio_group() {
+  let fonts = fonts();
+  let result = render(PdfOptions::builder()
+    .node(from_html("<div><input type='radio' name='plan' value='A' disabled/><input type='radio' name='plan' value='B'/></div>", FromHtmlOptions::default()).unwrap())
+    .page(PageOptions::A4).fonts(&fonts).form(true).build());
+
+  let error = result.expect_err("mixed disabled states cannot be represented by PDF field flags");
+
+  assert!(matches!(&error, PdfError::UnsupportedRadioGroup(name) if name == "plan"));
+  fs::write(
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures-generated/form_radio_error.txt"),
+    error.to_string(),
+  )
+  .unwrap();
+}
