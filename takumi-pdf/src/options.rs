@@ -68,6 +68,8 @@ pub enum PdfError {
   UnsupportedFormValue(String),
   /// Fillable forms require an unembedded font that the requested standard disallows.
   UnsupportedFormStandard,
+  /// A radio group mixes enabled and disabled buttons, which PDF field flags cannot express.
+  UnsupportedRadioGroup(String),
 }
 
 impl std::fmt::Display for PdfError {
@@ -101,6 +103,10 @@ impl std::fmt::Display for PdfError {
       Self::DuplicateFieldName(name) => write!(
         f,
         "More than one form control is named {name}. Every fillable field needs a name of its own."
+      ),
+      Self::UnsupportedRadioGroup(name) => write!(
+        f,
+        "Radio group {name} mixes enabled and disabled buttons. PDF applies disabled flags to the whole field."
       ),
       Self::InvalidFieldName(name) => write!(
         f,
