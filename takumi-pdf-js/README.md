@@ -248,6 +248,42 @@ const pdf = await render(invoice, {
 
 The PDF/A-3 levels require `mimeType`, `description`, and a modification date on each attachment. `metadata.creationDate` serves as the date fallback.
 
+## Fillable fields
+
+Set `form: true` to make named text inputs and textareas editable in a PDF reader.
+
+```tsx
+const pdf = await render(
+  <form>
+    <label htmlFor="name">Full name</label>
+    <input id="name" name="name" defaultValue="Kane" required />
+    <label>
+      Notes
+      <textarea name="notes" maxLength={200} />
+    </label>
+  </form>,
+  { form: true },
+);
+```
+
+| HTML                                                               | Field behavior                                              |
+| ------------------------------------------------------------------ | ----------------------------------------------------------- |
+| `name`                                                             | Field name; `id` is the fallback                            |
+| `value`, textarea text                                             | Initial and reset value                                     |
+| `required`, `readonly`, `disabled`                                 | Required, read-only, and excluded from export when disabled |
+| `maxlength`                                                        | Maximum text length                                         |
+| `type="password"`                                                  | Masked appearance                                           |
+| `aria-labelledby`, `aria-label`, `<label>`, `title`, `placeholder` | Accessible name, in priority order                          |
+| `color`, `font-size`, `text-align`                                 | Text appearance                                             |
+
+CSS controls the field's border and background. Its widget draws the value. A control taller than one page is clipped on the page where it starts.
+
+Names must be unique. Periods create a PDF field hierarchy: `user.name` places `name` under `user`. Empty segments such as `user..name` are rejected.
+
+Submit, reset, button, image, file, and hidden inputs do not become editable fields. Leaving `form` unset keeps the output static.
+
+Form text uses Helvetica with WinAnsiEncoding. Values this encoding cannot represent reject the render. Custom form fonts, PDF/A, and PDF/UA are not supported with `form: true`.
+
 ## Measuring
 
 `measure()` lays out a tree without rendering and returns its size in CSS px. Use it to size a header or footer band before setting `margin`:

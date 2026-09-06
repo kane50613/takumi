@@ -9,9 +9,9 @@
 use core::f32;
 
 use pdf_writer::types::AnnotationFlags;
-use pdf_writer::{Finish, Name, Ref, TextStr};
+use pdf_writer::{Finish, Name, Rect as PdfRect, Ref, Str, TextStr};
 
-use crate::krilla::chunk_container::ChunkContainer;
+use crate::krilla::chunk_container::{ChunkContainer, FieldSlot};
 use crate::krilla::color::Color;
 use crate::krilla::configure::{PdfVersion, ValidationError};
 use crate::krilla::error::KrillaResult;
@@ -44,6 +44,16 @@ impl Annotation {
     }
   }
 
+  /// Create a new form widget annotation.
+  pub fn new_widget(annotation: WidgetAnnotation, alt_text: Option<String>) -> Self {
+    Self {
+      annotation_type: AnnotationType::Widget(annotation),
+      alt: alt_text,
+      struct_parent: None,
+      location: None,
+    }
+  }
+
   /// Sets the location of the annotation.
   pub fn with_location(mut self, location: Option<Location>) -> Self {
     self.location = location;
@@ -69,23 +79,42 @@ impl Annotation {
     chunk_container: &mut ChunkContainer,
     root_ref: Ref,
     page_height: f32,
+    page_ref: Ref,
   ) -> KrillaResult<()> {
+    let (slot, appearance) = match &self.annotation_type {
+      AnnotationType::Widget(widget) => (
+        Some(chunk_container.field_slot(sc, &widget.name, root_ref)),
+        Some(widget.write_appearance(sc, chunk_container)),
+      ),
+      AnnotationType::Link(_) => (None, None),
+    };
     let chunk = &mut chunk_container.non_stream.annotations;
     let mut annotation = chunk
       .indirect(root_ref)
       .start::<pdf_writer::writers::Annotation>();
 
-    self
-      .annotation_type
-      .serialize_type(sc, &mut annotation, page_height)?;
+    self.annotation_type.serialize_type(
+      sc,
+      &mut annotation,
+      page_height,
+      page_ref,
+      slot.as_ref(),
+    )?;
 
-    let AnnotationType::Link(l) = &self.annotation_type;
+    if let Some(appearance) = appearance {
+      annotation.appearance().normal().stream(appearance);
+    }
+    let always_print = match &self.annotation_type {
+      AnnotationType::Link(link) => link.border.is_none(),
+      // A field a reader fills in has to come out of the printer.
+      AnnotationType::Widget(_) => true,
+    };
     // Only set the print flag when really necessary (only PDF/A). Don't
     // set it by default, so annotations with color borders will be shown
     // on a screen but not printed.
     // TODO: No need to write the print flag even if it is `None`,
     // only for PDF/A.
-    if l.border.is_none()
+    if always_print
       || sc
         .serialize_settings()
         .configuration
@@ -117,6 +146,8 @@ impl Annotation {
 pub enum AnnotationType {
   /// A link annotation.
   Link(LinkAnnotation),
+  /// A form field widget annotation.
+  Widget(WidgetAnnotation),
 }
 
 impl AnnotationType {
@@ -125,9 +156,16 @@ impl AnnotationType {
     sc: &mut SerializeContext,
     annotation: &mut pdf_writer::writers::Annotation,
     page_height: f32,
+    page_ref: Ref,
+    slot: Option<&FieldSlot>,
   ) -> KrillaResult<()> {
-    match self {
-      AnnotationType::Link(l) => l.serialize_type(sc, annotation, page_height),
+    match (self, slot) {
+      (AnnotationType::Link(link), _) => link.serialize_type(sc, annotation, page_height),
+      (AnnotationType::Widget(widget), Some(slot)) => {
+        widget.serialize_type(annotation, page_height, page_ref, slot);
+        Ok(())
+      }
+      (AnnotationType::Widget(_), None) => Ok(()),
     }
   }
 }
@@ -280,5 +318,395 @@ impl LinkAnnotation {
       }
       Target::Action(action) => action.serialize(sc, annotation.action()),
     }
+  }
+}
+
+/// How a widget's own CSS paints it, mirrored into the field so a viewer
+/// regenerating the appearance lands somewhere close to the rendered box.
+pub struct WidgetStyle {
+  /// Text color.
+  pub color: [f32; 3],
+  /// Text size in points.
+  pub font_size: f32,
+  /// `/Q`: 0 left, 1 center, 2 right.
+  pub align: i32,
+  /// `/Ff` ReadOnly.
+  pub read_only: bool,
+  /// `/Ff` Required.
+  pub required: bool,
+  /// `/Ff` NoExport.
+  pub no_export: bool,
+}
+
+/// The kind of form field a widget annotation carries.
+pub enum FormField {
+  /// A text field with the value it starts at.
+  Text {
+    /// The field's value.
+    value: String,
+    /// Whether the field wraps onto more than one line.
+    multiline: bool,
+    /// Whether the field hides what is typed into it.
+    password: bool,
+    /// `/MaxLen`.
+    max_len: Option<i32>,
+  },
+}
+
+impl FormField {
+  fn flags(&self, style: &WidgetStyle) -> i32 {
+    let mut flags = 0;
+
+    if style.read_only {
+      flags |= 1;
+    }
+    if style.required {
+      flags |= 1 << 1;
+    }
+    if style.no_export {
+      flags |= 1 << 2;
+    }
+    let Self::Text {
+      multiline,
+      password,
+      ..
+    } = self;
+
+    if *multiline {
+      flags |= 1 << 12;
+    }
+    if *password {
+      flags |= 1 << 13;
+    }
+
+    flags
+  }
+}
+
+/// A form field widget annotation, merged with the field dictionary it names.
+pub struct WidgetAnnotation {
+  pub(crate) rect: Rect,
+  /// The HTML name, which `/T` spells one period-delimited segment at a time.
+  pub(crate) name: String,
+  field: FormField,
+  style: WidgetStyle,
+  /// `/TU`, the name a reader announces the field by.
+  description: Option<String>,
+  /// `/Lang`, which PDF/UA requires on an annotation carrying text.
+  lang: Option<String>,
+}
+
+impl WidgetAnnotation {
+  /// Create a new widget annotation for the field named `name`.
+  pub fn new(rect: Rect, name: String, field: FormField, style: WidgetStyle) -> Self {
+    Self {
+      rect,
+      name,
+      field,
+      style,
+      description: None,
+      lang: None,
+    }
+  }
+
+  /// Sets `/TU`, which a screen reader announces in place of the field name.
+  pub fn with_description(mut self, description: Option<String>) -> Self {
+    self.description = description;
+    self
+  }
+
+  /// Sets the field's natural language.
+  pub fn with_lang(mut self, lang: Option<String>) -> Self {
+    self.lang = lang;
+    self
+  }
+
+  /// The `/DA` default appearance string, which a viewer reuses when it
+  /// regenerates the field after an edit.
+  fn default_appearance(&self) -> String {
+    let [red, green, blue] = self.style.color;
+
+    format!(
+      "/{FORM_FONT} {} Tf {red} {green} {blue} rg",
+      self.style.font_size
+    )
+  }
+
+  /// The text the appearance draws. A password field shows one asterisk per
+  /// character, as the control it came from does.
+  fn drawn_value(&self) -> String {
+    let FormField::Text {
+      value, password, ..
+    } = &self.field;
+
+    match password {
+      true => "*".repeat(value.chars().count()),
+      false => value.clone(),
+    }
+  }
+
+  pub(crate) fn value_is_encodable(&self) -> bool {
+    self.drawn_value().chars().all(|character| {
+      matches!(character, '\t' | '\n' | '\r') || win_ansi_byte(character).is_some()
+    })
+  }
+
+  /// Writes this widget's appearance stream, and the shared face it draws
+  /// with.
+  fn write_appearance(
+    &self,
+    sc: &mut SerializeContext,
+    chunk_container: &mut ChunkContainer,
+  ) -> Ref {
+    let width = self.rect.right() - self.rect.left();
+    let height = self.rect.bottom() - self.rect.top();
+    let FormField::Text { multiline, .. } = &self.field;
+    let content = text_appearance(
+      &self.drawn_value(),
+      *multiline,
+      width,
+      height,
+      self.style.font_size,
+      &self.style,
+    );
+    // The font reference is taken before the stream opens, which borrows the
+    // same chunk.
+    let font = chunk_container.form_font(sc);
+    let stream_ref = sc.new_ref();
+    let mut stream = chunk_container
+      .non_stream
+      .annotations
+      .form_xobject(stream_ref, content.as_bytes());
+
+    stream.bbox(PdfRect::new(0.0, 0.0, width, height));
+    stream
+      .resources()
+      .fonts()
+      .pair(Name(FORM_FONT.as_bytes()), font);
+    stream.finish();
+    stream_ref
+  }
+
+  fn serialize_type(
+    &self,
+    annotation: &mut pdf_writer::writers::Annotation,
+    page_height: f32,
+    page_ref: Ref,
+    slot: &FieldSlot,
+  ) {
+    annotation.subtype(pdf_writer::types::AnnotationType::Widget);
+    // A reader looking for a field's page should not have to scan every
+    // page's `/Annots` to find it.
+    annotation.pair(Name(b"P"), page_ref);
+
+    let actual_rect = self
+      .rect
+      .transform(page_root_transform(page_height))
+      .unwrap();
+
+    annotation.rect(actual_rect.to_pdf_rect());
+    // The page already paints the control's border and background. Leaving
+    // `/MK` out keeps a regenerated appearance transparent, so a rounded
+    // corner or a two-tone border survives the redraw.
+    annotation.border(0.0, 0.0, 0.0, None);
+
+    if let Some(lang) = &self.lang {
+      annotation.pair(Name(b"Lang"), TextStr(lang));
+    }
+    if let Some(parent) = slot.parent {
+      annotation.pair(Name(b"Parent"), parent);
+    }
+    annotation.pair(Name(b"T"), TextStr(&slot.partial));
+
+    if let Some(mapping) = &slot.mapping {
+      annotation.pair(Name(b"TM"), TextStr(mapping));
+    }
+    annotation.pair(Name(b"Ff"), self.field.flags(&self.style));
+
+    if let Some(description) = &self.description {
+      annotation.pair(Name(b"TU"), TextStr(description));
+    }
+    let FormField::Text { value, max_len, .. } = &self.field;
+
+    annotation.pair(Name(b"FT"), Name(b"Tx"));
+    annotation.pair(Name(b"DA"), Str(self.default_appearance().as_bytes()));
+    annotation.pair(Name(b"Q"), self.style.align);
+    annotation.pair(Name(b"V"), TextStr(value));
+    // HTML's `value` is what the field resets to, which is also where it
+    // starts.
+    annotation.pair(Name(b"DV"), TextStr(value));
+
+    if let Some(max_len) = max_len {
+      annotation.pair(Name(b"MaxLen"), *max_len);
+    }
+  }
+}
+
+/// The resource name the form's shared face is registered under, in `/DR` and
+/// in every appearance stream.
+pub(crate) const FORM_FONT: &str = "Helv";
+
+/// The whole content stream a text field's appearance draws.
+fn text_appearance(
+  value: &str,
+  multiline: bool,
+  width: f32,
+  height: f32,
+  size: f32,
+  style: &WidgetStyle,
+) -> String {
+  if value.is_empty() {
+    return String::new();
+  }
+  let [red, green, blue] = style.color;
+  let text = draw_value(value, multiline, width, height, size, style.align);
+
+  format!(
+    "/Tx BMC q 0 0 {width} {height} re W n \
+     BT /{FORM_FONT} {size} Tf {red} {green} {blue} rg {text} ET Q EMC"
+  )
+}
+
+/// Helvetica's advance widths for the printable ASCII range, in thousandths
+/// of an em, from the face's own metrics. A character outside that range is
+/// approximated at 500, which only moves where a line wraps or centers.
+const HELVETICA_WIDTHS: [u16; 95] = [
+  278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556,
+  556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667,
+  611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667,
+  667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500,
+  222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
+];
+
+/// The width the appearance's face draws this text at.
+fn text_width(text: &str, size: f32) -> f32 {
+  let thousandths: u32 = text
+    .chars()
+    .map(|character| match u32::from(character).checked_sub(32) {
+      Some(index) => u32::from(HELVETICA_WIDTHS.get(index as usize).copied().unwrap_or(500)),
+      None => 0,
+    })
+    .sum();
+
+  thousandths as f32 / 1000.0 * size
+}
+
+/// A `Tj` run per line of the value.
+fn draw_value(
+  value: &str,
+  multiline: bool,
+  width: f32,
+  height: f32,
+  size: f32,
+  align: i32,
+) -> String {
+  let usable = (width - 4.0).max(0.0);
+  let lines = match multiline {
+    false => vec![value.to_string()],
+    true => wrap(value, usable, size),
+  };
+  let mut content = String::new();
+  let top = height - size;
+
+  for (index, line) in lines.iter().enumerate() {
+    let x = match align {
+      1 => ((width - text_width(line, size)) / 2.0).max(2.0),
+      2 => (width - text_width(line, size) - 2.0).max(2.0),
+      _ => 2.0,
+    };
+    let y = match multiline {
+      true => top - index as f32 * size * 1.2,
+      false => (height - size) / 2.0 + size * 0.22,
+    };
+
+    content.push_str(&format!(
+      "1 0 0 1 {x} {y} Tm ({}) Tj ",
+      win_ansi_literal(line)
+    ));
+  }
+
+  content
+}
+
+/// Greedy word wrap at a drawn width, keeping the line breaks the value
+/// already has.
+fn wrap(value: &str, usable: f32, size: f32) -> Vec<String> {
+  value
+    .lines()
+    .flat_map(|line| wrap_line(line, usable, size))
+    .collect()
+}
+
+/// One source line wrapped at a drawn width; an empty one stays one empty
+/// line.
+fn wrap_line(value: &str, usable: f32, size: f32) -> Vec<String> {
+  let mut lines = Vec::new();
+  let mut line = String::new();
+
+  for word in value.split_whitespace() {
+    let candidate = match line.is_empty() {
+      true => word.to_string(),
+      false => format!("{line} {word}"),
+    };
+
+    if !line.is_empty() && text_width(&candidate, size) > usable {
+      lines.push(std::mem::take(&mut line));
+      line.push_str(word);
+    } else {
+      line = candidate;
+    }
+  }
+  if !line.is_empty() || lines.is_empty() {
+    lines.push(line);
+  }
+
+  lines
+}
+
+/// The value as a PDF literal string in WinAnsiEncoding, which is what the
+/// appearance's face reads. A character the encoding cannot hold is dropped,
+/// so no viewer draws a stray byte in its place.
+fn win_ansi_literal(value: &str) -> String {
+  let mut literal = String::with_capacity(value.len());
+
+  for character in value.chars() {
+    let Some(byte) = win_ansi_byte(character) else {
+      continue;
+    };
+
+    match byte {
+      b'(' | b')' | b'\\' => {
+        literal.push('\\');
+        literal.push(byte as char);
+      }
+      0x20..=0x7E => literal.push(byte as char),
+      _ => literal.push_str(&format!("\\{byte:03o}")),
+    }
+  }
+
+  literal
+}
+
+/// WinAnsiEncoding is Latin-1 with the C1 range replaced by the punctuation
+/// and symbols listed in PDF 32000 annex D.
+fn win_ansi_byte(character: char) -> Option<u8> {
+  const C1: [char; 27] = [
+    '\u{20AC}', '\u{201A}', '\u{0192}', '\u{201E}', '\u{2026}', '\u{2020}', '\u{2021}', '\u{02C6}',
+    '\u{2030}', '\u{0160}', '\u{2039}', '\u{0152}', '\u{017D}', '\u{2018}', '\u{2019}', '\u{201C}',
+    '\u{201D}', '\u{2022}', '\u{2013}', '\u{2014}', '\u{02DC}', '\u{2122}', '\u{0161}', '\u{203A}',
+    '\u{0153}', '\u{017E}', '\u{0178}',
+  ];
+  const C1_BYTES: [u8; 27] = [
+    0x80, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8A, 0x8B, 0x8C, 0x8E, 0x91, 0x92, 0x93,
+    0x94, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9A, 0x9B, 0x9C, 0x9E, 0x9F,
+  ];
+
+  match character {
+    ' '..='~' => Some(character as u8),
+    '\u{A0}'..='\u{FF}' => Some(character as u8),
+    _ => C1
+      .iter()
+      .position(|&mapped| mapped == character)
+      .map(|index| C1_BYTES[index]),
   }
 }

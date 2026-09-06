@@ -49,6 +49,7 @@ mod counters;
 pub use counters::counter_characters;
 mod emitter;
 mod filter;
+mod form;
 mod glyph;
 mod inline;
 mod interactive;
@@ -102,6 +103,7 @@ pub use crate::options::{
 };
 use crate::{
   emitter::DocumentState,
+  form::add_field_annotations,
   inline::{TextBox, build_inline_map},
   interactive::{Interactive, add_link_annotations},
   krilla::{
@@ -137,6 +139,7 @@ pub fn measure(options: MeasureOptions<'_>) -> Result<MeasuredSize, PdfError> {
     images: Rc::new(options.images),
     font_families: options.font_families,
     lang: options.lang,
+    form: false,
   };
   let tree = match (options.page, options.viewport) {
     (Some(page), _) => inputs.prepare_band(
@@ -170,9 +173,10 @@ pub fn render(mut options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
     images: Rc::new(options.images),
     font_families: options.font_families,
     lang: options.lang,
+    form: options.form,
   };
   let tagged = options.tagged != Tagging::Off || options.standard.requires_tagging();
-  let state = DocumentState::new(tagged, inputs.lang.as_ref().map(Lang::as_str));
+  let state = DocumentState::new(tagged, inputs.lang.as_ref().map(Lang::as_str), options.form);
   let structural = options.tagged.names_structure_destinations();
   let rendered = match options.page {
     Some(page) => {
@@ -220,6 +224,7 @@ pub fn render(mut options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
       rendered.root(),
       state.lang,
       &rendered.interactive().destination_targets(),
+      state.form,
     ));
   }
   if let Some(error) = state.into_error() {
@@ -235,6 +240,11 @@ fn open_document(
   options: &PdfOptions<'_>,
   attachments: Vec<Attachment>,
 ) -> Result<Document, PdfError> {
+  if options.form
+    && (options.standard.archival().is_some() || options.tagged.accessibility().is_some())
+  {
+    return Err(PdfError::UnsupportedFormStandard);
+  }
   let mut builder = ConfigurationBuilder::new();
   let mut validated = false;
 
@@ -384,6 +394,17 @@ impl SinglePage {
           .get(id)
           .map(|anchor| rendered.destination(anchor.top, &anchor.path))
       },
+    );
+    add_field_annotations(
+      &mut page,
+      &rendered.interactive.fields,
+      &rendered.interactive.labels,
+      Window {
+        y: Some((0.0, rendered.content.height)),
+        ..Window::default()
+      },
+      (0.0, 0.0),
+      state,
     );
     page.finish();
     Ok(rendered)

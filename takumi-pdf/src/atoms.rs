@@ -15,6 +15,7 @@ use takumi_core::{
 };
 
 use crate::{
+  form::is_form_control,
   inline::{InlineMap, build_inline_runs, inline_box_atoms, node_inline_items, text_line_atoms},
   options::PdfError,
   pagination::{Atom, Paragraph},
@@ -60,6 +61,9 @@ pub(crate) struct AtomCollector<'a> {
   pub(crate) contexts: &'a [StackingContextNode],
   pub(crate) results: &'a LayoutResults,
   pub(crate) inline: Option<&'a InlineMap<'a>>,
+  /// Whether a form control has to stay whole, which it does once it becomes
+  /// a widget annotation with one rectangle on one page.
+  pub(crate) form: bool,
 }
 
 impl AtomCollector<'_> {
@@ -129,7 +133,9 @@ impl AtomCollector<'_> {
     if style.break_after == BreakBetween::Page {
       atoms.forced.push(y + layout.size.height);
     }
-    if style.break_inside == BreakInside::Avoid {
+    let control = self.form && node.node.as_ref().is_some_and(is_form_control);
+
+    if style.break_inside == BreakInside::Avoid || control {
       atoms.extents.push((y, y + layout.size.height));
     }
 

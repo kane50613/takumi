@@ -13,6 +13,7 @@ use std::mem::take;
 use crate::{
   bands::{RepeatBounds, Repeatable, RepeatablePage},
   emitter::DocumentState,
+  form::add_field_annotations,
   inline::{InlineMap, TextBox, build_inline_map},
   interactive::add_link_annotations,
   krilla::{
@@ -313,6 +314,17 @@ impl PageComposer<'_, '_> {
       (frame.margin.left, frame.margin.top + slice.reserved),
       self.state.tags.as_ref(),
       anchor,
+    );
+    add_field_annotations(
+      &mut pdf_page,
+      &paginated.interactive.fields,
+      &paginated.interactive.labels,
+      Window {
+        y: Some((slice.start, slice.start + slice.paint_height)),
+        ..Window::default()
+      },
+      (frame.margin.left, frame.margin.top + slice.reserved),
+      self.state,
     );
     // A repeated box sits at the same place on every page, so its links are
     // added per page against the page area rather than the content window.

@@ -5,6 +5,7 @@ use xmp_writer::{RenditionClass, XmpWriter};
 
 use crate::krilla::configure::{PdfVersion, ValidationError};
 use crate::krilla::error::KrillaResult;
+use crate::krilla::interactive::annotation::FORM_FONT;
 use crate::krilla::interchange::metadata::{Metadata, write_custom_properties};
 use crate::krilla::metadata::PageLayout;
 use crate::krilla::object_stream::{self, ObjectStream};
@@ -20,6 +21,154 @@ pub(crate) struct ChunkContainer {
   pub(crate) mixed: MixedChunks,
   pub(crate) metadata: Option<Metadata>,
   pub(crate) non_stream: NonStreamChunks,
+  /// The root fields of the AcroForm.
+  form_fields: Vec<Ref>,
+  /// The base-14 face the field appearances and `/DR` share.
+  form_font: Option<Ref>,
+  /// The non-terminal fields dotted names put above their own.
+  form_parents: Vec<ParentField>,
+}
+
+/// A non-terminal field named by one segment of a dotted HTML name.
+struct ParentField {
+  /// The dotted name down to this field.
+  qualified: String,
+  field: Ref,
+  partial: String,
+  parent: Option<Ref>,
+  kids: Vec<Ref>,
+}
+
+/// Where a field sits in the `/T` hierarchy.
+pub(crate) struct FieldSlot {
+  /// The non-terminal field above it, absent at the root.
+  pub(crate) parent: Option<Ref>,
+  /// `/T`, the last segment of the name.
+  pub(crate) partial: String,
+  /// `/TM`, the HTML name when the segments do not spell it back.
+  pub(crate) mapping: Option<String>,
+}
+
+impl ChunkContainer {
+  /// The place of the field named `name`, with `kid` hung there. A period
+  /// delimits the PDF field hierarchy, so `a.b` is the field `b` under a
+  /// non-terminal `a`, created on first use.
+  pub(crate) fn field_slot(
+    &mut self,
+    sc: &mut SerializeContext,
+    name: &str,
+    kid: Ref,
+  ) -> FieldSlot {
+    let mut segments = name
+      .split('.')
+      .filter(|segment| !segment.is_empty())
+      .collect::<Vec<_>>();
+
+    if segments.is_empty() {
+      segments.push(name);
+    }
+    let (partial, parents) = match segments.split_last() {
+      Some((partial, parents)) => (*partial, parents),
+      None => (name, &[][..]),
+    };
+    let mut parent = None;
+    let mut qualified = String::new();
+
+    for segment in parents {
+      if !qualified.is_empty() {
+        qualified.push('.');
+      }
+      qualified.push_str(segment);
+      parent = Some(self.parent_field(sc, &qualified, segment, parent));
+    }
+    self.hang(parent, kid);
+
+    FieldSlot {
+      parent,
+      partial: partial.to_string(),
+      mapping: (segments.join(".") != name).then(|| name.to_string()),
+    }
+  }
+
+  fn parent_field(
+    &mut self,
+    sc: &mut SerializeContext,
+    qualified: &str,
+    partial: &str,
+    parent: Option<Ref>,
+  ) -> Ref {
+    if let Some(existing) = self
+      .form_parents
+      .iter()
+      .find(|field| field.qualified == qualified)
+    {
+      return existing.field;
+    }
+    let field = sc.new_ref();
+
+    self.hang(parent, field);
+    self.form_parents.push(ParentField {
+      qualified: qualified.to_string(),
+      field,
+      partial: partial.to_string(),
+      parent,
+      kids: vec![],
+    });
+    field
+  }
+
+  /// Adds `kid` under `parent`, or among the form's root fields.
+  fn hang(&mut self, parent: Option<Ref>, kid: Ref) {
+    match parent.and_then(|parent| {
+      self
+        .form_parents
+        .iter_mut()
+        .find(|field| field.field == parent)
+    }) {
+      Some(parent) => parent.kids.push(kid),
+      None => self.form_fields.push(kid),
+    }
+  }
+
+  fn write_parent_fields(&mut self) {
+    let chunk = &mut self.non_stream.annotations;
+
+    for parent in &self.form_parents {
+      let mut field = chunk.indirect(parent.field).dict();
+
+      field.pair(Name(b"T"), TextStr(&parent.partial));
+
+      if let Some(above) = parent.parent {
+        field.pair(Name(b"Parent"), above);
+      }
+      field
+        .insert(Name(b"Kids"))
+        .array()
+        .items(parent.kids.iter().copied());
+      field.finish();
+    }
+  }
+
+  /// The face the field appearances draw with, written on first use. A viewer
+  /// redrawing an edited field reads it from `/DR` by the name `/DA` gives.
+  pub(crate) fn form_font(&mut self, sc: &mut SerializeContext) -> Ref {
+    match self.form_font {
+      Some(font) => font,
+      None => {
+        let font = sc.new_ref();
+
+        self
+          .non_stream
+          .annotations
+          .type1_font(font)
+          .base_font(Name(b"Helvetica"))
+          .encoding_predefined(Name(b"WinAnsiEncoding"))
+          .finish();
+        self.form_font = Some(font);
+        font
+      }
+    }
+  }
 }
 
 pub(crate) struct StreamChunks {
@@ -95,6 +244,9 @@ impl ChunkContainer {
         pages: sc.new_chunk(),
         embedded_files: sc.new_chunk(),
       },
+      form_fields: vec![],
+      form_font: None,
+      form_parents: vec![],
     }
   }
 
@@ -102,6 +254,8 @@ impl ChunkContainer {
     mut self,
     sc: &mut SerializeContext,
   ) -> KrillaResult<(Pdf, Ref, Option<ObjectStream>)> {
+    self.write_parent_fields();
+
     let mut remapped_ref = Ref::new(1);
     let mut remapper = HashMap::new();
 
@@ -254,8 +408,21 @@ impl ChunkContainer {
       };
 
       let catalog_ref = remapped_ref.bump();
+      let form_font = self.form_font.map(|font| remapper[&font]);
 
       let mut catalog = pdf.catalog(catalog_ref);
+
+      if let Some(font) = form_font {
+        let mut form = catalog.form();
+
+        form.fields(self.form_fields.iter().map(|field| remapper[field]));
+        form.default_appearance(Str(format!("/{FORM_FONT} 0 Tf 0 g").as_bytes()));
+        form
+          .default_resources()
+          .fonts()
+          .pair(Name(FORM_FONT.as_bytes()), font);
+        form.finish();
+      }
 
       if let Some(pt) = &self.non_stream.page_tree {
         catalog.pages(remapper[&pt.0]);
