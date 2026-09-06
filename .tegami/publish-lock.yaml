@@ -1,98 +1,86 @@
 core:changelogs:
-  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n### Retry transient font and image requests\n\nRetry temporary GET and HEAD failures within the existing timeout, including Google Fonts metadata and font file downloads.\n"
-    filename: font-fetch-retries.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n### Keep Google Fonts cache entries within caller limits\n\nBound the default `googleFonts` CSS cache, isolate custom fetch implementations, and honor request policies on repeated calls.\n"
-    filename: font-css-cache.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n### Accept custom properties in node styles\n\nUse `Declarations` consistently for node styles, presets, and style helpers so custom properties typecheck without casts.\n"
-    filename: style-declarations.md
-    v: 0.0.0
-  - content: "---\npackages:\n  \"@takumi-rs/helpers\":\n    type: patch\n---\n\n### Honor request policies across redirects and cache hits\n\nStrip sensitive headers on cross-origin redirects, apply redirect method and body rules, and honor image cache readers' cancellation and timeout without aborting shared downloads.\n"
-    filename: resource-request-policies.md
+  - content: "---\npackages:\n  \"@takumi-rs/core\":\n    type: patch\n---\n\n### Export the CssInput type from @takumi-rs/core\n\nThe `css` option referenced `CssInput` without importing it, so type checking failed on the declaration file when `skipLibCheck` was off.\n"
+    filename: core-css-input-type.md
     v: 0.0.0
 core:packages:
   - id: npm:takumi
     updated: false
-  - id: npm:takumi-js
+  - id: npm:@takumi-rs/helpers
     updated: true
-  - id: npm:takumi-pdf
+  - changelogIds:
+      - core-css-input-type.md
+    id: npm:@takumi-rs/core
+    updated: true
+  - id: npm:takumi-js
     updated: true
   - id: npm:docs
     updated: false
-  - id: npm:@takumi-rs/core
-    updated: true
-  - changelogIds:
-      - font-fetch-retries.md
-      - font-css-cache.md
-      - style-declarations.md
-      - resource-request-policies.md
-    id: npm:@takumi-rs/helpers
-    updated: true
   - id: npm:@takumi-rs/wasm
     updated: true
   - id: npm:@takumi-rs/image-response
     updated: true
-  - id: npm:example-tanstack-start
-    updated: false
+  - id: npm:takumi-pdf
+    updated: true
   - id: npm:example-satori-html
+    updated: false
+  - id: npm:example-liquid-glass
+    updated: false
+  - id: npm:example-e-invoice
+    updated: false
+  - id: npm:example-css-library-integration
+    updated: false
+  - id: npm:svelte
     updated: false
   - id: npm:pdf-bench
     updated: false
-  - id: npm:ffplay
-    updated: false
   - id: npm:ffmpeg-keyframe-animation
+    updated: false
+  - id: npm:example-tanstack-start
     updated: false
   - id: npm:example-generate-invoice
     updated: false
   - id: npm:example-twitter-images
     updated: false
-  - id: npm:example-e-invoice
-    updated: false
-  - id: npm:svelte
-    updated: false
-  - id: npm:example-liquid-glass
-    updated: false
-  - id: npm:example-css-library-integration
-    updated: false
-  - id: npm:example-cloudflare-workers
+  - id: npm:waku-ssr
     updated: false
   - id: npm:example-nextjs
     updated: false
-  - id: npm:waku-ssr
+  - id: npm:ffplay
     updated: false
-  - id: cargo:takumi-svg
-    updated: false
-  - id: cargo:takumi-pdf
-    updated: true
-  - id: cargo:takumi-html
-    updated: false
-  - id: cargo:takumi-raster
+  - id: npm:example-cloudflare-workers
     updated: false
   - id: cargo:takumi
     updated: true
   - id: cargo:takumi-core
     updated: false
+  - id: cargo:takumi-svg
+    updated: false
+  - id: cargo:takumi-pdf
+    updated: true
+  - id: cargo:takumi-raster
+    updated: false
+  - id: cargo:takumi-html
+    updated: false
 npm:packages:
   - id: npm:takumi
-  - id: npm:takumi-js
-  - id: npm:takumi-pdf
-  - id: npm:docs
-  - id: npm:@takumi-rs/core
   - id: npm:@takumi-rs/helpers
+  - id: npm:@takumi-rs/core
+  - id: npm:takumi-js
+  - id: npm:docs
   - id: npm:@takumi-rs/wasm
   - id: npm:@takumi-rs/image-response
-  - id: npm:example-tanstack-start
+  - id: npm:takumi-pdf
   - id: npm:example-satori-html
+  - id: npm:example-liquid-glass
+  - id: npm:example-e-invoice
+  - id: npm:example-css-library-integration
+  - id: npm:svelte
   - id: npm:pdf-bench
-  - id: npm:ffplay
   - id: npm:ffmpeg-keyframe-animation
+  - id: npm:example-tanstack-start
   - id: npm:example-generate-invoice
   - id: npm:example-twitter-images
-  - id: npm:example-e-invoice
-  - id: npm:svelte
-  - id: npm:example-liquid-glass
-  - id: npm:example-css-library-integration
-  - id: npm:example-cloudflare-workers
-  - id: npm:example-nextjs
   - id: npm:waku-ssr
+  - id: npm:example-nextjs
+  - id: npm:ffplay
+  - id: npm:example-cloudflare-workers
