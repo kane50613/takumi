@@ -20,6 +20,14 @@ use crate::{
   window::Window,
 };
 
+/// A field name one of the drawn pages emitted.
+pub(crate) struct EmittedField {
+  pub(crate) name: String,
+  /// Whether this field may share its name with another.
+  pub(crate) shares_name: bool,
+  pub(crate) disabled: bool,
+}
+
 /// A form control box in content coordinates.
 pub(crate) struct FieldTarget {
   /// The HTML `name`, which the field exports under.
@@ -35,6 +43,8 @@ pub(crate) struct FieldTarget {
 /// The control an element asks for, before its value is read.
 enum ControlKind {
   Text { multiline: bool, password: bool },
+  CheckBox,
+  Radio,
 }
 
 impl ControlKind {
@@ -53,11 +63,16 @@ impl ControlKind {
       return None;
     }
     let kind = source.attribute("type").unwrap_or("text");
+
+    if kind.eq_ignore_ascii_case("checkbox") {
+      return Some(Self::CheckBox);
+    }
+    if kind.eq_ignore_ascii_case("radio") {
+      return Some(Self::Radio);
+    }
     // A button carries an action and `file` a local path, neither of which a
     // document can bind; `hidden` has no box for a widget to cover.
-    const UNSUPPORTED: [&str; 8] = [
-      "hidden", "submit", "reset", "button", "image", "file", "checkbox", "radio",
-    ];
+    const UNSUPPORTED: [&str; 6] = ["hidden", "submit", "reset", "button", "image", "file"];
 
     (!UNSUPPORTED
       .iter()
@@ -82,26 +97,50 @@ enum FieldKind {
     password: bool,
     max_len: Option<i32>,
   },
+  CheckBox {
+    on: bool,
+    export: String,
+  },
+  Radio {
+    on: bool,
+    export: String,
+  },
 }
 
 impl FieldKind {
   fn of(source: &Node, node: &RenderNode) -> Option<Self> {
-    let ControlKind::Text {
-      multiline,
-      password,
-    } = ControlKind::of(source)?;
-    // A `<textarea>` holds its initial value as its text, not as an attribute.
-    let value = match multiline {
-      true => raw_text(node),
-      false => source.attribute("value").unwrap_or_default().to_string(),
-    };
+    let on = source.attribute("checked").is_some();
 
-    Some(Self::Text {
-      value,
-      multiline,
-      password,
-      max_len: max_len(source),
+    Some(match ControlKind::of(source)? {
+      ControlKind::CheckBox => Self::CheckBox {
+        on,
+        export: export_value(source),
+      },
+      ControlKind::Radio => Self::Radio {
+        on,
+        export: export_value(source),
+      },
+      ControlKind::Text {
+        multiline,
+        password,
+      } => Self::Text {
+        // A `<textarea>` holds its initial value as its text, not as an
+        // attribute.
+        value: match multiline {
+          true => raw_text(node),
+          false => source.attribute("value").unwrap_or_default().to_string(),
+        },
+        multiline,
+        password,
+        max_len: max_len(source),
+      },
     })
+  }
+
+  /// Whether this control may share its name, which only the buttons of one
+  /// radio group do.
+  fn shares_name(&self) -> bool {
+    matches!(self, Self::Radio { .. })
   }
 
   fn to_form_field(&self) -> FormField {
@@ -117,8 +156,22 @@ impl FieldKind {
         password: *password,
         max_len: *max_len,
       },
+      Self::CheckBox { on, export } => FormField::CheckBox {
+        on: *on,
+        export: export.clone(),
+      },
+      Self::Radio { on, export } => FormField::Radio {
+        on: *on,
+        export: export.clone(),
+      },
     }
   }
+}
+
+/// What a button submits. HTML sends `on` only when the control carries no
+/// `value` at all, so an empty one stays empty.
+fn export_value(source: &Node) -> String {
+  source.attribute("value").unwrap_or("on").to_string()
 }
 
 /// `/MaxLen` is a positive integer, and HTML ignores a negative `maxlength`
@@ -321,7 +374,11 @@ pub(crate) fn add_field_annotations(
     ) else {
       continue;
     };
-    state.field_names.borrow_mut().push(field.name.clone());
+    state.field_names.borrow_mut().push(EmittedField {
+      name: field.name.clone(),
+      shares_name: field.field.shares_name(),
+      disabled: field.style.disabled,
+    });
 
     let annotation = match field.annotation(rect, labels, state.lang) {
       Ok(annotation) => annotation,

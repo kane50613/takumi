@@ -250,7 +250,7 @@ The PDF/A-3 levels require `mimeType`, `description`, and a modification date on
 
 ## Fillable fields
 
-Set `form: true` to make named text inputs and textareas editable in a PDF reader.
+Set `form: true` to make named inputs and textareas editable in a PDF reader.
 
 ```tsx
 const pdf = await render(
@@ -261,6 +261,8 @@ const pdf = await render(
       Notes
       <textarea name="notes" maxLength={200} />
     </label>
+
+    <input type="checkbox" name="subscribe" defaultChecked />
   </form>,
   { form: true },
 );
@@ -276,9 +278,11 @@ const pdf = await render(
 | `aria-labelledby`, `aria-label`, `<label>`, `title`, `placeholder` | Accessible name, in priority order                          |
 | `color`, `font-size`, `text-align`                                 | Text appearance                                             |
 
+For checkboxes and radio buttons, `value` is the export value. `checked` selects the initial and reset state. Radio buttons with the same `name` form one group. A group must have all its buttons enabled or all disabled; PDF applies these flags to the whole field.
+
 CSS controls the field's border and background. Its widget draws the value. A control taller than one page is clipped on the page where it starts.
 
-Names must be unique. Periods create a PDF field hierarchy: `user.name` places `name` under `user`. Empty segments such as `user..name` are rejected.
+Only radio buttons in the same group may share a name. Periods create a PDF field hierarchy: `user.name` places `name` under `user`. Empty segments such as `user..name` are rejected.
 
 Submit, reset, button, image, file, and hidden inputs do not become editable fields. Leaving `form` unset keeps the output static.
 
