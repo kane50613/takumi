@@ -1,0 +1,65 @@
+---
+title: Fillable forms
+description: Create editable PDF fields from HTML and JSX form controls
+icon: TextCursorInput
+---
+
+Set `form: true` to make inputs, textareas, and selects editable in a PDF reader.
+
+```tsx twoslash
+import { render } from "takumi-pdf";
+
+const pdf = await render(
+  <form>
+    <label htmlFor="name">Full name</label>
+    <input id="name" name="name" defaultValue="Kane" required />
+
+    <label>
+      <input type="checkbox" name="subscribe" defaultChecked />
+      Subscribe
+    </label>
+
+    <select name="plan" defaultValue="A" aria-label="Plan">
+      <option value="M">Monthly</option>
+      <option value="A">Annual</option>
+    </select>
+  </form>,
+  { form: true },
+);
+```
+
+Leaving `form` unset keeps the output static. Submit, reset, button, image, file, and hidden inputs do not become editable fields.
+
+## Values and selection
+
+Text fields start with their `value`; textareas use their text content. In JSX, use `defaultValue` for either control. A password field masks its appearance, but its value remains in the PDF. Masking does not protect a secret.
+
+For checkboxes and radio buttons, `value` is the export value. It defaults to `on` when the attribute is absent. `checked` sets the initial and reset selection; use `defaultChecked` in JSX. Radio buttons with the same `name` form one group.
+
+A select uses each option's `value` for export and its non-empty `label` for display. Without `value`, it exports the option text with HTML whitespace collapsed. Without `label`, that same text is displayed. A label never replaces the export value.
+
+In HTML, `selected` chooses the initial option. A single select keeps the last selected option. A closed drop-down with no selection uses the first enabled option. In JSX, set the select's `defaultValue` or `value` to the option's export value.
+
+`multiple` or a parsed `size` greater than one creates a list box. Only `multiple` allows several selected values. List boxes highlight the selected rows in their initial appearance. The `size` attribute follows HTML integer parsing: `+2` and `2px` both parse as `2`.
+
+## Names and labels
+
+A field uses `name`, with `id` as a fallback. Controls without either do not produce a field. Only radio buttons in one group may share a name.
+
+Periods create a PDF field hierarchy: `user.email` places `email` under `user`. Empty segments such as `user..email` are rejected. A field cannot also be a parent, so `user` and `user.email` cannot coexist. These checks apply to fields on retained pages; `pageRanges` removes fields with their pages.
+
+Accessible names come from `aria-labelledby`, `aria-label`, an associated `<label>`, `title`, or `placeholder`, in that order. Use `htmlFor` to associate a label in JSX.
+
+## Appearance and field flags
+
+CSS draws the control's border and background. The PDF widget draws its text or selection marker. `color`, `font-size`, and `text-align` control the text appearance.
+
+`required`, `readonly`, and `disabled` set PDF field flags. A disabled field is read-only and excluded from export. A radio group must have all its buttons enabled or all disabled, because PDF applies these flags to the whole field. Mixing enabled and disabled buttons rejects the render.
+
+`maxlength` limits text entry. A control taller than a page is clipped on the page where it starts.
+
+## Current limits
+
+Form text uses Helvetica with WinAnsiEncoding. Text values and option labels outside this encoding reject the render, including labels of unselected options. Custom form fonts are not supported. Export values are stored separately and may contain Unicode.
+
+`form: true` cannot be combined with `pdfa` or validated PDF/UA output. These combinations reject the render because the form font is not embedded. Ordinary tagged output remains available.
