@@ -3,9 +3,7 @@
     <img src="./example/twitter-images/output/readme-banner.webp" alt="Takumi — images and PDFs from JSX and CSS, no browser. Rendered by Takumi from the JSX shown in the banner." />
   </a>
 
-**Generate Open Graph images and PDF documents from JSX, HTML, and CSS. No headless browser required.**
-
-Takumi renders images in Node.js, Cloudflare Workers, browsers, and Rust applications. The PDF package runs in Node.js, Bun, and Cloudflare Workers.
+**Generate OG images and PDF documents from JSX, HTML, and CSS. No headless browser required.**
 
 [![npm version](https://img.shields.io/npm/v/takumi-js?label=takumi-js)](https://www.npmjs.com/package/takumi-js)
 [![npm version](https://img.shields.io/npm/v/takumi-pdf?label=takumi-pdf)](https://www.npmjs.com/package/takumi-pdf)
@@ -120,8 +118,6 @@ Takumi is a Rust rendering engine for markup and CSS. It handles layout, text sh
 ## Fonts and Output Formats
 
 ### Fonts
-
-Only a last-resort Latin font ships built in. Load the rest through `fonts`: a URL, raw bytes, or `googleFonts`. A weight range or an `axes` entry loads the variable font, so `font-variation-settings` drives its axes:
 
 ```tsx
 import { render } from "takumi-js";
