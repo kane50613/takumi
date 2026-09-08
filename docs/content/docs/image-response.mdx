@@ -6,11 +6,11 @@ icon: Send
 
 `ImageResponse` extends the web `Response`, so any runtime with `Request` and `Response` returns it from a route handler. The API matches `next/og`.
 
-```tsx
+```tsx twoslash title="app/og/route.tsx"
 import { ImageResponse } from "takumi-js/response";
 
 export function GET() {
-  return new ImageResponse(<OgImage />, { width: 1200, height: 630 });
+  return new ImageResponse(<div>Hello Takumi</div>, { width: 1200, height: 630 });
 }
 ```
 
@@ -65,48 +65,72 @@ export function GET() {
 
 ## Custom headers
 
-`content-type` defaults to the chosen `format`. Set cache headers or override anything via `headers`.
+`content-type` defaults to the chosen `format`. This handler lets browsers and shared caches reuse the image for one hour. Adjust `Cache-Control` to match how often the content changes.
 
-```tsx
-new ImageResponse(<OgImage />, {
-  format: "webp",
-  headers: {
-    "Cache-Control": "public, immutable, max-age=31536000",
-  },
-});
+```tsx twoslash title="Cache an image response"
+import { ImageResponse } from "takumi-js/response";
+
+export function GET() {
+  return new ImageResponse(<div>Hello Takumi</div>, {
+    width: 1200,
+    height: 630,
+    format: "webp",
+    // [!code highlight:3]
+    headers: {
+      "Cache-Control": "public, max-age=3600",
+    },
+  });
+}
 ```
 
 ## Error handling
 
 `ImageResponse` exposes a `ready` promise: it resolves when the render succeeds and rejects when it fails. Await it to serve a fallback.
 
-```tsx
-const response = new ImageResponse(<OgImage />);
+```tsx twoslash title="Return a fallback response"
+import { ImageResponse } from "takumi-js/response";
 
-try {
-  await response.ready;
-  return response;
-} catch {
-  return new Response("Failed to generate image", { status: 500 });
+export async function GET() {
+  const response = new ImageResponse(<div>Hello Takumi</div>, { width: 1200, height: 630 });
+
+  try {
+    await response.ready; // [!code highlight]
+    return response;
+  } catch {
+    return new Response("Failed to generate image", { status: 500 });
+  }
 }
 ```
 
 `onError` is a notification hook for side effects like logging. Its return value is ignored and the response stream still errors, so it cannot substitute a fallback image; use `ready` for that.
 
-```tsx
-new ImageResponse(<OgImage />, {
-  onError: (error) => console.error(error),
-});
+```tsx twoslash title="Log a render failure"
+import { ImageResponse } from "takumi-js/response";
+
+export function GET() {
+  return new ImageResponse(<div>Hello Takumi</div>, {
+    width: 1200,
+    height: 630,
+    onError: (error) => console.error(error), // [!code highlight]
+  });
+}
 ```
 
 ## Bring your own renderer
 
 Pass a `renderer` to reuse a configured instance across responses. A reused renderer decodes each font and image once.
 
-```tsx
+```tsx twoslash title="Reuse a native renderer"
 import { Renderer } from "@takumi-rs/core";
+import { ImageResponse } from "takumi-js/response";
 
-const renderer = new Renderer();
+const renderer = new Renderer(); // [!code highlight]
 
-new ImageResponse(<OgImage />, { renderer });
+export function GET() {
+  return new ImageResponse(<div>Hello Takumi</div>, {
+    width: 1200,
+    height: 630,
+    renderer, // [!code highlight]
+  });
+}
 ```

@@ -7,13 +7,15 @@ icon: BookOpen
 
 `takumi-pdf` renders JSX, HTML, and node trees to PDF. Use CSS and Tailwind to lay out the document, then save the returned bytes or send them in an HTTP response. The WebAssembly renderer runs without a browser process.
 
-```npm
-npm i takumi-pdf @takumi-rs/helpers react
+```npm title="Install takumi-pdf"
+npm i takumi-pdf @takumi-rs/helpers
 ```
 
 ## Render a document
 
-```tsx twoslash
+Save this as `invoice.tsx` and run `bun invoice.tsx` to write `invoice.pdf`. For Node.js, compile the JSX before running the file.
+
+```tsx twoslash title="invoice.tsx"
 import { render } from "takumi-pdf";
 import { PageNumber, TotalPages } from "takumi-pdf/primitives";
 import { googleFonts } from "@takumi-rs/helpers";
@@ -43,7 +45,7 @@ await writeFile("invoice.pdf", pdf);
 
 HTML strings use the same parser as `takumi-js`. A `<style>` tag in the string applies only to that render:
 
-```ts twoslash
+```ts twoslash title="Render HTML"
 import { render } from "takumi-pdf";
 
 // [!code highlight:4]
@@ -57,7 +59,7 @@ Headers, footers, and `measure()` accept the same inputs.
 
 ## Page setup
 
-```tsx twoslash
+```tsx twoslash title="Set page geometry"
 import type { ReactNode } from "react";
 declare const report: ReactNode;
 // ---cut---
@@ -101,7 +103,7 @@ A viewer draws white by default, and the file stays free of a full-page rectangl
 
 `render()` reuses a shared renderer. Create a `PdfRenderer` when you need a separate font registry:
 
-```tsx twoslash
+```tsx twoslash title="Reuse a font registry"
 import type { ReactNode } from "react";
 declare const doc: ReactNode;
 // ---cut---
@@ -124,7 +126,7 @@ Use the default import on Node.js, Bun, and Cloudflare Workers. For manual initi
 
 Import `takumi-pdf/next` in a Next.js route handler. This entry supports the Node and Edge runtimes without a `serverExternalPackages` entry.
 
-```ts
+```ts title="app/api/pdf/route.ts"
 import { render } from "takumi-pdf/next";
 ```
 
@@ -132,7 +134,7 @@ import { render } from "takumi-pdf/next";
 
 For browser bundles, initialize the renderer with `takumi-pdf/no-init` and `takumi-pdf/wasm-url`:
 
-```ts
+```ts title="Initialize in the browser"
 import init, { render } from "takumi-pdf/no-init";
 import wasmUrl from "takumi-pdf/wasm-url";
 

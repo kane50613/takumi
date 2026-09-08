@@ -10,7 +10,7 @@ Takumi does not navigate a page or execute its scripts. Generate dynamic content
 
 ## Before and after
 
-```ts
+```ts title="Before: Puppeteer"
 // Puppeteer
 const browser = await puppeteer.launch();
 const page = await browser.newPage();
@@ -29,7 +29,7 @@ const pdf = await page.pdf({
 await browser.close();
 ```
 
-```tsx twoslash
+```tsx twoslash title="After: takumi-pdf"
 declare const html: string;
 // ---cut---
 // takumi-pdf
@@ -79,7 +79,7 @@ Margins take numbers in CSS px. Chromium's `"0.5in"` strings have no equivalent;
 
 Use `prepareImages()` to fetch document images before rendering. Parse the HTML first so the helper can inspect its image references:
 
-```tsx twoslash
+```tsx twoslash title="Pass fetched image bytes"
 declare const html: string;
 // ---cut---
 import { prepareImages } from "@takumi-rs/helpers";

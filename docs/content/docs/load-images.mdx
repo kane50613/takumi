@@ -6,7 +6,7 @@ icon: Image
 
 ## External images
 
-```tsx twoslash
+```tsx twoslash title="Share downloaded image bytes"
 import { render } from "takumi-js";
 
 const element = <img src="https://example.com/image.png" />;
@@ -15,7 +15,7 @@ const fetchCache = new Map<string, Promise<ArrayBuffer>>();
 
 const image = await render(element, {
   images: {
-    fetchCache,
+    fetchCache, // [!code highlight]
   },
 });
 ```
@@ -26,13 +26,14 @@ A plain `Map` never evicts. If each render uses a different URL, pass a bounded 
 
 ## Fetch limits
 
-```tsx twoslash
+```tsx twoslash title="Limit image fetches"
 import { render } from "takumi-js";
 
 const element = <img src="https://example.com/image.png" />;
 
 const image = await render(element, {
   images: {
+    // [!code highlight:3]
     timeout: 3000,
     maxBytes: 4 * 1024 * 1024,
     allowUrl: (url) => new URL(url).hostname === "example.com",
@@ -60,20 +61,20 @@ Caller cancellation and an expired deadline stop retries. Other HTTP errors and 
 
 Provide images by key so the renderer doesn't have to fetch them itself. Each key can be used in any `src` field or in the `background-image` / `mask-image` CSS properties.
 
-```tsx twoslash
+```tsx twoslash title="Load named image sources"
 import { ImageResponse } from "takumi-js/response";
 
-export function GET() {
+export function GET(request: Request) {
   return new ImageResponse(<OgImage />, {
     // [!code ++:10]
     images: [
       {
         src: "my-logo",
-        data: () => fetch("/logo.png").then((res) => res.arrayBuffer()),
+        data: () => fetch(new URL("/logo.png", request.url)).then((res) => res.arrayBuffer()),
       },
       {
         src: "background",
-        data: () => fetch("/background.png").then((res) => res.arrayBuffer()),
+        data: () => fetch(new URL("/background.png", request.url)).then((res) => res.arrayBuffer()),
       },
     ],
   });
@@ -94,13 +95,19 @@ function OgImage() {
 
 ## Raw pixels
 
+This example fills a 64 × 64 image with opaque blue pixels.
+
 For pixels you compute yourself (charts, generative art), pass raw RGBA instead of encoding a PNG first; nothing is decoded. The `Bitmap` helper renders a row-major `width * height * 4` byte buffer as an `<img>`:
 
-```tsx twoslash
+```tsx twoslash title="Render raw RGBA pixels"
 import { render } from "takumi-js";
 import { Bitmap } from "takumi-js/helpers/jsx";
 
 const pixels = new Uint8Array(64 * 64 * 4);
+
+for (let offset = 0; offset < pixels.length; offset += 4) {
+  pixels.set([59, 130, 246, 255], offset);
+}
 
 const image = await render(<Bitmap width={64} height={64} data={pixels} />, {
   width: 64,
@@ -123,7 +130,9 @@ The decode cache lives in the renderer and is bounded: entries weigh in at their
 
 Set the budget when constructing the renderer; `0` disables caching:
 
-```ts
+```ts twoslash title="Set the decode cache budget"
+import { Renderer } from "takumi-js/node";
+
 const renderer = new Renderer({ cacheMaxBytes: 64 * 1024 * 1024 });
 ```
 
@@ -132,15 +141,15 @@ The per-image `cache` mode takes two values:
 - `auto` (default): cache the decoded image within the byte budget.
 - `none`: read the cache but never populate it. Use it for a one-off image you won't render again, so it can't displace images worth keeping.
 
-```tsx twoslash
+```tsx twoslash title="Skip caching one image"
 import { ImageResponse } from "takumi-js/response";
 
-export function GET() {
-  return new ImageResponse(<div />, {
+export function GET(request: Request) {
+  return new ImageResponse(<img src="banner" />, {
     images: [
       {
         src: "banner",
-        data: () => fetch("/banner.png").then((res) => res.arrayBuffer()),
+        data: () => fetch(new URL("/banner.png", request.url)).then((res) => res.arrayBuffer()),
         cache: "none", // [!code ++]
       },
     ],
@@ -150,14 +159,19 @@ export function GET() {
 
 To set the mode for every image in a render, including ones Takumi fetches itself, pass `images` as a group instead of an array. A per-source `cache` still wins. For a route where each request renders a different image, `cache: "none"` keeps one-off decodes out of the cache:
 
-```tsx twoslash
+```tsx twoslash title="Skip caching all images"
 import { ImageResponse } from "takumi-js/response";
 
-export function GET() {
+export function GET(request: Request) {
   return new ImageResponse(<OgImage />, {
     images: {
       cache: "none", // [!code ++]
-      sources: [{ src: "logo", data: () => fetch("/logo.png").then((res) => res.arrayBuffer()) }],
+      sources: [
+        {
+          src: "logo",
+          data: () => fetch(new URL("/logo.png", request.url)).then((res) => res.arrayBuffer()),
+        },
+      ],
     },
   });
 }
@@ -182,7 +196,7 @@ Takumi rejects oversized images at decode time. The limits guard server renders 
 
 `ImageResponse` accepts a satori-compatible `emoji` option. The providers are `twemoji`, `blobmoji`, `noto`, `openmoji`, `fluent`, and `fluentFlat`.
 
-```tsx twoslash
+```tsx twoslash title="Fetch emoji images"
 import { ImageResponse } from "takumi-js/response";
 
 export function GET() {
@@ -198,7 +212,7 @@ export function GET() {
 
 `ImageResponse` calls the `extractEmojis` helper for you. The helper splits emoji from text into image nodes pointing at a CDN. Run the steps yourself to fetch emoji bytes alongside other images.
 
-```tsx twoslash
+```tsx twoslash title="Extract emoji before rendering"
 import { extractEmojis } from "takumi-js/helpers/emoji";
 import { fromJsx } from "takumi-js/helpers/jsx";
 import { prepareImages } from "takumi-js/helpers";

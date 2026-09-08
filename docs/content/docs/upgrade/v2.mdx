@@ -9,7 +9,7 @@ v2 makes fonts and images explicit per-render resources and changes several CSS 
 
 Update the packages your project imports. For the high-level JavaScript API:
 
-```npm
+```npm title="Terminal"
 npm install takumi-js
 ```
 
@@ -21,7 +21,7 @@ If you use `@takumi-rs/core` or `@takumi-rs/wasm` directly, update those package
 
 The top-level `takumi-js` functions `render`, `renderSvg`, and `renderAnimation` await font and image loading before they render, so callers must `await` them. The [napi](https://www.npmjs.com/package/@takumi-rs/core) and [WebAssembly](https://www.npmjs.com/package/@takumi-rs/wasm) `Renderer` methods are async too.
 
-```ts
+```ts title="Top-level functions are async"
 const image = render(node, options); // [!code --]
 const image = await render(node, options); // [!code ++]
 ```
@@ -32,7 +32,7 @@ const image = await render(node, options); // [!code ++]
 
 `new Renderer(...)` no longer accepts fonts or a context. Construct it bare and pass the fonts a render needs through that render's `fonts` option. The embedded default fonts are decoded once and shared across every renderer.
 
-```ts
+```ts title="The Renderer constructor takes no arguments"
 const renderer = new Renderer({ fonts: [archivo] }); // [!code --]
 const renderer = new Renderer(); // [!code ++]
 const image = await renderer.render(node, { fonts: [archivo] }); // [!code ++]
@@ -42,7 +42,7 @@ const image = await renderer.render(node, { fonts: [archivo] }); // [!code ++]
 
 Pass `fonts` with each render for most uses. Use `registerFont` to preload fonts on a renderer you reuse.
 
-```ts
+```ts title="Replace loadFonts with registerFont"
 renderer.loadFonts([archivo, geist]); // [!code --]
 renderer.render(node, { fonts: [archivo, geist] }); // [!code ++]
 ```
@@ -50,7 +50,7 @@ renderer.render(node, { fonts: [archivo, geist] }); // [!code ++]
 To preload a font once and reuse it across many renders, a single `registerFont` replaces the three loaders.
 It accepts either raw bytes or a `{ name, data, weight, style }` descriptor, and resolves to the families it produced.
 
-```ts
+```ts title="Replace loadFonts with registerFont"
 renderer.loadFonts([archivo, geist]); // [!code --]
 await renderer.registerFont(archivo); // [!code ++]
 await renderer.registerFont(geist); // [!code ++]
@@ -60,7 +60,7 @@ await renderer.registerFont(geist); // [!code ++]
 
 Each render now takes an ordered `fontFamilies` list: the family names tried in turn when a glyph is missing. It defaults to every registered family in registration order.
 
-```tsx
+```tsx title="Pick the fallback chain with fontFamilies"
 const image = await renderer.render(node, {
   fontFamilies: ["Inter", "Noto Sans JP"], // [!code ++]
 });
@@ -75,7 +75,7 @@ const image = await renderer.render(node, {
 | —                  | `images.fetchCache`               | Byte cache shared across renders (a `Map`-like store); dedupes concurrent fetches. |
 | —                  | `fonts` on `renderAnimation`      | Animation calls now accept `fonts` and `fontFamilies`, matching `render`.          |
 
-```tsx
+```tsx title="Renamed and changed options"
 const image = await renderer.render(node, {
   fetchedResources: resources, // [!code --]
   images: resources, // [!code ++]
@@ -84,7 +84,7 @@ const image = await renderer.render(node, {
 
 `images` also takes a group form that holds pre-fetched entries, fetch behavior, and a shared byte cache in one place:
 
-```tsx
+```tsx title="Renamed and changed options"
 const imageCache = new Map<string, Promise<ArrayBuffer>>();
 
 const image = await render(node, {
@@ -105,7 +105,7 @@ v1 kept a mutable image store and a `GlobalContext` on the renderer, so an image
 
 Construct `ImageResponse` directly and pass options inline. For shared defaults, wrap your own helper.
 
-```tsx
+```tsx title="createImageResponse is removed"
 const ogImage = createImageResponse({ fonts: [inter] }); // [!code --]
 export function GET() {
   return ogImage(<OgImage />); // [!code --]
@@ -117,7 +117,7 @@ export function GET() {
 
 `takumi-js` now exports `renderSvg()` alongside `render()`. It takes the same input (JSX, an HTML string, or a node tree) and the same resource pipeline, but returns an `<svg>` document instead of a raster bitmap. It is the replacement for [satori](https://github.com/vercel/satori)'s SVG output; use `render()` for PNG or WebP.
 
-```tsx
+```tsx title="Render to vector SVG"
 import { render, renderSvg } from "takumi-js";
 
 const png = await render(<OgImage />, { width: 1200, height: 630 });
@@ -130,7 +130,7 @@ const svg = await renderSvg(<OgImage />, { width: 1200, height: 630 }); // [!cod
 
 `fonts` entries can now be bare URL strings instead of loaded font descriptors or raw bytes. The font is fetched on demand and cached automatically.
 
-```tsx
+```tsx title="Bare URL strings in fonts"
 const image = await render(<OgImage />, {
   fonts: ["https://example.com/Inter.woff2"], // [!code ++]
 });
@@ -140,7 +140,7 @@ const image = await render(<OgImage />, {
 
 If you were importing `ImageResponse` from the `@takumi-rs/image-response/wasm` subpath, you must now import it from `@takumi-rs/image-response` directly:
 
-```tsx
+```tsx title="@takumi-rs/image-response/wasm export is removed"
 import { ImageResponse } from "@takumi-rs/image-response/wasm"; // [!code --]
 import { ImageResponse } from "@takumi-rs/image-response"; // [!code ++]
 ```
@@ -177,7 +177,7 @@ Takumi's own text, borders, shadows, and decorations are unaffected by this chan
 
 `position` now defaults to `static`, not `relative`. An element only establishes a containing block for absolutely-positioned descendants, and honors `top`/`right`/`bottom`/`left` insets, when you opt in. Set `position: relative` where you relied on the old default.
 
-```tsx
+```tsx title="position"
 <div
   style={{
     display: "flex",
@@ -192,7 +192,7 @@ Takumi's own text, borders, shadows, and decorations are unaffected by this chan
 
 An omitted width in `border` / `outline` now resolves to `medium` (3px), the CSS initial value, instead of `0`. The `thin`, `medium`, and `thick` keywords are accepted. The used width stays `0` when the line's style is `none` or `hidden`.
 
-```tsx
+```tsx title="border-width and outline-width"
 <div style={{ border: "solid red" }}>3px border in v2, invisible in v1</div>
 ```
 
@@ -220,7 +220,7 @@ Unlike browsers, the v1 `background` shorthand parsed a blend-mode token and res
 
 Import the data structures from `takumi::prelude` and call the entry-point functions from the crate root:
 
-```rust
+```rust title="takumi is split into focused crates"
 use takumi::{ // [!code --]
   layout::{node::Node, Viewport, style::{Length::Px, Style, StyleDeclaration}}, // [!code --]
   resources::font::FontResource, // [!code --]
@@ -237,7 +237,7 @@ Backend internals are no longer re-exported. If you need them, enable the `unsta
 
 With the image store gone, the render context holds only fonts. Build a `Fonts`, register resources on it, and pass it through `RenderOptions::builder().fonts(&fonts)`.
 
-```rust
+```rust title="GlobalContext becomes a Fonts context"
 let mut global = GlobalContext::default(); // [!code --]
 global.font_context.load_and_store(FontResource::new(font_bytes)); // [!code --]
 let mut fonts = Fonts::default(); // [!code ++]
@@ -255,7 +255,7 @@ let options = RenderOptions::builder()
 
 The default raster backend feature was renamed to mirror `svg-backend`, and `rayon` no longer turns it on implicitly. Enable `raster-backend` (or keep the default features) to render rasters with `rayon` parallelism.
 
-```toml
+```toml title="Cargo.toml"
 takumi = { version = "*", default-features = false, features = ["raster", "rayon"] } # [!code --]
 takumi = { version = "*", default-features = false, features = ["raster-backend", "rayon"] } # [!code ++]
 ```
@@ -264,7 +264,7 @@ takumi = { version = "*", default-features = false, features = ["raster-backend"
 
 `OutputFormat::Jpeg` and `WebP` now carry a `Quality`, lossless WebP moved to its own `OutputFormat::WebPLossless` variant, and `write_image` no longer takes a separate quality argument.
 
-```rust
+```rust title="Image output quality is modeled per format"
 write_image(&image, ImageOutputFormat::WebP, 80)?; // [!code --]
 write_image(&image, &mut output, OutputFormat::WebP { quality: Quality::new(80) })?; // [!code ++]
 ```
@@ -276,7 +276,7 @@ In the napi binding, `format` is a string (`"png"` | `"jpeg"` | `"webp"` | ...) 
 | napi    | JPEG and lossy WebP | WebP                             |
 | wasm    | JPEG only           | absent (WebP is always lossless) |
 
-```ts
+```ts title="Image output quality is modeled per format"
 renderer.render(node, { format: "jpeg", quality: 80 });
 renderer.render(node, { format: "webp", lossless: true }); // napi only
 ```
@@ -291,7 +291,7 @@ renderer.render(node, { format: "webp", lossless: true }); // napi only
 | `Node::resource_urls` / `Style::resource_urls` | `image_urls`         | The URLs they collect are all images.                                            |
 | `ImageResourceError`                           | `ImageError`         | Matches `FontError`.                                                             |
 
-```rust
+```rust title="Renamed entry points"
 let measured = measure_layout(options)?; // [!code --]
 let measured = measure(options)?; // [!code ++]
 ```
@@ -302,7 +302,7 @@ let measured = measure(options)?; // [!code ++]
 
 `Length` and `ColorInput` were generic over a `const` bool so one enum could default two ways (`auto` vs `0`, `currentColor` vs `transparent`). That parameter is gone: both are plain enums. The `LengthDefaultsToZero` and `ColorDefaultsToTransparent` aliases are removed; use `Length` and `ColorInput`. Rendering is unchanged: the zero/transparent initial values are now declared per field.
 
-```rust
+```rust title="Remove default-flavor type parameters"
 let inset: LengthDefaultsToZero = Length::Px(0.0); // [!code --]
 let inset: Length = Length::Px(0.0); // [!code ++]
 ```
@@ -311,7 +311,7 @@ let inset: Length = Length::Px(0.0); // [!code ++]
 
 The CSS `<position>` value backs `background-position`, `object-position`, `transform-origin`, `mask-position`, and gradient centers, so `BackgroundPosition` was renamed to `PositionValue`, and `BackgroundPositions` to `PositionValues`. The `ObjectPosition` and `TransformOrigin` aliases are removed; they were aliases of `BackgroundPosition`, so their `Default` was top-left, not the `50% 50%` those properties actually default to. Use `PositionValue`, and `PositionValue::center()` for the `center center` initial value.
 
-```rust
+```rust title="BackgroundPosition is renamed to PositionValue"
 let origin: TransformOrigin = TransformOrigin::default(); // [!code --]
 let origin: PositionValue = PositionValue::center(); // [!code ++]
 ```
@@ -326,7 +326,7 @@ Several public enums in `takumi-core` gained `#[non_exhaustive]`:
 
 You can no longer build these variants with a struct literal from outside the crate, and a `match` on them needs a wildcard arm.
 
-```rust
+```rust title="Core enums are #[non_exhaustive]"
 match node.kind {
   NodeKind::Container(_) => {}
   NodeKind::Text(_) => {}
@@ -345,7 +345,7 @@ The multi-value CSS lists are plain aliases instead of newtypes. Drop the newtyp
 
 Parse strings with `FromCssStr`, which returns an owned `ParseError` and keeps `cssparser` out of the public API.
 
-```rust
+```rust title="CSS value lists are type aliases"
 let filters = Filters(vec![Filter::Blur(Length::Px(4.0))]); // [!code --]
 let filters = vec![Filter::Blur(Length::Px(4.0))];          // [!code ++]
 let sizes = BackgroundSizes::from_css_str("cover")?;
@@ -360,7 +360,7 @@ Two properties moved off `Length` onto dedicated enums:
 | `max-width`, `max-height`      | `MaxSize` | `MaxSize::None` (unbounded)     |
 | `column-gap`, `row-gap`, `gap` | `Gap`     | `Gap::Normal` (computes to `0`) |
 
-```rust
+```rust title="max-width / max-height and gap representation"
 let max_width = Length::Auto; // [!code --]
 let max_width = MaxSize::None; // [!code ++]
 
@@ -372,7 +372,7 @@ let gap = Gap::Normal; // [!code ++]
 
 Options on `RenderOptions` now take resolved types instead of raw strings. `font_families` accepts `FontFamily` (which can be parsed with `FontFamily::from_css_str`), and `lang` accepts `Lang` (which can be parsed with `Lang::parse`).
 
-```rust
+```rust title="font_families and lang option types are resolved"
 let options = RenderOptions::builder()
   .font_families(Some(vec!["Inter".to_string()])) // [!code --]
   .lang(Some("en-US".to_string())) // [!code --]
@@ -384,7 +384,7 @@ let options = RenderOptions::builder()
 
 To distinguish it from the `svg-backend` feature (used for SVG render output), the cargo feature gating SVG image input is renamed to `svg-source`.
 
-```toml
+```toml title="Cargo.toml"
 takumi = { version = "*", features = ["svg"] } # [!code --]
 takumi = { version = "*", features = ["svg-source"] } # [!code ++]
 ```
@@ -393,7 +393,7 @@ takumi = { version = "*", features = ["svg-source"] } # [!code ++]
 
 `write_animation` now streams animation frames straight to the encoder to keep memory bounded, rather than holding the entire frame sequence in memory. The napi and WASM bindings also use this behind the scenes.
 
-```rust
+```rust title="Stream animation frames with write_animation"
 // Legacy eager rendering of animation frames:
 let frames = render_animation(options)?; // [!code --]
 write_animated_webp(&frames, &mut output, fps)?; // [!code --]
@@ -406,7 +406,7 @@ write_animation(options, &mut output, format)?; // [!code ++]
 
 A new crate `takumi-html` is introduced to parse HTML and Tailwind markup into a node tree. Under the umbrella `takumi` crate, this is available via the `from-html` feature:
 
-```rust
+```rust title="Parsing HTML with takumi-html"
 use takumi::from_html; // [!code ++]
 
 let node = from_html(html_source, options)?; // [!code ++]

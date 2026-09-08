@@ -7,7 +7,7 @@ v1 is the first stable release. The public API is locked: v1.x releases stay bac
 
 ## Install
 
-```npm
+```npm title="Terminal"
 npm i takumi-js@1
 ```
 
@@ -33,7 +33,7 @@ Early Takumi defaulted `display` to `flex`. v1 defaults to `inline` to match the
 
 Add `display: flex` (or the `flex` Tailwind class) to every container that needs flexbox.
 
-```tsx
+```tsx title="display defaults to inline"
 <div
   style={{
     // [!code ++]
@@ -52,7 +52,7 @@ Add `display: flex` (or the `flex` Tailwind class) to every container that needs
 
 `takumi-js` now detects the right bindings for your environment (Node.js, Workers, and others). You no longer import NAPI (native Node addon) or WASM (WebAssembly) bindings directly.
 
-```ts
+```ts title="Unified runtime detection and fallback"
 import { ImageResponse } from "@takumi-rs/image-response"; // [!code --]
 import { ImageResponse } from "takumi-js/response"; // [!code ++]
 ```
@@ -65,7 +65,7 @@ It defaults to `twemoji`. To source emoji glyphs from a font, set it to `from-fo
 
 See [Images & emoji](/docs/load-images).
 
-```tsx
+```tsx title="emoji option for dynamic emoji loading"
 import { ImageResponse } from "takumi-js/response";
 import notoEmojiFont from "@fontsource/noto-color-emoji/files/noto-color-emoji-emoji-400-normal.woff2";
 
@@ -86,7 +86,7 @@ export function GET() {
 
 Image format options in `@takumi-rs/core` now take lowercase strings only.
 
-```ts
+```ts title="Lowercase image formats"
 const image = await renderer.render(node, {
   format: "WebP" // [!code --]
   format: "webp" // [!code ++]
@@ -97,7 +97,7 @@ const image = await renderer.render(node, {
 
 `renderer.putPersistentImage()` no longer accepts a raw `Buffer` as the second argument. Pass an `ImageSource` object instead.
 
-```ts
+```ts title="putPersistentImage() takes ImageSource"
 const data = await readFile("foo.png");
 
 await renderer.putPersistentImage("foo.png", data); // [!code --]
@@ -118,7 +118,7 @@ v1 removes all previously deprecated exports from `@takumi-rs/core`.
 
 The standalone `RenderOptionsBuilder` struct is gone. Call `builder()` on `RenderOptions`. It uses [typed-builder](https://docs.rs/typed-builder) for compile-time validation without `.unwrap()`.
 
-```rust
+```rust title="RenderOptions::builder() replaces RenderOptionsBuilder"
 let options = RenderOptionsBuilder::default().build().unwrap(); // [!code --]
 let options = RenderOptions::builder().build(); // [!code ++]
 ```
@@ -127,7 +127,7 @@ let options = RenderOptions::builder().build(); // [!code ++]
 
 `Viewport` no longer implements `From<(u32, u32)>`. Use the explicit constructor.
 
-```rust
+```rust title="Viewport constructor parameter change"
 let viewport = (800_u32, 600_u32).into(); // [!code --]
 let viewport = Viewport::new((800, 600)); // [!code ++]
 ```
@@ -142,7 +142,7 @@ let viewport = Viewport::new((800, 600)); // [!code ++]
 | `TakumiError` re-export         | `takumi::prelude::Error` (or `takumi_core::error::Error`)                           |
 | `detailed_css_error` feature    | Detailed CSS errors always on; no feature flag                                      |
 
-```rust
+```rust title="Removed Rust APIs"
 use takumi::TakumiError; // [!code --]
 use takumi::prelude::Error; // [!code ++]
 ```

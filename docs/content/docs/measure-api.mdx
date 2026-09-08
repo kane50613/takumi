@@ -6,26 +6,26 @@ icon: Ruler
 
 `measure()` returns a node's laid-out size without rendering it. Use it to fit a headline into a fixed width, or to place a badge against the measured box.
 
-```tsx twoslash tab="takumi-js/node"
+```tsx twoslash tab="takumi-js/node" title="Measure with the native renderer"
 import { Renderer } from "takumi-js/node";
 import { fromJsx } from "takumi-js/helpers/jsx";
 
 const renderer = new Renderer();
 const { node, css } = await fromJsx(<span tw="text-xl">I'm a text node</span>);
 
-// [!code ++]
 const { width, height } = await renderer.measure(node, { css }); // [!code highlight]
+//      ^?
 ```
 
-```tsx twoslash tab="takumi-js/wasm"
+```tsx twoslash tab="takumi-js/wasm" title="Measure with WebAssembly"
 import { Renderer } from "takumi-js/wasm";
 import { fromJsx } from "takumi-js/helpers/jsx";
 
 const renderer = new Renderer();
 const { node, css } = await fromJsx(<span tw="text-xl">I'm a text node</span>);
 
-// [!code ++]
 const { width, height } = await renderer.measure(node, { css }); // [!code highlight]
+//      ^?
 ```
 
 ## Returned fields

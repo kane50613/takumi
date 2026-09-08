@@ -8,7 +8,7 @@ Supply fonts through `fonts` and image bytes through `images`. Remote document i
 
 ## Fonts
 
-```tsx twoslash
+```tsx twoslash title="Fonts"
 import type { ReactNode } from "react";
 declare const doc: ReactNode;
 declare const fontBytes: Uint8Array;
@@ -34,7 +34,7 @@ The renderer does not use installed system fonts. If no registered font covers a
 
 Pass fetched bytes for each image URL in the document. The PDF renderer does not fetch those URLs:
 
-```tsx twoslash
+```tsx twoslash title="Images"
 import type { ReactNode } from "react";
 declare const doc: ReactNode;
 declare const logoUrl: string;

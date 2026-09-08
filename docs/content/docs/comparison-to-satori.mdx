@@ -66,7 +66,7 @@ Satori defaults to `display: flex` and requires an explicit supported `display` 
 
 `renderSvg` replaces `satori()`. It accepts JSX and returns an SVG string. The built-in Latin font makes a `fonts` entry optional.
 
-```tsx
+```tsx title="Replace satori with renderSvg"
 import satori from "satori"; // [!code --]
 import { renderSvg } from "takumi-js"; // [!code ++]
 
@@ -80,7 +80,7 @@ const svg = await renderSvg(<div style={{ display: "flex" }}>Hello</div>, { // [
 
 Skip the SVG step entirely when the goal is a bitmap. satori pipelines pair with `resvg` or `sharp` to rasterize; `render` returns encoded bytes in one call.
 
-```tsx twoslash
+```tsx twoslash title="Render PNG directly"
 import { render } from "takumi-js";
 
 const png = await render(<div tw="w-full h-full flex items-center justify-center">Hello</div>, {
@@ -93,7 +93,7 @@ const png = await render(<div tw="w-full h-full flex items-center justify-center
 
 [`ImageResponse`](/docs/image-response) matches the `next/og` API, including the satori-compatible `emoji` option. Swap the import.
 
-```tsx
+```tsx title="Replace the next/og import"
 import { ImageResponse } from "next/og"; // [!code --]
 import { ImageResponse } from "takumi-js/response"; // [!code ++]
 
@@ -111,7 +111,7 @@ The [Next.js integration guide](/docs/integration/nextjs) covers `opengraph-imag
 
 satori throws without at least one `fonts` entry. Takumi ships a built-in last-resort font (Geist, Latin only, weights 300 to 800), so Latin text renders with zero setup. For anything else, [`googleFonts`](/docs/helpers#fonts) fetches families in one call, and `fonts` also accepts raw bytes, descriptors, or bare URL strings.
 
-```tsx twoslash
+```tsx twoslash title="Load a CJK font"
 import { render } from "takumi-js";
 import { googleFonts } from "takumi-js/helpers";
 

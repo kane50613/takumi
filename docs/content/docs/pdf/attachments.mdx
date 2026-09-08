@@ -6,7 +6,7 @@ icon: Paperclip
 
 Pass files through `attachments` to include source data, supporting documents, or invoice XML. Readers can access them in PDF viewers that expose an attachment panel:
 
-```tsx twoslash
+```tsx twoslash title="Attachments"
 import type { ReactNode } from "react";
 declare const invoice: ReactNode;
 declare const xml: string;
@@ -43,7 +43,7 @@ const pdf = await render(invoice, {
 
 For a Factur-X or ZUGFeRD document, use PDF/A-3 and attach the invoice XML. This example shows the attachment configuration:
 
-```tsx twoslash
+```tsx twoslash title="Electronic invoices"
 import type { ReactNode } from "react";
 declare const invoice: ReactNode;
 declare const xml: string;

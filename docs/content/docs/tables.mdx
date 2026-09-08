@@ -16,11 +16,12 @@ Takumi renders `display: table` by rewriting the table into a grid before layout
 - `border-spacing` defaults to `2px`. Set `gap` on the table to change it.
 - Paged PDF output splits rows across pages. Column positions stay identical on every page.
 
-```tsx
+```tsx twoslash title="Set a table column width"
 <table style={{ width: "100%" }}>
   <thead>
     <tr style={{ background: "#e2e8f0" }}>
       <th>Name</th>
+      {/* [!code highlight] */}
       <th style={{ width: "80px" }}>Qty</th>
     </tr>
   </thead>

@@ -8,9 +8,11 @@ Render line items and totals as a paged document. If your invoice format require
 
 ## A plain invoice
 
+In this example, `invoice` is your invoice data and `InvoiceDocument` is your JSX template. For a complete implementation, see the [invoice example](https://github.com/kane50613/takumi/tree/master/example/generate-invoice).
+
 Line items flow across pages. A footer carries the page counter. `measure` returns the footer's height so you can reserve enough bottom margin:
 
-```tsx twoslash
+```tsx twoslash title="Reserve space for an invoice footer"
 import type { ReactNode } from "react";
 declare const invoice: { number: string };
 declare function InvoiceDocument(props: { data: typeof invoice }): ReactNode;
@@ -43,7 +45,7 @@ const pdf = await render(<InvoiceDocument data={invoice} />, {
 
 Use `break-inside: avoid` to keep a line item together when it fits on a page. In Tailwind, use `break-inside-avoid`:
 
-```tsx twoslash
+```tsx twoslash title="Keep a line item together"
 declare const item: { description: string; amount: string };
 // ---cut---
 import "takumi-pdf";
@@ -71,7 +73,7 @@ Factur-X and ZUGFeRD combine a readable PDF invoice with structured XML. Configu
 
 Each attachment's `modificationDate` falls back to `metadata.creationDate`. Setting the document date once covers both.
 
-```tsx twoslash
+```tsx twoslash title="Attach invoice XML"
 import type { ReactNode } from "react";
 import type { XmpSchema } from "takumi-pdf";
 declare const invoice: ReactNode;
@@ -113,14 +115,14 @@ Two validators cover the two halves. Both need Java.
 
 [veraPDF](https://verapdf.org) checks the container:
 
-```bash
+```bash title="Validate PDF/A and PDF/UA"
 verapdf --flavour 3b --format text invoice.pdf
 verapdf --flavour ua1 --format text invoice.pdf
 ```
 
 [Mustang](https://www.mustangproject.org) checks the Factur-X half, both the XML and the packaging:
 
-```bash
+```bash title="Validate Factur-X with Mustang"
 java -jar Mustang-CLI.jar --action validate --source invoice.pdf
 ```
 

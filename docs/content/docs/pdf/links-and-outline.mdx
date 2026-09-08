@@ -10,7 +10,7 @@ Add links with `<a href>`, bookmarks with `outline`, and document properties wit
 
 Anchors with an `href` become clickable link annotations. They appear on every page that their box touches:
 
-```tsx twoslash
+```tsx twoslash title="Link to a website"
 import { render } from "takumi-pdf";
 
 const pdf = await render(
@@ -25,7 +25,7 @@ Inline anchors annotate each text run. A link that wraps across lines stays clic
 
 `http`, `https`, `mailto` and `tel` links open outside the document. An `href` starting with `#` points inside it instead, to the element carrying that `id`:
 
-```tsx twoslash
+```tsx twoslash title="Link within the document"
 import { render } from "takumi-pdf";
 
 const pdf = await render(
@@ -43,7 +43,7 @@ Internal links jump to the target element. Unresolved fragments and unsupported 
 
 `<TargetPageNumber />` prints the page number of an internal link target. Put it inside an `<a href="#id">`, or pass `href` to the primitive to create its own link. HTML input can use the `targetPageNumber` class on an element inside the link.
 
-```tsx twoslash
+```tsx twoslash title="Build a table of contents"
 import { render } from "takumi-pdf";
 import { TargetPageNumber } from "takumi-pdf/primitives";
 
@@ -78,7 +78,7 @@ Headers and footers are laid out per page, outside this loop. A `<TargetPageNumb
 
 Set `outline: true` to build PDF bookmarks from `h1`–`h6`. Deeper headings nest under the previous shallower heading:
 
-```tsx twoslash
+```tsx twoslash title="Generate PDF bookmarks"
 import type { ReactNode } from "react";
 declare const report: ReactNode;
 // ---cut---
@@ -94,7 +94,7 @@ Clicking a bookmark jumps to the page and position of its heading.
 
 `metadata` fills the PDF document properties. `lang` also sets the metadata language:
 
-```tsx twoslash
+```tsx twoslash title="Set document metadata"
 import type { ReactNode } from "react";
 declare const report: ReactNode;
 // ---cut---

@@ -8,7 +8,7 @@ Start with an Open Graph image template and edit its content and styles.
 The [shadcn CLI](https://ui.shadcn.com/docs/cli) copies a template into your
 project and installs `takumi-js` alongside it.
 
-```npm
+```npm title="Terminal"
 npx shadcn@latest add https://takumi.kane.tw/r/image/blog-post.json
 ```
 
@@ -22,7 +22,7 @@ Register the namespace in `components.json` to reach the same items by name:
 }
 ```
 
-```npm
+```npm title="Terminal"
 npx shadcn@latest add @takumi/image/blog-post
 ```
 
@@ -33,7 +33,7 @@ card lands in `components/takumi/image/`.
 
 `image/og-route` is a Next.js route handler plus the card it renders. It creates an `/og` endpoint that reads the title from the query string.
 
-```npm
+```npm title="Terminal"
 npx shadcn@latest add @takumi/image/og-route
 ```
 
@@ -77,7 +77,7 @@ A blog post card with a large title and a subtitle.
 
 ![Blog Post Template](/templates/previews/blog-post.svg)
 
-```npm
+```npm title="Terminal"
 npx shadcn@latest add @takumi/image/blog-post
 ```
 
@@ -87,7 +87,7 @@ A documentation card for guides and API pages.
 
 ![Docs Template](/templates/previews/docs.svg)
 
-```npm
+```npm title="Terminal"
 npx shadcn@latest add @takumi/image/docs
 ```
 
@@ -97,7 +97,7 @@ A product card with an image, name, and price.
 
 ![Product Card Template](/templates/previews/product-card.svg)
 
-```npm
+```npm title="Terminal"
 npx shadcn@latest add @takumi/image/product-card
 ```
 
@@ -107,7 +107,7 @@ An editorial card for talks, webinars, and conferences, with an oversized title 
 
 ![Event Template](/templates/previews/event.svg)
 
-```npm
+```npm title="Terminal"
 npx shadcn@latest add @takumi/image/event
 ```
 
@@ -117,7 +117,7 @@ A high-contrast quote and testimonial card with author and company attribution.
 
 ![Quote Template](/templates/previews/quote.svg)
 
-```npm
+```npm title="Terminal"
 npx shadcn@latest add @takumi/image/quote
 ```
 
@@ -127,7 +127,7 @@ A developer-native card for open-source repositories, featuring the repo slug, d
 
 ![Repository Template](/templates/previews/repository.svg)
 
-```npm
+```npm title="Terminal"
 npx shadcn@latest add @takumi/image/repository
 ```
 
@@ -137,6 +137,6 @@ A release card with the version, the date, and a summary of what shipped.
 
 ![Changelog Template](/templates/previews/changelog.svg)
 
-```npm
+```npm title="Terminal"
 npx shadcn@latest add @takumi/image/changelog
 ```

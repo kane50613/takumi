@@ -26,7 +26,7 @@ Use the runtime-specific entries below when automatic resolution selects the wro
 
 Load the binary yourself:
 
-```ts
+```ts title="Export default doesn't exist in target module"
 import init, { render } from "takumi-pdf/no-init";
 import wasmUrl from "takumi-pdf/wasm-url";
 
@@ -86,7 +86,7 @@ Package managers install the native package for the machine running the install,
 so installing on macOS and deploying to Linux leaves the target's package missing.
 Install it explicitly:
 
-```npm
+```npm title="Terminal"
 npm install @takumi-rs/core-linux-x64-gnu
 ```
 
@@ -115,7 +115,7 @@ const config: NextConfig = {
 
 On webpack or Rspack with `target: "node"`, upgrade instead:
 
-```npm
+```npm title="Terminal"
 npm install takumi-pdf@latest @takumi-rs/wasm@latest
 ```
 
@@ -127,7 +127,7 @@ and `pkg` holds the binary alone.
 
 Upgrade, then build again:
 
-```npm
+```npm title="Terminal"
 npm install takumi-pdf@latest @takumi-rs/wasm@latest
 ```
 
@@ -165,7 +165,7 @@ If your framework has to bundle it,
 
 Register a font covering the characters the error names:
 
-```ts
+```ts title="No registered font covers क (U+0915)"
 import { googleFonts } from "@takumi-rs/helpers";
 import { render } from "takumi-pdf";
 
@@ -212,7 +212,7 @@ socket while loading a remote `img` URL
 
 Set `drawDebugBorder` to outline every node:
 
-```tsx
+```tsx title="The layout is not what I expected"
 import { ImageResponse } from "takumi-js/response";
 
 export function GET() {

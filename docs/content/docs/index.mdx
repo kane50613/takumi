@@ -10,8 +10,8 @@ Use `takumi-js` for image output. For invoices, reports, and other documents, st
 
 ## Install
 
-```npm
-npm i takumi-js react
+```npm title="Install takumi-js"
+npm i takumi-js
 ```
 
 `takumi-js` bundles both bindings: the native renderer (`@takumi-rs/core`) and the WebAssembly one (`@takumi-rs/wasm`). It picks the right one at runtime: native on Node.js, WebAssembly on Cloudflare Workers, Vercel Edge, Deno, and the browser. No extra install.
@@ -20,7 +20,7 @@ npm i takumi-js react
 
 `render` takes JSX and returns image bytes. The built-in font covers the Latin text in this example. Save it as `image.tsx` and run `bun image.tsx`, or compile the JSX before running it in Node.js.
 
-```tsx twoslash
+```tsx twoslash title="image.tsx"
 import { render } from "takumi-js";
 import { writeFile } from "node:fs/promises";
 
@@ -34,20 +34,20 @@ const png = await render(
   >
     Hello Takumi
   </div>,
-  { width: 1200, height: 630 },
+  { width: 1200, height: 630 }, // [!code highlight]
 );
 
 await writeFile("hello.png", png);
 ```
 
 - `width` and `height` set the canvas.
-- The root doesn't fill the canvas on its own, so it carries `width: 100%` and `height: 100%`.
+- `tw="w-full h-full"` makes the root fill that canvas.
 
 ## Serve it over HTTP
 
 [`ImageResponse`](/docs/image-response) extends the web `Response`, so any runtime with `Request` and `Response` can return it. The API matches `next/og`.
 
-```tsx twoslash
+```tsx twoslash title="app/og/route.tsx"
 import { ImageResponse } from "takumi-js/response";
 
 export function GET() {
@@ -68,7 +68,7 @@ export function GET() {
 
 `googleFonts` fetches families in one request and returns `fonts` entries. A weight range or an `axes` entry loads the variable font, so `font-weight` and `font-variation-settings` drive its axes per element.
 
-```tsx twoslash
+```tsx twoslash title="Load a variable font"
 import { render } from "takumi-js";
 import { googleFonts } from "takumi-js/helpers";
 
