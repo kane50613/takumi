@@ -55,7 +55,7 @@ const pdf = await render(
 await writeFile("invoice.pdf", pdf);
 ```
 
-`render()` returns `Promise<Uint8Array>`. Paged output defaults to A4 with a uniform 48px margin. Content flows across pages automatically.
+`render()` returns `Promise<Uint8Array>`. Paged output defaults to A4, and `margin` defaults to `"auto"` on all sides. Without headers or footers, margins are 37.8px. Top and bottom margins can expand to fit header or footer bands. Content flows across pages automatically.
 
 ## Choose the next guide
 

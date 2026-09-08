@@ -9,7 +9,7 @@ v2 makes fonts and images explicit per-render resources and changes several CSS 
 
 Update the packages your project imports. For the high-level JavaScript API:
 
-```npm title="Terminal"
+```npm
 npm install takumi-js
 ```
 
@@ -165,7 +165,7 @@ These properties changed their default or behavior to match the CSS spec. Verify
 
 The sections below cover the subtler cases.
 
-### `currentColor` in SVG images is no longer tinted by the host color
+### v2.0–v2.5: `currentColor` in SVG images ignores the host color
 
 This change applies to v2.0–v2.5. In those versions, SVG image content uses its own `color` instead of inheriting the host element's color.
 

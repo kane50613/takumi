@@ -86,7 +86,7 @@ Package managers install the native package for the machine running the install,
 so installing on macOS and deploying to Linux leaves the target's package missing.
 Install it explicitly:
 
-```npm title="Terminal"
+```npm
 npm install @takumi-rs/core-linux-x64-gnu
 ```
 
@@ -115,7 +115,7 @@ const config: NextConfig = {
 
 On webpack or Rspack with `target: "node"`, upgrade instead:
 
-```npm title="Terminal"
+```npm
 npm install takumi-pdf@latest @takumi-rs/wasm@latest
 ```
 
@@ -127,7 +127,7 @@ and `pkg` holds the binary alone.
 
 Upgrade, then build again:
 
-```npm title="Terminal"
+```npm
 npm install takumi-pdf@latest @takumi-rs/wasm@latest
 ```
 
