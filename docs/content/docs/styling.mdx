@@ -1,10 +1,10 @@
 ---
 title: Styling
-description: How CSS reaches a node, what the stylesheet engine supports, and the Tailwind paths.
+description: Style Takumi templates with inline CSS, stylesheets, Tailwind utilities, and design tokens.
 icon: Palette
 ---
 
-Pick a path by what you already have:
+Choose how to supply styles based on your project:
 
 | You have                                   | Use                                             |
 | ------------------------------------------ | ----------------------------------------------- |
@@ -14,7 +14,7 @@ Pick a path by what you already have:
 | Design tokens to theme with                | [a `:root` rule](#design-tokens)                |
 | One-off styles on one node                 | [the `style` prop](#inline-styles)              |
 
-The paths combine. Each section says who wins when they collide.
+These approaches can be combined. The sections below explain which declarations take precedence.
 
 ## Inline styles
 
@@ -26,7 +26,7 @@ The `style` prop puts `CSSProperties` on one node. It overrides the tag default 
 
 ## CSS
 
-Pass real CSS through `css`, one string or a list. The engine matches it by `className` or `id`.
+Pass a CSS string or a list of stylesheets through `css`. The engine matches it by `className` or `id`.
 
 ```tsx twoslash
 import { render } from "takumi-js";
@@ -142,7 +142,7 @@ export default defineConfig({
 
 ## Tailwind without a build step
 
-The `tw` prop runs a built-in parser with no build step. It matches [the satori prop](https://github.com/vercel/satori#tailwind-css), so `next/og` code ports as-is.
+The `tw` prop runs a built-in parser with no build step. It uses the same prop name as [Satori](https://github.com/vercel/satori#tailwind-css). Check class support when migrating `next/og` templates.
 
 ```tsx twoslash
 import { render } from "takumi-js";

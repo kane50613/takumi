@@ -1,6 +1,6 @@
 ---
-title: Comparison to satori
-description: How Takumi differs from satori and next/og, and how to migrate a template.
+title: Takumi vs. Satori
+description: Compare Takumi with Satori and next/og, including CSS support, output formats, and migration steps.
 icon: Scale
 ---
 
@@ -12,7 +12,7 @@ flowchart LR
     J2[JSX] --> T[Takumi] --> P2[PNG / WebP / SVG / GIF]
 ```
 
-Migration is mostly an import swap: `ImageResponse` matches the `next/og` API, and templates written for satori declare `display: flex` explicitly, so they render unchanged.
+Start migration by replacing the import. `ImageResponse` provides a `next/og`-compatible API, but the renderers have different layout and font behavior. Keep explicit Flexbox styles and compare your templates before deploying.
 
 Compare rendered output across providers at [image-bench.kane.tw](https://image-bench.kane.tw).
 
@@ -52,7 +52,7 @@ Selector support covers class, id, descendant, `:is()`, `::before`, and `::after
 
 | Feature             | satori / `next/og`         | Takumi                           |
 | :------------------ | :------------------------- | :------------------------------- |
-| Default font        | Geist 400 (`next/og` only) | ✅ Geist 400 to 800              |
+| Default font        | Geist 400 (`next/og` only) | ✅ Geist 300 to 800              |
 | WOFF2               | ❌                         | ✅                               |
 | Emoji providers     | `next/og` only             | ✅ built in                      |
 | Runtime             | Node, Edge, browser        | + Cloudflare Workers, Rust crate |
@@ -60,11 +60,11 @@ Selector support covers class, id, descendant, `:is()`, `::before`, and `::after
 
 ## Layout defaults
 
-satori forces `display: flex` on every element and throws when a `<div>` holds multiple children without an explicit `display`. Takumi follows CSS: a bare `<div>` is `display: block`. Explicit `display: flex` in a satori template carries over unchanged, so this difference only shows up in new templates.
+Satori defaults to `display: flex` and requires an explicit supported `display` value on a `<div>` with multiple children. Takumi defaults a bare `<div>` to `display: block`. Keep `display: flex` on containers that need Flexbox layout.
 
 ## Migrate from satori
 
-`renderSvg` replaces `satori()`. Same input shape, same SVG-string output, and no `fonts` requirement for Latin text.
+`renderSvg` replaces `satori()`. It accepts JSX and returns an SVG string. The built-in Latin font makes a `fonts` entry optional.
 
 ```tsx
 import satori from "satori"; // [!code --]
@@ -109,7 +109,7 @@ The [Next.js integration guide](/docs/integration/nextjs) covers `opengraph-imag
 
 ## Fonts
 
-satori throws without at least one `fonts` entry. Takumi ships a built-in last-resort font (Geist, Latin only, weights 400 to 800), so Latin text renders with zero setup. For anything else, [`googleFonts`](/docs/helpers#fonts) fetches families in one call, and `fonts` also accepts raw bytes, descriptors, or bare URL strings.
+satori throws without at least one `fonts` entry. Takumi ships a built-in last-resort font (Geist, Latin only, weights 300 to 800), so Latin text renders with zero setup. For anything else, [`googleFonts`](/docs/helpers#fonts) fetches families in one call, and `fonts` also accepts raw bytes, descriptors, or bare URL strings.
 
 ```tsx twoslash
 import { render } from "takumi-js";
@@ -139,10 +139,10 @@ satori renders one static frame. Takumi threads a time axis through the pipeline
 
 ## Performance and memory
 
-satori runs layout and text shaping in JavaScript on the calling thread. It hands the SVG string to a separate rasterizer. Takumi's native binding moves the whole pipeline off the event loop:
+Satori generates an SVG string on the calling thread. For raster output, pass that string to a separate rasterizer. Takumi's native binding moves the whole pipeline off the event loop:
 
 - **Renders run on worker threads.** `render` executes as an async task, so the event loop stays free, and concurrent renders read the font store without locking.
-- **Animation frames render in parallel** across a thread pool and stream into the encoder, so memory stays flat as frame count grows.
+- **Animation frames render in parallel** across a thread pool and stream into the encoder, so encoded animations do not need to retain every raw frame.
 - **Images decode at draw size.** A large photo drawn in a small box retains pixels at the draw size, not the source size, and the decode cache reuses them across renders.
 - **Fonts download by coverage.** `googleFonts` splits each family into unicode-range subsets, and a render fetches only the subsets its codepoints hit.
 
@@ -158,7 +158,7 @@ Measured from a clean `npm install` (macOS arm64) and gzip of the published arti
 | `@vercel/og`               | 35 MB (16 MB is optional `sharp`) | ~0.7 MB (`index.edge.js` + `resvg.wasm`) |
 | `takumi-js`                | 8.6 MB                            | 1.5 MB (`takumi_wasm_bg.wasm`)           |
 
-The WebAssembly binary is the weak spot: **3.7 MB raw, 1.5 MB gzipped**, about twice the `@vercel/og` edge stack. Cold starts download and compile more, and it takes a bigger bite out of platform script-size limits. On Node the picture flips: one native binary replaces satori, yoga, opentype.js, and resvg.
+In these versions, the Takumi WebAssembly binary measured **3.7 MB raw and 1.5 MB gzipped**, about twice the measured `@vercel/og` edge stack. Include download and compilation costs when measuring cold starts. On Node.js, Takumi uses a native binary. Check current package sizes against your deployment target before choosing a backend.
 
 ## Used in production
 

@@ -5,7 +5,7 @@
 
 **WebAssembly bindings for [Takumi](https://github.com/kane50613/takumi), a Rust image rendering engine.**
 
-Render OG cards, banners, and animations on Cloudflare Workers, edge runtimes, and browsers, no headless browser required.
+Render Open Graph images, banners, and animations on Cloudflare Workers, edge runtimes, and browsers without a headless browser. For JSX, HTML, and automatic resource loading, use [`takumi-js`](https://www.npmjs.com/package/takumi-js).
 
 [Documentation](https://takumi.kane.tw/docs/) · [Playground](https://takumi.kane.tw/playground)
 

@@ -1,6 +1,6 @@
 ---
 title: Reports & statements
-description: Long documents with chapters, bookmarks, and running bands.
+description: Generate PDF reports and statements with chapters, bookmarks, tables of contents, and repeating headers.
 icon: FileSpreadsheet
 ---
 
@@ -52,7 +52,7 @@ const pdf = await render(report, {
 });
 ```
 
-A table of contents is the same chapters as links, with the page each one starts on. `<TargetPageNumber />` fills the page in:
+Link each chapter in the table of contents. `<TargetPageNumber />` fills in the page number of each link target:
 
 ```tsx twoslash
 declare const chapters: { id: string; title: string }[];

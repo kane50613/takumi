@@ -1,20 +1,19 @@
 # Svelte Example
 
-This is a simple example of using `takumi-js` in svelte.
+Render a Svelte component and its CSS as an image with `takumi-js`.
 
-Before running the example, you need to build the native binary.
-
-Make sure you have [Rust installed](https://www.rust-lang.org/tools/install).
+Install [Rust](https://www.rust-lang.org/tools/install) and the workspace dependencies, then build from the repository root:
 
 ```bash
+bun install
 bun --filter '*' run build
 ```
 
-Then, run the development server.
+Start the example with [portless](https://github.com/vercel-labs/portless):
 
 ```bash
 cd example/svelte
-bun dev
+portless run --name takumi-svelte vite dev
 ```
 
-Visit http://localhost:3000/ to see the result.
+Open https://takumi-svelte.localhost/ to see the generated image.

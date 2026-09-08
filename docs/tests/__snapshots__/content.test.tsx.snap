@@ -1,0 +1,224 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`homepage copy renders with its links and image descriptions 1`] = `
+"<link rel="preload" as="image" href="/images/twitter-images/og-image@2x.webp"/><link rel="preload" as="image" href="/images/twitter-images/x-post-image@2x.webp"/><link rel="preload" as="image" href="/images/twitter-images/prisma-og-image@2x.webp"/><section><div><div><h1>JSX to images and PDFs.<br/><em>Skip the browser.</em></h1><p>Your components and CSS, rendered in Rust.</p><div><a data-slot="button" href="/docs">Get started</a><a href="/playground">Open the playground</a><code>bun i takumi-js</code></div></div><div><div><img src="/images/twitter-images/og-image@2x.webp" alt="Takumi OG image rendered by Takumi" width="2400" height="1260"/><img src="/images/twitter-images/x-post-image@2x.webp" alt="X post image rendered by Takumi" width="2400" height="1260"/><img src="/images/twitter-images/prisma-og-image@2x.webp" alt="Prisma-style OG image rendered by Takumi" width="2400" height="1260"/></div></div></div></section><section><div><h2>The CSS you write.</h2><p>Grid, gradients, custom fonts, and animation.</p><div><div><h3>Layout</h3><ul><li>display: grid</li><li>float</li><li>position: absolute</li><li>calc()</li><li>z-index</li></ul></div><div><h3>Selectors</h3><ul><li>:is()</li><li>:where()</li><li>::before</li><li>::after</li></ul></div><div><h3>Paint</h3><ul><li>backdrop-filter</li><li>mix-blend-mode</li><li>conic-gradient()</li><li>clip-path</li><li>mask</li><li>background-clip: text</li></ul></div><div><h3>Text</h3><ul><li>WOFF2 fonts</li><li>emoji</li><li>RTL scripts</li><li>multi-span inline</li></ul></div><div><h3>Motion</h3><ul><li>@keyframes</li><li>animation</li><li>Tailwind animate-*</li></ul></div></div><p>Native on Node.js and Bun. WebAssembly on Workers and browsers. A crate for Rust.</p><p>macOS · Linux · Windows · x64 · ARM64</p></div></section><section><div><div><div><h2>Animate the same tree.</h2><p>CSS keyframes to WebP, APNG, or GIF.</p></div><pre>@keyframes morph {
+  from { border-radius: 12%; transform: rotate(0deg) scale(1); }
+  50%  { border-radius: 50%; transform: rotate(90deg) scale(0.72); }
+  to   { border-radius: 12%; transform: rotate(180deg) scale(1); }
+}</pre></div><div><div><figure><img src="/images/twitter-images/home-filmstrip-0.webp" alt="Frame sampled at t=0ms" width="480" height="480" loading="lazy"/><figcaption>t=0</figcaption></figure><figure><img src="/images/twitter-images/home-filmstrip-1.webp" alt="Frame sampled at t=125ms" width="480" height="480" loading="lazy"/><figcaption>t=125</figcaption></figure><figure><img src="/images/twitter-images/home-filmstrip-2.webp" alt="Frame sampled at t=250ms" width="480" height="480" loading="lazy"/><figcaption>t=250</figcaption></figure><figure><img src="/images/twitter-images/home-filmstrip-3.webp" alt="Frame sampled at t=375ms" width="480" height="480" loading="lazy"/><figcaption>t=375</figcaption></figure><figure><img src="/images/twitter-images/home-filmstrip-4.webp" alt="Frame sampled at t=500ms" width="480" height="480" loading="lazy"/><figcaption>t=500</figcaption></figure><figure><img src="/images/twitter-images/home-filmstrip-5.webp" alt="Frame sampled at t=625ms" width="480" height="480" loading="lazy"/><figcaption>t=625</figcaption></figure><figure><img src="/images/twitter-images/home-filmstrip-6.webp" alt="Frame sampled at t=750ms" width="480" height="480" loading="lazy"/><figcaption>t=750</figcaption></figure><figure><img src="/images/twitter-images/home-filmstrip-7.webp" alt="Frame sampled at t=875ms" width="480" height="480" loading="lazy"/><figcaption>t=875</figcaption></figure></div></div></div></section>"
+`;
+
+exports[`guides have titles and distinct descriptions for discovery 1`] = `
+[
+  {
+    "description": "Render ECharts and other SVG charts as PNG images or PDF documents with Takumi.",
+    "path": "charts.mdx",
+    "title": "Charts",
+  },
+  {
+    "description": "Compare Takumi with Satori and next/og, including CSS support, output formats, and migration steps.",
+    "path": "comparison-to-satori.mdx",
+    "title": "Takumi vs. Satori",
+  },
+  {
+    "description": "Convert JSX and HTML to Takumi node trees, prepare images, and load fonts with reusable helpers.",
+    "path": "helpers.mdx",
+    "title": "Helpers",
+  },
+  {
+    "description": "Generate Open Graph images in HTTP route handlers with the next/og-compatible ImageResponse API.",
+    "path": "image-response.mdx",
+    "title": "ImageResponse",
+  },
+  {
+    "description": "Generate Open Graph images, social cards, SVG, and animations from JSX, HTML, and CSS with Takumi.",
+    "path": "index.mdx",
+    "title": "Introduction",
+  },
+  {
+    "description": "Generate Open Graph images for static Astro pages at build time with astro-takumi.",
+    "path": "integration/astro.mdx",
+    "title": "Astro",
+  },
+  {
+    "description": "Generate Open Graph images and page metadata with the built-in Fumapress Takumi plugin.",
+    "path": "integration/fumapress.mdx",
+    "title": "Fumapress",
+  },
+  {
+    "description": "Add Takumi image generation to Next.js, Astro, Nuxt, SvelteKit, TanStack Start, Nitro, or Fumapress.",
+    "path": "integration/index.mdx",
+    "title": "Integration",
+  },
+  {
+    "description": "Generate Open Graph images from React components in Next.js App Router route handlers.",
+    "path": "integration/nextjs.mdx",
+    "title": "Next.js",
+  },
+  {
+    "description": "Return Open Graph images from Nitro server routes with Takumi node helpers and ImageResponse.",
+    "path": "integration/nitro.mdx",
+    "title": "Nitro",
+  },
+  {
+    "description": "Generate Open Graph images from Vue templates with the Takumi renderer in Nuxt OG Image.",
+    "path": "integration/nuxt.mdx",
+    "title": "Nuxt",
+  },
+  {
+    "description": "Render Svelte components and their CSS as Open Graph images in SvelteKit server routes.",
+    "path": "integration/sveltekit.mdx",
+    "title": "SvelteKit",
+  },
+  {
+    "description": "Generate Open Graph images from React components in TanStack Start server file routes.",
+    "path": "integration/tanstack-start.mdx",
+    "title": "TanStack Start",
+  },
+  {
+    "description": "Render CSS keyframe animations as GIF, animated WebP, APNG, or raw frames for ffmpeg.",
+    "path": "keyframe-animation.mdx",
+    "title": "Keyframe Animation",
+  },
+  {
+    "description": "Load remote images, configure fetch limits and caches, and render emoji with Takumi.",
+    "path": "load-images.mdx",
+    "title": "Images & emoji",
+  },
+  {
+    "description": "Measure node dimensions and text runs with Renderer.measure() before rendering an image.",
+    "path": "measure-api.mdx",
+    "title": "The measure() API",
+  },
+  {
+    "description": "Choose PNG, JPEG, WebP, ICO, raw pixels, or SVG output and configure image quality and resolution.",
+    "path": "output-formats.mdx",
+    "title": "Output Formats",
+  },
+  {
+    "description": "Embed files in PDF documents and configure PDF/A-3 attachments for electronic invoices.",
+    "path": "pdf/attachments.mdx",
+    "title": "Attachments",
+  },
+  {
+    "description": "Embed SVG charts in PDF documents with vector output, chart fonts, and accessible descriptions.",
+    "path": "pdf/charts.mdx",
+    "title": "Charts",
+  },
+  {
+    "description": "Compare takumi-pdf, react-pdf, and Puppeteer using recorded invoice benchmarks and rendering tradeoffs.",
+    "path": "pdf/comparison.mdx",
+    "title": "Comparison",
+  },
+  {
+    "description": "Load fonts and image bytes for PDF rendering, including SVG charts and offline assets.",
+    "path": "pdf/fonts-and-images.mdx",
+    "title": "Fonts & images",
+  },
+  {
+    "description": "Migrate Puppeteer PDF templates to takumi-pdf, including page setup, assets, and CSS limitations.",
+    "path": "pdf/from-puppeteer.mdx",
+    "title": "From Puppeteer",
+  },
+  {
+    "description": "Migrate @react-pdf/renderer templates to takumi-pdf using HTML elements, CSS, and page options.",
+    "path": "pdf/from-react-pdf.mdx",
+    "title": "From react-pdf",
+  },
+  {
+    "description": "Add repeating PDF headers, footers, and page numbers, and measure the margins they need.",
+    "path": "pdf/headers-and-footers.mdx",
+    "title": "Headers & footers",
+  },
+  {
+    "description": "Generate PDF invoices and reports from JSX, HTML, and CSS with takumi-pdf, without a headless browser.",
+    "path": "pdf/index.mdx",
+    "title": "Generate PDFs",
+  },
+  {
+    "description": "Generate paginated PDF invoices with line items, totals, page numbers, and optional embedded XML.",
+    "path": "pdf/invoices.mdx",
+    "title": "Invoices",
+  },
+  {
+    "description": "Add clickable PDF links, a table of contents, heading bookmarks, and document metadata.",
+    "path": "pdf/links-and-outline.mdx",
+    "title": "Links, outline & metadata",
+  },
+  {
+    "description": "Control PDF page breaks, keep related content together, and set paragraph widows and orphans with CSS.",
+    "path": "pdf/pagination.mdx",
+    "title": "Pagination",
+  },
+  {
+    "description": "Configure PDF/A archival output, tagged PDF structure, and PDF/UA-1 validation with takumi-pdf.",
+    "path": "pdf/pdf-a.mdx",
+    "title": "PDF/A and PDF/UA",
+  },
+  {
+    "description": "Generate PDF reports and statements with chapters, bookmarks, tables of contents, and repeating headers.",
+    "path": "pdf/reports.mdx",
+    "title": "Reports & statements",
+  },
+  {
+    "description": "Create a single-page PDF with a fixed viewport or a height that fits its content.",
+    "path": "pdf/single-page.mdx",
+    "title": "Single-page viewport",
+  },
+  {
+    "description": "Generate PDF tickets, shipping labels, and receipts with fixed dimensions or content-sized pages.",
+    "path": "pdf/tickets.mdx",
+    "title": "Tickets & receipts",
+  },
+  {
+    "description": "Reuse Takumi renderers, tune image and glyph caches, and measure cold and repeated renders.",
+    "path": "performance-and-optimization.mdx",
+    "title": "Performance & Optimization",
+  },
+  {
+    "description": "Look up Takumi node fields, CSS properties, units, and supported values.",
+    "path": "reference.mdx",
+    "title": "Reference",
+  },
+  {
+    "description": "Style Takumi templates with inline CSS, stylesheets, Tailwind utilities, and design tokens.",
+    "path": "styling.mdx",
+    "title": "Styling",
+  },
+  {
+    "description": "Render HTML tables with Takumi, set column widths, and understand differences from browser table layout.",
+    "path": "tables.mdx",
+    "title": "Tables",
+  },
+  {
+    "description": "Add Open Graph image templates to your project with the shadcn CLI and the Takumi registry.",
+    "path": "templates.mdx",
+    "title": "Templates",
+  },
+  {
+    "description": "Fix Takumi import, bundler, font, image, and layout errors using their messages and runtime-specific solutions.",
+    "path": "troubleshooting.mdx",
+    "title": "Troubleshooting",
+  },
+  {
+    "description": "Load local or Google Fonts, choose fallbacks for multilingual text, and control typography in Takumi.",
+    "path": "typography-and-fonts.mdx",
+    "title": "Typography & Fonts",
+  },
+  {
+    "description": "Upgrade Takumi from v0 to v1 and update imports, image formats, layout defaults, and font handling.",
+    "path": "upgrade/v1.mdx",
+    "title": "Upgrade to v1",
+  },
+  {
+    "description": "Upgrade Takumi from v1 to v2 and migrate JavaScript APIs, Rust imports, resources, and CSS defaults.",
+    "path": "upgrade/v2.mdx",
+    "title": "Upgrade to v2",
+  },
+  {
+    "description": "Create CSS image effects with Takumi, including gradient text, masks, halftone, and dithering.",
+    "path": "visual-effects.mdx",
+    "title": "Visual Effects",
+  },
+]
+`;

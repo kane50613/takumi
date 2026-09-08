@@ -10,7 +10,7 @@ import { showcaseProjects, showcaseTemplates } from "~/data/showcase";
 
 const TITLE = "Showcase · Takumi";
 const DESCRIPTION =
-  "Discover how developers are using Takumi to power their dynamic image generation.";
+  "Explore Open Graph images and social cards built with Takumi, and find templates for your own project.";
 
 export default function Showcase() {
   return (
@@ -33,8 +33,8 @@ export default function Showcase() {
             Crafted with <span className="text-primary">Takumi</span>
           </h1>
           <p className="text-[1.1rem] md:text-[1.25rem] leading-relaxed text-muted-foreground text-pretty">
-            Explore a curated collection of production applications and open-source projects
-            leveraging Takumi's high-performance image engine.
+            See how applications and open-source projects use Takumi to generate Open Graph images
+            and social cards.
           </p>
         </div>
 
@@ -57,7 +57,7 @@ export default function Showcase() {
               </h2>
             </div>
             <p className="text-muted-foreground max-w-sm md:text-right">
-              Kickstart your generation with our pre-built, responsive canvas layouts.
+              Choose a template, then edit its content and styles for your project.
             </p>
           </div>
 
@@ -80,8 +80,7 @@ export default function Showcase() {
               Feature your creation
             </h2>
             <p className="text-muted-foreground text-lg mb-10 max-w-125">
-              Forged something exceptional? Submit your project to the showcase and share your craft
-              with the community.
+              Add your project to the showcase so others can see what you built with Takumi.
             </p>
 
             <a
@@ -90,7 +89,7 @@ export default function Showcase() {
               rel="noreferrer"
               className="group inline-flex items-center gap-3 px-8 py-4 bg-primary text-primary-foreground font-semibold rounded-full hover:bg-primary/90 transition-all shadow-[0_0_20px_-5px_--theme(--color-primary/0.4)] hover:shadow-[0_0_30px_-5px_--theme(--color-primary/0.6)] hover:-translate-y-0.5 active:translate-y-0 active:scale-95"
             >
-              Submit Pull Request
+              Add your project
               <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
             </a>
           </div>

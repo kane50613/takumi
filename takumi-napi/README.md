@@ -5,7 +5,7 @@
 
 **Native Node.js bindings for [Takumi](https://github.com/kane50613/takumi), a Rust image rendering engine.**
 
-The high-performance N-API runtime that turns node trees into OG cards, banners, and animations, no headless browser required.
+Render node trees as Open Graph images, banners, and animations in Node.js or Bun. For JSX, HTML, and automatic resource loading, use [`takumi-js`](https://www.npmjs.com/package/takumi-js).
 
 [Documentation](https://takumi.kane.tw/docs/) · [Playground](https://takumi.kane.tw/playground)
 
@@ -37,7 +37,7 @@ const png = await renderer.render(
 
 ## Fonts
 
-Pass fonts on the render options, no separate registration step:
+Pass fonts through the render options. A separate registration step is optional:
 
 ```ts
 import { readFile } from "node:fs/promises";

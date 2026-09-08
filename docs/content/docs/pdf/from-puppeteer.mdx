@@ -1,6 +1,6 @@
 ---
 title: From Puppeteer
-description: Move a Puppeteer PDF template to takumi-pdf.
+description: Migrate Puppeteer PDF templates to takumi-pdf, including page setup, assets, and CSS limitations.
 icon: Globe
 ---
 
@@ -101,7 +101,7 @@ Apply timeouts and URL policies to image fetching. Font URL loaders and `googleF
 
 ## Check browser-dependent features
 
-Chrome is a browser. Takumi is a layout engine with a document-shaped CSS subset.
+Takumi supports a subset of browser CSS. Check these differences before replacing Puppeteer:
 
 - **No scripts.** Charts and diagrams have to arrive as markup, SVG, or images. A client-side chart library will not run.
 - **Narrower CSS.** No `filter: blur()`, `drop-shadow()`, or `backdrop-filter` in PDF output. A blurred `box-shadow` approximates with bands. Grid and flex, transforms, gradients, masks, and clip paths all work.

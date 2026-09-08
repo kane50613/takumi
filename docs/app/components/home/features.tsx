@@ -33,7 +33,7 @@ export function Features() {
           The CSS you write.
         </h2>
         <p className="text-muted-foreground leading-relaxed max-w-150 mb-10">
-          Not a tiny OG subset. Put the property back.
+          Grid, gradients, custom fonts, and animation.
         </p>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-x-8 gap-y-10 max-w-250">
@@ -54,7 +54,7 @@ export function Features() {
         </div>
 
         <p className="mt-12 text-muted-foreground leading-relaxed max-w-150">
-          Native on Node. WASM on Workers and browsers. Crate for Rust.
+          Native on Node.js and Bun. WebAssembly on Workers and browsers. A crate for Rust.
         </p>
         <p className="mt-2 font-mono text-xs text-muted-foreground">
           macOS · Linux · Windows · x64 · ARM64

@@ -6,7 +6,7 @@
     "build": "waku build",
     "dev": "portless run --name takumi waku dev",
     "start": "waku start",
-    "test": "bun test app/playground",
+    "test": "bun test app/playground tests/content.test.tsx",
     "typecheck": "fumadocs-mdx && tsc --noEmit"
   },
   "dependencies": {

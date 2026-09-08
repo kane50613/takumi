@@ -1,12 +1,11 @@
 ---
 title: Visual Effects
-description: Aurora meshes, neon CRT, chrome type, halftone, and dithering with plain CSS.
+description: Create CSS image effects with Takumi, including gradient text, masks, halftone, and dithering.
 icon: Wand
 ---
 
-Effects you may not expect from an OG image renderer. Every image below is real takumi output;
-[`visual_showcase.rs`](https://github.com/kane50613/takumi/blob/master/takumi/tests/fixtures/visual_showcase.rs)
-in the test suite renders them from the exact CSS shown.
+Use CSS gradients, shadows, masks, and SVG filters to build these effects. The previews are Takumi test output. The showcase scenes are defined in
+[`visual_showcase.rs`](https://github.com/kane50613/takumi/blob/master/takumi/tests/fixtures/visual_showcase.rs).
 
 ## Aurora and film grain
 
@@ -79,7 +78,7 @@ Three layered effects:
 
 ## Chrome type
 
-A hard-stop metal band gradient clipped to the glyphs; `feSpecularLighting` adds the bevel rim.
+Clip a gradient with hard color stops to the glyphs for a metallic finish. `feSpecularLighting` adds the bevel rim.
 The starburst behind is one `repeating-conic-gradient`:
 
 ```css

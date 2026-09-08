@@ -1,60 +1,19 @@
 ---
 title: Upgrade to v2
-description: Walks through the breaking changes in v2 and how to upgrade from v1.
+description: Upgrade Takumi from v1 to v2 and migrate JavaScript APIs, Rust imports, resources, and CSS defaults.
 ---
 
-v2 makes fonts and images explicit per-render resources and tightens rendering to match the web platform. This page covers the breaking changes; for everything else see the [releases](https://github.com/kane50613/takumi/releases).
+v2 makes fonts and images explicit per-render resources and changes several CSS defaults. This guide covers migration from v1, including changes restored in later v2 releases. See the [release notes](https://github.com/kane50613/takumi/releases) for individual versions.
 
-## Upgrade with an AI agent
+## Install
 
-Most v2 breakages surface as type or compile errors, so a coding agent can do the bulk of the work. Bump the packages you use:
+Update the packages your project imports. For the high-level JavaScript API:
 
 ```npm
-npm install takumi-js @takumi-rs/core @takumi-rs/wasm
+npm install takumi-js
 ```
 
-Paste the prompt below. Apply only the lines for packages you import, run the type checker (`cargo check` for Rust), and fix the rest.
-
-```text
-Upgrade this project from Takumi v1 to v2. Apply `old -> new` for the packages it imports.
-
-JS (takumi-js, @takumi-rs/*):
-- await the top-level render/renderAnimation/renderSvg and the napi Renderer methods (they await resource loading)
-- new Renderer({fonts}) -> new Renderer(); pass fonts per call: render(node, {fonts:[inter]})
-- loadFont/loadFonts/loadFontSync -> fonts option in render/renderAnimation/renderSvg call
-- fonts array now accepts bare URL strings (e.g. fonts: ["https://example.com/Inter.woff2"])
-- render option fetchedResources -> images (keyed by src; no global image store)
-- render option resourcesOptions -> images.fetch/images.timeout; combine pre-fetched entries and a shared byte cache with the group form images: { sources: [...], fetch: myFetch, fetchCache: myMap }
-- extractResourceUrls + fetchResources helpers -> prepareImages({ node, fetchCache? }) from "takumi-js/helpers"
-- format is a string ("png"|"jpeg"|"webp"|...) with optional quality (jpeg/lossy webp) and lossless (webp)
-- createImageResponse(opts)(jsx) -> new ImageResponse(jsx, opts); import from "@takumi-rs/image-response" directly (the /wasm subpath is removed)
-- remove encodeFrames (use renderAnimation or render per frame for raw output)
-
-Rust (takumi crate):
-- use takumi::prelude::*; use takumi::render;   (internals now behind the `unstable` feature)
-- GlobalContext -> Fonts, passed via RenderOptions::builder().fonts(&fonts)
-- Cargo feature "raster" -> "raster-backend" (+ rayon); enable "svg-backend" for render_svg; rename feature "svg" to "svg-source" for SVG image input
-- OutputFormat::Jpeg/WebP carry Quality; lossless -> WebPLossless; write_image(img, &mut out, fmt)
-- measure_layout -> measure, render_sequence_animation -> render_animation; render -> Bitmap
-- render_for_layout drops the current_color argument
-- style value types (unstable): LengthDefaultsToZero -> Length, ColorDefaultsToTransparent -> ColorInput
-- BackgroundPosition -> PositionValue, BackgroundPositions -> PositionValues; ObjectPosition/TransformOrigin removed -> PositionValue (PositionValue::center() for the 50% 50% default)
-- max-width/max-height use MaxSize (initial None); column-gap/row-gap/gap use Gap (initial Normal)
-- background shorthand no longer sets background-blend-mode; blend_mode field is gone from Background struct
-- font_families and lang options in RenderOptions take resolved FontFamily and Lang instead of raw strings
-- write_animation streams animation frames straight to the encoder (e.g. write_animation(options, &mut output, format))
-- new takumi-html crate / "from-html" feature for parsing HTML into a Node tree (takumi::from_html)
-- core enums (NodeKind, ImageSource, ImageSourceInput, ImageCacheMode, Length, ColorInput), css PropertyId/StyleDeclaration, and css value enums (BlendMode, Filter, BasicShape, ContentValue, TextTransform, WhiteSpaceCollapse, OffsetPath, ImageScalingAlgorithm, Position) are now #[non_exhaustive]: add a wildcard match arm; build via constructors, not struct literals
-- css value lists are plain aliases now (Filters = Vec<Filter>, BackgroundImages/Sizes/Repeats and PositionValues = Box<[_]>); drop any newtype wrapper and parse from strings with FromCssStr::from_css_str instead of parse()/from_str
-
-CSS defaults changed, verify visually: position relative -> static; border/outline width
-0 -> medium (3px); negative scale reflects; line-clamp is a shorthand; currentColor in SVG
-images is no longer tinted; transform-origin/object-position default top-left -> center; bolder/lighter
-and larger/smaller font keywords now resolve; more elements (lists, sub/sup, ins/del, forms,
-details/summary) carry default styles.
-```
-
-The sections below explain each line.
+If you use `@takumi-rs/core` or `@takumi-rs/wasm` directly, update those packages too. Follow the JavaScript or Rust sections below, then run your type checker and compare rendered output.
 
 ## JavaScript
 
@@ -81,7 +40,7 @@ const image = await renderer.render(node, { fonts: [archivo] }); // [!code ++]
 
 ### `loadFont`, `loadFonts`, and `loadFontSync` become `registerFont`
 
-Passing `fonts` per render now covers most cases, you mostly don't need to invoke this function.
+Pass `fonts` with each render for most uses. Use `registerFont` to preload fonts on a renderer you reuse.
 
 ```ts
 renderer.loadFonts([archivo, geist]); // [!code --]
@@ -208,24 +167,11 @@ The sections below cover the subtler cases.
 
 ### `currentColor` in SVG images is no longer tinted by the host color
 
-<Callout type="info">
-  Since v2.6, `currentColor` inherits the host `color` again. The lookup matches an inline `<svg>`
-  in a browser: a `color` attribute inside the SVG wins, then the host `color`, then black. Icons
-  that stroke with `currentColor`, such as [Lucide](https://lucide.dev/), pick up the surrounding
-  text color without markup rewriting.
-</Callout>
+This change applies to v2.0–v2.5. In those versions, SVG image content uses its own `color` instead of inheriting the host element's color.
 
-In v1, an SVG supplied as an image (`Node::image`, `background-image: url(...)`, or `mask-image`) had its `currentColor` rewritten to the host element's `color` before rendering. v2 removes this.
+Since v2.6, the host color is the fallback again. An explicit `color` inside the SVG takes precedence, followed by the host color, then black. When upgrading directly to v2.6 or later, keep icons that use `currentColor` as they are.
 
-~~An SVG referenced as an image is an isolated document. It does not inherit `color` from the host, the same rule browsers, [satori](https://github.com/vercel/satori), and `@vercel/og` follow. Its `currentColor` now resolves to the SVG's own default (black) instead of the surrounding text color. This also makes the raster and vector (SVG) backends agree, and lets the raster backend reuse its cached parse instead of reparsing the SVG on every render.~~
-
-`currentColor` for Takumi's own properties (text `color`, `border-color`, `box-shadow`, `outline`, `text-decoration-color`) is unchanged. Only the contents of SVG images are affected.
-
-~~If you relied on the old behavior to tint an icon, set the color in the SVG markup before passing it in:~~
-
-```ts
-const tinted = icon.replace(/currentColor/g, "#3b82f6"); // [!code --]
-```
+Takumi's own text, borders, shadows, and decorations are unaffected by this change.
 
 ### `position`
 
@@ -337,31 +283,20 @@ renderer.render(node, { format: "webp", lossless: true }); // napi only
 
 ### Renamed entry points
 
-| v1                                             | v2                       | Note                                                                             |
-| ---------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------- |
-| `measure_layout`                               | `measure`                | Returns a `MeasuredNode`.                                                        |
-| `render_sequence_animation`                    | `render_animation`       | Matches the JS binding.                                                          |
-| `render` -> `image::RgbaImage`                 | `render` -> `Bitmap`     | Reach pixels with `bitmap.as_raw()` / `into_raw()`, or pass it to `write_image`. |
-| `render_for_layout(..., current_color)`        | `render_for_layout(...)` | The `current_color` argument is dropped.                                         |
-| `Node::resource_urls` / `Style::resource_urls` | `image_urls`             | The URLs they collect are all images.                                            |
-| `ImageResourceError`                           | `ImageError`             | Matches `FontError`.                                                             |
+| v1                                             | v2                   | Note                                                                             |
+| ---------------------------------------------- | -------------------- | -------------------------------------------------------------------------------- |
+| `measure_layout`                               | `measure`            | Returns a `MeasuredNode`.                                                        |
+| `render_sequence_animation`                    | `render_animation`   | Matches the JS binding.                                                          |
+| `render` -> `image::RgbaImage`                 | `render` -> `Bitmap` | Reach pixels with `bitmap.as_raw()` / `into_raw()`, or pass it to `write_image`. |
+| `Node::resource_urls` / `Style::resource_urls` | `image_urls`         | The URLs they collect are all images.                                            |
+| `ImageResourceError`                           | `ImageError`         | Matches `FontError`.                                                             |
 
 ```rust
 let measured = measure_layout(options)?; // [!code --]
 let measured = measure(options)?; // [!code ++]
 ```
 
-~~`render_for_layout` drops `current_color` because SVG `currentColor` is no longer resolved against the host:~~
-
-```rust
-image.render_for_layout(width, height, image_rendering, time_ms, current_color)?; // [!code --]
-image.render_for_layout(width, height, image_rendering, time_ms)?; // [!code ++]
-```
-
-<Callout type="info">
-  v2.6 restores `current_color` as the `currentColor` inheritance fallback. The v1 call shape works
-  again.
-</Callout>
+`render_for_layout` removed its `current_color` argument in v2.0 and restored it in v2.6. Keep the v1 call shape when upgrading to v2.6 or later.
 
 ### `Length` and `ColorInput` drop their default-flavor type parameter
 
@@ -404,9 +339,11 @@ match node.kind {
 The multi-value CSS lists are plain aliases instead of newtypes. Drop the newtype wrapper when you build one.
 
 | Underlying type | Aliases                                                                      |
-| --------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| --------------- | ---------------------------------------------------------------------------- |
 | `Vec<_>`        | `Filters`, `GridTemplateComponents`                                          |
-| `Box<[_]>`      | `BackgroundImages`, `BackgroundSizes`, `BackgroundRepeats`, `PositionValues` | To parse a value from a string, use the `FromCssStr` trait, which returns an owned `ParseError` and keeps `cssparser` out of the public API. |
+| `Box<[_]>`      | `BackgroundImages`, `BackgroundSizes`, `BackgroundRepeats`, `PositionValues` |
+
+Parse strings with `FromCssStr`, which returns an owned `ParseError` and keeps `cssparser` out of the public API.
 
 ```rust
 let filters = Filters(vec![Filter::Blur(Length::Px(4.0))]); // [!code --]
@@ -475,6 +412,6 @@ use takumi::from_html; // [!code ++]
 let node = from_html(html_source, options)?; // [!code ++]
 ```
 
-## More in Changelog!
+## Full release notes
 
 For the full list of changes, see the [releases](https://github.com/kane50613/takumi/releases).

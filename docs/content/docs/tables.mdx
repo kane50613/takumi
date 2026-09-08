@@ -1,6 +1,6 @@
 ---
 title: Tables
-description: What the table displays support, where they drift from browsers, and how to keep columns close to Chrome.
+description: Render HTML tables with Takumi, set column widths, and understand differences from browser table layout.
 icon: Table
 ---
 
@@ -51,7 +51,5 @@ The width drift appears when the table is wider than its content and the free sp
 
 ## Upstream table layout
 
-Native CSS table layout for taffy is in progress at
-[DioxusLabs/taffy#1094](https://github.com/DioxusLabs/taffy/pull/1094), with column width and row
-height distribution ported from Blink. Once it lands, Takumi switches to it. That closes the
-column width and baseline drift, with no change to the properties on this page.
+Native CSS table layout for Taffy is proposed in
+[DioxusLabs/taffy#1094](https://github.com/DioxusLabs/taffy/pull/1094). The PR is open as of September 9, 2026. Takumi currently uses the grid-based approximation described above.

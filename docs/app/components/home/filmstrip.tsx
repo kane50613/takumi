@@ -16,10 +16,10 @@ export function Filmstrip() {
         <div className="flex items-end justify-between gap-12 mb-10 max-lg:flex-col max-lg:items-start max-lg:gap-8">
           <div>
             <h2 className="font-[540] text-[clamp(2.25rem,4vw,3.5rem)] leading-[1.06] tracking-tight mb-4">
-              One tree, sampled across time.
+              Animate the same tree.
             </h2>
             <p className="text-[#a8a29a] leading-relaxed max-w-150">
-              Pass a timestamp. PNG is t&nbsp;=&nbsp;0. Animated WebP is the same tree over t.
+              CSS keyframes to WebP, APNG, or GIF.
             </p>
           </div>
           <pre className="shrink-0 font-mono text-xs leading-relaxed text-[#a8a29a] whitespace-pre max-lg:overflow-x-auto max-lg:max-w-full">

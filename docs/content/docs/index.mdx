@@ -1,28 +1,24 @@
 ---
 title: Introduction
-description: A Rust engine that renders JSX, HTML, and node trees into images. No headless browser.
+description: Generate Open Graph images, social cards, SVG, and animations from JSX, HTML, and CSS with Takumi.
 icon: Axe
 ---
 
-Takumi renders JSX, HTML, and node trees into PNG, JPEG, WebP, SVG, and animations. Native Rust on the server, WebAssembly on the edge.
+Takumi generates Open Graph (OG) images, social cards, and banners from JSX, HTML, or node trees. Style them with CSS or Tailwind, then render PNG, JPEG, WebP, SVG, or animations without a headless browser.
 
-Generate OG images and social cards without a headless browser:
-
-- **No Chromium.** Native Rust on the server, WebAssembly on the edge.
-- **Drop-in for `next/og`.** `ImageResponse` matches the API you already ship.
-- **Every output from one render.** Raster, vector SVG, and animated GIF or WebP.
+Use `takumi-js` for image output. For invoices, reports, and other documents, start with [PDF generation](/docs/pdf).
 
 ## Install
 
 ```npm
-npm i takumi-js
+npm i takumi-js react
 ```
 
 `takumi-js` bundles both bindings: the native renderer (`@takumi-rs/core`) and the WebAssembly one (`@takumi-rs/wasm`). It picks the right one at runtime: native on Node.js, WebAssembly on Cloudflare Workers, Vercel Edge, Deno, and the browser. No extra install.
 
 ## Render an image
 
-`render` takes JSX and returns image bytes. A default sans-serif font is built in, so text works without loading a font.
+`render` takes JSX and returns image bytes. The built-in font covers the Latin text in this example. Save it as `image.tsx` and run `bun image.tsx`, or compile the JSX before running it in Node.js.
 
 ```tsx twoslash
 import { render } from "takumi-js";
@@ -64,7 +60,7 @@ export function GET() {
 
 <Callout type="warning">
   Takumi never reads system fonts. One last-resort font ships built in (Geist, Latin only, weights
-  400 to 800). Load every other font through `fonts` or its glyphs render as tofu. See
+  300 to 800). Load fonts for other scripts through `fonts` to avoid missing glyphs. See
   [Fonts](/docs/typography-and-fonts).
 </Callout>
 
@@ -108,7 +104,7 @@ const png = await render(
 
 ## Coming from satori
 
-A bare `<div>` is `block` where satori forces `display: flex`. Takumi supports Flexbox, Grid, and block layout where satori is flex-only, and rasterizes directly instead of returning an SVG to convert. See the full [comparison to satori](/docs/comparison-to-satori).
+Takumi defaults a bare `<div>` to block layout. Keep explicit Flexbox styles when migrating a Satori template, and compare the rendered output. `renderSvg()` returns SVG, while `render()` returns encoded image bytes. See the [Satori comparison and migration guide](/docs/comparison-to-satori).
 
 ## Next steps
 
@@ -122,7 +118,7 @@ A bare `<div>` is `block` where satori forces `display: flex`. Takumi supports F
   <Card
     title="Integration"
     href="/docs/integration"
-    description="Add Takumi to Next.js, Cloudflare Workers, or any JS runtime"
+    description="Add image generation to your framework"
     icon={<ToyBrick />}
   />
   <Card
@@ -134,7 +130,7 @@ A bare `<div>` is `block` where satori forces `display: flex`. Takumi supports F
   <Card
     title="Fonts & text"
     href="/docs/typography-and-fonts"
-    description="Load fonts, route scripts, and style text"
+    description="Load fonts, set fallbacks, and style multilingual text"
     icon={<Type />}
   />
 </Cards>

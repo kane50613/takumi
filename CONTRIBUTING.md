@@ -298,6 +298,18 @@ gzip -9 -c takumi-wasm/pkg/takumi_wasm_bg.wasm | wc -c
 
 ## Documentation and changelogs
 
+### Writing and editing
+
+Start with the task the reader needs to complete. Keep README files focused on purpose, installation, a working example, and links to detailed guides. Maintain each API contract or benchmark in one place and link to it from other pages.
+
+Use short, descriptive headings and page-specific descriptions. Keep prerequisites before commands, and name the expected output. Follow [How to write good docs](https://www.fuma-nama.dev/blog/good-docs) for simple language, examples, and page organization.
+
+For discovery, use the terms readers search for naturally in titles, introductions, and links. [Google's SEO guide](https://developers.google.com/search/docs/fundamentals/seo-starter-guide) recommends useful content and descriptive links, and warns against keyword stuffing. [GitHub repository search](https://docs.github.com/en/search-github/searching-on-github/searching-for-repositories) supports searching names, descriptions, topics, and READMEs. Neither source establishes a formula for GitHub Trending placement.
+
+The [Satori README](https://github.com/vercel/satori#readme) introduces its input and output before detailing CSS limitations. The [react-pdf README](https://github.com/diegomura/react-pdf#readme) distinguishes creating PDFs from viewing them, then shows installation and rendering. Use those structural ideas without copying their claims or wording.
+
+See the [docs workspace README](./docs/README.md) for editing and validation commands. Documentation-only changes do not need a Tegami entry. Do not edit generated changelogs by hand.
+
 ### External behavior and public APIs
 
 A change to external behavior or a public API includes both of these updates:

@@ -1,10 +1,10 @@
-# e-invoice
+# Generate a Factur-X PDF invoice
 
-Builds the container an EU e-invoice needs, from JSX, using [takumi-pdf](../../takumi-pdf-js).
+Generate a Factur-X invoice from JSX with [takumi-pdf](../../takumi-pdf-js).
 
 An e-invoice is one file that has to satisfy two readers. A human opens it and sees an invoice. A machine opens it and reads `factur-x.xml`, the structured payload attached inside the PDF. Factur-X requires PDF/A-3 for the container.
 
-The output is a Factur-X MINIMUM invoice: a PDF/A-3B container that is also PDF/UA-1, carrying the XML payload and the `fx:` XMP block that identifies it. veraPDF and Mustang both pass it, see [Validating](#validating).
+This example produces a Factur-X MINIMUM invoice: a PDF/A-3B container that is also PDF/UA-1, carrying the XML payload and the `fx:` XMP block that identifies it. See [Validating](#validating) to check the output with veraPDF and Mustang.
 
 Build the wasm package first (needs [Rust](https://www.rust-lang.org/tools/install) and [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/)):
 
@@ -28,7 +28,7 @@ Open `output/invoice.pdf`. The attachment panel holds `factur-x.xml`.
 
 `attachments` embeds the XML with the `AFRelationship` of `Data`, the file name `factur-x.xml`, and a media type. Factur-X pins all three. `metadata.creationDate` supplies the attachment's modification date, so the date does not change between runs.
 
-`measure` lays out the footer band on its own and returns its height. The bottom margin is that height plus a gap, so the footer never collides with the body no matter what the band contains.
+`measure` lays out the footer and returns its height. The example adds a gap to that height when setting the bottom margin, keeping body content above the footer.
 
 `tagged: "ua1"` claims PDF/UA-1 on top of that. Headings, paragraphs, the table rows, and the logo's alt text land in the structure tree. The footer band, the backgrounds, and the borders are artifacts, so a screen reader skips them.
 

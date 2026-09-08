@@ -1,6 +1,6 @@
 ---
 title: Helpers
-description: Build inputs and load images without the renderer.
+description: Convert JSX and HTML to Takumi node trees, prepare images, and load fonts with reusable helpers.
 icon: Wrench
 ---
 
@@ -57,7 +57,7 @@ Length and color shorthands return CSS strings. `vw`/`vh` are viewport width/hei
 | `fromJsx(element, options?)` | `takumi-js/helpers/jsx`  | Convert JSX or a React element to `{ node, css }`. |
 | `fromHtml(html)`             | `takumi-js/helpers/html` | Convert an HTML string to `{ node, css }`.         |
 
-`fromJsx` resolves hooks and context itself: components using `useState`, `useContext`, or `use()` render with server semantics (initial state, no effects), without loading `react-dom`. Preact trees render too, as long as no component calls a Preact hook: those live on Preact's mangled internals, which no dispatcher can stand in for.
+`fromJsx` resolves React hooks and context without loading `react-dom`. Components using `useState`, `useContext`, or `use()` render with server semantics: initial state, no effects. Preact trees work only when their components do not call Preact hooks.
 
 ## Images & emoji
 

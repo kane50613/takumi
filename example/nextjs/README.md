@@ -1,20 +1,19 @@
 # Next.js Example
 
-This is a simple example of how to use `takumi-js` in Next.js.
+Generate an Open Graph image from a Next.js App Router route with `takumi-js`. Change the `name` query parameter to update the card.
 
-Before running the example, you need to build the native binary.
-
-Make sure you have [Rust installed](https://www.rust-lang.org/tools/install).
+Install [Rust](https://www.rust-lang.org/tools/install) and the workspace dependencies, then build from the repository root:
 
 ```bash
+bun install
 bun --filter '*' run build
 ```
 
-Then, run the development server.
+Start the example with [portless](https://github.com/vercel-labs/portless):
 
 ```bash
 cd example/nextjs
-bun dev
+portless run --name takumi-nextjs next dev
 ```
 
-Visit http://localhost:3000/hello?name=Kane to see the result.
+Open https://takumi-nextjs.localhost/?name=Kane to see the generated image.

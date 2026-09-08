@@ -1,6 +1,6 @@
 ---
 title: Invoices
-description: Render invoice line items and attach structured invoice data.
+description: Generate paginated PDF invoices with line items, totals, page numbers, and optional embedded XML.
 icon: Receipt
 ---
 
@@ -8,7 +8,7 @@ Render line items and totals as a paged document. If your invoice format require
 
 ## A plain invoice
 
-Line items flow across pages. A footer carries the page counter. `measure` returns the band's height, so the bottom margin always clears it:
+Line items flow across pages. A footer carries the page counter. `measure` returns the footer's height so you can reserve enough bottom margin:
 
 ```tsx twoslash
 import type { ReactNode } from "react";
