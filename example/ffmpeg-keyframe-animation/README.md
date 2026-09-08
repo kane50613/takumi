@@ -1,4 +1,4 @@
-# ffmpeg-h265 Example
+# CSS keyframe animation with ffmpeg
 
 [![Animation Preview](output/thumbnail.webp)](output/animation.mp4)
 
@@ -28,10 +28,10 @@ Render CSS **keyframe animations** with Takumi and encode them into an **H.265 (
 
 ```bash
 bun install
-bun src/index.ts
+bun src/index.tsx
 ```
 
-The output video will be written to `output/animation.mp4`.
+The example writes `output/animation.mp4`.
 
 ## Credits
 

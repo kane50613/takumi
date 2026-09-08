@@ -1,20 +1,19 @@
 # TanStack Start Example
 
-This is a simple example of using `takumi-js` in TanStack Start with Cloudflare Vite plugin.
+Return an Open Graph image from a TanStack Start server route using `takumi-js` and the Cloudflare Vite plugin.
 
-Before running the example, you need to build the native binary.
-
-Make sure you have [Rust installed](https://www.rust-lang.org/tools/install).
+Install [Rust](https://www.rust-lang.org/tools/install) and the workspace dependencies, then build from the repository root:
 
 ```bash
+bun install
 bun --filter '*' run build
 ```
 
-Then, run the development server.
+Start the example with [portless](https://github.com/vercel-labs/portless):
 
 ```bash
 cd example/tanstack-start
-bun dev
+portless run --name takumi-tanstack vite dev
 ```
 
-Visit http://localhost:3000/ to see the result.
+Open https://takumi-tanstack.localhost/ to see the generated image.

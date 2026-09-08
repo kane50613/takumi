@@ -1,12 +1,12 @@
 ---
 title: Performance & Optimization
-description: Reuse rendering work and measure before tuning caches.
+description: Reuse Takumi renderers, tune image and glyph caches, and measure cold and repeated renders.
 icon: Zap
 ---
 
 ## Reuse the renderer
 
-```tsx twoslash
+```tsx twoslash title="Reuse the renderer"
 import { render } from "takumi-js";
 
 const image = await render(<div tw="p-8 text-4xl">Hello Takumi</div>, {
@@ -38,20 +38,20 @@ Use representative text, images, output formats, and concurrent requests. Compar
 
 ### Resource cache
 
-```ts twoslash
+```ts twoslash title="Resource cache"
 import { Renderer } from "takumi-js/node";
 
-const renderer = new Renderer({ cacheMaxBytes: 64 * 1024 * 1024 });
+const renderer = new Renderer({ cacheMaxBytes: 64 * 1024 * 1024 }); // [!code highlight]
 ```
 
 Raise the budget when frequently reused images or stylesheets are being evicted. For images used only once, [`cache: "none"`](/docs/load-images#decode-caching) avoids displacing reusable entries. An unbounded `images.fetchCache` is separate from this budget.
 
 ### Glyph cache
 
-```ts twoslash
+```ts twoslash title="Glyph cache"
 import { setGlyphCacheMaxBytes } from "takumi-js";
 
-setGlyphCacheMaxBytes(64 * 1024 * 1024);
+setGlyphCacheMaxBytes(64 * 1024 * 1024); // [!code highlight]
 ```
 
 Call this before the first render. Outlines and masks share the budget across renderers in the same backend module. Large glyph sets or text sizes can benefit from more space, but benchmark your content first.

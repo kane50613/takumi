@@ -3,9 +3,9 @@
 
 # takumi-js
 
-**Render OG images from JSX, HTML, and CSS. No headless browser.**
+**Generate Open Graph images from JSX, HTML, and CSS without a headless browser.**
 
-Render PNG, WebP, SVG, or animations. The package provides an `ImageResponse` API compatible with `next/og`.
+Create social cards, banners, PNG, JPEG, WebP, SVG, and animations. The package provides an `ImageResponse` API compatible with `next/og`.
 
 [Documentation](https://takumi.kane.tw/docs/) · [Playground](https://takumi.kane.tw/playground)
 
@@ -21,12 +21,14 @@ npm install takumi-js
 
 ## Quick start
 
+Save this example as `image.tsx` and run it with `bun image.tsx`. In Node.js, compile JSX before running it.
+
 ```tsx
 import { render } from "takumi-js";
 import { writeFile } from "node:fs/promises";
 
 const image = await render(
-  <div tw="w-full h-full flex items-center justify-center bg-gradient-to-b from-blue-100 to-red-50">
+  <div tw="w-full h-full flex items-center justify-center bg-linear-to-b from-blue-100 to-red-50">
     <h1 tw="text-6xl font-bold">Hello from Takumi</h1>
   </div>,
   { width: 1200, height: 630 },
@@ -35,13 +37,13 @@ const image = await render(
 await writeFile("./output.png", image);
 ```
 
-## Coming from something else
+## Migrate from another renderer
 
-| You are using             | What changes                                                                                                                                                                                                |
-| :------------------------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `satori`                  | Replace `satori()` with `renderSvg()`, or call `render()` for encoded image bytes. [Compare the renderers](https://takumi.kane.tw/docs/comparison-to-satori).                                               |
-| `next/og`                 | Swap the `ImageResponse` import. Existing Satori-compatible templates keep their explicit Flexbox styles. [Read the migration guide](https://takumi.kane.tw/docs/comparison-to-satori#migrate-from-nextog). |
-| Puppeteer for screenshots | Pass a JSX or HTML tree to `render()`. Scripts do not run, and Takumi supports less CSS than Chrome.                                                                                                        |
+| You are using             | What changes                                                                                                                                                                                     |
+| :------------------------ | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `satori`                  | Replace `satori()` with `renderSvg()`, or call `render()` for encoded image bytes. [Compare the renderers](https://takumi.kane.tw/docs/comparison-to-satori).                                    |
+| `next/og`                 | Swap the `ImageResponse` import. Keep explicit Flexbox styles and compare the rendered output. [Read the migration guide](https://takumi.kane.tw/docs/comparison-to-satori#migrate-from-nextog). |
+| Puppeteer for screenshots | Pass a JSX or HTML tree to `render()`. Scripts do not run, and Takumi supports less CSS than Chrome.                                                                                             |
 
 ## Runtime detection
 
@@ -61,7 +63,7 @@ import { ImageResponse } from "takumi-js/response";
 
 export function GET() {
   return new ImageResponse(
-    <div tw="w-full h-full flex items-center justify-center bg-gradient-to-b from-blue-100 to-red-50">
+    <div tw="w-full h-full flex items-center justify-center bg-linear-to-b from-blue-100 to-red-50">
       <h1 tw="text-6xl font-bold">Hello from Takumi</h1>
     </div>,
     { width: 1200, height: 630 },
@@ -76,7 +78,7 @@ import { renderSvg } from "takumi-js";
 import { writeFile } from "node:fs/promises";
 
 const svg = await renderSvg(
-  <div tw="w-full h-full flex items-center justify-center bg-gradient-to-b from-blue-100 to-red-50">
+  <div tw="w-full h-full flex items-center justify-center bg-linear-to-b from-blue-100 to-red-50">
     <h1 tw="text-6xl font-bold">Hello from Takumi</h1>
   </div>,
   { width: 1200, height: 630 },

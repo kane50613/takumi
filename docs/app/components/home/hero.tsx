@@ -46,13 +46,12 @@ export function Hero() {
       <div className="max-w-275 mx-auto flex max-lg:flex-col lg:items-center justify-between gap-14">
         <div className="max-w-160">
           <h1 className="font-[540] text-[clamp(3rem,5.2vw,4.75rem)] leading-[1.04] tracking-tight text-balance mb-8 animate-reveal-up">
-            Render JSX to images.
+            JSX to images and PDFs.
             <br />
             <em className="text-primary">Skip the browser.</em>
           </h1>
           <p className="text-[clamp(1rem,2vw,1.125rem)] leading-relaxed text-muted-foreground mb-10 animate-reveal-up [animation-delay:100ms]">
-            Headless Chromium needs ~300&nbsp;MB and a cold start for one OG card. Takumi needs a
-            function call.
+            Create OG images, social cards, and PDFs from JSX or HTML, styled with CSS and Tailwind.
           </p>
           <div className="flex items-center gap-6 flex-wrap animate-reveal-up [animation-delay:200ms]">
             <Button asChild size="lg" className="px-7 font-semibold">

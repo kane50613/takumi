@@ -42,8 +42,9 @@ const CODE_SNIPPET = `export default function DemoCard() {
 
 const CTA_COMMAND = "bun i takumi-js";
 
-const TITLE = "Takumi: Render JSX to images. Skip the browser.";
-const DESCRIPTION = "JSX to pixels in Rust. Node, Workers, browser. No headless Chrome.";
+const TITLE = "Takumi: Open Graph images and PDFs from JSX";
+const DESCRIPTION =
+  "Generate Open Graph images, social cards, and PDF documents from JSX, HTML, and CSS. Render with Rust and WebAssembly without a headless browser.";
 
 const highlighter = await createHighlighterCore({
   themes: [githubDarkDefault, githubLightDefault],

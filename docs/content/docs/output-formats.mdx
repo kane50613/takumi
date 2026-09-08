@@ -1,6 +1,6 @@
 ---
 title: Output Formats
-description: Choose a raster format, set the pixel density, or emit vector SVG.
+description: Choose PNG, JPEG, WebP, ICO, raw pixels, or SVG output and configure image quality and resolution.
 icon: FileImage
 ---
 
@@ -10,12 +10,15 @@ icon: FileImage
 
 `format` defaults to `png`. `quality` and `lossless` apply only where the table marks a Yes, and are ignored elsewhere. `quality` runs `0`–`100` (default `75`).
 
-```tsx
+```tsx twoslash title="Choose an image encoder"
 import { render } from "takumi-js";
 
-await render(<OgImage />, { width: 1200, height: 630, format: "png" });
-await render(<OgImage />, { width: 1200, height: 630, format: "jpeg", quality: 80 });
-await render(<OgImage />, { width: 1200, height: 630, format: "webp", lossless: true });
+const card = <div tw="w-full h-full grid place-items-center bg-white">Hello Takumi</div>;
+
+// [!code highlight:3]
+const png = await render(card, { width: 1200, height: 630, format: "png" });
+const jpeg = await render(card, { width: 1200, height: 630, format: "jpeg", quality: 80 });
+const webp = await render(card, { width: 1200, height: 630, format: "webp", lossless: true });
 ```
 
 | Format          | Alpha | Honors `quality` | Honors `lossless` | Notes                                           |
@@ -39,8 +42,14 @@ await render(<OgImage />, { width: 1200, height: 630, format: "webp", lossless: 
 
 `devicePixelRatio` scales the output resolution without touching the layout. A `1200 × 630` render at `devicePixelRatio: 2` produces a `2400 × 1260` image whose elements keep their CSS sizes.
 
-```tsx
-await render(<OgImage />, { width: 1200, height: 630, devicePixelRatio: 2 });
+```tsx twoslash title="Render at twice the resolution"
+import { render } from "takumi-js";
+
+const image = await render(<div>Hello Takumi</div>, {
+  width: 1200,
+  height: 630,
+  devicePixelRatio: 2, // [!code highlight]
+});
 ```
 
 ## Dithering
@@ -50,8 +59,14 @@ await render(<OgImage />, { width: 1200, height: 630, devicePixelRatio: 2 });
 - `none` (default)
 - `ordered-bayer`
 
-```tsx
-await render(<Gradient />, { width: 1200, height: 630, dithering: "ordered-bayer" });
+```tsx twoslash title="Reduce gradient banding"
+import { render } from "takumi-js";
+
+const image = await render(<div tw="w-full h-full bg-linear-to-r from-slate-900 to-slate-700" />, {
+  width: 1200,
+  height: 630,
+  dithering: "ordered-bayer", // [!code highlight]
+});
 ```
 
 ## Animated output
@@ -62,11 +77,13 @@ await render(<Gradient />, { width: 1200, height: 630, dithering: "ordered-bayer
 
 `renderSvg()` is the second output backend. It returns an `<svg>` document string instead of a raster bitmap. The output is real `<rect>`, `<path>`, gradients, glyph outlines, and embedded images, drawn from the same layout.
 
-```tsx
+```tsx twoslash title="Render PNG and SVG"
 import { render, renderSvg } from "takumi-js";
 
-const png = await render(<OgImage />, { width: 1200, height: 630 });
-const svg = await renderSvg(<OgImage />, { width: 1200, height: 630 });
+const card = <div>Hello Takumi</div>;
+
+const png = await render(card, { width: 1200, height: 630 });
+const svg = await renderSvg(card, { width: 1200, height: 630 }); // [!code highlight]
 ```
 
 SVG is a vector format, so the raster-only knobs do not apply: `format`, `quality`, `lossless`, `dithering`, `drawDebugBorder`, `devicePixelRatio`.
@@ -75,6 +92,14 @@ SVG is a vector format, so the raster-only knobs do not apply: `format`, `qualit
 
 Every render takes an optional `AbortSignal`. Pass `signal` to abort a render that is still fetching fonts or images; an already-aborted signal throws before any work starts.
 
-```tsx
-await render(<OgImage />, { width: 1200, height: 630, signal: request.signal });
+```tsx twoslash title="Cancel with the request"
+import { ImageResponse } from "takumi-js/response";
+
+export function GET(request: Request) {
+  return new ImageResponse(<div>Hello Takumi</div>, {
+    width: 1200,
+    height: 630,
+    signal: request.signal, // [!code highlight]
+  });
+}
 ```

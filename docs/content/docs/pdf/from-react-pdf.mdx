@@ -1,6 +1,6 @@
 ---
 title: From react-pdf
-description: Convert react-pdf components and point-based layouts to HTML and CSS.
+description: Migrate @react-pdf/renderer templates to takumi-pdf using HTML elements, CSS, and page options.
 icon: Atom
 ---
 
@@ -8,7 +8,7 @@ Replace react-pdf document primitives with HTML elements, move page settings int
 
 ## Before and after
 
-```tsx
+```tsx title="Before: react-pdf primitives"
 // @react-pdf/renderer
 import { Document, Page, View, Text, StyleSheet, renderToBuffer, Font } from "@react-pdf/renderer";
 
@@ -32,7 +32,7 @@ const pdf = await renderToBuffer(
 );
 ```
 
-```tsx twoslash
+```tsx twoslash title="After: HTML elements and CSS"
 // takumi-pdf
 import { googleFonts } from "@takumi-rs/helpers";
 import { render } from "takumi-pdf";
@@ -84,7 +84,7 @@ const pdf = await render(
 
 react-pdf repeats a band by marking a `<View>` as `fixed` inside the page. Takumi takes the band as a separate option, and it draws in the margin:
 
-```tsx twoslash
+```tsx twoslash title="Repeat page headers"
 import type { ReactNode } from "react";
 declare const report: ReactNode;
 // ---cut---

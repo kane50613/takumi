@@ -1,6 +1,6 @@
 ---
 title: Keyframe Animation
-description: Animate scenes with CSS keyframes and render them as GIFs, WebP, APNG, or video frames.
+description: Render CSS keyframe animations as GIF, animated WebP, APNG, or raw frames for ffmpeg.
 icon: Play
 ---
 
@@ -116,13 +116,13 @@ Takumi supports these Tailwind animation forms:
 
 For arbitrary values, `_` is converted to a space, so:
 
-```txt
+```txt title="Tailwind animation utilities"
 animate-[move_1s_ease-in-out_infinite_alternate]
 ```
 
 becomes:
 
-```css
+```css title="Tailwind animation utilities"
 animation: move 1s ease-in-out infinite alternate;
 ```
 
@@ -188,7 +188,7 @@ const output = await render(<Scene />, {
 
 ### `renderAnimation()`
 
-`renderAnimation()` does not sample an animation for you. Animate the scene with stylesheet keyframes (an inline `<style>`, as in `Scene` above) or Tailwind's animation presets. `scenes` is an array so you can stitch several into one animation, but Takumi does not tween between them.
+`renderAnimation()` samples the animations defined in each scene. Define motion with stylesheet keyframes (an inline `<style>`, as in `Scene` above) or Tailwind's animation presets. `scenes` is an array so you can stitch several into one animation, but Takumi does not tween between them.
 
 ```tsx twoslash title="render.tsx"
 // @noErrors

@@ -1,15 +1,14 @@
 ---
 title: Troubleshooting
-description: Every error Takumi prints, what to do about it, and why it happens.
+description: Fix Takumi import, bundler, font, image, and layout errors using their messages and runtime-specific solutions.
 icon: Bug
 ---
 
-Each heading below is the text an error prints.
-Search this page for the line your build or your server printed.
+Search for the error message from your build or server logs. Start with the import table if the failure depends on your runtime.
 
 ## Pick the right entry
 
-Most build failures are a target reading the wrong entry. Start here.
+Check that your import matches the runtime and bundler.
 
 | Target                                 | Import                                             |
 | -------------------------------------- | -------------------------------------------------- |
@@ -19,7 +18,7 @@ Most build failures are a target reading the wrong entry. Start here.
 | A browser bundle, image output         | `takumi-js/wasm/no-init` plus `takumi-js/wasm-url` |
 
 The default entry reads the export conditions your bundler sets.
-It covers every server runtime with no configuration.
+Use the runtime-specific entries below when automatic resolution selects the wrong build.
 
 ## Bundler errors
 
@@ -27,7 +26,7 @@ It covers every server runtime with no configuration.
 
 Load the binary yourself:
 
-```ts
+```ts title="Export default doesn't exist in target module"
 import init, { render } from "takumi-pdf/no-init";
 import wasmUrl from "takumi-pdf/wasm-url";
 
@@ -63,7 +62,7 @@ internal id, which Node cannot resolve at runtime.
 ### Cannot find native binding
 
 `@takumi-rs/core` loads a platform-specific native package, and the one for the
-current platform is missing. Two things cause that.
+current platform is missing. Check package hoisting and the deployment target below.
 
 #### Hoist the native package
 
@@ -166,7 +165,7 @@ If your framework has to bundle it,
 
 Register a font covering the characters the error names:
 
-```ts
+```ts title="No registered font covers क (U+0915)"
 import { googleFonts } from "@takumi-rs/helpers";
 import { render } from "takumi-pdf";
 
@@ -175,8 +174,7 @@ const pdf = await render(document, {
 });
 ```
 
-Those characters would draw nothing and leave nothing in the text layer, so the
-render stops rather than shipping a page with holes.
+The PDF renderer rejects uncovered characters because they would be missing from both the visible page and its text layer.
 
 ### A PDF cannot draw filter: blur(2px)
 
@@ -214,7 +212,7 @@ socket while loading a remote `img` URL
 
 Set `drawDebugBorder` to outline every node:
 
-```tsx
+```tsx title="The layout is not what I expected"
 import { ImageResponse } from "takumi-js/response";
 
 export function GET() {

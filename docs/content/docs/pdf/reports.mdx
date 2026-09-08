@@ -1,6 +1,6 @@
 ---
 title: Reports & statements
-description: Long documents with chapters, bookmarks, and running bands.
+description: Generate PDF reports and statements with chapters, bookmarks, tables of contents, and repeating headers.
 icon: FileSpreadsheet
 ---
 
@@ -10,7 +10,7 @@ Use page breaks for chapters, repeating headers for context, and bookmarks or a 
 
 `break-before: page` starts a section on a fresh page. `break-inside: avoid` keeps a figure with its caption:
 
-```tsx twoslash
+```tsx twoslash title="Start chapters on new pages"
 declare const chartSvg: string;
 // ---cut---
 import { render } from "takumi-pdf";
@@ -38,7 +38,7 @@ See [Pagination](/docs/pdf/pagination) for the full set of break properties.
 
 `outline: true` turns `h1`–`h6` into PDF bookmarks. A reader opens the sidebar and jumps between chapters. Nesting follows heading depth:
 
-```tsx twoslash
+```tsx twoslash title="Generate chapter bookmarks"
 import type { ReactNode } from "react";
 declare const report: ReactNode;
 // ---cut---
@@ -52,9 +52,9 @@ const pdf = await render(report, {
 });
 ```
 
-A table of contents is the same chapters as links, with the page each one starts on. `<TargetPageNumber />` fills the page in:
+Use your `chapters` array of `{ id, title }` entries to link each chapter in the table of contents. `<TargetPageNumber />` fills in the page number of each link target:
 
-```tsx twoslash
+```tsx twoslash title="Build a table of contents"
 declare const chapters: { id: string; title: string }[];
 // ---cut---
 import { TargetPageNumber } from "takumi-pdf/primitives";
@@ -77,7 +77,7 @@ Each entry stays clickable, so the contents page works on screen as well as in p
 
 A report header usually names the document and the period. A footer usually carries the page counter:
 
-```tsx twoslash
+```tsx twoslash title="Repeat a report header"
 import type { ReactNode } from "react";
 declare const report: ReactNode;
 // ---cut---
@@ -108,7 +108,7 @@ Bands draw in the margin, so the margin has to be tall enough. [Headers & footer
 
 Use `<table>` markup. Rows split across pages, and column positions stay identical on every page. A `<thead>` [that qualifies](/docs/pdf/pagination#repeated-table-headers) repeats at the top of each continuation page:
 
-```tsx twoslash
+```tsx twoslash title="Repeat table headers"
 declare const rows: { id: string; label: string; amount: string }[];
 // ---cut---
 import "takumi-pdf";
@@ -136,9 +136,9 @@ Tagged output maps the markup to `Table`, `TR`, `TH` and `TD` structure elements
 
 ## Batches
 
-Statement runs render the same template thousands of times. Construct one `PdfRenderer` and keep it. Fonts register once and are reused for every document:
+Here, `accounts` contains your account records, `Statement` is your JSX template, and `save(id, pdf)` writes each result to storage. Statement runs render the same template thousands of times. Construct one `PdfRenderer` and keep it. Fonts register once and are reused for every document:
 
-```tsx twoslash
+```tsx twoslash title="Render a batch of statements"
 import type { ReactNode } from "react";
 declare const accounts: { id: string }[];
 declare function Statement(props: { account: (typeof accounts)[number] }): ReactNode;

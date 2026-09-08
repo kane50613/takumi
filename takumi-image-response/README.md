@@ -1,8 +1,8 @@
 # @takumi-rs/image-response
 
-> **Migrated to [`takumi-js/response`](https://www.npmjs.com/package/takumi-js).**
+> **Use [`takumi-js/response`](https://www.npmjs.com/package/takumi-js).**
 
-This package has moved into `takumi-js`. Install `takumi-js` and import `ImageResponse` from `takumi-js/response`:
+For new projects and migrations, install `takumi-js` and import `ImageResponse` from `takumi-js/response`:
 
 ```bash
 npm install takumi-js

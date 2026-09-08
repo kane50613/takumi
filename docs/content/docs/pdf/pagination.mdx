@@ -1,6 +1,6 @@
 ---
 title: Pagination
-description: Control where pages break with CSS.
+description: Control PDF page breaks, keep related content together, and set paragraph widows and orphans with CSS.
 icon: Scissors
 ---
 
@@ -8,7 +8,7 @@ Content flows across pages at the width available inside the margins. Use CSS br
 
 ## Break properties
 
-```tsx twoslash
+```tsx twoslash title="Break properties"
 import { render } from "takumi-pdf";
 
 const pdf = await render(
@@ -33,7 +33,7 @@ const pdf = await render(
 
 A cut through a paragraph keeps at least `orphans` lines at the bottom of the page and `widows` lines at the top of the next. Both default to 2, like Chromium. Set them to 1 to allow lone lines:
 
-```tsx twoslash
+```tsx twoslash title="Widows and orphans"
 import { render } from "takumi-pdf";
 
 const pdf = await render(
@@ -50,7 +50,7 @@ Both properties inherit. If a paragraph is too short to satisfy both values, `or
 
 A box that crosses a page break slices its border and background by default. Set `box-decoration-break: clone` to give each fragment complete decorations:
 
-```tsx twoslash
+```tsx twoslash title="Split decorations"
 import { render } from "takumi-pdf";
 
 const pdf = await render(
@@ -71,7 +71,7 @@ const pdf = await render(
 
 Use `<thead>` for column headings that repeat on continuation pages. The header stays together, including its spacing before the first body row.
 
-```tsx twoslash
+```tsx twoslash title="Repeated table headers"
 declare const rows: import("react").ReactNode;
 // ---cut---
 import { render } from "takumi-pdf";
@@ -95,7 +95,7 @@ A header taller than a quarter of the page does not repeat, matching Chromium. A
 
 `pageRanges` keeps only the listed pages, like a print dialog. Each entry is a 1-based page number or an inclusive span:
 
-```tsx twoslash
+```tsx twoslash title="Page ranges"
 declare const rows: import("react").ReactNode;
 // ---cut---
 import { render } from "takumi-pdf";
@@ -116,7 +116,7 @@ Layout and page counters still run over the whole document. A kept page shows th
 The box lays out against the page area.
 It stays outside the content column.
 
-```tsx twoslash
+```tsx twoslash title="Watermarks"
 import { render } from "takumi-pdf";
 
 const pdf = await render(

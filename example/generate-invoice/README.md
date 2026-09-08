@@ -1,6 +1,6 @@
-# generate-invoice
+# Generate PDF invoices and receipts
 
-Generates a paged A4 invoice and a single-page receipt from the same fake data, using [takumi-pdf](../../takumi-pdf-js).
+Generate a paginated A4 invoice and a single-page receipt from the same sample data with [takumi-pdf](../../takumi-pdf-js).
 
 Build the wasm package first (needs [Rust](https://www.rust-lang.org/tools/install) and [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/)):
 
@@ -12,7 +12,7 @@ bun run build
 Then run the example:
 
 ```bash
-cd example/generate-invoice
+cd ../example/generate-invoice
 bun index.tsx
 ```
 

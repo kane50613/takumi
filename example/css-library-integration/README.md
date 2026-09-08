@@ -1,6 +1,6 @@
-# CSS Library Integration Example
+# Render Tailwind CSS and UnoCSS stylesheets
 
-This example compiles Tailwind CSS and UnoCSS in-process and passes the resulting CSS into Takumi's `css` render option.
+Compile Tailwind CSS and UnoCSS in the same process, then pass each stylesheet to Takumi's `css` render option.
 
 ![Tailwind CSS output](./output/tailwind-stylesheets.png)
 ![UnoCSS output](./output/unocss-stylesheets.png)
@@ -13,7 +13,7 @@ Before running the example, build the native package once from the workspace roo
 bun --filter '*' run build
 ```
 
-Then render the example image.
+Then render both example images:
 
 ```bash
 cd example/css-library-integration

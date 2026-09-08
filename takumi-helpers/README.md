@@ -1,8 +1,8 @@
 # @takumi-rs/helpers
 
-**Utility functions and types for working with Takumi node trees.**
+**Convert JSX and HTML into Takumi node trees and prepare fonts, images, and emoji.**
 
-Convert JSX and HTML into the node trees Takumi's Rust engine renders. Load fonts and process emoji.
+Use these helpers when working with the native or WebAssembly bindings directly. With `takumi-js`, import them from `takumi-js/helpers` and its subpaths.
 
 [Documentation](https://takumi.kane.tw/docs/helpers#parsing-templates) · [GitHub](https://github.com/kane50613/takumi)
 
@@ -16,7 +16,7 @@ npm install @takumi-rs/helpers
 
 ### JSX to Node Tree
 
-Convert React-like elements into a serializable node tree + CSS.
+Convert React-like elements into a serializable node tree and its CSS.
 
 ```tsx
 import { fromJsx } from "@takumi-rs/helpers/jsx";
@@ -36,7 +36,7 @@ const { node, css } = await fromHtml("<div style='color: red'>Hello</div>");
 
 ### Emoji Processing
 
-Find and replace emoji characters in text nodes with image nodes (Twemoji or custom).
+Replace emoji in text nodes with image nodes from the selected provider.
 
 ```ts
 import { extractEmojis } from "@takumi-rs/helpers/emoji";

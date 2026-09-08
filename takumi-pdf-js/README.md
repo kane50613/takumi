@@ -7,22 +7,22 @@
 
 Build invoices and reports with CSS or Tailwind. The renderer writes vector PDF with selectable text.
 
-[Documentation](https://takumi.kane.tw/docs/) · [Playground](https://takumi.kane.tw/playground)
+[PDF documentation](https://takumi.kane.tw/docs/pdf) · [Playground](https://takumi.kane.tw/playground)
 
 </div>
 
-## Why
+## How it works
 
-Browser-based PDF generation starts a browser process and ships a Chrome installation. `takumi-pdf` compiles Takumi's layout and PDF code to WebAssembly.
+`takumi-pdf` runs Takumi's layout and PDF engine in WebAssembly on Node.js, Bun, and Cloudflare Workers. It does not launch a browser process.
 
-Pass JSX or a Takumi node tree with CSS. The renderer returns vector PDF bytes with searchable text and embedded subset fonts.
+Pass JSX, an HTML string, or a Takumi node tree with CSS. The renderer returns vector PDF bytes with searchable text and embedded subset fonts.
 
 ## Install
 
 ```bash
-npm install takumi-pdf
+npm install takumi-pdf @takumi-rs/helpers
 # or
-bun add takumi-pdf
+bun add takumi-pdf @takumi-rs/helpers
 ```
 
 ## Quick start
@@ -55,224 +55,31 @@ const pdf = await render(
 await writeFile("invoice.pdf", pdf);
 ```
 
-`render()` returns `Promise<Uint8Array>`. Paged output defaults to A4 with a uniform 48px margin; content flows across as many pages as it needs.
+`render()` returns `Promise<Uint8Array>`. Paged output defaults to A4, and `margin` defaults to `"auto"` on all sides. Without headers or footers, margins are 37.8px. Top and bottom margins can expand to fit header or footer bands. Content flows across pages automatically.
 
-## Page setup
+## Choose the next guide
 
-```tsx
-const pdf = await render(report, {
-  size: "letter",
-  landscape: true,
-  margin: { top: 48, right: 32, bottom: 48, left: 32 },
-});
-```
+| Task                                                | Guide                                                                                                                               |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Set page size, margins, and runtime imports         | [PDF getting started](https://takumi.kane.tw/docs/pdf)                                                                              |
+| Control page breaks and keep content together       | [Pagination](https://takumi.kane.tw/docs/pdf/pagination)                                                                            |
+| Reserve space for repeated headers and page numbers | [Headers and footers](https://takumi.kane.tw/docs/pdf/headers-and-footers)                                                          |
+| Create a certificate, ticket, or receipt            | [Single-page output](https://takumi.kane.tw/docs/pdf/single-page)                                                                   |
+| Load fonts and remote image bytes                   | [Fonts and images](https://takumi.kane.tw/docs/pdf/fonts-and-images)                                                                |
+| Add hyperlinks, bookmarks, and a table of contents  | [Links and metadata](https://takumi.kane.tw/docs/pdf/links-and-outline)                                                             |
+| Configure archival or accessible output             | [PDF/A and PDF/UA](https://takumi.kane.tw/docs/pdf/pdf-a)                                                                           |
+| Embed invoice XML or another file                   | [Attachments](https://takumi.kane.tw/docs/pdf/attachments)                                                                          |
+| Replace a browser or document renderer              | [From Puppeteer](https://takumi.kane.tw/docs/pdf/from-puppeteer) · [From react-pdf](https://takumi.kane.tw/docs/pdf/from-react-pdf) |
 
-| Option      | Type                                           | Default | Description                                                  |
-| ----------- | ---------------------------------------------- | ------- | ------------------------------------------------------------ |
-| `size`      | `"a4"`, `"letter"`, or `{ width, height }`     | `"a4"`  | Page size in CSS px at 96 dpi. Presets ignore case.          |
-| `landscape` | `boolean`                                      | `false` | Swaps page width and height, including explicit sizes.       |
-| `margin`    | `number` or `{ top?, right?, bottom?, left? }` | `48`    | A number applies to all sides. Missing object sides are `0`. |
+## Before using an existing template
 
-## Headers and footers
+- **Fonts:** Takumi does not read system fonts. Register fonts that cover your text.
+- **Images:** Fetch remote document images yourself and pass their bytes through `images`.
+- **Page geometry:** Use `size`, `landscape`, and `margin`. CSS `@page` rules are not supported.
+- **Effects:** PDF output rejects CSS `filter: blur()`, `drop-shadow()`, and `backdrop-filter`. Prepare those effects as images before rendering.
+- **Validation:** Tagged PDF is enabled by default. Choose the conformance options your document needs and validate the result.
 
-Headers and footers repeat on every page. `<PageNumber />` and `<TotalPages />` place the counters; the `format` prop picks a CSS counter style.
-
-```tsx
-import { render } from "takumi-pdf";
-import { PageNumber, TotalPages } from "takumi-pdf/primitives";
-
-const pdf = await render(report, {
-  footer: (
-    <div style={{ fontSize: 12 }}>
-      第 <PageNumber format="trad-chinese-informal" /> 頁,共{" "}
-      <TotalPages format="trad-chinese-informal" /> 頁
-    </div>
-  ),
-});
-```
-
-The primitives render class hooks, the same `pageNumber` / `totalPages` names Chromium's print templates use, so HTML input writes `<span class="pageNumber"></span>` directly.
-
-| Counter style                               | Example       |
-| ------------------------------------------- | ------------- |
-| `decimal` (default)                         | `12`          |
-| `decimal-leading-zero`                      | `07`          |
-| `lower-roman` / `upper-roman`               | `xii` / `XII` |
-| `cjk-decimal`                               | `一二`        |
-| `trad-chinese-informal` / `cjk-ideographic` | `十二`        |
-
-## Single-page viewport
-
-Use `viewport` for a fixed one-page PDF, such as a certificate or card. Percentage heights resolve against the viewport and overflow is clipped, like an image render.
-
-```tsx
-const pdf = await render(<div style={{ width: "100%", height: "100%" }}>Certificate</div>, {
-  viewport: { width: 1123, height: 794 },
-});
-```
-
-Omit `height` to size the single page to its content, like a thermal receipt. Percentage heights do not resolve there.
-
-```tsx
-const pdf = await render(receipt, { viewport: { width: 302 } });
-```
-
-`viewport` cannot be combined with `size`, `landscape`, `margin`, `header`, or `footer`.
-
-## Fonts
-
-Pass a font URL, font bytes, or the `googleFonts` helper. Registered fonts are deduplicated across calls.
-
-```tsx
-import { googleFonts } from "@takumi-rs/helpers";
-import { render } from "takumi-pdf";
-
-const pdf = await render(doc, {
-  fonts: [...(await googleFonts(["Inter"])), { name: "Brand Sans", weight: 700, data: fontBytes }],
-  fontFamilies: ["Brand Sans", "Inter", "sans-serif"],
-});
-```
-
-Reuse a `PdfRenderer` when an application renders many documents:
-
-```tsx
-import { PdfRenderer } from "takumi-pdf";
-
-const renderer = new PdfRenderer();
-await renderer.registerFont("https://example.com/Inter-Regular.woff2");
-
-const pdf = await renderer.render(doc);
-renderer.free();
-```
-
-## Pagination CSS
-
-```tsx
-const pdf = await render(
-  <article>
-    <h1 style={{ breakBefore: "page" }}>Chapter two</h1>
-    <section style={{ breakInside: "avoid" }}>Keep this together.</section>
-  </article>,
-);
-```
-
-| Property                      | Effect                                                  |
-| ----------------------------- | ------------------------------------------------------- |
-| `break-before: page`          | Starts the element on a new page.                       |
-| `break-after: page`           | Starts the following content on a new page.             |
-| `break-inside: avoid`         | Keeps the element on one page when it fits.             |
-| `box-decoration-break: clone` | Repeats borders and backgrounds on every page fragment. |
-
-## Tables
-
-`<table>` markup lays out on shared column tracks, so column x positions stay identical across pages. A `<thead>` paints again at the top of every page its table continues onto, when it is at most a quarter of the page tall and no header cell spans into the body.
-
-```tsx
-const pdf = await render(
-  <table>
-    <thead>
-      <tr>
-        <th>Name</th>
-        <th>Qty</th>
-      </tr>
-    </thead>
-    <tbody>{rows}</tbody>
-  </table>,
-);
-```
-
-## Links, outline, and metadata
-
-Anchors with an `href` become clickable link annotations. `<TargetPageNumber />` prints the page a link's target lands on, which is what a table of contents needs. `outline: true` builds PDF bookmarks from `h1` through `h6` headings. `metadata` fills the document properties:
-
-```tsx
-const pdf = await render(report, {
-  outline: true,
-  lang: "en",
-  metadata: {
-    title: "Annual report 2026",
-    authors: ["Acme Inc."],
-    creationDate: "2026-08-06",
-  },
-});
-```
-
-Omit `metadata` to keep output byte-identical across runs.
-
-## Tagged output and PDF/A
-
-Output is **tagged by default**: HTML semantics (`h1` through `h6`, `p`, `img` with `alt`, `a`, lists) become a PDF structure tree, like Chromium's print-to-PDF. Set `tagged: "ua1"` to validate against PDF/UA-1, or `tagged: false` to drop the tree when file size matters more than accessibility.
-
-`<table>` markup lays out and paints, but carries no `Table` structure elements yet.
-
-`pdfa` renders archival output. Validation runs during rendering. A document that cannot conform fails with the violated rule instead of writing a broken file. Every level, and PDF/UA-1, passes [veraPDF](https://verapdf.org).
-
-```tsx
-const pdf = await render(report, {
-  pdfa: "2a",
-  tagged: "ua1",
-  lang: "en",
-  metadata: { title: "Annual report", creationDate: "2026-08-06" },
-});
-```
-
-| Level                    | What it adds                          |
-| ------------------------ | ------------------------------------- |
-| `"2b"` / `"2u"`          | Basic conformance / Unicode mapping.  |
-| `"2a"` / `"3a"`          | A tagged structure tree.              |
-| `"3b"` / `"3u"` / `"3a"` | Arbitrary file attachments.           |
-| `"4"`                    | The PDF 2.0 revision of the standard. |
-| `"4f"`                   | PDF 2.0 with file attachments.        |
-
-Invalid combinations are **TypeScript type errors**. See the [PDF/A docs](https://takumi.kane.tw/docs/pdf/pdf-a) for the structure-tree mapping and required metadata.
-
-## Attachments
-
-Attach files with `attachments`. They appear in the viewer's attachment panel. Combine with `pdfa: "3b"` for ZUGFeRD and Factur-X electronic invoices:
-
-```tsx
-const pdf = await render(invoice, {
-  pdfa: "3b",
-  metadata: { title: "Invoice 1042", creationDate: "2026-08-06" },
-  attachments: [
-    {
-      name: "factur-x.xml",
-      data: xml,
-      mimeType: "application/xml",
-      description: "Factur-X invoice data",
-      relationship: "alternative",
-    },
-  ],
-});
-```
-
-The PDF/A-3 levels require `mimeType`, `description`, and a modification date on each attachment. `metadata.creationDate` serves as the date fallback.
-
-## Measuring
-
-`measure()` lays out a tree without rendering and returns its size in CSS px. Use it to size a header or footer band before setting `margin`:
-
-```tsx
-import { measure } from "takumi-pdf";
-
-const { height } = await measure(footer, { size: "a4" });
-```
-
-## Images and runtimes
-
-`takumi-pdf` runs on Node.js, Bun, and Cloudflare Workers.
-
-SVG images embed as vectors, not rasterized bitmaps.
-
-The renderer does not fetch remote images. Pass pre-fetched bytes for image URLs in the document:
-
-```tsx
-const pdf = await render(doc, {
-  images: [{ src: "https://example.com/logo.png", data: logoBytes }],
-});
-```
-
-`@page` CSS rules are not supported. Set page geometry with `size`, `landscape`, and `margin`.
+See the [PDF renderer comparison](https://takumi.kane.tw/docs/pdf/comparison) for recorded benchmarks and rendering differences. Runnable examples cover [invoices and receipts](https://github.com/kane50613/takumi/tree/master/example/generate-invoice) and [Factur-X invoices](https://github.com/kane50613/takumi/tree/master/example/e-invoice).
 
 ## License
 

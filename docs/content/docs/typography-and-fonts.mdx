@@ -1,6 +1,6 @@
 ---
 title: Typography & Fonts
-description: Load fonts, route scripts across them, and style text.
+description: Load local or Google Fonts, choose fallbacks for multilingual text, and control typography in Takumi.
 icon: Type
 ---
 
@@ -20,23 +20,23 @@ Pass the fonts a render needs through `fonts`. An entry takes one of three forms
 
 A reused renderer decodes each file once. `fonts` also takes a promise of the list, so async helpers like `googleFonts` pass straight through without `await`.
 
-```tsx twoslash
+```tsx twoslash title="Load a font URL"
 import { ImageResponse } from "takumi-js/response";
 
 export function GET() {
-  return new ImageResponse(<div />, {
-    fonts: ["https://example.com/Inter.woff2"],
+  return new ImageResponse(<div>Hello Takumi</div>, {
+    fonts: ["https://example.com/Inter.woff2"], // [!code highlight]
   });
 }
 ```
 
 The descriptor overrides what the file reports, or supplies bytes through a loader. `data` is raw bytes or a function that returns them.
 
-```tsx twoslash
+```tsx twoslash title="Override font metadata"
 import { ImageResponse } from "takumi-js/response";
 
 export function GET() {
-  return new ImageResponse(<div />, {
+  return new ImageResponse(<div>Hello Takumi</div>, {
     fonts: [
       {
         name: "Inter",
@@ -52,7 +52,7 @@ The takumi-js functions `render`, `renderAnimation`, and `renderSvg` take the sa
 
 `generic` claims a CSS generic family keyword for the font, so stacks ending in `monospace`, `serif`, and friends reach it without naming the family, the way Tailwind's `font-mono` resolves:
 
-```tsx twoslash
+```tsx twoslash title="Assign a generic font family"
 import { ImageResponse } from "takumi-js/response";
 
 export function GET() {
@@ -60,7 +60,7 @@ export function GET() {
     fonts: [
       {
         name: "Geist Mono",
-        generic: "monospace",
+        generic: "monospace", // [!code highlight]
         data: () => fetch("https://example.com/GeistMono.woff2").then((res) => res.arrayBuffer()),
       },
     ],
@@ -70,7 +70,7 @@ export function GET() {
 
 ### From Google Fonts
 
-```tsx twoslash
+```tsx twoslash title="Load multilingual fonts"
 import { render } from "takumi-js";
 import { googleFonts } from "takumi-js/helpers";
 
@@ -86,7 +86,7 @@ const image = await render(<div style={{ fontFamily: "Inter" }}>Hello 你好 こ
 
 Pass an object instead of a name to set a family's weight, style, or variable axes:
 
-```tsx twoslash
+```tsx twoslash title="Choose font weights and axes"
 import { googleFonts } from "takumi-js/helpers";
 
 await googleFonts([
@@ -119,12 +119,12 @@ Each family accepts:
 
 Pass an object for request-level options:
 
-```ts twoslash
+```ts twoslash title="Limit font requests"
 import { googleFonts } from "takumi-js/helpers";
 
 const fonts = await googleFonts({
   families: ["Inter"],
-  timeout: 3000,
+  timeout: 3000, // [!code highlight]
 });
 ```
 
@@ -141,7 +141,7 @@ Temporary network failures are retried within the request's timeout. See [fetch 
 
 ### Fonts in CI and offline renders
 
-```tsx twoslash
+```tsx twoslash title="Fonts in CI and offline renders"
 import { readFile } from "node:fs/promises";
 import { render } from "takumi-js";
 
@@ -173,13 +173,23 @@ To trim before the render, call `subsetFonts({ fonts, source })`, where `source`
 
 `registerFont` is the escape hatch for preloading. Register a font on a renderer up front, outside the request path, and reuse that renderer. It takes the same entries as `fonts` and returns the families it made.
 
-```tsx
+```tsx twoslash title="Preload a local font"
+import { readFile } from "node:fs/promises";
 import { Renderer } from "@takumi-rs/core";
+import { ImageResponse } from "takumi-js/response";
 
+const inter = await readFile(new URL("./fonts/Inter.woff2", import.meta.url));
 const renderer = new Renderer();
-await renderer.registerFont({ name: "Inter", data: inter });
 
-return new ImageResponse(<OgImage />, { renderer });
+await renderer.registerFont({ name: "Inter", data: inter }); // [!code highlight]
+
+export function GET() {
+  return new ImageResponse(<div style={{ fontFamily: "Inter" }}>Hello Takumi</div>, {
+    width: 1200,
+    height: 630,
+    renderer, // [!code highlight]
+  });
+}
 ```
 
 ## Choosing a font
@@ -188,9 +198,13 @@ return new ImageResponse(<OgImage />, { renderer });
 
 `fontFamilies` is the ordered list of families to try when a glyph is missing. It defaults to all registered families in registration order, with the built-in Geist last. Set it to pin which family wins and what backs it up.
 
-```tsx
-const image = await renderer.render(node, {
-  fontFamilies: ["Inter", "Noto Sans JP"],
+```tsx twoslash title="Choose font fallback order"
+import { render } from "takumi-js";
+import { googleFonts } from "takumi-js/helpers";
+
+const image = await render(<div>Hello こんにちは</div>, {
+  fonts: googleFonts(["Inter", "Noto Sans JP"]),
+  fontFamilies: ["Inter", "Noto Sans JP"], // [!code highlight]
 });
 ```
 
@@ -200,7 +214,7 @@ A missing glyph walks the chain until a family covers it. `googleFonts` builds o
 
 Control font axes with `font-variation-settings`. Control OpenType features with `font-feature-settings`. For variable fonts, `font-weight` is shorthand for the `wght` axis, and `font-stretch` drives `wdth`. Kerning is on by default; `font-kerning: none` turns it off.
 
-```tsx
+```tsx title="Set axes and OpenType features"
 <div
   style={{
     fontFamily: "Fraunces",
@@ -214,7 +228,7 @@ Control font axes with `font-variation-settings`. Control OpenType features with
 
 Register a variable font once, with no `weight`, and its axes stay live:
 
-```tsx
+```tsx title="Register a variable font"
 // a `weight` here pins the file to that instance instead
 await renderer.registerFont({ name: "Fraunces", data: variableWoff2 });
 ```
@@ -231,7 +245,7 @@ await renderer.registerFont({ name: "Fraunces", data: variableWoff2 });
 
 When a family lacks the weight or style you asked for, Takumi fakes a bold or oblique. `font-synthesis` turns that off. Missing weights then stay regular.
 
-```tsx
+```tsx title="Synthetic bold & italic"
 <div style={{ fontFamily: "Inter", fontSynthesis: "none" }}>No faux bold</div>
 ```
 
@@ -252,7 +266,7 @@ Values are `weight`, `style`, or `none`. Pass `weight`, `style`, or both to allo
 
 Outline glyphs with `-webkit-text-stroke`. Set a separate fill with `-webkit-text-fill-color`.
 
-```tsx
+```tsx title="Color, stroke, and fill"
 <div
   style={{
     color: "oklch(0.7 0.15 200)",
@@ -270,7 +284,7 @@ The stroke color defaults to `color` when you omit it.
 
 `text-decoration` draws `underline`, `line-through`, and `overline`. Combine them, and set color and thickness. `text-transform` changes the case.
 
-```tsx
+```tsx title="Decoration & transform"
 <div
   style={{
     textDecoration: "underline overline",
@@ -286,7 +300,7 @@ The stroke color defaults to `color` when you omit it.
 
 `text-shadow` takes offset, blur, and color. Stack layers with commas.
 
-```tsx
+```tsx title="Shadow"
 <div style={{ textShadow: "2px 2px 4px rgba(0,0,0,0.5), 0 0 8px blue" }}>Glow</div>
 ```
 
@@ -294,7 +308,7 @@ The stroke color defaults to `color` when you omit it.
 
 `letter-spacing`, `word-spacing`, `line-height`, `text-indent`, and `text-align` (including `justify`) work as in the browser.
 
-```tsx
+```tsx title="Spacing & alignment"
 <div
   style={{
     letterSpacing: "0.05em",
@@ -313,7 +327,7 @@ The stroke color defaults to `color` when you omit it.
 
 Takumi supports `balance` and `pretty` wrapping, adapted from [satori](https://github.com/vercel/satori/blob/2a0878a7f329bdba3a17ad68f71186a47add0dde/src/text/index.ts#L365). `balance` evens out line lengths. `pretty` stops the last line from stranding one word.
 
-```tsx
+```tsx title="Wrapping"
 <div style={{ textWrap: "balance" }}>Super Long Text</div>
 ```
 
@@ -323,7 +337,7 @@ Takumi supports `balance` and `pretty` wrapping, adapted from [satori](https://g
 
 When `text-overflow` is `ellipsis`, Takumi truncates at the `line-clamp` count or the container's max height, whichever comes first. Multiline ellipsis works; no `white-space: nowrap` needed.
 
-```tsx
+```tsx title="Truncation"
 <div
   style={{
     textOverflow: "ellipsis",
@@ -338,7 +352,7 @@ When `text-overflow` is `ellipsis`, Takumi truncates at the `line-clamp` count o
 
 `text-fit` scales text to fit its line box instead of wrapping or overflowing. The mode comes first: `grow`, `shrink`, or `none`. An optional target and percentage cap follow.
 
-```tsx
+```tsx title="Fit to container"
 <div style={{ textFit: "shrink" }}>Headline that always fits</div>
 <div style={{ textFit: "grow per-line 150%" }}>Per-line scaled, capped at 150%</div>
 ```
@@ -361,7 +375,7 @@ Takumi handles Right-to-Left scripts like Arabic and Hebrew, including mixed run
 
 The `lang` attribute sets the BCP-47 language for a node. Descendants inherit it, and a nested `lang` overrides. It drives locale-aware shaping: Han unification (one code point draws a different glyph for `zh-Hans`, `zh-Hant`, `ja`, or `ko`) and language-correct line breaking.
 
-```tsx
+```tsx title="Set each element’s language"
 <div>
   <p lang="ja">日本語</p>
   <p lang="zh-Hant">繁體中文</p>
@@ -370,7 +384,7 @@ The `lang` attribute sets the BCP-47 language for a node. Descendants inherit it
 
 To set a default for the whole render, pass `lang`. Per-node `lang` still overrides it.
 
-```tsx
+```tsx title="Set the default language"
 const image = await render(node, { width: 1200, height: 630, fonts, lang: "ja" });
 ```
 

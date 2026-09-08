@@ -1,4 +1,4 @@
-import { write } from "bun";
+import { writeFile } from "node:fs/promises";
 import { html } from "satori-html";
 import { render } from "takumi-js";
 
@@ -9,4 +9,4 @@ const png = await render(markup, {
   height: 400,
 });
 
-await write("./output.png", png.buffer);
+await writeFile("./output.png", png);

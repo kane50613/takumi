@@ -1,6 +1,6 @@
 ---
 title: Charts
-description: Generate SVG charts and render them as images or PDF.
+description: Render ECharts and other SVG charts as PNG images or PDF documents with Takumi.
 icon: ChartColumn
 ---
 
@@ -16,7 +16,7 @@ npm i echarts takumi-js @takumi-rs/helpers react
 
 This example generates a bar chart and saves it as a PNG. ECharts uses its SVG server renderer, so it needs no DOM or canvas.
 
-```tsx twoslash
+```tsx twoslash title="Render a chart to PNG"
 import * as echarts from "echarts";
 import { render } from "takumi-js";
 import { googleFonts } from "@takumi-rs/helpers";
@@ -67,7 +67,7 @@ Register fonts that cover every label, tick, and legend entry. Set the chart's f
 
 For a large font family, select the subsets against the chart text first. Include generated numeric ticks and punctuation as well as your data labels:
 
-```tsx twoslash
+```tsx twoslash title="Load chart label fonts"
 import { googleFonts, subsetFonts } from "@takumi-rs/helpers";
 
 const chartText = "一月二月三月四月營收0123456789.,−-%";

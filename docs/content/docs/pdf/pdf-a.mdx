@@ -1,12 +1,12 @@
 ---
 title: PDF/A and PDF/UA
-description: Configure archival output, document tags, and accessibility validation.
+description: Configure PDF/A archival output, tagged PDF structure, and PDF/UA-1 validation with takumi-pdf.
 icon: Archive
 ---
 
 Use `pdfa` for archival output and `tagged` for document structure and PDF/UA validation. The selected standard determines which metadata and attachments are allowed.
 
-```tsx twoslash
+```tsx twoslash title="PDF/A and PDF/UA"
 import type { ReactNode } from "react";
 declare const invoice: ReactNode;
 // ---cut---
@@ -49,7 +49,7 @@ Validate your generated document with [veraPDF](https://verapdf.org). Internal c
 
 Set `tagged: "ua1"` to also validate against PDF/UA-1:
 
-```tsx twoslash
+```tsx twoslash title="Tagged output"
 import type { ReactNode } from "react";
 declare const report: ReactNode;
 // ---cut---
@@ -96,7 +96,7 @@ Set `tagged: false` only when you do not need a structure tree and the selected 
 
 `tagged: "ua2"` validates against PDF/UA-2 instead. The standard is PDF 2.0 only, so it pairs with `pdfa: "4"`, `pdfa: "4f"`, or plain PDF.
 
-```tsx twoslash
+```tsx twoslash title="PDF/UA-2"
 import type { ReactNode } from "react";
 declare const report: ReactNode;
 // ---cut---

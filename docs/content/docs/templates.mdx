@@ -1,10 +1,10 @@
 ---
 title: Templates
-description: A collection of ready-to-use templates for Takumi.
+description: Add Open Graph image templates to your project with the shadcn CLI and the Takumi registry.
 icon: LayoutTemplate
 ---
 
-Takumi ships ready-made open graph cards. Use one as a starting point, or as-is.
+Start with an Open Graph image template and edit its content and styles.
 The [shadcn CLI](https://ui.shadcn.com/docs/cli) copies a template into your
 project and installs `takumi-js` alongside it.
 
@@ -31,9 +31,7 @@ card lands in `components/takumi/image/`.
 
 ## A route that answers with an image
 
-`image/og-route` is a Next.js route handler plus the card it renders. Adding it
-leaves you with a working `/og` endpoint that takes its title from the query
-string.
+`image/og-route` is a Next.js route handler plus the card it renders. It creates an `/og` endpoint that reads the title from the query string.
 
 ```npm
 npx shadcn@latest add @takumi/image/og-route

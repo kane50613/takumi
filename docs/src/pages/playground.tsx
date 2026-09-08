@@ -5,7 +5,7 @@ import { baseOptions } from "~/layout-config";
 
 const TITLE = "Playground · Takumi";
 const DESCRIPTION =
-  "Write JSX, watch Takumi render it to an image in your browser. WASM, no server.";
+  "Try Takumi in your browser. Edit JSX templates and preview images, SVG, animations, and PDF documents with WebAssembly.";
 
 export default function Playground() {
   return (
