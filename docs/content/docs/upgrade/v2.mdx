@@ -42,7 +42,7 @@ const image = await renderer.render(node, { fonts: [archivo] }); // [!code ++]
 
 Pass `fonts` with each render for most uses. Use `registerFont` to preload fonts on a renderer you reuse.
 
-```ts title="Replace loadFonts with registerFont"
+```ts title="Pass fonts per render"
 renderer.loadFonts([archivo, geist]); // [!code --]
 renderer.render(node, { fonts: [archivo, geist] }); // [!code ++]
 ```
