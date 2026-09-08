@@ -51,7 +51,7 @@ export function Hero() {
             <em className="text-primary">Skip the browser.</em>
           </h1>
           <p className="text-[clamp(1rem,2vw,1.125rem)] leading-relaxed text-muted-foreground mb-10 animate-reveal-up [animation-delay:100ms]">
-            Your components and CSS, rendered in Rust.
+            Create OG images, social cards, and PDFs from JSX or HTML, styled with CSS and Tailwind.
           </p>
           <div className="flex items-center gap-6 flex-wrap animate-reveal-up [animation-delay:200ms]">
             <Button asChild size="lg" className="px-7 font-semibold">
