@@ -14,9 +14,9 @@ Create social cards, banners, PNG, JPEG, WebP, SVG, and animations. The package 
 ## Install
 
 ```bash
-bun add takumi-js react
+bun add takumi-js
 # or
-npm install takumi-js react
+npm install takumi-js
 ```
 
 ## Quick start

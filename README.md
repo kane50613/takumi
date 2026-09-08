@@ -22,8 +22,8 @@ Takumi renders images in Node.js, Cloudflare Workers, browsers, and Rust applica
 Use `takumi-js` for images and animations, or `takumi-pdf` for PDF documents. The examples below use Bun to run JSX directly.
 
 ```bash
-bun i takumi-js react    # PNG, JPEG, WebP, SVG, animations
-bun i takumi-pdf react   # paged PDF
+bun i takumi-js    # PNG, JPEG, WebP, SVG, animations
+bun i takumi-pdf   # paged PDF
 ```
 
 ### Image

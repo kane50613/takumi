@@ -20,9 +20,9 @@ Pass JSX, an HTML string, or a Takumi node tree with CSS. The renderer returns v
 ## Install
 
 ```bash
-npm install takumi-pdf react @takumi-rs/helpers
+npm install takumi-pdf @takumi-rs/helpers
 # or
-bun add takumi-pdf react @takumi-rs/helpers
+bun add takumi-pdf @takumi-rs/helpers
 ```
 
 ## Quick start
