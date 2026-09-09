@@ -232,6 +232,8 @@ pub(crate) struct PdfRenderOptions {
   pub(crate) tagged: Option<TaggedInput>,
   /// Files attached to the document.
   pub(crate) attachments: Option<Vec<AttachmentInput>>,
+  /// Emits `<input>` and `<textarea>` as fillable AcroForm fields.
+  pub(crate) form: Option<bool>,
 }
 
 pub(crate) fn decode_images(

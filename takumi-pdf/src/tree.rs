@@ -7,6 +7,7 @@ use takumi_core::{
   context::RenderContext,
   geometry::{NodeId, Size},
   layout::{
+    inline_box::InlineSubtree,
     node::{Node, NodeKind},
     tree::{LayoutResults, LayoutTree, RenderNode},
   },
@@ -38,6 +39,9 @@ pub(crate) struct TreeInputs<'g> {
   pub(crate) images: Rc<HashMap<Arc<str>, ImageSource>>,
   pub(crate) font_families: Option<FontFamily>,
   pub(crate) lang: Option<Lang>,
+  /// Whether form controls become fillable fields, which keeps one off a page
+  /// break.
+  pub(crate) form: bool,
 }
 
 impl TreeInputs<'_> {
@@ -169,6 +173,25 @@ impl PreparedTree {
     })
   }
 
+  /// The scene an inline-level container carries, rooted at the box.
+  pub(crate) fn of_inline_box(subtree: InlineSubtree) -> Result<Self, PdfError> {
+    let contexts = build_stacking_contexts(
+      &subtree.root,
+      &subtree.results,
+      NodeId::ROOT,
+      Affine::IDENTITY,
+      subtree.size.map(Some),
+    )?;
+
+    Ok(Self {
+      root: subtree.root,
+      results: subtree.results,
+      contexts,
+      width: subtree.size.width,
+      height: subtree.size.height,
+    })
+  }
+
   /// The size the caller's own node laid out at, which is what `measure`
   /// reports. [`fill_root`] wraps that node in a page-wide box, so the root's
   /// size only ever gives the page back.
@@ -205,12 +228,14 @@ impl PreparedTree {
   pub(crate) fn atom_collector<'a>(
     &'a self,
     inline: Option<&'a InlineMap<'a>>,
+    form: bool,
   ) -> AtomCollector<'a> {
     AtomCollector {
       root: &self.root,
       contexts: &self.contexts,
       results: &self.results,
       inline,
+      form,
     }
   }
 

@@ -59,6 +59,15 @@ pub enum PdfError {
   InvalidPageRange(String),
   /// The page ranges select none of the document's pages.
   PageRangesOutOfBounds(usize),
+  /// Two form controls on the emitted pages share a `name`. PDF would merge
+  /// them into one field showing the same value in both places.
+  DuplicateFieldName(String),
+  /// A field name contains an empty hierarchy segment.
+  InvalidFieldName(String),
+  /// The form appearance font cannot encode a field value.
+  UnsupportedFormValue(String),
+  /// Fillable forms require an unembedded font that the requested standard disallows.
+  UnsupportedFormStandard,
 }
 
 impl std::fmt::Display for PdfError {
@@ -88,6 +97,21 @@ impl std::fmt::Display for PdfError {
       Self::MissingGlyphs(characters) => write!(
         f,
         "No registered font covers {characters}. Register one that does."
+      ),
+      Self::DuplicateFieldName(name) => write!(
+        f,
+        "More than one form control is named {name}. Every fillable field needs a name of its own."
+      ),
+      Self::InvalidFieldName(name) => write!(
+        f,
+        "Field name contains an empty period-separated segment: {name}"
+      ),
+      Self::UnsupportedFormValue(name) => write!(
+        f,
+        "Field {name} contains characters outside WinAnsiEncoding. Custom form fonts are not supported."
+      ),
+      Self::UnsupportedFormStandard => f.write_str(
+        "Fillable forms do not support PDF/A or PDF/UA because the form font is not embedded",
       ),
       Self::InvalidPageRange(range) => {
         write!(
@@ -364,6 +388,9 @@ pub struct PdfOptions<'g> {
   /// (`A2a`, `A3a`) force it on.
   #[builder(default)]
   pub tagged: Tagging,
+  /// Emits text controls as fillable fields; PDF/A and PDF/UA are unsupported.
+  #[builder(default)]
+  pub form: bool,
   /// Files attached to the document, shown in the viewer's attachment panel.
   /// The PDF/A-3 levels require each to carry a mime type, a description, and
   /// a modification date ([`PdfMetadata::creation_date`] is the fallback).

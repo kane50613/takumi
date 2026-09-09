@@ -395,6 +395,7 @@ impl InternalPage {
           chunk_container,
           annot_ref,
           self.page_settings.surface_size().height(),
+          root_ref,
         )?;
         annotation_refs.push((annot_ref, OnceCell::new()));
       }

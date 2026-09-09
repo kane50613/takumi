@@ -68,6 +68,7 @@ await writeFile("invoice.pdf", pdf);
 | Load fonts and remote image bytes                   | [Fonts and images](https://takumi.kane.tw/docs/pdf/fonts-and-images)                                                                |
 | Add hyperlinks, bookmarks, and a table of contents  | [Links and metadata](https://takumi.kane.tw/docs/pdf/links-and-outline)                                                             |
 | Configure archival or accessible output             | [PDF/A and PDF/UA](https://takumi.kane.tw/docs/pdf/pdf-a)                                                                           |
+| Make form controls fillable in a reader             | [Fillable forms](https://takumi.kane.tw/docs/pdf/forms)                                                                             |
 | Embed invoice XML or another file                   | [Attachments](https://takumi.kane.tw/docs/pdf/attachments)                                                                          |
 | Replace a browser or document renderer              | [From Puppeteer](https://takumi.kane.tw/docs/pdf/from-puppeteer) · [From react-pdf](https://takumi.kane.tw/docs/pdf/from-react-pdf) |
 
