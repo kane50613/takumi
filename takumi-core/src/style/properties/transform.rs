@@ -513,62 +513,60 @@ impl<'i> FromCss<'i> for Transform {
       );
     };
 
-    match_ignore_ascii_case! {function,
-      "translate" => parser.parse_nested_block(|input| {
+    let parse: fn(&mut Parser<'i, '_>) -> ParseResult<'i, Self> = match_ignore_ascii_case! {function,
+      "translate" => |input| {
         let x = Length::from_css(input)?;
         input.expect_comma()?;
         let y = Length::from_css(input)?;
 
-        Ok(Transform::Translate(x, y))
-      }),
-      "translatex" => parser.parse_nested_block(|input| Ok(Transform::Translate(
+        Ok(Self::Translate(x, y))
+      },
+      "translatex" => |input| Ok(Self::Translate(
         Length::from_css(input)?,
         Length::zero(),
-      ))),
-      "translatey" => parser.parse_nested_block(|input| Ok(Transform::Translate(
+      )),
+      "translatey" => |input| Ok(Self::Translate(
         Length::zero(),
         Length::from_css(input)?,
-      ))),
-      "scale" => parser.parse_nested_block(|input| {
+      )),
+      "scale" => |input| {
         let PercentageNumber(x) = PercentageNumber::from_css(input)?;
         if input.try_parse(Parser::expect_comma).is_ok() {
           let PercentageNumber(y) = PercentageNumber::from_css(input)?;
-          Ok(Transform::Scale(x, y))
+          Ok(Self::Scale(x, y))
         } else {
-          Ok(Transform::Scale(x, x))
+          Ok(Self::Scale(x, x))
         }
-      }),
-      "scalex" => parser.parse_nested_block(|input| Ok(Transform::Scale(
+      },
+      "scalex" => |input| Ok(Self::Scale(
         PercentageNumber::from_css(input)?.0,
         DEFAULT_SCALE,
-      ))),
-      "scaley" => parser.parse_nested_block(|input| Ok(Transform::Scale(
+      )),
+      "scaley" => |input| Ok(Self::Scale(
         DEFAULT_SCALE,
         PercentageNumber::from_css(input)?.0,
-      ))),
-      "skew" => parser.parse_nested_block(|input| {
+      )),
+      "skew" => |input| {
         let x = Angle::from_css(input)?;
         input.expect_comma()?;
         let y = Angle::from_css(input)?;
 
-        Ok(Transform::Skew(x, y))
-      }),
-      "skewx" => parser.parse_nested_block(|input| Ok(Transform::Skew(
+        Ok(Self::Skew(x, y))
+      },
+      "skewx" => |input| Ok(Self::Skew(
         Angle::from_css(input)?,
         Angle::default(),
-      ))),
-      "skewy" => parser.parse_nested_block(|input| Ok(Transform::Skew(
+      )),
+      "skewy" => |input| Ok(Self::Skew(
         Angle::default(),
         Angle::from_css(input)?,
-      ))),
-      "rotate" => parser.parse_nested_block(|input| Ok(Transform::Rotate(
-        Angle::from_css(input)?,
-      ))),
-      "matrix" => parser.parse_nested_block(|input| Ok(Transform::Matrix(
-        Affine::from_css(input)?,
-      ))),
-      _ => Err(unexpected_token!(location, token)),
-    }
+      )),
+      "rotate" => |input| Ok(Self::Rotate(Angle::from_css(input)?)),
+      "matrix" => |input| Ok(Self::Matrix(Affine::from_css(input)?)),
+      _ => return Err(unexpected_token!(location, token)),
+    };
+
+    parser.parse_nested_block(parse)
   }
 
   const VALID_TOKENS: &'static [CssToken] = &[CssToken::Syntax(CssSyntaxKind::TransformFunction)];
@@ -593,6 +591,53 @@ mod tests {
       Transform::from_css_str("scale(10)"),
       Ok(Transform::Scale(10.0, 10.0))
     );
+  }
+
+  #[test]
+  fn transform_functions_keep_their_individual_grammars() {
+    for (css, expected) in [
+      (
+        "translate(1px, 2px)",
+        Transform::Translate(Length::Px(1.0), Length::Px(2.0)),
+      ),
+      (
+        "translateX(1px)",
+        Transform::Translate(Length::Px(1.0), Length::zero()),
+      ),
+      (
+        "translateY(2px)",
+        Transform::Translate(Length::zero(), Length::Px(2.0)),
+      ),
+      ("scale(2, 3)", Transform::Scale(2.0, 3.0)),
+      ("scaleX(2)", Transform::Scale(2.0, DEFAULT_SCALE)),
+      ("scaleY(3)", Transform::Scale(DEFAULT_SCALE, 3.0)),
+      (
+        "skew(1deg, 2deg)",
+        Transform::Skew(Angle::new(1.0), Angle::new(2.0)),
+      ),
+      (
+        "skewX(1deg)",
+        Transform::Skew(Angle::new(1.0), Angle::default()),
+      ),
+      (
+        "skewY(2deg)",
+        Transform::Skew(Angle::default(), Angle::new(2.0)),
+      ),
+      ("rotate(3deg)", Transform::Rotate(Angle::new(3.0))),
+      (
+        "matrix(1, 0, 0, 1, 2, 3)",
+        Transform::Matrix(Affine::translation(2.0, 3.0)),
+      ),
+    ] {
+      assert_eq!(Transform::from_css_str(css), Ok(expected), "{css}");
+    }
+  }
+
+  #[test]
+  fn transform_errors_reject_missing_trailing_and_unknown_tokens() {
+    assert!(Transform::from_css_str("translate(1px)").is_err());
+    assert!(Transforms::from_css_str("translateX(1px) trailing").is_err());
+    assert!(Transforms::from_css_str("spin(1deg)").is_err());
   }
 
   #[test]

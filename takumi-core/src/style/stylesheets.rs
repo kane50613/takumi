@@ -343,18 +343,20 @@ macro_rules! define_style {
           }
 
           input.reset(&state);
-          match self {
+          let declaration = match self {
             $(
-              Self::[<$longhand:camel>] => Ok(smallvec![StyleDeclaration::[<$longhand:camel>](
+              Self::[<$longhand:camel>] => StyleDeclaration::[<$longhand:camel>](
                 <$longhand_ty as FromCss>::from_css(input)?,
-              )]),
+              ),
             )*
             $(
-              Self::[<$transient:camel>] => Ok(smallvec![StyleDeclaration::[<$transient:camel>](
+              Self::[<$transient:camel>] => StyleDeclaration::[<$transient:camel>](
                 <$transient_ty as FromCss>::from_css(input)?,
-              )]),
+              ),
             )*
-          }
+          };
+
+          Ok(smallvec![declaration])
         }
 
         const EXPECT_INFO: [(CssExpectedMessage, &'static [CssToken]); Self::COUNT] = [
