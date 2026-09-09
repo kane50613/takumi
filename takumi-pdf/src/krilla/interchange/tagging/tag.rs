@@ -1,113 +1,265 @@
-use std::marker::PhantomData;
 use std::num::{NonZeroU16, NonZeroU32};
 
+use pdf_writer::types::{
+  ListNumbering as PdfListNumbering, TableHeaderScope as PdfTableHeaderScope,
+};
 use smallvec::SmallVec;
 
 use crate::krilla::geom::Rect;
 use crate::krilla::surface::Location;
 
-include!("generated.rs");
-
-impl TagKind {
-  /// Get the location.
-  pub fn location(&self) -> Option<Location> {
-    self.as_any().location
-  }
-
-  /// Set the location.
-  pub fn set_location(&mut self, location: Option<Location>) {
-    self.as_any_mut().location = location;
-  }
-
-  /// Set the location.
-  pub fn with_location(mut self, location: Option<Location>) -> Self {
-    self.as_any_mut().location = location;
-    self
-  }
-}
-
-/// A specific tag which allows accessing attributes specific to this [`TagKind`].
-///
-/// # Example
-/// ```ignore
-/// use std::num::NonZeroU32;
-/// use krilla::tagging::{TagGroup, TagTree, TableHeaderScope, Tag, TagId};
-///
-/// let tag = Tag::TH(TableHeaderScope::Row)
-///     .with_id(Some(TagId::from(*b"this id")))
-///     .with_col_span(Some(NonZeroU32::new(3).unwrap()))
-///     .with_headers(Some([TagId::from(*b"parent id")]))
-///     .with_width(Some(250.0))
-///     .with_height(Some(100.0));
-/// let group = TagGroup::new(tag);
-///
-/// let mut tree = TagTree::new();
-/// tree.push(group);
-/// ```
 #[derive(Clone, Debug, PartialEq)]
-pub struct Tag<T> {
-  inner: AnyTag,
-  /// Compile time marker for a type-safe API.
-  pub(crate) ty: PhantomData<T>,
-}
-
-impl<T> Tag<T> {
-  /// This can't be public, otherwise tags could be constructed without
-  /// providing required attributes.
-  pub(crate) const fn new() -> Self {
-    Self {
-      inner: AnyTag::new(),
-      ty: PhantomData,
-    }
-  }
-
-  /// A raw tag, which allows reading all attributes.
-  pub fn as_any(&self) -> &AnyTag {
-    &self.inner
-  }
-
-  /// A raw tag, which allows reading all attributes and additionally writing
-  /// all global ones.
-  pub fn as_any_mut(&mut self) -> &mut AnyTag {
-    &mut self.inner
-  }
-
-  /// Get the location.
-  pub fn location(&self) -> Option<Location> {
-    self.as_any().location
-  }
-
-  /// Set the location.
-  pub fn set_location(&mut self, location: Option<Location>) {
-    self.as_any_mut().location = location;
-  }
-
-  /// Set the location.
-  pub fn with_location(mut self, location: Option<Location>) -> Self {
-    self.as_any_mut().location = location;
-    self
-  }
-}
-
-/// A raw tag, which allows reading all attributes and additionally writing all
-/// global ones.
-#[derive(Clone, Debug, PartialEq)]
-pub struct AnyTag {
-  /// The location of the tag.
-  pub location: Option<Location>,
+pub struct Tag {
+  pub(crate) location: Option<Location>,
+  pub(crate) kind: TagKind,
   pub(crate) attrs: OrdinalSet<Attr>,
 }
 
-impl AnyTag {
-  pub(crate) const fn new() -> Self {
+impl Tag {
+  pub const ARTICLE: Self = Self::plain(TagKind::Article);
+  pub const SECTION: Self = Self::plain(TagKind::Section);
+  pub const BLOCK_QUOTE: Self = Self::plain(TagKind::BlockQuote);
+  pub const CAPTION: Self = Self::plain(TagKind::Caption);
+  pub const P: Self = Self::plain(TagKind::P);
+  pub const LI: Self = Self::plain(TagKind::LI);
+  pub const LBL: Self = Self::plain(TagKind::Lbl);
+  pub const L_BODY: Self = Self::plain(TagKind::LBody);
+  pub const TABLE: Self = Self::plain(TagKind::Table);
+  pub const TR: Self = Self::plain(TagKind::TR);
+  pub const T_HEAD: Self = Self::plain(TagKind::THead);
+  pub const T_BODY: Self = Self::plain(TagKind::TBody);
+  pub const T_FOOT: Self = Self::plain(TagKind::TFoot);
+  pub const SPAN: Self = Self::plain(TagKind::Span);
+  pub const CODE: Self = Self::plain(TagKind::Code);
+  pub const LINK: Self = Self::plain(TagKind::Link);
+  pub const STRONG: Self = Self::plain(TagKind::Strong);
+  pub const EM: Self = Self::plain(TagKind::Em);
+
+  const fn plain(kind: TagKind) -> Self {
     Self {
-      attrs: OrdinalSet::new(),
       location: None,
+      kind,
+      attrs: OrdinalSet::new(),
+    }
+  }
+
+  pub fn heading(level: NonZeroU16, title: Option<String>) -> Self {
+    let mut tag = Self::plain(TagKind::Hn { level });
+
+    tag.attrs.set(Attr::Struct(StructAttr::HeadingLevel(level)));
+    if let Some(title) = title {
+      tag.attrs.set(Attr::Struct(StructAttr::Title(title)));
+    }
+    tag
+  }
+
+  pub fn list(numbering: ListNumbering) -> Self {
+    let mut tag = Self::plain(TagKind::L);
+
+    tag.attrs.set(Attr::List(ListAttr::Numbering(numbering)));
+    tag
+  }
+
+  pub fn table_header(
+    scope: TableHeaderScope,
+    row_span: Option<NonZeroU32>,
+    col_span: Option<NonZeroU32>,
+  ) -> Self {
+    let mut tag = Self::plain(TagKind::TH);
+
+    tag.attrs.set(Attr::Table(TableAttr::HeaderScope(scope)));
+    if let Some(row_span) = row_span {
+      tag.attrs.set(Attr::Table(TableAttr::RowSpan(row_span)));
+    }
+    if let Some(col_span) = col_span {
+      tag.attrs.set(Attr::Table(TableAttr::ColSpan(col_span)));
+    }
+    tag
+  }
+
+  pub fn table_data(row_span: Option<NonZeroU32>, col_span: Option<NonZeroU32>) -> Self {
+    let mut tag = Self::plain(TagKind::TD);
+
+    if let Some(row_span) = row_span {
+      tag.attrs.set(Attr::Table(TableAttr::RowSpan(row_span)));
+    }
+    if let Some(col_span) = col_span {
+      tag.attrs.set(Attr::Table(TableAttr::ColSpan(col_span)));
+    }
+    tag
+  }
+
+  pub fn figure(alt_text: Option<String>) -> Self {
+    let mut tag = Self::plain(TagKind::Figure);
+
+    if let Some(alt_text) = alt_text {
+      tag.attrs.set(Attr::Struct(StructAttr::AltText(alt_text)));
+    }
+    tag
+  }
+
+  pub fn set_id(&mut self, id: Option<TagId>) {
+    match id {
+      Some(id) => self.attrs.set(Attr::Struct(StructAttr::Id(id))),
+      None => self.attrs.remove(StructAttr::ID),
+    }
+  }
+
+  pub(crate) fn id(&self) -> Option<&TagId> {
+    match self.attrs.get(StructAttr::ID) {
+      Some(Attr::Struct(StructAttr::Id(id))) => Some(id),
+      _ => None,
+    }
+  }
+
+  pub(crate) fn headers(&self) -> Option<&[TagId]> {
+    match self.attrs.get(TableAttr::CELL_HEADERS) {
+      Some(Attr::Table(TableAttr::CellHeaders(headers))) => Some(headers),
+      _ => None,
+    }
+  }
+
+  pub(crate) fn title(&self) -> Option<&str> {
+    match self.attrs.get(StructAttr::TITLE) {
+      Some(Attr::Struct(StructAttr::Title(title))) => Some(title),
+      _ => None,
+    }
+  }
+
+  pub(crate) fn alt_text(&self) -> Option<&str> {
+    match self.attrs.get(StructAttr::ALT_TEXT) {
+      Some(Attr::Struct(StructAttr::AltText(alt_text))) => Some(alt_text),
+      _ => None,
+    }
+  }
+
+  #[cfg(test)]
+  pub(crate) fn with_attribute(mut self, attr: Attr) -> Self {
+    self.attrs.set(attr);
+    self
+  }
+
+  pub(crate) fn is_list_item(&self) -> bool {
+    matches!(self.kind, TagKind::LI)
+  }
+
+  pub(crate) fn is_link(&self) -> bool {
+    matches!(self.kind, TagKind::Link)
+  }
+
+  pub(crate) fn is_list(&self) -> bool {
+    matches!(self.kind, TagKind::L)
+  }
+
+  pub(crate) fn is_figure(&self) -> bool {
+    matches!(self.kind, TagKind::Figure)
+  }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum TagKind {
+  Part,
+  Article,
+  Section,
+  Div,
+  BlockQuote,
+  Caption,
+  TOC,
+  TOCI,
+  Index,
+  P,
+  Hn { level: NonZeroU16 },
+  L,
+  LI,
+  Lbl,
+  LBody,
+  Table,
+  TR,
+  TH,
+  TD,
+  THead,
+  TBody,
+  TFoot,
+  Span,
+  InlineQuote,
+  Note,
+  Reference,
+  BibEntry,
+  Code,
+  Link,
+  Annot,
+  Figure,
+  Formula,
+  Form,
+  NonStruct,
+  Datetime,
+  Terms,
+  Title,
+  Strong,
+  Em,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct TagId(pub(crate) SmallVec<[u8; 16]>);
+
+impl<I: IntoIterator<Item = u8>> From<I> for TagId {
+  fn from(value: I) -> Self {
+    Self(std::iter::once(b'U').chain(value).collect())
+  }
+}
+
+impl TagId {
+  pub fn as_bytes(&self) -> &[u8] {
+    self.0.as_slice()
+  }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub enum ListNumbering {
+  None,
+  Disc,
+  Circle,
+  Square,
+  Decimal,
+  LowerRoman,
+  UpperRoman,
+  LowerAlpha,
+  UpperAlpha,
+}
+
+impl ListNumbering {
+  pub(crate) fn to_pdf(self) -> PdfListNumbering {
+    match self {
+      Self::None => PdfListNumbering::None,
+      Self::Disc => PdfListNumbering::Disc,
+      Self::Circle => PdfListNumbering::Circle,
+      Self::Square => PdfListNumbering::Square,
+      Self::Decimal => PdfListNumbering::Decimal,
+      Self::LowerRoman => PdfListNumbering::LowerRoman,
+      Self::UpperRoman => PdfListNumbering::UpperRoman,
+      Self::LowerAlpha => PdfListNumbering::LowerAlpha,
+      Self::UpperAlpha => PdfListNumbering::UpperAlpha,
     }
   }
 }
 
-/// An ordered set using ordinal numbers to sort and identify elements.
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub enum TableHeaderScope {
+  Row,
+  Column,
+  Both,
+}
+
+impl TableHeaderScope {
+  pub(crate) fn to_pdf(self) -> PdfTableHeaderScope {
+    match self {
+      Self::Row => PdfTableHeaderScope::Row,
+      Self::Column => PdfTableHeaderScope::Column,
+      Self::Both => PdfTableHeaderScope::Both,
+    }
+  }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct OrdinalSet<A> {
   items: SmallVec<[A; 1]>,
@@ -127,13 +279,13 @@ impl<A: Ordinal> OrdinalSet<A> {
   }
 
   pub(crate) fn set(&mut self, attr: A) {
-    for (i, item) in self.items.iter().enumerate() {
+    for (index, item) in self.items.iter().enumerate() {
       if item.ordinal() == attr.ordinal() {
-        self.items[i] = attr;
+        self.items[index] = attr;
         return;
       }
       if item.ordinal() > attr.ordinal() {
-        self.items.insert(i, attr);
+        self.items.insert(index, attr);
         return;
       }
     }
@@ -141,122 +293,19 @@ impl<A: Ordinal> OrdinalSet<A> {
   }
 
   pub(crate) fn remove(&mut self, ordinal: usize) {
-    for (i, item) in self.items.iter().enumerate() {
-      if item.ordinal() == ordinal {
-        self.items.remove(i);
-        return;
-      }
-      if item.ordinal() > ordinal {
-        break;
-      }
+    if let Some(index) = self.items.iter().position(|item| item.ordinal() == ordinal) {
+      self.items.remove(index);
     }
   }
 
   pub(crate) fn get(&self, ordinal: usize) -> Option<&A> {
-    for item in self.items.iter() {
-      if item.ordinal() == ordinal {
-        return Some(item);
-      }
-      if item.ordinal() > ordinal {
-        break;
-      }
-    }
-    None
-  }
-
-  pub(crate) fn set_or_remove(&mut self, ordinal: usize, attr: Option<A>) {
-    match attr {
-      Some(attr) => self.set(attr),
-      None => self.remove(ordinal),
-    }
+    self.items.iter().find(|item| item.ordinal() == ordinal)
   }
 }
 
-/// Identifies elements using an ordinal number.
 pub(crate) trait Ordinal {
   fn ordinal(&self) -> usize;
 }
-
-/// An identifier of a [`Tag`].
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct TagId(pub(crate) SmallVec<[u8; 16]>);
-
-impl<I: IntoIterator<Item = u8>> From<I> for TagId {
-  fn from(value: I) -> Self {
-    // Disambiguate ids provided by the user from ids automatically assigned
-    // to notes by prefixing them with a `U`.
-    let bytes = std::iter::once(b'U').chain(value).collect();
-    TagId(bytes)
-  }
-}
-
-impl TagId {
-  /// Returns the identifier as a byte slice.
-  pub fn as_bytes(&self) -> &[u8] {
-    self.0.as_slice()
-  }
-}
-
-/// The list numbering type.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub enum ListNumbering {
-  /// No numbering.
-  None,
-  /// Solid circular bullets.
-  Disc,
-  /// Open circular bullets.
-  Circle,
-  /// Solid square bullets.
-  Square,
-  /// Decimal numbers.
-  Decimal,
-  /// Lowercase Roman numerals.
-  LowerRoman,
-  /// Uppercase Roman numerals.
-  UpperRoman,
-  /// Lowercase letters.
-  LowerAlpha,
-  /// Uppercase letters.
-  UpperAlpha,
-}
-
-impl ListNumbering {
-  pub(crate) fn to_pdf(self) -> pdf_writer::types::ListNumbering {
-    match self {
-      ListNumbering::None => pdf_writer::types::ListNumbering::None,
-      ListNumbering::Disc => pdf_writer::types::ListNumbering::Disc,
-      ListNumbering::Circle => pdf_writer::types::ListNumbering::Circle,
-      ListNumbering::Square => pdf_writer::types::ListNumbering::Square,
-      ListNumbering::Decimal => pdf_writer::types::ListNumbering::Decimal,
-      ListNumbering::LowerRoman => pdf_writer::types::ListNumbering::LowerRoman,
-      ListNumbering::UpperRoman => pdf_writer::types::ListNumbering::UpperRoman,
-      ListNumbering::LowerAlpha => pdf_writer::types::ListNumbering::LowerAlpha,
-      ListNumbering::UpperAlpha => pdf_writer::types::ListNumbering::UpperAlpha,
-    }
-  }
-}
-
-/// The scope of a table header cell.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub enum TableHeaderScope {
-  /// The header cell refers to the row.
-  Row,
-  /// The header cell refers to the column.
-  Column,
-  /// The header cell refers to both the row and the column.
-  Both,
-}
-
-impl TableHeaderScope {
-  pub(crate) fn to_pdf(self) -> pdf_writer::types::TableHeaderScope {
-    match self {
-      TableHeaderScope::Row => pdf_writer::types::TableHeaderScope::Row,
-      TableHeaderScope::Column => pdf_writer::types::TableHeaderScope::Column,
-      TableHeaderScope::Both => pdf_writer::types::TableHeaderScope::Both,
-    }
-  }
-}
-
 /// The positioning of the element with respect to the enclosing reference area
 /// and other content.
 /// When applied to an ILSE, any value except Inline shall cause the element to
@@ -679,5 +728,263 @@ impl ColumnDimensions {
   /// Construct a new `ColumnDimensions` with specific values for each column.
   pub fn specific(values: Vec<f32>) -> Self {
     ColumnDimensions::Specific(values)
+  }
+}
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Attr {
+  Struct(StructAttr),
+  List(ListAttr),
+  Table(TableAttr),
+  Layout(LayoutAttr),
+}
+
+impl Ordinal for Attr {
+  fn ordinal(&self) -> usize {
+    match self {
+      Self::Struct(a) => a.ordinal(),
+      Self::List(a) => a.ordinal(),
+      Self::Table(a) => a.ordinal(),
+      Self::Layout(a) => a.ordinal(),
+    }
+  }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum StructAttr {
+  /// The tag id.
+  Id(TagId),
+  /// The language of this tag.
+  Lang(String),
+  /// The optional alternate text that describes the text (for example, if the text
+  /// consists of a star symbol, the alt text should describe that in natural language).
+  AltText(String),
+  /// The expanded form of an abbreviation.
+  /// Only applicable if the content of the tag is an abbreviation.
+  Expanded(String),
+  /// The actual text represented by the content of this tag, i.e. if it contained
+  /// some curves that artistically represent some word. This should be the exact
+  /// replacement text of the word.
+  ActualText(String),
+  /// The title, characterizing a specific tag such as `"Chapter 1"`.
+  Title(String),
+  /// The heading level
+  HeadingLevel(NonZeroU16),
+}
+
+impl StructAttr {
+  pub(crate) const ID: usize = 0;
+  pub(crate) const LANG: usize = 1;
+  pub(crate) const ALT_TEXT: usize = 2;
+  pub(crate) const EXPANDED: usize = 3;
+  pub(crate) const ACTUAL_TEXT: usize = 4;
+  pub(crate) const TITLE: usize = 5;
+  pub(crate) const HEADING_LEVEL: usize = 6;
+}
+
+impl Ordinal for StructAttr {
+  fn ordinal(&self) -> usize {
+    match self {
+      Self::Id(_) => Self::ID,
+      Self::Lang(_) => Self::LANG,
+      Self::AltText(_) => Self::ALT_TEXT,
+      Self::Expanded(_) => Self::EXPANDED,
+      Self::ActualText(_) => Self::ACTUAL_TEXT,
+      Self::Title(_) => Self::TITLE,
+      Self::HeadingLevel(_) => Self::HEADING_LEVEL,
+    }
+  }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum ListAttr {
+  /// The list numbering.
+  Numbering(ListNumbering),
+}
+
+impl ListAttr {
+  pub(crate) const NUMBERING: usize = 7;
+}
+
+impl Ordinal for ListAttr {
+  fn ordinal(&self) -> usize {
+    match self {
+      Self::Numbering(_) => Self::NUMBERING,
+    }
+  }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum TableAttr {
+  /// The table summary.
+  Summary(String),
+  /// The table header scope.
+  HeaderScope(TableHeaderScope),
+  /// The list of headers associated with a table cell.
+  /// Table data cells (`TD`) may specify a list of table headers (`TH`),
+  /// which can also specify a list of parent header cells (`TH`), and so on.
+  /// To determine the list of associated headers this list is recursively
+  /// evaluated.
+  ///
+  /// This allows specifying header hierarchies inside tables.
+  CellHeaders(SmallVec<[TagId; 1]>),
+  /// The row span of this table cell.
+  RowSpan(NonZeroU32),
+  /// The column span of this table cell.
+  ColSpan(NonZeroU32),
+}
+
+impl TableAttr {
+  pub(crate) const SUMMARY: usize = 8;
+  pub(crate) const HEADER_SCOPE: usize = 9;
+  pub(crate) const CELL_HEADERS: usize = 10;
+  pub(crate) const ROW_SPAN: usize = 11;
+  pub(crate) const COL_SPAN: usize = 12;
+}
+
+impl Ordinal for TableAttr {
+  fn ordinal(&self) -> usize {
+    match self {
+      Self::Summary(_) => Self::SUMMARY,
+      Self::HeaderScope(_) => Self::HEADER_SCOPE,
+      Self::CellHeaders(_) => Self::CELL_HEADERS,
+      Self::RowSpan(_) => Self::ROW_SPAN,
+      Self::ColSpan(_) => Self::COL_SPAN,
+    }
+  }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum LayoutAttr {
+  /// The placement.
+  Placement(Placement),
+  /// The writing mode.
+  WritingMode(WritingMode),
+  /// The bounding box of a tag that encloses its visible content.
+  /// If the content spans multiple pages, this should be omitted.
+  BBox(BBox),
+  /// The width.
+  Width(f32),
+  /// The height.
+  Height(f32),
+  /// The background color.
+  BackgroundColor(NaiveRgbColor),
+  /// The border color.
+  BorderColor(Sides<NaiveRgbColor>),
+  /// The way the border is drawn.
+  BorderStyle(Sides<BorderStyle>),
+  /// The border width.
+  BorderThickness(Sides<f32>),
+  /// The padding inside of an element.
+  Padding(Sides<f32>),
+  /// The color of text, borders, and text decorations.
+  Color(NaiveRgbColor),
+  /// The spacing before the block-level element.
+  SpaceBefore(f32),
+  /// The spacing after the block-level element.
+  SpaceAfter(f32),
+  /// The spacing between the start inline edge of the element and the parent.
+  StartIndent(f32),
+  /// The spacing between the end inline edge of the element and the parent.
+  EndIndent(f32),
+  /// The amount the first line of text in a block-level element is indented. Only
+  /// applicable to paragraph-like elements with non-block-level elements.
+  TextIndent(f32),
+  /// The text alignment.
+  TextAlign(TextAlign),
+  /// The alignment of block-level elements inside of this block-level element.
+  BlockAlign(BlockAlign),
+  /// The alignment of inline-level elements inside of this block-level element.
+  InlineAlign(InlineAlign),
+  /// The border style of table cells, overriding `BorderStyle`.
+  TableBorderStyle(Sides<BorderStyle>),
+  /// The padding inside of table cells, overriding `Padding`.
+  TablePadding(Sides<f32>),
+  /// The distance by which the baseline shall be shifted from the default position.
+  BaselineShift(f32),
+  /// The height of each line in an element on the block axis.
+  LineHeight(LineHeight),
+  /// The color of the text decoration, overriding the fill color.
+  TextDecorationColor(NaiveRgbColor),
+  /// The width of the text decoration line.
+  TextDecorationThickness(f32),
+  /// The kind of text decoration.
+  TextDecorationType(TextDecorationType),
+  /// How the glyphs are rotated in a vertical writing mode.
+  GlyphOrientationVertical(GlyphOrientationVertical),
+  /// The number of columns in the grouping element.
+  ColumnCount(NonZeroU32),
+  /// The width of the gaps between columns in the grouping element.
+  ColumnGap(ColumnDimensions),
+  /// The width of the columns in the grouping element.
+  ColumnWidths(ColumnDimensions),
+}
+
+impl LayoutAttr {
+  pub(crate) const PLACEMENT: usize = 13;
+  pub(crate) const WRITING_MODE: usize = 14;
+  pub(crate) const B_BOX: usize = 15;
+  pub(crate) const WIDTH: usize = 16;
+  pub(crate) const HEIGHT: usize = 17;
+  pub(crate) const BACKGROUND_COLOR: usize = 18;
+  pub(crate) const BORDER_COLOR: usize = 19;
+  pub(crate) const BORDER_STYLE: usize = 20;
+  pub(crate) const BORDER_THICKNESS: usize = 21;
+  pub(crate) const PADDING: usize = 22;
+  pub(crate) const COLOR: usize = 23;
+  pub(crate) const SPACE_BEFORE: usize = 24;
+  pub(crate) const SPACE_AFTER: usize = 25;
+  pub(crate) const START_INDENT: usize = 26;
+  pub(crate) const END_INDENT: usize = 27;
+  pub(crate) const TEXT_INDENT: usize = 28;
+  pub(crate) const TEXT_ALIGN: usize = 29;
+  pub(crate) const BLOCK_ALIGN: usize = 30;
+  pub(crate) const INLINE_ALIGN: usize = 31;
+  pub(crate) const TABLE_BORDER_STYLE: usize = 32;
+  pub(crate) const TABLE_PADDING: usize = 33;
+  pub(crate) const BASELINE_SHIFT: usize = 34;
+  pub(crate) const LINE_HEIGHT: usize = 35;
+  pub(crate) const TEXT_DECORATION_COLOR: usize = 36;
+  pub(crate) const TEXT_DECORATION_THICKNESS: usize = 37;
+  pub(crate) const TEXT_DECORATION_TYPE: usize = 38;
+  pub(crate) const GLYPH_ORIENTATION_VERTICAL: usize = 39;
+  pub(crate) const COLUMN_COUNT: usize = 40;
+  pub(crate) const COLUMN_GAP: usize = 41;
+  pub(crate) const COLUMN_WIDTHS: usize = 42;
+}
+
+impl Ordinal for LayoutAttr {
+  fn ordinal(&self) -> usize {
+    match self {
+      Self::Placement(_) => Self::PLACEMENT,
+      Self::WritingMode(_) => Self::WRITING_MODE,
+      Self::BBox(_) => Self::B_BOX,
+      Self::Width(_) => Self::WIDTH,
+      Self::Height(_) => Self::HEIGHT,
+      Self::BackgroundColor(_) => Self::BACKGROUND_COLOR,
+      Self::BorderColor(_) => Self::BORDER_COLOR,
+      Self::BorderStyle(_) => Self::BORDER_STYLE,
+      Self::BorderThickness(_) => Self::BORDER_THICKNESS,
+      Self::Padding(_) => Self::PADDING,
+      Self::Color(_) => Self::COLOR,
+      Self::SpaceBefore(_) => Self::SPACE_BEFORE,
+      Self::SpaceAfter(_) => Self::SPACE_AFTER,
+      Self::StartIndent(_) => Self::START_INDENT,
+      Self::EndIndent(_) => Self::END_INDENT,
+      Self::TextIndent(_) => Self::TEXT_INDENT,
+      Self::TextAlign(_) => Self::TEXT_ALIGN,
+      Self::BlockAlign(_) => Self::BLOCK_ALIGN,
+      Self::InlineAlign(_) => Self::INLINE_ALIGN,
+      Self::TableBorderStyle(_) => Self::TABLE_BORDER_STYLE,
+      Self::TablePadding(_) => Self::TABLE_PADDING,
+      Self::BaselineShift(_) => Self::BASELINE_SHIFT,
+      Self::LineHeight(_) => Self::LINE_HEIGHT,
+      Self::TextDecorationColor(_) => Self::TEXT_DECORATION_COLOR,
+      Self::TextDecorationThickness(_) => Self::TEXT_DECORATION_THICKNESS,
+      Self::TextDecorationType(_) => Self::TEXT_DECORATION_TYPE,
+      Self::GlyphOrientationVertical(_) => Self::GLYPH_ORIENTATION_VERTICAL,
+      Self::ColumnCount(_) => Self::COLUMN_COUNT,
+      Self::ColumnGap(_) => Self::COLUMN_GAP,
+      Self::ColumnWidths(_) => Self::COLUMN_WIDTHS,
+    }
   }
 }

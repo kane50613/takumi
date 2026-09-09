@@ -7,8 +7,8 @@ use std::fmt::Display;
 use crate::krilla::tagging::{
   Attr, BBox, BlockAlign, BorderStyle, ColumnDimensions, GlyphOrientationVertical, Identifier,
   IdentifierInner, IdentifierType, InlineAlign, LayoutAttr, LineHeight, ListAttr, ListNumbering,
-  NaiveRgbColor, Node, Placement, Sides, StructAttr, TableAttr, TableHeaderScope, TagGroup, TagId,
-  TagKind, TagTree, TextAlign, TextDecorationType, WritingMode,
+  NaiveRgbColor, Node, Placement, Sides, StructAttr, TableAttr, TableHeaderScope, Tag, TagGroup,
+  TagId, TagKind, TagTree, TextAlign, TextDecorationType, WritingMode,
 };
 
 /// Helper trait for indented output.
@@ -113,54 +113,54 @@ impl Output for TagGroup {
   }
 }
 
-impl Output for TagKind {
+impl Output for Tag {
   fn output_indent(&self, f: &mut impl std::fmt::Write, indent: Indent) -> std::fmt::Result {
     write!(f, "{indent}- Tag: ")?;
-    match self {
-      TagKind::Part(_) => write!(f, "Part"),
-      TagKind::Article(_) => write!(f, "Article"),
-      TagKind::Section(_) => write!(f, "Section"),
-      TagKind::Div(_) => write!(f, "Div"),
-      TagKind::BlockQuote(_) => write!(f, "BlockQuote"),
-      TagKind::Caption(_) => write!(f, "Caption"),
-      TagKind::TOC(_) => write!(f, "TOC"),
-      TagKind::TOCI(_) => write!(f, "TOCI"),
-      TagKind::Index(_) => write!(f, "Index"),
-      TagKind::P(_) => write!(f, "P"),
-      TagKind::Hn(tag) => write!(f, "H{}", tag.level().get()),
-      TagKind::L(_) => write!(f, "L"),
-      TagKind::LI(_) => write!(f, "LI"),
-      TagKind::Lbl(_) => write!(f, "Lbl"),
-      TagKind::LBody(_) => write!(f, "LBody"),
-      TagKind::Table(_) => write!(f, "Table"),
-      TagKind::TR(_) => write!(f, "TR"),
-      TagKind::TH(_) => write!(f, "TH"),
-      TagKind::TD(_) => write!(f, "TD"),
-      TagKind::THead(_) => write!(f, "THead"),
-      TagKind::TBody(_) => write!(f, "TBody"),
-      TagKind::TFoot(_) => write!(f, "TFoot"),
-      TagKind::Span(_) => write!(f, "Span"),
-      TagKind::InlineQuote(_) => write!(f, "InlineQuote"),
-      TagKind::Note(_) => write!(f, "Note"),
-      TagKind::Reference(_) => write!(f, "Reference"),
-      TagKind::BibEntry(_) => write!(f, "BibEntry"),
-      TagKind::Code(_) => write!(f, "Code"),
-      TagKind::Link(_) => write!(f, "Link"),
-      TagKind::Annot(_) => write!(f, "Annot"),
-      TagKind::Figure(_) => write!(f, "Figure"),
-      TagKind::Formula(_) => write!(f, "Formula"),
-      TagKind::Form(_) => write!(f, "Form"),
-      TagKind::NonStruct(_) => write!(f, "NonStruct"),
-      TagKind::Datetime(_) => write!(f, "Datetime"),
-      TagKind::Terms(_) => write!(f, "Terms"),
-      TagKind::Title(_) => write!(f, "Title"),
-      TagKind::Strong(_) => write!(f, "Strong"),
-      TagKind::Em(_) => write!(f, "Em"),
+    match &self.kind {
+      TagKind::Part => write!(f, "Part"),
+      TagKind::Article => write!(f, "Article"),
+      TagKind::Section => write!(f, "Section"),
+      TagKind::Div => write!(f, "Div"),
+      TagKind::BlockQuote => write!(f, "BlockQuote"),
+      TagKind::Caption => write!(f, "Caption"),
+      TagKind::TOC => write!(f, "TOC"),
+      TagKind::TOCI => write!(f, "TOCI"),
+      TagKind::Index => write!(f, "Index"),
+      TagKind::P => write!(f, "P"),
+      TagKind::Hn { level } => write!(f, "H{}", level.get()),
+      TagKind::L => write!(f, "L"),
+      TagKind::LI => write!(f, "LI"),
+      TagKind::Lbl => write!(f, "Lbl"),
+      TagKind::LBody => write!(f, "LBody"),
+      TagKind::Table => write!(f, "Table"),
+      TagKind::TR => write!(f, "TR"),
+      TagKind::TH => write!(f, "TH"),
+      TagKind::TD => write!(f, "TD"),
+      TagKind::THead => write!(f, "THead"),
+      TagKind::TBody => write!(f, "TBody"),
+      TagKind::TFoot => write!(f, "TFoot"),
+      TagKind::Span => write!(f, "Span"),
+      TagKind::InlineQuote => write!(f, "InlineQuote"),
+      TagKind::Note => write!(f, "Note"),
+      TagKind::Reference => write!(f, "Reference"),
+      TagKind::BibEntry => write!(f, "BibEntry"),
+      TagKind::Code => write!(f, "Code"),
+      TagKind::Link => write!(f, "Link"),
+      TagKind::Annot => write!(f, "Annot"),
+      TagKind::Figure => write!(f, "Figure"),
+      TagKind::Formula => write!(f, "Formula"),
+      TagKind::Form => write!(f, "Form"),
+      TagKind::NonStruct => write!(f, "NonStruct"),
+      TagKind::Datetime => write!(f, "Datetime"),
+      TagKind::Terms => write!(f, "Terms"),
+      TagKind::Title => write!(f, "Title"),
+      TagKind::Strong => write!(f, "Strong"),
+      TagKind::Em => write!(f, "Em"),
     }?;
     writeln!(f)?;
 
     let indent = indent.inc();
-    for attr in self.as_any().attrs.iter() {
+    for attr in self.attrs.iter() {
       attr.output_indent(f, indent)?;
     }
 
@@ -594,7 +594,8 @@ mod tests {
   use crate::krilla::geom::Rect;
   use crate::krilla::tagging::fmt::{Indent, Output};
   use crate::krilla::tagging::{
-    BBox, ColumnDimensions, ContentTag, LineHeight, NaiveRgbColor, Sides, Tag, TagGroup, TagTree,
+    Attr, BBox, ColumnDimensions, ContentTag, LayoutAttr, LineHeight, NaiveRgbColor, Sides,
+    StructAttr, Tag, TagGroup, TagTree,
   };
 
   #[test]
@@ -608,17 +609,23 @@ mod tests {
     let mut page = document.start_page();
     let mut tree = TagTree::new();
 
-    let sec = Tag::Section
-      .with_lang(Some("de".into()))
-      .with_column_widths(Some(ColumnDimensions::Specific(vec![17.0, 23.0, 34.0])))
-      .with_column_gap(Some(ColumnDimensions::Specific(vec![3.0, 4.0])));
+    let sec = Tag::SECTION
+      .with_attribute(Attr::Struct(StructAttr::Lang("de".into())))
+      .with_attribute(Attr::Layout(LayoutAttr::ColumnWidths(
+        ColumnDimensions::Specific(vec![17.0, 23.0, 34.0]),
+      )))
+      .with_attribute(Attr::Layout(LayoutAttr::ColumnGap(
+        ColumnDimensions::Specific(vec![3.0, 4.0]),
+      )));
     let mut sec = TagGroup::new(sec);
 
     let figure_rect = Rect::from_ltrb(12.1, 12.342, 24.789877, 32.0).unwrap();
-    let figure = Tag::Figure(Some("figure alt text".into()))
-      .with_actual_text(Some("THE ACTUAL TEXT".into()))
-      .with_bbox(Some(BBox::new(0, figure_rect)))
-      .with_line_height(Some(LineHeight::Normal));
+    let figure = Tag::figure(Some("figure alt text".into()))
+      .with_attribute(Attr::Struct(StructAttr::ActualText(
+        "THE ACTUAL TEXT".into(),
+      )))
+      .with_attribute(Attr::Layout(LayoutAttr::BBox(BBox::new(0, figure_rect))))
+      .with_attribute(Attr::Layout(LayoutAttr::LineHeight(LineHeight::Normal)));
     let mut figure = TagGroup::new(figure);
 
     let link_rect = Rect::from_ltrb(12.0, 12.0, 24.0, 32.32).unwrap();
@@ -633,9 +640,11 @@ mod tests {
       NaiveRgbColor::new(0x4D, 0x66, 0x4D),
       NaiveRgbColor::new(0x00, 0xB3, 0x33),
     );
-    let table = Tag::Table
-      .with_border_color(Some(border_color))
-      .with_line_height(Some(LineHeight::Custom(23.0)));
+    let table = Tag::TABLE
+      .with_attribute(Attr::Layout(LayoutAttr::BorderColor(border_color)))
+      .with_attribute(Attr::Layout(LayoutAttr::LineHeight(LineHeight::Custom(
+        23.0,
+      ))));
     let table = TagGroup::new(table);
     sec.push(table);
 
@@ -709,7 +718,7 @@ val:
     let mut page = document.start_page();
     let mut tree = TagTree::new();
 
-    let heading = Tag::Hn(NonZeroU16::new(1).unwrap(), None);
+    let heading = Tag::heading(NonZeroU16::new(1).unwrap(), None);
     let mut heading = TagGroup::new(heading);
 
     let mut surface = page.surface();
