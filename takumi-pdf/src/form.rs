@@ -4,7 +4,10 @@
 use std::collections::HashMap;
 
 use takumi_core::{
-  layout::{node::Node, tree::RenderNode},
+  layout::{
+    node::{Node, OptionState},
+    tree::RenderNode,
+  },
   style::{Color, TextAlign},
 };
 
@@ -45,6 +48,7 @@ enum ControlKind {
   Text { multiline: bool, password: bool },
   CheckBox,
   Radio,
+  Choice { multi: bool, list: bool },
 }
 
 impl ControlKind {
@@ -57,6 +61,12 @@ impl ControlKind {
       return Some(Self::Text {
         multiline: true,
         password: false,
+      });
+    }
+    if tag.eq_ignore_ascii_case("select") {
+      return Some(Self::Choice {
+        multi: source.attribute("multiple").is_some(),
+        list: source.is_list_box(),
       });
     }
     if !tag.eq_ignore_ascii_case("input") {
@@ -105,6 +115,23 @@ enum FieldKind {
     on: bool,
     export: String,
   },
+  Choice {
+    /// Every option as the value it submits and the text it shows.
+    options: Vec<ChoiceOption>,
+    /// Which options start selected, by their place in `options`.
+    selected: Vec<usize>,
+    /// Whether more than one option can be picked.
+    multi: bool,
+    /// Whether the options lay out as a list box rather than a closed
+    /// drop-down.
+    list: bool,
+  },
+}
+
+/// One `<option>`: the value it submits and the text it shows.
+pub(crate) struct ChoiceOption {
+  pub(crate) export: String,
+  pub(crate) display: String,
 }
 
 impl FieldKind {
@@ -120,6 +147,16 @@ impl FieldKind {
         on,
         export: export_value(source),
       },
+      ControlKind::Choice { multi, list } => {
+        let (options, states) = options(node);
+
+        Self::Choice {
+          selected: OptionState::chosen(&states, multi, !list),
+          options,
+          multi,
+          list,
+        }
+      }
       ControlKind::Text {
         multiline,
         password,
@@ -164,7 +201,66 @@ impl FieldKind {
         on: *on,
         export: export.clone(),
       },
+      Self::Choice {
+        options,
+        selected,
+        multi,
+        list,
+      } => FormField::Choice {
+        options: options
+          .iter()
+          .map(|option| (option.export.clone(), option.display.clone()))
+          .collect(),
+        selected: selected.clone(),
+        multi: *multi,
+        list: *list,
+      },
     }
+  }
+}
+
+/// Every `<option>` under a `<select>` with its selection state. Layout moves
+/// the source children into the render tree, so they are read from there.
+fn options(node: &RenderNode) -> (Vec<ChoiceOption>, Vec<OptionState>) {
+  let mut options = Vec::new();
+  let mut states = Vec::new();
+
+  visit_options(node, &mut |option, state| {
+    options.push(option);
+    states.push(state);
+  });
+  (options, states)
+}
+
+fn visit_options(node: &RenderNode, visit: &mut impl FnMut(ChoiceOption, OptionState)) {
+  for child in node.children.as_deref().unwrap_or_default() {
+    let Some(source) = child.node.as_ref() else {
+      continue;
+    };
+    let Some(state) = source.option_state() else {
+      visit_options(child, visit);
+      continue;
+    };
+    let text = raw_text(child)
+      .split([' ', '\t', '\n', '\r', '\u{000c}'])
+      .filter(|part| !part.is_empty())
+      .collect::<Vec<_>>()
+      .join(" ");
+    let display = source
+      .option_label()
+      .map(str::to_string)
+      .unwrap_or_else(|| text.clone());
+
+    visit(
+      ChoiceOption {
+        export: source
+          .attribute("value")
+          .map(str::to_string)
+          .unwrap_or(text),
+        display,
+      },
+      state,
+    );
   }
 }
 

@@ -389,6 +389,18 @@ pub enum FormField {
     /// PDF name cannot carry still survives.
     export: String,
   },
+  /// A drop-down or list box.
+  Choice {
+    /// Every option as the value it submits and the text it shows.
+    options: Vec<(String, String)>,
+    /// Which options start selected, by their place in `options`.
+    selected: Vec<usize>,
+    /// Whether more than one option can be selected.
+    multi: bool,
+    /// Whether the options lay out as a list box rather than a closed
+    /// drop-down.
+    list: bool,
+  },
 }
 
 impl FormField {
@@ -418,10 +430,46 @@ impl FormField {
         }
       }
       Self::Radio { .. } => flags |= (1 << 14) | (1 << 15),
+      Self::Choice { multi, list, .. } => {
+        if !*list {
+          flags |= 1 << 17;
+        }
+        if *multi {
+          flags |= 1 << 21;
+        }
+      }
       Self::CheckBox { .. } => {}
     }
 
     flags
+  }
+
+  /// The text a choice field's appearance draws: every option as a row of a
+  /// list box, or what a drop-down's selected option shows, which is not what
+  /// it submits.
+  fn display(&self) -> String {
+    let Self::Choice {
+      options,
+      selected,
+      list,
+      ..
+    } = self
+    else {
+      return String::new();
+    };
+    let shown = match list {
+      true => options
+        .iter()
+        .map(|(_, display)| display.as_str())
+        .collect(),
+      false => selected
+        .iter()
+        .filter_map(|&index| options.get(index))
+        .map(|(_, display)| display.as_str())
+        .collect::<Vec<_>>(),
+    };
+
+    shown.join("\n")
   }
 
   /// The `/AP` state name the field files its "on" appearance under.
@@ -429,7 +477,7 @@ impl FormField {
     match self {
       Self::CheckBox { export, .. } if export == "Off" => "0".to_string(),
       Self::CheckBox { export, .. } => export.clone(),
-      Self::Text { .. } | Self::Radio { .. } => String::new(),
+      Self::Text { .. } | Self::Radio { .. } | Self::Choice { .. } => String::new(),
     }
   }
 }
@@ -527,8 +575,57 @@ impl WidgetAnnotation {
       } => value.chars().all(|character| {
         matches!(character, '\t' | '\n' | '\r') || win_ansi_byte(character).is_some()
       }),
+      FormField::Choice { options, .. } => options.iter().all(|(_, label)| {
+        label.chars().all(|character| {
+          matches!(character, '\t' | '\n' | '\r') || win_ansi_byte(character).is_some()
+        })
+      }),
       _ => true,
     }
+  }
+
+  fn choice_appearance(&self, width: f32, height: f32) -> String {
+    let size = self.style.font_size;
+    let FormField::Choice {
+      options,
+      selected,
+      list: true,
+      ..
+    } = &self.field
+    else {
+      return text_appearance(
+        &self.field.display(),
+        false,
+        width,
+        height,
+        size,
+        &self.style,
+      );
+    };
+    let [red, green, blue] = self.style.color;
+    let row_height = size * 1.2;
+    let mut content = format!("/Tx BMC q 0 0 {width} {height} re W n ");
+
+    for (index, (_, label)) in options.iter().enumerate() {
+      let bottom = height - (index + 1) as f32 * row_height;
+
+      if bottom + row_height <= 0.0 {
+        break;
+      }
+      // https://github.com/Hopding/pdf-lib/blob/master/src/api/form/appearances.ts
+      if selected.contains(&index) {
+        content.push_str(&format!(
+          "0.6 0.75686276 0.85490197 rg 0 {bottom} {width} {row_height} re f "
+        ));
+      }
+      let text = draw_value(label, false, width, row_height, size, self.style.align);
+
+      content.push_str(&format!(
+        "q 1 0 0 1 0 {bottom} cm BT /{FORM_FONT} {size} Tf {red} {green} {blue} rg {text} ET Q "
+      ));
+    }
+    content.push_str("Q EMC");
+    content
   }
 
   fn write_appearance(
@@ -560,6 +657,7 @@ impl WidgetAnnotation {
           None,
         )
       }
+      FormField::Choice { .. } => (self.choice_appearance(width, height), None),
       FormField::CheckBox { .. } => (
         check_mark(width, height, self.style.color),
         Some(sc.new_ref()),
@@ -568,7 +666,11 @@ impl WidgetAnnotation {
     };
     // The font reference is taken before the stream opens, which borrows the
     // same chunk.
-    let font = matches!(self.field, FormField::Text { .. }).then(|| chunk_container.form_font(sc));
+    let font = matches!(
+      self.field,
+      FormField::Text { .. } | FormField::Choice { .. }
+    )
+    .then(|| chunk_container.form_font(sc));
 
     if let Some(off) = off {
       chunk_container
@@ -680,6 +782,59 @@ impl WidgetAnnotation {
             .insert(Name(b"Opt"))
             .array()
             .item(TextStr(export));
+        }
+      }
+      FormField::Choice {
+        options, selected, ..
+      } => {
+        annotation.pair(Name(b"FT"), Name(b"Ch"));
+        annotation.pair(Name(b"DA"), Str(self.default_appearance().as_bytes()));
+        annotation.pair(Name(b"Q"), self.style.align);
+
+        let exports = selected
+          .iter()
+          .filter_map(|&index| options.get(index))
+          .map(|(export, _)| TextStr(export))
+          .collect::<Vec<_>>();
+
+        for key in [Name(b"V"), Name(b"DV")] {
+          // A list box holding more than one selection writes them as an
+          // array; one selection is written as the value it is.
+          match exports.as_slice() {
+            [] => {}
+            [one] => {
+              annotation.pair(key, *one);
+            }
+            many => {
+              annotation.insert(key).array().items(many.iter().copied());
+            }
+          }
+        }
+        let mut opt = annotation.insert(Name(b"Opt")).array();
+
+        for (export, display) in options {
+          match export == display {
+            // An option whose submitted value differs from its label writes
+            // both, export first, as the spec pairs them.
+            false => {
+              opt
+                .push()
+                .array()
+                .items([TextStr(export), TextStr(display)]);
+            }
+            true => {
+              opt.item(TextStr(display));
+            }
+          }
+        }
+        opt.finish();
+
+        if !selected.is_empty() {
+          annotation.insert(Name(b"I")).array().items(
+            selected
+              .iter()
+              .filter_map(|&index| i32::try_from(index).ok()),
+          );
         }
       }
       // The group owns `/FT` and `/V`; the button only says which state it

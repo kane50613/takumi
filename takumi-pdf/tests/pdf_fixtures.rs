@@ -4387,6 +4387,12 @@ const FORM_SOURCE: &str = r#"
   <input type="password" name="secret" value="hunter2" disabled aria-label="Secret"
     style="width:160px;height:24px;border:1px solid #999" />
 
+  <label for="plan" style="font-size:11px">Plan</label>
+  <select id="plan" name="plan" style="width:180px;height:26px;border:1px solid #999">
+    <option value="M">Monthly</option>
+    <option value="A" selected>Annual</option>
+  </select>
+
   <label for="terms">Accept</label>
   <input id="terms" type="checkbox" name="terms" value="yes (signed)" checked
     style="width:14px;height:14px;color:#15803d;border:1px solid #999" />
@@ -4432,6 +4438,10 @@ fn form_fields_render_as_widgets() {
     // `disabled` is read-only and stays out of the submission.
     "/Ff 8197",
     "(*******)",
+    // The drop-down submits the export value and draws the label.
+    "/FT/Ch",
+    "/V(A)/DV(A)",
+    "/Opt[[(M)(Monthly)][(A)(Annual)]]",
     // The check box files its on appearance under what it submits, escaped
     // once by the name it is written as.
     "/AS/yes#20#28signed#29",
@@ -4457,8 +4467,8 @@ fn form_fields_render_as_widgets() {
   );
   // One appearance stream per field, and every one of them names the shared
   // face its `/DA` does.
-  assert_eq!(pdf.matches("/Tx BMC").count(), 3);
-  assert_eq!(pdf.matches("/Font<</Helv").count(), 4);
+  assert_eq!(pdf.matches("/Tx BMC").count(), 4);
+  assert_eq!(pdf.matches("/Font<</Helv").count(), 5);
 }
 
 #[test]
@@ -4575,6 +4585,113 @@ fn a_dropped_button_leaves_the_group_numbered_from_zero() {
   assert!(pdf.contains("/Opt[(B)]"));
   assert!(pdf.contains("/V/0"));
   assert!(pdf.contains("/AS/0"));
+}
+
+#[test]
+fn a_multiple_select_holds_every_selected_option() {
+  let fonts = fonts();
+  let source = r#"<div><select name="plan" multiple style="width:180px;height:60px">
+    <option value="M" selected>Monthly</option>
+    <option value="Q">Quarterly</option>
+    <option value="A" selected>Annual</option>
+  </select></div>"#;
+  let bytes = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .build(),
+  );
+  let pdf = String::from_utf8_lossy(&bytes);
+
+  assert!(pdf.contains("/V[(M)(A)]"));
+  assert!(pdf.contains("/DV[(M)(A)]"));
+}
+
+#[test]
+fn a_single_select_keeps_only_its_last_selected_option() {
+  let fonts = fonts();
+  let source = r#"<div><select name="plan" style="width:180px;height:26px">
+    <option value="M" selected>Monthly</option>
+    <option value="A" selected>Annual</option>
+  </select></div>"#;
+  let bytes = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .build(),
+  );
+  let pdf = String::from_utf8_lossy(&bytes);
+
+  assert!(pdf.contains("/V(A)/DV(A)"));
+  assert!(!pdf.contains("/V["));
+}
+
+#[test]
+fn an_option_label_names_what_the_choice_shows() {
+  let fonts = fonts();
+  let source = r#"<div><select name="plan" style="width:180px;height:26px">
+    <option value="M" label="Monthly plan">M</option>
+  </select></div>"#;
+  let bytes = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .build(),
+  );
+  let pdf = String::from_utf8_lossy(&bytes);
+
+  assert!(pdf.contains("/Opt[[(M)(Monthly plan)]]"));
+  assert!(pdf.contains("(Monthly plan) Tj"));
+}
+
+#[test]
+fn a_sized_select_is_a_list_box_that_starts_empty() {
+  let fonts = fonts();
+  let source = r#"<div><select name="plan" size="3" style="width:180px;height:60px">
+    <option value="M">Monthly</option>
+    <option value="A">Annual</option>
+  </select></div>"#;
+  let bytes = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .build(),
+  );
+  let pdf = String::from_utf8_lossy(&bytes);
+
+  // Neither Combo nor MultiSelect, and nothing selected yet.
+  assert!(pdf.contains("/Ff 0"));
+  assert!(!pdf.contains("/V(") && !pdf.contains("/V["));
+  // Every option draws as a row of the list.
+  assert!(pdf.contains("(Monthly) Tj"));
+  assert!(pdf.contains("(Annual) Tj"));
+}
+
+#[test]
+fn a_select_without_a_selection_holds_its_first_option() {
+  let fonts = fonts();
+  let source = r#"<div><select name="plan" style="width:180px;height:26px">
+    <option value="M">Monthly</option>
+    <option value="A">Annual</option>
+  </select></div>"#;
+  let bytes = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .build(),
+  );
+
+  assert!(String::from_utf8_lossy(&bytes).contains("/V(M)"));
 }
 
 #[test]
@@ -4897,4 +5014,44 @@ fn form_mixed_disabled_radio_group() {
     error.to_string(),
   )
   .unwrap();
+}
+
+#[test]
+fn form_choice_browser_values() {
+  let bytes = run_pdf_fixture("form_choice_values", |fonts| {
+    PdfOptions::builder()
+    .node(from_html("<div><select name='text' style='width:160px;height:24px'><option> \n Monthly\t plan \n </option></select><select name='label' style='width:160px;height:24px'><option label='Annual plan'> \n Annual\t billing \n </option></select><select name='nbsp' style='width:160px;height:24px'><option>\u{00a0}Keep\u{00a0} space\u{00a0}</option></select><select name='list' multiple style='width:160px;height:70px'><option selected>Monthly</option><option>Quarterly</option><option selected>Annual</option></select></div>", FromHtmlOptions::default()).unwrap())
+    .page(PageOptions::A4).fonts(fonts).form(true).build()
+  });
+
+  let pdf = String::from_utf8_lossy(&bytes);
+
+  assert!(pdf.contains("/V(Monthly plan)"));
+  assert!(pdf.contains("/Opt[(Monthly plan)]"));
+  assert!(pdf.contains("/Opt[[(Annual billing)(Annual plan)]]"));
+  assert!(pdf.contains("/V["));
+  assert!(pdf.contains("/I[0 2]"));
+  assert_eq!(pdf.matches("0.6 0.75686276 0.85490197 rg").count(), 2);
+}
+
+#[test]
+fn form_choice_rejects_unencodable_labels() {
+  let fonts = fonts();
+  let error = render(
+    PdfOptions::builder()
+      .node(
+        from_html(
+          "<select name='city'><option>London</option><option value='tokyo'>東京</option></select>",
+          FromHtmlOptions::default(),
+        )
+        .unwrap(),
+      )
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .build(),
+  )
+  .unwrap_err();
+
+  assert!(matches!(error, PdfError::UnsupportedFormValue(name) if name == "city"));
 }
