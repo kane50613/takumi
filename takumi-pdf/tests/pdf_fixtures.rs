@@ -4387,6 +4387,15 @@ const FORM_SOURCE: &str = r#"
   <input type="password" name="secret" value="hunter2" disabled aria-label="Secret"
     style="width:160px;height:24px;border:1px solid #999" />
 
+  <label for="terms">Accept</label>
+  <input id="terms" type="checkbox" name="terms" value="yes (signed)" checked
+    style="width:14px;height:14px;color:#15803d;border:1px solid #999" />
+
+  <input type="radio" aria-label="Shipping" name="ship" value="Standard"
+    style="width:14px;height:14px;border:1px solid #999" />
+  <input type="radio" aria-label="Shipping" name="ship" value="Express" checked required
+    style="width:14px;height:14px;border:1px solid #999" />
+
   <input type="submit" value="Send" style="width:80px;height:24px" />
 </div>
 "#;
@@ -4423,6 +4432,16 @@ fn form_fields_render_as_widgets() {
     // `disabled` is read-only and stays out of the submission.
     "/Ff 8197",
     "(*******)",
+    // The check box files its on appearance under what it submits, escaped
+    // once by the name it is written as.
+    "/AS/yes#20#28signed#29",
+    // The radio group owns its buttons, and `/Opt` carries export values a
+    // PDF name could not.
+    "/Kids",
+    "/Opt[(Standard)(Express)]",
+    // The second button is the checked one, and one `required` button makes
+    // the whole group required.
+    "/Ff 49154/TU(Shipping)/V/1/DV/1",
   ] {
     assert!(pdf.contains(expected), "form output is missing {expected}");
   }
@@ -4432,7 +4451,10 @@ fn form_fields_render_as_widgets() {
   // No `/MK`: the page already paints the box, and an appearance the viewer
   // regenerates has to stay transparent over it.
   assert!(!pdf.contains("/MK"));
-  assert_eq!(pdf.matches("/Border[0 0 0]").count(), 3);
+  assert_eq!(
+    pdf.matches("/Border[0 0 0]").count(),
+    pdf.matches("/Subtype/Widget").count()
+  );
   // One appearance stream per field, and every one of them names the shared
   // face its `/DA` does.
   assert_eq!(pdf.matches("/Tx BMC").count(), 3);
@@ -4490,6 +4512,69 @@ fn a_dropped_page_takes_its_duplicate_name_with_it() {
     String::from_utf8_lossy(&bytes).matches("/T(who)").count(),
     1
   );
+}
+
+#[test]
+fn radio_buttons_share_one_name() {
+  let fonts = fonts();
+  let source = r#"<div><input type="radio" name="ship" value="A" style="width:14px;height:14px" />
+    <input type="radio" name="ship" value="B" style="width:14px;height:14px" /></div>"#;
+  let bytes = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .build(),
+  );
+
+  assert!(String::from_utf8_lossy(&bytes).contains("/Opt[(A)(B)]"));
+}
+
+#[test]
+fn a_radio_name_a_text_field_also_claims_is_rejected() {
+  let fonts = fonts();
+  let source = r#"<div><input name="ship" style="width:80px;height:20px" />
+    <input type="radio" name="ship" value="A" style="width:14px;height:14px" /></div>"#;
+  let error = render(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .build(),
+  )
+  .expect_err("a text field may not share a radio group's name");
+
+  assert!(matches!(error, PdfError::DuplicateFieldName(name) if name == "ship"));
+}
+
+#[test]
+fn a_dropped_button_leaves_the_group_numbered_from_zero() {
+  let fonts = fonts();
+  let source = r#"<div><input type="radio" name="ship" value="A" style="width:14px;height:14px" />
+    <div style="break-before:page">
+      <input type="radio" name="ship" value="B" checked style="width:14px;height:14px" />
+    </div></div>"#;
+  let bytes = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .page_ranges(vec![PageRange {
+        from: Some(2),
+        to: None,
+      }])
+      .build(),
+  );
+  let pdf = String::from_utf8_lossy(&bytes);
+
+  // The kept button is the group's only kid, so its state is the first one
+  // and `/Opt` describes it.
+  assert!(pdf.contains("/Opt[(B)]"));
+  assert!(pdf.contains("/V/0"));
+  assert!(pdf.contains("/AS/0"));
 }
 
 #[test]
@@ -4752,4 +4837,64 @@ fn form_inline_accessible_label() {
   });
 
   assert!(String::from_utf8_lossy(&bytes).contains("/TU(Account name)"));
+}
+
+#[test]
+fn a_check_box_submits_on_only_when_it_carries_no_value() {
+  let fonts = fonts();
+  let source = r#"<div><input type="checkbox" name="a" checked style="width:14px;height:14px" />
+    <input type="checkbox" name="b" value="" checked style="width:14px;height:14px" /></div>"#;
+  let bytes = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .form(true)
+      .build(),
+  );
+  let pdf = String::from_utf8_lossy(&bytes);
+
+  assert!(pdf.contains("/V/on"));
+  // An empty `value` submits empty, which HTML keeps apart from a missing one.
+  assert!(pdf.contains("/V//DV/"));
+}
+
+#[test]
+fn form_reserved_checkbox_state() {
+  let bytes = run_pdf_fixture("form_checkbox_off", |fonts| {
+    PdfOptions::builder()
+      .node(
+        from_html(
+          "<input type='checkbox' name='off' value='Off' checked style='width:20px;height:20px'/>",
+          FromHtmlOptions::default(),
+        )
+        .unwrap(),
+      )
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .form(true)
+      .build()
+  });
+
+  let pdf = String::from_utf8_lossy(&bytes);
+
+  assert!(pdf.contains("/V/0/DV/0/AS/0/Opt[(Off)]"));
+  assert!(pdf.contains("/N<</0 "));
+}
+
+#[test]
+fn form_mixed_disabled_radio_group() {
+  let fonts = fonts();
+  let result = render(PdfOptions::builder()
+    .node(from_html("<div><input type='radio' name='plan' value='A' disabled/><input type='radio' name='plan' value='B'/></div>", FromHtmlOptions::default()).unwrap())
+    .page(PageOptions::A4).fonts(&fonts).form(true).build());
+
+  let error = result.expect_err("mixed disabled states cannot be represented by PDF field flags");
+
+  assert!(matches!(&error, PdfError::UnsupportedRadioGroup(name) if name == "plan"));
+  fs::write(
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures-generated/form_radio_error.txt"),
+    error.to_string(),
+  )
+  .unwrap();
 }
