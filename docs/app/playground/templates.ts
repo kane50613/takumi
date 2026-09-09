@@ -2,6 +2,8 @@ import animatedShowcase from "./templates/animated-showcase?raw";
 import accessible from "./templates/accessible?raw";
 import analyticsChart from "./templates/analytics-chart?raw";
 import articleCover from "./templates/article-cover?raw";
+import formControls from "./templates/form-controls?raw";
+import formLease from "./templates/form-lease?raw";
 import gradientPoster from "./templates/gradient-poster?raw";
 import invoice from "./templates/invoice?raw";
 import multilingual from "./templates/multilingual?raw";
@@ -120,6 +122,20 @@ export const templates: Template[] = [
     description: "One page sized to its content, like a receipt roll",
     kind: "pdf",
     code: receipt,
+  },
+  {
+    id: "form-lease",
+    name: "Fillable lease",
+    description: "A rental agreement whose blanks stay editable in a PDF reader",
+    kind: "pdf",
+    code: formLease,
+  },
+  {
+    id: "form-controls",
+    name: "Form controls",
+    description: "Every control that becomes a PDF field, with its flags and names",
+    kind: "pdf",
+    code: formControls,
   },
 ];
 
