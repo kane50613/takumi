@@ -523,7 +523,7 @@ impl Identifier {
   }
 }
 
-impl TagKind {
+impl Tag {
   pub(crate) fn write_kind(&self, struct_elem: &mut StructElement, sc: &mut SerializeContext) {
     let pdf_version = sc.serialize_settings().pdf_version();
     if pdf_version < self.minimum_version() {
@@ -533,67 +533,66 @@ impl TagKind {
       return;
     }
 
-    match self {
-      Self::Part(_) => write_kind_compat(sc, struct_elem, StructRole2::Part),
-      Self::Article(_) => write_kind_1_7(struct_elem, StructRole::Art),
-      Self::Section(_) => write_kind_compat(sc, struct_elem, StructRole2::Sect),
-      Self::Div(_) => write_kind_compat(sc, struct_elem, StructRole2::Div),
-      Self::BlockQuote(_) => write_kind_1_7(struct_elem, StructRole::BlockQuote),
-      Self::Caption(_) => write_kind_compat(sc, struct_elem, StructRole2::Caption),
-      Self::TOC(_) => write_kind_1_7(struct_elem, StructRole::TOC),
-      Self::TOCI(_) => write_kind_1_7(struct_elem, StructRole::TOCI),
-      Self::Index(_) => write_kind_1_7(struct_elem, StructRole::Index),
-      Self::P(_) => write_kind_compat(sc, struct_elem, StructRole2::P),
-      Self::L(_) => write_kind_compat(sc, struct_elem, StructRole2::L),
-      Self::LI(_) => write_kind_compat(sc, struct_elem, StructRole2::LI),
-      Self::Lbl(_) => write_kind_compat(sc, struct_elem, StructRole2::Lbl),
-      Self::LBody(_) => write_kind_compat(sc, struct_elem, StructRole2::LBody),
-      Self::Table(_) => write_kind_compat(sc, struct_elem, StructRole2::Table),
-      Self::TR(_) => write_kind_compat(sc, struct_elem, StructRole2::TR),
-      Self::TH(_) => write_kind_compat(sc, struct_elem, StructRole2::TH),
-      Self::TD(_) => write_kind_compat(sc, struct_elem, StructRole2::TD),
-      Self::THead(_) => write_kind_compat(sc, struct_elem, StructRole2::THead),
-      Self::TBody(_) => write_kind_compat(sc, struct_elem, StructRole2::TBody),
-      Self::TFoot(_) => write_kind_compat(sc, struct_elem, StructRole2::TFoot),
-      Self::Span(_) => write_kind_compat(sc, struct_elem, StructRole2::Span),
-      Self::InlineQuote(_) => write_kind_1_7(struct_elem, StructRole::Quote),
-      Self::Note(_) => write_kind_1_7(struct_elem, StructRole::Note),
-      Self::Reference(_) => write_kind_1_7(struct_elem, StructRole::Reference),
-      Self::BibEntry(_) => write_kind_1_7(struct_elem, StructRole::BibEntry),
-      Self::Code(_) => write_kind_1_7(struct_elem, StructRole::Code),
-      Self::Link(_) => write_kind_compat(sc, struct_elem, StructRole2::Link),
-      Self::Annot(_) => write_kind_compat(sc, struct_elem, StructRole2::Annot),
-      Self::Figure(_) => write_kind_compat(sc, struct_elem, StructRole2::Figure),
-      Self::Formula(_) => write_kind_compat(sc, struct_elem, StructRole2::Formula),
-      Self::Form(_) => write_kind_compat(sc, struct_elem, StructRole2::Form),
-      Self::NonStruct(_) => write_kind_compat(sc, struct_elem, StructRole2::NonStruct),
-      // Custom structure roles that are registered in the `RoleMap`.
-      Self::Datetime(_) => write_kind_custom(sc, struct_elem, Name(b"Datetime")),
-      Self::Terms(_) => write_kind_custom(sc, struct_elem, Name(b"Terms")),
-      Self::Title(_) => write_kind_custom(sc, struct_elem, Name(b"Title")),
+    match &self.kind {
+      TagKind::Part => write_kind_compat(sc, struct_elem, StructRole2::Part),
+      TagKind::Article => write_kind_1_7(struct_elem, StructRole::Art),
+      TagKind::Section => write_kind_compat(sc, struct_elem, StructRole2::Sect),
+      TagKind::Div => write_kind_compat(sc, struct_elem, StructRole2::Div),
+      TagKind::BlockQuote => write_kind_1_7(struct_elem, StructRole::BlockQuote),
+      TagKind::Caption => write_kind_compat(sc, struct_elem, StructRole2::Caption),
+      TagKind::TOC => write_kind_1_7(struct_elem, StructRole::TOC),
+      TagKind::TOCI => write_kind_1_7(struct_elem, StructRole::TOCI),
+      TagKind::Index => write_kind_1_7(struct_elem, StructRole::Index),
+      TagKind::P => write_kind_compat(sc, struct_elem, StructRole2::P),
+      TagKind::L => write_kind_compat(sc, struct_elem, StructRole2::L),
+      TagKind::LI => write_kind_compat(sc, struct_elem, StructRole2::LI),
+      TagKind::Lbl => write_kind_compat(sc, struct_elem, StructRole2::Lbl),
+      TagKind::LBody => write_kind_compat(sc, struct_elem, StructRole2::LBody),
+      TagKind::Table => write_kind_compat(sc, struct_elem, StructRole2::Table),
+      TagKind::TR => write_kind_compat(sc, struct_elem, StructRole2::TR),
+      TagKind::TH => write_kind_compat(sc, struct_elem, StructRole2::TH),
+      TagKind::TD => write_kind_compat(sc, struct_elem, StructRole2::TD),
+      TagKind::THead => write_kind_compat(sc, struct_elem, StructRole2::THead),
+      TagKind::TBody => write_kind_compat(sc, struct_elem, StructRole2::TBody),
+      TagKind::TFoot => write_kind_compat(sc, struct_elem, StructRole2::TFoot),
+      TagKind::Span => write_kind_compat(sc, struct_elem, StructRole2::Span),
+      TagKind::InlineQuote => write_kind_1_7(struct_elem, StructRole::Quote),
+      TagKind::Note => write_kind_1_7(struct_elem, StructRole::Note),
+      TagKind::Reference => write_kind_1_7(struct_elem, StructRole::Reference),
+      TagKind::BibEntry => write_kind_1_7(struct_elem, StructRole::BibEntry),
+      TagKind::Code => write_kind_1_7(struct_elem, StructRole::Code),
+      TagKind::Link => write_kind_compat(sc, struct_elem, StructRole2::Link),
+      TagKind::Annot => write_kind_compat(sc, struct_elem, StructRole2::Annot),
+      TagKind::Figure => write_kind_compat(sc, struct_elem, StructRole2::Figure),
+      TagKind::Formula => write_kind_compat(sc, struct_elem, StructRole2::Formula),
+      TagKind::Form => write_kind_compat(sc, struct_elem, StructRole2::Form),
+      TagKind::NonStruct => write_kind_compat(sc, struct_elem, StructRole2::NonStruct),
+      TagKind::Datetime => write_kind_custom(sc, struct_elem, Name(b"Datetime")),
+      TagKind::Terms => write_kind_custom(sc, struct_elem, Name(b"Terms")),
+      TagKind::Title => write_kind_custom(sc, struct_elem, Name(b"Title")),
       // PDF 2.0 structure roles that are conditionally registered.
-      Self::Hn(tag) => {
-        let role2 = StructRole2::Heading(tag.level());
+      TagKind::Hn { level } => {
+        let role2 = StructRole2::Heading(*level);
         if pdf_version < PdfVersion::Pdf20 {
           // Dynamically register custom headings `Hn` if the level
           // (`n >= 7`) isn't supported by PDF 1.7 and below.
           let compat = role2.compatibility_1_7(RoleMapOpts::default());
           if compat.into_pdf_1_7().is_none() {
-            sc.global_objects.custom_heading_roles.insert(tag.level());
+            sc.global_objects.custom_heading_roles.insert(*level);
           }
           struct_elem.custom_kind(role2.to_name(&mut [0; 6]));
         } else {
           struct_elem.kind_2(role2, sc.pdf2_ns.ssn_ref);
         }
       }
-      Self::Strong(_) => {
+      TagKind::Strong => {
         if pdf_version < PdfVersion::Pdf20 {
           struct_elem.custom_kind(Name(b"Strong"));
         } else {
           struct_elem.kind_2(StructRole2::Strong, sc.pdf2_ns.ssn_ref);
         }
       }
-      Self::Em(_) => {
+      TagKind::Em => {
         if pdf_version < PdfVersion::Pdf20 {
           struct_elem.custom_kind(Name(b"Em"));
         } else {
@@ -604,58 +603,21 @@ impl TagKind {
   }
 
   pub(crate) fn minimum_version(&self) -> PdfVersion {
-    match self {
-      Self::Part(_) => PdfVersion::Pdf14,
-      Self::Article(_) => PdfVersion::Pdf14,
-      Self::Section(_) => PdfVersion::Pdf14,
-      Self::Div(_) => PdfVersion::Pdf14,
-      Self::BlockQuote(_) => PdfVersion::Pdf14,
-      Self::Caption(_) => PdfVersion::Pdf14,
-      Self::TOC(_) => PdfVersion::Pdf14,
-      Self::TOCI(_) => PdfVersion::Pdf14,
-      Self::Index(_) => PdfVersion::Pdf14,
-      Self::P(_) => PdfVersion::Pdf14,
-      Self::Hn(_) => PdfVersion::Pdf14,
-      Self::L(_) => PdfVersion::Pdf14,
-      Self::LI(_) => PdfVersion::Pdf14,
-      Self::Lbl(_) => PdfVersion::Pdf14,
-      Self::LBody(_) => PdfVersion::Pdf14,
-      Self::Table(_) => PdfVersion::Pdf14,
-      Self::TR(_) => PdfVersion::Pdf14,
-      Self::TH(_) => PdfVersion::Pdf14,
-      Self::TD(_) => PdfVersion::Pdf14,
+    match self.kind {
+      TagKind::THead | TagKind::TBody | TagKind::TFoot | TagKind::Annot => PdfVersion::Pdf15,
       // TODO: writing `P` tags in PDF 1.4 will break the table structure.
       // Instead consider just transparently inserting all children, which
       // should be `TR`s anyway.
-      Self::THead(_) => PdfVersion::Pdf15,
-      Self::TBody(_) => PdfVersion::Pdf15,
-      Self::TFoot(_) => PdfVersion::Pdf15,
-      Self::Span(_) => PdfVersion::Pdf14,
-      Self::InlineQuote(_) => PdfVersion::Pdf14,
-      Self::Note(_) => PdfVersion::Pdf14,
-      Self::Reference(_) => PdfVersion::Pdf14,
-      Self::BibEntry(_) => PdfVersion::Pdf14,
-      Self::Code(_) => PdfVersion::Pdf14,
-      Self::Link(_) => PdfVersion::Pdf14,
-      Self::Annot(_) => PdfVersion::Pdf15,
-      Self::Figure(_) => PdfVersion::Pdf14,
-      Self::Formula(_) => PdfVersion::Pdf14,
-      Self::Form(_) => PdfVersion::Pdf14,
-      Self::NonStruct(_) => PdfVersion::Pdf14,
-      Self::Datetime(_) => PdfVersion::Pdf14,
-      Self::Terms(_) => PdfVersion::Pdf14,
-      Self::Title(_) => PdfVersion::Pdf14,
-      Self::Strong(_) => PdfVersion::Pdf14,
-      Self::Em(_) => PdfVersion::Pdf14,
+      _ => PdfVersion::Pdf14,
     }
   }
 
   pub(crate) fn should_have_alt(&self) -> bool {
-    matches!(self, TagKind::Figure(_) | TagKind::Formula(_))
+    matches!(self.kind, TagKind::Figure | TagKind::Formula)
   }
 
   pub(crate) fn can_have_title(&self) -> bool {
-    matches!(self, Self::Hn(_))
+    matches!(self.kind, TagKind::Hn { .. })
   }
 }
 
@@ -745,26 +707,23 @@ pub(crate) enum Reference {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TagGroup {
   /// The tag of the tag group.
-  pub tag: TagKind,
+  pub tag: Tag,
   /// The children of the tag group.
   pub children: Vec<Node>,
 }
 
 impl TagGroup {
   /// Create a new tag group with a specific tag.
-  pub fn new(tag: impl Into<TagKind>) -> Self {
+  pub fn new(tag: Tag) -> Self {
     Self {
-      tag: tag.into(),
+      tag,
       children: vec![],
     }
   }
 
   /// Create a new tag group with a specific tag and a list of children.
-  pub fn with_children(tag: impl Into<TagKind>, children: Vec<Node>) -> Self {
-    Self {
-      tag: tag.into(),
-      children,
-    }
+  pub fn with_children(tag: Tag, children: Vec<Node>) -> Self {
+    Self { tag, children }
   }
 
   /// Append a new child to the tag group.
@@ -802,42 +761,39 @@ impl TagGroup {
     self.tag.write_kind(&mut struct_elem, sc);
     struct_elem.parent(parent_ref);
 
-    let tag = self.tag.as_any();
     let pdf_version = sc.serialize_settings().pdf_version();
 
-    if let Some(id) = tag.id() {
+    if let Some(id) = self.tag.id() {
       match id_tree.entry(id.clone()) {
         Entry::Vacant(vacant) => {
           struct_elem.id(Str(id.as_bytes()));
           vacant.insert(elem_ref);
         }
         Entry::Occupied(_) => {
-          return Err(KrillaError::DuplicateTagId(id.clone(), tag.location));
+          return Err(KrillaError::DuplicateTagId(id.clone(), self.tag.location));
         }
       }
-    } else if matches!(self.tag, TagKind::Note(_)) {
-      // Explicitly don't use `TagId::from_bytes` to disambiguate note IDs
-      // from user provided IDs.
+    } else if matches!(self.tag.kind, TagKind::Note) {
+      // Explicitly don't use `TagId::from` to disambiguate note IDs from user-provided IDs.
       let mut id = TagId(SmallVec::new());
       _ = write!(&mut id.0, "Note {note_id}");
       struct_elem.id(Str(id.as_bytes()));
       id_tree.insert(id, elem_ref);
-
       *note_id += 1;
     }
 
-    if self.tag.can_have_title() && tag.title().is_none_or(str::is_empty) {
+    if self.tag.can_have_title() && self.tag.title().is_none_or(str::is_empty) {
       sc.register_validation_error(ValidationError::MissingHeadingTitle);
     }
 
-    if self.tag.should_have_alt() && tag.alt_text().is_none_or(str::is_empty) {
-      sc.register_validation_error(ValidationError::MissingAltText(tag.location));
+    if self.tag.should_have_alt() && self.tag.alt_text().is_none_or(str::is_empty) {
+      sc.register_validation_error(ValidationError::MissingAltText(self.tag.location));
     }
 
     // TODO: Once we have a generalized mechanism for validating tag trees,
     // validate TH-outside-THead structure for PDF < 1.5.
 
-    for attr in tag.attrs.iter() {
+    for attr in self.tag.attrs.iter() {
       let Attr::Struct(attr) = attr else {
         continue;
       };
@@ -874,7 +830,7 @@ impl TagGroup {
 
     // Lazily initialize the list attributes to avoid an empty array.
     let mut list_attributes = LazyCell::new(|| attributes.push().list());
-    for attr in tag.attrs.iter() {
+    for attr in self.tag.attrs.iter() {
       let Attr::List(attr) = attr else {
         continue;
       };
@@ -888,7 +844,7 @@ impl TagGroup {
 
     // Lazily initialize the table attributes to avoid an empty array.
     let mut table_attributes = LazyCell::new(|| attributes.push().table());
-    for attr in tag.attrs.iter() {
+    for attr in self.tag.attrs.iter() {
       let Attr::Table(attr) = attr else {
         continue;
       };
@@ -905,7 +861,7 @@ impl TagGroup {
             // Without `Scope`, the correct cell to point to is ambiguous.
             sc.register_validation_error(ValidationError::RequiresNewerPdfVersion(
               VersionedFeature::TableHeaderScope,
-              tag.location,
+              self.tag.location,
             ));
           }
         }
@@ -927,7 +883,7 @@ impl TagGroup {
 
     // Lazily initialize the list attributes to avoid an empty array.
     let mut layout_attributes = LazyCell::new(|| attributes.push().layout());
-    for attr in tag.attrs.iter() {
+    for attr in self.tag.attrs.iter() {
       let Attr::Layout(attr) = attr else {
         continue;
       };
@@ -1098,7 +1054,7 @@ impl TagGroup {
     if let Some(headers) = self.tag.headers() {
       for id in headers.iter() {
         if !id_tree.contains_key(id) {
-          return Err(KrillaError::UnknownTagId(id.clone(), self.tag.location()));
+          return Err(KrillaError::UnknownTagId(id.clone(), self.tag.location));
         }
       }
     }

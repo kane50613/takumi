@@ -20,7 +20,7 @@ use takumi_core::{
 };
 
 use crate::krilla::tagging::{
-  Identifier, ListNumbering, TableHeaderScope, Tag, TagGroup, TagId, TagKind, TagTree,
+  Identifier, ListNumbering, TableHeaderScope, Tag, TagGroup, TagId, TagTree,
 };
 
 /// Marked-content identifiers recorded during emission, keyed by the source
@@ -185,19 +185,19 @@ fn build_node(
     // A destination names a structure element, and PDF/UA-2 asks every link
     // inside a document to be one. A target that carries no meaning of its own
     // still has to exist for the link to land on.
-    role = Some(Tag::P.into());
+    role = Some(Tag::P);
   }
 
   match role {
     Some(kind) => {
       flush_paragraph(pending, parent);
-      let is_list_item = matches!(kind, TagKind::LI(_));
+      let is_list_item = kind.is_list_item();
 
       if let Some(group) = build_element(node, path, walk, kind, nesting, false) {
         // An `LI` outside a list is invalid on its own, so it brings a list
         // of its own along.
         if is_list_item && !nesting.in_list {
-          let mut list = TagGroup::new(Tag::L(ListNumbering::None));
+          let mut list = TagGroup::new(Tag::list(ListNumbering::None));
 
           list.push(group);
           parent.push(list);
@@ -240,17 +240,17 @@ fn build_element(
   node: &RenderNode,
   path: &mut Vec<usize>,
   walk: &mut Walk,
-  kind: TagKind,
+  kind: Tag,
   nesting: Nesting,
   keep_empty: bool,
 ) -> Option<TagGroup> {
   let identifiers = walk.collector.take(path);
   let labels = walk.collector.take_labels(path);
   let mut annotations = walk.collector.take_annotations(path);
-  let is_link = matches!(kind, TagKind::Link(_));
-  let is_list_item = matches!(kind, TagKind::LI(_));
-  let is_list = matches!(kind, TagKind::L(_));
-  let is_figure = matches!(kind, TagKind::Figure(_));
+  let is_link = kind.is_link();
+  let is_list_item = kind.is_list_item();
+  let is_list = kind.is_list();
+  let is_figure = kind.is_figure();
   let mut kind = kind;
 
   let is_target = walk.targets.contains(path.as_slice());
@@ -267,7 +267,7 @@ fn build_element(
   // item's whole subtree wrap in one of each.
   if is_list_item {
     if !labels.is_empty() {
-      let mut label = TagGroup::new(Tag::Lbl);
+      let mut label = TagGroup::new(Tag::LBL);
 
       for identifier in labels {
         label.push(identifier);
@@ -302,7 +302,7 @@ fn build_element(
   has_content |= !children.is_empty();
   if is_list_item {
     if !children.is_empty() {
-      let mut body = TagGroup::new(Tag::LBody);
+      let mut body = TagGroup::new(Tag::L_BODY);
 
       for child in children {
         body.push(child);
@@ -355,9 +355,9 @@ impl TableBuilder {
     self.close_row();
     if let Some((part, rows)) = self.section.take() {
       let mut group = TagGroup::new(match part {
-        TablePart::HeaderCell => TagKind::from(Tag::THead),
-        TablePart::FooterCell => Tag::TFoot.into(),
-        _ => Tag::TBody.into(),
+        TablePart::HeaderCell => Tag::T_HEAD,
+        TablePart::FooterCell => Tag::T_FOOT,
+        _ => Tag::T_BODY,
       });
 
       for row in rows {
@@ -387,7 +387,7 @@ impl TableBuilder {
   fn push_stray(&mut self, children: Vec<TagGroup>) {
     self.close_section();
 
-    let mut cell = TagGroup::new(Tag::TD);
+    let mut cell = TagGroup::new(Tag::table_data(None, None));
 
     for child in children {
       cell.push(child);
@@ -418,7 +418,7 @@ fn placement_span(placement: &GridPlacement) -> Option<NonZeroU32> {
 /// a tagless cell in a header row group is still a header. A `TH` takes its
 /// `Scope` from the `scope` attribute, defaulting to `Column` in a header row
 /// group and `Row` elsewhere, per ISO 32000-2 §14.8.4.8.3's algorithm.
-fn cell_kind(cell: &RenderNode, part: TablePart) -> TagKind {
+fn cell_kind(cell: &RenderNode, part: TablePart) -> Tag {
   let source = cell.node.as_ref();
   let tag_name = source.and_then(|node| node.tag_name());
   let row_span = placement_span(&cell.context.style.grid_row_end);
@@ -430,10 +430,7 @@ fn cell_kind(cell: &RenderNode, part: TablePart) -> TagKind {
   };
 
   if !is_header {
-    return Tag::TD
-      .with_row_span(row_span)
-      .with_col_span(col_span)
-      .into();
+    return Tag::table_data(row_span, col_span);
   }
   let scope = source
     .and_then(|node| node.scope())
@@ -452,10 +449,7 @@ fn cell_kind(cell: &RenderNode, part: TablePart) -> TagKind {
       TableHeaderScope::Row
     });
 
-  Tag::TH(scope)
-    .with_row_span(row_span)
-    .with_col_span(col_span)
-    .into()
+  Tag::table_header(scope, row_span, col_span)
 }
 
 fn build_table(
@@ -467,7 +461,7 @@ fn build_table(
 ) {
   let identifiers = walk.collector.take(path);
   let annotations = walk.collector.take_annotations(path);
-  let mut kind: TagKind = Tag::Table.into();
+  let mut kind = Tag::TABLE;
   let is_target = walk.targets.contains(path.as_slice());
 
   if is_target {
@@ -501,8 +495,7 @@ fn build_table(
     }
     match child.table_part {
       Some(TablePart::Caption) => {
-        if let Some(caption) = build_element(child, path, walk, Tag::Caption.into(), nesting, false)
-        {
+        if let Some(caption) = build_element(child, path, walk, Tag::CAPTION, nesting, false) {
           builder.push_caption(caption);
         }
       }
@@ -556,7 +549,7 @@ fn build_table(
 /// box of their own) in `Link` elements of their own.
 fn push_link_wrappers(annotations: Vec<Identifier>, parent: &mut Vec<TagGroup>) {
   for annotation in annotations {
-    let mut group = TagGroup::new(Tag::Link);
+    let mut group = TagGroup::new(Tag::LINK);
 
     group.push(annotation);
     parent.push(group);
@@ -619,7 +612,7 @@ fn is_row_flex(node: &RenderNode) -> bool {
   )
 }
 
-fn role(node: &RenderNode, walk: &mut Walk, nesting: Nesting) -> Option<TagKind> {
+fn role(node: &RenderNode, walk: &mut Walk, nesting: Nesting) -> Option<Tag> {
   let source = node.node.as_ref()?;
   let tag_name = source.tag_name()?;
 
@@ -639,28 +632,28 @@ fn role(node: &RenderNode, walk: &mut Walk, nesting: Nesting) -> Option<TagKind>
       }
       let level = walk.heading_level(tag_name.as_bytes()[1] - b'0');
 
-      Some(Tag::Hn(level, title).into())
+      Some(Tag::heading(level, title))
     }
-    "p" => Some(Tag::P.into()),
+    "p" => Some(Tag::P),
     // A `Figure` encloses everything the illustration is made of, so the
     // caption has a parent to sit under and the image inside adds no element
     // of its own. Without an alternate description there is nothing to
     // enclose that a `Figure` would describe, and PDF/UA rejects one that
     // carries no text.
-    "figure" => Some(Tag::Figure(Some(figure_alt(node)?)).into()),
+    "figure" => Some(Tag::figure(Some(figure_alt(node)?))),
     "img" if nesting.in_figure => None,
     // `alt=""` marks a decorative image: emitted as an artifact, no element.
-    "img" if source.alt() != Some("") => Some(Tag::Figure(source.alt().map(str::to_string)).into()),
-    "a" if source.href().is_some() => Some(Tag::Link.into()),
-    "blockquote" => Some(Tag::BlockQuote.into()),
-    "section" => Some(Tag::Section.into()),
-    "article" => Some(Tag::Article.into()),
-    "ul" | "ol" => Some(Tag::L(list_numbering(node)).into()),
-    "li" => Some(Tag::LI.into()),
-    "strong" | "b" => Some(Tag::Strong.into()),
-    "em" | "i" => Some(Tag::Em.into()),
-    "code" => Some(Tag::Code.into()),
-    "figcaption" => Some(Tag::Caption.into()),
+    "img" if source.alt() != Some("") => Some(Tag::figure(source.alt().map(str::to_string))),
+    "a" if source.href().is_some() => Some(Tag::LINK),
+    "blockquote" => Some(Tag::BLOCK_QUOTE),
+    "section" => Some(Tag::SECTION),
+    "article" => Some(Tag::ARTICLE),
+    "ul" | "ol" => Some(Tag::list(list_numbering(node))),
+    "li" => Some(Tag::LI),
+    "strong" | "b" => Some(Tag::STRONG),
+    "em" | "i" => Some(Tag::EM),
+    "code" => Some(Tag::CODE),
+    "figcaption" => Some(Tag::CAPTION),
     _ => None,
   }
 }
