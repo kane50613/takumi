@@ -6,9 +6,15 @@ import * as typescript from "sugar-high/lang/typescript";
 type TextModel = ReturnType<Monaco["editor"]["getModels"]>[number];
 type ThemeData = Parameters<Monaco["editor"]["defineTheme"]>[1];
 
-/** Monaco hands the provider one line at a time, so the state carries the line number. */
+/**
+ * Monaco hands the provider one line at a time, so the state carries the line number. It also
+ * carries the model version the line was tokenized from: Monaco stops re-tokenizing as soon as an
+ * end state equals the one it stored, and every line below an opened comment or template literal
+ * needs new colours even though its number did not change.
+ */
 type LineState = {
   lineIndex: number;
+  version: number;
   clone(): LineState;
   equals(other: LineState): boolean;
 };
@@ -101,19 +107,20 @@ const plainTypes = new Set<TokenType>(["identifier", "sign", "space", "break", "
 
 const parsedModels = new WeakMap<TextModel, { version: number; lines: readonly ParsedLine[] }>();
 
-function linesOf(monaco: Monaco, model: TextModel) {
+function parseOf(monaco: Monaco, model: TextModel) {
   const version = model.getVersionId();
   const cached = parsedModels.get(model);
 
   if (cached && cached.version === version) {
-    return cached.lines;
+    return cached;
   }
 
   const { lines } = parse(model.getValue(monaco.editor.EndOfLinePreference.LF), typescript);
+  const parsed = { version, lines };
 
-  parsedModels.set(model, { version, lines });
+  parsedModels.set(model, parsed);
 
-  return lines;
+  return parsed;
 }
 
 function tokensOf(parsedLine: ParsedLine) {
@@ -143,32 +150,38 @@ function tokensOf(parsedLine: ParsedLine) {
  * which loses the multi-line comment and template string context.
  */
 function createTokensProvider(monaco: Monaco) {
-  const createState = (lineIndex: number): LineState => ({
+  const createState = (lineIndex: number, version: number): LineState => ({
     lineIndex,
-    clone: () => createState(lineIndex),
-    equals: (other) => other.lineIndex === lineIndex,
+    version,
+    clone: () => createState(lineIndex, version),
+    equals: (other) => other.lineIndex === lineIndex && other.version === version,
   });
 
   return {
-    getInitialState: () => createState(0),
+    getInitialState: () => createState(0, 0),
     tokenize(line: string, state: LineState) {
-      const endState = createState(state.lineIndex + 1);
-
       for (const model of monaco.editor.getModels()) {
         if (model.getLanguageId() !== languageId) {
           continue;
         }
 
-        const parsedLine = linesOf(monaco, model)[state.lineIndex];
+        const { version, lines } = parseOf(monaco, model);
+        const parsedLine = lines[state.lineIndex];
 
         if (parsedLine?.value === line) {
-          return { tokens: tokensOf(parsedLine), endState };
+          return {
+            tokens: tokensOf(parsedLine),
+            endState: createState(state.lineIndex + 1, version),
+          };
         }
       }
 
       const [parsedLine] = parse(line, typescript).lines;
 
-      return { tokens: parsedLine ? tokensOf(parsedLine) : [], endState };
+      return {
+        tokens: parsedLine ? tokensOf(parsedLine) : [],
+        endState: createState(state.lineIndex + 1, state.version),
+      };
     },
   };
 }
