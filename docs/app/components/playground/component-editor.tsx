@@ -17,8 +17,10 @@ import {
 } from "@codemirror/language";
 import { lintKeymap } from "@codemirror/lint";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
-import { Compartment, EditorState, type Extension } from "@codemirror/state";
+import { Compartment, EditorState, type Extension, RangeSetBuilder } from "@codemirror/state";
 import {
+  Decoration,
+  type DecorationSet,
   drawSelection,
   dropCursor,
   EditorView,
@@ -28,6 +30,8 @@ import {
   keymap,
   lineNumbers,
   rectangularSelection,
+  ViewPlugin,
+  type ViewUpdate,
 } from "@codemirror/view";
 import githubDarkDefault from "@shikijs/themes/github-dark-default";
 import githubLightDefault from "@shikijs/themes/github-light-default";
@@ -40,6 +44,51 @@ const THEMES = {
   dark: editorTheme(githubDarkDefault),
   light: editorTheme(githubLightDefault),
 };
+
+function indentDecorations(view: EditorView) {
+  const builder = new RangeSetBuilder<Decoration>();
+
+  for (const { from, to } of view.visibleRanges) {
+    for (let pos = from; pos <= to;) {
+      const line = view.state.doc.lineAt(pos);
+      const indent = line.text.length - line.text.trimStart().length;
+
+      if (indent > 0) {
+        builder.add(
+          line.from,
+          line.from,
+          Decoration.line({
+            attributes: {
+              style: `padding-left: calc(6px + ${indent}ch); text-indent: -${indent}ch`,
+            },
+          }),
+        );
+      }
+
+      pos = line.to + 1;
+    }
+  }
+
+  return builder.finish();
+}
+
+/** Hangs a wrapped line under its own indent, the way Monaco wrapped one. */
+const indentedWrapping = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet;
+
+    constructor(view: EditorView) {
+      this.decorations = indentDecorations(view);
+    }
+
+    update(update: ViewUpdate) {
+      if (update.docChanged || update.viewportChanged) {
+        this.decorations = indentDecorations(update.view);
+      }
+    }
+  },
+  { decorations: (plugin) => plugin.decorations },
+);
 
 /** Safari has no `requestIdleCallback`, so a timer stands in for it there. */
 function whenIdle(task: () => void) {
@@ -140,8 +189,13 @@ export function ComponentEditor({
         EditorState.tabSize.of(2),
         indentUnit.of("  "),
         EditorView.lineWrapping,
+        indentedWrapping,
         EditorView.theme({
           "&": { height: "100%", fontFamily: "var(--font-mono)" },
+          ".cm-foldGutter .cm-gutterElement": { opacity: 0, transition: "opacity 120ms" },
+          "&:hover .cm-foldGutter .cm-gutterElement, .cm-foldGutter [title='Unfold line']": {
+            opacity: 1,
+          },
           ".cm-scroller": { fontFamily: "inherit", lineHeight: "1.5" },
         }),
         EditorView.updateListener.of((update) => {
