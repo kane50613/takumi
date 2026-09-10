@@ -43,7 +43,6 @@ impl MakeComputed for LinearGradient {
 }
 
 /// Resolved geometry and stops shared by gradient renderers.
-#[derive(Debug, Clone)]
 pub struct LinearGradientGeometry {
   /// Direction vector X component.
   pub dir_x: f32,
@@ -52,7 +51,7 @@ pub struct LinearGradientGeometry {
   /// Full axis length in pixels.
   pub axis_length: f32,
   /// Projection offset for the gradient axis.
-  pub projection_bias: f32,
+  projection_bias: f32,
   stops: SmallVec<[ResolvedGradientStop; 4]>,
 }
 

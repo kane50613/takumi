@@ -120,7 +120,6 @@ impl<'i> FromCss<'i> for RadialSize {
 impl MakeComputed for RadialSize {}
 
 /// Resolved geometry and stops shared by gradient renderers.
-#[derive(Debug, Clone)]
 pub struct RadialGradientGeometry {
   /// Center X coordinate in pixels.
   pub cx: f32,
