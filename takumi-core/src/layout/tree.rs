@@ -875,7 +875,9 @@ impl<'r> LayoutTree<'r> {
 
       match (display_mode, has_children) {
         (TaffyDisplay::None, _) => compute_hidden_layout(tree, node),
-        (TaffyDisplay::Block, true) => compute_block_layout(tree, node, inputs, block_ctx),
+        (TaffyDisplay::Block | TaffyDisplay::FlowRoot, true) => {
+          compute_block_layout(tree, node, inputs, block_ctx)
+        }
         (TaffyDisplay::Flex, true) => compute_flexbox_layout(tree, node, inputs),
         (TaffyDisplay::Grid, true) => compute_grid_layout(tree, node, inputs),
         (_, false) => {
@@ -926,7 +928,7 @@ impl<'r> LayoutTree<'r> {
     });
 
     if let Some(node_data) = self.get_layout_node_mut_ref(node) {
-      node_data.first_baseline_y = output.first_baselines.y;
+      node_data.first_baseline_y = output.baselines.first;
     }
 
     output
@@ -934,8 +936,8 @@ impl<'r> LayoutTree<'r> {
 }
 
 impl CacheTree for LayoutTree<'_> {
-  fn cache_get(&self, node_id: TaffyNodeId, input: &LayoutInput) -> Option<LayoutOutput> {
-    let node = self.get_layout_node_ref(node_id)?;
+  fn cache_get(&mut self, node_id: TaffyNodeId, input: &LayoutInput) -> Option<LayoutOutput> {
+    let node = self.get_layout_node_mut_ref(node_id)?;
     node.cache.get(input)
   }
 
@@ -1147,8 +1149,8 @@ impl RenderNode {
     // Cap image content to the parent pseudo's box so explicit `width` / `height`
     // on the pseudo wins over intrinsic / default sizing.
     let max_size = TaffySize {
-      width: taffy::Dimension::percent(1.0),
-      height: taffy::Dimension::percent(1.0),
+      width: taffy::LengthPercentageAuto::percent(1.0),
+      height: taffy::LengthPercentageAuto::percent(1.0),
     };
 
     match image {

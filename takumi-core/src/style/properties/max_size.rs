@@ -1,7 +1,7 @@
 use std::fmt;
 
 use cssparser::Parser;
-use taffy::Dimension;
+use taffy::LengthPercentageAuto;
 
 use crate::style::{
   Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult,
@@ -87,11 +87,14 @@ impl From<Length> for MaxSize {
 }
 
 impl MaxSize {
-  /// Resolves to a taffy `Dimension`, treating `none` as unbounded (same as `Length::Auto`).
-  pub(crate) fn resolve_to_dimension(self, sizing: &SizingContext) -> Dimension {
+  /// Resolves to taffy, treating `none` as `auto`.
+  pub(crate) fn resolve_to_length_percentage_auto(
+    self,
+    sizing: &SizingContext,
+  ) -> LengthPercentageAuto {
     match self {
-      Self::None => Length::Auto.resolve_to_dimension(sizing),
-      Self::Length(length) => length.resolve_to_dimension(sizing),
+      Self::None => Length::Auto.resolve_to_length_percentage_auto(sizing),
+      Self::Length(length) => length.resolve_to_length_percentage_auto(sizing),
     }
   }
 }
