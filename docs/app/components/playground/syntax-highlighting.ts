@@ -48,7 +48,8 @@ const tokenScopes = {
   entity: "entity.name.tag",
   property: "support.variable.property",
   jsxliterals: "meta.jsx.children",
-} satisfies Partial<Record<TokenType, string>>;
+  constant: "constant.numeric",
+} satisfies Partial<Record<TokenType | "constant", string>>;
 
 function scopeOf(type: string) {
   return `sh.${type}`;
@@ -138,7 +139,12 @@ function tokensOf(parsedLine: ParsedLine) {
       continue;
     }
 
-    const scopes = type in tokenScopes ? scopeOf(type) : "";
+    const scopes =
+      type === "class" && /^\d/.test(value)
+        ? scopeOf("constant")
+        : type in tokenScopes
+          ? scopeOf(type)
+          : "";
 
     if (tokens.at(-1)?.scopes !== scopes) {
       tokens.push({ startIndex, scopes });
