@@ -129,7 +129,8 @@ fn draw_glyph_run_decorations(
       continue;
     }
 
-    let Some(line) = glyph_run.decoration_line(line_kind, options.baseline_shift) else {
+    let Some((offset, thickness)) = glyph_run.decoration_line(line_kind, options.baseline_shift)
+    else {
       continue;
     };
 
@@ -143,8 +144,8 @@ fn draw_glyph_run_decorations(
         resolved_glyphs,
         UnderlineDrawOptions {
           color: brush.decoration_color,
-          offset: line.offset,
-          size: line.thickness,
+          offset,
+          size: thickness,
           layout: options.layout,
           transform: options.transform,
           baseline_shift: options.baseline_shift,
@@ -155,8 +156,8 @@ fn draw_glyph_run_decorations(
         canvas,
         glyph_run,
         brush.decoration_color,
-        line.offset,
-        line.thickness,
+        offset,
+        thickness,
         options.layout,
         options.transform,
       );

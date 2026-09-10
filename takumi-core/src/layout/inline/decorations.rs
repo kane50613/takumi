@@ -28,22 +28,13 @@ pub struct DecorationRect {
   pub line: TextDecorationLines,
 }
 
-/// Raw position and thickness for one decoration line.
-#[derive(Clone, Copy)]
-pub struct DecorationLine {
-  /// Top edge relative to the line origin.
-  pub offset: f32,
-  /// Raw CSS or font thickness before backend rounding.
-  pub thickness: f32,
-}
-
 impl ShapedRun {
   /// Raw metrics for an enabled decoration line.
   pub fn decoration_line(
     &self,
     line: TextDecorationLines,
     baseline_shift: f32,
-  ) -> Option<DecorationLine> {
+  ) -> Option<(f32, f32)> {
     if !self.brush.decoration_line.contains(line) {
       return None;
     }
@@ -70,7 +61,7 @@ impl ShapedRun {
       SizedTextDecorationThickness::FromFont => font_thickness,
     };
 
-    Some(DecorationLine { offset, thickness })
+    Some((offset, thickness))
   }
 
   /// The active decoration lines for a glyph run, in border-box space.
@@ -125,7 +116,7 @@ impl ShapedRun {
     }
     let top = layout.border.top + layout.padding.top;
     // Blink floors every decoration at 1px (`TextDecorationInfo::ResolvedThickness`).
-    let thickness = |line: DecorationLine| line.thickness.max(1.0);
+    let thickness = |value: f32| value.max(1.0);
     let mut emit = |x: f32,
                     span_width: f32,
                     y_offset: f32,
@@ -146,9 +137,10 @@ impl ShapedRun {
       });
     };
 
-    if let Some(line) = self.decoration_line(TextDecorationLines::UNDERLINE, baseline_shift) {
-      let y_offset = line.offset;
-      let height = thickness(line);
+    if let Some((y_offset, raw_thickness)) =
+      self.decoration_line(TextDecorationLines::UNDERLINE, baseline_shift)
+    {
+      let height = thickness(raw_thickness);
       // `skip-ink` cuts the line where the glyphs cross it. The pieces carry the
       // same transform, so a backend paints them exactly as it paints one line.
       let spans = if brush.decoration_skip_ink == TextDecorationSkipInk::None {
@@ -190,12 +182,12 @@ impl ShapedRun {
       (TextDecorationLines::OVERLINE, false),
       (TextDecorationLines::LINE_THROUGH, true),
     ] {
-      if let Some(line) = self.decoration_line(line_kind, baseline_shift) {
+      if let Some((offset, raw_thickness)) = self.decoration_line(line_kind, baseline_shift) {
         emit(
           snapped_start_x,
           width,
-          line.offset,
-          thickness(line),
+          offset,
+          thickness(raw_thickness),
           over,
           line_kind,
         );

@@ -35,7 +35,7 @@ mod truncation;
 
 pub use self::{
   background::InlineBackgroundFragment,
-  decorations::{DecorationLine, DecorationRect},
+  decorations::DecorationRect,
   items::{DecorationLink, InlineBoxItem, InlineItem, ProcessedInlineSpan, collect_inline_items},
   metrics::VisualInlineBox,
   outline::{InlineOutlineRect, outline_island_contour, outline_islands},
