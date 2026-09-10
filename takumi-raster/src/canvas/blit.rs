@@ -50,27 +50,21 @@ pub(crate) fn compute_overlay_bounds_for_canvas(
 
   let offset_x = offset.x.trunc() as i32;
   let offset_y = offset.y.trunc() as i32;
-  let bottom_width = canvas_width as i32;
-  let bottom_height = canvas_height as i32;
-  let y_min = offset_y.max(0);
-  let y_max = (offset_y + height as i32).min(bottom_height);
-  if y_min >= y_max {
-    return None;
+  let clipped = Placement {
+    left: offset_x,
+    top: offset_y,
+    width,
+    height,
   }
-
-  let x_min = offset_x.max(0);
-  let x_max = (offset_x + width as i32).min(bottom_width);
-  if x_min >= x_max {
-    return None;
-  }
+  .clamp_to(Size::new(canvas_width, canvas_height))?;
 
   Some(OverlayBounds {
     offset_x,
     offset_y,
-    x_min,
-    x_max,
-    y_min,
-    y_max,
+    x_min: clipped.left,
+    x_max: clipped.right(),
+    y_min: clipped.top,
+    y_max: clipped.bottom(),
   })
 }
 
