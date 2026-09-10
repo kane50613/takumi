@@ -4,7 +4,7 @@ use cssparser::{Parser, Token, match_ignore_ascii_case, serialize_string};
 
 use crate::style::{
   Animatable, BackgroundImage, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss,
-  declare_enum_from_css_impl, unexpected_token,
+  impl_css_enum, unexpected_token,
 };
 
 /// The counter style a list item's marker is generated from.
@@ -92,13 +92,11 @@ pub enum ListStylePosition {
   Inside,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   ListStylePosition,
   "outside" => ListStylePosition::Outside,
   "inside" => ListStylePosition::Inside,
 );
-
-impl Animatable for ListStylePosition {}
 
 /// The `list-style` shorthand.
 #[derive(Debug, Default, Clone, PartialEq)]

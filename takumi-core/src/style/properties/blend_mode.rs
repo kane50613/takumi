@@ -2,8 +2,8 @@ use cssparser::Parser;
 
 use super::background_image::parse_comma_list;
 use crate::style::{
-  Animatable, CssToken, FromCss, FromCssStr, ListInterpolationStrategy, ParseResult,
-  declare_enum_from_css_impl, tw::TailwindPropertyParser,
+  Animatable, CssToken, FromCss, FromCssStr, ListInterpolationStrategy, ParseResult, impl_css_enum,
+  tw::TailwindPropertyParser,
 };
 
 /// A list of blend modes.
@@ -60,8 +60,8 @@ pub enum BlendMode {
   PlusDarker,
 }
 
-declare_enum_from_css_impl!(
-  BlendMode,
+impl_css_enum!(
+  custom_animatable BlendMode,
   "normal" => BlendMode::Normal,
   "multiply" => BlendMode::Multiply,
   "screen" => BlendMode::Screen,

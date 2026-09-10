@@ -5,7 +5,7 @@ use typed_builder::TypedBuilder;
 
 use crate::style::{
   CssDescriptorKind, CssSyntaxKind, CssToken, FromCss, FromCssStr, MakeComputed, ParseResult,
-  ToCss, declare_enum_from_css_impl, next_is_comma, tw::TailwindPropertyParser, unexpected_token,
+  ToCss, impl_css_enum, next_is_comma, tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Implements `FromCss` for a `Box<[T]>` animation list type as a comma-separated list of `$elem`.
@@ -232,7 +232,7 @@ pub enum AnimationDirection {
   AlternateReverse,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   AnimationDirection,
   "normal" => AnimationDirection::Normal,
   "reverse" => AnimationDirection::Reverse,
@@ -260,7 +260,7 @@ pub enum AnimationFillMode {
   Both,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   AnimationFillMode,
   "none" => AnimationFillMode::None,
   "forwards" => AnimationFillMode::Forwards,
@@ -284,7 +284,7 @@ pub enum AnimationPlayState {
   Paused,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   AnimationPlayState,
   "running" => AnimationPlayState::Running,
   "paused" => AnimationPlayState::Paused,

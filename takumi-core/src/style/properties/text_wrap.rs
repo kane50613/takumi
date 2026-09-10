@@ -2,7 +2,7 @@ use cssparser::{Parser, match_ignore_ascii_case};
 use typed_builder::TypedBuilder;
 
 use crate::style::{
-  CssDescriptorKind, CssToken, FromCss, MakeComputed, ParseResult, declare_enum_from_css_impl,
+  CssDescriptorKind, CssToken, FromCss, MakeComputed, ParseResult, impl_css_enum,
   tw::TailwindPropertyParser,
 };
 
@@ -95,7 +95,7 @@ impl TextWrapMode {
   }
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   TextWrapMode,
   "wrap" => TextWrapMode::Wrap,
   "nowrap" => TextWrapMode::NoWrap,
@@ -114,7 +114,7 @@ pub enum TextWrapStyle {
   Pretty,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   TextWrapStyle,
   "auto" => TextWrapStyle::Auto,
   "balance" => TextWrapStyle::Balance,

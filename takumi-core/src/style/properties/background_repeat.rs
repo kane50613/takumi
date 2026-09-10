@@ -6,7 +6,7 @@ use smallvec::{SmallVec, smallvec};
 use super::background_image::parse_comma_list;
 use crate::style::{
   Animatable, CssToken, FromCss, ListInterpolationStrategy, MakeComputed, ParseResult, ToCss,
-  declare_enum_from_css_impl,
+  impl_css_enum,
 };
 
 /// Tile origins along one axis for `background-repeat: repeat`: the first origin
@@ -91,7 +91,7 @@ pub enum BackgroundRepeatStyle {
   Round,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   BackgroundRepeatStyle,
   "repeat" => BackgroundRepeatStyle::Repeat,
   "no-repeat" => BackgroundRepeatStyle::NoRepeat,

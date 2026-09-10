@@ -3,8 +3,8 @@ use std::fmt;
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
-  Animatable, CssToken, FontFeature, FromCss, MakeComputed, ParseResult, Tag, ToCss,
-  declare_enum_from_css_impl, unexpected_token,
+  Animatable, CssToken, FontFeature, FromCss, MakeComputed, ParseResult, Tag, ToCss, impl_css_enum,
+  unexpected_token,
 };
 
 /// Tri-state for one `font-variant-ligatures` group.
@@ -453,7 +453,7 @@ impl FontVariantCaps {
   }
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   ident keyword FontVariantCaps,
   "normal" => FontVariantCaps::Normal,
   "small-caps" => FontVariantCaps::SmallCaps,
@@ -463,8 +463,6 @@ declare_enum_from_css_impl!(
   "unicase" => FontVariantCaps::Unicase,
   "titling-caps" => FontVariantCaps::TitlingCaps,
 );
-
-impl Animatable for FontVariantCaps {}
 
 /// `font-variant-position`.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -488,14 +486,12 @@ impl FontVariantPosition {
   }
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   ident keyword FontVariantPosition,
   "normal" => FontVariantPosition::Normal,
   "sub" => FontVariantPosition::Sub,
   "super" => FontVariantPosition::Super,
 );
-
-impl Animatable for FontVariantPosition {}
 
 /// Appends every resolved `font-variant-*` feature to `out`, in property order. The caller
 /// appends `font-feature-settings` afterwards so explicit settings win on tag conflicts.

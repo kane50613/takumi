@@ -4,7 +4,7 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
   Animatable, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed, ParseResult,
-  SizingContext, ToCss, declare_enum_from_css_impl, unexpected_token,
+  SizingContext, ToCss, impl_css_enum, unexpected_token,
 };
 
 /// Absolute `font-size` keywords.
@@ -46,7 +46,7 @@ impl FontSizeKeyword {
   }
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   FontSizeKeyword,
   "xx-small" => FontSizeKeyword::XXSmall,
   "x-small" => FontSizeKeyword::XSmall,

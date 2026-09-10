@@ -850,31 +850,43 @@ macro_rules! impl_from_taffy_enum {
 
 pub(crate) use impl_from_taffy_enum;
 
-/// Declares a CSS enum parser with automatic value list generation.
-/// The first token in a `|` group is the canonical form; the rest parse as
-/// aliases and serialize back to it.
-macro_rules! declare_enum_from_css_impl {
+/// Treats the first keyword in each group as canonical and the rest as aliases.
+macro_rules! impl_css_enum {
   (
     $enum_type:ty,
     $($canonical:literal $(| $alias:literal)* => $variant:path),* $(,)?
   ) => {
-    $crate::style::properties::declare_enum_from_css_impl!(@impl
+    $crate::style::properties::impl_css_enum!(@impl
       $crate::style::properties::parse_enum_keyword,
+      default,
+      $enum_type,
+      $($canonical $(| $alias)* => $variant),*
+    );
+  };
+
+  (
+    custom_animatable $enum_type:ty,
+    $($canonical:literal $(| $alias:literal)* => $variant:path),* $(,)?
+  ) => {
+    $crate::style::properties::impl_css_enum!(@impl
+      $crate::style::properties::parse_enum_keyword,
+      custom,
       $enum_type,
       $($canonical $(| $alias)* => $variant),*
     );
   };
 
   (ident $enum_type:ty, $($canonical:literal $(| $alias:literal)* => $variant:path),* $(,)?) => {
-    $crate::style::properties::declare_enum_from_css_impl!(@impl
+    $crate::style::properties::impl_css_enum!(@impl
       $crate::style::properties::parse_ident_enum_keyword,
+      default,
       $enum_type,
       $($canonical $(| $alias)* => $variant),*
     );
   };
 
   (ident keyword $enum_type:ty, $($canonical:literal $(| $alias:literal)* => $variant:path),* $(,)?) => {
-    $crate::style::properties::declare_enum_from_css_impl!(
+    $crate::style::properties::impl_css_enum!(
       ident $enum_type,
       $($canonical $(| $alias)* => $variant),*
     );
@@ -890,14 +902,16 @@ macro_rules! declare_enum_from_css_impl {
     }
   };
 
-  (@impl $parser:path, $enum_type:ty, $($canonical:literal $(| $alias:literal)* => $variant:path),* $(,)?) => {
+  (@impl $parser:path, $animatable:ident, $enum_type:ty, $($canonical:literal $(| $alias:literal)* => $variant:path),* $(,)?) => {
     impl $enum_type {
       const KEYWORD_VALUES: &'static [Self] = &[
-        $($variant $(, $crate::style::properties::declare_enum_from_css_impl!(@value $variant, $alias))*),*
+        $($variant $(, $crate::style::properties::impl_css_enum!(@value $variant, $alias))*),*
       ];
     }
 
     impl crate::style::MakeComputed for $enum_type {}
+
+    $crate::style::properties::impl_css_enum!(@animatable $animatable $enum_type);
 
     impl<'i> crate::style::FromCss<'i> for $enum_type {
       const VALID_TOKENS: &'static [crate::style::CssToken] = &[
@@ -930,12 +944,18 @@ macro_rules! declare_enum_from_css_impl {
 
   };
 
+  (@animatable default $enum_type:ty) => {
+    impl $crate::style::Animatable for $enum_type {}
+  };
+
+  (@animatable custom $enum_type:ty) => {};
+
   (@value $variant:path, $alias:literal) => {
     $variant
   };
 }
 
-pub(crate) use declare_enum_from_css_impl;
+pub(crate) use impl_css_enum;
 
 /// Declares a box-alignment enum parser that accepts the optional `safe`/`unsafe`
 /// overflow-position prefix on its positional keywords.

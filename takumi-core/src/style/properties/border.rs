@@ -4,8 +4,8 @@ use cssparser::Parser;
 
 use crate::style::{
   Animatable, BorderStyle, Color, ColorInput, CssSyntaxKind, CssToken, FromCss, MakeComputed,
-  ParseResult, SizingContext, ToCss, declare_enum_from_css_impl, properties::Length,
-  tw::TailwindPropertyParser, unexpected_token,
+  ParseResult, SizingContext, ToCss, impl_css_enum, properties::Length, tw::TailwindPropertyParser,
+  unexpected_token,
 };
 
 /// CSSWG `<line-width>` keyword (`thin | medium | thick`).
@@ -20,7 +20,7 @@ pub enum LineWidthKeyword {
   Thick,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   LineWidthKeyword,
   "thin" => LineWidthKeyword::Thin,
   "medium" => LineWidthKeyword::Medium,

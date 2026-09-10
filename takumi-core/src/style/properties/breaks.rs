@@ -8,7 +8,7 @@ use cssparser::{BasicParseErrorKind, Parser};
 
 use crate::style::{
   Animatable, Color, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, SizingContext,
-  ToCss, declare_enum_from_css_impl, lerp,
+  ToCss, impl_css_enum, lerp,
 };
 
 /// A forced-break value for `break-before` / `break-after`. Pagination has no
@@ -71,7 +71,7 @@ pub enum BreakInside {
   Avoid,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   BreakInside,
   "auto" => BreakInside::Auto,
   "avoid" => BreakInside::Avoid
@@ -149,7 +149,7 @@ pub enum BoxDecorationBreak {
   Clone,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   BoxDecorationBreak,
   "slice" => BoxDecorationBreak::Slice,
   "clone" => BoxDecorationBreak::Clone

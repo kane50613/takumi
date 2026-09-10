@@ -11,7 +11,7 @@ use super::gradient_utils::{
 use crate::style::{
   Color, ColorInterpolationMethod, CssDescriptorKind, CssToken, FromCss, GradientStop, Length,
   MakeComputed, ParseResult, PositionValue, ResolvedGradientStop, SizingContext, StopPosition,
-  ToCss, declare_enum_from_css_impl, unexpected_token,
+  ToCss, impl_css_enum, unexpected_token,
 };
 
 /// Radii of the ellipse through `corner`, as Blink's `EllipseRadius`
@@ -68,7 +68,7 @@ pub enum RadialShape {
   Ellipse,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   RadialShape,
   "circle" => RadialShape::Circle,
   "ellipse" => RadialShape::Ellipse,

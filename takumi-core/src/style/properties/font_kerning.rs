@@ -1,4 +1,4 @@
-use crate::style::{Animatable, FontFeature, Tag, declare_enum_from_css_impl};
+use crate::style::{FontFeature, Tag, impl_css_enum};
 
 /// `font-kerning`. The shaper kerns by default, so only `normal`/`none` emit a `kern` tag.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -22,14 +22,12 @@ impl FontKerning {
   }
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   ident FontKerning,
   "auto" => FontKerning::Auto,
   "normal" => FontKerning::Normal,
   "none" => FontKerning::None,
 );
-
-impl Animatable for FontKerning {}
 
 #[cfg(test)]
 mod tests {

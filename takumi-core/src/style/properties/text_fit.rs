@@ -4,8 +4,8 @@ use cssparser::{Parser, Token};
 use typed_builder::TypedBuilder;
 
 use crate::style::{
-  Animatable, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss,
-  declare_enum_from_css_impl, unexpected_token,
+  Animatable, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, impl_css_enum,
+  unexpected_token,
 };
 
 /// Controls whether inline contents are scaled to fit their line box.
@@ -77,7 +77,7 @@ pub enum TextFitMode {
   Shrink,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   TextFitMode,
   "none" => TextFitMode::None,
   "grow" => TextFitMode::Grow,
@@ -97,7 +97,7 @@ pub enum TextFitTarget {
   PerLineAll,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   TextFitTarget,
   "consistent" => TextFitTarget::Consistent,
   "per-line" => TextFitTarget::PerLine,
