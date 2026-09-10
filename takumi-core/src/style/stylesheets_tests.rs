@@ -57,6 +57,18 @@ fn parse_declarations_is_err(name: &str, css: &str) -> bool {
   StyleDeclarationBlock::parse(name, &mut parser).is_err()
 }
 
+/// `flex-basis` accepts everything `width` does, so its diagnostics must list
+/// the sizing keywords too.
+#[test]
+fn flex_basis_diagnostics_list_the_sizing_keywords() {
+  let error = from_value::<Style>(json!({ "flexBasis": "nope" }))
+    .unwrap_err()
+    .to_string();
+
+  assert!(error.contains("'min-content'"), "{error}");
+  assert!(error.contains("'content'"), "{error}");
+}
+
 fn inherited_style_from_pairs(
   declarations: impl IntoIterator<Item = (&'static str, &'static str)>,
   parent: &ComputedStyle,

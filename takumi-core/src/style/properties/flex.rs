@@ -90,11 +90,14 @@ impl Animatable for FlexBasis {
   }
 }
 
+const FLEX_BASIS_TOKEN_LISTS: &[&[CssToken]] =
+  &[&[CssToken::Keyword("content")], SizeValue::VALID_TOKENS];
+
+const FLEX_BASIS_TOKENS: [CssToken; CssToken::merged_len(FLEX_BASIS_TOKEN_LISTS)] =
+  CssToken::merge_lists(FLEX_BASIS_TOKEN_LISTS);
+
 impl<'i> FromCss<'i> for FlexBasis {
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("content"),
-    CssToken::Syntax(CssSyntaxKind::Length),
-  ];
+  const VALID_TOKENS: &'static [CssToken] = &FLEX_BASIS_TOKENS;
 
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     if input
@@ -437,13 +440,20 @@ impl<'i> FromCss<'i> for Flex {
     })
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
+  const VALID_TOKENS: &'static [CssToken] = &FLEX_TOKENS;
+}
+
+const FLEX_TOKEN_LISTS: &[&[CssToken]] = &[
+  &[
     CssToken::Keyword("none"),
     CssToken::Keyword("auto"),
     CssToken::Syntax(CssSyntaxKind::Number),
-    CssToken::Syntax(CssSyntaxKind::Length),
-  ];
-}
+  ],
+  FlexBasis::VALID_TOKENS,
+];
+
+const FLEX_TOKENS: [CssToken; CssToken::merged_len(FLEX_TOKEN_LISTS)] =
+  CssToken::merge_lists(FLEX_TOKEN_LISTS);
 
 impl MakeComputed for Flex {
   fn make_computed(&mut self, sizing: &SizingContext) {
