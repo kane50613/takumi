@@ -859,7 +859,7 @@ macro_rules! declare_enum_from_css_impl {
     $($canonical:literal $(| $alias:literal)* => $variant:path),* $(,)?
   ) => {
     $crate::style::properties::declare_enum_from_css_impl!(@impl
-      crate::style::parse_enum_keyword,
+      $crate::style::properties::parse_enum_keyword,
       $enum_type,
       $($canonical $(| $alias)* => $variant),*
     );
@@ -867,7 +867,7 @@ macro_rules! declare_enum_from_css_impl {
 
   (ident $enum_type:ty, $($canonical:literal $(| $alias:literal)* => $variant:path),* $(,)?) => {
     $crate::style::properties::declare_enum_from_css_impl!(@impl
-      crate::style::parse_ident_enum_keyword,
+      $crate::style::properties::parse_ident_enum_keyword,
       $enum_type,
       $($canonical $(| $alias)* => $variant),*
     );
@@ -881,7 +881,10 @@ macro_rules! declare_enum_from_css_impl {
 
     impl $enum_type {
       fn from_keyword(ident: &str) -> Option<Self> {
-        crate::style::CssToken::keyword_index(ident, Self::VALID_TOKENS)
+        crate::style::CssToken::keyword_index(
+          ident,
+          <Self as $crate::style::properties::FromCss>::VALID_TOKENS,
+        )
           .map(|index| Self::KEYWORD_VALUES[index])
       }
     }
