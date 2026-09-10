@@ -16,6 +16,25 @@ use crate::{
   viewport::Viewport,
 };
 
+/// The sizing longhands moved off `Length`, so their builders take anything that
+/// converts into the new value types. This pins the `Length` call that callers
+/// wrote before the sizing keywords existed.
+#[test]
+fn the_sizing_builders_still_take_a_length() {
+  assert_eq!(
+    StyleDeclaration::width(Length::Px(80.0)),
+    StyleDeclaration::width(SizeValue::Length(Length::Px(80.0)))
+  );
+  assert_eq!(
+    StyleDeclaration::height(Length::Percentage(50.0)),
+    StyleDeclaration::height(SizeValue::Length(Length::Percentage(50.0)))
+  );
+  assert_eq!(
+    StyleDeclaration::flex_basis(Some(Length::Px(12.0))),
+    StyleDeclaration::flex_basis(Some(FlexBasis::Size(SizeValue::Length(Length::Px(12.0)))))
+  );
+}
+
 fn style_with(declarations: impl IntoIterator<Item = StyleDeclaration>) -> Style {
   let mut style = Style::default();
   for declaration in declarations {
@@ -64,11 +83,11 @@ fn resolve_var(
 #[test]
 fn test_merge_from_inline_over_tailwind() {
   let mut tw_style = style_with([
-    StyleDeclaration::width(Length::Rem(10.0).into()),
-    StyleDeclaration::height(Length::Rem(20.0).into()),
+    StyleDeclaration::width(Length::Rem(10.0)),
+    StyleDeclaration::height(Length::Rem(20.0)),
     StyleDeclaration::color(ColorInput::Value(Color([255, 0, 0, 255]))),
   ]);
-  let inline_style = style_with([StyleDeclaration::width(Length::Px(100.0).into())]);
+  let inline_style = style_with([StyleDeclaration::width(Length::Px(100.0))]);
 
   tw_style.merge_from(inline_style);
 

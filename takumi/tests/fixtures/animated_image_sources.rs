@@ -16,8 +16,8 @@ const MARKER: [u8; 4] = [60, 60, 60, 255];
 fn marker_frame(column: usize) -> AnimationFrame {
   let marker = Node::container([]).with_style(
     Style::default()
-      .with(StyleDeclaration::width(Px(MARKER_SIZE).into()))
-      .with(StyleDeclaration::height(Px(MARKER_SIZE).into()))
+      .with(StyleDeclaration::width(Px(MARKER_SIZE)))
+      .with(StyleDeclaration::height(Px(MARKER_SIZE)))
       .with(StyleDeclaration::margin_left(Px(
         column as f32 * MARKER_SIZE,
       )))
@@ -29,8 +29,8 @@ fn marker_frame(column: usize) -> AnimationFrame {
   let node = Node::container([marker]).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0).into()))
-      .with(StyleDeclaration::height(Percentage(100.0).into()))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::align_items(AlignItems::Center))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color(BACKDROP),
@@ -94,14 +94,14 @@ fn frames(source: Vec<u8>) -> Vec<AnimationFrame> {
   };
   let node = Node::container([Node::image(image).with_style(
     Style::default()
-      .with(StyleDeclaration::width(Px(SOURCE_SIZE as f32).into()))
-      .with(StyleDeclaration::height(Px(SOURCE_SIZE as f32).into())),
+      .with(StyleDeclaration::width(Px(SOURCE_SIZE as f32)))
+      .with(StyleDeclaration::height(Px(SOURCE_SIZE as f32))),
   )])
   .with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0).into()))
-      .with(StyleDeclaration::height(Percentage(100.0).into()))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
       .with(StyleDeclaration::align_items(AlignItems::Center))
       .with(StyleDeclaration::background_color(ColorInput::Value(

@@ -264,10 +264,10 @@ fn fill_root(node: Node, viewport: Viewport) -> Node {
   let mut style = Style::default()
     .with(StyleDeclaration::display(Display::Flex))
     .with(StyleDeclaration::flex_direction(FlexDirection::Column))
-    .with(StyleDeclaration::width(Length::Percentage(100.0).into()));
+    .with(StyleDeclaration::width(Length::Percentage(100.0)));
 
   if viewport.size.height.is_some() {
-    style = style.with(StyleDeclaration::height(Length::Percentage(100.0).into()));
+    style = style.with(StyleDeclaration::height(Length::Percentage(100.0)));
   }
 
   Node::container([node]).with_style(style)
@@ -326,8 +326,8 @@ pub(crate) fn page_root(context: &RenderContext, child: RenderNode) -> RenderNod
   let area = Node::container([]).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Block))
-      .with(StyleDeclaration::width(Length::Percentage(100.0).into()))
-      .with(StyleDeclaration::height(Length::Percentage(100.0).into())),
+      .with(StyleDeclaration::width(Length::Percentage(100.0)))
+      .with(StyleDeclaration::height(Length::Percentage(100.0))),
   );
   let mut root = RenderNode::from_node(context, area);
 

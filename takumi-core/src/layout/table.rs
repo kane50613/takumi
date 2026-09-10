@@ -1105,7 +1105,7 @@ mod tests {
     let stylesheet_width = Node::container([Node::text("w")])
       .with_class_name("td")
       .with_id("w")
-      .with_style(Style::default().with(StyleDeclaration::width(Length::Px(220.0).into())));
+      .with_style(Style::default().with(StyleDeclaration::width(Length::Px(220.0))));
     let tree =
       lower(Node::container([row([stylesheet_width, cell("b")])]).with_class_name("table"));
 
@@ -1167,7 +1167,7 @@ mod tests {
     let shifted = Node::container([Node::text("w")])
       .with_class_name("td")
       .with_id("w")
-      .with_style(Style::default().with(StyleDeclaration::width(Length::Px(220.0).into())));
+      .with_style(Style::default().with(StyleDeclaration::width(Length::Px(220.0))));
     let tree = lower(
       Node::container([row([with_span(cell("a"), "rowspan", "2")]), row([shifted])])
         .with_class_name("table"),

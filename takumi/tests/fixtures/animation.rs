@@ -40,8 +40,8 @@ fn bouncing_text_node(y_offset: f32) -> Node {
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color([240, 240, 240, 255]),
       )))
-      .with(StyleDeclaration::width(Percentage(100.0).into()))
-      .with(StyleDeclaration::height(Percentage(100.0).into()))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
       .with(StyleDeclaration::align_items(AlignItems::Center))
       .with(StyleDeclaration::justify_content(JustifyContent::Center)),
@@ -93,8 +93,8 @@ fn keyframe_interpolation_node() -> Node {
   .with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0).into()))
-      .with(StyleDeclaration::height(Percentage(100.0).into()))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
       .with(StyleDeclaration::align_items(AlignItems::Center))

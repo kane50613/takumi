@@ -86,8 +86,8 @@ fn test_measure_simple_container() {
   let node: Node = Node::container([]).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Px(100.0).into()))
-      .with(StyleDeclaration::height(Px(100.0).into()))
+      .with(StyleDeclaration::width(Px(100.0)))
+      .with(StyleDeclaration::height(Px(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color([255, 0, 0, 255]),
       ))),
@@ -120,7 +120,7 @@ fn test_measure_text_node() {
   let node: Node = Node::text("Hello World".to_string()).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Px(300.0).into()))
+      .with(StyleDeclaration::width(Px(300.0)))
       .with(StyleDeclaration::font_size(Px(20.0).into())),
   );
 
@@ -163,8 +163,8 @@ fn test_measure_flex_text_node_centers_inner_text() {
   let node: Node = Node::text("Hello World".to_string()).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Px(300.0).into()))
-      .with(StyleDeclaration::height(Px(120.0).into()))
+      .with(StyleDeclaration::width(Px(300.0)))
+      .with(StyleDeclaration::height(Px(120.0)))
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
       .with(StyleDeclaration::align_items(AlignItems::Center))
@@ -210,8 +210,8 @@ fn test_measure_flex_text_node_anonymous_item_uses_intrinsic_size() {
   let node: Node = Node::text("Hello World".to_string()).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Px(300.0).into()))
-      .with(StyleDeclaration::height(Px(120.0).into()))
+      .with(StyleDeclaration::width(Px(300.0)))
+      .with(StyleDeclaration::height(Px(120.0)))
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
       .with(StyleDeclaration::align_items(AlignItems::Center))
@@ -264,8 +264,8 @@ fn test_measure_inline_layout() {
   let node: Node = Node::container(children).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Px(400.0).into()))
-      .with(StyleDeclaration::height(Px(300.0).into()))
+      .with(StyleDeclaration::width(Px(400.0)))
+      .with(StyleDeclaration::height(Px(300.0)))
       .with(StyleDeclaration::font_size(Px(20.0).into()))
       .with(StyleDeclaration::display(Display::Block)),
   );
@@ -318,7 +318,7 @@ fn test_measure_inline_layout() {
 fn test_measure_text_fit_per_line_grow_scales_run_geometry() {
   let base_style = Style::default()
     .with(StyleDeclaration::display(Display::Flex))
-    .with(StyleDeclaration::width(Px(320.0).into()))
+    .with(StyleDeclaration::width(Px(320.0)))
     .with(StyleDeclaration::font_size(Px(34.0).into()))
     .with(StyleDeclaration::line_height(LineHeight::Unitless(1.0)))
     .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap))
@@ -642,7 +642,7 @@ fn test_measure_keeps_authored_text_beside_generated_block_content() {
 fn test_measure_text_fit_per_line_shrink_scales_run_geometry() {
   let base_style = Style::default()
     .with(StyleDeclaration::display(Display::Flex))
-    .with(StyleDeclaration::width(Px(320.0).into()))
+    .with(StyleDeclaration::width(Px(320.0)))
     .with(StyleDeclaration::font_size(Px(34.0).into()))
     .with(StyleDeclaration::line_height(LineHeight::Unitless(1.0)))
     .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap))
@@ -680,7 +680,7 @@ fn test_measure_text_fit_per_line_shrink_scales_run_geometry() {
 fn test_measure_text_fit_per_line_skips_forced_break_lines() {
   let base_style = Style::default()
     .with(StyleDeclaration::display(Display::Flex))
-    .with(StyleDeclaration::width(Px(320.0).into()))
+    .with(StyleDeclaration::width(Px(320.0)))
     .with(StyleDeclaration::font_size(Px(34.0).into()))
     .with(StyleDeclaration::line_height(LineHeight::Unitless(1.0)))
     .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap))
@@ -738,7 +738,7 @@ fn grow_per_line_all_text_fit() -> TextFit {
 fn measure_text_fit_line_height(line_height: LineHeight) -> (MeasuredNode, MeasuredNode) {
   let base_style = Style::default()
     .with(StyleDeclaration::display(Display::Flex))
-    .with(StyleDeclaration::width(Px(320.0).into()))
+    .with(StyleDeclaration::width(Px(320.0)))
     .with(StyleDeclaration::font_size(Px(34.0).into()))
     .with(StyleDeclaration::line_height(line_height))
     .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap))
@@ -805,7 +805,7 @@ fn test_measure_text_fit_center_alignment_keeps_scaled_text_centered() {
   let text = "Takumi 1.2 now support the latest.".to_string();
   let base = Style::default()
     .with(StyleDeclaration::display(Display::Block))
-    .with(StyleDeclaration::width(Percentage(100.0).into()))
+    .with(StyleDeclaration::width(Percentage(100.0)))
     .with(StyleDeclaration::font_size(Px(48.0).into()))
     .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
     .with(StyleDeclaration::text_align(TextAlign::Center));
@@ -838,7 +838,7 @@ fn test_measure_text_fit_center_alignment_keeps_scaled_text_centered() {
 fn test_measure_text_fit_is_disabled_by_floats() {
   let base_style = Style::default()
     .with(StyleDeclaration::display(Display::Block))
-    .with(StyleDeclaration::width(Px(240.0).into()))
+    .with(StyleDeclaration::width(Px(240.0)))
     .with(StyleDeclaration::font_size(Px(20.0).into()))
     .with(StyleDeclaration::line_height(LineHeight::Unitless(1.2)));
   let fit_style = base_style.clone().with(StyleDeclaration::text_fit(
@@ -853,8 +853,8 @@ fn test_measure_text_fit_is_disabled_by_floats() {
         Style::default()
           .with(StyleDeclaration::display(Display::Inline))
           .with(StyleDeclaration::float(Float::Left))
-          .with(StyleDeclaration::width(Px(72.0).into()))
-          .with(StyleDeclaration::height(Px(72.0).into())),
+          .with(StyleDeclaration::width(Px(72.0)))
+          .with(StyleDeclaration::height(Px(72.0))),
       ),
       Node::text(
         "Takumi should wrap this sentence around the floated image for the first few lines before returning to the full measure width once the float ends.".to_string(),
@@ -874,7 +874,7 @@ fn test_measure_text_fit_is_disabled_by_floats() {
 fn test_measure_text_fit_scales_text_around_inline_atomic_content() {
   let base_style = Style::default()
     .with(StyleDeclaration::display(Display::Block))
-    .with(StyleDeclaration::width(Px(320.0).into()))
+    .with(StyleDeclaration::width(Px(320.0)))
     .with(StyleDeclaration::font_size(Px(34.0).into()))
     .with(StyleDeclaration::line_height(LineHeight::Unitless(1.0)))
     .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap));
@@ -892,8 +892,8 @@ fn test_measure_text_fit_scales_text_around_inline_atomic_content() {
       Node::image(("assets/images/yeecord.png", 64.0, 64.0)).with_style(
         Style::default()
           .with(StyleDeclaration::display(Display::InlineBlock))
-          .with(StyleDeclaration::width(Em(1.0).into()))
-          .with(StyleDeclaration::height(Em(1.0).into())),
+          .with(StyleDeclaration::width(Em(1.0)))
+          .with(StyleDeclaration::height(Em(1.0))),
       ),
       Node::text(" now".to_string())
         .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
@@ -930,7 +930,7 @@ fn test_measure_text_fit_scales_text_around_inline_atomic_content() {
 fn test_measure_text_fit_applies_with_spacing_adjustments() {
   let base_style = Style::default()
     .with(StyleDeclaration::display(Display::Flex))
-    .with(StyleDeclaration::width(Px(320.0).into()))
+    .with(StyleDeclaration::width(Px(320.0)))
     .with(StyleDeclaration::font_size(Px(34.0).into()))
     .with(StyleDeclaration::line_height(LineHeight::Unitless(1.0)))
     .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap))
@@ -974,7 +974,7 @@ fn test_measure_text_fit_applies_with_spacing_adjustments() {
 fn test_measure_text_fit_shrink_applies_with_letter_spacing() {
   let base_style = Style::default()
     .with(StyleDeclaration::display(Display::Flex))
-    .with(StyleDeclaration::width(Px(320.0).into()))
+    .with(StyleDeclaration::width(Px(320.0)))
     .with(StyleDeclaration::font_size(Px(34.0).into()))
     .with(StyleDeclaration::line_height(LineHeight::Unitless(1.0)))
     .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap))
@@ -1013,8 +1013,8 @@ fn test_measure_left_float_offsets_text_runs_until_float_bottom() {
       Style::default()
         .with(StyleDeclaration::display(Display::Inline))
         .with(StyleDeclaration::float(Float::Left))
-        .with(StyleDeclaration::width(Px(72.0).into()))
-        .with(StyleDeclaration::height(Px(72.0).into())),
+        .with(StyleDeclaration::width(Px(72.0)))
+        .with(StyleDeclaration::height(Px(72.0))),
     ),
     Node::text(
       "Takumi should wrap this sentence around the floated image for the first few lines before returning to the full measure width once the float ends.".to_string(),
@@ -1024,7 +1024,7 @@ fn test_measure_left_float_offsets_text_runs_until_float_bottom() {
   .with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Block))
-      .with(StyleDeclaration::width(Px(240.0).into()))
+      .with(StyleDeclaration::width(Px(240.0)))
       .with(StyleDeclaration::font_size(Px(20.0).into()))
       .with(StyleDeclaration::line_height(LineHeight::Unitless(1.2))),
   );
@@ -1073,8 +1073,8 @@ fn test_measure_floated_inline_block_container_is_not_dropped() {
       Style::default()
         .with(StyleDeclaration::display(Display::InlineBlock))
         .with(StyleDeclaration::float(Float::Left))
-        .with(StyleDeclaration::width(Px(96.0).into()))
-        .with(StyleDeclaration::height(Px(56.0).into())),
+        .with(StyleDeclaration::width(Px(96.0)))
+        .with(StyleDeclaration::height(Px(56.0))),
     ),
     Node::text(
       "Floated inline-block containers should remain in the inline formatting context instead of disappearing after blockification.".to_string(),
@@ -1084,7 +1084,7 @@ fn test_measure_floated_inline_block_container_is_not_dropped() {
   .with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Block))
-      .with(StyleDeclaration::width(Px(260.0).into()))
+      .with(StyleDeclaration::width(Px(260.0)))
       .with(StyleDeclaration::font_size(Px(20.0).into()))
       .with(StyleDeclaration::line_height(LineHeight::Unitless(1.2))),
   );
@@ -1111,16 +1111,16 @@ fn test_measure_clear_left_moves_following_float_below_previous_left_float() {
       Style::default()
         .with(StyleDeclaration::display(Display::InlineBlock))
         .with(StyleDeclaration::float(Float::Left))
-        .with(StyleDeclaration::width(Px(72.0).into()))
-        .with(StyleDeclaration::height(Px(72.0).into())),
+        .with(StyleDeclaration::width(Px(72.0)))
+        .with(StyleDeclaration::height(Px(72.0))),
     ),
     Node::container([]).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::InlineBlock))
         .with(StyleDeclaration::float(Float::Left))
         .with(StyleDeclaration::clear(Clear::Left))
-        .with(StyleDeclaration::width(Px(48.0).into()))
-        .with(StyleDeclaration::height(Px(48.0).into())),
+        .with(StyleDeclaration::width(Px(48.0)))
+        .with(StyleDeclaration::height(Px(48.0))),
     ),
     Node::text(
       "A cleared float should begin below the previous left float instead of sitting beside it."
@@ -1131,7 +1131,7 @@ fn test_measure_clear_left_moves_following_float_below_previous_left_float() {
   .with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Block))
-      .with(StyleDeclaration::width(Px(240.0).into()))
+      .with(StyleDeclaration::width(Px(240.0)))
       .with(StyleDeclaration::font_size(Px(20.0).into()))
       .with(StyleDeclaration::line_height(LineHeight::Unitless(1.2))),
   );
@@ -1165,23 +1165,23 @@ fn test_measure_line_box_reflows_below_float_that_intersects_tall_line() {
         Style::default()
           .with(StyleDeclaration::display(Display::InlineBlock))
           .with(StyleDeclaration::float(Float::Left))
-          .with(StyleDeclaration::width(Px(80.0).into()))
-          .with(StyleDeclaration::height(Px(40.0).into())),
+          .with(StyleDeclaration::width(Px(80.0)))
+          .with(StyleDeclaration::height(Px(40.0))),
       ),
     Node::container([])
       .with_style(
         Style::default()
           .with(StyleDeclaration::display(Display::InlineBlock))
-          .with(StyleDeclaration::width(Px(100.0).into()))
-          .with(StyleDeclaration::height(Px(20.0).into())),
+          .with(StyleDeclaration::width(Px(100.0)))
+          .with(StyleDeclaration::height(Px(20.0))),
       ),
     Node::container([])
       .with_style(
         Style::default()
           .with(StyleDeclaration::display(Display::InlineBlock))
           .with(StyleDeclaration::float(Float::Left))
-          .with(StyleDeclaration::width(Px(120.0).into()))
-          .with(StyleDeclaration::height(Px(40.0).into())),
+          .with(StyleDeclaration::width(Px(120.0)))
+          .with(StyleDeclaration::height(Px(40.0))),
       ),
     Node::text(
       "Text after the second float should move below it when the current line box height intersects that float."
@@ -1192,7 +1192,7 @@ fn test_measure_line_box_reflows_below_float_that_intersects_tall_line() {
   .with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Block))
-      .with(StyleDeclaration::width(Px(180.0).into()))
+      .with(StyleDeclaration::width(Px(180.0)))
       .with(StyleDeclaration::font_size(Px(20.0).into()))
       .with(StyleDeclaration::line_height(LineHeight::Unitless(3.0))),
   );
@@ -1221,7 +1221,7 @@ fn test_measure_text_indent_first_line_only() {
   let node = Node::text("alpha\nbeta".to_string()).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Px(300.0).into()))
+      .with(StyleDeclaration::width(Px(300.0)))
       .with(StyleDeclaration::font_size(Px(20.0).into()))
       .with(StyleDeclaration::white_space_collapse(
         WhiteSpaceCollapse::PreserveBreaks,
@@ -1242,7 +1242,7 @@ fn test_measure_text_indent_each_line() {
   let node = Node::text("alpha\nbeta\ngamma".to_string()).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Px(300.0).into()))
+      .with(StyleDeclaration::width(Px(300.0)))
       .with(StyleDeclaration::font_size(Px(20.0).into()))
       .with(StyleDeclaration::white_space_collapse(
         WhiteSpaceCollapse::PreserveBreaks,
@@ -1288,8 +1288,8 @@ fn test_measure_inline_layout_preserves_text_span_boundaries() {
   .with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Px(600.0).into()))
-      .with(StyleDeclaration::height(Px(120.0).into()))
+      .with(StyleDeclaration::width(Px(600.0)))
+      .with(StyleDeclaration::height(Px(120.0)))
       .with(StyleDeclaration::font_size(Px(20.0).into()))
       .with(StyleDeclaration::display(Display::Block)),
   );
@@ -1328,8 +1328,8 @@ fn test_measure_inline_layout_preserves_space_only_spans() {
   .with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Px(600.0).into()))
-      .with(StyleDeclaration::height(Px(120.0).into()))
+      .with(StyleDeclaration::width(Px(600.0)))
+      .with(StyleDeclaration::height(Px(120.0)))
       .with(StyleDeclaration::font_size(Px(20.0).into()))
       .with(StyleDeclaration::display(Display::Block)),
   );
@@ -1401,8 +1401,8 @@ fn test_measure_inline_atomic_containers_fixture() {
   .with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0).into()))
-      .with(StyleDeclaration::height(Percentage(100.0).into()))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::align_items(AlignItems::Center))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -1487,8 +1487,8 @@ fn test_measure_inline_layout_keeps_compact_text_line_height_with_small_inline_b
     Node::image("assets/images/yeecord.png").with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Inline))
-        .with(StyleDeclaration::width(Px(8.0).into()))
-        .with(StyleDeclaration::height(Px(8.0).into())),
+        .with(StyleDeclaration::width(Px(8.0)))
+        .with(StyleDeclaration::height(Px(8.0))),
     ),
     Node::text("line".to_string())
       .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
@@ -1497,7 +1497,7 @@ fn test_measure_inline_layout_keeps_compact_text_line_height_with_small_inline_b
   let node: Node = Node::container(children).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Block))
-      .with(StyleDeclaration::width(Px(400.0).into()))
+      .with(StyleDeclaration::width(Px(400.0)))
       .with(StyleDeclaration::font_size(Px(24.0).into()))
       .with(StyleDeclaration::line_height(LineHeight::Unitless(0.5))),
   );
@@ -1520,8 +1520,8 @@ fn test_measure_inline_image_uses_replaced_baseline_fallback() {
       Style::default()
         .with(StyleDeclaration::display(Display::Inline))
         .with(StyleDeclaration::box_sizing(BoxSizing::ContentBox))
-        .with(StyleDeclaration::width(Px(20.0).into()))
-        .with(StyleDeclaration::height(Px(20.0).into()))
+        .with(StyleDeclaration::width(Px(20.0)))
+        .with(StyleDeclaration::height(Px(20.0)))
         .with_padding(Sides([Px(4.0); 4]))
         .with_border_width(Sides([Px(2.0).into(); 4]))
         .with_border_style(Sides([BorderStyle::Solid; 4])),
@@ -1555,8 +1555,8 @@ fn test_measure_inline_image_respects_box_sizing_with_border() {
     Style::default()
       .with(StyleDeclaration::display(Display::Inline))
       .with(StyleDeclaration::box_sizing(box_sizing))
-      .with(StyleDeclaration::width(Px(20.0).into()))
-      .with(StyleDeclaration::height(Px(20.0).into()))
+      .with(StyleDeclaration::width(Px(20.0)))
+      .with(StyleDeclaration::height(Px(20.0)))
       .with_border_width(Sides([Px(2.0).into(); 4]))
       .with_border_style(Sides([BorderStyle::Solid; 4]))
   };
@@ -1587,7 +1587,7 @@ fn test_measure_inline_image_border_box_single_axis_preserves_aspect_ratio() {
     Style::default()
       .with(StyleDeclaration::display(Display::Inline))
       .with(StyleDeclaration::box_sizing(BoxSizing::BorderBox))
-      .with(StyleDeclaration::width(Px(48.0).into()))
+      .with(StyleDeclaration::width(Px(48.0)))
       .with_padding_inline(SpacePair::from_single(Px(4.0))),
   )])
   .with_style(Style::default().with(StyleDeclaration::display(Display::Block)));
@@ -1605,8 +1605,8 @@ fn test_measure_text_node_keeps_first_line_when_height_is_smaller_than_line_heig
   let node = Node::text("Visible text".to_string()).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Px(200.0).into()))
-      .with(StyleDeclaration::height(Px(10.0).into()))
+      .with(StyleDeclaration::width(Px(200.0)))
+      .with(StyleDeclaration::height(Px(10.0)))
       .with(StyleDeclaration::font_size(Px(16.0).into()))
       .with(StyleDeclaration::line_height(Px(30.0).into())),
   );
@@ -1627,7 +1627,7 @@ fn test_measure_text_node_rem_font_size_matches_px_when_dpr_is_below_one() {
     Node::text(text.clone()).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::width(Px(400.0).into()))
+        .with(StyleDeclaration::width(Px(400.0)))
         .with(StyleDeclaration::font_size(Rem(1.0).into())),
     ),
     viewport,
@@ -1637,7 +1637,7 @@ fn test_measure_text_node_rem_font_size_matches_px_when_dpr_is_below_one() {
     Node::text(text).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::width(Px(400.0).into()))
+        .with(StyleDeclaration::width(Px(400.0)))
         .with(StyleDeclaration::font_size(Px(16.0).into())),
     ),
     viewport,
@@ -1664,8 +1664,8 @@ fn test_measure_lh_resolves_against_explicit_line_height() {
     Node::container([Node::container([]).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::width(Px(40.0).into()))
-        .with(StyleDeclaration::height(Lh(1.0).into())),
+        .with(StyleDeclaration::width(Px(40.0)))
+        .with(StyleDeclaration::height(Lh(1.0))),
     )])
     .with_style(
       Style::default()
@@ -1692,8 +1692,8 @@ fn test_measure_rlh_resolves_against_the_document_root_line_height() {
     Node::container([Node::container([]).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::width(Px(40.0).into()))
-        .with(StyleDeclaration::height(Rlh(1.0).into()))
+        .with(StyleDeclaration::width(Px(40.0)))
+        .with(StyleDeclaration::height(Rlh(1.0)))
         .with(StyleDeclaration::line_height(LineHeight::Length(Px(20.0)))),
     )])
     .with_style(
@@ -1723,8 +1723,8 @@ fn test_measure_rem_resolves_against_the_document_root_font_size() {
     Node::container([Node::container([]).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::width(Rem(1.0).into()))
-        .with(StyleDeclaration::height(Rem(1.0).into())),
+        .with(StyleDeclaration::width(Rem(1.0)))
+        .with(StyleDeclaration::height(Rem(1.0))),
     )])
     .with_style(
       Style::default()
@@ -1750,7 +1750,7 @@ fn test_measure_nested_em_font_size_inherits_correctly_from_rem_when_dpr_is_belo
     .with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::width(Px(400.0).into()))
+        .with(StyleDeclaration::width(Px(400.0)))
         .with(StyleDeclaration::font_size(Rem(1.0).into())),
     ),
     viewport,
@@ -1765,7 +1765,7 @@ fn test_measure_nested_em_font_size_inherits_correctly_from_rem_when_dpr_is_belo
     .with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::width(Px(400.0).into()))
+        .with(StyleDeclaration::width(Px(400.0)))
         .with(StyleDeclaration::font_size(Px(16.0).into())),
     ),
     viewport,
@@ -1802,8 +1802,8 @@ fn test_measure_svg_attr_size_in_absolute_flex_container() {
   .with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0).into()))
-      .with(StyleDeclaration::height(Percentage(100.0).into())),
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0))),
   );
 
   let result = takumi::measure(
@@ -1850,8 +1850,8 @@ fn test_measure_svg_attr_size_in_absolute_flex_container_with_parent_padding() {
   .with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0).into()))
-      .with(StyleDeclaration::height(Percentage(100.0).into()))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::position(Position::Relative))
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
@@ -1893,13 +1893,13 @@ fn test_measure_svg_with_width_only_preserves_intrinsic_ratio() {
   let node: Node = Node::container([Node::image(svg).with_tag_name("svg").with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Px(96.0).into())),
+      .with(StyleDeclaration::width(Px(96.0))),
   )])
   .with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0).into()))
-      .with(StyleDeclaration::height(Percentage(100.0).into()))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column)),
   );
@@ -1967,8 +1967,8 @@ fn test_measure_img_svg_attribute_sizing_cases() {
     let node: Node = Node::container([image]).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::width(Percentage(100.0).into()))
-        .with(StyleDeclaration::height(Percentage(100.0).into()))
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
         .with(StyleDeclaration::display(Display::Flex))
         .with(StyleDeclaration::flex_direction(FlexDirection::Column)),
     );
@@ -2000,7 +2000,7 @@ fn test_grid_container_drops_whitespace_only_text_children() {
   let grid_style = || {
     Style::default()
       .with(StyleDeclaration::display(Display::Grid))
-      .with(StyleDeclaration::width(Px(200.0).into()))
+      .with(StyleDeclaration::width(Px(200.0)))
   };
 
   let with_whitespace =
@@ -2026,7 +2026,7 @@ fn test_flex_container_drops_whitespace_only_text_children() {
   let flex_style = || {
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Px(200.0).into()))
+      .with(StyleDeclaration::width(Px(200.0)))
   };
 
   let with_whitespace =
@@ -2050,23 +2050,23 @@ fn test_block_container_drops_whitespace_between_absolute_and_in_flow_sibling() 
       Style::default()
         .with(StyleDeclaration::display(Display::Block))
         .with(StyleDeclaration::position(Position::Absolute))
-        .with(StyleDeclaration::width(Px(40.0).into()))
-        .with(StyleDeclaration::height(Px(40.0).into())),
+        .with(StyleDeclaration::width(Px(40.0)))
+        .with(StyleDeclaration::height(Px(40.0))),
     )
   };
   let in_flow_child = || {
     Node::container([]).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Block))
-        .with(StyleDeclaration::width(Px(100.0).into()))
-        .with(StyleDeclaration::height(Px(100.0).into())),
+        .with(StyleDeclaration::width(Px(100.0)))
+        .with(StyleDeclaration::height(Px(100.0))),
     )
   };
   let block_style = || {
     Style::default()
       .with(StyleDeclaration::display(Display::Block))
       .with(StyleDeclaration::position(Position::Relative))
-      .with(StyleDeclaration::width(Px(200.0).into()))
+      .with(StyleDeclaration::width(Px(200.0)))
   };
 
   let with_whitespace = Node::container([
@@ -2093,16 +2093,16 @@ fn test_block_container_drops_whitespace_between_absolute_only_siblings() {
       Style::default()
         .with(StyleDeclaration::display(Display::Block))
         .with(StyleDeclaration::position(Position::Absolute))
-        .with(StyleDeclaration::width(Px(40.0).into()))
-        .with(StyleDeclaration::height(Px(40.0).into())),
+        .with(StyleDeclaration::width(Px(40.0)))
+        .with(StyleDeclaration::height(Px(40.0))),
     )
   };
   let block_style = || {
     Style::default()
       .with(StyleDeclaration::display(Display::Block))
       .with(StyleDeclaration::position(Position::Relative))
-      .with(StyleDeclaration::width(Px(200.0).into()))
-      .with(StyleDeclaration::height(Px(200.0).into()))
+      .with(StyleDeclaration::width(Px(200.0)))
+      .with(StyleDeclaration::height(Px(200.0)))
   };
 
   let with_whitespace = Node::container([
@@ -2136,8 +2136,8 @@ fn test_block_container_preserves_pre_whitespace_next_to_absolute_sibling() {
       Style::default()
         .with(StyleDeclaration::display(Display::Block))
         .with(StyleDeclaration::position(Position::Absolute))
-        .with(StyleDeclaration::width(Px(40.0).into()))
-        .with(StyleDeclaration::height(Px(40.0).into())),
+        .with(StyleDeclaration::width(Px(40.0)))
+        .with(StyleDeclaration::height(Px(40.0))),
     )
   };
   let parent = Node::container([Node::text("\n\n".to_string()), abs()]).with_style(
@@ -2146,7 +2146,7 @@ fn test_block_container_preserves_pre_whitespace_next_to_absolute_sibling() {
       .with(StyleDeclaration::white_space_collapse(
         WhiteSpaceCollapse::Preserve,
       ))
-      .with(StyleDeclaration::width(Px(200.0).into())),
+      .with(StyleDeclaration::width(Px(200.0))),
   );
 
   let result = measure(parent, create_measure_viewport());
@@ -2169,7 +2169,7 @@ fn test_block_container_drops_whitespace_only_child() {
   let parent = Node::container([Node::text("\n  ".to_string())]).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Block))
-      .with(StyleDeclaration::width(Px(200.0).into())),
+      .with(StyleDeclaration::width(Px(200.0))),
   );
 
   let result = measure(parent, create_measure_viewport());
@@ -2189,14 +2189,14 @@ fn test_block_container_preserves_whitespace_between_inline_siblings() {
     Node::container([]).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Block))
-        .with(StyleDeclaration::width(Px(50.0).into()))
-        .with(StyleDeclaration::height(Px(50.0).into())),
+        .with(StyleDeclaration::width(Px(50.0)))
+        .with(StyleDeclaration::height(Px(50.0))),
     )
   };
   let block_style = || {
     Style::default()
       .with(StyleDeclaration::display(Display::Block))
-      .with(StyleDeclaration::width(Px(400.0).into()))
+      .with(StyleDeclaration::width(Px(400.0)))
   };
 
   let with_space = Node::container([
@@ -2228,14 +2228,14 @@ fn test_block_container_keeps_absolute_child_next_to_text() {
       Style::default()
         .with(StyleDeclaration::display(Display::Block))
         .with(StyleDeclaration::position(Position::Absolute))
-        .with(StyleDeclaration::width(Px(40.0).into()))
-        .with(StyleDeclaration::height(Px(40.0).into())),
+        .with(StyleDeclaration::width(Px(40.0)))
+        .with(StyleDeclaration::height(Px(40.0))),
     )
   };
   let parent = Node::container([Node::text("hi".to_string()), abs()]).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Block))
-      .with(StyleDeclaration::width(Px(200.0).into())),
+      .with(StyleDeclaration::width(Px(200.0))),
   );
 
   let result = measure(parent, create_measure_viewport());

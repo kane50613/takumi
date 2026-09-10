@@ -120,7 +120,7 @@ fn column(children: Vec<Node>) -> Node {
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::flex_direction(FlexDirection::Column))
-      .with(StyleDeclaration::width(Percentage(100.0).into())),
+      .with(StyleDeclaration::width(Percentage(100.0))),
   )
 }
 
@@ -132,8 +132,8 @@ fn text_basic() {
         Node::container([text("Hello PDF from Takumi", 32.0)]).with_style(
           Style::default()
             .with(StyleDeclaration::display(Display::Flex))
-            .with(StyleDeclaration::width(Percentage(100.0).into()))
-            .with(StyleDeclaration::height(Percentage(100.0).into()))
+            .with(StyleDeclaration::width(Percentage(100.0)))
+            .with(StyleDeclaration::height(Percentage(100.0)))
             .with(StyleDeclaration::background_color(ColorInput::Value(
               Color([235, 244, 255, 255]),
             ))),
@@ -156,8 +156,8 @@ fn media_print_applies_to_pdf_output() {
       .with_style(
         Style::default()
           .with(StyleDeclaration::display(Display::Flex))
-          .with(StyleDeclaration::width(Percentage(100.0).into()))
-          .with(StyleDeclaration::height(Percentage(100.0).into())),
+          .with(StyleDeclaration::width(Percentage(100.0)))
+          .with(StyleDeclaration::height(Percentage(100.0))),
       )
   };
   fn options(fonts: &Fonts, node: Node, sheet: Arc<StyleSheet>) -> PdfOptions<'_> {
@@ -202,8 +202,8 @@ fn text_ligatures() {
         Node::container([text("Difficult office traffic affix", 24.0)]).with_style(
           Style::default()
             .with(StyleDeclaration::display(Display::Flex))
-            .with(StyleDeclaration::width(Percentage(100.0).into()))
-            .with(StyleDeclaration::height(Percentage(100.0).into())),
+            .with(StyleDeclaration::width(Percentage(100.0)))
+            .with(StyleDeclaration::height(Percentage(100.0))),
         ),
       )
       .viewport(Viewport::new((600, 100)))
@@ -779,7 +779,7 @@ fn paged_widow_orphan_control() {
         Style::default()
           .with(StyleDeclaration::display(Display::Flex))
           .with(StyleDeclaration::flex_direction(FlexDirection::Column))
-          .with(StyleDeclaration::width(Percentage(100.0).into()))
+          .with(StyleDeclaration::width(Percentage(100.0)))
           .with(StyleDeclaration::widows(MinLines::from(1)))
           .with(StyleDeclaration::orphans(MinLines::from(1))),
       )
@@ -1298,8 +1298,8 @@ fn image_object_fit() {
         Node::container(images).with_style(
           Style::default()
             .with(StyleDeclaration::display(Display::Flex))
-            .with(StyleDeclaration::width(Percentage(100.0).into()))
-            .with(StyleDeclaration::height(Percentage(100.0).into()))
+            .with(StyleDeclaration::width(Percentage(100.0)))
+            .with(StyleDeclaration::height(Percentage(100.0)))
             .with(StyleDeclaration::padding_top(Px(16.0))),
         ),
       )

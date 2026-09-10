@@ -28,7 +28,7 @@ fn unbreakable_ellipsis_root(text_overflow: TextOverflow) -> Node {
       .with(StyleDeclaration::text_overflow(text_overflow))
       .with(StyleDeclaration::text_wrap_mode(TextWrapMode::NoWrap))
       .with_overflow(SpacePair::from_single(Overflow::Hidden))
-      .with(StyleDeclaration::width(Length::Px(360.0).into()))
+      .with(StyleDeclaration::width(Length::Px(360.0)))
       .with(StyleDeclaration::color(ColorInput::Value(Color::black()))),
   );
 
@@ -36,12 +36,12 @@ fn unbreakable_ellipsis_root(text_overflow: TextOverflow) -> Node {
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::font_size(Length::Px(48.0).into()))
-      .with(StyleDeclaration::width(
-        Length::Px(ELLIPSIS_CANVAS_WIDTH as f32).into(),
-      ))
-      .with(StyleDeclaration::height(
-        Length::Px(ELLIPSIS_CANVAS_HEIGHT as f32).into(),
-      ))
+      .with(StyleDeclaration::width(Length::Px(
+        ELLIPSIS_CANVAS_WIDTH as f32,
+      )))
+      .with(StyleDeclaration::height(Length::Px(
+        ELLIPSIS_CANVAS_HEIGHT as f32,
+      )))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color::white(),
       ))),

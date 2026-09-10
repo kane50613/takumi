@@ -31,8 +31,8 @@ fn simple_image_blit_fixture() -> Node {
   Node::image(IMAGE_PATH).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0).into()))
-      .with(StyleDeclaration::height(Percentage(100.0).into()))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::object_fit(ObjectFit::Fill)),
   )
 }
@@ -66,8 +66,8 @@ fn gradient_clip_text_fixture() -> Node {
   .with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0).into()))
-      .with(StyleDeclaration::height(Percentage(100.0).into()))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color([242, 242, 242, 255]),
       )))
@@ -83,8 +83,8 @@ fn emoji_social_fixture() -> Node {
     Node::container([Node::image(IMAGE_PATH).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::width(Px(220.0).into()))
-        .with(StyleDeclaration::height(Px(220.0).into()))
+        .with(StyleDeclaration::width(Px(220.0)))
+        .with(StyleDeclaration::height(Px(220.0)))
         .with(StyleDeclaration::object_fit(ObjectFit::Cover)),
     )])
     .with_style(
@@ -118,8 +118,8 @@ fn emoji_social_fixture() -> Node {
   .with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0).into()))
-      .with(StyleDeclaration::height(Percentage(100.0).into()))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
       .with_padding(Sides([Px(48.0), Px(56.0), Px(48.0), Px(56.0)]))
       .with(StyleDeclaration::background_image(Some(
         BackgroundImages::from_css_str(

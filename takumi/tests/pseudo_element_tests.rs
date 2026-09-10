@@ -160,8 +160,8 @@ fn pseudo_does_not_apply_to_replaced_image_element() {
     .with_class_name("logo")
     .with_style(
       Style::default()
-        .with(StyleDeclaration::width(Px(50.0).into()))
-        .with(StyleDeclaration::height(Px(50.0).into())),
+        .with(StyleDeclaration::width(Px(50.0)))
+        .with(StyleDeclaration::height(Px(50.0))),
     );
   let result = measure_with_css(root, r#".logo::before { content: "x"; }"#);
   assert!(measured_text_runs(&result).is_empty());
@@ -181,7 +181,7 @@ fn display_flex_pseudo_downgrades_to_block() {
     .with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Block))
-        .with(StyleDeclaration::width(Px(200.0).into())),
+        .with(StyleDeclaration::width(Px(200.0))),
     );
   let block = measure_with_css(
     root.clone(),
@@ -204,7 +204,7 @@ fn display_block_pseudo_creates_block_level_box() {
     .with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Block))
-        .with(StyleDeclaration::width(Px(200.0).into())),
+        .with(StyleDeclaration::width(Px(200.0))),
     );
   let inline = measure_with_css(
     root.clone(),
@@ -234,7 +234,7 @@ fn gradient_content_renders_with_default_object_size() {
   let root = box_node("hero").with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Block))
-      .with(StyleDeclaration::width(Px(400.0).into())),
+      .with(StyleDeclaration::width(Px(400.0))),
   );
   let result = measure_with_css(
     root,

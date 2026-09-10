@@ -267,12 +267,24 @@ macro_rules! define_style {
   // Field default for `ComputedStyle`: explicit `= expr` when given, else the type's `Default`.
   (@default $default:expr) => { $default };
   (@default) => { ::core::default::Default::default() };
+  // `where builder = manual` keeps the generated constructor out of the way of a
+  // hand-written one.
+  (@builder $name:ident, $ty:ty, manual) => {};
+  (@builder $name:ident, $ty:ty) => {
+    paste! {
+      /// Returns a declaration for this property.
+      pub fn $name(value: $ty) -> Self {
+        Self::[<$name:camel>](value)
+      }
+    }
+  };
   (
     longhands {
       $(
         $longhand:ident: $longhand_ty:ty
           $(where inherit = $longhand_inherit:literal)?
           $(where anonymous = $longhand_anonymous:literal)?
+          $(where builder = $longhand_builder:ident)?
           $(= $longhand_default:expr)?,
       )*
     }
@@ -998,10 +1010,7 @@ macro_rules! define_style {
 
       impl StyleDeclaration {
         $(
-          /// Returns a declaration for this property.
-          pub fn $longhand(value: $longhand_ty) -> Self {
-            Self::[<$longhand:camel>](value)
-          }
+          define_style!(@builder $longhand, $longhand_ty $(, $longhand_builder)?);
         )*
         $(
           /// Returns a declaration for this property.
@@ -1181,8 +1190,8 @@ define_style! {
     animation_fill_mode: AnimationFillModes,
     animation_play_state: AnimationPlayStates,
     display: Display,
-    width: SizeValue,
-    height: SizeValue,
+    width: SizeValue where builder = manual,
+    height: SizeValue where builder = manual,
     max_width: MaxSize,
     max_height: MaxSize,
     min_width: Length,
@@ -1209,7 +1218,7 @@ define_style! {
     align_self: AlignItems,
     flex_wrap: FlexWrap,
     flex_line_count: FlexLineCount,
-    flex_basis: Option<FlexBasis>,
+    flex_basis: Option<FlexBasis> where builder = manual,
     order: Order,
     z_index: ZIndex,
     position: Position,
@@ -1689,6 +1698,25 @@ define_style! {
       target.push(StyleDeclaration::block_ellipsis(value.block_ellipsis));
       target.push(StyleDeclaration::r#continue(value.line_continue));
     },
+  }
+}
+
+// Hand-written so that a `Length` still reaches the sizing longhands, which the
+// CSS Sizing keywords moved off `Length`.
+impl StyleDeclaration {
+  /// Returns a declaration for this property.
+  pub fn width(value: impl Into<SizeValue>) -> Self {
+    Self::Width(value.into())
+  }
+
+  /// Returns a declaration for this property.
+  pub fn height(value: impl Into<SizeValue>) -> Self {
+    Self::Height(value.into())
+  }
+
+  /// Returns a declaration for this property.
+  pub fn flex_basis<T: Into<FlexBasis>>(value: Option<T>) -> Self {
+    Self::FlexBasis(value.map(Into::into))
   }
 }
 

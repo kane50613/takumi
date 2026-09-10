@@ -31,8 +31,8 @@ fn nested_clip_masks_fixture() -> Node {
     Node::container([]).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::width(Percentage(100.0).into()))
-        .with(StyleDeclaration::height(Percentage(100.0).into()))
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
         .with_border_radius(BorderRadius::from_css_str(radius).unwrap())
         .with_overflow(SpacePair::from_single(Overflow::Clip))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -46,8 +46,8 @@ fn nested_clip_masks_fixture() -> Node {
     current = Node::container([current]).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::width(Percentage(95.0).into()))
-        .with(StyleDeclaration::height(Percentage(95.0).into()))
+        .with(StyleDeclaration::width(Percentage(95.0)))
+        .with(StyleDeclaration::height(Percentage(95.0)))
         .with_border_radius(BorderRadius::from_css_str(radius).unwrap())
         .with_overflow(SpacePair::from_single(Overflow::Clip))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -59,8 +59,8 @@ fn nested_clip_masks_fixture() -> Node {
   Node::container([current]).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0).into()))
-      .with(StyleDeclaration::height(Percentage(100.0).into()))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::align_items(AlignItems::Center))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -73,15 +73,15 @@ fn scaled_image_fixture() -> Node {
   Node::container([Node::image(IMAGE_PATH).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0).into()))
-      .with(StyleDeclaration::height(Percentage(100.0).into()))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::object_fit(ObjectFit::Cover)),
   )])
   .with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Px(720.0).into()))
-      .with(StyleDeclaration::height(Px(720.0).into()))
+      .with(StyleDeclaration::width(Px(720.0)))
+      .with(StyleDeclaration::height(Px(720.0)))
       .with_border_radius(BorderRadius::from_css_str("96px").unwrap())
       .with_overflow(SpacePair::from_single(Overflow::Clip))
       .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -98,8 +98,8 @@ fn gradient_clip_mask_fixture() -> Node {
   Node::container([Node::container([]).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Px(640.0).into()))
-      .with(StyleDeclaration::height(Px(640.0).into()))
+      .with(StyleDeclaration::width(Px(640.0)))
+      .with(StyleDeclaration::height(Px(640.0)))
       .with_border_radius(BorderRadius::from_css_str("64px").unwrap())
       .with_overflow(SpacePair::from_single(Overflow::Clip))
       .with(StyleDeclaration::background_image(Some(gradient)))
@@ -117,8 +117,8 @@ fn gradient_clip_mask_fixture() -> Node {
   .with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0).into()))
-      .with(StyleDeclaration::height(Percentage(100.0).into()))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::align_items(AlignItems::Center))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
       .with(StyleDeclaration::background_color(ColorInput::Value(

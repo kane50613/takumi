@@ -27,12 +27,8 @@ fn root(opacity: f32) -> Node {
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::align_items(AlignItems::FlexStart))
-      .with(StyleDeclaration::width(
-        Length::Px(CANVAS_WIDTH as f32).into(),
-      ))
-      .with(StyleDeclaration::height(
-        Length::Px(CANVAS_HEIGHT as f32).into(),
-      ))
+      .with(StyleDeclaration::width(Length::Px(CANVAS_WIDTH as f32)))
+      .with(StyleDeclaration::height(Length::Px(CANVAS_HEIGHT as f32)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color::white(),
       ))),
@@ -87,12 +83,8 @@ fn descender_root(opacity: f32) -> Node {
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
       .with(StyleDeclaration::align_items(AlignItems::FlexStart))
-      .with(StyleDeclaration::width(
-        Length::Px(CANVAS_WIDTH as f32).into(),
-      ))
-      .with(StyleDeclaration::height(
-        Length::Px(CANVAS_HEIGHT as f32).into(),
-      ))
+      .with(StyleDeclaration::width(Length::Px(CANVAS_WIDTH as f32)))
+      .with(StyleDeclaration::height(Length::Px(CANVAS_HEIGHT as f32)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color::white(),
       ))),
