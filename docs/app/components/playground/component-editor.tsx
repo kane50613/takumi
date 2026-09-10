@@ -1,83 +1,89 @@
 "use client";
 
 import { Editor } from "@monaco-editor/react";
-import { shikiToMonaco } from "@shikijs/monaco";
+import type { Monaco } from "@monaco-editor/react";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
 import type { ComponentProps } from "react";
-import { createHighlighterCore } from "shiki/core";
-import { createOnigurumaEngine } from "shiki/engine-oniguruma.mjs";
-// Dynamic imports keep the typings out of the playground chunk; they load as
-// their own chunks alongside the editor.
-const [
-  reactTypings,
-  reactJsxRuntimeTypings,
-  cssTypings,
-  takumiTypings,
-  pdfPrimitivesTypings,
-  playgroundOptionsTypings,
-  echartsCoreTypings,
-  echartsChartsTypings,
-  echartsComponentsTypings,
-  echartsRenderersTypings,
-  echartsSharedTypings,
-] = await Promise.all([
-  import("../../../node_modules/@types/react/index.d.ts?raw").then((module) => module.default),
-  import("../../../node_modules/@types/react/jsx-runtime.d.ts?raw").then(
-    (module) => module.default,
-  ),
-  import("../../../node_modules/csstype/index.d.ts?raw").then((module) => module.default),
-  import("../../../node_modules/@takumi-rs/wasm/pkg/takumi_wasm_bg.wasm.d.ts?raw").then(
-    (module) => module.default,
-  ),
-  import("../../../node_modules/takumi-pdf/dist/primitives.d.mts?raw").then(
-    (module) => module.default,
-  ),
-  import("../../playground/options.ts?raw").then((module) => module.default),
-  import("../../../node_modules/echarts/types/dist/core.d.ts?raw").then((module) => module.default),
-  import("../../../node_modules/echarts/types/dist/charts.d.ts?raw").then(
-    (module) => module.default,
-  ),
-  import("../../../node_modules/echarts/types/dist/components.d.ts?raw").then(
-    (module) => module.default,
-  ),
-  import("../../../node_modules/echarts/types/dist/renderers.d.ts?raw").then(
-    (module) => module.default,
-  ),
-  import("../../../node_modules/echarts/types/dist/shared.d.ts?raw").then(
-    (module) => module.default,
-  ),
-]);
+import { darkTheme, lightTheme, registerSyntaxHighlighting } from "./syntax-highlighting";
 
-function createHighlighter() {
-  return createHighlighterCore({
-    themes: [
-      import("shiki/themes/github-dark-default.mjs"),
-      import("shiki/themes/github-light-default.mjs"),
-    ],
-    langs: [import("shiki/langs/tsx.mjs")],
-    engine: createOnigurumaEngine(import("shiki/wasm")),
-    langAlias: {
-      typescript: "tsx",
-    },
-  });
-}
+type ExtraLib = { content: string; filePath: string };
 
-type GlobalThis = typeof globalThis & {
-  shikiInstance: ReturnType<typeof createHighlighter>;
-};
+const extraLib = (filePath: string) => (module: { default: string }) => ({
+  content: module.default,
+  filePath,
+});
 
-(globalThis as GlobalThis).shikiInstance ??= createHighlighter();
+const coreTypings = () =>
+  Promise.all([
+    import("../../../node_modules/@types/react/index.d.ts?raw").then(
+      extraLib("file:///node_modules/react/index.d.ts"),
+    ),
+    import("../../../node_modules/@types/react/jsx-runtime.d.ts?raw").then(
+      extraLib("file:///node_modules/react/jsx-runtime.d.ts"),
+    ),
+    import("../../../node_modules/csstype/index.d.ts?raw").then(
+      extraLib("file:///node_modules/csstype/index.d.ts"),
+    ),
+    import("../../../node_modules/@takumi-rs/wasm/pkg/takumi_wasm_bg.wasm.d.ts?raw").then(
+      extraLib("file:///node_modules/@takumi-rs/wasm/index.d.ts"),
+    ),
+    import("../../../node_modules/takumi-pdf/dist/primitives.d.mts?raw").then(
+      extraLib("file:///node_modules/takumi-pdf/primitives.d.ts"),
+    ),
+    import("../../playground/options.ts?raw").then(extraLib("file:///options.d.ts")),
+  ]);
 
-const highlighter = await (globalThis as GlobalThis).shikiInstance;
+const echartsTypings = () =>
+  Promise.all(
+    Object.entries(
+      // Vite skips node_modules unless the glob is exhaustive.
+      import.meta.glob<string>(
+        "../../../node_modules/echarts/types/dist/{core,charts,components,renderers,shared}.d.ts",
+        { query: "?raw", import: "default", exhaustive: true },
+      ),
+    ).map(async ([path, load]) => ({
+      content: await load(),
+      filePath: `file:///${path.slice(path.indexOf("node_modules"))}`,
+    })),
+  );
 
-const tailwindTypings = `
+const tailwindTypings: ExtraLib = {
+  content: `
 declare namespace React {
   interface HTMLAttributes<T> {
     tw?: string;
   }
 }
-`;
+`,
+  filePath: "file:///tw.d.ts",
+};
+
+const loadedTypings: ExtraLib[] = [];
+
+/** Monaco replaces the whole set, so every mount rewrites it from what has loaded so far. */
+function applyTypings(monaco: Monaco) {
+  monaco.languages.typescript.typescriptDefaults.setExtraLibs([tailwindTypings, ...loadedTypings]);
+}
+
+/** A failed load is dropped so the next mount retries it. */
+function typingsLoader(typings: () => Promise<ExtraLib[]>) {
+  let load: Promise<void> | undefined;
+
+  return (monaco: Monaco) =>
+    (load ??= typings()
+      .then((libs) => {
+        loadedTypings.push(...libs);
+        applyTypings(monaco);
+      })
+      .catch((error: unknown) => {
+        load = undefined;
+        throw error;
+      }));
+}
+
+const loadCoreTypings = typingsLoader(coreTypings);
+const loadEchartsTypings = typingsLoader(echartsTypings);
 
 export function ComponentEditor({
   code,
@@ -94,13 +100,14 @@ export function ComponentEditor({
     Parameters<NonNullable<ComponentProps<typeof Editor>["onMount"]>>[0] | null
   >(null);
   const isApplyingExternalCodeRef = useRef(false);
-  // The command is registered once, so it reads the callback through a ref.
+  /** The command is registered once, so it reads the callback through a ref. */
   const onRunRef = useRef(onRun);
-
-  onRunRef.current = onRun;
   /** The last value the editor itself produced, so its own edits never bounce back. */
   const lastEmittedRef = useRef(code);
-  const theme = resolvedTheme === "dark" ? "github-dark-default" : "github-light-default";
+
+  onRunRef.current = onRun;
+
+  const theme = resolvedTheme === "dark" ? darkTheme : lightTheme;
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -118,10 +125,7 @@ export function ComponentEditor({
     };
   }, []);
 
-  // Only a change from outside the editor (a template, a reset, formatting) is
-  // worth writing back. An IME composes through several intermediate values, and
-  // the state lags behind them, so comparing against the model alone would make
-  // every stale round trip look external.
+  // An IME lags the state behind the model, so only the last emitted value tells an outside edit apart.
   useEffect(() => {
     const editor = editorRef.current;
     const model = editor?.getModel();
@@ -133,8 +137,7 @@ export function ComponentEditor({
     const selection = editor.getSelection();
 
     isApplyingExternalCodeRef.current = true;
-    // A full-range edit rather than `setValue`: it keeps the undo stack and
-    // leaves the cursor where it was instead of dropping it at the top.
+    // A full-range edit keeps the undo stack, which `setValue` drops.
     model.pushEditOperations([], [{ range: model.getFullModelRange(), text: code }], () => null);
     isApplyingExternalCodeRef.current = false;
     lastEmittedRef.current = code;
@@ -162,64 +165,25 @@ export function ComponentEditor({
           },
         });
 
-        monaco.languages.typescript.typescriptDefaults.setExtraLibs([
-          {
-            content: reactTypings,
-            filePath: "file:///node_modules/react/index.d.ts",
-          },
-          {
-            content: reactJsxRuntimeTypings,
-            filePath: "file:///node_modules/react/jsx-runtime.d.ts",
-          },
-          {
-            content: cssTypings,
-            filePath: "file:///node_modules/csstype/index.d.ts",
-          },
-          {
-            content: takumiTypings,
-            filePath: "file:///node_modules/@takumi-rs/wasm/index.d.ts",
-          },
-          {
-            content: pdfPrimitivesTypings,
-            filePath: "file:///node_modules/takumi-pdf/primitives.d.ts",
-          },
-          {
-            content: playgroundOptionsTypings,
-            filePath: "file:///options.d.ts",
-          },
-          {
-            content: echartsCoreTypings,
-            filePath: "file:///node_modules/echarts/types/dist/core.d.ts",
-          },
-          {
-            content: echartsChartsTypings,
-            filePath: "file:///node_modules/echarts/types/dist/charts.d.ts",
-          },
-          {
-            content: echartsComponentsTypings,
-            filePath: "file:///node_modules/echarts/types/dist/components.d.ts",
-          },
-          {
-            content: echartsRenderersTypings,
-            filePath: "file:///node_modules/echarts/types/dist/renderers.d.ts",
-          },
-          {
-            content: echartsSharedTypings,
-            filePath: "file:///node_modules/echarts/types/dist/shared.d.ts",
-          },
-          {
-            content: tailwindTypings,
-            filePath: "file:///tw.d.ts",
-          },
-        ]);
-
-        shikiToMonaco(highlighter, monaco);
+        applyTypings(monaco);
+        registerSyntaxHighlighting(monaco);
       }}
       onMount={(editor, monaco) => {
         editorRef.current = editor;
-        // Monaco owns the keyboard inside the editor and binds ⌘↵ itself, so the
-        // shortcut has to be registered here rather than on the window.
+        // Monaco owns the keyboard inside the editor, so ⌘↵ cannot be bound on the window.
         editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => onRunRef.current());
+
+        loadCoreTypings(monaco);
+
+        // echarts ships megabytes of typings, so they wait until the code asks for them.
+        const loadEchartsTypingsIfUsed = () => {
+          if (editor.getModel()?.getValue().includes("echarts")) {
+            loadEchartsTypings(monaco);
+          }
+        };
+
+        loadEchartsTypingsIfUsed();
+        editor.onDidChangeModelContent(loadEchartsTypingsIfUsed);
       }}
       width="100%"
       height="100%"
