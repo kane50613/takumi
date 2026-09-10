@@ -122,7 +122,9 @@ impl AtomCollector<'_> {
         let extent = (bounds.top as f32, bounds.bottom as f32);
 
         atoms.extents.push(extent);
-        atoms.content.push(extent);
+        if extent.1 > extent.0 {
+          atoms.content.push(extent);
+        }
       }
       return Ok(parent * relative);
     }
