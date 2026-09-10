@@ -28,7 +28,7 @@ pub enum VerticalAlignKeyword {
   Super,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   VerticalAlignKeyword,
   "baseline" => VerticalAlignKeyword::Baseline,
   "top" => VerticalAlignKeyword::Top,

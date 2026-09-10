@@ -550,66 +550,33 @@ macro_rules! impl_passthrough_animatable {
 }
 
 impl_passthrough_animatable!(
-  BoxSizing,
   AnimationNames,
   AnimationDurations,
   AnimationTimingFunctions,
   AnimationIterationCounts,
-  AnimationDirections,
-  AnimationFillModes,
-  AnimationPlayStates,
-  Clear,
-  Display,
-  Direction,
-  Float,
-  FlexDirection,
   AlignItems,
   JustifyContent,
-  FlexWrap,
-  Position,
-  BorderStyle,
   Border,
-  ObjectFit,
-  Overflow,
-  BackgroundClip,
-  BackgroundOrigin,
   GridAutoFlow,
   GridLine,
   GridTemplateAreas,
   TextOverflow,
-  TextTransform,
   FontStyle,
   FontFamily,
   LineHeight,
   FontSynthesis,
-  FontSynthesic,
   LineClamp,
-  TextAlign,
   TextStroke,
-  LineJoin,
   TextDecoration,
   TextDecorationLines,
-  TextDecorationStyle,
-  TextDecorationSkipInk,
-  TextUnderlinePosition,
   BreakBetween,
-  BreakInside,
-  BoxDecorationBreak,
-  ImageScalingAlgorithm,
   OverflowWrap,
-  WordBreak,
   BasicShape,
   OffsetPath,
   OffsetAnchor,
   OffsetPosition,
-  FillRule,
   WhiteSpace,
-  WhiteSpaceCollapse,
-  TextWrapMode,
-  TextWrapStyle,
   TextWrap,
-  Isolation,
-  Visibility,
   VerticalAlign,
   Flex,
   Background,
@@ -750,6 +717,78 @@ mod tests {
 
     target.interpolate(&Dummy(3), &Dummy(7), 0.5, &sizing(), current_color());
     assert_eq!(target, Dummy(7));
+  }
+
+  #[test]
+  fn animation_keyword_lists_remain_discrete() {
+    fn interpolate<T: Animatable>(from: T, to: T, progress: f32) -> T {
+      let mut value = from.clone();
+
+      value.interpolate(&from, &to, progress, &sizing(), current_color());
+      value
+    }
+
+    macro_rules! assert_discrete_list {
+      ($type:ty; [$($from:expr),*]; [$($to:expr),*]) => {
+        let from: $type = Box::from([$($from),*]);
+        let to: $type = Box::from([$($to),*]);
+
+        assert_eq!(interpolate(from.clone(), to.clone(), 0.49), from);
+        assert_eq!(interpolate(from.clone(), to.clone(), 0.5), to);
+      };
+    }
+
+    assert_discrete_list!(
+      AnimationDirections;
+      [AnimationDirection::Normal, AnimationDirection::Reverse];
+      [AnimationDirection::Alternate, AnimationDirection::AlternateReverse]
+    );
+    assert_discrete_list!(
+      AnimationDirections;
+      [AnimationDirection::Normal];
+      [AnimationDirection::Reverse, AnimationDirection::Alternate]
+    );
+    assert_discrete_list!(
+      AnimationFillModes;
+      [AnimationFillMode::None, AnimationFillMode::Forwards];
+      [AnimationFillMode::Backwards, AnimationFillMode::Both]
+    );
+    assert_discrete_list!(
+      AnimationFillModes;
+      [AnimationFillMode::None];
+      [AnimationFillMode::Forwards, AnimationFillMode::Both]
+    );
+    assert_discrete_list!(
+      AnimationPlayStates;
+      [AnimationPlayState::Running, AnimationPlayState::Paused];
+      [AnimationPlayState::Paused, AnimationPlayState::Running]
+    );
+    assert_discrete_list!(
+      AnimationPlayStates;
+      [AnimationPlayState::Running];
+      [AnimationPlayState::Paused, AnimationPlayState::Running]
+    );
+  }
+
+  #[test]
+  fn blend_modes_repeat_to_lcm() {
+    let from: BlendModes = Box::from([BlendMode::Normal, BlendMode::Multiply]);
+    let to: BlendModes = Box::from([BlendMode::Screen, BlendMode::Overlay, BlendMode::Darken]);
+    let mut value = from.clone();
+
+    value.interpolate(&from, &to, 0.5, &sizing(), current_color());
+
+    assert_eq!(
+      value.as_ref(),
+      [
+        BlendMode::Screen,
+        BlendMode::Overlay,
+        BlendMode::Darken,
+        BlendMode::Screen,
+        BlendMode::Overlay,
+        BlendMode::Darken,
+      ]
+    );
   }
 
   #[test]

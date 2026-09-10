@@ -6,7 +6,7 @@ use typed_builder::TypedBuilder;
 
 use crate::style::{
   Animatable, Color, CssSyntaxKind, CssToken, FromCss, FromCssStr, Length, MakeComputed,
-  ParseResult, SizingContext, ToCss, declare_enum_from_css_impl, properties::ColorInput,
+  ParseResult, SizingContext, ToCss, impl_css_enum, properties::ColorInput,
   tw::TailwindPropertyParser, unexpected_token,
 };
 
@@ -287,7 +287,7 @@ pub enum TextUnderlinePosition {
   Under,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   TextUnderlinePosition,
   "auto" => TextUnderlinePosition::Auto,
   "from-font" => TextUnderlinePosition::FromFont,
@@ -303,7 +303,7 @@ pub enum TextDecorationStyle {
   Solid,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   TextDecorationStyle,
   "solid" => Self::Solid
 );

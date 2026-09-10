@@ -1,7 +1,7 @@
 use cssparser::match_ignore_ascii_case;
 use taffy::Overflow as TaffyOverflow;
 
-use crate::style::{declare_enum_from_css_impl, tw::TailwindPropertyParser};
+use crate::style::{impl_css_enum, tw::TailwindPropertyParser};
 
 /// How children overflowing their container should affect layout
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -19,7 +19,7 @@ pub enum Overflow {
   Hidden,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   Overflow,
   "visible" => Overflow::Visible,
   "clip" => Overflow::Clip,

@@ -7,7 +7,7 @@ use crate::{
   geometry::{Point, Size},
   style::{
     Angle, Animatable, BasicShape, Color, CssSyntaxKind, CssToken, FromCss, Length, MakeComputed,
-    ParseResult, ShapePosition, ShapeRadius, SizingContext, ToCss, declare_enum_from_css_impl,
+    ParseResult, ShapePosition, ShapeRadius, SizingContext, ToCss, impl_css_enum,
   },
 };
 
@@ -30,7 +30,7 @@ pub enum RaySize {
   Sides,
 }
 
-crate::style::properties::declare_enum_from_css_impl!(
+crate::style::properties::impl_css_enum!(
   RaySize,
   "closest-side" => RaySize::ClosestSide,
   "closest-corner" => RaySize::ClosestCorner,
@@ -125,7 +125,7 @@ pub enum CoordBox {
   ViewBox,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   CoordBox,
   "content-box" => CoordBox::ContentBox,
   "padding-box" => CoordBox::PaddingBox,

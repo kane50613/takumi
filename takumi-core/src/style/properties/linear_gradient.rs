@@ -14,8 +14,8 @@ use super::gradient_utils::{
 };
 use crate::style::{
   Animatable, Color, ColorInterpolationMethod, CssDescriptorKind, CssSyntaxKind, CssToken, FromCss,
-  Length, MakeComputed, ParseResult, SizingContext, ToCss, declare_enum_from_css_impl,
-  properties::ColorInput, tw::TailwindPropertyParser, unexpected_token,
+  Length, MakeComputed, ParseResult, SizingContext, ToCss, impl_css_enum, properties::ColorInput,
+  tw::TailwindPropertyParser, unexpected_token,
 };
 
 /// Represents a linear gradient.
@@ -572,13 +572,13 @@ pub enum VerticalKeyword {
   Bottom,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   HorizontalKeyword,
   "left" => HorizontalKeyword::Left,
   "right" => HorizontalKeyword::Right,
 );
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   VerticalKeyword,
   "top" => VerticalKeyword::Top,
   "bottom" => VerticalKeyword::Bottom,

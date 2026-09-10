@@ -1,9 +1,7 @@
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use typed_builder::TypedBuilder;
 
-use crate::style::{
-  CssToken, FromCss, MakeComputed, ParseResult, declare_enum_from_css_impl, unexpected_token,
-};
+use crate::style::{CssToken, FromCss, MakeComputed, ParseResult, impl_css_enum, unexpected_token};
 
 /// Controls synthetic font behaviors.
 #[derive(Debug, Clone, Copy, PartialEq, Default, TypedBuilder)]
@@ -69,7 +67,7 @@ impl FontSynthesic {
   }
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   FontSynthesic,
   "auto" => FontSynthesic::Auto,
   "none" => FontSynthesic::None,

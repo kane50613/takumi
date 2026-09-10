@@ -1,4 +1,4 @@
-use crate::style::declare_enum_from_css_impl;
+use crate::style::impl_css_enum;
 
 /// Controls how text should be broken at word boundaries.
 ///
@@ -17,7 +17,7 @@ pub enum WordBreak {
   BreakWord,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   WordBreak,
   "normal" => WordBreak::Normal,
   "break-all" => WordBreak::BreakAll,

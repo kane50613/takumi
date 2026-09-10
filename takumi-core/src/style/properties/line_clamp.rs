@@ -3,8 +3,8 @@ use std::fmt;
 use cssparser::{Parser, serialize_string};
 
 use crate::style::{
-  Animatable, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss,
-  declare_enum_from_css_impl, tw::TailwindPropertyParser,
+  Animatable, CssSyntaxKind, CssToken, FromCss, MakeComputed, ParseResult, ToCss, impl_css_enum,
+  tw::TailwindPropertyParser,
 };
 
 /// `block-ellipsis`: `none | auto | <string>`. Inherited.
@@ -65,13 +65,11 @@ pub enum Continue {
   Collapse,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   Continue,
   "normal" => Continue::Normal,
   "collapse" => Continue::Collapse,
 );
-
-impl Animatable for Continue {}
 
 /// Parsed `line-clamp` shorthand: `none | <integer> || <'block-ellipsis'>`.
 ///

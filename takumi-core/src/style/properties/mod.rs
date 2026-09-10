@@ -139,9 +139,7 @@ pub use text_shadow::*;
 pub use text_stroke::*;
 pub use text_wrap::*;
 pub use traits::*;
-pub(crate) use traits::{
-  declare_box_alignment_enum_impl, declare_enum_from_css_impl, impl_from_taffy_enum,
-};
+pub(crate) use traits::{declare_box_alignment_enum_impl, impl_css_enum, impl_from_taffy_enum};
 pub use transform::*;
 pub use vertical_align::*;
 pub use white_space::*;
@@ -278,7 +276,7 @@ pub enum ObjectFit {
   None,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   ObjectFit,
   "fill" => ObjectFit::Fill,
   "contain" => ObjectFit::Contain,
@@ -304,7 +302,7 @@ pub enum BackgroundClip {
   BorderArea,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   BackgroundClip,
   "border-box" => BackgroundClip::BorderBox,
   "padding-box" => BackgroundClip::PaddingBox,
@@ -339,7 +337,7 @@ pub enum BackgroundOrigin {
   ContentBox,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   BackgroundOrigin,
   "border-box" => BackgroundOrigin::BorderBox,
   "padding-box" => BackgroundOrigin::PaddingBox,
@@ -439,7 +437,7 @@ pub enum BoxSizing {
   BorderBox,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   BoxSizing,
   "content-box" => BoxSizing::ContentBox,
   "border-box" => BoxSizing::BorderBox
@@ -468,7 +466,7 @@ pub enum TextAlign {
   End,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   TextAlign,
   "left" => TextAlign::Left,
   "right" => TextAlign::Right,
@@ -493,7 +491,7 @@ pub enum Isolation {
   Auto,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   Isolation,
   "isolate" => Isolation::Isolate,
   "auto" => Isolation::Auto
@@ -513,7 +511,7 @@ pub enum Visibility {
   Hidden,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   Visibility,
   "visible" => Visibility::Visible,
   "hidden" => Visibility::Hidden
@@ -530,13 +528,11 @@ pub enum CaptionSide {
   Bottom,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   CaptionSide,
   "top" => CaptionSide::Top,
   "bottom" => CaptionSide::Bottom
 );
-
-impl Animatable for CaptionSide {}
 
 /// Defines whether adjacent table cell borders collapse onto one grid line.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -549,13 +545,11 @@ pub enum BorderCollapse {
   Collapse,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   BorderCollapse,
   "separate" => BorderCollapse::Separate,
   "collapse" => BorderCollapse::Collapse
 );
-
-impl Animatable for BorderCollapse {}
 
 /// Defines how a table distributes its column widths.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -568,13 +562,11 @@ pub enum TableLayout {
   Fixed,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   TableLayout,
   "auto" => TableLayout::Auto,
   "fixed" => TableLayout::Fixed
 );
-
-impl Animatable for TableLayout {}
 
 /// A `border-spacing` value: one or two non-negative lengths. A declaration
 /// carrying a percentage, `auto`, or a negative length is discarded, so the
@@ -646,7 +638,7 @@ pub enum LineJoin {
   Bevel,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   LineJoin,
   "miter" => LineJoin::Miter,
   "round" => LineJoin::Round,
@@ -673,7 +665,7 @@ pub enum Position {
   Fixed,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   Position,
   "relative" => Position::Relative,
   "absolute" => Position::Absolute,
@@ -725,7 +717,7 @@ impl Direction {
   }
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   Direction,
   "ltr" => Direction::Ltr,
   "rtl" => Direction::Rtl
@@ -750,7 +742,7 @@ pub enum Float {
   InlineEnd,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   Float,
   "none" => Float::None,
   "left" => Float::Left,
@@ -803,7 +795,7 @@ pub enum Clear {
   InlineEnd,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   Clear,
   "none" => Clear::None,
   "left" => Clear::Left,
@@ -856,7 +848,7 @@ pub enum FlexDirection {
   ColumnReverse,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   FlexDirection,
   "row" => FlexDirection::Row,
   "column" => FlexDirection::Column,
@@ -1010,7 +1002,7 @@ pub enum Display {
   TableCaption,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   Display,
   "none" => Display::None,
   "flex" | "-webkit-box" | "-webkit-flex" => Display::Flex,
@@ -1079,7 +1071,7 @@ pub enum BoxOrient {
   Vertical,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   BoxOrient,
   "horizontal" | "inline-axis" => BoxOrient::Horizontal,
   "vertical" | "block-axis" => BoxOrient::Vertical
@@ -1099,7 +1091,7 @@ pub enum BoxPack {
   Justify,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   BoxPack,
   "start" => BoxPack::Start,
   "end" => BoxPack::End,
@@ -1123,7 +1115,7 @@ pub enum BoxAlign {
   Stretch,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   BoxAlign,
   "start" => BoxAlign::Start,
   "end" => BoxAlign::End,
@@ -1274,7 +1266,7 @@ pub enum FlexWrap {
   WrapReverse,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   FlexWrap,
   "nowrap" => FlexWrap::NoWrap,
   "wrap" => FlexWrap::Wrap,
@@ -1298,7 +1290,7 @@ pub enum TextTransform {
   Capitalize,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   TextTransform,
   "none" => TextTransform::None,
   "uppercase" => TextTransform::Uppercase,
@@ -1317,7 +1309,7 @@ pub enum TextDecorationSkipInk {
   None,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   TextDecorationSkipInk,
   "auto" => TextDecorationSkipInk::Auto,
   "none" => TextDecorationSkipInk::None
@@ -1338,7 +1330,7 @@ pub enum WhiteSpaceCollapse {
   PreserveBreaks,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   WhiteSpaceCollapse,
   "preserve" => WhiteSpaceCollapse::Preserve,
   "collapse" => WhiteSpaceCollapse::Collapse,
@@ -1362,7 +1354,7 @@ pub enum ImageScalingAlgorithm {
   Pixelated,
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   ImageScalingAlgorithm,
   "auto" => ImageScalingAlgorithm::Auto,
   "smooth" => ImageScalingAlgorithm::Smooth,
@@ -1402,7 +1394,7 @@ impl BorderStyle {
   }
 }
 
-declare_enum_from_css_impl!(
+impl_css_enum!(
   BorderStyle,
   "none" => BorderStyle::None,
   "hidden" => BorderStyle::Hidden,

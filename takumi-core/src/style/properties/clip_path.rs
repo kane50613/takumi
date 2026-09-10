@@ -161,7 +161,7 @@ impl BasicShape {
   }
 }
 
-crate::style::properties::declare_enum_from_css_impl!(
+crate::style::properties::impl_css_enum!(
   FillRule,
   "nonzero" => FillRule::NonZero,
   "evenodd" => FillRule::EvenOdd,
