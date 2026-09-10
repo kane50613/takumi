@@ -998,7 +998,7 @@ impl LineSetup {
     let resolved_metrics = *line_vertical_metrics.get(line_index)?;
     let line_scale = line_scales.get(line_index).copied().unwrap_or(1.0);
     let (line_scale_origin_x, alignment_correction) =
-      text_fit_line_alignment_correction(line, line_scale, layout.content_box_size().width);
+      text_fit_line_alignment_correction(line, line_scale, layout.unsnapped_content.width);
     Some(Self {
       state: LineScaleState {
         scale: line_scale,
@@ -1205,6 +1205,7 @@ mod tests {
       size: Size::new(100.0, 100.0),
       border: crate::geometry::Rect::default(),
       padding: crate::geometry::Rect::default(),
+      unsnapped_content: Size::new(100.0, 100.0),
     };
     let decorations = run.decorations(&HashMap::new(), layout, 0.0, Affine::IDENTITY);
 
@@ -1260,6 +1261,7 @@ mod tests {
       size: Size::new(1200.0, 630.0),
       border: Rect::default(),
       padding: Rect::default(),
+      unsnapped_content: Size::new(1200.0, 630.0),
     };
     let runs = built.resolve_runs(&render_node.context, layout).unwrap();
 
@@ -1342,6 +1344,7 @@ mod tests {
       size: Size::new(1200.0, 630.0),
       border: crate::geometry::Rect::default(),
       padding: crate::geometry::Rect::default(),
+      unsnapped_content: Size::new(1200.0, 630.0),
     };
     let runs = built.resolve_runs(&render_node.context, layout).unwrap();
 
@@ -1403,6 +1406,7 @@ mod tests {
       size: Size::new(1200.0, 630.0),
       border: crate::geometry::Rect::default(),
       padding: crate::geometry::Rect::default(),
+      unsnapped_content: Size::new(1200.0, 630.0),
     };
     let runs = built.resolve_runs(&render_node.context, layout).unwrap();
     let fragment = runs
