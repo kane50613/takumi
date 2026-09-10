@@ -2228,3 +2228,50 @@ fn test_inline_span_padding_reserves_advance() {
 
   assert_within(line_width(&padded), line_width(&plain) + 16.0, 0.5);
 }
+
+/// A flex item's baseline is the baseline of its first line box.
+/// https://www.w3.org/TR/css-flexbox-1/#flex-baselines
+#[test]
+fn test_measure_flex_baseline_aligns_to_the_first_line() {
+  let flex_row = |paragraph: &str| {
+    measure(
+      Node::from_html(
+        &format!(
+          r#"<div style="display:flex; align-items:baseline; gap:16px; width:400px"><span style="font-size:9px; white-space:nowrap">TAG 4</span><p style="font-size:11px; line-height:1.5; margin:0">{paragraph}</p></div>"#
+        ),
+        FromHtmlOptions::default(),
+      )
+      .expect("parse"),
+      create_measure_viewport(),
+    )
+  };
+  let label_drop = |out: &MeasuredNode| {
+    let label = &out.children[0];
+    let paragraph = &out.children[1];
+
+    (label.transform[5] + label.runs[0].y) - (paragraph.transform[5] + paragraph.runs[0].y)
+  };
+
+  let one_line = flex_row("Ruckfahrt nach Khasab.");
+  let two_lines = flex_row(
+    "Ruckfahrt nach Khasab, dann weiter nach Maskat, der Tag steht vollstandig im nachsten Abschnitt.",
+  );
+  assert_eq!(two_lines.children[1].runs.len(), 2);
+  assert_within(label_drop(&two_lines), label_drop(&one_line), 0.05);
+
+  // The same two fonts share a line box, so their offset is the baseline offset.
+  let inline = measure(
+    Node::from_html(
+      r#"<div style="width:400px"><span style="font-size:9px">TAG 4</span><span style="font-size:11px; line-height:1.5">Khasab</span></div>"#,
+      FromHtmlOptions::default(),
+    )
+    .expect("parse"),
+    create_measure_viewport(),
+  );
+
+  assert_within(
+    label_drop(&two_lines),
+    inline.runs[0].y - inline.runs[1].y,
+    0.05,
+  );
+}

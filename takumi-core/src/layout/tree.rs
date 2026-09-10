@@ -898,7 +898,7 @@ impl<'r> LayoutTree<'r> {
             }
           };
 
-          compute_leaf_layout(
+          let mut output = compute_leaf_layout(
             inputs,
             &node_data.style,
             |val, basis| tree.resolve_calc_value(val, basis),
@@ -922,7 +922,25 @@ impl<'r> LayoutTree<'r> {
                 )
                 .into_taffy()
             },
-          )
+          );
+
+          let lays_out_text = node_data.is_inline_children
+            || matches!(
+              render_node.node.as_ref().and_then(Node::inline_content),
+              Some(InlineContentKind::Text(_))
+            );
+
+          // `compute_leaf_layout` reports no baseline, which leaves flexbox
+          // baseline alignment on its bottom margin edge fallback.
+          if lays_out_text && inputs.run_mode == RunMode::PerformLayout {
+            output.baselines.first = render_node.inline_content_border_box_baseline(
+              Size::from_taffy(inputs.available_space).map(AvailableSpace::from_taffy),
+              Size::from_taffy(output.size),
+              false,
+            );
+          }
+
+          output
         }
       }
     });
@@ -1692,6 +1710,23 @@ impl RenderNode {
     size: Size<f32>,
     use_last_line: bool,
   ) -> Option<f32> {
+    let baseline = self.inline_content_border_box_baseline(available_space, size, use_last_line)?;
+    let margin_top = self
+      .context
+      .style
+      .margin_top
+      .to_px(&self.context.sizing, 0.0);
+
+    Some(margin_top + baseline)
+  }
+
+  /// Baseline of the first or last line box, measured from the border box top.
+  fn inline_content_border_box_baseline(
+    &self,
+    available_space: Size<AvailableSpace>,
+    size: Size<f32>,
+    use_last_line: bool,
+  ) -> Option<f32> {
     if matches!(
       self.node.as_ref().and_then(Node::inline_content),
       Some(InlineContentKind::Box)
@@ -1737,10 +1772,10 @@ impl RenderNode {
       resolved.first()?
     };
     let sizing = &self.context.sizing;
-    let margin_top = self.context.style.margin_top.to_px(sizing, 0.0);
     let border_top = Length::from(self.context.style.border_top_width).to_px(sizing, 0.0);
     let padding_top = self.context.style.padding_top.to_px(sizing, 0.0);
-    Some(margin_top + border_top + padding_top + line.resolved_baseline)
+
+    Some(border_top + padding_top + line.resolved_baseline)
   }
 
   fn layout_first_baseline_offset(
