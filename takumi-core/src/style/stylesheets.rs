@@ -49,6 +49,21 @@ macro_rules! define_inherited_default {
   };
 }
 
+/// What an anonymous box takes from the box it stands in for: inherited
+/// properties, plus the ones flagged `anonymous` that apply to that box's own
+/// content but are read from the anonymous box.
+macro_rules! define_anonymous_default {
+  ($parent:expr, $default:expr, inherit $inherit:tt $(, anonymous $anonymous:tt)?) => {
+    $parent.to_owned()
+  };
+  ($parent:expr, $default:expr, anonymous $anonymous:tt) => {
+    $parent.to_owned()
+  };
+  ($parent:expr, $default:expr) => {
+    $default
+  };
+}
+
 type ParsedDeclarations = SmallVec<[StyleDeclaration; 8]>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -257,6 +272,7 @@ macro_rules! define_style {
       $(
         $longhand:ident: $longhand_ty:ty
           $(where inherit = $longhand_inherit:literal)?
+          $(where anonymous = $longhand_anonymous:literal)?
           $(= $longhand_default:expr)?,
       )*
     }
@@ -875,6 +891,16 @@ macro_rules! define_style {
           }
         }
 
+        /// Builds the style of an anonymous box generated inside `parent`.
+        pub(crate) fn for_anonymous(parent: &Self) -> Self {
+          Self {
+            custom_properties: inherited_custom_properties(&parent.custom_properties),
+            registered_custom_properties: parent.registered_custom_properties.clone(),
+            lang: parent.lang,
+            $($longhand: define_anonymous_default!(parent.$longhand, define_style!(@default $($longhand_default)?) $(, inherit $longhand_inherit)? $(, anonymous $longhand_anonymous)?),)*
+          }
+        }
+
         /// Resolves relative units against the sizing context.
         pub(crate) fn make_computed_values(&mut self, sizing: &SizingContext) {
           $(self.$longhand.make_computed(sizing);)*
@@ -1204,14 +1230,14 @@ define_style! {
     row_gap: Gap,
     flex_grow: Option<FlexGrow>,
     flex_shrink: Option<FlexGrow>,
-    border_top_left_radius: SpacePair<Length> = SpacePair::from_single(Length::zero()),
-    border_top_right_radius: SpacePair<Length> = SpacePair::from_single(Length::zero()),
-    border_bottom_right_radius: SpacePair<Length> = SpacePair::from_single(Length::zero()),
-    border_bottom_left_radius: SpacePair<Length> = SpacePair::from_single(Length::zero()),
-    corner_top_left_shape: Superellipse,
-    corner_top_right_shape: Superellipse,
-    corner_bottom_right_shape: Superellipse,
-    corner_bottom_left_shape: Superellipse,
+    border_top_left_radius: SpacePair<Length> where anonymous = true = SpacePair::from_single(Length::zero()),
+    border_top_right_radius: SpacePair<Length> where anonymous = true = SpacePair::from_single(Length::zero()),
+    border_bottom_right_radius: SpacePair<Length> where anonymous = true = SpacePair::from_single(Length::zero()),
+    border_bottom_left_radius: SpacePair<Length> where anonymous = true = SpacePair::from_single(Length::zero()),
+    corner_top_left_shape: Superellipse where anonymous = true,
+    corner_top_right_shape: Superellipse where anonymous = true,
+    corner_bottom_right_shape: Superellipse where anonymous = true,
+    corner_bottom_left_shape: Superellipse where anonymous = true,
     border_top_width: LineWidth,
     border_right_width: LineWidth,
     border_bottom_width: LineWidth,
@@ -1228,17 +1254,17 @@ define_style! {
     outline_style: BorderStyle,
     outline_color: ColorInput,
     outline_offset: Length,
-    object_fit: ObjectFit,
+    object_fit: ObjectFit where anonymous = true,
     overflow_x: Overflow,
     overflow_y: Overflow,
-    object_position: PositionValue = PositionValue::center(),
-    background_image: Option<BackgroundImages>,
-    background_position: PositionValues,
-    background_size: BackgroundSizes,
-    background_repeat: BackgroundRepeats,
-    background_blend_mode: BlendModes,
-    background_color: ColorInput = ColorInput::transparent(),
-    background_clip: BackgroundClip,
+    object_position: PositionValue where anonymous = true = PositionValue::center(),
+    background_image: Option<BackgroundImages> where anonymous = true,
+    background_position: PositionValues where anonymous = true,
+    background_size: BackgroundSizes where anonymous = true,
+    background_repeat: BackgroundRepeats where anonymous = true,
+    background_blend_mode: BlendModes where anonymous = true,
+    background_color: ColorInput where anonymous = true = ColorInput::transparent(),
+    background_clip: BackgroundClip where anonymous = true,
     background_origin: BackgroundOrigin,
     box_shadow: Option<BoxShadows>,
     grid_auto_columns: Option<GridTrackSizes>,
@@ -1251,7 +1277,7 @@ define_style! {
     grid_template_columns: Option<GridTemplateComponents>,
     grid_template_rows: Option<GridTemplateComponents>,
     grid_template_areas: Option<GridTemplateAreas>,
-    text_overflow: TextOverflow,
+    text_overflow: TextOverflow where anonymous = true,
     text_fit: TextFit where inherit = true,
     text_transform: TextTransform where inherit = true,
     font_style: FontStyle where inherit = true,
@@ -1273,25 +1299,25 @@ define_style! {
     font_kerning: FontKerning where inherit = true,
     font_synthesis_weight: FontSynthesic where inherit = true,
     font_synthesis_style: FontSynthesic where inherit = true,
-    max_lines: Option<u32>,
+    max_lines: Option<u32> where anonymous = true,
     block_ellipsis: BlockEllipsis where inherit = true,
-    r#continue: Continue,
+    r#continue: Continue where anonymous = true,
     text_align: TextAlign where inherit = true,
     webkit_text_stroke_width: Option<Length> where inherit = true,
     webkit_text_stroke_color: Option<ColorInput> where inherit = true,
     webkit_text_fill_color: Option<ColorInput> where inherit = true,
     stroke_linejoin: LineJoin where inherit = true,
     text_shadow: Option<TextShadows> where inherit = true,
-    text_decoration_line: Option<TextDecorationLines>,
-    text_decoration_style: TextDecorationStyle,
+    text_decoration_line: Option<TextDecorationLines> where anonymous = true,
+    text_decoration_style: TextDecorationStyle where anonymous = true,
     break_before: BreakBetween,
     break_after: BreakBetween,
     break_inside: BreakInside,
     box_decoration_break: BoxDecorationBreak,
     widows: MinLines where inherit = true,
     orphans: MinLines where inherit = true,
-    text_decoration_color: ColorInput,
-    text_decoration_thickness: TextDecorationThickness,
+    text_decoration_color: ColorInput where anonymous = true,
+    text_decoration_thickness: TextDecorationThickness where anonymous = true,
     text_underline_offset: TextUnderlineOffset where inherit = true,
     text_underline_position: TextUnderlinePosition where inherit = true,
     text_decoration_skip_ink: TextDecorationSkipInk where inherit = true,
