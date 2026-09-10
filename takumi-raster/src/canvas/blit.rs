@@ -36,6 +36,34 @@ pub(crate) struct OverlayBounds {
   pub y_max: i32,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct PlacementOverlap {
+  pub(crate) placement: Placement,
+  pub(crate) lhs_offset: Point<u32>,
+  pub(crate) rhs_offset: Point<u32>,
+}
+
+pub(crate) fn placement_overlap(lhs: Placement, rhs: Placement) -> Option<PlacementOverlap> {
+  let placement = Placement::from_bounds(
+    lhs.left.max(rhs.left),
+    lhs.top.max(rhs.top),
+    lhs.right().min(rhs.right()),
+    lhs.bottom().min(rhs.bottom()),
+  )?;
+
+  Some(PlacementOverlap {
+    lhs_offset: Point::new(
+      (placement.left - lhs.left) as u32,
+      (placement.top - lhs.top) as u32,
+    ),
+    rhs_offset: Point::new(
+      (placement.left - rhs.left) as u32,
+      (placement.top - rhs.top) as u32,
+    ),
+    placement,
+  })
+}
+
 #[inline(always)]
 pub(crate) fn compute_overlay_bounds_for_canvas(
   canvas_width: u32,
@@ -50,27 +78,21 @@ pub(crate) fn compute_overlay_bounds_for_canvas(
 
   let offset_x = offset.x.trunc() as i32;
   let offset_y = offset.y.trunc() as i32;
-  let bottom_width = canvas_width as i32;
-  let bottom_height = canvas_height as i32;
-  let y_min = offset_y.max(0);
-  let y_max = (offset_y + height as i32).min(bottom_height);
-  if y_min >= y_max {
-    return None;
+  let clipped = Placement {
+    left: offset_x,
+    top: offset_y,
+    width,
+    height,
   }
-
-  let x_min = offset_x.max(0);
-  let x_max = (offset_x + width as i32).min(bottom_width);
-  if x_min >= x_max {
-    return None;
-  }
+  .clamp_to(Size::new(canvas_width, canvas_height))?;
 
   Some(OverlayBounds {
     offset_x,
     offset_y,
-    x_min,
-    x_max,
-    y_min,
-    y_max,
+    x_min: clipped.left,
+    x_max: clipped.right(),
+    y_min: clipped.top,
+    y_max: clipped.bottom(),
   })
 }
 
@@ -591,6 +613,54 @@ mod tests {
     BorderProperties, Canvas, PaintSource, Result, pixmap_from_buffer,
     resources::image_buffer::ImageBuffer, style::ImageScalingAlgorithm,
   };
+
+  #[test]
+  fn placement_overlap_tracks_both_source_offsets() {
+    let overlap = placement_overlap(
+      Placement {
+        left: 0,
+        top: 0,
+        width: 4,
+        height: 3,
+      },
+      Placement {
+        left: -1,
+        top: 1,
+        width: 4,
+        height: 3,
+      },
+    )
+    .unwrap();
+
+    assert_eq!(
+      overlap.placement,
+      Placement {
+        left: 0,
+        top: 1,
+        width: 3,
+        height: 2,
+      }
+    );
+    assert_eq!(overlap.lhs_offset, Point::new(0, 1));
+    assert_eq!(overlap.rhs_offset, Point::new(1, 0));
+    assert!(
+      placement_overlap(
+        Placement {
+          left: 0,
+          top: 0,
+          width: 1,
+          height: 1,
+        },
+        Placement {
+          left: 1,
+          top: 0,
+          width: 1,
+          height: 1,
+        },
+      )
+      .is_none()
+    );
+  }
 
   #[test]
   fn test_subcanvas_overlay_sampled_image_matches_direct_render() -> Result<()> {

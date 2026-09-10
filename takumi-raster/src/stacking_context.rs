@@ -18,7 +18,7 @@ use crate::{
     },
     tree::{LayoutResults, RenderNode},
   },
-  prepare_node_mask, resolve_outline,
+  placement_overlap, prepare_node_mask, resolve_outline,
   style::{Affine, BackgroundImage, BlendMode, Filter, SizingContext},
 };
 
@@ -48,18 +48,32 @@ pub(crate) fn blend_pixmap_software(
   if opacity <= 0.0 {
     return;
   }
+  if offset.x >= dst.width() as i32 || offset.y >= dst.height() as i32 {
+    return;
+  }
 
-  let Some(OverlapRegion {
-    dst_left,
-    dst_top,
-    src_left,
-    src_top,
-    width,
-    height,
-  }) = overlapping_region(dst, src, offset)
-  else {
+  let Some(overlap) = placement_overlap(
+    Placement {
+      left: 0,
+      top: 0,
+      width: dst.width(),
+      height: dst.height(),
+    },
+    Placement {
+      left: offset.x,
+      top: offset.y,
+      width: src.width(),
+      height: src.height(),
+    },
+  ) else {
     return;
   };
+  let dst_left = overlap.lhs_offset.x as usize;
+  let dst_top = overlap.lhs_offset.y as usize;
+  let src_left = overlap.rhs_offset.x as usize;
+  let src_top = overlap.rhs_offset.y as usize;
+  let width = overlap.placement.width as usize;
+  let height = overlap.placement.height as usize;
 
   let dst_width = dst.width() as usize;
   let src_width = src.width() as usize;
@@ -86,40 +100,6 @@ pub(crate) fn blend_pixmap_software(
   }
 }
 
-fn overlapping_region(dst: &Pixmap, src: &Pixmap, offset: Point<i32>) -> Option<OverlapRegion> {
-  let dst_left = offset.x.max(0) as usize;
-  let dst_top = offset.y.max(0) as usize;
-  let src_left = (-offset.x).max(0) as usize;
-  let src_top = (-offset.y).max(0) as usize;
-  let width = (dst.width() as i32 - offset.x.max(0))
-    .min(src.width() as i32 - src_left as i32)
-    .max(0) as usize;
-  let height = (dst.height() as i32 - offset.y.max(0))
-    .min(src.height() as i32 - src_top as i32)
-    .max(0) as usize;
-
-  if width == 0 || height == 0 {
-    return None;
-  }
-
-  Some(OverlapRegion {
-    dst_left,
-    dst_top,
-    src_left,
-    src_top,
-    width,
-    height,
-  })
-}
-
-struct OverlapRegion {
-  dst_left: usize,
-  dst_top: usize,
-  src_left: usize,
-  src_top: usize,
-  width: usize,
-  height: usize,
-}
 enum DeferredNodeRender {
   Deferred {
     path: Vec<usize>,
@@ -740,6 +720,9 @@ fn draw_render_node_inline(
 mod tests {
   use std::error::Error;
 
+  use tiny_skia::Pixmap;
+
+  use super::{BlendMode, Point, blend_pixmap_software};
   use crate::{Fonts, RenderOptions, layout::node::Node, render, viewport::Viewport};
 
   type TestResult = Result<(), Box<dyn Error>>;
@@ -790,5 +773,23 @@ mod tests {
       "overflowing child of zero-sized opacity parent must still paint, got {pixel:?}"
     );
     Ok(())
+  }
+
+  #[test]
+  fn blending_outside_the_destination_leaves_pixels_unchanged() {
+    let mut dst = Pixmap::new(1, 1).unwrap();
+    dst.data_mut().copy_from_slice(&[1, 2, 3, 4]);
+    let mut src = Pixmap::new(1, 1).unwrap();
+    src.data_mut().copy_from_slice(&[5, 6, 7, 8]);
+
+    blend_pixmap_software(
+      &mut dst,
+      &src,
+      BlendMode::Normal,
+      Point::new(i32::MAX, i32::MAX),
+      1.0,
+    );
+
+    assert_eq!(dst.data(), &[1, 2, 3, 4]);
   }
 }
