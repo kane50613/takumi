@@ -63,6 +63,12 @@ describe("fromHtml", () => {
     expect((node as TextNode).text).toBe("&notarealentity; &");
   });
 
+  test("decodes references in image src", () => {
+    const { node } = fromHtml('<img src="/image?href=photo.png&amp;w=200&amp;h=200">');
+
+    expect((node as { src: string }).src).toBe("/image?href=photo.png&w=200&h=200");
+  });
+
   test("does not resolve Object.prototype members as entities", () => {
     const { node } = fromHtml("<div>&constructor; &hasOwnProperty;</div>");
 

@@ -125,7 +125,7 @@ function buildStaticNodes(
 
     nodes.push(
       image({
-        src,
+        src: decodeHtmlEntities(src),
         width: parseDimension(element.attributes?.width),
         height: parseDimension(element.attributes?.height),
         ...metadata,
