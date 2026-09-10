@@ -296,7 +296,9 @@ impl TableGrid {
   /// space evenly, so column widths stop following the content. CSS 2.2 §17.5.2
   /// only reaches that algorithm when the table's width is not `auto`. A
   /// spanning cell splits its declared width evenly across the tracks it
-  /// covers; a percentage width on one is ignored.
+  /// covers; a percentage width on one is ignored. Like Blink's
+  /// `InlineSizesFromStyle`, only a fixed or percentage width constrains a
+  /// column, so a sizing keyword leaves it `auto`.
   ///
   /// Columns that stay `auto` after that pass become `fr` tracks weighted by
   /// max-content, so free space follows content the way Blink's `kAboveMax`
@@ -307,9 +309,11 @@ impl TableGrid {
     let measured = if fixed { 1 } else { rows.len() };
 
     for (cell, (column, colspan)) in self.placed_cells(rows, measured) {
-      let width = cell.context.style.width;
+      let Some(width) = cell.context.style.width.as_length() else {
+        continue;
+      };
 
-      if width.is_auto() {
+      if width == Length::Auto {
         continue;
       }
 
@@ -319,11 +323,8 @@ impl TableGrid {
         if tracks.get(*column).is_some_and(free) {
           tracks[*column] = width.to_css_string();
         }
-      } else if fixed
-        && let Some(length) = width.as_length()
-        && !matches!(length, Length::Percentage(_))
-      {
-        let share = length.to_px(&cell.context.sizing, 0.0) / f32::from(*colspan);
+      } else if fixed && !matches!(width, Length::Percentage(_)) {
+        let share = width.to_px(&cell.context.sizing, 0.0) / f32::from(*colspan);
 
         for track in tracks
           .iter_mut()

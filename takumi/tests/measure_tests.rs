@@ -2359,6 +2359,64 @@ fn test_table_auto_columns_share_free_width_by_max_content() {
   );
 }
 
+/// Blink's `InlineSizesFromStyle` reads a cell's `width` only when it is fixed
+/// or a percentage, so a sizing keyword leaves the column as if it were `auto`.
+#[test]
+fn test_table_keyword_cell_width_leaves_column_auto() {
+  let body_widths = |width: &str| {
+    let node = Node::from_html(
+      &format!(
+        r#"<div style="width: 352px"><table style="width: 100%; font-size: 12px">
+      <tr><th>Name</th><th>Description</th><th{width}>Qty</th></tr>
+      <tr><td>Item 30</td><td>Description of item 30</td><td>90</td></tr>
+    </table></div>"#
+      ),
+      FromHtmlOptions::default(),
+    )
+    .expect("parse");
+
+    measure(node, create_measure_viewport()).children[0].children[3..]
+      .iter()
+      .map(|cell| cell.width)
+      .collect::<Vec<_>>()
+  };
+
+  assert_eq!(
+    body_widths(r#" style="width: fit-content""#),
+    body_widths("")
+  );
+}
+
+/// A keyword width on a fixed-layout cell must not discard the whole track list.
+#[test]
+fn test_table_fixed_layout_keeps_tracks_with_keyword_cell_width() {
+  let table = |width: &str| {
+    let node = Node::from_html(
+      &format!(
+        r#"<div style="width: 352px"><table style="width: 100%; table-layout: fixed; font-size: 12px">
+      <tr><th{width}>Name</th><th style="width: 120px">Description</th></tr>
+      <tr><td>Item 30</td><td>Description of item 30</td></tr>
+    </table></div>"#
+      ),
+      FromHtmlOptions::default(),
+    )
+    .expect("parse");
+    let table = &measure(node, create_measure_viewport()).children[0];
+
+    (
+      table.width,
+      table.children[2..]
+        .iter()
+        .map(|cell| cell.width)
+        .collect::<Vec<_>>(),
+    )
+  };
+  let (width, body_widths) = table(r#" style="width: max-content""#);
+
+  assert_within(width, 352.0, 0.5);
+  assert_eq!(body_widths, table("").1);
+}
+
 /// Horizontal padding on an inline span reserves advance on the line, like
 /// Blink adds the span's edges to the line's inline size.
 #[test]
