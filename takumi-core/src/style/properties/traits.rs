@@ -956,7 +956,7 @@ macro_rules! declare_box_alignment_enum_impl {
       ];
 
       fn from_css(input: &mut cssparser::Parser<'i, '_>) -> crate::style::ParseResult<'i, Self> {
-        let mut safe = false;
+        let mut overflow_position = None;
 
         loop {
           let location = input.current_source_location();
@@ -967,10 +967,13 @@ macro_rules! declare_box_alignment_enum_impl {
           };
 
           cssparser::match_ignore_ascii_case! {&ident,
-            "safe" => safe = true,
-            "unsafe" => safe = false,
-            $($safe_css => return Ok(if safe { Self::$safe_variant } else { Self::$base_variant }),)*
-            $($plain_css => return if safe {
+            "safe" | "unsafe" => {
+              if overflow_position.replace(ident.eq_ignore_ascii_case("safe")).is_some() {
+                return Err($crate::style::unexpected_token!(location, token));
+              }
+            },
+            $($safe_css => return Ok(if overflow_position.unwrap_or(false) { Self::$safe_variant } else { Self::$base_variant }),)*
+            $($plain_css => return if overflow_position.unwrap_or(false) {
               Err($crate::style::unexpected_token!(location, token))
             } else {
               Ok(Self::$plain_variant)

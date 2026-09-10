@@ -136,13 +136,20 @@ mod tests {
   fn alignment_overflow_prefixes_preserve_their_meaning() {
     let safe = AlignItems::from_css_str("SAFE CENTER").unwrap();
     let unsafe_value = AlignItems::from_css_str("unsafe center").unwrap();
-    let repeated_prefixes = AlignItems::from_css_str("safe unsafe center").unwrap();
+    let repeated_prefixes = [
+      "safe safe center",
+      "unsafe unsafe center",
+      "safe unsafe center",
+      "UNSAFE safe center",
+    ];
 
     assert_eq!(safe, AlignItems::SafeCenter);
     assert_eq!(safe.to_css_string(), "safe center");
     assert_eq!(unsafe_value, AlignItems::Center);
     assert_eq!(unsafe_value.to_css_string(), "center");
-    assert_eq!(repeated_prefixes, AlignItems::Center);
+    for css in repeated_prefixes {
+      assert!(AlignItems::from_css_str(css).is_err(), "{css}");
+    }
     assert!(AlignItems::from_css_str("safe stretch").is_err());
   }
 }
