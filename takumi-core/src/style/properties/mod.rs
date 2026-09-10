@@ -19,6 +19,7 @@ mod breaks;
 mod clip_path;
 mod color;
 pub(crate) mod conic_gradient;
+mod contain;
 mod content;
 mod corner_shape;
 pub(crate) mod filter;
@@ -86,6 +87,7 @@ pub use breaks::*;
 pub use clip_path::*;
 pub use color::*;
 pub use conic_gradient::ConicGradient;
+pub use contain::*;
 pub use content::*;
 pub use corner_shape::*;
 use cssparser::{Parser, match_ignore_ascii_case};
@@ -984,6 +986,8 @@ pub enum Display {
   Block,
   /// The element generates an inline-level block container
   InlineBlock,
+  /// The element creates a block container that establishes a new block formatting context
+  FlowRoot,
   /// The element creates a block container that also generates a list marker
   ListItem,
   /// The element generates a table wrapper box
@@ -1012,6 +1016,7 @@ impl_css_enum!(
   "inline" => Display::Inline,
   "block" => Display::Block,
   "inline-block" => Display::InlineBlock,
+  "flow-root" => Display::FlowRoot,
   "list-item" => Display::ListItem,
   "table" => Display::Table,
   "table-header-group" => Display::TableHeaderGroup,
@@ -1164,6 +1169,7 @@ impl Display {
       Display::Block | Display::InlineBlock | Display::Inline | Display::ListItem => {
         taffy::Display::Block
       }
+      Display::FlowRoot => taffy::Display::FlowRoot,
       // Lowering replaces every table box that sits in a table, so what is left
       // here is a table part outside one. Blink wraps those in anonymous table
       // boxes; block is the approximation.
@@ -1197,6 +1203,10 @@ pub enum AlignItems {
   FlexStart,
   /// Items are aligned to the flex container's cross-end side
   FlexEnd,
+  /// Items are aligned to the start of their own writing mode's cross axis
+  SelfStart,
+  /// Items are aligned to the end of their own writing mode's cross axis
+  SelfEnd,
   /// Items are centered in the cross axis
   Center,
   /// Items are aligned so that their baselines align
@@ -1211,6 +1221,10 @@ pub enum AlignItems {
   SafeFlexStart,
   /// `safe flex-end`: like `FlexEnd`, falling back to start-edge alignment on overflow.
   SafeFlexEnd,
+  /// `safe self-start`: like `SelfStart`, falling back to start-edge alignment on overflow.
+  SafeSelfStart,
+  /// `safe self-end`: like `SelfEnd`, falling back to start-edge alignment on overflow.
+  SafeSelfEnd,
   /// `safe center`: like `Center`, falling back to start-edge alignment on overflow.
   SafeCenter,
 }
@@ -1222,6 +1236,8 @@ declare_box_alignment_enum_impl!(
     "end" => End / SafeEnd,
     "flex-start" => FlexStart / SafeFlexStart,
     "flex-end" => FlexEnd / SafeFlexEnd,
+    "self-start" => SelfStart / SafeSelfStart,
+    "self-end" => SelfEnd / SafeSelfEnd,
     "center" => Center / SafeCenter,
   },
   plain {
@@ -1246,34 +1262,14 @@ impl AlignItems {
       AlignItems::SafeEnd => Some(taffy::AlignItems::SAFE_END),
       AlignItems::SafeFlexStart => Some(taffy::AlignItems::SAFE_FLEX_START),
       AlignItems::SafeFlexEnd => Some(taffy::AlignItems::SAFE_FLEX_END),
+      AlignItems::SelfStart => Some(taffy::AlignItems::SELF_START),
+      AlignItems::SelfEnd => Some(taffy::AlignItems::SELF_END),
+      AlignItems::SafeSelfStart => Some(taffy::AlignItems::SAFE_SELF_START),
+      AlignItems::SafeSelfEnd => Some(taffy::AlignItems::SAFE_SELF_END),
       AlignItems::SafeCenter => Some(taffy::AlignItems::SAFE_CENTER),
     }
   }
 }
-
-/// Defines how flex items should wrap.
-///
-/// This enum determines how flex items should wrap within the flex container.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-#[non_exhaustive]
-pub enum FlexWrap {
-  /// Flex items will all be displayed in a single line, shrinking as needed
-  #[default]
-  NoWrap,
-  /// Flex items will wrap onto multiple lines, with new lines stacking in the flex direction
-  Wrap,
-  /// Flex items will wrap onto multiple lines, with new lines stacking in the reverse flex direction
-  WrapReverse,
-}
-
-impl_css_enum!(
-  FlexWrap,
-  "nowrap" => FlexWrap::NoWrap,
-  "wrap" => FlexWrap::Wrap,
-  "wrap-reverse" => FlexWrap::WrapReverse
-);
-
-impl_from_taffy_enum!(FlexWrap, into_taffy -> taffy::FlexWrap, NoWrap, Wrap, WrapReverse);
 
 /// Controls text case transformation when rendering.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -1424,6 +1420,16 @@ mod display_tests {
       Display::from_css_str("-webkit-inline-flex"),
       Ok(Display::InlineFlex)
     );
+  }
+
+  #[test]
+  fn flow_root_is_a_block_level_box() {
+    let flow_root = Display::from_css_str("flow-root").unwrap();
+
+    assert_eq!(flow_root, Display::FlowRoot);
+    assert_eq!(flow_root.into_taffy(), taffy::Display::FlowRoot);
+    assert_eq!(flow_root.as_blockified(), Display::FlowRoot);
+    assert!(!flow_root.is_inline_level());
   }
 }
 

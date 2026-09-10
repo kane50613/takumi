@@ -306,7 +306,7 @@ impl ComputedStyle {
       Self::grid_template(&self.grid_template_rows, sizing);
 
     taffy::Style {
-      contain: taffy::Contain::NONE,
+      contain: self.contain.into_taffy(),
       float: self.float.resolve(self.direction),
       clear: self.clear.resolve(self.direction),
       direction: self.direction.into_taffy(),
@@ -367,6 +367,7 @@ impl ComputedStyle {
         .resolve_to_dimension(sizing),
       flex_shrink: self.flex_shrink.map(|shrink| shrink.0).unwrap_or(1.0),
       flex_wrap: self.flex_wrap.into_taffy(),
+      flex_line_count: self.flex_line_count.get(),
       min_size: Size {
         width: self.min_width,
         height: self.min_height,

@@ -396,6 +396,95 @@ fn test_measure_content_box_wraps_inside_its_padding() {
   assert_close(content_box.height, border_box.height);
 }
 
+/// `display: flow-root` makes the box a block formatting context root, so a
+/// child's top margin no longer collapses out of it and a float stays inside.
+#[test]
+fn test_measure_flow_root_establishes_a_block_formatting_context() {
+  let margin_container = |display: &str| {
+    Node::from_html(
+      &format!(
+        r#"<div style="width:200px"><div style="display:{display}; width:200px"><div style="margin-top:40px; height:20px"></div></div></div>"#
+      ),
+      FromHtmlOptions::default(),
+    )
+    .expect("parse")
+  };
+  let float_container = |display: &str| {
+    Node::from_html(
+      &format!(
+        r#"<div style="width:200px"><div style="display:{display}; width:200px"><div style="float:left; width:50px; height:30px"></div></div></div>"#
+      ),
+      FromHtmlOptions::default(),
+    )
+    .expect("parse")
+  };
+
+  let block_margin = measure(margin_container("block"), create_measure_viewport());
+  let flow_root_margin = measure(margin_container("flow-root"), create_measure_viewport());
+  let block_float = measure(float_container("block"), create_measure_viewport());
+  let flow_root_float = measure(float_container("flow-root"), create_measure_viewport());
+
+  assert_close(block_margin.children[0].height, 20.0);
+  assert_close(flow_root_margin.children[0].height, 60.0);
+  assert_close(block_float.children[0].height, 0.0);
+  assert_close(flow_root_float.children[0].height, 30.0);
+}
+
+/// `contain: layout` and `contain: paint` make the box an independent
+/// formatting context, so a float inside it stops escaping.
+#[test]
+fn test_measure_contain_establishes_an_independent_formatting_context() {
+  let container = |contain: &str| {
+    Node::from_html(
+      &format!(
+        r#"<div style="width:200px"><div style="display:block; contain:{contain}; width:200px"><div style="float:left; width:50px; height:30px"></div></div></div>"#
+      ),
+      FromHtmlOptions::default(),
+    )
+    .expect("parse")
+  };
+
+  let none = measure(container("none"), create_measure_viewport());
+  let layout = measure(container("layout"), create_measure_viewport());
+  let paint = measure(container("paint"), create_measure_viewport());
+  let size_only = measure(container("size"), create_measure_viewport());
+
+  assert_close(none.children[0].height, 0.0);
+  assert_close(layout.children[0].height, 30.0);
+  assert_close(paint.children[0].height, 30.0);
+  // Size containment is parsed but does not reach layout.
+  assert_close(size_only.children[0].height, 0.0);
+}
+
+/// `balance` spreads the items so the largest line is as small as possible, and
+/// `flex-line-count` asks for a minimum number of lines.
+#[test]
+fn test_measure_flex_wrap_balance_evens_out_the_lines() {
+  let container = |wrap: &str| {
+    Node::from_html(
+      &format!(
+        r#"<div style="display:flex; flex-wrap:{wrap}; width:300px; align-items:flex-start"><div style="width:84px; height:20px"></div><div style="width:84px; height:20px"></div><div style="width:84px; height:20px"></div><div style="width:84px; height:20px"></div></div>"#
+      ),
+      FromHtmlOptions::default(),
+    )
+    .expect("parse")
+  };
+
+  let wrap = measure(container("wrap"), create_measure_viewport());
+  let balance = measure(container("wrap balance"), create_measure_viewport());
+  let three_lines = measure(
+    container("wrap balance; flex-line-count:3"),
+    create_measure_viewport(),
+  );
+
+  assert_close(wrap.height, 40.0);
+  assert_close(balance.height, 40.0);
+  assert_close(three_lines.height, 60.0);
+  // Balancing four equal items over two lines puts two on each.
+  assert_close(wrap.children[3].transform[5], 20.0);
+  assert_close(balance.children[2].transform[5], 20.0);
+}
+
 /// A text node carries its own inline content but has no children, so the
 /// measure traversal used to walk past it without emitting a run.
 #[test]
