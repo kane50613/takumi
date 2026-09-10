@@ -1,5 +1,7 @@
 //! Cutting the content column into pages without splitting unsplittable atoms.
 
+use std::mem::take;
+
 use takumi_core::{
   geometry::transformed_rect_extents,
   layout::node::Node,
@@ -418,22 +420,74 @@ impl Paginated {
   }
 }
 
+/// The content boxes of the column, indexed for asking what a page range
+/// holds.
+struct Content {
+  /// Boxes sorted by top.
+  boxes: Vec<Atom>,
+  /// Running maximum of `boxes[..=i].1`, so a range query needs one bisection.
+  prefix_max_bottom: Vec<f32>,
+}
+
+impl Content {
+  fn new(mut boxes: Vec<Atom>) -> Self {
+    boxes.sort_by(|a, b| a.0.total_cmp(&b.0));
+
+    let mut running = f32::MIN;
+    let prefix_max_bottom = boxes
+      .iter()
+      .map(|(_, bottom)| {
+        running = running.max(*bottom);
+        running
+      })
+      .collect();
+
+    Self {
+      boxes,
+      prefix_max_bottom,
+    }
+  }
+
+  /// Where the last content box ends; a column of nothing but spacing ends
+  /// where it starts.
+  fn bottom(&self) -> f32 {
+    self.prefix_max_bottom.last().copied().unwrap_or(0.0)
+  }
+
+  /// Whether any content box overlaps `top..bottom` by more than a hairline.
+  fn overlaps(&self, top: f32, bottom: f32) -> bool {
+    let before = self
+      .boxes
+      .partition_point(|(box_top, _)| *box_top < bottom - 0.5);
+
+    before > 0 && self.prefix_max_bottom[before - 1] > top + 0.5
+  }
+}
+
 /// Page start offsets for slicing `total` height into windows of `window`
 /// height. Each cut moves up to the top of any atom straddling it, repeated
 /// until no atom straddles (a raised cut can land inside another atom). An
 /// atom taller than the window can never fit a page, so it does not push cuts
 /// at all — matching browsers, where `break-inside: avoid` is dropped for
 /// boxes taller than the fragmentainer.
+///
+/// A forced cut opens no empty page. One with no content above it on its page
+/// is dropped, as css-break-3 §forced-breaks asks: the node already opens the
+/// page, and only spacing consumed at the boundary sits before it. The column
+/// ends at its last content box, so trailing spacing never opens a page either.
 impl Atoms {
   pub(crate) fn page_starts(mut self, headers: &[HeaderBand], total: f32, window: f32) -> Vec<f32> {
     let Self {
       extents,
       forced,
       paragraphs,
+      content,
     } = &mut self;
+    let content = Content::new(take(content));
+    let total = total.min(content.bottom());
 
     extents.sort_by(|a, b| a.0.total_cmp(&b.0));
-    forced.retain(|cut| *cut > 1.0 && *cut < total - 1.0);
+    forced.retain(|cut| *cut < total - 1.0);
     forced.sort_by(f32::total_cmp);
 
     // The prefix max of bottoms lets the back-scan stop early even when a
@@ -455,7 +509,10 @@ impl Atoms {
     loop {
       let limit = y0 + window - HeaderBand::replays(headers, y0, window).0;
 
-      if let Some(cut) = forced.iter().copied().find(|cut| *cut > y0 + 1.0)
+      if let Some(cut) = forced
+        .iter()
+        .copied()
+        .find(|cut| *cut > y0 + 1.0 && content.overlaps(y0, *cut))
         && cut <= limit
       {
         starts.push(cut);

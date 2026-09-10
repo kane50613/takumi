@@ -9,7 +9,9 @@ use crate::{
     inline::DecorationRect,
   },
   shadow::SizedShadow,
-  style::{Affine, BackgroundClip, BoxShadow, Color, FillRule, Sides, TextDecorationLines},
+  style::{
+    Affine, BackgroundClip, BackgroundImage, BoxShadow, Color, FillRule, Sides, TextDecorationLines,
+  },
 };
 
 /// A closed shape to fill, in the coordinate space of the box that owns it.
@@ -182,6 +184,25 @@ impl<'c> BoxPainter<'c> {
   /// The outline the box paints, or `None` when it paints none.
   pub fn outline(&self) -> Option<OutlineGeometry> {
     outline_paint(self.context, self.layout.size)
+  }
+
+  /// Whether the box puts any ink of its own on the page: a background, a border, a shadow or an
+  /// outline.
+  pub fn paints_decorations(&self) -> bool {
+    let style = &self.context.style;
+    let current_color = self.context.current_color;
+    let background = style.background_color.resolve(current_color).0[3] != 0
+      || style
+        .background_image
+        .as_deref()
+        .is_some_and(|images| images.iter().any(BackgroundImage::paints));
+    let shadows = self.shadows();
+
+    (background && self.background_clip_shape().is_some())
+      || self.border.has_visible_sides()
+      || !shadows.inset.is_empty()
+      || !shadows.outer.is_empty()
+      || (style.outline_color.resolve(current_color).0[3] != 0 && self.outline().is_some())
   }
 }
 

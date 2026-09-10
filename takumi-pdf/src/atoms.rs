@@ -10,6 +10,7 @@ use takumi_core::{
     node::NodeKind,
     tree::{LayoutResults, RenderNode},
   },
+  painter::BoxPainter,
   scene::{NodePaint, PaintItemKind, StackingContextNode},
   style::{Affine, BreakBetween, BreakInside},
 };
@@ -28,6 +29,10 @@ pub(crate) struct Atoms {
   pub(crate) extents: Vec<Atom>,
   /// Where `break-before` / `break-after: page` force a cut.
   pub(crate) forced: Vec<f32>,
+  /// Boxes that show on the page: text, images, childless boxes and boxes
+  /// with decorations of their own. Spacing between them is not content, so a
+  /// page holding nothing else is empty.
+  pub(crate) content: Vec<Atom>,
   /// Text boxes with their `widows` / `orphans` minimums.
   pub(crate) paragraphs: Vec<Paragraph>,
 }
@@ -114,13 +119,15 @@ impl AtomCollector<'_> {
     let relative = parent.invert().unwrap_or(Affine::IDENTITY) * paint.transform;
     if !relative.only_translation() {
       if let Some(bounds) = paint.paint_bounds {
-        atoms
-          .extents
-          .push((bounds.top as f32, bounds.bottom as f32));
+        let extent = (bounds.top as f32, bounds.bottom as f32);
+
+        atoms.extents.push(extent);
+        atoms.content.push(extent);
       }
       return Ok(parent * relative);
     }
     let y = relative.y;
+    let extent = (y, y + layout.size.height);
     let style = &node.context.style;
 
     if style.break_before == BreakBetween::Page {
@@ -130,21 +137,32 @@ impl AtomCollector<'_> {
       atoms.forced.push(y + layout.size.height);
     }
     if style.break_inside == BreakInside::Avoid {
-      atoms.extents.push((y, y + layout.size.height));
+      atoms.extents.push(extent);
     }
+    let mut shows = node
+      .children
+      .as_deref()
+      .is_none_or(<[RenderNode]>::is_empty)
+      || BoxPainter::new(&node.context, layout).paints_decorations();
 
     if node.should_create_inline_layout() {
+      shows = true;
       self.text_atoms(node, paint.node_id, layout, y, atoms)?;
     } else if !node.has_anonymous_text_item_child() {
       match node.node.as_ref().map(|n| &n.kind) {
         Some(NodeKind::Text(_)) => {
+          shows = true;
           self.text_atoms(node, paint.node_id, layout, y, atoms)?;
         }
         Some(NodeKind::Image(_)) => {
-          atoms.extents.push((y, y + layout.size.height));
+          shows = true;
+          atoms.extents.push(extent);
         }
         _ => {}
       }
+    }
+    if shows && extent.1 > extent.0 {
+      atoms.content.push(extent);
     }
     Ok(parent)
   }
