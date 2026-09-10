@@ -1,6 +1,6 @@
 import type { Monaco } from "@monaco-editor/react";
 import type { ParsedLine, TokenType } from "sugar-high/core";
-import { parse } from "sugar-high/core";
+import { parse, SugarHigh } from "sugar-high/core";
 import * as typescript from "sugar-high/lang/typescript";
 
 type TextModel = ReturnType<Monaco["editor"]["getModels"]>[number];
@@ -8,21 +8,30 @@ type ThemeData = Parameters<Monaco["editor"]["defineTheme"]>[1];
 
 /**
  * Monaco hands the provider one line at a time, so the state carries the line number. It also
- * carries the model version the line was tokenized from: Monaco stops re-tokenizing as soon as an
- * end state equals the one it stored, and every line below an opened comment or template literal
+ * carries the token left open at the end of the line: Monaco stops re-tokenizing as soon as an end
+ * state equals the one it stored, and every line below a newly opened comment or template literal
  * needs new colours even though its number did not change.
  */
 type LineState = {
   lineIndex: number;
-  version: number;
+  openToken: number | undefined;
   clone(): LineState;
   equals(other: LineState): boolean;
+};
+
+type ParsedModel = {
+  version: number;
+  lines: readonly ParsedLine[];
+  /** Per line, the type of the token that runs past its end, aligned with `lines`. */
+  openTokens: readonly (number | undefined)[];
 };
 
 export const darkTheme = "takumi-dark";
 export const lightTheme = "takumi-light";
 
 const languageId = "typescript";
+
+const breakToken = SugarHigh.TokenMap.get("break");
 
 /**
  * Colours follow GitHub's default themes. sugar-high has no separate function token, so calls stay
@@ -105,7 +114,43 @@ function scopeOf(type: string) {
 /** Token types the themes leave at the editor foreground, so they need no scope of their own. */
 const plainTypes = new Set<TokenType>(["identifier", "sign", "space", "break", "jsxliterals"]);
 
-const parsedModels = new WeakMap<TextModel, { version: number; lines: readonly ParsedLine[] }>();
+const parsedModels = new WeakMap<TextModel, ParsedModel>();
+
+/**
+ * sugar-high splits a token that spans lines into one token per line without a break between them,
+ * so the tokens it emits for a break are the only line ends with nothing left open.
+ */
+function openTokensOf(tokens: readonly [number, string][]) {
+  const openTokens: (number | undefined)[] = [];
+
+  for (const [type, value] of tokens) {
+    if (type === breakToken) {
+      openTokens.push(undefined);
+      continue;
+    }
+
+    for (let count = value.split("\n").length - 1; count > 0; count--) {
+      openTokens.push(type);
+    }
+  }
+
+  return openTokens;
+}
+
+function parseCode(code: string): Omit<ParsedModel, "version"> {
+  let rawTokens: [number, string][] = [];
+
+  const { lines } = parse(code, {
+    ...typescript,
+    tokenize: (source, options) => {
+      rawTokens = typescript.tokenize(source, options);
+
+      return rawTokens;
+    },
+  });
+
+  return { lines, openTokens: openTokensOf(rawTokens) };
+}
 
 function parseOf(monaco: Monaco, model: TextModel) {
   const version = model.getVersionId();
@@ -115,8 +160,10 @@ function parseOf(monaco: Monaco, model: TextModel) {
     return cached;
   }
 
-  const { lines } = parse(model.getValue(monaco.editor.EndOfLinePreference.LF), typescript);
-  const parsed = { version, lines };
+  const parsed = {
+    version,
+    ...parseCode(model.getValue(monaco.editor.EndOfLinePreference.LF)),
+  };
 
   parsedModels.set(model, parsed);
 
@@ -150,28 +197,28 @@ function tokensOf(parsedLine: ParsedLine) {
  * which loses the multi-line comment and template string context.
  */
 function createTokensProvider(monaco: Monaco) {
-  const createState = (lineIndex: number, version: number): LineState => ({
+  const createState = (lineIndex: number, openToken: number | undefined): LineState => ({
     lineIndex,
-    version,
-    clone: () => createState(lineIndex, version),
-    equals: (other) => other.lineIndex === lineIndex && other.version === version,
+    openToken,
+    clone: () => createState(lineIndex, openToken),
+    equals: (other) => other.lineIndex === lineIndex && other.openToken === openToken,
   });
 
   return {
-    getInitialState: () => createState(0, 0),
+    getInitialState: () => createState(0, undefined),
     tokenize(line: string, state: LineState) {
       for (const model of monaco.editor.getModels()) {
         if (model.getLanguageId() !== languageId) {
           continue;
         }
 
-        const { version, lines } = parseOf(monaco, model);
+        const { lines, openTokens } = parseOf(monaco, model);
         const parsedLine = lines[state.lineIndex];
 
         if (parsedLine?.value === line) {
           return {
             tokens: tokensOf(parsedLine),
-            endState: createState(state.lineIndex + 1, version),
+            endState: createState(state.lineIndex + 1, openTokens[state.lineIndex]),
           };
         }
       }
@@ -180,7 +227,7 @@ function createTokensProvider(monaco: Monaco) {
 
       return {
         tokens: parsedLine ? tokensOf(parsedLine) : [],
-        endState: createState(state.lineIndex + 1, state.version),
+        endState: createState(state.lineIndex + 1, state.openToken),
       };
     },
   };
