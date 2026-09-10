@@ -11,7 +11,9 @@
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
     "paths": {
-      "~/*": ["./app/*"]
+      "~/*": ["./app/*"],
+      // The root `typescript` is the Go port, which ships no compiler types.
+      "typescript": ["./node_modules/typescript-5"]
     },
     "esModuleInterop": true,
     "verbatimModuleSyntax": true,

@@ -1,83 +1,69 @@
 "use client";
 
-import { Editor } from "@monaco-editor/react";
-import { shikiToMonaco } from "@shikijs/monaco";
+import {
+  autocompletion,
+  closeBrackets,
+  closeBracketsKeymap,
+  completionKeymap,
+} from "@codemirror/autocomplete";
+import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { javascript } from "@codemirror/lang-javascript";
+import {
+  bracketMatching,
+  foldGutter,
+  foldKeymap,
+  indentOnInput,
+  indentUnit,
+} from "@codemirror/language";
+import { lintKeymap } from "@codemirror/lint";
+import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
+import { Compartment, EditorState, type Extension } from "@codemirror/state";
+import {
+  drawSelection,
+  dropCursor,
+  EditorView,
+  highlightActiveLine,
+  highlightActiveLineGutter,
+  highlightSpecialChars,
+  keymap,
+  lineNumbers,
+  rectangularSelection,
+} from "@codemirror/view";
+import githubDarkDefault from "@shikijs/themes/github-dark-default";
+import githubLightDefault from "@shikijs/themes/github-light-default";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
-import type { ComponentProps } from "react";
-import { createHighlighterCore } from "shiki/core";
-import { createOnigurumaEngine } from "shiki/engine-oniguruma.mjs";
-// Dynamic imports keep the typings out of the playground chunk; they load as
-// their own chunks alongside the editor.
-const [
-  reactTypings,
-  reactJsxRuntimeTypings,
-  cssTypings,
-  takumiTypings,
-  pdfPrimitivesTypings,
-  playgroundOptionsTypings,
-  echartsCoreTypings,
-  echartsChartsTypings,
-  echartsComponentsTypings,
-  echartsRenderersTypings,
-  echartsSharedTypings,
-] = await Promise.all([
-  import("../../../node_modules/@types/react/index.d.ts?raw").then((module) => module.default),
-  import("../../../node_modules/@types/react/jsx-runtime.d.ts?raw").then(
-    (module) => module.default,
-  ),
-  import("../../../node_modules/csstype/index.d.ts?raw").then((module) => module.default),
-  import("../../../node_modules/@takumi-rs/wasm/pkg/takumi_wasm_bg.wasm.d.ts?raw").then(
-    (module) => module.default,
-  ),
-  import("../../../node_modules/takumi-pdf/dist/primitives.d.mts?raw").then(
-    (module) => module.default,
-  ),
-  import("../../playground/options.ts?raw").then((module) => module.default),
-  import("../../../node_modules/echarts/types/dist/core.d.ts?raw").then((module) => module.default),
-  import("../../../node_modules/echarts/types/dist/charts.d.ts?raw").then(
-    (module) => module.default,
-  ),
-  import("../../../node_modules/echarts/types/dist/components.d.ts?raw").then(
-    (module) => module.default,
-  ),
-  import("../../../node_modules/echarts/types/dist/renderers.d.ts?raw").then(
-    (module) => module.default,
-  ),
-  import("../../../node_modules/echarts/types/dist/shared.d.ts?raw").then(
-    (module) => module.default,
-  ),
-]);
+import { editorTheme } from "./editor-theme";
+import { startTypeScriptService, type TypeScriptService } from "./typescript-service";
 
-function createHighlighter() {
-  return createHighlighterCore({
-    themes: [
-      import("shiki/themes/github-dark-default.mjs"),
-      import("shiki/themes/github-light-default.mjs"),
-    ],
-    langs: [import("shiki/langs/tsx.mjs")],
-    engine: createOnigurumaEngine(import("shiki/wasm")),
-    langAlias: {
-      typescript: "tsx",
-    },
-  });
-}
-
-type GlobalThis = typeof globalThis & {
-  shikiInstance: ReturnType<typeof createHighlighter>;
+const THEMES = {
+  dark: editorTheme(githubDarkDefault),
+  light: editorTheme(githubLightDefault),
 };
 
-(globalThis as GlobalThis).shikiInstance ??= createHighlighter();
+/** Safari has no `requestIdleCallback`, so a timer stands in for it there. */
+function whenIdle(task: () => void) {
+  if (typeof requestIdleCallback === "function") {
+    const handle = requestIdleCallback(task);
 
-const highlighter = await (globalThis as GlobalThis).shikiInstance;
-
-const tailwindTypings = `
-declare namespace React {
-  interface HTMLAttributes<T> {
-    tw?: string;
+    return () => cancelIdleCallback(handle);
   }
+
+  const handle = setTimeout(task, 500);
+
+  return () => clearTimeout(handle);
 }
-`;
+
+/** Line numbers and folding cost more than they are worth on a phone. */
+function viewportExtensions(isMobileViewport: boolean): Extension {
+  return [
+    EditorView.theme({
+      "&": { fontSize: isMobileViewport ? "13px" : "16px" },
+      ".cm-content": { padding: isMobileViewport ? "6px 0" : "8px 0" },
+    }),
+    isMobileViewport ? [] : [lineNumbers(), highlightActiveLineGutter(), foldGutter()],
+  ];
+}
 
 export function ComponentEditor({
   code,
@@ -90,23 +76,23 @@ export function ComponentEditor({
 }) {
   const { resolvedTheme } = useTheme();
   const [isMobileViewport, setIsMobileViewport] = useState(false);
-  const editorRef = useRef<
-    Parameters<NonNullable<ComponentProps<typeof Editor>["onMount"]>>[0] | null
-  >(null);
-  const isApplyingExternalCodeRef = useRef(false);
-  // The command is registered once, so it reads the callback through a ref.
+  const containerRef = useRef<HTMLDivElement>(null);
+  const viewRef = useRef<EditorView>(null);
+  // The editor is built once, so its extensions read the callbacks through refs.
   const onRunRef = useRef(onRun);
-
-  onRunRef.current = onRun;
+  const setCodeRef = useRef(setCode);
   /** The last value the editor itself produced, so its own edits never bounce back. */
   const lastEmittedRef = useRef(code);
-  const theme = resolvedTheme === "dark" ? "github-dark-default" : "github-light-default";
+  const [compartments] = useState(() => ({
+    theme: new Compartment(),
+    viewport: new Compartment(),
+    typescript: new Compartment(),
+  }));
+
+  onRunRef.current = onRun;
+  setCodeRef.current = setCode;
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
     const mobileMediaQuery = window.matchMedia("(max-width: 640px)");
     const updateMobileViewport = () => setIsMobileViewport(mobileMediaQuery.matches);
 
@@ -118,150 +104,123 @@ export function ComponentEditor({
     };
   }, []);
 
-  // Only a change from outside the editor (a template, a reset, formatting) is
-  // worth writing back. An IME composes through several intermediate values, and
-  // the state lags behind them, so comparing against the model alone would make
-  // every stale round trip look external.
   useEffect(() => {
-    const editor = editorRef.current;
-    const model = editor?.getModel();
+    const view = new EditorView({
+      doc: lastEmittedRef.current,
+      parent: containerRef.current ?? undefined,
+      extensions: [
+        keymap.of([
+          {
+            key: "Mod-Enter",
+            run: () => {
+              onRunRef.current();
+              return true;
+            },
+          },
+          indentWithTab,
+          ...closeBracketsKeymap,
+          ...completionKeymap,
+          ...defaultKeymap,
+          ...searchKeymap,
+          ...historyKeymap,
+          ...foldKeymap,
+          ...lintKeymap,
+        ]),
+        javascript({ jsx: true, typescript: true }),
+        history(),
+        drawSelection(),
+        dropCursor(),
+        rectangularSelection(),
+        highlightSpecialChars(),
+        highlightActiveLine(),
+        highlightSelectionMatches(),
+        indentOnInput(),
+        bracketMatching(),
+        closeBrackets(),
+        EditorState.tabSize.of(2),
+        indentUnit.of("  "),
+        EditorView.lineWrapping,
+        EditorView.theme({
+          "&": { height: "100%", fontFamily: "var(--font-mono)" },
+          ".cm-scroller": { fontFamily: "inherit", lineHeight: "1.5" },
+        }),
+        EditorView.updateListener.of((update) => {
+          if (!update.docChanged) return;
 
-    if (!editor || !model || code === lastEmittedRef.current || model.getValue() === code) {
-      return;
-    }
+          const value = update.state.doc.toString();
 
-    const selection = editor.getSelection();
+          lastEmittedRef.current = value;
+          setCodeRef.current(value);
+        }),
+        compartments.theme.of(THEMES.dark),
+        compartments.viewport.of(viewportExtensions(false)),
+        compartments.typescript.of(autocompletion()),
+      ],
+    });
 
-    isApplyingExternalCodeRef.current = true;
-    // A full-range edit rather than `setValue`: it keeps the undo stack and
-    // leaves the cursor where it was instead of dropping it at the top.
-    model.pushEditOperations([], [{ range: model.getFullModelRange(), text: code }], () => null);
-    isApplyingExternalCodeRef.current = false;
+    viewRef.current = view;
+
+    return () => {
+      viewRef.current = null;
+      view.destroy();
+    };
+  }, [compartments]);
+
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: compartments.theme.reconfigure(
+        resolvedTheme === "dark" ? THEMES.dark : THEMES.light,
+      ),
+    });
+  }, [resolvedTheme, compartments]);
+
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: compartments.viewport.reconfigure(viewportExtensions(isMobileViewport)),
+    });
+  }, [isMobileViewport, compartments]);
+
+  // The language service is the heaviest part of the editor, so it starts once
+  // the browser is otherwise idle and joins the editor that is already running.
+  useEffect(() => {
+    let service: TypeScriptService | undefined;
+    let disposed = false;
+    const cancel = whenIdle(() => {
+      startTypeScriptService()
+        .then((started) => {
+          service = started;
+
+          if (disposed) return started.dispose();
+
+          viewRef.current?.dispatch({
+            effects: compartments.typescript.reconfigure(started.extensions),
+          });
+        })
+        .catch((error: unknown) => console.error("Failed to start the language service:", error));
+    });
+
+    return () => {
+      disposed = true;
+      cancel();
+      service?.dispose();
+    };
+  }, [compartments]);
+
+  // Only a change from outside the editor (a template, a share link, formatting)
+  // is worth writing back, and it goes in as one transaction so undo still walks
+  // back through everything typed before it.
+  useEffect(() => {
+    const view = viewRef.current;
+
+    if (!view || code === lastEmittedRef.current) return;
+
+    const current = view.state.doc.toString();
+
+    if (current === code) return;
+
     lastEmittedRef.current = code;
-
-    if (selection) {
-      editor.setSelection(selection);
-    }
+    view.dispatch({ changes: { from: 0, to: current.length, insert: code } });
   }, [code]);
 
-  return (
-    <Editor
-      beforeMount={(monaco) => {
-        monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
-          target: monaco.languages.typescript.ScriptTarget.Latest,
-          allowNonTsExtensions: true,
-          moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
-          module: monaco.languages.typescript.ModuleKind.ESNext,
-          reactNamespace: "React",
-          esModuleInterop: true,
-          jsx: monaco.languages.typescript.JsxEmit.ReactJSX,
-          typeRoots: ["node_modules/@types"],
-          baseUrl: "file:///",
-          paths: {
-            "echarts/*": ["node_modules/echarts/types/dist/*"],
-          },
-        });
-
-        monaco.languages.typescript.typescriptDefaults.setExtraLibs([
-          {
-            content: reactTypings,
-            filePath: "file:///node_modules/react/index.d.ts",
-          },
-          {
-            content: reactJsxRuntimeTypings,
-            filePath: "file:///node_modules/react/jsx-runtime.d.ts",
-          },
-          {
-            content: cssTypings,
-            filePath: "file:///node_modules/csstype/index.d.ts",
-          },
-          {
-            content: takumiTypings,
-            filePath: "file:///node_modules/@takumi-rs/wasm/index.d.ts",
-          },
-          {
-            content: pdfPrimitivesTypings,
-            filePath: "file:///node_modules/takumi-pdf/primitives.d.ts",
-          },
-          {
-            content: playgroundOptionsTypings,
-            filePath: "file:///options.d.ts",
-          },
-          {
-            content: echartsCoreTypings,
-            filePath: "file:///node_modules/echarts/types/dist/core.d.ts",
-          },
-          {
-            content: echartsChartsTypings,
-            filePath: "file:///node_modules/echarts/types/dist/charts.d.ts",
-          },
-          {
-            content: echartsComponentsTypings,
-            filePath: "file:///node_modules/echarts/types/dist/components.d.ts",
-          },
-          {
-            content: echartsRenderersTypings,
-            filePath: "file:///node_modules/echarts/types/dist/renderers.d.ts",
-          },
-          {
-            content: echartsSharedTypings,
-            filePath: "file:///node_modules/echarts/types/dist/shared.d.ts",
-          },
-          {
-            content: tailwindTypings,
-            filePath: "file:///tw.d.ts",
-          },
-        ]);
-
-        shikiToMonaco(highlighter, monaco);
-      }}
-      onMount={(editor, monaco) => {
-        editorRef.current = editor;
-        // Monaco owns the keyboard inside the editor and binds ⌘↵ itself, so the
-        // shortcut has to be registered here rather than on the window.
-        editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => onRunRef.current());
-      }}
-      width="100%"
-      height="100%"
-      language="typescript"
-      theme={theme}
-      path="main.tsx"
-      options={{
-        automaticLayout: true,
-        wordWrap: "on",
-        tabSize: 2,
-        minimap: {
-          enabled: false,
-        },
-        glyphMargin: !isMobileViewport,
-        folding: !isMobileViewport,
-        stickyScroll: {
-          enabled: false,
-        },
-        scrollbar: {
-          useShadows: false,
-          verticalScrollbarSize: isMobileViewport ? 8 : 10,
-          horizontalScrollbarSize: isMobileViewport ? 8 : 10,
-        },
-        lineNumbers: isMobileViewport ? "off" : "on",
-        lineDecorationsWidth: isMobileViewport ? 8 : 10,
-        lineNumbersMinChars: isMobileViewport ? 0 : 3,
-        overviewRulerLanes: isMobileViewport ? 0 : 2,
-        fontSize: isMobileViewport ? 13 : 16,
-        padding: {
-          top: isMobileViewport ? 6 : 8,
-          bottom: isMobileViewport ? 6 : 8,
-        },
-        scrollBeyondLastLine: false,
-      }}
-      loading="Launching editor..."
-      defaultValue={code}
-      onChange={(value) => {
-        if (value !== undefined && !isApplyingExternalCodeRef.current) {
-          lastEmittedRef.current = value;
-          setCode(value);
-        }
-      }}
-    />
-  );
+  return <div ref={containerRef} className="h-full w-full overflow-hidden" />;
 }
