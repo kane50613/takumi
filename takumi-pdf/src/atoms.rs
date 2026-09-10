@@ -1,5 +1,5 @@
-//! Unsplittable vertical extents and paragraphs collected from the laid-out
-//! scene, which pagination cuts around.
+//! Unsplittable vertical extents, paragraphs and content boxes collected from
+//! the laid-out scene, which pagination cuts around.
 
 use std::ops::Range;
 
