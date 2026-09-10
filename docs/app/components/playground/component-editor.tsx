@@ -1,12 +1,11 @@
 "use client";
 
 import { Editor } from "@monaco-editor/react";
-import { shikiToMonaco } from "@shikijs/monaco";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
 import type { ComponentProps } from "react";
-import { createHighlighterCore } from "shiki/core";
-import { createOnigurumaEngine } from "shiki/engine-oniguruma.mjs";
+import { darkTheme, lightTheme, registerSyntaxHighlighting } from "./syntax-highlighting";
+
 // Dynamic imports keep the typings out of the playground chunk; they load as
 // their own chunks alongside the editor.
 const [
@@ -49,28 +48,6 @@ const [
   ),
 ]);
 
-function createHighlighter() {
-  return createHighlighterCore({
-    themes: [
-      import("shiki/themes/github-dark-default.mjs"),
-      import("shiki/themes/github-light-default.mjs"),
-    ],
-    langs: [import("shiki/langs/tsx.mjs")],
-    engine: createOnigurumaEngine(import("shiki/wasm")),
-    langAlias: {
-      typescript: "tsx",
-    },
-  });
-}
-
-type GlobalThis = typeof globalThis & {
-  shikiInstance: ReturnType<typeof createHighlighter>;
-};
-
-(globalThis as GlobalThis).shikiInstance ??= createHighlighter();
-
-const highlighter = await (globalThis as GlobalThis).shikiInstance;
-
 const tailwindTypings = `
 declare namespace React {
   interface HTMLAttributes<T> {
@@ -100,7 +77,7 @@ export function ComponentEditor({
   onRunRef.current = onRun;
   /** The last value the editor itself produced, so its own edits never bounce back. */
   const lastEmittedRef = useRef(code);
-  const theme = resolvedTheme === "dark" ? "github-dark-default" : "github-light-default";
+  const theme = resolvedTheme === "dark" ? darkTheme : lightTheme;
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -213,7 +190,7 @@ export function ComponentEditor({
           },
         ]);
 
-        shikiToMonaco(highlighter, monaco);
+        registerSyntaxHighlighting(monaco);
       }}
       onMount={(editor, monaco) => {
         editorRef.current = editor;
