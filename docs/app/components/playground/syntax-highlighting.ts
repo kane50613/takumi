@@ -114,8 +114,6 @@ function scopeOf(type: string) {
 /** Token types the themes leave at the editor foreground, so they need no scope of their own. */
 const plainTypes = new Set<TokenType>(["identifier", "sign", "space", "break", "jsxliterals"]);
 
-const parsedModels = new WeakMap<TextModel, ParsedModel>();
-
 /**
  * sugar-high splits a token that spans lines into one token per line without a break between them,
  * so the tokens it emits for a break are the only line ends with nothing left open.
@@ -152,24 +150,6 @@ function parseCode(code: string): Omit<ParsedModel, "version"> {
   return { lines, openTokens: openTokensOf(rawTokens) };
 }
 
-function parseOf(monaco: Monaco, model: TextModel) {
-  const version = model.getVersionId();
-  const cached = parsedModels.get(model);
-
-  if (cached && cached.version === version) {
-    return cached;
-  }
-
-  const parsed = {
-    version,
-    ...parseCode(model.getValue(monaco.editor.EndOfLinePreference.LF)),
-  };
-
-  parsedModels.set(model, parsed);
-
-  return parsed;
-}
-
 function tokensOf(parsedLine: ParsedLine) {
   const tokens: { startIndex: number; scopes: string }[] = [];
   let startIndex = 0;
@@ -193,10 +173,53 @@ function tokensOf(parsedLine: ParsedLine) {
 
 /**
  * sugar-high parses a whole document rather than a line at a time, so the provider looks the line up
- * in the cached parse of the model it belongs to. A line that matches no model is parsed on its own,
- * which loses the multi-line comment and template string context.
+ * in the cached parse of the model it belongs to. Monaco names no model in `tokenize`, so the
+ * provider keeps the last model that matched and only rescans when it stops matching. A line that
+ * matches no model is parsed on its own, which loses the multi-line comment and template context.
  */
 function createTokensProvider(monaco: Monaco) {
+  const parsedModels = new WeakMap<TextModel, ParsedModel>();
+  let boundModel: TextModel | undefined;
+
+  const parseOf = (model: TextModel) => {
+    const version = model.getVersionId();
+    const cached = parsedModels.get(model);
+
+    if (cached && cached.version === version) {
+      return cached;
+    }
+
+    const parsed = {
+      version,
+      ...parseCode(model.getValue(monaco.editor.EndOfLinePreference.LF)),
+    };
+
+    parsedModels.set(model, parsed);
+
+    return parsed;
+  };
+
+  const lineAt = (lineIndex: number, line: string) => {
+    const models =
+      boundModel && !boundModel.isDisposed()
+        ? [boundModel, ...monaco.editor.getModels()]
+        : monaco.editor.getModels();
+
+    for (const model of models) {
+      if (model.getLanguageId() !== languageId) {
+        continue;
+      }
+
+      const parsed = parseOf(model);
+
+      if (parsed.lines[lineIndex]?.value === line) {
+        boundModel = model;
+
+        return { parsedLine: parsed.lines[lineIndex], openToken: parsed.openTokens[lineIndex] };
+      }
+    }
+  };
+
   const createState = (lineIndex: number, openToken: number | undefined): LineState => ({
     lineIndex,
     openToken,
@@ -207,20 +230,13 @@ function createTokensProvider(monaco: Monaco) {
   return {
     getInitialState: () => createState(0, undefined),
     tokenize(line: string, state: LineState) {
-      for (const model of monaco.editor.getModels()) {
-        if (model.getLanguageId() !== languageId) {
-          continue;
-        }
+      const found = lineAt(state.lineIndex, line);
 
-        const { lines, openTokens } = parseOf(monaco, model);
-        const parsedLine = lines[state.lineIndex];
-
-        if (parsedLine?.value === line) {
-          return {
-            tokens: tokensOf(parsedLine),
-            endState: createState(state.lineIndex + 1, openTokens[state.lineIndex]),
-          };
-        }
+      if (found) {
+        return {
+          tokens: tokensOf(found.parsedLine),
+          endState: createState(state.lineIndex + 1, found.openToken),
+        };
       }
 
       const [parsedLine] = parse(line, typescript).lines;
