@@ -246,8 +246,8 @@ fn collect_measure_result(
           let built = create_inline_layout(InlineLayoutRequest::in_available_space(
             collect_inline_items(current),
             Size {
-              width: AvailableSpace::Definite(layout.content_box_width()),
-              height: AvailableSpace::Definite(layout.content_box_height()),
+              width: AvailableSpace::Definite(layout.unsnapped_content.width),
+              height: AvailableSpace::Definite(layout.unsnapped_content.height),
             },
             Size::NONE,
             &font_style,
@@ -299,8 +299,8 @@ fn collect_measure_result(
               decorations: None,
             }],
             Size {
-              width: AvailableSpace::Definite(layout.content_box_width()),
-              height: AvailableSpace::Definite(layout.content_box_height()),
+              width: AvailableSpace::Definite(layout.unsnapped_content.width),
+              height: AvailableSpace::Definite(layout.unsnapped_content.height),
             },
             Size::NONE,
             &font_style,

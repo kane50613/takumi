@@ -316,11 +316,11 @@ pub(crate) enum InlineContentKind<'c> {
 
 impl From<&InlineBoxItem<'_>> for ComputedLayout {
   fn from(value: &InlineBoxItem<'_>) -> Self {
-    ComputedLayout {
-      location: Point::ZERO,
-      size: Size::new(value.paint_width, value.paint_height),
-      border: value.border,
-      padding: value.padding,
-    }
+    ComputedLayout::new(
+      Point::ZERO,
+      Size::new(value.paint_width, value.paint_height),
+      value.border,
+      value.padding,
+    )
   }
 }
