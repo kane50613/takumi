@@ -67,20 +67,30 @@ declare namespace React {
 };
 
 const loadedTypings: ExtraLib[] = [];
-let coreTypingsLoad: Promise<void> | undefined;
-let echartsTypingsLoad: Promise<void> | undefined;
 
 /** Monaco replaces the whole set, so every mount rewrites it from what has loaded so far. */
 function applyTypings(monaco: Monaco) {
   monaco.languages.typescript.typescriptDefaults.setExtraLibs([tailwindTypings, ...loadedTypings]);
 }
 
-function loadTypings(monaco: Monaco, typings: Promise<ExtraLib[]>) {
-  return typings.then((libs) => {
-    loadedTypings.push(...libs);
-    applyTypings(monaco);
-  });
+/** Shares one load across mounts; a failed load is dropped so the next mount retries it. */
+function typingsLoader(typings: () => Promise<ExtraLib[]>) {
+  let load: Promise<void> | undefined;
+
+  return (monaco: Monaco) =>
+    (load ??= typings()
+      .then((libs) => {
+        loadedTypings.push(...libs);
+        applyTypings(monaco);
+      })
+      .catch((error: unknown) => {
+        load = undefined;
+        throw error;
+      }));
 }
+
+const loadCoreTypings = typingsLoader(coreTypings);
+const loadEchartsTypings = typingsLoader(echartsTypings);
 
 export function ComponentEditor({
   code,
@@ -174,17 +184,17 @@ export function ComponentEditor({
         // shortcut has to be registered here rather than on the window.
         editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => onRunRef.current());
 
-        coreTypingsLoad ??= loadTypings(monaco, coreTypings());
+        loadCoreTypings(monaco);
 
         // echarts ships megabytes of typings, so they wait until the code asks for them.
-        const loadEchartsTypings = () => {
+        const loadEchartsTypingsIfUsed = () => {
           if (editor.getModel()?.getValue().includes("echarts")) {
-            echartsTypingsLoad ??= loadTypings(monaco, echartsTypings());
+            loadEchartsTypings(monaco);
           }
         };
 
-        loadEchartsTypings();
-        editor.onDidChangeModelContent(loadEchartsTypings);
+        loadEchartsTypingsIfUsed();
+        editor.onDidChangeModelContent(loadEchartsTypingsIfUsed);
       }}
       width="100%"
       height="100%"
