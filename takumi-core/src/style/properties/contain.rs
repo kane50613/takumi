@@ -8,10 +8,12 @@ use crate::style::{Animatable, CssToken, FromCss, MakeComputed, ParseResult, ToC
 
 /// A `contain` value: `none | strict | content | [ size || inline-size || layout || style || paint ]`.
 ///
-/// Approximate: only `layout` and `paint` containment reach layout, where they
-/// make the box an independent formatting context. `size`, `inline-size` and
-/// `style` containment parse and serialize but have no effect, so `strict`
-/// behaves like `layout paint`.
+/// Approximate: `layout` and `paint` containment make the box an independent
+/// formatting context and a containing block for fixed and absolute
+/// descendants; `paint` also clips descendants to the padding edge and so makes
+/// the box a stacking context. `size`, `inline-size` and `style` containment
+/// parse and serialize but have no effect, so `strict` behaves like
+/// `layout paint`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Contain(u8);
 

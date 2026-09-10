@@ -1535,6 +1535,29 @@ fn overflow_visible_paired_with_clip_stays_mixed() {
 }
 
 #[test]
+fn paint_containment_clips_both_axes() {
+  let style = inherited_style_from_pairs([("contain", "paint")], &ComputedStyle::default());
+
+  assert_eq!(
+    style.resolve_overflows(),
+    SpacePair::from_pair(Overflow::Clip, Overflow::Clip)
+  );
+}
+
+#[test]
+fn paint_containment_keeps_hidden_axis() {
+  let style = inherited_style_from_pairs(
+    [("contain", "paint"), ("overflow-y", "hidden")],
+    &ComputedStyle::default(),
+  );
+
+  assert_eq!(
+    style.resolve_overflows(),
+    SpacePair::from_pair(Overflow::Hidden, Overflow::Hidden)
+  );
+}
+
+#[test]
 fn shorthands_take_css_wide_keywords() {
   let block = StyleDeclarationBlock::from_str("margin: inherit; overflow: initial").unwrap();
 

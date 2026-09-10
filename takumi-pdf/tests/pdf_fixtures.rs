@@ -2269,7 +2269,7 @@ fn overflow_clipping() {
       <div style="overflow: hidden; border-radius: 24px; width: 140px; height: 110px; border: 2px solid #333333;">
         <div style="width: 300px; height: 300px; background-image: linear-gradient(45deg, #f97316, #0ea5e9);"></div>
       </div>
-      <div style="overflow-x: hidden; width: 120px; height: 110px; border: 2px solid #999999;">
+      <div style="overflow-x: clip; width: 120px; height: 110px; border: 2px solid #999999;">
         <div style="width: 300px; height: 80px; background-color: #a3e635;"></div>
       </div>
     </div>"#;

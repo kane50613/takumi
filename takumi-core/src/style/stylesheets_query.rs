@@ -75,9 +75,12 @@ impl ComputedStyle {
   /// Whether the box is a containing block for `fixed` descendants, and so
   /// also for `absolute` ones. Blink resolves this as `ComputeIsFixedContainer`
   /// (`layout_object.cc`); the conditions takumi has properties for are a
-  /// transform-related property and a non-initial `filter` / `backdrop-filter`.
+  /// transform-related property, a non-initial `filter` / `backdrop-filter`,
+  /// and `layout` or `paint` containment.
   pub fn contains_fixed_descendants(&self) -> bool {
-    self.transform.as_ref().is_some_and(|t| !t.0.is_empty())
+    self.contain.contains(Contain::LAYOUT)
+      || self.contain.contains(Contain::PAINT)
+      || self.transform.as_ref().is_some_and(|t| !t.0.is_empty())
       || self.offset_path.is_some()
       || self.rotate.is_some()
       || self.translate != SpacePair::default()
@@ -180,12 +183,23 @@ impl ComputedStyle {
   /// that is neither `visible` nor `clip` computes to a clipping value, per
   /// <https://drafts.csswg.org/css-overflow-3/#overflow-properties>. Blink
   /// resolves it to `auto`; without a scrolling box that is `hidden` here.
+  /// `contain: paint` clips a `visible` axis to the padding edge, as Blink's
+  /// `LayoutBox::ComputeOverflowClipAxes` does.
   pub fn resolve_overflows(&self) -> SpacePair<Overflow> {
-    let (x, y) = match (self.overflow_x, self.overflow_y) {
+    let (mut x, mut y) = match (self.overflow_x, self.overflow_y) {
       (Overflow::Visible, other) if !other.is_clip_or_visible() => (Overflow::Hidden, other),
       (other, Overflow::Visible) if !other.is_clip_or_visible() => (other, Overflow::Hidden),
       pair => pair,
     };
+
+    if self.contain.contains(Contain::PAINT) {
+      if x == Overflow::Visible {
+        x = Overflow::Clip;
+      }
+      if y == Overflow::Visible {
+        y = Overflow::Clip;
+      }
+    }
 
     SpacePair::from_pair(x, y)
   }
