@@ -15,3 +15,9 @@ declare module "monaco-editor/esm/vs/language/typescript/monaco.contribution.js"
   export const ModuleResolutionKind: typeof typescript.ModuleResolutionKind;
   export const ScriptTarget: typeof typescript.ScriptTarget;
 }
+
+declare module "monaco-editor/esm/vs/language/typescript/tsMode.js" {
+  import type { typescript } from "monaco-editor";
+
+  export function setupTypeScript(defaults: typescript.LanguageServiceDefaults): void;
+}
