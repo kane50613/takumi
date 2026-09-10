@@ -21,11 +21,8 @@ import "monaco-editor/esm/vs/editor/contrib/wordHighlighter/browser/wordHighligh
 import "monaco-editor/esm/vs/editor/contrib/wordOperations/browser/wordOperations.js";
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker.js?worker";
-import "monaco-editor/esm/vs/language/typescript/monaco.contribution.js";
 import TypeScriptWorker from "monaco-editor/esm/vs/language/typescript/ts.worker.js?worker";
 import { languageId, registerSyntaxHighlighting } from "./syntax-highlighting";
-
-export { startTypeScriptService } from "./typescript-service";
 
 globalThis.MonacoEnvironment = {
   getWorker: (_workerId, label) =>
@@ -40,3 +37,13 @@ monaco.languages.setLanguageConfiguration(languageId, typescriptConfiguration);
 registerSyntaxHighlighting(monaco);
 
 loader.config({ monaco });
+
+/** The language service is megabytes of worker, so it is fetched once the editor has painted. */
+export function startTypeScriptService(codeEditor: monaco.editor.IStandaloneCodeEditor) {
+  // Safari has no `requestIdleCallback`; a timeout inside a frame lands after that frame paints.
+  requestAnimationFrame(() =>
+    setTimeout(() => {
+      import("./typescript-service").then((module) => module.startTypeScriptService(codeEditor));
+    }),
+  );
+}
