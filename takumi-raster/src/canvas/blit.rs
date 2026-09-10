@@ -36,6 +36,34 @@ pub(crate) struct OverlayBounds {
   pub y_max: i32,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct PlacementOverlap {
+  pub(crate) placement: Placement,
+  pub(crate) lhs_offset: Point<u32>,
+  pub(crate) rhs_offset: Point<u32>,
+}
+
+pub(crate) fn placement_overlap(lhs: Placement, rhs: Placement) -> Option<PlacementOverlap> {
+  let placement = Placement::from_bounds(
+    lhs.left.max(rhs.left),
+    lhs.top.max(rhs.top),
+    lhs.right().min(rhs.right()),
+    lhs.bottom().min(rhs.bottom()),
+  )?;
+
+  Some(PlacementOverlap {
+    lhs_offset: Point::new(
+      (placement.left - lhs.left) as u32,
+      (placement.top - lhs.top) as u32,
+    ),
+    rhs_offset: Point::new(
+      (placement.left - rhs.left) as u32,
+      (placement.top - rhs.top) as u32,
+    ),
+    placement,
+  })
+}
+
 #[inline(always)]
 pub(crate) fn compute_overlay_bounds_for_canvas(
   canvas_width: u32,
@@ -585,6 +613,54 @@ mod tests {
     BorderProperties, Canvas, PaintSource, Result, pixmap_from_buffer,
     resources::image_buffer::ImageBuffer, style::ImageScalingAlgorithm,
   };
+
+  #[test]
+  fn placement_overlap_tracks_both_source_offsets() {
+    let overlap = placement_overlap(
+      Placement {
+        left: 0,
+        top: 0,
+        width: 4,
+        height: 3,
+      },
+      Placement {
+        left: -1,
+        top: 1,
+        width: 4,
+        height: 3,
+      },
+    )
+    .unwrap();
+
+    assert_eq!(
+      overlap.placement,
+      Placement {
+        left: 0,
+        top: 1,
+        width: 3,
+        height: 2,
+      }
+    );
+    assert_eq!(overlap.lhs_offset, Point::new(0, 1));
+    assert_eq!(overlap.rhs_offset, Point::new(1, 0));
+    assert!(
+      placement_overlap(
+        Placement {
+          left: 0,
+          top: 0,
+          width: 1,
+          height: 1,
+        },
+        Placement {
+          left: 1,
+          top: 0,
+          width: 1,
+          height: 1,
+        },
+      )
+      .is_none()
+    );
+  }
 
   #[test]
   fn test_subcanvas_overlay_sampled_image_matches_direct_render() -> Result<()> {

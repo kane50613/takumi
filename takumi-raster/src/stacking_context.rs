@@ -18,7 +18,7 @@ use crate::{
     },
     tree::{LayoutResults, RenderNode},
   },
-  prepare_node_mask, resolve_outline,
+  placement_overlap, prepare_node_mask, resolve_outline,
   style::{Affine, BackgroundImage, BlendMode, Filter, SizingContext},
 };
 
@@ -52,18 +52,20 @@ pub(crate) fn blend_pixmap_software(
     return;
   }
 
-  let Some(overlap) = (Placement {
-    left: 0,
-    top: 0,
-    width: dst.width(),
-    height: dst.height(),
-  })
-  .overlap(Placement {
-    left: offset.x,
-    top: offset.y,
-    width: src.width(),
-    height: src.height(),
-  }) else {
+  let Some(overlap) = placement_overlap(
+    Placement {
+      left: 0,
+      top: 0,
+      width: dst.width(),
+      height: dst.height(),
+    },
+    Placement {
+      left: offset.x,
+      top: offset.y,
+      width: src.width(),
+      height: src.height(),
+    },
+  ) else {
     return;
   };
   let dst_left = overlap.lhs_offset.x as usize;

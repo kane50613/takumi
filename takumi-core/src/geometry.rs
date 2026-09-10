@@ -461,17 +461,6 @@ pub struct Placement {
   pub height: u32,
 }
 
-/// The shared pixels and source offsets of two overlapping placements.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct PlacementOverlap {
-  /// Shared placement in the original coordinate space.
-  pub placement: Placement,
-  /// Origin within the left-hand placement.
-  pub lhs_offset: Point<u32>,
-  /// Origin within the right-hand placement.
-  pub rhs_offset: Point<u32>,
-}
-
 impl Placement {
   /// Right edge, exclusive.
   pub fn right(self) -> i32 {
@@ -525,77 +514,11 @@ impl Placement {
       self.bottom().clamp(0, size.height as i32),
     )
   }
-
-  /// Finds the shared pixels and their offsets in both placements.
-  pub fn overlap(self, other: Self) -> Option<PlacementOverlap> {
-    let placement = Self::from_bounds(
-      self.left.max(other.left),
-      self.top.max(other.top),
-      self.right().min(other.right()),
-      self.bottom().min(other.bottom()),
-    )?;
-
-    Some(PlacementOverlap {
-      lhs_offset: Point::new(
-        (placement.left - self.left) as u32,
-        (placement.top - self.top) as u32,
-      ),
-      rhs_offset: Point::new(
-        (placement.left - other.left) as u32,
-        (placement.top - other.top) as u32,
-      ),
-      placement,
-    })
-  }
 }
 
 #[cfg(test)]
 mod tests {
-  use super::{Placement, Point, Size};
-
-  #[test]
-  fn placement_overlap_tracks_both_source_offsets() {
-    let overlap = Placement {
-      left: 0,
-      top: 0,
-      width: 4,
-      height: 3,
-    }
-    .overlap(Placement {
-      left: -1,
-      top: 1,
-      width: 4,
-      height: 3,
-    })
-    .unwrap();
-
-    assert_eq!(
-      overlap.placement,
-      Placement {
-        left: 0,
-        top: 1,
-        width: 3,
-        height: 2,
-      }
-    );
-    assert_eq!(overlap.lhs_offset, Point::new(0, 1));
-    assert_eq!(overlap.rhs_offset, Point::new(1, 0));
-    assert!(
-      Placement {
-        left: 0,
-        top: 0,
-        width: 1,
-        height: 1,
-      }
-      .overlap(Placement {
-        left: 1,
-        top: 0,
-        width: 1,
-        height: 1,
-      })
-      .is_none()
-    );
-  }
+  use super::Size;
 
   #[test]
   fn aspect_ratio_fills_height_from_width() {

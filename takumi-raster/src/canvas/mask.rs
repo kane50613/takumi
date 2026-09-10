@@ -10,6 +10,7 @@ use crate::{
   BorderProperties, Command, Fill, Placement, RenderContext, Result, Style, build_path,
   checked_area, create_mask, fast_div_255,
   layout::clip::clip_shape_commands,
+  placement_overlap,
   style::{Affine, BasicShape, ComputedStyle, FillRule, Overflow},
 };
 
@@ -366,7 +367,7 @@ struct AlphaOverlap {
 
 impl AlphaOverlap {
   fn new(lhs: Placement, rhs: Placement) -> Option<Self> {
-    let overlap = lhs.overlap(rhs)?;
+    let overlap = placement_overlap(lhs, rhs)?;
     let lhs_stride = lhs.width as usize;
     let rhs_stride = rhs.width as usize;
     Some(Self {
