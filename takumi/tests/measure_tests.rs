@@ -485,6 +485,61 @@ fn test_measure_flex_wrap_balance_evens_out_the_lines() {
   assert_close(balance.children[2].transform[5], 20.0);
 }
 
+/// The CSS Sizing keywords size a box from its content instead of its
+/// containing block.
+#[test]
+fn test_measure_sizing_keywords_size_from_the_content() {
+  let box_with = |width: &str| {
+    Node::from_html(
+      &format!(
+        r#"<div style="display:flex; width:400px; align-items:flex-start"><div style="display:block; width:{width}; font-size:20px">alpha beta gamma delta</div></div>"#
+      ),
+      FromHtmlOptions::default(),
+    )
+    .expect("parse")
+  };
+  let measured =
+    |width: &str| measure(box_with(width), create_measure_viewport()).children[0].width;
+
+  let min_content = measured("min-content");
+  let max_content = measured("max-content");
+  let fit_content = measured("fit-content");
+  let limited = measured("fit-content(120px)");
+  let stretch = measured("stretch");
+
+  assert!(
+    min_content < max_content,
+    "min-content {min_content} should be narrower than max-content {max_content}"
+  );
+  assert!(max_content <= 400.0);
+  assert_close(fit_content, max_content);
+  assert_close(limited, 120.0);
+  assert_close(stretch, 400.0);
+}
+
+/// `flex-basis: content` sizes the item from its content, ignoring `width`.
+#[test]
+fn test_measure_flex_basis_content_ignores_the_width() {
+  let item = |basis: &str| {
+    Node::from_html(
+      &format!(
+        r#"<div style="display:flex; width:400px"><div style="width:40px; flex-basis:{basis}; flex-grow:0; flex-shrink:0; font-size:20px">alpha beta</div></div>"#
+      ),
+      FromHtmlOptions::default(),
+    )
+    .expect("parse")
+  };
+
+  let from_width = measure(item("auto"), create_measure_viewport()).children[0].width;
+  let from_content = measure(item("content"), create_measure_viewport()).children[0].width;
+
+  assert_close(from_width, 40.0);
+  assert!(
+    from_content > from_width,
+    "content basis {from_content} should exceed the width basis {from_width}"
+  );
+}
+
 /// A text node carries its own inline content but has no children, so the
 /// measure traversal used to walk past it without emitting a run.
 #[test]

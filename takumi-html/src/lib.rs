@@ -625,11 +625,10 @@ mod tests {
   }
 
   /// A `style` attribute is a declaration list, and CSS drops only the declaration it
-  /// cannot read. `fit-content` is not a width this crate understands, and it used to take
-  /// the whole attribute down with it.
+  /// cannot read. An unreadable width used to take the whole attribute down with it.
   #[test]
   fn an_unreadable_declaration_leaves_its_neighbours_alone() {
-    let block = parse_declarations("font-size:64px;width:fit-content;color:red");
+    let block = parse_declarations("font-size:64px;width:wider;color:red");
 
     assert_eq!(block.len(), 2);
   }

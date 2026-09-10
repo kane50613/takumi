@@ -46,11 +46,11 @@ fn test_box_sizing() {
 fn test_parse_width() {
   assert_eq!(
     parse_property("w-64"),
-    expect(TailwindProperty::Width(Length::from_spacing(64.0)))
+    expect(TailwindProperty::Width(Length::from_spacing(64.0).into()))
   );
   assert_eq!(
     parse_property("h-32"),
-    expect(TailwindProperty::Height(Length::from_spacing(32.0)))
+    expect(TailwindProperty::Height(Length::from_spacing(32.0).into()))
   );
   assert_eq!(
     parse_property("justify-self-center"),
@@ -204,7 +204,7 @@ fn test_parse_arbitrary_flex_with_spaces() {
     expect(TailwindProperty::Flex(Flex {
       grow: 3.0,
       shrink: 1.0,
-      basis: Length::Auto,
+      basis: FlexBasis::default(),
     }))
   );
 }
@@ -1103,6 +1103,36 @@ fn test_border_width_implies_solid_and_per_side_color() {
     bar.border_top_color,
     ColorInput::Value(Color([43, 127, 255, 255]))
   );
+}
+
+/// Mirrors the utilities documented at https://tailwindcss.com/docs/width
+#[test]
+fn test_parse_sizing_keyword_utilities() {
+  for (token, expected) in [
+    ("w-min", TailwindProperty::Width(SizeValue::MinContent)),
+    ("w-max", TailwindProperty::Width(SizeValue::MaxContent)),
+    ("w-fit", TailwindProperty::Width(SizeValue::FitContent)),
+    ("h-min", TailwindProperty::Height(SizeValue::MinContent)),
+    ("h-max", TailwindProperty::Height(SizeValue::MaxContent)),
+    ("h-fit", TailwindProperty::Height(SizeValue::FitContent)),
+    ("size-fit", TailwindProperty::Size(SizeValue::FitContent)),
+    (
+      "basis-content",
+      TailwindProperty::FlexBasis(FlexBasis::Content),
+    ),
+    (
+      "basis-full",
+      TailwindProperty::FlexBasis(FlexBasis::Size(SizeValue::Length(Length::Percentage(
+        100.0,
+      )))),
+    ),
+  ] {
+    assert_eq!(
+      parse_property(token),
+      expect(expected),
+      "failed for {token}"
+    );
+  }
 }
 
 /// Mirrors the utilities documented at https://tailwindcss.com/docs/contain

@@ -583,7 +583,7 @@ pub(crate) enum TailwindProperty {
   /// `flex` property.
   Flex(Flex),
   /// `flex-basis` property.
-  FlexBasis(Length),
+  FlexBasis(FlexBasis),
   /// `overflow` property.
   Overflow(Overflow),
   /// `overflow-x` property.
@@ -625,11 +625,11 @@ pub(crate) enum TailwindProperty {
   /// `text-transform` property.
   TextTransform(TextTransform),
   /// `width` and `height` property.
-  Size(Length),
+  Size(SizeValue),
   /// `width` property.
-  Width(Length),
+  Width(SizeValue),
   /// `height` property.
-  Height(Length),
+  Height(SizeValue),
   /// `min-width` property.
   MinWidth(Length),
   /// `min-height` property.
@@ -1423,11 +1423,11 @@ impl TailwindProperty {
           important,
           flex_grow(Some(FlexGrow(flex.grow))),
           flex_shrink(Some(FlexGrow(flex.shrink))),
-          flex_basis(Some(flex.basis.into()))
+          flex_basis(Some(flex.basis))
         );
       }
       TailwindProperty::FlexBasis(flex_basis) => {
-        push_decl!(builder, important, flex_basis(Some(flex_basis.into())))
+        push_decl!(builder, important, flex_basis(Some(flex_basis)))
       }
       TailwindProperty::Overflow(overflow) => {
         push_decl!(
@@ -1477,10 +1477,10 @@ impl TailwindProperty {
         push_decl!(builder, important, text_transform(text_transform))
       }
       TailwindProperty::Size(size) => {
-        push_decl!(builder, important, width(size.into()), height(size.into()));
+        push_decl!(builder, important, width(size), height(size));
       }
-      TailwindProperty::Width(width) => push_decl!(builder, important, width(width.into())),
-      TailwindProperty::Height(height) => push_decl!(builder, important, height(height.into())),
+      TailwindProperty::Width(width) => push_decl!(builder, important, width(width)),
+      TailwindProperty::Height(height) => push_decl!(builder, important, height(height)),
       TailwindProperty::MinWidth(min_width) => push_decl!(builder, important, min_width(min_width)),
       TailwindProperty::MinHeight(min_height) => {
         push_decl!(builder, important, min_height(min_height))

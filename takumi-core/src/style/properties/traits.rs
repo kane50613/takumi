@@ -163,6 +163,8 @@ pub(crate) enum CssDescriptorKind {
   DropShadowFn,
   /// `<ellipse()>`
   EllipseFn,
+  /// `<fit-content()>`
+  FitContentFn,
   /// `<grayscale()>`
   GrayscaleFn,
   /// `<hue-rotate()>`
@@ -223,6 +225,7 @@ impl CssDescriptorKind {
       Self::CubicBezierFn => "cubic-bezier()",
       Self::DropShadowFn => "drop-shadow()",
       Self::EllipseFn => "ellipse()",
+      Self::FitContentFn => "fit-content()",
       Self::GrayscaleFn => "grayscale()",
       Self::HueRotateFn => "hue-rotate()",
       Self::InColorSpace => "in <color-space>",

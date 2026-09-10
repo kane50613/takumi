@@ -1209,7 +1209,7 @@ define_style! {
     align_self: AlignItems,
     flex_wrap: FlexWrap,
     flex_line_count: FlexLineCount,
-    flex_basis: Option<SizeValue>,
+    flex_basis: Option<FlexBasis>,
     order: Order,
     z_index: ZIndex,
     position: Position,
@@ -1477,9 +1477,7 @@ define_style! {
       target.push(StyleDeclaration::flex_shrink(
         value.map(|value| FlexGrow(value.shrink)),
       ));
-      target.push(StyleDeclaration::flex_basis(
-        value.map(|value| value.basis.into()),
-      ));
+      target.push(StyleDeclaration::flex_basis(value.map(|value| value.basis)));
     },
     place_items: PlaceItems => [AlignItems, JustifyItems] |value, target| {
       target.push(StyleDeclaration::align_items(value.align));
