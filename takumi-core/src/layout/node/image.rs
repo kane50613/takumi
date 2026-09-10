@@ -28,10 +28,10 @@ pub(crate) fn take_image_style_layers(
   if width.is_some() || height.is_some() {
     let preset_style = preset.get_or_insert_with(Style::default);
     if let Some(width) = width {
-      preset_style.push(StyleDeclaration::width(Length::Px(width)), false);
+      preset_style.push(StyleDeclaration::width(Length::Px(width).into()), false);
     }
     if let Some(height) = height {
-      preset_style.push(StyleDeclaration::height(Length::Px(height)), false);
+      preset_style.push(StyleDeclaration::height(Length::Px(height).into()), false);
     }
   }
 

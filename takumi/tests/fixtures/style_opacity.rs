@@ -30,8 +30,8 @@ fn test_inline_text_span_opacity() {
     Node::container([]).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::InlineBlock))
-        .with(StyleDeclaration::width(Length::Px(80.0)))
-        .with(StyleDeclaration::height(Length::Px(1.0))),
+        .with(StyleDeclaration::width(Length::Px(80.0).into()))
+        .with(StyleDeclaration::height(Length::Px(1.0).into())),
     ),
     Node::text("H".to_string())
       .with_style(Style::default().with(StyleDeclaration::display(Display::Inline))),
@@ -39,8 +39,8 @@ fn test_inline_text_span_opacity() {
   .with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Block))
-      .with(StyleDeclaration::width(Length::Px(320.0)))
-      .with(StyleDeclaration::height(Length::Px(120.0)))
+      .with(StyleDeclaration::width(Length::Px(320.0).into()))
+      .with(StyleDeclaration::height(Length::Px(120.0).into()))
       .with(StyleDeclaration::font_size(Length::Px(96.0).into()))
       .with(StyleDeclaration::font_weight(FontWeight::from(700.0)))
       .with(StyleDeclaration::color(ColorInput::Value(Color::black())))

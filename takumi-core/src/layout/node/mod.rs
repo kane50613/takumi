@@ -899,7 +899,7 @@ mod matching_tests {
   use crate::{
     layout::node::Node,
     matching::{MatchedDeclarationsView, match_stylesheets_view},
-    style::{ComputedStyle, Length, Style, StyleSheet},
+    style::{ComputedStyle, Length, SizeValue, Style, StyleSheet},
     viewport::Viewport,
   };
 
@@ -907,7 +907,7 @@ mod matching_tests {
     Node::container([]).with_class_name(class_name)
   }
 
-  fn computed_width_from_matches(matches: &MatchedDeclarationsView<'_>) -> Length {
+  fn computed_width_from_matches(matches: &MatchedDeclarationsView<'_>) -> SizeValue {
     let mut style = Style::default();
     for &declarations in matches
       .layered_normal()
@@ -926,7 +926,7 @@ mod matching_tests {
     style.inherit(&ComputedStyle::default()).width
   }
 
-  fn computed_height_from_matches(matches: &MatchedDeclarationsView<'_>) -> Length {
+  fn computed_height_from_matches(matches: &MatchedDeclarationsView<'_>) -> SizeValue {
     let mut style = Style::default();
     for &declarations in matches
       .layered_normal()
@@ -983,7 +983,7 @@ mod matching_tests {
     assert_eq!(matched.len(), 1);
     assert_eq!(
       computed_width_from_matches(matched[0].element()),
-      Length::Px(10.0)
+      Length::Px(10.0).into()
     );
   }
 
@@ -1005,7 +1005,7 @@ mod matching_tests {
     assert_eq!(matched.len(), 2);
     assert_eq!(
       computed_width_from_matches(matched[1].element()),
-      Length::Px(10.0)
+      Length::Px(10.0).into()
     );
   }
 
@@ -1029,7 +1029,7 @@ mod matching_tests {
     assert_eq!(matched.len(), 1);
     assert_eq!(
       computed_width_from_matches(matched[0].element()),
-      Length::Px(20.0)
+      Length::Px(20.0).into()
     );
   }
 
@@ -1042,7 +1042,7 @@ mod matching_tests {
     assert_eq!(matched.len(), 1);
     assert_eq!(
       computed_width_from_matches(matched[0].element()),
-      Length::Px(20.0)
+      Length::Px(20.0).into()
     );
   }
 
@@ -1067,7 +1067,7 @@ mod matching_tests {
     assert_eq!(matched.len(), 1);
     assert_eq!(
       computed_width_from_matches(matched[0].element()),
-      Length::Px(10.0)
+      Length::Px(10.0).into()
     );
   }
 
@@ -1086,7 +1086,7 @@ mod matching_tests {
     assert_eq!(matched.len(), 1);
     assert_eq!(
       computed_width_from_matches(matched[0].element()),
-      Length::Px(10.0)
+      Length::Px(10.0).into()
     );
   }
 
@@ -1111,19 +1111,19 @@ mod matching_tests {
     assert_eq!(matched.len(), 5);
     assert_eq!(
       computed_width_from_matches(matched[2].element()),
-      Length::Px(10.0)
+      Length::Px(10.0).into()
     );
     assert_eq!(
       computed_height_from_matches(matched[2].element()),
-      Length::Px(30.0)
+      Length::Px(30.0).into()
     );
     assert_eq!(
       computed_width_from_matches(matched[4].element()),
-      Length::Px(20.0)
+      Length::Px(20.0).into()
     );
     assert_eq!(
       computed_height_from_matches(matched[4].element()),
-      Length::Px(30.0)
+      Length::Px(30.0).into()
     );
   }
 
@@ -1152,11 +1152,11 @@ mod matching_tests {
     assert_eq!(matched.len(), 2);
     assert_eq!(
       computed_width_from_matches(matched[1].element()),
-      Length::Px(30.0)
+      Length::Px(30.0).into()
     );
     assert_eq!(
       computed_height_from_matches(matched[1].element()),
-      Length::Px(40.0)
+      Length::Px(40.0).into()
     );
   }
 

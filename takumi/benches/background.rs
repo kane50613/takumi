@@ -59,8 +59,8 @@ fn panel(style: Style) -> Node {
 fn base_style() -> Style {
   Style::default()
     .with(StyleDeclaration::display(Display::Flex))
-    .with(StyleDeclaration::width(Percentage(100.0)))
-    .with(StyleDeclaration::height(Percentage(100.0)))
+    .with(StyleDeclaration::width(Percentage(100.0).into()))
+    .with(StyleDeclaration::height(Percentage(100.0).into()))
     .with(StyleDeclaration::background_color(ColorInput::Value(
       Color([18, 18, 22, 255]),
     )))
@@ -84,8 +84,8 @@ fn image_node(source: ImageSource) -> Node {
   Node::container([Node::image(source).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Px(PANEL_WIDTH as f32)))
-      .with(StyleDeclaration::height(Px(PANEL_HEIGHT as f32)))
+      .with(StyleDeclaration::width(Px(PANEL_WIDTH as f32).into()))
+      .with(StyleDeclaration::height(Px(PANEL_HEIGHT as f32).into()))
       .with(StyleDeclaration::object_fit(ObjectFit::Fill)),
   )])
   .with_style(base_style())

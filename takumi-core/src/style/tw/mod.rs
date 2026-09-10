@@ -1423,11 +1423,11 @@ impl TailwindProperty {
           important,
           flex_grow(Some(FlexGrow(flex.grow))),
           flex_shrink(Some(FlexGrow(flex.shrink))),
-          flex_basis(Some(flex.basis))
+          flex_basis(Some(flex.basis.into()))
         );
       }
       TailwindProperty::FlexBasis(flex_basis) => {
-        push_decl!(builder, important, flex_basis(Some(flex_basis)))
+        push_decl!(builder, important, flex_basis(Some(flex_basis.into())))
       }
       TailwindProperty::Overflow(overflow) => {
         push_decl!(
@@ -1477,10 +1477,10 @@ impl TailwindProperty {
         push_decl!(builder, important, text_transform(text_transform))
       }
       TailwindProperty::Size(size) => {
-        push_decl!(builder, important, width(size), height(size));
+        push_decl!(builder, important, width(size.into()), height(size.into()));
       }
-      TailwindProperty::Width(width) => push_decl!(builder, important, width(width)),
-      TailwindProperty::Height(height) => push_decl!(builder, important, height(height)),
+      TailwindProperty::Width(width) => push_decl!(builder, important, width(width.into())),
+      TailwindProperty::Height(height) => push_decl!(builder, important, height(height.into())),
       TailwindProperty::MinWidth(min_width) => push_decl!(builder, important, min_width(min_width)),
       TailwindProperty::MinHeight(min_height) => {
         push_decl!(builder, important, min_height(min_height))

@@ -12,8 +12,8 @@ fn nested_clip_masks_fixture() -> Node {
     Node::container([]).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::width(Percentage(100.0)))
-        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::width(Percentage(100.0).into()))
+        .with(StyleDeclaration::height(Percentage(100.0).into()))
         .with_border_radius(BorderRadius::from_css_str(radius).unwrap())
         .with_overflow(SpacePair::from_single(Overflow::Clip))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -27,8 +27,8 @@ fn nested_clip_masks_fixture() -> Node {
     current = Node::container([current]).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::width(Percentage(95.0)))
-        .with(StyleDeclaration::height(Percentage(95.0)))
+        .with(StyleDeclaration::width(Percentage(95.0).into()))
+        .with(StyleDeclaration::height(Percentage(95.0).into()))
         .with_border_radius(BorderRadius::from_css_str(radius).unwrap())
         .with_overflow(SpacePair::from_single(Overflow::Clip))
         .with(StyleDeclaration::background_color(ColorInput::Value(
@@ -40,8 +40,8 @@ fn nested_clip_masks_fixture() -> Node {
   Node::container([current]).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0)))
-      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::width(Percentage(100.0).into()))
+      .with(StyleDeclaration::height(Percentage(100.0).into()))
       .with(StyleDeclaration::align_items(AlignItems::Center))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
       .with(StyleDeclaration::background_color(ColorInput::Value(

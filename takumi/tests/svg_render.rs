@@ -61,8 +61,8 @@ fn assert_close(actual: [u8; 4], expected: [u8; 4], tol: i32) {
 fn full_container(decls: impl IntoIterator<Item = StyleDeclaration>) -> Node {
   let mut style = Style::default()
     .with(StyleDeclaration::display(Display::Flex))
-    .with(StyleDeclaration::width(Percentage(100.0)))
-    .with(StyleDeclaration::height(Percentage(100.0)));
+    .with(StyleDeclaration::width(Percentage(100.0).into()))
+    .with(StyleDeclaration::height(Percentage(100.0).into()));
   for declaration in decls {
     style = style.with(declaration);
   }
@@ -112,8 +112,8 @@ fn text_renders_visible_glyphs() {
   let node = Node::container([text]).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0)))
-      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::width(Percentage(100.0).into()))
+      .with(StyleDeclaration::height(Percentage(100.0).into()))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color([255, 255, 255, 255]),
       ))),
@@ -145,8 +145,8 @@ fn underline_decoration_renders() {
   let node = Node::container([text]).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0)))
-      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::width(Percentage(100.0).into()))
+      .with(StyleDeclaration::height(Percentage(100.0).into()))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color([255, 255, 255, 255]),
       ))),

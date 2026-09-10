@@ -382,7 +382,7 @@ impl ComputedStyle {
       },
       flex_basis: self
         .flex_basis
-        .unwrap_or(Length::Auto)
+        .unwrap_or_default()
         .resolve_to_dimension(sizing),
       flex_shrink: self.flex_shrink.map(|shrink| shrink.0).unwrap_or(1.0),
       flex_wrap: self.flex_wrap.into_taffy(),

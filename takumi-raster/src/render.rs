@@ -725,8 +725,8 @@ mod tests {
       let node = Node::container([]).with_style(
         Style::default()
           .with(StyleDeclaration::display(Display::Flex))
-          .with(StyleDeclaration::width(Length::Percentage(100.0)))
-          .with(StyleDeclaration::height(Length::Percentage(100.0)))
+          .with(StyleDeclaration::width(Length::Percentage(100.0).into()))
+          .with(StyleDeclaration::height(Length::Percentage(100.0).into()))
           .with(StyleDeclaration::background_image(Some(
             crate::style::BackgroundImages::from_css_str(
               "linear-gradient(37deg, #101010, #131313)",
@@ -979,7 +979,7 @@ mod tests {
     let fonts = Fonts::default();
     let node = Node::container([]).with_tag_name("div").with_style(
       Style::default()
-        .with(StyleDeclaration::width(Px(100.0)))
+        .with(StyleDeclaration::width(Px(100.0).into()))
         .with(StyleDeclaration::animation_name(
           [Some("grow".to_string())].into(),
         ))
@@ -1006,7 +1006,7 @@ mod tests {
               .offsets([0.0])
               .declarations(
                 Style::default()
-                  .with(StyleDeclaration::width(Px(100.0)))
+                  .with(StyleDeclaration::width(Px(100.0).into()))
                   .into(),
               )
               .build(),
@@ -1014,7 +1014,7 @@ mod tests {
               .offsets([1.0])
               .declarations(
                 Style::default()
-                  .with(StyleDeclaration::width(Px(200.0)))
+                  .with(StyleDeclaration::width(Px(200.0).into()))
                   .into(),
               )
               .build(),
@@ -1048,8 +1048,8 @@ mod tests {
         .with(StyleDeclaration::position(Position::Absolute))
         .with(StyleDeclaration::left(Px(40.0)))
         .with(StyleDeclaration::top(Px(30.0)))
-        .with(StyleDeclaration::width(Px(10.0)))
-        .with(StyleDeclaration::height(Px(10.0))),
+        .with(StyleDeclaration::width(Px(10.0).into()))
+        .with(StyleDeclaration::height(Px(10.0).into())),
     );
     let mid = Node::container([abs]).with_style(
       Style::default()
@@ -1057,15 +1057,15 @@ mod tests {
         .with(StyleDeclaration::position(Position::Static))
         .with(StyleDeclaration::margin_left(Px(50.0)))
         .with(StyleDeclaration::margin_top(Px(50.0)))
-        .with(StyleDeclaration::width(Px(100.0)))
-        .with(StyleDeclaration::height(Px(100.0))),
+        .with(StyleDeclaration::width(Px(100.0).into()))
+        .with(StyleDeclaration::height(Px(100.0).into())),
     );
     let root = Node::container([mid]).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Block))
         .with(StyleDeclaration::position(Position::Relative))
-        .with(StyleDeclaration::width(Px(200.0)))
-        .with(StyleDeclaration::height(Px(200.0))),
+        .with(StyleDeclaration::width(Px(200.0).into()))
+        .with(StyleDeclaration::height(Px(200.0).into())),
     );
 
     let options = RenderOptions::builder()
@@ -1097,8 +1097,8 @@ mod tests {
         .with(StyleDeclaration::position(Position::Absolute))
         .with(StyleDeclaration::left(Length::Px(0.0)))
         .with(StyleDeclaration::top(Length::Px(0.0)))
-        .with(StyleDeclaration::width(Length::Px(128.0)))
-        .with(StyleDeclaration::height(Length::Px(128.0)))
+        .with(StyleDeclaration::width(Length::Px(128.0).into()))
+        .with(StyleDeclaration::height(Length::Px(128.0).into()))
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::from_rgb(0xff0000),
         ))),
@@ -1106,8 +1106,8 @@ mod tests {
     .with_style(
       Style::default()
         .with(StyleDeclaration::position(Position::Relative))
-        .with(StyleDeclaration::width(Length::Px(256.0)))
-        .with(StyleDeclaration::height(Length::Px(256.0)))
+        .with(StyleDeclaration::width(Length::Px(256.0).into()))
+        .with(StyleDeclaration::height(Length::Px(256.0).into()))
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color::from_rgb(0x0b1020),
         ))),

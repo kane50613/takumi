@@ -2829,7 +2829,7 @@ mod tests {
     style.append_block(declarations);
 
     let resolved = style.inherit(&adjusted_parent);
-    assert_eq!(resolved.width, Length::Px(10.0));
+    assert_eq!(resolved.width, Length::Px(10.0).into());
   }
 
   #[test]
@@ -2898,11 +2898,11 @@ mod tests {
       .with_lang(Lang::parse("zh-Hant").unwrap()),
     );
 
-    assert_eq!(tree.context.style.width, Length::Px(10.0));
+    assert_eq!(tree.context.style.width, Length::Px(10.0).into());
 
     let children = tree.children.as_deref().expect("block children");
-    assert_eq!(children[0].context.style.width, Length::Px(10.0));
-    assert_eq!(children[1].context.style.width, Length::Px(20.0));
+    assert_eq!(children[0].context.style.width, Length::Px(10.0).into());
+    assert_eq!(children[1].context.style.width, Length::Px(20.0).into());
   }
 
   #[test]
@@ -2936,7 +2936,13 @@ mod tests {
 
       let child = &children[0];
 
-      child.context.style.width.to_px(&child.context.sizing, 0.0)
+      child
+        .context
+        .style
+        .width
+        .as_length()
+        .expect("length width")
+        .to_px(&child.context.sizing, 0.0)
     }
 
     let content = Node::container([Node::container([]).with_id("child")]).with_id("root");

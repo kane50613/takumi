@@ -1181,8 +1181,8 @@ define_style! {
     animation_fill_mode: AnimationFillModes,
     animation_play_state: AnimationPlayStates,
     display: Display,
-    width: Length,
-    height: Length,
+    width: SizeValue,
+    height: SizeValue,
     max_width: MaxSize,
     max_height: MaxSize,
     min_width: Length,
@@ -1209,7 +1209,7 @@ define_style! {
     align_self: AlignItems,
     flex_wrap: FlexWrap,
     flex_line_count: FlexLineCount,
-    flex_basis: Option<Length>,
+    flex_basis: Option<SizeValue>,
     order: Order,
     z_index: ZIndex,
     position: Position,
@@ -1477,7 +1477,9 @@ define_style! {
       target.push(StyleDeclaration::flex_shrink(
         value.map(|value| FlexGrow(value.shrink)),
       ));
-      target.push(StyleDeclaration::flex_basis(value.map(|value| value.basis)));
+      target.push(StyleDeclaration::flex_basis(
+        value.map(|value| value.basis.into()),
+      ));
     },
     place_items: PlaceItems => [AlignItems, JustifyItems] |value, target| {
       target.push(StyleDeclaration::align_items(value.align));

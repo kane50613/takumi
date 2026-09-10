@@ -736,8 +736,8 @@ mod tests {
     let fonts = Fonts::default();
     let node = Node::container([]).with_style(
       Style::default()
-        .with(StyleDeclaration::width(Percentage(100.0)))
-        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::width(Percentage(100.0).into()))
+        .with(StyleDeclaration::height(Percentage(100.0).into()))
         .with(StyleDeclaration::background_image(Some(
           BackgroundImages::from_css_str(&format!("url({BITMAP_URL})")).expect("background url"),
         )))

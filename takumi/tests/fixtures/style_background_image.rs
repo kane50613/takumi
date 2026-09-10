@@ -15,8 +15,8 @@ fn create_container_with(
   Node::container([]).with_style(
     Style::default()
       .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::width(Percentage(100.0)))
-      .with(StyleDeclaration::height(Percentage(100.0)))
+      .with(StyleDeclaration::width(Percentage(100.0).into()))
+      .with(StyleDeclaration::height(Percentage(100.0).into()))
       .with(StyleDeclaration::background_image(Some(background_images)))
       .with(StyleDeclaration::background_size(
         background_size.unwrap_or_default(),

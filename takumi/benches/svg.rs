@@ -45,8 +45,8 @@ fn render_fixture(fonts: &Fonts, node: Node) {
 fn full(decls: impl IntoIterator<Item = StyleDeclaration>) -> Style {
   let mut style = Style::default()
     .with(StyleDeclaration::display(Display::Flex))
-    .with(StyleDeclaration::width(Percentage(100.0)))
-    .with(StyleDeclaration::height(Percentage(100.0)));
+    .with(StyleDeclaration::width(Percentage(100.0).into()))
+    .with(StyleDeclaration::height(Percentage(100.0).into()));
   for declaration in decls {
     style = style.with(declaration);
   }
@@ -111,8 +111,8 @@ fn shape_border_fixture() -> Node {
     Node::container([]).with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Flex))
-        .with(StyleDeclaration::width(Px(160.0)))
-        .with(StyleDeclaration::height(Px(120.0)))
+        .with(StyleDeclaration::width(Px(160.0).into()))
+        .with(StyleDeclaration::height(Px(120.0).into()))
         .with(StyleDeclaration::background_color(ColorInput::Value(
           Color([(i * 9) as u8, (255 - i * 9) as u8, 128, 255]),
         )))

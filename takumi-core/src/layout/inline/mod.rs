@@ -1531,7 +1531,7 @@ mod tests {
     .with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Block))
-        .with(StyleDeclaration::width(300.0.into()))
+        .with(StyleDeclaration::width(Length::from(300.0).into()))
         .with_white_space(WhiteSpace::pre_wrap()),
     );
 

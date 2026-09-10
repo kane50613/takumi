@@ -14,8 +14,12 @@ const BENCH_HEIGHT: u32 = 630;
 
 fn build_gradient_node(background_images: Option<BackgroundImages>) -> Node {
   let style = Style::default()
-    .with(StyleDeclaration::width(Length::Px(BENCH_WIDTH as f32)))
-    .with(StyleDeclaration::height(Length::Px(BENCH_HEIGHT as f32)))
+    .with(StyleDeclaration::width(
+      Length::Px(BENCH_WIDTH as f32).into(),
+    ))
+    .with(StyleDeclaration::height(
+      Length::Px(BENCH_HEIGHT as f32).into(),
+    ))
     .with(StyleDeclaration::background_image(background_images));
 
   Node::container([]).with_style(style)

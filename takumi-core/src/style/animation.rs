@@ -1338,18 +1338,18 @@ mod tests {
   #[test]
   fn apply_interpolated_properties_only_updates_masked_fields() {
     let mut base_style = ComputedStyle {
-      width: Length::Px(10.0),
-      height: Length::Px(20.0),
+      width: Length::Px(10.0).into(),
+      height: Length::Px(20.0).into(),
       ..ComputedStyle::default()
     };
     let from = ComputedStyle {
-      width: Length::Px(10.0),
-      height: Length::Px(100.0),
+      width: Length::Px(10.0).into(),
+      height: Length::Px(100.0).into(),
       ..ComputedStyle::default()
     };
     let to = ComputedStyle {
-      width: Length::Px(30.0),
-      height: Length::Px(200.0),
+      width: Length::Px(30.0).into(),
+      height: Length::Px(200.0).into(),
       ..ComputedStyle::default()
     };
     let animated_properties: PropertyMask = [LonghandId::Width].into_iter().collect();
@@ -1363,8 +1363,8 @@ mod tests {
       current_color(),
     );
 
-    assert_eq!(base_style.width, Length::Px(20.0));
-    assert_eq!(base_style.height, Length::Px(20.0));
+    assert_eq!(base_style.width, Length::Px(20.0).into());
+    assert_eq!(base_style.height, Length::Px(20.0).into());
   }
 
   #[test]

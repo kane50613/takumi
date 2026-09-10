@@ -307,9 +307,9 @@ impl TableGrid {
     let measured = if fixed { 1 } else { rows.len() };
 
     for (cell, (column, colspan)) in self.placed_cells(rows, measured) {
-      let width = &cell.context.style.width;
+      let width = cell.context.style.width;
 
-      if *width == Length::Auto {
+      if width.is_auto() {
         continue;
       }
 
@@ -319,8 +319,11 @@ impl TableGrid {
         if tracks.get(*column).is_some_and(free) {
           tracks[*column] = width.to_css_string();
         }
-      } else if fixed && !matches!(width, Length::Percentage(_)) {
-        let share = width.to_px(&cell.context.sizing, 0.0) / f32::from(*colspan);
+      } else if fixed
+        && let Some(length) = width.as_length()
+        && !matches!(length, Length::Percentage(_))
+      {
+        let share = length.to_px(&cell.context.sizing, 0.0) / f32::from(*colspan);
 
         for track in tracks
           .iter_mut()
@@ -421,8 +424,8 @@ impl RenderNode {
     let collapse = self.context.style.border_collapse == BorderCollapse::Collapse;
     let spacing = self.context.style.border_spacing.0;
     let sizing = self.context.sizing.clone();
-    let fixed = self.context.style.table_layout == TableLayout::Fixed
-      && self.context.style.width != Length::Auto;
+    let fixed =
+      self.context.style.table_layout == TableLayout::Fixed && !self.context.style.width.is_auto();
     let tracks = grid.track_sizes(&rows, fixed, spacing.x.to_px(&sizing, 0.0));
     let collapsed = collapse.then(|| {
       CollapsedBorders::resolve(
@@ -1102,7 +1105,7 @@ mod tests {
     let stylesheet_width = Node::container([Node::text("w")])
       .with_class_name("td")
       .with_id("w")
-      .with_style(Style::default().with(StyleDeclaration::width(Length::Px(220.0))));
+      .with_style(Style::default().with(StyleDeclaration::width(Length::Px(220.0).into())));
     let tree =
       lower(Node::container([row([stylesheet_width, cell("b")])]).with_class_name("table"));
 
@@ -1164,7 +1167,7 @@ mod tests {
     let shifted = Node::container([Node::text("w")])
       .with_class_name("td")
       .with_id("w")
-      .with_style(Style::default().with(StyleDeclaration::width(Length::Px(220.0))));
+      .with_style(Style::default().with(StyleDeclaration::width(Length::Px(220.0).into())));
     let tree = lower(
       Node::container([row([with_span(cell("a"), "rowspan", "2")]), row([shifted])])
         .with_class_name("table"),
