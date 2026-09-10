@@ -49,23 +49,20 @@ impl ShapedRun {
     }
 
     let metrics = self.metrics;
-    let (offset, font_thickness) = if line == TextDecorationLines::UNDERLINE {
-      (
+    let (offset, font_thickness) = match line {
+      TextDecorationLines::UNDERLINE => (
         self.baseline + baseline_shift + self.underline_offset_from_baseline(),
         metrics.underline_size,
-      )
-    } else if line == TextDecorationLines::OVERLINE {
-      (
+      ),
+      TextDecorationLines::OVERLINE => (
         self.baseline + baseline_shift - metrics.ascent - metrics.underline_offset,
         metrics.underline_size,
-      )
-    } else if line == TextDecorationLines::LINE_THROUGH {
-      (
+      ),
+      TextDecorationLines::LINE_THROUGH => (
         self.baseline + baseline_shift - metrics.strikethrough_offset,
         metrics.strikethrough_size,
-      )
-    } else {
-      return None;
+      ),
+      _ => return None,
     };
 
     let thickness = match self.brush.decoration_thickness {
