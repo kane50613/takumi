@@ -27,20 +27,10 @@ fn get_luma(pixel: &[u8]) -> f32 {
     + pixel[2] as f32 * LUMA_WEIGHTS[2]
 }
 
-/// Applies a single pixel filter inline - used for single filter optimization
+/// Applies a prepared matrix filter to one pixel.
 #[inline(always)]
 fn apply_single_pixel_filter(pixel: &mut [u8], filter: &Filter) {
   match *filter {
-    Filter::Brightness(PercentageNumber(value)) => {
-      for channel in pixel.iter_mut().take(3) {
-        *channel = ((*channel) as f32 * value).clamp(0.0, 255.0) as u8;
-      }
-    }
-    Filter::Contrast(PercentageNumber(value)) => {
-      for channel in pixel.iter_mut().take(3) {
-        *channel = ((*channel as f32 - 128.0) * value + 128.0).clamp(0.0, 255.0) as u8;
-      }
-    }
     Filter::Grayscale(PercentageNumber(amount)) => {
       let lum = get_luma(pixel);
       for channel in pixel.iter_mut().take(3) {
@@ -51,13 +41,6 @@ fn apply_single_pixel_filter(pixel: &mut [u8], filter: &Filter) {
       let lum = get_luma(pixel);
       for channel in pixel.iter_mut().take(3) {
         *channel = (lum * (1.0 - value) + *channel as f32 * value).clamp(0.0, 255.0) as u8;
-      }
-    }
-    Filter::Invert(PercentageNumber(amount)) => {
-      for channel in pixel.iter_mut().take(3) {
-        let inverted = u8::MAX.saturating_sub(*channel);
-        *channel =
-          ((*channel as f32 * (1.0 - amount)) + (inverted as f32 * amount)).clamp(0.0, 255.0) as u8;
       }
     }
     Filter::Sepia(PercentageNumber(amount)) => {
@@ -77,11 +60,6 @@ fn apply_single_pixel_filter(pixel: &mut [u8], filter: &Filter) {
       pixel[1] = (g * (1.0 - amount) + sepia_g * amount).clamp(0.0, 255.0) as u8;
       pixel[2] = (b * (1.0 - amount) + sepia_b * amount).clamp(0.0, 255.0) as u8;
     }
-    Filter::Opacity(PercentageNumber(value)) => {
-      pixel[3] = ((pixel[3]) as f32 * value).clamp(0.0, 255.0) as u8;
-    }
-    // Complex filters are not handled here
-    Filter::Blur(_) | Filter::DropShadow(_) | Filter::HueRotate(_) => {}
     _ => {}
   }
 }
