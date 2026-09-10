@@ -1,10 +1,13 @@
 import type { Monaco } from "@monaco-editor/react";
+import githubDark from "@shikijs/themes/github-dark-default";
+import githubLight from "@shikijs/themes/github-light-default";
 import type { ParsedLine, TokenType } from "sugar-high/core";
 import { parse, SugarHigh } from "sugar-high/core";
 import * as typescript from "sugar-high/lang/typescript";
 
 type TextModel = ReturnType<Monaco["editor"]["getModels"]>[number];
 type ThemeData = Parameters<Monaco["editor"]["defineTheme"]>[1];
+type ShikiTheme = typeof githubDark;
 
 /**
  * Monaco hands the provider one line at a time, so the state carries the line number. It also
@@ -34,85 +37,61 @@ const languageId = "typescript";
 const breakToken = SugarHigh.TokenMap.get("break");
 
 /**
- * Colours follow GitHub's default themes. sugar-high has no separate function token, so calls stay
- * in the identifier colour instead of GitHub's purple.
+ * The TextMate scope GitHub's themes colour each sugar-high token with. `sign` covers operators and
+ * punctuation alike, so it stays at the editor foreground rather than painting braces keyword red.
  */
-const themes: Record<string, ThemeData & { rules: { token: string; foreground: string }[] }> = {
-  [darkTheme]: {
-    base: "vs-dark",
-    inherit: true,
-    rules: tokenRules({
-      foreground: "e6edf3",
-      keyword: "ff7b72",
-      string: "a5d6ff",
-      comment: "8b949e",
-      class: "79c0ff",
-      property: "79c0ff",
-      entity: "7ee787",
-    }),
-    colors: {
-      "editor.background": "#0d1117",
-      "editor.foreground": "#e6edf3",
-      "editor.lineHighlightBackground": "#6e76811a",
-      "editor.selectionHighlightBackground": "#3fb95040",
-      "editorCursor.foreground": "#2f81f7",
-      "editorIndentGuide.activeBackground": "#e6edf33d",
-      "editorIndentGuide.background": "#e6edf31f",
-      "editorLineNumber.activeForeground": "#e6edf3",
-      "editorLineNumber.foreground": "#6e7681",
-      "editorWhitespace.foreground": "#484f58",
-      "editorWidget.background": "#161b22",
-      "editorBracketMatch.background": "#3fb95040",
-      "editorBracketMatch.border": "#3fb95099",
-    },
-  },
-  [lightTheme]: {
-    base: "vs",
-    inherit: true,
-    rules: tokenRules({
-      foreground: "1f2328",
-      keyword: "cf222e",
-      string: "0a3069",
-      comment: "6e7781",
-      class: "0550ae",
-      property: "0550ae",
-      entity: "116329",
-    }),
-    colors: {
-      "editor.background": "#ffffff",
-      "editor.foreground": "#1f2328",
-      "editor.lineHighlightBackground": "#eaeef280",
-      "editor.selectionHighlightBackground": "#4ac26b40",
-      "editorCursor.foreground": "#0969da",
-      "editorIndentGuide.activeBackground": "#1f23283d",
-      "editorIndentGuide.background": "#1f23281f",
-      "editorLineNumber.activeForeground": "#1f2328",
-      "editorLineNumber.foreground": "#8c959f",
-      "editorWhitespace.foreground": "#afb8c1",
-      "editorWidget.background": "#ffffff",
-      "editorBracketMatch.background": "#4ac26b40",
-      "editorBracketMatch.border": "#4ac26b99",
-    },
-  },
-};
-
-function tokenRules(
-  palette: { foreground: string } & Partial<Record<TokenType, string>>,
-): { token: string; foreground: string }[] {
-  const { foreground, ...tokens } = palette;
-
-  return [
-    { token: "", foreground },
-    ...Object.entries(tokens).map(([type, color]) => ({ token: scopeOf(type), foreground: color })),
-  ];
-}
+const tokenScopes = {
+  keyword: "keyword",
+  string: "string",
+  comment: "comment",
+  class: "entity.name.type",
+  entity: "entity.name.tag",
+  property: "support.variable.property",
+  jsxliterals: "meta.jsx.children",
+} satisfies Partial<Record<TokenType, string>>;
 
 function scopeOf(type: string) {
   return `sh.${type}`;
 }
 
-/** Token types the themes leave at the editor foreground, so they need no scope of their own. */
-const plainTypes = new Set<TokenType>(["identifier", "sign", "space", "break", "jsxliterals"]);
+/** Resolves a scope the way TextMate does: the most specific prefix an entry lists wins. */
+function settingsOfScope(theme: ShikiTheme, scope: string) {
+  const segments = scope.split(".");
+
+  for (let length = segments.length; length > 0; length--) {
+    const prefix = segments.slice(0, length).join(".");
+    const entry = theme.tokenColors?.find(({ scope: entryScope }) =>
+      Array.isArray(entryScope) ? entryScope.includes(prefix) : entryScope === prefix,
+    );
+
+    if (entry?.settings.foreground) {
+      return entry.settings;
+    }
+  }
+}
+
+/** github-dark-default lists a colour ramp under `symbolIcon.constantForeground`, which Monaco rejects. */
+const singleColor = /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+
+function themeDataOf(theme: ShikiTheme, base: ThemeData["base"]): ThemeData {
+  const colors = Object.fromEntries(
+    Object.entries(theme.colors ?? {}).filter(([, color]) => singleColor.test(color)),
+  );
+  const rules = Object.entries(tokenScopes).flatMap(([type, scope]) => {
+    const settings = settingsOfScope(theme, scope);
+
+    return settings?.foreground
+      ? [{ token: scopeOf(type), foreground: settings.foreground, fontStyle: settings.fontStyle }]
+      : [];
+  });
+
+  return {
+    base,
+    inherit: true,
+    colors,
+    rules: [{ token: "", foreground: colors["editor.foreground"] }, ...rules],
+  };
+}
 
 /**
  * sugar-high splits a token that spans lines into one token per line without a break between them,
@@ -159,7 +138,7 @@ function tokensOf(parsedLine: ParsedLine) {
       continue;
     }
 
-    const scopes = plainTypes.has(type) ? "" : scopeOf(type);
+    const scopes = type in tokenScopes ? scopeOf(type) : "";
 
     if (tokens.at(-1)?.scopes !== scopes) {
       tokens.push({ startIndex, scopes });
@@ -251,9 +230,8 @@ function createTokensProvider(monaco: Monaco) {
 
 /** Registers sugar-high tokenization and the two editor themes on a Monaco instance. */
 export function registerSyntaxHighlighting(monaco: Monaco) {
-  for (const [name, data] of Object.entries(themes)) {
-    monaco.editor.defineTheme(name, data);
-  }
+  monaco.editor.defineTheme(darkTheme, themeDataOf(githubDark, "vs-dark"));
+  monaco.editor.defineTheme(lightTheme, themeDataOf(githubLight, "vs"));
 
   monaco.languages.setTokensProvider(languageId, createTokensProvider(monaco));
 }
