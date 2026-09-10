@@ -2143,18 +2143,16 @@ fn test_padded_flex_text_keeps_one_line() {
 /// one line.
 #[test]
 fn test_flex_padding_does_not_narrow_anonymous_text() {
-  let sentence = "The quick brown fox jumps over the lazy dog and keeps running";
   let container = |width: Option<f32>, padding: f32| {
-    let mut style = Style::default()
-      .with(StyleDeclaration::display(Display::Flex))
-      .with(StyleDeclaration::padding_left(Px(padding)))
-      .with(StyleDeclaration::padding_right(Px(padding)))
-      .with(StyleDeclaration::font_size(Px(24.0).into()));
+    let width = width.map_or(String::new(), |width| format!("width: {width}px;"));
 
-    if let Some(width) = width {
-      style = style.with(StyleDeclaration::width(Px(width)));
-    }
-    Node::container([Node::text(sentence.to_string())]).with_style(style)
+    Node::from_html(
+      &format!(
+        r#"<div style="display: flex; padding: 0 {padding}px; font-size: 24px; {width}">The quick brown fox jumps over the lazy dog and keeps running</div>"#
+      ),
+      FromHtmlOptions::default(),
+    )
+    .expect("parse")
   };
   let unpadded = measure(container(None, 0.0), create_measure_viewport());
   let text = &unpadded.children[0];
