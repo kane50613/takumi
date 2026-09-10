@@ -25,7 +25,7 @@ use takumi_core::{
     node::NodeKind,
     tree::{LayoutResults, NodeOrigin, RenderNode},
   },
-  paint::{ConicGradientTile, LinearGradientTile, RadialGradientTile},
+  paint::ConicGradientTile,
   painter::{
     BoxPainter, BoxShadows, FillShape, PaintDevice, StrokeStyle, paint_border,
     paint_run_decorations,
@@ -728,31 +728,23 @@ impl Emitter<'_> {
 
     let paint: Paint = match image {
       BackgroundImage::Linear(gradient) => {
-        let tile =
-          LinearGradientTile::new(gradient, w as u32, h as u32, sizing, current_color, false);
-        let resolved = self.filtered_stops(ResolvedGradientStop::resolve(
-          &gradient.stops,
-          tile.axis_length.max(1e-6),
-          sizing,
-          current_color,
-        ));
+        let mut geometry = gradient.resolve_geometry(w as u32, h as u32, sizing, current_color);
+        let axis_length = geometry.axis_length;
+        let (dir_x, dir_y) = (geometry.dir_x, geometry.dir_y);
+        self.filter_stops(geometry.stops_mut());
+        let resolved = geometry.stops();
         if resolved.is_empty() {
           return None;
         }
-        let max_extent = tile.axis_length / 2.0;
+        let max_extent = axis_length / 2.0;
         let (cx, cy) = (x + w / 2.0, y + h / 2.0);
-        let point_at = |t: f32| {
-          (
-            cx + (t - max_extent) * tile.dir_x,
-            cy + (t - max_extent) * tile.dir_y,
-          )
-        };
+        let point_at = |t: f32| (cx + (t - max_extent) * dir_x, cy + (t - max_extent) * dir_y);
         let (t0, t1, base, span) = if gradient.repeating {
           let first = resolved.first().map_or(0.0, |s| s.position);
-          let last = resolved.last().map_or(tile.axis_length, |s| s.position);
+          let last = resolved.last().map_or(axis_length, |s| s.position);
           (first, last, first, (last - first).max(1e-6))
         } else {
-          (0.0, tile.axis_length, 0.0, tile.axis_length.max(1e-6))
+          (0.0, axis_length, 0.0, axis_length.max(1e-6))
         };
         let (x1, y1) = point_at(t0);
         let (x2, y2) = point_at(t1);
@@ -764,32 +756,28 @@ impl Emitter<'_> {
           y2,
           transform: Transform::identity(),
           spread_method: spread(gradient.repeating),
-          stops: krilla_stops(&resolved, base, span),
+          stops: krilla_stops(resolved, base, span),
           anti_alias: false,
         }
         .into()
       }
       BackgroundImage::Radial(gradient) => {
-        let tile =
-          RadialGradientTile::new(gradient, w as u32, h as u32, sizing, current_color, false);
-        let resolved = self.filtered_stops(ResolvedGradientStop::resolve(
-          &gradient.stops,
-          tile.radius_scale.max(1e-6),
-          sizing,
-          current_color,
-        ));
+        let mut geometry = gradient.resolve_geometry(w as u32, h as u32, sizing, current_color);
+        let (cx, cy) = (geometry.cx, geometry.cy);
+        let radius_x = geometry.inv_radius_x.max(1e-6).recip();
+        let radius_y = geometry.inv_radius_y.max(1e-6).recip();
+        let extent = geometry.radius_scale.max(1e-6);
+        self.filter_stops(geometry.stops_mut());
+        let resolved = geometry.stops();
         if resolved.is_empty() {
           return None;
         }
-        let radius_x = tile.inv_radius_x.max(1e-6).recip();
-        let radius_y = tile.inv_radius_y.max(1e-6).recip();
-        let extent = tile.radius_scale.max(1e-6);
         // PDF radial shadings cannot repeat, so a repeating gradient expands
         // its period across the full radius instead of relying on the spread.
         let stops = if gradient.repeating {
-          expanded_radial_stops(&resolved, extent)
+          expanded_radial_stops(resolved, extent)
         } else {
-          krilla_stops(&resolved, 0.0, extent)
+          krilla_stops(resolved, 0.0, extent)
         };
         let scale_x = (radius_x / extent).max(1e-6);
         let scale_y = (radius_y / extent).max(1e-6);
@@ -801,7 +789,7 @@ impl Emitter<'_> {
           cx: 0.0,
           cy: 0.0,
           cr: extent,
-          transform: Transform::from_row(scale_x, 0.0, 0.0, scale_y, x + tile.cx, y + tile.cy),
+          transform: Transform::from_row(scale_x, 0.0, 0.0, scale_y, x + cx, y + cy),
           spread_method: SpreadMethod::Pad,
           stops,
           anti_alias: false,
@@ -951,16 +939,12 @@ impl Emitter<'_> {
   }
 
   /// Gradient stops as this subtree's `filter` leaves them.
-  fn filtered_stops<S>(&self, mut resolved: S) -> S
-  where
-    S: AsMut<[ResolvedGradientStop]>,
-  {
+  fn filter_stops(&self, resolved: &mut [ResolvedGradientStop]) {
     if let Some(filter) = &self.color_filter {
-      for stop in resolved.as_mut() {
+      for stop in resolved {
         stop.color = filter.apply_color(stop.color);
       }
     }
-    resolved
   }
 
   /// Opens an artifact sequence around a decoration when tagging is on, so it stays out of the

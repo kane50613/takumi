@@ -63,8 +63,8 @@ pub mod paint {
     conic_gradient::ConicGradientTile,
     filter::compose_transfer_table,
     gradient_utils::{ColorLut, GradientOverlayTile},
-    linear_gradient::{LinearGradientFastPathKind, LinearGradientTile},
-    radial_gradient::RadialGradientTile,
+    linear_gradient::{LinearGradientFastPathKind, LinearGradientGeometry, LinearGradientTile},
+    radial_gradient::{RadialGradientGeometry, RadialGradientTile},
   };
 }
 

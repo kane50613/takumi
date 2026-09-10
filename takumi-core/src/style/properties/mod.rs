@@ -116,7 +116,8 @@ pub use line_clamp::*;
 pub use line_height::*;
 pub use linear_gradient::{
   Angle, GradientKeywordDirection, GradientStop, HorizontalKeyword, LinearGradient,
-  LinearGradientDirection, ResolvedGradientStop, StopPosition, VerticalKeyword,
+  LinearGradientDirection, LinearGradientGeometry, ResolvedGradientStop, StopPosition,
+  VerticalKeyword,
 };
 pub use list_style::*;
 pub use max_size::*;
@@ -126,7 +127,7 @@ pub use overflow::*;
 pub use overflow_wrap::*;
 use parley::Alignment;
 pub use percentage_number::*;
-pub use radial_gradient::{RadialGradient, RadialShape, RadialSize};
+pub use radial_gradient::{RadialGradient, RadialGradientGeometry, RadialShape, RadialSize};
 use serde::Deserialize;
 pub use sides::*;
 pub use space_pair::*;
