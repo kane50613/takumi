@@ -4,7 +4,7 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
   Animatable, CssToken, FontFeature, FromCss, MakeComputed, ParseResult, Tag, ToCss,
-  unexpected_token,
+  declare_enum_from_css_impl, unexpected_token,
 };
 
 /// Tri-state for one `font-variant-ligatures` group.
@@ -434,19 +434,6 @@ pub enum FontVariantCaps {
 }
 
 impl FontVariantCaps {
-  fn from_keyword(ident: &str) -> Option<Self> {
-    Some(match_ignore_ascii_case! { ident,
-      "normal" => Self::Normal,
-      "small-caps" => Self::SmallCaps,
-      "all-small-caps" => Self::AllSmallCaps,
-      "petite-caps" => Self::PetiteCaps,
-      "all-petite-caps" => Self::AllPetiteCaps,
-      "unicase" => Self::Unicase,
-      "titling-caps" => Self::TitlingCaps,
-      _ => return None,
-    })
-  }
-
   fn append_features(&self, out: &mut Vec<FontFeature>) {
     match self {
       Self::Normal => {}
@@ -464,47 +451,20 @@ impl FontVariantCaps {
       Self::TitlingCaps => out.push(FontFeature::new(Tag::new(b"titl"), 1)),
     }
   }
-
-  fn keyword(&self) -> &'static str {
-    match self {
-      Self::Normal => "normal",
-      Self::SmallCaps => "small-caps",
-      Self::AllSmallCaps => "all-small-caps",
-      Self::PetiteCaps => "petite-caps",
-      Self::AllPetiteCaps => "all-petite-caps",
-      Self::Unicase => "unicase",
-      Self::TitlingCaps => "titling-caps",
-    }
-  }
 }
 
-impl MakeComputed for FontVariantCaps {}
+declare_enum_from_css_impl!(
+  ident keyword FontVariantCaps,
+  "normal" => FontVariantCaps::Normal,
+  "small-caps" => FontVariantCaps::SmallCaps,
+  "all-small-caps" => FontVariantCaps::AllSmallCaps,
+  "petite-caps" => FontVariantCaps::PetiteCaps,
+  "all-petite-caps" => FontVariantCaps::AllPetiteCaps,
+  "unicase" => FontVariantCaps::Unicase,
+  "titling-caps" => FontVariantCaps::TitlingCaps,
+);
+
 impl Animatable for FontVariantCaps {}
-
-impl<'i> FromCss<'i> for FontVariantCaps {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
-    let ident = input.expect_ident()?;
-    Self::from_keyword(ident)
-      .ok_or_else(|| unexpected_token!(location, &Token::Ident(ident.to_owned())))
-  }
-
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("normal"),
-    CssToken::Keyword("small-caps"),
-    CssToken::Keyword("all-small-caps"),
-    CssToken::Keyword("petite-caps"),
-    CssToken::Keyword("all-petite-caps"),
-    CssToken::Keyword("unicase"),
-    CssToken::Keyword("titling-caps"),
-  ];
-}
-
-impl ToCss for FontVariantCaps {
-  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    dest.write_str(self.keyword())
-  }
-}
 
 /// `font-variant-position`.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -519,15 +479,6 @@ pub enum FontVariantPosition {
 }
 
 impl FontVariantPosition {
-  fn from_keyword(ident: &str) -> Option<Self> {
-    Some(match_ignore_ascii_case! { ident,
-      "normal" => Self::Normal,
-      "sub" => Self::Sub,
-      "super" => Self::Super,
-      _ => return None,
-    })
-  }
-
   fn append_features(&self, out: &mut Vec<FontFeature>) {
     match self {
       Self::Normal => {}
@@ -535,39 +486,16 @@ impl FontVariantPosition {
       Self::Super => out.push(FontFeature::new(Tag::new(b"sups"), 1)),
     }
   }
-
-  fn keyword(&self) -> &'static str {
-    match self {
-      Self::Normal => "normal",
-      Self::Sub => "sub",
-      Self::Super => "super",
-    }
-  }
 }
 
-impl MakeComputed for FontVariantPosition {}
+declare_enum_from_css_impl!(
+  ident keyword FontVariantPosition,
+  "normal" => FontVariantPosition::Normal,
+  "sub" => FontVariantPosition::Sub,
+  "super" => FontVariantPosition::Super,
+);
+
 impl Animatable for FontVariantPosition {}
-
-impl<'i> FromCss<'i> for FontVariantPosition {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
-    let ident = input.expect_ident()?;
-    Self::from_keyword(ident)
-      .ok_or_else(|| unexpected_token!(location, &Token::Ident(ident.to_owned())))
-  }
-
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("normal"),
-    CssToken::Keyword("sub"),
-    CssToken::Keyword("super"),
-  ];
-}
-
-impl ToCss for FontVariantPosition {
-  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    dest.write_str(self.keyword())
-  }
-}
 
 /// Appends every resolved `font-variant-*` feature to `out`, in property order. The caller
 /// appends `font-feature-settings` afterwards so explicit settings win on tag conflicts.

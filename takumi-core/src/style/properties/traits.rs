@@ -1,8 +1,8 @@
 use std::{borrow::Cow, fmt, sync::Arc};
 
-use cssparser::{Parser, ParserInput};
+use cssparser::{Parser, ParserInput, Token};
 
-use crate::style::{Color, SizingContext, math::lcm};
+use crate::style::{Color, SizingContext, build_unexpected_token, math::lcm};
 
 /// Parser result type alias for CSS property parsers.
 pub(crate) type ParseResult<'i, T> = Result<T, cssparser::ParseError<'i, Cow<'i, str>>>;
@@ -289,6 +289,54 @@ impl CssToken {
     }
     merged
   }
+
+  #[inline(never)]
+  pub(crate) fn keyword_index(ident: &str, tokens: &[CssToken]) -> Option<usize> {
+    tokens.iter().position(
+      |token| matches!(token, Self::Keyword(keyword) if ident.eq_ignore_ascii_case(keyword)),
+    )
+  }
+}
+
+#[inline(never)]
+pub(crate) fn parse_enum_keyword<'i>(
+  input: &mut Parser<'i, '_>,
+  valid_tokens: &'static [CssToken],
+  expect: CssExpectedMessage,
+) -> ParseResult<'i, usize> {
+  let location = input.current_source_location();
+  let token = input.next()?;
+
+  let Token::Ident(ident) = token else {
+    return Err(build_unexpected_token(
+      location,
+      token,
+      expect,
+      valid_tokens,
+    ));
+  };
+
+  CssToken::keyword_index(ident, valid_tokens)
+    .ok_or_else(|| build_unexpected_token(location, token, expect, valid_tokens))
+}
+
+#[inline(never)]
+pub(crate) fn parse_ident_enum_keyword<'i>(
+  input: &mut Parser<'i, '_>,
+  valid_tokens: &'static [CssToken],
+  expect: CssExpectedMessage,
+) -> ParseResult<'i, usize> {
+  let location = input.current_source_location();
+  let ident = input.expect_ident()?;
+
+  CssToken::keyword_index(ident, valid_tokens).ok_or_else(|| {
+    build_unexpected_token(
+      location,
+      &Token::Ident(ident.to_owned()),
+      expect,
+      valid_tokens,
+    )
+  })
 }
 
 impl std::fmt::Display for CssToken {
@@ -810,6 +858,45 @@ macro_rules! declare_enum_from_css_impl {
     $enum_type:ty,
     $($canonical:literal $(| $alias:literal)* => $variant:path),* $(,)?
   ) => {
+    $crate::style::properties::declare_enum_from_css_impl!(@impl
+      $crate::style::properties::parse_enum_keyword,
+      $enum_type,
+      $($canonical $(| $alias)* => $variant),*
+    );
+  };
+
+  (ident $enum_type:ty, $($canonical:literal $(| $alias:literal)* => $variant:path),* $(,)?) => {
+    $crate::style::properties::declare_enum_from_css_impl!(@impl
+      $crate::style::properties::parse_ident_enum_keyword,
+      $enum_type,
+      $($canonical $(| $alias)* => $variant),*
+    );
+  };
+
+  (ident keyword $enum_type:ty, $($canonical:literal $(| $alias:literal)* => $variant:path),* $(,)?) => {
+    $crate::style::properties::declare_enum_from_css_impl!(
+      ident $enum_type,
+      $($canonical $(| $alias)* => $variant),*
+    );
+
+    impl $enum_type {
+      fn from_keyword(ident: &str) -> Option<Self> {
+        crate::style::CssToken::keyword_index(
+          ident,
+          <Self as $crate::style::properties::FromCss>::VALID_TOKENS,
+        )
+          .map(|index| Self::KEYWORD_VALUES[index])
+      }
+    }
+  };
+
+  (@impl $parser:path, $enum_type:ty, $($canonical:literal $(| $alias:literal)* => $variant:path),* $(,)?) => {
+    impl $enum_type {
+      const KEYWORD_VALUES: &'static [Self] = &[
+        $($variant $(, $crate::style::properties::declare_enum_from_css_impl!(@value $variant, $alias))*),*
+      ];
+    }
+
     impl crate::style::MakeComputed for $enum_type {}
 
     impl<'i> crate::style::FromCss<'i> for $enum_type {
@@ -821,19 +908,13 @@ macro_rules! declare_enum_from_css_impl {
       ];
 
       fn from_css(input: &mut cssparser::Parser<'i, '_>) -> crate::style::ParseResult<'i, Self> {
-        let location = input.current_source_location();
-        let token = input.next()?;
+        let index = $parser(
+          input,
+          Self::VALID_TOKENS,
+          <Self as crate::style::FromCss>::EXPECT_MESSAGE,
+        )?;
 
-        let cssparser::Token::Ident(ident) = token else {
-          return Err($crate::style::unexpected_token!(location, token));
-        };
-
-        cssparser::match_ignore_ascii_case! {&ident,
-          $(
-            $canonical $(| $alias)* => Ok($variant),
-          )*
-          _ => Err($crate::style::unexpected_token!(location, token)),
-        }
+        Ok(Self::KEYWORD_VALUES[index])
       }
     }
 
@@ -847,6 +928,10 @@ macro_rules! declare_enum_from_css_impl {
       }
     }
 
+  };
+
+  (@value $variant:path, $alias:literal) => {
+    $variant
   };
 }
 

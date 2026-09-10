@@ -1,11 +1,4 @@
-use std::fmt;
-
-use cssparser::{Parser, Token, match_ignore_ascii_case};
-
-use crate::style::{
-  Animatable, CssToken, FontFeature, FromCss, MakeComputed, ParseResult, Tag, ToCss,
-  unexpected_token,
-};
+use crate::style::{Animatable, FontFeature, Tag, declare_enum_from_css_impl};
 
 /// `font-kerning`. The shaper kerns by default, so only `normal`/`none` emit a `kern` tag.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -20,15 +13,6 @@ pub enum FontKerning {
 }
 
 impl FontKerning {
-  fn from_keyword(ident: &str) -> Option<Self> {
-    Some(match_ignore_ascii_case! { ident,
-      "auto" => Self::Auto,
-      "normal" => Self::Normal,
-      "none" => Self::None,
-      _ => return None,
-    })
-  }
-
   pub(crate) fn append_features(&self, out: &mut Vec<FontFeature>) {
     match self {
       Self::Auto => {}
@@ -36,36 +20,52 @@ impl FontKerning {
       Self::None => out.push(FontFeature::new(Tag::new(b"kern"), 0)),
     }
   }
-
-  fn keyword(&self) -> &'static str {
-    match self {
-      Self::Auto => "auto",
-      Self::Normal => "normal",
-      Self::None => "none",
-    }
-  }
 }
 
-impl MakeComputed for FontKerning {}
+declare_enum_from_css_impl!(
+  ident FontKerning,
+  "auto" => FontKerning::Auto,
+  "normal" => FontKerning::Normal,
+  "none" => FontKerning::None,
+);
+
 impl Animatable for FontKerning {}
 
-impl<'i> FromCss<'i> for FontKerning {
-  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
-    let location = input.current_source_location();
-    let ident = input.expect_ident()?;
-    Self::from_keyword(ident)
-      .ok_or_else(|| unexpected_token!(location, &Token::Ident(ident.to_owned())))
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::style::{FromCssStr, ToCss};
+
+  #[test]
+  fn keyword_parsing_is_case_insensitive_and_canonical() {
+    let parsed = FontKerning::from_css_str("NORMAL").unwrap();
+
+    assert_eq!(parsed, FontKerning::Normal);
+    assert_eq!(parsed.to_css_string(), "normal");
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
-    CssToken::Keyword("auto"),
-    CssToken::Keyword("normal"),
-    CssToken::Keyword("none"),
-  ];
-}
+  #[test]
+  fn keyword_errors_preserve_ident_and_non_ident_forms() {
+    let keyword = FontKerning::from_css_str("kern").unwrap_err();
+    let number = FontKerning::from_css_str("1").unwrap_err();
+    let string = FontKerning::from_css_str("\"normal\"").unwrap_err();
+    let function = FontKerning::from_css_str("kern()").unwrap_err();
 
-impl ToCss for FontKerning {
-  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
-    dest.write_str(self.keyword())
+    assert_eq!(
+      keyword.to_string(),
+      "Unexpected token: kern, expected a value of 'auto', 'normal' or 'none'"
+    );
+    assert_eq!(
+      number.to_string(),
+      "Basic(UnexpectedToken(Number { has_sign: false, value: 1.0, int_value: Some(1) }))"
+    );
+    assert_eq!(
+      string.to_string(),
+      "Basic(UnexpectedToken(QuotedString(\"normal\")))"
+    );
+    assert_eq!(
+      function.to_string(),
+      "Basic(UnexpectedToken(Function(\"kern\")))"
+    );
   }
 }
