@@ -415,6 +415,7 @@ mod tests {
       extents: extents.to_vec(),
       forced: forced.to_vec(),
       paragraphs,
+      content: vec![(0.0, f32::INFINITY)],
     }
   }
 
@@ -478,7 +479,7 @@ mod tests {
 
   #[test]
   fn content_taller_than_a_render_allows_stops_counting() {
-    let starts = Atoms::default().page_starts(&[], 2_000_000.0, 10.0);
+    let starts = atoms(&[], &[], Vec::new()).page_starts(&[], 2_000_000.0, 10.0);
 
     assert_eq!(starts.len(), MAX_PAGES, "the page count runs unbounded");
   }
@@ -486,7 +487,7 @@ mod tests {
   #[test]
   fn page_starts_without_atoms_cuts_at_window() {
     assert_eq!(
-      Atoms::default().page_starts(&[], 250.0, 100.0),
+      atoms(&[], &[], Vec::new()).page_starts(&[], 250.0, 100.0),
       vec![0.0, 100.0, 200.0]
     );
   }
@@ -611,6 +612,41 @@ mod tests {
       atoms(&[], &[40.0, 150.0], Vec::new()).page_starts(&[], 250.0, 100.0),
       vec![0.0, 40.0, 140.0, 150.0]
     );
+  }
+
+  #[test]
+  fn page_starts_drops_forced_cuts_beside_spacing_alone() {
+    let atoms = Atoms {
+      forced: vec![40.0, 110.0],
+      content: vec![(0.0, 20.0), (60.0, 80.0)],
+      ..Atoms::default()
+    };
+
+    assert_eq!(atoms.page_starts(&[], 120.0, 30.0), vec![0.0, 30.0, 60.0]);
+  }
+
+  #[test]
+  fn page_starts_keeps_forced_cuts_under_content() {
+    let atoms = Atoms {
+      forced: vec![40.0],
+      content: vec![(0.0, 20.0), (30.0, 35.0), (60.0, 80.0)],
+      ..Atoms::default()
+    };
+
+    assert_eq!(
+      atoms.page_starts(&[], 120.0, 30.0),
+      vec![0.0, 30.0, 40.0, 70.0]
+    );
+  }
+
+  #[test]
+  fn page_starts_ends_at_the_last_content_box() {
+    let atoms = Atoms {
+      content: vec![(0.0, 90.0)],
+      ..Atoms::default()
+    };
+
+    assert_eq!(atoms.page_starts(&[], 250.0, 100.0), vec![0.0]);
   }
 
   #[test]

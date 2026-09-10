@@ -871,6 +871,142 @@ fn break_after_a_padded_box_cuts_once() {
   );
 }
 
+fn page_count(pdf: &[u8]) -> usize {
+  let text = String::from_utf8_lossy(pdf);
+  let start = text.find("/Type/Pages/Count ").expect("a page tree") + "/Type/Pages/Count ".len();
+  let digits: String = text[start..]
+    .chars()
+    .take_while(char::is_ascii_digit)
+    .collect();
+
+  digits.parse().expect("a page count")
+}
+
+/// The second keep already opens page 2 with the list's spacing consumed at
+/// the boundary, so a forced break on it must not open a page between the two.
+#[test]
+fn a_forced_break_on_a_node_that_opens_a_page_adds_no_empty_page() {
+  let fonts = fonts();
+  let page = || PageOptions {
+    width: 400.0,
+    height: 300.0,
+    margin: PageMargins::uniform(20.0),
+  };
+  let document = |spacer: u32, list: &str, first: &str, second: &str| {
+    format!(
+      r#"<div style="display: flex; flex-direction: column;">
+        <div style="height: {spacer}px; width: 100px;"><span style="font-size: 10px;">A</span></div>
+        <div style="display: flex; flex-direction: column; {list}">
+          <div style="display: flex; flex-direction: column; break-inside: avoid; {first}"><span style="font-size: 10px; line-height: 1.4;">B1</span></div>
+          <div style="display: flex; flex-direction: column; break-inside: avoid; {second}"><span style="font-size: 10px; line-height: 1.4;">B2</span></div>
+        </div>
+      </div>"#
+    )
+  };
+  let render_with = |source: &str| {
+    render(
+      PdfOptions::builder()
+        .node(from_html(source, FromHtmlOptions::default()).expect("parse the doc"))
+        .page(page())
+        .fonts(&fonts)
+        .build(),
+    )
+    .expect("render the doc")
+  };
+  let plain = render_with(&document(235, "gap: 16px;", "", ""));
+
+  assert_eq!(
+    page_count(&plain),
+    2,
+    "the second keep opens page 2 on its own"
+  );
+
+  for (spacer, list, first, second) in [
+    (235, "gap: 16px;", "", "break-before: page;"),
+    (235, "", "", "margin-top: 16px; break-before: page;"),
+    (245, "padding-top: 16px;", "break-before: page;", ""),
+  ] {
+    let forced = render_with(&document(spacer, list, first, second));
+
+    assert_eq!(
+      page_count(&forced),
+      2,
+      "a forced break at the top of page 2 opened an empty page ({list} {first} {second})"
+    );
+  }
+  assert_eq!(
+    render_with(&document(235, "gap: 16px;", "", "break-before: page;")),
+    plain,
+    "a forced break at the top of page 2 changed the document"
+  );
+}
+
+#[test]
+fn forced_breaks_beside_spacing_alone_open_no_page() {
+  let fonts = fonts();
+  let render_with = |source: &str| render(a4_options(source, &fonts)).expect("render the doc");
+  let leading = render_with(
+    r#"<div style="display: flex; flex-direction: column;">
+      <div style="display: flex; margin-top: 16px; break-before: page;">One</div>
+    </div>"#,
+  );
+  let trailing = render_with(
+    r#"<div style="display: flex; flex-direction: column; padding-bottom: 16px;">
+      <div style="display: flex; break-after: page;">One</div>
+    </div>"#,
+  );
+  let doubled = render_with(
+    r#"<div style="display: flex; flex-direction: column;">
+      <div style="display: flex; break-after: page;">One</div>
+      <div style="display: flex; margin-top: 16px; break-before: page;">Two</div>
+    </div>"#,
+  );
+
+  assert_eq!(
+    page_count(&leading),
+    1,
+    "a leading break opened an empty page"
+  );
+  assert_eq!(
+    page_count(&trailing),
+    1,
+    "a trailing break opened an empty page"
+  );
+  assert_eq!(
+    page_count(&doubled),
+    2,
+    "adjacent breaks opened an empty page"
+  );
+}
+
+#[test]
+fn trailing_spacing_opens_no_page() {
+  let fonts = fonts();
+  let page = PageOptions {
+    width: 400.0,
+    height: 300.0,
+    margin: PageMargins::uniform(20.0),
+  };
+  let pdf = render(
+    PdfOptions::builder()
+      .node(
+        from_html(
+          r#"<div style="display: flex; flex-direction: column; padding-bottom: 40px;">
+            <div style="height: 240px;"><span style="font-size: 10px;">A</span></div>
+          </div>"#,
+          FromHtmlOptions::default(),
+        )
+        .expect("parse the doc"),
+      )
+      .page(page)
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render the doc");
+
+  assert_eq!(page_count(&pdf), 1, "trailing padding opened an empty page");
+}
+
 /// A table of contents whose entries carry `targetPageNumber` hooks. Each
 /// section is forced onto its own page, so the entries have to read 2, 3 and 4.
 fn toc_document(cells: [&str; 3]) -> String {

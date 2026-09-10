@@ -424,16 +424,29 @@ impl Paginated {
 /// atom taller than the window can never fit a page, so it does not push cuts
 /// at all — matching browsers, where `break-inside: avoid` is dropped for
 /// boxes taller than the fragmentainer.
+///
+/// A forced cut with no content on its page above it is dropped, per
+/// css-break-3 §forced-breaks. The column ends at its last content box.
 impl Atoms {
   pub(crate) fn page_starts(mut self, headers: &[HeaderBand], total: f32, window: f32) -> Vec<f32> {
     let Self {
       extents,
       forced,
       paragraphs,
+      content,
     } = &mut self;
+    let overlaps = |top: f32, bottom: f32| {
+      content
+        .iter()
+        .any(|&(box_top, box_bottom)| box_top < bottom - 0.5 && box_bottom > top + 0.5)
+    };
+    let total = content
+      .iter()
+      .fold(0.0_f32, |bottom, atom| bottom.max(atom.1))
+      .min(total);
 
     extents.sort_by(|a, b| a.0.total_cmp(&b.0));
-    forced.retain(|cut| *cut > 1.0 && *cut < total - 1.0);
+    forced.retain(|cut| *cut < total - 1.0);
     forced.sort_by(f32::total_cmp);
 
     // The prefix max of bottoms lets the back-scan stop early even when a
@@ -455,7 +468,10 @@ impl Atoms {
     loop {
       let limit = y0 + window - HeaderBand::replays(headers, y0, window).0;
 
-      if let Some(cut) = forced.iter().copied().find(|cut| *cut > y0 + 1.0)
+      if let Some(cut) = forced
+        .iter()
+        .copied()
+        .find(|cut| *cut > y0 + 1.0 && overlaps(y0, *cut))
         && cut <= limit
       {
         starts.push(cut);
