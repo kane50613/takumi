@@ -30,8 +30,12 @@ fn the_sizing_builders_still_take_a_length() {
     StyleDeclaration::height(SizeValue::Length(Length::Percentage(50.0)))
   );
   assert_eq!(
-    StyleDeclaration::flex_basis(Some(Length::Px(12.0))),
+    StyleDeclaration::flex_basis(Some(Length::Px(12.0).into())),
     StyleDeclaration::flex_basis(Some(FlexBasis::Size(SizeValue::Length(Length::Px(12.0)))))
+  );
+  assert_eq!(
+    StyleDeclaration::flex_basis(None),
+    StyleDeclaration::FlexBasis(None)
   );
 }
 

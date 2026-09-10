@@ -1218,7 +1218,7 @@ define_style! {
     align_self: AlignItems,
     flex_wrap: FlexWrap,
     flex_line_count: FlexLineCount,
-    flex_basis: Option<FlexBasis> where builder = manual,
+    flex_basis: Option<FlexBasis>,
     order: Order,
     z_index: ZIndex,
     position: Position,
@@ -1712,11 +1712,6 @@ impl StyleDeclaration {
   /// Returns a declaration for this property.
   pub fn height(value: impl Into<SizeValue>) -> Self {
     Self::Height(value.into())
-  }
-
-  /// Returns a declaration for this property.
-  pub fn flex_basis<T: Into<FlexBasis>>(value: Option<T>) -> Self {
-    Self::FlexBasis(value.map(Into::into))
   }
 }
 
