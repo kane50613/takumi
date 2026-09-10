@@ -9,24 +9,12 @@ type TextModel = ReturnType<Monaco["editor"]["getModels"]>[number];
 type ThemeData = Parameters<Monaco["editor"]["defineTheme"]>[1];
 type ShikiTheme = typeof githubDark;
 
-/**
- * Monaco hands the provider one line at a time, so the state carries the line number. It also
- * carries the token left open at the end of the line: Monaco stops re-tokenizing as soon as an end
- * state equals the one it stored, and every line below a newly opened comment or template literal
- * needs new colours even though its number did not change.
- */
+/** Monaco stops re-tokenizing once an end state repeats, so the state carries the token left open. */
 type LineState = {
   lineIndex: number;
   openToken: number | undefined;
   clone(): LineState;
   equals(other: LineState): boolean;
-};
-
-type ParsedModel = {
-  version: number;
-  lines: readonly ParsedLine[];
-  /** Per line, the type of the token that runs past its end, aligned with `lines`. */
-  openTokens: readonly (number | undefined)[];
 };
 
 export const darkTheme = "takumi-dark";
@@ -36,10 +24,7 @@ const languageId = "typescript";
 
 const breakToken = SugarHigh.TokenMap.get("break");
 
-/**
- * The TextMate scope GitHub's themes colour each sugar-high token with. `sign` covers operators and
- * punctuation alike, so it stays at the editor foreground rather than painting braces keyword red.
- */
+/** `sign` covers punctuation as well as operators, so it stays at the editor foreground. */
 const tokenScopes = {
   keyword: "keyword",
   string: "string",
@@ -55,7 +40,7 @@ function scopeOf(type: string) {
   return `sh.${type}`;
 }
 
-/** Resolves a scope the way TextMate does: the most specific prefix an entry lists wins. */
+/** TextMate resolves a scope to the most specific prefix an entry lists. */
 function settingsOfScope(theme: ShikiTheme, scope: string) {
   const segments = scope.split(".");
 
@@ -94,10 +79,7 @@ function themeDataOf(theme: ShikiTheme, base: ThemeData["base"]): ThemeData {
   };
 }
 
-/**
- * sugar-high splits a token that spans lines into one token per line without a break between them,
- * so the tokens it emits for a break are the only line ends with nothing left open.
- */
+/** sugar-high splits a multi-line token per line, so its break tokens are the only closed line ends. */
 function openTokensOf(tokens: readonly [number, string][]) {
   const openTokens: (number | undefined)[] = [];
 
@@ -113,21 +95,6 @@ function openTokensOf(tokens: readonly [number, string][]) {
   }
 
   return openTokens;
-}
-
-function parseCode(code: string): Omit<ParsedModel, "version"> {
-  let rawTokens: [number, string][] = [];
-
-  const { lines } = parse(code, {
-    ...typescript,
-    tokenize: (source, options) => {
-      rawTokens = typescript.tokenize(source, options);
-
-      return rawTokens;
-    },
-  });
-
-  return { lines, openTokens: openTokensOf(rawTokens) };
 }
 
 function tokensOf(parsedLine: ParsedLine) {
@@ -156,14 +123,12 @@ function tokensOf(parsedLine: ParsedLine) {
   return tokens;
 }
 
-/**
- * sugar-high parses a whole document rather than a line at a time, so the provider looks the line up
- * in the cached parse of the model it belongs to. Monaco names no model in `tokenize`, so the
- * provider keeps the last model that matched and only rescans when it stops matching. A line that
- * matches no model is parsed on its own, which loses the multi-line comment and template context.
- */
+/** Monaco names no model in `tokenize`, so lines are matched by text, which the playground's single model keeps unambiguous. */
 function createTokensProvider(monaco: Monaco) {
-  const parsedModels = new WeakMap<TextModel, ParsedModel>();
+  const parsedModels = new WeakMap<
+    TextModel,
+    { version: number; lines: readonly ParsedLine[]; openTokens: readonly (number | undefined)[] }
+  >();
   let boundModel: TextModel | undefined;
 
   const parseOf = (model: TextModel) => {
@@ -174,10 +139,18 @@ function createTokensProvider(monaco: Monaco) {
       return cached;
     }
 
-    const parsed = {
-      version,
-      ...parseCode(model.getValue(monaco.editor.EndOfLinePreference.LF)),
-    };
+    let rawTokens: [number, string][] = [];
+
+    const { lines } = parse(model.getValue(monaco.editor.EndOfLinePreference.LF), {
+      ...typescript,
+      tokenize: (source, options) => {
+        rawTokens = typescript.tokenize(source, options);
+
+        return rawTokens;
+      },
+    });
+
+    const parsed = { version, lines, openTokens: openTokensOf(rawTokens) };
 
     parsedModels.set(model, parsed);
 
@@ -185,24 +158,24 @@ function createTokensProvider(monaco: Monaco) {
   };
 
   const lineAt = (lineIndex: number, line: string) => {
-    const models =
-      boundModel && !boundModel.isDisposed()
-        ? [boundModel, ...monaco.editor.getModels()]
-        : monaco.editor.getModels();
+    const matches = monaco.editor
+      .getModels()
+      .filter(
+        (model: TextModel) =>
+          model.getLanguageId() === languageId && parseOf(model).lines[lineIndex]?.value === line,
+      );
+    const model: TextModel | undefined =
+      matches.length > 1 ? matches.find((match: TextModel) => match === boundModel) : matches[0];
 
-    for (const model of models) {
-      if (model.getLanguageId() !== languageId) {
-        continue;
-      }
-
-      const parsed = parseOf(model);
-
-      if (parsed.lines[lineIndex]?.value === line) {
-        boundModel = model;
-
-        return { parsedLine: parsed.lines[lineIndex], openToken: parsed.openTokens[lineIndex] };
-      }
+    if (!model) {
+      return;
     }
+
+    boundModel = model;
+
+    const parsed = parseOf(model);
+
+    return { parsedLine: parsed.lines[lineIndex], openToken: parsed.openTokens[lineIndex] };
   };
 
   const createState = (lineIndex: number, openToken: number | undefined): LineState => ({
@@ -234,7 +207,6 @@ function createTokensProvider(monaco: Monaco) {
   };
 }
 
-/** Registers sugar-high tokenization and the two editor themes on a Monaco instance. */
 export function registerSyntaxHighlighting(monaco: Monaco) {
   monaco.editor.defineTheme(darkTheme, themeDataOf(githubDark, "vs-dark"));
   monaco.editor.defineTheme(lightTheme, themeDataOf(githubLight, "vs"));

@@ -14,8 +14,6 @@ const extraLib = (filePath: string) => (module: { default: string }) => ({
   filePath,
 });
 
-// Dynamic imports keep the typings out of the playground chunk; they load as
-// their own chunks alongside the editor.
 const coreTypings = () =>
   Promise.all([
     import("../../../node_modules/@types/react/index.d.ts?raw").then(
@@ -37,23 +35,18 @@ const coreTypings = () =>
   ]);
 
 const echartsTypings = () =>
-  Promise.all([
-    import("../../../node_modules/echarts/types/dist/core.d.ts?raw").then(
-      extraLib("file:///node_modules/echarts/types/dist/core.d.ts"),
-    ),
-    import("../../../node_modules/echarts/types/dist/charts.d.ts?raw").then(
-      extraLib("file:///node_modules/echarts/types/dist/charts.d.ts"),
-    ),
-    import("../../../node_modules/echarts/types/dist/components.d.ts?raw").then(
-      extraLib("file:///node_modules/echarts/types/dist/components.d.ts"),
-    ),
-    import("../../../node_modules/echarts/types/dist/renderers.d.ts?raw").then(
-      extraLib("file:///node_modules/echarts/types/dist/renderers.d.ts"),
-    ),
-    import("../../../node_modules/echarts/types/dist/shared.d.ts?raw").then(
-      extraLib("file:///node_modules/echarts/types/dist/shared.d.ts"),
-    ),
-  ]);
+  Promise.all(
+    Object.entries(
+      // Vite skips node_modules unless the glob is exhaustive.
+      import.meta.glob<string>(
+        "../../../node_modules/echarts/types/dist/{core,charts,components,renderers,shared}.d.ts",
+        { query: "?raw", import: "default", exhaustive: true },
+      ),
+    ).map(async ([path, load]) => ({
+      content: await load(),
+      filePath: `file:///${path.slice(path.indexOf("node_modules"))}`,
+    })),
+  );
 
 const tailwindTypings: ExtraLib = {
   content: `
@@ -73,7 +66,7 @@ function applyTypings(monaco: Monaco) {
   monaco.languages.typescript.typescriptDefaults.setExtraLibs([tailwindTypings, ...loadedTypings]);
 }
 
-/** Shares one load across mounts; a failed load is dropped so the next mount retries it. */
+/** A failed load is dropped so the next mount retries it. */
 function typingsLoader(typings: () => Promise<ExtraLib[]>) {
   let load: Promise<void> | undefined;
 
@@ -107,12 +100,13 @@ export function ComponentEditor({
     Parameters<NonNullable<ComponentProps<typeof Editor>["onMount"]>>[0] | null
   >(null);
   const isApplyingExternalCodeRef = useRef(false);
-  // The command is registered once, so it reads the callback through a ref.
+  /** The command is registered once, so it reads the callback through a ref. */
   const onRunRef = useRef(onRun);
-
-  onRunRef.current = onRun;
   /** The last value the editor itself produced, so its own edits never bounce back. */
   const lastEmittedRef = useRef(code);
+
+  onRunRef.current = onRun;
+
   const theme = resolvedTheme === "dark" ? darkTheme : lightTheme;
 
   useEffect(() => {
@@ -131,10 +125,7 @@ export function ComponentEditor({
     };
   }, []);
 
-  // Only a change from outside the editor (a template, a reset, formatting) is
-  // worth writing back. An IME composes through several intermediate values, and
-  // the state lags behind them, so comparing against the model alone would make
-  // every stale round trip look external.
+  // An IME lags the state behind the model, so only the last emitted value tells an outside edit apart.
   useEffect(() => {
     const editor = editorRef.current;
     const model = editor?.getModel();
@@ -146,8 +137,7 @@ export function ComponentEditor({
     const selection = editor.getSelection();
 
     isApplyingExternalCodeRef.current = true;
-    // A full-range edit rather than `setValue`: it keeps the undo stack and
-    // leaves the cursor where it was instead of dropping it at the top.
+    // A full-range edit keeps the undo stack, which `setValue` drops.
     model.pushEditOperations([], [{ range: model.getFullModelRange(), text: code }], () => null);
     isApplyingExternalCodeRef.current = false;
     lastEmittedRef.current = code;
@@ -180,8 +170,7 @@ export function ComponentEditor({
       }}
       onMount={(editor, monaco) => {
         editorRef.current = editor;
-        // Monaco owns the keyboard inside the editor and binds ⌘↵ itself, so the
-        // shortcut has to be registered here rather than on the window.
+        // Monaco owns the keyboard inside the editor, so ⌘↵ cannot be bound on the window.
         editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => onRunRef.current());
 
         loadCoreTypings(monaco);
