@@ -6,6 +6,7 @@ import {
   ScriptTarget,
   typescriptDefaults,
 } from "monaco-editor/esm/vs/language/typescript/monaco.contribution.js";
+import { setupTypeScript } from "monaco-editor/esm/vs/language/typescript/tsMode.js";
 
 type ExtraLib = { content: string; filePath: string };
 
@@ -102,6 +103,8 @@ export function startTypeScriptService(codeEditor: editor.IStandaloneCodeEditor)
   });
 
   applyTypings();
+  // The contribution hooks `onLanguage`, which fired when the editor created its model.
+  setupTypeScript(typescriptDefaults);
   loadCoreTypings();
 
   // echarts ships megabytes of typings, so they wait until the code asks for them.
