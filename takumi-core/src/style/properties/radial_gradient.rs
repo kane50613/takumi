@@ -1,6 +1,7 @@
 use std::{f32::consts::SQRT_2, fmt};
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
+use smallvec::SmallVec;
 use tiny_skia::PremultipliedColorU8;
 use typed_builder::TypedBuilder;
 
@@ -118,6 +119,115 @@ impl<'i> FromCss<'i> for RadialSize {
 
 impl MakeComputed for RadialSize {}
 
+/// Resolved geometry and stops shared by gradient renderers.
+pub struct RadialGradientGeometry {
+  /// Center X coordinate in pixels.
+  pub cx: f32,
+  /// Center Y coordinate in pixels.
+  pub cy: f32,
+  /// Reciprocal horizontal radius for sampling.
+  pub inv_radius_x: f32,
+  /// Reciprocal vertical radius for sampling.
+  pub inv_radius_y: f32,
+  /// Axis length in pixels.
+  pub radius_scale: f32,
+  stops: SmallVec<[ResolvedGradientStop; 4]>,
+}
+
+impl RadialGradient {
+  /// Resolves the geometry and stops for a target viewport.
+  pub fn resolve_geometry(
+    &self,
+    width: u32,
+    height: u32,
+    sizing: &SizingContext,
+    current_color: Color,
+  ) -> RadialGradientGeometry {
+    let cx = Length::from(self.center.0.x).to_px(sizing, width as f32);
+    let cy = Length::from(self.center.0.y).to_px(sizing, height as f32);
+    let dx_left = cx.abs();
+    let dx_right = (width as f32 - cx).abs();
+    let dy_top = cy.abs();
+    let dy_bottom = (height as f32 - cy).abs();
+    let corner_distances = [
+      (dx_left, dy_top),
+      (dx_left, dy_bottom),
+      (dx_right, dy_top),
+      (dx_right, dy_bottom),
+    ]
+    .map(|(dx, dy)| (dx * dx + dy * dy).sqrt());
+    let (radius_x, radius_y) = match (self.shape, self.size) {
+      (shape, RadialSize::Explicit { radius_x, radius_y }) => {
+        let radius_x = radius_x.to_px(sizing, width as f32).max(0.0);
+        let radius_y = radius_y.to_px(sizing, height as f32).max(0.0);
+
+        match shape {
+          RadialShape::Circle => {
+            let radius = radius_x.max(radius_y);
+            (radius, radius)
+          }
+          RadialShape::Ellipse => (radius_x, radius_y),
+        }
+      }
+      (RadialShape::Ellipse, RadialSize::FarthestCorner) => {
+        ellipse_radii_through((dx_left.max(dx_right), dy_top.max(dy_bottom)))
+      }
+      (RadialShape::Circle, RadialSize::FarthestCorner) => {
+        let radius = corner_distances.into_iter().fold(0.0_f32, f32::max);
+        (radius, radius)
+      }
+      (RadialShape::Ellipse, RadialSize::FarthestSide) => {
+        (dx_left.max(dx_right), dy_top.max(dy_bottom))
+      }
+      (RadialShape::Ellipse, RadialSize::ClosestSide) => {
+        (dx_left.min(dx_right), dy_top.min(dy_bottom))
+      }
+      (RadialShape::Circle, RadialSize::FarthestSide) => {
+        let radius = dx_left.max(dx_right).max(dy_top.max(dy_bottom));
+        (radius, radius)
+      }
+      (RadialShape::Circle, RadialSize::ClosestSide) => {
+        let radius = dx_left.min(dx_right).min(dy_top.min(dy_bottom));
+        (radius, radius)
+      }
+      (RadialShape::Ellipse, RadialSize::ClosestCorner) => {
+        ellipse_radii_through((dx_left.min(dx_right), dy_top.min(dy_bottom)))
+      }
+      (RadialShape::Circle, RadialSize::ClosestCorner) => {
+        let radius = corner_distances.into_iter().fold(f32::INFINITY, f32::min);
+        (radius, radius)
+      }
+    };
+    let radius_scale = radius_x.max(radius_y);
+
+    RadialGradientGeometry {
+      cx,
+      cy,
+      inv_radius_x: radius_x.max(1e-6).recip(),
+      inv_radius_y: radius_y.max(1e-6).recip(),
+      radius_scale,
+      stops: ResolvedGradientStop::resolve(
+        &self.stops,
+        radius_scale.max(1e-6),
+        sizing,
+        current_color,
+      ),
+    }
+  }
+}
+
+impl RadialGradientGeometry {
+  /// Resolved stops in radius pixels.
+  pub fn stops(&self) -> &[ResolvedGradientStop] {
+    &self.stops
+  }
+
+  /// Mutable resolved stops for backend color filtering.
+  pub fn stops_mut(&mut self) -> &mut [ResolvedGradientStop] {
+    &mut self.stops
+  }
+}
+
 /// Precomputed drawing context for repeated sampling of a `RadialGradient`.
 #[derive(Debug, Clone)]
 pub struct RadialGradientTile {
@@ -221,81 +331,14 @@ impl RadialGradientTile {
     current_color: Color,
     dither: bool,
   ) -> Self {
-    let cx = Length::from(gradient.center.0.x).to_px(sizing, width as f32);
-    let cy = Length::from(gradient.center.0.y).to_px(sizing, height as f32);
-
-    // Absolute distances to the sides, so an out-of-box center still measures
-    // non-negative radii (Blink RadiusToSide).
-    let dx_left = cx.abs();
-    let dx_right = (width as f32 - cx).abs();
-    let dy_top = cy.abs();
-    let dy_bottom = (height as f32 - cy).abs();
-
-    let corner_distances = [
-      (dx_left, dy_top),
-      (dx_left, dy_bottom),
-      (dx_right, dy_top),
-      (dx_right, dy_bottom),
-    ]
-    .map(|(dx, dy)| (dx * dx + dy * dy).sqrt());
-
-    let (radius_x, radius_y) = match (gradient.shape, gradient.size) {
-      (shape, RadialSize::Explicit { radius_x, radius_y }) => {
-        let resolved_radius_x = radius_x.to_px(sizing, width as f32).max(0.0);
-        let resolved_radius_y = radius_y.to_px(sizing, height as f32).max(0.0);
-
-        match shape {
-          RadialShape::Circle => {
-            let r = resolved_radius_x.max(resolved_radius_y);
-            (r, r)
-          }
-          RadialShape::Ellipse => (resolved_radius_x, resolved_radius_y),
-        }
-      }
-      (RadialShape::Ellipse, RadialSize::FarthestCorner) => {
-        ellipse_radii_through((dx_left.max(dx_right), dy_top.max(dy_bottom)))
-      }
-      (RadialShape::Circle, RadialSize::FarthestCorner) => {
-        let r = corner_distances.into_iter().fold(0.0_f32, f32::max);
-        (r, r)
-      }
-      // Fallbacks for other size keywords: approximate using sides
-      (RadialShape::Ellipse, RadialSize::FarthestSide) => {
-        (dx_left.max(dx_right), dy_top.max(dy_bottom))
-      }
-      (RadialShape::Ellipse, RadialSize::ClosestSide) => {
-        (dx_left.min(dx_right), dy_top.min(dy_bottom))
-      }
-      (RadialShape::Circle, RadialSize::FarthestSide) => {
-        let r = dx_left.max(dx_right).max(dy_top.max(dy_bottom));
-        (r, r)
-      }
-      (RadialShape::Circle, RadialSize::ClosestSide) => {
-        let r = dx_left.min(dx_right).min(dy_top.min(dy_bottom));
-        (r, r)
-      }
-      (RadialShape::Ellipse, RadialSize::ClosestCorner) => {
-        ellipse_radii_through((dx_left.min(dx_right), dy_top.min(dy_bottom)))
-      }
-      (RadialShape::Circle, RadialSize::ClosestCorner) => {
-        let r = corner_distances.into_iter().fold(f32::INFINITY, f32::min);
-        (r, r)
-      }
-    };
-
-    let radius_scale = radius_x.max(radius_y);
-    let resolved_stops = ResolvedGradientStop::resolve(
-      &gradient.stops,
-      radius_scale.max(1e-6),
-      sizing,
-      current_color,
-    );
-    let axis = LutAxis::new(gradient.repeating, resolved_stops, radius_scale);
-    let lut_size = axis.lut_size_covering((radius_scale.ceil() as usize).saturating_add(1));
+    let geometry = gradient.resolve_geometry(width, height, sizing, current_color);
+    let axis = LutAxis::new(gradient.repeating, geometry.stops, geometry.radius_scale);
+    let lut_size =
+      axis.lut_size_covering((geometry.radius_scale.ceil() as usize).saturating_add(1));
     let lut = axis.lut(lut_size, gradient.interpolation, dither);
     let lut_len = lut.len();
-    let inv_radius_x = radius_x.max(1e-6).recip();
-    let inv_radius_y = radius_y.max(1e-6).recip();
+    let inv_radius_x = geometry.inv_radius_x;
+    let inv_radius_y = geometry.inv_radius_y;
     let position_to_lut_scale = if axis.length.abs() <= f32::EPSILON || lut_len <= 1 {
       0.0
     } else {
@@ -306,11 +349,11 @@ impl RadialGradientTile {
     RadialGradientTile {
       width,
       height,
-      cx,
-      cy,
+      cx: geometry.cx,
+      cy: geometry.cy,
       inv_radius_x,
       inv_radius_y,
-      radius_scale,
+      radius_scale: geometry.radius_scale,
       repeating: axis.repeating,
       repeat_start: axis.repeat_start,
       repeat_period: axis.repeat_period,

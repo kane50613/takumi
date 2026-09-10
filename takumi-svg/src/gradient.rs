@@ -6,7 +6,7 @@ use takumi_core::{
   context::RenderContext,
   geometry::{Point, Size},
   layout::background::{BackgroundLayerInput, LayerTileStyle},
-  paint::{ColorLut, ConicGradientTile, LinearGradientTile, RadialGradientTile},
+  paint::{ColorLut, ConicGradientTile},
   style::{
     BackgroundImage, BackgroundRepeat, BackgroundSize, BlendMode, ColorInterpolationMethod,
     ConicGradient, LinearGradient, PositionValue, RadialGradient, ResolvedGradientStop,
@@ -212,45 +212,38 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
 
   fn linear(&mut self, gradient: &LinearGradient, rect: Frame) -> io::Result<()> {
     let Frame { x, y, w, h } = rect;
-    let tile = LinearGradientTile::new(
-      gradient,
+    let geometry = gradient.resolve_geometry(
       w as u32,
       h as u32,
       &self.context.sizing,
       self.context.current_color,
-      false,
     );
-    let resolved = ResolvedGradientStop::resolve(
-      &gradient.stops,
-      tile.axis_length.max(1e-6),
-      &self.context.sizing,
-      self.context.current_color,
-    );
+    let resolved = geometry.stops();
     if resolved.is_empty() {
       return Ok(());
     }
 
-    let max_extent = tile.axis_length / 2.0;
+    let max_extent = geometry.axis_length / 2.0;
     let (cx, cy) = (x + w / 2.0, y + h / 2.0);
     let point_at = |t: f32| {
       (
-        cx + (t - max_extent) * tile.dir_x,
-        cy + (t - max_extent) * tile.dir_y,
+        cx + (t - max_extent) * geometry.dir_x,
+        cy + (t - max_extent) * geometry.dir_y,
       )
     };
 
     let (t0, t1, base, span) = if gradient.repeating {
       let first = resolved.first().map_or(0.0, |s| s.position);
-      let last = resolved.last().map_or(tile.axis_length, |s| s.position);
+      let last = resolved.last().map_or(geometry.axis_length, |s| s.position);
       (first, last, first, last - first)
     } else {
-      (0.0, tile.axis_length, 0.0, tile.axis_length)
+      (0.0, geometry.axis_length, 0.0, geometry.axis_length)
     };
 
     let stops = if gradient.repeating {
-      svg_stops(&resolved, base, span)
+      svg_stops(resolved, base, span)
     } else {
-      lut_svg_stops(&resolved, tile.axis_length, gradient.interpolation)
+      lut_svg_stops(resolved, geometry.axis_length, gradient.interpolation)
     };
     let paint = self
       .doc
@@ -260,45 +253,40 @@ impl<'a, 'd> LayerEmitter<'a, 'd> {
 
   fn radial(&mut self, gradient: &RadialGradient, rect: Frame) -> io::Result<()> {
     let Frame { x, y, w, h } = rect;
-    let tile = RadialGradientTile::new(
-      gradient,
+    let geometry = gradient.resolve_geometry(
       w as u32,
       h as u32,
       &self.context.sizing,
       self.context.current_color,
-      false,
     );
-    let resolved = ResolvedGradientStop::resolve(
-      &gradient.stops,
-      tile.radius_scale.max(1e-6),
-      &self.context.sizing,
-      self.context.current_color,
-    );
+    let resolved = geometry.stops();
     if resolved.is_empty() {
       return Ok(());
     }
 
-    let radius_x = tile.inv_radius_x.recip();
-    let radius_y = tile.inv_radius_y.recip();
+    let radius_x = geometry.inv_radius_x.recip();
+    let radius_y = geometry.inv_radius_y.recip();
     let (r, base, span) = if gradient.repeating {
       let first = resolved.first().map_or(0.0, |s| s.position);
-      let last = resolved.last().map_or(tile.radius_scale, |s| s.position);
+      let last = resolved
+        .last()
+        .map_or(geometry.radius_scale, |s| s.position);
       ((last - first).max(1e-6), first, last - first)
     } else {
-      (tile.radius_scale, 0.0, tile.radius_scale)
+      (geometry.radius_scale, 0.0, geometry.radius_scale)
     };
     let scale = (
-      (radius_x / tile.radius_scale.max(1e-6)).max(1e-6),
-      (radius_y / tile.radius_scale.max(1e-6)).max(1e-6),
+      (radius_x / geometry.radius_scale.max(1e-6)).max(1e-6),
+      (radius_y / geometry.radius_scale.max(1e-6)).max(1e-6),
     );
 
     let stops = if gradient.repeating {
-      svg_stops(&resolved, base, span)
+      svg_stops(resolved, base, span)
     } else {
-      lut_svg_stops(&resolved, tile.radius_scale, gradient.interpolation)
+      lut_svg_stops(resolved, geometry.radius_scale, gradient.interpolation)
     };
     let paint = self.doc.radial_gradient(
-      (x + tile.cx, y + tile.cy),
+      (x + geometry.cx, y + geometry.cy),
       r,
       scale,
       gradient.repeating,

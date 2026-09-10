@@ -4,6 +4,7 @@ use std::{
 };
 
 use cssparser::{Parser, Token, match_ignore_ascii_case};
+use smallvec::SmallVec;
 use tiny_skia::PremultipliedColorU8;
 use typed_builder::TypedBuilder;
 
@@ -38,6 +39,92 @@ pub struct LinearGradient {
 impl MakeComputed for LinearGradient {
   fn make_computed(&mut self, sizing: &SizingContext) {
     self.stops.make_computed(sizing);
+  }
+}
+
+/// Resolved geometry and stops shared by gradient renderers.
+pub struct LinearGradientGeometry {
+  /// Direction vector X component.
+  pub dir_x: f32,
+  /// Direction vector Y component.
+  pub dir_y: f32,
+  /// Full axis length in pixels.
+  pub axis_length: f32,
+  /// Projection offset for the gradient axis.
+  projection_bias: f32,
+  stops: SmallVec<[ResolvedGradientStop; 4]>,
+}
+
+impl LinearGradient {
+  fn direction_components(&self, width: u32, height: u32) -> (f32, f32) {
+    match self.direction {
+      LinearGradientDirection::Angle(angle) => {
+        let rad = angle.0.to_radians();
+        (rad.sin(), -rad.cos())
+      }
+      LinearGradientDirection::Keyword(keyword_direction) => {
+        if let (Some(horizontal), Some(vertical)) =
+          (keyword_direction.horizontal, keyword_direction.vertical)
+        {
+          let dir_x = match horizontal {
+            HorizontalKeyword::Left => -(height as f32),
+            HorizontalKeyword::Right => height as f32,
+          };
+          let dir_y = match vertical {
+            VerticalKeyword::Top => -(width as f32),
+            VerticalKeyword::Bottom => width as f32,
+          };
+          let magnitude = dir_x.hypot(dir_y);
+          if magnitude > f32::EPSILON {
+            return (dir_x / magnitude, dir_y / magnitude);
+          }
+        }
+
+        let angle = keyword_direction.to_angle();
+        let rad = angle.0.to_radians();
+        (rad.sin(), -rad.cos())
+      }
+    }
+  }
+
+  /// Resolves the geometry and stops for a target viewport.
+  pub fn resolve_geometry(
+    &self,
+    width: u32,
+    height: u32,
+    sizing: &SizingContext,
+    current_color: Color,
+  ) -> LinearGradientGeometry {
+    let (dir_x, dir_y) = self.direction_components(width, height);
+    let cx = width as f32 / 2.0;
+    let cy = height as f32 / 2.0;
+    let max_extent = ((width as f32 * dir_x.abs()) + (height as f32 * dir_y.abs())) / 2.0;
+    let axis_length = 2.0 * max_extent;
+
+    LinearGradientGeometry {
+      dir_x,
+      dir_y,
+      axis_length,
+      projection_bias: max_extent - cx * dir_x - cy * dir_y,
+      stops: ResolvedGradientStop::resolve(
+        &self.stops,
+        axis_length.max(1e-6),
+        sizing,
+        current_color,
+      ),
+    }
+  }
+}
+
+impl LinearGradientGeometry {
+  /// Resolved stops in axis pixels.
+  pub fn stops(&self) -> &[ResolvedGradientStop] {
+    &self.stops
+  }
+
+  /// Mutable resolved stops for backend color filtering.
+  pub fn stops_mut(&mut self) -> &mut [ResolvedGradientStop] {
+    &mut self.stops
   }
 }
 
@@ -115,37 +202,6 @@ pub struct LinearGradientFastPath<'a> {
 
 impl LinearGradientTile {
   const AXIS_ALIGNMENT_EPSILON: f32 = 1e-4;
-
-  fn direction_components(gradient: &LinearGradient, width: u32, height: u32) -> (f32, f32) {
-    match gradient.direction {
-      LinearGradientDirection::Angle(angle) => {
-        let rad = angle.0.to_radians();
-        (rad.sin(), -rad.cos())
-      }
-      LinearGradientDirection::Keyword(keyword_direction) => {
-        if let (Some(horizontal), Some(vertical)) =
-          (keyword_direction.horizontal, keyword_direction.vertical)
-        {
-          let dir_x = match horizontal {
-            HorizontalKeyword::Left => -(height as f32),
-            HorizontalKeyword::Right => height as f32,
-          };
-          let dir_y = match vertical {
-            VerticalKeyword::Top => -(width as f32),
-            VerticalKeyword::Bottom => width as f32,
-          };
-          let magnitude = dir_x.hypot(dir_y);
-          if magnitude > f32::EPSILON {
-            return (dir_x / magnitude, dir_y / magnitude);
-          }
-        }
-
-        let angle = keyword_direction.to_angle();
-        let rad = angle.0.to_radians();
-        (rad.sin(), -rad.cos())
-      }
-    }
-  }
 
   /// Projects a pixel onto the gradient axis, in pixels.
   #[inline(always)]
@@ -232,22 +288,10 @@ impl LinearGradientTile {
     current_color: Color,
     dither: bool,
   ) -> Self {
-    let (dir_x, dir_y) = Self::direction_components(gradient, width, height);
+    let geometry = gradient.resolve_geometry(width, height, sizing, current_color);
+    let (dir_x, dir_y) = (geometry.dir_x, geometry.dir_y);
     let axis_aligned_kind = Self::classify_axis_aligned(dir_x, dir_y);
-
-    let cx = width as f32 / 2.0;
-    let cy = height as f32 / 2.0;
-    let max_extent = ((width as f32 * dir_x.abs()) + (height as f32 * dir_y.abs())) / 2.0;
-    let axis_length = 2.0 * max_extent;
-    let projection_bias = max_extent - cx * dir_x - cy * dir_y;
-
-    let resolved_stops = ResolvedGradientStop::resolve(
-      &gradient.stops,
-      axis_length.max(1e-6),
-      sizing,
-      current_color,
-    );
-    let axis = LutAxis::new(gradient.repeating, resolved_stops, axis_length);
+    let axis = LutAxis::new(gradient.repeating, geometry.stops, geometry.axis_length);
     let lut_size = match axis_aligned_kind {
       Some(LinearGradientFastPathKind::Horizontal) => axis.lut_size_covering(width as usize + 1),
       Some(LinearGradientFastPathKind::Vertical) => axis.lut_size_covering(height as usize + 1),
@@ -267,11 +311,11 @@ impl LinearGradientTile {
       height,
       dir_x,
       dir_y,
-      axis_length,
+      axis_length: geometry.axis_length,
       repeating: axis.repeating,
       repeat_start: axis.repeat_start,
       repeat_period: axis.repeat_period,
-      projection_bias,
+      projection_bias: geometry.projection_bias,
       position_to_lut_scale,
       fully_opaque,
       lut,
