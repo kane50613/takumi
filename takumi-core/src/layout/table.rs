@@ -632,20 +632,11 @@ impl RenderNode {
   /// context of its own, so taffy would lay its inline children out as blocks.
   /// Nested tables pay for this once per level, since each level lays the levels
   /// below it out again.
-  fn mark_intrinsic(&mut self) {
-    self.context.intrinsic_min_content = true;
-
-    for child in self.children.as_deref_mut().unwrap_or_default() {
-      child.mark_intrinsic();
-    }
-  }
-
   fn intrinsic_widths(&self) -> (f32, f32) {
     let mut cell = self.clone();
 
     cell.lower_cell(1, 0, 1, false);
     cell.context.style.display.blockify();
-    cell.mark_intrinsic();
 
     let measure = |width| {
       let mut tree = LayoutTree::from_render_node(&cell);

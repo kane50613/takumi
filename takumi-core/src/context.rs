@@ -43,8 +43,6 @@ pub struct RenderContextInit {
   dither_gradients: bool,
   #[builder(default = false)]
   collapsed_borders: bool,
-  #[builder(default = false)]
-  intrinsic_min_content: bool,
   #[builder(default)]
   images: Rc<HashMap<Arc<str>, ImageSource>>,
   #[builder(default)]
@@ -73,7 +71,6 @@ impl From<RenderContextInit> for RenderContext {
       current_color: init.current_color,
       style: init.style,
       collapsed_borders: init.collapsed_borders,
-      intrinsic_min_content: init.intrinsic_min_content,
     }
   }
 }
@@ -93,14 +90,11 @@ pub struct RenderContext {
   pub style: Box<ComputedStyle>,
   /// Whether this box is a cell of a table that collapses its borders.
   pub(crate) collapsed_borders: bool,
-  /// Whether a min-content measurement reports the widest run it could not break instead of the
-  /// zero width it wrapped against.
-  pub(crate) intrinsic_min_content: bool,
 }
 
 /// A [`RenderContextBuilder`] with nothing set yet.
 type UnsetRenderContextBuilder =
-  RenderContextBuilder<((), (), (), (), (), (), (), (), (), (), (), (), (), ())>;
+  RenderContextBuilder<((), (), (), (), (), (), (), (), (), (), (), (), ())>;
 
 impl RenderContext {
   /// Starts a root context; `fonts` and `sizing` are required.
@@ -160,7 +154,6 @@ impl RenderContext {
       current_color,
       style: Box::new(style),
       collapsed_borders: false,
-      intrinsic_min_content: parent.intrinsic_min_content,
     }
   }
 }

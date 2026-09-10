@@ -36,7 +36,7 @@ pub(super) fn text_fit_is_applicable(positioned_floats: &[PositionedInlineBox]) 
 }
 
 /// Returns `(text_advance, static_advance)` for a line.
-fn text_fit_line_advance(line: &Line<'_, InlineBrush>) -> (f32, f32) {
+pub(super) fn text_fit_line_advance(line: &Line<'_, InlineBrush>) -> (f32, f32) {
   let metrics = line.metrics();
   let static_advance: f32 = line
     .items()

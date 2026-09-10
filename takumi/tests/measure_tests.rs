@@ -506,7 +506,25 @@ fn test_measure_sizing_keywords_size_from_the_content() {
   let fit_content = measured("fit-content");
   let limited = measured("fit-content(120px)");
   let stretch = measured("stretch");
+  let widest_word = ["alpha", "beta", "gamma", "delta"]
+    .into_iter()
+    .map(|word| {
+      measure(
+        Node::from_html(
+          &format!(
+            r#"<div style="display:flex; width:400px; align-items:flex-start"><div style="display:block; width:max-content; font-size:20px">{word}</div></div>"#
+          ),
+          FromHtmlOptions::default(),
+        )
+        .expect("parse"),
+        create_measure_viewport(),
+      )
+      .children[0]
+        .width
+    })
+    .fold(0.0_f32, f32::max);
 
+  assert_close(min_content, widest_word);
   assert!(
     min_content < max_content,
     "min-content {min_content} should be narrower than max-content {max_content}"

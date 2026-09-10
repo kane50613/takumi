@@ -2040,8 +2040,8 @@ impl RenderNode {
           max_width,
           ceil_width,
           parent_font_metrics,
-          clamp_to_max_width: !self.context.intrinsic_min_content
-            || !matches!(available_space.width, AvailableSpace::MinContent),
+          min_content_query: known_dimensions.width.is_none()
+            && matches!(available_space.width, AvailableSpace::MinContent),
         },
       );
     }
