@@ -30,7 +30,7 @@ use crate::{
   style::{
     Affine, BackgroundImage, BackgroundImages, BlendMode, BoxSizing, Color, ComputedStyle,
     ContentItem, ContentValue, Display, Filters, Float, Isolation, Length, LineHeight,
-    ListStylePosition, PercentageNumber, Position, SizingContext, Style as NodeStyle,
+    ListStylePosition, MaxSize, PercentageNumber, Position, SizingContext, Style as NodeStyle,
     StyleDeclaration, StyleDeclarationBlock, StyleSheet, TextWrapMode, TwBlocks, TwCache,
     WhiteSpaceCollapse, apply_stylesheet_animations,
   },
@@ -1107,6 +1107,28 @@ impl RenderNode {
     context.style.break_before = Default::default();
     context.style.break_after = Default::default();
     context.style.break_inside = Default::default();
+    context.style.width = Length::Auto;
+    context.style.height = Length::Auto;
+    context.style.min_width = Length::Auto;
+    context.style.min_height = Length::Auto;
+    context.style.max_width = MaxSize::None;
+    context.style.max_height = MaxSize::None;
+    context.style.top = Length::Auto;
+    context.style.right = Length::Auto;
+    context.style.bottom = Length::Auto;
+    context.style.left = Length::Auto;
+    context.style.padding_top = Length::zero();
+    context.style.padding_right = Length::zero();
+    context.style.padding_bottom = Length::zero();
+    context.style.padding_left = Length::zero();
+    context.style.margin_top = Length::zero();
+    context.style.margin_right = Length::zero();
+    context.style.margin_bottom = Length::zero();
+    context.style.margin_left = Length::zero();
+    context.style.border_top_style = Default::default();
+    context.style.border_right_style = Default::default();
+    context.style.border_bottom_style = Default::default();
+    context.style.border_left_style = Default::default();
     context
   }
 
