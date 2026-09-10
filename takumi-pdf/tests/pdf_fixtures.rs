@@ -1123,6 +1123,46 @@ fn a4_options<'f>(source: &str, fonts: &'f Fonts) -> PdfOptions<'f> {
     .build()
 }
 
+/// Text wraps at paint against the width layout measured it at, so a column
+/// with a fractional width paints exactly the lines the layout reserved.
+#[test]
+fn a_fractional_column_paints_the_lines_layout_reserved() {
+  let fonts = fonts();
+  let source = r#"<div style="display: flex; flex-direction: column; width: 217.25px;"><span style="font-size: 11px; line-height: 1.5;">Ihre Begleitung für diesen Tag ist Zahraa, die Ihnen ihre Heimatstadt aus ihrer ganz persönlichen Perspektive zeigen wird. Freuen Sie sich auf ein authentisches Oman-Erlebnis jenseits der typischen Reiseführer.</span></div>"#;
+  let node = from_html(source, FromHtmlOptions::default()).expect("parse the doc");
+  let size = measure(
+    MeasureOptions::builder()
+      .node(node.clone())
+      .viewport(Viewport::new((800, None)))
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("measure the doc");
+  let reserved = (size.height / 16.5).round() as usize;
+  let pdf = render(
+    PdfOptions::builder()
+      .node(node)
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render the doc");
+  let mut baselines: Vec<String> = content_lines(&pdf)
+    .map(|line| String::from_utf8_lossy(&line).into_owned())
+    .filter(|line| line.starts_with("BT ") && line.contains(" Tm"))
+    .filter_map(|line| line.split_whitespace().nth(10).map(str::to_owned))
+    .collect();
+
+  baselines.sort();
+  baselines.dedup();
+  assert_eq!(reserved, 5, "the layout reserves five lines");
+  assert_eq!(
+    baselines.len(),
+    reserved,
+    "the page painted a different number of lines than the layout reserved"
+  );
+}
+
 /// An inline hook has no box of its own. Directly under a tall block it would
 /// take that block's first page, so it takes the page the flow reached instead.
 #[test]

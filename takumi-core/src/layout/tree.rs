@@ -24,7 +24,7 @@ use crate::{
       collect_inline_items, create_inline_constraint, create_inline_layout, measure_inline_layout,
     },
     list_marker::{ListCounter, is_list_element, list_marker, owns_list_counter},
-    node::{Node, NodeStyleLayers},
+    node::{Node, NodeKind, NodeStyleLayers},
   },
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
   style::{
@@ -152,6 +152,7 @@ struct LayoutNodeState {
   final_layout: Layout,
   first_baseline_y: Option<f32>,
   is_inline_children: bool,
+  wraps_text: bool,
   children: Box<[TaffyNodeId]>,
   box_children: Box<[OrderedChild]>,
 }
@@ -515,6 +516,7 @@ fn push_layout_node<'r>(
       final_layout: Layout::new(),
       first_baseline_y: None,
       is_inline_children,
+      wraps_text: render_node.wraps_text(),
       children: Box::new([]),
       box_children: Box::new([]),
     });
@@ -1075,8 +1077,13 @@ impl RoundTree for LayoutTree<'_> {
     };
 
     let mut final_layout = *layout;
-    if node.is_inline_children {
+    // Text wraps against the width it was measured at. A snapped content box
+    // can be a fraction narrower, which pushes a nearly full line's last word
+    // onto a line the layout never reserved.
+    if node.wraps_text {
       final_layout.size.width = node.unrounded_layout.size.width;
+      final_layout.padding.left = node.unrounded_layout.padding.left;
+      final_layout.padding.right = node.unrounded_layout.padding.right;
     }
     // Snap the box, not the stroke: a rounded border width comes out as 2px on
     // one edge and 3px on another for a uniform 2.5px border, while the
@@ -1341,6 +1348,14 @@ impl RenderNode {
   fn is_collapsible_whitespace_only_text_node(&self) -> bool {
     self.context.style.white_space_collapse == WhiteSpaceCollapse::Collapse
       && self.is_whitespace_only_text_node()
+  }
+
+  /// Whether the node's own content is lines of text: an inline formatting
+  /// context, or a text node laying out its own run.
+  pub fn wraps_text(&self) -> bool {
+    self.should_create_inline_layout()
+      || (!self.has_anonymous_text_item_child()
+        && matches!(self.node.as_ref().map(|n| &n.kind), Some(NodeKind::Text(_))))
   }
 
   /// True if any direct child is an anonymous text item.
