@@ -1,12 +1,13 @@
-import type { Monaco } from "@monaco-editor/react";
+import type * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
 import githubDark from "@shikijs/themes/github-dark-default";
 import githubLight from "@shikijs/themes/github-light-default";
 import type { ParsedLine, TokenType } from "sugar-high/core";
 import { parse, SugarHigh } from "sugar-high/core";
 import * as typescript from "sugar-high/lang/typescript";
 
-type TextModel = ReturnType<Monaco["editor"]["getModels"]>[number];
-type ThemeData = Parameters<Monaco["editor"]["defineTheme"]>[1];
+type Monaco = typeof monaco;
+type TextModel = monaco.editor.ITextModel;
+type ThemeData = monaco.editor.IStandaloneThemeData;
 type ShikiTheme = typeof githubDark;
 
 /** Monaco stops re-tokenizing once an end state repeats, so the state carries the token left open. */
@@ -20,7 +21,7 @@ type LineState = {
 export const darkTheme = "takumi-dark";
 export const lightTheme = "takumi-light";
 
-const languageId = "typescript";
+export const languageId = "typescript";
 
 const breakToken = SugarHigh.TokenMap.get("break");
 
