@@ -186,8 +186,7 @@ impl<'c> BoxPainter<'c> {
     outline_paint(self.context, self.layout.size)
   }
 
-  /// Whether the box puts any ink of its own on the page: a background, a border, a shadow or an
-  /// outline.
+  /// Whether the box paints a background, border, shadow or outline.
   pub fn paints_decorations(&self) -> bool {
     let style = &self.context.style;
     let current_color = self.context.current_color;

@@ -425,10 +425,8 @@ impl Paginated {
 /// at all — matching browsers, where `break-inside: avoid` is dropped for
 /// boxes taller than the fragmentainer.
 ///
-/// A forced cut opens no empty page. One with no content above it on its page
-/// is dropped, as css-break-3 §forced-breaks asks: the node already opens the
-/// page, and only spacing consumed at the boundary sits before it. The column
-/// ends at its last content box, so trailing spacing never opens a page either.
+/// A forced cut with no content on its page above it is dropped, per
+/// css-break-3 §forced-breaks. The column ends at its last content box.
 impl Atoms {
   pub(crate) fn page_starts(mut self, headers: &[HeaderBand], total: f32, window: f32) -> Vec<f32> {
     let Self {

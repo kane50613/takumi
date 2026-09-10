@@ -29,9 +29,7 @@ pub(crate) struct Atoms {
   pub(crate) extents: Vec<Atom>,
   /// Where `break-before` / `break-after: page` force a cut.
   pub(crate) forced: Vec<f32>,
-  /// Boxes that show on the page: text, images, childless boxes and boxes
-  /// with decorations of their own. Spacing between them is not content, so a
-  /// page holding nothing else is empty.
+  /// Boxes that show on the page; spacing between them does not.
   pub(crate) content: Vec<Atom>,
   /// Text boxes with their `widows` / `orphans` minimums.
   pub(crate) paragraphs: Vec<Paragraph>,

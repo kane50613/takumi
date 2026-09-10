@@ -410,7 +410,6 @@ mod tests {
     pagination::{Atom, MAX_PAGES, Paragraph},
   };
 
-  /// Atoms over a column that is content from top to bottom.
   fn atoms(extents: &[Atom], forced: &[f32], paragraphs: Vec<Paragraph>) -> Atoms {
     Atoms {
       extents: extents.to_vec(),
@@ -615,8 +614,6 @@ mod tests {
     );
   }
 
-  /// Content ends at 20 and 60 with spacing between: the forced cut at 40 has
-  /// nothing above it on its page, and the one at 110 nothing below.
   #[test]
   fn page_starts_drops_forced_cuts_beside_spacing_alone() {
     let atoms = Atoms {
@@ -628,7 +625,6 @@ mod tests {
     assert_eq!(atoms.page_starts(&[], 120.0, 30.0), vec![0.0, 30.0, 60.0]);
   }
 
-  /// A forced cut at 40 keeps its page once content sits above it.
   #[test]
   fn page_starts_keeps_forced_cuts_under_content() {
     let atoms = Atoms {

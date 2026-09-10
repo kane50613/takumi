@@ -882,9 +882,8 @@ fn page_count(pdf: &[u8]) -> usize {
   digits.parse().expect("a page count")
 }
 
-/// A 235px spacer plus the first keep fills a 260px page, and the list's
-/// spacing is consumed at the boundary, so the second keep already opens page
-/// 2. A forced break on it must not open a page between the two.
+/// The second keep already opens page 2 with the list's spacing consumed at
+/// the boundary, so a forced break on it must not open a page between the two.
 #[test]
 fn a_forced_break_on_a_node_that_opens_a_page_adds_no_empty_page() {
   let fonts = fonts();
@@ -922,8 +921,6 @@ fn a_forced_break_on_a_node_that_opens_a_page_adds_no_empty_page() {
     "the second keep opens page 2 on its own"
   );
 
-  // The list's `padding-top` is consumed at the boundary when the spacer
-  // leaves the whole list to page 2.
   for (spacer, list, first, second) in [
     (235, "gap: 16px;", "", "break-before: page;"),
     (235, "", "", "margin-top: 16px; break-before: page;"),
@@ -944,8 +941,6 @@ fn a_forced_break_on_a_node_that_opens_a_page_adds_no_empty_page() {
   );
 }
 
-/// A forced break with only spacing above it on the first page, and one with
-/// only spacing below it at the end, both cut nothing.
 #[test]
 fn forced_breaks_beside_spacing_alone_open_no_page() {
   let fonts = fonts();
@@ -984,8 +979,6 @@ fn forced_breaks_beside_spacing_alone_open_no_page() {
   );
 }
 
-/// Spacing that runs past the last content box is not a page: a padded root
-/// whose padding alone crosses the page edge stays on one page.
 #[test]
 fn trailing_spacing_opens_no_page() {
   let fonts = fonts();
