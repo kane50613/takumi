@@ -1,60 +1,86 @@
 "use client";
 
 import { Editor } from "@monaco-editor/react";
+import type { Monaco } from "@monaco-editor/react";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
 import type { ComponentProps } from "react";
 import { darkTheme, lightTheme, registerSyntaxHighlighting } from "./syntax-highlighting";
 
+type ExtraLib = { content: string; filePath: string };
+
+const extraLib = (filePath: string) => (module: { default: string }) => ({
+  content: module.default,
+  filePath,
+});
+
 // Dynamic imports keep the typings out of the playground chunk; they load as
 // their own chunks alongside the editor.
-const [
-  reactTypings,
-  reactJsxRuntimeTypings,
-  cssTypings,
-  takumiTypings,
-  pdfPrimitivesTypings,
-  playgroundOptionsTypings,
-  echartsCoreTypings,
-  echartsChartsTypings,
-  echartsComponentsTypings,
-  echartsRenderersTypings,
-  echartsSharedTypings,
-] = await Promise.all([
-  import("../../../node_modules/@types/react/index.d.ts?raw").then((module) => module.default),
-  import("../../../node_modules/@types/react/jsx-runtime.d.ts?raw").then(
-    (module) => module.default,
-  ),
-  import("../../../node_modules/csstype/index.d.ts?raw").then((module) => module.default),
-  import("../../../node_modules/@takumi-rs/wasm/pkg/takumi_wasm_bg.wasm.d.ts?raw").then(
-    (module) => module.default,
-  ),
-  import("../../../node_modules/takumi-pdf/dist/primitives.d.mts?raw").then(
-    (module) => module.default,
-  ),
-  import("../../playground/options.ts?raw").then((module) => module.default),
-  import("../../../node_modules/echarts/types/dist/core.d.ts?raw").then((module) => module.default),
-  import("../../../node_modules/echarts/types/dist/charts.d.ts?raw").then(
-    (module) => module.default,
-  ),
-  import("../../../node_modules/echarts/types/dist/components.d.ts?raw").then(
-    (module) => module.default,
-  ),
-  import("../../../node_modules/echarts/types/dist/renderers.d.ts?raw").then(
-    (module) => module.default,
-  ),
-  import("../../../node_modules/echarts/types/dist/shared.d.ts?raw").then(
-    (module) => module.default,
-  ),
-]);
+const coreTypings = () =>
+  Promise.all([
+    import("../../../node_modules/@types/react/index.d.ts?raw").then(
+      extraLib("file:///node_modules/react/index.d.ts"),
+    ),
+    import("../../../node_modules/@types/react/jsx-runtime.d.ts?raw").then(
+      extraLib("file:///node_modules/react/jsx-runtime.d.ts"),
+    ),
+    import("../../../node_modules/csstype/index.d.ts?raw").then(
+      extraLib("file:///node_modules/csstype/index.d.ts"),
+    ),
+    import("../../../node_modules/@takumi-rs/wasm/pkg/takumi_wasm_bg.wasm.d.ts?raw").then(
+      extraLib("file:///node_modules/@takumi-rs/wasm/index.d.ts"),
+    ),
+    import("../../../node_modules/takumi-pdf/dist/primitives.d.mts?raw").then(
+      extraLib("file:///node_modules/takumi-pdf/primitives.d.ts"),
+    ),
+    import("../../playground/options.ts?raw").then(extraLib("file:///options.d.ts")),
+  ]);
 
-const tailwindTypings = `
+const echartsTypings = () =>
+  Promise.all([
+    import("../../../node_modules/echarts/types/dist/core.d.ts?raw").then(
+      extraLib("file:///node_modules/echarts/types/dist/core.d.ts"),
+    ),
+    import("../../../node_modules/echarts/types/dist/charts.d.ts?raw").then(
+      extraLib("file:///node_modules/echarts/types/dist/charts.d.ts"),
+    ),
+    import("../../../node_modules/echarts/types/dist/components.d.ts?raw").then(
+      extraLib("file:///node_modules/echarts/types/dist/components.d.ts"),
+    ),
+    import("../../../node_modules/echarts/types/dist/renderers.d.ts?raw").then(
+      extraLib("file:///node_modules/echarts/types/dist/renderers.d.ts"),
+    ),
+    import("../../../node_modules/echarts/types/dist/shared.d.ts?raw").then(
+      extraLib("file:///node_modules/echarts/types/dist/shared.d.ts"),
+    ),
+  ]);
+
+const tailwindTypings: ExtraLib = {
+  content: `
 declare namespace React {
   interface HTMLAttributes<T> {
     tw?: string;
   }
 }
-`;
+`,
+  filePath: "file:///tw.d.ts",
+};
+
+const loadedTypings: ExtraLib[] = [];
+let coreTypingsLoad: Promise<void> | undefined;
+let echartsTypingsLoad: Promise<void> | undefined;
+
+/** Monaco replaces the whole set, so every mount rewrites it from what has loaded so far. */
+function applyTypings(monaco: Monaco) {
+  monaco.languages.typescript.typescriptDefaults.setExtraLibs([tailwindTypings, ...loadedTypings]);
+}
+
+function loadTypings(monaco: Monaco, typings: Promise<ExtraLib[]>) {
+  return typings.then((libs) => {
+    loadedTypings.push(...libs);
+    applyTypings(monaco);
+  });
+}
 
 export function ComponentEditor({
   code,
@@ -139,57 +165,7 @@ export function ComponentEditor({
           },
         });
 
-        monaco.languages.typescript.typescriptDefaults.setExtraLibs([
-          {
-            content: reactTypings,
-            filePath: "file:///node_modules/react/index.d.ts",
-          },
-          {
-            content: reactJsxRuntimeTypings,
-            filePath: "file:///node_modules/react/jsx-runtime.d.ts",
-          },
-          {
-            content: cssTypings,
-            filePath: "file:///node_modules/csstype/index.d.ts",
-          },
-          {
-            content: takumiTypings,
-            filePath: "file:///node_modules/@takumi-rs/wasm/index.d.ts",
-          },
-          {
-            content: pdfPrimitivesTypings,
-            filePath: "file:///node_modules/takumi-pdf/primitives.d.ts",
-          },
-          {
-            content: playgroundOptionsTypings,
-            filePath: "file:///options.d.ts",
-          },
-          {
-            content: echartsCoreTypings,
-            filePath: "file:///node_modules/echarts/types/dist/core.d.ts",
-          },
-          {
-            content: echartsChartsTypings,
-            filePath: "file:///node_modules/echarts/types/dist/charts.d.ts",
-          },
-          {
-            content: echartsComponentsTypings,
-            filePath: "file:///node_modules/echarts/types/dist/components.d.ts",
-          },
-          {
-            content: echartsRenderersTypings,
-            filePath: "file:///node_modules/echarts/types/dist/renderers.d.ts",
-          },
-          {
-            content: echartsSharedTypings,
-            filePath: "file:///node_modules/echarts/types/dist/shared.d.ts",
-          },
-          {
-            content: tailwindTypings,
-            filePath: "file:///tw.d.ts",
-          },
-        ]);
-
+        applyTypings(monaco);
         registerSyntaxHighlighting(monaco);
       }}
       onMount={(editor, monaco) => {
@@ -197,6 +173,18 @@ export function ComponentEditor({
         // Monaco owns the keyboard inside the editor and binds ⌘↵ itself, so the
         // shortcut has to be registered here rather than on the window.
         editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => onRunRef.current());
+
+        coreTypingsLoad ??= loadTypings(monaco, coreTypings());
+
+        // echarts ships megabytes of typings, so they wait until the code asks for them.
+        const loadEchartsTypings = () => {
+          if (editor.getModel()?.getValue().includes("echarts")) {
+            echartsTypingsLoad ??= loadTypings(monaco, echartsTypings());
+          }
+        };
+
+        loadEchartsTypings();
+        editor.onDidChangeModelContent(loadEchartsTypings);
       }}
       width="100%"
       height="100%"
