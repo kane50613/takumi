@@ -30,6 +30,19 @@ For offline renders, [bundle font files](/docs/typography-and-fonts#fonts-in-ci-
 
 The renderer does not use installed system fonts. If no registered font covers a body-text character, the render fails with the character and its codepoint. Register coverage for every script you use. Google Fonts may split accented characters between `latin` and `latin-ext` subsets.
 
+Set `missingGlyph` to render anyway. `"notdef"` draws the font's `.notdef` glyph, usually an empty box. `"skip"` drops the character from the page. Neither puts the character in the text layer.
+
+```tsx twoslash title="Render with uncovered characters"
+import type { ReactNode } from "react";
+declare const doc: ReactNode;
+// ---cut---
+import { render } from "takumi-pdf";
+
+const pdf = await render(doc, { missingGlyph: "notdef" });
+```
+
+Quote a family name that contains digits or spaces in CSS, such as `fontFamily: '"Source Serif 4"'`. An unquoted `Source Serif 4` is not a valid `font-family` value, so the declaration is dropped and the text falls back to the next family.
+
 ## Images
 
 Pass fetched bytes for each image URL in the document. The PDF renderer does not fetch those URLs:

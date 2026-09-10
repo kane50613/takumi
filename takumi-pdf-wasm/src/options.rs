@@ -11,7 +11,7 @@ use takumi_core::{
   style::{Color, ColorInput, CssSource, FromCssStr},
   viewport::Viewport,
 };
-use takumi_pdf::{PageMargin, PageMargins, PageOptions, PageRange};
+use takumi_pdf::{MissingGlyph, PageMargin, PageMargins, PageOptions, PageRange};
 
 use crate::{
   map_error,
@@ -232,6 +232,28 @@ pub(crate) struct PdfRenderOptions {
   pub(crate) tagged: Option<TaggedInput>,
   /// Files attached to the document.
   pub(crate) attachments: Option<Vec<AttachmentInput>>,
+  /// What becomes of a character no registered font covers: `"error"`
+  /// (default), `"notdef"` or `"skip"`.
+  pub(crate) missing_glyph: Option<MissingGlyphInput>,
+}
+
+/// `missingGlyph` names accepted from JS.
+#[derive(Deserialize, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum MissingGlyphInput {
+  Error,
+  Notdef,
+  Skip,
+}
+
+impl From<MissingGlyphInput> for MissingGlyph {
+  fn from(input: MissingGlyphInput) -> Self {
+    match input {
+      MissingGlyphInput::Error => Self::Error,
+      MissingGlyphInput::Notdef => Self::Notdef,
+      MissingGlyphInput::Skip => Self::Skip,
+    }
+  }
 }
 
 pub(crate) fn decode_images(

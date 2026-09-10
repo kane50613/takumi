@@ -177,7 +177,16 @@ export type PdfRenderOptions = {
   tagged?: Tagged;
   /** Files attached to the document. */
   attachments?: Attachment[];
+  /**
+   * What becomes of a character no registered font covers: `"error"` (default)
+   * fails the render naming it, `"notdef"` draws the font's `.notdef` glyph,
+   * `"skip"` drops it from the page. Neither puts it in the text layer.
+   */
+  missingGlyph?: MissingGlyph;
 };
+
+/** What becomes of a character no registered font covers. */
+export type MissingGlyph = "error" | "notdef" | "skip";
 
 /** Options for `measure`: page geometry (or a viewport) plus layout resources. */
 export type MeasureOptions = (

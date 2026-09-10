@@ -4,20 +4,23 @@ use std::ops::Range;
 
 use takumi_core::layout::inline::ShapedRun;
 
-use crate::krilla::{
-  surface::Location,
-  text::{Glyph, GlyphId},
+use crate::{
+  krilla::{
+    surface::Location,
+    text::{Glyph, GlyphId},
+  },
+  options::MissingGlyph,
 };
 
 /// The run's glyphs, each carrying the source text it maps to.
 ///
-/// A character no registered font covers shapes to `.notdef`. It draws nothing
-/// and leaves nothing behind in the text layer, so the page would come out
-/// looking finished with the character quietly gone. Every such character lands
-/// in `uncovered` for the caller to report once the page is done.
+/// A character no registered font covers shapes to `.notdef`. Every such
+/// character lands in `uncovered` for the caller to report once the page is
+/// done; [`MissingGlyph::Skip`] leaves its glyph out of the run as well.
 pub(crate) fn run_glyphs(
   shaped: &ShapedRun,
   run_text: &str,
+  missing: MissingGlyph,
   uncovered: &mut String,
 ) -> Vec<PdfGlyph> {
   let clusters = cluster_spans(shaped, run_text);
@@ -35,6 +38,7 @@ pub(crate) fn run_glyphs(
     .glyphs
     .iter()
     .zip(spans)
+    .filter(|(glyph, _)| missing != MissingGlyph::Skip || glyph.id != 0)
     .map(|(glyph, range)| PdfGlyph {
       id: GlyphId::new(glyph.id),
       x_offset: glyph.x / shaped.font_size,

@@ -398,3 +398,19 @@ test("rejects a filter a PDF cannot express", async () => {
     }),
   ).rejects.toThrow("A PDF cannot draw filter: blur(4px)");
 });
+
+test("missingGlyph renders through uncovered characters", async () => {
+  const uncovered = container({
+    style: { display: "flex", padding: 24 },
+    children: [text("uncovered क", { fontSize: 16 })],
+  });
+  const viewport = { width: 200, height: 100 };
+
+  await expect(renderer.render(uncovered, { viewport })).rejects.toThrow(
+    "No registered font covers क (U+0915)",
+  );
+  const notdef = await renderer.render(uncovered, { viewport, missingGlyph: "notdef" });
+  const skipped = await renderer.render(uncovered, { viewport, missingGlyph: "skip" });
+
+  expect(Buffer.from(notdef).equals(Buffer.from(skipped))).toBe(false);
+});
