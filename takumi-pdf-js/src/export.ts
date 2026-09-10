@@ -89,6 +89,9 @@ export type PageMargin =
  */
 export type PageRange = number | { from?: number; to?: number };
 
+/** What becomes of a character no registered font covers. */
+export type MissingGlyph = "error" | "notdef" | "skip";
+
 /**
  * Paged output (the default): content flows across pages of `size`, like
  * Puppeteer's `page.pdf()`. The layout canvas has unbounded height, so
@@ -302,6 +305,13 @@ export type RenderOptions = (PagedOptions | ViewportOptions) &
      * Unset leaves the page empty, so a viewer shows its own white.
      */
     backgroundColor?: string;
+    /**
+     * What becomes of a character no registered font covers: `"error"`
+     * (default) fails the render naming it, `"notdef"` draws the font's
+     * `.notdef` glyph, `"skip"` drops it from the page. Neither puts it in
+     * the text layer.
+     */
+    missingGlyph?: MissingGlyph;
   };
 
 function isNode(value: NodeInput): value is Node {

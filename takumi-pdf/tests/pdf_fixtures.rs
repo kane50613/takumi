@@ -30,8 +30,9 @@ use takumi_core::{
 };
 use takumi_html::{FromHtmlOptions, from_html};
 use takumi_pdf::{
-  Attachment, AttachmentRelationship, MeasureOptions, PageMargins, PageOptions, PageRange, PdfDate,
-  PdfError, PdfMetadata, PdfOptions, PdfStandard, Tagging, XmpProperty, XmpSchema, measure, render,
+  Attachment, AttachmentRelationship, MeasureOptions, MissingGlyph, PageMargins, PageOptions,
+  PageRange, PdfDate, PdfError, PdfMetadata, PdfOptions, PdfStandard, Tagging, XmpProperty,
+  XmpSchema, measure, render,
 };
 
 fn fonts() -> Fonts {
@@ -2545,6 +2546,52 @@ fn uncovered_character_stops_the_render() {
   assert!(render_with("covered").is_ok());
   assert!(
     matches!(render_with("uncovered \u{76F4}"), Err(PdfError::MissingGlyphs(named)) if named == "直 (U+76F4)")
+  );
+}
+
+/// `missingGlyph` lets the render through: `notdef` shows glyph 0, `skip`
+/// leaves it out of the run. Neither puts the character in the text layer.
+#[test]
+fn uncovered_character_renders_under_a_missing_glyph_policy() {
+  let latin_only = {
+    let mut fonts = Fonts::default();
+    let data = fs::read(
+      Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf"),
+    )
+    .expect("read test font");
+
+    fonts
+      .register(FontResource::new(data))
+      .expect("load test font");
+    fonts
+  };
+  let render_with = |policy: MissingGlyph| {
+    render(
+      PdfOptions::builder()
+        .node(text("uncovered \u{76F4}", 16.0))
+        .viewport(Viewport::new((200, 100)))
+        .fonts(&latin_only)
+        .missing_glyph(policy)
+        .build(),
+    )
+  };
+
+  assert!(matches!(
+    render_with(MissingGlyph::Error),
+    Err(PdfError::MissingGlyphs(_))
+  ));
+
+  let notdef = render_with(MissingGlyph::Notdef).expect("render with .notdef");
+  let skipped = render_with(MissingGlyph::Skip).expect("render without the glyph");
+
+  assert!(
+    inflated_text(&notdef).contains("(\\000\\000)"),
+    "notdef did not show glyph 0"
+  );
+  assert!(
+    !inflated_text(&skipped).contains("(\\000\\000)"),
+    "skip showed glyph 0"
   );
 }
 

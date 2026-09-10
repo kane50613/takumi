@@ -369,6 +369,22 @@ pub struct PdfOptions<'g> {
   /// a modification date ([`PdfMetadata::creation_date`] is the fallback).
   #[builder(default)]
   pub attachments: Vec<Attachment>,
+  /// What becomes of a character no registered font covers.
+  #[builder(default)]
+  pub missing_glyph: MissingGlyph,
+}
+
+/// What becomes of a character no registered font covers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MissingGlyph {
+  /// The render fails naming the characters.
+  #[default]
+  Error,
+  /// The font's `.notdef` glyph is drawn, usually an empty box. The text
+  /// layer does not carry the character.
+  Notdef,
+  /// The character is dropped from the page and the text layer.
+  Skip,
 }
 
 /// A file attached to the document.

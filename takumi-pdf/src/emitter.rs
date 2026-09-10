@@ -63,7 +63,7 @@ use crate::{
     tagging::{Artifact, ArtifactType, ContentTag, SpanTag},
     text::{Font, Tag},
   },
-  options::PdfError,
+  options::{MissingGlyph, PdfError},
   paint::{
     empty_path, expanded_radial_stops, fill_from_rgba, krilla_blend, krilla_path, krilla_stop,
     krilla_stops, overflow_clip_rect, pop_transforms, rect_path, spread,
@@ -143,24 +143,29 @@ pub(crate) struct DocumentState<'a> {
   pub(crate) issues: RefCell<RenderIssues>,
   /// The document's default language.
   pub(crate) lang: Option<&'a str>,
+  pub(crate) missing_glyph: MissingGlyph,
 }
 
 impl<'a> DocumentState<'a> {
-  pub(crate) fn new(tagged: bool, lang: Option<&'a str>) -> Self {
+  pub(crate) fn new(tagged: bool, lang: Option<&'a str>, missing_glyph: MissingGlyph) -> Self {
     Self {
       fonts: RefCell::new(FontMap::default()),
       tags: tagged.then(RefCell::default),
       issues: RefCell::default(),
       lang,
+      missing_glyph,
     }
   }
 
   /// The error the pages left behind, if any: what failed outright, else the characters no font
-  /// covered.
+  /// covered when those are errors.
   pub(crate) fn into_error(self) -> Option<PdfError> {
     let issues = self.issues.into_inner();
 
-    if issues.failure.is_some() || issues.uncovered.is_empty() {
+    if issues.failure.is_some()
+      || issues.uncovered.is_empty()
+      || self.missing_glyph != MissingGlyph::Error
+    {
       return issues.failure;
     }
     let named = issues
@@ -1355,6 +1360,7 @@ impl Emitter<'_> {
       let glyphs = run_glyphs(
         shaped,
         run_text,
+        self.document.missing_glyph,
         &mut self.document.issues.borrow_mut().uncovered,
       );
 
@@ -1776,6 +1782,7 @@ impl Emitter<'_> {
       let glyphs = run_glyphs(
         shaped,
         run_text,
+        self.document.missing_glyph,
         &mut self.document.issues.borrow_mut().uncovered,
       );
 
