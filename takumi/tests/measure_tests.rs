@@ -2254,6 +2254,29 @@ fn test_flex_padding_does_not_narrow_anonymous_text() {
   assert_eq!(padded.children[0].width, text.width);
 }
 
+#[test]
+fn test_flow_root_wraps_inline_text_like_block() {
+  let container = |display: &str| {
+    Node::from_html(
+      &format!(
+        r#"<div style="display: {display}; width: 120px; font-size: 16px"><span>The quick brown</span> fox jumps over <span>the lazy dog</span></div>"#
+      ),
+      FromHtmlOptions::default(),
+    )
+    .expect("parse")
+  };
+  let flow_root = measure(container("flow-root"), create_measure_viewport());
+  let block = measure(container("block"), create_measure_viewport());
+  let line_height = flow_root.runs[0].height;
+
+  assert_eq!(flow_root.height, block.height);
+  assert!(
+    flow_root.height > line_height,
+    "flow-root height {} is not wrapped past one {line_height}px line",
+    flow_root.height
+  );
+}
+
 /// Blink shares a table's free width among its auto columns in proportion to
 /// their max-content widths, whether or not another column declares a width.
 #[test]
