@@ -105,7 +105,7 @@ enum DeferredNodeRender {
     path: Vec<usize>,
     layout: Layout,
     has_constraint: bool,
-    isolated_canvas: Option<CanvasSubcanvas>,
+    isolated_canvas: Option<Box<CanvasSubcanvas>>,
     filter_bounds: Option<SceneBounds>,
   },
   SkipRendering,
@@ -127,7 +127,7 @@ fn finish_node_render(
   canvas: &mut Canvas,
   layout: Layout,
   has_constraint: bool,
-  isolated_canvas: Option<CanvasSubcanvas>,
+  isolated_canvas: Option<Box<CanvasSubcanvas>>,
   filter_bounds: Option<SceneBounds>,
   outlines: Option<&mut Vec<DeferredOutline>>,
 ) -> Result<()> {
@@ -225,7 +225,7 @@ fn finish_node_render(
       canvas.pop_mask();
     }
     canvas.composite_subcanvas(
-      isolated_canvas,
+      *isolated_canvas,
       node.context.style.mix_blend_mode,
       node.context.style.opacity.0,
     );
@@ -337,13 +337,15 @@ fn begin_node_render(
 
   let should_isolate = current.context.style.needs_offscreen_compositing();
   let isolated_canvas = if should_isolate {
-    Some(canvas.begin_subcanvas(compute_isolation_bounds(
-      current,
-      layout.size,
-      node_paint.transform,
-      canvas.viewport(),
-      isolation_bounds_hint,
-    ))?)
+    Some(Box::new(canvas.begin_subcanvas(
+      compute_isolation_bounds(
+        current,
+        layout.size,
+        node_paint.transform,
+        canvas.viewport(),
+        isolation_bounds_hint,
+      ),
+    )?))
   } else {
     None
   };
@@ -357,7 +359,7 @@ fn begin_node_render(
   )?;
   if matches!(mask_action, NodeMaskAction::SkipRendering) {
     if let Some(isolated_canvas) = isolated_canvas {
-      canvas.composite_subcanvas(isolated_canvas, BlendMode::Normal, 0.0);
+      canvas.composite_subcanvas(*isolated_canvas, BlendMode::Normal, 0.0);
     }
     return Ok(Some(DeferredNodeRender::SkipRendering));
   }
@@ -684,7 +686,7 @@ fn draw_render_node_inline(
 
   let built = create_inline_layout(InlineLayoutRequest::in_content_box(
     collect_inline_items(node),
-    layout.content_box_size(),
+    layout.unsnapped_content,
     &font_style,
     &node.context,
     InlineLayoutMode::Draw,

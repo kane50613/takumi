@@ -101,6 +101,7 @@ pub struct LayoutResults {
 
 struct LayoutResultNode {
   layout: Layout,
+  unsnapped: Layout,
   first_baseline_y: Option<f32>,
   box_children: Box<[OrderedChild]>,
 }
@@ -112,7 +113,7 @@ impl LayoutResults {
     self
       .nodes
       .get(idx)
-      .map(|node| ComputedLayout::from_taffy(&node.layout))
+      .map(|node| ComputedLayout::from_taffy(&node.layout, &node.unsnapped))
       .ok_or(Error::InvalidLayoutNode(node_id.into()))
   }
 
@@ -657,6 +658,7 @@ impl<'r> LayoutTree<'r> {
         .into_iter()
         .map(|node| LayoutResultNode {
           layout: node.final_layout,
+          unsnapped: node.unrounded_layout,
           first_baseline_y: node.first_baseline_y,
           box_children: node.box_children,
         })

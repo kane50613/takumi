@@ -254,9 +254,26 @@ pub struct ComputedLayout {
   pub border: Rect<f32>,
   /// Padding widths per side.
   pub padding: Rect<f32>,
+  /// Content-box size before pixel snapping. Text wraps against it, so paint
+  /// breaks the same lines layout measured.
+  pub unsnapped_content: Size<f32>,
 }
 
 impl ComputedLayout {
+  /// A layout that was never snapped, so its content box is its own.
+  pub fn new(location: Point<f32>, size: Size<f32>, border: Rect<f32>, padding: Rect<f32>) -> Self {
+    let mut layout = Self {
+      location,
+      size,
+      border,
+      padding,
+      unsnapped_content: Size::ZERO,
+    };
+
+    layout.unsnapped_content = layout.content_box_size();
+    layout
+  }
+
   /// Content-box width: border-box width minus padding and border on both sides.
   pub fn content_box_width(&self) -> f32 {
     self.size.width - self.padding.left - self.padding.right - self.border.left - self.border.right
@@ -286,12 +303,15 @@ impl ComputedLayout {
 }
 
 impl ComputedLayout {
-  pub(crate) fn from_taffy(l: &taffy::Layout) -> Self {
+  /// Converts the snapped layout, taking the content box from the layout
+  /// before snapping.
+  pub(crate) fn from_taffy(l: &taffy::Layout, unsnapped: &taffy::Layout) -> Self {
     Self {
       location: Point::from_taffy(l.location),
       size: Size::from_taffy(l.size),
       border: Rect::from_taffy(l.border),
       padding: Rect::from_taffy(l.padding),
+      unsnapped_content: Size::from_taffy(unsnapped.content_box_size()),
     }
   }
 }

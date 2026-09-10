@@ -397,16 +397,17 @@ fn compute_node_paint_bounds(
     return bounds;
   }
 
+  let content = layout.unsnapped_content;
   let available_space = Size {
-    width: AvailableSpace::Definite(layout.content_box_width()),
-    height: AvailableSpace::Definite(layout.content_box_height()),
+    width: AvailableSpace::Definite(content.width),
+    height: AvailableSpace::Definite(content.height),
   };
-  let max_height = resolve_inline_max_height(&font_style, layout.content_box_height());
+  let max_height = resolve_inline_max_height(&font_style, content.height);
 
   let built = create_inline_layout(InlineLayoutRequest {
     items: collect_inline_items(node),
     available_space,
-    max_width: layout.content_box_width(),
+    max_width: content.width,
     max_height,
     style: &font_style,
     context: &node.context,
