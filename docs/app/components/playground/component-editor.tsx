@@ -1,22 +1,10 @@
 "use client";
 
-import {
-  autocompletion,
-  closeBrackets,
-  closeBracketsKeymap,
-  completionKeymap,
-} from "@codemirror/autocomplete";
-import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { autocompletion, closeBrackets } from "@codemirror/autocomplete";
+import { history } from "@codemirror/commands";
 import { javascript } from "@codemirror/lang-javascript";
-import {
-  bracketMatching,
-  foldGutter,
-  foldKeymap,
-  indentOnInput,
-  indentUnit,
-} from "@codemirror/language";
-import { lintKeymap } from "@codemirror/lint";
-import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
+import { bracketMatching, foldGutter, indentOnInput, indentUnit } from "@codemirror/language";
+import { highlightSelectionMatches, search } from "@codemirror/search";
 import { Compartment, EditorState, type Extension, RangeSetBuilder } from "@codemirror/state";
 import {
   Decoration,
@@ -37,7 +25,10 @@ import githubDarkDefault from "@shikijs/themes/github-dark-default";
 import githubLightDefault from "@shikijs/themes/github-light-default";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
+import { editorBindings, type PlaygroundActions } from "./editor-commands";
 import { editorTheme } from "./editor-theme";
+import { FindWidget, findWidgetTheme } from "./find-widget";
+import { textmateScopes } from "./textmate-scopes";
 import { startTypeScriptService, type TypeScriptService } from "./typescript-service";
 
 const THEMES = {
@@ -118,10 +109,12 @@ export function ComponentEditor({
   code,
   setCode,
   onRun,
+  onFormat,
 }: {
   code: string;
   setCode: (code: string) => void;
   onRun: () => void;
+  onFormat: () => void;
 }) {
   const { resolvedTheme } = useTheme();
   const [isMobileViewport, setIsMobileViewport] = useState(false);
@@ -129,6 +122,7 @@ export function ComponentEditor({
   const viewRef = useRef<EditorView>(null);
   // The editor is built once, so its extensions read the callbacks through refs.
   const onRunRef = useRef(onRun);
+  const onFormatRef = useRef(onFormat);
   const setCodeRef = useRef(setCode);
   /** The last value the editor itself produced, so its own edits never bounce back. */
   const lastEmittedRef = useRef(code);
@@ -139,6 +133,7 @@ export function ComponentEditor({
   }));
 
   onRunRef.current = onRun;
+  onFormatRef.current = onFormat;
   setCodeRef.current = setCode;
 
   useEffect(() => {
@@ -154,28 +149,25 @@ export function ComponentEditor({
   }, []);
 
   useEffect(() => {
+    const actions: PlaygroundActions = {
+      run: () => {
+        onRunRef.current();
+        return true;
+      },
+      format: () => {
+        onFormatRef.current();
+        return true;
+      },
+    };
     const view = new EditorView({
       doc: lastEmittedRef.current,
       parent: containerRef.current ?? undefined,
       extensions: [
-        keymap.of([
-          {
-            key: "Mod-Enter",
-            run: () => {
-              onRunRef.current();
-              return true;
-            },
-          },
-          indentWithTab,
-          ...closeBracketsKeymap,
-          ...completionKeymap,
-          ...defaultKeymap,
-          ...searchKeymap,
-          ...historyKeymap,
-          ...foldKeymap,
-          ...lintKeymap,
-        ]),
+        keymap.of([...editorBindings(actions)]),
+        search({ top: true, createPanel: (view) => new FindWidget(view) }),
+        findWidgetTheme,
         javascript({ jsx: true, typescript: true }),
+        textmateScopes,
         history(),
         drawSelection(),
         dropCursor(),
@@ -186,6 +178,7 @@ export function ComponentEditor({
         indentOnInput(),
         bracketMatching(),
         closeBrackets(),
+        EditorState.allowMultipleSelections.of(true),
         EditorState.tabSize.of(2),
         indentUnit.of("  "),
         EditorView.lineWrapping,

@@ -3,6 +3,7 @@ import type { Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { type Tag, tags } from "@lezer/highlight";
 import type { ThemeRegistration } from "shiki";
+import { SCOPE_CLASSES } from "./textmate-scopes";
 
 /** Lezer tags mapped onto the TextMate scopes the GitHub themes colour. */
 const TAG_SCOPES: [Tag | Tag[], string][] = [
@@ -11,9 +12,19 @@ const TAG_SCOPES: [Tag | Tag[], string][] = [
   [[tags.string, tags.special(tags.string)], "string"],
   [[tags.comment, tags.lineComment, tags.blockComment, tags.docComment], "comment"],
   [[tags.number, tags.bool, tags.null, tags.atom], "constant"],
-  [[tags.function(tags.variableName), tags.function(tags.propertyName)], "entity.name.function"],
+  [
+    [
+      tags.function(tags.variableName),
+      tags.function(tags.propertyName),
+      tags.function(tags.definition(tags.variableName)),
+      tags.className,
+    ],
+    "entity.name.function",
+  ],
   [tags.definition(tags.variableName), "meta.definition.variable"],
-  [[tags.typeName, tags.className, tags.namespace], "entity.name.type"],
+  [[tags.typeName, tags.definition(tags.className), tags.namespace], "entity.name.type"],
+  [tags.derefOperator, "punctuation.accessor"],
+  [[tags.operator, tags.function(tags.punctuation)], "keyword.operator"],
   [tags.tagName, "entity.name.tag"],
   [tags.attributeName, "entity.other.attribute-name"],
   [tags.propertyName, "variable.other.property"],
@@ -53,6 +64,28 @@ function scopeColor(theme: ThemeRegistration, scope: string) {
   return best?.foreground;
 }
 
+/** The Lezer highlight style carrying the theme's TextMate colours. */
+export function highlightStyle(theme: ThemeRegistration) {
+  const foreground = color(theme, "editor.foreground") ?? "#000000";
+
+  // An uncoloured scope still needs a rule, or a broader tag's rule would colour it.
+  return HighlightStyle.define(
+    TAG_SCOPES.map(([tag, scope]) => ({ tag, color: scopeColor(theme, scope) ?? foreground })),
+    { themeType: theme.type },
+  );
+}
+
+/** The colour of each context scope class, keyed by selector. */
+export function scopeClassColors(theme: ThemeRegistration) {
+  return Object.fromEntries(
+    Object.entries(SCOPE_CLASSES).flatMap(([name, scope]) => {
+      const foreground = scopeColor(theme, scope);
+
+      return foreground ? [[`.${name}`, { color: foreground }]] : [];
+    }),
+  );
+}
+
 export function editorTheme(theme: ThemeRegistration): Extension {
   const background = color(theme, "editor.background") ?? "#ffffff";
   const foreground = color(theme, "editor.foreground") ?? "#000000";
@@ -64,19 +97,18 @@ export function editorTheme(theme: ThemeRegistration): Extension {
   const matchingBracket = color(theme, "editorBracketMatch.background") ?? selection;
   const lineHighlight = color(theme, "editor.lineHighlightBackground") ?? "transparent";
 
-  const highlightStyle = HighlightStyle.define(
-    TAG_SCOPES.flatMap(([tag, scope]) => {
-      const foreground = scopeColor(theme, scope);
-
-      return foreground ? [{ tag, color: foreground }] : [];
-    }).concat({ tag: tags.operator, color: foreground }),
-    { themeType: theme.type },
-  );
-
   return [
     EditorView.theme(
       {
-        "&": { backgroundColor: background, color: foreground },
+        "&": {
+          backgroundColor: background,
+          color: foreground,
+          "--cm-focus-border": color(theme, "focusBorder") ?? selection,
+          "--cm-placeholder": color(theme, "input.placeholderForeground") ?? gutterForeground,
+          "--cm-hover": color(theme, "list.hoverBackground") ?? selection,
+          "--cm-toggle-active": color(theme, "list.activeSelectionBackground") ?? selection,
+          "--cm-error": color(theme, "errorForeground") ?? foreground,
+        },
         ".cm-content": { caretColor: color(theme, "editorCursor.foreground") ?? foreground },
         ".cm-cursor, .cm-dropCursor": {
           borderLeftColor: color(theme, "editorCursor.foreground") ?? foreground,
@@ -126,16 +158,32 @@ export function editorTheme(theme: ThemeRegistration): Extension {
           backgroundColor: color(theme, "list.activeSelectionBackground") ?? selection,
           color: foreground,
         },
-        ".cm-panels": {
+        ".cm-panels": { backgroundColor: "transparent" },
+        ".cm-panel": {
           backgroundColor: color(theme, "editorWidget.background") ?? background,
           color: foreground,
+          border: `1px solid ${color(theme, "panel.border") ?? gutterForeground}`,
+          boxShadow: `0 4px 12px ${color(theme, "widget.shadow") ?? "#00000040"}`,
+        },
+        ".cm-panel.cm-find": { borderTop: "none" },
+        ".cm-find-field": {
+          backgroundColor: color(theme, "input.background") ?? background,
+          color: color(theme, "input.foreground") ?? foreground,
+        },
+        ".cm-find-input, .cm-find-replace .cm-find-field": {
+          backgroundColor: color(theme, "input.background") ?? background,
+          borderColor: color(theme, "input.border") ?? "transparent",
+        },
+        ".cm-searchMatch-selected": {
+          backgroundColor: color(theme, "editor.findMatchBackground") ?? selection,
         },
         ".cm-searchMatch": {
-          backgroundColor: color(theme, "editor.selectionHighlightBackground") ?? selection,
+          backgroundColor: color(theme, "editor.findMatchHighlightBackground") ?? selection,
         },
+        ...scopeClassColors(theme),
       },
       { dark: theme.type === "dark" },
     ),
-    syntaxHighlighting(highlightStyle),
+    syntaxHighlighting(highlightStyle(theme)),
   ];
 }
