@@ -190,7 +190,7 @@ test("report deserialize error for alignItems property with invalid type", () =>
       ),
     "alignItems",
     "sequence",
-    "a value of 'normal', 'baseline', 'stretch', 'start', 'end', 'flex-start', 'flex-end', 'center', 'safe' or 'unsafe'; also accepts 'initial', 'unset' or 'inherit'.",
+    "a value of 'normal', 'baseline', 'stretch', 'start', 'end', 'flex-start', 'flex-end', 'self-start', 'self-end', 'center', 'safe' or 'unsafe'; also accepts 'initial', 'unset' or 'inherit'.",
   );
 });
 
@@ -212,7 +212,7 @@ test("report deserialize error for alignItems property with invalid string value
     "alignItems",
     "invalid",
     "invalid",
-    "a value of 'normal', 'baseline', 'stretch', 'start', 'end', 'flex-start', 'flex-end', 'center', 'safe' or 'unsafe'; also accepts 'initial', 'unset' or 'inherit'.",
+    "a value of 'normal', 'baseline', 'stretch', 'start', 'end', 'flex-start', 'flex-end', 'self-start', 'self-end', 'center', 'safe' or 'unsafe'; also accepts 'initial', 'unset' or 'inherit'.",
   );
 });
 
