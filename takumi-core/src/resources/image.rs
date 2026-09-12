@@ -54,7 +54,7 @@ use crate::{
 };
 
 #[cfg(feature = "svg")]
-const MAX_RASTER_PIXELS: u64 = 16 << 20;
+const MAX_RASTER_PIXELS: u64 = 64 << 20;
 
 #[cfg(feature = "svg")]
 fn within_raster_pixel_budget(width: u32, height: u32) -> bool {
@@ -2246,8 +2246,8 @@ mod tests {
       .into();
 
     let result = source.render_for_layout(
-      4097,
-      4096,
+      8193,
+      8192,
       ImageScalingAlgorithm::Auto,
       0,
       Color::black(),
