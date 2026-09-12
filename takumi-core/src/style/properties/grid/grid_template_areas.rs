@@ -18,10 +18,12 @@ pub struct GridTemplateAreas(pub Vec<Vec<String>>);
 impl MakeComputed for GridTemplateAreas {}
 
 impl GridTemplateAreas {
-  pub(crate) fn into_taffy(self) -> Vec<taffy::GridTemplateArea<String>> {
+  pub(crate) fn into_taffy(self) -> Option<taffy::GridTemplateAreas<String>> {
     if self.0.is_empty() {
-      return Vec::new();
+      return None;
     }
+    let row_count = self.0.len() as u16;
+    let column_count = self.0.iter().map(Vec::len).max().unwrap_or(0) as u16;
 
     let mut bounds: HashMap<&str, (usize, usize, usize, usize)> = HashMap::new();
     for (r, row) in self.0.iter().enumerate() {
@@ -48,7 +50,11 @@ impl GridTemplateAreas {
         column_end: (cmax as u16) + 2,
       });
     }
-    areas
+    Some(taffy::GridTemplateAreas {
+      areas,
+      row_count,
+      column_count,
+    })
   }
 }
 

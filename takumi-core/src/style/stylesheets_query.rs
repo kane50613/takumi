@@ -306,6 +306,7 @@ impl ComputedStyle {
       Self::grid_template(&self.grid_template_rows, sizing);
 
     taffy::Style {
+      contain: taffy::Contain::NONE,
       float: self.float.resolve(self.direction),
       clear: self.clear.resolve(self.direction),
       direction: self.direction.into_taffy(),
@@ -370,12 +371,12 @@ impl ComputedStyle {
         width: self.min_width,
         height: self.min_height,
       }
-      .map(|length| length.resolve_to_dimension(sizing)),
+      .map(|length| length.resolve_to_length_percentage_auto(sizing)),
       max_size: Size {
         width: self.max_width,
         height: self.max_height,
       }
-      .map(|length| length.resolve_to_dimension(sizing)),
+      .map(|length| length.resolve_to_length_percentage_auto(sizing)),
       grid_auto_columns: self
         .grid_auto_columns
         .as_ref()
@@ -411,8 +412,7 @@ impl ComputedStyle {
         .grid_template_areas
         .as_ref()
         .cloned()
-        .unwrap_or_default()
-        .into_taffy(),
+        .and_then(GridTemplateAreas::into_taffy),
       aspect_ratio: self.aspect_ratio.into(),
       align_self: self.align_self.into_taffy(),
       justify_self: self.justify_self.into_taffy(),
