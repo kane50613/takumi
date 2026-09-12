@@ -403,7 +403,11 @@ fn text_ink_reach(font_style: &SizedFontStyle) -> f32 {
 }
 
 /// Grows `bounds` by `reach` local px on every side, taking the transform's per-axis envelope.
-fn outset_bounds(bounds: Option<SceneBounds>, reach: f32, transform: Affine) -> Option<SceneBounds> {
+fn outset_bounds(
+  bounds: Option<SceneBounds>,
+  reach: f32,
+  transform: Affine,
+) -> Option<SceneBounds> {
   let mut bounds = bounds?;
   if reach <= 0.0 {
     return Some(bounds);
