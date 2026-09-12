@@ -28,11 +28,10 @@ use crate::{
   },
   matching::{MatchedDeclarationsView, NodeMatchedDeclarations, match_stylesheets_view},
   style::{
-    Affine, BackgroundImage, BackgroundImages, BlendMode, BoxSizing, Color, ComputedStyle,
-    ContentItem, ContentValue, Display, Filters, Float, Isolation, Length, LineHeight,
-    ListStylePosition, PercentageNumber, Position, SizingContext, Style as NodeStyle,
-    StyleDeclaration, StyleDeclarationBlock, StyleSheet, TextWrapMode, TwBlocks, TwCache,
-    WhiteSpaceCollapse, apply_stylesheet_animations,
+    Affine, BackgroundImage, BackgroundImages, BoxSizing, Color, ComputedStyle, ContentItem,
+    ContentValue, Display, Float, Length, LineHeight, ListStylePosition, Position, SizingContext,
+    Style as NodeStyle, StyleDeclaration, StyleDeclarationBlock, StyleSheet, TextWrapMode,
+    TwBlocks, TwCache, WhiteSpaceCollapse, apply_stylesheet_animations,
   },
   viewport::Viewport,
 };
@@ -1087,26 +1086,14 @@ impl RoundTree for LayoutTree<'_> {
 }
 
 impl RenderNode {
+  /// Blink's `CreateAnonymousStyleWithDisplay`, with the `anonymous` flags of
+  /// the style table standing in for its applied text decorations.
+  /// https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/css/resolver/style_resolver.cc
   fn anonymous_box_context(parent_context: &RenderContext) -> RenderContext {
     let mut context = parent_context.clone();
+
+    context.style = Box::new(ComputedStyle::for_anonymous(&parent_context.style));
     context.style.display = Display::Block;
-    context.style.opacity = PercentageNumber(1.0);
-    context.style.filter = Filters::default();
-    context.style.backdrop_filter = Filters::default();
-    context.style.mix_blend_mode = BlendMode::Normal;
-    context.style.isolation = Isolation::Auto;
-    context.style.clip_path = None;
-    context.style.mask_image = None;
-    context.style.mask_size = Default::default();
-    context.style.mask_position = Default::default();
-    context.style.mask_repeat = Default::default();
-    context.style.transform = None;
-    context.style.rotate = None;
-    context.style.scale = Default::default();
-    context.style.translate = Default::default();
-    context.style.break_before = Default::default();
-    context.style.break_after = Default::default();
-    context.style.break_inside = Default::default();
     context
   }
 

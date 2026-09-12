@@ -2138,6 +2138,33 @@ fn test_padded_flex_text_keeps_one_line() {
   assert_eq!(wrapped.children[0].width, nowrap.children[0].width);
 }
 
+/// The anonymous item bare text takes in a flex container has no padding of
+/// its own, so a container whose content box fits the text exactly keeps it on
+/// one line.
+#[test]
+fn test_flex_padding_does_not_narrow_anonymous_text() {
+  let container = |width: Option<f32>, padding: f32| {
+    let width = width.map_or(String::new(), |width| format!("width: {width}px;"));
+
+    Node::from_html(
+      &format!(
+        r#"<div style="display: flex; padding: 0 {padding}px; font-size: 24px; {width}">The quick brown fox jumps over the lazy dog and keeps running</div>"#
+      ),
+      FromHtmlOptions::default(),
+    )
+    .expect("parse")
+  };
+  let unpadded = measure(container(None, 0.0), create_measure_viewport());
+  let text = &unpadded.children[0];
+  let padded = measure(
+    container(Some(text.width + 48.0), 24.0),
+    create_measure_viewport(),
+  );
+
+  assert_eq!(padded.children[0].height, text.height);
+  assert_eq!(padded.children[0].width, text.width);
+}
+
 /// Horizontal padding on an inline span reserves advance on the line, like
 /// Blink adds the span's edges to the line's inline size.
 #[test]
