@@ -191,6 +191,12 @@ Those three embed directly. GIF has no decoder in this build. A CSS `filter`
 needs pixels to work on and only PNG decodes for that path, so an image under a
 filter raises this too when it arrived as JPEG or WebP.
 
+### Invalid viewport dimensions: a canvas holds 1 to 64 megapixels
+
+Shrink the viewport, or render the content in tiles and stitch them.
+
+The canvas is refused when `width * height` is zero or above 64 megapixels, which is 8192 × 8192. See [Render large canvases](/docs/performance-and-optimization#render-large-canvases).
+
 ### The content spans more than 20000 pages
 
 Give the tree a height that resolves. A percentage height inside a paged render

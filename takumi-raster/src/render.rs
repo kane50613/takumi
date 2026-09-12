@@ -820,7 +820,7 @@ mod tests {
     let fonts = Fonts::default();
     let options = RenderOptions::builder()
       .fonts(&fonts)
-      .viewport(Viewport::new((4097, 4096)))
+      .viewport(Viewport::new((8193, 8192)))
       .node(Node::container([]))
       .build();
 
