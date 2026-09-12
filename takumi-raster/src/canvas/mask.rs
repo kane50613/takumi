@@ -104,12 +104,6 @@ pub(crate) fn prepare_node_mask(
     return Ok(NodeMaskAction::None);
   }
 
-  if (clip_x && layout.padding_box_width() < f32::EPSILON)
-    || (clip_y && layout.padding_box_height() < f32::EPSILON)
-  {
-    return Ok(NodeMaskAction::SkipRendering);
-  }
-
   let border_props = BorderProperties::from_context(context, layout.size, layout.border);
   if !border_props.is_zero() {
     return Ok(rounded_overflow_mask(
