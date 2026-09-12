@@ -2,7 +2,10 @@ use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use takumi::{
-  prelude::{Fonts, Node, RenderOptions, Viewport},
+  prelude::{
+    BackgroundImages, BorderRadius, Color, ColorInput, Display, Filters, FlexWrap, Fonts,
+    FromCssStr, Length::Px, Node, RenderOptions, Style, StyleDeclaration, Viewport,
+  },
   render,
 };
 
@@ -26,6 +29,36 @@ fn run_effect_render(fonts: &Fonts, effect_tw: &str) {
   black_box(image);
 }
 
+fn backdrop_blur_cards() -> Node {
+  let cards = (0..16).map(|_| {
+    Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::width(Px(120.0)))
+        .with(StyleDeclaration::height(Px(120.0)))
+        .with(StyleDeclaration::margin_top(Px(4.0)))
+        .with(StyleDeclaration::margin_left(Px(4.0)))
+        .with_border_radius(BorderRadius::from_css_str("24px").unwrap())
+        .with(StyleDeclaration::backdrop_filter(
+          Filters::from_css_str("blur(10px)").unwrap(),
+        ))
+        .with(StyleDeclaration::background_color(ColorInput::Value(
+          Color([255, 255, 255, 80]),
+        ))),
+    )
+  });
+
+  Node::container(cards.collect::<Vec<_>>()).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap))
+      .with(StyleDeclaration::width(Px(512.0)))
+      .with(StyleDeclaration::height(Px(512.0)))
+      .with(StyleDeclaration::background_image(Some(
+        BackgroundImages::from_css_str("linear-gradient(135deg, #ff0080, #4000ff)").unwrap(),
+      ))),
+  )
+}
+
 fn bench_effects(c: &mut Criterion) {
   let fonts = Fonts::default();
 
@@ -39,6 +72,16 @@ fn bench_effects(c: &mut Criterion) {
   });
   group.bench_function("drop_shadow_md", |b| {
     b.iter(|| run_effect_render(&fonts, black_box("drop-shadow-md")))
+  });
+  group.bench_function("backdrop_blur_cards", |b| {
+    b.iter(|| {
+      let options = RenderOptions::builder()
+        .viewport(Viewport::new((512, 512)))
+        .node(black_box(backdrop_blur_cards()))
+        .fonts(&fonts)
+        .build();
+      black_box(render(options).unwrap());
+    })
   });
 
   group.finish();

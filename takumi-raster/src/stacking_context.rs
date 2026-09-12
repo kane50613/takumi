@@ -589,7 +589,6 @@ fn supports_bounds_hint(node: &RenderNode, require_child_clipping: bool) -> bool
   });
 
   style.filter.is_empty()
-    && style.backdrop_filter.is_empty()
     && !style.has_shape_mask()
     && !has_box_shadow
     && !has_outline
