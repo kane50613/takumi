@@ -23,15 +23,15 @@ use crate::{
 fn the_sizing_builders_still_take_a_length() {
   assert_eq!(
     StyleDeclaration::width(Length::Px(80.0)),
-    StyleDeclaration::width(SizeValue::Length(Length::Px(80.0)))
+    StyleDeclaration::width(Length::Px(80.0))
   );
   assert_eq!(
     StyleDeclaration::height(Length::Percentage(50.0)),
-    StyleDeclaration::height(SizeValue::Length(Length::Percentage(50.0)))
+    StyleDeclaration::height(Length::Percentage(50.0))
   );
   assert_eq!(
     StyleDeclaration::flex_basis(Some(Length::Px(12.0).into())),
-    StyleDeclaration::flex_basis(Some(FlexBasis::Size(SizeValue::Length(Length::Px(12.0)))))
+    StyleDeclaration::flex_basis(Some(FlexBasis::Size(Length::Px(12.0).into())))
   );
   assert_eq!(
     StyleDeclaration::flex_basis(None),
@@ -1338,7 +1338,7 @@ fn test_var_chain_resolves_at_consuming_element() {
 fn test_var_drops_invalid_declaration_without_fallback() {
   let style = inherited_style_from_pairs([("width", "var(--missing)")], &ComputedStyle::default());
 
-  assert_eq!(style.width, SizeValue::default());
+  assert_eq!(style.width, Length::Auto.into());
 }
 
 #[test]
@@ -1376,7 +1376,7 @@ fn test_var_resolves_inside_shorthand() {
 fn test_var_rejects_non_custom_property_name() {
   let style = inherited_style_from_pairs([("width", "var(size, 18px)")], &ComputedStyle::default());
 
-  assert_eq!(style.width, SizeValue::default());
+  assert_eq!(style.width, Length::Auto.into());
 }
 
 /// A substituted value is syntax-checked as a whole, so `24px 10px` is invalid
@@ -1390,7 +1390,7 @@ fn test_var_rejects_trailing_tokens_after_substitution() {
     &ComputedStyle::default(),
   );
 
-  assert_eq!(style.width, SizeValue::default());
+  assert_eq!(style.width, Length::Auto.into());
 }
 
 #[test]
@@ -1400,7 +1400,7 @@ fn test_var_rejects_missing_separator_in_function() {
     &ComputedStyle::default(),
   );
 
-  assert_eq!(style.width, SizeValue::default());
+  assert_eq!(style.width, Length::Auto.into());
 }
 
 #[test]
@@ -1463,7 +1463,7 @@ fn test_var_drops_declaration_when_substitution_stays_invalid() {
     &ComputedStyle::default(),
   );
 
-  assert_eq!(style.width, SizeValue::default());
+  assert_eq!(style.width, Length::Auto.into());
 }
 
 #[test]

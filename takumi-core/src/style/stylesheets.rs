@@ -1190,8 +1190,8 @@ define_style! {
     animation_fill_mode: AnimationFillModes,
     animation_play_state: AnimationPlayStates,
     display: Display,
-    width: SizeValue where builder = manual,
-    height: SizeValue where builder = manual,
+    width: Size where builder = manual,
+    height: Size where builder = manual,
     max_width: MaxSize,
     max_height: MaxSize,
     min_width: Length,
@@ -1705,12 +1705,12 @@ define_style! {
 // CSS Sizing keywords moved off `Length`.
 impl StyleDeclaration {
   /// Returns a declaration for this property.
-  pub fn width(value: impl Into<SizeValue>) -> Self {
+  pub fn width(value: impl Into<Size>) -> Self {
     Self::Width(value.into())
   }
 
   /// Returns a declaration for this property.
-  pub fn height(value: impl Into<SizeValue>) -> Self {
+  pub fn height(value: impl Into<Size>) -> Self {
     Self::Height(value.into())
   }
 }

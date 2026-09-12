@@ -625,11 +625,11 @@ pub(crate) enum TailwindProperty {
   /// `text-transform` property.
   TextTransform(TextTransform),
   /// `width` and `height` property.
-  Size(SizeValue),
+  Size(Size),
   /// `width` property.
-  Width(SizeValue),
+  Width(Size),
   /// `height` property.
-  Height(SizeValue),
+  Height(Size),
   /// `min-width` property.
   MinWidth(Length),
   /// `min-height` property.

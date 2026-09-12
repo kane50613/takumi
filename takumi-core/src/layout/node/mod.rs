@@ -899,7 +899,7 @@ mod matching_tests {
   use crate::{
     layout::node::Node,
     matching::{MatchedDeclarationsView, match_stylesheets_view},
-    style::{ComputedStyle, Length, SizeValue, Style, StyleSheet},
+    style::{ComputedStyle, Length, Size, Style, StyleSheet},
     viewport::Viewport,
   };
 
@@ -907,7 +907,7 @@ mod matching_tests {
     Node::container([]).with_class_name(class_name)
   }
 
-  fn computed_width_from_matches(matches: &MatchedDeclarationsView<'_>) -> SizeValue {
+  fn computed_width_from_matches(matches: &MatchedDeclarationsView<'_>) -> Size {
     let mut style = Style::default();
     for &declarations in matches
       .layered_normal()
@@ -926,7 +926,7 @@ mod matching_tests {
     style.inherit(&ComputedStyle::default()).width
   }
 
-  fn computed_height_from_matches(matches: &MatchedDeclarationsView<'_>) -> SizeValue {
+  fn computed_height_from_matches(matches: &MatchedDeclarationsView<'_>) -> Size {
     let mut style = Style::default();
     for &declarations in matches
       .layered_normal()

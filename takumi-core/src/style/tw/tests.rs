@@ -1109,22 +1109,20 @@ fn test_border_width_implies_solid_and_per_side_color() {
 #[test]
 fn test_parse_sizing_keyword_utilities() {
   for (token, expected) in [
-    ("w-min", TailwindProperty::Width(SizeValue::MinContent)),
-    ("w-max", TailwindProperty::Width(SizeValue::MaxContent)),
-    ("w-fit", TailwindProperty::Width(SizeValue::FitContent)),
-    ("h-min", TailwindProperty::Height(SizeValue::MinContent)),
-    ("h-max", TailwindProperty::Height(SizeValue::MaxContent)),
-    ("h-fit", TailwindProperty::Height(SizeValue::FitContent)),
-    ("size-fit", TailwindProperty::Size(SizeValue::FitContent)),
+    ("w-min", TailwindProperty::Width(Size::MinContent)),
+    ("w-max", TailwindProperty::Width(Size::MaxContent)),
+    ("w-fit", TailwindProperty::Width(Size::FitContent)),
+    ("h-min", TailwindProperty::Height(Size::MinContent)),
+    ("h-max", TailwindProperty::Height(Size::MaxContent)),
+    ("h-fit", TailwindProperty::Height(Size::FitContent)),
+    ("size-fit", TailwindProperty::Size(Size::FitContent)),
     (
       "basis-content",
       TailwindProperty::FlexBasis(FlexBasis::Content),
     ),
     (
       "basis-full",
-      TailwindProperty::FlexBasis(FlexBasis::Size(SizeValue::Length(Length::Percentage(
-        100.0,
-      )))),
+      TailwindProperty::FlexBasis(FlexBasis::Size(Size::Length(Length::Percentage(100.0)))),
     ),
   ] {
     assert_eq!(

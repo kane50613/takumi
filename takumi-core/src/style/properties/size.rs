@@ -14,7 +14,7 @@ use crate::style::{
 /// CSS Sizing Level 3 keyword.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
-pub enum SizeValue {
+pub enum Size {
   /// A `<length-percentage>` or `auto`.
   Length(Length),
   /// `min-content`: the largest minimum content contribution.
@@ -29,13 +29,13 @@ pub enum SizeValue {
   Stretch,
 }
 
-impl Default for SizeValue {
+impl Default for Size {
   fn default() -> Self {
     Self::auto()
   }
 }
 
-impl SizeValue {
+impl Size {
   /// An automatic size.
   pub const fn auto() -> Self {
     Self::Length(Length::Auto)
@@ -82,13 +82,13 @@ impl SizeValue {
   }
 }
 
-impl From<Length> for SizeValue {
+impl From<Length> for Size {
   fn from(length: Length) -> Self {
     Self::Length(length)
   }
 }
 
-impl MakeComputed for SizeValue {
+impl MakeComputed for Size {
   fn make_computed(&mut self, sizing: &SizingContext) {
     match self {
       Self::Length(length) | Self::FitContentLimit(length) => length.make_computed(sizing),
@@ -97,7 +97,7 @@ impl MakeComputed for SizeValue {
   }
 }
 
-impl Animatable for SizeValue {
+impl Animatable for Size {
   fn interpolate(
     &mut self,
     from: &Self,
@@ -128,7 +128,7 @@ impl Animatable for SizeValue {
   }
 }
 
-impl<'i> FromCss<'i> for SizeValue {
+impl<'i> FromCss<'i> for Size {
   const VALID_TOKENS: &'static [CssToken] = &[
     CssToken::Syntax(CssSyntaxKind::Length),
     CssToken::Keyword("min-content"),
@@ -147,32 +147,32 @@ impl<'i> FromCss<'i> for SizeValue {
   }
 }
 
-fn parse_sizing_keyword<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, SizeValue> {
+fn parse_sizing_keyword<'i>(input: &mut Parser<'i, '_>) -> ParseResult<'i, Size> {
   let location = input.current_source_location();
   let token = input.next()?.clone();
 
   match &token {
     Token::Ident(ident) => match_ignore_ascii_case! {ident,
-      "min-content" => Ok(SizeValue::MinContent),
-      "max-content" => Ok(SizeValue::MaxContent),
-      "fit-content" => Ok(SizeValue::FitContent),
-      "stretch" => Ok(SizeValue::Stretch),
-      _ => Err(unexpected_token!(SizeValue, location, &token)),
+      "min-content" => Ok(Size::MinContent),
+      "max-content" => Ok(Size::MaxContent),
+      "fit-content" => Ok(Size::FitContent),
+      "stretch" => Ok(Size::Stretch),
+      _ => Err(unexpected_token!(Size, location, &token)),
     },
     Token::Function(name) if name.eq_ignore_ascii_case("fit-content") => {
       let limit = input.parse_nested_block(Length::from_css)?;
 
       if limit == Length::Auto {
-        return Err(unexpected_token!(SizeValue, location, &token));
+        return Err(unexpected_token!(Size, location, &token));
       }
 
-      Ok(SizeValue::FitContentLimit(limit))
+      Ok(Size::FitContentLimit(limit))
     }
-    _ => Err(unexpected_token!(SizeValue, location, &token)),
+    _ => Err(unexpected_token!(Size, location, &token)),
   }
 }
 
-impl ToCss for SizeValue {
+impl ToCss for Size {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match self {
       Self::Length(length) => length.to_css(dest),
@@ -189,7 +189,7 @@ impl ToCss for SizeValue {
   }
 }
 
-impl TailwindPropertyParser for SizeValue {
+impl TailwindPropertyParser for Size {
   const NAMESPACES: &'static [Namespace] = Length::NAMESPACES;
 
   fn parse_tw(token: &str) -> Option<Self> {
@@ -212,11 +212,11 @@ mod tests {
   #[test]
   fn parses_lengths_and_auto() {
     for (css, expected) in [
-      ("auto", SizeValue::Length(Length::Auto)),
-      ("100px", SizeValue::Length(Length::Px(100.0))),
-      ("50%", SizeValue::Length(Length::Percentage(50.0))),
+      ("auto", Size::Length(Length::Auto)),
+      ("100px", Size::Length(Length::Px(100.0))),
+      ("50%", Size::Length(Length::Percentage(50.0))),
     ] {
-      let parsed = SizeValue::from_css_str(css).unwrap();
+      let parsed = Size::from_css_str(css).unwrap();
 
       assert_eq!(parsed, expected, "{css}");
       assert_eq!(parsed.to_css_string(), css);
@@ -226,28 +226,28 @@ mod tests {
   #[test]
   fn parses_the_sizing_keywords() {
     for (css, expected) in [
-      ("min-content", SizeValue::MinContent),
-      ("max-content", SizeValue::MaxContent),
-      ("fit-content", SizeValue::FitContent),
-      ("stretch", SizeValue::Stretch),
+      ("min-content", Size::MinContent),
+      ("max-content", Size::MaxContent),
+      ("fit-content", Size::FitContent),
+      ("stretch", Size::Stretch),
       (
         "fit-content(20rem)",
-        SizeValue::FitContentLimit(Length::Rem(20.0)),
+        Size::FitContentLimit(Length::Rem(20.0)),
       ),
       (
         "fit-content(50%)",
-        SizeValue::FitContentLimit(Length::Percentage(50.0)),
+        Size::FitContentLimit(Length::Percentage(50.0)),
       ),
     ] {
-      let parsed = SizeValue::from_css_str(css).unwrap();
+      let parsed = Size::from_css_str(css).unwrap();
 
       assert_eq!(parsed, expected, "{css}");
       assert_eq!(parsed.to_css_string(), css);
     }
 
-    assert!(SizeValue::from_css_str("fit-content(auto)").is_err());
-    assert!(SizeValue::from_css_str("fit-content()").is_err());
-    assert!(SizeValue::from_css_str("content").is_err());
+    assert!(Size::from_css_str("fit-content(auto)").is_err());
+    assert!(Size::from_css_str("fit-content()").is_err());
+    assert!(Size::from_css_str("content").is_err());
   }
 
   #[test]
@@ -257,35 +257,35 @@ mod tests {
       .build();
 
     assert_eq!(
-      SizeValue::MinContent.resolve_to_dimension(&sizing),
+      Size::MinContent.resolve_to_dimension(&sizing),
       Dimension::min_content()
     );
     assert_eq!(
-      SizeValue::MaxContent.resolve_to_dimension(&sizing),
+      Size::MaxContent.resolve_to_dimension(&sizing),
       Dimension::max_content()
     );
     assert_eq!(
-      SizeValue::Stretch.resolve_to_dimension(&sizing),
+      Size::Stretch.resolve_to_dimension(&sizing),
       Dimension::stretch()
     );
     assert_eq!(
-      SizeValue::FitContentLimit(Length::Px(30.0)).resolve_to_dimension(&sizing),
+      Size::FitContentLimit(Length::Px(30.0)).resolve_to_dimension(&sizing),
       Dimension::fit_content_px(30.0)
     );
     assert_eq!(
-      SizeValue::FitContentLimit(Length::Percentage(40.0)).resolve_to_dimension(&sizing),
+      Size::FitContentLimit(Length::Percentage(40.0)).resolve_to_dimension(&sizing),
       Dimension::fit_content_percent(0.4)
     );
   }
 
   #[test]
   fn parses_the_tailwind_keywords() {
-    assert_eq!(SizeValue::parse_tw("min"), Some(SizeValue::MinContent));
-    assert_eq!(SizeValue::parse_tw("max"), Some(SizeValue::MaxContent));
-    assert_eq!(SizeValue::parse_tw("fit"), Some(SizeValue::FitContent));
+    assert_eq!(Size::parse_tw("min"), Some(Size::MinContent));
+    assert_eq!(Size::parse_tw("max"), Some(Size::MaxContent));
+    assert_eq!(Size::parse_tw("fit"), Some(Size::FitContent));
     assert_eq!(
-      SizeValue::parse_tw("full"),
-      Some(SizeValue::Length(Length::Percentage(100.0)))
+      Size::parse_tw("full"),
+      Some(Size::Length(Length::Percentage(100.0)))
     );
   }
 }

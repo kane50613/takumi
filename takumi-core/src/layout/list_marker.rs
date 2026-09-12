@@ -9,7 +9,7 @@ use crate::{
   matching::MatchedDeclarationsView,
   style::{
     BackgroundImage, Direction, Display, JustifyContent, Length, ListStylePosition, MakeComputed,
-    SizeValue, TextWrapMode, WhiteSpaceCollapse,
+    Size, TextWrapMode, WhiteSpaceCollapse,
   },
 };
 
@@ -37,7 +37,7 @@ pub(super) fn list_marker(item_context: &RenderContext, ordinal: i32) -> Option<
   // An outside marker hangs at the item's content edge without taking width:
   // a zero-width flex box ends its overflowing content there.
   if item_context.style.list_style_position == ListStylePosition::Outside {
-    style.width = SizeValue::zero();
+    style.width = Size::zero();
   }
 
   let context = RenderContext::from_parent(item_context, style, sizing, current_color);

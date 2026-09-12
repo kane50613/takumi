@@ -4,7 +4,7 @@ use cssparser::{BasicParseErrorKind, Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
   Animatable, AspectRatio, Color, CssSyntaxKind, CssToken, FlexDirection, FromCss, FromCssStr,
-  Length, MakeComputed, ParseResult, SizeValue, SizingContext, ToCss,
+  Length, MakeComputed, ParseResult, Size, SizingContext, ToCss,
   tw::{Namespace, TailwindPropertyParser},
   unexpected_token,
 };
@@ -16,7 +16,7 @@ pub enum FlexBasis {
   /// `content`: size the item from its content, ignoring its main size property.
   Content,
   /// A `width`-style sizing value.
-  Size(SizeValue),
+  Size(Size),
 }
 
 impl Default for FlexBasis {
@@ -28,12 +28,12 @@ impl Default for FlexBasis {
 impl FlexBasis {
   /// An automatic basis.
   pub const fn auto() -> Self {
-    Self::Size(SizeValue::auto())
+    Self::Size(Size::auto())
   }
 
   /// A zero basis.
   pub const fn zero() -> Self {
-    Self::Size(SizeValue::zero())
+    Self::Size(Size::zero())
   }
 
   pub(crate) fn resolve_to_dimension(self, sizing: &SizingContext) -> taffy::Dimension {
@@ -44,15 +44,15 @@ impl FlexBasis {
   }
 }
 
-impl From<SizeValue> for FlexBasis {
-  fn from(size: SizeValue) -> Self {
+impl From<Size> for FlexBasis {
+  fn from(size: Size) -> Self {
     Self::Size(size)
   }
 }
 
 impl From<Length> for FlexBasis {
   fn from(length: Length) -> Self {
-    Self::Size(SizeValue::Length(length))
+    Self::Size(Size::Length(length))
   }
 }
 
@@ -91,7 +91,7 @@ impl Animatable for FlexBasis {
 }
 
 const FLEX_BASIS_TOKEN_LISTS: &[&[CssToken]] =
-  &[&[CssToken::Keyword("content")], SizeValue::VALID_TOKENS];
+  &[&[CssToken::Keyword("content")], Size::VALID_TOKENS];
 
 const FLEX_BASIS_TOKENS: [CssToken; CssToken::merged_len(FLEX_BASIS_TOKEN_LISTS)] =
   CssToken::merge_lists(FLEX_BASIS_TOKEN_LISTS);
@@ -107,7 +107,7 @@ impl<'i> FromCss<'i> for FlexBasis {
       return Ok(Self::Content);
     }
 
-    SizeValue::from_css(input).map(Self::Size)
+    Size::from_css(input).map(Self::Size)
   }
 }
 
@@ -121,14 +121,14 @@ impl ToCss for FlexBasis {
 }
 
 impl TailwindPropertyParser for FlexBasis {
-  const NAMESPACES: &'static [Namespace] = SizeValue::NAMESPACES;
+  const NAMESPACES: &'static [Namespace] = Size::NAMESPACES;
 
   fn parse_tw(token: &str) -> Option<Self> {
     if token.eq_ignore_ascii_case("content") {
       return Some(Self::Content);
     }
 
-    SizeValue::parse_tw(token).map(Self::Size)
+    Size::parse_tw(token).map(Self::Size)
   }
 }
 
