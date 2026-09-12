@@ -54,7 +54,7 @@ extern "C" {
 #[serde(rename_all = "camelCase")]
 pub struct RendererOptions {
   /// Byte budget shared by every cached resource — decoded images, SVG
-  /// rasters, parsed stylesheets. `0` disables caching. Defaults to 16 MiB.
+  /// rasters, parsed stylesheets. `0` disables caching. Defaults to 64 MiB.
   pub cache_max_bytes: Option<u64>,
 }
 

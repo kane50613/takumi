@@ -126,7 +126,7 @@ Takumi caches each decoded image so repeated content is decoded once. Two indepe
 | Byte cache   | Fetched bytes  | URL                 | `images.fetchCache`                |
 | Decode cache | Decoded pixels | Hash of image bytes | per-image `cache` / `images.cache` |
 
-The decode cache lives in the renderer and is bounded: entries weigh in at their decoded size against a byte budget (16 MiB by default), and once it fills the cache evicts the least recently used. A high-cardinality workload (a different image every render) won't grow memory; it misses the cache and decodes each time. SVG sources and their rasterized pixmaps share the same budget, as do parsed stylesheets.
+The decode cache lives in the renderer and is bounded: entries weigh in at their decoded size against a byte budget (64 MiB by default), and once it fills the cache evicts the least recently used. A high-cardinality workload (a different image every render) won't grow memory; it misses the cache and decodes each time. SVG sources and their rasterized pixmaps share the same budget, as do parsed stylesheets.
 
 Set the budget when constructing the renderer; `0` disables caching:
 

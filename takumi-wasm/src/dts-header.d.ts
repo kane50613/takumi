@@ -47,7 +47,7 @@ export type RendererOptions = {
   /**
    * Byte budget shared by every cached resource — decoded images, SVG
    * rasters, parsed stylesheets. `0` disables caching.
-   * @default 16 MiB
+   * @default 64 MiB
    */
   cacheMaxBytes?: number;
 };
