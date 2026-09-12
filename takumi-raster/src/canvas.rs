@@ -122,13 +122,13 @@ impl<'a> DrawTarget<'a, '_> {
 pub(crate) struct Canvas {
   image: Pixmap,
   origin: Point<u32>,
-  constraint_mask_stack: Vec<Option<MaskStackEntry>>,
+  constraint_mask_stack: Vec<MaskStackEntry>,
 }
 
 pub(crate) struct CanvasSubcanvas {
   image: Pixmap,
   origin: Option<Point<u32>>,
-  constraint_mask_stack: Option<Vec<Option<MaskStackEntry>>>,
+  constraint_mask_stack: Option<Vec<MaskStackEntry>>,
   offset: Point<i32>,
 }
 
@@ -277,15 +277,15 @@ impl Canvas {
   }
 
   pub(crate) fn has_no_constraint_mask(&self) -> bool {
-    self.constraint_mask_stack.iter().all(Option::is_none)
+    self.constraint_mask_stack.is_empty()
   }
 
   pub(crate) fn push_mask(&mut self, mask: TinyMask) {
     let mask = self.intersect_with_constraint_mask(mask);
-    self.constraint_mask_stack.push(Some(MaskStackEntry {
+    self.constraint_mask_stack.push(MaskStackEntry {
       mask: Arc::new(mask),
       origin: self.origin,
-    }));
+    });
   }
 
   pub(crate) fn pop_mask(&mut self) {
@@ -444,7 +444,7 @@ impl Canvas {
   }
 
   fn with_overlay_state<R>(&mut self, f: impl FnOnce(&mut DrawTarget<'_, '_>) -> R) -> R {
-    let combined_mask = self.constraint_mask_stack.last().and_then(Option::as_ref);
+    let combined_mask = self.constraint_mask_stack.last();
     let combined_mask = combined_mask.map(|entry| MaskView {
       mask: entry.mask.as_ref(),
       origin: entry.origin,
@@ -459,7 +459,7 @@ impl Canvas {
   }
 
   fn intersect_with_constraint_mask(&self, mut mask: TinyMask) -> TinyMask {
-    let Some(previous) = self.constraint_mask_stack.last().and_then(Option::as_ref) else {
+    let Some(previous) = self.constraint_mask_stack.last() else {
       return mask;
     };
 
@@ -485,8 +485,6 @@ impl Canvas {
         let left = row.alpha_at_offset(x);
         *out = if left == u8::MAX {
           right
-        } else if left == 0 {
-          0
         } else if right == u8::MAX {
           left
         } else {
@@ -520,7 +518,7 @@ impl Canvas {
   fn restore_subcanvas_state(
     &mut self,
     origin: Option<Point<u32>>,
-    constraint_mask_stack: Option<Vec<Option<MaskStackEntry>>>,
+    constraint_mask_stack: Option<Vec<MaskStackEntry>>,
   ) {
     if let Some(origin) = origin {
       self.origin = origin;

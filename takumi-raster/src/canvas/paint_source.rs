@@ -117,23 +117,6 @@ impl<'a> PaintSource<'a> {
     }
   }
 
-  fn write_premultiplied(self, dst: &mut [u8]) {
-    let resolved = self.resolve();
-    if let ResolvedSource::Direct(Self::Pixmap(source)) = resolved {
-      dst.copy_from_slice(bytemuck::cast_slice(source.pixels()));
-      return;
-    }
-
-    let width = self.width();
-    let height = self.height();
-    let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(dst);
-    for y in 0..height {
-      for x in 0..width {
-        pixels[(y * width + x) as usize] = premultiplied_from_pixel(resolved.get_pixel(x, y));
-      }
-    }
-  }
-
   pub(crate) fn with_pixmap_ref<R>(self, f: impl FnOnce(PixmapRef<'_>) -> R) -> Option<R> {
     if let Some(source) = self.as_pixmap_ref() {
       return Some(f(source));
@@ -143,7 +126,13 @@ impl<'a> PaintSource<'a> {
     let height = self.height();
     let source_len = checked_area(width, height, 4)?;
     let mut premultiplied = vec![0; source_len];
-    self.write_premultiplied(&mut premultiplied);
+    let resolved = self.resolve();
+    let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(&mut premultiplied);
+    for y in 0..height {
+      for x in 0..width {
+        pixels[(y * width + x) as usize] = premultiplied_from_pixel(resolved.get_pixel(x, y));
+      }
+    }
 
     PixmapRef::from_bytes(&premultiplied, width, height).map(f)
   }
