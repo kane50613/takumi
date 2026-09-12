@@ -4,7 +4,7 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use takumi::{
   prelude::{
     AlignItems, BackgroundClip, BackgroundImages, BackgroundRepeats, BackgroundSizes, BorderRadius,
-    Color, ColorInput, Display, Fonts, FromCssStr, JustifyContent,
+    Color, ColorInput, Display, FlexWrap, Fonts, FromCssStr, JustifyContent,
     Length::{Percentage, Px},
     Node, ObjectFit, Overflow, PositionValues, RenderOptions, SpacePair, Style, StyleDeclaration,
     Viewport,
@@ -63,6 +63,41 @@ fn nested_clip_masks_fixture() -> Node {
       .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::align_items(AlignItems::Center))
       .with(StyleDeclaration::justify_content(JustifyContent::Center))
+      .with(StyleDeclaration::background_color(ColorInput::Value(
+        Color::white(),
+      ))),
+  )
+}
+
+fn sibling_clip_masks_fixture() -> Node {
+  let cards = (0..64).map(|index| {
+    let inner = Node::container([]).with_style(
+      Style::default()
+        .with(StyleDeclaration::width(Percentage(100.0)))
+        .with(StyleDeclaration::height(Percentage(100.0)))
+        .with(StyleDeclaration::background_color(ColorInput::Value(
+          Color([200, 30, index as u8, 255]),
+        ))),
+    );
+
+    Node::container([inner]).with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::Flex))
+        .with(StyleDeclaration::width(Px(92.0)))
+        .with(StyleDeclaration::height(Px(92.0)))
+        .with(StyleDeclaration::margin_top(Px(4.0)))
+        .with(StyleDeclaration::margin_left(Px(4.0)))
+        .with_border_radius(BorderRadius::from_css_str("24px").unwrap())
+        .with_overflow(SpacePair::from_single(Overflow::Clip)),
+    )
+  });
+
+  Node::container(cards.collect::<Vec<_>>()).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::flex_wrap(FlexWrap::Wrap))
+      .with(StyleDeclaration::width(Percentage(100.0)))
+      .with(StyleDeclaration::height(Percentage(100.0)))
       .with(StyleDeclaration::background_color(ColorInput::Value(
         Color::white(),
       ))),
@@ -133,6 +168,9 @@ fn bench_canvas(c: &mut Criterion) {
 
   group.bench_function("nested_clip_masks", |b| {
     b.iter(|| render_node(&fonts, black_box(nested_clip_masks_fixture())))
+  });
+  group.bench_function("sibling_clip_masks", |b| {
+    b.iter(|| render_node(&fonts, black_box(sibling_clip_masks_fixture())))
   });
   group.bench_function("scaled_image_clip", |b| {
     b.iter(|| render_node(&fonts, black_box(scaled_image_fixture())))
