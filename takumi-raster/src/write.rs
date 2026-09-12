@@ -223,9 +223,66 @@ fn duration_ms_to_gif_delay(duration_ms: u32) -> u16 {
   }
 }
 
-fn configure_png_encoder<T: Write>(encoder: &mut png::Encoder<'_, T>) {
-  encoder.set_deflate_compression(DeflateCompression::Level(7));
-  encoder.set_filter(Filter::NoFilter);
+#[derive(Clone, Copy)]
+struct PngEncoding {
+  compression: DeflateCompression,
+  filter: Filter,
+}
+
+/// Flat art deflates best unfiltered, where long runs repeat across rows.
+const FLAT_PNG: PngEncoding = PngEncoding {
+  compression: DeflateCompression::Level(7),
+  filter: Filter::NoFilter,
+};
+
+/// Photographs deflate best filtered, and level 3 already captures most of it.
+const PHOTO_PNG: PngEncoding = PngEncoding {
+  compression: DeflateCompression::Level(3),
+  filter: Filter::Adaptive,
+};
+
+/// Picks the encoding that makes a 1-in-32 row sample of `rgba` smaller.
+fn pick_png_encoding(rgba: &[u8], width: u32) -> PngEncoding {
+  const ROW_STRIDE: usize = 32;
+
+  let row_bytes = width as usize * 4;
+  if row_bytes == 0 {
+    return FLAT_PNG;
+  }
+
+  let band: Vec<u8> = rgba
+    .chunks_exact(row_bytes)
+    .step_by(ROW_STRIDE)
+    .flatten()
+    .copied()
+    .collect();
+  let band_height = (band.len() / row_bytes) as u32;
+  if band_height < 2 {
+    return FLAT_PNG;
+  }
+
+  let encoded_len = |encoding: PngEncoding| {
+    let mut out = Vec::new();
+    let mut encoder = png::Encoder::new(&mut out, width, band_height);
+    encoder.set_deflate_compression(encoding.compression);
+    encoder.set_filter(encoding.filter);
+    encoder.set_color(ColorType::Rgba);
+    let written = encoder
+      .write_header()
+      .and_then(|mut writer| writer.write_image_data(&band));
+    written.map(|_| out.len())
+  };
+
+  match (encoded_len(FLAT_PNG), encoded_len(PHOTO_PNG)) {
+    (Ok(flat), Ok(photo)) if photo < flat => PHOTO_PNG,
+    _ => FLAT_PNG,
+  }
+}
+
+fn configure_png_encoder<T: Write>(encoder: &mut png::Encoder<'_, T>, rgba: &[u8], width: u32) {
+  let encoding = pick_png_encoding(rgba, width);
+  encoder.set_deflate_compression(encoding.compression);
+  encoder.set_filter(encoding.filter);
 }
 
 /// Writes a single rendered image to `destination` using `format`.
@@ -249,7 +306,7 @@ pub fn write_image<T: Write>(
     }
     OutputFormat::Png => {
       let mut encoder = png::Encoder::new(destination, image.width(), image.height());
-      configure_png_encoder(&mut encoder);
+      configure_png_encoder(&mut encoder, image.as_raw(), image.width());
 
       let has_alpha = has_any_alpha_pixel(rgba);
 
@@ -407,7 +464,7 @@ where
   let height = first.image.height();
 
   let mut encoder = png::Encoder::new(destination, width, height);
-  configure_png_encoder(&mut encoder);
+  configure_png_encoder(&mut encoder, first.image.as_raw(), width);
   encoder.set_color(ColorType::Rgba);
   encoder
     .set_animated(frame_count, options.loop_count.unwrap_or(0) as u32)
@@ -599,9 +656,51 @@ mod tests {
   use takumi_core::Error;
 
   use super::{
-    AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, Bitmap,
-    OutputFormat, write_animated_gif, write_animated_png, write_animated_webp, write_image,
+    AnimatedGifOptions, AnimatedPngOptions, AnimatedWebpOptions, AnimationFrame, Bitmap, Filter,
+    OutputFormat, pick_png_encoding, write_animated_gif, write_animated_png, write_animated_webp,
+    write_image,
   };
+
+  fn band(width: u32, height: u32, pixel: impl Fn(u32, u32) -> [u8; 4]) -> Vec<u8> {
+    let pixel = &pixel;
+    (0..height)
+      .flat_map(|y| (0..width).flat_map(move |x| pixel(x, y)))
+      .collect()
+  }
+
+  #[test]
+  fn flat_art_encodes_unfiltered() {
+    let rgba = band(256, 64, |x, _| {
+      if x < 128 {
+        [20, 40, 60, 255]
+      } else {
+        [200, 40, 60, 255]
+      }
+    });
+
+    assert!(matches!(
+      pick_png_encoding(&rgba, 256).filter,
+      Filter::NoFilter
+    ));
+  }
+
+  #[test]
+  fn photographic_content_encodes_filtered() {
+    let rgba = band(256, 64, |x, y| {
+      let noise = (x.wrapping_mul(2654435761) ^ y.wrapping_mul(40503)) as u8;
+      [
+        (x as u8).wrapping_add(noise / 8),
+        (y as u8).wrapping_add(noise / 4),
+        noise,
+        255,
+      ]
+    });
+
+    assert!(matches!(
+      pick_png_encoding(&rgba, 256).filter,
+      Filter::Adaptive
+    ));
+  }
 
   fn mk_frame(image: RgbaImage, duration_ms: u32) -> AnimationFrame {
     AnimationFrame {
