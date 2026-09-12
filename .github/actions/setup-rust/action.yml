@@ -41,6 +41,6 @@ runs:
 
     - name: Install cargo-binstall
       if: ${{ inputs.binstall }}
-      uses: taiki-e/install-action@cb33e69fad06166ca28a42b2575e4dadabf62ee8 # v2.85.8
+      uses: taiki-e/install-action@7b8d4719ee4aaa279bdf55df38dacb9ebfe12a6c # v2.87.6
       with:
         tool: ${{ inputs.binstall }}
