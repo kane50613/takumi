@@ -20,7 +20,7 @@ use crate::{
     tree::{ContainingBlocks, LayoutResults, RenderNode},
   },
   shadow::SizedShadow,
-  style::{Affine, BlurType, ComputedStyle, Display},
+  style::{Affine, BlurType, ComputedStyle, Display, Filter},
 };
 
 /// A node's resolved paint inputs.
@@ -357,6 +357,11 @@ pub fn build_stacking_contexts(
         }
       }
     }
+    if let Some(root_paint) = &contexts[context_id].root
+      && let Some(root_node) = root.node_at_path(&root_paint.path)
+    {
+      paint_bounds = outset_bounds(paint_bounds, filter_reach(root_node), root_paint.transform);
+    }
     contexts[context_id].paint_bounds = if unknown { None } else { paint_bounds };
   }
 
@@ -368,6 +373,30 @@ fn shadow_reach(shadow: &SizedShadow) -> f32 {
   shadow.offset_x.abs().max(shadow.offset_y.abs())
     + shadow.spread_radius.max(0.0)
     + shadow.blur_radius * BlurType::Shadow.extent_multiplier()
+}
+
+/// How far the node's filters spread its layer, in local px; mirrors the raster
+/// backend's `filter_padding`.
+fn filter_reach(node: &RenderNode) -> f32 {
+  let sizing = &node.context.sizing;
+  node
+    .context
+    .style
+    .filter
+    .iter()
+    .map(|filter| match filter {
+      Filter::Blur(radius) => radius.to_px(sizing, 1.0) * BlurType::Filter.extent_multiplier(),
+      Filter::DropShadow(shadow) => {
+        shadow
+          .offset_x
+          .to_px(sizing, 1.0)
+          .abs()
+          .max(shadow.offset_y.to_px(sizing, 1.0).abs())
+          + shadow.blur_radius.to_px(sizing, 1.0) * BlurType::Shadow.extent_multiplier()
+      }
+      _ => 0.0,
+    })
+    .sum()
 }
 
 /// How far box shadows and the outline reach past the border box, in local px.
@@ -607,11 +636,16 @@ fn compute_node_paint_bounds(
       max
     });
 
-  outset_bounds(
-    bounds,
-    background_padding.max(text_ink_reach(&font_style)),
-    inline_transform,
-  )
+  let text_reach = built
+    .spans
+    .iter()
+    .filter_map(|span| match span {
+      ProcessedInlineSpan::Text { style, .. } => Some(text_ink_reach(style)),
+      _ => None,
+    })
+    .fold(text_ink_reach(&font_style), f32::max);
+
+  outset_bounds(bounds, background_padding.max(text_reach), inline_transform)
 }
 
 fn has_inline_paint_content(node: &RenderNode) -> bool {

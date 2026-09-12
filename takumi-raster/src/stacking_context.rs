@@ -338,8 +338,6 @@ fn begin_node_render(
   let should_isolate = current.context.style.needs_offscreen_compositing();
   let isolated_canvas = if should_isolate {
     Some(canvas.begin_subcanvas(compute_isolation_bounds(
-      current,
-      node_paint.transform,
       canvas.viewport(),
       isolation_bounds_hint,
     ))?)
@@ -582,15 +580,11 @@ fn full_viewport_placement(viewport: CanvasViewport) -> Placement {
 }
 
 fn compute_isolation_bounds(
-  node: &RenderNode,
-  transform: Affine,
   viewport: CanvasViewport,
   paint_bounds_hint: Option<SceneBounds>,
 ) -> Placement {
-  let padding = 2 + filter_padding(&node.context.style.filter, &node.context.sizing, transform);
-
   paint_bounds_hint
-    .and_then(|bounds| placement_from_bounds(bounds, viewport, padding))
+    .and_then(|bounds| placement_from_bounds(bounds, viewport, 2))
     .unwrap_or_else(|| full_viewport_placement(viewport))
 }
 
