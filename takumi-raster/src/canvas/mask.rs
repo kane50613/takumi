@@ -104,8 +104,8 @@ pub(crate) fn prepare_node_mask(
     return Ok(NodeMaskAction::None);
   }
 
-  if (clip_x && layout.content_box_width() < f32::EPSILON)
-    || (clip_y && layout.content_box_height() < f32::EPSILON)
+  if (clip_x && layout.padding_box_width() < f32::EPSILON)
+    || (clip_y && layout.padding_box_height() < f32::EPSILON)
   {
     return Ok(NodeMaskAction::SkipRendering);
   }
@@ -265,25 +265,17 @@ fn rect_overflow_mask(
   (clip_x, clip_y): (bool, bool),
 ) -> NodeMaskAction {
   let from = Point {
-    x: if clip_x {
-      (layout.padding.left + layout.border.left) as u32
-    } else {
-      0
-    },
-    y: if clip_y {
-      (layout.padding.top + layout.border.top) as u32
-    } else {
-      0
-    },
+    x: if clip_x { layout.border.left as u32 } else { 0 },
+    y: if clip_y { layout.border.top as u32 } else { 0 },
   };
   let to = Point {
     x: if clip_x {
-      from.x + layout.content_box_width() as u32
+      from.x + layout.padding_box_width() as u32
     } else {
       u32::MAX
     },
     y: if clip_y {
-      from.y + layout.content_box_height() as u32
+      from.y + layout.padding_box_height() as u32
     } else {
       u32::MAX
     },

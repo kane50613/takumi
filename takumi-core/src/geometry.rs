@@ -267,6 +267,16 @@ impl ComputedLayout {
     self.size.height - self.padding.top - self.padding.bottom - self.border.top - self.border.bottom
   }
 
+  /// Padding-box width: border-box width minus the border on both sides.
+  pub fn padding_box_width(&self) -> f32 {
+    self.size.width - self.border.left - self.border.right
+  }
+
+  /// Padding-box height: border-box height minus the border on both sides.
+  pub fn padding_box_height(&self) -> f32 {
+    self.size.height - self.border.top - self.border.bottom
+  }
+
   /// Content-box size.
   pub fn content_box_size(&self) -> Size<f32> {
     Size {
