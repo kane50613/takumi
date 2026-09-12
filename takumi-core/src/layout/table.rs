@@ -296,7 +296,9 @@ impl TableGrid {
   /// space evenly, so column widths stop following the content. CSS 2.2 §17.5.2
   /// only reaches that algorithm when the table's width is not `auto`. A
   /// spanning cell splits its declared width evenly across the tracks it
-  /// covers; a percentage width on one is ignored.
+  /// covers; a percentage width on one is ignored. Like Blink's
+  /// `InlineSizesFromStyle`, only a fixed or percentage width constrains a
+  /// column, so a sizing keyword leaves it `auto`.
   ///
   /// Columns that stay `auto` after that pass become `fr` tracks weighted by
   /// max-content, so free space follows content the way Blink's `kAboveMax`
@@ -307,9 +309,11 @@ impl TableGrid {
     let measured = if fixed { 1 } else { rows.len() };
 
     for (cell, (column, colspan)) in self.placed_cells(rows, measured) {
-      let width = &cell.context.style.width;
+      let Some(width) = cell.context.style.width.as_length() else {
+        continue;
+      };
 
-      if *width == Length::Auto {
+      if width == Length::Auto {
         continue;
       }
 
@@ -421,8 +425,8 @@ impl RenderNode {
     let collapse = self.context.style.border_collapse == BorderCollapse::Collapse;
     let spacing = self.context.style.border_spacing.0;
     let sizing = self.context.sizing.clone();
-    let fixed = self.context.style.table_layout == TableLayout::Fixed
-      && self.context.style.width != Length::Auto;
+    let fixed =
+      self.context.style.table_layout == TableLayout::Fixed && !self.context.style.width.is_auto();
     let tracks = grid.track_sizes(&rows, fixed, spacing.x.to_px(&sizing, 0.0));
     let collapsed = collapse.then(|| {
       CollapsedBorders::resolve(
@@ -628,20 +632,11 @@ impl RenderNode {
   /// context of its own, so taffy would lay its inline children out as blocks.
   /// Nested tables pay for this once per level, since each level lays the levels
   /// below it out again.
-  fn mark_intrinsic(&mut self) {
-    self.context.intrinsic_min_content = true;
-
-    for child in self.children.as_deref_mut().unwrap_or_default() {
-      child.mark_intrinsic();
-    }
-  }
-
   fn intrinsic_widths(&self) -> (f32, f32) {
     let mut cell = self.clone();
 
     cell.lower_cell(1, 0, 1, false);
     cell.context.style.display.blockify();
-    cell.mark_intrinsic();
 
     let measure = |width| {
       let mut tree = LayoutTree::from_render_node(&cell);

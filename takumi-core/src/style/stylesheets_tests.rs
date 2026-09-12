@@ -16,6 +16,29 @@ use crate::{
   viewport::Viewport,
 };
 
+/// The sizing longhands moved off `Length`, so their builders take anything that
+/// converts into the new value types. This pins the `Length` call that callers
+/// wrote before the sizing keywords existed.
+#[test]
+fn the_sizing_builders_still_take_a_length() {
+  assert_eq!(
+    StyleDeclaration::width(Length::Px(80.0)),
+    StyleDeclaration::width(Length::Px(80.0))
+  );
+  assert_eq!(
+    StyleDeclaration::height(Length::Percentage(50.0)),
+    StyleDeclaration::height(Length::Percentage(50.0))
+  );
+  assert_eq!(
+    StyleDeclaration::flex_basis(Some(Length::Px(12.0).into())),
+    StyleDeclaration::flex_basis(Some(FlexBasis::Size(Length::Px(12.0).into())))
+  );
+  assert_eq!(
+    StyleDeclaration::flex_basis(None),
+    StyleDeclaration::FlexBasis(None)
+  );
+}
+
 fn style_with(declarations: impl IntoIterator<Item = StyleDeclaration>) -> Style {
   let mut style = Style::default();
   for declaration in declarations {
@@ -36,6 +59,18 @@ fn parse_declarations_is_err(name: &str, css: &str) -> bool {
   let mut input = ParserInput::new(css);
   let mut parser = Parser::new(&mut input);
   StyleDeclarationBlock::parse(name, &mut parser).is_err()
+}
+
+/// `flex-basis` accepts everything `width` does, so its diagnostics must list
+/// the sizing keywords too.
+#[test]
+fn flex_basis_diagnostics_list_the_sizing_keywords() {
+  let error = from_value::<Style>(json!({ "flexBasis": "nope" }))
+    .unwrap_err()
+    .to_string();
+
+  assert!(error.contains("'min-content'"), "{error}");
+  assert!(error.contains("'content'"), "{error}");
 }
 
 fn inherited_style_from_pairs(
@@ -73,8 +108,8 @@ fn test_merge_from_inline_over_tailwind() {
   tw_style.merge_from(inline_style);
 
   let resolved = tw_style.inherit(&ComputedStyle::default());
-  assert_eq!(resolved.width, Length::Px(100.0));
-  assert_eq!(resolved.height, Length::Rem(20.0));
+  assert_eq!(resolved.width, Length::Px(100.0).into());
+  assert_eq!(resolved.height, Length::Rem(20.0).into());
   assert_eq!(resolved.color, ColorInput::Value(Color([255, 0, 0, 255])));
 }
 
@@ -1227,7 +1262,7 @@ fn test_var_resolves_local_custom_property() {
     &ComputedStyle::default(),
   );
 
-  assert_eq!(style.width, Length::Px(24.0));
+  assert_eq!(style.width, Length::Px(24.0).into());
 }
 
 #[test]
@@ -1237,7 +1272,7 @@ fn test_var_uses_fallback_when_missing() {
     &ComputedStyle::default(),
   );
 
-  assert_eq!(style.width, Length::Px(18.0));
+  assert_eq!(style.width, Length::Px(18.0).into());
 }
 
 #[test]
@@ -1261,7 +1296,7 @@ fn test_var_resolves_custom_property_declared_later_on_same_element() {
     &ComputedStyle::default(),
   );
 
-  assert_eq!(style.width, Length::Px(24.0));
+  assert_eq!(style.width, Length::Px(24.0).into());
 }
 
 #[test]
@@ -1277,7 +1312,7 @@ fn test_var_inherits_custom_properties_from_parent() {
   let parent = inherited_style_from_pairs([("--card-width", "320px")], &ComputedStyle::default());
   let child = inherited_style_from_pairs([("width", "var(--card-width)")], &parent);
 
-  assert_eq!(child.width, Length::Px(320.0));
+  assert_eq!(child.width, Length::Px(320.0).into());
 }
 
 /// The shadcn `@theme inline` pattern: a `:root` token aliases another
@@ -1296,14 +1331,14 @@ fn test_var_chain_resolves_at_consuming_element() {
   let dark = inherited_style_from_pairs([("--background", "20px")], &root);
   let child = inherited_style_from_pairs([("width", "var(--panel-width)")], &dark);
 
-  assert_eq!(child.width, Length::Px(20.0));
+  assert_eq!(child.width, Length::Px(20.0).into());
 }
 
 #[test]
 fn test_var_drops_invalid_declaration_without_fallback() {
   let style = inherited_style_from_pairs([("width", "var(--missing)")], &ComputedStyle::default());
 
-  assert_eq!(style.width, Length::default());
+  assert_eq!(style.width, Length::Auto.into());
 }
 
 #[test]
@@ -1317,7 +1352,7 @@ fn test_var_uses_fallback_for_cycles() {
     &ComputedStyle::default(),
   );
 
-  assert_eq!(style.width, Length::Px(14.0));
+  assert_eq!(style.width, Length::Px(14.0).into());
 }
 
 #[test]
@@ -1341,7 +1376,7 @@ fn test_var_resolves_inside_shorthand() {
 fn test_var_rejects_non_custom_property_name() {
   let style = inherited_style_from_pairs([("width", "var(size, 18px)")], &ComputedStyle::default());
 
-  assert_eq!(style.width, Length::default());
+  assert_eq!(style.width, Length::Auto.into());
 }
 
 /// A substituted value is syntax-checked as a whole, so `24px 10px` is invalid
@@ -1355,7 +1390,7 @@ fn test_var_rejects_trailing_tokens_after_substitution() {
     &ComputedStyle::default(),
   );
 
-  assert_eq!(style.width, Length::default());
+  assert_eq!(style.width, Length::Auto.into());
 }
 
 #[test]
@@ -1365,7 +1400,7 @@ fn test_var_rejects_missing_separator_in_function() {
     &ComputedStyle::default(),
   );
 
-  assert_eq!(style.width, Length::default());
+  assert_eq!(style.width, Length::Auto.into());
 }
 
 #[test]
@@ -1378,7 +1413,7 @@ fn test_var_supports_nested_fallback_chains() {
     &ComputedStyle::default(),
   );
 
-  assert_eq!(style.width, Length::Px(22.0));
+  assert_eq!(style.width, Length::Px(22.0).into());
 }
 
 #[test]
@@ -1428,7 +1463,7 @@ fn test_var_drops_declaration_when_substitution_stays_invalid() {
     &ComputedStyle::default(),
   );
 
-  assert_eq!(style.width, Length::default());
+  assert_eq!(style.width, Length::Auto.into());
 }
 
 #[test]

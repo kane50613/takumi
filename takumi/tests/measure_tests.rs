@@ -485,6 +485,79 @@ fn test_measure_flex_wrap_balance_evens_out_the_lines() {
   assert_close(balance.children[2].transform[5], 20.0);
 }
 
+/// The CSS Sizing keywords size a box from its content instead of its
+/// containing block.
+#[test]
+fn test_measure_sizing_keywords_size_from_the_content() {
+  let box_with = |width: &str| {
+    Node::from_html(
+      &format!(
+        r#"<div style="display:flex; width:400px; align-items:flex-start"><div style="display:block; width:{width}; font-size:20px">alpha beta gamma delta</div></div>"#
+      ),
+      FromHtmlOptions::default(),
+    )
+    .expect("parse")
+  };
+  let measured =
+    |width: &str| measure(box_with(width), create_measure_viewport()).children[0].width;
+
+  let min_content = measured("min-content");
+  let max_content = measured("max-content");
+  let fit_content = measured("fit-content");
+  let limited = measured("fit-content(120px)");
+  let stretch = measured("stretch");
+  let widest_word = ["alpha", "beta", "gamma", "delta"]
+    .into_iter()
+    .map(|word| {
+      measure(
+        Node::from_html(
+          &format!(
+            r#"<div style="display:flex; width:400px; align-items:flex-start"><div style="display:block; width:max-content; font-size:20px">{word}</div></div>"#
+          ),
+          FromHtmlOptions::default(),
+        )
+        .expect("parse"),
+        create_measure_viewport(),
+      )
+      .children[0]
+        .width
+    })
+    .fold(0.0_f32, f32::max);
+
+  assert_close(min_content, widest_word);
+  assert!(
+    min_content < max_content,
+    "min-content {min_content} should be narrower than max-content {max_content}"
+  );
+  assert!(max_content <= 400.0);
+  assert_close(fit_content, max_content);
+  assert_close(limited, 120.0);
+  assert_close(stretch, 400.0);
+}
+
+/// `flex-basis: content` sizes the item from its content, ignoring `width`.
+#[test]
+fn test_measure_flex_basis_content_ignores_the_width() {
+  let item = |basis: &str| {
+    Node::from_html(
+      &format!(
+        r#"<div style="display:flex; width:400px"><div style="width:40px; flex-basis:{basis}; flex-grow:0; flex-shrink:0; font-size:20px">alpha beta</div></div>"#
+      ),
+      FromHtmlOptions::default(),
+    )
+    .expect("parse")
+  };
+
+  let from_width = measure(item("auto"), create_measure_viewport()).children[0].width;
+  let from_content = measure(item("content"), create_measure_viewport()).children[0].width;
+
+  assert_close(from_width, 40.0);
+  assert!(
+    from_content > from_width,
+    "content basis {from_content} should exceed the width basis {from_width}"
+  );
+}
+
 /// A text node carries its own inline content but has no children, so the
 /// measure traversal used to walk past it without emitting a run.
 #[test]
@@ -2302,6 +2375,64 @@ fn test_table_auto_columns_share_free_width_by_max_content() {
     free * description / (name + description),
     1.0,
   );
+}
+
+/// Blink's `InlineSizesFromStyle` reads a cell's `width` only when it is fixed
+/// or a percentage, so a sizing keyword leaves the column as if it were `auto`.
+#[test]
+fn test_table_keyword_cell_width_leaves_column_auto() {
+  let body_widths = |width: &str| {
+    let node = Node::from_html(
+      &format!(
+        r#"<div style="width: 352px"><table style="width: 100%; font-size: 12px">
+      <tr><th>Name</th><th>Description</th><th{width}>Qty</th></tr>
+      <tr><td>Item 30</td><td>Description of item 30</td><td>90</td></tr>
+    </table></div>"#
+      ),
+      FromHtmlOptions::default(),
+    )
+    .expect("parse");
+
+    measure(node, create_measure_viewport()).children[0].children[3..]
+      .iter()
+      .map(|cell| cell.width)
+      .collect::<Vec<_>>()
+  };
+
+  assert_eq!(
+    body_widths(r#" style="width: fit-content""#),
+    body_widths("")
+  );
+}
+
+/// A keyword width on a fixed-layout cell must not discard the whole track list.
+#[test]
+fn test_table_fixed_layout_keeps_tracks_with_keyword_cell_width() {
+  let table = |width: &str| {
+    let node = Node::from_html(
+      &format!(
+        r#"<div style="width: 352px"><table style="width: 100%; table-layout: fixed; font-size: 12px">
+      <tr><th{width}>Name</th><th style="width: 120px">Description</th></tr>
+      <tr><td>Item 30</td><td>Description of item 30</td></tr>
+    </table></div>"#
+      ),
+      FromHtmlOptions::default(),
+    )
+    .expect("parse");
+    let table = &measure(node, create_measure_viewport()).children[0];
+
+    (
+      table.width,
+      table.children[2..]
+        .iter()
+        .map(|cell| cell.width)
+        .collect::<Vec<_>>(),
+    )
+  };
+  let (width, body_widths) = table(r#" style="width: max-content""#);
+
+  assert_within(width, 352.0, 0.5);
+  assert_eq!(body_widths, table("").1);
 }
 
 /// Horizontal padding on an inline span reserves advance on the line, like

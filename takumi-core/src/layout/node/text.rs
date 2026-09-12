@@ -24,7 +24,7 @@ fn measure_cache_key(
   font_style: &SizedFontStyle<'_>,
   max_width: f32,
   max_height: Option<MaxHeight>,
-  clamp_to_max_width: bool,
+  min_content_query: bool,
 ) -> (u64, u32) {
   let style = &context.style;
   let mut hasher = Xxh3::new();
@@ -32,7 +32,7 @@ fn measure_cache_key(
   hasher.write(text.text.as_bytes());
   font_style.hash_shaping_inputs(&mut hasher);
   hasher.write_u32(max_width.to_bits());
-  hasher.write_u8(u8::from(clamp_to_max_width));
+  hasher.write_u8(u8::from(min_content_query));
   match max_height {
     None => hasher.write_u8(0),
     Some(MaxHeight::Absolute(height)) => {
@@ -82,15 +82,15 @@ pub(crate) fn measure_text_node(
   let (max_width, max_height) =
     create_inline_constraint(context, available_space, known_dimensions);
   let font_style = SizedFontStyle::from_style(&context.style, context);
-  let clamp_to_max_width =
-    !context.intrinsic_min_content || !matches!(available_space.width, AvailableSpace::MinContent);
+  let min_content_query =
+    known_dimensions.width.is_none() && matches!(available_space.width, AvailableSpace::MinContent);
   let key = measure_cache_key(
     text,
     context,
     &font_style,
     max_width,
     max_height,
-    clamp_to_max_width,
+    min_content_query,
   );
 
   context.inline_cache().get_or_measure(key, || {
@@ -120,7 +120,7 @@ pub(crate) fn measure_text_node(
         max_width,
         ceil_width: true,
         parent_font_metrics,
-        clamp_to_max_width,
+        min_content_query,
       },
     )
   })

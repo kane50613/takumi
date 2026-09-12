@@ -49,7 +49,7 @@ use self::{
   items::inline_box_kind,
   metrics::text_line_box_contribution,
   runs::measured_run_text,
-  text_fit::{text_fit_is_applicable, text_fit_line_scales},
+  text_fit::{text_fit_is_applicable, text_fit_line_advance, text_fit_line_scales},
   truncation::make_ellipsis_layout,
 };
 pub(crate) use self::{
@@ -310,9 +310,9 @@ pub(crate) struct InlineMeasureOptions {
   pub(crate) max_width: f32,
   pub(crate) ceil_width: bool,
   pub(crate) parent_font_metrics: Option<ParentFontMetrics>,
-  /// A min-content query wraps at zero and reports the widest run it could not break, so the width
-  /// it wrapped against must not cap the answer.
-  pub(crate) clamp_to_max_width: bool,
+  /// A min-content query wraps at every opportunity, so the width it wrapped against neither caps
+  /// the answer nor counts the spaces that pushed the breaks.
+  pub(crate) min_content_query: bool,
 }
 
 #[derive(Clone, PartialEq, Copy, Debug)]
@@ -483,11 +483,23 @@ pub(crate) fn measure_inline_layout(
     max_width,
     ceil_width,
     parent_font_metrics,
-    clamp_to_max_width,
+    min_content_query,
   } = options;
   let max_run_width = layout
     .lines()
-    .map(|line| line.metrics().inline_min_coord + line.metrics().advance)
+    .enumerate()
+    .map(|(index, line)| {
+      let metrics = line.metrics();
+
+      if !min_content_query {
+        return metrics.inline_min_coord + metrics.advance;
+      }
+
+      let (text_advance, static_advance) = text_fit_line_advance(&line);
+      let scale = line_scales.get(index).copied().unwrap_or(1.0);
+
+      metrics.inline_min_coord + static_advance + text_advance * scale
+    })
     .fold(0.0, f32::max);
   let line_metrics = resolve_inline_line_metrics(layout, spans, parent_font_metrics, line_scales);
   let total_height = line_metrics
@@ -510,10 +522,10 @@ pub(crate) fn measure_inline_layout(
   };
 
   Size {
-    width: if clamp_to_max_width {
-      measured_width.min(max_width)
-    } else {
+    width: if min_content_query {
       measured_width
+    } else {
+      measured_width.min(max_width)
     },
     height: total_height.max(float_box_height).ceil(),
   }
@@ -1531,7 +1543,7 @@ mod tests {
     .with_style(
       Style::default()
         .with(StyleDeclaration::display(Display::Block))
-        .with(StyleDeclaration::width(300.0.into()))
+        .with(StyleDeclaration::width(Length::from(300.0)))
         .with_white_space(WhiteSpace::pre_wrap()),
     );
 

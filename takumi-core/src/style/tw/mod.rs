@@ -583,7 +583,7 @@ pub(crate) enum TailwindProperty {
   /// `flex` property.
   Flex(Flex),
   /// `flex-basis` property.
-  FlexBasis(Length),
+  FlexBasis(FlexBasis),
   /// `overflow` property.
   Overflow(Overflow),
   /// `overflow-x` property.
@@ -625,11 +625,11 @@ pub(crate) enum TailwindProperty {
   /// `text-transform` property.
   TextTransform(TextTransform),
   /// `width` and `height` property.
-  Size(Length),
+  Size(Size),
   /// `width` property.
-  Width(Length),
+  Width(Size),
   /// `height` property.
-  Height(Length),
+  Height(Size),
   /// `min-width` property.
   MinWidth(Length),
   /// `min-height` property.

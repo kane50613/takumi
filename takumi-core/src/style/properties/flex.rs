@@ -3,9 +3,134 @@ use std::{fmt, mem};
 use cssparser::{BasicParseErrorKind, Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{
-  Animatable, AspectRatio, CssSyntaxKind, CssToken, FlexDirection, FromCss, FromCssStr, Length,
-  MakeComputed, ParseResult, SizingContext, ToCss, tw::TailwindPropertyParser, unexpected_token,
+  Animatable, AspectRatio, Color, CssSyntaxKind, CssToken, FlexDirection, FromCss, FromCssStr,
+  Length, MakeComputed, ParseResult, Size, SizingContext, ToCss,
+  tw::{Namespace, TailwindPropertyParser},
+  unexpected_token,
 };
+
+/// Represents a `flex-basis` value: `content` or a sizing value.
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub enum FlexBasis {
+  /// `content`: size the item from its content, ignoring its main size property.
+  Content,
+  /// A `width`-style sizing value.
+  Size(Size),
+}
+
+impl Default for FlexBasis {
+  fn default() -> Self {
+    Self::auto()
+  }
+}
+
+impl FlexBasis {
+  /// An automatic basis.
+  pub const fn auto() -> Self {
+    Self::Size(Size::auto())
+  }
+
+  /// A zero basis.
+  pub const fn zero() -> Self {
+    Self::Size(Size::zero())
+  }
+
+  pub(crate) fn resolve_to_dimension(self, sizing: &SizingContext) -> taffy::Dimension {
+    match self {
+      Self::Content => taffy::Dimension::content(),
+      Self::Size(size) => size.resolve_to_dimension(sizing),
+    }
+  }
+}
+
+impl From<Size> for FlexBasis {
+  fn from(size: Size) -> Self {
+    Self::Size(size)
+  }
+}
+
+impl From<Length> for FlexBasis {
+  fn from(length: Length) -> Self {
+    Self::Size(Size::Length(length))
+  }
+}
+
+impl MakeComputed for FlexBasis {
+  fn make_computed(&mut self, sizing: &SizingContext) {
+    if let Self::Size(size) = self {
+      size.make_computed(sizing);
+    }
+  }
+}
+
+impl Animatable for FlexBasis {
+  fn interpolate(
+    &mut self,
+    from: &Self,
+    to: &Self,
+    progress: f32,
+    sizing: &SizingContext,
+    current_color: Color,
+  ) {
+    *self = match (from, to) {
+      (Self::Size(from), Self::Size(to)) => {
+        let mut size = *from;
+        size.interpolate(from, to, progress, sizing, current_color);
+        Self::Size(size)
+      }
+      _ => {
+        if progress >= 0.5 {
+          *to
+        } else {
+          *from
+        }
+      }
+    };
+  }
+}
+
+const FLEX_BASIS_TOKEN_LISTS: &[&[CssToken]] =
+  &[&[CssToken::Keyword("content")], Size::VALID_TOKENS];
+
+const FLEX_BASIS_TOKENS: [CssToken; CssToken::merged_len(FLEX_BASIS_TOKEN_LISTS)] =
+  CssToken::merge_lists(FLEX_BASIS_TOKEN_LISTS);
+
+impl<'i> FromCss<'i> for FlexBasis {
+  const VALID_TOKENS: &'static [CssToken] = &FLEX_BASIS_TOKENS;
+
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    if input
+      .try_parse(|input| input.expect_ident_matching("content"))
+      .is_ok()
+    {
+      return Ok(Self::Content);
+    }
+
+    Size::from_css(input).map(Self::Size)
+  }
+}
+
+impl ToCss for FlexBasis {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::Content => dest.write_str("content"),
+      Self::Size(size) => size.to_css(dest),
+    }
+  }
+}
+
+impl TailwindPropertyParser for FlexBasis {
+  const NAMESPACES: &'static [Namespace] = Size::NAMESPACES;
+
+  fn parse_tw(token: &str) -> Option<Self> {
+    if token.eq_ignore_ascii_case("content") {
+      return Some(Self::Content);
+    }
+
+    Size::parse_tw(token).map(Self::Size)
+  }
+}
 
 /// Whether flex items wrap onto more than one line.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -157,7 +282,7 @@ pub struct Flex {
   /// The flex-shrink value.
   pub shrink: f32,
   /// The flex-basis value.
-  pub basis: Length,
+  pub basis: FlexBasis,
 }
 
 impl TailwindPropertyParser for Flex {
@@ -183,7 +308,7 @@ impl Flex {
     Self {
       grow: 1.0,
       shrink: 1.0,
-      basis: Length::Auto,
+      basis: FlexBasis::auto(),
     }
   }
 
@@ -192,7 +317,7 @@ impl Flex {
     Self {
       grow: 0.0,
       shrink: 0.0,
-      basis: Length::Auto,
+      basis: FlexBasis::auto(),
     }
   }
 
@@ -201,7 +326,7 @@ impl Flex {
     Self {
       grow: 0.0,
       shrink: 1.0,
-      basis: Length::Auto,
+      basis: FlexBasis::auto(),
     }
   }
 
@@ -210,7 +335,7 @@ impl Flex {
     Self {
       grow: number,
       shrink: 1.0,
-      basis: Length::zero(),
+      basis: FlexBasis::zero(),
     }
   }
 }
@@ -299,7 +424,7 @@ impl<'i> FromCss<'i> for Flex {
       }
 
       if basis.is_none()
-        && let Ok(val) = input.try_parse(Length::from_css)
+        && let Ok(val) = input.try_parse(FlexBasis::from_css)
       {
         basis = Some(val);
         continue;
@@ -311,17 +436,24 @@ impl<'i> FromCss<'i> for Flex {
     Ok(Flex {
       grow: grow.unwrap_or(1.0),
       shrink: shrink.unwrap_or(1.0),
-      basis: basis.unwrap_or(Length::zero()),
+      basis: basis.unwrap_or_else(FlexBasis::zero),
     })
   }
 
-  const VALID_TOKENS: &'static [CssToken] = &[
+  const VALID_TOKENS: &'static [CssToken] = &FLEX_TOKENS;
+}
+
+const FLEX_TOKEN_LISTS: &[&[CssToken]] = &[
+  &[
     CssToken::Keyword("none"),
     CssToken::Keyword("auto"),
     CssToken::Syntax(CssSyntaxKind::Number),
-    CssToken::Syntax(CssSyntaxKind::Length),
-  ];
-}
+  ],
+  FlexBasis::VALID_TOKENS,
+];
+
+const FLEX_TOKENS: [CssToken; CssToken::merged_len(FLEX_TOKEN_LISTS)] =
+  CssToken::merge_lists(FLEX_TOKEN_LISTS);
 
 impl MakeComputed for Flex {
   fn make_computed(&mut self, sizing: &SizingContext) {
@@ -340,7 +472,7 @@ mod tests {
       Ok(Flex {
         grow: 1.0,
         shrink: 1.0,
-        basis: Length::Auto
+        basis: FlexBasis::default()
       })
     );
   }
@@ -352,7 +484,7 @@ mod tests {
       Ok(Flex {
         grow: 2.0,
         shrink: 1.0,
-        basis: Length::zero()
+        basis: FlexBasis::zero()
       })
     );
   }
@@ -364,7 +496,7 @@ mod tests {
       Ok(Flex {
         grow: 1.0,
         shrink: 1.0,
-        basis: Length::Px(30.0)
+        basis: Length::Px(30.0).into()
       })
     );
   }
@@ -432,7 +564,7 @@ mod tests {
       Ok(Flex {
         grow: 2.0,
         shrink: 2.0,
-        basis: Length::zero()
+        basis: FlexBasis::zero()
       })
     );
   }

@@ -161,12 +161,18 @@ Applying it broadly makes a render slower, not faster.
 
 ### Sizing
 
-| Property                 | Values    |
-| :----------------------- | :-------- |
-| `width`, `height`        | Supported |
-| `minWidth`, `maxWidth`   | Supported |
-| `minHeight`, `maxHeight` | Supported |
-| `aspectRatio`            | Supported |
+| Property                | Values                                                                                                                                 |
+| :---------------------- | :------------------------------------------------------------------------------------------------------------------------------------- |
+| `width`, `height`       | `<length-percentage>`, `auto`, `min-content`, `max-content`, `fit-content`, `fit-content(<length-percentage>)`, `stretch` <sup>1</sup> |
+| `minWidth`, `minHeight` | `<length-percentage>`, `auto`                                                                                                          |
+| `maxWidth`, `maxHeight` | `<length-percentage>`, `none`, `auto` <sup>2</sup>                                                                                     |
+| `aspectRatio`           | Supported                                                                                                                              |
+
+<sup>1</sup> A `fit-content()` limit that mixes lengths and percentages in `calc()` falls back to
+plain `fit-content`. This also applies to `flexBasis`.
+
+<sup>2</sup> `maxWidth` and `maxHeight` accept `auto` as an alias for `none` for compatibility. The
+min/max properties reject intrinsic sizing keywords, `fit-content()`, and `stretch`.
 
 ### Spacing
 
@@ -201,6 +207,7 @@ pixel draws as one. The rest rounds toward zero, so `1.5px` draws as `1px`.
 | Property                                                 | Values                                                                                                                                                                            |
 | :------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `flex` (`flexBasis`, `flexGrow`, `flexShrink`)           | Supported                                                                                                                                                                         |
+| `flexBasis`                                              | `content`, plus every `width` value                                                                                                                                               |
 | `flexDirection`                                          | Supported                                                                                                                                                                         |
 | `flexFlow`                                               | Supported                                                                                                                                                                         |
 | `flexWrap`                                               | `nowrap`, `wrap`, `wrap-reverse`, `balance`, `wrap balance`, `wrap-reverse balance`; pairs also accept the reverse order                                                          |
