@@ -26,7 +26,7 @@
     "@types/bun": "^1.4.0",
     "knip": "^6.33.0",
     "lefthook": "^2.1.12",
-    "oxfmt": "^0.65.0",
+    "oxfmt": "^0.66.0",
     "oxlint": "^1.80.0",
     "publint": "^0.3.24",
     "tegami": "^1.4.0",
@@ -34,7 +34,7 @@
   },
   "overrides": {
     "@takumi-rs/image-response": "workspace:*",
-    "rolldown-plugin-dts": "0.27.6",
+    "rolldown-plugin-dts": "0.28.5",
     "takumi-js": "workspace:*",
     "vite": "8.2.2",
     "waku": "1.0.0-rc.0"
