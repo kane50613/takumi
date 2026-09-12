@@ -22,7 +22,7 @@ impl SamplingFootprint {
     }
   }
 
-  fn is_minifying(self) -> bool {
+  pub(crate) fn is_minifying(self) -> bool {
     self.x > 1.0 || self.y > 1.0
   }
 

@@ -95,11 +95,14 @@ fn bench_background(c: &mut Criterion) {
   let fonts = Fonts::default();
   let source = wallpaper(PANEL_WIDTH, PANEL_HEIGHT);
   let oversized = wallpaper(PANEL_WIDTH * 2, PANEL_HEIGHT);
+  let undersized = wallpaper(PANEL_WIDTH / 2, PANEL_HEIGHT / 2);
 
   let images: HashMap<Arc<str>, ImageSource> =
     HashMap::from([(Arc::from(WALLPAPER_URL), source.clone())]);
   let scaled_images: HashMap<Arc<str>, ImageSource> =
     HashMap::from([(Arc::from(WALLPAPER_URL), oversized)]);
+  let upscaled_images: HashMap<Arc<str>, ImageSource> =
+    HashMap::from([(Arc::from(WALLPAPER_URL), undersized)]);
   let no_images = HashMap::new();
 
   let mut group = c.benchmark_group("background");
@@ -122,6 +125,16 @@ fn bench_background(c: &mut Criterion) {
         &fonts,
         black_box(panel(background_style(ImageScalingAlgorithm::Auto))),
         &scaled_images,
+      )
+    })
+  });
+
+  group.bench_function("upscaled_auto", |b| {
+    b.iter(|| {
+      render_node(
+        &fonts,
+        black_box(panel(background_style(ImageScalingAlgorithm::Auto))),
+        &upscaled_images,
       )
     })
   });

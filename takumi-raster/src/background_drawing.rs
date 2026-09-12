@@ -225,6 +225,33 @@ impl<'a> SampledBitmapView<'a> {
     .unwrap_or(PremultipliedColorU8::TRANSPARENT)
   }
 
+  /// Column lookups for bilinear sampling of destination columns `x_start..x_start + width`, or
+  /// `None` when the tile samples nearest or box.
+  pub(crate) fn bilinear_rows(&self, x_start: u32, width: u32) -> Option<BilinearRows<'a>> {
+    if matches!(self.algorithm, ImageScalingAlgorithm::Pixelated) || self.footprint.is_minifying() {
+      return None;
+    }
+
+    let source_width = self.source.width();
+    if source_width == 0 || self.source.height() == 0 {
+      return None;
+    }
+
+    let columns = (x_start..x_start.checked_add(width)?)
+      .map(|x| {
+        bilinear_axis(
+          (x as f32 + 0.5) * source_width as f32 / self.logical_size.width.max(1) as f32,
+          source_width,
+        )
+      })
+      .collect();
+
+    Some(BilinearRows {
+      view: *self,
+      columns,
+    })
+  }
+
   /// Copies source row `y` into `dst` when the tile is drawn 1:1, reporting whether it did.
   fn try_copy_row(&self, y: u32, dst: &mut [[u8; 4]]) -> bool {
     let Some(source) = self.identity_source() else {
@@ -242,6 +269,79 @@ impl<'a> SampledBitmapView<'a> {
 
     dst.copy_from_slice(bytemuck::cast_slice(row));
     true
+  }
+}
+
+#[derive(Clone, Copy)]
+struct BilinearAxis {
+  floor: u32,
+  ceil: u32,
+  ratio: u32,
+}
+
+/// One axis of `interpolate_bilinear`, casts included, so a row fill matches it byte for byte.
+fn bilinear_axis(coord: f32, len: u32) -> BilinearAxis {
+  let last = len.saturating_sub(1);
+  let coord = (coord - 0.5).clamp(0.0, last as f32);
+  let floor = coord.floor() as u32;
+
+  BilinearAxis {
+    floor,
+    ceil: (floor + 1).min(last),
+    ratio: ((coord - floor as f32) * 256.0) as u32,
+  }
+}
+
+/// Bilinear sampling of a scaled tile one destination row at a time.
+pub(crate) struct BilinearRows<'a> {
+  view: SampledBitmapView<'a>,
+  columns: Vec<BilinearAxis>,
+}
+
+impl BilinearRows<'_> {
+  /// Fills `dst` with destination row `y`, one pixel per column.
+  pub(crate) fn fill(&self, y: u32, dst: &mut [[u8; 4]]) {
+    let source = self.view.source;
+    let width = source.width() as usize;
+    let row = bilinear_axis(
+      (y as f32 + 0.5) * source.height() as f32 / self.view.logical_size.height.max(1) as f32,
+      source.height(),
+    );
+    let pixels = source.pixels();
+    let top = &pixels[row.floor as usize * width..][..width];
+    let bottom = &pixels[row.ceil as usize * width..][..width];
+    let v_opposite = 256 - row.ratio;
+
+    for (out, column) in dst.iter_mut().zip(&self.columns) {
+      let u_opposite = 256 - column.ratio;
+      let weights = [
+        u_opposite * v_opposite,
+        column.ratio * v_opposite,
+        u_opposite * row.ratio,
+        column.ratio * row.ratio,
+      ];
+      let taps = [
+        top[column.floor as usize],
+        top[column.ceil as usize],
+        bottom[column.floor as usize],
+        bottom[column.ceil as usize],
+      ];
+      let mix = |channel: fn(PremultipliedColorU8) -> u8| {
+        let sum: u32 = taps
+          .iter()
+          .zip(weights)
+          .map(|(tap, weight)| channel(*tap) as u32 * weight)
+          .sum();
+        (sum >> 16) as u8
+      };
+
+      *out = [
+        mix(PremultipliedColorU8::red),
+        mix(PremultipliedColorU8::green),
+        mix(PremultipliedColorU8::blue),
+        mix(PremultipliedColorU8::alpha),
+      ];
+    }
   }
 }
 
