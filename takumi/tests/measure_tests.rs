@@ -2165,6 +2165,33 @@ fn test_flex_padding_does_not_narrow_anonymous_text() {
   assert_eq!(padded.children[0].width, text.width);
 }
 
+/// Blink shares a table's free width among its auto columns in proportion to
+/// their max-content widths, whether or not another column declares a width.
+#[test]
+fn test_table_auto_columns_share_free_width_by_max_content() {
+  let node = Node::from_html(
+    r#"<div style="width: 352px"><table style="width: 100%; font-size: 12px">
+      <tr><th>Name</th><th>Description</th><th style="width: 48px">Qty</th></tr>
+      <tr><td>Item 30</td><td>Description of item 30</td><td>90</td></tr>
+    </table></div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parse");
+  let out = measure(node, create_measure_viewport());
+  let cells = &out.children[0].children;
+  let max_content = |cell: &MeasuredNode| cell.runs[0].width + 2.0;
+  let (name, description) = (max_content(&cells[3]), max_content(&cells[4]));
+  // 352px less the 48px column and four 2px spacings.
+  let free = 296.0;
+
+  assert_within(cells[3].width, free * name / (name + description), 1.0);
+  assert_within(
+    cells[4].width,
+    free * description / (name + description),
+    1.0,
+  );
+}
+
 /// Horizontal padding on an inline span reserves advance on the line, like
 /// Blink adds the span's edges to the line's inline size.
 #[test]

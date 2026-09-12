@@ -333,11 +333,17 @@ impl TableGrid {
       }
     }
 
-    if !fixed
-      && tracks.iter().all(|track| track == "auto")
-      && let Some(measured) = self.column_widths(rows, spacing).tracks()
-    {
-      tracks = measured;
+    if !fixed && tracks.iter().any(|track| track == "auto") {
+      for (track, measured) in tracks
+        .iter_mut()
+        .zip(self.column_widths(rows, spacing).tracks())
+      {
+        if track == "auto"
+          && let Some(measured) = measured
+        {
+          *track = measured;
+        }
+      }
     }
 
     GridTemplateComponents::from_css_str(&tracks.join(" ")).unwrap_or_default()
@@ -348,15 +354,12 @@ impl TableGrid {
 struct ColumnWidths(Vec<(f32, f32)>);
 
 impl ColumnWidths {
-  /// `None` when nothing was measured, which leaves every track `auto`.
-  fn tracks(&self) -> Option<Vec<String>> {
-    self.0.iter().any(|(_, max)| *max > 0.0).then(|| {
-      self
-        .0
-        .iter()
-        .map(|(min, max)| format!("minmax({min}px, {max}fr)"))
-        .collect()
-    })
+  /// One track per column; a column that measured nothing stays `auto`.
+  fn tracks(&self) -> impl Iterator<Item = Option<String>> + '_ {
+    self
+      .0
+      .iter()
+      .map(|(min, max)| (*max > 0.0).then(|| format!("minmax({min}px, {max}fr)")))
   }
 }
 
