@@ -897,6 +897,8 @@ pub(crate) enum TailwindProperty {
     /// Built-in layers serving as the `var()` fallback.
     layers: &'static [TextShadow],
   },
+  /// `contain` property.
+  Contain(Contain),
   /// `isolation` property.
   Isolation(Isolation),
   /// `mix-blend-mode` property.
@@ -1776,6 +1778,9 @@ impl TailwindProperty {
       }
       TailwindProperty::WordBreak(word_break) => {
         push_decl!(builder, important, word_break(word_break))
+      }
+      TailwindProperty::Contain(contain) => {
+        push_decl!(builder, important, contain(contain))
       }
       TailwindProperty::Isolation(isolation) => {
         push_decl!(builder, important, isolation(isolation))

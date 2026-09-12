@@ -875,9 +875,10 @@ impl<'r> LayoutTree<'r> {
 
       match (display_mode, has_children) {
         (TaffyDisplay::None, _) => compute_hidden_layout(tree, node),
-        (TaffyDisplay::Block | TaffyDisplay::FlowRoot, true) => {
-          compute_block_layout(tree, node, inputs, block_ctx)
-        }
+        (TaffyDisplay::Block, true) => compute_block_layout(tree, node, inputs, block_ctx),
+        // A flow-root box is a block formatting context root, so it never joins
+        // its parent's context. <https://drafts.csswg.org/css-display-3/#valdef-display-flow-root>
+        (TaffyDisplay::FlowRoot, true) => compute_block_layout(tree, node, inputs, None),
         (TaffyDisplay::Flex, true) => compute_flexbox_layout(tree, node, inputs),
         (TaffyDisplay::Grid, true) => compute_grid_layout(tree, node, inputs),
         (_, false) => {
@@ -1421,7 +1422,11 @@ impl RenderNode {
     self.force_inline_layout
       || (matches!(
         self.context.style.display,
-        Display::Block | Display::InlineBlock | Display::ListItem | Display::TableCell
+        Display::Block
+          | Display::FlowRoot
+          | Display::InlineBlock
+          | Display::ListItem
+          | Display::TableCell
       ) && self.children.as_ref().is_some_and(|children| {
         children
           .iter()

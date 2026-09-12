@@ -152,4 +152,22 @@ mod tests {
     }
     assert!(AlignItems::from_css_str("safe stretch").is_err());
   }
+
+  #[test]
+  fn self_positions_round_trip() {
+    for (css, expected) in [
+      ("self-start", AlignItems::SelfStart),
+      ("self-end", AlignItems::SelfEnd),
+      ("safe self-start", AlignItems::SafeSelfStart),
+      ("safe self-end", AlignItems::SafeSelfEnd),
+    ] {
+      let parsed = AlignItems::from_css_str(css).unwrap();
+
+      assert_eq!(parsed, expected, "{css}");
+      assert_eq!(parsed.to_css_string(), css);
+    }
+
+    // Content distribution takes no self-position keyword.
+    assert!(JustifyContent::from_css_str("self-start").is_err());
+  }
 }

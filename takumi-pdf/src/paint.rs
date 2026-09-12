@@ -68,8 +68,9 @@ pub(crate) fn overflow_clip_rect(
   y: f32,
 ) -> Option<KrillaPath> {
   const UNBOUNDED: f32 = 1.0e6;
-  let clip_x = style.overflow_x != Overflow::Visible;
-  let clip_y = style.overflow_y != Overflow::Visible;
+  let overflow = style.resolve_overflows();
+  let clip_x = overflow.x != Overflow::Visible;
+  let clip_y = overflow.y != Overflow::Visible;
 
   let (left, right) = if clip_x {
     let padding_left = x + layout.border.left;

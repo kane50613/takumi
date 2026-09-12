@@ -1105,6 +1105,33 @@ fn test_border_width_implies_solid_and_per_side_color() {
   );
 }
 
+/// Mirrors the utilities documented at https://tailwindcss.com/docs/contain
+#[test]
+fn test_parse_contain_utilities() {
+  for (token, expected) in [
+    ("contain-none", Contain::NONE),
+    ("contain-content", Contain::CONTENT),
+    ("contain-layout", Contain::LAYOUT),
+    ("contain-style", Contain::STYLE),
+    ("contain-paint", Contain::PAINT),
+  ] {
+    assert_eq!(
+      parse_property(token),
+      expect(TailwindProperty::Contain(expected)),
+      "failed for {token}"
+    );
+  }
+}
+
+/// Mirrors the utilities documented at https://tailwindcss.com/docs/display
+#[test]
+fn test_parse_flow_root_utility() {
+  assert_eq!(
+    parse_property("flow-root"),
+    expect(TailwindProperty::Display(Display::FlowRoot))
+  );
+}
+
 /// Mirrors the utilities documented at https://tailwindcss.com/docs/list-style-type
 #[test]
 fn test_parse_list_utilities() {
