@@ -58,6 +58,9 @@ impl ComputedStyle {
   }
 
   /// Whether the element establishes a new stacking context.
+  ///
+  /// Blink inlines the containment half of this as `LayoutObject::IsStackingContext`
+  /// (`layout_object.h`): layout and paint containment each force one.
   pub(crate) fn creates_stacking_context(
     &self,
     width: f32,
@@ -66,6 +69,8 @@ impl ComputedStyle {
     is_flex_or_grid_item: bool,
   ) -> bool {
     self.isolation == Isolation::Isolate
+      || self.contain.contains(Contain::LAYOUT)
+      || self.contain.contains(Contain::PAINT)
       || self.is_z_index_applicable(is_flex_or_grid_item)
       || self.offset_path.is_some()
       || self.has_non_identity_transform(width, height, sizing)

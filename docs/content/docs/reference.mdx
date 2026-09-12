@@ -139,7 +139,7 @@ Properties use their camelCase names. Longhands are listed in parentheses. `Supp
 | `objectPosition`                                                     | Supported                                                                                                                                                                                                                                          |
 | `boxSizing`                                                          | Supported                                                                                                                                                                                                                                          |
 | `visibility`                                                         | `visible`, `hidden`                                                                                                                                                                                                                                |
-| `contain`                                                            | `none`, `strict`, `content`, `size`, `inline-size`, `layout`, `style`, `paint` <sup>2</sup>                                                                                                                                                        |
+| `contain`                                                            | `none`, `content`, `layout`, `style`, `paint` <sup>2</sup>                                                                                                                                                                                         |
 | `content`                                                            | Supported                                                                                                                                                                                                                                          |
 | `listStyleType`                                                      | `none`, `disc`, `circle`, `square`, `decimal`, `decimal-leading-zero`, `lower-alpha`, `lower-latin`, `upper-alpha`, `upper-latin`, `lower-roman`, `upper-roman`, `<string>`                                                                        |
 | `listStyle` (`listStyleType`, `listStylePosition`, `listStyleImage`) | Supported                                                                                                                                                                                                                                          |
@@ -151,9 +151,13 @@ Properties use their camelCase names. Longhands are listed in parentheses. `Supp
 <sup>1</sup> Table layout uses a naive grid-based implementation, not the CSS table algorithm. See
 [Tables](/docs/tables) for what carries over and where it drifts.
 
-<sup>2</sup> Only `layout` and `paint` containment affect layout, by making the box an independent
-formatting context. `size`, `inline-size` and `style` parse and serialize but do nothing, so
-`strict` behaves like `layout paint`.
+<sup>2</sup> `size`, `inline-size` and `strict` are rejected, because takumi does not implement size
+containment. `style` containment parses but has nothing to scope: takumi has no author-facing
+counters, and list-item ordinals do not restart at the boundary.
+
+`contain` is not a performance hint here. takumi renders once, so there is no relayout for
+containment to skip, and `contain: paint` costs a stacking context and a clip layer per box. Reach
+for `overflow: clip` and `display: flow-root` when you want the effect without the containment.
 
 ### Sizing
 

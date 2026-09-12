@@ -1110,10 +1110,7 @@ fn test_border_width_implies_solid_and_per_side_color() {
 fn test_parse_contain_utilities() {
   for (token, expected) in [
     ("contain-none", Contain::NONE),
-    ("contain-strict", Contain::STRICT),
     ("contain-content", Contain::CONTENT),
-    ("contain-size", Contain::SIZE),
-    ("contain-inline-size", Contain::INLINE_SIZE),
     ("contain-layout", Contain::LAYOUT),
     ("contain-style", Contain::STYLE),
     ("contain-paint", Contain::PAINT),

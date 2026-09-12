@@ -6,34 +6,29 @@ use cssparser::{Parser, Token, match_ignore_ascii_case};
 
 use crate::style::{Animatable, CssToken, FromCss, MakeComputed, ParseResult, ToCss};
 
-/// A `contain` value: `none | strict | content | [ size || inline-size || layout || style || paint ]`.
+/// A `contain` value: `none | content | [ layout || style || paint ]`.
 ///
-/// Approximate: `layout` and `paint` containment make the box an independent
-/// formatting context and a containing block for fixed and absolute
-/// descendants; `paint` also clips descendants to the padding edge and so makes
-/// the box a stacking context. `size`, `inline-size` and `style` containment
-/// parse and serialize but have no effect, so `strict` behaves like
-/// `layout paint`.
+/// `size`, `inline-size` and `strict` are rejected: takumi does not implement
+/// size containment, and css-contain-2 §5 requires a partial implementation to
+/// treat a value it cannot support as invalid rather than apply a weaker one.
+///
+/// Approximate: `style` containment has nothing to scope, because takumi has no
+/// author-facing counters or quotes. List-item ordinals do not restart at a
+/// `style` containment boundary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Contain(u8);
 
 impl Contain {
   /// No containment.
   pub const NONE: Self = Self(0);
-  /// `inline-size`: size containment on the inline axis.
-  pub const INLINE_SIZE: Self = Self(1 << 0);
-  /// `size`: size containment on both axes.
-  pub const SIZE: Self = Self((1 << 0) | (1 << 1));
   /// `layout`: the box is an independent formatting context with no baseline.
-  pub const LAYOUT: Self = Self(1 << 2);
+  pub const LAYOUT: Self = Self(1 << 0);
   /// `style`: counters and quotes are scoped to the box.
-  pub const STYLE: Self = Self(1 << 3);
+  pub const STYLE: Self = Self(1 << 1);
   /// `paint`: descendants are clipped to the box's padding edge.
-  pub const PAINT: Self = Self(1 << 4);
+  pub const PAINT: Self = Self(1 << 2);
   /// `content`: `layout style paint`.
   pub const CONTENT: Self = Self(Self::LAYOUT.0 | Self::STYLE.0 | Self::PAINT.0);
-  /// `strict`: `size layout style paint`.
-  pub const STRICT: Self = Self(Self::SIZE.0 | Self::CONTENT.0);
 
   /// Whether every containment type in `other` is present.
   pub const fn contains(self, other: Self) -> bool {
@@ -61,10 +56,7 @@ impl Animatable for Contain {}
 impl<'i> FromCss<'i> for Contain {
   const VALID_TOKENS: &'static [CssToken] = &[
     CssToken::Keyword("none"),
-    CssToken::Keyword("strict"),
     CssToken::Keyword("content"),
-    CssToken::Keyword("size"),
-    CssToken::Keyword("inline-size"),
     CssToken::Keyword("layout"),
     CssToken::Keyword("style"),
     CssToken::Keyword("paint"),
@@ -72,7 +64,6 @@ impl<'i> FromCss<'i> for Contain {
 
   fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
     let mut flags = Self::NONE;
-    let mut seen_size = false;
 
     loop {
       let location = input.current_source_location();
@@ -83,24 +74,15 @@ impl<'i> FromCss<'i> for Contain {
 
       let added = match_ignore_ascii_case! {ident,
         // The single-keyword values stand alone.
-        "none" | "strict" | "content" => {
+        "none" | "content" => {
           if flags != Self::NONE || !input.is_exhausted() {
             return Err(crate::style::unexpected_token!(location, &token));
           }
 
           return Ok(match_ignore_ascii_case! {ident,
-            "strict" => Self::STRICT,
             "content" => Self::CONTENT,
             _ => Self::NONE,
           });
-        },
-        "size" => {
-          seen_size = true;
-          Self::SIZE
-        },
-        "inline-size" => {
-          seen_size = true;
-          Self::INLINE_SIZE
         },
         "layout" => Self::LAYOUT,
         "style" => Self::STYLE,
@@ -108,14 +90,7 @@ impl<'i> FromCss<'i> for Contain {
         _ => return Err(crate::style::unexpected_token!(location, &token)),
       };
 
-      // `size` and `inline-size` exclude each other, so both share one slot.
-      let is_duplicate = if added.contains(Self::INLINE_SIZE) {
-        seen_size && flags.contains(Self::INLINE_SIZE)
-      } else {
-        flags.contains(added)
-      };
-
-      if is_duplicate {
+      if flags.contains(added) {
         return Err(crate::style::unexpected_token!(location, &token));
       }
 
@@ -132,23 +107,18 @@ impl ToCss for Contain {
   fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
     match *self {
       Self::NONE => return dest.write_str("none"),
-      Self::STRICT => return dest.write_str("strict"),
       Self::CONTENT => return dest.write_str("content"),
       _ => {}
     }
 
-    let keywords = [
-      (Self::SIZE, "size"),
-      (Self::INLINE_SIZE, "inline-size"),
+    let mut written = false;
+
+    for (flag, keyword) in [
       (Self::LAYOUT, "layout"),
       (Self::STYLE, "style"),
       (Self::PAINT, "paint"),
-    ];
-    let mut written = false;
-
-    for (flag, keyword) in keywords {
-      // `size` covers `inline-size`, so it is written instead of it.
-      if !self.contains(flag) || (flag == Self::INLINE_SIZE && self.contains(Self::SIZE)) {
+    ] {
+      if !self.contains(flag) {
         continue;
       }
 
@@ -171,18 +141,14 @@ mod tests {
 
   #[test]
   fn parses_the_single_keyword_values() {
-    for (css, expected) in [
-      ("none", Contain::NONE),
-      ("strict", Contain::STRICT),
-      ("content", Contain::CONTENT),
-    ] {
+    for (css, expected) in [("none", Contain::NONE), ("content", Contain::CONTENT)] {
       let parsed = Contain::from_css_str(css).unwrap();
 
       assert_eq!(parsed, expected, "{css}");
       assert_eq!(parsed.to_css_string(), css);
     }
 
-    assert!(Contain::from_css_str("strict layout").is_err());
+    assert!(Contain::from_css_str("content layout").is_err());
     assert!(Contain::from_css_str("layout none").is_err());
   }
 
@@ -191,9 +157,8 @@ mod tests {
     for (css, expected) in [
       ("layout", "layout"),
       ("paint layout", "layout paint"),
-      ("inline-size layout", "inline-size layout"),
-      ("style size paint", "size style paint"),
-      ("SIZE LAYOUT STYLE PAINT", "strict"),
+      ("style paint", "style paint"),
+      ("LAYOUT STYLE PAINT", "content"),
     ] {
       assert_eq!(
         Contain::from_css_str(css).unwrap().to_css_string(),
@@ -203,18 +168,30 @@ mod tests {
     }
 
     assert!(Contain::from_css_str("layout layout").is_err());
-    assert!(Contain::from_css_str("size inline-size").is_err());
     assert!(Contain::from_css_str("layout 1px").is_err());
+  }
+
+  /// css-contain-2 §5: a value takumi cannot support must be invalid, not
+  /// silently downgraded to a weaker containment.
+  #[test]
+  fn rejects_the_unsupported_size_containment() {
+    for css in [
+      "size",
+      "inline-size",
+      "strict",
+      "size layout",
+      "layout size",
+    ] {
+      assert!(Contain::from_css_str(css).is_err(), "{css}");
+    }
   }
 
   #[test]
   fn only_layout_and_paint_reach_taffy() {
     assert_eq!(Contain::NONE.into_taffy(), taffy::Contain::NONE);
-    assert_eq!(Contain::SIZE.into_taffy(), taffy::Contain::NONE);
     assert_eq!(Contain::STYLE.into_taffy(), taffy::Contain::NONE);
     assert_eq!(Contain::LAYOUT.into_taffy(), taffy::Contain::LAYOUT);
     assert_eq!(Contain::PAINT.into_taffy(), taffy::Contain::PAINT);
     assert_eq!(Contain::CONTENT.into_taffy(), taffy::Contain::CONTENT);
-    assert_eq!(Contain::STRICT.into_taffy(), taffy::Contain::CONTENT);
   }
 }
