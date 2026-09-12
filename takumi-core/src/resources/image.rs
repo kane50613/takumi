@@ -1152,6 +1152,8 @@ const DEFAULT_MAX_BYTES: u64 = 64 << 20;
 
 /// Bytes each cache shard holds. An entry over 97% of its shard is never
 /// admitted, so a shard has to be large enough for one decoded photo.
+/// `quick_cache` rounds the shard count up to a power of two, so the count is
+/// rounded down first to keep this floor.
 const SHARD_BYTES: u64 = 64 << 20;
 
 /// Cache policy for a decoded image, applied per [`ResourceCache::get_or_decode`] call.
@@ -1261,7 +1263,12 @@ impl ResourceCache {
     // ~64 KiB average decoded image ⇒ a reasonable item-count hint for the budget.
     let estimated_items = (max_bytes / (64 << 10)).max(1) as usize;
     let parallelism = std::thread::available_parallelism().map_or(1, |n| n.get() as u64);
-    let shards = (max_bytes / SHARD_BYTES).clamp(1, parallelism) as usize;
+    let shards = (max_bytes / SHARD_BYTES).clamp(1, parallelism);
+    let shards = if shards.is_power_of_two() {
+      shards
+    } else {
+      shards.next_power_of_two() / 2
+    } as usize;
     let options = OptionsBuilder::new()
       .estimated_items_capacity(estimated_items)
       .weight_capacity(max_bytes)
@@ -1531,6 +1538,17 @@ mod resource_cache_tests {
     let cache = ResourceCache::new(16 << 20);
     let key = ResourceCacheKey::sized(1, 2400, 1601, ImageScalingAlgorithm::Auto);
     let buffer = Arc::new(ImageBuffer::new(2400, 1601).unwrap());
+
+    cache.cache.insert(key, CacheEntry::Sized(buffer));
+
+    assert!(cache.cache.get(&key).is_some());
+  }
+
+  #[test]
+  fn an_uneven_budget_keeps_a_whole_shard_per_entry() {
+    let cache = ResourceCache::new(192 << 20);
+    let key = ResourceCacheKey::sized(1, 4000, 3900, ImageScalingAlgorithm::Auto);
+    let buffer = Arc::new(ImageBuffer::new(4000, 3900).unwrap());
 
     cache.cache.insert(key, CacheEntry::Sized(buffer));
 
