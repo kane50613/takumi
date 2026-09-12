@@ -247,25 +247,6 @@ impl<'a> SampledBitmapView<'a> {
       columns,
     })
   }
-
-  /// Copies source row `y` into `dst` when the tile is drawn 1:1, reporting whether it did.
-  fn try_copy_row(&self, y: u32, dst: &mut [[u8; 4]]) -> bool {
-    let Some(source) = self.identity_source() else {
-      return false;
-    };
-    if source.width() as usize != dst.len() {
-      return false;
-    }
-
-    let stride = dst.len() * 4;
-    let start = y as usize * stride;
-    let Some(row) = source.data().get(start..start + stride) else {
-      return false;
-    };
-
-    dst.copy_from_slice(bytemuck::cast_slice(row));
-    true
-  }
 }
 
 #[derive(Clone, Copy)]
@@ -433,35 +414,7 @@ impl BackgroundTile {
       Self::Linear(t) => rasterize_gradient_row(t, y, pixels),
       Self::Radial(t) => rasterize_gradient_row(t, y, pixels),
       Self::Conic(t) => rasterize_gradient_row(t, y, pixels),
-      Self::Pixmap(t) => {
-        let ps = PaintSource::from(t.as_ref());
-        for (x, chunk) in pixels.iter_mut().enumerate() {
-          let p = ps.get_pixel(x as u32, y);
-          *chunk = [p.red(), p.green(), p.blue(), p.alpha()];
-        }
-      }
-      Self::SampledBitmap { .. } => {
-        let Some(view) = self.sampled_bitmap_view() else {
-          pixels.fill([0; 4]);
-          return;
-        };
-
-        if view.try_copy_row(y, pixels) {
-          return;
-        }
-
-        for (x, chunk) in pixels.iter_mut().enumerate() {
-          let p = view.sample(x as u32, y);
-          *chunk = [p.red(), p.green(), p.blue(), p.alpha()];
-        }
-      }
-      Self::Color(t) => {
-        let p = t.get_pixel(0, 0);
-        let bytes = [p.red(), p.green(), p.blue(), p.alpha()];
-        for chunk in pixels.iter_mut() {
-          *chunk = bytes;
-        }
-      }
+      _ => PaintSource::from(self).rows(0, width).fill(y, pixels),
     }
   }
 

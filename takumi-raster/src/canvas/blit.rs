@@ -10,7 +10,7 @@ use super::{
   composite,
   composite::sampling_footprint,
   mask::MaskRow,
-  paint_source::{MaskCompositeColor, ResolvedSource, sample_paint_source},
+  paint_source::{MaskCompositeColor, RowSource, sample_paint_source},
   skia::{
     FillColorOptions, ImagePathFillOptions, try_draw_image_with_tiny_skia,
     try_fill_color_with_tiny_skia, try_fill_image_path_with_tiny_skia,
@@ -175,31 +175,8 @@ fn blit_sampled_paint_source_translation(
 
 /// Walks the destination region row by row, pulling each pixel from `sample`
 /// in source-local coordinates.
-pub(super) fn blit_rows_from_sampler(
-  pixels: &mut [[u8; 4]],
-  canvas_width: u32,
-  bounds: OverlayBounds,
-  mode: BlendMode,
-  combined_mask: Option<MaskView<'_>>,
-  sample: impl Fn(u32, u32) -> [u8; 4],
-) {
-  let x_start = (bounds.x_min - bounds.offset_x) as u32;
-  blit_rows(
-    pixels,
-    canvas_width,
-    bounds,
-    mode,
-    combined_mask,
-    |src_y, row| {
-      for (i, pixel) in row.iter_mut().enumerate() {
-        *pixel = sample(x_start + i as u32, src_y);
-      }
-    },
-  );
-}
-
 /// Blends `bounds` row by row, asking `fill` for each source row's premultiplied pixels.
-fn blit_rows(
+pub(super) fn blit_rows(
   pixels: &mut [[u8; 4]],
   canvas_width: u32,
   bounds: OverlayBounds,
@@ -264,44 +241,30 @@ pub(super) fn blit_paint_source_translation(
   };
 
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-  match source.resolve() {
-    ResolvedSource::Direct(PaintSource::Pixmap(source))
-      if mode == BlendMode::Normal && combined_mask.is_none() =>
-    {
+  let rows = source.rows(
+    (bounds.x_min - bounds.offset_x) as u32,
+    (bounds.x_max - bounds.x_min) as u32,
+  );
+  match rows {
+    RowSource::Copy { source, x_start } if mode == BlendMode::Normal && combined_mask.is_none() => {
       let source_pixels = source.pixels();
-      let source_width = source.width();
+      let source_width = source.width() as usize;
       let copy_width = (bounds.x_max - bounds.x_min) as usize;
-      let src_x_start = (bounds.x_min - bounds.offset_x) as usize;
       for dest_y in bounds.y_min..bounds.y_max {
-        let src_y = (dest_y - bounds.offset_y) as usize;
-        let src_start = src_y * source_width as usize + src_x_start;
-        let src_end = src_start + copy_width;
+        let src_start = (dest_y - bounds.offset_y) as usize * source_width + x_start as usize;
         let dst_start = (dest_y as u32 * canvas_width + bounds.x_min as u32) as usize;
-        let dst_end = dst_start + copy_width;
-        let dst = bytemuck::cast_slice_mut(&mut pixels[dst_start..dst_end]);
-        composite_premultiplied_over_span(dst, &source_pixels[src_start..src_end]);
+        let dst = bytemuck::cast_slice_mut(&mut pixels[dst_start..dst_start + copy_width]);
+        composite_premultiplied_over_span(dst, &source_pixels[src_start..src_start + copy_width]);
       }
     }
-    ResolvedSource::Bitmap(view)
-      if let Some(rows) = view.bilinear_rows(
-        (bounds.x_min - bounds.offset_x) as u32,
-        (bounds.x_max - bounds.x_min) as u32,
-      ) =>
-    {
-      blit_rows(
-        pixels,
-        canvas_width,
-        bounds,
-        mode,
-        combined_mask,
-        |src_y, row| rows.fill(src_y, row),
-      );
-    }
-    resolved => {
-      blit_rows_from_sampler(pixels, canvas_width, bounds, mode, combined_mask, |x, y| {
-        premultiplied_from_pixel(resolved.get_pixel(x, y))
-      });
-    }
+    rows => blit_rows(
+      pixels,
+      canvas_width,
+      bounds,
+      mode,
+      combined_mask,
+      |src_y, row| rows.fill(src_y, row),
+    ),
   }
 }
 
@@ -353,9 +316,14 @@ fn blit_solid_translation(
   }
 
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(data);
-  blit_rows_from_sampler(pixels, canvas_width, bounds, mode, combined_mask, |_, _| {
-    color
-  });
+  blit_rows(
+    pixels,
+    canvas_width,
+    bounds,
+    mode,
+    combined_mask,
+    |_, row| row.fill(color),
+  );
 }
 
 pub(crate) fn composite_mask_source_to_pixmap(
