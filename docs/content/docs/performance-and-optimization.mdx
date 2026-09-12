@@ -68,7 +68,7 @@ Each filtered node needs an offscreen layer. Put filters on one node when they s
 
 ## Render large canvases
 
-A canvas holds at most 64 megapixels, which is 8192 × 8192 or 4096 × 16384. A larger viewport fails with `Invalid viewport dimensions`.
+A canvas holds at most 64 megapixels. That is 8192 × 8192, or 4096 × 16384.
 
 ```ts twoslash title="A 4K render"
 import { render } from "takumi-js";
@@ -79,6 +79,6 @@ const image = await render(<div tw="p-8 text-4xl">Hello Takumi</div>, {
 });
 ```
 
-Painting cost grows with the area a node touches, not with the canvas. A `backdrop-filter` blurs only the pixels under its node, and a clip mask covers only the clipped box. The canvas itself costs 4 bytes per pixel, so a 64 megapixel render holds a 256 MiB buffer before encoding.
+A larger viewport fails with `Invalid viewport dimensions`. Each pixel costs 4 bytes, so a full 64 megapixel render holds 256 MiB before encoding.
 
-On servers, the native backend supports multithreaded rendering. The Wasm backend is single-threaded. `takumi-js` selects the backend for the environment; use explicit backend imports only when you need to control that choice.
+Painting cost follows the area a node covers, not the canvas. A `backdrop-filter` blurs only the pixels under its node. A clip mask costs only the clipped box.

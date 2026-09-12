@@ -4,4 +4,6 @@
 
 # Render canvases up to 64 megapixels
 
-The canvas budget rises from 16 to 64 megapixels, so 8K wide banners and long 4K pages render instead of failing with `InvalidViewport`. The error message now names the budget.
+The canvas budget is now 64 megapixels, up from 16. A 7680 × 4320 banner or a 4096 × 16384 page fits.
+
+Over the budget, `render` fails with `InvalidViewport`. The message now states the limit.
