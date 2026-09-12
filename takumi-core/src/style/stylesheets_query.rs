@@ -59,8 +59,8 @@ impl ComputedStyle {
 
   /// Whether the element establishes a new stacking context.
   ///
-  /// Blink inlines the containment half of this as `LayoutObject::IsStackingContext`
-  /// (`layout_object.h`): layout and paint containment each force one.
+  /// Blink resolves the containment half as `LayoutObject::IsStackingContext`
+  /// (`layout_object.h`).
   pub(crate) fn creates_stacking_context(
     &self,
     width: f32,

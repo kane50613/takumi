@@ -8,13 +8,11 @@ use crate::style::{Animatable, CssToken, FromCss, MakeComputed, ParseResult, ToC
 
 /// A `contain` value: `none | content | [ layout || style || paint ]`.
 ///
-/// `size`, `inline-size` and `strict` are rejected: takumi does not implement
-/// size containment, and css-contain-2 §5 requires a partial implementation to
-/// treat a value it cannot support as invalid rather than apply a weaker one.
+/// `size`, `inline-size` and `strict` are rejected, per the partial
+/// implementation rule in <https://www.w3.org/TR/css-contain-2/#conform-partial>.
 ///
-/// Approximate: `style` containment has nothing to scope, because takumi has no
-/// author-facing counters or quotes. List-item ordinals do not restart at a
-/// `style` containment boundary.
+/// Approximate: `style` containment scopes nothing, because takumi has no
+/// author-facing counters. List-item ordinals cross the boundary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Contain(u8);
 
@@ -171,8 +169,6 @@ mod tests {
     assert!(Contain::from_css_str("layout 1px").is_err());
   }
 
-  /// css-contain-2 §5: a value takumi cannot support must be invalid, not
-  /// silently downgraded to a weaker containment.
   #[test]
   fn rejects_the_unsupported_size_containment() {
     for css in [

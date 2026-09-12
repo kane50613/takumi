@@ -1557,8 +1557,6 @@ fn paint_containment_keeps_hidden_axis() {
   );
 }
 
-/// Blink forces one for either containment type in `LayoutObject::IsStackingContext`,
-/// so a `contain: layout` box must not leak its descendants' paint order upwards.
 #[test]
 fn layout_containment_creates_a_stacking_context() {
   let sizing = SizingContext::builder()

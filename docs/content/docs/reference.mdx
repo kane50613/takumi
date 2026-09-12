@@ -139,7 +139,7 @@ Properties use their camelCase names. Longhands are listed in parentheses. `Supp
 | `objectPosition`                                                     | Supported                                                                                                                                                                                                                                          |
 | `boxSizing`                                                          | Supported                                                                                                                                                                                                                                          |
 | `visibility`                                                         | `visible`, `hidden`                                                                                                                                                                                                                                |
-| `contain`                                                            | `none`, `content`, `layout`, `style`, `paint` <sup>2</sup>                                                                                                                                                                                         |
+| `contain`                                                            | `none`, `content` (= `layout style paint`), or a space-separated combination of `layout`, `style`, `paint` in any order, without duplicates <sup>2</sup>                                                                                           |
 | `content`                                                            | Supported                                                                                                                                                                                                                                          |
 | `listStyleType`                                                      | `none`, `disc`, `circle`, `square`, `decimal`, `decimal-leading-zero`, `lower-alpha`, `lower-latin`, `upper-alpha`, `upper-latin`, `lower-roman`, `upper-roman`, `<string>`                                                                        |
 | `listStyle` (`listStyleType`, `listStylePosition`, `listStyleImage`) | Supported                                                                                                                                                                                                                                          |
@@ -151,13 +151,13 @@ Properties use their camelCase names. Longhands are listed in parentheses. `Supp
 <sup>1</sup> Table layout uses a naive grid-based implementation, not the CSS table algorithm. See
 [Tables](/docs/tables) for what carries over and where it drifts.
 
-<sup>2</sup> `size`, `inline-size` and `strict` are rejected, because takumi does not implement size
-containment. `style` containment parses but has nothing to scope: takumi has no author-facing
-counters, and list-item ordinals do not restart at the boundary.
+<sup>2</sup> `size`, `inline-size`, and `strict` cause a parse error because size containment is not
+implemented. `style` parses but has nothing to scope: Takumi has no author-facing counters, and
+list-item ordinals do not restart at the boundary.
 
-`contain` is not a performance hint here. takumi renders once, so there is no relayout for
-containment to skip, and `contain: paint` costs a stacking context and a clip layer per box. Reach
-for `overflow: clip` and `display: flow-root` when you want the effect without the containment.
+Containment is a correctness feature here, not a performance hint. Takumi renders once, so there
+is no relayout to skip, and paint containment adds a stacking context and a clip layer per box.
+Applying it broadly makes a render slower, not faster.
 
 ### Sizing
 
@@ -198,17 +198,21 @@ pixel draws as one. The rest rounds toward zero, so `1.5px` draws as `1px`.
 
 ### Flexbox
 
-| Property                                                 | Values                                                             |
-| :------------------------------------------------------- | :----------------------------------------------------------------- |
-| `flex` (`flexBasis`, `flexGrow`, `flexShrink`)           | Supported                                                          |
-| `flexDirection`                                          | Supported                                                          |
-| `flexFlow`                                               | Supported                                                          |
-| `flexWrap`                                               | `nowrap`, `wrap`, `wrap-reverse`, each optionally with `balance`   |
-| `flexLineCount`                                          | `<integer>` of 1 or more                                           |
-| `justifyContent`, `alignContent`                         | Supported                                                          |
-| `justifyItems`, `justifySelf`, `alignItems`, `alignSelf` | Supported, including `self-start` and `self-end`                   |
-| `placeContent`, `placeItems`, `placeSelf`                | Supported                                                          |
-| `WebkitBoxOrient`, `WebkitBoxPack`, `WebkitBoxAlign`     | Legacy aliases for `flexDirection`, `justifyContent`, `alignItems` |
+| Property                                                 | Values                                                                                                                                                                            |
+| :------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `flex` (`flexBasis`, `flexGrow`, `flexShrink`)           | Supported                                                                                                                                                                         |
+| `flexDirection`                                          | Supported                                                                                                                                                                         |
+| `flexFlow`                                               | Supported                                                                                                                                                                         |
+| `flexWrap`                                               | `nowrap`, `wrap`, `wrap-reverse`, `balance`, `wrap balance`, `wrap-reverse balance`; pairs also accept the reverse order                                                          |
+| `flexLineCount`                                          | `<integer>` of 1 or more (minimum line count); values above 65535 are clamped to 65535                                                                                            |
+| `justifyContent`, `alignContent`                         | `normal`, `stretch`, `space-between`, `space-around`, `space-evenly`; `start`, `end`, `flex-start`, `flex-end`, `center` optionally prefixed with `safe` or `unsafe` <sup>1</sup> |
+| `justifyItems`, `justifySelf`, `alignItems`, `alignSelf` | `normal`, `baseline`, `stretch`; `start`, `end`, `flex-start`, `flex-end`, `self-start`, `self-end`, `center` optionally prefixed with `safe` or `unsafe` <sup>1</sup>            |
+| `placeContent`, `placeItems`, `placeSelf`                | Supported                                                                                                                                                                         |
+| `WebkitBoxOrient`, `WebkitBoxPack`, `WebkitBoxAlign`     | Legacy aliases for `flexDirection`, `justifyContent`, `alignItems`                                                                                                                |
+
+<sup>1</sup> `unsafe` also parses before the other listed alignment values, such as `normal`. `safe`
+only works with the positional values listed after the semicolon. `alignSelf` and `justifySelf`
+reject `auto`. `justifyContent` and `alignContent` reject `self-start` and `self-end`.
 
 ### Grid
 

@@ -2,6 +2,26 @@
 "takumi": minor
 ---
 
-# Add flow-root, self-position alignment, balanced flex wrapping, and `contain`
+# Add balanced flex wrapping, flow-root, self-alignment, and containment
 
-`display: flow-root` makes a box a block formatting context root. `align-items`, `align-self`, `justify-items` and `justify-self` take `self-start` and `self-end`. `flex-wrap` takes `balance`, paired with the new `flex-line-count` longhand. `contain` takes `none`, `content`, and any of `layout`, `style` and `paint`. `contain: paint` clips descendants to the padding box, and either `layout` or `paint` makes the box a stacking context and a containing block for fixed descendants. `size`, `inline-size` and `strict` are rejected, because size containment is not implemented.
+Spread flex items across balanced lines and set a minimum line count:
+
+```css
+.cards {
+  display: flex;
+  flex-wrap: balance;
+  flex-line-count: 2;
+}
+```
+
+`balance` also combines with `wrap` or `wrap-reverse`, in either order. It cannot combine with `nowrap`.
+
+- `display: flow-root` makes the box a block formatting context root.
+- `align-items`, `align-self`, `justify-items`, and `justify-self` accept `self-start` and `self-end` to align to the item's own start or end. `justify-content` and `align-content` reject them.
+- `contain` accepts `none`, `content`, or a space-separated combination of `layout`, `style`, and `paint`, without duplicates. `content` means `layout style paint`.
+
+`contain: paint` clips descendants to the padding box. Either `layout` or `paint` creates a stacking context and a containing block for absolute and fixed descendants.
+
+Size containment is not implemented, so `size`, `inline-size`, and `strict` cause a parse error. `style` parses but has nothing to scope: Takumi has no author-facing counters, and list-item ordinals do not restart at the boundary.
+
+Containment is a correctness feature here, not a performance hint. Takumi renders once, so there is no relayout to skip. Paint containment adds a stacking context and a clip layer per box.

@@ -7,22 +7,20 @@ use crate::style::{
   MakeComputed, ParseResult, SizingContext, ToCss, tw::TailwindPropertyParser, unexpected_token,
 };
 
-/// Defines how flex items should wrap.
-///
-/// This enum determines how flex items should wrap within the flex container.
+/// Whether flex items wrap onto more than one line.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[non_exhaustive]
 pub enum FlexWrap {
-  /// Flex items will all be displayed in a single line, shrinking as needed
+  /// One line; items shrink to fit it.
   #[default]
   NoWrap,
-  /// Flex items will wrap onto multiple lines, with new lines stacking in the flex direction
+  /// Many lines, stacked along the flex direction.
   Wrap,
-  /// Flex items will wrap onto multiple lines, with new lines stacking in the reverse flex direction
+  /// Many lines, stacked against the flex direction.
   WrapReverse,
-  /// Like `Wrap`, with the items spread across lines so that the largest line is as small as possible
+  /// Like `Wrap`, with items spread so the longest line is as short as possible.
   Balance,
-  /// Like `WrapReverse`, with the items spread across lines so that the largest line is as small as possible
+  /// Like `WrapReverse`, with items spread so the longest line is as short as possible.
   BalanceReverse,
 }
 
