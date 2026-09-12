@@ -11,6 +11,7 @@ use crate::{
   font_style::SizedFontStyle,
   geometry::{AvailableSpace, ComputedLayout, NodeId, Point, Size, transformed_rect_extents},
   layout::{
+    decoration::outline_paint,
     inline::{
       InlineContentKind, InlineLayoutMode, InlineLayoutRequest, PlacedItem, ProcessedInlineSpan,
       collect_inline_items, create_inline_layout, resolve_inline_max_height, scale_text_fit_x,
@@ -18,7 +19,8 @@ use crate::{
     node::Node,
     tree::{ContainingBlocks, LayoutResults, RenderNode},
   },
-  style::{Affine, ComputedStyle, Display, SizingContext},
+  shadow::SizedShadow,
+  style::{Affine, BlurType, ComputedStyle, Display},
 };
 
 /// A node's resolved paint inputs.
@@ -361,21 +363,63 @@ pub fn build_stacking_contexts(
   Ok(contexts)
 }
 
-/// Ink whose extent this module does not measure (shadows, outlines, text strokes) forces `None`:
-/// bounds must never underestimate paint output.
-fn style_paints_unmeasured_ink(style: &ComputedStyle, sizing: &SizingContext) -> bool {
-  style
-    .box_shadow
-    .as_ref()
-    .is_some_and(|shadows| !shadows.is_empty())
-    || style.outline_style.is_rendered()
-    || style
-      .text_shadow
-      .as_ref()
-      .is_some_and(|shadows| !shadows.is_empty())
-    || style
-      .webkit_text_stroke_width
-      .is_some_and(|width| width.to_px(sizing, sizing.font_size) > 0.0)
+/// How far a shadow's ink reaches past the shape that casts it.
+fn shadow_reach(shadow: &SizedShadow) -> f32 {
+  shadow.offset_x.abs().max(shadow.offset_y.abs())
+    + shadow.spread_radius.max(0.0)
+    + shadow.blur_radius * BlurType::Shadow.extent_multiplier()
+}
+
+/// How far box shadows and the outline reach past the border box, in local px.
+fn box_ink_reach(node: &RenderNode, size: Size<f32>) -> f32 {
+  let context = &node.context;
+  let shadows = context.style.box_shadow.iter().flatten();
+  let shadow_reach = shadows
+    .filter(|shadow| !shadow.inset)
+    .map(|shadow| {
+      shadow_reach(&SizedShadow::from_box_shadow(
+        *shadow,
+        &context.sizing,
+        context.current_color,
+        size,
+      ))
+    })
+    .fold(0.0_f32, f32::max);
+  let outline_reach = outline_paint(context, size).map_or(0.0, |outline| outline.grow.max(0.0));
+
+  shadow_reach.max(outline_reach)
+}
+
+/// How far text shadows, the text stroke and inline outlines reach past glyph ink, in local px.
+fn text_ink_reach(font_style: &SizedFontStyle) -> f32 {
+  let shadow_reach = font_style
+    .text_shadow
+    .iter()
+    .map(shadow_reach)
+    .fold(0.0_f32, f32::max);
+  let outline_reach = (font_style.outline_width + font_style.outline_offset).max(0.0);
+
+  shadow_reach.max(font_style.stroke_width).max(outline_reach)
+}
+
+/// Grows `bounds` by `reach` local px on every side, taking the transform's per-axis envelope.
+fn outset_bounds(
+  bounds: Option<SceneBounds>,
+  reach: f32,
+  transform: Affine,
+) -> Option<SceneBounds> {
+  let mut bounds = bounds?;
+  if reach <= 0.0 {
+    return Some(bounds);
+  }
+
+  let pad_x = (reach * (transform.a.abs() + transform.c.abs())).ceil() as usize;
+  let pad_y = (reach * (transform.b.abs() + transform.d.abs())).ceil() as usize;
+  bounds.left = bounds.left.saturating_sub(pad_x);
+  bounds.top = bounds.top.saturating_sub(pad_y);
+  bounds.right += pad_x;
+  bounds.bottom += pad_y;
+  Some(bounds)
 }
 
 fn compute_node_paint_bounds(
@@ -383,11 +427,11 @@ fn compute_node_paint_bounds(
   layout: ComputedLayout,
   transform: Affine,
 ) -> Option<SceneBounds> {
-  if style_paints_unmeasured_ink(&node.context.style, &node.context.sizing) {
-    return None;
-  }
-
-  let mut bounds = bounds_for_rect(layout.size, transform);
+  let mut bounds = outset_bounds(
+    bounds_for_rect(layout.size, transform),
+    box_ink_reach(node, layout.size),
+    transform,
+  );
   if !has_inline_paint_content(node) {
     return bounds;
   }
@@ -563,23 +607,11 @@ fn compute_node_paint_bounds(
       max
     });
 
-  if background_padding > 0.0
-    && let Some(bounds) = &mut bounds
-  {
-    // The padding is local CSS px while the bounds are device space; the
-    // linear part of the transform bounds its device-space envelope per axis.
-    let pad_x =
-      (background_padding * (inline_transform.a.abs() + inline_transform.c.abs())).ceil() as usize;
-    let pad_y =
-      (background_padding * (inline_transform.b.abs() + inline_transform.d.abs())).ceil() as usize;
-
-    bounds.left = bounds.left.saturating_sub(pad_x);
-    bounds.top = bounds.top.saturating_sub(pad_y);
-    bounds.right += pad_x;
-    bounds.bottom += pad_y;
-  }
-
-  bounds
+  outset_bounds(
+    bounds,
+    background_padding.max(text_ink_reach(&font_style)),
+    inline_transform,
+  )
 }
 
 fn has_inline_paint_content(node: &RenderNode) -> bool {
