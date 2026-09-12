@@ -1,5 +1,5 @@
 use takumi_core::{
-  geometry::{ComputedLayout as Layout, NodeId, Point, Size, transformed_rect_extents},
+  geometry::{ComputedLayout as Layout, NodeId, Point},
   layout::decoration::OutlineGeometry,
   scene::{NodePaint, PaintItem, PaintItemKind, SceneBounds, StackingContextNode},
 };
@@ -19,7 +19,7 @@ use crate::{
     tree::{LayoutResults, RenderNode},
   },
   placement_overlap, prepare_node_mask, resolve_outline,
-  style::{Affine, BackgroundImage, BlendMode, Filter, SizingContext},
+  style::{Affine, BlendMode, Filter, SizingContext},
 };
 
 fn bounds_intersects_viewport(bounds: SceneBounds, viewport: CanvasViewport) -> bool {
