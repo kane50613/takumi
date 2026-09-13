@@ -6,7 +6,9 @@ use std::borrow::Cow;
 use parley::layout::BreakReason;
 
 use crate::{
-  layout::inline::{InlineLayout, ProcessedInlineSpan, break_lines},
+  layout::inline::{
+    InlineLayout, LineWidths, ProcessedInlineSpan, break_lines, break_lines_within,
+  },
   style::{TextTransform, TextWrapMode, WhiteSpaceCollapse},
 };
 
@@ -271,11 +273,13 @@ pub(crate) fn make_balanced_text(
     );
     false
   } else {
-    // Apply the balanced width
     positioned_floats.clear();
-    break_lines(
+    break_lines_within(
       inline_layout,
-      balanced_width,
+      LineWidths {
+        breaking: balanced_width,
+        alignment: max_width,
+      },
       max_height,
       line_height_hint,
       text_wrap_mode,
