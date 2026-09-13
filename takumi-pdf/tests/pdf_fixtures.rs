@@ -4597,3 +4597,46 @@ fn a_box_as_tall_as_the_window_fills_exactly_one_page() {
     "a4 in rounded px"
   );
 }
+
+/// Viewport units in paged content resolve against the page area, as in
+/// print media, although the column lays out at unbounded height.
+#[test]
+fn viewport_units_in_paged_content_take_the_page_area() {
+  let fonts = fonts();
+  let a4 = PageOptions {
+    margin: PageMargins::uniform(0.0),
+    ..PageOptions::A4
+  };
+
+  assert_eq!(
+    page_count(&run_pdf_fixture_with(
+      "page-area-viewport-units",
+      &fonts,
+      |fonts| { page_sized_boxes(fonts, a4, "100vh") }
+    )),
+    3
+  );
+  let column = PdfOptions::builder()
+    .node(
+      from_html(
+        r#"<div style="width: 50vw; height: 50vh; background: #e2e8f0"></div>
+           <div style="width: 100vw; height: 50vmin; background: #cbd5e1"></div>
+           <div style="height: 40vmax; background: #94a3b8"></div>"#,
+        FromHtmlOptions::default(),
+      )
+      .expect("parse viewport unit boxes"),
+    )
+    .page(PageOptions {
+      width: 300.0,
+      height: 160.0,
+      margin: PageMargins::uniform(20.0),
+    })
+    .fonts(&fonts)
+    .build();
+
+  assert_eq!(
+    page_count(&render_pinned(column)),
+    2,
+    "50vh + 50vmin + 40vmax = 60 + 60 + 104 in a 120 window"
+  );
+}

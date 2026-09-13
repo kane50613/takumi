@@ -89,7 +89,7 @@ mod subsetter;
 use takumi_core::{
   layout::tree::RenderNode,
   style::{Affine, Color, Lang},
-  viewport::{MediaTarget, Viewport},
+  viewport::MediaTarget,
 };
 
 /// Written as `/Producer` and `pdf:Producer` in every document takumi renders.
@@ -113,7 +113,7 @@ use crate::{
     page::PageSettings,
   },
   options::{PT_PER_PX, PageSelection, build_metadata, krilla_datetime, validate_xmp_schemas},
-  page::{PageBands, PagePlan},
+  page::{PageBands, PagePlan, band_viewport},
   paint::paint_page_background,
   tags::tag_id,
   tree::{PreparedTree, TreeInputs},
@@ -139,12 +139,7 @@ pub fn measure(options: MeasureOptions<'_>) -> Result<MeasuredSize, PdfError> {
     lang: options.lang,
   };
   let tree = match (options.page, options.viewport) {
-    (Some(page), _) => inputs.prepare_band(
-      &options.node,
-      999,
-      999,
-      Viewport::new((page.width as u32, None)).with_media_target(MediaTarget::Print),
-    )?,
+    (Some(page), _) => inputs.prepare_band(&options.node, 999, 999, band_viewport(&page))?,
     (None, Some(viewport)) => {
       inputs.prepare(options.node, viewport.with_media_target(MediaTarget::Print))?
     }

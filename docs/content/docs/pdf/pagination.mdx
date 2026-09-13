@@ -4,7 +4,7 @@ description: Control PDF page breaks, keep related content together, and set par
 icon: Scissors
 ---
 
-Content flows across pages at the width available inside the margins. Use CSS break properties to start chapters, keep related content together, and control how paragraphs split. Percentage heights do not resolve in this mode because the content has no fixed height.
+Content flows across pages at the width available inside the margins. Use CSS break properties to start chapters, keep related content together, and control how paragraphs split. Percentage heights do not resolve in this mode because the content has no fixed height. Viewport units do: `vh` is the page area height, as in print media.
 
 ## Break properties
 
@@ -28,6 +28,27 @@ const pdf = await render(
 | `box-decoration-break: clone` | Repeats borders and backgrounds on every page fragment. |
 
 `break-inside: avoid` applies only when the box fits on a page. An oversized box can still split. Text lines, images, and transformed subtrees are kept together where possible.
+
+## Full-page boxes
+
+A `100vh` box fills one page inside the margins, and the next box starts on the following page. Use it for a cover or any page laid out by hand:
+
+```tsx twoslash title="Full-page cover"
+import { render } from "takumi-pdf";
+
+const pdf = await render(
+  <article>
+    {/* [!code highlight] */}
+    <section style={{ height: "100vh", display: "flex", alignItems: "flex-end" }}>
+      <h1>Annual report</h1>
+    </section>
+    <p>The report starts on page two.</p>
+  </article>,
+  { margin: 0 },
+);
+```
+
+`vw`, `vmin`, and `vmax` resolve against the same page area. In the `header` and `footer` bands they resolve against the full page.
 
 ## Widows and orphans
 
