@@ -427,6 +427,11 @@ impl Paginated {
 ///
 /// A forced cut with no content on its page above it is dropped, per
 /// css-break-3 §forced-breaks. The column ends at its last content box.
+///
+/// Layout snaps box edges to whole pixels while the window is fractional, so
+/// a box sized to the page can end up to [`ContentEdges::TOLERANCE`] past the window.
+/// A cut within that distance of a content edge lands on the edge instead of
+/// leaving a sub-pixel sliver on either page.
 impl Atoms {
   pub(crate) fn page_starts(mut self, headers: &[HeaderBand], total: f32, window: f32) -> Vec<f32> {
     let Self {
@@ -444,6 +449,7 @@ impl Atoms {
       .iter()
       .fold(0.0_f32, |bottom, atom| bottom.max(atom.1))
       .min(total);
+    let edges = ContentEdges::new(content);
 
     extents.sort_by(|a, b| a.0.total_cmp(&b.0));
     forced.retain(|cut| *cut < total - 1.0);
@@ -466,7 +472,10 @@ impl Atoms {
     let mut y0 = 0.0_f32;
 
     loop {
-      let limit = y0 + window - HeaderBand::replays(headers, y0, window).0;
+      let limit = edges.snap(
+        y0 + window - HeaderBand::replays(headers, y0, window).0,
+        y0 + 1.0,
+      );
 
       if let Some(cut) = forced
         .iter()
@@ -533,5 +542,40 @@ impl Atoms {
       }
     }
     starts
+  }
+}
+
+/// The tops and bottoms of the content boxes, sorted, which a cut lands on
+/// when it falls within a pixel of one.
+struct ContentEdges(Vec<f32>);
+
+impl ContentEdges {
+  /// How far a snapped box edge can sit from the fractional cut it belongs
+  /// on: half a pixel from snapping the edge, half from snapping the cut
+  /// before it.
+  const TOLERANCE: f32 = 1.0;
+
+  fn new(content: &[Atom]) -> Self {
+    let mut edges: Vec<f32> = content
+      .iter()
+      .flat_map(|&(top, bottom)| [top, bottom])
+      .collect();
+
+    edges.sort_by(f32::total_cmp);
+    Self(edges)
+  }
+
+  /// The edge closest to `limit` within [`Self::TOLERANCE`] and above
+  /// `floor`, or `limit` itself.
+  fn snap(&self, limit: f32, floor: f32) -> f32 {
+    let after = self.0.partition_point(|edge| *edge < limit);
+    let before = after.checked_sub(1).map(|index| self.0[index]);
+
+    [before, self.0.get(after).copied()]
+      .into_iter()
+      .flatten()
+      .filter(|edge| (edge - limit).abs() <= Self::TOLERANCE && *edge > floor)
+      .min_by(|a, b| (a - limit).abs().total_cmp(&(b - limit).abs()))
+      .unwrap_or(limit)
   }
 }
