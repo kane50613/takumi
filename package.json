@@ -23,13 +23,13 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
-    "@types/bun": "^1.4.0",
-    "knip": "^6.33.0",
+    "@types/bun": "^1.4.1",
+    "knip": "^6.34.0",
     "lefthook": "^2.1.12",
-    "oxfmt": "^0.65.0",
-    "oxlint": "^1.80.0",
+    "oxfmt": "^0.66.0",
+    "oxlint": "^1.81.0",
     "publint": "^0.3.24",
-    "tegami": "^1.4.0",
+    "tegami": "^1.5.0",
     "typescript": "catalog:"
   },
   "overrides": {
@@ -40,15 +40,15 @@
     "waku": "1.0.0-rc.0"
   },
   "catalog": {
-    "@types/bun": "^1.4.0",
+    "@types/bun": "^1.4.1",
     "csstype": "^3.2.3",
-    "@types/node": "^26.4.0",
+    "@types/node": "^26.4.1",
     "@types/react": "19.2.18",
-    "@types/react-dom": "^19.2.5",
-    "lucide-react": "^1.37.0",
+    "@types/react-dom": "^19.2.7",
+    "lucide-react": "^1.45.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "tsdown": "0.22.14",
+    "tsdown": "0.23.0",
     "unrun": "^0.3.1",
     "typescript": "^7.0.2",
     "vite": "^8.2.2"

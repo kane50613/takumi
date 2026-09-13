@@ -18,9 +18,9 @@
   "devDependencies": {
     "@tailwindcss/vite": "4.3.3",
     "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.5",
+    "@types/react-dom": "^19.2.7",
     "tailwindcss": "^4.3.3",
     "typescript": "catalog:",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.0"
   }
 }
