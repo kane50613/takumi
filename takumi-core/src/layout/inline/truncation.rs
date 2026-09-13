@@ -4,9 +4,11 @@ use crate::{context::RenderContext, font_style::SizedFontStyle, text_processing:
 use parley::{InlineBoxKind, PositionedInlineBox, PositionedLayoutItem};
 
 use super::{
-  InlineLayout, apply_text_indent, breaking::break_lines, chromium_line_breaks,
-  inline_line_height_hint, items::ProcessedInlineSpan, push_presentation_text,
-  push_spans_into_builder, refresh_text_span_ranges,
+  InlineLayout, apply_text_indent,
+  breaking::{LineWidths, break_lines},
+  chromium_line_breaks, inline_line_height_hint,
+  items::ProcessedInlineSpan,
+  push_presentation_text, push_spans_into_builder, refresh_text_span_ranges,
 };
 
 fn tail_text_span<'a, 'c>(
@@ -237,7 +239,7 @@ pub(super) fn make_ellipsis_layout<'c>(
   positioned_floats.clear();
   break_lines(
     &mut final_layout,
-    max_width,
+    LineWidths::uniform(max_width),
     max_height,
     inline_line_height_hint(root_style),
     text_wrap_mode,

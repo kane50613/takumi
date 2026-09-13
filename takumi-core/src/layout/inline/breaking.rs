@@ -109,26 +109,6 @@ impl LineWidths {
 
 pub(crate) fn break_lines(
   layout: &mut InlineLayout,
-  max_width: f32,
-  max_height: Option<MaxHeight>,
-  line_height_hint: f32,
-  text_wrap_mode: TextWrapMode,
-  spans: &[ProcessedInlineSpan<'_>],
-  positioned_floats: &mut Vec<PositionedInlineBox>,
-) {
-  break_lines_within(
-    layout,
-    LineWidths::uniform(max_width),
-    max_height,
-    line_height_hint,
-    text_wrap_mode,
-    spans,
-    positioned_floats,
-  );
-}
-
-pub(crate) fn break_lines_within(
-  layout: &mut InlineLayout,
   widths: LineWidths,
   max_height: Option<MaxHeight>,
   line_height_hint: f32,
