@@ -11,19 +11,22 @@ const CANVAS: (u32, u32) = (480, 320);
 struct Case {
   name: &'static str,
   css: &'static str,
-  expected: Option<(u32, u32)>,
+  expected: Option<InkBounds>,
 }
+
+/// Inclusive edges of the dark ink: left, top, right, bottom.
+type InkBounds = (u32, u32, u32, u32);
 
 const CASES: &[Case] = &[
   Case {
     name: "box-shadow",
     css: ".ink { box-shadow: 40px 40px 20px 10px black; }",
-    expected: Some((292, 232)),
+    expected: Some((87, 101, 292, 232)),
   },
   Case {
     name: "outline",
     css: ".ink { outline: 12px solid black; outline-offset: 24px; }",
-    expected: Some((275, 215)),
+    expected: Some((44, 44, 275, 215)),
   },
   Case {
     name: "text-shadow",
@@ -38,22 +41,32 @@ const CASES: &[Case] = &[
   Case {
     name: "filter-blur",
     css: ".ink { filter: blur(16px); background: black; }",
-    expected: Some((244, 184)),
+    expected: Some((75, 75, 244, 184)),
   },
   Case {
     name: "drop-shadow",
     css: ".ink { filter: drop-shadow(40px 40px 12px black); background: black; }",
-    expected: Some((281, 221)),
+    expected: Some((80, 80, 281, 221)),
   },
   Case {
     name: "clip-path",
     css: ".ink { clip-path: circle(60%); background: black; }",
-    expected: Some((239, 179)),
+    expected: Some((80, 80, 239, 179)),
   },
   Case {
     name: "child-drop-shadow",
     css: ".ink { filter: brightness(1); } .child { width: 120px; height: 60px; filter: drop-shadow(40px 40px 12px black); background: black; }",
-    expected: Some((241, 186)),
+    expected: Some((80, 80, 241, 186)),
+  },
+  Case {
+    name: "box-shadow-negative",
+    css: ".ink { box-shadow: -40px -40px 20px 10px black; }",
+    expected: Some((27, 27, 212, 152)),
+  },
+  Case {
+    name: "drop-shadow-negative",
+    css: ".ink { filter: drop-shadow(-40px -40px 12px black); background: black; }",
+    expected: Some((38, 38, 239, 179)),
   },
   Case {
     name: "child-text-stroke",
@@ -88,8 +101,7 @@ fn render_case(effect: &str, opacity: f32) -> Bitmap {
   .unwrap()
 }
 
-/// Right and bottom edges of the dark ink, inclusive.
-fn ink_extent(image: &Bitmap) -> (u32, u32) {
+fn ink_bounds(image: &Bitmap) -> InkBounds {
   let width = image.width();
 
   image
@@ -99,10 +111,13 @@ fn ink_extent(image: &Bitmap) -> (u32, u32) {
     .iter()
     .enumerate()
     .filter(|(_, pixel)| pixel[3] > 0 && pixel[0].min(pixel[1]).min(pixel[2]) < 160)
-    .fold((0, 0), |(right, bottom), (index, _)| {
-      let index = index as u32;
-      (right.max(index % width), bottom.max(index / width))
-    })
+    .fold(
+      (u32::MAX, u32::MAX, 0, 0),
+      |(left, top, right, bottom), (index, _)| {
+        let (x, y) = (index as u32 % width, index as u32 / width);
+        (left.min(x), top.min(y), right.max(x), bottom.max(y))
+      },
+    )
 }
 
 #[test]
@@ -113,15 +128,23 @@ fn test_isolation_keeps_ink_that_reaches_past_the_box() {
     expected,
   } in CASES
   {
-    let plain = ink_extent(&render_case(css, 1.0));
-    let isolated = ink_extent(&render_case(css, 0.99));
+    let plain = render_case(css, 1.0);
+    let isolated = render_case(css, 0.99);
+    let plain = ink_bounds(&plain);
+    let isolated = ink_bounds(&isolated);
 
-    assert!(plain.0 > 0 && plain.1 > 0, "{name}: no ink painted");
+    assert!(plain.2 > 0 && plain.3 > 0, "{name}: no ink painted");
     if let Some(expected) = expected {
       assert_eq!(plain, *expected, "{name}: the layer clipped the ink");
     }
+    let edges = [
+      (plain.0, isolated.0),
+      (plain.1, isolated.1),
+      (plain.2, isolated.2),
+      (plain.3, isolated.3),
+    ];
     assert!(
-      plain.0.abs_diff(isolated.0) <= 1 && plain.1.abs_diff(isolated.1) <= 1,
+      edges.iter().all(|(a, b)| a.abs_diff(*b) <= 1),
       "{name}: isolation clipped the ink to {isolated:?}, expected {plain:?}",
     );
   }

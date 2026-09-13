@@ -446,8 +446,8 @@ fn outset_bounds(
   let pad_y = (reach * (transform.b.abs() + transform.d.abs())).ceil() as usize;
   bounds.left = bounds.left.saturating_sub(pad_x);
   bounds.top = bounds.top.saturating_sub(pad_y);
-  bounds.right += pad_x;
-  bounds.bottom += pad_y;
+  bounds.right = bounds.right.saturating_add(pad_x);
+  bounds.bottom = bounds.bottom.saturating_add(pad_y);
   Some(bounds)
 }
 
