@@ -102,7 +102,7 @@ function typingsLoader(typings: () => Promise<ExtraLib[]>) {
       })
       .catch((error: unknown) => {
         load = undefined;
-        throw error;
+        console.error("Failed to load the playground typings", error);
       }));
 }
 
