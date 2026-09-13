@@ -66,4 +66,19 @@ For repeated remote images, use a bounded [fetch cache](/docs/load-images#extern
 
 Each filtered node needs an offscreen layer. Put filters on one node when they should apply to the same composed content. Moving filters from children to a parent can change the output, so compare the result.
 
-On servers, the native backend supports multithreaded rendering. The Wasm backend is single-threaded. `takumi-js` selects the backend for the environment; use explicit backend imports only when you need to control that choice.
+## Render large canvases
+
+A canvas holds at most 64 megapixels. That is 8192 × 8192, or 4096 × 16384.
+
+```tsx twoslash title="A 4K render"
+import { render } from "takumi-js";
+
+const image = await render(<div tw="p-8 text-4xl">Hello Takumi</div>, {
+  width: 3840,
+  height: 2160,
+});
+```
+
+A larger viewport fails with `Invalid viewport dimensions: a canvas holds 1 to 64 megapixels`. Each pixel costs 4 bytes, so a full 64 megapixel render holds 256 MiB before encoding.
+
+Painting cost follows the area a node covers, not the canvas. A `backdrop-filter` blurs only the pixels under its node. A clip mask costs only the clipped box.
