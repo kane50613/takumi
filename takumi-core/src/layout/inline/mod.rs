@@ -53,7 +53,7 @@ use self::{
   truncation::make_ellipsis_layout,
 };
 pub(crate) use self::{
-  breaking::{break_lines, create_inline_constraint},
+  breaking::{LineWidths, break_lines, create_inline_constraint},
   items::InlineContentKind,
   metrics::{
     ParentFontMetrics, ResolvedInlineLineState, ResolvedLineMetrics, get_parent_font_metrics,
@@ -858,7 +858,7 @@ fn prepare_inline_layout(
   apply_text_indent(&mut built.layout, style, max_width);
   break_lines(
     &mut built.layout,
-    max_width,
+    LineWidths::uniform(max_width),
     max_height,
     line_height_hint,
     text_wrap_mode,

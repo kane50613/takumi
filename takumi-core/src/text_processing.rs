@@ -6,7 +6,7 @@ use std::borrow::Cow;
 use parley::layout::BreakReason;
 
 use crate::{
-  layout::inline::{InlineLayout, ProcessedInlineSpan, break_lines},
+  layout::inline::{InlineLayout, LineWidths, ProcessedInlineSpan, break_lines},
   style::{TextTransform, TextWrapMode, WhiteSpaceCollapse},
 };
 
@@ -235,7 +235,7 @@ pub(crate) fn make_balanced_text(
     positioned_floats.clear();
     break_lines(
       inline_layout,
-      mid,
+      LineWidths::uniform(mid),
       None,
       line_height_hint,
       text_wrap_mode,
@@ -262,7 +262,7 @@ pub(crate) fn make_balanced_text(
     positioned_floats.clear();
     break_lines(
       inline_layout,
-      max_width,
+      LineWidths::uniform(max_width),
       max_height,
       line_height_hint,
       text_wrap_mode,
@@ -271,11 +271,13 @@ pub(crate) fn make_balanced_text(
     );
     false
   } else {
-    // Apply the balanced width
     positioned_floats.clear();
     break_lines(
       inline_layout,
-      balanced_width,
+      LineWidths {
+        breaking: balanced_width,
+        alignment: max_width,
+      },
       max_height,
       line_height_hint,
       text_wrap_mode,
@@ -327,7 +329,7 @@ pub(crate) fn make_pretty_text(
   positioned_floats.clear();
   break_lines(
     inline_layout,
-    adjusted_width,
+    LineWidths::uniform(adjusted_width),
     max_height,
     line_height_hint,
     text_wrap_mode,
@@ -346,7 +348,7 @@ pub(crate) fn make_pretty_text(
     positioned_floats.clear();
     break_lines(
       inline_layout,
-      max_width,
+      LineWidths::uniform(max_width),
       max_height,
       line_height_hint,
       text_wrap_mode,

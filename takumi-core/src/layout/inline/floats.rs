@@ -2,7 +2,7 @@
 
 use parley::{InlineBox, PositionedInlineBox};
 
-use super::{InlineBrush, items::ProcessedInlineSpan};
+use super::{InlineBrush, breaking::LineWidths, items::ProcessedInlineSpan};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum FloatSide {
@@ -30,18 +30,25 @@ impl ActiveFloat {
 }
 
 pub(super) struct FloatLayoutState {
-  max_width: f32,
+  widths: LineWidths,
   line_height_hint: f32,
   active_floats: Vec<ActiveFloat>,
 }
 
 impl FloatLayoutState {
-  pub(super) fn new(max_width: f32, line_height_hint: f32) -> Self {
+  pub(super) fn new(widths: LineWidths, line_height_hint: f32) -> Self {
     Self {
-      max_width,
+      widths,
       line_height_hint,
       active_floats: Vec::new(),
     }
+  }
+
+  /// The width the line at `line_y` aligns within, after the floats beside it.
+  pub(super) fn line_width(&self, line_y: f32) -> f32 {
+    let (line_x, line_right) = self.line_bounds(line_y);
+
+    (line_right - line_x).max(0.0)
   }
 
   pub(super) fn side_for_inline_box(
@@ -95,7 +102,7 @@ impl FloatLayoutState {
   fn bounds_for_range(&self, top: f32, height: f32) -> (f32, f32) {
     let bottom = top + height.max(0.0);
     let mut left = 0.0_f32;
-    let mut right = self.max_width;
+    let mut right = self.widths.alignment;
 
     for active_float in &self.active_floats {
       if !active_float.overlaps_range(top, bottom) {
@@ -109,8 +116,8 @@ impl FloatLayoutState {
     }
 
     (
-      left.min(self.max_width),
-      right.max(left).min(self.max_width),
+      left.min(self.widths.alignment),
+      right.max(left).min(self.widths.alignment),
     )
   }
 
@@ -140,7 +147,7 @@ impl FloatLayoutState {
 
     loop {
       let (left, right) = self.bounds_for_range(line_y, height);
-      if width <= right - left || (left == 0.0 && right == self.max_width) {
+      if width <= right - left || (left == 0.0 && right == self.widths.alignment) {
         return line_y;
       }
 
@@ -156,7 +163,7 @@ impl FloatLayoutState {
 
     loop {
       let (left, right) = self.line_bounds(line_y);
-      if current_advance <= right - left || (left == 0.0 && right == self.max_width) {
+      if current_advance <= right - left || (left == 0.0 && right == self.widths.alignment) {
         return line_y;
       }
 
@@ -207,9 +214,9 @@ impl FloatLayoutState {
   ) {
     let (line_x, line_right) = self.line_bounds(line_y);
     let state = breaker.state_mut();
-    state.set_layout_max_advance(self.max_width);
+    state.set_layout_max_advance(self.widths.alignment);
     state.set_line_x(line_x);
     state.set_line_y(f64::from(line_y));
-    state.set_line_max_advance((line_right - line_x).max(0.0));
+    state.set_line_max_advance((line_right - line_x).max(0.0).min(self.widths.breaking));
   }
 }

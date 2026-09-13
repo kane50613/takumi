@@ -87,9 +87,29 @@ pub(crate) fn create_inline_constraint(
   (width_constraint, max_height)
 }
 
+/// The width lines break at and the width they align within.
+///
+/// `text-wrap: balance` narrows the breaking width while alignment keeps the container width,
+/// as Blink clears its overridden available width before aligning
+/// (blink/renderer/core/layout/inline/line_breaker.cc, `LineBreaker::NextLine`).
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) struct LineWidths {
+  pub(crate) breaking: f32,
+  pub(crate) alignment: f32,
+}
+
+impl LineWidths {
+  pub(crate) fn uniform(width: f32) -> Self {
+    Self {
+      breaking: width,
+      alignment: width,
+    }
+  }
+}
+
 pub(crate) fn break_lines(
   layout: &mut InlineLayout,
-  max_width: f32,
+  widths: LineWidths,
   max_height: Option<MaxHeight>,
   line_height_hint: f32,
   text_wrap_mode: TextWrapMode,
@@ -97,17 +117,18 @@ pub(crate) fn break_lines(
   positioned_floats: &mut Vec<PositionedInlineBox>,
 ) {
   let inline_boxes = layout.inline_boxes().to_vec();
-  let mut float_layout = FloatLayoutState::new(max_width, line_height_hint);
+  let mut float_layout = FloatLayoutState::new(widths, line_height_hint);
   let has_custom_out_of_flow = inline_boxes
     .iter()
     .any(|inline_box| inline_box.kind == InlineBoxKind::CustomOutOfFlow);
+  let is_uniform = widths.breaking == widths.alignment;
 
-  if text_wrap_mode == TextWrapMode::NoWrap && !has_custom_out_of_flow {
-    return layout.break_all_lines(Some(max_width));
+  if text_wrap_mode == TextWrapMode::NoWrap && !has_custom_out_of_flow && is_uniform {
+    return layout.break_all_lines(Some(widths.breaking));
   }
 
-  if max_height.is_none() && !has_custom_out_of_flow {
-    return layout.break_all_lines(Some(max_width));
+  if max_height.is_none() && !has_custom_out_of_flow && is_uniform {
+    return layout.break_all_lines(Some(widths.breaking));
   }
 
   let (limit_height, limit_lines) = match max_height {
@@ -119,8 +140,9 @@ pub(crate) fn break_lines(
 
   let mut total_height = 0.0;
   let mut line_count = 0;
+  let mut line_y = 0.0;
   let mut breaker = layout.break_lines();
-  float_layout.update_breaker_line(&mut breaker, 0.0);
+  float_layout.update_breaker_line(&mut breaker, line_y);
 
   while line_count < limit_lines {
     let Some(yield_data) = breaker.break_next() else {
@@ -143,7 +165,7 @@ pub(crate) fn break_lines(
         let clear = float_layout.clear_for_inline_box(spans, inline_box.id);
         let start_y = breaker.state().line_y() as f32;
         let positioned_float = float_layout.push_float(side, clear, start_y, &inline_box);
-        let line_y = float_layout.find_line_y_for_advance(start_y, data.advance);
+        line_y = float_layout.find_line_y_for_advance(start_y, data.advance);
         float_layout.update_breaker_line(&mut breaker, line_y);
         positioned_floats.push(positioned_float);
         continue;
@@ -155,10 +177,11 @@ pub(crate) fn break_lines(
       break;
     }
 
+    breaker.set_prior_line_width(float_layout.line_width(line_y));
     total_height += height;
     line_count += 1;
-    let next_line_y = breaker.state().line_y() as f32;
-    float_layout.update_breaker_line(&mut breaker, next_line_y);
+    line_y = breaker.state().line_y() as f32;
+    float_layout.update_breaker_line(&mut breaker, line_y);
 
     if total_height >= limit_height {
       break;
