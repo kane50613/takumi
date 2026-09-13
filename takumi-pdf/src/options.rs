@@ -6,12 +6,15 @@ use std::{collections::HashMap, sync::Arc};
 use takumi_core::{
   Fonts,
   error::Error as TakumiError,
-  geometry::Rect,
+  geometry::{Rect, Size},
   layout::node::Node,
   resources::{font::FontError, image::ImageSource},
-  style::{Color, FontFamily, Lang, StyleSheet},
+  style::{
+    Color, FontFamily, Lang, Length, PageOrientation, PageSelector, PageSheet, PageSize,
+    PageSizeName, SizingContext, StyleSheet,
+  },
   units::{ONE_IN_PX, ONE_MM_IN_PX, ONE_PT_IN_PX},
-  viewport::Viewport,
+  viewport::{MediaTarget, Viewport},
 };
 use typed_builder::TypedBuilder;
 
@@ -317,7 +320,9 @@ pub struct PdfOptions<'g> {
   /// Resources fetched externally, keyed by URL.
   #[builder(default)]
   pub images: HashMap<Arc<str>, ImageSource>,
-  /// Paged output; `None` renders a single page at the viewport size.
+  /// Paged output; `None` renders a single page at the viewport size. A
+  /// `@page` rule without a selector in [`Self::stylesheet`] overrides the
+  /// size and margins it sets, like `preferCSSPageSize` in Chromium.
   #[builder(default, setter(strip_option))]
   pub page: Option<PageOptions>,
   /// The pages the output keeps, 1-based like a print dialog. Layout and page
@@ -722,6 +727,96 @@ impl PageOptions {
       self.width - margin.horizontal(),
       self.height - margin.vertical(),
     )
+  }
+
+  /// The page with the winning `@page` descriptors for every page laid over
+  /// it: `size` replaces the page size, and each margin descriptor its side,
+  /// resolved against that size. A rule with a page selector is left for
+  /// named pages.
+  pub(crate) fn with_page_rules(self, stylesheet: &StyleSheet) -> Self {
+    let winners = stylesheet.page_descriptors(self.viewport(), PageSelector::is_universal);
+    let page = match winners.size {
+      Some(size) => self.sized(size),
+      None => self,
+    };
+    let sizing = SizingContext::builder().viewport(page.viewport()).build();
+    let side = |length: Option<Length>, current: PageMargin, axis: f32| match length {
+      None => current,
+      Some(Length::Auto) => PageMargin::Auto,
+      Some(length) => PageMargin::Px(length.to_px(&sizing, axis)),
+    };
+
+    Self {
+      margin: PageMargins {
+        top: side(winners.margin.top, page.margin.top, page.height),
+        right: side(winners.margin.right, page.margin.right, page.width),
+        bottom: side(winners.margin.bottom, page.margin.bottom, page.height),
+        left: side(winners.margin.left, page.margin.left, page.width),
+      },
+      ..page
+    }
+  }
+
+  /// The page at a `size` value: the sheet it names, or this one, turned to
+  /// the orientation it asks for.
+  fn sized(self, size: PageSize) -> Self {
+    let (width, height) = match size.sheet {
+      None => (self.width, self.height),
+      Some(PageSheet::Named(name)) => {
+        let preset = Self::from_keyword(name);
+
+        (preset.width, preset.height)
+      }
+      Some(PageSheet::Lengths { width, height }) => {
+        let sizing = SizingContext::builder().viewport(self.viewport()).build();
+
+        (width.to_px(&sizing, 0.0), height.to_px(&sizing, 0.0))
+      }
+    };
+    let (width, height) = match size.orientation {
+      Some(PageOrientation::Landscape) if width < height => (height, width),
+      Some(PageOrientation::Portrait) if width > height => (height, width),
+      _ => (width, height),
+    };
+
+    Self {
+      width,
+      height,
+      ..self
+    }
+  }
+
+  /// The preset a css-page-3 size keyword names.
+  const fn from_keyword(name: PageSizeName) -> Self {
+    match name {
+      PageSizeName::A3 => Self::A3,
+      PageSizeName::A4 => Self::A4,
+      PageSizeName::A5 => Self::A5,
+      PageSizeName::B4 => Self::B4,
+      PageSizeName::B5 => Self::B5,
+      PageSizeName::JisB4 => Self::JIS_B4,
+      PageSizeName::JisB5 => Self::JIS_B5,
+      PageSizeName::Ledger => Self::LEDGER,
+      PageSizeName::Legal => Self::LEGAL,
+      PageSizeName::Letter => Self::LETTER,
+    }
+  }
+
+  /// The page as the viewport `@media` queries and `@page` lengths resolve
+  /// against.
+  fn viewport(&self) -> Viewport {
+    Viewport::new((self.width as u32, self.height as u32)).with_media_target(MediaTarget::Print)
+  }
+
+  /// Full page width, unbounded height: what a band lays out against, with
+  /// viewport units taking the whole page.
+  pub(crate) fn band_viewport(&self) -> Viewport {
+    Viewport::new((self.width as u32, None))
+      .with_media_target(MediaTarget::Print)
+      .with_unit_reference(Size {
+        width: self.width,
+        height: self.height,
+      })
   }
 }
 

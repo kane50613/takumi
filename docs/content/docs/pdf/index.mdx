@@ -92,7 +92,24 @@ const pdf = await render(report, {
 
 Set `landscape` to turn any of them, or pass `{ width, height }` for a size with no keyword.
 
-Set page geometry through these options. CSS `@page` rules are not parsed.
+A CSS `@page` rule sets the same geometry and wins over the options, like `preferCSSPageSize` in Chromium. `size` takes a page keyword, one or two lengths, or an orientation, and `margin` takes lengths or `auto`:
+
+```tsx twoslash title="Page geometry from CSS"
+import type { ReactNode } from "react";
+declare const report: ReactNode;
+// ---cut---
+import { render } from "takumi-pdf";
+
+const pdf = await render(report, {
+  // [!code highlight:3]
+  css: `@page {
+    size: A5 landscape;
+    margin: 10mm 15mm;
+  }`,
+});
+```
+
+A rule with a page selector, such as `@page :first` or `@page cover`, is parsed but not applied yet.
 
 Automatic top and bottom margins fit the header or footer, including its 20px inset from the paper edge. They are at least 37.8px on ordinary page sizes. Without a header or footer, the default is 37.8px (1cm). See [Headers and footers](/docs/pdf/headers-and-footers#sizing-the-margin).
 

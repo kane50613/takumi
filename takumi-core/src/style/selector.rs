@@ -14,6 +14,8 @@ use selectors::parser::{
 };
 
 pub use crate::style::media_query::MediaQueryList;
+use crate::style::page_rule::{PageDescriptors, PageRule, PageSelector};
+use crate::viewport::Viewport;
 use crate::{
   error::StyleSheetParseError,
   keyframes::parse_keyframe_prelude,
@@ -47,7 +49,7 @@ pub(crate) enum LayerName {
   Anonymous,
 }
 
-type LayerPath = Vec<LayerName>;
+pub(crate) type LayerPath = Vec<LayerName>;
 
 /// An ASCII-case-insensitive CSS identifier.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -283,6 +285,7 @@ struct StyleSheetFragment {
   rules: Vec<CssRule>,
   keyframes: Vec<KeyframesRule>,
   property_rules: Vec<PropertyRule>,
+  page_rules: Vec<PageRule>,
   declared_layers: Vec<LayerPath>,
   preflight: bool,
 }
@@ -292,6 +295,7 @@ impl StyleSheetFragment {
     self.rules.extend(other.rules);
     self.keyframes.extend(other.keyframes);
     self.property_rules.extend(other.property_rules);
+    self.page_rules.extend(other.page_rules);
     self.declared_layers.extend(other.declared_layers);
     self.preflight |= other.preflight;
   }
@@ -573,6 +577,7 @@ enum AtRulePrelude {
   Keyframes(String),
   Layer(Vec<LayerPath>),
   Media(MediaQueryList),
+  Page(Vec<PageSelector>),
   Property(String),
   Supports(bool),
   /// Tailwind's `@theme`, read as the `:root` rule it compiles to. Modifiers
@@ -890,6 +895,10 @@ fn parse_at_rule_prelude<'i, 't>(
     return MediaQueryList::parse(input).map(AtRulePrelude::Media);
   }
 
+  if name.eq_ignore_ascii_case("page") {
+    return PageSelector::parse_list(input).map(AtRulePrelude::Page);
+  }
+
   if name.eq_ignore_ascii_case("supports") {
     return parse_supports_condition(input).map(AtRulePrelude::Supports);
   }
@@ -1136,6 +1145,7 @@ fn parse_nested_at_rule_block<'i, 't>(
     AtRulePrelude::Theme => parse_theme_block(media_queries, current_layer, lossy, input),
     AtRulePrelude::Keyframes(_)
     | AtRulePrelude::Property(_)
+    | AtRulePrelude::Page(_)
     | AtRulePrelude::TailwindImport
     | AtRulePrelude::Apply(_) => {
       Err(input.new_custom_error(StyleSheetParseError::unsupported_nested_at_rule()))
@@ -1242,6 +1252,9 @@ impl<'i> AtRuleParser<'i> for RuleParser {
         for property_rule in &mut fragment.property_rules {
           property_rule.media_queries.push(media_query.clone());
         }
+        for page_rule in &mut fragment.page_rules {
+          page_rule.media_queries.push(media_query.clone());
+        }
 
         Ok(fragment)
       }
@@ -1267,6 +1280,15 @@ impl<'i> AtRuleParser<'i> for RuleParser {
       }
       AtRulePrelude::Property(name) => Ok(StyleSheetFragment {
         property_rules: vec![parse_property_rule(name, input)?],
+        ..StyleSheetFragment::default()
+      }),
+      AtRulePrelude::Page(selectors) => Ok(StyleSheetFragment {
+        page_rules: vec![PageRule::parse_block(
+          selectors,
+          self.current_layer.clone(),
+          self.lossy,
+          input,
+        )?],
         ..StyleSheetFragment::default()
       }),
     }
@@ -1309,6 +1331,8 @@ pub struct StyleSheet {
   pub(crate) keyframes: Vec<KeyframesRule>,
   /// `@property` rules.
   pub(crate) property_rules: Vec<PropertyRule>,
+  /// `@page` rules in source order.
+  pub(crate) page_rules: Vec<PageRule>,
   /// Number of distinct cascade layers.
   pub(crate) layer_count: usize,
   /// Widths from unconditional `:root` `--breakpoint-*` declarations, which
@@ -1432,6 +1456,21 @@ impl StyleSheet {
     &self.property_rules
   }
 
+  /// The `@page` rules, in source order.
+  pub fn page_rules(&self) -> &[PageRule] {
+    &self.page_rules
+  }
+
+  /// The `@page` descriptors that win for a page whose selectors pass
+  /// `selects`, with `@media` conditions read against `viewport`.
+  pub fn page_descriptors(
+    &self,
+    viewport: Viewport,
+    selects: impl Fn(&PageSelector) -> bool,
+  ) -> PageDescriptors {
+    PageDescriptors::cascade(&self.page_rules, self.layer_count, viewport, selects)
+  }
+
   /// Extends the stylesheet with keyframes.
   pub fn extend_keyframes(&mut self, keyframes: Vec<KeyframesRule>) {
     self.keyframes.extend(keyframes);
@@ -1511,6 +1550,7 @@ impl StyleSheet {
     let mut rules = Vec::new();
     let mut keyframes = Vec::new();
     let mut property_rules = Vec::new();
+    let mut page_rules = Vec::new();
     let mut declared_layers = Vec::new();
     let mut preflight = false;
 
@@ -1520,6 +1560,7 @@ impl StyleSheet {
           rules.extend(fragment.rules);
           keyframes.extend(fragment.keyframes);
           property_rules.extend(fragment.property_rules);
+          page_rules.extend(fragment.page_rules);
           declared_layers.extend(fragment.declared_layers);
           preflight |= fragment.preflight;
         }
@@ -1552,14 +1593,22 @@ impl StyleSheet {
       layer_order.entry(layer_name).or_insert(next_order);
     }
 
-    for rule in &rules {
-      if let Some(layer_name) = &rule.layer {
-        let next_order = layer_order.len();
-        layer_order.entry(layer_name.clone()).or_insert(next_order);
-      }
+    for layer_name in rules
+      .iter()
+      .filter_map(|rule| rule.layer.as_ref())
+      .chain(page_rules.iter().filter_map(|rule| rule.layer.as_ref()))
+    {
+      let next_order = layer_order.len();
+      layer_order.entry(layer_name.clone()).or_insert(next_order);
     }
 
     for rule in &mut rules {
+      rule.layer_order = rule
+        .layer
+        .as_ref()
+        .and_then(|layer_name| layer_order.get(layer_name).copied());
+    }
+    for rule in &mut page_rules {
       rule.layer_order = rule
         .layer
         .as_ref()
@@ -1573,6 +1622,7 @@ impl StyleSheet {
 
     Ok(Self {
       breakpoints: collect_breakpoints(&rules),
+      page_rules,
       rules,
       keyframes,
       property_rules,

@@ -4640,3 +4640,127 @@ fn viewport_units_in_paged_content_take_the_page_area() {
     "50vh + 50vmin + 40vmax = 60 + 60 + 104 in a 120 window"
   );
 }
+
+/// The `/MediaBox` of every page, in pt.
+fn media_boxes(pdf: &[u8]) -> Vec<(f32, f32)> {
+  let text = String::from_utf8_lossy(pdf);
+
+  text
+    .match_indices("/MediaBox[0 0 ")
+    .map(|(index, prefix)| {
+      let rest = &text[index + prefix.len()..];
+      let end = rest.find(']').expect("a closed media box");
+      let mut sides = rest[..end]
+        .split(' ')
+        .map(|side| side.parse::<f32>().expect("a pt size"));
+
+      (sides.next().unwrap(), sides.next().unwrap())
+    })
+    .collect()
+}
+
+/// A `@page` rule without a selector sets the page size and margins over the
+/// render options, later rules winning, like `preferCSSPageSize` in Chromium.
+/// A rule with a page selector and one behind a failing `@media` are skipped.
+#[test]
+fn at_page_rules_set_the_page_size_and_margins() {
+  let fonts = fonts();
+  let node = || {
+    from_html(
+      r#"<div style="background: #e2e8f0; height: 100vh"></div>
+         <div style="background: #cbd5e1; height: 100vh"></div>"#,
+      FromHtmlOptions::default(),
+    )
+    .expect("parse boxes")
+  };
+  let render_with = |css: &str, page: PageOptions| {
+    render_pinned(
+      PdfOptions::builder()
+        .node(node())
+        .page(page)
+        .stylesheet(Arc::new(StyleSheet::parse(css).expect("parse @page")))
+        .fonts(&fonts)
+        .build(),
+    )
+  };
+  let pt = |px: f32| px * 72.0 / 96.0;
+
+  let pdf = run_pdf_fixture_with("at-page-size-and-margin", &fonts, |fonts| {
+    PdfOptions::builder()
+      .node(node())
+      .page(PageOptions::A4)
+      .stylesheet(Arc::new(
+        StyleSheet::parse(
+          "@page { size: A5 landscape; margin: 10mm 5mm }
+           @page cover { size: A3 }
+           @media screen { @page { size: letter } }",
+        )
+        .expect("parse @page"),
+      ))
+      .fonts(fonts)
+      .build()
+  });
+  let a5_landscape = (pt(PageOptions::A5.height), pt(PageOptions::A5.width));
+
+  assert_eq!(page_count(&pdf), 2);
+  for size in media_boxes(&pdf) {
+    assert!(
+      (size.0 - a5_landscape.0).abs() < 0.01 && (size.1 - a5_landscape.1).abs() < 0.01,
+      "expected A5 landscape, got {size:?}"
+    );
+  }
+
+  let lengths = render_with("@page { size: 4in 6in; margin: 0 }", PageOptions::LETTER);
+
+  assert_eq!(media_boxes(&lengths)[0], (288.0, 432.0));
+
+  let turned = render_with("@page { size: landscape }", PageOptions::LETTER);
+
+  assert_eq!(
+    media_boxes(&turned)[0],
+    (
+      pt(PageOptions::LETTER.height),
+      pt(PageOptions::LETTER.width)
+    )
+  );
+
+  let restored = render_with(
+    "@page { size: A5 } @page { size: auto }",
+    PageOptions::LETTER,
+  );
+
+  assert_eq!(
+    media_boxes(&restored)[0],
+    (
+      pt(PageOptions::LETTER.width),
+      pt(PageOptions::LETTER.height)
+    )
+  );
+}
+
+/// Margins resolve against the page size the cascade settles on, whichever
+/// rule sets it: a 10% margin of a 200px page is 20px, leaving a 160px window.
+#[test]
+fn at_page_margins_resolve_against_the_cascaded_size() {
+  let fonts = fonts();
+  let pdf = render_pinned(
+    PdfOptions::builder()
+      .node(
+        from_html(
+          r#"<div style="background: #e2e8f0; height: 160px"></div>
+             <div style="background: #cbd5e1; height: 160px"></div>"#,
+          FromHtmlOptions::default(),
+        )
+        .expect("parse boxes"),
+      )
+      .page(PageOptions::A4)
+      .stylesheet(Arc::new(
+        StyleSheet::parse("@page { margin: 10% } @page { size: 200px }").expect("parse @page"),
+      ))
+      .fonts(&fonts)
+      .build(),
+  );
+
+  assert_eq!(media_boxes(&pdf)[0], (150.0, 150.0));
+  assert_eq!(page_count(&pdf), 2);
+}

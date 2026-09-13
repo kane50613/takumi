@@ -53,25 +53,25 @@ const pdf = await render(html, {
 
 ## Option map
 
-| `page.pdf()`                             | `takumi-pdf`                           |
-| ---------------------------------------- | -------------------------------------- |
-| `format: "A4"`                           | `size: "a4"`                           |
-| `width`, `height`                        | `size: { width, height }`              |
-| `landscape`                              | `landscape`                            |
-| `margin`                                 | `margin`, in CSS px                    |
-| `displayHeaderFooter` + `headerTemplate` | `header`                               |
-| `footerTemplate`                         | `footer`                               |
-| `pageNumber`, `totalPages` classes       | the same classes                       |
-| `date`, `title`, `url` classes           | interpolate the value yourself         |
-| `tagged` (default on)                    | `tagged` (default on)                  |
-| `outline`                                | `outline`                              |
-| `printBackground`                        | always on                              |
-| `path`                                   | write the returned `Uint8Array`        |
-| `timeout`, `waitForFonts`                | not needed: no page to load            |
-| `scale`                                  | not supported: scale the CSS instead   |
-| `pageRanges`                             | `pageRanges: [1, { from: 4, to: 8 }]`  |
-| `preferCSSPageSize`, `@page`             | not supported: set `size` and `margin` |
-| `omitBackground`                         | not supported                          |
+| `page.pdf()`                             | `takumi-pdf`                                        |
+| ---------------------------------------- | --------------------------------------------------- |
+| `format: "A4"`                           | `size: "a4"`                                        |
+| `width`, `height`                        | `size: { width, height }`                           |
+| `landscape`                              | `landscape`                                         |
+| `margin`                                 | `margin`, in CSS px                                 |
+| `displayHeaderFooter` + `headerTemplate` | `header`                                            |
+| `footerTemplate`                         | `footer`                                            |
+| `pageNumber`, `totalPages` classes       | the same classes                                    |
+| `date`, `title`, `url` classes           | interpolate the value yourself                      |
+| `tagged` (default on)                    | `tagged` (default on)                               |
+| `outline`                                | `outline`                                           |
+| `printBackground`                        | always on                                           |
+| `path`                                   | write the returned `Uint8Array`                     |
+| `timeout`, `waitForFonts`                | not needed: no page to load                         |
+| `scale`                                  | not supported: scale the CSS instead                |
+| `pageRanges`                             | `pageRanges: [1, { from: 4, to: 8 }]`               |
+| `preferCSSPageSize`, `@page`             | `@page { size; margin }` in `css`, always preferred |
+| `omitBackground`                         | not supported                                       |
 
 Margins take numbers in CSS px. Chromium's `"0.5in"` strings have no equivalent; `48` is that half inch.
 

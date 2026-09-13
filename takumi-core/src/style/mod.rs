@@ -4,6 +4,7 @@ mod css_input;
 mod css_source;
 pub mod math;
 mod media_query;
+mod page_rule;
 pub(crate) mod properties;
 pub(crate) mod selector;
 mod sizing;
@@ -20,6 +21,10 @@ pub use css_source::{
   SupportsRule,
 };
 pub(crate) use math::lerp;
+pub use page_rule::{
+  PageDescriptors, PageOrientation, PagePseudoClass, PageRule, PageSelector, PageSheet, PageSize,
+  PageSizeName,
+};
 pub(crate) use properties::unexpected_token;
 pub use properties::*;
 // Selector matching internals (CssRule, SelectorImpl, Ident, …) stay crate-private

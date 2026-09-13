@@ -100,17 +100,6 @@ impl PageFrame {
   }
 }
 
-/// Full page width, unbounded height: what a band lays out against, with
-/// viewport units taking the whole page.
-pub(crate) fn band_viewport(page: &PageOptions) -> Viewport {
-  Viewport::new((page.width as u32, None))
-    .with_media_target(MediaTarget::Print)
-    .with_unit_reference(Size {
-      width: page.width,
-      height: page.height,
-    })
-}
-
 /// What a paged render takes from its options besides the content.
 pub(crate) struct PageBands<'o> {
   pub(crate) header: Option<&'o Node>,
@@ -161,7 +150,7 @@ impl PagePlan {
   ) -> Result<Self, PdfError> {
     // Bands lay out at full page width and draw inside the margin areas,
     // like Chromium's print header and footer templates.
-    let band_viewport = band_viewport(&page);
+    let band_viewport = page.band_viewport();
     let measure_bands =
       |pages: usize| -> Result<(Option<Repeatable>, Option<Repeatable>), PdfError> {
         let band = |template: Option<&Node>, bounds| {

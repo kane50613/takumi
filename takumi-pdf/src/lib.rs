@@ -113,7 +113,7 @@ use crate::{
     page::PageSettings,
   },
   options::{PT_PER_PX, PageSelection, build_metadata, krilla_datetime, validate_xmp_schemas},
-  page::{PageBands, PagePlan, band_viewport},
+  page::{PageBands, PagePlan},
   paint::paint_page_background,
   tags::tag_id,
   tree::{PreparedTree, TreeInputs},
@@ -139,7 +139,11 @@ pub fn measure(options: MeasureOptions<'_>) -> Result<MeasuredSize, PdfError> {
     lang: options.lang,
   };
   let tree = match (options.page, options.viewport) {
-    (Some(page), _) => inputs.prepare_band(&options.node, 999, 999, band_viewport(&page))?,
+    (Some(page), _) => {
+      let page = page.with_page_rules(&inputs.stylesheet);
+
+      inputs.prepare_band(&options.node, 999, 999, page.band_viewport())?
+    }
     (None, Some(viewport)) => {
       inputs.prepare(options.node, viewport.with_media_target(MediaTarget::Print))?
     }
@@ -171,6 +175,7 @@ pub fn render(mut options: PdfOptions<'_>) -> Result<Vec<u8>, PdfError> {
   let structural = options.tagged.names_structure_destinations();
   let rendered = match options.page {
     Some(page) => {
+      let page = page.with_page_rules(&inputs.stylesheet);
       let bands = PageBands {
         header: options.header.as_ref(),
         footer: options.footer.as_ref(),
