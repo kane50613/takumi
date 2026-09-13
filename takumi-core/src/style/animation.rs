@@ -570,6 +570,7 @@ impl_passthrough_animatable!(
   TextDecoration,
   TextDecorationLines,
   BreakBetween,
+  PageName,
   OverflowWrap,
   BasicShape,
   OffsetPath,

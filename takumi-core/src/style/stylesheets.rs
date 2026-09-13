@@ -1322,6 +1322,7 @@ define_style! {
     text_decoration_style: TextDecorationStyle where anonymous = true,
     break_before: BreakBetween,
     break_after: BreakBetween,
+    page: PageName where inherit = true,
     break_inside: BreakInside,
     box_decoration_break: BoxDecorationBreak,
     widows: MinLines where inherit = true,
