@@ -1,113 +1,21 @@
 "use client";
 
 import { Editor } from "@monaco-editor/react";
-import type { Monaco } from "@monaco-editor/react";
-import { shikiToMonaco } from "@shikijs/monaco";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
 import type { ComponentProps } from "react";
-import { createHighlighterCore } from "shiki/core";
-import { createOnigurumaEngine } from "shiki/engine-oniguruma.mjs";
+import type { startTypeScriptService } from "./monaco";
 
-function createHighlighter() {
-  return createHighlighterCore({
-    themes: [
-      import("shiki/themes/github-dark-default.mjs"),
-      import("shiki/themes/github-light-default.mjs"),
-    ],
-    langs: [import("shiki/langs/tsx.mjs")],
-    engine: createOnigurumaEngine(import("shiki/wasm")),
-    langAlias: {
-      typescript: "tsx",
-    },
-  });
-}
+type MonacoModule = { startTypeScriptService: typeof startTypeScriptService };
 
-type GlobalThis = typeof globalThis & {
-  shikiInstance: ReturnType<typeof createHighlighter>;
-};
+let monacoModule: Promise<MonacoModule> | undefined;
 
-(globalThis as GlobalThis).shikiInstance ??= createHighlighter();
-
-const highlighter = await (globalThis as GlobalThis).shikiInstance;
-
-type ExtraLib = { content: string; filePath: string };
-
-const extraLib = (filePath: string) => (module: { default: string }) => ({
-  content: module.default,
-  filePath,
-});
-
-const coreTypings = () =>
-  Promise.all([
-    import("../../../node_modules/@types/react/index.d.ts?raw").then(
-      extraLib("file:///node_modules/react/index.d.ts"),
-    ),
-    import("../../../node_modules/@types/react/jsx-runtime.d.ts?raw").then(
-      extraLib("file:///node_modules/react/jsx-runtime.d.ts"),
-    ),
-    import("../../../node_modules/csstype/index.d.ts?raw").then(
-      extraLib("file:///node_modules/csstype/index.d.ts"),
-    ),
-    import("../../../node_modules/@takumi-rs/wasm/pkg/takumi_wasm_bg.wasm.d.ts?raw").then(
-      extraLib("file:///node_modules/@takumi-rs/wasm/index.d.ts"),
-    ),
-    import("../../../node_modules/takumi-pdf/dist/primitives.d.mts?raw").then(
-      extraLib("file:///node_modules/takumi-pdf/primitives.d.ts"),
-    ),
-    import("../../playground/options.ts?raw").then(extraLib("file:///options.d.ts")),
-  ]);
-
-const echartsTypings = () =>
-  Promise.all(
-    Object.entries(
-      // Vite skips node_modules unless the glob is exhaustive.
-      import.meta.glob<string>(
-        "../../../node_modules/echarts/types/dist/{core,charts,components,renderers,shared}.d.ts",
-        { query: "?raw", import: "default", exhaustive: true },
-      ),
-    ).map(async ([path, load]) => ({
-      content: await load(),
-      filePath: `file:///${path.slice(path.indexOf("node_modules"))}`,
-    })),
-  );
-
-const tailwindTypings: ExtraLib = {
-  content: `
-declare namespace React {
-  interface HTMLAttributes<T> {
-    tw?: string;
-  }
-}
-`,
-  filePath: "file:///tw.d.ts",
-};
-
-const loadedTypings: ExtraLib[] = [];
-
-/** Monaco replaces the whole set, so every mount rewrites it from what has loaded so far. */
-function applyTypings(monaco: Monaco) {
-  monaco.languages.typescript.typescriptDefaults.setExtraLibs([tailwindTypings, ...loadedTypings]);
-}
-
-/** A failed load is dropped so the next mount retries it. */
-function typingsLoader(typings: () => Promise<ExtraLib[]>) {
-  let load: Promise<void> | undefined;
-
-  return (monaco: Monaco) =>
-    (load ??= typings()
-      .then((libs) => {
-        loadedTypings.push(...libs);
-        applyTypings(monaco);
-      })
-      .catch((error: unknown) => {
-        load = undefined;
-        console.error("Failed to load the playground typings", error);
-      }));
-}
-
-const loadCoreTypings = typingsLoader(coreTypings);
-const loadEchartsTypings = typingsLoader(echartsTypings);
+/** monaco-editor reaches for `document` while it evaluates, so it may only load in the browser. */
+const loadMonaco = () =>
+  (monacoModule ??= import("./monaco").catch((error: unknown) => {
+    monacoModule = undefined;
+    throw error;
+  }));
 
 export function ComponentEditor({
   code,
@@ -119,6 +27,8 @@ export function ComponentEditor({
   onRun: () => void;
 }) {
   const { resolvedTheme } = useTheme();
+  const [monaco, setMonaco] = useState<MonacoModule | null>(null);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const editorRef = useRef<
     Parameters<NonNullable<ComponentProps<typeof Editor>["onMount"]>>[0] | null
@@ -132,6 +42,27 @@ export function ComponentEditor({
   onRunRef.current = onRun;
 
   const theme = resolvedTheme === "dark" ? "github-dark-default" : "github-light-default";
+
+  useEffect(() => {
+    let isMounted = true;
+
+    loadMonaco().then(
+      (module) => {
+        if (isMounted) {
+          setMonaco(module);
+        }
+      },
+      (error: unknown) => {
+        if (isMounted) {
+          setLoadError(error);
+        }
+      },
+    );
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -171,43 +102,24 @@ export function ComponentEditor({
     }
   }, [code]);
 
+  if (!monaco) {
+    return (
+      <div className="grid h-full w-full place-items-center text-fd-muted-foreground text-sm">
+        {loadError
+          ? "The editor failed to load. Reload the page to try again."
+          : "Launching editor..."}
+      </div>
+    );
+  }
+
   return (
     <Editor
-      beforeMount={(monaco) => {
-        monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
-          target: monaco.languages.typescript.ScriptTarget.Latest,
-          allowNonTsExtensions: true,
-          moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
-          module: monaco.languages.typescript.ModuleKind.ESNext,
-          reactNamespace: "React",
-          esModuleInterop: true,
-          jsx: monaco.languages.typescript.JsxEmit.ReactJSX,
-          typeRoots: ["node_modules/@types"],
-          baseUrl: "file:///",
-          paths: {
-            "echarts/*": ["node_modules/echarts/types/dist/*"],
-          },
-        });
-
-        applyTypings(monaco);
-        shikiToMonaco(highlighter, monaco);
-      }}
-      onMount={(editor, monaco) => {
+      onMount={(editor, { KeyCode, KeyMod }) => {
         editorRef.current = editor;
         // Monaco owns the keyboard inside the editor, so ⌘↵ cannot be bound on the window.
-        editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => onRunRef.current());
+        editor.addCommand(KeyMod.CtrlCmd | KeyCode.Enter, () => onRunRef.current());
 
-        loadCoreTypings(monaco);
-
-        // echarts ships megabytes of typings, so they wait until the code asks for them.
-        const loadEchartsTypingsIfUsed = () => {
-          if (editor.getModel()?.getValue().includes("echarts")) {
-            loadEchartsTypings(monaco);
-          }
-        };
-
-        loadEchartsTypingsIfUsed();
-        editor.onDidChangeModelContent(loadEchartsTypingsIfUsed);
+        monaco.startTypeScriptService(editor);
       }}
       width="100%"
       height="100%"
