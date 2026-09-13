@@ -57,7 +57,10 @@ export function startTypeScriptService(codeEditor: monaco.editor.IStandaloneCode
   // Safari has no `requestIdleCallback`; a timeout inside a frame lands after that frame paints.
   requestAnimationFrame(() =>
     setTimeout(() => {
-      import("./typescript-service").then((module) => module.startTypeScriptService(codeEditor));
+      import("./typescript-service").then(
+        (module) => module.startTypeScriptService(codeEditor),
+        (error: unknown) => console.error("Failed to start the TypeScript service", error),
+      );
     }),
   );
 }
