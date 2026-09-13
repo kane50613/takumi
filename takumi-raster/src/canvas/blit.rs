@@ -183,16 +183,41 @@ pub(super) fn blit_rows_from_sampler(
   combined_mask: Option<MaskView<'_>>,
   sample: impl Fn(u32, u32) -> [u8; 4],
 ) {
+  let x_start = (bounds.x_min - bounds.offset_x) as u32;
+  blit_rows(
+    pixels,
+    canvas_width,
+    bounds,
+    mode,
+    combined_mask,
+    |src_y, row| {
+      for (i, pixel) in row.iter_mut().enumerate() {
+        *pixel = sample(x_start + i as u32, src_y);
+      }
+    },
+  );
+}
+
+/// Blends `bounds` row by row, asking `fill` for each source row's premultiplied pixels.
+fn blit_rows(
+  pixels: &mut [[u8; 4]],
+  canvas_width: u32,
+  bounds: OverlayBounds,
+  mode: BlendMode,
+  combined_mask: Option<MaskView<'_>>,
+  mut fill: impl FnMut(u32, &mut [[u8; 4]]),
+) {
+  let mut row = vec![[0u8; 4]; (bounds.x_max - bounds.x_min).max(0) as usize];
+
   for dest_y in bounds.y_min..bounds.y_max {
     let mask_row = combined_mask.map(|view| view.row(dest_y, bounds.x_min));
     if mask_row.is_some_and(|row| row.is_empty()) {
       continue;
     }
 
-    let src_y = (dest_y - bounds.offset_y) as u32;
+    fill((dest_y - bounds.offset_y) as u32, &mut row);
     let dst_row = dest_y as usize * canvas_width as usize;
-    for (i, dest_x) in (bounds.x_min..bounds.x_max).enumerate() {
-      let src = sample((dest_x - bounds.offset_x) as u32, src_y);
+    for (i, (dest_x, &src)) in (bounds.x_min..bounds.x_max).zip(&row).enumerate() {
       if src[3] == 0 {
         continue;
       }
@@ -281,6 +306,21 @@ pub(super) fn blit_paint_source_translation(
           blend_premultiplied_pixel(&mut pixels[dst_row + dest_x as usize], src, mode);
         }
       }
+    }
+    ResolvedSource::Bitmap(view)
+      if let Some(rows) = view.bilinear_rows(
+        (bounds.x_min - bounds.offset_x) as u32,
+        (bounds.x_max - bounds.x_min) as u32,
+      ) =>
+    {
+      blit_rows(
+        pixels,
+        canvas_width,
+        bounds,
+        mode,
+        combined_mask,
+        |src_y, row| rows.fill(src_y, row),
+      );
     }
     resolved => {
       blit_rows_from_sampler(pixels, canvas_width, bounds, mode, combined_mask, |x, y| {
