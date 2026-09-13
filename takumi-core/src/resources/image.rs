@@ -11,8 +11,8 @@ use std::str::{FromStr, from_utf8};
 use std::sync::{Arc, OnceLock, Weak};
 
 use quick_cache::{
-  Weighter,
-  sync::{Cache, GuardResult},
+  DefaultHashBuilder, OptionsBuilder, Weighter,
+  sync::{Cache, DefaultLifecycle, GuardResult},
 };
 #[cfg(feature = "svg")]
 use roxmltree::{Document, ParsingOptions};
@@ -1148,7 +1148,13 @@ impl ImageError {
 /// Resource budget before entries start getting evicted. Deliberately
 /// conservative: a single-template server's working set fits comfortably, and
 /// heavier workloads raise it through [`ResourceCache::new`].
-const DEFAULT_MAX_BYTES: u64 = 16 << 20; // 16 MiB
+const DEFAULT_MAX_BYTES: u64 = 64 << 20;
+
+/// Bytes each cache shard holds. An entry over 97% of its shard is never
+/// admitted, so a shard has to be large enough for one decoded photo.
+/// `quick_cache` rounds the shard count up to a power of two, so the count is
+/// rounded down first to keep this floor.
+const SHARD_BYTES: u64 = 64 << 20;
 
 /// Cache policy for a decoded image, applied per [`ResourceCache::get_or_decode`] call.
 #[derive(Clone, Copy, Default, Deserialize)]
@@ -1256,13 +1262,30 @@ impl ResourceCache {
   pub fn new(max_bytes: u64) -> Self {
     // ~64 KiB average decoded image ⇒ a reasonable item-count hint for the budget.
     let estimated_items = (max_bytes / (64 << 10)).max(1) as usize;
+    let parallelism = std::thread::available_parallelism().map_or(1, |n| n.get() as u64);
+    let shards = (max_bytes / SHARD_BYTES).clamp(1, parallelism);
+    let shards = if shards.is_power_of_two() {
+      shards
+    } else {
+      shards.next_power_of_two() / 2
+    } as usize;
+    let options = OptionsBuilder::new()
+      .estimated_items_capacity(estimated_items)
+      .weight_capacity(max_bytes)
+      .shards(shards)
+      .build();
+    let cache = match options {
+      Ok(options) => Cache::with_options(
+        options,
+        ResourceWeighter,
+        DefaultHashBuilder::default(),
+        DefaultLifecycle::default(),
+      ),
+      Err(_) => Cache::with_weighter(estimated_items, max_bytes, ResourceWeighter),
+    };
 
     Self {
-      cache: Arc::new(Cache::with_weighter(
-        estimated_items,
-        max_bytes,
-        ResourceWeighter,
-      )),
+      cache: Arc::new(cache),
     }
   }
 
@@ -1332,6 +1355,8 @@ impl ResourceCache {
 
 #[cfg(test)]
 mod resource_cache_tests {
+  use std::sync::Arc;
+
   use quick_cache::sync::Cache;
 
   use super::{
@@ -1506,6 +1531,28 @@ mod resource_cache_tests {
     let second = cache.get_or_parse_stylesheet(sources);
 
     assert!(std::sync::Arc::ptr_eq(&first, &second));
+  }
+
+  #[test]
+  fn a_sized_entry_near_the_budget_is_retained() {
+    let cache = ResourceCache::new(16 << 20);
+    let key = ResourceCacheKey::sized(1, 2400, 1601, ImageScalingAlgorithm::Auto);
+    let buffer = Arc::new(ImageBuffer::new(2400, 1601).unwrap());
+
+    cache.cache.insert(key, CacheEntry::Sized(buffer));
+
+    assert!(cache.cache.get(&key).is_some());
+  }
+
+  #[test]
+  fn an_uneven_budget_keeps_a_whole_shard_per_entry() {
+    let cache = ResourceCache::new(192 << 20);
+    let key = ResourceCacheKey::sized(1, 4000, 3900, ImageScalingAlgorithm::Auto);
+    let buffer = Arc::new(ImageBuffer::new(4000, 3900).unwrap());
+
+    cache.cache.insert(key, CacheEntry::Sized(buffer));
+
+    assert!(cache.cache.get(&key).is_some());
   }
 
   #[test]

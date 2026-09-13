@@ -418,7 +418,7 @@ pub struct ImageSource<'ctx> {
 pub struct RendererOptions {
   /// Byte budget shared by every cached resource — decoded images, SVG
   /// rasters, parsed stylesheets. `0` disables caching.
-  /// @default 16 MiB
+  /// @default 64 MiB
   pub cache_max_bytes: Option<f64>,
 }
 

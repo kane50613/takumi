@@ -21,7 +21,7 @@ const image = await render(<div tw="p-8 text-4xl">Hello Takumi</div>, {
 
 | Work                                            | Lifetime              | Configuration                                                      |
 | :---------------------------------------------- | :-------------------- | :----------------------------------------------------------------- |
-| Decoded images, SVG rasters, parsed stylesheets | Renderer              | `cacheMaxBytes`, 16 MiB by default                                 |
+| Decoded images, SVG rasters, parsed stylesheets | Renderer              | `cacheMaxBytes`, 64 MiB by default                                 |
 | Glyph outlines and rasterized masks             | Loaded backend module | `setGlyphCacheMaxBytes`, 8 MiB by default                          |
 | Parsed Tailwind classes                         | Loaded backend module | Automatic, bounded internally                                      |
 | Resolved Tailwind declarations                  | Render                | Automatic, separated by viewport width, font size, and pixel ratio |
