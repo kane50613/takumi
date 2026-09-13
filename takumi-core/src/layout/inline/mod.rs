@@ -53,7 +53,7 @@ use self::{
   truncation::make_ellipsis_layout,
 };
 pub(crate) use self::{
-  breaking::{LineWidths, break_lines, create_inline_constraint},
+  breaking::{LineWidths, break_lines, create_inline_constraint, has_custom_out_of_flow},
   items::InlineContentKind,
   metrics::{
     ParentFontMetrics, ResolvedInlineLineState, ResolvedLineMetrics, get_parent_font_metrics,
