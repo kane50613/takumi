@@ -10,7 +10,7 @@ use tiny_skia::PixmapMut;
 
 use super::{
   MaskView,
-  blit::{blit_rows_from_sampler, compute_overlay_bounds_for_canvas},
+  blit::{blit_rows, compute_overlay_bounds_for_canvas},
 };
 use crate::{BackgroundTile, blend::*, style::BlendMode};
 
@@ -72,9 +72,19 @@ pub(crate) fn overlay_gradient_tile<T>(
   };
 
   let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(pixmap.pixels_mut());
-  blit_rows_from_sampler(pixels, bottom_width, bounds, mode, combined_mask, |x, y| {
-    premultiplied_from_pixel(gradient.sample_pixel_dithered(x, y))
-  });
+  let x_start = (bounds.x_min - bounds.offset_x) as u32;
+  blit_rows(
+    pixels,
+    bottom_width,
+    bounds,
+    mode,
+    combined_mask,
+    |y, row| {
+      for (i, pixel) in row.iter_mut().enumerate() {
+        *pixel = premultiplied_from_pixel(gradient.sample_pixel_dithered(x_start + i as u32, y));
+      }
+    },
+  );
 }
 
 fn try_overlay_linear_gradient_tile_fast_normal_unconstrained(

@@ -12,7 +12,7 @@ use tiny_skia::{IntSize, Pixmap, PixmapMut, PixmapRef, PremultipliedColorU8};
 #[cfg(feature = "svg")]
 use crate::resources::image::RenderedImage;
 use crate::{
-  BorderProperties, DrawTarget, OverlayOptions, PaintSource, RenderContext, Result,
+  BorderProperties, DrawTarget, OverlayOptions, PaintSource, RenderContext, Result, RowSource,
   SamplingFootprint, checked_area, color_to_premultiplied, interpolate_with_footprint,
   layout::node::resolve_image,
   overlay_image, pixmap_from_buffer, pixmap_ref_from_buffer,
@@ -56,10 +56,10 @@ fn rasterize_tile(tile: BackgroundTile) -> Result<BackgroundTile> {
   let mut data = vec![0; len];
   let row_bytes = width as usize * 4;
 
-  for y in 0..height {
-    let row_offset = y as usize * row_bytes;
-    let dst_row = &mut data[row_offset..row_offset + row_bytes];
-    tile.rasterize_row(y, width, dst_row);
+  let rows = tile.rows(width);
+
+  for (y, dst_row) in data.chunks_exact_mut(row_bytes).enumerate() {
+    rows.fill(y as u32, dst_row);
   }
 
   let Some(pixmap) = Pixmap::from_vec(data, size) else {
@@ -247,25 +247,6 @@ impl<'a> SampledBitmapView<'a> {
       columns,
     })
   }
-
-  /// Copies source row `y` into `dst` when the tile is drawn 1:1, reporting whether it did.
-  fn try_copy_row(&self, y: u32, dst: &mut [[u8; 4]]) -> bool {
-    let Some(source) = self.identity_source() else {
-      return false;
-    };
-    if source.width() as usize != dst.len() {
-      return false;
-    }
-
-    let stride = dst.len() * 4;
-    let start = y as usize * stride;
-    let Some(row) = source.data().get(start..start + stride) else {
-      return false;
-    };
-
-    dst.copy_from_slice(bytemuck::cast_slice(row));
-    true
-  }
 }
 
 #[derive(Clone, Copy)]
@@ -355,6 +336,42 @@ pub(crate) enum BackgroundTile {
   Color(ColorTile),
 }
 
+/// Row producer for a tile, resolved once so a full rasterization reuses its state.
+pub(crate) enum TileRows<'a> {
+  Linear(&'a LinearGradientTile),
+  Radial(&'a RadialGradientTile),
+  Conic(&'a ConicGradientTile),
+  Source(RowSource<'a>),
+}
+
+impl TileRows<'_> {
+  pub(crate) fn fill(&self, y: u32, dst: &mut [u8]) {
+    let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(dst);
+
+    match self {
+      Self::Linear(t) => fill_gradient_row(*t, y, pixels),
+      Self::Radial(t) => fill_gradient_row(*t, y, pixels),
+      Self::Conic(t) => fill_gradient_row(*t, y, pixels),
+      Self::Source(rows) => rows.fill(y, pixels),
+    }
+  }
+}
+
+fn fill_gradient_row<T: GradientOverlayTile>(t: &T, y: u32, pixels: &mut [[u8; 4]]) {
+  let lut_len = t.lut_len();
+  let mut row_state = t.begin_row(0, y, lut_len);
+  let dither = t.dither_active();
+  for (x, chunk) in pixels.iter_mut().enumerate() {
+    let lut_idx = t.next_lut_index(&mut row_state);
+    let p = if dither {
+      t.sample_dithered_at(lut_idx, x as u32, y)
+    } else {
+      t.sample_at(lut_idx)
+    };
+    *chunk = [p.red(), p.green(), p.blue(), p.alpha()];
+  }
+}
+
 impl BackgroundTile {
   pub(crate) fn width(&self) -> u32 {
     match self {
@@ -410,58 +427,12 @@ impl BackgroundTile {
     SampledBitmapView::new(source.as_ref(), *width, *height, *algo)
   }
 
-  pub(crate) fn rasterize_row(&self, y: u32, width: u32, dst: &mut [u8]) {
-    debug_assert_eq!(dst.len(), (width * 4) as usize);
-    let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(dst);
-
-    fn rasterize_gradient_row<T: GradientOverlayTile>(t: &T, y: u32, pixels: &mut [[u8; 4]]) {
-      let lut_len = t.lut_len();
-      let mut row_state = t.begin_row(0, y, lut_len);
-      let dither = t.dither_active();
-      for (x, chunk) in pixels.iter_mut().enumerate() {
-        let lut_idx = t.next_lut_index(&mut row_state);
-        let p = if dither {
-          t.sample_dithered_at(lut_idx, x as u32, y)
-        } else {
-          t.sample_at(lut_idx)
-        };
-        *chunk = [p.red(), p.green(), p.blue(), p.alpha()];
-      }
-    }
-
+  pub(crate) fn rows(&self, width: u32) -> TileRows<'_> {
     match self {
-      Self::Linear(t) => rasterize_gradient_row(t, y, pixels),
-      Self::Radial(t) => rasterize_gradient_row(t, y, pixels),
-      Self::Conic(t) => rasterize_gradient_row(t, y, pixels),
-      Self::Pixmap(t) => {
-        let ps = PaintSource::from(t.as_ref());
-        for (x, chunk) in pixels.iter_mut().enumerate() {
-          let p = ps.get_pixel(x as u32, y);
-          *chunk = [p.red(), p.green(), p.blue(), p.alpha()];
-        }
-      }
-      Self::SampledBitmap { .. } => {
-        let Some(view) = self.sampled_bitmap_view() else {
-          pixels.fill([0; 4]);
-          return;
-        };
-
-        if view.try_copy_row(y, pixels) {
-          return;
-        }
-
-        for (x, chunk) in pixels.iter_mut().enumerate() {
-          let p = view.sample(x as u32, y);
-          *chunk = [p.red(), p.green(), p.blue(), p.alpha()];
-        }
-      }
-      Self::Color(t) => {
-        let p = t.get_pixel(0, 0);
-        let bytes = [p.red(), p.green(), p.blue(), p.alpha()];
-        for chunk in pixels.iter_mut() {
-          *chunk = bytes;
-        }
-      }
+      Self::Linear(t) => TileRows::Linear(t),
+      Self::Radial(t) => TileRows::Radial(t),
+      Self::Conic(t) => TileRows::Conic(t),
+      _ => TileRows::Source(PaintSource::from(self).rows(0, width)),
     }
   }
 
@@ -787,10 +758,11 @@ mod tests {
         render_context.current_color,
         dither,
       ));
+      let tile_rows = tile.rows(64);
       let mut rows = Vec::new();
       for y in [0, 1] {
         let mut row = vec![0u8; 64 * 4];
-        tile.rasterize_row(y, 64, &mut row);
+        tile_rows.fill(y, &mut row);
         rows.push(row);
       }
       rows

@@ -2,7 +2,7 @@ use image::Rgba;
 use tiny_skia::{PixmapRef, PremultipliedColorU8};
 
 use crate::{
-  BackgroundTile, ColorTile, SampledBitmapView,
+  BackgroundTile, BilinearRows, ColorTile, SampledBitmapView,
   blend::{premultiplied_from_pixel, premultiply_rgba},
   canvas::{checked_area, composite_premultiplied_over},
   style::{Color, ImageScalingAlgorithm},
@@ -100,6 +100,26 @@ impl<'a> PaintSource<'a> {
     }
   }
 
+  /// Rows for destination columns `x_start..x_start + width`, resolved once so
+  /// every row fill reads pixels the cheapest way the source allows.
+  pub(crate) fn rows(self, x_start: u32, width: u32) -> RowSource<'a> {
+    if let Some(color) = self.premultiplied_constant() {
+      return RowSource::Constant(color);
+    }
+
+    match self.resolve() {
+      ResolvedSource::Direct(Self::Pixmap(source)) => RowSource::Copy { source, x_start },
+      ResolvedSource::Bitmap(view) => match view.bilinear_rows(x_start, width) {
+        Some(rows) => RowSource::Bilinear(rows),
+        None => RowSource::Sampled {
+          source: ResolvedSource::Bitmap(view),
+          x_start,
+        },
+      },
+      source => RowSource::Sampled { source, x_start },
+    }
+  }
+
   pub(crate) fn as_pixmap_ref(self) -> Option<PixmapRef<'a>> {
     match self.resolve() {
       ResolvedSource::Direct(Self::Pixmap(source)) => Some(source),
@@ -126,12 +146,10 @@ impl<'a> PaintSource<'a> {
     let height = self.height();
     let source_len = checked_area(width, height, 4)?;
     let mut premultiplied = vec![0; source_len];
-    let resolved = self.resolve();
+    let rows = self.rows(0, width);
     let pixels: &mut [[u8; 4]] = bytemuck::cast_slice_mut(&mut premultiplied);
-    for y in 0..height {
-      for x in 0..width {
-        pixels[(y * width + x) as usize] = premultiplied_from_pixel(resolved.get_pixel(x, y));
-      }
+    for (y, row) in pixels.chunks_exact_mut(width as usize).enumerate() {
+      rows.fill(y as u32, row);
     }
 
     PixmapRef::from_bytes(&premultiplied, width, height).map(f)
@@ -170,6 +188,41 @@ impl ResolvedSource<'_> {
     match self {
       Self::Direct(source) => source.get_pixel(x, y),
       Self::Bitmap(view) => view.sample(x, y),
+    }
+  }
+}
+
+/// A paint source read one destination row at a time.
+pub(crate) enum RowSource<'a> {
+  Copy {
+    source: PixmapRef<'a>,
+    x_start: u32,
+  },
+  Bilinear(BilinearRows<'a>),
+  Constant([u8; 4]),
+  Sampled {
+    source: ResolvedSource<'a>,
+    x_start: u32,
+  },
+}
+
+impl RowSource<'_> {
+  /// Fills `dst` with source row `y`, one pixel per destination column.
+  pub(crate) fn fill(&self, y: u32, dst: &mut [[u8; 4]]) {
+    match self {
+      Self::Copy { source, x_start } => {
+        let start = y as usize * source.width() as usize + *x_start as usize;
+        dst.copy_from_slice(bytemuck::cast_slice(
+          &source.pixels()[start..start + dst.len()],
+        ));
+      }
+      Self::Bilinear(rows) => rows.fill(y, dst),
+      Self::Constant(color) => dst.fill(*color),
+      Self::Sampled { source, x_start } => {
+        for (i, pixel) in dst.iter_mut().enumerate() {
+          *pixel = premultiplied_from_pixel(source.get_pixel(x_start + i as u32, y));
+        }
+      }
     }
   }
 }

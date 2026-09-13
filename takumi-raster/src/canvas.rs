@@ -27,7 +27,7 @@ pub(crate) use mask::{
 };
 use mask::{MaskStackEntry, resolve_mask};
 pub(crate) use paint_source::{
-  MaskCompositeColor, PaintSource, SamplingFootprint, interpolate_with_footprint,
+  MaskCompositeColor, PaintSource, RowSource, SamplingFootprint, interpolate_with_footprint,
 };
 use takumi_core::geometry::{Point, Size};
 use tiny_skia::{
