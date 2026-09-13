@@ -9,7 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@cloudflare/vite-plugin": "^1.54.2",
+    "@cloudflare/vite-plugin": "^1.54.4",
     "@tanstack/react-router": "^1.170.32",
     "@tanstack/react-router-ssr-query": "^1.167.2",
     "@tanstack/react-start": "^1.168.49",
@@ -25,6 +25,6 @@
     "@types/react-dom": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.0"
   }
 }
